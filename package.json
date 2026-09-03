@@ -1,0 +1,19 @@
+{
+	"name": "recoder",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"packageManager": "bun@1.3.11",
+	"workspaces": ["apps/*", "packages/*"],
+	"scripts": {
+		"dev": "turbo dev",
+		"dev:web": "bun --filter @recoder/web dev",
+		"dev:server": "bun --filter @recoder/server dev",
+		"build": "turbo build",
+		"check": "turbo check",
+		"test": "turbo test"
+	},
+	"devDependencies": {
+		"turbo": "^2.10.12"
+	}
+}

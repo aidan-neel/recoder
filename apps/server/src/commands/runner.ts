@@ -1,0 +1,89 @@
+import { mkdir } from 'node:fs/promises';
+import type { CommandRun } from '@recoder/shared';
+import { env } from '../env';
+import { allowedCommands } from '../env';
+import { db } from '../store';
+
+export interface RunOptions {
+	command: string;
+	args?: string[];
+	/** Human label shown in the dashboard (e.g. "collect diff"). */
+	label?: string;
+	cwd?: string;
+	timeoutMs?: number;
+}
+
+const MAX_LOG_CHARS = 200_000;
+
+function truncate(logs: string): string {
+	if (logs.length <= MAX_LOG_CHARS) return logs;
+	return `…[truncated ${logs.length - MAX_LOG_CHARS} chars]\n` + logs.slice(-MAX_LOG_CHARS);
+}
+
+/**
+ * Execute an allowlisted binary via Bun.spawn (argv array, never a shell),
+ * capture stdout/stderr, enforce a timeout, and persist a CommandRun.
+ */
+export async function runCommand(opts: RunOptions): Promise<CommandRun> {
+	const args = opts.args ?? [];
+	const run: CommandRun = {
+		id: crypto.randomUUID(),
+		label: opts.label ?? null,
+		command: opts.command,
+		args,
+		status: 'running',
+		exitCode: null,
+		startedAt: new Date().toISOString(),
+		finishedAt: null,
+		logs: ''
+	};
+
+	if (!allowedCommands.has(opts.command)) {
+		run.status = 'rejected';
+		run.finishedAt = new Date().toISOString();
+		run.logs = `command "${opts.command}" is not allowlisted (RECODER_ALLOWED_COMMANDS=${env.RECODER_ALLOWED_COMMANDS})`;
+		db.runs.set(run);
+		throw new Error(run.logs);
+	}
+
+	const cwd = opts.cwd ?? env.RECODER_WORKDIR;
+	const timeoutMs = opts.timeoutMs ?? env.RECODER_COMMAND_TIMEOUT_MS;
+	await mkdir(cwd, { recursive: true });
+
+	db.runs.set(run);
+
+	try {
+		const proc = Bun.spawn([opts.command, ...args], {
+			cwd,
+			stdout: 'pipe',
+			stderr: 'pipe'
+		});
+
+		let timedOut = false;
+		const timer = setTimeout(() => {
+			timedOut = true;
+			proc.kill();
+		}, timeoutMs);
+
+		const [stdout, stderr, exitCode] = await Promise.all([
+			proc.stdout ? Bun.readableStreamToText(proc.stdout) : Promise.resolve(''),
+			proc.stderr ? Bun.readableStreamToText(proc.stderr) : Promise.resolve(''),
+			proc.exited
+		]);
+		clearTimeout(timer);
+
+		const combined = [stdout, stderr ? `\n[stderr]\n${stderr}` : ''].join('').trim();
+		run.logs = truncate(combined);
+		run.exitCode = exitCode;
+		run.status = timedOut ? 'killed' : exitCode === 0 ? 'succeeded' : 'failed';
+		run.finishedAt = new Date().toISOString();
+		db.runs.set(run);
+		return run;
+	} catch (err) {
+		run.status = 'failed';
+		run.finishedAt = new Date().toISOString();
+		run.logs = truncate(err instanceof Error ? err.message : String(err));
+		db.runs.set(run);
+		throw err;
+	}
+}

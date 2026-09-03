@@ -1,0 +1,173 @@
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import 'tailwindcss';
+@import '@sivir-ui/svelte/ui.css';
+
+/* Readable blue text on both themes (brand indigo is too dark on dark bg). */
+@theme {
+	--color-info-vivid: #2f3ac7;
+}
+.dark {
+	--color-info-vivid: #a5b4fc;
+}
+
+/* Midnight Ledger (Sivir theme v2) — token overrides for the app. */
+:root,
+.dark {
+	--font-sans: 'Inter', sans-serif;
+	--font-mono: 'JetBrains Mono', monospace;
+	--font-header: var(--font-sans);
+	--radius-sm: 6px;
+	--radius-md: 8px;
+	--radius-lg: 10px;
+	--radius-xl: 14px;
+	--sivir-space-unit: 3.45px;
+	--motion-duration-hover: 90ms;
+	--motion-duration-menu: 30ms;
+	--motion-duration-panel: 130ms;
+	--motion-duration-sheet: 220ms;
+	--motion-duration-sheet-out: 154ms;
+	--motion-duration-overlay: 90ms;
+	--motion-duration-toast-in: 240ms;
+	--motion-duration-toast-out: 180ms;
+}
+:root {
+	--color-primary: #281ee6;
+	--color-primary-hover: color-mix(in srgb, #281ee6 78%, black);
+	--color-ring: color-mix(in srgb, #281ee6 30%, transparent);
+	--sivir-blue-500: #281ee6;
+	--sivir-blue-50: color-mix(in srgb, #281ee6 12%, white);
+	--sivir-neutral-0: hsl(0 0% 100%);
+	--sivir-neutral-10: hsl(60 11.1% 99.2%);
+	--sivir-neutral-50: hsl(60 11.1% 96.5%);
+	--sivir-neutral-100: hsl(60 6.2% 93.7%);
+	--sivir-neutral-150: hsl(60 4.2% 90.6%);
+	--sivir-neutral-300: hsl(60 4.4% 82.4%);
+	--sivir-neutral-500: hsl(60 3% 41.5%);
+	--sivir-neutral-900: hsl(60 5.7% 10.4%);
+}
+.dark {
+	--color-primary: #281ee6;
+	--color-primary-hover: color-mix(in srgb, #281ee6 78%, black);
+	--color-ring: color-mix(in srgb, #281ee6 30%, transparent);
+	--sivir-blue-500: #281ee6;
+	--sivir-blue-50: color-mix(in srgb, #281ee6 12%, black);
+	--sivir-neutral-0: hsl(0 0% 5%);
+	--sivir-neutral-10: hsl(60 11.1% 99.2%);
+	--sivir-neutral-50: hsl(0 0% 10%);
+	--sivir-neutral-100: hsl(0 0% 13%);
+	--sivir-neutral-150: hsl(0 0% 15.7%);
+	--sivir-neutral-300: hsl(0 0% 22.7%);
+	--sivir-neutral-500: hsl(0 0% 65%);
+	--sivir-neutral-900: hsl(0 0% 93%);
+}
+
+:root,
+.dark {
+	--font-size-header: 16px;
+	--font-weight-header: 600;
+	--font-weight-body: 500;
+	--font-weight-label: 500;
+	--font-weight-button: 500;
+	--font-weight-badge: 500;
+	--font-weight-description: 500;
+}
+:root {
+	--color-card: #ffffff;
+	--color-panel: #ffffff;
+	--color-border: #dedede;
+	--color-background: #fafafa;
+	--color-secondary: #efefee;
+	--color-muted: #f0f0f0;
+}
+.dark {
+	--color-card: #171717;
+	--color-panel: #171717;
+	--color-border: #1f1f1f;
+	--color-background: #0f0f0f;
+	--color-secondary: #1f1f1f;
+	--color-muted: #1a1a1a;
+}
+:root,
+.dark {
+	--radius-lg: 8px;
+	--radius-md: 6px;
+	--radius-xl: 12px;
+	--radius-sm: 4px;
+}
+:root {
+	--color-primary-stroke: transparent;
+	--ui-cursor-interactive: default;
+	--elevation-1: none;
+	--elevation-float: none;
+	--elevation-modal: none;
+	--elevation-control: inset 0 0 0 1px var(--color-border);
+	--elevation-button-outline: inset 0 0 0 1px var(--color-border);
+}
+.dark {
+	--color-primary-stroke: transparent;
+	--ui-cursor-interactive: default;
+	--elevation-1: none;
+	--elevation-float: none;
+	--elevation-modal: none;
+	--elevation-control: inset 0 0 0 1px var(--color-border);
+	--elevation-button-outline: inset 0 0 0 1px var(--color-border);
+}
+
+/* Native affordances follow the active palette. */
+:root {
+	color-scheme: light;
+}
+.dark {
+	color-scheme: dark;
+}
+
+/* Diff syntax highlighting (GitHub-style). */
+:root {
+	--hl-keyword: #cf222e;
+	--hl-string: #0a3069;
+	--hl-comment: #59636e;
+	--hl-number: #0550ae;
+	--hl-fn: #6639ba;
+	--hl-type: #116329;
+	--hl-attr: #0550ae;
+}
+.dark {
+	--hl-keyword: #ff7b72;
+	--hl-string: #a5d6ff;
+	--hl-comment: #8b949e;
+	--hl-number: #79c0ff;
+	--hl-fn: #d2a8ff;
+	--hl-type: #7ee787;
+	--hl-attr: #79c0ff;
+}
+
+/* Thread panel enter animation (CSS-only; transforms never affect layout). */
+@keyframes thread-panel-in {
+	from {
+		opacity: 0;
+		transform: scale(0.96) translate(12px, 12px);
+		filter: blur(3px);
+	}
+	to {
+		opacity: 1;
+		transform: scale(1) translate(0, 0);
+		filter: blur(0);
+	}
+}
+
+.thread-panel-enter {
+	animation: thread-panel-in 160ms cubic-bezier(0.16, 1, 0.3, 1);
+	transform-origin: bottom right;
+}
+
+/* Hide scrollbars while keeping the element scrollable. */
+.hide-scrollbar {
+	scrollbar-width: none;
+}
+.hide-scrollbar::-webkit-scrollbar {
+	display: none;
+}

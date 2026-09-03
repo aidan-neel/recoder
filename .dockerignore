@@ -1,0 +1,15 @@
+node_modules
+.git
+.github
+.turbo
+.svelte-kit
+dist
+build
+.env
+.env.*
+Dockerfile*
+docker-compose*
+README.md
+*.md
+*.log
+.DS_Store

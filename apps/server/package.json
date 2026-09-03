@@ -1,0 +1,21 @@
+{
+	"name": "@recoder/server",
+	"private": true,
+	"version": "0.1.0",
+	"type": "module",
+	"scripts": {
+		"dev": "bun --hot src/index.ts",
+		"start": "bun src/index.ts",
+		"check": "tsc --noEmit",
+		"test": "bun test"
+	},
+	"dependencies": {
+		"@recoder/shared": "workspace:*",
+		"hono": "^4.13.5",
+		"zod": "^4.5.4"
+	},
+	"devDependencies": {
+		"bun-types": "^1.4.0",
+		"typescript": "^7.0.2"
+	}
+}

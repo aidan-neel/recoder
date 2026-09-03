@@ -1,0 +1,45 @@
+name: recoder
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    container_name: recoder-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3001}:3001"
+    environment:
+      PORT: 3001
+      HOST: 0.0.0.0
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      RECODER_ALLOWED_COMMANDS: ${RECODER_ALLOWED_COMMANDS:-echo,git,gh,bun}
+      RECODER_WORKDIR: /tmp/recoder-work
+      RECODER_COMMAND_TIMEOUT_MS: ${RECODER_COMMAND_TIMEOUT_MS:-120000}
+    volumes:
+      - recoder-work:/tmp/recoder-work
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health > /dev/null']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        PUBLIC_API_URL: ${PUBLIC_API_URL:-http://localhost:3001}
+    container_name: recoder-web
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      ORIGIN: ${FRONTEND_URL:-http://localhost:3000}
+    depends_on:
+      server:
+        condition: service_healthy
+
+volumes:
+  recoder-work:
