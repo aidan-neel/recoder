@@ -155,7 +155,7 @@
 </script>
 
 <div
-	class="mx-auto flex min-h-[calc(100vh-52px-6rem)] w-full max-w-2xl flex-col justify-center px-4 py-10"
+	class="session-enter mx-auto flex min-h-[calc(100vh-52px-6rem)] w-full max-w-2xl flex-col justify-center px-4 py-10"
 	style="justify-content: safe center"
 >
 	<div class="flex items-center gap-3">

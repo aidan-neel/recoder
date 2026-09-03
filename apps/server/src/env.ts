@@ -6,7 +6,7 @@ const envSchema = z.object({
 	FRONTEND_URL: z.string().default('http://localhost:3000'),
 	GITHUB_WEBHOOK_SECRET: z.string().optional(),
 	RECODER_WORKDIR: z.string().default('/tmp/recoder-work'),
-	RECODER_ALLOWED_COMMANDS: z.string().default('echo,git,gh,bun'),
+	RECODER_ALLOWED_COMMANDS: z.string().default('echo,git,gh,glab,bun'),
 	RECODER_COMMAND_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000)
 });
 

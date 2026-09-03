@@ -164,10 +164,77 @@
 	transform-origin: bottom right;
 }
 
+/* Pull request section entrance (CSS-only; transform never affects layout).
+   Runs together with the Svelte slide transition on the wrapper so the whole
+   container grows as one coordinated 270ms motion. */
+@keyframes pr-section-in {
+	from {
+		opacity: 0;
+		transform: translateY(-8px);
+		filter: blur(4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+		filter: blur(0);
+	}
+}
+
+.pr-section-enter {
+	animation: pr-section-in 270ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.pr-section-enter {
+		animation: none;
+	}
+}
+
 /* Hide scrollbars while keeping the element scrollable. */
 .hide-scrollbar {
 	scrollbar-width: none;
 }
 .hide-scrollbar::-webkit-scrollbar {
 	display: none;
+}
+
+/* Session page entrance (CSS-only, staggered via inline animation-delay). */
+@keyframes session-enter {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.session-enter {
+	animation: session-enter 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Diff content swap when switching files. */
+@keyframes diff-enter {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.diff-enter {
+	animation: diff-enter 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.session-enter {
+		animation: none;
+	}
+	.diff-enter {
+		animation: none;
+	}
 }

@@ -19,6 +19,9 @@ build/
 *.log
 .DS_Store
 
+# runtime data (persisted CLI tokens, sandboxes) — never commit
+data/
+
 # misc
 .vscode/*
 !.vscode/extensions.json

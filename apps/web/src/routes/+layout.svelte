@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import favicon from '$lib/assets/favicon.svg';
+	import ModelSettingsModal from '$lib/components/model-settings-modal.svelte';
 	import SessionBar from '$lib/components/session-bar.svelte';
 	import '../app.css';
 
@@ -25,4 +26,5 @@
 	<main class="min-h-0 flex-1">
 		{@render children()}
 	</main>
+	<ModelSettingsModal />
 </div>

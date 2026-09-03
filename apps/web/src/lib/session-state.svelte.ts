@@ -12,13 +12,8 @@ export interface Session {
 const DOT_COLORS = ['#5b8cff', '#8a8f98', '#3fb96c', '#e56b6f', '#c792ea', '#e5c07b'];
 
 class SessionState {
-	sessions = $state<Session[]>([
-		{ id: 'ledger-api', name: 'ledger-api', ref: '#4127', color: '#5b8cff', status: 'ready' },
-		{ id: 'gateway', name: 'gateway', ref: '#902', color: '#8a8f98', status: 'ready' },
-		{ id: 'console', name: 'console', ref: '#3310', color: '#3fb96c', status: 'ready' },
-		{ id: 'infra', name: 'infra', ref: 'local', color: '#e56b6f', status: 'ready' }
-	]);
-	activeId = $state<string>('ledger-api');
+	sessions = $state<Session[]>([]);
+	activeId = $state<string>('');
 	private counter = $state(0);
 
 	get active(): Session | undefined {
@@ -68,6 +63,23 @@ class SessionState {
 	markReady(id: string): void {
 		const session = this.sessions.find((s) => s.id === id);
 		if (session) session.status = 'ready';
+	}
+
+	/** Register an externally-created session (e.g. a queued backend review) without touching existing ones. */
+	ensureSession(id: string, name: string, ref: string | null, status: 'reviewing' | 'ready'): void {
+		if (!this.sessions.some((s) => s.id === id)) {
+			this.sessions = [
+				...this.sessions,
+				{
+					id,
+					name,
+					ref,
+					color: DOT_COLORS[this.sessions.length % DOT_COLORS.length],
+					status
+				}
+			];
+		}
+		this.activeId = id;
 	}
 
 	close(id: string): void {

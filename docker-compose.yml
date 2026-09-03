@@ -14,11 +14,15 @@ services:
       HOST: 0.0.0.0
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITLAB_TOKEN: ${GITLAB_TOKEN:-}
       RECODER_ALLOWED_COMMANDS: ${RECODER_ALLOWED_COMMANDS:-echo,git,gh,bun}
       RECODER_WORKDIR: /tmp/recoder-work
       RECODER_COMMAND_TIMEOUT_MS: ${RECODER_COMMAND_TIMEOUT_MS:-120000}
+      RECODER_DATA_DIR: /app/data
     volumes:
       - recoder-work:/tmp/recoder-work
+      - recoder-data:/app/data
     healthcheck:
       test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/health > /dev/null']
       interval: 10s
@@ -43,3 +47,4 @@ services:
 
 volumes:
   recoder-work:
+  recoder-data:

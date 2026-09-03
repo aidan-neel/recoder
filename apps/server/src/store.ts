@@ -23,3 +23,6 @@ export const db = {
 	reviews: createCollection<Review>(),
 	runs: createCollection<CommandRun>()
 };
+
+/** Raw unified diffs by review id. Populated by the pipeline's fetch step. */
+export const reviewDiffs = new Map<string, string>();

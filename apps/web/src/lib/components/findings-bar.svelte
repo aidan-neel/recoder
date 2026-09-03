@@ -80,7 +80,7 @@
 	});
 </script>
 
-<div class="flex shrink-0 items-center gap-2">
+<div class="session-enter flex shrink-0 items-center gap-2" style="animation-delay: 60ms">
 	<div class="flex h-9 items-center gap-0.5 rounded-lg border border-border bg-card px-1.5">
 		<span class="px-1.5 text-[15px] text-foreground-muted">Finding</span>
 		<span class="font-mono text-[14px]">

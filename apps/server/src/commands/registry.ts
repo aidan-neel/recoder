@@ -15,12 +15,12 @@ export interface PipelineStep {
  * 2. Return its argv here (optionally per-repo/PR via `ctx`).
  * 3. Parse its output into findings in pipeline.ts.
  */
-export function demoReviewSteps(ctx: { repo: string; pr: string }): PipelineStep[] {
+export function demoReviewSteps(ctx: { repo: string; pr: string; sandbox: string }): PipelineStep[] {
 	return [
 		{
 			label: 'collect diff',
 			command: 'echo',
-			args: [`[recoder] collecting diff for ${ctx.repo} PR #${ctx.pr}`]
+			args: [`[recoder] collecting diff for ${ctx.repo} PR #${ctx.pr} (sandbox: ${ctx.sandbox})`]
 		},
 		{ label: 'run checks', command: 'echo', args: ['[recoder] running checks (stub)'] },
 		{ label: 'write summary', command: 'echo', args: ['[recoder] writing summary (stub)'] }

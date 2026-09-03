@@ -89,7 +89,7 @@
 				<div
 					role="row"
 					tabindex="-1"
-					class="grid w-max min-w-full grid-cols-[2.75rem_2.75rem_minmax(0,1fr)] {rowBg[line.type]}"
+					class="grid w-full grid-cols-[2.75rem_2.75rem_minmax(0,1fr)] {rowBg[line.type]}"
 					style:box-shadow={mark
 						? `inset ${hovered ? 3 : 2}px 0 0 ${SEVERITY_DOT[mark.severity]}`
 						: null}
@@ -108,7 +108,7 @@
 					>
 						{line.newNo ?? ''}
 					</span>
-					<span class="pr-4 whitespace-pre">
+					<span class="pr-4 whitespace-pre-wrap break-all min-w-0">
 						{#if line.type === 'del'}
 							<span class="text-error">-</span>{@html highlighted[hi][i]}
 						{:else if line.type === 'add'}

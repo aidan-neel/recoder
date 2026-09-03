@@ -7,9 +7,11 @@
 		".": "./src/index.ts"
 	},
 	"scripts": {
-		"check": "tsc --noEmit"
+		"check": "tsc --noEmit",
+		"test": "bun test"
 	},
 	"devDependencies": {
+		"bun-types": "^1.4.0",
 		"typescript": "^7.0.2"
 	}
 }

@@ -1,8 +1,9 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { Review } from '@recoder/shared';
-import { runReviewPipeline } from '../commands/pipeline';
-import { db } from '../store';
+import { parseUnifiedDiff } from '@recoder/shared';
+import { queueReview } from '../commands/pipeline';
+import { subscribeReview } from '../lib/events';
+import { db, reviewDiffs } from '../store';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),
@@ -20,31 +21,51 @@ app.get('/:id', (c) => {
 	return c.json(review);
 });
 
+/** Parsed unified diff for a review (404 until the fetch step stores one). */
+app.get('/:id/files', (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const diff = reviewDiffs.get(review.id);
+	if (!diff) return c.json({ error: 'no diff yet' }, 404);
+	return c.json(parseUnifiedDiff(diff));
+});
+
+/** Live pipeline events (fetch/sandbox/agent progress) as server-sent events. */
+app.get('/:id/events', (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	let unsubscribe: (() => void) | undefined;
+	const stream = new ReadableStream({
+		start(controller) {
+			const send = (data: unknown) => {
+				controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
+			};
+			send({ type: 'step', step: 'status', message: `status: ${review.status}` });
+			unsubscribe = subscribeReview(review.id, send);
+		},
+		cancel() {
+			unsubscribe?.();
+		}
+	});
+	return new Response(stream, {
+		headers: {
+			'content-type': 'text/event-stream',
+			'cache-control': 'no-cache',
+			connection: 'keep-alive'
+		}
+	});
+});
+
 app.post('/', async (c) => {
 	const parsed = createReviewSchema.safeParse(await c.req.json().catch(() => null));
 	if (!parsed.success) {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
 	}
-	if (!db.repos.get(parsed.data.repoId)) {
-		return c.json({ error: 'repo not found' }, 400);
+	try {
+		return c.json(queueReview(parsed.data), 201);
+	} catch (err) {
+		return c.json({ error: err instanceof Error ? err.message : 'invalid input' }, 400);
 	}
-	const now = new Date().toISOString();
-	const review: Review = {
-		id: crypto.randomUUID(),
-		repoId: parsed.data.repoId,
-		prNumber: parsed.data.prNumber,
-		headSha: parsed.data.headSha ?? 'unknown',
-		status: 'queued',
-		summary: null,
-		findings: [],
-		runs: [],
-		createdAt: now,
-		updatedAt: now
-	};
-	db.reviews.set(review);
-	// Run the pipeline in the background; the client polls GET /api/reviews/:id.
-	void runReviewPipeline(review.id).catch((err) => console.error('[reviews] pipeline failed', err));
-	return c.json(review, 201);
 });
 
 export default app;

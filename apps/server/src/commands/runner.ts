@@ -11,9 +11,20 @@ export interface RunOptions {
 	label?: string;
 	cwd?: string;
 	timeoutMs?: number;
+	/** Extra env vars merged over process.env for this run only. */
+	env?: Record<string, string>;
 }
 
 const MAX_LOG_CHARS = 200_000;
+
+/** process.env minus undefined values, merged with overrides (Bun needs Record<string, string>). */
+function withEnv(overrides: Record<string, string>): Record<string, string> {
+	const base: Record<string, string> = {};
+	for (const [key, value] of Object.entries(process.env)) {
+		if (value !== undefined) base[key] = value;
+	}
+	return { ...base, ...overrides };
+}
 
 function truncate(logs: string): string {
 	if (logs.length <= MAX_LOG_CHARS) return logs;
@@ -56,7 +67,8 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 		const proc = Bun.spawn([opts.command, ...args], {
 			cwd,
 			stdout: 'pipe',
-			stderr: 'pipe'
+			stderr: 'pipe',
+			env: opts.env ? withEnv(opts.env) : undefined
 		});
 
 		let timedOut = false;

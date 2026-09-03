@@ -1,5 +1,10 @@
 import { app } from './app';
 import { env } from './env';
+import { initReviewSettings } from './lib/review-settings';
+import { initTokenStore } from './lib/tokens';
+
+initTokenStore();
+initReviewSettings();
 
 const server = Bun.serve({
 	fetch: app.fetch,

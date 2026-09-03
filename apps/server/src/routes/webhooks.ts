@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
-import type { Review } from '@recoder/shared';
-import { runReviewPipeline } from '../commands/pipeline';
+import { queueReview } from '../commands/pipeline';
 import { env } from '../env';
 import { db } from '../store';
 
@@ -45,21 +44,11 @@ app.post('/github', async (c) => {
 		if (!repo) {
 			return c.json({ received: true, reviewCreated: false, reason: 'repo not tracked' });
 		}
-		const now = new Date().toISOString();
-		const review: Review = {
-			id: crypto.randomUUID(),
+		const review = queueReview({
 			repoId: repo.id,
 			prNumber: payload.pull_request.number,
-			headSha: payload.pull_request.head?.sha ?? 'unknown',
-			status: 'queued',
-			summary: null,
-			findings: [],
-			runs: [],
-			createdAt: now,
-			updatedAt: now
-		};
-		db.reviews.set(review);
-		void runReviewPipeline(review.id).catch((err) => console.error('[webhook] pipeline failed', err));
+			headSha: payload.pull_request.head?.sha
+		});
 		return c.json({ received: true, reviewCreated: true, reviewId: review.id }, 201);
 	}
 

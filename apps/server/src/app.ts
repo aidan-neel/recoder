@@ -2,7 +2,9 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { env } from './env';
+import auth from './routes/auth';
 import health from './routes/health';
+import settings from './routes/settings';
 import repos from './routes/repos';
 import reviews from './routes/reviews';
 import runs from './routes/runs';
@@ -16,7 +18,7 @@ app.use(
 	'*',
 	cors({
 		origin: '*',
-		allowMethods: ['GET', 'POST', 'DELETE', 'OPTIONS'],
+		allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
 		allowHeaders: ['Content-Type', 'Authorization', 'X-Hub-Signature-256']
 	})
 );
@@ -25,6 +27,8 @@ app.get('/', (c) =>
 	c.json({ name: 'recoder', version: VERSION, frontend: env.FRONTEND_URL, health: '/health' })
 );
 app.route('/health', health);
+app.route('/api/auth', auth);
+app.route('/api/settings', settings);
 app.route('/api/repos', repos);
 app.route('/api/reviews', reviews);
 app.route('/api/runs', runs);

@@ -1,10 +1,22 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { page } from '$app/state';
 	import Plus from '@lucide/svelte/icons/plus';
+	import Settings from '@lucide/svelte/icons/settings';
 	import X from '@lucide/svelte/icons/x';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import { modelSettingsUi } from '$lib/model-settings.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
+
+	function closeSession(id: string): void {
+		sessionState.close(id);
+		// If we closed the session we're looking at, follow the tab strip.
+		if (page.url.pathname === `/session/${id}`) {
+			const next = sessionState.activeId;
+			void goto(next ? `/session/${next}` : '/');
+		}
+	}
 </script>
 
 <header class="flex h-[52px] shrink-0 items-center gap-1 bg-background px-3">
@@ -45,7 +57,7 @@
 					{/if}
 				</button>
 				<button
-					onclick={() => sessionState.close(session.id)}
+					onclick={() => closeSession(session.id)}
 					aria-label="Close {session.name}"
 					title="Close {session.name}"
 					class="ml-1 flex h-6 w-6 items-center justify-center rounded-full opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 hover:bg-foreground/10"
@@ -65,6 +77,15 @@
 			title="New session"
 		>
 			<Plus size={14} />
+		</Button>
+		<Button
+			variant="ghost"
+			size="icon"
+			onclick={() => modelSettingsUi.show()}
+			aria-label="Reviewer model settings"
+			title="Reviewer model settings"
+		>
+			<Settings size={14} />
 		</Button>
 	</div>
 </header>

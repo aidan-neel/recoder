@@ -4,16 +4,26 @@
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import { FINDING_DOT, type TreeNode } from '$lib/file-tree';
 	import { getFileIcon, getFolderIcon } from '$lib/file-icons';
+	import { folderOpen } from '$lib/folder-open.svelte';
 	import FileTreeNode from './file-tree-node.svelte';
 
 	interface Props {
 		node: TreeNode;
 		selectedId: string;
 		onSelect: (id: string) => void;
+		parentPath?: string;
 	}
 
-	let { node, selectedId, onSelect }: Props = $props();
-	let open = $state(true);
+	let { node, selectedId, onSelect, parentPath = '' }: Props = $props();
+	// Stable identity for this node instance (props never change per instance).
+	const key =
+		node.kind === 'folder' ? (parentPath ? `${parentPath}/${node.name}` : node.name) : node.id;
+	const fullPath = $derived(node.kind === 'folder' ? key : node.id);
+	let open = $state(folderOpen.isOpen(key));
+
+	$effect(() => {
+		if (node.kind === 'folder') folderOpen.set(key, open);
+	});
 </script>
 
 {#if node.kind === 'folder'}
@@ -33,7 +43,7 @@
 		</Collapsible.Trigger>
 		<Collapsible.Content class="ml-[9px] space-y-px border-l border-dotted border-border py-px pl-2">
 			{#each node.children as child (child.kind === 'file' ? child.id : child.name)}
-				<FileTreeNode node={child} {selectedId} {onSelect} />
+				<FileTreeNode node={child} {selectedId} {onSelect} parentPath={fullPath} />
 			{/each}
 		</Collapsible.Content>
 	</Collapsible.Root>
