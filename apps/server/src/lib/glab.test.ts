@@ -3,11 +3,12 @@ import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GhError } from './gh';
-import { fetchMergeRequest } from './glab';
+import { fetchMergeRequest, listMergeRequests } from './glab';
 
 const VIEW_JSON =
 	'{"iid":5,"title":"Fix MR","web_url":"https://gitlab.com/a/b/-/merge_requests/5",' +
-	'"author":{"username":"u"},"target_branch":"main","source_branch":"feat","sha":"def456"}';
+	'"author":{"username":"u"},"target_branch":"main","source_branch":"feat","sha":"def456",' +
+	'"additions":4,"deletions":1,"changes_count":2,"created_at":"2026-08-30T12:00:00Z"}';
 
 const DIFF = 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old\n+new';
 
@@ -32,6 +33,7 @@ describe('fetchMergeRequest', () => {
 		expect(pr.author).toBe('u');
 		expect(pr.headSha).toBe('def456');
 		expect(pr.base).toBe('main');
+		expect(pr.createdAt).toBe('2026-08-30T12:00:00Z');
 		expect(diff).toContain('diff --git');
 	});
 
@@ -40,5 +42,44 @@ describe('fetchMergeRequest', () => {
 		const err = await fetchMergeRequest('https://gitlab.com/a/b', 5, opts).catch((e) => e);
 		expect(err).toBeInstanceOf(GhError);
 		expect((err as GhError).kind).toBe('auth');
+	});
+});
+
+describe('listMergeRequests', () => {
+	const LIST_JSON =
+		'[{"iid":5,"title":"Fix MR","web_url":"https://gitlab.com/a/b/-/merge_requests/5",' +
+		'"author":{"username":"u"},"target_branch":"main","source_branch":"feat",' +
+		'"sha":"def456","created_at":"2026-08-30T12:00:00Z"},' +
+		'{"iid":4,"title":"Docs","web_url":"https://gitlab.com/a/b/-/merge_requests/4",' +
+		'"author":{"username":"sam"},"target_branch":"main","source_branch":"docs",' +
+		'"sha":"aaa111","created_at":"2026-08-29T09:00:00Z"}]';
+
+	const STATS_JSON =
+		'{"iid":5,"additions":4,"deletions":1,"changes_count":2,"sha":"def456"}';
+
+	test('lists MRs and enriches stats via mr view', async () => {
+		const opts = await fakeBin(
+			`#!/bin/sh\nif [ "$1" = "mr" ] && [ "$2" = "list" ]; then echo '${LIST_JSON}'; exit 0; fi\n` +
+				`if [ "$1" = "mr" ] && [ "$2" = "view" ]; then echo '${STATS_JSON}'; exit 0; fi\n` +
+				`echo 'unexpected' >&2; exit 1\n`
+		);
+		const prs = await listMergeRequests('https://gitlab.com/a/b', opts);
+		expect(prs).toHaveLength(2);
+		expect(prs[0].number).toBe(5);
+		expect(prs[0].author).toBe('u');
+		expect(prs[0].createdAt).toBe('2026-08-30T12:00:00Z');
+		expect(prs[0].additions).toBe(4);
+		expect(prs[0].changedFiles).toBe(2);
+	});
+
+	test('keeps zeroed stats when a view fails', async () => {
+		const opts = await fakeBin(
+			`#!/bin/sh\nif [ "$1" = "mr" ] && [ "$2" = "list" ]; then echo '${LIST_JSON}'; exit 0; fi\n` +
+				`echo 'boom' >&2; exit 1\n`
+		);
+		const prs = await listMergeRequests('https://gitlab.com/a/b', opts);
+		expect(prs).toHaveLength(2);
+		expect(prs[0].additions).toBe(0);
+		expect(prs[0].title).toBe('Fix MR');
 	});
 });

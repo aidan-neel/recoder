@@ -26,6 +26,8 @@ function now(): string {
 class ThreadStore {
 	/** Open thread id. Null = panel closed. */
 	openId = $state<string | null>(null);
+	/** Backend review backing the open thread (null = local-only demo threads). */
+	reviewId = $state<string | null>(null);
 
 	threads = $state<Record<string, Thread>>({
 		'f-security-tenant': {
@@ -76,6 +78,22 @@ class ThreadStore {
 			author: 'You',
 			time: now(),
 			body: hunkRef ? `[hunk ${hunkRef}]\n${text}` : text
+		});
+	}
+
+	reply(findingId: string, author: string, body: string, model?: string): void {
+		let thread = this.threads[findingId];
+		if (!thread) {
+			thread = { findingId, messages: [] };
+			this.threads[findingId] = thread;
+		}
+		thread.messages.push({
+			id: crypto.randomUUID(),
+			role: 'agent',
+			author,
+			model,
+			time: now(),
+			body
 		});
 	}
 

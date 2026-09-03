@@ -65,9 +65,14 @@ class SessionState {
 		if (session) session.status = 'ready';
 	}
 
-	/** Register an externally-created session (e.g. a queued backend review) without touching existing ones. */
+	/** Register an externally-created session (e.g. a queued backend review). Always reflects the latest known status. */
 	ensureSession(id: string, name: string, ref: string | null, status: 'reviewing' | 'ready'): void {
-		if (!this.sessions.some((s) => s.id === id)) {
+		const existing = this.sessions.find((s) => s.id === id);
+		if (existing) {
+			existing.name = name;
+			existing.ref = ref;
+			existing.status = status;
+		} else {
 			this.sessions = [
 				...this.sessions,
 				{

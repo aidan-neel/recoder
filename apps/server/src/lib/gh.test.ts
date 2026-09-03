@@ -2,14 +2,15 @@ import { describe, expect, test } from 'bun:test';
 import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fetchPullRequest, GhError, parseRepoSlug } from './gh';
+import { fetchPullRequest, GhError, listPullRequests, parseRepoSlug } from './gh';
 import { extractJson } from './gh';
 import { sandboxKey } from './sandbox';
 
 const VIEW_JSON =
 	'{"number":7,"title":"Fix it","url":"https://github.com/o/r/pull/7",' +
 	'"author":{"login":"octo"},"baseRefName":"main","headRefName":"feat",' +
-	'"headRefOid":"abc123","additions":10,"deletions":2,"changedFiles":3}';
+	'"headRefOid":"abc123","additions":10,"deletions":2,"changedFiles":3,' +
+	'"createdAt":"2026-08-30T12:00:00Z"}';
 
 const DIFF = 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old\n+new';
 
@@ -46,6 +47,7 @@ describe('fetchPullRequest', () => {
 		expect(pr.author).toBe('octo');
 		expect(pr.headSha).toBe('abc123');
 		expect(pr.additions).toBe(10);
+		expect(pr.createdAt).toBe('2026-08-30T12:00:00Z');
 		expect(diff).toContain('diff --git');
 	});
 
@@ -61,6 +63,35 @@ describe('fetchPullRequest', () => {
 		const err = await fetchPullRequest('o/r', 9, { env: { PATH: dir } }).catch((e) => e);
 		expect(err).toBeInstanceOf(GhError);
 		expect((err as GhError).kind).toBe('unavailable');
+	});
+});
+
+describe('listPullRequests', () => {
+	const LIST_JSON =
+		'[{"number":7,"title":"Fix it","url":"https://github.com/o/r/pull/7",' +
+		'"author":{"login":"octo"},"baseRefName":"main","headRefName":"feat",' +
+		'"headRefOid":"abc123","additions":10,"deletions":2,"changedFiles":3,' +
+		'"createdAt":"2026-08-30T12:00:00Z"},' +
+		'{"number":6,"title":"Docs","url":"https://github.com/o/r/pull/6",' +
+		'"author":{"login":"sam"},"baseRefName":"main","headRefName":"docs",' +
+		'"headRefOid":"def456","additions":1,"deletions":0,"changedFiles":1,' +
+		'"createdAt":"2026-08-29T09:00:00Z"}]';
+
+	test('returns open PRs via gh pr list', async () => {
+		const opts = await fakeBin(`#!/bin/sh\necho '${LIST_JSON}'; exit 0\n`);
+		const prs = await listPullRequests('https://github.com/o/r', opts);
+		expect(prs).toHaveLength(2);
+		expect(prs[0].number).toBe(7);
+		expect(prs[0].author).toBe('octo');
+		expect(prs[0].createdAt).toBe('2026-08-30T12:00:00Z');
+		expect(prs[1].number).toBe(6);
+		expect(prs[1].additions).toBe(1);
+	});
+
+	test('rejects non-array output', async () => {
+		const opts = await fakeBin(`#!/bin/sh\necho '{"number":7}'; exit 0\n`);
+		const err = await listPullRequests('o/r', opts).catch((e) => e);
+		expect(err).toBeInstanceOf(GhError);
 	});
 });
 

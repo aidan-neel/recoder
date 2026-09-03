@@ -1,22 +1,34 @@
 <script lang="ts">
-	import { onDestroy } from 'svelte';
-	import RotateCw from '@lucide/svelte/icons/rotate-cw';
-	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
-	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import Shortcut from '@sivir-ui/svelte/components/shortcut';
-	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import { TaskSteps, type TaskStep } from '@sivir-ui/svelte/components/task-steps';
+	import ReviewingView, {
+		type ReviewingFinding
+	} from '$lib/components/reviewing-view.svelte';
 
 	interface Props {
 		title: string;
 		repo: string;
+		prLabel?: string | null;
+		files?: number | null;
+		additions?: number | null;
+		deletions?: number | null;
 		/** When set, a completion action linking out (sandbox use). */
 		sessionHref?: string;
+		onOpenDiff?: (() => void) | null;
 		onDone?: () => void;
 	}
 
-	let { title, repo, sessionHref, onDone = () => {} }: Props = $props();
+	let {
+		title,
+		repo,
+		prLabel = null,
+		files = null,
+		additions = null,
+		deletions = null,
+		sessionHref,
+		onOpenDiff = null,
+		onDone = () => {}
+	}: Props = $props();
 
 	interface AgentSim {
 		id: string;
@@ -26,47 +38,68 @@
 		rate: number;
 		status: 'queued' | 'running' | 'done';
 		progress: number;
+		doneAt: number | null;
 		logs: string[];
-		findings: number;
+	}
+
+	interface ScriptedFinding {
+		severity: ReviewingFinding['severity'];
+		title: string;
+		location: string;
 	}
 
 	const LOG_SCRIPTS: Record<string, string[]> = {
 		security: [
-			'cloning acme/ledger-api@feat/rate-limit',
-			'diff loaded · 6 files · +89 −34',
-			'tracing bucket ownership across tenants',
+			'cloning acme/recoder@release/v0.2.9',
+			'diff loaded · 13 files · +1204 −318',
 			'gateway.ts:88 passes raw IP — flagging',
 			'checking refill path for time oracle',
 			'writing finding F-01 · tenant budget drain'
 		],
-		perf: [
-			'diff loaded · 6 files · +89 −34',
-			'profiling hot paths in limiter.ts',
-			'buckets Map has no eviction — unbounded growth',
-			'measuring constructor allocation cost',
-			'writing finding F-02 · missing eviction'
-		],
 		correctness: [
-			'diff loaded · 6 files · +89 −34',
+			'diff loaded · 13 files · +1204 −318',
 			'checking Clock injection vs Date.now',
 			'refill() bypasses injected clock — flagging',
 			'verifying bucket invariants',
 			'writing finding F-03 · dead clock'
 		],
+		perf: [
+			'diff loaded · 13 files · +1204 −318',
+			'profiling hot paths in limiter.ts',
+			'buckets Map has no eviction — unbounded growth',
+			'measuring constructor allocation cost',
+			'writing finding F-02 · missing eviction'
+		],
 		docs: [
-			'diff loaded · 6 files · +89 −34',
+			'diff loaded · 13 files · +1204 −318',
 			'scanning comments against new signatures',
 			'allow() doc predates class move — flagging',
 			'writing finding F-04 · stale doc comment'
 		]
 	};
 
+	const FINDING_SCRIPTS: Record<string, ScriptedFinding[]> = {
+		security: [
+			{ severity: 'high', title: 'Tenant budget drain via raw IP bucket key', location: 'gateway.ts:88' },
+			{ severity: 'medium', title: 'Refill window leaks bucket state across tenants', location: 'limiter.ts:44' }
+		],
+		perf: [
+			{ severity: 'medium', title: 'buckets Map has no eviction — unbounded growth', location: 'limiter.ts:24' }
+		],
+		correctness: [
+			{ severity: 'medium', title: 'refill() reads Date.now, ignoring injected clock', location: 'limiter.ts:61' }
+		],
+		docs: [
+			{ severity: 'low', title: 'allow() doc comment predates the class move', location: 'limiter.ts:12' }
+		]
+	};
+
 	function initialAgents(): AgentSim[] {
 		return [
-			{ id: 'security', name: 'security', model: '32b', rate: 4.2, status: 'running', progress: 2, logs: [], findings: 0 },
-			{ id: 'perf', name: 'perf', model: '7b', rate: 6.5, status: 'running', progress: 2, logs: [], findings: 0 },
-			{ id: 'correctness', name: 'correctness', model: '32b', rate: 3.4, status: 'running', progress: 2, logs: [], findings: 0 },
-			{ id: 'docs', name: 'docs', model: '7b', rate: 7.5, status: 'running', progress: 2, logs: [], findings: 0 }
+			{ id: 'security', name: 'security', model: 'qwen3.8-flash', rate: 4.2, status: 'running', progress: 2, doneAt: null, logs: [] },
+			{ id: 'perf', name: 'perf', model: 'qwen3.8-flash', rate: 6.5, status: 'running', progress: 2, doneAt: null, logs: [] },
+			{ id: 'correctness', name: 'correctness', model: 'qwen3.8-flash', rate: 3.4, status: 'running', progress: 2, doneAt: null, logs: [] },
+			{ id: 'docs', name: 'docs', model: 'qwen3.8-flash', rate: 7.5, status: 'running', progress: 2, doneAt: null, logs: [] }
 		];
 	}
 
@@ -76,19 +109,47 @@
 	let timer: ReturnType<typeof setInterval> | undefined;
 	let clock: ReturnType<typeof setInterval> | undefined;
 
-	const overall = $derived(
-		Math.round(agents.reduce((sum, a) => sum + a.progress, 0) / agents.length)
-	);
-	const findingsTotal = $derived(agents.reduce((sum, a) => sum + a.findings, 0));
-	const doneCount = $derived(agents.filter((a) => a.status === 'done').length);
-	const done = $derived(doneCount === agents.length);
+	function revealed(agent: AgentSim): ScriptedFinding[] {
+		const script = FINDING_SCRIPTS[agent.id] ?? [];
+		if (agent.status === 'done') return script;
+		return script.slice(0, Math.min(script.length, Math.floor(agent.progress / 35)));
+	}
 
-	const stages: TaskStep[] = [
-		{ id: 'fetch', label: 'Fetch diff', meta: '+89 −34' },
-		{ id: 'review', label: 'Agents reviewing' },
-		{ id: 'ready', label: 'Ready' }
-	];
-	const stageCurrent = $derived(done ? stages.length : 1);
+	const viewAgents = $derived(
+		agents.map((agent) => ({
+			id: agent.id,
+			name: agent.name,
+			model: agent.model,
+			status: agent.status,
+			progress: agent.progress,
+			findings: revealed(agent).length,
+			logs: agent.logs,
+			doneMeta:
+				agent.status === 'done'
+					? `done · ${revealed(agent).length} finding${revealed(agent).length === 1 ? '' : 's'} · ${formatElapsed(agent.doneAt ?? elapsed)}`
+					: null
+		}))
+	);
+
+	const viewFindings = $derived.by(() => {
+		const out: ReviewingFinding[] = [];
+		let n = 0;
+		for (const agent of agents) {
+			for (const finding of revealed(agent)) {
+				n += 1;
+				out.push({
+					id: `F-${String(n).padStart(2, '0')}`,
+					agent: agent.name,
+					severity: finding.severity,
+					title: finding.title,
+					location: finding.location
+				});
+			}
+		}
+		return out;
+	});
+
+	const pendingCount = $derived(agents.filter((a) => a.status !== 'done').length);
 
 	let restartOpen = $state(false);
 
@@ -125,9 +186,7 @@
 				if (agent.logs[agent.logs.length - 1] !== line) agent.logs.push(line);
 				if (agent.progress >= 100) {
 					agent.status = 'done';
-					agent.findings = 1 + Math.floor(Math.random() * 2);
-				} else if (agent.progress > 55 && agent.findings === 0 && Math.random() > 0.6) {
-					agent.findings = 1;
+					agent.doneAt = elapsed;
 				}
 			}
 			if (allDone) {
@@ -145,8 +204,6 @@
 		return stop;
 	});
 
-	onDestroy(stop);
-
 	function formatElapsed(total: number): string {
 		const m = Math.floor(total / 60);
 		const s = total % 60;
@@ -154,103 +211,41 @@
 	}
 </script>
 
-<div
-	class="session-enter mx-auto flex min-h-[calc(100vh-52px-6rem)] w-full max-w-2xl flex-col justify-center px-4 py-10"
-	style="justify-content: safe center"
->
-	<div class="flex items-center gap-3">
-		<div class="min-w-0 flex-1">
-			<div class="flex items-center gap-2.5">
-				{#if !done}
-					<Spinner size={18} aria-hidden="true" />
-				{/if}
-				<h1 class="truncate text-2xl font-semibold tracking-tight">{title}</h1>
-			</div>
-		</div>
-		<Button
-			variant="ghost"
-			size="icon"
-			aria-label="Restart review"
-			title="Restart review"
-			onclick={() => (restartOpen = true)}
-		>
-			<RotateCw size={15} />
-		</Button>
-	</div>
+<ReviewingView
+	title={title}
+	meta={{
+		prLabel: prLabel ?? '',
+		repo,
+		files,
+		additions,
+		deletions,
+		elapsed: formatElapsed(elapsed)
+	}}
+	agents={viewAgents}
+	findings={viewFindings}
+	{pendingCount}
+	{onOpenDiff}
+	onRestart={() => (restartOpen = true)}
+	doneHref={sessionHref}
+/>
 
-	<div class="mt-4">
-		<TaskSteps steps={stages} current={stageCurrent} label="Review stages" />
-	</div>
-
-	<div class="mt-4 flex items-baseline gap-3">
-		<div class="min-w-0 flex-1">
-			<Progress value={overall} max={100} />
-		</div>
-		<span class="shrink-0 font-mono text-[13px]">{overall}%</span>
-	</div>
-	<p class="mt-1.5 font-mono text-[13px] text-foreground-muted">
-		{repo} · {doneCount} of {agents.length} agents done · {findingsTotal} findings · {formatElapsed(
-			elapsed
-		)} elapsed
-	</p>
-
-	<div class="mt-6 divide-y divide-border border-y border-border">
-		{#each agents as agent (agent.id)}
-			<div class="py-3">
-				<div class="flex items-center gap-2.5">
-					{#if agent.status === 'running'}
-						<Spinner size={14} aria-hidden="true" />
-					{:else}
-						<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success"></span>
-					{/if}
-					<span class="text-[15px] font-medium">{agent.name}</span>
-					<span class="font-mono text-[12px] text-foreground-muted">{agent.model}</span>
-					<span class="ml-auto shrink-0 font-mono text-[13px] text-foreground-muted">
-						{agent.status === 'done'
-							? `${agent.findings} finding${agent.findings === 1 ? '' : 's'}`
-							: `${Math.round(agent.progress)}%`}
-					</span>
-				</div>
-				<div class="mt-2 flex items-center gap-3 pl-[22px]">
-					<div class="min-w-0 flex-1">
-						<Progress value={agent.progress} max={100} />
-					</div>
-				</div>
-				<p class="mt-1.5 truncate pl-[22px] font-mono text-[13px] text-foreground-muted">
-					{#if agent.logs.length === 0}
-						<span class="opacity-60">Starting…</span>
-					{:else}
-						› {agent.logs[agent.logs.length - 1]}
-					{/if}
-				</p>
-			</div>
-		{/each}
-	</div>
-
-	{#if done && sessionHref}
-		<div class="mt-6 flex justify-center">
-			<Button href={sessionHref} class="font-sans">Open session</Button>
-		</div>
-	{/if}
-
-	<AlertDialog.Root bind:open={restartOpen}>
-		<AlertDialog.Content>
-			<AlertDialog.Header>
-				<AlertDialog.Title>Restart review?</AlertDialog.Title>
-				<AlertDialog.Description>
-					Agent progress and streamed logs start over from zero.
-				</AlertDialog.Description>
-			</AlertDialog.Header>
-			<AlertDialog.Footer>
-				<AlertDialog.Exit>
-					Cancel
-					<Shortcut shortcut="esc" />
-				</AlertDialog.Exit>
-				<AlertDialog.Confirm variant="primary" onclick={confirmRestart}>
-					Restart
-					<Shortcut shortcut="enter" />
-				</AlertDialog.Confirm>
-			</AlertDialog.Footer>
-		</AlertDialog.Content>
-	</AlertDialog.Root>
-</div>
+<AlertDialog.Root bind:open={restartOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>Restart review?</AlertDialog.Title>
+			<AlertDialog.Description>
+				Agent progress and streamed logs start over from zero.
+			</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Exit>
+				Cancel
+				<Shortcut shortcut="esc" />
+			</AlertDialog.Exit>
+			<AlertDialog.Confirm variant="primary" onclick={confirmRestart}>
+				Restart
+				<Shortcut shortcut="enter" />
+			</AlertDialog.Confirm>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

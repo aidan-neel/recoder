@@ -63,8 +63,10 @@
 		{:else}
 			<div class="flex items-center gap-2 font-mono text-[14px]">
 				<SeverityPill severity={finding.severity} />
-				<span class="font-medium">{finding.category}</span>
-				<span class="truncate text-foreground-muted">{finding.agent}</span>
+			<span class="font-medium">{finding.category}</span>
+			<span class="truncate text-foreground-muted">
+				{finding.agent}{finding.model ? ` · ${finding.model}` : ''}
+			</span>
 				{#if finding.code}
 					<span class="ml-auto shrink-0 font-mono text-foreground-muted">{finding.code}</span>
 				{/if}

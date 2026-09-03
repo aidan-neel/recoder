@@ -11,18 +11,26 @@
 	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import SeverityPill from './severity-pill.svelte';
 	import { findingsStore } from '$lib/findings.svelte';
+	import { serverApi } from '$lib/server-api';
 	import { threadsStore, type Thread } from '$lib/threads.svelte';
 
-	const participants = ['security', 'orchestrator', 'perf'];
+	const BASE_PARTICIPANTS = ['security', 'orchestrator', 'perf'];
 
-	let active = $state(participants[0]);
+	let active = $state(BASE_PARTICIPANTS[0]);
 	let draft = $state('');
 	let attachedQuote = $state<string | null>(null);
 	let selectionAvailable = $state(false);
+	let sending = $state(false);
+	let sendError = $state<string | null>(null);
 	let inputEl: HTMLTextAreaElement | undefined = $state();
 
 	const findingId = $derived(threadsStore.openId);
 	const finding = $derived(findingsStore.items.find((f) => f.id === findingId));
+	const participants = $derived(
+		finding && !BASE_PARTICIPANTS.includes(finding.agent)
+			? [...BASE_PARTICIPANTS, finding.agent]
+			: BASE_PARTICIPANTS
+	);
 	const thread = $derived<Thread>(
 		findingId
 			? (threadsStore.get(findingId) ?? { findingId, messages: [] })
@@ -57,17 +65,56 @@
 		window.getSelection()?.removeAllRanges();
 	}
 
-	function send(): void {
-		if (!findingId) return;
+	// Follow the finding's own reviewer when the thread changes.
+	$effect(() => {
+		const agent = finding?.agent;
+		if (findingId && agent && participants.includes(agent)) {
+			active = agent;
+		}
+	});
+
+	async function send(): Promise<void> {
+		if (!findingId || sending) return;
 		const body = draft.trim();
 		if (!body) return;
 		const quote = attachedQuote
 			? `${attachedQuote.split('\n').map((line) => `> ${line}`).join('\n')}\n\n`
 			: '';
-		threadsStore.send(findingId, `${quote}${body}`);
+		const question = `${quote}${body}`;
+		const history = (threadsStore.get(findingId)?.messages ?? []).map((m) => ({
+			role: m.role === 'user' ? ('user' as const) : ('assistant' as const),
+			body: m.body
+		}));
+		threadsStore.send(findingId, question);
 		draft = '';
 		attachedQuote = null;
+		sendError = null;
 		if (inputEl) inputEl.style.height = 'auto';
+
+		// Local-only demo threads have no backend review to answer.
+		const reviewId = threadsStore.reviewId;
+		if (!reviewId || !finding) return;
+		sending = true;
+		try {
+			const result = await serverApi.discuss(reviewId, {
+				agent: active,
+				finding: {
+					file: finding.file,
+					line: finding.startLine,
+					endLine: finding.endLine,
+					severity: finding.severity,
+					message: finding.body,
+					agent: finding.agent
+				},
+				history,
+				question
+			});
+			threadsStore.reply(findingId, result.agent, result.reply, result.model);
+		} catch (e) {
+			sendError = e instanceof Error ? e.message : 'The reviewer did not respond.';
+		} finally {
+			sending = false;
+		}
 	}
 
 	$effect(() => {
@@ -151,6 +198,9 @@
 					aria-label="Ask about this finding"
 					class="max-h-[120px] w-full resize-none bg-transparent text-[14px] leading-relaxed outline-none placeholder:text-foreground-muted/70"
 				></textarea>
+				{#if sendError}
+					<p class="mt-2 text-[13px] font-medium text-error" role="alert">{sendError}</p>
+				{/if}
 				<div class="mt-2 flex items-center gap-1">
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger
@@ -199,8 +249,9 @@
 						variant="primary"
 						size="sm"
 						class="ml-auto h-9"
-						disabled={!draft.trim()}
-						onclick={send}
+						disabled={!draft.trim() || sending}
+						loading={sending}
+						onclick={() => void send()}
 					>
 						Send
 						<Shortcut shortcut="enter" />

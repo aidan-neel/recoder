@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { parseUnifiedDiff, type PullPreview, type Repo } from '@recoder/shared';
-import { fetchPullRequest, GhError } from '../lib/gh';
-import { fetchMergeRequest } from '../lib/glab';
+import { fetchPullRequest, GhError, listPullRequests } from '../lib/gh';
+import { fetchMergeRequest, listMergeRequests } from '../lib/glab';
 import { detectProvider } from '../lib/providers';
 import { tokenEnv } from '../lib/tokens';
 import { db } from '../store';
@@ -37,6 +37,26 @@ app.get('/:id', (c) => {
 app.delete('/:id', (c) => {
 	if (!db.repos.delete(c.req.param('id'))) return c.json({ error: 'repo not found' }, 404);
 	return c.json({ deleted: true });
+});
+
+/**
+ * Open PRs/MRs for a tracked repo via the provider CLI.
+ * Cheap metadata only — no sandbox checkout.
+ */
+app.get('/:id/pulls', async (c) => {
+	const repo = db.repos.get(c.req.param('id'));
+	if (!repo) return c.json({ error: 'repo not found' }, 404);
+	const provider = repo.provider ?? detectProvider(repo.url);
+	try {
+		const prs =
+			provider === 'gitlab'
+				? await listMergeRequests(repo.url, { env: tokenEnv('gitlab') })
+				: await listPullRequests(repo.url, { env: tokenEnv('github') });
+		return c.json(prs);
+	} catch (err) {
+		if (err instanceof GhError) return c.json({ error: err.message, kind: err.kind }, 502);
+		throw err;
+	}
 });
 
 /**

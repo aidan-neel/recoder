@@ -1,6 +1,7 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Provider } from '@recoder/shared';
+import { serverDataDir } from './data-dir';
 
 /**
  * CLI tokens for gh/glab, set from the UI (`POST /api/auth/token`).
@@ -12,12 +13,8 @@ import type { Provider } from '@recoder/shared';
  */
 const store = new Map<Provider, string>();
 
-function dataDir(): string {
-	return process.env.RECODER_DATA_DIR ?? './data';
-}
-
 function tokenFile(): string {
-	return join(dataDir(), 'tokens.json');
+	return join(serverDataDir(), 'tokens.json');
 }
 
 function readStored(): Partial<Record<Provider, string>> {
@@ -38,7 +35,6 @@ function readStored(): Partial<Record<Provider, string>> {
 
 function persist(): void {
 	try {
-		mkdirSync(dataDir(), { recursive: true });
 		writeFileSync(tokenFile(), JSON.stringify(Object.fromEntries(store)), { mode: 0o600 });
 	} catch (err) {
 		console.warn('[auth] could not persist tokens', err instanceof Error ? err.message : err);

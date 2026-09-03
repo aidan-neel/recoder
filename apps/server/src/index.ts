@@ -2,9 +2,11 @@ import { app } from './app';
 import { env } from './env';
 import { initReviewSettings } from './lib/review-settings';
 import { initTokenStore } from './lib/tokens';
+import { recoverStaleReviews } from './store';
 
 initTokenStore();
 initReviewSettings();
+recoverStaleReviews();
 
 const server = Bun.serve({
 	fetch: app.fetch,

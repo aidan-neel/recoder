@@ -1,9 +1,12 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app } from '../app';
 import { clearToken, hasToken, initTokenStore, setToken, tokenEnv } from '../lib/tokens';
+
+// Never touch the real data dir (tokens.json, recoder.db) from tests.
+process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-test-'));
 
 describe('tokens', () => {
 	test('set/has/env/clear round-trip', () => {

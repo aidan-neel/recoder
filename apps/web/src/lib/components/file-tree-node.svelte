@@ -2,7 +2,7 @@
 	import Minus from '@lucide/svelte/icons/minus';
 	import Plus from '@lucide/svelte/icons/plus';
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
-	import { FINDING_DOT, type TreeNode } from '$lib/file-tree';
+	import { FINDING_DOT, type FileBadge, type TreeNode } from '$lib/file-tree';
 	import { getFileIcon, getFolderIcon } from '$lib/file-icons';
 	import { folderOpen } from '$lib/folder-open.svelte';
 	import FileTreeNode from './file-tree-node.svelte';
@@ -12,9 +12,11 @@
 		selectedId: string;
 		onSelect: (id: string) => void;
 		parentPath?: string;
+		badges?: Map<string, FileBadge>;
+		onJump?: (fileId: string, findingId: string) => void;
 	}
 
-	let { node, selectedId, onSelect, parentPath = '' }: Props = $props();
+	let { node, selectedId, onSelect, parentPath = '', badges, onJump }: Props = $props();
 	// Stable identity for this node instance (props never change per instance).
 	const key =
 		node.kind === 'folder' ? (parentPath ? `${parentPath}/${node.name}` : node.name) : node.id;
@@ -43,23 +45,29 @@
 		</Collapsible.Trigger>
 		<Collapsible.Content class="ml-[9px] space-y-px border-l border-dotted border-border py-px pl-2">
 			{#each node.children as child (child.kind === 'file' ? child.id : child.name)}
-				<FileTreeNode node={child} {selectedId} {onSelect} parentPath={fullPath} />
+				<FileTreeNode node={child} {selectedId} {onSelect} parentPath={fullPath} {badges} {onJump} />
 			{/each}
 		</Collapsible.Content>
 	</Collapsible.Root>
 {:else}
 	{@const selected = node.id === selectedId}
-	<button
-		onclick={() => onSelect(node.id)}
-		aria-current={selected}
-		class="flex h-8 w-full items-center gap-2 rounded-md px-2 text-left transition-colors {selected
+	{@const badge = badges?.get(node.id)}
+	<div
+		class="flex h-8 w-full items-center gap-2 rounded-md px-2 transition-colors {selected
 			? 'bg-secondary text-foreground'
 			: 'text-foreground-muted hover:bg-secondary/60 hover:text-foreground'}"
 	>
-		<span class="flex shrink-0 items-center [&>svg]:h-4 [&>svg]:w-4">
-			{@html getFileIcon(node.name)}
-		</span>
-		<span class="min-w-0 flex-1 truncate font-mono text-[15px]">{node.name}</span>
+		<button
+			onclick={() => onSelect(node.id)}
+			aria-current={selected}
+			aria-label="Show {node.name}"
+			class="flex min-w-0 flex-1 items-center gap-2 text-left"
+		>
+			<span class="flex shrink-0 items-center [&>svg]:h-4 [&>svg]:w-4">
+				{@html getFileIcon(node.name)}
+			</span>
+			<span class="min-w-0 flex-1 truncate font-mono text-[15px]">{node.name}</span>
+		</button>
 		<span class="flex shrink-0 items-center gap-1.5 font-mono text-[14px]">
 			{#if node.additions > 0}
 				<span class="text-success">+{node.additions}</span>
@@ -67,12 +75,23 @@
 			{#if node.deletions > 0}
 				<span class="text-error">-{node.deletions}</span>
 			{/if}
-			{#if node.finding}
-				<span
-					class="h-1.5 w-1.5 rounded-full"
-					style:background-color={FINDING_DOT[node.finding]}
-				></span>
-			{/if}
 		</span>
-	</button>
+		{#if badge && onJump}
+			<button
+				type="button"
+				onclick={() => onJump(node.id, badge.findingId)}
+				title="Jump to finding"
+				aria-label="{badge.count} finding{badge.count === 1 ? '' : 's'} in {node.name} — jump to finding"
+				class="shrink-0 rounded bg-secondary px-1.5 py-px font-mono text-[12px] transition-colors hover:bg-foreground/15"
+				style:color={FINDING_DOT[badge.kind]}
+			>
+				{badge.count}
+			</button>
+		{:else if node.finding}
+			<span
+				class="h-1.5 w-1.5 shrink-0 rounded-full"
+				style:background-color={FINDING_DOT[node.finding]}
+			></span>
+		{/if}
+	</div>
 {/if}

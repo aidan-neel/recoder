@@ -17,6 +17,8 @@ export interface ChatOptions {
 	/** Response format hint; ignored by servers that don't support it. */
 	jsonMode?: boolean;
 	temperature?: number;
+	/** Fixed seed for deterministic output. Only sent when set (some servers reject unknown fields). */
+	seed?: number;
 	maxTokens?: number;
 	timeoutMs?: number;
 	signal?: AbortSignal;
@@ -49,6 +51,7 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 				messages: opts.messages,
 				temperature: opts.temperature ?? 0.2,
 				max_tokens: opts.maxTokens ?? 4000,
+				...(opts.seed !== undefined ? { seed: opts.seed } : {}),
 				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {})
 			}),
 			signal: controller.signal

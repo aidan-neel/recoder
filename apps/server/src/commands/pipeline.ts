@@ -1,9 +1,9 @@
 import { parseUnifiedDiff, type Finding, type Review } from '@recoder/shared';
-import { db, reviewDiffs } from '../store';
+import { db, reviewDiffs, reviewSandboxes } from '../store';
 import { emitReviewEvent } from '../lib/events';
 import { fetchPullRequest, GhError } from '../lib/gh';
 import { fetchMergeRequest } from '../lib/glab';
-import { runAllRoles } from '../lib/harness';
+import { filterNewFindings, runAllRoles } from '../lib/harness';
 import { isReviewConfigured } from '../lib/models';
 import { detectProvider, locateRepo, refspecFor } from '../lib/providers';
 import { prepareSandbox } from '../lib/sandbox';
@@ -74,11 +74,20 @@ export async function runReviewPipeline(reviewId: string): Promise<void> {
 
 	try {
 		// 1. Fetch the PR. Offline provider CLI → stay in stub mode and continue.
-		emitReviewEvent(reviewId, { type: 'step', step: 'fetch', message: 'Fetching PR…' });
 		try {
 			if (!repo) throw new Error('repo not found');
 			const provider = repo.provider ?? detectProvider(repo.url);
 			const env = tokenEnv(provider);
+			const viewCmd =
+				provider === 'gitlab'
+					? `glab mr view ${review.prNumber}`
+					: `gh pr view ${review.prNumber}`;
+			emitReviewEvent(reviewId, {
+				type: 'step',
+				step: 'fetch',
+				message: `Fetching PR #${review.prNumber}…`,
+				data: { command: viewCmd }
+			});
 			const { pr, diff } =
 				provider === 'gitlab'
 					? await fetchMergeRequest(repo.url, review.prNumber, { env })
@@ -110,9 +119,14 @@ export async function runReviewPipeline(reviewId: string): Promise<void> {
 
 		// 2. Sandbox checkout (provider mode only).
 		if (review.source !== 'stub' && repo) {
-			emitReviewEvent(reviewId, { type: 'step', step: 'sandbox', message: 'Preparing sandbox…' });
 			const { slug } = locateRepo(repo.url);
 			const { fetchRef, branch } = refspecFor(review.source, review.prNumber);
+			emitReviewEvent(reviewId, {
+				type: 'step',
+				step: 'sandbox',
+				message: 'Preparing sandbox…',
+				data: { command: `git fetch origin ${fetchRef.split(':')[0]}` }
+			});
 			const sandbox = await prepareSandbox({
 				repoSlug: slug,
 				prNumber: review.prNumber,
@@ -121,6 +135,7 @@ export async function runReviewPipeline(reviewId: string): Promise<void> {
 				branch
 			});
 			sandboxPath = sandbox.path;
+			reviewSandboxes.set(reviewId, sandbox.path);
 			emitReviewEvent(reviewId, { type: 'log', step: 'sandbox', message: `Checked out ${sandbox.headSha.slice(0, 12)}` });
 		}
 
@@ -140,12 +155,12 @@ export async function runReviewPipeline(reviewId: string): Promise<void> {
 				{
 					onLog: (role, message) =>
 						emitReviewEvent(reviewId, { type: 'log', step: `agent:${role}`, message }),
-					onAgentStart: (role) =>
+					onAgentStart: (role, model) =>
 						emitReviewEvent(reviewId, {
 							type: 'step',
 							step: `agent:${role}`,
 							message: `${role} agent started`,
-							data: { agent: role, status: 'running' }
+							data: { agent: role, status: 'running', model }
 						}),
 					onAgentDone: (role, findings) =>
 						emitReviewEvent(reviewId, {
@@ -153,15 +168,37 @@ export async function runReviewPipeline(reviewId: string): Promise<void> {
 							step: `agent:${role}`,
 							message: `${role} done: ${findings} finding(s)`,
 							data: { agent: role, status: 'done', findings }
+						}),
+					onFiles: (role, files) =>
+						emitReviewEvent(reviewId, {
+							type: 'log',
+							step: `agent:${role}`,
+							message: `${role} scanning ${files.length} file(s)`,
+							data: { agent: role, status: 'running', files }
 						})
 				}
 			);
 			findings = results.flatMap((r) => r.findings);
+			// Suppress anything an earlier review of this PR already reported:
+			// re-runs only surface genuinely new findings.
+			const previous = db.reviews
+				.list()
+				.filter(
+					(r) => r.id !== reviewId && r.repoId === review.repoId && r.prNumber === review.prNumber && r.status === 'passed'
+				)
+				.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
+			const previousFingerprints = new Set(
+				(previous?.findings ?? []).flatMap((f) => (f.fingerprint ? [f.fingerprint] : []))
+			);
+			const { fresh, suppressed } = filterNewFindings(findings, previousFingerprints);
+			findings = fresh;
 			const fileCount = files.length;
 			summary =
 				`Reviewed PR #${review.prNumber} (${fileCount} files) with ` +
 				results.map((r) => `${r.role} (${r.findings.length})`).join(', ') +
-				'.';
+				(suppressed > 0
+					? ` ${suppressed} already-reported finding${suppressed === 1 ? '' : 's'} suppressed.`
+					: '');
 		} else {
 			const steps = demoReviewSteps({
 				repo: repo?.name ?? review.repoId,

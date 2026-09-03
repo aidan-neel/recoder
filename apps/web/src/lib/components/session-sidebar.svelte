@@ -1,8 +1,10 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import FileTreeNode from './file-tree-node.svelte';
-	import { buildFileTree, changedFileCount, changedFiles } from '$lib/file-tree';
+	import { buildFileTree, changedFileCount, changedFiles, type FileBadge, type FindingKind } from '$lib/file-tree';
 	import type { FileDiff } from '@recoder/shared';
+	import { findingsStore, type FindingSeverity } from '$lib/findings.svelte';
 	import { sessionFile } from '$lib/session-file.svelte';
 
 	interface Props {
@@ -16,6 +18,42 @@
 
 	const tree = $derived(fileDiffs ? buildFileTree(fileDiffs) : changedFiles);
 	const fileCount = $derived(fileDiffs ? fileDiffs.length : changedFileCount);
+
+	const severityRank: Record<FindingSeverity, number> = { high: 0, medium: 1, low: 2, info: 3 };
+	const severityKind: Record<FindingSeverity, FindingKind> = {
+		high: 'error',
+		medium: 'warning',
+		low: 'info',
+		info: 'info'
+	};
+
+	/** Open findings per file → badge with count, strongest severity, first finding. */
+	const badges = $derived.by(() => {
+		const byFile = new Map<string, typeof findingsStore.items>();
+		for (const finding of findingsStore.items) {
+			if (finding.status === 'dismissed') continue;
+			const list = byFile.get(finding.file) ?? [];
+			list.push(finding);
+			byFile.set(finding.file, list);
+		}
+		const map = new Map<string, FileBadge>();
+		for (const [file, list] of byFile) {
+			const sorted = [...list].sort(
+				(a, b) => severityRank[a.severity] - severityRank[b.severity] || a.startLine - b.startLine
+			);
+			const top = [...list].sort((a, b) => a.startLine - b.startLine)[0];
+			map.set(file, { count: list.length, kind: severityKind[sorted[0].severity], findingId: top.id });
+		}
+		return map;
+	});
+
+	/** Select the file, then scroll its finding card into view. */
+	async function jumpToFinding(fileId: string, findingId: string): Promise<void> {
+		sessionFile.select(fileId);
+		await tick();
+		findingsStore.discuss(findingId);
+		document.getElementById(`finding-${findingId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+	}
 </script>
 
 <aside
@@ -48,6 +86,8 @@
 					{node}
 					selectedId={sessionFile.currentId}
 					onSelect={(id) => sessionFile.select(id)}
+					{badges}
+					onJump={(fileId, findingId) => void jumpToFinding(fileId, findingId)}
 				/>
 			{/each}
 			</div>

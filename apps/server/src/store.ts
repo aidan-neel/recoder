@@ -1,28 +1,110 @@
+import { Database } from 'bun:sqlite';
+import { join } from 'node:path';
 import type { CommandRun, Repo, Review } from '@recoder/shared';
+import { serverDataDir } from './lib/data-dir';
 
-function createCollection<T extends { id: string }>() {
-	const items = new Map<string, T>();
+/**
+ * SQLite-backed store. Everything the UI treats as durable (repos, reviews,
+ * runs, diffs) survives restarts and `--hot` reloads — previously all of
+ * this lived in Maps and vanished on every server edit.
+ */
+
+let handle: Database | null = null;
+
+function getDb(): Database {
+	if (!handle) {
+		handle = new Database(join(serverDataDir(), 'recoder.db'));
+		handle.run('PRAGMA journal_mode = WAL');
+		handle.run('CREATE TABLE IF NOT EXISTS repos (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+		handle.run('CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+		handle.run('CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+		handle.run(
+			'CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)'
+		);
+	}
+	return handle;
+}
+
+/** Test helper: close + forget the handle (e.g. after switching data dirs). */
+export function closeStore(): void {
+	handle?.close();
+	handle = null;
+}
+
+function createCollection<T extends { id: string }>(table: string) {
+	const database = () => getDb();
 	return {
-		list: (): T[] => [...items.values()],
-		get: (id: string): T | undefined => items.get(id),
+		list: (): T[] =>
+			(database().query(`SELECT value FROM ${table} ORDER BY rowid`).all() as { value: string }[]).map(
+				(row) => JSON.parse(row.value) as T
+			),
+		get: (id: string): T | undefined => {
+			const row = database().query(`SELECT value FROM ${table} WHERE id = ?`).get(id) as {
+				value: string;
+			} | null;
+			return row ? (JSON.parse(row.value) as T) : undefined;
+		},
 		set: (item: T): T => {
-			items.set(item.id, item);
+			database()
+				.query(`INSERT INTO ${table} (id, value) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value`)
+				.run(item.id, JSON.stringify(item));
 			return item;
 		},
-		delete: (id: string): boolean => items.delete(id),
-		clear: (): void => items.clear()
+		delete: (id: string): boolean =>
+			database().query(`DELETE FROM ${table} WHERE id = ?`).run(id).changes > 0,
+		clear: (): void => {
+			database().query(`DELETE FROM ${table}`).run();
+		}
 	};
 }
 
-/**
- * In-memory store. Good enough for the scaffold and trivially replaceable:
- * keep the collection shape and back it with SQLite/Postgres later.
- */
 export const db = {
-	repos: createCollection<Repo>(),
-	reviews: createCollection<Review>(),
-	runs: createCollection<CommandRun>()
+	repos: createCollection<Repo>('repos'),
+	reviews: createCollection<Review>('reviews'),
+	runs: createCollection<CommandRun>('runs')
 };
 
+/** Sandbox checkout paths by review id (ephemeral: lost on restart, context falls back to diff-only). */
+export const reviewSandboxes = new Map<string, string>();
+
 /** Raw unified diffs by review id. Populated by the pipeline's fetch step. */
-export const reviewDiffs = new Map<string, string>();
+export const reviewDiffs = {
+	get: (reviewId: string): string | undefined => {
+		const row = getDb()
+			.query('SELECT diff FROM review_diffs WHERE review_id = ?')
+			.get(reviewId) as { diff: string } | null;
+		return row?.diff;
+	},
+	has: (reviewId: string): boolean => reviewDiffs.get(reviewId) !== undefined,
+	set: (reviewId: string, diff: string): void => {
+		getDb()
+			.query(
+				'INSERT INTO review_diffs (review_id, diff) VALUES (?, ?) ON CONFLICT(review_id) DO UPDATE SET diff = excluded.diff'
+			)
+			.run(reviewId, diff);
+	},
+	delete: (reviewId: string): void => {
+		getDb().query('DELETE FROM review_diffs WHERE review_id = ?').run(reviewId);
+	}
+};
+
+/**
+ * Mark reviews left running/queued by a previous process as failed so the UI
+ * never spins forever on orphaned work.
+ */
+export function recoverStaleReviews(): number {
+	let recovered = 0;
+	for (const review of db.reviews.list()) {
+		if (review.status === 'running' || review.status === 'queued') {
+			db.reviews.set({
+				...review,
+				status: 'failed',
+				summary: 'Server restarted while this review was running. Press Review to retry.',
+				updatedAt: new Date().toISOString()
+			});
+			recovered++;
+		}
+	}
+	if (recovered > 0) console.warn(`[store] marked ${recovered} stale review(s) as failed`);
+	return recovered;
+}

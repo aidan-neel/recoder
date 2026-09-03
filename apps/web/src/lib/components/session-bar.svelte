@@ -69,10 +69,7 @@
 		<Button
 			variant="ghost"
 			size="icon"
-			onclick={() => {
-				const created = sessionState.add();
-				void goto(`/session/${created.id}`);
-			}}
+			onclick={() => void goto('/')}
 			aria-label="New session"
 			title="New session"
 		>

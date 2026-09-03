@@ -54,6 +54,13 @@ UI-connected provider tokens persist to `$RECODER_DATA_DIR/tokens.json`
 restarts. Process env (`GH_TOKEN`/`GITLAB_TOKEN`) takes precedence when set.
 Backed by the `recoder-data` volume in compose.
 
+## Durable state (SQLite)
+
+Tracked repos, reviews, command runs, and fetched diffs live in
+`$RECODER_DATA_DIR/recoder.db` (WAL mode) — restarts and hot reloads no
+longer wipe sessions. Reviews orphaned mid-run by a restart are marked
+failed on boot with a retry hint instead of spinning forever.
+
 ## API (server :3001)
 
 | Method | Path                    | Description                              |

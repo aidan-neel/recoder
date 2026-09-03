@@ -134,8 +134,65 @@ export async function fetchMergeRequest(
 			headSha: String(view.sha ?? 'unknown'),
 			additions: Number(view.additions ?? 0),
 			deletions: Number(view.deletions ?? 0),
-			changedFiles: Number(view.changes_count ?? 0)
+			changedFiles: Number(view.changes_count ?? 0),
+			createdAt: typeof view.created_at === 'string' ? view.created_at : ''
 		},
 		diff
 	};
+}
+
+/** Open MRs for a repo, newest first. Stats come from per-MR views (the list
+ *  endpoint omits diff stats); an MR whose view fails keeps zeroed stats
+ *  rather than failing the whole list. Throws GhError. */
+export async function listMergeRequests(
+	repoUrl: string,
+	opts?: { env?: Record<string, string>; limit?: number }
+): Promise<PullRequest[]> {
+	const slug = parseSlug(repoUrl);
+	const rows = extractJson(
+		await glab(
+			['mr', 'list', '-R', slug, '-F', 'json', '--per-page', String(opts?.limit ?? 20)],
+			opts?.env
+		)
+	);
+	if (!Array.isArray(rows)) throw new GhError('unknown', 'glab mr list returned non-array JSON');
+	const prs = rows.flatMap((row) => {
+		if (typeof row !== 'object' || row === null) return [];
+		const item = row as Record<string, unknown>;
+		const author =
+			typeof item.author === 'object' && item.author !== null
+				? String((item.author as Record<string, unknown>).username ?? 'unknown')
+				: 'unknown';
+		const pr: PullRequest = {
+			number: Number(item.iid ?? 0),
+			title: String(item.title ?? ''),
+			url: String(item.web_url ?? ''),
+			author,
+			base: String(item.target_branch ?? ''),
+			headRef: String(item.source_branch ?? ''),
+			headSha: typeof item.sha === 'string' ? item.sha : 'unknown',
+			additions: 0,
+			deletions: 0,
+			changedFiles: 0,
+			createdAt: typeof item.created_at === 'string' ? item.created_at : ''
+		};
+		return pr.number > 0 ? [pr] : [];
+	});
+	await Promise.all(
+		prs.map(async (pr) => {
+			try {
+				const view = (await glab(
+					['mr', 'view', String(pr.number), '-R', slug, '-F', 'json'],
+					opts?.env
+				).then(extractJson)) as Record<string, unknown>;
+				pr.additions = Number(view.additions ?? 0);
+				pr.deletions = Number(view.deletions ?? 0);
+				pr.changedFiles = Number(view.changes_count ?? 0);
+				if (typeof view.sha === 'string') pr.headSha = view.sha;
+			} catch {
+				/* keep zeroed stats for this MR */
+			}
+		})
+	);
+	return prs;
 }

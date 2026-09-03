@@ -39,6 +39,16 @@ export interface Finding {
 	severity: FindingSeverity;
 	message: string;
 	suggestion?: string;
+	/** Reviewer role that produced this finding (e.g. `security`). */
+	agent?: string;
+	/** Model that produced this finding. */
+	model?: string;
+	/**
+	 * Stability fingerprint: hash of file + category + normalized anchor
+	 * code. Same issue re-found on a later run matches, so re-reviews only
+	 * surface genuinely new findings.
+	 */
+	fingerprint?: string;
 }
 
 export interface Review {
@@ -158,6 +168,8 @@ export interface PullRequest {
 	additions: number;
 	deletions: number;
 	changedFiles: number;
+	/** ISO timestamp the PR/MR was opened (empty when the provider omits it). */
+	createdAt: string;
 }
 
 export interface PullFile {
@@ -171,4 +183,32 @@ export interface PullPreview {
 	provider: Provider;
 	pr: PullRequest;
 	files: PullFile[];
+}
+
+export interface DiscussMessage {
+	role: 'user' | 'assistant';
+	body: string;
+}
+
+export interface DiscussFinding {
+	file: string;
+	line: number;
+	endLine: number;
+	severity: string;
+	message: string;
+	agent: string;
+}
+
+export interface DiscussRequest {
+	/** Reviewer role to answer as (falls back to a default when unknown). */
+	agent: string;
+	finding: DiscussFinding;
+	history: DiscussMessage[];
+	question: string;
+}
+
+export interface DiscussResponse {
+	agent: string;
+	model: string;
+	reply: string;
 }

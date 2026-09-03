@@ -1,11 +1,14 @@
 <script lang="ts">
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
+	import Search from '@lucide/svelte/icons/search';
+	import X from '@lucide/svelte/icons/x';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import {
 		SEVERITIES,
 		findingsStore,
+		matchesQuery,
 		type FindingSeverity
 	} from '$lib/findings.svelte';
 
@@ -39,6 +42,7 @@
 	const visible = $derived(
 		openItems
 			.filter((f) => !hidden.has(f.severity))
+			.filter((f) => matchesQuery(f, findingsStore.query))
 			.sort((a, b) => a.startLine - b.startLine || a.id.localeCompare(b.id))
 	);
 
@@ -122,7 +126,36 @@
 		</button>
 	{/each}
 
-	<div class="ml-auto flex shrink-0 items-center gap-2">
+	<div class="ml-auto flex min-w-0 shrink-0 items-center gap-2">
+		<div
+			class="flex h-9 min-w-0 items-center gap-1.5 rounded-lg border border-border bg-card px-2.5"
+		>
+			<Search size={14} class="shrink-0 text-foreground-muted" aria-hidden="true" />
+			<input
+				type="search"
+				placeholder="Search findings"
+				aria-label="Search findings"
+				bind:value={findingsStore.query}
+				onkeydown={(e) => {
+					if (e.key === 'Escape' && findingsStore.query !== '') {
+						e.stopPropagation();
+						findingsStore.query = '';
+					}
+				}}
+				class="w-28 min-w-0 bg-transparent text-[14px] transition-[width] outline-none placeholder:text-foreground-muted focus:w-40 md:w-36 md:focus:w-48"
+			/>
+			{#if findingsStore.query !== ''}
+				<button
+					type="button"
+					aria-label="Clear search"
+					title="Clear search"
+					onclick={() => (findingsStore.query = '')}
+					class="flex shrink-0 items-center justify-center rounded-full text-foreground-muted transition-colors hover:text-foreground"
+				>
+					<X size={13} />
+				</button>
+			{/if}
+		</div>
 		<span
 			class="flex h-9 items-center gap-1.5 rounded-md bg-[#141c28] px-2.5 text-[14px] text-[#5698ff]"
 		>

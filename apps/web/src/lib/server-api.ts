@@ -2,12 +2,15 @@ import { env } from '$env/dynamic/public';
 import type {
 	CreateRepoInput,
 	CreateReviewInput,
+	DiscussRequest,
+	DiscussResponse,
 	FileDiff,
 	ModelSettings,
 	ModelSettingsPatch,
 	Provider,
 	ProviderAuth,
 	PullPreview,
+	PullRequest,
 	RemoteRepo,
 	Repo,
 	Review
@@ -40,9 +43,15 @@ export const serverApi = {
 		req<Repo>('/api/repos', { method: 'POST', body: JSON.stringify(input) }),
 	previewPr: (repoId: string, n: number) =>
 		req<PullPreview>(`/api/repos/${repoId}/pulls/${n}`),
+	listPrs: (repoId: string) => req<PullRequest[]>(`/api/repos/${repoId}/pulls`),
 	listReviews: () => req<Review[]>('/api/reviews'),
 	getReview: (id: string) => req<Review>(`/api/reviews/${id}`),
 	getReviewFiles: (id: string) => req<FileDiff[]>(`/api/reviews/${id}/files`),
+	discuss: (reviewId: string, input: DiscussRequest) =>
+		req<DiscussResponse>(`/api/reviews/${reviewId}/discuss`, {
+			method: 'POST',
+			body: JSON.stringify(input)
+		}),
 	queueReview: (input: CreateReviewInput) =>
 		req<Review>('/api/reviews', { method: 'POST', body: JSON.stringify(input) }),
 	authStatus: () => req<{ github: ProviderAuth; gitlab: ProviderAuth }>('/api/auth/status'),

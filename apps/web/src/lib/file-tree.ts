@@ -17,6 +17,13 @@ export const FINDING_DOT: Record<FindingKind, string> = {
 	info: '#5b8cff'
 };
 
+/** Clickable finding badge on a file row — jumps straight to the finding. */
+export interface FileBadge {
+	count: number;
+	kind: FindingKind;
+	findingId: string;
+}
+
 /** Folders first, then files; alphabetical (case-insensitive) within each group. */
 export function sortTreeNodes(nodes: TreeNode[]): TreeNode[] {
 	return [...nodes]

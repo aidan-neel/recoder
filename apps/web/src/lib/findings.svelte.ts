@@ -5,6 +5,8 @@
  * strip and thread panel read the same store.
  */
 
+import type { Finding as BackendFinding, FindingSeverity as BackendSeverity } from '@recoder/shared';
+
 export type FindingSeverity = 'high' | 'medium' | 'low' | 'info';
 export type FindingStatus = 'open' | 'accepted' | 'dismissed';
 
@@ -27,10 +29,12 @@ export interface Finding {
 	category: string;
 	/** Reviewing agent / model, e.g. `qwen2.5-coder-32b`. */
 	agent: string;
+	/** Model that produced this finding, when known. */
+	model?: string | null;
+	/** Fix attribution, set when the finding is accepted. */
+	fixedBy?: string | null;
 	body: string;
 	file: string;
-	/** Which model conducted the fix, once accepted. */
-	fixedBy?: string | null;
 	/** New-side line range the finding refers to (inclusive). */
 	startLine: number;
 	endLine: number;
@@ -117,11 +121,48 @@ function initialFindings(): Finding[] {
 	];
 }
 
+/** Text filter for the findings searcher (topbar). Empty means no filtering. */
+export function matchesQuery(f: Finding, query: string): boolean {
+	const q = query.trim().toLowerCase();
+	if (q === '') return true;
+	return [f.code ?? '', f.body, f.file, f.category, f.agent, f.severity].some((s) =>
+		s.toLowerCase().includes(q)
+	);
+}
+
+/** Map a backend finding (harness output) onto the local card/thread model. */
+export function mapBackendFinding(f: BackendFinding, index: number): Finding {
+	const severityMap: Record<BackendSeverity, FindingSeverity> = {
+		error: 'high',
+		warning: 'medium',
+		info: 'info'
+	};
+	const match = /^\[([^\]]+)\]\s*/.exec(f.message);
+	const category = match?.[1] ?? 'review';
+	const body = match ? f.message.slice(match[0].length) : f.message;
+	const line = f.line ?? 1;
+	return {
+		id: f.id,
+		code: `R-${String(index + 1).padStart(2, '0')}`,
+		severity: severityMap[f.severity],
+		category,
+		agent: f.agent ?? 'reviewer',
+		model: f.model ?? null,
+		body,
+		file: f.file,
+		startLine: line,
+		endLine: f.endLine && f.endLine >= line ? f.endLine : line,
+		status: 'open'
+	};
+}
+
 class FindingsStore {
 	items = $state<Finding[]>(initialFindings());
 	activeId = $state<string | null>(null);
 	/** Finding id currently hovered (card or code) — drives cross-highlighting. */
 	hoveredId = $state<string | null>(null);
+	/** Topbar search text; cards and navigation filter on it. */
+	query = $state('');
 
 	forFile(file: string): Finding[] {
 		return this.items.filter((f) => f.file === file);
@@ -156,10 +197,18 @@ class FindingsStore {
 		if (finding) finding.status = 'open';
 	}
 
+	/** Merge remotely-fetched findings (backend reviews) into the local store. */
+	syncRemote(findings: Finding[]): void {
+		for (const f of findings) {
+			if (!this.items.some((i) => i.id === f.id)) this.items.push(f);
+		}
+	}
+
 	reset(): void {
 		this.items = initialFindings();
 		this.activeId = null;
 		this.hoveredId = null;
+		this.query = '';
 	}
 }
 

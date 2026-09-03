@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { emitReviewEvent, listenerCount, subscribeReview } from './events';
-import { extractFindingsJson, runRoleReview } from './harness';
+import { extractFindingsJson, filterNewFindings, fingerprintFinding, runRoleReview } from './harness';
 import { configForRole, isReviewConfigured, REVIEW_ROLES } from './models';
 
 const ENV_KEYS = [
@@ -91,19 +91,22 @@ describe('runRoleReview', () => {
 				{ file: 'other.ts', line: 1, severity: 'low', category: 'x', body: 'not in diff' }
 			])
 		);
-		const started: string[] = [];
+		const started: [string, string][] = [];
 		const done: [string, number][] = [];
+		const seenFiles: [string, string[]][] = [];
 		const result = await runRoleReview(
 			'security',
 			{ diff: DIFF, sandboxPath: null },
 			{
 				onLog: () => {},
-				onAgentStart: (r) => started.push(r),
-				onAgentDone: (r, n) => done.push([r, n])
+				onAgentStart: (r, m) => started.push([r, m]),
+				onAgentDone: (r, n) => done.push([r, n]),
+				onFiles: (r, f) => seenFiles.push([r, f])
 			}
 		);
-		expect(started).toEqual(['security']);
+		expect(started).toEqual([['security', 'test-model']]);
 		expect(done).toEqual([['security', 1]]);
+		expect(seenFiles).toEqual([['security', ['a.ts']]]);
 		expect(result.findings).toHaveLength(1);
 		expect(result.findings[0]).toMatchObject({
 			file: 'a.ts',
@@ -129,7 +132,44 @@ describe('runRoleReview', () => {
 	});
 });
 
-describe('events', () => {	test('subscribe/emit/unsubscribe', () => {
+describe('finding stability', () => {
+	test('same issue twice → same fingerprint (wording/whitespace independent)', () => {
+		const a = fingerprintFinding('a.ts', 'sec', 'const  buckets  =  new Map();\n');
+		const b = fingerprintFinding('a.ts', 'sec', 'const buckets = new Map();');
+		expect(a).toBe(b);
+	});
+
+	test('different file, category, or code → different fingerprint', () => {
+		const base = fingerprintFinding('a.ts', 'sec', 'x = 1;');
+		expect(fingerprintFinding('b.ts', 'sec', 'x = 1;')).not.toBe(base);
+		expect(fingerprintFinding('a.ts', 'perf', 'x = 1;')).not.toBe(base);
+		expect(fingerprintFinding('a.ts', 'sec', 'x = 2;')).not.toBe(base);
+	});
+
+	test('filterNewFindings suppresses repeats and in-run duplicates', () => {
+		const mk = (id: string, fingerprint?: string) => ({
+			id,
+			file: 'a.ts',
+			line: 1,
+			severity: 'info' as const,
+			message: id,
+			fingerprint
+		});
+		const current = [
+			mk('old', 'fp-old'),
+			mk('new', 'fp-new'),
+			mk('dup-a', 'fp-dup'),
+			mk('dup-b', 'fp-dup'),
+			mk('nofp')
+		];
+		const { fresh, suppressed } = filterNewFindings(current, new Set(['fp-old']));
+		expect(fresh.map((f) => f.id)).toEqual(['new', 'dup-a']);
+		expect(suppressed).toBe(3);
+	});
+});
+
+describe('events', () => {
+	test('subscribe/emit/unsubscribe', () => {
 		const seen: string[] = [];
 		const off = subscribeReview('r1', (e) => seen.push(e.message));
 		expect(listenerCount('r1')).toBe(1);

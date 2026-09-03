@@ -157,31 +157,62 @@ export async function fetchPullRequest(
 			'--repo',
 			slug,
 			'--json',
-			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles'
+			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,createdAt'
 		],
 		opts?.env
 	).then(extractJson)) as Record<string, unknown>;
 
+	const diff = await gh(['pr', 'diff', String(prNumber), '--repo', slug], opts?.env);
+
+	return { pr: parsePullRow(view, prNumber), diff };
+}
+
+/** Open PRs for a repo, newest first. Throws GhError. */
+export async function listPullRequests(
+	repoUrl: string,
+	opts?: { env?: Record<string, string>; limit?: number }
+): Promise<PullRequest[]> {
+	const slug = parseRepoSlug(repoUrl);
+	const rows = (await gh(
+		[
+			'pr',
+			'list',
+			'--repo',
+			slug,
+			'--state',
+			'open',
+			'--limit',
+			String(opts?.limit ?? 20),
+			'--json',
+			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,createdAt'
+		],
+		opts?.env
+	).then(extractJson)) as unknown;
+	if (!Array.isArray(rows)) throw new GhError('unknown', 'gh pr list returned non-array JSON');
+	return rows.flatMap((row) =>
+		typeof row === 'object' && row !== null
+			? [parsePullRow(row as Record<string, unknown>, 0)]
+			: []
+	);
+}
+
+/** Normalize one `gh pr view`/`pr list` JSON row to a PullRequest. */
+function parsePullRow(view: Record<string, unknown>, fallbackNumber: number): PullRequest {
 	const author =
 		typeof view.author === 'object' && view.author !== null
 			? String((view.author as Record<string, unknown>).login ?? 'unknown')
 			: 'unknown';
-
-	const diff = await gh(['pr', 'diff', String(prNumber), '--repo', slug], opts?.env);
-
 	return {
-		pr: {
-			number: Number(view.number ?? prNumber),
-			title: String(view.title ?? ''),
-			url: String(view.url ?? ''),
-			author,
-			base: String(view.baseRefName ?? ''),
-			headRef: String(view.headRefName ?? ''),
-			headSha: String(view.headRefOid ?? 'unknown'),
-			additions: Number(view.additions ?? 0),
-			deletions: Number(view.deletions ?? 0),
-			changedFiles: Number(view.changedFiles ?? 0)
-		},
-		diff
+		number: Number(view.number ?? fallbackNumber),
+		title: String(view.title ?? ''),
+		url: String(view.url ?? ''),
+		author,
+		base: String(view.baseRefName ?? ''),
+		headRef: String(view.headRefName ?? ''),
+		headSha: String(view.headRefOid ?? 'unknown'),
+		additions: Number(view.additions ?? 0),
+		deletions: Number(view.deletions ?? 0),
+		changedFiles: Number(view.changedFiles ?? 0),
+		createdAt: typeof view.createdAt === 'string' ? view.createdAt : ''
 	};
 }

@@ -12,7 +12,8 @@
 	import CodeDiff from '$lib/components/code-diff.svelte';
 	import ThreadPanel from '$lib/components/thread-panel.svelte';
 	import { getFileDiff } from '$lib/diff';
-	import { findingsStore } from '$lib/findings.svelte';
+	import { findingsStore, mapBackendFinding } from '$lib/findings.svelte';
+	import { threadsStore } from '$lib/threads.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
 	import { sessionFile } from '$lib/session-file.svelte';
 	import { serverApi } from '$lib/server-api';
@@ -92,8 +93,36 @@
 		};
 	});
 
+	// Peek at the (partial) diff while a backend review is still running.
+	let peekDiff = $state(false);
+	$effect(() => {
+		if (
+			backendReview &&
+			backendReview.status !== 'queued' &&
+			backendReview.status !== 'running'
+		) {
+			peekDiff = false;
+		}
+	});
+
 	const isBackend = $derived(backendChecked && backendReview !== null);
-	const liveDiff = $derived.by(() => {
+
+	// Merge backend findings into the local store once per completed review,
+	// so tree badges, line markers, cards, and threads all work uniformly.
+	$effect(() => {
+		if (
+			isBackend &&
+			backendReview !== null &&
+			(backendReview.status === 'passed' || backendReview.status === 'failed') &&
+			backendReview.findings.length > 0
+		) {
+			findingsStore.syncRemote(
+				backendReview.findings.map((f, i) => mapBackendFinding(f, i))
+			);
+		}
+		// Threads discuss against this backend review; mock sessions stay local-only.
+		threadsStore.reviewId = isBackend && backendReview ? backendReview.id : null;
+	});	const liveDiff = $derived.by(() => {
 		if (!backendFiles) return null;
 		return (
 			backendFiles.find((f) => f.path === sessionFile.currentId) ??
@@ -106,9 +135,7 @@
 		if (liveDiff) return liveDiff;
 		return { path: sessionFile.currentId, additions: 0, deletions: 0, hunks: [] };
 	});
-	const displayFindings = $derived(
-		isBackend ? [] : findingsStore.forFile(sessionFile.currentId)
-	);
+	const displayFindings = $derived(findingsStore.forFile(sessionFile.currentId));
 	const backendRunning = $derived(
 		isBackend &&
 			backendReview !== null &&
@@ -159,10 +186,20 @@
 	<ReviewProgress
 		title={`${session.ref ?? session.name} · ${session.name}`}
 		repo={session.name}
+		prLabel={session.ref}
 		onDone={() => sessionState.markReady(session.id)}
 	/>
-{:else if backendRunning && backendReview}
-	<LiveReviewProgress review={backendReview} fileCount={backendFiles?.length ?? 0} />
+{:else if backendRunning && backendReview && !peekDiff}
+	{@const diffFiles = backendFiles ?? []}
+	<LiveReviewProgress
+		review={backendReview}
+		repo={session.name}
+		files={backendFiles ? diffFiles.length : null}
+		additions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.additions, 0) : null}
+		deletions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
+		onOpenDiff={() => (peekDiff = true)}
+		onRestart={() => void rerunReview()}
+	/>
 {:else}
 	<div class="flex h-[calc(100vh-52px)]">
 		<SessionSidebar
@@ -199,6 +236,15 @@
 							onclick={() => void rerunReview()}
 						>
 							Review
+						</Button>
+					{:else if peekDiff}
+						<Button
+							variant="ghost"
+							size="sm"
+							class="ml-auto h-8 shrink-0 font-sans"
+							onclick={() => (peekDiff = false)}
+						>
+							Progress
 						</Button>
 					{/if}
 				</div>

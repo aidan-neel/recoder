@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { parseUnifiedDiff } from '@recoder/shared';
 import { queueReview } from '../commands/pipeline';
 import { subscribeReview } from '../lib/events';
-import { db, reviewDiffs } from '../store';
+import { discussFinding, discussRequestSchema } from '../lib/discuss';
+import { LlmError } from '../lib/llm';
+import { db, reviewDiffs, reviewSandboxes } from '../store';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),
@@ -30,6 +32,35 @@ app.get('/:id/files', (c) => {
 	return c.json(parseUnifiedDiff(diff));
 });
 
+/** Ask the finding's reviewer a follow-up, with file + diff context. */
+app.post('/:id/discuss', async (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const parsed = discussRequestSchema.safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) {
+		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
+	}
+	const diff = reviewDiffs.get(review.id);
+	if (!diff) return c.json({ error: 'no diff yet' }, 409);
+	try {
+		const result = await discussFinding({
+			agent: parsed.data.agent,
+			file: parsed.data.finding.file,
+			line: parsed.data.finding.line,
+			endLine: parsed.data.finding.endLine,
+			severity: parsed.data.finding.severity,
+			message: parsed.data.finding.message,
+			history: parsed.data.history,
+			question: parsed.data.question,
+			diff,
+			sandboxPath: reviewSandboxes.get(review.id) ?? null
+		});
+		return c.json(result);
+	} catch (err) {
+		if (err instanceof LlmError) return c.json({ error: err.message }, 502);
+		throw err;
+	}
+});
 /** Live pipeline events (fetch/sandbox/agent progress) as server-sent events. */
 app.get('/:id/events', (c) => {
 	const review = db.reviews.get(c.req.param('id'));
