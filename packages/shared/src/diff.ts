@@ -35,6 +35,13 @@ function stripPrefix(path: string): string {
 	return path.replace(/^[ab]\//, '');
 }
 
+/** Remove git's double-quoting around paths containing spaces. */
+function unquote(path: string): string {
+	return path.startsWith('"') && path.endsWith('"') && path.length >= 2
+		? path.slice(1, -1)
+		: path;
+}
+
 function blankFile(path: string): FileDiff {
 	return { path, additions: 0, deletions: 0, hunks: [] };
 }
@@ -45,6 +52,10 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 	let hunk: DiffHunk | null = null;
 	let oldNo = 0;
 	let newNo = 0;
+	// Last seen ---/+++ paths. Some producers (plain patches, MR raw diffs)
+	// omit `diff --git` headers — these let orphan hunks find their file.
+	let pendingOld: string | null = null;
+	let pendingNew: string | null = null;
 
 	const pushHunk = () => {
 		if (current && hunk) current.hunks.push(hunk);
@@ -55,14 +66,31 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 		if (raw.startsWith('diff --git ')) {
 			pushHunk();
 			const parts = raw.split(' ');
-			current = blankFile(stripPrefix(parts[2] ?? 'unknown'));
+			let rawPath = parts[2] ?? 'unknown';
+			// Quoted paths (spaces in name): rejoin tokens through the closing quote.
+			if (rawPath.startsWith('"')) {
+				const collected = [rawPath];
+				let i = 3;
+				while (!rawPath.endsWith('"') && i < parts.length) {
+					rawPath = parts[i];
+					collected.push(rawPath);
+					i++;
+				}
+				rawPath = collected.join(' ').replace(/^"|"$/g, '');
+			}
+			current = blankFile(stripPrefix(rawPath));
 			files.push(current);
+			pendingOld = null;
+			pendingNew = null;
 			continue;
 		}
 		if (raw.startsWith('--- ') || raw.startsWith('+++ ')) {
-			if (current && current.path === 'unknown') {
-				const p = raw.slice(4).trim();
-				if (p !== '/dev/null') current.path = stripPrefix(p);
+			const p = raw.slice(4).trim();
+			const path = p === '/dev/null' ? null : stripPrefix(unquote(p.split('\t')[0]));
+			if (raw.startsWith('--- ')) pendingOld = path;
+			else pendingNew = path;
+			if (current && current.path === 'unknown' && path) {
+				current.path = path;
 			}
 			continue;
 		}
@@ -70,7 +98,7 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 		if (m) {
 			pushHunk();
 			if (!current) {
-				current = blankFile('unknown');
+				current = blankFile(pendingNew ?? pendingOld ?? 'unknown');
 				files.push(current);
 			}
 			oldNo = Number(m[1]);
@@ -102,4 +130,73 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 	}
 	pushHunk();
 	return files.filter((f) => f.hunks.length > 0);
+}
+
+function splitFileLines(text: string): string[] {
+	if (text === '') return [];
+	const lines = text.split('\n');
+	if (lines[lines.length - 1] === '') lines.pop();
+	return lines;
+}
+
+const MAX_EXPAND_LINES = 8000;
+
+/**
+ * Fill hunk gaps with the new-side file so the diff view can show the whole
+ * file, not just changed islands. Returns the original file when the text is
+ * empty, huge, or already a single covering hunk.
+ */
+export function expandFileDiff(file: FileDiff, newText: string): FileDiff {
+	const newLines = splitFileLines(newText);
+	if (newLines.length === 0 || newLines.length > MAX_EXPAND_LINES || file.hunks.length === 0) {
+		return file;
+	}
+
+	const out: DiffLine[] = [];
+	let newCursor = 1;
+	let oldCursor = 1;
+
+	for (const hunk of file.hunks) {
+		while (newCursor < hunk.newStart && newCursor <= newLines.length) {
+			out.push({
+				type: 'context',
+				oldNo: oldCursor,
+				newNo: newCursor,
+				text: newLines[newCursor - 1] ?? ''
+			});
+			newCursor += 1;
+			oldCursor += 1;
+		}
+		oldCursor = hunk.oldStart > 0 ? hunk.oldStart : oldCursor;
+		for (const line of hunk.lines) {
+			out.push(line);
+			if (line.newNo !== null) newCursor = line.newNo + 1;
+			if (line.oldNo !== null) oldCursor = line.oldNo + 1;
+		}
+	}
+	while (newCursor <= newLines.length) {
+		out.push({
+			type: 'context',
+			oldNo: oldCursor,
+			newNo: newCursor,
+			text: newLines[newCursor - 1] ?? ''
+		});
+		newCursor += 1;
+		oldCursor += 1;
+	}
+
+	const lastOld = out.reduce((max, line) => (line.oldNo !== null && line.oldNo > max ? line.oldNo : max), 0);
+	return {
+		...file,
+		hunks: [
+			{
+				header: `@@ -1,${lastOld} +1,${newLines.length} @@`,
+				oldStart: 1,
+				oldCount: lastOld,
+				newStart: 1,
+				newCount: newLines.length,
+				lines: out
+			}
+		]
+	};
 }

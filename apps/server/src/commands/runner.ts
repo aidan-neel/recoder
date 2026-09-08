@@ -13,6 +13,7 @@ export interface RunOptions {
 	timeoutMs?: number;
 	/** Extra env vars merged over process.env for this run only. */
 	env?: Record<string, string>;
+	onOutput?: (chunk: string) => void;
 }
 
 const MAX_LOG_CHARS = 200_000;
@@ -77,9 +78,25 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 			proc.kill();
 		}, timeoutMs);
 
+		const read = async (stream: ReadableStream<Uint8Array> | null): Promise<string> => {
+			if (!stream) return '';
+			const reader = stream.getReader();
+			const decoder = new TextDecoder();
+			let text = '';
+			try {
+				while (true) {
+					const { done, value } = await reader.read();
+					if (done) break;
+					const chunk = decoder.decode(value, { stream: true });
+					text += chunk;
+					try { opts.onOutput?.(chunk); } catch { /* Reporting cannot break a command. */ }
+				}
+				return text + decoder.decode();
+			} finally { reader.releaseLock(); }
+		};
 		const [stdout, stderr, exitCode] = await Promise.all([
-			proc.stdout ? Bun.readableStreamToText(proc.stdout) : Promise.resolve(''),
-			proc.stderr ? Bun.readableStreamToText(proc.stderr) : Promise.resolve(''),
+			read(proc.stdout),
+			read(proc.stderr),
 			proc.exited
 		]);
 		clearTimeout(timer);

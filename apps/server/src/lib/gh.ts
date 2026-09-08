@@ -1,4 +1,4 @@
-import type { PullRequest, RemoteRepo } from '@recoder/shared';
+import type { PullFile, PullRequest, RemoteRepo } from '@recoder/shared';
 import { runCommand } from '../commands/runner.js';
 
 export type GhErrorKind = 'unavailable' | 'auth' | 'not-found' | 'unknown';
@@ -84,6 +84,21 @@ export interface FetchedPull {
 	diff: string;
 }
 
+/** Preview file statistics without requesting GitHub's size-limited diff. */
+export async function listPullFiles(repoUrl: string, prNumber: number, env?: Record<string, string>): Promise<PullFile[]> {
+	const slug = parseRepoSlug(repoUrl);
+	const files: PullFile[] = [];
+	for (let page = 1; ; page++) {
+		const rows = extractJson(await gh(['api', 'repos/' + slug + '/pulls/' + prNumber + '/files?per_page=100&page=' + page], env));
+		if (!Array.isArray(rows)) throw new GhError('unknown', 'gh returned non-array files');
+		for (const row of rows) {
+			files.push({ path: row.filename, additions: row.additions, deletions: row.deletions });
+		}
+		if (rows.length < 100) break;
+	}
+	return files;
+}
+
 /** Is the gh binary usable at all? */
 export async function ghAvailable(): Promise<boolean> {
 	try {
@@ -146,7 +161,7 @@ export async function listGhRepos(env?: Record<string, string>): Promise<RemoteR
 export async function fetchPullRequest(
 	repoUrl: string,
 	prNumber: number,
-	opts?: { env?: Record<string, string> }
+	opts?: { env?: Record<string, string>; metadataOnly?: boolean }
 ): Promise<FetchedPull> {
 	const slug = parseRepoSlug(repoUrl);
 	const view = (await gh(
@@ -162,9 +177,25 @@ export async function fetchPullRequest(
 		opts?.env
 	).then(extractJson)) as Record<string, unknown>;
 
-	const diff = await gh(['pr', 'diff', String(prNumber), '--repo', slug], opts?.env);
+	const diff = opts?.metadataOnly ? '' : await gh(['pr', 'diff', String(prNumber), '--repo', slug], opts?.env);
 
 	return { pr: parsePullRow(view, prNumber), diff };
+}
+
+/** Head branch name for a PR (no diff fetch). Throws GhError. */
+export async function fetchPullHeadRef(
+	repoUrl: string,
+	prNumber: number,
+	opts?: { env?: Record<string, string> }
+): Promise<string> {
+	const slug = parseRepoSlug(repoUrl);
+	const view = (await gh(
+		['pr', 'view', String(prNumber), '--repo', slug, '--json', 'headRefName'],
+		opts?.env
+	).then(extractJson)) as Record<string, unknown>;
+	const headRef = typeof view.headRefName === 'string' ? view.headRefName : '';
+	if (!headRef) throw new GhError('unknown', 'PR has no head ref');
+	return headRef;
 }
 
 /** Open PRs for a repo, newest first. Throws GhError. */

@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app } from '../app';
@@ -7,6 +7,10 @@ import { clearToken, hasToken, initTokenStore, setToken, tokenEnv } from '../lib
 
 // Never touch the real data dir (tokens.json, recoder.db) from tests.
 process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-test-'));
+
+beforeEach(() => {
+	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-auth-'));
+});
 
 describe('tokens', () => {
 	test('set/has/env/clear round-trip', () => {
@@ -17,6 +21,23 @@ describe('tokens', () => {
 		expect(tokenEnv('gitlab')).toEqual({});
 		clearToken('github');
 		expect(hasToken('github')).toBe(false);
+	});
+
+	test('falls back to the legacy CWD-relative tokens file', () => {
+		const legacyDir = mkdtempSync(join(tmpdir(), 'recoder-legacy-'));
+		mkdirSync(join(legacyDir, 'data'), { recursive: true });
+		writeFileSync(join(legacyDir, 'data', 'tokens.json'), JSON.stringify({ github: 'legacy' }));
+		const emptyDir = mkdtempSync(join(tmpdir(), 'recoder-empty-'));
+		process.env.RECODER_DATA_DIR = emptyDir;
+		const cwd = process.cwd();
+		process.chdir(legacyDir);
+		try {
+			expect(hasToken('github')).toBe(true);
+			expect(tokenEnv('github')).toEqual({ GH_TOKEN: 'legacy' });
+		} finally {
+			process.chdir(cwd);
+			clearToken('github');
+		}
 	});
 
 	test('persist across init (restart)', () => {
@@ -35,7 +56,6 @@ describe('tokens', () => {
 			expect(tokenEnv('gitlab')).toEqual({ GITLAB_TOKEN: 'glpersist' });
 			clearToken('gitlab');
 		} finally {
-			delete process.env.RECODER_DATA_DIR;
 			clearToken('github');
 			clearToken('gitlab');
 		}

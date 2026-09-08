@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
-import type { CommandRun, Repo, Review } from '@recoder/shared';
+import type { CommandRun, Repo, Review, ReviewProgress } from '@recoder/shared';
 import { serverDataDir } from './lib/data-dir';
 
 /**
@@ -18,6 +18,7 @@ function getDb(): Database {
 		handle.run('CREATE TABLE IF NOT EXISTS repos (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+		handle.run('CREATE TABLE IF NOT EXISTS review_progress (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run(
 			'CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)'
 		);
@@ -63,6 +64,8 @@ export const db = {
 	reviews: createCollection<Review>('reviews'),
 	runs: createCollection<CommandRun>('runs')
 };
+
+export const reviewProgress = createCollection<ReviewProgress>('review_progress');
 
 /** Sandbox checkout paths by review id (ephemeral: lost on restart, context falls back to diff-only). */
 export const reviewSandboxes = new Map<string, string>();

@@ -97,7 +97,17 @@ export interface HealthResponse {
 export const REVIEW_STATUSES: ReviewStatus[] = ['queued', 'running', 'passed', 'failed'];
 
 /** Reviewer agent roles (each can route to its own model). */
-export type ReviewRole = 'security' | 'perf' | 'correctness' | 'docs';
+export type ReviewRole =
+	| 'security'
+	| 'perf'
+	| 'correctness'
+	| 'docs'
+	| 'dedup'
+	| 'patterns'
+	| 'testing'
+	| 'errors'
+	| 'concurrency'
+	| 'api';
 
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {
@@ -212,3 +222,41 @@ export interface DiscussResponse {
 	model: string;
 	reply: string;
 }
+
+export interface SuggestFixFinding {
+	file: string;
+	line: number;
+	endLine: number;
+	severity: string;
+	message: string;
+}
+
+export interface SuggestFixRequest {
+	/** Reviewer role to author the fix (falls back to a default when unknown). */
+	agent: string;
+	finding: SuggestFixFinding;
+}
+
+export interface SuggestFixResponse {
+	agent: string;
+	model: string;
+	summary: string;
+	/** Unified diff patch (`a/` / `b/` prefixes, repo-rooted). */
+	patch: string;
+	/** Whether the patch applies cleanly to the review sandbox (null when none). */
+	applies: boolean | null;
+}
+
+export interface ApplyFixRequest {
+	finding: SuggestFixFinding;
+	summary: string;
+	patch: string;
+}
+
+export interface ApplyFixResponse {
+	sha: string;
+	/** PR head branch the commit was pushed to. */
+	branch: string;
+	pushed: boolean;
+}
+export * from './progress';

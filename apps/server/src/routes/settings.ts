@@ -7,10 +7,17 @@ import {
 	saveReviewSettings
 } from '../lib/review-settings';
 import { isReviewConfigured } from '../lib/models';
+import { REVIEW_ROLES } from '../lib/roles';
 
 function mask(key: string | undefined): string | null {
 	if (!key) return null;
 	return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
+}
+
+/** Per-role model routing for the UI (null = use shared). */
+function rolesPayload(): Record<string, string | null> {
+	const stored = getStoredSettings();
+	return Object.fromEntries(REVIEW_ROLES.map((role) => [role, stored.roles?.[role] ?? null]));
 }
 
 const app = new Hono();
@@ -32,12 +39,7 @@ app.get('/models', (c) => {
 			baseUrl: e.baseUrl ?? null,
 			apiKeyPreview: mask(e.apiKey)
 		})),
-		roles: {
-			security: stored.roles?.security ?? null,
-			perf: stored.roles?.perf ?? null,
-			correctness: stored.roles?.correctness ?? null,
-			docs: stored.roles?.docs ?? null
-		},
+		roles: rolesPayload(),
 		limits: {
 			maxFiles: eff.maxFiles,
 			maxDiffChars: eff.maxDiffChars,
@@ -68,12 +70,7 @@ app.put('/models', async (c) => {
 			baseUrl: e.baseUrl ?? null,
 			apiKeyPreview: mask(e.apiKey)
 		})),
-		roles: {
-			security: stored.roles?.security ?? null,
-			perf: stored.roles?.perf ?? null,
-			correctness: stored.roles?.correctness ?? null,
-			docs: stored.roles?.docs ?? null
-		},
+		roles: rolesPayload(),
 		limits: {
 			maxFiles: eff.maxFiles,
 			maxDiffChars: eff.maxDiffChars,

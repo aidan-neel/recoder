@@ -104,6 +104,22 @@ export async function listGlabRepos(env?: Record<string, string>): Promise<Remot
 	});
 }
 
+/** Source branch name for an MR (no diff fetch). Throws GhError. */
+export async function fetchMergeHeadRef(
+	repoUrl: string,
+	iid: number,
+	env?: Record<string, string>
+): Promise<string> {
+	const slug = parseSlug(repoUrl);
+	const view = (await glab(
+		['mr', 'view', String(iid), '-R', slug, '-F', 'json'],
+		env
+	).then(extractJson)) as Record<string, unknown>;
+	const headRef = typeof view.source_branch === 'string' ? view.source_branch : '';
+	if (!headRef) throw new GhError('unknown', 'MR has no source branch');
+	return headRef;
+}
+
 /** MR metadata + unified diff via the glab CLI. Throws GhError. */
 export async function fetchMergeRequest(
 	repoUrl: string,

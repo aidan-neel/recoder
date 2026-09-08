@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { parseUnifiedDiff, type PullPreview, type Repo } from '@recoder/shared';
-import { fetchPullRequest, GhError, listPullRequests } from '../lib/gh';
+import { fetchPullRequest, GhError, listPullFiles, listPullRequests } from '../lib/gh';
 import { fetchMergeRequest, listMergeRequests } from '../lib/glab';
 import { detectProvider } from '../lib/providers';
 import { tokenEnv } from '../lib/tokens';
@@ -73,11 +73,11 @@ app.get('/:id/pulls/:pr', async (c) => {
 		const { pr, diff } =
 			provider === 'gitlab'
 				? await fetchMergeRequest(repo.url, n, { env: tokenEnv('gitlab') })
-				: await fetchPullRequest(repo.url, n, { env: tokenEnv('github') });
+				: await fetchPullRequest(repo.url, n, { env: tokenEnv('github'), metadataOnly: true });
 		const preview: PullPreview = {
 			provider,
 			pr,
-			files: parseUnifiedDiff(diff).map((f) => ({
+			files: provider === 'github' ? await listPullFiles(repo.url, n, tokenEnv('github')) : parseUnifiedDiff(diff).map((f) => ({
 				path: f.path,
 				additions: f.additions,
 				deletions: f.deletions

@@ -1,6 +1,8 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
+import { serverDataDir } from './data-dir.js';
 import type { ReviewRole } from './models.js';
+import { REVIEW_ROLES } from './roles.js';
 
 /**
  * Reviewer model settings, editable from the UI and persisted to disk.
@@ -12,7 +14,13 @@ const roleSettingsSchema = z.object({
 	security: z.string().max(200).optional(),
 	perf: z.string().max(200).optional(),
 	correctness: z.string().max(200).optional(),
-	docs: z.string().max(200).optional()
+	docs: z.string().max(200).optional(),
+	dedup: z.string().max(200).optional(),
+	patterns: z.string().max(200).optional(),
+	testing: z.string().max(200).optional(),
+	errors: z.string().max(200).optional(),
+	concurrency: z.string().max(200).optional(),
+	api: z.string().max(200).optional()
 });
 
 const modelEntrySchema = z.object({
@@ -58,9 +66,7 @@ interface StoredSettings {
 let overrides: StoredSettings = {};
 
 function settingsFile(): string {
-	const dir = process.env.RECODER_DATA_DIR ?? './data';
-	mkdirSync(dir, { recursive: true });
-	return `${dir}/review-config.json`;
+	return `${serverDataDir()}/review-config.json`;
 }
 
 function persist(): void {
@@ -130,7 +136,7 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 		const ids = new Set(clean.models.map((e) => e.id));
 		if (clean.sharedModelId && !ids.has(clean.sharedModelId)) delete clean.sharedModelId;
 		if (clean.roles) {
-			for (const role of ['security', 'perf', 'correctness', 'docs'] as const) {
+			for (const role of REVIEW_ROLES) {
 				if (clean.roles[role] && !ids.has(clean.roles[role] as string)) delete clean.roles[role];
 			}
 		}
@@ -140,7 +146,7 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	}
 	if (patch.roles !== undefined) {
 		clean.roles = { ...(clean.roles ?? {}) };
-		for (const role of ['security', 'perf', 'correctness', 'docs'] as const) {
+		for (const role of REVIEW_ROLES) {
 			const value = patch.roles[role];
 			if (value !== undefined) {
 				if (value === '') delete clean.roles[role];
@@ -184,13 +190,13 @@ export function effectiveReviewEnv(): {
 		baseUrl: pick(overrides.baseUrl, process.env.RECODER_REVIEW_BASE_URL).replace(/\/$/, ''),
 		apiKey: pick(overrides.apiKey, process.env.RECODER_REVIEW_API_KEY),
 		model: shared?.model ?? pick(undefined, process.env.RECODER_REVIEW_MODEL),
-		roles: {
-			security: pick(overrides.roles?.security, process.env.RECODER_SECURITY_MODEL) || undefined,
-			perf: pick(overrides.roles?.perf, process.env.RECODER_PERF_MODEL) || undefined,
-			correctness:
-				pick(overrides.roles?.correctness, process.env.RECODER_CORRECTNESS_MODEL) || undefined,
-			docs: pick(overrides.roles?.docs, process.env.RECODER_DOCS_MODEL) || undefined
-		},
+		roles: Object.fromEntries(
+			REVIEW_ROLES.map((role) => [
+				role,
+				pick(overrides.roles?.[role], process.env[`RECODER_${role.toUpperCase()}_MODEL`]) ||
+					undefined
+			])
+		) as Partial<Record<ReviewRole, string>>,
 		maxFiles: pickNumber(overrides.maxFiles, process.env.RECODER_REVIEW_MAX_FILES, 20),
 		maxDiffChars: pickNumber(
 			overrides.maxDiffChars,

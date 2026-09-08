@@ -19,8 +19,9 @@ import { effectiveReviewEnv, getStoredSettings } from './review-settings.js';
  *   RECODER_PERF_MODEL=...
  */
 
-export const REVIEW_ROLES = ['security', 'perf', 'correctness', 'docs'] as const;
-export type ReviewRole = (typeof REVIEW_ROLES)[number];
+import { REVIEW_ROLES, type ReviewRole } from './roles.js';
+
+export { REVIEW_ROLES, type ReviewRole };
 
 const configSchema = z.object({
 	baseUrl: z.string().min(1),

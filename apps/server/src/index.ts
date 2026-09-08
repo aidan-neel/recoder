@@ -1,5 +1,6 @@
 import { app } from './app';
 import { env } from './env';
+import { serverDataDir } from './lib/data-dir';
 import { initReviewSettings } from './lib/review-settings';
 import { initTokenStore } from './lib/tokens';
 import { recoverStaleReviews } from './store';
@@ -16,3 +17,5 @@ const server = Bun.serve({
 
 // eslint-disable-next-line no-console
 console.log(`recoder server listening on http://${server.hostname}:${server.port}`);
+// eslint-disable-next-line no-console
+console.log(`recoder data dir: ${serverDataDir()}`);

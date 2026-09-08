@@ -10,6 +10,21 @@ import type { Finding as BackendFinding, FindingSeverity as BackendSeverity } fr
 export type FindingSeverity = 'high' | 'medium' | 'low' | 'info';
 export type FindingStatus = 'open' | 'accepted' | 'dismissed';
 
+/** On-demand fix suggestion state for one finding (client-side only). */
+export interface FixSuggestion {
+	status: 'loading' | 'ready' | 'error';
+	summary?: string;
+	patch?: string;
+	/** Whether the patch applies cleanly to the review sandbox (null when unknown). */
+	applies?: boolean | null;
+	error?: string;
+	/** Apply-to-PR state for a ready suggestion. */
+	apply?: 'applying' | 'applied' | 'error';
+	applyError?: string;
+	sha?: string;
+	branch?: string;
+}
+
 export const SEVERITIES: FindingSeverity[] = ['high', 'medium', 'low', 'info'];
 
 /** Severity → marker dot color. */
@@ -27,7 +42,7 @@ export interface Finding {
 	severity: FindingSeverity;
 	/** Review category, e.g. `perf`, `security`, `docs`. */
 	category: string;
-	/** Reviewing agent / model, e.g. `qwen2.5-coder-32b`. */
+	/** Reviewer role that owns this finding, e.g. `security`. */
 	agent: string;
 	/** Model that produced this finding, when known. */
 	model?: string | null;
@@ -42,7 +57,6 @@ export interface Finding {
 }
 
 const FILE = 'src/rate-limit/limiter.ts';
-const AGENT = 'qwen2.5-coder-32b';
 
 function initialFindings(): Finding[] {
 	return [
@@ -51,7 +65,7 @@ function initialFindings(): Finding[] {
 			code: 'F-01',
 			severity: 'high',
 			category: 'security',
-			agent: AGENT,
+			agent: 'security',
 			body: "bucketFor shares one Map across tenants — two tenants behind one egress IP drain each other's budget.",
 			file: FILE,
 			startLine: 28,
@@ -63,7 +77,7 @@ function initialFindings(): Finding[] {
 			code: 'F-02',
 			severity: 'medium',
 			category: 'perf',
-			agent: AGENT,
+			agent: 'perf',
 			body: 'buckets Map has no eviction, so it grows once per key forever',
 			file: FILE,
 			startLine: 10,
@@ -75,7 +89,7 @@ function initialFindings(): Finding[] {
 			code: 'F-03',
 			severity: 'medium',
 			category: 'correctness',
-			agent: AGENT,
+			agent: 'correctness',
 			body: 'refill() reads Date.now() directly, so the injected Clock is dead weight and tests cannot control time.',
 			file: FILE,
 			startLine: 20,
@@ -87,7 +101,7 @@ function initialFindings(): Finding[] {
 			code: 'F-04',
 			severity: 'low',
 			category: 'docs',
-			agent: AGENT,
+			agent: 'docs',
 			body: '`allow` moved into the class but the doc comment still reads like a free function.',
 			file: FILE,
 			startLine: 19,
@@ -99,7 +113,7 @@ function initialFindings(): Finding[] {
 			code: 'F-05',
 			severity: 'low',
 			category: 'style',
-			agent: AGENT,
+			agent: 'patterns',
 			body: 'Constructor takes capacity but never validates it — zero capacity bricks every bucket silently.',
 			file: FILE,
 			startLine: 13,
@@ -111,7 +125,7 @@ function initialFindings(): Finding[] {
 			code: 'F-06',
 			severity: 'info',
 			category: 'note',
-			agent: AGENT,
+			agent: 'docs',
 			body: 'Clock is imported here — confirm refill timing moves onto it before removing the Date.now call.',
 			file: FILE,
 			startLine: 1,
@@ -119,15 +133,6 @@ function initialFindings(): Finding[] {
 			status: 'open'
 		}
 	];
-}
-
-/** Text filter for the findings searcher (topbar). Empty means no filtering. */
-export function matchesQuery(f: Finding, query: string): boolean {
-	const q = query.trim().toLowerCase();
-	if (q === '') return true;
-	return [f.code ?? '', f.body, f.file, f.category, f.agent, f.severity].some((s) =>
-		s.toLowerCase().includes(q)
-	);
 }
 
 /** Map a backend finding (harness output) onto the local card/thread model. */
@@ -156,16 +161,46 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 	};
 }
 
+const HIDE_INFO_KEY = 'recoder.hideInfo';
+
+function loadHideInfo(): boolean {
+	try {
+		return localStorage.getItem(HIDE_INFO_KEY) === '1';
+	} catch {
+		return false;
+	}
+}
+
 class FindingsStore {
 	items = $state<Finding[]>(initialFindings());
+	/** Fix suggestions by finding id (fetched on demand, never persisted). */
+	suggestions = $state<Record<string, FixSuggestion>>({});
 	activeId = $state<string | null>(null);
 	/** Finding id currently hovered (card or code) — drives cross-highlighting. */
 	hoveredId = $state<string | null>(null);
-	/** Topbar search text; cards and navigation filter on it. */
-	query = $state('');
+	/** When true, info findings are omitted from the tree, diff, and navigator. */
+	hideInfo = $state(loadHideInfo());
+
+	isShown(finding: Finding): boolean {
+		return !(this.hideInfo && finding.severity === 'info');
+	}
 
 	forFile(file: string): Finding[] {
-		return this.items.filter((f) => f.file === file);
+		return this.items.filter((f) => f.file === file && this.isShown(f));
+	}
+
+	setHideInfo(hide: boolean): void {
+		this.hideInfo = hide;
+		try {
+			localStorage.setItem(HIDE_INFO_KEY, hide ? '1' : '0');
+		} catch {
+			// Preference just won't survive refresh.
+		}
+		const active = this.items.find((f) => f.id === this.activeId);
+		if (active && !this.isShown(active)) {
+			this.activeId = null;
+			this.hoveredId = null;
+		}
 	}
 
 	get active(): Finding | undefined {
@@ -197,6 +232,39 @@ class FindingsStore {
 		if (finding) finding.status = 'open';
 	}
 
+	suggesting(id: string): void {
+		this.suggestions[id] = { status: 'loading' };
+	}
+
+	suggestReady(id: string, suggestion: { summary: string; patch: string; applies: boolean | null }): void {
+		this.suggestions[id] = { status: 'ready', ...suggestion };
+	}
+
+	suggestError(id: string, error: string): void {
+		this.suggestions[id] = { status: 'error', error };
+	}
+
+	applyingFix(id: string): void {
+		const current = this.suggestions[id];
+		if (current?.status === 'ready') {
+			this.suggestions[id] = { ...current, apply: 'applying', applyError: undefined };
+		}
+	}
+
+	applyReady(id: string, result: { sha: string; branch: string }): void {
+		const current = this.suggestions[id];
+		if (current?.status === 'ready') {
+			this.suggestions[id] = { ...current, apply: 'applied', ...result };
+		}
+	}
+
+	applyFailed(id: string, error: string): void {
+		const current = this.suggestions[id];
+		if (current?.status === 'ready') {
+			this.suggestions[id] = { ...current, apply: 'error', applyError: error };
+		}
+	}
+
 	/** Merge remotely-fetched findings (backend reviews) into the local store. */
 	syncRemote(findings: Finding[]): void {
 		for (const f of findings) {
@@ -204,11 +272,19 @@ class FindingsStore {
 		}
 	}
 
-	reset(): void {
-		this.items = initialFindings();
+	/** Replace items wholesale when switching to another session's findings. */
+	replaceAll(findings: Finding[]): void {
+		this.items = findings;
+		this.suggestions = {};
 		this.activeId = null;
 		this.hoveredId = null;
-		this.query = '';
+	}
+
+	reset(): void {
+		this.items = initialFindings();
+		this.suggestions = {};
+		this.activeId = null;
+		this.hoveredId = null;
 	}
 }
 

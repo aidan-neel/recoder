@@ -1,5 +1,7 @@
 import { env } from '$env/dynamic/public';
 import type {
+	ApplyFixRequest,
+	ApplyFixResponse,
 	CreateRepoInput,
 	CreateReviewInput,
 	DiscussRequest,
@@ -13,7 +15,9 @@ import type {
 	PullRequest,
 	RemoteRepo,
 	Repo,
-	Review
+	Review,
+	SuggestFixRequest,
+	SuggestFixResponse
 } from '@recoder/shared';
 
 const base = (env.PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
@@ -52,8 +56,68 @@ export const serverApi = {
 			method: 'POST',
 			body: JSON.stringify(input)
 		}),
+	/**
+	 * Stream a follow-up reply as server-sent events. Forwards each token to
+	 * `onToken` and resolves with the final reply once `done` arrives.
+	 */
+	discussStream: async (
+		reviewId: string,
+		input: DiscussRequest,
+		onToken: (text: string) => void,
+		signal?: AbortSignal
+	): Promise<DiscussResponse> => {
+		const res = await fetch(`${base}/api/reviews/${reviewId}/discuss/stream`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(input),
+			signal
+		});
+		if (!res.ok || !res.body) {
+			const body = (await res.json().catch(() => null)) as { error?: string } | null;
+			throw new Error(body?.error ?? `API ${res.status}`);
+		}
+		let result: DiscussResponse | null = null;
+		const reader = res.body.getReader();
+		const decoder = new TextDecoder();
+		let buffer = '';
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) break;
+			buffer += decoder.decode(value, { stream: true });
+			let idx: number;
+			while ((idx = buffer.indexOf('\n\n')) >= 0) {
+				const event = buffer.slice(0, idx);
+				buffer = buffer.slice(idx + 2);
+				for (const line of event.split('\n')) {
+					const trimmed = line.trim();
+					if (!trimmed.startsWith('data:')) continue;
+					const data = JSON.parse(trimmed.slice(5).trim()) as
+						| { type: 'token'; text: string }
+						| ({ type: 'done' } & DiscussResponse)
+						| { type: 'error'; error: string };
+					if (data.type === 'token') onToken(data.text);
+					else if (data.type === 'done') result = data;
+					else if (data.type === 'error') throw new Error(data.error);
+				}
+			}
+		}
+		if (!result) throw new Error('The reviewer did not respond.');
+		return result;
+	},
+	suggestFix: (reviewId: string, input: SuggestFixRequest) =>
+		req<SuggestFixResponse>(`/api/reviews/${reviewId}/fixes/suggest`, {
+			method: 'POST',
+			body: JSON.stringify(input)
+		}),
+	applyFix: (reviewId: string, input: ApplyFixRequest) =>
+		req<ApplyFixResponse>(`/api/reviews/${reviewId}/fixes/apply`, {
+			method: 'POST',
+			body: JSON.stringify(input)
+		}),
 	queueReview: (input: CreateReviewInput) =>
 		req<Review>('/api/reviews', { method: 'POST', body: JSON.stringify(input) }),
+	deleteReview: (id: string) =>
+		req<{ deleted: boolean }>(`/api/reviews/${id}`, { method: 'DELETE' }),
 	authStatus: () => req<{ github: ProviderAuth; gitlab: ProviderAuth }>('/api/auth/status'),
 	saveToken: (provider: Provider, token: string) =>
 		req<{ provider: Provider; user: string | null }>('/api/auth/token', {

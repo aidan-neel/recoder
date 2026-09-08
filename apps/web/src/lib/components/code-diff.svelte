@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { DiffLine, FileDiff } from '$lib/diff';
 	import type { Finding, FindingSeverity } from '$lib/findings.svelte';
-	import { SEVERITY_DOT, findingsStore, matchesQuery } from '$lib/findings.svelte';
+	import { SEVERITY_DOT, findingsStore } from '$lib/findings.svelte';
 	import { highlightLines } from '$lib/highlight';
 	import FindingCard from './finding-card.svelte';
 
@@ -119,13 +119,7 @@
 					</span>
 				</div>
 				{#each byLine.get(key) ?? [] as finding (finding.id)}
-					<div
-						id={`finding-${finding.id}`}
-						class="mx-4 my-1.5 scroll-mt-2 transition-opacity sm:mx-10 {findingsStore.query
-							.trim() !== '' && !matchesQuery(finding, findingsStore.query)
-							? 'opacity-30'
-							: ''}"
-					>
+					<div id={`finding-${finding.id}`} class="mx-4 my-1.5 scroll-mt-2 sm:mx-10">
 						<FindingCard {finding} />
 					</div>
 				{/each}

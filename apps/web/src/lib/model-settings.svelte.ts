@@ -1,7 +1,18 @@
 import type { ModelSettings, ModelSettingsPatch, ReviewRole } from '@recoder/shared';
 import { serverApi } from './server-api';
 
-export const MODEL_ROLES: ReviewRole[] = ['security', 'perf', 'correctness', 'docs'];
+export const MODEL_ROLES: ReviewRole[] = [
+	'security',
+	'perf',
+	'correctness',
+	'docs',
+	'dedup',
+	'patterns',
+	'testing',
+	'errors',
+	'concurrency',
+	'api'
+];
 
 /** Global open state + cached config for the model settings modal. */
 class ModelSettingsUi {

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -20,12 +20,13 @@ afterEach(() => {
 		else process.env[k] = savedEnv[k];
 	}
 	setReviewOverrides({});
-	delete process.env.RECODER_DATA_DIR;
 });
 
 function isolateDataDir(): void {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-settings-'));
 }
+
+beforeEach(isolateDataDir);
 
 describe('review settings', () => {
 	test('unconfigured by default', async () => {

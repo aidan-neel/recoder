@@ -8,13 +8,26 @@
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 	import * as Message from '@sivir-ui/svelte/components/message';
+	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
 	import Shortcut from '@sivir-ui/svelte/components/shortcut';
+	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import SeverityPill from './severity-pill.svelte';
-	import { findingsStore } from '$lib/findings.svelte';
+	import { SEVERITY_DOT, findingsStore } from '$lib/findings.svelte';
 	import { serverApi } from '$lib/server-api';
-	import { threadsStore, type Thread } from '$lib/threads.svelte';
+	import { formatAgentName, threadsStore, type Thread } from '$lib/threads.svelte';
 
-	const BASE_PARTICIPANTS = ['security', 'orchestrator', 'perf'];
+	const BASE_PARTICIPANTS = [
+		'security',
+		'perf',
+		'correctness',
+		'docs',
+		'dedup',
+		'patterns',
+		'testing',
+		'errors',
+		'concurrency',
+		'api'
+	];
 
 	let active = $state(BASE_PARTICIPANTS[0]);
 	let draft = $state('');
@@ -26,6 +39,20 @@
 
 	const findingId = $derived(threadsStore.openId);
 	const finding = $derived(findingsStore.items.find((f) => f.id === findingId));
+	/** Collapse for the floating finding card. Reopens when switching threads. */
+	let contextOpen = $state(true);
+	$effect(() => {
+		if (findingId) contextOpen = true;
+	});
+
+	// A card's "Suggest fix" queues a canned message; send it like typed text.
+	$effect(() => {
+		const pending = threadsStore.pendingMessage;
+		if (!pending || pending.findingId !== findingId || composerBusy) return;
+		threadsStore.pendingMessage = null;
+		draft = pending.text;
+		void send();
+	});
 	const participants = $derived(
 		finding && !BASE_PARTICIPANTS.includes(finding.agent)
 			? [...BASE_PARTICIPANTS, finding.agent]
@@ -36,6 +63,14 @@
 			? (threadsStore.get(findingId) ?? { findingId, messages: [] })
 			: { findingId: '', messages: [] }
 	);
+	/** Composer locked while a reply streams. */
+	const composerBusy = $derived(sending);
+
+	function suggestViaChat(): void {
+		if (!findingId || composerBusy) return;
+		draft = 'Suggest a fix for this finding';
+		void send();
+	}
 
 	function autoresize(): void {
 		if (!inputEl) return;
@@ -74,7 +109,7 @@
 	});
 
 	async function send(): Promise<void> {
-		if (!findingId || sending) return;
+		if (!findingId || composerBusy) return;
 		const body = draft.trim();
 		if (!body) return;
 		const quote = attachedQuote
@@ -95,22 +130,41 @@
 		const reviewId = threadsStore.reviewId;
 		if (!reviewId || !finding) return;
 		sending = true;
+		const replyAuthor = active;
+		const placeholderId = threadsStore.beginReply(findingId, replyAuthor);
+		const payload = {
+			agent: active,
+			finding: {
+				file: finding.file,
+				line: finding.startLine,
+				endLine: finding.endLine,
+				severity: finding.severity,
+				message: finding.body,
+				agent: finding.agent
+			},
+			history,
+			question
+		};
+		const push = (text: string) => threadsStore.appendReply(findingId, placeholderId, text);
+		const streamedSoFar = (): string =>
+			threadsStore.get(findingId)?.messages.find((m) => m.id === placeholderId)?.body.trim() ?? '';
 		try {
-			const result = await serverApi.discuss(reviewId, {
-				agent: active,
-				finding: {
-					file: finding.file,
-					line: finding.startLine,
-					endLine: finding.endLine,
-					severity: finding.severity,
-					message: finding.body,
-					agent: finding.agent
-				},
-				history,
-				question
-			});
-			threadsStore.reply(findingId, result.agent, result.reply, result.model);
+			try {
+				const result = await serverApi.discussStream(reviewId, payload, push);
+				threadsStore.finishReply(findingId, placeholderId, result.agent, result.model);
+			} catch (e) {
+				// Nothing arrived — likely transient (model hiccup, dropped stream).
+				// Retry once before giving up; a partial reply is kept as-is.
+				if (streamedSoFar() !== '') throw e;
+				const result = await serverApi.discussStream(reviewId, payload, push);
+				threadsStore.finishReply(findingId, placeholderId, result.agent, result.model);
+			}
 		} catch (e) {
+			if (streamedSoFar() !== '') {
+				threadsStore.finishReply(findingId, placeholderId);
+			} else {
+				threadsStore.dropReply(findingId, placeholderId);
+			}
 			sendError = e instanceof Error ? e.message : 'The reviewer did not respond.';
 		} finally {
 			sending = false;
@@ -130,78 +184,138 @@
 	}
 </script>
 
-{#if threadsStore.openId}
 	<section
 		aria-label="Finding thread"
-		class="thread-panel-enter absolute right-4 bottom-4 z-20 flex h-[min(680px,calc(100%-2rem))] w-[520px] flex-col overflow-hidden rounded-2xl border border-border bg-card"
+		class="relative flex min-h-0 w-[440px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background xl:w-[520px]"
 	>
-		<div class="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4">
+		<div class="flex h-11 w-full shrink-0 items-center gap-2 border-b border-border px-4">
 			{#if finding}
 				<SeverityPill severity={finding.severity} />
 				<span class="font-mono text-[13px] font-semibold">{finding.code}</span>
+				<span class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground-muted">
+					{formatAgentName(finding.agent)}{finding.model ? ` · ${finding.model}` : ''}
+				</span>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="-mr-2"
+					aria-label={contextOpen ? 'Collapse finding card' : 'Expand finding card'}
+					onclick={() => (contextOpen = !contextOpen)}
+				>
+					<ChevronDown size={15} class="transition-transform {contextOpen ? '' : '-rotate-90'}" />
+				</Button>
 			{:else}
-				<span class="text-[13px] text-foreground-muted">Thread</span>
+				<span class="text-[15px] font-medium">Discussion</span>
 			{/if}
-			<Button
-				variant="ghost"
-				size="icon"
-				class="-mr-2 ml-auto"
-				aria-label="Close thread"
-				onclick={() => threadsStore.close()}
-			>
-				<X size={15} />
-			</Button>
 		</div>
 
-		<Conversation.Root class="min-h-0 flex-1">
+		{#if finding && contextOpen}
+			<div
+				class="mx-3 mt-3 shrink-0 rounded-xl border border-border bg-card p-3"
+				aria-label="Finding context"
+			>
+				<p
+					class="m-0 flex items-center gap-1.5 font-mono text-[13px]"
+					style:color={SEVERITY_DOT[finding.severity]}
+				>
+					<span
+						class="h-1.5 w-1.5 shrink-0 rounded-full"
+						style:background-color={SEVERITY_DOT[finding.severity]}
+					></span>
+					<span class="truncate">{finding.file}:{finding.startLine}</span>
+				</p>
+				<div class="mt-1.5 min-w-0">
+					<Markdown content={finding.body} />
+				</div>
+				{#if finding.status !== 'open'}
+					<div class="mt-2 flex items-center gap-2">
+						{#if finding.status === 'accepted'}
+							<span
+								class="rounded bg-success/15 px-1.5 py-0.5 font-sans text-[13px] font-semibold text-success"
+							>
+								Fixed
+							</span>
+							{#if finding.fixedBy}
+								<span class="font-mono text-[12px] text-foreground-muted">
+									· {formatAgentName(finding.fixedBy)}
+								</span>
+							{/if}
+						{:else}
+							<span class="font-mono text-[13px] text-foreground-muted">Dismissed</span>
+						{/if}
+						<Button
+							variant="ghost"
+							size="sm"
+							class="font-sans text-[14px]"
+							onclick={() => findingsStore.reopen(finding.id)}
+						>
+							Undo
+						</Button>
+					</div>
+				{/if}
+			</div>
+		{/if}
+
+		<Conversation.Root class="min-h-0 w-full flex-1">
 			<Conversation.Content
 				aria-label="Thread messages"
 				transcriptClass="flex flex-col gap-4 p-4"
 			>
 				{#each thread.messages as message (message.id)}
 					{#if message.role === 'agent'}
-						<Message.Root
-							from="assistant"
-							name={message.model ? `${message.author} · ${message.model}` : message.author}
-							timestamp={message.time}
-						>
-							<Message.Content>
-								<Markdown content={message.body} />
-							</Message.Content>
-						</Message.Root>
+						<div class="message-in">
+							<Message.Root from="assistant" status={message.streaming ? 'streaming' : 'idle'}>
+								<Message.Content>
+									{#if message.streaming}
+										<ResponseStream textStream={message.body} streaming class="font-normal" />
+									{:else}
+										<Markdown content={message.body} />
+									{/if}
+								</Message.Content>
+							</Message.Root>
+						</div>
 					{:else}
-						<Message.Root from="user">
-							<Message.Content>
-								<Markdown content={message.body} />
-							</Message.Content>
-						</Message.Root>
+						<div class="message-in">
+							<Message.Root from="user">
+								<Message.Content>
+									<Markdown content={message.body} />
+								</Message.Content>
+							</Message.Root>
+						</div>
 					{/if}
 				{:else}
-					<Conversation.Empty
-						title="No replies yet"
-						description="Ask {active} about this finding below."
-					/>
+					{#if finding}
+						<Conversation.Empty
+							title="No replies yet"
+							description="Ask {formatAgentName(active)} about this finding below."
+						/>
+					{:else}
+						<Conversation.Empty title="Select a finding" />
+					{/if}
 				{/each}
 			</Conversation.Content>
 			<Conversation.ScrollButton />
 		</Conversation.Root>
 
-		<div class="shrink-0 p-3">
+		<div class="w-full shrink-0 p-3">
 			<div data-composer class="rounded-xl border border-border bg-background p-3">
-				<textarea
-					bind:this={inputEl}
-					bind:value={draft}
-					oninput={autoresize}
-					onkeydown={onKeydown}
-					rows={3}
-					placeholder="Ask {active} about this finding…"
-					aria-label="Ask about this finding"
-					class="max-h-[120px] w-full resize-none bg-transparent text-[14px] leading-relaxed outline-none placeholder:text-foreground-muted/70"
-				></textarea>
-				{#if sendError}
-					<p class="mt-2 text-[13px] font-medium text-error" role="alert">{sendError}</p>
-				{/if}
-				<div class="mt-2 flex items-center gap-1">
+			<textarea
+				bind:this={inputEl}
+				bind:value={draft}
+				oninput={autoresize}
+				onkeydown={onKeydown}
+				rows={3}
+				placeholder={finding
+					? `Ask ${formatAgentName(active)} about this finding…`
+					: 'Select a finding'}
+				aria-label={finding ? 'Ask about this finding' : 'Select a finding'}
+				disabled={composerBusy || !finding}
+				class="max-h-[120px] w-full resize-none rounded-lg bg-secondary px-2.5 py-2 text-[14px] leading-relaxed outline-none placeholder:text-foreground-muted/70 disabled:opacity-60"
+			></textarea>
+			{#if sendError}
+				<p class="mt-2 text-[13px] font-medium text-error" role="alert">{sendError}</p>
+			{/if}
+			<div class="mt-2 flex items-center gap-1">
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger
 							variant="ghost"
@@ -210,14 +324,14 @@
 							style="interpolate-size: allow-keywords"
 							aria-label="Choose agent"
 						>
-							{active}
+							{formatAgentName(active)}
 							<ChevronDown size={12} class="text-foreground-muted" />
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content class="min-w-[12rem]">
 							<DropdownMenu.Label>Model</DropdownMenu.Label>
 							{#each participants as participant (participant)}
 								<DropdownMenu.Item callback={() => (active = participant)}>
-									<span class="flex-1">{participant}</span>
+									<span class="flex-1">{formatAgentName(participant)}</span>
 									{#if active === participant}
 										<Check size={13} class="text-primary" />
 									{/if}
@@ -246,18 +360,33 @@
 						</button>
 					{/if}
 					<Button
+						variant="ghost"
+						size="sm"
+						class="h-9 font-sans text-[13px]"
+						disabled={composerBusy || !threadsStore.reviewId}
+						title={threadsStore.reviewId
+							? 'Ask for a fix in chat'
+							: 'Needs a backend review'}
+						onclick={() => suggestViaChat()}
+					>
+						Suggest fix
+					</Button>
+					<Button
 						variant="primary"
 						size="sm"
 						class="ml-auto h-9"
-						disabled={!draft.trim() || sending}
-						loading={sending}
+						disabled={!finding || !draft.trim() || composerBusy}
+						aria-label={sending ? 'Sending' : 'Send'}
 						onclick={() => void send()}
 					>
-						Send
-						<Shortcut shortcut="enter" />
-					</Button>
-				</div>
+						{#if sending}
+							<Spinner size={14} />
+						{:else}
+							Send
+							<Shortcut shortcut="enter" />
+						{/if}
+				</Button>
+			</div>
 			</div>
 		</div>
 	</section>
-{/if}

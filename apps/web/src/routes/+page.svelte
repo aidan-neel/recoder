@@ -1,25 +1,32 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
+	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
+	import Hash from '@lucide/svelte/icons/hash';
+	import Link2 from '@lucide/svelte/icons/link-2';
 	import Moon from '@lucide/svelte/icons/moon';
 	import Plus from '@lucide/svelte/icons/plus';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Search from '@lucide/svelte/icons/search';
 	import Settings from '@lucide/svelte/icons/settings';
 	import Sun from '@lucide/svelte/icons/sun';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import { Button, type ButtonStatus } from '@sivir-ui/svelte/components/button';
 	import * as Alert from '@sivir-ui/svelte/components/alert';
+	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
+	import * as ContextMenu from '@sivir-ui/svelte/components/context-menu';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
+	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
 	import type { Provider, ProviderAuth, PullPreview, PullRequest, RemoteRepo, Repo, Review } from '@recoder/shared';
 	import { serverApi } from '$lib/server-api';
-	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
+	import { modelSettingsUi } from '$lib/model-settings.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
 	import { theme } from '$lib/theme.svelte';
 
@@ -120,6 +127,10 @@
 	let preview = $state<PullPreview | null>(null);
 	let fetchingPreview = $state(false);
 	let prError = $state<string | null>(null);
+	/** Reviews require a reviewer model — no model, no (stub) review. */
+	const needsModel = $derived(
+		!apiDown && !!modelSettingsUi.config && !modelSettingsUi.config.configured
+	);
 
 	const selected = $derived(repos.find((r) => r.id === selectedRepo));
 	const trackedNames = $derived(new Set(repos.map((r) => r.url.replace(/\/$/, ''))));
@@ -208,7 +219,8 @@
 			const [status, fetchedRepos, reviews] = await Promise.all([
 				serverApi.authStatus(),
 				serverApi.listRepos(),
-				serverApi.listReviews()
+				serverApi.listReviews(),
+				modelSettingsUi.load()
 			]);
 			auth = status;
 			if (status.github.authenticated || status.gitlab.authenticated) void loadRemote();
@@ -318,6 +330,43 @@
 		void goto(`/session/${id}`);
 	}
 
+	function copySessionLink(id: string): void {
+		const url = `${window.location.origin}/session/${id}`;
+		void navigator.clipboard?.writeText(url).catch(() => {});
+	}
+
+	function copySessionId(id: string): void {
+		void navigator.clipboard?.writeText(id).catch(() => {});
+	}
+
+	let deletingId = $state<string | null>(null);
+	let pendingDeleteId = $state<string | null>(null);
+	let deleteDialogOpen = $state(false);
+	const pendingDelete = $derived(recent.find((s) => s.id === pendingDeleteId) ?? null);
+
+	function confirmDelete(): void {
+		const id = pendingDeleteId;
+		pendingDeleteId = null;
+		deleteDialogOpen = false;
+		if (id) void deleteSession(id);
+	}
+
+	async function deleteSession(id: string): Promise<void> {
+		if (deletingId) return;
+		deletingId = id;
+		try {
+			if (!apiDown) await serverApi.deleteReview(id);
+			allReviews = allReviews.filter((r) => r.id !== id);
+			recent = recent.filter((s) => s.id !== id);
+			// Drop the matching tab too, if one is open.
+			sessionState.close(id);
+		} catch (e) {
+			prError = e instanceof Error ? e.message : 'Failed to delete session.';
+		} finally {
+			deletingId = null;
+		}
+	}
+
 	function selectRepo(id: string): void {
 		if (selectedRepo === id) return;
 		selectedRepo = id;
@@ -415,6 +464,11 @@
 
 	async function reviewPr(n: number): Promise<void> {
 		if (!selected || reviewTarget) return;
+		if (!apiDown && modelSettingsUi.config && !modelSettingsUi.config.configured) {
+			prError = 'Add a reviewer model first — reviews cannot run without one.';
+			modelSettingsUi.show();
+			return;
+		}
 		reviewTarget = { n, status: 'loading' };
 		prError = null;
 		if (apiDown) {
@@ -438,8 +492,11 @@
 	}
 </script>
 
-<div class="flex min-h-[calc(100vh-8rem)] flex-col px-4 py-10">
-	<div class="m-auto w-full max-w-4xl">
+<div class="flex min-h-[calc(100vh-52px-4rem)] flex-col px-4 py-10">
+	<!-- Top-anchored (mx-auto, not m-auto): vertically centering this column
+		re-centers the whole page whenever async content changes its height,
+		which reads as a full-page layout shift on every load. -->
+	<div class="session-enter mx-auto w-full max-w-4xl">
 	<div class="flex items-start justify-between gap-2">
 		<div class="min-w-0">
 			<h1 class="text-2xl font-semibold tracking-tight">Start a review</h1>
@@ -474,16 +531,31 @@
 	</div>
 
 	{#if apiDown}
-		<Alert.Root variant="warning" class="mt-4">
+		<Alert.Root variant="warning" class="session-enter mt-4">
 			<Alert.Title>API unreachable</Alert.Title>
 			<Alert.Description>
 				Showing demo data. Start the server with <code class="font-mono">bun run dev:server</code>
 				for live fetching.
 			</Alert.Description>
 		</Alert.Root>
+	{:else if needsModel}
+		<Alert.Root variant="warning" class="session-enter mt-4">
+			<Alert.Title>No reviewer model configured</Alert.Title>
+			<Alert.Description>
+				Reviews need at least one model — without it there is nothing to review with.
+			</Alert.Description>
+			<Button
+				variant="outline"
+				size="sm"
+				class="mt-2 w-fit font-sans"
+				onclick={() => modelSettingsUi.show()}
+			>
+				Open reviewer models
+			</Button>
+		</Alert.Root>
 	{/if}
 
-	<div class="mt-8 flex flex-col gap-2 sm:flex-row">
+	<div class="session-enter mt-8 flex flex-col gap-2 sm:flex-row" style="animation-delay: 80ms">
 		{#if authLoading}
 			<Skeleton class="h-[var(--size-control-md)] w-full rounded-lg sm:w-64 sm:shrink-0" />
 		{:else if repos.length > 0}
@@ -557,34 +629,35 @@
 		</Button>
 	</div>
 
-	<div class="mt-8 flex items-baseline justify-between gap-2">
-		<h2 class="text-[15px] font-medium">Open pull requests · {filtered.length}</h2>
-		<p class="shrink-0 text-[13px] text-foreground-muted">Reviewers: {MODEL_ROLES.join(' · ')}</p>
+	<div class="session-enter mt-8 flex items-baseline justify-between gap-2" style="animation-delay: 140ms">
+		<h2 class="text-[15px] font-medium tabular-nums">
+			Open pull requests · {prsLoading ? '…' : filtered.length}
+		</h2>
 	</div>
 
 	{#if prError}
 		<p class="mt-2 text-[13px] font-medium text-error" role="alert">{prError}</p>
 	{/if}
 
-	<div class="mt-3 grid gap-2.5">
+	<div class="session-enter mt-3 grid gap-2.5" style="animation-delay: 180ms" aria-busy={prsLoading}>
 		{#if prsLoading}
 			{#each [0, 1, 2] as i (i)}
 				<div
-					class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5"
+					class="flex min-w-0 items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5"
 					role="status"
 					aria-label="Loading pull requests"
 				>
-					<Skeleton class="size-[18px] shrink-0 rounded-full" />
+					<Skeleton class="mt-0.5 size-[18px] shrink-0 self-start rounded-full" />
 					<div class="min-w-0 flex-1">
 						<Skeleton class="h-[22px] w-2/3" />
 						<Skeleton class="mt-0.5 h-5 w-1/2" />
 					</div>
 					<Skeleton class="hidden h-5 w-32 shrink-0 sm:block" />
-					<Skeleton class="h-8 w-[74px] shrink-0 rounded-lg" />
+					<Skeleton class="h-[34px] w-[84px] shrink-0 rounded-lg" />
 				</div>
 			{/each}
 		{:else if prsError}
-			<div class="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
+			<div class="flex min-w-0 items-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5">
 				<p class="min-w-0 flex-1 text-[14px] font-medium text-error">{prsError}</p>
 				<Button variant="outline" size="sm" class="shrink-0 font-sans" onclick={() => void loadPrs()}>
 					Retry
@@ -592,7 +665,7 @@
 			</div>
 		{:else}
 			{#if showFetchCard && pastedNumber !== null}
-				<div class="flex items-center gap-3 rounded-xl border border-dashed border-border px-4 py-3">
+				<div class="flex min-w-0 items-center gap-3 rounded-xl border border-dashed border-border px-4 py-3">
 					<p class="min-w-0 flex-1 truncate font-mono text-[13px] text-foreground-muted">
 						PR #{pastedNumber} isn’t in the open list.
 					</p>
@@ -611,7 +684,7 @@
 				{@const isHighlighted = highlightN === pr.number}
 				{@const isReviewed = reviewed.has(`${selected?.id}#${pr.number}`)}
 				<div
-					class="flex items-center gap-3 rounded-xl border px-4 py-3.5 transition-colors {isHighlighted
+					class="flex min-w-0 items-center gap-3 rounded-xl border px-4 py-3.5 transition-colors {isHighlighted
 						? 'border-primary/60 bg-primary/[0.05]'
 						: 'border-border bg-card'}"
 				>
@@ -666,40 +739,64 @@
 		{/if}
 	</div>
 
-	<h2 class="mt-10 text-[15px] font-medium">Recent sessions</h2>
-	<div class="mt-1 divide-y divide-border border-y border-border">
+	<h2 class="session-enter mt-10 text-[15px] font-medium" style="animation-delay: 220ms">Recent sessions</h2>
+	<div class="session-enter mt-1 divide-y divide-border border-y border-border" style="animation-delay: 260ms" aria-busy={recentLoading}>
 		{#if recentLoading}
 			{#each [0, 1] as i (i)}
 				<div class="flex items-center gap-2.5 px-1 py-2.5" role="status" aria-label="Loading sessions">
-					<Skeleton class="h-5 w-40" />
-					<Skeleton class="h-4 w-12" />
-					<Skeleton class="ml-auto h-4 w-16" />
+					<Skeleton class="h-[22px] w-40" />
+					<Skeleton class="h-[18px] w-12" />
+					<Skeleton class="h-[18px] w-24" />
+					<Skeleton class="ml-auto h-[18px] w-16" />
 				</div>
 			{/each}
 		{:else}
 			{#each recent as session (session.id)}
-			<button
-				type="button"
-				onclick={() =>
-					openSession(
-						session.id,
-						session.repo,
-						`#${session.pr}`,
-						session.status === 'passed' ? 'ready' : 'reviewing'
-					)}
-				class="flex w-full items-center gap-2.5 bg-transparent px-1 py-2.5 text-left transition-colors hover:bg-secondary/60"
-			>
-				<span
-					class="h-1.5 w-1.5 shrink-0 rounded-full"
-					style:background-color={statusDot[session.status]}
-				></span>
-				<span class="font-mono text-[15px]">{session.repo}</span>
-				<span class="font-mono text-[13px] text-foreground-muted">#{session.pr}</span>
-				<span class="font-mono text-[13px] text-foreground-muted">
-					· {session.findings} finding{session.findings === 1 ? '' : 's'}
-				</span>
-				<span class="ml-auto text-[13px] text-foreground-muted">{session.status}</span>
-			</button>
+			{@const sessionStatus = session.status === 'passed' ? 'ready' : 'reviewing'}
+			<ContextMenu.Root>
+				<ContextMenu.Trigger>
+					<button
+						type="button"
+						onclick={() => openSession(session.id, session.repo, `#${session.pr}`, sessionStatus)}
+						class="group flex w-full items-center gap-2.5 bg-transparent px-1 py-2.5 text-left transition-colors"
+					>
+						<span
+							class="h-1.5 w-1.5 shrink-0 rounded-full"
+							style:background-color={statusDot[session.status]}
+						></span>
+						<span class="font-mono text-[15px] group-hover:underline group-hover:underline-offset-4">{session.repo}</span>
+						<span class="font-mono text-[13px] text-foreground-muted">#{session.pr}</span>
+						<span class="font-mono text-[13px] text-foreground-muted">
+							· {session.findings} finding{session.findings === 1 ? '' : 's'}
+						</span>
+						<span class="ml-auto text-[13px] text-foreground-muted">{session.status}</span>
+					</button>
+				</ContextMenu.Trigger>
+				<ContextMenu.Content class="min-w-[13rem]">
+					<ContextMenu.Item
+						callback={() => openSession(session.id, session.repo, `#${session.pr}`, sessionStatus)}
+					>
+						<span class="flex items-center gap-2"><ArrowUpRight size={14} /> Open session</span>
+					</ContextMenu.Item>
+					<ContextMenu.Item callback={() => copySessionLink(session.id)}>
+						<span class="flex items-center gap-2"><Link2 size={14} /> Copy link</span>
+					</ContextMenu.Item>
+					<ContextMenu.Item callback={() => copySessionId(session.id)}>
+						<span class="flex items-center gap-2"><Hash size={14} /> Copy session ID</span>
+					</ContextMenu.Item>
+					<ContextMenu.Separator />
+					<ContextMenu.Item
+						callback={() => {
+							pendingDeleteId = session.id;
+							deleteDialogOpen = true;
+						}}
+					>
+						<span class="flex items-center gap-2 text-[var(--color-error)]">
+							<Trash2 size={14} /> Delete
+						</span>
+					</ContextMenu.Item>
+				</ContextMenu.Content>
+			</ContextMenu.Root>
 			{:else}
 				<p class="px-1 py-3 text-[14px] text-foreground-muted">No sessions yet.</p>
 			{/each}
@@ -707,12 +804,21 @@
 	</div>
 
 	{#if !apiDown}
-		<fieldset class="mt-10">
+		<fieldset class="session-enter mt-10" style="animation-delay: 300ms">
 			<legend class="text-[14px] font-medium">Connect</legend>
 			<div class="mt-2 grid gap-2">
 				{#if authLoading}
-					<Skeleton class="h-[68px] w-full rounded-lg" />
-					<Skeleton class="h-[68px] w-full rounded-lg" />
+					{#each [0, 1] as i (i)}
+						<div
+							class="flex items-center gap-2.5 rounded-lg border border-border bg-card px-3 py-2.5"
+							role="status"
+							aria-label="Loading providers"
+						>
+							<Skeleton class="size-1.5 shrink-0 rounded-full" />
+							<Skeleton class="h-[22px] w-20" />
+							<Skeleton class="ml-auto h-[28px] w-[86px] shrink-0 rounded-lg" />
+						</div>
+					{/each}
 				{:else if auth}
 					{#each PROVIDERS as { id, label } (id)}
 						{@const state = auth[id]}
@@ -855,5 +961,38 @@
 			</Modal.Body>
 		</Modal.Content>
 	</Modal.Root>
+
+	<AlertDialog.Root
+		error
+		bind:open={deleteDialogOpen}
+		onOpenChange={(open) => {
+			if (!open) pendingDeleteId = null;
+		}}
+	>
+		<AlertDialog.Content>
+			<AlertDialog.Header>
+				<AlertDialog.Title>Delete this session?</AlertDialog.Title>
+				<AlertDialog.Description>
+					{#if pendingDelete}
+						{pendingDelete.repo} #{pendingDelete.pr} with {pendingDelete.findings} finding{pendingDelete.findings === 1 ? '' : 's'} will
+						be permanently removed.
+					{:else}
+						This session will be permanently removed.
+					{/if}
+					This action cannot be undone.
+				</AlertDialog.Description>
+			</AlertDialog.Header>
+			<AlertDialog.Footer>
+				<AlertDialog.Exit>
+					Cancel
+					<Shortcut shortcut="esc" />
+				</AlertDialog.Exit>
+				<AlertDialog.Confirm onclick={() => confirmDelete()}>
+					Delete
+					<Shortcut shortcut="enter" />
+				</AlertDialog.Confirm>
+			</AlertDialog.Footer>
+		</AlertDialog.Content>
+	</AlertDialog.Root>
 	</div>
 </div>

@@ -51,8 +51,18 @@ sandbox excerpts to role-specific models and parses strict-JSON findings:
 
 UI-connected provider tokens persist to `$RECODER_DATA_DIR/tokens.json`
 (0600, same tradeoff as the gh CLI's own storage) so reconnects survive
-restarts. Process env (`GH_TOKEN`/`GITLAB_TOKEN`) takes precedence when set.
+restarts and hot reloads. The default directory is `~/.recoder/data`,
+independent of the server's working directory. Tokens stay saved until explicitly
+disconnected; expired or revoked tokens must be replaced. Saves are atomic, and
+failed saves return an error. Process env (`GH_TOKEN`/`GITLAB_TOKEN`) takes precedence when set.
 Backed by the `recoder-data` volume in compose.
+
+GitHub reviews fetch PR metadata, clone into a separate checkout per review,
+and compute the merge-base diff with local Git. They do not use GitHub's
+size-limited PR diff endpoint. Specialist agents and their scouts receive
+local diff and checkout excerpts; large file lists are reviewed in batches.
+Checkouts are read-only inputs to the review harness, not OS-level containers.
+Model inference still uses the endpoint configured in settings.
 
 ## Durable state (SQLite)
 

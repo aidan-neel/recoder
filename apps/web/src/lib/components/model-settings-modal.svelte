@@ -10,6 +10,7 @@
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
 	import type { ModelEntry } from '@recoder/shared';
 	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
+	import { formatAgentName } from '$lib/threads.svelte';
 
 	interface DraftEntry extends ModelEntry {
 		/** Key for brand-new entries (never sent for existing ones). */
@@ -22,12 +23,9 @@
 
 	let entries = $state<DraftEntry[]>([]);
 	let sharedId = $state('');
-	let roleIds = $state<Record<string, string>>({
-		security: SHARED_SENTINEL,
-		perf: SHARED_SENTINEL,
-		correctness: SHARED_SENTINEL,
-		docs: SHARED_SENTINEL
-	});
+	let roleIds = $state<Record<string, string>>(
+		Object.fromEntries(MODEL_ROLES.map((role) => [role, SHARED_SENTINEL]))
+	);
 	let seeded = $state(false);
 
 	let adding = $state(false);
@@ -127,7 +125,7 @@
 					: ''}.
 			</Modal.Description>
 		</Modal.Header>
-		<Modal.Body class="gap-4">
+		<Modal.Body class="max-h-[min(70vh,36rem)] gap-4 overflow-y-auto">
 			{#if modelSettingsUi.loading && !modelSettingsUi.config}
 				<div class="flex flex-col gap-3" role="status" aria-label="Loading model settings">
 					<Skeleton class="h-10 w-full rounded-lg" />
@@ -259,7 +257,7 @@
 							<div class="grid gap-3 sm:grid-cols-2">
 								{#each MODEL_ROLES as role (role)}
 									<div class="flex flex-col gap-1.5">
-										<span class="text-[14px] font-medium capitalize">{role}</span>
+										<span class="text-[14px] font-medium">{formatAgentName(role)}</span>
 										<Select.Root value={roleIds[role]}>
 											<Select.Trigger class="w-full justify-between" variant="outline">
 												<span class="truncate">{roleLabel(role)}</span>

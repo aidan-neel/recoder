@@ -10,6 +10,8 @@ export interface ThreadMessage {
 	model?: string;
 	time: string;
 	body: string;
+	/** True while a streamed reply is still arriving. */
+	streaming?: boolean;
 }
 
 export interface Thread {
@@ -19,6 +21,26 @@ export interface Thread {
 
 export const PARTICIPANT_MODEL = '32b';
 
+/** Display labels for agent ids (ids stay lowercase for backend payloads). */
+const AGENT_LABELS: Record<string, string> = {
+	security: 'Security',
+	orchestrator: 'Orchestrator',
+	perf: 'Perf',
+	correctness: 'Correctness',
+	docs: 'Docs',
+	dedup: 'Dedup',
+	patterns: 'Patterns',
+	testing: 'Testing',
+	errors: 'Errors',
+	concurrency: 'Concurrency',
+	api: 'API'
+};
+
+export function formatAgentName(id?: string | null): string {
+	if (!id) return '';
+	return AGENT_LABELS[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
+}
+
 function now(): string {
 	return new Date().toTimeString().slice(0, 8);
 }
@@ -26,6 +48,11 @@ function now(): string {
 class ThreadStore {
 	/** Open thread id. Null = panel closed. */
 	openId = $state<string | null>(null);
+	/**
+	 * Chat message queued by a finding card's "Suggest fix" (consumed by the
+	 * open thread, which sends it like a typed message).
+	 */
+	pendingMessage = $state<{ findingId: string; text: string } | null>(null);
 	/** Backend review backing the open thread (null = local-only demo threads). */
 	reviewId = $state<string | null>(null);
 
@@ -97,8 +124,52 @@ class ThreadStore {
 		});
 	}
 
+	/** Insert an empty agent message for an in-flight stream; returns its id. */
+	beginReply(findingId: string, author: string): string {
+		let thread = this.threads[findingId];
+		if (!thread) {
+			thread = { findingId, messages: [] };
+			this.threads[findingId] = thread;
+		}
+		const id = crypto.randomUUID();
+		thread.messages.push({
+			id,
+			role: 'agent',
+			author,
+			time: now(),
+			body: '',
+			streaming: true
+		});
+		return id;
+	}
+
+	appendReply(findingId: string, id: string, text: string): void {
+		const message = this.threads[findingId]?.messages.find((m) => m.id === id);
+		if (message) message.body += text;
+	}
+
+	finishReply(findingId: string, id: string, author?: string, model?: string): void {
+		const message = this.threads[findingId]?.messages.find((m) => m.id === id);
+		if (!message) return;
+		message.streaming = false;
+		if (author) message.author = author;
+		if (model) message.model = model;
+	}
+
+	/** Remove a streamed placeholder (e.g. the stream failed before any token). */
+	dropReply(findingId: string, id: string): void {
+		const thread = this.threads[findingId];
+		if (!thread) return;
+		thread.messages = thread.messages.filter((m) => m.id !== id);
+	}
+
 	open(findingId: string): void {
 		this.openId = findingId;
+	}
+
+	/** Queue a message for the open thread to send like a typed message. */
+	queueMessage(findingId: string, text: string): void {
+		this.pendingMessage = { findingId, text };
 	}
 
 	close(): void {

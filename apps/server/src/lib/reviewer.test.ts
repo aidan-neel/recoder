@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { emitReviewEvent, listenerCount, subscribeReview } from './events';
+import {
+	clearReviewEvents,
+	emitReviewEvent,
+	listenerCount,
+	reviewEventBuffer,
+	subscribeReview
+} from './events';
 import { extractFindingsJson, filterNewFindings, fingerprintFinding, runRoleReview } from './harness';
 import { configForRole, isReviewConfigured, REVIEW_ROLES } from './models';
 
@@ -38,13 +44,32 @@ describe('models', () => {
 			model: 'strong-model'
 		});
 		expect(configForRole('perf').model).toBe('shared-model');
-		expect(REVIEW_ROLES).toEqual(['security', 'perf', 'correctness', 'docs']);
+		expect(REVIEW_ROLES).toEqual([
+			'security',
+			'perf',
+			'correctness',
+			'docs',
+			'dedup',
+			'patterns',
+			'testing',
+			'errors',
+			'concurrency',
+			'api'
+		]);
 	});
 });
 
 describe('extractFindingsJson', () => {
 	test('parses bare arrays', () => {
 		expect(extractFindingsJson('[]')).toEqual([]);
+	});
+
+	test('unwraps {findings: [...]} objects from json_object mode', () => {
+		expect(extractFindingsJson('{"findings":[{"file":"a.ts"}]}')).toEqual([{ file: 'a.ts' }]);
+	});
+
+	test('wraps a single finding object', () => {
+		expect(extractFindingsJson('{"file":"a.ts","line":1}')).toEqual([{ file: 'a.ts', line: 1 }]);
 	});
 
 	test('tolerates fences and prose', () => {
@@ -94,6 +119,7 @@ describe('runRoleReview', () => {
 		const started: [string, string][] = [];
 		const done: [string, number][] = [];
 		const seenFiles: [string, string[]][] = [];
+		const reported: [string, number][] = [];
 		const result = await runRoleReview(
 			'security',
 			{ diff: DIFF, sandboxPath: null },
@@ -101,11 +127,13 @@ describe('runRoleReview', () => {
 				onLog: () => {},
 				onAgentStart: (r, m) => started.push([r, m]),
 				onAgentDone: (r, n) => done.push([r, n]),
-				onFiles: (r, f) => seenFiles.push([r, f])
+				onFiles: (r, f) => seenFiles.push([r, f]),
+				onFindings: (r, items) => reported.push([r, items.length])
 			}
 		);
 		expect(started).toEqual([['security', 'test-model']]);
 		expect(done).toEqual([['security', 1]]);
+		expect(reported).toEqual([['security', 1]]);
 		expect(seenFiles).toEqual([['security', ['a.ts']]]);
 		expect(result.findings).toHaveLength(1);
 		expect(result.findings[0]).toMatchObject({
@@ -114,6 +142,22 @@ describe('runRoleReview', () => {
 			endLine: 3,
 			severity: 'error'
 		});
+	});
+
+	test('accepts findings wrapped in a findings object', async () => {
+		process.env.RECODER_REVIEW_BASE_URL = 'http://localhost:9/v1';
+		process.env.RECODER_REVIEW_API_KEY = 'test';
+		process.env.RECODER_REVIEW_MODEL = 'test-model';
+		stubFetch(
+			JSON.stringify({
+				findings: [
+					{ file: 'a.ts', line: 2, severity: 'medium', category: 'sec', body: 'bad' }
+				]
+			})
+		);
+		const result = await runRoleReview('security', { diff: DIFF, sandboxPath: null });
+		expect(result.findings).toHaveLength(1);
+		expect(result.findings[0]).toMatchObject({ file: 'a.ts', line: 2, severity: 'warning' });
 	});
 
 	test('bad model output yields no findings but still completes', async () => {
@@ -169,6 +213,12 @@ describe('finding stability', () => {
 });
 
 describe('events', () => {
+	afterEach(() => {
+		clearReviewEvents('r1');
+		clearReviewEvents('r2');
+		clearReviewEvents('r3');
+	});
+
 	test('subscribe/emit/unsubscribe', () => {
 		const seen: string[] = [];
 		const off = subscribeReview('r1', (e) => seen.push(e.message));
@@ -187,5 +237,19 @@ describe('events', () => {
 		});
 		expect(() => emitReviewEvent('r2', { type: 'log', message: 'x' })).not.toThrow();
 		off();
+		clearReviewEvents('r2');
+	});
+
+	test('replays buffered events to late subscribers', () => {
+		emitReviewEvent('r3', { type: 'log', step: 'agent:security', message: 'hello' });
+		emitReviewEvent('r3', { type: 'finding', message: 'one', data: { items: [{ id: 'f1' }] } });
+		expect(reviewEventBuffer('r3').map((e) => e.message)).toEqual(['hello', 'one']);
+		const seen: string[] = [];
+		const off = subscribeReview('r3', (e) => seen.push(e.message));
+		expect(seen).toEqual(['hello', 'one']);
+		emitReviewEvent('r3', { type: 'log', message: 'live' });
+		expect(seen).toEqual(['hello', 'one', 'live']);
+		off();
+		clearReviewEvents('r3');
 	});
 });

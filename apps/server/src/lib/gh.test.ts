@@ -36,6 +36,14 @@ describe('parseRepoSlug', () => {
 });
 
 describe('fetchPullRequest', () => {
+	test('metadata-only reviews never request the size-limited diff', async () => {
+		const opts = await fakeBin(
+			`#!/bin/sh\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then echo '${VIEW_JSON}'; exit 0; fi\necho 'HTTP 406: diff too large' >&2; exit 1\n`
+		);
+		const { pr, diff } = await fetchPullRequest('o/r', 7, { ...opts, metadataOnly: true });
+		expect(pr.number).toBe(7);
+		expect(diff).toBe('');
+	});
 	test('returns metadata + diff via gh', async () => {
 		const opts = await fakeBin(
 			`#!/bin/sh\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then echo '${VIEW_JSON}'; exit 0; fi\n` +

@@ -1,77 +1,93 @@
-import { readFileSync, writeFileSync } from 'node:fs';
+import { closeSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Provider } from '@recoder/shared';
 import { serverDataDir } from './data-dir';
 
-/**
- * CLI tokens for gh/glab, set from the UI (`POST /api/auth/token`).
- *
- * Persisted to disk (0600) so reconnects survive restarts — same tradeoff
- * the gh CLI itself makes with ~/.config/gh/hosts.yml. Process env
- * (`GH_TOKEN` / `GITLAB_TOKEN`) still takes precedence when set; the stored
- * token is only a fallback.
- */
-const store = new Map<Provider, string>();
+type Tokens = Partial<Record<Provider, string>>;
 
 function tokenFile(): string {
 	return join(serverDataDir(), 'tokens.json');
 }
 
-function readStored(): Partial<Record<Provider, string>> {
+function readFileTokens(file: string): Tokens | undefined {
+	let raw: string;
 	try {
-		const raw = readFileSync(tokenFile(), 'utf8');
-		const parsed = JSON.parse(raw) as Record<string, unknown>;
-		const out: Partial<Record<Provider, string>> = {};
-		for (const provider of ['github', 'gitlab'] as const) {
-			if (typeof parsed[provider] === 'string' && parsed[provider] !== '') {
-				out[provider] = parsed[provider];
-			}
-		}
-		return out;
-	} catch {
-		return {};
-	}
-}
-
-function persist(): void {
-	try {
-		writeFileSync(tokenFile(), JSON.stringify(Object.fromEntries(store)), { mode: 0o600 });
+		raw = readFileSync(file, 'utf8');
 	} catch (err) {
-		console.warn('[auth] could not persist tokens', err instanceof Error ? err.message : err);
+		if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+		throw new Error('Could not read saved provider tokens');
+	}
+	try {
+		const parsed = JSON.parse(raw);
+		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+		const tokens: Tokens = {};
+		for (const provider of ['github', 'gitlab'] as const) {
+			if (typeof parsed[provider] === 'string' && parsed[provider]) tokens[provider] = parsed[provider];
+		}
+		return tokens;
+	} catch {
+		throw new Error('Saved provider tokens are invalid; refusing to overwrite them');
 	}
 }
 
-/** Load persisted tokens into memory. Call once at boot. */
-export function initTokenStore(): void {
-	for (const provider of ['github', 'gitlab'] as const) {
-		// Process env wins — it works without any stored state.
-		const fromEnv = provider === 'gitlab' ? process.env.GITLAB_TOKEN : process.env.GH_TOKEN;
-		if (fromEnv) {
-			store.set(provider, fromEnv);
-			continue;
+/** Replace atomically: failed saves leave the previous credentials intact. */
+function persist(tokens: Tokens): void {
+	const file = tokenFile();
+	const temporary = file + '.' + crypto.randomUUID() + '.tmp';
+	try {
+		const fd = openSync(temporary, 'wx', 0o600);
+		try {
+			writeFileSync(fd, JSON.stringify(tokens));
+			fsyncSync(fd);
+		} finally {
+			closeSync(fd);
 		}
-		const stored = readStored()[provider];
-		if (stored) store.set(provider, stored);
+		renameSync(temporary, file);
+	} catch {
+		throw new Error('Could not save provider tokens to disk');
+	} finally {
+		try { unlinkSync(temporary); } catch { /* Already renamed or never created. */ }
 	}
+}
+
+function readStored(): Tokens {
+	const primary = readFileTokens(tokenFile());
+	// An empty primary is intentional (disconnect); never resurrect legacy tokens.
+	if (primary !== undefined) return primary;
+	const legacy = readFileTokens(join(process.cwd(), 'data', 'tokens.json'));
+	if (legacy !== undefined) {
+		persist(legacy);
+		return legacy;
+	}
+	return {};
+}
+
+/** Migrate legacy credentials at boot. Disk remains authoritative across hot reloads. */
+export function initTokenStore(): void {
+	readStored();
 }
 
 export function setToken(provider: Provider, token: string): void {
-	store.set(provider, token);
-	persist();
+	persist({ ...readStored(), [provider]: token });
 }
 
 export function clearToken(provider: Provider): void {
-	store.delete(provider);
-	persist();
+	const tokens = readStored();
+	delete tokens[provider];
+	persist(tokens);
+}
+
+function getToken(provider: Provider): string | undefined {
+	// Environment overrides are never copied into the persisted credentials.
+	return (provider === 'gitlab' ? process.env.GITLAB_TOKEN : process.env.GH_TOKEN) || readStored()[provider];
 }
 
 export function hasToken(provider: Provider): boolean {
-	return store.has(provider);
+	return getToken(provider) !== undefined;
 }
 
-/** Env override carrying the stored token (empty when unset). */
 export function tokenEnv(provider: Provider): Record<string, string> {
-	const token = store.get(provider);
+	const token = getToken(provider);
 	if (!token) return {};
 	return provider === 'gitlab' ? { GITLAB_TOKEN: token } : { GH_TOKEN: token };
 }

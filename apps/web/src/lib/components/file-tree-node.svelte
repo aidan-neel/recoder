@@ -67,31 +67,32 @@
 				{@html getFileIcon(node.name)}
 			</span>
 			<span class="min-w-0 flex-1 truncate font-mono text-[15px]">{node.name}</span>
+			<span class="flex shrink-0 items-center gap-1.5 font-mono text-[14px] select-none">
+				{#if node.additions > 0}
+					<span class="text-success">+{node.additions}</span>
+				{/if}
+				{#if node.deletions > 0}
+					<span class="text-error">-{node.deletions}</span>
+				{/if}
+				{#if !(badge && onJump) && node.finding}
+					<span
+						class="h-1.5 w-1.5 shrink-0 rounded-full"
+						style:background-color={FINDING_DOT[node.finding]}
+					></span>
+				{/if}
+			</span>
 		</button>
-		<span class="flex shrink-0 items-center gap-1.5 font-mono text-[14px]">
-			{#if node.additions > 0}
-				<span class="text-success">+{node.additions}</span>
-			{/if}
-			{#if node.deletions > 0}
-				<span class="text-error">-{node.deletions}</span>
-			{/if}
-		</span>
 		{#if badge && onJump}
 			<button
 				type="button"
 				onclick={() => onJump(node.id, badge.findingId)}
 				title="Jump to finding"
 				aria-label="{badge.count} finding{badge.count === 1 ? '' : 's'} in {node.name} — jump to finding"
-				class="shrink-0 rounded bg-secondary px-1.5 py-px font-mono text-[12px] transition-colors hover:bg-foreground/15"
+				class="shrink-0 rounded bg-secondary px-1.5 py-px font-mono text-[12px] select-none transition-colors hover:bg-foreground/15"
 				style:color={FINDING_DOT[badge.kind]}
 			>
 				{badge.count}
 			</button>
-		{:else if node.finding}
-			<span
-				class="h-1.5 w-1.5 shrink-0 rounded-full"
-				style:background-color={FINDING_DOT[node.finding]}
-			></span>
 		{/if}
 	</div>
 {/if}
