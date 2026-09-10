@@ -115,19 +115,18 @@
 		return script.slice(0, Math.min(script.length, Math.floor(agent.progress / 35)));
 	}
 
-	const viewAgents = $derived(
+	const viewAssignments = $derived(
 		agents.map((agent) => ({
-			id: agent.id,
-			name: agent.name,
+			id: `${agent.id}-demo`,
+			role: agent.id,
+			title: agent.name === 'patterns' ? 'Repository consistency' : agent.name,
+			reason: 'Demo specialist assignment',
+			status: agent.status === 'done' ? 'done' as const : agent.status === 'running' ? 'running' as const : 'queued' as const,
+			scope: [{ path: 'src/rate-limit/limiter.ts', hunkIds: [] }],
 			model: agent.model,
-			status: agent.status,
-			progress: agent.progress,
-			findings: revealed(agent).length,
-			logs: agent.logs,
-			doneMeta:
-				agent.status === 'done'
-					? `done · ${revealed(agent).length} finding${revealed(agent).length === 1 ? '' : 's'} · ${formatElapsed(agent.doneAt ?? elapsed)}`
-					: null
+			candidateCount: revealed(agent).length,
+			currentOperation: agent.logs.at(-1) ?? 'Reviewing demo changes',
+			elapsedMs: agent.progress * 40
 		}))
 	);
 
@@ -221,12 +220,18 @@
 		deletions,
 		elapsed: formatElapsed(elapsed)
 	}}
-	agents={viewAgents}
+	assignments={viewAssignments}
 	findings={viewFindings}
 	{pendingCount}
 	{onOpenDiff}
 	onRestart={() => (restartOpen = true)}
 	doneHref={sessionHref}
+	stage={pendingCount ? 2 : 4}
+	stageLabel={pendingCount ? 'Specialist review' : 'Review complete'}
+	confirmed={!pendingCount}
+	candidateCount={viewFindings.length}
+	headline={pendingCount ? `${agents.filter((agent) => agent.status === 'running').length} reviewers active` : `${agents.length} complete`}
+	active={pendingCount > 0}
 />
 
 <AlertDialog.Root bind:open={restartOpen}>

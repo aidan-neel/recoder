@@ -1,12 +1,15 @@
 <script lang="ts">
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
+	import Check from '@lucide/svelte/icons/check';
+	import Copy from '@lucide/svelte/icons/copy';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
-import { tick } from 'svelte';
+import { onDestroy, tick } from 'svelte';
 import {
 	SEVERITIES,
 	findingsStore,
@@ -89,6 +92,63 @@ import { threadsStore } from '$lib/threads.svelte';
 		openItems.filter((f) => f.status === 'open' && findingsStore.isShown(f))
 	);
 	const fixAllDisabled = $derived(fixable.length === 0 || !reviewId);
+
+	let findingsCopied = $state(false);
+	let findingsCopyTimer: ReturnType<typeof setTimeout> | undefined;
+	onDestroy(() => clearTimeout(findingsCopyTimer));
+
+	function fallbackCopyFindings(text: string): boolean {
+		if (typeof document === 'undefined' || typeof document.execCommand !== 'function') {
+			return false;
+		}
+		const textarea = document.createElement('textarea');
+		textarea.value = text;
+		textarea.style.position = 'fixed';
+		textarea.style.opacity = '0';
+		document.body.appendChild(textarea);
+		textarea.select();
+		const done = document.execCommand('copy');
+		textarea.remove();
+		return done;
+	}
+
+	async function copyFindings(): Promise<void> {
+		let done = false;
+		if (typeof navigator !== 'undefined' && navigator.clipboard) {
+			try {
+				await navigator.clipboard.writeText(copyText);
+				done = true;
+			} catch {
+				done = fallbackCopyFindings(copyText);
+			}
+		} else {
+			done = fallbackCopyFindings(copyText);
+		}
+		if (!done) return;
+		findingsCopied = true;
+		clearTimeout(findingsCopyTimer);
+		findingsCopyTimer = setTimeout(() => (findingsCopied = false), 2000);
+	}
+
+	/** All non-dismissed findings in stable display order, formatted for pasting into an LLM. */
+	const copyText = $derived.by(() => {
+		const items = [...openItems].sort(
+			(a, b) => a.file.localeCompare(b.file) || a.startLine - b.startLine || a.id.localeCompare(b.id)
+		);
+		if (items.length === 0) return 'No review findings.';
+		const lines = [`# Code review findings (${items.length})`, ''];
+		items.forEach((f, i) => {
+			const range = f.startLine === f.endLine ? `${f.startLine}` : `${f.startLine}-${f.endLine}`;
+			const id = f.code ? ` ${f.code}` : '';
+			const status = f.status !== 'open' ? ` [${f.status}]` : '';
+			lines.push(`## ${i + 1}.${id} [${f.severity}] ${f.category} — ${f.file}:${range}${status}`);
+			lines.push(`Reviewer: ${f.agent}${f.model ? ` (${f.model})` : ''}`);
+			lines.push('');
+			lines.push(f.body);
+			lines.push('');
+		});
+		return lines.join('\n').trimEnd();
+	});
 
 	interface FixAllItem {
 		id: string;
@@ -338,6 +398,34 @@ import { threadsStore } from '$lib/threads.svelte';
 	{/each}
 
 	<div class="ml-auto flex min-w-0 shrink-0 items-center gap-2">
+		<Tooltip.Root placement="top" delay={125} closeDelay={80}>
+			<Tooltip.Trigger showOnClick class="shrink-0">
+				<Button
+					variant="secondary"
+					size="sm"
+					class="h-9 w-9 shrink-0 px-0"
+					disabled={openItems.length === 0}
+					aria-label={findingsCopied ? 'Copied!' : 'Copy'}
+					onclick={() => void copyFindings()}
+				>
+					<span class="relative grid size-4 place-items-center">
+						<Copy
+							size={15}
+							class={`col-start-1 row-start-1 transition-[transform,opacity] [transition-duration:var(--motion-duration-panel)] ease-[var(--ease-out)] ${
+								findingsCopied ? '-rotate-90 scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'
+							}`}
+						/>
+						<Check
+							size={15}
+							class={`col-start-1 row-start-1 text-[var(--color-success)] transition-[transform,opacity] [transition-duration:var(--motion-duration-panel)] ease-[var(--ease-out)] ${
+								findingsCopied ? 'rotate-0 scale-100 opacity-100' : 'rotate-90 scale-50 opacity-0'
+							}`}
+						/>
+					</span>
+				</Button>
+			</Tooltip.Trigger>
+			<Tooltip.Content>{findingsCopied ? 'Copied!' : 'Copy'}</Tooltip.Content>
+		</Tooltip.Root>
 		<Button
 			variant="primary"
 			size="sm"

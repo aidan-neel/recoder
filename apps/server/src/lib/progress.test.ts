@@ -31,6 +31,28 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 	expect(listenerCount(id)).toBe(1);
 	await reader.cancel();
 	expect(listenerCount(id)).toBe(0);
+	db.reviews.set({ ...db.reviews.get(id)!, status: 'failed', summary: 'Server restarted' });
+	const completed = await app.request('/api/reviews/' + id + '/events');
+	const completedReader = completed.body!.getReader();
+	const terminal = JSON.parse(new TextDecoder().decode((await completedReader.read()).value).slice(6).trim());
+	expect(terminal.status).toBe('failed');
+	expect((await completedReader.read()).done).toBe(true);
+	expect(listenerCount(id)).toBe(0);
+});
+
+test('plan and assignment snapshots stay readable for older clients', () => {
+	const assignment = {
+		id: 'correctness-core', role: 'correctness', title: 'Correctness', reason: 'behavior',
+		status: 'running' as const, scope: [{ path: 'a.ts', hunkIds: ['a.ts:1,1:1,1'] }], candidateCount: 0
+	};
+	const event = {
+		type: 'plan', sequence: 2, message: 'Planning', at: new Date().toISOString(),
+		data: { planVersion: 1, planSummary: 'two specialists', assignments: [assignment], candidateCount: 0 }
+	};
+	const next = applyProgressMessage(emptyReviewProgress('review'), event);
+	expect(next.planVersion).toBe(1);
+	expect(next.assignments?.[0].id).toBe('correctness-core');
+	expect(next.assignments?.[0].id).not.toBe(next.assignments?.[0].role);
 });
 
 test('client ignores duplicate events and retains failed work separately from completion', () => {

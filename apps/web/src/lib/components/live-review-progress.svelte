@@ -1,9 +1,8 @@
 <script lang="ts">
 	import { apiBase } from '$lib/server-api';
-	import { MODEL_ROLES } from '$lib/model-settings.svelte';
-	import { applyProgressMessage, emptyReviewProgress, taskSummary, type ProgressMessage } from '$lib/review-progress-state';
-	import type { Finding, Review } from '@recoder/shared';
-	import ReviewingView, { type ReviewingAgent, type ReviewingFinding } from './reviewing-view.svelte';
+	import { applyProgressMessage, emptyReviewProgress, formatAssignmentHeadline, type ProgressMessage } from '$lib/review-progress-state';
+	import type { Finding, Review, ReviewAssignment } from '@recoder/shared';
+	import ReviewingView, { type ReviewingFinding } from './reviewing-view.svelte';
 
 	interface Props {
 		review: Review;
@@ -73,61 +72,58 @@
 		for (const finding of liveFindings) byId.set(finding.id, finding);
 		return [...byId.values()];
 	});
-	const tasks = $derived(Object.values(progress.tasks));
-	const agentTasks = $derived(tasks.filter((task) => task.agent));
-	const summary = $derived(taskSummary(agentTasks));
-	const viewAgents = $derived<ReviewingAgent[]>(MODEL_ROLES.map((role) => {
-		const work = agentTasks.filter((task) => task.agent === role);
-		const counts = taskSummary(work);
-		const current = work.find((task) => task.status === 'running') ??
-			work.find((task) => task.status === 'queued') ?? work.at(-1);
-		const roleStatus = counts.total && counts.settled === counts.total
-			? (counts.failed ? 'error' : 'done')
-			: counts.running ? 'running' : status === 'failed' ? 'error' : 'queued';
-		const findings = mergedFindings.filter((finding) => finding.agent === role).length;
-		return {
-			id: role, name: role, model: work.find((task) => task.model)?.model ?? null,
-			status: roleStatus, progress: 0, findings, doneMeta: null,
-			logs: progress.activity.filter((entry) => entry.agent === role).map((entry) => entry.message),
-			tasks: work, completed: counts.done, total: counts.total, failed: counts.failed,
-			current: roleStatus === 'done' ? 'Review complete' : roleStatus === 'error' ? 'Review incomplete' : current?.message ?? 'Waiting for the local diff',
-			batch: current?.batch, batches: current?.batches
-		};
-	}));
-	const viewFindings = $derived<ReviewingFinding[]>(mergedFindings.map((finding, i) => ({
+	const assignments = $derived<ReviewAssignment[]>(progress.assignments ?? []);
+	const confirmed = $derived(status === 'passed');
+	const viewFindings = $derived<ReviewingFinding[]>((confirmed || (!active && mergedFindings.length > 0)) ? mergedFindings.map((finding, i) => ({
 		id: 'F-' + String(i + 1).padStart(2, '0'), agent: finding.agent ?? null,
 		severity: finding.severity === 'error' ? 'high' : finding.severity === 'warning' ? 'medium' : 'info',
 		title: finding.message.split('\n')[0].replace(/^\[[^\]]+\]\s*/, '') || finding.file,
-		location: finding.file + ':' + finding.line
-	})));
-	const stage = $derived(status === 'passed' ? 5
-		: progress.tasks.finalize ? 4 : agentTasks.length ? 3
-		: progress.tasks.diff ? 2 : progress.tasks.sandbox ? 1 : 0);
-	const currentStage = $derived(['Fetching PR metadata', 'Preparing local checkout', 'Computing local PR diff', 'Reviewing changes', 'Saving results', 'Review complete'][stage]);
+		location: finding.file + (finding.line ? ':' + finding.line : ''),
+		confirmed
+	})) : []);
+	const stageIndex = $derived(
+		status === 'passed' ? 4
+			: progress.stage === 'consolidation' || progress.tasks.finalize ? 3
+			: progress.stage === 'specialists' || (assignments.length > 0) ? 2
+			: progress.stage === 'understand' || progress.tasks.inventory || progress.tasks.planning ? 1
+			: 0
+	);
+	const currentStage = $derived(
+		status === 'passed' ? 'Review complete'
+			: status === 'failed' ? (progress.outcome === 'partial' ? 'Review incomplete' : 'Review interrupted')
+			: ['Checkout', 'Understand changes', 'Specialist review', 'Consolidation'][stageIndex]
+	);
 	const connectionLabel = $derived(connection === 'closed' ? 'Updates complete'
 		: connection === 'reconnecting' || now - lastReceived > 15000 ? 'Reconnecting · keeping the latest progress'
 		: connection === 'connecting' ? 'Connecting to review' : 'Live updates connected');
+	const headline = $derived(formatAssignmentHeadline(assignments));
 </script>
 
 <ReviewingView
+	{reviewId}
 	title={review.prTitle || `PR #${review.prNumber}`}
 	meta={{ prLabel: '#' + review.prNumber, repo, files, additions, deletions, elapsed }}
-	agents={viewAgents}
+	{assignments}
 	findings={viewFindings}
-	pendingCount={viewAgents.filter((agent) => agent.status === 'running' || agent.status === 'queued').length}
-	pipelineLogs={progress.activity.filter((entry) => !entry.agent).map((entry) => entry.message)}
+	pendingCount={assignments.filter((assignment) => assignment.status === 'running' || assignment.status === 'queued' || assignment.status === 'waiting').length}
+	pipelineLogs={progress.activity.map((entry) => entry.message)}
 	{onOpenDiff}
 	{onRestart}
-	{stage}
-	stageLabel={status === 'failed' ? 'Review interrupted' : currentStage}
-	stageDetail={stage < 3 ? progress.tasks[['fetch', 'sandbox', 'diff'][stage]]?.message : undefined}
+	stage={stageIndex}
+	stageLabel={currentStage}
+	stageDetail={stageIndex === 0 ? progress.tasks[['fetch', 'sandbox', 'diff'].find((id) => progress.tasks[id]?.status === 'running') ?? 'fetch']?.message : undefined}
 	failed={status === 'failed'}
 	errorMessage={status === 'failed' ? failureReason ?? review.summary : null}
 	{connectionLabel}
 	connectionLost={connection === 'reconnecting' || (active && now - lastReceived > 15000)}
-	completedTasks={summary.done}
-	totalTasks={summary.total}
-	failedTasks={summary.failed}
+	{headline}
+	planSummary={progress.planSummary ?? null}
+	candidateCount={progress.candidateCount ?? 0}
+	{confirmed}
+	coverage={progress.coverage ?? null}
+	coverageGaps={progress.coverageGaps ?? []}
+	recommendedChecks={progress.recommendedChecks ?? []}
 	{now}
-	active={active}
+	{active}
+	tasks={Object.values(progress.tasks)}
 />

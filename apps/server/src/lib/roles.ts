@@ -1,9 +1,8 @@
 /**
  * Reviewer role registry (leaf module — no imports, safe to require anywhere).
  *
- * Ten specialized lenses. Each role fans out to three explorer scouts over
- * the changed files, then synthesizes its own findings from the diff plus
- * the scouts' notes. Tokens are cheap (local models); thoroughness wins.
+ * Ten specialized lenses. The orchestrator assigns a bounded subset per
+ * review; assignment identity is never the role id.
  */
 
 export const REVIEW_ROLES = [
@@ -28,14 +27,14 @@ export const ROLE_LABELS: Record<ReviewRole, string> = {
 	correctness: 'Correctness',
 	docs: 'Docs',
 	dedup: 'Dedup',
-	patterns: 'Patterns',
+	patterns: 'Repository consistency',
 	testing: 'Testing',
 	errors: 'Errors',
 	concurrency: 'Concurrency',
 	api: 'API'
 };
 
-/** What each lens hunts. Fed to scouts and synthesizers. */
+/** What each lens hunts. Fed to the planner and specialists. */
 export const ROLE_FOCUS: Record<ReviewRole, string> = {
 	security:
 		'Trust boundaries, auth/authz, injection, secret leaks, tenant isolation, unsafe deserialization, SSRF, path traversal.',

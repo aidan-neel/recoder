@@ -69,12 +69,14 @@
 						variant="primary"
 						size="sm"
 						class="font-sans text-[14px]"
+						aria-expanded={threadsStore.openId === finding.id}
+						aria-controls={threadsStore.openId === finding.id ? 'finding-thread' : undefined}
 						onclick={() => {
 							findingsStore.discuss(finding.id);
 							threadsStore.open(finding.id);
 						}}
 					>
-						Discuss
+						Discuss finding
 					</Button>
 					<Button
 						variant="secondary"

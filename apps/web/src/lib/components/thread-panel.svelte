@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Paperclip from '@lucide/svelte/icons/paperclip';
@@ -9,7 +10,6 @@
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 	import * as Message from '@sivir-ui/svelte/components/message';
 	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
-	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import SeverityPill from './severity-pill.svelte';
 	import { SEVERITY_DOT, findingsStore } from '$lib/findings.svelte';
@@ -36,6 +36,18 @@
 	let sending = $state(false);
 	let sendError = $state<string | null>(null);
 	let inputEl: HTMLTextAreaElement | undefined = $state();
+	let returnFocus: HTMLElement | null = null;
+	$effect(() => {
+		if (!inputEl) return;
+		returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		inputEl.focus({ preventScroll: true });
+	});
+
+	async function close(): Promise<void> {
+		threadsStore.close();
+		await tick();
+		if (returnFocus?.isConnected) returnFocus.focus();
+	}
 
 	const findingId = $derived(threadsStore.openId);
 	const finding = $derived(findingsStore.items.find((f) => f.id === findingId));
@@ -64,7 +76,7 @@
 			: { findingId: '', messages: [] }
 	);
 	/** Composer locked while a reply streams. */
-	const composerBusy = $derived(sending);
+	const composerBusy = $derived(sending || thread.messages.some((message) => message.streaming));
 
 	function suggestViaChat(): void {
 		if (!findingId || composerBusy) return;
@@ -109,6 +121,8 @@
 	});
 
 	async function send(): Promise<void> {
+		// Keep stream callbacks on this finding even if the panel closes or switches.
+		const findingId = threadsStore.openId;
 		if (!findingId || composerBusy) return;
 		const body = draft.trim();
 		if (!body) return;
@@ -177,16 +191,26 @@
 	});
 
 	function onKeydown(event: KeyboardEvent): void {
-		if (event.key === 'Enter' && !event.shiftKey) {
+		if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
 			event.preventDefault();
 			send();
 		}
 	}
 </script>
 
+	<svelte:window onkeydown={(event) => {
+		// Let the agent menu consume Escape before closing its parent panel.
+		if (event.key === 'Escape' && !event.defaultPrevented &&
+			document.activeElement?.closest('#finding-thread')) {
+			event.preventDefault();
+			void close();
+		}
+	}} />
+
 	<section
+		id="finding-thread"
 		aria-label="Finding thread"
-		class="relative flex min-h-0 w-[440px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background xl:w-[520px]"
+		class="thread-panel-enter relative flex min-h-0 min-w-0 w-full flex-col overflow-hidden rounded-xl border border-border bg-background xl:w-[440px] xl:shrink-0 2xl:w-[520px]"
 	>
 		<div class="flex h-11 w-full shrink-0 items-center gap-2 border-b border-border px-4">
 			{#if finding}
@@ -200,18 +224,28 @@
 					size="icon"
 					class="-mr-2"
 					aria-label={contextOpen ? 'Collapse finding card' : 'Expand finding card'}
+					aria-expanded={contextOpen}
 					onclick={() => (contextOpen = !contextOpen)}
 				>
-					<ChevronDown size={15} class="transition-transform {contextOpen ? '' : '-rotate-90'}" />
+					<ChevronDown size={15} class="motion-safe:transition-transform {contextOpen ? '' : '-rotate-90'}" />
 				</Button>
 			{:else}
 				<span class="text-[15px] font-medium">Discussion</span>
 			{/if}
+			<Button
+				variant="ghost"
+				size="icon"
+				class="ml-auto shrink-0"
+				aria-label="Close discussion"
+				onclick={() => void close()}
+			>
+				<X size={16} aria-hidden="true" />
+			</Button>
 		</div>
 
 		{#if finding && contextOpen}
 			<div
-				class="mx-3 mt-3 shrink-0 rounded-xl border border-border bg-card p-3"
+				class="mx-3 mt-3 max-h-[30%] shrink-0 overflow-y-auto rounded-xl border border-border bg-card p-3"
 				aria-label="Finding context"
 			>
 				<p
@@ -297,38 +331,58 @@
 			<Conversation.ScrollButton />
 		</Conversation.Root>
 
-		<div class="w-full shrink-0 p-3">
-			<div data-composer class="rounded-xl border border-border bg-background p-3">
+		<div data-composer class="m-3 flex shrink-0 flex-col gap-2 rounded-lg border border-border bg-card p-2">
 			<textarea
 				bind:this={inputEl}
 				bind:value={draft}
 				oninput={autoresize}
 				onkeydown={onKeydown}
-				rows={3}
+				rows={2}
+				name="discussion"
 				placeholder={finding
 					? `Ask ${formatAgentName(active)} about this finding…`
 					: 'Select a finding'}
 				aria-label={finding ? 'Ask about this finding' : 'Select a finding'}
 				disabled={composerBusy || !finding}
-				class="max-h-[120px] w-full resize-none rounded-lg bg-secondary px-2.5 py-2 text-[14px] leading-relaxed outline-none placeholder:text-foreground-muted/70 disabled:opacity-60"
+				class="block min-h-14 max-h-[120px] w-full resize-none rounded-sm border-0 bg-transparent px-2 py-1.5 text-base leading-relaxed placeholder:text-foreground-muted disabled:opacity-60 sm:text-[14px]"
 			></textarea>
 			{#if sendError}
-				<p class="mt-2 text-[13px] font-medium text-error" role="alert">{sendError}</p>
+				<p class="break-words px-2 text-[13px] font-medium text-error" role="alert">{sendError}</p>
 			{/if}
-			<div class="mt-2 flex items-center gap-1">
+			{#if attachedQuote || selectionAvailable}
+				<div class="flex min-w-0">
+					{#if attachedQuote}
+						<Button
+							variant="secondary"
+							size="sm"
+							onclick={() => (attachedQuote = null)}
+							aria-label="Remove attached code"
+							class="min-w-0 max-w-full gap-1.5 font-mono text-[12px]"
+						>
+							<span class="truncate">{attachedQuote.split('\n')[0].slice(0, 32)}</span>
+							<X size={12} class="shrink-0" aria-hidden="true" />
+						</Button>
+					{:else}
+						<Button variant="ghost" size="sm" onclick={attachSelection}>
+							<Paperclip size={13} aria-hidden="true" />
+							Attach selection
+						</Button>
+					{/if}
+				</div>
+			{/if}
+			<div class="flex flex-wrap items-center gap-1.5">
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger
 							variant="ghost"
 							size="sm"
-							class="h-9 gap-1.5 font-sans text-[13px] transition-[width]"
-							style="interpolate-size: allow-keywords"
-							aria-label="Choose agent"
+							class="h-9 min-w-0 max-w-full gap-1.5 font-sans text-[13px]"
+							aria-label={`Choose agent: ${formatAgentName(active)}`}
 						>
-							{formatAgentName(active)}
-							<ChevronDown size={12} class="text-foreground-muted" />
+							<span class="truncate">{formatAgentName(active)}</span>
+							<ChevronDown size={12} class="shrink-0 text-foreground-muted" aria-hidden="true" />
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content class="min-w-[12rem]">
-							<DropdownMenu.Label>Model</DropdownMenu.Label>
+							<DropdownMenu.Label>Reviewer</DropdownMenu.Label>
 							{#each participants as participant (participant)}
 								<DropdownMenu.Item callback={() => (active = participant)}>
 									<span class="flex-1">{formatAgentName(participant)}</span>
@@ -339,26 +393,7 @@
 							{/each}
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
-					{#if attachedQuote}
-						<button
-							type="button"
-							onclick={() => (attachedQuote = null)}
-							title="Remove attached code"
-							class="flex max-w-[12rem] items-center gap-1.5 rounded-md border border-border bg-secondary px-2 py-1.5 font-mono text-[12px] text-foreground-muted transition-colors hover:text-foreground"
-						>
-							<span class="truncate">{attachedQuote.split('\n')[0].slice(0, 32)}</span>
-							<X size={12} class="shrink-0" />
-						</button>
-					{:else if selectionAvailable}
-						<button
-							type="button"
-							onclick={attachSelection}
-							class="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-foreground-muted transition-colors hover:text-foreground"
-						>
-							<Paperclip size={13} />
-							Attach selection
-						</button>
-					{/if}
+					<div class="ml-auto flex shrink-0 items-center gap-1.5">
 					<Button
 						variant="ghost"
 						size="sm"
@@ -374,19 +409,17 @@
 					<Button
 						variant="primary"
 						size="sm"
-						class="ml-auto h-9"
+						class="h-9 min-w-16"
 						disabled={!finding || !draft.trim() || composerBusy}
 						aria-label={sending ? 'Sending' : 'Send'}
 						onclick={() => void send()}
 					>
 						{#if sending}
-							<Spinner size={14} />
-						{:else}
-							Send
-							<Shortcut shortcut="enter" />
+							<Spinner size={14} aria-hidden="true" />
 						{/if}
+						Send
 				</Button>
-			</div>
+				</div>
 			</div>
 		</div>
 	</section>

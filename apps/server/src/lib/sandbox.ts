@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { runCommand } from '../commands/runner.js';
 import { env } from '../env.js';
 import type { Provider } from '@recoder/shared';
+import type { ReviewRevision } from './evidence.js';
 
 export interface Sandbox {
 	key: string;
@@ -102,19 +103,34 @@ export async function prepareSandbox(opts: {
 	return { key, path, repoSlug, prNumber, headSha };
 }
 
-/** Compute the PR patch from its merge base, without API limits or log truncation. */
-export async function sandboxDiff(path: string, baseRef: string, overrides?: Record<string, string>, provider?: Provider): Promise<string> {
+/** Fetch the target branch, record immutable SHAs, and compute the merge-base patch. */
+export async function sandboxRevisionDiff(
+	path: string,
+	baseRef: string,
+	overrides?: Record<string, string>,
+	provider?: Provider
+): Promise<{ revision: ReviewRevision; diff: string }> {
 	await git(path, ['check-ref-format', 'refs/heads/' + baseRef], 'sandbox validate base');
 	await git(path, ['fetch', 'origin', 'refs/heads/' + baseRef], 'sandbox fetch base', overrides, provider);
-	const base = await git(path, ['merge-base', 'FETCH_HEAD', 'HEAD'], 'sandbox merge base');
-	const proc = Bun.spawn(['git', '-c', 'core.quotePath=false', 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/', base, 'HEAD', '--'], {
+	const targetSha = await git(path, ['rev-parse', 'FETCH_HEAD'], 'sandbox target sha');
+	const mergeBaseSha = await git(path, ['merge-base', 'FETCH_HEAD', 'HEAD'], 'sandbox merge base');
+	const headSha = await git(path, ['rev-parse', 'HEAD'], 'sandbox head sha');
+	const proc = Bun.spawn(['git', '-c', 'core.quotePath=false', 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/', mergeBaseSha, headSha, '--'], {
 		cwd: path, stdout: 'pipe', stderr: 'pipe'
 	});
 	const [diff, stderr, code] = await Promise.all([
 		new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited
 	]);
 	if (code !== 0) throw new Error('Local PR diff failed: ' + stderr.slice(-2000));
-	return diff;
+	return {
+		revision: { checkoutPath: path, headSha, targetSha, mergeBaseSha, targetRef: baseRef },
+		diff
+	};
+}
+
+/** Compute the PR patch from its merge base, without API limits or log truncation. */
+export async function sandboxDiff(path: string, baseRef: string, overrides?: Record<string, string>, provider?: Provider): Promise<string> {
+	return (await sandboxRevisionDiff(path, baseRef, overrides, provider)).diff;
 }
 
 /** Remove a sandbox checkout. No retention policy yet — call explicitly. */

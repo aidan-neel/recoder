@@ -172,7 +172,7 @@ export async function fetchPullRequest(
 			'--repo',
 			slug,
 			'--json',
-			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,createdAt'
+			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,createdAt,body'
 		],
 		opts?.env
 	).then(extractJson)) as Record<string, unknown>;
@@ -215,7 +215,7 @@ export async function listPullRequests(
 			'--limit',
 			String(opts?.limit ?? 20),
 			'--json',
-			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,createdAt'
+			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,createdAt,body'
 		],
 		opts?.env
 	).then(extractJson)) as unknown;
@@ -244,6 +244,7 @@ function parsePullRow(view: Record<string, unknown>, fallbackNumber: number): Pu
 		additions: Number(view.additions ?? 0),
 		deletions: Number(view.deletions ?? 0),
 		changedFiles: Number(view.changedFiles ?? 0),
-		createdAt: typeof view.createdAt === 'string' ? view.createdAt : ''
+		createdAt: typeof view.createdAt === 'string' ? view.createdAt : '',
+		body: typeof view.body === 'string' ? view.body : ''
 	};
 }

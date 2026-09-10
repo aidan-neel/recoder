@@ -34,20 +34,69 @@ $RECODER_WORKDIR/repos/<owner>__<repo>__pr-<n>/
 
 ## Reviewer harness (custom, read-only)
 
-No OpenCode/agent-execution here — a purpose-built harness sends the diff +
-sandbox excerpts to role-specific models and parses strict-JSON findings:
+No OpenCode/agent-execution here — a purpose-built orchestrator inventories the
+local checkout, plans a bounded set of scoped specialists, and consolidates
+their candidates. Agents cannot execute repository scripts, install
+dependencies, or modify code.
 
 - Any OpenAI-compatible endpoint: vLLM, OpenRouter, or DashScope. Configure
   `RECODER_REVIEW_BASE_URL` + `RECODER_REVIEW_API_KEY` + `RECODER_REVIEW_MODEL`
   (e.g. a Qwen coder model), with optional per-role overrides
   (`RECODER_SECURITY_MODEL`, `RECODER_PERF_MODEL`, …).
-- Roles run in parallel: `security`, `perf`, `correctness`, `docs`.
-- Without model config the pipeline stays in stub mode (demo steps).
+- Planning uses the correctness model. Specialists keep their per-role models.
+- Executable PRs always get correctness and repository consistency (`patterns`).
+  Other roles are selected by relevance. At most six initial assignments, two
+  follow-ups, and two specialists at a time.
+- Specialists retrieve evidence through a validated JSON action loop
+  (`listFiles`, `readFile`, `search`, `readDiff`) against revision aliases
+  (`head`, `target`, `mergeBase`). No shell, no symlink following, no submodules.
+- Findings stay candidates until consolidation. Coverage is tracked per changed
+  hunk. A finished review is labeled “Review complete”, not a merge approval.
 - Progress streams over SSE: `GET /api/reviews/:id/events`.
 - Model settings live behind the gear icon (or `PUT /api/settings/models`);
   stored in `$RECODER_DATA_DIR/review-config.json` (0600), overriding env.
+- Without model config, queueing a review is refused. The in-app demo route is
+  the only stub review path.
 
 ## Auth persistence
+
+### ChatGPT subscription reviewers (Codex)
+
+Open **Reviewer models → Codex subscription → Connect ChatGPT**. Open the
+official sign-in link and enter the displayed device code yourself. Once
+connected, choose an available model (Luna is preselected only if Codex returns
+it) and click **Add reviewer model** — it becomes the shared model
+automatically (assign it to specific roles instead if you prefer).
+Existing role overrides are not changed automatically.
+
+The API server needs Codex CLI 0.153.4 or newer on its PATH. The Docker image
+includes a pinned CLI; rebuild the server image to get this integration. For a
+local install, run `npm install -g @openai/codex@0.153.4`. A nonstandard binary
+can be selected with `RECODER_CODEX_BIN` (an executable path, not a command line).
+
+Recoder starts the official `codex app-server` over private stdio. Codex owns
+device sign-in, token storage, and refresh in `$RECODER_DATA_DIR/codex` (directory
+mode 0700), backed by the existing data volume. It does not read your personal
+Codex login or send OAuth tokens to the frontend. Disconnect affects only
+Recoder's login, and requires active Codex calls to finish first.
+
+This provider uses your subscription allowance and reports available usage
+windows in settings. It does not switch to an API key, another model, or a
+paid API endpoint on failure. Account limits and model access still apply.
+Recoder retains orchestration and bounded evidence retrieval; Codex runs as a
+text-only adapter with execution features disabled, an empty working directory,
+read-only sandbox policy, no turn environments, and no command approvals.
+Discussion replies on this provider currently arrive as a complete answer.
+
+Use this single-user server only on a trusted network or behind an authenticated
+reverse proxy. Subscription status routes reject unrelated browser origins;
+set `FRONTEND_URL` to the actual frontend origin when deploying. This is not a
+multi-tenant OAuth application. Login may need to be repeated after provider
+revocation or an unrefreshable expiration; restarting Recoder does not log out.
+
+Protocol: [Codex App Server](https://learn.chatgpt.com/docs/app-server).
+
+### GitHub and GitLab
 
 UI-connected provider tokens persist to `$RECODER_DATA_DIR/tokens.json`
 (0600, same tradeoff as the gh CLI's own storage) so reconnects survive
@@ -57,12 +106,14 @@ disconnected; expired or revoked tokens must be replaced. Saves are atomic, and
 failed saves return an error. Process env (`GH_TOKEN`/`GITLAB_TOKEN`) takes precedence when set.
 Backed by the `recoder-data` volume in compose.
 
-GitHub reviews fetch PR metadata, clone into a separate checkout per review,
-and compute the merge-base diff with local Git. They do not use GitHub's
-size-limited PR diff endpoint. Specialist agents and their scouts receive
-local diff and checkout excerpts; large file lists are reviewed in batches.
+GitHub and GitLab reviews fetch PR/MR metadata, clone into a separate checkout
+per review, and compute the merge-base diff with local Git. They do not use
+GitHub's size-limited PR diff endpoint. The checkout retains the reviewed head
+SHA, fetched target-branch SHA, and merge-base SHA. Repository conventions are
+read from the target revision; old behavior is compared at the merge base.
 Checkouts are read-only inputs to the review harness, not OS-level containers.
-Model inference still uses the endpoint configured in settings.
+Model inference still uses the endpoint configured in settings. Live provider
+failures fail the review instead of silently succeeding with a stub.
 
 ## Durable state (SQLite)
 

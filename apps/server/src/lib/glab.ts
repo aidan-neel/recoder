@@ -151,7 +151,8 @@ export async function fetchMergeRequest(
 			additions: Number(view.additions ?? 0),
 			deletions: Number(view.deletions ?? 0),
 			changedFiles: Number(view.changes_count ?? 0),
-			createdAt: typeof view.created_at === 'string' ? view.created_at : ''
+			createdAt: typeof view.created_at === 'string' ? view.created_at : '',
+			body: typeof view.description === 'string' ? view.description : ''
 		},
 		diff
 	};

@@ -170,8 +170,8 @@
 			variant="ghost"
 			size="icon"
 			onclick={() => modelSettingsUi.show()}
-			aria-label="Reviewer model settings"
-			title="Reviewer model settings"
+			aria-label="Connections"
+			title="Connections"
 		>
 			<Settings size={14} />
 		</Button>

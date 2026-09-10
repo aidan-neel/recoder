@@ -1,5 +1,7 @@
 import { env } from '$env/dynamic/public';
 import type {
+	CodexConnection,
+	CodexModel,
 	ApplyFixRequest,
 	ApplyFixResponse,
 	CreateRepoInput,
@@ -16,6 +18,7 @@ import type {
 	RemoteRepo,
 	Repo,
 	Review,
+	ReviewMetrics,
 	SuggestFixRequest,
 	SuggestFixResponse
 } from '@recoder/shared';
@@ -42,6 +45,10 @@ export function detectProvider(url: string): 'github' | 'gitlab' {
 }
 
 export const serverApi = {
+	getCodexStatus: () => req<CodexConnection>('/api/settings/codex/status'),
+	connectCodex: () => req<CodexConnection>('/api/settings/codex/connect', { method: 'POST' }),
+	disconnectCodex: () => req<{ ok: boolean }>('/api/settings/codex/disconnect', { method: 'POST' }),
+	getCodexModels: () => req<CodexModel[]>('/api/settings/codex/models'),
 	listRepos: () => req<Repo[]>('/api/repos'),
 	createRepo: (input: CreateRepoInput) =>
 		req<Repo>('/api/repos', { method: 'POST', body: JSON.stringify(input) }),
@@ -50,6 +57,7 @@ export const serverApi = {
 	listPrs: (repoId: string) => req<PullRequest[]>(`/api/repos/${repoId}/pulls`),
 	listReviews: () => req<Review[]>('/api/reviews'),
 	getReview: (id: string) => req<Review>(`/api/reviews/${id}`),
+	getReviewMetrics: (id: string, signal?: AbortSignal) => req<ReviewMetrics | null>(`/api/reviews/${id}/metrics`, { signal }),
 	getReviewFiles: (id: string) => req<FileDiff[]>(`/api/reviews/${id}/files`),
 	discuss: (reviewId: string, input: DiscussRequest) =>
 		req<DiscussResponse>(`/api/reviews/${reviewId}/discuss`, {

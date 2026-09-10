@@ -8,6 +8,7 @@ import {
 } from '../lib/review-settings';
 import { isReviewConfigured } from '../lib/models';
 import { REVIEW_ROLES } from '../lib/roles';
+import codexRoutes from './codex';
 
 function mask(key: string | undefined): string | null {
 	if (!key) return null;
@@ -21,6 +22,7 @@ function rolesPayload(): Record<string, string | null> {
 }
 
 const app = new Hono();
+app.route('/codex', codexRoutes);
 
 /** Effective reviewer model config. Keys are never returned in full. */
 app.get('/models', (c) => {
@@ -33,6 +35,7 @@ app.get('/models', (c) => {
 		apiKeyPreview: apiKeyPreview(),
 		sharedModelId: stored.sharedModelId ?? null,
 		models: (stored.models ?? []).map((e) => ({
+			provider: e.provider ?? 'openai-compatible',
 			id: e.id,
 			label: e.label,
 			model: e.model,
@@ -40,6 +43,7 @@ app.get('/models', (c) => {
 			apiKeyPreview: mask(e.apiKey)
 		})),
 		roles: rolesPayload(),
+		roleEfforts: stored.roleEfforts ?? {},
 		limits: {
 			maxFiles: eff.maxFiles,
 			maxDiffChars: eff.maxDiffChars,
@@ -49,7 +53,7 @@ app.get('/models', (c) => {
 });
 
 /** Merge a validated patch over the stored model settings. Empty key keeps the existing one. */
-app.put('/models', async (c) => {
+app.on(['PUT', 'PATCH'], '/models', async (c) => {
 	const parsed = reviewSettingsSchema.safeParse(await c.req.json().catch(() => null));
 	if (!parsed.success) {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
@@ -64,6 +68,7 @@ app.put('/models', async (c) => {
 		apiKeyPreview: apiKeyPreview(),
 		sharedModelId: stored.sharedModelId ?? null,
 		models: (stored.models ?? []).map((e) => ({
+			provider: e.provider ?? 'openai-compatible',
 			id: e.id,
 			label: e.label,
 			model: e.model,
@@ -71,6 +76,7 @@ app.put('/models', async (c) => {
 			apiKeyPreview: mask(e.apiKey)
 		})),
 		roles: rolesPayload(),
+		roleEfforts: stored.roleEfforts ?? {},
 		limits: {
 			maxFiles: eff.maxFiles,
 			maxDiffChars: eff.maxDiffChars,

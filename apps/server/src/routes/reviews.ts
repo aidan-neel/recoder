@@ -18,7 +18,8 @@ import { GhError, fetchPullHeadRef } from '../lib/gh';
 import { fetchMergeHeadRef } from '../lib/glab';
 import { LlmError } from '../lib/llm';
 import { refspecFor } from '../lib/providers';
-import { db, reviewDiffs, reviewSandboxes, reviewProgress } from '../store';
+import { db, reviewDiffs, reviewSandboxes, reviewProgress, reviewMetrics } from '../store';
+import { getReviewMetrics, withReviewMetrics } from '../lib/metrics';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),
@@ -29,6 +30,13 @@ const createReviewSchema = z.object({
 const app = new Hono();
 
 app.get('/', (c) => c.json(db.reviews.list()));
+
+app.get('/:id/metrics', (c) => {
+	c.header('Cache-Control', 'no-store');
+	const id = c.req.param('id');
+	if (!db.reviews.get(id)) return c.json({ error: 'review not found' }, 404);
+	return c.json(getReviewMetrics(id));
+});
 
 app.get('/:id', (c) => {
 	const review = db.reviews.get(c.req.param('id'));
@@ -41,6 +49,7 @@ app.delete('/:id', (c) => {
 	if (!review) return c.json({ error: 'review not found' }, 404);
 	db.reviews.delete(review.id);
 	reviewDiffs.delete(review.id);
+	reviewMetrics.delete(review.id);
 	reviewSandboxes.delete(review.id);
 	clearReviewEvents(review.id);
 	return c.json({ deleted: true });
@@ -76,7 +85,7 @@ app.post('/:id/discuss', async (c) => {
 	const diff = reviewDiffs.get(review.id);
 	if (!diff) return c.json({ error: 'no diff yet' }, 409);
 	try {
-		const result = await discussFinding({
+		const result = await withReviewMetrics(review.id, 'discussion', () => discussFinding({
 			agent: parsed.data.agent,
 			file: parsed.data.finding.file,
 			line: parsed.data.finding.line,
@@ -87,7 +96,7 @@ app.post('/:id/discuss', async (c) => {
 			question: parsed.data.question,
 			diff,
 			sandboxPath: reviewSandboxes.get(review.id) ?? null
-		});
+		}));
 		return c.json(result);
 	} catch (err) {
 		if (err instanceof LlmError) return c.json({ error: err.message }, 502);
@@ -122,9 +131,9 @@ app.post('/:id/discuss/stream', async (c) => {
 				controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
 			};
 			try {
-				const result = await streamDiscussFinding(input, (text) =>
+				const result = await withReviewMetrics(review.id, 'discussion', () => streamDiscussFinding(input, (text) =>
 					send({ type: 'token', text })
-				);
+				));
 				send({ type: 'done', ...result });
 			} catch (err) {
 				send({
@@ -156,7 +165,7 @@ app.post('/:id/fixes/suggest', async (c) => {
 	if (!diff) return c.json({ error: 'no diff yet' }, 409);
 	const sandboxPath = reviewSandboxes.get(review.id) ?? null;
 	try {
-		const result = await suggestFix({
+		const result = await withReviewMetrics(review.id, 'fix', () => suggestFix({
 			agent: parsed.data.agent,
 			file: parsed.data.finding.file,
 			line: parsed.data.finding.line,
@@ -165,7 +174,7 @@ app.post('/:id/fixes/suggest', async (c) => {
 			message: parsed.data.finding.message,
 			diff,
 			sandboxPath
-		});
+		}));
 		const applies = sandboxPath ? await patchApplies(sandboxPath, result.patch) : null;
 		return c.json({ ...result, applies });
 	} catch (err) {
@@ -228,6 +237,11 @@ app.get('/:id/events', (c) => {
 	const encoder = new TextEncoder();
 	let unsubscribe: (() => void) | undefined;
 	let heartbeat: ReturnType<typeof setInterval> | undefined;
+	const cleanup = () => {
+		unsubscribe?.();
+		if (heartbeat) clearInterval(heartbeat);
+		c.req.raw.signal.removeEventListener('abort', cleanup);
+	};
 	const stream = new ReadableStream({
 		start(controller) {
 			const send = (data: unknown) => {
@@ -235,11 +249,17 @@ app.get('/:id/events', (c) => {
 					controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
 				} catch {
 					// Client went away.
+					cleanup();
 				}
 			};
 			const snapshot = reviewProgress.get(review.id) ?? emptyReviewProgress(review.id);
 			send({ type: 'snapshot', snapshot, status: review.status, sequence: snapshot.sequence });
+			if (review.status === 'passed' || review.status === 'failed') {
+				controller.close();
+				return;
+			}
 			unsubscribe = subscribeReview(review.id, (event) => send({ ...event }), false);
+			c.req.raw.signal.addEventListener('abort', cleanup, { once: true });
 			heartbeat = setInterval(() => {
 				try {
 					send({ type: 'heartbeat', at: new Date().toISOString(), status: db.reviews.get(review.id)?.status });
@@ -249,8 +269,7 @@ app.get('/:id/events', (c) => {
 			}, 5000);
 		},
 		cancel() {
-			unsubscribe?.();
-			if (heartbeat) clearInterval(heartbeat);
+			cleanup();
 		}
 	});
 	return new Response(stream, {

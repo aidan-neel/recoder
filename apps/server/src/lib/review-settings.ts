@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
+import type { ReasoningEffort } from '@recoder/shared';
 import { serverDataDir } from './data-dir.js';
 import type { ReviewRole } from './models.js';
 import { REVIEW_ROLES } from './roles.js';
@@ -24,6 +25,7 @@ const roleSettingsSchema = z.object({
 });
 
 const modelEntrySchema = z.object({
+	provider: z.enum(['openai-compatible', 'codex']).optional(),
 	id: z.string().max(100).optional(),
 	label: z.string().min(1).max(100),
 	model: z.string().min(1).max(200),
@@ -37,6 +39,7 @@ export const reviewSettingsSchema = z.object({
 	models: z.array(modelEntrySchema).max(50).optional(),
 	sharedModelId: z.string().max(100).nullable().optional(),
 	roles: roleSettingsSchema.optional(),
+	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(['low', 'medium', 'high'])).optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
 	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
 	maxFileChars: z.number().int().positive().max(200_000).optional()
@@ -45,6 +48,7 @@ export const reviewSettingsSchema = z.object({
 export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
 
 export interface StoredModelEntry {
+	provider?: 'openai-compatible' | 'codex';
 	id: string;
 	label: string;
 	model: string;
@@ -58,6 +62,7 @@ interface StoredSettings {
 	models?: StoredModelEntry[];
 	sharedModelId?: string | null;
 	roles?: Partial<Record<ReviewRole, string>>;
+	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;
@@ -87,6 +92,7 @@ export function initReviewSettings(): void {
 			const normalized: StoredSettings = {
 				...rest,
 				models: models?.map((e) => ({
+					provider: e.provider,
 					id: e.id ?? crypto.randomUUID(),
 					label: e.label,
 					model: e.model,
@@ -121,15 +127,18 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 		clean.models = patch.models.map((entry) => {
 			const kept = entry.id ? previous.get(entry.id) : undefined;
 			const next: StoredModelEntry = {
+				provider: entry.provider ?? kept?.provider ?? 'openai-compatible',
 				id: entry.id ?? crypto.randomUUID(),
 				label: entry.label,
 				model: entry.model
 			};
 			const baseUrl = entry.baseUrl?.replace(/\/$/, '');
-			if (baseUrl) next.baseUrl = baseUrl;
+			if (baseUrl && next.provider !== 'codex') next.baseUrl = baseUrl;
 			// Empty key keeps the existing entry key; new entries store what was given.
-			if (entry.apiKey) next.apiKey = entry.apiKey;
-			else if (kept?.apiKey) next.apiKey = kept.apiKey;
+			if (next.provider !== 'codex') {
+				if (entry.apiKey) next.apiKey = entry.apiKey;
+				else if (kept?.apiKey) next.apiKey = kept.apiKey;
+			}
 			return next;
 		});
 		// Drop routing pointers to deleted entries.
@@ -155,6 +164,7 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 		}
 		if (Object.keys(clean.roles).length === 0) delete clean.roles;
 	}
+	if (patch.roleEfforts !== undefined) clean.roleEfforts = { ...clean.roleEfforts, ...patch.roleEfforts };
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
 	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;

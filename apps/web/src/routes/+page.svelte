@@ -462,8 +462,8 @@
 		}
 	}
 
-	async function reviewPr(n: number): Promise<void> {
-		if (!selected || reviewTarget) return;
+	async function reviewPr(n: number, repo: Pick<Repo, 'id' | 'name'> | undefined = selected): Promise<void> {
+		if (!repo || reviewTarget) return;
 		if (!apiDown && modelSettingsUi.config && !modelSettingsUi.config.configured) {
 			prError = 'Add a reviewer model first — reviews cannot run without one.';
 			modelSettingsUi.show();
@@ -473,18 +473,18 @@
 		prError = null;
 		if (apiDown) {
 			await new Promise((r) => setTimeout(r, 900));
-			const session = sessionState.restartReview(selected.id, selected.name, `#${n}`);
+			const session = sessionState.restartReview(repo.id, repo.name, `#${n}`);
 			reviewTarget = { n, status: 'success' };
 			await new Promise((r) => setTimeout(r, 350));
 			await goto(`/session/${session.id}`);
 			return;
 		}
 		try {
-			const review = await serverApi.queueReview({ repoId: selected.id, prNumber: n });
+			const review = await serverApi.queueReview({ repoId: repo.id, prNumber: n });
 			await refreshReviews();
 			reviewTarget = { n, status: 'success' };
 			await new Promise((r) => setTimeout(r, 350));
-			openSession(review.id, selected.name, `#${n}`, 'reviewing');
+			openSession(review.id, repo.name, `#${n}`, 'reviewing');
 		} catch (e) {
 			reviewTarget = null;
 			prError = e instanceof Error ? e.message : 'Failed to queue review.';
@@ -753,6 +753,7 @@
 		{:else}
 			{#each recent as session (session.id)}
 			{@const sessionStatus = session.status === 'passed' ? 'ready' : 'reviewing'}
+			{@const repoId = apiDown ? session.id : allReviews.find((r) => r.id === session.id)?.repoId}
 			<ContextMenu.Root>
 				<ContextMenu.Trigger>
 					<button
@@ -785,6 +786,14 @@
 						<span class="flex items-center gap-2"><Hash size={14} /> Copy session ID</span>
 					</ContextMenu.Item>
 					<ContextMenu.Separator />
+					<ContextMenu.Item
+						disabled={!repoId || !!reviewTarget || deletingId === session.id}
+						callback={() => {
+							if (repoId) void reviewPr(session.pr, { id: repoId, name: session.repo });
+						}}
+					>
+						<span class="flex items-center gap-2"><RefreshCw size={14} aria-hidden="true" /> Re-review</span>
+					</ContextMenu.Item>
 					<ContextMenu.Item
 						callback={() => {
 							pendingDeleteId = session.id;

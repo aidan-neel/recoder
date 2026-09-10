@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { FileDiff } from '@recoder/shared';
-import { scopeReviewFiles } from './review-scope';
+import { classifyPath, scopeReviewFiles } from './review-scope';
 
 const file = (path: string): FileDiff => ({ path, additions: 1, deletions: 0, hunks: [] });
 
@@ -29,25 +29,32 @@ describe('scopeReviewFiles', () => {
 		expect(skipped[0].reason).toMatch(/generated|build/);
 	});
 
-	test('skips lockfiles, declarations, maps, and binaries', () => {
+	test('does not treat declaration files or text SVG as generated-by-extension', () => {
 		const { included, skipped } = scopeReviewFiles([
-			file('bun.lock'),
 			file('src/types.d.ts'),
+			file('assets/logo.svg'),
+			file('src/app.ts')
+		]);
+		expect(included.map((f) => f.path)).toEqual(['src/types.d.ts', 'assets/logo.svg', 'src/app.ts']);
+		expect(skipped).toEqual([]);
+	});
+
+	test('keeps lockfiles as summarized evidence rather than dropping them', () => {
+		expect(classifyPath('bun.lock')).toMatchObject({ classification: 'lockfile', summarize: true });
+		expect(classifyPath('package-lock.json').excludeReason).toBeUndefined();
+		const { included } = scopeReviewFiles([file('bun.lock'), file('src/app.ts')]);
+		expect(included.map((f) => f.path)).toEqual(['bun.lock', 'src/app.ts']);
+	});
+
+	test('skips maps and binaries', () => {
+		const { included, skipped } = scopeReviewFiles([
 			file('assets/app.min.js'),
 			file('assets/app.js.map'),
 			file('assets/logo.png'),
-			file('assets/font.woff2'),
 			file('src/app.ts')
 		]);
 		expect(included.map((f) => f.path)).toEqual(['src/app.ts']);
-		expect(skipped.map((s) => s.path)).toEqual([
-			'bun.lock',
-			'src/types.d.ts',
-			'assets/app.min.js',
-			'assets/app.js.map',
-			'assets/logo.png',
-			'assets/font.woff2'
-		]);
+		expect(skipped.map((s) => s.path)).toEqual(['assets/app.min.js', 'assets/app.js.map', 'assets/logo.png']);
 	});
 
 	test('skips unresolvable paths', () => {

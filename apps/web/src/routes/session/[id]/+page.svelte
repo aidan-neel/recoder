@@ -7,6 +7,7 @@
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import LiveReviewProgress from '$lib/components/live-review-progress.svelte';
 	import ReviewProgress from '$lib/components/review-progress.svelte';
+	import ReviewMetricsModal from '$lib/components/review-metrics-modal.svelte';
 	import SessionSidebar from '$lib/components/session-sidebar.svelte';
 	import FindingsBar from '$lib/components/findings-bar.svelte';
 	import CodeDiff from '$lib/components/code-diff.svelte';
@@ -57,6 +58,12 @@
 					`#${review.prNumber}`,
 					running ? 'reviewing' : 'ready'
 				);
+			}
+			if (
+				(review.status === 'passed' || review.status === 'failed') &&
+				sessionState.sessions.find((s) => s.id === currentId)?.status === 'reviewing'
+			) {
+				sessionState.markReady(currentId);
 			}
 			try {
 				const files = await serverApi.getReviewFiles(currentId);
@@ -176,6 +183,8 @@
 		userPickedFile = false;
 		findingsSyncedFor = null;
 		peekDiff = false;
+		threadsStore.close();
+		threadsStore.pendingMessage = null;
 		// Drop the previous session's file + findings immediately so the new
 		// session never flashes stale content while its review loads.
 		sessionFile.select(DEFAULT_FILE);
@@ -294,9 +303,9 @@
 		</div>
 	{/if}
 	<div class="flex min-h-0 flex-1">
-		<SessionSidebar
-			fileDiffs={isBackend ? (backendFiles ?? []) : null}
-		/>
+		<div class={threadsStore.openId ? 'shrink-0 max-xl:hidden' : 'shrink-0'}>
+			<SessionSidebar fileDiffs={isBackend ? (backendFiles ?? []) : null} />
+		</div>
 		<div class="m-3 flex min-w-0 flex-1 flex-col gap-3">
 			{#if isBackend && backendReview}
 				<div class="flex shrink-0 flex-col gap-2">
@@ -314,7 +323,7 @@
 					{/if}
 					<span class="truncate">
 						{#if backendReview.prTitle}{backendReview.prTitle} · {/if}PR #{backendReview.prNumber}
-						· {backendReview.source} · {backendReview.status}{backendFiles
+						· {backendReview.source} · {backendReview.status === 'passed' ? 'Review complete' : backendReview.status === 'failed' ? 'Review incomplete' : backendReview.status}{backendFiles
 							? ` · ${backendFiles.length} files`
 							: ' · fetching diff…'}
 					</span>
@@ -328,6 +337,7 @@
 							Progress
 						</Button>
 					{/if}
+					<ReviewMetricsModal reviewId={backendReview.id} />
 					</div>
 					<FindingsBar />
 				</div>
@@ -335,7 +345,7 @@
 				<FindingsBar />
 			{/if}
 			<div class="flex min-h-0 flex-1 gap-3">
-				<div id="diff-panel" class="session-enter relative min-h-0 flex-1" style="animation-delay: 120ms">
+				<div id="diff-panel" class="session-enter relative min-h-0 min-w-0 flex-1 {threadsStore.openId ? 'max-xl:hidden' : ''}" style="animation-delay: 120ms">
 					{#if isBackend && backendReview?.status === 'failed' && !backendFiles}
 						<div
 							class="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl border border-border p-6 text-center"
@@ -382,7 +392,11 @@
 						</ScrollArea>
 					{/if}
 				</div>
-				<ThreadPanel />
+				{#if threadsStore.openId}
+					{#key threadsStore.openId}
+						<ThreadPanel />
+					{/key}
+				{/if}
 			</div>
 		</div>
 	</div>
