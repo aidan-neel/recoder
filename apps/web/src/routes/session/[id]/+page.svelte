@@ -14,6 +14,7 @@
 	import ThreadPanel from '$lib/components/thread-panel.svelte';
 	import { getFileDiff } from '$lib/diff';
 	import { findingsStore, mapBackendFinding } from '$lib/findings.svelte';
+	import { notesStore } from '$lib/notes.svelte';
 	import { threadsStore } from '$lib/threads.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
 	import { DEFAULT_FILE, sessionFile } from '$lib/session-file.svelte';
@@ -136,6 +137,7 @@
 		if (!backendChecked) return;
 		if (isBackend && backendReview) {
 			threadsStore.reviewId = backendReview.id;
+			notesStore.reviewId = backendReview.id;
 			const mapped = backendReview.findings.map((f, i) => mapBackendFinding(f, i));
 			const terminal =
 				backendReview.status === 'passed' || backendReview.status === 'failed';
@@ -185,6 +187,7 @@
 		peekDiff = false;
 		threadsStore.close();
 		threadsStore.pendingMessage = null;
+		notesStore.clear();
 		// Drop the previous session's file + findings immediately so the new
 		// session never flashes stale content while its review loads.
 		sessionFile.select(DEFAULT_FILE);

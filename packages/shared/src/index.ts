@@ -133,6 +133,8 @@ export interface ModelEntry {
 	model: string;
 	baseUrl: string | null;
 	apiKeyPreview: string | null;
+	/** Reasoning levels this model accepts, when the provider reports them. */
+	efforts?: ReasoningEffort[];
 }
 
 export interface ModelEntryPatch {
@@ -142,9 +144,10 @@ export interface ModelEntryPatch {
 	model: string;
 	baseUrl?: string;
 	apiKey?: string;
+	efforts?: ReasoningEffort[];
 }
 
-export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 
 /** Reviewer model configuration (keys are never exposed). */
 export interface ModelSettings {
@@ -155,7 +158,7 @@ export interface ModelSettings {
 	sharedModelId: string | null;
 	models: ModelEntry[];
 	roles: Record<ReviewRole, string | null>;
-	/** Explicit per-role overrides; absent roles retain provider defaults (Codex: low). */
+	/** Explicit per-role overrides; absent roles retain provider defaults (Codex: medium). */
 	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
 }
@@ -186,6 +189,8 @@ export interface CodexConnection {
 export interface CodexModel {
 	id: string;
 	label: string;
+	/** Reasoning levels the provider reports for this model. */
+	efforts?: ReasoningEffort[];
 }
 
 /** CLI auth state for one provider. */
@@ -300,4 +305,51 @@ export interface ApplyFixResponse {
 	branch: string;
 	pushed: boolean;
 }
+
+/**
+ * A developer comment anchored to a range of diff lines. The quoted snippet
+ * travels with the note so the model can reason about the exact text even when
+ * the file is later re-rendered or the line numbers drift.
+ */
+export interface RereviewNote {
+	file: string;
+	line: number;
+	endLine: number;
+	side: 'old' | 'new';
+	/** Text the developer highlighted (may span multiple lines). */
+	quote: string;
+	/** The developer's comment. */
+	body: string;
+	/** New-side code for the anchored range. */
+	newText?: string;
+	/** Old-side code for the anchored range, when it touches deletions. */
+	oldText?: string;
+	/** Surrounding unified-diff lines. */
+	diffContext?: string;
+	/** The enclosing hunk header. */
+	hunkHeader?: string;
+}
+
+export interface RereviewRequest {
+	notes: RereviewNote[];
+}
+
+export type RereviewVerdict = 'valid' | 'invalid' | 'uncertain';
+
+export interface RereviewAssessment {
+	/** 0-based index into the request's `notes` array. */
+	noteIndex: number;
+	verdict: RereviewVerdict;
+	response: string;
+}
+
+export interface RereviewResponse {
+	agent: string;
+	model: string;
+	summary: string;
+	assessments: RereviewAssessment[];
+	/** New findings the notes surfaced; empty when nothing was added. */
+	findings: Finding[];
+}
+
 export * from './progress';

@@ -1,7 +1,17 @@
 <script lang="ts">
-	import * as Modal from '@sivir-ui/svelte/components/modal';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import * as Alert from '@sivir-ui/svelte/components/alert';
+	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
-	import type { ReviewMetrics, TokenAggregate, TokenUsage } from '@recoder/shared';
+	import * as Card from '@sivir-ui/svelte/components/card';
+	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
+	import * as Modal from '@sivir-ui/svelte/components/modal';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import type {
+		ReviewMetrics,
+		TokenAggregate,
+		TokenUsage
+	} from '@recoder/shared';
 	import { serverApi } from '$lib/server-api';
 
 	let { reviewId }: { reviewId: string } = $props();
@@ -21,7 +31,11 @@
 		{ key: 'cacheWriteInputTokens', label: 'Cache writes' },
 		{ key: 'reasoningOutputTokens', label: 'Reasoning output' }
 	] as const;
-	const scopeLabels = { pipeline: 'Review pipeline', discussion: 'Discussions', fix: 'Fix suggestions' };
+	const scopeLabels = {
+		pipeline: 'Review pipeline',
+		discussion: 'Discussions',
+		fix: 'Fix suggestions'
+	};
 
 	$effect(() => {
 		if (!open) return;
@@ -40,7 +54,10 @@
 				error = '';
 			} catch (cause) {
 				if (controller.signal.aborted) return;
-				error = cause instanceof Error ? cause.message : 'Could not load token usage.';
+				error =
+					cause instanceof Error
+						? cause.message
+						: 'Could not load token usage.';
 			} finally {
 				if (!controller.signal.aborted) {
 					loading = false;
@@ -49,94 +66,187 @@
 			}
 		}
 		void refresh();
-		return () => { controller.abort(); if (timer) clearTimeout(timer); };
+		return () => {
+			controller.abort();
+			if (timer) clearTimeout(timer);
+		};
 	});
 </script>
 
 {#snippet count(aggregate: TokenAggregate, key: keyof TokenUsage)}
-	<span class="tabular-nums">{aggregate.usage[key] === null ? 'Unavailable' : formatter.format(aggregate.usage[key])}</span>
+	<span class="tabular-nums"
+		>{aggregate.usage[key] === null
+			? 'Unavailable'
+			: formatter.format(aggregate.usage[key])}</span
+	>
 	{#if aggregate.reportedCalls[key] > 0 && aggregate.reportedCalls[key] < aggregate.calls}
-		<span class="block text-xs font-normal text-foreground-muted">{aggregate.reportedCalls[key]}/{aggregate.calls} calls reported</span>
+		<Typography.Metadata class="block">
+			{aggregate.reportedCalls[key]}/{aggregate.calls} calls reported
+		</Typography.Metadata>
 	{/if}
 {/snippet}
 
 {#snippet counts(aggregate: TokenAggregate, breakdown = false)}
-	<dl class="grid gap-3 text-sm sm:grid-cols-3">
+	<div class="grid min-w-0 gap-3 text-sm sm:grid-cols-3">
 		{#each primary as field}
-			<div class="min-w-0">
-				<dt class="text-foreground-muted">{field.label}</dt>
-				<dd class="mt-1 break-words font-medium">{@render count(aggregate, field.key)}</dd>
+			<div class="flex min-w-0 justify-between gap-3 sm:block">
+				<Typography.Description class="m-0">{field.label}</Typography.Description>
+				<div class="text-right font-medium sm:mt-1 sm:text-left">
+					{@render count(aggregate, field.key)}
+				</div>
 			</div>
 		{/each}
-	</dl>
+	</div>
 	{#if breakdown}
-		<dl class="mt-3 grid gap-1 text-xs text-foreground-muted">
+		<div class="mt-3 grid gap-1">
 			{#each details as field}
 				{#if aggregate.usage[field.key] !== null}
 					<div class="flex justify-between gap-4">
-						<dt>{field.label}</dt><dd class="text-right">{@render count(aggregate, field.key)}</dd>
+						<Typography.Metadata>{field.label}</Typography.Metadata>
+						<Typography.Metadata class="text-right">
+							{@render count(aggregate, field.key)}
+						</Typography.Metadata>
 					</div>
 				{/if}
 			{/each}
-		</dl>
+		</div>
 	{/if}
 {/snippet}
 
 <Modal.Root bind:open>
-	<Modal.Trigger variant="ghost" size="sm" class="shrink-0 font-sans">Token usage</Modal.Trigger>
-	<Modal.Content size="md" surfaceClass="max-h-[min(75dvh,42rem)] overflow-y-auto overscroll-contain">
+	<Modal.Trigger variant="ghost" class="shrink-0 font-sans">Token usage</Modal.Trigger>
+	<Modal.Content
+		size="xl"
+		surfaceClass="max-h-[min(75dvh,42rem)] overflow-y-auto overscroll-contain [overflow-wrap:anywhere]"
+	>
 		<Modal.Header>
 			<Modal.Title>Review token usage</Modal.Title>
-			<Modal.Description>Review pipeline, discussions, and fix suggestions for this review, including retries.</Modal.Description>
+			<Modal.Description>
+				Review pipeline, discussions, and fix suggestions for this review,
+				including retries.
+			</Modal.Description>
 		</Modal.Header>
-		<Modal.Body class="gap-5">
-			<p role="status" class={loading ? 'text-sm text-foreground-muted' : 'sr-only'}>{loading ? 'Loading token usage...' : ''}</p>
+		<Modal.Body class="min-w-0 gap-5">
+			<p role="status" class={loading ? 'text-sm text-foreground-muted' : 'sr-only'}>
+				{loading ? 'Loading token usage...' : ''}
+			</p>
 			{#if error}
-				<div role="alert" class="text-sm">
-					<p>Could not refresh token usage: {error}{metrics ? ' Showing the last loaded counts.' : ''}</p>
-					<Button variant="outline" size="sm" class="mt-2" onclick={() => retry++}>Retry</Button>
-				</div>
+				<Alert.Root variant="error">
+					<Alert.Title>Could not refresh token usage</Alert.Title>
+					<Alert.Description>
+						{error}{metrics ? ' Showing the last loaded counts.' : ''}
+					</Alert.Description>
+					<Button
+						variant="outline"
+						size="md"
+						class="mt-2 self-start"
+						onclick={() => retry++}>Retry</Button
+					>
+				</Alert.Root>
 			{/if}
 			{#if !loading && !error && !metrics}
-				<p class="text-sm text-foreground-muted">Token usage was not recorded for this review. Historical counts cannot be recovered.</p>
+				<Typography.Description>
+					Token usage was not recorded for this review. Historical counts cannot
+					be recovered.
+				</Typography.Description>
 			{:else if metrics}
 				{#if !metrics.pipelineTracked}
-					<p class="text-sm text-foreground-muted">Partial history: recording started with a follow-up. Earlier pipeline and follow-up usage is unavailable.</p>
+					<Typography.Description>
+						Partial history: recording started with a follow-up. Earlier pipeline
+						and follow-up usage is unavailable.
+					</Typography.Description>
 				{/if}
-				<section aria-label="Reported totals">
-					<h3 class="mb-3 text-sm font-semibold">Reported totals <span class="font-normal text-foreground-muted">({metrics.total.calls} requests)</span></h3>
-					{@render counts(metrics.total, true)}
-				</section>
-				{#if metrics.total.calls === 0}
-					<p class="text-sm text-foreground-muted">No model requests recorded yet.</p>
-				{/if}
-				{#if metrics.total.pendingCalls || metrics.total.failedCalls}
-					<p class="text-xs text-foreground-muted">{metrics.total.pendingCalls} unfinished requests; {metrics.total.failedCalls} failed requests. Any reported tokens are included.</p>
-				{/if}
+
+				<Card.Root class="p-4">
+					<Card.Header class="mb-3 flex-row items-baseline justify-between gap-2">
+						<Typography.H3 class="m-0">Reported totals</Typography.H3>
+						<Badge variant="outline">{metrics.total.calls} requests</Badge>
+					</Card.Header>
+					<Card.Content class="gap-3">
+						{@render counts(metrics.total, true)}
+						{#if metrics.total.calls === 0}
+							<Typography.Description class="m-0">
+								No model requests recorded yet.
+							</Typography.Description>
+						{/if}
+						{#if metrics.total.pendingCalls || metrics.total.failedCalls}
+							<Typography.Metadata>
+								{metrics.total.pendingCalls} unfinished requests; {metrics.total
+									.failedCalls} failed requests. Any reported tokens are included.
+							</Typography.Metadata>
+						{/if}
+					</Card.Content>
+				</Card.Root>
+
 				{#if metrics.models.length}
-					<section aria-label="Usage by model" class="grid gap-4 border-t border-border pt-4">
-						<h3 class="text-sm font-semibold">By model</h3>
-						{#each metrics.models as model (`${model.provider}:${model.model}`)}
-							<div>
-								<p class="break-words text-sm font-medium">{model.model}</p>
-								<p class="mb-2 text-xs text-foreground-muted">{model.provider === 'codex' ? 'Codex' : 'OpenAI-compatible'} / {model.calls} requests</p>
-								{@render counts(model, true)}
-							</div>
-						{/each}
-					</section>
-					<details class="border-t border-border pt-4">
-						<summary class="cursor-pointer text-sm font-medium">By activity</summary>
-						<div class="mt-3 grid gap-4">
-							{#each metrics.scopes.filter((scope) => scope.calls > 0) as scope (scope.scope)}
-								<section aria-label={scopeLabels[scope.scope]}>
-									<h4 class="mb-2 text-sm">{scopeLabels[scope.scope]} <span class="text-foreground-muted">({scope.calls} requests)</span></h4>
-									{@render counts(scope, true)}
-								</section>
+					<Card.Root class="p-4">
+						<Typography.H3 class="mb-3 mt-0">By model</Typography.H3>
+						<div class="grid gap-4">
+							{#each metrics.models as model (`${model.provider}:${model.model}`)}
+								<div class="min-w-0">
+									<div class="mb-2 flex flex-wrap items-center gap-2">
+										<Typography.InlineCode class="text-sm"
+											>{model.model}</Typography.InlineCode
+										>
+										<Badge variant="secondary"
+											>{model.provider === 'codex'
+												? 'Codex'
+												: 'OpenAI-compatible'}</Badge
+										>
+										<Badge variant="outline">{model.calls} requests</Badge>
+									</div>
+									{@render counts(model, true)}
+								</div>
 							{/each}
 						</div>
-					</details>
+					</Card.Root>
+
+					<Collapsible.Root>
+						<Collapsible.Trigger
+							class="w-full justify-between py-1 text-sm font-medium"
+						>
+							By activity
+							<ChevronDown
+								size={15}
+								class="text-foreground-muted transition-transform group-data-[state=open]:rotate-180"
+								aria-hidden="true"
+							/>
+						</Collapsible.Trigger>
+						<Collapsible.Content>
+							<div class="mt-3 grid gap-4">
+								{#each metrics.scopes.filter((scope) => scope.calls > 0) as scope (scope.scope)}
+									<div>
+										<Typography.H4 class="mb-2 mt-0">
+											{scopeLabels[scope.scope]}
+											<Typography.Metadata>({scope.calls} requests)</Typography.Metadata>
+										</Typography.H4>
+										{@render counts(scope, true)}
+									</div>
+								{/each}
+							</div>
+						</Collapsible.Content>
+					</Collapsible.Root>
 				{/if}
-				<p class="text-xs leading-relaxed text-foreground-muted">Provider-reported tokens, not a billing estimate. Missing counts are unavailable, not zero. Partial sums include only reporting calls. Cache and reasoning breakdowns are shown when provided and are not added again to totals. Models are grouped by requested model and provider. Each Codex request is one turn and includes its reported internal model usage. Updates every few seconds while open.</p>
+
+				<Collapsible.Root>
+					<Collapsible.Trigger class="w-full justify-between text-xs font-medium">
+						About these counts
+						<ChevronDown
+							size={14}
+							class="text-foreground-muted transition-transform group-data-[state=open]:rotate-180"
+							aria-hidden="true"
+						/>
+					</Collapsible.Trigger>
+					<Collapsible.Content>
+						<Typography.Metadata class="mt-2 block leading-relaxed">
+							Provider-reported tokens, not a billing estimate. Missing counts are
+							unavailable, not zero. Partial sums include only reporting calls.
+							Cache and reasoning breakdowns are included in totals. Models are
+							grouped by requested model and provider. Updates every few seconds
+							while open.
+						</Typography.Metadata>
+					</Collapsible.Content>
+				</Collapsible.Root>
 			{/if}
 		</Modal.Body>
 		<Modal.Footer><Modal.Close>Close</Modal.Close></Modal.Footer>

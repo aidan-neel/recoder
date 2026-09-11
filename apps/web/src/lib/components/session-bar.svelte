@@ -10,6 +10,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as ContextMenu from '@sivir-ui/svelte/components/context-menu';
 	import { modelSettingsUi } from '$lib/model-settings.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
@@ -45,6 +46,14 @@
 
 	let renamingId = $state<string | null>(null);
 	let renameDraft = $state('');
+	let renameInput: HTMLInputElement | undefined = $state();
+
+	$effect(() => {
+		if (renamingId && renameInput) {
+			renameInput.focus();
+			renameInput.select();
+		}
+	});
 
 	function startRename(id: string, name: string): void {
 		renamingId = id;
@@ -60,11 +69,6 @@
 
 	function cancelRename(): void {
 		renamingId = null;
-	}
-
-	function focusInput(node: HTMLInputElement): void {
-		node.focus();
-		node.select();
 	}
 </script>
 
@@ -90,10 +94,9 @@
 							: 'text-foreground-muted hover:bg-secondary/60 hover:text-foreground'}"
 					>
 					{#if renamingId === session.id}
-						<input
-							use:focusInput
-							value={renameDraft}
-							oninput={(e) => (renameDraft = e.currentTarget.value)}
+						<Input
+							bind:element={renameInput}
+							bind:value={renameDraft}
 							onkeydown={(e) => {
 								if (e.key === 'Enter') commitRename(session.id);
 								else if (e.key === 'Escape') cancelRename();
@@ -102,7 +105,7 @@
 							onblur={() => commitRename(session.id)}
 							onclick={(e) => e.stopPropagation()}
 							aria-label="Rename session"
-							class="mx-2 h-7 w-32 rounded border border-border bg-background px-2 text-[15px] text-foreground outline-none focus:border-primary"
+							class="mx-2 h-7 min-h-0 w-32 px-2 text-[15px]"
 						/>
 					{:else}
 						<button

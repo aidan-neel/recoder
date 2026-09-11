@@ -40,7 +40,8 @@ app.get('/models', (c) => {
 			label: e.label,
 			model: e.model,
 			baseUrl: e.baseUrl ?? null,
-			apiKeyPreview: mask(e.apiKey)
+			apiKeyPreview: mask(e.apiKey),
+			...(e.efforts?.length ? { efforts: e.efforts } : {})
 		})),
 		roles: rolesPayload(),
 		roleEfforts: stored.roleEfforts ?? {},
@@ -73,7 +74,8 @@ app.on(['PUT', 'PATCH'], '/models', async (c) => {
 			label: e.label,
 			model: e.model,
 			baseUrl: e.baseUrl ?? null,
-			apiKeyPreview: mask(e.apiKey)
+			apiKeyPreview: mask(e.apiKey),
+			...(e.efforts?.length ? { efforts: e.efforts } : {})
 		})),
 		roles: rolesPayload(),
 		roleEfforts: stored.roleEfforts ?? {},

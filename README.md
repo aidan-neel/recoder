@@ -60,33 +60,34 @@ dependencies, or modify code.
 
 ## Auth persistence
 
-### ChatGPT subscription reviewers (Codex)
+### ChatGPT reviewers
 
-Open **Reviewer models → Codex subscription → Connect ChatGPT**. Open the
-official sign-in link and enter the displayed device code yourself. Once
-connected, choose an available model (Luna is preselected only if Codex returns
-it) and click **Add reviewer model** — it becomes the shared model
-automatically (assign it to specific roles instead if you prefer).
-Existing role overrides are not changed automatically.
+Open **Connections → ChatGPT → Sign in**, then open the official sign-in link
+and enter the device code. Device-code authorization may need to be enabled in
+your ChatGPT security settings. Select an available model and **Add model** to
+make it the default. Each role also has its own reasoning-effort control and
+optional model override.
 
-The API server needs Codex CLI 0.153.4 or newer on its PATH. The Docker image
-includes a pinned CLI; rebuild the server image to get this integration. For a
-local install, run `npm install -g @openai/codex@0.153.4`. A nonstandard binary
-can be selected with `RECODER_CODEX_BIN` (an executable path, not a command line).
+Recoder's harness calls the ChatGPT Codex Responses endpoint directly over
+HTTPS using OAuth. It handles device authorization, token refresh, streaming,
+model discovery, and account usage limits itself. No Codex CLI, App Server,
+local callback listener, or additional runtime process is required.
 
-Recoder starts the official `codex app-server` over private stdio. Codex owns
-device sign-in, token storage, and refresh in `$RECODER_DATA_DIR/codex` (directory
-mode 0700), backed by the existing data volume. It does not read your personal
-Codex login or send OAuth tokens to the frontend. Disconnect affects only
-Recoder's login, and requires active Codex calls to finish first.
+Credentials persist atomically in `$RECODER_DATA_DIR/chatgpt-auth.json` (0600),
+backed by the existing data volume. Recoder migrates a previous login from its
+own `$RECODER_DATA_DIR/codex/auth.json` on first use; it never reads your personal
+`~/.codex` login. OAuth credentials never reach the frontend. Disconnect clears
+Recoder's saved login and cancels pending device authorization, after active
+model calls finish. Reconnects cannot resurrect a migrated login.
 
-This provider uses your subscription allowance and reports available usage
-windows in settings. It does not switch to an API key, another model, or a
-paid API endpoint on failure. Account limits and model access still apply.
-Recoder retains orchestration and bounded evidence retrieval; Codex runs as a
-text-only adapter with execution features disabled, an empty working directory,
-read-only sandbox policy, no turn environments, and no command approvals.
-Discussion replies on this provider currently arrive as a complete answer.
+The provider uses your ChatGPT allowance and displays account usage windows in
+the **Usage** popover. It does not fall back to an API key or switch models on
+failure. Recoder owns orchestration and tool execution; the provider receives
+the conversation as a direct model request. Discussion output streams as it
+arrives, and input/output/cache/reasoning token counts feed each review's
+**Token usage** modal when reported. The endpoint does not support the API-key
+client's temperature, seed, or output-token-cap parameters; request deadlines
+and Recoder's evidence limits still apply.
 
 Use this single-user server only on a trusted network or behind an authenticated
 reverse proxy. Subscription status routes reject unrelated browser origins;
@@ -94,7 +95,8 @@ set `FRONTEND_URL` to the actual frontend origin when deploying. This is not a
 multi-tenant OAuth application. Login may need to be repeated after provider
 revocation or an unrefreshable expiration; restarting Recoder does not log out.
 
-Protocol: [Codex App Server](https://learn.chatgpt.com/docs/app-server).
+Protocol references: [device OAuth](https://github.com/openai/codex/blob/main/codex-rs/login/src/device_code_auth.rs)
+and [direct Responses requests](https://github.com/openai/codex/blob/main/codex-rs/codex-api/src/endpoint/responses.rs).
 
 ### GitHub and GitLab
 

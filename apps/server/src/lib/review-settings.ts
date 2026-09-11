@@ -24,13 +24,16 @@ const roleSettingsSchema = z.object({
 	api: z.string().max(200).optional()
 });
 
+const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high'] as const;
+
 const modelEntrySchema = z.object({
 	provider: z.enum(['openai-compatible', 'codex']).optional(),
 	id: z.string().max(100).optional(),
 	label: z.string().min(1).max(100),
 	model: z.string().min(1).max(200),
 	baseUrl: z.string().max(500).optional(),
-	apiKey: z.string().max(500).optional()
+	apiKey: z.string().max(500).optional(),
+	efforts: z.array(z.enum(REASONING_EFFORTS)).max(8).optional()
 });
 
 export const reviewSettingsSchema = z.object({
@@ -39,7 +42,7 @@ export const reviewSettingsSchema = z.object({
 	models: z.array(modelEntrySchema).max(50).optional(),
 	sharedModelId: z.string().max(100).nullable().optional(),
 	roles: roleSettingsSchema.optional(),
-	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(['low', 'medium', 'high'])).optional(),
+	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(REASONING_EFFORTS)).optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
 	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
 	maxFileChars: z.number().int().positive().max(200_000).optional()
@@ -54,6 +57,7 @@ export interface StoredModelEntry {
 	model: string;
 	baseUrl?: string;
 	apiKey?: string;
+	efforts?: ReasoningEffort[];
 }
 
 interface StoredSettings {
@@ -97,7 +101,8 @@ export function initReviewSettings(): void {
 					label: e.label,
 					model: e.model,
 					...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
-					...(e.apiKey ? { apiKey: e.apiKey } : {})
+					...(e.apiKey ? { apiKey: e.apiKey } : {}),
+					...(e.efforts?.length ? { efforts: e.efforts } : {})
 				}))
 			};
 			overrides = apiKey ? { ...normalized, apiKey } : normalized;
@@ -134,6 +139,7 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 			};
 			const baseUrl = entry.baseUrl?.replace(/\/$/, '');
 			if (baseUrl && next.provider !== 'codex') next.baseUrl = baseUrl;
+			if (entry.efforts?.length) next.efforts = entry.efforts;
 			// Empty key keeps the existing entry key; new entries store what was given.
 			if (next.provider !== 'codex') {
 				if (entry.apiKey) next.apiKey = entry.apiKey;

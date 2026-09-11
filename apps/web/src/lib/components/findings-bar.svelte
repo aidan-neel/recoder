@@ -16,9 +16,9 @@ import {
 	type Finding,
 	type FindingSeverity
 } from '$lib/findings.svelte';
-import { sessionFile } from '$lib/session-file.svelte';
-import { serverApi } from '$lib/server-api';
-import { threadsStore } from '$lib/threads.svelte';
+	import { sessionFile } from '$lib/session-file.svelte';
+	import { serverApi } from '$lib/server-api';
+	import { threadsStore } from '$lib/threads.svelte';
 
 	const sevLabel: Record<FindingSeverity, string> = {
 		high: 'High',
@@ -28,10 +28,10 @@ import { threadsStore } from '$lib/threads.svelte';
 	};
 
 	const pillStyle: Record<FindingSeverity, string> = {
-		high: 'bg-error/30 text-error',
-		medium: 'bg-warning/30 text-warning',
-		low: 'bg-[#1a2740] text-[#7eb0ff]',
-		info: 'bg-secondary text-foreground'
+		high: 'bg-[var(--sev-high-bg)] text-[var(--sev-high-fg)] ring-1 ring-inset ring-[var(--sev-high-line)]',
+		medium: 'bg-[var(--sev-medium-bg)] text-[var(--sev-medium-fg)] ring-1 ring-inset ring-[var(--sev-medium-line)]',
+		low: 'bg-[var(--sev-low-bg)] text-[var(--sev-low-fg)] ring-1 ring-inset ring-[var(--sev-low-line)]',
+		info: 'bg-[var(--sev-info-bg)] text-[var(--sev-info-fg)] ring-1 ring-inset ring-[var(--sev-info-line)]'
 	};
 
 	/** Severities currently filtered out of navigation. */

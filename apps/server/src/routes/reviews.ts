@@ -4,6 +4,7 @@ import { emptyReviewProgress, expandFileDiff, parseUnifiedDiff } from '@recoder/
 import { queueReview } from '../commands/pipeline';
 import { clearReviewEvents, subscribeReview } from '../lib/events';
 import { discussFinding, streamDiscussFinding, discussRequestSchema } from '../lib/discuss';
+import { runRereview, rereviewRequestSchema } from '../lib/rereview';
 import { readSandboxFile } from '../lib/harness';
 import {
 	applyFixCommit,
@@ -152,6 +153,47 @@ app.post('/:id/discuss/stream', async (c) => {
 			connection: 'keep-alive'
 		}
 	});
+});
+/**
+ * Developer notes → batch re-review pass. The model answers each note and may
+ * add findings, which are merged into the stored review so a refresh keeps them.
+ */
+app.post('/:id/rereview', async (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const parsed = rereviewRequestSchema.safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) {
+		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
+	}
+	const diff = reviewDiffs.get(review.id);
+	if (!diff) return c.json({ error: 'no diff yet' }, 409);
+	try {
+		const result = await withReviewMetrics(review.id, 'discussion', () => runRereview({
+			notes: parsed.data.notes,
+			diff,
+			sandboxPath: reviewSandboxes.get(review.id) ?? null,
+			existingFindings: review.findings
+		}));
+		if (result.findings.length > 0) {
+			const current = db.reviews.get(review.id);
+			if (current) {
+				const seen = new Set(current.findings.map((f) => `${f.file}:${f.line ?? ''}:${f.message}`));
+				const fresh = result.findings.filter((f) => !seen.has(`${f.file}:${f.line ?? ''}:${f.message}`));
+				result.findings = fresh;
+				if (fresh.length > 0) {
+					db.reviews.set({
+						...current,
+						findings: [...current.findings, ...fresh],
+						updatedAt: new Date().toISOString()
+					});
+				}
+			}
+		}
+		return c.json(result);
+	} catch (err) {
+		if (err instanceof LlmError) return c.json({ error: err.message }, 502);
+		throw err;
+	}
 });
 /** Suggest a minimal unified-diff fix for one finding (on demand, not stored). */
 app.post('/:id/fixes/suggest', async (c) => {

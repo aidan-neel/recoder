@@ -4,8 +4,7 @@ WORKDIR /app
 
 # git + gh power the PR fetch and sandbox checkouts (public repos work
 # without auth; private repos need GH_TOKEN / `gh auth login` at runtime).
-RUN apk add --no-cache git github-cli glab nodejs npm \
-    && npm install --global @openai/codex@0.153.4
+RUN apk add --no-cache git github-cli glab
 
 COPY package.json bun.lock* turbo.json ./
 COPY packages/shared ./packages/shared

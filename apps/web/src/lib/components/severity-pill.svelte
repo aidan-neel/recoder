@@ -15,10 +15,10 @@
 	};
 
 	const style: Record<FindingSeverity, string> = {
-		high: 'bg-error/15 text-error',
-		medium: 'bg-warning/15 text-warning',
-		low: 'bg-[#141c28] text-[#5698ff]',
-		info: 'bg-secondary text-foreground-muted'
+		high: 'bg-[var(--sev-high-bg)] text-[var(--sev-high-fg)] ring-1 ring-inset ring-[var(--sev-high-line)]',
+		medium: 'bg-[var(--sev-medium-bg)] text-[var(--sev-medium-fg)] ring-1 ring-inset ring-[var(--sev-medium-line)]',
+		low: 'bg-[var(--sev-low-bg)] text-[var(--sev-low-fg)] ring-1 ring-inset ring-[var(--sev-low-line)]',
+		info: 'bg-[var(--sev-info-bg)] text-[var(--sev-info-fg)] ring-1 ring-inset ring-[var(--sev-info-line)]'
 	};
 </script>
 

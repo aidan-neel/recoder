@@ -19,6 +19,8 @@ import type {
 	Repo,
 	Review,
 	ReviewMetrics,
+	RereviewRequest,
+	RereviewResponse,
 	SuggestFixRequest,
 	SuggestFixResponse
 } from '@recoder/shared';
@@ -112,6 +114,12 @@ export const serverApi = {
 		if (!result) throw new Error('The reviewer did not respond.');
 		return result;
 	},
+	/** Batch re-review pass driven by the developer's notes. */
+	rereview: (reviewId: string, input: RereviewRequest) =>
+		req<RereviewResponse>(`/api/reviews/${reviewId}/rereview`, {
+			method: 'POST',
+			body: JSON.stringify(input)
+		}),
 	suggestFix: (reviewId: string, input: SuggestFixRequest) =>
 		req<SuggestFixResponse>(`/api/reviews/${reviewId}/fixes/suggest`, {
 			method: 'POST',

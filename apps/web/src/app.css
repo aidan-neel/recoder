@@ -65,6 +65,36 @@
 	--sivir-neutral-900: hsl(0 0% 93%);
 }
 
+/* Finding severity chips — explicit tints so they read vivid, not washed out. */
+:root {
+	--sev-high-bg: #ffece9;
+	--sev-high-fg: #ac011a;
+	--sev-high-line: #fcc0ba;
+	--sev-medium-bg: #ffefd1;
+	--sev-medium-fg: #935b00;
+	--sev-medium-line: #f4ca84;
+	--sev-low-bg: #e6f3ff;
+	--sev-low-fg: #0b58bb;
+	--sev-low-line: #aed0ff;
+	--sev-info-bg: #eef0f3;
+	--sev-info-fg: #4e5661;
+	--sev-info-line: #c9ced4;
+}
+.dark {
+	--sev-high-bg: #682321;
+	--sev-high-fg: #ff9189;
+	--sev-high-line: #ab413e;
+	--sev-medium-bg: #5b3b00;
+	--sev-medium-fg: #ffc249;
+	--sev-medium-line: #a27000;
+	--sev-low-bg: #173c70;
+	--sev-low-fg: #82b9ff;
+	--sev-low-line: #366dbe;
+	--sev-info-bg: #33363a;
+	--sev-info-fg: #b2b8bf;
+	--sev-info-line: #5f646a;
+}
+
 :root,
 .dark {
 	--font-size-header: 16px;

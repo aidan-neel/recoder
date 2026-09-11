@@ -22,10 +22,12 @@
 </script>
 
 <div
-	class="rounded-lg border border-border bg-card p-3 font-sans {focused
+	class="select-none rounded-lg border border-border bg-card p-3 font-sans {focused
 		? 'ring-1 ring-[#5698ff]'
 		: ''}"
-	onmouseenter={() => (findingsStore.hoveredId = finding.id)}
+	onmouseenter={() => {
+		if (!findingsStore.suppressHover) findingsStore.hoveredId = finding.id;
+	}}
 	onmouseleave={() => (findingsStore.hoveredId = null)}
 	role="article"
 >

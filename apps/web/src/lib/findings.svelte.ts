@@ -178,6 +178,8 @@ class FindingsStore {
 	activeId = $state<string | null>(null);
 	/** Finding id currently hovered (card or code) — drives cross-highlighting. */
 	hoveredId = $state<string | null>(null);
+	/** While true (a selection drag is in progress), hovering never cross-highlights. */
+	suppressHover = $state(false);
 	/** When true, info findings are omitted from the tree, diff, and navigator. */
 	hideInfo = $state(loadHideInfo());
 

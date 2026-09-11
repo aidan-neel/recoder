@@ -9,7 +9,7 @@ import { effectiveReviewEnv, getStoredSettings } from './review-settings.js';
  * vLLM (`http://host:8000/v1`), OpenRouter
  * (`https://openrouter.ai/api/v1`), and DashScope
  * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). Subscription
- * entries explicitly select the Codex App Server adapter instead; they never
+ * entries explicitly select the direct ChatGPT OAuth adapter instead; they never
  * inherit an API endpoint or key from the shared environment.
  *
  * One shared model by default; override per role when you want a stronger
@@ -85,7 +85,7 @@ export function configForRole(role: ReviewRole): RoleConfig {
 	const entry = entries.find((e) => e.id === entryId) ?? entries[0];
 	if (entry) {
 		if (entry.provider === 'codex') {
-			return { role, provider: 'codex', model: entry.model, baseUrl: '', apiKey: '', reasoningEffort: reasoningEffort ?? 'low' };
+			return { role, provider: 'codex', model: entry.model, baseUrl: '', apiKey: '', reasoningEffort: reasoningEffort ?? 'medium' };
 		}
 		const baseUrl = entry.baseUrl || eff.baseUrl;
 		const apiKey = entry.apiKey || eff.apiKey;

@@ -125,7 +125,7 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 		if (opts.provider === 'codex') {
 			const { codex } = await import('./codex');
 			try { result = await codex.complete(remaining); }
-			catch (error) { throw new LlmError(0, error instanceof Error ? error.message : 'Codex request failed'); }
+			catch (error) { if (error instanceof LlmError) throw error; throw new LlmError(0, 'ChatGPT request failed'); }
 		} else result = await chatCompletionInner(remaining);
 		success = true;
 		return result;
@@ -196,19 +196,15 @@ export async function streamChatCompletion(
 	opts: ChatOptions,
 	onToken: (text: string) => void
 ): Promise<string> {
-	if (opts.provider === 'codex') {
-		// Preserve the existing limiter/deadline path; emit only the final answer,
-		// never Codex commentary or reasoning as a discussion response.
-		const reply = await chatCompletion(opts);
-		onToken(reply);
-		return reply;
-	}
 	const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
 	await acquireLlmSlot(opts.signal, Math.max(1, deadline - Date.now()));
-	const tracking = trackTokenCall(opts.model, 'openai-compatible');
+	const tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
 	let success = false;
 	try {
-		const result = await streamChatCompletionInner({ ...opts, timeoutMs: Math.max(1, deadline - Date.now()), onUsage: (usage) => { tracking.usage(usage); opts.onUsage?.(usage); } }, onToken);
+		const remaining = { ...opts, timeoutMs: Math.max(1, deadline - Date.now()), onUsage: (usage: TokenUsage) => { tracking.usage(usage); opts.onUsage?.(usage); } };
+		const result = opts.provider === 'codex'
+			? await (await import('./codex')).codex.complete(remaining, onToken)
+			: await streamChatCompletionInner(remaining, onToken);
 		success = true;
 		return result;
 	} finally {

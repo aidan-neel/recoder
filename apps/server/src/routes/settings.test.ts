@@ -48,7 +48,7 @@ describe('review settings', () => {
 		expect(getStoredSettings().roles).toEqual({ security: 'sub' });
 		expect(configForRole('security').reasoningEffort).toBe('high');
 		expect(configForRole('perf').reasoningEffort).toBe('medium');
-		expect(configForRole('docs').reasoningEffort).toBe('low');
+		expect(configForRole('docs').reasoningEffort).toBe('medium');
 		const put = await app.request('/api/settings/models', {
 			method: 'PUT', headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ maxFiles: 10, roleEfforts: {} })
@@ -76,7 +76,7 @@ describe('review settings', () => {
 
 	test('invalid effort values and unknown roles are rejected without changing settings', async () => {
 		setReviewOverrides({ roleEfforts: { security: 'high' } });
-		for (const roleEfforts of [{ security: 'minimal' }, { security: null }, { security: '' }, { security: 1 }, { unknown: 'low' }, [], null]) {
+		for (const roleEfforts of [{ security: 'ultra' }, { security: null }, { security: '' }, { security: 1 }, { unknown: 'low' }, [], null]) {
 			const res = await app.request('/api/settings/models', {
 				method: 'PATCH', headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ roleEfforts })

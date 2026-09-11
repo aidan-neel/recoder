@@ -112,13 +112,17 @@ test('cancellation before acquiring capacity does not invent a model request', a
 
 test('Codex chat and streaming followups each count once and separate the same model across providers', async () => {
 	const a = review();
-	codex.complete = async (options) => {
+	codex.complete = async (options, onToken) => {
+		onToken?.('o');
 		options.onUsage?.(normalizeTokenUsage({ inputTokens: 50, outputTokens: 10 }, 'codex'));
+		onToken?.('k');
 		options.onUsage?.(normalizeTokenUsage({ inputTokens: 100, outputTokens: 30 }, 'codex'));
 		return 'ok';
 	};
 	await withReviewMetrics(a.id, 'pipeline', () => chatCompletion({ ...opts, provider: 'codex' }));
-	await withReviewMetrics(a.id, 'discussion', () => streamChatCompletion({ ...opts, provider: 'codex' }, () => {}));
+	const chunks: string[] = [];
+	await withReviewMetrics(a.id, 'discussion', () => streamChatCompletion({ ...opts, provider: 'codex' }, (text) => chunks.push(text)));
+	expect(chunks).toEqual(['o', 'k']);
 	await withReviewMetrics(a.id, 'discussion', () => chatCompletion(opts));
 	expect(getReviewMetrics(a.id)?.models.map((model) => [model.provider, model.calls, model.usage.totalTokens])).toEqual([['codex', 2, 260], ['openai-compatible', 1, 130]]);
 });

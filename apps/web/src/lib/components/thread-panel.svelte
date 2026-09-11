@@ -11,6 +11,7 @@
 	import * as Message from '@sivir-ui/svelte/components/message';
 	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
+	import { Textarea } from '@sivir-ui/svelte/components/textarea';
 	import SeverityPill from './severity-pill.svelte';
 	import { SEVERITY_DOT, findingsStore } from '$lib/findings.svelte';
 	import { serverApi } from '$lib/server-api';
@@ -82,12 +83,6 @@
 		if (!findingId || composerBusy) return;
 		draft = 'Suggest a fix for this finding';
 		void send();
-	}
-
-	function autoresize(): void {
-		if (!inputEl) return;
-		inputEl.style.height = 'auto';
-		inputEl.style.height = `${Math.min(inputEl.scrollHeight, 120)}px`;
 	}
 
 	function onSelectionChange(): void {
@@ -332,10 +327,10 @@
 		</Conversation.Root>
 
 		<div data-composer class="m-3 flex shrink-0 flex-col gap-2 rounded-lg border border-border bg-card p-2">
-			<textarea
-				bind:this={inputEl}
+			<Textarea
+				bind:element={inputEl}
 				bind:value={draft}
-				oninput={autoresize}
+				autoresize
 				onkeydown={onKeydown}
 				rows={2}
 				name="discussion"
@@ -344,8 +339,8 @@
 					: 'Select a finding'}
 				aria-label={finding ? 'Ask about this finding' : 'Select a finding'}
 				disabled={composerBusy || !finding}
-				class="block min-h-14 max-h-[120px] w-full resize-none rounded-sm border-0 bg-transparent px-2 py-1.5 text-base leading-relaxed placeholder:text-foreground-muted disabled:opacity-60 sm:text-[14px]"
-			></textarea>
+				class="min-h-14 max-h-[120px] w-full rounded-sm border-0 bg-transparent px-2 py-1.5 text-base leading-relaxed placeholder:text-foreground-muted disabled:opacity-60 sm:text-[14px]"
+			/>
 			{#if sendError}
 				<p class="break-words px-2 text-[13px] font-medium text-error" role="alert">{sendError}</p>
 			{/if}
