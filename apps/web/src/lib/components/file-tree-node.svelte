@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import Minus from '@lucide/svelte/icons/minus';
 	import Plus from '@lucide/svelte/icons/plus';
+	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import { FINDING_DOT, type FileBadge, type TreeNode } from '$lib/file-tree';
 	import { getFileIcon, getFolderIcon } from '$lib/file-icons';
@@ -18,9 +20,10 @@
 
 	let { node, selectedId, onSelect, parentPath = '', badges, onJump }: Props = $props();
 	// Stable identity for this node instance (props never change per instance).
-	const key =
-		node.kind === 'folder' ? (parentPath ? `${parentPath}/${node.name}` : node.name) : node.id;
-	const fullPath = $derived(node.kind === 'folder' ? key : node.id);
+	const key = untrack(() =>
+		node.kind === 'folder' ? (parentPath ? `${parentPath}/${node.name}` : node.name) : node.id
+	);
+	const fullPath = key;
 	let open = $state(folderOpen.isOpen(key));
 
 	$effect(() => {
@@ -31,7 +34,7 @@
 {#if node.kind === 'folder'}
 	<Collapsible.Root bind:open>
 		<Collapsible.Trigger
-			class="flex h-8 w-full items-center gap-1.5 rounded-md px-1 text-left text-[16px] text-foreground-muted transition-colors hover:bg-secondary/60 hover:text-foreground"
+		class="flex h-9 w-full items-center gap-1.5 rounded-md px-1 text-left text-[16px] text-foreground-muted transition-colors hover:bg-secondary/60 hover:text-foreground"
 		>
 			{#if open}
 				<Minus size={12} />
@@ -53,11 +56,12 @@
 	{@const selected = node.id === selectedId}
 	{@const badge = badges?.get(node.id)}
 	<div
-		class="flex h-8 w-full items-center gap-2 rounded-md px-2 transition-colors {selected
+		class="flex h-9 w-full items-center gap-2 rounded-md px-2 transition-colors {selected
 			? 'bg-secondary text-foreground'
 			: 'text-foreground-muted hover:bg-secondary/60 hover:text-foreground'}"
 	>
-		<button
+		<Button
+			unstyled
 			onclick={() => onSelect(node.id)}
 			aria-current={selected}
 			aria-label="Show {node.name}"
@@ -81,18 +85,20 @@
 					></span>
 				{/if}
 			</span>
-		</button>
+		</Button>
 		{#if badge && onJump}
-			<button
+			<Button
 				type="button"
+				variant="quiet"
+				size="icon"
 				onclick={() => onJump(node.id, badge.findingId)}
 				title="Jump to finding"
 				aria-label="{badge.count} finding{badge.count === 1 ? '' : 's'} in {node.name} — jump to finding"
-				class="shrink-0 rounded bg-secondary px-1.5 py-px font-mono text-[12px] select-none transition-colors hover:bg-foreground/15"
-				style:color={FINDING_DOT[badge.kind]}
+				class="shrink-0 font-mono text-[12px] select-none"
+				style={`color: ${FINDING_DOT[badge.kind]}`}
 			>
 				{badge.count}
-			</button>
+			</Button>
 		{/if}
 	</div>
 {/if}

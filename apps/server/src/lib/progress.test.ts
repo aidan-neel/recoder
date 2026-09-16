@@ -1,9 +1,30 @@
 import { expect, test } from 'bun:test';
 import { app } from '../app';
 import { db, reviewProgress } from '../store';
-import { emitReviewEvent, listenerCount, reportReviewTask, reviewEventBuffer, trackReviewTask } from './events';
+import { emitReviewEvent, listenerCount, reportReviewTask, reportReviewReasoning, reportReviewTool, reviewEventBuffer, trackReviewTask } from './events';
 import { chatCompletion, resetLlmLimiter } from './llm';
 import { applyProgressMessage, emptyReviewProgress, taskSummary } from '../../../web/src/lib/review-progress-state';
+
+test('streamed traces match persisted reconnect snapshots and keep assignment ownership', () => {
+	const id = crypto.randomUUID();
+	const first = { id: 'turn-a', assignmentId: 'correctness-a', role: 'correctness', text: 'First' };
+	reportReviewReasoning(id, first);
+	const startedAt = reviewProgress.get(id)!.reasoning![0].at;
+	reportReviewReasoning(id, { ...first, text: 'First update' });
+	reportReviewReasoning(id, { ...first, id: 'turn-b', assignmentId: 'correctness-b', text: 'Different assignment' });
+	const tool = { id: 'tool-a', assignmentId: 'correctness-a', role: 'correctness', command: 'readDiff src/a.ts', status: 'running' as const, exitCode: null, startedAt };
+	reportReviewTool(id, tool);
+	reportReviewTool(id, { ...tool, status: 'done', elapsedMs: 31, finishedAt: startedAt });
+	let client = emptyReviewProgress(id);
+	for (const event of reviewEventBuffer(id)) client = applyProgressMessage(client, event);
+	const stored = reviewProgress.get(id)!;
+	expect(client).toEqual(stored);
+	expect(client.reasoning).toHaveLength(2);
+	expect(client.reasoning![0]).toMatchObject({ at: startedAt, text: 'First update', assignmentId: 'correctness-a' });
+	expect(client.toolCalls).toHaveLength(1);
+	expect(client.activity).toHaveLength(1);
+	expect(applyProgressMessage(emptyReviewProgress(id), { type: 'snapshot', snapshot: stored })).toEqual(client);
+});
 
 test('task snapshots retain early completions after event history overflows', () => {
 	const id = crypto.randomUUID();

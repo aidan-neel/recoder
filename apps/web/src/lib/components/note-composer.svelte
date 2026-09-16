@@ -31,5 +31,5 @@
 	onkeydown={onKeydown}
 	{placeholder}
 	aria-label="Review note"
-	class="border border-[var(--color-input)] shadow-[0_12px_32px_-8px_rgba(0,0,0,0.7)] focus-visible:border-[var(--color-input)] focus-visible:shadow-[0_12px_32px_-8px_rgba(0,0,0,0.7)]"
+	class="shadow-[var(--elevation-float)]"
 />

@@ -1,10 +1,15 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { untrack } from 'svelte';
+	import Files from '@lucide/svelte/icons/files';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import * as Alert from '@sivir-ui/svelte/components/alert';
+	import * as Card from '@sivir-ui/svelte/components/card';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
+	import * as Sheet from '@sivir-ui/svelte/components/sheet';
 	import LiveReviewProgress from '$lib/components/live-review-progress.svelte';
 	import ReviewProgress from '$lib/components/review-progress.svelte';
 	import ReviewMetricsModal from '$lib/components/review-metrics-modal.svelte';
@@ -42,6 +47,7 @@
 	let backendDown = $state(false);
 	/** Bumped by the retry button to re-run the backend check. */
 	let retryNonce = $state(0);
+	let filesOpen = $state(false);
 
 	async function refreshBackend(currentId: string): Promise<boolean> {
 		try {
@@ -115,17 +121,8 @@
 		};
 	});
 
-	// Peek at the (partial) diff while a backend review is still running.
+	// Keep the progress transcript available after completion until Open diff is selected.
 	let peekDiff = $state(false);
-	$effect(() => {
-		if (
-			backendReview &&
-			backendReview.status !== 'queued' &&
-			backendReview.status !== 'running'
-		) {
-			peekDiff = false;
-		}
-	});
 
 	const isBackend = $derived(backendChecked && backendReview !== null);
 
@@ -178,20 +175,25 @@
 	const SEV_RANK = { high: 0, medium: 1, low: 2, info: 3 } as const;
 	let lastAutoFile: string | null = $state(null);
 	let userPickedFile = $state(false);
+	let resetSessionId: string | null = null;
 
 	$effect(() => {
-		void id;
-		lastAutoFile = null;
-		userPickedFile = false;
-		findingsSyncedFor = null;
-		peekDiff = false;
-		threadsStore.close();
-		threadsStore.pendingMessage = null;
-		notesStore.clear();
-		// Drop the previous session's file + findings immediately so the new
-		// session never flashes stale content while its review loads.
-		sessionFile.select(DEFAULT_FILE);
-		findingsStore.replaceAll([]);
+		const currentId = id;
+		if (resetSessionId === currentId) return;
+		resetSessionId = currentId;
+		untrack(() => {
+			lastAutoFile = null;
+			userPickedFile = false;
+			findingsSyncedFor = null;
+			peekDiff = false;
+			threadsStore.close();
+			threadsStore.pendingMessage = null;
+			notesStore.clear();
+			// Drop the previous session's file + findings immediately so the new
+			// session never flashes stale content while its review loads.
+			sessionFile.select(DEFAULT_FILE);
+			findingsStore.replaceAll([]);
+		});
 	});
 
 	// Selections that didn't come from the auto-picker are the user's choice.
@@ -231,6 +233,7 @@
 	async function rerunReview(): Promise<void> {
 		if (!backendReview || queueing) return;
 		queueing = true;
+		backendError = null;
 		try {
 			const review = await serverApi.queueReview({
 				repoId: backendReview.repoId,
@@ -252,15 +255,12 @@
 </script>
 
 {#if !session}
-	<div class="mx-auto flex min-h-[calc(100vh-52px-4rem)] w-full max-w-md flex-col justify-center px-4">
+	<div class="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col justify-center px-4">
 		<h1 class="text-lg font-semibold tracking-tight">Session not found</h1>
-		<p class="mt-1 text-[14px] text-foreground-muted">
-			This session doesn't exist. Start a fresh review instead.
-		</p>
 		<Button href="/" class="mt-4 w-fit font-sans">Start a review</Button>
 	</div>
 {:else if !backendChecked}
-	<div class="mx-auto flex min-h-[calc(100vh-52px-4rem)] w-full max-w-md flex-col justify-center gap-3 px-4" role="status" aria-label="Loading session">
+	<div class="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col justify-center gap-3 px-4" role="status" aria-label="Loading session">
 		<Skeleton class="h-7 w-2/3 rounded-lg" />
 		<Skeleton class="h-4 w-full rounded-md" />
 		<Skeleton class="h-4 w-5/6 rounded-md" />
@@ -272,44 +272,60 @@
 		prLabel={session.ref}
 		onDone={() => sessionState.markReady(session.id)}
 	/>
-{:else if (backendRunning || backendReview?.status === 'failed') && backendReview && !peekDiff}
+{:else if backendReview && !peekDiff}
 	{@const diffFiles = backendFiles ?? []}
+	{#key backendReview.id}
 	<LiveReviewProgress
 		review={backendReview}
 		repo={session.name}
 		files={backendFiles ? diffFiles.length : null}
 		additions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.additions, 0) : null}
 		deletions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
-		onOpenDiff={() => (peekDiff = true)}
+		onOpenDiff={backendFiles?.length && !backendRunning ? () => (peekDiff = true) : null}
 		onRestart={() => void rerunReview()}
+		restarting={queueing}
+		actionError={backendError}
 	/>
+	{/key}
 {:else}
-	<div class="flex h-[calc(100vh-52px)] flex-col">
+	<div class="flex h-full flex-col">
 	{#if backendError}
-		<div
-			class="mx-3 mt-3 flex shrink-0 items-center gap-2 rounded-xl border border-error/40 bg-error/10 px-4 py-2.5 text-[13px]"
-			role="alert"
-		>
-			<span class="min-w-0 flex-1 truncate">
+		<Alert.Root variant="error" class="mx-3 mt-3 shrink-0">
+			<Alert.Title>Review data unavailable</Alert.Title>
+			<Alert.Description>
 				{backendDown
 					? `Review API unreachable (${backendError}) — showing local demo content.`
 					: backendError}
-			</span>
+			</Alert.Description>
 			<Button
-				variant="ghost"
-				size="sm"
-				class="h-7 shrink-0 font-sans"
+				variant="outline"
+				class="mt-2 w-fit font-sans"
 				onclick={() => (retryNonce += 1)}
 			>
 				Retry
 			</Button>
-		</div>
+		</Alert.Root>
 	{/if}
 	<div class="flex min-h-0 flex-1">
-		<div class={threadsStore.openId ? 'shrink-0 max-xl:hidden' : 'shrink-0'}>
+		<div class="shrink-0 max-lg:hidden {threadsStore.openId ? 'max-xl:hidden' : ''}">
 			<SessionSidebar fileDiffs={isBackend ? (backendFiles ?? []) : null} />
 		</div>
 		<div class="m-3 flex min-w-0 flex-1 flex-col gap-3">
+			<Sheet.Root bind:open={filesOpen}>
+				<div class="lg:hidden">
+					<Sheet.Trigger variant="outline" class="max-w-full justify-start">
+						<Files size={15} aria-hidden="true" />
+						<span class="truncate font-mono text-[13px]">{sessionFile.currentId}</span>
+					</Sheet.Trigger>
+				</div>
+				<Sheet.Content side="left" class="[&>[data-ui=sheet-surface]]:p-0">
+					<Sheet.Title class="sr-only">Changed files</Sheet.Title>
+					<SessionSidebar
+						fileDiffs={isBackend ? (backendFiles ?? []) : null}
+						onFileSelect={() => (filesOpen = false)}
+					/>
+				</Sheet.Content>
+			</Sheet.Root>
 			{#if isBackend && backendReview}
 				<div class="flex shrink-0 flex-col gap-2">
 					<div
@@ -348,26 +364,20 @@
 				<FindingsBar />
 			{/if}
 			<div class="flex min-h-0 flex-1 gap-3">
-				<div id="diff-panel" class="session-enter relative min-h-0 min-w-0 flex-1 {threadsStore.openId ? 'max-xl:hidden' : ''}" style="animation-delay: 120ms">
+				<div id="diff-panel" class="relative min-h-0 min-w-0 flex-1 {threadsStore.openId ? 'max-xl:hidden' : ''}">
 					{#if isBackend && backendReview?.status === 'failed' && !backendFiles}
-						<div
-							class="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl border border-border p-6 text-center"
-							role="alert"
-						>
-							<p class="text-[15px] font-medium">Review failed</p>
-							<p class="max-w-md text-[13px] leading-relaxed text-foreground-muted">
+						<Alert.Root variant="error" class="absolute inset-0 flex items-center justify-center p-6 text-center">
+							<Alert.Title>Review failed</Alert.Title>
+							<Alert.Description class="max-w-md">
 								{backendReview.summary ?? 'The pipeline failed before producing a diff.'}
-							</p>
-							<p class="font-mono text-[12px] text-foreground-muted">
+							</Alert.Description>
+							<Alert.Description class="font-mono text-[12px]">
 								Fix the cause, then press Review above to retry.
-							</p>
-						</div>
+							</Alert.Description>
+						</Alert.Root>
 					{:else if isBackend && !backendFiles}
-						<div
-							class="absolute inset-0 overflow-hidden rounded-xl border border-border p-4"
-							role="status"
-							aria-label="Fetching PR diff"
-						>
+						<div class="absolute inset-0" role="status" aria-label="Fetching PR diff">
+						<Card.Root class="h-full overflow-hidden p-4">
 							<div class="flex items-center gap-2 text-[14px] text-foreground-muted">
 								<Spinner size={15} aria-hidden="true" />
 								Fetching PR diff…
@@ -380,15 +390,17 @@
 								<Skeleton class="h-4 w-3/5 rounded-md" />
 								<Skeleton class="h-4 w-5/6 rounded-md" />
 							</div>
+						</Card.Root>
 						</div>
 					{:else}
 						<ScrollArea
 							orientation="vertical"
 							aria-label="Code diff"
 							class="absolute inset-0 rounded-xl border border-border"
+							showCues={false}
 						>
 							{#key fileDiff.path}
-								<div class="diff-enter min-h-full">
+								<div class="min-h-full">
 									<CodeDiff diff={fileDiff} findings={displayFindings} />
 								</div>
 							{/key}

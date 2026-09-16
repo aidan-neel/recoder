@@ -58,6 +58,11 @@ export const serverApi = {
 		req<PullPreview>(`/api/repos/${repoId}/pulls/${n}`),
 	listPrs: (repoId: string) => req<PullRequest[]>(`/api/repos/${repoId}/pulls`),
 	listReviews: () => req<Review[]>('/api/reviews'),
+	/** Compact live progress per review (tasks settled/total, active specialists). */
+	reviewSummaries: () =>
+		req<Record<string, { tasksDone: number; tasksTotal: number; specialists: number }>>(
+			'/api/reviews/progress-summaries'
+		),
 	getReview: (id: string) => req<Review>(`/api/reviews/${id}`),
 	getReviewMetrics: (id: string, signal?: AbortSignal) => req<ReviewMetrics | null>(`/api/reviews/${id}/metrics`, { signal }),
 	getReviewFiles: (id: string) => req<FileDiff[]>(`/api/reviews/${id}/files`),

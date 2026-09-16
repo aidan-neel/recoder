@@ -32,6 +32,28 @@ const app = new Hono();
 
 app.get('/', (c) => c.json(db.reviews.list()));
 
+/** Compact live progress per review, for the home dashboard's recent-session list. */
+app.get('/progress-summaries', (c) => {
+	const summaries: Record<
+		string,
+		{ tasksDone: number; tasksTotal: number; specialists: number }
+	> = {};
+	for (const progress of reviewProgress.list()) {
+		const tasks = Object.values(progress.tasks ?? {});
+		summaries[progress.id] = {
+			tasksTotal: tasks.length,
+			tasksDone: tasks.filter(
+				(task) =>
+					task.status === 'done' || task.status === 'skipped' || task.status === 'error'
+			).length,
+			specialists: (progress.assignments ?? []).filter(
+				(assignment) => assignment.status === 'running'
+			).length
+		};
+	}
+	return c.json(summaries);
+});
+
 app.get('/:id/metrics', (c) => {
 	c.header('Cache-Control', 'no-store');
 	const id = c.req.param('id');

@@ -5,7 +5,9 @@ import {
 	reportReviewAssignment,
 	reportReviewCoverage,
 	reportReviewPlan,
+	reportReviewReasoning,
 	reportReviewTask,
+	reportReviewTool,
 	trackReviewTask
 } from '../lib/events';
 import { fetchPullRequest } from '../lib/gh';
@@ -192,6 +194,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 					const snapshot = reviewProgress.get(reviewId);
 					if (snapshot) reviewProgress.set({ ...snapshot, budget });
 				},
+				onReasoning: (reasoning) => reportReviewReasoning(reviewId, reasoning),
+				onTool: (tool) => reportReviewTool(reviewId, tool),
 				onCandidates: (count) => {
 					const snapshot = reviewProgress.get(reviewId);
 					if (snapshot) reviewProgress.set({ ...snapshot, candidateCount: count });
@@ -202,8 +206,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 					});
 				},
 				onStage: (stage) => {
-					const snapshot = reviewProgress.get(reviewId);
-					if (snapshot) reviewProgress.set({ ...snapshot, stage });
+					emitReviewEvent(reviewId, { type: 'step', step: stage, message: '', data: { stage } });
 				}
 			}
 		);

@@ -5,13 +5,14 @@
 	import Paperclip from '@lucide/svelte/icons/paperclip';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import { Badge } from '@sivir-ui/svelte/components/badge';
+	import * as Card from '@sivir-ui/svelte/components/card';
+	import * as Composer from '@sivir-ui/svelte/components/composer';
 	import * as Conversation from '@sivir-ui/svelte/components/conversation';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 	import * as Message from '@sivir-ui/svelte/components/message';
 	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
-	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import { Textarea } from '@sivir-ui/svelte/components/textarea';
 	import SeverityPill from './severity-pill.svelte';
 	import { SEVERITY_DOT, findingsStore } from '$lib/findings.svelte';
 	import { serverApi } from '$lib/server-api';
@@ -185,12 +186,6 @@
 		return () => document.removeEventListener('selectionchange', onSelectionChange);
 	});
 
-	function onKeydown(event: KeyboardEvent): void {
-		if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
-			event.preventDefault();
-			send();
-		}
-	}
 </script>
 
 	<svelte:window onkeydown={(event) => {
@@ -204,9 +199,10 @@
 
 	<section
 		id="finding-thread"
-		aria-label="Finding thread"
-		class="thread-panel-enter relative flex min-h-0 min-w-0 w-full flex-col overflow-hidden rounded-xl border border-border bg-background xl:w-[440px] xl:shrink-0 2xl:w-[520px]"
+		aria-label="Finding discussion"
+		class="thread-panel-enter relative min-h-0 min-w-0 w-full xl:w-[440px] xl:shrink-0 2xl:w-[520px]"
 	>
+	<Card.Root class="h-full overflow-hidden bg-background p-0">
 		<div class="flex h-11 w-full shrink-0 items-center gap-2 border-b border-border px-4">
 			{#if finding}
 				<SeverityPill severity={finding.severity} />
@@ -239,10 +235,8 @@
 		</div>
 
 		{#if finding && contextOpen}
-			<div
-				class="mx-3 mt-3 max-h-[30%] shrink-0 overflow-y-auto rounded-xl border border-border bg-card p-3"
-				aria-label="Finding context"
-			>
+			<div class="mx-3 mt-3 max-h-[30%] shrink-0" aria-label="Finding context">
+			<Card.Root class="max-h-full overflow-y-auto p-3">
 				<p
 					class="m-0 flex items-center gap-1.5 font-mono text-[13px]"
 					style:color={SEVERITY_DOT[finding.severity]}
@@ -259,11 +253,7 @@
 				{#if finding.status !== 'open'}
 					<div class="mt-2 flex items-center gap-2">
 						{#if finding.status === 'accepted'}
-							<span
-								class="rounded bg-success/15 px-1.5 py-0.5 font-sans text-[13px] font-semibold text-success"
-							>
-								Fixed
-							</span>
+							<Badge variant="success">Fixed</Badge>
 							{#if finding.fixedBy}
 								<span class="font-mono text-[12px] text-foreground-muted">
 									· {formatAgentName(finding.fixedBy)}
@@ -274,7 +264,6 @@
 						{/if}
 						<Button
 							variant="ghost"
-							size="sm"
 							class="font-sans text-[14px]"
 							onclick={() => findingsStore.reopen(finding.id)}
 						>
@@ -282,6 +271,7 @@
 						</Button>
 					</div>
 				{/if}
+			</Card.Root>
 			</div>
 		{/if}
 
@@ -292,8 +282,7 @@
 			>
 				{#each thread.messages as message (message.id)}
 					{#if message.role === 'agent'}
-						<div class="message-in">
-							<Message.Root from="assistant" status={message.streaming ? 'streaming' : 'idle'}>
+						<Message.Root from="assistant" status={message.streaming ? 'streaming' : 'idle'}>
 								<Message.Content>
 									{#if message.streaming}
 										<ResponseStream textStream={message.body} streaming class="font-normal" />
@@ -301,45 +290,42 @@
 										<Markdown content={message.body} />
 									{/if}
 								</Message.Content>
-							</Message.Root>
-						</div>
+						</Message.Root>
 					{:else}
-						<div class="message-in">
-							<Message.Root from="user">
+						<Message.Root from="user">
 								<Message.Content>
 									<Markdown content={message.body} />
 								</Message.Content>
-							</Message.Root>
-						</div>
+						</Message.Root>
 					{/if}
 				{:else}
 					{#if finding}
-						<Conversation.Empty
-							title="No replies yet"
-							description="Ask {formatAgentName(active)} about this finding below."
-						/>
+						<Conversation.Empty title="No replies yet" description="" />
 					{:else}
-						<Conversation.Empty title="Select a finding" />
+						<Conversation.Empty title="Select a finding" description="" />
 					{/if}
 				{/each}
 			</Conversation.Content>
 			<Conversation.ScrollButton />
 		</Conversation.Root>
 
-		<div data-composer class="m-3 flex shrink-0 flex-col gap-2 rounded-lg border border-border bg-card p-2">
-			<Textarea
+		<Composer.Root
+			data-composer
+			class="m-3 shrink-0"
+			bind:value={draft}
+			status={sendError ? 'error' : sending ? 'submitting' : 'idle'}
+			disabled={composerBusy || !finding}
+			onSubmit={() => send()}
+		>
+			<Composer.Input
 				bind:element={inputEl}
-				bind:value={draft}
-				autoresize
-				onkeydown={onKeydown}
 				rows={2}
 				name="discussion"
 				placeholder={finding
 					? `Ask ${formatAgentName(active)} about this finding…`
 					: 'Select a finding'}
 				aria-label={finding ? 'Ask about this finding' : 'Select a finding'}
-				disabled={composerBusy || !finding}
-				class="min-h-14 max-h-[120px] w-full rounded-sm border-0 bg-transparent px-2 py-1.5 text-base leading-relaxed placeholder:text-foreground-muted disabled:opacity-60 sm:text-[14px]"
+				class="min-h-16 max-h-[120px] text-base sm:text-[14px]"
 			/>
 			{#if sendError}
 				<p class="break-words px-2 text-[13px] font-medium text-error" role="alert">{sendError}</p>
@@ -365,7 +351,7 @@
 					{/if}
 				</div>
 			{/if}
-			<div class="flex flex-wrap items-center gap-1.5">
+			<Composer.Toolbar variant="inset">
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger
 							variant="ghost"
@@ -401,20 +387,13 @@
 					>
 						Suggest fix
 					</Button>
-					<Button
-						variant="primary"
-						size="sm"
+					<Composer.Submit
 						class="h-9 min-w-16"
-						disabled={!finding || !draft.trim() || composerBusy}
-						aria-label={sending ? 'Sending' : 'Send'}
-						onclick={() => void send()}
-					>
-						{#if sending}
-							<Spinner size={14} aria-hidden="true" />
-						{/if}
-						Send
-				</Button>
+						disabled={!finding || composerBusy}
+						loadingLabel="Sending"
+					/>
 				</div>
-			</div>
-		</div>
+			</Composer.Toolbar>
+		</Composer.Root>
+	</Card.Root>
 	</section>

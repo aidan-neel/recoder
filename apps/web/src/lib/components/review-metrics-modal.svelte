@@ -121,10 +121,6 @@
 	>
 		<Modal.Header>
 			<Modal.Title>Review token usage</Modal.Title>
-			<Modal.Description>
-				Review pipeline, discussions, and fix suggestions for this review,
-				including retries.
-			</Modal.Description>
 		</Modal.Header>
 		<Modal.Body class="min-w-0 gap-5">
 			<p role="status" class={loading ? 'text-sm text-foreground-muted' : 'sr-only'}>
@@ -138,7 +134,6 @@
 					</Alert.Description>
 					<Button
 						variant="outline"
-						size="md"
 						class="mt-2 self-start"
 						onclick={() => retry++}>Retry</Button
 					>

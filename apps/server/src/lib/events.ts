@@ -5,8 +5,10 @@ import {
 	type ReviewAssignment,
 	type ReviewBudgetSnapshot,
 	type ReviewProgress,
+	type ReviewReasoningEntry,
 	type ReviewStage,
 	type ReviewTask,
+	type ReviewToolCall,
 	type RoleDecision
 } from '@recoder/shared';
 import { reviewProgress } from '../store';
@@ -17,7 +19,18 @@ import { reviewProgress } from '../store';
  * in-progress page (or EventSource reconnect) still sees agent output.
  */
 
-export type ReviewEventType = 'step' | 'log' | 'done' | 'error' | 'finding' | 'task' | 'plan' | 'coverage' | 'assignment';
+export type ReviewEventType =
+	| 'step'
+	| 'log'
+	| 'done'
+	| 'error'
+	| 'finding'
+	| 'task'
+	| 'plan'
+	| 'coverage'
+	| 'assignment'
+	| 'reasoning'
+	| 'tool';
 
 export interface ReviewEvent {
 	type: ReviewEventType;
@@ -70,9 +83,38 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 		if (previous?.message !== task.message || previous?.status !== task.status) {
 			snapshot.activity.push({ sequence: snapshot.sequence, message: task.message, at: message.at, agent: task.agent });
 		}
+	} else if (event.type === 'reasoning' && event.data?.reasoning) {
+		// Reasoning text streams as growing deltas sharing one id; upsert so the
+		// entry holds the accumulated text instead of every token.
+		const entry = event.data.reasoning as Omit<ReviewReasoningEntry, 'at'>;
+		const reasoning = [...(snapshot.reasoning ?? [])];
+		const index = reasoning.findIndex((item) => item.id === entry.id);
+		const next: ReviewReasoningEntry = { ...entry, text: entry.text.slice(0, 64_000), at: reasoning[index]?.at ?? message.at };
+		message.data = { ...message.data, reasoning: next };
+		if (index >= 0) reasoning[index] = next;
+		else reasoning.push(next);
+		snapshot.reasoning = reasoning.slice(-200);
+	} else if (event.type === 'tool' && event.data?.tool) {
+		const tool = event.data.tool as ReviewToolCall;
+		const toolCalls = [...(snapshot.toolCalls ?? [])];
+		const index = toolCalls.findIndex((item) => item.id === tool.id);
+		if (index >= 0) toolCalls[index] = tool;
+		else toolCalls.push(tool);
+		snapshot.toolCalls = toolCalls.slice(-300);
+		if (tool.status !== 'running') {
+			snapshot.activity.push({
+				sequence: snapshot.sequence,
+				message:
+					tool.status === 'error'
+						? `${tool.command} · failed`
+						: `${tool.command} · ${tool.exitCode === null ? 'complete' : `exit ${tool.exitCode}`}`,
+				at: message.at,
+				agent: tool.role
+			});
+		}
 	} else if (event.type === 'finding') {
 		// Candidate/finding payloads stay off the activity transcript.
-	} else {
+	} else if (message.message) {
 		snapshot.activity.push({ sequence: snapshot.sequence, message: message.message, at: message.at, agent: event.data?.agent as string | undefined ?? (event.step?.startsWith('agent:') ? event.step.slice(6) : undefined) });
 	}
 	applySnapshotPatch(snapshot, event.data);
@@ -173,6 +215,29 @@ export function reportReviewAssignment(reviewId: string, assignment: ReviewAssig
 		step: `assignment:${assignment.id}`,
 		message: assignment.currentOperation ?? assignment.title,
 		data: { assignment, assignments, agent: assignment.role }
+	});
+}
+
+/** Report accumulated provider reasoning for an assignment turn (upsert by id). */
+export function reportReviewReasoning(
+	reviewId: string,
+	reasoning: Omit<ReviewReasoningEntry, 'at'>
+): void {
+	emitReviewEvent(reviewId, {
+		type: 'reasoning',
+		step: reasoning.assignmentId ? `assignment:${reasoning.assignmentId}` : 'review',
+		message: '',
+		data: { reasoning, agent: reasoning.role }
+	});
+}
+
+/** Report one tool/retrieval call; the same id updates it from running to finished. */
+export function reportReviewTool(reviewId: string, tool: ReviewToolCall): void {
+	emitReviewEvent(reviewId, {
+		type: 'tool',
+		step: tool.assignmentId ? `assignment:${tool.assignmentId}` : 'review',
+		message: tool.command,
+		data: { tool, agent: tool.role }
 	});
 }
 

@@ -3,7 +3,20 @@ import { mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildInventory } from './inventory';
-import { EvidenceStore, sanitizeRepoPath } from './evidence';
+import { EvidenceStore, sanitizeRepoPath, type ToolCallReport } from './evidence';
+
+test('retrieval reports terminal errors and observer failures do not alter results', async () => {
+	const store = new EvidenceStore(null, buildInventory(''), 20_000);
+	const calls: ToolCallReport[] = [];
+	const [result] = await store.executeRound([{ action: 'readFile', path: '../secret' }], undefined, (tool) => calls.push(tool));
+	expect(result.ok).toBe(false);
+	expect(calls.map((call) => call.status)).toEqual(['running', 'error']);
+	expect(calls[0].id).toBe(calls[1].id);
+	expect(calls[1].exitCode).toBeNull();
+	expect(calls[1].finishedAt).toBeDefined();
+	const [again] = await store.executeRound([{ action: 'readFile', path: '../secret' }], undefined, () => { throw new Error('observer'); });
+	expect(again).toEqual(result);
+});
 
 function git(cwd: string, args: string[]): string {
 	const result = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });

@@ -2,9 +2,11 @@
 	import { untrack } from 'svelte';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import * as Popover from '@sivir-ui/svelte/components/popover';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
+	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import type { CodexConnection, CodexModel } from '@recoder/shared';
 	import { serverApi } from '$lib/server-api';
 
@@ -149,7 +151,7 @@
 </script>
 
 <section
-	class="flex min-w-0 flex-col gap-2 border-b border-border pb-4"
+	class="flex min-w-0 flex-col gap-2"
 	aria-labelledby={`${id}-title`}
 >
 	<div class="flex flex-wrap items-center justify-between gap-2">
@@ -157,7 +159,6 @@
 		{#if connection?.authenticated || connection?.login}
 			<Button
 				variant="ghost"
-				size="sm"
 				loading={busy}
 				disabled={disabled || busy}
 				aria-label={connection.authenticated
@@ -170,7 +171,6 @@
 		{:else}
 			<Button
 				variant="secondary"
-				size="sm"
 				loading={busy}
 				disabled={disabled || busy || (!connection && refreshing)}
 				aria-label="Sign in to ChatGPT"
@@ -213,15 +213,15 @@
 							aria-label="ChatGPT usage details"
 							role="region"
 							tabindex={0}
+							showCues={false}
 						>
 							<div class="flex flex-col gap-4 p-4">
 								<div class="flex flex-wrap items-center justify-between gap-2">
 									<h4 class="m-0 text-sm font-medium">Usage</h4>
-									<Button
-										variant="ghost"
-										size="icon"
-										class="size-7"
-										loading={refreshing}
+					<Button
+						variant="ghost"
+						size="icon"
+						loading={refreshing}
 										loadingLabel=""
 										disabled={busy}
 										aria-label="Refresh ChatGPT usage"
@@ -260,20 +260,14 @@
 											>
 										</div>
 										{#if percent !== null}
-											<div
-												role="meter"
-												aria-label={`${name} usage`}
-												aria-valuemin={0}
-												aria-valuemax={100}
-												aria-valuenow={percent}
-												aria-valuetext={`${Math.round(percent)}% used. ${resetLabel(limit.resetsAt)}`}
-												class="h-1 overflow-hidden rounded-full bg-border"
-											>
-												<div
-													class="h-full rounded-full bg-info-vivid"
-													style:width={`${percent}%`}
-												></div>
-											</div>
+											<Progress
+												value={percent}
+												max={100}
+												{...{
+													'aria-label': `${name} usage`,
+													'aria-valuetext': `${Math.round(percent)}% used. ${resetLabel(limit.resetsAt)}`
+												}}
+											/>
 										{/if}
 									</div>
 								{:else}
@@ -291,7 +285,7 @@
 		{/if}
 	</div>
 	{#if connection?.login && !signInOpen}
-		<Button variant="ghost" size="sm" class="self-start" onclick={() => (signInOpen = true)}>
+		<Button variant="ghost" class="self-start" onclick={() => (signInOpen = true)}>
 			Show sign-in code
 		</Button>
 	{/if}
@@ -320,22 +314,25 @@
 		<Modal.Content size="lg" aria-label="Sign in to ChatGPT">
 			<Modal.Header>
 				<Modal.Title>Sign in to ChatGPT</Modal.Title>
-				<Modal.Description>
-					Open the sign-in page and enter this code to connect your subscription.
-				</Modal.Description>
 			</Modal.Header>
 			<Modal.Body class="gap-3">
 				{#if connection?.login}
-					<code
-						class="select-all self-start rounded border border-border px-3 py-2 text-base"
-						>{connection.login.userCode}</code
-					>
-					<a
+					<p class="m-0 text-sm text-foreground-muted">
+						Enter this code on the ChatGPT sign-in page.
+					</p>
+					<Input
+						readonly
+						aria-label="ChatGPT sign-in code"
+						value={connection.login.userCode}
+						class="select-all font-mono text-base"
+					/>
+					<Button
 						href={connection.login.verificationUrl}
+						variant="outline"
 						target="_blank"
 						rel="noopener noreferrer"
-						class="self-start text-sm underline underline-offset-4"
-						>Open ChatGPT sign-in ↗</a
+						class="self-start"
+						>Open ChatGPT sign-in ↗</Button
 					>
 				{:else}
 					<p class="m-0 text-sm text-foreground-muted">Waiting for sign-in to start…</p>
@@ -343,10 +340,9 @@
 				{#if error}<p class="m-0 text-sm text-error" role="alert">{error}</p>{/if}
 			</Modal.Body>
 			<Modal.Footer>
-				<Modal.Close size="md" disabled={busy}>Cancel</Modal.Close>
+				<Modal.Close disabled={busy}>Cancel</Modal.Close>
 				<Button
 					variant="primary"
-					size="md"
 					loading={refreshing}
 					disabled={busy || !connection?.login}
 					onclick={() => void refresh()}>Check sign-in</Button

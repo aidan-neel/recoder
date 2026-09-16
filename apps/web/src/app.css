@@ -1,9 +1,3 @@
-@import '@fontsource/inter/400.css';
-@import '@fontsource/inter/500.css';
-@import '@fontsource/inter/600.css';
-@import '@fontsource/jetbrains-mono/400.css';
-@import '@fontsource/jetbrains-mono/500.css';
-@import 'tailwindcss';
 @import '@sivir-ui/svelte/ui.css';
 
 /* Readable blue text on both themes (brand indigo is too dark on dark bg). */
@@ -131,18 +125,18 @@
 :root {
 	--color-primary-stroke: transparent;
 	--ui-cursor-interactive: default;
-	--elevation-1: none;
-	--elevation-float: none;
-	--elevation-modal: none;
+	--elevation-1: 0 1px 2px oklch(0 0 0 / 0.06), 0 1px 1px oklch(0 0 0 / 0.04);
+	--elevation-float: 0 12px 32px oklch(0 0 0 / 0.12), 0 2px 8px oklch(0 0 0 / 0.08);
+	--elevation-modal: 0 24px 64px oklch(0 0 0 / 0.16), 0 4px 16px oklch(0 0 0 / 0.08);
 	--elevation-control: inset 0 0 0 1px var(--color-border);
 	--elevation-button-outline: inset 0 0 0 1px var(--color-border);
 }
 .dark {
 	--color-primary-stroke: transparent;
 	--ui-cursor-interactive: default;
-	--elevation-1: none;
-	--elevation-float: none;
-	--elevation-modal: none;
+	--elevation-1: 0 1px 2px oklch(0 0 0 / 0.24), 0 1px 1px oklch(0 0 0 / 0.18);
+	--elevation-float: 0 12px 32px oklch(0 0 0 / 0.42), 0 2px 8px oklch(0 0 0 / 0.3);
+	--elevation-modal: 0 24px 64px oklch(0 0 0 / 0.5), 0 4px 16px oklch(0 0 0 / 0.32);
 	--elevation-control: inset 0 0 0 1px var(--color-border);
 	--elevation-button-outline: inset 0 0 0 1px var(--color-border);
 }
@@ -175,69 +169,13 @@
 	--hl-attr: #79c0ff;
 }
 
-/* Animate newly opened discussions, not layout width or streaming content. */
+/* Newly opened discussions get a short, interruptible continuity cue. */
 .thread-panel-enter {
 	opacity: 1;
-	transition: opacity 130ms ease-out;
+	transition: opacity 150ms cubic-bezier(0.23, 1, 0.32, 1);
 	@starting-style {
 		opacity: 0;
 	}
-}
-
-@media (prefers-reduced-motion: no-preference) {
-	.thread-panel-enter {
-		transform: translateY(0);
-		transition: opacity 220ms cubic-bezier(0.16, 1, 0.3, 1),
-			transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
-		@starting-style {
-			opacity: 0;
-			transform: translateY(8px);
-		}
-	}
-}
-
-/* Pull request section entrance (CSS-only; transform never affects layout).
-   Runs together with the Svelte slide transition on the wrapper so the whole
-   container grows as one coordinated 270ms motion. */
-@keyframes pr-section-in {
-	from {
-		opacity: 0;
-		transform: translateY(-8px);
-		filter: blur(4px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-		filter: blur(0);
-	}
-}
-
-.pr-section-enter {
-	animation: pr-section-in 270ms cubic-bezier(0.33, 1, 0.68, 1);
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.pr-section-enter {
-		animation: none;
-	}
-}
-
-/* Chat message entrance (fade + rise + unblur). */
-@keyframes message-in {
-	from {
-		opacity: 0;
-		transform: translateY(8px);
-		filter: blur(4px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-		filter: blur(0);
-	}
-}
-
-.message-in {
-	animation: message-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Sivir stateful Button renders stacked faces (idle/loading/success/error) and hides
@@ -257,85 +195,8 @@
 	filter: blur(0);
 }
 
-/* Hide scrollbars while keeping the element scrollable. */
-.hide-scrollbar {
-	scrollbar-width: none;
-}
-.hide-scrollbar::-webkit-scrollbar {
-	display: none;
-}
-
-/* Hide the page scrollbar globally (scrolling still works). */
-html,
-body {
-	scrollbar-width: none;
-}
-html::-webkit-scrollbar,
-body::-webkit-scrollbar {
-	display: none;
-}
-
-/* Session page entrance (CSS-only, staggered via inline animation-delay). */
-@keyframes session-enter {
-	from {
-		opacity: 0;
-		transform: translateY(10px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
-.session-enter {
-	animation: session-enter 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Diff content swap when switching files. */
-@keyframes diff-enter {
-	from {
-		opacity: 0;
-		transform: translateY(4px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
-}
-
-.diff-enter {
-	animation: diff-enter 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-
-/* Agent thought-trace lines blur in as they arrive. */
-@keyframes trace-in {
-	from {
-		opacity: 0;
-		filter: blur(4px);
-		transform: translateY(2px);
-	}
-	to {
-		opacity: 1;
-		filter: blur(0);
-		transform: translateY(0);
-	}
-}
-
-.trace-in {
-	animation: trace-in 320ms ease-out both;
-}
-
 @media (prefers-reduced-motion: reduce) {
-	.session-enter {
-		animation: none;
-	}
-	.diff-enter {
-		animation: none;
-	}
-	.trace-in {
-		animation: none;
-	}
-	.message-in {
-		animation: none;
+	.thread-panel-enter {
+		transition: none;
 	}
 }

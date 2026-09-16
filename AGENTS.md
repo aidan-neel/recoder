@@ -32,4 +32,7 @@ Run the relevant `check` (and tests) before finishing a change.
   (e.g. a dense toolbar row). Prefer `md` everywhere else.
 - For square icon-only controls use `size="icon"`; keep the hit target at least
   `size-9`.
-
+- Sivir `ScrollArea` must always be used with `showCues={false}`. We never use
+  the blur/edge-fade scroll cues.
+- We do not use subtitles in our headings only titles.
+  i

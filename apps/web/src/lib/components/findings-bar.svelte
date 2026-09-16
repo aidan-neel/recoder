@@ -4,11 +4,14 @@
 	import Check from '@lucide/svelte/icons/check';
 	import Copy from '@lucide/svelte/icons/copy';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
+	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
+	import { Toggle } from '@sivir-ui/svelte/components/toggle';
 import { onDestroy, tick } from 'svelte';
 import {
 	SEVERITIES,
@@ -83,6 +86,10 @@ import {
 	}
 
 	function toggle(severity: FindingSeverity): void {
+		if (severity === 'info') {
+			findingsStore.setHideInfo(!findingsStore.hideInfo);
+			return;
+		}
 		if (hidden.has(severity)) hidden.delete(severity);
 		else hidden.add(severity);
 	}
@@ -318,8 +325,8 @@ import {
 	});
 </script>
 
-<div class="session-enter flex shrink-0 items-center gap-2" style="animation-delay: 60ms">
-	<div class="flex h-9 items-center gap-0.5 rounded-lg border border-border bg-card px-1.5">
+<div class="flex shrink-0 flex-wrap items-center gap-2">
+	<Card.Root class="flex h-10 shrink-0 flex-row items-center gap-0.5 p-1">
 		<span class="px-1.5 text-[15px] text-foreground-muted">Finding</span>
 		<span class="font-mono text-[14px]">
 			{visible.length === 0 ? 0 : position + 1} of {visible.length}
@@ -343,58 +350,21 @@ import {
 		>
 			<ChevronDown size={14} />
 		</Button>
-	</div>
+	</Card.Root>
 
 	{#each SEVERITIES as severity (severity)}
-		{#if severity === 'info'}
-			<label
-				title={findingsStore.hideInfo ? 'Show info findings' : 'Hide info findings'}
-				class="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 font-sans text-[14px] font-medium transition-all {pillStyle.info} {findingsStore.hideInfo
-					? 'opacity-40'
-					: ''}"
-			>
-				<input
-					type="checkbox"
-					class="peer sr-only"
-					checked={!findingsStore.hideInfo}
-					onchange={(e) => findingsStore.setHideInfo(!e.currentTarget.checked)}
-				/>
-				<span
-					class="flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border border-border bg-background peer-checked:border-primary peer-checked:bg-primary"
-					aria-hidden="true"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="3"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						class="size-2.5 text-[var(--color-on-primary)] {findingsStore.hideInfo
-							? 'opacity-0'
-							: 'opacity-100'}"
-					>
-						<path d="M20 6 9 17l-5-5" />
-					</svg>
-				</span>
-				Info
-				<span>{counts.info}</span>
-			</label>
-		{:else}
-			<button
-				type="button"
-				onclick={() => toggle(severity)}
-				aria-pressed={!hidden.has(severity)}
-				title="Toggle {severity} findings"
-				class="flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 font-sans text-[14px] font-medium transition-all {pillStyle[
-					severity
-				]} {hidden.has(severity) ? 'opacity-40' : ''}"
-			>
-				{sevLabel[severity]}
-				<span>{counts[severity]}</span>
-			</button>
-		{/if}
+		<Toggle
+			size="sm"
+			pressed={severity === 'info' ? !findingsStore.hideInfo : !hidden.has(severity)}
+			onPressedChange={() => toggle(severity)}
+			title="Toggle {severity} findings"
+			class="h-9 shrink-0 gap-1.5 px-2.5 font-sans text-[14px] {pillStyle[severity]} {severity === 'info'
+				? findingsStore.hideInfo ? 'opacity-40' : ''
+				: hidden.has(severity) ? 'opacity-40' : ''}"
+		>
+			{sevLabel[severity]}
+			<span>{counts[severity]}</span>
+		</Toggle>
 	{/each}
 
 	<div class="ml-auto flex min-w-0 shrink-0 items-center gap-2">
@@ -402,8 +372,8 @@ import {
 			<Tooltip.Trigger showOnClick class="shrink-0">
 				<Button
 					variant="secondary"
-					size="sm"
-					class="h-9 w-9 shrink-0 px-0"
+					size="icon"
+					class="shrink-0"
 					disabled={openItems.length === 0}
 					aria-label={findingsCopied ? 'Copied!' : 'Copy'}
 					onclick={() => void copyFindings()}
@@ -411,14 +381,14 @@ import {
 					<span class="relative grid size-4 place-items-center">
 						<Copy
 							size={15}
-							class={`col-start-1 row-start-1 transition-[transform,opacity] [transition-duration:var(--motion-duration-panel)] ease-[var(--ease-out)] ${
-								findingsCopied ? '-rotate-90 scale-50 opacity-0' : 'rotate-0 scale-100 opacity-100'
+							class={`col-start-1 row-start-1 transition-[filter,scale,opacity] duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${
+								findingsCopied ? 'scale-[0.25] opacity-0 blur-[4px]' : 'scale-100 opacity-100 blur-0'
 							}`}
 						/>
 						<Check
 							size={15}
-							class={`col-start-1 row-start-1 text-[var(--color-success)] transition-[transform,opacity] [transition-duration:var(--motion-duration-panel)] ease-[var(--ease-out)] ${
-								findingsCopied ? 'rotate-0 scale-100 opacity-100' : 'rotate-90 scale-50 opacity-0'
+							class={`col-start-1 row-start-1 text-[var(--color-success)] transition-[filter,scale,opacity] duration-150 ease-[cubic-bezier(0.2,0,0,1)] ${
+								findingsCopied ? 'scale-100 opacity-100 blur-0' : 'scale-[0.25] opacity-0 blur-[4px]'
 							}`}
 						/>
 					</span>
@@ -482,10 +452,11 @@ import {
 					<Skeleton class="h-[68px] w-full rounded-lg" />
 				</div>
 			{:else}
-				<ScrollArea aria-label="Generated fixes" class="max-h-96">
+				<ScrollArea aria-label="Generated fixes" class="max-h-96" showCues={false}>
 					<div class="grid gap-2 pr-2">
 						{#each fixAllItems as item (item.id)}
-							<div class="overflow-hidden rounded-lg border border-border" aria-label="Fix preview">
+							<div aria-label="Fix preview">
+							<Card.Root class="overflow-hidden p-0">
 								<div class="flex items-center gap-2 border-b border-border bg-background px-3 py-1.5">
 									{#if item.code}
 										<span class="font-mono text-[13px] font-semibold">{item.code}</span>
@@ -494,21 +465,13 @@ import {
 										{item.file}:{item.line}
 									</span>
 									{#if item.pushed}
-										<span class="shrink-0 rounded bg-success/15 px-1.5 py-0.5 font-sans text-[12px] font-semibold text-success">
-											Pushed
-										</span>
+										<Badge variant="success" class="shrink-0">Pushed</Badge>
 									{:else if item.error}
-										<span class="shrink-0 rounded bg-error/15 px-1.5 py-0.5 font-sans text-[12px] font-semibold text-error">
-											Failed
-										</span>
+										<Badge variant="error" class="shrink-0">Failed</Badge>
 									{:else if item.applies === true}
-										<span class="shrink-0 rounded bg-success/15 px-1.5 py-0.5 font-sans text-[12px] font-semibold text-success">
-											Applies cleanly
-										</span>
+										<Badge variant="success" class="shrink-0">Applies cleanly</Badge>
 									{:else if item.applies === false}
-										<span class="shrink-0 rounded bg-error/15 px-1.5 py-0.5 font-sans text-[12px] font-semibold text-error">
-											May not apply
-										</span>
+										<Badge variant="error" class="shrink-0">May not apply</Badge>
 									{/if}
 								</div>
 								{#if item.error}
@@ -530,6 +493,7 @@ import {
 										{item.pushError}
 									</p>
 								{/if}
+							</Card.Root>
 							</div>
 						{/each}
 					</div>

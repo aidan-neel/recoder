@@ -31,6 +31,8 @@ export interface ChatOptions {
 	onProgress?: (state: 'queued' | 'running', elapsedMs: number) => void;
 	/** Latest cumulative usage for this request, not a delta. */
 	onUsage?: (usage: TokenUsage) => void;
+	/** Provider-disclosed reasoning/thinking text, streamed as deltas when available. */
+	onReasoning?: (text: string) => void;
 }
 
 export class LlmError extends Error {
@@ -98,7 +100,10 @@ export function resetLlmLimiter(): void {
 
 /** SSE `data:` payload shape for OpenAI-compatible chat chunk streams. */
 interface ChatChunk {
-	choices?: { finish_reason?: string; delta?: { content?: string | null } }[];
+	choices?: {
+		finish_reason?: string;
+		delta?: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null };
+	}[];
 	usage?: unknown;
 	error?: { message?: string };
 }
@@ -166,10 +171,15 @@ async function chatCompletionInner(opts: ChatOptions): Promise<string> {
 			throw new LlmError(res.status, `LLM ${res.status}: ${text.slice(0, 500)}`);
 		}
 		const body = (await res.json()) as {
-			choices?: { finish_reason?: string; message?: { content?: string | null } }[];
+			choices?: {
+				finish_reason?: string;
+				message?: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null };
+			}[];
 			usage?: unknown;
 		};
 		opts.onUsage?.(normalizeTokenUsage(body.usage, 'openai-compatible'));
+		const reasoning = body.choices?.[0]?.message?.reasoning_content ?? body.choices?.[0]?.message?.reasoning;
+		if (typeof reasoning === 'string' && reasoning) opts.onReasoning?.(reasoning);
 		if (body.choices?.[0]?.finish_reason === 'length') {
 			throw new LlmError(0, 'Model output truncated at the output-token limit; return a shorter JSON result');
 		}
@@ -273,6 +283,8 @@ async function streamChatCompletionInner(
 				if (chunk.choices?.[0]?.finish_reason === 'length') {
 					streamError = 'Model output truncated at the output-token limit';
 				}
+				const reasoning = chunk.choices?.[0]?.delta?.reasoning_content ?? chunk.choices?.[0]?.delta?.reasoning;
+				if (reasoning) opts.onReasoning?.(reasoning);
 				const text = chunk.choices?.[0]?.delta?.content;
 				if (text) {
 					full += text;

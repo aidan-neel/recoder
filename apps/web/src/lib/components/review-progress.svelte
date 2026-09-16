@@ -150,6 +150,64 @@
 
 	const pendingCount = $derived(agents.filter((a) => a.status !== 'done').length);
 
+	const viewTasks = $derived(
+		agents.map((agent) => ({
+			id: `${agent.id}-task`,
+			label: 'Specialist review',
+			status: agent.status === 'done' ? ('done' as const) : ('running' as const),
+			message: agent.logs.at(-1) ?? 'Reviewing demo changes',
+			assignmentId: `${agent.id}-demo`,
+			agent: agent.id,
+			batch: Math.max(1, Math.min(3, Math.ceil(agent.progress / 34))),
+			batches: 3,
+			elapsedMs: agent.progress * 40,
+			updatedAt: new Date().toISOString()
+		}))
+	);
+
+	const viewReasoning = $derived(
+		agents.flatMap((agent) =>
+			agent.logs.length
+				? [
+						{
+							id: `${agent.id}-reason`,
+							assignmentId: `${agent.id}-demo`,
+							role: agent.id,
+							model: agent.model,
+							at: new Date().toISOString(),
+							text: agent.logs.join('\n')
+						}
+					]
+				: []
+		)
+	);
+
+	const viewTools = $derived(
+		agents.flatMap((agent) => [
+			{
+				id: `${agent.id}-t1`,
+				assignmentId: `${agent.id}-demo`,
+				role: agent.id,
+				command: `rg -n ${JSON.stringify(agent.id)} src/rate-limit`,
+				status: 'done' as const,
+				exitCode: 0,
+				startedAt: new Date().toISOString(),
+				elapsedMs: 31,
+				summary: '3 matches'
+			},
+			{
+				id: `${agent.id}-t2`,
+				assignmentId: `${agent.id}-demo`,
+				role: agent.id,
+				command: `read limiter.ts:61-84`,
+				status: agent.status === 'done' ? ('done' as const) : ('running' as const),
+				exitCode: agent.status === 'done' ? 0 : null,
+				startedAt: new Date().toISOString(),
+				elapsedMs: agent.progress * 30
+			}
+		])
+	);
+
 	let restartOpen = $state(false);
 
 	function confirmRestart() {
@@ -222,15 +280,16 @@
 	}}
 	assignments={viewAssignments}
 	findings={viewFindings}
+	tasks={viewTasks}
+	reasoning={viewReasoning}
+	toolCalls={viewTools}
+	pipelineLogs={agents.flatMap((agent) => agent.logs)}
 	{pendingCount}
 	{onOpenDiff}
 	onRestart={() => (restartOpen = true)}
 	doneHref={sessionHref}
 	stage={pendingCount ? 2 : 4}
 	stageLabel={pendingCount ? 'Specialist review' : 'Review complete'}
-	confirmed={!pendingCount}
-	candidateCount={viewFindings.length}
-	headline={pendingCount ? `${agents.filter((agent) => agent.status === 'running').length} reviewers active` : `${agents.length} complete`}
 	active={pendingCount > 0}
 />
 

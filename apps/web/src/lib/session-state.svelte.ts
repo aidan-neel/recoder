@@ -113,13 +113,6 @@ class SessionState {
 		this.persist();
 	}
 
-	rename(id: string, name: string): void {
-		const session = this.sessions.find((s) => s.id === id);
-		const trimmed = name.trim();
-		if (session && trimmed !== '') session.name = trimmed;
-		this.persist();
-	}
-
 	duplicate(id: string): Session | undefined {
 		const source = this.sessions.find((s) => s.id === id);
 		if (!source) return undefined;

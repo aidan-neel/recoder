@@ -19,7 +19,12 @@ class Theme {
 		this.ensureLoaded();
 		this.dark = !this.dark;
 		if (typeof document === 'undefined') return;
+		const freeze = document.createElement('style');
+		freeze.textContent = '*,*::before,*::after{transition:none!important}';
+		document.head.appendChild(freeze);
 		document.documentElement.classList.toggle('dark', this.dark);
+		void document.documentElement.offsetHeight;
+		requestAnimationFrame(() => freeze.remove());
 		try {
 			localStorage.setItem(STORAGE_KEY, this.dark ? 'dark' : 'light');
 		} catch {

@@ -2,6 +2,9 @@
 	import MessageSquare from '@lucide/svelte/icons/message-square';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import { Badge } from '@sivir-ui/svelte/components/badge';
+	import * as Card from '@sivir-ui/svelte/components/card';
+	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 	import * as Popover from '@sivir-ui/svelte/components/popover';
 	import type { DiffLine, FileDiff } from '$lib/diff';
@@ -142,7 +145,11 @@
 
 	function onPointerDown(event: PointerEvent): void {
 		const target = event.target as HTMLElement | null;
-		if (target?.closest('[data-note-composer]')) return;
+		if (
+			target?.closest(
+				'[data-note-composer], button, a, input, textarea, select, [role="button"]'
+			)
+		) return;
 		pointerDown = true;
 		findingsStore.suppressHover = true;
 	}
@@ -367,13 +374,10 @@
 							? 'pointer-events-none'
 							: ''}"
 					>
-						<div class="rounded-lg border border-border bg-card p-3 font-sans" role="article">
+						<article>
+						<Card.Root class="p-3 font-sans">
 							<div class="flex items-center gap-2 font-mono text-[14px]">
-								<span
-									class="rounded bg-info/15 px-1.5 py-0.5 font-sans text-[13px] font-semibold text-info"
-								>
-									Note
-								</span>
+								<Badge variant="info">Note</Badge>
 								<span class="min-w-0 flex-1 truncate text-foreground-muted">
 									{note.file}:{note.startLine === note.endLine
 										? note.startLine
@@ -382,7 +386,7 @@
 								<Button
 									variant="ghost"
 									size="icon"
-									class="size-7 shrink-0"
+									class="shrink-0"
 									aria-label="Edit note"
 									onclick={() => openEdit(note)}
 								>
@@ -390,13 +394,13 @@
 								</Button>
 							</div>
 							{#if note.quote}
-								<pre
-									class="m-0 mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded-md border border-border bg-background px-2 py-1.5 font-mono text-[12px] leading-relaxed text-foreground-muted">{note.quote}</pre>
+								<CodeBlock code={note.quote} lang="plaintext" copy="overlay" class="mt-2 max-h-32" />
 							{/if}
 							<div class="mt-1.5 min-w-0">
 								<Markdown content={note.body} />
 							</div>
-						</div>
+						</Card.Root>
+						</article>
 					</div>
 				{/each}
 				{#each byLine.get(key) ?? [] as finding (finding.id)}

@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import { Badge } from '@sivir-ui/svelte/components/badge';
+	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 	import SeverityPill from './severity-pill.svelte';
@@ -22,15 +24,17 @@
 </script>
 
 <div
-	class="select-none rounded-lg border border-border bg-card p-3 font-sans {focused
-		? 'ring-1 ring-[#5698ff]'
-		: ''}"
 	onmouseenter={() => {
 		if (!findingsStore.suppressHover) findingsStore.hoveredId = finding.id;
 	}}
 	onmouseleave={() => (findingsStore.hoveredId = null)}
 	role="article"
 >
+	<Card.Root
+		class="select-none p-3 font-sans {focused
+			? 'ring-1 ring-[#5698ff]'
+			: ''}"
+	>
 	<Collapsible.Root open={expanded}>
 		{#if dismissed}
 			<div class="flex items-center gap-2 font-mono text-[14px] text-foreground-muted">
@@ -42,7 +46,6 @@
 				<span class="opacity-70">· Dismissed</span>
 				<Button
 					variant="ghost"
-					size="sm"
 					class="ml-auto font-sans text-[14px]"
 					onclick={() => findingsStore.reopen(finding.id)}
 				>
@@ -69,7 +72,6 @@
 				<div class="mt-2.5 flex items-center gap-1">
 					<Button
 						variant="primary"
-						size="sm"
 						class="font-sans text-[14px]"
 						aria-expanded={threadsStore.openId === finding.id}
 						aria-controls={threadsStore.openId === finding.id ? 'finding-thread' : undefined}
@@ -82,7 +84,6 @@
 					</Button>
 					<Button
 						variant="secondary"
-						size="sm"
 						class="font-sans text-[14px]"
 						onclick={() => {
 							findingsStore.dismiss(finding.id);
@@ -96,17 +97,12 @@
 
 			{#if accepted}
 				<div class="mt-2 flex items-center gap-2">
-			<span
-				class="rounded bg-success/15 px-1.5 py-0.5 font-sans text-[13px] font-semibold text-success"
-			>
-				Fixed
-			</span>
+			<Badge variant="success">Fixed</Badge>
 			{#if finding.fixedBy}
 				<span class="font-mono text-[12px] text-foreground-muted">· {finding.fixedBy}</span>
 			{/if}
 					<Button
 						variant="ghost"
-						size="sm"
 						class="font-sans text-[14px]"
 						onclick={() => findingsStore.reopen(finding.id)}
 					>
@@ -116,4 +112,5 @@
 			{/if}
 		</Collapsible.Content>
 	</Collapsible.Root>
+	</Card.Root>
 </div>

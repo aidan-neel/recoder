@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import type { FindingSeverity } from '$lib/findings.svelte';
 
 	interface Props {
@@ -22,6 +23,6 @@
 	};
 </script>
 
-<span class="rounded px-1.5 py-0.5 font-sans text-[13px] font-semibold {style[severity]}">
+<Badge variant="outline" class="font-sans text-[13px] {style[severity]}">
 	{label[severity]}
-</span>
+</Badge>

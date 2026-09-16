@@ -2,6 +2,7 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import * as Select from '@sivir-ui/svelte/components/select';
@@ -46,6 +47,7 @@
 	let draftRoleModel = $state(SHARED);
 	let draftEffort = $state<ReasoningEffort | undefined>();
 	const sharedEntry = $derived(entries.find((entry) => entry.id === sharedId));
+	const apiEntries = $derived(entries.filter((entry) => entry.provider !== 'codex'));
 	const label = (entry: ModelEntry) =>
 		entry.provider === 'codex'
 			? entry.label.replace(/\s*·\s*subscription$/i, '')
@@ -215,7 +217,7 @@
 <Modal.Root bind:open={modelSettingsUi.open}>
 	<Modal.Content
 		size="xl"
-		class="!max-w-[52rem] !max-h-[min(88dvh,48rem)]"
+		class="!max-w-[58rem] !max-h-[min(90dvh,50rem)]"
 		surfaceClass="!overflow-hidden"
 		allowEscape={!modelSettingsUi.saving && connectionEscape.allowEscape}
 		allowClickOutside={!modelSettingsUi.saving}
@@ -245,133 +247,182 @@
 				{/if}
 			{:else}
 				<ScrollArea
-					class="max-h-[min(62dvh,34rem)]"
+					class="max-h-[min(64dvh,36rem)]"
+					showCues={false}
 					aria-label="Connection settings"
 				>
 					<div
-						class="grid gap-7 p-0.5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
+						class="grid gap-6 p-0.5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
 					>
 						<section
-							class="flex min-w-0 flex-col gap-6"
+							class="flex min-w-0 flex-col gap-2.5"
 							aria-label="Model providers"
 						>
-							<CodexConnection
-								active={modelSettingsUi.open}
-								onSync={syncCodexModels}
-								onClear={clearCodexModels}
-								disabled={modelSettingsUi.saving}
-								bind:usageOpen={connectionEscape.open.usage}
-							/>
-							<div class="flex flex-wrap items-center justify-between gap-3">
-								<div>
-									<h3 class="m-0 text-sm font-medium">API provider</h3>
-									<p class="m-0 mt-1 text-xs text-foreground-muted">
-										OpenAI-compatible endpoints
-									</p>
-								</div>
-								<Modal.Root bind:open={adding}>
-									<Modal.Trigger
-										variant="outline"
-										size="md"
+							<h3
+								class="m-0 px-1 text-[13px] font-medium text-foreground-muted"
+								>Providers</h3
+							>
+							<Card.Root class="p-0">
+								<div class="p-4">
+									<CodexConnection
+										active={modelSettingsUi.open}
+										onSync={syncCodexModels}
+										onClear={clearCodexModels}
 										disabled={modelSettingsUi.saving}
-										onclick={startAdd}
-										><Plus size={14} aria-hidden="true" />Add provider</Modal.Trigger
+										bind:usageOpen={connectionEscape.open.usage}
+									/>
+								</div>
+								<div class="border-t border-border p-4">
+									<div
+										class="flex items-center justify-between gap-3"
 									>
-									<Modal.Content size="lg">
-										<Modal.Header
-											><Modal.Title>Add API provider</Modal.Title
-											><Modal.Description
-												>Connect a model using an OpenAI-compatible API.
-												Credentials stay on this server.</Modal.Description
-											></Modal.Header
+										<span class="text-sm font-medium"
+											>API providers</span
 										>
-										<form
-											id="add-model-provider"
-											onsubmit={confirmAdd}
-											class="grid gap-4"
+										<Modal.Root bind:open={adding}>
+											<Modal.Trigger
+												variant="outline"
+												disabled={modelSettingsUi.saving}
+												onclick={startAdd}
+												><Plus size={14} aria-hidden="true" />Add
+												provider</Modal.Trigger
+											>
+											<Modal.Content size="lg">
+												<Modal.Header
+													><Modal.Title
+														>Add API provider</Modal.Title
+													></Modal.Header
+												>
+												<form
+													id="add-model-provider"
+													onsubmit={confirmAdd}
+													class="grid gap-4"
+												>
+													<Input
+														label="Name"
+														placeholder="OpenRouter"
+														required
+														bind:value={draftLabel}
+													/>
+													<Input
+														label="Model ID"
+														placeholder="openai/gpt-5"
+														required
+														bind:value={draftModel}
+													/>
+													<Input
+														label="Base URL"
+														type="url"
+														placeholder="https://api.openai.com/v1"
+														bind:value={draftBaseUrl}
+													/>
+													<Input
+														label="API key"
+														type="password"
+														autocomplete="off"
+														placeholder="Optional for local providers"
+														bind:value={draftKey}
+													/>
+												</form>
+												<Modal.Footer
+													><Modal.Close>Cancel</Modal.Close
+													><Button
+														type="submit"
+														form="add-model-provider"
+														>Add provider</Button
+													></Modal.Footer
+												>
+											</Modal.Content>
+										</Modal.Root>
+									</div>
+									{#if apiEntries.length > 0}
+										<ul
+											class="m-0 mt-3 flex list-none flex-col gap-2 border-t border-border p-0 pt-3"
 										>
-											<Input
-												label="Name"
-												placeholder="OpenRouter"
-												required
-												bind:value={draftLabel}
-											/>
-											<Input
-												label="Model ID"
-												placeholder="openai/gpt-5"
-												required
-												bind:value={draftModel}
-											/>
-											<Input
-												label="Base URL"
-												type="url"
-												placeholder="https://api.openai.com/v1"
-												bind:value={draftBaseUrl}
-											/>
-											<Input
-												label="API key"
-												type="password"
-												autocomplete="off"
-												placeholder="Optional for local providers"
-												bind:value={draftKey}
-											/>
-										</form>
-										<Modal.Footer
-											><Modal.Close size="md">Cancel</Modal.Close><Button
-												type="submit"
-												size="md"
-												form="add-model-provider">Add provider</Button
-											></Modal.Footer
+											{#each apiEntries as entry (entry.id)}
+												<li
+													class="flex min-w-0 items-baseline justify-between gap-3"
+												>
+													<span
+														class="min-w-0 truncate text-[13px] font-medium"
+														>{label(entry)}</span
+													>
+													<span
+														class="shrink-0 truncate font-mono text-xs text-foreground-muted"
+														>{entry.model}</span
+													>
+												</li>
+											{/each}
+										</ul>
+									{:else}
+										<p
+											class="m-0 mt-3 border-t border-border pt-3 text-[13px] text-foreground-muted"
 										>
-									</Modal.Content>
-								</Modal.Root>
-							</div>
+											No API providers yet.
+										</p>
+									{/if}
+								</div>
+							</Card.Root>
 						</section>
 						<section
-							class="flex min-w-0 flex-col gap-4"
+							class="flex min-w-0 flex-col gap-2.5"
 							aria-label="Reviewer roles"
 						>
-							<div class="flex flex-col gap-2">
-								<h3 class="m-0 text-sm font-medium">Default model</h3>
-								<Select.Root
-									value={sharedId}
-									bind:open={connectionEscape.open.sharedModel}
-								>
-									<Select.Trigger
-										variant="outline"
-										size="md"
-										class="w-full justify-between"
-										disabled={!entries.length || modelSettingsUi.saving}
-										aria-label="Default model"
-										><span class="truncate"
-											>{sharedEntry
-												? label(sharedEntry)
-												: 'Use environment settings'}</span
-										></Select.Trigger
+							<h3
+								class="m-0 px-1 text-[13px] font-medium text-foreground-muted"
+								>Reviewers</h3
+							>
+							<Card.Root class="p-0">
+								<div class="flex flex-col gap-2 p-4">
+									<span class="text-sm font-medium"
+										>Default model</span
 									>
-									<Select.Content class="max-h-64"
-										>{#each entries as entry (entry.id)}<Select.Item
-												value={entry.id}
-												onclick={() => {
-													sharedId = entry.id;
-													void persist();
-												}}>{label(entry)}</Select.Item
-											>{/each}</Select.Content
+									<Select.Root
+										value={sharedId}
+										bind:open={connectionEscape.open.sharedModel}
 									>
-								</Select.Root>
-							</div>
-							<div class="flex items-center justify-between gap-2">
-								<h3 class="m-0 text-sm font-medium">Roles</h3>
-								<span class="text-xs text-foreground-muted"
-									>Reasoning effort</span
+										<Select.Trigger
+											variant="outline"
+											class="w-full justify-between"
+											disabled={!entries.length ||
+												modelSettingsUi.saving}
+											aria-label="Default model"
+											><span class="truncate"
+												>{sharedEntry
+													? label(sharedEntry)
+													: 'Use environment settings'}</span
+											></Select.Trigger
+										>
+										<Select.Content class="max-h-64"
+											>{#each entries as entry (entry.id)}<Select.Item
+													value={entry.id}
+													onclick={() => {
+														sharedId = entry.id;
+														void persist();
+													}}>{label(entry)}</Select.Item
+												>{/each}</Select.Content
+										>
+									</Select.Root>
+								</div>
+								<div
+									class="flex items-center justify-between gap-2 border-t border-border px-4 py-2 text-xs text-foreground-muted"
 								>
-							</div>
-							<div class="flex flex-col gap-1" aria-label="Reviewer role settings">
-								{#each MODEL_ROLES as role (role)}
+									<span>Role</span>
+									<span>Reasoning effort</span>
+								</div>
+								<ul
+									class="m-0 flex list-none flex-col divide-y divide-border p-0"
+									aria-label="Reviewer role settings"
+								>
+									{#each MODEL_ROLES as role (role)}
 										{@const override = roleModelLabel(role)}
-										<div class="flex items-center gap-2 py-2">
+										<li
+											class="flex items-center gap-2 px-4 py-2.5"
+										>
 											<div class="min-w-0 flex-1">
-												<div class="text-sm font-medium">
+												<div
+													class="truncate text-sm font-medium"
+												>
 													{formatAgentName(role)}
 												</div>
 												<div
@@ -380,7 +431,9 @@
 														? label(override)
 														: 'Uses default model'}
 												>
-													{override ? label(override) : 'Default model'}
+													{override
+														? label(override)
+														: 'Default model'}
 												</div>
 											</div>
 											<Select.Root
@@ -389,19 +442,25 @@
 											>
 												<Select.Trigger
 													variant="ghost"
-													size="md"
 													class="min-w-24 shrink-0 justify-between"
 													disabled={modelSettingsUi.saving}
-													aria-label="{formatAgentName(role)} reasoning effort"
-													>{effortLabel(roleEfforts[role])}</Select.Trigger
+													aria-label="{formatAgentName(
+														role
+													)} reasoning effort"
+													>{effortLabel(
+														roleEfforts[role]
+													)}</Select.Trigger
 												>
 												<Select.Content
 													>{#each effortsFor(roleIds[role] ?? SHARED) as effort}<Select.Item
 															value={effort}
 															onclick={() => {
-																roleEfforts[role] = effort;
+																roleEfforts[role] =
+																	effort;
 																void persist();
-															}}>{effortLabel(effort)}</Select.Item
+															}}>{effortLabel(
+																effort
+															)}</Select.Item
 														>{/each}</Select.Content
 												>
 											</Select.Root>
@@ -410,16 +469,19 @@
 												size="icon"
 												class="size-9 shrink-0"
 												disabled={modelSettingsUi.saving}
-												aria-label="Customize {formatAgentName(role)}"
+												aria-label="Customize {formatAgentName(
+													role
+												)}"
 												onclick={() => editRole(role)}
 												><SlidersHorizontal
 													size={14}
 													aria-hidden="true"
 												/></Button
 											>
-										</div>
+										</li>
 									{/each}
-								</div>
+								</ul>
+							</Card.Root>
 						</section>
 					</div>
 				</ScrollArea>
@@ -430,11 +492,9 @@
 						allowClickOutside={!modelSettingsUi.saving}
 						showClose={!modelSettingsUi.saving}
 					>
-						<Modal.Header
+					<Modal.Header
 							><Modal.Title
 								>{editingRole ? formatAgentName(editingRole) : 'Role'} settings</Modal.Title
-							><Modal.Description
-								>Override the default model for this role.</Modal.Description
 							></Modal.Header
 						>
 						<Modal.Body class="gap-4">
@@ -444,7 +504,6 @@
 									bind:open={roleEscape.open.model}
 									><Select.Trigger
 										variant="outline"
-										size="md"
 										aria-label="Role model"
 										disabled={modelSettingsUi.saving}
 										class="w-full justify-between"
@@ -474,7 +533,6 @@
 									bind:open={roleEscape.open.effort}
 									><Select.Trigger
 										variant="outline"
-										size="md"
 										aria-label="Role reasoning effort"
 										disabled={modelSettingsUi.saving}
 										class="w-full justify-between"
@@ -501,10 +559,9 @@
 								</p>{/if}
 						</Modal.Body>
 						<Modal.Footer
-							><Modal.Close size="md" disabled={modelSettingsUi.saving}
+							><Modal.Close disabled={modelSettingsUi.saving}
 								>Cancel</Modal.Close
 							><Button
-								size="md"
 								loading={modelSettingsUi.saving}
 								onclick={() => void saveRole()}>Save role</Button
 							></Modal.Footer
@@ -520,13 +577,13 @@
 			>
 				{#if modelSettingsUi.error && seeded}<span class="text-error"
 						>Changes not saved.</span
-					><Button variant="ghost" size="md" onclick={() => void persist()}
+					><Button variant="ghost" onclick={() => void persist()}
 						>Retry</Button
 					>
 				{:else if modelSettingsUi.saving}Saving changes...
 				{:else}Changes save automatically{/if}
 			</div>
-			<Modal.Close variant="primary" size="md" disabled={modelSettingsUi.saving}>Done</Modal.Close>
+			<Modal.Close variant="primary" disabled={modelSettingsUi.saving}>Done</Modal.Close>
 		</Modal.Footer>
 	</Modal.Content>
 </Modal.Root>

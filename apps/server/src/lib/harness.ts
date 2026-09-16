@@ -25,7 +25,7 @@ import {
 	canLaunchInvestigation,
 	runJsonAgent
 } from './agent-loop.js';
-import { EvidenceStore, formatToolResults, type ReviewRevision } from './evidence.js';
+import { EvidenceStore, formatToolResults, type ReviewRevision, type ToolCallReport } from './evidence.js';
 import { buildInventory, type ReviewInventory } from './inventory.js';
 import { CoverageLedger } from './coverage.js';
 import {
@@ -82,6 +82,14 @@ export interface HarnessEvents {
 	onBudget?: (budget: ReviewBudgetSnapshot) => void;
 	onCandidates?: (count: number) => void;
 	onStage?: (stage: ReviewStage) => void;
+	onReasoning?: (reasoning: {
+		id: string;
+		text: string;
+		assignmentId?: string;
+		role?: string;
+		model?: string;
+	}) => void;
+	onTool?: (tool: ToolCallReport & { assignmentId?: string; role?: string }) => void;
 }
 
 /** Safely read a sandbox file (stays inside the checkout, capped length). */
@@ -390,7 +398,10 @@ export async function runAdaptiveReview(
 							model: cfg.model,
 							elapsedMs
 						}),
-					onLog: (message) => events?.onLog?.(message)
+					onLog: (message) => events?.onLog?.(message),
+					onReasoning: (reasoning) =>
+						events?.onReasoning?.({ ...reasoning, role: 'correctness', model: cfg.model }),
+					onTool: (tool) => events?.onTool?.({ ...tool, role: 'correctness' })
 				});
 				if (result.value) {
 					const applied = applyConsolidation(result.value, valid);
@@ -512,7 +523,10 @@ async function runPlanner(input: {
 				model: cfg.model,
 				elapsedMs
 			}),
-		onLog: (message) => input.events?.onLog?.(message, { role: 'correctness' })
+		onLog: (message) => input.events?.onLog?.(message, { role: 'correctness' }),
+		onReasoning: (reasoning) =>
+			input.events?.onReasoning?.({ ...reasoning, role: 'correctness', model: cfg.model }),
+		onTool: (tool) => input.events?.onTool?.({ ...tool, role: 'correctness' })
 	});
 	if (result.value) return { plan: result.value, degraded: false };
 	return {
@@ -563,7 +577,10 @@ async function selectFollowUps(
 		deadlineAt,
 		parse: (raw) => sanitizePlannerOutput(raw, inventory, true),
 		validationError: plannerValidationError,
-		onLog: (message) => events?.onLog?.(message)
+		onLog: (message) => events?.onLog?.(message),
+		onReasoning: (reasoning) =>
+			events?.onReasoning?.({ ...reasoning, role: 'correctness', model: cfg.model }),
+		onTool: (tool) => events?.onTool?.({ ...tool, role: 'correctness' })
 	});
 	return (result.value?.assignments ?? unique).slice(0, REVIEW_POLICY.maxFollowUpAssignments);
 }
@@ -638,9 +655,11 @@ async function runOneAssignment(
 	try {
 		// Supply the first bounded patch page up front instead of spending a model
 		// round asking for evidence we already know this assignment needs.
-		const initialEvidence = await ctx.evidence.executeRound(item.scope.map((entry) => ({
-			action: 'readDiff', path: entry.path, hunkIds: entry.hunkIds
-		})), ctx.signal);
+		const initialEvidence = await ctx.evidence.executeRound(
+			item.scope.map((entry) => ({ action: 'readDiff', path: entry.path, hunkIds: entry.hunkIds })),
+			ctx.signal,
+			(tool) => ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role: item.role })
+		);
 		const result = await runJsonAgent({
 			label: item.title,
 			system: specialistSystemPrompt(item.role),
@@ -671,7 +690,16 @@ async function runOneAssignment(
 					files: item.scope.map((entry) => entry.path)
 				});
 			},
-			onLog: (message) => ctx.events?.onLog?.(message, { assignmentId: item.id, role: item.role })
+			onLog: (message) => ctx.events?.onLog?.(message, { assignmentId: item.id, role: item.role }),
+			onReasoning: (reasoning) =>
+				ctx.events?.onReasoning?.({
+					...reasoning,
+					assignmentId: item.id,
+					role: item.role,
+					model: cfg.model
+				}),
+			onTool: (tool) =>
+				ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role: item.role })
 		});
 		const assignedHunks = new Set(item.scope.flatMap((entry) => entry.hunkIds));
 		if (!result.value) {

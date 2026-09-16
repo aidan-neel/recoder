@@ -74,6 +74,13 @@ export async function readChatGptResponse(response: Response, opts: ChatOptions,
 		if (event.type === 'response.output_item.added' || event.type === 'response.output_item.done') {
 			if (event.item) items.set(key, event.item);
 		}
+		if (
+			(event.type === 'response.reasoning_text.delta' ||
+				event.type === 'response.reasoning_summary_text.delta') &&
+			typeof event.delta === 'string'
+		) {
+			opts.onReasoning?.(event.delta);
+		}
 		if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
 			const item = items.get(key);
 			if (!item || finalItem(item)) {

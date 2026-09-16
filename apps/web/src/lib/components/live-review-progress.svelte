@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { apiBase } from '$lib/server-api';
-	import { applyProgressMessage, emptyReviewProgress, formatAssignmentHeadline, type ProgressMessage } from '$lib/review-progress-state';
+	import { applyProgressMessage, emptyReviewProgress, type ProgressMessage } from '$lib/review-progress-state';
 	import type { Finding, Review, ReviewAssignment } from '@recoder/shared';
 	import ReviewingView, { type ReviewingFinding } from './reviewing-view.svelte';
 
@@ -12,8 +12,10 @@
 		deletions?: number | null;
 		onOpenDiff?: (() => void) | null;
 		onRestart?: (() => void) | null;
+		actionError?: string | null;
+		restarting?: boolean;
 	}
-	let { review, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onRestart = null }: Props = $props();
+	let { review, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onRestart = null, actionError = null, restarting = false }: Props = $props();
 	let progress = $state(emptyReviewProgress(''));
 	let liveFindings = $state<Finding[]>([]);
 	let connection = $state<'connecting' | 'live' | 'reconnecting' | 'closed'>('connecting');
@@ -73,6 +75,8 @@
 		return [...byId.values()];
 	});
 	const assignments = $derived<ReviewAssignment[]>(progress.assignments ?? []);
+	// Planner/consolidation events are review-level, never another correctness assignment.
+	const pipelineId = '__pipeline';
 	const confirmed = $derived(status === 'passed');
 	const viewFindings = $derived<ReviewingFinding[]>((confirmed || (!active && mergedFindings.length > 0)) ? mergedFindings.map((finding, i) => ({
 		id: 'F-' + String(i + 1).padStart(2, '0'), agent: finding.agent ?? null,
@@ -93,37 +97,43 @@
 			: status === 'failed' ? (progress.outcome === 'partial' ? 'Review incomplete' : 'Review interrupted')
 			: ['Checkout', 'Understand changes', 'Specialist review', 'Consolidation'][stageIndex]
 	);
+	const displayAssignments = $derived<ReviewAssignment[]>([...assignments, {
+		id: pipelineId, role: 'pipeline', title: 'Review pipeline', reason: 'Planning and saving results',
+		status: active ? 'running' : status === 'passed' ? 'done' : 'error', scope: [],
+		currentOperation: currentStage
+	}]);
 	const connectionLabel = $derived(connection === 'closed' ? 'Updates complete'
 		: connection === 'reconnecting' || now - lastReceived > 15000 ? 'Reconnecting · keeping the latest progress'
 		: connection === 'connecting' ? 'Connecting to review' : 'Live updates connected');
-	const headline = $derived(formatAssignmentHeadline(assignments));
 </script>
 
 <ReviewingView
+	fullscreen
 	{reviewId}
 	title={review.prTitle || `PR #${review.prNumber}`}
 	meta={{ prLabel: '#' + review.prNumber, repo, files, additions, deletions, elapsed }}
-	{assignments}
+	assignments={displayAssignments}
 	findings={viewFindings}
 	pendingCount={assignments.filter((assignment) => assignment.status === 'running' || assignment.status === 'queued' || assignment.status === 'waiting').length}
 	pipelineLogs={progress.activity.map((entry) => entry.message)}
 	{onOpenDiff}
 	{onRestart}
+	{restarting}
 	stage={stageIndex}
 	stageLabel={currentStage}
 	stageDetail={stageIndex === 0 ? progress.tasks[['fetch', 'sandbox', 'diff'].find((id) => progress.tasks[id]?.status === 'running') ?? 'fetch']?.message : undefined}
 	failed={status === 'failed'}
-	errorMessage={status === 'failed' ? failureReason ?? review.summary : null}
+	errorMessage={actionError ?? (status === 'failed' ? failureReason ?? review.summary : null)}
 	{connectionLabel}
 	connectionLost={connection === 'reconnecting' || (active && now - lastReceived > 15000)}
-	{headline}
 	planSummary={progress.planSummary ?? null}
-	candidateCount={progress.candidateCount ?? 0}
-	{confirmed}
 	coverage={progress.coverage ?? null}
 	coverageGaps={progress.coverageGaps ?? []}
 	recommendedChecks={progress.recommendedChecks ?? []}
 	{now}
 	{active}
-	tasks={Object.values(progress.tasks)}
+	tasks={Object.values(progress.tasks).map((task) => ({ ...task, assignmentId: task.assignmentId ?? pipelineId }))}
+	reasoning={(progress.reasoning ?? []).map((entry) => ({ ...entry, assignmentId: entry.assignmentId ?? pipelineId }))}
+	toolCalls={(progress.toolCalls ?? []).map((tool) => ({ ...tool, assignmentId: tool.assignmentId ?? pipelineId }))}
+	roleDecisions={progress.roleDecisions ?? []}
 />

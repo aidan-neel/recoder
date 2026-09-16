@@ -4,7 +4,9 @@ import {
 	formatAssignmentHeadline,
 	type ReviewAssignment,
 	type ReviewProgress,
-	type ReviewTask
+	type ReviewReasoningEntry,
+	type ReviewTask,
+	type ReviewToolCall
 } from '@recoder/shared';
 
 export interface ProgressMessage {
@@ -19,6 +21,8 @@ export interface ProgressMessage {
 		task?: ReviewTask;
 		assignment?: ReviewAssignment;
 		assignments?: ReviewAssignment[];
+		reasoning?: Omit<ReviewReasoningEntry, 'at'> & { at?: string };
+		tool?: ReviewToolCall;
 		agent?: string;
 		[key: string]: unknown;
 	};
@@ -63,9 +67,35 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 		else list.push(assignment);
 		next.assignments = list;
 	}
-	if (event.message && event.type !== 'finding') {
+	if (event.type === 'reasoning' && event.data?.reasoning) {
+		const prior = current.reasoning?.find((item) => item.id === event.data?.reasoning?.id);
+		const entry: ReviewReasoningEntry = { ...event.data.reasoning, at: event.data.reasoning.at ?? prior?.at ?? next.updatedAt };
+		const list = [...(current.reasoning ?? [])];
+		const index = list.findIndex((item) => item.id === entry.id);
+		if (index >= 0) list[index] = entry;
+		else list.push(entry);
+		next.reasoning = list.slice(-200);
+	}
+	if (event.type === 'tool' && event.data?.tool) {
+		const tool = event.data.tool;
+		const list = [...(current.toolCalls ?? [])];
+		const index = list.findIndex((item) => item.id === tool.id);
+		if (index >= 0) list[index] = tool;
+		else list.push(tool);
+		next.toolCalls = list.slice(-300);
+	}
+	const tool = event.data?.tool;
+	const activityMessage = event.type === 'tool' && tool
+		? `${tool.command} · ${tool.status === 'error' ? 'failed' : tool.exitCode === null ? 'complete' : `exit ${tool.exitCode}`}`
+		: event.message;
+	if (
+		activityMessage &&
+		event.type !== 'reasoning' &&
+		event.type !== 'finding' &&
+		!(event.type === 'tool' && event.data?.tool?.status === 'running')
+	) {
 		next.activity = [...current.activity, {
-			sequence: event.sequence, message: event.message, at: next.updatedAt,
+			sequence: event.sequence, message: activityMessage, at: next.updatedAt,
 			agent: task?.agent ?? event.data?.assignment?.role ?? event.data?.agent ?? (event.step?.startsWith('agent:') ? event.step.slice(6) : undefined)
 		}].slice(-100);
 	}

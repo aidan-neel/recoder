@@ -13,9 +13,15 @@
 	interface Props {
 		/** Live review diffs. Falls back to the mock tree when null. */
 		fileDiffs?: FileDiff[] | null;
+		onFileSelect?: () => void;
 	}
 
-	let { fileDiffs = null }: Props = $props();
+	let { fileDiffs = null, onFileSelect }: Props = $props();
+
+	function selectFile(id: string): void {
+		sessionFile.select(id);
+		onFileSelect?.();
+	}
 
 	const tree = $derived(fileDiffs ? buildFileTree(fileDiffs) : changedFiles);
 	const fileCount = $derived(fileDiffs ? fileDiffs.length : changedFileCount);
@@ -51,6 +57,7 @@
 	/** Select the file, then scroll its finding card into view. */
 	async function jumpToFinding(fileId: string, findingId: string): Promise<void> {
 		sessionFile.select(fileId);
+		onFileSelect?.();
 		await tick();
 		findingsStore.discuss(findingId);
 		document.getElementById(`finding-${findingId}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -107,7 +114,7 @@
 
 <aside
 	aria-label="Session files"
-	class="session-enter flex h-full w-[375px] shrink-0 flex-col gap-4 overflow-hidden bg-background p-3"
+	class="flex h-full w-[min(375px,100vw)] shrink-0 flex-col gap-4 overflow-hidden bg-background p-3"
 >
 	<div class="flex min-h-0 flex-1 flex-col gap-3">
 		<div class="flex items-center justify-between px-1 text-[15px]">
@@ -126,9 +133,7 @@
 				<Search size={14} />
 			{/snippet}
 		</Input>
-		<div
-			class="flex items-center gap-2 rounded-md px-1 py-1 text-[13px] text-foreground-muted transition-colors select-none hover:text-foreground"
-		>
+		<div class="flex items-center gap-2 px-1 py-1 text-[13px] text-foreground-muted select-none">
 			<Checkbox
 				bind:checked={onlyWithFindings}
 				disabled={findingsFileCount === 0}
@@ -137,13 +142,13 @@
 			/>
 			<span class="ml-auto shrink-0 font-mono text-[12px] opacity-70">{findingsFileCount}</span>
 		</div>
-		<ScrollArea aria-label="Changed files" class="min-h-0 flex-1">
+		<ScrollArea aria-label="Changed files" class="min-h-0 flex-1" showCues={false}>
 			<div class="space-y-px pb-2">
 			{#each visibleTree as node (node.kind === 'file' ? node.id : node.name)}
 				<FileTreeNode
 					{node}
 					selectedId={sessionFile.currentId}
-					onSelect={(id) => sessionFile.select(id)}
+					onSelect={selectFile}
 					{badges}
 					onJump={(fileId, findingId) => void jumpToFinding(fileId, findingId)}
 				/>

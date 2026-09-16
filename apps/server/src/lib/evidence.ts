@@ -35,6 +35,43 @@ export interface RetrievalAction {
 	cursor?: string;
 }
 
+/** Observable tool/retrieval call reported to the live review dashboard. */
+export interface ToolCallReport {
+	id: string;
+	command: string;
+	status: 'running' | 'done' | 'error';
+	exitCode: number | null;
+	startedAt: string;
+	finishedAt?: string;
+	elapsedMs?: number;
+	summary?: string;
+}
+
+export function actionCommand(action: RetrievalAction): string {
+	const path = action.path ? ` ${action.path}` : '';
+	switch (action.action) {
+		case 'search':
+			return `search ${JSON.stringify(action.query ?? '')}${path || ' .'}`;
+		case 'readFile':
+			return `read${action.path ? ` ${action.path}` : ''}${
+				action.startLine ? `:${action.startLine}-${action.endLine ?? action.startLine}` : ''
+			}`;
+		case 'listFiles':
+			return `list ${action.prefix || '.'}`;
+		case 'readDiff':
+			return `readDiff ${action.path ?? 'scoped hunks'}`;
+		default:
+			return action.action;
+	}
+}
+
+function toolSummary(result: ToolResult): string {
+	if (!result.ok) return result.error ?? 'failed';
+	if (result.action === 'search') return `${result.matches ?? 0} match${result.matches === 1 ? '' : 'es'}`;
+	if (result.path) return `${result.path}${result.startLine ? `:${result.startLine}-${result.endLine ?? result.startLine}` : ''}`;
+	return result.truncated ? 'truncated' : 'ok';
+}
+
 export interface ToolResult {
 	action: string;
 	ok: boolean;
@@ -56,6 +93,7 @@ export class EvidenceStore {
 	readonly records = new Map<string, EvidenceRecord>();
 	private readonly cache = new Map<string, ToolResult>();
 	private seq = 0;
+	private toolSeq = 0;
 	constructor(
 		readonly revision: ReviewRevision | null,
 		readonly inventory: ReviewInventory,
@@ -89,7 +127,11 @@ export class EvidenceStore {
 		return stored;
 	}
 
-	async executeRound(rawActions: unknown, signal?: AbortSignal): Promise<ToolResult[]> {
+	async executeRound(
+		rawActions: unknown,
+		signal?: AbortSignal,
+		onTool?: (tool: ToolCallReport) => void
+	): Promise<ToolResult[]> {
 		const actions = normalizeActions(rawActions).slice(0, REVIEW_POLICY.maxRetrievalsPerTurn);
 		const results: ToolResult[] = [];
 		let used = 0;
@@ -98,7 +140,34 @@ export class EvidenceStore {
 				results.push({ action: action.action, ok: false, error: 'review aborted', content: '', truncated: false });
 				continue;
 			}
-			const result = await this.executeOne(action, signal);
+			const toolId = `tool_${++this.toolSeq}`;
+			const command = actionCommand(action);
+			const started = Date.now();
+			const startedAt = new Date(started).toISOString();
+			const report = (tool: ToolCallReport) => {
+				try { onTool?.(tool); } catch { /* Observers cannot break retrieval. */ }
+			};
+			report({ id: toolId, command, status: 'running', exitCode: null, startedAt });
+			let result: ToolResult;
+			try {
+				result = await this.executeOne(action, signal);
+			} catch (error) {
+				report({ id: toolId, command, status: 'error', exitCode: null, startedAt,
+					finishedAt: new Date().toISOString(), elapsedMs: Date.now() - started,
+					summary: error instanceof Error ? error.message : 'Retrieval failed' });
+				throw error;
+			}
+			report({
+				id: toolId,
+				command,
+				status: result.ok ? 'done' : 'error',
+				// Retrieval actions are not shell processes; do not invent exit codes.
+				exitCode: null,
+				startedAt,
+				finishedAt: new Date().toISOString(),
+				elapsedMs: Date.now() - started,
+				summary: toolSummary(result)
+			});
 			if (used >= REVIEW_POLICY.maxToolRoundChars) {
 				results.push({
 					...result,

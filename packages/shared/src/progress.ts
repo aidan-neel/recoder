@@ -112,11 +112,39 @@ export interface ReviewBudgetSnapshot {
 	limit: number;
 }
 
+/** Provider reasoning/thinking text captured for a reviewer assignment. */
+export interface ReviewReasoningEntry {
+	id: string;
+	assignmentId?: string;
+	role?: string;
+	model?: string;
+	at: string;
+	text: string;
+}
+
+/** One observable model tool/retrieval call, with its result and timing. */
+export interface ReviewToolCall {
+	id: string;
+	assignmentId?: string;
+	role?: string;
+	/** Display command, e.g. `rg -n "refill" src/rate-limit`. */
+	command: string;
+	status: 'running' | 'done' | 'error';
+	exitCode: number | null;
+	startedAt: string;
+	finishedAt?: string;
+	elapsedMs?: number;
+	/** Short outcome summary, e.g. `3 matches` or `limiter.ts:61-84`. */
+	summary?: string;
+}
+
 export interface ReviewProgress {
 	id: string;
 	sequence: number;
 	tasks: Record<string, ReviewTask>;
 	activity: { sequence: number; message: string; at: string; agent?: string }[];
+	reasoning?: ReviewReasoningEntry[];
+	toolCalls?: ReviewToolCall[];
 	updatedAt: string;
 	planVersion?: number;
 	planSummary?: string;

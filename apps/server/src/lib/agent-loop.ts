@@ -1,7 +1,7 @@
 import type { ChatMessage } from './llm.js';
 import { chatCompletion, LlmError } from './llm.js';
 import { extractJsonValue } from './json-extract.js';
-import { parseActions, formatToolResults, type EvidenceStore } from './evidence.js';
+import { parseActions, formatToolResults, type EvidenceStore, type ToolCallReport } from './evidence.js';
 import { REVIEW_POLICY } from './review-policy.js';
 import type { RoleConfig } from './models.js';
 import { isAuthFailure } from './planner.js';
@@ -60,6 +60,9 @@ export interface JsonAgentOptions<T> {
 	validationError?: (raw: unknown) => string;
 	onProgress?: (state: 'queued' | 'running' | 'retrieval', elapsedMs: number, detail: string) => void;
 	onLog?: (message: string) => void;
+	/** Accumulated provider reasoning for a turn, upserted by `id`. */
+	onReasoning?: (reasoning: { id: string; text: string }) => void;
+	onTool?: (tool: ToolCallReport) => void;
 }
 
 export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
@@ -84,6 +87,12 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		opts.budget.spend();
 		opts.onLog?.(`${opts.label} model turn ${turn}/${opts.maxTurns} (${opts.config.model})`);
 		const started = Date.now();
+		const reasoningId = `reason_${opts.label.slice(0, 24)}_${turn}_${Math.random().toString(36).slice(2, 8)}`;
+		let reasoningText = '';
+		let reasoningEmittedAt = 0;
+		const flushReasoning = () => {
+			if (opts.onReasoning && reasoningText) opts.onReasoning({ id: reasoningId, text: reasoningText });
+		};
 		let output: string;
 		try {
 			output = await chatCompletion({
@@ -98,10 +107,23 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 				maxTokens: 8000,
 				timeoutMs: Math.min(REVIEW_POLICY.perCallDeadlineMs, Math.max(1, deadlineAt - Date.now())),
 				signal: opts.signal,
+				onReasoning: opts.onReasoning
+					? (chunk) => {
+							reasoningText = (reasoningText + chunk).slice(0, 64_000);
+							const now = Date.now();
+							// Throttle: reasoning can stream token-by-token, and every
+							// emit persists the review snapshot.
+							if (now - reasoningEmittedAt > 250) {
+								reasoningEmittedAt = now;
+								flushReasoning();
+							}
+						}
+					: undefined,
 				onProgress: (state, elapsedMs) =>
 					opts.onProgress?.(state, elapsedMs, state === 'queued' ? 'Waiting for a model slot' : `Running ${opts.label}`)
 			});
 		} catch (err) {
+			flushReasoning();
 			if (isAuthFailure(err)) throw new AuthConfigError(err instanceof Error ? err.message : String(err));
 			if (opts.signal.aborted || (err instanceof LlmError && /cancel/i.test(err.message))) {
 				throw new ReviewAbortedError('review aborted');
@@ -115,6 +137,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			}
 			return { value: null, error: lastError };
 		}
+		flushReasoning();
 		let parsed: unknown;
 		try {
 			parsed = extractJsonValue(output);
@@ -134,7 +157,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		const actions = parseActions(parsed);
 		if (actions && !lastTurn) {
 			opts.onProgress?.('retrieval', Date.now() - started, `Reading repository evidence for ${opts.label}`);
-			const results = await opts.evidence.executeRound(actions, opts.signal);
+			const results = await opts.evidence.executeRound(actions, opts.signal, opts.onTool);
 			for (const result of results) {
 				if (result.ok && result.path) opts.onLog?.(`Reading ${result.path}${result.startLine ? `:${result.startLine}` : ''}`);
 			}
