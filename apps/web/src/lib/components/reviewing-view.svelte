@@ -38,8 +38,10 @@
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import * as Select from '@sivir-ui/svelte/components/select';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import { formatAgentName } from '$lib/threads.svelte';
 	import ReviewMetricsModal from './review-metrics-modal.svelte';
+	import ReviewToolCallView from './review-tool-call.svelte';
 
 	interface Props {
 		reviewId?: string;
@@ -160,11 +162,11 @@
 			null
 	);
 
-	let tab = $state('reasoning');
+	let tab = $state('activity');
 	$effect(() => {
-		if (!assignments.some((assignment) => assignment.id === selectedId) ||
-			(!pickedAssignment && selectedId === '__pipeline' && assignments.some((assignment) => assignment.id !== '__pipeline'))) {
-			selectedId = assignments.find((assignment) => assignment.id !== '__pipeline' && assignment.status === 'running')?.id ?? assignments[0]?.id ?? null;
+		if (!pickedAssignment || !assignments.some((assignment) => assignment.id === selectedId)) {
+			selectedId = assignments.find((assignment) => assignment.id !== '__pipeline' && assignment.status === 'running')?.id ??
+				assignments.find((assignment) => assignment.status === 'running')?.id ?? assignments[0]?.id ?? null;
 		}
 	});
 
@@ -239,6 +241,10 @@
 	const selectedTools = $derived(
 		selected ? toolCalls.filter((tool) => tool.assignmentId === selected.id) : []
 	);
+	const selectedActivity = $derived([
+		...selectedReasoning.map((entry) => ({ type: 'reasoning' as const, id: entry.id, at: entry.at, entry })),
+		...selectedTools.map((tool) => ({ type: 'tool' as const, id: tool.id, at: tool.startedAt, tool }))
+	].sort((a, b) => Date.parse(a.at) - Date.parse(b.at)));
 	const selectedTasks = $derived(selected ? tasksFor(selected.id) : []);
 	const waitingRoles = $derived(roleDecisions.filter((decision) => decision.decision === 'deferred'));
 	const selectedMeta = $derived.by(() => {
@@ -273,7 +279,7 @@
 		</div>
 		<div class="flex flex-wrap items-center gap-2">
 			{#if reviewId}<ReviewMetricsModal {reviewId} />{/if}
-			{#if onOpenDiff && !active}<Button variant="outline" onclick={onOpenDiff}>Open diff</Button>{/if}
+			{#if onOpenDiff}<Button variant="outline" onclick={onOpenDiff}>Open diff</Button>{/if}
 			{#if onRestart}<Button variant="ghost" loading={restarting} loadingLabel="Restarting…" onclick={onRestart}>Restart review</Button>{/if}
 		</div>
 	</header>
@@ -413,6 +419,13 @@
 	</section>
 {/snippet}
 
+{#snippet reasoningEntry(entry: ReviewReasoningEntry)}
+	<Typography.Text
+		aria-busy={active && entry.status === 'streaming'}
+		class="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground-muted"
+	>{entry.text}</Typography.Text>
+{/snippet}
+
 {#snippet detailContent()}
 	<section class="min-w-0" aria-label="Specialist detail">
 		{#if selected}
@@ -425,8 +438,9 @@
 						{/if}
 					</div>
 					<Tabs.List>
-						<Tabs.Trigger value="reasoning" class={tabTriggerClass}>Reasoning</Tabs.Trigger>
-						<Tabs.Trigger value="tools" class={tabTriggerClass}>Tool calls</Tabs.Trigger>
+						<Tabs.Trigger value="activity" class={tabTriggerClass}>Activity</Tabs.Trigger>
+						<Tabs.Trigger value="reasoning" class={tabTriggerClass}>Reasoning{selectedReasoning.length ? ` (${selectedReasoning.length})` : ''}</Tabs.Trigger>
+						<Tabs.Trigger value="tools" class={tabTriggerClass}>Tool calls{selectedTools.length ? ` (${selectedTools.length})` : ''}</Tabs.Trigger>
 						<Tabs.Trigger value="tasks" class={tabTriggerClass}>Tasks</Tabs.Trigger>
 					</Tabs.List>
 				</div>
@@ -435,19 +449,33 @@
 					<p class="mt-3 font-mono text-[13px] text-foreground-muted">{selectedMeta}</p>
 				{/if}
 
+				<Tabs.Content value="activity" class="mt-4">
+					<div class="flex min-w-0 flex-col gap-4">
+						{#each selectedActivity as item (item.type + item.id)}
+							{#if item.type === 'reasoning'}
+								{@render reasoningEntry(item.entry)}
+							{:else}
+								<ReviewToolCallView tool={item.tool} duration={toolDuration(item.tool)} {active} />
+							{/if}
+						{:else}
+							<Typography.Text class="py-3 text-sm text-foreground-muted">{selected.currentOperation ?? selected.reason}</Typography.Text>
+						{/each}
+					</div>
+				</Tabs.Content>
+
 				<Tabs.Content value="reasoning" class="mt-4">
 					{#if selectedReasoning.length > 0}
 						<div class="flex flex-col gap-4">
 							{#each selectedReasoning as entry (entry.id)}
-								<p class="whitespace-pre-wrap break-words text-sm leading-relaxed">{entry.text}</p>
+								{@render reasoningEntry(entry)}
 							{/each}
 						</div>
 					{:else}
-						<p class="py-3 text-sm text-foreground-muted">
-							{active
-								? 'Reasoning appears here as the specialist thinks through the change.'
-								: 'No reasoning was captured for this specialist.'}
-						</p>
+						<Typography.Text class="py-3 text-sm text-foreground-muted">
+							{active && (selected.status === 'running' || selected.status === 'waiting' || selected.status === 'queued')
+								? 'Waiting for a provider reasoning summary. Tool calls and tasks update independently.'
+								: 'The provider did not return a reasoning summary for this specialist.'}
+						</Typography.Text>
 					{/if}
 				</Tabs.Content>
 
@@ -457,29 +485,10 @@
 							<h3 class="text-sm font-medium">Tool calls · {selectedTools.length}</h3>
 							<span class="text-[12px] text-foreground-muted">Read-only evidence retrieval</span>
 						</div>
-						<div class="overflow-hidden rounded-[var(--radius-lg)] border border-border">
-							<ul class="m-0 flex list-none flex-col divide-y divide-border p-0">
-								{#each selectedTools as tool (tool.id)}
-									<li class="flex items-center gap-3 px-3 py-2 font-mono text-[13px]">
-										{#if tool.status === 'running'}
-											<Spinner size={13} class="shrink-0 text-foreground-muted" aria-hidden="true" />
-										{:else}
-											<span class="shrink-0 text-foreground-muted" aria-hidden="true">$</span>
-										{/if}
-										<span class="min-w-0 flex-1 break-words" title={tool.summary}>{tool.command}</span>
-										{#if tool.status === 'running'}
-											<span class="shrink-0 text-[var(--color-info-vivid)]">running</span>
-										{:else if tool.status === 'error'}
-											<span class="shrink-0 text-error">{tool.exitCode === null ? 'failed' : `exit ${tool.exitCode}`}</span>
-										{:else}
-											<span class="shrink-0 text-success">{tool.exitCode === null ? 'complete' : `exit ${tool.exitCode}`}</span>
-										{/if}
-										<span class="w-14 shrink-0 text-right tabular-nums text-foreground-muted">
-											{toolDuration(tool)}
-										</span>
-									</li>
-								{/each}
-							</ul>
+						<div class="flex min-w-0 flex-col gap-3">
+							{#each selectedTools as tool (tool.id)}
+								<ReviewToolCallView {tool} duration={toolDuration(tool)} {active} />
+							{/each}
 						</div>
 					{:else}
 						<p class="py-3 text-sm text-foreground-muted">
@@ -524,19 +533,6 @@
 {#snippet footerContent()}
 	{#if coverage || recommendedChecks.length > 0 || pipelineLogs.length > 0}
 		<div class="mt-8 flex flex-col gap-4 border-t border-border pt-6">
-			{#if coverage}
-				<div class="flex flex-col gap-1">
-					<p class="text-sm text-foreground-muted">
-						{coverage.reviewed} reviewed · {coverage.partial} partial · {coverage.excluded} excluded ·
-						{coverage.pending} pending
-					</p>
-					{#each coverageGaps as gap (gap.hunkId ?? gap.path + gap.reason)}
-						<p class="break-all font-mono text-[12px] text-foreground-muted">
-							{gap.path}{gap.hunkId ? ` · ${gap.hunkId}` : ''} · {gap.state} · {gap.reason}
-						</p>
-					{/each}
-				</div>
-			{/if}
 			{#if recommendedChecks.length > 0}
 				<section aria-label="Recommended checks">
 					<h2 class="mb-2 text-sm font-semibold">Checks recommended but not executed</h2>
@@ -546,19 +542,26 @@
 				</section>
 			{/if}
 			<Collapsible.Root bind:open={activityOpen}>
-				<div class="flex items-center justify-between gap-2 rounded-[var(--radius-lg)] border border-border px-3 py-2.5">
+				<Collapsible.Trigger class="flex w-full items-center justify-between gap-2 rounded-[var(--radius-lg)] border border-border px-3 py-2.5 text-left transition-colors hover:bg-secondary">
 					<span class="text-sm font-medium">Activity history</span>
 					<span class="flex items-center gap-2 text-[13px] text-foreground-muted">
 						{plural(pipelineLogs.length, 'event')}
-						<Collapsible.Trigger class="flex items-center gap-1 text-[var(--color-info-vivid)] hover:underline hover:underline-offset-4">
-							{activityOpen ? 'Collapse' : 'Expand'}
-							<ChevronDown size={13} class="transition-transform {activityOpen ? 'rotate-180' : ''}" />
-						</Collapsible.Trigger>
+						<ChevronDown size={13} class="transition-transform {activityOpen ? 'rotate-180' : ''}" />
 					</span>
-				</div>
+				</Collapsible.Trigger>
 				<Collapsible.Content>
-					<ScrollArea class="mt-2 max-h-64" aria-label="Pipeline activity" showCues={false}>
+					<ScrollArea class="mt-2" style="max-height: 24rem" aria-label="Pipeline activity" showCues={false}>
 						<div class="space-y-2 pr-2 text-[13px] text-foreground-muted">
+							{#if coverage}
+								<Typography.Text class="text-sm text-foreground-muted">
+									{coverage.reviewed} reviewed · {coverage.partial} partial · {coverage.excluded} excluded · {coverage.pending} pending
+								</Typography.Text>
+							{/if}
+							{#each coverageGaps as gap (gap.hunkId ?? gap.path + gap.reason)}
+								<Typography.Text class="break-all font-mono text-xs text-foreground-muted">
+									{gap.path}{gap.hunkId ? ` · ${gap.hunkId}` : ''} · {gap.state} · {gap.reason}
+								</Typography.Text>
+							{/each}
 							{#each pipelineLogs as line, index (index)}
 								<p class="break-words">{line}</p>
 							{:else}
@@ -574,16 +577,144 @@
 	{#if !active && doneHref}<div class="mt-6"><Button href={doneHref}>Open session</Button></div>{/if}
 {/snippet}
 
+{#snippet pipelineSidebar()}
+	<section aria-label="Review pipeline">
+		<div class="flex items-center gap-2.5">
+			{#if failed}<CircleAlert size={18} class="text-error" />
+			{:else if active}<Spinner size={18} aria-hidden="true" />
+			{:else}<Check size={18} class="text-success" />{/if}
+			<h2 class="text-base font-semibold">{stageLabel}</h2>
+		</div>
+
+		{#if errorMessage}
+			<p role="alert" class="mt-3 break-words text-sm text-error">{errorMessage}</p>
+		{/if}
+		{#if stageDetail}<p class="mt-3 text-sm text-foreground-muted">{stageDetail}</p>{/if}
+		{#if planSummary}<p class="mt-3 text-sm text-foreground-muted">{planSummary}</p>{/if}
+
+		<div class="mt-4 flex flex-col">
+			{#each stages as stage_, index (stage_.key)}
+				{@const state = stageStates[index]}
+				<div class="flex gap-3">
+					<div class="flex flex-col items-center">
+						<div
+							class="flex size-6 shrink-0 items-center justify-center rounded-full border transition-colors {state ===
+							'active'
+								? 'border-primary bg-primary/[0.08]'
+								: state === 'done'
+									? 'border-success/50 bg-success/10'
+									: state === 'error'
+										? 'border-error/50 bg-error/10'
+										: 'border-border bg-secondary'}"
+						>
+							{#if state === 'done'}
+								<Check size={13} class="text-success" aria-hidden="true" />
+							{:else if state === 'active'}
+								<Spinner size={12} aria-hidden="true" />
+							{:else if state === 'error'}
+								<CircleAlert size={13} class="text-error" aria-hidden="true" />
+							{:else}
+								<span class="size-1.5 rounded-full bg-foreground-muted/40" aria-hidden="true"></span>
+							{/if}
+						</div>
+						{#if index < stages.length - 1}
+							<div class="my-1 w-px flex-1 bg-border"></div>
+						{/if}
+					</div>
+					<div class="min-w-0 pb-5">
+						<span
+							class="text-sm font-medium {state === 'active'
+								? 'text-foreground'
+								: state === 'done'
+									? 'text-foreground'
+									: state === 'error'
+										? 'text-error'
+										: 'text-foreground-muted'}"
+						>
+							{stage_.label}
+						</span>
+						{#if state === 'active' && stageDetail}
+							<p class="mt-0.5 text-[13px] text-foreground-muted">{stageDetail}</p>
+						{/if}
+					</div>
+				</div>
+			{/each}
+		</div>
+
+		{#if tasks.length > 0}
+			<div class="mt-2 space-y-2">
+				<div class="flex items-baseline justify-between gap-2 text-sm">
+					<span class="text-foreground-muted">{completeTasks} of {tasks.length} tasks</span>
+					{#if failedTasks > 0}<span class="text-error">{failedTasks} failed</span>{/if}
+				</div>
+				<Progress
+					value={completeTasks}
+					max={Math.max(tasks.length, 1)}
+					{...{ 'aria-label': 'Completed review tasks' }}
+				/>
+				<div class="text-[13px] text-foreground-muted">
+					{activeSpecialists} specialists working · {completeSpecialists} complete
+				</div>
+			</div>
+		{/if}
+
+		{#if connectionLabel}
+			<p
+				role="status"
+				class="mt-3 text-[13px] {connectionLost ? 'text-warning' : 'text-foreground-muted'}"
+			>
+				{connectionLabel}
+			</p>
+		{/if}
+	</section>
+{/snippet}
+
+{#snippet mobilePipeline()}
+	<div class="mb-4 flex flex-col gap-2 lg:hidden">
+		<div class="flex items-center gap-2">
+			{#if failed}<CircleAlert size={16} class="text-error" />
+			{:else if active}<Spinner size={16} aria-hidden="true" />
+			{:else}<Check size={16} class="text-success" />{/if}
+			<span class="text-sm font-medium">{stageLabel}</span>
+			{#if connectionLabel}
+				<span class="ml-auto text-[12px] {connectionLost ? 'text-warning' : 'text-foreground-muted'}">
+					{connectionLabel}
+				</span>
+			{/if}
+		</div>
+		{#if tasks.length > 0}
+			<div class="flex items-center gap-2">
+				<Progress
+					class="h-1.5 flex-1"
+					value={completeTasks}
+					max={Math.max(tasks.length, 1)}
+					{...{ 'aria-label': 'Completed review tasks' }}
+				/>
+				<span class="shrink-0 text-[12px] text-foreground-muted">{completeTasks}/{tasks.length}</span>
+			</div>
+		{/if}
+		{#if errorMessage}
+			<p role="alert" class="text-[13px] text-error">{errorMessage}</p>
+		{/if}
+	</div>
+{/snippet}
+
 {#if fullscreen}
 	<div class="flex h-full flex-col overflow-hidden">
-		<div class="shrink-0 px-5 pt-5 sm:px-6">
+		<div class="shrink-0 border-b border-border px-5 py-4 sm:px-6">
 			{@render headerContent()}
-			{@render statusContent()}
 		</div>
 		<div class="flex min-h-0 flex-1">
-			<aside class="hidden w-[340px] shrink-0 border-r border-border lg:flex lg:flex-col">
-				<ScrollArea class="min-h-0 flex-1" aria-label="Specialist activity" showCues={false}>
-					<div class="p-4">{@render activityContent()}</div>
+			<aside class="hidden w-[320px] shrink-0 flex-col border-r border-border lg:flex">
+				<ScrollArea class="min-h-0 flex-[2_1_0%]" showCues={false}>
+					<div class="p-4">
+						{@render pipelineSidebar()}
+					</div>
+				</ScrollArea>
+				<ScrollArea class="min-h-0 flex-1 border-t border-border" showCues={false}>
+					<div class="p-4">
+						{@render activityContent()}
+					</div>
 				</ScrollArea>
 			</aside>
 			<section class="min-w-0 flex-1">
@@ -597,6 +728,7 @@
 								</Select.Content>
 							</Select.Root>
 						</div>
+						{@render mobilePipeline()}
 						{@render detailContent()}
 						{@render footerContent()}
 					</div>

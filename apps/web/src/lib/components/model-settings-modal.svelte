@@ -1,8 +1,10 @@
 <script lang="ts">
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Plus from '@lucide/svelte/icons/plus';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
+	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import * as Select from '@sivir-ui/svelte/components/select';
@@ -11,7 +13,6 @@
 	import type {
 		CodexModel,
 		ModelEntry,
-		ReasoningEffort,
 		ReviewRole
 	} from '@recoder/shared';
 	import CodexConnection from './codex-connection.svelte';
@@ -19,11 +20,11 @@
 	import { formatAgentName } from '$lib/threads.svelte';
 	import { createNestedEscapeGuard } from '$lib/nested-escape-guard.svelte';
 	const connectionEscape = createNestedEscapeGuard(
-		['sharedModel', 'usage', ...MODEL_ROLES],
+		['sharedModel', 'usage'],
 		() => modelSettingsUi.open
 	);
 	const roleEscape = createNestedEscapeGuard(
-		['model', 'effort'],
+		['model'],
 		() => roleOpen
 	);
 
@@ -31,11 +32,9 @@
 		newKey?: string;
 	}
 	const SHARED = '__shared__';
-	const DEFAULT_EFFORTS: ReasoningEffort[] = ['minimal', 'low', 'medium', 'high'];
 	let entries = $state<DraftEntry[]>([]);
 	let sharedId = $state('');
 	let roleIds = $state<Partial<Record<ReviewRole, string>>>({});
-	let roleEfforts = $state<Partial<Record<ReviewRole, ReasoningEffort>>>({});
 	let seeded = $state(false);
 	let adding = $state(false);
 	let draftLabel = $state('');
@@ -45,23 +44,19 @@
 	let editingRole = $state<ReviewRole | null>(null);
 	let roleOpen = $state(false);
 	let draftRoleModel = $state(SHARED);
-	let draftEffort = $state<ReasoningEffort | undefined>();
+	let advancedOpen = $state(false);
 	const sharedEntry = $derived(entries.find((entry) => entry.id === sharedId));
 	const apiEntries = $derived(entries.filter((entry) => entry.provider !== 'codex'));
 	const label = (entry: ModelEntry) =>
 		entry.provider === 'codex'
 			? entry.label.replace(/\s*·\s*subscription$/i, '')
 			: entry.label;
-	const effortLabel = (effort?: ReasoningEffort) =>
-		effort ? effort[0].toUpperCase() + effort.slice(1) : 'Medium';
 	const roleModelLabel = (role: ReviewRole) =>
 		entries.find((entry) => entry.id === roleIds[role]);
-	/** Reasoning levels the provider reports for a model (falls back to the full set). */
-	function effortsFor(modelId: string | null | undefined): ReasoningEffort[] {
-		const resolved = !modelId || modelId === SHARED ? sharedId : modelId;
-		const entry = entries.find((item) => item.id === resolved);
-		return entry?.efforts?.length ? entry.efforts : DEFAULT_EFFORTS;
-	}
+	/** Specialists overriding the default model — surfaced on the Advanced trigger. */
+	const customizedCount = $derived(
+		MODEL_ROLES.filter((role) => (roleIds[role] ?? SHARED) !== SHARED).length
+	);
 
 	$effect(() => {
 		if (
@@ -79,15 +74,13 @@
 			roleIds = Object.fromEntries(
 				MODEL_ROLES.map((role) => [role, config.roles[role] ?? SHARED])
 			);
-			roleEfforts = Object.fromEntries(
-				MODEL_ROLES.map((role) => [role, config.roleEfforts?.[role] ?? 'medium'])
-			) as Partial<Record<ReviewRole, ReasoningEffort>>;
 			seeded = true;
 		}
 		if (!modelSettingsUi.open) {
 			seeded = false;
 			adding = false;
 			roleOpen = false;
+			advancedOpen = false;
 			draftKey = '';
 		}
 	});
@@ -110,8 +103,7 @@
 					role,
 					roleIds[role] === SHARED ? '' : (roleIds[role] ?? '')
 				])
-			),
-			roleEfforts
+			)
 		});
 		if (ok && modelSettingsUi.config)
 			entries = modelSettingsUi.config.models.map((entry) => ({
@@ -202,17 +194,33 @@
 	function editRole(role: ReviewRole): void {
 		editingRole = role;
 		draftRoleModel = roleIds[role] ?? SHARED;
-		draftEffort = roleEfforts[role] ?? 'medium';
 		roleOpen = true;
 	}
 
 	async function saveRole(): Promise<void> {
 		if (!editingRole) return;
 		roleIds[editingRole] = draftRoleModel;
-		roleEfforts[editingRole] = draftEffort ?? 'medium';
 		if (await persist()) roleOpen = false;
 	}
+
+	/** Enter closes the settings (Done) unless focus is on a control or a nested modal is open. */
+	function handleEnterDone(event: KeyboardEvent): void {
+		if (event.key !== 'Enter' || !modelSettingsUi.open) return;
+		if (modelSettingsUi.saving || adding || roleOpen) return;
+		if (Object.values(connectionEscape.open).some(Boolean)) return;
+		const target = event.target as HTMLElement | null;
+		if (
+			target?.closest(
+				'button, a, input, textarea, select, [role="option"], [role="menuitem"], [role="listbox"]'
+			)
+		)
+			return;
+		event.preventDefault();
+		modelSettingsUi.hide();
+	}
 </script>
+
+<svelte:window onkeydown={handleEnterDone} />
 
 <Modal.Root bind:open={modelSettingsUi.open}>
 	<Modal.Content
@@ -251,9 +259,7 @@
 					showCues={false}
 					aria-label="Connection settings"
 				>
-					<div
-						class="grid gap-6 p-0.5 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]"
-					>
+					<div class="flex flex-col gap-6 p-0.5">
 						<section
 							class="flex min-w-0 flex-col gap-2.5"
 							aria-label="Model providers"
@@ -404,83 +410,72 @@
 										>
 									</Select.Root>
 								</div>
-								<div
-									class="flex items-center justify-between gap-2 border-t border-border px-4 py-2 text-xs text-foreground-muted"
+								<Collapsible.Root bind:open={advancedOpen}>
+								<Collapsible.Trigger
+									class="flex w-full items-center justify-between gap-2 border-t border-border px-4 py-2.5 text-left text-sm font-medium transition-colors hover:bg-secondary"
 								>
-									<span>Role</span>
-									<span>Reasoning effort</span>
-								</div>
-								<ul
-									class="m-0 flex list-none flex-col divide-y divide-border p-0"
-									aria-label="Reviewer role settings"
-								>
-									{#each MODEL_ROLES as role (role)}
-										{@const override = roleModelLabel(role)}
-										<li
-											class="flex items-center gap-2 px-4 py-2.5"
-										>
-											<div class="min-w-0 flex-1">
-												<div
-													class="truncate text-sm font-medium"
-												>
-													{formatAgentName(role)}
-												</div>
-												<div
-													class="truncate text-xs text-foreground-muted"
-													title={override
-														? label(override)
-														: 'Uses default model'}
-												>
-													{override
-														? label(override)
-														: 'Default model'}
-												</div>
-											</div>
-											<Select.Root
-												value={roleEfforts[role] ?? 'medium'}
-												bind:open={connectionEscape.open[role]}
+									<span>Advanced</span>
+									<span
+										class="flex items-center gap-2 text-xs font-normal text-foreground-muted"
+									>
+										{#if customizedCount > 0}
+											<span>{customizedCount} customized</span>
+										{/if}
+										<ChevronDown
+											size={13}
+											aria-hidden="true"
+											class="transition-transform {advancedOpen
+												? 'rotate-180'
+												: ''}"
+										/>
+									</span>
+								</Collapsible.Trigger>
+								<Collapsible.Content>
+									<ul
+										class="m-0 flex list-none flex-col divide-y divide-border border-t border-border p-0"
+										aria-label="Reviewer role settings"
+									>
+										{#each MODEL_ROLES as role (role)}
+											{@const override = roleModelLabel(role)}
+											<li
+												class="flex items-center gap-2 px-4 py-2.5"
 											>
-												<Select.Trigger
+												<div class="min-w-0 flex-1">
+													<div
+														class="truncate text-sm font-medium"
+													>
+														{formatAgentName(role)}
+													</div>
+													<div
+														class="truncate text-xs text-foreground-muted"
+														title={override
+															? label(override)
+															: 'Uses default model'}
+													>
+														{override
+															? label(override)
+															: 'Default model'}
+													</div>
+												</div>
+												<Button
 													variant="ghost"
-													class="min-w-24 shrink-0 justify-between"
+													size="icon"
+													class="size-9 shrink-0"
 													disabled={modelSettingsUi.saving}
-													aria-label="{formatAgentName(
+													aria-label="Customize {formatAgentName(
 														role
-													)} reasoning effort"
-													>{effortLabel(
-														roleEfforts[role]
-													)}</Select.Trigger
+													)}"
+													onclick={() => editRole(role)}
+													><SlidersHorizontal
+														size={14}
+														aria-hidden="true"
+													/></Button
 												>
-												<Select.Content
-													>{#each effortsFor(roleIds[role] ?? SHARED) as effort}<Select.Item
-															value={effort}
-															onclick={() => {
-																roleEfforts[role] =
-																	effort;
-																void persist();
-															}}>{effortLabel(
-																effort
-															)}</Select.Item
-														>{/each}</Select.Content
-												>
-											</Select.Root>
-											<Button
-												variant="ghost"
-												size="icon"
-												class="size-9 shrink-0"
-												disabled={modelSettingsUi.saving}
-												aria-label="Customize {formatAgentName(
-													role
-												)}"
-												onclick={() => editRole(role)}
-												><SlidersHorizontal
-													size={14}
-													aria-hidden="true"
-												/></Button
-											>
-										</li>
-									{/each}
-								</ul>
+											</li>
+										{/each}
+									</ul>
+								</Collapsible.Content>
+							</Collapsible.Root>
 							</Card.Root>
 						</section>
 					</div>
@@ -523,33 +518,8 @@
 												onclick={() => (draftRoleModel = entry.id)}
 												>{label(entry)}</Select.Item
 											>{/each}</Select.Content
-									></Select.Root
+									>						</Select.Root
 								>
-							</div>
-							<div class="grid gap-2">
-								<span class="text-sm font-medium">Reasoning effort</span
-								>								<Select.Root
-									value={draftEffort ?? 'medium'}
-									bind:open={roleEscape.open.effort}
-									><Select.Trigger
-										variant="outline"
-										aria-label="Role reasoning effort"
-										disabled={modelSettingsUi.saving}
-										class="w-full justify-between"
-										>{effortLabel(draftEffort)}</Select.Trigger
-									><Select.Content
-										>{#each effortsFor(draftRoleModel) as effort}<Select.Item
-												value={effort}
-												onclick={() => (draftEffort = effort)}
-												>{effortLabel(effort)}</Select.Item
-											>{/each}</Select.Content
-									></Select.Root
-								>
-								<p class="m-0 text-xs text-foreground-muted">
-									Higher effort can improve complex reviews, but takes longer
-									and uses more tokens. Levels reflect what the selected model
-									supports.
-								</p>
 							</div>
 							{#if modelSettingsUi.error}<p
 									role="alert"
@@ -572,7 +542,7 @@
 		</Modal.Body>
 		<Modal.Footer>
 			<div
-				class="flex min-w-0 flex-1 items-center gap-2 text-xs text-foreground-muted"
+				class="flex min-w-0 flex-1 items-center gap-2 pl-3 text-xs text-foreground-muted"
 				role="status"
 			>
 				{#if modelSettingsUi.error && seeded}<span class="text-error"

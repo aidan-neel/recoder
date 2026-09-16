@@ -131,7 +131,9 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 			const { codex } = await import('./codex');
 			try { result = await codex.complete(remaining); }
 			catch (error) { if (error instanceof LlmError) throw error; throw new LlmError(0, 'ChatGPT request failed'); }
-		} else result = await chatCompletionInner(remaining);
+		} else result = opts.onReasoning
+			? await streamChatCompletionInner(remaining, () => {})
+			: await chatCompletionInner(remaining);
 		success = true;
 		return result;
 	} finally {
@@ -170,22 +172,7 @@ async function chatCompletionInner(opts: ChatOptions): Promise<string> {
 			const text = await res.text().catch(() => res.statusText);
 			throw new LlmError(res.status, `LLM ${res.status}: ${text.slice(0, 500)}`);
 		}
-		const body = (await res.json()) as {
-			choices?: {
-				finish_reason?: string;
-				message?: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null };
-			}[];
-			usage?: unknown;
-		};
-		opts.onUsage?.(normalizeTokenUsage(body.usage, 'openai-compatible'));
-		const reasoning = body.choices?.[0]?.message?.reasoning_content ?? body.choices?.[0]?.message?.reasoning;
-		if (typeof reasoning === 'string' && reasoning) opts.onReasoning?.(reasoning);
-		if (body.choices?.[0]?.finish_reason === 'length') {
-			throw new LlmError(0, 'Model output truncated at the output-token limit; return a shorter JSON result');
-		}
-		const content = body.choices?.[0]?.message?.content;
-		if (!content) throw new LlmError(res.status, 'LLM returned no content');
-		return content;
+		return await readChatResponse(res, opts);
 	} catch (err) {
 		if (err instanceof LlmError) throw err;
 		if (controller.signal.aborted) {
@@ -196,6 +183,22 @@ async function chatCompletionInner(opts: ChatOptions): Promise<string> {
 		clearTimeout(timer);
 		opts.signal?.removeEventListener('abort', abort);
 	}
+}
+
+async function readChatResponse(res: Response, opts: ChatOptions): Promise<string> {
+	const body = await res.json() as {
+		choices?: { finish_reason?: string; message?: { content?: string | null; reasoning_content?: string | null; reasoning?: string | null } }[];
+		usage?: unknown;
+	};
+	opts.onUsage?.(normalizeTokenUsage(body.usage, 'openai-compatible'));
+	const reasoning = body.choices?.[0]?.message?.reasoning_content ?? body.choices?.[0]?.message?.reasoning;
+	if (typeof reasoning === 'string' && reasoning) opts.onReasoning?.(reasoning);
+	if (body.choices?.[0]?.finish_reason === 'length') {
+		throw new LlmError(0, 'Model output truncated at the output-token limit; return a shorter JSON result');
+	}
+	const content = body.choices?.[0]?.message?.content;
+	if (!content) throw new LlmError(res.status, 'LLM returned no content');
+	return content;
 }
 
 /**
@@ -231,6 +234,10 @@ async function streamChatCompletionInner(
 	const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 120_000);
 	const abort = () => controller.abort();
 	opts.signal?.addEventListener('abort', abort, { once: true });
+	if (opts.signal?.aborted) controller.abort();
+	let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+	const cancelReader = () => { void reader?.cancel().catch(() => {}); };
+	controller.signal.addEventListener('abort', cancelReader, { once: true });
 
 	try {
 		const res = await fetch(`${opts.baseUrl}/chat/completions`, {
@@ -247,7 +254,8 @@ async function streamChatCompletionInner(
 				stream: true,
 				stream_options: { include_usage: true },
 				...(opts.reasoningEffort !== undefined ? { reasoning_effort: opts.reasoningEffort } : {}),
-				...(opts.seed !== undefined ? { seed: opts.seed } : {})
+				...(opts.seed !== undefined ? { seed: opts.seed } : {}),
+				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {})
 			}),
 			signal: controller.signal
 		});
@@ -255,14 +263,22 @@ async function streamChatCompletionInner(
 			const text = await res.text().catch(() => res.statusText);
 			throw new LlmError(res.status, `LLM ${res.status}: ${text.slice(0, 500)}`);
 		}
+		// Some compatible endpoints return a normal response despite stream=true.
+		if (res.headers.get('content-type')?.includes('application/json')) {
+			const text = await readChatResponse(res, opts);
+			onToken(text);
+			return text;
+		}
 		let full = '';
 		let ended = false;
 		let streamError: string | undefined;
-		const reader = res.body.getReader();
+		reader = res.body.getReader();
 		const decoder = new TextDecoder();
 		let buffer = '';
 		while (!ended) {
+			controller.signal.throwIfAborted();
 			const { done, value } = await reader.read();
+			controller.signal.throwIfAborted();
 			buffer += done ? decoder.decode() + '\n' : decoder.decode(value, { stream: true });
 			let idx: number;
 			while ((idx = buffer.indexOf('\n')) >= 0) {
@@ -298,9 +314,15 @@ async function streamChatCompletionInner(
 		return full;
 	} catch (err) {
 		if (err instanceof LlmError) throw err;
+		if (controller.signal.aborted) {
+			throw new LlmError(0, opts.signal?.aborted ? 'Model request cancelled' : `Model request timed out after ${Math.round((opts.timeoutMs ?? 120_000) / 1000)}s`);
+		}
 		throw new LlmError(0, err instanceof Error ? err.message : String(err));
 	} finally {
 		clearTimeout(timer);
 		opts.signal?.removeEventListener('abort', abort);
+		controller.signal.removeEventListener('abort', cancelReader);
+		await reader?.cancel().catch(() => {});
+		reader?.releaseLock();
 	}
 }

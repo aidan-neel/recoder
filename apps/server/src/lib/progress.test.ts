@@ -14,7 +14,9 @@ test('streamed traces match persisted reconnect snapshots and keep assignment ow
 	reportReviewReasoning(id, { ...first, id: 'turn-b', assignmentId: 'correctness-b', text: 'Different assignment' });
 	const tool = { id: 'tool-a', assignmentId: 'correctness-a', role: 'correctness', command: 'readDiff src/a.ts', status: 'running' as const, exitCode: null, startedAt };
 	reportReviewTool(id, tool);
-	reportReviewTool(id, { ...tool, status: 'done', elapsedMs: 31, finishedAt: startedAt });
+	reportReviewTool(id, { ...tool, status: 'done', elapsedMs: 31, finishedAt: startedAt,
+		input: { action: 'readDiff', path: 'src/a.ts' }, result: { content: '-old\n+new', truncated: false, evidenceId: 'ev_1' }
+	});
 	let client = emptyReviewProgress(id);
 	for (const event of reviewEventBuffer(id)) client = applyProgressMessage(client, event);
 	const stored = reviewProgress.get(id)!;
@@ -22,8 +24,30 @@ test('streamed traces match persisted reconnect snapshots and keep assignment ow
 	expect(client.reasoning).toHaveLength(2);
 	expect(client.reasoning![0]).toMatchObject({ at: startedAt, text: 'First update', assignmentId: 'correctness-a' });
 	expect(client.toolCalls).toHaveLength(1);
+	expect(client.toolCalls![0].result?.content).toBe('-old\n+new');
 	expect(client.activity).toHaveLength(1);
 	expect(applyProgressMessage(emptyReviewProgress(id), { type: 'snapshot', snapshot: stored })).toEqual(client);
+});
+
+test('terminal SSE delivers final findings and snapshot immediately, then closes and unsubscribes', async () => {
+	const id = crypto.randomUUID();
+	const now = new Date().toISOString();
+	const review = { id, repoId: 'test', prNumber: 1, headSha: 'abc', status: 'running' as const, summary: null,
+		findings: [], runs: [], source: 'github' as const, prTitle: 'Test', prUrl: null, createdAt: now, updatedAt: now };
+	db.reviews.set(review);
+	const response = await app.request(`/api/reviews/${id}/events`);
+	const reader = response.body!.getReader();
+	await reader.read();
+	const final = { ...review, status: 'passed' as const, summary: 'Review complete',
+		findings: [{ id: 'finding-1', file: 'a.ts', line: 1, severity: 'warning' as const, message: 'Check caller' }] };
+	db.reviews.set(final);
+	emitReviewEvent(id, { type: 'done', message: 'Review complete', data: { outcome: 'complete' } });
+	const event = JSON.parse(new TextDecoder().decode((await reader.read()).value).slice(6).trim());
+	expect(event.review).toEqual(final);
+	expect(event.snapshot.outcome).toBe('complete');
+	expect(applyProgressMessage(emptyReviewProgress(id), event)).toEqual(event.snapshot);
+	expect((await reader.read()).done).toBe(true);
+	expect(listenerCount(id)).toBe(0);
 });
 
 test('task snapshots retain early completions after event history overflows', () => {

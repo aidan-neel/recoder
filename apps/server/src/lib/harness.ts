@@ -9,6 +9,7 @@ import type {
 	ReviewAssignment,
 	ReviewBudgetSnapshot,
 	ReviewOutcome,
+	ReviewReasoningEntry,
 	ReviewStage,
 	ReviewTask,
 	RoleDecision
@@ -82,13 +83,7 @@ export interface HarnessEvents {
 	onBudget?: (budget: ReviewBudgetSnapshot) => void;
 	onCandidates?: (count: number) => void;
 	onStage?: (stage: ReviewStage) => void;
-	onReasoning?: (reasoning: {
-		id: string;
-		text: string;
-		assignmentId?: string;
-		role?: string;
-		model?: string;
-	}) => void;
+	onReasoning?: (reasoning: Omit<ReviewReasoningEntry, 'at'>) => void;
 	onTool?: (tool: ToolCallReport & { assignmentId?: string; role?: string }) => void;
 }
 
@@ -229,13 +224,12 @@ export async function runAdaptiveReview(
 	try {
 		events?.onStage?.('understand');
 		task('inventory', 'Understand changes', 'running', 'Building the change inventory', { kind: 'inventory' });
-		await loadGuidance(inventory, evidence, controller.signal);
+		await loadGuidance(inventory, evidence, controller.signal, events?.onTool);
 		task('inventory', 'Understand changes', 'done', `Inventoried ${inventory.files.length} changed path${inventory.files.length === 1 ? '' : 's'}`, {
 			kind: 'inventory'
 		});
 		publishCoverage();
 
-		events?.onStage?.('specialists');
 		task('planning', 'Planning the review', 'running', 'Planning specialist assignments', {
 			kind: 'planning',
 			agent: 'correctness'
@@ -292,6 +286,7 @@ export async function runAdaptiveReview(
 		const recommended = new Set<string>();
 		const followUps: PlannerAssignment[] = [];
 
+		events?.onStage?.('specialists');
 		await runAssignmentPool(
 			plan.assignments,
 			assignments,
@@ -843,11 +838,12 @@ function anchorFn(inventory: ReviewInventory) {
 	};
 }
 
-async function loadGuidance(inventory: ReviewInventory, evidence: EvidenceStore, signal: AbortSignal): Promise<void> {
+async function loadGuidance(inventory: ReviewInventory, evidence: EvidenceStore, signal: AbortSignal, onTool?: HarnessEvents['onTool']): Promise<void> {
 	if (!evidence.revision) return;
-	const reads = INSTRUCTION_PATHS.map((path) => ({ action: 'readFile' as const, revision: 'target', path, startLine: 1, endLine: 80 }));
+	const paths = await evidence.existingFiles('target', INSTRUCTION_PATHS, signal);
+	const reads = paths.map((path) => ({ action: 'readFile' as const, revision: 'target', path, startLine: 1, endLine: 80 }));
 	for (let i = 0; i < reads.length; i += REVIEW_POLICY.maxRetrievalsPerTurn) {
-		const results = await evidence.executeRound(reads.slice(i, i + REVIEW_POLICY.maxRetrievalsPerTurn), signal);
+		const results = await evidence.executeRound(reads.slice(i, i + REVIEW_POLICY.maxRetrievalsPerTurn), signal, onTool);
 		for (const result of results) {
 			if (!result.ok || !result.path || !result.content.trim()) continue;
 			inventory.instructionFiles.push({
@@ -864,7 +860,8 @@ async function loadGuidance(inventory: ReviewInventory, evidence: EvidenceStore,
 		if (!base || base.length < 3) continue;
 		const results = await evidence.executeRound(
 			[{ action: 'search', revision: 'target', query: base, prefix: '' }],
-			signal
+			signal,
+			onTool
 		);
 		for (const result of results) {
 			if (!result.ok) continue;

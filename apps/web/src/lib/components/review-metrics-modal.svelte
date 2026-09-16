@@ -1,10 +1,8 @@
 <script lang="ts">
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import * as Alert from '@sivir-ui/svelte/components/alert';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
-	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type {
@@ -31,11 +29,6 @@
 		{ key: 'cacheWriteInputTokens', label: 'Cache writes' },
 		{ key: 'reasoningOutputTokens', label: 'Reasoning output' }
 	] as const;
-	const scopeLabels = {
-		pipeline: 'Review pipeline',
-		discussion: 'Discussions',
-		fix: 'Fix suggestions'
-	};
 
 	$effect(() => {
 		if (!open) return;
@@ -195,53 +188,7 @@
 							{/each}
 						</div>
 					</Card.Root>
-
-					<Collapsible.Root>
-						<Collapsible.Trigger
-							class="w-full justify-between py-1 text-sm font-medium"
-						>
-							By activity
-							<ChevronDown
-								size={15}
-								class="text-foreground-muted transition-transform group-data-[state=open]:rotate-180"
-								aria-hidden="true"
-							/>
-						</Collapsible.Trigger>
-						<Collapsible.Content>
-							<div class="mt-3 grid gap-4">
-								{#each metrics.scopes.filter((scope) => scope.calls > 0) as scope (scope.scope)}
-									<div>
-										<Typography.H4 class="mb-2 mt-0">
-											{scopeLabels[scope.scope]}
-											<Typography.Metadata>({scope.calls} requests)</Typography.Metadata>
-										</Typography.H4>
-										{@render counts(scope, true)}
-									</div>
-								{/each}
-							</div>
-						</Collapsible.Content>
-					</Collapsible.Root>
 				{/if}
-
-				<Collapsible.Root>
-					<Collapsible.Trigger class="w-full justify-between text-xs font-medium">
-						About these counts
-						<ChevronDown
-							size={14}
-							class="text-foreground-muted transition-transform group-data-[state=open]:rotate-180"
-							aria-hidden="true"
-						/>
-					</Collapsible.Trigger>
-					<Collapsible.Content>
-						<Typography.Metadata class="mt-2 block leading-relaxed">
-							Provider-reported tokens, not a billing estimate. Missing counts are
-							unavailable, not zero. Partial sums include only reporting calls.
-							Cache and reasoning breakdowns are included in totals. Models are
-							grouped by requested model and provider. Updates every few seconds
-							while open.
-						</Typography.Metadata>
-					</Collapsible.Content>
-				</Collapsible.Root>
 			{/if}
 		</Modal.Body>
 		<Modal.Footer><Modal.Close>Close</Modal.Close></Modal.Footer>

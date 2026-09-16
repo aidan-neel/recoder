@@ -5,6 +5,7 @@ import { parseActions, formatToolResults, type EvidenceStore, type ToolCallRepor
 import { REVIEW_POLICY } from './review-policy.js';
 import type { RoleConfig } from './models.js';
 import { isAuthFailure } from './planner.js';
+import type { ReviewReasoningEntry } from '@recoder/shared';
 
 export class ReviewAbortedError extends Error {
 	constructor(message: string) {
@@ -61,7 +62,7 @@ export interface JsonAgentOptions<T> {
 	onProgress?: (state: 'queued' | 'running' | 'retrieval', elapsedMs: number, detail: string) => void;
 	onLog?: (message: string) => void;
 	/** Accumulated provider reasoning for a turn, upserted by `id`. */
-	onReasoning?: (reasoning: { id: string; text: string }) => void;
+	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status'>) => void;
 	onTool?: (tool: ToolCallReport) => void;
 }
 
@@ -90,8 +91,8 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		const reasoningId = `reason_${opts.label.slice(0, 24)}_${turn}_${Math.random().toString(36).slice(2, 8)}`;
 		let reasoningText = '';
 		let reasoningEmittedAt = 0;
-		const flushReasoning = () => {
-			if (opts.onReasoning && reasoningText) opts.onReasoning({ id: reasoningId, text: reasoningText });
+		const flushReasoning = (status: ReviewReasoningEntry['status'] = 'streaming') => {
+			if (opts.onReasoning && reasoningText) opts.onReasoning({ id: reasoningId, text: reasoningText, status });
 		};
 		let output: string;
 		try {
@@ -123,7 +124,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 					opts.onProgress?.(state, elapsedMs, state === 'queued' ? 'Waiting for a model slot' : `Running ${opts.label}`)
 			});
 		} catch (err) {
-			flushReasoning();
+			flushReasoning('error');
 			if (isAuthFailure(err)) throw new AuthConfigError(err instanceof Error ? err.message : String(err));
 			if (opts.signal.aborted || (err instanceof LlmError && /cancel/i.test(err.message))) {
 				throw new ReviewAbortedError('review aborted');
@@ -137,7 +138,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			}
 			return { value: null, error: lastError };
 		}
-		flushReasoning();
+		flushReasoning('done');
 		let parsed: unknown;
 		try {
 			parsed = extractJsonValue(output);

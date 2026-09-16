@@ -260,6 +260,21 @@ test('terminal SSE without trailing newline keeps output; missing usage is not f
 	expect(reports).toEqual([]);
 });
 
+test('ChatGPT requests reasoning summaries and deduplicates delta, done and terminal representations', async () => {
+	const item = { id: 'reasoning-1', type: 'reasoning', summary: [{ type: 'summary_text', text: 'Checking callers.' }] };
+	const f = fixture({ handler: (call) => call.url.endsWith('/responses') ? sse([
+		{ type: 'response.reasoning_summary_text.delta', item_id: item.id, summary_index: 0, delta: 'Checking ' },
+		{ type: 'response.reasoning_summary_text.delta', item_id: item.id, summary_index: 0, delta: 'callers.' },
+		{ type: 'response.reasoning_summary_text.done', item_id: item.id, summary_index: 0, text: 'Checking callers.' },
+		{ type: 'response.output_item.done', item },
+		completeEvent({ output: [item, { id: 'reasoning-2', type: 'reasoning', summary: [{ type: 'summary_text', text: 'Compared the old behavior.' }] }, finalItem] })
+	]) : undefined });
+	const reasoning: string[] = [];
+	expect(await f.provider.complete({ ...input, onReasoning: (text) => reasoning.push(text) })).toBe('{"findings":[]}');
+	expect(f.calls.find((call) => call.url.endsWith('/responses'))!.body.reasoning.summary).toBe('auto');
+	expect(reasoning.join('')).toBe('Checking callers.\n\nCompared the old behavior.');
+});
+
 test.each(['response.failed', 'response.incomplete'])('%s retains usage but rejects partial output', async (type) => {
 	const f = fixture({ handler: (call) => call.url.endsWith('/responses') ? sse([{ type, response: { usage, status: 'failed', incomplete_details: { reason: 'max_output_tokens' } } }]) : undefined });
 	const reports: unknown[] = [];

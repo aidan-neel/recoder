@@ -317,12 +317,23 @@ app.get('/:id/events', (c) => {
 				}
 			};
 			const snapshot = reviewProgress.get(review.id) ?? emptyReviewProgress(review.id);
-			send({ type: 'snapshot', snapshot, status: review.status, sequence: snapshot.sequence });
+			send({ type: 'snapshot', snapshot, review, status: review.status, sequence: snapshot.sequence });
 			if (review.status === 'passed' || review.status === 'failed') {
 				controller.close();
 				return;
 			}
-			unsubscribe = subscribeReview(review.id, (event) => send({ ...event }), false);
+			unsubscribe = subscribeReview(review.id, (event) => {
+				const terminal = !event.step && (event.type === 'done' || event.type === 'error');
+				send(terminal ? {
+					...event,
+					review: db.reviews.get(review.id),
+					snapshot: reviewProgress.get(review.id)
+				} : event);
+				if (terminal) {
+					cleanup();
+					controller.close();
+				}
+			}, false);
 			c.req.raw.signal.addEventListener('abort', cleanup, { once: true });
 			heartbeat = setInterval(() => {
 				try {

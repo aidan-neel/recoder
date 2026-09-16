@@ -120,6 +120,7 @@ export interface ReviewReasoningEntry {
 	model?: string;
 	at: string;
 	text: string;
+	status?: 'streaming' | 'done' | 'error';
 }
 
 /** One observable model tool/retrieval call, with its result and timing. */
@@ -136,6 +137,27 @@ export interface ReviewToolCall {
 	elapsedMs?: number;
 	/** Short outcome summary, e.g. `3 matches` or `limiter.ts:61-84`. */
 	summary?: string;
+	/** The actual retrieval request, including revision and range. */
+	input?: {
+		action: string;
+		revision?: string;
+		path?: string;
+		prefix?: string;
+		startLine?: number;
+		endLine?: number;
+		query?: string;
+		hunkIds?: string[];
+		cursor?: string;
+	};
+	/** Bounded preview of the evidence returned to the agent. */
+	result?: {
+		content: string;
+		truncated: boolean;
+		evidenceId?: string;
+		revision?: string;
+		path?: string;
+		error?: string;
+	};
 }
 
 export interface ReviewProgress {

@@ -2,9 +2,9 @@ import type { ChatOptions } from './llm';
 import { LlmError } from './llm';
 import { normalizeTokenUsage } from './metrics';
 
-type OutputItem = { id?: string; type?: string; role?: string; phase?: string; content?: Array<{ type?: string; text?: string }> };
+type OutputItem = { id?: string; type?: string; role?: string; phase?: string; content?: Array<{ type?: string; text?: string }>; summary?: Array<{ type?: string; text?: string }> };
 type ResponseData = { status?: string; output?: OutputItem[]; usage?: Record<string, any>; incomplete_details?: { reason?: string }; error?: { code?: string } };
-type ResponseEvent = { type?: string; item_id?: string; output_index?: number; delta?: string; item?: OutputItem; response?: ResponseData; code?: string };
+type ResponseEvent = { type?: string; item_id?: string; output_index?: number; summary_index?: number; content_index?: number; delta?: string; text?: string; part?: { text?: string }; item?: OutputItem; response?: ResponseData; code?: string };
 
 /** Preserve roles instead of embedding the conversation in one JSON user message. */
 export function chatGptRequest(opts: ChatOptions): Record<string, unknown> {
@@ -17,7 +17,7 @@ export function chatGptRequest(opts: ChatOptions): Record<string, unknown> {
 			type: 'message', role: message.role,
 			content: [{ type: message.role === 'assistant' ? 'output_text' : 'input_text', text: message.content }]
 		})),
-		reasoning: { effort: opts.reasoningEffort ?? 'low' },
+		reasoning: { effort: opts.reasoningEffort ?? 'low', ...(opts.onReasoning ? { summary: 'auto' } : {}) },
 		tools: [], tool_choice: 'none', parallel_tool_calls: false, include: []
 		// The ChatGPT endpoint does not accept max_output_tokens, temperature or
 		// seed. Recoder retains its deadlines and bounded evidence/tool loop.
@@ -48,6 +48,21 @@ export async function readChatGptResponse(response: Response, opts: ChatOptions,
 	const decoder = new TextDecoder();
 	const items = new Map<string, OutputItem>();
 	const deltas = new Map<string, string>();
+	const reasoningParts = new Map<string, string>();
+	const reportReasoning = (key: string, text: string, delta = false) => {
+		const previous = reasoningParts.get(key) ?? '';
+		const next = delta ? previous + text : text;
+		if (!next.startsWith(previous) || next === previous) return;
+		const separator = !reasoningParts.has(key) && reasoningParts.size > 0 ? '\n\n' : '';
+		reasoningParts.set(key, next);
+		opts.onReasoning?.(separator + next.slice(previous.length));
+	};
+	const reportSummary = (item: OutputItem, key: string) => {
+		if (item.type !== 'reasoning') return;
+		item.summary?.forEach((part, index) => {
+			if (part.text) reportReasoning(`${key}:${index}`, part.text);
+		});
+	};
 	let streamed = '';
 	let final = '';
 	let completed = false;
@@ -73,13 +88,20 @@ export async function readChatGptResponse(response: Response, opts: ChatOptions,
 		const key = event.item_id ?? event.item?.id ?? String(event.output_index ?? 0);
 		if (event.type === 'response.output_item.added' || event.type === 'response.output_item.done') {
 			if (event.item) items.set(key, event.item);
+			if (event.item && event.type === 'response.output_item.done') reportSummary(event.item, key);
 		}
 		if (
 			(event.type === 'response.reasoning_text.delta' ||
 				event.type === 'response.reasoning_summary_text.delta') &&
 			typeof event.delta === 'string'
 		) {
-			opts.onReasoning?.(event.delta);
+			reportReasoning(`${key}:${event.summary_index ?? event.content_index ?? 0}`, event.delta, true);
+		}
+		if (event.type === 'response.reasoning_summary_text.done' && event.text) {
+			reportReasoning(`${key}:${event.summary_index ?? 0}`, event.text);
+		}
+		if (event.type === 'response.reasoning_summary_part.done' && event.part?.text) {
+			reportReasoning(`${key}:${event.summary_index ?? 0}`, event.part.text);
 		}
 		if (event.type === 'response.output_text.delta' && typeof event.delta === 'string') {
 			const item = items.get(key);
@@ -101,6 +123,7 @@ export async function readChatGptResponse(response: Response, opts: ChatOptions,
 			}, 'codex'));
 			if (event.type !== 'response.completed' || (event.response?.status && event.response.status !== 'completed')) throw streamFailure(event);
 			const output = event.response?.output ?? [...items.values()];
+			output.forEach((item, index) => reportSummary(item, item.id ?? String(index)));
 			final = output.filter(finalItem).map(itemText).join('') || [...deltas.entries()].filter(([id]) => !items.has(id) || finalItem(items.get(id)!)).map(([, text]) => text).join('');
 			if (!final) throw new LlmError(502, 'ChatGPT returned no final answer.');
 			if (!streamed) onToken?.(final);

@@ -24,6 +24,7 @@
 	import { sessionState } from '$lib/session-state.svelte';
 	import { DEFAULT_FILE, sessionFile } from '$lib/session-file.svelte';
 	import { serverApi } from '$lib/server-api';
+	import { ReviewStream } from '$lib/review-stream.svelte';
 	import type { FileDiff, Review } from '@recoder/shared';
 
 	const id = $derived(page.params.id ?? '');
@@ -48,30 +49,39 @@
 	/** Bumped by the retry button to re-run the backend check. */
 	let retryNonce = $state(0);
 	let filesOpen = $state(false);
+	let reviewStream = $state<ReviewStream | null>(null);
+
+	function acceptReview(review: Review): void {
+		if (page.params.id !== review.id) return;
+		// A polling request started before the terminal SSE must not rewind the UI.
+		if (backendReview?.id === review.id &&
+			(backendReview.status === 'passed' || backendReview.status === 'failed') &&
+			(review.status === 'queued' || review.status === 'running')) return;
+		backendReview = review;
+		const running = review.status === 'queued' || review.status === 'running';
+		if (!sessionState.sessions.some((s) => s.id === review.id)) {
+			sessionState.ensureSession(review.id, review.prTitle || `PR #${review.prNumber}`, `#${review.prNumber}`, running ? 'reviewing' : 'ready');
+		}
+		if (!running && sessionState.sessions.find((s) => s.id === review.id)?.status === 'reviewing') {
+			sessionState.markReady(review.id);
+		}
+	}
+
+	const liveReviewId = $derived(backendReview?.id ?? null);
+	$effect(() => {
+		const currentId = liveReviewId;
+		if (!currentId) { reviewStream = null; return; }
+		const stream = new ReviewStream(currentId, acceptReview);
+		reviewStream = stream;
+		return () => stream.close();
+	});
 
 	async function refreshBackend(currentId: string): Promise<boolean> {
 		try {
 			const review = await serverApi.getReview(currentId);
 			if (page.params.id !== currentId) return false;
 			backendDown = false;
-			backendReview = review;
-			// Direct link or cleared storage: recreate the tab from the review
-			// itself so refresh never lands on "Session not found".
-			if (!sessionState.sessions.some((s) => s.id === currentId)) {
-				const running = review.status === 'queued' || review.status === 'running';
-				sessionState.ensureSession(
-					currentId,
-					review.prTitle && review.prTitle !== '' ? review.prTitle : `PR #${review.prNumber}`,
-					`#${review.prNumber}`,
-					running ? 'reviewing' : 'ready'
-				);
-			}
-			if (
-				(review.status === 'passed' || review.status === 'failed') &&
-				sessionState.sessions.find((s) => s.id === currentId)?.status === 'reviewing'
-			) {
-				sessionState.markReady(currentId);
-			}
+			acceptReview(review);
 			try {
 				const files = await serverApi.getReviewFiles(currentId);
 				if (page.params.id !== currentId) return false;
@@ -85,11 +95,9 @@
 			if (page.params.id !== currentId) return false;
 			// Unknown id → mock fallback (demo sessions). Anything else means
 			// the API itself is unreachable — surfaced, not silently mocked.
-			backendReview = null;
-			backendFiles = null;
 			backendError = e instanceof Error ? e.message : null;
 			backendDown = !(e instanceof Error && /review not found/i.test(e.message));
-			return false;
+			return backendDown;
 		} finally {
 			if (page.params.id === currentId) backendChecked = true;
 		}
@@ -121,8 +129,13 @@
 		};
 	});
 
-	// Keep the progress transcript available after completion until Open diff is selected.
 	let peekDiff = $state(false);
+	let autoOpenedFor = $state<string | null>(null);
+	$effect(() => {
+		if (backendReview?.status !== 'passed' || !backendFiles?.length || autoOpenedFor === backendReview.id) return;
+		autoOpenedFor = backendReview.id;
+		peekDiff = true;
+	});
 
 	const isBackend = $derived(backendChecked && backendReview !== null);
 
@@ -186,6 +199,7 @@
 			userPickedFile = false;
 			findingsSyncedFor = null;
 			peekDiff = false;
+			autoOpenedFor = null;
 			threadsStore.close();
 			threadsStore.pendingMessage = null;
 			notesStore.clear();
@@ -220,12 +234,6 @@
 			lastAutoFile = target;
 		}
 	});
-
-	const backendRunning = $derived(
-		isBackend &&
-			backendReview !== null &&
-			(backendReview.status === 'queued' || backendReview.status === 'running')
-	);
 
 	// Live pipeline log while the backend is working (fetch/sandbox/agents).
 	let queueing = $state(false);
@@ -272,16 +280,17 @@
 		prLabel={session.ref}
 		onDone={() => sessionState.markReady(session.id)}
 	/>
-{:else if backendReview && !peekDiff}
+{:else if backendReview && reviewStream && !peekDiff}
 	{@const diffFiles = backendFiles ?? []}
 	{#key backendReview.id}
 	<LiveReviewProgress
 		review={backendReview}
+		stream={reviewStream}
 		repo={session.name}
 		files={backendFiles ? diffFiles.length : null}
 		additions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.additions, 0) : null}
 		deletions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
-		onOpenDiff={backendFiles?.length && !backendRunning ? () => (peekDiff = true) : null}
+		onOpenDiff={backendFiles?.length ? () => (peekDiff = true) : null}
 		onRestart={() => void rerunReview()}
 		restarting={queueing}
 		actionError={backendError}
@@ -341,10 +350,7 @@
 						></span>
 					{/if}
 					<span class="truncate">
-						{#if backendReview.prTitle}{backendReview.prTitle} · {/if}PR #{backendReview.prNumber}
-						· {backendReview.source} · {backendReview.status === 'passed' ? 'Review complete' : backendReview.status === 'failed' ? 'Review incomplete' : backendReview.status}{backendFiles
-							? ` · ${backendFiles.length} files`
-							: ' · fetching diff…'}
+						{#if backendReview.prTitle}{backendReview.prTitle}{:else}PR #{backendReview.prNumber}{/if}
 					</span>
 					{#if peekDiff}
 						<Button

@@ -2,6 +2,7 @@ import {
 	assignmentCounts,
 	emptyReviewProgress,
 	formatAssignmentHeadline,
+	type Review,
 	type ReviewAssignment,
 	type ReviewProgress,
 	type ReviewReasoningEntry,
@@ -16,6 +17,7 @@ export interface ProgressMessage {
 	message?: string;
 	step?: string;
 	status?: string;
+	review?: Review;
 	snapshot?: ReviewProgress;
 	data?: {
 		task?: ReviewTask;
@@ -44,7 +46,9 @@ const SNAPSHOT_KEYS = [
 ] as const;
 
 export function applyProgressMessage(current: ReviewProgress, event: ProgressMessage): ReviewProgress {
-	if (event.type === 'snapshot' && event.snapshot) return event.snapshot;
+	if (event.snapshot) {
+		return event.snapshot.id === current.id && event.snapshot.sequence >= current.sequence ? event.snapshot : current;
+	}
 	if (!event.sequence || event.sequence <= current.sequence) return current;
 	const next: ReviewProgress = { ...current, sequence: event.sequence, updatedAt: event.at ?? current.updatedAt };
 	const data = event.data;

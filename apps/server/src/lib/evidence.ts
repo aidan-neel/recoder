@@ -1,6 +1,6 @@
 import { REVIEW_POLICY } from './review-policy.js';
 import type { ReviewInventory } from './inventory.js';
-import type { FileDiff } from '@recoder/shared';
+import type { FileDiff, ReviewToolCall } from '@recoder/shared';
 
 export type RevisionAlias = 'head' | 'target' | 'mergeBase';
 
@@ -36,22 +36,12 @@ export interface RetrievalAction {
 }
 
 /** Observable tool/retrieval call reported to the live review dashboard. */
-export interface ToolCallReport {
-	id: string;
-	command: string;
-	status: 'running' | 'done' | 'error';
-	exitCode: number | null;
-	startedAt: string;
-	finishedAt?: string;
-	elapsedMs?: number;
-	summary?: string;
-}
+export type ToolCallReport = Omit<ReviewToolCall, 'assignmentId' | 'role'>;
 
 export function actionCommand(action: RetrievalAction): string {
-	const path = action.path ? ` ${action.path}` : '';
 	switch (action.action) {
 		case 'search':
-			return `search ${JSON.stringify(action.query ?? '')}${path || ' .'}`;
+			return `search ${JSON.stringify(action.query ?? '')} ${action.prefix || '.'}`;
 		case 'readFile':
 			return `read${action.path ? ` ${action.path}` : ''}${
 				action.startLine ? `:${action.startLine}-${action.endLine ?? action.startLine}` : ''
@@ -108,6 +98,25 @@ export class EvidenceStore {
 		return this.records.get(id);
 	}
 
+	/** Discover optional regular files before issuing observable read requests. */
+	async existingFiles(revision: RevisionAlias, paths: readonly string[], signal?: AbortSignal): Promise<string[]> {
+		const resolved = this.resolveRevision(revision);
+		if ('error' in resolved) throw new Error(resolved.error);
+		if (!paths.length) return [];
+		if (paths.some((path) => !sanitizeRepoPath(path))) throw new Error('invalid path');
+		if (!this.revision) return paths.filter((path) => this.inventory.files.some((file) => file.path === path));
+		const listed = await git(this.revision.checkoutPath, ['ls-tree', '-z', resolved.sha, '--', ...paths], signal);
+		if (listed.code !== 0) throw new Error(listed.stderr.slice(0, 400) || 'File discovery failed');
+		const found = new Set<string>();
+		for (const record of listed.stdout.split('\0')) {
+			const tab = record.indexOf('\t');
+			if (tab < 0) continue;
+			const [mode, type] = record.slice(0, tab).split(/\s+/);
+			if (type === 'blob' && (mode === '100644' || mode === '100755')) found.add(record.slice(tab + 1));
+		}
+		return paths.filter((path) => found.has(path));
+	}
+
 	private remember(record: Omit<EvidenceRecord, 'id'>): EvidenceRecord {
 		const key = `${record.revision}:${record.path}:${record.startLine}-${record.endLine}:${record.content.length}`;
 		for (const existing of this.records.values()) {
@@ -147,51 +156,41 @@ export class EvidenceStore {
 			const report = (tool: ToolCallReport) => {
 				try { onTool?.(tool); } catch { /* Observers cannot break retrieval. */ }
 			};
-			report({ id: toolId, command, status: 'running', exitCode: null, startedAt });
+			report({ id: toolId, command, input: action, status: 'running', exitCode: null, startedAt });
 			let result: ToolResult;
 			try {
 				result = await this.executeOne(action, signal);
 			} catch (error) {
-				report({ id: toolId, command, status: 'error', exitCode: null, startedAt,
+				report({ id: toolId, command, input: action, status: 'error', exitCode: null, startedAt,
 					finishedAt: new Date().toISOString(), elapsedMs: Date.now() - started,
 					summary: error instanceof Error ? error.message : 'Retrieval failed' });
 				throw error;
 			}
-			report({
-				id: toolId,
-				command,
-				status: result.ok ? 'done' : 'error',
-				// Retrieval actions are not shell processes; do not invent exit codes.
-				exitCode: null,
-				startedAt,
-				finishedAt: new Date().toISOString(),
-				elapsedMs: Date.now() - started,
-				summary: toolSummary(result)
-			});
-			if (used >= REVIEW_POLICY.maxToolRoundChars) {
-				results.push({
-					...result,
-					content: '',
-					truncated: true,
-					continuation: result.continuation ?? 'round-budget',
-					error: result.error,
-					ok: result.ok
-				});
-				continue;
-			}
+			// Report the same bounded evidence the agent actually receives.
 			if (used + result.content.length > REVIEW_POLICY.maxToolRoundChars) {
-				const room = REVIEW_POLICY.maxToolRoundChars - used;
-				results.push({
+				const room = Math.max(0, REVIEW_POLICY.maxToolRoundChars - used);
+				result = {
 					...result,
 					content: result.content.slice(0, room),
 					truncated: true,
 					continuation: result.continuation ?? 'round-budget'
-				});
-				used = REVIEW_POLICY.maxToolRoundChars;
-			} else {
-				results.push(result);
-				used += result.content.length;
+				};
 			}
+			results.push(result);
+			used += result.content.length;
+			report({
+				id: toolId, command, input: action,
+				status: result.ok ? 'done' : 'error',
+				// Retrieval actions are not shell processes; do not invent exit codes.
+				exitCode: null, startedAt,
+				finishedAt: new Date().toISOString(), elapsedMs: Date.now() - started,
+				summary: toolSummary(result),
+				result: {
+					content: result.content.slice(0, 12_000),
+					truncated: result.truncated || result.content.length > 12_000,
+					evidenceId: result.evidenceId, revision: result.revision, path: result.path, error: result.error
+				}
+			});
 		}
 		return results;
 	}

@@ -114,7 +114,7 @@
 
 <aside
 	aria-label="Session files"
-	class="flex h-full w-[min(375px,100vw)] shrink-0 flex-col gap-4 overflow-hidden bg-background p-3"
+	class="flex h-full w-[min(375px,100vw)] shrink-0 flex-col gap-4 overflow-hidden border-r border-border bg-background p-3"
 >
 	<div class="flex min-h-0 flex-1 flex-col gap-3">
 		<div class="flex items-center justify-between px-1 text-[15px]">

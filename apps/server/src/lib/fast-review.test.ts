@@ -1,5 +1,8 @@
 import { afterEach, expect, test } from 'bun:test';
-import type { ReviewAssignment } from '@recoder/shared';
+import type { ReviewAssignment, ReviewToolCall } from '@recoder/shared';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { runAdaptiveReview } from './harness';
 import { getStoredSettings, setReviewOverrides } from './review-settings';
 import { REVIEW_ROLES } from './roles';
@@ -199,4 +202,46 @@ test('invalid planner output falls back to correctness and repository consistenc
 	const result = await runAdaptiveReview({ diff: DIFF, sandboxPath: null, prTitle: 'x', prBody: '' });
 	expect(result.planningDegraded).toBe(true);
 	expect(result.assignments.map((assignment) => assignment.role).sort()).toEqual(['correctness', 'patterns']);
+});
+
+test('review startup only reads guidance files that exist on the target revision', async () => {
+	setup();
+	const root = await mkdtemp(join(tmpdir(), 'recoder-guidance-review-'));
+	const git = (args: string[]) => {
+		const result = Bun.spawnSync(['git', ...args], { cwd: root, stdout: 'pipe', stderr: 'pipe' });
+		if (result.exitCode !== 0) throw new Error(result.stderr.toString());
+		return result.stdout.toString().trim();
+	};
+	try {
+		git(['init', '-b', 'main']);
+		git(['config', 'user.name', 'Test']);
+		git(['config', 'user.email', 'test@example.com']);
+		await mkdir(join(root, 'src'));
+		await writeFile(join(root, 'src/a.ts'), 'old\n');
+		await writeFile(join(root, 'AGENTS.md'), 'Base revision guidance');
+		git(['add', '.']);
+		git(['commit', '-m', 'base']);
+		const targetSha = git(['rev-parse', 'HEAD']);
+		await writeFile(join(root, 'src/a.ts'), 'new\n');
+		await writeFile(join(root, 'CLAUDE.md'), 'Head-only guidance');
+		git(['add', '.']);
+		git(['commit', '-m', 'head']);
+		const headSha = git(['rev-parse', 'HEAD']);
+		let plannerPrompt = '';
+		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body));
+			if (body.messages[0].content.includes('review orchestrator')) plannerPrompt = body.messages[1].content;
+			return Response.json({ choices: [{ message: { content: JSON.stringify({ findings: [], examinedHunks: [HUNK] }) } }] });
+		}) as unknown as typeof fetch;
+		const tools: ReviewToolCall[] = [];
+		await runAdaptiveReview({ diff: DIFF, sandboxPath: root, revision: { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' } }, { onTool: (tool) => tools.push(tool) });
+		const guidanceReads = tools.filter((tool) => tool.input?.action === 'readFile' && tool.status !== 'running');
+		expect(guidanceReads.map((tool) => tool.input?.path)).toEqual(['AGENTS.md']);
+		expect(guidanceReads[0].status).toBe('done');
+		expect(tools.some((tool) => tool.status === 'error')).toBe(false);
+		expect(plannerPrompt).toContain('Base revision guidance');
+		expect(plannerPrompt).not.toContain('Head-only guidance');
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
 });
