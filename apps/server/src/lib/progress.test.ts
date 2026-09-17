@@ -29,7 +29,7 @@ test('streamed traces match persisted reconnect snapshots and keep assignment ow
 	expect(applyProgressMessage(emptyReviewProgress(id), { type: 'snapshot', snapshot: stored })).toEqual(client);
 });
 
-test('terminal SSE delivers final findings and snapshot immediately, then closes and unsubscribes', async () => {
+test('terminal SSE delivers final findings and stays connected for subsequent conversation', async () => {
 	const id = crypto.randomUUID();
 	const now = new Date().toISOString();
 	const review = { id, repoId: 'test', prNumber: 1, headSha: 'abc', status: 'running' as const, summary: null,
@@ -46,7 +46,13 @@ test('terminal SSE delivers final findings and snapshot immediately, then closes
 	expect(event.review).toEqual(final);
 	expect(event.snapshot.outcome).toBe('complete');
 	expect(applyProgressMessage(emptyReviewProgress(id), event)).toEqual(event.snapshot);
-	expect((await reader.read()).done).toBe(true);
+	expect(listenerCount(id)).toBe(1);
+	emitReviewEvent(id, { type: 'message', step: 'chat', message: '', data: { chatMessage: {
+		id: 'reply', assignmentId: '__pipeline', from: 'assistant', text: 'Follow-up answer', at: now, status: 'done'
+	} } });
+	const reply = JSON.parse(new TextDecoder().decode((await reader.read()).value).slice(6).trim());
+	expect(reply.data.chatMessage.text).toBe('Follow-up answer');
+	await reader.cancel();
 	expect(listenerCount(id)).toBe(0);
 });
 
@@ -81,7 +87,8 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 	const completedReader = completed.body!.getReader();
 	const terminal = JSON.parse(new TextDecoder().decode((await completedReader.read()).value).slice(6).trim());
 	expect(terminal.status).toBe('failed');
-	expect((await completedReader.read()).done).toBe(true);
+	expect(listenerCount(id)).toBe(1);
+	await completedReader.cancel();
 	expect(listenerCount(id)).toBe(0);
 });
 

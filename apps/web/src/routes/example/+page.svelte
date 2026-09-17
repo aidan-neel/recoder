@@ -4,6 +4,7 @@
 	import type {
 		CoverageSummary,
 		ReviewAssignment,
+		ReviewChatMessage,
 		ReviewReasoningEntry,
 		ReviewTask,
 		ReviewToolCall,
@@ -94,8 +95,14 @@
 	}));
 
 	const tasks = buildTasks();
+	const messages: ReviewChatMessage[] = [
+		{ id: 'request', assignmentId: '__pipeline', from: 'user', text: 'Review this pull request. Focus on the new status command and its effect on existing CLI behavior.', at: iso(300_000), status: 'done' },
+		{ id: 'plan', assignmentId: '__pipeline', from: 'assistant', model: MODEL, text: 'I’m tracing the new `status` command from registration through registry comparison. The specialists will check correctness, output formatting, and error handling while I compare their evidence.', at: iso(260_000), status: 'done' },
+		{ id: 'update', assignmentId: '__pipeline', from: 'assistant', model: MODEL, text: 'The first results are back. I’m checking whether the reported sorting mutation is introduced by this change before confirming it as a finding.', at: iso(40_000), status: 'done' }
+	];
 
 	const reasoning: ReviewReasoningEntry[] = [
+		{ id: 'orchestrator-reason', assignmentId: '__pipeline', model: MODEL, at: iso(290_000), status: 'done', text: '**Inspecting command behavior**\n\nThe changes touch both registration and output. I’ll compare the existing list command first, then assign focused checks so the specialists do not duplicate the same investigation.' },
 		{
 			id: 'r1',
 			assignmentId: 'correctness-focus',
@@ -179,13 +186,14 @@
 	{findings}
 	{tasks}
 	{reasoning}
+	{messages}
+	orchestratorModel={MODEL}
 	{toolCalls}
 	stage={2}
 	stageLabel="Reviewing changes"
 	active
 	connectionLabel="Live updates connected"
 	{coverage}
-	recommendedChecks={['Run the CLI integration suite on the merge commit', 'Verify focus restoration in a real browser']}
 	{pipelineLogs}
 	onOpenDiff={noop}
 	onRestart={noop}

@@ -18,6 +18,7 @@ import type {
 	RemoteRepo,
 	Repo,
 	Review,
+	ReviewChatMessage,
 	ReviewMetrics,
 	RereviewRequest,
 	RereviewResponse,
@@ -64,6 +65,10 @@ export const serverApi = {
 			'/api/reviews/progress-summaries'
 		),
 	getReview: (id: string) => req<Review>(`/api/reviews/${id}`),
+	sendReviewMessage: (id: string, assignmentId: string, text: string) =>
+		req<ReviewChatMessage>(`/api/reviews/${id}/chat`, { method: 'POST', body: JSON.stringify({ assignmentId, text }) }),
+	stopReviewMessage: (id: string, assignmentId: string) =>
+		req<{ stopped: boolean }>(`/api/reviews/${id}/chat/stop`, { method: 'POST', body: JSON.stringify({ assignmentId }) }),
 	getReviewMetrics: (id: string, signal?: AbortSignal) => req<ReviewMetrics | null>(`/api/reviews/${id}/metrics`, { signal }),
 	getReviewFiles: (id: string) => req<FileDiff[]>(`/api/reviews/${id}/files`),
 	discuss: (reviewId: string, input: DiscussRequest) =>

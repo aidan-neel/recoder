@@ -21,6 +21,7 @@ import { LlmError } from '../lib/llm';
 import { refspecFor } from '../lib/providers';
 import { db, reviewDiffs, reviewSandboxes, reviewProgress, reviewMetrics } from '../store';
 import { getReviewMetrics, withReviewMetrics } from '../lib/metrics';
+import { cancelReviewChats, ReviewChatError, startReviewChat, stopReviewChat } from '../lib/review-chat';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),
@@ -71,6 +72,7 @@ app.delete('/:id', (c) => {
 	const review = db.reviews.get(c.req.param('id'));
 	if (!review) return c.json({ error: 'review not found' }, 404);
 	db.reviews.delete(review.id);
+	cancelReviewChats(review.id);
 	reviewDiffs.delete(review.id);
 	reviewMetrics.delete(review.id);
 	reviewSandboxes.delete(review.id);
@@ -95,6 +97,25 @@ app.get('/:id/files', async (c) => {
 		})
 	);
 	return c.json(expanded);
+});
+
+const chatSchema = z.object({ assignmentId: z.string().min(1).max(100), text: z.string().trim().min(1).max(8000) });
+app.post('/:id/chat', async (c) => {
+	const parsed = chatSchema.safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) return c.json({ error: 'Enter a message of at most 8,000 characters.' }, 400);
+	try {
+		return c.json(startReviewChat(c.req.param('id'), parsed.data.assignmentId, parsed.data.text), 202);
+	} catch (error) {
+		if (error instanceof ReviewChatError) return c.json({ error: error.message }, error.status);
+		return c.json({ error: 'Configure the model in Connections before sending a message.' }, 409);
+	}
+});
+app.post('/:id/chat/stop', async (c) => {
+	if (!db.reviews.get(c.req.param('id'))) return c.json({ error: 'review not found' }, 404);
+	const parsed = chatSchema.pick({ assignmentId: true }).safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) return c.json({ error: 'Invalid conversation.' }, 400);
+	stopReviewChat(c.req.param('id'), parsed.data.assignmentId);
+	return c.json({ stopped: true });
 });
 
 /** Ask the finding's reviewer a follow-up, with file + diff context. */
@@ -318,10 +339,6 @@ app.get('/:id/events', (c) => {
 			};
 			const snapshot = reviewProgress.get(review.id) ?? emptyReviewProgress(review.id);
 			send({ type: 'snapshot', snapshot, review, status: review.status, sequence: snapshot.sequence });
-			if (review.status === 'passed' || review.status === 'failed') {
-				controller.close();
-				return;
-			}
 			unsubscribe = subscribeReview(review.id, (event) => {
 				const terminal = !event.step && (event.type === 'done' || event.type === 'error');
 				send(terminal ? {
@@ -329,10 +346,6 @@ app.get('/:id/events', (c) => {
 					review: db.reviews.get(review.id),
 					snapshot: reviewProgress.get(review.id)
 				} : event);
-				if (terminal) {
-					cleanup();
-					controller.close();
-				}
 			}, false);
 			c.req.raw.signal.addEventListener('abort', cleanup, { once: true });
 			heartbeat = setInterval(() => {

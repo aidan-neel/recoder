@@ -4,6 +4,7 @@ import {
 	type CoverageSummary,
 	type ReviewAssignment,
 	type ReviewBudgetSnapshot,
+	type ReviewChatMessage,
 	type ReviewProgress,
 	type ReviewReasoningEntry,
 	type ReviewStage,
@@ -30,6 +31,7 @@ export type ReviewEventType =
 	| 'coverage'
 	| 'assignment'
 	| 'reasoning'
+	| 'message'
 	| 'tool';
 
 export interface ReviewEvent {
@@ -62,7 +64,8 @@ const SNAPSHOT_KEYS = [
 	'outcome',
 	'recommendedChecks',
 	'stage',
-	'planningDegraded'
+	'planningDegraded',
+	'orchestratorModel'
 ] as const;
 
 export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): void {
@@ -83,6 +86,15 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 		if (previous?.message !== task.message || previous?.status !== task.status) {
 			snapshot.activity.push({ sequence: snapshot.sequence, message: task.message, at: message.at, agent: task.agent });
 		}
+	} else if (event.type === 'message' && event.data?.chatMessage) {
+		const entry = event.data.chatMessage as ReviewChatMessage;
+		const entries = [...(snapshot.messages ?? [])];
+		const index = entries.findIndex((item) => item.id === entry.id);
+		const next = { ...entry, text: entry.text.slice(0, 64_000), at: entries[index]?.at ?? entry.at ?? message.at };
+		if (index >= 0) entries[index] = next;
+		else entries.push(next);
+		snapshot.messages = entries.slice(-500);
+		message.data = { ...message.data, chatMessage: next };
 	} else if (event.type === 'reasoning' && event.data?.reasoning) {
 		// Reasoning text streams as growing deltas sharing one id; upsert so the
 		// entry holds the accumulated text instead of every token.

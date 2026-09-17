@@ -119,6 +119,16 @@ export function recoverStaleReviews(): number {
 			}
 			recovered++;
 		}
+		const progress = reviewProgress.get(review.id);
+		if (progress?.messages?.some((message) => message.status === 'streaming') || progress?.reasoning?.some((entry) => entry.status === 'streaming')) {
+			reviewProgress.set({
+				...progress,
+				messages: progress.messages?.map((message) => message.status === 'streaming'
+					? { ...message, status: 'error', text: `${message.text}${message.text ? '\n\n' : ''}Response interrupted when the server restarted.` }
+					: message),
+				reasoning: progress.reasoning?.map((entry) => entry.status === 'streaming' ? { ...entry, status: 'error' } : entry)
+			});
+		}
 	}
 	if (recovered > 0) console.warn(`[store] marked ${recovered} stale review(s) as failed`);
 	return recovered;

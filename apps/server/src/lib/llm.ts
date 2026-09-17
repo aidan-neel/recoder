@@ -210,19 +210,31 @@ export async function streamChatCompletion(
 	onToken: (text: string) => void
 ): Promise<string> {
 	const deadline = Date.now() + (opts.timeoutMs ?? 120_000);
-	await acquireLlmSlot(opts.signal, Math.max(1, deadline - Date.now()));
-	const tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
+	let state: 'queued' | 'running' = 'queued';
+	let started = Date.now();
+	const report = () => opts.onProgress?.(state, Date.now() - started);
+	report();
+	const heartbeat = setInterval(report, 5000);
+	let acquired = false;
+	let tracking: ReturnType<typeof trackTokenCall> | undefined;
 	let success = false;
 	try {
-		const remaining = { ...opts, timeoutMs: Math.max(1, deadline - Date.now()), onUsage: (usage: TokenUsage) => { tracking.usage(usage); opts.onUsage?.(usage); } };
+		await acquireLlmSlot(opts.signal, Math.max(1, deadline - Date.now()));
+		acquired = true;
+		state = 'running';
+		started = Date.now();
+		report();
+		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
+		const remaining = { ...opts, timeoutMs: Math.max(1, deadline - Date.now()), onUsage: (usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); } };
 		const result = opts.provider === 'codex'
 			? await (await import('./codex')).codex.complete(remaining, onToken)
 			: await streamChatCompletionInner(remaining, onToken);
 		success = true;
 		return result;
 	} finally {
-		releaseLlmSlot();
-		tracking.finish(success);
+		clearInterval(heartbeat);
+		if (acquired) releaseLlmSlot();
+		tracking?.finish(success);
 	}
 }
 

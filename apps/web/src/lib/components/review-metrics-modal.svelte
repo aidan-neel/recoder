@@ -107,7 +107,7 @@
 {/snippet}
 
 <Modal.Root bind:open>
-	<Modal.Trigger variant="ghost" class="shrink-0 font-sans">Token usage</Modal.Trigger>
+	<Modal.Trigger variant="ghost" class="shrink-0 font-sans">Usage</Modal.Trigger>
 	<Modal.Content
 		size="xl"
 		surfaceClass="max-h-[min(75dvh,42rem)] overflow-y-auto overscroll-contain [overflow-wrap:anywhere]"

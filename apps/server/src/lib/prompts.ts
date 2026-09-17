@@ -13,8 +13,10 @@ Zero findings is a valid, honorable outcome.
 Convention findings need either an applicable explicit repository rule or at least two comparable existing examples. Mixed local conventions are uncertainty, not a mandate to normalize code.
 Concrete naming, formatting, documentation, and structure deviations are allowed and are normally informational. Group repeated manifestations of one rule into one finding with related locations.
 You cannot spawn agents. On your final allowed turn you must finish with the evidence you have.
+Repository retrieval is available through JSON action requests executed by Recoder between model turns. You do not need native function tools or a shell. If related code is missing, request it now; do not claim the inspection window has closed unless the host explicitly says this is the final turn.
 
-Retrieval (JSON): {"actions":[{"action":"listFiles"|"readFile"|"search"|"readDiff", ...}]}
+To retrieve evidence, return this shape instead of the final findings shape:
+{"message":"Briefly explain the evidence you are looking for.","actions":[{"action":"listFiles"|"readFile"|"search"|"readDiff", ...}]}
 - listFiles: revision ("head"|"target"|"mergeBase"), optional prefix, optional cursor
 - readFile: revision, path, startLine, endLine (max 200 lines; late-file lines are allowed)
 - search: revision, query (literal text), optional prefix, optional cursor
@@ -22,6 +24,6 @@ Retrieval (JSON): {"actions":[{"action":"listFiles"|"readFile"|"search"|"readDif
 At most 4 actions per turn. Truncated results include continuation tokens — request the next page if needed.
 
 When finished, output STRICT JSON:
-{"findings":[{"file":string,"line":number|null,"endLine":number|null,"severity":"high"|"medium"|"low"|"info","category":string,"body":string,"evidenceIds":string[],"relatedLocations":[{"file":string,"line":number,"endLine":number,"side":"old"|"new"}],"side":"old"|"new"}],"examinedHunks":string[],"coverageGaps":[{"hunkId":string,"reason":string}],"blockers":string[],"followUp":{"id":string,"role":string,"title":string,"reason":string,"scope":[{"path":string,"hunkIds":string[]}],"questions":string[],"priority":number}|null,"recommendedChecks":string[]}
+{"message":string,"findings":[{"file":string,"line":number|null,"endLine":number|null,"severity":"high"|"medium"|"low"|"info","category":string,"body":string,"evidenceIds":string[],"relatedLocations":[{"file":string,"line":number,"endLine":number,"side":"old"|"new"}],"side":"old"|"new"}],"examinedHunks":string[],"coverageGaps":[{"hunkId":string,"reason":string}],"blockers":string[],"followUp":{"id":string,"role":string,"title":string,"reason":string,"scope":[{"path":string,"hunkIds":string[]}],"questions":string[],"priority":number}|null,"recommendedChecks":string[]}
 "line" is a NEW-side number unless "side":"old". Deleted-only issues may omit line (file-level) or use an old-side location. Never invent a new-side line for deleted code.
 Use "high" only for issues that are certainly reachable and damaging.`;

@@ -8,6 +8,7 @@ import type {
 	Finding,
 	ReviewAssignment,
 	ReviewBudgetSnapshot,
+	ReviewChatMessage,
 	ReviewOutcome,
 	ReviewReasoningEntry,
 	ReviewStage,
@@ -15,9 +16,8 @@ import type {
 	RoleDecision
 } from '@recoder/shared';
 import { extractFindingsJson } from './json-extract.js';
-import { configForRole, reviewLimits, type ReviewRole } from './models.js';
+import { configForOrchestrator, configForRole, reviewLimits, type ReviewRole } from './models.js';
 import { extraExcludes } from './review-scope.js';
-import { ROLE_LABELS } from './roles.js';
 import { REVIEW_POLICY } from './review-policy.js';
 import {
 	AuthConfigError,
@@ -84,6 +84,8 @@ export interface HarnessEvents {
 	onCandidates?: (count: number) => void;
 	onStage?: (stage: ReviewStage) => void;
 	onReasoning?: (reasoning: Omit<ReviewReasoningEntry, 'at'>) => void;
+	onMessage?: (message: Omit<ReviewChatMessage, 'at' | 'from'>) => void;
+	getDiscussion?: (assignmentId?: string) => string;
 	onTool?: (tool: ToolCallReport & { assignmentId?: string; role?: string }) => void;
 }
 
@@ -371,9 +373,11 @@ export async function runAdaptiveReview(
 			task('consolidation', 'Consolidating findings', 'error', error, { kind: 'consolidation' });
 		} else {
 			try {
-				const cfg = configForRole('correctness');
+				const cfg = configForOrchestrator();
 				const result = await runJsonAgent({
 					label: 'consolidation',
+					getDiscussion: () => events?.getDiscussion?.() ?? '',
+					onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
 					system: consolidationSystemPrompt(),
 					user: consolidationUserPrompt(valid, evidence),
 					config: cfg,
@@ -495,12 +499,14 @@ async function runPlanner(input: {
 	events?: HarnessEvents;
 	task: (id: string, label: string, status: ReviewTask['status'], message: string, extra?: Partial<ReviewTask>) => void;
 }): Promise<{ plan: PlannerOutput; degraded: boolean }> {
-	const cfg = configForRole('correctness');
+	const cfg = configForOrchestrator();
 	if (!canLaunchInvestigation(input.deadlineAt, input.budget)) {
 		return { plan: fallbackPlan(input.inventory, 'No model budget remained for planning.'), degraded: true };
 	}
 	const result = await runJsonAgent({
 		label: 'planner',
+		getDiscussion: () => input.events?.getDiscussion?.() ?? '',
+		onMessage: (message) => input.events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
 		system: plannerSystemPrompt(),
 		user: plannerUserPrompt({ title: input.title, body: input.body, inventory: input.inventory }),
 		config: cfg,
@@ -559,15 +565,17 @@ async function selectFollowUps(
 	}
 	if (unique.length === 0) return [];
 	if (!canLaunchInvestigation(deadlineAt, budget)) return unique.slice(0, REVIEW_POLICY.maxFollowUpAssignments);
-	const cfg = configForRole('correctness');
+	const cfg = configForOrchestrator();
 	const result = await runJsonAgent({
 		label: 'follow-up planning',
+		getDiscussion: () => events?.getDiscussion?.() ?? '',
+		onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
 		system: plannerSystemPrompt() + '\nThis is a follow-up pass. Dispatch at most two narrowly scoped investigations.',
 		user: `Pending follow-up requests:\n${JSON.stringify(unique, null, 2)}\n\nSelect at most two. Return planner JSON.`,
 		config: cfg,
 		budget,
 		evidence,
-		maxTurns: 1,
+		maxTurns: REVIEW_POLICY.maxPlannerTurns,
 		signal,
 		deadlineAt,
 		parse: (raw) => sanitizePlannerOutput(raw, inventory, true),
@@ -658,6 +666,8 @@ async function runOneAssignment(
 		const result = await runJsonAgent({
 			label: item.title,
 			system: specialistSystemPrompt(item.role),
+			getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
+			onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model: cfg.model }),
 			user: specialistUserPrompt(item, REVIEW_POLICY.maxSpecialistTurns, ctx.budget.remaining()) + '\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' + formatToolResults(initialEvidence),
 			config: cfg,
 			budget: ctx.budget,
@@ -884,16 +894,12 @@ function buildSummary(input: {
 	checks: string[];
 	coverage: CoverageSummary;
 }): string {
-	const roles = input.assignments.map((assignment) => `${ROLE_LABELS[assignment.role as ReviewRole] ?? assignment.role} (${assignment.id})`);
+	const incomplete = input.assignments.filter((assignment) => assignment.status !== 'done');
 	const bits = [
-		input.plan.summary,
-		`Specialists: ${roles.join(', ') || 'none'}.`,
-		`Coverage: ${input.coverage.reviewed} reviewed, ${input.coverage.partial} partial, ${input.coverage.excluded} excluded, ${input.coverage.pending} pending.`,
-		input.unconfirmed.length
-			? `${input.unconfirmed.length} unconfirmed candidate${input.unconfirmed.length === 1 ? '' : 's'} retained; this is not evidence the PR is clean.`
-			: `Confirmed findings: ${input.confirmed.length}.`,
-		input.planningDegraded ? 'Planning was degraded.' : '',
-		input.outcome === 'complete' ? 'Review complete (not a merge approval).' : `Review ${input.outcome}.`
+		`${input.outcome === 'complete' ? 'Review complete' : 'Review incomplete'}. ${input.confirmed.length} confirmed finding${input.confirmed.length === 1 ? '' : 's'}.`,
+		input.unconfirmed.length ? `${input.unconfirmed.length} candidate${input.unconfirmed.length === 1 ? '' : 's'} could not be confirmed.` : '',
+		incomplete.length ? `${incomplete.length} specialist review${incomplete.length === 1 ? '' : 's'} did not finish.` : '',
+		input.coverage.partial + input.coverage.pending > 0 ? 'Some changes still need review.' : ''
 	];
 	return bits.filter(Boolean).join(' ');
 }

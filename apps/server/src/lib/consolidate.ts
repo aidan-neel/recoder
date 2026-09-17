@@ -19,6 +19,7 @@ export interface CandidateFinding extends Finding {
 }
 
 export const consolidationSchema = z.object({
+	message: z.string().max(12000).optional(),
 	keep: z.array(z.string()).max(80).default([]),
 	merge: z
 		.array(
@@ -41,7 +42,7 @@ export function consolidationSystemPrompt(): string {
 You may keep, merge, clarify, or reject candidates. You cannot invent findings or evidence.
 Do not drop an issue solely because a previous review reported it.
 Do not merge distinct issues that happen to share a file or line.
-Output STRICT JSON: {"keep":[candidateId],"merge":[{"keepId","mergeIds","body?"}],"reject":[{"id","reason"}],"recommendedChecks":[string]}
+Output STRICT JSON: {"message":string,"keep":[candidateId],"merge":[{"keepId","mergeIds","body?"}],"reject":[{"id","reason"}],"recommendedChecks":[string]}
 Every candidate id must appear in keep, merge, or reject.`;
 }
 

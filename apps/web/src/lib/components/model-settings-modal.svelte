@@ -10,6 +10,7 @@
 	import * as Select from '@sivir-ui/svelte/components/select';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type {
 		CodexModel,
 		ModelEntry,
@@ -20,7 +21,7 @@
 	import { formatAgentName } from '$lib/threads.svelte';
 	import { createNestedEscapeGuard } from '$lib/nested-escape-guard.svelte';
 	const connectionEscape = createNestedEscapeGuard(
-		['sharedModel', 'usage'],
+		['sharedModel', 'orchestratorModel', 'usage'],
 		() => modelSettingsUi.open
 	);
 	const roleEscape = createNestedEscapeGuard(
@@ -34,6 +35,7 @@
 	const SHARED = '__shared__';
 	let entries = $state<DraftEntry[]>([]);
 	let sharedId = $state('');
+	let orchestratorId = $state('');
 	let roleIds = $state<Partial<Record<ReviewRole, string>>>({});
 	let seeded = $state(false);
 	let adding = $state(false);
@@ -70,7 +72,8 @@
 				...entry,
 				label: label(entry)
 			}));
-			sharedId = config.sharedModelId ?? config.models[0]?.id ?? '';
+			sharedId = config.specialistModelId ?? config.sharedModelId ?? config.models[0]?.id ?? '';
+			orchestratorId = config.orchestratorModelId ?? config.sharedModelId ?? config.models[0]?.id ?? '';
 			roleIds = Object.fromEntries(
 				MODEL_ROLES.map((role) => [role, config.roles[role] ?? SHARED])
 			);
@@ -98,6 +101,8 @@
 				...(entry.efforts?.length ? { efforts: entry.efforts } : {})
 			})),
 			sharedModelId: sharedId || null,
+			specialistModelId: sharedId || null,
+			orchestratorModelId: orchestratorId || null,
 			roles: Object.fromEntries(
 				MODEL_ROLES.map((role) => [
 					role,
@@ -139,6 +144,7 @@
 			}
 		];
 		if (!sharedId) sharedId = id;
+		if (!orchestratorId) orchestratorId = id;
 		adding = false;
 		draftKey = '';
 		await persist();
@@ -168,6 +174,7 @@
 		if (!sharedId || !entries.some((entry) => entry.id === sharedId)) {
 			sharedId = next[0]?.id ?? others[0]?.id ?? '';
 		}
+		if (!entries.some((entry) => entry.id === orchestratorId)) orchestratorId = sharedId;
 		void persist();
 	}
 
@@ -176,6 +183,7 @@
 		if (!entries.some((entry) => entry.provider === 'codex')) return;
 		entries = entries.filter((entry) => entry.provider !== 'codex');
 		if (!entries.some((entry) => entry.id === sharedId)) sharedId = entries[0]?.id ?? '';
+		if (!entries.some((entry) => entry.id === orchestratorId)) orchestratorId = sharedId;
 		void persist();
 	}
 
@@ -379,10 +387,21 @@
 								>Reviewers</h3
 							>
 							<Card.Root class="p-0">
+								<div class="flex flex-col gap-2 border-b border-border p-4">
+									<Typography.Text class="text-sm font-medium">Orchestrator model</Typography.Text>
+									<Select.Root value={orchestratorId} bind:open={connectionEscape.open.orchestratorModel}>
+										<Select.Trigger variant="outline" class="w-full justify-between" disabled={!entries.length || modelSettingsUi.saving} aria-label="Orchestrator model">
+											<span class="truncate">{entries.find((entry) => entry.id === orchestratorId)?.label ?? 'Use environment settings'}</span>
+										</Select.Trigger>
+										<Select.Content class="max-h-64">
+											{#each entries as entry (entry.id)}
+												<Select.Item value={entry.id} onclick={() => { orchestratorId = entry.id; void persist(); }}>{label(entry)}</Select.Item>
+											{/each}
+										</Select.Content>
+									</Select.Root>
+								</div>
 								<div class="flex flex-col gap-2 p-4">
-									<span class="text-sm font-medium"
-										>Default model</span
-									>
+									<Typography.Text class="text-sm font-medium">Specialist model</Typography.Text>
 									<Select.Root
 										value={sharedId}
 										bind:open={connectionEscape.open.sharedModel}
@@ -392,7 +411,7 @@
 											class="w-full justify-between"
 											disabled={!entries.length ||
 												modelSettingsUi.saving}
-											aria-label="Default model"
+											aria-label="Specialist model"
 											><span class="truncate"
 												>{sharedEntry
 													? label(sharedEntry)

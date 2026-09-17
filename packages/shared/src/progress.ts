@@ -160,6 +160,22 @@ export interface ReviewToolCall {
 	};
 }
 
+export const ORCHESTRATOR_ID = '__pipeline';
+
+export interface ReviewChatMessage {
+	id: string;
+	assignmentId: string;
+	from: 'user' | 'assistant' | 'system';
+	text: string;
+	at: string;
+	status: 'streaming' | 'done' | 'error';
+	model?: string;
+	/** Interactive messages are included in subsequent review turns. */
+	discussion?: boolean;
+	/** Specialist conversation mirrored into the orchestrator transcript. */
+	forwardedFrom?: string;
+}
+
 export interface ReviewProgress {
 	id: string;
 	sequence: number;
@@ -167,6 +183,8 @@ export interface ReviewProgress {
 	activity: { sequence: number; message: string; at: string; agent?: string }[];
 	reasoning?: ReviewReasoningEntry[];
 	toolCalls?: ReviewToolCall[];
+	messages?: ReviewChatMessage[];
+	orchestratorModel?: string;
 	updatedAt: string;
 	planVersion?: number;
 	planSummary?: string;

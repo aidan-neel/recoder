@@ -130,12 +130,6 @@
 	});
 
 	let peekDiff = $state(false);
-	let autoOpenedFor = $state<string | null>(null);
-	$effect(() => {
-		if (backendReview?.status !== 'passed' || !backendFiles?.length || autoOpenedFor === backendReview.id) return;
-		autoOpenedFor = backendReview.id;
-		peekDiff = true;
-	});
 
 	const isBackend = $derived(backendChecked && backendReview !== null);
 
@@ -199,7 +193,6 @@
 			userPickedFile = false;
 			findingsSyncedFor = null;
 			peekDiff = false;
-			autoOpenedFor = null;
 			threadsStore.close();
 			threadsStore.pendingMessage = null;
 			notesStore.clear();
@@ -359,7 +352,7 @@
 							class="ml-auto h-8 shrink-0 font-sans"
 							onclick={() => (peekDiff = false)}
 						>
-							Progress
+							Conversation
 						</Button>
 					{/if}
 					<ReviewMetricsModal reviewId={backendReview.id} />

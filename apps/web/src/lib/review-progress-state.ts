@@ -4,6 +4,7 @@ import {
 	formatAssignmentHeadline,
 	type Review,
 	type ReviewAssignment,
+	type ReviewChatMessage,
 	type ReviewProgress,
 	type ReviewReasoningEntry,
 	type ReviewTask,
@@ -25,6 +26,7 @@ export interface ProgressMessage {
 		assignments?: ReviewAssignment[];
 		reasoning?: Omit<ReviewReasoningEntry, 'at'> & { at?: string };
 		tool?: ReviewToolCall;
+		chatMessage?: ReviewChatMessage;
 		agent?: string;
 		[key: string]: unknown;
 	};
@@ -42,7 +44,8 @@ const SNAPSHOT_KEYS = [
 	'outcome',
 	'recommendedChecks',
 	'stage',
-	'planningDegraded'
+	'planningDegraded',
+	'orchestratorModel'
 ] as const;
 
 export function applyProgressMessage(current: ReviewProgress, event: ProgressMessage): ReviewProgress {
@@ -58,6 +61,14 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 		}
 	}
 	const task = event.data?.task;
+	if (event.type === 'message' && event.data?.chatMessage) {
+		const entry = event.data.chatMessage;
+		const list = [...(current.messages ?? [])];
+		const index = list.findIndex((item) => item.id === entry.id);
+		if (index >= 0) list[index] = entry;
+		else list.push(entry);
+		next.messages = list.slice(-500);
+	}
 	if (event.type === 'task' && task) {
 		const previous = current.tasks[task.id];
 		next.tasks = { ...current.tasks, [task.id]: { ...previous, ...task, updatedAt: next.updatedAt } };
@@ -95,6 +106,7 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 	if (
 		activityMessage &&
 		event.type !== 'reasoning' &&
+		event.type !== 'message' &&
 		event.type !== 'finding' &&
 		!(event.type === 'tool' && event.data?.tool?.status === 'running')
 	) {

@@ -1,6 +1,4 @@
 <script lang="ts">
-	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
-	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import ReviewingView, {
 		type ReviewingFinding
 	} from '$lib/components/reviewing-view.svelte';
@@ -208,10 +206,8 @@
 		])
 	);
 
-	let restartOpen = $state(false);
 
 	function confirmRestart() {
-		restartOpen = false;
 		start();
 	}
 
@@ -286,30 +282,9 @@
 	pipelineLogs={agents.flatMap((agent) => agent.logs)}
 	{pendingCount}
 	{onOpenDiff}
-	onRestart={() => (restartOpen = true)}
+	onRestart={confirmRestart}
 	doneHref={sessionHref}
 	stage={pendingCount ? 2 : 4}
 	stageLabel={pendingCount ? 'Specialist review' : 'Review complete'}
 	active={pendingCount > 0}
 />
-
-<AlertDialog.Root bind:open={restartOpen}>
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>Restart review?</AlertDialog.Title>
-			<AlertDialog.Description>
-				Agent progress and streamed logs start over from zero.
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Exit>
-				Cancel
-				<Shortcut shortcut="esc" />
-			</AlertDialog.Exit>
-			<AlertDialog.Confirm variant="primary" onclick={confirmRestart}>
-				Restart
-				<Shortcut shortcut="enter" />
-			</AlertDialog.Confirm>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>

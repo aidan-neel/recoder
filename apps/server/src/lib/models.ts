@@ -62,6 +62,7 @@ export function reviewConfig(): { baseUrl: string; apiKey: string; model: string
 export function isReviewConfigured(): boolean {
 	try {
 		configForRole('security');
+		configForOrchestrator();
 		return true;
 	} catch {
 		return false;
@@ -75,12 +76,21 @@ export function isReviewConfigured(): boolean {
  * to the global base URL/key. Legacy env trio still works when no entries
  * (or no matching entry) exist.
  */
+export function configForOrchestrator(): RoleConfig {
+	return resolveConfig('correctness', true);
+}
+
 export function configForRole(role: ReviewRole): RoleConfig {
+	return resolveConfig(role, false);
+}
+
+function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 	const stored = getStoredSettings();
 	const reasoningEffort = stored.roleEfforts?.[role];
 	const eff = effectiveReviewEnv();
 	const entries = stored.models ?? [];
-	const entryId = stored.roles?.[role] ?? stored.sharedModelId ?? entries[0]?.id;
+	const entryId = (orchestrator ? stored.orchestratorModelId : stored.roles?.[role] ?? stored.specialistModelId)
+		?? stored.sharedModelId ?? entries[0]?.id;
 	// A dangling pointer (entry deleted out-of-band) falls back to the first entry.
 	const entry = entries.find((e) => e.id === entryId) ?? entries[0];
 	if (entry) {
@@ -97,7 +107,7 @@ export function configForRole(role: ReviewRole): RoleConfig {
 		return { role, baseUrl, apiKey, model: entry.model, reasoningEffort };
 	}
 	const shared = reviewConfig();
-	const override = eff.roles[role];
+	const override = orchestrator ? undefined : eff.roles[role];
 	return { role, baseUrl: shared.baseUrl, apiKey: shared.apiKey, model: override || shared.model, reasoningEffort };
 }
 

@@ -3,52 +3,25 @@
 	import { onMount } from 'svelte';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import Check from '@lucide/svelte/icons/check';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
-	import Hash from '@lucide/svelte/icons/hash';
 	import Link2 from '@lucide/svelte/icons/link-2';
 	import Plus from '@lucide/svelte/icons/plus';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Search from '@lucide/svelte/icons/search';
-	import Trash2 from '@lucide/svelte/icons/trash-2';
 	import * as Alert from '@sivir-ui/svelte/components/alert';
-	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button, type ButtonStatus } from '@sivir-ui/svelte/components/button';
-	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as ContextMenu from '@sivir-ui/svelte/components/context-menu';
-	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
-	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import type { Provider, ProviderAuth, PullPreview, PullRequest, RemoteRepo, Repo, Review } from '@recoder/shared';
 	import { serverApi } from '$lib/server-api';
-	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
+	import { modelSettingsUi } from '$lib/model-settings.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
-
-	interface ProgressSummary {
-		tasksDone: number;
-		tasksTotal: number;
-		specialists: number;
-	}
-
-	interface RecentSession {
-		id: string;
-		repo: string;
-		pr: number;
-		findings: number;
-		status: Review['status'];
-		durationMs?: number;
-		tasksDone?: number;
-		tasksTotal?: number;
-		specialists?: number;
-		reason?: string;
-		updatedAt: string;
-	}
 
 	const hoursAgoIso = (h: number): string => new Date(Date.now() - h * 3_600_000).toISOString();
 
@@ -61,13 +34,6 @@
 	const DEMO_AUTH: (ProviderAuth & { label: string })[] = [
 		{ provider: 'github', label: 'GitHub', available: true, authenticated: true, user: 'aidan-neel' },
 		{ provider: 'gitlab', label: 'GitLab', available: false, authenticated: false, user: null }
-	];
-
-	const DEMO_RECENT: RecentSession[] = [
-		{ id: 'demo-160-live', repo: 'sivir-ui', pr: 160, findings: 0, status: 'running', tasksDone: 14, tasksTotal: 22, specialists: 3, updatedAt: new Date(Date.now() - 2 * 60_000).toISOString() },
-		{ id: 'demo-155-passed', repo: 'sivir-ui', pr: 155, findings: 0, status: 'passed', durationMs: 72_000, updatedAt: hoursAgoIso(24) },
-		{ id: 'demo-160-passed', repo: 'sivir-ui', pr: 160, findings: 6, status: 'passed', durationMs: 124_000, updatedAt: hoursAgoIso(72) },
-		{ id: 'demo-88-failed', repo: 'recoder', pr: 88, findings: 0, status: 'failed', durationMs: 18_000, reason: 'Local checkout failed', updatedAt: hoursAgoIso(48) }
 	];
 
 	const DEMO_PRS: Record<string, PullRequest[]> = {
@@ -106,19 +72,9 @@
 		{ id: 'gitlab', label: 'GitLab' }
 	];
 
-	const statusDot = {
-		passed: '#3fb96c',
-		running: '#5b8cff',
-		queued: '#8a8f98',
-		failed: '#e0655f'
-	} as const;
-
 	let apiDown = $state(false);
 	let repos = $state<Repo[]>([]);
-	let recentLoading = $state(true);
 	let allReviews = $state<Review[]>([]);
-	let reviewSummaries = $state<Record<string, ProgressSummary>>({});
-	let demoRecent = $state<RecentSession[]>(DEMO_RECENT);
 
 	let auth = $state<{ github: ProviderAuth; gitlab: ProviderAuth } | null>(null);
 	let authLoading = $state(true);
@@ -146,8 +102,6 @@
 	let previewRepoId = $state<string | null>(null);
 	let fetchingPreview = $state(false);
 	let prError = $state<string | null>(null);
-	let sortNewest = $state(true);
-	let allSessionsOpen = $state(false);
 
 	/** Reviews require a reviewer model — no model, no (stub) review. */
 	const needsModel = $derived(
@@ -166,14 +120,6 @@
 		}
 		return map;
 	});
-	const repoNameById = $derived(new Map(repos.map((r) => [r.id, r.name] as const)));
-	const recent = $derived(
-		apiDown ? demoRecent : mapRecent(allReviews, repoNameById, reviewSummaries)
-	);
-	const visibleRecent = $derived(recent.slice(0, 4));
-	const reviewingCount = $derived(
-		recent.filter((s) => s.status === 'running' || s.status === 'queued').length
-	);
 	const providerRows = $derived<({ provider: Provider; label: string } & ProviderAuth)[]>(
 		apiDown
 			? DEMO_AUTH
@@ -186,6 +132,11 @@
 	const highlightN = $derived(preview?.pr.number ?? null);
 	const hasFilter = $derived(filter.trim() !== '');
 	const anyPrsLoading = $derived(repos.some((r) => prsLoadingByRepo[r.id]));
+	const matchTotal = $derived.by(() => {
+		let n = 0;
+		for (const repo of repos) n += sortedByRepo.get(repo.id)?.length ?? 0;
+		return n;
+	});
 	/** Sidebar "selection" is just the search box narrowed to one repo name. */
 	const activeRepo = $derived.by(() => {
 		const q = filter.trim().toLowerCase();
@@ -221,16 +172,11 @@
 			sorted.sort((a, b) => {
 				const ta = Date.parse(a.createdAt) || 0;
 				const tb = Date.parse(b.createdAt) || 0;
-				return sortNewest ? tb - ta : ta - tb;
+				return tb - ta;
 			});
 			map.set(repo.id, sorted);
 		}
 		return map;
-	});
-	const listedTotal = $derived.by(() => {
-		let n = 0;
-		for (const repo of repos) n += sortedByRepo.get(repo.id)?.length ?? 0;
-		return n;
 	});
 	const showFetchCard = $derived(
 		pastedNumber !== null &&
@@ -250,54 +196,19 @@
 		);
 	});
 
-	function mapRecent(
-		reviews: Review[],
-		names: Map<string, string>,
-		summaries: Record<string, ProgressSummary>
-	): RecentSession[] {
-		return reviews
-			.map((review) => {
-				const summary = summaries[review.id];
-				const start = Date.parse(review.createdAt);
-				const end = Date.parse(review.updatedAt);
-				return {
-					id: review.id,
-					repo: names.get(review.repoId) ?? review.repoId.slice(0, 8),
-					pr: review.prNumber,
-					findings: review.findings.length,
-					status: review.status,
-					durationMs:
-						Number.isFinite(start) && Number.isFinite(end)
-							? Math.max(0, end - start)
-							: undefined,
-					tasksDone: summary?.tasksDone,
-					tasksTotal: summary?.tasksTotal,
-					specialists: summary?.specialists,
-					reason: review.status === 'failed' ? (review.summary ?? undefined) : undefined,
-					updatedAt: review.updatedAt
-				};
-			})
-			.sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
-	}
-
 	function timeAgo(iso: string): string {
 		const t = Date.parse(iso);
 		if (Number.isNaN(t)) return '';
 		const s = Math.max(0, (Date.now() - t) / 1000);
 		if (s < 60) return 'just now';
 		const m = Math.floor(s / 60);
-		if (m < 60) return `${m}m ago`;
+		if (m < 60) return m === 1 ? '1 minute ago' : `${m} minutes ago`;
 		const h = Math.floor(m / 60);
-		if (h < 24) return `${h}h ago`;
+		if (h < 24) return h === 1 ? '1 hour ago' : `${h} hours ago`;
 		const d = Math.floor(h / 24);
 		if (d === 1) return 'yesterday';
-		if (d < 30) return `${d}d ago`;
+		if (d < 30) return `${d} days ago`;
 		return new Date(t).toLocaleDateString();
-	}
-
-	function formatDuration(ms: number): string {
-		const seconds = Math.max(0, Math.floor(ms / 1000));
-		return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 	}
 
 	function plural(n: number, word: string): string {
@@ -314,49 +225,7 @@
 		return Number.isSafeInteger(n) && n > 0 ? n : null;
 	}
 
-	function recentHeadline(session: RecentSession): string {
-		if (session.status === 'running' || session.status === 'queued') {
-			const parts: string[] = [];
-			if (session.tasksTotal) {
-				parts.push(`${session.tasksDone ?? 0} of ${session.tasksTotal} tasks`);
-			}
-			if (session.specialists) {
-				parts.push(`${plural(session.specialists, 'specialist')} working`);
-			}
-			if (parts.length === 0) {
-				parts.push(session.findings > 0 ? `${plural(session.findings, 'finding')} so far` : 'Starting…');
-			}
-			return parts.join(' · ');
-		}
-		const parts: string[] = [];
-		if (session.status === 'failed') {
-			parts.push(session.reason?.split('\n')[0] ?? 'Review failed');
-		} else {
-			parts.push(plural(session.findings, 'finding'));
-		}
-		if (session.durationMs !== undefined) parts.push(formatDuration(session.durationMs));
-		if (session.updatedAt) parts.push(timeAgo(session.updatedAt));
-		return parts.join(' · ');
-	}
-
-	function recentStatusLabel(session: RecentSession): string {
-		return session.status === 'running' || session.status === 'queued' ? 'reviewing' : session.status;
-	}
-
-	function reviewDuration(review: Review): string {
-		const start = Date.parse(review.createdAt);
-		const end = Date.parse(review.updatedAt);
-		if (!Number.isFinite(start) || !Number.isFinite(end)) return '';
-		return formatDuration(Math.max(0, end - start));
-	}
-
 	onMount(async () => {
-		void serverApi
-			.reviewSummaries()
-			.then((summaries) => (reviewSummaries = summaries))
-			.catch(() => {
-				// Older server builds omit the summaries route — recent rows degrade gracefully.
-			});
 		try {
 			const [status, fetchedRepos, reviews] = await Promise.all([
 				serverApi.authStatus(),
@@ -372,14 +241,12 @@
 		} catch {
 			apiDown = true;
 			repos = DEMO_REPOS;
-			demoRecent = DEMO_RECENT;
 			for (const repo of DEMO_REPOS) {
 				prsByRepo[repo.id] = DEMO_PRS[repo.id] ?? [];
 				prsLoadingByRepo[repo.id] = false;
 			}
 		} finally {
 			authLoading = false;
-			recentLoading = false;
 		}
 	});
 
@@ -486,41 +353,18 @@
 		openSession(review.id, name, `#${review.prNumber}`, status);
 	}
 
-	function copySessionLink(id: string): void {
-		const url = `${window.location.origin}/session/${id}`;
-		void navigator.clipboard?.writeText(url).catch(() => {});
+	function handleCardOpen(
+		pr: PullRequest,
+		repo: Pick<Repo, 'id' | 'name'>,
+		review: Review | undefined
+	): void {
+		if (reviewTarget) return;
+		if (review) openReviewSession(review, repo.name);
+		else void reviewPr(pr.number, repo);
 	}
 
-	function copySessionId(id: string): void {
-		void navigator.clipboard?.writeText(id).catch(() => {});
-	}
-
-	let deletingId = $state<string | null>(null);
-	let pendingDeleteId = $state<string | null>(null);
-	let deleteDialogOpen = $state(false);
-	const pendingDelete = $derived(recent.find((s) => s.id === pendingDeleteId) ?? null);
-
-	function confirmDelete(): void {
-		const id = pendingDeleteId;
-		pendingDeleteId = null;
-		deleteDialogOpen = false;
-		if (id) void deleteSession(id);
-	}
-
-	async function deleteSession(id: string): Promise<void> {
-		if (deletingId) return;
-		deletingId = id;
-		try {
-			if (!apiDown) await serverApi.deleteReview(id);
-			allReviews = allReviews.filter((r) => r.id !== id);
-			demoRecent = demoRecent.filter((s) => s.id !== id);
-			// Drop the matching tab too, if one is open.
-			sessionState.close(id);
-		} catch (e) {
-			prError = e instanceof Error ? e.message : 'Failed to delete session.';
-		} finally {
-			deletingId = null;
-		}
+	function copyPrLink(pr: PullRequest): void {
+		void navigator.clipboard?.writeText(pr.url).catch(() => {});
 	}
 
 	/** Clicking a repo in the sidebar narrows the list to it via the search box; click again clears. */
@@ -559,12 +403,7 @@
 	async function refreshReviews(): Promise<void> {
 		if (apiDown) return;
 		try {
-			const [reviews, summaries] = await Promise.all([
-				serverApi.listReviews(),
-				serverApi.reviewSummaries().catch(() => reviewSummaries)
-			]);
-			allReviews = reviews;
-			reviewSummaries = summaries;
+			allReviews = await serverApi.listReviews();
 		} catch {
 			// Keep last known state; the list error surfaces fetch failures.
 		}
@@ -695,8 +534,9 @@
 
 {#snippet filterInput()}
 	<Input
-		placeholder="Filter open PRs, or paste a pull request URL"
-		aria-label="Filter open PRs, or paste a pull request URL"
+		placeholder="Filter open PRs, or paste a URL"
+		aria-label="Filter open PRs, or paste a URL"
+		class="border-transparent bg-transparent placeholder:text-[#71717a]"
 		bind:value={filter}
 		disabled={repos.length === 0}
 		oninput={() => {
@@ -713,139 +553,79 @@
 
 {#snippet prCard(pr: PullRequest, repo: Pick<Repo, 'id' | 'name'>)}
 	{@const review = latestByPr.get(`${repo.id}#${pr.number}`)}
-	{@const isReviewed = review !== undefined}
 	{@const isHighlighted = highlightN === pr.number}
-	{@const expanded =
-		!!review &&
-		(review.status === 'running' ||
-			review.status === 'queued' ||
-			sessionState.activeId === review.id)}
-	{@const summary = review ? reviewSummaries[review.id] : undefined}
-	<Card.Root
-		class="flex min-w-0 flex-col p-4 transition-colors {isHighlighted
-			? 'border-primary/60 bg-primary/[0.05]'
-			: ''}"
-	>
-		<div class="flex min-w-0 items-start gap-3">
-			<GitPullRequest
-				size={18}
-				class="mt-0.5 shrink-0 {isHighlighted ? 'text-primary' : 'text-success'}"
-			/>
-			<div class="min-w-0 flex-1">
-				<p class="flex flex-wrap items-center gap-x-2 gap-y-1">
-					<span class="font-mono text-[13px] text-foreground-muted">#{pr.number}</span>
-					<span class="text-[15px] font-semibold tracking-tight">
-						{pr.title === '' ? `PR #${pr.number}` : pr.title}
-					</span>
-					{#if isReviewed}
-						<Badge variant="secondary">Reviewed</Badge>
-					{/if}
-				</p>
-				<p class="mt-0.5 truncate font-mono text-[13px] text-foreground-muted">
-					{pr.headRef} → {pr.base} · {plural(pr.changedFiles, 'file')}
-					<span class="text-success">+{pr.additions}</span>
-					<span class="text-error">−{pr.deletions}</span>
-					{pr.createdAt === '' ? '' : ` · opened ${timeAgo(pr.createdAt)}`} · by {pr.author}
-				</p>
-			</div>
-			<div class="flex shrink-0 items-center gap-2">
-				{#if expanded && review}
-					<Button
-						variant="outline"
-						class="font-sans"
-						onclick={() => openReviewSession(review, repo.name)}
-					>
-						Open diff
-					</Button>
-				{/if}
-				<Button
-					variant={isReviewed && !isHighlighted ? 'secondary' : 'primary'}
-					class="font-sans"
-					status={reviewTarget?.n === pr.number ? reviewTarget.status : 'idle'}
-					loadingLabel="Queueing…"
-					successLabel="Queued"
-					onclick={() => void reviewPr(pr.number, repo)}
-				>
-					{#if isReviewed}
-					<RefreshCw size={14} aria-hidden="true" />
-				{/if}
-				{isReviewed ? 'Re-review' : 'Review'}
-				</Button>
-			</div>
-		</div>
-
-		{#if expanded && review}
-			<div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border pt-3 text-[13px] text-foreground-muted">
-				{#if review.status === 'running' || review.status === 'queued'}
-					<Spinner size={13} aria-hidden="true" />
-				{:else}
-					<span
-						class="h-1.5 w-1.5 shrink-0 rounded-full"
-						style:background-color={statusDot[review.status]}
-					></span>
-				{/if}
-				<span>
-					Last review {review.status === 'passed'
-						? 'passed'
-						: review.status === 'failed'
-							? 'failed'
-							: 'started'}
-					{timeAgo(review.updatedAt)}
+	{@const queueing = reviewTarget?.n === pr.number}
+	{@const live =
+		review !== undefined && (review.status === 'running' || review.status === 'queued')}
+	{@const title = pr.title === '' ? `PR #${pr.number}` : pr.title}
+	<ContextMenu.Root>
+		<ContextMenu.Trigger
+			{...{
+				onclick: () => handleCardOpen(pr, repo, review),
+				'aria-label': `${review ? 'Open review of' : 'Review'} ${title}, PR #${pr.number} in ${repo.name}`
+			}}
+			class="flex min-w-0 cursor-pointer flex-col gap-1.5 rounded-2xl border border-white/10 bg-transparent p-5 text-left transition-colors hover:bg-white/[0.02] {isHighlighted
+				? 'border-primary/60 bg-primary/[0.05]'
+				: ''}"
+		>
+			<span class="flex min-w-0 items-center gap-2">
+				<GitPullRequest size={18} class="shrink-0 text-[#4ade80]" aria-hidden="true" />
+				<span class="min-w-0 flex-1 truncate text-[15px] font-medium tracking-tight text-[#f4f4f5]">
+					{title}
 				</span>
-				<span aria-hidden="true">·</span>
-				<span>{plural(review.findings.length, 'finding')}</span>
-				{#if summary && summary.tasksTotal > 0}
-					<span aria-hidden="true">·</span>
-					<span>{summary.tasksTotal} tasks</span>
+				<span class="shrink-0 font-mono text-[13px] text-[#8e8e96]">
+					#{pr.number}
+				</span>
+				{#if queueing || live}
+					<Spinner size={16} aria-hidden="true" />
+				{:else}
+					<ChevronRight size={18} class="shrink-0 text-[#6e6e76]" aria-hidden="true" />
 				{/if}
-				{#if reviewDuration(review) !== ''}
-					<span aria-hidden="true">·</span>
-					<span class="font-mono tabular-nums">{reviewDuration(review)}</span>
-				{/if}
-				<Button
-					variant="quiet"
-					class="ml-auto shrink-0 font-sans text-[13px] text-primary dark:text-[#9e99f3] hover:underline hover:underline-offset-4"
-					onclick={() => openReviewSession(review, repo.name)}
-				>
-					Open session
-				</Button>
-			</div>
-		{:else if isReviewed && review}
-			<div
-				class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border pt-3 text-[13px] text-foreground-muted"
+			</span>
+			<span
+				class="flex min-w-0 items-center gap-x-3 overflow-hidden font-mono text-[13px] text-[#8f8f96] [&>*]:shrink-0"
 			>
-				<span
-					class="h-1.5 w-1.5 shrink-0 rounded-full"
-					style:background-color={statusDot[review.status]}
-				></span>
-				<span>Reviewed {timeAgo(review.updatedAt)}</span>
-				<span aria-hidden="true">·</span>
-				<span>{plural(review.findings.length, 'finding')}</span>
-				{#if reviewDuration(review) !== ''}
-					<span aria-hidden="true">·</span>
-					<span class="font-mono tabular-nums">{reviewDuration(review)}</span>
-				{/if}
-				<Button
-					variant="quiet"
-					class="ml-auto shrink-0 font-sans text-[13px] text-primary dark:text-[#9e99f3] hover:underline hover:underline-offset-4"
-					onclick={() => openReviewSession(review, repo.name)}
-				>
-					Open session
-				</Button>
-			</div>
-		{/if}
-	</Card.Root>
+					<Badge variant="secondary" class="bg-white/[0.054] font-mono text-[#b5b5bd]"><span class="font-normal">{pr.headRef}</span></Badge>
+					<span>into</span>
+					<Badge variant="secondary" class="bg-white/[0.054] font-mono text-[#b5b5bd]"><span class="font-normal">{pr.base}</span></Badge>
+					<span>{plural(pr.changedFiles, 'file')}</span>
+					<span class="text-[#4ade80]">+{pr.additions}</span>
+					<span class="text-[#f87171]">-{pr.deletions}</span>
+					<span class="truncate">{pr.author}</span>
+					{#if pr.createdAt !== ''}
+						<span>{timeAgo(pr.createdAt)}</span>
+					{/if}
+				</span>
+		</ContextMenu.Trigger>
+		<ContextMenu.Content class="min-w-[13rem]">
+			{#if review}
+				<ContextMenu.Item callback={() => openReviewSession(review, repo.name)}>
+					<span class="flex items-center gap-2"><ArrowUpRight size={14} /> Open session</span>
+				</ContextMenu.Item>
+				<ContextMenu.Item callback={() => void reviewPr(pr.number, repo)}>
+					<span class="flex items-center gap-2"><RefreshCw size={14} /> Re-review</span>
+				</ContextMenu.Item>
+			{:else}
+				<ContextMenu.Item callback={() => void reviewPr(pr.number, repo)}>
+					<span class="flex items-center gap-2"><GitPullRequest size={14} /> Review now</span>
+				</ContextMenu.Item>
+			{/if}
+			<ContextMenu.Item callback={() => copyPrLink(pr)}>
+				<span class="flex items-center gap-2"><Link2 size={14} /> Copy link</span>
+			</ContextMenu.Item>
+		</ContextMenu.Content>
+	</ContextMenu.Root>
 {/snippet}
 
 <div class="flex h-full flex-col overflow-hidden lg:flex-row">
-	<!-- Repositories + reviewer -->
+	<!-- Repositories -->
 	<aside
 		aria-label="Repositories"
 		class="hidden w-[340px] shrink-0 flex-col border-r border-border bg-background lg:flex"
 	>
 			<ScrollArea class="min-h-0 flex-1" showCues={false}>
 			<div class="flex flex-col gap-1 p-3">
-				<h2 class="px-1 pb-1 text-[13px] font-medium text-foreground-muted">Repositories</h2>
+				<h2 class="px-2 pb-1 text-[13px] font-medium text-foreground-muted">Repositories</h2>
 				{#if authLoading}
 					{#each [0, 1, 2] as i (i)}
 						<Skeleton class="h-9 w-full rounded-md" />
@@ -861,7 +641,7 @@
 								class="flex h-9 w-full items-center gap-2.5 rounded-md px-2 text-left transition-colors {activeRepo?.id ===
 								repo.id
 									? 'bg-secondary text-foreground'
-									: 'text-foreground-muted hover:bg-secondary/50 hover:text-foreground'}"
+									: 'text-foreground hover:bg-secondary/50'}"
 							>
 								<span class="flex shrink-0 items-center text-foreground-muted">
 									{@render providerMark(repo.provider, 14)}
@@ -871,11 +651,11 @@
 						{/each}
 					</nav>
 				{:else}
-					<p class="px-1 py-2 text-[14px] text-foreground-muted">No repositories tracked.</p>
+					<p class="px-2 py-2 text-[14px] text-foreground-muted">No repositories tracked.</p>
 				{/if}
 				<Button
-					variant="ghost"
-					class="mt-1 justify-start font-sans text-foreground-muted"
+					variant="quiet"
+					class="mt-1 justify-start font-sans text-foreground-muted hover:text-foreground"
 					onclick={openBrowse}
 				>
 					<Plus size={15} /> Track a repository
@@ -935,37 +715,44 @@
 		</div>
 	</aside>
 
-	<!-- Main + recent sessions -->
-	<div class="flex min-h-0 min-w-0 flex-1 flex-col xl:flex-row">
-		<section class="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Start a review">
-			<div class="shrink-0 px-3">
-			<div class="mx-auto flex w-full max-w-[960px] flex-wrap items-center gap-2 py-3">
-				{#if authLoading}
-					<div class="min-w-0 flex-1">
-						<Skeleton class="h-[var(--size-control-md)] w-full rounded-lg" />
-					</div>
-				{:else if repos.length > 0}
-					<div class="min-w-0 flex-1">{@render filterInput()}</div>
-				{:else}
-					<Button variant="outline" class="shrink-0 font-sans" onclick={openBrowse}>
-						<Plus size={15} /> Add repository
-					</Button>
-					<div class="min-w-0 flex-1">{@render filterInput()}</div>
-				{/if}
-				<Button
-					variant="outline"
-					class="shrink-0 font-sans"
-					loading={refreshing}
-					disabled={repos.length === 0}
-					onclick={() => void refreshAll()}
-				>
-					<RefreshCw size={15} /> Refresh
-				</Button>
-			</div>
-			</div>
-
+	<!-- Main -->
+	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
+		<section class="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Home">
 			<ScrollArea class="min-h-0 flex-1" aria-label="Open pull requests" showCues={false}>
-				<div class="mx-auto flex w-full max-w-[960px] flex-col gap-3 p-4">
+				<div class="mx-auto flex w-full max-w-[880px] flex-col gap-7 px-4 pt-14 pb-10">
+					<h1 class="text-xl font-medium tracking-tight">Home</h1>
+
+					<div class="flex items-center gap-2">
+						{#if authLoading}
+							<div class="min-w-0 flex-1">
+								<Skeleton class="h-[var(--size-control-md)] w-full rounded-lg" />
+							</div>
+							<Skeleton class="size-[var(--size-control-md)] shrink-0 rounded-lg" />
+						{:else}
+							{#if repos.length === 0}
+								<Button
+									variant="outline"
+									class="h-[var(--size-control-md)] shrink-0 font-sans"
+									onclick={openBrowse}
+								>
+									<Plus size={15} /> Add repository
+								</Button>
+							{/if}
+							<div class="min-w-0 flex-1">{@render filterInput()}</div>
+							<Button
+								variant="ghost"
+								size="icon"
+								class="h-[var(--size-control-md)] w-[var(--size-control-md)] shrink-0"
+								loading={refreshing}
+								disabled={repos.length === 0}
+								aria-label="Refresh pull requests"
+								onclick={() => void refreshAll()}
+							>
+								<RefreshCw size={15} />
+							</Button>
+						{/if}
+					</div>
+
 					{#if apiDown}
 						<Alert.Root variant="warning">
 							<Alert.Title>API unreachable</Alert.Title>
@@ -990,84 +777,51 @@
 						</Alert.Root>
 					{/if}
 
-					<div class="flex items-baseline justify-between gap-3">
-						<h2 class="text-[15px] font-medium">
-							Open pull requests
-							<span class="text-foreground-muted tabular-nums">{anyPrsLoading ? '…' : listedTotal}</span>
-						</h2>
-						<DropdownMenu.Root>
-							<DropdownMenu.Trigger
-								variant="ghost"
-								class="-mr-1 shrink-0 font-sans text-[13px] text-foreground-muted"
-								aria-label="Sort pull requests"
-							>
-								{sortNewest ? 'Newest first' : 'Oldest first'}
-								<ChevronDown size={14} />
-							</DropdownMenu.Trigger>
-							<DropdownMenu.Content class="w-44">
-								<DropdownMenu.RadioGroup
-									value={sortNewest ? 'newest' : 'oldest'}
-									onValueChange={(v) => (sortNewest = v === 'newest')}
-								>
-									<DropdownMenu.RadioItem value="newest">
-										<span class="min-w-0 flex-1 text-left">Newest first</span>
-									</DropdownMenu.RadioItem>
-									<DropdownMenu.RadioItem value="oldest">
-										<span class="min-w-0 flex-1 text-left">Oldest first</span>
-									</DropdownMenu.RadioItem>
-								</DropdownMenu.RadioGroup>
-							</DropdownMenu.Content>
-						</DropdownMenu.Root>
-					</div>
-
 					{#if prError}
 						<p class="text-[13px] font-medium text-error" role="alert">{prError}</p>
 					{/if}
 
 					{#if showFetchCard && pastedNumber !== null}
-						<Card.Root class="flex min-w-0 flex-row items-center gap-3 border-dashed p-3">
-							<p class="min-w-0 flex-1 truncate font-mono text-[13px] text-foreground-muted">
+						<div class="flex min-w-0 items-center gap-3 px-2 py-1">
+							<p class="min-w-0 flex-1 truncate font-mono text-[13px] text-[#8f8f96]">
 								PR #{pastedNumber} isn’t in the open list.
 							</p>
 							<Button
-								variant="outline"
-								class="shrink-0 font-sans"
+								variant="quiet"
+								class="shrink-0 font-sans text-primary dark:text-[#9e99f3]"
 								loading={fetchingPreview}
 								onclick={() => void fetchPreview(pastedNumber)}
 							>
 								Fetch
 							</Button>
-						</Card.Root>
+						</div>
 					{/if}
 
-					<div class="flex flex-col gap-6" aria-busy={anyPrsLoading}>
+					<div class="flex flex-col gap-14" aria-busy={anyPrsLoading}>
 						{#each repos as repo (repo.id)}
 							{@const groupPrs = sortedByRepo.get(repo.id) ?? []}
 							{#if !hasFilter || groupPrs.length > 0}
 								<section
-									class="flex min-w-0 flex-col gap-2"
+									class="flex min-w-0 flex-col gap-4"
 									aria-label="Pull requests in {repo.name}"
 								>
-									<div class="flex items-center gap-2 px-1">
-										<span class="flex shrink-0 items-center text-foreground-muted">
+									<div class="flex items-center gap-2 text-[#8e8e96]">
+										<span class="flex shrink-0 items-center">
 											{@render providerMark(repo.provider, 14)}
 										</span>
-										<h3 class="min-w-0 truncate font-mono text-[13px] font-medium text-foreground-muted">
+										<h2 class="min-w-0 truncate font-mono text-[13px] font-medium">
 											{repo.name}
-										</h3>
-										<span class="text-[13px] text-foreground-muted tabular-nums">{groupPrs.length}</span>
+										</h2>
+										<span class="text-[13px] tabular-nums">{groupPrs.length}</span>
 									</div>
 									{#if prsLoadingByRepo[repo.id]}
-										<div role="status" aria-label="Loading pull requests">
-											<Card.Root class="flex min-w-0 flex-row items-center gap-3 p-4">
-												<Skeleton class="mt-0.5 size-[18px] shrink-0 self-start rounded-full" />
-												<div class="min-w-0 flex-1">
-													<Skeleton class="h-[22px] w-2/3" />
-													<Skeleton class="mt-0.5 h-5 w-1/2" />
-												</div>
-												<Skeleton class="hidden h-5 w-32 shrink-0 sm:block" />
-												<Skeleton class="h-[34px] w-[84px] shrink-0 rounded-lg" />
-											</Card.Root>
+										<div role="status" aria-label="Loading pull requests" class="flex min-w-0 items-start gap-3 px-2 py-3">
+											<Skeleton class="mt-0.5 size-[18px] shrink-0 rounded-full" />
+											<div class="min-w-0 flex-1">
+												<Skeleton class="h-5 w-2/3" />
+												<Skeleton class="mt-1.5 h-4 w-1/2" />
+											</div>
+											<Skeleton class="size-[18px] shrink-0 rounded-md" />
 										</div>
 									{:else if prsErrorByRepo[repo.id]}
 										<Alert.Root variant="error">
@@ -1097,7 +851,7 @@
 							<p class="px-1 py-3 text-[14px] text-foreground-muted">
 								Track a repository to see its open pull requests.
 							</p>
-						{:else if hasFilter && pastedNumber === null && listedTotal === 0 && !anyPrsLoading}
+						{:else if hasFilter && pastedNumber === null && matchTotal === 0 && !anyPrsLoading}
 							<p class="px-1 py-3 text-[14px] text-foreground-muted">
 								No pull requests match this filter.
 							</p>
@@ -1106,170 +860,6 @@
 				</div>
 			</ScrollArea>
 		</section>
-
-		<!-- Recent sessions -->
-		<aside
-			aria-label="Recent sessions"
-			class="flex shrink-0 flex-col border-t border-border xl:w-[360px] xl:border-t-0 xl:border-l"
-		>
-			<div class="flex shrink-0 items-center justify-between gap-2 px-4 py-3">
-				<h2 class="text-[15px] font-medium">Recent sessions</h2>
-				{#if recent.length > 0}
-					<Button
-						variant="quiet"
-						class="h-auto px-0 font-sans text-[13px] text-primary dark:text-[#9e99f3] hover:bg-transparent hover:underline hover:underline-offset-4"
-						onclick={() => (allSessionsOpen = true)}
-					>
-						See all
-					</Button>
-				{/if}
-			</div>
-
-			<ScrollArea class="min-h-0 flex-1" aria-label="Recent sessions" showCues={false}>
-				<div class="flex flex-col gap-2 px-4 pb-3" aria-busy={recentLoading}>
-					{#if recentLoading}
-						{#each [0, 1, 2] as i (i)}
-							<Card.Root class="flex flex-col gap-2 p-3">
-								<div class="flex items-center gap-2">
-									<Skeleton class="h-[18px] w-28" />
-									<Skeleton class="ml-auto h-[18px] w-16" />
-								</div>
-								<Skeleton class="h-[16px] w-40" />
-							</Card.Root>
-						{/each}
-					{:else}
-						{#each visibleRecent as session (session.id)}
-							{@const sessionStatus =
-								session.status === 'passed' || session.status === 'failed'
-									? 'ready'
-									: 'reviewing'}
-							{@const repoId = apiDown
-								? undefined
-								: allReviews.find((r) => r.id === session.id)?.repoId}
-							<ContextMenu.Root>
-								<ContextMenu.Trigger>
-									<Button
-										unstyled
-										type="button"
-										onclick={() =>
-											openSession(session.id, session.repo, `#${session.pr}`, sessionStatus)}
-										class="group flex w-full flex-col gap-1 rounded-[var(--radius-lg)] border-[length:var(--border-size)] border-border bg-card p-3 text-left transition-colors hover:bg-secondary"
-									>
-										<span class="flex min-w-0 items-center gap-2">
-											<span class="truncate font-mono text-[14px] text-foreground">
-												{session.repo} <span class="text-foreground-muted">#{session.pr}</span>
-											</span>
-											<span class="ml-auto flex shrink-0 items-center gap-2">
-												{#if session.status === 'running' || session.status === 'queued'}
-													<Spinner size={12} aria-hidden="true" />
-												{:else}
-													<span
-														class="h-1.5 w-1.5 rounded-full"
-														style:background-color={statusDot[session.status]}
-													></span>
-												{/if}
-												<span
-													class:text-success={session.status === 'passed'}
-													class:text-error={session.status === 'failed'}
-													class:text-info-vivid={session.status === 'running' ||
-														session.status === 'queued'}
-													class="text-[13px] font-medium"
-												>
-													{recentStatusLabel(session)}
-												</span>
-											</span>
-										</span>
-										<span class="truncate font-mono text-[12px] text-foreground-muted">
-											{recentHeadline(session)}
-										</span>
-									</Button>
-								</ContextMenu.Trigger>
-								<ContextMenu.Content class="min-w-[13rem]">
-									<ContextMenu.Item
-										callback={() =>
-											openSession(session.id, session.repo, `#${session.pr}`, sessionStatus)}
-									>
-										<span class="flex items-center gap-2"><ArrowUpRight size={14} /> Open session</span>
-									</ContextMenu.Item>
-									<ContextMenu.Item callback={() => copySessionLink(session.id)}>
-										<span class="flex items-center gap-2"><Link2 size={14} /> Copy link</span>
-									</ContextMenu.Item>
-									<ContextMenu.Item callback={() => copySessionId(session.id)}>
-										<span class="flex items-center gap-2"><Hash size={14} /> Copy session ID</span>
-									</ContextMenu.Item>
-									<ContextMenu.Separator />
-									<ContextMenu.Item
-										disabled={!repoId || !!reviewTarget || deletingId === session.id}
-										callback={() => {
-											if (repoId) void reviewPr(session.pr, { id: repoId, name: session.repo });
-										}}
-									>
-										<span class="flex items-center gap-2">
-											<RefreshCw size={14} aria-hidden="true" /> Re-review
-										</span>
-									</ContextMenu.Item>
-									<ContextMenu.Item
-										callback={() => {
-											pendingDeleteId = session.id;
-											deleteDialogOpen = true;
-										}}
-									>
-										<span class="flex items-center gap-2 text-[var(--color-error)]">
-											<Trash2 size={14} /> Delete
-										</span>
-									</ContextMenu.Item>
-								</ContextMenu.Content>
-							</ContextMenu.Root>
-						{:else}
-							<p class="px-1 py-3 text-[14px] text-foreground-muted">No sessions yet.</p>
-						{/each}
-					{/if}
-				</div>
-			</ScrollArea>
-
-			<div class="shrink-0 px-4 pt-2 pb-3">
-				<h2 class="pb-1 text-[13px] font-medium text-foreground-muted">Reviewer</h2>
-				{#if !apiDown && !modelSettingsUi.config}
-					<Card.Root class="p-3">
-						<Skeleton class="h-4 w-24 rounded-md" />
-						<Skeleton class="mt-2 h-3 w-40 rounded-md" />
-					</Card.Root>
-				{:else}
-					<Button
-						unstyled
-						type="button"
-						onclick={() => modelSettingsUi.show()}
-						class="group flex w-full items-center gap-3 rounded-[var(--radius-lg)] border-[length:var(--border-size)] border-border bg-card p-3 text-left transition-colors hover:bg-secondary"
-					>
-						<span class="min-w-0 flex-1">
-							{#if apiDown}
-								<span class="block text-[15px] font-medium">{MODEL_ROLES.length} specialists</span>
-								<span class="mt-0.5 block truncate font-mono text-[12px] text-foreground-muted">
-									qwen2.5-coder-32b-instruct
-								</span>
-							{:else if modelSettingsUi.config?.configured}
-								<span class="block text-[15px] font-medium">{MODEL_ROLES.length} specialists</span>
-								<span class="mt-0.5 block truncate font-mono text-[12px] text-foreground-muted">
-									{modelSettingsUi.config.model}
-								</span>
-							{:else}
-								<span class="block text-[14px] text-foreground-muted">No reviewer model configured</span>
-							{/if}
-						</span>
-						<ChevronRight
-							size={16}
-							class="shrink-0 text-foreground-muted transition-transform group-hover:translate-x-0.5"
-						/>
-					</Button>
-				{/if}
-			</div>
-
-			{#if reviewingCount > 0}
-				<p class="shrink-0 border-t border-border px-4 py-3 text-[13px] text-foreground-muted">
-					{plural(reviewingCount, 'review')} in progress.
-				</p>
-			{/if}
-		</aside>
 	</div>
 </div>
 
@@ -1365,63 +955,6 @@
 	</Modal.Content>
 </Modal.Root>
 
-<Modal.Root bind:open={allSessionsOpen}>
-	<Modal.Content size="lg">
-		<Modal.Header>
-			<Modal.Title>All sessions</Modal.Title>
-		</Modal.Header>
-		<Modal.Body>
-			<ScrollArea aria-label="All sessions" class="max-h-[60dvh]" showCues={false}>
-				<div class="flex flex-col gap-2 pr-2">
-					{#each recent as session (session.id)}
-						{@const sessionStatus =
-							session.status === 'passed' || session.status === 'failed' ? 'ready' : 'reviewing'}
-						<Button
-							unstyled
-							type="button"
-							onclick={() => {
-								allSessionsOpen = false;
-								openSession(session.id, session.repo, `#${session.pr}`, sessionStatus);
-							}}
-							class="flex w-full flex-col gap-1 rounded-[var(--radius-lg)] border-[length:var(--border-size)] border-border bg-card p-3 text-left transition-colors hover:bg-secondary"
-						>
-							<span class="flex min-w-0 items-center gap-2">
-								<span class="truncate font-mono text-[14px] text-foreground">
-									{session.repo} <span class="text-foreground-muted">#{session.pr}</span>
-								</span>
-								<span class="ml-auto flex shrink-0 items-center gap-2">
-									{#if session.status === 'running' || session.status === 'queued'}
-										<Spinner size={12} aria-hidden="true" />
-									{:else}
-										<span
-											class="h-1.5 w-1.5 rounded-full"
-											style:background-color={statusDot[session.status]}
-										></span>
-									{/if}
-									<span
-										class:text-success={session.status === 'passed'}
-										class:text-error={session.status === 'failed'}
-										class:text-info-vivid={session.status === 'running' ||
-											session.status === 'queued'}
-										class="text-[13px] font-medium"
-									>
-										{recentStatusLabel(session)}
-									</span>
-								</span>
-							</span>
-							<span class="truncate font-mono text-[12px] text-foreground-muted">
-								{recentHeadline(session)}
-							</span>
-						</Button>
-					{:else}
-						<p class="px-1 py-3 text-[14px] text-foreground-muted">No sessions yet.</p>
-					{/each}
-				</div>
-			</ScrollArea>
-		</Modal.Body>
-	</Modal.Content>
-</Modal.Root>
-
 <Modal.Root bind:open={connectOpen}>
 	<Modal.Content size="sm">
 		<Modal.Header>
@@ -1466,36 +999,3 @@
 		</Modal.Footer>
 	</Modal.Content>
 </Modal.Root>
-
-<AlertDialog.Root
-	error
-	bind:open={deleteDialogOpen}
-	onOpenChange={(open) => {
-		if (!open) pendingDeleteId = null;
-	}}
->
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>Delete this session?</AlertDialog.Title>
-			<AlertDialog.Description>
-				{#if pendingDelete}
-					{pendingDelete.repo} #{pendingDelete.pr} with {plural(pendingDelete.findings, 'finding')} will
-					be permanently removed.
-				{:else}
-					This session will be permanently removed.
-				{/if}
-				This action cannot be undone.
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Exit>
-				Cancel
-				<Shortcut shortcut="esc" />
-			</AlertDialog.Exit>
-			<AlertDialog.Confirm onclick={() => confirmDelete()}>
-				Delete
-				<Shortcut shortcut="enter" />
-			</AlertDialog.Confirm>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>

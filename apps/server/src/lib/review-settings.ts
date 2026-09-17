@@ -41,6 +41,8 @@ export const reviewSettingsSchema = z.object({
 	apiKey: z.string().max(500).optional(),
 	models: z.array(modelEntrySchema).max(50).optional(),
 	sharedModelId: z.string().max(100).nullable().optional(),
+	orchestratorModelId: z.string().max(100).nullable().optional(),
+	specialistModelId: z.string().max(100).nullable().optional(),
 	roles: roleSettingsSchema.optional(),
 	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(REASONING_EFFORTS)).optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
@@ -65,6 +67,8 @@ interface StoredSettings {
 	apiKey?: string;
 	models?: StoredModelEntry[];
 	sharedModelId?: string | null;
+	orchestratorModelId?: string | null;
+	specialistModelId?: string | null;
 	roles?: Partial<Record<ReviewRole, string>>;
 	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
 	maxFiles?: number;
@@ -150,6 +154,8 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 		// Drop routing pointers to deleted entries.
 		const ids = new Set(clean.models.map((e) => e.id));
 		if (clean.sharedModelId && !ids.has(clean.sharedModelId)) delete clean.sharedModelId;
+		if (clean.orchestratorModelId && !ids.has(clean.orchestratorModelId)) delete clean.orchestratorModelId;
+		if (clean.specialistModelId && !ids.has(clean.specialistModelId)) delete clean.specialistModelId;
 		if (clean.roles) {
 			for (const role of REVIEW_ROLES) {
 				if (clean.roles[role] && !ids.has(clean.roles[role] as string)) delete clean.roles[role];
@@ -159,6 +165,8 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.sharedModelId !== undefined) {
 		clean.sharedModelId = patch.sharedModelId || null;
 	}
+	if (patch.orchestratorModelId !== undefined) clean.orchestratorModelId = patch.orchestratorModelId || null;
+	if (patch.specialistModelId !== undefined) clean.specialistModelId = patch.specialistModelId || null;
 	if (patch.roles !== undefined) {
 		clean.roles = { ...(clean.roles ?? {}) };
 		for (const role of REVIEW_ROLES) {

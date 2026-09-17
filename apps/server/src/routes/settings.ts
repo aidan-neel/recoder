@@ -34,6 +34,8 @@ app.get('/models', (c) => {
 		model: eff.model,
 		apiKeyPreview: apiKeyPreview(),
 		sharedModelId: stored.sharedModelId ?? null,
+		orchestratorModelId: stored.orchestratorModelId ?? null,
+		specialistModelId: stored.specialistModelId ?? null,
 		models: (stored.models ?? []).map((e) => ({
 			provider: e.provider ?? 'openai-compatible',
 			id: e.id,
@@ -68,6 +70,8 @@ app.on(['PUT', 'PATCH'], '/models', async (c) => {
 		model: eff.model,
 		apiKeyPreview: apiKeyPreview(),
 		sharedModelId: stored.sharedModelId ?? null,
+		orchestratorModelId: stored.orchestratorModelId ?? null,
+		specialistModelId: stored.specialistModelId ?? null,
 		models: (stored.models ?? []).map((e) => ({
 			provider: e.provider ?? 'openai-compatible',
 			id: e.id,

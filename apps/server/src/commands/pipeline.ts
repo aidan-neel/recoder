@@ -13,7 +13,8 @@ import {
 import { fetchPullRequest } from '../lib/gh';
 import { fetchMergeRequest } from '../lib/glab';
 import { runAdaptiveReview } from '../lib/harness';
-import { isReviewConfigured } from '../lib/models';
+import { configForOrchestrator, isReviewConfigured } from '../lib/models';
+import { discussionContext, recordChatMessage } from '../lib/review-chat';
 import { detectProvider, locateRepo, refspecFor } from '../lib/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../lib/sandbox';
 import { tokenEnv } from '../lib/tokens';
@@ -94,6 +95,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 
 	try {
 		if (!repo) throw new Error('repo not found');
+		emitReviewEvent(reviewId, { type: 'step', step: 'orchestrator', message: '', data: { orchestratorModel: configForOrchestrator().model } });
 		const provider = repo.provider ?? detectProvider(repo.url);
 		const env = tokenEnv(provider);
 		const viewCmd =
@@ -180,6 +182,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			},
 			{
 				onTask: (task) => reportReviewTask(reviewId, task),
+				onMessage: (message) => recordChatMessage(reviewId, { ...message, from: 'assistant', at: new Date().toISOString() }),
+				getDiscussion: (assignmentId) => discussionContext(reviewId, assignmentId),
 				onLog: (message, meta) =>
 					emitReviewEvent(reviewId, {
 						type: 'log',

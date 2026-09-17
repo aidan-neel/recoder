@@ -2,6 +2,7 @@
 	import type { ReviewStream } from '$lib/review-stream.svelte';
 	import type { Review, ReviewAssignment } from '@recoder/shared';
 	import ReviewingView, { type ReviewingFinding } from './reviewing-view.svelte';
+	import { serverApi } from '$lib/server-api';
 
 	interface Props {
 		review: Review;
@@ -72,6 +73,10 @@
 	title={review.prTitle || `PR #${review.prNumber}`}
 	meta={{ prLabel: '#' + review.prNumber, repo, files, additions, deletions, elapsed }}
 	assignments={displayAssignments}
+	messages={progress.messages ?? []}
+	orchestratorModel={progress.orchestratorModel}
+	onSend={async (assignmentId, text) => { await serverApi.sendReviewMessage(reviewId, assignmentId, text); }}
+	onStop={async (assignmentId) => { await serverApi.stopReviewMessage(reviewId, assignmentId); }}
 	findings={viewFindings}
 	pendingCount={assignments.filter((assignment) => assignment.status === 'running' || assignment.status === 'queued' || assignment.status === 'waiting').length}
 	pipelineLogs={progress.activity.map((entry) => entry.message)}
@@ -82,13 +87,12 @@
 	stageLabel={currentStage}
 	stageDetail={stageIndex === 0 ? progress.tasks[['fetch', 'sandbox', 'diff'].find((id) => progress.tasks[id]?.status === 'running') ?? 'fetch']?.message : undefined}
 	failed={status === 'failed'}
-	errorMessage={actionError ?? (status === 'failed' ? review.summary : null)}
+	errorMessage={actionError ?? (status === 'failed' && !progress.assignments?.length ? review.summary : null)}
 	{connectionLabel}
 	connectionLost={connection === 'reconnecting' || (active && now - lastReceived > 15000)}
 	planSummary={progress.planSummary ?? null}
 	coverage={progress.coverage ?? null}
 	coverageGaps={progress.coverageGaps ?? []}
-	recommendedChecks={progress.recommendedChecks ?? []}
 	{now}
 	{active}
 	tasks={Object.values(progress.tasks).map((task) => ({ ...task, assignmentId: task.assignmentId ?? pipelineId }))}

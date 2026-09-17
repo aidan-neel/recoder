@@ -46,8 +46,9 @@ const followUpSchema = z
 	.optional();
 
 export const specialistOutputSchema = z.object({
-	findings: z.array(findingSchema).max(30).default([]),
-	examinedHunks: z.array(z.string()).max(200).default([]),
+	message: z.string().max(12000).optional(),
+	findings: z.array(findingSchema).max(30),
+	examinedHunks: z.array(z.string()).max(200),
 	coverageGaps: z.array(z.object({ hunkId: z.string(), reason: z.string().max(400) })).max(80).default([]),
 	blockers: z.array(z.string().max(400)).max(20).default([]),
 	followUp: followUpSchema,

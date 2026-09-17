@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app } from '../app';
 import { effectiveReviewEnv, getStoredSettings, initReviewSettings, setReviewOverrides } from '../lib/review-settings';
-import { configForRole, isReviewConfigured } from '../lib/models';
+import { configForOrchestrator, configForRole, isReviewConfigured } from '../lib/models';
 
 const ENV_KEYS = [
 	'RECODER_REVIEW_BASE_URL',
@@ -30,6 +30,26 @@ function isolateDataDir(): void {
 beforeEach(isolateDataDir);
 
 describe('review settings', () => {
+	test('orchestrator and specialist models route independently and survive reload', async () => {
+		const response = await app.request('/api/settings/models', {
+			method: 'PATCH', headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({
+				models: [
+					{ id: 'lead', label: 'Lead', model: 'lead-model', provider: 'codex' },
+					{ id: 'worker', label: 'Worker', model: 'worker-model', provider: 'codex' }
+				], orchestratorModelId: 'lead', specialistModelId: 'worker', roles: { security: 'lead' }
+			})
+		});
+		expect(response.status).toBe(200);
+		setReviewOverrides({});
+		initReviewSettings();
+		expect(configForOrchestrator().model).toBe('lead-model');
+		expect(configForRole('correctness').model).toBe('worker-model');
+		expect(configForRole('security').model).toBe('lead-model');
+		const settings = await (await app.request('/api/settings/models')).json();
+		expect(settings.orchestratorModelId).toBe('lead');
+		expect(settings.specialistModelId).toBe('worker');
+	});
 	test('PATCH merges role efforts, persists across reload, and preserves model routing', async () => {
 		setReviewOverrides({
 			models: [{ id: 'sub', label: 'Subscription', model: 'test-model', provider: 'codex' }],

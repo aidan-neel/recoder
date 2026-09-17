@@ -156,6 +156,8 @@ export interface ModelSettings {
 	model: string;
 	apiKeyPreview: string | null;
 	sharedModelId: string | null;
+	orchestratorModelId?: string | null;
+	specialistModelId?: string | null;
 	models: ModelEntry[];
 	roles: Record<ReviewRole, string | null>;
 	/** Explicit per-role overrides; absent roles retain provider defaults (Codex: medium). */
@@ -168,6 +170,8 @@ export interface ModelSettingsPatch {
 	apiKey?: string;
 	models?: ModelEntryPatch[];
 	sharedModelId?: string | null;
+	orchestratorModelId?: string | null;
+	specialistModelId?: string | null;
 	roles?: Partial<Record<ReviewRole, string>>;
 	/** Merged by role; omitted roles keep their saved effort. */
 	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;

@@ -57,7 +57,7 @@ test('review agent, discussion, streaming discussion, and fix consume resolved r
 		const body = JSON.parse(init!.body as string);
 		efforts.push(body.reasoning_effort);
 		return body.stream
-			? new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n')
+			? new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: body.response_format ? '{"message":"Checked the evidence","ok":true}' : 'ok' } }] })}\n\ndata: [DONE]\n\n`)
 			: Response.json({ choices: [{ message: { content: JSON.stringify({ summary: 'Fix', patch: '--- a/test.ts\n+++ b/test.ts\n' }) } }] });
 	}) as typeof fetch;
 	const finding = { agent: 'security', file: 'test.ts', line: 1, endLine: 1, severity: 'warning', message: 'Issue', diff: '', sandboxPath: null };

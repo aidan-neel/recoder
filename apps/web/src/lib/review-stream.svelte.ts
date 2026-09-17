@@ -30,8 +30,6 @@ export class ReviewStream {
 			const status = message.review?.status ?? message.status ??
 				(!message.step && message.type === 'done' ? 'passed' : !message.step && message.type === 'error' ? 'failed' : null);
 			if (status !== 'passed' && status !== 'failed') return;
-			this.connection = 'closed';
-			this.source.close();
 			// Older servers and heartbeat recovery may only provide a status.
 			if (!message.review) {
 				void serverApi.getReview(id).then((review) => {

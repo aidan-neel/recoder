@@ -1,5 +1,6 @@
 import type { ChatMessage } from './llm.js';
-import { chatCompletion, LlmError } from './llm.js';
+import { streamChatCompletion, LlmError } from './llm.js';
+import { streamedMessage } from './response-text.js';
 import { extractJsonValue } from './json-extract.js';
 import { parseActions, formatToolResults, type EvidenceStore, type ToolCallReport } from './evidence.js';
 import { REVIEW_POLICY } from './review-policy.js';
@@ -24,8 +25,8 @@ export class AuthConfigError extends Error {
 export class ModelBudget {
 	used = 0;
 	constructor(
-		readonly limit = REVIEW_POLICY.maxModelCalls,
-		readonly reserve = REVIEW_POLICY.reserveCallsForConsolidation
+		readonly limit: number = REVIEW_POLICY.maxModelCalls,
+		readonly reserve: number = REVIEW_POLICY.reserveCallsForConsolidation
 	) {}
 	remaining(): number {
 		return Math.max(0, this.limit - this.used);
@@ -64,27 +65,31 @@ export interface JsonAgentOptions<T> {
 	/** Accumulated provider reasoning for a turn, upserted by `id`. */
 	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status'>) => void;
 	onTool?: (tool: ToolCallReport) => void;
+	onMessage?: (message: { id: string; text: string; status: 'streaming' | 'done' | 'error' }) => void;
+	getDiscussion?: () => string;
 }
 
 export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
 	// Reserve time throughout an investigation, not merely when dispatching it.
 	const deadlineAt = opts.deadlineAt - (opts.consumeReserve ? 0 : REVIEW_POLICY.reserveMsForConsolidation);
 	const messages: ChatMessage[] = [
-		{ role: 'system', content: opts.system },
+		{ role: 'system', content: opts.system + '\nIn every JSON response, put "message" first: a concise, reader-facing Markdown explanation of your current investigation or conclusion. Then include the required structured fields. Describe actual evidence and decisions; do not narrate JSON formatting or budget compliance. This text is shown live to the developer.' },
 		{ role: 'user', content: opts.user }
 	];
 	let repaired = 0;
 	let lastError = 'no model output';
-	// One repair may follow the final normal turn. It still consumes the shared
-	// call/time budget; a retrieval request can never unlock this extra turn.
-	for (let turn = 1; turn <= opts.maxTurns + REVIEW_POLICY.schemaRepairAttempts; turn++) {
+	// Schema repairs cost model calls, but must not consume an evidence round.
+	// Each successful retrieval advances the investigation; the final turn is
+	// reserved for the result, with the global budget/deadline enforced throughout.
+	let turn = 1;
+	for (let call = 1; call <= opts.maxTurns + REVIEW_POLICY.schemaRepairAttempts; call++) {
 		throwIfAborted(opts.signal);
 		if (Date.now() >= deadlineAt) return { value: null, error: 'Investigation deadline reached; remaining time reserved for consolidation' };
 		if (!opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve })) {
 			return { value: null, error: 'model-call budget exhausted' };
 		}
 		const lastTurn = turn >= opts.maxTurns || !opts.budget.canSpend(2, { consumeReserve: opts.consumeReserve });
-		if (lastTurn) messages.push({ role: 'user', content: 'This is your final turn. Return the required compact result JSON using available evidence. Do not request retrieval. Omit optional fields when unnecessary.' });
+		if (lastTurn) messages.push({ role: 'user', content: 'This is your final turn. Return the required compact result JSON using available evidence, with the reader-facing "message" first. Do not request retrieval. Omit other optional fields when unnecessary.' });
 		opts.budget.spend();
 		opts.onLog?.(`${opts.label} model turn ${turn}/${opts.maxTurns} (${opts.config.model})`);
 		const started = Date.now();
@@ -95,14 +100,22 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			if (opts.onReasoning && reasoningText) opts.onReasoning({ id: reasoningId, text: reasoningText, status });
 		};
 		let output: string;
+		let response = '';
+		let responseEmittedAt = 0;
+		const responseId = `message_${reasoningId}`;
+		const flushResponse = (status: 'streaming' | 'done' | 'error') => {
+			const text = streamedMessage(response);
+			if (text) opts.onMessage?.({ id: responseId, text, status });
+		};
 		try {
-			output = await chatCompletion({
+			const discussion = opts.getDiscussion?.();
+			output = await streamChatCompletion({
 				provider: opts.config.provider,
 				reasoningEffort: opts.config.reasoningEffort,
 				baseUrl: opts.config.baseUrl,
 				apiKey: opts.config.apiKey,
 				model: opts.config.model,
-				messages,
+				messages: discussion ? [...messages, { role: 'user', content: `Developer conversations since the review started (consider these with the review evidence):\n${discussion}` }] : messages,
 				jsonMode: true,
 				temperature: 0,
 				maxTokens: 8000,
@@ -122,8 +135,17 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 					: undefined,
 				onProgress: (state, elapsedMs) =>
 					opts.onProgress?.(state, elapsedMs, state === 'queued' ? 'Waiting for a model slot' : `Running ${opts.label}`)
+			}, (chunk) => {
+				response += chunk;
+				if (Date.now() - responseEmittedAt > 100) {
+					responseEmittedAt = Date.now();
+					flushResponse('streaming');
+				}
 			});
+			response = output;
+			flushResponse('done');
 		} catch (err) {
+			flushResponse('error');
 			flushReasoning('error');
 			if (isAuthFailure(err)) throw new AuthConfigError(err instanceof Error ? err.message : String(err));
 			if (opts.signal.aborted || (err instanceof LlmError && /cancel/i.test(err.message))) {
@@ -155,8 +177,11 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			}
 			return { value: null, error: lastError };
 		}
+		if (!streamedMessage(output) && parsed && typeof parsed === 'object' && 'message' in parsed && typeof parsed.message === 'string') {
+			opts.onMessage?.({ id: responseId, text: parsed.message, status: 'done' });
+		}
 		const actions = parseActions(parsed);
-		if (actions && !lastTurn) {
+		if (actions && !lastTurn && opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve }) && Date.now() < deadlineAt) {
 			opts.onProgress?.('retrieval', Date.now() - started, `Reading repository evidence for ${opts.label}`);
 			const results = await opts.evidence.executeRound(actions, opts.signal, opts.onTool);
 			for (const result of results) {
@@ -171,6 +196,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 						? '\n\nThis is your final turn. Finish with the required JSON result. Do not request more retrieval.'
 						: '\n\nContinue. Finish with the required JSON when you have enough evidence.')
 			});
+			turn++;
 			continue;
 		}
 		const value = opts.parse(parsed);
@@ -185,7 +211,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			});
 			continue;
 		}
-		if (actions && lastTurn) return { value: null, error: 'final turn requested retrieval instead of completing' };
+		if (actions) return { value: null, error: lastTurn ? 'final turn requested retrieval instead of completing' : 'No model capacity or investigation time remained to inspect the requested evidence' };
 		return { value: null, error: lastError };
 	}
 	return { value: null, error: lastError };
