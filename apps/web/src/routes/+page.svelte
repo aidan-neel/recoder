@@ -533,22 +533,24 @@
 {/snippet}
 
 {#snippet filterInput()}
-	<Input
-		placeholder="Filter open PRs, or paste a URL"
-		aria-label="Filter open PRs, or paste a URL"
-		class="border-transparent bg-transparent placeholder:text-[#71717a]"
-		bind:value={filter}
-		disabled={repos.length === 0}
-		oninput={() => {
-			prError = null;
-			preview = null;
-			previewRepoId = null;
-		}}
-	>
-		{#snippet leading()}
-			<Search size={15} />
-		{/snippet}
-	</Input>
+	<div class="home-filter-field">
+		<Input
+			placeholder="Filter open PRs, or paste a URL"
+			aria-label="Filter open PRs, or paste a URL"
+			class="border-transparent bg-transparent"
+			bind:value={filter}
+			disabled={repos.length === 0}
+			oninput={() => {
+				prError = null;
+				preview = null;
+				previewRepoId = null;
+			}}
+		>
+			{#snippet leading()}
+				<span class="flex items-center dark:text-[#555555]"><Search size={15} /></span>
+			{/snippet}
+		</Input>
+	</div>
 {/snippet}
 
 {#snippet prCard(pr: PullRequest, repo: Pick<Repo, 'id' | 'name'>)}

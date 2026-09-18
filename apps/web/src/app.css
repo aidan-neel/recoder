@@ -1,5 +1,16 @@
 @import '@sivir-ui/svelte/ui.css';
 
+/* Home "Filter open PRs" field — exact colors from the design mock (dark theme).
+   Targets the Sivir Input wrapper + placeholder, which aren't reachable via the
+   Input `class` prop (it only styles the inner <input>). */
+.dark .home-filter-field [data-ui='input-control'] {
+	background-color: #171717;
+	border-color: #2a2a2a;
+}
+.dark .home-filter-field [data-ui='input']::placeholder {
+	color: #b2b2b2;
+}
+
 /* Readable blue text on both themes (brand indigo is too dark on dark bg). */
 @theme {
 	--color-info-vivid: #2f3ac7;
