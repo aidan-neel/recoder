@@ -46,7 +46,7 @@
 			</span>
 			<span class="font-mono text-[15px]">{node.name}</span>
 		</Collapsible.Trigger>
-		<Collapsible.Content class="ml-[9px] space-y-px border-l border-dotted border-border py-px pl-2">
+		<Collapsible.Content class="ml-[9px] space-y-px border-l border-solid border-border py-px pl-2">
 			{#each node.children as child (child.kind === 'file' ? child.id : child.name)}
 				<FileTreeNode node={child} {selectedId} {onSelect} parentPath={fullPath} {badges} {onJump} />
 			{/each}

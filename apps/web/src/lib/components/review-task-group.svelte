@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { ReviewToolCall } from '@recoder/shared';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import * as Tool from '@sivir-ui/svelte/components/tool';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import { taskGroupLabel } from '$lib/review-transcript';
@@ -16,14 +16,16 @@
 	}
 </script>
 
-<Tool.Root name={label} state={running ? 'running' : failed ? 'error' : 'complete'} open={false} class="min-w-0 [&>button]:min-h-10">
+<Tool.Root name={label} state={running ? 'running' : failed ? 'error' : 'complete'} variant="quiet" open={false} class="review-tool-disclosure min-w-0">
 	{#snippet trigger({ open })}
-		<ChevronDown size={14} aria-hidden="true" class="shrink-0 text-foreground-muted transition-transform motion-reduce:transition-none {open ? '' : '-rotate-90'}" />
-		{#if running}<Spinner size={14} aria-hidden="true" />{/if}
-		<span class="min-w-0 flex-1 text-sm text-foreground-muted">{label}</span>
-		{#if failed}<span class="shrink-0 text-xs text-error">{failed} failed</span>{/if}
+		<span class="min-w-0 text-sm">{label}</span>
+		{#if running}<Spinner size={12} aria-hidden="true" />{/if}
+		{#if failed}<span class="shrink-0 text-xs">· {failed} failed</span>{/if}
+		<ChevronRight size={14} aria-hidden="true" class="shrink-0 {open ? 'rotate-90' : ''}" />
 	{/snippet}
-	{#each tools as tool (tool.id)}
-		<ReviewToolCallView {tool} duration={duration(tool)} {active} />
-	{/each}
+	<div class="my-1 flex min-w-0 flex-col gap-1 border-s border-border ps-3">
+		{#each tools as tool (tool.id)}
+			<ReviewToolCallView {tool} duration={duration(tool)} {active} />
+		{/each}
+	</div>
 </Tool.Root>

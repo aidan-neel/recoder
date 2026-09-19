@@ -4,6 +4,15 @@ export type TranscriptItem =
 	| { kind: 'message'; id: string; at: string; message: ReviewChatMessage }
 	| { kind: 'tasks'; id: string; at: string; tools: ReviewToolCall[] };
 
+/** Failed retrievals in older snapshots can lack both command and input.action. */
+export function toolPresentation(tool: Pick<ReviewToolCall, 'command' | 'input'>) {
+	const text = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
+	const command = text(tool.command);
+	const action = text(tool.input?.action) || command.split(/\s+/)[0];
+	const target = text(tool.input?.path) || text(tool.input?.query) || text(tool.input?.prefix) || command.replace(/^\S+\s*/, '');
+	return { action, target, name: command || [action || 'Tool request', target].filter(Boolean).join(' ') };
+}
+
 /** A message separates work groups; streaming updates retain the first tool's key. */
 export function groupTranscript(messages: ReviewChatMessage[], tools: ReviewToolCall[]): TranscriptItem[] {
 	const timeline = [
@@ -24,7 +33,7 @@ export function groupTranscript(messages: ReviewChatMessage[], tools: ReviewTool
 export function taskGroupLabel(tools: ReviewToolCall[]): string {
 	let reads = 0, searches = 0, listings = 0, other = 0;
 	for (const tool of tools) {
-		const action = tool.input?.action ?? tool.command.split(' ')[0];
+		const { action } = toolPresentation(tool);
 		if (['read', 'readFile', 'readDiff'].includes(action)) reads++;
 		else if (['search', 'rg'].includes(action)) searches++;
 		else if (['list', 'listFiles'].includes(action)) listings++;

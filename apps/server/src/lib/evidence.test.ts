@@ -36,6 +36,17 @@ test('tool previews preserve evidence and bounded output across repeated retriev
 	expect(actionCommand({ action: 'search', query: 'needle', prefix: 'src/lib' })).toBe('search "needle" src/lib');
 });
 
+test('malformed retrievals still report a display command and preserve their failure details', async () => {
+	const store = new EvidenceStore(null, buildInventory(''), 20_000);
+	const calls: ToolCallReport[] = [];
+	const input = { type: 'readDiff', path: 'packages/sivir/cli/commands/status.ts' };
+	const results = await store.executeRound([input, { action: 42 }], undefined, (tool) => calls.push(tool));
+	expect(results.every((result) => !result.ok)).toBe(true);
+	expect(calls.map((call) => call.command)).toEqual(['Unknown tool', 'Unknown tool', 'Unknown tool', 'Unknown tool']);
+	expect(calls[1]).toMatchObject({ status: 'error', input, summary: 'unsupported action', result: { error: 'unsupported action' } });
+	expect(JSON.parse(JSON.stringify(calls[1])).command).toBe('Unknown tool');
+});
+
 function git(cwd: string, args: string[]): string {
 	const result = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
 	if (result.exitCode !== 0) throw new Error(result.stderr.toString());

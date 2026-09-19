@@ -5,37 +5,36 @@
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import Hash from '@lucide/svelte/icons/hash';
 	import Link2 from '@lucide/svelte/icons/link-2';
-	import PanelLeftClose from '@lucide/svelte/icons/panel-left-close';
-	import PanelLeftOpen from '@lucide/svelte/icons/panel-left-open';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Plus from '@lucide/svelte/icons/plus';
-	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import Search from '@lucide/svelte/icons/search';
 	import Settings from '@lucide/svelte/icons/settings';
+	import SquarePen from '@lucide/svelte/icons/square-pen';
 	import X from '@lucide/svelte/icons/x';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as ContextMenu from '@sivir-ui/svelte/components/context-menu';
+	import { Input } from '@sivir-ui/svelte/components/input';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Sheet from '@sivir-ui/svelte/components/sheet';
 	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import { appSidebarState } from '$lib/app-sidebar-state.svelte';
 	import { modelSettingsUi } from '$lib/model-settings.svelte';
-	import {
-		recentHeadline,
-		recentSessions,
-		recentStatusLabel,
-		type RecentSession
-	} from '$lib/recent-sessions.svelte';
+	import { recentSessions, type RecentSession } from '$lib/recent-sessions.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
 	import { theme } from '$lib/theme.svelte';
 
 	const statusDot = {
-		passed: '#3fb96c',
-		running: '#5b8cff',
-		queued: '#8a8f98',
-		failed: '#e0655f'
+		draft: 'var(--color-foreground-muted)',
+		passed: 'var(--color-success)',
+		running: 'var(--color-info-vivid)',
+		queued: 'var(--color-foreground-muted)',
+		failed: 'var(--color-error)'
 	} as const;
 
 	let closingId = $state<string | null>(null);
@@ -51,8 +50,7 @@
 	});
 
 	function openReview(session: RecentSession): void {
-		const status =
-			session.status === 'passed' || session.status === 'failed' ? 'ready' : 'reviewing';
+		const status = session.status === 'running' || session.status === 'queued' ? 'reviewing' : 'ready';
 		sessionState.ensureSession(session.id, session.repo, `#${session.pr}`, status);
 		appSidebarState.closeMobile();
 		void goto(`/session/${session.id}`);
@@ -101,63 +99,59 @@
 		appSidebarState.closeMobile();
 		void goto('/');
 	}
+
+	let sessionQuery = $state('');
+
+	const filteredSessions = $derived.by(() => {
+		const q = sessionQuery.trim().toLowerCase();
+		return recentSessions.recent.filter((session) =>
+			`${session.repo} ${session.title ?? ''} ${session.branch ?? ''} #${session.pr}`.toLowerCase().includes(q)
+		);
+	});
 </script>
 
 {#snippet sessionRow(session: RecentSession)}
 	{@const active = page.url.pathname === `/session/${session.id}`}
 	{@const title = session.title?.trim() ? session.title : `PR #${session.pr}`}
 	<ContextMenu.Root>
-		<div
-			class="group flex w-full items-start rounded-md border-[length:var(--border-size)] border-border bg-card transition-colors hover:bg-secondary {active
-				? 'border-primary/60 bg-primary/[0.05]'
-				: ''}"
-		>
+		<div class="flex w-full items-start">
 			<ContextMenu.Trigger
 				{...{
 					onclick: () => openReview(session),
+					onkeydowncapture: (event: KeyboardEvent) => {
+						if (event.key === 'Enter' || event.key === ' ') {
+							event.preventDefault();
+							openReview(session);
+						}
+					},
+					onpointerupcapture: (event: PointerEvent) => {
+						if (event.pointerType === 'touch') event.stopPropagation();
+					},
 					'aria-label': `Open ${title} in ${session.repo}`,
 					'aria-current': active ? 'page' : undefined
 				}}
-				class="flex min-w-0 flex-1 cursor-pointer flex-col gap-1 p-2.5 text-left"
+				class="review-row session-row -mx-1 flex min-w-0 flex-1 flex-col gap-1 rounded-lg px-2 py-2 text-left transition-colors hover:cursor-default {active
+					? 'bg-secondary'
+					: 'hover:bg-secondary aria-expanded:bg-secondary'}"
 			>
-				<span class="flex min-w-0 items-center gap-2">
-					<span class="min-w-0 flex-1 truncate text-[13px] font-medium text-foreground">
-						{title}
-					</span>
-					<span class="flex shrink-0 items-center gap-1.5">
-						{#if session.status === 'running' || session.status === 'queued'}
-							<Spinner size={12} aria-hidden="true" />
-						{:else}
-							<span
-								class="h-1.5 w-1.5 rounded-full"
-								style:background-color={statusDot[session.status]}
-							></span>
-						{/if}
-						<span
-							class:text-success={session.status === 'passed'}
-							class:text-error={session.status === 'failed'}
-							class:text-info-vivid={session.status === 'running' ||
-								session.status === 'queued'}
-							class="text-[12px] font-medium"
-						>
-							{recentStatusLabel(session)}
-						</span>
+				<span class="flex w-full min-w-0 items-center gap-2">
+					<Typography.Metadata class="min-w-0 flex-1 truncate text-sm font-normal text-foreground" title={session.repo}>
+						{session.repo.split('/').at(-1)} code review <span class="font-mono text-foreground-muted">#{session.pr}</span>
+					</Typography.Metadata>
+					<span class="flex shrink-0 items-center gap-1 text-[11px]" style:color={statusDot[session.status]}>
+						{#if session.status === 'running'}<Spinner size={10} aria-hidden="true" />{:else}<span class="size-1.5 rounded-full bg-current" aria-hidden="true"></span>{/if}
+						{session.status === 'draft' ? 'Not started' : session.status === 'passed' ? 'Passed' : session.status === 'failed' ? 'Failed' : session.status === 'queued' ? 'Queued' : 'Reviewing'}
 					</span>
 				</span>
-				<span class="truncate font-mono text-[12px] text-foreground-muted">
-					#{session.pr} · {recentHeadline(session)}
-				</span>
+				<Typography.Metadata class="w-full truncate font-mono text-xs font-normal text-foreground-muted" title={title}>
+					{title}
+				</Typography.Metadata>
+				{#if session.branch}
+					<Typography.InlineCode class="max-w-full truncate self-start rounded-sm px-1.5 py-0.5 text-[12px] leading-4 font-normal text-foreground-muted" title={session.branch}>
+						{session.branch}
+					</Typography.InlineCode>
+				{/if}
 			</ContextMenu.Trigger>
-			<Button
-				variant="ghost"
-				size="icon"
-				onclick={() => requestClose(session.id)}
-				aria-label="Close {title} in {session.repo}"
-				title="Close session"
-				class="mr-1 mt-1 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-			>
-				<X size={13} />
-			</Button>
 		</div>
 		<ContextMenu.Content class="min-w-[13rem]">
 			<ContextMenu.Item callback={() => openReview(session)}>
@@ -179,9 +173,9 @@
 	</ContextMenu.Root>
 {/snippet}
 
-{#snippet sidebarNav(expanded: boolean)}
-	<div class="flex h-full flex-col gap-1 overflow-hidden p-2 select-none">
-		<div class="flex shrink-0 items-center gap-1">
+{#snippet sidebarNav(expanded: boolean, mobile = false)}
+	<div class="flex h-full flex-col gap-3 overflow-hidden select-none {expanded ? 'p-3' : 'p-2'}">
+		<div class="flex min-h-10 shrink-0 items-center gap-1">
 			<Button
 				href="/"
 				unstyled
@@ -191,9 +185,9 @@
 					? 'flex-1 px-2'
 					: 'w-full justify-center'}"
 			>
-				<span class="h-4 w-4 shrink-0 rounded-[4px] bg-primary"></span>
+				<span class="recoder-mark size-4 shrink-0 bg-primary" aria-hidden="true"></span>
 				{#if expanded}
-					<span class="truncate text-[16px] font-medium tracking-tight">Recoder</span>
+					<span class="truncate text-[14px] font-normal">Recoder</span>
 				{/if}
 			</Button>
 			{#if expanded}
@@ -202,14 +196,15 @@
 						<Button
 							variant="ghost"
 							size="icon"
-							onclick={() => appSidebarState.toggleCollapsed()}
-							aria-label="Collapse sidebar"
+							onclick={() => mobile ? appSidebarState.closeMobile() : appSidebarState.toggleCollapsed()}
+							aria-label={mobile ? 'Close sidebar' : 'Collapse sidebar'}
 							aria-expanded="true"
+							class="size-9"
 						>
-							<PanelLeftClose size={15} />
+							<ChevronLeft size={16} strokeWidth={1.5} aria-hidden="true" />
 						</Button>
 					</Tooltip.Trigger>
-					<Tooltip.Content>Collapse sidebar</Tooltip.Content>
+					<Tooltip.Content>{mobile ? 'Close sidebar' : 'Collapse sidebar'}</Tooltip.Content>
 				</Tooltip.Root>
 			{/if}
 		</div>
@@ -223,7 +218,7 @@
 						aria-label="Expand sidebar"
 						aria-expanded="false"
 					>
-						<PanelLeftOpen size={15} />
+						<ChevronRight size={16} strokeWidth={1.5} aria-hidden="true" />
 					</Button>
 				</Tooltip.Trigger>
 				<Tooltip.Content>Expand sidebar</Tooltip.Content>
@@ -231,9 +226,30 @@
 		{/if}
 
 		{#if expanded}
-			<Button variant="outline" class="w-full shrink-0 justify-start font-sans" onclick={goHome}>
-				<Plus size={15} /> New session
-			</Button>
+			<div class="flex shrink-0 items-center gap-2 [--color-input:var(--color-border-subtle)] [--elevation-button-outline:inset_0_0_0_1px_var(--color-border-subtle)]">
+				<div class="min-w-0 flex-1 [--color-field:transparent] [--radius-lg:10px] [--size-control-md:36px]">
+					<Input
+						placeholder="Search"
+						aria-label="Search sessions"
+						class="border-transparent bg-transparent"
+						bind:value={sessionQuery}
+					>
+						{#snippet leading()}
+							<Search size={15} />
+						{/snippet}
+					</Input>
+				</div>
+				<Button
+					variant="outline"
+					size="icon"
+					onclick={goHome}
+					aria-label="New session"
+					title="New session"
+					class="size-9 shrink-0 rounded-[10px] bg-transparent"
+				>
+					<SquarePen size={15} />
+				</Button>
+			</div>
 		{:else}
 			<Tooltip.Root placement="right" delay={1500}>
 				<Tooltip.Trigger class="flex justify-center">
@@ -250,68 +266,31 @@
 			</Tooltip.Root>
 		{/if}
 
-		{#if expanded}
-			<div class="flex items-baseline justify-between gap-2 px-2 pt-2">
-				<p class="m-0 text-[12px] font-medium text-foreground-muted">
-					Sessions
-					<span class="ml-1 tabular-nums">{recentSessions.recent.length}</span>
-				</p>
-				{#if recentSessions.reviewingCount > 0}
-					<span class="flex shrink-0 items-center gap-1 text-[12px] text-foreground-muted">
-						<Spinner size={11} aria-hidden="true" />
-						{recentSessions.reviewingCount} in progress
-					</span>
-				{:else}
-					<Button
-						variant="quiet"
-						class="h-auto shrink-0 px-0 font-sans text-[12px] text-foreground-muted hover:bg-transparent hover:text-foreground"
-						loading={recentSessions.loading}
-						onclick={() => void recentSessions.refresh()}
-					>
-						<RefreshCw size={12} aria-hidden="true" /> Refresh
-					</Button>
-				{/if}
-			</div>
-		{/if}
-
-		<ScrollArea class="min-h-0 flex-1" showCues={false} aria-label="Sessions">
+		<ScrollArea class="min-h-0 flex-1 {expanded ? '-mx-1' : ''}" showCues={false} aria-label="Sessions">
 			{#if expanded}
-				<div class="flex flex-col gap-3 px-0.5" aria-busy={recentSessions.loading}>
+				<div class="flex flex-col gap-2 px-1" aria-busy={recentSessions.loading}>
 					{#if recentSessions.loading}
 						{#each [0, 1, 2] as i (i)}
-							<div class="flex flex-col gap-2 rounded-md border border-border bg-card p-2.5">
-								<div class="flex items-center gap-2">
-									<Skeleton class="h-[16px] w-24" />
-									<Skeleton class="ml-auto h-[16px] w-14" />
+							<div class="flex flex-col gap-2 px-2 py-2">
+								<div class="flex items-center justify-between gap-3">
+									<Skeleton class="h-4 w-3/5 rounded-md" />
+									<Skeleton class="h-3 w-12 rounded-md" />
 								</div>
-								<Skeleton class="h-[14px] w-36" />
+								<Skeleton class="h-3 w-full rounded-md" />
+								<Skeleton class="h-5 w-28 rounded-md" />
 							</div>
 						{/each}
-					{:else if recentSessions.recent.length === 0}
-						<p class="px-2 py-1 text-[13px] text-foreground-muted">
-							{recentSessions.apiDown
-								? 'API unreachable — no sessions to show.'
-								: 'No sessions yet. Review a pull request to start one.'}
-						</p>
+					{:else if filteredSessions.length === 0}
+						<Typography.Text variant="supporting" class="px-1 py-1 text-[13px]">
+							{sessionQuery.trim() !== ''
+								? 'No sessions match your search.'
+								: recentSessions.apiDown
+									? 'API unreachable — no sessions to show.'
+									: 'No sessions yet. Review a pull request to start one.'}
+						</Typography.Text>
 					{:else}
-						{#each recentSessions.recentByRepo as [repoName, sessions] (repoName)}
-							{@const groupReviewing = sessions.filter(
-								(s) => s.status === 'running' || s.status === 'queued'
-							).length}
-							<section class="flex min-w-0 flex-col gap-1.5" aria-label="Sessions in {repoName}">
-								<div class="flex items-center gap-1.5 px-1">
-									<h3 class="min-w-0 flex-1 truncate font-mono text-[12px] font-medium text-foreground-muted">
-										{repoName}
-									</h3>
-									{#if groupReviewing > 0}
-										<Spinner size={11} aria-hidden="true" />
-									{/if}
-									<span class="shrink-0 text-[12px] text-foreground-muted tabular-nums">{sessions.length}</span>
-								</div>
-								{#each sessions as session (session.id)}
-									{@render sessionRow(session)}
-								{/each}
-							</section>
+						{#each filteredSessions as session (session.id)}
+							{@render sessionRow(session)}
 						{/each}
 					{/if}
 				</div>
@@ -354,7 +333,7 @@
 			{#if expanded}
 				<Button
 					variant="ghost"
-					class="w-full justify-start font-sans"
+					class="w-full justify-start font-sans font-normal text-foreground-muted"
 					onclick={() => modelSettingsUi.show()}
 				>
 					<Settings size={15} /> Settings
@@ -367,6 +346,7 @@
 							size="icon"
 							onclick={() => modelSettingsUi.show()}
 							aria-label="Settings"
+							class="size-9 text-foreground-muted"
 						>
 							<Settings size={15} />
 						</Button>
@@ -380,7 +360,7 @@
 
 <aside
 	aria-label="Sessions"
-	class="hidden h-full shrink-0 overflow-hidden transition-[width] duration-200 lg:block {appSidebarState.collapsed
+	class="hidden h-full shrink-0 overflow-hidden bg-chrome transition-[width] duration-200 motion-reduce:transition-none lg:block {appSidebarState.collapsed
 		? 'w-14'
 		: 'w-[360px]'}"
 >
@@ -391,9 +371,9 @@
 	open={appSidebarState.mobileOpen}
 	onOpenChange={(v) => (appSidebarState.mobileOpen = v)}
 >
-	<Sheet.Content side="left" class="w-[360px] [&>[data-ui=sheet-surface]]:p-0">
+	<Sheet.Content side="left" class="w-[360px] max-w-[calc(100%-1rem)] [&>[data-ui=sheet-surface]]:bg-chrome [&>[data-ui=sheet-surface]]:p-0">
 		<Sheet.Title class="sr-only">Sessions</Sheet.Title>
-		{@render sidebarNav(true)}
+		{@render sidebarNav(true, true)}
 	</Sheet.Content>
 </Sheet.Root>
 

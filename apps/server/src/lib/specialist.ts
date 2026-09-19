@@ -12,6 +12,7 @@ const locationSchema = z.object({
 });
 
 const findingSchema = z.object({
+	title: z.string().trim().min(1).max(120).optional(),
 	file: z.string().min(1).max(500),
 	line: z.number().int().positive().nullable().optional(),
 	endLine: z.number().int().positive().nullable().optional(),

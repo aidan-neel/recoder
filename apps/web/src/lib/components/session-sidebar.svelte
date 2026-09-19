@@ -4,6 +4,7 @@
 	import { Checkbox } from '@sivir-ui/svelte/components/checkbox';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import FileTreeNode from './file-tree-node.svelte';
 	import { buildFileTree, changedFileCount, changedFiles, type FileBadge, type FindingKind, type TreeNode } from '$lib/file-tree';
 	import type { FileDiff } from '@recoder/shared';
@@ -14,9 +15,10 @@
 		/** Live review diffs. Falls back to the mock tree when null. */
 		fileDiffs?: FileDiff[] | null;
 		onFileSelect?: () => void;
+		inSheet?: boolean;
 	}
 
-	let { fileDiffs = null, onFileSelect }: Props = $props();
+	let { fileDiffs = null, onFileSelect, inSheet = false }: Props = $props();
 
 	function selectFile(id: string): void {
 		sessionFile.select(id);
@@ -99,7 +101,6 @@
 			: tree
 	);
 	const visibleCount = $derived.by(() => {
-		if (!onlyWithFindings) return fileCount;
 		let n = 0;
 		const walk = (nodes: TreeNode[]) => {
 			for (const node of nodes) {
@@ -114,25 +115,25 @@
 
 <aside
 	aria-label="Session files"
-	class="flex h-full w-[min(375px,100vw)] shrink-0 flex-col gap-4 overflow-hidden border-r border-border bg-background p-3"
+	class="flex h-full min-h-0 w-full shrink-0 flex-col gap-4 overflow-hidden bg-background p-4"
 >
 	<div class="flex min-h-0 flex-1 flex-col gap-3">
-		<div class="flex items-center justify-between px-1 text-[15px]">
-			<span class="font-medium text-foreground">Changed files</span>
-			<span class="font-mono text-[14px] text-foreground-muted">
-				{onlyWithFindings ? `${visibleCount} of ${fileCount}` : fileCount}
-			</span>
+		<div class="flex items-center justify-between text-sm {inSheet ? 'pe-10' : ''}">
+			<Typography.Title level={2} class="text-sm font-normal">Changed files</Typography.Title>
+			<Typography.Metadata class="font-mono text-xs">
+				{onlyWithFindings || fileQuery ? `${visibleCount} of ${fileCount}` : fileCount}
+			</Typography.Metadata>
 		</div>
-		<Input
-			variant="secondary"
-			placeholder="Search files"
-			aria-label="Search files"
-			bind:value={fileQuery}
-		>
-			{#snippet leading()}
-				<Search size={14} />
-			{/snippet}
-		</Input>
+		<div class="shrink-0">
+			<Input
+				placeholder="Search files"
+				aria-label="Search files"
+				bind:value={fileQuery}
+				class="bg-transparent text-sm"
+			>
+				{#snippet leading()}<Search size={14} aria-hidden="true" />{/snippet}
+			</Input>
+		</div>
 		<div class="flex items-center gap-2 px-1 py-1 text-[13px] text-foreground-muted select-none">
 			<Checkbox
 				bind:checked={onlyWithFindings}
@@ -153,13 +154,13 @@
 					onJump={(fileId, findingId) => void jumpToFinding(fileId, findingId)}
 				/>
 			{:else}
-				<p class="px-2 py-3 text-[13px] text-foreground-muted">
+				<Typography.Text class="px-2 py-3 text-sm text-foreground-muted">
 					{#if fileQuery.trim() !== ''}
 						No files match “{fileQuery.trim()}”.
 					{:else}
 						No files with findings. Clear the filter to see all changed files.
 					{/if}
-				</p>
+				</Typography.Text>
 			{/each}
 			</div>
 		</ScrollArea>

@@ -1,4 +1,4 @@
-import { parseUnifiedDiff, type Finding, type Review } from '@recoder/shared';
+import { emptyReviewProgress, parseUnifiedDiff, type CreateReviewInput, type Finding, type Review } from '@recoder/shared';
 import { db, reviewDiffs, reviewSandboxes, reviewProgress } from '../store';
 import {
 	emitReviewEvent,
@@ -20,11 +20,7 @@ import { prepareSandbox, sandboxRevisionDiff } from '../lib/sandbox';
 import { tokenEnv } from '../lib/tokens';
 import { withReviewMetrics } from '../lib/metrics';
 
-export interface QueueReviewInput {
-	repoId: string;
-	prNumber: number;
-	headSha?: string;
-}
+export type QueueReviewInput = CreateReviewInput;
 
 function touch(reviewId: string, patch: Partial<Review>): Review {
 	const current = db.reviews.get(reviewId);
@@ -46,6 +42,12 @@ export function queueReview(input: QueueReviewInput): Review {
 			'reviewer not configured: add a reviewer model in settings (or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL)'
 		);
 	}
+	const review = createReviewSession(input);
+	return startReviewSession(review.id);
+}
+
+/** Opening a PR creates durable chat state without running models or the pipeline. */
+export function createReviewSession(input: CreateReviewInput): Review {
 	const repo = db.repos.get(input.repoId);
 	if (!repo) throw new Error('repo not found');
 	if (!Number.isInteger(input.prNumber) || input.prNumber <= 0) {
@@ -57,18 +59,30 @@ export function queueReview(input: QueueReviewInput): Review {
 		repoId: input.repoId,
 		prNumber: input.prNumber,
 		headSha: input.headSha ?? 'unknown',
-		status: 'queued',
+		status: 'draft',
 		summary: null,
 		findings: [],
 		runs: [],
-		source: 'stub',
-		prTitle: null,
+		source: repo.provider ?? detectProvider(repo.url),
+		prTitle: input.prTitle ?? null,
 		prUrl: null,
 		createdAt: now,
 		updatedAt: now
 	};
 	db.reviews.set(review);
-	void runReviewPipeline(review.id).catch((err) => console.error('[pipeline] failed', err));
+	reviewProgress.set(emptyReviewProgress(review.id));
+	return review;
+}
+
+/** Claim the draft synchronously so concurrent prompts cannot launch two pipelines. */
+export function startReviewSession(reviewId: string): Review {
+	const current = db.reviews.get(reviewId);
+	if (!current) throw new Error('review not found');
+	if (current.status !== 'draft') throw new Error('This review has already started.');
+	if (!isReviewConfigured()) throw new Error('Add a reviewer model in settings before starting the review.');
+	const review = touch(reviewId, { status: 'queued', startedAt: new Date().toISOString() });
+	emitReviewEvent(reviewId, { type: 'step', step: 'queued', message: '', data: { stage: 'checkout' } });
+	void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
 	return review;
 }
 
@@ -183,7 +197,10 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			{
 				onTask: (task) => reportReviewTask(reviewId, task),
 				onMessage: (message) => recordChatMessage(reviewId, { ...message, from: 'assistant', at: new Date().toISOString() }),
-				getDiscussion: (assignmentId) => discussionContext(reviewId, assignmentId),
+				getDiscussion: (assignmentId) => [
+					discussionContext(reviewId),
+					assignmentId && assignmentId !== '__pipeline' ? discussionContext(reviewId, assignmentId) : ''
+				].filter(Boolean).join('\n\n'),
 				onLog: (message, meta) =>
 					emitReviewEvent(reviewId, {
 						type: 'log',

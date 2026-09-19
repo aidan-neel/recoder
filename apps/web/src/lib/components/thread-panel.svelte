@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
+	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Paperclip from '@lucide/svelte/icons/paperclip';
 	import X from '@lucide/svelte/icons/x';
@@ -13,8 +14,10 @@
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 	import * as Message from '@sivir-ui/svelte/components/message';
 	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
-	import SeverityPill from './severity-pill.svelte';
-	import { SEVERITY_DOT, findingsStore } from '$lib/findings.svelte';
+	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import FindingSeverity from './finding-severity.svelte';
+	import { findingsStore } from '$lib/findings.svelte';
 	import { serverApi } from '$lib/server-api';
 	import { formatAgentName, threadsStore, type Thread } from '$lib/threads.svelte';
 
@@ -200,16 +203,13 @@
 	<section
 		id="finding-thread"
 		aria-label="Finding discussion"
-		class="thread-panel-enter relative min-h-0 min-w-0 w-full xl:w-[440px] xl:shrink-0 2xl:w-[520px]"
+		class="thread-panel-enter relative min-h-0 min-w-0 w-full xl:w-[400px] xl:shrink-0 2xl:w-[440px]"
 	>
-	<Card.Root class="h-full overflow-hidden bg-background p-0">
-		<div class="flex h-11 w-full shrink-0 items-center gap-2 border-b border-border px-4">
+	<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
+		<div class="flex min-h-12 w-full shrink-0 items-center gap-2 border-b border-border-subtle px-4">
 			{#if finding}
-				<SeverityPill severity={finding.severity} />
-				<span class="font-mono text-[13px] font-semibold">{finding.code}</span>
-				<span class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground-muted">
-					{formatAgentName(finding.agent)}{finding.model ? ` · ${finding.model}` : ''}
-				</span>
+				<FindingSeverity severity={finding.severity} />
+				<Typography.Title level={2} class="min-w-0 flex-1 truncate text-sm font-normal" title={finding.title}>{finding.title}</Typography.Title>
 				<Button
 					variant="ghost"
 					size="icon"
@@ -221,7 +221,7 @@
 					<ChevronDown size={15} class="motion-safe:transition-transform {contextOpen ? '' : '-rotate-90'}" />
 				</Button>
 			{:else}
-				<span class="text-[15px] font-medium">Discussion</span>
+				<Typography.Title level={2} class="text-sm font-normal">Discussion</Typography.Title>
 			{/if}
 			<Button
 				variant="ghost"
@@ -235,20 +235,13 @@
 		</div>
 
 		{#if finding && contextOpen}
-			<div class="mx-3 mt-3 max-h-[30%] shrink-0" aria-label="Finding context">
-			<Card.Root class="max-h-full overflow-y-auto p-3">
-				<p
-					class="m-0 flex items-center gap-1.5 font-mono text-[13px]"
-					style:color={SEVERITY_DOT[finding.severity]}
-				>
-					<span
-						class="h-1.5 w-1.5 shrink-0 rounded-full"
-						style:background-color={SEVERITY_DOT[finding.severity]}
-					></span>
+			<div class="mx-4 mt-3 shrink-0 border-b border-border-subtle pb-3">
+			<ScrollArea showCues={false} style="max-height: min(14rem, 28dvh)" aria-label="Finding context">
+				<Typography.Metadata class="flex items-center gap-1.5 font-mono text-xs">
 					<span class="truncate">{finding.file}:{finding.startLine}</span>
-				</p>
-				<div class="mt-1.5 min-w-0">
-					<Markdown content={finding.body} />
+				</Typography.Metadata>
+				<div class="mt-2 min-w-0 text-sm">
+					<Markdown content={finding.body} class="text-sm" />
 				</div>
 				{#if finding.status !== 'open'}
 					<div class="mt-2 flex items-center gap-2">
@@ -271,7 +264,7 @@
 						</Button>
 					</div>
 				{/if}
-			</Card.Root>
+			</ScrollArea>
 			</div>
 		{/if}
 
@@ -309,54 +302,12 @@
 			<Conversation.ScrollButton />
 		</Conversation.Root>
 
-		<Composer.Root
-			data-composer
-			class="m-3 shrink-0"
-			bind:value={draft}
-			status={sendError ? 'error' : sending ? 'submitting' : 'idle'}
-			disabled={composerBusy || !finding}
-			onSubmit={() => send()}
-		>
-			<Composer.Input
-				bind:element={inputEl}
-				rows={2}
-				name="discussion"
-				placeholder={finding
-					? `Ask ${formatAgentName(active)} about this finding…`
-					: 'Select a finding'}
-				aria-label={finding ? 'Ask about this finding' : 'Select a finding'}
-				class="min-h-16 max-h-[120px] text-base sm:text-[14px]"
-			/>
-			{#if sendError}
-				<p class="break-words px-2 text-[13px] font-medium text-error" role="alert">{sendError}</p>
-			{/if}
-			{#if attachedQuote || selectionAvailable}
-				<div class="flex min-w-0">
-					{#if attachedQuote}
-						<Button
-							variant="secondary"
-							size="sm"
-							onclick={() => (attachedQuote = null)}
-							aria-label="Remove attached code"
-							class="min-w-0 max-w-full gap-1.5 font-mono text-[12px]"
-						>
-							<span class="truncate">{attachedQuote.split('\n')[0].slice(0, 32)}</span>
-							<X size={12} class="shrink-0" aria-hidden="true" />
-						</Button>
-					{:else}
-						<Button variant="ghost" size="sm" onclick={attachSelection}>
-							<Paperclip size={13} aria-hidden="true" />
-							Attach selection
-						</Button>
-					{/if}
-				</div>
-			{/if}
-			<Composer.Toolbar variant="inset">
+		<div class="shrink-0 space-y-2 px-3 pb-4 pt-2">
+			<div class="flex min-w-0 items-center justify-between gap-2">
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger
 							variant="ghost"
-							size="sm"
-							class="h-9 min-w-0 max-w-full gap-1.5 font-sans text-[13px]"
+							class="h-9 min-w-0 max-w-full gap-1.5 font-sans text-xs !font-normal text-foreground-muted"
 							aria-label={`Choose agent: ${formatAgentName(active)}`}
 						>
 							<span class="truncate">{formatAgentName(active)}</span>
@@ -374,11 +325,9 @@
 							{/each}
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
-					<div class="ml-auto flex shrink-0 items-center gap-1.5">
 					<Button
 						variant="ghost"
-						size="sm"
-						class="h-9 font-sans text-[13px]"
+						class="h-9 shrink-0 font-sans text-xs !font-normal text-foreground-muted"
 						disabled={composerBusy || !threadsStore.reviewId}
 						title={threadsStore.reviewId
 							? 'Ask for a fix in chat'
@@ -387,13 +336,20 @@
 					>
 						Suggest fix
 					</Button>
-					<Composer.Submit
-						class="h-9 min-w-16"
-						disabled={!finding || composerBusy}
-						loadingLabel="Sending"
-					/>
-				</div>
-			</Composer.Toolbar>
-		</Composer.Root>
+			</div>
+			{#if attachedQuote}
+				<Button variant="secondary" onclick={() => attachedQuote = null} aria-label="Remove attached code" class="max-w-full gap-2 font-mono text-xs"><span class="truncate">{attachedQuote.split('\n')[0].slice(0, 48)}</span><X size={12} aria-hidden="true" /></Button>
+			{/if}
+			{#if sendError}<Typography.Text class="break-words text-sm text-error" role="alert">{sendError}</Typography.Text>{/if}
+			<Composer.Root data-composer class="session-composer" bind:value={draft} status={sending ? 'submitting' : 'idle'} disabled={composerBusy || !finding} onSubmit={() => send()}>
+				<Composer.Input bind:element={inputEl} rows={1} name="discussion" placeholder={finding ? `Ask ${formatAgentName(active)}…` : 'Select a finding'} aria-label={finding ? 'Ask about this finding' : 'Select a finding'} class="session-composer-input" />
+				<Composer.Actions class="!flex-none !flex-nowrap !gap-1 self-end !p-0">
+					<Button variant="quiet" size="icon" class="group size-9 rounded-full text-foreground-muted" disabled={!selectionAvailable || composerBusy} onclick={attachSelection} aria-label="Attach selected code" title="Select code in the diff to attach it"><span class="flex size-7 items-center justify-center rounded-full group-hover:bg-foreground/[0.08]"><Paperclip class="size-3.5" aria-hidden="true" /></span></Button>
+					<Composer.Submit class="!size-9 !min-w-9 !rounded-full !bg-transparent !p-0 [&_.sivir-button-face]:text-[0px]" disabled={!finding || composerBusy}>
+						{#snippet children()}<span class="flex size-7 items-center justify-center rounded-full bg-primary text-[var(--color-on-primary)]"><ArrowUp class="size-4" aria-hidden="true" /></span>{/snippet}
+					</Composer.Submit>
+				</Composer.Actions>
+			</Composer.Root>
+		</div>
 	</Card.Root>
 	</section>

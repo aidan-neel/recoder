@@ -92,6 +92,41 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 	expect(listenerCount(id)).toBe(0);
 });
 
+test('a real HTTP subscription survives idle periods and still delivers review and chat updates', async () => {
+	const id = crypto.randomUUID();
+	const now = new Date().toISOString();
+	const review = { id, repoId: 'test', prNumber: 1, headSha: 'abc', status: 'running' as const, summary: null,
+		findings: [], runs: [], source: 'github' as const, prTitle: 'SSE liveness', prUrl: null, createdAt: now, updatedAt: now };
+	db.reviews.set(review);
+	const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: app.fetch });
+	const controller = new AbortController();
+	let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+	try {
+		const response = await fetch(new URL(`/api/reviews/${id}/events`, server.url), { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(18_000)]) });
+		reader = response.body!.getReader();
+		const read = async () => JSON.parse(new TextDecoder().decode((await reader!.read()).value).slice(6).trim());
+		expect((await read()).type).toBe('snapshot');
+		expect(await read()).toMatchObject({ type: 'heartbeat', status: 'running' });
+		expect(await read()).toMatchObject({ type: 'heartbeat', status: 'running' });
+		expect(listenerCount(id)).toBe(1);
+		db.reviews.set({ ...review, status: 'passed' });
+		emitReviewEvent(id, { type: 'done', message: 'Complete' });
+		expect((await read()).review.status).toBe('passed');
+		emitReviewEvent(id, { type: 'message', step: 'chat', message: '', data: { chatMessage: {
+			id: 'after-idle', assignmentId: '__pipeline', from: 'assistant', text: 'Still connected.', at: now, status: 'done'
+		} } });
+		expect((await read()).data.chatMessage.text).toBe('Still connected.');
+		await reader.cancel();
+		await new Promise(resolve => setTimeout(resolve, 20));
+		expect(listenerCount(id)).toBe(0);
+	} finally {
+		controller.abort();
+		await reader?.cancel().catch(() => {});
+		server.stop(true);
+		db.reviews.delete(id);
+	}
+}, 20_000);
+
 test('plan and assignment snapshots stay readable for older clients', () => {
 	const assignment = {
 		id: 'correctness-core', role: 'correctness', title: 'Correctness', reason: 'behavior',

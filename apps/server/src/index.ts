@@ -10,7 +10,11 @@ initReviewSettings();
 recoverStaleReviews();
 
 const server = Bun.serve({
-	fetch: app.fetch,
+	fetch(request, server) {
+		// Review conversations stay subscribed even when the agents are idle.
+		if (/^\/api\/reviews\/[^/]+\/events$/.test(new URL(request.url).pathname)) server.timeout(request, 0);
+		return app.fetch(request, server);
+	},
 	port: env.PORT,
 	hostname: env.HOST
 });

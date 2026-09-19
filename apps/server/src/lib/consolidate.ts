@@ -86,6 +86,7 @@ export function validateCandidate(
 	}
 	const finding: CandidateFinding = {
 		id: crypto.randomUUID(),
+		title: raw.title,
 		candidateId,
 		file: raw.file,
 		line,

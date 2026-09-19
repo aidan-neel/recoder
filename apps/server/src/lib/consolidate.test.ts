@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { buildInventory } from './inventory';
 import { EvidenceStore } from './evidence';
 import { applyConsolidation, deterministicConsolidate, validateCandidate } from './consolidate';
+import { parseSpecialistOutput } from './specialist';
 
 const DIFF = `diff --git a/a.ts b/a.ts
 --- a/a.ts
@@ -85,4 +86,15 @@ test('failed consolidation keeps validated candidates as unconfirmed rather than
 	const { confirmed, rejected } = deterministicConsolidate([candidate]);
 	expect(confirmed).toHaveLength(1);
 	expect(rejected).toEqual([]);
+});
+
+test('authored finding titles survive specialist parsing, validation, and consolidation', () => {
+	const parsed = parseSpecialistOutput({ findings: [{ title: 'Compare semantic versions', file: 'a.ts', line: 1, severity: 'medium', category: 'correctness', body: 'Raw string ordering misclassifies version numbers.' }], examinedHunks: [] });
+	expect(parsed).not.toBeNull();
+	const inventory = buildInventory(DIFF);
+	const candidate = validateCandidate(parsed!.findings[0], {
+		candidateId: 'c-title', assignmentId: 'version-check', role: 'correctness', model: 'test', fingerprint: () => 'title-fp'
+	}, inventory, new EvidenceStore(null, inventory, 1000));
+	const result = applyConsolidation({ keep: ['c-title'], merge: [], reject: [], recommendedChecks: [] }, [candidate]);
+	expect(result.confirmed[0]).toMatchObject({ title: 'Compare semantic versions', message: '[correctness] Raw string ordering misclassifies version numbers.' });
 });

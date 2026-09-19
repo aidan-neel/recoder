@@ -3,6 +3,7 @@
 	import type { Review, ReviewAssignment } from '@recoder/shared';
 	import ReviewingView, { type ReviewingFinding } from './reviewing-view.svelte';
 	import { serverApi } from '$lib/server-api';
+	import { recentSessions } from '$lib/recent-sessions.svelte';
 
 	interface Props {
 		review: Review;
@@ -19,7 +20,6 @@
 	let { review, stream, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onRestart = null, actionError = null, restarting = false }: Props = $props();
 	const progress = $derived(stream.progress);
 	const connection = $derived(stream.connection);
-	const lastReceived = $derived(stream.lastReceived);
 	let now = $state(Date.now());
 	const reviewId = $derived(review.id);
 
@@ -28,8 +28,9 @@
 		return () => clearInterval(timer);
 	});
 	const status = $derived(review.status);
+	const awaitingPrompt = $derived(status === 'draft');
 	const active = $derived(status === 'queued' || status === 'running');
-	const elapsed = $derived(formatDuration((active ? now : Date.parse(review.updatedAt)) - Date.parse(review.createdAt)));
+	const elapsed = $derived(awaitingPrompt ? '0:00' : formatDuration((active ? now : Date.parse(review.updatedAt)) - Date.parse(review.startedAt ?? review.createdAt)));
 	function formatDuration(ms: number): string {
 		const seconds = Math.max(0, Math.floor(ms / 1000));
 		return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
@@ -40,7 +41,7 @@
 	const confirmed = $derived(status === 'passed');
 	const viewFindings = $derived<ReviewingFinding[]>(!active ? review.findings.map((finding, i) => ({
 		id: 'F-' + String(i + 1).padStart(2, '0'), agent: finding.agent ?? null,
-		severity: finding.severity === 'error' ? 'high' : finding.severity === 'warning' ? 'medium' : 'info',
+		severity: finding.severity === 'error' ? 'high' : finding.severity === 'warning' ? 'medium' : 'low',
 		title: finding.message.split('\n')[0].replace(/^\[[^\]]+\]\s*/, '') || finding.file,
 		location: finding.file + (finding.line ? ':' + finding.line : ''),
 		confirmed
@@ -63,15 +64,17 @@
 		currentOperation: currentStage
 	}]);
 	const connectionLabel = $derived(connection === 'closed' ? 'Updates complete'
-		: connection === 'reconnecting' || now - lastReceived > 15000 ? 'Reconnecting · keeping the latest progress'
+		: connection === 'reconnecting' ? 'Reconnecting · keeping the latest progress'
 		: connection === 'connecting' ? 'Connecting to review' : 'Live updates connected');
 </script>
 
 <ReviewingView
 	fullscreen
 	{reviewId}
+	{awaitingPrompt}
+	completedAt={!active && !awaitingPrompt ? review.updatedAt : undefined}
 	title={review.prTitle || `PR #${review.prNumber}`}
-	meta={{ prLabel: '#' + review.prNumber, repo, files, additions, deletions, elapsed }}
+	meta={{ prLabel: '#' + review.prNumber, repo, files, additions, deletions, elapsed, branch: recentSessions.branches[`${review.repoId}#${review.prNumber}`] }}
 	assignments={displayAssignments}
 	messages={progress.messages ?? []}
 	orchestratorModel={progress.orchestratorModel}
@@ -89,7 +92,7 @@
 	failed={status === 'failed'}
 	errorMessage={actionError ?? (status === 'failed' && !progress.assignments?.length ? review.summary : null)}
 	{connectionLabel}
-	connectionLost={connection === 'reconnecting' || (active && now - lastReceived > 15000)}
+	connectionLost={connection === 'reconnecting'}
 	planSummary={progress.planSummary ?? null}
 	coverage={progress.coverage ?? null}
 	coverageGaps={progress.coverageGaps ?? []}

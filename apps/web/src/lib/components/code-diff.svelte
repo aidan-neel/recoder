@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import MessageSquare from '@lucide/svelte/icons/message-square';
 	import Pencil from '@lucide/svelte/icons/pencil';
 	import { Button } from '@sivir-ui/svelte/components/button';
@@ -6,11 +7,14 @@
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import * as Popover from '@sivir-ui/svelte/components/popover';
 	import type { DiffLine, FileDiff } from '$lib/diff';
+	import type { ReviewCodeContext } from '@recoder/shared';
 	import type { Finding, FindingSeverity } from '$lib/findings.svelte';
 	import { SEVERITY_DOT, findingsStore } from '$lib/findings.svelte';
 	import { highlightLines } from '$lib/highlight';
+	import { getFileIcon } from '$lib/file-icons';
 	import { notesStore, type ReviewNote } from '$lib/notes.svelte';
 	import FindingCard from './finding-card.svelte';
 	import NoteComposer from './note-composer.svelte';
@@ -18,9 +22,10 @@
 	interface Props {
 		diff: FileDiff;
 		findings?: Finding[];
+		onAsk?: (context: ReviewCodeContext) => void;
 	}
 
-	let { diff, findings = [] }: Props = $props();
+	let { diff, findings = [], onAsk }: Props = $props();
 
 	/** Hunks annotated with how many unchanged lines were skipped before them. */
 	const hunks = $derived(
@@ -137,7 +142,8 @@
 	}
 
 	function cap(text: string, max = 4000): string {
-		return text.length > max ? text.slice(0, max) + '\n…[truncated]' : text;
+		const suffix = '\n…[truncated]';
+		return text.length > max ? text.slice(0, max - suffix.length) + suffix : text;
 	}
 
 	/** True while the pointer is down, so a pause mid-drag never commits. */
@@ -169,6 +175,7 @@
 		const selection = window.getSelection();
 		if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
 		const range = selection.getRangeAt(0);
+		if (!rootEl.contains(range.startContainer) || !rootEl.contains(range.endContainer)) return;
 		const rows = Array.from(rootEl.querySelectorAll<HTMLElement>('[data-diff-row]'));
 		let from = -1;
 		let to = -1;
@@ -203,6 +210,33 @@
 			oldText: cap(slice.filter(({ line }) => line.oldNo !== null).map(({ line }) => line.text).join('\n')),
 			diffContext: cap(context.map(({ line }) => `${marker(line)}${line.text}`).join('\n')),
 			hunkHeader: slice[slice.length - 1]?.hunk.header
+		};
+		popoverOpen = true;
+	}
+
+	async function askAboutSelection(): Promise<void> {
+		if (!pending || !onAsk) return;
+		const { file, startLine, endLine, side, quote, diffContext } = pending;
+		popoverOpen = false;
+		window.getSelection()?.removeAllRanges();
+		// Wait for the popover to restore focus before focusing the discussion.
+		await tick();
+		onAsk?.({ file, startLine, endLine, side, quote, diffContext });
+	}
+
+	/** Line controls provide a keyboard/touch alternative to highlighting text. */
+	function selectLine(line: DiffLine, target: HTMLElement): void {
+		const row = target.closest<HTMLElement>('[data-diff-row]');
+		if (!rootEl || !row) return;
+		const index = flatLines.findIndex((item) => item.line === line);
+		const number = line.newNo ?? line.oldNo;
+		if (number === null) return;
+		anchorTop = row.offsetTop + row.offsetHeight;
+		anchorLeft = 0;
+		pending = {
+			mode: 'create', file: diff.path, startLine: number, endLine: number,
+			side: line.newNo === null ? 'old' : 'new', quote: line.text.slice(0, 2000),
+			diffContext: cap(flatLines.slice(Math.max(0, index - 3), index + 4).map(({ line }) => `${marker(line)}${line.text}`).join('\n'))
 		};
 		popoverOpen = true;
 	}
@@ -288,13 +322,14 @@
 	});
 </script>
 
-<div bind:this={rootEl} class="relative flex min-h-full flex-col">
-	<div class="flex h-11 shrink-0 items-center gap-2.5 border-b border-border px-4">
-		<span class="truncate font-mono text-[15px] font-medium">{diff.path}</span>
-		<span class="shrink-0 font-mono text-[14px]">
+<div bind:this={rootEl} class="review-file-diff relative flex min-w-0 flex-col gap-2">
+	<div class="flex min-h-9 shrink-0 items-center gap-2">
+		<span class="flex shrink-0 items-center [&>svg]:size-4" aria-hidden="true">{@html getFileIcon(diff.path)}</span>
+		<Typography.Metadata class="min-w-0 truncate font-mono text-sm font-medium text-foreground" title={diff.path}>{diff.path.split('/').at(-1)}</Typography.Metadata>
+		<span class="shrink-0 font-mono text-xs">
 			<span class="text-success">+{diff.additions}</span>
 			{' '}
-			<span class="text-error">-{diff.deletions}</span>
+			<span class="text-error">−{diff.deletions}</span>
 		</span>
 		{#if fileNotes.length > 0}
 			<span class="ml-auto flex shrink-0 items-center gap-1.5 text-[13px] text-info">
@@ -303,9 +338,10 @@
 			</span>
 		{/if}
 	</div>
+	<Card.Root class="overflow-hidden rounded-xl border border-border bg-transparent !p-0 shadow-none">
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="flex-1 py-2 font-mono text-[14px] leading-6"
+		class="py-3 font-mono text-sm leading-6"
 		onpointerdown={onPointerDown}
 	>
 		{#each hunks as { hunk, skipped }, hi (hi)}
@@ -344,25 +380,22 @@
 					}}
 					onmouseleave={() => (findingsStore.hoveredId = null)}
 				>
-					<span
+					{#if line.newNo === null}
+						<Button variant="ghost" size="sm" class="!h-6 !min-h-6 !justify-end rounded-none !py-0 !pe-3 !ps-0 font-mono text-xs !font-normal text-foreground-muted" aria-label={`Discuss deleted line ${line.oldNo}`} title="Discuss this deleted line" onclick={(event: MouseEvent) => selectLine(line, event.currentTarget as HTMLElement)}>{line.oldNo}</Button>
+					{:else}<span
 						class="pr-3 text-right text-foreground-muted/60 select-none"
 						style:color={mark ? SEVERITY_DOT[mark.severity] : null}
 					>
 						{line.oldNo ?? ''}
-					</span>
-					<span
-						class="pr-3 text-right text-foreground-muted/60 select-none"
-						style:color={mark ? SEVERITY_DOT[mark.severity] : null}
-					>
-						{line.newNo ?? ''}
-					</span>
+					</span>{/if}
+					{#if line.newNo !== null}<Button variant="ghost" size="sm" class="!h-6 !min-h-6 !justify-end rounded-none !py-0 !pe-3 !ps-0 font-mono text-xs !font-normal text-foreground-muted" aria-label={`Discuss line ${line.newNo}`} title="Discuss this line" onclick={(event: MouseEvent) => selectLine(line, event.currentTarget as HTMLElement)}>{line.newNo}</Button>{:else}<span></span>{/if}
 					<span class="pr-4 whitespace-pre-wrap break-all min-w-0">
 						{#if line.type === 'del'}
-							<span class="text-error">-</span>{@html highlighted[hi][i]}
+							<span class="mr-1 inline-block w-3 shrink-0 text-center text-error select-none">-</span>{@html highlighted[hi][i]}
 						{:else if line.type === 'add'}
-							<span class="text-success">+</span>{@html highlighted[hi][i]}
+							<span class="mr-1 inline-block w-3 shrink-0 text-center text-success select-none">+</span>{@html highlighted[hi][i]}
 						{:else}
-							<span class="text-foreground-muted/40 select-none">{' '}</span>{@html highlighted[hi][i]}
+							<span class="mr-1 inline-block w-3 shrink-0 text-center text-foreground-muted/40 select-none">{' '}</span>{@html highlighted[hi][i]}
 						{/if}
 					</span>
 				</div>
@@ -370,7 +403,7 @@
 					<div
 						id={`note-${note.id}`}
 						data-note-card
-						class="mx-4 my-1.5 scroll-mt-2 select-none sm:mx-10 {findingsStore.suppressHover
+						class="mx-3 my-3 scroll-mt-3 sm:ms-[5.5rem] {findingsStore.suppressHover
 							? 'pointer-events-none'
 							: ''}"
 					>
@@ -406,7 +439,7 @@
 				{#each byLine.get(key) ?? [] as finding (finding.id)}
 					<div
 						id={`finding-${finding.id}`}
-						class="mx-4 my-1.5 scroll-mt-2 select-none sm:mx-10 {findingsStore.suppressHover
+						class="mx-3 my-3 scroll-mt-3 sm:ms-[5.5rem] {findingsStore.suppressHover
 							? 'pointer-events-none'
 							: ''}"
 					>
@@ -415,7 +448,9 @@
 				{/each}
 			{/each}
 		{/each}
+		{#if hunks.length === 0}<Typography.Text class="px-4 py-3 text-sm text-foreground-muted">No text changes to display for this file.</Typography.Text>{/if}
 	</div>
+	</Card.Root>
 
 	<Popover.Root bind:open={popoverOpen} placement="bottom-start" inert={false}>
 		<Popover.Trigger
@@ -426,12 +461,16 @@
 			style="top: {anchorTop}px; left: {anchorLeft}px"
 		/>
 		<Popover.Content
-			aria-label={pending?.mode === 'edit' ? 'Edit review note' : 'Add review note'}
-			class="w-[22rem] min-w-0 max-w-[calc(100vw-1rem)] overflow-visible border-0 bg-transparent shadow-none [--sivir-modal-inset:0px]"
-			surfaceClass="w-full overflow-visible rounded-none bg-transparent p-0"
+			aria-label={pending?.mode === 'edit' ? 'Edit review note' : 'Discuss selected code'}
+			class="w-[22rem] min-w-0 max-w-[calc(100vw-1rem)]"
+			surfaceClass="!gap-3 !p-3"
 			lockScroll={false}
 		>
 			{#if pending}
+				<Typography.Metadata class="truncate font-mono text-xs" title={pending.file}>{pending.file.split('/').at(-1)}:{pending.startLine}{pending.endLine !== pending.startLine ? `–${pending.endLine}` : ''} · {pending.side === 'old' ? 'Before' : 'After'}</Typography.Metadata>
+				{#if onAsk && pending.mode === 'create'}
+					<Button variant="secondary" class="w-full justify-start gap-2 font-normal" onclick={askAboutSelection}><MessageSquare size={15} aria-hidden="true" />Ask about this code</Button>
+				{/if}
 				<NoteComposer
 					initialBody={pending.mode === 'edit' && pending.id
 						? (notesStore.items.find((note) => note.id === pending?.id)?.body ?? '')

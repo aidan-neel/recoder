@@ -1,27 +1,33 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import FolderGit2 from '@lucide/svelte/icons/folder-git-2';
 	import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
 	import Link2 from '@lucide/svelte/icons/link-2';
 	import Plus from '@lucide/svelte/icons/plus';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Search from '@lucide/svelte/icons/search';
+	import X from '@lucide/svelte/icons/x';
 	import * as Alert from '@sivir-ui/svelte/components/alert';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button, type ButtonStatus } from '@sivir-ui/svelte/components/button';
+	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as ContextMenu from '@sivir-ui/svelte/components/context-menu';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
+	import * as Sheet from '@sivir-ui/svelte/components/sheet';
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
+	import { Switch } from '@sivir-ui/svelte/components/switch';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type { Provider, ProviderAuth, PullPreview, PullRequest, RemoteRepo, Repo, Review } from '@recoder/shared';
 	import { serverApi } from '$lib/server-api';
 	import { modelSettingsUi } from '$lib/model-settings.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
+	import { recentSessions } from '$lib/recent-sessions.svelte';
 
 	const hoursAgoIso = (h: number): string => new Date(Date.now() - h * 3_600_000).toISOString();
 
@@ -74,7 +80,6 @@
 
 	let apiDown = $state(false);
 	let repos = $state<Repo[]>([]);
-	let allReviews = $state<Review[]>([]);
 
 	let auth = $state<{ github: ProviderAuth; gitlab: ProviderAuth } | null>(null);
 	let authLoading = $state(true);
@@ -85,6 +90,7 @@
 	let tokenError = $state<string | null>(null);
 
 	let browseOpen = $state(false);
+	let repositoriesOpen = $state(false);
 	let remote = $state<RemoteRepo[]>([]);
 	let remoteQuery = $state('');
 	let remoteLoading = $state(false);
@@ -95,13 +101,13 @@
 	let prsByRepo = $state<Record<string, PullRequest[]>>({});
 	let prsLoadingByRepo = $state<Record<string, boolean>>({});
 	let prsErrorByRepo = $state<Record<string, string | null>>({});
-	let prsError = $state<string | null>(null);
 	let refreshing = $state(false);
-	let reviewTarget = $state<{ n: number; status: ButtonStatus } | null>(null);
+	let reviewTarget = $state<{ repoId: string; n: number; status: ButtonStatus } | null>(null);
 	let preview = $state<PullPreview | null>(null);
 	let previewRepoId = $state<string | null>(null);
 	let fetchingPreview = $state(false);
 	let prError = $state<string | null>(null);
+	let interactiveReview = $state(false);
 
 	/** Reviews require a reviewer model — no model, no (stub) review. */
 	const needsModel = $derived(
@@ -109,17 +115,6 @@
 	);
 
 	const trackedNames = $derived(new Set(repos.map((r) => r.url.replace(/\/$/, ''))));
-	const latestByPr = $derived.by(() => {
-		const map = new Map<string, Review>();
-		for (const review of allReviews) {
-			const key = `${review.repoId}#${review.prNumber}`;
-			const current = map.get(key);
-			if (!current || Date.parse(review.updatedAt) > Date.parse(current.updatedAt)) {
-				map.set(key, review);
-			}
-		}
-		return map;
-	});
 	const providerRows = $derived<({ provider: Provider; label: string } & ProviderAuth)[]>(
 		apiDown
 			? DEMO_AUTH
@@ -129,7 +124,6 @@
 	);
 
 	const pastedNumber = $derived(parsePrNumber(filter));
-	const highlightN = $derived(preview?.pr.number ?? null);
 	const hasFilter = $derived(filter.trim() !== '');
 	const anyPrsLoading = $derived(repos.some((r) => prsLoadingByRepo[r.id]));
 	const matchTotal = $derived.by(() => {
@@ -153,6 +147,7 @@
 			if (q !== '') {
 				list = list.filter(
 					(pr) =>
+						(pr.number === pastedNumber && findRepoForPr(filter)?.id === repo.id && /https?:\/\//i.test(q)) ||
 						repo.name.toLowerCase().includes(q) ||
 						String(pr.number).includes(q) ||
 						pr.title.toLowerCase().includes(q) ||
@@ -182,7 +177,7 @@
 		pastedNumber !== null &&
 			repos.length > 0 &&
 			!anyPrsLoading &&
-			!repos.some((r) => (prsByRepo[r.id] ?? []).some((p) => p.number === pastedNumber)) &&
+			!(prsByRepo[findRepoForPr(filter)?.id ?? ''] ?? []).some((p) => p.number === pastedNumber) &&
 			preview?.pr.number !== pastedNumber
 	);
 	const filteredRemote = $derived.by(() => {
@@ -226,17 +221,16 @@
 	}
 
 	onMount(async () => {
+		interactiveReview = localStorage.getItem('recoder.interactiveReview') === 'true';
 		try {
-			const [status, fetchedRepos, reviews] = await Promise.all([
+			const [status, fetchedRepos] = await Promise.all([
 				serverApi.authStatus(),
 				serverApi.listRepos(),
-				serverApi.listReviews(),
 				modelSettingsUi.load()
 			]);
 			auth = status;
 			if (status.github.authenticated || status.gitlab.authenticated) void loadRemote();
 			repos = fetchedRepos;
-			allReviews = reviews;
 			await loadAllPrs();
 		} catch {
 			apiDown = true;
@@ -259,6 +253,7 @@
 	}
 
 	function openConnect(provider: Provider): void {
+		repositoriesOpen = false;
 		connecting = provider;
 		tokenInput = '';
 		tokenError = null;
@@ -320,6 +315,7 @@
 	}
 
 	function openBrowse(): void {
+		repositoriesOpen = false;
 		browseOpen = true;
 		remoteQuery = '';
 		if (remote.length === 0 && !remoteLoading) void loadRemote();
@@ -344,23 +340,20 @@
 
 	function openSession(id: string, name: string, ref: string, status: 'reviewing' | 'ready'): void {
 		sessionState.ensureSession(id, name, ref, status);
-		void goto(`/session/${id}`);
+		void goto(`/session/${id}${interactiveReview ? '?view=diff' : ''}`);
 	}
 
 	function openReviewSession(review: Review, name: string): void {
-		const status =
-			review.status === 'passed' || review.status === 'failed' ? 'ready' : 'reviewing';
+		const status = review.status === 'running' || review.status === 'queued' ? 'reviewing' : 'ready';
 		openSession(review.id, name, `#${review.prNumber}`, status);
 	}
 
 	function handleCardOpen(
 		pr: PullRequest,
-		repo: Pick<Repo, 'id' | 'name'>,
-		review: Review | undefined
+		repo: Pick<Repo, 'id' | 'name'>
 	): void {
 		if (reviewTarget) return;
-		if (review) openReviewSession(review, repo.name);
-		else void reviewPr(pr.number, repo);
+		void reviewPr(pr.number, repo);
 	}
 
 	function copyPrLink(pr: PullRequest): void {
@@ -369,6 +362,7 @@
 
 	/** Clicking a repo in the sidebar narrows the list to it via the search box; click again clears. */
 	function toggleRepoFilter(name: string): void {
+		repositoriesOpen = false;
 		const active = filter.trim().toLowerCase() === name.toLowerCase();
 		filter = active ? '' : name;
 		preview = null;
@@ -402,11 +396,7 @@
 
 	async function refreshReviews(): Promise<void> {
 		if (apiDown) return;
-		try {
-			allReviews = await serverApi.listReviews();
-		} catch {
-			// Keep last known state; the list error surfaces fetch failures.
-		}
+		await recentSessions.refresh();
 	}
 
 	async function refreshAll(): Promise<void> {
@@ -472,30 +462,25 @@
 
 	async function reviewPr(n: number, repo: Pick<Repo, 'id' | 'name'>): Promise<void> {
 		if (!repo || reviewTarget) return;
-		if (!apiDown && modelSettingsUi.config && !modelSettingsUi.config.configured) {
-			prError = 'Add a reviewer model first — reviews cannot run without one.';
-			modelSettingsUi.show();
-			return;
-		}
-		reviewTarget = { n, status: 'loading' };
+		reviewTarget = { repoId: repo.id, n, status: 'loading' };
 		prError = null;
 		if (apiDown) {
-			await new Promise((r) => setTimeout(r, 900));
-			const session = sessionState.restartReview(repo.id, repo.name, `#${n}`);
-			reviewTarget = { n, status: 'success' };
-			await new Promise((r) => setTimeout(r, 350));
-			await goto(`/session/${session.id}`);
+			prError = 'Connect to the review server to open a session.';
+			reviewTarget = null;
 			return;
 		}
 		try {
-			const review = await serverApi.queueReview({ repoId: repo.id, prNumber: n });
-			await refreshReviews();
-			reviewTarget = { n, status: 'success' };
+			const pr = prsByRepo[repo.id]?.find((item) => item.number === n) ?? (previewRepoId === repo.id && preview?.pr.number === n ? preview.pr : undefined);
+			localStorage.setItem('recoder.interactiveReview', String(interactiveReview));
+			const review = await serverApi.queueReview({ repoId: repo.id, prNumber: n, start: interactiveReview, prTitle: pr?.title });
+			if (pr?.headRef) recentSessions.branches[`${repo.id}#${n}`] = pr.headRef;
+			void refreshReviews();
+			reviewTarget = { repoId: repo.id, n, status: 'success' };
 			await new Promise((r) => setTimeout(r, 350));
 			openReviewSession(review, repo.name);
 		} catch (e) {
 			reviewTarget = null;
-			prError = e instanceof Error ? e.message : 'Failed to queue review.';
+			prError = e instanceof Error ? e.message : 'Could not open a review session.';
 		}
 	}
 </script>
@@ -533,11 +518,11 @@
 {/snippet}
 
 {#snippet filterInput()}
-	<div class="home-filter-field">
+	<div class="home-filter-field [--size-control-md:42px] [--font-size-body:16px]">
 		<Input
 			placeholder="Filter open PRs, or paste a URL"
 			aria-label="Filter open PRs, or paste a URL"
-			class="border-transparent bg-transparent"
+			class="border-transparent bg-transparent text-[16px] md:text-[16px]"
 			bind:value={filter}
 			disabled={repos.length === 0}
 			oninput={() => {
@@ -547,71 +532,81 @@
 			}}
 		>
 			{#snippet leading()}
-				<span class="flex items-center dark:text-[#555555]"><Search size={15} /></span>
+				<Search size={18} strokeWidth={1.5} />
 			{/snippet}
 		</Input>
 	</div>
 {/snippet}
 
-{#snippet prCard(pr: PullRequest, repo: Pick<Repo, 'id' | 'name'>)}
-	{@const review = latestByPr.get(`${repo.id}#${pr.number}`)}
-	{@const isHighlighted = highlightN === pr.number}
-	{@const queueing = reviewTarget?.n === pr.number}
-	{@const live =
-		review !== undefined && (review.status === 'running' || review.status === 'queued')}
+{#snippet prCard(pr: PullRequest, repo: Pick<Repo, 'id' | 'name'>, featured: boolean)}
+	{@const isHighlighted = previewRepoId === repo.id && preview?.pr.number === pr.number}
+	{@const queueing = reviewTarget?.repoId === repo.id && reviewTarget?.n === pr.number}
 	{@const title = pr.title === '' ? `PR #${pr.number}` : pr.title}
 	<ContextMenu.Root>
+		<Card.Root class="pr-card rounded-xl bg-transparent p-0 {isHighlighted ? 'border-primary' : ''}">
 		<ContextMenu.Trigger
 			{...{
-				onclick: () => handleCardOpen(pr, repo, review),
-				'aria-label': `${review ? 'Open review of' : 'Review'} ${title}, PR #${pr.number} in ${repo.name}`
+				onclick: () => handleCardOpen(pr, repo),
+				onkeydowncapture: (event: KeyboardEvent) => {
+					if (event.key === 'Enter' || event.key === ' ') {
+						event.preventDefault();
+						handleCardOpen(pr, repo);
+					}
+				},
+				onpointerupcapture: (event: PointerEvent) => {
+					if (event.pointerType === 'touch') event.stopPropagation();
+				},
+				'aria-busy': queueing,
+				'aria-label': `Start a new review of ${title}, PR #${pr.number} in ${repo.name}`
 			}}
-			class="flex min-w-0 cursor-pointer flex-col gap-1.5 rounded-2xl border border-white/10 bg-transparent p-5 text-left transition-colors hover:bg-white/[0.02] {isHighlighted
-				? 'border-primary/60 bg-primary/[0.05]'
-				: ''}"
+			class="review-row flex min-w-0 cursor-pointer items-center gap-4 rounded-xl px-4 py-5 text-left transition-colors hover:bg-secondary/50"
 		>
-			<span class="flex min-w-0 items-center gap-2">
-				<GitPullRequest size={18} class="shrink-0 text-[#4ade80]" aria-hidden="true" />
-				<span class="min-w-0 flex-1 truncate text-[15px] font-medium tracking-tight text-[#f4f4f5]">
+			<span class="flex min-w-0 flex-1 flex-col gap-2">
+			<span class="flex min-w-0 items-center gap-2.5">
+				<GitPullRequest size={20} strokeWidth={1.5} class="mr-1 shrink-0 text-success" aria-hidden="true" />
+				<span class="min-w-0 text-[16px] leading-5 font-normal text-foreground max-sm:line-clamp-3 max-sm:break-words sm:truncate" title={title}>
 					{title}
 				</span>
-				<span class="shrink-0 font-mono text-[13px] text-[#8e8e96]">
+				<Typography.Metadata class="shrink-0 font-mono text-[13px]">
 					#{pr.number}
-				</span>
-				{#if queueing || live}
-					<Spinner size={16} aria-hidden="true" />
-				{:else}
-					<ChevronRight size={18} class="shrink-0 text-[#6e6e76]" aria-hidden="true" />
-				{/if}
+				</Typography.Metadata>
 			</span>
+			{#if featured}
+				<Typography.Metadata class="flex flex-wrap gap-x-3 font-mono text-[12px]">
+					{#if pr.createdAt}<span>{timeAgo(pr.createdAt)}</span>{/if}
+					<span>{pr.author}</span>
+				</Typography.Metadata>
+			{/if}
 			<span
-				class="flex min-w-0 items-center gap-x-3 overflow-hidden font-mono text-[13px] text-[#8f8f96] [&>*]:shrink-0"
+				class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 font-mono text-[14px] text-foreground-muted"
 			>
-					<Badge variant="secondary" class="bg-white/[0.054] font-mono text-[#b5b5bd]"><span class="font-normal">{pr.headRef}</span></Badge>
+					<Typography.InlineCode class="max-w-full truncate rounded-md px-2 py-0.5 text-[14px] leading-5 font-normal text-foreground-muted" title={pr.headRef}>{pr.headRef}</Typography.InlineCode>
 					<span>into</span>
-					<Badge variant="secondary" class="bg-white/[0.054] font-mono text-[#b5b5bd]"><span class="font-normal">{pr.base}</span></Badge>
-					<span>{plural(pr.changedFiles, 'file')}</span>
-					<span class="text-[#4ade80]">+{pr.additions}</span>
-					<span class="text-[#f87171]">-{pr.deletions}</span>
-					<span class="truncate">{pr.author}</span>
-					{#if pr.createdAt !== ''}
-						<span>{timeAgo(pr.createdAt)}</span>
+					<Typography.InlineCode class="max-w-full truncate rounded-md px-2 py-0.5 text-[14px] leading-5 font-normal text-foreground-muted" title={pr.base}>{pr.base}</Typography.InlineCode>
+					<span class="ml-3 whitespace-nowrap">{plural(pr.changedFiles, 'file')}</span>
+					<span class="text-success">+{pr.additions}</span>
+					<span class="text-error">-{pr.deletions}</span>
+					{#if !featured}
+					<span class="ml-3 flex min-w-0 flex-wrap items-center gap-x-6 gap-y-1">
+						<span class="max-w-full truncate">{pr.author}</span>
+						{#if pr.createdAt !== ''}
+							<span>{timeAgo(pr.createdAt)}</span>
+						{/if}
+					</span>
 					{/if}
 				</span>
-		</ContextMenu.Trigger>
-		<ContextMenu.Content class="min-w-[13rem]">
-			{#if review}
-				<ContextMenu.Item callback={() => openReviewSession(review, repo.name)}>
-					<span class="flex items-center gap-2"><ArrowUpRight size={14} /> Open session</span>
-				</ContextMenu.Item>
-				<ContextMenu.Item callback={() => void reviewPr(pr.number, repo)}>
-					<span class="flex items-center gap-2"><RefreshCw size={14} /> Re-review</span>
-				</ContextMenu.Item>
+			</span>
+			{#if queueing}
+				<Spinner size={16} aria-hidden="true" />
 			{:else}
-				<ContextMenu.Item callback={() => void reviewPr(pr.number, repo)}>
-					<span class="flex items-center gap-2"><GitPullRequest size={14} /> Review now</span>
-				</ContextMenu.Item>
+				<ChevronRight size={20} strokeWidth={1.5} class="shrink-0 text-foreground-muted sm:mr-5" aria-hidden="true" />
 			{/if}
+		</ContextMenu.Trigger>
+		</Card.Root>
+		<ContextMenu.Content class="min-w-[13rem]">
+			<ContextMenu.Item callback={() => void reviewPr(pr.number, repo)}>
+				<span class="flex items-center gap-2"><GitPullRequest size={14} /> Start a new review</span>
+			</ContextMenu.Item>
 			<ContextMenu.Item callback={() => copyPrLink(pr)}>
 				<span class="flex items-center gap-2"><Link2 size={14} /> Copy link</span>
 			</ContextMenu.Item>
@@ -619,21 +614,21 @@
 	</ContextMenu.Root>
 {/snippet}
 
-<div class="flex h-full flex-col overflow-hidden lg:flex-row">
-	<!-- Repositories -->
-	<aside
-		aria-label="Repositories"
-		class="hidden w-[340px] shrink-0 flex-col border-r border-border bg-background lg:flex"
-	>
+{#snippet repositories(mobile = false)}
 			<ScrollArea class="min-h-0 flex-1" showCues={false}>
-			<div class="flex flex-col gap-1 p-3">
-				<h2 class="px-2 pb-1 text-[13px] font-medium text-foreground-muted">Repositories</h2>
+			<div class="flex flex-col gap-1 px-4 py-3">
+				<div class="mb-2 flex items-center justify-between gap-2">
+					<Typography.H2 class="text-[14px] font-normal tracking-normal text-foreground-muted">Repositories</Typography.H2>
+					{#if mobile}
+						<Sheet.Close variant="ghost" size="icon" class="size-9" aria-label="Close repositories"><X size={16} /></Sheet.Close>
+					{/if}
+				</div>
 				{#if authLoading}
 					{#each [0, 1, 2] as i (i)}
 						<Skeleton class="h-9 w-full rounded-md" />
 					{/each}
 				{:else if repos.length > 0}
-					<nav class="flex flex-col gap-0.5" aria-label="Tracked repositories">
+					<nav class="-mx-2 flex flex-col" aria-label="Tracked repositories">
 						{#each repos as repo (repo.id)}
 							<Button
 								unstyled
@@ -645,10 +640,10 @@
 									? 'bg-secondary text-foreground'
 									: 'text-foreground hover:bg-secondary/50'}"
 							>
-								<span class="flex shrink-0 items-center text-foreground-muted">
-									{@render providerMark(repo.provider, 14)}
+								<span class="flex shrink-0 items-center text-foreground">
+									{@render providerMark(repo.provider, 16)}
 								</span>
-								<span class="truncate font-mono text-[14px]">{repo.name}</span>
+								<span class="truncate text-[14px] font-normal">{repo.name}</span>
 							</Button>
 						{/each}
 					</nav>
@@ -657,7 +652,7 @@
 				{/if}
 				<Button
 					variant="quiet"
-					class="mt-1 justify-start font-sans text-foreground-muted hover:text-foreground"
+					class="-mx-2 justify-start px-2 font-sans font-normal text-foreground-muted hover:text-foreground"
 					onclick={openBrowse}
 				>
 					<Plus size={15} /> Track a repository
@@ -678,7 +673,7 @@
 				{#each providerRows as provider (provider.provider)}
 					<div class="flex items-center gap-2 px-1 py-0.5 text-[13px]">
 						{#if provider.authenticated}
-							<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success"></span>
+							<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-success" aria-hidden="true"></span>
 						{:else}
 							<span class="h-1.5 w-1.5 shrink-0 rounded-full bg-foreground-muted/40"></span>
 						{/if}
@@ -686,7 +681,7 @@
 							{@render providerMark(provider.provider, 14)}
 						</span>
 						{#if provider.authenticated && provider.user}
-							<span class="truncate font-mono text-foreground-muted">{provider.user}</span>
+							<span class="truncate font-mono text-foreground-muted" title="Connected to {provider.label}">{provider.user}</span>
 						{:else if !provider.available}
 							<span class="truncate text-foreground-muted">CLI not installed</span>
 						{:else}
@@ -696,7 +691,7 @@
 							{#if provider.authenticated}
 								<Button
 									variant="quiet"
-									class="h-7 px-2 text-[12px] text-foreground-muted hover:bg-secondary"
+									class="px-2 text-[14px] font-normal text-foreground-muted hover:bg-secondary"
 									onclick={() => void disconnect(provider.provider)}
 								>
 									Disconnect
@@ -704,7 +699,7 @@
 							{:else if provider.available}
 								<Button
 									variant="quiet"
-									class="h-7 px-2 text-[12px] text-primary dark:text-[#9e99f3] hover:bg-secondary"
+									class="px-2 text-[14px] text-info-vivid hover:bg-secondary"
 									onclick={() => openConnect(provider.provider)}
 								>
 									Connect
@@ -715,14 +710,28 @@
 				{/each}
 			{/if}
 		</div>
+{/snippet}
+
+<div class="flex h-full min-h-0 overflow-hidden">
+	<aside aria-label="Repositories" class="hidden w-[340px] shrink-0 flex-col border-r border-border-subtle min-[1440px]:flex">
+		{@render repositories()}
 	</aside>
 
 	<!-- Main -->
 	<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 		<section class="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Home">
 			<ScrollArea class="min-h-0 flex-1" aria-label="Open pull requests" showCues={false}>
-				<div class="mx-auto flex w-full max-w-[880px] flex-col gap-7 px-4 pt-14 pb-10">
-					<h1 class="text-xl font-medium tracking-tight">Home</h1>
+				<div class="mx-auto flex w-full max-w-[1022px] flex-col gap-6 px-4 pt-6 pb-10 sm:px-6 sm:pt-14">
+					<div class="flex items-center justify-between gap-3">
+						<Typography.H1 class="text-[24px] font-normal leading-8 tracking-normal">Home</Typography.H1>
+						<Sheet.Root bind:open={repositoriesOpen}>
+							<Sheet.Trigger variant="outline" class="min-[1440px]:hidden"><FolderGit2 size={16} /> Repositories</Sheet.Trigger>
+							<Sheet.Content side="left" class="w-[340px] max-w-[calc(100%-1rem)] [&>[data-ui=sheet-surface]]:gap-0 [&>[data-ui=sheet-surface]]:p-0">
+								<Sheet.Title class="sr-only">Manage repositories</Sheet.Title>
+								{@render repositories(true)}
+							</Sheet.Content>
+						</Sheet.Root>
+					</div>
 
 					<div class="flex items-center gap-2">
 						{#if authLoading}
@@ -731,29 +740,22 @@
 							</div>
 							<Skeleton class="size-[var(--size-control-md)] shrink-0 rounded-lg" />
 						{:else}
-							{#if repos.length === 0}
-								<Button
-									variant="outline"
-									class="h-[var(--size-control-md)] shrink-0 font-sans"
-									onclick={openBrowse}
-								>
-									<Plus size={15} /> Add repository
-								</Button>
-							{/if}
 							<div class="min-w-0 flex-1">{@render filterInput()}</div>
 							<Button
-								variant="ghost"
+								variant="outline"
 								size="icon"
-								class="h-[var(--size-control-md)] w-[var(--size-control-md)] shrink-0"
-								loading={refreshing}
-								disabled={repos.length === 0}
+								class="size-[42px] shrink-0 bg-card text-foreground-muted"
+								aria-busy={refreshing}
+								disabled={refreshing || repos.length === 0}
 								aria-label="Refresh pull requests"
 								onclick={() => void refreshAll()}
 							>
-								<RefreshCw size={15} />
+								{#if refreshing}<Spinner size={18} />{:else}<RefreshCw size={18} strokeWidth={1.5} />{/if}
 							</Button>
 						{/if}
 					</div>
+
+					<Switch bind:switched={interactiveReview} label="Interactive review" description="Start reviewing with the diff open. Select code and ask questions as the review runs." />
 
 					{#if apiDown}
 						<Alert.Root variant="warning">
@@ -785,12 +787,12 @@
 
 					{#if showFetchCard && pastedNumber !== null}
 						<div class="flex min-w-0 items-center gap-3 px-2 py-1">
-							<p class="min-w-0 flex-1 truncate font-mono text-[13px] text-[#8f8f96]">
+							<p class="min-w-0 flex-1 truncate font-mono text-[13px] text-foreground-muted">
 								PR #{pastedNumber} isn’t in the open list.
 							</p>
 							<Button
 								variant="quiet"
-								class="shrink-0 font-sans text-primary dark:text-[#9e99f3]"
+								class="shrink-0 font-sans text-info-vivid"
 								loading={fetchingPreview}
 								onclick={() => void fetchPreview(pastedNumber)}
 							>
@@ -799,22 +801,22 @@
 						</div>
 					{/if}
 
-					<div class="flex flex-col gap-14" aria-busy={anyPrsLoading}>
+					<div class="flex flex-col gap-7" aria-busy={anyPrsLoading}>
 						{#each repos as repo (repo.id)}
 							{@const groupPrs = sortedByRepo.get(repo.id) ?? []}
-							{#if !hasFilter || groupPrs.length > 0}
+							{#if !hasFilter || groupPrs.length > 0 || activeRepo?.id === repo.id}
 								<section
 									class="flex min-w-0 flex-col gap-4"
 									aria-label="Pull requests in {repo.name}"
 								>
-									<div class="flex items-center gap-2 text-[#8e8e96]">
+									<div class="mb-2 flex items-center gap-2 text-foreground-muted">
 										<span class="flex shrink-0 items-center">
-											{@render providerMark(repo.provider, 14)}
+											{@render providerMark(repo.provider, 16)}
 										</span>
-										<h2 class="min-w-0 truncate font-mono text-[13px] font-medium">
+										<Typography.H2 class="min-w-0 truncate font-mono text-[14px] leading-5 font-normal tracking-normal text-foreground-muted">
 											{repo.name}
-										</h2>
-										<span class="text-[13px] tabular-nums">{groupPrs.length}</span>
+										</Typography.H2>
+										<Typography.Metadata class="ml-4 text-[14px] tabular-nums">{groupPrs.length}</Typography.Metadata>
 									</div>
 									{#if prsLoadingByRepo[repo.id]}
 										<div role="status" aria-label="Loading pull requests" class="flex min-w-0 items-start gap-3 px-2 py-3">
@@ -843,17 +845,20 @@
 										</p>
 									{:else}
 										{#each groupPrs as pr (pr.number)}
-											{@render prCard(pr, repo)}
+												{@render prCard(pr, repo, groupPrs.length === 1)}
 										{/each}
 									{/if}
 								</section>
 							{/if}
 						{/each}
-						{#if repos.length === 0}
-							<p class="px-1 py-3 text-[14px] text-foreground-muted">
+						{#if authLoading}
+							<Skeleton class="h-[120px] w-full rounded-xl" />
+						{:else if repos.length === 0}
+							<Typography.Text variant="supporting" class="px-1 py-3">
 								Track a repository to see its open pull requests.
-							</p>
-						{:else if hasFilter && pastedNumber === null && matchTotal === 0 && !anyPrsLoading}
+							</Typography.Text>
+							<Button variant="outline" class="w-fit" onclick={openBrowse}><Plus size={16} /> Add repository</Button>
+						{:else if hasFilter && !activeRepo && pastedNumber === null && matchTotal === 0 && !anyPrsLoading}
 							<p class="px-1 py-3 text-[14px] text-foreground-muted">
 								No pull requests match this filter.
 							</p>

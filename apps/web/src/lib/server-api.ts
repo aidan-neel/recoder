@@ -19,6 +19,7 @@ import type {
 	Repo,
 	Review,
 	ReviewChatMessage,
+	ReviewCodeContext,
 	ReviewMetrics,
 	RereviewRequest,
 	RereviewResponse,
@@ -64,13 +65,13 @@ export const serverApi = {
 		req<Record<string, { tasksDone: number; tasksTotal: number; specialists: number }>>(
 			'/api/reviews/progress-summaries'
 		),
-	getReview: (id: string) => req<Review>(`/api/reviews/${id}`),
-	sendReviewMessage: (id: string, assignmentId: string, text: string) =>
-		req<ReviewChatMessage>(`/api/reviews/${id}/chat`, { method: 'POST', body: JSON.stringify({ assignmentId, text }) }),
+	getReview: (id: string, signal?: AbortSignal) => req<Review>(`/api/reviews/${id}`, { signal }),
+	sendReviewMessage: (id: string, assignmentId: string, text: string, codeContext?: ReviewCodeContext) =>
+		req<ReviewChatMessage>(`/api/reviews/${id}/chat`, { method: 'POST', body: JSON.stringify({ assignmentId, text, codeContext }) }),
 	stopReviewMessage: (id: string, assignmentId: string) =>
 		req<{ stopped: boolean }>(`/api/reviews/${id}/chat/stop`, { method: 'POST', body: JSON.stringify({ assignmentId }) }),
 	getReviewMetrics: (id: string, signal?: AbortSignal) => req<ReviewMetrics | null>(`/api/reviews/${id}/metrics`, { signal }),
-	getReviewFiles: (id: string) => req<FileDiff[]>(`/api/reviews/${id}/files`),
+	getReviewFiles: (id: string, signal?: AbortSignal) => req<FileDiff[]>(`/api/reviews/${id}/files`, { signal }),
 	discuss: (reviewId: string, input: DiscussRequest) =>
 		req<DiscussResponse>(`/api/reviews/${reviewId}/discuss`, {
 			method: 'POST',

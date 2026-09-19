@@ -54,7 +54,7 @@ test('runRereview answers each note and maps new findings', async () => {
 							summary: 'One note is valid.',
 							assessments: [{ noteIndex: 0, verdict: 'valid', response: 'Agreed — extract a constant.' }],
 							findings: [
-								{ file: 'src/a.ts', line: 2, severity: 'medium', category: 'patterns', body: 'Magic number' }
+								{ title: 'Extract the unexplained constant', file: 'src/a.ts', line: 2, severity: 'medium', category: 'patterns', body: 'Magic number' }
 							]
 						})
 					}
@@ -72,6 +72,7 @@ test('runRereview answers each note and maps new findings', async () => {
 	]);
 	expect(result.findings).toHaveLength(1);
 	expect(result.findings[0]).toMatchObject({
+		title: 'Extract the unexplained constant',
 		file: 'src/a.ts',
 		line: 2,
 		severity: 'warning',

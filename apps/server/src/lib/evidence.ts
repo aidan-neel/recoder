@@ -50,8 +50,10 @@ export function actionCommand(action: RetrievalAction): string {
 			return `list ${action.prefix || '.'}`;
 		case 'readDiff':
 			return `readDiff ${action.path ?? 'scoped hunks'}`;
-		default:
-			return action.action;
+		default: {
+			const name = (action as { action?: unknown }).action;
+			return typeof name === 'string' && name.trim() ? name : 'Unknown tool';
+		}
 	}
 }
 

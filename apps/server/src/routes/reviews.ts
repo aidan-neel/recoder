@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { emptyReviewProgress, expandFileDiff, parseUnifiedDiff } from '@recoder/shared';
-import { queueReview } from '../commands/pipeline';
+import { createReviewSession, queueReview } from '../commands/pipeline';
 import { clearReviewEvents, subscribeReview } from '../lib/events';
 import { discussFinding, streamDiscussFinding, discussRequestSchema } from '../lib/discuss';
 import { runRereview, rereviewRequestSchema } from '../lib/rereview';
@@ -21,12 +22,14 @@ import { LlmError } from '../lib/llm';
 import { refspecFor } from '../lib/providers';
 import { db, reviewDiffs, reviewSandboxes, reviewProgress, reviewMetrics } from '../store';
 import { getReviewMetrics, withReviewMetrics } from '../lib/metrics';
-import { cancelReviewChats, ReviewChatError, startReviewChat, stopReviewChat } from '../lib/review-chat';
+import { cancelReviewChats, ReviewChatError, reviewCodeContextSchema, startReviewChat, stopReviewChat } from '../lib/review-chat';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),
 	prNumber: z.number().int().positive(),
-	headSha: z.string().min(1).max(100).optional()
+	headSha: z.string().min(1).max(100).optional(),
+	start: z.boolean().optional(),
+	prTitle: z.string().max(500).optional()
 });
 
 const app = new Hono();
@@ -99,12 +102,12 @@ app.get('/:id/files', async (c) => {
 	return c.json(expanded);
 });
 
-const chatSchema = z.object({ assignmentId: z.string().min(1).max(100), text: z.string().trim().min(1).max(8000) });
+const chatSchema = z.object({ assignmentId: z.string().min(1).max(100), text: z.string().trim().min(1).max(8000), codeContext: reviewCodeContextSchema.optional() });
 app.post('/:id/chat', async (c) => {
 	const parsed = chatSchema.safeParse(await c.req.json().catch(() => null));
-	if (!parsed.success) return c.json({ error: 'Enter a message of at most 8,000 characters.' }, 400);
+	if (!parsed.success) return c.json({ error: 'Enter a message of at most 8,000 characters and a valid code selection.' }, 400);
 	try {
-		return c.json(startReviewChat(c.req.param('id'), parsed.data.assignmentId, parsed.data.text), 202);
+		return c.json(startReviewChat(c.req.param('id'), parsed.data.assignmentId, parsed.data.text, parsed.data.codeContext), 202);
 	} catch (error) {
 		if (error instanceof ReviewChatError) return c.json({ error: error.message }, error.status);
 		return c.json({ error: 'Configure the model in Connections before sending a message.' }, 409);
@@ -319,55 +322,50 @@ app.post('/:id/fixes/apply', async (c) => {
 app.get('/:id/events', (c) => {
 	const review = db.reviews.get(c.req.param('id'));
 	if (!review) return c.json({ error: 'review not found' }, 404);
-	const encoder = new TextEncoder();
-	let unsubscribe: (() => void) | undefined;
-	let heartbeat: ReturnType<typeof setInterval> | undefined;
-	const cleanup = () => {
-		unsubscribe?.();
-		if (heartbeat) clearInterval(heartbeat);
-		c.req.raw.signal.removeEventListener('abort', cleanup);
-	};
-	const stream = new ReadableStream({
-		start(controller) {
-			const send = (data: unknown) => {
-				try {
-					controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
-				} catch {
-					// Client went away.
-					cleanup();
-				}
-			};
-			const snapshot = reviewProgress.get(review.id) ?? emptyReviewProgress(review.id);
-			send({ type: 'snapshot', snapshot, review, status: review.status, sequence: snapshot.sequence });
-			unsubscribe = subscribeReview(review.id, (event) => {
-				const terminal = !event.step && (event.type === 'done' || event.type === 'error');
-				send(terminal ? {
-					...event,
-					review: db.reviews.get(review.id),
-					snapshot: reviewProgress.get(review.id)
-				} : event);
-			}, false);
-			c.req.raw.signal.addEventListener('abort', cleanup, { once: true });
-			heartbeat = setInterval(() => {
-				try {
-					send({ type: 'heartbeat', at: new Date().toISOString(), status: db.reviews.get(review.id)?.status });
-				} catch {
-					if (heartbeat) clearInterval(heartbeat);
-				}
-			}, 5000);
-		},
-		cancel() {
-			cleanup();
+	c.header('X-Accel-Buffering', 'no');
+	const response = streamSSE(c, async (stream) => {
+		let lastStatus = review.status;
+		let writes = Promise.resolve();
+		const send = (data: unknown) => {
+			const encoded = JSON.stringify(data);
+			writes = writes.then(async () => {
+				if (!stream.aborted) await stream.writeSSE({ data: encoded });
+			});
+			return writes;
+		};
+		const snapshot = reviewProgress.get(review.id) ?? emptyReviewProgress(review.id);
+		const initial = send({ type: 'snapshot', snapshot, review, status: review.status, sequence: snapshot.sequence });
+		// Subscribe before awaiting the first write so no update can fall between
+		// the snapshot and live events. Serialize all writes through the same queue.
+		const unsubscribe = subscribeReview(review.id, (event) => {
+			const terminal = !event.step && (event.type === 'done' || event.type === 'error');
+			const current = db.reviews.get(review.id);
+			const statusChanged = current?.status !== lastStatus;
+			if (current) lastStatus = current.status;
+			void send(terminal || statusChanged ? {
+				...event,
+				review: current,
+				...(terminal ? { snapshot: reviewProgress.get(review.id) } : {})
+			} : event);
+		}, false);
+		let wake: (() => void) | undefined;
+		stream.onAbort(() => { unsubscribe(); wake?.(); });
+		try {
+			await initial;
+			while (!stream.aborted) {
+				await new Promise<void>((resolve) => {
+					const timer = setTimeout(resolve, 5000);
+					wake = () => { clearTimeout(timer); resolve(); };
+				});
+				if (!stream.aborted) await send({ type: 'heartbeat', at: new Date().toISOString(), status: lastStatus });
+			}
+		} finally {
+			unsubscribe();
+			wake?.();
 		}
 	});
-	return new Response(stream, {
-		headers: {
-			'content-type': 'text/event-stream',
-			'cache-control': 'no-cache',
-			connection: 'keep-alive',
-			'x-accel-buffering': 'no'
-		}
-	});
+	response.headers.set('Cache-Control', 'no-cache, no-transform');
+	return response;
 });
 
 app.post('/', async (c) => {
@@ -376,7 +374,7 @@ app.post('/', async (c) => {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
 	}
 	try {
-		return c.json(queueReview(parsed.data), 201);
+		return c.json(parsed.data.start === false ? createReviewSession(parsed.data) : queueReview(parsed.data), 201);
 	} catch (err) {
 		return c.json({ error: err instanceof Error ? err.message : 'invalid input' }, 400);
 	}

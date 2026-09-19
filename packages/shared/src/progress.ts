@@ -162,6 +162,16 @@ export interface ReviewToolCall {
 
 export const ORCHESTRATOR_ID = '__pipeline';
 
+/** Source evidence attached to a developer question, independent of findings. */
+export interface ReviewCodeContext {
+	file: string;
+	startLine: number;
+	endLine: number;
+	side: 'old' | 'new';
+	quote: string;
+	diffContext?: string;
+}
+
 export interface ReviewChatMessage {
 	id: string;
 	assignmentId: string;
@@ -174,6 +184,7 @@ export interface ReviewChatMessage {
 	discussion?: boolean;
 	/** Specialist conversation mirrored into the orchestrator transcript. */
 	forwardedFrom?: string;
+	codeContext?: ReviewCodeContext;
 }
 
 export interface ReviewProgress {

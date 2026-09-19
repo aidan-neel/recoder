@@ -6,6 +6,7 @@ export interface RecentSession {
 	repo: string;
 	pr: number;
 	title: string | null;
+	branch: string | null;
 	findings: number;
 	status: Review['status'];
 	durationMs?: number;
@@ -25,18 +26,20 @@ interface ProgressSummary {
 function mapRecent(
 	reviews: Review[],
 	names: Map<string, string>,
-	summaries: Record<string, ProgressSummary>
+	summaries: Record<string, ProgressSummary>,
+	branches: Record<string, string | null>
 ): RecentSession[] {
 	return reviews
 		.map((review) => {
 			const summary = summaries[review.id];
-			const start = Date.parse(review.createdAt);
+			const start = Date.parse(review.startedAt ?? review.createdAt);
 			const end = Date.parse(review.updatedAt);
 			return {
 				id: review.id,
 				repo: names.get(review.repoId) ?? review.repoId.slice(0, 8),
 				pr: review.prNumber,
 				title: review.prTitle,
+				branch: branches[`${review.repoId}#${review.prNumber}`] ?? null,
 				findings: review.findings.length,
 				status: review.status,
 				durationMs:
@@ -73,6 +76,7 @@ function plural(n: number, word: string): string {
 }
 
 export function recentHeadline(session: RecentSession): string {
+	if (session.status === 'draft') return 'Waiting for your prompt';
 	if (session.status === 'running' || session.status === 'queued') {
 		const parts: string[] = [];
 		if (session.tasksTotal) {
@@ -108,14 +112,16 @@ class RecentSessionsState {
 	repos = $state<Repo[]>([]);
 	reviews = $state<Review[]>([]);
 	summaries = $state<Record<string, ProgressSummary>>({});
+	branches = $state<Record<string, string | null>>({});
 	loading = $state(true);
 	apiDown = $state(false);
 	private inflight: Promise<void> | null = null;
+	private branchRequests = new Set<string>();
 
 	get recent(): RecentSession[] {
 		if (this.apiDown) return [];
 		const names = new Map(this.repos.map((r) => [r.id, r.name] as const));
-		return mapRecent(this.reviews, names, this.summaries);
+		return mapRecent(this.reviews, names, this.summaries, this.branches);
 	}
 
 	get recentByRepo(): [string, RecentSession[]][] {
@@ -161,17 +167,37 @@ class RecentSessionsState {
 			this.repos = repos;
 			this.reviews = reviews;
 			this.apiDown = false;
-			try {
-				this.summaries = await serverApi.reviewSummaries();
-			} catch {
-				// Older server builds omit the summaries route — rows degrade gracefully.
-			}
+			void this.loadBranches(reviews);
 		} catch {
 			this.apiDown = true;
 			this.repos = [];
 			this.reviews = [];
 		} finally {
 			this.loading = false;
+		}
+	}
+
+	/** Resolve each PR once, including closed PRs, without delaying the session list. */
+	private async loadBranches(reviews: Review[]): Promise<void> {
+		const pending = reviews.filter((review) => {
+			const key = `${review.repoId}#${review.prNumber}`;
+			if (review.source === 'stub' || key in this.branches || this.branchRequests.has(key)) return false;
+			this.branchRequests.add(key);
+			return true;
+		});
+		// Bound provider requests when a long review history is loaded.
+		for (let i = 0; i < pending.length; i += 4) {
+			await Promise.all(pending.slice(i, i + 4).map(async (review) => {
+				const key = `${review.repoId}#${review.prNumber}`;
+				try {
+					const { pr } = await serverApi.previewPr(review.repoId, review.prNumber);
+					this.branches[key] = pr.headRef || null;
+				} catch {
+					// Keep the session usable when the provider or branch is unavailable.
+				} finally {
+					this.branchRequests.delete(key);
+				}
+			}));
 		}
 	}
 

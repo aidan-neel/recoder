@@ -8,7 +8,7 @@ export * from './metrics';
 
 export type Provider = 'github' | 'gitlab';
 
-export type ReviewStatus = 'queued' | 'running' | 'passed' | 'failed';
+export type ReviewStatus = 'draft' | 'queued' | 'running' | 'passed' | 'failed';
 
 export type FindingSeverity = 'info' | 'warning' | 'error';
 
@@ -41,6 +41,8 @@ export interface FindingLocation {
 
 export interface Finding {
 	id: string;
+	/** Short issue-specific heading. Older saved reviews may omit it. */
+	title?: string;
 	file: string;
 	line?: number;
 	/** Inclusive end of the range this finding refers to (defaults to `line`). */
@@ -81,6 +83,8 @@ export interface Review {
 	source: 'github' | 'gitlab' | 'stub';
 	prTitle: string | null;
 	prUrl: string | null;
+	/** When analysis began; draft sessions may exist before a review is requested. */
+	startedAt?: string;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -89,6 +93,10 @@ export interface CreateReviewInput {
 	repoId: string;
 	prNumber: number;
 	headSha?: string;
+	/** False opens an empty chat session; omitted/true queues an automated review. */
+	start?: boolean;
+	/** Display metadata from the selected open PR. Refetched before analysis. */
+	prTitle?: string;
 }
 
 export interface CommandRun {
@@ -110,7 +118,7 @@ export interface HealthResponse {
 	uptimeSeconds: number;
 }
 
-export const REVIEW_STATUSES: ReviewStatus[] = ['queued', 'running', 'passed', 'failed'];
+export const REVIEW_STATUSES: ReviewStatus[] = ['draft', 'queued', 'running', 'passed', 'failed'];
 
 /** Reviewer agent roles (each can route to its own model). */
 export type ReviewRole =

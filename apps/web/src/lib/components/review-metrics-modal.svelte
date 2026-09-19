@@ -4,6 +4,7 @@
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
+	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type {
 		ReviewMetrics,
@@ -12,8 +13,7 @@
 	} from '@recoder/shared';
 	import { serverApi } from '$lib/server-api';
 
-	let { reviewId }: { reviewId: string } = $props();
-	let open = $state(false);
+	let { reviewId, open = $bindable(false), showTrigger = true }: { reviewId: string; open?: boolean; showTrigger?: boolean } = $props();
 	let metrics = $state<ReviewMetrics | null>(null);
 	let loading = $state(true);
 	let error = $state('');
@@ -107,18 +107,20 @@
 {/snippet}
 
 <Modal.Root bind:open>
-	<Modal.Trigger variant="ghost" class="shrink-0 font-sans">Usage</Modal.Trigger>
+	{#if showTrigger}<Modal.Trigger variant="ghost" class="shrink-0 font-sans">Usage</Modal.Trigger>{/if}
 	<Modal.Content
 		size="xl"
-		surfaceClass="max-h-[min(75dvh,42rem)] overflow-y-auto overscroll-contain [overflow-wrap:anywhere]"
+		surfaceClass="max-h-[min(75dvh,42rem)] !overflow-hidden [overflow-wrap:anywhere]"
 	>
-		<Modal.Header>
+		<Modal.Header class="shrink-0">
 			<Modal.Title>Review token usage</Modal.Title>
 		</Modal.Header>
-		<Modal.Body class="min-w-0 gap-5">
-			<p role="status" class={loading ? 'text-sm text-foreground-muted' : 'sr-only'}>
+		<Modal.Body class="min-h-0 min-w-0 flex-1">
+		<ScrollArea showCues={false} class="min-h-0 flex-1 rounded-lg [&>[data-ui=scroll-area-viewport]]:focus-visible:outline-2 [&>[data-ui=scroll-area-viewport]]:focus-visible:-outline-offset-2 [&>[data-ui=scroll-area-viewport]]:focus-visible:outline-ring" aria-label="Review token usage details" tabindex={0}>
+		<div class="flex min-w-0 flex-col gap-5 pe-2">
+			<Typography.Text role="status" class={loading ? 'text-sm text-foreground-muted' : 'sr-only'}>
 				{loading ? 'Loading token usage...' : ''}
-			</p>
+			</Typography.Text>
 			{#if error}
 				<Alert.Root variant="error">
 					<Alert.Title>Could not refresh token usage</Alert.Title>
@@ -190,6 +192,8 @@
 					</Card.Root>
 				{/if}
 			{/if}
+		</div>
+		</ScrollArea>
 		</Modal.Body>
 		<Modal.Footer><Modal.Close>Close</Modal.Close></Modal.Footer>
 	</Modal.Content>

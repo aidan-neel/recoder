@@ -1,22 +1,15 @@
 @import '@sivir-ui/svelte/ui.css';
 
-/* Home "Filter open PRs" field — exact colors from the design mock (dark theme).
-   Targets the Sivir Input wrapper + placeholder, which aren't reachable via the
-   Input `class` prop (it only styles the inner <input>). */
-.dark .home-filter-field [data-ui='input-control'] {
-	background-color: #171717;
-	border-color: #2a2a2a;
-}
-.dark .home-filter-field [data-ui='input']::placeholder {
-	color: #b2b2b2;
-}
-
 /* Readable blue text on both themes (brand indigo is too dark on dark bg). */
 @theme {
 	--color-info-vivid: #2f3ac7;
+	--color-chrome: #f3f3f3;
+	--color-border-subtle: #e5e5e5;
 }
 .dark {
 	--color-info-vivid: #a5b4fc;
+	--color-chrome: #111111;
+	--color-border-subtle: #1f1f1f;
 }
 
 /* Midnight Ledger (Sivir theme v2) — token overrides for the app. */
@@ -29,7 +22,8 @@
 	--radius-md: 8px;
 	--radius-lg: 10px;
 	--radius-xl: 14px;
-	--sivir-space-unit: 3.45px;
+	--sivir-space-unit: 4px;
+	--size-icon-md: 36px;
 	--motion-duration-hover: 90ms;
 	--motion-duration-menu: 30ms;
 	--motion-duration-panel: 130ms;
@@ -42,7 +36,7 @@
 :root {
 	--color-primary: #281ee6;
 	--color-primary-hover: color-mix(in srgb, #281ee6 78%, black);
-	--color-ring: color-mix(in srgb, #281ee6 30%, transparent);
+	--color-ring: #827bff;
 	--sivir-blue-500: #281ee6;
 	--sivir-blue-50: color-mix(in srgb, #281ee6 12%, white);
 	--sivir-neutral-0: hsl(0 0% 100%);
@@ -57,7 +51,7 @@
 .dark {
 	--color-primary: #281ee6;
 	--color-primary-hover: color-mix(in srgb, #281ee6 78%, black);
-	--color-ring: color-mix(in srgb, #281ee6 30%, transparent);
+	--color-ring: #a5a0ff;
 	--sivir-blue-500: #281ee6;
 	--sivir-blue-50: color-mix(in srgb, #281ee6 12%, black);
 	--sivir-neutral-0: hsl(0 0% 5%);
@@ -87,7 +81,7 @@
 }
 .dark {
 	--sev-high-bg: #682321;
-	--sev-high-fg: #ff9189;
+	--sev-high-fg: #ff7b72;
 	--sev-high-line: #ab413e;
 	--sev-medium-bg: #5b3b00;
 	--sev-medium-fg: #ffc249;
@@ -104,11 +98,11 @@
 .dark {
 	--font-size-header: 16px;
 	--font-weight-header: 600;
-	--font-weight-body: 500;
+	--font-weight-body: 400;
 	--font-weight-label: 500;
 	--font-weight-button: 500;
 	--font-weight-badge: 500;
-	--font-weight-description: 500;
+	--font-weight-description: 400;
 }
 :root {
 	--color-card: #ffffff;
@@ -117,20 +111,29 @@
 	--color-background: #fafafa;
 	--color-secondary: #efefee;
 	--color-muted: #f0f0f0;
+	--color-input: var(--color-border);
+	--color-field: var(--color-card);
+	--color-success: #287a16;
 }
 .dark {
 	--color-card: #171717;
 	--color-panel: #171717;
-	--color-border: #1f1f1f;
+	--color-border: #2a2a2a;
 	--color-background: #0f0f0f;
-	--color-secondary: #1f1f1f;
+	--color-secondary: #191919;
 	--color-muted: #1a1a1a;
+	--color-input: var(--color-border);
+	--color-field: var(--color-card);
+	--color-foreground: #f5f5f5;
+	--color-foreground-muted: #a8a8a8;
+	--color-success: #7eff4e;
+	--color-error: #ff4b4b;
 }
 :root,
 .dark {
-	--radius-lg: 8px;
+	--radius-lg: 12px;
 	--radius-md: 6px;
-	--radius-xl: 12px;
+	--radius-xl: 16px;
 	--radius-sm: 4px;
 }
 :root {
@@ -158,6 +161,67 @@
 }
 .dark {
 	color-scheme: dark;
+}
+
+/* ContextMenu 1.1 triggers own menu keys; these rows also support activation. */
+.review-row:focus-visible {
+	outline: 2px solid var(--color-ring);
+	outline-offset: -2px;
+}
+
+.recoder-mark {
+	clip-path: polygon(0 0, 100% 0, 100% 52%, 52% 100%, 0 100%);
+}
+
+/* The session shares one canvas; disclosures and the composer carry its chrome. */
+.review-disclosure {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	min-height: 1.75rem;
+	border-radius: var(--radius-sm);
+	color: var(--color-foreground-muted);
+	font-size: 0.875rem;
+	text-align: start;
+}
+.review-disclosure:hover { color: var(--color-foreground); }
+.review-disclosure[aria-expanded='true'] > svg { transform: rotate(90deg); }
+.review-disclosure:focus-visible {
+	outline: 2px solid var(--color-ring);
+	outline-offset: 3px;
+}
+.review-tool-disclosure > button {
+	min-height: 28px;
+	gap: 8px;
+	border-radius: var(--radius-sm);
+	color: var(--color-foreground-muted);
+}
+.review-tool-disclosure > button:hover { color: var(--color-foreground); }
+.session-composer {
+	flex-direction: row !important;
+	align-items: flex-end;
+	gap: 0.25rem;
+	padding: 4px 6px 4px 12px;
+	border: 1px solid var(--color-border);
+	border-radius: 26px;
+	background: var(--color-card);
+	box-shadow: none;
+}
+.session-composer-input {
+	min-height: 36px !important;
+	max-height: 180px;
+	min-width: 0;
+	flex: 1;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	padding: 8px 0 !important;
+	font-size: 14px;
+	line-height: 20px;
+	box-shadow: none;
+}
+@media (max-width: 639px) {
+	.session-composer-input { font-size: 16px; }
 }
 
 /* Diff syntax highlighting (GitHub-style). */
