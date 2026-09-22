@@ -1,18 +1,23 @@
 <script lang="ts">
+	import { tick } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
+	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Paperclip from '@lucide/svelte/icons/paperclip';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import { Badge } from '@sivir-ui/svelte/components/badge';
+	import * as Card from '@sivir-ui/svelte/components/card';
+	import * as Composer from '@sivir-ui/svelte/components/composer';
 	import * as Conversation from '@sivir-ui/svelte/components/conversation';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 	import * as Message from '@sivir-ui/svelte/components/message';
 	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
-	import Shortcut from '@sivir-ui/svelte/components/shortcut';
-	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import SeverityPill from './severity-pill.svelte';
-	import { SEVERITY_DOT, findingsStore } from '$lib/findings.svelte';
+	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import FindingSeverity from './finding-severity.svelte';
+	import { findingsStore } from '$lib/findings.svelte';
 	import { serverApi } from '$lib/server-api';
 	import { formatAgentName, threadsStore, type Thread } from '$lib/threads.svelte';
 
@@ -36,6 +41,18 @@
 	let sending = $state(false);
 	let sendError = $state<string | null>(null);
 	let inputEl: HTMLTextAreaElement | undefined = $state();
+	let returnFocus: HTMLElement | null = null;
+	$effect(() => {
+		if (!inputEl) return;
+		returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		inputEl.focus({ preventScroll: true });
+	});
+
+	async function close(): Promise<void> {
+		threadsStore.close();
+		await tick();
+		if (returnFocus?.isConnected) returnFocus.focus();
+	}
 
 	const findingId = $derived(threadsStore.openId);
 	const finding = $derived(findingsStore.items.find((f) => f.id === findingId));
@@ -64,18 +81,12 @@
 			: { findingId: '', messages: [] }
 	);
 	/** Composer locked while a reply streams. */
-	const composerBusy = $derived(sending);
+	const composerBusy = $derived(sending || thread.messages.some((message) => message.streaming));
 
 	function suggestViaChat(): void {
 		if (!findingId || composerBusy) return;
 		draft = 'Suggest a fix for this finding';
 		void send();
-	}
-
-	function autoresize(): void {
-		if (!inputEl) return;
-		inputEl.style.height = 'auto';
-		inputEl.style.height = `${Math.min(inputEl.scrollHeight, 120)}px`;
 	}
 
 	function onSelectionChange(): void {
@@ -109,6 +120,8 @@
 	});
 
 	async function send(): Promise<void> {
+		// Keep stream callbacks on this finding even if the panel closes or switches.
+		const findingId = threadsStore.openId;
 		if (!findingId || composerBusy) return;
 		const body = draft.trim();
 		if (!body) return;
@@ -176,65 +189,64 @@
 		return () => document.removeEventListener('selectionchange', onSelectionChange);
 	});
 
-	function onKeydown(event: KeyboardEvent): void {
-		if (event.key === 'Enter' && !event.shiftKey) {
-			event.preventDefault();
-			send();
-		}
-	}
 </script>
 
+	<svelte:window onkeydown={(event) => {
+		// Let the agent menu consume Escape before closing its parent panel.
+		if (event.key === 'Escape' && !event.defaultPrevented &&
+			document.activeElement?.closest('#finding-thread')) {
+			event.preventDefault();
+			void close();
+		}
+	}} />
+
 	<section
-		aria-label="Finding thread"
-		class="relative flex min-h-0 w-[440px] shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-background xl:w-[520px]"
+		id="finding-thread"
+		aria-label="Finding discussion"
+		class="thread-panel-enter relative min-h-0 min-w-0 w-full xl:w-[400px] xl:shrink-0 2xl:w-[440px]"
 	>
-		<div class="flex h-11 w-full shrink-0 items-center gap-2 border-b border-border px-4">
+	<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
+		<div class="flex min-h-12 w-full shrink-0 items-center gap-2 border-b border-border-subtle px-4">
 			{#if finding}
-				<SeverityPill severity={finding.severity} />
-				<span class="font-mono text-[13px] font-semibold">{finding.code}</span>
-				<span class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground-muted">
-					{formatAgentName(finding.agent)}{finding.model ? ` · ${finding.model}` : ''}
-				</span>
+				<FindingSeverity severity={finding.severity} />
+				<Typography.Title level={2} class="min-w-0 flex-1 truncate text-sm font-normal" title={finding.title}>{finding.title}</Typography.Title>
 				<Button
 					variant="ghost"
 					size="icon"
 					class="-mr-2"
 					aria-label={contextOpen ? 'Collapse finding card' : 'Expand finding card'}
+					aria-expanded={contextOpen}
 					onclick={() => (contextOpen = !contextOpen)}
 				>
-					<ChevronDown size={15} class="transition-transform {contextOpen ? '' : '-rotate-90'}" />
+					<ChevronDown size={15} class="motion-safe:transition-transform {contextOpen ? '' : '-rotate-90'}" />
 				</Button>
 			{:else}
-				<span class="text-[15px] font-medium">Discussion</span>
+				<Typography.Title level={2} class="text-sm font-normal">Discussion</Typography.Title>
 			{/if}
+			<Button
+				variant="ghost"
+				size="icon"
+				class="ml-auto shrink-0"
+				aria-label="Close discussion"
+				onclick={() => void close()}
+			>
+				<X size={16} aria-hidden="true" />
+			</Button>
 		</div>
 
 		{#if finding && contextOpen}
-			<div
-				class="mx-3 mt-3 shrink-0 rounded-xl border border-border bg-card p-3"
-				aria-label="Finding context"
-			>
-				<p
-					class="m-0 flex items-center gap-1.5 font-mono text-[13px]"
-					style:color={SEVERITY_DOT[finding.severity]}
-				>
-					<span
-						class="h-1.5 w-1.5 shrink-0 rounded-full"
-						style:background-color={SEVERITY_DOT[finding.severity]}
-					></span>
+			<div class="mx-4 mt-3 shrink-0 border-b border-border-subtle pb-3">
+			<ScrollArea showCues={false} style="max-height: min(14rem, 28dvh)" aria-label="Finding context">
+				<Typography.Metadata class="flex items-center gap-1.5 font-mono text-xs">
 					<span class="truncate">{finding.file}:{finding.startLine}</span>
-				</p>
-				<div class="mt-1.5 min-w-0">
-					<Markdown content={finding.body} />
+				</Typography.Metadata>
+				<div class="mt-2 min-w-0 text-sm">
+					<Markdown content={finding.body} class="text-sm" />
 				</div>
 				{#if finding.status !== 'open'}
 					<div class="mt-2 flex items-center gap-2">
 						{#if finding.status === 'accepted'}
-							<span
-								class="rounded bg-success/15 px-1.5 py-0.5 font-sans text-[13px] font-semibold text-success"
-							>
-								Fixed
-							</span>
+							<Badge variant="success">Fixed</Badge>
 							{#if finding.fixedBy}
 								<span class="font-mono text-[12px] text-foreground-muted">
 									· {formatAgentName(finding.fixedBy)}
@@ -245,7 +257,6 @@
 						{/if}
 						<Button
 							variant="ghost"
-							size="sm"
 							class="font-sans text-[14px]"
 							onclick={() => findingsStore.reopen(finding.id)}
 						>
@@ -253,6 +264,7 @@
 						</Button>
 					</div>
 				{/if}
+			</ScrollArea>
 			</div>
 		{/if}
 
@@ -263,8 +275,7 @@
 			>
 				{#each thread.messages as message (message.id)}
 					{#if message.role === 'agent'}
-						<div class="message-in">
-							<Message.Root from="assistant" status={message.streaming ? 'streaming' : 'idle'}>
+						<Message.Root from="assistant" status={message.streaming ? 'streaming' : 'idle'}>
 								<Message.Content>
 									{#if message.streaming}
 										<ResponseStream textStream={message.body} streaming class="font-normal" />
@@ -272,63 +283,38 @@
 										<Markdown content={message.body} />
 									{/if}
 								</Message.Content>
-							</Message.Root>
-						</div>
+						</Message.Root>
 					{:else}
-						<div class="message-in">
-							<Message.Root from="user">
+						<Message.Root from="user">
 								<Message.Content>
 									<Markdown content={message.body} />
 								</Message.Content>
-							</Message.Root>
-						</div>
+						</Message.Root>
 					{/if}
 				{:else}
 					{#if finding}
-						<Conversation.Empty
-							title="No replies yet"
-							description="Ask {formatAgentName(active)} about this finding below."
-						/>
+						<Conversation.Empty title="No replies yet" description="" />
 					{:else}
-						<Conversation.Empty title="Select a finding" />
+						<Conversation.Empty title="Select a finding" description="" />
 					{/if}
 				{/each}
 			</Conversation.Content>
 			<Conversation.ScrollButton />
 		</Conversation.Root>
 
-		<div class="w-full shrink-0 p-3">
-			<div data-composer class="rounded-xl border border-border bg-background p-3">
-			<textarea
-				bind:this={inputEl}
-				bind:value={draft}
-				oninput={autoresize}
-				onkeydown={onKeydown}
-				rows={3}
-				placeholder={finding
-					? `Ask ${formatAgentName(active)} about this finding…`
-					: 'Select a finding'}
-				aria-label={finding ? 'Ask about this finding' : 'Select a finding'}
-				disabled={composerBusy || !finding}
-				class="max-h-[120px] w-full resize-none rounded-lg bg-secondary px-2.5 py-2 text-[14px] leading-relaxed outline-none placeholder:text-foreground-muted/70 disabled:opacity-60"
-			></textarea>
-			{#if sendError}
-				<p class="mt-2 text-[13px] font-medium text-error" role="alert">{sendError}</p>
-			{/if}
-			<div class="mt-2 flex items-center gap-1">
+		<div class="shrink-0 space-y-2 px-3 pb-4 pt-2">
+			<div class="flex min-w-0 items-center justify-between gap-2">
 					<DropdownMenu.Root>
 						<DropdownMenu.Trigger
 							variant="ghost"
-							size="sm"
-							class="h-9 gap-1.5 font-sans text-[13px] transition-[width]"
-							style="interpolate-size: allow-keywords"
-							aria-label="Choose agent"
+							class="h-9 min-w-0 max-w-full gap-1.5 font-sans text-xs !font-normal text-foreground-muted"
+							aria-label={`Choose agent: ${formatAgentName(active)}`}
 						>
-							{formatAgentName(active)}
-							<ChevronDown size={12} class="text-foreground-muted" />
+							<span class="truncate">{formatAgentName(active)}</span>
+							<ChevronDown size={12} class="shrink-0 text-foreground-muted" aria-hidden="true" />
 						</DropdownMenu.Trigger>
 						<DropdownMenu.Content class="min-w-[12rem]">
-							<DropdownMenu.Label>Model</DropdownMenu.Label>
+							<DropdownMenu.Label>Reviewer</DropdownMenu.Label>
 							{#each participants as participant (participant)}
 								<DropdownMenu.Item callback={() => (active = participant)}>
 									<span class="flex-1">{formatAgentName(participant)}</span>
@@ -339,30 +325,9 @@
 							{/each}
 						</DropdownMenu.Content>
 					</DropdownMenu.Root>
-					{#if attachedQuote}
-						<button
-							type="button"
-							onclick={() => (attachedQuote = null)}
-							title="Remove attached code"
-							class="flex max-w-[12rem] items-center gap-1.5 rounded-md border border-border bg-secondary px-2 py-1.5 font-mono text-[12px] text-foreground-muted transition-colors hover:text-foreground"
-						>
-							<span class="truncate">{attachedQuote.split('\n')[0].slice(0, 32)}</span>
-							<X size={12} class="shrink-0" />
-						</button>
-					{:else if selectionAvailable}
-						<button
-							type="button"
-							onclick={attachSelection}
-							class="flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] text-foreground-muted transition-colors hover:text-foreground"
-						>
-							<Paperclip size={13} />
-							Attach selection
-						</button>
-					{/if}
 					<Button
 						variant="ghost"
-						size="sm"
-						class="h-9 font-sans text-[13px]"
+						class="h-9 shrink-0 font-sans text-xs !font-normal text-foreground-muted"
 						disabled={composerBusy || !threadsStore.reviewId}
 						title={threadsStore.reviewId
 							? 'Ask for a fix in chat'
@@ -371,22 +336,20 @@
 					>
 						Suggest fix
 					</Button>
-					<Button
-						variant="primary"
-						size="sm"
-						class="ml-auto h-9"
-						disabled={!finding || !draft.trim() || composerBusy}
-						aria-label={sending ? 'Sending' : 'Send'}
-						onclick={() => void send()}
-					>
-						{#if sending}
-							<Spinner size={14} />
-						{:else}
-							Send
-							<Shortcut shortcut="enter" />
-						{/if}
-				</Button>
 			</div>
-			</div>
+			{#if attachedQuote}
+				<Button variant="secondary" onclick={() => attachedQuote = null} aria-label="Remove attached code" class="max-w-full gap-2 font-mono text-xs"><span class="truncate">{attachedQuote.split('\n')[0].slice(0, 48)}</span><X size={12} aria-hidden="true" /></Button>
+			{/if}
+			{#if sendError}<Typography.Text class="break-words text-sm text-error" role="alert">{sendError}</Typography.Text>{/if}
+			<Composer.Root data-composer class="session-composer" bind:value={draft} status={sending ? 'submitting' : 'idle'} disabled={composerBusy || !finding} onSubmit={() => send()}>
+				<Composer.Input bind:element={inputEl} rows={1} name="discussion" placeholder={finding ? `Ask ${formatAgentName(active)}…` : 'Select a finding'} aria-label={finding ? 'Ask about this finding' : 'Select a finding'} class="session-composer-input" />
+				<Composer.Actions class="!flex-none !flex-nowrap !gap-1 self-end !p-0">
+					<Button variant="quiet" size="icon" class="group size-9 rounded-full text-foreground-muted" disabled={!selectionAvailable || composerBusy} onclick={attachSelection} aria-label="Attach selected code" title="Select code in the diff to attach it"><span class="flex size-7 items-center justify-center rounded-full group-hover:bg-foreground/[0.08]"><Paperclip class="size-3.5" aria-hidden="true" /></span></Button>
+					<Composer.Submit class="!size-9 !min-w-9 !rounded-full !bg-transparent !p-0 [&_.sivir-button-face]:text-[0px]" disabled={!finding || composerBusy}>
+						{#snippet children()}<span class="flex size-7 items-center justify-center rounded-full bg-primary text-[var(--color-on-primary)]"><ArrowUp class="size-4" aria-hidden="true" /></span>{/snippet}
+					</Composer.Submit>
+				</Composer.Actions>
+			</Composer.Root>
 		</div>
+	</Card.Root>
 	</section>

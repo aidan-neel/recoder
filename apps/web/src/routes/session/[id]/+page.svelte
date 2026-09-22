@@ -1,23 +1,38 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import { tick, untrack } from 'svelte';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import MessageSquare from '@lucide/svelte/icons/message-square';
+	import X from '@lucide/svelte/icons/x';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import * as Alert from '@sivir-ui/svelte/components/alert';
+	import * as Card from '@sivir-ui/svelte/components/card';
+	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
+	import * as Sheet from '@sivir-ui/svelte/components/sheet';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import SessionSkeleton from '$lib/components/session-skeleton.svelte';
 	import LiveReviewProgress from '$lib/components/live-review-progress.svelte';
 	import ReviewProgress from '$lib/components/review-progress.svelte';
+	import ReviewMetricsModal from '$lib/components/review-metrics-modal.svelte';
 	import SessionSidebar from '$lib/components/session-sidebar.svelte';
 	import FindingsBar from '$lib/components/findings-bar.svelte';
 	import CodeDiff from '$lib/components/code-diff.svelte';
 	import ThreadPanel from '$lib/components/thread-panel.svelte';
+	import ReviewConversation from '$lib/components/review-conversation.svelte';
 	import { getFileDiff } from '$lib/diff';
 	import { findingsStore, mapBackendFinding } from '$lib/findings.svelte';
+	import { notesStore } from '$lib/notes.svelte';
 	import { threadsStore } from '$lib/threads.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
 	import { DEFAULT_FILE, sessionFile } from '$lib/session-file.svelte';
 	import { serverApi } from '$lib/server-api';
-	import type { FileDiff, Review } from '@recoder/shared';
+	import { ReviewStream } from '$lib/review-stream.svelte';
+	import { recentSessions } from '$lib/recent-sessions.svelte';
+	import { ORCHESTRATOR_ID, type FileDiff, type Review, type ReviewCodeContext, type ReviewAssignment } from '@recoder/shared';
 
 	const id = $derived(page.params.id ?? '');
 	const session = $derived(sessionState.sessions.find((s) => s.id === id));
@@ -30,54 +45,68 @@
 		}
 	});
 
-	// Live backend review (if this id is a real review id). Falls back to
-	// the mock session when the API is down or the id is unknown.
+	// Review metadata and repository files load independently of the live chat.
 	let backendReview = $state<Review | null>(null);
 	let backendFiles = $state<FileDiff[] | null>(null);
 	let backendChecked = $state(false);
 	let backendError = $state<string | null>(null);
+	let filesError = $state<string | null>(null);
+	let filesRetryNonce = $state(0);
 	/** True when the API itself is unreachable (vs. "no such review" → demo). */
 	let backendDown = $state(false);
 	/** Bumped by the retry button to re-run the backend check. */
 	let retryNonce = $state(0);
+	let filesOpen = $state(false);
+	let usageOpen = $state(false);
+	let reviewStream = $state<ReviewStream | null>(null);
 
-	async function refreshBackend(currentId: string): Promise<boolean> {
+	function acceptReview(review: Review): void {
+		if (page.params.id !== review.id) return;
+		// A polling request started before the terminal SSE must not rewind the UI.
+		if (backendReview?.id === review.id &&
+			(backendReview.status === 'passed' || backendReview.status === 'failed') &&
+			(review.status === 'queued' || review.status === 'running')) return;
+		if (backendReview?.id === review.id && backendReview.status !== 'draft' && review.status === 'draft') return;
+		backendReview = review;
+		// Keep the session list's status in sync with terminal and live stream events.
+		const recentIndex = recentSessions.reviews.findIndex((item) => item.id === review.id);
+		if (recentIndex >= 0) recentSessions.reviews[recentIndex] = review;
+		const running = review.status === 'queued' || review.status === 'running';
+		if (!sessionState.sessions.some((s) => s.id === review.id)) {
+			sessionState.ensureSession(review.id, review.prTitle || `PR #${review.prNumber}`, `#${review.prNumber}`, running ? 'reviewing' : 'ready');
+		}
+		if (!running && sessionState.sessions.find((s) => s.id === review.id)?.status === 'reviewing') {
+			sessionState.markReady(review.id);
+		}
+	}
+
+	const liveReviewId = $derived(backendReview?.id ?? null);
+	const liveReviewStatus = $derived(backendReview?.status);
+	$effect(() => {
+		const currentId = liveReviewId;
+		if (!currentId) { reviewStream = null; return; }
+		const stream = new ReviewStream(currentId, acceptReview);
+		reviewStream = stream;
+		return () => stream.close();
+	});
+
+	async function refreshBackend(currentId: string, signal: AbortSignal): Promise<boolean> {
 		try {
-			const review = await serverApi.getReview(currentId);
-			if (page.params.id !== currentId) return false;
+			const review = await serverApi.getReview(currentId, AbortSignal.any([signal, AbortSignal.timeout(15_000)]));
+			if (signal.aborted || page.params.id !== currentId) return false;
 			backendDown = false;
-			backendReview = review;
-			// Direct link or cleared storage: recreate the tab from the review
-			// itself so refresh never lands on "Session not found".
-			if (!sessionState.sessions.some((s) => s.id === currentId)) {
-				const running = review.status === 'queued' || review.status === 'running';
-				sessionState.ensureSession(
-					currentId,
-					review.prTitle && review.prTitle !== '' ? review.prTitle : `PR #${review.prNumber}`,
-					`#${review.prNumber}`,
-					running ? 'reviewing' : 'ready'
-				);
-			}
-			try {
-				const files = await serverApi.getReviewFiles(currentId);
-				if (page.params.id !== currentId) return false;
-				backendFiles = files;
-			} catch {
-				// 404 until the fetch step stores a diff — keep polling.
-			}
+			acceptReview(review);
 			backendError = null;
-			return review.status === 'queued' || review.status === 'running';
+			return review.status === 'draft' || review.status === 'queued' || review.status === 'running';
 		} catch (e) {
-			if (page.params.id !== currentId) return false;
+			if (signal.aborted || page.params.id !== currentId) return false;
 			// Unknown id → mock fallback (demo sessions). Anything else means
 			// the API itself is unreachable — surfaced, not silently mocked.
-			backendReview = null;
-			backendFiles = null;
-			backendError = e instanceof Error ? e.message : null;
+			backendError = e instanceof Error && e.name === 'TimeoutError' ? 'Loading the session timed out. Try again.' : e instanceof Error ? e.message : 'Could not load the session.';
 			backendDown = !(e instanceof Error && /review not found/i.test(e.message));
-			return false;
+			return backendDown;
 		} finally {
-			if (page.params.id === currentId) backendChecked = true;
+			if (!signal.aborted && page.params.id === currentId) backendChecked = true;
 		}
 	}
 
@@ -86,38 +115,86 @@
 		void retryNonce;
 		backendReview = null;
 		backendFiles = null;
+		filesError = null;
 		backendChecked = false;
 		backendError = null;
 		backendDown = false;
-		let stopped = false;
-		let timer: ReturnType<typeof setInterval> | undefined;
-
-		void (async () => {
-			const keepPolling = await refreshBackend(currentId);
-			if (stopped || !keepPolling) return;
-			timer = setInterval(async () => {
-				const more = await refreshBackend(currentId);
-				if (!more && timer) clearInterval(timer);
-			}, 2500);
-		})();
+		const controller = new AbortController();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		async function poll() {
+			const more = await refreshBackend(currentId, controller.signal);
+			if (!controller.signal.aborted && more) timer = setTimeout(poll, 2500);
+		}
+		void poll();
 
 		return () => {
-			stopped = true;
-			if (timer) clearInterval(timer);
+			controller.abort();
+			if (timer) clearTimeout(timer);
 		};
 	});
 
-	// Peek at the (partial) diff while a backend review is still running.
-	let peekDiff = $state(false);
+	// Chat/SSE can render as soon as metadata arrives. Expanding repository files
+	// can take much longer, and must never block the conversation or overlap polls.
 	$effect(() => {
-		if (
-			backendReview &&
-			backendReview.status !== 'queued' &&
-			backendReview.status !== 'running'
-		) {
-			peekDiff = false;
+		const currentId = liveReviewId;
+		const status = liveReviewStatus;
+		void filesRetryNonce;
+		if (!currentId || !status || status === 'draft') return;
+		const controller = new AbortController();
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		async function loadFiles() {
+			try {
+				const files = await serverApi.getReviewFiles(currentId!, AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]));
+				if (controller.signal.aborted || page.params.id !== currentId) return;
+				backendFiles = files;
+				filesError = null;
+			} catch {
+				if (controller.signal.aborted || page.params.id !== currentId) return;
+				// A diff is not available during checkout or after an early failure.
+				if (status === 'passed' || status === 'failed') filesError = 'Could not load the code diff. Try again.';
+			} finally {
+				if (!controller.signal.aborted && (status === 'queued' || status === 'running')) timer = setTimeout(loadFiles, 2500);
+			}
 		}
+		void loadFiles();
+		return () => {
+			controller.abort();
+			if (timer) clearTimeout(timer);
+		};
 	});
+
+	const peekDiff = $derived(page.url.searchParams.get('view') === 'diff');
+	function setDiffView(open: boolean): void {
+		const url = new URL(page.url);
+		if (open) url.searchParams.set('view', 'diff');
+		else url.searchParams.delete('view');
+		void goto(`${url.pathname}${url.search}`, { noScroll: true, keepFocus: true });
+	}
+	let chatOpen = $state(false);
+	let chatDraft = $state('');
+	let codeContext = $state<ReviewCodeContext | null>(null);
+	let chatFocus = $state(0);
+	let chatReturnFocus: HTMLElement | null = null;
+	const showChat = $derived(chatOpen && !threadsStore.openId);
+	const sidePanelOpen = $derived(!!threadsStore.openId || showChat);
+	const reviewing = $derived(backendReview?.status === 'running' || backendReview?.status === 'queued');
+	const orchestrator = $derived<ReviewAssignment>({
+		id: ORCHESTRATOR_ID, role: 'orchestrator', title: 'Orchestrator', reason: '', scope: [],
+		status: reviewing ? 'running' : backendReview?.status === 'draft' ? 'waiting' : backendReview?.status === 'failed' ? 'error' : 'done'
+	});
+	function openChat(context?: ReviewCodeContext): void {
+		chatReturnFocus = context ? document.getElementById('ask-review') : document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		threadsStore.close();
+		if (context) { codeContext = context; userPickedFile = true; }
+		chatOpen = true;
+		chatFocus++;
+	}
+	async function closeChat(): Promise<void> {
+		chatOpen = false;
+		await tick();
+		if (chatReturnFocus?.isConnected) chatReturnFocus.focus();
+		else document.getElementById('ask-review')?.focus();
+	}
 
 	const isBackend = $derived(backendChecked && backendReview !== null);
 
@@ -129,6 +206,7 @@
 		if (!backendChecked) return;
 		if (isBackend && backendReview) {
 			threadsStore.reviewId = backendReview.id;
+			notesStore.reviewId = backendReview.id;
 			const mapped = backendReview.findings.map((f, i) => mapBackendFinding(f, i));
 			const terminal =
 				backendReview.status === 'passed' || backendReview.status === 'failed';
@@ -169,17 +247,27 @@
 	const SEV_RANK = { high: 0, medium: 1, low: 2, info: 3 } as const;
 	let lastAutoFile: string | null = $state(null);
 	let userPickedFile = $state(false);
+	let resetSessionId: string | null = null;
 
 	$effect(() => {
-		void id;
-		lastAutoFile = null;
-		userPickedFile = false;
-		findingsSyncedFor = null;
-		peekDiff = false;
-		// Drop the previous session's file + findings immediately so the new
-		// session never flashes stale content while its review loads.
-		sessionFile.select(DEFAULT_FILE);
-		findingsStore.replaceAll([]);
+		const currentId = id;
+		if (resetSessionId === currentId) return;
+		resetSessionId = currentId;
+		untrack(() => {
+			lastAutoFile = null;
+			userPickedFile = false;
+			findingsSyncedFor = null;
+			chatOpen = false;
+			chatDraft = '';
+			codeContext = null;
+			threadsStore.close();
+			threadsStore.pendingMessage = null;
+			notesStore.clear();
+			// Drop the previous session's file + findings immediately so the new
+			// session never flashes stale content while its review loads.
+			sessionFile.select(DEFAULT_FILE);
+			findingsStore.replaceAll([]);
+		});
 	});
 
 	// Selections that didn't come from the auto-picker are the user's choice.
@@ -207,28 +295,25 @@
 		}
 	});
 
-	const backendRunning = $derived(
-		isBackend &&
-			backendReview !== null &&
-			(backendReview.status === 'queued' || backendReview.status === 'running')
-	);
-
 	// Live pipeline log while the backend is working (fetch/sandbox/agents).
 	let queueing = $state(false);
 	/** Queue a fresh backend review for the same repo/PR and jump to it. */
 	async function rerunReview(): Promise<void> {
 		if (!backendReview || queueing) return;
 		queueing = true;
+		backendError = null;
 		try {
 			const review = await serverApi.queueReview({
 				repoId: backendReview.repoId,
-				prNumber: backendReview.prNumber
+				prNumber: backendReview.prNumber,
+				prTitle: backendReview.prTitle ?? undefined,
+				start: false
 			});
 			sessionState.ensureSession(
 				review.id,
 				session?.name ?? 'session',
 				`#${review.prNumber}`,
-				'reviewing'
+				'ready'
 			);
 			await goto(`/session/${review.id}`);
 		} catch (e) {
@@ -239,19 +324,27 @@
 	}
 </script>
 
-{#if !session}
-	<div class="mx-auto flex min-h-[calc(100vh-52px-4rem)] w-full max-w-md flex-col justify-center px-4">
-		<h1 class="text-lg font-semibold tracking-tight">Session not found</h1>
-		<p class="mt-1 text-[14px] text-foreground-muted">
-			This session doesn't exist. Start a fresh review instead.
-		</p>
-		<Button href="/" class="mt-4 w-fit font-sans">Start a review</Button>
+<svelte:window onkeydown={(event) => {
+	if (event.key === 'Escape' && !event.defaultPrevented && document.activeElement?.closest('#interactive-review')) {
+		event.preventDefault();
+		void closeChat();
+	}
+}} />
+
+{#if !backendChecked}
+	<SessionSkeleton specialist={!!page.url.searchParams.get('agent')} />
+{:else if backendDown && !backendReview}
+	<div class="mx-auto flex h-full w-full max-w-[776px] flex-col justify-center px-4 sm:px-6">
+		<Alert.Root variant="error">
+			<Alert.Title>Could not load session</Alert.Title>
+			<Alert.Description>{backendError}</Alert.Description>
+			<Button variant="outline" class="mt-3 w-fit" onclick={() => retryNonce++}>Retry</Button>
+		</Alert.Root>
 	</div>
-{:else if !backendChecked}
-	<div class="mx-auto flex min-h-[calc(100vh-52px-4rem)] w-full max-w-md flex-col justify-center gap-3 px-4" role="status" aria-label="Loading session">
-		<Skeleton class="h-7 w-2/3 rounded-lg" />
-		<Skeleton class="h-4 w-full rounded-md" />
-		<Skeleton class="h-4 w-5/6 rounded-md" />
+{:else if !session}
+	<div class="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-md flex-col justify-center px-4">
+		<Typography.Title level={1} class="text-lg font-semibold tracking-tight">Session not found</Typography.Title>
+		<Button href="/" class="mt-4 w-fit font-sans">Start a review</Button>
 	</div>
 {:else if !isBackend && session.status === 'reviewing'}
 	<ReviewProgress
@@ -260,101 +353,117 @@
 		prLabel={session.ref}
 		onDone={() => sessionState.markReady(session.id)}
 	/>
-{:else if (backendRunning || backendReview?.status === 'failed') && backendReview && !peekDiff}
+{:else if backendReview && reviewStream}
 	{@const diffFiles = backendFiles ?? []}
+	<div class="flex h-full flex-col" class:hidden={peekDiff}>
+	{#if filesError}
+		<Alert.Root variant="error" class="mx-4 mt-2 shrink-0">
+			<Alert.Title>{filesError}</Alert.Title>
+			<Button variant="outline" class="mt-2 w-fit" onclick={() => filesRetryNonce++}>Retry loading diff</Button>
+		</Alert.Root>
+	{/if}
+	<div class="min-h-0 flex-1">
+	{#key backendReview.id}
 	<LiveReviewProgress
 		review={backendReview}
+		stream={reviewStream}
 		repo={session.name}
 		files={backendFiles ? diffFiles.length : null}
 		additions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.additions, 0) : null}
 		deletions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
-		onOpenDiff={() => (peekDiff = true)}
+		onOpenDiff={backendReview.status !== 'draft' ? () => setDiffView(true) : null}
 		onRestart={() => void rerunReview()}
+		restarting={queueing}
+		actionError={backendError}
 	/>
+	{/key}
+	</div>
+	</div>
+	{#if peekDiff}{@render diffWorkspace()}{/if}
 {:else}
-	<div class="flex h-[calc(100vh-52px)] flex-col">
+	{@render diffWorkspace()}
+{/if}
+
+{#snippet diffWorkspace()}
+	{@const files = backendFiles ?? (isBackend ? [] : [fileDiff])}
+	{@const recent = recentSessions.recent.find((item) => item.id === id)}
+	<div class="review-workspace flex h-full min-h-0 flex-col">
+	<header class="flex min-h-14 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
+		<Typography.Title level={1} class="min-w-0 flex-1 basis-64 truncate text-sm font-normal tracking-normal" title={backendReview?.prTitle ?? session?.name}>{backendReview?.prTitle || session?.name || 'Review'}</Typography.Title>
+		<div class="ms-auto flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-foreground-muted">
+			{#if recent?.branch}<Typography.InlineCode class="max-w-40 truncate rounded-md px-1.5 py-0.5 text-xs font-normal" title={recent.branch}>{recent.branch}</Typography.InlineCode>{/if}
+			{#if reviewStream?.progress.orchestratorModel}<Typography.Metadata class="max-w-44 truncate font-mono text-xs" title={reviewStream.progress.orchestratorModel}>{reviewStream.progress.orchestratorModel}</Typography.Metadata>{/if}
+			<Sheet.Root bind:open={filesOpen}>
+				<Sheet.Trigger variant="quiet" class="!h-9 gap-3 !px-0 font-mono text-xs !font-normal text-foreground-muted" aria-label="Browse changed files">
+					{files.length} {files.length === 1 ? 'file' : 'files'}
+					<span class="text-success">+{files.reduce((sum, file) => sum + file.additions, 0)}</span>
+					<span class="text-error">−{files.reduce((sum, file) => sum + file.deletions, 0)}</span>
+				</Sheet.Trigger>
+				<Sheet.Content side="left" class="w-[400px] max-w-[calc(100%-1rem)] [&>[data-ui=sheet-surface]]:bg-background [&>[data-ui=sheet-surface]]:p-0">
+					<Sheet.Title class="sr-only">Changed files</Sheet.Title>
+					<SessionSidebar inSheet fileDiffs={isBackend ? (backendFiles ?? []) : null} onFileSelect={() => filesOpen = false} />
+				</Sheet.Content>
+			</Sheet.Root>
+			<Card.Root class="!h-9 !flex-row items-center !gap-0 rounded-lg border border-border-subtle bg-transparent !p-0 shadow-none">
+				<Button variant="ghost" class="!h-9 rounded-s-lg rounded-e-none !px-2.5 font-sans text-sm !font-normal" disabled={!backendReview} onclick={() => setDiffView(false)}>Conversation</Button>
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger variant="ghost" size="icon" class="!size-9 !min-w-9 rounded-s-none rounded-e-lg border-s border-border-subtle" aria-label="Conversation options" disabled={!backendReview}><ChevronDown size={13} aria-hidden="true" /></DropdownMenu.Trigger>
+					<DropdownMenu.Content>
+						{#if backendReview}<DropdownMenu.Item callback={() => usageOpen = true}>Usage</DropdownMenu.Item>{/if}
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
+			</Card.Root>
+		</div>
+	</header>
+	<div class="flex shrink-0 flex-wrap items-center gap-3 px-3 pb-3">
+		<FindingsBar />
+		{#if backendReview}
+			<div class="ms-auto flex items-center gap-3">
+				<Typography.Metadata class="flex items-center gap-2 text-xs" role="status">
+					{#if reviewing}<Spinner size={13} aria-hidden="true" />Review running{:else if backendReview.status === 'failed'}Review interrupted{:else if backendReview.status === 'draft'}Ready to review{:else}Review complete{/if}
+				</Typography.Metadata>
+				<Button id="ask-review" variant={showChat ? 'secondary' : 'outline'} class="gap-2 font-normal" aria-expanded={showChat} aria-controls="interactive-review" onclick={() => showChat ? void closeChat() : openChat()}><MessageSquare size={15} aria-hidden="true" />Ask reviewer</Button>
+			</div>
+		{/if}
+	</div>
+	{#if filesError}
+		<Alert.Root variant="error" class="mx-3 mb-3 shrink-0"><Alert.Title>{filesError}</Alert.Title><Button variant="outline" onclick={() => filesRetryNonce++}>Retry loading diff</Button></Alert.Root>
+	{/if}
 	{#if backendError}
-		<div
-			class="mx-3 mt-3 flex shrink-0 items-center gap-2 rounded-xl border border-error/40 bg-error/10 px-4 py-2.5 text-[13px]"
-			role="alert"
-		>
-			<span class="min-w-0 flex-1 truncate">
+		<Alert.Root variant="error" class="mx-3 mt-3 shrink-0">
+			<Alert.Title>Review data unavailable</Alert.Title>
+			<Alert.Description>
 				{backendDown
 					? `Review API unreachable (${backendError}) — showing local demo content.`
 					: backendError}
-			</span>
+			</Alert.Description>
 			<Button
-				variant="ghost"
-				size="sm"
-				class="h-7 shrink-0 font-sans"
+				variant="outline"
+				class="mt-2 w-fit font-sans"
 				onclick={() => (retryNonce += 1)}
 			>
 				Retry
 			</Button>
-		</div>
+		</Alert.Root>
 	{/if}
-	<div class="flex min-h-0 flex-1">
-		<SessionSidebar
-			fileDiffs={isBackend ? (backendFiles ?? []) : null}
-		/>
-		<div class="m-3 flex min-w-0 flex-1 flex-col gap-3">
-			{#if isBackend && backendReview}
-				<div class="flex shrink-0 flex-col gap-2">
-					<div
-						class="flex shrink-0 items-center gap-2 font-mono text-[13px] text-foreground-muted"
-						role="status"
-					>
-					{#if backendReview.status === 'queued' || backendReview.status === 'running'}
-						<Spinner size={13} aria-hidden="true" />
-					{:else}
-						<span
-							class="h-1.5 w-1.5 shrink-0 rounded-full"
-							style:background-color={backendReview.status === 'passed' ? '#3fb96c' : '#e0655f'}
-						></span>
-					{/if}
-					<span class="truncate">
-						{#if backendReview.prTitle}{backendReview.prTitle} · {/if}PR #{backendReview.prNumber}
-						· {backendReview.source} · {backendReview.status}{backendFiles
-							? ` · ${backendFiles.length} files`
-							: ' · fetching diff…'}
-					</span>
-					{#if peekDiff}
-						<Button
-							variant="ghost"
-							size="sm"
-							class="ml-auto h-8 shrink-0 font-sans"
-							onclick={() => (peekDiff = false)}
-						>
-							Progress
-						</Button>
-					{/if}
-					</div>
-					<FindingsBar />
+			<div class="flex min-h-0 flex-1">
+				<div class="hidden w-[300px] shrink-0 lg:block 2xl:w-[340px] {sidePanelOpen ? 'max-2xl:!hidden' : ''}">
+					<SessionSidebar fileDiffs={isBackend ? (backendFiles ?? []) : null} />
 				</div>
-			{:else}
-				<FindingsBar />
-			{/if}
-			<div class="flex min-h-0 flex-1 gap-3">
-				<div id="diff-panel" class="session-enter relative min-h-0 flex-1" style="animation-delay: 120ms">
+				<div id="diff-panel" class="relative min-h-0 min-w-0 flex-1 {sidePanelOpen ? 'max-xl:hidden' : ''}">
 					{#if isBackend && backendReview?.status === 'failed' && !backendFiles}
-						<div
-							class="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-xl border border-border p-6 text-center"
-							role="alert"
-						>
-							<p class="text-[15px] font-medium">Review failed</p>
-							<p class="max-w-md text-[13px] leading-relaxed text-foreground-muted">
+						<Alert.Root variant="error" class="absolute inset-0 flex items-center justify-center p-6 text-center">
+							<Alert.Title>Review failed</Alert.Title>
+							<Alert.Description class="max-w-md">
 								{backendReview.summary ?? 'The pipeline failed before producing a diff.'}
-							</p>
-							<p class="font-mono text-[12px] text-foreground-muted">
+							</Alert.Description>
+							<Alert.Description class="font-mono text-[12px]">
 								Fix the cause, then press Review above to retry.
-							</p>
-						</div>
+							</Alert.Description>
+						</Alert.Root>
 					{:else if isBackend && !backendFiles}
-						<div
-							class="absolute inset-0 overflow-hidden rounded-xl border border-border p-4"
-							role="status"
-							aria-label="Fetching PR diff"
-						>
+						<div class="absolute inset-0" role="status" aria-label="Fetching PR diff">
+						<Card.Root class="h-full overflow-hidden p-4">
 							<div class="flex items-center gap-2 text-[14px] text-foreground-muted">
 								<Spinner size={15} aria-hidden="true" />
 								Fetching PR diff…
@@ -367,24 +476,44 @@
 								<Skeleton class="h-4 w-3/5 rounded-md" />
 								<Skeleton class="h-4 w-5/6 rounded-md" />
 							</div>
+						</Card.Root>
 						</div>
 					{:else}
 						<ScrollArea
 							orientation="vertical"
 							aria-label="Code diff"
-							class="absolute inset-0 rounded-xl border border-border"
+							class="absolute inset-0 px-3 pb-3 pt-2"
+							showCues={false}
 						>
 							{#key fileDiff.path}
-								<div class="diff-enter min-h-full">
-									<CodeDiff diff={fileDiff} findings={displayFindings} />
+								<div class="min-w-0">
+									<CodeDiff diff={fileDiff} findings={displayFindings} onAsk={isBackend ? openChat : undefined} />
 								</div>
 							{/key}
 						</ScrollArea>
 					{/if}
 				</div>
-				<ThreadPanel />
+				{#if threadsStore.openId}
+					{#key threadsStore.openId}
+						<ThreadPanel />
+					{/key}
+				{:else if showChat && backendReview && reviewStream}
+					<section id="interactive-review" aria-label="Interactive review" class="flex min-h-0 w-full min-w-0 flex-col xl:w-[420px] xl:shrink-0 2xl:w-[460px]">
+						<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
+							<header class="flex min-h-12 shrink-0 items-center gap-2 border-b border-border-subtle px-4">
+								<Typography.Title level={2} class="min-w-0 flex-1 text-sm font-normal">Orchestrator</Typography.Title>
+								<Button variant="ghost" size="icon" class="size-9" aria-label="Close review chat" onclick={() => void closeChat()}><X size={16} aria-hidden="true" /></Button>
+							</header>
+							{#if reviewStream.connection === 'reconnecting'}<Typography.Text role="status" class="px-4 py-2 text-sm text-warning">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
+							<ReviewConversation compact assignment={orchestrator} messages={reviewStream.progress.messages ?? []}
+								reasoning={[]} toolCalls={[]} tasks={[]} active={reviewing} now={Date.now()}
+								bind:draft={chatDraft} bind:codeContext focusKey={chatFocus}
+								onSend={async (assignmentId, text, context) => { await serverApi.sendReviewMessage(id, assignmentId, text, context); }}
+								onStop={async (assignmentId) => { await serverApi.stopReviewMessage(id, assignmentId); }} />
+						</Card.Root>
+					</section>
+				{/if}
 			</div>
-		</div>
 	</div>
-	</div>
-{/if}
+	{#if backendReview}<ReviewMetricsModal reviewId={backendReview.id} bind:open={usageOpen} showTrigger={false} />{/if}
+{/snippet}

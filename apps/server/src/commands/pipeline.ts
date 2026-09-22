@@ -1,22 +1,26 @@
-import { parseUnifiedDiff, type Finding, type Review } from '@recoder/shared';
+import { emptyReviewProgress, parseUnifiedDiff, type CreateReviewInput, type Finding, type Review } from '@recoder/shared';
 import { db, reviewDiffs, reviewSandboxes, reviewProgress } from '../store';
-import { emitReviewEvent, reportReviewTask, trackReviewTask } from '../lib/events';
-import { fetchPullRequest, GhError } from '../lib/gh';
+import {
+	emitReviewEvent,
+	reportReviewAssignment,
+	reportReviewCoverage,
+	reportReviewPlan,
+	reportReviewReasoning,
+	reportReviewTask,
+	reportReviewTool,
+	trackReviewTask
+} from '../lib/events';
+import { fetchPullRequest } from '../lib/gh';
 import { fetchMergeRequest } from '../lib/glab';
-import { filterNewFindings, runAllRoles } from '../lib/harness';
-import { isReviewConfigured } from '../lib/models';
-import { REVIEW_ROLES } from '../lib/roles';
+import { runAdaptiveReview } from '../lib/harness';
+import { configForOrchestrator, isReviewConfigured } from '../lib/models';
+import { discussionContext, recordChatMessage } from '../lib/review-chat';
 import { detectProvider, locateRepo, refspecFor } from '../lib/providers';
-import { prepareSandbox, sandboxDiff } from '../lib/sandbox';
+import { prepareSandbox, sandboxRevisionDiff } from '../lib/sandbox';
 import { tokenEnv } from '../lib/tokens';
-import { demoReviewSteps } from './registry';
-import { runCommand } from './runner';
+import { withReviewMetrics } from '../lib/metrics';
 
-export interface QueueReviewInput {
-	repoId: string;
-	prNumber: number;
-	headSha?: string;
-}
+export type QueueReviewInput = CreateReviewInput;
 
 function touch(reviewId: string, patch: Partial<Review>): Review {
 	const current = db.reviews.get(reviewId);
@@ -38,6 +42,12 @@ export function queueReview(input: QueueReviewInput): Review {
 			'reviewer not configured: add a reviewer model in settings (or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL)'
 		);
 	}
+	const review = createReviewSession(input);
+	return startReviewSession(review.id);
+}
+
+/** Opening a PR creates durable chat state without running models or the pipeline. */
+export function createReviewSession(input: CreateReviewInput): Review {
 	const repo = db.repos.get(input.repoId);
 	if (!repo) throw new Error('repo not found');
 	if (!Number.isInteger(input.prNumber) || input.prNumber <= 0) {
@@ -49,250 +59,221 @@ export function queueReview(input: QueueReviewInput): Review {
 		repoId: input.repoId,
 		prNumber: input.prNumber,
 		headSha: input.headSha ?? 'unknown',
-		status: 'queued',
+		status: 'draft',
 		summary: null,
 		findings: [],
 		runs: [],
-		source: 'stub',
-		prTitle: null,
+		source: repo.provider ?? detectProvider(repo.url),
+		prTitle: input.prTitle ?? null,
 		prUrl: null,
 		createdAt: now,
 		updatedAt: now
 	};
 	db.reviews.set(review);
-	// Run the pipeline in the background; the client polls GET /api/reviews/:id.
-	void runReviewPipeline(review.id).catch((err) => console.error('[pipeline] failed', err));
+	reviewProgress.set(emptyReviewProgress(review.id));
+	return review;
+}
+
+/** Claim the draft synchronously so concurrent prompts cannot launch two pipelines. */
+export function startReviewSession(reviewId: string): Review {
+	const current = db.reviews.get(reviewId);
+	if (!current) throw new Error('review not found');
+	if (current.status !== 'draft') throw new Error('This review has already started.');
+	if (!isReviewConfigured()) throw new Error('Add a reviewer model in settings before starting the review.');
+	const review = touch(reviewId, { status: 'queued', startedAt: new Date().toISOString() });
+	emitReviewEvent(reviewId, { type: 'step', step: 'queued', message: '', data: { stage: 'checkout' } });
+	void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
 	return review;
 }
 
 /**
- * Drive a queued review: fetch the PR (gh or stub) → prepare the sandbox →
- * run reviewer command steps → mark passed/failed.
+ * Drive a queued review: fetch PR metadata → prepare the sandbox →
+ * run the adaptive harness → persist coverage and findings.
  *
- * No reviewer agent executes yet: after fetch + sandbox, the demo `echo`
- * steps stand in. Sandbox preparation is required in github mode and skipped
- * in stub mode (gh unavailable/unauthenticated).
+ * Provider fetch failures fail the review. Demo UI lives on explicit
+ * frontend demo routes, not as a silent fallback for live reviews.
  */
 export async function runReviewPipeline(reviewId: string): Promise<void> {
+	return withReviewMetrics(reviewId, 'pipeline', () => runTrackedReviewPipeline(reviewId));
+}
+
+async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	const initial = db.reviews.get(reviewId);
 	if (!initial) return;
 	const repo = db.repos.get(initial.repoId);
 	let review = touch(reviewId, { status: 'running' });
 	let sandboxPath: string | null = null;
 	let baseRef: string | undefined;
+	let prBody = '';
+	const analysis = new AbortController();
 
 	try {
-		// 1. Fetch the PR. Offline provider CLI → stay in stub mode and continue.
-		try {
-			if (!repo) throw new Error('repo not found');
-			const provider = repo.provider ?? detectProvider(repo.url);
-			const env = tokenEnv(provider);
-			const viewCmd =
-				provider === 'gitlab'
-					? `glab mr view ${review.prNumber}`
-					: `gh pr view ${review.prNumber}`;
-			emitReviewEvent(reviewId, {
-				type: 'step',
-				step: 'fetch',
-				message: `Fetching PR #${review.prNumber}…`,
-				data: { command: viewCmd }
-			});
-			const { pr, diff } = await trackReviewTask(reviewId, 'fetch', 'Fetching PR metadata', async () =>
-				provider === 'gitlab'
-					? await fetchMergeRequest(repo.url, review.prNumber, { env })
-					: await fetchPullRequest(repo.url, review.prNumber, { env, metadataOnly: true }));
-			baseRef = pr.base;
-			reviewDiffs.set(reviewId, diff);
-			review = touch(reviewId, {
-				headSha: pr.headSha,
-				prTitle: pr.title,
-				prUrl: pr.url,
-				source: provider
-			});
-			emitReviewEvent(reviewId, {
-				type: 'log',
-				step: 'fetch',
-				message: `Fetched ${pr.title || `PR #${pr.number}`}`
-			});
-		} catch (err) {
-			if (err instanceof GhError && (err.kind === 'unavailable' || err.kind === 'auth')) {
-				console.warn(`[pipeline] provider CLI unavailable (${err.kind}); continuing in stub mode`);
-				emitReviewEvent(reviewId, {
-					type: 'log',
-					step: 'fetch',
-					message: 'Provider CLI unavailable — stub mode'
-				});
-			} else {
-				throw err;
-			}
-		}
-
-		// 2. Sandbox checkout (provider mode only).
-		if (review.source !== 'stub' && repo) {
-			const source = review.source;
-			const { slug } = locateRepo(repo.url);
-			const { fetchRef, branch } = refspecFor(review.source, review.prNumber);
-			emitReviewEvent(reviewId, {
-				type: 'step',
-				step: 'sandbox',
-				message: 'Preparing sandbox…',
-				data: { command: `git fetch origin ${fetchRef.split(':')[0]}` }
-			});
-			const sandbox = await trackReviewTask(reviewId, 'sandbox', 'Preparing local checkout', (onProgress) => prepareSandbox({
-				onProgress,
-				repoSlug: slug,
-				prNumber: review.prNumber,
-				repoUrl: repo.url,
-				fetchRef,
-				branch,
-				reviewId,
-				provider: source,
-				env: tokenEnv(source),
-				expectedHeadSha: review.headSha
-			}));
-			sandboxPath = sandbox.path;
-			reviewSandboxes.set(reviewId, sandbox.path);
-			if (!baseRef) throw new Error('PR base branch is missing');
-			const diff = await trackReviewTask(reviewId, 'diff', 'Computing local PR diff', () =>
-				sandboxDiff(sandbox.path, baseRef!, tokenEnv(source), source));
-			reviewDiffs.set(reviewId, diff);
-			emitReviewEvent(reviewId, { type: 'log', step: 'sandbox', message: `Checked out ${sandbox.headSha.slice(0, 12)}` });
-		}
-
-		// 3. Review: real harness when a model is configured, demo echo otherwise.
-		let findings: Finding[];
-		let summary: string;
-		if (isReviewConfigured() && reviewDiffs.has(reviewId)) {
-			const diff = reviewDiffs.get(reviewId) ?? '';
-			const files = parseUnifiedDiff(diff);
-			emitReviewEvent(reviewId, {
-				type: 'step',
-				step: 'review',
-				message: `Reviewing ${files.length} files with ${REVIEW_ROLES.length} specialists…`
-			});
-			// Suppress anything an earlier review of this PR already reported:
-			// re-runs only surface genuinely new findings. Computed up front so
-			// live appends can filter the same way as the final pass.
-			const previous = db.reviews
-				.list()
-				.filter(
-					(r) => r.id !== reviewId && r.repoId === review.repoId && r.prNumber === review.prNumber && r.status === 'passed'
-				)
-				.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))[0];
-			const previousFingerprints = new Set(
-				(previous?.findings ?? []).flatMap((f) => (f.fingerprint ? [f.fingerprint] : []))
-			);
-			const appendLive = (role: string, items: Finding[]): Finding[] => {
-				const { fresh } = filterNewFindings(items, previousFingerprints);
-				for (const item of fresh) {
-					if (item.fingerprint) previousFingerprints.add(item.fingerprint);
-				}
-				if (fresh.length === 0) return [];
-				const current = db.reviews.get(reviewId);
-				if (current) touch(reviewId, { findings: [...current.findings, ...fresh] });
-				emitReviewEvent(reviewId, {
-					type: 'finding',
-					step: `agent:${role}`,
-					message: `${role} reported ${fresh.length} finding${fresh.length === 1 ? '' : 's'}`,
-					data: { agent: role, status: 'running', items: fresh, findings: fresh.length }
-				});
-				return fresh;
-			};
-			const results = await runAllRoles(
-				{ diff, sandboxPath },
-				{
-					onTask: (task) => reportReviewTask(reviewId, task),
-					onLog: (role, message) =>
-						emitReviewEvent(reviewId, { type: 'log', step: `agent:${role}`, message }),
-					onAgentStart: (role, model) =>
-						emitReviewEvent(reviewId, {
-							type: 'step',
-							step: `agent:${role}`,
-							message: `${role} agent started`,
-							data: { agent: role, status: 'running', model }
-						}),
-					onAgentDone: (role, findings) =>
-						emitReviewEvent(reviewId, {
-							type: 'done',
-							step: `agent:${role}`,
-							message: `${role} done: ${findings} finding(s)`,
-							data: { agent: role, status: 'done', findings }
-						}),
-					onFiles: (role, files) =>
-						emitReviewEvent(reviewId, {
-							type: 'log',
-							step: `agent:${role}`,
-							message: `${role} scanning ${files.length} file(s)`,
-							data: { agent: role, status: 'running', files }
-						}),
-					onFindings: (role, items) => {
-						appendLive(role, items);
-					}
-				}
-			);
-			findings = results.flatMap((r) => r.findings);
-			const failedSpecialists = Object.values(reviewProgress.get(reviewId)?.tasks ?? {})
-				.filter((task) => task.id.endsWith(':synthesis') && task.status === 'error');
-			if (failedSpecialists.length) {
-				throw new Error(failedSpecialists.length + ' specialist verification tasks failed. Partial findings are saved; restart the review to retry.');
-			}
-			const { fresh, suppressed } = filterNewFindings(
-				findings,
-				new Set((previous?.findings ?? []).flatMap((f) => (f.fingerprint ? [f.fingerprint] : [])))
-			);
-			findings = fresh;
-			const fileCount = files.length;
-			summary =
-				`Reviewed PR #${review.prNumber} (${fileCount} files) with ` +
-				results.map((r) => `${r.role} (${r.findings.length})`).join(', ') +
-				(suppressed > 0
-					? ` ${suppressed} already-reported finding${suppressed === 1 ? '' : 's'} suppressed.`
-					: '');
-		} else {
-			emitReviewEvent(reviewId, {
-				type: 'log',
-				step: 'demo',
-				message: 'No reviewer model configured — stub demo steps (add a model in settings for live agent output).'
-			});
-			const steps = demoReviewSteps({
-				repo: repo?.name ?? review.repoId,
-				pr: String(review.prNumber),
-				sandbox: sandboxPath ?? '(stub mode: no sandbox)'
-			});
-			for (const step of steps) {
-				emitReviewEvent(reviewId, { type: 'step', step: 'demo', message: `${step.label}…` });
-				const run = await runCommand({ label: step.label, command: step.command, args: step.args });
-				review = touch(reviewId, { runs: [...review.runs, run.id] });
-				if (run.status !== 'succeeded') {
-					throw new Error(`step "${step.label}" ${run.status} (exit ${run.exitCode})`);
-				}
-				emitReviewEvent(reviewId, { type: 'log', step: 'demo', message: `${step.label}: done` });
-			}
-			findings = [
-				{
-					id: crypto.randomUUID(),
-					file: 'README.md',
-					line: 1,
-					severity: 'info',
-					message: 'Stub finding: wire a real reviewer into commands/registry.ts to get real findings.'
-				}
-			];
-			summary =
-				review.source === 'github' || review.source === 'gitlab'
-					? `Fetched PR #${review.prNumber} into ${sandboxPath}. Demo steps only — set RECODER_REVIEW_API_KEY to run the reviewer harness.`
-					: `Demo review of PR #${review.prNumber} completed in stub mode (provider CLI unavailable).`;
-		}
-
-		reportReviewTask(reviewId, { id: 'finalize', label: 'Saving results', message: 'Saving review results', status: 'running' });
-		touch(reviewId, { status: 'passed', summary, findings });
-		reportReviewTask(reviewId, { id: 'finalize', label: 'Saving results', message: 'Review results saved', status: 'done' });
+		if (!repo) throw new Error('repo not found');
+		emitReviewEvent(reviewId, { type: 'step', step: 'orchestrator', message: '', data: { orchestratorModel: configForOrchestrator().model } });
+		const provider = repo.provider ?? detectProvider(repo.url);
+		const env = tokenEnv(provider);
+		const viewCmd =
+			provider === 'gitlab'
+				? `glab mr view ${review.prNumber}`
+				: `gh pr view ${review.prNumber}`;
 		emitReviewEvent(reviewId, {
-			type: 'done',
-			message: `Review complete: ${findings.length} finding(s)`
+			type: 'step',
+			step: 'fetch',
+			message: `Fetching PR #${review.prNumber}…`,
+			data: { command: viewCmd, stage: 'checkout' }
+		});
+		const { pr, diff } = await trackReviewTask(reviewId, 'fetch', 'Fetching PR metadata', async () =>
+			provider === 'gitlab'
+				? await fetchMergeRequest(repo.url, review.prNumber, { env })
+				: await fetchPullRequest(repo.url, review.prNumber, { env, metadataOnly: true }));
+		baseRef = pr.base;
+		prBody = pr.body ?? '';
+		reviewDiffs.set(reviewId, diff);
+		review = touch(reviewId, {
+			headSha: pr.headSha,
+			prTitle: pr.title,
+			prUrl: pr.url,
+			source: provider
+		});
+		emitReviewEvent(reviewId, {
+			type: 'log',
+			step: 'fetch',
+			message: `Fetched ${pr.title || `PR #${review.prNumber}`}`
+		});
+
+		const source = review.source === 'stub' ? provider : review.source;
+		const { slug } = locateRepo(repo.url);
+		const { fetchRef, branch } = refspecFor(source, review.prNumber);
+		emitReviewEvent(reviewId, {
+			type: 'step',
+			step: 'sandbox',
+			message: 'Preparing sandbox…',
+			data: { command: `git fetch origin ${fetchRef.split(':')[0]}`, stage: 'checkout' }
+		});
+		const sandbox = await trackReviewTask(reviewId, 'sandbox', 'Preparing local checkout', (onProgress) => prepareSandbox({
+			onProgress,
+			repoSlug: slug,
+			prNumber: review.prNumber,
+			repoUrl: repo.url,
+			fetchRef,
+			branch,
+			reviewId,
+			provider: source,
+			env: tokenEnv(source),
+			expectedHeadSha: review.headSha
+		}));
+		sandboxPath = sandbox.path;
+		reviewSandboxes.set(reviewId, sandbox.path);
+		if (!baseRef) throw new Error('PR base branch is missing');
+		const inspected = await trackReviewTask(reviewId, 'diff', 'Computing local PR diff', () =>
+			sandboxRevisionDiff(sandbox.path, baseRef!, tokenEnv(source), source));
+		reviewDiffs.set(reviewId, inspected.diff);
+		emitReviewEvent(reviewId, {
+			type: 'log',
+			step: 'sandbox',
+			message: `Checked out ${inspected.revision.headSha.slice(0, 12)} (merge-base ${inspected.revision.mergeBaseSha.slice(0, 12)})`,
+			data: { stage: 'checkout' }
+		});
+
+		if (!isReviewConfigured()) {
+			throw new Error('reviewer not configured');
+		}
+		const files = parseUnifiedDiff(inspected.diff);
+		emitReviewEvent(reviewId, {
+			type: 'step',
+			step: 'review',
+			message: `Planning a review of ${files.length} files…`,
+			data: { stage: 'understand' }
+		});
+		const result = await runAdaptiveReview(
+			{
+				diff: inspected.diff,
+				sandboxPath,
+				revision: inspected.revision,
+				prTitle: review.prTitle,
+				prBody,
+				signal: analysis.signal
+			},
+			{
+				onTask: (task) => reportReviewTask(reviewId, task),
+				onMessage: (message) => recordChatMessage(reviewId, { ...message, from: 'assistant', at: new Date().toISOString() }),
+				getDiscussion: (assignmentId) => [
+					discussionContext(reviewId),
+					assignmentId && assignmentId !== '__pipeline' ? discussionContext(reviewId, assignmentId) : ''
+				].filter(Boolean).join('\n\n'),
+				onLog: (message, meta) =>
+					emitReviewEvent(reviewId, {
+						type: 'log',
+						step: meta?.assignmentId ? `assignment:${meta.assignmentId}` : 'review',
+						message,
+						data: { agent: meta?.role, assignmentId: meta?.assignmentId }
+					}),
+				onPlan: (data) => reportReviewPlan(reviewId, data),
+				onAssignment: (assignment) => reportReviewAssignment(reviewId, assignment),
+				onCoverage: (coverage, gaps) => reportReviewCoverage(reviewId, coverage, gaps),
+				onBudget: (budget) => {
+					const snapshot = reviewProgress.get(reviewId);
+					if (snapshot) reviewProgress.set({ ...snapshot, budget });
+				},
+				onReasoning: (reasoning) => reportReviewReasoning(reviewId, reasoning),
+				onTool: (tool) => reportReviewTool(reviewId, tool),
+				onCandidates: (count) => {
+					const snapshot = reviewProgress.get(reviewId);
+					if (snapshot) reviewProgress.set({ ...snapshot, candidateCount: count });
+					emitReviewEvent(reviewId, {
+						type: 'finding',
+						message: `${count} candidate finding${count === 1 ? '' : 's'}`,
+						data: { candidateCount: count }
+					});
+				},
+				onStage: (stage) => {
+					emitReviewEvent(reviewId, { type: 'step', step: stage, message: '', data: { stage } });
+				}
+			}
+		);
+
+		const snapshot = reviewProgress.get(reviewId);
+		if (snapshot) {
+			reviewProgress.set({
+				...snapshot,
+				assignments: result.assignments,
+				coverage: result.coverage,
+				coverageGaps: result.coverageGaps,
+				outcome: result.outcome,
+				recommendedChecks: result.recommendedChecks,
+				planningDegraded: result.planningDegraded,
+				candidateCount: result.unconfirmed.length + result.findings.length
+			});
+		}
+
+		reportReviewTask(reviewId, { id: 'finalize', label: 'Saving results', message: 'Saving review results', status: 'running', kind: 'other' });
+		const findings: Finding[] = result.outcome === 'complete' ? result.findings : [...result.findings, ...result.unconfirmed];
+		const status = result.outcome === 'complete' ? 'passed' : 'failed';
+		touch(reviewId, { status, summary: result.summary, findings });
+		reportReviewTask(reviewId, {
+			id: 'finalize',
+			label: 'Saving results',
+			message: result.outcome === 'complete' ? 'Review complete' : 'Review incomplete',
+			status: result.outcome === 'complete' ? 'done' : 'error',
+			kind: 'other'
+		});
+		emitReviewEvent(reviewId, {
+			type: result.outcome === 'complete' ? 'done' : 'error',
+			message: result.summary,
+			data: {
+				outcome: result.outcome,
+				coverage: result.coverage,
+				coverageGaps: result.coverageGaps,
+				recommendedChecks: result.recommendedChecks,
+				candidateCount: result.findings.length
+			}
 		});
 	} catch (err) {
+		analysis.abort();
 		const message = err instanceof Error ? err.message : 'pipeline failed';
 		try {
+			const snapshot = reviewProgress.get(reviewId);
+			if (snapshot) reviewProgress.set({ ...snapshot, outcome: 'failed' });
 			touch(reviewId, { status: 'failed', summary: message });
 		} catch {
 			// Review was deleted mid-run (e.g. its session was closed) — nothing to update.

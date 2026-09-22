@@ -1,6 +1,4 @@
 <script lang="ts">
-	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
-	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import ReviewingView, {
 		type ReviewingFinding
 	} from '$lib/components/reviewing-view.svelte';
@@ -115,19 +113,18 @@
 		return script.slice(0, Math.min(script.length, Math.floor(agent.progress / 35)));
 	}
 
-	const viewAgents = $derived(
+	const viewAssignments = $derived(
 		agents.map((agent) => ({
-			id: agent.id,
-			name: agent.name,
+			id: `${agent.id}-demo`,
+			role: agent.id,
+			title: agent.name === 'patterns' ? 'Repository consistency' : agent.name,
+			reason: 'Demo specialist assignment',
+			status: agent.status === 'done' ? 'done' as const : agent.status === 'running' ? 'running' as const : 'queued' as const,
+			scope: [{ path: 'src/rate-limit/limiter.ts', hunkIds: [] }],
 			model: agent.model,
-			status: agent.status,
-			progress: agent.progress,
-			findings: revealed(agent).length,
-			logs: agent.logs,
-			doneMeta:
-				agent.status === 'done'
-					? `done · ${revealed(agent).length} finding${revealed(agent).length === 1 ? '' : 's'} · ${formatElapsed(agent.doneAt ?? elapsed)}`
-					: null
+			candidateCount: revealed(agent).length,
+			currentOperation: agent.logs.at(-1) ?? 'Reviewing demo changes',
+			elapsedMs: agent.progress * 40
 		}))
 	);
 
@@ -151,10 +148,66 @@
 
 	const pendingCount = $derived(agents.filter((a) => a.status !== 'done').length);
 
-	let restartOpen = $state(false);
+	const viewTasks = $derived(
+		agents.map((agent) => ({
+			id: `${agent.id}-task`,
+			label: 'Specialist review',
+			status: agent.status === 'done' ? ('done' as const) : ('running' as const),
+			message: agent.logs.at(-1) ?? 'Reviewing demo changes',
+			assignmentId: `${agent.id}-demo`,
+			agent: agent.id,
+			batch: Math.max(1, Math.min(3, Math.ceil(agent.progress / 34))),
+			batches: 3,
+			elapsedMs: agent.progress * 40,
+			updatedAt: new Date().toISOString()
+		}))
+	);
+
+	const viewReasoning = $derived(
+		agents.flatMap((agent) =>
+			agent.logs.length
+				? [
+						{
+							id: `${agent.id}-reason`,
+							assignmentId: `${agent.id}-demo`,
+							role: agent.id,
+							model: agent.model,
+							at: new Date().toISOString(),
+							text: agent.logs.join('\n')
+						}
+					]
+				: []
+		)
+	);
+
+	const viewTools = $derived(
+		agents.flatMap((agent) => [
+			{
+				id: `${agent.id}-t1`,
+				assignmentId: `${agent.id}-demo`,
+				role: agent.id,
+				command: `rg -n ${JSON.stringify(agent.id)} src/rate-limit`,
+				status: 'done' as const,
+				exitCode: 0,
+				startedAt: new Date().toISOString(),
+				elapsedMs: 31,
+				summary: '3 matches'
+			},
+			{
+				id: `${agent.id}-t2`,
+				assignmentId: `${agent.id}-demo`,
+				role: agent.id,
+				command: `read limiter.ts:61-84`,
+				status: agent.status === 'done' ? ('done' as const) : ('running' as const),
+				exitCode: agent.status === 'done' ? 0 : null,
+				startedAt: new Date().toISOString(),
+				elapsedMs: agent.progress * 30
+			}
+		])
+	);
+
 
 	function confirmRestart() {
-		restartOpen = false;
 		start();
 	}
 
@@ -221,31 +274,17 @@
 		deletions,
 		elapsed: formatElapsed(elapsed)
 	}}
-	agents={viewAgents}
+	assignments={viewAssignments}
 	findings={viewFindings}
+	tasks={viewTasks}
+	reasoning={viewReasoning}
+	toolCalls={viewTools}
+	pipelineLogs={agents.flatMap((agent) => agent.logs)}
 	{pendingCount}
 	{onOpenDiff}
-	onRestart={() => (restartOpen = true)}
+	onRestart={confirmRestart}
 	doneHref={sessionHref}
+	stage={pendingCount ? 2 : 4}
+	stageLabel={pendingCount ? 'Specialist review' : 'Review complete'}
+	active={pendingCount > 0}
 />
-
-<AlertDialog.Root bind:open={restartOpen}>
-	<AlertDialog.Content>
-		<AlertDialog.Header>
-			<AlertDialog.Title>Restart review?</AlertDialog.Title>
-			<AlertDialog.Description>
-				Agent progress and streamed logs start over from zero.
-			</AlertDialog.Description>
-		</AlertDialog.Header>
-		<AlertDialog.Footer>
-			<AlertDialog.Exit>
-				Cancel
-				<Shortcut shortcut="esc" />
-			</AlertDialog.Exit>
-			<AlertDialog.Confirm variant="primary" onclick={confirmRestart}>
-				Restart
-				<Shortcut shortcut="enter" />
-			</AlertDialog.Confirm>
-		</AlertDialog.Footer>
-	</AlertDialog.Content>
-</AlertDialog.Root>

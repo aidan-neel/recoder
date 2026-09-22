@@ -1,13 +1,23 @@
 import type { FileDiff } from '@recoder/shared';
 
 /**
- * Which changed files the reviewers actually look at.
+ * Classify changed files for inventory and coverage.
  *
- * Build output, vendored code, lockfiles, generated declarations, and
- * binaries carry no review signal and drown the scouts in noise
- * (`.svelte-kit/__package__`, `dist`, `*.d.ts` …). They stay visible in the
- * diff view — they just never enter model context.
+ * Generated, vendored, binary, explicitly excluded, and oversized content
+ * stay in the coverage ledger with a reason — they are never silently
+ * dropped. Hand-written declaration files, text SVGs, and lockfiles are
+ * reviewable evidence (lockfiles may be summarized rather than fully read).
  */
+
+export type FileClassification =
+	| 'source'
+	| 'test'
+	| 'docs'
+	| 'config'
+	| 'lockfile'
+	| 'generated'
+	| 'binary'
+	| 'other';
 
 /** Path segments that mark a file as generated, built, or vendored. */
 const SKIP_SEGMENTS = new Set([
@@ -42,8 +52,7 @@ const SKIP_SEGMENTS = new Set([
 	'site-packages'
 ]);
 
-/** Basenames never worth reviewing (lockfiles, OS junk). */
-const SKIP_BASENAMES = new Set([
+const LOCKFILE_BASENAMES = new Set([
 	'package-lock.json',
 	'yarn.lock',
 	'pnpm-lock.yaml',
@@ -53,18 +62,13 @@ const SKIP_BASENAMES = new Set([
 	'poetry.lock',
 	'cargo.lock',
 	'composer.lock',
-	'podfile.lock',
-	'.ds_store'
+	'podfile.lock'
 ]);
 
-/** Extensions with no review signal: generated, minified, maps, binaries. */
-const SKIP_EXTENSIONS = [
+const BINARY_EXTENSIONS = [
 	'.min.js',
 	'.min.css',
 	'.map',
-	'.d.ts',
-	'.d.mts',
-	'.d.cts',
 	'.png',
 	'.jpg',
 	'.jpeg',
@@ -73,7 +77,6 @@ const SKIP_EXTENSIONS = [
 	'.avif',
 	'.ico',
 	'.bmp',
-	'.svg',
 	'.woff',
 	'.woff2',
 	'.ttf',
@@ -103,9 +106,81 @@ const SKIP_EXTENSIONS = [
 	'.a'
 ];
 
+const SOURCE_EXTENSIONS = new Set([
+	'.ts',
+	'.tsx',
+	'.js',
+	'.jsx',
+	'.mjs',
+	'.cjs',
+	'.mts',
+	'.cts',
+	'.d.ts',
+	'.d.mts',
+	'.d.cts',
+	'.svelte',
+	'.vue',
+	'.py',
+	'.go',
+	'.rs',
+	'.java',
+	'.kt',
+	'.rb',
+	'.php',
+	'.cs',
+	'.cpp',
+	'.cc',
+	'.cxx',
+	'.c',
+	'.h',
+	'.hpp',
+	'.swift',
+	'.scala',
+	'.clj',
+	'.ex',
+	'.exs',
+	'.erl',
+	'.hs',
+	'.lua',
+	'.r',
+	'.sql',
+	'.sh',
+	'.bash',
+	'.zsh',
+	'.ps1'
+]);
+
+const DOC_EXTENSIONS = new Set(['.md', '.mdx', '.rst', '.txt', '.adoc', '.html']);
+const CONFIG_BASENAMES = new Set([
+	'package.json',
+	'tsconfig.json',
+	'jsconfig.json',
+	'pyproject.toml',
+	'cargo.toml',
+	'go.mod',
+	'go.sum',
+	'dockerfile',
+	'makefile',
+	'.editorconfig',
+	'.gitignore',
+	'.prettierrc',
+	'.eslintrc',
+	'eslint.config.js',
+	'eslint.config.ts',
+	'biome.json',
+	'.clang-format'
+]);
+
 export interface SkippedFile {
 	path: string;
 	reason: string;
+}
+
+export interface FileClass {
+	classification: FileClassification;
+	excludeReason?: string;
+	summarize?: boolean;
+	language: string | null;
 }
 
 export interface ReviewScope {
@@ -121,24 +196,70 @@ export function extraExcludes(): string[] {
 		.filter(Boolean);
 }
 
-function skipReason(path: string, extra: string[]): string | null {
-	if (path === '' || path === 'unknown') return 'unresolvable path';
+function extOf(basename: string): string {
+	const lower = basename.toLowerCase();
+	if (lower.endsWith('.d.ts')) return '.d.ts';
+	if (lower.endsWith('.d.mts')) return '.d.mts';
+	if (lower.endsWith('.d.cts')) return '.d.cts';
+	const dot = lower.lastIndexOf('.');
+	return dot >= 0 ? lower.slice(dot) : '';
+}
+
+function looksLikeTest(path: string, basename: string): boolean {
+	const lower = path.toLowerCase();
+	if (/(^|\/)(tests?|__tests__|spec)(\/|$)/.test(lower)) return true;
+	return /\.(test|spec)\.[^.]+$/.test(basename.toLowerCase());
+}
+
+export function classifyPath(path: string, extra: string[] = []): FileClass {
+	if (path === '' || path === 'unknown') {
+		return { classification: 'other', excludeReason: 'unresolvable path', language: null };
+	}
 	const lower = path.toLowerCase();
 	for (const pattern of extra) {
-		if (pattern !== '' && lower.includes(pattern)) return `matches RECODER_REVIEW_EXCLUDE "${pattern}"`;
+		if (pattern !== '' && lower.includes(pattern)) {
+			return {
+				classification: 'other',
+				excludeReason: `matches RECODER_REVIEW_EXCLUDE "${pattern}"`,
+				language: null
+			};
+		}
 	}
 	const segments = lower.split('/').filter(Boolean);
 	const basename = segments[segments.length - 1] ?? '';
-	if (SKIP_BASENAMES.has(basename) || basename.endsWith('.lock')) return 'lockfile';
 	if (segments.some((s) => SKIP_SEGMENTS.has(s) || s.endsWith('.egg-info'))) {
-		return 'generated/build output';
+		return { classification: 'generated', excludeReason: 'generated/build output', language: null };
 	}
-	if (SKIP_EXTENSIONS.some((ext) => basename.endsWith(ext))) {
-		return basename.endsWith('.d.ts') || basename.endsWith('.d.mts') || basename.endsWith('.d.cts')
-			? 'generated declarations'
-			: 'binary or minified asset';
+	if (LOCKFILE_BASENAMES.has(basename) || (basename.endsWith('.lock') && basename !== '.lock')) {
+		return { classification: 'lockfile', summarize: true, language: null };
 	}
-	return null;
+	if (BINARY_EXTENSIONS.some((ext) => basename.endsWith(ext))) {
+		return { classification: 'binary', excludeReason: 'binary or minified asset', language: null };
+	}
+	const ext = extOf(basename);
+	const language = ext ? ext.slice(1) : null;
+	if (looksLikeTest(path, basename)) {
+		return { classification: 'test', language };
+	}
+	if (DOC_EXTENSIONS.has(ext) || basename === 'license' || basename === 'copying') {
+		return { classification: 'docs', language };
+	}
+	if (CONFIG_BASENAMES.has(basename) || basename.startsWith('.') || ext === '.toml' || ext === '.yml' || ext === '.yaml' || ext === '.json') {
+		return { classification: 'config', language };
+	}
+	if (SOURCE_EXTENSIONS.has(ext) || ext === '.svg') {
+		return { classification: 'source', language: ext === '.svg' ? 'svg' : language };
+	}
+	return { classification: 'other', language };
+}
+
+export function packageBoundary(path: string): string | null {
+	const parts = path.split('/').filter(Boolean);
+	if (parts[0] === 'apps' || parts[0] === 'packages' || parts[0] === 'services') {
+		return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0];
+	}
+	if (parts[0] === 'src' || parts[0] === 'lib') return parts[0];
+	return parts[0] ?? null;
 }
 
 /** Split changed files into reviewable context vs. skipped noise. */
@@ -146,9 +267,12 @@ export function scopeReviewFiles(files: FileDiff[], extra: string[] = []): Revie
 	const included: FileDiff[] = [];
 	const skipped: SkippedFile[] = [];
 	for (const file of files) {
-		const reason = skipReason(file.path, extra);
-		if (reason) skipped.push({ path: file.path === '' ? '(empty path)' : file.path, reason });
-		else included.push(file);
+		const classified = classifyPath(file.path, extra);
+		if (classified.excludeReason) {
+			skipped.push({ path: file.path === '' ? '(empty path)' : file.path, reason: classified.excludeReason });
+		} else {
+			included.push(file);
+		}
 	}
 	return { included, skipped };
 }

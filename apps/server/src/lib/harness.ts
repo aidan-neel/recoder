@@ -1,181 +1,103 @@
 import { createHash } from 'node:crypto';
-import { readFile, realpath } from 'node:fs/promises';
+import { lstat, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { z } from 'zod';
-import { parseUnifiedDiff, type FileDiff, type Finding, type FindingSeverity, type ReviewTask } from '@recoder/shared';
-import { chatCompletion } from './llm.js';
-import { configForRole, reviewLimits, type ReviewRole } from './models.js';
-import { extraExcludes, scopeReviewFiles } from './review-scope.js';
-import { REVIEW_ROLES, ROLE_FOCUS } from './roles.js';
+import type {
+	AssignmentStatus,
+	CoverageGap,
+	CoverageSummary,
+	Finding,
+	ReviewAssignment,
+	ReviewBudgetSnapshot,
+	ReviewChatMessage,
+	ReviewOutcome,
+	ReviewReasoningEntry,
+	ReviewStage,
+	ReviewTask,
+	RoleDecision
+} from '@recoder/shared';
+import { extractFindingsJson } from './json-extract.js';
+import { configForOrchestrator, configForRole, reviewLimits, type ReviewRole } from './models.js';
+import { extraExcludes } from './review-scope.js';
+import { REVIEW_POLICY } from './review-policy.js';
+import {
+	AuthConfigError,
+	ModelBudget,
+	ReviewAbortedError,
+	canLaunchInvestigation,
+	runJsonAgent
+} from './agent-loop.js';
+import { EvidenceStore, formatToolResults, type ReviewRevision, type ToolCallReport } from './evidence.js';
+import { buildInventory, type ReviewInventory } from './inventory.js';
+import { CoverageLedger } from './coverage.js';
+import {
+	fallbackPlan,
+	plannerSystemPrompt,
+	plannerValidationError,
+	plannerUserPrompt,
+	sanitizePlannerOutput,
+	type PlannerAssignment,
+	type PlannerOutput
+} from './planner.js';
+import { parseSpecialistOutput, specialistSystemPrompt, specialistUserPrompt } from './specialist.js';
+import {
+	applyConsolidation,
+	consolidationSchema,
+	consolidationSystemPrompt,
+	consolidationUserPrompt,
+	deterministicConsolidate,
+	validateCandidate,
+	type CandidateFinding
+} from './consolidate.js';
+
+export { extractFindingsJson };
+export type { ReviewRevision };
+
+const INSTRUCTION_PATHS = [
+	'AGENTS.md',
+	'CLAUDE.md',
+	'CONTRIBUTING.md',
+	'.github/CONTRIBUTING.md',
+	'docs/CONTRIBUTING.md'
+];
 
 /**
  * Custom review harness. Read-only by construction:
- * - inputs are the PR diff + file excerpts read from the sandbox checkout;
+ * - inputs are the PR diff + git objects from the sandbox checkout;
  * - the model is instructed (and the output schema enforces) review-only
  *   findings — no patches, no commands, no file writes;
- * - this module never spawns processes or writes to disk.
+ * - this module never writes to the checkout and never exposes a shell.
  */
-
-const rawFindingSchema = z.object({
-	file: z.string().min(1).max(500),
-	line: z.number().int().positive(),
-	endLine: z.number().int().positive().optional(),
-	severity: z.enum(['high', 'medium', 'low', 'info']),
-	category: z.string().min(1).max(50),
-	body: z.string().min(1).max(2000)
-});
-
-const toBackendSeverity: Record<string, FindingSeverity> = {
-	high: 'error',
-	medium: 'warning',
-	low: 'info',
-	info: 'info'
-};
-
-/** Three explorer scouts per role; each takes a slice of the changed files. */
-const SCOUTS_PER_ROLE = 3;
-
-/**
- * File context per scout (chars). Scouts flag candidates from the diff plus
- * file heads (imports, conventions); the synthesizer verifies against full
- * excerpts. Keeps the 30-scout fan-out fast on local models.
- */
-const SCOUT_MAX_FILE_CHARS = 4000;
-
-/**
- * Shared spine for every reviewer: fierce staff engineer, not polite
- * assistant. Findings need file:line evidence, never vibes — and the
- * codebase's own idioms outrank textbook patterns.
- */
-const REVIEW_PERSONA = `You are a fierce staff engineer doing review, not a polite assistant. You have strong opinions and you defend them with evidence.
-Every finding must cite concrete file:line evidence from the diff or excerpts below. No vibes, no generic advice, no style crusades.
-Respect this codebase's own grain: the file excerpts show how this repo actually does things. Never prescribe a pattern the codebase itself rejects (no OOP in a functional codebase, no framework idioms it doesn't use). Call out code that fights the local conventions instead.
-Rank ruthlessly: a short list of real, evidenced issues beats a long list of nits. Zero findings is a valid, honorable outcome.`;
-
-const SYSTEM_PROMPT = `You are a read-only code reviewer. You cannot change code, run commands, or access anything outside the provided diff and file excerpts.
-Review only what is shown. Do not invent files, lines, or behavior you cannot see.
-Be concise: each finding body is one or two short sentences stating the problem and, where obvious, the fix. No background, no explanations of your reasoning.
-The body is rendered as markdown: use inline code for identifiers (names, files, symbols). You may add ONE short fenced code block, and only when showing the exact snippet or fix genuinely helps — never for prose. No headings, lists, quotes, bold, or emojis.
-If the diff is clean, return {"findings":[]}. There is no quota — zero findings is the correct answer for good code.
-Output STRICT JSON object: {"findings":[{"file": string, "line": number, "endLine": number, "severity": "high"|"medium"|"low"|"info", "category": string, "body": string}]}.
-"line"/"endLine" are NEW-side line numbers from the diff. Use "high" only for issues that are certainly reachable and damaging. {"findings":[]} is valid when there is nothing worth flagging. No prose outside the JSON object.
-${REVIEW_PERSONA}`;
-
-const scoutNoteSchema = z.object({
-	file: z.string().min(1).max(500),
-	line: z.number().int().positive(),
-	note: z.string().min(1).max(1000)
-});
-
-/** Render one file's hunks back into unified-diff text for a scout's slice. */
-function renderMiniDiff(file: FileDiff): string {
-	const hunks = file.hunks
-		.map((hunk) => {
-			const lines = hunk.lines
-				.map((line) => (line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' ') + line.text)
-				.join('\n');
-			return `${hunk.header}\n${lines}`;
-		})
-		.join('\n');
-	return `--- a/${file.path}\n+++ b/${file.path}\n${hunks}`;
-}
-
-/**
- * One explorer scout: reads its slice of files and returns compact
- * observations for the role's lens. Never throws — a blind scout just
- * yields no notes and the synthesizer falls back to the raw diff.
- */
-async function runScout(
-	role: ReviewRole,
-	scoutIndex: number,
-	files: FileDiff[],
-	input: { sandboxPath: string | null; maxFileChars: number; batch: number; batches: number },
-	model: { baseUrl: string; apiKey: string; model: string },
-	log: (message: string) => void,
-	onTask?: HarnessEvents['onTask']
-): Promise<string> {
-	const label = `scout ${scoutIndex + 1}/${SCOUTS_PER_ROLE}`;
-	const startedAt = new Date().toISOString();
-	const report = (status: ReviewTask['status'], message: string, extra: Partial<ReviewTask> = {}) => onTask?.({
-		id: role + ':' + input.batch + ':scout:' + scoutIndex,
-		agent: role, label: 'Scout ' + (scoutIndex + 1), scout: scoutIndex + 1,
-		batch: input.batch, batches: input.batches, model: model.model,
-		files: files.map((file) => file.path), startedAt, status, message, ...extra
-	});
-	if (!files.length) {
-		report('skipped', 'No files assigned');
-		return '';
-	}
-	report('running', 'Reading ' + files.length + ' assigned files');
-	try {
-		let context = '';
-		if (input.sandboxPath) {
-			for (const file of files) {
-				report('running', 'Reading ' + file.path, { currentFile: file.path });
-				const text = await readSandboxFile(input.sandboxPath, file.path, input.maxFileChars);
-				if (text !== null) context += `\n--- ${file.path} ---\n${text}`;
-			}
-		}
-		const miniDiff = files.map(renderMiniDiff).join('\n').slice(0, 30000);
-		const user = [
-			`You are scouting for a ${role} review. Lens: ${ROLE_FOCUS[role]}`,
-			'',
-			'--- assigned changed files (unified diff) ---',
-			miniDiff || '(no hunks assigned)',
-			context ? '\n--- file excerpts (new-side) ---' + context : '',
-			'',
-			'List every observation relevant to your lens as a JSON array: [{"file": string, "line": number, "note": string}]. "line" is a NEW-side line number. Flag anything suspicious — the synthesizer decides what becomes a finding. [] is valid. No prose outside the JSON array.'
-		].join('\n');
-		log(`${label}: exploring ${files.map((f) => f.path).join(', ') || 'nothing'}…`);
-		const output = await chatCompletion({
-			onProgress: (status, elapsedMs) => report(status, status === 'queued' ? 'Waiting for a model slot' : 'Examining assigned changes', { elapsedMs, currentFile: undefined }),
-			baseUrl: model.baseUrl,
-			apiKey: model.apiKey,
-			model: model.model,
-			messages: [
-				{
-					role: 'system',
-					content: `You are a scout for a ${role} code review. ${REVIEW_PERSONA}`
-				},
-				{ role: 'user', content: user }
-			],
-			temperature: 0.2,
-			timeoutMs: 120_000
-		});
-		const parsed = z.array(scoutNoteSchema).safeParse(extractFindingsJson(output));
-		if (!parsed.success) {
-			report('error', 'Scout returned invalid notes; specialist will use the diff');
-			log(`${label}: no usable notes`);
-			return '';
-		}
-		log(`${label}: ${parsed.data.length} note(s)`);
-		report('done', 'Finished scouting · ' + parsed.data.length + ' observations', { currentFile: undefined });
-		return parsed.data.map((n) => `${n.file}:${n.line} — ${n.note}`).join('\n');
-	} catch (err) {
-		report('error', err instanceof Error ? err.message : 'Scout failed');
-		log(`${label} failed: ${err instanceof Error ? err.message : String(err)}`);
-		return '';
-	}
-}
 
 export interface HarnessEvents {
 	onTask?: (task: Omit<ReviewTask, 'updatedAt'>) => void;
-	onLog?: (role: ReviewRole, message: string) => void;
-	onAgentStart?: (role: ReviewRole, model: string) => void;
-	onAgentDone?: (role: ReviewRole, findings: number) => void;
-	onFiles?: (role: ReviewRole, files: string[]) => void;
-	/** Fired with the validated findings just before `onAgentDone`. */
-	onFindings?: (role: ReviewRole, findings: Finding[]) => void;
+	onLog?: (message: string, meta?: { assignmentId?: string; role?: string }) => void;
+	onPlan?: (data: {
+		planVersion: number;
+		summary: string;
+		assignments: ReviewAssignment[];
+		roleDecisions: RoleDecision[];
+		planningDegraded?: boolean;
+	}) => void;
+	onAssignment?: (assignment: ReviewAssignment) => void;
+	onCoverage?: (coverage: CoverageSummary, gaps: CoverageGap[]) => void;
+	onBudget?: (budget: ReviewBudgetSnapshot) => void;
+	onCandidates?: (count: number) => void;
+	onStage?: (stage: ReviewStage) => void;
+	onReasoning?: (reasoning: Omit<ReviewReasoningEntry, 'at'>) => void;
+	onMessage?: (message: Omit<ReviewChatMessage, 'at' | 'from'>) => void;
+	getDiscussion?: (assignmentId?: string) => string;
+	onTool?: (tool: ToolCallReport & { assignmentId?: string; role?: string }) => void;
 }
 
 /** Safely read a sandbox file (stays inside the checkout, capped length). */
 export async function readSandboxFile(sandboxPath: string, file: string, maxChars: number): Promise<string | null> {
+	const root = resolve(sandboxPath);
 	const resolved = resolve(join(sandboxPath, file));
-	if (!resolved.startsWith(resolve(sandboxPath) + '/')) return null;
+	if (resolved !== root && !resolved.startsWith(root + '/')) return null;
 	try {
-		const [root, target] = await Promise.all([realpath(sandboxPath), realpath(resolved)]);
-		if (!target.startsWith(root + '/')) return null;
-		const text = await readFile(target, 'utf8');
+		const info = await lstat(resolved);
+		if (info.isSymbolicLink() || !info.isFile()) return null;
+		const text = await readFile(resolved, 'utf8');
 		return text.length > maxChars ? text.slice(0, maxChars) + '\n…[truncated]' : text;
 	} catch {
 		return null;
@@ -201,61 +123,7 @@ export async function readExcerpt(
 		.join('\n');
 	return numbered.length > maxChars ? numbered.slice(0, maxChars) + '\n…[truncated]' : numbered;
 }
-function unwrapFindings(parsed: unknown): unknown {
-	if (Array.isArray(parsed)) return parsed;
-	if (parsed && typeof parsed === 'object') {
-		const obj = parsed as Record<string, unknown>;
-		for (const key of ['findings', 'items', 'results', 'issues']) {
-			if (Array.isArray(obj[key])) return obj[key];
-		}
-		if (typeof obj.file === 'string') return [obj];
-	}
-	throw new Error('no JSON array in model output');
-}
 
-/** Pull a findings array out of model output (tolerates fences/prose/object wrappers). */
-export function extractFindingsJson(output: string): unknown {
-	const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(output);
-	const candidate = (fenced ? fenced[1] : output).trim();
-	try {
-		return unwrapFindings(JSON.parse(candidate));
-	} catch {
-		// Fall through to sliced extraction — models often wrap JSON in prose.
-	}
-	const start = candidate.indexOf('[');
-	const end = candidate.lastIndexOf(']');
-	if (start !== -1 && end > start) {
-		return JSON.parse(candidate.slice(start, end + 1));
-	}
-	const objStart = candidate.indexOf('{');
-	const objEnd = candidate.lastIndexOf('}');
-	if (objStart !== -1 && objEnd > objStart) {
-		return unwrapFindings(JSON.parse(candidate.slice(objStart, objEnd + 1)));
-	}
-	throw new Error('no JSON array in model output');
-}
-
-function toFinding(
-	raw: z.infer<typeof rawFindingSchema>,
-	role: ReviewRole,
-	model: string,
-	anchorText: (file: string, startLine: number, endLine: number) => string
-): Finding {
-	const endLine = raw.endLine && raw.endLine >= raw.line ? raw.endLine : raw.line;
-	return {
-		id: crypto.randomUUID(),
-		file: raw.file,
-		line: raw.line,
-		endLine,
-		severity: toBackendSeverity[raw.severity],
-		message: `[${raw.category}] ${raw.body}`,
-		agent: role,
-		model,
-		fingerprint: fingerprintFinding(raw.file, raw.category, anchorText(raw.file, raw.line, endLine))
-	};
-}
-
-/** Normalize anchor code so cosmetic differences don't change the fingerprint. */
 function normalizeAnchor(text: string): string {
 	return text
 		.split('\n')
@@ -264,11 +132,6 @@ function normalizeAnchor(text: string): string {
 		.join('\n');
 }
 
-/**
- * Stability fingerprint for a finding: file + category + normalized anchor
- * code. Line numbers are deliberately excluded so findings survive line
- * shifts; wording is excluded so rephrased duplicates still match.
- */
 export function fingerprintFinding(file: string, category: string, anchorText: string): string {
 	return createHash('sha256')
 		.update(`${file}\n${category}\n${normalizeAnchor(anchorText)}`)
@@ -276,10 +139,6 @@ export function fingerprintFinding(file: string, category: string, anchorText: s
 		.slice(0, 16);
 }
 
-/**
- * Drop findings already reported by earlier reviews (by fingerprint) and
- * collapse in-run duplicates. Returns the genuinely new findings.
- */
 export function filterNewFindings(
 	current: Finding[],
 	previousFingerprints: Set<string>
@@ -299,234 +158,748 @@ export function filterNewFindings(
 	return { fresh, suppressed };
 }
 
-export interface RoleResult {
-	role: ReviewRole;
-	findings: Finding[];
+export interface AdaptiveReviewInput {
+	diff: string;
+	sandboxPath: string | null;
+	revision?: ReviewRevision | null;
+	prTitle?: string | null;
+	prBody?: string | null;
+	signal?: AbortSignal;
 }
 
-/** Run one role over the diff. Returns validated findings (never throws on bad model output). */
-export async function runRoleReview(
-	role: ReviewRole,
-	input: { diff: string; sandboxPath: string | null; batch?: number; batches?: number },
+export interface AdaptiveReviewResult {
+	findings: Finding[];
+	unconfirmed: Finding[];
+	summary: string;
+	outcome: ReviewOutcome;
+	recommendedChecks: string[];
+	coverage: CoverageSummary;
+	coverageGaps: CoverageGap[];
+	assignments: ReviewAssignment[];
+	planningDegraded: boolean;
+	error?: string;
+}
+
+export async function runAdaptiveReview(
+	input: AdaptiveReviewInput,
 	events?: HarnessEvents
-): Promise<RoleResult> {
-	const log = (message: string) => events?.onLog?.(role, message);
+): Promise<AdaptiveReviewResult> {
+	const deadlineAt = Date.now() + REVIEW_POLICY.analysisDeadlineMs;
+	const controller = new AbortController();
+	const onAbort = () => controller.abort();
+	input.signal?.addEventListener('abort', onAbort, { once: true });
+	const timeout = setTimeout(() => controller.abort(), REVIEW_POLICY.analysisDeadlineMs);
+	const budget = new ModelBudget();
 	const limits = reviewLimits();
-	const cfg = configForRole(role);
-	const batch = input.batch ?? 1;
-	const batches = input.batches ?? 1;
-	const synthesis = (status: ReviewTask['status'], message: string, elapsedMs?: number) => events?.onTask?.({
-		id: role + ':' + batch + ':synthesis', agent: role, label: 'Verify findings',
-		model: cfg.model, batch, batches, status, message, elapsedMs
-	});
-	const done = (findings: Finding[]): RoleResult => {
-		if (findings.length > 0) events?.onFindings?.(role, findings);
-		events?.onAgentDone?.(role, findings.length);
-		return { role, findings };
-	};
-	events?.onAgentStart?.(role, cfg.model);
-
-	// Review scope first: build output, lockfiles, and binaries never enter
-	// model context (they stay visible in the diff view regardless).
-	const { included, skipped } = scopeReviewFiles(parseUnifiedDiff(input.diff), extraExcludes());
-	for (const s of skipped) log(`skipping ${s.path} (${s.reason})`);
-	const files = included.slice(0, limits.maxFiles);
-	if (included.length === 0) {
-		for (let i = 0; i < SCOUTS_PER_ROLE; i++) events?.onTask?.({
-			id: role + ':' + batch + ':scout:' + i, agent: role, label: 'Scout ' + (i + 1),
-			scout: i + 1, batch, batches, status: 'skipped', message: 'No reviewable files'
+	const inventory = buildInventory(input.diff, extraExcludes());
+	const revision = input.revision ?? (input.sandboxPath
+		? {
+				checkoutPath: input.sandboxPath,
+				headSha: 'HEAD',
+				targetSha: '',
+				mergeBaseSha: '',
+				targetRef: ''
+			}
+		: null);
+	const evidence = new EvidenceStore(input.revision ?? null, inventory, limits.maxFileChars);
+	const coverage = new CoverageLedger();
+	coverage.seed(inventory);
+	const assignments: ReviewAssignment[] = [];
+	const publishCoverage = () => events?.onCoverage?.(coverage.summary(), coverage.gaps());
+	const publishBudget = () => events?.onBudget?.(budget.snapshot());
+	const task = (
+		id: string,
+		label: string,
+		status: ReviewTask['status'],
+		message: string,
+		extra?: Partial<ReviewTask>
+	) =>
+		events?.onTask?.({
+			id,
+			label,
+			status,
+			message,
+			kind: extra?.kind ?? 'other',
+			...extra
 		});
-		synthesis('skipped', 'No reviewable files');
-		log('no reviewable files in scope');
-		return done([]);
-	}
-	events?.onFiles?.(role, files.map((f) => f.path));
 
-	// New-side line text per file, for stability fingerprints.
-	const anchorLines = new Map<string, Map<number, string>>();
-	for (const file of files) {
-		const lines = new Map<number, string>();
-		for (const hunk of file.hunks) {
-			for (const line of hunk.lines) {
-				if (line.newNo !== null) lines.set(line.newNo, line.text);
+	try {
+		events?.onStage?.('understand');
+		task('inventory', 'Understand changes', 'running', 'Building the change inventory', { kind: 'inventory' });
+		await loadGuidance(inventory, evidence, controller.signal, events?.onTool);
+		task('inventory', 'Understand changes', 'done', `Inventoried ${inventory.files.length} changed path${inventory.files.length === 1 ? '' : 's'}`, {
+			kind: 'inventory'
+		});
+		publishCoverage();
+
+		task('planning', 'Planning the review', 'running', 'Planning specialist assignments', {
+			kind: 'planning',
+			agent: 'correctness'
+		});
+		let planningDegraded = false;
+		let plan: PlannerOutput;
+		try {
+			const planned = await runPlanner({
+				inventory,
+				evidence,
+				budget,
+				deadlineAt,
+				signal: controller.signal,
+				title: input.prTitle ?? '',
+				body: input.prBody ?? '',
+				events,
+				task
+			});
+			plan = planned.plan;
+			planningDegraded = planned.degraded;
+		} catch (err) {
+			if (err instanceof AuthConfigError) throw err;
+			planningDegraded = true;
+			plan = fallbackPlan(inventory, err instanceof Error ? err.message : 'Planning failed');
+		}
+		if (plan.assignments.length === 0) {
+			plan = fallbackPlan(inventory);
+			planningDegraded = true;
+		}
+
+		for (const item of plan.assignments) {
+			for (const scope of item.scope) {
+				for (const hunkId of scope.hunkIds) coverage.assign(hunkId, scope.path, item.role);
+			}
+			assignments.push(toAssignmentRecord(item, 'queued'));
+		}
+		coverage.excludeUnassigned(inventory);
+		events?.onPlan?.({
+			planVersion: 1,
+			summary: plan.summary,
+			assignments: assignments.map((assignment) => ({ ...assignment })),
+			roleDecisions: plan.roleDecisions,
+			planningDegraded
+		});
+		task('planning', 'Planning the review', planningDegraded ? 'partial' : 'done', plan.summary, {
+			kind: 'planning',
+			agent: 'correctness'
+		});
+		publishCoverage();
+		publishBudget();
+
+		const candidates: CandidateFinding[] = [];
+		let nextCandidate = 1;
+		const recommended = new Set<string>();
+		const followUps: PlannerAssignment[] = [];
+
+		events?.onStage?.('specialists');
+		await runAssignmentPool(
+			plan.assignments,
+			assignments,
+			{
+				inventory,
+				evidence,
+				coverage,
+				budget,
+				deadlineAt,
+				signal: controller.signal,
+				events,
+				task,
+				candidates,
+				nextCandidate: () => `c${nextCandidate++}`,
+				recommended,
+				followUps
+			}
+		);
+		publishCoverage();
+		publishBudget();
+		events?.onCandidates?.(candidates.filter((candidate) => candidate.valid).length);
+
+		if (
+			followUps.length > 0 &&
+			canLaunchInvestigation(deadlineAt, budget) &&
+			assignments.length < REVIEW_POLICY.maxInitialAssignments + REVIEW_POLICY.maxFollowUpAssignments
+		) {
+			const extra = await selectFollowUps(followUps, inventory, evidence, budget, deadlineAt, controller.signal, events);
+			for (const item of extra) {
+				for (const scope of item.scope) {
+					for (const hunkId of scope.hunkIds) coverage.assign(hunkId, scope.path, item.role);
+				}
+				const record = toAssignmentRecord(item, 'queued', true);
+				assignments.push(record);
+				events?.onAssignment?.(record);
+			}
+			if (extra.length) {
+				events?.onPlan?.({
+					planVersion: 2,
+					summary: plan.summary,
+					assignments: assignments.map((assignment) => ({ ...assignment })),
+					roleDecisions: plan.roleDecisions,
+					planningDegraded
+				});
+				await runAssignmentPool(extra, assignments, {
+					inventory,
+					evidence,
+					coverage,
+					budget,
+					deadlineAt,
+					signal: controller.signal,
+					events,
+					task,
+					candidates,
+					nextCandidate: () => `c${nextCandidate++}`,
+					recommended,
+					followUps: []
+				});
 			}
 		}
-		anchorLines.set(file.path, lines);
+
+		events?.onStage?.('consolidation');
+		events?.onCandidates?.(candidates.filter((candidate) => candidate.valid).length);
+		const valid = candidates.filter((candidate) => candidate.valid);
+		task('consolidation', 'Consolidating findings', 'running', `Consolidating ${valid.length} candidate${valid.length === 1 ? '' : 's'}`, {
+			kind: 'consolidation'
+		});
+
+		let confirmed: Finding[] = [];
+		let unconfirmed: Finding[] = [];
+		let outcome: ReviewOutcome = 'complete';
+		let error: string | undefined;
+		const checks = [...recommended];
+
+		if (valid.length === 0) {
+			confirmed = [];
+			task('consolidation', 'Consolidating findings', 'done', 'No candidates to consolidate', { kind: 'consolidation' });
+		} else if (!budget.canSpend(1, { consumeReserve: true }) || Date.now() >= deadlineAt) {
+			unconfirmed = valid;
+			outcome = 'partial';
+			error = 'Reserved consolidation call was unavailable';
+			task('consolidation', 'Consolidating findings', 'error', error, { kind: 'consolidation' });
+		} else {
+			try {
+				const cfg = configForOrchestrator();
+				const result = await runJsonAgent({
+					label: 'consolidation',
+					getDiscussion: () => events?.getDiscussion?.() ?? '',
+					onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
+					system: consolidationSystemPrompt(),
+					user: consolidationUserPrompt(valid, evidence),
+					config: cfg,
+					budget,
+					evidence,
+					maxTurns: 1,
+					signal: controller.signal,
+					deadlineAt,
+					consumeReserve: true,
+					parse: (raw) => {
+						const parsed = consolidationSchema.safeParse(raw);
+						return parsed.success ? parsed.data : null;
+					},
+					onProgress: (state, elapsedMs, detail) =>
+						task('consolidation', 'Consolidating findings', state === 'queued' ? 'waiting' : 'running', detail, {
+							kind: 'consolidation',
+							model: cfg.model,
+							elapsedMs
+						}),
+					onLog: (message) => events?.onLog?.(message),
+					onReasoning: (reasoning) =>
+						events?.onReasoning?.({ ...reasoning, role: 'correctness', model: cfg.model }),
+					onTool: (tool) => events?.onTool?.({ ...tool, role: 'correctness' })
+				});
+				if (result.value) {
+					const applied = applyConsolidation(result.value, valid);
+					confirmed = applied.confirmed;
+					for (const check of result.value.recommendedChecks) checks.push(check);
+					task('consolidation', 'Consolidating findings', 'done', `Confirmed ${confirmed.length} finding${confirmed.length === 1 ? '' : 's'}`, {
+						kind: 'consolidation'
+					});
+				} else {
+					unconfirmed = valid;
+					outcome = 'partial';
+					error = result.error ?? 'Consolidation failed';
+					task('consolidation', 'Consolidating findings', 'error', error, { kind: 'consolidation' });
+				}
+			} catch (err) {
+				if (err instanceof AuthConfigError) throw err;
+				unconfirmed = valid;
+				outcome = 'partial';
+				error = err instanceof Error ? err.message : 'Consolidation failed';
+				task('consolidation', 'Consolidating findings', 'error', error, { kind: 'consolidation' });
+			}
+		}
+
+		publishCoverage();
+		publishBudget();
+		if (outcome === 'complete' && !coverage.complete()) outcome = 'partial';
+		if (outcome === 'complete' && assignments.some((assignment) => assignment.status === 'error' || assignment.status === 'partial')) {
+			outcome = 'partial';
+		}
+
+		const summary = buildSummary({
+			plan,
+			assignments,
+			confirmed,
+			unconfirmed,
+			outcome,
+			planningDegraded,
+			checks,
+			coverage: coverage.summary()
+		});
+		return {
+			findings: confirmed,
+			unconfirmed,
+			summary,
+			outcome,
+			recommendedChecks: [...new Set(checks)],
+			coverage: coverage.summary(),
+			coverageGaps: coverage.gaps(),
+			assignments,
+			planningDegraded,
+			error
+		};
+	} catch (err) {
+		if (err instanceof AuthConfigError) {
+			return failReview(assignments, coverage, budget, err.message, 'failed');
+		}
+		if (err instanceof ReviewAbortedError || controller.signal.aborted) {
+			return failReview(assignments, coverage, budget, 'Review analysis deadline reached', 'failed');
+		}
+		return failReview(assignments, coverage, budget, err instanceof Error ? err.message : 'Review failed', 'failed');
+	} finally {
+		clearTimeout(timeout);
+		input.signal?.removeEventListener('abort', onAbort);
 	}
-	const anchorText = (file: string, startLine: number, endLine: number): string => {
-		const lines = anchorLines.get(file);
-		if (!lines) return '';
+}
+
+function failReview(
+	assignments: ReviewAssignment[],
+	coverage: CoverageLedger,
+	_budget: ModelBudget,
+	error: string,
+	outcome: ReviewOutcome
+): AdaptiveReviewResult {
+	return {
+		findings: [],
+		unconfirmed: [],
+		summary: error,
+		outcome,
+		recommendedChecks: [],
+		coverage: coverage.summary(),
+		coverageGaps: coverage.gaps(),
+		assignments,
+		planningDegraded: true,
+		error
+	};
+}
+
+async function runPlanner(input: {
+	inventory: ReviewInventory;
+	evidence: EvidenceStore;
+	budget: ModelBudget;
+	deadlineAt: number;
+	signal: AbortSignal;
+	title: string;
+	body: string;
+	events?: HarnessEvents;
+	task: (id: string, label: string, status: ReviewTask['status'], message: string, extra?: Partial<ReviewTask>) => void;
+}): Promise<{ plan: PlannerOutput; degraded: boolean }> {
+	const cfg = configForOrchestrator();
+	if (!canLaunchInvestigation(input.deadlineAt, input.budget)) {
+		return { plan: fallbackPlan(input.inventory, 'No model budget remained for planning.'), degraded: true };
+	}
+	const result = await runJsonAgent({
+		label: 'planner',
+		getDiscussion: () => input.events?.getDiscussion?.() ?? '',
+		onMessage: (message) => input.events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
+		system: plannerSystemPrompt(),
+		user: plannerUserPrompt({ title: input.title, body: input.body, inventory: input.inventory }),
+		config: cfg,
+		budget: input.budget,
+		evidence: input.evidence,
+		maxTurns: REVIEW_POLICY.maxPlannerTurns,
+		signal: input.signal,
+		deadlineAt: input.deadlineAt,
+		parse: (raw) => sanitizePlannerOutput(raw, input.inventory),
+		validationError: plannerValidationError,
+		onProgress: (state, elapsedMs, detail) =>
+			input.task('planning', 'Planning the review', state === 'queued' ? 'waiting' : 'running', detail, {
+				kind: 'planning',
+				agent: 'correctness',
+				model: cfg.model,
+				elapsedMs
+			}),
+		onLog: (message) => input.events?.onLog?.(message, { role: 'correctness' }),
+		onReasoning: (reasoning) =>
+			input.events?.onReasoning?.({ ...reasoning, role: 'correctness', model: cfg.model }),
+		onTool: (tool) => input.events?.onTool?.({ ...tool, role: 'correctness' })
+	});
+	if (result.value) return { plan: result.value, degraded: false };
+	return {
+		plan: fallbackPlan(input.inventory, result.error ?? 'Planner output was invalid; using bounded fallback assignments.'),
+		degraded: true
+	};
+}
+
+async function selectFollowUps(
+	requests: PlannerAssignment[],
+	inventory: ReviewInventory,
+	evidence: EvidenceStore,
+	budget: ModelBudget,
+	deadlineAt: number,
+	signal: AbortSignal,
+	events?: HarnessEvents
+): Promise<PlannerAssignment[]> {
+	const unique: PlannerAssignment[] = [];
+	const seen = new Set<string>();
+	for (const request of requests) {
+		if (seen.has(request.id) || request.id === request.role) continue;
+		const sanitized = sanitizePlannerOutput(
+			{
+				summary: 'follow-up',
+				assignments: [request],
+				roleDecisions: []
+			},
+			inventory,
+			true
+		);
+		if (!sanitized?.assignments[0]) continue;
+		seen.add(request.id);
+		unique.push({ ...sanitized.assignments[0], id: request.id.startsWith('follow-') ? request.id : `follow-${request.id}` });
+		if (unique.length >= REVIEW_POLICY.maxFollowUpAssignments) break;
+	}
+	if (unique.length === 0) return [];
+	if (!canLaunchInvestigation(deadlineAt, budget)) return unique.slice(0, REVIEW_POLICY.maxFollowUpAssignments);
+	const cfg = configForOrchestrator();
+	const result = await runJsonAgent({
+		label: 'follow-up planning',
+		getDiscussion: () => events?.getDiscussion?.() ?? '',
+		onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
+		system: plannerSystemPrompt() + '\nThis is a follow-up pass. Dispatch at most two narrowly scoped investigations.',
+		user: `Pending follow-up requests:\n${JSON.stringify(unique, null, 2)}\n\nSelect at most two. Return planner JSON.`,
+		config: cfg,
+		budget,
+		evidence,
+		maxTurns: REVIEW_POLICY.maxPlannerTurns,
+		signal,
+		deadlineAt,
+		parse: (raw) => sanitizePlannerOutput(raw, inventory, true),
+		validationError: plannerValidationError,
+		onLog: (message) => events?.onLog?.(message),
+		onReasoning: (reasoning) =>
+			events?.onReasoning?.({ ...reasoning, role: 'correctness', model: cfg.model }),
+		onTool: (tool) => events?.onTool?.({ ...tool, role: 'correctness' })
+	});
+	return (result.value?.assignments ?? unique).slice(0, REVIEW_POLICY.maxFollowUpAssignments);
+}
+
+interface PoolContext {
+	inventory: ReviewInventory;
+	evidence: EvidenceStore;
+	coverage: CoverageLedger;
+	budget: ModelBudget;
+	deadlineAt: number;
+	signal: AbortSignal;
+	events?: HarnessEvents;
+	task: (id: string, label: string, status: ReviewTask['status'], message: string, extra?: Partial<ReviewTask>) => void;
+	candidates: CandidateFinding[];
+	nextCandidate: () => string;
+	recommended: Set<string>;
+	followUps: PlannerAssignment[];
+}
+
+async function runAssignmentPool(
+	items: PlannerAssignment[],
+	records: ReviewAssignment[],
+	ctx: PoolContext
+): Promise<void> {
+	const queue = [...items].sort((a, b) => a.priority - b.priority);
+	let cursor = 0;
+	const workers = Array.from({ length: Math.min(REVIEW_POLICY.maxConcurrentAssignments, queue.length) }, async () => {
+		while (cursor < queue.length) {
+			if (ctx.signal.aborted) return;
+			if (!canLaunchInvestigation(ctx.deadlineAt, ctx.budget)) {
+				while (cursor < queue.length) {
+					const skipped = queue[cursor++];
+					updateAssignment(records, skipped.id, {
+						status: 'skipped',
+						currentOperation: 'Not launched: budget or time reserved for consolidation'
+					});
+					ctx.events?.onAssignment?.(records.find((record) => record.id === skipped.id)!);
+				}
+				return;
+			}
+			const item = queue[cursor++];
+			await runOneAssignment(item, records, ctx);
+		}
+	});
+	await Promise.all(workers);
+}
+
+async function runOneAssignment(
+	item: PlannerAssignment,
+	records: ReviewAssignment[],
+	ctx: PoolContext
+): Promise<void> {
+	const cfg = configForRole(item.role);
+	const started = new Date().toISOString();
+	updateAssignment(records, item.id, {
+		status: 'queued',
+		model: cfg.model,
+		queuedAt: started,
+		currentOperation: 'Queued for specialist review'
+	});
+	ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
+	const taskId = `assignment:${item.id}`;
+	ctx.task(taskId, item.title, 'queued', 'Queued for specialist review', {
+		kind: 'assignment',
+		assignmentId: item.id,
+		agent: item.role,
+		model: cfg.model,
+		files: item.scope.map((entry) => entry.path),
+		queuedAt: started,
+		queueReason: 'Waiting for a specialist slot'
+	});
+	try {
+		// Supply the first bounded patch page up front instead of spending a model
+		// round asking for evidence we already know this assignment needs.
+		const initialEvidence = await ctx.evidence.executeRound(
+			item.scope.map((entry) => ({ action: 'readDiff', path: entry.path, hunkIds: entry.hunkIds })),
+			ctx.signal,
+			(tool) => ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role: item.role })
+		);
+		const result = await runJsonAgent({
+			label: item.title,
+			system: specialistSystemPrompt(item.role),
+			getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
+			onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model: cfg.model }),
+			user: specialistUserPrompt(item, REVIEW_POLICY.maxSpecialistTurns, ctx.budget.remaining()) + '\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' + formatToolResults(initialEvidence),
+			config: cfg,
+			budget: ctx.budget,
+			evidence: ctx.evidence,
+			maxTurns: REVIEW_POLICY.maxSpecialistTurns,
+			signal: ctx.signal,
+			deadlineAt: ctx.deadlineAt,
+			parse: parseSpecialistOutput,
+			onProgress: (state, elapsedMs, detail) => {
+				const status = state === 'queued' ? 'waiting' : 'running';
+				updateAssignment(records, item.id, {
+					status,
+					currentOperation: detail,
+					startedAt: started,
+					elapsedMs: Date.now() - Date.parse(started),
+					model: cfg.model
+				});
+				ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
+				ctx.task(taskId, item.title, status, detail, {
+					kind: state === 'retrieval' ? 'retrieval' : 'model',
+					assignmentId: item.id,
+					agent: item.role,
+					model: cfg.model,
+					elapsedMs,
+					files: item.scope.map((entry) => entry.path)
+				});
+			},
+			onLog: (message) => ctx.events?.onLog?.(message, { assignmentId: item.id, role: item.role }),
+			onReasoning: (reasoning) =>
+				ctx.events?.onReasoning?.({
+					...reasoning,
+					assignmentId: item.id,
+					role: item.role,
+					model: cfg.model
+				}),
+			onTool: (tool) =>
+				ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role: item.role })
+		});
+		const assignedHunks = new Set(item.scope.flatMap((entry) => entry.hunkIds));
+		if (!result.value) {
+			for (const hunkId of assignedHunks) {
+				const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? item.scope[0]?.path ?? '';
+				ctx.coverage.partial(hunkId, path, item.role, result.error ?? 'specialist failed');
+			}
+			updateAssignment(records, item.id, {
+				status: 'error',
+				currentOperation: result.error ?? 'Specialist failed',
+				completedAt: new Date().toISOString()
+			});
+			ctx.task(taskId, item.title, 'error', result.error ?? 'Specialist failed', {
+				kind: 'assignment',
+				assignmentId: item.id,
+				agent: item.role,
+				model: cfg.model
+			});
+			ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
+			return;
+		}
+		const examined = result.value.examinedHunks.filter((hunkId) => assignedHunks.has(hunkId));
+		for (const hunkId of examined) {
+			const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? '';
+			ctx.coverage.examined(hunkId, path, item.role);
+		}
+		for (const hunkId of assignedHunks) {
+			if (examined.includes(hunkId)) continue;
+			const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? '';
+			const gap = result.value.coverageGaps.find((itemGap) => itemGap.hunkId === hunkId);
+			ctx.coverage.partial(hunkId, path, item.role, gap?.reason ?? 'assigned hunk was not examined');
+		}
+		const anchor = anchorFn(ctx.inventory);
+		for (const raw of result.value.findings) {
+			ctx.candidates.push(
+				validateCandidate(
+					raw,
+					{
+						candidateId: ctx.nextCandidate(),
+						assignmentId: item.id,
+						role: item.role,
+						model: cfg.model,
+						fingerprint: (file, category, start, end, side) =>
+							fingerprintFinding(file, category, anchor(file, start, end, side))
+					},
+					ctx.inventory,
+					ctx.evidence
+				)
+			);
+		}
+		for (const check of result.value.recommendedChecks) ctx.recommended.add(check);
+		if (result.value.followUp) {
+			ctx.followUps.push({
+				id: result.value.followUp.id,
+				role: result.value.followUp.role,
+				title: result.value.followUp.title,
+				reason: result.value.followUp.reason,
+				scope: result.value.followUp.scope,
+				questions: result.value.followUp.questions,
+				contextEvidenceIds: result.value.followUp.contextEvidenceIds ?? [],
+				priority: result.value.followUp.priority ?? 80
+			});
+		}
+		const validCount = ctx.candidates.filter((candidate) => candidate.assignmentId === item.id && candidate.valid).length;
+		const status: AssignmentStatus = examined.length === assignedHunks.size ? 'done' : 'partial';
+		updateAssignment(records, item.id, {
+			status,
+			candidateCount: validCount,
+			currentOperation:
+				status === 'done'
+					? `Finished · ${validCount} candidate${validCount === 1 ? '' : 's'}`
+					: `Partial coverage · ${validCount} candidate${validCount === 1 ? '' : 's'}`,
+			completedAt: new Date().toISOString()
+		});
+		ctx.task(taskId, item.title, status === 'done' ? 'done' : 'partial', records.find((record) => record.id === item.id)?.currentOperation ?? 'Finished', {
+			kind: 'assignment',
+			assignmentId: item.id,
+			agent: item.role,
+			model: cfg.model,
+			candidateCount: validCount,
+			files: item.scope.map((entry) => entry.path)
+		});
+		ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
+		ctx.events?.onCandidates?.(ctx.candidates.filter((candidate) => candidate.valid).length);
+	} catch (err) {
+		if (err instanceof AuthConfigError) throw err;
+		if (err instanceof ReviewAbortedError) throw err;
+		updateAssignment(records, item.id, {
+			status: 'error',
+			currentOperation: err instanceof Error ? err.message : 'Specialist failed',
+			completedAt: new Date().toISOString()
+		});
+		ctx.task(taskId, item.title, 'error', err instanceof Error ? err.message : 'Specialist failed', {
+			kind: 'assignment',
+			assignmentId: item.id,
+			agent: item.role
+		});
+		ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
+	}
+}
+
+function updateAssignment(records: ReviewAssignment[], id: string, patch: Partial<ReviewAssignment>): void {
+	const index = records.findIndex((record) => record.id === id);
+	if (index < 0) return;
+	records[index] = { ...records[index], ...patch };
+	const record = records[index];
+	if (record.completedAt && (record.startedAt || record.queuedAt)) {
+		record.elapsedMs = Math.max(0, Date.parse(record.completedAt) - Date.parse(record.startedAt ?? record.queuedAt!));
+	}
+}
+
+function toAssignmentRecord(item: PlannerAssignment, status: AssignmentStatus, followUp = false): ReviewAssignment {
+	return {
+		id: item.id,
+		role: item.role,
+		title: item.title,
+		reason: item.reason,
+		status,
+		scope: item.scope,
+		questions: item.questions,
+		priority: item.priority,
+		followUp,
+		candidateCount: 0,
+		currentOperation: status === 'queued' ? 'Queued for specialist review' : undefined,
+		queuedAt: new Date().toISOString()
+	};
+}
+
+function anchorFn(inventory: ReviewInventory) {
+	return (file: string, start: number, end: number, side: 'old' | 'new'): string => {
+		const diff = inventory.diffs.find((entry) => entry.path === file);
+		if (!diff) return '';
 		const out: string[] = [];
-		for (let n = startLine; n <= endLine; n++) {
-			const text = lines.get(n);
-			if (text !== undefined) out.push(text);
+		for (const hunk of diff.hunks) {
+			for (const line of hunk.lines) {
+				const no = side === 'old' ? line.oldNo : line.newNo;
+				if (no !== null && no >= start && no <= end) out.push(line.text);
+			}
 		}
 		return out.join('\n');
 	};
-	// Model-facing diff covers in-scope files only, so build noise can't eat
-	// the context budget.
-	const scopedDiff = files.map(renderMiniDiff).join('\n');
-	const trimmedDiff =
-		scopedDiff.length > limits.maxDiffChars
-			? scopedDiff.slice(0, limits.maxDiffChars) + '\n…[diff truncated]'
-			: scopedDiff;
+}
 
-	// Focused context: full new-side content for the smallest files (most signal per token).
-	let context = '';
-	if (input.sandboxPath) {
-		const smallest = [...files]
-			.sort(
-				(a, b) =>
-					a.additions + a.deletions - (b.additions + b.deletions)
-			)
-			.slice(0, 5);
-		for (const file of smallest) {
-			const text = await readSandboxFile(input.sandboxPath, file.path, limits.maxFileChars);
-			if (text !== null) {
-				log(`reading ${file.path} (${text.length} chars)`);
-				context += `\n--- ${file.path} ---\n${text}`;
-			} else {
-				log(`skipping ${file.path} (unreadable)`);
+async function loadGuidance(inventory: ReviewInventory, evidence: EvidenceStore, signal: AbortSignal, onTool?: HarnessEvents['onTool']): Promise<void> {
+	if (!evidence.revision) return;
+	const paths = await evidence.existingFiles('target', INSTRUCTION_PATHS, signal);
+	const reads = paths.map((path) => ({ action: 'readFile' as const, revision: 'target', path, startLine: 1, endLine: 80 }));
+	for (let i = 0; i < reads.length; i += REVIEW_POLICY.maxRetrievalsPerTurn) {
+		const results = await evidence.executeRound(reads.slice(i, i + REVIEW_POLICY.maxRetrievalsPerTurn), signal, onTool);
+		for (const result of results) {
+			if (!result.ok || !result.path || !result.content.trim()) continue;
+			inventory.instructionFiles.push({
+				path: result.path,
+				excerpt: result.content.slice(0, 4000),
+				truncated: result.truncated
+			});
+		}
+	}
+	const related = new Set<string>();
+	const sources = inventory.files.filter((file) => file.classification === 'source' || file.classification === 'test').slice(0, 5);
+	for (const file of sources) {
+		const base = file.path.split('/').pop()?.replace(/\.[^.]+$/, '');
+		if (!base || base.length < 3) continue;
+		const results = await evidence.executeRound(
+			[{ action: 'search', revision: 'target', query: base, prefix: '' }],
+			signal,
+			onTool
+		);
+		for (const result of results) {
+			if (!result.ok) continue;
+			for (const line of result.content.split('\n').slice(0, 8)) {
+				const path = line.replace(/^[^:]+:/, '').split(':')[0];
+				if (path && path !== file.path) related.add(path);
 			}
 		}
-	} else {
-		log('no sandbox — diff only');
 	}
-
-	// Explorer fan-out: three scouts split the files round-robin so every
-	// corner gets eyes before the role synthesizes its verdict.
-	const slices: FileDiff[][] = Array.from({ length: SCOUTS_PER_ROLE }, () => []);
-	files.forEach((file, i) => slices[i % SCOUTS_PER_ROLE].push(file));
-	const scoutNotes = (
-		await Promise.all(
-			slices.map((slice, i) =>
-				runScout(
-					role,
-					i,
-					slice,
-					{ sandboxPath: input.sandboxPath, maxFileChars: SCOUT_MAX_FILE_CHARS, batch, batches },
-					cfg,
-					log,
-					events?.onTask
-				)
-			)
-		)
-	).filter(Boolean);
-
-	const user = [
-		`Role focus: ${ROLE_FOCUS[role]}`,
-		'',
-		'--- unified diff ---',
-		trimmedDiff,
-		context ? '\n--- file excerpts (new-side) ---' + context : '',
-		scoutNotes.length > 0
-			? '\n--- explorer scout notes (verify each against the diff before citing) ---\n' +
-				scoutNotes.join('\n')
-			: ''
-	].join('\n');
-
-	let raw: unknown;
-	try {
-		log(`sending ${user.length} chars to ${cfg.model}…`);
-		const seed = Number(process.env.RECODER_REVIEW_SEED);
-		const output = await chatCompletion({
-			onProgress: (status, elapsedMs) => synthesis(status, status === 'queued' ? 'Waiting for a model slot' : 'Checking scout observations against the diff', elapsedMs),
-			baseUrl: cfg.baseUrl,
-			apiKey: cfg.apiKey,
-			model: cfg.model,
-			messages: [
-				{ role: 'system', content: SYSTEM_PROMPT },
-				{ role: 'user', content: user }
-			],
-			jsonMode: true,
-			temperature: 0,
-			...(Number.isFinite(seed) ? { seed } : {}),
-			timeoutMs: 180_000
-		});
-		log(`parsing response (${output.length} chars)…`);
-		synthesis('running', 'Validating findings and file references');
-		raw = extractFindingsJson(output);
-	} catch (err) {
-		synthesis('error', err instanceof Error ? err.message : 'Specialist failed');
-		log(`model call failed: ${err instanceof Error ? err.message : String(err)}`);
-		return done([]);
-	}
-
-	const parsed = z.array(rawFindingSchema).safeParse(raw);
-	if (!parsed.success) {
-		synthesis('error', 'Specialist returned invalid findings');
-		log(`dropping invalid model output (${parsed.error.issues.length} schema issues)`);
-		return done([]);
-	}
-	// Keep only findings anchored to in-scope files in this diff.
-	const known = new Set(files.map((f) => f.path));
-	const findings = parsed.data
-		.filter((f) => known.has(f.file))
-		.map((f) => toFinding(f, role, cfg.model, anchorText));
-	const dropped = parsed.data.length - findings.length;
-	if (dropped > 0) log(`dropping ${dropped} finding(s) outside review scope`);
-	for (const finding of findings) {
-		const body = finding.message.replace(/^\[[^\]]+\]\s*/, '');
-		log(`${finding.file}${finding.line ? `:${finding.line}` : ''} · ${body}`);
-	}
-	log(`done: ${findings.length} finding(s)`);
-		synthesis('done', 'Verified ' + findings.length + ' findings');
-	return done(findings);
+	inventory.relatedPaths = [...related].slice(0, 16);
 }
 
-/** Partition large reviews so the per-request file limit never drops later files. */
-export function reviewBatches(diff: string, maxFiles: number, maxDiffChars: number): string[] {
-	const { included } = scopeReviewFiles(parseUnifiedDiff(diff), extraExcludes());
-	const batches: string[] = [];
-	let parts: string[] = [];
-	let chars = 0;
-	for (const file of included) {
-		const patch = 'diff --git a/' + file.path + ' b/' + file.path + '\n' + renderMiniDiff(file);
-		if (parts.length && (parts.length >= maxFiles || chars + patch.length > maxDiffChars)) {
-			batches.push(parts.join('\n'));
-			parts = [];
-			chars = 0;
-		}
-		parts.push(patch);
-		chars += patch.length + 1;
-	}
-	if (parts.length) batches.push(parts.join('\n'));
-	return batches;
-}
-
-/** Roles run in parallel; batches run sequentially to bound model concurrency. */
-export async function runAllRoles(
-	input: { diff: string; sandboxPath: string | null },
-	events?: HarnessEvents
-): Promise<RoleResult[]> {
-	const { REVIEW_ROLES } = await import('./models.js');
-	const limits = reviewLimits();
-	const batches = reviewBatches(input.diff, limits.maxFiles, limits.maxDiffChars);
-	if (!batches.length) batches.push(input.diff);
-	for (const role of REVIEW_ROLES) {
-		for (let batch = 1; batch <= batches.length; batch++) {
-			for (let scout = 0; scout < SCOUTS_PER_ROLE; scout++) events?.onTask?.({
-				id: role + ':' + batch + ':scout:' + scout, agent: role, label: 'Scout ' + (scout + 1),
-				scout: scout + 1, batch, batches: batches.length, status: 'queued', message: 'Waiting for batch ' + batch
-			});
-			events?.onTask?.({
-				id: role + ':' + batch + ':synthesis', agent: role, label: 'Verify findings',
-				batch, batches: batches.length, status: 'queued', message: 'Waiting for scout observations'
-			});
-		}
-	}
-	return Promise.all(REVIEW_ROLES.map(async (role) => {
-		const findings: Finding[] = [];
-		for (const [index, diff] of batches.entries()) {
-			events?.onLog?.(role, 'Reviewing batch ' + (index + 1) + '/' + batches.length);
-			const result = await runRoleReview(role, { ...input, diff, batch: index + 1, batches: batches.length }, {
-				...events,
-				onAgentStart: index === 0 ? events?.onAgentStart : undefined,
-				onAgentDone: undefined
-			});
-			findings.push(...result.findings);
-		}
-		events?.onAgentDone?.(role, findings.length);
-		return { role, findings };
-	}));
+function buildSummary(input: {
+	plan: PlannerOutput;
+	assignments: ReviewAssignment[];
+	confirmed: Finding[];
+	unconfirmed: Finding[];
+	outcome: ReviewOutcome;
+	planningDegraded: boolean;
+	checks: string[];
+	coverage: CoverageSummary;
+}): string {
+	const incomplete = input.assignments.filter((assignment) => assignment.status !== 'done');
+	const bits = [
+		`${input.outcome === 'complete' ? 'Review complete' : 'Review incomplete'}. ${input.confirmed.length} confirmed finding${input.confirmed.length === 1 ? '' : 's'}.`,
+		input.unconfirmed.length ? `${input.unconfirmed.length} candidate${input.unconfirmed.length === 1 ? '' : 's'} could not be confirmed.` : '',
+		incomplete.length ? `${incomplete.length} specialist review${incomplete.length === 1 ? '' : 's'} did not finish.` : '',
+		input.coverage.partial + input.coverage.pending > 0 ? 'Some changes still need review.' : ''
+	];
+	return bits.filter(Boolean).join(' ');
 }

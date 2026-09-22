@@ -6,7 +6,7 @@ import {
 	reviewEventBuffer,
 	subscribeReview
 } from './events';
-import { extractFindingsJson, filterNewFindings, fingerprintFinding, runRoleReview } from './harness';
+import { extractFindingsJson, filterNewFindings, fingerprintFinding } from './harness';
 import { configForRole, isReviewConfigured, REVIEW_ROLES } from './models';
 
 const ENV_KEYS = [
@@ -79,100 +79,6 @@ describe('extractFindingsJson', () => {
 
 	test('throws without an array', () => {
 		expect(() => extractFindingsJson('no json here')).toThrow();
-	});
-});
-
-describe('runRoleReview', () => {
-	const realFetch = globalThis.fetch;
-
-	afterEach(() => {
-		globalThis.fetch = realFetch;
-	});
-
-	function stubFetch(output: string, status = 200): void {
-		globalThis.fetch = (async () =>
-			new Response(
-				JSON.stringify({ choices: [{ message: { content: output } }] }),
-				{ status, headers: { 'content-type': 'application/json' } }
-			)) as unknown as typeof fetch;
-	}
-
-	const DIFF = `diff --git a/a.ts b/a.ts
---- a/a.ts
-+++ b/a.ts
-@@ -1,3 +1,4 @@
- ctx
--old
-+new
- tail`;
-
-	test('maps model output to findings and fires lifecycle callbacks', async () => {
-		process.env.RECODER_REVIEW_BASE_URL = 'http://localhost:9/v1';
-		process.env.RECODER_REVIEW_API_KEY = 'test';
-		process.env.RECODER_REVIEW_MODEL = 'test-model';
-		stubFetch(
-			JSON.stringify([
-				{ file: 'a.ts', line: 2, endLine: 3, severity: 'high', category: 'sec', body: 'bad' },
-				{ file: 'other.ts', line: 1, severity: 'low', category: 'x', body: 'not in diff' }
-			])
-		);
-		const started: [string, string][] = [];
-		const done: [string, number][] = [];
-		const seenFiles: [string, string[]][] = [];
-		const reported: [string, number][] = [];
-		const result = await runRoleReview(
-			'security',
-			{ diff: DIFF, sandboxPath: null },
-			{
-				onLog: () => {},
-				onAgentStart: (r, m) => started.push([r, m]),
-				onAgentDone: (r, n) => done.push([r, n]),
-				onFiles: (r, f) => seenFiles.push([r, f]),
-				onFindings: (r, items) => reported.push([r, items.length])
-			}
-		);
-		expect(started).toEqual([['security', 'test-model']]);
-		expect(done).toEqual([['security', 1]]);
-		expect(reported).toEqual([['security', 1]]);
-		expect(seenFiles).toEqual([['security', ['a.ts']]]);
-		expect(result.findings).toHaveLength(1);
-		expect(result.findings[0]).toMatchObject({
-			file: 'a.ts',
-			line: 2,
-			endLine: 3,
-			severity: 'error'
-		});
-	});
-
-	test('accepts findings wrapped in a findings object', async () => {
-		process.env.RECODER_REVIEW_BASE_URL = 'http://localhost:9/v1';
-		process.env.RECODER_REVIEW_API_KEY = 'test';
-		process.env.RECODER_REVIEW_MODEL = 'test-model';
-		stubFetch(
-			JSON.stringify({
-				findings: [
-					{ file: 'a.ts', line: 2, severity: 'medium', category: 'sec', body: 'bad' }
-				]
-			})
-		);
-		const result = await runRoleReview('security', { diff: DIFF, sandboxPath: null });
-		expect(result.findings).toHaveLength(1);
-		expect(result.findings[0]).toMatchObject({ file: 'a.ts', line: 2, severity: 'warning' });
-	});
-
-	test('bad model output yields no findings but still completes', async () => {
-		process.env.RECODER_REVIEW_BASE_URL = 'http://localhost:9/v1';
-		process.env.RECODER_REVIEW_API_KEY = 'test';
-		process.env.RECODER_REVIEW_MODEL = 'test-model';
-		stubFetch('not json at all');
-		const done: [string, number][] = [];
-		const result = await runRoleReview(
-			'perf',
-			{ diff: DIFF, sandboxPath: null },
-			{ onAgentDone: (r, n) => done.push([r, n]) }
-		);
-		expect(result.findings).toEqual([]);
-		expect(done).toEqual([['perf', 0]]);
 	});
 });
 

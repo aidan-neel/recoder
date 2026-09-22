@@ -1,220 +1,280 @@
 <script lang="ts" module>
-	import type { ReviewTask } from '@recoder/shared';
-	export interface ReviewingAgent {
-		id: string;
-		name: string;
-		model: string | null;
-		status: 'queued' | 'running' | 'done' | 'error';
-		progress: number;
-		findings: number;
-		logs: string[];
-		doneMeta: string | null;
-		tasks?: ReviewTask[];
-		completed?: number;
-		total?: number;
-		failed?: number;
-		current?: string;
-		batch?: number;
-		batches?: number;
-	}
+	import type { CoverageGap, CoverageSummary, ReviewAssignment, ReviewChatMessage, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
 	export interface ReviewingFinding {
 		id: string;
 		agent: string | null;
 		severity: 'high' | 'medium' | 'low' | 'info';
 		title: string;
 		location: string | null;
+		confirmed?: boolean;
 	}
 	export interface ReviewingMeta {
-		prLabel: string; repo: string; files: number | null;
-		additions: number | null; deletions: number | null; elapsed: string;
+		prLabel: string;
+		repo: string;
+		files: number | null;
+		additions: number | null;
+		deletions: number | null;
+		elapsed: string;
+		branch?: string | null;
 	}
+	export type { ReviewAssignment };
 </script>
 
 <script lang="ts">
+	import { page } from '$app/state';
+	import { ORCHESTRATOR_ID } from '@recoder/shared';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import Check from '@lucide/svelte/icons/check';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import Ellipsis from '@lucide/svelte/icons/ellipsis';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import Check from '@lucide/svelte/icons/check';
+	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
+	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
+	import { Badge, type BadgeVariant } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
-	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import { Progress } from '@sivir-ui/svelte/components/progress';
-	import { TaskSteps } from '@sivir-ui/svelte/components/task-steps';
+	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
-	import { formatAgentName } from '$lib/threads.svelte';
-	import SeverityPill from './severity-pill.svelte';
+	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
+	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
+	import { Spinner } from '@sivir-ui/svelte/components/spinner';
+	import { Markdown } from '@sivir-ui/svelte/components/markdown';
+	import { TaskSteps } from '@sivir-ui/svelte/components/task-steps';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import ReviewMetricsModal from './review-metrics-modal.svelte';
+	import ReviewConversation from './review-conversation.svelte';
+	import FindingSeverity from './finding-severity.svelte';
 
 	interface Props {
-		title: string; meta: ReviewingMeta; agents: ReviewingAgent[];
-		findings: ReviewingFinding[]; pendingCount: number;
-		onOpenDiff: (() => void) | null; onRestart: (() => void) | null;
-		doneHref?: string | null; pipelineLogs?: string[]; spinQueued?: boolean;
-		stage?: number; stageLabel?: string; stageDetail?: string; failed?: boolean; errorMessage?: string | null;
-		connectionLabel?: string; connectionLost?: boolean;
-		completedTasks?: number; totalTasks?: number; failedTasks?: number;
-		now?: number; active?: boolean;
+		reviewId?: string;
+		title: string;
+		meta: ReviewingMeta;
+		assignments?: ReviewAssignment[];
+		messages?: ReviewChatMessage[];
+		orchestratorModel?: string;
+		reasoning?: ReviewReasoningEntry[];
+		toolCalls?: ReviewToolCall[];
+		active?: boolean;
+		awaitingPrompt?: boolean;
+		completedAt?: string;
+		failed?: boolean;
+		errorMessage?: string | null;
+		connectionLost?: boolean;
+		onOpenDiff: (() => void) | null;
+		onRestart: (() => void) | null;
+		onSend?: (assignmentId: string, text: string) => Promise<void>;
+		onStop?: (assignmentId: string) => Promise<void>;
+		restarting?: boolean;
+		now?: number;
+		fullscreen?: boolean;
+		findings: ReviewingFinding[];
+		roleDecisions?: RoleDecision[];
+		tasks?: ReviewTask[];
+		stage?: number;
+		stageLabel?: string;
+		stageDetail?: string;
+		connectionLabel?: string;
+		planSummary?: string | null;
+		pendingCount?: number;
+		coverage?: CoverageSummary | null;
+		coverageGaps?: CoverageGap[];
+		pipelineLogs?: string[];
+		doneHref?: string | null;
 	}
 	let {
-		title, meta, agents, findings, pendingCount, onOpenDiff, onRestart,
-		doneHref = null, pipelineLogs = [], stage = 3, stageLabel = 'Reviewing changes', stageDetail,
-		failed = false, errorMessage = null, connectionLabel = '', connectionLost = false,
-		completedTasks = 0, totalTasks = 0, failedTasks = 0, now = Date.now(), active = true
+		reviewId, title, meta, assignments = [], messages = [], orchestratorModel,
+		reasoning = [], toolCalls = [], active = true, failed = false,
+		errorMessage = null, connectionLost = false, onOpenDiff, onRestart,
+		onSend, onStop, restarting = false, now = Date.now(), fullscreen = false, stage = 0, tasks = [],
+		planSummary = null, pipelineLogs = [], stageLabel = 'Preparing review', coverage = null,
+		awaitingPrompt = false, completedAt, findings = []
 	}: Props = $props();
-	const steps = [
-		{ id: 'fetch', label: 'PR metadata' }, { id: 'sandbox', label: 'Local checkout' },
-		{ id: 'diff', label: 'Local diff' }, { id: 'agents', label: 'Specialist review' },
-		{ id: 'finalize', label: 'Save results' }
-	];
-	const running = $derived(agents.filter((agent) => agent.status === 'running').length);
-	const done = $derived(agents.filter((agent) => agent.status === 'done').length);
-	function taskTime(task: ReviewTask): string {
-		const elapsed = (task.elapsedMs ?? 0) + ((task.status === 'running' || task.status === 'queued') && active
-			? Math.max(0, now - Date.parse(task.updatedAt)) : 0);
-		return Math.floor(elapsed / 60000) + ':' + String(Math.floor(elapsed / 1000) % 60).padStart(2, '0');
+
+	let drafts = $state<Record<string, string>>({});
+	let restartOpen = $state(false);
+	let metricsOpen = $state(false);
+	const specialists = $derived(assignments.filter((assignment) => assignment.id !== ORCHESTRATOR_ID));
+	const orchestrator = $derived<ReviewAssignment>({
+		id: ORCHESTRATOR_ID, role: 'orchestrator', title: 'Orchestrator', reason: '', scope: [],
+		status: awaitingPrompt ? 'waiting' : active ? 'running' : failed ? 'partial' : 'done',
+		model: orchestratorModel ?? assignments.find((item) => item.id === ORCHESTRATOR_ID)?.model ??
+			messages.findLast((item) => item.assignmentId === ORCHESTRATOR_ID && item.model)?.model ??
+			reasoning.findLast((item) => (!item.assignmentId || item.assignmentId === ORCHESTRATOR_ID) && item.model)?.model
+	});
+	const selected = $derived(specialists.find((assignment) => assignment.id === page.url.searchParams.get('agent')) ?? orchestrator);
+	const isOrchestrator = $derived(selected.id === ORCHESTRATOR_ID);
+
+	/** URL-backed chats support browser history, reloads, and opening in a new tab. */
+	function conversationHref(assignmentId: string): string {
+		const url = new URL(page.url);
+		if (assignmentId === ORCHESTRATOR_ID) url.searchParams.delete('agent');
+		else url.searchParams.set('agent', assignmentId);
+		return `${url.pathname}${url.search}${url.hash}`;
 	}
-	function statusLabel(status: ReviewingAgent['status']): string {
-		return { queued: 'Waiting', running: 'Working', done: 'Complete', error: 'Incomplete' }[status];
+	const specialistsAt = $derived(specialists.map((item) => item.queuedAt ?? item.startedAt).filter((at): at is string => !!at).sort()[0]);
+	const pending = $derived(specialists.filter((item) => ['running', 'waiting', 'queued'].includes(item.status)).length);
+	const finalization = $derived(tasks.find((task) => task.id === 'consolidation'));
+	const finalizationSeconds = $derived(finalization?.elapsedMs !== undefined ? Math.max(0, Math.round(finalization.elapsedMs / 1000)) : null);
+	const progressLabel = $derived(!active ? failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}` : pending ? 'Waiting for specialists…' : stageLabel);
+	const finalReasoning = $derived(reasoning.filter((entry) => (entry.assignmentId ?? ORCHESTRATOR_ID) === ORCHESTRATOR_ID && finalization?.startedAt && Date.parse(entry.at) >= Date.parse(finalization.startedAt)));
+	const chatReasoning = $derived(reasoning.filter((entry) => !finalReasoning.some((item) => item.id === entry.id)));
+	const findingCounts = $derived([
+		{ severity: 'high' as const, count: findings.filter((finding) => finding.severity === 'high').length },
+		{ severity: 'medium' as const, count: findings.filter((finding) => finding.severity === 'medium').length },
+		{ severity: 'low' as const, count: findings.filter((finding) => finding.severity === 'low' || finding.severity === 'info').length }
+	]);
+	const reviewSteps = [
+		{ id: 'checkout', label: 'Prepare repository' },
+		{ id: 'plan', label: 'Plan review' },
+		{ id: 'specialists', label: 'Specialist reviews' },
+		{ id: 'consolidate', label: 'Consolidate findings' }
+	];
+	const currentStep = $derived(!active && !failed ? reviewSteps.length : Math.min(stage, reviewSteps.length - 1));
+
+	function statusFor(assignment: ReviewAssignment): { label: string; variant: BadgeVariant } {
+		switch (assignment.status) {
+			case 'running': return { label: active ? 'Reviewing' : 'Interrupted', variant: active ? 'warning' : 'error' };
+			case 'waiting': return { label: 'Waiting', variant: 'secondary' };
+			case 'queued': return { label: 'Queued', variant: 'outline' };
+			case 'done': return { label: 'Finished', variant: 'success' };
+			case 'partial': return { label: 'Incomplete', variant: 'warning' };
+			case 'error': return { label: 'Failed', variant: 'error' };
+			case 'skipped': return { label: 'Skipped', variant: 'secondary' };
+		}
 	}
 </script>
 
-<div class="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
-	<header class="flex flex-wrap items-start justify-between gap-4">
-		<div class="min-w-0 flex-1 basis-64">
-			<h1 class="text-xl font-semibold tracking-tight break-words sm:text-2xl">{title}</h1>
-			<p class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-sm text-foreground-muted">
-				<span class="break-all">{meta.repo} {meta.prLabel}</span>
-				{#if meta.files !== null}<span>{meta.files} files</span>{/if}
-				{#if meta.additions !== null}<span class="text-success">+{meta.additions}</span>{/if}
-				{#if meta.deletions !== null}<span class="text-error">−{meta.deletions}</span>{/if}
-				<span class="font-mono tabular-nums">{meta.elapsed} elapsed</span>
-			</p>
-		</div>
-		<div class="flex items-center gap-2">
-			{#if onOpenDiff}<Button variant="outline" size="sm" onclick={onOpenDiff}>Open diff</Button>{/if}
-			{#if onRestart}<Button variant="ghost" size="sm" onclick={onRestart}>Restart review</Button>{/if}
-		</div>
-	</header>
+{#snippet specialistsContent()}
+	<section class="flex min-w-0 flex-col gap-3" aria-label="Specialists">
+		<Collapsible.Root>
+			<Collapsible.Trigger class="review-disclosure">
+				Created {specialists.length} {specialists.length === 1 ? 'specialist' : 'specialists'}
+				<ChevronRight size={14} aria-hidden="true" />
+			</Collapsible.Trigger>
+			<Collapsible.Content class="pb-2">
+				{#each specialists as assignment (assignment.id)}
+					<Typography.Text class="mb-2 text-sm"><span class="font-medium">{assignment.title}:</span> {assignment.reason}</Typography.Text>
+				{/each}
+			</Collapsible.Content>
+		</Collapsible.Root>
+		{#if planSummary}<Markdown content={planSummary} class="text-sm" />{/if}
+		<Card.Root class="!gap-0 overflow-hidden rounded-xl border border-border bg-transparent !p-0 shadow-none">
+			{#each specialists as assignment (assignment.id)}
+				{@const status = statusFor(assignment)}
+					<Button href={conversationHref(assignment.id)} variant="ghost" class="specialist-row h-auto min-h-[68px] w-full justify-start rounded-none !px-3 !py-3 text-left" aria-label={`Open ${assignment.title} conversation`}>
+						<span class="flex min-w-0 flex-1 flex-col gap-1">
+							<span class="flex min-w-0 items-center justify-between gap-3">
+								<span class="truncate text-sm font-normal">{assignment.title}</span>
+								<Badge variant={status.variant} dot={assignment.status === 'done'} class="min-h-[23px] shrink-0 gap-1 rounded-md px-1.5 py-1 text-xs font-normal">
+									{#if assignment.status === 'running' && active}<Spinner size={11} aria-hidden="true" />
+									{:else if status.variant === 'error'}<CircleAlert size={11} aria-hidden="true" />{/if}
+									{status.label}
+								</Badge>
+							</span>
+							<Typography.Metadata class="truncate font-mono text-xs font-normal" title={assignment.currentOperation || assignment.reason}>{assignment.currentOperation || assignment.reason || status.label}</Typography.Metadata>
+						</span>
+					</Button>
+			{/each}
+		</Card.Root>
+	</section>
+{/snippet}
 
-	<section aria-label="Review status" class="my-6 border-y border-border py-5">
-		<div class="flex flex-wrap items-center justify-between gap-3">
-			<div class="flex items-center gap-2.5">
-				{#if failed}<CircleAlert size={18} class="text-error" />
-				{:else if active}<Spinner size={18} aria-hidden="true" />
-				{:else}<Check size={18} class="text-success" />{/if}
-				<h2 class="text-base font-semibold">{stageLabel}</h2>
-			</div>
-			{#if connectionLabel}
-				<p role="status" class="text-sm {connectionLost ? 'text-warning' : 'text-foreground-muted'}">{connectionLabel}</p>
+{#snippet progressContent()}
+	<Collapsible.Root>
+		<Collapsible.Trigger class="review-disclosure" >
+			<span class={failed ? 'text-error' : ''}>{progressLabel}</span><ChevronRight size={14} aria-hidden="true" />
+		</Collapsible.Trigger>
+		<Collapsible.Content class="space-y-4 py-3">
+			{#each finalReasoning as entry (entry.id)}<Markdown content={entry.text} streaming={active && entry.status === 'streaming'} />{/each}
+			<TaskSteps steps={reviewSteps} current={currentStep} {failed} label="Review progress" />
+			<Typography.Metadata class="block font-mono">{meta.repo} {meta.prLabel} · {meta.elapsed}</Typography.Metadata>
+			{#if coverage}<Typography.Text class="text-sm text-foreground-muted">{coverage.reviewed} of {coverage.total} changes reviewed{coverage.partial ? ` · ${coverage.partial} partial` : ''}</Typography.Text>{/if}
+			<ScrollArea showCues={false} class="max-h-64" aria-label="Review activity">
+				{#each tasks as task (task.id)}<Typography.Text class="mb-2 text-xs text-foreground-muted"><span class="font-medium">{task.label}</span> · {task.message || task.status}</Typography.Text>{/each}
+				{#each pipelineLogs as log, i (i)}<Typography.Text class="mb-1 break-words font-mono text-xs text-foreground-muted">{log}</Typography.Text>{/each}
+			</ScrollArea>
+		</Collapsible.Content>
+	</Collapsible.Root>
+	{#if !active && !failed}
+		<Card.Root class="review-completion mt-2 !flex-row flex-wrap items-center justify-between !gap-4 rounded-xl border border-border-subtle bg-transparent !p-4 shadow-none">
+			<Card.Content class="min-w-0 !space-y-2">
+				<Typography.Text class="flex items-center gap-2 text-sm font-normal text-foreground"><Check size={15} class="shrink-0 text-success" aria-hidden="true" />Review finished with {findings.length} {findings.length === 1 ? 'finding' : 'findings'}</Typography.Text>
+				{#if findings.length}
+					<div class="flex flex-wrap items-center gap-2 ps-[23px]" aria-label="Findings by severity">
+						{#each findingCounts.filter((item) => item.count > 0) as item (item.severity)}
+							<FindingSeverity severity={item.severity} count={item.count} />
+						{/each}
+					</div>
+				{/if}
+			</Card.Content>
+			<Button variant="outline" onclick={onOpenDiff ?? undefined} disabled={!onOpenDiff} class="shrink-0 gap-2 bg-transparent font-normal">Open Review <ArrowUpRight size={14} aria-hidden="true" /></Button>
+		</Card.Root>
+	{/if}
+{/snippet}
+
+<div class="review-workspace flex min-h-0 flex-col {fullscreen ? 'h-full' : 'h-[min(56rem,85dvh)]'}">
+	<header class="flex min-h-14 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
+		<Typography.Title level={1} class="min-w-0 flex-1 basis-64 truncate text-sm font-normal tracking-normal" title={title}>{title}</Typography.Title>
+		<div class="ms-auto flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-foreground-muted">
+			{#if meta.branch}<Typography.Metadata class="max-w-40 truncate font-mono text-xs font-normal" title={meta.branch}>{meta.branch}</Typography.Metadata>{/if}
+			{#if selected.model}<Typography.Metadata class="max-w-48 truncate font-mono text-xs font-normal" title={selected.model}>{selected.model}</Typography.Metadata>{/if}
+			{#if meta.files !== null}
+				<Button variant="quiet" class="h-7 gap-2 px-1 font-mono text-xs font-normal text-foreground-muted hover:text-foreground" disabled={!onOpenDiff} onclick={onOpenDiff ?? undefined} aria-label={`Open diff, ${meta.files} changed files`}>
+					{meta.files} {meta.files === 1 ? 'file' : 'files'}
+					{#if meta.additions !== null}<span class="text-success">+{meta.additions}</span>{/if}
+					{#if meta.deletions !== null}<span class="text-error">−{meta.deletions}</span>{/if}
+				</Button>
+			{/if}
+			{#if reviewId || onRestart || onOpenDiff}
+				<DropdownMenu.Root>
+					<DropdownMenu.Trigger variant="ghost" size="icon" aria-label="Session actions" class="size-9"><Ellipsis size={16} aria-hidden="true" /></DropdownMenu.Trigger>
+					<DropdownMenu.Content>
+						{#if onOpenDiff}<DropdownMenu.Item callback={onOpenDiff}>Open diff</DropdownMenu.Item>{/if}
+						{#if reviewId}<DropdownMenu.Item callback={() => metricsOpen = true}>View token usage</DropdownMenu.Item>{/if}
+						{#if onRestart}<DropdownMenu.Item disabled={restarting} callback={() => restartOpen = true}>{restarting ? 'Restarting…' : 'Restart review'}</DropdownMenu.Item>{/if}
+					</DropdownMenu.Content>
+				</DropdownMenu.Root>
 			{/if}
 		</div>
-		{#if errorMessage}<p role="alert" class="mt-3 break-words text-sm text-error">{errorMessage}</p>{/if}
-		{#if stageDetail}<p class="mt-3 text-sm text-foreground-muted">{stageDetail}</p>{/if}
-		{#if totalTasks > 0}
-			<div class="mt-4 flex flex-wrap justify-between gap-2 text-sm text-foreground-muted">
-				<p>{completedTasks} of {totalTasks} review tasks complete{#if failedTasks} · <span class="text-error">{failedTasks} failed</span>{/if}</p>
-				<p>{running} specialists working · {done} complete</p>
-			</div>
-			<Progress class="mt-2" value={completedTasks} max={totalTasks} {...{ 'aria-label': 'Completed review tasks' }} />
-		{:else}
-			<p class="mt-3 text-sm text-foreground-muted">Specialists start once the local checkout and diff are ready.</p>
-		{/if}
-	</section>
-
-	<div class="grid items-start gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
-		<aside class="min-w-0 space-y-6">
-			<section aria-label="Review stages">
-				<h2 class="mb-3 text-sm font-semibold">Review stages</h2>
-				<TaskSteps {steps} current={stage} {failed} label="Review stages" />
-			</section>
-			<Collapsible.Root>
-				<Collapsible.Trigger class="group flex w-full justify-between gap-2 py-2 text-sm font-medium">
-					Activity history <ChevronDown size={14} class="group-data-[state=open]:rotate-180" />
-				</Collapsible.Trigger>
-				<Collapsible.Content>
-					<!-- svelte-ignore a11y_no_noninteractive_tabindex (Scrollable history needs keyboard access.) -->
-					<div class="max-h-64 space-y-3 overflow-y-auto py-2 text-sm text-foreground-muted" tabindex="0" role="region" aria-label="Pipeline activity">
-						{#each pipelineLogs as line, index (index)}<p class="break-words">{line}</p>{:else}<p>Waiting for the first update.</p>{/each}
-					</div>
-				</Collapsible.Content>
-			</Collapsible.Root>
-			<section aria-label="Findings so far" class="border-t border-border pt-5">
-				<h2 class="mb-3 flex justify-between text-sm font-semibold">Findings so far <span class="font-mono">{findings.length}</span></h2>
-				{#each findings as finding (finding.id)}
-					<div class="space-y-2 border-b border-border py-3">
-						<SeverityPill severity={finding.severity} />
-						<p class="break-words text-sm">{finding.title}</p>
-						{#if finding.location}<p class="break-all font-mono text-xs text-foreground-muted">{finding.location}</p>{/if}
-					</div>
-				{:else}
-					<p class="text-sm leading-relaxed text-foreground-muted">{pendingCount ? 'Verified findings appear as specialists finish each batch.' : 'No findings reported.'}</p>
-				{/each}
-			</section>
-		</aside>
-
-		<section class="min-w-0" aria-label="Specialist activity">
-			<div class="mb-3 flex items-baseline justify-between gap-3">
-				<h2 class="text-base font-semibold">Specialist activity</h2>
-				<span class="text-sm text-foreground-muted">{agents.length} specialists</span>
-			</div>
-			<div class="divide-y divide-border border-y border-border">
-				{#each agents as agent (agent.id)}
-					<Collapsible.Root open={agent.id === agents[0]?.id}>
-						<div class="min-w-0 py-1">
-							<Collapsible.Trigger class="group flex w-full items-start gap-3 rounded-md px-2 py-4 text-left hover:bg-secondary/50">
-								<span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
-									{#if agent.status === 'running'}<Spinner size={16} aria-hidden="true" />
-									{:else if agent.status === 'done'}<Check size={16} class="text-success" />
-									{:else if agent.status === 'error'}<CircleAlert size={16} class="text-error" />
-									{:else}<span class="h-1.5 w-1.5 rounded-full bg-foreground-muted"></span>{/if}
-								</span>
-								<span class="min-w-0 flex-1">
-									<span class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-										<span class="font-medium">{formatAgentName(agent.name)}</span>
-										<span class="text-xs {agent.status === 'error' ? 'text-error' : 'text-foreground-muted'}">
-											{statusLabel(agent.status)}{#if agent.total} · {agent.completed}/{agent.total} tasks{/if}
-										</span>
-									</span>
-									<span class="mt-1 block break-words text-sm text-foreground-muted">{agent.current ?? agent.logs.at(-1) ?? 'Waiting for the local diff'}</span>
-									{#if agent.batches}
-										<span class="mt-1.5 block text-xs text-foreground-muted">Batch {agent.batch} of {agent.batches} · {agent.findings} findings{#if agent.failed} · {agent.failed} failed tasks{/if}</span>
-									{/if}
-								</span>
-								<ChevronDown size={16} class="mt-1 shrink-0 text-foreground-muted group-data-[state=open]:rotate-180" />
-							</Collapsible.Trigger>
-							<Collapsible.Content class="pb-4 pl-10 pr-2">
-								{#if agent.model}<p class="mb-3 break-all font-mono text-xs text-foreground-muted">{agent.model}</p>{/if}
-								{#if agent.tasks?.length}
-									<ul class="space-y-3" aria-label={formatAgentName(agent.name) + ' tasks'}>
-										{#each agent.tasks.filter((task) => task.batch === agent.batch) as task (task.id)}
-											<li class="border-l-2 border-border pl-3">
-												<div class="flex flex-wrap justify-between gap-2 text-sm">
-													<span class="font-medium">{task.label}</span>
-													<span class="text-foreground-muted">
-														{task.status === 'queued' ? 'Queued' : task.status === 'running' ? 'Working' : task.status === 'done' ? 'Complete' : task.status === 'skipped' ? 'Skipped' : 'Failed'}
-														{#if task.elapsedMs !== undefined}<span class="ml-2 font-mono tabular-nums">{taskTime(task)}</span>{/if}
-													</span>
-												</div>
-												<p class="mt-1 break-words text-sm {task.status === 'error' ? 'text-error' : 'text-foreground-muted'}">{task.message}</p>
-												{#if task.files?.length}<p class="mt-1 break-all font-mono text-xs leading-relaxed text-foreground-muted">{task.files.join(', ')}</p>{/if}
-											</li>
-										{/each}
-									</ul>
-								{:else}<p class="text-sm text-foreground-muted">No tasks assigned yet.</p>{/if}
-								{#if agent.logs.length}
-									<Collapsible.Root>
-										<Collapsible.Trigger class="mt-4 py-2 text-sm text-foreground-muted">Activity history <ChevronDown size={14} /></Collapsible.Trigger>
-										<Collapsible.Content>
-											<!-- svelte-ignore a11y_no_noninteractive_tabindex (Scrollable history needs keyboard access.) -->
-											<div class="max-h-52 space-y-2 overflow-y-auto py-2 text-sm text-foreground-muted" tabindex="0" role="region" aria-label={formatAgentName(agent.name) + ' activity'}>
-												{#each agent.logs as line, index (index)}<p class="break-words">{line}</p>{/each}
-											</div>
-										</Collapsible.Content>
-									</Collapsible.Root>
-								{/if}
-							</Collapsible.Content>
-						</div>
-					</Collapsible.Root>
-				{/each}
-			</div>
-		</section>
-	</div>
-	{#if done === agents.length && doneHref}<div class="mt-6"><Button href={doneHref}>Open session</Button></div>{/if}
+	</header>
+	{#if !isOrchestrator}
+		{@const status = statusFor(selected)}
+		<nav aria-label="Review conversations" class="mx-auto flex w-full max-w-[776px] shrink-0 items-center gap-2 px-4 pb-3 pt-1 sm:px-6">
+			<Button href={conversationHref(ORCHESTRATOR_ID)} variant="ghost" size="icon" aria-label="Back to Orchestrator" title="Back to Orchestrator" class="size-9 shrink-0"><ArrowLeft size={16} aria-hidden="true" /></Button>
+			<Typography.Title level={2} class="sr-only">{selected.title} conversation</Typography.Title>
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger variant="ghost" class="min-w-0 gap-2 !px-2 text-sm" aria-label="Switch conversation"><span class="truncate">{selected.title}</span><ChevronDown size={14} class="shrink-0" aria-hidden="true" /></DropdownMenu.Trigger>
+				<DropdownMenu.Content>
+					{#each [orchestrator, ...specialists] as assignment (assignment.id)}
+						<DropdownMenu.Item href={conversationHref(assignment.id)} aria-current={assignment.id === selected.id ? 'page' : undefined}>{assignment.title}</DropdownMenu.Item>
+					{/each}
+				</DropdownMenu.Content>
+			</DropdownMenu.Root>
+			<Badge variant={status.variant} dot={selected.status === 'done'} class="ms-auto shrink-0 rounded-md font-normal">{status.label}</Badge>
+		</nav>
+	{/if}
+	{#if connectionLost}<Typography.Text role="status" class="mx-auto w-full max-w-[776px] px-6 py-2 text-sm text-warning">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
+	{#if errorMessage}<Typography.Text role="alert" class="mx-auto w-full max-w-[776px] px-6 py-2 text-sm text-error">{errorMessage}</Typography.Text>{/if}
+	{#each [selected] as target (target.id)}
+		<ReviewConversation assignment={target} {messages} reasoning={isOrchestrator ? chatReasoning : reasoning} {toolCalls} {active} {now}
+			awaitingPrompt={isOrchestrator && awaitingPrompt}
+			tasks={tasks.filter((task) => (task.assignmentId ?? ORCHESTRATOR_ID) === target.id)}
+			bind:draft={() => drafts[target.id] ?? '', (value) => drafts[target.id] = value} {onSend} {onStop}
+			workspace={isOrchestrator && specialists.length ? specialistsContent : undefined} workspaceAt={specialistsAt}
+			afterTranscript={isOrchestrator && !awaitingPrompt ? progressContent : undefined} afterTranscriptAt={completedAt} />
+	{/each}
 </div>
+
+{#if reviewId}<ReviewMetricsModal {reviewId} bind:open={metricsOpen} showTrigger={false} />{/if}
+<AlertDialog.Root bind:open={restartOpen}>
+	<AlertDialog.Content>
+		<AlertDialog.Header>
+			<AlertDialog.Title>Restart review?</AlertDialog.Title>
+			<AlertDialog.Description>Open a fresh session for this pull request. Tell the orchestrator what to review when you’re ready.</AlertDialog.Description>
+		</AlertDialog.Header>
+		<AlertDialog.Footer>
+			<AlertDialog.Exit>Cancel</AlertDialog.Exit>
+			<AlertDialog.Confirm variant="primary" onclick={onRestart ?? undefined}>Restart review</AlertDialog.Confirm>
+		</AlertDialog.Footer>
+	</AlertDialog.Content>
+</AlertDialog.Root>

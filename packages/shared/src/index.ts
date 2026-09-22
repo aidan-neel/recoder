@@ -4,10 +4,11 @@
  */
 
 export * from './diff';
+export * from './metrics';
 
 export type Provider = 'github' | 'gitlab';
 
-export type ReviewStatus = 'queued' | 'running' | 'passed' | 'failed';
+export type ReviewStatus = 'draft' | 'queued' | 'running' | 'passed' | 'failed';
 
 export type FindingSeverity = 'info' | 'warning' | 'error';
 
@@ -30,8 +31,18 @@ export interface CreateRepoInput {
 	defaultBranch?: string;
 }
 
+export interface FindingLocation {
+	file: string;
+	line?: number;
+	endLine?: number;
+	/** Diff side this location refers to. Defaults to `new` when a line exists. */
+	side?: 'old' | 'new';
+}
+
 export interface Finding {
 	id: string;
+	/** Short issue-specific heading. Older saved reviews may omit it. */
+	title?: string;
 	file: string;
 	line?: number;
 	/** Inclusive end of the range this finding refers to (defaults to `line`). */
@@ -49,6 +60,13 @@ export interface Finding {
 	 * surface genuinely new findings.
 	 */
 	fingerprint?: string;
+	/** Specialist assignment that produced this finding — never equal to the role id. */
+	assignmentId?: string;
+	category?: string;
+	evidenceIds?: string[];
+	relatedLocations?: FindingLocation[];
+	/** Diff side for deleted-code findings. Defaults to `new` when a line exists. */
+	side?: 'old' | 'new';
 }
 
 export interface Review {
@@ -65,6 +83,8 @@ export interface Review {
 	source: 'github' | 'gitlab' | 'stub';
 	prTitle: string | null;
 	prUrl: string | null;
+	/** When analysis began; draft sessions may exist before a review is requested. */
+	startedAt?: string;
 	createdAt: string;
 	updatedAt: string;
 }
@@ -73,6 +93,10 @@ export interface CreateReviewInput {
 	repoId: string;
 	prNumber: number;
 	headSha?: string;
+	/** False opens an empty chat session; omitted/true queues an automated review. */
+	start?: boolean;
+	/** Display metadata from the selected open PR. Refetched before analysis. */
+	prTitle?: string;
 }
 
 export interface CommandRun {
@@ -94,7 +118,7 @@ export interface HealthResponse {
 	uptimeSeconds: number;
 }
 
-export const REVIEW_STATUSES: ReviewStatus[] = ['queued', 'running', 'passed', 'failed'];
+export const REVIEW_STATUSES: ReviewStatus[] = ['draft', 'queued', 'running', 'passed', 'failed'];
 
 /** Reviewer agent roles (each can route to its own model). */
 export type ReviewRole =
@@ -111,20 +135,27 @@ export type ReviewRole =
 
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {
+	provider?: 'openai-compatible' | 'codex';
 	id: string;
 	label: string;
 	model: string;
 	baseUrl: string | null;
 	apiKeyPreview: string | null;
+	/** Reasoning levels this model accepts, when the provider reports them. */
+	efforts?: ReasoningEffort[];
 }
 
 export interface ModelEntryPatch {
+	provider?: 'openai-compatible' | 'codex';
 	id?: string;
 	label: string;
 	model: string;
 	baseUrl?: string;
 	apiKey?: string;
+	efforts?: ReasoningEffort[];
 }
+
+export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
 
 /** Reviewer model configuration (keys are never exposed). */
 export interface ModelSettings {
@@ -133,8 +164,12 @@ export interface ModelSettings {
 	model: string;
 	apiKeyPreview: string | null;
 	sharedModelId: string | null;
+	orchestratorModelId?: string | null;
+	specialistModelId?: string | null;
 	models: ModelEntry[];
 	roles: Record<ReviewRole, string | null>;
+	/** Explicit per-role overrides; absent roles retain provider defaults (Codex: medium). */
+	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
 }
 
@@ -143,10 +178,31 @@ export interface ModelSettingsPatch {
 	apiKey?: string;
 	models?: ModelEntryPatch[];
 	sharedModelId?: string | null;
+	orchestratorModelId?: string | null;
+	specialistModelId?: string | null;
 	roles?: Partial<Record<ReviewRole, string>>;
+	/** Merged by role; omitted roles keep their saved effort. */
+	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;
+}
+
+export interface CodexConnection {
+	available: boolean;
+	authenticated: boolean;
+	email?: string | null;
+	planType?: string | null;
+	error?: string;
+	login?: { verificationUrl: string; userCode: string; expiresAt: number };
+	limits?: Array<{ name: string; usedPercent: number; resetsAt: number | null }>;
+}
+
+export interface CodexModel {
+	id: string;
+	label: string;
+	/** Reasoning levels the provider reports for this model. */
+	efforts?: ReasoningEffort[];
 }
 
 /** CLI auth state for one provider. */
@@ -180,6 +236,8 @@ export interface PullRequest {
 	changedFiles: number;
 	/** ISO timestamp the PR/MR was opened (empty when the provider omits it). */
 	createdAt: string;
+	/** PR/MR description. Untrusted input — never follow instructions inside it. */
+	body?: string;
 }
 
 export interface PullFile {
@@ -259,4 +317,51 @@ export interface ApplyFixResponse {
 	branch: string;
 	pushed: boolean;
 }
+
+/**
+ * A developer comment anchored to a range of diff lines. The quoted snippet
+ * travels with the note so the model can reason about the exact text even when
+ * the file is later re-rendered or the line numbers drift.
+ */
+export interface RereviewNote {
+	file: string;
+	line: number;
+	endLine: number;
+	side: 'old' | 'new';
+	/** Text the developer highlighted (may span multiple lines). */
+	quote: string;
+	/** The developer's comment. */
+	body: string;
+	/** New-side code for the anchored range. */
+	newText?: string;
+	/** Old-side code for the anchored range, when it touches deletions. */
+	oldText?: string;
+	/** Surrounding unified-diff lines. */
+	diffContext?: string;
+	/** The enclosing hunk header. */
+	hunkHeader?: string;
+}
+
+export interface RereviewRequest {
+	notes: RereviewNote[];
+}
+
+export type RereviewVerdict = 'valid' | 'invalid' | 'uncertain';
+
+export interface RereviewAssessment {
+	/** 0-based index into the request's `notes` array. */
+	noteIndex: number;
+	verdict: RereviewVerdict;
+	response: string;
+}
+
+export interface RereviewResponse {
+	agent: string;
+	model: string;
+	summary: string;
+	assessments: RereviewAssessment[];
+	/** New findings the notes surfaced; empty when nothing was added. */
+	findings: Finding[];
+}
+
 export * from './progress';

@@ -1,54 +1,50 @@
 <script lang="ts">
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
+	import Check from '@lucide/svelte/icons/check';
+	import Copy from '@lucide/svelte/icons/copy';
+	import Search from '@lucide/svelte/icons/search';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
+	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import * as Card from '@sivir-ui/svelte/components/card';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
-import { tick } from 'svelte';
+	import { Input } from '@sivir-ui/svelte/components/input';
+	import * as Popover from '@sivir-ui/svelte/components/popover';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import FindingSeverity from './finding-severity.svelte';
+import { onDestroy, tick } from 'svelte';
 import {
 	SEVERITIES,
 	findingsStore,
 	type Finding,
-	type FindingSeverity
+	type FindingSeverity as Severity
 } from '$lib/findings.svelte';
-import { sessionFile } from '$lib/session-file.svelte';
-import { serverApi } from '$lib/server-api';
-import { threadsStore } from '$lib/threads.svelte';
+	import { sessionFile } from '$lib/session-file.svelte';
+	import { serverApi } from '$lib/server-api';
+	import { threadsStore } from '$lib/threads.svelte';
 
-	const sevLabel: Record<FindingSeverity, string> = {
-		high: 'High',
-		medium: 'Medium',
-		low: 'Low',
-		info: 'Info'
-	};
-
-	const pillStyle: Record<FindingSeverity, string> = {
-		high: 'bg-error/30 text-error',
-		medium: 'bg-warning/30 text-warning',
-		low: 'bg-[#1a2740] text-[#7eb0ff]',
-		info: 'bg-secondary text-foreground'
-	};
-
-	/** Severities currently filtered out of navigation. */
-	let hidden = $state(new Set<FindingSeverity>());
+	let searchOpen = $state(false);
+	let query = $state('');
 	let index = $state(0);
 
 	const openItems = $derived(findingsStore.items.filter((f) => f.status !== 'dismissed'));
 
 	const counts = $derived(
 		Object.fromEntries(SEVERITIES.map((s) => [s, openItems.filter((f) => f.severity === s).length])) as Record<
-			FindingSeverity,
+			Severity,
 			number
 		>
 	);
 
 	const visible = $derived(
 		openItems
-			.filter((f) => !hidden.has(f.severity) && findingsStore.isShown(f))
-			.sort((a, b) => a.startLine - b.startLine || a.id.localeCompare(b.id))
+			.filter((f) => findingsStore.isShown(f))
+			.sort((a, b) => a.file.localeCompare(b.file) || a.startLine - b.startLine || a.id.localeCompare(b.id))
 	);
+	const matches = $derived(visible.filter((finding) => `${finding.title} ${finding.body} ${finding.file} ${finding.code ?? ''} ${finding.category} ${finding.agent}`.toLowerCase().includes(query.trim().toLowerCase())));
 
 	/** 0-based position of the current finding within the visible list. */
 	const position = $derived.by(() => {
@@ -63,6 +59,7 @@ import { threadsStore } from '$lib/threads.svelte';
 
 	/** Jump to a finding, switching files first when it lives elsewhere. */
 	async function jumpTo(finding: Finding): Promise<void> {
+		searchOpen = false;
 		if (finding.file !== sessionFile.currentId) {
 			sessionFile.select(finding.file);
 			await tick();
@@ -79,9 +76,8 @@ import { threadsStore } from '$lib/threads.svelte';
 		void jumpTo(visible[index]);
 	}
 
-	function toggle(severity: FindingSeverity): void {
-		if (hidden.has(severity)) hidden.delete(severity);
-		else hidden.add(severity);
+	function toggle(severity: Severity): void {
+		findingsStore.toggleSeverity(severity);
 	}
 
 	const reviewId = $derived(threadsStore.reviewId);
@@ -90,9 +86,65 @@ import { threadsStore } from '$lib/threads.svelte';
 	);
 	const fixAllDisabled = $derived(fixable.length === 0 || !reviewId);
 
+	let findingsCopied = $state(false);
+	let findingsCopyTimer: ReturnType<typeof setTimeout> | undefined;
+	onDestroy(() => clearTimeout(findingsCopyTimer));
+
+	function fallbackCopyFindings(text: string): boolean {
+		if (typeof document === 'undefined' || typeof document.execCommand !== 'function') {
+			return false;
+		}
+		const textarea = document.createElement('textarea');
+		textarea.value = text;
+		textarea.style.position = 'fixed';
+		textarea.style.opacity = '0';
+		document.body.appendChild(textarea);
+		textarea.select();
+		const done = document.execCommand('copy');
+		textarea.remove();
+		return done;
+	}
+
+	async function copyFindings(): Promise<void> {
+		let done = false;
+		if (typeof navigator !== 'undefined' && navigator.clipboard) {
+			try {
+				await navigator.clipboard.writeText(copyText);
+				done = true;
+			} catch {
+				done = fallbackCopyFindings(copyText);
+			}
+		} else {
+			done = fallbackCopyFindings(copyText);
+		}
+		if (!done) return;
+		findingsCopied = true;
+		clearTimeout(findingsCopyTimer);
+		findingsCopyTimer = setTimeout(() => (findingsCopied = false), 2000);
+	}
+
+	/** All non-dismissed findings in stable display order, formatted for pasting into an LLM. */
+	const copyText = $derived.by(() => {
+		const items = [...openItems].sort(
+			(a, b) => a.file.localeCompare(b.file) || a.startLine - b.startLine || a.id.localeCompare(b.id)
+		);
+		if (items.length === 0) return 'No review findings.';
+		const lines = [`# Code review findings (${items.length})`, ''];
+		items.forEach((f, i) => {
+			const range = f.startLine === f.endLine ? `${f.startLine}` : `${f.startLine}-${f.endLine}`;
+			const status = f.status !== 'open' ? ` [${f.status}]` : '';
+			lines.push(`## ${i + 1}. [${f.severity}] ${f.title} — ${f.file}:${range}${status}`);
+			lines.push(`Reviewer: ${f.agent}${f.model ? ` (${f.model})` : ''}`);
+			lines.push('');
+			lines.push(f.body);
+			lines.push('');
+		});
+		return lines.join('\n').trimEnd();
+	});
+
 	interface FixAllItem {
 		id: string;
-		code: string | null;
+		title: string;
 		file: string;
 		line: number;
 		summary: string;
@@ -147,7 +199,7 @@ import { threadsStore } from '$lib/threads.svelte';
 					...fixAllItems,
 					{
 						id: finding.id,
-						code: finding.code,
+						title: finding.title,
 						file: finding.file,
 						line: finding.startLine,
 						summary: existing.summary ?? finding.body,
@@ -175,7 +227,7 @@ import { threadsStore } from '$lib/threads.svelte';
 					...fixAllItems,
 					{
 						id: finding.id,
-						code: finding.code,
+						title: finding.title,
 						file: finding.file,
 						line: finding.startLine,
 						summary: result.summary,
@@ -193,7 +245,7 @@ import { threadsStore } from '$lib/threads.svelte';
 					...fixAllItems,
 					{
 						id: finding.id,
-						code: finding.code,
+						title: finding.title,
 						file: finding.file,
 						line: finding.startLine,
 						summary: finding.body,
@@ -244,11 +296,11 @@ import { threadsStore } from '$lib/threads.svelte';
 		else if (pushed === 0) fixAllError = 'No fixes could be pushed.';
 	}
 
-	// Hijack browser find: Ctrl/Cmd+F steps through findings instead.
+	// Search findings without changing the active finding until a result is chosen.
 	function onKeydown(event: KeyboardEvent): void {
-		if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
+		if (!event.defaultPrevented && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
 			event.preventDefault();
-			go(position + 1);
+			searchOpen = true;
 		}
 	}
 
@@ -258,15 +310,51 @@ import { threadsStore } from '$lib/threads.svelte';
 	});
 </script>
 
-<div class="session-enter flex shrink-0 items-center gap-2" style="animation-delay: 60ms">
-	<div class="flex h-9 items-center gap-0.5 rounded-lg border border-border bg-card px-1.5">
-		<span class="px-1.5 text-[15px] text-foreground-muted">Finding</span>
-		<span class="font-mono text-[14px]">
-			{visible.length === 0 ? 0 : position + 1} of {visible.length}
-		</span>
+<div class="findings-toolbar flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
+	<Card.Root class="!h-9 shrink-0 !flex-row items-center !gap-0 rounded-[10px] border border-border bg-transparent !p-0 shadow-none">
+		<Popover.Root bind:open={searchOpen} placement="bottom-start">
+			<Popover.Trigger variant="ghost" class="!h-9 gap-2 rounded-s-[10px] rounded-e-none !px-2.5 text-sm !font-normal" aria-label="Search findings">
+				Findings
+				<span class="font-mono text-xs tabular-nums text-foreground-muted">{visible.length === 0 ? 0 : position + 1}/{visible.length}</span>
+			</Popover.Trigger>
+			<Popover.Content class="w-[28rem] max-w-[calc(100vw-2rem)]" surfaceClass="!gap-0 !p-0">
+				<div class="flex items-center justify-between px-4 pb-2 pt-4">
+					<Popover.Title class="text-sm font-medium">Findings</Popover.Title>
+					<Typography.Metadata class="text-xs tabular-nums" role="status">{matches.length} {matches.length === 1 ? 'result' : 'results'}</Typography.Metadata>
+				</div>
+				<div class="px-3 pb-3"><Input variant="secondary" bind:value={query} placeholder="Search text or file…" aria-label="Search finding text or file" onkeydown={(event) => {
+					if (event.key === 'Enter' && matches[0]) { event.preventDefault(); void jumpTo(matches[0]); }
+				}}>
+					{#snippet leading()}<Search size={15} aria-hidden="true" />{/snippet}
+				</Input></div>
+				<ScrollArea showCues={false} class="px-2" style="max-height: min(24rem, 45dvh)" aria-label="Matching findings">
+					{#each matches as finding (finding.id)}
+						<Button variant="ghost" class="!h-auto w-full min-w-0 !justify-start rounded-lg !px-2 !py-3 text-left !whitespace-normal" onclick={() => void jumpTo(finding)}>
+							<span class="flex w-full min-w-0 items-start gap-3">
+								<span class="w-8 shrink-0 pt-0.5"><FindingSeverity severity={finding.severity} /></span>
+								<span class="flex min-w-0 flex-1 flex-col gap-1.5">
+									<span class="text-sm font-normal leading-5 text-foreground">{finding.title}</span>
+									<span class="truncate font-mono text-xs font-normal text-foreground-muted" title={`${finding.file}:${finding.startLine}`}>{finding.file}:{finding.startLine}</span>
+								</span>
+							</span>
+						</Button>
+					{:else}
+						<Typography.Text class="px-2 py-4 text-sm text-foreground-muted">{query ? 'No findings match your search.' : 'No findings match the selected severities.'}</Typography.Text>
+					{/each}
+				</ScrollArea>
+				<div class="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-border-subtle p-3">
+					<Button variant="ghost" disabled={openItems.length === 0} onclick={() => void copyFindings()} class="gap-2 text-sm !font-normal">
+						{#if findingsCopied}<Check size={14} aria-hidden="true" />{:else}<Copy size={14} aria-hidden="true" />{/if}
+						{findingsCopied ? 'Copied' : 'Copy findings'}
+					</Button>
+					<Button variant="outline" disabled={fixAllDisabled} onclick={() => { searchOpen = false; fixAllConfirmOpen = true; }} class="text-sm !font-normal">Fix all ({fixable.length})</Button>
+				</div>
+			</Popover.Content>
+		</Popover.Root>
 		<Button
-			variant="ghost"
+			variant="quiet"
 			size="icon"
+			class="!size-9 !min-w-9 rounded-none text-foreground-muted hover:text-foreground"
 			aria-label="Previous finding"
 			disabled={visible.length === 0}
 			onclick={() => go(position - 1)}
@@ -274,83 +362,27 @@ import { threadsStore } from '$lib/threads.svelte';
 			<ChevronUp size={14} />
 		</Button>
 		<Button
-			variant="ghost"
+			variant="quiet"
 			size="icon"
+			class="!size-9 !min-w-9 rounded-s-none rounded-e-[10px] text-foreground-muted hover:text-foreground"
 			aria-label="Next finding"
-			title="Next finding (Ctrl+F)"
+			title="Next finding"
 			disabled={visible.length === 0}
 			onclick={() => go(position + 1)}
 		>
 			<ChevronDown size={14} />
 		</Button>
-	</div>
+	</Card.Root>
 
 	{#each SEVERITIES as severity (severity)}
-		{#if severity === 'info'}
-			<label
-				title={findingsStore.hideInfo ? 'Show info findings' : 'Hide info findings'}
-				class="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-2.5 font-sans text-[14px] font-medium transition-all {pillStyle.info} {findingsStore.hideInfo
-					? 'opacity-40'
-					: ''}"
-			>
-				<input
-					type="checkbox"
-					class="peer sr-only"
-					checked={!findingsStore.hideInfo}
-					onchange={(e) => findingsStore.setHideInfo(!e.currentTarget.checked)}
-				/>
-				<span
-					class="flex size-3.5 shrink-0 items-center justify-center rounded-[3px] border border-border bg-background peer-checked:border-primary peer-checked:bg-primary"
-					aria-hidden="true"
-				>
-					<svg
-						xmlns="http://www.w3.org/2000/svg"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="3"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						class="size-2.5 text-[var(--color-on-primary)] {findingsStore.hideInfo
-							? 'opacity-0'
-							: 'opacity-100'}"
-					>
-						<path d="M20 6 9 17l-5-5" />
-					</svg>
-				</span>
-				Info
-				<span>{counts.info}</span>
-			</label>
-		{:else}
-			<button
-				type="button"
-				onclick={() => toggle(severity)}
-				aria-pressed={!hidden.has(severity)}
-				title="Toggle {severity} findings"
-				class="flex h-9 shrink-0 items-center gap-1.5 rounded-md px-2.5 font-sans text-[14px] font-medium transition-all {pillStyle[
-					severity
-				]} {hidden.has(severity) ? 'opacity-40' : ''}"
-			>
-				{sevLabel[severity]}
-				<span>{counts[severity]}</span>
-			</button>
-		{/if}
+		<FindingSeverity
+			{severity}
+			count={counts[severity]}
+			interactive
+			pressed={findingsStore.isSeverityShown(severity)}
+			onToggle={() => toggle(severity)}
+		/>
 	{/each}
-
-	<div class="ml-auto flex min-w-0 shrink-0 items-center gap-2">
-		<Button
-			variant="primary"
-			size="sm"
-			class="h-9 shrink-0 font-sans"
-			disabled={fixAllDisabled}
-			title={reviewId
-				? `Generate fixes for ${fixable.length} open finding${fixable.length === 1 ? '' : 's'}`
-				: 'Needs a backend review'}
-			onclick={() => (fixAllConfirmOpen = true)}
-		>
-			Fix all ({fixable.length})
-		</Button>
-	</div>
 
 	<AlertDialog.Root bind:open={fixAllConfirmOpen}>
 		<AlertDialog.Content>
@@ -394,33 +426,24 @@ import { threadsStore } from '$lib/threads.svelte';
 					<Skeleton class="h-[68px] w-full rounded-lg" />
 				</div>
 			{:else}
-				<ScrollArea aria-label="Generated fixes" class="max-h-96">
+				<ScrollArea aria-label="Generated fixes" class="max-h-96" showCues={false}>
 					<div class="grid gap-2 pr-2">
 						{#each fixAllItems as item (item.id)}
-							<div class="overflow-hidden rounded-lg border border-border" aria-label="Fix preview">
+							<div aria-label="Fix preview">
+							<Card.Root class="overflow-hidden p-0">
 								<div class="flex items-center gap-2 border-b border-border bg-background px-3 py-1.5">
-									{#if item.code}
-										<span class="font-mono text-[13px] font-semibold">{item.code}</span>
-									{/if}
+									<Typography.Metadata class="min-w-0 truncate text-sm text-foreground" title={item.title}>{item.title}</Typography.Metadata>
 									<span class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground-muted">
 										{item.file}:{item.line}
 									</span>
 									{#if item.pushed}
-										<span class="shrink-0 rounded bg-success/15 px-1.5 py-0.5 font-sans text-[12px] font-semibold text-success">
-											Pushed
-										</span>
+										<Badge variant="success" class="shrink-0">Pushed</Badge>
 									{:else if item.error}
-										<span class="shrink-0 rounded bg-error/15 px-1.5 py-0.5 font-sans text-[12px] font-semibold text-error">
-											Failed
-										</span>
+										<Badge variant="error" class="shrink-0">Failed</Badge>
 									{:else if item.applies === true}
-										<span class="shrink-0 rounded bg-success/15 px-1.5 py-0.5 font-sans text-[12px] font-semibold text-success">
-											Applies cleanly
-										</span>
+										<Badge variant="success" class="shrink-0">Applies cleanly</Badge>
 									{:else if item.applies === false}
-										<span class="shrink-0 rounded bg-error/15 px-1.5 py-0.5 font-sans text-[12px] font-semibold text-error">
-											May not apply
-										</span>
+										<Badge variant="error" class="shrink-0">May not apply</Badge>
 									{/if}
 								</div>
 								{#if item.error}
@@ -442,6 +465,7 @@ import { threadsStore } from '$lib/threads.svelte';
 										{item.pushError}
 									</p>
 								{/if}
+							</Card.Root>
 							</div>
 						{/each}
 					</div>

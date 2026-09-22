@@ -76,6 +76,8 @@ export async function discussFinding(input: DiscussInput): Promise<{ agent: stri
 
 	try {
 		const reply = await chatCompletion({
+			provider: cfg.provider,
+			reasoningEffort: cfg.reasoningEffort,
 			baseUrl: cfg.baseUrl,
 			apiKey: cfg.apiKey,
 			model: cfg.model,
@@ -100,6 +102,8 @@ export async function streamDiscussFinding(
 	try {
 		const reply = await streamChatCompletion(
 			{
+				provider: cfg.provider,
+				reasoningEffort: cfg.reasoningEffort,
 				baseUrl: cfg.baseUrl,
 				apiKey: cfg.apiKey,
 				model: cfg.model,

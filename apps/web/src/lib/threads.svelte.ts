@@ -29,7 +29,7 @@ const AGENT_LABELS: Record<string, string> = {
 	correctness: 'Correctness',
 	docs: 'Docs',
 	dedup: 'Dedup',
-	patterns: 'Patterns',
+	patterns: 'Repository consistency',
 	testing: 'Testing',
 	errors: 'Errors',
 	concurrency: 'Concurrency',
@@ -46,7 +46,7 @@ function now(): string {
 }
 
 class ThreadStore {
-	/** Open thread id. Null = panel closed. */
+	/** Explicit discussion state, independent of the finding navigator selection. */
 	openId = $state<string | null>(null);
 	/**
 	 * Chat message queued by a finding card's "Suggest fix" (consumed by the
@@ -174,6 +174,7 @@ class ThreadStore {
 
 	close(): void {
 		this.openId = null;
+		this.pendingMessage = null;
 	}
 }
 

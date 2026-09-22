@@ -1,4 +1,15 @@
-import { emptyReviewProgress, type ReviewProgress, type ReviewTask } from '@recoder/shared';
+import {
+	assignmentCounts,
+	emptyReviewProgress,
+	formatAssignmentHeadline,
+	type Review,
+	type ReviewAssignment,
+	type ReviewChatMessage,
+	type ReviewProgress,
+	type ReviewReasoningEntry,
+	type ReviewTask,
+	type ReviewToolCall
+} from '@recoder/shared';
 
 export interface ProgressMessage {
 	type: string;
@@ -7,24 +18,101 @@ export interface ProgressMessage {
 	message?: string;
 	step?: string;
 	status?: string;
+	review?: Review;
 	snapshot?: ReviewProgress;
-	data?: { task?: ReviewTask; agent?: string; [key: string]: unknown };
+	data?: {
+		task?: ReviewTask;
+		assignment?: ReviewAssignment;
+		assignments?: ReviewAssignment[];
+		reasoning?: Omit<ReviewReasoningEntry, 'at'> & { at?: string };
+		tool?: ReviewToolCall;
+		chatMessage?: ReviewChatMessage;
+		agent?: string;
+		[key: string]: unknown;
+	};
 }
 
+const SNAPSHOT_KEYS = [
+	'planVersion',
+	'planSummary',
+	'assignments',
+	'roleDecisions',
+	'budget',
+	'candidateCount',
+	'coverage',
+	'coverageGaps',
+	'outcome',
+	'recommendedChecks',
+	'stage',
+	'planningDegraded',
+	'orchestratorModel'
+] as const;
+
 export function applyProgressMessage(current: ReviewProgress, event: ProgressMessage): ReviewProgress {
-	if (event.type === 'snapshot' && event.snapshot) return event.snapshot;
+	if (event.snapshot) {
+		return event.snapshot.id === current.id && event.snapshot.sequence >= current.sequence ? event.snapshot : current;
+	}
 	if (!event.sequence || event.sequence <= current.sequence) return current;
-	const next = { ...current, sequence: event.sequence, updatedAt: event.at ?? current.updatedAt };
+	const next: ReviewProgress = { ...current, sequence: event.sequence, updatedAt: event.at ?? current.updatedAt };
+	const data = event.data;
+	if (data) {
+		for (const key of SNAPSHOT_KEYS) {
+			if (key in data) (next as unknown as Record<string, unknown>)[key] = data[key];
+		}
+	}
 	const task = event.data?.task;
+	if (event.type === 'message' && event.data?.chatMessage) {
+		const entry = event.data.chatMessage;
+		const list = [...(current.messages ?? [])];
+		const index = list.findIndex((item) => item.id === entry.id);
+		if (index >= 0) list[index] = entry;
+		else list.push(entry);
+		next.messages = list.slice(-500);
+	}
 	if (event.type === 'task' && task) {
 		const previous = current.tasks[task.id];
 		next.tasks = { ...current.tasks, [task.id]: { ...previous, ...task, updatedAt: next.updatedAt } };
 		if (previous?.message === task.message && previous?.status === task.status) return next;
 	}
-	if (event.message && event.type !== 'finding') {
+	if (event.type === 'assignment' && event.data?.assignment) {
+		const assignment = event.data.assignment;
+		const list = [...(next.assignments ?? current.assignments ?? [])];
+		const index = list.findIndex((item) => item.id === assignment.id);
+		if (index >= 0) list[index] = assignment;
+		else list.push(assignment);
+		next.assignments = list;
+	}
+	if (event.type === 'reasoning' && event.data?.reasoning) {
+		const prior = current.reasoning?.find((item) => item.id === event.data?.reasoning?.id);
+		const entry: ReviewReasoningEntry = { ...event.data.reasoning, at: event.data.reasoning.at ?? prior?.at ?? next.updatedAt };
+		const list = [...(current.reasoning ?? [])];
+		const index = list.findIndex((item) => item.id === entry.id);
+		if (index >= 0) list[index] = entry;
+		else list.push(entry);
+		next.reasoning = list.slice(-200);
+	}
+	if (event.type === 'tool' && event.data?.tool) {
+		const tool = event.data.tool;
+		const list = [...(current.toolCalls ?? [])];
+		const index = list.findIndex((item) => item.id === tool.id);
+		if (index >= 0) list[index] = tool;
+		else list.push(tool);
+		next.toolCalls = list.slice(-300);
+	}
+	const tool = event.data?.tool;
+	const activityMessage = event.type === 'tool' && tool
+		? `${tool.command} · ${tool.status === 'error' ? 'failed' : tool.exitCode === null ? 'complete' : `exit ${tool.exitCode}`}`
+		: event.message;
+	if (
+		activityMessage &&
+		event.type !== 'reasoning' &&
+		event.type !== 'message' &&
+		event.type !== 'finding' &&
+		!(event.type === 'tool' && event.data?.tool?.status === 'running')
+	) {
 		next.activity = [...current.activity, {
-			sequence: event.sequence, message: event.message, at: next.updatedAt,
-			agent: task?.agent ?? event.data?.agent ?? (event.step?.startsWith('agent:') ? event.step.slice(6) : undefined)
+			sequence: event.sequence, message: activityMessage, at: next.updatedAt,
+			agent: task?.agent ?? event.data?.assignment?.role ?? event.data?.agent ?? (event.step?.startsWith('agent:') ? event.step.slice(6) : undefined)
 		}].slice(-100);
 	}
 	return next;
@@ -33,8 +121,8 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 export function taskSummary(tasks: ReviewTask[]) {
 	const done = tasks.filter((task) => task.status === 'done' || task.status === 'skipped').length;
 	const failed = tasks.filter((task) => task.status === 'error').length;
-	const running = tasks.filter((task) => task.status === 'running').length;
+	const running = tasks.filter((task) => task.status === 'running' || task.status === 'waiting').length;
 	return { done, failed, running, total: tasks.length, settled: done + failed };
 }
 
-export { emptyReviewProgress };
+export { assignmentCounts, emptyReviewProgress, formatAssignmentHeadline };

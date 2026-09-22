@@ -1,5 +1,7 @@
 import { env } from '$env/dynamic/public';
 import type {
+	CodexConnection,
+	CodexModel,
 	ApplyFixRequest,
 	ApplyFixResponse,
 	CreateRepoInput,
@@ -16,6 +18,11 @@ import type {
 	RemoteRepo,
 	Repo,
 	Review,
+	ReviewChatMessage,
+	ReviewCodeContext,
+	ReviewMetrics,
+	RereviewRequest,
+	RereviewResponse,
 	SuggestFixRequest,
 	SuggestFixResponse
 } from '@recoder/shared';
@@ -42,6 +49,10 @@ export function detectProvider(url: string): 'github' | 'gitlab' {
 }
 
 export const serverApi = {
+	getCodexStatus: () => req<CodexConnection>('/api/settings/codex/status'),
+	connectCodex: () => req<CodexConnection>('/api/settings/codex/connect', { method: 'POST' }),
+	disconnectCodex: () => req<{ ok: boolean }>('/api/settings/codex/disconnect', { method: 'POST' }),
+	getCodexModels: () => req<CodexModel[]>('/api/settings/codex/models'),
 	listRepos: () => req<Repo[]>('/api/repos'),
 	createRepo: (input: CreateRepoInput) =>
 		req<Repo>('/api/repos', { method: 'POST', body: JSON.stringify(input) }),
@@ -49,8 +60,18 @@ export const serverApi = {
 		req<PullPreview>(`/api/repos/${repoId}/pulls/${n}`),
 	listPrs: (repoId: string) => req<PullRequest[]>(`/api/repos/${repoId}/pulls`),
 	listReviews: () => req<Review[]>('/api/reviews'),
-	getReview: (id: string) => req<Review>(`/api/reviews/${id}`),
-	getReviewFiles: (id: string) => req<FileDiff[]>(`/api/reviews/${id}/files`),
+	/** Compact live progress per review (tasks settled/total, active specialists). */
+	reviewSummaries: () =>
+		req<Record<string, { tasksDone: number; tasksTotal: number; specialists: number }>>(
+			'/api/reviews/progress-summaries'
+		),
+	getReview: (id: string, signal?: AbortSignal) => req<Review>(`/api/reviews/${id}`, { signal }),
+	sendReviewMessage: (id: string, assignmentId: string, text: string, codeContext?: ReviewCodeContext) =>
+		req<ReviewChatMessage>(`/api/reviews/${id}/chat`, { method: 'POST', body: JSON.stringify({ assignmentId, text, codeContext }) }),
+	stopReviewMessage: (id: string, assignmentId: string) =>
+		req<{ stopped: boolean }>(`/api/reviews/${id}/chat/stop`, { method: 'POST', body: JSON.stringify({ assignmentId }) }),
+	getReviewMetrics: (id: string, signal?: AbortSignal) => req<ReviewMetrics | null>(`/api/reviews/${id}/metrics`, { signal }),
+	getReviewFiles: (id: string, signal?: AbortSignal) => req<FileDiff[]>(`/api/reviews/${id}/files`, { signal }),
 	discuss: (reviewId: string, input: DiscussRequest) =>
 		req<DiscussResponse>(`/api/reviews/${reviewId}/discuss`, {
 			method: 'POST',
@@ -104,6 +125,12 @@ export const serverApi = {
 		if (!result) throw new Error('The reviewer did not respond.');
 		return result;
 	},
+	/** Batch re-review pass driven by the developer's notes. */
+	rereview: (reviewId: string, input: RereviewRequest) =>
+		req<RereviewResponse>(`/api/reviews/${reviewId}/rereview`, {
+			method: 'POST',
+			body: JSON.stringify(input)
+		}),
 	suggestFix: (reviewId: string, input: SuggestFixRequest) =>
 		req<SuggestFixResponse>(`/api/reviews/${reviewId}/fixes/suggest`, {
 			method: 'POST',

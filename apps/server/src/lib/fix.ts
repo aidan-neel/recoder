@@ -66,6 +66,8 @@ export async function suggestFix(
 
 	try {
 		const output = await chatCompletion({
+			provider: cfg.provider,
+			reasoningEffort: cfg.reasoningEffort,
 			baseUrl: cfg.baseUrl,
 			apiKey: cfg.apiKey,
 			model: cfg.model,

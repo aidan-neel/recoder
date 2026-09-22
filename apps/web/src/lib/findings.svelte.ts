@@ -6,6 +6,7 @@
  */
 
 import type { Finding as BackendFinding, FindingSeverity as BackendSeverity } from '@recoder/shared';
+import { findingTitle } from './finding-title';
 
 export type FindingSeverity = 'high' | 'medium' | 'low' | 'info';
 export type FindingStatus = 'open' | 'accepted' | 'dismissed';
@@ -29,7 +30,7 @@ export const SEVERITIES: FindingSeverity[] = ['high', 'medium', 'low', 'info'];
 
 /** Severity → marker dot color. */
 export const SEVERITY_DOT: Record<FindingSeverity, string> = {
-	high: '#e0655f',
+	high: '#ef4444',
 	medium: '#d9a13b',
 	low: '#5b8cff',
 	info: '#8a8f98'
@@ -37,8 +38,9 @@ export const SEVERITY_DOT: Record<FindingSeverity, string> = {
 
 export interface Finding {
 	id: string;
-	/** Short code shown in threads, e.g. `F-01`. */
+	/** Legacy reference retained for existing links and searches. */
 	code: string | null;
+	title: string;
 	severity: FindingSeverity;
 	/** Review category, e.g. `perf`, `security`, `docs`. */
 	category: string;
@@ -63,6 +65,7 @@ function initialFindings(): Finding[] {
 		{
 			id: 'f-security-tenant',
 			code: 'F-01',
+			title: 'Shared buckets leak limits across tenants',
 			severity: 'high',
 			category: 'security',
 			agent: 'security',
@@ -75,6 +78,7 @@ function initialFindings(): Finding[] {
 		{
 			id: 'f-perf-eviction',
 			code: 'F-02',
+			title: 'Unbounded bucket storage',
 			severity: 'medium',
 			category: 'perf',
 			agent: 'perf',
@@ -87,6 +91,7 @@ function initialFindings(): Finding[] {
 		{
 			id: 'f-correctness-clock',
 			code: 'F-03',
+			title: 'Refill ignores the injected clock',
 			severity: 'medium',
 			category: 'correctness',
 			agent: 'correctness',
@@ -99,6 +104,7 @@ function initialFindings(): Finding[] {
 		{
 			id: 'f-docs-allow',
 			code: 'F-04',
+			title: 'Outdated allow documentation',
 			severity: 'low',
 			category: 'docs',
 			agent: 'docs',
@@ -111,6 +117,7 @@ function initialFindings(): Finding[] {
 		{
 			id: 'f-style-capacity',
 			code: 'F-05',
+			title: 'Zero capacity silently blocks requests',
 			severity: 'low',
 			category: 'style',
 			agent: 'patterns',
@@ -123,6 +130,7 @@ function initialFindings(): Finding[] {
 		{
 			id: 'f-note-clock',
 			code: 'F-06',
+			title: 'Clock integration needs verification',
 			severity: 'info',
 			category: 'note',
 			agent: 'docs',
@@ -149,6 +157,7 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 	return {
 		id: f.id,
 		code: `R-${String(index + 1).padStart(2, '0')}`,
+		title: findingTitle(body, f.title),
 		severity: severityMap[f.severity],
 		category,
 		agent: f.agent ?? 'reviewer',
@@ -178,11 +187,29 @@ class FindingsStore {
 	activeId = $state<string | null>(null);
 	/** Finding id currently hovered (card or code) — drives cross-highlighting. */
 	hoveredId = $state<string | null>(null);
+	/** While true (a selection drag is in progress), hovering never cross-highlights. */
+	suppressHover = $state(false);
 	/** When true, info findings are omitted from the tree, diff, and navigator. */
 	hideInfo = $state(loadHideInfo());
+	hiddenSeverities = $state<FindingSeverity[]>([]);
+
+	isSeverityShown(severity: FindingSeverity): boolean {
+		return !this.hiddenSeverities.includes(severity) && !(this.hideInfo && severity === 'info');
+	}
 
 	isShown(finding: Finding): boolean {
-		return !(this.hideInfo && finding.severity === 'info');
+		return this.isSeverityShown(finding.severity);
+	}
+
+	toggleSeverity(severity: FindingSeverity): void {
+		if (severity === 'info') { this.setHideInfo(!this.hideInfo); return; }
+		this.hiddenSeverities = this.hiddenSeverities.includes(severity)
+			? this.hiddenSeverities.filter((item) => item !== severity)
+			: [...this.hiddenSeverities, severity];
+		if (this.active && !this.isShown(this.active)) {
+			this.activeId = null;
+			this.hoveredId = null;
+		}
 	}
 
 	forFile(file: string): Finding[] {
@@ -275,6 +302,7 @@ class FindingsStore {
 	/** Replace items wholesale when switching to another session's findings. */
 	replaceAll(findings: Finding[]): void {
 		this.items = findings;
+		this.hiddenSeverities = [];
 		this.suggestions = {};
 		this.activeId = null;
 		this.hoveredId = null;
@@ -282,6 +310,7 @@ class FindingsStore {
 
 	reset(): void {
 		this.items = initialFindings();
+		this.hiddenSeverities = [];
 		this.suggestions = {};
 		this.activeId = null;
 		this.hoveredId = null;

@@ -88,7 +88,7 @@ describe('reviews + command runner', () => {
 		}
 	});
 
-	test('POST /api/reviews queues a review and the demo pipeline passes', async () => {
+	test('POST /api/reviews queues a review and provider fetch failures fail instead of stub-succeeding', async () => {
 		const createdRepo = await app.request('/api/repos', {
 			method: 'POST',
 			headers: { 'content-type': 'application/json' },
@@ -105,15 +105,15 @@ describe('reviews + command runner', () => {
 		const review = await createdReview.json();
 		expect(review.status).toBe('queued');
 
-		// Demo pipeline runs `echo` steps; poll until it settles.
-		let status = review.status;
-		for (let i = 0; i < 50 && (status === 'queued' || status === 'running'); i++) {
+		let loaded = review;
+		for (let i = 0; i < 50 && (loaded.status === 'queued' || loaded.status === 'running'); i++) {
 			await new Promise((r) => setTimeout(r, 100));
 			const res = await app.request(`/api/reviews/${review.id}`);
-			status = (await res.json()).status;
+			loaded = await res.json();
 		}
-		expect(status).toBe('passed');
-		expect(db.runs.list().length).toBeGreaterThan(0);
+		expect(loaded.status).toBe('failed');
+		expect(loaded.summary).toBeTruthy();
+		expect(loaded.findings).toEqual([]);
 	});
 
 	test('DELETE /api/reviews/:id removes the review and its diff', async () => {

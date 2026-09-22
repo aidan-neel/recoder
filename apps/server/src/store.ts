@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
-import type { CommandRun, Repo, Review, ReviewProgress } from '@recoder/shared';
+import type { CommandRun, Repo, Review, ReviewProgress, TokenCall } from '@recoder/shared';
 import { serverDataDir } from './lib/data-dir';
 
 /**
@@ -19,6 +19,7 @@ function getDb(): Database {
 		handle.run('CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS review_progress (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+		handle.run('CREATE TABLE IF NOT EXISTS review_metrics (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run(
 			'CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)'
 		);
@@ -67,6 +68,13 @@ export const db = {
 
 export const reviewProgress = createCollection<ReviewProgress>('review_progress');
 
+export const reviewMetrics = createCollection<{
+	id: string;
+	startedAt: string;
+	pipelineTracked: boolean;
+	calls: TokenCall[];
+}>('review_metrics');
+
 /** Sandbox checkout paths by review id (ephemeral: lost on restart, context falls back to diff-only). */
 export const reviewSandboxes = new Map<string, string>();
 
@@ -102,10 +110,24 @@ export function recoverStaleReviews(): number {
 			db.reviews.set({
 				...review,
 				status: 'failed',
-				summary: 'Server restarted while this review was running. Press Review to retry.',
+				summary: 'Review interrupted when the server restarted. Progress and candidates were kept. Press Review to retry.',
 				updatedAt: new Date().toISOString()
 			});
+			const progress = reviewProgress.get(review.id);
+			if (progress) {
+				reviewProgress.set({ ...progress, outcome: 'failed', updatedAt: new Date().toISOString() });
+			}
 			recovered++;
+		}
+		const progress = reviewProgress.get(review.id);
+		if (progress?.messages?.some((message) => message.status === 'streaming') || progress?.reasoning?.some((entry) => entry.status === 'streaming')) {
+			reviewProgress.set({
+				...progress,
+				messages: progress.messages?.map((message) => message.status === 'streaming'
+					? { ...message, status: 'error', text: `${message.text}${message.text ? '\n\n' : ''}Response interrupted when the server restarted.` }
+					: message),
+				reasoning: progress.reasoning?.map((entry) => entry.status === 'streaming' ? { ...entry, status: 'error' } : entry)
+			});
 		}
 	}
 	if (recovered > 0) console.warn(`[store] marked ${recovered} stale review(s) as failed`);

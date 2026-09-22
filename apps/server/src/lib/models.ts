@@ -1,13 +1,16 @@
 import { z } from 'zod';
+import type { ReasoningEffort } from '@recoder/shared';
 import { effectiveReviewEnv, getStoredSettings } from './review-settings.js';
 
 /**
  * Model routing for the review harness.
  *
- * Every role talks OpenAI-compatible chat completions, so one client covers
+ * API-key roles use OpenAI-compatible chat completions, so one client covers
  * vLLM (`http://host:8000/v1`), OpenRouter
  * (`https://openrouter.ai/api/v1`), and DashScope
- * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`).
+ * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). Subscription
+ * entries explicitly select the direct ChatGPT OAuth adapter instead; they never
+ * inherit an API endpoint or key from the shared environment.
  *
  * One shared model by default; override per role when you want a stronger
  * (or cheaper) model for a specific lens:
@@ -30,6 +33,9 @@ const configSchema = z.object({
 });
 
 export interface RoleConfig {
+	/** Unset API effort is omitted for endpoints that do not support reasoning. */
+	reasoningEffort?: ReasoningEffort;
+	provider?: 'openai-compatible' | 'codex';
 	role: ReviewRole;
 	baseUrl: string;
 	apiKey: string;
@@ -56,6 +62,7 @@ export function reviewConfig(): { baseUrl: string; apiKey: string; model: string
 export function isReviewConfigured(): boolean {
 	try {
 		configForRole('security');
+		configForOrchestrator();
 		return true;
 	} catch {
 		return false;
@@ -69,14 +76,27 @@ export function isReviewConfigured(): boolean {
  * to the global base URL/key. Legacy env trio still works when no entries
  * (or no matching entry) exist.
  */
+export function configForOrchestrator(): RoleConfig {
+	return resolveConfig('correctness', true);
+}
+
 export function configForRole(role: ReviewRole): RoleConfig {
+	return resolveConfig(role, false);
+}
+
+function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 	const stored = getStoredSettings();
+	const reasoningEffort = stored.roleEfforts?.[role];
 	const eff = effectiveReviewEnv();
 	const entries = stored.models ?? [];
-	const entryId = stored.roles?.[role] ?? stored.sharedModelId ?? entries[0]?.id;
+	const entryId = (orchestrator ? stored.orchestratorModelId : stored.roles?.[role] ?? stored.specialistModelId)
+		?? stored.sharedModelId ?? entries[0]?.id;
 	// A dangling pointer (entry deleted out-of-band) falls back to the first entry.
 	const entry = entries.find((e) => e.id === entryId) ?? entries[0];
 	if (entry) {
+		if (entry.provider === 'codex') {
+			return { role, provider: 'codex', model: entry.model, baseUrl: '', apiKey: '', reasoningEffort: reasoningEffort ?? 'medium' };
+		}
 		const baseUrl = entry.baseUrl || eff.baseUrl;
 		const apiKey = entry.apiKey || eff.apiKey;
 		if (!baseUrl || !apiKey) {
@@ -84,11 +104,11 @@ export function configForRole(role: ReviewRole): RoleConfig {
 				`reviewer not configured: model "${entry.label}" has no endpoint (set a base URL and API key)`
 			);
 		}
-		return { role, baseUrl, apiKey, model: entry.model };
+		return { role, baseUrl, apiKey, model: entry.model, reasoningEffort };
 	}
 	const shared = reviewConfig();
-	const override = eff.roles[role];
-	return { role, baseUrl: shared.baseUrl, apiKey: shared.apiKey, model: override || shared.model };
+	const override = orchestrator ? undefined : eff.roles[role];
+	return { role, baseUrl: shared.baseUrl, apiKey: shared.apiKey, model: override || shared.model, reasoningEffort };
 }
 
 /** Caps so one PR can't blow the context window. */
