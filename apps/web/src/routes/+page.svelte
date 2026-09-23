@@ -169,10 +169,11 @@
 
 	/* ── Sessions ──────────────────────────────────────────────── */
 
-	function openReview(review: Review, repo: Repo, diff = false): void {
+	/** `chat` opens the Orchestrator panel beside the diff (interactive review). */
+	function openReview(review: Review, repo: Repo, diff = false, chat = false): void {
 		const status = review.status === 'running' || review.status === 'queued' ? 'reviewing' : 'ready';
 		sessionState.ensureSession(review.id, repo.name, `#${review.prNumber}`, status);
-		void goto(`/session/${review.id}${diff ? '?view=diff' : ''}`);
+		void goto(`/session/${review.id}${diff ? `?view=diff${chat ? '&chat=1' : ''}` : ''}`);
 	}
 
 	/**
@@ -195,7 +196,7 @@
 			if (pr.headRef) recentSessions.branches[key] = pr.headRef;
 			await recentSessions.refresh();
 			if (mode === 'interactive' || interactiveReview) {
-				openReview(review, repo, mode === 'review');
+				openReview(review, repo, true, mode === 'interactive');
 				return;
 			}
 			sessionState.ensureSession(review.id, repo.name, `#${pr.number}`, 'reviewing');
@@ -315,7 +316,17 @@
 		>
 			{text}
 		</HoverCard.Trigger>
-		<HoverCard.Content side="bottom" align="start" class="pr-card">
+		<HoverCard.Content
+			side="bottom"
+			align="start"
+			class="pr-card"
+			{...{
+				onclick: () => {
+					if (item.review) openReview(item.review, item.repo);
+					else window.open(item.pr.url, '_blank', 'noopener,noreferrer');
+				}
+			}}
+		>
 			<div class="flex items-center gap-2 font-mono text-[11.5px] text-fg-faint">
 				<ProviderMark provider={item.repo.provider} size={12} />
 				<span class="truncate">{item.repo.name}</span>
@@ -334,7 +345,7 @@
 				{#if item.pr.createdAt}<span aria-hidden="true">·</span><span>{shortAge(item.pr.createdAt)} old</span>{/if}
 				<span aria-hidden="true">·</span><span class="truncate">{item.pr.author}</span>
 			</div>
-			<div class="mt-1 flex items-center justify-between gap-2 border-t border-line-subtle pt-2.5">
+			<div class="mt-2 flex items-center justify-between gap-2">
 				{#if status}
 					<Badge variant="secondary" class="status-chip" data-tone={status.tone}>{status.label}</Badge>
 				{:else}

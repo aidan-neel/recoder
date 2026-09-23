@@ -1,8 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import Ellipsis from '@lucide/svelte/icons/ellipsis';
-	import GitBranch from '@lucide/svelte/icons/git-branch';
-	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
@@ -26,12 +24,17 @@
 		onFiles?: (() => void) | null;
 		filesLabel?: string;
 		menu?: Snippet;
+		/** Diff workspace: its toolbar (findings stepper, filters, actions) takes the meta's place, so the view has one bar. */
+		toolbar?: Snippet;
 	}
 
 	let {
 		title, branch = null, repo = null, prLabel = null, bordered = true, files = null, additions = null, deletions = null,
-		view, onView = null, diffDisabled = false, onFiles = null, filesLabel = 'Open diff', menu
+		view, onView = null, diffDisabled = false, onFiles = null, filesLabel = 'Open diff', menu, toolbar
 	}: Props = $props();
+
+	/** Branch, repo and diffstat, shown in the title's tooltip. */
+	const tooltip = $derived([title, [repo, prLabel].filter(Boolean).join(' '), branch, files !== null ? `${files} ${files === 1 ? 'file' : 'files'} +${additions ?? 0} −${deletions ?? 0}` : null].filter(Boolean).join(' · '));
 
 	/**
 	 * Sivir Tabs keeps its own value after a click. The conversation header stays
@@ -52,21 +55,10 @@
 	}
 </script>
 
-<header class="session-header" data-bordered={bordered || undefined}>
-	<Typography.Title level={1} class="session-title" {title}>{title}</Typography.Title>
-	<div class="session-meta">
-		{#if branch}
-			<span class="session-branch" title={branch}><GitBranch size={12} aria-hidden="true" /><span class="truncate">{branch}</span></span>
-		{/if}
-		{#if repo}<span class="shrink-0">{repo}{prLabel ? ` ${prLabel}` : ''}</span>{/if}
-		{#if files !== null}
-			<Button variant="quiet" class="session-files" disabled={!onFiles} onclick={onFiles ?? undefined} aria-label="{filesLabel}, {files} changed {files === 1 ? 'file' : 'files'}">
-				<span>{files} {files === 1 ? 'file' : 'files'}</span>
-				{#if additions !== null}<span class="text-success">+{additions}</span>{/if}
-				{#if deletions !== null}<span class="text-danger">−{deletions}</span>{/if}
-			</Button>
-		{/if}
-	</div>
+<!-- Same bar in every view: title far left · view tabs centred · ⋯ and the
+     view's actions (toolbar) far right. Branch/repo/diffstat live in the title's tooltip. -->
+<header class="session-header" data-bordered={bordered || undefined} data-merged="">
+	<Typography.Title level={1} class="session-title" title={tooltip}>{title}</Typography.Title>
 	{#if onView}
 		<Tabs.Root bind:value={current} onValueChange={choose} variant="segmented" class="view-switch">
 			<Tabs.List {...{ 'aria-label': 'Session view' }}>
@@ -81,5 +73,8 @@
 			<DropdownMenu.Trigger variant="ghost" size="icon" aria-label="Session actions"><Ellipsis size={16} aria-hidden="true" /></DropdownMenu.Trigger>
 			<DropdownMenu.Content>{@render menu()}</DropdownMenu.Content>
 		</DropdownMenu.Root>
+	{/if}
+	{#if toolbar}
+		<div class="session-toolbar">{@render toolbar()}</div>
 	{/if}
 </header>

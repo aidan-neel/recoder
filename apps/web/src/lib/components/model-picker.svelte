@@ -38,13 +38,26 @@
 
 	let open = $state(false);
 	let triggerEl: HTMLElement | undefined;
-	/** In a composer the menu clears the whole composer, not just the trigger (5c). */
-	let lift = $state(0);
 
+	/**
+	 * Right-align the menu to the trigger. Sivir's dropdown is always "-start"
+	 * and Floating UI may already have shifted it to fit the viewport, so
+	 * measure after it opens and nudge by the actual gap (kept on screen).
+	 */
 	$effect(() => {
 		if (!open || !triggerEl) return;
-		const composer = triggerEl.closest('.rc-composer');
-		lift = composer ? Math.max(0, triggerEl.getBoundingClientRect().top - composer.getBoundingClientRect().top) : 0;
+		const trigger = triggerEl;
+		const frame = requestAnimationFrame(() => {
+			const panel = [...document.querySelectorAll<HTMLElement>("[data-ui='popover-content'].model-menu")].at(-1);
+			const floating = panel?.closest<HTMLElement>('[data-floating-content]');
+			if (!panel || !floating) return;
+			const current = parseFloat(floating.style.getPropertyValue('--menu-shift')) || 0;
+			const rect = panel.getBoundingClientRect();
+			const wanted = current + trigger.getBoundingClientRect().right - rect.right;
+			const minShift = current + 8 - rect.left;
+			floating.style.setProperty('--menu-shift', `${Math.max(wanted, minShift)}px`);
+		});
+		return () => cancelAnimationFrame(frame);
 	});
 
 	onMount(() => {
@@ -93,7 +106,7 @@
 			</span>
 		{/key}
 	</DropdownMenu.Trigger>
-	<DropdownMenu.Content class="model-menu w-[250px]" {...{ style: `--menu-lift: ${lift}px` }}>
+	<DropdownMenu.Content class="model-menu">
 		<DropdownMenu.Sub>
 			<DropdownMenu.SubTrigger class="model-menu-row">
 				<span class="flex w-full items-center gap-2">

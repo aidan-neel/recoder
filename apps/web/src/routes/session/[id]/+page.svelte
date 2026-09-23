@@ -3,7 +3,6 @@
 	import { page } from '$app/state';
 	import { tick, untrack } from 'svelte';
 	import MessageSquare from '@lucide/svelte/icons/message-square';
-	import X from '@lucide/svelte/icons/x';
 	import Check from '@lucide/svelte/icons/check';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Alert from '@sivir-ui/svelte/components/alert';
@@ -30,6 +29,8 @@
 	import { getFileDiff } from '$lib/diff';
 	import { findingsStore, mapBackendFinding } from '$lib/findings.svelte';
 	import { notesStore } from '$lib/notes.svelte';
+	import { parseModelNotes } from '$lib/model-notes';
+	import { errorToast } from '$lib/notify';
 	import { threadsStore } from '$lib/threads.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
 	import { DEFAULT_FILE, sessionFile } from '$lib/session-file.svelte';
@@ -145,21 +146,24 @@
 		const currentId = liveReviewId;
 		const status = liveReviewStatus;
 		void filesRetryNonce;
-		if (!currentId || !status || status === 'draft') return;
+		if (!currentId || !status) return;
 		const controller = new AbortController();
 		let timer: ReturnType<typeof setTimeout> | undefined;
+		// Drafts (interactive review) get their diff fetched in the background after creation.
+		let loaded = false;
 		async function loadFiles() {
 			try {
 				const files = await serverApi.getReviewFiles(currentId!, AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]));
 				if (controller.signal.aborted || page.params.id !== currentId) return;
 				backendFiles = files;
 				filesError = null;
+				loaded = true;
 			} catch {
 				if (controller.signal.aborted || page.params.id !== currentId) return;
 				// A diff is not available during checkout or after an early failure.
 				if (status === 'passed' || status === 'failed') filesError = 'Could not load the code diff. Try again.';
 			} finally {
-				if (!controller.signal.aborted && (status === 'queued' || status === 'running')) timer = setTimeout(loadFiles, 2500);
+				if (!controller.signal.aborted && (status === 'queued' || status === 'running' || (status === 'draft' && !loaded))) timer = setTimeout(loadFiles, 2500);
 			}
 		}
 		void loadFiles();
@@ -190,6 +194,130 @@
 	let codeContext = $state<ReviewCodeContext | null>(null);
 	let chatFocus = $state(0);
 	let chatReturnFocus: HTMLElement | null = null;
+
+	/* File tree width: draggable, remembered per browser. Kept in rem so it
+	   scales with the root font size on large monitors. */
+	const TREE_KEY = 'recoder.treeWidth';
+	const TREE_MIN = 12.5;
+	const TREE_MAX = 30;
+	const TREE_DEFAULT = 18;
+	let treeWidth = $state(TREE_DEFAULT);
+	$effect(() => {
+		try {
+			const stored = Number(localStorage.getItem(TREE_KEY));
+			if (stored >= TREE_MIN && stored <= TREE_MAX) treeWidth = stored;
+		} catch {
+			// Storage unavailable: default width.
+		}
+	});
+	function setTreeWidth(rem: number): void {
+		treeWidth = Math.min(TREE_MAX, Math.max(TREE_MIN, rem));
+		try {
+			localStorage.setItem(TREE_KEY, String(treeWidth));
+		} catch {
+			// Not persisted; the width still applies for this visit.
+		}
+	}
+	function startTreeResize(event: PointerEvent): void {
+		if (event.button !== 0) return;
+		const handle = event.currentTarget as HTMLElement;
+		handle.setPointerCapture(event.pointerId);
+		const startX = event.clientX;
+		const start = treeWidth;
+		const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+		document.documentElement.dataset.resizing = '';
+		const move = (e: PointerEvent) => setTreeWidth(start + (e.clientX - startX) / rootPx);
+		const end = () => {
+			handle.removeEventListener('pointermove', move);
+			handle.removeEventListener('pointerup', end);
+			handle.removeEventListener('pointercancel', end);
+			delete document.documentElement.dataset.resizing;
+		};
+		handle.addEventListener('pointermove', move);
+		handle.addEventListener('pointerup', end);
+		handle.addEventListener('pointercancel', end);
+	}
+	/* Chat drawer width: drag its left edge. Narrower than CHAT_COLLAPSE
+	   collapses it; dragging back out (or Enter / double-click) reopens it. */
+	const CHAT_KEY = 'recoder.chatWidth';
+	const CHAT_MIN = 20;
+	const CHAT_MAX = 45;
+	const CHAT_DEFAULT = 26.25;
+	const CHAT_COLLAPSE = 12;
+	let chatWidth = $state(CHAT_DEFAULT);
+	$effect(() => {
+		try {
+			const stored = Number(localStorage.getItem(CHAT_KEY));
+			if (stored >= CHAT_MIN && stored <= CHAT_MAX) chatWidth = stored;
+		} catch {
+			// Storage unavailable: default width.
+		}
+	});
+	function setChatWidth(rem: number): void {
+		chatWidth = Math.min(CHAT_MAX, Math.max(CHAT_MIN, rem));
+		try {
+			localStorage.setItem(CHAT_KEY, String(chatWidth));
+		} catch {
+			// Not persisted; the width still applies for this visit.
+		}
+	}
+	function startChatResize(event: PointerEvent): void {
+		if (event.button !== 0) return;
+		const handle = event.currentTarget as HTMLElement;
+		handle.setPointerCapture(event.pointerId);
+		const startX = event.clientX;
+		const start = showChat ? chatWidth : 0;
+		const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+		let moved = false;
+		document.documentElement.dataset.resizing = '';
+		const move = (e: PointerEvent) => {
+			const width = start + (startX - e.clientX) / rootPx;
+			if (Math.abs(e.clientX - startX) > 3) moved = true;
+			if (!moved) return;
+			if (width < CHAT_COLLAPSE) {
+				if (chatOpen) chatOpen = false;
+				return;
+			}
+			if (!chatOpen) {
+				threadsStore.close();
+				chatOpen = true;
+			}
+			setChatWidth(width);
+		};
+		const end = () => {
+			handle.removeEventListener('pointermove', move);
+			handle.removeEventListener('pointerup', end);
+			handle.removeEventListener('pointercancel', end);
+			delete document.documentElement.dataset.resizing;
+		};
+		handle.addEventListener('pointermove', move);
+		handle.addEventListener('pointerup', end);
+		handle.addEventListener('pointercancel', end);
+	}
+	function chatResizeKey(event: KeyboardEvent): void {
+		if (event.key === 'Enter' || event.key === ' ') {
+			event.preventDefault();
+			if (showChat) void closeChat();
+			else openChat();
+			return;
+		}
+		if (!showChat) {
+			if (event.key === 'ArrowLeft') { event.preventDefault(); openChat(); }
+			return;
+		}
+		const next = { ArrowLeft: chatWidth + 1, ArrowRight: chatWidth - 1, Home: CHAT_MAX, End: CHAT_MIN }[event.key];
+		if (next === undefined) return;
+		event.preventDefault();
+		if (event.key === 'ArrowRight' && chatWidth <= CHAT_MIN) chatOpen = false;
+		else setChatWidth(next);
+	}
+
+	function treeResizeKey(event: KeyboardEvent): void {
+		const next = { ArrowLeft: treeWidth - 1, ArrowRight: treeWidth + 1, Home: TREE_MIN, End: TREE_MAX }[event.key];
+		if (next === undefined) return;
+		event.preventDefault();
+		setTreeWidth(next);
+	}
 	const showChat = $derived(chatOpen && !threadsStore.openId);
 	const sidePanelOpen = $derived(!!threadsStore.openId || showChat);
 	const reviewing = $derived(backendReview?.status === 'running' || backendReview?.status === 'queued');
@@ -241,6 +369,35 @@
 	// their own findings (synced once, so local dismiss/accept is preserved),
 	// mock sessions get the local demo set back. Never accumulate across reviews.
 	let findingsSyncedFor: string | null = $state(null);
+
+	/* Notes the model wrote on request (```recoder-note blocks in a finished
+	   reply) become diff notes, once per reply. Cleared with the session. */
+	const notedReplies = new Set<string>();
+	$effect(() => {
+		const files = backendFiles;
+		// Read status/text here (tracked): replies finish by updating in place.
+		const finished = (reviewStream?.progress.messages ?? []).filter((message) =>
+			message.from === 'assistant' && message.status === 'done' && message.text.includes('```recoder-note'));
+		if (!files || !backendReview || finished.length === 0) return;
+		untrack(() => {
+			for (const message of finished) {
+				if (notedReplies.has(message.id)) continue;
+				notedReplies.add(message.id);
+				for (const note of parseModelNotes(message.text)) {
+					const file = files.find((f) => f.path === note.file) ?? files.find((f) => f.path.endsWith(`/${note.file}`) || note.file.endsWith(`/${f.path}`));
+					if (!file) continue;
+					const lines = file.hunks.flatMap((hunk) => hunk.lines).filter((line) => {
+						const n = note.side === 'old' ? line.oldNo : line.newNo;
+						return n !== null && n >= note.startLine && n <= note.endLine;
+					});
+					notesStore.add({
+						file: file.path, startLine: note.startLine, endLine: note.endLine, side: note.side, body: note.body,
+						quote: lines.map((line) => line.text).join('\n').slice(0, 2000)
+					});
+				}
+			}
+		});
+	});
 	$effect(() => {
 		if (!backendChecked) return;
 		if (isBackend && backendReview) {
@@ -296,12 +453,13 @@
 			lastAutoFile = null;
 			userPickedFile = false;
 			findingsSyncedFor = null;
-			chatOpen = false;
+			chatOpen = page.url.searchParams.has('chat');
 			chatDraft = '';
 			codeContext = null;
 			threadsStore.close();
 			threadsStore.pendingMessage = null;
 			notesStore.clear();
+			notedReplies.clear();
 			// Drop the previous session's file + findings immediately so the new
 			// session never flashes stale content while its review loads.
 			sessionFile.select(DEFAULT_FILE);
@@ -337,6 +495,16 @@
 	// Live pipeline log while the backend is working (fetch/sandbox/agents).
 	let queueing = $state(false);
 	/** Queue a fresh backend review for the same repo/PR and jump to it. */
+	/** Findings empty state: run a draft's full review directly. */
+	async function startDraftReview(): Promise<void> {
+		if (!backendReview) return;
+		try {
+			backendReview = await serverApi.startReview(backendReview.id);
+		} catch (e) {
+			errorToast('Could not start the review', e instanceof Error ? e.message : undefined);
+		}
+	}
+
 	async function rerunReview(): Promise<void> {
 		if (!backendReview || queueing) return;
 		queueing = true;
@@ -364,6 +532,13 @@
 </script>
 
 <svelte:window onkeydown={(event) => {
+	// Escape lets go of attached code first (from the composer or the diff), then collapses the chat.
+	if (event.key === 'Escape' && !event.defaultPrevented && codeContext && showChat
+		&& (document.activeElement?.closest('#interactive-review, #diff-panel') || document.activeElement === document.body)) {
+		event.preventDefault();
+		codeContext = null;
+		return;
+	}
 	if (event.key === 'Escape' && !event.defaultPrevented && document.activeElement?.closest('#interactive-review')) {
 		event.preventDefault();
 		void closeChat();
@@ -410,8 +585,8 @@
 		files={backendFiles ? diffFiles.length : null}
 		additions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.additions, 0) : null}
 		deletions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
-		onOpenDiff={backendReview.status !== 'draft' ? () => setDiffView(true) : null}
-		onShowView={backendReview.status !== 'draft' ? (view) => setView(view) : null}
+		onOpenDiff={() => setDiffView(true)}
+		onShowView={(view) => setView(view)}
 		onOpenFinding={(finding) => { if (finding.file) { sessionFile.select(finding.file); userPickedFile = true; } setDiffView(true); }}
 		onRestart={() => void rerunReview()}
 		restarting={queueing}
@@ -449,6 +624,7 @@
 		onFiles={() => (filesOpen = true)}
 		filesLabel="Browse changed files"
 		menu={diffMenu}
+		toolbar={workspaceToolbar}
 	/>
 	<Sheet.Root bind:open={filesOpen}>
 		<Sheet.Content side="left" class="w-[400px] max-w-[calc(100%-1rem)] [&>[data-ui=sheet-surface]]:bg-background [&>[data-ui=sheet-surface]]:p-0">
@@ -456,20 +632,20 @@
 			<SessionSidebar inSheet fileDiffs={isBackend ? (backendFiles ?? []) : null} onFileSelect={() => filesOpen = false} />
 		</Sheet.Content>
 	</Sheet.Root>
-	{#if workspaceView !== 'findings'}
-		<div class="diff-toolbar">
-			<FindingsBar>
+	{#snippet workspaceToolbar()}
+			<FindingsBar part="actions">
 				{#snippet trailing()}
 					{#if backendReview}
-						<Typography.Metadata class="review-state" role="status">
-							{#if reviewing}<Spinner size={13} class="text-sev-medium" aria-hidden="true" />Review running{:else if backendReview.status === 'failed'}Review interrupted{:else if backendReview.status === 'draft'}Ready to review{:else}<Check size={14} class="text-success" aria-hidden="true" />Review complete{/if}
-						</Typography.Metadata>
+						{#if reviewing || backendReview.status === 'failed'}
+							<Typography.Metadata class="review-state" role="status">
+								{#if reviewing}<Spinner size={13} class="text-sev-medium" aria-hidden="true" />Review running{:else}Review interrupted{/if}
+							</Typography.Metadata>
+						{/if}
 						<Button id="ask-review" variant="outline" class="gap-2" aria-pressed={showChat} aria-expanded={showChat} aria-controls="interactive-review" onclick={() => showChat ? void closeChat() : openChat()}><MessageSquare size={15} aria-hidden="true" />Ask reviewer</Button>
 					{/if}
 				{/snippet}
 			</FindingsBar>
-		</div>
-	{/if}
+	{/snippet}
 	{#if filesError}
 		<Alert.Root variant="error" class="mx-3 my-3 shrink-0"><Alert.Title>{filesError}</Alert.Title><Button variant="outline" class="mt-2 w-fit" onclick={() => filesRetryNonce++}>Retry loading diff</Button></Alert.Root>
 	{/if}
@@ -484,11 +660,33 @@
 				{#if workspaceView === 'findings'}
 					<div class="flex min-h-0 min-w-0 flex-1 {sidePanelOpen ? 'max-xl:hidden' : ''}">
 						<FindingsFocus files={files} toolCalls={reviewStream?.progress.toolCalls ?? []} branch={recent?.branch}
+							status={!backendReview ? 'done' : reviewing ? 'running' : backendReview.status === 'draft' ? 'draft' : backendReview.status === 'failed' ? 'failed' : 'done'}
+							onStartReview={backendReview?.status === 'draft' ? startDraftReview : null}
+							onOpenDiff={() => setView('diff')}
+							onAsk={isBackend ? () => openChat() : null}
+							onConversation={() => setView('conversation')}
+							onRestart={isBackend ? () => void rerunReview() : null}
 							onFullFile={(finding) => { sessionFile.select(finding.file); userPickedFile = true; findingsStore.discuss(finding.id); setView('diff'); requestAnimationFrame(() => document.getElementById(`finding-${finding.id}`)?.scrollIntoView({ block: 'center' })); }} />
 					</div>
 				{:else}
-				<div class="diff-tree hidden lg:block {sidePanelOpen ? 'max-2xl:!hidden' : ''}">
-					<SessionSidebar fileDiffs={isBackend ? (backendFiles ?? []) : null} />
+				<div class="diff-tree hidden lg:block" data-beside-panel={sidePanelOpen || undefined} style="width: {treeWidth}rem">
+					<SessionSidebar fileDiffs={isBackend ? (backendFiles ?? []) : null}>
+						{#snippet header()}<FindingsBar part="nav" />{/snippet}
+					</SessionSidebar>
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+					<div
+						class="tree-resizer"
+						role="separator"
+						aria-orientation="vertical"
+						aria-label="Resize file tree"
+						aria-valuemin={TREE_MIN * 16}
+						aria-valuemax={TREE_MAX * 16}
+						aria-valuenow={Math.round(treeWidth * 16)}
+						tabindex="0"
+						onpointerdown={startTreeResize}
+						onkeydown={treeResizeKey}
+						ondblclick={() => setTreeWidth(TREE_DEFAULT)}
+					></div>
 				</div>
 				<div id="diff-panel" class="relative flex min-h-0 min-w-0 flex-1 flex-col {sidePanelOpen ? 'max-xl:hidden' : ''}">
 					{#if isBackend && backendReview?.status === 'failed' && !backendFiles}
@@ -507,7 +705,7 @@
 						<ScrollArea orientation="vertical" aria-label="Code diff" class="min-h-0 flex-1" showCues={false}>
 							{#key fileDiff.path}
 								<div class="min-w-0 page-enter">
-									<CodeDiff diff={fileDiff} findings={displayFindings} mode={diffPrefs.mode} onAsk={isBackend ? openChat : undefined} />
+									<CodeDiff diff={fileDiff} findings={displayFindings} mode={diffPrefs.mode} onAsk={isBackend ? openChat : undefined} activeRange={showChat ? codeContext : null} onClearRange={() => (codeContext = null)} />
 								</div>
 							{/key}
 						</ScrollArea>
@@ -518,21 +716,37 @@
 					{#key threadsStore.openId}
 						<ThreadPanel />
 					{/key}
-				{:else if showChat && backendReview && reviewStream}
-					<section id="interactive-review" aria-label="Interactive review" class="flex min-h-0 w-full min-w-0 flex-col xl:w-[420px] xl:shrink-0 2xl:w-[460px]">
-						<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
-							<header class="flex min-h-12 shrink-0 items-center gap-2 border-b border-border-subtle px-4">
-								<Typography.Title level={2} class="min-w-0 flex-1 text-sm font-normal">Orchestrator</Typography.Title>
-								<Button variant="ghost" size="icon" class="size-9" aria-label="Close review chat" onclick={() => void closeChat()}><X size={16} aria-hidden="true" /></Button>
-							</header>
-							{#if reviewStream.connection === 'reconnecting'}<Typography.Text role="status" class="px-4 py-2 text-sm text-warning">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
-							<ReviewConversation compact assignment={orchestrator} messages={reviewStream.progress.messages ?? []}
-								reasoning={[]} toolCalls={[]} tasks={[]} active={reviewing} now={Date.now()}
-								bind:draft={chatDraft} bind:codeContext focusKey={chatFocus}
-								onSend={async (assignmentId, text, context) => { await serverApi.sendReviewMessage(id, assignmentId, text, context); }}
-								onStop={async (assignmentId) => { await serverApi.stopReviewMessage(id, assignmentId); }} />
-						</Card.Root>
-					</section>
+				{:else if backendReview && reviewStream}
+					<!-- Drawer: stays mounted; drag its left edge to resize, past the minimum to collapse, back out to reopen. -->
+					<div class="chat-drawer" data-open={showChat || undefined} style="--chat-width: {chatWidth}rem">
+						<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+						<div
+							class="chat-resizer"
+							role="separator"
+							aria-orientation="vertical"
+							aria-label={showChat ? 'Resize chat. Drag right to collapse.' : 'Chat collapsed. Drag left or press Enter to open.'}
+							aria-controls="interactive-review"
+							aria-valuemin={0}
+							aria-valuemax={CHAT_MAX * 16}
+							aria-valuenow={showChat ? Math.round(chatWidth * 16) : 0}
+							tabindex="0"
+							onpointerdown={startChatResize}
+							onkeydown={chatResizeKey}
+							ondblclick={() => (showChat ? void closeChat() : openChat())}
+						></div>
+						<div class="chat-drawer-clip">
+							<section id="interactive-review" aria-label="Interactive review" class="chat-drawer-panel" inert={!showChat}>
+								<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
+									{#if reviewStream.connection === 'reconnecting'}<Typography.Text role="status" class="px-4 py-2 text-sm text-warning">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
+									<ReviewConversation compact assignment={orchestrator} messages={reviewStream.progress.messages ?? []}
+										reasoning={[]} toolCalls={[]} tasks={[]} active={reviewing} now={Date.now()}
+										bind:draft={chatDraft} bind:codeContext focusKey={chatFocus}
+										onSend={async (assignmentId, text, context) => { await serverApi.sendReviewMessage(id, assignmentId, text, context); }}
+										onStop={async (assignmentId) => { await serverApi.stopReviewMessage(id, assignmentId); }} />
+								</Card.Root>
+							</section>
+						</div>
+					</div>
 				{/if}
 			</div>
 	</div>

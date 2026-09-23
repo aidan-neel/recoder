@@ -1,6 +1,11 @@
 <script lang="ts">
 	import type { ReviewToolCall } from '@recoder/shared';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
+	import CheckCheck from '@lucide/svelte/icons/check-check';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import CircleCheck from '@lucide/svelte/icons/circle-check';
+	import ScanSearch from '@lucide/svelte/icons/scan-search';
+	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import FileIcon from '@lucide/svelte/icons/file';
 	import ListFilter from '@lucide/svelte/icons/list-filter';
 	import MessageSquare from '@lucide/svelte/icons/message-square';
@@ -28,8 +33,35 @@
 		branch?: string | null;
 		/** Open the whole file in the inline diff. */
 		onFullFile: (finding: Finding) => void;
+		/** Where the review is, for the empty state. */
+		status?: 'draft' | 'running' | 'failed' | 'done';
+		onStartReview?: (() => Promise<void>) | null;
+		onOpenDiff?: (() => void) | null;
+		onAsk?: (() => void) | null;
+		onConversation?: (() => void) | null;
+		onRestart?: (() => void) | null;
 	}
-	let { files, toolCalls = [], branch = null, onFullFile }: Props = $props();
+	let { files, toolCalls = [], branch = null, onFullFile, status = 'done', onStartReview = null, onOpenDiff = null, onAsk = null, onConversation = null, onRestart = null }: Props = $props();
+
+	/* Empty states: what the page says when there's nothing in the list. */
+	const fixedCount = $derived(findingsStore.items.filter((f) => f.status === 'accepted').length);
+	const dismissedCount = $derived(findingsStore.items.filter((f) => f.status === 'dismissed').length);
+	const hiddenCount = $derived(findingsStore.items.filter((f) => f.status === 'open' && !findingsStore.isShown(f)).length);
+	const emptyKind = $derived(
+		status === 'draft' ? 'draft'
+			: status === 'running' ? 'running'
+			: status === 'failed' && findingsStore.items.length === 0 ? 'failed'
+			: findingsStore.items.length === 0 ? 'clean'
+			: 'caught-up'
+	);
+	const additions = $derived(files.reduce((sum, file) => sum + file.additions, 0));
+	const deletions = $derived(files.reduce((sum, file) => sum + file.deletions, 0));
+	let starting = $state(false);
+	async function start(): Promise<void> {
+		if (!onStartReview || starting) return;
+		starting = true;
+		try { await onStartReview(); } finally { starting = false; }
+	}
 
 	const RANK = { high: 0, medium: 1, low: 2, info: 3 } as const;
 	let query = $state('');
@@ -79,6 +111,65 @@
 	const base = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 </script>
 
+{#snippet ghostCards(shimmer: boolean)}
+	<div class="focus-empty-ghosts" data-shimmer={shimmer || undefined} aria-hidden="true">
+		{#each ['high', 'medium', 'low'] as sev, i (sev)}
+			<div class="focus-empty-ghost" style="--i: {i}">
+				<span class="focus-empty-ghost-pill" data-sev={sev}></span>
+				<span class="focus-empty-ghost-line" style="width: {[58, 72, 46][i]}%"></span>
+				<span class="focus-empty-ghost-line is-faint" style="width: {[86, 64, 78][i]}%"></span>
+			</div>
+		{/each}
+	</div>
+{/snippet}
+
+{#if ranked.length === 0 && !query.trim()}
+	<div class="focus-empty" data-kind={emptyKind}>
+		<div class="focus-empty-card enter-rise">
+			<span class="focus-empty-icon" aria-hidden="true">
+				{#if emptyKind === 'draft'}<ScanSearch size={20} />
+				{:else if emptyKind === 'running'}<Spinner size={18} />
+				{:else if emptyKind === 'failed'}<CircleAlert size={20} />
+				{:else if emptyKind === 'clean'}<CircleCheck size={20} />
+				{:else}<CheckCheck size={20} />{/if}
+			</span>
+			<Typography.Title level={2} class="focus-empty-title">
+				{emptyKind === 'draft' ? 'No findings yet' : emptyKind === 'running' ? 'Reviewing this pull request' : emptyKind === 'failed' ? "The review didn't finish" : emptyKind === 'clean' ? 'Nothing to fix' : 'All caught up'}
+			</Typography.Title>
+			<p class="focus-empty-text">
+				{#if emptyKind === 'draft'}Run the full review and specialists will check every change. Findings land here, ranked by severity.
+				{:else if emptyKind === 'running'}Specialists are working through the diff. Findings appear here once the review consolidates them.
+				{:else if emptyKind === 'failed'}No findings were saved. Restart the review to try again.
+				{:else if emptyKind === 'clean'}The review found nothing in this pull request that needs a change.
+				{:else}Every finding is fixed, dismissed or hidden by a filter.{/if}
+			</p>
+			<div class="focus-empty-facts">
+				{#if emptyKind === 'caught-up'}
+					{#if fixedCount}<span><b class="text-success">{fixedCount}</b> fixed</span>{/if}
+					{#if dismissedCount}<span><b>{dismissedCount}</b> dismissed</span>{/if}
+					{#if hiddenCount}<span><b>{hiddenCount}</b> hidden</span>{/if}
+				{:else if files.length}
+					<span><b>{files.length}</b> {files.length === 1 ? 'file' : 'files'}</span>
+					<span><b class="text-success">+{additions}</b> <b class="text-danger">−{deletions}</b></span>
+				{/if}
+			</div>
+			<div class="focus-empty-actions">
+				{#if emptyKind === 'draft' && onStartReview}
+					<Button variant="primary" loading={starting} disabled={starting} onclick={() => void start()}>Start review</Button>
+				{:else if emptyKind === 'running' && onConversation}
+					<Button variant="outline" onclick={onConversation}>Watch progress</Button>
+				{:else if emptyKind === 'failed' && onRestart}
+					<Button variant="primary" onclick={onRestart}>Restart review</Button>
+				{:else if emptyKind === 'caught-up' && hiddenCount}
+					<Button variant="outline" onclick={() => findingsStore.showAllSeverities()}>Show all severities</Button>
+				{/if}
+				{#if onOpenDiff && emptyKind !== 'failed'}<Button variant="ghost" onclick={onOpenDiff}>Open diff</Button>{/if}
+				{#if onAsk && emptyKind !== 'running'}<Button variant="ghost" class="gap-1.5" onclick={onAsk}><MessageSquare size={14} aria-hidden="true" />Ask reviewer</Button>{/if}
+			</div>
+		</div>
+		{#if emptyKind === 'draft' || emptyKind === 'running'}{@render ghostCards(emptyKind === 'running')}{/if}
+	</div>
+{:else}
 <div class="focus-body">
 	<section class="focus-list" aria-label="Findings that need you">
 		<header class="focus-list-head">
@@ -117,13 +208,16 @@
 							</span>
 							<span class="focus-card-body ai-voice">{finding.title}</span>
 						</Button>
-						{#if isActive}
-							<div class="focus-card-foot">
-								<span class="min-w-0 flex-1 truncate">{formatAgentName(finding.agent)}</span>
-								<Button variant="ghost" onclick={() => dismiss(finding)}>Dismiss</Button>
-								<Button variant="outline" class="gap-1.5" onclick={() => discuss(finding)}><MessageSquare size={14} aria-hidden="true" />Discuss</Button>
+						<!-- Always rendered; opens on the active card with a height transition (no jump). -->
+						<div class="focus-card-reveal" inert={!isActive}>
+							<div class="focus-card-reveal-clip">
+								<div class="focus-card-foot">
+									<span class="min-w-0 flex-1 truncate">{formatAgentName(finding.agent)}</span>
+									<Button variant="ghost" onclick={() => dismiss(finding)}>Dismiss</Button>
+									<Button variant="outline" class="gap-1.5" onclick={() => discuss(finding)}><MessageSquare size={14} aria-hidden="true" />Discuss</Button>
+								</div>
 							</div>
-						{/if}
+						</div>
 					</Card.Root>
 				{:else}
 					<Typography.Text class="px-1 py-3 text-sm text-fg-muted">{query ? 'No findings match your search.' : 'Nothing needs you. Every finding is fixed, dismissed or filtered out.'}</Typography.Text>
@@ -180,3 +274,5 @@
 		{/if}
 	</ScrollArea>
 </div>
+
+{/if}

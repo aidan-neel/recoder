@@ -16,9 +16,11 @@
 		fileDiffs?: FileDiff[] | null;
 		onFileSelect?: () => void;
 		inSheet?: boolean;
+		/** Rendered above "Changed files" (the findings navigator in the diff view). */
+		header?: import('svelte').Snippet;
 	}
 
-	let { fileDiffs = null, onFileSelect, inSheet = false }: Props = $props();
+	let { fileDiffs = null, onFileSelect, inSheet = false, header }: Props = $props();
 
 	function selectFile(id: string): void {
 		sessionFile.select(id);
@@ -117,6 +119,7 @@
 	aria-label="Session files"
 	class="file-panel"
 >
+	{@render header?.()}
 	<div class="flex min-h-0 flex-1 flex-col gap-2.5">
 		<div class="file-panel-head {inSheet ? 'pe-10' : ''}">
 			<Typography.Title level={2} class="file-panel-title">Changed files</Typography.Title>

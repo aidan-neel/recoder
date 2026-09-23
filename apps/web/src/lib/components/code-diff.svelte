@@ -25,9 +25,15 @@
 		mode?: 'unified' | 'split';
 		/** Off for the focused-hunk card, where the finding sits beside the code. */
 		cards?: boolean;
+		/** Range attached to the chat composer; its rows stay tinted after the text selection clears. */
+		activeRange?: ReviewCodeContext | null;
+		/** A plain click in the code (no drag) lets go of the attached range. */
+		onClearRange?: () => void;
+		/** Preview only (e.g. a suggested fix): no selection, notes or line actions. */
+		readonly?: boolean;
 	}
 
-	let { diff, findings = [], onAsk, mode = 'unified', cards = true }: Props = $props();
+	let { diff, findings = [], onAsk, mode = 'unified', cards = true, activeRange = null, onClearRange, readonly = false }: Props = $props();
 
 	/** Index of each hunk's first line within `flatLines`. */
 	const hunkOffsets = $derived(diff.hunks.reduce<number[]>((acc, hunk, i) => {
@@ -159,6 +165,11 @@
 	let anchorTop = $state(0);
 	let anchorLeft = $state(0);
 
+	/** Full-row wash for highlighted lines (findings, notes, the selected range). */
+	function rowTint(color: string, percent: number): string {
+		return `color-mix(in oklab, ${color} ${percent}%, transparent)`;
+	}
+
 	function marker(line: DiffLine): string {
 		return line.type === 'add' ? '+' : line.type === 'del' ? '-' : ' ';
 	}
@@ -170,6 +181,8 @@
 
 	/** True while the pointer is down, so a pause mid-drag never commits. */
 	let pointerDown = false;
+	/** Where a press on the code started; a release within a few px is a click. */
+	let pressAt: { x: number; y: number } | null = null;
 
 	function onPointerDown(event: PointerEvent): void {
 		const target = event.target as HTMLElement | null;
@@ -178,6 +191,7 @@
 				'[data-note-composer], button, a, input, textarea, select, [role="button"]'
 			)
 		) return;
+		pressAt = target?.closest('[data-diff-row]') ? { x: event.clientX, y: event.clientY } : null;
 		pointerDown = true;
 		findingsStore.suppressHover = true;
 	}
@@ -193,6 +207,7 @@
 
 	function commitSelection(): void {
 		selectionTimer = undefined;
+		if (readonly) return;
 		if (pointerDown || !rootEl) return;
 		const selection = window.getSelection();
 		if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
@@ -222,12 +237,21 @@
 			startLine: Math.min(...lines),
 			endLine: Math.max(...lines),
 			side,
-			quote: range.toString().trim().slice(0, 2000),
+			// Whole lines on the chosen side, not the raw selection (which carries gutter numbers and partial lines).
+			quote: slice.filter(({ line }) => (side === 'new' ? line.newNo : line.oldNo) !== null).map(({ line }) => line.text).join('\n').slice(0, 2000),
 			newText: cap(slice.filter(({ line }) => line.newNo !== null).map(({ line }) => line.text).join('\n')),
 			oldText: cap(slice.filter(({ line }) => line.oldNo !== null).map(({ line }) => line.text).join('\n')),
 			diffContext: cap(context.map(({ line }) => `${marker(line)}${line.text}`).join('\n')),
 			hunkHeader: slice[slice.length - 1]?.hunk.header
 		};
+		// With a chat, the selection goes straight into its composer as a quote;
+		// notes come from the model when asked. Without one, keep the note popover.
+		if (onAsk) {
+			const { file, startLine, endLine, side, quote, diffContext } = pending;
+			pending = null;
+			onAsk({ file, startLine, endLine, side, quote, diffContext });
+			return;
+		}
 		popoverOpen = true;
 	}
 
@@ -255,11 +279,21 @@
 			side: line.newNo === null ? 'old' : 'new', quote: line.text.slice(0, 2000),
 			diffContext: cap(flatLines.slice(Math.max(0, index - 3), index + 4).map(({ line }) => `${marker(line)}${line.text}`).join('\n'))
 		};
+		if (onAsk) {
+			const { file, startLine, endLine, side, quote, diffContext } = pending;
+			pending = null;
+			onAsk({ file, startLine, endLine, side, quote, diffContext });
+			return;
+		}
 		popoverOpen = true;
 	}
 
 	/** True for rows in the range the open composer is anchored to. */
 	function isPendingRow(line: DiffLine): boolean {
+		if (activeRange && activeRange.file === diff.path) {
+			const n = activeRange.side === 'new' ? line.newNo : line.oldNo;
+			if (n !== null && n >= activeRange.startLine && n <= activeRange.endLine) return true;
+		}
 		if (!popoverOpen || !pending) return false;
 		if (pending.side === 'new') {
 			return line.newNo !== null && line.newNo >= pending.startLine && line.newNo <= pending.endLine;
@@ -324,10 +358,16 @@
 
 	// A drag ends anywhere; only then may a selection commit.
 	$effect(() => {
-		const release = () => {
+		const release = (event: PointerEvent) => {
 			if (!pointerDown) return;
 			pointerDown = false;
 			findingsStore.suppressHover = false;
+			const click = pressAt && Math.hypot(event.clientX - pressAt.x, event.clientY - pressAt.y) < 4;
+			pressAt = null;
+			if (click && activeRange && window.getSelection()?.isCollapsed !== false) {
+				onClearRange?.();
+				return;
+			}
 			scheduleSelection();
 		};
 		window.addEventListener('pointerup', release);
@@ -342,7 +382,7 @@
 {#snippet number(line: DiffLine, side: 'old' | 'new', mark: Finding | undefined)}
 	{@const n = side === 'old' ? line.oldNo : line.newNo}
 	{@const selectable = side === 'new' ? n !== null : line.newNo === null && n !== null}
-	{#if selectable}
+	{#if selectable && !readonly}
 		<Button unstyled class="diff-num" style={mark && side === 'new' ? `color: ${SEVERITY_DOT[mark.severity]}` : undefined}
 			aria-label={side === 'new' ? `Discuss line ${n}` : `Discuss deleted line ${n}`}
 			onclick={(event: MouseEvent) => selectLine(line, event.currentTarget as HTMLElement)}>{n}</Button>
@@ -392,9 +432,9 @@
 				{#each splitRows[hi] as row, r (r)}
 					{@const right = row.right?.line}
 					{@const mark = right?.newNo != null ? lineMarks.get(right.newNo) : undefined}
-					{@const hovered = mark && findingsStore.hoveredId === mark.id}
 					<div role="row" tabindex="-1" data-diff-row class="diff-row diff-split-row"
-						style:box-shadow={mark ? `inset ${hovered ? 3 : 2}px 0 0 ${SEVERITY_DOT[mark.severity]}` : null}
+						style:box-shadow={mark ? `inset 2px 0 0 ${SEVERITY_DOT[mark.severity]}` : null}
+						style:--row-tint={mark ? rowTint(SEVERITY_DOT[mark.severity], 12) : null}
 						onmouseenter={() => { if (!findingsStore.suppressHover) findingsStore.hoveredId = mark?.id ?? null; }}
 						onmouseleave={() => (findingsStore.hoveredId = null)}>
 						<div class="diff-half" data-type={row.left ? (row.left.line.type === 'context' ? 'context' : 'del') : 'empty'}>
@@ -410,7 +450,6 @@
 				{#each hunk.lines as line, i (`${line.oldNo}-${line.newNo}-${i}`)}
 					{@const key = line.newNo ?? -1}
 					{@const mark = lineMarks.get(key)}
-					{@const hovered = mark && findingsStore.hoveredId === mark.id}
 					{@const noteCount = noteCountForRow(line)}
 					<div role="row" tabindex="-1" data-diff-row data-type={line.type}
 						data-new-no={line.newNo ?? ''} data-old-no={line.oldNo ?? ''}
@@ -418,9 +457,16 @@
 						style:box-shadow={isPendingRow(line)
 							? 'inset 3px 0 0 var(--selection-bar)'
 							: mark
-								? `inset ${hovered ? 3 : 2}px 0 0 ${SEVERITY_DOT[mark.severity]}`
+								? `inset 2px 0 0 ${SEVERITY_DOT[mark.severity]}`
 								: noteCount > 0
 									? 'inset 2px 0 0 var(--selection-bar)'
+									: null}
+						style:--row-tint={isPendingRow(line)
+							? rowTint('var(--selection-bar)', 16)
+							: mark
+								? rowTint(SEVERITY_DOT[mark.severity], 12)
+								: noteCount > 0
+									? rowTint('var(--selection-bar)', 12)
 									: null}
 						onmouseenter={() => { if (!findingsStore.suppressHover) findingsStore.hoveredId = mark?.id ?? null; }}
 						onmouseleave={() => (findingsStore.hoveredId = null)}>

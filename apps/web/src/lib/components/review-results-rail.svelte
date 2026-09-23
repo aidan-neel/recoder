@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { CoverageGap, CoverageSummary, ReviewAssignment } from '@recoder/shared';
+	import type { Snippet } from 'svelte';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
@@ -15,8 +16,12 @@
 		coverageGaps?: CoverageGap[];
 		onOpenFinding?: ((finding: ReviewingFinding) => void) | null;
 		specialistHref: (assignmentId: string) => string;
+		/** Show the Findings / Specialists / Coverage cards (off while the review runs). */
+		results?: boolean;
+		/** Cards above the results, e.g. live progress. */
+		children?: Snippet;
 	}
-	let { findings, specialists, coverage = null, coverageGaps = [], onOpenFinding = null, specialistHref }: Props = $props();
+	let { findings, specialists, coverage = null, coverageGaps = [], onOpenFinding = null, specialistHref, results = true, children }: Props = $props();
 
 	const RANK = { high: 0, medium: 1, low: 2, info: 3 } as const;
 	const ranked = $derived([...findings].sort((a, b) => RANK[a.severity] - RANK[b.severity]));
@@ -32,9 +37,11 @@
 	const countFor = (role: string) => findings.filter((finding) => finding.agent === role).length;
 </script>
 
-<aside class="results-rail" aria-label="Review results">
-	<ScrollArea class="h-full" showCues={false} aria-label="Review results">
+<aside class="results-rail" aria-label={results ? 'Review results' : 'Review progress'}>
+	<ScrollArea class="h-full" showCues={false} aria-label={results ? 'Review results' : 'Review progress'}>
 		<div class="results-rail-body">
+			{@render children?.()}
+			{#if results}
 			<Card.Root class="rail-card">
 				<div class="rail-card-head">
 					<Typography.Title level={2} class="rail-card-title">Findings</Typography.Title>
@@ -91,6 +98,7 @@
 						{/if}
 					</p>
 				</Card.Root>
+			{/if}
 			{/if}
 		</div>
 	</ScrollArea>

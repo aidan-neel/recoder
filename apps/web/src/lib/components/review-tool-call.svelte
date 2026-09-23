@@ -1,13 +1,11 @@
 <script lang="ts">
 	import type { ReviewToolCall } from '@recoder/shared';
-	import * as Tool from '@sivir-ui/svelte/components/tool';
 	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import ChevronRight from '@lucide/svelte/icons/chevron-right';
-	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import { toolPresentation } from '$lib/review-transcript';
+	import Disclosure from './ui/disclosure.svelte';
 
 	let { tool, duration, active }: { tool: ReviewToolCall; duration: string; active: boolean } = $props();
 	const interrupted = $derived(tool.status === 'running' && !active);
@@ -17,22 +15,14 @@
 	const target = $derived(presentation.target || 'Details unavailable');
 </script>
 
-<Tool.Root
-	name={presentation.name}
-	state={tool.status === 'done' ? 'complete' : interrupted ? 'error' : tool.status}
-	variant="quiet"
-	{duration}
-	open={false}
-	class="review-tool-row min-w-0"
->
-	{#snippet trigger()}
+<Disclosure size="row" title={target} meta={duration}>
+	{#snippet label()}
 		<span class="tool-row-action">{actionLabel}</span>
-		<span class="tool-row-target" title={target}>{target}</span>
+		<span class="tool-row-target">{target}</span>
 		{#if tool.status === 'running' && active}<Spinner size={12} class="shrink-0 text-sev-medium" aria-hidden="true" />{/if}
 		{#if tool.status === 'error' || interrupted}<span class="shrink-0 text-danger">{interrupted ? 'Interrupted' : 'Failed'}</span>{/if}
-		{#if duration}<span class="tool-row-duration">{duration}</span>{/if}
 	{/snippet}
-	<div class="tool-row-details min-w-0 space-y-3 py-2">
+	<div class="min-w-0 space-y-3 py-1">
 		<ScrollArea style="max-height: min(24rem, 50dvh)" aria-label="Tool details" showCues={false}>
 			{#if tool.result?.content}
 				<CodeBlock code={tool.result.content} lang={action === 'readDiff' ? 'diff' : 'plaintext'} copy="overlay" class="rounded-lg ![--code-block-max-height:none]" />
@@ -48,15 +38,11 @@
 				<Typography.Text class="mt-2 font-mono text-xs text-foreground-muted">{tool.result.evidenceId}{tool.result.revision ? ` · ${tool.result.revision}` : ''}</Typography.Text>
 			{/if}
 		</ScrollArea>
-		<div class="flex flex-wrap items-start gap-x-4 gap-y-2">
-			{#if tool.input}
-				<Collapsible.Root>
-					<Collapsible.Trigger class="review-disclosure !text-xs">Input <ChevronRight size={12} aria-hidden="true" /></Collapsible.Trigger>
-					<Collapsible.Content class="w-full py-2">
-						<Typography.Text class="whitespace-pre-wrap break-all font-mono text-xs text-foreground-muted">{JSON.stringify(tool.input, null, 2)}</Typography.Text>
-					</Collapsible.Content>
-				</Collapsible.Root>
-			{/if}
-		</div>
+		{#if tool.input}
+			<Disclosure size="sm">
+				{#snippet label()}Input{/snippet}
+				<Typography.Text class="whitespace-pre-wrap break-all font-mono text-xs text-foreground-muted">{JSON.stringify(tool.input, null, 2)}</Typography.Text>
+			</Disclosure>
+		{/if}
 	</div>
-</Tool.Root>
+</Disclosure>

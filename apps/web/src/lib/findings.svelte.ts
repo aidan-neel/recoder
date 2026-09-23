@@ -217,6 +217,12 @@ class FindingsStore {
 		}
 	}
 
+	/** Clear every severity filter (Info included). */
+	showAllSeverities(): void {
+		this.hiddenSeverities = [];
+		if (this.hideInfo) this.setHideInfo(false);
+	}
+
 	forFile(file: string): Finding[] {
 		return this.items.filter((f) => f.file === file && this.isShown(f));
 	}

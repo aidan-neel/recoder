@@ -6,6 +6,7 @@
 	import CommandPalette from '$lib/components/command-palette.svelte';
 	import ModelSettingsModal from '$lib/components/model-settings-modal.svelte';
 	import UsageModal from '$lib/components/usage-modal.svelte';
+	import DeleteSessionDialog from '$lib/components/delete-session-dialog.svelte';
 	import TopBar from '$lib/components/top-bar.svelte';
 	import '../app.css';
 
@@ -30,6 +31,7 @@
 	</main>
 	<ModelSettingsModal />
 	<UsageModal />
+	<DeleteSessionDialog />
 	<CommandPalette />
 	<Toaster />
 </div>

@@ -149,6 +149,8 @@ export const serverApi = {
 		}),
 	queueReview: (input: CreateReviewInput) =>
 		req<Review>('/api/reviews', { method: 'POST', body: JSON.stringify(input) }),
+	/** Start a draft (interactive) review's full pipeline. */
+	startReview: (id: string) => req<Review>(`/api/reviews/${id}/start`, { method: 'POST' }),
 	deleteReview: (id: string) =>
 		req<{ deleted: boolean }>(`/api/reviews/${id}`, { method: 'DELETE' }),
 	authStatus: () => req<{ github: ProviderAuth; gitlab: ProviderAuth }>('/api/auth/status'),

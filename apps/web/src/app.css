@@ -96,7 +96,7 @@
 	--dur-pill: 240ms;
 	--dur-menu: 150ms;
 	--dur-submenu: 120ms;
-	--dur-enter: 220ms;
+	--dur-enter: 270ms;
 	--dur-toast: 220ms;
 	--dur-shimmer: 1.6s;
 	--dur-skeleton: 1.4s;
@@ -1048,19 +1048,18 @@ kbd.keycap {
 .quiet-trigger-label {
 	display: inline-flex;
 	gap: 5px;
-	animation: rc-label-in 180ms var(--ease-menu);
+	animation: rc-label-in 230ms var(--ease-menu);
 }
 
-/* Model menu: 250px, opens upward anchored to the trigger's right edge. */
-.model-menu {
+/* Model menu: 250px, sits on top of its trigger, right edges aligned.
+   Width goes on the panel only: Sivir also passes the content class to the
+   inner ScrollArea, so a width utility there overflowed the panel padding. */
+[data-ui='popover-content'].model-menu {
+	width: 250px;
 	transform-origin: bottom right;
 }
 [data-floating-content]:has(> .model-menu) {
-	translate: calc(var(--popover-trigger-width) - 100%) 0;
-}
-/* Opening upward from a composer: clear the composer's top edge. */
-[data-floating-content][data-placement^='top'] > .model-menu {
-	translate: 0 calc(-1 * var(--menu-lift, 0px));
+	translate: var(--menu-shift, 0px) 0;
 }
 [data-ui='popover-content'].model-menu .sivir-menu-item,
 [data-ui='popover-content'].submenu-left .sivir-menu-item {
@@ -1141,36 +1140,279 @@ kbd.keycap {
 	outline-offset: -2px;
 }
 
-/* The session shares one canvas; disclosures and the composer carry its chrome. */
-.review-disclosure {
+/* "Added a note on list.ts:12" under a reply that wrote a diff note. */
+.model-note-added {
+	margin: 8px 0 0;
+	padding-left: 10px;
+	font-family: var(--font-ui);
+	font-size: 12px;
+	color: var(--text-subtle);
+	box-shadow: inset 2px 0 0 var(--selection-bar);
+}
+/* Code a sent message was about: badge that expands to the quoted lines. */
+.code-ref {
 	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	margin-bottom: 6px;
+}
+.code-ref-badge {
+	display: inline-flex;
+	max-width: 100%;
+	align-self: flex-start;
 	align-items: center;
-	gap: 0.5rem;
-	min-height: 1.75rem;
-	border-radius: var(--radius-sm);
+	gap: 6px;
+	height: 24px;
+	padding: 0 6px 0 7px;
+	border-radius: 7px;
+	background: rgba(0, 0, 0, 0.18);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-secondary);
+	cursor: pointer;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.code-ref-badge:hover {
+	background: rgba(0, 0, 0, 0.3);
+}
+.code-ref-badge:focus-visible {
+	outline: 2px solid var(--color-ring);
+	outline-offset: 2px;
+}
+.code-ref-icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+.code-ref-chevron {
+	flex-shrink: 0;
 	color: var(--text-faint);
-	font-size: 13px;
-	text-align: start;
-	transition: color var(--dur-hover) ease-out;
+	transition: transform 200ms var(--ease-menu);
 }
-.review-disclosure:hover {
-	color: var(--text-primary);
-}
-.review-disclosure[aria-expanded='true'] > svg {
+.code-ref[data-open] .code-ref-chevron {
 	transform: rotate(90deg);
 }
-.review-disclosure:focus-visible {
+.code-ref-panel {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows 220ms var(--ease-menu),
+		opacity 160ms ease-out;
+}
+.code-ref[data-open] .code-ref-panel {
+	grid-template-rows: 1fr;
+	opacity: 1;
+}
+.code-ref-clip {
+	min-height: 0;
+	overflow: hidden;
+}
+.code-ref-clip > * {
+	margin-top: 6px;
+}
+[data-ui='code-block'].code-ref-code {
+	--code-block-padding-x: 12px;
+	--code-block-padding-y: 8px;
+	--code-block-line-height: 1.55;
+	--code-block-max-height: 12rem;
+	--font-size-label: 11.5px;
+	border-radius: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+	.code-ref-panel,
+	.code-ref-chevron {
+		transition: none;
+	}
+}
+/* Selected code in the composer: a file:line badge (the model gets the code). */
+.composer-quote {
+	display: inline-flex;
+	max-width: 100%;
+	align-self: flex-start;
+	align-items: center;
+	gap: 6px;
+	height: 26px;
+	margin-bottom: 6px;
+	padding: 0 3px 0 8px;
+	border-radius: 7px;
+	background: var(--bg-bubble);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-secondary);
+}
+.composer-quote-icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+[data-ui='button'][data-variant][data-size].composer-quote-remove {
+	width: 20px;
+	height: 20px;
+	min-width: 0;
+	flex-shrink: 0;
+	padding: 0;
+	border-radius: 5px;
+	color: var(--text-ghost);
+}
+[data-ui='button'][data-variant][data-size].composer-quote-remove:hover {
+	color: var(--text-primary);
+}
+/* Transcript disclosures ($lib/components/ui/disclosure.svelte): glyph, label,
+   meta, chevron; the body opens on a grid-rows transition behind a left rail. */
+.disclosure {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+}
+.disclosure-trigger {
+	display: inline-flex;
+	max-width: 100%;
+	align-self: flex-start;
+	align-items: center;
+	gap: 8px;
+	min-height: 28px;
+	padding: 0;
+	border-radius: var(--radius-sm);
+	font-size: 13px;
+	line-height: 18px;
+	text-align: start;
+	color: var(--text-faint);
+	cursor: pointer;
+	transition: color var(--dur-hover) ease-out;
+}
+.disclosure-trigger:disabled {
+	cursor: default;
+}
+.disclosure[data-open] > .disclosure-trigger {
+	color: var(--text-tertiary);
+}
+.disclosure-trigger:not(:disabled):hover {
+	color: var(--text-primary);
+}
+.disclosure-trigger:focus-visible {
 	outline: 2px solid var(--color-ring);
 	outline-offset: 3px;
 }
-.review-tool-disclosure > button {
-	min-height: 26px;
-	gap: 8px;
-	border-radius: var(--radius-sm);
-	color: var(--text-faint);
+.disclosure-glyph {
+	display: inline-flex;
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	color: var(--success);
 }
-.review-tool-disclosure > button:hover {
+.disclosure[data-status='running'] > .disclosure-trigger .disclosure-glyph {
+	color: var(--sev-medium);
+}
+.disclosure[data-status='error'] > .disclosure-trigger .disclosure-glyph,
+.disclosure[data-status='error'] > .disclosure-trigger .disclosure-label {
+	color: var(--danger);
+}
+.disclosure-label {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.disclosure-meta {
+	flex-shrink: 0;
+	font-family: var(--font-code);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-ghost);
+}
+.disclosure-chevron {
+	flex-shrink: 0;
+	color: var(--text-ghost);
+	transition:
+		transform 200ms var(--ease-menu),
+		color var(--dur-hover) ease-out;
+}
+.disclosure-trigger:hover .disclosure-chevron {
+	color: currentColor;
+}
+.disclosure[data-open] > .disclosure-trigger .disclosure-chevron {
+	transform: rotate(90deg);
+}
+.disclosure-panel {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows 200ms var(--ease-menu),
+		opacity 140ms ease-out;
+}
+.disclosure[data-open] > .disclosure-panel {
+	grid-template-rows: 1fr;
+	opacity: 1;
+	transition:
+		grid-template-rows 240ms var(--ease-menu),
+		opacity 200ms ease-out 40ms;
+}
+.disclosure-clip {
+	min-height: 0;
+	overflow: hidden;
+}
+.disclosure-body {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 8px;
+	margin: 4px 0 4px 6px;
+	padding: 2px 0 2px 14px;
+	border-left: 1px solid var(--line-control);
+	font-size: 13px;
+	line-height: 19px;
+	color: var(--text-muted);
+}
+.disclosure-body [data-ui='markdown'] {
+	font-size: 13px;
+}
+/* Nested detail (e.g. tool input). */
+.disclosure[data-size='sm'] > .disclosure-trigger {
+	gap: 6px;
+	min-height: 24px;
+	font-size: 12px;
+}
+/* Tool row: full width, action + target + duration; chevron on hover. */
+.disclosure[data-size='row'] > .disclosure-trigger {
+	width: 100%;
+	align-self: stretch;
+	gap: 10px;
+	min-height: 26px;
+	font-size: 12.5px;
+	color: var(--text-subtle);
+}
+.disclosure[data-size='row'] > .disclosure-trigger .disclosure-label {
+	display: flex;
+	flex: 1;
+	align-items: center;
+	gap: 10px;
+}
+.disclosure[data-size='row'] > .disclosure-trigger .disclosure-chevron {
+	opacity: 0;
+	transition:
+		transform 200ms var(--ease-menu),
+		opacity var(--dur-hover) ease-out;
+}
+.disclosure[data-size='row'] > .disclosure-trigger:hover .disclosure-chevron,
+.disclosure[data-size='row'][data-open] > .disclosure-trigger .disclosure-chevron,
+.disclosure[data-size='row'] > .disclosure-trigger:focus-visible .disclosure-chevron {
+	opacity: 1;
+}
+.disclosure[data-size='row'] > .disclosure-trigger:hover .tool-row-target {
 	color: var(--text-primary);
+}
+@media (prefers-reduced-motion: reduce) {
+	.disclosure-panel,
+	.disclosure[data-open] > .disclosure-panel,
+	.disclosure-chevron {
+		transition: none;
+	}
 }
 .session-composer {
 	flex-direction: row !important;
@@ -1891,6 +2133,16 @@ main[data-route^='/session'] *::-webkit-scrollbar {
 /* PR hover card (brief references). */
 [data-ui='popover-content'].pr-card {
 	width: 320px;
+	cursor: pointer;
+}
+[data-ui='popover-content'].pr-card > div {
+	box-shadow: inset 0 0 0 100vmax transparent;
+	transition: box-shadow var(--dur-hover) var(--ease-menu);
+}
+@media (hover: hover) {
+	[data-ui='popover-content'].pr-card:hover > div {
+		box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--text-primary) 4%, transparent);
+	}
 }
 .pr-card > .sivir-inset-surface,
 [data-ui='popover-content'].pr-card > div {
@@ -2145,6 +2397,323 @@ mark.palette-hit {
 	letter-spacing: normal;
 	color: var(--text-primary);
 }
+/* Diff view: one bar. Title far left · view tabs centred · ⋯, status,
+   Ask reviewer, Fix all far right (the toolbar's pieces join the header row).
+   The findings stepper and filters live in the sidebar (.findings-nav). */
+.session-header[data-merged] {
+	gap: 8px;
+	padding: 0 12px 0 18px;
+}
+.session-header[data-merged] .session-title {
+	flex: 0 1 auto;
+	min-width: 40px;
+}
+@media (min-width: 1280px) {
+	/* Never run under the centred tabs. */
+	.session-header[data-merged] .session-title {
+		max-width: calc(50% - 190px);
+	}
+}
+.session-toolbar,
+.session-toolbar .findings-toolbar {
+	display: contents;
+}
+.session-header[data-merged] {
+	position: relative;
+}
+.session-header[data-merged] .view-switch {
+	order: 1;
+	margin-left: auto;
+}
+/* Centred in the bar when there's room; otherwise it flows before the actions. */
+@media (min-width: 1280px) {
+	.session-header[data-merged] .view-switch {
+		position: absolute;
+		left: 50%;
+		transform: translateX(-50%);
+	}
+	.session-header[data-merged] > [data-ui='dropdown-menu-trigger'],
+	.session-header[data-merged] > [data-ui='button'] {
+		margin-left: auto;
+	}
+}
+.session-header[data-merged] > [data-ui='dropdown-menu-trigger'],
+.session-header[data-merged] > [data-ui='button'] {
+	order: 2;
+}
+.session-toolbar .findings-toolbar-end {
+	order: 3;
+	margin-left: 4px;
+}
+@media (max-width: 1279px) {
+	.session-toolbar .review-state {
+		display: none;
+	}
+}
+@media (max-width: 1179px) {
+	.session-toolbar #ask-review {
+		gap: 0;
+		width: 32px;
+		padding: 0;
+		font-size: 0;
+	}
+}
+/* Findings view empty states: centred message, facts, actions; faded
+   placeholder cards underneath before/while the review runs. */
+.focus-empty {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	gap: 32px;
+	overflow-y: auto;
+	padding: min(14vh, 120px) 24px 40px;
+}
+.focus-empty-card {
+	display: flex;
+	max-width: 440px;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	text-align: center;
+}
+.focus-empty-icon {
+	display: flex;
+	width: 44px;
+	height: 44px;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 8px;
+	border-radius: 12px;
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card), 0 4px 16px rgba(0, 0, 0, 0.25);
+	color: var(--text-secondary);
+}
+.focus-empty[data-kind='running'] .focus-empty-icon { color: var(--sev-medium); }
+.focus-empty[data-kind='failed'] .focus-empty-icon { color: var(--danger); }
+.focus-empty[data-kind='clean'] .focus-empty-icon,
+.focus-empty[data-kind='caught-up'] .focus-empty-icon { color: var(--success); }
+.focus-empty .focus-empty-title {
+	margin: 0;
+	font-size: 17px;
+	font-weight: 500;
+	line-height: 24px;
+	letter-spacing: normal;
+	color: var(--text-primary);
+}
+.focus-empty-text {
+	margin: 0;
+	font-size: 13.5px;
+	line-height: 20px;
+	color: var(--text-subtle);
+	text-wrap: balance;
+}
+.focus-empty-facts {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 6px;
+	margin-top: 6px;
+}
+.focus-empty-facts:empty {
+	display: none;
+}
+.focus-empty-facts > span {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 24px;
+	padding: 0 9px;
+	border-radius: 7px;
+	background: var(--bg-bubble);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-faint);
+}
+.focus-empty-facts b {
+	font-weight: 500;
+	color: var(--text-secondary);
+}
+.focus-empty-facts b.text-success { color: var(--success); }
+.focus-empty-facts b.text-danger { color: var(--danger); }
+.focus-empty-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+	margin-top: 12px;
+}
+.focus-empty-ghosts {
+	display: flex;
+	width: min(560px, 100%);
+	flex-direction: column;
+	gap: 8px;
+	-webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 100%);
+	mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 100%);
+	pointer-events: none;
+	user-select: none;
+}
+.focus-empty-ghost {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	padding: 14px 16px;
+	border-radius: 12px;
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+}
+.focus-empty-ghost-pill {
+	width: 44px;
+	height: 16px;
+	border-radius: 5px;
+	background: var(--sev-info-tint);
+}
+.focus-empty-ghost-pill[data-sev='high'] { background: var(--sev-high-tint); }
+.focus-empty-ghost-pill[data-sev='medium'] { background: var(--sev-medium-tint); }
+.focus-empty-ghost-pill[data-sev='low'] { background: var(--sev-low-tint); }
+.focus-empty-ghost-line {
+	height: 8px;
+	border-radius: 4px;
+	background: var(--line-control);
+}
+.focus-empty-ghost-line.is-faint {
+	opacity: 0.6;
+}
+.focus-empty-ghosts[data-shimmer] .focus-empty-ghost-line {
+	background: linear-gradient(90deg, var(--bg-hover) 0%, var(--line-strong) 50%, var(--bg-hover) 100%);
+	background-size: 200% 100%;
+	animation: rc-shimmer var(--dur-skeleton) linear infinite;
+	animation-delay: calc(var(--i, 0) * 120ms);
+}
+@media (prefers-reduced-motion: reduce) {
+	.focus-empty-ghosts[data-shimmer] .focus-empty-ghost-line {
+		animation: none;
+	}
+}
+/* Findings navigator at the top of the file sidebar: position + stepper,
+   severity toggles (2×2), and search. */
+.findings-nav {
+	display: flex;
+	flex-shrink: 0;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0 -10px 12px;
+	padding: 0 10px 12px;
+	border-bottom: 1px solid var(--line-divider);
+}
+.findings-nav-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 24px;
+	padding-left: 3px;
+}
+.findings-nav-title {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--text-primary);
+}
+.findings-nav-pos {
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-faint);
+}
+.findings-nav-steps {
+	display: flex;
+	margin-left: auto;
+}
+.findings-nav-steps [data-ui='button'][data-variant][data-size] {
+	width: 24px;
+	height: 24px;
+	min-width: 0;
+	min-height: 0;
+	padding: 0;
+	border-radius: 6px;
+	color: var(--text-faint);
+}
+.findings-nav-steps [data-ui='button'][data-variant][data-size]:hover:not(:disabled) {
+	background: var(--bg-hover);
+	color: var(--text-primary);
+}
+.findings-nav-filters {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4px;
+}
+.findings-nav-filter {
+	--sev: var(--sev-info);
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 7px;
+	height: 28px;
+	padding: 0 8px;
+	border-radius: 7px;
+	font-size: 12.5px;
+	color: var(--text-ghost);
+	cursor: pointer;
+	transition:
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
+}
+.findings-nav-filter[data-severity='high'] { --sev: var(--sev-high); }
+.findings-nav-filter[data-severity='medium'] { --sev: var(--sev-medium); }
+.findings-nav-filter[data-severity='low'] { --sev: var(--sev-low); }
+.findings-nav-filter:hover {
+	background: var(--bg-hover);
+	color: var(--text-secondary);
+}
+.findings-nav-filter[aria-pressed='true'] {
+	background: color-mix(in oklab, var(--sev) 10%, transparent);
+	color: var(--text-secondary);
+}
+.findings-nav-filter:focus-visible {
+	outline: 2px solid var(--color-ring);
+	outline-offset: 1px;
+}
+.findings-nav-dot {
+	width: 7px;
+	height: 7px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	box-shadow: inset 0 0 0 1.5px var(--sev);
+}
+.findings-nav-filter[aria-pressed='true'] .findings-nav-dot {
+	background: var(--sev);
+}
+.findings-nav-label {
+	flex: 1;
+	min-width: 0;
+	text-align: left;
+}
+.findings-nav-count {
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-faint);
+}
+.findings-nav-filter[aria-pressed='true'] .findings-nav-count {
+	color: var(--sev);
+}
+[data-ui='button'][data-variant].findings-nav-search {
+	width: 100%;
+	height: 30px;
+	min-height: 30px;
+	justify-content: flex-start;
+	gap: 8px;
+	padding: 0 10px;
+	border-radius: 8px;
+	background: var(--bg-field);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+	font-size: 12.5px;
+	font-weight: 400;
+	color: var(--text-faint);
+}
+[data-ui='button'][data-variant].findings-nav-search:hover {
+	color: var(--text-secondary);
+}
 .session-meta {
 	display: flex;
 	min-width: 0;
@@ -2205,77 +2774,137 @@ mark.palette-hit {
 .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
 	color: var(--text-primary);
 }
-
-/* ── Live review step row (3b) ─────────────────────────────── */
-.review-steps {
-	display: flex;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 10px;
-	padding: 0 18px 12px;
-	border-bottom: 1px solid var(--line-divider);
-}
-[data-ui='task-steps'].review-steps-list {
-	flex: 1;
-	min-width: 0;
-}
-.review-steps-list ol {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-	overflow: hidden;
-}
-.review-steps-list li {
-	height: 20px;
-	margin: 0;
+/* Session header: text tabs (no pill), active one underlined on the header's bottom edge. */
+.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] {
+	gap: 4px;
 	padding: 0;
-	gap: 10px;
-	flex-shrink: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
 }
-.review-steps-list li:not(:last-child)::after {
-	content: '';
-	width: 28px;
-	height: 1px;
-	background: var(--line-control);
+/* No pill: the active view is bright text with a 2px underline on the header's bottom edge. */
+.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true'] {
+	display: none;
 }
-.review-steps-list li > span:nth-child(2) {
-	flex: none;
-	font-size: 12.5px;
+.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
+	position: relative;
+	height: 30px;
+	min-height: 30px;
+	padding: 0 10px;
+	border-radius: 7px;
+	background: transparent;
+	font-size: 13px;
 	font-weight: 400;
-	white-space: nowrap;
+	color: var(--text-faint);
+	transition:
+		color var(--dur-hover) ease-out,
+		background-color var(--dur-hover) ease-out;
 }
-.review-steps-list li[data-status='done'] > span:nth-child(2) {
-	color: var(--text-subtle);
+.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover:not(:disabled):not([data-state='active']) {
+	background: var(--bg-hover);
+	color: var(--text-secondary);
 }
-.review-steps-list li[data-status='active'] > span:nth-child(2) {
+.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
 	color: var(--text-primary);
 }
-.review-steps-list li[data-status='pending'] > span:nth-child(2) {
+.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active']::after {
+	content: '';
+	position: absolute;
+	right: 10px;
+	bottom: -11px;
+	left: 10px;
+	height: 2px;
+	border-radius: 2px 2px 0 0;
+	background: var(--text-primary);
+}
+.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:disabled {
+	color: var(--text-ghost);
+}
+
+/* ── Live progress card (top of the right rail while a review runs) ── */
+.rail-progress .rail-card-head {
+	align-items: center;
+}
+.progress-steps {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 2px 14px 12px;
+	list-style: none;
+}
+.progress-step {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 30px;
+	font-size: 12.5px;
 	color: var(--text-faint);
 }
-.review-steps-list li[data-status='error'] > span:nth-child(2) {
-	color: var(--danger);
+/* Connector between marks. */
+.progress-step:not(:last-child)::after {
+	content: '';
+	position: absolute;
+	top: calc(50% + 11px);
+	left: 8px;
+	width: 1px;
+	height: calc(100% - 22px);
+	background: var(--line-control);
 }
-.review-steps-list .sivir-task-mark {
-	width: 16px;
-	height: 16px;
-	border-radius: 8px;
+.progress-step[data-status='done']:not(:last-child)::after {
+	background: var(--line-strong);
+}
+.progress-mark {
+	display: inline-flex;
+	width: 17px;
+	height: 17px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	border-radius: 999px;
+	box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.progress-step[data-status='done'] .progress-mark {
 	background: var(--bg-hover);
-}
-.review-steps-list li[data-status='done'] .sivir-task-mark {
+	box-shadow: none;
 	color: var(--success);
 }
-.review-steps-list .sivir-task-spinner {
-	width: 12px;
-	height: 12px;
+.progress-step[data-status='active'] .progress-mark {
+	box-shadow: none;
 	color: var(--sev-medium);
 }
-.review-steps-list li[data-status='pending'] > span:first-child > span {
-	width: 16px;
-	height: 16px;
-	border-radius: 8px;
-	background: transparent;
-	box-shadow: inset 0 0 0 1px var(--line-strong);
+.progress-step[data-status='error'] .progress-mark {
+	box-shadow: none;
+	color: var(--danger);
+}
+.progress-step[data-status='done'] .progress-label {
+	color: var(--text-subtle);
+}
+.progress-step[data-status='active'] .progress-label {
+	color: var(--text-primary);
+}
+.progress-step[data-status='error'] .progress-label {
+	color: var(--danger);
+}
+.progress-label {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.progress-meta {
+	flex-shrink: 0;
+	font-family: var(--font-code);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-faint);
+}
+.progress-step[data-status='active'] .progress-meta {
+	color: var(--text-subtle);
+}
+.review-live[data-failed] .review-live-dot {
+	background: var(--danger);
 }
 .review-live {
 	display: flex;
@@ -2360,36 +2989,7 @@ mark.palette-hit {
 	font-size: 13px;
 }
 
-/* Tool group: sentence header, then rows behind a left rule. */
-[data-ui='tool'].review-tool-group,
-[data-ui='tool'].review-tool-row {
-	display: block;
-	width: 100%;
-}
-[data-ui='tool'].review-tool-group > button {
-	min-height: 28px;
-	width: auto;
-	gap: 8px;
-	font-size: 13px;
-	color: var(--text-subtle);
-}
-[data-ui='tool'].review-tool-group > button:hover {
-	color: var(--text-primary);
-}
-.tool-rows {
-	display: flex;
-	flex-direction: column;
-	margin: 2px 0 0 6px;
-	padding-left: 14px;
-	border-left: 1px solid var(--line-control);
-}
-[data-ui='tool'].review-tool-row > button {
-	width: 100%;
-	min-height: 26px;
-	gap: 10px;
-	font-size: 12.5px;
-	color: var(--text-subtle);
-}
+/* Tool group rows (inside a Disclosure body). */
 .tool-row-action {
 	width: 62px;
 	flex-shrink: 0;
@@ -2405,9 +3005,6 @@ mark.palette-hit {
 	color: var(--text-tertiary);
 	transition: color var(--dur-hover) ease-out;
 }
-[data-ui='tool'].review-tool-row > button:hover .tool-row-target {
-	color: var(--text-primary);
-}
 .tool-row-duration {
 	flex-shrink: 0;
 	font-family: var(--font-code);
@@ -2422,26 +3019,16 @@ mark.palette-hit {
 	flex-direction: column;
 	gap: 10px;
 }
-.specialist-reasons {
+.specialist-list {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
-	padding: 6px 0 4px;
-	font-size: 13px;
-	line-height: 19px;
-	color: var(--text-muted);
-}
-.specialist-reasons [data-ui='markdown'] {
-	font-size: 13px;
-}
-.specialist-list {
-	margin: 0;
+	gap: 2px;
+	margin: 0 -10px;
 	padding: 0;
 	list-style: none;
-	border-top: 1px solid var(--bg-bubble);
 }
-.specialist-list > li {
-	border-bottom: 1px solid var(--bg-bubble);
+.disclosure-body .specialist-list {
+	margin: 0;
 }
 [data-ui='button'][data-variant].specialist-row {
 	width: 100%;
@@ -2449,13 +3036,13 @@ mark.palette-hit {
 	min-height: 0;
 	justify-content: flex-start;
 	gap: 14px;
-	padding: 11px 4px;
-	border-radius: 0;
+	padding: 10px 10px;
+	border-radius: 10px;
 	font-weight: 400;
 	text-align: left;
 }
 [data-ui='button'][data-variant].specialist-row:hover {
-	background-color: rgba(255, 245, 230, 0.03);
+	background-color: var(--bg-hover);
 }
 .specialist-main {
 	display: flex;
@@ -2476,6 +3063,9 @@ mark.palette-hit {
 	color: var(--text-primary);
 }
 .specialist-model,
+.specialist-op {
+	line-height: 16px;
+}
 .specialist-op {
 	min-width: 0;
 	overflow: hidden;
@@ -2504,14 +3094,6 @@ mark.palette-hit {
 [data-ui='badge'].status-chip[data-tone='running'] {
 	color: var(--sev-medium);
 	background-color: var(--sev-medium-tint);
-}
-.review-progress-detail {
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	padding: 8px 0;
-	font-size: 13px;
-	color: var(--text-muted);
 }
 .review-log {
 	margin-bottom: 6px;
@@ -2568,6 +3150,11 @@ mark.palette-hit {
 	margin: 0 auto;
 	padding: 0 24px;
 	pointer-events: auto;
+}
+/* Side-panel chat: the composer spans the panel (the dock's 12px margin only). */
+.review-chat[data-compact] .review-dock-inner {
+	max-width: none;
+	padding: 0;
 }
 
 /* ── Results rail (4f) ────────────────────────────────────── */
@@ -2764,9 +3351,15 @@ mark.palette-hit {
 .review-chat:not([data-compact]) div:has(> [data-ui='conversation-scroll-button']) {
 	bottom: 150px;
 }
-/* Usage modal: the primary action lines up with the body's content edge. */
-.usage-modal [data-ui='modal-footer'] {
-	padding-inline-end: 20px;
+/* Destructive menu item (Delete session): red text; hover stays the normal highlight. */
+[data-ui='popover-content'][role='menu'] .sivir-menu-item.menu-danger {
+	color: var(--danger);
+}
+/* Modal and alert-dialog footers: buttons line up with the body's 20px
+   content edge and get the same 20px below (Sivir's default is 6px 4px). */
+[data-ui='modal-footer'] {
+	gap: 8px;
+	padding: 4px 20px 20px;
 }
 
 /* ── Motion: page transitions and streaming text ───────────── */
@@ -2800,13 +3393,6 @@ mark.palette-hit {
 }
 
 /* ── Diff workspace (3c inline, 3d focus) ─────────────────── */
-.diff-toolbar {
-	display: flex;
-	flex-shrink: 0;
-	align-items: center;
-	padding: 0 14px 12px 18px;
-	border-bottom: 1px solid var(--line-divider);
-}
 .findings-toolbar-end {
 	display: flex;
 	align-items: center;
@@ -2851,12 +3437,167 @@ mark.palette-hit {
 	text-align: center;
 }
 
-/* File tree: 256px, rows 28px. */
+/* Material Icon Theme file/folder icons in the tree. */
+.tree-icon {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	user-select: none;
+	-webkit-user-drag: none;
+}
+.tree-file[data-viewed] .tree-icon {
+	opacity: 0.55;
+}
+/* File tree: resizable (width set inline, 200-480px), rows 28px. */
 .diff-tree {
-	width: 256px;
+	position: relative;
+	width: 288px;
 	min-height: 0;
 	flex-shrink: 0;
 	border-right: 1px solid var(--line-divider);
+}
+/* Hidden when a side panel replaces the diff (under 1280px). */
+@media (max-width: 1279px) {
+	.diff-tree[data-beside-panel] {
+		display: none;
+	}
+}
+/* Drag handle straddling the tree's right border. */
+.tree-resizer {
+	position: absolute;
+	top: 0;
+	right: -4px;
+	bottom: 0;
+	z-index: 2;
+	width: 8px;
+	cursor: col-resize;
+	touch-action: none;
+}
+.tree-resizer::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 3px;
+	width: 2px;
+	background: transparent;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.tree-resizer:hover::after,
+.tree-resizer:focus-visible::after,
+:root[data-resizing] .tree-resizer::after {
+	background: var(--line-strong);
+}
+.tree-resizer:focus-visible {
+	outline: none;
+}
+:root[data-resizing],
+:root[data-resizing] * {
+	cursor: col-resize !important;
+	user-select: none;
+}
+/* Review chat drawer: animates its width open and shut; the panel inside
+   keeps its width and is pinned right, so it slides out rather than squashing.
+   Under 1280px an open drawer replaces the diff. */
+.chat-drawer {
+	position: relative;
+	display: flex;
+	width: 0;
+	min-height: 0;
+	flex-shrink: 0;
+	transition: width 260ms var(--ease-menu);
+}
+.chat-drawer[data-open] {
+	width: var(--chat-width);
+}
+/* Dragging sets the width directly; no easing to fight the pointer. */
+:root[data-resizing] .chat-drawer,
+:root[data-resizing] .chat-drawer-panel {
+	transition: none;
+}
+@media (max-width: 1279px) {
+	.chat-drawer[data-open] {
+		width: auto;
+		flex: 1;
+	}
+	.chat-drawer[data-open] .chat-drawer-panel {
+		width: 100%;
+	}
+}
+.chat-drawer-clip {
+	display: flex;
+	width: 100%;
+	min-width: 0;
+	justify-content: flex-end;
+	overflow: hidden;
+}
+.chat-drawer-panel {
+	display: flex;
+	width: var(--chat-width);
+	min-height: 0;
+	flex-shrink: 0;
+	flex-direction: column;
+	opacity: 0;
+	transition: opacity 180ms ease-out;
+}
+.chat-drawer[data-open] .chat-drawer-panel {
+	opacity: 1;
+	transition: opacity 220ms ease-out 60ms;
+}
+/* Drag edge on the drawer's left border; stays at the right edge when collapsed
+   (with a small grip) so the chat can be dragged back out. */
+.chat-resizer {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: -4px;
+	z-index: 3;
+	width: 8px;
+	cursor: col-resize;
+	touch-action: none;
+}
+.chat-resizer::after {
+	content: '';
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 3px;
+	width: 2px;
+	background: transparent;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.chat-resizer:hover::after,
+.chat-resizer:focus-visible::after,
+:root[data-resizing] .chat-resizer::after {
+	background: var(--line-strong);
+}
+.chat-resizer:focus-visible {
+	outline: none;
+}
+.chat-drawer:not([data-open]) .chat-resizer {
+	left: -10px;
+	width: 10px;
+}
+.chat-drawer:not([data-open]) .chat-resizer::before {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 3px;
+	width: 4px;
+	height: 36px;
+	border-radius: 2px;
+	background: var(--line-strong);
+	transform: translateY(-50%);
+	transition: background-color var(--dur-hover) ease-out;
+}
+.chat-drawer:not([data-open]) .chat-resizer:hover::before {
+	background: var(--text-faint);
+}
+@media (prefers-reduced-motion: reduce) {
+	.chat-drawer,
+	.chat-drawer-panel {
+		transition: none;
+	}
 }
 .file-panel {
 	display: flex;
@@ -3011,9 +3752,17 @@ mark.palette-hit {
 	font-size: 11.5px;
 }
 .diff-viewed {
+	align-items: center;
 	font-size: 12.5px;
+	line-height: 16px;
 	color: var(--text-muted);
 	white-space: nowrap;
+}
+/* Sivir nudges the label up (-0.2rem) for its body size; at 12.5px that
+   leaves "Viewed" above the box. */
+.diff-viewed [role='presentation'] {
+	margin-top: 0;
+	line-height: 16px;
 }
 .diff-mode-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
 	height: 24px;
@@ -3037,6 +3786,23 @@ mark.palette-hit {
 .diff-row {
 	display: grid;
 	grid-template-columns: 44px 44px 18px minmax(0, 1fr);
+}
+/* Selecting code: the gutter (line numbers, +/−) is never part of a selection,
+   and the selection itself is a soft blue that keeps the syntax colours. */
+.diff-num,
+.diff-sign {
+	-webkit-user-select: none;
+	user-select: none;
+}
+.diff-lines .diff-code::selection,
+.diff-lines .diff-code ::selection {
+	background-color: color-mix(in oklab, var(--selection-bar) 34%, transparent);
+	color: inherit;
+}
+/* Highlighted lines wash the whole row (over the add/del colour); --row-tint is set inline. */
+[data-diff-row].diff-row[style*='--row-tint'],
+[data-diff-row].diff-row[style*='--row-tint'] > .diff-half {
+	background-image: linear-gradient(var(--row-tint), var(--row-tint));
 }
 .diff-row[data-type='add'],
 .diff-half[data-type='add'] {
@@ -3203,7 +3969,9 @@ button.diff-num:hover {
 }
 .suggested-fix-head {
 	display: flex;
+	align-items: center;
 	gap: 6px;
+	min-height: 24px;
 	font-size: 12px;
 	color: var(--text-subtle);
 }
@@ -3222,7 +3990,12 @@ button.diff-num:hover {
 }
 .suggested-fix-code > span {
 	display: block;
+	margin: 0 -12px;
+	padding: 0 12px;
 	white-space: pre;
+}
+.suggested-fix-code > [data-sign='+'] {
+	background: var(--diff-add);
 }
 .suggested-fix-sign {
 	display: inline-block;
@@ -3232,7 +4005,97 @@ button.diff-num:hover {
 	color: var(--success);
 }
 .suggested-fix-code > [data-sign='-'] {
+	background: var(--diff-del);
+}
+.suggested-fix-code > [data-sign='-'] > :not(.suggested-fix-sign) {
+	opacity: 0.7;
+}
+[data-ui='button'][data-variant][data-size].suggested-fix-expand {
+	width: 24px;
+	height: 24px;
+	min-width: 0;
+	min-height: 0;
+	margin-left: auto;
+	padding: 0;
+	border-radius: 6px;
 	color: var(--text-faint);
+}
+[data-ui='button'][data-variant][data-size].suggested-fix-expand:hover {
+	color: var(--text-primary);
+}
+/* Full-screen fix review: the patch rendered like the Diff tab. */
+[data-ui='modal-content'].fix-review-modal,
+.fix-review-modal {
+	top: var(--sivir-viewport-center, 50%);
+	width: min(1240px, calc(100vw - 48px));
+	max-width: none;
+	height: min(88vh, calc(var(--sivir-viewport-height, 100vh) - 48px));
+}
+.fix-review-modal [data-ui='modal-surface'] {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	overflow: hidden;
+}
+.fix-review-head {
+	display: flex;
+	flex-direction: row !important;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 56px 14px 20px;
+	border-bottom: 1px solid var(--line-divider);
+}
+.fix-review-modal .fix-review-title {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 500;
+}
+.fix-review-meta {
+	display: flex;
+	gap: 6px;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-subtle);
+}
+.fix-review-mode {
+	margin-left: auto;
+}
+.fix-review-summary {
+	flex-shrink: 0;
+	margin: 0;
+	padding: 12px 20px;
+	border-bottom: 1px solid var(--line-divider);
+	font-size: 13px;
+	line-height: 19px;
+	color: var(--text-muted);
+}
+.fix-review-files {
+	min-height: 0;
+	flex: 1;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+.fix-review-file + .fix-review-file {
+	border-top: 1px solid var(--line-divider);
+}
+.fix-review-file-head {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 40px;
+	padding: 0 20px;
+	border-bottom: 1px solid var(--line-divider);
+	background: var(--bg-raised);
+	font-size: 12.5px;
+}
+.fix-review-file-stats {
+	margin-left: auto;
+	font-family: var(--font-code);
+	font-size: 11.5px;
 }
 .suggested-fix-code > [data-sign='-'] .suggested-fix-sign {
 	color: var(--danger);
@@ -3347,6 +4210,32 @@ button.diff-num:hover {
 .focus-card-body {
 	font-size: 15px;
 	line-height: 1.42;
+}
+/* Active card's footer opens with a height transition instead of popping in. */
+.focus-card-reveal {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows 220ms var(--ease-menu),
+		opacity 140ms ease-out;
+}
+[data-ui='card'].focus-card[data-active] .focus-card-reveal {
+	grid-template-rows: 1fr;
+	opacity: 1;
+	transition:
+		grid-template-rows 240ms var(--ease-menu),
+		opacity 200ms ease-out 60ms;
+}
+.focus-card-reveal-clip {
+	min-height: 0;
+	overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+	.focus-card-reveal,
+	[data-ui='card'].focus-card[data-active] .focus-card-reveal {
+		transition: none;
+	}
 }
 .focus-card-foot {
 	display: flex;
@@ -3474,11 +4363,9 @@ button.diff-num:hover {
    Hidden views replay this when shown again, since display:none restarts animations. */
 :is(
 		.home-column > *,
-		.review-steps,
 		.review-transcript > *,
 		.review-dock-inner,
 		.results-rail-body > *,
-		.diff-toolbar,
 		.file-panel-head,
 		.file-panel > div > :not(:has(.file-tree)):not(.file-panel-head),
 		.file-tree > *,
@@ -3494,7 +4381,6 @@ button.diff-num:hover {
 .home-column > :nth-child(2) { --stage: 2; }
 .home-column > :nth-child(3) { --stage: 3; }
 .home-column > :nth-child(n + 4) { --stage: 4; }
-.review-steps { --stage: 0; }
 .review-transcript > :nth-child(1) { --stage: 1; }
 .review-transcript > :nth-child(2) { --stage: 2; }
 .review-transcript > :nth-child(3) { --stage: 3; }
@@ -3505,7 +4391,6 @@ button.diff-num:hover {
 .results-rail-body > :nth-child(1) { --stage: 2; }
 .results-rail-body > :nth-child(2) { --stage: 4; }
 .results-rail-body > :nth-child(3) { --stage: 6; }
-.diff-toolbar { --stage: 0; }
 .file-panel-head { --stage: 1; }
 .file-panel > div > :not(:has(.file-tree)):not(.file-panel-head) { --stage: 2; }
 .file-tree > :nth-child(1) { --stage: 3; }
@@ -3526,12 +4411,10 @@ button.diff-num:hover {
 @media (prefers-reduced-motion: reduce) {
 	:is(
 			.home-column > *,
-			.review-steps,
-			.review-transcript > *,
+				.review-transcript > *,
 			.review-dock-inner,
 			.results-rail-body > *,
-			.diff-toolbar,
-			.file-panel-head,
+				.file-panel-head,
 			.file-panel > div > *,
 			.file-tree > *,
 			.diff-file-header,

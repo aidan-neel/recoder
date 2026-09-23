@@ -116,6 +116,8 @@ class RecentSessionsState {
 	loading = $state(true);
 	apiDown = $state(false);
 	private inflight: Promise<void> | null = null;
+	/** Deleted in the UI, DELETE still pending (undo window): kept out of refreshes. */
+	private hidden = new Set<string>();
 	private branchRequests = new Set<string>();
 
 	get recent(): RecentSession[] {
@@ -169,7 +171,7 @@ class RecentSessionsState {
 				serverApi.reviewSummaries().catch(() => this.summaries)
 			]);
 			this.repos = repos;
-			this.reviews = reviews;
+			this.reviews = reviews.filter((review) => !this.hidden.has(review.id));
 			this.summaries = summaries;
 			this.apiDown = false;
 			void this.loadBranches(reviews);
@@ -219,6 +221,27 @@ class RecentSessionsState {
 				}
 			}));
 		}
+	}
+
+	/** Drop a review from the list until `unhide` or `forget`; returns where it was. */
+	hide(id: string): { review: Review; index: number } | null {
+		this.hidden.add(id);
+		const index = this.reviews.findIndex((review) => review.id === id);
+		if (index < 0) return null;
+		const review = this.reviews[index];
+		this.reviews = this.reviews.filter((item) => item.id !== id);
+		return { review, index };
+	}
+
+	unhide(id: string, snapshot: { review: Review; index: number } | null): void {
+		this.hidden.delete(id);
+		if (!snapshot || this.reviews.some((review) => review.id === id)) return;
+		this.reviews = [...this.reviews.slice(0, snapshot.index), snapshot.review, ...this.reviews.slice(snapshot.index)];
+	}
+
+	/** The server deleted it; stop filtering. */
+	forget(id: string): void {
+		this.hidden.delete(id);
 	}
 
 	async deleteReview(id: string): Promise<void> {

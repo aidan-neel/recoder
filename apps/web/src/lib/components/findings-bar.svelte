@@ -30,8 +30,13 @@ import {
 	import { threadsStore } from '$lib/threads.svelte';
 	import { toFixInput } from '$lib/fixes';
 
-	/** Status and actions shown before Fix all at the toolbar's right end. */
-	let { trailing }: { trailing?: Snippet } = $props();
+	/**
+	 * `trailing`: status and actions shown before Fix all at the toolbar's right end.
+	 * `part`: 'actions' renders only those actions + Fix all (the session header);
+	 * 'nav' renders the findings stepper, severity filters and search as a
+	 * sidebar section; 'all' is the original single toolbar.
+	 */
+	let { trailing, part = 'all' }: { trailing?: Snippet; part?: 'all' | 'nav' | 'actions' } = $props();
 	let searchOpen = $state(false);
 	let query = $state('');
 	let index = $state(0);
@@ -92,6 +97,8 @@ import {
 	);
 	const fixAllDisabled = $derived(fixable.length === 0 || !reviewId);
 	$effect(() => {
+		// Only the instance that owns Fix all registers it with ⌘K.
+		if (part === 'nav') return;
 		paletteContext.fixAll = fixAllDisabled
 			? null
 			: { count: fixable.length, run: () => { searchOpen = false; fixAllConfirmOpen = true; } };
@@ -308,14 +315,7 @@ import {
 	});
 </script>
 
-<div class="findings-toolbar flex w-full min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
-	<Card.Root class="!h-8 shrink-0 !flex-row items-center !gap-0 rounded-[9px] border-0 bg-transparent !p-0 shadow-none">
-		<Popover.Root bind:open={searchOpen} placement="bottom-start">
-			<Popover.Trigger variant="ghost" class="!h-8 gap-2 rounded-s-[9px] rounded-e-none !px-2.5 text-sm !font-normal" aria-label="Search findings">
-				Findings
-				<span class="font-mono text-xs tabular-nums text-foreground-muted">{visible.length === 0 ? 0 : position + 1}/{visible.length}</span>
-			</Popover.Trigger>
-			<Popover.Content class="w-[28rem] max-w-[calc(100vw-2rem)]" surfaceClass="!gap-0 !p-0">
+{#snippet searchPanel()}
 				<div class="flex items-center justify-between px-4 pb-2 pt-4">
 					<Popover.Title class="text-sm font-medium">Findings</Popover.Title>
 					<Typography.Metadata class="text-xs tabular-nums" role="status">{matches.length} {matches.length === 1 ? 'result' : 'results'}</Typography.Metadata>
@@ -346,7 +346,46 @@ import {
 						{findingsCopied ? 'Copied' : 'Copy findings'}
 					</Button>
 				</div>
-			</Popover.Content>
+{/snippet}
+
+{#if part === 'nav'}
+	{#if openItems.length > 0 || findingsStore.items.length > 0}
+		<section class="findings-nav" aria-label="Findings">
+			<div class="findings-nav-head">
+				<span class="findings-nav-title">Findings</span>
+				<span class="findings-nav-pos" aria-live="polite">{visible.length === 0 ? 0 : position + 1} / {visible.length}</span>
+				<span class="findings-nav-steps">
+					<Button variant="quiet" size="icon" aria-label="Previous finding" disabled={visible.length === 0} onclick={() => go(position - 1)}><ChevronUp size={14} /></Button>
+					<Button variant="quiet" size="icon" aria-label="Next finding" title="Next finding" disabled={visible.length === 0} onclick={() => go(position + 1)}><ChevronDown size={14} /></Button>
+				</span>
+			</div>
+			<div class="findings-nav-filters" role="group" aria-label="Show severities">
+				{#each SEVERITIES as severity (severity)}
+					<button type="button" class="findings-nav-filter" data-severity={severity} aria-pressed={findingsStore.isSeverityShown(severity)} onclick={() => toggle(severity)}>
+						<span class="findings-nav-dot" aria-hidden="true"></span>
+						<span class="findings-nav-label">{severity === 'medium' ? 'Med' : severity.charAt(0).toUpperCase() + severity.slice(1)}</span>
+						<span class="findings-nav-count">{counts[severity]}</span>
+					</button>
+				{/each}
+			</div>
+			<Popover.Root bind:open={searchOpen} placement="bottom-start">
+				<Popover.Trigger variant="ghost" class="findings-nav-search" aria-label="Search findings">
+					<Search size={13} aria-hidden="true" /><span>Search findings…</span>
+				</Popover.Trigger>
+				<Popover.Content class="w-[28rem] max-w-[calc(100vw-2rem)]" surfaceClass="!gap-0 !p-0">{@render searchPanel()}</Popover.Content>
+			</Popover.Root>
+		</section>
+	{/if}
+{:else}
+<div class="findings-toolbar flex w-full min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
+	{#if part === 'all'}
+	<Card.Root class="!h-8 shrink-0 !flex-row items-center !gap-0 rounded-[9px] border-0 bg-transparent !p-0 shadow-none">
+		<Popover.Root bind:open={searchOpen} placement="bottom-start">
+			<Popover.Trigger variant="ghost" class="!h-8 gap-2 rounded-s-[9px] rounded-e-none !px-2.5 text-sm !font-normal" aria-label="Search findings">
+				Findings
+				<span class="font-mono text-xs tabular-nums text-foreground-muted">{visible.length === 0 ? 0 : position + 1}/{visible.length}</span>
+			</Popover.Trigger>
+			<Popover.Content class="w-[28rem] max-w-[calc(100vw-2rem)]" surfaceClass="!gap-0 !p-0">{@render searchPanel()}</Popover.Content>
 		</Popover.Root>
 		<Button
 			variant="quiet"
@@ -380,6 +419,7 @@ import {
 			onToggle={() => toggle(severity)}
 		/>
 	{/each}
+	{/if}
 
 	<div class="findings-toolbar-end">
 		{@render trailing?.()}
@@ -503,3 +543,4 @@ import {
 		</AlertDialog.Content>
 	</AlertDialog.Root>
 </div>
+{/if}

@@ -1,12 +1,10 @@
 <script lang="ts">
 	import { ORCHESTRATOR_ID, type ReviewAssignment, type ReviewChatMessage, type ReviewCodeContext, type ReviewReasoningEntry, type ReviewTask, type ReviewToolCall } from '@recoder/shared';
 	import type { Snippet } from 'svelte';
-	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import X from '@lucide/svelte/icons/x';
 	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
-	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import * as Conversation from '@sivir-ui/svelte/components/conversation';
 	import * as Message from '@sivir-ui/svelte/components/message';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
@@ -14,11 +12,15 @@
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import ReviewTaskGroup from './review-task-group.svelte';
+	import Disclosure from './ui/disclosure.svelte';
+	import CodeRef from './code-ref.svelte';
 	import ReviewComposer from './review-composer.svelte';
 	import ModelPicker from './model-picker.svelte';
 	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
 	import type { ReviewRole } from '@recoder/shared';
 	import { groupTranscript } from '$lib/review-transcript';
+	import { parseModelNotes, stripModelNotes } from '$lib/model-notes';
+	import { fileIconUrl } from '$lib/material-icons';
 
 	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, inserts = [], placeholder, awaitingPrompt = false }: {
 		assignment: ReviewAssignment;
@@ -120,37 +122,33 @@
 	{#if message.codeContext}
 		{@render codeReference(message.codeContext)}
 	{/if}
-	<Markdown content={message.text} streaming={message.status === 'streaming'} />
+	{#if message.from === 'assistant' && message.text.includes('```recoder-note')}
+		<Markdown content={stripModelNotes(message.text)} streaming={message.status === 'streaming'} />
+		{#each parseModelNotes(message.text) as note, i (i)}
+			<p class="model-note-added">Added a note on <span class="font-mono">{note.file.split('/').at(-1)}:{note.startLine}{note.endLine !== note.startLine ? `–${note.endLine}` : ''}</span></p>
+		{/each}
+	{:else}
+		<Markdown content={message.text} streaming={message.status === 'streaming'} />
+	{/if}
 {/snippet}
 
 {#snippet codeReference(context: ReviewCodeContext)}
-	<Collapsible.Root>
-		<Collapsible.Trigger class="review-disclosure max-w-full" title={context.file}>
-			<ChevronRight size={14} class="shrink-0" aria-hidden="true" />
-			<span class="min-w-0 truncate font-mono text-xs">{context.file}:{context.startLine}{context.endLine !== context.startLine ? `–${context.endLine}` : ''}</span>
-			<span class="shrink-0 text-xs">{context.side === 'old' ? 'Before' : 'After'}</span>
-		</Collapsible.Trigger>
-		<Collapsible.Content class="pt-2"><CodeBlock code={context.quote} lang="plaintext" class="max-h-48" /></Collapsible.Content>
-	</Collapsible.Root>
+	<CodeRef {context} />
 {/snippet}
 
 {#snippet reviewReasoning()}
 	{#if conversationReasoning.length}
-		<Collapsible.Root open={specialist}>
-			<Collapsible.Trigger class="review-disclosure">
-				{conversationReasoning.some((entry) => entry.status === 'streaming') && (active || generating) ? awaitingPrompt ? 'Thinking…' : 'Reviewing changes…' : reasoningSeconds ? `Reviewed changes for ${reasoningSeconds}s` : 'Reviewed changes'}
-				<ChevronRight size={14} aria-hidden="true" />
-			</Collapsible.Trigger>
-			<Collapsible.Content class="space-y-3 py-2 text-sm text-foreground-muted">
-				{#each conversationReasoning as entry (entry.id)}<Markdown content={entry.text} streaming={active && entry.status === 'streaming'} />{/each}
-			</Collapsible.Content>
-		</Collapsible.Root>
+		{@const reasoningLive = conversationReasoning.some((entry) => entry.status === 'streaming') && (active || generating)}
+		<Disclosure open={specialist} status={reasoningLive ? 'running' : undefined} bodyClass="!gap-3">
+			{#snippet label()}{reasoningLive ? awaitingPrompt ? 'Thinking…' : 'Reviewing changes…' : reasoningSeconds ? `Reviewed changes for ${reasoningSeconds}s` : 'Reviewed changes'}{/snippet}
+			{#each conversationReasoning as entry (entry.id)}<Markdown content={entry.text} streaming={active && entry.status === 'streaming'} />{/each}
+		</Disclosure>
 	{/if}
 {/snippet}
 
 <div class="review-chat" data-compact={compact || undefined}>
 <Conversation.Root class="min-h-0 w-full flex-1">
-	<Conversation.Content aria-label={`${assignment.title} messages`} transcriptClass={compact ? '!max-w-[776px] !gap-4 !px-4 !py-2' : 'review-transcript'} class="![scrollbar-gutter:auto]">
+	<Conversation.Content aria-label={`${assignment.title} messages`} transcriptClass={compact ? '!max-w-[776px] !gap-4 !px-4 !pt-5 !pb-2' : 'review-transcript'} class="![scrollbar-gutter:auto]">
 		{#each entries as item, index (item.kind + item.id)}
 			{#each placed.filter((insert) => insert.index === index) as insert (insert.key)}{@render insert.snippet()}{/each}
 			{#if index === firstAssistantIndex}{@render reviewReasoning()}{/if}
@@ -178,16 +176,14 @@
 					<span class="min-w-0 break-words">{currentOperation}</span>
 				</Typography.Text>
 				{#if tasks.length}
-					<Collapsible.Root>
-						<Collapsible.Trigger class="review-disclosure">Review activity <ChevronRight size={14} aria-hidden="true" /></Collapsible.Trigger>
-						<Collapsible.Content class="py-2">
-							<ScrollArea showCues={false} class="max-h-64" aria-label={`${assignment.title} tasks`}>
-								{#each tasks as task (task.id)}
-									<Typography.Text class="mb-3 break-words text-sm text-foreground-muted"><span class="font-medium text-foreground">{task.label}</span> · {task.status}<span class="mt-1 block">{task.message}</span></Typography.Text>
-								{/each}
-								</ScrollArea>
-						</Collapsible.Content>
-					</Collapsible.Root>
+					<Disclosure meta={String(tasks.length)}>
+						{#snippet label()}Review activity{/snippet}
+						<ScrollArea showCues={false} class="max-h-64" aria-label={`${assignment.title} tasks`}>
+							{#each tasks as task (task.id)}
+								<Typography.Text class="review-log"><span class="text-fg-secondary">{task.label}</span> · {task.status}{#if task.message}<span class="mt-0.5 block">{task.message}</span>{/if}</Typography.Text>
+							{/each}
+						</ScrollArea>
+					</Disclosure>
 				{/if}
 			</section>
 		{/if}
@@ -223,10 +219,12 @@
 	>
 		{#snippet context()}
 			{#if codeContext}
-				<div class="flex min-w-0 items-start gap-1">
-					<div class="min-w-0 flex-1">{@render codeReference(codeContext)}</div>
-					<Button variant="ghost" size="icon" class="shrink-0" aria-label="Remove selected code" disabled={sending} onclick={() => codeContext = null}><X size={14} aria-hidden="true" /></Button>
-				</div>
+				{@const name = codeContext.file.split('/').at(-1) ?? codeContext.file}
+				<span class="composer-quote" title="{codeContext.file}{codeContext.side === 'old' ? ' (before)' : ''}">
+					<img src={fileIconUrl(name)} alt="" width="14" height="14" class="composer-quote-icon" />
+					<span class="min-w-0 truncate">{name}:{codeContext.startLine}{codeContext.endLine !== codeContext.startLine ? `–${codeContext.endLine}` : ''}</span>
+					<Button variant="ghost" size="icon" class="composer-quote-remove" aria-label="Remove selected code" disabled={sending} onclick={() => codeContext = null}><X size={12} aria-hidden="true" /></Button>
+				</span>
 			{/if}
 		{/snippet}
 		{#snippet leading()}

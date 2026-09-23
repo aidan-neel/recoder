@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { emptyReviewProgress, expandFileDiff, parseUnifiedDiff } from '@recoder/shared';
-import { createReviewSession, queueReview } from '../commands/pipeline';
+import { createReviewSession, queueReview, startReviewSession } from '../commands/pipeline';
+import { isReviewConfigured } from '../lib/models';
 import { clearReviewEvents, subscribeReview } from '../lib/events';
 import { discussFinding, streamDiscussFinding, discussRequestSchema } from '../lib/discuss';
 import { runRereview, rereviewRequestSchema } from '../lib/rereview';
@@ -22,7 +23,7 @@ import { LlmError } from '../lib/llm';
 import { refspecFor } from '../lib/providers';
 import { db, reviewDiffs, reviewSandboxes, reviewProgress, reviewMetrics } from '../store';
 import { getReviewMetrics, withReviewMetrics } from '../lib/metrics';
-import { cancelReviewChats, ReviewChatError, reviewCodeContextSchema, startReviewChat, stopReviewChat } from '../lib/review-chat';
+import { cancelReviewChats, ReviewChatError, reviewCodeContextSchema, prepareDraftSession, startReviewChat, stopReviewChat } from '../lib/review-chat';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),
@@ -100,6 +101,16 @@ app.get('/:id/files', async (c) => {
 		})
 	);
 	return c.json(expanded);
+});
+
+/** Start a draft (interactive) review directly, without going through the orchestrator chat. */
+app.post('/:id/start', (c) => {
+	try {
+		return c.json(startReviewSession(c.req.param('id')), 202);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : 'Could not start the review.';
+		return c.json({ error: message }, message === 'review not found' ? 404 : 409);
+	}
 });
 
 const chatSchema = z.object({ assignmentId: z.string().min(1).max(100), text: z.string().trim().min(1).max(8000), codeContext: reviewCodeContextSchema.optional() });
@@ -374,7 +385,10 @@ app.post('/', async (c) => {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
 	}
 	try {
-		return c.json(parsed.data.start === false ? createReviewSession(parsed.data) : queueReview(parsed.data), 201);
+		if (parsed.data.start !== false) return c.json(queueReview(parsed.data), 201);
+		const review = createReviewSession(parsed.data);
+		void prepareDraftSession(review.id, isReviewConfigured());
+		return c.json(review, 201);
 	} catch (err) {
 		return c.json({ error: err instanceof Error ? err.message : 'invalid input' }, 400);
 	}

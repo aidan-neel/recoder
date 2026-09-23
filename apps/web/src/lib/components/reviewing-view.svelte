@@ -34,7 +34,6 @@
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
-	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
@@ -44,9 +43,11 @@
 	import ReviewConversation from './review-conversation.svelte';
 	import ReviewResultsRail from './review-results-rail.svelte';
 	import ReviewSteps from './review-steps.svelte';
+	import Disclosure from './ui/disclosure.svelte';
 	import SessionHeader from './session-header.svelte';
 	import FindingSeverity from './finding-severity.svelte';
 	import { closeSessionTab } from '$lib/session-tabs';
+	import { requestDeleteSession } from '$lib/delete-session.svelte';
 	import { formatAgentName } from '$lib/threads.svelte';
 
 	interface Props {
@@ -158,7 +159,7 @@
 	{#if onOpenDiff}<DropdownMenu.Item callback={onOpenDiff}>Open diff</DropdownMenu.Item>{/if}
 	{#if reviewId}<DropdownMenu.Item callback={() => metricsOpen = true}>View token usage</DropdownMenu.Item>{/if}
 	{#if onRestart}<DropdownMenu.Item disabled={restarting} callback={() => restartOpen = true}>{restarting ? 'Restarting…' : 'Restart review'}</DropdownMenu.Item>{/if}
-	{#if reviewId}{@const id = reviewId}<DropdownMenu.Separator /><DropdownMenu.Item callback={() => void closeSessionTab(id)}>Close tab</DropdownMenu.Item>{/if}
+	{#if reviewId}{@const id = reviewId}<DropdownMenu.Separator /><DropdownMenu.Item callback={() => void closeSessionTab(id)}>Close tab</DropdownMenu.Item><DropdownMenu.Item class="menu-danger" callback={() => requestDeleteSession(id)}>Delete session</DropdownMenu.Item>{/if}
 {/snippet}
 
 {#snippet specialistRows()}
@@ -187,19 +188,14 @@
 
 {#snippet specialistsContent()}
 	<section class="specialists" aria-label="Specialists">
-		<Collapsible.Root>
-			<Collapsible.Trigger class="review-disclosure">
-				Created {specialists.length} {specialists.length === 1 ? 'specialist' : 'specialists'}
-				<ChevronRight size={14} aria-hidden="true" />
-			</Collapsible.Trigger>
-			<Collapsible.Content class="specialist-reasons">
-				{#if planSummary}<Markdown content={planSummary} />{/if}
-				{#each specialists as assignment (assignment.id)}
-					<Typography.Text><span class="text-fg-secondary">{formatAgentName(assignment.role)}:</span> {assignment.reason || assignment.title}</Typography.Text>
-				{/each}
-				{#if finished}{@render specialistRows()}{/if}
-			</Collapsible.Content>
-		</Collapsible.Root>
+		<Disclosure>
+			{#snippet label()}Created {specialists.length} {specialists.length === 1 ? 'specialist' : 'specialists'}{/snippet}
+			{#if planSummary}<Markdown content={planSummary} />{/if}
+			{#each specialists as assignment (assignment.id)}
+				<Typography.Text><span class="text-fg-secondary">{formatAgentName(assignment.role)}:</span> {assignment.reason || assignment.title}</Typography.Text>
+			{/each}
+			{#if finished}{@render specialistRows()}{/if}
+		</Disclosure>
 		{#if !finished}{@render specialistRows()}{/if}
 	</section>
 {/snippet}
@@ -214,18 +210,12 @@
 {/snippet}
 
 {#snippet progressContent()}
-	<Collapsible.Root>
-		<Collapsible.Trigger class="review-disclosure">
-			{#if active}<Spinner size={12} class="text-sev-medium" aria-hidden="true" />{/if}
-			<span class={failed ? 'text-danger' : ''}>{active ? footerLabel : failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}</span>
-			<ChevronRight size={14} aria-hidden="true" />
-		</Collapsible.Trigger>
-		<Collapsible.Content class="review-progress-detail">
-			{#each finalReasoning as entry (entry.id)}<Markdown content={entry.text} streaming={active && entry.status === 'streaming'} />{/each}
-			{#if coverage}<Typography.Text class="text-fg-muted">{coverage.reviewed} of {coverage.total} changes reviewed{coverage.partial ? ` · ${coverage.partial} partial` : ''}</Typography.Text>{/if}
-			{@render activityLog()}
-		</Collapsible.Content>
-	</Collapsible.Root>
+	<Disclosure status={active ? 'running' : failed ? 'error' : 'done'} bodyClass="!gap-3">
+		{#snippet label()}{active ? footerLabel : failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
+		{#each finalReasoning as entry (entry.id)}<Markdown content={entry.text} streaming={active && entry.status === 'streaming'} />{/each}
+		{#if coverage}<Typography.Text>{coverage.reviewed} of {coverage.total} changes reviewed{coverage.partial ? ` · ${coverage.partial} partial` : ''}</Typography.Text>{/if}
+		{@render activityLog()}
+	</Disclosure>
 {/snippet}
 
 {#snippet resultCard()}
@@ -255,13 +245,8 @@
 		onView={(view) => { if (view !== 'conversation') return onShowView ? onShowView(view) : onOpenDiff?.(); }}
 		diffDisabled={!onOpenDiff}
 		onFiles={onOpenDiff}
-		bordered={!showSteps}
 		menu={reviewId || onRestart || onOpenDiff ? sessionMenu : undefined}
 	/>
-	{#if showSteps}
-		<ReviewSteps current={currentStep} {failed} {active} elapsed={meta.elapsed}
-			specialists={{ done: specialists.filter((item) => ['done', 'skipped', 'error', 'partial'].includes(item.status)).length, total: specialists.length }} />
-	{/if}
 	{#if !isOrchestrator}
 		{@const status = statusFor(selected)}
 		<nav aria-label="Review conversations" class="mx-auto flex w-full max-w-[740px] shrink-0 items-center gap-2 px-6 pb-1 pt-3">
@@ -295,8 +280,13 @@
 					] : []} />
 			{/each}
 		</div>
-		{#if showRail}
-			<ReviewResultsRail {findings} {specialists} {coverage} {coverageGaps} {onOpenFinding} specialistHref={conversationHref} />
+		{#if showRail || (isOrchestrator && showSteps)}
+			<ReviewResultsRail {findings} {specialists} {coverage} {coverageGaps} {onOpenFinding} specialistHref={conversationHref} results={showRail}>
+				{#if showSteps}
+					<ReviewSteps current={currentStep} {failed} {active} elapsed={meta.elapsed}
+						specialists={{ done: specialists.filter((item) => ['done', 'skipped', 'error', 'partial'].includes(item.status)).length, total: specialists.length }} />
+				{/if}
+			</ReviewResultsRail>
 		{/if}
 	</div>
 </div>

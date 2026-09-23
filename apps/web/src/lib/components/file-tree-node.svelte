@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import FileIcon from '@lucide/svelte/icons/file';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import { FINDING_DOT, type FileBadge, type TreeNode } from '$lib/file-tree';
 	import { folderOpen } from '$lib/folder-open.svelte';
+	import { fileIconUrl, folderIconUrl } from '$lib/material-icons';
 	import FileTreeNode from './file-tree-node.svelte';
 	import { diffPrefs } from '$lib/diff-prefs.svelte';
 
@@ -35,6 +35,7 @@
 	<Collapsible.Root bind:open>
 		<Collapsible.Trigger class="tree-folder">
 			<ChevronDown size={12} class="tree-chevron" aria-hidden="true" />
+			<img src={folderIconUrl(node.name, open)} alt="" class="tree-icon" width="16" height="16" />
 			<span class="truncate">{node.name}</span>
 		</Collapsible.Trigger>
 		<Collapsible.Content class="tree-children">
@@ -54,7 +55,7 @@
 			aria-label="Show {node.name}"
 			class="tree-file-select"
 		>
-			<FileIcon size={13} class="shrink-0 text-fg-faint" aria-hidden="true" />
+			<img src={fileIconUrl(node.name)} alt="" class="tree-icon" width="16" height="16" />
 			<span class="tree-file-name">{node.name}</span>
 			<span class="tree-file-stats">
 				{#if node.additions > 0}

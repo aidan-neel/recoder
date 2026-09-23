@@ -23,6 +23,7 @@
 	import { recentSessions } from '$lib/recent-sessions.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
 	import { closeSessionTab, sessionTab, type SessionTab } from '$lib/session-tabs';
+	import { requestDeleteSession } from '$lib/delete-session.svelte';
 	import { initials, shellState } from '$lib/shell-state.svelte';
 
 	const HOME = 'home';
@@ -302,6 +303,8 @@
 				>
 					Close tabs to the right
 				</ContextMenu.Item>
+				<ContextMenu.Separator />
+				<ContextMenu.Item class="menu-danger" callback={() => requestDeleteSession(tab.id)}>Delete session</ContextMenu.Item>
 			{:else}
 				<ContextMenu.Item callback={() => void newReview()}>Review a pull request…</ContextMenu.Item>
 				<ContextMenu.Item disabled={tabs.length === 0} callback={() => void closeTabs(tabs)}>Close all tabs</ContextMenu.Item>
