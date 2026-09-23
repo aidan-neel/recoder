@@ -8,6 +8,8 @@
 	import FindingSeverity from './finding-severity.svelte';
 	import FixButton from './fix-button.svelte';
 	import SuggestedFix from './suggested-fix.svelte';
+	import FixStatus from './fix-status.svelte';
+	import FixChecks from './fix-checks.svelte';
 	import SeverityPill from './ui/severity-pill.svelte';
 	import { SEVERITY_DOT, findingsStore, type Finding } from '$lib/findings.svelte';
 	import { formatAgentName, threadsStore } from '$lib/threads.svelte';
@@ -57,7 +59,8 @@
 			<Collapsible.Content>
 				<Typography.Title level={3} class="sr-only">{finding.title}</Typography.Title>
 				<div class="inline-finding-body ai-voice"><Markdown content={finding.body} /></div>
-				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} />{/if}
+				<FixStatus {finding} />
+				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks {finding} />{/if}
 				<div class="inline-finding-foot">
 					<Typography.Metadata class="min-w-0 flex-1 truncate" title={`${finding.category} · ${formatAgentName(finding.agent)}${finding.model ? ` · ${finding.model}` : ''}`}>
 						{formatAgentName(finding.agent)}{#if finding.model}<span class="font-mono"> · {finding.model}</span>{/if}

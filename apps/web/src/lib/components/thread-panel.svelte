@@ -13,7 +13,6 @@
 	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import FindingSeverity from './finding-severity.svelte';
 	import ModelPicker from './model-picker.svelte';
 	import ReviewComposer from './review-composer.svelte';
 	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
@@ -214,12 +213,12 @@
 	<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
 		<div class="flex min-h-12 w-full shrink-0 items-center gap-2 border-b border-border-subtle px-4">
 			{#if finding}
-				<FindingSeverity severity={finding.severity} />
-				<Typography.Title level={2} class="min-w-0 flex-1 truncate text-sm font-normal" title={finding.title}>{finding.title}</Typography.Title>
+				<!-- No visible title: the finding card below names it. Kept for screen readers. -->
+				<Typography.Title level={2} class="sr-only">{finding.title}</Typography.Title>
 				<Button
 					variant="ghost"
 					size="icon"
-					class="-mr-2"
+					class="ml-auto -mr-2"
 					aria-label={contextOpen ? 'Collapse finding card' : 'Expand finding card'}
 					aria-expanded={contextOpen}
 					onclick={() => (contextOpen = !contextOpen)}
@@ -227,12 +226,12 @@
 					<ChevronDown size={15} class="motion-safe:transition-transform {contextOpen ? '' : '-rotate-90'}" />
 				</Button>
 			{:else}
-				<Typography.Title level={2} class="text-sm font-normal">Discussion</Typography.Title>
+				<Typography.Title level={2} class="sr-only">Discussion</Typography.Title>
 			{/if}
 			<Button
 				variant="ghost"
 				size="icon"
-				class="ml-auto shrink-0"
+				class="{finding ? '' : 'ml-auto'} shrink-0"
 				aria-label="Close discussion"
 				onclick={() => void close()}
 			>

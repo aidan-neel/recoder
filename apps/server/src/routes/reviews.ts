@@ -11,13 +11,18 @@ import { readSandboxFile } from '../lib/harness';
 import {
 	applyFixCommit,
 	applyFixRequestSchema,
+	deleteVerifyBranch,
 	FixError,
+	pushVerifyBranch,
+	VERIFY_BRANCH_PREFIX,
+	withSandboxLock,
 	patchApplies,
 	pushFixBranch,
 	suggestFix,
 	suggestFixRequestSchema
 } from '../lib/fix';
 import { GhError, fetchPullHeadRef } from '../lib/gh';
+import { fetchChecks } from '../lib/checks';
 import { fetchMergeHeadRef } from '../lib/glab';
 import { LlmError } from '../lib/llm';
 import { refspecFor } from '../lib/providers';
@@ -302,33 +307,95 @@ app.post('/:id/fixes/apply', async (c) => {
 			review.source === 'gitlab'
 				? await fetchMergeHeadRef(repo.url, review.prNumber)
 				: await fetchPullHeadRef(repo.url, review.prNumber);
-		const { sha } = await applyFixCommit({
-			sandboxPath,
-			patch: parsed.data.patch,
-			summary: parsed.data.summary,
-			file: parsed.data.finding.file,
-			line: parsed.data.finding.line,
-			message: parsed.data.finding.message
-		});
-		try {
-			await pushFixBranch({
+		const source = review.source;
+		return await withSandboxLock(sandboxPath, async () => {
+			const { sha } = await applyFixCommit({
 				sandboxPath,
-				localBranch: refspecFor(review.source, review.prNumber).branch,
-				headRef
+				patch: parsed.data.patch,
+				summary: parsed.data.summary,
+				file: parsed.data.finding.file,
+				line: parsed.data.finding.line,
+				message: parsed.data.finding.message
 			});
-		} catch (err) {
-			if (err instanceof FixError) {
-				return c.json({ error: err.message, sha, pushed: false }, 502);
+			try {
+				await pushFixBranch({
+					sandboxPath,
+					localBranch: refspecFor(source, review.prNumber).branch,
+					headRef
+				});
+			} catch (err) {
+				if (err instanceof FixError) {
+					return c.json({ error: err.message, sha, pushed: false }, 502);
+				}
+				throw err;
 			}
-			throw err;
-		}
-		return c.json({ sha, branch: headRef, pushed: true });
+			return c.json({ sha, branch: headRef, pushed: true });
+		});
 	} catch (err) {
 		if (err instanceof FixError) return c.json({ error: err.message }, err.status);
 		if (err instanceof GhError) return c.json({ error: err.message }, 502);
 		throw err;
 	}
 });
+/** CI checks for the PR head (default) or any branch/sha of this repo (e.g. a fix's verify branch). */
+app.get('/:id/checks', async (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const repo = db.repos.get(review.repoId);
+	if (!repo || review.source === 'stub') return c.json({ error: 'checks are unavailable for this review' }, 409);
+	try {
+		const ref = c.req.query('ref') || (review.source === 'gitlab'
+			? await fetchMergeHeadRef(repo.url, review.prNumber)
+			: await fetchPullHeadRef(repo.url, review.prNumber));
+		return c.json({ ref, checks: await fetchChecks(repo, ref) });
+	} catch (err) {
+		if (err instanceof GhError) return c.json({ error: err.message }, 502);
+		throw err;
+	}
+});
+
+const verifyFixSchema = applyFixRequestSchema.extend({ key: z.string().trim().min(1).max(80) });
+/** Push a fix to a temporary `recoder/fix-…` branch so CI can run on it; the PR branch is untouched. */
+app.post('/:id/fixes/verify', async (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const parsed = verifyFixSchema.safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
+	const sandboxPath = reviewSandboxes.get(review.id);
+	if (!sandboxPath || review.source === 'stub') return c.json({ error: 'no checkout yet' }, 409);
+	const branch = `${VERIFY_BRANCH_PREFIX}${review.prNumber}-${parsed.data.key.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24)}`;
+	try {
+		const { sha } = await withSandboxLock(sandboxPath, () => pushVerifyBranch({
+			sandboxPath,
+			branch,
+			patch: parsed.data.patch,
+			summary: parsed.data.summary,
+			file: parsed.data.finding.file,
+			line: parsed.data.finding.line,
+			message: parsed.data.finding.message
+		}));
+		return c.json({ branch, sha });
+	} catch (err) {
+		if (err instanceof FixError) return c.json({ error: err.message }, err.status);
+		throw err;
+	}
+});
+
+app.delete('/:id/fixes/verify', async (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const branch = c.req.query('branch') ?? '';
+	const sandboxPath = reviewSandboxes.get(review.id);
+	if (!sandboxPath) return c.json({ error: 'no checkout yet' }, 409);
+	try {
+		await withSandboxLock(sandboxPath, () => deleteVerifyBranch(sandboxPath, branch));
+		return c.json({ deleted: true });
+	} catch (err) {
+		if (err instanceof FixError) return c.json({ error: err.message }, err.status);
+		throw err;
+	}
+});
+
 /** Live pipeline events (fetch/sandbox/agent progress) as server-sent events. */
 app.get('/:id/events', (c) => {
 	const review = db.reviews.get(c.req.param('id'));

@@ -19,6 +19,7 @@ import type {
 	PullRequest,
 	RemoteRepo,
 	Repo,
+	PrCheck,
 	Review,
 	ReviewChatMessage,
 	ReviewCodeContext,
@@ -149,6 +150,14 @@ export const serverApi = {
 		}),
 	queueReview: (input: CreateReviewInput) =>
 		req<Review>('/api/reviews', { method: 'POST', body: JSON.stringify(input) }),
+	/** CI checks for the PR head, or `ref` (a branch or sha, e.g. a fix's verify branch). */
+	getChecks: (id: string, ref?: string) =>
+		req<{ ref: string; checks: PrCheck[] }>(`/api/reviews/${id}/checks${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`),
+	/** Push a fix to a temporary branch so CI runs on it (the PR branch is untouched). */
+	verifyFix: (id: string, input: ApplyFixRequest & { key: string }) =>
+		req<{ branch: string; sha: string }>(`/api/reviews/${id}/fixes/verify`, { method: 'POST', body: JSON.stringify(input) }),
+	deleteVerifyBranch: (id: string, branch: string) =>
+		req<{ deleted: boolean }>(`/api/reviews/${id}/fixes/verify?branch=${encodeURIComponent(branch)}`, { method: 'DELETE' }),
 	/** Start a draft (interactive) review's full pipeline. */
 	startReview: (id: string) => req<Review>(`/api/reviews/${id}/start`, { method: 'POST' }),
 	deleteReview: (id: string) =>

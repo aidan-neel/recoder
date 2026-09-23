@@ -36,7 +36,30 @@ export function parseModelNotes(text: string): ModelNote[] {
 	return notes;
 }
 
-/** Reply text without note blocks, including one still streaming in. */
+const FIX_BLOCK = /```recoder-fix[^\n]*\n([\s\S]*?)```/;
+
+/** A fix request the model made when asked (```recoder-fix {"findings": [...] | "all"}). */
+export function parseFixRequest(text: string): string[] | 'all' | null {
+	const match = FIX_BLOCK.exec(text);
+	if (!match) return null;
+	try {
+		const raw = JSON.parse(match[1]) as { findings?: unknown };
+		if (raw.findings === 'all') return 'all';
+		if (Array.isArray(raw.findings)) {
+			const ids = raw.findings.filter((id): id is string => typeof id === 'string' && id.trim() !== '').slice(0, 50);
+			return ids.length ? ids : null;
+		}
+	} catch {
+		// Malformed block: ignore rather than guess.
+	}
+	return null;
+}
+
+/** Reply text without note/fix blocks, including one still streaming in. */
 export function stripModelNotes(text: string): string {
-	return text.replace(BLOCK, '').replace(/```recoder-note[\s\S]*$/, '').trimEnd();
+	return text
+		.replace(BLOCK, '')
+		.replace(new RegExp(FIX_BLOCK.source, 'g'), '')
+		.replace(/```recoder-(note|fix)[\s\S]*$/, '')
+		.trimEnd();
 }

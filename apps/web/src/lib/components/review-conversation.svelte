@@ -19,7 +19,7 @@
 	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
 	import type { ReviewRole } from '@recoder/shared';
 	import { groupTranscript } from '$lib/review-transcript';
-	import { parseModelNotes, stripModelNotes } from '$lib/model-notes';
+	import { parseFixRequest, parseModelNotes, stripModelNotes } from '$lib/model-notes';
 	import { fileIconUrl } from '$lib/material-icons';
 
 	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, inserts = [], placeholder, awaitingPrompt = false }: {
@@ -122,11 +122,15 @@
 	{#if message.codeContext}
 		{@render codeReference(message.codeContext)}
 	{/if}
-	{#if message.from === 'assistant' && message.text.includes('```recoder-note')}
+	{#if message.from === 'assistant' && (message.text.includes('```recoder-note') || message.text.includes('```recoder-fix'))}
+		{@const fixRequest = parseFixRequest(message.text)}
 		<Markdown content={stripModelNotes(message.text)} streaming={message.status === 'streaming'} />
 		{#each parseModelNotes(message.text) as note, i (i)}
 			<p class="model-note-added">Added a note on <span class="font-mono">{note.file.split('/').at(-1)}:{note.startLine}{note.endLine !== note.startLine ? `–${note.endLine}` : ''}</span></p>
 		{/each}
+		{#if fixRequest}
+			<p class="model-note-added">Preparing fixes for {fixRequest === 'all' ? 'every open finding' : `${fixRequest.length} ${fixRequest.length === 1 ? 'finding' : 'findings'}`}. You review the patches before anything is pushed.</p>
+		{/if}
 	{:else}
 		<Markdown content={message.text} streaming={message.status === 'streaming'} />
 	{/if}

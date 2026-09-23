@@ -23,13 +23,14 @@
 	import FindingsFocus from '$lib/components/findings-focus.svelte';
 	import { diffPrefs } from '$lib/diff-prefs.svelte';
 	import FindingsBar from '$lib/components/findings-bar.svelte';
+	import PrChecks from '$lib/components/pr-checks.svelte';
 	import CodeDiff from '$lib/components/code-diff.svelte';
 	import ThreadPanel from '$lib/components/thread-panel.svelte';
 	import ReviewConversation from '$lib/components/review-conversation.svelte';
 	import { getFileDiff } from '$lib/diff';
 	import { findingsStore, mapBackendFinding } from '$lib/findings.svelte';
 	import { notesStore } from '$lib/notes.svelte';
-	import { parseModelNotes } from '$lib/model-notes';
+	import { parseFixRequest, parseModelNotes } from '$lib/model-notes';
 	import { errorToast } from '$lib/notify';
 	import { threadsStore } from '$lib/threads.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
@@ -373,6 +374,29 @@
 	/* Notes the model wrote on request (```recoder-note blocks in a finished
 	   reply) become diff notes, once per reply. Cleared with the session. */
 	const notedReplies = new Set<string>();
+
+	/* Fixes the model was asked for (```recoder-fix in a finished reply) open the
+	   Fix-all review for those findings, once per reply. The Findings view hosts
+	   it, so switch there from the conversation. */
+	const fixedReplies = new Set<string>();
+	/** Only replies started after this page opened can trigger fixes (history never re-runs). */
+	const openedAt = Date.now();
+	$effect(() => {
+		const finished = (reviewStream?.progress.messages ?? []).filter((message) =>
+			message.from === 'assistant' && message.status === 'done' && message.text.includes('```recoder-fix')
+			&& Date.parse(message.at) >= openedAt - 2000);
+		if (!backendReview) return;
+		untrack(() => {
+			for (const message of finished) {
+				if (fixedReplies.has(message.id)) continue;
+				fixedReplies.add(message.id);
+				const ids = parseFixRequest(message.text);
+				if (!ids) continue;
+				findingsStore.fixRequest = { key: message.id, ids };
+				if (workspaceView === null) void setView('findings');
+			}
+		});
+	});
 	$effect(() => {
 		const files = backendFiles;
 		// Read status/text here (tracked): replies finish by updating in place.
@@ -460,6 +484,7 @@
 			threadsStore.pendingMessage = null;
 			notesStore.clear();
 			notedReplies.clear();
+			fixedReplies.clear();
 			// Drop the previous session's file + findings immediately so the new
 			// session never flashes stale content while its review loads.
 			sessionFile.select(DEFAULT_FILE);
@@ -636,6 +661,7 @@
 			<FindingsBar part="actions">
 				{#snippet trailing()}
 					{#if backendReview}
+						{#if backendReview.source !== 'stub'}<PrChecks reviewId={backendReview.id} />{/if}
 						{#if reviewing || backendReview.status === 'failed'}
 							<Typography.Metadata class="review-state" role="status">
 								{#if reviewing}<Spinner size={13} class="text-sev-medium" aria-hidden="true" />Review running{:else}Review interrupted{/if}

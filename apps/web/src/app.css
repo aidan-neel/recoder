@@ -3157,6 +3157,47 @@ mark.palette-hit {
 	padding: 0;
 }
 
+/* Transcript secondary text (thinking, disclosures, tool rows, status lines)
+   sits at body size next to the model's prose, not UI-caption size.
+   Geist reads larger than Lora at the same px, so 15px pairs with 16px prose. */
+.review-transcript .disclosure-trigger,
+.review-transcript .disclosure-body,
+.review-transcript .disclosure-body [data-ui='markdown'],
+.review-transcript .review-thinking,
+.review-transcript .review-log,
+.review-transcript .model-note-added,
+.review-transcript .specialist-name {
+	font-size: 15px;
+	line-height: 22px;
+}
+.review-transcript .disclosure[data-size='row'] > .disclosure-trigger {
+	min-height: 30px;
+	font-size: 14px;
+}
+.review-transcript .tool-row-target {
+	font-size: 13px;
+}
+.review-transcript .disclosure-meta,
+.review-transcript .tool-row-duration,
+.review-transcript .specialist-op {
+	font-size: 12.5px;
+}
+.review-transcript .specialist-model {
+	font-size: 12px;
+}
+.review-transcript .tool-row-action {
+	width: 72px;
+}
+/* Side-panel chat: one step down, matching its 15px prose. */
+.review-chat[data-compact] .disclosure-trigger,
+.review-chat[data-compact] .disclosure-body,
+.review-chat[data-compact] .disclosure-body [data-ui='markdown'],
+.review-chat[data-compact] .review-thinking,
+.review-chat[data-compact] .model-note-added {
+	font-size: 14px;
+	line-height: 21px;
+}
+
 /* ── Results rail (4f) ────────────────────────────────────── */
 .results-rail {
 	width: 372px;
@@ -4101,6 +4142,213 @@ button.diff-num:hover {
 	color: var(--danger);
 }
 
+/* A finding's fix in progress (or failed), above where the ready fix appears. */
+.fix-status {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 12px 0 0;
+	padding: 9px 12px;
+	border: 1px dashed var(--line-menu);
+	border-radius: 10px;
+	font-size: 12.5px;
+	color: var(--text-subtle);
+}
+.fix-status[data-error] {
+	border-style: solid;
+	border-color: color-mix(in oklab, var(--danger) 35%, transparent);
+	color: var(--danger);
+}
+.fix-status-retry {
+	margin-left: auto;
+	color: var(--text-secondary);
+	text-decoration: underline;
+	text-underline-offset: 2px;
+	cursor: pointer;
+}
+.focus-card-fix {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 5px;
+	height: 18px;
+	padding: 0 6px;
+	border-radius: 5px;
+	font-size: 11px;
+	background: var(--bg-hover);
+	color: var(--text-subtle);
+}
+.focus-card-fix[data-state='fixing'] { color: var(--sev-medium); background: var(--sev-medium-tint); }
+.focus-card-fix[data-state='ready'] { color: var(--selection-bar); background: color-mix(in oklab, var(--selection-bar) 14%, transparent); }
+.focus-card-fix[data-state='fixed'] { color: var(--success); background: color-mix(in oklab, var(--success) 14%, transparent); }
+.focus-card-fix[data-state='failed'] { color: var(--danger); background: color-mix(in oklab, var(--danger) 14%, transparent); }
+/* CI checks: shared list (PR checks popover, a fix's verify panel). */
+.check-list {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.check-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	height: 28px;
+	padding: 0 4px;
+	border-radius: 6px;
+	font-size: 12.5px;
+	color: var(--text-secondary);
+}
+.check-row:hover {
+	background: var(--bg-hover);
+}
+.check-icon {
+	display: inline-flex;
+	width: 16px;
+	flex-shrink: 0;
+	justify-content: center;
+	color: var(--text-faint);
+}
+.check-row[data-state='passed'] .check-icon { color: var(--success); }
+.check-row[data-state='failed'] .check-icon,
+.check-row[data-state='failed'] .check-state { color: var(--danger); }
+.check-row[data-state='running'] .check-icon { color: var(--sev-medium); }
+.check-name {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.check-state {
+	flex-shrink: 0;
+	font-family: var(--font-code);
+	font-size: 11px;
+	color: var(--text-faint);
+}
+.check-link {
+	display: inline-flex;
+	flex-shrink: 0;
+	padding: 3px;
+	border-radius: 5px;
+	color: var(--text-faint);
+}
+.check-link:hover {
+	background: var(--bg-hover);
+	color: var(--text-primary);
+}
+/* A ready fix's CI verification. */
+.fix-checks {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 8px;
+	padding: 8px 10px;
+	border-radius: 10px;
+	background: var(--bg-bubble);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+}
+.fix-checks-head {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	min-height: 26px;
+	font-size: 12.5px;
+	color: var(--text-secondary);
+}
+.fix-checks-icon {
+	display: inline-flex;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.fix-checks[data-status='passed'] .fix-checks-icon { color: var(--success); }
+.fix-checks[data-status='failed'] .fix-checks-icon,
+.fix-checks[data-status='error'] .fix-checks-icon { color: var(--danger); }
+.fix-checks[data-status='waiting'] .fix-checks-icon,
+.fix-checks[data-status='running'] .fix-checks-icon,
+.fix-checks[data-status='pushing'] .fix-checks-icon { color: var(--sev-medium); }
+.fix-checks-title {
+	min-width: 0;
+	flex: 1;
+}
+.fix-checks-title code,
+.fix-checks-hint code {
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-tertiary);
+}
+.fix-checks-actions {
+	display: flex;
+	flex-shrink: 0;
+	gap: 2px;
+}
+[data-ui='button'][data-variant].fix-checks-run {
+	height: 26px;
+	min-height: 26px;
+	padding: 0 8px;
+	font-size: 12px;
+	font-weight: 400;
+}
+.fix-checks-hint {
+	margin: 0;
+	padding-left: 21px;
+	font-size: 12px;
+	line-height: 17px;
+	color: var(--text-faint);
+}
+/* PR checks summary in the session bar. */
+[data-ui='button'][data-variant].pr-checks {
+	height: 32px;
+	min-height: 32px;
+	gap: 6px;
+	padding: 0 10px;
+	font-size: 12.5px;
+	font-weight: 400;
+	color: var(--text-subtle);
+}
+[data-ui='button'][data-variant].pr-checks[data-tone='passed'] svg { color: var(--success); }
+[data-ui='button'][data-variant].pr-checks[data-tone='failed'] { color: var(--danger); }
+[data-ui='button'][data-variant].pr-checks[data-tone='running'] svg { color: var(--sev-medium); }
+.pr-checks-pending {
+	display: inline-flex;
+	width: 32px;
+	justify-content: center;
+	color: var(--text-ghost);
+}
+.pr-checks-head {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	padding: 0 4px;
+}
+.pr-checks-ref {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-family: var(--font-code);
+	font-size: 11px;
+	color: var(--text-faint);
+}
+[data-ui='button'][data-variant][data-size].pr-checks-refresh {
+	width: 26px;
+	height: 26px;
+	min-width: 0;
+	min-height: 0;
+	padding: 0;
+	color: var(--text-faint);
+}
+.pr-checks-empty {
+	margin: 0;
+	padding: 4px;
+	font-size: 12.5px;
+	color: var(--text-subtle);
+}
 /* Fix button keeps one width across its states. */
 [data-ui='button'][data-variant].fix-button {
 	width: 112px;

@@ -284,6 +284,13 @@ export interface PullRequest {
 	body?: string;
 }
 
+/** A CI check on a commit or branch (GitHub check run or commit status, GitLab commit status). */
+export interface PrCheck {
+	name: string;
+	state: 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
+	url: string | null;
+}
+
 export interface PullFile {
 	path: string;
 	additions: number;

@@ -22,6 +22,8 @@
 	import FindingSeverity from './finding-severity.svelte';
 	import FixButton from './fix-button.svelte';
 	import SuggestedFix from './suggested-fix.svelte';
+	import FixStatus from './fix-status.svelte';
+	import FixChecks from './fix-checks.svelte';
 	import SeverityPill from './ui/severity-pill.svelte';
 	import type { FileDiff } from '$lib/diff';
 	import { SEVERITIES, findingsStore, type Finding } from '$lib/findings.svelte';
@@ -205,6 +207,11 @@
 								<FindingSeverity severity={finding.severity} />
 								<span class="min-w-0 truncate">{finding.category}</span>
 								<span class="focus-card-loc" title="{finding.file}:{finding.startLine}">{finding.file}:{finding.startLine}</span>
+								{#if findingsStore.suggestions[finding.id]}
+									{@const fix = findingsStore.suggestions[finding.id]}
+									{@const fixState = fix.apply === 'applied' || finding.status === 'accepted' ? 'fixed' : fix.status === 'loading' ? 'fixing' : fix.status === 'ready' ? 'ready' : 'failed'}
+									<span class="focus-card-fix" data-state={fixState}>{#if fixState === 'fixing'}<Spinner size={10} aria-hidden="true" />{/if}{fixState === 'fixing' ? 'Fixing' : fixState === 'ready' ? 'Fix ready' : fixState === 'fixed' ? 'Fixed' : 'Fix failed'}</span>
+								{/if}
 							</span>
 							<span class="focus-card-body ai-voice">{finding.title}</span>
 						</Button>
@@ -259,7 +266,8 @@
 							</ScrollArea>
 						</div>
 					{/if}
-					{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} />{/if}
+					<FixStatus finding={active} />
+					{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks finding={active} />{/if}
 					<div class="focus-detail-foot">
 						<span class="min-w-0 flex-1 truncate">{#if branch}Pushes one commit to <span class="font-mono">{branch}</span>{/if}</span>
 						{#if active.status === 'open'}
