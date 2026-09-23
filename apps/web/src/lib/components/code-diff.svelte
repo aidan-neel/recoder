@@ -14,7 +14,6 @@
 	import type { Finding, FindingSeverity } from '$lib/findings.svelte';
 	import { SEVERITY_DOT, findingsStore } from '$lib/findings.svelte';
 	import { highlightLines } from '$lib/highlight';
-	import { getFileIcon } from '$lib/file-icons';
 	import { notesStore, type ReviewNote } from '$lib/notes.svelte';
 	import FindingCard from './finding-card.svelte';
 	import NoteComposer from './note-composer.svelte';
@@ -23,9 +22,38 @@
 		diff: FileDiff;
 		findings?: Finding[];
 		onAsk?: (context: ReviewCodeContext) => void;
+		mode?: 'unified' | 'split';
+		/** Off for the focused-hunk card, where the finding sits beside the code. */
+		cards?: boolean;
 	}
 
-	let { diff, findings = [], onAsk }: Props = $props();
+	let { diff, findings = [], onAsk, mode = 'unified', cards = true }: Props = $props();
+
+	/** Index of each hunk's first line within `flatLines`. */
+	const hunkOffsets = $derived(diff.hunks.reduce<number[]>((acc, hunk, i) => {
+		acc.push(i === 0 ? 0 : acc[i - 1] + diff.hunks[i - 1].lines.length);
+		return acc;
+	}, []));
+
+	interface SplitCell { line: DiffLine; i: number }
+	/** Side-by-side rows: context on both sides, deletions paired with the additions that follow. */
+	const splitRows = $derived(diff.hunks.map((hunk) => {
+		const rows: { left: SplitCell | null; right: SplitCell | null }[] = [];
+		let dels: SplitCell[] = [];
+		let adds: SplitCell[] = [];
+		const flush = () => {
+			for (let k = 0; k < Math.max(dels.length, adds.length); k++) rows.push({ left: dels[k] ?? null, right: adds[k] ?? null });
+			dels = [];
+			adds = [];
+		};
+		hunk.lines.forEach((line, i) => {
+			if (line.type === 'del') { if (adds.length) flush(); dels.push({ line, i }); }
+			else if (line.type === 'add') adds.push({ line, i });
+			else { flush(); rows.push({ left: { line, i }, right: { line, i } }); }
+		});
+		flush();
+		return rows;
+	}));
 
 	/** Hunks annotated with how many unchanged lines were skipped before them. */
 	const hunks = $derived(
@@ -35,12 +63,6 @@
 			return { hunk, skipped: Math.max(0, hunk.oldStart - prevEnd) };
 		})
 	);
-
-	const rowBg: Record<DiffLine['type'], string> = {
-		context: '',
-		add: 'bg-success/10',
-		del: 'bg-error/10'
-	};
 
 	/** Per-line highlighted HTML, aligned 1:1 with hunks → lines. */
 	const highlighted = $derived(
@@ -176,16 +198,11 @@
 		if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
 		const range = selection.getRangeAt(0);
 		if (!rootEl.contains(range.startContainer) || !rootEl.contains(range.endContainer)) return;
-		const rows = Array.from(rootEl.querySelectorAll<HTMLElement>('[data-diff-row]'));
-		let from = -1;
-		let to = -1;
-		rows.forEach((row, i) => {
-			if (range.intersectsNode(row)) {
-				if (from < 0) from = i;
-				to = i;
-			}
-		});
-		if (from < 0 || to < 0) return;
+		const cells = Array.from(rootEl.querySelectorAll<HTMLElement>('[data-flat]')).filter((cell) => range.intersectsNode(cell));
+		if (cells.length === 0) return;
+		const indexes = cells.map((cell) => Number(cell.dataset.flat));
+		const from = Math.min(...indexes);
+		const to = Math.max(...indexes);
 		const slice = flatLines.slice(from, to + 1);
 		const newNos = slice.map(({ line }) => line.newNo).filter((n): n is number => n !== null);
 		const oldNos = slice.map(({ line }) => line.oldNo).filter((n): n is number => n !== null);
@@ -196,7 +213,7 @@
 		const context = flatLines.slice(Math.max(0, from - 3), Math.min(flatLines.length, to + 4));
 		const rootRect = rootEl.getBoundingClientRect();
 		const rangeRect = range.getBoundingClientRect();
-		const lastRow = rows[to];
+		const lastRow = cells.at(-1)!.closest<HTMLElement>('[data-diff-row]') ?? cells.at(-1)!;
 		anchorTop = lastRow.offsetTop + lastRow.offsetHeight - 2;
 		anchorLeft = Math.max(0, rangeRect.left - rootRect.left);
 		pending = {
@@ -322,135 +339,101 @@
 	});
 </script>
 
-<div bind:this={rootEl} class="review-file-diff relative flex min-w-0 flex-col gap-2">
-	<div class="flex min-h-9 shrink-0 items-center gap-2">
-		<span class="flex shrink-0 items-center [&>svg]:size-4" aria-hidden="true">{@html getFileIcon(diff.path)}</span>
-		<Typography.Metadata class="min-w-0 truncate font-mono text-sm font-medium text-foreground" title={diff.path}>{diff.path.split('/').at(-1)}</Typography.Metadata>
-		<span class="shrink-0 font-mono text-xs">
-			<span class="text-success">+{diff.additions}</span>
-			{' '}
-			<span class="text-error">−{diff.deletions}</span>
-		</span>
-		{#if fileNotes.length > 0}
-			<span class="ml-auto flex shrink-0 items-center gap-1.5 text-[13px] text-info">
-				<MessageSquare size={14} aria-hidden="true" />
-				{fileNotes.length}
-			</span>
-		{/if}
-	</div>
-	<Card.Root class="overflow-hidden rounded-xl border border-border bg-transparent !p-0 shadow-none">
+{#snippet number(line: DiffLine, side: 'old' | 'new', mark: Finding | undefined)}
+	{@const n = side === 'old' ? line.oldNo : line.newNo}
+	{@const selectable = side === 'new' ? n !== null : line.newNo === null && n !== null}
+	{#if selectable}
+		<Button unstyled class="diff-num" style={mark && side === 'new' ? `color: ${SEVERITY_DOT[mark.severity]}` : undefined}
+			aria-label={side === 'new' ? `Discuss line ${n}` : `Discuss deleted line ${n}`}
+			onclick={(event: MouseEvent) => selectLine(line, event.currentTarget as HTMLElement)}>{n}</Button>
+	{:else}
+		<span class="diff-num" style:color={mark && side === 'new' ? SEVERITY_DOT[mark.severity] : null}>{n ?? ''}</span>
+	{/if}
+{/snippet}
+
+{#snippet code(line: DiffLine, hi: number, i: number)}
+	<span class="diff-sign" aria-hidden="true">{line.type === 'del' ? '-' : line.type === 'add' ? '+' : ''}</span>
+	<span class="diff-code" data-flat={hunkOffsets[hi] + i}>{@html highlighted[hi][i]}</span>
+{/snippet}
+
+{#snippet attachments(line: DiffLine, key: number)}
+	{#each notesForRow(line) as note (note.id)}
+		<div id={`note-${note.id}`} data-note-card class="diff-attachment {findingsStore.suppressHover ? 'pointer-events-none' : ''}">
+			<article>
+			<Card.Root class="inline-finding">
+				<div class="inline-finding-head">
+					<Badge variant="info">Note</Badge>
+					<span class="min-w-0 flex-1 truncate font-mono">{note.file}:{note.startLine === note.endLine ? note.startLine : `${note.startLine}-${note.endLine}`}</span>
+					<Button variant="ghost" size="icon" class="shrink-0" aria-label="Edit note" onclick={() => openEdit(note)}><Pencil size={13} /></Button>
+				</div>
+				{#if note.quote}<CodeBlock code={note.quote} lang="plaintext" copy="overlay" class="mt-2 max-h-32" />{/if}
+				<div class="mt-1.5 min-w-0 text-[13.5px]"><Markdown content={note.body} /></div>
+			</Card.Root>
+			</article>
+		</div>
+	{/each}
+	{#if cards}
+		{#each byLine.get(key) ?? [] as finding (finding.id)}
+			<div id={`finding-${finding.id}`} class="diff-attachment {findingsStore.suppressHover ? 'pointer-events-none' : ''}">
+				<FindingCard {finding} />
+			</div>
+		{/each}
+	{/if}
+{/snippet}
+
+<div bind:this={rootEl} class="review-file-diff relative min-w-0" data-mode={mode}>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="py-3 font-mono text-sm leading-6"
-		onpointerdown={onPointerDown}
-	>
+	<div class="diff-lines" onpointerdown={onPointerDown}>
 		{#each hunks as { hunk, skipped }, hi (hi)}
 			{#if skipped > 0}
-				<div
-					class="flex items-center gap-3 px-4 py-1.5 text-[13px] text-foreground-muted/70 select-none"
-				>
-					<span class="h-px flex-1 bg-border/60"></span>
-					<span class="font-mono">
-						{skipped} unchanged {skipped === 1 ? 'line' : 'lines'}
-					</span>
-					<span class="h-px flex-1 bg-border/60"></span>
-				</div>
+				<div class="diff-skip"><span>{skipped} unchanged {skipped === 1 ? 'line' : 'lines'}</span></div>
 			{/if}
-			{#each hunk.lines as line, i (`${line.oldNo}-${line.newNo}-${i}`)}
-				{@const key = line.newNo ?? -1}
-				{@const mark = lineMarks.get(key)}
-				{@const hovered = mark && findingsStore.hoveredId === mark.id}
-				{@const noteCount = noteCountForRow(line)}
-				<div
-					role="row"
-					tabindex="-1"
-					data-diff-row
-					data-new-no={line.newNo ?? ''}
-					data-old-no={line.oldNo ?? ''}
-					class="grid w-full grid-cols-[2.75rem_2.75rem_minmax(0,1fr)] {rowBg[line.type]}"
-					style:box-shadow={isPendingRow(line)
-						? 'inset 3px 0 0 var(--color-info)'
-						: mark
-							? `inset ${hovered ? 3 : 2}px 0 0 ${SEVERITY_DOT[mark.severity]}`
-							: noteCount > 0
-								? 'inset 2px 0 0 var(--color-info)'
-								: null}
-					onmouseenter={() => {
-						if (!findingsStore.suppressHover) findingsStore.hoveredId = mark?.id ?? null;
-					}}
-					onmouseleave={() => (findingsStore.hoveredId = null)}
-				>
-					{#if line.newNo === null}
-						<Button variant="ghost" size="sm" class="!h-6 !min-h-6 !justify-end rounded-none !py-0 !pe-3 !ps-0 font-mono text-xs !font-normal text-foreground-muted" aria-label={`Discuss deleted line ${line.oldNo}`} title="Discuss this deleted line" onclick={(event: MouseEvent) => selectLine(line, event.currentTarget as HTMLElement)}>{line.oldNo}</Button>
-					{:else}<span
-						class="pr-3 text-right text-foreground-muted/60 select-none"
-						style:color={mark ? SEVERITY_DOT[mark.severity] : null}
-					>
-						{line.oldNo ?? ''}
-					</span>{/if}
-					{#if line.newNo !== null}<Button variant="ghost" size="sm" class="!h-6 !min-h-6 !justify-end rounded-none !py-0 !pe-3 !ps-0 font-mono text-xs !font-normal text-foreground-muted" aria-label={`Discuss line ${line.newNo}`} title="Discuss this line" onclick={(event: MouseEvent) => selectLine(line, event.currentTarget as HTMLElement)}>{line.newNo}</Button>{:else}<span></span>{/if}
-					<span class="pr-4 whitespace-pre-wrap break-all min-w-0">
-						{#if line.type === 'del'}
-							<span class="mr-1 inline-block w-3 shrink-0 text-center text-error select-none">-</span>{@html highlighted[hi][i]}
-						{:else if line.type === 'add'}
-							<span class="mr-1 inline-block w-3 shrink-0 text-center text-success select-none">+</span>{@html highlighted[hi][i]}
-						{:else}
-							<span class="mr-1 inline-block w-3 shrink-0 text-center text-foreground-muted/40 select-none">{' '}</span>{@html highlighted[hi][i]}
-						{/if}
-					</span>
-				</div>
-				{#each notesForRow(line) as note (note.id)}
-					<div
-						id={`note-${note.id}`}
-						data-note-card
-						class="mx-3 my-3 scroll-mt-3 sm:ms-[5.5rem] {findingsStore.suppressHover
-							? 'pointer-events-none'
-							: ''}"
-					>
-						<article>
-						<Card.Root class="p-3 font-sans">
-							<div class="flex items-center gap-2 font-mono text-[14px]">
-								<Badge variant="info">Note</Badge>
-								<span class="min-w-0 flex-1 truncate text-foreground-muted">
-									{note.file}:{note.startLine === note.endLine
-										? note.startLine
-										: `${note.startLine}-${note.endLine}`}
-								</span>
-								<Button
-									variant="ghost"
-									size="icon"
-									class="shrink-0"
-									aria-label="Edit note"
-									onclick={() => openEdit(note)}
-								>
-									<Pencil size={13} />
-								</Button>
-							</div>
-							{#if note.quote}
-								<CodeBlock code={note.quote} lang="plaintext" copy="overlay" class="mt-2 max-h-32" />
-							{/if}
-							<div class="mt-1.5 min-w-0">
-								<Markdown content={note.body} />
-							</div>
-						</Card.Root>
-						</article>
+			{#if mode === 'split'}
+				{#each splitRows[hi] as row, r (r)}
+					{@const right = row.right?.line}
+					{@const mark = right?.newNo != null ? lineMarks.get(right.newNo) : undefined}
+					{@const hovered = mark && findingsStore.hoveredId === mark.id}
+					<div role="row" tabindex="-1" data-diff-row class="diff-row diff-split-row"
+						style:box-shadow={mark ? `inset ${hovered ? 3 : 2}px 0 0 ${SEVERITY_DOT[mark.severity]}` : null}
+						onmouseenter={() => { if (!findingsStore.suppressHover) findingsStore.hoveredId = mark?.id ?? null; }}
+						onmouseleave={() => (findingsStore.hoveredId = null)}>
+						<div class="diff-half" data-type={row.left ? (row.left.line.type === 'context' ? 'context' : 'del') : 'empty'}>
+							{#if row.left}{@render number(row.left.line, 'old', undefined)}{@render code(row.left.line, hi, row.left.i)}{/if}
+						</div>
+						<div class="diff-half" data-type={row.right ? (row.right.line.type === 'context' ? 'context' : 'add') : 'empty'}>
+							{#if row.right}{@render number(row.right.line, 'new', mark)}{@render code(row.right.line, hi, row.right.i)}{/if}
+						</div>
 					</div>
+					{#if row.right}{@render attachments(row.right.line, row.right.line.newNo ?? -1)}{:else if row.left}{@render attachments(row.left.line, -1)}{/if}
 				{/each}
-				{#each byLine.get(key) ?? [] as finding (finding.id)}
-					<div
-						id={`finding-${finding.id}`}
-						class="mx-3 my-3 scroll-mt-3 sm:ms-[5.5rem] {findingsStore.suppressHover
-							? 'pointer-events-none'
-							: ''}"
-					>
-						<FindingCard {finding} />
+			{:else}
+				{#each hunk.lines as line, i (`${line.oldNo}-${line.newNo}-${i}`)}
+					{@const key = line.newNo ?? -1}
+					{@const mark = lineMarks.get(key)}
+					{@const hovered = mark && findingsStore.hoveredId === mark.id}
+					{@const noteCount = noteCountForRow(line)}
+					<div role="row" tabindex="-1" data-diff-row data-type={line.type}
+						data-new-no={line.newNo ?? ''} data-old-no={line.oldNo ?? ''}
+						class="diff-row"
+						style:box-shadow={isPendingRow(line)
+							? 'inset 3px 0 0 var(--selection-bar)'
+							: mark
+								? `inset ${hovered ? 3 : 2}px 0 0 ${SEVERITY_DOT[mark.severity]}`
+								: noteCount > 0
+									? 'inset 2px 0 0 var(--selection-bar)'
+									: null}
+						onmouseenter={() => { if (!findingsStore.suppressHover) findingsStore.hoveredId = mark?.id ?? null; }}
+						onmouseleave={() => (findingsStore.hoveredId = null)}>
+						{@render number(line, 'old', mark)}
+						{@render number(line, 'new', mark)}
+						{@render code(line, hi, i)}
 					</div>
+					{@render attachments(line, key)}
 				{/each}
-			{/each}
+			{/if}
 		{/each}
-		{#if hunks.length === 0}<Typography.Text class="px-4 py-3 text-sm text-foreground-muted">No text changes to display for this file.</Typography.Text>{/if}
+		{#if hunks.length === 0}<Typography.Text class="px-5 py-3 text-sm text-fg-muted">No text changes to display for this file.</Typography.Text>{/if}
 	</div>
-	</Card.Root>
 
 	<Popover.Root bind:open={popoverOpen} placement="bottom-start" inert={false}>
 		<Popover.Trigger

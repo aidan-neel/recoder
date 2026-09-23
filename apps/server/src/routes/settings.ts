@@ -3,6 +3,7 @@ import {
 	apiKeyPreview,
 	effectiveReviewEnv,
 	getStoredSettings,
+	settingsFileDisplay,
 	reviewSettingsSchema,
 	saveReviewSettings
 } from '../lib/review-settings';
@@ -25,10 +26,10 @@ const app = new Hono();
 app.route('/codex', codexRoutes);
 
 /** Effective reviewer model config. Keys are never returned in full. */
-app.get('/models', (c) => {
+function settingsPayload() {
 	const eff = effectiveReviewEnv();
 	const stored = getStoredSettings();
-	return c.json({
+	return {
 		configured: isReviewConfigured(),
 		baseUrl: eff.baseUrl,
 		model: eff.model,
@@ -43,17 +44,23 @@ app.get('/models', (c) => {
 			model: e.model,
 			baseUrl: e.baseUrl ?? null,
 			apiKeyPreview: mask(e.apiKey),
-			...(e.efforts?.length ? { efforts: e.efforts } : {})
+			...(e.efforts?.length ? { efforts: e.efforts } : {}),
+			...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {})
 		})),
 		roles: rolesPayload(),
 		roleEfforts: stored.roleEfforts ?? {},
+		orchestratorEffort: stored.orchestratorEffort ?? null,
+		applyToSpecialists: stored.applyToSpecialists ?? false,
+		configPath: settingsFileDisplay(),
 		limits: {
 			maxFiles: eff.maxFiles,
 			maxDiffChars: eff.maxDiffChars,
 			maxFileChars: eff.maxFileChars
 		}
-	});
-});
+	};
+}
+
+app.get('/models', (c) => c.json(settingsPayload()));
 
 /** Merge a validated patch over the stored model settings. Empty key keeps the existing one. */
 app.on(['PUT', 'PATCH'], '/models', async (c) => {
@@ -62,33 +69,7 @@ app.on(['PUT', 'PATCH'], '/models', async (c) => {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
 	}
 	saveReviewSettings(parsed.data);
-	const eff = effectiveReviewEnv();
-	const stored = getStoredSettings();
-	return c.json({
-		configured: isReviewConfigured(),
-		baseUrl: eff.baseUrl,
-		model: eff.model,
-		apiKeyPreview: apiKeyPreview(),
-		sharedModelId: stored.sharedModelId ?? null,
-		orchestratorModelId: stored.orchestratorModelId ?? null,
-		specialistModelId: stored.specialistModelId ?? null,
-		models: (stored.models ?? []).map((e) => ({
-			provider: e.provider ?? 'openai-compatible',
-			id: e.id,
-			label: e.label,
-			model: e.model,
-			baseUrl: e.baseUrl ?? null,
-			apiKeyPreview: mask(e.apiKey),
-			...(e.efforts?.length ? { efforts: e.efforts } : {})
-		})),
-		roles: rolesPayload(),
-		roleEfforts: stored.roleEfforts ?? {},
-		limits: {
-			maxFiles: eff.maxFiles,
-			maxDiffChars: eff.maxDiffChars,
-			maxFileChars: eff.maxFileChars
-		}
-	});
+	return c.json(settingsPayload());
 });
 
 export default app;

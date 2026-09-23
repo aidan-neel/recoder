@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Inter:wght@400;500;600&amp;family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&amp;family=Geist+Mono:wght@400;500&amp;display=swap"><style>@keyframes rc-spin{to{transform:rotate(360deg)}}</style></helmet>
+<div style="width:100%;height:100%;display:flex;flex-direction:column;gap:14px;padding:12px 10px 10px;box-sizing:border-box;background:#0d0c0b;font-family:{{ sansFam }};color:#ede9e3;user-select:none">
+  <div style="display:flex;align-items:center;gap:9px;height:34px;padding:0 6px 0 8px">
+    
+    <span style="font-size:14px;font-weight:500;letter-spacing:-0.01em;flex:1">Recoder</span>
+    <span style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;color:#6f6a63">{{ ic.panelLeft }}</span>
+  </div>
+  <div style="display:flex;gap:6px">
+    <div style="flex:1;height:34px;display:flex;align-items:center;gap:8px;padding:0 8px 0 10px;border-radius:9px;background:#151413;border:1px solid #1f1e1c;color:#6f6a63;font-size:13px">{{ ic.search }}<span style="flex:1">Search sessions</span><span style="font-family:'Geist Mono',monospace;font-size:10.5px;padding:2px 5px;border-radius:4px;background:#1f1e1c;color:#8a857d">⌘K</span></div>
+    <div style="width:34px;height:34px;flex-shrink:0;display:flex;align-items:center;justify-content:center;border-radius:9px;border:1px solid #1f1e1c;color:#a39e96">{{ ic.squarePen }}</div>
+  </div>
+  <div style="flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:16px;padding-top:2px">
+    <sc-for list="{{ groups }}" as="g" hint-placeholder-count="3">
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <div style="font-size:11.5px;color:#6f6a63;padding:0 10px 6px;font-weight:500">{{ g.label }}</div>
+        <sc-for list="{{ g.items }}" as="s" hint-placeholder-count="2">
+          <div style="display:flex;flex-direction:column;gap:3px;padding:8px 10px;border-radius:9px;background:{{ s.bg }}">
+            <span style="font-size:13.5px;line-height:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:{{ s.fg }}">{{ s.title }}</span>
+            <div style="display:flex;align-items:center;gap:6px;font-family:'Geist Mono',monospace;font-size:11px;color:#6f6a63">
+              <span style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.meta }}</span>
+              <span style="display:flex;align-items:center;gap:5px;flex-shrink:0;color:{{ s.statusColor }}">{{ s.statusIcon }}{{ s.status }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px;padding:10px 11px;border-radius:10px;background:#131211;border:1px solid #1c1b19">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;font-size:12px"><span style="color:#a39e96">ChatGPT usage</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#6f6a63">38% · resets 2h</span></div>
+    <div style="height:3px;border-radius:2px;background:#232120;overflow:hidden"><div style="width:38%;height:100%;background:#a39e96;border-radius:2px"></div></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:9px;height:34px;padding:0 8px;border-radius:8px;color:#a39e96;font-size:13px">{{ ic.settings }}<span style="flex:1">Settings</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#6f6a63">aidan-neel</span></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:272,&quot;height&quot;:900},&quot;active&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;&quot;,&quot;r4127&quot;,&quot;r160&quot;,&quot;r902&quot;,&quot;r88&quot;,&quot;r3310&quot;,&quot;r155&quot;],&quot;default&quot;:&quot;r4127&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;live&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  icons() {
+    if (this._ic) return this._ic;
+    const h = React.createElement;
+    const P = {
+      search: [['circle', { cx: 11, cy: 11, r: 8 }], ['path', { d: 'm21 21-4.3-4.3' }]],
+      panelLeft: [['rect', { width: 18, height: 18, x: 3, y: 3, rx: 2 }], ['path', { d: 'M9 3v18' }]],
+      squarePen: [['path', { d: 'M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7' }], ['path', { d: 'M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z' }]],
+      settings: [['path', { d: 'M20 7h-9' }], ['path', { d: 'M14 17H5' }], ['circle', { cx: 17, cy: 17, r: 3 }], ['circle', { cx: 7, cy: 7, r: 3 }]],
+      loader: [['path', { d: 'M21 12a9 9 0 1 1-6.219-8.56' }]]
+    };
+    const mk = (n, s) => h('svg', { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', style: { display: 'block', flexShrink: 0 } }, P[n].map((e, i) => h(e[0], Object.assign({ key: i }, e[1]))));
+    this._ic = { search: mk('search', 14), panelLeft: mk('panelLeft', 16), squarePen: mk('squarePen', 14), settings: mk('settings', 15),
+      spin: h('span', { style: { display: 'inline-flex', animation: 'rc-spin 0.9s linear infinite' } }, mk('loader', 11)) };
+    return this._ic;
+  }
+  renderVals() {
+    const ic = this.icons();
+    const h = React.createElement;
+    const active = this.props.active ?? '';
+    const live = this.props.live ?? false;
+    const dot = (c) => h('span', { style: { width: 6, height: 6, borderRadius: 3, background: c, display: 'inline-block' } });
+    const S = {
+      running: { status: '4/6', color: '#a39e96', icon: ic.spin },
+      findings: (t, c) => ({ status: t, color: c, icon: null }),
+    };
+    const row = (id, title, meta, st) => ({ id, title, meta, status: st.status, statusColor: st.color, statusIcon: st.icon,
+      bg: id === active ? '#1c1b19' : 'transparent', fg: id === active ? '#ede9e3' : '#cfcac2' });
+    const groups = [
+      { label: 'Today', items: [
+        row('r4127', 'Move rate limiter into a class', 'ledger-api #4127', live ? S.running : { status: '6 findings', color: '#a39e96', icon: null }),
+        row('r160', 'refactor(cli): extract sivir list formatting', 'sivir-ui #160', { status: '2 fixed', color: '#6f6a63', icon: null }),
+        row('r902', 'Stream upstream errors to client', 'gateway #902', { status: 'Failed', color: '#f08a7e', icon: dot('#f08a7e') })
+      ] },
+      { label: 'Yesterday', items: [
+        row('r88', 'Add adaptive review planning', 'recoder #88', { status: '1 high', color: '#f4a097', icon: dot('#f08a7e') }),
+        row('r3310', 'Settings page: split billing tab', 'console #3310', { status: 'Not started', color: '#6f6a63', icon: null })
+      ] },
+      { label: 'Last week', items: [
+        row('r155', 'fix(select): restore focus after outside click', 'sivir-ui #155', { status: 'Clean', color: '#86c98c', icon: dot('#86c98c') })
+      ] }
+    ];
+    return { sansFam: this.props.sans ?? "'Geist',system-ui,sans-serif", ic, groups };
+  }
+}
+</script>
+</body>
+</html>

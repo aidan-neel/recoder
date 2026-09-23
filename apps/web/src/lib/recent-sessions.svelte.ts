@@ -160,21 +160,41 @@ class RecentSessionsState {
 		return this.load();
 	}
 
-	private async fetchAll(): Promise<void> {
-		this.loading = true;
+	private async fetchAll(quiet = false): Promise<void> {
+		if (!quiet) this.loading = true;
 		try {
-			const [repos, reviews] = await Promise.all([serverApi.listRepos(), serverApi.listReviews()]);
+			const [repos, reviews, summaries] = await Promise.all([
+				serverApi.listRepos(),
+				serverApi.listReviews(),
+				serverApi.reviewSummaries().catch(() => this.summaries)
+			]);
 			this.repos = repos;
 			this.reviews = reviews;
+			this.summaries = summaries;
 			this.apiDown = false;
 			void this.loadBranches(reviews);
 		} catch {
+			if (quiet) return;
 			this.apiDown = true;
 			this.repos = [];
 			this.reviews = [];
 		} finally {
-			this.loading = false;
+			if (!quiet) this.loading = false;
 		}
+	}
+
+	/**
+	 * Keep session tab badges live while any review runs. Returns a stop function;
+	 * polling is skipped entirely when nothing is running.
+	 */
+	watchRunning(intervalMs = 4000): () => void {
+		const timer = setInterval(() => {
+			if (this.reviewingCount === 0 || this.inflight) return;
+			this.inflight = this.fetchAll(true).finally(() => {
+				this.inflight = null;
+			});
+		}, intervalMs);
+		return () => clearInterval(timer);
 	}
 
 	/** Resolve each PR once, including closed PRs, without delaying the session list. */

@@ -12,9 +12,9 @@ export type TreeNode =
 	  };
 
 export const FINDING_DOT: Record<FindingKind, string> = {
-	error: '#e0655f',
-	warning: '#d9a13b',
-	info: '#5b8cff'
+	error: 'var(--sev-high-icon)',
+	warning: 'var(--sev-medium)',
+	info: 'var(--sev-low)'
 };
 
 /** Clickable finding badge on a file row — jumps straight to the finding. */

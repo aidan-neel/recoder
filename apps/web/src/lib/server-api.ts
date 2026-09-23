@@ -9,6 +9,8 @@ import type {
 	DiscussRequest,
 	DiscussResponse,
 	FileDiff,
+	HomeBriefRequest,
+	HomeBriefResponse,
 	ModelSettings,
 	ModelSettingsPatch,
 	Provider,
@@ -58,8 +60,12 @@ export const serverApi = {
 		req<Repo>('/api/repos', { method: 'POST', body: JSON.stringify(input) }),
 	previewPr: (repoId: string, n: number) =>
 		req<PullPreview>(`/api/repos/${repoId}/pulls/${n}`),
+	deleteRepo: (id: string) => req<{ deleted: boolean }>(`/api/repos/${id}`, { method: 'DELETE' }),
 	listPrs: (repoId: string) => req<PullRequest[]>(`/api/repos/${repoId}/pulls`),
 	listReviews: () => req<Review[]>('/api/reviews'),
+	/** AI brief for Home, written by the orchestrator's model. */
+	homeBrief: (input: HomeBriefRequest, signal?: AbortSignal) =>
+		req<HomeBriefResponse>('/api/home/brief', { method: 'POST', body: JSON.stringify(input), signal }),
 	/** Compact live progress per review (tasks settled/total, active specialists). */
 	reviewSummaries: () =>
 		req<Record<string, { tasksDone: number; tasksTotal: number; specialists: number }>>(

@@ -1,0 +1,182 @@
+<script lang="ts">
+	import type { ReviewToolCall } from '@recoder/shared';
+	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
+	import FileIcon from '@lucide/svelte/icons/file';
+	import ListFilter from '@lucide/svelte/icons/list-filter';
+	import MessageSquare from '@lucide/svelte/icons/message-square';
+	import Search from '@lucide/svelte/icons/search';
+	import { Button } from '@sivir-ui/svelte/components/button';
+	import * as Card from '@sivir-ui/svelte/components/card';
+	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
+	import { Input } from '@sivir-ui/svelte/components/input';
+	import { Markdown } from '@sivir-ui/svelte/components/markdown';
+	import * as Popover from '@sivir-ui/svelte/components/popover';
+	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import CodeDiff from './code-diff.svelte';
+	import FindingSeverity from './finding-severity.svelte';
+	import FixButton from './fix-button.svelte';
+	import SuggestedFix from './suggested-fix.svelte';
+	import SeverityPill from './ui/severity-pill.svelte';
+	import type { FileDiff } from '$lib/diff';
+	import { SEVERITIES, findingsStore, type Finding } from '$lib/findings.svelte';
+	import { formatAgentName, threadsStore } from '$lib/threads.svelte';
+
+	interface Props {
+		files: FileDiff[];
+		toolCalls?: ReviewToolCall[];
+		branch?: string | null;
+		/** Open the whole file in the inline diff. */
+		onFullFile: (finding: Finding) => void;
+	}
+	let { files, toolCalls = [], branch = null, onFullFile }: Props = $props();
+
+	const RANK = { high: 0, medium: 1, low: 2, info: 3 } as const;
+	let query = $state('');
+	const ranked = $derived(findingsStore.items
+		.filter((finding) => finding.status !== 'dismissed' && findingsStore.isShown(finding))
+		.filter((finding) => !query.trim() || `${finding.title} ${finding.body} ${finding.file} ${finding.category}`.toLowerCase().includes(query.trim().toLowerCase()))
+		.sort((a, b) => RANK[a.severity] - RANK[b.severity] || a.file.localeCompare(b.file) || a.startLine - b.startLine));
+	const active = $derived(ranked.find((finding) => finding.id === findingsStore.activeId) ?? ranked[0]);
+	const suggestion = $derived(active ? findingsStore.suggestions[active.id] : undefined);
+
+	/** The finding's hunk, trimmed to its lines plus three either side. */
+	const focused = $derived.by((): FileDiff | null => {
+		if (!active) return null;
+		const file = files.find((item) => item.path === active.file);
+		if (!file) return null;
+		const hunk = file.hunks.find((item) => item.lines.some((line) => line.newNo !== null && line.newNo >= active.startLine && line.newNo <= active.endLine))
+			?? file.hunks.find((item) => active.startLine >= item.newStart && active.startLine < item.newStart + Math.max(1, item.newCount));
+		if (!hunk) return null;
+		const near = (n: number | null) => n !== null && n >= active.startLine - 3 && n <= active.endLine + 3;
+		const first = hunk.lines.findIndex((line) => near(line.newNo));
+		const last = hunk.lines.findLastIndex((line) => near(line.newNo));
+		const lines = first < 0 ? hunk.lines : hunk.lines.slice(first, last + 1);
+		return { ...file, hunks: [{ ...hunk, lines }] };
+	});
+	const range = $derived.by(() => {
+		const numbers = focused?.hunks[0].lines.map((line) => line.newNo).filter((n): n is number => n !== null) ?? [];
+		return numbers.length ? [Math.min(...numbers), Math.max(...numbers)] : null;
+	});
+	const evidence = $derived.by(() => {
+		if (!active?.evidenceIds?.length) return null;
+		const cited = toolCalls.filter((tool) => tool.result?.evidenceId && active.evidenceIds!.includes(tool.result.evidenceId) && tool.result.content);
+		return cited.find((tool) => tool.assignmentId === active.assignmentId) ?? cited[0] ?? null;
+	});
+
+	function select(finding: Finding): void {
+		findingsStore.discuss(finding.id);
+	}
+	function discuss(finding: Finding): void {
+		findingsStore.discuss(finding.id);
+		threadsStore.open(finding.id);
+	}
+	function dismiss(finding: Finding): void {
+		findingsStore.dismiss(finding.id);
+		if (threadsStore.openId === finding.id) threadsStore.close();
+	}
+	const dir = (path: string) => path.slice(0, path.lastIndexOf('/') + 1);
+	const base = (path: string) => path.slice(path.lastIndexOf('/') + 1);
+</script>
+
+<div class="focus-body">
+	<section class="focus-list" aria-label="Findings that need you">
+		<header class="focus-list-head">
+			<Typography.Title level={2} class="focus-list-title">Needs you</Typography.Title>
+			<span class="focus-list-meta"><span class="font-mono">{ranked.length}</span> by severity</span>
+			<span class="ms-auto"></span>
+			<Popover.Root placement="bottom-end">
+				<Popover.Trigger variant="ghost" size="icon" aria-label="Filter by severity"><ListFilter size={15} aria-hidden="true" /></Popover.Trigger>
+				<Popover.Content class="w-auto" surfaceClass="!p-2">
+					<Popover.Title class="sr-only">Severities</Popover.Title>
+					<div class="flex gap-1.5">
+						{#each SEVERITIES as severity (severity)}
+							<FindingSeverity {severity} count={findingsStore.items.filter((item) => item.status !== 'dismissed' && item.severity === severity).length} interactive pressed={findingsStore.isSeverityShown(severity)} onToggle={() => findingsStore.toggleSeverity(severity)} />
+						{/each}
+					</div>
+				</Popover.Content>
+			</Popover.Root>
+			<Popover.Root placement="bottom-end">
+				<Popover.Trigger variant="ghost" size="icon" aria-label="Search findings"><Search size={15} aria-hidden="true" /></Popover.Trigger>
+				<Popover.Content class="w-72" surfaceClass="!p-2">
+					<Popover.Title class="sr-only">Search findings</Popover.Title>
+					<Input bind:value={query} placeholder="Search text or file…" aria-label="Search findings" />
+				</Popover.Content>
+			</Popover.Root>
+		</header>
+		<ScrollArea class="min-h-0 flex-1" showCues={false} aria-label="Findings">
+			<div class="focus-cards">
+				{#each ranked as finding, i (finding.id)}
+					{@const isActive = finding.id === active?.id}
+					<Card.Root class="focus-card enter-rise" data-active={isActive || undefined} {...{ style: `--i: ${i}` }}>
+						<Button unstyled class="focus-card-select" aria-current={isActive || undefined} onclick={() => select(finding)}>
+							<span class="focus-card-head">
+								<FindingSeverity severity={finding.severity} />
+								<span class="min-w-0 truncate">{finding.category}</span>
+								<span class="focus-card-loc" title="{finding.file}:{finding.startLine}">{finding.file}:{finding.startLine}</span>
+							</span>
+							<span class="focus-card-body ai-voice">{finding.title}</span>
+						</Button>
+						{#if isActive}
+							<div class="focus-card-foot">
+								<span class="min-w-0 flex-1 truncate">{formatAgentName(finding.agent)}</span>
+								<Button variant="ghost" onclick={() => dismiss(finding)}>Dismiss</Button>
+								<Button variant="outline" class="gap-1.5" onclick={() => discuss(finding)}><MessageSquare size={14} aria-hidden="true" />Discuss</Button>
+							</div>
+						{/if}
+					</Card.Root>
+				{:else}
+					<Typography.Text class="px-1 py-3 text-sm text-fg-muted">{query ? 'No findings match your search.' : 'Nothing needs you. Every finding is fixed, dismissed or filtered out.'}</Typography.Text>
+				{/each}
+			</div>
+		</ScrollArea>
+	</section>
+
+	<ScrollArea class="min-h-0" showCues={false} aria-label="Focused finding">
+		{#if active}
+			{#key active.id}
+			<div class="focus-detail-column">
+				<Card.Root class="focus-hunk">
+					<header class="focus-hunk-head">
+						<FileIcon size={14} class="shrink-0 text-fg-faint" aria-hidden="true" />
+						<span class="diff-file-path" title={active.file}><span class="diff-file-dir">{dir(active.file)}</span><span class="diff-file-name">{base(active.file)}</span></span>
+						{#if range}<span class="focus-hunk-range">lines {range[0]}–{range[1]}</span>{/if}
+						<Button variant="ghost" class="ms-auto gap-1.5" onclick={() => onFullFile(active)}>Full file <ArrowUpRight size={13} aria-hidden="true" /></Button>
+					</header>
+					{#if focused}
+						{#key active.id}<CodeDiff diff={focused} findings={[active]} cards={false} />{/key}
+					{:else}
+						<Typography.Text class="px-5 py-4 text-sm text-fg-muted">The diff for this file isn't loaded yet.</Typography.Text>
+					{/if}
+				</Card.Root>
+
+				<Card.Root class="focus-detail">
+					<div class="focus-detail-head">
+						{#if active.status === 'accepted'}<SeverityPill tone="success">Fixed</SeverityPill>{:else}<FindingSeverity severity={active.severity} />{/if}
+						<Typography.Title level={3} class="focus-detail-title">{active.title}</Typography.Title>
+						<span class="focus-detail-meta">{[active.code, formatAgentName(active.agent), active.model].filter(Boolean).join(' · ')}</span>
+					</div>
+					<div class="focus-detail-body ai-voice"><Markdown content={active.body} /></div>
+					{#if evidence?.result}
+						<div class="focus-evidence">
+							<div class="focus-evidence-head"><span>Evidence</span><span class="font-mono" title={evidence.command}>{evidence.command}</span></div>
+							<ScrollArea class="max-h-56" showCues={false} aria-label="Evidence">
+								<CodeBlock code={evidence.result.content} lang="plaintext" copy="overlay" class="focus-evidence-code" />
+							</ScrollArea>
+						</div>
+					{/if}
+					{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} />{/if}
+					<div class="focus-detail-foot">
+						<span class="min-w-0 flex-1 truncate">{#if branch}Pushes one commit to <span class="font-mono">{branch}</span>{/if}</span>
+						{#if active.status === 'open'}
+							<Button variant="ghost" onclick={() => dismiss(active)}>Dismiss</Button>
+							<Button variant="outline" class="gap-1.5" onclick={() => discuss(active)}><MessageSquare size={14} aria-hidden="true" />Discuss</Button>
+						{/if}
+						<FixButton finding={active} />
+					</div>
+				</Card.Root>
+			</div>
+			{/key}
+		{/if}
+	</ScrollArea>
+</div>

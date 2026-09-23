@@ -24,7 +24,7 @@ const roleSettingsSchema = z.object({
 	api: z.string().max(200).optional()
 });
 
-const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high'] as const;
+import { REASONING_EFFORTS } from '@recoder/shared';
 
 const modelEntrySchema = z.object({
 	provider: z.enum(['openai-compatible', 'codex']).optional(),
@@ -33,7 +33,8 @@ const modelEntrySchema = z.object({
 	model: z.string().min(1).max(200),
 	baseUrl: z.string().max(500).optional(),
 	apiKey: z.string().max(500).optional(),
-	efforts: z.array(z.enum(REASONING_EFFORTS)).max(8).optional()
+	efforts: z.array(z.enum(REASONING_EFFORTS)).max(8).optional(),
+	defaultEffort: z.enum(REASONING_EFFORTS).optional()
 });
 
 export const reviewSettingsSchema = z.object({
@@ -45,6 +46,8 @@ export const reviewSettingsSchema = z.object({
 	specialistModelId: z.string().max(100).nullable().optional(),
 	roles: roleSettingsSchema.optional(),
 	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(REASONING_EFFORTS)).optional(),
+	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
+	applyToSpecialists: z.boolean().optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
 	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
 	maxFileChars: z.number().int().positive().max(200_000).optional()
@@ -60,6 +63,7 @@ export interface StoredModelEntry {
 	baseUrl?: string;
 	apiKey?: string;
 	efforts?: ReasoningEffort[];
+	defaultEffort?: ReasoningEffort;
 }
 
 interface StoredSettings {
@@ -71,6 +75,8 @@ interface StoredSettings {
 	specialistModelId?: string | null;
 	roles?: Partial<Record<ReviewRole, string>>;
 	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
+	orchestratorEffort?: ReasoningEffort | null;
+	applyToSpecialists?: boolean;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;
@@ -80,6 +86,13 @@ let overrides: StoredSettings = {};
 
 function settingsFile(): string {
 	return `${serverDataDir()}/review-config.json`;
+}
+
+/** Where overrides are saved, with the home directory shortened to `~`. */
+export function settingsFileDisplay(): string {
+	const home = process.env.HOME ?? process.env.USERPROFILE;
+	const file = settingsFile();
+	return home && file.startsWith(home) ? `~${file.slice(home.length)}` : file;
 }
 
 function persist(): void {
@@ -106,7 +119,8 @@ export function initReviewSettings(): void {
 					model: e.model,
 					...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
 					...(e.apiKey ? { apiKey: e.apiKey } : {}),
-					...(e.efforts?.length ? { efforts: e.efforts } : {})
+					...(e.efforts?.length ? { efforts: e.efforts } : {}),
+					...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {})
 				}))
 			};
 			overrides = apiKey ? { ...normalized, apiKey } : normalized;
@@ -144,6 +158,7 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 			const baseUrl = entry.baseUrl?.replace(/\/$/, '');
 			if (baseUrl && next.provider !== 'codex') next.baseUrl = baseUrl;
 			if (entry.efforts?.length) next.efforts = entry.efforts;
+			if (entry.defaultEffort) next.defaultEffort = entry.defaultEffort;
 			// Empty key keeps the existing entry key; new entries store what was given.
 			if (next.provider !== 'codex') {
 				if (entry.apiKey) next.apiKey = entry.apiKey;
@@ -179,6 +194,8 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 		if (Object.keys(clean.roles).length === 0) delete clean.roles;
 	}
 	if (patch.roleEfforts !== undefined) clean.roleEfforts = { ...clean.roleEfforts, ...patch.roleEfforts };
+	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
+	if (patch.applyToSpecialists !== undefined) clean.applyToSpecialists = patch.applyToSpecialists;
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
 	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;

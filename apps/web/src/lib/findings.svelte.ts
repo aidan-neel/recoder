@@ -28,12 +28,12 @@ export interface FixSuggestion {
 
 export const SEVERITIES: FindingSeverity[] = ['high', 'medium', 'low', 'info'];
 
-/** Severity → marker dot color. */
+/** Severity → marker color (diff bars, line numbers). */
 export const SEVERITY_DOT: Record<FindingSeverity, string> = {
-	high: '#ef4444',
-	medium: '#d9a13b',
-	low: '#5b8cff',
-	info: '#8a8f98'
+	high: 'var(--sev-high-icon)',
+	medium: 'var(--sev-medium)',
+	low: 'var(--sev-low)',
+	info: 'var(--sev-info)'
 };
 
 export interface Finding {
@@ -55,6 +55,9 @@ export interface Finding {
 	/** New-side line range the finding refers to (inclusive). */
 	startLine: number;
 	endLine: number;
+	/** Tool results the reviewer cited (`ev_…`), matched against the review's tool calls. */
+	evidenceIds?: string[];
+	assignmentId?: string;
 	status: FindingStatus;
 }
 
@@ -156,7 +159,7 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 	const line = f.line ?? 1;
 	return {
 		id: f.id,
-		code: `R-${String(index + 1).padStart(2, '0')}`,
+		code: `F-${String(index + 1).padStart(2, '0')}`,
 		title: findingTitle(body, f.title),
 		severity: severityMap[f.severity],
 		category,
@@ -166,6 +169,8 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 		file: f.file,
 		startLine: line,
 		endLine: f.endLine && f.endLine >= line ? f.endLine : line,
+		evidenceIds: f.evidenceIds ?? [],
+		assignmentId: f.assignmentId,
 		status: 'open'
 	};
 }

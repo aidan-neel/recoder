@@ -1,16 +1,19 @@
 <script lang="ts">
+	import { paletteContext } from '$lib/palette.svelte';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import Check from '@lucide/svelte/icons/check';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Search from '@lucide/svelte/icons/search';
+	import Wrench from '@lucide/svelte/icons/wrench';
+	import type { Snippet } from 'svelte';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import Shortcut from '@sivir-ui/svelte/components/shortcut';
-	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
+	import Skeleton from '$lib/components/ui/skeleton.svelte';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Popover from '@sivir-ui/svelte/components/popover';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
@@ -25,7 +28,10 @@ import {
 	import { sessionFile } from '$lib/session-file.svelte';
 	import { serverApi } from '$lib/server-api';
 	import { threadsStore } from '$lib/threads.svelte';
+	import { toFixInput } from '$lib/fixes';
 
+	/** Status and actions shown before Fix all at the toolbar's right end. */
+	let { trailing }: { trailing?: Snippet } = $props();
 	let searchOpen = $state(false);
 	let query = $state('');
 	let index = $state(0);
@@ -85,6 +91,14 @@ import {
 		openItems.filter((f) => f.status === 'open' && findingsStore.isShown(f))
 	);
 	const fixAllDisabled = $derived(fixable.length === 0 || !reviewId);
+	$effect(() => {
+		paletteContext.fixAll = fixAllDisabled
+			? null
+			: { count: fixable.length, run: () => { searchOpen = false; fixAllConfirmOpen = true; } };
+		return () => {
+			paletteContext.fixAll = null;
+		};
+	});
 
 	let findingsCopied = $state(false);
 	let findingsCopyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -165,22 +179,6 @@ import {
 	const pushableCount = $derived(
 		fixAllItems.filter((i) => !i.error && i.patch !== '' && !i.pushed).length
 	);
-
-	function toFixInput(finding: Finding): {
-		file: string;
-		line: number;
-		endLine: number;
-		severity: string;
-		message: string;
-	} {
-		return {
-			file: finding.file,
-			line: finding.startLine,
-			endLine: finding.endLine,
-			severity: finding.severity,
-			message: finding.body
-		};
-	}
 
 	/** Confirm → generate a suggested patch per open finding, then preview. */
 	async function confirmFixAll(): Promise<void> {
@@ -310,10 +308,10 @@ import {
 	});
 </script>
 
-<div class="findings-toolbar flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
-	<Card.Root class="!h-9 shrink-0 !flex-row items-center !gap-0 rounded-[10px] border border-border bg-transparent !p-0 shadow-none">
+<div class="findings-toolbar flex w-full min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
+	<Card.Root class="!h-8 shrink-0 !flex-row items-center !gap-0 rounded-[9px] border-0 bg-transparent !p-0 shadow-none">
 		<Popover.Root bind:open={searchOpen} placement="bottom-start">
-			<Popover.Trigger variant="ghost" class="!h-9 gap-2 rounded-s-[10px] rounded-e-none !px-2.5 text-sm !font-normal" aria-label="Search findings">
+			<Popover.Trigger variant="ghost" class="!h-8 gap-2 rounded-s-[9px] rounded-e-none !px-2.5 text-sm !font-normal" aria-label="Search findings">
 				Findings
 				<span class="font-mono text-xs tabular-nums text-foreground-muted">{visible.length === 0 ? 0 : position + 1}/{visible.length}</span>
 			</Popover.Trigger>
@@ -347,14 +345,13 @@ import {
 						{#if findingsCopied}<Check size={14} aria-hidden="true" />{:else}<Copy size={14} aria-hidden="true" />{/if}
 						{findingsCopied ? 'Copied' : 'Copy findings'}
 					</Button>
-					<Button variant="outline" disabled={fixAllDisabled} onclick={() => { searchOpen = false; fixAllConfirmOpen = true; }} class="text-sm !font-normal">Fix all ({fixable.length})</Button>
 				</div>
 			</Popover.Content>
 		</Popover.Root>
 		<Button
 			variant="quiet"
 			size="icon"
-			class="!size-9 !min-w-9 rounded-none text-foreground-muted hover:text-foreground"
+			class="!size-8 !min-w-8 rounded-none text-foreground-muted hover:text-foreground"
 			aria-label="Previous finding"
 			disabled={visible.length === 0}
 			onclick={() => go(position - 1)}
@@ -364,7 +361,7 @@ import {
 		<Button
 			variant="quiet"
 			size="icon"
-			class="!size-9 !min-w-9 rounded-s-none rounded-e-[10px] text-foreground-muted hover:text-foreground"
+			class="!size-8 !min-w-8 rounded-s-none rounded-e-[9px] text-foreground-muted hover:text-foreground"
 			aria-label="Next finding"
 			title="Next finding"
 			disabled={visible.length === 0}
@@ -383,6 +380,13 @@ import {
 			onToggle={() => toggle(severity)}
 		/>
 	{/each}
+
+	<div class="findings-toolbar-end">
+		{@render trailing?.()}
+		<Button class="fix-all gap-2" disabled={fixAllDisabled} onclick={() => { searchOpen = false; fixAllConfirmOpen = true; }}>
+			<Wrench size={14} aria-hidden="true" />Fix all<span class="fix-all-count">{fixable.length}</span>
+		</Button>
+	</div>
 
 	<AlertDialog.Root bind:open={fixAllConfirmOpen}>
 		<AlertDialog.Content>

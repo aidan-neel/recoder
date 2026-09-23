@@ -1,7 +1,7 @@
 <script lang="ts">
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
-	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
+	import Skeleton from '$lib/components/ui/skeleton.svelte';
 
 	let { specialist = false }: { specialist?: boolean } = $props();
 </script>

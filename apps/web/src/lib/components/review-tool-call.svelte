@@ -23,16 +23,16 @@
 	variant="quiet"
 	{duration}
 	open={false}
-	class="review-tool-disclosure min-w-0"
+	class="review-tool-row min-w-0"
 >
-	{#snippet trigger({ open })}
-		<span class="shrink-0 text-sm">{actionLabel}</span>
-		<span class="min-w-0 truncate font-mono text-xs" title={target}>{target}</span>
-		{#if tool.status === 'running' && active}<Spinner size={12} class="shrink-0" aria-hidden="true" />{/if}
-		{#if tool.status === 'error' || interrupted}<span class="shrink-0 text-xs text-error">{interrupted ? 'Interrupted' : 'Failed'}</span>{/if}
-		<ChevronRight size={13} aria-hidden="true" class="shrink-0 {open ? 'rotate-90' : ''}" />
+	{#snippet trigger()}
+		<span class="tool-row-action">{actionLabel}</span>
+		<span class="tool-row-target" title={target}>{target}</span>
+		{#if tool.status === 'running' && active}<Spinner size={12} class="shrink-0 text-sev-medium" aria-hidden="true" />{/if}
+		{#if tool.status === 'error' || interrupted}<span class="shrink-0 text-danger">{interrupted ? 'Interrupted' : 'Failed'}</span>{/if}
+		{#if duration}<span class="tool-row-duration">{duration}</span>{/if}
 	{/snippet}
-	<div class="min-w-0 space-y-3 py-2">
+	<div class="tool-row-details min-w-0 space-y-3 py-2">
 		<ScrollArea style="max-height: min(24rem, 50dvh)" aria-label="Tool details" showCues={false}>
 			{#if tool.result?.content}
 				<CodeBlock code={tool.result.content} lang={action === 'readDiff' ? 'diff' : 'plaintext'} copy="overlay" class="rounded-lg ![--code-block-max-height:none]" />
@@ -49,7 +49,6 @@
 			{/if}
 		</ScrollArea>
 		<div class="flex flex-wrap items-start gap-x-4 gap-y-2">
-			{#if duration}<Typography.Metadata class="pt-1 font-mono text-xs tabular-nums">{duration}</Typography.Metadata>{/if}
 			{#if tool.input}
 				<Collapsible.Root>
 					<Collapsible.Trigger class="review-disclosure !text-xs">Input <ChevronRight size={12} aria-hidden="true" /></Collapsible.Trigger>

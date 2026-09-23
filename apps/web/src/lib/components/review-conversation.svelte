@@ -1,16 +1,12 @@
 <script lang="ts">
 	import { ORCHESTRATOR_ID, type ReviewAssignment, type ReviewChatMessage, type ReviewCodeContext, type ReviewReasoningEntry, type ReviewTask, type ReviewToolCall } from '@recoder/shared';
 	import type { Snippet } from 'svelte';
-	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
-	import Paperclip from '@lucide/svelte/icons/paperclip';
-	import Square from '@lucide/svelte/icons/square';
 	import X from '@lucide/svelte/icons/x';
 	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
-	import * as Composer from '@sivir-ui/svelte/components/composer';
 	import * as Conversation from '@sivir-ui/svelte/components/conversation';
 	import * as Message from '@sivir-ui/svelte/components/message';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
@@ -18,9 +14,13 @@
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import ReviewTaskGroup from './review-task-group.svelte';
+	import ReviewComposer from './review-composer.svelte';
+	import ModelPicker from './model-picker.svelte';
+	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
+	import type { ReviewRole } from '@recoder/shared';
 	import { groupTranscript } from '$lib/review-transcript';
 
-	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, workspace, workspaceAt, afterTranscript, afterTranscriptAt, awaitingPrompt = false }: {
+	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, inserts = [], placeholder, awaitingPrompt = false }: {
 		assignment: ReviewAssignment;
 		messages: ReviewChatMessage[];
 		reasoning: ReviewReasoningEntry[];
@@ -34,10 +34,9 @@
 		focusKey?: number;
 		onSend?: (id: string, text: string, context?: ReviewCodeContext) => Promise<void>;
 		onStop?: (id: string) => Promise<void>;
-		workspace?: Snippet;
-		workspaceAt?: string;
-		afterTranscript?: Snippet;
-		afterTranscriptAt?: string;
+		/** Blocks placed in the transcript before the first entry newer than `at` (or at the end). */
+		inserts?: { key: string; at?: string; snippet: Snippet }[];
+		placeholder?: string;
 		awaitingPrompt?: boolean;
 	} = $props();
 	const belongs = (id?: string) => (id ?? ORCHESTRATOR_ID) === assignment.id;
@@ -51,16 +50,12 @@
 		? currentTask?.message || assignment.currentOperation || 'Waiting for this specialist…'
 		: assignment.status === 'done' ? 'Specialist finished' : assignment.status === 'skipped' ? 'Specialist skipped' : 'Specialist review incomplete');
 	const entries = $derived(groupTranscript(conversationMessages, conversationTools));
-	// Keep the specialist group at its creation point as follow-up messages arrive.
-	const workspaceIndex = $derived.by(() => {
-		const index = workspaceAt ? entries.findIndex((entry) => Date.parse(entry.at) > Date.parse(workspaceAt)) : -1;
-		return index < 0 ? entries.length : index;
-	});
+	// Keep inserted blocks (specialists, results) at their point in time as follow-ups arrive.
+	const placed = $derived(inserts.map((insert) => {
+		const index = insert.at ? entries.findIndex((entry) => Date.parse(entry.at) > Date.parse(insert.at!)) : -1;
+		return { ...insert, index: index < 0 ? entries.length : index };
+	}));
 	const firstAssistantIndex = $derived(entries.findIndex((entry) => entry.kind === 'message' && entry.message.from === 'assistant'));
-	const resultIndex = $derived.by(() => {
-		const index = afterTranscriptAt ? entries.findIndex((entry) => Date.parse(entry.at) > Date.parse(afterTranscriptAt)) : -1;
-		return index < 0 ? entries.length : index;
-	});
 	const reasoningSeconds = $derived.by(() => {
 		const start = Date.parse(conversationReasoning[0]?.at ?? '');
 		const end = Date.parse(entries[firstAssistantIndex]?.at ?? '');
@@ -72,6 +67,7 @@
 		(generating || (active && (conversationReasoning.some((entry) => entry.status === 'streaming') ||
 			tasks.some((task) => task.status === 'running' && ['model', 'planning', 'consolidation'].includes(task.kind ?? '')))))
 	);
+	const isRole = (role: string): role is ReviewRole => (MODEL_ROLES as string[]).includes(role);
 	let sending = $state(false);
 	let stopping = $state(false);
 	let error = $state('');
@@ -142,7 +138,7 @@
 	{#if conversationReasoning.length}
 		<Collapsible.Root open={specialist}>
 			<Collapsible.Trigger class="review-disclosure">
-				{conversationReasoning.some((entry) => entry.status === 'streaming') && (active || generating) ? awaitingPrompt ? 'Thinking…' : 'Reviewing changes…' : reasoningSeconds ? `Reviewed for ${reasoningSeconds}s` : 'Reviewed changes'}
+				{conversationReasoning.some((entry) => entry.status === 'streaming') && (active || generating) ? awaitingPrompt ? 'Thinking…' : 'Reviewing changes…' : reasoningSeconds ? `Reviewed changes for ${reasoningSeconds}s` : 'Reviewed changes'}
 				<ChevronRight size={14} aria-hidden="true" />
 			</Collapsible.Trigger>
 			<Collapsible.Content class="space-y-3 py-2 text-sm text-foreground-muted">
@@ -152,18 +148,18 @@
 	{/if}
 {/snippet}
 
+<div class="review-chat" data-compact={compact || undefined}>
 <Conversation.Root class="min-h-0 w-full flex-1">
-	<Conversation.Content aria-label={`${assignment.title} messages`} transcriptClass={`!max-w-[776px] !gap-4 !py-2 ${compact ? '!px-4' : ''}`} class="![scrollbar-gutter:auto]">
+	<Conversation.Content aria-label={`${assignment.title} messages`} transcriptClass={compact ? '!max-w-[776px] !gap-4 !px-4 !py-2' : 'review-transcript'} class="![scrollbar-gutter:auto]">
 		{#each entries as item, index (item.kind + item.id)}
-			{#if index === workspaceIndex && workspace}{@render workspace()}{/if}
-			{#if index === resultIndex}{@render afterTranscript?.()}{/if}
+			{#each placed.filter((insert) => insert.index === index) as insert (insert.key)}{@render insert.snippet()}{/each}
 			{#if index === firstAssistantIndex}{@render reviewReasoning()}{/if}
 			{#if item.kind === 'message'}
 				{@const message = item.message}
 				<Message.Root from={message.from} status={message.status === 'done' ? 'idle' : message.status}
 					class="[--font-weight-body:400]"
 					name={message.forwardedFrom ? `${message.from === 'user' ? 'You →' : 'Reply from'} ${message.forwardedFrom}` : undefined}>
-					<Message.Content class="!max-w-full text-sm font-normal leading-relaxed [&_[data-ui=markdown]]:text-sm">
+					<Message.Content class={message.from === 'assistant' ? 'review-prose ai-voice' : message.from === 'user' ? 'review-bubble' : '!max-w-full text-sm'}>
 						{@render response(message)}
 					</Message.Content>
 				</Message.Root>
@@ -174,8 +170,7 @@
 			{#if !awaitingPrompt && !specialist}<Typography.Text class="py-4 text-sm text-foreground-muted" role="status">{compact ? 'Select code in the diff or ask a question about this review.' : active ? 'Preparing the review…' : 'Ask a question about this review.'}</Typography.Text>{/if}
 		{/each}
 		{#if firstAssistantIndex < 0}{@render reviewReasoning()}{/if}
-		{#if workspaceIndex === entries.length && workspace}{@render workspace()}{/if}
-		{#if resultIndex === entries.length}{@render afterTranscript?.()}{/if}
+		{#each placed.filter((insert) => insert.index === entries.length) as insert (insert.key)}{@render insert.snippet()}{/each}
 		{#if specialist}
 			<section class="space-y-2" aria-label={`${assignment.title} activity`}>
 				<Typography.Text role="status" class="flex items-start gap-2 text-sm text-foreground-muted">
@@ -197,34 +192,67 @@
 			</section>
 		{/if}
 		{#if thinking}
-			<Typography.Text role="status" class="flex items-center gap-2 px-1 text-sm text-foreground-muted"><Spinner size={14} aria-hidden="true" />Thinking</Typography.Text>
+			<Typography.Text role="status" class="review-thinking"><span class="shimmer-text">Thinking</span></Typography.Text>
 		{/if}
 	</Conversation.Content>
 	<Conversation.ScrollButton />
 </Conversation.Root>
 
-<div class="mx-auto w-full max-w-[776px] shrink-0 {compact ? 'px-3 pb-4 pt-3' : 'px-4 pb-8 pt-4 sm:px-6'}">
-	{#if codeContext}
-		<div class="mb-2 flex min-w-0 items-start gap-1">
-			<div class="min-w-0 flex-1">{@render codeReference(codeContext)}</div>
-			<Button variant="ghost" size="icon" class="size-9 shrink-0" aria-label="Remove selected code" disabled={sending} onclick={() => codeContext = null}><X size={14} aria-hidden="true" /></Button>
-		</div>
-	{/if}
-	{#if assignment.id !== ORCHESTRATOR_ID}<Typography.Metadata class="mb-2 block text-xs">Shared with orchestrator</Typography.Metadata>{/if}
+<div class={compact ? 'mx-auto w-full max-w-[776px] shrink-0 px-3 pb-3 pt-3' : 'review-dock'}>
+	<div class="review-dock-inner">
 	{#if error}<Typography.Text id={errorId} role="alert" class="mb-2 text-sm text-error">{error}</Typography.Text>{/if}
 	<!-- Never write a filename back: Sivir 0.3.2 also binds value on file inputs. -->
 	<div hidden><Input type="file" bind:value={() => '', () => {}} bind:element={fileInput} aria-label="Attach a text file" onchange={attachFile} /></div>
-	<Composer.Root bind:value={draft} onSubmit={send} onStop={onStop ? stop : undefined} {generating} status={sending ? 'submitting' : 'idle'} disabled={!onSend} class="session-composer">
-		<Composer.Input bind:element={composerInput} class="session-composer-input" aria-label={`Message ${assignment.title}`} aria-describedby={error ? errorId : undefined} aria-invalid={error ? 'true' : undefined} placeholder={codeContext ? 'Ask about this code…' : awaitingPrompt ? 'Ask Orchestrator to start a review…' : `Ask ${assignment.title} anything…`} maxlength={8000} disabled={sending || !onSend} oninput={() => error = ''} />
-		<Composer.Actions class="!flex-none !flex-nowrap !gap-1 self-end !p-0">
-			<Button variant="quiet" size="icon" class="group size-9 rounded-full text-foreground-muted" aria-label="Attach a text file" title="Attach a text file" disabled={!onSend || sending} onclick={() => fileInput?.click()}><span class="flex size-7 items-center justify-center rounded-full group-hover:bg-foreground/[0.08]"><Paperclip class="size-3.5" strokeWidth={1.5} aria-hidden="true" /></span></Button>
-			{#if generating && onStop}
-				<Button variant="ghost" size="icon" class="size-9 rounded-full !bg-transparent [&_.sivir-button-face]:text-[0px]" aria-label="Stop response" loading={stopping} onclick={stop}><span class="flex size-7 items-center justify-center rounded-full bg-primary text-[var(--color-on-primary)]"><Square class="size-2.5" fill="currentColor" aria-hidden="true" /></span></Button>
-			{:else}
-				<Composer.Submit class="!size-9 !min-w-9 !rounded-full !bg-transparent !p-0 [&_.sivir-button-face]:text-[0px]" disabled={generating}>
-					{#snippet children()}<span class="flex size-7 items-center justify-center rounded-full bg-primary text-[var(--color-on-primary)]"><ArrowUp class="size-4" strokeWidth={1.5} aria-hidden="true" /></span>{/snippet}
-				</Composer.Submit>
+	<ReviewComposer
+		bind:value={draft}
+		bind:inputEl={composerInput}
+		size={compact ? 'panel' : 'main'}
+		label={`Message ${assignment.title}`}
+		placeholder={codeContext ? 'Ask about this code…' : placeholder ?? (awaitingPrompt ? 'Ask Orchestrator to start a review…' : `Ask ${assignment.title} anything…`)}
+		maxlength={8000}
+		describedBy={error ? errorId : undefined}
+		invalid={!!error}
+		{sending}
+		{generating}
+		disabled={!onSend}
+		onSubmit={send}
+		onStop={onStop ? stop : undefined}
+		onAttach={() => fileInput?.click()}
+		attachLabel="Attach a text file"
+		oninput={() => error = ''}
+	>
+		{#snippet context()}
+			{#if codeContext}
+				<div class="flex min-w-0 items-start gap-1">
+					<div class="min-w-0 flex-1">{@render codeReference(codeContext)}</div>
+					<Button variant="ghost" size="icon" class="shrink-0" aria-label="Remove selected code" disabled={sending} onclick={() => codeContext = null}><X size={14} aria-hidden="true" /></Button>
+				</div>
 			{/if}
-		</Composer.Actions>
-	</Composer.Root>
+		{/snippet}
+		{#snippet leading()}
+			{#if specialist}<Typography.Metadata class="truncate text-[12px] text-fg-faint">Shared with Orchestrator</Typography.Metadata>{/if}
+		{/snippet}
+		{#snippet picker()}
+			{#if !specialist}
+				<ModelPicker
+					value={modelSettingsUi.orchestrator}
+					onSelect={(choice) => void modelSettingsUi.selectOrchestrator(choice)}
+					size={compact ? 'panel' : 'md'}
+					composerExtras
+					label="Orchestrator model"
+				/>
+			{:else if isRole(assignment.role)}
+				{@const role = assignment.role}
+				<ModelPicker
+					value={modelSettingsUi.roleChoice(role)}
+					onSelect={(choice) => void modelSettingsUi.selectRole(role, choice)}
+					size={compact ? 'panel' : 'md'}
+					disabled={modelSettingsUi.applyToSpecialists}
+					label="{assignment.title} model"
+				/>
+			{/if}
+		{/snippet}
+	</ReviewComposer>
+	</div>
+</div>
 </div>

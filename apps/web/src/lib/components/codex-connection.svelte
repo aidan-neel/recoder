@@ -1,11 +1,10 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
-	import * as Popover from '@sivir-ui/svelte/components/popover';
-	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
+	import * as Card from '@sivir-ui/svelte/components/card';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import type { CodexConnection, CodexModel } from '@recoder/shared';
 	import { serverApi } from '$lib/server-api';
@@ -14,14 +13,12 @@
 		active,
 		onSync,
 		onClear,
-		disabled = false,
-		usageOpen = $bindable(false)
+		disabled = false
 	}: {
 		active: boolean;
 		onSync: (models: CodexModel[]) => void;
 		onClear: () => void;
 		disabled?: boolean;
-		usageOpen?: boolean;
 	} = $props();
 	const id = $props.id();
 	let connection = $state<CodexConnection | null>(null);
@@ -56,6 +53,24 @@
 		if (hours < 24)
 			return `Resets in ${hours}h${minutes % 60 ? ` ${minutes % 60}m` : ''}`;
 		return `Resets in ${Math.floor(hours / 24)}d${hours % 24 ? ` ${hours % 24}h` : ''}`;
+	}
+
+	/** "resets 2h", "resets 40m", or the weekday when more than a day out. */
+	function resetShort(resetsAt: number | null): string {
+		if (!resetsAt || !Number.isFinite(resetsAt)) return 'reset unknown';
+		const minutes = Math.ceil((resetsAt * 1000 - now) / 60_000);
+		if (minutes <= 0) return 'resetting';
+		if (minutes < 60) return `resets ${minutes}m`;
+		if (minutes < 24 * 60) return `resets ${Math.round(minutes / 60)}h`;
+		return `resets ${new Date(resetsAt * 1000).toLocaleDateString(undefined, { weekday: 'short' })}`;
+	}
+
+	function planName(plan: string): string {
+		return plan
+			.replace(/lite$/i, ' lite')
+			.split(/[\s_-]+/)
+			.map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+			.join(' ');
 	}
 
 	async function refresh(): Promise<void> {
@@ -150,162 +165,68 @@
 	});
 </script>
 
-<section
-	class="flex min-w-0 flex-col gap-2"
-	aria-labelledby={`${id}-title`}
->
-	<div class="flex flex-wrap items-center justify-between gap-2">
-		<h3 id={`${id}-title`} class="m-0 text-sm font-medium">ChatGPT</h3>
-		{#if connection?.authenticated || connection?.login}
-			<Button
-				variant="ghost"
-				loading={busy}
-				disabled={disabled || busy}
-				aria-label={connection.authenticated
-					? 'Disconnect ChatGPT'
-					: 'Cancel ChatGPT sign-in'}
-				onclick={disconnect}
-			>
-				{connection.authenticated ? 'Disconnect' : 'Cancel sign-in'}
-			</Button>
-		{:else}
-			<Button
-				variant="secondary"
-				loading={busy}
-				disabled={disabled || busy || (!connection && refreshing)}
-				aria-label="Sign in to ChatGPT"
-				onclick={connect}>Sign in</Button
-			>
-		{/if}
-	</div>
-	<div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-		<div
-			role="status"
-			class="min-w-0 text-[13px] text-foreground-muted [overflow-wrap:anywhere]"
-		>
-			{#if !connection}{refreshError
-					? 'Connection unavailable'
-					: 'Checking connection...'}
-			{:else if connection.authenticated}
-				{#if connection.email}<span class="text-foreground"
-						>{connection.email}</span
-					><span class="mx-1" aria-hidden="true">·</span>{/if}Connected
+<Card.Root class="provider-card" data-active={connection?.authenticated || undefined} {...{ "aria-labelledby": `${id}-title` }}>
+	<div class="provider-card-head">
+		<span class="provider-dot" data-on={connection?.authenticated || undefined} aria-hidden="true"></span>
+		<Typography.Title level={3} id={`${id}-title`} class="provider-card-title">ChatGPT</Typography.Title>
+		<span class="provider-status" data-on={connection?.authenticated || undefined} role="status">
+			{#if !connection}{refreshError ? 'Unavailable' : 'Checking…'}
+			{:else if connection.authenticated}Signed in
 			{:else if connection.login}Waiting for sign-in
 			{:else}Not connected{/if}
-		</div>
-		{#if connection?.authenticated}
-			<Popover.Root placement="bottom-start" bind:open={usageOpen}>
-				<Popover.Trigger
-					variant="ghost"
-					size="sm"
-					class="min-h-6 px-2 text-xs"
-					aria-label="Usage limits for ChatGPT"
-					onopen={() => void refresh()}>Usage</Popover.Trigger
-				>
-				<Popover.Content
-					class="w-[400px] max-w-[calc(100vw-2rem)]"
-					surfaceClass="bg-card p-0"
-					aria-label="ChatGPT usage limits"
-				>
-					<div class="max-h-[min(320px,60dvh)]">
-						<ScrollArea
-							class="max-h-[min(320px,60dvh)]"
-							aria-label="ChatGPT usage details"
-							role="region"
-							tabindex={0}
-							showCues={false}
-						>
-							<div class="flex flex-col gap-4 p-4">
-								<div class="flex flex-wrap items-center justify-between gap-2">
-									<h4 class="m-0 text-sm font-medium">Usage</h4>
-					<Button
-						variant="ghost"
-						size="icon"
-						loading={refreshing}
-										loadingLabel=""
-										disabled={busy}
-										aria-label="Refresh ChatGPT usage"
-										onclick={() => void refresh()}
-										><RefreshCw size={14} aria-hidden="true" /></Button
-									>
-								</div>
-								{#if refreshError || connection.error}
-									<p class="m-0 text-xs text-error [overflow-wrap:anywhere]">
-										Usage may be out of date. {refreshError || connection.error}
-									</p>
-								{/if}
-								{#each limits as limit}
-									{@const name = limitName(limit.name)}
-									{@const percent = Number.isFinite(limit.usedPercent)
-										? Math.max(0, Math.min(100, limit.usedPercent))
-										: null}
-									<div class="flex flex-col gap-2">
-										<div
-											class="flex items-baseline justify-between gap-3 text-xs"
-										>
-											<div
-												class="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1"
-											>
-												<span class="font-medium [overflow-wrap:anywhere]"
-													>{name}</span
-												>
-												<span class="text-foreground-muted"
-													>{resetLabel(limit.resetsAt)}</span
-												>
-											</div>
-											<span class="shrink-0 tabular-nums"
-												>{percent === null
-													? 'Unavailable'
-													: `${Math.round(percent)}% used`}</span
-											>
-										</div>
-										{#if percent !== null}
-											<Progress
-												value={percent}
-												max={100}
-												{...{
-													'aria-label': `${name} usage`,
-													'aria-valuetext': `${Math.round(percent)}% used. ${resetLabel(limit.resetsAt)}`
-												}}
-											/>
-										{/if}
-									</div>
-								{:else}
-									<p role="status" class="m-0 text-xs text-foreground-muted">
-										{refreshing
-											? 'Loading usage...'
-											: 'Usage limits are not available. Try refreshing.'}
-									</p>
-								{/each}
-							</div>
-						</ScrollArea>
-					</div>
-				</Popover.Content>
-			</Popover.Root>
-		{/if}
+		</span>
 	</div>
-	{#if connection?.login && !signInOpen}
-		<Button variant="ghost" class="self-start" onclick={() => (signInOpen = true)}>
-			Show sign-in code
-		</Button>
+
+	{#if connection?.authenticated}
+		<p class="provider-account">
+			{connection.email ?? 'Signed in'}{#if connection.planType}<span class="mx-1.5" aria-hidden="true">·</span>{planName(connection.planType)}{/if}
+		</p>
+		<div class="flex flex-col gap-3">
+			{#each limits as limit (limit.name)}
+				{@const name = limitName(limit.name)}
+				{@const percent = Number.isFinite(limit.usedPercent) ? Math.max(0, Math.min(100, limit.usedPercent)) : null}
+				<div class="flex flex-col gap-2">
+					<div class="flex items-baseline justify-between gap-3 text-[12.5px]">
+						<span class="text-fg-muted">{name}</span>
+						<span class="font-mono text-[12px] text-fg-muted tabular-nums">
+							{percent === null ? '—' : `${Math.round(percent)}%`}<span class="mx-1.5 text-fg-faint">·</span>{resetShort(limit.resetsAt)}
+						</span>
+					</div>
+					{#if percent !== null}
+						<Progress
+							value={percent}
+							max={100}
+							class="usage-bar"
+							{...{ 'aria-label': `${name} usage`, 'aria-valuetext': `${Math.round(percent)}% used. ${resetLabel(limit.resetsAt)}` }}
+						/>
+					{/if}
+				</div>
+			{:else}
+				<p class="m-0 text-[12.5px] text-fg-faint" role="status">{refreshing ? 'Loading usage…' : 'Usage limits unavailable.'}</p>
+			{/each}
+		</div>
+		<div class="mt-auto flex justify-end pt-1">
+			<Button variant="ghost" class="provider-link" loading={busy} disabled={disabled || busy} onclick={disconnect}>Sign out</Button>
+		</div>
+	{:else}
+		<p class="provider-account">Use your ChatGPT plan for any role set to a ChatGPT model.</p>
+		<div class="mt-auto flex flex-wrap items-center gap-2 pt-1">
+			{#if connection?.login}
+				<Button variant="outline" onclick={() => (signInOpen = true)}>Show sign-in code</Button>
+				<Button variant="ghost" class="provider-link" disabled={busy} onclick={disconnect}>Cancel</Button>
+			{:else}
+				<Button loading={busy} disabled={disabled || busy || (!connection && refreshing)} onclick={connect}>Sign in with ChatGPT</Button>
+			{/if}
+		</div>
 	{/if}
+
 	{#if error || refreshError || connection?.error}
 		<div class="flex flex-wrap items-center gap-2">
-			<p
-				class="m-0 min-w-0 text-xs text-error [overflow-wrap:anywhere]"
-				role="alert"
-			>
+			<p class="m-0 min-w-0 text-[12px] text-danger [overflow-wrap:anywhere]" role="alert">
 				{error || refreshError || connection?.error}
 			</p>
 			{#if refreshError || connection?.error}
-				<Button
-					variant="ghost"
-					size="sm"
-					loading={refreshing}
-					disabled={busy || refreshing}
-					aria-label="Retry loading ChatGPT connection data"
-					onclick={() => void refresh()}>Retry</Button
-				>
+				<Button variant="ghost" class="provider-link" loading={refreshing} disabled={busy || refreshing} onclick={() => void refresh()}>Retry</Button>
 			{/if}
 		</div>
 	{/if}
@@ -350,4 +271,4 @@
 			</Modal.Footer>
 		</Modal.Content>
 	</Modal.Root>
-</section>
+</Card.Root>

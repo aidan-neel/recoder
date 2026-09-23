@@ -14,7 +14,7 @@ test('tools form stable groups between messages and summary dumps stay out of th
 	expect(groups[0].kind === 'tasks' && groups[0].tools.map((item) => item.id)).toEqual(['a', 'b']);
 	const updated = groupTranscript(messages, [...tools, tool('d', 6)]);
 	expect(updated.at(-1)?.id).toBe('c');
-	expect(taskGroupLabel([tool('a', 1), tool('b', 2), tool('c', 3, 'search')])).toBe('2 file reads · 1 search');
+	expect(taskGroupLabel([tool('a', 1), tool('b', 2), tool('c', 3, 'search')])).toBe('Read 2 files, searched once');
 });
 
 test('persisted malformed retrievals render through both snapshots and live events', () => {
@@ -31,7 +31,7 @@ test('persisted malformed retrievals render through both snapshots and live even
 	const live = applyProgressMessage(initial, { type: 'tool', sequence: 1, data: { tool: malformed } });
 	for (const progress of [restored, live]) {
 		const groups = groupTranscript([], progress.toolCalls!);
-		expect(taskGroupLabel(progress.toolCalls!)).toBe('1 operation');
+		expect(taskGroupLabel(progress.toolCalls!)).toBe('Ran 1 tool');
 		expect(groups[0].kind).toBe('tasks');
 		expect(toolPresentation(progress.toolCalls![0])).toEqual({ action: '', target: malformed.input!.path!, name: `Tool request ${malformed.input!.path}` });
 		expect(progress.toolCalls![0].result?.error).toBe('unsupported action');
@@ -41,7 +41,7 @@ test('persisted malformed retrievals render through both snapshots and live even
 test('tool presentation tolerates missing or non-string labels without losing valid inputs', () => {
 	const missing = { ...tool('missing', 1), command: undefined, input: undefined } as unknown as ReviewToolCall;
 	expect(toolPresentation(missing)).toEqual({ action: '', target: '', name: 'Tool request' });
-	expect(taskGroupLabel([missing, tool('valid', 2)])).toBe('1 file read · 1 operation');
+	expect(taskGroupLabel([missing, tool('valid', 2)])).toBe('Read 1 file, ran 1 tool');
 	const read = { ...missing, input: { action: 'readFile', path: 'src/a.ts' } };
 	expect(toolPresentation(read)).toEqual({ action: 'readFile', target: 'src/a.ts', name: 'readFile src/a.ts' });
 	const invalid = { ...missing, command: 42, input: { action: {}, path: false } } as unknown as ReviewToolCall;

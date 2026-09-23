@@ -2,15 +2,15 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { tick, untrack } from 'svelte';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import MessageSquare from '@lucide/svelte/icons/message-square';
 	import X from '@lucide/svelte/icons/x';
+	import Check from '@lucide/svelte/icons/check';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Alert from '@sivir-ui/svelte/components/alert';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
-	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
+	import Skeleton from '$lib/components/ui/skeleton.svelte';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Sheet from '@sivir-ui/svelte/components/sheet';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
@@ -19,6 +19,10 @@
 	import ReviewProgress from '$lib/components/review-progress.svelte';
 	import ReviewMetricsModal from '$lib/components/review-metrics-modal.svelte';
 	import SessionSidebar from '$lib/components/session-sidebar.svelte';
+	import SessionHeader, { type SessionView } from '$lib/components/session-header.svelte';
+	import DiffFileHeader from '$lib/components/diff-file-header.svelte';
+	import FindingsFocus from '$lib/components/findings-focus.svelte';
+	import { diffPrefs } from '$lib/diff-prefs.svelte';
 	import FindingsBar from '$lib/components/findings-bar.svelte';
 	import CodeDiff from '$lib/components/code-diff.svelte';
 	import ThreadPanel from '$lib/components/thread-panel.svelte';
@@ -32,6 +36,8 @@
 	import { serverApi } from '$lib/server-api';
 	import { ReviewStream } from '$lib/review-stream.svelte';
 	import { recentSessions } from '$lib/recent-sessions.svelte';
+	import { closeSessionTab } from '$lib/session-tabs';
+	import { paletteContext } from '$lib/palette.svelte';
 	import { ORCHESTRATOR_ID, type FileDiff, type Review, type ReviewCodeContext, type ReviewAssignment } from '@recoder/shared';
 
 	const id = $derived(page.params.id ?? '');
@@ -163,13 +169,22 @@
 		};
 	});
 
-	const peekDiff = $derived(page.url.searchParams.get('view') === 'diff');
-	function setDiffView(open: boolean): void {
+	/** Conversation, Findings (focus mode) or Diff (inline mode), kept in the URL. */
+	const workspaceView = $derived.by((): 'findings' | 'diff' | null => {
+		const view = page.url.searchParams.get('view');
+		return view === 'findings' || view === 'diff' ? view : null;
+	});
+	const peekDiff = $derived(workspaceView !== null);
+	function setView(view: SessionView): Promise<void> {
 		const url = new URL(page.url);
-		if (open) url.searchParams.set('view', 'diff');
-		else url.searchParams.delete('view');
-		void goto(`${url.pathname}${url.search}`, { noScroll: true, keepFocus: true });
+		if (view === 'conversation') url.searchParams.delete('view');
+		else url.searchParams.set('view', view);
+		return goto(`${url.pathname}${url.search}`, { noScroll: true, keepFocus: true });
 	}
+	function setDiffView(open: boolean): void {
+		void setView(open ? 'diff' : 'conversation');
+	}
+	$effect(() => diffPrefs.useReview(backendReview?.id ?? null));
 	let chatOpen = $state(false);
 	let chatDraft = $state('');
 	let codeContext = $state<ReviewCodeContext | null>(null);
@@ -197,6 +212,30 @@
 	}
 
 	const isBackend = $derived(backendChecked && backendReview !== null);
+
+	// ⌘K palette: this session's scope, files, and the Orchestrator.
+	$effect(() => {
+		const review = backendReview;
+		if (!review) return;
+		const repo = recentSessions.repos.find((item) => item.id === review.repoId)?.name ?? review.repoId.slice(0, 8);
+		paletteContext.session = { id: review.id, repo: repo.split('/').pop() ?? repo, pr: review.prNumber };
+		paletteContext.ask = async (text) => {
+			setDiffView(false);
+			await serverApi.sendReviewMessage(review.id, ORCHESTRATOR_ID, text);
+		};
+		paletteContext.showView = (view) => setDiffView(view === 'diff');
+		return () => {
+			paletteContext.session = null;
+			paletteContext.ask = null;
+			paletteContext.showView = null;
+		};
+	});
+	$effect(() => {
+		paletteContext.files = backendFiles ?? [];
+		return () => {
+			paletteContext.files = [];
+		};
+	});
 
 	// Findings belong to the current session only: backend reviews get exactly
 	// their own findings (synced once, so local dismiss/accept is preserved),
@@ -372,6 +411,8 @@
 		additions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.additions, 0) : null}
 		deletions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
 		onOpenDiff={backendReview.status !== 'draft' ? () => setDiffView(true) : null}
+		onShowView={backendReview.status !== 'draft' ? (view) => setView(view) : null}
+		onOpenFinding={(finding) => { if (finding.file) { sessionFile.select(finding.file); userPickedFile = true; } setDiffView(true); }}
 		onRestart={() => void rerunReview()}
 		restarting={queueing}
 		actionError={backendError}
@@ -384,115 +425,95 @@
 	{@render diffWorkspace()}
 {/if}
 
+{#snippet diffMenu()}
+	{#if backendReview}<DropdownMenu.Item callback={() => setDiffView(false)}>Show conversation</DropdownMenu.Item>{/if}
+	{#if backendReview}<DropdownMenu.Item callback={() => usageOpen = true}>View token usage</DropdownMenu.Item>{/if}
+	<DropdownMenu.Separator />
+	<DropdownMenu.Item callback={() => void closeSessionTab(id)}>Close tab</DropdownMenu.Item>
+{/snippet}
+
 {#snippet diffWorkspace()}
 	{@const files = backendFiles ?? (isBackend ? [] : [fileDiff])}
 	{@const recent = recentSessions.recent.find((item) => item.id === id)}
 	<div class="review-workspace flex h-full min-h-0 flex-col">
-	<header class="flex min-h-14 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
-		<Typography.Title level={1} class="min-w-0 flex-1 basis-64 truncate text-sm font-normal tracking-normal" title={backendReview?.prTitle ?? session?.name}>{backendReview?.prTitle || session?.name || 'Review'}</Typography.Title>
-		<div class="ms-auto flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-foreground-muted">
-			{#if recent?.branch}<Typography.InlineCode class="max-w-40 truncate rounded-md px-1.5 py-0.5 text-xs font-normal" title={recent.branch}>{recent.branch}</Typography.InlineCode>{/if}
-			{#if reviewStream?.progress.orchestratorModel}<Typography.Metadata class="max-w-44 truncate font-mono text-xs" title={reviewStream.progress.orchestratorModel}>{reviewStream.progress.orchestratorModel}</Typography.Metadata>{/if}
-			<Sheet.Root bind:open={filesOpen}>
-				<Sheet.Trigger variant="quiet" class="!h-9 gap-3 !px-0 font-mono text-xs !font-normal text-foreground-muted" aria-label="Browse changed files">
-					{files.length} {files.length === 1 ? 'file' : 'files'}
-					<span class="text-success">+{files.reduce((sum, file) => sum + file.additions, 0)}</span>
-					<span class="text-error">−{files.reduce((sum, file) => sum + file.deletions, 0)}</span>
-				</Sheet.Trigger>
-				<Sheet.Content side="left" class="w-[400px] max-w-[calc(100%-1rem)] [&>[data-ui=sheet-surface]]:bg-background [&>[data-ui=sheet-surface]]:p-0">
-					<Sheet.Title class="sr-only">Changed files</Sheet.Title>
-					<SessionSidebar inSheet fileDiffs={isBackend ? (backendFiles ?? []) : null} onFileSelect={() => filesOpen = false} />
-				</Sheet.Content>
-			</Sheet.Root>
-			<Card.Root class="!h-9 !flex-row items-center !gap-0 rounded-lg border border-border-subtle bg-transparent !p-0 shadow-none">
-				<Button variant="ghost" class="!h-9 rounded-s-lg rounded-e-none !px-2.5 font-sans text-sm !font-normal" disabled={!backendReview} onclick={() => setDiffView(false)}>Conversation</Button>
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger variant="ghost" size="icon" class="!size-9 !min-w-9 rounded-s-none rounded-e-lg border-s border-border-subtle" aria-label="Conversation options" disabled={!backendReview}><ChevronDown size={13} aria-hidden="true" /></DropdownMenu.Trigger>
-					<DropdownMenu.Content>
-						{#if backendReview}<DropdownMenu.Item callback={() => usageOpen = true}>Usage</DropdownMenu.Item>{/if}
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			</Card.Root>
+	<SessionHeader
+		title={backendReview?.prTitle || session?.name || 'Review'}
+		branch={recent?.branch}
+		repo={session?.name}
+		prLabel={backendReview ? `#${backendReview.prNumber}` : session?.ref}
+		files={files.length}
+		additions={files.reduce((sum, file) => sum + file.additions, 0)}
+		deletions={files.reduce((sum, file) => sum + file.deletions, 0)}
+		view={workspaceView ?? 'diff'}
+		onView={backendReview ? setView : null}
+		onFiles={() => (filesOpen = true)}
+		filesLabel="Browse changed files"
+		menu={diffMenu}
+	/>
+	<Sheet.Root bind:open={filesOpen}>
+		<Sheet.Content side="left" class="w-[400px] max-w-[calc(100%-1rem)] [&>[data-ui=sheet-surface]]:bg-background [&>[data-ui=sheet-surface]]:p-0">
+			<Sheet.Title class="sr-only">Changed files</Sheet.Title>
+			<SessionSidebar inSheet fileDiffs={isBackend ? (backendFiles ?? []) : null} onFileSelect={() => filesOpen = false} />
+		</Sheet.Content>
+	</Sheet.Root>
+	{#if workspaceView !== 'findings'}
+		<div class="diff-toolbar">
+			<FindingsBar>
+				{#snippet trailing()}
+					{#if backendReview}
+						<Typography.Metadata class="review-state" role="status">
+							{#if reviewing}<Spinner size={13} class="text-sev-medium" aria-hidden="true" />Review running{:else if backendReview.status === 'failed'}Review interrupted{:else if backendReview.status === 'draft'}Ready to review{:else}<Check size={14} class="text-success" aria-hidden="true" />Review complete{/if}
+						</Typography.Metadata>
+						<Button id="ask-review" variant="outline" class="gap-2" aria-pressed={showChat} aria-expanded={showChat} aria-controls="interactive-review" onclick={() => showChat ? void closeChat() : openChat()}><MessageSquare size={15} aria-hidden="true" />Ask reviewer</Button>
+					{/if}
+				{/snippet}
+			</FindingsBar>
 		</div>
-	</header>
-	<div class="flex shrink-0 flex-wrap items-center gap-3 px-3 pb-3">
-		<FindingsBar />
-		{#if backendReview}
-			<div class="ms-auto flex items-center gap-3">
-				<Typography.Metadata class="flex items-center gap-2 text-xs" role="status">
-					{#if reviewing}<Spinner size={13} aria-hidden="true" />Review running{:else if backendReview.status === 'failed'}Review interrupted{:else if backendReview.status === 'draft'}Ready to review{:else}Review complete{/if}
-				</Typography.Metadata>
-				<Button id="ask-review" variant={showChat ? 'secondary' : 'outline'} class="gap-2 font-normal" aria-expanded={showChat} aria-controls="interactive-review" onclick={() => showChat ? void closeChat() : openChat()}><MessageSquare size={15} aria-hidden="true" />Ask reviewer</Button>
-			</div>
-		{/if}
-	</div>
+	{/if}
 	{#if filesError}
-		<Alert.Root variant="error" class="mx-3 mb-3 shrink-0"><Alert.Title>{filesError}</Alert.Title><Button variant="outline" onclick={() => filesRetryNonce++}>Retry loading diff</Button></Alert.Root>
+		<Alert.Root variant="error" class="mx-3 my-3 shrink-0"><Alert.Title>{filesError}</Alert.Title><Button variant="outline" class="mt-2 w-fit" onclick={() => filesRetryNonce++}>Retry loading diff</Button></Alert.Root>
 	{/if}
 	{#if backendError}
 		<Alert.Root variant="error" class="mx-3 mt-3 shrink-0">
 			<Alert.Title>Review data unavailable</Alert.Title>
-			<Alert.Description>
-				{backendDown
-					? `Review API unreachable (${backendError}) — showing local demo content.`
-					: backendError}
-			</Alert.Description>
-			<Button
-				variant="outline"
-				class="mt-2 w-fit font-sans"
-				onclick={() => (retryNonce += 1)}
-			>
-				Retry
-			</Button>
+			<Alert.Description>{backendDown ? `Review API unreachable (${backendError}) — showing local demo content.` : backendError}</Alert.Description>
+			<Button variant="outline" class="mt-2 w-fit" onclick={() => (retryNonce += 1)}>Retry</Button>
 		</Alert.Root>
 	{/if}
 			<div class="flex min-h-0 flex-1">
-				<div class="hidden w-[300px] shrink-0 lg:block 2xl:w-[340px] {sidePanelOpen ? 'max-2xl:!hidden' : ''}">
+				{#if workspaceView === 'findings'}
+					<div class="flex min-h-0 min-w-0 flex-1 {sidePanelOpen ? 'max-xl:hidden' : ''}">
+						<FindingsFocus files={files} toolCalls={reviewStream?.progress.toolCalls ?? []} branch={recent?.branch}
+							onFullFile={(finding) => { sessionFile.select(finding.file); userPickedFile = true; findingsStore.discuss(finding.id); setView('diff'); requestAnimationFrame(() => document.getElementById(`finding-${finding.id}`)?.scrollIntoView({ block: 'center' })); }} />
+					</div>
+				{:else}
+				<div class="diff-tree hidden lg:block {sidePanelOpen ? 'max-2xl:!hidden' : ''}">
 					<SessionSidebar fileDiffs={isBackend ? (backendFiles ?? []) : null} />
 				</div>
-				<div id="diff-panel" class="relative min-h-0 min-w-0 flex-1 {sidePanelOpen ? 'max-xl:hidden' : ''}">
+				<div id="diff-panel" class="relative flex min-h-0 min-w-0 flex-1 flex-col {sidePanelOpen ? 'max-xl:hidden' : ''}">
 					{#if isBackend && backendReview?.status === 'failed' && !backendFiles}
-						<Alert.Root variant="error" class="absolute inset-0 flex items-center justify-center p-6 text-center">
+						<Alert.Root variant="error" class="m-4">
 							<Alert.Title>Review failed</Alert.Title>
-							<Alert.Description class="max-w-md">
-								{backendReview.summary ?? 'The pipeline failed before producing a diff.'}
-							</Alert.Description>
-							<Alert.Description class="font-mono text-[12px]">
-								Fix the cause, then press Review above to retry.
-							</Alert.Description>
+							<Alert.Description class="max-w-md">{backendReview.summary ?? 'The pipeline failed before producing a diff.'}</Alert.Description>
+							<Alert.Description>Fix the cause, then restart the review from the conversation.</Alert.Description>
 						</Alert.Root>
 					{:else if isBackend && !backendFiles}
-						<div class="absolute inset-0" role="status" aria-label="Fetching PR diff">
-						<Card.Root class="h-full overflow-hidden p-4">
-							<div class="flex items-center gap-2 text-[14px] text-foreground-muted">
-								<Spinner size={15} aria-hidden="true" />
-								Fetching PR diff…
-							</div>
-							<div class="mt-4 flex flex-col gap-2.5">
-								<Skeleton class="h-4 w-11/12 rounded-md" />
-								<Skeleton class="h-4 w-full rounded-md" />
-								<Skeleton class="h-4 w-4/5 rounded-md" />
-								<Skeleton class="h-4 w-full rounded-md" />
-								<Skeleton class="h-4 w-3/5 rounded-md" />
-								<Skeleton class="h-4 w-5/6 rounded-md" />
-							</div>
-						</Card.Root>
+						<div class="diff-loading" role="status" aria-label="Fetching PR diff">
+							<Typography.Metadata>Fetching PR diff…</Typography.Metadata>
+							{#each ['w-11/12', 'w-full', 'w-4/5', 'w-full', 'w-3/5', 'w-5/6', 'w-11/12', 'w-2/3'] as width, i (i)}<Skeleton class="h-3.5 rounded-md {width}" />{/each}
 						</div>
 					{:else}
-						<ScrollArea
-							orientation="vertical"
-							aria-label="Code diff"
-							class="absolute inset-0 px-3 pb-3 pt-2"
-							showCues={false}
-						>
+						<DiffFileHeader diff={fileDiff} />
+						<ScrollArea orientation="vertical" aria-label="Code diff" class="min-h-0 flex-1" showCues={false}>
 							{#key fileDiff.path}
-								<div class="min-w-0">
-									<CodeDiff diff={fileDiff} findings={displayFindings} onAsk={isBackend ? openChat : undefined} />
+								<div class="min-w-0 page-enter">
+									<CodeDiff diff={fileDiff} findings={displayFindings} mode={diffPrefs.mode} onAsk={isBackend ? openChat : undefined} />
 								</div>
 							{/key}
 						</ScrollArea>
 					{/if}
 				</div>
+				{/if}
 				{#if threadsStore.openId}
 					{#key threadsStore.openId}
 						<ThreadPanel />

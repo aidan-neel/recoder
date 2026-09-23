@@ -30,6 +30,7 @@ export function groupTranscript(messages: ReviewChatMessage[], tools: ReviewTool
 	return groups;
 }
 
+/** "Read 4 files, searched once": the group header, written as a sentence. */
 export function taskGroupLabel(tools: ReviewToolCall[]): string {
 	let reads = 0, searches = 0, listings = 0, other = 0;
 	for (const tool of tools) {
@@ -39,10 +40,12 @@ export function taskGroupLabel(tools: ReviewToolCall[]): string {
 		else if (['list', 'listFiles'].includes(action)) listings++;
 		else other++;
 	}
-	return [
-		reads ? `${reads} file ${reads === 1 ? 'read' : 'reads'}` : '',
-		searches ? `${searches} ${searches === 1 ? 'search' : 'searches'}` : '',
-		listings ? `${listings} file ${listings === 1 ? 'listing' : 'listings'}` : '',
-		other ? `${other} ${other === 1 ? 'operation' : 'operations'}` : ''
-	].filter(Boolean).join(' · ');
+	const times = (n: number) => n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`;
+	const parts = [
+		reads ? `read ${reads} ${reads === 1 ? 'file' : 'files'}` : '',
+		searches ? `searched ${times(searches)}` : '',
+		listings ? `listed files ${times(listings)}` : '',
+		other ? `ran ${other} ${other === 1 ? 'tool' : 'tools'}` : ''
+	].filter(Boolean).join(', ');
+	return parts.charAt(0).toUpperCase() + parts.slice(1);
 }

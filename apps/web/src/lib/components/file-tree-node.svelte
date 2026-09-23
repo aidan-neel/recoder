@@ -1,13 +1,13 @@
 <script lang="ts">
 	import { untrack } from 'svelte';
-	import Minus from '@lucide/svelte/icons/minus';
-	import Plus from '@lucide/svelte/icons/plus';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import FileIcon from '@lucide/svelte/icons/file';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import { FINDING_DOT, type FileBadge, type TreeNode } from '$lib/file-tree';
-	import { getFileIcon, getFolderIcon } from '$lib/file-icons';
 	import { folderOpen } from '$lib/folder-open.svelte';
 	import FileTreeNode from './file-tree-node.svelte';
+	import { diffPrefs } from '$lib/diff-prefs.svelte';
 
 	interface Props {
 		node: TreeNode;
@@ -33,20 +33,11 @@
 
 {#if node.kind === 'folder'}
 	<Collapsible.Root bind:open>
-		<Collapsible.Trigger
-		class="flex h-9 w-full items-center gap-1.5 rounded-md px-1 text-left text-[16px] text-foreground-muted transition-colors hover:bg-secondary/60 hover:text-foreground"
-		>
-			{#if open}
-				<Minus size={12} />
-			{:else}
-				<Plus size={12} />
-			{/if}
-			<span class="flex shrink-0 items-center [&>svg]:h-4 [&>svg]:w-4">
-				{@html getFolderIcon(node.name, open)}
-			</span>
-			<span class="font-mono text-[15px]">{node.name}</span>
+		<Collapsible.Trigger class="tree-folder">
+			<ChevronDown size={12} class="tree-chevron" aria-hidden="true" />
+			<span class="truncate">{node.name}</span>
 		</Collapsible.Trigger>
-		<Collapsible.Content class="ml-[9px] space-y-px border-l border-solid border-border py-px pl-2">
+		<Collapsible.Content class="tree-children">
 			{#each node.children as child (child.kind === 'file' ? child.id : child.name)}
 				<FileTreeNode node={child} {selectedId} {onSelect} parentPath={fullPath} {badges} {onJump} />
 			{/each}
@@ -55,28 +46,22 @@
 {:else}
 	{@const selected = node.id === selectedId}
 	{@const badge = badges?.get(node.id)}
-	<div
-		class="flex h-9 w-full items-center gap-2 rounded-md px-2 transition-colors {selected
-			? 'bg-secondary text-foreground'
-			: 'text-foreground-muted hover:bg-secondary/60 hover:text-foreground'}"
-	>
+	<div class="tree-file" data-selected={selected || undefined} data-viewed={diffPrefs.isViewed(node.id) || undefined}>
 		<Button
 			unstyled
 			onclick={() => onSelect(node.id)}
 			aria-current={selected}
 			aria-label="Show {node.name}"
-			class="flex min-w-0 flex-1 items-center gap-2 text-left"
+			class="tree-file-select"
 		>
-			<span class="flex shrink-0 items-center [&>svg]:h-4 [&>svg]:w-4">
-				{@html getFileIcon(node.name)}
-			</span>
-			<span class="min-w-0 flex-1 truncate font-mono text-[15px]">{node.name}</span>
-			<span class="flex shrink-0 items-center gap-1.5 font-mono text-[14px] select-none">
+			<FileIcon size={13} class="shrink-0 text-fg-faint" aria-hidden="true" />
+			<span class="tree-file-name">{node.name}</span>
+			<span class="tree-file-stats">
 				{#if node.additions > 0}
 					<span class="text-success">+{node.additions}</span>
 				{/if}
 				{#if node.deletions > 0}
-					<span class="text-error">-{node.deletions}</span>
+					<span class="text-danger">−{node.deletions}</span>
 				{/if}
 				{#if !(badge && onJump) && node.finding}
 					<span
@@ -94,7 +79,7 @@
 				onclick={() => onJump(node.id, badge.findingId)}
 				title="Jump to finding"
 				aria-label="{badge.count} finding{badge.count === 1 ? '' : 's'} in {node.name} — jump to finding"
-				class="shrink-0 font-mono text-[12px] select-none"
+				class="tree-file-count"
 				style={`color: ${FINDING_DOT[badge.kind]}`}
 			>
 				{badge.count}

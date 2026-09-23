@@ -4,6 +4,7 @@
 	import ReviewingView, { type ReviewingFinding } from './reviewing-view.svelte';
 	import { serverApi } from '$lib/server-api';
 	import { recentSessions } from '$lib/recent-sessions.svelte';
+	import { mapBackendFinding } from '$lib/findings.svelte';
 
 	interface Props {
 		review: Review;
@@ -13,11 +14,13 @@
 		additions?: number | null;
 		deletions?: number | null;
 		onOpenDiff?: (() => void) | null;
+		onShowView?: ((view: 'findings' | 'diff') => void | Promise<void>) | null;
+		onOpenFinding?: ((finding: ReviewingFinding) => void) | null;
 		onRestart?: (() => void) | null;
 		actionError?: string | null;
 		restarting?: boolean;
 	}
-	let { review, stream, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onRestart = null, actionError = null, restarting = false }: Props = $props();
+	let { review, stream, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onShowView = null, onOpenFinding = null, onRestart = null, actionError = null, restarting = false }: Props = $props();
 	const progress = $derived(stream.progress);
 	const connection = $derived(stream.connection);
 	let now = $state(Date.now());
@@ -41,9 +44,11 @@
 	const confirmed = $derived(status === 'passed');
 	const viewFindings = $derived<ReviewingFinding[]>(!active ? review.findings.map((finding, i) => ({
 		id: 'F-' + String(i + 1).padStart(2, '0'), agent: finding.agent ?? null,
-		severity: finding.severity === 'error' ? 'high' : finding.severity === 'warning' ? 'medium' : 'low',
-		title: finding.message.split('\n')[0].replace(/^\[[^\]]+\]\s*/, '') || finding.file,
+		severity: finding.severity === 'error' ? 'high' : finding.severity === 'warning' ? 'medium' : 'info',
+		title: mapBackendFinding(finding, i).title || finding.file,
 		location: finding.file + (finding.line ? ':' + finding.line : ''),
+		file: finding.file,
+		line: finding.line ?? null,
 		confirmed
 	})) : []);
 	const stageIndex = $derived(
@@ -84,6 +89,8 @@
 	pendingCount={assignments.filter((assignment) => assignment.status === 'running' || assignment.status === 'queued' || assignment.status === 'waiting').length}
 	pipelineLogs={progress.activity.map((entry) => entry.message)}
 	{onOpenDiff}
+	{onShowView}
+	{onOpenFinding}
 	{onRestart}
 	{restarting}
 	stage={stageIndex}

@@ -4,6 +4,7 @@ import { logger } from 'hono/logger';
 import { env } from './env';
 import auth from './routes/auth';
 import health from './routes/health';
+import home from './routes/home';
 import settings from './routes/settings';
 import repos from './routes/repos';
 import reviews from './routes/reviews';
@@ -28,6 +29,7 @@ app.get('/', (c) =>
 );
 app.route('/health', health);
 app.route('/api/auth', auth);
+app.route('/api/home', home);
 app.route('/api/settings', settings);
 app.route('/api/repos', repos);
 app.route('/api/reviews', reviews);

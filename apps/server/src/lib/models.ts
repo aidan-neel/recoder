@@ -86,16 +86,21 @@ export function configForRole(role: ReviewRole): RoleConfig {
 
 function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 	const stored = getStoredSettings();
-	const reasoningEffort = stored.roleEfforts?.[role];
+	// "Apply to all specialists": every role runs on the orchestrator's model and effort.
+	const followOrchestrator = orchestrator || stored.applyToSpecialists === true;
+	const requested = followOrchestrator
+		? (stored.orchestratorEffort ?? stored.roleEfforts?.correctness)
+		: stored.roleEfforts?.[role];
 	const eff = effectiveReviewEnv();
 	const entries = stored.models ?? [];
-	const entryId = (orchestrator ? stored.orchestratorModelId : stored.roles?.[role] ?? stored.specialistModelId)
+	const entryId = (followOrchestrator ? stored.orchestratorModelId : stored.roles?.[role] ?? stored.specialistModelId)
 		?? stored.sharedModelId ?? entries[0]?.id;
 	// A dangling pointer (entry deleted out-of-band) falls back to the first entry.
 	const entry = entries.find((e) => e.id === entryId) ?? entries[0];
 	if (entry) {
+		const reasoningEffort = supportedEffort(requested, entry.efforts, entry.defaultEffort);
 		if (entry.provider === 'codex') {
-			return { role, provider: 'codex', model: entry.model, baseUrl: '', apiKey: '', reasoningEffort: reasoningEffort ?? 'medium' };
+			return { role, provider: 'codex', model: entry.model, baseUrl: '', apiKey: '', reasoningEffort: reasoningEffort ?? entry.defaultEffort ?? 'medium' };
 		}
 		const baseUrl = entry.baseUrl || eff.baseUrl;
 		const apiKey = entry.apiKey || eff.apiKey;
@@ -107,8 +112,23 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 		return { role, baseUrl, apiKey, model: entry.model, reasoningEffort };
 	}
 	const shared = reviewConfig();
-	const override = orchestrator ? undefined : eff.roles[role];
-	return { role, baseUrl: shared.baseUrl, apiKey: shared.apiKey, model: override || shared.model, reasoningEffort };
+	const override = followOrchestrator ? undefined : eff.roles[role];
+	return { role, baseUrl: shared.baseUrl, apiKey: shared.apiKey, model: override || shared.model, reasoningEffort: requested ?? undefined };
+}
+
+/**
+ * A saved effort the model no longer offers (e.g. after switching models) falls
+ * back to the model default: medium when offered, else the first listed level.
+ */
+function supportedEffort(
+	requested: ReasoningEffort | null | undefined,
+	offered: ReasoningEffort[] | undefined,
+	fallback: ReasoningEffort | undefined
+): ReasoningEffort | undefined {
+	if (!requested) return undefined;
+	if (!offered?.length || offered.includes(requested)) return requested;
+	if (fallback && offered.includes(fallback)) return fallback;
+	return offered.includes('medium') ? 'medium' : offered[0];
 }
 
 /** Caps so one PR can't blow the context window. */

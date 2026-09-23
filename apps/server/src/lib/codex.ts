@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { CodexConnection, CodexModel } from '@recoder/shared';
+import { REASONING_EFFORTS, type CodexConnection, type CodexModel, type ReasoningEffort } from '@recoder/shared';
 import { ChatGptAuth } from './chatgpt-auth';
 import { chatGptRequest, readChatGptResponse } from './chatgpt-responses';
 import { LlmError, type ChatOptions } from './llm';
@@ -59,18 +59,34 @@ export class ChatGptProvider {
 		const response = await this.auth.authorizedFetch('/codex/models?client_version=0.153.4');
 		await this.checkResponse(response, 'models');
 		const raw = await response.json().catch(() => { throw new LlmError(502, 'ChatGPT returned an invalid model catalog. Try again.'); });
-		const parsed = z.object({ models: z.array(z.object({ slug: z.string().min(1), display_name: z.string().optional(), visibility: z.string().optional(), supported_reasoning_efforts: z.array(z.string()).optional(), reasoning_efforts: z.array(z.string()).optional(), efforts: z.array(z.string()).optional() })) }).safeParse(raw);
+		// Levels arrive as `{ effort, description }` objects; older catalogs used plain strings.
+		const level = z.union([z.string(), z.object({ effort: z.string() }).passthrough()]);
+		const parsed = z.object({ models: z.array(z.object({
+			slug: z.string().min(1),
+			display_name: z.string().optional(),
+			visibility: z.string().optional(),
+			default_reasoning_level: z.string().nullish(),
+			supported_reasoning_levels: z.array(level).nullish(),
+			supported_reasoning_efforts: z.array(z.string()).nullish(),
+			reasoning_efforts: z.array(z.string()).nullish(),
+			efforts: z.array(z.string()).nullish()
+		}).passthrough()) }).safeParse(raw);
 		if (!parsed.success) throw new LlmError(502, 'ChatGPT returned an invalid model catalog. Try again.');
-		const effortOrder = ['minimal', 'low', 'medium', 'high'] as const;
+		const isEffort = (value: unknown): value is ReasoningEffort => (REASONING_EFFORTS as readonly unknown[]).includes(value);
 		return parsed.data.models
 			.filter((model) => !model.visibility || model.visibility === 'list')
 			.map((model) => {
-				const raw = model.supported_reasoning_efforts ?? model.reasoning_efforts ?? model.efforts;
-				const efforts = raw ? effortOrder.filter((effort) => raw.includes(effort)) : [];
+				const raw = (model.supported_reasoning_levels ?? model.supported_reasoning_efforts ?? model.reasoning_efforts ?? model.efforts ?? [])
+					.map((item) => (typeof item === 'string' ? item : item.effort));
+				const efforts = REASONING_EFFORTS.filter((effort) => raw.includes(effort));
+				const defaultEffort = isEffort(model.default_reasoning_level) && efforts.includes(model.default_reasoning_level)
+					? model.default_reasoning_level
+					: undefined;
 				return {
 					id: model.slug,
 					label: model.display_name || model.slug,
-					...(efforts.length ? { efforts: [...efforts] } : {})
+					...(efforts.length ? { efforts: [...efforts] } : {}),
+					...(defaultEffort ? { defaultEffort } : {})
 				};
 			});
 	}
