@@ -28,3 +28,6 @@ When finished, output STRICT JSON:
 Give every finding a concise, issue-specific title (about 4–9 words, at most 120 characters). Use plain sentence case without an ID, severity, or category prefix. Keep the detailed explanation and evidence in body.
 "line" is a NEW-side number unless "side":"old". Deleted-only issues may omit line (file-level) or use an old-side location. Never invent a new-side line for deleted code.
 Use "high" only for issues that are certainly reachable and damaging.`;
+
+/** How anything shown to the developer in the review chat should read. */
+export const CHAT_STYLE = `Writing style: be minimal. Use as few words as the point needs, usually one to three short sentences in total, and never more than 60 words unless the developer asks for detail. Put each separate subject in its own short paragraph, with a blank line between paragraphs; never run different subjects together in one paragraph. No preamble, no restating the question, no closing summary, no offers of more help. Use a list only for three or more parallel items.`;

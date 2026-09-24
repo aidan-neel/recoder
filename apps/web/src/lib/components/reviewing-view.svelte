@@ -1,11 +1,13 @@
 <script lang="ts" module>
-	import type { CoverageGap, CoverageSummary, ReviewAssignment, ReviewChatMessage, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
+	import type { CoverageGap, CoverageSummary, ReviewAssignment, ReviewGuidelinesUsed, ReviewChatMessage, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
 	export interface ReviewingFinding {
 		id: string;
 		agent: string | null;
 		severity: 'high' | 'medium' | 'low' | 'info';
 		title: string;
 		location: string | null;
+		file?: string;
+		line?: number | null;
 		confirmed?: boolean;
 	}
 	export interface ReviewingMeta {
@@ -24,26 +26,31 @@
 	import { page } from '$app/state';
 	import { ORCHESTRATOR_ID } from '@recoder/shared';
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
+	import Check from '@lucide/svelte/icons/check';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
-	import Ellipsis from '@lucide/svelte/icons/ellipsis';
-	import CircleAlert from '@lucide/svelte/icons/circle-alert';
-	import Check from '@lucide/svelte/icons/check';
-	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
-	import { Badge, type BadgeVariant } from '@sivir-ui/svelte/components/badge';
+	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
-	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
-	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
-	import { TaskSteps } from '@sivir-ui/svelte/components/task-steps';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import ReviewMetricsModal from './review-metrics-modal.svelte';
 	import ReviewConversation from './review-conversation.svelte';
+	import ReviewResultsRail from './review-results-rail.svelte';
+	import ReviewSteps from './review-steps.svelte';
+	import Disclosure from './ui/disclosure.svelte';
+	import ReasoningSteps from './reasoning-steps.svelte';
+	import PrChecks from './pr-checks.svelte';
+	import SessionHeader from './session-header.svelte';
 	import FindingSeverity from './finding-severity.svelte';
+	import { closeSessionTab } from '$lib/session-tabs';
+	import { requestDeleteSession } from '$lib/delete-session.svelte';
+	import { formatAgentName } from '$lib/threads.svelte';
+	import { guidelinesStore } from '$lib/guidelines.svelte';
 
 	interface Props {
 		reviewId?: string;
@@ -61,6 +68,9 @@
 		errorMessage?: string | null;
 		connectionLost?: boolean;
 		onOpenDiff: (() => void) | null;
+		/** Switch to the Findings or Diff workspace. Falls back to `onOpenDiff`. */
+		onShowView?: ((view: 'findings' | 'diff') => void | Promise<void>) | null;
+		onOpenFinding?: ((finding: ReviewingFinding) => void) | null;
 		onRestart: (() => void) | null;
 		onSend?: (assignmentId: string, text: string) => Promise<void>;
 		onStop?: (assignmentId: string) => Promise<void>;
@@ -78,15 +88,22 @@
 		pendingCount?: number;
 		coverage?: CoverageSummary | null;
 		coverageGaps?: CoverageGap[];
-		pipelineLogs?: string[];
+		/** Pipeline events (oldest first), shown while the review runs. */
+		activity?: { message: string; agent?: string }[];
+		/** Show the pull request's CI checks in the session bar. */
+		showChecks?: boolean;
+		/** The tracked repo, for its review guidelines. */
+		repoId?: string | null;
+		/** Owner guidelines this review ran with. */
+		guidelines?: ReviewGuidelinesUsed | null;
 		doneHref?: string | null;
 	}
 	let {
 		reviewId, title, meta, assignments = [], messages = [], orchestratorModel,
 		reasoning = [], toolCalls = [], active = true, failed = false,
-		errorMessage = null, connectionLost = false, onOpenDiff, onRestart,
+		errorMessage = null, connectionLost = false, onOpenDiff, onShowView = null, onOpenFinding = null, onRestart,
 		onSend, onStop, restarting = false, now = Date.now(), fullscreen = false, stage = 0, tasks = [],
-		planSummary = null, pipelineLogs = [], stageLabel = 'Preparing review', coverage = null,
+		planSummary = null, activity = [], showChecks = false, repoId = null, guidelines = null, stageLabel = 'Preparing review', coverage = null, coverageGaps = [],
 		awaitingPrompt = false, completedAt, findings = []
 	}: Props = $props();
 
@@ -103,6 +120,9 @@
 	});
 	const selected = $derived(specialists.find((assignment) => assignment.id === page.url.searchParams.get('agent')) ?? orchestrator);
 	const isOrchestrator = $derived(selected.id === ORCHESTRATOR_ID);
+	const finished = $derived(!active && !failed && !awaitingPrompt);
+	const showSteps = $derived(!awaitingPrompt && (active || failed));
+	const showRail = $derived(isOrchestrator && !active && !awaitingPrompt && (findings.length > 0 || specialists.length > 0));
 
 	/** URL-backed chats support browser history, reloads, and opening in a new tab. */
 	function conversationHref(assignmentId: string): string {
@@ -112,157 +132,210 @@
 		return `${url.pathname}${url.search}${url.hash}`;
 	}
 	const specialistsAt = $derived(specialists.map((item) => item.queuedAt ?? item.startedAt).filter((at): at is string => !!at).sort()[0]);
-	const pending = $derived(specialists.filter((item) => ['running', 'waiting', 'queued'].includes(item.status)).length);
+	const running = $derived(specialists.filter((item) => ['running', 'waiting', 'queued'].includes(item.status)));
 	const finalization = $derived(tasks.find((task) => task.id === 'consolidation'));
 	const finalizationSeconds = $derived(finalization?.elapsedMs !== undefined ? Math.max(0, Math.round(finalization.elapsedMs / 1000)) : null);
-	const progressLabel = $derived(!active ? failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}` : pending ? 'Waiting for specialists…' : stageLabel);
 	const finalReasoning = $derived(reasoning.filter((entry) => (entry.assignmentId ?? ORCHESTRATOR_ID) === ORCHESTRATOR_ID && finalization?.startedAt && Date.parse(entry.at) >= Date.parse(finalization.startedAt)));
+	/** Consecutive repeats collapse (events are often emitted twice); newest last. */
+	const recentActivity = $derived.by(() => {
+		const rows: { key: number; agent: string; message: string }[] = [];
+		for (const [i, item] of activity.entries()) {
+			const agent = item.agent ? formatAgentName(item.agent) : 'Review';
+			const last = rows.at(-1);
+			if (last && last.agent === agent && last.message === item.message) continue;
+			rows.push({ key: i, agent, message: item.message });
+		}
+		return rows.slice(-8);
+	});
+	/** Finalization at a glance, in the tool-row grid (label · value · meta). */
+	const finalFacts = $derived.by(() => {
+		const facts: { label: string; value: string; meta?: string; mono?: boolean; open?: () => void }[] = [];
+		const candidateCount = specialists.reduce((sum, item) => sum + (item.candidateCount ?? 0), 0);
+		if (candidateCount) facts.push({ label: 'Candidates', value: `${candidateCount} from ${specialists.length} ${specialists.length === 1 ? 'specialist' : 'specialists'}` });
+		if (finished) facts.push({ label: 'Confirmed', value: `${findings.length} ${findings.length === 1 ? 'finding' : 'findings'}` });
+		if (coverage) facts.push({ label: 'Coverage', value: `${coverage.reviewed} of ${coverage.total} changes${coverage.partial ? ` · ${coverage.partial} partial` : ''}` });
+		if (guidelines?.layers.length) {
+			const hasRepoLayer = guidelines.layers.some((layer) => layer.source === 'repo');
+			const value = guidelines.layers.map((layer) => layer.source === 'global'
+				? 'Global'
+				: `${layer.path}${layer.ref ? ` @ ${layer.ref}` : ''}${layer.sha ? ` ${layer.sha.slice(0, 7)}` : ''}`).join(' + ');
+			const target = hasRepoLayer && repoId ? { kind: 'repo' as const, repoId } : { kind: 'global' as const };
+			facts.push({ label: 'Guidelines', value, open: () => guidelinesStore.open(target) });
+		}
+		if (finalization?.model) facts.push({ label: 'Model', value: finalization.model, mono: true, meta: finalization.elapsedMs !== undefined ? `${(finalization.elapsedMs / 1000).toFixed(1)}s` : undefined });
+		return facts;
+	});
 	const chatReasoning = $derived(reasoning.filter((entry) => !finalReasoning.some((item) => item.id === entry.id)));
-	const findingCounts = $derived([
-		{ severity: 'high' as const, count: findings.filter((finding) => finding.severity === 'high').length },
-		{ severity: 'medium' as const, count: findings.filter((finding) => finding.severity === 'medium').length },
-		{ severity: 'low' as const, count: findings.filter((finding) => finding.severity === 'low' || finding.severity === 'info').length }
-	]);
-	const reviewSteps = [
-		{ id: 'checkout', label: 'Prepare repository' },
-		{ id: 'plan', label: 'Plan review' },
-		{ id: 'specialists', label: 'Specialist reviews' },
-		{ id: 'consolidate', label: 'Consolidate findings' }
-	];
-	const currentStep = $derived(!active && !failed ? reviewSteps.length : Math.min(stage, reviewSteps.length - 1));
+	const findingCounts = $derived((['high', 'medium', 'low', 'info'] as const)
+		.map((severity) => ({ severity, count: findings.filter((finding) => finding.severity === severity).length }))
+		.filter((item) => item.count > 0));
+	const currentStep = $derived(!active && !failed ? 4 : Math.min(stage, 3));
 
-	function statusFor(assignment: ReviewAssignment): { label: string; variant: BadgeVariant } {
+	/** "correctness and performance", "security, docs and 2 more". */
+	function nameList(items: ReviewAssignment[]): string {
+		const names = items.map((item) => formatAgentName(item.role).toLowerCase());
+		if (names.length <= 1) return names[0] ?? '';
+		if (names.length <= 3) return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+		return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
+	}
+	const footerLabel = $derived(running.length ? `Waiting on ${nameList(running)}` : stageLabel);
+
+	function statusFor(assignment: ReviewAssignment): { label: string; tone: string } {
 		switch (assignment.status) {
-			case 'running': return { label: active ? 'Reviewing' : 'Interrupted', variant: active ? 'warning' : 'error' };
-			case 'waiting': return { label: 'Waiting', variant: 'secondary' };
-			case 'queued': return { label: 'Queued', variant: 'outline' };
-			case 'done': return { label: 'Finished', variant: 'success' };
-			case 'partial': return { label: 'Incomplete', variant: 'warning' };
-			case 'error': return { label: 'Failed', variant: 'error' };
-			case 'skipped': return { label: 'Skipped', variant: 'secondary' };
+			case 'running': return active ? { label: 'Reviewing', tone: 'running' } : { label: 'Interrupted', tone: 'danger' };
+			case 'waiting': return { label: 'Waiting', tone: 'idle' };
+			case 'queued': return { label: 'Queued', tone: 'idle' };
+			case 'done': return { label: 'Finished', tone: 'success' };
+			case 'partial': return { label: 'Incomplete', tone: 'running' };
+			case 'error': return { label: 'Failed', tone: 'danger' };
+			case 'skipped': return { label: 'Skipped', tone: 'idle' };
 		}
 	}
 </script>
 
-{#snippet specialistsContent()}
-	<section class="flex min-w-0 flex-col gap-3" aria-label="Specialists">
-		<Collapsible.Root>
-			<Collapsible.Trigger class="review-disclosure">
-				Created {specialists.length} {specialists.length === 1 ? 'specialist' : 'specialists'}
-				<ChevronRight size={14} aria-hidden="true" />
-			</Collapsible.Trigger>
-			<Collapsible.Content class="pb-2">
-				{#each specialists as assignment (assignment.id)}
-					<Typography.Text class="mb-2 text-sm"><span class="font-medium">{assignment.title}:</span> {assignment.reason}</Typography.Text>
-				{/each}
-			</Collapsible.Content>
-		</Collapsible.Root>
-		{#if planSummary}<Markdown content={planSummary} class="text-sm" />{/if}
-		<Card.Root class="!gap-0 overflow-hidden rounded-xl border border-border bg-transparent !p-0 shadow-none">
-			{#each specialists as assignment (assignment.id)}
-				{@const status = statusFor(assignment)}
-					<Button href={conversationHref(assignment.id)} variant="ghost" class="specialist-row h-auto min-h-[68px] w-full justify-start rounded-none !px-3 !py-3 text-left" aria-label={`Open ${assignment.title} conversation`}>
-						<span class="flex min-w-0 flex-1 flex-col gap-1">
-							<span class="flex min-w-0 items-center justify-between gap-3">
-								<span class="truncate text-sm font-normal">{assignment.title}</span>
-								<Badge variant={status.variant} dot={assignment.status === 'done'} class="min-h-[23px] shrink-0 gap-1 rounded-md px-1.5 py-1 text-xs font-normal">
-									{#if assignment.status === 'running' && active}<Spinner size={11} aria-hidden="true" />
-									{:else if status.variant === 'error'}<CircleAlert size={11} aria-hidden="true" />{/if}
-									{status.label}
-								</Badge>
-							</span>
-							<Typography.Metadata class="truncate font-mono text-xs font-normal" title={assignment.currentOperation || assignment.reason}>{assignment.currentOperation || assignment.reason || status.label}</Typography.Metadata>
+{#snippet sessionMenu()}
+	{#if onOpenDiff}<DropdownMenu.Item callback={onOpenDiff}>Open diff</DropdownMenu.Item>{/if}
+	{#if reviewId}<DropdownMenu.Item callback={() => metricsOpen = true}>View token usage</DropdownMenu.Item>{/if}
+	{#if repoId}{@const id = repoId}<DropdownMenu.Item callback={() => guidelinesStore.open({ kind: 'repo', repoId: id })}>Review guidelines</DropdownMenu.Item>{/if}
+	{#if onRestart}<DropdownMenu.Item disabled={restarting} callback={() => restartOpen = true}>{restarting ? 'Restarting…' : 'Restart review'}</DropdownMenu.Item>{/if}
+	{#if reviewId}{@const id = reviewId}<DropdownMenu.Separator /><DropdownMenu.Item callback={() => void closeSessionTab(id)}>Close tab</DropdownMenu.Item><DropdownMenu.Item class="menu-danger" callback={() => requestDeleteSession(id)}>Delete session</DropdownMenu.Item>{/if}
+{/snippet}
+
+{#snippet specialistRows()}
+	<ul class="specialist-list" aria-label="Specialists">
+		{#each specialists as assignment (assignment.id)}
+			{@const status = statusFor(assignment)}
+			<li>
+				<Button href={conversationHref(assignment.id)} variant="ghost" class="specialist-row" aria-label={`Open ${formatAgentName(assignment.role)} conversation`}>
+					<span class="specialist-main">
+						<span class="specialist-name-line">
+							<span class="specialist-name">{formatAgentName(assignment.role)}</span>
+							{#if assignment.model}<span class="specialist-model">{assignment.model}</span>{/if}
 						</span>
-					</Button>
+						<span class="specialist-op" title={assignment.currentOperation || assignment.title}>{assignment.currentOperation || assignment.title}</span>
+					</span>
+					<Badge variant="secondary" class="status-chip" data-tone={status.tone}>
+						{#if assignment.status === 'running' && active}<Spinner size={12} aria-hidden="true" />{/if}
+						{status.label}
+					</Badge>
+					<ChevronRight size={16} class="specialist-chevron" aria-hidden="true" />
+				</Button>
+			</li>
+		{/each}
+	</ul>
+{/snippet}
+
+{#snippet specialistsContent()}
+	<section class="specialists" aria-label="Specialists">
+		<Disclosure>
+			{#snippet label()}Created {specialists.length} {specialists.length === 1 ? 'specialist' : 'specialists'}{/snippet}
+			{#if planSummary}<Markdown content={planSummary} />{/if}
+			{#each specialists as assignment (assignment.id)}
+				<Typography.Text><span class="text-fg-secondary">{formatAgentName(assignment.role)}:</span> {assignment.reason || assignment.title}</Typography.Text>
 			{/each}
-		</Card.Root>
+			{#if finished}{@render specialistRows()}{/if}
+		</Disclosure>
+		{#if !finished}{@render specialistRows()}{/if}
 	</section>
 {/snippet}
 
 {#snippet progressContent()}
-	<Collapsible.Root>
-		<Collapsible.Trigger class="review-disclosure" >
-			<span class={failed ? 'text-error' : ''}>{progressLabel}</span><ChevronRight size={14} aria-hidden="true" />
-		</Collapsible.Trigger>
-		<Collapsible.Content class="space-y-4 py-3">
-			{#each finalReasoning as entry (entry.id)}<Markdown content={entry.text} streaming={active && entry.status === 'streaming'} />{/each}
-			<TaskSteps steps={reviewSteps} current={currentStep} {failed} label="Review progress" />
-			<Typography.Metadata class="block font-mono">{meta.repo} {meta.prLabel} · {meta.elapsed}</Typography.Metadata>
-			{#if coverage}<Typography.Text class="text-sm text-foreground-muted">{coverage.reviewed} of {coverage.total} changes reviewed{coverage.partial ? ` · ${coverage.partial} partial` : ''}</Typography.Text>{/if}
-			<ScrollArea showCues={false} class="max-h-64" aria-label="Review activity">
-				{#each tasks as task (task.id)}<Typography.Text class="mb-2 text-xs text-foreground-muted"><span class="font-medium">{task.label}</span> · {task.message || task.status}</Typography.Text>{/each}
-				{#each pipelineLogs as log, i (i)}<Typography.Text class="mb-1 break-words font-mono text-xs text-foreground-muted">{log}</Typography.Text>{/each}
-			</ScrollArea>
-		</Collapsible.Content>
-	</Collapsible.Root>
-	{#if !active && !failed}
-		<Card.Root class="review-completion mt-2 !flex-row flex-wrap items-center justify-between !gap-4 rounded-xl border border-border-subtle bg-transparent !p-4 shadow-none">
-			<Card.Content class="min-w-0 !space-y-2">
-				<Typography.Text class="flex items-center gap-2 text-sm font-normal text-foreground"><Check size={15} class="shrink-0 text-success" aria-hidden="true" />Review finished with {findings.length} {findings.length === 1 ? 'finding' : 'findings'}</Typography.Text>
-				{#if findings.length}
-					<div class="flex flex-wrap items-center gap-2 ps-[23px]" aria-label="Findings by severity">
-						{#each findingCounts.filter((item) => item.count > 0) as item (item.severity)}
-							<FindingSeverity severity={item.severity} count={item.count} />
-						{/each}
-					</div>
-				{/if}
-			</Card.Content>
-			<Button variant="outline" onclick={onOpenDiff ?? undefined} disabled={!onOpenDiff} class="shrink-0 gap-2 bg-transparent font-normal">Open Review <ArrowUpRight size={14} aria-hidden="true" /></Button>
-		</Card.Root>
-	{/if}
+	<Disclosure status={active ? 'running' : failed ? 'error' : 'done'} bodyClass="finalize-body">
+		{#snippet label()}{active ? footerLabel : failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
+		<ReasoningSteps entries={finalReasoning} live={active} />
+		{#if (active || failed) && recentActivity.length}
+			<div class="fact-rows" role="log" aria-label="Recent activity">
+				{#each recentActivity as row (row.key)}
+					<Typography.Text class="fact-row" title={row.message}><span class="fact-label">{row.agent}</span><span class="fact-value">{row.message}</span></Typography.Text>
+				{/each}
+			</div>
+		{/if}
+		{#if finalFacts.length}
+			<div class="fact-rows" aria-label="Finalization summary">
+				{#each finalFacts as fact (fact.label)}
+					<Typography.Text class="fact-row"><span class="fact-label">{fact.label}</span>{#if fact.open}<Button unstyled class="fact-value fact-link" title="Edit these guidelines" onclick={fact.open}>{fact.value}</Button>{:else}<span class="fact-value" class:font-mono={fact.mono}>{fact.value}</span>{/if}{#if fact.meta}<span class="fact-meta">{fact.meta}</span>{/if}</Typography.Text>
+				{/each}
+			</div>
+		{/if}
+	</Disclosure>
+{/snippet}
+
+{#snippet headerChecks()}
+	{#if reviewId}<div class="findings-toolbar-end"><PrChecks {reviewId} /></div>{/if}
+{/snippet}
+
+{#snippet resultCard()}
+	<Card.Root class="review-result">
+		<div class="review-result-text">
+			<Typography.Text class="review-result-title"><Check size={16} class="shrink-0 text-success" aria-hidden="true" />Review finished with {findings.length} {findings.length === 1 ? 'finding' : 'findings'}</Typography.Text>
+			{#if findingCounts.length}
+				<div class="review-result-pills" aria-label="Findings by severity">
+					{#each findingCounts as item (item.severity)}<FindingSeverity severity={item.severity} count={item.count} />{/each}
+				</div>
+			{/if}
+		</div>
+		<Button onclick={onOpenDiff ?? undefined} disabled={!onOpenDiff} class="shrink-0 gap-2">Open review <ArrowUpRight size={14} aria-hidden="true" /></Button>
+	</Card.Root>
 {/snippet}
 
 <div class="review-workspace flex min-h-0 flex-col {fullscreen ? 'h-full' : 'h-[min(56rem,85dvh)]'}">
-	<header class="flex min-h-14 shrink-0 flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2">
-		<Typography.Title level={1} class="min-w-0 flex-1 basis-64 truncate text-sm font-normal tracking-normal" title={title}>{title}</Typography.Title>
-		<div class="ms-auto flex min-w-0 max-w-full flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-foreground-muted">
-			{#if meta.branch}<Typography.Metadata class="max-w-40 truncate font-mono text-xs font-normal" title={meta.branch}>{meta.branch}</Typography.Metadata>{/if}
-			{#if selected.model}<Typography.Metadata class="max-w-48 truncate font-mono text-xs font-normal" title={selected.model}>{selected.model}</Typography.Metadata>{/if}
-			{#if meta.files !== null}
-				<Button variant="quiet" class="h-7 gap-2 px-1 font-mono text-xs font-normal text-foreground-muted hover:text-foreground" disabled={!onOpenDiff} onclick={onOpenDiff ?? undefined} aria-label={`Open diff, ${meta.files} changed files`}>
-					{meta.files} {meta.files === 1 ? 'file' : 'files'}
-					{#if meta.additions !== null}<span class="text-success">+{meta.additions}</span>{/if}
-					{#if meta.deletions !== null}<span class="text-error">−{meta.deletions}</span>{/if}
-				</Button>
-			{/if}
-			{#if reviewId || onRestart || onOpenDiff}
-				<DropdownMenu.Root>
-					<DropdownMenu.Trigger variant="ghost" size="icon" aria-label="Session actions" class="size-9"><Ellipsis size={16} aria-hidden="true" /></DropdownMenu.Trigger>
-					<DropdownMenu.Content>
-						{#if onOpenDiff}<DropdownMenu.Item callback={onOpenDiff}>Open diff</DropdownMenu.Item>{/if}
-						{#if reviewId}<DropdownMenu.Item callback={() => metricsOpen = true}>View token usage</DropdownMenu.Item>{/if}
-						{#if onRestart}<DropdownMenu.Item disabled={restarting} callback={() => restartOpen = true}>{restarting ? 'Restarting…' : 'Restart review'}</DropdownMenu.Item>{/if}
-					</DropdownMenu.Content>
-				</DropdownMenu.Root>
-			{/if}
-		</div>
-	</header>
+	<SessionHeader
+		{title}
+		branch={meta.branch}
+		repo={meta.repo}
+		prLabel={meta.prLabel}
+		files={meta.files}
+		additions={meta.additions}
+		deletions={meta.deletions}
+		view="conversation"
+		onView={(view) => { if (view !== 'conversation') return onShowView ? onShowView(view) : onOpenDiff?.(); }}
+		diffDisabled={!onOpenDiff}
+		onFiles={onOpenDiff}
+		menu={reviewId || onRestart || onOpenDiff || repoId ? sessionMenu : undefined}
+		toolbar={showChecks && reviewId ? headerChecks : undefined}
+	/>
 	{#if !isOrchestrator}
 		{@const status = statusFor(selected)}
-		<nav aria-label="Review conversations" class="mx-auto flex w-full max-w-[776px] shrink-0 items-center gap-2 px-4 pb-3 pt-1 sm:px-6">
-			<Button href={conversationHref(ORCHESTRATOR_ID)} variant="ghost" size="icon" aria-label="Back to Orchestrator" title="Back to Orchestrator" class="size-9 shrink-0"><ArrowLeft size={16} aria-hidden="true" /></Button>
-			<Typography.Title level={2} class="sr-only">{selected.title} conversation</Typography.Title>
+		<nav aria-label="Review conversations" class="mx-auto flex w-full max-w-[740px] shrink-0 items-center gap-2 px-6 pb-1 pt-3">
+			<Button href={conversationHref(ORCHESTRATOR_ID)} variant="ghost" size="icon" aria-label="Back to Orchestrator" title="Back to Orchestrator" class="shrink-0"><ArrowLeft size={16} aria-hidden="true" /></Button>
+			<Typography.Title level={2} class="sr-only">{formatAgentName(selected.role)} conversation</Typography.Title>
 			<DropdownMenu.Root>
-				<DropdownMenu.Trigger variant="ghost" class="min-w-0 gap-2 !px-2 text-sm" aria-label="Switch conversation"><span class="truncate">{selected.title}</span><ChevronDown size={14} class="shrink-0" aria-hidden="true" /></DropdownMenu.Trigger>
+				<DropdownMenu.Trigger variant="quiet" class="min-w-0 gap-2" aria-label="Switch conversation"><span class="truncate">{formatAgentName(selected.role)}</span><ChevronDown size={14} class="shrink-0" aria-hidden="true" /></DropdownMenu.Trigger>
 				<DropdownMenu.Content>
 					{#each [orchestrator, ...specialists] as assignment (assignment.id)}
-						<DropdownMenu.Item href={conversationHref(assignment.id)} aria-current={assignment.id === selected.id ? 'page' : undefined}>{assignment.title}</DropdownMenu.Item>
+						<DropdownMenu.Item href={conversationHref(assignment.id)} aria-current={assignment.id === selected.id ? 'page' : undefined}>{formatAgentName(assignment.role)}</DropdownMenu.Item>
 					{/each}
 				</DropdownMenu.Content>
 			</DropdownMenu.Root>
-			<Badge variant={status.variant} dot={selected.status === 'done'} class="ms-auto shrink-0 rounded-md font-normal">{status.label}</Badge>
+			<Badge variant="secondary" class="status-chip ms-auto shrink-0" data-tone={status.tone}>{status.label}</Badge>
 		</nav>
 	{/if}
-	{#if connectionLost}<Typography.Text role="status" class="mx-auto w-full max-w-[776px] px-6 py-2 text-sm text-warning">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
-	{#if errorMessage}<Typography.Text role="alert" class="mx-auto w-full max-w-[776px] px-6 py-2 text-sm text-error">{errorMessage}</Typography.Text>{/if}
-	{#each [selected] as target (target.id)}
-		<ReviewConversation assignment={target} {messages} reasoning={isOrchestrator ? chatReasoning : reasoning} {toolCalls} {active} {now}
-			awaitingPrompt={isOrchestrator && awaitingPrompt}
-			tasks={tasks.filter((task) => (task.assignmentId ?? ORCHESTRATOR_ID) === target.id)}
-			bind:draft={() => drafts[target.id] ?? '', (value) => drafts[target.id] = value} {onSend} {onStop}
-			workspace={isOrchestrator && specialists.length ? specialistsContent : undefined} workspaceAt={specialistsAt}
-			afterTranscript={isOrchestrator && !awaitingPrompt ? progressContent : undefined} afterTranscriptAt={completedAt} />
-	{/each}
+	{#if connectionLost}<Typography.Text role="status" class="mx-auto w-full max-w-[740px] px-6 py-2 text-sm text-sev-medium">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
+	{#if errorMessage}<Typography.Text role="alert" class="mx-auto w-full max-w-[740px] px-6 py-2 text-sm text-danger">{errorMessage}</Typography.Text>{/if}
+	<div class="flex min-h-0 flex-1">
+		<div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
+			{#each [selected] as target (target.id)}
+				<ReviewConversation assignment={target} {messages} reasoning={isOrchestrator ? chatReasoning : reasoning} {toolCalls} {active} {now}
+					awaitingPrompt={isOrchestrator && awaitingPrompt}
+					tasks={tasks.filter((task) => (task.assignmentId ?? ORCHESTRATOR_ID) === target.id)}
+					bind:draft={() => drafts[target.id] ?? '', (value) => drafts[target.id] = value} {onSend} {onStop}
+					placeholder={!isOrchestrator ? undefined : awaitingPrompt ? undefined : active ? 'Ask Orchestrator anything…' : 'Ask a follow-up about this review…'}
+					inserts={isOrchestrator ? [
+						...(specialists.length ? [{ key: 'specialists', at: specialistsAt, snippet: specialistsContent }] : []),
+						...(!awaitingPrompt ? [{ key: 'progress', at: active ? undefined : finalization?.startedAt ?? completedAt, snippet: progressContent }] : []),
+						...(finished ? [{ key: 'result', at: completedAt, snippet: resultCard }] : [])
+					] : []} />
+			{/each}
+		</div>
+		{#if showRail || (isOrchestrator && showSteps)}
+			<ReviewResultsRail {findings} {specialists} {coverage} {coverageGaps} {onOpenFinding} specialistHref={conversationHref} results={showRail}>
+				{#if showSteps}
+					<ReviewSteps current={currentStep} {failed} {active} elapsed={meta.elapsed}
+						specialists={{ done: specialists.filter((item) => ['done', 'skipped', 'error', 'partial'].includes(item.status)).length, total: specialists.length }} />
+				{/if}
+			</ReviewResultsRail>
+		{/if}
+	</div>
 </div>
 
 {#if reviewId}<ReviewMetricsModal {reviewId} bind:open={metricsOpen} showTrigger={false} />{/if}

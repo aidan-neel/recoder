@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { page } from '$app/state';
 	import { ORCHESTRATOR_ID, type ReviewAssignment, type ReviewChatMessage, type ReviewReasoningEntry, type ReviewTask, type ReviewToolCall } from '@recoder/shared';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
@@ -42,6 +43,33 @@
 		id: `${spec.id}-tool`, assignmentId: spec.id, role: spec.id, command: 'rg -n "status" packages/cli',
 		status: 'done', exitCode: 0, startedAt: iso(70), elapsedMs: 220, summary: '3 matches'
 	}));
+	// `?state=running` previews artboard 3b: a review mid-flight.
+	const running = page.url.searchParams.get('state') === 'running';
+	const liveSpecs = [
+		{ id: 'correctness', model: 'gpt-5-codex', status: 'running', op: 'Reading src/rate-limit/limiter.ts:20-46' },
+		{ id: 'patterns', model: 'gpt-5-codex', status: 'done', op: 'Compared exports against 14 call sites · 1 finding' },
+		{ id: 'perf', model: 'qwen3-coder', status: 'running', op: 'Searching src/ for Map eviction patterns' },
+		{ id: 'docs', model: 'qwen3-coder', status: 'done', op: 'Checked doc comments in src/rate-limit' },
+		{ id: 'security', model: 'gpt-5-codex', status: 'queued', op: 'Waiting for a free slot' }
+	] as const;
+	const liveAssignments: ReviewAssignment[] = liveSpecs.map((spec) => ({
+		id: spec.id, role: spec.id, title: spec.id, reason: spec.op, status: spec.status, scope: [],
+		model: spec.model, currentOperation: spec.op, startedAt: iso(60)
+	}));
+	const liveMessages: ReviewChatMessage[] = [
+		{ id: 'ask', assignmentId: ORCHESTRATOR_ID, from: 'user', text: 'Review this. Focus on the clock injection and anything that breaks existing callers.', at: iso(140), status: 'done' },
+		{ id: 'plan', assignmentId: ORCHESTRATOR_ID, from: 'assistant', model, at: iso(120), status: 'done',
+			text: 'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI’m sending five specialists. Correctness and repository consistency always run; performance, docs and security were picked for this diff.' }
+	];
+	const liveTools: ReviewToolCall[] = [
+		['readDiff', 'src/rate-limit/limiter.ts', 400], ['search', 'allow\\( in src/', 1100],
+		['readFile', 'src/rate-limit/index.ts', 200], ['readFile', 'src/time/clock.ts', 200]
+	].map(([action, target, ms], i) => ({
+		id: `live-tool-${i}`, assignmentId: ORCHESTRATOR_ID, command: `${action} ${target}`, input: { action: action as string, path: target as string },
+		status: 'done', exitCode: 0, startedAt: iso(118 - i), elapsedMs: ms as number
+	}));
+	const liveReasoning: ReviewReasoningEntry[] = [{ id: 'live-reasoning', assignmentId: ORCHESTRATOR_ID, model, at: iso(132), status: 'done', text: 'Reading the diff to scope specialists.' }];
+
 	async function send(assignmentId: string, text: string) {
 		const at = new Date().toISOString();
 		messages = [...messages,
@@ -53,6 +81,14 @@
 
 <svelte:head><title>Session design preview — Recoder</title></svelte:head>
 
+{#if running}
+	<ReviewingView fullscreen
+		title="Move rate limiter into a class with injectable clock"
+		meta={{ prLabel: '#4127', repo: 'ledger-api', branch: 'rate-limit/clock', files: 6, additions: 73, deletions: 34, elapsed: '2:14' }}
+		assignments={liveAssignments} messages={liveMessages} toolCalls={liveTools} reasoning={liveReasoning} orchestratorModel={model}
+		findings={[]} stage={2} stageLabel="Specialist review" active completedAt={undefined}
+		onSend={send} onOpenDiff={() => diffOpen = true} onRestart={null} />
+{:else}
 {#key previewKey}
 	<ReviewingView fullscreen
 		title="refactor(cli): extract `sivir list` formatting, add `sivir status`"
@@ -65,6 +101,7 @@
 		onSend={send} onOpenDiff={() => diffOpen = true}
 		onRestart={() => { messages = []; awaitingPrompt = true; previewKey++; }} />
 {/key}
+{/if}
 
 <Modal.Root bind:open={diffOpen}>
 	<Modal.Content size="xl">

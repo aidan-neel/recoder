@@ -12,6 +12,15 @@ export type FindingSeverity = 'high' | 'medium' | 'low' | 'info';
 export type FindingStatus = 'open' | 'accepted' | 'dismissed';
 
 /** On-demand fix suggestion state for one finding (client-side only). */
+/** CI verification of a fix on its temporary branch. */
+export interface FixVerify {
+	status: 'pushing' | 'waiting' | 'running' | 'passed' | 'failed' | 'none' | 'error';
+	branch?: string;
+	sha?: string;
+	checks?: import('@recoder/shared').PrCheck[];
+	error?: string;
+}
+
 export interface FixSuggestion {
 	status: 'loading' | 'ready' | 'error';
 	summary?: string;
@@ -24,16 +33,17 @@ export interface FixSuggestion {
 	applyError?: string;
 	sha?: string;
 	branch?: string;
+	verify?: FixVerify;
 }
 
 export const SEVERITIES: FindingSeverity[] = ['high', 'medium', 'low', 'info'];
 
-/** Severity → marker dot color. */
+/** Severity → marker color (diff bars, line numbers). */
 export const SEVERITY_DOT: Record<FindingSeverity, string> = {
-	high: '#ef4444',
-	medium: '#d9a13b',
-	low: '#5b8cff',
-	info: '#8a8f98'
+	high: 'var(--sev-high-icon)',
+	medium: 'var(--sev-medium)',
+	low: 'var(--sev-low)',
+	info: 'var(--sev-info)'
 };
 
 export interface Finding {
@@ -55,6 +65,9 @@ export interface Finding {
 	/** New-side line range the finding refers to (inclusive). */
 	startLine: number;
 	endLine: number;
+	/** Tool results the reviewer cited (`ev_…`), matched against the review's tool calls. */
+	evidenceIds?: string[];
+	assignmentId?: string;
 	status: FindingStatus;
 }
 
@@ -156,7 +169,7 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 	const line = f.line ?? 1;
 	return {
 		id: f.id,
-		code: `R-${String(index + 1).padStart(2, '0')}`,
+		code: `F-${String(index + 1).padStart(2, '0')}`,
 		title: findingTitle(body, f.title),
 		severity: severityMap[f.severity],
 		category,
@@ -166,6 +179,8 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 		file: f.file,
 		startLine: line,
 		endLine: f.endLine && f.endLine >= line ? f.endLine : line,
+		evidenceIds: f.evidenceIds ?? [],
+		assignmentId: f.assignmentId,
 		status: 'open'
 	};
 }
@@ -210,6 +225,15 @@ class FindingsStore {
 			this.activeId = null;
 			this.hoveredId = null;
 		}
+	}
+
+	/** Fixes the chat asked for (finding ids or codes, or 'all'); the Fix-all flow picks it up. */
+	fixRequest = $state<{ key: string; ids: string[] | 'all' } | null>(null);
+
+	/** Clear every severity filter (Info included). */
+	showAllSeverities(): void {
+		this.hiddenSeverities = [];
+		if (this.hideInfo) this.setHideInfo(false);
 	}
 
 	forFile(file: string): Finding[] {
@@ -269,6 +293,11 @@ class FindingsStore {
 
 	suggestError(id: string, error: string): void {
 		this.suggestions[id] = { status: 'error', error };
+	}
+
+	setVerify(id: string, verify: FixVerify | undefined): void {
+		const current = this.suggestions[id];
+		if (current?.status === 'ready') this.suggestions[id] = { ...current, verify };
 	}
 
 	applyingFix(id: string): void {

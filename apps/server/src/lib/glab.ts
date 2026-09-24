@@ -21,6 +21,11 @@ function classifyFailure(logs: string): GhError {
 }
 
 /** Run `glab`, capturing stdout. Never throws raw — always GhError. */
+/** `glab api <path>` parsed as JSON. */
+export async function glabApi(path: string, env?: Record<string, string>): Promise<unknown> {
+	return extractJson(await glab(['api', path], env));
+}
+
 async function glab(args: string[], env?: Record<string, string>): Promise<string> {
 	let run;
 	try {

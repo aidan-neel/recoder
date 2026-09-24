@@ -2,7 +2,8 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { emptyReviewProgress, expandFileDiff, parseUnifiedDiff } from '@recoder/shared';
-import { createReviewSession, queueReview } from '../commands/pipeline';
+import { createReviewSession, queueReview, startReviewSession } from '../commands/pipeline';
+import { isReviewConfigured } from '../lib/models';
 import { clearReviewEvents, subscribeReview } from '../lib/events';
 import { discussFinding, streamDiscussFinding, discussRequestSchema } from '../lib/discuss';
 import { runRereview, rereviewRequestSchema } from '../lib/rereview';
@@ -10,19 +11,26 @@ import { readSandboxFile } from '../lib/harness';
 import {
 	applyFixCommit,
 	applyFixRequestSchema,
+	deleteVerifyBranch,
 	FixError,
+	pushVerifyBranch,
+	VERIFY_BRANCH_PREFIX,
+	withSandboxLock,
 	patchApplies,
 	pushFixBranch,
 	suggestFix,
 	suggestFixRequestSchema
 } from '../lib/fix';
 import { GhError, fetchPullHeadRef } from '../lib/gh';
+import { fetchChecks } from '../lib/checks';
+import { fetchPullHead } from '../lib/github-rest';
 import { fetchMergeHeadRef } from '../lib/glab';
 import { LlmError } from '../lib/llm';
-import { refspecFor } from '../lib/providers';
+import { parseSlug, refspecFor } from '../lib/providers';
 import { db, reviewDiffs, reviewSandboxes, reviewProgress, reviewMetrics } from '../store';
 import { getReviewMetrics, withReviewMetrics } from '../lib/metrics';
-import { cancelReviewChats, ReviewChatError, reviewCodeContextSchema, startReviewChat, stopReviewChat } from '../lib/review-chat';
+import { CheckoutError, ensureReviewCheckout, findReviewCheckout } from '../lib/review-checkout';
+import { cancelReviewChats, ReviewChatError, reviewCodeContextSchema, prepareDraftSession, startReviewChat, stopReviewChat } from '../lib/review-chat';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),
@@ -90,7 +98,7 @@ app.get('/:id/files', async (c) => {
 	const diff = reviewDiffs.get(review.id);
 	if (!diff) return c.json({ error: 'no diff yet' }, 404);
 	const files = parseUnifiedDiff(diff);
-	const sandboxPath = reviewSandboxes.get(review.id);
+	const sandboxPath = await findReviewCheckout(review);
 	if (!sandboxPath) return c.json(files);
 	const expanded = await Promise.all(
 		files.map(async (file) => {
@@ -100,6 +108,16 @@ app.get('/:id/files', async (c) => {
 		})
 	);
 	return c.json(expanded);
+});
+
+/** Start a draft (interactive) review directly, without going through the orchestrator chat. */
+app.post('/:id/start', (c) => {
+	try {
+		return c.json(startReviewSession(c.req.param('id')), 202);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : 'Could not start the review.';
+		return c.json({ error: message }, message === 'review not found' ? 404 : 409);
+	}
 });
 
 const chatSchema = z.object({ assignmentId: z.string().min(1).max(100), text: z.string().trim().min(1).max(8000), codeContext: reviewCodeContextSchema.optional() });
@@ -131,6 +149,7 @@ app.post('/:id/discuss', async (c) => {
 	}
 	const diff = reviewDiffs.get(review.id);
 	if (!diff) return c.json({ error: 'no diff yet' }, 409);
+	const sandboxPath = await findReviewCheckout(review);
 	try {
 		const result = await withReviewMetrics(review.id, 'discussion', () => discussFinding({
 			agent: parsed.data.agent,
@@ -142,7 +161,7 @@ app.post('/:id/discuss', async (c) => {
 			history: parsed.data.history,
 			question: parsed.data.question,
 			diff,
-			sandboxPath: reviewSandboxes.get(review.id) ?? null
+			sandboxPath
 		}));
 		return c.json(result);
 	} catch (err) {
@@ -170,7 +189,7 @@ app.post('/:id/discuss/stream', async (c) => {
 		history: parsed.data.history,
 		question: parsed.data.question,
 		diff,
-		sandboxPath: reviewSandboxes.get(review.id) ?? null
+		sandboxPath: await findReviewCheckout(review)
 	};
 	const stream = new ReadableStream({
 		async start(controller) {
@@ -213,11 +232,12 @@ app.post('/:id/rereview', async (c) => {
 	}
 	const diff = reviewDiffs.get(review.id);
 	if (!diff) return c.json({ error: 'no diff yet' }, 409);
+	const sandboxPath = await findReviewCheckout(review);
 	try {
 		const result = await withReviewMetrics(review.id, 'discussion', () => runRereview({
 			notes: parsed.data.notes,
 			diff,
-			sandboxPath: reviewSandboxes.get(review.id) ?? null,
+			sandboxPath,
 			existingFindings: review.findings
 		}));
 		if (result.findings.length > 0) {
@@ -251,7 +271,7 @@ app.post('/:id/fixes/suggest', async (c) => {
 	}
 	const diff = reviewDiffs.get(review.id);
 	if (!diff) return c.json({ error: 'no diff yet' }, 409);
-	const sandboxPath = reviewSandboxes.get(review.id) ?? null;
+	const sandboxPath = await findReviewCheckout(review);
 	try {
 		const result = await withReviewMetrics(review.id, 'fix', () => suggestFix({
 			agent: parsed.data.agent,
@@ -282,8 +302,6 @@ app.post('/:id/fixes/apply', async (c) => {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
 	}
 	if (review.source === 'stub') return c.json({ error: 'no checkout for stub reviews' }, 409);
-	const sandboxPath = reviewSandboxes.get(review.id);
-	if (!sandboxPath) return c.json({ error: 'no checkout yet' }, 409);
 	const repo = db.repos.get(review.repoId);
 	if (!repo) return c.json({ error: 'repo is no longer tracked' }, 409);
 	try {
@@ -291,33 +309,101 @@ app.post('/:id/fixes/apply', async (c) => {
 			review.source === 'gitlab'
 				? await fetchMergeHeadRef(repo.url, review.prNumber)
 				: await fetchPullHeadRef(repo.url, review.prNumber);
-		const { sha } = await applyFixCommit({
+		const source = review.source;
+		const sandboxPath = await ensureReviewCheckout(review);
+		return await withSandboxLock(sandboxPath, async () => {
+			const { sha } = await applyFixCommit({
+				sandboxPath,
+				patch: parsed.data.patch,
+				summary: parsed.data.summary,
+				file: parsed.data.finding.file,
+				line: parsed.data.finding.line,
+				message: parsed.data.finding.message
+			});
+			try {
+				await pushFixBranch({
+					sandboxPath,
+					localBranch: refspecFor(source, review.prNumber).branch,
+					headRef
+				});
+			} catch (err) {
+				if (err instanceof FixError) {
+					return c.json({ error: err.message, sha, pushed: false }, 502);
+				}
+				throw err;
+			}
+			return c.json({ sha, branch: headRef, pushed: true });
+		});
+	} catch (err) {
+		if (err instanceof FixError || err instanceof CheckoutError) return c.json({ error: err.message }, err.status);
+		if (err instanceof GhError) return c.json({ error: err.message }, 502);
+		throw err;
+	}
+});
+/** CI checks for the PR head (default) or any branch/sha of this repo (e.g. a fix's verify branch). */
+app.get('/:id/checks', async (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const repo = db.repos.get(review.repoId);
+	if (!repo || review.source === 'stub') return c.json({ error: 'checks are unavailable for this review' }, 409);
+	try {
+		const requested = c.req.query('ref');
+		if (requested) return c.json({ ref: requested, checks: await fetchChecks(repo, requested) });
+		if (review.source === 'gitlab') {
+			const ref = await fetchMergeHeadRef(repo.url, review.prNumber);
+			return c.json({ ref, checks: await fetchChecks(repo, ref) });
+		}
+		// Checks run on the head commit; its sha also covers PRs from forks.
+		const head = await fetchPullHead(parseSlug(repo.url), review.prNumber);
+		return c.json({ ref: head.ref, checks: await fetchChecks(repo, head.sha) });
+	} catch (err) {
+		if (err instanceof GhError) return c.json({ error: err.message }, 502);
+		throw err;
+	}
+});
+
+const verifyFixSchema = applyFixRequestSchema.extend({ key: z.string().trim().min(1).max(80) });
+/** Push a fix to a temporary `recoder/fix-…` branch so CI can run on it; the PR branch is untouched. */
+app.post('/:id/fixes/verify', async (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const parsed = verifyFixSchema.safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
+	if (review.source === 'stub') return c.json({ error: 'no checkout for stub reviews' }, 409);
+	const branch = `${VERIFY_BRANCH_PREFIX}${review.prNumber}-${parsed.data.key.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24)}`;
+	try {
+		const sandboxPath = await ensureReviewCheckout(review);
+		const { sha } = await withSandboxLock(sandboxPath, () => pushVerifyBranch({
 			sandboxPath,
+			branch,
 			patch: parsed.data.patch,
 			summary: parsed.data.summary,
 			file: parsed.data.finding.file,
 			line: parsed.data.finding.line,
 			message: parsed.data.finding.message
-		});
-		try {
-			await pushFixBranch({
-				sandboxPath,
-				localBranch: refspecFor(review.source, review.prNumber).branch,
-				headRef
-			});
-		} catch (err) {
-			if (err instanceof FixError) {
-				return c.json({ error: err.message, sha, pushed: false }, 502);
-			}
-			throw err;
-		}
-		return c.json({ sha, branch: headRef, pushed: true });
+		}));
+		return c.json({ branch, sha });
 	} catch (err) {
-		if (err instanceof FixError) return c.json({ error: err.message }, err.status);
-		if (err instanceof GhError) return c.json({ error: err.message }, 502);
+		if (err instanceof FixError || err instanceof CheckoutError) return c.json({ error: err.message }, err.status);
 		throw err;
 	}
 });
+
+app.delete('/:id/fixes/verify', async (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const branch = c.req.query('branch') ?? '';
+	if (review.source === 'stub') return c.json({ error: 'no checkout for stub reviews' }, 409);
+	try {
+		const sandboxPath = await ensureReviewCheckout(review);
+		await withSandboxLock(sandboxPath, () => deleteVerifyBranch(sandboxPath, branch));
+		return c.json({ deleted: true });
+	} catch (err) {
+		if (err instanceof FixError || err instanceof CheckoutError) return c.json({ error: err.message }, err.status);
+		throw err;
+	}
+});
+
 /** Live pipeline events (fetch/sandbox/agent progress) as server-sent events. */
 app.get('/:id/events', (c) => {
 	const review = db.reviews.get(c.req.param('id'));
@@ -374,7 +460,10 @@ app.post('/', async (c) => {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
 	}
 	try {
-		return c.json(parsed.data.start === false ? createReviewSession(parsed.data) : queueReview(parsed.data), 201);
+		if (parsed.data.start !== false) return c.json(queueReview(parsed.data), 201);
+		const review = createReviewSession(parsed.data);
+		void prepareDraftSession(review.id, isReviewConfigured());
+		return c.json(review, 201);
 	} catch (err) {
 		return c.json({ error: err instanceof Error ? err.message : 'invalid input' }, 400);
 	}

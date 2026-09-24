@@ -1,16 +1,16 @@
 <script lang="ts">
+	import { paletteContext } from '$lib/palette.svelte';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronUp from '@lucide/svelte/icons/chevron-up';
 	import Check from '@lucide/svelte/icons/check';
 	import Copy from '@lucide/svelte/icons/copy';
 	import Search from '@lucide/svelte/icons/search';
+	import Wrench from '@lucide/svelte/icons/wrench';
+	import type { Snippet } from 'svelte';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
-	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
-	import Shortcut from '@sivir-ui/svelte/components/shortcut';
-	import { Skeleton } from '@sivir-ui/svelte/components/skeleton';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Popover from '@sivir-ui/svelte/components/popover';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
@@ -23,9 +23,17 @@ import {
 	type FindingSeverity as Severity
 } from '$lib/findings.svelte';
 	import { sessionFile } from '$lib/session-file.svelte';
-	import { serverApi } from '$lib/server-api';
 	import { threadsStore } from '$lib/threads.svelte';
+	import { applyReadyFixes, fixFindings, hasReadyFix } from '$lib/fixes';
+	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 
+	/**
+	 * `trailing`: status and actions shown before Fix all at the toolbar's right end.
+	 * `part`: 'actions' renders only those actions + Fix all (the session header);
+	 * 'nav' renders the findings stepper, severity filters and search as a
+	 * sidebar section; 'all' is the original single toolbar.
+	 */
+	let { trailing, part = 'all' }: { trailing?: Snippet; part?: 'all' | 'nav' | 'actions' } = $props();
 	let searchOpen = $state(false);
 	let query = $state('');
 	let index = $state(0);
@@ -84,7 +92,6 @@ import {
 	const fixable = $derived(
 		openItems.filter((f) => f.status === 'open' && findingsStore.isShown(f))
 	);
-	const fixAllDisabled = $derived(fixable.length === 0 || !reviewId);
 
 	let findingsCopied = $state(false);
 	let findingsCopyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -142,159 +149,42 @@ import {
 		return lines.join('\n').trimEnd();
 	});
 
-	interface FixAllItem {
-		id: string;
-		title: string;
-		file: string;
-		line: number;
-		summary: string;
-		patch: string;
-		applies: boolean | null;
-		error: string | null;
-		pushed: boolean;
-		pushError: string | null;
-	}
+	/* Fix all: specialists write a patch per finding in the background; each is
+	   reviewed on its finding. The button follows along, then applies the ready ones. */
+	const openList = $derived(openItems.filter((f) => f.status === 'open'));
+	const writing = $derived(openList.filter((f) => findingsStore.suggestions[f.id]?.status === 'loading').length);
+	const readyFixes = $derived(openList.filter(hasReadyFix));
+	const applying = $derived(openList.some((f) => findingsStore.suggestions[f.id]?.apply === 'applying'));
+	const toFix = $derived(fixable.filter((f) => { const s = findingsStore.suggestions[f.id]; return s?.status !== 'loading' && !hasReadyFix(f); }));
+	let applyConfirmOpen = $state(false);
 
-	let fixAllConfirmOpen = $state(false);
-	let fixAllPreviewOpen = $state(false);
-	let fixAllPhase = $state<'suggesting' | 'ready' | 'applying' | 'done'>('suggesting');
-	let fixAllItems = $state<FixAllItem[]>([]);
-	let fixAllError = $state<string | null>(null);
-	let fixAllResult = $state<{ sha: string; branch: string; count: number } | null>(null);
-
-	const pushableCount = $derived(
-		fixAllItems.filter((i) => !i.error && i.patch !== '' && !i.pushed).length
-	);
-
-	function toFixInput(finding: Finding): {
-		file: string;
-		line: number;
-		endLine: number;
-		severity: string;
-		message: string;
-	} {
-		return {
-			file: finding.file,
-			line: finding.startLine,
-			endLine: finding.endLine,
-			severity: finding.severity,
-			message: finding.body
+	const fixAllDisabled = $derived(toFix.length === 0 || !reviewId);
+	$effect(() => {
+		// Only the instance that owns Fix all registers it with ⌘K.
+		if (part === 'nav') return;
+		paletteContext.fixAll = fixAllDisabled
+			? null
+			: { count: toFix.length, run: () => startFixAll() };
+		return () => {
+			paletteContext.fixAll = null;
 		};
+	});
+
+	function startFixAll(targets: Finding[] = toFix): void {
+		searchOpen = false;
+		void fixFindings(targets);
 	}
 
-	/** Confirm → generate a suggested patch per open finding, then preview. */
-	async function confirmFixAll(): Promise<void> {
-		const rid = reviewId;
-		if (!rid) return;
-		fixAllConfirmOpen = false;
-		fixAllItems = [];
-		fixAllError = null;
-		fixAllResult = null;
-		fixAllPhase = 'suggesting';
-		fixAllPreviewOpen = true;
-		for (const finding of fixable) {
-			const existing = findingsStore.suggestions[finding.id];
-			if (existing?.status === 'ready' && existing.patch) {
-				fixAllItems = [
-					...fixAllItems,
-					{
-						id: finding.id,
-						title: finding.title,
-						file: finding.file,
-						line: finding.startLine,
-						summary: existing.summary ?? finding.body,
-						patch: existing.patch,
-						applies: existing.applies ?? null,
-						error: null,
-						pushed: false,
-						pushError: null
-					}
-				];
-				continue;
-			}
-			findingsStore.suggesting(finding.id);
-			try {
-				const result = await serverApi.suggestFix(rid, {
-					agent: finding.agent,
-					finding: toFixInput(finding)
-				});
-				findingsStore.suggestReady(finding.id, {
-					summary: result.summary,
-					patch: result.patch,
-					applies: result.applies
-				});
-				fixAllItems = [
-					...fixAllItems,
-					{
-						id: finding.id,
-						title: finding.title,
-						file: finding.file,
-						line: finding.startLine,
-						summary: result.summary,
-						patch: result.patch,
-						applies: result.applies,
-						error: null,
-						pushed: false,
-						pushError: null
-					}
-				];
-			} catch (e) {
-				const error = e instanceof Error ? e.message : 'Could not suggest a fix.';
-				findingsStore.suggestError(finding.id, error);
-				fixAllItems = [
-					...fixAllItems,
-					{
-						id: finding.id,
-						title: finding.title,
-						file: finding.file,
-						line: finding.startLine,
-						summary: finding.body,
-						patch: '',
-						applies: null,
-						error,
-						pushed: false,
-						pushError: null
-					}
-				];
-			}
-		}
-		fixAllPhase = 'ready';
-	}
-
-	/** Push every generated patch to the PR head branch, then mark findings fixed. */
-	async function pushFixAll(): Promise<void> {
-		const rid = reviewId;
-		if (!rid || fixAllPhase !== 'ready') return;
-		fixAllPhase = 'applying';
-		fixAllError = null;
-		let pushed = 0;
-		let last: { sha: string; branch: string } | null = null;
-		for (const item of fixAllItems) {
-			if (item.error || item.patch === '' || item.pushed) continue;
-			const finding = findingsStore.items.find((f) => f.id === item.id);
-			if (!finding) continue;
-			findingsStore.applyingFix(item.id);
-			try {
-				const result = await serverApi.applyFix(rid, {
-					finding: toFixInput(finding),
-					summary: item.summary,
-					patch: item.patch
-				});
-				findingsStore.applyReady(item.id, { sha: result.sha, branch: result.branch });
-				findingsStore.accept(item.id, finding.agent);
-				item.pushed = true;
-				pushed += 1;
-				last = result;
-			} catch (e) {
-				const error = e instanceof Error ? e.message : 'Could not apply the fix.';
-				findingsStore.applyFailed(item.id, error);
-				item.pushError = error;
-			}
-		}
-		fixAllPhase = 'done';
-		if (last) fixAllResult = { ...last, count: pushed };
-		else if (pushed === 0) fixAllError = 'No fixes could be pushed.';
-	}
+	/** The chat asked for fixes: same as Fix all, for those findings. */
+	$effect(() => {
+		const request = findingsStore.fixRequest;
+		if (part === 'nav' || !request || !reviewId) return;
+		findingsStore.fixRequest = null;
+		const targets = request.ids === 'all'
+			? openList
+			: openList.filter((f) => (request.ids as string[]).some((id) => id === f.id || id.toUpperCase() === f.code?.toUpperCase()));
+		if (targets.length) startFixAll(targets);
+	});
 
 	// Search findings without changing the active finding until a result is chosen.
 	function onKeydown(event: KeyboardEvent): void {
@@ -310,14 +200,7 @@ import {
 	});
 </script>
 
-<div class="findings-toolbar flex min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
-	<Card.Root class="!h-9 shrink-0 !flex-row items-center !gap-0 rounded-[10px] border border-border bg-transparent !p-0 shadow-none">
-		<Popover.Root bind:open={searchOpen} placement="bottom-start">
-			<Popover.Trigger variant="ghost" class="!h-9 gap-2 rounded-s-[10px] rounded-e-none !px-2.5 text-sm !font-normal" aria-label="Search findings">
-				Findings
-				<span class="font-mono text-xs tabular-nums text-foreground-muted">{visible.length === 0 ? 0 : position + 1}/{visible.length}</span>
-			</Popover.Trigger>
-			<Popover.Content class="w-[28rem] max-w-[calc(100vw-2rem)]" surfaceClass="!gap-0 !p-0">
+{#snippet searchPanel()}
 				<div class="flex items-center justify-between px-4 pb-2 pt-4">
 					<Popover.Title class="text-sm font-medium">Findings</Popover.Title>
 					<Typography.Metadata class="text-xs tabular-nums" role="status">{matches.length} {matches.length === 1 ? 'result' : 'results'}</Typography.Metadata>
@@ -347,14 +230,52 @@ import {
 						{#if findingsCopied}<Check size={14} aria-hidden="true" />{:else}<Copy size={14} aria-hidden="true" />{/if}
 						{findingsCopied ? 'Copied' : 'Copy findings'}
 					</Button>
-					<Button variant="outline" disabled={fixAllDisabled} onclick={() => { searchOpen = false; fixAllConfirmOpen = true; }} class="text-sm !font-normal">Fix all ({fixable.length})</Button>
 				</div>
-			</Popover.Content>
+{/snippet}
+
+{#if part === 'nav'}
+	{#if openItems.length > 0 || findingsStore.items.length > 0}
+		<section class="findings-nav" aria-label="Findings">
+			<div class="findings-nav-head">
+				<span class="findings-nav-title">Findings</span>
+				<span class="findings-nav-pos" aria-live="polite">{visible.length === 0 ? 0 : position + 1} / {visible.length}</span>
+				<span class="findings-nav-steps">
+					<Button variant="quiet" size="icon" aria-label="Previous finding" disabled={visible.length === 0} onclick={() => go(position - 1)}><ChevronUp size={14} /></Button>
+					<Button variant="quiet" size="icon" aria-label="Next finding" title="Next finding" disabled={visible.length === 0} onclick={() => go(position + 1)}><ChevronDown size={14} /></Button>
+				</span>
+			</div>
+			<div class="findings-nav-filters" role="group" aria-label="Show severities">
+				{#each SEVERITIES as severity (severity)}
+					<button type="button" class="findings-nav-filter" data-severity={severity} aria-pressed={findingsStore.isSeverityShown(severity)} onclick={() => toggle(severity)}>
+						<span class="findings-nav-dot" aria-hidden="true"></span>
+						<span class="findings-nav-label">{severity === 'medium' ? 'Med' : severity.charAt(0).toUpperCase() + severity.slice(1)}</span>
+						<span class="findings-nav-count">{counts[severity]}</span>
+					</button>
+				{/each}
+			</div>
+			<Popover.Root bind:open={searchOpen} placement="bottom-start">
+				<Popover.Trigger variant="ghost" class="findings-nav-search" aria-label="Search findings">
+					<Search size={13} aria-hidden="true" /><span>Search findings…</span>
+				</Popover.Trigger>
+				<Popover.Content class="w-[28rem] max-w-[calc(100vw-2rem)]" surfaceClass="!gap-0 !p-0">{@render searchPanel()}</Popover.Content>
+			</Popover.Root>
+		</section>
+	{/if}
+{:else}
+<div class="findings-toolbar flex w-full min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
+	{#if part === 'all'}
+	<Card.Root class="!h-8 shrink-0 !flex-row items-center !gap-0 rounded-[9px] border-0 bg-transparent !p-0 shadow-none">
+		<Popover.Root bind:open={searchOpen} placement="bottom-start">
+			<Popover.Trigger variant="ghost" class="!h-8 gap-2 rounded-s-[9px] rounded-e-none !px-2.5 text-sm !font-normal" aria-label="Search findings">
+				Findings
+				<span class="font-mono text-xs tabular-nums text-foreground-muted">{visible.length === 0 ? 0 : position + 1}/{visible.length}</span>
+			</Popover.Trigger>
+			<Popover.Content class="w-[28rem] max-w-[calc(100vw-2rem)]" surfaceClass="!gap-0 !p-0">{@render searchPanel()}</Popover.Content>
 		</Popover.Root>
 		<Button
 			variant="quiet"
 			size="icon"
-			class="!size-9 !min-w-9 rounded-none text-foreground-muted hover:text-foreground"
+			class="!size-8 !min-w-8 rounded-none text-foreground-muted hover:text-foreground"
 			aria-label="Previous finding"
 			disabled={visible.length === 0}
 			onclick={() => go(position - 1)}
@@ -364,7 +285,7 @@ import {
 		<Button
 			variant="quiet"
 			size="icon"
-			class="!size-9 !min-w-9 rounded-s-none rounded-e-[10px] text-foreground-muted hover:text-foreground"
+			class="!size-8 !min-w-8 rounded-s-none rounded-e-[9px] text-foreground-muted hover:text-foreground"
 			aria-label="Next finding"
 			title="Next finding"
 			disabled={visible.length === 0}
@@ -383,119 +304,36 @@ import {
 			onToggle={() => toggle(severity)}
 		/>
 	{/each}
+	{/if}
 
-	<AlertDialog.Root bind:open={fixAllConfirmOpen}>
+	<div class="findings-toolbar-end">
+		{@render trailing?.()}
+		{#if writing}
+			<Button class="fix-all gap-2" disabled aria-live="polite"><Spinner size={13} aria-hidden="true" />Writing {writing} {writing === 1 ? 'fix' : 'fixes'}</Button>
+		{:else if applying}
+			<Button class="fix-all gap-2" disabled aria-live="polite"><Spinner size={13} aria-hidden="true" />Applying</Button>
+		{:else if readyFixes.length}
+			<Button class="fix-all gap-2" onclick={() => { searchOpen = false; applyConfirmOpen = true; }}>
+				<Check size={14} aria-hidden="true" />Apply fixes<span class="fix-all-count">{readyFixes.length}</span>
+			</Button>
+		{:else}
+			<Button class="fix-all gap-2" disabled={toFix.length === 0 || !reviewId} onclick={() => startFixAll()}>
+				<Wrench size={14} aria-hidden="true" />Fix all<span class="fix-all-count">{toFix.length}</span>
+			</Button>
+		{/if}
+	</div>
+
+	<AlertDialog.Root bind:open={applyConfirmOpen}>
 		<AlertDialog.Content>
 			<AlertDialog.Header>
-				<AlertDialog.Title>Fix all {fixable.length} finding{fixable.length === 1 ? '' : 's'}?</AlertDialog.Title>
-				<AlertDialog.Description>
-					This requests a fix for each open finding. Nothing is pushed yet — you review
-					the patches first.
-				</AlertDialog.Description>
+				<AlertDialog.Title>Apply {readyFixes.length} {readyFixes.length === 1 ? 'fix' : 'fixes'}?</AlertDialog.Title>
+				<AlertDialog.Description>Each fix is pushed as its own commit to the pull request branch. Review them on their findings first if you haven't.</AlertDialog.Description>
 			</AlertDialog.Header>
 			<AlertDialog.Footer>
-				<AlertDialog.Exit>
-					Cancel
-					<Shortcut shortcut="esc" />
-				</AlertDialog.Exit>
-				<AlertDialog.Confirm onclick={() => void confirmFixAll()}>
-					Generate fixes
-					<Shortcut shortcut="enter" />
-				</AlertDialog.Confirm>
-			</AlertDialog.Footer>
-		</AlertDialog.Content>
-	</AlertDialog.Root>
-
-	<AlertDialog.Root bind:open={fixAllPreviewOpen}>
-		<AlertDialog.Content size="lg">
-			<AlertDialog.Header>
-				<AlertDialog.Title>Review fixes</AlertDialog.Title>
-				<AlertDialog.Description>
-					{#if fixAllPhase === 'done' && fixAllResult}
-						Pushed {fixAllResult.count} fix{fixAllResult.count === 1 ? '' : 'es'} to
-						{fixAllResult.branch} ({fixAllResult.sha.slice(0, 7)}).
-					{:else}
-						Review the generated patches below. Approving pushes them to the PR head
-						branch.
-					{/if}
-				</AlertDialog.Description>
-			</AlertDialog.Header>
-			{#if fixAllPhase === 'suggesting'}
-				<div class="flex flex-col gap-2" role="status" aria-label="Generating fixes">
-					<Skeleton class="h-[68px] w-full rounded-lg" />
-					<Skeleton class="h-[68px] w-full rounded-lg" />
-				</div>
-			{:else}
-				<ScrollArea aria-label="Generated fixes" class="max-h-96" showCues={false}>
-					<div class="grid gap-2 pr-2">
-						{#each fixAllItems as item (item.id)}
-							<div aria-label="Fix preview">
-							<Card.Root class="overflow-hidden p-0">
-								<div class="flex items-center gap-2 border-b border-border bg-background px-3 py-1.5">
-									<Typography.Metadata class="min-w-0 truncate text-sm text-foreground" title={item.title}>{item.title}</Typography.Metadata>
-									<span class="min-w-0 flex-1 truncate font-mono text-[12px] text-foreground-muted">
-										{item.file}:{item.line}
-									</span>
-									{#if item.pushed}
-										<Badge variant="success" class="shrink-0">Pushed</Badge>
-									{:else if item.error}
-										<Badge variant="error" class="shrink-0">Failed</Badge>
-									{:else if item.applies === true}
-										<Badge variant="success" class="shrink-0">Applies cleanly</Badge>
-									{:else if item.applies === false}
-										<Badge variant="error" class="shrink-0">May not apply</Badge>
-									{/if}
-								</div>
-								{#if item.error}
-									<p class="m-0 px-3 py-2 text-[13px] font-medium text-error" role="alert">
-										{item.error}
-									</p>
-								{:else}
-									<p class="m-0 truncate px-3 pt-2 text-[13px] font-medium">{item.summary}</p>
-									<pre class="m-0 max-h-56 overflow-auto bg-background p-2.5 font-mono text-[12px] leading-relaxed">{#each item.patch.split('\n') as line, i (i)}<div
-												class={line.startsWith('+') && !line.startsWith('+++')
-													? 'text-success'
-													: line.startsWith('-') && !line.startsWith('---')
-														? 'text-error'
-														: 'text-foreground-muted'}>{line || ' '}</div
-											>{/each}</pre>
-								{/if}
-								{#if item.pushError}
-									<p class="m-0 px-3 py-2 text-[13px] font-medium text-error" role="alert">
-										{item.pushError}
-									</p>
-								{/if}
-							</Card.Root>
-							</div>
-						{/each}
-					</div>
-				</ScrollArea>
-			{/if}
-			{#if fixAllError}
-				<p class="mt-2 text-[13px] font-medium text-error" role="alert">{fixAllError}</p>
-			{/if}
-			<AlertDialog.Footer>
-				{#if fixAllPhase === 'done'}
-					<AlertDialog.Exit>
-						Done
-						<Shortcut shortcut="esc" />
-					</AlertDialog.Exit>
-				{:else}
-					<AlertDialog.Exit disabled={fixAllPhase === 'applying'}>
-						Cancel
-						<Shortcut shortcut="esc" />
-					</AlertDialog.Exit>
-					<AlertDialog.Confirm
-						disabled={fixAllPhase !== 'ready' || pushableCount === 0}
-						loading={fixAllPhase === 'applying'}
-						loadingLabel="Pushing…"
-						onclick={() => void pushFixAll()}
-					>
-						Push {pushableCount} fix{pushableCount === 1 ? '' : 'es'}
-						<Shortcut shortcut="enter" />
-					</AlertDialog.Confirm>
-				{/if}
+				<AlertDialog.Exit>Cancel</AlertDialog.Exit>
+				<AlertDialog.Confirm variant="primary" onclick={() => { applyConfirmOpen = false; void applyReadyFixes(readyFixes); }}>Apply {readyFixes.length} {readyFixes.length === 1 ? 'fix' : 'fixes'}</AlertDialog.Confirm>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
 	</AlertDialog.Root>
 </div>
+{/if}

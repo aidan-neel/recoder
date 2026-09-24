@@ -16,9 +16,11 @@
 		fileDiffs?: FileDiff[] | null;
 		onFileSelect?: () => void;
 		inSheet?: boolean;
+		/** Rendered above "Changed files" (the findings navigator in the diff view). */
+		header?: import('svelte').Snippet;
 	}
 
-	let { fileDiffs = null, onFileSelect, inSheet = false }: Props = $props();
+	let { fileDiffs = null, onFileSelect, inSheet = false, header }: Props = $props();
 
 	function selectFile(id: string): void {
 		sessionFile.select(id);
@@ -115,36 +117,37 @@
 
 <aside
 	aria-label="Session files"
-	class="flex h-full min-h-0 w-full shrink-0 flex-col gap-4 overflow-hidden bg-background p-4"
+	class="file-panel"
 >
-	<div class="flex min-h-0 flex-1 flex-col gap-3">
-		<div class="flex items-center justify-between text-sm {inSheet ? 'pe-10' : ''}">
-			<Typography.Title level={2} class="text-sm font-normal">Changed files</Typography.Title>
-			<Typography.Metadata class="font-mono text-xs">
+	{@render header?.()}
+	<div class="flex min-h-0 flex-1 flex-col gap-2.5">
+		<div class="file-panel-head {inSheet ? 'pe-10' : ''}">
+			<Typography.Title level={2} class="file-panel-title">Changed files</Typography.Title>
+			<Typography.Metadata class="font-mono text-[11.5px]">
 				{onlyWithFindings || fileQuery ? `${visibleCount} of ${fileCount}` : fileCount}
 			</Typography.Metadata>
 		</div>
 		<div class="shrink-0">
 			<Input
-				placeholder="Search files"
-				aria-label="Search files"
+				placeholder="Filter files"
+				aria-label="Filter files"
 				bind:value={fileQuery}
-				class="bg-transparent text-sm"
+				class="file-filter"
 			>
 				{#snippet leading()}<Search size={14} aria-hidden="true" />{/snippet}
 			</Input>
 		</div>
-		<div class="flex items-center gap-2 px-1 py-1 text-[13px] text-foreground-muted select-none">
+		<div class="file-panel-toggle">
 			<Checkbox
 				bind:checked={onlyWithFindings}
 				disabled={findingsFileCount === 0}
-				label="Only show files with findings"
+				label="Only files with findings"
 				class="min-w-0 flex-1"
 			/>
-			<span class="ml-auto shrink-0 font-mono text-[12px] opacity-70">{findingsFileCount}</span>
+			<span class="ml-auto shrink-0 font-mono text-[11.5px] text-fg-faint">{findingsFileCount}</span>
 		</div>
 		<ScrollArea aria-label="Changed files" class="min-h-0 flex-1" showCues={false}>
-			<div class="space-y-px pb-2">
+			<div class="file-tree">
 			{#each visibleTree as node (node.kind === 'file' ? node.id : node.name)}
 				<FileTreeNode
 					{node}

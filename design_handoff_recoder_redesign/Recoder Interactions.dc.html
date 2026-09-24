@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;family=Inter:wght@400;500;600&amp;family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&amp;family=Newsreader:opsz,wght@6..72,400;6..72,500&amp;family=Lora:wght@400;500&amp;family=Source+Serif+4:opsz,wght@8..60,400;8..60,500&amp;family=Literata:opsz,wght@7..72,400;7..72,500&amp;display=swap"><style>body{margin:0;background:#0d0c0b}a{color:#cfcac2}a:hover{color:#ede9e3}textarea::placeholder,input::placeholder{color:#6f6a63}@keyframes rc-spin{to{transform:rotate(360deg)}}@keyframes rc-shimmer{from{background-position:100% 0}to{background-position:-100% 0}}@keyframes rc-indet{from{left:-40%}to{left:100%}}@keyframes rc-blink{50%{opacity:0}}@keyframes rc-in{from{opacity:0;transform:translateY(2px)}to{opacity:1;transform:none}}@media (prefers-reduced-motion: reduce){*{transition-duration:1ms!important}}</style></helmet>
+<div style="min-height:100vh;background:#0d0c0b;font-family:{{ sansFam }};color:#ede9e3;padding:40px;box-sizing:border-box">
+  <div style="max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;flex-direction:column;gap:6px;padding:0 2px 8px">
+      <span style="font-size:20px;font-weight:500;letter-spacing:-0.01em">Recoder · interaction layer</span>
+      <span style="font-size:13.5px;color:#8a857d">Live specimens. Hover, click and type; every state below is working, not a still.</span>
+    </div>
+
+    <div style="background:#141312;border:1px solid #201f1d;border-radius:14px;overflow:hidden">
+      <div style="display:flex;align-items:baseline;gap:12px;padding:16px 18px 0"><span style="font-size:13.5px;font-weight:500">Top bar · traveling highlight</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#6f6a63">hover highlight instant · active pill slides 240ms · color 120ms</span></div>
+      <div style="padding:16px 18px 18px;overflow-x:auto">
+        <div style="height:46px;min-width:max-content;display:flex;align-items:center;gap:4px;padding:0 10px 0 14px;border-radius:10px;background:#0d0c0b;box-shadow:inset 0 0 0 1px #1d1c1a">
+          <span style="font-size:14px;font-weight:500;letter-spacing:-0.01em;padding:0 12px 0 2px">Recoder</span>
+          <div onMouseLeave="{{ tabsLeave }}" style="position:relative;display:flex;align-items:center;gap:2px;height:30px">
+            <div style="position:absolute;left:0;top:0;height:30px;width:{{ hlTabs.w }}px;transform:translateX({{ hlTabs.x }}px);opacity:{{ hlTabs.op }};transition:{{ hlTabs.tr }};border-radius:8px;background:rgba(255,245,230,0.05);pointer-events:none"></div>
+            <div style="position:absolute;left:0;top:0;height:30px;width:{{ act.w }}px;transform:translateX({{ act.x }}px);opacity:{{ act.op }};transition:{{ act.tr }};border-radius:8px;background:#1c1b19;box-shadow:inset 0 0 0 1px #2a2826;pointer-events:none"></div>
+            <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+              <div ref="{{ t.ref }}" onMouseEnter="{{ t.enter }}" onClick="{{ t.click }}" style="position:relative;height:30px;display:flex;align-items:center;gap:7px;padding:0 10px;border-radius:8px;color:{{ t.fg }};transition:color 120ms;font-size:13px;white-space:nowrap;cursor:default">
+                <span style="display:flex;color:{{ t.iconColor }}">{{ t.icon }}</span>
+                <span>{{ t.repo }}</span>
+                <sc-if value="{{ t.hasPr }}" hint-placeholder-val="{{ true }}"><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#6f6a63">{{ t.pr }}</span></sc-if>
+                <span style="font-family:'Geist Mono',monospace;font-size:10.5px;padding:0 5px;border-radius:4px;color:{{ t.badgeFg }};background:{{ t.badgeBg }}">{{ t.badge }}</span>
+              </div>
+              <sc-if value="{{ t.sep }}" hint-placeholder-val="{{ false }}"><span style="width:1px;height:16px;background:#262422;margin:0 6px"></span></sc-if>
+            </sc-for>
+          </div>
+          <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:7px;color:#6f6a63;transition:background 120ms, color 120ms" style-hover="background:#1c1b19;color:#ede9e3">{{ ic.plus }}</div>
+          <div style="flex:1"></div>
+          <div style="flex:0 1 260px;min-width:170px;margin-left:12px;height:30px;display:flex;align-items:center;gap:8px;padding:0 7px 0 10px;box-sizing:border-box;border-radius:8px;background:{{ searchBg }};box-shadow:{{ searchRing }};transition:box-shadow 150ms, background 150ms;color:#6f6a63">
+            {{ ic.search }}
+            <input onFocus="{{ searchFocus }}" onBlur="{{ searchBlur }}" placeholder="Search or ask Recoder" style="flex:1;min-width:0;background:transparent;border:0;outline:0;color:#ede9e3;font-family:inherit;font-size:13px;padding:0">
+            <span style="font-family:'Geist Mono',monospace;font-size:10.5px;padding:1px 5px;border-radius:4px;background:#1f1e1c;color:#8a857d">⌘K</span>
+          </div>
+          <div style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:#8a857d;transition:background 120ms, color 120ms" style-hover="background:#1c1b19;color:#ede9e3" style-active="transform:scale(0.94)">{{ ic.settings }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(560px,1fr));gap:20px">
+
+      <div style="background:#141312;border:1px solid #201f1d;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:baseline;gap:12px;padding:16px 18px 0"><span style="font-size:13.5px;font-weight:500">Composer · model menu</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#6f6a63">menu 150ms rise from trigger · label swap 180ms</span></div>
+        <div style="position:relative;height:380px">
+          <div style="position:absolute;left:28px;right:28px;top:24px;display:flex;flex-direction:column;gap:12px">
+            <sc-if value="{{ noSent }}" hint-placeholder-val="{{ true }}">
+              <p style="margin:0;font-family:{{ serifFam }};font-size:17px;line-height:1.55;color:#6f6a63;text-wrap:pretty">The rest is small: an unbounded buckets Map, an unvalidated capacity, and a stale doc comment. Four of the six have a suggested patch ready.</p>
+            </sc-if>
+            <sc-if value="{{ hasSent }}" hint-placeholder-val="{{ false }}">
+              <div style="align-self:flex-end;max-width:380px;padding:9px 13px;border-radius:14px 14px 4px 14px;background:#211f1d;font-size:13.5px;line-height:20px;color:#e4dfd8">{{ lastSent }}</div>
+              <div style="font-family:{{ serifFam }};font-size:17px;line-height:1.55;color:#e4dfd8">{{ replyEl }}</div>
+            </sc-if>
+          </div>
+          <sc-if value="{{ menu }}" hint-placeholder-val="{{ false }}"><div onClick="{{ closeMenu }}" style="position:absolute;inset:0"></div></sc-if>
+          <div style="position:absolute;left:24px;right:24px;bottom:22px;border-radius:18px;background:#1a1918;box-shadow:{{ compRing }};transition:box-shadow 150ms;padding:12px 12px 10px 16px;display:flex;flex-direction:column;gap:8px">
+            <textarea value="{{ text }}" onChange="{{ onText }}" onKeyDown="{{ onKey }}" onFocus="{{ compFocus }}" onBlur="{{ compBlur }}" rows="2" placeholder="Ask Orchestrator anything, or @mention a specialist…" style="resize:none;background:transparent;border:0;outline:0;color:#ede9e3;font-family:inherit;font-size:14px;line-height:20px;padding:2px 0 0;margin:0"></textarea>
+            <div style="display:flex;align-items:center;gap:4px">
+              <div style="width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:15px;color:#8a857d;margin-left:-6px;transition:background 120ms, color 120ms" style-hover="background:#232120;color:#ede9e3">{{ ic.paperclip }}</div>
+              <div style="flex:1"></div>
+              <div style="position:relative">
+                <div onClick="{{ toggleMenu }}" style="height:30px;display:flex;align-items:center;padding:0 9px;border-radius:8px;background:{{ trigBg }};font-size:12.5px;color:#ede9e3;transition:background 120ms;cursor:default" style-hover="background:#232120" style-active="transform:scale(0.97)">{{ trigLabel }}</div>
+                <div onMouseLeave="{{ menuLeave }}" style="position:absolute;right:0;bottom:38px;width:250px;transform-origin:100% 100%;opacity:{{ menuOp }};transform:{{ menuTf }};pointer-events:{{ menuPe }};transition:opacity 150ms cubic-bezier(.2,.8,.2,1), transform 150ms cubic-bezier(.2,.8,.2,1);z-index:3">
+                  <div style="position:relative;border-radius:12px;background:#1c1b19;box-shadow:0 0 0 1px #2e2b28,0 20px 50px rgba(0,0,0,0.55);padding:6px;display:flex;flex-direction:column;gap:1px">
+                    <div style="position:absolute;left:0;top:0;width:{{ hlMenu.w }}px;height:{{ hlMenu.h }}px;transform:translate({{ hlMenu.x }}px,{{ hlMenu.y }}px);opacity:{{ hlMenu.op }};transition:{{ hlMenu.tr }};border-radius:7px;background:#2a2826;pointer-events:none"></div>
+                    <div onMouseEnter="{{ enterModel }}" style="position:relative;height:32px;display:flex;align-items:center;gap:8px;padding:0 10px;border-radius:7px;cursor:default"><span style="font-size:13px;flex:1">Model</span><span style="font-size:12px;color:#a39e96">{{ model }}</span><span style="display:flex;color:#6f6a63">{{ ic.chevR }}</span></div>
+                    <div onMouseEnter="{{ enterEffort }}" style="position:relative;height:32px;display:flex;align-items:center;gap:8px;padding:0 10px;border-radius:7px;cursor:default"><span style="font-size:13px;flex:1;color:{{ effortRowFg }}">Reasoning effort</span><span style="font-size:12px;color:{{ effortValFg }}">{{ effortVal }}</span><sc-if value="{{ hasEffort }}" hint-placeholder-val="{{ true }}"><span style="display:flex;color:#6f6a63">{{ ic.chevR }}</span></sc-if></div>
+                    <div style="height:1px;background:#282624;margin:4px 0"></div>
+                    <div onMouseEnter="{{ enterPlain }}" onClick="{{ toggleApply }}" style="position:relative;height:32px;display:flex;align-items:center;gap:8px;padding:0 10px;border-radius:7px;cursor:default"><span style="font-size:13px;flex:1;color:#bdb8b0">Apply to all specialists</span><span style="width:26px;height:15px;border-radius:8px;background:{{ swTrack }};position:relative;transition:background 160ms"><span style="position:absolute;left:2px;top:2px;width:11px;height:11px;border-radius:6px;background:{{ swKnob }};transform:translateX({{ swX }});transition:transform 160ms cubic-bezier(.3,.7,.2,1), background 160ms"></span></span></div>
+                    <div onMouseEnter="{{ enterPlain }}" style="position:relative;height:32px;display:flex;align-items:center;gap:8px;padding:0 10px;border-radius:7px;color:#8a857d;font-size:13px;cursor:default"><span style="flex:1">Role models…</span><span style="font-family:'Geist Mono',monospace;font-size:10.5px">⌘,</span></div>
+                  </div>
+                  <div style="position:absolute;right:100%;top:0;padding-right:6px;opacity:{{ submOp }};transform:{{ submTf }};pointer-events:{{ submPe }};transition:opacity 120ms, transform 120ms cubic-bezier(.2,.8,.2,1)">
+                    <div onMouseLeave="{{ submLeave }}" style="position:relative;width:230px;border-radius:12px;background:#1c1b19;box-shadow:0 0 0 1px #2e2b28,0 20px 50px rgba(0,0,0,0.55);padding:6px;display:flex;flex-direction:column;gap:1px">
+                      <div style="position:absolute;left:0;top:0;width:{{ hlSubm.w }}px;height:{{ hlSubm.h }}px;transform:translate({{ hlSubm.x }}px,{{ hlSubm.y }}px);opacity:{{ hlSubm.op }};transition:{{ hlSubm.tr }};border-radius:7px;background:#2a2826;pointer-events:none"></div>
+                      <sc-for list="{{ models }}" as="m" hint-placeholder-count="3">
+                        <div onMouseEnter="{{ m.enter }}" onClick="{{ m.pick }}" style="position:relative;height:32px;display:flex;align-items:center;gap:8px;padding:0 10px;border-radius:7px;cursor:default"><span style="font-size:13px;flex:1">{{ m.name }}</span><span style="font-size:11px;color:#6f6a63">{{ m.provider }}</span><span style="width:12px;display:flex;color:#ede9e3">{{ m.check }}</span></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                  <div style="position:absolute;right:100%;top:33px;padding-right:6px;opacity:{{ subeOp }};transform:{{ subeTf }};pointer-events:{{ subePe }};transition:opacity 120ms, transform 120ms cubic-bezier(.2,.8,.2,1)">
+                    <div onMouseLeave="{{ subeLeave }}" style="position:relative;width:250px;border-radius:12px;background:#1c1b19;box-shadow:0 0 0 1px #2e2b28,0 20px 50px rgba(0,0,0,0.55);padding:6px;display:flex;flex-direction:column;gap:1px">
+                      <div style="position:absolute;left:0;top:0;width:{{ hlSube.w }}px;height:{{ hlSube.h }}px;transform:translate({{ hlSube.x }}px,{{ hlSube.y }}px);opacity:{{ hlSube.op }};transition:{{ hlSube.tr }};border-radius:7px;background:#242220;pointer-events:none"></div>
+                      <sc-for list="{{ efforts }}" as="e" hint-placeholder-count="3">
+                        <div onMouseEnter="{{ e.enter }}" onClick="{{ e.pick }}" style="position:relative;display:flex;align-items:flex-start;gap:10px;padding:7px 10px;border-radius:7px;cursor:default"><span style="width:12px;margin-top:3px;display:flex;color:#ede9e3">{{ e.check }}</span><div style="display:flex;flex-direction:column;gap:1px"><span style="font-size:13px">{{ e.label }}</span><span style="font-size:11.5px;color:#6f6a63">{{ e.desc }}</span></div></div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div onClick="{{ onSend }}" style="position:relative;width:30px;height:30px;border-radius:15px;display:flex;align-items:center;justify-content:center;background:{{ sendBg }};color:{{ sendFg }};transition:background 150ms, color 150ms, transform 80ms;cursor:default" style-active="transform:scale(0.92)">{{ sendIcon }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#141312;border:1px solid #201f1d;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:baseline;gap:12px;padding:16px 18px 0"><span style="font-size:13.5px;font-weight:500">PR list · hover reveal, start a review</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#6f6a63">instant row highlight · action slides in 6px · idle → starting → running → done</span></div>
+        <div style="padding:12px 10px 14px">
+          <div onMouseLeave="{{ rowsLeave }}" style="position:relative;display:flex;flex-direction:column;gap:2px">
+            <div style="position:absolute;left:0;top:0;width:{{ hlRows.w }}px;height:{{ hlRows.h }}px;transform:translate({{ hlRows.x }}px,{{ hlRows.y }}px);opacity:{{ hlRows.op }};transition:{{ hlRows.tr }};border-radius:10px;background:#1a1918;box-shadow:inset 0 0 0 1px #211f1d;pointer-events:none"></div>
+            <sc-for list="{{ rows }}" as="r" hint-placeholder-count="4">
+              <div onMouseEnter="{{ r.enter }}" style="position:relative;height:56px;display:grid;grid-template-columns:20px minmax(0,1fr) auto;align-items:center;gap:12px;padding:0 10px 0 12px;border-radius:10px;cursor:default">
+                <span style="display:flex;justify-content:center;color:{{ r.iconColor }};transition:color 200ms">{{ r.icon }}</span>
+                <div style="min-width:0;display:flex;flex-direction:column;gap:3px">
+                  <span style="font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ r.title }}</span>
+                  <span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#6f6a63">{{ r.repo }} {{ r.pr }}</span>
+                </div>
+                <div style="position:relative;min-width:168px;height:30px;display:flex;align-items:center;justify-content:flex-end">
+                  <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:{{ r.metaFg }};opacity:{{ r.metaOp }};transition:opacity 150ms">{{ r.meta }}</div>
+                  <div style="position:absolute;right:0;top:0;opacity:{{ r.btnOp }};transform:translateX({{ r.btnX }});pointer-events:{{ r.btnPe }};transition:opacity 150ms, transform 180ms cubic-bezier(.3,.7,.2,1)">
+                    <div onClick="{{ r.review }}" style="height:30px;display:flex;align-items:center;gap:7px;padding:0 12px;border-radius:8px;background:{{ primary }};color:{{ onPrimary }};font-size:12.5px;font-weight:500;transition:filter 120ms, transform 80ms" style-hover="filter:brightness(1.08)" style-active="transform:scale(0.97)">{{ r.btnContent }}</div>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#141312;border:1px solid #201f1d;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 12px 0 18px"><span style="font-size:13.5px;font-weight:500">Live activity · thinking, tools, streaming</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#6f6a63">rows grow 200ms · shimmer 1.6s · caret 1s</span><div style="flex:1"></div>
+          <div onClick="{{ replay }}" style="height:28px;display:flex;align-items:center;gap:6px;padding:0 9px;border-radius:7px;color:#8a857d;font-size:12.5px;transition:background 120ms, color 120ms" style-hover="background:#1c1b19;color:#ede9e3" style-active="transform:scale(0.97)">{{ ic.replay }}Replay</div></div>
+        <div style="padding:16px 24px 22px;min-height:300px;box-sizing:border-box;display:flex;flex-direction:column">
+          <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;height:22px"><span style="color:#cfcac2">Orchestrator</span><span style="color:#57534d">·</span>{{ liveStatus }}</div>
+          <div style="display:flex;flex-direction:column;margin-top:8px">
+            <sc-for list="{{ tools }}" as="t" hint-placeholder-count="3">
+              <div style="height:{{ t.h }}px;opacity:{{ t.op }};transform:translateY({{ t.ty }}px);overflow:hidden;display:flex;align-items:center;gap:8px;font-size:12.5px;color:#8a857d;transition:height 200ms cubic-bezier(.3,.7,.2,1), opacity 200ms, transform 200ms">
+                <span style="width:14px;display:flex;justify-content:center;color:{{ t.iconColor }}">{{ t.icon }}</span>
+                <span>{{ t.label }}</span><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#a39e96">{{ t.arg }}</span>
+                <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#57534d;opacity:{{ t.msOp }};transition:opacity 200ms">{{ t.ms }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <p style="margin:14px 0 0;font-family:{{ serifFam }};font-size:17px;line-height:1.55;color:#e4dfd8;text-wrap:pretty;min-height:78px">{{ liveText }}{{ caret }}</p>
+        </div>
+      </div>
+
+      <div style="background:#141312;border:1px solid #201f1d;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:baseline;gap:12px;padding:16px 18px 0"><span style="font-size:13.5px;font-weight:500">Apply fix · async button and toast</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#6f6a63">fixed-width button · toast rises 220ms, 5s dwell</span></div>
+        <div style="position:relative;padding:16px 18px 18px;min-height:300px;box-sizing:border-box;overflow:hidden">
+          <div style="border-radius:12px;background:#1a1918;box-shadow:0 0 0 1px #242220;padding:14px 16px 14px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:11px;font-weight:500;padding:1px 6px;border-radius:5px;color:{{ pillFg }};background:{{ pillBg }};transition:color 200ms, background 200ms">{{ pillLabel }}</span>
+              <span style="font-size:13.5px;flex:1;color:{{ fixTitleFg }};transition:color 200ms">refill() ignores the injected Clock</span>
+              <span style="font-family:'Geist Mono',monospace;font-size:11px;color:#57534d">F-03</span>
+            </div>
+            <p style="margin:0;font-family:{{ serifFam }};font-size:16px;line-height:1.5;color:#cfcac2">refill() reads Date.now() directly, so tests can't control time.</p>
+            <div style="border-radius:8px;background:#151413;box-shadow:inset 0 0 0 1px #211f1d;padding:6px 0">
+              <div style="font-family:'Geist Mono',monospace;font-size:12px;line-height:20px;white-space:pre;padding:0 12px;color:#f08a7e;background:rgba(240,138,126,0.07)">-    const now = Date.now();</div>
+              <div style="font-family:'Geist Mono',monospace;font-size:12px;line-height:20px;white-space:pre;padding:0 12px;color:#86c98c;background:rgba(134,201,140,0.07)">+    const now = this.clock.now();</div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;align-items:center;gap:4px">
+              <div onClick="{{ onCopy }}" style="height:30px;display:flex;align-items:center;gap:6px;padding:0 10px;border-radius:8px;color:#8a857d;font-size:12.5px;transition:background 120ms, color 120ms" style-hover="background:#232120;color:#ede9e3" style-active="transform:scale(0.97)">{{ copyContent }}</div>
+              <div onClick="{{ onApply }}" style="width:112px;height:30px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:8px;background:{{ applyBg }};box-shadow:{{ applyRing }};color:{{ applyFg }};font-size:12.5px;font-weight:500;transition:background 200ms, color 200ms, box-shadow 200ms, transform 80ms" style-active="transform:scale(0.97)">{{ applyContent }}</div>
+            </div>
+          </div>
+          <div style="position:absolute;left:50%;bottom:18px;transform:translate(-50%,{{ toastY }});opacity:{{ toastOp }};pointer-events:{{ toastPe }};transition:opacity 220ms cubic-bezier(.2,.8,.2,1), transform 220ms cubic-bezier(.2,.8,.2,1);display:flex;align-items:center;gap:12px;height:38px;padding:0 6px 0 14px;border-radius:10px;background:#24221f;box-shadow:0 0 0 1px #34312d,0 12px 30px rgba(0,0,0,0.5);font-size:13px;white-space:nowrap">
+            <span style="display:flex;color:#86c98c">{{ ic.check }}</span><span>Fix applied to <span style="font-family:'Geist Mono',monospace;font-size:12px">limiter.ts</span></span>
+            <div onClick="{{ onUndo }}" style="height:28px;display:flex;align-items:center;padding:0 10px;border-radius:7px;font-weight:500;transition:background 120ms" style-hover="background:#302d2a">Undo</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#141312;border:1px solid #201f1d;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 12px 0 18px"><span style="font-size:13.5px;font-weight:500">Loading · skeleton to content</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#6f6a63">crossfade 220ms · 40ms stagger</span><div style="flex:1"></div>
+          <div style="position:relative;display:flex;padding:2px;border-radius:8px;background:#1a1918;box-shadow:inset 0 0 0 1px #232120">
+            <div style="position:absolute;left:2px;top:2px;width:76px;height:26px;border-radius:6px;background:#2a2826;transform:translateX({{ segX }});transition:transform 200ms cubic-bezier(.3,.7,.2,1)"></div>
+            <div onClick="{{ showLoading }}" style="position:relative;width:76px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;color:{{ segA }};transition:color 150ms;cursor:default">Loading</div>
+            <div onClick="{{ showLoaded }}" style="position:relative;width:76px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;color:{{ segB }};transition:color 150ms;cursor:default">Loaded</div>
+          </div>
+        </div>
+        <div style="position:relative;height:248px;margin:14px 10px 12px">
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;gap:2px;opacity:{{ skOp }};transition:opacity 220ms">
+            <sc-for list="{{ skRows }}" as="k" hint-placeholder-count="4">
+              <div style="height:56px;display:flex;align-items:center;gap:12px;padding:0 12px">{{ k.a }}<div style="flex:1;display:flex;flex-direction:column;gap:8px">{{ k.b }}{{ k.c }}</div>{{ k.d }}</div>
+            </sc-for>
+          </div>
+          <div style="position:absolute;inset:0;display:flex;flex-direction:column;gap:2px;pointer-events:{{ ldPe }}">
+            <sc-for list="{{ loadedRows }}" as="f" hint-placeholder-count="4">
+              <div style="height:56px;display:flex;align-items:center;gap:12px;padding:0 12px;border-radius:10px;opacity:{{ f.op }};transform:translateY({{ f.ty }});transition:opacity 220ms {{ f.delay }}, transform 220ms cubic-bezier(.3,.7,.2,1) {{ f.delay }}, background 120ms" style-hover="background:#1a1918">
+                <span style="min-width:44px;text-align:center;font-size:11px;font-weight:500;padding:1px 6px;border-radius:5px;color:{{ f.fg }};background:{{ f.bg }}">{{ f.sev }}</span>
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px"><span style="font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ f.title }}</span><span style="font-size:12px;color:#6f6a63">{{ f.agent }}</span></div>
+                <span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#6f6a63">{{ f.loc }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#141312;border:1px solid #201f1d;border-radius:14px;overflow:hidden;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:baseline;gap:12px;padding:16px 18px 0"><span style="font-size:13.5px;font-weight:500">Buttons and motion tokens</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:#6f6a63">hover and press each one</span></div>
+        <div style="padding:18px;display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <div style="height:32px;display:flex;align-items:center;gap:7px;padding:0 14px;border-radius:8px;background:{{ primary }};color:{{ onPrimary }};font-size:13px;font-weight:500;transition:filter 120ms, transform 80ms;cursor:default" style-hover="filter:brightness(1.08)" style-active="transform:scale(0.97)">{{ ic.play }}Review</div>
+            <div style="height:32px;display:flex;align-items:center;padding:0 12px;border-radius:8px;box-shadow:inset 0 0 0 1px #2e2b28;font-size:13px;color:#cfcac2;transition:background 120ms, box-shadow 120ms, color 120ms, transform 80ms;cursor:default" style-hover="background:#1f1e1c;box-shadow:inset 0 0 0 1px #3a3632;color:#ede9e3" style-active="transform:scale(0.97)">Open diff</div>
+            <div style="height:32px;display:flex;align-items:center;padding:0 12px;border-radius:8px;font-size:13px;color:#8a857d;transition:background 120ms, color 120ms, transform 80ms;cursor:default" style-hover="background:#1c1b19;color:#ede9e3" style-active="transform:scale(0.97)">Dismiss</div>
+            <div style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;border-radius:8px;color:#8a857d;transition:background 120ms, color 120ms, transform 80ms" style-hover="background:#1c1b19;color:#ede9e3" style-active="transform:scale(0.92)">{{ ic.settings }}</div>
+            <div style="flex:1"></div>
+            <div onClick="{{ toggleSw }}" style="display:flex;align-items:center;gap:10px;height:32px;padding:0 4px;font-size:13px;color:#a39e96;cursor:default"><span>Interactive review</span><span style="width:32px;height:18px;border-radius:9px;background:{{ sw2Track }};position:relative;transition:background 160ms"><span style="position:absolute;left:2px;top:2px;width:14px;height:14px;border-radius:7px;background:{{ sw2Knob }};transform:translateX({{ sw2X }});transition:transform 160ms cubic-bezier(.3,.7,.2,1), background 160ms"></span></span></div>
+          </div>
+          <div style="border-radius:10px;box-shadow:0 0 0 1px #211f1d;overflow:hidden">
+            <sc-for list="{{ tokens }}" as="k" hint-placeholder-count="6">
+              <div style="display:grid;grid-template-columns:150px minmax(0,1fr);gap:12px;padding:9px 14px;border-top:{{ k.border }};font-size:12.5px"><span style="color:#a39e96">{{ k.name }}</span><span style="font-family:'Geist Mono',monospace;font-size:11.5px;color:#cfcac2">{{ k.val }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;primary&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#ede9e3&quot;,&quot;options&quot;:[&quot;#ede9e3&quot;,&quot;#f7f4ee&quot;,&quot;#5b8def&quot;,&quot;#3d6bff&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Brand&quot;},&quot;serif&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Newsreader&quot;,&quot;Lora&quot;,&quot;Source Serif 4&quot;,&quot;Literata&quot;],&quot;default&quot;:&quot;Newsreader&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Type&quot;},&quot;sans&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;Geist&quot;,&quot;Inter&quot;,&quot;DM Sans&quot;],&quot;default&quot;:&quot;Geist&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Type&quot;},&quot;highlight&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;traveling&quot;,&quot;instant&quot;],&quot;default&quot;:&quot;traveling&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Motion&quot;}}">
+class Component extends DCLogic {
+  state = {
+    hl: {}, tab: 'r4127', act: null, sFocus: false,
+    menu: false, sub: null, model: '5.6 Sol', effort: 'Medium', applyAll: false,
+    text: '', cFocus: false, sending: false, lastSent: null,
+    rows: { a: 'idle', b: 'idle', c: 'idle', d: 'idle' }, hoverRow: null,
+    live: { phase: 'idle', tools: [0, 0, 0], chars: 0 },
+    fix: 'idle', toast: false, copied: false,
+    loaded: false, sw: true
+  };
+  MODELS = {
+    '5.6 Sol': { provider: 'ChatGPT', efforts: [['Low', 'Fastest, fewest tokens'], ['Medium', 'Default'], ['High', 'Slower, more thorough']] },
+    '5.6 Sol Mini': { provider: 'ChatGPT', efforts: [['Minimal', 'Near-instant'], ['Low', 'Fast'], ['Medium', 'Default'], ['High', 'Most thorough']] },
+    'Qwen3 Coder': { provider: 'OpenRouter', efforts: null }
+  };
+  LIVE_TEXT = "Two things stand out. refill() still reads Date.now(), so the injected Clock does nothing yet, and the buckets Map never evicts. I've asked Correctness and Performance to confirm both.";
+  componentDidMount() {
+    this.timers = []; this.liveTimers = [];
+    const m = () => this.measureTab();
+    requestAnimationFrame(m);
+    if (document.fonts) document.fonts.ready.then(m);
+    this.runLive();
+    this.after(1400, () => this.setState({ loaded: true }));
+  }
+  componentWillUnmount() { this.timers.forEach(clearTimeout); this.liveTimers.forEach(clearTimeout); }
+  after(ms, fn) { this.timers.push(setTimeout(fn, ms)); }
+  measureTab() { const el = this.tabEls && this.tabEls[this.state.tab]; if (el) this.setState({ act: { x: el.offsetLeft, w: el.offsetWidth, anim: false } }); }
+  tabRef(id) { this._tr = this._tr || {}; return this._tr[id] || (this._tr[id] = (el) => { (this.tabEls = this.tabEls || {})[id] = el; }); }
+  enter(g, extra) {
+    return (e) => {
+      const el = e.currentTarget; const r = { x: el.offsetLeft, y: el.offsetTop, w: el.offsetWidth, h: el.offsetHeight };
+      this.setState((s) => { const p = s.hl[g]; r.on = true; r.anim = !!(p && p.on); return Object.assign({ hl: Object.assign({}, s.hl, { [g]: r }) }, extra || {}); });
+    };
+  }
+  leave(g, extra) { return () => this.setState((s) => Object.assign({ hl: Object.assign({}, s.hl, { [g]: Object.assign({}, s.hl[g], { on: false }) }) }, extra || {})); }
+  hlv(g) {
+    const h = this.state.hl[g] || { x: 0, y: 0, w: 0, h: 0 }; const e = 'cubic-bezier(.3,.7,.2,1)';
+    const travel = (this.props.highlight ?? 'instant') === 'traveling' && h.anim;
+    return { x: h.x, y: h.y, w: h.w, h: h.h, op: h.on ? 1 : 0, tr: travel ? `transform 200ms ${e}, width 200ms ${e}, height 200ms ${e}, opacity 120ms` : 'opacity 120ms' };
+  }
+  icons() {
+    if (this._ic) return this._ic;
+    const h = React.createElement;
+    const P = {
+      search: [['circle', { cx: 11, cy: 11, r: 8 }], ['path', { d: 'm21 21-4.3-4.3' }]],
+      inbox: [['path', { d: 'M22 12h-6l-2 3h-4l-2-3H2' }], ['path', { d: 'M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z' }]],
+      plus: [['path', { d: 'M5 12h14' }], ['path', { d: 'M12 5v14' }]],
+      settings: [['path', { d: 'M20 7h-9' }], ['path', { d: 'M14 17H5' }], ['circle', { cx: 17, cy: 17, r: 3 }], ['circle', { cx: 7, cy: 7, r: 3 }]],
+      pr: [['circle', { cx: 18, cy: 18, r: 3 }], ['circle', { cx: 6, cy: 6, r: 3 }], ['path', { d: 'M13 6h3a2 2 0 0 1 2 2v7' }], ['line', { x1: 6, x2: 6, y1: 9, y2: 21 }]],
+      loader: [['path', { d: 'M21 12a9 9 0 1 1-6.219-8.56' }]],
+      chevR: [['path', { d: 'm9 18 6-6-6-6' }]],
+      check: [['path', { d: 'M20 6 9 17l-5-5' }]],
+      arrowUp: [['path', { d: 'm5 12 7-7 7 7' }], ['path', { d: 'M12 19V5' }]],
+      paperclip: [['path', { d: 'm21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48' }]],
+      replay: [['path', { d: 'M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8' }], ['path', { d: 'M3 3v5h5' }]],
+      wrench: [['path', { d: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z' }]],
+      copy: [['rect', { width: 14, height: 14, x: 8, y: 8, rx: 2 }], ['path', { d: 'M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2' }]],
+      play: [['path', { d: 'M6 3v18l15-9z' }]]
+    };
+    const mk = (n, s) => h('svg', { width: s, height: s, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round', strokeLinejoin: 'round', style: { display: 'block', flexShrink: 0 } }, P[n].map((e, i) => h(e[0], Object.assign({ key: i }, e[1]))));
+    const spin = (s) => h('span', { style: { display: 'inline-flex', animation: 'rc-spin 0.9s linear infinite' } }, mk('loader', s));
+    this._ic = { search: mk('search', 14), inbox: mk('inbox', 14), plus: mk('plus', 14), settings: mk('settings', 15), pr: mk('pr', 13), pr14: mk('pr', 14),
+      chevR: mk('chevR', 12), check: mk('check', 12), check14: mk('check', 14), arrowUp: mk('arrowUp', 16), paperclip: mk('paperclip', 14), replay: mk('replay', 13),
+      wrench: mk('wrench', 12), copy: mk('copy', 12), play: mk('play', 12), spin12: spin(12), spin13: spin(13), spin14: spin(14) };
+    return this._ic;
+  }
+  shim(text) {
+    return React.createElement('span', { style: { background: 'linear-gradient(90deg,#6f6a63 0%,#6f6a63 40%,#ede9e3 50%,#6f6a63 60%,#6f6a63 100%)', backgroundSize: '200% 100%', WebkitBackgroundClip: 'text', backgroundClip: 'text', color: 'transparent', animation: 'rc-shimmer 1.6s linear infinite' } }, text);
+  }
+  sk(w, hgt, r) {
+    return React.createElement('span', { style: { display: 'block', width: w, height: hgt, borderRadius: r || 4, background: 'linear-gradient(90deg,#1c1b19 0%,#262422 50%,#1c1b19 100%)', backgroundSize: '200% 100%', animation: 'rc-shimmer 1.4s linear infinite' } });
+  }
+  runLive() {
+    this.liveTimers.forEach(clearTimeout); this.liveTimers = [];
+    const at = (ms, fn) => this.liveTimers.push(setTimeout(fn, ms));
+    const set = (fn) => this.setState((s) => ({ live: fn(Object.assign({}, s.live, { tools: s.live.tools.slice() })) }));
+    this.setState({ live: { phase: 'thinking', tools: [0, 0, 0], chars: 0 } });
+    at(900, () => set((l) => { l.phase = 'tools'; l.tools[0] = 1; return l; }));
+    at(1400, () => set((l) => { l.tools[0] = 2; l.tools[1] = 1; return l; }));
+    at(2100, () => set((l) => { l.tools[1] = 2; l.tools[2] = 1; return l; }));
+    at(2600, () => set((l) => { l.tools[2] = 2; l.phase = 'stream'; return l; }));
+    const n = this.LIVE_TEXT.length; let t = 2750;
+    for (let c = 3; c < n + 3; c += 3) { const cc = Math.min(c, n); at(t, () => set((l) => { l.chars = cc; return l; })); t += 26; }
+    at(t + 120, () => set((l) => { l.phase = 'done'; return l; }));
+  }
+  review(id) {
+    return (e) => {
+      e.stopPropagation();
+      if (this.state.rows[id] !== 'idle') return;
+      const setRow = (v) => this.setState((s) => ({ rows: Object.assign({}, s.rows, { [id]: v }) }));
+      setRow('starting');
+      this.after(900, () => setRow('running'));
+      this.after(4600, () => setRow('done'));
+    };
+  }
+  renderVals() {
+    const s = this.state, h = React.createElement, ic = this.icons();
+    const primary = this.props.primary ?? '#ede9e3';
+    const hx = /^#([0-9a-f]{6})$/i.exec(primary); let onPrimary = '#ffffff';
+    if (hx) { const n = parseInt(hx[1], 16), lin = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      if (0.2126 * lin(n >> 16) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255) > 0.3) onPrimary = '#141312'; }
+    const serifName = this.props.serif ?? 'Lora', sansName = this.props.sans ?? 'Geist';
+
+    const TABS = [
+      ['home', 'Home', '', ic.inbox, '#a39e96', '4', '#6f6a63', 'transparent', true],
+      ['r4127', 'ledger-api', '#4127', ic.spin13, '#e9c07a', '4/6', '#a39e96', 'rgba(255,245,230,0.06)'],
+      ['r160', 'sivir-ui', '#160', ic.pr, '#86c98c', '2', '#6f6a63', 'transparent'],
+      ['r902', 'gateway', '#902', ic.pr, '#f08a7e', 'failed', '#f08a7e', 'rgba(240,138,126,0.12)'],
+      ['r88', 'recoder', '#88', ic.pr, '#86c98c', '1 high', '#f4a097', 'rgba(240,138,126,0.13)']
+    ];
+    const tabs = TABS.map(([id, repo, pr, icon, iconColor, badge, badgeFg, badgeBg, sep]) => ({
+      repo, pr, hasPr: !!pr, icon, iconColor, badge, badgeFg, badgeBg, sep: !!sep,
+      fg: id === s.tab ? '#ede9e3' : '#a39e96', ref: this.tabRef(id), enter: this.enter('tabs'),
+      click: (e) => { const el = e.currentTarget; this.setState({ tab: id, act: { x: el.offsetLeft, w: el.offsetWidth, anim: true } }); }
+    }));
+    const act = s.act ? { x: s.act.x, w: s.act.w, op: 1, tr: s.act.anim ? 'transform 240ms cubic-bezier(.3,.7,.2,1), width 240ms cubic-bezier(.3,.7,.2,1)' : 'none' } : { x: 0, w: 0, op: 0, tr: 'none' };
+
+    const M = this.MODELS[s.model], hasEffort = !!M.efforts;
+    const open = (on, axis) => ({ op: on ? 1 : 0, tf: on ? 'none' : axis, pe: on ? 'auto' : 'none' });
+    const mo = open(s.menu, 'translateY(4px) scale(0.98)'), sm = open(s.menu && s.sub === 'model', 'translateX(4px)'), se = open(s.menu && s.sub === 'effort' && hasEffort, 'translateX(4px)');
+    const models = Object.keys(this.MODELS).map((name) => ({ name, provider: this.MODELS[name].provider, check: name === s.model ? ic.check : null, enter: this.enter('subm'),
+      pick: () => { const m = this.MODELS[name]; const eff = m.efforts && !m.efforts.some((x) => x[0] === s.effort) ? 'Medium' : s.effort; this.setState({ model: name, effort: eff, menu: false, sub: null }); } }));
+    const efforts = hasEffort ? M.efforts.map(([label, desc]) => ({ label, desc, check: label === s.effort ? ic.check : null, enter: this.enter('sube'),
+      pick: () => this.setState({ effort: label, menu: false, sub: null }) })) : [];
+    const trigLabel = h('span', { key: s.model + (hasEffort ? s.effort : ''), style: { display: 'inline-flex', gap: 5, animation: 'rc-in 180ms cubic-bezier(.2,.8,.2,1)' } }, s.model, hasEffort ? h('span', { style: { color: '#8a857d' } }, s.effort) : null);
+
+    const canSend = s.text.trim().length > 0;
+    const stopIcon = h('span', { style: { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center', width: 30, height: 30 } },
+      h('span', { style: { width: 9, height: 9, borderRadius: 2, background: 'currentColor' } }),
+      h('span', { style: { position: 'absolute', inset: 0, borderRadius: 15, border: '1.5px solid transparent', borderTopColor: '#ede9e3', animation: 'rc-spin 0.9s linear infinite' } }));
+    const onSend = () => {
+      if (s.sending) { this.setState({ sending: false }); return; }
+      if (!canSend) return;
+      this.setState({ lastSent: s.text.trim(), text: '', sending: true });
+      this.after(2400, () => this.setState({ sending: false }));
+    };
+
+    const RW = [['a', 'ledger-api', '#4127', 'Move rate limiter into a class with injectable clock', '2h · 6 files', '6 findings'],
+      ['b', 'sivir-ui', '#160', 'refactor(cli): extract list formatting, add sivir status', '5h · 4 files', '2 findings'],
+      ['c', 'gateway', '#902', 'Stream upstream errors to client', '1d · 3 files', '1 finding'],
+      ['d', 'console', '#3310', 'Settings page: split billing tab', '2d · 9 files', 'No findings']];
+    const bar = h('span', { style: { position: 'relative', display: 'block', width: 64, height: 3, borderRadius: 2, background: '#262422', overflow: 'hidden' } },
+      h('span', { style: { position: 'absolute', top: 0, bottom: 0, width: '40%', borderRadius: 2, background: '#cfcac2', animation: 'rc-indet 1.1s cubic-bezier(.4,0,.2,1) infinite' } }));
+    const rows = RW.map(([id, repo, pr, title, meta, found]) => {
+      const st = s.rows[id], hov = s.hoverRow === id;
+      const showBtn = (st === 'idle' && hov) || st === 'starting';
+      return { repo, pr, title, enter: this.enter('rows', { hoverRow: id }), review: this.review(id),
+        icon: st === 'idle' ? ic.pr14 : st === 'done' ? ic.check14 : ic.spin14,
+        iconColor: st === 'done' ? '#86c98c' : st === 'idle' ? '#6f6a63' : '#e9c07a',
+        meta: st === 'running' ? h('span', { style: { display: 'flex', alignItems: 'center', gap: 10 } }, this.shim('Planning'), bar)
+          : st === 'done' ? h('span', { key: 'd', style: { animation: 'rc-in 220ms ease-out' } }, found) : meta,
+        metaFg: st === 'done' ? '#cfcac2' : '#6f6a63', metaOp: showBtn ? 0 : 1,
+        btnOp: showBtn ? 1 : 0, btnX: showBtn ? '0px' : '6px', btnPe: showBtn ? 'auto' : 'none',
+        btnContent: st === 'starting' ? h('span', { style: { display: 'flex', alignItems: 'center', gap: 7 } }, ic.spin12, 'Starting') : h('span', { style: { display: 'flex', alignItems: 'center', gap: 7 } }, ic.play, 'Review') };
+    });
+
+    const L = s.live;
+    const statusText = { thinking: 'Planning review', tools: 'Working', stream: 'Writing', idle: '' }[L.phase];
+    const liveStatus = L.phase === 'done' ? h('span', { key: 'done', style: { color: '#6f6a63', animation: 'rc-in 200ms ease-out' } }, 'Done · 4.1s') : h('span', { key: 'sh' }, this.shim(statusText));
+    const TL = [['Read file', 'src/rate-limit/limiter.ts', '0.3s'], ['Searched', 'Date.now', '0.5s'], ['Dispatched', 'Correctness, Performance', '0.1s']];
+    const tools = TL.map(([label, arg, ms], i) => { const st = L.tools[i];
+      return { label, arg, ms, h: st ? 26 : 0, op: st ? 1 : 0, ty: st ? 0 : -3, icon: st === 2 ? ic.check : ic.spin12, iconColor: st === 2 ? '#86c98c' : '#8a857d', msOp: st === 2 ? 1 : 0 }; });
+    const streaming = L.phase === 'stream';
+    const caret = streaming ? h('span', { style: { display: 'inline-block', width: 2, height: '1em', background: '#ede9e3', verticalAlign: '-0.15em', marginLeft: 2, animation: 'rc-blink 1s steps(1) infinite' } }) : null;
+
+    const fx = s.fix;
+    const applyContent = fx === 'applying' ? h('span', { key: 'a', style: { display: 'flex', alignItems: 'center', gap: 6 } }, ic.spin12, 'Applying')
+      : fx === 'applied' ? h('span', { key: 'b', style: { display: 'flex', alignItems: 'center', gap: 6, animation: 'rc-in 180ms ease-out' } }, ic.check, 'Applied')
+      : h('span', { key: 'c', style: { display: 'flex', alignItems: 'center', gap: 6 } }, ic.wrench, 'Apply fix');
+    const copyContent = s.copied ? h('span', { key: 'y', style: { display: 'flex', alignItems: 'center', gap: 6, color: '#86c98c', animation: 'rc-in 150ms ease-out' } }, ic.check, 'Copied') : h('span', { key: 'n', style: { display: 'flex', alignItems: 'center', gap: 6 } }, ic.copy, 'Copy');
+
+    const FR = [['High', '#f4a097', 'rgba(240,138,126,0.13)', 'allow() can go negative under concurrent calls', 'Correctness', 'limiter.ts:24'],
+      ['Medium', '#e9c07a', 'rgba(230,180,94,0.13)', 'refill() ignores the injected Clock', 'Correctness', 'limiter.ts:23'],
+      ['Medium', '#e9c07a', 'rgba(230,180,94,0.13)', 'buckets Map has no eviction', 'Performance', 'limiter.ts:11'],
+      ['Low', '#9fb8e6', 'rgba(127,166,245,0.12)', 'capacity is never validated', 'Correctness', 'limiter.ts:14']];
+    const loadedRows = FR.map(([sev, fg, bg, title, agent, loc], i) => ({ sev, fg, bg, title, agent, loc, op: s.loaded ? 1 : 0, ty: s.loaded ? '0px' : '4px', delay: s.loaded ? (80 + i * 40) + 'ms' : '0ms' }));
+    const skRows = [0, 1, 2, 3].map((i) => ({ a: this.sk(44, 16, 5), b: this.sk([220, 180, 250, 160][i], 10), c: this.sk([90, 110, 80, 100][i], 8), d: this.sk(70, 9) }));
+
+    const tokens = [['Hover', 'background, color · 120ms ease-out'], ['Press', 'scale 0.97 (icons 0.92) · 80ms'], ['Hover highlight', 'instant position, 120ms fade in/out (travel available as tweak)'],
+      ['Menus', 'fade + 4px rise from trigger · 150ms cubic-bezier(.2,.8,.2,1)'], ['Content enter', 'fade + 4px · 220ms · 40ms stagger'], ['Reduced motion', 'transitions snap; spinners keep turning']]
+      .map(([name, val], i) => ({ name, val, border: i ? '1px solid #211f1d' : 'none' }));
+
+    return {
+      ic, primary, onPrimary, serifFam: "'" + serifName + "',Georgia,serif", sansFam: "'" + sansName + "',system-ui,sans-serif",
+      tabs, act, hlTabs: this.hlv('tabs'), tabsLeave: this.leave('tabs'),
+      searchBg: s.sFocus ? '#1a1918' : '#151413', searchRing: s.sFocus ? 'inset 0 0 0 1px #3d3935, 0 0 0 3px rgba(237,233,227,0.06)' : 'inset 0 0 0 1px #1f1e1c',
+      searchFocus: () => this.setState({ sFocus: true }), searchBlur: () => this.setState({ sFocus: false }),
+      menu: s.menu, closeMenu: () => this.setState({ menu: false, sub: null }), toggleMenu: () => this.setState((p) => ({ menu: !p.menu, sub: null })),
+      menuOp: mo.op, menuTf: mo.tf, menuPe: mo.pe, submOp: sm.op, submTf: sm.tf, submPe: sm.pe, subeOp: se.op, subeTf: se.tf, subePe: se.pe,
+      hlMenu: this.hlv('menu'), hlSubm: this.hlv('subm'), hlSube: this.hlv('sube'),
+      menuLeave: this.leave('menu', { sub: null }), submLeave: this.leave('subm'), subeLeave: this.leave('sube'),
+      enterModel: this.enter('menu', { sub: 'model' }), enterEffort: this.enter('menu', { sub: hasEffort ? 'effort' : null }), enterPlain: this.enter('menu', { sub: null }),
+      model: s.model, hasEffort, effortVal: hasEffort ? s.effort : 'Not supported', effortValFg: hasEffort ? '#a39e96' : '#57534d', effortRowFg: hasEffort ? '#ede9e3' : '#6f6a63',
+      models, efforts, trigLabel, trigBg: s.menu ? '#2a2826' : 'transparent',
+      toggleApply: () => this.setState((p) => ({ applyAll: !p.applyAll })),
+      swTrack: s.applyAll ? primary : '#34312d', swKnob: s.applyAll ? onPrimary : '#8a857d', swX: s.applyAll ? '11px' : '0px',
+      text: s.text, onText: (e) => this.setState({ text: e.target.value }),
+      onKey: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); onSend(); } },
+      compFocus: () => this.setState({ cFocus: true }), compBlur: () => this.setState({ cFocus: false }),
+      compRing: s.cFocus ? '0 0 0 1px #3d3935, 0 10px 30px rgba(0,0,0,0.35)' : '0 0 0 1px #2a2826, 0 10px 30px rgba(0,0,0,0.35)',
+      onSend, sendBg: s.sending ? '#2a2826' : canSend ? primary : '#232120', sendFg: s.sending ? '#ede9e3' : canSend ? onPrimary : '#57534d',
+      sendIcon: s.sending ? stopIcon : ic.arrowUp,
+      hasSent: !!s.lastSent, noSent: !s.lastSent, lastSent: s.lastSent,
+      replyEl: s.sending ? h('span', { key: 'th', style: { fontFamily: "'" + sansName + "',sans-serif", fontSize: 13 } }, this.shim('Thinking')) : h('span', { key: 'rp', style: { animation: 'rc-in 220ms ease-out' } }, "Noted. I'll fold that into the summary before it posts."),
+      rows, hlRows: this.hlv('rows'), rowsLeave: this.leave('rows', { hoverRow: null }),
+      replay: () => this.runLive(), liveStatus, tools, liveText: this.LIVE_TEXT.slice(0, L.chars), caret,
+      pillLabel: fx === 'applied' ? 'Fixed' : 'Medium', pillFg: fx === 'applied' ? '#86c98c' : '#e9c07a', pillBg: fx === 'applied' ? 'rgba(134,201,140,0.13)' : 'rgba(230,180,94,0.13)',
+      fixTitleFg: fx === 'applied' ? '#8a857d' : '#ede9e3',
+      applyBg: fx === 'applied' ? 'transparent' : primary, applyFg: fx === 'applied' ? '#86c98c' : onPrimary, applyRing: fx === 'applied' ? 'inset 0 0 0 1px #2e2b28' : 'none', applyContent,
+      onApply: () => { if (fx !== 'idle') return; this.setState({ fix: 'applying' }); this.after(1000, () => { this.setState({ fix: 'applied', toast: true }); const id = (this._toast = (this._toast || 0) + 1); this.after(5000, () => { if (this._toast === id) this.setState({ toast: false }); }); }); },
+      onUndo: () => { this._toast = (this._toast || 0) + 1; this.setState({ fix: 'idle', toast: false }); },
+      toastY: s.toast ? '0px' : '12px', toastOp: s.toast ? 1 : 0, toastPe: s.toast ? 'auto' : 'none',
+      copyContent, onCopy: () => { this.setState({ copied: true }); this.after(1200, () => this.setState({ copied: false })); },
+      segX: s.loaded ? '76px' : '0px', segA: s.loaded ? '#8a857d' : '#ede9e3', segB: s.loaded ? '#ede9e3' : '#8a857d',
+      showLoading: () => this.setState({ loaded: false }), showLoaded: () => this.setState({ loaded: true }),
+      skOp: s.loaded ? 0 : 1, ldPe: s.loaded ? 'auto' : 'none', skRows, loadedRows,
+      toggleSw: () => this.setState((p) => ({ sw: !p.sw })), sw2Track: s.sw ? primary : '#34312d', sw2Knob: s.sw ? onPrimary : '#8a857d', sw2X: s.sw ? '14px' : '0px',
+      tokens
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -279,7 +279,7 @@
 	tasks={viewTasks}
 	reasoning={viewReasoning}
 	toolCalls={viewTools}
-	pipelineLogs={agents.flatMap((agent) => agent.logs)}
+	activity={agents.flatMap((agent) => agent.logs.map((message) => ({ message, agent: agent.name })))}
 	{pendingCount}
 	{onOpenDiff}
 	onRestart={confirmRestart}

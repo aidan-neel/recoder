@@ -353,3 +353,26 @@ test('harness completion and streaming use direct HTTP, count once each and pres
 		db.reviews.delete(id); reviewMetrics.delete(id);
 	}
 });
+
+test('model discovery reads effort levels and the default from the catalog', async () => {
+	const f = fixture({
+		handler: (call) => call.url.includes('/codex/models?')
+			? Response.json({ models: [
+				{
+					slug: 'sol', display_name: 'GPT-5.6-Sol', visibility: 'list', default_reasoning_level: 'medium',
+					supported_reasoning_levels: [
+						{ effort: 'low', description: 'Fast' },
+						{ effort: 'medium', description: 'Balanced' },
+						{ effort: 'xhigh', description: 'Extra high' },
+						{ effort: 'turbo', description: 'Unknown levels are ignored' }
+					]
+				},
+				{ slug: 'legacy', visibility: 'list', supported_reasoning_efforts: ['minimal', 'high'] }
+			] })
+			: undefined
+	});
+	expect(await f.provider.models()).toEqual([
+		{ id: 'sol', label: 'GPT-5.6-Sol', efforts: ['low', 'medium', 'xhigh'], defaultEffort: 'medium' },
+		{ id: 'legacy', label: 'legacy', efforts: ['minimal', 'high'] }
+	]);
+});

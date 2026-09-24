@@ -11,8 +11,10 @@ recoverStaleReviews();
 
 const server = Bun.serve({
 	fetch(request, server) {
-		// Review conversations stay subscribed even when the agents are idle.
-		if (/^\/api\/reviews\/[^/]+\/events$/.test(new URL(request.url).pathname)) server.timeout(request, 0);
+		// Review conversations stay subscribed even when the agents are idle, and a
+		// guidelines draft can think for longer than the idle timeout before its first token.
+		const path = new URL(request.url).pathname;
+		if (/^\/api\/reviews\/[^/]+\/events$/.test(path) || path === '/api/guidelines/draft') server.timeout(request, 0);
 		return app.fetch(request, server);
 	},
 	port: env.PORT,

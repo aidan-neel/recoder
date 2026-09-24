@@ -165,6 +165,13 @@ class SessionState {
 		this.persist();
 	}
 
+	/** Put a closed tab back where it was, without changing the active tab (undo). */
+	restore(session: Session, index: number): void {
+		if (this.sessions.some((s) => s.id === session.id)) return;
+		this.sessions = [...this.sessions.slice(0, index), session, ...this.sessions.slice(index)];
+		this.persist();
+	}
+
 	close(id: string): void {
 		const index = this.sessions.findIndex((s) => s.id === id);
 		if (index === -1) return;

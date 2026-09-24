@@ -1,14 +1,11 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
-	import ArrowUp from '@lucide/svelte/icons/arrow-up';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
-	import Paperclip from '@lucide/svelte/icons/paperclip';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import * as Card from '@sivir-ui/svelte/components/card';
-	import * as Composer from '@sivir-ui/svelte/components/composer';
 	import * as Conversation from '@sivir-ui/svelte/components/conversation';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
@@ -16,7 +13,10 @@
 	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import FindingSeverity from './finding-severity.svelte';
+	import ModelPicker from './model-picker.svelte';
+	import ReviewComposer from './review-composer.svelte';
+	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
+	import type { ReviewRole } from '@recoder/shared';
 	import { findingsStore } from '$lib/findings.svelte';
 	import { serverApi } from '$lib/server-api';
 	import { formatAgentName, threadsStore, type Thread } from '$lib/threads.svelte';
@@ -35,10 +35,12 @@
 	];
 
 	let active = $state(BASE_PARTICIPANTS[0]);
+	const isRole = (role: string): role is ReviewRole => (MODEL_ROLES as string[]).includes(role);
 	let draft = $state('');
 	let attachedQuote = $state<string | null>(null);
 	let selectionAvailable = $state(false);
 	let sending = $state(false);
+	let replyController = $state<AbortController | null>(null);
 	let sendError = $state<string | null>(null);
 	let inputEl: HTMLTextAreaElement | undefined = $state();
 	let returnFocus: HTMLElement | null = null;
@@ -161,15 +163,17 @@
 		const push = (text: string) => threadsStore.appendReply(findingId, placeholderId, text);
 		const streamedSoFar = (): string =>
 			threadsStore.get(findingId)?.messages.find((m) => m.id === placeholderId)?.body.trim() ?? '';
+		const controller = new AbortController();
+		replyController = controller;
 		try {
 			try {
-				const result = await serverApi.discussStream(reviewId, payload, push);
+				const result = await serverApi.discussStream(reviewId, payload, push, controller.signal);
 				threadsStore.finishReply(findingId, placeholderId, result.agent, result.model);
 			} catch (e) {
 				// Nothing arrived — likely transient (model hiccup, dropped stream).
 				// Retry once before giving up; a partial reply is kept as-is.
-				if (streamedSoFar() !== '') throw e;
-				const result = await serverApi.discussStream(reviewId, payload, push);
+				if (controller.signal.aborted || streamedSoFar() !== '') throw e;
+				const result = await serverApi.discussStream(reviewId, payload, push, controller.signal);
 				threadsStore.finishReply(findingId, placeholderId, result.agent, result.model);
 			}
 		} catch (e) {
@@ -178,9 +182,10 @@
 			} else {
 				threadsStore.dropReply(findingId, placeholderId);
 			}
-			sendError = e instanceof Error ? e.message : 'The reviewer did not respond.';
+			if (!controller.signal.aborted) sendError = e instanceof Error ? e.message : 'The reviewer did not respond.';
 		} finally {
 			sending = false;
+			if (replyController === controller) replyController = null;
 		}
 	}
 
@@ -208,12 +213,12 @@
 	<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
 		<div class="flex min-h-12 w-full shrink-0 items-center gap-2 border-b border-border-subtle px-4">
 			{#if finding}
-				<FindingSeverity severity={finding.severity} />
-				<Typography.Title level={2} class="min-w-0 flex-1 truncate text-sm font-normal" title={finding.title}>{finding.title}</Typography.Title>
+				<!-- No visible title: the finding card below names it. Kept for screen readers. -->
+				<Typography.Title level={2} class="sr-only">{finding.title}</Typography.Title>
 				<Button
 					variant="ghost"
 					size="icon"
-					class="-mr-2"
+					class="ml-auto -mr-2"
 					aria-label={contextOpen ? 'Collapse finding card' : 'Expand finding card'}
 					aria-expanded={contextOpen}
 					onclick={() => (contextOpen = !contextOpen)}
@@ -221,12 +226,12 @@
 					<ChevronDown size={15} class="motion-safe:transition-transform {contextOpen ? '' : '-rotate-90'}" />
 				</Button>
 			{:else}
-				<Typography.Title level={2} class="text-sm font-normal">Discussion</Typography.Title>
+				<Typography.Title level={2} class="sr-only">Discussion</Typography.Title>
 			{/if}
 			<Button
 				variant="ghost"
 				size="icon"
-				class="ml-auto shrink-0"
+				class="{finding ? '' : 'ml-auto'} shrink-0"
 				aria-label="Close discussion"
 				onclick={() => void close()}
 			>
@@ -341,15 +346,38 @@
 				<Button variant="secondary" onclick={() => attachedQuote = null} aria-label="Remove attached code" class="max-w-full gap-2 font-mono text-xs"><span class="truncate">{attachedQuote.split('\n')[0].slice(0, 48)}</span><X size={12} aria-hidden="true" /></Button>
 			{/if}
 			{#if sendError}<Typography.Text class="break-words text-sm text-error" role="alert">{sendError}</Typography.Text>{/if}
-			<Composer.Root data-composer class="session-composer" bind:value={draft} status={sending ? 'submitting' : 'idle'} disabled={composerBusy || !finding} onSubmit={() => send()}>
-				<Composer.Input bind:element={inputEl} rows={1} name="discussion" placeholder={finding ? `Ask ${formatAgentName(active)}…` : 'Select a finding'} aria-label={finding ? 'Ask about this finding' : 'Select a finding'} class="session-composer-input" />
-				<Composer.Actions class="!flex-none !flex-nowrap !gap-1 self-end !p-0">
-					<Button variant="quiet" size="icon" class="group size-9 rounded-full text-foreground-muted" disabled={!selectionAvailable || composerBusy} onclick={attachSelection} aria-label="Attach selected code" title="Select code in the diff to attach it"><span class="flex size-7 items-center justify-center rounded-full group-hover:bg-foreground/[0.08]"><Paperclip class="size-3.5" aria-hidden="true" /></span></Button>
-					<Composer.Submit class="!size-9 !min-w-9 !rounded-full !bg-transparent !p-0 [&_.sivir-button-face]:text-[0px]" disabled={!finding || composerBusy}>
-						{#snippet children()}<span class="flex size-7 items-center justify-center rounded-full bg-primary text-[var(--color-on-primary)]"><ArrowUp class="size-4" aria-hidden="true" /></span>{/snippet}
-					</Composer.Submit>
-				</Composer.Actions>
-			</Composer.Root>
+			<div data-composer>
+				<ReviewComposer
+					bind:value={draft}
+					bind:inputEl
+					size="panel"
+					label={finding ? 'Ask about this finding' : 'Select a finding'}
+					placeholder={finding ? `Reply to ${formatAgentName(active)}…` : 'Select a finding'}
+					{sending}
+					generating={composerBusy && !sending}
+					disabled={!finding}
+					onSubmit={() => send()}
+					onAttach={attachSelection}
+					attachDisabled={!selectionAvailable || composerBusy}
+					attachLabel="Attach selected code"
+				>
+					{#snippet leading()}
+						<Typography.Metadata class="truncate text-[12px] text-fg-faint">Shared with Orchestrator</Typography.Metadata>
+					{/snippet}
+					{#snippet picker()}
+						{#if isRole(active)}
+							{@const role = active}
+							<ModelPicker
+								value={modelSettingsUi.roleChoice(role)}
+								onSelect={(choice) => void modelSettingsUi.selectRole(role, choice)}
+								size="panel"
+								disabled={modelSettingsUi.applyToSpecialists}
+								label="{formatAgentName(role)} model"
+							/>
+						{/if}
+					{/snippet}
+				</ReviewComposer>
+			</div>
 		</div>
 	</Card.Root>
 	</section>

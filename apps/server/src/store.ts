@@ -75,7 +75,7 @@ export const reviewMetrics = createCollection<{
 	calls: TokenCall[];
 }>('review_metrics');
 
-/** Sandbox checkout paths by review id (ephemeral: lost on restart, context falls back to diff-only). */
+/** Sandbox checkout paths by review id. In memory only; `lib/review-checkout.ts` finds or restores a checkout after a restart. */
 export const reviewSandboxes = new Map<string, string>();
 
 /** Raw unified diffs by review id. Populated by the pipeline's fetch step. */

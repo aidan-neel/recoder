@@ -38,6 +38,8 @@ import {
 	type PlannerAssignment,
 	type PlannerOutput
 } from './planner.js';
+import { GUIDELINES_PATH, type ReviewGuidelinesUsed } from '@recoder/shared';
+import { composeGuidelines, readGlobalGuidelines, withGuidelines, type GuidelinesInput } from './guidelines.js';
 import { parseSpecialistOutput, specialistSystemPrompt, specialistUserPrompt } from './specialist.js';
 import {
 	applyConsolidation,
@@ -87,6 +89,8 @@ export interface HarnessEvents {
 	onMessage?: (message: Omit<ReviewChatMessage, 'at' | 'from'>) => void;
 	getDiscussion?: (assignmentId?: string) => string;
 	onTool?: (tool: ToolCallReport & { assignmentId?: string; role?: string }) => void;
+	/** Which owner guidelines this review runs with (reported once, after inventory). */
+	onGuidelines?: (used: ReviewGuidelinesUsed) => void;
 }
 
 /** Safely read a sandbox file (stays inside the checkout, capped length). */
@@ -227,6 +231,12 @@ export async function runAdaptiveReview(
 		events?.onStage?.('understand');
 		task('inventory', 'Understand changes', 'running', 'Building the change inventory', { kind: 'inventory' });
 		await loadGuidance(inventory, evidence, controller.signal, events?.onTool);
+		const guidelines = composeGuidelines({
+			global: readGlobalGuidelines().content,
+			repo: await loadRepoGuidelines(evidence, controller.signal, events?.onTool)
+		});
+		inventory.guidelines = guidelines?.block ?? null;
+		if (guidelines) events?.onGuidelines?.(guidelines.used);
 		task('inventory', 'Understand changes', 'done', `Inventoried ${inventory.files.length} changed path${inventory.files.length === 1 ? '' : 's'}`, {
 			kind: 'inventory'
 		});
@@ -378,7 +388,7 @@ export async function runAdaptiveReview(
 					label: 'consolidation',
 					getDiscussion: () => events?.getDiscussion?.() ?? '',
 					onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
-					system: consolidationSystemPrompt(),
+					system: withGuidelines(consolidationSystemPrompt(), inventory.guidelines),
 					user: consolidationUserPrompt(valid, evidence),
 					config: cfg,
 					budget,
@@ -507,7 +517,7 @@ async function runPlanner(input: {
 		label: 'planner',
 		getDiscussion: () => input.events?.getDiscussion?.() ?? '',
 		onMessage: (message) => input.events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
-		system: plannerSystemPrompt(),
+		system: withGuidelines(plannerSystemPrompt(), input.inventory.guidelines),
 		user: plannerUserPrompt({ title: input.title, body: input.body, inventory: input.inventory }),
 		config: cfg,
 		budget: input.budget,
@@ -570,7 +580,7 @@ async function selectFollowUps(
 		label: 'follow-up planning',
 		getDiscussion: () => events?.getDiscussion?.() ?? '',
 		onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
-		system: plannerSystemPrompt() + '\nThis is a follow-up pass. Dispatch at most two narrowly scoped investigations.',
+		system: withGuidelines(plannerSystemPrompt() + '\nThis is a follow-up pass. Dispatch at most two narrowly scoped investigations.', inventory.guidelines),
 		user: `Pending follow-up requests:\n${JSON.stringify(unique, null, 2)}\n\nSelect at most two. Return planner JSON.`,
 		config: cfg,
 		budget,
@@ -665,7 +675,7 @@ async function runOneAssignment(
 		);
 		const result = await runJsonAgent({
 			label: item.title,
-			system: specialistSystemPrompt(item.role),
+			system: withGuidelines(specialistSystemPrompt(item.role), ctx.inventory.guidelines),
 			getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
 			onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model: cfg.model }),
 			user: specialistUserPrompt(item, REVIEW_POLICY.maxSpecialistTurns, ctx.budget.remaining()) + '\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' + formatToolResults(initialEvidence),
@@ -846,6 +856,31 @@ function anchorFn(inventory: ReviewInventory) {
 		}
 		return out.join('\n');
 	};
+}
+
+/**
+ * The repo layer of owner guidelines, read at the PR's base ("target") commit:
+ * a pull request that edits the file does not change its own review.
+ */
+async function loadRepoGuidelines(evidence: EvidenceStore, signal: AbortSignal, onTool?: HarnessEvents['onTool']): Promise<GuidelinesInput['repo']> {
+	if (!evidence.revision) return null;
+	try {
+		const [path] = await evidence.existingFiles('target', [GUIDELINES_PATH], signal);
+		if (!path) return null;
+		const lines = REVIEW_POLICY.maxReadLines;
+		const results = await evidence.executeRound([
+			{ action: 'readFile', revision: 'target', path, startLine: 1, endLine: lines },
+			{ action: 'readFile', revision: 'target', path, startLine: lines + 1, endLine: lines * 2 }
+		], signal, onTool);
+		const content = results
+			.filter((result) => result.ok)
+			.map((result) => result.content.split('\n').map((line) => line.replace(/^\d+\|/, '')).join('\n'))
+			.join('\n');
+		if (!content.trim()) return null;
+		return { content, path, ref: evidence.revision.targetRef || undefined, sha: evidence.revision.targetSha || undefined };
+	} catch {
+		return null;
+	}
 }
 
 async function loadGuidance(inventory: ReviewInventory, evidence: EvidenceStore, signal: AbortSignal, onTool?: HarnessEvents['onTool']): Promise<void> {

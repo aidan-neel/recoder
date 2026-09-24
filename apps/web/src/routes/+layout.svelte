@@ -1,49 +1,48 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import appleTouchIcon from '$lib/assets/apple-touch-icon.png';
 	import favicon from '$lib/assets/favicon.svg';
-	import AppSidebar from '$lib/components/app-sidebar.svelte';
-	import ModelSettingsModal from '$lib/components/model-settings-modal.svelte';
-	import Menu from '@lucide/svelte/icons/menu';
-	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
-	import { appSidebarState } from '$lib/app-sidebar-state.svelte';
+	import { Toaster } from '@sivir-ui/svelte/components/toast';
+	import CommandPalette from '$lib/components/command-palette.svelte';
+	import GuidelinesEditor from '$lib/components/guidelines-editor.svelte';
+	import ModelSettingsModal from '$lib/components/model-settings-modal.svelte';
+	import UsageModal from '$lib/components/usage-modal.svelte';
+	import DeleteSessionDialog from '$lib/components/delete-session-dialog.svelte';
+	import TopBar from '$lib/components/top-bar.svelte';
 	import '../app.css';
 
 	let { children } = $props();
+
+	// Sivir's Toaster portals to <body> without marking itself an overlay root,
+	// so an open modal inerts it and toast actions (Undo, View) stop responding.
+	// Overlay roots are exempt from that inert, so mark the toaster as one.
+	$effect(() => {
+		document.querySelector('[role="region"][aria-label="Notifications"]')?.parentElement?.setAttribute('data-overlay-root', '');
+	});
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
-	<title>Recoder — self-hosted PR reviews</title>
+	<link rel="icon" href={favicon} type="image/svg+xml" />
+	<link rel="apple-touch-icon" href={appleTouchIcon} />
+	<title>Recoder</title>
 	<meta
 		name="description"
 		content="Recoder is a self-hosted, OpenCode-style pull request reviewer you run with Docker."
 	/>
 </svelte:head>
 
-<div class="flex h-dvh overflow-hidden bg-chrome text-foreground">
-	<AppSidebar />
-	<div class="flex min-w-0 flex-1 flex-col lg:py-2 lg:pe-2">
-		<div
-			class="flex h-[52px] shrink-0 items-center gap-1 border-b border-border bg-background px-3 lg:hidden"
-		>
-			<Button
-				variant="ghost"
-				size="icon"
-				onclick={() => (appSidebarState.mobileOpen = true)}
-				aria-label="Open sessions sidebar"
-			>
-				<Menu size={16} />
-			</Button>
-			<Button href="/" unstyled class="flex min-h-9 items-center gap-2 rounded-md px-1">
-				<span class="recoder-mark size-4 bg-primary" aria-hidden="true"></span>
-				<span class="text-[16px] font-semibold tracking-tight">Recoder</span>
-			</Button>
-		</div>
-		<main class="flex min-h-0 flex-1">
-			<Card.Root class="min-h-0 min-w-0 flex-1 overflow-hidden rounded-none border-0 bg-background p-0 lg:rounded-xl lg:border lg:border-border-subtle">
-				{@render children()}
-			</Card.Root>
-		</main>
-	</div>
+<div class="flex h-dvh flex-col overflow-hidden bg-chrome text-fg">
+	<TopBar />
+	<main id="app-canvas" class="flex min-h-0 flex-1 px-2 pb-2" data-route={page.route.id}>
+		<Card.Root class="app-canvas min-h-0 min-w-0 flex-1 gap-0 overflow-hidden rounded-[14px] border border-line-canvas bg-canvas p-0 shadow-none">
+			{@render children()}
+		</Card.Root>
+	</main>
 	<ModelSettingsModal />
+	<GuidelinesEditor />
+	<UsageModal />
+	<DeleteSessionDialog />
+	<CommandPalette />
+	<Toaster />
 </div>

@@ -187,6 +187,26 @@ export interface ReviewChatMessage {
 	codeContext?: ReviewCodeContext;
 }
 
+/** One layer of owner review guidelines a review ran with. */
+export interface ReviewGuidelinesLayer {
+	source: 'global' | 'repo';
+	/** Repo file path (`.recoder/REVIEW.md`) for the repo layer. */
+	path?: string;
+	/** Branch the repo layer was read from (the PR's base). */
+	ref?: string;
+	/** Commit the repo layer was read at. */
+	sha?: string;
+	chars: number;
+	truncated: boolean;
+}
+
+/** Which owner guidelines a review used, so the UI can say why it behaved as it did. */
+export interface ReviewGuidelinesUsed {
+	layers: ReviewGuidelinesLayer[];
+	/** Short hash of the composed guidelines text. */
+	hash: string;
+}
+
 export interface ReviewProgress {
 	id: string;
 	sequence: number;
@@ -209,6 +229,7 @@ export interface ReviewProgress {
 	recommendedChecks?: string[];
 	stage?: ReviewStage;
 	planningDegraded?: boolean;
+	guidelines?: ReviewGuidelinesUsed;
 }
 
 export function emptyReviewProgress(id: string): ReviewProgress {

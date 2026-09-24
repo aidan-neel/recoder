@@ -66,6 +66,11 @@ export function extractJson(logs: string): unknown {
 	}
 }
 
+/** `gh api <path>` parsed as JSON (for endpoints without a dedicated command). */
+export async function ghApi(path: string, env?: Record<string, string>): Promise<unknown> {
+	return extractJson(await gh(['api', path], env));
+}
+
 /** Run `gh`, capturing stdout. Never throws raw — always GhError. */
 async function gh(args: string[], env?: Record<string, string>): Promise<string> {
 	let run;

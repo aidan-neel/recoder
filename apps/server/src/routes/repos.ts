@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { parseUnifiedDiff, type PullPreview, type Repo } from '@recoder/shared';
-import { fetchPullRequest, GhError, listPullFiles, listPullRequests } from '../lib/gh';
-import { fetchMergeRequest, listMergeRequests } from '../lib/glab';
+import type { Repo } from '@recoder/shared';
+import { GhError, listPullRequests } from '../lib/gh';
+import { listMergeRequests } from '../lib/glab';
 import { detectProvider } from '../lib/providers';
+import { fetchPullPreview } from '../lib/pull-preview';
 import { tokenEnv } from '../lib/tokens';
 import { db } from '../store';
 
@@ -68,22 +69,8 @@ app.get('/:id/pulls/:pr', async (c) => {
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
 	const n = Number(c.req.param('pr'));
 	if (!Number.isInteger(n) || n <= 0) return c.json({ error: 'invalid PR number' }, 400);
-	const provider = repo.provider ?? detectProvider(repo.url);
 	try {
-		const { pr, diff } =
-			provider === 'gitlab'
-				? await fetchMergeRequest(repo.url, n, { env: tokenEnv('gitlab') })
-				: await fetchPullRequest(repo.url, n, { env: tokenEnv('github'), metadataOnly: true });
-		const preview: PullPreview = {
-			provider,
-			pr,
-			files: provider === 'github' ? await listPullFiles(repo.url, n, tokenEnv('github')) : parseUnifiedDiff(diff).map((f) => ({
-				path: f.path,
-				additions: f.additions,
-				deletions: f.deletions
-			}))
-		};
-		return c.json(preview);
+		return c.json(await fetchPullPreview(repo, n));
 	} catch (err) {
 		if (err instanceof GhError) return c.json({ error: err.message, kind: err.kind }, 502);
 		throw err;

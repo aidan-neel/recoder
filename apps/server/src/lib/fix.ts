@@ -224,6 +224,52 @@ export async function applyFixCommit(input: ApplyFixInput): Promise<{ sha: strin
 	return { sha };
 }
 
+/** One git operation at a time per sandbox (apply and verify both move HEAD). */
+const sandboxLocks = new Map<string, Promise<unknown>>();
+export function withSandboxLock<T>(sandboxPath: string, fn: () => Promise<T>): Promise<T> {
+	const previous = sandboxLocks.get(sandboxPath) ?? Promise.resolve();
+	const run = previous.catch(() => undefined).then(fn);
+	sandboxLocks.set(sandboxPath, run.catch(() => undefined));
+	return run;
+}
+
+/** Temporary branches Recoder pushes to run CI on a fix; nothing else may be deleted. */
+export const VERIFY_BRANCH_PREFIX = 'recoder/fix-';
+
+/**
+ * Verify a fix on CI without touching the PR branch: commit the patch on a
+ * throwaway local branch from the current HEAD, force-push it as
+ * `recoder/fix-…`, then put the sandbox back exactly as it was.
+ */
+export async function pushVerifyBranch(input: ApplyFixInput & { branch: string }): Promise<{ sha: string }> {
+	if (!input.branch.startsWith(VERIFY_BRANCH_PREFIX)) throw new FixError(409, 'invalid verify branch');
+	const path = input.sandboxPath;
+	const base = await git(path, ['rev-parse', 'HEAD'], 'verify base');
+	const current = await git(path, ['rev-parse', '--abbrev-ref', 'HEAD'], 'verify branch');
+	const local = `recoder-verify-${Date.now()}`;
+	await git(path, ['checkout', '-q', '-b', local, base], 'verify checkout', 409);
+	try {
+		const { sha } = await applyFixCommit(input);
+		try {
+			await git(path, ['push', '-f', 'origin', `${local}:refs/heads/${input.branch}`], 'verify push', 502);
+		} catch (err) {
+			if (err instanceof FixError) throw new FixError(502, `couldn't push the fix branch (check push access): ${err.message}`);
+			throw err;
+		}
+		return { sha };
+	} finally {
+		await git(path, ['reset', '-q', '--hard', base], 'verify reset').catch(() => undefined);
+		await git(path, ['checkout', '-q', current === 'HEAD' ? base : current], 'verify restore').catch(() => undefined);
+		await git(path, ['branch', '-q', '-D', local], 'verify cleanup').catch(() => undefined);
+	}
+}
+
+/** Remove a verify branch from the remote (after applying or discarding the fix). */
+export async function deleteVerifyBranch(sandboxPath: string, branch: string): Promise<void> {
+	if (!branch.startsWith(VERIFY_BRANCH_PREFIX)) throw new FixError(409, 'invalid verify branch');
+	await git(sandboxPath, ['push', 'origin', '--delete', branch], 'verify delete', 502);
+}
+
 /** Push a sandbox branch to the PR head ref over the host's git credentials. */
 export async function pushFixBranch(input: {
 	sandboxPath: string;

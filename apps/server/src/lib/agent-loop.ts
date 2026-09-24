@@ -7,6 +7,7 @@ import { REVIEW_POLICY } from './review-policy.js';
 import type { RoleConfig } from './models.js';
 import { isAuthFailure } from './planner.js';
 import type { ReviewReasoningEntry } from '@recoder/shared';
+import { CHAT_STYLE } from './prompts';
 
 export class ReviewAbortedError extends Error {
 	constructor(message: string) {
@@ -73,7 +74,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 	// Reserve time throughout an investigation, not merely when dispatching it.
 	const deadlineAt = opts.deadlineAt - (opts.consumeReserve ? 0 : REVIEW_POLICY.reserveMsForConsolidation);
 	const messages: ChatMessage[] = [
-		{ role: 'system', content: opts.system + '\nIn every JSON response, put "message" first: a concise, reader-facing Markdown explanation of your current investigation or conclusion. Then include the required structured fields. Describe actual evidence and decisions; do not narrate JSON formatting or budget compliance. This text is shown live to the developer.' },
+		{ role: 'system', content: opts.system + '\nIn every JSON response, put "message" first: a concise, reader-facing Markdown explanation of your current investigation or conclusion. Then include the required structured fields. Describe actual evidence and decisions; do not narrate JSON formatting or budget compliance. This text is shown live to the developer. ' + CHAT_STYLE },
 		{ role: 'user', content: opts.user }
 	];
 	let repaired = 0;

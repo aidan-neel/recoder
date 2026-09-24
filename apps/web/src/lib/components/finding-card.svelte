@@ -1,11 +1,16 @@
 <script lang="ts">
+	import MessageSquare from '@lucide/svelte/icons/message-square';
 	import { Button } from '@sivir-ui/svelte/components/button';
-	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import FindingSeverity from './finding-severity.svelte';
+	import FixButton from './fix-button.svelte';
+	import SuggestedFix from './suggested-fix.svelte';
+	import FixStatus from './fix-status.svelte';
+	import FixChecks from './fix-checks.svelte';
+	import SeverityPill from './ui/severity-pill.svelte';
 	import { SEVERITY_DOT, findingsStore, type Finding } from '$lib/findings.svelte';
 	import { formatAgentName, threadsStore } from '$lib/threads.svelte';
 
@@ -19,9 +24,12 @@
 	const accepted = $derived(finding.status === 'accepted');
 	/** Ringed while this is the navigator's current finding. */
 	const focused = $derived(findingsStore.activeId === finding.id);
+	const suggestion = $derived(findingsStore.suggestions[finding.id]);
 
-	/** Drives the collapse/expand animation. Derived so external resets stay in sync. */
-	const expanded = $derived(!dismissed);
+	function discuss(): void {
+		findingsStore.discuss(finding.id);
+		threadsStore.open(finding.id);
+	}
 </script>
 
 <div
@@ -32,84 +40,46 @@
 	role="article"
 	aria-label={finding.title}
 >
-	<Card.Root
-		class="max-w-4xl rounded-xl border border-border bg-card/50 !p-3 font-sans shadow-none {focused
-			? 'ring-1 ring-ring'
-			: ''}"
-	>
-	<Collapsible.Root open={expanded}>
-		{#if dismissed}
-			<div class="flex min-w-0 items-center gap-2 text-sm text-foreground-muted">
-				<span
-					class="h-1.5 w-1.5 shrink-0 rounded-full"
-					style:background-color={SEVERITY_DOT[finding.severity]}
-				></span>
-				<Typography.Metadata class="min-w-0 truncate text-sm" title={finding.title}>{finding.title}</Typography.Metadata>
-				<span class="shrink-0 text-xs">Dismissed</span>
-				<Button
-					variant="ghost"
-					class="ml-auto font-sans text-[14px]"
-					onclick={() => findingsStore.reopen(finding.id)}
-				>
-					Undo
-				</Button>
-			</div>
-		{:else}
-			<div class="flex items-start gap-2 text-sm">
-				<FindingSeverity severity={finding.severity} />
-				<Typography.Title level={3} class="min-w-0 text-sm !font-medium leading-5 tracking-normal" title={finding.title}>{finding.title}</Typography.Title>
-			</div>
-		{/if}
-		<Collapsible.Content>
-			<div class="mt-2 min-w-0 text-sm">
-				<Markdown content={finding.body} class="text-sm" />
-			</div>
-			<div class="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-			<Typography.Metadata class="min-w-0 truncate text-xs" title={`${finding.category} · ${formatAgentName(finding.agent)}${finding.model ? ` · ${finding.model}` : ''}`}>{formatAgentName(finding.agent)}{finding.model ? ` · ${finding.model}` : ''}</Typography.Metadata>
-			{#if finding.status === 'open'}
-				<div class="flex items-center gap-1">
-					<Button
-						variant="outline"
-						class="bg-transparent !px-2.5 font-sans text-xs !font-normal"
-						aria-expanded={threadsStore.openId === finding.id}
-						aria-controls={threadsStore.openId === finding.id ? 'finding-thread' : undefined}
-						onclick={() => {
-							findingsStore.discuss(finding.id);
-							threadsStore.open(finding.id);
-						}}
-					>
-						Discuss finding
-					</Button>
-					<Button
-						variant="ghost"
-						class="!px-2.5 font-sans text-xs !font-normal text-foreground-muted"
-						onclick={() => {
+	<Card.Root class="inline-finding" data-focused={focused || undefined} data-state={finding.status}>
+		<Collapsible.Root open={!dismissed}>
+			{#if dismissed}
+				<div class="inline-finding-dismissed">
+					<span class="size-1.5 shrink-0 rounded-full" style:background-color={SEVERITY_DOT[finding.severity]}></span>
+					<Typography.Metadata class="min-w-0 flex-1 truncate" title={finding.title}>{finding.title}</Typography.Metadata>
+					<span class="shrink-0">Dismissed</span>
+					<Button variant="ghost" onclick={() => findingsStore.reopen(finding.id)}>Undo</Button>
+				</div>
+			{:else}
+				<div class="inline-finding-head">
+					{#if accepted}<SeverityPill tone="success">Fixed</SeverityPill>{:else}<FindingSeverity severity={finding.severity} />{/if}
+					<span class="min-w-0 truncate">{finding.category}</span>
+					{#if finding.code}<span class="inline-finding-id">{finding.code}</span>{/if}
+				</div>
+			{/if}
+			<Collapsible.Content>
+				<Typography.Title level={3} class="sr-only">{finding.title}</Typography.Title>
+				<div class="inline-finding-body ai-voice"><Markdown content={finding.body} /></div>
+				<FixStatus {finding} />
+				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks {finding} />{/if}
+				<div class="inline-finding-foot">
+					<Typography.Metadata class="min-w-0 flex-1 truncate" title={`${finding.category} · ${formatAgentName(finding.agent)}${finding.model ? ` · ${finding.model}` : ''}`}>
+						{formatAgentName(finding.agent)}{#if finding.model}<span class="font-mono"> · {finding.model}</span>{/if}
+					</Typography.Metadata>
+					{#if accepted}
+						{#if suggestion?.sha}<span class="font-mono text-[11.5px] text-fg-faint" title="Pushed to {suggestion.branch}">{suggestion.sha.slice(0, 7)}</span>{/if}
+						<FixButton {finding} />
+					{:else if finding.status === 'open'}
+						<Button variant="ghost" class="gap-1.5" aria-expanded={threadsStore.openId === finding.id} aria-controls={threadsStore.openId === finding.id ? 'finding-thread' : undefined} onclick={discuss}>
+							<MessageSquare size={14} aria-hidden="true" />Discuss
+						</Button>
+						<Button variant="ghost" class="text-fg-muted" onclick={() => {
 							findingsStore.dismiss(finding.id);
 							if (threadsStore.openId === finding.id) threadsStore.close();
-						}}
-					>
-						Dismiss
-					</Button>
+						}}>Dismiss</Button>
+						<FixButton {finding} />
+					{/if}
 				</div>
-			{/if}
-
-			{#if accepted}
-				<div class="flex items-center gap-2">
-			<Badge variant="success">Fixed</Badge>
-			{#if finding.fixedBy}
-				<span class="font-mono text-[12px] text-foreground-muted">· {finding.fixedBy}</span>
-			{/if}
-					<Button
-						variant="ghost"
-						class="font-sans text-[14px]"
-						onclick={() => findingsStore.reopen(finding.id)}
-					>
-						Undo
-					</Button>
-				</div>
-			{/if}
-			</div>
-		</Collapsible.Content>
-	</Collapsible.Root>
+			</Collapsible.Content>
+		</Collapsible.Root>
 	</Card.Root>
 </div>

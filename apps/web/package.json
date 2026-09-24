@@ -12,8 +12,11 @@
 		"check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch"
 	},
 	"devDependencies": {
+		"@fontsource/geist-mono": "^5.3.0",
+		"@fontsource/geist-sans": "^5.3.0",
 		"@fontsource/inter": "^5.3.0",
 		"@fontsource/jetbrains-mono": "^5.3.0",
+		"@fontsource/lora": "^5.3.0",
 		"@sveltejs/adapter-node": "^5.5.7",
 		"@sveltejs/kit": "^2.63.0",
 		"@sveltejs/vite-plugin-svelte": "^7.1.2",
@@ -28,6 +31,6 @@
 		"@lucide/svelte": "^1.39.0",
 		"@recoder/shared": "workspace:*",
 		"@sivir-ui/svelte": "^0.3.2",
-		"material-icon-theme": "^5.38.1"
+		"material-icon-theme": "5.38.1"
 	}
 }

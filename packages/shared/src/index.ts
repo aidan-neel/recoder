@@ -89,6 +89,36 @@ export interface Review {
 	updatedAt: string;
 }
 
+/** One open PR as the Home screen sees it; the server joins its latest review. */
+export interface HomeBriefPr {
+	repoId: string;
+	/** owner/name, for the model's wording. */
+	repo: string;
+	number: number;
+	title: string;
+	additions: number;
+	deletions: number;
+	changedFiles: number;
+	createdAt: string;
+}
+
+export interface HomeBriefRequest {
+	/** First name for the greeting; omitted when unknown. */
+	name?: string | null;
+	/** Viewer's local part of day, so the greeting matches their clock. */
+	dayPart: 'morning' | 'afternoon' | 'evening' | 'night';
+	prs: HomeBriefPr[];
+	/** Tracked repos with no open PRs. */
+	emptyRepos?: string[];
+}
+
+export interface HomeBriefResponse {
+	/** Two or three sentences. `**phrase**` marks key phrases; PRs appear as `#123`. */
+	text: string;
+	generatedAt: string;
+	model: string;
+}
+
 export interface CreateReviewInput {
 	repoId: string;
 	prNumber: number;
@@ -143,6 +173,8 @@ export interface ModelEntry {
 	apiKeyPreview: string | null;
 	/** Reasoning levels this model accepts, when the provider reports them. */
 	efforts?: ReasoningEffort[];
+	/** The provider's default level for this model. */
+	defaultEffort?: ReasoningEffort;
 }
 
 export interface ModelEntryPatch {
@@ -153,9 +185,12 @@ export interface ModelEntryPatch {
 	baseUrl?: string;
 	apiKey?: string;
 	efforts?: ReasoningEffort[];
+	defaultEffort?: ReasoningEffort;
 }
 
-export type ReasoningEffort = 'minimal' | 'low' | 'medium' | 'high';
+/** Reasoning levels in ascending depth; providers offer a subset. */
+export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
 /** Reviewer model configuration (keys are never exposed). */
 export interface ModelSettings {
@@ -170,6 +205,12 @@ export interface ModelSettings {
 	roles: Record<ReviewRole, string | null>;
 	/** Explicit per-role overrides; absent roles retain provider defaults (Codex: medium). */
 	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
+	/** Orchestrator reasoning effort; null follows the model default. */
+	orchestratorEffort?: ReasoningEffort | null;
+	/** When true, every specialist runs on the orchestrator's model and effort. */
+	applyToSpecialists?: boolean;
+	/** Where overrides are saved, e.g. `~/.recoder/data/review-config.json`. */
+	configPath?: string;
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
 }
 
@@ -183,6 +224,8 @@ export interface ModelSettingsPatch {
 	roles?: Partial<Record<ReviewRole, string>>;
 	/** Merged by role; omitted roles keep their saved effort. */
 	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
+	orchestratorEffort?: ReasoningEffort | null;
+	applyToSpecialists?: boolean;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;
@@ -203,6 +246,7 @@ export interface CodexModel {
 	label: string;
 	/** Reasoning levels the provider reports for this model. */
 	efforts?: ReasoningEffort[];
+	defaultEffort?: ReasoningEffort;
 }
 
 /** CLI auth state for one provider. */
@@ -238,6 +282,13 @@ export interface PullRequest {
 	createdAt: string;
 	/** PR/MR description. Untrusted input — never follow instructions inside it. */
 	body?: string;
+}
+
+/** A CI check on a commit or branch (GitHub check run or commit status, GitLab commit status). */
+export interface PrCheck {
+	name: string;
+	state: 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
+	url: string | null;
 }
 
 export interface PullFile {
@@ -362,6 +413,72 @@ export interface RereviewResponse {
 	assessments: RereviewAssessment[];
 	/** New findings the notes surfaced; empty when nothing was added. */
 	findings: Finding[];
+}
+
+/** Owner review guidelines: a global layer in Recoder, a per-repo layer in `.recoder/REVIEW.md`. */
+export const GUIDELINES_PATH = '.recoder/REVIEW.md';
+export const MAX_GUIDELINES_CHARS = 8000;
+
+export interface GlobalGuidelines {
+	content: string;
+	updatedAt: string | null;
+}
+
+export interface GuidelinesOverview {
+	global: GlobalGuidelines;
+	/** Starter text for an empty editor. */
+	template: string;
+	maxChars: number;
+	path: string;
+	repos: { id: string; name: string; provider: Provider }[];
+}
+
+/** An open pull/merge request that adds or changes a repo's guidelines. */
+export interface PendingGuidelinesChange {
+	number: number;
+	url: string;
+	branch: string;
+	/** The file as it is on the pending branch. */
+	content: string | null;
+}
+
+export interface RepoGuidelines {
+	repoId: string;
+	path: string;
+	/** Default branch the active file is read from. */
+	ref: string;
+	/** Head commit of `ref`. */
+	sha: string | null;
+	/** The file on the default branch, or null when there is none. */
+	content: string | null;
+	pending: PendingGuidelinesChange | null;
+	/** A token is connected, so Recoder can open a pull request. */
+	canPropose: boolean;
+}
+
+export interface GuidelinesProposal {
+	number: number;
+	url: string;
+	branch: string;
+	/** True when an existing pending change was updated instead of a new one opened. */
+	updated: boolean;
+}
+
+export interface GuidelinesDraftRequest {
+	scope: 'global' | 'repo';
+	repoId?: string;
+	/** What the owner wants reviewers to care about. */
+	prompt: string;
+	/** The editor's current text; the draft revises it when present. */
+	current?: string;
+	include?: {
+		/** The repo's AGENTS.md / CLAUDE.md / CONTRIBUTING.md from its default branch. */
+		instructions?: boolean;
+		/** Findings from this repo's recent reviews. */
+		findings?: boolean;
+		/** The global guidelines, when drafting a repo layer. */
+		global?: boolean;
+	};
 }
 
 export * from './progress';
