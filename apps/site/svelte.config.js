@@ -7,8 +7,9 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		// Prerendered to plain HTML for any static host (recoder.dev).
-		adapter: adapter({ strict: true }),
+		// Prerendered to plain HTML. No options: on Vercel, adapter-static only
+		// switches to zero-config (Build Output API in .vercel/output) without them.
+		adapter: adapter(),
 		alias: {
 			// The site renders the app's own components and styles, so the two never drift.
 			$web: '../web/src/lib'
