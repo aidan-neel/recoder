@@ -53,16 +53,18 @@ The source of truth for Recoder's UI. The screen specs are in `design_handoff_re
 - Primary must stay swappable. If a light color is picked, on-primary is computed by luminance: dark text when L > 0.3.
 
 ### Status and severity (text on tint)
+Vivid, not pastel: chroma sits at 70–95% of the sRGB maximum for each hue (OKLCH). Keep lightness and hue when tuning, and recheck contrast: every text color passes 5:1 on its tint over `bg-canvas` and `bg-raised`.
+
 | Status | Text | Tint |
 |---|---|---|
-| High / danger | `#f4a097` (icon `#f08a7e`) | `rgba(240,138,126,.13)` |
-| Medium | `#e9c07a` | `rgba(230,180,94,.13)` |
-| Low | `#9fb8e6` | `rgba(127,166,245,.12)` |
+| High / danger | `#fc8d85` (icon `#fb6862`, danger `#fb756e`) | `rgba(251,104,98,.15)` |
+| Medium | `#f7c065` | `rgba(247,192,101,.14)` |
+| Low | `#82b3fb` | `rgba(130,179,251,.14)` |
 | Info | `#b9b3aa` | `rgba(255,245,230,.07)` |
-| Success | `#86c98c` | `rgba(134,201,140,.13)` |
+| Success | `#67da7e` | `rgba(103,218,126,.13)` |
 
 ### Diff and code
-- Diff backgrounds: add `rgba(134,201,140,.08)`, delete `rgba(240,138,126,.08)`.
+- Diff backgrounds: add `rgba(103,218,126,.08)`, delete `rgba(251,104,98,.08)`.
 - Finding lines get a 2px inset bar in the severity color.
 - Selection: `rgba(127,166,245,.16)` with a 2px bar `#7fa6f5`.
 - Syntax colors: keyword `#e8927c`, function `#d4b3ee`, type `#93cfc0`, plain `#d6d1c9`.

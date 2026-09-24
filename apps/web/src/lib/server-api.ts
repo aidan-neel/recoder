@@ -9,6 +9,10 @@ import type {
 	DiscussRequest,
 	DiscussResponse,
 	FileDiff,
+	GlobalGuidelines,
+	GuidelinesDraftRequest,
+	GuidelinesOverview,
+	GuidelinesProposal,
 	HomeBriefRequest,
 	HomeBriefResponse,
 	ModelSettings,
@@ -19,6 +23,7 @@ import type {
 	PullRequest,
 	RemoteRepo,
 	Repo,
+	RepoGuidelines,
 	PrCheck,
 	Review,
 	ReviewChatMessage,
@@ -45,6 +50,31 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 		throw new Error(body?.error ?? `API ${res.status}`);
 	}
 	return (await res.json()) as T;
+}
+
+/** Read a `data: {...}` server-sent event stream, one parsed payload per event. */
+async function readSse(res: Response, onEvent: (data: unknown) => void): Promise<void> {
+	if (!res.ok || !res.body) {
+		const body = (await res.json().catch(() => null)) as { error?: string } | null;
+		throw new Error(body?.error ?? `API ${res.status}`);
+	}
+	const reader = res.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = '';
+	for (;;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		buffer += decoder.decode(value, { stream: true });
+		let idx: number;
+		while ((idx = buffer.indexOf('\n\n')) >= 0) {
+			const event = buffer.slice(0, idx);
+			buffer = buffer.slice(idx + 2);
+			for (const line of event.split('\n')) {
+				const trimmed = line.trim();
+				if (trimmed.startsWith('data:')) onEvent(JSON.parse(trimmed.slice(5).trim()));
+			}
+		}
+	}
 }
 
 export function detectProvider(url: string): 'github' | 'gitlab' {
@@ -100,37 +130,41 @@ export const serverApi = {
 			body: JSON.stringify(input),
 			signal
 		});
-		if (!res.ok || !res.body) {
-			const body = (await res.json().catch(() => null)) as { error?: string } | null;
-			throw new Error(body?.error ?? `API ${res.status}`);
-		}
 		let result: DiscussResponse | null = null;
-		const reader = res.body.getReader();
-		const decoder = new TextDecoder();
-		let buffer = '';
-		for (;;) {
-			const { done, value } = await reader.read();
-			if (done) break;
-			buffer += decoder.decode(value, { stream: true });
-			let idx: number;
-			while ((idx = buffer.indexOf('\n\n')) >= 0) {
-				const event = buffer.slice(0, idx);
-				buffer = buffer.slice(idx + 2);
-				for (const line of event.split('\n')) {
-					const trimmed = line.trim();
-					if (!trimmed.startsWith('data:')) continue;
-					const data = JSON.parse(trimmed.slice(5).trim()) as
-						| { type: 'token'; text: string }
-						| ({ type: 'done' } & DiscussResponse)
-						| { type: 'error'; error: string };
-					if (data.type === 'token') onToken(data.text);
-					else if (data.type === 'done') result = data;
-					else if (data.type === 'error') throw new Error(data.error);
-				}
-			}
-		}
+		await readSse(res, (raw) => {
+			const data = raw as { type: 'token'; text: string } | ({ type: 'done' } & DiscussResponse) | { type: 'error'; error: string };
+			if (data.type === 'token') onToken(data.text);
+			else if (data.type === 'done') result = data;
+			else if (data.type === 'error') throw new Error(data.error);
+		});
 		if (!result) throw new Error('The reviewer did not respond.');
 		return result;
+	},
+	/** Owner review guidelines: the global layer and per-repo `.recoder/REVIEW.md`. */
+	getGuidelines: () => req<GuidelinesOverview>('/api/guidelines'),
+	saveGlobalGuidelines: (content: string) =>
+		req<GlobalGuidelines>('/api/guidelines/global', { method: 'PUT', body: JSON.stringify({ content }) }),
+	getRepoGuidelines: (repoId: string) => req<RepoGuidelines>(`/api/guidelines/repos/${encodeURIComponent(repoId)}`),
+	/** Open a pull/merge request with the file (or push to the pending one). */
+	proposeRepoGuidelines: (repoId: string, content: string) =>
+		req<GuidelinesProposal>(`/api/guidelines/repos/${encodeURIComponent(repoId)}/propose`, { method: 'POST', body: JSON.stringify({ content }) }),
+	/** Stream a draft from the orchestrator; resolves with the cleaned full text. */
+	draftGuidelines: async (input: GuidelinesDraftRequest, onToken: (text: string) => void, signal?: AbortSignal): Promise<string> => {
+		const res = await fetch(`${base}/api/guidelines/draft`, {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify(input),
+			signal
+		});
+		let text: string | null = null;
+		await readSse(res, (raw) => {
+			const data = raw as { type: 'token'; text: string } | { type: 'done'; text: string } | { type: 'error'; error: string };
+			if (data.type === 'token') onToken(data.text);
+			else if (data.type === 'done') text = data.text;
+			else throw new Error(data.error);
+		});
+		if (text === null) throw new Error('The orchestrator did not respond.');
+		return text;
 	},
 	/** Batch re-review pass driven by the developer's notes. */
 	rereview: (reviewId: string, input: RereviewRequest) =>

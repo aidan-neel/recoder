@@ -63,6 +63,17 @@
 		event.preventDefault();
 		void onStop?.();
 	}
+
+	/** A press anywhere on the composer's surface (padding, footer gaps, chips) focuses the input. */
+	function focusInput(event: PointerEvent): void {
+		if (disabled || event.button !== 0 || !inputEl) return;
+		const target = event.target as HTMLElement;
+		if (target === inputEl || target.closest('button, a, input, textarea, select, label, [role="button"], [role="combobox"], [contenteditable="true"]')) return;
+		event.preventDefault();
+		if (document.activeElement === inputEl) return;
+		inputEl.focus();
+		inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+	}
 </script>
 
 <Composer.Root
@@ -74,6 +85,7 @@
 	{disabled}
 	data-size={size}
 	class="rc-composer"
+	onpointerdown={focusInput}
 >
 	{@render context?.()}
 	<Composer.Input

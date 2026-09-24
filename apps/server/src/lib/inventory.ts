@@ -44,6 +44,8 @@ export interface ReviewInventory {
 	hunksById: Map<string, { file: InventoryFile; hunk: InventoryHunk }>;
 	diffs: FileDiff[];
 	instructionFiles: InstructionFile[];
+	/** Trusted owner guidelines block (global + repo layer), when any are set. */
+	guidelines: string | null;
 	relatedPaths: string[];
 	executable: boolean;
 	docsOnly: boolean;
@@ -119,6 +121,7 @@ export function buildInventory(diff: string, extras: string[] = extraExcludes())
 		hunksById,
 		diffs,
 		instructionFiles: [],
+		guidelines: null,
 		relatedPaths: [],
 		executable,
 		docsOnly

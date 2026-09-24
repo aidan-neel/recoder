@@ -1,12 +1,13 @@
 import type { PrCheck, Repo } from '@recoder/shared';
-import { ghApi } from './gh.js';
+import { githubRest } from './github-rest.js';
 import { glabApi } from './glab.js';
 import { detectProvider, parseSlug } from './providers.js';
 import { tokenEnv } from './tokens.js';
 
 /**
  * CI checks on a commit or branch: GitHub check runs plus legacy commit
- * statuses, or GitLab commit statuses. Read-only.
+ * statuses (REST API with the configured token, not the gh CLI), or GitLab
+ * commit statuses. Read-only.
  */
 export async function fetchChecks(repo: Repo, ref: string): Promise<PrCheck[]> {
 	const provider = repo.provider ?? detectProvider(repo.url);
@@ -15,11 +16,10 @@ export async function fetchChecks(repo: Repo, ref: string): Promise<PrCheck[]> {
 }
 
 async function githubChecks(slug: string, ref: string): Promise<PrCheck[]> {
-	const env = tokenEnv('github');
 	const target = encodeURIComponent(ref);
 	const [runs, combined] = await Promise.all([
-		ghApi(`repos/${slug}/commits/${target}/check-runs?per_page=100`, env) as Promise<{ check_runs?: { name: string; status: string; conclusion: string | null; html_url: string | null; details_url: string | null }[] }>,
-		ghApi(`repos/${slug}/commits/${target}/status`, env) as Promise<{ statuses?: { context: string; state: string; target_url: string | null }[] }>
+		githubRest(`repos/${slug}/commits/${target}/check-runs?per_page=100`) as Promise<{ check_runs?: { name: string; status: string; conclusion: string | null; html_url: string | null; details_url: string | null }[] }>,
+		githubRest(`repos/${slug}/commits/${target}/status`) as Promise<{ statuses?: { context: string; state: string; target_url: string | null }[] }>
 	]);
 	const checks: PrCheck[] = (runs.check_runs ?? []).map((run) => ({
 		name: run.name,

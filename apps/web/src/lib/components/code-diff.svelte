@@ -16,6 +16,7 @@
 	import { highlightLines } from '$lib/highlight';
 	import { notesStore, type ReviewNote } from '$lib/notes.svelte';
 	import FindingCard from './finding-card.svelte';
+	import { collapse } from '$lib/collapse';
 	import NoteComposer from './note-composer.svelte';
 
 	interface Props {
@@ -414,7 +415,7 @@
 	{/each}
 	{#if cards}
 		{#each byLine.get(key) ?? [] as finding (finding.id)}
-			<div id={`finding-${finding.id}`} class="diff-attachment {findingsStore.suppressHover ? 'pointer-events-none' : ''}">
+			<div id={`finding-${finding.id}`} class="diff-attachment {findingsStore.suppressHover ? 'pointer-events-none' : ''}" in:collapse out:collapse>
 				<FindingCard {finding} />
 			</div>
 		{/each}
@@ -433,6 +434,7 @@
 					{@const right = row.right?.line}
 					{@const mark = right?.newNo != null ? lineMarks.get(right.newNo) : undefined}
 					<div role="row" tabindex="-1" data-diff-row class="diff-row diff-split-row"
+						data-new-no={right?.newNo ?? ''} data-old-no={row.left?.line.oldNo ?? ''}
 						style:box-shadow={mark ? `inset 2px 0 0 ${SEVERITY_DOT[mark.severity]}` : null}
 						style:--row-tint={mark ? rowTint(SEVERITY_DOT[mark.severity], 12) : null}
 						onmouseenter={() => { if (!findingsStore.suppressHover) findingsStore.hoveredId = mark?.id ?? null; }}
@@ -454,6 +456,7 @@
 					<div role="row" tabindex="-1" data-diff-row data-type={line.type}
 						data-new-no={line.newNo ?? ''} data-old-no={line.oldNo ?? ''}
 						class="diff-row"
+						data-pending={isPendingRow(line) || undefined}
 						style:box-shadow={isPendingRow(line)
 							? 'inset 3px 0 0 var(--selection-bar)'
 							: mark

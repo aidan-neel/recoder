@@ -55,24 +55,26 @@
 	--primary-hover: #fffcf5;
 	--on-primary: #141312;
 
-	/* Status and severity: text on tint */
-	--sev-high: #f4a097;
-	--sev-high-icon: #f08a7e;
-	--sev-high-tint: rgba(240, 138, 126, 0.13);
-	--sev-medium: #e9c07a;
-	--sev-medium-tint: rgba(230, 180, 94, 0.13);
-	--sev-low: #9fb8e6;
-	--sev-low-tint: rgba(127, 166, 245, 0.12);
+	/* Status and severity: text on tint. Chroma sits at 70-95% of the sRGB
+	   maximum for each hue (OKLCH), so they read vivid, not muted. Every text
+	   color passes 5:1 on its tint over canvas and raised surfaces. */
+	--sev-high: #fc8d85;
+	--sev-high-icon: #fb6862;
+	--sev-high-tint: rgba(251, 104, 98, 0.15);
+	--sev-medium: #f7c065;
+	--sev-medium-tint: rgba(247, 192, 101, 0.14);
+	--sev-low: #82b3fb;
+	--sev-low-tint: rgba(130, 179, 251, 0.14);
 	--sev-info: #b9b3aa;
 	--sev-info-tint: rgba(255, 245, 230, 0.07);
-	--success: #86c98c;
-	--success-tint: rgba(134, 201, 140, 0.13);
-	--danger: #f08a7e;
-	--danger-tint: rgba(240, 138, 126, 0.12);
+	--success: #67da7e;
+	--success-tint: rgba(103, 218, 126, 0.13);
+	--danger: #fb756e;
+	--danger-tint: rgba(251, 117, 110, 0.13);
 
 	/* Diff and code */
-	--diff-add: rgba(134, 201, 140, 0.08);
-	--diff-del: rgba(240, 138, 126, 0.08);
+	--diff-add: rgba(103, 218, 126, 0.08);
+	--diff-del: rgba(251, 104, 98, 0.08);
 	--selection: rgba(127, 166, 245, 0.16);
 	--selection-bar: #7fa6f5;
 	--syn-keyword: #e8927c;
@@ -485,6 +487,11 @@ body {
 }
 [data-size='icon'].sivir-press:active:not(:disabled):not([aria-disabled='true']) {
 	scale: 0.92;
+}
+/* Top bar: no press scale on tabs, triggers or icon buttons. */
+.top-bar .sivir-press:active:not(:disabled):not([aria-disabled='true']),
+.top-bar [data-size='icon'].sivir-press:active:not(:disabled):not([aria-disabled='true']) {
+	scale: none;
 }
 
 /* Floating surfaces: menus, popovers, selects, command palette. */
@@ -937,6 +944,7 @@ kbd.keycap {
 
 /* ───────────────────── Composer (5c) ───────────────────── */
 [data-ui='composer-form'].rc-composer {
+	cursor: text;
 	gap: 10px;
 	padding: 12px 12px 10px 16px;
 	border: 0;
@@ -1104,7 +1112,31 @@ kbd.keycap {
 /* Spinners keep the design's 0.9s turn. */
 [data-ui='spinner'] {
 	animation-duration: var(--dur-spinner);
+	/* Never clip the icon; it is invisible while the box collapses. */
+	overflow: visible;
 }
+/* Sivir sizes the spinner box with an inline px style, which the rem step
+   can't reach, while the icon inside scales with the root font. Restate the
+   box in CSS (compiled to rem) so it grows with the icon on large screens.
+   A collapsed spinner has width 0px and matches none of these. */
+[data-ui='spinner'][style*='height: 10px'] { height: 10px !important; }
+[data-ui='spinner'][style*='width: 10px'] { width: 10px !important; }
+[data-ui='spinner'][style*='height: 11px'] { height: 11px !important; }
+[data-ui='spinner'][style*='width: 11px'] { width: 11px !important; }
+[data-ui='spinner'][style*='height: 12px'] { height: 12px !important; }
+[data-ui='spinner'][style*='width: 12px'] { width: 12px !important; }
+[data-ui='spinner'][style*='height: 13px'] { height: 13px !important; }
+[data-ui='spinner'][style*='width: 13px'] { width: 13px !important; }
+[data-ui='spinner'][style*='height: 14px'] { height: 14px !important; }
+[data-ui='spinner'][style*='width: 14px'] { width: 14px !important; }
+[data-ui='spinner'][style*='height: 15px'] { height: 15px !important; }
+[data-ui='spinner'][style*='width: 15px'] { width: 15px !important; }
+[data-ui='spinner'][style*='height: 16px'] { height: 16px !important; }
+[data-ui='spinner'][style*='width: 16px'] { width: 16px !important; }
+[data-ui='spinner'][style*='height: 18px'] { height: 18px !important; }
+[data-ui='spinner'][style*='width: 18px'] { width: 18px !important; }
+[data-ui='spinner'][style*='height: 20px'] { height: 20px !important; }
+[data-ui='spinner'][style*='width: 20px'] { width: 20px !important; }
 
 /* Scroll areas never show cues; keep native scrollbars quiet. */
 * {
@@ -1338,20 +1370,22 @@ kbd.keycap {
 .disclosure[data-open] > .disclosure-trigger .disclosure-chevron {
 	transform: rotate(90deg);
 }
+/* Height eases in and out (not front-loaded), so tall panels unfold instead
+   of snapping open; the content fades in just behind the height. */
 .disclosure-panel {
 	display: grid;
 	grid-template-rows: 0fr;
 	opacity: 0;
 	transition:
-		grid-template-rows 200ms var(--ease-menu),
+		grid-template-rows 220ms cubic-bezier(0.4, 0, 0.2, 1),
 		opacity 140ms ease-out;
 }
 .disclosure[data-open] > .disclosure-panel {
 	grid-template-rows: 1fr;
 	opacity: 1;
 	transition:
-		grid-template-rows 240ms var(--ease-menu),
-		opacity 200ms ease-out 40ms;
+		grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1),
+		opacity 220ms ease-out 60ms;
 }
 .disclosure-clip {
 	min-height: 0;
@@ -1565,12 +1599,24 @@ kbd.keycap {
 	background: transparent;
 	box-shadow: none;
 }
-/* Active chip: a flat fill that snaps to the chip. */
+/* Active chip: one flat fill that slides to the selected chip (as in the session view switch). */
 .repo-chips [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true'] {
 	border-radius: 8px;
 	background-color: var(--line-subtle);
 	box-shadow: none;
-	transition: none;
+	transition:
+		left 240ms var(--ease-menu),
+		width 240ms var(--ease-menu),
+		top 240ms var(--ease-menu),
+		height 240ms var(--ease-menu);
+}
+.repo-chips [data-ui='tabs-trigger'].sivir-press:active {
+	scale: none;
+}
+@media (prefers-reduced-motion: reduce) {
+	.repo-chips [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true'] {
+		transition: none;
+	}
 }
 .repo-chips [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
 	height: 30px;
@@ -1582,7 +1628,7 @@ kbd.keycap {
 	color: var(--text-muted);
 	transition: background-color var(--dur-hover) ease-out, color var(--dur-hover) ease-out;
 }
-.repo-chips [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover {
+.repo-chips [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover:not([data-state='active']) {
 	background-color: rgba(255, 245, 230, 0.04);
 	color: var(--text-primary);
 }
@@ -1780,7 +1826,7 @@ kbd.keycap {
 }
 [data-ui='badge'].status-chip[data-tone='success'] {
 	color: var(--success);
-	background-color: rgba(134, 201, 140, 0.1);
+	background-color: var(--success-tint);
 }
 [data-ui='badge'].status-chip[data-tone='high'] {
 	color: var(--sev-high);
@@ -2113,7 +2159,15 @@ kbd.keycap {
 	border-radius: 8px;
 	font-family: var(--font-code);
 	font-size: 12.5px;
+	font-variant-numeric: tabular-nums;
 	text-align: right;
+	appearance: textfield;
+}
+/* The native spinner reserves ~14px on the right even when hidden; drop it so padding is even. */
+.settings-number [data-ui='input']::-webkit-inner-spin-button,
+.settings-number [data-ui='input']::-webkit-outer-spin-button {
+	appearance: none;
+	margin: 0;
 }
 
 /* Switch: no knob stretch on press. */
@@ -2352,7 +2406,7 @@ main[data-route^='/session'] *::-webkit-scrollbar {
 }
 mark.palette-hit {
 	border-radius: 3px;
-	background-color: rgba(233, 192, 122, 0.18);
+	background-color: color-mix(in srgb, var(--sev-medium) 20%, transparent);
 	color: var(--text-primary);
 }
 .palette-footer {
@@ -2774,51 +2828,54 @@ mark.palette-hit {
 .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
 	color: var(--text-primary);
 }
-/* Session header: text tabs (no pill), active one underlined on the header's bottom edge. */
-.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] {
-	gap: 4px;
+/* Session header and guidelines editor: quiet text tabs with one pill that travels to the selected
+   view (Sivir's segmented indicator; carryPill in $lib/tab-pill.ts continues the
+   slide across header instances). No press scale. */
+:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] {
+	gap: 0;
 	padding: 0;
 	border-radius: 0;
 	background: transparent;
 	box-shadow: none;
 }
-/* No pill: the active view is bright text with a 2px underline on the header's bottom edge. */
-.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true'] {
-	display: none;
+:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true'] {
+	display: block;
+	border-radius: 7px;
+	background-color: var(--line-tab);
+	box-shadow: none;
+	transition:
+		left 240ms var(--ease-menu),
+		width 240ms var(--ease-menu),
+		top 240ms var(--ease-menu),
+		height 240ms var(--ease-menu);
 }
-.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
-	position: relative;
-	height: 30px;
-	min-height: 30px;
-	padding: 0 10px;
+:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
+	height: 28px;
+	min-height: 28px;
+	padding: 0 9px;
 	border-radius: 7px;
 	background: transparent;
 	font-size: 13px;
 	font-weight: 400;
 	color: var(--text-faint);
-	transition:
-		color var(--dur-hover) ease-out,
-		background-color var(--dur-hover) ease-out;
+	transition: color var(--dur-hover) ease-out;
 }
-.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover:not(:disabled):not([data-state='active']) {
-	background: var(--bg-hover);
+:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-trigger'].sivir-press:active {
+	scale: none;
+}
+:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover:not(:disabled):not([data-state='active']) {
 	color: var(--text-secondary);
 }
-.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
+:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
 	color: var(--text-primary);
 }
-.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active']::after {
-	content: '';
-	position: absolute;
-	right: 10px;
-	bottom: -11px;
-	left: 10px;
-	height: 2px;
-	border-radius: 2px 2px 0 0;
-	background: var(--text-primary);
-}
-.session-header .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:disabled {
+:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:disabled {
 	color: var(--text-ghost);
+}
+@media (prefers-reduced-motion: reduce) {
+	:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true'] {
+		transition: none;
+	}
 }
 
 /* ── Live progress card (top of the right rail while a review runs) ── */
@@ -3013,6 +3070,88 @@ mark.palette-hit {
 	color: var(--text-ghost);
 }
 
+/* Finalized review body: reasoning steps, then facts in the tool-row grid. */
+.disclosure-body.finalize-body {
+	gap: 10px;
+}
+.reasoning-steps {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+}
+.reasoning-step {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 2px;
+}
+.reasoning-step-title {
+	margin: 0;
+	padding: 4px 0;
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 19px;
+	color: var(--text-muted);
+}
+.reasoning-step [data-ui='markdown'] {
+	color: var(--text-faint);
+}
+.fact-rows {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+}
+.fact-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 10px;
+	min-height: 26px;
+	margin: 0;
+	font-size: 12.5px;
+	line-height: 18px;
+	color: var(--text-subtle);
+}
+.fact-label {
+	width: 84px;
+	flex-shrink: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.fact-value {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-tertiary);
+}
+button.fact-link {
+	text-align: left;
+	text-decoration: underline;
+	text-decoration-color: var(--line-strong);
+	text-underline-offset: 3px;
+	cursor: pointer;
+	transition: color 120ms ease-out, text-decoration-color 120ms ease-out;
+}
+button.fact-link:hover {
+	color: var(--text-primary);
+	text-decoration-color: currentColor;
+}
+.fact-value.font-mono {
+	font-size: 11.5px;
+}
+.fact-meta {
+	flex-shrink: 0;
+	font-family: var(--font-code);
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-ghost);
+}
+
 /* Specialists: rows with a live status chip. */
 .specialists {
 	display: flex;
@@ -3187,6 +3326,24 @@ mark.palette-hit {
 }
 .review-transcript .tool-row-action {
 	width: 72px;
+}
+.review-transcript .reasoning-step-title {
+	font-size: 15px;
+	line-height: 22px;
+}
+.review-transcript .fact-row {
+	min-height: 30px;
+	font-size: 14px;
+}
+.review-transcript .fact-label {
+	width: 96px;
+}
+.review-transcript .fact-value.font-mono,
+.review-transcript .fact-meta {
+	font-size: 13px;
+}
+.review-transcript .fact-meta {
+	font-size: 12.5px;
 }
 /* Side-panel chat: one step down, matching its 15px prose. */
 .review-chat[data-compact] .disclosure-trigger,
@@ -3700,6 +3857,10 @@ mark.palette-hit {
 	background: rgba(255, 245, 230, 0.03);
 	color: var(--text-primary);
 }
+/* Same 8px icon-to-name gap as file rows (the row gap is 6px for the chevron). */
+.tree-folder > .tree-icon + span {
+	margin-left: 2px;
+}
 .tree-folder[aria-expanded='false'] .tree-chevron {
 	transform: rotate(-90deg);
 }
@@ -3709,12 +3870,14 @@ mark.palette-hit {
 	gap: 1px;
 	padding-left: 12px;
 }
+/* Files reserve the folder chevron's column (6px pad + 12px chevron + 6px gap),
+   so a file's icon and name line up with sibling folders'. */
 .tree-file {
 	display: flex;
 	height: 28px;
 	align-items: center;
 	gap: 4px;
-	padding: 0 4px 0 8px;
+	padding: 0 4px 0 24px;
 	border-radius: 7px;
 	color: var(--text-secondary);
 	transition: background-color var(--dur-hover) ease-out;
@@ -3841,9 +4004,30 @@ mark.palette-hit {
 	color: inherit;
 }
 /* Highlighted lines wash the whole row (over the add/del colour); --row-tint is set inline. */
-[data-diff-row].diff-row[style*='--row-tint'],
-[data-diff-row].diff-row[style*='--row-tint'] > .diff-half {
+@property --row-tint {
+	syntax: '<color>';
+	inherits: true;
+	initial-value: transparent;
+}
+/* Every row carries the wash (transparent unless set) so it fades when a
+   finding is shown, hidden or dismissed; the severity bar fades with it. */
+.diff-lines [data-diff-row].diff-row,
+.diff-lines [data-diff-row].diff-row > .diff-half {
 	background-image: linear-gradient(var(--row-tint), var(--row-tint));
+}
+.diff-lines [data-diff-row].diff-row {
+	transition:
+		--row-tint 220ms ease-out,
+		box-shadow 220ms ease-out;
+}
+/* Selecting code stays instant. */
+.diff-lines [data-diff-row].diff-row[data-pending] {
+	transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+	.diff-lines [data-diff-row].diff-row {
+		transition: none;
+	}
 }
 .diff-row[data-type='add'],
 .diff-half[data-type='add'] {
@@ -4138,6 +4322,222 @@ button.diff-num:hover {
 	font-family: var(--font-code);
 	font-size: 11.5px;
 }
+/* ── Review guidelines: Settings rows and the editor ─────────── */
+.guidelines-row-rule {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.guidelines-chip-link {
+	flex-shrink: 0;
+	border-radius: 6px;
+}
+.guidelines-chip-link:hover [data-ui='badge'] {
+	filter: brightness(1.15);
+}
+[data-ui='modal-panel'].guidelines-modal,
+.guidelines-modal {
+	top: var(--sivir-viewport-center, 50%);
+	width: min(960px, calc(100vw - 48px));
+	max-width: none;
+	height: min(88vh, calc(var(--sivir-viewport-height, 100vh) - 48px));
+}
+/* One surface: header, document and composer dock share the modal background. */
+.guidelines-modal [data-ui='modal-surface'] {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	overflow: hidden;
+}
+.guidelines-head {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+	height: 56px;
+	padding: 0 12px 0 24px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.guidelines-head .view-switch {
+	margin-right: 4px;
+}
+.guidelines-modal .guidelines-title {
+	flex-shrink: 0;
+	margin: 0;
+	font-size: 15px;
+	font-weight: 500;
+	letter-spacing: 0;
+	color: var(--text-primary);
+}
+/* Inline metadata after the title (no subtitle line). */
+.guidelines-meta {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 10px;
+	margin-left: 4px;
+	overflow: hidden;
+	white-space: nowrap;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-faint);
+}
+.guidelines-meta > span:first-child {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.guidelines-pending {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	border-radius: 4px;
+	color: var(--sev-medium);
+	transition: color var(--dur-hover) ease-out;
+}
+.guidelines-pending:hover {
+	color: var(--text-primary);
+}
+.guidelines-count {
+	flex-shrink: 0;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-ghost);
+}
+.guidelines-count[data-over] {
+	color: var(--danger);
+}
+[data-ui='button'][data-variant].guidelines-save {
+	flex-shrink: 0;
+	gap: 8px;
+}
+/* The document: one centered reading column that scrolls. */
+.guidelines-modal [data-ui='scroll-area'].guidelines-scroll {
+	min-height: 0;
+	flex: 1;
+}
+.guidelines-doc {
+	width: 100%;
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 24px;
+}
+.guidelines-loading {
+	display: flex;
+	flex: 1;
+	flex-direction: column;
+	gap: 12px;
+}
+[data-ui='textarea'].guidelines-input {
+	width: 100%;
+	min-height: 320px;
+	resize: none;
+	overflow: hidden;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-family: var(--font-code);
+	font-size: 13px;
+	line-height: 22px;
+	color: var(--text-secondary);
+	tab-size: 2;
+}
+[data-ui='textarea'].guidelines-input:focus,
+[data-ui='textarea'].guidelines-input:focus-visible {
+	border: 0;
+	box-shadow: none;
+	outline: none;
+}
+.guidelines-preview [data-ui='markdown'] {
+	font-size: 14px;
+	line-height: 22px;
+	color: var(--text-secondary);
+}
+.guidelines-preview [data-ui='markdown'] h2 {
+	margin: 26px 0 8px;
+	font-size: 13px;
+	font-weight: 500;
+	letter-spacing: normal;
+	color: var(--text-primary);
+}
+.guidelines-preview [data-ui='markdown'] h2:first-child {
+	margin-top: 0;
+}
+.guidelines-empty {
+	font-size: 13.5px;
+	line-height: 22px;
+	color: var(--text-faint);
+}
+/* A draft that revises existing rules: review it as a diff first. */
+[data-ui='file-diff'].guidelines-proposal-diff {
+	--file-diff-max-height: none;
+	--file-diff-line-height: 22px;
+	gap: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+	background: transparent;
+}
+.guidelines-proposal-diff [data-ui='file-diff-content'] {
+	overflow-x: auto;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-size: 12.5px;
+}
+/* The composer docks at the bottom, the same width as the document. */
+.guidelines-dock {
+	display: flex;
+	flex-shrink: 0;
+	flex-direction: column;
+	gap: 10px;
+	width: 100%;
+	max-width: 720px;
+	margin: 0 auto;
+	padding: 4px 24px 20px;
+}
+/* One-click starting points above the composer. */
+.guidelines-presets {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	animation: rc-enter var(--dur-enter) var(--ease-menu) both;
+}
+[data-ui='button'][data-variant].guidelines-preset {
+	border-radius: 999px;
+	font-size: 12.5px;
+	color: var(--text-muted);
+}
+[data-ui='button'][data-variant].guidelines-preset:hover:not(:disabled) {
+	color: var(--text-primary);
+}
+.guidelines-proposal-bar {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding-left: 4px;
+	font-size: 12.5px;
+	color: var(--text-muted);
+	animation: rc-enter var(--dur-enter) var(--ease-menu) both;
+}
+.guidelines-error {
+	padding-left: 4px;
+	font-size: 12.5px;
+	color: var(--danger);
+}
+[data-ui='button'].guidelines-sources {
+	margin-left: -6px;
+	font-size: 12.5px;
+	color: var(--text-subtle);
+}
+
 .suggested-fix-code > [data-sign='-'] .suggested-fix-sign {
 	color: var(--danger);
 }
@@ -4408,8 +4808,15 @@ button.diff-num:hover {
 .focus-cards {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
 	padding: 2px 2px 12px;
+}
+/* Spacing lives on the slot so a filtered card's gap collapses with it. */
+.focus-card-slot + .focus-card-slot {
+	margin-top: 8px;
+}
+/* Room for the card's ring and shadow while a slot's height animates (slide clips). */
+.focus-card-slot {
+	flex-shrink: 0;
 }
 [data-ui='card'].focus-card {
 	gap: 0;
@@ -4557,26 +4964,154 @@ button.diff-num:hover {
 }
 .focus-evidence {
 	overflow: hidden;
+	border: 0;
 	border-radius: 10px;
 	background: var(--bg-canvas);
 	box-shadow: 0 0 0 1px var(--line-card);
 }
+[data-ui='file-diff'].focus-evidence {
+	--file-diff-max-height: 240px;
+	--file-diff-line-height: 20px;
+}
+/* Evidence diffs sit flush in their frame (no Sivir inset padding). */
+[data-ui='file-diff'].focus-evidence,
+[data-ui='file-diff'].evidence-lightbox-diff {
+	gap: 0;
+	padding: 0;
+}
+/* One line-number column when there is no old side (new files, excerpts). */
+[data-ui='file-diff'][data-single-gutter] [data-ui='file-diff-row'] {
+	grid-template-columns: 52px 24px minmax(0, 1fr);
+}
+[data-ui='file-diff'][data-single-gutter] [data-ui='file-diff-row'] > span:first-child {
+	display: none;
+}
 .focus-evidence-head {
 	display: flex;
 	min-width: 0;
+	align-items: center;
 	gap: 10px;
 	padding: 8px 12px;
 	border-bottom: 1px solid var(--line-divider);
 	font-size: 12px;
 	color: var(--text-muted);
 }
-.focus-evidence-head > .font-mono {
+.focus-evidence-label {
+	flex-shrink: 0;
+}
+/* Evidence file: type icon + file name; the full path is the tooltip. */
+.evidence-file {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 6px;
+}
+.evidence-file-icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+.evidence-file-name {
 	min-width: 0;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-tertiary);
+}
+.fix-review-head .evidence-file {
+	flex: 0 1 auto;
+}
+.fix-review-head .evidence-file-name {
+	font-size: 12.5px;
+}
+.focus-evidence-command {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-family: var(--font-code);
 	font-size: 11px;
+	font-weight: 400;
 	color: var(--text-faint);
+}
+.focus-evidence-head [data-ui='file-diff-plus-minus'] {
+	font-size: 11px;
+	font-weight: 400;
+}
+.focus-evidence-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+	margin: -4px -6px -4px 4px;
+}
+[data-ui='button'][data-variant].evidence-open {
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--text-subtle);
+}
+[data-ui='button'][data-variant].evidence-open:hover {
+	color: var(--text-primary);
+}
+/* Evidence lightbox: the same frame as the fix review, the diff fills it. */
+/* The lightbox fits its content, up to the viewport cap, then the diff scrolls. */
+.fix-review-modal.evidence-lightbox {
+	height: auto;
+	max-height: min(88vh, calc(var(--sivir-viewport-height, 100vh) - 48px));
+}
+.evidence-lightbox [data-ui='modal-surface'] {
+	max-height: min(88vh, calc(var(--sivir-viewport-height, 100vh) - 48px));
+}
+[data-ui='file-diff'].evidence-lightbox-diff {
+	--file-diff-max-height: none;
+	--file-diff-line-height: 22px;
+	min-height: 0;
+	flex: 0 1 auto;
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+	background: var(--bg-canvas);
+}
+.evidence-lightbox-diff [data-ui='file-diff-content'] {
+	min-height: 0;
+	flex: 0 1 auto;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-size: 13px;
+	overscroll-behavior: contain;
+}
+/* "Open in diff" lands on a row: a short wash so the eye finds it. */
+[data-diff-row][data-flash] {
+	animation: diff-row-flash 1.6s ease-out;
+}
+@keyframes diff-row-flash {
+	0%, 35% { background-color: var(--sev-medium-tint); }
+	100% { background-color: transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+	[data-diff-row][data-flash] {
+		animation: none;
+		outline: 1px solid var(--sev-medium);
+		outline-offset: -1px;
+	}
+}
+.focus-evidence-range {
+	flex-shrink: 0;
+	font-family: var(--font-code);
+	font-size: 11px;
+	color: var(--text-ghost);
+}
+.focus-evidence [data-ui='file-diff-content'] {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-size: 12px;
 }
 .focus-evidence [data-ui='code-block'] {
 	border: 0;

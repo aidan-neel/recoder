@@ -14,6 +14,7 @@
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import { Switch } from '@sivir-ui/svelte/components/switch';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
+	import { keepPillAligned } from '$lib/tab-pill';
 	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type { PullPreview, PullRequest, Repo, Review } from '@recoder/shared';
@@ -477,7 +478,7 @@
 		<div class="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2">
 			{#if openPrs.repos.length > 0}
 				<Tabs.Root value={repoChip} onValueChange={(value) => (repoChip = value)} variant="segmented" class="repo-chips">
-					<Tabs.List {...{ 'aria-label': 'Filter by repository' }}>
+					<Tabs.List {...{ 'aria-label': 'Filter by repository' }} {@attach keepPillAligned}>
 						<Tabs.Trigger value="all">
 							All
 							{#if openPrs.count !== null}<span class="chip-count">{openPrs.count}</span>{/if}

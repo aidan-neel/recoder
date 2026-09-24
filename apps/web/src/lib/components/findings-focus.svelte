@@ -12,7 +12,6 @@
 	import Search from '@lucide/svelte/icons/search';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
-	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 	import * as Popover from '@sivir-ui/svelte/components/popover';
@@ -22,6 +21,9 @@
 	import FindingSeverity from './finding-severity.svelte';
 	import FixButton from './fix-button.svelte';
 	import SuggestedFix from './suggested-fix.svelte';
+	import EvidenceView from './evidence-view.svelte';
+	import { collapse } from '$lib/collapse';
+	import { evidenceView } from '$lib/evidence';
 	import FixStatus from './fix-status.svelte';
 	import FixChecks from './fix-checks.svelte';
 	import SeverityPill from './ui/severity-pill.svelte';
@@ -35,6 +37,8 @@
 		branch?: string | null;
 		/** Open the whole file in the inline diff. */
 		onFullFile: (finding: Finding) => void;
+		/** Open a file in the inline diff at a line (the evidence's "Open in diff"). */
+		onOpenAt?: ((file: string, line: number | null) => void) | null;
 		/** Where the review is, for the empty state. */
 		status?: 'draft' | 'running' | 'failed' | 'done';
 		onStartReview?: (() => Promise<void>) | null;
@@ -43,7 +47,7 @@
 		onConversation?: (() => void) | null;
 		onRestart?: (() => void) | null;
 	}
-	let { files, toolCalls = [], branch = null, onFullFile, status = 'done', onStartReview = null, onOpenDiff = null, onAsk = null, onConversation = null, onRestart = null }: Props = $props();
+	let { files, toolCalls = [], branch = null, onFullFile, onOpenAt = null, status = 'done', onStartReview = null, onOpenDiff = null, onAsk = null, onConversation = null, onRestart = null }: Props = $props();
 
 	/* Empty states: what the page says when there's nothing in the list. */
 	const fixedCount = $derived(findingsStore.items.filter((f) => f.status === 'accepted').length);
@@ -96,6 +100,12 @@
 		if (!active?.evidenceIds?.length) return null;
 		const cited = toolCalls.filter((tool) => tool.result?.evidenceId && active.evidenceIds!.includes(tool.result.evidenceId) && tool.result.content);
 		return cited.find((tool) => tool.assignmentId === active.assignmentId) ?? cited[0] ?? null;
+	});
+
+	/** "Open in diff" only when the cited file is part of this pull request. */
+	const evidenceInDiff = $derived.by(() => {
+		const shown = evidence ? evidenceView(evidence) : null;
+		return !!shown && shown.kind !== 'text' && files.some((file) => file.path === shown.file);
 	});
 
 	function select(finding: Finding): void {
@@ -201,6 +211,7 @@
 			<div class="focus-cards">
 				{#each ranked as finding, i (finding.id)}
 					{@const isActive = finding.id === active?.id}
+					<div class="focus-card-slot" in:collapse out:collapse>
 					<Card.Root class="focus-card enter-rise" data-active={isActive || undefined} {...{ style: `--i: ${i}` }}>
 						<Button unstyled class="focus-card-select" aria-current={isActive || undefined} onclick={() => select(finding)}>
 							<span class="focus-card-head">
@@ -226,6 +237,7 @@
 							</div>
 						</div>
 					</Card.Root>
+					</div>
 				{:else}
 					<Typography.Text class="px-1 py-3 text-sm text-fg-muted">{query ? 'No findings match your search.' : 'Nothing needs you. Every finding is fixed, dismissed or filtered out.'}</Typography.Text>
 				{/each}
@@ -258,14 +270,7 @@
 						<span class="focus-detail-meta">{[active.code, formatAgentName(active.agent), active.model].filter(Boolean).join(' · ')}</span>
 					</div>
 					<div class="focus-detail-body ai-voice"><Markdown content={active.body} /></div>
-					{#if evidence?.result}
-						<div class="focus-evidence">
-							<div class="focus-evidence-head"><span>Evidence</span><span class="font-mono" title={evidence.command}>{evidence.command}</span></div>
-							<ScrollArea class="max-h-56" showCues={false} aria-label="Evidence">
-								<CodeBlock code={evidence.result.content} lang="plaintext" copy="overlay" class="focus-evidence-code" />
-							</ScrollArea>
-						</div>
-					{/if}
+					{#if evidence}<EvidenceView tool={evidence} onOpenInDiff={evidenceInDiff ? onOpenAt : null} />{/if}
 					<FixStatus finding={active} />
 					{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks finding={active} />{/if}
 					<div class="focus-detail-foot">

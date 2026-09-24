@@ -45,7 +45,8 @@ const SNAPSHOT_KEYS = [
 	'recommendedChecks',
 	'stage',
 	'planningDegraded',
-	'orchestratorModel'
+	'orchestratorModel',
+	'guidelines'
 ] as const;
 
 export function applyProgressMessage(current: ReviewProgress, event: ProgressMessage): ReviewProgress {

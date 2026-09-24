@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import type { CoverageGap, CoverageSummary, ReviewAssignment, ReviewChatMessage, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
+	import type { CoverageGap, CoverageSummary, ReviewAssignment, ReviewGuidelinesUsed, ReviewChatMessage, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
 	export interface ReviewingFinding {
 		id: string;
 		agent: string | null;
@@ -35,7 +35,6 @@
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
-	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
@@ -44,11 +43,14 @@
 	import ReviewResultsRail from './review-results-rail.svelte';
 	import ReviewSteps from './review-steps.svelte';
 	import Disclosure from './ui/disclosure.svelte';
+	import ReasoningSteps from './reasoning-steps.svelte';
+	import PrChecks from './pr-checks.svelte';
 	import SessionHeader from './session-header.svelte';
 	import FindingSeverity from './finding-severity.svelte';
 	import { closeSessionTab } from '$lib/session-tabs';
 	import { requestDeleteSession } from '$lib/delete-session.svelte';
 	import { formatAgentName } from '$lib/threads.svelte';
+	import { guidelinesStore } from '$lib/guidelines.svelte';
 
 	interface Props {
 		reviewId?: string;
@@ -86,7 +88,14 @@
 		pendingCount?: number;
 		coverage?: CoverageSummary | null;
 		coverageGaps?: CoverageGap[];
-		pipelineLogs?: string[];
+		/** Pipeline events (oldest first), shown while the review runs. */
+		activity?: { message: string; agent?: string }[];
+		/** Show the pull request's CI checks in the session bar. */
+		showChecks?: boolean;
+		/** The tracked repo, for its review guidelines. */
+		repoId?: string | null;
+		/** Owner guidelines this review ran with. */
+		guidelines?: ReviewGuidelinesUsed | null;
 		doneHref?: string | null;
 	}
 	let {
@@ -94,7 +103,7 @@
 		reasoning = [], toolCalls = [], active = true, failed = false,
 		errorMessage = null, connectionLost = false, onOpenDiff, onShowView = null, onOpenFinding = null, onRestart,
 		onSend, onStop, restarting = false, now = Date.now(), fullscreen = false, stage = 0, tasks = [],
-		planSummary = null, pipelineLogs = [], stageLabel = 'Preparing review', coverage = null, coverageGaps = [],
+		planSummary = null, activity = [], showChecks = false, repoId = null, guidelines = null, stageLabel = 'Preparing review', coverage = null, coverageGaps = [],
 		awaitingPrompt = false, completedAt, findings = []
 	}: Props = $props();
 
@@ -127,6 +136,35 @@
 	const finalization = $derived(tasks.find((task) => task.id === 'consolidation'));
 	const finalizationSeconds = $derived(finalization?.elapsedMs !== undefined ? Math.max(0, Math.round(finalization.elapsedMs / 1000)) : null);
 	const finalReasoning = $derived(reasoning.filter((entry) => (entry.assignmentId ?? ORCHESTRATOR_ID) === ORCHESTRATOR_ID && finalization?.startedAt && Date.parse(entry.at) >= Date.parse(finalization.startedAt)));
+	/** Consecutive repeats collapse (events are often emitted twice); newest last. */
+	const recentActivity = $derived.by(() => {
+		const rows: { key: number; agent: string; message: string }[] = [];
+		for (const [i, item] of activity.entries()) {
+			const agent = item.agent ? formatAgentName(item.agent) : 'Review';
+			const last = rows.at(-1);
+			if (last && last.agent === agent && last.message === item.message) continue;
+			rows.push({ key: i, agent, message: item.message });
+		}
+		return rows.slice(-8);
+	});
+	/** Finalization at a glance, in the tool-row grid (label · value · meta). */
+	const finalFacts = $derived.by(() => {
+		const facts: { label: string; value: string; meta?: string; mono?: boolean; open?: () => void }[] = [];
+		const candidateCount = specialists.reduce((sum, item) => sum + (item.candidateCount ?? 0), 0);
+		if (candidateCount) facts.push({ label: 'Candidates', value: `${candidateCount} from ${specialists.length} ${specialists.length === 1 ? 'specialist' : 'specialists'}` });
+		if (finished) facts.push({ label: 'Confirmed', value: `${findings.length} ${findings.length === 1 ? 'finding' : 'findings'}` });
+		if (coverage) facts.push({ label: 'Coverage', value: `${coverage.reviewed} of ${coverage.total} changes${coverage.partial ? ` · ${coverage.partial} partial` : ''}` });
+		if (guidelines?.layers.length) {
+			const hasRepoLayer = guidelines.layers.some((layer) => layer.source === 'repo');
+			const value = guidelines.layers.map((layer) => layer.source === 'global'
+				? 'Global'
+				: `${layer.path}${layer.ref ? ` @ ${layer.ref}` : ''}${layer.sha ? ` ${layer.sha.slice(0, 7)}` : ''}`).join(' + ');
+			const target = hasRepoLayer && repoId ? { kind: 'repo' as const, repoId } : { kind: 'global' as const };
+			facts.push({ label: 'Guidelines', value, open: () => guidelinesStore.open(target) });
+		}
+		if (finalization?.model) facts.push({ label: 'Model', value: finalization.model, mono: true, meta: finalization.elapsedMs !== undefined ? `${(finalization.elapsedMs / 1000).toFixed(1)}s` : undefined });
+		return facts;
+	});
 	const chatReasoning = $derived(reasoning.filter((entry) => !finalReasoning.some((item) => item.id === entry.id)));
 	const findingCounts = $derived((['high', 'medium', 'low', 'info'] as const)
 		.map((severity) => ({ severity, count: findings.filter((finding) => finding.severity === severity).length }))
@@ -158,6 +196,7 @@
 {#snippet sessionMenu()}
 	{#if onOpenDiff}<DropdownMenu.Item callback={onOpenDiff}>Open diff</DropdownMenu.Item>{/if}
 	{#if reviewId}<DropdownMenu.Item callback={() => metricsOpen = true}>View token usage</DropdownMenu.Item>{/if}
+	{#if repoId}{@const id = repoId}<DropdownMenu.Item callback={() => guidelinesStore.open({ kind: 'repo', repoId: id })}>Review guidelines</DropdownMenu.Item>{/if}
 	{#if onRestart}<DropdownMenu.Item disabled={restarting} callback={() => restartOpen = true}>{restarting ? 'Restarting…' : 'Restart review'}</DropdownMenu.Item>{/if}
 	{#if reviewId}{@const id = reviewId}<DropdownMenu.Separator /><DropdownMenu.Item callback={() => void closeSessionTab(id)}>Close tab</DropdownMenu.Item><DropdownMenu.Item class="menu-danger" callback={() => requestDeleteSession(id)}>Delete session</DropdownMenu.Item>{/if}
 {/snippet}
@@ -200,22 +239,29 @@
 	</section>
 {/snippet}
 
-{#snippet activityLog()}
-	{#if tasks.length || pipelineLogs.length}
-		<ScrollArea showCues={false} class="max-h-64" aria-label="Review activity">
-			{#each tasks as task (task.id)}<Typography.Text class="review-log"><span class="text-fg-secondary">{task.label}</span> · {task.message || task.status}</Typography.Text>{/each}
-			{#each pipelineLogs as log, i (i)}<Typography.Text class="review-log font-mono">{log}</Typography.Text>{/each}
-		</ScrollArea>
-	{/if}
+{#snippet progressContent()}
+	<Disclosure status={active ? 'running' : failed ? 'error' : 'done'} bodyClass="finalize-body">
+		{#snippet label()}{active ? footerLabel : failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
+		<ReasoningSteps entries={finalReasoning} live={active} />
+		{#if (active || failed) && recentActivity.length}
+			<div class="fact-rows" role="log" aria-label="Recent activity">
+				{#each recentActivity as row (row.key)}
+					<Typography.Text class="fact-row" title={row.message}><span class="fact-label">{row.agent}</span><span class="fact-value">{row.message}</span></Typography.Text>
+				{/each}
+			</div>
+		{/if}
+		{#if finalFacts.length}
+			<div class="fact-rows" aria-label="Finalization summary">
+				{#each finalFacts as fact (fact.label)}
+					<Typography.Text class="fact-row"><span class="fact-label">{fact.label}</span>{#if fact.open}<Button unstyled class="fact-value fact-link" title="Edit these guidelines" onclick={fact.open}>{fact.value}</Button>{:else}<span class="fact-value" class:font-mono={fact.mono}>{fact.value}</span>{/if}{#if fact.meta}<span class="fact-meta">{fact.meta}</span>{/if}</Typography.Text>
+				{/each}
+			</div>
+		{/if}
+	</Disclosure>
 {/snippet}
 
-{#snippet progressContent()}
-	<Disclosure status={active ? 'running' : failed ? 'error' : 'done'} bodyClass="!gap-3">
-		{#snippet label()}{active ? footerLabel : failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
-		{#each finalReasoning as entry (entry.id)}<Markdown content={entry.text} streaming={active && entry.status === 'streaming'} />{/each}
-		{#if coverage}<Typography.Text>{coverage.reviewed} of {coverage.total} changes reviewed{coverage.partial ? ` · ${coverage.partial} partial` : ''}</Typography.Text>{/if}
-		{@render activityLog()}
-	</Disclosure>
+{#snippet headerChecks()}
+	{#if reviewId}<div class="findings-toolbar-end"><PrChecks {reviewId} /></div>{/if}
 {/snippet}
 
 {#snippet resultCard()}
@@ -245,7 +291,8 @@
 		onView={(view) => { if (view !== 'conversation') return onShowView ? onShowView(view) : onOpenDiff?.(); }}
 		diffDisabled={!onOpenDiff}
 		onFiles={onOpenDiff}
-		menu={reviewId || onRestart || onOpenDiff ? sessionMenu : undefined}
+		menu={reviewId || onRestart || onOpenDiff || repoId ? sessionMenu : undefined}
+		toolbar={showChecks && reviewId ? headerChecks : undefined}
 	/>
 	{#if !isOrchestrator}
 		{@const status = statusFor(selected)}

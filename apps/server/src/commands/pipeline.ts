@@ -226,6 +226,10 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 						data: { candidateCount: count }
 					});
 				},
+				onGuidelines: (guidelines) => {
+					const sources = guidelines.layers.map((layer) => layer.source === 'global' ? 'global' : layer.path).join(' + ');
+					emitReviewEvent(reviewId, { type: 'step', step: 'review', message: `Following review guidelines (${sources})`, data: { guidelines } });
+				},
 				onStage: (stage) => {
 					emitReviewEvent(reviewId, { type: 'step', step: stage, message: '', data: { stage } });
 				}

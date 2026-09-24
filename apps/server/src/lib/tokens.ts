@@ -77,7 +77,7 @@ export function clearToken(provider: Provider): void {
 	persist(tokens);
 }
 
-function getToken(provider: Provider): string | undefined {
+export function getToken(provider: Provider): string | undefined {
 	// Environment overrides are never copied into the persisted credentials.
 	return (provider === 'gitlab' ? process.env.GITLAB_TOKEN : process.env.GH_TOKEN) || readStored()[provider];
 }

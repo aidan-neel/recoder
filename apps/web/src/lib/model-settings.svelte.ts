@@ -96,7 +96,7 @@ export function resolveEffort(model: ModelOption | undefined, effort: ReasoningE
 	return effort && model.efforts.some((option) => option.id === effort) ? effort : model.defaultEffort;
 }
 
-export type SettingsSection = 'models' | 'connections' | 'harness' | 'appearance';
+export type SettingsSection = 'models' | 'connections' | 'harness' | 'guidelines' | 'appearance';
 
 /** Global open state + cached config for the model settings modal. */
 class ModelSettingsUi {

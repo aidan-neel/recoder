@@ -87,7 +87,10 @@
 	onStop={async (assignmentId) => { await serverApi.stopReviewMessage(reviewId, assignmentId); }}
 	findings={viewFindings}
 	pendingCount={assignments.filter((assignment) => assignment.status === 'running' || assignment.status === 'queued' || assignment.status === 'waiting').length}
-	pipelineLogs={progress.activity.map((entry) => entry.message)}
+	activity={progress.activity}
+	showChecks={review.source !== 'stub'}
+	repoId={review.source !== 'stub' ? review.repoId : null}
+	guidelines={progress.guidelines ?? null}
 	{onOpenDiff}
 	{onShowView}
 	{onOpenFinding}

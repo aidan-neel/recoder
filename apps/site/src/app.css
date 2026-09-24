@@ -1,0 +1,185 @@
+/*
+ * recoder.dev runs on the app's design system, verbatim: tokens, the Sivir
+ * theme mapping and every component style come from apps/web. Only the
+ * marketing layout below is site-specific.
+ */
+@import '../../web/src/app.css';
+@source '../../web/src/lib/components';
+@source './';
+
+/* ───────────────────────── Page ───────────────────────── */
+/* One canvas card on the chrome, like the app. The page scrolls without a visible bar. */
+html {
+	scrollbar-width: none;
+}
+html::-webkit-scrollbar {
+	display: none;
+}
+
+/* Home's column, widened so the brief lines up with the demo window below. */
+.site-column {
+	display: flex;
+	width: 100%;
+	max-width: 1280px;
+	flex-direction: column;
+	margin: 0 auto;
+	padding: 56px 40px 48px;
+}
+/* The Home brief (3a), as the page title. */
+.site-brief.home-brief {
+	max-width: 860px;
+	margin: 0;
+	font-family: var(--font-ai);
+	font-size: 27px;
+	font-weight: 400;
+	line-height: 1.38;
+	letter-spacing: -0.005em;
+	color: var(--text-brief-body);
+}
+.site-brief .text-fg {
+	color: var(--text-primary);
+}
+
+/* Self-host command: Home's filter field, holding a one-line install. */
+.site-install {
+	max-width: 860px;
+	margin-top: 44px;
+}
+[data-ui='code-block'].install-command {
+	--code-block-padding-x: 13px;
+	--code-block-padding-y: 0px;
+	--code-block-line-height: 40px;
+	--code-block-max-height: none;
+	--font-size-label: 13px;
+	border-radius: 10px;
+	background-color: var(--bg-field);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+	transition: box-shadow var(--dur-hover) ease-out, background-color var(--dur-hover) ease-out;
+}
+[data-ui='code-block'].install-command:hover {
+	background-color: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+}
+.install-command [data-ui='code-block-surface'],
+.install-command [data-ui='code-block-content'],
+.install-command [data-ui='code-block-content'] > div > div {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+}
+.install-command pre {
+	scrollbar-width: none;
+}
+.install-command pre::before {
+	content: '$';
+	margin-right: 10px;
+	color: var(--text-ghost);
+}
+.install-command pre code {
+	font-weight: 400;
+	color: var(--text-secondary);
+}
+
+/* Waitlist: the outline button opens into an email field in place. */
+.waitlist-wrap {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	animation: rc-label-in 200ms var(--ease-menu);
+}
+.waitlist {
+	display: flex;
+	gap: 8px;
+}
+.waitlist-input {
+	width: 250px;
+}
+.waitlist [data-ui='input-control'] {
+	min-height: 34px;
+	height: 34px;
+	padding: 0 12px;
+	border-radius: 9px;
+}
+.waitlist [data-ui='input'] {
+	font-size: 13.5px;
+}
+.waitlist-error {
+	font-size: 12.5px;
+	line-height: 18px;
+	color: var(--danger);
+}
+.waitlist-done {
+	display: flex;
+	min-height: 34px;
+	align-items: center;
+	gap: 8px;
+	padding: 0 4px;
+	font-size: 13.5px;
+	color: var(--text-secondary);
+	animation: rc-label-in 230ms var(--ease-menu);
+}
+
+/* ─────────────────────── Live demo ─────────────────────── */
+.demo-stage {
+	position: relative;
+	width: 100%;
+}
+.demo-window {
+	display: flex;
+	width: 1200px;
+	height: 760px;
+	flex-direction: column;
+	overflow: hidden;
+	border-radius: 18px;
+	background: var(--bg-chrome);
+	box-shadow:
+		0 0 0 1px var(--line-card),
+		0 30px 80px rgba(0, 0, 0, 0.5);
+	transform-origin: top left;
+	user-select: none;
+}
+.demo-window[data-compact] {
+	width: 720px;
+	height: 680px;
+}
+.demo-window[data-compact] .demo-rail,
+.demo-window[data-compact] .usage-meter,
+.demo-window[data-compact] .search-trigger {
+	display: none;
+}
+.demo-body {
+	transition: opacity 450ms var(--ease-menu);
+}
+.demo-body[data-fading] {
+	opacity: 0;
+}
+.demo-rail {
+	overflow: hidden;
+}
+/* Rail rows arrive as findings land, with the app's enter motion (no stagger delay). */
+.demo-row-in {
+	animation: rc-enter var(--dur-enter) var(--ease-menu) both;
+}
+
+@media (max-width: 640px) {
+	.site-column {
+		padding: 32px 16px 24px;
+	}
+	.site-brief.home-brief {
+		font-size: 22px;
+	}
+	.waitlist {
+		flex-wrap: wrap;
+	}
+	.waitlist-input {
+		width: 100%;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.demo-body,
+	.demo-row-in {
+		transition: none;
+		animation: none;
+	}
+}

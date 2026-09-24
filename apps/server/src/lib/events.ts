@@ -65,7 +65,8 @@ const SNAPSHOT_KEYS = [
 	'recommendedChecks',
 	'stage',
 	'planningDegraded',
-	'orchestratorModel'
+	'orchestratorModel',
+	'guidelines'
 ] as const;
 
 export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): void {

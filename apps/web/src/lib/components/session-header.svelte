@@ -4,6 +4,7 @@
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import { carryPill, keepPillAligned } from '$lib/tab-pill';
 
 	export type SessionView = 'conversation' | 'findings' | 'diff';
 
@@ -61,7 +62,7 @@
 	<Typography.Title level={1} class="session-title" title={tooltip}>{title}</Typography.Title>
 	{#if onView}
 		<Tabs.Root bind:value={current} onValueChange={choose} variant="segmented" class="view-switch">
-			<Tabs.List {...{ 'aria-label': 'Session view' }}>
+			<Tabs.List {...{ 'aria-label': 'Session view' }} {@attach keepPillAligned} {@attach (list: HTMLElement) => carryPill(list, 'session-view', view)}>
 				<Tabs.Trigger value="conversation">Conversation</Tabs.Trigger>
 				<Tabs.Trigger value="findings" disabled={diffDisabled}>Findings</Tabs.Trigger>
 				<Tabs.Trigger value="diff" disabled={diffDisabled}>Diff</Tabs.Trigger>

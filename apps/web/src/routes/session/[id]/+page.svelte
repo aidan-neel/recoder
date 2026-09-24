@@ -35,6 +35,8 @@
 	import { threadsStore } from '$lib/threads.svelte';
 	import { sessionState } from '$lib/session-state.svelte';
 	import { DEFAULT_FILE, sessionFile } from '$lib/session-file.svelte';
+	import { revealDiffLine } from '$lib/reveal-line';
+	import { guidelinesStore } from '$lib/guidelines.svelte';
 	import { serverApi } from '$lib/server-api';
 	import { ReviewStream } from '$lib/review-stream.svelte';
 	import { recentSessions } from '$lib/recent-sessions.svelte';
@@ -501,8 +503,9 @@
 	$effect(() => {
 		if (!isBackend || !backendReview || !backendFiles || backendFiles.length === 0) return;
 		if (userPickedFile) return;
+		// Filters are read untracked: toggling a severity must not switch files.
 		const open = findingsStore.items.filter(
-			(f) => f.status !== 'dismissed' && findingsStore.isShown(f)
+			(f) => f.status !== 'dismissed' && untrack(() => findingsStore.isShown(f))
 		);
 		open.sort(
 			(a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || a.startLine - b.startLine
@@ -628,6 +631,7 @@
 {#snippet diffMenu()}
 	{#if backendReview}<DropdownMenu.Item callback={() => setDiffView(false)}>Show conversation</DropdownMenu.Item>{/if}
 	{#if backendReview}<DropdownMenu.Item callback={() => usageOpen = true}>View token usage</DropdownMenu.Item>{/if}
+	{#if backendReview && backendReview.source !== 'stub'}{@const repoId = backendReview.repoId}<DropdownMenu.Item callback={() => guidelinesStore.open({ kind: 'repo', repoId })}>Review guidelines</DropdownMenu.Item>{/if}
 	<DropdownMenu.Separator />
 	<DropdownMenu.Item callback={() => void closeSessionTab(id)}>Close tab</DropdownMenu.Item>
 {/snippet}
@@ -692,6 +696,7 @@
 							onAsk={isBackend ? () => openChat() : null}
 							onConversation={() => setView('conversation')}
 							onRestart={isBackend ? () => void rerunReview() : null}
+							onOpenAt={(file, line) => { sessionFile.select(file); userPickedFile = true; void setView('diff').then(() => { if (line !== null) revealDiffLine(line); }); }}
 							onFullFile={(finding) => { sessionFile.select(finding.file); userPickedFile = true; findingsStore.discuss(finding.id); setView('diff'); requestAnimationFrame(() => document.getElementById(`finding-${finding.id}`)?.scrollIntoView({ block: 'center' })); }} />
 					</div>
 				{:else}

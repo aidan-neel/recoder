@@ -1,12 +1,14 @@
 /**
  * Opening a collapsible changes the height of whatever it lives in. In the
  * review chat that fights the conversation's stick-to-bottom scrolling, and
- * the header you clicked slides away. `anchorToggle` holds the header where it
- * was for the length of the open/close transition, then (when opening) scrolls
- * just enough to bring the new content into view, never past the header.
+ * the header you clicked slides away. `anchorToggle` holds the header in place
+ * while the panel animates. When opening, it also scrolls in step with the
+ * growing panel, so the new content comes into view in the same motion (never
+ * past the header), instead of a second scroll after the panel finishes.
  */
 
-const HOLD_MS = 320;
+/** Covers the open/close transition in app.css (.disclosure-panel). */
+const HOLD_MS = 360;
 
 function scrollParent(el: HTMLElement): HTMLElement | null {
 	for (let node = el.parentElement; node; node = node.parentElement) {
@@ -33,11 +35,26 @@ export function anchorToggle(trigger: HTMLElement, opening: boolean, panel: () =
 	const before = trigger.getBoundingClientRect().top;
 	const until = performance.now() + HOLD_MS;
 
+	/** Where the header should sit this frame: held, or lifted just enough to show the panel. */
+	const targetTop = (): number => {
+		const body = opening ? panel() : null;
+		if (!body) return before;
+		const top = trigger.getBoundingClientRect().top;
+		const bodyBelowTrigger = body.getBoundingClientRect().bottom - top;
+		const fit = visibleBottom(container) - 16 - bodyBelowTrigger;
+		const ceiling = Math.min(before, container.getBoundingClientRect().top + 12);
+		return Math.max(ceiling, Math.min(before, fit));
+	};
 	const hold = () => {
-		const drift = trigger.getBoundingClientRect().top - before;
+		const drift = trigger.getBoundingClientRect().top - targetTop();
 		if (Math.abs(drift) > 0.5) container.scrollTop += drift;
 	};
-	// Corrects on scroll too, so a stick-to-bottom scroll is undone before it paints.
+	// The chat's stick-to-bottom re-pins with scrollTo() on every resize while
+	// the panel grows; that would fight the anchor each frame (the page lurches,
+	// then snaps back). Mute it on this viewport for the transition only.
+	const muted = !Object.prototype.hasOwnProperty.call(container, 'scrollTo');
+	if (muted) container.scrollTo = () => {};
+	// Corrects on scroll too, so any other scroll is undone before it paints.
 	container.addEventListener('scroll', hold);
 	const tick = () => {
 		hold();
@@ -46,20 +63,7 @@ export function anchorToggle(trigger: HTMLElement, opening: boolean, panel: () =
 			return;
 		}
 		container.removeEventListener('scroll', hold);
-		if (opening) reveal();
+		if (muted) delete (container as { scrollTo?: unknown }).scrollTo;
 	};
 	requestAnimationFrame(tick);
-
-	function reveal(): void {
-		const body = panel();
-		if (!body || !container) return;
-		const top = container.getBoundingClientRect().top;
-		const overflow = body.getBoundingClientRect().bottom - visibleBottom(container) + 16;
-		if (overflow <= 0) return;
-		const room = trigger.getBoundingClientRect().top - top - 12;
-		const by = Math.min(overflow, Math.max(0, room));
-		if (by < 1) return;
-		const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-		container.scrollBy({ top: by, behavior: reduce ? 'auto' : 'smooth' });
-	}
 }

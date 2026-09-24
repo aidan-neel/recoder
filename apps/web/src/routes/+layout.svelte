@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import appleTouchIcon from '$lib/assets/apple-touch-icon.png';
 	import favicon from '$lib/assets/favicon.svg';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Toaster } from '@sivir-ui/svelte/components/toast';
 	import CommandPalette from '$lib/components/command-palette.svelte';
+	import GuidelinesEditor from '$lib/components/guidelines-editor.svelte';
 	import ModelSettingsModal from '$lib/components/model-settings-modal.svelte';
 	import UsageModal from '$lib/components/usage-modal.svelte';
 	import DeleteSessionDialog from '$lib/components/delete-session-dialog.svelte';
@@ -11,10 +13,18 @@
 	import '../app.css';
 
 	let { children } = $props();
+
+	// Sivir's Toaster portals to <body> without marking itself an overlay root,
+	// so an open modal inerts it and toast actions (Undo, View) stop responding.
+	// Overlay roots are exempt from that inert, so mark the toaster as one.
+	$effect(() => {
+		document.querySelector('[role="region"][aria-label="Notifications"]')?.parentElement?.setAttribute('data-overlay-root', '');
+	});
 </script>
 
 <svelte:head>
-	<link rel="icon" href={favicon} />
+	<link rel="icon" href={favicon} type="image/svg+xml" />
+	<link rel="apple-touch-icon" href={appleTouchIcon} />
 	<title>Recoder</title>
 	<meta
 		name="description"
@@ -30,6 +40,7 @@
 		</Card.Root>
 	</main>
 	<ModelSettingsModal />
+	<GuidelinesEditor />
 	<UsageModal />
 	<DeleteSessionDialog />
 	<CommandPalette />

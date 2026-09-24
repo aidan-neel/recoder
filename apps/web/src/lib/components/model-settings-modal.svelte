@@ -8,16 +8,19 @@
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import SettingsAppearance from './settings-appearance.svelte';
 	import SettingsConnections from './settings-connections.svelte';
+	import SettingsGuidelines from './settings-guidelines.svelte';
 	import SettingsHarness from './settings-harness.svelte';
 	import SettingsModels from './settings-models.svelte';
 	import Skeleton from './ui/skeleton.svelte';
 	import { modelSettingsUi, type SettingsSection } from '$lib/model-settings.svelte';
 	import { settingsDraft } from '$lib/settings-draft.svelte';
+	import { guidelinesStore } from '$lib/guidelines.svelte';
 
 	const SECTIONS: { id: SettingsSection; label: string }[] = [
 		{ id: 'models', label: 'Models' },
 		{ id: 'connections', label: 'Connections' },
 		{ id: 'harness', label: 'Review harness' },
+		{ id: 'guidelines', label: 'Guidelines' },
 		{ id: 'appearance', label: 'Appearance' }
 	];
 
@@ -48,7 +51,8 @@
 	}
 
 	function onKey(event: KeyboardEvent): void {
-		if (!modelSettingsUi.open || event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return;
+		// The guidelines editor stacks on top and owns ⌘↵ while it is open.
+		if (!modelSettingsUi.open || guidelinesStore.editing || modelSettingsUi.section === 'guidelines' || event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return;
 		event.preventDefault();
 		void save();
 	}
@@ -112,6 +116,7 @@
 							<Tabs.Content value="models"><SettingsModels /></Tabs.Content>
 							<Tabs.Content value="connections"><SettingsConnections /></Tabs.Content>
 							<Tabs.Content value="harness"><SettingsHarness /></Tabs.Content>
+							<Tabs.Content value="guidelines"><SettingsGuidelines /></Tabs.Content>
 							<Tabs.Content value="appearance"><SettingsAppearance /></Tabs.Content>
 						{/if}
 					</div>
@@ -121,14 +126,20 @@
 					{#if saveError}
 						<span class="min-w-0 flex-1 truncate text-danger" role="alert">{saveError}</span>
 					{:else}
-						<span class="min-w-0 flex-1 truncate">Overrides RECODER_REVIEW_* env vars</span>
+						<span class="min-w-0 flex-1 truncate">{modelSettingsUi.section === 'guidelines' ? 'Guidelines save from their own editor' : 'Overrides RECODER_REVIEW_* env vars'}</span>
 					{/if}
-					<Modal.Close variant="ghost" class="settings-cancel mr-0" disabled={modelSettingsUi.saving}>
-						Cancel <kbd class="keycap">esc</kbd>
-					</Modal.Close>
-					<Button class="settings-save" loading={modelSettingsUi.saving} onclick={() => void save()}>
-						Save <kbd class="keycap">⌘↵</kbd>
-					</Button>
+					{#if modelSettingsUi.section === 'guidelines'}
+						<Modal.Close variant="ghost" class="settings-cancel mr-0">
+							Close <kbd class="keycap">esc</kbd>
+						</Modal.Close>
+					{:else}
+						<Modal.Close variant="ghost" class="settings-cancel mr-0" disabled={modelSettingsUi.saving}>
+							Cancel <kbd class="keycap">esc</kbd>
+						</Modal.Close>
+						<Button class="settings-save" loading={modelSettingsUi.saving} onclick={() => void save()}>
+							Save <kbd class="keycap">⌘↵</kbd>
+						</Button>
+					{/if}
 				</footer>
 			</div>
 		</Tabs.Root>

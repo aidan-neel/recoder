@@ -403,6 +403,7 @@ describe('reviews + command runner', () => {
 
 			test('409 for stub reviews without a checkout', async () => {
 				const id = await seedReviewWithDiff();
+				db.reviews.set({ ...db.reviews.get(id)!, source: 'stub' });
 				const res = await app.request(`/api/reviews/${id}/fixes/apply`, {
 					method: 'POST',
 					headers: { 'content-type': 'application/json' },

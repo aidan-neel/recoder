@@ -25,6 +25,7 @@
 	import { closeSessionTab, sessionTab, type SessionTab } from '$lib/session-tabs';
 	import { requestDeleteSession } from '$lib/delete-session.svelte';
 	import { initials, shellState } from '$lib/shell-state.svelte';
+	import { keepPillAligned } from '$lib/tab-pill';
 
 	const HOME = 'home';
 
@@ -113,32 +114,6 @@
 	const visibleTabs = $derived(tabs.filter((tab) => visibleIds.includes(tab.id)));
 	const hiddenTabs = $derived(tabs.filter((tab) => !visibleIds.includes(tab.id)));
 
-	/**
-	 * Sivir's active-tab pill re-measures only on list or window resize. Tabs that
-	 * change width inside a fixed-width list (badges arriving, fonts loading) or
-	 * get added leave it misaligned, so nudge it whenever any tab changes size.
-	 */
-	function keepPillAligned(list: HTMLElement): () => void {
-		let frame = 0;
-		const nudge = () => {
-			cancelAnimationFrame(frame);
-			frame = requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
-		};
-		const ro = new ResizeObserver(nudge);
-		const observe = () => list.querySelectorAll('[role="tab"]').forEach((tab) => ro.observe(tab));
-		observe();
-		const mo = new MutationObserver(() => {
-			observe();
-			nudge();
-		});
-		mo.observe(list, { childList: true });
-		return () => {
-			ro.disconnect();
-			mo.disconnect();
-			cancelAnimationFrame(frame);
-		};
-	}
-
 	/* ── Context menu: acts on the tab under the pointer, or the bar itself. ── */
 	let menuTabId = $state<string | null>(null);
 	const menuTab = $derived(tabs.find((tab) => tab.id === menuTabId) ?? null);
@@ -190,6 +165,16 @@
 		if (mod && event.key === ',') {
 			event.preventDefault();
 			modelSettingsUi.show();
+			return;
+		}
+		// Ctrl+Tab / Ctrl+Shift+Tab: next / previous tab (Home, then sessions), wrapping.
+		if (event.ctrlKey && event.key === 'Tab' && !event.altKey && !event.metaKey) {
+			if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+			event.preventDefault();
+			const order = [HOME, ...tabs.map((tab) => tab.id)];
+			const at = order.indexOf(activeValue);
+			const step = event.shiftKey ? -1 : 1;
+			navigate(order[at < 0 ? (step > 0 ? 0 : order.length - 1) : (at + step + order.length) % order.length]);
 			return;
 		}
 		if (mod && (event.key === '1' || event.key === '2') && paletteContext.showView) {

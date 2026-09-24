@@ -56,15 +56,29 @@ After phase 7, do 4d (first run). Then do a polish pass: check hover, press, foc
 - No top-left wordmark or logo.
 - There is no traveling hover highlight in the top bar. The active tab pill is flat, has no border, and snaps.
 - The Switch has no press stretch.
+- The top bar has **no press scale** on anything (tabs, search, icon buttons, account). There is an override under the press rules in `app.css`.
+- The session view switch (Conversation · Findings · Diff) is quiet text tabs with **one pill that slides** to the selected view. There is no press scale and no underline. `carryPill` in `$lib/tab-pill.ts` carries the slide across header instances, because each view mounts its own header.
+- **PR checks stay in the session header in every view**, including Conversation. The server reads them from the GitHub REST API using the connected token (`GH_TOKEN`, then the Settings token, then `GITHUB_TOKEN`), not the `gh` CLI. See `lib/github-rest.ts`.
+- The "Finalized review" body shows reasoning headings as plain rows (`reasoning-steps.svelte`), then facts in the tool-row grid. The raw activity log shows only while the review runs, with duplicates removed. Tool rows are final: don't restyle them.
+- Finding Evidence uses Sivir `FileDiff` (`evidence-view.svelte`). Search output stays a code block.
 - Scrollbars are hidden on session pages.
 - The usage meter in the top right opens a **Usage modal**, not Settings.
-- Home repo chips use Sivir Tabs (segmented). PR row hover is flat, with no ring.
+- Home repo chips use Sivir Tabs (segmented). The active fill slides between chips like the session view switch, with no press scale. PR row hover is flat, with no ring.
 - Hovering a `#160` reference in the Home brief shows a HoverCard with PR details.
 - **Streaming text has no caret.** Sivir's `.sivir-markdown-caret` is hidden. The paragraph being written gets the skeleton shimmer (a mask sweep).
 - **Page animations are per element, not a full-page fade.** A View Transition crossfade was tried and rejected as ugly. Each page staggers its own pieces in, like the Settings → Connections list (`rc-enter`: 4px rise plus fade, 45ms steps). Chrome never moves: the top bar and the session header stay put.
   - The staging is the "Entrances" block at the end of `app.css`.
   - Hidden views replay it when shown, because `display:none` restarts animations.
   - Picking a finding in Focus mode re-keys the detail column so it animates.
+- **Review guidelines** (our own AGENTS.md for the reviewer) have two layers. The **global** layer is `review-guidelines.md` in the data dir. The **repo** layer is `.recoder/REVIEW.md` committed in the repo.
+  - The harness reads the repo file at the PR's **base** revision, so a PR can't rewrite its own rules.
+  - The guidelines block is trusted. It ranks below the safety contract and above repo instruction files and PR text. The repo layer overrides global. Each layer is capped at 8,000 characters.
+  - It reaches the planner, the follow-up planner, the specialists and consolidation (`withGuidelines` in `lib/guidelines.ts`).
+  - Authoring is an AI draft plus an editor (`guidelines-editor.svelte`). The owner rejected a split pane with darker bands as "ugly and basic". It is now one surface with a single 720px document column (Write / Preview tabs in the header, Save in the header). The app's `ReviewComposer` is docked at the bottom for drafts, with a sources menu in its footer.
+    - From an empty template, a draft goes straight in. Revising existing rules shows a line diff to Accept or Discard.
+    - The draft runs on the Orchestrator model (`POST /api/guidelines/draft`, SSE). The idle timeout is off for that route.
+  - Saving the global layer is instant, with an Undo toast. Saving a repo layer **opens a pull request** through the provider REST API (GitHub or GitLab) with the connected token, and pushes to the pending `recoder/review-guidelines-*` branch when one is open.
+  - Entry points: Settings → Guidelines, "Review guidelines" in the session `…` menu, and the "Guidelines" row in the Finalized review body.
 
 ## Design system in code
 
@@ -87,6 +101,8 @@ After phase 7, do 4d (first run). Then do a polish pass: check hover, press, foc
   - Toasts come from `$lib/notify.ts` (`undoToast`, `errorToast`).
   - Respect `prefers-reduced-motion`.
 
+- **Review checkouts survive restarts.** `reviewSandboxes` lives in memory, so routes go through `lib/review-checkout.ts`. `findReviewCheckout` is for reads and locates the pipeline's checkout on disk. `ensureReviewCheckout` is for apply, verify and verify-cleanup: it re-fetches the PR head into the same path, cloning if the directory is gone. Never read `reviewSandboxes` directly in a route.
+
 ### Sivir gotchas learned the hard way
 
 - `cn()` merge order varies. Some parts (Modal.Footer, Tabs, Card) apply their own utilities *after* your class, so a conflicting class like `pe-5` is silently dropped. Restyle through `data-ui` hooks in `app.css` instead.
@@ -99,6 +115,8 @@ After phase 7, do 4d (first run). Then do a polish pass: check hover, press, foc
 - Svelte-check rejects `style=` / `aria-*` on some Sivir parts (Card, Skeleton, Tabs.List). Pass them through a spread: `{...{ style: '…' }}`.
 - Svelte 5 trims whitespace at element boundaries, so use margin spans for separators.
 - `ScrollArea` always gets `showCues={false}`.
+- Inline px styles (like Sivir Spinner's `style:width`) skip the rem step, so on large screens they end up smaller than their rem-sized children. Spinner boxes are restated per size in `app.css`; add a rule there if you use a new spinner size.
+- An open Modal inerts everything outside `[data-overlay-root]`, including Sivir's own Toaster, so toast actions stop responding. `+layout.svelte` marks the toaster portal as an overlay root.
 
 ## File map (new or heavily changed)
 
@@ -152,6 +170,8 @@ After phase 7, do 4d (first run). Then do a polish pass: check hover, press, foc
   - ChatGPT reports only one limit.
 - **⌘1 / ⌘2** switch views, but the browser may take them.
 - **Finding ids** now show as `F-01` (was `R-01`).
+- **Guidelines drafts don't use findings.** The owner removed the recent-findings source. Repo drafts can still read the repo's instruction files and the global guidelines. The editor header is one 56px row: title plus inline mono metadata, no subtitle.
+- **Opening a guidelines PR has not been run against a real repo.** It's covered by mocked tests for GitHub and GitLab (`repo-files.test.ts`).
 
 ## Verifying (do this before calling anything done)
 
