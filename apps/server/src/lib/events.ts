@@ -53,6 +53,7 @@ const buffers = new Map<string, ReviewEvent[]>();
 const MAX_BUFFER = 400;
 
 const SNAPSHOT_KEYS = [
+	'paused',
 	'planVersion',
 	'planSummary',
 	'assignments',
@@ -151,6 +152,12 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 
 function applySnapshotPatch(snapshot: ReviewProgress, data?: Record<string, unknown>): void {
 	if (!data) return;
+	// A finished pipeline settles its half-streamed replies and reasoning in one go.
+	const settled = data.settled as Pick<ReviewProgress, 'messages' | 'reasoning'> | undefined;
+	if (settled) {
+		snapshot.messages = settled.messages;
+		snapshot.reasoning = settled.reasoning;
+	}
 	for (const key of SNAPSHOT_KEYS) {
 		if (key in data) (snapshot as unknown as Record<string, unknown>)[key] = data[key];
 	}

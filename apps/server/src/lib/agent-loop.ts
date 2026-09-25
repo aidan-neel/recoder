@@ -7,7 +7,8 @@ import { REVIEW_POLICY } from './review-policy.js';
 import type { RoleConfig } from './models.js';
 import { isAuthFailure } from './planner.js';
 import type { ReviewReasoningEntry } from '@recoder/shared';
-import { CHAT_STYLE } from './prompts';
+import { CHAT_STYLE, RETRIEVAL_EXAMPLES } from './prompts';
+import { currentReviewControl, reviewNow, reviewPausePoint } from './review-control.js';
 
 export class ReviewAbortedError extends Error {
 	constructor(message: string) {
@@ -45,7 +46,7 @@ export class ModelBudget {
 }
 
 export function canLaunchInvestigation(deadlineAt: number, budget: ModelBudget): boolean {
-	return budget.canSpend(1) && Date.now() + REVIEW_POLICY.reserveMsForConsolidation < deadlineAt;
+	return budget.canSpend(1) && reviewNow() + REVIEW_POLICY.reserveMsForConsolidation < deadlineAt;
 }
 
 export interface JsonAgentOptions<T> {
@@ -61,6 +62,8 @@ export interface JsonAgentOptions<T> {
 	consumeReserve?: boolean;
 	parse: (raw: unknown) => T | null;
 	validationError?: (raw: unknown) => string;
+	/** A minimal valid final answer, quoted back when the model gets the shape wrong. */
+	finalExample?: string;
 	onProgress?: (state: 'queued' | 'running' | 'retrieval', elapsedMs: number, detail: string) => void;
 	onLog?: (message: string) => void;
 	/** Accumulated provider reasoning for a turn, upserted by `id`. */
@@ -79,18 +82,21 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 	];
 	let repaired = 0;
 	let lastError = 'no model output';
+	const shapes = `${RETRIEVAL_EXAMPLES}\nTo finish, reply with ONLY the final JSON object${opts.finalExample ? `, for example:\n${opts.finalExample}` : '.'}\nNo prose outside the JSON, no code fences.`;
 	// Schema repairs cost model calls, but must not consume an evidence round.
 	// Each successful retrieval advances the investigation; the final turn is
 	// reserved for the result, with the global budget/deadline enforced throughout.
 	let turn = 1;
 	for (let call = 1; call <= opts.maxTurns + REVIEW_POLICY.schemaRepairAttempts; call++) {
 		throwIfAborted(opts.signal);
-		if (Date.now() >= deadlineAt) return { value: null, error: 'Investigation deadline reached; remaining time reserved for consolidation' };
+		await reviewPausePoint(opts.signal);
+		throwIfAborted(opts.signal);
+		if (reviewNow() >= deadlineAt) return { value: null, error: 'Investigation deadline reached; remaining time reserved for consolidation' };
 		if (!opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve })) {
 			return { value: null, error: 'model-call budget exhausted' };
 		}
 		const lastTurn = turn >= opts.maxTurns || !opts.budget.canSpend(2, { consumeReserve: opts.consumeReserve });
-		if (lastTurn) messages.push({ role: 'user', content: 'This is your final turn. Return the required compact result JSON using available evidence, with the reader-facing "message" first. Do not request retrieval. Omit other optional fields when unnecessary.' });
+		if (lastTurn && !messages.at(-1)?.content.startsWith('This is your final turn.')) messages.push({ role: 'user', content: 'This is your final turn. Return the required compact result JSON using available evidence, with the reader-facing "message" first. Do not request retrieval. Omit other optional fields when unnecessary.' });
 		opts.budget.spend();
 		opts.onLog?.(`${opts.label} model turn ${turn}/${opts.maxTurns} (${opts.config.model})`);
 		const started = Date.now();
@@ -100,6 +106,15 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		const flushReasoning = (status: ReviewReasoningEntry['status'] = 'streaming') => {
 			if (opts.onReasoning && reasoningText) opts.onReasoning({ id: reasoningId, text: reasoningText, status });
 		};
+		// Cut off runaway reasoning: a stuck model otherwise thinks until the call times out.
+		const callAbort = new AbortController();
+		const forwardAbort = () => callAbort.abort();
+		opts.signal.addEventListener('abort', forwardAbort, { once: true });
+		// Pausing the review stops this call; it is re-run on resume.
+		const control = currentReviewControl();
+		const pauseSignal = control?.pauseSignal;
+		pauseSignal?.addEventListener('abort', forwardAbort, { once: true });
+		let overthought = false;
 		let output: string;
 		let response = '';
 		let responseEmittedAt = 0;
@@ -120,11 +135,16 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 				jsonMode: true,
 				temperature: 0,
 				maxTokens: 8000,
-				timeoutMs: Math.min(REVIEW_POLICY.perCallDeadlineMs, Math.max(1, deadlineAt - Date.now())),
-				signal: opts.signal,
+				timeoutMs: Math.min(REVIEW_POLICY.perCallDeadlineMs, Math.max(1, deadlineAt - reviewNow())),
+				signal: callAbort.signal,
 				onReasoning: opts.onReasoning
 					? (chunk) => {
 							reasoningText = (reasoningText + chunk).slice(0, 64_000);
+							if (!overthought && (reasoningText.length > REVIEW_POLICY.maxReasoningChars || isLooping(reasoningText))) {
+								overthought = true;
+								opts.onLog?.(`${opts.label} reasoning ran long; asking for an answer`);
+								callAbort.abort();
+							}
 							const now = Date.now();
 							// Throttle: reasoning can stream token-by-token, and every
 							// emit persists the review snapshot.
@@ -146,10 +166,26 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			response = output;
 			flushResponse('done');
 		} catch (err) {
+			opts.signal.removeEventListener('abort', forwardAbort);
+			pauseSignal?.removeEventListener('abort', forwardAbort);
+			if (!opts.signal.aborted && pauseSignal?.aborted) {
+				// Paused mid-call: give the call back and redo this turn after resume.
+				flushResponse('done');
+				flushReasoning('done');
+				opts.budget.used = Math.max(0, opts.budget.used - 1);
+				call--;
+				continue;
+			}
 			flushResponse('error');
-			flushReasoning('error');
+			flushReasoning(overthought ? 'done' : 'error');
 			if (isAuthFailure(err)) throw new AuthConfigError(err instanceof Error ? err.message : String(err));
-			if (opts.signal.aborted || (err instanceof LlmError && /cancel/i.test(err.message))) {
+			if (!opts.signal.aborted && (overthought || (err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message))) && repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns) {
+				repaired++;
+				lastError = overthought ? 'reasoning ran too long without an answer' : (err as Error).message;
+				messages.push({ role: 'user', content: `You spent too long thinking without replying. Stop deliberating and reply now with JSON only: request the evidence you need, or give your final result with what you already know.\n\n${shapes}` });
+				continue;
+			}
+			if (opts.signal.aborted || (!overthought && err instanceof LlmError && /cancel/i.test(err.message))) {
 				throw new ReviewAbortedError('review aborted');
 			}
 			lastError = err instanceof Error ? err.message : String(err);
@@ -161,6 +197,8 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			}
 			return { value: null, error: lastError };
 		}
+		opts.signal.removeEventListener('abort', forwardAbort);
+		pauseSignal?.removeEventListener('abort', forwardAbort);
 		flushReasoning('done');
 		let parsed: unknown;
 		try {
@@ -172,7 +210,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 				messages.push({ role: 'assistant', content: output });
 				messages.push({
 					role: 'user',
-					content: `Your previous output was not valid JSON (${lastError}). Reply with a single JSON object only.`
+					content: `Your previous reply was not valid JSON (${lastError}).\n\n${shapes}`
 				});
 				continue;
 			}
@@ -182,7 +220,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			opts.onMessage?.({ id: responseId, text: parsed.message, status: 'done' });
 		}
 		const actions = parseActions(parsed);
-		if (actions && !lastTurn && opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve }) && Date.now() < deadlineAt) {
+		if (actions && !lastTurn && opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve }) && reviewNow() < deadlineAt) {
 			opts.onProgress?.('retrieval', Date.now() - started, `Reading repository evidence for ${opts.label}`);
 			const results = await opts.evidence.executeRound(actions, opts.signal, opts.onTool);
 			for (const result of results) {
@@ -208,7 +246,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			messages.push({ role: 'assistant', content: output });
 			messages.push({
 				role: 'user',
-				content: `Your JSON did not match the required schema: ${lastError}. Correct these fields and reply with a single valid JSON object.`
+				content: `Your JSON was neither a retrieval request nor a valid final result. Problems: ${lastError}.\n\n${shapes}`
 			});
 			continue;
 		}
@@ -216,6 +254,15 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		return { value: null, error: lastError };
 	}
 	return { value: null, error: lastError };
+}
+
+/** The tail of the reasoning keeps reappearing: the model is going in circles. */
+export function isLooping(text: string): boolean {
+	if (text.length < 4_000) return false;
+	const tail = text.slice(-240);
+	let count = 0;
+	for (let at = text.indexOf(tail); at !== -1 && count < 3; at = text.indexOf(tail, at + 1)) count++;
+	return count >= 3;
 }
 
 function throwIfAborted(signal: AbortSignal): void {

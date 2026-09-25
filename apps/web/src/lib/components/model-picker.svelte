@@ -6,6 +6,7 @@
 	import type { ReasoningEffort } from '@recoder/shared';
 	import {
 		effortLabel,
+		formatContextWindow,
 		modelSettingsUi,
 		resolveEffort,
 		type ModelChoice,
@@ -127,7 +128,7 @@
 						</span>
 						<span class="flex min-w-0 flex-1 flex-col gap-px text-left">
 							<span class="truncate text-[13px]">{option.displayName}</span>
-							<span class="truncate text-[11px] text-fg-faint">{option.provider}</span>
+							<span class="truncate text-[11px] text-fg-faint">{option.provider}{#if option.contextWindow}<span> · {formatContextWindow(option.contextWindow)} context</span>{/if}</span>
 						</span>
 					</DropdownMenu.Item>
 				{/each}

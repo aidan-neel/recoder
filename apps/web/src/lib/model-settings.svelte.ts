@@ -1,4 +1,4 @@
-import type { ModelEntry, ModelSettings, ModelSettingsPatch, ReasoningEffort, ReviewRole } from '@recoder/shared';
+import type { ModelEntry, Provider, ModelSettings, ModelSettingsPatch, ReasoningEffort, ReviewRole } from '@recoder/shared';
 import { errorToast } from './notify';
 import { serverApi } from './server-api';
 
@@ -29,6 +29,14 @@ export interface ModelOption {
 	/** Null when the model has no reasoning control. */
 	efforts: EffortOption[] | null;
 	defaultEffort: ReasoningEffort | null;
+	/** Tokens per request, when the endpoint reported it. */
+	contextWindow: number | null;
+}
+
+/** 131072 → "128K", 1048576 → "1M". */
+export function formatContextWindow(tokens: number): string {
+	if (tokens >= 1024 * 1024) return `${Math.round((tokens / (1024 * 1024)) * 10) / 10}M`;
+	return `${Math.round(tokens / 1024)}K`;
 }
 
 export interface ModelChoice {
@@ -86,8 +94,22 @@ export function toModelOption(entry: ModelEntry): ModelOption {
 			label: EFFORT_TEXT[id].label,
 			description: id === defaultEffort ? 'Model default' : EFFORT_TEXT[id].description
 		})) ?? null,
-		defaultEffort
+		defaultEffort,
+		contextWindow: entry.contextWindow ?? null
 	};
+}
+
+/**
+ * What to show for a model id in the UI: the configured entry's name
+ * ("Ornith 1.5 35B"), else a tidied id ("ornith-ai/Ornith-1.5-35B-A3B" → "Ornith 1.5 35B A3B").
+ * Raw ids stay available in tooltips.
+ */
+export function modelLabel(modelId: string | null | undefined): string {
+	if (!modelId) return '';
+	const entry = modelSettingsUi.config?.models.find((item) => item.model === modelId || item.id === modelId);
+	if (entry) return toModelOption(entry).displayName;
+	const tail = modelId.split('/').pop() ?? modelId;
+	return /^gpt-\d/i.test(tail) ? tail.replace(/^gpt-/i, 'GPT-') : tail.replace(/[-_]+/g, ' ').trim();
 }
 
 /** Keep an effort only when the model offers it; otherwise use the model default. */
@@ -98,6 +120,9 @@ export function resolveEffort(model: ModelOption | undefined, effort: ReasoningE
 
 export type SettingsSection = 'models' | 'connections' | 'harness' | 'guidelines' | 'appearance';
 
+/** A dialog to open inside the section as soon as Settings shows it. */
+export type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-repos' };
+
 /** Global open state + cached config for the model settings modal. */
 class ModelSettingsUi {
 	open = $state(false);
@@ -107,9 +132,12 @@ class ModelSettingsUi {
 	loading = $state(false);
 	saving = $state(false);
 	error = $state<string | null>(null);
+	/** Consumed by the section that owns the dialog. */
+	intent = $state<SettingsIntent | null>(null);
 
-	show(section: SettingsSection = 'models'): void {
+	show(section: SettingsSection = 'models', intent: SettingsIntent | null = null): void {
 		this.section = section;
+		this.intent = intent;
 		this.open = true;
 		void this.load();
 	}
@@ -219,7 +247,8 @@ class ModelSettingsUi {
 					...(entry.baseUrl ? { baseUrl: entry.baseUrl } : {}),
 					apiKey: '',
 					...(entry.efforts?.length ? { efforts: entry.efforts } : {}),
-					...(entry.defaultEffort ? { defaultEffort: entry.defaultEffort } : {})
+					...(entry.defaultEffort ? { defaultEffort: entry.defaultEffort } : {}),
+				...(entry.contextWindow ? { contextWindow: entry.contextWindow } : {})
 				}))
 			});
 		} catch {
@@ -238,7 +267,8 @@ class ModelSettingsUi {
 				...(entry.baseUrl ? { baseUrl: entry.baseUrl } : {}),
 				apiKey: entry.newKey ?? '',
 				...(entry.efforts?.length ? { efforts: entry.efforts } : {}),
-				...(entry.defaultEffort ? { defaultEffort: entry.defaultEffort } : {})
+				...(entry.defaultEffort ? { defaultEffort: entry.defaultEffort } : {}),
+				...(entry.contextWindow ? { contextWindow: entry.contextWindow } : {})
 			}))
 		});
 	}

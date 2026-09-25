@@ -18,7 +18,9 @@ export const REVIEW_POLICY = {
 	maxReadLines: 200,
 	maxSearchMatches: 50,
 	maxToolRoundChars: 24_000,
-	schemaRepairAttempts: 1,
+	schemaRepairAttempts: 4,
+	/** Reasoning longer than this (or looping) is cut off and the model is told to answer. */
+	maxReasoningChars: 32_000,
 	reserveCallsForConsolidation: 1,
 	reserveMsForConsolidation: 90_000,
 	maxListPage: 200

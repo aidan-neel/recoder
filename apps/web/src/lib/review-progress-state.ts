@@ -33,6 +33,7 @@ export interface ProgressMessage {
 }
 
 const SNAPSHOT_KEYS = [
+	'paused',
 	'planVersion',
 	'planSummary',
 	'assignments',
@@ -56,6 +57,11 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 	if (!event.sequence || event.sequence <= current.sequence) return current;
 	const next: ReviewProgress = { ...current, sequence: event.sequence, updatedAt: event.at ?? current.updatedAt };
 	const data = event.data;
+	const settled = data?.settled as Pick<ReviewProgress, 'messages' | 'reasoning'> | undefined;
+	if (settled) {
+		next.messages = settled.messages;
+		next.reasoning = settled.reasoning;
+	}
 	if (data) {
 		for (const key of SNAPSHOT_KEYS) {
 			if (key in data) (next as unknown as Record<string, unknown>)[key] = data[key];

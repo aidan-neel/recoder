@@ -1,7 +1,10 @@
 <script lang="ts">
 	import { ORCHESTRATOR_ID, type ReviewAssignment, type ReviewChatMessage, type ReviewCodeContext, type ReviewReasoningEntry, type ReviewTask, type ReviewToolCall } from '@recoder/shared';
 	import type { Snippet } from 'svelte';
+	import Play from '@lucide/svelte/icons/play';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import X from '@lucide/svelte/icons/x';
+	import { CopyButton } from '@sivir-ui/svelte/components/copy-button';
 	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
@@ -19,10 +22,11 @@
 	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
 	import type { ReviewRole } from '@recoder/shared';
 	import { groupTranscript } from '$lib/review-transcript';
+	import { formatAgentName } from '$lib/threads.svelte';
 	import { parseFixRequest, parseModelNotes, stripModelNotes } from '$lib/model-notes';
 	import { fileIconUrl } from '$lib/material-icons';
 
-	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, inserts = [], placeholder, awaitingPrompt = false }: {
+	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, inserts = [], placeholder, awaitingPrompt = false, onStartReview = null }: {
 		assignment: ReviewAssignment;
 		messages: ReviewChatMessage[];
 		reasoning: ReviewReasoningEntry[];
@@ -40,7 +44,15 @@
 		inserts?: { key: string; at?: string; snippet: Snippet }[];
 		placeholder?: string;
 		awaitingPrompt?: boolean;
+		/** Draft (interactive) reviews: the orchestrator offers the full review, so its latest reply carries the button. */
+		onStartReview?: (() => Promise<void>) | null;
 	} = $props();
+	let startingReview = $state(false);
+	async function startReview(): Promise<void> {
+		if (!onStartReview || startingReview) return;
+		startingReview = true;
+		try { await onStartReview(); } finally { startingReview = false; }
+	}
 	const belongs = (id?: string) => (id ?? ORCHESTRATOR_ID) === assignment.id;
 	const conversationMessages = $derived(messages.filter((message) => belongs(message.assignmentId)));
 	const conversationReasoning = $derived(reasoning.filter((entry) => belongs(entry.assignmentId)));
@@ -57,18 +69,50 @@
 		const index = insert.at ? entries.findIndex((entry) => Date.parse(entry.at) > Date.parse(insert.at!)) : -1;
 		return { ...insert, index: index < 0 ? entries.length : index };
 	}));
-	const firstAssistantIndex = $derived(entries.findIndex((entry) => entry.kind === 'message' && entry.message.from === 'assistant'));
-	const reasoningSeconds = $derived.by(() => {
-		const start = Date.parse(conversationReasoning[0]?.at ?? '');
-		const end = Date.parse(entries[firstAssistantIndex]?.at ?? '');
-		return Number.isFinite(start) && Number.isFinite(end) && end > start ? Math.round((end - start) / 1000) : null;
+	const lastAssistantIndex = $derived(entries.findLastIndex((entry) => entry.kind === 'message' && entry.message.from === 'assistant'));
+	/** Each agent turn's reply id is `message_<reasoning id>`, so thinking can sit with the reply it led to. */
+	const reasoningByMessage = $derived(new Map<string, ReviewReasoningEntry>(conversationReasoning.map((entry) => [`message_${entry.id}`, entry])));
+	const messageIds = $derived(new Set(conversationMessages.map((message) => message.id)));
+	const orphanReasoning = $derived(conversationReasoning.filter((entry) => !messageIds.has(`message_${entry.id}`)));
+	/** Specialists narrate tasks by title ("Running Correctness of …"); only show a status that says something new. */
+	const specialistStatus = $derived.by(() => {
+		if (!specialist) return null;
+		// Finished states are on the badge at the top; don't repeat them at the bottom.
+		if (!active || !['running', 'waiting', 'queued'].includes(assignment.status)) return null;
+		if (orphanReasoning.some((entry) => entry.status === 'streaming')) return null;
+		const op = currentTask?.message || assignment.currentOperation || '';
+		return /^Running\b/.test(op) || op === assignment.title ? null : op || null;
 	});
+	function thoughtSeconds(entry: ReviewReasoningEntry, until?: string): number | null {
+		const start = Date.parse(entry.at);
+		const end = Date.parse(until ?? '');
+		return Number.isFinite(start) && Number.isFinite(end) && end > start ? Math.round((end - start) / 1000) : null;
+	}
+	/** Only while a reply is actually pending and nothing (text or thinking) has streamed for it yet. */
 	const thinking = $derived(
-		!conversationMessages.some((message) => !message.forwardedFrom && message.status === 'streaming' && message.text.trim()) &&
-		!conversationTools.some((tool) => tool.status === 'running' && active) &&
-		(generating || (active && (conversationReasoning.some((entry) => entry.status === 'streaming') ||
-			tasks.some((task) => task.status === 'running' && ['model', 'planning', 'consolidation'].includes(task.kind ?? '')))))
+		generating &&
+		!conversationMessages.some((message) => message.status === 'streaming' && message.text.trim()) &&
+		!conversationReasoning.some((entry) => entry.status === 'streaming' && entry.text.trim())
 	);
+	/** Thinking with no reply of its own sits where it happened in time, not lumped at the top. */
+	const orphansAt = $derived.by(() => {
+		const byIndex = new Map<number, ReviewReasoningEntry[]>();
+		for (const entry of orphanReasoning) {
+			if (!entry.text.trim()) continue;
+			const found = entries.findIndex((item) => Date.parse(item.at) > Date.parse(entry.at));
+			const index = found < 0 ? entries.length : found;
+			byIndex.set(index, [...(byIndex.get(index) ?? []), entry]);
+		}
+		return byIndex;
+	});
+	/** Re-ask the question that led to this reply. */
+	function retryFor(index: number): (() => void) | null {
+		if (!onSend) return null;
+		const previous = entries.slice(0, index).findLast((item) => item.kind === 'message' && item.message.from === 'user');
+		if (!previous || previous.kind !== 'message') return null;
+		const question = previous.message;
+		return () => void onSend?.(assignment.id, question.text, question.codeContext);
+	}
 	const isRole = (role: string): role is ReviewRole => (MODEL_ROLES as string[]).includes(role);
 	let sending = $state(false);
 	let stopping = $state(false);
@@ -140,14 +184,17 @@
 	<CodeRef {context} />
 {/snippet}
 
-{#snippet reviewReasoning()}
-	{#if conversationReasoning.length}
-		{@const reasoningLive = conversationReasoning.some((entry) => entry.status === 'streaming') && (active || generating)}
-		<Disclosure open={specialist} status={reasoningLive ? 'running' : undefined} bodyClass="!gap-3">
-			{#snippet label()}{reasoningLive ? awaitingPrompt ? 'Thinking…' : 'Reviewing changes…' : reasoningSeconds ? `Reviewed changes for ${reasoningSeconds}s` : 'Reviewed changes'}{/snippet}
-			{#each conversationReasoning as entry (entry.id)}<Markdown content={entry.text} streaming={active && entry.status === 'streaming'} />{/each}
-		</Disclosure>
-	{/if}
+{#snippet thought(entry: ReviewReasoningEntry, until?: string)}
+	{@const live = entry.status === 'streaming' && (active || generating)}
+	{@const seconds = thoughtSeconds(entry, until)}
+	<Disclosure status={live ? 'running' : undefined} bodyClass="!gap-3">
+		{#snippet label()}{live ? 'Thinking…' : seconds ? `Thought for ${seconds}s` : 'Thought'}{/snippet}
+		<Markdown content={entry.text} streaming={live} />
+	</Disclosure>
+{/snippet}
+
+{#snippet orphansBefore(index: number)}
+	{#each orphansAt.get(index) ?? [] as entry (entry.id)}{@render thought(entry)}{/each}
 {/snippet}
 
 <div class="review-chat" data-compact={compact || undefined}>
@@ -155,41 +202,47 @@
 	<Conversation.Content aria-label={`${assignment.title} messages`} transcriptClass={compact ? '!max-w-[776px] !gap-4 !px-4 !pt-5 !pb-2' : 'review-transcript'} class="![scrollbar-gutter:auto]">
 		{#each entries as item, index (item.kind + item.id)}
 			{#each placed.filter((insert) => insert.index === index) as insert (insert.key)}{@render insert.snippet()}{/each}
-			{#if index === firstAssistantIndex}{@render reviewReasoning()}{/if}
+			{@render orphansBefore(index)}
 			{#if item.kind === 'message'}
 				{@const message = item.message}
+				{@const ownThought = reasoningByMessage.get(message.id)}
+				{#if ownThought}{@render thought(ownThought, message.at)}{/if}
 				<Message.Root from={message.from} status={message.status === 'done' ? 'idle' : message.status}
 					class="[--font-weight-body:400]"
 					name={message.forwardedFrom ? `${message.from === 'user' ? 'You →' : 'Reply from'} ${message.forwardedFrom}` : undefined}>
 					<Message.Content class={message.from === 'assistant' ? 'review-prose ai-voice' : message.from === 'user' ? 'review-bubble' : '!max-w-full text-sm'}>
 						{@render response(message)}
 					</Message.Content>
+					{#if message.from === 'assistant' && message.status !== 'streaming' && message.text.trim() && (message.discussion || index === lastAssistantIndex)}
+						{@const retry = message.discussion && !generating ? retryFor(index) : null}
+						<Message.Actions class="message-actions">
+							<CopyButton text={stripModelNotes(message.text)} label="Copy" copiedLabel="Copied" class="message-action" />
+							{#if retry}
+								<Button variant="ghost" size="icon" class="message-action" aria-label="Retry" title="Retry" onclick={retry}><RotateCcw size={13} aria-hidden="true" /></Button>
+							{/if}
+						</Message.Actions>
+					{/if}
 				</Message.Root>
+				{#if onStartReview && !specialist && index === lastAssistantIndex && message.status !== 'streaming'}
+					<div class="review-start-cta">
+						<Button class="brief-action" loading={startingReview} onclick={() => void startReview()}>
+							<Play size={12} fill="currentColor" aria-hidden="true" /> Run full review
+						</Button>
+					</div>
+				{/if}
 			{:else}
 				<ReviewTaskGroup tools={item.tools} {active} {now} />
 			{/if}
-		{:else}
-			{#if !awaitingPrompt && !specialist}<Typography.Text class="py-4 text-sm text-foreground-muted" role="status">{compact ? 'Select code in the diff or ask a question about this review.' : active ? 'Preparing the review…' : 'Ask a question about this review.'}</Typography.Text>{/if}
 		{/each}
-		{#if firstAssistantIndex < 0}{@render reviewReasoning()}{/if}
+		{@render orphansBefore(entries.length)}
 		{#each placed.filter((insert) => insert.index === entries.length) as insert (insert.key)}{@render insert.snippet()}{/each}
 		{#if specialist}
-			<section class="space-y-2" aria-label={`${assignment.title} activity`}>
+			{#if specialistStatus}
 				<Typography.Text role="status" class="flex items-start gap-2 text-sm text-foreground-muted">
-					{#if active && assignment.status === 'running'}<Spinner size={14} class="mt-1 shrink-0" aria-hidden="true" />{/if}
-					<span class="min-w-0 break-words">{currentOperation}</span>
+					{#if active && ['running', 'waiting', 'queued'].includes(assignment.status)}<Spinner size={14} class="mt-1 shrink-0" aria-hidden="true" />{/if}
+					<span class="min-w-0 break-words">{specialistStatus}</span>
 				</Typography.Text>
-				{#if tasks.length}
-					<Disclosure meta={String(tasks.length)}>
-						{#snippet label()}Review activity{/snippet}
-						<ScrollArea showCues={false} class="max-h-64" aria-label={`${assignment.title} tasks`}>
-							{#each tasks as task (task.id)}
-								<Typography.Text class="review-log"><span class="text-fg-secondary">{task.label}</span> · {task.status}{#if task.message}<span class="mt-0.5 block">{task.message}</span>{/if}</Typography.Text>
-							{/each}
-						</ScrollArea>
-					</Disclosure>
-				{/if}
-			</section>
+			{/if}
 		{/if}
 		{#if thinking}
 			<Typography.Text role="status" class="review-thinking"><span class="shimmer-text">Thinking</span></Typography.Text>
@@ -208,7 +261,7 @@
 		bind:inputEl={composerInput}
 		size={compact ? 'panel' : 'main'}
 		label={`Message ${assignment.title}`}
-		placeholder={codeContext ? 'Ask about this code…' : placeholder ?? (awaitingPrompt ? 'Ask Orchestrator to start a review…' : `Ask ${assignment.title} anything…`)}
+		placeholder={codeContext ? 'Ask about this code…' : placeholder ?? (awaitingPrompt ? 'Ask Orchestrator to start a review…' : `Ask ${specialist ? formatAgentName(assignment.role) : assignment.title} anything…`)}
 		maxlength={8000}
 		describedBy={error ? errorId : undefined}
 		invalid={!!error}

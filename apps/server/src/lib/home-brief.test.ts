@@ -45,7 +45,7 @@ const input: HomeBriefRequest = {
 test('facts join each PR with its latest review', () => {
 	const high = { id: 'f', file: 'a.ts', severity: 'error' as const, message: 'x' };
 	const facts = briefFacts(input, [review({ findings: [high] })], NOW);
-	expect(facts).toContain('Greeting: Evening, Aidan.');
+	expect(facts).not.toContain('Greeting');
 	expect(facts).toContain('Open PRs: 2 across 2 repos.');
 	expect(facts).toContain('#158 "Theme Studio": +604 −137 in 12 files, opened 5h ago; never reviewed.');
 	expect(facts).toContain('#88 "Adaptive planning"');
@@ -63,7 +63,7 @@ test('model output is trimmed to the brief', () => {
 	expect(cleanBrief('Brief: "**Evening.** Two PRs\n are open."')).toBe('**Evening.** Two PRs are open.');
 });
 
-test('the brief uses the orchestrator model and is cached for identical facts', async () => {
+test('the brief uses the orchestrator model, drops its greeting and is kept across fact changes', async () => {
 	setReviewOverrides({
 		baseUrl: 'http://model.test/v1',
 		apiKey: 'k',
@@ -77,8 +77,10 @@ test('the brief uses the orchestrator model and is cached for identical facts', 
 	}) as unknown as typeof fetch;
 
 	const first = await homeBrief(input, []);
-	const second = await homeBrief(input, []);
-	expect(first.text).toBe('**Evening, Aidan.** Two PRs are open.');
+	// A PR opening changes the facts but not the brief: it is kept for 12 hours.
+	const second = await homeBrief({ ...input, prs: [] }, []);
+	// The page adds its own greeting, so the model's is dropped.
+	expect(first.text).toBe('Two PRs are open.');
 	expect(first.model).toBe('orch-model');
 	expect(second).toEqual(first);
 	expect(bodies).toHaveLength(1);

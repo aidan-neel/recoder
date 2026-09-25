@@ -88,7 +88,7 @@ export async function streamGuidelinesDraft(request: GuidelinesDraftRequest, sou
 			{ role: 'system', content: SYSTEM_PROMPT },
 			{ role: 'user', content: await draftUserPrompt(request, sources) }
 		],
-		maxTokens: 2500,
+		maxTokens: 6000,
 		timeoutMs: 120_000,
 		signal
 	}, onToken);

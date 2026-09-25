@@ -1,6 +1,18 @@
 import type { HomeBriefResponse, PullRequest, Repo } from '@recoder/shared';
 import { serverApi } from '$lib/server-api';
 
+const BRIEF_KEY = 'recoder.homeBrief';
+
+function readBrief(): HomeBriefResponse | null {
+	try {
+		const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(BRIEF_KEY);
+		const value = raw ? (JSON.parse(raw) as HomeBriefResponse) : null;
+		return value && typeof value.text === 'string' ? value : null;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * Tracked repos and their open PRs. Lives outside the Home page so the Home
  * tab can show the open-PR count and revisiting Home doesn't refetch.
@@ -14,8 +26,20 @@ class OpenPrsState {
 	loading = $state(true);
 	refreshing = $state(false);
 	apiDown = $state(false);
-	/** Last brief shown, so Home paints it immediately on return. */
-	brief = $state<HomeBriefResponse | null>(null);
+	/** Last brief shown, kept across reloads so Home paints it immediately. */
+	brief = $state<HomeBriefResponse | null>(readBrief());
+	/** The server rewrites the brief at most every 12 hours; ask once per app session. */
+	briefRequested = false;
+
+	setBrief(brief: HomeBriefResponse | null): void {
+		this.brief = brief;
+		try {
+			if (brief) localStorage.setItem(BRIEF_KEY, JSON.stringify(brief));
+			else localStorage.removeItem(BRIEF_KEY);
+		} catch {
+			// Not persisted; it still shows this visit.
+		}
+	}
 	private started = false;
 
 	/** Open PRs across every tracked repo; null until every repo has loaded. */

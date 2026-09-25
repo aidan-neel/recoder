@@ -30,6 +30,7 @@
 	import type { FileDiff } from '$lib/diff';
 	import { SEVERITIES, findingsStore, type Finding } from '$lib/findings.svelte';
 	import { formatAgentName, threadsStore } from '$lib/threads.svelte';
+	import { modelLabel } from '$lib/model-settings.svelte';
 
 	interface Props {
 		files: FileDiff[];
@@ -267,7 +268,7 @@
 					<div class="focus-detail-head">
 						{#if active.status === 'accepted'}<SeverityPill tone="success">Fixed</SeverityPill>{:else}<FindingSeverity severity={active.severity} />{/if}
 						<Typography.Title level={3} class="focus-detail-title">{active.title}</Typography.Title>
-						<span class="focus-detail-meta">{[active.code, formatAgentName(active.agent), active.model].filter(Boolean).join(' · ')}</span>
+						<span class="focus-detail-meta">{[active.code, formatAgentName(active.agent), modelLabel(active.model)].filter(Boolean).join(' · ')}</span>
 					</div>
 					<div class="focus-detail-body ai-voice"><Markdown content={active.body} /></div>
 					{#if evidence}<EvidenceView tool={evidence} onOpenInDiff={evidenceInDiff ? onOpenAt : null} />{/if}

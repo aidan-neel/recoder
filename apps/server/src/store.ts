@@ -100,6 +100,29 @@ export const reviewDiffs = {
 };
 
 /**
+ * When the pipeline ends, nothing it started is still writing: settle its
+ * half-streamed replies and reasoning (dropping empty ones) so the page stops
+ * showing "Thinking" and a Stop button. Discussion replies have their own lifecycle.
+ */
+export function settlePipelineStreams(reviewId: string): ReviewProgress | null {
+	const progress = reviewProgress.get(reviewId);
+	if (!progress) return null;
+	const open = (status?: string) => status === 'streaming';
+	if (!progress.messages?.some((m) => open(m.status) && !m.discussion) && !progress.reasoning?.some((r) => open(r.status))) return null;
+	const settled: ReviewProgress = {
+		...progress,
+		messages: progress.messages
+			?.filter((m) => !(open(m.status) && !m.discussion && !m.text.trim()))
+			.map((m) => (open(m.status) && !m.discussion ? { ...m, status: 'done' as const } : m)),
+		reasoning: progress.reasoning
+			?.filter((r) => !(open(r.status) && !r.text.trim()))
+			.map((r) => (open(r.status) ? { ...r, status: 'done' as const } : r))
+	};
+	reviewProgress.set(settled);
+	return settled;
+}
+
+/**
  * Mark reviews left running/queued by a previous process as failed so the UI
  * never spins forever on orphaned work.
  */
@@ -110,7 +133,7 @@ export function recoverStaleReviews(): number {
 			db.reviews.set({
 				...review,
 				status: 'failed',
-				summary: 'Review interrupted when the server restarted. Progress and candidates were kept. Press Review to retry.',
+				summary: 'The server restarted mid-review. Progress so far was kept.',
 				updatedAt: new Date().toISOString()
 			});
 			const progress = reviewProgress.get(review.id);
@@ -124,7 +147,7 @@ export function recoverStaleReviews(): number {
 			reviewProgress.set({
 				...progress,
 				messages: progress.messages?.map((message) => message.status === 'streaming'
-					? { ...message, status: 'error', text: `${message.text}${message.text ? '\n\n' : ''}Response interrupted when the server restarted.` }
+					? { ...message, status: 'error', text: `${message.text}${message.text ? '\n\n' : ''}Interrupted by a server restart.` }
 					: message),
 				reasoning: progress.reasoning?.map((entry) => entry.status === 'streaming' ? { ...entry, status: 'error' } : entry)
 			});

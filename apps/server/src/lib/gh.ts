@@ -1,4 +1,4 @@
-import type { PullFile, PullRequest, RemoteRepo } from '@recoder/shared';
+import type { PrPerson, PullFile, PullRequest, RemoteRepo } from '@recoder/shared';
 import { runCommand } from '../commands/runner.js';
 
 export type GhErrorKind = 'unavailable' | 'auth' | 'not-found' | 'unknown';
@@ -220,7 +220,7 @@ export async function listPullRequests(
 			'--limit',
 			String(opts?.limit ?? 20),
 			'--json',
-			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,createdAt,body'
+			'number,title,url,author,baseRefName,headRefName,headRefOid,additions,deletions,changedFiles,createdAt,body,assignees'
 		],
 		opts?.env
 	).then(extractJson)) as unknown;
@@ -250,6 +250,16 @@ function parsePullRow(view: Record<string, unknown>, fallbackNumber: number): Pu
 		deletions: Number(view.deletions ?? 0),
 		changedFiles: Number(view.changedFiles ?? 0),
 		createdAt: typeof view.createdAt === 'string' ? view.createdAt : '',
-		body: typeof view.body === 'string' ? view.body : ''
+		body: typeof view.body === 'string' ? view.body : '',
+		...(Array.isArray(view.assignees) ? { assignees: githubPeople(view.assignees) } : {})
 	};
+}
+
+/** `gh` gives logins without avatars; github.com/<login>.png is the public avatar. */
+function githubPeople(rows: unknown[]): PrPerson[] {
+	return rows.flatMap((row) => {
+		const person = row as { login?: unknown; name?: unknown } | null;
+		if (typeof person?.login !== 'string') return [];
+		return [{ login: person.login, name: typeof person.name === 'string' && person.name ? person.name : null, avatarUrl: `https://github.com/${encodeURIComponent(person.login)}.png?size=64` }];
+	});
 }

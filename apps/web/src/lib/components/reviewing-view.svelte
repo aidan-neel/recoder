@@ -30,6 +30,8 @@
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
@@ -51,6 +53,9 @@
 	import { requestDeleteSession } from '$lib/delete-session.svelte';
 	import { formatAgentName } from '$lib/threads.svelte';
 	import { guidelinesStore } from '$lib/guidelines.svelte';
+	import { errorToast } from '$lib/notify';
+	import { serverApi } from '$lib/server-api';
+	import { modelLabel } from '$lib/model-settings.svelte';
 
 	interface Props {
 		reviewId?: string;
@@ -66,6 +71,8 @@
 		completedAt?: string;
 		failed?: boolean;
 		errorMessage?: string | null;
+		onStartReview?: (() => Promise<void>) | null;
+		paused?: boolean;
 		connectionLost?: boolean;
 		onOpenDiff: (() => void) | null;
 		/** Switch to the Findings or Diff workspace. Falls back to `onOpenDiff`. */
@@ -101,7 +108,7 @@
 	let {
 		reviewId, title, meta, assignments = [], messages = [], orchestratorModel,
 		reasoning = [], toolCalls = [], active = true, failed = false,
-		errorMessage = null, connectionLost = false, onOpenDiff, onShowView = null, onOpenFinding = null, onRestart,
+		errorMessage = null, onStartReview = null, paused = false, connectionLost = false, onOpenDiff, onShowView = null, onOpenFinding = null, onRestart,
 		onSend, onStop, restarting = false, now = Date.now(), fullscreen = false, stage = 0, tasks = [],
 		planSummary = null, activity = [], showChecks = false, repoId = null, guidelines = null, stageLabel = 'Preparing review', coverage = null, coverageGaps = [],
 		awaitingPrompt = false, completedAt, findings = []
@@ -110,6 +117,25 @@
 	let drafts = $state<Record<string, string>>({});
 	let restartOpen = $state(false);
 	let metricsOpen = $state(false);
+
+	async function togglePause(): Promise<void> {
+		if (!reviewId) return;
+		try {
+			if (paused) await serverApi.resumeReview(reviewId);
+			else await serverApi.pauseReview(reviewId);
+		} catch (e) {
+			errorToast(paused ? 'Could not resume the review' : 'Could not pause the review', e instanceof Error ? e.message : undefined);
+		}
+	}
+
+	async function cancelReview(): Promise<void> {
+		if (!reviewId) return;
+		try {
+			await serverApi.cancelReview(reviewId);
+		} catch (e) {
+			errorToast('Could not cancel the review', e instanceof Error ? e.message : undefined);
+		}
+	}
 	const specialists = $derived(assignments.filter((assignment) => assignment.id !== ORCHESTRATOR_ID));
 	const orchestrator = $derived<ReviewAssignment>({
 		id: ORCHESTRATOR_ID, role: 'orchestrator', title: 'Orchestrator', reason: '', scope: [],
@@ -136,17 +162,6 @@
 	const finalization = $derived(tasks.find((task) => task.id === 'consolidation'));
 	const finalizationSeconds = $derived(finalization?.elapsedMs !== undefined ? Math.max(0, Math.round(finalization.elapsedMs / 1000)) : null);
 	const finalReasoning = $derived(reasoning.filter((entry) => (entry.assignmentId ?? ORCHESTRATOR_ID) === ORCHESTRATOR_ID && finalization?.startedAt && Date.parse(entry.at) >= Date.parse(finalization.startedAt)));
-	/** Consecutive repeats collapse (events are often emitted twice); newest last. */
-	const recentActivity = $derived.by(() => {
-		const rows: { key: number; agent: string; message: string }[] = [];
-		for (const [i, item] of activity.entries()) {
-			const agent = item.agent ? formatAgentName(item.agent) : 'Review';
-			const last = rows.at(-1);
-			if (last && last.agent === agent && last.message === item.message) continue;
-			rows.push({ key: i, agent, message: item.message });
-		}
-		return rows.slice(-8);
-	});
 	/** Finalization at a glance, in the tool-row grid (label · value · meta). */
 	const finalFacts = $derived.by(() => {
 		const facts: { label: string; value: string; meta?: string; mono?: boolean; open?: () => void }[] = [];
@@ -162,7 +177,7 @@
 			const target = hasRepoLayer && repoId ? { kind: 'repo' as const, repoId } : { kind: 'global' as const };
 			facts.push({ label: 'Guidelines', value, open: () => guidelinesStore.open(target) });
 		}
-		if (finalization?.model) facts.push({ label: 'Model', value: finalization.model, mono: true, meta: finalization.elapsedMs !== undefined ? `${(finalization.elapsedMs / 1000).toFixed(1)}s` : undefined });
+		if (finalization?.model) facts.push({ label: 'Model', value: modelLabel(finalization.model), mono: false, meta: finalization.elapsedMs !== undefined ? `${(finalization.elapsedMs / 1000).toFixed(1)}s` : undefined });
 		return facts;
 	});
 	const chatReasoning = $derived(reasoning.filter((entry) => !finalReasoning.some((item) => item.id === entry.id)));
@@ -197,6 +212,10 @@
 	{#if onOpenDiff}<DropdownMenu.Item callback={onOpenDiff}>Open diff</DropdownMenu.Item>{/if}
 	{#if reviewId}<DropdownMenu.Item callback={() => metricsOpen = true}>View token usage</DropdownMenu.Item>{/if}
 	{#if repoId}{@const id = repoId}<DropdownMenu.Item callback={() => guidelinesStore.open({ kind: 'repo', repoId: id })}>Review guidelines</DropdownMenu.Item>{/if}
+	{#if reviewId && active && !awaitingPrompt}
+		<DropdownMenu.Item callback={() => void togglePause()}>{paused ? 'Resume review' : 'Pause review'}</DropdownMenu.Item>
+		<DropdownMenu.Item callback={() => void cancelReview()}>Cancel review</DropdownMenu.Item>
+	{/if}
 	{#if onRestart}<DropdownMenu.Item disabled={restarting} callback={() => restartOpen = true}>{restarting ? 'Restarting…' : 'Restart review'}</DropdownMenu.Item>{/if}
 	{#if reviewId}{@const id = reviewId}<DropdownMenu.Separator /><DropdownMenu.Item callback={() => void closeSessionTab(id)}>Close tab</DropdownMenu.Item><DropdownMenu.Item class="menu-danger" callback={() => requestDeleteSession(id)}>Delete session</DropdownMenu.Item>{/if}
 {/snippet}
@@ -210,7 +229,7 @@
 					<span class="specialist-main">
 						<span class="specialist-name-line">
 							<span class="specialist-name">{formatAgentName(assignment.role)}</span>
-							{#if assignment.model}<span class="specialist-model">{assignment.model}</span>{/if}
+							{#if assignment.model}<span class="specialist-model" title={assignment.model}>{modelLabel(assignment.model)}</span>{/if}
 						</span>
 						<span class="specialist-op" title={assignment.currentOperation || assignment.title}>{assignment.currentOperation || assignment.title}</span>
 					</span>
@@ -243,13 +262,6 @@
 	<Disclosure status={active ? 'running' : failed ? 'error' : 'done'} bodyClass="finalize-body">
 		{#snippet label()}{active ? footerLabel : failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
 		<ReasoningSteps entries={finalReasoning} live={active} />
-		{#if (active || failed) && recentActivity.length}
-			<div class="fact-rows" role="log" aria-label="Recent activity">
-				{#each recentActivity as row (row.key)}
-					<Typography.Text class="fact-row" title={row.message}><span class="fact-label">{row.agent}</span><span class="fact-value">{row.message}</span></Typography.Text>
-				{/each}
-			</div>
-		{/if}
 		{#if finalFacts.length}
 			<div class="fact-rows" aria-label="Finalization summary">
 				{#each finalFacts as fact (fact.label)}
@@ -311,11 +323,26 @@
 		</nav>
 	{/if}
 	{#if connectionLost}<Typography.Text role="status" class="mx-auto w-full max-w-[740px] px-6 py-2 text-sm text-sev-medium">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
-	{#if errorMessage}<Typography.Text role="alert" class="mx-auto w-full max-w-[740px] px-6 py-2 text-sm text-danger">{errorMessage}</Typography.Text>{/if}
+	{#if errorMessage}
+		<div class="mx-auto w-full max-w-[740px] px-6 pt-3">
+			<Card.Root class="review-notice" {...{ role: 'alert' }}>
+				<CircleAlert size={15} class="review-notice-icon" aria-hidden="true" />
+				<div class="min-w-0 flex-1">
+					<p class="review-notice-title">{failed ? stageLabel : 'Something went wrong'}</p>
+					<p class="review-notice-body">{errorMessage}</p>
+				</div>
+				{#if failed && onRestart}
+					<Button variant="outline" class="shrink-0" loading={restarting} onclick={() => (restartOpen = true)}>
+						<RotateCcw size={13} aria-hidden="true" /> Retry
+					</Button>
+				{/if}
+			</Card.Root>
+		</div>
+	{/if}
 	<div class="flex min-h-0 flex-1">
 		<div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
 			{#each [selected] as target (target.id)}
-				<ReviewConversation assignment={target} {messages} reasoning={isOrchestrator ? chatReasoning : reasoning} {toolCalls} {active} {now}
+				<ReviewConversation {onStartReview} assignment={target} {messages} reasoning={isOrchestrator ? chatReasoning : reasoning} {toolCalls} {active} {now}
 					awaitingPrompt={isOrchestrator && awaitingPrompt}
 					tasks={tasks.filter((task) => (task.assignmentId ?? ORCHESTRATOR_ID) === target.id)}
 					bind:draft={() => drafts[target.id] ?? '', (value) => drafts[target.id] = value} {onSend} {onStop}
@@ -330,7 +357,8 @@
 		{#if showRail || (isOrchestrator && showSteps)}
 			<ReviewResultsRail {findings} {specialists} {coverage} {coverageGaps} {onOpenFinding} specialistHref={conversationHref} results={showRail}>
 				{#if showSteps}
-					<ReviewSteps current={currentStep} {failed} {active} elapsed={meta.elapsed}
+					<ReviewSteps current={currentStep} {failed} {active} elapsed={meta.elapsed} {paused}
+						onPauseToggle={reviewId && !awaitingPrompt ? togglePause : null} onCancel={reviewId && !awaitingPrompt ? cancelReview : null}
 						specialists={{ done: specialists.filter((item) => ['done', 'skipped', 'error', 'partial'].includes(item.status)).length, total: specialists.length }} />
 				{/if}
 			</ReviewResultsRail>

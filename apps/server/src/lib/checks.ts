@@ -12,7 +12,7 @@ import { tokenEnv } from './tokens.js';
 export async function fetchChecks(repo: Repo, ref: string): Promise<PrCheck[]> {
 	const provider = repo.provider ?? detectProvider(repo.url);
 	const slug = parseSlug(repo.url);
-	return provider === 'gitlab' ? gitlabChecks(slug, ref) : githubChecks(slug, ref);
+	return provider === 'gitlab' ? gitlabChecks(slug, ref, repo.url) : githubChecks(slug, ref);
 }
 
 async function githubChecks(slug: string, ref: string): Promise<PrCheck[]> {
@@ -43,8 +43,8 @@ async function githubChecks(slug: string, ref: string): Promise<PrCheck[]> {
 	return checks;
 }
 
-async function gitlabChecks(slug: string, ref: string): Promise<PrCheck[]> {
-	const env = tokenEnv('gitlab');
+async function gitlabChecks(slug: string, ref: string, repoUrl: string): Promise<PrCheck[]> {
+	const env = tokenEnv('gitlab', repoUrl);
 	const project = encodeURIComponent(slug);
 	const commit = await glabApi(`projects/${project}/repository/commits/${encodeURIComponent(ref)}`, env) as { id: string };
 	const statuses = await glabApi(`projects/${project}/repository/commits/${commit.id}/statuses?per_page=100`, env) as { name: string; status: string; target_url: string | null }[];

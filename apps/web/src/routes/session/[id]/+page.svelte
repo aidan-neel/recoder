@@ -617,6 +617,7 @@
 		onShowView={(view) => setView(view)}
 		onOpenFinding={(finding) => { if (finding.file) { sessionFile.select(finding.file); userPickedFile = true; } setDiffView(true); }}
 		onRestart={() => void rerunReview()}
+		onStartReview={backendReview?.status === 'draft' ? startDraftReview : null}
 		restarting={queueing}
 		actionError={backendError}
 	/>
@@ -769,7 +770,7 @@
 							<section id="interactive-review" aria-label="Interactive review" class="chat-drawer-panel" inert={!showChat}>
 								<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
 									{#if reviewStream.connection === 'reconnecting'}<Typography.Text role="status" class="px-4 py-2 text-sm text-warning">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
-									<ReviewConversation compact assignment={orchestrator} messages={reviewStream.progress.messages ?? []}
+									<ReviewConversation compact onStartReview={backendReview?.status === 'draft' ? startDraftReview : null} assignment={orchestrator} messages={reviewStream.progress.messages ?? []}
 										reasoning={[]} toolCalls={[]} tasks={[]} active={reviewing} now={Date.now()}
 										bind:draft={chatDraft} bind:codeContext focusKey={chatFocus}
 										onSend={async (assignmentId, text, context) => { await serverApi.sendReviewMessage(id, assignmentId, text, context); }}

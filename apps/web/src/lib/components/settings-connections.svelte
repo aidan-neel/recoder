@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack as untracked } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
@@ -16,6 +16,7 @@
 	import type { Provider, ProviderAuth, RemoteRepo, Repo } from '@recoder/shared';
 	import ProviderMark from './provider-mark.svelte';
 	import Skeleton from './ui/skeleton.svelte';
+	import { modelSettingsUi } from '$lib/model-settings.svelte';
 	import { errorToast, undoToast } from '$lib/notify';
 	import { openPrs } from '$lib/open-prs.svelte';
 	import { serverApi } from '$lib/server-api';
@@ -23,7 +24,7 @@
 
 	const PROVIDERS: { id: Provider; label: string; scope: string }[] = [
 		{ id: 'github', label: 'GitHub', scope: 'Needs the repo scope.' },
-		{ id: 'gitlab', label: 'GitLab', scope: 'Needs read_api and read_repository.' }
+		{ id: 'gitlab', label: 'GitLab', scope: 'Needs read_api and read_repository. Leave the URL blank for gitlab.com.' }
 	];
 
 	let auth = $state<{ github: ProviderAuth; gitlab: ProviderAuth } | null>(null);
@@ -31,6 +32,8 @@
 	let connecting = $state<Provider | null>(null);
 	let tokenOpen = $state(false);
 	let token = $state('');
+	/** Self-managed GitLab host; blank means gitlab.com. */
+	let gitlabHost = $state('');
 	let tokenSaving = $state(false);
 	let tokenError = $state<string | null>(null);
 	let disconnecting = $state<Provider | null>(null);
@@ -48,6 +51,17 @@
 		void openPrs.load();
 	});
 
+	/** Home's setup checklist opens Settings straight into a dialog. */
+	$effect(() => {
+		const intent = modelSettingsUi.intent;
+		if (!intent) return;
+		untracked(() => {
+			modelSettingsUi.intent = null;
+			if (intent.kind === 'connect') openToken(intent.provider);
+			else void openBrowse();
+		});
+	});
+
 	async function loadAuth(): Promise<void> {
 		authError = null;
 		try {
@@ -60,6 +74,7 @@
 	function openToken(provider: Provider): void {
 		connecting = provider;
 		token = '';
+		gitlabHost = auth?.gitlab.host ?? '';
 		tokenError = null;
 		tokenOpen = true;
 	}
@@ -70,7 +85,7 @@
 		tokenSaving = true;
 		tokenError = null;
 		try {
-			await serverApi.saveToken(connecting, token.trim());
+			await serverApi.saveToken(connecting, token.trim(), connecting === 'gitlab' ? gitlabHost.trim() : undefined);
 			tokenOpen = false;
 			token = '';
 			await loadAuth();
@@ -165,7 +180,7 @@
 						<p class="settings-row-name">{provider.label}</p>
 						<p class="settings-row-desc">
 							{#if !state}Checking…
-							{:else if state.authenticated}Signed in as <span class="font-mono">{state.user}</span>
+							{:else if state.authenticated}Signed in as <span class="font-mono">{state.user}</span>{#if state.host}<span> on </span><span class="font-mono">{state.host}</span>{/if}
 							{:else if !state.available}CLI not installed. Connect with a token instead.
 							{:else}Not connected{/if}
 						</p>
@@ -234,6 +249,15 @@
 		</Modal.Header>
 		<Modal.Body>
 			<form id="connect-provider" class="grid gap-3" onsubmit={saveToken}>
+				{#if connecting === 'gitlab'}
+					<Input
+						label="GitLab URL"
+						autocomplete="off"
+						spellcheck={false}
+						placeholder="gitlab.com"
+						bind:value={gitlabHost}
+					/>
+				{/if}
 				<Input
 					type="password"
 					label="Personal access token"

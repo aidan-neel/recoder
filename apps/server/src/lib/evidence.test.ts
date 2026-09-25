@@ -39,11 +39,11 @@ test('tool previews preserve evidence and bounded output across repeated retriev
 test('malformed retrievals still report a display command and preserve their failure details', async () => {
 	const store = new EvidenceStore(null, buildInventory(''), 20_000);
 	const calls: ToolCallReport[] = [];
-	const input = { type: 'readDiff', path: 'packages/sivir/cli/commands/status.ts' };
+	const input = { type: 'deleteFile', path: 'packages/sivir/cli/commands/status.ts' };
 	const results = await store.executeRound([input, { action: 42 }], undefined, (tool) => calls.push(tool));
 	expect(results.every((result) => !result.ok)).toBe(true);
 	expect(calls.map((call) => call.command)).toEqual(['Unknown tool', 'Unknown tool', 'Unknown tool', 'Unknown tool']);
-	expect(calls[1]).toMatchObject({ status: 'error', input, summary: 'unsupported action', result: { error: 'unsupported action' } });
+	expect(calls[1]).toMatchObject({ status: 'error', input, summary: expect.stringContaining('unsupported action'), result: { error: expect.stringContaining('Use exactly one of') } });
 	expect(JSON.parse(JSON.stringify(calls[1])).command).toBe('Unknown tool');
 });
 

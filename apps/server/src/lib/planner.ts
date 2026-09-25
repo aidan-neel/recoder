@@ -57,14 +57,23 @@ Rules:
 - Assignment id must be unique and must NOT equal the role id (use names like correctness-auth, not "correctness").
 - Decide from changed behavior and PR intent, not file extensions alone.
 - For executable code, correctness and patterns (repository consistency) are mandatory. Documentation-only changes do not need a correctness assignment.
-- Explain security and performance selection or omission in roleDecisions.
+- Give a roleDecisions entry for every role, and give each selected role an assignment.
 - Group related changes by behavior/package, not fixed file counts. Each specialist has up to ${REVIEW_POLICY.maxSpecialistTurns - 1} evidence-retrieval rounds and a final result turn. Aim for at most 24,000 patch characters and 40 hunks per assignment. Leave unreviewable scope explicitly uncovered.
 - Use an empty hunkIds array to select all hunks of a file; do not repeat long inventories in your output.
 - Avoid overlapping assignments unless different review questions justify it.
 - Treat uncertain high-risk changes as investigation candidates.
 - Identify unassigned areas honestly in the summary.
-- At most ${REVIEW_POLICY.maxInitialAssignments} assignments. Fewer is better; a small PR usually needs only correctness and patterns.
-- Repository retrieval is available through JSON requests that Recoder executes between model turns, even though no native function tools are exposed. Return {"message":"What you are checking","actions":[...]} with listFiles, readFile, search, or readDiff before finishing. Only when explicitly told this is your final turn must you return the plan JSON without more actions.
+- At most ${REVIEW_POLICY.maxInitialAssignments} assignments. Correctness and patterns are the floor, not the default: think hard about every other role before leaving it out.
+- Weigh each role one at a time against concrete signals in the diff and the code around it (retrieve evidence first when unsure). Select a role whenever its signals are present; do not skip it because correctness "partly covers" it, because each specialist asks sharper questions in its area. Signals:
+  - concurrency: threads, processes, multiprocessing, queues, pipes, locks, events, async/await, event loops, workers, pools, shared mutable state, background tasks, signal handlers, message passing between processes or actors, start/stop/shutdown ordering.
+  - errors: exceptions, retries, timeouts, cleanup/finally blocks, shutdown and exit paths, resources that must be released.
+  - api: renamed or removed public symbols, changed signatures, message/enum/wire formats, anything other modules or processes consume.
+  - testing: new behavior or changed contracts with no matching test change.
+  - security: trust boundaries, input parsing, deserialization (including pickling), auth, secrets, shell or SQL.
+  - perf: hot loops, blocking calls on hot paths, unbounded growth, N+1 access.
+  - docs: public behavior whose docs, docstrings or comments no longer match.
+- Every roleDecisions reason must cite the specific file, symbol or pattern that decided it. "deferred" and "not_needed" need a concrete reason the signal is absent, not a guess that behavior is unchanged.
+- Repository retrieval is available through JSON requests that Recoder executes between model turns, even though no native function tools are exposed. Return {"message":"What you are checking","actions":[{"action":"readDiff","path":"src/a.ts"},{"action":"search","revision":"head","query":"literalText"}]}, where each action's "action" is exactly readDiff, readFile, search or listFiles, before finishing. Only when explicitly told this is your final turn must you return the plan JSON without more actions.
 Available roles and focus:
 ${REVIEW_ROLES.map((role) => `- ${role}: ${ROLE_FOCUS[role]}`).join('\n')}`;
 }
@@ -72,6 +81,8 @@ ${REVIEW_ROLES.map((role) => `- ${role}: ${ROLE_FOCUS[role]}`).join('\n')}`;
 export function plannerUserPrompt(input: {
 	title: string;
 	body: string;
+	/** Reviewers, assignees, labels, linked issues. */
+	context?: string;
 	inventory: ReviewInventory;
 	evidenceNotes?: string;
 }): string {
@@ -84,6 +95,7 @@ export function plannerUserPrompt(input: {
 	return [
 		`PR title (untrusted): ${input.title || '(none)'}`,
 		`${UNTRUSTED_PREFIX}PR description:\n${input.body || '(none)'}`,
+		input.context ? `${UNTRUSTED_PREFIX}PR context (people, labels, linked issues and their blockers):\n${input.context}` : '',
 		`Change inventory (${input.inventory.files.length} files; executable=${input.inventory.executable}; docsOnly=${input.inventory.docsOnly}):`,
 		inventorySummary(input.inventory),
 		related,
@@ -121,6 +133,18 @@ export function sanitizePlannerOutput(raw: unknown, inventory: ReviewInventory, 
 	let clipped = assignments.sort((a, b) => a.priority - b.priority).slice(0, limit);
 	if (!followUp && inventory.executable) {
 		clipped = ensureMandatory(clipped, inventory);
+	}
+	// A role the planner marked "selected" must actually run, even when it forgot
+	// to write the assignment for it.
+	if (!followUp) {
+		const assigned = new Set(clipped.map((assignment) => assignment.role));
+		for (const decision of parsed.data.roleDecisions) {
+			if (decision.decision !== 'selected' || assigned.has(decision.role) || clipped.length >= limit) continue;
+			const extra = fallbackAssignment(`${decision.role}-selected`, decision.role, inventory, 50);
+			if (extra.scope.length === 0) continue;
+			clipped.push({ ...extra, reason: decision.reason });
+			assigned.add(decision.role);
+		}
 	}
 	if (clipped.length === 0) return null;
 	const selected = new Set(clipped.map((assignment) => assignment.role));

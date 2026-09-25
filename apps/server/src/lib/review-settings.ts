@@ -34,7 +34,8 @@ const modelEntrySchema = z.object({
 	baseUrl: z.string().max(500).optional(),
 	apiKey: z.string().max(500).optional(),
 	efforts: z.array(z.enum(REASONING_EFFORTS)).max(8).optional(),
-	defaultEffort: z.enum(REASONING_EFFORTS).optional()
+	defaultEffort: z.enum(REASONING_EFFORTS).optional(),
+	contextWindow: z.number().int().positive().max(100_000_000).optional()
 });
 
 export const reviewSettingsSchema = z.object({
@@ -64,6 +65,7 @@ export interface StoredModelEntry {
 	apiKey?: string;
 	efforts?: ReasoningEffort[];
 	defaultEffort?: ReasoningEffort;
+	contextWindow?: number;
 }
 
 interface StoredSettings {
@@ -159,6 +161,8 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 			if (baseUrl && next.provider !== 'codex') next.baseUrl = baseUrl;
 			if (entry.efforts?.length) next.efforts = entry.efforts;
 			if (entry.defaultEffort) next.defaultEffort = entry.defaultEffort;
+			const contextWindow = entry.contextWindow ?? kept?.contextWindow;
+			if (contextWindow) next.contextWindow = contextWindow;
 			// Empty key keeps the existing entry key; new entries store what was given.
 			if (next.provider !== 'codex') {
 				if (entry.apiKey) next.apiKey = entry.apiKey;

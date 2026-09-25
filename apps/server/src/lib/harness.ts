@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { reviewNow } from './review-control.js';
 import { lstat, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type {
@@ -40,7 +41,7 @@ import {
 } from './planner.js';
 import { GUIDELINES_PATH, type ReviewGuidelinesUsed } from '@recoder/shared';
 import { composeGuidelines, readGlobalGuidelines, withGuidelines, type GuidelinesInput } from './guidelines.js';
-import { parseSpecialistOutput, specialistSystemPrompt, specialistUserPrompt } from './specialist.js';
+import { parseSpecialistOutput, specialistSystemPrompt, specialistUserPrompt, specialistValidationError } from './specialist.js';
 import {
 	applyConsolidation,
 	consolidationSchema,
@@ -168,6 +169,8 @@ export interface AdaptiveReviewInput {
 	revision?: ReviewRevision | null;
 	prTitle?: string | null;
 	prBody?: string | null;
+	/** Reviewers, assignees, linked issues (untrusted). */
+	prContext?: string | null;
 	signal?: AbortSignal;
 }
 
@@ -188,7 +191,7 @@ export async function runAdaptiveReview(
 	input: AdaptiveReviewInput,
 	events?: HarnessEvents
 ): Promise<AdaptiveReviewResult> {
-	const deadlineAt = Date.now() + REVIEW_POLICY.analysisDeadlineMs;
+	const deadlineAt = reviewNow() + REVIEW_POLICY.analysisDeadlineMs;
 	const controller = new AbortController();
 	const onAbort = () => controller.abort();
 	input.signal?.addEventListener('abort', onAbort, { once: true });
@@ -257,6 +260,7 @@ export async function runAdaptiveReview(
 				signal: controller.signal,
 				title: input.prTitle ?? '',
 				body: input.prBody ?? '',
+				context: input.prContext ?? '',
 				events,
 				task
 			});
@@ -376,7 +380,7 @@ export async function runAdaptiveReview(
 		if (valid.length === 0) {
 			confirmed = [];
 			task('consolidation', 'Consolidating findings', 'done', 'No candidates to consolidate', { kind: 'consolidation' });
-		} else if (!budget.canSpend(1, { consumeReserve: true }) || Date.now() >= deadlineAt) {
+		} else if (!budget.canSpend(1, { consumeReserve: true }) || reviewNow() >= deadlineAt) {
 			unconfirmed = valid;
 			outcome = 'partial';
 			error = 'Reserved consolidation call was unavailable';
@@ -506,6 +510,7 @@ async function runPlanner(input: {
 	signal: AbortSignal;
 	title: string;
 	body: string;
+	context?: string;
 	events?: HarnessEvents;
 	task: (id: string, label: string, status: ReviewTask['status'], message: string, extra?: Partial<ReviewTask>) => void;
 }): Promise<{ plan: PlannerOutput; degraded: boolean }> {
@@ -518,7 +523,7 @@ async function runPlanner(input: {
 		getDiscussion: () => input.events?.getDiscussion?.() ?? '',
 		onMessage: (message) => input.events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
 		system: withGuidelines(plannerSystemPrompt(), input.inventory.guidelines),
-		user: plannerUserPrompt({ title: input.title, body: input.body, inventory: input.inventory }),
+		user: plannerUserPrompt({ title: input.title, body: input.body, context: input.context, inventory: input.inventory }),
 		config: cfg,
 		budget: input.budget,
 		evidence: input.evidence,
@@ -686,6 +691,8 @@ async function runOneAssignment(
 			signal: ctx.signal,
 			deadlineAt: ctx.deadlineAt,
 			parse: parseSpecialistOutput,
+			validationError: specialistValidationError,
+			finalExample: '{"message":"No issues in the queue split.","findings":[],"examinedHunks":[],"coverageGaps":[],"blockers":[],"followUp":null,"recommendedChecks":[]}',
 			onProgress: (state, elapsedMs, detail) => {
 				const status = state === 'queued' ? 'waiting' : 'running';
 				updateAssignment(records, item.id, {
@@ -736,7 +743,11 @@ async function runOneAssignment(
 			ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
 			return;
 		}
-		const examined = result.value.examinedHunks.filter((hunkId) => assignedHunks.has(hunkId));
+		// Weaker models often finish without listing hunks. The scoped patch was in
+		// their evidence, so credit what they were shown rather than mark it unexamined.
+		const shownHunks = new Set(initialEvidence.flatMap((evidence) => evidence.hunkIds ?? []));
+		const listed = result.value.examinedHunks.filter((hunkId) => assignedHunks.has(hunkId));
+		const examined = listed.length > 0 ? listed : [...assignedHunks].filter((hunkId) => shownHunks.has(hunkId));
 		for (const hunkId of examined) {
 			const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? '';
 			ctx.coverage.examined(hunkId, path, item.role);

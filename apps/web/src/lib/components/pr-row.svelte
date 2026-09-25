@@ -2,6 +2,8 @@
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
+	import * as Avatar from '@sivir-ui/svelte/components/avatar';
+	import { initials } from '$lib/shell-state.svelte';
 	import Link2 from '@lucide/svelte/icons/link-2';
 	import LoaderCircle from '@lucide/svelte/icons/loader';
 	import MessageSquare from '@lucide/svelte/icons/message-square';
@@ -46,6 +48,8 @@
 	const state = $derived(starting ? 'starting' : running ? 'running' : justFinished ? 'done' : 'idle');
 	const status = $derived(prStatus(review));
 	const title = $derived(pr.title === '' ? `PR #${pr.number}` : pr.title);
+	const assignees = $derived(pr.assignees ?? []);
+	const assigneeNames = $derived(assignees.map((person) => person.name ?? person.login).join(', '));
 	const hasSession = $derived(!!review);
 
 	function copyLink(): void {
@@ -66,6 +70,17 @@
 		</span>
 		<span class="flex min-w-0 flex-1 flex-col gap-[5px]">
 			<span class="flex min-w-0 items-baseline gap-2">
+				{#if assignees.length > 0}
+					<span class="pr-row-people" title="Assigned to {assigneeNames}" aria-label="Assigned to {assigneeNames}">
+						{#each assignees.slice(0, 4) as person (person.login)}
+							<Avatar.Root size="sm" class="pr-row-avatar">
+								{#if person.avatarUrl}<Avatar.Image src={person.avatarUrl} alt="" loading="lazy" referrerpolicy="no-referrer" />{/if}
+								<Avatar.Fallback>{initials(person.name ?? person.login)}</Avatar.Fallback>
+							</Avatar.Root>
+						{/each}
+						{#if assignees.length > 4}<span class="pr-row-avatar-more">+{assignees.length - 4}</span>{/if}
+					</span>
+				{/if}
 				<Button
 					unstyled
 					class="pr-row-open min-w-0 truncate text-left text-[14.5px] text-fg"

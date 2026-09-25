@@ -7,6 +7,7 @@
 	import type { ReviewMetrics, TokenAggregate } from '@recoder/shared';
 	import Skeleton from './ui/skeleton.svelte';
 	import { serverApi } from '$lib/server-api';
+	import { modelLabel } from '$lib/model-settings.svelte';
 
 	let { reviewId, open = $bindable(false), showTrigger = true }: { reviewId: string; open?: boolean; showTrigger?: boolean } = $props();
 	let metrics = $state<ReviewMetrics | null>(null);
@@ -116,7 +117,7 @@
 						{@const note = coverageNote(model)}
 						<div class="flex flex-col gap-2">
 							<div class="flex items-baseline justify-between gap-3">
-								<span class="min-w-0 truncate font-mono text-[12.5px] text-fg" title={model.model}>{model.model}<span class="ms-2 font-sans text-[12px] text-fg-faint">{model.provider === 'codex' ? 'ChatGPT' : 'Endpoint'}</span></span>
+								<span class="min-w-0 truncate text-[12.5px] text-fg" title={model.model}>{modelLabel(model.model)}<span class="ms-2 font-sans text-[12px] text-fg-faint">{model.provider === 'codex' ? 'ChatGPT' : 'Endpoint'}</span></span>
 								<span class="shrink-0 font-mono text-[12.5px] text-fg-muted tabular-nums">{tokens(model.tokens)}</span>
 							</div>
 							{#if share !== null}

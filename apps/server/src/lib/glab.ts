@@ -1,6 +1,7 @@
 import type { PullRequest, RemoteRepo } from '@recoder/shared';
 import { runCommand } from '../commands/runner.js';
 import { extractJson, GhError } from './gh.js';
+import { apiMergeHeadRef, apiMergeRequest, apiMergeRequests, apiProjects, apiUser, gitlabGet, gitlabPeople, useGitlabApi } from './gitlab-api.js';
 import { parseSlug } from './providers.js';
 
 function classifyFailure(logs: string): GhError {
@@ -23,6 +24,7 @@ function classifyFailure(logs: string): GhError {
 /** Run `glab`, capturing stdout. Never throws raw — always GhError. */
 /** `glab api <path>` parsed as JSON. */
 export async function glabApi(path: string, env?: Record<string, string>): Promise<unknown> {
+	if (useGitlabApi(env)) return gitlabGet(path, env!);
 	return extractJson(await glab(['api', path], env));
 }
 
@@ -53,10 +55,17 @@ export async function glabAvailable(): Promise<boolean> {
 	}
 }
 
-/** Authenticated user (if any). Never throws. */
+/** Authenticated user (if any). Never throws; `error` says why a token didn't work. */
 export async function glabAuth(
 	env?: Record<string, string>
-): Promise<{ authenticated: boolean; user: string | null }> {
+): Promise<{ authenticated: boolean; user: string | null; error?: string }> {
+	if (useGitlabApi(env)) {
+		try {
+			return { authenticated: true, user: await apiUser(env!) };
+		} catch (err) {
+			return { authenticated: false, user: null, error: err instanceof Error ? err.message : String(err) };
+		}
+	}
 	try {
 		const run = await runCommand({
 			label: 'glab auth',
@@ -74,6 +83,7 @@ export async function glabAuth(
 
 /** User's projects (recent activity first). Throws GhError. */
 export async function listGlabRepos(env?: Record<string, string>): Promise<RemoteRepo[]> {
+	if (useGitlabApi(env)) return apiProjects(env!);
 	let run;
 	try {
 		run = await runCommand({
@@ -115,6 +125,7 @@ export async function fetchMergeHeadRef(
 	iid: number,
 	env?: Record<string, string>
 ): Promise<string> {
+	if (useGitlabApi(env)) return apiMergeHeadRef(repoUrl, iid, env!);
 	const slug = parseSlug(repoUrl);
 	const view = (await glab(
 		['mr', 'view', String(iid), '-R', slug, '-F', 'json'],
@@ -131,6 +142,7 @@ export async function fetchMergeRequest(
 	iid: number,
 	opts?: { env?: Record<string, string> }
 ): Promise<FetchedMerge> {
+	if (useGitlabApi(opts?.env)) return apiMergeRequest(repoUrl, iid, opts!.env!);
 	const slug = parseSlug(repoUrl);
 	const view = (await glab(
 		['mr', 'view', String(iid), '-R', slug, '-F', 'json'],
@@ -170,6 +182,7 @@ export async function listMergeRequests(
 	repoUrl: string,
 	opts?: { env?: Record<string, string>; limit?: number }
 ): Promise<PullRequest[]> {
+	if (useGitlabApi(opts?.env)) return apiMergeRequests(repoUrl, opts!.env!, opts?.limit);
 	const slug = parseSlug(repoUrl);
 	const rows = extractJson(
 		await glab(
@@ -196,7 +209,8 @@ export async function listMergeRequests(
 			additions: 0,
 			deletions: 0,
 			changedFiles: 0,
-			createdAt: typeof item.created_at === 'string' ? item.created_at : ''
+			createdAt: typeof item.created_at === 'string' ? item.created_at : '',
+			assignees: gitlabPeople(item.assignees)
 		};
 		return pr.number > 0 ? [pr] : [];
 	});

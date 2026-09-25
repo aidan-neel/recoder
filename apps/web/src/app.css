@@ -1508,6 +1508,232 @@ kbd.keycap {
 	box-shadow: none;
 }
 
+/* Pause / cancel under the progress steps while a review runs: quiet, inset like the steps. */
+.progress-controls {
+	display: flex;
+	gap: 2px;
+	padding: 6px 8px 8px;
+	border-top: 1px solid var(--line-subtle-2);
+}
+[data-ui='button'][data-variant][data-size].progress-control {
+	height: 28px;
+	min-height: 28px;
+	gap: 6px;
+	padding: 0 8px;
+	border-radius: 7px;
+	font-size: 12.5px;
+	font-weight: 400;
+	color: var(--text-subtle);
+}
+[data-ui='button'][data-variant][data-size].progress-control:hover {
+	color: var(--text-primary);
+}
+[data-ui='button'][data-variant='ghost'][data-size].progress-cancel:hover {
+	color: var(--danger);
+}
+.review-live[data-paused] .review-live-dot {
+	background-color: var(--sev-medium);
+}
+
+/* Copy / retry under an assistant reply: faint until hovered, like the rest of the chrome. */
+[data-ui='message'] .message-actions {
+	display: flex;
+	gap: 2px;
+	margin-top: 2px;
+	margin-left: -6px;
+}
+[data-ui='button'][data-variant][data-size].message-action {
+	width: 26px;
+	height: 26px;
+	min-height: 26px;
+	color: var(--text-faint);
+}
+[data-ui='button'][data-variant][data-size].message-action:hover {
+	color: var(--text-primary);
+}
+[data-ui='button'][data-variant][data-size].message-action svg {
+	width: 13px;
+	height: 13px;
+}
+
+/* Draft review: the orchestrator's offer to run the full review, as a button under its reply. */
+.review-start-cta {
+	display: flex;
+	margin-top: -6px;
+}
+
+/* Review stopped (interrupted, failed action): a quiet card, not a red sentence. */
+[data-ui='card'].review-notice {
+	flex-direction: row;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 12px 12px 14px;
+	border: 0;
+	border-radius: 12px;
+	background-color: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+}
+.review-notice-icon {
+	flex-shrink: 0;
+	align-self: flex-start;
+	margin-top: 2px;
+	color: var(--danger);
+}
+.review-notice-title {
+	font-size: 13.5px;
+	font-weight: 500;
+	line-height: 20px;
+	color: var(--text-primary);
+}
+.review-notice-body {
+	font-size: 12.5px;
+	line-height: 18px;
+	color: var(--text-subtle);
+	text-wrap: pretty;
+}
+
+/* ── First run (4d): setup checklist ──────────────────────── */
+.setup {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 620px;
+	margin: 0 auto;
+	padding: 110px 0 40px;
+}
+@media (max-width: 700px) {
+	.setup {
+		padding: 40px 16px 32px;
+	}
+}
+.setup-headline {
+	font-family: var(--font-ai);
+	font-size: 28px;
+	line-height: 1.35;
+	color: var(--text-brief-body);
+	text-wrap: pretty;
+}
+[data-ui='card'].setup-card {
+	gap: 0;
+	margin-top: 32px;
+	padding: 0;
+	border: 0;
+	border-radius: 14px;
+	background-color: var(--bg-raised);
+	box-shadow: 0 0 0 1px var(--line-card), 0 8px 24px rgba(0, 0, 0, 0.25);
+	overflow: hidden;
+}
+.setup-step {
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	padding: 16px 18px;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.setup-step + .setup-step {
+	border-top: 1px solid var(--bg-hover);
+}
+.setup-step[data-state='current'] {
+	padding-bottom: 18px;
+	background-color: var(--line-divider);
+}
+.setup-step-body {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 12px;
+}
+.setup-step-text {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.setup-step-title {
+	font-size: 14px;
+	line-height: 22px;
+	color: var(--text-primary);
+}
+.setup-step-desc {
+	font-size: 12px;
+	line-height: 18px;
+	color: var(--text-faint);
+	text-wrap: pretty;
+}
+.setup-step[data-state='current'] .setup-step-text {
+	gap: 3px;
+}
+.setup-step[data-state='current'] .setup-step-desc {
+	font-size: 12.5px;
+	color: var(--text-subtle);
+}
+.setup-step[data-state='done'] .setup-step-title {
+	color: var(--text-muted);
+}
+.setup-step[data-state='pending'] .setup-step-title {
+	color: var(--text-subtle);
+}
+.setup-step[data-state='pending'] .setup-step-desc {
+	color: var(--text-ghost);
+}
+.setup-step[data-state='done'],
+.setup-step[data-state='pending'] {
+	align-items: center;
+}
+.setup-marker {
+	display: flex;
+	width: 22px;
+	height: 22px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	border-radius: 11px;
+	font-family: var(--font-code);
+	font-size: 11px;
+	color: var(--text-faint);
+	box-shadow: inset 0 0 0 1px var(--line-hover);
+}
+.setup-step[data-state='current'] .setup-marker {
+	color: var(--text-primary);
+	box-shadow: inset 0 0 0 1.5px var(--text-secondary);
+}
+.setup-marker[data-state='done'] {
+	color: var(--success);
+	background-color: var(--success-tint);
+	box-shadow: none;
+}
+.setup-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+[data-ui='button'][data-variant][data-size].setup-action {
+	height: 34px;
+	min-height: 34px;
+	gap: 8px;
+	padding: 0 14px;
+	border-radius: 9px;
+	font-size: 13px;
+}
+[data-ui='button'][data-variant='outline'][data-size].setup-action {
+	padding: 0 12px;
+	font-weight: 400;
+}
+[data-ui='button'][data-variant][data-size].setup-pending-action {
+	flex-shrink: 0;
+	gap: 6px;
+	padding: 0 10px;
+	font-size: 12.5px;
+	font-weight: 400;
+	color: var(--text-muted);
+	white-space: nowrap;
+}
+[data-ui='button'][data-variant][data-size].setup-pending-action:disabled {
+	opacity: 1;
+	color: var(--text-ghost);
+	box-shadow: inset 0 0 0 1px var(--bg-hover);
+}
+
 /* ── Home (3a) ─────────────────────────────────────────────── */
 .home-column {
 	display: flex;
@@ -1522,13 +1748,25 @@ kbd.keycap {
 		padding: 32px 16px 32px;
 	}
 }
-.home-brief {
+.home-brief-stack {
+	display: grid;
 	margin-top: 12px;
+}
+.home-brief-stack > .home-brief-layer {
+	grid-area: 1 / 1;
+	min-width: 0;
+}
+.home-brief {
 	font-size: 27px;
 	line-height: 1.38;
 	letter-spacing: -0.005em;
 	color: var(--text-brief-body);
 	text-wrap: pretty;
+}
+/* Sivir's popover leaves a whitespace node beside the link. A flex container
+   drops whitespace-only text, so it can't add (or swallow) a space. */
+.home-brief .brief-ref-wrap {
+	display: inline-flex;
 }
 .home-brief .brief-ref {
 	display: inline;
@@ -1716,6 +1954,32 @@ kbd.keycap {
 	align-self: flex-start;
 	margin-top: 1px;
 	color: var(--success);
+}
+/* Assignees: a tiny overlapping stack on the title line. */
+.pr-row-people {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	align-self: center;
+}
+[data-ui='avatar'].pr-row-avatar {
+	width: 16px;
+	height: 16px;
+	min-width: 16px;
+	font-size: 7.5px;
+	font-weight: 600;
+	color: var(--text-secondary);
+	background-color: var(--bg-hover);
+	box-shadow: 0 0 0 1.5px var(--bg-canvas);
+}
+[data-ui='avatar'].pr-row-avatar + [data-ui='avatar'].pr-row-avatar {
+	margin-left: -5px;
+}
+.pr-row-avatar-more {
+	margin-left: 3px;
+	font-family: var(--font-code);
+	font-size: 10px;
+	color: var(--text-faint);
 }
 .pr-row[data-state='starting'] .pr-row-icon,
 .pr-row[data-state='running'] .pr-row-icon {
@@ -2104,6 +2368,15 @@ kbd.keycap {
 	font-size: 12.5px;
 	color: var(--text-secondary);
 	border-bottom: 1px solid var(--line-subtle-2);
+}
+.endpoint-ctx {
+	flex-shrink: 0;
+	padding: 1px 5px;
+	border-radius: 4px;
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	color: var(--text-subtle);
+	background-color: var(--bg-hover);
 }
 [data-ui='button'].endpoint-remove {
 	width: 28px;
@@ -5146,6 +5419,7 @@ button.diff-num:hover {
    Hidden views replay this when shown again, since display:none restarts animations. */
 :is(
 		.home-column > *,
+		.setup > *,
 		.review-transcript > *,
 		.review-dock-inner,
 		.results-rail-body > *,
@@ -5162,6 +5436,7 @@ button.diff-num:hover {
 	animation-delay: calc(40ms + var(--stage, 0) * 45ms);
 }
 .home-column > :nth-child(2) { --stage: 2; }
+.setup > :nth-child(2) { --stage: 2; }
 .home-column > :nth-child(3) { --stage: 3; }
 .home-column > :nth-child(n + 4) { --stage: 4; }
 .review-transcript > :nth-child(1) { --stage: 1; }
@@ -5194,6 +5469,7 @@ button.diff-num:hover {
 @media (prefers-reduced-motion: reduce) {
 	:is(
 			.home-column > *,
+			.setup > *,
 				.review-transcript > *,
 			.review-dock-inner,
 			.results-rail-body > *,

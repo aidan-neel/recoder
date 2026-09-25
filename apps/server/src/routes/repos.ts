@@ -51,7 +51,7 @@ app.get('/:id/pulls', async (c) => {
 	try {
 		const prs =
 			provider === 'gitlab'
-				? await listMergeRequests(repo.url, { env: tokenEnv('gitlab') })
+				? await listMergeRequests(repo.url, { env: tokenEnv('gitlab', repo.url) })
 				: await listPullRequests(repo.url, { env: tokenEnv('github') });
 		return c.json(prs);
 	} catch (err) {

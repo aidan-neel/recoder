@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/public';
-import type {
+import type { DiscoveredModel,
 	CodexConnection,
 	CodexModel,
 	ApplyFixRequest,
@@ -186,7 +186,7 @@ export const serverApi = {
 		req<Review>('/api/reviews', { method: 'POST', body: JSON.stringify(input) }),
 	/** CI checks for the PR head, or `ref` (a branch or sha, e.g. a fix's verify branch). */
 	getChecks: (id: string, ref?: string) =>
-		req<{ ref: string; checks: PrCheck[] }>(`/api/reviews/${id}/checks${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`),
+		req<{ ref: string; provider?: string; checks: PrCheck[] }>(`/api/reviews/${id}/checks${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`),
 	/** Push a fix to a temporary branch so CI runs on it (the PR branch is untouched). */
 	verifyFix: (id: string, input: ApplyFixRequest & { key: string }) =>
 		req<{ branch: string; sha: string }>(`/api/reviews/${id}/fixes/verify`, { method: 'POST', body: JSON.stringify(input) }),
@@ -194,18 +194,24 @@ export const serverApi = {
 		req<{ deleted: boolean }>(`/api/reviews/${id}/fixes/verify?branch=${encodeURIComponent(branch)}`, { method: 'DELETE' }),
 	/** Start a draft (interactive) review's full pipeline. */
 	startReview: (id: string) => req<Review>(`/api/reviews/${id}/start`, { method: 'POST' }),
+	cancelReview: (id: string) => req<{ cancelled: boolean }>(`/api/reviews/${id}/cancel`, { method: 'POST' }),
+	pauseReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/pause`, { method: 'POST' }),
+	resumeReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/resume`, { method: 'POST' }),
 	deleteReview: (id: string) =>
 		req<{ deleted: boolean }>(`/api/reviews/${id}`, { method: 'DELETE' }),
 	authStatus: () => req<{ github: ProviderAuth; gitlab: ProviderAuth }>('/api/auth/status'),
-	saveToken: (provider: Provider, token: string) =>
+	saveToken: (provider: Provider, token: string, host?: string) =>
 		req<{ provider: Provider; user: string | null }>('/api/auth/token', {
 			method: 'POST',
-			body: JSON.stringify({ provider, token })
+			body: JSON.stringify({ provider, token, ...(host !== undefined ? { host } : {}) })
 		}),
 	clearToken: (provider: Provider) =>
 		req<{ cleared: boolean }>(`/api/auth/token/${provider}`, { method: 'DELETE' }),
 	remoteRepos: (provider: Provider) => req<RemoteRepo[]>(`/api/auth/repos?provider=${provider}`),
 	getModelSettings: () => req<ModelSettings>('/api/settings/models'),
+	/** What an OpenAI-compatible endpoint serves; `baseUrl` comes back corrected (e.g. with `/v1`). */
+	discoverModels: (input: { baseUrl?: string; apiKey?: string }) =>
+		req<{ baseUrl: string; models: DiscoveredModel[] }>('/api/settings/models/discover', { method: 'POST', body: JSON.stringify(input) }),
 	saveModelSettings: (patch: ModelSettingsPatch) =>
 		req<ModelSettings>('/api/settings/models', { method: 'PUT', body: JSON.stringify(patch) })
 };

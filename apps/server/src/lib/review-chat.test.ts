@@ -42,7 +42,7 @@ test('server restart settles interrupted replies even on completed reviews', () 
 	recoverStaleReviews();
 	expect(db.reviews.get(id)?.status).toBe('passed');
 	expect(reviewProgress.get(id)?.messages?.[0]).toMatchObject({ status: 'error' });
-	expect(reviewProgress.get(id)?.messages?.[0].text).toContain('server restarted');
+	expect(reviewProgress.get(id)?.messages?.[0].text).toContain('server restart');
 });
 
 test('specialist chat streams, persists, and is visible in subsequent orchestrator requests', async () => {

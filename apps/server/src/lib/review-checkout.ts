@@ -62,7 +62,7 @@ export async function ensureReviewCheckout(review: Review): Promise<string> {
 		branch,
 		reviewId: review.id,
 		provider: source,
-		env: tokenEnv(source)
+		env: tokenEnv(source, repo.url)
 	})
 		.then((sandbox) => {
 			reviewSandboxes.set(review.id, sandbox.path);

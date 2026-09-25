@@ -1,4 +1,5 @@
 import type { Provider } from '@recoder/shared';
+import { getGitlabHost, hostOfRepoUrl } from './gitlab-host';
 
 export interface RepoLocator {
 	provider: Provider;
@@ -6,9 +7,11 @@ export interface RepoLocator {
 	slug: string;
 }
 
-/** github.com (or no recognizable host) → github; *gitlab* hosts → gitlab. */
+/** github.com (or no recognizable host) → github; *gitlab* hosts and the configured GitLab host → gitlab. */
 export function detectProvider(repoUrl: string): Provider {
-	return /gitlab\./i.test(repoUrl.trim()) ? 'gitlab' : 'github';
+	if (/gitlab\./i.test(repoUrl.trim())) return 'gitlab';
+	const host = getGitlabHost();
+	return host && hostOfRepoUrl(repoUrl) === host ? 'gitlab' : 'github';
 }
 
 /** Strip scheme/host/`git@` prefix and `.git` suffix → namespace path. */

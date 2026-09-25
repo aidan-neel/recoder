@@ -1,5 +1,6 @@
 import { emptyReviewProgress, parseUnifiedDiff, type CreateReviewInput, type Finding, type Review } from '@recoder/shared';
-import { db, reviewDiffs, reviewSandboxes, reviewProgress } from '../store';
+import { closeReviewControl, openReviewControl, runWithReviewControl, type ReviewControl } from '../lib/review-control';
+import { db, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
 import {
 	emitReviewEvent,
 	reportReviewAssignment,
@@ -12,6 +13,7 @@ import {
 } from '../lib/events';
 import { fetchPullRequest } from '../lib/gh';
 import { fetchMergeRequest } from '../lib/glab';
+import { fetchPrContext } from '../lib/pr-context';
 import { runAdaptiveReview } from '../lib/harness';
 import { configForOrchestrator, isReviewConfigured } from '../lib/models';
 import { discussionContext, recordChatMessage } from '../lib/review-chat';
@@ -105,13 +107,15 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	let sandboxPath: string | null = null;
 	let baseRef: string | undefined;
 	let prBody = '';
-	const analysis = new AbortController();
+	let prContext: Promise<string> = Promise.resolve('');
+	const control = openReviewControl(reviewId);
+	const analysis = control.abort;
 
 	try {
 		if (!repo) throw new Error('repo not found');
 		emitReviewEvent(reviewId, { type: 'step', step: 'orchestrator', message: '', data: { orchestratorModel: configForOrchestrator().model } });
 		const provider = repo.provider ?? detectProvider(repo.url);
-		const env = tokenEnv(provider);
+		const env = tokenEnv(provider, repo.url);
 		const viewCmd =
 			provider === 'gitlab'
 				? `glab mr view ${review.prNumber}`
@@ -128,6 +132,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 				: await fetchPullRequest(repo.url, review.prNumber, { env, metadataOnly: true }));
 		baseRef = pr.base;
 		prBody = pr.body ?? '';
+		// People and linked issues for the planner; fetched while the sandbox clones.
+		prContext = fetchPrContext(repo, review.prNumber, provider);
 		reviewDiffs.set(reviewId, diff);
 		review = touch(reviewId, {
 			headSha: pr.headSha,
@@ -159,14 +165,14 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			branch,
 			reviewId,
 			provider: source,
-			env: tokenEnv(source),
+			env: tokenEnv(source, repo.url),
 			expectedHeadSha: review.headSha
 		}));
 		sandboxPath = sandbox.path;
 		reviewSandboxes.set(reviewId, sandbox.path);
 		if (!baseRef) throw new Error('PR base branch is missing');
 		const inspected = await trackReviewTask(reviewId, 'diff', 'Computing local PR diff', () =>
-			sandboxRevisionDiff(sandbox.path, baseRef!, tokenEnv(source), source));
+			sandboxRevisionDiff(sandbox.path, baseRef!, tokenEnv(source, repo.url), source));
 		reviewDiffs.set(reviewId, inspected.diff);
 		emitReviewEvent(reviewId, {
 			type: 'log',
@@ -185,13 +191,15 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			message: `Planning a review of ${files.length} files…`,
 			data: { stage: 'understand' }
 		});
-		const result = await runAdaptiveReview(
+		throwIfCancelled(control);
+		const result = await runWithReviewControl(control, async () => runAdaptiveReview(
 			{
 				diff: inspected.diff,
 				sandboxPath,
 				revision: inspected.revision,
 				prTitle: review.prTitle,
 				prBody,
+				prContext: await prContext,
 				signal: analysis.signal
 			},
 			{
@@ -234,7 +242,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 					emitReviewEvent(reviewId, { type: 'step', step: stage, message: '', data: { stage } });
 				}
 			}
-		);
+		));
+		throwIfCancelled(control);
 
 		const snapshot = reviewProgress.get(reviewId);
 		if (snapshot) {
@@ -273,8 +282,9 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			}
 		});
 	} catch (err) {
+		const cancelled = analysis.signal.aborted;
 		analysis.abort();
-		const message = err instanceof Error ? err.message : 'pipeline failed';
+		const message = cancelled ? 'Review cancelled.' : err instanceof Error ? err.message : 'pipeline failed';
 		try {
 			const snapshot = reviewProgress.get(reviewId);
 			if (snapshot) reviewProgress.set({ ...snapshot, outcome: 'failed' });
@@ -282,6 +292,16 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		} catch {
 			// Review was deleted mid-run (e.g. its session was closed) — nothing to update.
 		}
-		emitReviewEvent(reviewId, { type: 'error', message });
+		emitReviewEvent(reviewId, { type: 'error', message, data: { paused: false } });
+	} finally {
+		closeReviewControl(reviewId, control);
+		try {
+			const settled = settlePipelineStreams(reviewId);
+			if (settled) emitReviewEvent(reviewId, { type: 'log', step: 'review', message: '', data: { settled: { messages: settled.messages, reasoning: settled.reasoning } } });
+		} catch { /* Review deleted mid-run. */ }
 	}
+}
+
+function throwIfCancelled(control: ReviewControl): void {
+	if (control.abort.signal.aborted) throw new Error('Review cancelled.');
 }

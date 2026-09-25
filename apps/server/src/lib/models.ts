@@ -28,7 +28,8 @@ export { REVIEW_ROLES, type ReviewRole };
 
 const configSchema = z.object({
 	baseUrl: z.string().min(1),
-	apiKey: z.string().min(1),
+	// Optional: local servers (vLLM, Ollama, LM Studio) usually run without a key.
+	apiKey: z.string().default(''),
 	model: z.string().min(1)
 });
 
@@ -104,9 +105,9 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 		}
 		const baseUrl = entry.baseUrl || eff.baseUrl;
 		const apiKey = entry.apiKey || eff.apiKey;
-		if (!baseUrl || !apiKey) {
+		if (!baseUrl) {
 			throw new Error(
-				`reviewer not configured: model "${entry.label}" has no endpoint (set a base URL and API key)`
+				`reviewer not configured: model "${entry.label}" has no endpoint (set a base URL)`
 			);
 		}
 		return { role, baseUrl, apiKey, model: entry.model, reasoningEffort };

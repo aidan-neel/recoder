@@ -77,6 +77,8 @@ export interface ToolResult {
 	truncated: boolean;
 	continuation?: string | null;
 	matches?: number;
+	/** readDiff: the hunks whose patch text this result contains. */
+	hunkIds?: string[];
 }
 
 const ALIASES: RevisionAlias[] = ['head', 'target', 'mergeBase'];
@@ -174,6 +176,8 @@ export class EvidenceStore {
 				result = {
 					...result,
 					content: result.content.slice(0, room),
+					// The cut may land inside the last hunk: don't claim it was shown.
+					hunkIds: result.hunkIds?.slice(0, -1),
 					truncated: true,
 					continuation: result.continuation ?? 'round-budget'
 				};
@@ -229,7 +233,10 @@ export class EvidenceStore {
 			case 'readDiff':
 				return this.readDiff(action);
 			default:
-				return { action: 'unknown', ok: false, error: 'unsupported action', content: '', truncated: false };
+				return {
+					action: 'unknown', ok: false, content: '', truncated: false,
+					error: `unsupported action ${JSON.stringify(action).slice(0, 160)}. Use exactly one of: {"action":"readDiff","path":"src/a.ts"} | {"action":"readFile","revision":"head","path":"src/a.ts","startLine":1,"endLine":150} | {"action":"search","revision":"head","query":"literalText"} | {"action":"listFiles","revision":"head","prefix":"src/"}`
+				};
 		}
 	}
 
@@ -358,6 +365,7 @@ export class EvidenceStore {
 		let chars = rendered.join('\n').length;
 		let lastId: string | null = null;
 		let truncated = false;
+		const shown: string[] = [];
 		for (let i = start; i < hunks.length; i++) {
 			const hunk = hunks[i];
 			const id = `${path}:${hunk.oldStart},${hunk.oldCount}:${hunk.newStart},${hunk.newCount}`;
@@ -372,6 +380,7 @@ export class EvidenceStore {
 			rendered.push(chunk);
 			chars += chunk.length + 1;
 			lastId = id;
+			shown.push(id);
 		}
 		if (start + (lastId ? hunks.findIndex((hunk) => `${path}:${hunk.oldStart},${hunk.oldCount}:${hunk.newStart},${hunk.newCount}` === lastId) + 1 - start : 0) < hunks.length) {
 			truncated = truncated || start + 1 < hunks.length && lastId !== `${path}:${hunks.at(-1)!.oldStart},${hunks.at(-1)!.oldCount}:${hunks.at(-1)!.newStart},${hunks.at(-1)!.newCount}`;
@@ -383,25 +392,125 @@ export class EvidenceStore {
 			content: rendered.join('\n'),
 			truncated,
 			continuation: truncated ? lastId : null,
+			hunkIds: shown,
 			startLine: hunks[start]?.newStart,
 			endLine: hunks.at(-1)?.newStart
 		};
 	}
 }
 
+const ACTION_NAMES = ['listFiles', 'readFile', 'search', 'readDiff'] as const;
+
+/** Names weaker models use for the four actions. */
+const ACTION_ALIASES: Record<string, (typeof ACTION_NAMES)[number]> = {
+	listfiles: 'listFiles', list_files: 'listFiles', list: 'listFiles', ls: 'listFiles',
+	readfile: 'readFile', read_file: 'readFile', read: 'readFile', open: 'readFile', cat: 'readFile', view: 'readFile',
+	search: 'search', grep: 'search', find: 'search', search_code: 'search', searchcode: 'search',
+	readdiff: 'readDiff', read_diff: 'readDiff', diff: 'readDiff', getdiff: 'readDiff', get_diff: 'readDiff'
+};
+
+function actionName(value: unknown): (typeof ACTION_NAMES)[number] | null {
+	if (typeof value !== 'string') return null;
+	if ((ACTION_NAMES as readonly string[]).includes(value)) return value as (typeof ACTION_NAMES)[number];
+	return ACTION_ALIASES[value.trim().toLowerCase()] ?? null;
+}
+
+function safeJson(text: string): unknown {
+	try {
+		return JSON.parse(text);
+	} catch {
+		return undefined;
+	}
+}
+
+function toInt(value: unknown): number | undefined {
+	const n = typeof value === 'string' ? Number.parseInt(value, 10) : value;
+	return typeof n === 'number' && Number.isFinite(n) ? Math.trunc(n) : undefined;
+}
+
+/** Field names models reach for instead of ours: `pattern` → `query`, `file` → `path`, `lines: "10-40"` … */
+function canonicalFields(args: Record<string, unknown>): Record<string, unknown> {
+	const out: Record<string, unknown> = { ...args };
+	const pick = (target: string, ...keys: string[]) => {
+		if (out[target] !== undefined) return;
+		for (const key of keys) if (out[key] !== undefined) { out[target] = out[key]; delete out[key]; return; }
+	};
+	pick('query', 'pattern', 'regex', 'text', 'term', 'q', 'keyword', 'symbol');
+	pick('path', 'file', 'filePath', 'file_path', 'filepath', 'filename', 'fileName');
+	pick('prefix', 'dir', 'directory', 'folder', 'scope');
+	pick('startLine', 'start_line', 'start', 'from', 'line', 'offset');
+	pick('endLine', 'end_line', 'end', 'to');
+	pick('hunkIds', 'hunks', 'hunk_ids');
+	if (typeof out.lines === 'string') {
+		const m = /^(\d+)\s*[-:–,]\s*(\d+)$/.exec(out.lines.trim());
+		if (m) { out.startLine ??= Number(m[1]); out.endLine ??= Number(m[2]); }
+		delete out.lines;
+	}
+	if (out.startLine !== undefined) out.startLine = toInt(out.startLine);
+	if (out.endLine !== undefined) out.endLine = toInt(out.endLine);
+	if (typeof out.hunkIds === 'string') out.hunkIds = [out.hunkIds];
+	if (typeof out.revision === 'string') {
+		const revision = out.revision.toLowerCase();
+		out.revision = revision === 'base' || revision === 'old' || revision === 'main' ? 'target' : revision === 'new' || revision === 'pr' ? 'head' : revision === 'mergebase' ? 'mergeBase' : out.revision;
+	}
+	return out;
+}
+
+/**
+ * Local models phrase the same request many ways: `{"readDiff": {…}}`,
+ * `{"type": "readDiff", "args": {…}}`, `{"name": "read_file", "arguments": "{…}"}`,
+ * OpenAI-style `{"function": {"name", "arguments"}}`. Fold them all into
+ * `{"action": "readDiff", …}`; unknown shapes pass through and get a helpful error.
+ */
+function canonicalAction(item: Record<string, unknown>): RetrievalAction {
+	const fn = item.function && typeof item.function === 'object' ? (item.function as Record<string, unknown>) : null;
+	const named = actionName(item.action) ?? actionName(item.name) ?? actionName(item.tool) ?? actionName(item.type) ?? actionName(fn?.name);
+	if (named) {
+		const rawArgs = [item.arguments, item.args, item.input, item.parameters, item.params, fn?.arguments].find((value) => value !== undefined);
+		const args = typeof rawArgs === 'string' ? safeJson(rawArgs) : rawArgs;
+		const rest = { ...item };
+		for (const key of ['action', 'name', 'tool', 'type', 'function', 'arguments', 'args', 'input', 'parameters', 'params']) delete rest[key];
+		return { ...canonicalFields({ ...rest, ...(args && typeof args === 'object' ? (args as object) : {}) }), action: named } as RetrievalAction;
+	}
+	const keys = Object.keys(item);
+	const key = keys.length === 1 ? actionName(keys[0]) : null;
+	if (key) {
+		const args = item[keys[0]];
+		return { ...canonicalFields(args && typeof args === 'object' ? (args as Record<string, unknown>) : {}), action: key } as RetrievalAction;
+	}
+	return item as unknown as RetrievalAction;
+}
+
+function isAction(value: unknown): value is Record<string, unknown> {
+	if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+	return actionName((canonicalAction(value as Record<string, unknown>) as { action?: unknown }).action) !== null;
+}
+
+/** Keys models use for the list of requests. */
+const ACTION_LIST_KEYS = ['actions', 'tool_calls', 'toolCalls', 'tools', 'calls', 'requests', 'retrieval', 'retrievals', 'retrieve'];
+
 export function parseActions(parsed: unknown): RetrievalAction[] | null {
 	if (!parsed || typeof parsed !== 'object') return null;
-	const obj = parsed as Record<string, unknown>;
-	if (Array.isArray(obj.actions)) {
-		const actions = obj.actions.filter((item) => item && typeof item === 'object') as RetrievalAction[];
+	if (Array.isArray(parsed)) {
+		const actions = parsed.filter(isAction).map((item) => canonicalAction(item as Record<string, unknown>));
 		return actions.length ? actions : null;
 	}
-	if (typeof obj.action === 'string') return [obj as unknown as RetrievalAction];
+	const obj = parsed as Record<string, unknown>;
+	for (const key of ACTION_LIST_KEYS) {
+		const list = obj[key];
+		if (Array.isArray(list)) {
+			const actions = list.filter((item) => item && typeof item === 'object').map((item) => canonicalAction(item as Record<string, unknown>));
+			if (actions.length) return actions;
+		} else if (list && typeof list === 'object' && isAction(list)) {
+			return [canonicalAction(list as Record<string, unknown>)];
+		}
+	}
+	if (isAction(obj)) return [canonicalAction(obj)];
 	return null;
 }
 
 function normalizeActions(raw: unknown): RetrievalAction[] {
-	if (Array.isArray(raw)) return raw.filter((item) => item && typeof item === 'object') as RetrievalAction[];
+	if (Array.isArray(raw)) return raw.filter((item) => item && typeof item === 'object').map((item) => canonicalAction(item as Record<string, unknown>));
 	return parseActions(raw) ?? [];
 }
 

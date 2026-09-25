@@ -13,6 +13,7 @@
 	import SeverityPill from './ui/severity-pill.svelte';
 	import { SEVERITY_DOT, findingsStore, type Finding } from '$lib/findings.svelte';
 	import { formatAgentName, threadsStore } from '$lib/threads.svelte';
+	import { modelLabel } from '$lib/model-settings.svelte';
 
 	interface Props {
 		finding: Finding;
@@ -63,7 +64,7 @@
 				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks {finding} />{/if}
 				<div class="inline-finding-foot">
 					<Typography.Metadata class="min-w-0 flex-1 truncate" title={`${finding.category} · ${formatAgentName(finding.agent)}${finding.model ? ` · ${finding.model}` : ''}`}>
-						{formatAgentName(finding.agent)}{#if finding.model}<span class="font-mono"> · {finding.model}</span>{/if}
+						{formatAgentName(finding.agent)}{#if finding.model}<span> · {modelLabel(finding.model)}</span>{/if}
 					</Typography.Metadata>
 					{#if accepted}
 						{#if suggestion?.sha}<span class="font-mono text-[11.5px] text-fg-faint" title="Pushed to {suggestion.branch}">{suggestion.sha.slice(0, 7)}</span>{/if}

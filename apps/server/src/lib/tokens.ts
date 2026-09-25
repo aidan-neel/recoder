@@ -2,6 +2,7 @@ import { closeSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, w
 import { join } from 'node:path';
 import type { Provider } from '@recoder/shared';
 import { serverDataDir } from './data-dir';
+import { getGitlabHost, hostOfRepoUrl } from './gitlab-host';
 
 type Tokens = Partial<Record<Provider, string>>;
 
@@ -86,8 +87,13 @@ export function hasToken(provider: Provider): boolean {
 	return getToken(provider) !== undefined;
 }
 
-export function tokenEnv(provider: Provider): Record<string, string> {
+/**
+ * Env for a provider CLI call. GitLab also gets `GITLAB_HOST`: the repo's own
+ * host when there is one, else the configured self-managed instance.
+ */
+export function tokenEnv(provider: Provider, repoUrl?: string): Record<string, string> {
 	const token = getToken(provider);
-	if (!token) return {};
-	return provider === 'gitlab' ? { GITLAB_TOKEN: token } : { GH_TOKEN: token };
+	if (provider === 'github') return token ? { GH_TOKEN: token } : {};
+	const host = (repoUrl ? hostOfRepoUrl(repoUrl) : null) ?? getGitlabHost();
+	return { ...(token ? { GITLAB_TOKEN: token } : {}), ...(host ? { GITLAB_HOST: host } : {}) };
 }

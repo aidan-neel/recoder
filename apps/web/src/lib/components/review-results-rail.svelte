@@ -8,6 +8,7 @@
 	import FindingSeverity from './finding-severity.svelte';
 	import type { ReviewingFinding } from './reviewing-view.svelte';
 	import { formatAgentName } from '$lib/threads.svelte';
+	import { modelLabel } from '$lib/model-settings.svelte';
 
 	interface Props {
 		findings: ReviewingFinding[];
@@ -70,7 +71,7 @@
 						<Button href={specialistHref(specialist.id)} variant="ghost" class="rail-specialist" title={specialist.title}>
 							<span class="rail-dot" data-status={specialist.status} aria-hidden="true"></span>
 							<span class="rail-specialist-name">{formatAgentName(specialist.role)}</span>
-							<span class="rail-specialist-meta">{[specialist.model, duration(specialist.elapsedMs)].filter(Boolean).join(' · ')}</span>
+							<span class="rail-specialist-meta">{[modelLabel(specialist.model), duration(specialist.elapsedMs)].filter(Boolean).join(' · ')}</span>
 							<span class="rail-specialist-count" aria-label="{countFor(specialist.role)} findings">{countFor(specialist.role)}</span>
 						</Button>
 					{/each}

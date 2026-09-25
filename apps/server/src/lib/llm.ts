@@ -33,6 +33,29 @@ export interface ChatOptions {
 	onUsage?: (usage: TokenUsage) => void;
 	/** Provider-disclosed reasoning/thinking text, streamed as deltas when available. */
 	onReasoning?: (text: string) => void;
+	/** false: ask the model to answer without a thinking phase (quick summaries). */
+	thinking?: boolean;
+}
+
+/** Endpoints that rejected `chat_template_kwargs`; later calls leave it off. */
+const noTemplateKwargs = new Set<string>();
+
+/** vLLM/SGLang templates read `enable_thinking`; strict providers may reject the field. */
+function thinkingFields(opts: ChatOptions): Record<string, unknown> {
+	return opts.thinking === false && !noTemplateKwargs.has(opts.baseUrl) ? { chat_template_kwargs: { enable_thinking: false } } : {};
+}
+
+/** Retry once without the thinking switch when an endpoint refuses it. */
+async function withThinkingFallback<T>(opts: ChatOptions, run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (err) {
+		if (opts.thinking === false && !noTemplateKwargs.has(opts.baseUrl) && err instanceof LlmError && err.status >= 400 && err.status < 500 && /chat_template_kwargs|enable_thinking|unrecognized|unknown (field|parameter)|extra (fields|inputs)/i.test(err.message)) {
+			noTemplateKwargs.add(opts.baseUrl);
+			return run();
+		}
+		throw err;
+	}
 }
 
 export class LlmError extends Error {
@@ -41,6 +64,60 @@ export class LlmError extends Error {
 	constructor(status: number, message: string) {
 		super(message);
 		this.status = status;
+	}
+}
+
+const TRANSIENT_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
+const TRANSIENT_NETWORK = /stalled|socket|ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|EAI_AGAIN|fetch failed|network|connection (?:was )?(?:closed|reset|refused|lost)|other side closed|Unable to connect|terminated/i;
+
+/** Dropped sockets and overloaded servers (vLLM restarts, proxies) are worth another try; bad requests are not. */
+export function isTransientLlmError(err: unknown): boolean {
+	if (!(err instanceof LlmError)) return false;
+	if (TRANSIENT_STATUS.has(err.status)) return true;
+	return err.status === 0 && TRANSIENT_NETWORK.test(err.message) && !/cancelled|timed out|truncated/i.test(err.message);
+}
+
+/** A stream with no bytes for this long is dead (RECODER_LLM_IDLE_MS, default 45s). */
+function streamIdleMs(): number {
+	const raw = Number(process.env.RECODER_LLM_IDLE_MS);
+	return Number.isFinite(raw) && raw >= 1_000 ? raw : 45_000;
+}
+
+function llmRetries(): number {
+	const raw = Number(process.env.RECODER_LLM_RETRIES);
+	return Number.isFinite(raw) && raw >= 0 ? Math.floor(raw) : 5;
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+	return new Promise((resolve, reject) => {
+		if (signal?.aborted) return reject(new LlmError(0, 'Model request cancelled'));
+		const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
+		const onAbort = () => { clearTimeout(timer); reject(new LlmError(0, 'Model request cancelled')); };
+		signal?.addEventListener('abort', onAbort, { once: true });
+	});
+}
+
+/**
+ * Run one model request, retrying transient failures with backoff (1s, 2s, 4s…
+ * capped at 15s) while the request's deadline allows. `canRetry` lets streaming
+ * callers stop once text has reached the user.
+ */
+async function withRetries<T>(
+	opts: Pick<ChatOptions, 'signal' | 'timeoutMs'>,
+	deadline: number,
+	attempt: (timeoutMs: number) => Promise<T>,
+	canRetry: () => boolean = () => true
+): Promise<T> {
+	const max = llmRetries();
+	for (let tries = 0; ; tries++) {
+		try {
+			return await attempt(Math.max(1, deadline - Date.now()));
+		} catch (err) {
+			const wait = Math.min(15_000, 1_000 * 2 ** tries);
+			if (tries >= max || !isTransientLlmError(err) || !canRetry() || Date.now() + wait >= deadline - 5_000) throw err;
+			console.warn(`[llm] ${(err as Error).message} — retrying in ${wait / 1000}s (${tries + 1}/${max})`);
+			await sleep(wait, opts.signal);
+		}
 	}
 }
 
@@ -131,9 +208,9 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 			const { codex } = await import('./codex');
 			try { result = await codex.complete(remaining); }
 			catch (error) { if (error instanceof LlmError) throw error; throw new LlmError(0, 'ChatGPT request failed'); }
-		} else result = opts.onReasoning
-			? await streamChatCompletionInner(remaining, () => {})
-			: await chatCompletionInner(remaining);
+		} else result = await withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => opts.onReasoning
+			? streamChatCompletionInner({ ...remaining, timeoutMs }, () => {})
+			: chatCompletionInner({ ...remaining, timeoutMs })));
 		success = true;
 		return result;
 	} finally {
@@ -155,7 +232,7 @@ async function chatCompletionInner(opts: ChatOptions): Promise<string> {
 			method: 'POST',
 			headers: {
 				'content-type': 'application/json',
-				authorization: `Bearer ${opts.apiKey}`
+				...(opts.apiKey ? { authorization: `Bearer ${opts.apiKey}` } : {})
 			},
 			body: JSON.stringify({
 				model: opts.model,
@@ -164,7 +241,8 @@ async function chatCompletionInner(opts: ChatOptions): Promise<string> {
 				max_tokens: opts.maxTokens ?? 4000,
 				...(opts.reasoningEffort !== undefined ? { reasoning_effort: opts.reasoningEffort } : {}),
 				...(opts.seed !== undefined ? { seed: opts.seed } : {}),
-				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {})
+				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+				...thinkingFields(opts)
 			}),
 			signal: controller.signal
 		});
@@ -172,7 +250,9 @@ async function chatCompletionInner(opts: ChatOptions): Promise<string> {
 			const text = await res.text().catch(() => res.statusText);
 			throw new LlmError(res.status, `LLM ${res.status}: ${text.slice(0, 500)}`);
 		}
-		return await readChatResponse(res, opts);
+		const aborted = new Promise<never>((_, reject) => controller.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+		aborted.catch(() => {});
+		return await Promise.race([readChatResponse(res, opts), aborted]);
 	} catch (err) {
 		if (err instanceof LlmError) throw err;
 		if (controller.signal.aborted) {
@@ -226,9 +306,12 @@ export async function streamChatCompletion(
 		report();
 		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
 		const remaining = { ...opts, timeoutMs: Math.max(1, deadline - Date.now()), onUsage: (usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); } };
+		// Once text has streamed to the user a retry would repeat it, so only retry before the first token.
+		let streamed = false;
+		const forward = (text: string) => { streamed = true; onToken(text); };
 		const result = opts.provider === 'codex'
 			? await (await import('./codex')).codex.complete(remaining, onToken)
-			: await streamChatCompletionInner(remaining, onToken);
+			: await withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => streamChatCompletionInner({ ...remaining, timeoutMs }, forward)), () => !streamed);
 		success = true;
 		return result;
 	} finally {
@@ -250,13 +333,23 @@ async function streamChatCompletionInner(
 	let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 	const cancelReader = () => { void reader?.cancel().catch(() => {}); };
 	controller.signal.addEventListener('abort', cancelReader, { once: true });
+	// Aborting doesn't always wake a pending read on a half-dead socket, so race
+	// every read against the abort, and abort a stream that goes quiet.
+	const aborted = new Promise<never>((_, reject) => controller.signal.addEventListener('abort', () => reject(new Error('aborted')), { once: true }));
+	aborted.catch(() => {});
+	let lastData = Date.now();
+	let stalled = false;
+	const idleMs = streamIdleMs();
+	const watchdog = setInterval(() => {
+		if (Date.now() - lastData > idleMs) { stalled = true; controller.abort(); }
+	}, Math.min(5_000, idleMs));
 
 	try {
 		const res = await fetch(`${opts.baseUrl}/chat/completions`, {
 			method: 'POST',
 			headers: {
 				'content-type': 'application/json',
-				authorization: `Bearer ${opts.apiKey}`
+				...(opts.apiKey ? { authorization: `Bearer ${opts.apiKey}` } : {})
 			},
 			body: JSON.stringify({
 				model: opts.model,
@@ -267,7 +360,8 @@ async function streamChatCompletionInner(
 				stream_options: { include_usage: true },
 				...(opts.reasoningEffort !== undefined ? { reasoning_effort: opts.reasoningEffort } : {}),
 				...(opts.seed !== undefined ? { seed: opts.seed } : {}),
-				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {})
+				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+				...thinkingFields(opts)
 			}),
 			signal: controller.signal
 		});
@@ -289,7 +383,8 @@ async function streamChatCompletionInner(
 		let buffer = '';
 		while (!ended) {
 			controller.signal.throwIfAborted();
-			const { done, value } = await reader.read();
+			const { done, value } = await Promise.race([reader.read(), aborted]);
+			lastData = Date.now();
 			controller.signal.throwIfAborted();
 			buffer += done ? decoder.decode() + '\n' : decoder.decode(value, { stream: true });
 			let idx: number;
@@ -327,11 +422,14 @@ async function streamChatCompletionInner(
 	} catch (err) {
 		if (err instanceof LlmError) throw err;
 		if (controller.signal.aborted) {
-			throw new LlmError(0, opts.signal?.aborted ? 'Model request cancelled' : `Model request timed out after ${Math.round((opts.timeoutMs ?? 120_000) / 1000)}s`);
+			if (opts.signal?.aborted) throw new LlmError(0, 'Model request cancelled');
+			if (stalled) throw new LlmError(0, `Model stream stalled: no data for ${Math.round(idleMs / 1000)}s`);
+			throw new LlmError(0, `Model request timed out after ${Math.round((opts.timeoutMs ?? 120_000) / 1000)}s`);
 		}
 		throw new LlmError(0, err instanceof Error ? err.message : String(err));
 	} finally {
 		clearTimeout(timer);
+		clearInterval(watchdog);
 		opts.signal?.removeEventListener('abort', abort);
 		controller.signal.removeEventListener('abort', cancelReader);
 		await reader?.cancel().catch(() => {});

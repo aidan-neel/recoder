@@ -9,7 +9,7 @@ export async function fetchPullPreview(repo: Repo, prNumber: number): Promise<Pu
 	const provider = repo.provider ?? detectProvider(repo.url);
 	const { pr, diff } =
 		provider === 'gitlab'
-			? await fetchMergeRequest(repo.url, prNumber, { env: tokenEnv('gitlab') })
+			? await fetchMergeRequest(repo.url, prNumber, { env: tokenEnv('gitlab', repo.url) })
 			: await fetchPullRequest(repo.url, prNumber, { env: tokenEnv('github'), metadataOnly: true });
 	return {
 		provider,
@@ -24,6 +24,6 @@ export async function fetchPullPreview(repo: Repo, prNumber: number): Promise<Pu
 export async function fetchPullDiff(repo: Repo, prNumber: number): Promise<{ pr: PullPreview['pr']; diff: string }> {
 	const provider = repo.provider ?? detectProvider(repo.url);
 	return provider === 'gitlab'
-		? fetchMergeRequest(repo.url, prNumber, { env: tokenEnv('gitlab') })
+		? fetchMergeRequest(repo.url, prNumber, { env: tokenEnv('gitlab', repo.url) })
 		: fetchPullRequest(repo.url, prNumber, { env: tokenEnv('github') });
 }

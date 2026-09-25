@@ -4,11 +4,14 @@ import type { ProviderAuth } from '@recoder/shared';
 import { ghAuth, ghAvailable, listGhRepos } from '../lib/gh';
 import { glabAuth, glabAvailable, listGlabRepos } from '../lib/glab';
 import { GhError } from '../lib/gh';
+import { getGitlabHost, normalizeGitlabHost, setGitlabHost } from '../lib/gitlab-host';
 import { clearToken, setToken, tokenEnv } from '../lib/tokens';
 
 const tokenSchema = z.object({
 	provider: z.enum(['github', 'gitlab']),
-	token: z.string().min(1).max(500)
+	token: z.string().min(1).max(500),
+	/** GitLab only: self-managed instance, e.g. `gitlab.acme.com`. Empty means gitlab.com. */
+	host: z.string().max(253).optional()
 });
 
 async function githubStatus(): Promise<ProviderAuth> {
@@ -19,10 +22,13 @@ async function githubStatus(): Promise<ProviderAuth> {
 }
 
 async function gitlabStatus(): Promise<ProviderAuth> {
+	const env = tokenEnv('gitlab');
+	const host = getGitlabHost();
 	const available = await glabAvailable();
-	if (!available) return { provider: 'gitlab', available, authenticated: false, user: null };
-	const { authenticated, user } = await glabAuth(tokenEnv('gitlab'));
-	return { provider: 'gitlab', available, authenticated, user };
+	// A connected token talks to the REST API, so the CLI is optional.
+	if (!available && !env.GITLAB_TOKEN) return { provider: 'gitlab', available, authenticated: false, user: null, host };
+	const { authenticated, user } = await glabAuth(env);
+	return { provider: 'gitlab', available, authenticated, user, host };
 }
 
 const app = new Hono();
@@ -38,14 +44,23 @@ app.post('/token', async (c) => {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
 	}
 	const { provider, token } = parsed.data;
+	const rawHost = provider === 'gitlab' ? parsed.data.host?.trim() ?? '' : '';
+	const host = rawHost === '' ? null : normalizeGitlabHost(rawHost);
+	if (rawHost !== '' && !host) {
+		return c.json({ error: 'That GitLab URL is not a valid host.', kind: 'host' }, 400);
+	}
 	const candidate: Record<string, string> =
-		provider === 'gitlab' ? { GITLAB_TOKEN: token } : { GH_TOKEN: token };
+		provider === 'gitlab'
+			? { GITLAB_TOKEN: token, ...(host && host !== 'gitlab.com' ? { GITLAB_HOST: host } : {}) }
+			: { GH_TOKEN: token };
 	const check =
 		provider === 'gitlab' ? await glabAuth(candidate) : await ghAuth(candidate);
 	if (!check.authenticated) {
-		return c.json({ error: 'token rejected by provider CLI', kind: 'auth' }, 401);
+		const error = ('error' in check && check.error) || (host ? `Token rejected by ${host}` : 'token rejected by provider CLI');
+		return c.json({ error, kind: 'auth' }, 401);
 	}
 	setToken(provider, token);
+	if (provider === 'gitlab') setGitlabHost(host);
 	return c.json({ provider, user: check.user });
 });
 

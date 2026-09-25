@@ -230,6 +230,8 @@ export interface ReviewProgress {
 	stage?: ReviewStage;
 	planningDegraded?: boolean;
 	guidelines?: ReviewGuidelinesUsed;
+	/** Held by the developer; model calls wait until resumed. */
+	paused?: boolean;
 }
 
 export function emptyReviewProgress(id: string): ReviewProgress {

@@ -27,7 +27,20 @@ function gitEnv(overrides?: Record<string, string>, provider?: Provider): Record
 			GIT_CONFIG_VALUE_0: '',
 			GIT_CONFIG_KEY_1: 'credential.https://github.com.helper',
 			GIT_CONFIG_VALUE_1: '!gh auth git-credential'
-		} : {})
+		} : {}),
+		...(provider === 'gitlab' && overrides?.GITLAB_TOKEN ? gitlabCredentials(overrides.GITLAB_HOST || 'gitlab.com') : {})
+	};
+}
+
+/** The connected GitLab token as the git password, read from the env at call time so it never lands in args or URLs. */
+function gitlabCredentials(host: string): Record<string, string> {
+	const scope = `credential.https://${host}.helper`;
+	return {
+		GIT_CONFIG_COUNT: '2',
+		GIT_CONFIG_KEY_0: scope,
+		GIT_CONFIG_VALUE_0: '',
+		GIT_CONFIG_KEY_1: scope,
+		GIT_CONFIG_VALUE_1: '!f() { test "$1" = get && echo username=oauth2 && echo "password=$GITLAB_TOKEN"; }; f'
 	};
 }
 

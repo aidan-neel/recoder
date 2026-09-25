@@ -17,10 +17,11 @@
 		onShowView?: ((view: 'findings' | 'diff') => void | Promise<void>) | null;
 		onOpenFinding?: ((finding: ReviewingFinding) => void) | null;
 		onRestart?: (() => void) | null;
+		onStartReview?: (() => Promise<void>) | null;
 		actionError?: string | null;
 		restarting?: boolean;
 	}
-	let { review, stream, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onShowView = null, onOpenFinding = null, onRestart = null, actionError = null, restarting = false }: Props = $props();
+	let { review, stream, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onShowView = null, onOpenFinding = null, onRestart = null, onStartReview = null, actionError = null, restarting = false }: Props = $props();
 	const progress = $derived(stream.progress);
 	const connection = $derived(stream.connection);
 	let now = $state(Date.now());
@@ -77,6 +78,8 @@
 	fullscreen
 	{reviewId}
 	{awaitingPrompt}
+	onStartReview={awaitingPrompt ? onStartReview : null}
+	paused={progress.paused ?? false}
 	completedAt={!active && !awaitingPrompt ? review.updatedAt : undefined}
 	title={review.prTitle || `PR #${review.prNumber}`}
 	meta={{ prLabel: '#' + review.prNumber, repo, files, additions, deletions, elapsed, branch: recentSessions.branches[`${review.repoId}#${review.prNumber}`] }}

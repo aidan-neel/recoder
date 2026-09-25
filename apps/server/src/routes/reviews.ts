@@ -1,4 +1,6 @@
 import { Hono } from 'hono';
+import { getReviewControl } from '../lib/review-control';
+import { emitReviewEvent } from '../lib/events';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { emptyReviewProgress, expandFileDiff, parseUnifiedDiff } from '@recoder/shared';
@@ -25,6 +27,7 @@ import { GhError, fetchPullHeadRef } from '../lib/gh';
 import { fetchChecks } from '../lib/checks';
 import { fetchPullHead } from '../lib/github-rest';
 import { fetchMergeHeadRef } from '../lib/glab';
+import { tokenEnv } from '../lib/tokens';
 import { LlmError } from '../lib/llm';
 import { parseSlug, refspecFor } from '../lib/providers';
 import { db, reviewDiffs, reviewSandboxes, reviewProgress, reviewMetrics } from '../store';
@@ -82,6 +85,7 @@ app.get('/:id', (c) => {
 app.delete('/:id', (c) => {
 	const review = db.reviews.get(c.req.param('id'));
 	if (!review) return c.json({ error: 'review not found' }, 404);
+	getReviewControl(review.id)?.cancel();
 	db.reviews.delete(review.id);
 	cancelReviewChats(review.id);
 	reviewDiffs.delete(review.id);
@@ -89,6 +93,36 @@ app.delete('/:id', (c) => {
 	reviewSandboxes.delete(review.id);
 	clearReviewEvents(review.id);
 	return c.json({ deleted: true });
+});
+
+/** Stop a running review. Findings so far are kept; it can be restarted. */
+app.post('/:id/cancel', (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const control = getReviewControl(review.id);
+	if (!control) return c.json({ error: 'review is not running' }, 409);
+	control.cancel();
+	cancelReviewChats(review.id);
+	return c.json({ cancelled: true });
+});
+
+/** Hold a running review: in-flight model calls stop and re-run on resume. */
+app.post('/:id/pause', (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const control = getReviewControl(review.id);
+	if (!control) return c.json({ error: 'review is not running' }, 409);
+	if (control.pause()) emitReviewEvent(review.id, { type: 'step', step: 'review', message: 'Review paused', data: { paused: true } });
+	return c.json({ paused: true });
+});
+
+app.post('/:id/resume', (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const control = getReviewControl(review.id);
+	if (!control) return c.json({ error: 'review is not running' }, 409);
+	if (control.resume()) emitReviewEvent(review.id, { type: 'step', step: 'review', message: 'Review resumed', data: { paused: false } });
+	return c.json({ paused: false });
 });
 
 /** Parsed unified diff for a review (404 until the fetch step stores one). */
@@ -307,7 +341,7 @@ app.post('/:id/fixes/apply', async (c) => {
 	try {
 		const headRef =
 			review.source === 'gitlab'
-				? await fetchMergeHeadRef(repo.url, review.prNumber)
+				? await fetchMergeHeadRef(repo.url, review.prNumber, tokenEnv('gitlab', repo.url))
 				: await fetchPullHeadRef(repo.url, review.prNumber);
 		const source = review.source;
 		const sandboxPath = await ensureReviewCheckout(review);
@@ -348,14 +382,15 @@ app.get('/:id/checks', async (c) => {
 	if (!repo || review.source === 'stub') return c.json({ error: 'checks are unavailable for this review' }, 409);
 	try {
 		const requested = c.req.query('ref');
-		if (requested) return c.json({ ref: requested, checks: await fetchChecks(repo, requested) });
+		const provider = review.source;
+		if (requested) return c.json({ ref: requested, provider, checks: await fetchChecks(repo, requested) });
 		if (review.source === 'gitlab') {
-			const ref = await fetchMergeHeadRef(repo.url, review.prNumber);
-			return c.json({ ref, checks: await fetchChecks(repo, ref) });
+			const ref = await fetchMergeHeadRef(repo.url, review.prNumber, tokenEnv('gitlab', repo.url));
+			return c.json({ ref, provider, checks: await fetchChecks(repo, ref) });
 		}
 		// Checks run on the head commit; its sha also covers PRs from forks.
 		const head = await fetchPullHead(parseSlug(repo.url), review.prNumber);
-		return c.json({ ref: head.ref, checks: await fetchChecks(repo, head.sha) });
+		return c.json({ ref: head.ref, provider, checks: await fetchChecks(repo, head.sha) });
 	} catch (err) {
 		if (err instanceof GhError) return c.json({ error: err.message }, 502);
 		throw err;

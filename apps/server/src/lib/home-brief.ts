@@ -1,4 +1,7 @@
 import type { HomeBriefRequest, HomeBriefResponse, Review } from '@recoder/shared';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { serverDataDir } from './data-dir';
 import { chatCompletion, LlmError } from './llm.js';
 import { configForOrchestrator } from './models.js';
 
@@ -8,15 +11,41 @@ import { configForOrchestrator } from './models.js';
  * stored reviews, so the model never guesses at review state.
  */
 
-const SYSTEM_PROMPT = `You write the brief at the top of a code-review app's home screen: two or three short sentences telling the developer where their open pull requests stand.
-Tone: a sharp colleague catching them up. Conversational, specific, no filler, no exclamation marks, no emoji.
-Start with the greeting you are given, then say how many PRs are open across how many repos. Then point at what deserves attention: the biggest unreviewed PR, open high-severity findings, failed or running reviews. Skip anything unremarkable.
-Refer to PRs only as #number. Mark the greeting and at most two key phrases with **double asterisks**. Never mark a PR number.
-Use only the facts provided. At most 60 words. Plain text only.`;
+const SYSTEM_PROMPT = `You write the one-line brief at the top of a code-review app's home screen.
+Say only the single most useful thing: the one pull request that most needs attention and why (open high-severity findings, a failed review, or the biggest one nobody has reviewed). Mention a second only if it is just as urgent. Do not list, count, or summarize the rest; leave everything unremarkable out.
+Tone: a sharp colleague in passing. Plain and specific, no filler, no exclamation marks, no emoji. Do not greet; the page adds the greeting.
+Refer to PRs only as #number. Mark at most one key phrase with **double asterisks**. Never mark a PR number.
+Use only the facts provided. One or two short sentences, at most 25 words. Plain text only.`;
 
-const CACHE_TTL_MS = 30 * 60_000;
-const cache = new Map<string, { at: number; value: HomeBriefResponse }>();
-const inflight = new Map<string, Promise<HomeBriefResponse>>();
+/** Bump when the prompt changes so a saved brief written by the old one is replaced. */
+const BRIEF_VERSION = 3;
+
+/**
+ * One brief, kept on disk and rewritten at most every 12 hours
+ * (RECODER_BRIEF_TTL_MS). PRs opening or reviews finishing don't trigger a
+ * rewrite: Home shows live state everywhere else, and the brief is a digest.
+ */
+function briefTtlMs(): number {
+	const raw = Number(process.env.RECODER_BRIEF_TTL_MS);
+	return Number.isFinite(raw) && raw > 0 ? raw : 12 * 60 * 60_000;
+}
+
+function briefFile(): string {
+	return join(serverDataDir(), 'home-brief.json');
+}
+
+function readStoredBrief(): HomeBriefResponse | null {
+	try {
+		const value = JSON.parse(readFileSync(briefFile(), 'utf8')) as HomeBriefResponse & { version?: number };
+		if (value?.version !== BRIEF_VERSION) return null;
+		return typeof value.text === 'string' && typeof value.generatedAt === 'string' ? value : null;
+	} catch {
+		return null;
+	}
+}
+
+let stored: HomeBriefResponse | null | undefined;
+let inflight: Promise<HomeBriefResponse> | null = null;
 
 function ageText(iso: string, now: number): string {
 	const t = Date.parse(iso);
@@ -31,7 +60,7 @@ function reviewText(review: Review | undefined, now: number): string {
 	if (!review) return 'never reviewed';
 	if (review.status === 'draft') return 'review session open, not started';
 	if (review.status === 'running' || review.status === 'queued') return 'review running now';
-	if (review.status === 'failed') return 'last review failed';
+	if (review.status === 'failed') return "Recoder's last review run errored before finishing (a tool problem, not a verdict on the code; it needs a re-run)";
 	const high = review.findings.filter((f) => f.severity === 'error').length;
 	const medium = review.findings.filter((f) => f.severity === 'warning').length;
 	const when = ageText(review.updatedAt, now).replace('opened', 'reviewed');
@@ -60,19 +89,10 @@ export function latestReviews(reviews: Review[]): Map<string, Review> {
 	return latest;
 }
 
-const GREETING: Record<HomeBriefRequest['dayPart'], string> = {
-	morning: 'Morning',
-	afternoon: 'Afternoon',
-	evening: 'Evening',
-	night: 'Evening'
-};
-
 export function briefFacts(input: HomeBriefRequest, reviews: Review[], now = Date.now()): string {
 	const latest = latestReviews(reviews);
-	const greeting = `${GREETING[input.dayPart]}${input.name ? `, ${input.name}` : ''}.`;
 	const repos = new Set(input.prs.map((pr) => pr.repo));
 	const lines = [
-		`Greeting: ${greeting}`,
 		`Open PRs: ${input.prs.length} across ${repos.size} repo${repos.size === 1 ? '' : 's'}.`
 	];
 	for (const pr of input.prs) {
@@ -89,6 +109,8 @@ export function briefFacts(input: HomeBriefRequest, reviews: Review[], now = Dat
 export function cleanBrief(raw: string): string {
 	return raw
 		.replace(/^\s*(brief:)?\s*/i, '')
+		// Home adds its own greeting for the current time of day; a cached one would go stale.
+		.replace(/^\**\s*(good\s+)?(morning|afternoon|evening|night)\b[^.!*]*[.!]\s*\**\s*/i, '')
 		.replace(/^["“]|["”]$/g, '')
 		.replace(/\s+/g, ' ')
 		.trim()
@@ -98,11 +120,9 @@ export function cleanBrief(raw: string): string {
 export async function homeBrief(input: HomeBriefRequest, reviews: Review[]): Promise<HomeBriefResponse> {
 	const facts = briefFacts(input, reviews);
 	const cfg = configForOrchestrator();
-	const key = `${cfg.model}\n${facts.replace(/opened [^;,]*|reviewed [^;,]*/g, '')}`;
-	const hit = cache.get(key);
-	if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.value;
-	const pending = inflight.get(key);
-	if (pending) return pending;
+	if (stored === undefined) stored = readStoredBrief();
+	if (stored && stored.model === cfg.model && Date.now() - Date.parse(stored.generatedAt) < briefTtlMs()) return stored;
+	if (inflight) return inflight;
 
 	const run = (async () => {
 		try {
@@ -116,22 +136,30 @@ export async function homeBrief(input: HomeBriefRequest, reviews: Review[]): Pro
 					{ role: 'system', content: SYSTEM_PROMPT },
 					{ role: 'user', content: facts }
 				],
-				maxTokens: 400,
+				// Reasoning models spend output tokens thinking before the brief itself.
+				maxTokens: 4000,
+				thinking: false,
 				timeoutMs: 60_000
 			});
 			const text = cleanBrief(raw);
 			if (!text) throw new LlmError(0, 'model returned an empty brief');
 			const value: HomeBriefResponse = { text, generatedAt: new Date().toISOString(), model: cfg.model };
-			cache.set(key, { at: Date.now(), value });
+			stored = value;
+			try { writeFileSync(briefFile(), JSON.stringify({ ...value, version: BRIEF_VERSION })); } catch { /* Kept in memory for this run. */ }
 			return value;
 		} finally {
-			inflight.delete(key);
+			inflight = null;
 		}
 	})();
-	inflight.set(key, run);
-	return run;
+	// Never let one stuck call hold every later request.
+	inflight = Promise.race([
+		run,
+		new Promise<never>((_, reject) => setTimeout(() => reject(new LlmError(0, 'brief timed out')), 90_000))
+	]).finally(() => { inflight = null; });
+	return inflight;
 }
 
 export function clearHomeBriefCache(): void {
-	cache.clear();
+	stored = null;
+	try { rmSync(briefFile(), { force: true }); } catch { /* Nothing stored. */ }
 }
