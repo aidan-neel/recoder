@@ -38,9 +38,8 @@ Run the relevant `check` (and tests) before finishing a change.
 
 ## Recoder design system (dark redesign)
 
-Read `DESIGN.md` before touching any UI in `apps/web`. Screen specs and HTML
-references live in `design_handoff_recoder_redesign/` (open the `.dc.html`
-files in a browser; `README.md` there has per-screen values).
+Read `DESIGN.md` before touching any UI in `apps/web`. It holds the tokens,
+component specs, layout and behavior rules.
 
 - Tokens are CSS custom properties in `apps/web/src/app.css`, named after the
   DESIGN.md tokens (`--bg-canvas`, `--text-muted`, `--sev-high`…), with
@@ -71,8 +70,8 @@ files in a browser; `README.md` there has per-screen values).
 - **Panel headers are 44px**, matching the diff header, so borders line up.
 - Respect `prefers-reduced-motion`. Keep body text at 4.5:1; use `text-fg-faint`
   and below only for metadata.
-- Before calling a UI task done, compare against the matching artboard and
-  check hover, press, focus, loading, empty and error states at 1280 and 1440
+- Before calling a UI task done, compare against `DESIGN.md` and check
+  hover, press, focus, loading, empty and error states at 1280 and 1440
   wide. The top bar must not clip: the search shrinks to 170px and tabs
   overflow into a menu.
 - **Large screens scale via rem.** A PostCSS step in `apps/web/vite.config.ts`

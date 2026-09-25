@@ -59,8 +59,9 @@
 	const generating = $derived(conversationMessages.some((message) => message.discussion && !message.forwardedFrom && message.status === 'streaming'));
 	const conversationTools = $derived(toolCalls.filter((tool) => belongs(tool.assignmentId)));
 	const specialist = $derived(assignment.id !== ORCHESTRATOR_ID);
+	const working = $derived(active && ['running', 'waiting', 'queued'].includes(assignment.status));
 	const currentTask = $derived(tasks.findLast((task) => task.status === 'running' || task.status === 'waiting'));
-	const currentOperation = $derived(active && ['running', 'waiting', 'queued'].includes(assignment.status)
+	const currentOperation = $derived(working
 		? currentTask?.message || assignment.currentOperation || 'Waiting for this specialist…'
 		: assignment.status === 'done' ? 'Specialist finished' : assignment.status === 'skipped' ? 'Specialist skipped' : 'Specialist review incomplete');
 	const entries = $derived(groupTranscript(conversationMessages, conversationTools));
@@ -70,15 +71,15 @@
 		return { ...insert, index: index < 0 ? entries.length : index };
 	}));
 	const lastAssistantIndex = $derived(entries.findLastIndex((entry) => entry.kind === 'message' && entry.message.from === 'assistant'));
-	/** Each agent turn's reply id is `message_<reasoning id>`, so thinking can sit with the reply it led to. */
-	const reasoningByMessage = $derived(new Map<string, ReviewReasoningEntry>(conversationReasoning.map((entry) => [`message_${entry.id}`, entry])));
-	const messageIds = $derived(new Set(conversationMessages.map((message) => message.id)));
+	/** Agent turns reply as `message_<reasoning id>`; discussion replies think as `reason_<reply id>`. Either way thinking sits with its reply. */
+	const reasoningByMessage = $derived(new Map<string, ReviewReasoningEntry>(conversationReasoning.flatMap((entry) => [[`message_${entry.id}`, entry], [entry.id.replace(/^reason_/, ''), entry]])));
+	const messageIds = $derived(new Set(entries.flatMap((entry) => entry.kind === 'message' ? [entry.id] : [])));
 	const orphanReasoning = $derived(conversationReasoning.filter((entry) => !messageIds.has(`message_${entry.id}`)));
 	/** Specialists narrate tasks by title ("Running Correctness of …"); only show a status that says something new. */
 	const specialistStatus = $derived.by(() => {
 		if (!specialist) return null;
 		// Finished states are on the badge at the top; don't repeat them at the bottom.
-		if (!active || !['running', 'waiting', 'queued'].includes(assignment.status)) return null;
+		if (!working) return null;
 		if (orphanReasoning.some((entry) => entry.status === 'streaming')) return null;
 		const op = currentTask?.message || assignment.currentOperation || '';
 		return /^Running\b/.test(op) || op === assignment.title ? null : op || null;
@@ -185,7 +186,7 @@
 {/snippet}
 
 {#snippet thought(entry: ReviewReasoningEntry, until?: string)}
-	{@const live = entry.status === 'streaming' && (active || generating)}
+	{@const live = !until && entry.status === 'streaming' && (active || generating)}
 	{@const seconds = thoughtSeconds(entry, until)}
 	<Disclosure status={live ? 'running' : undefined} bodyClass="!gap-3">
 		{#snippet label()}{live ? 'Thinking…' : seconds ? `Thought for ${seconds}s` : 'Thought'}{/snippet}
@@ -213,7 +214,7 @@
 					<Message.Content class={message.from === 'assistant' ? 'review-prose ai-voice' : message.from === 'user' ? 'review-bubble' : '!max-w-full text-sm'}>
 						{@render response(message)}
 					</Message.Content>
-					{#if message.from === 'assistant' && message.status !== 'streaming' && message.text.trim() && (message.discussion || index === lastAssistantIndex)}
+					{#if message.from === 'assistant' && message.status !== 'streaming' && message.text.trim() && (message.discussion || (index === lastAssistantIndex && !working))}
 						{@const retry = message.discussion && !generating ? retryFor(index) : null}
 						<Message.Actions class="message-actions">
 							<CopyButton text={stripModelNotes(message.text)} label="Copy" copiedLabel="Copied" class="message-action" />
@@ -239,7 +240,7 @@
 		{#if specialist}
 			{#if specialistStatus}
 				<Typography.Text role="status" class="flex items-start gap-2 text-sm text-foreground-muted">
-					{#if active && ['running', 'waiting', 'queued'].includes(assignment.status)}<Spinner size={14} class="mt-1 shrink-0" aria-hidden="true" />{/if}
+					{#if working}<Spinner size={14} class="mt-1 shrink-0" aria-hidden="true" />{/if}
 					<span class="min-w-0 break-words">{specialistStatus}</span>
 				</Typography.Text>
 			{/if}

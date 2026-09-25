@@ -672,11 +672,14 @@ async function runOneAssignment(
 	});
 	try {
 		// Supply the first bounded patch page up front instead of spending a model
-		// round asking for evidence we already know this assignment needs.
+		// round asking for evidence we already know this assignment needs. Every
+		// scoped file gets a result (truncated once the round budget is spent), so
+		// none silently drops out of the evidence past the per-turn action limit.
 		const initialEvidence = await ctx.evidence.executeRound(
 			item.scope.map((entry) => ({ action: 'readDiff', path: entry.path, hunkIds: entry.hunkIds })),
 			ctx.signal,
-			(tool) => ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role: item.role })
+			(tool) => ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role: item.role }),
+			item.scope.length
 		);
 		const result = await runJsonAgent({
 			label: item.title,
@@ -743,11 +746,12 @@ async function runOneAssignment(
 			ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
 			return;
 		}
-		// Weaker models often finish without listing hunks. The scoped patch was in
-		// their evidence, so credit what they were shown rather than mark it unexamined.
+		// Models often list only some of the hunks they read. The scoped patch was in
+		// their evidence, so credit what they were shown unless they reported a gap for it.
 		const shownHunks = new Set(initialEvidence.flatMap((evidence) => evidence.hunkIds ?? []));
-		const listed = result.value.examinedHunks.filter((hunkId) => assignedHunks.has(hunkId));
-		const examined = listed.length > 0 ? listed : [...assignedHunks].filter((hunkId) => shownHunks.has(hunkId));
+		const listedHunks = new Set(result.value.examinedHunks);
+		const gapHunks = new Set(result.value.coverageGaps.map((gap) => gap.hunkId));
+		const examined = [...assignedHunks].filter((hunkId) => listedHunks.has(hunkId) || (shownHunks.has(hunkId) && !gapHunks.has(hunkId)));
 		for (const hunkId of examined) {
 			const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? '';
 			ctx.coverage.examined(hunkId, path, item.role);

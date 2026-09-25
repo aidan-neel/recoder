@@ -140,12 +140,14 @@ export class EvidenceStore {
 		return stored;
 	}
 
+	/** Runs up to `maxActions` retrievals whose combined content stays within one round's character budget. */
 	async executeRound(
 		rawActions: unknown,
 		signal?: AbortSignal,
-		onTool?: (tool: ToolCallReport) => void
+		onTool?: (tool: ToolCallReport) => void,
+		maxActions: number = REVIEW_POLICY.maxRetrievalsPerTurn
 	): Promise<ToolResult[]> {
-		const actions = normalizeActions(rawActions).slice(0, REVIEW_POLICY.maxRetrievalsPerTurn);
+		const actions = normalizeActions(rawActions).slice(0, maxActions);
 		const results: ToolResult[] = [];
 		let used = 0;
 		for (const action of actions) {
@@ -177,7 +179,7 @@ export class EvidenceStore {
 					...result,
 					content: result.content.slice(0, room),
 					// The cut may land inside the last hunk: don't claim it was shown.
-					hunkIds: result.hunkIds?.slice(0, -1),
+					hunkIds: room === 0 ? [] : result.hunkIds?.slice(0, -1),
 					truncated: true,
 					continuation: result.continuation ?? 'round-budget'
 				};

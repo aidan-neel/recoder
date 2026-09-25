@@ -36,6 +36,21 @@ test('tool previews preserve evidence and bounded output across repeated retriev
 	expect(actionCommand({ action: 'search', query: 'needle', prefix: 'src/lib' })).toBe('search "needle" src/lib');
 });
 
+test('a scoped round reads every file past the per-turn limit and credits no hunks it cut entirely', async () => {
+	const file = (name: string, size: number) => `diff --git a/${name} b/${name}\n--- a/${name}\n+++ b/${name}\n@@ -1 +1 @@\n-old\n+${'x'.repeat(size)}\n`;
+	const names = ['a.ts', 'b.ts', 'c.ts', 'd.ts', 'e.ts', 'f.ts'];
+	const twoHunks = 'diff --git a/two.ts b/two.ts\n--- a/two.ts\n+++ b/two.ts\n@@ -1 +1 @@\n-old\n+new\n@@ -20 +20 @@\n-old\n+new\n';
+	const store = new EvidenceStore(null, buildInventory([...names.map((name) => file(name, 10)), file('big.ts', 30_000), twoHunks].join('')), 24_000);
+	const limited = await store.executeRound(names.map((path) => ({ action: 'readDiff', path })));
+	expect(limited).toHaveLength(4);
+	const scoped = await store.executeRound([...names, 'big.ts', 'late.ts'].map((path) => ({ action: 'readDiff', path })), undefined, undefined, 8);
+	expect(scoped.map((result) => result.path)).toEqual([...names, 'big.ts', undefined]);
+	expect(scoped.slice(0, 6).every((result) => result.ok && result.hunkIds?.length === 1)).toBe(true);
+	expect(scoped[6]).toMatchObject({ truncated: true });
+	const cut = await store.executeRound([{ action: 'readDiff', path: 'big.ts' }, { action: 'readDiff', path: 'two.ts' }], undefined, undefined, 2);
+	expect(cut[1]).toMatchObject({ content: '', truncated: true, hunkIds: [] });
+});
+
 test('malformed retrievals still report a display command and preserve their failure details', async () => {
 	const store = new EvidenceStore(null, buildInventory(''), 20_000);
 	const calls: ToolCallReport[] = [];

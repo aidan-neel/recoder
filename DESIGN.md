@@ -1,6 +1,6 @@
 # Recoder design system (dark)
 
-The source of truth for Recoder's UI. The screen specs are in `design_handoff_recoder_redesign/README.md`.
+The source of truth for Recoder's UI.
 
 ## Principles
 - **Warm near-black surfaces, flat by default.** Depth comes from 1px rings and a few surface steps. Shadows are for floating things only (menus, modals, toasts, the composer).
@@ -102,7 +102,37 @@ Heights are 28 (panel), 30 (default) and 32–34 (toolbar or hero).
 - **Segmented control**: container `#1a1918` with inset ring `#232120`, padding 2–3. The active item is `#262422` or `#2a2826`; the thumb slides over 200ms.
 - **Severity pill**: 11–11.5px/500, padding `1px 6–7px`, radius 5.
 - **Keycap**: Geist Mono 10.5, padding `1px 5px`, radius 4, bg `#1f1e1c`–`#24221f`.
-- **Switch**: 26×15 (menu) or 32×18 (settings), knob inset 2px.
+- **Switch**: 26×15 (menu) or 32×18 (settings), knob inset 2px. The knob slides over 160ms `cubic-bezier(.3,.7,.2,1)`; the track is primary when on and `#34312d` when off.
+- **Search field**: 30px, radius 8, bg `#151413`, inset ring `#1f1e1c`, ⌘K keycap. On focus: bg `#1a1918`, ring `#3d3935` plus a 3px `rgba(237,233,227,.06)` halo.
+
+### Model picker
+The one pattern used everywhere a model is picked (composer, side panels, Settings → Models roles).
+- **Trigger**: quiet text button, 30px (28px in side panels), padding `0 9px`, radius 8, 12.5px. Model name in `#ede9e3`, then the effort word in full in `#8a857d` (`5.6 Sol Medium`, never `Med`). Models without an effort control show only the name. In the composer it sits just before the send button.
+- **Menu**: 250px, opens upward, anchored to the trigger's right edge. Rows are 32px, radius 7: `Model ›`, `Reasoning effort ›` (dimmed "Not supported" with no chevron when the model has none), a divider, then `Apply to all specialists` with a switch and `Role models…` (opens Settings → Models). No Speed row.
+- **Submenus** open to the left, top-aligned to their row, with a 6px invisible bridge. Effort options come from the selected model's capabilities. Switching to a model that lacks the current effort resets it to that model's default.
+- Settings roles use the same trigger, never a separate Low/Medium/High control. Inheriting roles show "Same as Orchestrator".
+
+## Layout
+- **Top bar**: 46px, bg `bg.chrome`. Left: the "Recoder" wordmark (no logo mark), Home, a 1px × 16px divider, one tab per open session, and `+`. Right: search (max 260px, shrinks to 170px), usage meter, settings, avatar. Tabs overflow into a menu rather than clipping.
+- **Tab**: 30px, padding `0 10px`, radius 8, 13px. Status icon, repo name, `#PR` in mono 11.5 `text.faint`, and a mono 10.5 badge (progress while running, finding count when passed, "failed" on a danger tint). Inactive text `text.muted`; active tab gets a `bg.menu` pill with a 1px `line.control` inset ring.
+- **Canvas card**: fills the rest of the page with an 8px margin on the sides and bottom, bg `bg.canvas`, 1px `line.card` border, radius 14, overflow hidden.
+- **Panel headers are 44px**, the same as the diff header, so bottom borders line up. Docked right panels are bg `bg.panel` with a `line.divider` left border.
+- **Transcript**: centered, max-width 740. User bubbles are `bg.bubble`, radius `14 14 4 14`, max 520, right-aligned. The composer floats over a `transparent → bg.canvas` fade.
+- **Diff lines**: grid `44px 44px 18px 1fr`, mono 12.5/22.
+- **Modal**: radius 16, `bg.raised-2`, modal elevation over the scrim.
+
+## Behavior
+- **Composer**: focus moves the ring from `#2a2826` to `#3d3935` over 150ms. Send is disabled (`#232120` bg, `#57534d` icon) while empty and turns primary with text. Enter sends; Shift+Enter inserts a newline. While a reply is pending, Send becomes Stop (a 9px square inside a spinning ring) and the reply shows a shimmering "Thinking" line.
+- **Streaming**: tool rows grow in (200ms) with a spinner that becomes a check, then their duration fades in. Streaming text shows a 2px caret blinking at 1s.
+- **Async buttons keep a fixed width** across states. Apply fix is 112px: Apply fix → Applying (spinner) → Applied (check, transparent bg, success text). The finding's pill crossfades to "Fixed" and its title dims. A toast follows with Undo.
+- **Copy** flips to "✓ Copied" in success green for 1.2s.
+- **Trigger label changes** fade in and rise 2px over 180ms.
+- **Menus** close on outside click and Esc.
+
+## Assets
+- Icons: Lucide, stroke 1.75, 12–16px.
+- Fonts: Geist, Geist Mono and Lora from Google Fonts.
+- No images or logo mark. The brand is the "Recoder" wordmark.
 
 ## Motion
 | Token | Value |

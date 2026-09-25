@@ -177,7 +177,7 @@
 				onCheckedChange={(on) => void modelSettingsUi.setApplyToSpecialists(on)}
 				onclick={(event) => event.preventDefault()}
 			>
-				<span class="flex-1 text-left text-fg-tertiary">Apply to all specialists</span>
+				<span class="flex-1 text-left">Apply to all specialists</span>
 				<span class="switch-sm" aria-hidden="true">
 					<span data-ui="switch" data-state={modelSettingsUi.applyToSpecialists ? 'checked' : 'unchecked'} class="flex rounded-full"><span class="block rounded-full"></span></span>
 				</span>

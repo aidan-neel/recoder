@@ -2,7 +2,7 @@
 
 Self-hosted, OpenCode-style pull request reviewer. Runs anywhere Docker runs.
 
-![Recoder session view](assets/session.png)
+![A finished Recoder review with findings, specialists and coverage](assets/session.png)
 
 ## Quickstart
 
@@ -147,6 +147,7 @@ failed on boot with a retry hint instead of spinning forever.
 
 ```
 apps/web        SvelteKit frontend (adapter-node, self-hostable)
+apps/site       recoder.dev landing page
 apps/server     Bun API + gh fetching + sandboxes + command runner
 packages/shared shared API types + unified-diff parser
 ```
@@ -167,6 +168,6 @@ packages/shared shared API types + unified-diff parser
 
 ## UI
 
-SvelteKit + Tailwind CSS v4 + [Sivir UI](https://sivir.dev) (`@sivir-ui/svelte`,
-Midnight Ledger theme). Per the [Sivir guide](https://sivir.dev/llms.txt), check
-the live component pages before adding new components.
+SvelteKit + Tailwind CSS v4 + [Sivir UI](https://sivir.dev) (`@sivir-ui/svelte`),
+restyled through the tokens in [DESIGN.md](DESIGN.md). Contributor and agent
+rules live in [AGENTS.md](AGENTS.md).
