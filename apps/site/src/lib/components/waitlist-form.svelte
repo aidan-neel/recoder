@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
@@ -8,7 +8,10 @@
 	/**
 	 * Hosted-version waitlist: a secondary button that opens into an email field
 	 * in place. Posts `{ email }` to /api/waitlist, which stores it in Neon.
+	 * The joined address is kept in localStorage so returning visitors see the
+	 * confirmation instead of the form.
 	 */
+	const STORAGE_KEY = 'recoder:waitlist-email';
 	let open = $state(false);
 	let email = $state('');
 	let status = $state<'idle' | 'pending' | 'done' | 'error'>('idle');
@@ -16,6 +19,18 @@
 	let inputEl = $state<HTMLInputElement>();
 	let triggerEl = $state<HTMLButtonElement | HTMLAnchorElement>();
 	const id = $props.id();
+
+	onMount(() => {
+		try {
+			const joined = localStorage.getItem(STORAGE_KEY);
+			if (joined) {
+				email = joined;
+				status = 'done';
+			}
+		} catch {
+			// Storage blocked (private mode, disabled cookies): show the form.
+		}
+	});
 
 	async function expand() {
 		open = true;
@@ -50,6 +65,11 @@
 			});
 			if (!response.ok) throw new Error(String(response.status));
 			status = 'done';
+			try {
+				localStorage.setItem(STORAGE_KEY, address);
+			} catch {
+				// Not remembered across visits; joining still worked.
+			}
 		} catch {
 			status = 'error';
 			error = 'That didn’t go through. Check your connection and try again.';
