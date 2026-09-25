@@ -30,7 +30,7 @@ test('a schema repair preserves all seven evidence rounds and the final result t
 	}) as typeof fetch;
 	const tools: string[] = [];
 	const result = await runJsonAgent({ label: 'correctness', system: '', user: '', config, budget, evidence,
-		maxTurns: REVIEW_POLICY.maxSpecialistTurns, signal: new AbortController().signal,
+		maxTurns: 8, signal: new AbortController().signal,
 		deadlineAt: Date.now() + 300_000, parse: parseSpecialistOutput,
 		onTool: (tool) => { if (tool.status === 'done') tools.push(tool.command); }
 	});

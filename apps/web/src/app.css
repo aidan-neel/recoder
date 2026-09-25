@@ -599,6 +599,43 @@ body {
 	background-color: var(--success-tint);
 }
 
+/* Verification pill: proven by a run (success tint) or not (neutral). */
+[data-ui='badge'][data-verify='verified'] {
+	color: var(--success);
+	background-color: var(--success-tint);
+}
+[data-ui='badge'][data-verify='unverified'] {
+	color: var(--text-subtle);
+	background-color: var(--bg-bubble);
+}
+.verify-trigger {
+	flex-shrink: 0;
+}
+/* Focus detail: what the run showed, under the finding body. */
+.verify-note {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--text-muted);
+}
+.verify-note-icon {
+	margin-top: 3px;
+	flex-shrink: 0;
+}
+.verify-note[data-status='verified'] .verify-note-icon {
+	color: var(--success);
+}
+.verify-note code {
+	padding: 1px 5px;
+	border-radius: 4px;
+	background: var(--bg-bubble);
+	font-family: var(--font-code);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
 /* Toolbar severity chips: 32px, radius 9, 12.5/500, colored text on tint. */
 [data-ui='button'].severity-chip {
 	height: 32px;
@@ -1535,25 +1572,30 @@ kbd.keycap {
 	background-color: var(--sev-medium);
 }
 
-/* Copy / retry under an assistant reply: faint until hovered, like the rest of the chrome. */
+/* Copy / retry under an assistant reply: right-aligned, faint until hovered.
+   Styled through the container because Sivir's CopyButton puts `class` on its tooltip wrapper. */
 [data-ui='message'] .message-actions {
 	display: flex;
+	align-self: stretch;
+	justify-content: flex-end;
 	gap: 2px;
 	margin-top: 2px;
-	margin-left: -6px;
+	margin-right: -4px;
 }
-[data-ui='button'][data-variant][data-size].message-action {
-	width: 26px;
-	height: 26px;
-	min-height: 26px;
+.message-actions [data-ui='button'][data-variant][data-size] {
+	width: 24px;
+	min-width: 24px;
+	height: 24px;
+	min-height: 24px;
+	padding: 0;
 	color: var(--text-faint);
 }
-[data-ui='button'][data-variant][data-size].message-action:hover {
+.message-actions [data-ui='button'][data-variant][data-size]:hover {
 	color: var(--text-primary);
 }
-[data-ui='button'][data-variant][data-size].message-action svg {
-	width: 13px;
-	height: 13px;
+.message-actions [data-ui='button'] svg {
+	width: 12px;
+	height: 12px;
 }
 
 /* Draft review: the orchestrator's offer to run the full review, as a button under its reply. */
@@ -3269,7 +3311,7 @@ mark.palette-hit {
 	max-width: 740px;
 	margin-inline: auto;
 	padding: 30px 24px 180px;
-	gap: 18px;
+	gap: 14px;
 }
 [data-ui='message-content'].review-bubble {
 	max-width: 520px;
@@ -3287,8 +3329,8 @@ mark.palette-hit {
 }
 .review-prose [data-ui='markdown'] {
 	font-family: var(--font-ai);
-	font-size: 16px;
-	line-height: 1.55;
+	font-size: 15.5px;
+	line-height: 1.5;
 	color: var(--text-ai);
 }
 .review-prose [data-ui='markdown'] :is(p, li, h1, h2, h3, h4, h5, h6) {
@@ -3310,7 +3352,7 @@ mark.palette-hit {
 	color: var(--text-ai);
 }
 .review-chat[data-compact] .review-prose [data-ui='markdown'] {
-	font-size: 15px;
+	font-size: 14.5px;
 }
 .review-chat[data-compact] .review-prose [data-ui='markdown'] :not(pre) > code {
 	font-size: 12.5px;
@@ -3319,10 +3361,118 @@ mark.palette-hit {
 	font-size: 13px;
 }
 
+/* Model reasoning reads as quiet notes: gray, regular weight, headings included. */
+.thought-body [data-ui='markdown'],
+.thought-body [data-ui='markdown'] :is(p, li, h1, h2, h3, h4, h5, h6, strong, b) {
+	font-weight: 400;
+	color: var(--text-subtle);
+}
+.thought-body [data-ui='markdown'] :is(h1, h2, h3, h4, h5, h6) {
+	font-size: inherit;
+	line-height: inherit;
+	letter-spacing: normal;
+}
+
+/* Thinking → Thought for: crossfade through a blur, timer glides, glyph folds away. */
+.thought-label {
+	--tl-settle: 350ms;
+	display: inline-flex;
+	align-items: center;
+	vertical-align: top;
+	white-space: nowrap;
+}
+.thought-label-glyph {
+	display: inline-flex;
+	width: 0;
+	margin-right: 0;
+	overflow: hidden;
+	opacity: 0;
+	transition:
+		width var(--tl-settle) cubic-bezier(0.23, 1, 0.32, 1),
+		margin var(--tl-settle) cubic-bezier(0.23, 1, 0.32, 1),
+		opacity var(--tl-settle) ease;
+}
+.thought-label[data-working] .thought-label-glyph {
+	width: 12px;
+	margin-right: 8px;
+	opacity: 1;
+}
+.thought-label-stack {
+	display: inline-grid;
+}
+.thought-label-text {
+	grid-area: 1 / 1;
+	width: max-content;
+	opacity: 0;
+	filter: blur(2px);
+	transition:
+		opacity var(--tl-settle) cubic-bezier(0.23, 1, 0.32, 1),
+		filter var(--tl-settle) cubic-bezier(0.23, 1, 0.32, 1);
+}
+.thought-label-text[data-active] {
+	opacity: 1;
+	filter: blur(0);
+}
+.thought-label-time {
+	margin-left: 0.3em;
+	font-variant-numeric: tabular-nums;
+	opacity: 0.7;
+	transition: transform var(--tl-settle) cubic-bezier(0.77, 0, 0.175, 1);
+}
+.thought-label[data-working] {
+	color: var(--text-secondary);
+}
+@media (prefers-reduced-motion: reduce) {
+	.thought-label-text {
+		filter: none;
+	}
+	.thought-label-time,
+	.thought-label-glyph {
+		transition: opacity var(--tl-settle) ease;
+	}
+}
+
+/* Thinking: 3×3 dots, brightness wave running corner to corner. */
+.dot-loader {
+	display: inline-grid;
+	grid-template-columns: repeat(3, 3px);
+	gap: 1.5px;
+	flex-shrink: 0;
+}
+.dot-loader > span {
+	width: 3px;
+	height: 3px;
+	border-radius: 999px;
+	background: var(--text-primary);
+	opacity: 0.18;
+	animation: rc-dot-wave 1.1s ease-in-out infinite;
+	animation-delay: calc(var(--d) * 110ms);
+}
+@keyframes rc-dot-wave {
+	0%, 100% { opacity: 0.18; }
+	40% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+	.dot-loader > span {
+		animation: none;
+		opacity: 0.6;
+	}
+}
+
 /* Tool group rows (inside a Disclosure body). */
 .tool-row-action {
 	width: 62px;
 	flex-shrink: 0;
+}
+/* Exit code after a command's target: quiet on success, amber when non-zero (often the repro doing its job). */
+.tool-row-exit {
+	flex-shrink: 0;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-faint);
+}
+.tool-row-exit[data-failed] {
+	color: var(--sev-medium);
 }
 .tool-row-target {
 	flex: 1;
@@ -3496,6 +3646,24 @@ button.fact-link:hover {
 .specialist-chevron {
 	flex-shrink: 0;
 	color: var(--text-ghost);
+}
+/* Specialist conversation bar: back to Orchestrator, name, status on the right. */
+.agent-nav {
+	gap: 6px;
+}
+.agent-name {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--text-primary);
+}
+.agent-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	white-space: nowrap;
+}
+.agent-status[data-tone='danger'] {
+	color: var(--sev-high);
 }
 [data-ui='badge'].status-chip {
 	display: inline-flex;
@@ -3679,6 +3847,10 @@ button.fact-link:hover {
 	border-radius: 0;
 	font-weight: 400;
 	text-align: left;
+}
+/* Full-width rows: no press scale (it pulls the row off the card edges). */
+:is(.rail-finding, .rail-specialist, .specialist-row).sivir-press:active:not(:disabled):not([aria-disabled='true']) {
+	scale: none;
 }
 [data-ui='button'][data-variant].rail-finding {
 	align-items: flex-start;
@@ -4245,12 +4417,6 @@ button.fact-link:hover {
 	height: 24px;
 	min-height: 24px;
 	font-size: 12px;
-}
-.diff-loading {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	padding: 16px 20px;
 }
 
 /* Diff lines: 44 44 18 1fr, mono 12.5/22. */
@@ -5107,6 +5273,28 @@ button.diff-num:hover {
 [data-ui='card'].focus-card[data-active] {
 	box-shadow: 0 0 0 1px var(--line-hover), 0 6px 20px rgba(0, 0, 0, 0.3);
 }
+/* Dismissed findings (Show dismissed): flat and dimmed, below the open ones. */
+[data-ui='card'].focus-card[data-dismissed] {
+	background: transparent;
+	box-shadow: 0 0 0 1px var(--line-card);
+}
+[data-ui='card'].focus-card[data-dismissed] .focus-card-body {
+	color: var(--text-subtle);
+}
+.focus-filter-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 8px;
+	padding: 8px 4px 2px;
+	border-top: 1px solid var(--line-subtle);
+}
+.focus-filter-count {
+	margin-left: auto;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-faint);
+}
 .focus-card-select {
 	display: flex;
 	width: 100%;
@@ -5430,8 +5618,7 @@ button.diff-num:hover {
 		.diff-file-header,
 		.review-file-diff,
 		.focus-list-head,
-		.focus-detail-column > *,
-		.diff-loading > *
+		.focus-detail-column > *
 	) {
 	animation: rc-enter var(--dur-enter) var(--ease-menu) both;
 	animation-delay: calc(40ms + var(--stage, 0) * 45ms);
@@ -5462,7 +5649,6 @@ button.diff-num:hover {
 .focus-list-head { --stage: 0; }
 .focus-detail-column > :nth-child(1) { --stage: 0; }
 .focus-detail-column > :nth-child(2) { --stage: 2; }
-.diff-loading > * { --stage: 0; }
 /* A file switch in the diff re-mounts only the code, so it gets a quicker rise. */
 .diff-file-header ~ [data-ui='scroll-area'] .review-file-diff {
 	animation-duration: 180ms;
@@ -5482,8 +5668,7 @@ button.diff-num:hover {
 			.diff-file-header,
 			.review-file-diff,
 			.focus-list-head,
-			.focus-detail-column > *,
-			.diff-loading > *
+			.focus-detail-column > *
 		) {
 		animation: none;
 	}

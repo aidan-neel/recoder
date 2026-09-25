@@ -39,10 +39,23 @@
 		message: spec.operation, updatedAt: iso(0), startedAt: iso(80)
 	}));
 	const findings: ReviewingFinding[] = ['high', 'medium', 'medium', 'low'].map((severity, i) => ({ id: `example-${i}`, agent: 'testing', severity: severity as ReviewingFinding['severity'], title: 'Example finding', location: null }));
-	const toolCalls: ReviewToolCall[] = specs.map((spec) => ({
-		id: `${spec.id}-tool`, assignmentId: spec.id, role: spec.id, command: 'rg -n "status" packages/cli',
-		status: 'done', exitCode: 0, startedAt: iso(70), elapsedMs: 220, summary: '3 matches'
-	}));
+	const repro = 'packages/cli/src/recoder-repro.test.ts';
+	const toolCalls: ReviewToolCall[] = [
+		...specs.map((spec) => ({
+			id: `${spec.id}-tool`, assignmentId: spec.id, role: spec.id, command: 'rg -n "status" packages/cli',
+			status: 'done' as const, exitCode: 0, startedAt: iso(70), elapsedMs: 220, summary: '3 matches'
+		})),
+		{
+			id: 'testing-write', assignmentId: 'testing', role: 'testing', command: `write ${repro}`, input: { action: 'writeFile', path: repro },
+			status: 'done', exitCode: null, startedAt: iso(66), elapsedMs: 90, summary: repro,
+			result: { content: `Wrote ${repro} (6 lines).\nimport { expect, test } from 'bun:test';\nimport { status } from './status';\n\ntest('status prints a line for an empty queue', () => {\n\texpect(status([])).toBe('No pending jobs');\n});`, truncated: false }
+		},
+		{
+			id: 'testing-run', assignmentId: 'testing', role: 'testing', command: `$ bun test ${repro}`, input: { action: 'run', command: `bun test ${repro}` },
+			status: 'done', exitCode: 1, startedAt: iso(64), elapsedMs: 1840, summary: 'exit 1',
+			result: { content: `$ bun test ${repro}\n(fail) status prints a line for an empty queue\n  Expected: "No pending jobs"\n  Received: ""\n\n 0 pass\n 1 fail\n[exit 1 · 1.8s]`, truncated: false, evidenceId: 'ev_9' }
+		}
+	];
 	// `?state=running` previews artboard 3b: a review mid-flight.
 	const running = page.url.searchParams.get('state') === 'running';
 	const liveSpecs = [
@@ -70,12 +83,26 @@
 	}));
 	const liveReasoning: ReviewReasoningEntry[] = [{ id: 'live-reasoning', assignmentId: ORCHESTRATOR_ID, model, at: iso(132), status: 'done', text: 'Reading the diff to scope specialists.' }];
 
+	/** Streams the canned reply in network-sized chunks, like a live provider. */
 	async function send(assignmentId: string, text: string) {
 		const at = new Date().toISOString();
+		const reply = 'This is an interactive design preview. Open a session from the top bar to discuss a real pull request with the review agents. Replies stream in as the model writes them, so you can start reading before it finishes.';
+		const id = crypto.randomUUID();
 		messages = [...messages,
 			{ id: crypto.randomUUID(), assignmentId, from: 'user', text, at, status: 'done', discussion: true },
-			{ id: crypto.randomUUID(), assignmentId, from: 'assistant', text: 'This is an interactive design preview. Open a session from the sidebar to discuss a real pull request with the review agents.', at, status: 'done', discussion: true }
+			{ id, assignmentId, from: 'assistant', text: '', at, status: 'streaming', discussion: true }
 		];
+		const update = (patch: Partial<ReviewChatMessage>) => (messages = messages.map((message) => message.id === id ? { ...message, ...patch } : message));
+		// Like the real API: sending resolves at once, the reply streams after.
+		void (async () => {
+			await new Promise((resolve) => setTimeout(resolve, 700));
+			for (let end = 0; end < reply.length;) {
+				end = Math.min(reply.length, end + 18 + Math.floor(Math.random() * 30));
+				update({ text: reply.slice(0, end) });
+				await new Promise((resolve) => setTimeout(resolve, 90 + Math.random() * 160));
+			}
+			update({ status: 'done' });
+		})();
 	}
 </script>
 
@@ -86,7 +113,7 @@
 		title="Move rate limiter into a class with injectable clock"
 		meta={{ prLabel: '#4127', repo: 'ledger-api', branch: 'rate-limit/clock', files: 6, additions: 73, deletions: 34, elapsed: '2:14' }}
 		assignments={liveAssignments} messages={liveMessages} toolCalls={liveTools} reasoning={liveReasoning} orchestratorModel={model}
-		findings={[]} stage={2} stageLabel="Specialist review" active completedAt={undefined}
+		findings={[]} stage={3} stageLabel="Specialist review" active completedAt={undefined}
 		onSend={send} onOpenDiff={() => diffOpen = true} onRestart={null} />
 {:else}
 {#key previewKey}
@@ -96,7 +123,7 @@
 		assignments={awaitingPrompt ? [] : assignments}
 		tasks={awaitingPrompt ? [] : [...tasks, { id: 'consolidation', label: 'Finalize review', message: 'Complete', status: 'done', elapsedMs: 20000, updatedAt: iso(0) }]}
 		reasoning={awaitingPrompt ? [] : reasoning} {messages} toolCalls={awaitingPrompt ? [] : toolCalls} orchestratorModel={model}
-		findings={awaitingPrompt ? [] : findings} stage={4} stageLabel="Review complete" active={false} {awaitingPrompt} completedAt={awaitingPrompt ? undefined : iso(0)}
+		findings={awaitingPrompt ? [] : findings} stage={6} stageLabel="Review complete" active={false} {awaitingPrompt} completedAt={awaitingPrompt ? undefined : iso(0)}
 		planSummary={'I created 3 specialists for this review:\n\n- Test coverage\n- Complexity\n- Documentation'}
 		onSend={send} onOpenDiff={() => diffOpen = true}
 		onRestart={() => { messages = []; awaitingPrompt = true; previewKey++; }} />

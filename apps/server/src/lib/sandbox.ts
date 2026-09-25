@@ -4,6 +4,7 @@ import { runCommand } from '../commands/runner.js';
 import { env } from '../env.js';
 import type { Provider } from '@recoder/shared';
 import type { ReviewRevision } from './evidence.js';
+import { sandboxLayout } from './exec-sandbox.js';
 
 export interface Sandbox {
 	key: string;
@@ -146,7 +147,8 @@ export async function sandboxDiff(path: string, baseRef: string, overrides?: Rec
 	return (await sandboxRevisionDiff(path, baseRef, overrides, provider)).diff;
 }
 
-/** Remove a sandbox checkout. No retention policy yet — call explicitly. */
+/** Remove a sandbox checkout and its dependency cache. No retention policy yet — call explicitly. */
 export async function removeSandbox(path: string): Promise<void> {
 	await rm(path, { recursive: true, force: true });
+	await rm(sandboxLayout(path).cacheDir, { recursive: true, force: true });
 }

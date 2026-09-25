@@ -16,6 +16,9 @@ export type ReviewTaskKind =
 	| 'retrieval'
 	| 'model'
 	| 'consolidation'
+	| 'setup'
+	| 'checks'
+	| 'verification'
 	| 'other';
 
 export type CoverageState = 'pending' | 'reviewed' | 'partial' | 'excluded';
@@ -24,7 +27,7 @@ export type ReviewOutcome = 'complete' | 'partial' | 'failed';
 
 export type RoleDecisionKind = 'selected' | 'not_needed' | 'deferred';
 
-export type ReviewStage = 'checkout' | 'understand' | 'specialists' | 'consolidation';
+export type ReviewStage = 'checkout' | 'understand' | 'checks' | 'specialists' | 'verify' | 'consolidation';
 
 export type AssignmentStatus =
 	| 'queued'
@@ -121,6 +124,8 @@ export interface ReviewReasoningEntry {
 	at: string;
 	text: string;
 	status?: 'streaming' | 'done' | 'error';
+	/** The provider only returns a summary of its reasoning (ChatGPT), so the text is dropped and only the timing is kept. */
+	summary?: boolean;
 }
 
 /** One observable model tool/retrieval call, with its result and timing. */
@@ -148,6 +153,9 @@ export interface ReviewToolCall {
 		query?: string;
 		hunkIds?: string[];
 		cursor?: string;
+		/** `run`: the shell command executed in the review sandbox. */
+		command?: string;
+		timeoutSec?: number;
 	};
 	/** Bounded preview of the evidence returned to the agent. */
 	result?: {

@@ -11,6 +11,7 @@
 	import FixStatus from './fix-status.svelte';
 	import FixChecks from './fix-checks.svelte';
 	import SeverityPill from './ui/severity-pill.svelte';
+	import VerificationBadge from './verification-badge.svelte';
 	import { SEVERITY_DOT, findingsStore, type Finding } from '$lib/findings.svelte';
 	import { formatAgentName, threadsStore } from '$lib/threads.svelte';
 	import { modelLabel } from '$lib/model-settings.svelte';
@@ -53,6 +54,7 @@
 			{:else}
 				<div class="inline-finding-head">
 					{#if accepted}<SeverityPill tone="success">Fixed</SeverityPill>{:else}<FindingSeverity severity={finding.severity} />{/if}
+					{#if finding.verification && !accepted}<VerificationBadge verification={finding.verification} />{/if}
 					<span class="min-w-0 truncate">{finding.category}</span>
 					{#if finding.code}<span class="inline-finding-id">{finding.code}</span>{/if}
 				</div>

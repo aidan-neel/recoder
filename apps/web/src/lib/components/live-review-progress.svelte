@@ -52,17 +52,21 @@
 		line: finding.line ?? null,
 		confirmed
 	})) : []);
+	// Indexes match the steps in review-steps.svelte.
 	const stageIndex = $derived(
-		status === 'passed' ? 4
-			: progress.stage === 'consolidation' || progress.tasks.finalize ? 3
-			: progress.stage === 'specialists' || (assignments.length > 0) ? 2
+		status === 'passed' ? 6
+			: progress.stage === 'consolidation' || progress.tasks.finalize ? 5
+			: progress.stage === 'verify' ? 4
+			: progress.stage === 'specialists' ? 3
+			: progress.stage === 'checks' ? 2
+			: assignments.length > 0 ? 3
 			: progress.stage === 'understand' || progress.tasks.inventory || progress.tasks.planning ? 1
 			: 0
 	);
 	const currentStage = $derived(
 		status === 'passed' ? 'Review complete'
 			: status === 'failed' ? (progress.outcome === 'partial' ? 'Review incomplete' : 'Review interrupted')
-			: ['Checkout', 'Understand changes', 'Specialist review', 'Consolidation'][stageIndex]
+			: ['Checkout', 'Understand changes', 'Running checks', 'Specialist review', 'Verifying findings', 'Consolidation'][stageIndex]
 	);
 	const displayAssignments = $derived<ReviewAssignment[]>([...assignments, {
 		id: pipelineId, role: 'pipeline', title: 'Review pipeline', reason: 'Planning and saving results',
@@ -101,7 +105,8 @@
 	{restarting}
 	stage={stageIndex}
 	stageLabel={currentStage}
-	stageDetail={stageIndex === 0 ? progress.tasks[['fetch', 'sandbox', 'diff'].find((id) => progress.tasks[id]?.status === 'running') ?? 'fetch']?.message : undefined}
+	stageDetail={stageIndex === 0 ? progress.tasks[['fetch', 'sandbox', 'diff'].find((id) => progress.tasks[id]?.status === 'running') ?? 'fetch']?.message
+		: stageIndex === 2 ? (progress.tasks.checks ?? progress.tasks.setup)?.message : undefined}
 	failed={status === 'failed'}
 	errorMessage={actionError ?? (status === 'failed' && !progress.assignments?.length ? review.summary : null)}
 	{connectionLabel}

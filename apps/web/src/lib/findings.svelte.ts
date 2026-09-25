@@ -68,6 +68,8 @@ export interface Finding {
 	/** Tool results the reviewer cited (`ev_…`), matched against the review's tool calls. */
 	evidenceIds?: string[];
 	assignmentId?: string;
+	/** Whether a run in the review sandbox proved it. Older reviews omit it. */
+	verification?: import('@recoder/shared').FindingVerification;
 	status: FindingStatus;
 }
 
@@ -86,6 +88,12 @@ function initialFindings(): Finding[] {
 			file: FILE,
 			startLine: 28,
 			endLine: 31,
+			verification: {
+				status: 'verified',
+				reason: 'A repro that takes 10 requests as tenant A leaves tenant B with 0 tokens.',
+				command: 'bun test src/rate-limit/recoder-repro.test.ts',
+				exitCode: 1
+			},
 			status: 'open'
 		},
 		{
@@ -96,6 +104,7 @@ function initialFindings(): Finding[] {
 			category: 'perf',
 			agent: 'perf',
 			body: 'buckets Map has no eviction, so it grows once per key forever',
+			verification: { status: 'unverified', reason: 'Growth over hours of traffic cannot be reproduced in a short run.' },
 			file: FILE,
 			startLine: 10,
 			endLine: 12,
@@ -181,6 +190,7 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 		endLine: f.endLine && f.endLine >= line ? f.endLine : line,
 		evidenceIds: f.evidenceIds ?? [],
 		assignmentId: f.assignmentId,
+		verification: f.verification,
 		status: 'open'
 	};
 }
@@ -207,6 +217,8 @@ class FindingsStore {
 	/** When true, info findings are omitted from the tree, diff, and navigator. */
 	hideInfo = $state(loadHideInfo());
 	hiddenSeverities = $state<FindingSeverity[]>([]);
+	/** Findings view: list dismissed findings (dimmed, with Restore) below the open ones. */
+	showDismissed = $state(false);
 
 	isSeverityShown(severity: FindingSeverity): boolean {
 		return !this.hiddenSeverities.includes(severity) && !(this.hideInfo && severity === 'info');

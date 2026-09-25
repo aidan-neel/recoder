@@ -1,6 +1,7 @@
 import { REVIEW_POLICY } from './review-policy.js';
 import type { ReviewInventory } from './inventory.js';
 import type { FileDiff, ReviewToolCall } from '@recoder/shared';
+import type { ExecWorkspace } from './exec-workspace.js';
 
 export type RevisionAlias = 'head' | 'target' | 'mergeBase';
 
@@ -21,10 +22,14 @@ export interface EvidenceRecord {
 	endLine: number;
 	content: string;
 	truncated: boolean;
+	/** A command run in the review sandbox, rather than a read of repository content. */
+	kind?: 'run';
+	command?: string;
+	exitCode?: number | null;
 }
 
 export interface RetrievalAction {
-	action: 'listFiles' | 'readFile' | 'search' | 'readDiff';
+	action: 'listFiles' | 'readFile' | 'search' | 'readDiff' | 'run' | 'writeFile';
 	revision?: string;
 	path?: string;
 	prefix?: string;
@@ -33,6 +38,11 @@ export interface RetrievalAction {
 	query?: string;
 	hunkIds?: string[];
 	cursor?: string;
+	/** run: shell command, executed offline in the review sandbox. */
+	command?: string;
+	timeoutSec?: number;
+	/** writeFile: full file content. */
+	content?: string;
 }
 
 /** Observable tool/retrieval call reported to the live review dashboard. */
@@ -50,6 +60,10 @@ export function actionCommand(action: RetrievalAction): string {
 			return `list ${action.prefix || '.'}`;
 		case 'readDiff':
 			return `readDiff ${action.path ?? 'scoped hunks'}`;
+		case 'run':
+			return `$ ${action.command ?? ''}`;
+		case 'writeFile':
+			return `write ${action.path ?? ''}`;
 		default: {
 			const name = (action as { action?: unknown }).action;
 			return typeof name === 'string' && name.trim() ? name : 'Unknown tool';
@@ -58,6 +72,10 @@ export function actionCommand(action: RetrievalAction): string {
 }
 
 function toolSummary(result: ToolResult): string {
+	if (result.action === 'run') {
+		if (result.exitCode === null || result.exitCode === undefined) return result.error ?? 'timed out';
+		return `exit ${result.exitCode}`;
+	}
 	if (!result.ok) return result.error ?? 'failed';
 	if (result.action === 'search') return `${result.matches ?? 0} match${result.matches === 1 ? '' : 'es'}`;
 	if (result.path) return `${result.path}${result.startLine ? `:${result.startLine}-${result.endLine ?? result.startLine}` : ''}`;
@@ -79,6 +97,8 @@ export interface ToolResult {
 	matches?: number;
 	/** readDiff: the hunks whose patch text this result contains. */
 	hunkIds?: string[];
+	/** run: the command's exit code; null when it timed out or was stopped. */
+	exitCode?: number | null;
 }
 
 const ALIASES: RevisionAlias[] = ['head', 'target', 'mergeBase'];
@@ -88,6 +108,10 @@ export class EvidenceStore {
 	private readonly cache = new Map<string, ToolResult>();
 	private seq = 0;
 	private toolSeq = 0;
+	/** Where `run` and `writeFile` execute; null keeps the review read-only. */
+	exec: ExecWorkspace | null = null;
+	/** Why `exec` is null, shown to agents that ask to run something. */
+	execUnavailable = 'Running code is unavailable in this review.';
 	constructor(
 		readonly revision: ReviewRevision | null,
 		readonly inventory: ReviewInventory,
@@ -121,6 +145,38 @@ export class EvidenceStore {
 		return paths.filter((path) => found.has(path));
 	}
 
+	private async run(action: RetrievalAction, signal?: AbortSignal): Promise<ToolResult> {
+		const command = typeof action.command === 'string' ? action.command.trim() : '';
+		if (!command || command.length > 4000) return { action: 'run', ok: false, error: 'command must be 1–4000 characters', content: '', truncated: false };
+		if (!this.exec) return { action: 'run', ok: false, error: this.execUnavailable, content: '', truncated: false };
+		const seconds = typeof action.timeoutSec === 'number' && action.timeoutSec > 0 ? action.timeoutSec : REVIEW_POLICY.defaultRunTimeoutMs / 1000;
+		const result = await this.exec.run(command, Math.min(seconds * 1000, REVIEW_POLICY.maxRunTimeoutMs), signal);
+		const status = result.timedOut ? `timed out after ${(result.elapsedMs / 1000).toFixed(1)}s` : `exit ${result.exitCode} · ${(result.elapsedMs / 1000).toFixed(1)}s`;
+		const content = `$ ${command}\n${result.output}${result.output.endsWith('\n') || !result.output ? '' : '\n'}[${status}]`;
+		const stored = this.remember({ revision: 'head', path: '', startLine: 1, endLine: 1, content, truncated: result.truncated, kind: 'run', command, exitCode: result.exitCode });
+		return {
+			action: 'run',
+			// A failing command is still evidence; only a run that never finished is an error.
+			ok: !result.timedOut,
+			error: result.timedOut ? status : undefined,
+			evidenceId: stored.id,
+			content,
+			truncated: result.truncated,
+			exitCode: result.exitCode
+		};
+	}
+
+	private async writeFile(action: RetrievalAction, signal?: AbortSignal): Promise<ToolResult> {
+		const path = sanitizeRepoPath(action.path);
+		if (!path) return { action: 'writeFile', ok: false, error: 'invalid path', content: '', truncated: false };
+		if (typeof action.content !== 'string') return { action: 'writeFile', ok: false, error: 'content must be a string', content: '', truncated: false, path };
+		if (!this.exec) return { action: 'writeFile', ok: false, error: this.execUnavailable, content: '', truncated: false, path };
+		const written = await this.exec.writeFile(path, action.content, signal);
+		if (!written.ok) return { action: 'writeFile', ok: false, error: written.error, content: '', truncated: false, path };
+		const lines = action.content.split('\n').length;
+		return { action: 'writeFile', ok: true, path, content: `Wrote ${path} (${lines} line${lines === 1 ? '' : 's'}).\n${action.content}`, truncated: false };
+	}
+
 	private remember(record: Omit<EvidenceRecord, 'id'>): EvidenceRecord {
 		const key = `${record.revision}:${record.path}:${record.startLine}-${record.endLine}:${record.content.length}`;
 		for (const existing of this.records.values()) {
@@ -150,9 +206,14 @@ export class EvidenceStore {
 		const actions = normalizeActions(rawActions).slice(0, maxActions);
 		const results: ToolResult[] = [];
 		let used = 0;
+		let runs = 0;
 		for (const action of actions) {
 			if (signal?.aborted) {
 				results.push({ action: action.action, ok: false, error: 'review aborted', content: '', truncated: false });
+				continue;
+			}
+			if (action.action === 'run' && ++runs > REVIEW_POLICY.maxRunsPerTurn) {
+				results.push({ action: 'run', ok: false, error: `at most ${REVIEW_POLICY.maxRunsPerTurn} run actions per turn; request it next turn`, content: '', truncated: false });
 				continue;
 			}
 			const toolId = `tool_${++this.toolSeq}`;
@@ -162,12 +223,13 @@ export class EvidenceStore {
 			const report = (tool: ToolCallReport) => {
 				try { onTool?.(tool); } catch { /* Observers cannot break retrieval. */ }
 			};
-			report({ id: toolId, command, input: action, status: 'running', exitCode: null, startedAt });
+			const input = reportedInput(action);
+			report({ id: toolId, command, input, status: 'running', exitCode: null, startedAt });
 			let result: ToolResult;
 			try {
 				result = await this.executeOne(action, signal);
 			} catch (error) {
-				report({ id: toolId, command, input: action, status: 'error', exitCode: null, startedAt,
+				report({ id: toolId, command, input, status: 'error', exitCode: null, startedAt,
 					finishedAt: new Date().toISOString(), elapsedMs: Date.now() - started,
 					summary: error instanceof Error ? error.message : 'Retrieval failed' });
 				throw error;
@@ -187,10 +249,10 @@ export class EvidenceStore {
 			results.push(result);
 			used += result.content.length;
 			report({
-				id: toolId, command, input: action,
+				id: toolId, command, input,
 				status: result.ok ? 'done' : 'error',
-				// Retrieval actions are not shell processes; do not invent exit codes.
-				exitCode: null, startedAt,
+				// Only `run` is a process; retrievals do not invent exit codes.
+				exitCode: result.exitCode ?? null, startedAt,
 				finishedAt: new Date().toISOString(), elapsedMs: Date.now() - started,
 				summary: toolSummary(result),
 				result: {
@@ -204,6 +266,9 @@ export class EvidenceStore {
 	}
 
 	private async executeOne(action: RetrievalAction, signal?: AbortSignal): Promise<ToolResult> {
+		// Runs and writes change state, so they are never served from the cache.
+		if (action.action === 'run') return this.run(action, signal);
+		if (action.action === 'writeFile') return this.writeFile(action, signal);
 		const cacheKey = JSON.stringify(action);
 		const cached = this.cache.get(cacheKey);
 		if (cached) return cached;
@@ -401,14 +466,16 @@ export class EvidenceStore {
 	}
 }
 
-const ACTION_NAMES = ['listFiles', 'readFile', 'search', 'readDiff'] as const;
+const ACTION_NAMES = ['listFiles', 'readFile', 'search', 'readDiff', 'run', 'writeFile'] as const;
 
 /** Names weaker models use for the four actions. */
 const ACTION_ALIASES: Record<string, (typeof ACTION_NAMES)[number]> = {
 	listfiles: 'listFiles', list_files: 'listFiles', list: 'listFiles', ls: 'listFiles',
 	readfile: 'readFile', read_file: 'readFile', read: 'readFile', open: 'readFile', cat: 'readFile', view: 'readFile',
 	search: 'search', grep: 'search', find: 'search', search_code: 'search', searchcode: 'search',
-	readdiff: 'readDiff', read_diff: 'readDiff', diff: 'readDiff', getdiff: 'readDiff', get_diff: 'readDiff'
+	readdiff: 'readDiff', read_diff: 'readDiff', diff: 'readDiff', getdiff: 'readDiff', get_diff: 'readDiff',
+	run: 'run', bash: 'run', shell: 'run', sh: 'run', exec: 'run', execute: 'run', run_command: 'run', runcommand: 'run', terminal: 'run',
+	writefile: 'writeFile', write_file: 'writeFile', write: 'writeFile', create_file: 'writeFile', createfile: 'writeFile'
 };
 
 function actionName(value: unknown): (typeof ACTION_NAMES)[number] | null {
@@ -431,12 +498,19 @@ function toInt(value: unknown): number | undefined {
 }
 
 /** Field names models reach for instead of ours: `pattern` → `query`, `file` → `path`, `lines: "10-40"` … */
-function canonicalFields(args: Record<string, unknown>): Record<string, unknown> {
+function canonicalFields(args: Record<string, unknown>, action?: string): Record<string, unknown> {
 	const out: Record<string, unknown> = { ...args };
 	const pick = (target: string, ...keys: string[]) => {
 		if (out[target] !== undefined) return;
 		for (const key of keys) if (out[key] !== undefined) { out[target] = out[key]; delete out[key]; return; }
 	};
+	if (action === 'run') {
+		pick('command', 'cmd', 'script', 'shell', 'bash');
+		pick('timeoutSec', 'timeout', 'timeout_sec', 'timeoutSeconds');
+		if (Array.isArray(out.command)) out.command = out.command.filter((part) => typeof part === 'string').join(' ');
+		if (out.timeoutSec !== undefined) out.timeoutSec = toInt(out.timeoutSec);
+	}
+	if (action === 'writeFile') pick('content', 'contents', 'text', 'body', 'code', 'data');
 	pick('query', 'pattern', 'regex', 'text', 'term', 'q', 'keyword', 'symbol');
 	pick('path', 'file', 'filePath', 'file_path', 'filepath', 'filename', 'fileName');
 	pick('prefix', 'dir', 'directory', 'folder', 'scope');
@@ -472,13 +546,13 @@ function canonicalAction(item: Record<string, unknown>): RetrievalAction {
 		const args = typeof rawArgs === 'string' ? safeJson(rawArgs) : rawArgs;
 		const rest = { ...item };
 		for (const key of ['action', 'name', 'tool', 'type', 'function', 'arguments', 'args', 'input', 'parameters', 'params']) delete rest[key];
-		return { ...canonicalFields({ ...rest, ...(args && typeof args === 'object' ? (args as object) : {}) }), action: named } as RetrievalAction;
+		return { ...canonicalFields({ ...rest, ...(args && typeof args === 'object' ? (args as object) : {}) }, named), action: named } as RetrievalAction;
 	}
 	const keys = Object.keys(item);
 	const key = keys.length === 1 ? actionName(keys[0]) : null;
 	if (key) {
 		const args = item[keys[0]];
-		return { ...canonicalFields(args && typeof args === 'object' ? (args as Record<string, unknown>) : {}), action: key } as RetrievalAction;
+		return { ...canonicalFields(args && typeof args === 'object' ? (args as Record<string, unknown>) : typeof args === 'string' && key === 'run' ? { command: args } : {}, key), action: key } as RetrievalAction;
 	}
 	return item as unknown as RetrievalAction;
 }
@@ -509,6 +583,12 @@ export function parseActions(parsed: unknown): RetrievalAction[] | null {
 	}
 	if (isAction(obj)) return [canonicalAction(obj)];
 	return null;
+}
+
+/** What the dashboard shows as the tool's input: file content is the result, not the request. */
+function reportedInput(action: RetrievalAction): ToolCallReport['input'] {
+	const { content: _content, ...rest } = action;
+	return rest;
 }
 
 function normalizeActions(raw: unknown): RetrievalAction[] {

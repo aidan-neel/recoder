@@ -42,6 +42,7 @@ export function consolidationSystemPrompt(): string {
 You may keep, merge, clarify, or reject candidates. You cannot invent findings or evidence.
 Do not drop an issue solely because a previous review reported it.
 Do not merge distinct issues that happen to share a file or line.
+A candidate marked "verified" was reproduced by a command that ran in the review sandbox; reject it only as a duplicate or when it is out of this PR's scope. An "unverified" candidate could not be proven by running code: keep it only when the cited code evidence clearly supports it.
 Output STRICT JSON: {"message":string,"keep":[candidateId],"merge":[{"keepId","mergeIds","body?"}],"reject":[{"id","reason"}],"recommendedChecks":[string]}
 Every candidate id must appear in keep, merge, or reject.`;
 }
@@ -49,13 +50,16 @@ Every candidate id must appear in keep, merge, or reject.`;
 export function consolidationUserPrompt(candidates: CandidateFinding[], evidence: EvidenceStore): string {
 	const lines = candidates.map((candidate) => {
 		const loc = candidate.side === 'old' ? `${candidate.file}${candidate.line ? `:${candidate.line}` : ''} (old)` : `${candidate.file}${candidate.line ? `:${candidate.line}` : ''}`;
-		return `${candidate.candidateId} [${candidate.agent}/${candidate.assignmentId}] ${candidate.severity} ${loc}\n${candidate.message}\nevidence: ${(candidate.evidenceIds ?? []).join(', ') || '(none)'}`;
+		const verification = candidate.verification
+			? `\n${candidate.verification.status}: ${candidate.verification.reason}${candidate.verification.command ? ` (\`${candidate.verification.command}\`)` : ''}`
+			: '';
+		return `${candidate.candidateId} [${candidate.agent}/${candidate.assignmentId}] ${candidate.severity} ${loc}\n${candidate.message}${verification}\nevidence: ${(candidate.evidenceIds ?? []).join(', ') || '(none)'}`;
 	});
 	const cited = new Set(candidates.flatMap((candidate) => candidate.evidenceIds ?? []));
 	const records = [...evidence.records.values()].filter((record) => cited.has(record.id));
 	const perRecord = Math.max(200, Math.floor(32_000 / Math.max(1, records.length)));
 	const evidenceNotes = records
-		.map((record) => `${record.id} ${record.revision} ${record.path}:${record.startLine}-${record.endLine}\nUNTRUSTED EVIDENCE:\n${record.content.slice(0, perRecord)}${record.content.length > perRecord ? '\n[excerpt truncated; do not assume omitted content]' : ''}`)
+		.map((record) => `${record.id} ${record.kind === 'run' ? `run: ${record.command}` : `${record.revision} ${record.path}:${record.startLine}-${record.endLine}`}\nUNTRUSTED EVIDENCE:\n${record.content.slice(0, perRecord)}${record.content.length > perRecord ? '\n[excerpt truncated; do not assume omitted content]' : ''}`)
 		.join('\n');
 	return `Candidates:\n${lines.join('\n\n')}\n\nEvidence index:\n${evidenceNotes || '(none)'}`;
 }
@@ -132,10 +136,17 @@ export function applyConsolidation(
 		const keep = byId.get(merge.keepId);
 		if (!keep || consumed.has(merge.keepId)) continue;
 		const related = [...(keep.relatedLocations ?? [])];
+		let verification = keep.verification;
+		let evidenceIds = keep.evidenceIds;
 		for (const id of merge.mergeIds) {
 			const extra = byId.get(id);
 			if (!extra) continue;
 			consumed.add(id);
+			// A merged duplicate that was reproduced proves the kept finding too.
+			if (extra.verification?.status === 'verified' && verification?.status !== 'verified') {
+				verification = extra.verification;
+				evidenceIds = [...new Set([...(extra.evidenceIds ?? []), ...(evidenceIds ?? [])])];
+			}
 			related.push({ file: extra.file, line: extra.line, endLine: extra.endLine, side: extra.side });
 			related.push(...(extra.relatedLocations ?? []));
 		}
@@ -143,7 +154,9 @@ export function applyConsolidation(
 		confirmed.push({
 			...keep,
 			message: merge.body ? `[${keep.category ?? 'issue'}] ${merge.body}` : keep.message,
-			relatedLocations: related
+			relatedLocations: related,
+			evidenceIds,
+			verification
 		});
 	}
 

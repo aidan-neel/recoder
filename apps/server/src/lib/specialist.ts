@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { REVIEW_ROLES, ROLE_FOCUS, ROLE_LABELS, type ReviewRole } from './roles.js';
 import { REVIEW_POLICY } from './review-policy.js';
-import { SHARED_REVIEW_CONTRACT } from './prompts.js';
+import { EXEC_REVIEW_CONTRACT, SHARED_REVIEW_CONTRACT } from './prompts.js';
 import type { PlannerAssignment } from './planner.js';
 
 const locationSchema = z.object({
@@ -59,8 +59,8 @@ export const specialistOutputSchema = z.object({
 export type SpecialistOutput = z.infer<typeof specialistOutputSchema>;
 export type SpecialistFinding = z.infer<typeof findingSchema>;
 
-export function specialistSystemPrompt(role: ReviewRole): string {
-	return `${SHARED_REVIEW_CONTRACT}
+export function specialistSystemPrompt(role: ReviewRole, exec = false): string {
+	return `${exec ? EXEC_REVIEW_CONTRACT : SHARED_REVIEW_CONTRACT}
 
 Role: ${ROLE_LABELS[role]} (${role})
 Focus: ${ROLE_FOCUS[role]}`;

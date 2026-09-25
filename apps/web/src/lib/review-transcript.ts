@@ -9,7 +9,7 @@ export function toolPresentation(tool: Pick<ReviewToolCall, 'command' | 'input'>
 	const text = (value: unknown): string => typeof value === 'string' ? value.trim() : '';
 	const command = text(tool.command);
 	const action = text(tool.input?.action) || command.split(/\s+/)[0];
-	const target = text(tool.input?.path) || text(tool.input?.query) || text(tool.input?.prefix) || command.replace(/^\S+\s*/, '');
+	const target = text(tool.input?.command) || text(tool.input?.path) || text(tool.input?.query) || text(tool.input?.prefix) || command.replace(/^\S+\s*/, '');
 	return { action, target, name: command || [action || 'Tool request', target].filter(Boolean).join(' ') };
 }
 
@@ -30,18 +30,29 @@ export function groupTranscript(messages: ReviewChatMessage[], tools: ReviewTool
 	return groups;
 }
 
-/** "Read 4 files, searched once": the group header, written as a sentence. */
+/** Glyph and failure count for a tool group; a tool still "running" after the review stopped failed. */
+export function taskGroupStatus(tools: ReviewToolCall[], active: boolean): { status: 'running' | 'error' | 'done'; failed: number } {
+	const failed = tools.filter((tool) => tool.status === 'error' || (!active && tool.status === 'running')).length;
+	const running = active && tools.some((tool) => tool.status === 'running');
+	return { status: running ? 'running' : failed ? 'error' : 'done', failed };
+}
+
+/** "Ran 2 commands, read 4 files": the group header, written as a sentence. */
 export function taskGroupLabel(tools: ReviewToolCall[]): string {
-	let reads = 0, searches = 0, listings = 0, other = 0;
+	let runs = 0, writes = 0, reads = 0, searches = 0, listings = 0, other = 0;
 	for (const tool of tools) {
 		const { action } = toolPresentation(tool);
-		if (['read', 'readFile', 'readDiff'].includes(action)) reads++;
+		if (action === 'run' || action === '$') runs++;
+		else if (action === 'writeFile') writes++;
+		else if (['read', 'readFile', 'readDiff'].includes(action)) reads++;
 		else if (['search', 'rg'].includes(action)) searches++;
 		else if (['list', 'listFiles'].includes(action)) listings++;
 		else other++;
 	}
 	const times = (n: number) => n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`;
 	const parts = [
+		runs ? `ran ${runs} ${runs === 1 ? 'command' : 'commands'}` : '',
+		writes ? `wrote ${writes} ${writes === 1 ? 'file' : 'files'}` : '',
 		reads ? `read ${reads} ${reads === 1 ? 'file' : 'files'}` : '',
 		searches ? `searched ${times(searches)}` : '',
 		listings ? `listed files ${times(listings)}` : '',

@@ -139,7 +139,7 @@ export function demoState(t: number) {
 		summary: stream(summary, t, AT.summaryStart, AT.summaryEnd),
 		finished,
 		/** ReviewSteps index: prepare, plan, specialists, consolidate. */
-		step: finished ? 4 : t >= AT.finalizeStart ? 3 : t >= AT.specialists ? 2 : t >= AT.reasonStart ? 1 : 0,
+		step: finished ? 6 : t >= AT.finalizeStart ? 5 : t >= AT.specialists ? 3 : t >= AT.reasonStart ? 1 : 0,
 		elapsed: clock(t)
 	};
 }

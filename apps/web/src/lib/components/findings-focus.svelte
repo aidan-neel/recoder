@@ -2,6 +2,7 @@
 	import type { ReviewToolCall } from '@recoder/shared';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import CheckCheck from '@lucide/svelte/icons/check-check';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import ScanSearch from '@lucide/svelte/icons/scan-search';
@@ -11,6 +12,7 @@
 	import MessageSquare from '@lucide/svelte/icons/message-square';
 	import Search from '@lucide/svelte/icons/search';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import { Switch } from '@sivir-ui/svelte/components/switch';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
@@ -27,6 +29,7 @@
 	import FixStatus from './fix-status.svelte';
 	import FixChecks from './fix-checks.svelte';
 	import SeverityPill from './ui/severity-pill.svelte';
+	import VerificationBadge from './verification-badge.svelte';
 	import type { FileDiff } from '$lib/diff';
 	import { SEVERITIES, findingsStore, type Finding } from '$lib/findings.svelte';
 	import { formatAgentName, threadsStore } from '$lib/threads.svelte';
@@ -73,9 +76,10 @@
 	const RANK = { high: 0, medium: 1, low: 2, info: 3 } as const;
 	let query = $state('');
 	const ranked = $derived(findingsStore.items
-		.filter((finding) => finding.status !== 'dismissed' && findingsStore.isShown(finding))
+		.filter((finding) => (finding.status !== 'dismissed' || findingsStore.showDismissed) && findingsStore.isShown(finding))
 		.filter((finding) => !query.trim() || `${finding.title} ${finding.body} ${finding.file} ${finding.category}`.toLowerCase().includes(query.trim().toLowerCase()))
-		.sort((a, b) => RANK[a.severity] - RANK[b.severity] || a.file.localeCompare(b.file) || a.startLine - b.startLine));
+		.sort((a, b) => Number(a.status === 'dismissed') - Number(b.status === 'dismissed') || RANK[a.severity] - RANK[b.severity] || a.file.localeCompare(b.file) || a.startLine - b.startLine));
+	const needsYou = $derived(ranked.filter((finding) => finding.status !== 'dismissed').length);
 	const active = $derived(ranked.find((finding) => finding.id === findingsStore.activeId) ?? ranked[0]);
 	const suggestion = $derived(active ? findingsStore.suggestions[active.id] : undefined);
 
@@ -97,10 +101,14 @@
 		const numbers = focused?.hunks[0].lines.map((line) => line.newNo).filter((n): n is number => n !== null) ?? [];
 		return numbers.length ? [Math.min(...numbers), Math.max(...numbers)] : null;
 	});
+	/** The first cited result in citation order (a verified finding cites its proving run first). */
 	const evidence = $derived.by(() => {
-		if (!active?.evidenceIds?.length) return null;
-		const cited = toolCalls.filter((tool) => tool.result?.evidenceId && active.evidenceIds!.includes(tool.result.evidenceId) && tool.result.content);
-		return cited.find((tool) => tool.assignmentId === active.assignmentId) ?? cited[0] ?? null;
+		for (const id of active?.evidenceIds ?? []) {
+			const cited = toolCalls.filter((tool) => tool.result?.evidenceId === id && tool.result.content);
+			const pick = cited.find((tool) => tool.assignmentId === active!.assignmentId) ?? cited[0];
+			if (pick) return pick;
+		}
+		return null;
 	});
 
 	/** "Open in diff" only when the cited file is part of this pull request. */
@@ -119,6 +127,10 @@
 	function dismiss(finding: Finding): void {
 		findingsStore.dismiss(finding.id);
 		if (threadsStore.openId === finding.id) threadsStore.close();
+	}
+	function restore(finding: Finding): void {
+		findingsStore.reopen(finding.id);
+		findingsStore.discuss(finding.id);
 	}
 	const dir = (path: string) => path.slice(0, path.lastIndexOf('/') + 1);
 	const base = (path: string) => path.slice(path.lastIndexOf('/') + 1);
@@ -176,6 +188,9 @@
 				{:else if emptyKind === 'caught-up' && hiddenCount}
 					<Button variant="outline" onclick={() => findingsStore.showAllSeverities()}>Show all severities</Button>
 				{/if}
+				{#if emptyKind === 'caught-up' && dismissedCount}
+					<Button variant="ghost" onclick={() => (findingsStore.showDismissed = true)}>Show dismissed</Button>
+				{/if}
 				{#if onOpenDiff && emptyKind !== 'failed'}<Button variant="ghost" onclick={onOpenDiff}>Open diff</Button>{/if}
 				{#if onAsk && emptyKind !== 'running'}<Button variant="ghost" class="gap-1.5" onclick={onAsk}><MessageSquare size={14} aria-hidden="true" />Ask reviewer</Button>{/if}
 			</div>
@@ -187,7 +202,7 @@
 	<section class="focus-list" aria-label="Findings that need you">
 		<header class="focus-list-head">
 			<Typography.Title level={2} class="focus-list-title">Needs you</Typography.Title>
-			<span class="focus-list-meta"><span class="font-mono">{ranked.length}</span> by severity</span>
+			<span class="focus-list-meta"><span class="font-mono">{needsYou}</span> by severity</span>
 			<span class="ms-auto"></span>
 			<Popover.Root placement="bottom-end">
 				<Popover.Trigger variant="ghost" size="icon" aria-label="Filter by severity"><ListFilter size={15} aria-hidden="true" /></Popover.Trigger>
@@ -197,6 +212,10 @@
 						{#each SEVERITIES as severity (severity)}
 							<FindingSeverity {severity} count={findingsStore.items.filter((item) => item.status !== 'dismissed' && item.severity === severity).length} interactive pressed={findingsStore.isSeverityShown(severity)} onToggle={() => findingsStore.toggleSeverity(severity)} />
 						{/each}
+					</div>
+					<div class="focus-filter-row">
+						<Switch switched={findingsStore.showDismissed} disabled={dismissedCount === 0} onclick={() => (findingsStore.showDismissed = !findingsStore.showDismissed)} label="Show dismissed" />
+						<span class="focus-filter-count">{dismissedCount}</span>
 					</div>
 				</Popover.Content>
 			</Popover.Root>
@@ -212,11 +231,12 @@
 			<div class="focus-cards">
 				{#each ranked as finding, i (finding.id)}
 					{@const isActive = finding.id === active?.id}
+					{@const dismissed = finding.status === 'dismissed'}
 					<div class="focus-card-slot" in:collapse out:collapse>
-					<Card.Root class="focus-card enter-rise" data-active={isActive || undefined} {...{ style: `--i: ${i}` }}>
+					<Card.Root class="focus-card enter-rise" data-active={isActive || undefined} data-dismissed={dismissed || undefined} {...{ style: `--i: ${i}` }}>
 						<Button unstyled class="focus-card-select" aria-current={isActive || undefined} onclick={() => select(finding)}>
 							<span class="focus-card-head">
-								<FindingSeverity severity={finding.severity} />
+								{#if dismissed}<SeverityPill tone="info">Dismissed</SeverityPill>{:else}<FindingSeverity severity={finding.severity} />{#if finding.verification && finding.status !== 'accepted'}<VerificationBadge verification={finding.verification} />{/if}{/if}
 								<span class="min-w-0 truncate">{finding.category}</span>
 								<span class="focus-card-loc" title="{finding.file}:{finding.startLine}">{finding.file}:{finding.startLine}</span>
 								{#if findingsStore.suggestions[finding.id]}
@@ -232,8 +252,12 @@
 							<div class="focus-card-reveal-clip">
 								<div class="focus-card-foot">
 									<span class="min-w-0 flex-1 truncate">{formatAgentName(finding.agent)}</span>
-									<Button variant="ghost" onclick={() => dismiss(finding)}>Dismiss</Button>
-									<Button variant="outline" class="gap-1.5" onclick={() => discuss(finding)}><MessageSquare size={14} aria-hidden="true" />Discuss</Button>
+									{#if dismissed}
+										<Button variant="outline" class="gap-1.5" onclick={() => restore(finding)}><RotateCcw size={14} aria-hidden="true" />Restore</Button>
+									{:else}
+										<Button variant="ghost" onclick={() => dismiss(finding)}>Dismiss</Button>
+										<Button variant="outline" class="gap-1.5" onclick={() => discuss(finding)}><MessageSquare size={14} aria-hidden="true" />Discuss</Button>
+									{/if}
 								</div>
 							</div>
 						</div>
@@ -266,21 +290,34 @@
 
 				<Card.Root class="focus-detail">
 					<div class="focus-detail-head">
-						{#if active.status === 'accepted'}<SeverityPill tone="success">Fixed</SeverityPill>{:else}<FindingSeverity severity={active.severity} />{/if}
+						{#if active.status === 'accepted'}<SeverityPill tone="success">Fixed</SeverityPill>{:else if active.status === 'dismissed'}<SeverityPill tone="info">Dismissed</SeverityPill>{:else}<FindingSeverity severity={active.severity} />{#if active.verification}<VerificationBadge verification={active.verification} />{/if}{/if}
 						<Typography.Title level={3} class="focus-detail-title">{active.title}</Typography.Title>
 						<span class="focus-detail-meta">{[active.code, formatAgentName(active.agent), modelLabel(active.model)].filter(Boolean).join(' · ')}</span>
 					</div>
 					<div class="focus-detail-body ai-voice"><Markdown content={active.body} /></div>
+					{#if active.verification}
+						<p class="verify-note" data-status={active.verification.status}>
+							{#if active.verification.status === 'verified'}<CircleCheck size={14} class="verify-note-icon" aria-hidden="true" />{:else}<CircleAlert size={14} class="verify-note-icon" aria-hidden="true" />{/if}
+							<span>
+								{active.verification.status === 'verified' ? 'Verified' : 'Not verified'}: {active.verification.reason}
+								{#if active.verification.command}<code>{active.verification.command}</code>{#if active.verification.exitCode !== undefined && active.verification.exitCode !== null} exited {active.verification.exitCode}.{/if}{/if}
+							</span>
+						</p>
+					{/if}
 					{#if evidence}<EvidenceView tool={evidence} onOpenInDiff={evidenceInDiff ? onOpenAt : null} />{/if}
 					<FixStatus finding={active} />
 					{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks finding={active} />{/if}
 					<div class="focus-detail-foot">
-						<span class="min-w-0 flex-1 truncate">{#if branch}Pushes one commit to <span class="font-mono">{branch}</span>{/if}</span>
+						<span class="min-w-0 flex-1 truncate">{#if branch && active.status !== 'dismissed'}Pushes one commit to <span class="font-mono">{branch}</span>{/if}</span>
 						{#if active.status === 'open'}
 							<Button variant="ghost" onclick={() => dismiss(active)}>Dismiss</Button>
 							<Button variant="outline" class="gap-1.5" onclick={() => discuss(active)}><MessageSquare size={14} aria-hidden="true" />Discuss</Button>
 						{/if}
-						<FixButton finding={active} />
+						{#if active.status === 'dismissed'}
+							<Button variant="primary" class="gap-1.5" onclick={() => restore(active)}><RotateCcw size={14} aria-hidden="true" />Restore</Button>
+						{:else}
+							<FixButton finding={active} />
+						{/if}
 					</div>
 				</Card.Root>
 			</div>

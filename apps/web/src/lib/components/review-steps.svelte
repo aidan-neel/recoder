@@ -33,7 +33,9 @@
 	const steps = $derived([
 		{ id: 'checkout', label: 'Prepare repository', meta: '' },
 		{ id: 'plan', label: 'Plan review', meta: '' },
-		{ id: 'specialists', label: 'Specialist reviews', meta: specialists?.total && current >= 2 ? `${specialists.done}/${specialists.total}` : '' },
+		{ id: 'checks', label: 'Run checks', meta: '' },
+		{ id: 'specialists', label: 'Specialist reviews', meta: specialists?.total && current >= 3 ? `${specialists.done}/${specialists.total}` : '' },
+		{ id: 'verify', label: 'Verify findings', meta: '' },
 		{ id: 'consolidate', label: 'Consolidate findings', meta: '' }
 	]);
 	function statusOf(index: number): 'done' | 'active' | 'error' | 'pending' {

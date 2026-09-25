@@ -39,6 +39,16 @@ export interface FindingLocation {
 	side?: 'old' | 'new';
 }
 
+/** Whether a finding was proven by running code in the review sandbox. */
+export interface FindingVerification {
+	status: 'verified' | 'unverified';
+	/** What the run showed, or why it could not be proven. */
+	reason: string;
+	/** The command whose output proves the finding. */
+	command?: string;
+	exitCode?: number | null;
+}
+
 export interface Finding {
 	id: string;
 	/** Short issue-specific heading. Older saved reviews may omit it. */
@@ -67,6 +77,7 @@ export interface Finding {
 	relatedLocations?: FindingLocation[];
 	/** Diff side for deleted-code findings. Defaults to `new` when a line exists. */
 	side?: 'old' | 'new';
+	verification?: FindingVerification;
 }
 
 export interface Review {

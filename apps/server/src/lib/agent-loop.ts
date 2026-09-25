@@ -28,7 +28,8 @@ export class ModelBudget {
 	used = 0;
 	constructor(
 		readonly limit: number = REVIEW_POLICY.maxModelCalls,
-		readonly reserve: number = REVIEW_POLICY.reserveCallsForConsolidation
+		/** Calls held back from ordinary spending; raised while later stages need a guaranteed share. */
+		public reserve: number = REVIEW_POLICY.reserveCallsForConsolidation
 	) {}
 	remaining(): number {
 		return Math.max(0, this.limit - this.used);
@@ -64,10 +65,12 @@ export interface JsonAgentOptions<T> {
 	validationError?: (raw: unknown) => string;
 	/** A minimal valid final answer, quoted back when the model gets the shape wrong. */
 	finalExample?: string;
+	/** Action request examples quoted back on a malformed reply; defaults to read-only retrieval. */
+	actionExamples?: string;
 	onProgress?: (state: 'queued' | 'running' | 'retrieval', elapsedMs: number, detail: string) => void;
 	onLog?: (message: string) => void;
 	/** Accumulated provider reasoning for a turn, upserted by `id`. */
-	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status'>) => void;
+	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status' | 'summary'>) => void;
 	onTool?: (tool: ToolCallReport) => void;
 	onMessage?: (message: { id: string; text: string; status: 'streaming' | 'done' | 'error' }) => void;
 	getDiscussion?: () => string;
@@ -82,7 +85,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 	];
 	let repaired = 0;
 	let lastError = 'no model output';
-	const shapes = `${RETRIEVAL_EXAMPLES}\nTo finish, reply with ONLY the final JSON object${opts.finalExample ? `, for example:\n${opts.finalExample}` : '.'}\nNo prose outside the JSON, no code fences.`;
+	const shapes = `${opts.actionExamples ?? RETRIEVAL_EXAMPLES}\nTo finish, reply with ONLY the final JSON object${opts.finalExample ? `, for example:\n${opts.finalExample}` : '.'}\nNo prose outside the JSON, no code fences.`;
 	// Schema repairs cost model calls, but must not consume an evidence round.
 	// Each successful retrieval advances the investigation; the final turn is
 	// reserved for the result, with the global budget/deadline enforced throughout.
@@ -104,7 +107,10 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		let reasoningText = '';
 		let reasoningEmittedAt = 0;
 		const flushReasoning = (status: ReviewReasoningEntry['status'] = 'streaming') => {
-			if (opts.onReasoning && reasoningText) opts.onReasoning({ id: reasoningId, text: reasoningText, status });
+			if (!opts.onReasoning || !reasoningText) return;
+			// ChatGPT sends a summary, not its reasoning; keep the timing, drop the text.
+			if (opts.config.provider === 'codex') opts.onReasoning({ id: reasoningId, text: '', status, summary: true });
+			else opts.onReasoning({ id: reasoningId, text: reasoningText, status });
 		};
 		// Cut off runaway reasoning: a stuck model otherwise thinks until the call times out.
 		const callAbort = new AbortController();

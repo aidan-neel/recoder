@@ -11,14 +11,16 @@
 	const interrupted = $derived(tool.status === 'running' && !active);
 	const presentation = $derived(toolPresentation(tool));
 	const action = $derived(presentation.action);
-	const actionLabel = $derived(action === 'readDiff' ? 'Read diff' : ['readFile', 'read'].includes(action) ? 'Read file' : ['search', 'rg'].includes(action) ? 'Search' : ['listFiles', 'list'].includes(action) ? 'List files' : 'Run tool');
+	const isRun = $derived(action === 'run' || action === '$');
+	const actionLabel = $derived(isRun ? 'Run' : action === 'writeFile' ? 'Write file' : action === 'readDiff' ? 'Read diff' : ['readFile', 'read'].includes(action) ? 'Read file' : ['search', 'rg'].includes(action) ? 'Search' : ['listFiles', 'list'].includes(action) ? 'List files' : 'Run tool');
 	const target = $derived(presentation.target || 'Details unavailable');
 </script>
 
 <Disclosure size="row" title={target} meta={duration}>
 	{#snippet label()}
 		<span class="tool-row-action">{actionLabel}</span>
-		<span class="tool-row-target">{target}</span>
+		<span class="tool-row-target" data-command={isRun || undefined}>{target}</span>
+		{#if isRun && tool.status !== 'running' && tool.exitCode !== null}<span class="tool-row-exit" data-failed={tool.exitCode !== 0 || undefined}>exit {tool.exitCode}</span>{/if}
 		{#if tool.status === 'running' && active}<Spinner size={12} class="shrink-0 text-sev-medium" aria-hidden="true" />{/if}
 		{#if tool.status === 'error' || interrupted}<span class="shrink-0 text-danger">{interrupted ? 'Interrupted' : 'Failed'}</span>{/if}
 	{/snippet}
@@ -28,7 +30,7 @@
 				<CodeBlock code={tool.result.content} lang={action === 'readDiff' ? 'diff' : 'plaintext'} copy="overlay" class="rounded-lg ![--code-block-max-height:none]" />
 			{:else}
 				<Typography.Text class="break-words text-sm text-foreground-muted">
-					{tool.result?.error || tool.summary || (interrupted ? 'The review ended before this operation finished.' : tool.status === 'running' ? 'Retrieving evidence…' : 'No output was recorded.')}
+					{tool.result?.error || tool.summary || (interrupted ? 'The review ended before this operation finished.' : tool.status === 'running' ? (isRun ? 'Running…' : 'Retrieving evidence…') : 'No output was recorded.')}
 				</Typography.Text>
 			{/if}
 			{#if tool.result?.truncated}

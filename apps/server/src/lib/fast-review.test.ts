@@ -9,6 +9,7 @@ import { REVIEW_ROLES } from './roles';
 import { resetLlmLimiter } from './llm';
 import { REVIEW_POLICY } from './review-policy';
 import { writeGlobalGuidelines } from './guidelines';
+import { execUnavailableReason } from './exec-sandbox';
 
 const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();
@@ -327,6 +328,66 @@ test('owner guidelines reach every stage, and the repo layer comes from the base
 	} finally {
 		if (dataDir === undefined) delete process.env.RECODER_DATA_DIR;
 		else process.env.RECODER_DATA_DIR = dataDir;
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test.skipIf((await execUnavailableReason()) !== null)('verification drops a finding a run disproves and marks a reproduced one verified', async () => {
+	setup();
+	const root = await mkdtemp(join(tmpdir(), 'recoder-verify-review-'));
+	const git = (args: string[]) => Bun.spawnSync(['git', ...args], { cwd: root, stdout: 'pipe' }).stdout.toString().trim();
+	try {
+		git(['init', '-q', '-b', 'main']);
+		git(['config', 'user.name', 'Test']);
+		git(['config', 'user.email', 'test@example.com']);
+		await mkdir(join(root, 'src'));
+		await writeFile(join(root, 'src/a.ts'), 'old\n');
+		git(['add', '.']);
+		git(['commit', '-q', '-m', 'base']);
+		const targetSha = git(['rev-parse', 'HEAD']);
+		await writeFile(join(root, 'src/a.ts'), 'new\n');
+		git(['commit', '-q', '-am', 'head']);
+		const headSha = git(['rev-parse', 'HEAD']);
+		const plan = {
+			summary: 'One change',
+			assignments: [
+				{ id: 'correctness-core', role: 'correctness', title: 'Correctness', reason: 'x', scope: [{ path: 'src/a.ts', hunkIds: [HUNK] }], questions: [], contextEvidenceIds: [], priority: 1 },
+				{ id: 'patterns-core', role: 'patterns', title: 'Consistency', reason: 'x', scope: [{ path: 'src/a.ts', hunkIds: [HUNK] }], questions: [], contextEvidenceIds: [], priority: 2 }
+			],
+			roleDecisions: decisions(['correctness', 'patterns']),
+			checks: ['cat src/a.ts']
+		};
+		const finding = (body: string) => ({ file: 'src/a.ts', line: 1, severity: 'medium', category: 'bug', body, evidenceIds: [] });
+		const specialists: string[] = [];
+		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+			const body = JSON.parse(String(init?.body));
+			const system: string = body.messages[0].content;
+			const user: string = body.messages[1].content;
+			const last: string = body.messages.at(-1).content;
+			let reply: unknown = { findings: [], examinedHunks: [HUNK] };
+			if (system.includes('review orchestrator')) reply = plan;
+			else if (system.includes('Role: Correctness')) {
+				specialists.push(user);
+				reply = { findings: [finding('Real bug.'), finding('Imagined bug.')], examinedHunks: [HUNK], coverageGaps: [], blockers: [], followUp: null, recommendedChecks: [] };
+			} else if (system.includes('You verify one code review finding')) {
+				const proof = /evidenceId=(ev_\d+)/.exec(last)?.[1];
+				reply = !proof
+					? { actions: [{ action: 'run', command: 'grep -c new src/a.ts' }] }
+					: user.includes('Real bug.')
+						? { verdict: 'confirmed', reason: 'grep shows it.', evidenceIds: [proof] }
+						: { verdict: 'refuted', reason: 'grep shows otherwise.', evidenceIds: [proof] };
+			} else if (system.includes('consolidate Recoder specialist candidates')) {
+				reply = { keep: [...new Set(user.match(/\bc\d+\b/g))], merge: [], reject: [], recommendedChecks: [] };
+			}
+			return Response.json({ choices: [{ message: { content: JSON.stringify({ message: 'Working.', ...reply as object }) } }] });
+		}) as unknown as typeof fetch;
+		const result = await runAdaptiveReview({ diff: DIFF, sandboxPath: root, revision: { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' } });
+		expect(specialists[0]).toContain('`cat src/a.ts` → passed');
+		expect(result.findings).toHaveLength(1);
+		expect(result.findings[0].message).toContain('Real bug.');
+		expect(result.findings[0].verification).toEqual({ status: 'verified', reason: 'grep shows it.', command: 'grep -c new src/a.ts', exitCode: 0 });
+		expect(result.summary).toContain('1 verified by running code');
+	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
 });

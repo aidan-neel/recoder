@@ -53,6 +53,8 @@ export function evidenceView(tool: ReviewToolCall): EvidenceView | null {
 	const text = tool.result?.content;
 	if (!text) return null;
 	const input = (tool.input ?? {}) as { action?: string; type?: string; path?: string };
+	// Command output is shown as-is: test runners print lines like `--- FAIL`.
+	if (input.action === 'run') return { kind: 'text', text };
 	const path = typeof input.path === 'string' ? input.path : '';
 	const diff = /^(diff --git|--- |@@ )/m.test(text) ? parseUnifiedDiff(text) : null;
 	if (diff) return { kind: 'diff', file: diff.file || path, lines: diff.lines };

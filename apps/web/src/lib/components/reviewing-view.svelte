@@ -28,7 +28,6 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import Check from '@lucide/svelte/icons/check';
-	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
@@ -184,7 +183,7 @@
 	const findingCounts = $derived((['high', 'medium', 'low', 'info'] as const)
 		.map((severity) => ({ severity, count: findings.filter((finding) => finding.severity === severity).length }))
 		.filter((item) => item.count > 0));
-	const currentStep = $derived(!active && !failed ? 4 : Math.min(stage, 3));
+	const currentStep = $derived(!active && !failed ? 6 : Math.min(stage, 5));
 
 	/** "correctness and performance", "security, docs and 2 more". */
 	function nameList(items: ReviewAssignment[]): string {
@@ -193,6 +192,9 @@
 		if (names.length <= 3) return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 		return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
 	}
+	/** Early stages (checkout, inventory, planning) have nothing to open, and the live thinking and tool rows already show the work. */
+	const showProgress = $derived(!active || running.length > 0 || !!finalization);
+	const progressHasBody = $derived(finalReasoning.length > 0 || finalFacts.length > 0);
 	const footerLabel = $derived(running.length ? `Waiting on ${nameList(running)}` : stageLabel);
 
 	function statusFor(assignment: ReviewAssignment): { label: string; tone: string } {
@@ -206,6 +208,7 @@
 			case 'skipped': return { label: 'Skipped', tone: 'idle' };
 		}
 	}
+
 </script>
 
 {#snippet sessionMenu()}
@@ -259,8 +262,12 @@
 {/snippet}
 
 {#snippet progressContent()}
-	<Disclosure status={active ? 'running' : failed ? 'error' : 'done'} bodyClass="finalize-body">
+	<Disclosure status={active ? 'running' : failed ? 'error' : 'done'} bodyClass="finalize-body" children={progressHasBody ? progressBody : undefined}>
 		{#snippet label()}{active ? footerLabel : failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
+	</Disclosure>
+{/snippet}
+
+{#snippet progressBody()}
 		<ReasoningSteps entries={finalReasoning} live={active} />
 		{#if finalFacts.length}
 			<div class="fact-rows" aria-label="Finalization summary">
@@ -269,7 +276,6 @@
 				{/each}
 			</div>
 		{/if}
-	</Disclosure>
 {/snippet}
 
 {#snippet headerChecks()}
@@ -308,18 +314,15 @@
 	/>
 	{#if !isOrchestrator}
 		{@const status = statusFor(selected)}
-		<nav aria-label="Review conversations" class="mx-auto flex w-full max-w-[740px] shrink-0 items-center gap-2 px-6 pb-1 pt-3">
-			<Button href={conversationHref(ORCHESTRATOR_ID)} variant="ghost" size="icon" aria-label="Back to Orchestrator" title="Back to Orchestrator" class="shrink-0"><ArrowLeft size={16} aria-hidden="true" /></Button>
-			<Typography.Title level={2} class="sr-only">{formatAgentName(selected.role)} conversation</Typography.Title>
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger variant="quiet" class="min-w-0 gap-2" aria-label="Switch conversation"><span class="truncate">{formatAgentName(selected.role)}</span><ChevronDown size={14} class="shrink-0" aria-hidden="true" /></DropdownMenu.Trigger>
-				<DropdownMenu.Content>
-					{#each [orchestrator, ...specialists] as assignment (assignment.id)}
-						<DropdownMenu.Item href={conversationHref(assignment.id)} aria-current={assignment.id === selected.id ? 'page' : undefined}>{formatAgentName(assignment.role)}</DropdownMenu.Item>
-					{/each}
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-			<Badge variant="secondary" class="status-chip ms-auto shrink-0" data-tone={status.tone}>{status.label}</Badge>
+		<nav aria-label="Specialist conversation" class="agent-nav mx-auto flex w-full max-w-[740px] shrink-0 items-center px-6 pt-3">
+			<Button href={conversationHref(ORCHESTRATOR_ID)} variant="ghost" size="icon" class="shrink-0" aria-label="Back to Orchestrator" title="Back to Orchestrator">
+				<ArrowLeft size={15} aria-hidden="true" />
+			</Button>
+			<Typography.Title level={2} class="agent-name min-w-0 truncate">{formatAgentName(selected.role)}</Typography.Title>
+			<Typography.Metadata class="agent-status ms-auto shrink-0" data-tone={status.tone}>
+				{#if selected.status === 'running' && active}<Spinner size={12} aria-hidden="true" />{/if}
+				{status.label}
+			</Typography.Metadata>
 		</nav>
 	{/if}
 	{#if connectionLost}<Typography.Text role="status" class="mx-auto w-full max-w-[740px] px-6 py-2 text-sm text-sev-medium">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
@@ -349,7 +352,7 @@
 					placeholder={!isOrchestrator ? undefined : awaitingPrompt ? undefined : active ? 'Ask Orchestrator anything…' : 'Ask a follow-up about this review…'}
 					inserts={isOrchestrator ? [
 						...(specialists.length ? [{ key: 'specialists', at: specialistsAt, snippet: specialistsContent }] : []),
-						...(!awaitingPrompt ? [{ key: 'progress', at: active ? undefined : finalization?.startedAt ?? completedAt, snippet: progressContent }] : []),
+						...(!awaitingPrompt && showProgress ? [{ key: 'progress', at: active ? undefined : finalization?.startedAt ?? completedAt, snippet: progressContent }] : []),
 						...(finished ? [{ key: 'result', at: completedAt, snippet: resultCard }] : [])
 					] : []} />
 			{/each}
