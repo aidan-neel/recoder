@@ -1,15 +1,13 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
-	import { env } from '$env/dynamic/public';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 
 	/**
 	 * Hosted-version waitlist: a secondary button that opens into an email field
-	 * in place. Posts `{ email }` as JSON to PUBLIC_WAITLIST_ENDPOINT (Formspree,
-	 * Loops, a serverless function…); any 2xx counts as joined.
+	 * in place. Posts `{ email }` to /api/waitlist, which stores it in Neon.
 	 */
 	let open = $state(false);
 	let email = $state('');
@@ -42,19 +40,13 @@
 			inputEl?.focus();
 			return;
 		}
-		const endpoint = env.PUBLIC_WAITLIST_ENDPOINT;
-		if (!endpoint) {
-			status = 'error';
-			error = 'The waitlist isn’t open yet. Self-host Recoder in the meantime.';
-			return;
-		}
 		status = 'pending';
 		error = '';
 		try {
-			const response = await fetch(endpoint, {
+			const response = await fetch('/api/waitlist', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-				body: JSON.stringify({ email: address, source: 'recoder.dev' })
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email: address })
 			});
 			if (!response.ok) throw new Error(String(response.status));
 			status = 'done';

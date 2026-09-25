@@ -1,4 +1,4 @@
-import adapter from '@sveltejs/adapter-static';
+import adapter from '@sveltejs/adapter-vercel';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
@@ -7,8 +7,8 @@ const config = {
 		runes: ({ filename }) => (filename.split(/[/\\]/).includes('node_modules') ? undefined : true)
 	},
 	kit: {
-		// Prerendered to plain HTML for any static host (recoder.dev).
-		adapter: adapter({ strict: true }),
+		// Deployed to Vercel: pages are prerendered, /api/waitlist runs as a function.
+		adapter: adapter(),
 		alias: {
 			// The site renders the app's own components and styles, so the two never drift.
 			$web: '../web/src/lib'

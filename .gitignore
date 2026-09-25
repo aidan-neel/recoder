@@ -8,6 +8,7 @@ node_modules/
 dist/
 build/
 .svelte-kit/
+.vercel/
 *.tsbuildinfo
 
 # env (never commit secrets; .env.example files are allowlisted below)
@@ -25,3 +26,7 @@ data/
 # misc
 .vscode/*
 !.vscode/extensions.json
+
+# local tooling output
+test-results/
+output/
