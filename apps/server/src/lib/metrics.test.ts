@@ -1,4 +1,7 @@
-import { afterEach, beforeEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Review } from '@recoder/shared';
 import { app } from '../app';
 import { closeStore, db, reviewDiffs, reviewMetrics } from '../store';
@@ -23,6 +26,19 @@ function review(): Review {
 	ids.push(value.id);
 	return db.reviews.set(value);
 }
+
+const originalDataDir = process.env.RECODER_DATA_DIR;
+
+// closeStore() reopens SQLite from RECODER_DATA_DIR, so own it for the whole file.
+beforeAll(() => {
+	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-metrics-'));
+	closeStore();
+});
+afterAll(() => {
+	closeStore();
+	if (originalDataDir === undefined) delete process.env.RECODER_DATA_DIR;
+	else process.env.RECODER_DATA_DIR = originalDataDir;
+});
 
 beforeEach(() => {
 	globalThis.fetch = (async () => Response.json({ choices: [{ message: { content: 'ok' } }], usage })) as unknown as typeof fetch;

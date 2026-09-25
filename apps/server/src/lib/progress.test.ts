@@ -116,7 +116,8 @@ test('a real HTTP subscription survives idle periods and still delivers review a
 			id: 'after-idle', assignmentId: '__pipeline', from: 'assistant', text: 'Still connected.', at: now, status: 'done'
 		} } });
 		expect((await read()).data.chatMessage.text).toBe('Still connected.');
-		await reader.cancel();
+		// Bun's fetch keeps the socket open after reader.cancel(); abort to actually disconnect.
+		controller.abort();
 		await new Promise(resolve => setTimeout(resolve, 20));
 		expect(listenerCount(id)).toBe(0);
 	} finally {
