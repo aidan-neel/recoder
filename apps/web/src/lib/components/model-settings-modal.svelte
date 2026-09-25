@@ -2,6 +2,7 @@
 	import X from '@lucide/svelte/icons/x';
 	import * as Alert from '@sivir-ui/svelte/components/alert';
 	import { Button } from '@sivir-ui/svelte/components/button';
+	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
@@ -106,11 +107,33 @@
 								<Button variant="outline" class="mt-2 w-fit" onclick={() => void modelSettingsUi.load()}>Retry</Button>
 							</Alert.Root>
 						{:else if !config || !settingsDraft.seeded}
-							<div class="flex flex-col gap-4" role="status" aria-label="Loading settings">
-								<Skeleton class="h-4 w-20" />
-								<div class="grid grid-cols-2 gap-3"><Skeleton class="h-40 rounded-xl" /><Skeleton class="h-40 rounded-xl" /></div>
-								<Skeleton class="h-4 w-20" />
-								<Skeleton class="h-64 rounded-xl" />
+							<!-- Built from the real settings classes so rows land where the loaded section puts them. -->
+							<div class="flex flex-col gap-6" role="status" aria-label="Loading settings">
+								{#if modelSettingsUi.section === 'models'}
+									<section class="settings-section" aria-hidden="true">
+										<Typography.H3 class="settings-label">Provider</Typography.H3>
+										<div class="provider-grid">
+											{#each [0, 1] as i (i)}
+												<Card.Root class="provider-card">
+													<div class="flex h-5 items-center gap-2"><Skeleton class="size-1.5 !rounded-full" /><Skeleton class="h-3.5 w-24" /><Skeleton class="ms-auto h-3 w-12" /></div>
+													<Skeleton class="h-3 w-3/4" />
+													<Skeleton class="h-3 w-1/2" />
+												</Card.Root>
+											{/each}
+										</div>
+									</section>
+								{/if}
+								<section class="settings-section" aria-hidden="true">
+									{#if modelSettingsUi.section === 'models'}<Typography.H3 class="settings-label">Roles</Typography.H3>{:else}<div class="flex h-[17.5px] items-center"><Skeleton class="h-3 w-24" /></div>{/if}
+									<Card.Root class="settings-list">
+										{#each [0, 1, 2, 3, 4] as i (i)}
+											<div class="settings-row">
+												<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={[28, 36, 24, 32, 26][i]} unit="%" /><Skeleton class="h-2.5" w={[44, 38, 30, 34, 40][i]} unit="%" /></div>
+												<Skeleton class="h-3 w-24" />
+											</div>
+										{/each}
+									</Card.Root>
+								</section>
 							</div>
 						{:else}
 							<Tabs.Content value="models"><SettingsModels /></Tabs.Content>

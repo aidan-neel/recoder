@@ -391,18 +391,27 @@
 {/snippet}
 
 {#snippet skeletonRows(n: number)}
-	<div role="status" aria-label="Loading pull requests" class="flex flex-col border-t border-line-subtle">
+	<!-- Same box as .pr-row: 14px 12px padding, 20px title line over an 18px mono meta line. -->
+	<div role="status" aria-label="Loading pull requests" class="pr-list">
 		{#each Array(n) as _, i (i)}
-			<div class="flex items-start gap-3.5 border-b border-line-subtle px-3 py-3.5">
-				<Skeleton class="mt-0.5 size-4 shrink-0 rounded-full" />
-				<div class="flex min-w-0 flex-1 flex-col gap-2">
-					<Skeleton class="h-4 w-3/5" />
-					<Skeleton class="h-3 w-2/5" />
+			<div class="flex items-center gap-3.5 border-b border-line-subtle px-3 py-3.5" aria-hidden="true">
+				<Skeleton class="size-4 shrink-0 self-start" />
+				<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+					<div class="flex h-5 items-center"><Skeleton class="h-3.5" w={[62, 48, 56][i % 3]} unit="%" /></div>
+					<div class="flex h-[18px] items-center"><Skeleton class="h-2.5" w={[40, 34, 44][i % 3]} unit="%" /></div>
 				</div>
-				<Skeleton class="h-5 w-16 rounded-md" />
+				<Skeleton class="h-5 w-14" />
+				<Skeleton class="size-3.5" />
 			</div>
 		{/each}
 	</div>
+{/snippet}
+
+{#snippet skeletonGroup()}
+	<section class="flex min-w-0 flex-col">
+		<div class="group-head h-[27px]" aria-hidden="true"><Skeleton class="size-3.5" /><Skeleton class="h-3 w-36" /></div>
+		{@render skeletonRows(3)}
+	</section>
 {/snippet}
 
 <ScrollArea class="h-full min-h-0" aria-label="Home" showCues={false}>
@@ -422,10 +431,10 @@
 						{/if}
 					</Typography.Metadata>
 					{#if showBriefSkeleton}
-						<div class="mt-4 flex flex-col gap-3" role="status" aria-label="Writing the brief">
-							<Skeleton class="h-6 w-[92%]" />
-							<Skeleton class="h-6 w-[84%]" />
-							<Skeleton class="h-6 w-[48%]" />
+						<!-- Two lines on the brief's 27px / 1.38 line box, so the page doesn't shift when it lands. -->
+						<div class="mt-4 flex flex-col" role="status" aria-label="Writing the brief">
+							<div class="flex h-[37px] items-center"><Skeleton class="h-[22px] w-[94%]" /></div>
+							<div class="flex h-[37px] items-center"><Skeleton class="h-[22px] w-[58%]" /></div>
 						</div>
 					{:else if briefText}
 						<div class="home-brief-stack">
@@ -523,6 +532,8 @@
 							{/each}
 						</Tabs.List>
 					</Tabs.Root>
+				{:else if openPrs.loading}
+					<Skeleton class="h-[30px] w-56" />
 				{/if}
 				<span class="flex-1"></span>
 				<span class="home-switch"><Switch bind:switched={interactiveReview} label="Interactive review" /></span>
@@ -552,7 +563,7 @@
 
 			<div class="mt-[30px] flex flex-col gap-7" aria-busy={anyLoading || openPrs.loading}>
 				{#if openPrs.loading}
-					{@render skeletonRows(3)}
+					{@render skeletonGroup()}
 				{:else}
 					{#each listedGroups as group, gi (group.repo.id)}
 						<section class="flex min-w-0 flex-col" aria-label="Pull requests in {group.repo.name}">

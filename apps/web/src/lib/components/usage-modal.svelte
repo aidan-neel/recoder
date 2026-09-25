@@ -7,7 +7,7 @@
 	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type { CodexConnection } from '@recoder/shared';
-	import Skeleton from './ui/skeleton.svelte';
+	import UsageSkeleton from './usage-skeleton.svelte';
 	import { modelSettingsUi } from '$lib/model-settings.svelte';
 	import { serverApi } from '$lib/server-api';
 	import { shellState } from '$lib/shell-state.svelte';
@@ -81,11 +81,7 @@
 					<Alert.Description>{error}</Alert.Description>
 				</Alert.Root>
 			{:else if !connection}
-				<div class="flex flex-col gap-4" role="status" aria-label="Loading usage">
-					<Skeleton class="h-4 w-1/2" />
-					<Skeleton class="h-10 w-full" />
-					<Skeleton class="h-10 w-full" />
-				</div>
+				<UsageSkeleton label="Loading usage" />
 			{:else if !connection.authenticated}
 				<Typography.Text variant="supporting">Sign in to ChatGPT in Settings to review with your plan and track its limits here.</Typography.Text>
 			{:else}

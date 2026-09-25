@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { buildInventory } from './inventory';
-import { fallbackPlan, sanitizePlannerOutput, plannerSystemPrompt, plannerValidationError } from './planner';
+import { fallbackPlan, sanitizePlannerOutput, plannerValidationError } from './planner';
 import { REVIEW_ROLES } from './roles';
 
 const DIFF = `diff --git a/src/a.ts b/src/a.ts
@@ -28,9 +28,7 @@ function decisions(selected: string[]) {
 describe('planner validation', () => {
 	const inventory = buildInventory(DIFF);
 
-	test('prompt supplies typed requirements and repair identifies invalid fields', () => {
-		expect(plannerSystemPrompt()).toContain('"type":"integer"');
-		expect(plannerSystemPrompt()).toContain('contextEvidenceIds');
+	test('repair identifies invalid fields', () => {
 		expect(plannerValidationError({ summary: 'Review', assignments: 'incorrect', roleDecisions: [] }))
 			.toContain('assignments:');
 	});

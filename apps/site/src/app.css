@@ -120,6 +120,240 @@ html::-webkit-scrollbar {
 	animation: rc-label-in 230ms var(--ease-menu);
 }
 
+/* ─────────────────────── Shell + nav ─────────────────────── */
+/* One canvas card on the chrome; the nav sits inside it, centered down the left edge. */
+.site-shell {
+	display: flex;
+	min-height: 100dvh;
+	padding: 8px;
+}
+[data-ui='card'].site-card {
+	flex-direction: row;
+	overflow: visible;
+}
+.site-main {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+}
+.site-nav {
+	position: sticky;
+	top: 8px;
+	display: flex;
+	width: 176px;
+	height: calc(100dvh - 16px);
+	flex: none;
+	align-items: center;
+	padding: 0 8px 0 12px;
+}
+.site-nav-list {
+	position: relative;
+	display: flex;
+	width: 100%;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+	isolation: isolate;
+}
+[data-ui='button'].site-nav-item {
+	position: relative;
+	z-index: 1;
+	height: 30px;
+	justify-content: flex-start;
+	gap: 10px;
+	padding: 0 12px 0 10px;
+	border-radius: 999px;
+	font-size: 14.5px;
+	font-weight: 400;
+	color: var(--text-muted);
+}
+[data-ui='button'].site-nav-item:hover:not(:disabled) {
+	background-color: transparent;
+	color: var(--text-primary);
+}
+/* No press scale on nav links, like the app's top bar tabs. */
+.site-nav .sivir-press:active:not(:disabled):not([aria-disabled='true']) {
+	scale: none;
+}
+[data-ui='button'].site-nav-item[aria-current='page'] {
+	color: var(--text-primary);
+}
+.hover-highlight.site-nav-hl {
+	border-radius: 999px;
+}
+/* Active pill: bg.menu; slides between links. */
+.site-nav-pill {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 0;
+	border-radius: 999px;
+	background-color: var(--bg-menu);
+	pointer-events: none;
+}
+.site-nav-pill[data-ready] {
+	transition:
+		transform var(--dur-pill) var(--ease-menu),
+		width var(--dur-pill) var(--ease-menu);
+}
+/* Mobile: the nav becomes a row across the top of the card that scrolls sideways. */
+@media (max-width: 900px) {
+	[data-ui='card'].site-card {
+		flex-direction: column;
+	}
+	.site-nav {
+		position: static;
+		width: 100%;
+		height: auto;
+		padding: 10px 10px 0;
+	}
+	.site-nav-list {
+		flex-direction: row;
+		align-items: center;
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		scrollbar-width: none;
+	}
+	.site-nav-list::-webkit-scrollbar {
+		display: none;
+	}
+	[data-ui='button'].site-nav-item {
+		flex: none;
+		white-space: nowrap;
+	}
+}
+
+/* ─────────────────────── Docs ─────────────────────── */
+.docs-column {
+	width: 100%;
+	max-width: 760px;
+	margin: 0 auto;
+	padding: 88px 40px 64px;
+}
+.docs-title {
+	margin: 0 0 20px;
+	font-size: 30px;
+	font-weight: 500;
+	line-height: 1.2;
+	letter-spacing: -0.015em;
+	color: var(--text-primary);
+}
+.docs-prose [data-ui='markdown'] {
+	font-size: 15px;
+	line-height: 1.7;
+	color: var(--text-secondary);
+}
+.docs-prose [data-ui='markdown'] :is(p, li) {
+	color: var(--text-secondary);
+}
+.docs-prose [data-ui='markdown'] :is(h2, h3) {
+	margin: 40px 0 12px;
+	font-size: 18px;
+	font-weight: 500;
+	letter-spacing: -0.005em;
+	color: var(--text-primary);
+}
+.docs-prose [data-ui='markdown'] strong {
+	font-weight: 500;
+	color: var(--text-primary);
+}
+.docs-prose [data-ui='markdown'] a {
+	color: var(--text-primary);
+	text-decoration: underline;
+	text-decoration-color: var(--line-control);
+	text-underline-offset: 3px;
+}
+/* Tables wrap their prose column; variable names stay on one line. */
+.docs-prose [data-ui='markdown'] table {
+	width: 100%;
+	min-width: 0;
+	font-size: 13.5px;
+}
+.docs-prose [data-ui='markdown'] td code {
+	white-space: nowrap;
+}
+.docs-pager {
+	display: flex;
+	gap: 8px;
+	margin-top: 56px;
+	padding-top: 20px;
+	border-top: 1px solid var(--line-card);
+}
+
+/* ─────────────────────── Hero motion ─────────────────────── */
+/* The headline resolves word by word out of a blur. */
+.hero-word {
+	display: inline-block;
+	animation: hero-word 760ms var(--ease-menu) both;
+	animation-delay: calc(80ms + var(--w, 0) * 36ms);
+}
+@keyframes hero-word {
+	from {
+		opacity: 0;
+		filter: blur(8px);
+		transform: translateY(0.3em);
+	}
+	to {
+		opacity: 1;
+		filter: none;
+		transform: none;
+	}
+}
+/* Actions and the install line follow the last words. */
+.hero-rise {
+	animation: hero-rise 800ms var(--ease-menu) both;
+	animation-delay: calc(520ms + var(--d, 0) * 110ms);
+}
+@keyframes hero-rise {
+	from {
+		opacity: 0;
+		filter: blur(4px);
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		filter: none;
+		transform: none;
+	}
+}
+/* The demo rises in after the headline. */
+.hero-stage {
+	position: relative;
+	animation: hero-stage-in 1300ms var(--ease-menu) 760ms both;
+}
+@keyframes hero-stage-in {
+	from {
+		opacity: 0;
+		transform: translateY(48px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+/* A soft light behind the window that drifts slowly. */
+.hero-glow {
+	position: absolute;
+	top: -140px;
+	right: 0;
+	left: 0;
+	z-index: 0;
+	height: 560px;
+	background: radial-gradient(55% 50% at 50% 45%, color-mix(in oklab, var(--text-primary) 10%, transparent), transparent 72%);
+	filter: blur(40px);
+	pointer-events: none;
+	animation: hero-glow 14s ease-in-out infinite alternate;
+}
+@keyframes hero-glow {
+	from {
+		transform: translate3d(-5%, 0, 0) scale(1);
+	}
+	to {
+		transform: translate3d(5%, 24px, 0) scale(1.08);
+	}
+}
+
 /* ─────────────────────── Live demo ─────────────────────── */
 .demo-stage {
 	position: relative;
@@ -163,6 +397,9 @@ html::-webkit-scrollbar {
 }
 
 @media (max-width: 640px) {
+	.docs-column {
+		padding: 64px 16px 32px;
+	}
 	.site-column {
 		padding: 32px 16px 24px;
 	}
@@ -177,6 +414,11 @@ html::-webkit-scrollbar {
 	}
 }
 @media (prefers-reduced-motion: reduce) {
+	.hero-word,
+	.hero-rise,
+	.hero-stage,
+	.hero-glow,
+	.site-nav-pill[data-ready],
 	.demo-body,
 	.demo-row-in {
 		transition: none;

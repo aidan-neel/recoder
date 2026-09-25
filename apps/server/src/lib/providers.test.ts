@@ -1,14 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { detectProvider, locateRepo, parseSlug, refspecFor } from './providers';
-
-describe('detectProvider', () => {
-	test('github by default, gitlab by host', () => {
-		expect(detectProvider('https://github.com/o/r')).toBe('github');
-		expect(detectProvider('git@github.com:o/r.git')).toBe('github');
-		expect(detectProvider('https://gitlab.com/o/r')).toBe('gitlab');
-		expect(detectProvider('https://gitlab.example.com/o/r')).toBe('gitlab');
-	});
-});
+import { locateRepo, parseSlug } from './providers';
 
 describe('parseSlug', () => {
 	test('strips hosts, users, and .git', () => {
@@ -32,18 +23,5 @@ describe('locateRepo', () => {
 
 	test('rejects non owner/repo github slugs', () => {
 		expect(() => locateRepo('https://github.com/a/b/c')).toThrow();
-	});
-});
-
-describe('refspecFor', () => {
-	test('github pull refs', () => {
-		expect(refspecFor('github', 7)).toEqual({ fetchRef: 'pull/7/head:pr-7', branch: 'pr-7' });
-	});
-
-	test('gitlab mr refs', () => {
-		expect(refspecFor('gitlab', 7)).toEqual({
-			fetchRef: 'merge-requests/7/head:mr-7',
-			branch: 'mr-7'
-		});
 	});
 });

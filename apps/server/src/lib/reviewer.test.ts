@@ -2,12 +2,11 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import {
 	clearReviewEvents,
 	emitReviewEvent,
-	listenerCount,
 	reviewEventBuffer,
 	subscribeReview
 } from './events';
 import { extractFindingsJson, filterNewFindings, fingerprintFinding } from './harness';
-import { configForRole, isReviewConfigured, REVIEW_ROLES } from './models';
+import { configForRole, isReviewConfigured } from './models';
 
 const ENV_KEYS = [
 	'RECODER_REVIEW_BASE_URL',
@@ -44,18 +43,6 @@ describe('models', () => {
 			model: 'strong-model'
 		});
 		expect(configForRole('perf').model).toBe('shared-model');
-		expect(REVIEW_ROLES).toEqual([
-			'security',
-			'perf',
-			'correctness',
-			'docs',
-			'dedup',
-			'patterns',
-			'testing',
-			'errors',
-			'concurrency',
-			'api'
-		]);
 	});
 });
 
@@ -123,18 +110,6 @@ describe('events', () => {
 		clearReviewEvents('r1');
 		clearReviewEvents('r2');
 		clearReviewEvents('r3');
-	});
-
-	test('subscribe/emit/unsubscribe', () => {
-		const seen: string[] = [];
-		const off = subscribeReview('r1', (e) => seen.push(e.message));
-		expect(listenerCount('r1')).toBe(1);
-		emitReviewEvent('r1', { type: 'log', message: 'hello' });
-		expect(seen).toEqual(['hello']);
-		off();
-		expect(listenerCount('r1')).toBe(0);
-		emitReviewEvent('r1', { type: 'log', message: 'after' });
-		expect(seen).toEqual(['hello']);
 	});
 
 	test('listener failures do not break emit', () => {

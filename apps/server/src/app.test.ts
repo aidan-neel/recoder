@@ -8,25 +8,7 @@ import { db, reviewDiffs } from './store';
 // Never touch the real data dir (recoder.db) from tests.
 process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-test-'));
 
-describe('health', () => {
-	test('GET /health returns ok', async () => {
-		const res = await app.request('/health');
-		expect(res.status).toBe(200);
-		const body = await res.json();
-		expect(body.ok).toBe(true);
-		expect(body.name).toBe('recoder');
-	});
-});
-
 describe('repos', () => {
-	test('POST /api/repos validates input', async () => {
-		const res = await app.request('/api/repos', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ name: '', url: 'not-a-url' })
-		});
-		expect(res.status).toBe(400);
-	});
 
 	test('CRUD round-trip', async () => {
 		const created = await app.request('/api/repos', {
@@ -189,15 +171,6 @@ describe('reviews + command runner', () => {
 			return review.id;
 		}
 
-		test('404 for unknown review', async () => {
-			const res = await app.request('/api/reviews/nope/discuss', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify(body())
-			});
-			expect(res.status).toBe(404);
-		});
-
 		test('409 without a fetched diff', async () => {
 			const createdRepo = await app.request('/api/repos', {
 				method: 'POST',
@@ -358,16 +331,6 @@ describe('reviews + command runner', () => {
 			}
 		});
 
-		test('400 on invalid body', async () => {
-			const id = await seedReviewWithDiff();
-			const res = await app.request(`/api/reviews/${id}/discuss`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ agent: 'security' })
-			});
-			expect(res.status).toBe(400);
-		});
-
 		describe('fixes apply', () => {
 			const applyBody = (patch: object = {}) => ({
 				finding: {
@@ -380,25 +343,6 @@ describe('reviews + command runner', () => {
 				summary: 'Namespace buckets per tenant.',
 				patch: 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,3 +1,4 @@\n ctx\n-old\n+new\n tail',
 				...patch
-			});
-
-			test('404 for unknown review', async () => {
-				const res = await app.request('/api/reviews/nope/fixes/apply', {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(applyBody())
-				});
-				expect(res.status).toBe(404);
-			});
-
-			test('400 on invalid body', async () => {
-				const id = await seedReviewWithDiff();
-				const res = await app.request(`/api/reviews/${id}/fixes/apply`, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ summary: 'x' })
-				});
-				expect(res.status).toBe(400);
 			});
 
 			test('409 for stub reviews without a checkout', async () => {

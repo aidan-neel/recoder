@@ -5,7 +5,7 @@
 	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type { ReviewMetrics, TokenAggregate } from '@recoder/shared';
-	import Skeleton from './ui/skeleton.svelte';
+	import UsageSkeleton from './usage-skeleton.svelte';
 	import { serverApi } from '$lib/server-api';
 	import { modelLabel } from '$lib/model-settings.svelte';
 
@@ -97,11 +97,7 @@
 				</Alert.Root>
 			{/if}
 			{#if loading && !metrics}
-				<div class="flex flex-col gap-4" role="status" aria-label="Loading token usage">
-					<Skeleton class="h-4 w-1/2" />
-					<Skeleton class="h-10 w-full" />
-					<Skeleton class="h-10 w-full" />
-				</div>
+				<UsageSkeleton label="Loading token usage" detail />
 			{:else if !metrics}
 				{#if !error}<Typography.Text variant="supporting">Token usage wasn't recorded for this review, and earlier counts can't be recovered.</Typography.Text>{/if}
 			{:else}

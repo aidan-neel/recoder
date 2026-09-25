@@ -2,7 +2,7 @@ import { beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { clearToken, setToken, tokenEnv } from './tokens';
+import { clearToken, hasToken, setToken, tokenEnv } from './tokens';
 
 beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-tokens-'));
@@ -26,6 +26,21 @@ test('credentials survive a fresh process launched from another directory', () =
 	});
 	expect(result.exitCode).toBe(0);
 	expect(result.stdout.toString().trim()).toBe('restart-token');
+});
+
+test('falls back to the legacy CWD-relative tokens file', () => {
+	const cwd = process.cwd();
+	const legacy = mkdtempSync(join(tmpdir(), 'recoder-legacy-'));
+	mkdirSync(join(legacy, 'data'));
+	writeFileSync(join(legacy, 'data', 'tokens.json'), '{"github":"legacy"}');
+	process.chdir(legacy);
+	try {
+		expect(hasToken('github')).toBe(true);
+		expect(tokenEnv('github')).toEqual({ GH_TOKEN: 'legacy' });
+	} finally {
+		process.chdir(cwd);
+		clearToken('github');
+	}
 });
 
 test('disconnect does not resurrect legacy credentials', () => {

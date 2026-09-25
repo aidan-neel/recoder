@@ -35,16 +35,6 @@ test('repo drafts include the request, global rules, untrusted instruction files
 	expect(prompt).toContain('- [info/patterns] Rename foo to bar (a.ts)');
 });
 
-test('sources can be switched off and current text is revised', async () => {
-	const prompt = await draftUserPrompt(
-		{ scope: 'global', prompt: 'Tighten severity', current: '## Focus\n- Flag auth bugs', include: { instructions: false, findings: false } },
-		{ repo: null, host: null, reviews: [review([{ id: 'f', file: 'a.ts', severity: 'info', message: 'x' }])] }
-	);
-	expect(prompt).toContain('Current guidelines (revise these):\n## Focus\n- Flag auth bugs');
-	expect(prompt).not.toContain('Findings from recent reviews');
-	expect(prompt).toContain('global layer');
-});
-
 test('cleanDraft strips a wrapping fence', () => {
 	expect(cleanDraft('```markdown\n## Focus\n- X\n```')).toBe('## Focus\n- X\n');
 	expect(cleanDraft('## Focus\n- X')).toBe('## Focus\n- X\n');

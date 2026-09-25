@@ -49,7 +49,11 @@
 	{#if !overview}
 		<Card.Root class="settings-list">
 			{#each [0, 1] as i (i)}
-				<div class="settings-row"><Skeleton class="h-4 w-4 rounded" /><div class="flex-1"><Skeleton class="h-3.5 w-32" /></div><Skeleton class="h-7 w-16 rounded-md" /></div>
+				<div class="settings-row" role="status" aria-label="Loading repositories">
+					<Skeleton class="size-4 shrink-0" />
+					<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={i ? 30 : 38} unit="%" /><Skeleton class="h-2.5" w={i ? 44 : 52} unit="%" /></div>
+					<Skeleton class="h-8 w-14" />
+				</div>
 			{/each}
 		</Card.Root>
 	{:else if overview.repos.length === 0}

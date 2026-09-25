@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MAX_GUIDELINES_CHARS } from '@recoder/shared';
-import { composeGuidelines, GUIDELINES_TEMPLATE, hasRules, readGlobalGuidelines, withGuidelines, writeGlobalGuidelines } from './guidelines';
+import { composeGuidelines, GUIDELINES_TEMPLATE, hasRules, readGlobalGuidelines, writeGlobalGuidelines } from './guidelines';
 
 beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-guidelines-'));
@@ -53,9 +53,4 @@ test('truncates an oversized repo layer and says so', () => {
 	expect(composed.used.layers[0].truncated).toBe(true);
 	expect(composed.used.layers[0].chars).toBe(MAX_GUIDELINES_CHARS);
 	expect(composed.block).toContain('[truncated]');
-});
-
-test('withGuidelines appends after the system prompt only when set', () => {
-	expect(withGuidelines('SYSTEM', null)).toBe('SYSTEM');
-	expect(withGuidelines('SYSTEM', 'BLOCK')).toBe('SYSTEM\n\nBLOCK');
 });

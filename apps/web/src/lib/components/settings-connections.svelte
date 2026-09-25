@@ -186,7 +186,7 @@
 						</p>
 					</div>
 					{#if !state}
-						<Skeleton class="h-7 w-20 rounded-md" />
+						<Skeleton class="h-8 w-24" />
 					{:else if state.authenticated}
 						<Button
 							variant="ghost"
@@ -215,7 +215,12 @@
 	{#if openPrs.loading}
 		<Card.Root class="settings-list">
 			{#each [0, 1] as i (i)}
-				<div class="settings-row"><Skeleton class="h-4 w-1/2" /></div>
+				<div class="settings-row" role="status" aria-label="Loading repositories">
+					<Skeleton class="size-3.5 shrink-0" />
+					<div class="min-w-0 flex-1"><Skeleton class="h-3" w={i ? 34 : 42} unit="%" /></div>
+					<Skeleton class="h-2.5 w-12" />
+					<Skeleton class="size-[30px]" />
+				</div>
 			{/each}
 		</Card.Root>
 	{:else if openPrs.repos.length === 0}
@@ -283,8 +288,17 @@
 		<Modal.Header><Modal.Title>Track a repository</Modal.Title></Modal.Header>
 		<Modal.Body>
 			{#if remoteLoading}
-				<div class="flex flex-col gap-2" role="status" aria-label="Listing repositories">
-					{#each [0, 1, 2, 3] as i (i)}<Skeleton class="h-10 w-full rounded-lg" />{/each}
+				<div class="flex flex-col gap-3" role="status" aria-label="Listing repositories">
+					<Skeleton class="h-8 w-full" />
+					<div class="flex flex-col" aria-hidden="true">
+						{#each [44, 30, 52, 36, 40] as width, i (i)}
+							<div class="flex h-[47px] items-center gap-3 border-b border-line-subtle">
+								<Skeleton class="size-3.5 shrink-0" />
+								<div class="min-w-0 flex-1"><Skeleton class="h-3" w={width} unit="%" /></div>
+								<Skeleton class="size-[30px]" />
+							</div>
+						{/each}
+					</div>
 				</div>
 			{:else if remoteError}
 				<Alert.Root variant="error">

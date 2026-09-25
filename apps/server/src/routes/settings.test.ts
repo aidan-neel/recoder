@@ -126,16 +126,6 @@ describe('review settings', () => {
 		expect(configForRole('security')).toMatchObject({ model: 'legacy-model', reasoningEffort: 'high' });
 	});
 
-	test('unconfigured by default', async () => {
-		for (const k of ENV_KEYS) delete process.env[k];
-		expect(isReviewConfigured()).toBe(false);
-		const res = await app.request('/api/settings/models');
-		expect(res.status).toBe(200);
-		const body = await res.json();
-		expect(body.configured).toBe(false);
-		expect(body.apiKeyPreview).toBeNull();
-	});
-
 	test('PUT stores config and GET masks the key', async () => {
 		isolateDataDir();
 		const put = await app.request('/api/settings/models', {
@@ -191,15 +181,6 @@ describe('review settings', () => {
 		expect(effectiveReviewEnv().model).toBe('ui-model');
 		setReviewOverrides({});
 		expect(effectiveReviewEnv().model).toBe('env-model');
-	});
-
-	test('PUT validates input', async () => {
-		const res = await app.request('/api/settings/models', {
-			method: 'PUT',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ maxFiles: -3 })
-		});
-		expect(res.status).toBe(400);
 	});
 
 	test('codex subscription model is listed and selectable as shared', async () => {

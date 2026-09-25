@@ -8,6 +8,39 @@
 
 Run the relevant `check` (and tests) before finishing a change.
 
+CI runs each package's `check`, `test` and `build` as its own job
+(`.github/workflows/ci.yml`), so a failure names the package and task. Add a
+matrix entry when a package gains a new task.
+
+## Unit tests
+
+Tests are `bun test`, next to the code they cover (`foo.ts` → `foo.test.ts`).
+Only write a test when it would catch a bug that `check` and a quick manual run
+would not.
+
+Write a test for:
+
+- Parsers and normalizers of outside input: diffs, model JSON, CLI output, SSE.
+- Security boundaries: sandbox paths, symlinks, token storage, secrets in errors.
+- Concurrency, retries, cancellation, deadlines and budgets.
+- State that must survive a restart or reconnect.
+- A bug you just fixed, so it stays fixed.
+
+Don't write a test for:
+
+- Prompt wording or copy (`toContain('some sentence')` on a prompt).
+- Constants, enums, lookup tables or config echoed back.
+- Behavior the type system or a library already guarantees, like a schema
+  rejecting a malformed body.
+- Trivial getters, one-line wrappers or string formatting.
+- Anything another test already covers.
+- Anything that needs the real network, a logged-in CLI or the real data dir.
+  Stub `fetch`, use a fake binary on `PATH`, and point `RECODER_DATA_DIR` at a
+  temp dir.
+
+Keep each test to one behavior, named as a sentence about that behavior. When a
+change makes a test obsolete, delete the test.
+
 ## UI requirement (mandatory — no exceptions)
 
 - **ALL UI must be built with Sivir UI components** from `@sivir-ui/svelte`.

@@ -104,6 +104,12 @@ export function toModelOption(entry: ModelEntry): ModelOption {
  * ("Ornith 1.5 35B"), else a tidied id ("ornith-ai/Ornith-1.5-35B-A3B" → "Ornith 1.5 35B A3B").
  * Raw ids stay available in tooltips.
  */
+/** ChatGPT models only return summaries of their reasoning, never the reasoning itself. */
+export function summarizesReasoning(modelId: string | null | undefined): boolean {
+	if (!modelId) return false;
+	return modelSettingsUi.config?.models.some((item) => (item.model === modelId || item.id === modelId) && item.provider === 'codex') ?? false;
+}
+
 export function modelLabel(modelId: string | null | undefined): string {
 	if (!modelId) return '';
 	const entry = modelSettingsUi.config?.models.find((item) => item.model === modelId || item.id === modelId);

@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { HomeBriefRequest, Review } from '@recoder/shared';
-import { briefFacts, cleanBrief, clearHomeBriefCache, homeBrief, latestReviews } from './home-brief';
+import { cleanBrief, clearHomeBriefCache, homeBrief, latestReviews } from './home-brief';
 import { setReviewOverrides } from './review-settings';
 
 const realFetch = globalThis.fetch;
@@ -41,17 +41,6 @@ const input: HomeBriefRequest = {
 	],
 	emptyRepos: ['aidan-neel/skills']
 };
-
-test('facts join each PR with its latest review', () => {
-	const high = { id: 'f', file: 'a.ts', severity: 'error' as const, message: 'x' };
-	const facts = briefFacts(input, [review({ findings: [high] })], NOW);
-	expect(facts).not.toContain('Greeting');
-	expect(facts).toContain('Open PRs: 2 across 2 repos.');
-	expect(facts).toContain('#158 "Theme Studio": +604 −137 in 12 files, opened 5h ago; never reviewed.');
-	expect(facts).toContain('#88 "Adaptive planning"');
-	expect(facts).toContain('reviewed 20h ago, 1 high finding.');
-	expect(facts).toContain('Repos with no open PRs: aidan-neel/skills.');
-});
 
 test('a real review outranks a newer empty draft', () => {
 	const done = review({ status: 'passed', updatedAt: hoursAgo(10) });

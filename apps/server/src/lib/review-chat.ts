@@ -110,7 +110,7 @@ export function startReviewChat(reviewId: string, assignmentId: string, text: st
 			if (!db.reviews.get(reviewId)) { controller.abort(); return; }
 			if (reasoning) reportReviewReasoning(reviewId, {
 				id: `reason_${reply.id}`, assignmentId, model: config.model, role,
-				text: reasoning, status
+				...(config.provider === 'codex' ? { text: '', summary: true } : { text: reasoning }), status
 			});
 			forward({ ...reply, status });
 		};

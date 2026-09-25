@@ -13,6 +13,7 @@
 	import { Textarea } from '@sivir-ui/svelte/components/textarea';
 	import { toast } from '@sivir-ui/svelte/components/toast';
 	import ReviewComposer from './review-composer.svelte';
+	import * as Card from '@sivir-ui/svelte/components/card';
 	import Skeleton from './ui/skeleton.svelte';
 	import { guidelinesStore } from '$lib/guidelines.svelte';
 	import { lineDiff } from '$lib/line-diff';
@@ -255,9 +256,21 @@
 				</Alert.Root>
 			</div>
 		{:else if !ready}
+			<!-- Same frame as the loaded editor: a Markdown heading with bullets, then the dock. -->
 			<div class="guidelines-doc guidelines-loading" role="status" aria-label="Loading guidelines">
-				<Skeleton class="h-4 w-24" />
-				{#each ['w-2/3', 'w-5/6', 'w-1/2', 'w-3/4', 'w-2/5'] as w, i (i)}<Skeleton class="h-3.5 rounded-md {w}" />{/each}
+				{#each [[62, 48, 70], [54, 40]] as bullets, g (g)}
+					<Skeleton class="mt-2 h-4 w-24 first:mt-0" />
+					{#each bullets as width, i (i)}
+						<div class="flex items-center gap-3"><Skeleton class="size-1.5 shrink-0 !rounded-full" /><Skeleton class="h-3" w={width} unit="%" /></div>
+					{/each}
+				{/each}
+			</div>
+			<div class="guidelines-dock" aria-hidden="true">
+				<div class="flex gap-2">{#each ['w-32', 'w-40', 'w-28'] as w, i (i)}<Skeleton class="h-8 {w}" />{/each}</div>
+				<Card.Root class="h-[85px] justify-between rounded-[18px] border-0 bg-raised !px-4 !py-3.5 shadow-none ring-1 ring-line-card">
+					<Skeleton class="h-3.5 w-64 max-w-full" />
+					<div class="flex justify-end"><Skeleton class="size-7 !rounded-full" /></div>
+				</Card.Root>
 			</div>
 		{:else}
 			<ScrollArea class="guidelines-scroll" showCues={false} aria-label="Guidelines">

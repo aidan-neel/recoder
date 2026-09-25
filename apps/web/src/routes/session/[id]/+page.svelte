@@ -9,11 +9,11 @@
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
-	import Skeleton from '$lib/components/ui/skeleton.svelte';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Sheet from '@sivir-ui/svelte/components/sheet';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import SessionSkeleton from '$lib/components/session-skeleton.svelte';
+	import DiffSkeleton from '$lib/components/diff-skeleton.svelte';
 	import LiveReviewProgress from '$lib/components/live-review-progress.svelte';
 	import ReviewProgress from '$lib/components/review-progress.svelte';
 	import ReviewMetricsModal from '$lib/components/review-metrics-modal.svelte';
@@ -574,7 +574,8 @@
 }} />
 
 {#if !backendChecked}
-	<SessionSkeleton specialist={!!page.url.searchParams.get('agent')} />
+	{@const loadingView = page.url.searchParams.get('view')}
+	<SessionSkeleton view={loadingView === 'findings' || loadingView === 'diff' ? loadingView : page.url.searchParams.get('agent') ? 'specialist' : 'conversation'} />
 {:else if backendDown && !backendReview}
 	<div class="mx-auto flex h-full w-full max-w-[776px] flex-col justify-center px-4 sm:px-6">
 		<Alert.Root variant="error">
@@ -728,10 +729,7 @@
 							<Alert.Description>Fix the cause, then restart the review from the conversation.</Alert.Description>
 						</Alert.Root>
 					{:else if isBackend && !backendFiles}
-						<div class="diff-loading" role="status" aria-label="Fetching PR diff">
-							<Typography.Metadata>Fetching PR diff…</Typography.Metadata>
-							{#each ['w-11/12', 'w-full', 'w-4/5', 'w-full', 'w-3/5', 'w-5/6', 'w-11/12', 'w-2/3'] as width, i (i)}<Skeleton class="h-3.5 rounded-md {width}" />{/each}
-						</div>
+						<DiffSkeleton label="Fetching PR diff" />
 					{:else}
 						<DiffFileHeader diff={fileDiff} />
 						<ScrollArea orientation="vertical" aria-label="Code diff" class="min-h-0 flex-1" showCues={false}>

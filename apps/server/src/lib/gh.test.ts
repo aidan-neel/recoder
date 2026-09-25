@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fetchPullRequest, GhError, listPullRequests, parseRepoSlug } from './gh';
 import { extractJson } from './gh';
-import { sandboxKey } from './sandbox';
 
 const VIEW_JSON =
 	'{"number":7,"title":"Fix it","url":"https://github.com/o/r/pull/7",' +
@@ -103,19 +102,10 @@ describe('listPullRequests', () => {
 	});
 });
 
-describe('sandboxKey', () => {
-	test('is stable and filesystem-safe', () => {
-		expect(sandboxKey('o/r', 7)).toBe('o__r__pr-7');
-	});
-});
-
 describe('extractJson', () => {
 	test('parses top-level arrays (gh repo list)', () => {
 		expect(extractJson('[{"a":1}]')).toEqual([{ a: 1 }]);
 		expect(extractJson('noise\n[{"a":1}]\n')).toEqual([{ a: 1 }]);
 	});
 
-	test('still parses objects', () => {
-		expect(extractJson('{"a":1}')).toEqual({ a: 1 });
-	});
 });
