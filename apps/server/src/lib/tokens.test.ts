@@ -1,11 +1,18 @@
-import { beforeEach, expect, test } from 'bun:test';
+import { afterAll, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { clearToken, hasToken, setToken, tokenEnv } from './tokens';
 
+const originalDataDir = process.env.RECODER_DATA_DIR;
+
 beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-tokens-'));
+});
+// The last test points RECODER_DATA_DIR at a file; don't leak that into later test files.
+afterAll(() => {
+	if (originalDataDir === undefined) delete process.env.RECODER_DATA_DIR;
+	else process.env.RECODER_DATA_DIR = originalDataDir;
 });
 
 test('saving another provider preserves tokens not loaded in memory', () => {
