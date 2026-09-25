@@ -2,7 +2,7 @@
 
 A self-hosted pull request reviewer.
 
-![Recoder](assets/session.png)
+![Recoder](assets/screenshot.png)
 
 ## Run
 
