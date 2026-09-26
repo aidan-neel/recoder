@@ -12,7 +12,6 @@ const ENV_KEYS = [
 	'RECODER_REVIEW_BASE_URL',
 	'RECODER_REVIEW_API_KEY',
 	'RECODER_REVIEW_MODEL',
-	'RECODER_SECURITY_MODEL',
 	'RECODER_PERF_MODEL'
 ];
 
@@ -30,19 +29,6 @@ describe('models', () => {
 		for (const k of ENV_KEYS) delete process.env[k];
 		expect(isReviewConfigured()).toBe(false);
 		expect(() => configForRole('security')).toThrow();
-	});
-
-	test('shared model with per-role override', () => {
-		process.env.RECODER_REVIEW_BASE_URL = 'https://example.com/v1/';
-		process.env.RECODER_REVIEW_API_KEY = 'key';
-		process.env.RECODER_REVIEW_MODEL = 'shared-model';
-		process.env.RECODER_SECURITY_MODEL = 'strong-model';
-		expect(isReviewConfigured()).toBe(true);
-		expect(configForRole('security')).toMatchObject({
-			baseUrl: 'https://example.com/v1',
-			model: 'strong-model'
-		});
-		expect(configForRole('perf').model).toBe('shared-model');
 	});
 });
 

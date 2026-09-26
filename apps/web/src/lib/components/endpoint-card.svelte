@@ -118,7 +118,7 @@
 		<Typography.Title level={3} id="{id}-title" class="provider-card-title">OpenAI-compatible</Typography.Title>
 		<span class="provider-status" data-on={isSet || undefined}>{isSet ? 'Set' : 'Not set'}</span>
 	</div>
-	<p class="provider-account">vLLM, OpenRouter or DashScope. Used for any role set to an endpoint model.</p>
+	<p class="provider-account">vLLM, OpenRouter or DashScope models, for Review or Specialists.</p>
 	<div class="provider-fields">
 		<Input
 			type="url"

@@ -44,6 +44,12 @@ export class ChatGptProvider {
 		}
 	}
 
+	/** Saved credentials only: no network, so a review can check before its checkout. */
+	async signedIn(): Promise<boolean> {
+		try { return (await this.auth.status()).authenticated; }
+		catch { return false; }
+	}
+
 	async connect(): Promise<CodexConnection> {
 		if (this.active) throw new LlmError(409, 'Wait for active ChatGPT requests to finish before signing in.');
 		return this.auth.connect();
@@ -94,7 +100,7 @@ export class ChatGptProvider {
 	private async checkResponse(response: Response, operation: string): Promise<void> {
 		if (response.ok) return;
 		await response.body?.cancel();
-		if (response.status === 429) throw new LlmError(429, 'ChatGPT usage limit reached. Check Usage in Connections for reset times.');
+		if (response.status === 429) throw new LlmError(429, 'ChatGPT usage limit reached. See Settings → Models for reset times.');
 		if (response.status === 403) throw new LlmError(403, 'ChatGPT denied access. Check model access and workspace permissions.');
 		throw new LlmError(response.status, `Could not load ChatGPT ${operation} (HTTP ${response.status}). ${response.status === 400 ? 'Check the selected model and reasoning effort.' : 'Try again.'}`);
 	}

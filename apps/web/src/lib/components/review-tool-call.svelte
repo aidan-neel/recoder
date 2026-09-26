@@ -12,16 +12,24 @@
 	const presentation = $derived(toolPresentation(tool));
 	const action = $derived(presentation.action);
 	const isRun = $derived(action === 'run' || action === '$');
-	const actionLabel = $derived(isRun ? 'Run' : action === 'writeFile' ? 'Write file' : action === 'readDiff' ? 'Read diff' : ['readFile', 'read'].includes(action) ? 'Read file' : ['search', 'rg'].includes(action) ? 'Search' : ['listFiles', 'list'].includes(action) ? 'List files' : 'Run tool');
+	const live = $derived(tool.status === 'running' && active);
+	// "Reading file" while it runs, "Read file" once it's done.
+	const actionLabel = $derived(isRun ? (live ? 'Running' : 'Run')
+		: action === 'writeFile' ? (live ? 'Writing file' : 'Write file')
+		: action === 'readDiff' ? (live ? 'Reading diff' : 'Read diff')
+		: ['readFile', 'read'].includes(action) ? (live ? 'Reading file' : 'Read file')
+		: ['search', 'rg'].includes(action) ? (live ? 'Searching' : 'Search')
+		: ['listFiles', 'list'].includes(action) ? (live ? 'Listing files' : 'List files')
+		: live ? 'Running tool' : 'Run tool');
 	const target = $derived(presentation.target || 'Details unavailable');
 </script>
 
 <Disclosure size="row" title={target} meta={duration}>
 	{#snippet label()}
-		<span class="tool-row-action">{actionLabel}</span>
+		<span class="tool-row-action" class:shimmer-text={live}>{actionLabel}</span>
 		<span class="tool-row-target" data-command={isRun || undefined}>{target}</span>
 		{#if isRun && tool.status !== 'running' && tool.exitCode !== null}<span class="tool-row-exit" data-failed={tool.exitCode !== 0 || undefined}>exit {tool.exitCode}</span>{/if}
-		{#if tool.status === 'running' && active}<Spinner size={12} class="shrink-0 text-sev-medium" aria-hidden="true" />{/if}
+		{#if live}<Spinner size={12} class="shrink-0 text-sev-medium" aria-hidden="true" />{/if}
 		{#if tool.status === 'error' || interrupted}<span class="shrink-0 text-danger">{interrupted ? 'Interrupted' : 'Failed'}</span>{/if}
 	{/snippet}
 	<div class="min-w-0 space-y-3 py-1">

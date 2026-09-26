@@ -43,6 +43,7 @@ const SNAPSHOT_KEYS = [
 	'coverage',
 	'coverageGaps',
 	'outcome',
+	'failure',
 	'recommendedChecks',
 	'stage',
 	'planningDegraded',

@@ -160,19 +160,57 @@ test('a 401 refreshes once and retries the same request without API fallback', a
 	expect(f.calls.every((call) => call.headers.get('authorization') !== `Bearer ${input.apiKey}`)).toBe(true);
 });
 
-test('repeated 401 requires sign-in rather than a refresh loop', async () => {
+test('a 401 after a fresh refresh fails the request but keeps the login', async () => {
 	const f = fixture({ handler: (call) => call.url.endsWith('/responses') ? new Response('', { status: 401 }) : undefined });
-	await expect(f.provider.complete(input)).rejects.toThrow('Sign in again');
+	await expect(f.provider.complete(input)).rejects.toThrow('right after renewing the sign-in');
 	expect(f.calls.filter((call) => call.url.endsWith('/oauth/token'))).toHaveLength(1);
-	expect((await f.provider.status()).authenticated).toBe(false);
+	expect((await f.provider.status()).authenticated).toBe(true);
 });
 
-test.each([400, 401, 403, 500])('refresh HTTP %s gives actionable errors and preserves credentials only on transient failure', async (status) => {
-	const f = fixture({ expired: true, handler: (call) => call.url.endsWith('/oauth/token') ? Response.json({ error: 'private-refresh' }, { status }) : undefined });
-	await expect(f.provider.complete(input)).rejects.toThrow(status === 500 ? 'HTTP 500' : 'Sign in again');
-	const stored = JSON.parse(readFileSync(f.file, 'utf8')).credentials;
-	expect(Boolean(stored)).toBe(status === 500);
+test.each([
+	[401, { error: 'invalid_token' }, false],
+	[400, { error: 'invalid_grant' }, false],
+	[400, { error: { code: 'refresh_token_reused' } }, false],
+	[400, { error: 'private-refresh' }, true],
+	[403, { error: 'private-refresh' }, true],
+	[500, { error: 'private-refresh' }, true]
+])('refresh HTTP %s %j keeps the login only when the failure is temporary', async (status, body, kept) => {
+	const f = fixture({ expired: true, handler: (call) => call.url.endsWith('/oauth/token') ? Response.json(body, { status }) : undefined });
+	const error = await f.provider.complete(input).then(() => null, (e: Error) => e);
+	expect(error?.message).toContain(kept ? `HTTP ${status}` : 'Sign in again');
+	expect(error?.message).not.toContain('private-refresh');
+	expect(Boolean(JSON.parse(readFileSync(f.file, 'utf8')).credentials)).toBe(kept);
 	expect(f.calls.some((call) => call.url.endsWith('/responses'))).toBe(false);
+});
+
+test('a rejected refresh keeps tokens another instance rotated meanwhile', async () => {
+	let rotated = () => {};
+	const f = fixture({ expired: true, handler: (call) => {
+		if (!call.url.endsWith('/oauth/token')) return undefined;
+		rotated();
+		return Response.json({ error: 'refresh_token_reused' }, { status: 400 });
+	} });
+	rotated = () => writeFileSync(f.file, JSON.stringify({ version: 1, credentials: {
+		accessToken: token('-other'), refreshToken: 'private-refresh-other', accountId: 'account-test',
+		expiresAt: now + 3600_000, email: 'tester@example.test', planType: 'plus'
+	} }));
+	await f.provider.complete(input);
+	expect(JSON.parse(readFileSync(f.file, 'utf8')).credentials.refreshToken).toBe('private-refresh-other');
+	expect(f.calls.find((call) => call.url.endsWith('/responses'))?.headers.get('authorization')).toBe(`Bearer ${token('-other')}`);
+});
+
+test('two instances on one credentials file share a single refresh', async () => {
+	let refreshes = 0;
+	const f = fixture({ expired: true, handler: async (call) => {
+		if (!call.url.endsWith('/oauth/token')) return undefined;
+		refreshes++;
+		await Bun.sleep(5);
+		return Response.json(tokens('-new'));
+	} });
+	const second = new ChatGptProvider(new ChatGptAuth(f.http, () => f.directory, () => now));
+	providers.push(second);
+	await Promise.all([f.provider.complete(input), second.complete(input)]);
+	expect(refreshes).toBe(1);
 });
 
 test('refresh retains the previous refresh token when rotation is omitted', async () => {
@@ -196,8 +234,8 @@ test('direct Responses requests preserve roles and effort without unsupported AP
 	for (const key of ['max_output_tokens', 'max_tokens', 'temperature', 'seed']) expect(call.body[key]).toBeUndefined();
 });
 
-test.each(['low', 'medium', 'high'] as const)('direct model request consumes persisted role effort %s', async (reasoningEffort) => {
-	setReviewOverrides({ models: [{ id: 'sub', label: 'ChatGPT', model: 'test-model', provider: 'codex' }], roleEfforts: { security: reasoningEffort } });
+test.each(['low', 'medium', 'high'] as const)('direct model request consumes the persisted Specialist effort %s', async (reasoningEffort) => {
+	setReviewOverrides({ models: [{ id: 'sub', label: 'ChatGPT', model: 'test-model', provider: 'codex' }], specialistEffort: reasoningEffort });
 	const f = fixture();
 	await f.provider.complete({ ...input, ...configForRole('security') });
 	expect(f.calls.find((call) => call.url.endsWith('/responses'))!.body.reasoning.effort).toBe(reasoningEffort);

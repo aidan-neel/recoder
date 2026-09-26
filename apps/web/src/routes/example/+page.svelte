@@ -5,6 +5,7 @@
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import ReviewingView, { type ReviewingFinding } from '$lib/components/reviewing-view.svelte';
 	import CodeDiff from '$lib/components/code-diff.svelte';
+	import { findingsStore } from '$lib/findings.svelte';
 	import { getFileDiff } from '$lib/diff';
 	import { DEFAULT_FILE } from '$lib/session-file.svelte';
 
@@ -12,7 +13,12 @@
 	const now = Date.now();
 	const iso = (secondsAgo: number) => new Date(now - secondsAgo * 1000).toISOString();
 	const model = 'GPT 5.6 Sol';
-	let awaitingPrompt = $state(false);
+	// `?state=draft` previews a new session: the opening card, then the orchestrator's first pass.
+	const draft = page.url.searchParams.get('state') === 'draft';
+	// `?state=failed` previews an incomplete review with Continue review.
+	let failed = $state(page.url.searchParams.get('state') === 'failed');
+	let continuing = $state(false);
+	let awaitingPrompt = $state(draft);
 	const specs = [
 		{ id: 'testing', title: 'Test Coverage', operation: 'Searching across `/study` for missing tests…' },
 		{ id: 'complexity', title: 'Complexity', operation: 'Searching across `/study` for complexity…' },
@@ -27,7 +33,25 @@
 		{ id: 'request', assignmentId: ORCHESTRATOR_ID, from: 'user', text: 'No questions yet, just start your review first.', at: iso(130), status: 'done' },
 		{ id: 'plan', assignmentId: ORCHESTRATOR_ID, from: 'assistant', model, text: 'Okay, beginning a review on Sivir UI. First, I’ll create 3 specialists for a broad review.', at: iso(100), status: 'done' }
 	];
-	let messages = $state<ReviewChatMessage[]>([...initialMessages]);
+	const openerMessage: ReviewChatMessage = {
+		id: 'opener', assignmentId: ORCHESTRATOR_ID, from: 'assistant', model, discussion: true, at: iso(20), status: 'done',
+		text: 'This pull request moves `sivir list` formatting into its own module and adds a `sivir status` command.\n\nRisk areas:\n- `status.ts`: an empty queue prints nothing instead of a message.\n- `list.ts`: column widths changed, so scripts that parse the output may break.\n\nYou can comment on the diff, ask about anything, or press Run full review.'
+	};
+	// `?state=fixes` previews fixes a reply asked for: one being written, one ready to apply.
+	const fixesPreview = page.url.searchParams.get('state') === 'fixes';
+	const fixReply: ReviewChatMessage = {
+		id: 'fix-reply', assignmentId: ORCHESTRATOR_ID, from: 'assistant', model, discussion: true, at: iso(5), status: 'done',
+		text: 'I’ll fix the tenant leak and the eviction issue.\n\n```recoder-fix\n{"findings":["F-01","F-02"]}\n```'
+	};
+	if (fixesPreview) {
+		findingsStore.fixBatches['fix-reply'] = ['f-security-tenant', 'f-perf-eviction'];
+		findingsStore.suggestions['f-security-tenant'] = {
+			status: 'ready', summary: 'Key buckets by tenant as well as route.', applies: true,
+			patch: 'diff --git a/src/rate-limit/limiter.ts b/src/rate-limit/limiter.ts\n--- a/src/rate-limit/limiter.ts\n+++ b/src/rate-limit/limiter.ts\n@@ -20,3 +20,3 @@\n export function bucketKey(req: Request): string {\n-\treturn req.route;\n+\treturn `${req.tenantId}:${req.route}:${req.headers.get(\'x-forwarded-for\') ?? req.ip}`;\n }\n'
+		};
+		findingsStore.suggestions['f-perf-eviction'] = { status: 'loading' };
+	}
+	let messages = $state<ReviewChatMessage[]>(draft ? [openerMessage] : fixesPreview ? [...initialMessages, fixReply] : [...initialMessages]);
 	let previewKey = $state(0);
 	let diffOpen = $state(false);
 	const reasoning: ReviewReasoningEntry[] = [{
@@ -79,7 +103,9 @@
 		['readFile', 'src/rate-limit/index.ts', 200], ['readFile', 'src/time/clock.ts', 200]
 	].map(([action, target, ms], i) => ({
 		id: `live-tool-${i}`, assignmentId: ORCHESTRATOR_ID, command: `${action} ${target}`, input: { action: action as string, path: target as string },
-		status: 'done', exitCode: 0, startedAt: iso(118 - i), elapsedMs: ms as number
+		// The last reads are still going, so the preview shows the live labels.
+		...(i >= 2 ? { status: 'running' as const, exitCode: null } : { status: 'done' as const, exitCode: 0, elapsedMs: ms as number }),
+		startedAt: iso(118 - i)
 	}));
 	const liveReasoning: ReviewReasoningEntry[] = [{ id: 'live-reasoning', assignmentId: ORCHESTRATOR_ID, model, at: iso(132), status: 'done', text: 'Reading the diff to scope specialists.' }];
 
@@ -123,9 +149,12 @@
 		assignments={awaitingPrompt ? [] : assignments}
 		tasks={awaitingPrompt ? [] : [...tasks, { id: 'consolidation', label: 'Finalize review', message: 'Complete', status: 'done', elapsedMs: 20000, updatedAt: iso(0) }]}
 		reasoning={awaitingPrompt ? [] : reasoning} {messages} toolCalls={awaitingPrompt ? [] : toolCalls} orchestratorModel={model}
-		findings={awaitingPrompt ? [] : findings} stage={6} stageLabel="Review complete" active={false} {awaitingPrompt} completedAt={awaitingPrompt ? undefined : iso(0)}
+		findings={awaitingPrompt ? [] : findings} stage={6} stageLabel={failed ? 'Specialist review' : 'Review complete'} active={continuing} {failed} {awaitingPrompt} completedAt={awaitingPrompt ? undefined : iso(0)}
+		failure={failed ? { reason: 'The model endpoint timed out.' } : null}
+		onContinue={failed ? async () => { continuing = true; await new Promise((resolve) => setTimeout(resolve, 900)); failed = false; continuing = false; } : null}
 		planSummary={'I created 3 specialists for this review:\n\n- Test coverage\n- Complexity\n- Documentation'}
 		onSend={send} onOpenDiff={() => diffOpen = true}
+		onStartReview={awaitingPrompt ? async () => { await new Promise((resolve) => setTimeout(resolve, 600)); awaitingPrompt = false; } : null}
 		onRestart={() => { messages = []; awaitingPrompt = true; previewKey++; }} />
 {/key}
 {/if}

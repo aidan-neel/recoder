@@ -28,6 +28,12 @@ export interface EvidenceRecord {
 	exitCode?: number | null;
 }
 
+export interface EvidenceSnapshot {
+	records: EvidenceRecord[];
+	seq: number;
+	toolSeq: number;
+}
+
 export interface RetrievalAction {
 	action: 'listFiles' | 'readFile' | 'search' | 'readDiff' | 'run' | 'writeFile';
 	revision?: string;
@@ -117,6 +123,21 @@ export class EvidenceStore {
 		readonly inventory: ReviewInventory,
 		readonly maxFileChars: number
 	) {}
+
+	/** The records a checkpoint needs, plus the id counters so restored and new ids never collide. */
+	snapshot(ids: Iterable<string>): EvidenceSnapshot {
+		const records = [...new Set(ids)].flatMap((id) => {
+			const record = this.records.get(id);
+			return record ? [{ ...record }] : [];
+		});
+		return { records, seq: this.seq, toolSeq: this.toolSeq };
+	}
+
+	restore(snapshot: EvidenceSnapshot): void {
+		for (const record of snapshot.records) this.records.set(record.id, { ...record });
+		this.seq = Math.max(this.seq, snapshot.seq);
+		this.toolSeq = Math.max(this.toolSeq, snapshot.toolSeq);
+	}
 
 	providedIds(): Set<string> {
 		return new Set(this.records.keys());

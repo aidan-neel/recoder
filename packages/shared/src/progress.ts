@@ -180,6 +180,16 @@ export interface ReviewCodeContext {
 	diffContext?: string;
 }
 
+/** What the developer can do about a failed request: sign in to ChatGPT, or set up a model. */
+export type FailureAction = 'sign-in' | 'settings';
+
+/** Why a model call failed, in words for the developer. */
+export interface ModelFailure {
+	reason: string;
+	/** ChatGPT is signed out or its sign-in expired; signing in fixes it. */
+	signIn?: boolean;
+}
+
 export interface ReviewChatMessage {
 	id: string;
 	assignmentId: string;
@@ -193,6 +203,8 @@ export interface ReviewChatMessage {
 	/** Specialist conversation mirrored into the orchestrator transcript. */
 	forwardedFrom?: string;
 	codeContext?: ReviewCodeContext;
+	/** Set on a reply the model could not finish. */
+	failure?: ModelFailure;
 }
 
 /** One layer of owner review guidelines a review ran with. */
@@ -234,6 +246,8 @@ export interface ReviewProgress {
 	coverage?: CoverageSummary;
 	coverageGaps?: CoverageGap[];
 	outcome?: ReviewOutcome;
+	/** Why a failed review stopped, when a model call caused it. */
+	failure?: ModelFailure;
 	recommendedChecks?: string[];
 	stage?: ReviewStage;
 	planningDegraded?: boolean;

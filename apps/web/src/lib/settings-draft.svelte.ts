@@ -1,5 +1,5 @@
-import type { ModelSettings, ModelSettingsPatch, ReviewRole } from '@recoder/shared';
-import { MODEL_ROLES, modelSettingsUi, type ModelChoice } from './model-settings.svelte';
+import type { ModelSettings, ModelSettingsPatch } from '@recoder/shared';
+import { modelSettingsUi, type ModelChoice } from './model-settings.svelte';
 
 type Limits = ModelSettings['limits'];
 
@@ -12,23 +12,24 @@ const sameChoice = (a: ModelChoice | null | undefined, b: ModelChoice | null | u
  */
 class SettingsDraft {
 	orchestrator = $state<ModelChoice | null>(null);
-	roles = $state<Partial<Record<ReviewRole, ModelChoice | null>>>({});
+	/** Null follows the Review model. */
+	specialist = $state<ModelChoice | null>(null);
 	baseUrl = $state('');
 	/** Typed API key; empty keeps the saved one. */
 	apiKey = $state('');
 	limits = $state<Limits>({ maxFiles: 0, maxDiffChars: 0, maxFileChars: 0 });
 	seeded = $state(false);
-	private initial: { orchestrator: ModelChoice | null; roles: Partial<Record<ReviewRole, ModelChoice | null>>; baseUrl: string; limits: Limits } | null = null;
+	private initial: { orchestrator: ModelChoice | null; specialist: ModelChoice | null; baseUrl: string; limits: Limits } | null = null;
 
 	seed(config: ModelSettings): void {
 		this.orchestrator = modelSettingsUi.orchestrator;
-		this.roles = Object.fromEntries(MODEL_ROLES.map((role) => [role, modelSettingsUi.roleChoice(role)]));
+		this.specialist = config.specialistModelId ? modelSettingsUi.specialist : null;
 		this.baseUrl = config.baseUrl ?? '';
 		this.apiKey = '';
 		this.limits = { ...config.limits };
 		this.initial = {
 			orchestrator: this.orchestrator,
-			roles: { ...this.roles },
+			specialist: this.specialist,
 			baseUrl: this.baseUrl,
 			limits: { ...this.limits }
 		};
@@ -50,16 +51,10 @@ class SettingsDraft {
 			patch.orchestratorModelId = this.orchestrator.modelId;
 			patch.orchestratorEffort = this.orchestrator.effort;
 		}
-		const roles: Partial<Record<ReviewRole, string>> = {};
-		const roleEfforts: ModelSettingsPatch['roleEfforts'] = {};
-		for (const role of MODEL_ROLES) {
-			const choice = this.roles[role];
-			if (!choice || sameChoice(choice, initial.roles[role])) continue;
-			roles[role] = choice.modelId;
-			if (choice.effort) roleEfforts[role] = choice.effort;
+		if (!sameChoice(this.specialist, initial.specialist)) {
+			patch.specialistModelId = this.specialist?.modelId ?? null;
+			patch.specialistEffort = this.specialist?.effort ?? null;
 		}
-		if (Object.keys(roles).length) patch.roles = roles;
-		if (Object.keys(roleEfforts).length) patch.roleEfforts = roleEfforts;
 		if (this.baseUrl.trim() !== initial.baseUrl) patch.baseUrl = this.baseUrl.trim();
 		if (this.apiKey.trim()) patch.apiKey = this.apiKey.trim();
 		if (this.limits.maxFiles !== initial.limits.maxFiles) patch.maxFiles = this.limits.maxFiles;

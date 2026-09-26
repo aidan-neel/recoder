@@ -308,7 +308,7 @@
 					<FixStatus finding={active} />
 					{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks finding={active} />{/if}
 					<div class="focus-detail-foot">
-						<span class="min-w-0 flex-1 truncate">{#if branch && active.status !== 'dismissed'}Pushes one commit to <span class="font-mono">{branch}</span>{/if}</span>
+						<span class="min-w-0 flex-1 truncate">{#if active.fix}Fixed in <span class="font-mono">{active.fix.sha.slice(0, 7)}</span> on <span class="font-mono">{active.fix.branch}</span>{:else if branch && active.status !== 'dismissed'}Pushes one commit to <span class="font-mono">{branch}</span>{/if}</span>
 						{#if active.status === 'open'}
 							<Button variant="ghost" onclick={() => dismiss(active)}>Dismiss</Button>
 							<Button variant="outline" class="gap-1.5" onclick={() => discuss(active)}><MessageSquare size={14} aria-hidden="true" />Discuss</Button>

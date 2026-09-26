@@ -12,6 +12,7 @@ import reviews from './routes/reviews';
 import runs from './routes/runs';
 import webhooks from './routes/webhooks';
 import { VERSION } from './version';
+import { ModelConfigError } from './lib/models';
 
 export const app = new Hono();
 
@@ -40,6 +41,8 @@ app.route('/api/webhooks', webhooks);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
 app.onError((err, c) => {
+	// Any route that needs a model: say what to set up instead of a bare 500.
+	if (err instanceof ModelConfigError) return c.json({ error: err.message, action: 'settings' }, 409);
 	console.error('[recoder] unhandled error', err);
 	return c.json({ error: 'internal server error' }, 500);
 });

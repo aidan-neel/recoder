@@ -4,6 +4,7 @@
 	import Paperclip from '@lucide/svelte/icons/paperclip';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Composer from '@sivir-ui/svelte/components/composer';
+	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 
 	interface Props {
 		value?: string;
@@ -14,6 +15,8 @@
 		sending?: boolean;
 		/** A reply is streaming; Send becomes Stop. */
 		generating?: boolean;
+		/** The review is working or a reply is arriving: a ring spins around Send, which still sends. */
+		busy?: boolean;
 		disabled?: boolean;
 		maxlength?: number;
 		describedBy?: string;
@@ -41,6 +44,7 @@
 		label,
 		sending = false,
 		generating = false,
+		busy = false,
 		disabled = false,
 		maxlength,
 		describedBy,
@@ -116,9 +120,11 @@
 		{@render leading?.()}
 		<span class="flex-1"></span>
 		{@render picker?.()}
-		<Composer.Submit class="rc-send" disabled={generating && !onStop} onclick={stopClick}>
+		<Composer.Submit class="rc-send" data-busy={(busy || generating) && !sending ? '' : undefined} disabled={generating && !onStop} onclick={stopClick}>
 			{#snippet children({ action })}
-				{#if generating || action === 'stop'}
+				{#if sending && !generating}
+					<Spinner size={size === 'panel' ? 14 : 15} aria-hidden="true" />
+				{:else if generating || action === 'stop'}
 					<span class="rc-stop" aria-hidden="true"></span>
 				{:else}
 					<ArrowUp size={size === 'panel' ? 15 : 16} strokeWidth={1.75} aria-hidden="true" />

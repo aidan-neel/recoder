@@ -1,6 +1,6 @@
 import { emptyReviewProgress, parseUnifiedDiff, type CreateReviewInput, type Finding, type Review } from '@recoder/shared';
 import { closeReviewControl, openReviewControl, runWithReviewControl, type ReviewControl } from '../lib/review-control';
-import { db, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
+import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
 import {
 	emitReviewEvent,
 	reportReviewAssignment,
@@ -15,12 +15,15 @@ import { fetchPullRequest } from '../lib/gh';
 import { fetchMergeRequest } from '../lib/glab';
 import { fetchPrContext } from '../lib/pr-context';
 import { runAdaptiveReview } from '../lib/harness';
-import { configForOrchestrator, isReviewConfigured } from '../lib/models';
+import { configForOrchestrator, configForRole, isReviewConfigured } from '../lib/models';
+import { AuthConfigError } from '../lib/agent-loop';
+import { codex } from '../lib/codex';
 import { discussionContext, recordChatMessage } from '../lib/review-chat';
 import { detectProvider, locateRepo, refspecFor } from '../lib/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../lib/sandbox';
 import { tokenEnv } from '../lib/tokens';
 import { withReviewMetrics } from '../lib/metrics';
+import { carryFixes } from '../lib/finding-fixes';
 
 export type QueueReviewInput = CreateReviewInput;
 
@@ -89,6 +92,22 @@ export function startReviewSession(reviewId: string): Review {
 }
 
 /**
+ * Continue a failed review where it stopped. Planning and finished specialists
+ * are kept from the last checkpoint; without one (or when the PR moved on)
+ * the review runs again from the start in the same session.
+ */
+export function continueReviewSession(reviewId: string): Review {
+	const current = db.reviews.get(reviewId);
+	if (!current) throw new Error('review not found');
+	if (current.status !== 'failed') throw new Error('Only an incomplete review can be continued.');
+	if (!isReviewConfigured()) throw new Error('Add a reviewer model in settings before continuing the review.');
+	const review = touch(reviewId, { status: 'queued' });
+	emitReviewEvent(reviewId, { type: 'step', step: 'queued', message: '', data: { stage: 'checkout', outcome: null, failure: null } });
+	void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
+	return review;
+}
+
+/**
  * Drive a queued review: fetch PR metadata → prepare the sandbox →
  * run the adaptive harness → persist coverage and findings.
  *
@@ -113,6 +132,10 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 
 	try {
 		if (!repo) throw new Error('repo not found');
+		// Planning and the correctness pass always run: fail now, not after a long checkout.
+		if ([configForOrchestrator(), configForRole('correctness')].some((config) => config.provider === 'codex') && !(await codex.signedIn())) {
+			throw new AuthConfigError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });
+		}
 		emitReviewEvent(reviewId, { type: 'step', step: 'orchestrator', message: '', data: { orchestratorModel: configForOrchestrator().model } });
 		const provider = repo.provider ?? detectProvider(repo.url);
 		const env = tokenEnv(provider, repo.url);
@@ -192,6 +215,13 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			data: { stage: 'understand' }
 		});
 		throwIfCancelled(control);
+		const { headSha, mergeBaseSha } = inspected.revision;
+		const saved = reviewCheckpoints.get(reviewId);
+		const resume = saved?.headSha === headSha && saved.mergeBaseSha === mergeBaseSha ? saved : null;
+		if (saved && !resume) {
+			reviewCheckpoints.delete(reviewId);
+			emitReviewEvent(reviewId, { type: 'log', step: 'review', message: 'The pull request changed since the last run, so the review starts over.' });
+		}
 		const result = await runWithReviewControl(control, async () => runAdaptiveReview(
 			{
 				diff: inspected.diff,
@@ -200,7 +230,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 				prTitle: review.prTitle,
 				prBody,
 				prContext: await prContext,
-				signal: analysis.signal
+				signal: analysis.signal,
+				resume
 			},
 			{
 				onTask: (task) => reportReviewTask(reviewId, task),
@@ -240,7 +271,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 				},
 				onStage: (stage) => {
 					emitReviewEvent(reviewId, { type: 'step', step: stage, message: '', data: { stage } });
-				}
+				},
+				onCheckpoint: (checkpoint) => reviewCheckpoints.set({ ...checkpoint, id: reviewId, headSha, mergeBaseSha })
 			}
 		));
 		throwIfCancelled(control);
@@ -253,6 +285,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 				coverage: result.coverage,
 				coverageGaps: result.coverageGaps,
 				outcome: result.outcome,
+				failure: result.failure,
 				recommendedChecks: result.recommendedChecks,
 				planningDegraded: result.planningDegraded,
 				candidateCount: result.unconfirmed.length + result.findings.length
@@ -262,7 +295,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		reportReviewTask(reviewId, { id: 'finalize', label: 'Saving results', message: 'Saving review results', status: 'running', kind: 'other' });
 		const findings: Finding[] = result.outcome === 'complete' ? result.findings : [...result.findings, ...result.unconfirmed];
 		const status = result.outcome === 'complete' ? 'passed' : 'failed';
-		touch(reviewId, { status, summary: result.summary, findings });
+		touch(reviewId, { status, summary: result.summary, findings: carryFixes(db.reviews.get(reviewId)?.findings ?? [], findings) });
+		if (status === 'passed') reviewCheckpoints.delete(reviewId);
 		reportReviewTask(reviewId, {
 			id: 'finalize',
 			label: 'Saving results',
@@ -275,6 +309,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			message: result.summary,
 			data: {
 				outcome: result.outcome,
+				...(result.failure ? { failure: result.failure } : {}),
 				coverage: result.coverage,
 				coverageGaps: result.coverageGaps,
 				recommendedChecks: result.recommendedChecks,
@@ -285,14 +320,15 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		const cancelled = analysis.signal.aborted;
 		analysis.abort();
 		const message = cancelled ? 'Review cancelled.' : err instanceof Error ? err.message : 'pipeline failed';
+		const failure = !cancelled && err instanceof AuthConfigError ? err.failure : undefined;
 		try {
 			const snapshot = reviewProgress.get(reviewId);
-			if (snapshot) reviewProgress.set({ ...snapshot, outcome: 'failed' });
+			if (snapshot) reviewProgress.set({ ...snapshot, outcome: 'failed', ...(failure ? { failure } : {}) });
 			touch(reviewId, { status: 'failed', summary: message });
 		} catch {
 			// Review was deleted mid-run (e.g. its session was closed) — nothing to update.
 		}
-		emitReviewEvent(reviewId, { type: 'error', message, data: { paused: false } });
+		emitReviewEvent(reviewId, { type: 'error', message, data: { paused: false, ...(failure ? { failure } : {}) } });
 	} finally {
 		closeReviewControl(reviewId, control);
 		try {

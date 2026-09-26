@@ -127,7 +127,7 @@ export function resolveEffort(model: ModelOption | undefined, effort: ReasoningE
 export type SettingsSection = 'models' | 'connections' | 'harness' | 'guidelines' | 'appearance';
 
 /** A dialog to open inside the section as soon as Settings shows it. */
-export type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-repos' };
+export type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-repos' } | { kind: 'chatgpt-sign-in' };
 
 /** Global open state + cached config for the model settings modal. */
 class ModelSettingsUi {
@@ -157,22 +157,27 @@ class ModelSettingsUi {
 		return (this.config?.models ?? []).map(toModelOption);
 	}
 
-	/** The Orchestrator's model and effort: what the composer picker shows. */
+	/** The Review model and effort (the orchestrator): what the composer picker shows. */
 	get orchestrator(): ModelChoice | null {
 		const config = this.config;
 		if (!config) return null;
 		const modelId = config.orchestratorModelId ?? config.sharedModelId ?? config.models[0]?.id;
 		const model = this.models.find((item) => item.id === modelId);
 		if (!model) return null;
-		return { modelId: model.id, effort: resolveEffort(model, config.orchestratorEffort ?? config.roleEfforts?.correctness) };
+		return { modelId: model.id, effort: resolveEffort(model, config.orchestratorEffort) };
 	}
 
-	get applyToSpecialists(): boolean {
-		return this.config?.applyToSpecialists ?? false;
+	/** The one model every specialist runs on, mirroring the server: unset follows Review. */
+	get specialist(): ModelChoice | null {
+		const config = this.config;
+		if (!config?.specialistModelId) return this.orchestrator;
+		const model = this.models.find((item) => item.id === config.specialistModelId);
+		if (!model) return this.orchestrator;
+		return { modelId: model.id, effort: resolveEffort(model, config.specialistEffort) };
 	}
 
 	/** Optimistically apply a patch, then persist; reverts and reports on failure. */
-	async update(patch: Pick<ModelSettingsPatch, 'orchestratorModelId' | 'orchestratorEffort' | 'applyToSpecialists'>): Promise<boolean> {
+	async update(patch: Pick<ModelSettingsPatch, 'orchestratorModelId' | 'orchestratorEffort' | 'specialistModelId' | 'specialistEffort'>): Promise<boolean> {
 		const previous = this.config;
 		if (previous) this.config = { ...previous, ...patch };
 		const ok = await this.save(patch);
@@ -187,39 +192,8 @@ class ModelSettingsUi {
 		return this.update({ orchestratorModelId: choice.modelId, orchestratorEffort: choice.effort });
 	}
 
-	/** The model a specialist role runs on, mirroring the server's routing. */
-	roleChoice(role: ReviewRole): ModelChoice | null {
-		const config = this.config;
-		if (!config) return null;
-		if (config.applyToSpecialists) return this.orchestrator;
-		const modelId = config.roles[role] ?? config.specialistModelId ?? config.sharedModelId ?? config.models[0]?.id;
-		const model = this.models.find((item) => item.id === modelId);
-		if (!model) return null;
-		return { modelId: model.id, effort: resolveEffort(model, config.roleEfforts?.[role]) };
-	}
-
-	async selectRole(role: ReviewRole, choice: ModelChoice): Promise<boolean> {
-		const previous = this.config;
-		if (previous) {
-			this.config = {
-				...previous,
-				roles: { ...previous.roles, [role]: choice.modelId },
-				roleEfforts: choice.effort ? { ...previous.roleEfforts, [role]: choice.effort } : previous.roleEfforts
-			};
-		}
-		const ok = await this.save({
-			roles: { [role]: choice.modelId },
-			...(choice.effort ? { roleEfforts: { [role]: choice.effort } } : {})
-		});
-		if (!ok) {
-			this.config = previous;
-			errorToast('Model settings were not saved', this.error ?? undefined);
-		}
-		return ok;
-	}
-
-	setApplyToSpecialists(on: boolean): Promise<boolean> {
-		return this.update({ applyToSpecialists: on });
+	selectSpecialist(choice: ModelChoice): Promise<boolean> {
+		return this.update({ specialistModelId: choice.modelId, specialistEffort: choice.effort });
 	}
 
 	private capabilitiesChecked = false;

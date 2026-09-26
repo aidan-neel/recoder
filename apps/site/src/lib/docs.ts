@@ -69,7 +69,7 @@ The web app opens on [localhost:5173](http://localhost:5173) and the server list
 | --- | --- | --- |
 | \`RECODER_REVIEW_MAX_FILE_CHARS\` | \`12000\` | Most characters returned by one file read. |
 | \`RECODER_REVIEW_EXCLUDE\` | none | Comma-separated text. Files whose path contains any of it are left out of the review. |
-| \`RECODER_LLM_CONCURRENCY\` | \`4\` | Most model requests running at once. |
+| \`RECODER_LLM_CONCURRENCY\` | \`8\` | Most model requests running at once. |
 | \`RECODER_LLM_RETRIES\` | \`5\` | Retries for a failed model request. |
 
 ## Commands

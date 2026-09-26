@@ -17,6 +17,16 @@ function key(hunkId: string, role?: string): string {
 export class CoverageLedger {
 	private readonly entries = new Map<string, CoverageEntry>();
 
+	/** Every entry, for a resume checkpoint. */
+	snapshot(): CoverageEntry[] {
+		return [...this.entries.values()].map((entry) => ({ ...entry }));
+	}
+
+	/** Put back a checkpoint's entries over a freshly seeded ledger. */
+	restore(entries: CoverageEntry[]): void {
+		for (const entry of entries) this.entries.set(key(entry.hunkId, entry.role), { ...entry });
+	}
+
 	seed(inventory: ReviewInventory): void {
 		for (const file of inventory.files) {
 			if (file.hunks.length === 0) continue;

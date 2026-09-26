@@ -18,10 +18,12 @@
 		onOpenFinding?: ((finding: ReviewingFinding) => void) | null;
 		onRestart?: (() => void) | null;
 		onStartReview?: (() => Promise<void>) | null;
+		/** Continue a failed review from where it stopped. */
+		onContinue?: (() => Promise<void>) | null;
 		actionError?: string | null;
 		restarting?: boolean;
 	}
-	let { review, stream, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onShowView = null, onOpenFinding = null, onRestart = null, onStartReview = null, actionError = null, restarting = false }: Props = $props();
+	let { review, stream, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onShowView = null, onOpenFinding = null, onRestart = null, onStartReview = null, onContinue = null, actionError = null, restarting = false }: Props = $props();
 	const progress = $derived(stream.progress);
 	const connection = $derived(stream.connection);
 	let now = $state(Date.now());
@@ -39,7 +41,8 @@
 		const seconds = Math.max(0, Math.floor(ms / 1000));
 		return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
 	}
-	const assignments = $derived<ReviewAssignment[]>(progress.assignments ?? []);
+	// One entry per id (latest wins): reviews saved before follow-up ids were made unique can repeat one.
+	const assignments = $derived<ReviewAssignment[]>([...new Map((progress.assignments ?? []).map((assignment) => [assignment.id, assignment])).values()]);
 	// Planner/consolidation events are review-level, never another correctness assignment.
 	const pipelineId = '__pipeline';
 	const confirmed = $derived(status === 'passed');
@@ -102,13 +105,15 @@
 	{onShowView}
 	{onOpenFinding}
 	{onRestart}
+	onContinue={status === 'failed' ? onContinue : null}
 	{restarting}
 	stage={stageIndex}
 	stageLabel={currentStage}
 	stageDetail={stageIndex === 0 ? progress.tasks[['fetch', 'sandbox', 'diff'].find((id) => progress.tasks[id]?.status === 'running') ?? 'fetch']?.message
 		: stageIndex === 2 ? (progress.tasks.checks ?? progress.tasks.setup)?.message : undefined}
 	failed={status === 'failed'}
-	errorMessage={actionError ?? (status === 'failed' && !progress.assignments?.length ? review.summary : null)}
+	errorMessage={actionError ?? (status === 'failed' && !progress.failure && progress.outcome !== 'partial' ? review.summary : null)}
+	failure={progress.failure ?? null}
 	{connectionLabel}
 	connectionLost={connection === 'reconnecting'}
 	planSummary={progress.planSummary ?? null}

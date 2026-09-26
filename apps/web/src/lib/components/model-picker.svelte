@@ -19,10 +19,12 @@
 		onSelect: (choice: ModelChoice) => void;
 		/** 30px in composers, 28px in side panels. */
 		size?: 'md' | 'panel';
-		/** Composer extras: "Apply to all specialists" and "Role models…". */
+		/** Composer extra: "Model settings…". */
 		composerExtras?: boolean;
-		/** Trigger text when `value` is null (e.g. "Same as Orchestrator"). */
+		/** Trigger text when `value` is null (e.g. "Same as Review"). */
 		placeholder?: string;
+		/** Offers `placeholder` as the first model option, to go back to following another pick. */
+		onFollow?: () => void;
 		disabled?: boolean;
 		label?: string;
 	}
@@ -33,6 +35,7 @@
 		size = 'md',
 		composerExtras = false,
 		placeholder = 'Choose a model',
+		onFollow,
 		disabled = false,
 		label = 'Model and reasoning effort'
 	}: Props = $props();
@@ -79,7 +82,7 @@
 		if (model) onSelect({ modelId: model.id, effort: next });
 	}
 
-	function openRoleModels(): void {
+	function openModelSettings(): void {
 		open = false;
 		modelSettingsUi.show();
 	}
@@ -112,10 +115,17 @@
 			<DropdownMenu.SubTrigger class="model-menu-row">
 				<span class="flex w-full items-center gap-2">
 					<span class="flex-1">Model</span>
-					<span class="model-menu-value">{model?.displayName ?? 'None'}</span>
+					<span class="model-menu-value">{model?.displayName ?? (onFollow ? placeholder : 'None')}</span>
 				</span>
 			</DropdownMenu.SubTrigger>
 			<DropdownMenu.SubContent class="submenu-left w-[230px]">
+				{#if onFollow}
+					<DropdownMenu.Item callback={onFollow} class="model-option" aria-checked={!value} role="menuitemradio">
+						<span class="flex w-3 shrink-0 justify-center" aria-hidden="true">{#if !value}<Check size={12} />{/if}</span>
+						<span class="flex-1 truncate text-left text-[13px]">{placeholder}</span>
+					</DropdownMenu.Item>
+					<DropdownMenu.Separator />
+				{/if}
 				{#each models as option (option.id)}
 					<DropdownMenu.Item
 						callback={() => pickModel(option)}
@@ -162,7 +172,7 @@
 					{/each}
 				</DropdownMenu.SubContent>
 			</DropdownMenu.Sub>
-		{:else}
+		{:else if model}
 			<DropdownMenu.Item disabled class="model-menu-row">
 				<span class="flex-1 text-left">Reasoning effort</span>
 				<span class="model-menu-value">Not supported</span>
@@ -171,20 +181,9 @@
 
 		{#if composerExtras}
 			<DropdownMenu.Separator />
-			<DropdownMenu.CheckboxItem
-				class="model-menu-row apply-all"
-				checked={modelSettingsUi.applyToSpecialists}
-				onCheckedChange={(on) => void modelSettingsUi.setApplyToSpecialists(on)}
-				onclick={(event) => event.preventDefault()}
-			>
-				<span class="flex-1 text-left">Apply to all specialists</span>
-				<span class="switch-sm" aria-hidden="true">
-					<span data-ui="switch" data-state={modelSettingsUi.applyToSpecialists ? 'checked' : 'unchecked'} class="flex rounded-full"><span class="block rounded-full"></span></span>
-				</span>
-			</DropdownMenu.CheckboxItem>
-			<DropdownMenu.Item callback={openRoleModels} class="model-menu-row text-fg-subtle">
-				<span class="flex-1 text-left">Role models…</span>
-				<Shortcut shortcut="cmd+," class="keycap" ontrigger={openRoleModels} />
+			<DropdownMenu.Item callback={openModelSettings} class="model-menu-row text-fg-subtle">
+				<span class="flex-1 text-left">Model settings…</span>
+				<Shortcut shortcut="cmd+," class="keycap" ontrigger={openModelSettings} />
 			</DropdownMenu.Item>
 		{/if}
 	</DropdownMenu.Content>

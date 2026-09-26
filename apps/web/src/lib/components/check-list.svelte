@@ -5,10 +5,12 @@
 	import CircleDashed from '@lucide/svelte/icons/circle-dashed';
 	import Minus from '@lucide/svelte/icons/minus';
 	import X from '@lucide/svelte/icons/x';
+	import Wrench from '@lucide/svelte/icons/wrench';
+	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 
-	/** CI checks, failures first. */
-	let { checks }: { checks: PrCheck[] } = $props();
+	/** CI checks, failures first. `onFix` offers a fix for failed checks that have a log. */
+	let { checks, onFix, fixLabel = () => 'Suggest fix' }: { checks: PrCheck[]; onFix?: (check: PrCheck) => void; fixLabel?: (check: PrCheck) => string } = $props();
 	const ORDER = { failed: 0, running: 1, pending: 2, passed: 3, skipped: 4 } as const;
 	const sorted = $derived([...checks].sort((a, b) => ORDER[a.state] - ORDER[b.state] || a.name.localeCompare(b.name)));
 </script>
@@ -24,7 +26,12 @@
 				{:else}<CircleDashed size={13} />{/if}
 			</span>
 			<span class="check-name" title={check.name}>{check.name}</span>
-			<span class="check-state">{check.state}</span>
+			{#if onFix && check.state === 'failed' && check.id}
+				<!-- Dense popover row: the compact size is intentional. -->
+				<Button variant="ghost" size="sm" class="check-fix" onclick={() => onFix(check)}><Wrench size={12} aria-hidden="true" />{fixLabel(check)}</Button>
+			{:else}
+				<span class="check-state">{check.state}</span>
+			{/if}
 			{#if check.url}<a class="check-link" href={check.url} target="_blank" rel="noopener noreferrer" aria-label="Open {check.name}"><ArrowUpRight size={12} aria-hidden="true" /></a>{/if}
 		</li>
 	{/each}

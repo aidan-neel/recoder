@@ -175,17 +175,6 @@ import {
 		void fixFindings(targets);
 	}
 
-	/** The chat asked for fixes: same as Fix all, for those findings. */
-	$effect(() => {
-		const request = findingsStore.fixRequest;
-		if (part === 'nav' || !request || !reviewId) return;
-		findingsStore.fixRequest = null;
-		const targets = request.ids === 'all'
-			? openList
-			: openList.filter((f) => (request.ids as string[]).some((id) => id === f.id || id.toUpperCase() === f.code?.toUpperCase()));
-		if (targets.length) startFixAll(targets);
-	});
-
 	// Search findings without changing the active finding until a result is chosen.
 	function onKeydown(event: KeyboardEvent): void {
 		if (!event.defaultPrevented && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {

@@ -9,6 +9,8 @@
 	import * as Popover from '@sivir-ui/svelte/components/popover';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import CheckList from './check-list.svelte';
+	import CheckFixDialog from './check-fix-dialog.svelte';
+	import { checkFixes } from '$lib/check-fixes.svelte';
 	import { serverApi } from '$lib/server-api';
 
 	/** The pull request's CI checks: a summary button with the list in a popover. Polls while any run. */
@@ -19,6 +21,22 @@
 	let pipeline = $state(false);
 	let error = $state<string | null>(null);
 	let loading = $state(false);
+	let listOpen = $state(false);
+	let fixing = $state<PrCheck | null>(null);
+	let fixOpen = $state(false);
+
+	/** Open the fix for a failed check, writing it first if there isn't one. */
+	function openFix(check: PrCheck): void {
+		listOpen = false;
+		fixing = check;
+		fixOpen = true;
+		const fix = checkFixes.get(reviewId, check);
+		if (!fix || fix.status === 'error') void checkFixes.suggest(reviewId, check);
+	}
+	function fixLabel(check: PrCheck): string {
+		const fix = checkFixes.get(reviewId, check);
+		return fix?.status === 'loading' ? 'Writing fix' : fix?.status === 'ready' ? 'View fix' : 'Suggest fix';
+	}
 
 	const failed = $derived((checks ?? []).filter((c) => c.state === 'failed').length);
 	const active = $derived((checks ?? []).filter((c) => c.state === 'running' || c.state === 'pending').length);
@@ -56,7 +74,7 @@
 {#if checks === null && !error}
 	<span class="pr-checks-pending" aria-label="Loading checks"><Spinner size={12} aria-hidden="true" /></span>
 {:else}
-	<Popover.Root placement="bottom-end">
+	<Popover.Root placement="bottom-end" bind:open={listOpen}>
 		<Popover.Trigger variant="ghost" class="pr-checks" data-tone={tone} aria-label={pipeline ? 'Merge request pipeline' : 'Pull request checks'}>
 			{#if pipeline}
 				{#if error}<CircleDashed size={14} aria-hidden="true" />Pipeline
@@ -77,8 +95,11 @@
 				<Button variant="ghost" size="icon" class="pr-checks-refresh" aria-label="Refresh checks" disabled={loading} onclick={() => void load()}><RefreshCw size={13} aria-hidden="true" /></Button>
 			</div>
 			{#if error}<p class="pr-checks-empty">{error}</p>
-			{:else if checks?.length}<CheckList {checks} />
+			{:else if checks?.length}<CheckList {checks} onFix={openFix} {fixLabel} />
 			{:else}<p class="pr-checks-empty">{pipeline ? "No pipeline has run on this merge request's latest commit." : "No checks have run on this pull request's latest commit."}</p>{/if}
 		</Popover.Content>
 	</Popover.Root>
 {/if}
+
+<!-- The pushed fix starts new runs; check back shortly. -->
+<CheckFixDialog {reviewId} check={fixing} bind:open={fixOpen} onApplied={() => setTimeout(() => void load(), 5000)} />

@@ -18,7 +18,7 @@ function base(env: Record<string, string>): string {
 }
 
 /** Network errors keep their cause: a self-managed host often fails on DNS or TLS. */
-export async function gitlabGet(path: string, env: Record<string, string>): Promise<unknown> {
+export async function gitlabGet(path: string, env: Record<string, string>, asText = false): Promise<unknown> {
 	const host = env.GITLAB_HOST || 'gitlab.com';
 	let response: Response;
 	try {
@@ -30,7 +30,7 @@ export async function gitlabGet(path: string, env: Record<string, string>): Prom
 		const cause = err instanceof Error ? (err.cause instanceof Error ? err.cause.message : err.message) : String(err);
 		throw new GhError('unavailable', `Couldn't reach ${host}: ${cause}`);
 	}
-	if (response.ok) return response.json();
+	if (response.ok) return asText ? response.text() : response.json();
 	const text = await response.text().catch(() => '');
 	if (response.status === 401 || response.status === 403) {
 		throw new GhError('auth', `${host} rejected the token (${response.status}). It needs the read_api scope.`);

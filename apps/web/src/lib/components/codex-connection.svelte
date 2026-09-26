@@ -8,6 +8,8 @@
 	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import type { CodexConnection, CodexModel } from '@recoder/shared';
 	import { serverApi } from '$lib/server-api';
+	import { chatGptStatus } from '$lib/chatgpt-status.svelte';
+	import { modelSettingsUi } from '$lib/model-settings.svelte';
 
 	let {
 		active,
@@ -90,8 +92,9 @@
 				}
 				onSync(models);
 			} else {
+				// An expired sign-in keeps the ChatGPT models and role picks; signing in
+				// again restores them. Only an explicit sign-out clears them.
 				models = [];
-				onClear();
 			}
 			refreshError = '';
 		} catch (cause) {
@@ -158,6 +161,19 @@
 		}
 	}
 
+	$effect(() => {
+		if (connection) chatGptStatus.signedIn = connection.authenticated;
+	});
+
+	/** A "Sign in to ChatGPT" button elsewhere opened Settings: start sign-in once the status is known. */
+	$effect(() => {
+		if (modelSettingsUi.intent?.kind !== 'chatgpt-sign-in' || !active || !connection || busy || disabled) return;
+		untrack(() => {
+			modelSettingsUi.intent = null;
+			if (!connection?.authenticated) void connect();
+		});
+	});
+
 	// Keep the sign-in modal in step with the pending/authenticated state.
 	$effect(() => {
 		if (connection?.login) signInOpen = true;
@@ -209,7 +225,7 @@
 			<Button variant="ghost" class="provider-link" loading={busy} disabled={disabled || busy} onclick={disconnect}>Sign out</Button>
 		</div>
 	{:else}
-		<p class="provider-account">Use your ChatGPT plan for any role set to a ChatGPT model.</p>
+		<p class="provider-account">Run reviews on your ChatGPT plan.</p>
 		<div class="mt-auto flex flex-wrap items-center gap-2 pt-1">
 			{#if connection?.login}
 				<Button variant="outline" onclick={() => (signInOpen = true)}>Show sign-in code</Button>

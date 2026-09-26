@@ -7,7 +7,7 @@
 	import { applyFix, suggestFix } from '$lib/fixes';
 	import { threadsStore } from '$lib/threads.svelte';
 
-	let { finding, class: className = '' }: { finding: Finding; class?: string } = $props();
+	let { finding, variant = 'primary', class: className = '' }: { finding: Finding; variant?: 'primary' | 'outline'; class?: string } = $props();
 	const suggestion = $derived(findingsStore.suggestions[finding.id]);
 	/** A patch has to exist before it can be pushed, so the first step asks for one. */
 	const state = $derived(
@@ -20,7 +20,7 @@
 </script>
 
 <Button
-	variant={state === 'applied' ? 'outline' : 'primary'}
+	variant={state === 'applied' ? 'outline' : variant}
 	class="fix-button {className}"
 	data-state={state}
 	disabled={!threadsStore.reviewId || state === 'suggesting' || state === 'applying' || state === 'applied'}

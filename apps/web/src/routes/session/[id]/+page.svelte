@@ -29,6 +29,7 @@
 	import ReviewConversation from '$lib/components/review-conversation.svelte';
 	import { getFileDiff } from '$lib/diff';
 	import { findingsStore, mapBackendFinding } from '$lib/findings.svelte';
+	import { fixFindings } from '$lib/fixes';
 	import { notesStore } from '$lib/notes.svelte';
 	import { parseFixRequest, parseModelNotes } from '$lib/model-notes';
 	import { errorToast } from '$lib/notify';
@@ -37,7 +38,7 @@
 	import { DEFAULT_FILE, sessionFile } from '$lib/session-file.svelte';
 	import { revealDiffLine } from '$lib/reveal-line';
 	import { guidelinesStore } from '$lib/guidelines.svelte';
-	import { serverApi } from '$lib/server-api';
+	import { ApiError, serverApi } from '$lib/server-api';
 	import { ReviewStream } from '$lib/review-stream.svelte';
 	import { recentSessions } from '$lib/recent-sessions.svelte';
 	import { closeSessionTab } from '$lib/session-tabs';
@@ -182,12 +183,23 @@
 		return view === 'findings' || view === 'diff' ? view : null;
 	});
 	const peekDiff = $derived(workspaceView !== null);
-	function setView(view: SessionView): Promise<void> {
+	function setView(view: SessionView, replaceState = false): Promise<void> {
 		const url = new URL(page.url);
 		if (view === 'conversation') url.searchParams.delete('view');
 		else url.searchParams.set('view', view);
-		return goto(`${url.pathname}${url.search}`, { noScroll: true, keepFocus: true });
+		return goto(`${url.pathname}${url.search}`, { noScroll: true, keepFocus: true, replaceState });
 	}
+	/* A running review opens on Findings, where results land as they are
+	   found. Once per session visit, so choosing Conversation sticks. */
+	let findingsDefaultFor: string | null = null;
+	$effect(() => {
+		const review = backendReview;
+		if (!review || findingsDefaultFor === review.id) return;
+		findingsDefaultFor = review.id;
+		if ((review.status === 'queued' || review.status === 'running') && !page.url.searchParams.get('view')) {
+			untrack(() => void setView('findings', true));
+		}
+	});
 	function setDiffView(open: boolean): void {
 		void setView(open ? 'diff' : 'conversation');
 	}
@@ -377,9 +389,8 @@
 	   reply) become diff notes, once per reply. Cleared with the session. */
 	const notedReplies = new Set<string>();
 
-	/* Fixes the model was asked for (```recoder-fix in a finished reply) open the
-	   Fix-all review for those findings, once per reply. The Findings view hosts
-	   it, so switch there from the conversation. */
+	/* Fixes the model was asked for (```recoder-fix in a finished reply) start
+	   for those findings, once per reply, and show up in that reply. */
 	const fixedReplies = new Set<string>();
 	/** Only replies started after this page opened can trigger fixes (history never re-runs). */
 	const openedAt = Date.now();
@@ -394,8 +405,11 @@
 				fixedReplies.add(message.id);
 				const ids = parseFixRequest(message.text);
 				if (!ids) continue;
-				findingsStore.fixRequest = { key: message.id, ids };
-				if (workspaceView === null) void setView('findings');
+				// Same as Fix all, for those findings.
+				const open = findingsStore.items.filter((f) => f.status === 'open');
+				const targets = ids === 'all' ? open : open.filter((f) => ids.some((id) => id === f.id || id.toUpperCase() === f.code?.toUpperCase()));
+				findingsStore.fixBatches[message.id] = targets.map((f) => f.id);
+				if (targets.length) void fixFindings(targets);
 			}
 		});
 	});
@@ -487,6 +501,7 @@
 			notesStore.clear();
 			notedReplies.clear();
 			fixedReplies.clear();
+			findingsStore.fixBatches = {};
 			// Drop the previous session's file + findings immediately so the new
 			// session never flashes stale content while its review loads.
 			sessionFile.select(DEFAULT_FILE);
@@ -528,8 +543,22 @@
 		if (!backendReview) return;
 		try {
 			backendReview = await serverApi.startReview(backendReview.id);
+			findingsDefaultFor = backendReview.id;
+			void setView('findings');
 		} catch (e) {
 			errorToast('Could not start the review', e instanceof Error ? e.message : undefined);
+		}
+	}
+
+	/** Continue a failed review where it stopped, in this session. */
+	async function continueReview(): Promise<void> {
+		if (!backendReview) return;
+		try {
+			backendReview = await serverApi.continueReview(backendReview.id);
+			findingsDefaultFor = backendReview.id;
+			void setView('findings');
+		} catch (e) {
+			errorToast('Could not continue the review', e instanceof Error ? e.message : undefined, e instanceof ApiError ? e.action : undefined);
 		}
 	}
 
@@ -619,6 +648,7 @@
 		onOpenFinding={(finding) => { if (finding.file) { sessionFile.select(finding.file); userPickedFile = true; } setDiffView(true); }}
 		onRestart={() => void rerunReview()}
 		onStartReview={backendReview?.status === 'draft' ? startDraftReview : null}
+		onContinue={backendReview?.status === 'failed' ? continueReview : null}
 		restarting={queueing}
 		actionError={backendError}
 	/>

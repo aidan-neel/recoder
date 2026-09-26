@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import type { CoverageGap, CoverageSummary, ReviewAssignment, ReviewGuidelinesUsed, ReviewChatMessage, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
+	import type { CoverageGap, CoverageSummary, ModelFailure, ReviewAssignment, ReviewGuidelinesUsed, ReviewChatMessage, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
 	export interface ReviewingFinding {
 		id: string;
 		agent: string | null;
@@ -29,8 +29,8 @@
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import Check from '@lucide/svelte/icons/check';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
-	import CircleAlert from '@lucide/svelte/icons/circle-alert';
-	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
+	import Play from '@lucide/svelte/icons/play';
+	import ScanSearch from '@lucide/svelte/icons/scan-search';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
@@ -48,6 +48,7 @@
 	import PrChecks from './pr-checks.svelte';
 	import SessionHeader from './session-header.svelte';
 	import FindingSeverity from './finding-severity.svelte';
+	import FailureNotice from './failure-notice.svelte';
 	import { closeSessionTab } from '$lib/session-tabs';
 	import { requestDeleteSession } from '$lib/delete-session.svelte';
 	import { formatAgentName } from '$lib/threads.svelte';
@@ -70,6 +71,8 @@
 		completedAt?: string;
 		failed?: boolean;
 		errorMessage?: string | null;
+		/** Why a failed review stopped, when a model call caused it. */
+		failure?: ModelFailure | null;
 		onStartReview?: (() => Promise<void>) | null;
 		paused?: boolean;
 		connectionLost?: boolean;
@@ -78,6 +81,8 @@
 		onShowView?: ((view: 'findings' | 'diff') => void | Promise<void>) | null;
 		onOpenFinding?: ((finding: ReviewingFinding) => void) | null;
 		onRestart: (() => void) | null;
+		/** Continue a failed review from where it stopped. */
+		onContinue?: (() => Promise<void>) | null;
 		onSend?: (assignmentId: string, text: string) => Promise<void>;
 		onStop?: (assignmentId: string) => Promise<void>;
 		restarting?: boolean;
@@ -107,13 +112,27 @@
 	let {
 		reviewId, title, meta, assignments = [], messages = [], orchestratorModel,
 		reasoning = [], toolCalls = [], active = true, failed = false,
-		errorMessage = null, onStartReview = null, paused = false, connectionLost = false, onOpenDiff, onShowView = null, onOpenFinding = null, onRestart,
+		errorMessage = null, failure = null, onStartReview = null, paused = false, connectionLost = false, onOpenDiff, onShowView = null, onOpenFinding = null, onRestart, onContinue = null,
 		onSend, onStop, restarting = false, now = Date.now(), fullscreen = false, stage = 0, tasks = [],
 		planSummary = null, activity = [], showChecks = false, repoId = null, guidelines = null, stageLabel = 'Preparing review', coverage = null, coverageGaps = [],
 		awaitingPrompt = false, completedAt, findings = []
 	}: Props = $props();
 
 	let drafts = $state<Record<string, string>>({});
+	/** A new session opens on a card with Run full review until the developer says something. */
+	const showIntro = $derived(awaitingPrompt && !messages.some((message) => (message.assignmentId ?? ORCHESTRATOR_ID) === ORCHESTRATOR_ID && message.from === 'user'));
+	let introStarting = $state(false);
+	async function startFromIntro(): Promise<void> {
+		if (!onStartReview || introStarting) return;
+		introStarting = true;
+		try { await onStartReview(); } finally { introStarting = false; }
+	}
+	let continuing = $state(false);
+	async function continueRun(): Promise<void> {
+		if (!onContinue || continuing) return;
+		continuing = true;
+		try { await onContinue(); } finally { continuing = false; }
+	}
 	let restartOpen = $state(false);
 	let metricsOpen = $state(false);
 
@@ -265,6 +284,13 @@
 	<Disclosure status={active ? 'running' : failed ? 'error' : 'done'} bodyClass="finalize-body" children={progressHasBody ? progressBody : undefined}>
 		{#snippet label()}{active ? footerLabel : failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
 	</Disclosure>
+	{#if failed && !active && onContinue}
+		<div class="review-start-cta">
+			<Button class="brief-action" loading={continuing} onclick={() => void continueRun()}>
+				<Play size={12} fill="currentColor" aria-hidden="true" /> Continue review
+			</Button>
+		</div>
+	{/if}
 {/snippet}
 
 {#snippet progressBody()}
@@ -276,6 +302,24 @@
 				{/each}
 			</div>
 		{/if}
+{/snippet}
+
+{#snippet reviewIntro()}
+	<div class="focus-empty review-intro">
+		<div class="focus-empty-card">
+			<span class="focus-empty-icon" aria-hidden="true"><ScanSearch size={20} /></span>
+			<Typography.Title level={2} class="focus-empty-title">Nothing reviewed yet</Typography.Title>
+			<p class="focus-empty-text">Ask about any change, or run the full review and specialists will check every file.</p>
+			<div class="focus-empty-facts">
+				{#if meta.files !== null}<span><b>{meta.files}</b> {meta.files === 1 ? 'file' : 'files'}</span>{/if}
+				{#if meta.additions !== null && meta.deletions !== null}<span><b class="text-success">+{meta.additions}</b> <b class="text-danger">−{meta.deletions}</b></span>{/if}
+			</div>
+			<div class="focus-empty-actions">
+				{#if onStartReview}<Button variant="primary" loading={introStarting} disabled={introStarting} onclick={() => void startFromIntro()}>Run full review</Button>{/if}
+				{#if onOpenDiff}<Button variant="ghost" onclick={onOpenDiff}>Open diff</Button>{/if}
+			</div>
+		</div>
+	</div>
 {/snippet}
 
 {#snippet headerChecks()}
@@ -326,26 +370,16 @@
 		</nav>
 	{/if}
 	{#if connectionLost}<Typography.Text role="status" class="mx-auto w-full max-w-[740px] px-6 py-2 text-sm text-sev-medium">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
-	{#if errorMessage}
+	{#if errorMessage || (failed && failure)}
 		<div class="mx-auto w-full max-w-[740px] px-6 pt-3">
-			<Card.Root class="review-notice" {...{ role: 'alert' }}>
-				<CircleAlert size={15} class="review-notice-icon" aria-hidden="true" />
-				<div class="min-w-0 flex-1">
-					<p class="review-notice-title">{failed ? stageLabel : 'Something went wrong'}</p>
-					<p class="review-notice-body">{errorMessage}</p>
-				</div>
-				{#if failed && onRestart}
-					<Button variant="outline" class="shrink-0" loading={restarting} onclick={() => (restartOpen = true)}>
-						<RotateCcw size={13} aria-hidden="true" /> Retry
-					</Button>
-				{/if}
-			</Card.Root>
+			<FailureNotice title={failed ? stageLabel : 'Something went wrong'} reason={errorMessage ?? failure?.reason ?? ''}
+				signIn={!errorMessage && failure?.signIn} onRetry={failed && onContinue ? () => void continueRun() : failed && onRestart ? () => (restartOpen = true) : null} retrying={continuing || restarting} />
 		</div>
 	{/if}
 	<div class="flex min-h-0 flex-1">
 		<div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
 			{#each [selected] as target (target.id)}
-				<ReviewConversation {onStartReview} assignment={target} {messages} reasoning={isOrchestrator ? chatReasoning : reasoning} {toolCalls} {active} {now}
+				<ReviewConversation {onStartReview} intro={isOrchestrator && showIntro ? reviewIntro : undefined} signInShown={failed && !errorMessage && !!failure?.signIn} assignment={target} {messages} reasoning={isOrchestrator ? chatReasoning : reasoning} {toolCalls} {active} {now}
 					awaitingPrompt={isOrchestrator && awaitingPrompt}
 					tasks={tasks.filter((task) => (task.assignmentId ?? ORCHESTRATOR_ID) === target.id)}
 					bind:draft={() => drafts[target.id] ?? '', (value) => drafts[target.id] = value} {onSend} {onStop}

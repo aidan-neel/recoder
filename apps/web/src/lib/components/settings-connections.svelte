@@ -54,11 +54,11 @@
 	/** Home's setup checklist opens Settings straight into a dialog. */
 	$effect(() => {
 		const intent = modelSettingsUi.intent;
-		if (!intent) return;
+		if (!intent || intent.kind === 'chatgpt-sign-in') return;
 		untracked(() => {
 			modelSettingsUi.intent = null;
 			if (intent.kind === 'connect') openToken(intent.provider);
-			else void openBrowse();
+			else if (intent.kind === 'browse-repos') void openBrowse();
 		});
 	});
 

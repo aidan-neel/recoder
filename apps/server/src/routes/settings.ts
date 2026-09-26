@@ -18,11 +18,6 @@ function mask(key: string | undefined): string | null {
 	return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
 }
 
-/** Per-role model routing for the UI (null = use shared). */
-function rolesPayload(): Record<string, string | null> {
-	const stored = getStoredSettings();
-	return Object.fromEntries(REVIEW_ROLES.map((role) => [role, stored.roles?.[role] ?? null]));
-}
 
 const app = new Hono();
 app.route('/codex', codexRoutes);
@@ -50,10 +45,8 @@ function settingsPayload() {
 			...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
 			...(e.contextWindow ? { contextWindow: e.contextWindow } : {})
 		})),
-		roles: rolesPayload(),
-		roleEfforts: stored.roleEfforts ?? {},
 		orchestratorEffort: stored.orchestratorEffort ?? null,
-		applyToSpecialists: stored.applyToSpecialists ?? false,
+		specialistEffort: stored.specialistEffort ?? null,
 		configPath: settingsFileDisplay(),
 		limits: {
 			maxFiles: eff.maxFiles,

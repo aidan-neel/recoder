@@ -16,8 +16,12 @@
 	import ReviewTaskGroup from './review-task-group.svelte';
 	import Disclosure from './ui/disclosure.svelte';
 	import ThoughtLabel from './ui/thought-label.svelte';
+	import DotLoader from './ui/dot-loader.svelte';
 	import CodeRef from './code-ref.svelte';
+	import { findingsStore } from '$lib/findings.svelte';
+	import ConversationFixes from './conversation-fixes.svelte';
 	import CopyAction from './copy-action.svelte';
+	import FailureNotice from './failure-notice.svelte';
 	import StreamingMarkdown from './streaming-markdown.svelte';
 	import ReviewComposer from './review-composer.svelte';
 	import ModelPicker from './model-picker.svelte';
@@ -28,7 +32,7 @@
 	import { parseFixRequest, parseModelNotes, stripModelNotes } from '$lib/model-notes';
 	import { fileIconUrl } from '$lib/material-icons';
 
-	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, inserts = [], placeholder, awaitingPrompt = false, onStartReview = null }: {
+	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, inserts = [], placeholder, awaitingPrompt = false, onStartReview = null, signInShown = false, intro }: {
 		assignment: ReviewAssignment;
 		messages: ReviewChatMessage[];
 		reasoning: ReviewReasoningEntry[];
@@ -48,6 +52,10 @@
 		awaitingPrompt?: boolean;
 		/** Draft (interactive) reviews: the orchestrator offers the full review, so its latest reply carries the button. */
 		onStartReview?: (() => Promise<void>) | null;
+		/** A sign-in notice already shows above the transcript. */
+		signInShown?: boolean;
+		/** Opening card at the top of a new session; it carries Run full review while it shows. */
+		intro?: Snippet;
 	} = $props();
 	let startingReview = $state(false);
 	async function startReview(): Promise<void> {
@@ -72,6 +80,8 @@
 		const index = insert.at ? entries.findIndex((entry) => Date.parse(entry.at) > Date.parse(insert.at!)) : -1;
 		return { ...insert, index: index < 0 ? entries.length : index };
 	}));
+	/** Only the latest sign-in failure carries the notice; earlier ones would repeat it. */
+	const lastSignInIndex = $derived(signInShown ? -1 : entries.findLastIndex((entry) => entry.kind === 'message' && !!entry.message.failure?.signIn));
 	const lastAssistantIndex = $derived(entries.findLastIndex((entry) => entry.kind === 'message' && entry.message.from === 'assistant'));
 	/** Agent turns reply as `message_<reasoning id>`; discussion replies think as `reason_<reply id>`. Either way thinking sits with its reply. */
 	const reasoningByMessage = $derived(new Map<string, ReviewReasoningEntry>(conversationReasoning.flatMap((entry) => [[`message_${entry.id}`, entry], [entry.id.replace(/^reason_/, ''), entry]])));
@@ -140,7 +150,7 @@
 	function traceHead(item: Trace): TraceHead {
 		if (item.kind === 'tasks') {
 			const { status, failed } = taskGroupStatus(item.tools, active);
-			return { label: `${taskGroupLabel(item.tools)}${failed ? ` · ${failed} failed` : ''}`, status };
+			return { label: `${taskGroupLabel(item.tools, status === 'running')}${failed ? ` · ${failed} failed` : ''}`, status };
 		}
 		const working = thoughtLive(item.entry, item.until);
 		return { label: '', thought: { working, time: working ? elapsed(item.entry.at) : elapsed(item.entry.at, item.until) } };
@@ -173,7 +183,6 @@
 		const question = previous.message;
 		return () => void onSend?.(assignment.id, question.text, question.codeContext);
 	}
-	const isRole = (role: string): role is ReviewRole => (MODEL_ROLES as string[]).includes(role);
 	let sending = $state(false);
 	let stopping = $state(false);
 	let error = $state('');
@@ -232,8 +241,11 @@
 		{#each parseModelNotes(message.text) as note, i (i)}
 			<p class="model-note-added">Added a note on <span class="font-mono">{note.file.split('/').at(-1)}:{note.startLine}{note.endLine !== note.startLine ? `–${note.endLine}` : ''}</span></p>
 		{/each}
-		{#if fixRequest}
-			<p class="model-note-added">Preparing fixes for {fixRequest === 'all' ? 'every open finding' : `${fixRequest.length} ${fixRequest.length === 1 ? 'finding' : 'findings'}`}. You review the patches before anything is pushed.</p>
+		{#if findingsStore.fixBatches[message.id]}
+			<ConversationFixes ids={findingsStore.fixBatches[message.id]} />
+		{:else if fixRequest && message.status !== 'streaming'}
+			<!-- An earlier visit's fixes live on their findings. -->
+			<p class="model-note-added">Fixes for {fixRequest === 'all' ? 'every open finding' : `${fixRequest.length} ${fixRequest.length === 1 ? 'finding' : 'findings'}`} are on the Findings tab.</p>
 		{/if}
 	{:else}
 		<StreamingMarkdown content={message.text} streaming={message.status === 'streaming'} />
@@ -245,7 +257,7 @@
 {/snippet}
 
 {#snippet headLabel(head: TraceHead)}
-	{#if head.thought}<ThoughtLabel working={head.thought.working} time={head.thought.time} />{:else}{head.label}{/if}
+	{#if head.thought}<ThoughtLabel working={head.thought.working} time={head.thought.time} />{:else if head.status === 'running'}<span class="shimmer-text">{head.label}</span>{:else}{head.label}{/if}
 {/snippet}
 
 {#snippet traceRow(item: Trace)}
@@ -265,20 +277,42 @@
 <div class="review-chat" data-compact={compact || undefined}>
 <Conversation.Root class="min-h-0 w-full flex-1">
 	<Conversation.Content aria-label={`${assignment.title} messages`} transcriptClass={compact ? '!max-w-[776px] !gap-3 !px-4 !pt-5 !pb-2' : 'review-transcript'} class="![scrollbar-gutter:auto]">
+		{#if intro}{@render intro()}{/if}
 		{#each rows as row (row.key)}
 			{#if row.kind === 'insert'}
 				{@render row.snippet()}
 			{:else if row.kind === 'message'}
 				{@const message = row.message}
 				{@const index = row.index}
-				<Message.Root from={message.from} status={message.status === 'done' ? 'idle' : message.status}
+				<!-- A failure explains itself in a notice, so it gets no "Failed" label or empty reply. -->
+				<Message.Root from={message.from} status={message.status === 'done' || message.failure ? 'idle' : message.status}
 					class="[--font-weight-body:400]"
 					name={message.forwardedFrom ? `${message.from === 'user' ? 'You →' : 'Reply from'} ${message.forwardedFrom}` : undefined}>
-					<Message.Content class={message.from === 'assistant' ? 'review-prose ai-voice' : message.from === 'user' ? 'review-bubble' : '!max-w-full text-sm'}>
-						{@render response(message)}
-					</Message.Content>
+					{#if message.text.trim() || !message.failure}
+						<Message.Content class={message.from === 'assistant' ? 'review-prose ai-voice' : message.from === 'user' ? 'review-bubble' : '!max-w-full text-sm'}>
+							{@render response(message)}
+						</Message.Content>
+					{/if}
+					{#if message.from === 'assistant' && message.status === 'streaming' && message.text.trim()}
+						<span class="message-writing" role="status" aria-label="Still writing"><DotLoader /></span>
+					{/if}
+					{#if message.failure?.signIn && index !== lastSignInIndex}
+						{#if message.status === 'error'}<Typography.Metadata class="text-fg-faint">Not answered: signed out of ChatGPT</Typography.Metadata>{/if}
+					{:else if message.failure}
+						<FailureNotice class="message-failure" title={message.failure.signIn ? 'Signed out of ChatGPT' : 'Reply failed'}
+							reason={message.failure.reason} signIn={message.failure.signIn}
+							onRetry={message.status === 'error' && message.discussion && !generating ? retryFor(index) : null} />
+					{/if}
+					<!-- The message's own actions (start the review) sit in it, above Copy and Retry. -->
+					{#if onStartReview && !intro && !specialist && index === lastAssistantIndex && message.status !== 'streaming'}
+						<div class="review-start-cta">
+							<Button class="brief-action" loading={startingReview} onclick={() => void startReview()}>
+								<Play size={12} fill="currentColor" aria-hidden="true" /> Run full review
+							</Button>
+						</div>
+					{/if}
 					{#if message.from === 'assistant' && message.status !== 'streaming' && message.text.trim() && (message.discussion || (index === lastAssistantIndex && !working))}
-						{@const retry = message.discussion && !generating ? retryFor(index) : null}
+						{@const retry = message.discussion && !generating && !message.failure ? retryFor(index) : null}
 						<Message.Actions class="message-actions">
 							{#if retry}
 								<Tooltip.Root placement="top" delay={750} closeDelay={80}>
@@ -292,13 +326,6 @@
 						</Message.Actions>
 					{/if}
 				</Message.Root>
-				{#if onStartReview && !specialist && index === lastAssistantIndex && message.status !== 'streaming'}
-					<div class="review-start-cta">
-						<Button class="brief-action" loading={startingReview} onclick={() => void startReview()}>
-							<Play size={12} fill="currentColor" aria-hidden="true" /> Run full review
-						</Button>
-					</div>
-				{/if}
 			{:else if row.traces.length === 1}
 				{@render traceRow(row.traces[0])}
 			{:else}
@@ -343,6 +370,7 @@
 		invalid={!!error}
 		{sending}
 		{generating}
+		busy={working || conversationMessages.some((message) => message.status === 'streaming')}
 		disabled={!onSend}
 		onSubmit={send}
 		onStop={onStop ? stop : undefined}
@@ -372,14 +400,12 @@
 					composerExtras
 					label="Orchestrator model"
 				/>
-			{:else if isRole(assignment.role)}
-				{@const role = assignment.role}
+			{:else}
 				<ModelPicker
-					value={modelSettingsUi.roleChoice(role)}
-					onSelect={(choice) => void modelSettingsUi.selectRole(role, choice)}
+					value={modelSettingsUi.specialist}
+					onSelect={(choice) => void modelSettingsUi.selectSpecialist(choice)}
 					size={compact ? 'panel' : 'md'}
-					disabled={modelSettingsUi.applyToSpecialists}
-					label="{assignment.title} model"
+					label="Specialist model"
 				/>
 			{/if}
 		{/snippet}

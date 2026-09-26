@@ -5,6 +5,7 @@ import type { DiscoveredModel,
 	ApplyFixRequest,
 	ApplyFixResponse,
 	CreateRepoInput,
+	FailureAction,
 	CreateReviewInput,
 	DiscussRequest,
 	DiscussResponse,
@@ -40,14 +41,22 @@ const base = (env.PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 /** API origin for non-fetch uses (e.g. EventSource). */
 export const apiBase = base;
 
+/** A failed request, with what the developer can do about it when the server says. */
+export class ApiError extends Error {
+	constructor(message: string, readonly action?: FailureAction) {
+		super(message);
+		this.name = 'ApiError';
+	}
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
 	const res = await fetch(`${base}${path}`, {
 		...init,
 		headers: { 'content-type': 'application/json', ...init?.headers }
 	});
 	if (!res.ok) {
-		const body = (await res.json().catch(() => null)) as { error?: string } | null;
-		throw new Error(body?.error ?? `API ${res.status}`);
+		const body = (await res.json().catch(() => null)) as { error?: string; action?: FailureAction } | null;
+		throw new ApiError(body?.error ?? `API ${res.status}`, body?.action === 'sign-in' || body?.action === 'settings' ? body.action : undefined);
 	}
 	return (await res.json()) as T;
 }
@@ -177,6 +186,12 @@ export const serverApi = {
 			method: 'POST',
 			body: JSON.stringify(input)
 		}),
+	/** A fix for a failing CI check, written from its log. */
+	suggestCheckFix: (reviewId: string, check: { id: string; name: string }) =>
+		req<SuggestFixResponse>(`/api/reviews/${reviewId}/checks/fix`, {
+			method: 'POST',
+			body: JSON.stringify(check)
+		}),
 	applyFix: (reviewId: string, input: ApplyFixRequest) =>
 		req<ApplyFixResponse>(`/api/reviews/${reviewId}/fixes/apply`, {
 			method: 'POST',
@@ -194,6 +209,8 @@ export const serverApi = {
 		req<{ deleted: boolean }>(`/api/reviews/${id}/fixes/verify?branch=${encodeURIComponent(branch)}`, { method: 'DELETE' }),
 	/** Start a draft (interactive) review's full pipeline. */
 	startReview: (id: string) => req<Review>(`/api/reviews/${id}/start`, { method: 'POST' }),
+	/** Continue a failed review from where it stopped. */
+	continueReview: (id: string) => req<Review>(`/api/reviews/${id}/continue`, { method: 'POST' }),
 	cancelReview: (id: string) => req<{ cancelled: boolean }>(`/api/reviews/${id}/cancel`, { method: 'POST' }),
 	pauseReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/pause`, { method: 'POST' }),
 	resumeReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/resume`, { method: 'POST' }),

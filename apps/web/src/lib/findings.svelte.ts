@@ -25,9 +25,13 @@ export interface FixSuggestion {
 	status: 'loading' | 'ready' | 'error';
 	summary?: string;
 	patch?: string;
+	/** What the patch was built from; applying rebuilds it against the latest code. */
+	edits?: import('@recoder/shared').FixEdit[];
 	/** Whether the patch applies cleanly to the review sandbox (null when unknown). */
 	applies?: boolean | null;
 	error?: string;
+	/** What fixes a failed suggestion: signing in to ChatGPT, or setting up a model. */
+	action?: import('@recoder/shared').FailureAction;
 	/** Apply-to-PR state for a ready suggestion. */
 	apply?: 'applying' | 'applied' | 'error';
 	applyError?: string;
@@ -60,6 +64,8 @@ export interface Finding {
 	model?: string | null;
 	/** Fix attribution, set when the finding is accepted. */
 	fixedBy?: string | null;
+	/** The pushed fix commit, when Recoder fixed it. */
+	fix?: import('@recoder/shared').FindingFix;
 	body: string;
 	file: string;
 	/** New-side line range the finding refers to (inclusive). */
@@ -191,7 +197,10 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 		evidenceIds: f.evidenceIds ?? [],
 		assignmentId: f.assignmentId,
 		verification: f.verification,
-		status: 'open'
+		// A fix Recoder pushed earlier keeps the finding Fixed across reloads.
+		status: f.fix ? 'accepted' : 'open',
+		fixedBy: f.fix?.agent ?? null,
+		fix: f.fix
 	};
 }
 
@@ -240,7 +249,8 @@ class FindingsStore {
 	}
 
 	/** Fixes the chat asked for (finding ids or codes, or 'all'); the Fix-all flow picks it up. */
-	fixRequest = $state<{ key: string; ids: string[] | 'all' } | null>(null);
+	/** Findings each chat reply asked to fix, by message id, so the reply shows their fixes. */
+	fixBatches = $state<Record<string, string[]>>({});
 
 	/** Clear every severity filter (Info included). */
 	showAllSeverities(): void {
@@ -274,11 +284,12 @@ class FindingsStore {
 		this.activeId = id;
 	}
 
-	accept(id: string, fixedBy?: string): void {
+	accept(id: string, fixedBy?: string, fix?: import('@recoder/shared').FindingFix): void {
 		const finding = this.items.find((f) => f.id === id);
 		if (finding) {
 			finding.status = 'accepted';
 			finding.fixedBy = fixedBy ?? null;
+			if (fix) finding.fix = fix;
 		}
 	}
 
@@ -299,12 +310,12 @@ class FindingsStore {
 		this.suggestions[id] = { status: 'loading' };
 	}
 
-	suggestReady(id: string, suggestion: { summary: string; patch: string; applies: boolean | null }): void {
+	suggestReady(id: string, suggestion: { summary: string; patch: string; edits?: import('@recoder/shared').FixEdit[]; applies: boolean | null }): void {
 		this.suggestions[id] = { status: 'ready', ...suggestion };
 	}
 
-	suggestError(id: string, error: string): void {
-		this.suggestions[id] = { status: 'error', error };
+	suggestError(id: string, error: string, action?: import('@recoder/shared').FailureAction): void {
+		this.suggestions[id] = { status: 'error', error, ...(action ? { action } : {}) };
 	}
 
 	setVerify(id: string, verify: FixVerify | undefined): void {

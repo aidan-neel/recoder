@@ -1,23 +1,12 @@
 <script lang="ts">
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import type { CodexModel, ModelEntry, ReviewRole } from '@recoder/shared';
+	import type { CodexModel, ModelEntry } from '@recoder/shared';
 	import CodexConnection from './codex-connection.svelte';
 	import EndpointCard from './endpoint-card.svelte';
 	import ModelPicker from './model-picker.svelte';
-	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
+	import { modelSettingsUi } from '$lib/model-settings.svelte';
 	import { settingsDraft } from '$lib/settings-draft.svelte';
-	import { formatAgentName } from '$lib/threads.svelte';
-
-	const ROLE_NAME: Partial<Record<ReviewRole, string>> = { perf: 'Performance', docs: 'Documentation', api: 'API design' };
-	const ROLE_DESC: Partial<Record<ReviewRole, string>> = {
-		correctness: 'Always runs',
-		patterns: 'Always runs on executable PRs'
-	};
-	/** Always-run roles first, then the rest as the planner selects them. */
-	const ORDER: ReviewRole[] = ['correctness', 'patterns', ...MODEL_ROLES.filter((r) => r !== 'correctness' && r !== 'patterns')];
-
-	const applyAll = $derived(modelSettingsUi.applyToSpecialists);
 
 	/** Mirror the connected ChatGPT catalog into the registry. */
 	function syncCodexModels(models: CodexModel[]): void {
@@ -64,40 +53,31 @@
 </section>
 
 <section class="settings-section" aria-labelledby="models-roles">
-	<div class="flex items-baseline justify-between gap-3">
-		<Typography.H3 id="models-roles" class="settings-label">Roles</Typography.H3>
-		<Typography.Metadata class="text-[12.5px] text-fg-faint">Planning uses the Orchestrator model</Typography.Metadata>
-	</div>
+	<Typography.H3 id="models-roles" class="settings-label">Models</Typography.H3>
 	<Card.Root class="settings-list">
 		<div class="settings-row role-row">
 			<div class="min-w-0 flex-1">
-				<p class="settings-row-name">Orchestrator</p>
-				<p class="settings-row-desc">Plans the review and writes the summary</p>
+				<p class="settings-row-name">Review</p>
+				<p class="settings-row-desc">Plans the review, writes the summary and answers in chat</p>
 			</div>
 			<ModelPicker
 				value={settingsDraft.orchestrator}
-				onSelect={(choice) => {
-					settingsDraft.orchestrator = choice;
-				}}
-				label="Orchestrator model and reasoning effort"
+				onSelect={(choice) => (settingsDraft.orchestrator = choice)}
+				label="Review model and reasoning effort"
 			/>
 		</div>
-		{#each ORDER as role (role)}
-			<div class="settings-row role-row">
-				<div class="min-w-0 flex-1">
-					<p class="settings-row-name">{ROLE_NAME[role] ?? formatAgentName(role)}</p>
-					<p class="settings-row-desc">{ROLE_DESC[role] ?? 'Selected by relevance'}</p>
-				</div>
-				<ModelPicker
-					value={applyAll ? null : (settingsDraft.roles[role] ?? null)}
-					placeholder="Same as Orchestrator"
-					disabled={applyAll}
-					onSelect={(choice) => {
-						settingsDraft.roles = { ...settingsDraft.roles, [role]: choice };
-					}}
-					label="{ROLE_NAME[role] ?? formatAgentName(role)} model and reasoning effort"
-				/>
+		<div class="settings-row role-row">
+			<div class="min-w-0 flex-1">
+				<p class="settings-row-name">Specialists</p>
+				<p class="settings-row-desc">Every specialist in a review runs on this model</p>
 			</div>
-		{/each}
+			<ModelPicker
+				value={settingsDraft.specialist}
+				onSelect={(choice) => (settingsDraft.specialist = choice)}
+				placeholder="Same as Review"
+				onFollow={() => (settingsDraft.specialist = null)}
+				label="Specialist model and reasoning effort"
+			/>
+		</div>
 	</Card.Root>
 </section>

@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app } from './app';
-import { db, reviewDiffs } from './store';
+import { db, reviewDiffs, reviewSandboxes } from './store';
+import { createReviewSession } from './commands/pipeline';
 
 // Never touch the real data dir (recoder.db) from tests.
 process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-test-'));
@@ -26,6 +27,19 @@ describe('repos', () => {
 		const missing = await app.request('/api/repos/does-not-exist');
 		expect(missing.status).toBe(404);
 	});
+});
+
+test('a fix request with no model set up says so instead of a 500', async () => {
+	const repo = db.repos.set({ id: 'repo-nomodel-fix', name: 'demo', url: 'https://github.com/example/demo', provider: 'github', defaultBranch: 'main', createdAt: '', updatedAt: '' });
+	const review = createReviewSession({ repoId: repo.id, prNumber: 1 });
+	reviewDiffs.set(review.id, 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b\n');
+	const res = await app.request(`/api/reviews/${review.id}/fixes/suggest`, {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({ agent: 'correctness', finding: { file: 'x.ts', line: 1, endLine: 1, severity: 'error', message: 'bug' } })
+	});
+	expect(res.status).toBe(409);
+	expect(await res.json()).toMatchObject({ error: expect.stringContaining('Settings → Models'), action: 'settings' });
 });
 
 /** Queueing requires a reviewer model — stub it for tests that need reviews. */
@@ -168,6 +182,11 @@ describe('reviews + command runner', () => {
 				review.id,
 				'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,3 +1,4 @@\n ctx\n-old\n+new\n tail'
 			);
+			// A real checkout of the PR head, so fixes are built against the file.
+			const checkout = mkdtempSync(join(tmpdir(), 'recoder-fix-checkout-'));
+			Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout });
+			writeFileSync(join(checkout, 'a.ts'), 'ctx\nnew\ntail\n');
+			reviewSandboxes.set(review.id, checkout);
 			return review.id;
 		}
 
@@ -260,12 +279,12 @@ describe('reviews + command runner', () => {
 			}
 		});
 
-		test('suggests a unified-diff fix', async () => {
+		test('builds the fix patch from the model\'s edits against the checkout', async () => {
 			process.env.RECODER_REVIEW_BASE_URL = 'http://localhost:9/v1';
 			process.env.RECODER_REVIEW_API_KEY = 'test';
 			process.env.RECODER_REVIEW_MODEL = 'test-model';
 			stubFetch(
-				'{"summary": "Namespace buckets per tenant.", "patch": "diff --git a/a.ts b/a.ts\\n--- a/a.ts\\n+++ b/a.ts\\n@@ -1,3 +1,4 @@\\n ctx\\n-old\\n+new\\n tail"}'
+				'{"summary": "Namespace buckets per tenant.", "edits": [{"file": "a.ts", "find": "new", "replace": "newer"}]}'
 			);
 			try {
 				const id = await seedReviewWithDiff();
@@ -278,8 +297,8 @@ describe('reviews + command runner', () => {
 				const fix = await res.json();
 				expect(fix.summary).toContain('Namespace');
 				expect(fix.patch).toContain('--- a/a.ts');
-				// No sandbox in tests, so applicability is unknown.
-				expect(fix.applies).toBeNull();
+				expect(fix.patch).toContain('+newer');
+				expect(fix.applies).toBe(true);
 			} finally {
 				globalThis.fetch = realFetch;
 				delete process.env.RECODER_REVIEW_BASE_URL;
@@ -288,11 +307,11 @@ describe('reviews + command runner', () => {
 			}
 		});
 
-		test('rejects non-diff model output for fixes', async () => {
+		test('rejects fix edits that match nothing in the file', async () => {
 			process.env.RECODER_REVIEW_BASE_URL = 'http://localhost:9/v1';
 			process.env.RECODER_REVIEW_API_KEY = 'test';
 			process.env.RECODER_REVIEW_MODEL = 'test-model';
-			stubFetch('{"summary": "Just rewrite it.", "patch": "rewrite everything"}');
+			stubFetch('{"summary": "Just rewrite it.", "edits": [{"file": "a.ts", "find": "not in the file", "replace": "x"}]}');
 			try {
 				const id = await seedReviewWithDiff();
 				const res = await app.request(`/api/reviews/${id}/fixes/suggest`, {

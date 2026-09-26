@@ -4,10 +4,11 @@ import { emitReviewEvent } from '../lib/events';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { emptyReviewProgress, expandFileDiff, parseUnifiedDiff } from '@recoder/shared';
-import { createReviewSession, queueReview, startReviewSession } from '../commands/pipeline';
-import { isReviewConfigured } from '../lib/models';
+import { createReviewSession, queueReview, continueReviewSession, startReviewSession } from '../commands/pipeline';
+import { configForRole, isReviewConfigured, ModelConfigError } from '../lib/models';
+import { modelFailure } from '../lib/model-failure';
 import { clearReviewEvents, subscribeReview } from '../lib/events';
-import { discussFinding, streamDiscussFinding, discussRequestSchema } from '../lib/discuss';
+import { discussFinding, streamDiscussFinding, discussRequestSchema, resolveDiscussRole } from '../lib/discuss';
 import { runRereview, rereviewRequestSchema } from '../lib/rereview';
 import { readSandboxFile } from '../lib/harness';
 import {
@@ -21,18 +22,20 @@ import {
 	patchApplies,
 	pushFixBranch,
 	suggestFix,
+	suggestCheckFix,
 	suggestFixRequestSchema
 } from '../lib/fix';
 import { GhError, fetchPullHeadRef } from '../lib/gh';
-import { fetchChecks } from '../lib/checks';
+import { failureExcerpt, fetchCheckLog, fetchChecks } from '../lib/checks';
 import { fetchPullHead } from '../lib/github-rest';
 import { fetchMergeHeadRef } from '../lib/glab';
 import { tokenEnv } from '../lib/tokens';
 import { LlmError } from '../lib/llm';
 import { parseSlug, refspecFor } from '../lib/providers';
-import { db, reviewDiffs, reviewSandboxes, reviewProgress, reviewMetrics } from '../store';
+import { db, reviewDiffs, reviewSandboxes, reviewProgress, reviewMetrics, reviewCheckpoints } from '../store';
 import { getReviewMetrics, withReviewMetrics } from '../lib/metrics';
 import { CheckoutError, ensureReviewCheckout, findReviewCheckout } from '../lib/review-checkout';
+import { markFindingFixed } from '../lib/finding-fixes';
 import { cancelReviewChats, ReviewChatError, reviewCodeContextSchema, prepareDraftSession, startReviewChat, stopReviewChat } from '../lib/review-chat';
 
 const createReviewSchema = z.object({
@@ -90,6 +93,7 @@ app.delete('/:id', (c) => {
 	cancelReviewChats(review.id);
 	reviewDiffs.delete(review.id);
 	reviewMetrics.delete(review.id);
+	reviewCheckpoints.delete(review.id);
 	reviewSandboxes.delete(review.id);
 	clearReviewEvents(review.id);
 	return c.json({ deleted: true });
@@ -154,6 +158,16 @@ app.post('/:id/start', (c) => {
 	}
 });
 
+/** Continue a failed review from its last checkpoint. */
+app.post('/:id/continue', (c) => {
+	try {
+		return c.json(continueReviewSession(c.req.param('id')), 202);
+	} catch (err) {
+		const message = err instanceof Error ? err.message : 'Could not continue the review.';
+		return c.json({ error: message }, message === 'review not found' ? 404 : 409);
+	}
+});
+
 const chatSchema = z.object({ assignmentId: z.string().min(1).max(100), text: z.string().trim().min(1).max(8000), codeContext: reviewCodeContextSchema.optional() });
 app.post('/:id/chat', async (c) => {
 	const parsed = chatSchema.safeParse(await c.req.json().catch(() => null));
@@ -162,7 +176,7 @@ app.post('/:id/chat', async (c) => {
 		return c.json(startReviewChat(c.req.param('id'), parsed.data.assignmentId, parsed.data.text, parsed.data.codeContext), 202);
 	} catch (error) {
 		if (error instanceof ReviewChatError) return c.json({ error: error.message }, error.status);
-		return c.json({ error: 'Configure the model in Connections before sending a message.' }, 409);
+		return c.json({ error: 'Add a reviewer model in Settings → Models before sending a message.' }, 409);
 	}
 });
 app.post('/:id/chat/stop', async (c) => {
@@ -238,7 +252,7 @@ app.post('/:id/discuss/stream', async (c) => {
 			} catch (err) {
 				send({
 					type: 'error',
-					error: err instanceof LlmError ? err.message : 'The reviewer did not respond.'
+					error: err instanceof LlmError || err instanceof ModelConfigError ? err.message : 'The reviewer did not respond.'
 				});
 			} finally {
 				controller.close();
@@ -305,7 +319,15 @@ app.post('/:id/fixes/suggest', async (c) => {
 	}
 	const diff = reviewDiffs.get(review.id);
 	if (!diff) return c.json({ error: 'no diff yet' }, 409);
-	const sandboxPath = await findReviewCheckout(review);
+	// A missing model is the first thing to say, before any checkout work.
+	configForRole(resolveDiscussRole(parsed.data.agent));
+	let sandboxPath: string;
+	try {
+		sandboxPath = await ensureReviewCheckout(review);
+	} catch (err) {
+		if (err instanceof CheckoutError) return c.json({ error: `Fixes need a local checkout of the pull request. ${err.message}` }, err.status);
+		throw err;
+	}
 	try {
 		const result = await withReviewMetrics(review.id, 'fix', () => suggestFix({
 			agent: parsed.data.agent,
@@ -317,10 +339,41 @@ app.post('/:id/fixes/suggest', async (c) => {
 			diff,
 			sandboxPath
 		}));
-		const applies = sandboxPath ? await patchApplies(sandboxPath, result.patch) : null;
+		const applies = await patchApplies(sandboxPath, result.patch);
 		return c.json({ ...result, applies });
 	} catch (err) {
-		if (err instanceof LlmError) return c.json({ error: err.message }, 502);
+		if (err instanceof LlmError) {
+			const failure = modelFailure(err, configForRole(resolveDiscussRole(parsed.data.agent)).provider, 'The model could not write a fix. Try again.');
+			return c.json({ error: failure.reason, ...(failure.signIn ? { action: 'sign-in' } : {}) }, 502);
+		}
+		throw err;
+	}
+});
+const checkFixSchema = z.object({ id: z.string().regex(/^\d+$/).max(30), name: z.string().min(1).max(300) });
+/** Suggest a fix for a failing CI check from its log (same shape as a finding's fix). */
+app.post('/:id/checks/fix', async (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const parsed = checkFixSchema.safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
+	const repo = db.repos.get(review.repoId);
+	if (!repo || review.source === 'stub') return c.json({ error: 'checks are unavailable for this review' }, 409);
+	const diff = reviewDiffs.get(review.id);
+	if (!diff) return c.json({ error: 'no diff yet' }, 409);
+	configForRole('correctness');
+	try {
+		const [log, sandboxPath] = await Promise.all([fetchCheckLog(repo, parsed.data.id), ensureReviewCheckout(review)]);
+		const excerpt = failureExcerpt(log);
+		if (!excerpt) return c.json({ error: 'This check has no log to work from.' }, 409);
+		const result = await withReviewMetrics(review.id, 'fix', () => suggestCheckFix({ check: parsed.data.name, log: excerpt, diff, sandboxPath }));
+		return c.json({ ...result, applies: await patchApplies(sandboxPath, result.patch) });
+	} catch (err) {
+		if (err instanceof CheckoutError) return c.json({ error: `Fixes need a local checkout of the pull request. ${err.message}` }, err.status);
+		if (err instanceof GhError) return c.json({ error: `Couldn't read the check's log: ${err.message}` }, 502);
+		if (err instanceof LlmError) {
+			const failure = modelFailure(err, configForRole('correctness').provider, 'The model could not write a fix. Try again.');
+			return c.json({ error: failure.reason, ...(failure.signIn ? { action: 'sign-in' } : {}) }, 502);
+		}
 		throw err;
 	}
 });
@@ -349,6 +402,7 @@ app.post('/:id/fixes/apply', async (c) => {
 			const { sha } = await applyFixCommit({
 				sandboxPath,
 				patch: parsed.data.patch,
+				edits: parsed.data.edits,
 				summary: parsed.data.summary,
 				file: parsed.data.finding.file,
 				line: parsed.data.finding.line,
@@ -365,6 +419,15 @@ app.post('/:id/fixes/apply', async (c) => {
 					return c.json({ error: err.message, sha, pushed: false }, 502);
 				}
 				throw err;
+			}
+			if (parsed.data.findingId) {
+				markFindingFixed(review.id, parsed.data.findingId, {
+					sha,
+					branch: headRef,
+					summary: parsed.data.summary,
+					at: new Date().toISOString(),
+					...(parsed.data.agent ? { agent: parsed.data.agent } : {})
+				});
 			}
 			return c.json({ sha, branch: headRef, pushed: true });
 		});
@@ -412,6 +475,7 @@ app.post('/:id/fixes/verify', async (c) => {
 			sandboxPath,
 			branch,
 			patch: parsed.data.patch,
+			edits: parsed.data.edits,
 			summary: parsed.data.summary,
 			file: parsed.data.finding.file,
 			line: parsed.data.finding.line,

@@ -34,7 +34,7 @@ function itemText(item: OutputItem): string {
 
 function streamFailure(event: ResponseEvent): LlmError {
 	const code = event.response?.error?.code ?? event.code;
-	if (code === 'usage_limit_reached' || code === 'rate_limit_exceeded') return new LlmError(429, 'ChatGPT usage limit reached. Check Usage in Connections for reset times.');
+	if (code === 'usage_limit_reached' || code === 'rate_limit_exceeded') return new LlmError(429, 'ChatGPT usage limit reached. See Settings → Models for reset times.');
 	if (code === 'context_length_exceeded') return new LlmError(400, 'The review exceeds this ChatGPT model’s context window. Reduce the review scope.');
 	if (event.type === 'response.incomplete') return new LlmError(0, event.response?.incomplete_details?.reason === 'max_output_tokens'
 		? 'ChatGPT output was truncated at the output-token limit. Return a shorter result.' : 'ChatGPT returned an incomplete response. Try again.');

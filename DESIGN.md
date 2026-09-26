@@ -49,7 +49,7 @@ The source of truth for Recoder's UI.
 
 ### Primary
 - `primary` `#ede9e3` (cream), `on-primary` `#141312`.
-- Hover: `filter: brightness(1.08)`. Press: scale .97.
+- Hover: `filter: brightness(1.08)`. No press scale.
 - Primary must stay swappable. If a light color is picked, on-primary is computed by luminance: dark text when L > 0.3.
 
 ### Status and severity (text on tint)
@@ -108,7 +108,7 @@ Heights are 28 (panel), 30 (default) and 32–34 (toolbar or hero).
 ### Model picker
 The one pattern used everywhere a model is picked (composer, side panels, Settings → Models roles).
 - **Trigger**: quiet text button, 30px (28px in side panels), padding `0 9px`, radius 8, 12.5px. Model name in `#ede9e3`, then the effort word in full in `#8a857d` (`5.6 Sol Medium`, never `Med`). Models without an effort control show only the name. In the composer it sits just before the send button.
-- **Menu**: 250px, opens upward, anchored to the trigger's right edge. Rows are 32px, radius 7: `Model ›`, `Reasoning effort ›` (dimmed "Not supported" with no chevron when the model has none), a divider, then `Apply to all specialists` with a switch and `Role models…` (opens Settings → Models). No Speed row.
+- **Menu**: 250px, opens upward, anchored to the trigger's right edge. Rows are 32px, radius 7: `Model ›`, `Reasoning effort ›` (dimmed "Not supported" with no chevron when the model has none), a divider, then `Model settings…` (opens Settings → Models). No Speed row. There are two model picks, Review and Specialists; Specialists can follow Review ("Same as Review"). No per-role models.
 - **Submenus** open to the left, top-aligned to their row, with a 6px invisible bridge. Effort options come from the selected model's capabilities. Switching to a model that lacks the current effort resets it to that model's default.
 - Settings roles use the same trigger, never a separate Low/Medium/High control. Inheriting roles show "Same as Orchestrator".
 
@@ -138,12 +138,12 @@ The one pattern used everywhere a model is picked (composer, side panels, Settin
 | Token | Value |
 |---|---|
 | `hover` | color/background 120ms ease-out |
-| `press` | scale .97 (icons .92), 80ms |
+| `press` | none: controls never scale when pressed |
 | `highlight` | instant position, 120ms opacity fade |
 | `tab-pill` | 240ms cubic-bezier(.3,.7,.2,1) |
 | `menu` | 150ms cubic-bezier(.2,.8,.2,1), 4px rise, scale .98 → 1, origin at the trigger |
 | `submenu` | 120ms, 4px horizontal |
-| `enter` | 220ms fade + 4px rise, 40ms stagger |
+| `enter` | 220ms fade + 4px rise, 40ms stagger. Not on the file tree panel, which stays still; its folders open instantly |
 | `toast` | 220ms rise 12px, 5s dwell |
 | `shimmer` | 1.6s linear (text), 1.4s (skeleton) |
 | `spinner` | 0.9s linear |

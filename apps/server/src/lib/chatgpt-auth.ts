@@ -60,6 +60,24 @@ function credentialsFromTokens(raw: unknown, now: number, previous?: Credentials
 	};
 }
 
+/**
+ * Refresh tokens are single-use: two refreshes with the same token make OpenAI
+ * reject the second, and a rejection used to delete the login the first one
+ * just saved. One in-flight refresh per credentials file, shared across
+ * instances so `bun --hot` reloads (a new instance each) cannot race.
+ */
+const sharedRefreshes: Map<string, Promise<unknown>> = ((globalThis as Record<string, unknown>).__recoderChatGptRefreshes ??= new Map()) as Map<string, Promise<unknown>>;
+
+/** OpenAI's answer that the refresh token itself is dead (Codex CLI treats the same codes as final). */
+const DEAD_REFRESH_CODES = new Set(['invalid_grant', 'refresh_token_expired', 'refresh_token_reused', 'refresh_token_invalidated']);
+async function refreshErrorCode(response: Response): Promise<string | undefined> {
+	try {
+		const body = await response.json() as Record<string, any>;
+		const code = typeof body.error === 'string' ? body.error : body.error?.code ?? body.code;
+		return typeof code === 'string' ? code : undefined;
+	} catch { return undefined; }
+}
+
 /** Bound a caller's wait without cancelling a refresh shared by other requests. */
 async function waitFor<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 	signal.throwIfAborted();
@@ -80,7 +98,6 @@ export class ChatGptAuth {
 	private loginError?: string;
 	private loginStarting?: Promise<CodexConnection>;
 	private polling?: Promise<void>;
-	private refreshing?: Promise<Credentials>;
 	private timer?: ReturnType<typeof setTimeout>;
 	private lifecycle = new AbortController();
 	private generation = 0;
@@ -262,9 +279,11 @@ export class ChatGptAuth {
 
 	private async refresh(stale: Credentials): Promise<Credentials> {
 		const stored = this.read();
-		if (!stored) throw new LlmError(401, 'Sign in to ChatGPT in Connections.');
+		if (!stored) throw new LlmError(401, 'Sign in to ChatGPT to use this model.');
 		if (stored.accessToken !== stale.accessToken) return stored;
-		if (this.refreshing) return this.refreshing;
+		const file = join(this.dataDir(), 'chatgpt-auth.json');
+		const inFlight = sharedRefreshes.get(file) as Promise<Credentials> | undefined;
+		if (inFlight) return inFlight;
 		const current = this.generation;
 		const work = (async () => {
 			const response = await this.request(`${ISSUER}/oauth/token`, {
@@ -273,10 +292,15 @@ export class ChatGptAuth {
 			});
 			if (current !== this.generation) { await response.body?.cancel(); throw new LlmError(401, 'ChatGPT connection changed. Try again.'); }
 			if (!response.ok) {
-				await response.body?.cancel();
-				if ([400, 401, 403].includes(response.status)) {
+				const code = await refreshErrorCode(response);
+				// Only a dead refresh token ends the login. A 403 (often a proxy or Cloudflare) or 5xx is temporary.
+				if (response.status === 401 || (response.status === 400 && code && DEAD_REFRESH_CODES.has(code))) {
+					// Someone else may have rotated the token meanwhile; their save wins.
+					const latest = this.read();
+					if (latest && latest.refreshToken !== stored.refreshToken) return latest;
+					console.warn(`[recoder] ChatGPT sign-in cleared: token refresh rejected (HTTP ${response.status}${code ? `, ${code}` : ''})`);
 					this.persist(null);
-					this.loginError = 'ChatGPT sign-in expired or was revoked. Sign in again in Connections.';
+					this.loginError = 'Your ChatGPT sign-in expired. Sign in again.';
 					throw new LlmError(401, this.loginError);
 				}
 				throw new LlmError(response.status, `ChatGPT token refresh failed (HTTP ${response.status}). Try again.`);
@@ -287,16 +311,16 @@ export class ChatGptAuth {
 			this.loginError = undefined;
 			return tokens;
 		})();
-		this.refreshing = work;
+		sharedRefreshes.set(file, work);
 		try { return await work; }
-		finally { if (this.refreshing === work) this.refreshing = undefined; }
+		finally { if (sharedRefreshes.get(file) === work) sharedRefreshes.delete(file); }
 	}
 
 	/** Fixed origin/path only: configured API endpoints can never receive OAuth credentials. */
 	async authorizedFetch(path: '/codex/responses' | '/codex/models?client_version=0.153.4' | '/wham/usage', init: RequestInit = {}): Promise<Response> {
 		const signal = AbortSignal.any([this.lifecycle.signal, init.signal ?? AbortSignal.timeout(20_000)]);
 		let credentials = this.read();
-		if (!credentials) throw new LlmError(401, this.loginError ?? 'Sign in to ChatGPT in Connections.');
+		if (!credentials) throw new LlmError(401, this.loginError ?? 'Sign in to ChatGPT to use this model.');
 		const current = this.generation;
 		if (credentials.expiresAt <= this.now() + 60_000) credentials = await waitFor(this.refresh(credentials), signal);
 		for (let attempt = 0; attempt < 2; attempt++) {
@@ -314,12 +338,10 @@ export class ChatGptAuth {
 			if (response.status !== 401) return response;
 			await response.body?.cancel();
 			if (attempt === 0) credentials = await waitFor(this.refresh(credentials), signal);
-			else {
-				if (current === this.generation && this.read()?.accessToken === credentials.accessToken) this.persist(null);
-				throw new LlmError(401, 'ChatGPT rejected the refreshed login. Sign in again in Connections.');
-			}
+			// A 401 right after a successful refresh is about this request, not the login: keep it.
+			else throw new LlmError(502, 'ChatGPT rejected this request right after renewing the sign-in. Try again.');
 		}
-		throw new LlmError(401, 'Sign in to ChatGPT in Connections.');
+		throw new LlmError(401, 'Sign in to ChatGPT to use this model.');
 	}
 
 	disconnect(): void {
@@ -337,6 +359,5 @@ export class ChatGptAuth {
 		this.login = undefined;
 		this.polling = undefined;
 		this.loginStarting = undefined;
-		this.refreshing = undefined;
 	}
 }

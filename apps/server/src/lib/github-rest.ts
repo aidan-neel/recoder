@@ -9,7 +9,7 @@ export function githubToken(): string | undefined {
 }
 
 /** Call a GitHub REST endpoint as JSON with the configured token, no `gh` CLI. Throws GhError. */
-export async function githubRest(path: string, init?: { method?: 'GET' | 'POST' | 'PUT' | 'PATCH'; body?: unknown }): Promise<unknown> {
+export async function githubRest(path: string, init?: { method?: 'GET' | 'POST' | 'PUT' | 'PATCH'; body?: unknown; text?: boolean }): Promise<unknown> {
 	const token = githubToken();
 	let response: Response;
 	try {
@@ -29,7 +29,7 @@ export async function githubRest(path: string, init?: { method?: 'GET' | 'POST' 
 		throw new GhError('unavailable', `GitHub API unreachable: ${err instanceof Error ? err.message : String(err)}`);
 	}
 	if (response.status === 204) return null;
-	if (response.ok) return response.json();
+	if (response.ok) return init?.text ? response.text() : response.json();
 	const body = await response.text().catch(() => '');
 	const message = (() => {
 		try { return (JSON.parse(body) as { message?: string }).message ?? body; } catch { return body; }

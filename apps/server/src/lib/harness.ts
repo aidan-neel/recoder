@@ -7,6 +7,7 @@ import type {
 	CoverageGap,
 	CoverageSummary,
 	Finding,
+	ModelFailure,
 	ReviewAssignment,
 	ReviewBudgetSnapshot,
 	ReviewChatMessage,
@@ -30,6 +31,7 @@ import {
 import { EvidenceStore, formatToolResults, type ReviewRevision, type ToolCallReport } from './evidence.js';
 import { buildInventory, type ReviewInventory } from './inventory.js';
 import { CoverageLedger } from './coverage.js';
+import type { ReviewCheckpoint } from './review-checkpoint.js';
 import {
 	fallbackPlan,
 	plannerSystemPrompt,
@@ -101,7 +103,15 @@ export interface HarnessEvents {
 	onTool?: (tool: ToolCallReport & { assignmentId?: string; role?: string }) => void;
 	/** Which owner guidelines this review runs with (reported once, after inventory). */
 	onGuidelines?: (used: ReviewGuidelinesUsed) => void;
+	/** Where the review stands, so a failed run can continue from here. */
+	onCheckpoint?: (checkpoint: ReviewProgressCheckpoint) => void;
 }
+
+/** A checkpoint as the harness sees it; the pipeline adds the review id and revision. */
+export type ReviewProgressCheckpoint = Omit<ReviewCheckpoint, 'id' | 'headSha' | 'mergeBaseSha'>;
+
+/** Assignments whose work a resumed review keeps. */
+const FINISHED: ReadonlySet<AssignmentStatus> = new Set(['done', 'partial']);
 
 /** Safely read a sandbox file (stays inside the checkout, capped length). */
 export async function readSandboxFile(sandboxPath: string, file: string, maxChars: number): Promise<string | null> {
@@ -181,6 +191,8 @@ export interface AdaptiveReviewInput {
 	/** Reviewers, assignees, linked issues (untrusted). */
 	prContext?: string | null;
 	signal?: AbortSignal;
+	/** Continue a failed review: skip planning and the specialists that finished. */
+	resume?: ReviewProgressCheckpoint | null;
 }
 
 export interface AdaptiveReviewResult {
@@ -194,6 +206,8 @@ export interface AdaptiveReviewResult {
 	assignments: ReviewAssignment[];
 	planningDegraded: boolean;
 	error?: string;
+	/** Set when a model call stopped the review, e.g. ChatGPT is signed out. */
+	failure?: ModelFailure;
 }
 
 export async function runAdaptiveReview(
@@ -269,46 +283,62 @@ export async function runAdaptiveReview(
 		const setup = workspace ? installDependencies(workspace, controller.signal, events, task) : Promise.resolve(null);
 		const execNotes = workspace ? await plannerExecNotes(workspace) : undefined;
 
-		task('planning', 'Planning the review', 'running', 'Planning specialist assignments', {
-			kind: 'planning',
-			agent: 'correctness'
-		});
-		let planningDegraded = false;
+		const resume = input.resume ?? null;
+		let planningDegraded = resume?.planningDegraded ?? false;
 		let plan: PlannerOutput;
-		try {
-			const planned = await runPlanner({
-				inventory,
-				evidence,
-				budget,
-				deadlineAt: investigationDeadline,
-				exec: Boolean(workspace),
-				execNotes,
-				signal: controller.signal,
-				title: input.prTitle ?? '',
-				body: input.prBody ?? '',
-				context: input.prContext ?? '',
-				events,
-				task
-			});
-			plan = planned.plan;
-			planningDegraded = planned.degraded;
-		} catch (err) {
-			if (err instanceof AuthConfigError) throw err;
-			planningDegraded = true;
-			plan = fallbackPlan(inventory, err instanceof Error ? err.message : 'Planning failed');
+		if (resume) {
+			plan = resume.plan;
+			evidence.restore(resume.evidence);
+			coverage.restore(resume.coverage);
+			events?.onLog?.('Continuing the review where it stopped');
+		} else {
+			try {
+				task('planning', 'Planning the review', 'running', 'Planning specialist assignments', {
+					kind: 'planning',
+					agent: 'correctness'
+				});
+				const planned = await runPlanner({
+					inventory,
+					evidence,
+					budget,
+					deadlineAt: investigationDeadline,
+					exec: Boolean(workspace),
+					execNotes,
+					signal: controller.signal,
+					title: input.prTitle ?? '',
+					body: input.prBody ?? '',
+					context: input.prContext ?? '',
+					events,
+					task
+				});
+				plan = planned.plan;
+				planningDegraded = planned.degraded;
+			} catch (err) {
+				if (err instanceof AuthConfigError) throw err;
+				planningDegraded = true;
+				plan = fallbackPlan(inventory, err instanceof Error ? err.message : 'Planning failed');
+			}
 		}
 		if (plan.assignments.length === 0) {
 			plan = fallbackPlan(inventory);
 			planningDegraded = true;
 		}
 
-		for (const item of plan.assignments) {
-			for (const scope of item.scope) {
-				for (const hunkId of scope.hunkIds) coverage.assign(hunkId, scope.path, item.role);
+		const items: PlannerAssignment[] = resume ? [...resume.items] : [...plan.assignments];
+		if (resume) {
+			for (const record of resume.assignments) {
+				const item = items.find((entry) => entry.id === record.id);
+				assignments.push(FINISHED.has(record.status) || !item ? { ...record } : toAssignmentRecord(item, 'queued', record.followUp));
 			}
-			assignments.push(toAssignmentRecord(item, 'queued'));
+		} else {
+			for (const item of plan.assignments) {
+				for (const scope of item.scope) {
+					for (const hunkId of scope.hunkIds) coverage.assign(hunkId, scope.path, item.role);
+				}
+				assignments.push(toAssignmentRecord(item, 'queued'));
+			}
+			coverage.excludeUnassigned(inventory);
 		}
-		coverage.excludeUnassigned(inventory);
 		events?.onPlan?.({
 			planVersion: 1,
 			summary: plan.summary,
@@ -323,10 +353,33 @@ export async function runAdaptiveReview(
 		publishCoverage();
 		publishBudget();
 
-		const candidates: CandidateFinding[] = [];
-		let nextCandidate = 1;
-		const recommended = new Set<string>();
-		const followUps: PlannerAssignment[] = [];
+		const candidates: CandidateFinding[] = (resume?.candidates ?? []).map((candidate) => ({ ...candidate }));
+		let nextCandidate = 1 + Math.max(0, ...candidates.map((candidate) => Number(candidate.candidateId.slice(1)) || 0));
+		const recommended = new Set<string>(resume?.recommended ?? []);
+		const followUps: PlannerAssignment[] = [...(resume?.followUps ?? [])];
+		let followUpsDone = resume?.followUpsDone ?? false;
+		const finishedIds = () => new Set(assignments.filter((record) => FINISHED.has(record.status)).map((record) => record.id));
+		const checkpoint = () => {
+			if (!events?.onCheckpoint) return;
+			const finished = finishedIds();
+			const kept = candidates.filter((candidate) => candidate.assignmentId && finished.has(candidate.assignmentId));
+			events.onCheckpoint({
+				plan,
+				planningDegraded,
+				items: [...items],
+				assignments: assignments.map((record) => ({ ...record })),
+				candidates: kept.map((candidate) => ({ ...candidate })),
+				coverage: coverage.snapshot(),
+				evidence: evidence.snapshot([
+					...kept.flatMap((candidate) => candidate.evidenceIds ?? []),
+					...items.flatMap((item) => item.contextEvidenceIds)
+				]),
+				recommended: [...recommended],
+				followUps: [...followUps],
+				followUpsDone
+			});
+		};
+		checkpoint();
 
 		let setupNotes = '';
 		if (workspace) {
@@ -339,8 +392,9 @@ export async function runAdaptiveReview(
 		}
 
 		events?.onStage?.('specialists');
+		const finishedAtStart = finishedIds();
 		await runAssignmentPool(
-			plan.assignments,
+			items.filter((item) => !finishedAtStart.has(item.id)),
 			assignments,
 			{
 				inventory,
@@ -356,7 +410,8 @@ export async function runAdaptiveReview(
 				recommended,
 				followUps,
 				exec: Boolean(workspace),
-				setupNotes
+				setupNotes,
+				onFinished: checkpoint
 			}
 		);
 		publishCoverage();
@@ -364,11 +419,18 @@ export async function runAdaptiveReview(
 		events?.onCandidates?.(candidates.filter((candidate) => candidate.valid).length);
 
 		if (
+			!followUpsDone &&
 			followUps.length > 0 &&
 			canLaunchInvestigation(investigationDeadline, budget) &&
 			assignments.length < REVIEW_POLICY.maxInitialAssignments + REVIEW_POLICY.maxFollowUpAssignments
 		) {
-			const extra = await selectFollowUps(followUps, inventory, evidence, budget, investigationDeadline, controller.signal, events);
+			const extra = uniqueIds(
+				await selectFollowUps(followUps, inventory, evidence, budget, investigationDeadline, controller.signal, events),
+				assignments.map((record) => record.id)
+			);
+			followUpsDone = true;
+			followUps.length = 0;
+			items.push(...extra);
 			for (const item of extra) {
 				for (const scope of item.scope) {
 					for (const hunkId of scope.hunkIds) coverage.assign(hunkId, scope.path, item.role);
@@ -399,15 +461,18 @@ export async function runAdaptiveReview(
 					recommended,
 					followUps: [],
 					exec: Boolean(workspace),
-					setupNotes
+					setupNotes,
+					onFinished: checkpoint
 				});
 			}
 		}
 
 		budget.reserve = REVIEW_POLICY.reserveCallsForConsolidation;
-		if (candidates.some((candidate) => candidate.valid)) {
+		// A resumed review keeps the verdicts it already has.
+		const unverified = candidates.filter((candidate) => candidate.valid && !candidate.verification);
+		if (unverified.length) {
 			if (workspace) events?.onStage?.('verify');
-			await verifyCandidates(candidates.filter((candidate) => candidate.valid), {
+			await verifyCandidates(unverified, {
 				evidence,
 				budget,
 				deadlineAt,
@@ -415,7 +480,8 @@ export async function runAdaptiveReview(
 				events,
 				task,
 				setupNotes,
-				unavailable: workspace ? null : execReason
+				unavailable: workspace ? null : execReason,
+				onVerified: checkpoint
 			});
 			publishBudget();
 		}
@@ -525,7 +591,7 @@ export async function runAdaptiveReview(
 		};
 	} catch (err) {
 		if (err instanceof AuthConfigError) {
-			return failReview(assignments, coverage, budget, err.message, 'failed');
+			return { ...failReview(assignments, coverage, budget, err.message, 'failed'), failure: err.failure };
 		}
 		if (err instanceof ReviewAbortedError || controller.signal.aborted) {
 			return failReview(assignments, coverage, budget, 'Review analysis deadline reached', 'failed');
@@ -683,6 +749,8 @@ interface PoolContext {
 	exec: boolean;
 	/** Dependency setup and baseline check results, shared with every specialist. */
 	setupNotes: string;
+	/** Called after each assignment settles, to save a checkpoint. */
+	onFinished?: () => void;
 }
 
 async function runAssignmentPool(
@@ -882,6 +950,7 @@ async function runOneAssignment(
 		});
 		ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
 		ctx.events?.onCandidates?.(ctx.candidates.filter((candidate) => candidate.valid).length);
+		ctx.onFinished?.();
 	} catch (err) {
 		if (err instanceof AuthConfigError) throw err;
 		if (err instanceof ReviewAbortedError) throw err;
@@ -897,6 +966,21 @@ async function runOneAssignment(
 		});
 		ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
 	}
+}
+
+/**
+ * Follow-ups whose ids don't collide with an assignment already launched: the
+ * follow-up planner may reuse an id (e.g. the specialist that asked for it).
+ */
+export function uniqueIds(items: PlannerAssignment[], taken: Iterable<string>): PlannerAssignment[] {
+	const used = new Set(taken);
+	return items.map((item) => {
+		let id = item.id;
+		if (used.has(id)) id = id.startsWith('follow-') ? id : `follow-${id}`;
+		for (let n = 2; used.has(id); n++) id = `${item.id.startsWith('follow-') ? item.id : `follow-${item.id}`}-${n}`;
+		used.add(id);
+		return id === item.id ? item : { ...item, id };
+	});
 }
 
 function updateAssignment(records: ReviewAssignment[], id: string, patch: Partial<ReviewAssignment>): void {
@@ -1112,6 +1196,8 @@ async function verifyCandidates(candidates: CandidateFinding[], ctx: {
 	setupNotes: string;
 	/** Why code cannot run in this review; null when it can. */
 	unavailable: string | null;
+	/** Called after each verdict, to save a checkpoint. */
+	onVerified?: () => void;
 }): Promise<void> {
 	if (ctx.unavailable) {
 		for (const candidate of candidates) candidate.verification = { status: 'unverified', reason: `Not run: ${ctx.unavailable}` };
@@ -1130,6 +1216,7 @@ async function verifyCandidates(candidates: CandidateFinding[], ctx: {
 				continue;
 			}
 			await verifyOne(candidate, ctx);
+			ctx.onVerified?.();
 		}
 	});
 	await Promise.all(workers);

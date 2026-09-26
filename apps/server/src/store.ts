@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import type { CommandRun, Repo, Review, ReviewProgress, TokenCall } from '@recoder/shared';
 import { serverDataDir } from './lib/data-dir';
+import type { ReviewCheckpoint } from './lib/review-checkpoint';
 
 /**
  * SQLite-backed store. Everything the UI treats as durable (repos, reviews,
@@ -20,6 +21,7 @@ function getDb(): Database {
 		handle.run('CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS review_progress (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS review_metrics (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+		handle.run('CREATE TABLE IF NOT EXISTS review_checkpoints (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run(
 			'CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)'
 		);
@@ -74,6 +76,9 @@ export const reviewMetrics = createCollection<{
 	pipelineTracked: boolean;
 	calls: TokenCall[];
 }>('review_metrics');
+
+/** Where an unfinished review stopped, so it can continue instead of starting over (see ReviewCheckpoint). */
+export const reviewCheckpoints = createCollection<ReviewCheckpoint>('review_checkpoints');
 
 /** Sandbox checkout paths by review id. In memory only; `lib/review-checkout.ts` finds or restores a checkout after a restart. */
 export const reviewSandboxes = new Map<string, string>();

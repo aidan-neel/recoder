@@ -16,7 +16,7 @@ export function toolPresentation(tool: Pick<ReviewToolCall, 'command' | 'input'>
 /** A message separates work groups; streaming updates retain the first tool's key. */
 export function groupTranscript(messages: ReviewChatMessage[], tools: ReviewToolCall[]): TranscriptItem[] {
 	const timeline = [
-		...messages.filter((message) => message.text.trim() && message.id !== 'review-result')
+		...messages.filter((message) => (message.text.trim() || message.failure) && message.id !== 'review-result')
 			.map((message) => ({ kind: 'message' as const, id: message.id, at: message.at, message })),
 		...tools.map((tool) => ({ kind: 'tool' as const, id: tool.id, at: tool.startedAt, tool }))
 	].sort((a, b) => Date.parse(a.at) - Date.parse(b.at));
@@ -37,10 +37,15 @@ export function taskGroupStatus(tools: ReviewToolCall[], active: boolean): { sta
 	return { status: running ? 'running' : failed ? 'error' : 'done', failed };
 }
 
-/** "Ran 2 commands, read 4 files": the group header, written as a sentence. */
-export function taskGroupLabel(tools: ReviewToolCall[]): string {
+/**
+ * The group header, written as a sentence. While live it names only what is
+ * still going ("Reading 2 files"); once done it sums the group ("Read 3 files,
+ * searched once").
+ */
+export function taskGroupLabel(tools: ReviewToolCall[], live = false): string {
 	let runs = 0, writes = 0, reads = 0, searches = 0, listings = 0, other = 0;
-	for (const tool of tools) {
+	const running = tools.filter((tool) => tool.status === 'running');
+	for (const tool of live && running.length ? running : tools) {
 		const { action } = toolPresentation(tool);
 		if (action === 'run' || action === '$') runs++;
 		else if (action === 'writeFile') writes++;
@@ -49,14 +54,25 @@ export function taskGroupLabel(tools: ReviewToolCall[]): string {
 		else if (['list', 'listFiles'].includes(action)) listings++;
 		else other++;
 	}
+	const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 	const times = (n: number) => n === 1 ? 'once' : n === 2 ? 'twice' : `${n} times`;
-	const parts = [
-		runs ? `ran ${runs} ${runs === 1 ? 'command' : 'commands'}` : '',
-		writes ? `wrote ${writes} ${writes === 1 ? 'file' : 'files'}` : '',
-		reads ? `read ${reads} ${reads === 1 ? 'file' : 'files'}` : '',
-		searches ? `searched ${times(searches)}` : '',
-		listings ? `listed files ${times(listings)}` : '',
-		other ? `ran ${other} ${other === 1 ? 'tool' : 'tools'}` : ''
-	].filter(Boolean).join(', ');
-	return parts.charAt(0).toUpperCase() + parts.slice(1);
+	const parts = live
+		? [
+				runs ? `running ${count(runs, 'command', 'commands')}` : '',
+				writes ? `writing ${count(writes, 'file', 'files')}` : '',
+				reads ? `reading ${count(reads, 'file', 'files')}` : '',
+				searches ? (searches === 1 ? 'searching' : `running ${searches} searches`) : '',
+				listings ? 'listing files' : '',
+				other ? `running ${count(other, 'tool', 'tools')}` : ''
+			]
+		: [
+				runs ? `ran ${count(runs, 'command', 'commands')}` : '',
+				writes ? `wrote ${count(writes, 'file', 'files')}` : '',
+				reads ? `read ${count(reads, 'file', 'files')}` : '',
+				searches ? `searched ${times(searches)}` : '',
+				listings ? `listed files ${times(listings)}` : '',
+				other ? `ran ${count(other, 'tool', 'tools')}` : ''
+			];
+	const sentence = parts.filter(Boolean).join(', ');
+	return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }

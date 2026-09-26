@@ -28,6 +28,12 @@ export async function glabApi(path: string, env?: Record<string, string>): Promi
 	return extractJson(await glab(['api', path], env));
 }
 
+/** A plain-text API response, e.g. a job log. */
+export async function glabApiText(path: string, env?: Record<string, string>): Promise<string> {
+	if (useGitlabApi(env)) return gitlabGet(path, env!, true) as Promise<string>;
+	return glab(['api', path], env);
+}
+
 async function glab(args: string[], env?: Record<string, string>): Promise<string> {
 	let run;
 	try {

@@ -78,6 +78,18 @@ export interface Finding {
 	/** Diff side for deleted-code findings. Defaults to `new` when a line exists. */
 	side?: 'old' | 'new';
 	verification?: FindingVerification;
+	/** Set once a Recoder fix for this finding was pushed to the PR branch. */
+	fix?: FindingFix;
+}
+
+/** A fix Recoder pushed for a finding. */
+export interface FindingFix {
+	sha: string;
+	branch: string;
+	summary: string;
+	at: string;
+	/** Reviewer role that wrote the fix. */
+	agent?: string;
 }
 
 export interface Review {
@@ -221,15 +233,13 @@ export interface ModelSettings {
 	apiKeyPreview: string | null;
 	sharedModelId: string | null;
 	orchestratorModelId?: string | null;
+	/** Every specialist runs on this model; null follows the Review model. */
 	specialistModelId?: string | null;
 	models: ModelEntry[];
-	roles: Record<ReviewRole, string | null>;
-	/** Explicit per-role overrides; absent roles retain provider defaults (Codex: medium). */
-	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
-	/** Orchestrator reasoning effort; null follows the model default. */
+	/** Review (orchestrator) reasoning effort; null follows the model default. */
 	orchestratorEffort?: ReasoningEffort | null;
-	/** When true, every specialist runs on the orchestrator's model and effort. */
-	applyToSpecialists?: boolean;
+	/** Specialist reasoning effort; null follows the Review effort when the model does too. */
+	specialistEffort?: ReasoningEffort | null;
 	/** Where overrides are saved, e.g. `~/.recoder/data/review-config.json`. */
 	configPath?: string;
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
@@ -242,11 +252,8 @@ export interface ModelSettingsPatch {
 	sharedModelId?: string | null;
 	orchestratorModelId?: string | null;
 	specialistModelId?: string | null;
-	roles?: Partial<Record<ReviewRole, string>>;
-	/** Merged by role; omitted roles keep their saved effort. */
-	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
 	orchestratorEffort?: ReasoningEffort | null;
-	applyToSpecialists?: boolean;
+	specialistEffort?: ReasoningEffort | null;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;
@@ -317,6 +324,8 @@ export interface PrPerson {
 
 /** A CI check on a commit or branch (GitHub check run or commit status, GitLab commit status). */
 export interface PrCheck {
+	/** Check run (GitHub) or job (GitLab) id; commit statuses from other CI have none, so no log. */
+	id?: string;
 	name: string;
 	state: 'pending' | 'running' | 'passed' | 'failed' | 'skipped';
 	url: string | null;
@@ -377,20 +386,34 @@ export interface SuggestFixRequest {
 	finding: SuggestFixFinding;
 }
 
+/** One find-and-replace in a file; the server turns these into a patch against the current code. */
+export interface FixEdit {
+	file: string;
+	/** Text copied verbatim from the file, long enough to match once. */
+	find: string;
+	replace: string;
+}
+
 export interface SuggestFixResponse {
 	agent: string;
 	model: string;
 	summary: string;
 	/** Unified diff patch (`a/` / `b/` prefixes, repo-rooted). */
 	patch: string;
+	/** The edits the patch was built from; applying rebuilds the patch from these against the latest code. */
+	edits?: FixEdit[];
 	/** Whether the patch applies cleanly to the review sandbox (null when none). */
 	applies: boolean | null;
 }
 
 export interface ApplyFixRequest {
+	/** The review finding this fixes; it is marked fixed once pushed. */
+	findingId?: string;
+	agent?: string;
 	finding: SuggestFixFinding;
 	summary: string;
 	patch: string;
+	edits?: FixEdit[];
 }
 
 export interface ApplyFixResponse {

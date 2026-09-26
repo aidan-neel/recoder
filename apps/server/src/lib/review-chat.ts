@@ -10,6 +10,7 @@ import { streamedMessage } from './response-text';
 import { parseUnifiedDiff } from '@recoder/shared';
 import { fetchPullDiff } from './pull-preview';
 import { CHAT_STYLE } from './prompts';
+import { modelFailure } from './model-failure';
 
 const noteSchema = z.object({
 	file: z.string().trim().min(1).max(500),
@@ -147,7 +148,9 @@ export function startReviewChat(reviewId: string, assignmentId: string, text: st
 			} else reply.text = output;
 			flush('done');
 		} catch (error) {
-			reply.text = `${reply.text}${reply.text ? '\n\n' : ''}${controller.signal.aborted ? 'Reply stopped.' : 'The model could not finish this reply. Please try again.'}`;
+			// The reason renders as a notice, not as the model's words.
+			if (controller.signal.aborted) reply.text = `${reply.text}${reply.text ? '\n\n' : ''}Reply stopped.`;
+			else reply.failure = modelFailure(error, config.provider, 'The model could not finish this reply. Try again.');
 			flush('error');
 		} finally {
 			pending.delete(key);
@@ -207,10 +210,13 @@ function startDraftOpener(reviewId: string, fetched: { pr: { title: string; head
 			if (controller.signal.aborted) throw new Error('Reply stopped.');
 			reply.text = reply.text.trim();
 			flush('done');
-		} catch {
-			// A failed opener shouldn't block the session: fall back to a plain prompt.
+		} catch (error) {
+			// A failed opener shouldn't block the session: fall back to a plain prompt,
+			// and say so up front when signing in to ChatGPT would fix every reply.
 			const partial = reply.text.trim();
 			reply.text = partial || `Ready to review #${review.prNumber}. Tell me what to focus on, or press Run full review below.`;
+			const failure = controller.signal.aborted ? null : modelFailure(error, config.provider, '');
+			if (failure?.signIn) reply.failure = failure;
 			flush(partial && !controller.signal.aborted ? 'error' : 'done');
 		} finally {
 			pending.delete(key);

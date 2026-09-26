@@ -35,7 +35,6 @@
 	];
 
 	let active = $state(BASE_PARTICIPANTS[0]);
-	const isRole = (role: string): role is ReviewRole => (MODEL_ROLES as string[]).includes(role);
 	let draft = $state('');
 	let attachedQuote = $state<string | null>(null);
 	let selectionAvailable = $state(false);
@@ -365,16 +364,12 @@
 						<Typography.Metadata class="truncate text-[12px] text-fg-faint">Shared with Orchestrator</Typography.Metadata>
 					{/snippet}
 					{#snippet picker()}
-						{#if isRole(active)}
-							{@const role = active}
-							<ModelPicker
-								value={modelSettingsUi.roleChoice(role)}
-								onSelect={(choice) => void modelSettingsUi.selectRole(role, choice)}
-								size="panel"
-								disabled={modelSettingsUi.applyToSpecialists}
-								label="{formatAgentName(role)} model"
-							/>
-						{/if}
+						<ModelPicker
+							value={modelSettingsUi.specialist}
+							onSelect={(choice) => void modelSettingsUi.selectSpecialist(choice)}
+							size="panel"
+							label="Specialist model"
+						/>
 					{/snippet}
 				</ReviewComposer>
 			</div>

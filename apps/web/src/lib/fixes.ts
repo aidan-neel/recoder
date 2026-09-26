@@ -1,6 +1,6 @@
 import { findingsStore, type Finding, type FixVerify } from './findings.svelte';
 import { errorToast, undoToast } from './notify';
-import { serverApi } from './server-api';
+import { ApiError, serverApi } from './server-api';
 import { threadsStore } from './threads.svelte';
 
 /** The finding fields the fix endpoints need. */
@@ -21,11 +21,12 @@ export async function suggestFix(finding: Finding, opts: { quiet?: boolean; queu
 	findingsStore.suggesting(finding.id);
 	try {
 		const result = await serverApi.suggestFix(reviewId, { agent: finding.agent, finding: toFixInput(finding) });
-		findingsStore.suggestReady(finding.id, { summary: result.summary, patch: result.patch, applies: result.applies });
+		findingsStore.suggestReady(finding.id, { summary: result.summary, patch: result.patch, edits: result.edits, applies: result.applies });
 	} catch (e) {
 		const message = e instanceof Error ? e.message : 'Could not suggest a fix.';
-		findingsStore.suggestError(finding.id, message);
-		if (!opts.quiet) errorToast('Could not suggest a fix', message);
+		const action = e instanceof ApiError ? e.action : undefined;
+		findingsStore.suggestError(finding.id, message, action);
+		if (!opts.quiet) errorToast('Could not suggest a fix', message, action);
 	}
 }
 
@@ -37,13 +38,16 @@ export async function applyFix(finding: Finding, opts: { quiet?: boolean } = {})
 	findingsStore.applyingFix(finding.id);
 	try {
 		const result = await serverApi.applyFix(reviewId, {
+			findingId: finding.id,
+			agent: finding.agent,
 			finding: toFixInput(finding),
 			summary: suggestion.summary ?? finding.body,
-			patch: suggestion.patch
+			patch: suggestion.patch,
+			edits: suggestion.edits
 		});
 		const verifyBranch = findingsStore.suggestions[finding.id]?.verify?.branch;
 		findingsStore.applyReady(finding.id, { sha: result.sha, branch: result.branch });
-		findingsStore.accept(finding.id, finding.agent);
+		findingsStore.accept(finding.id, finding.agent, { sha: result.sha, branch: result.branch, summary: suggestion.summary ?? finding.body, at: new Date().toISOString(), agent: finding.agent });
 		// The temporary CI branch has served its purpose.
 		if (verifyBranch) void serverApi.deleteVerifyBranch(reviewId, verifyBranch).catch(() => undefined);
 		// Pushed commits can't be reverted from here, so the toast has no Undo.
@@ -77,8 +81,11 @@ export async function fixFindings(findings: Finding[]): Promise<void> {
 		while (next < queue.length) await suggestFix(queue[next++], { quiet: true, queued: true });
 	};
 	await Promise.all(Array.from({ length: Math.min(3, queue.length) }, worker));
-	const failed = queue.filter((f) => findingsStore.suggestions[f.id]?.status === 'error').length;
-	if (failed) errorToast(`${failed} ${failed === 1 ? 'fix' : 'fixes'} couldn't be written`, 'Retry from the finding.');
+	const errors = queue.flatMap((f) => { const s = findingsStore.suggestions[f.id]; return s?.status === 'error' ? [s] : []; });
+	const failed = errors.length;
+	// One shared cause (signed out, no model) is worth saying, with its way out; mixed causes live on each finding.
+	const shared = failed > 0 && errors.every((s) => s.error && s.error === errors[0].error && s.action === errors[0].action) ? errors[0] : null;
+	if (failed) errorToast(`${failed} ${failed === 1 ? 'fix' : 'fixes'} couldn't be written`, shared?.error ?? 'Retry from the finding.', shared?.action);
 }
 
 /** Push every ready fix, one commit each, in order. */
@@ -112,7 +119,8 @@ export async function verifyFix(finding: Finding): Promise<void> {
 			key: finding.code ?? finding.id,
 			finding: toFixInput(finding),
 			summary: suggestion.summary ?? finding.body,
-			patch: suggestion.patch
+			patch: suggestion.patch,
+			edits: suggestion.edits
 		});
 	} catch (e) {
 		findingsStore.setVerify(finding.id, { status: 'error', error: e instanceof Error ? e.message : 'Could not push the fix branch.' });

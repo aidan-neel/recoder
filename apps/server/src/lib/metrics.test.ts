@@ -1,10 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Review } from '@recoder/shared';
 import { app } from '../app';
-import { closeStore, db, reviewDiffs, reviewMetrics } from '../store';
+import { closeStore, db, reviewDiffs, reviewMetrics, reviewSandboxes } from '../store';
 import { chatCompletion, resetLlmLimiter, streamChatCompletion } from './llm';
 import { getReviewMetrics, normalizeTokenUsage, trackTokenCall, withReviewMetrics } from './metrics';
 import { getStoredSettings, setReviewOverrides } from './review-settings';
@@ -203,12 +203,16 @@ test('metrics API distinguishes historical unavailable, tracked no requests, and
 test('discussion, streaming discussion and fix routes all record follow-up scope', async () => {
 	const a = review();
 	reviewDiffs.set(a.id, 'diff --git a/test.ts b/test.ts\n--- a/test.ts\n+++ b/test.ts\n@@ -1 +1 @@\n-old\n+new\n');
+	const checkout = mkdtempSync(join(tmpdir(), 'recoder-metrics-fix-'));
+	mkdirSync(join(checkout, '.git'));
+	writeFileSync(join(checkout, 'test.ts'), 'new\n');
+	reviewSandboxes.set(a.id, checkout);
 	setReviewOverrides({ models: [{ id: 'test', label: 'Test', model: opts.model, baseUrl: opts.baseUrl, apiKey: opts.apiKey }], sharedModelId: 'test' });
 	globalThis.fetch = (async (_url, init) => {
 		const body = JSON.parse(init!.body as string);
 		return body.stream
 			? new Response(`data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: ${JSON.stringify({ choices: [], usage })}\n\ndata: [DONE]\n\n`)
-			: Response.json({ choices: [{ message: { content: JSON.stringify({ summary: 'Fix', patch: '--- a/test.ts\n+++ b/test.ts\n' }) } }], usage });
+			: Response.json({ choices: [{ message: { content: JSON.stringify({ summary: 'Fix', edits: [{ file: 'test.ts', find: 'new', replace: 'newer' }] }) } }], usage });
 	}) as typeof fetch;
 	for (const path of ['discuss', 'discuss/stream', 'fixes/suggest']) {
 		const res = await app.request(`/api/reviews/${a.id}/${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ agent: 'security', finding: { file: 'test.ts', line: 1, endLine: 1, severity: 'warning', message: 'Issue' }, question: 'Why?', history: [] }) });

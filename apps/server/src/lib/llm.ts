@@ -124,7 +124,7 @@ async function withRetries<T>(
 /**
  * Global cap shared by review assignments and interactive discussions.
  * Bound concurrency to avoid overwhelming the model endpoint. Tune with
- * RECODER_LLM_CONCURRENCY (default 4).
+ * RECODER_LLM_CONCURRENCY (default 8, enough for every specialist at once).
  * Acquire a slot only when a concrete call is ready — never pre-create
  * hundreds of waiting promises.
  */
@@ -133,7 +133,7 @@ const llmWaiters: (() => void)[] = [];
 
 function llmLimit(): number {
 	const raw = Number(process.env.RECODER_LLM_CONCURRENCY);
-	return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 4;
+	return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : 8;
 }
 
 async function acquireLlmSlot(signal?: AbortSignal, timeoutMs = 120_000): Promise<void> {

@@ -11,19 +11,6 @@ import { REVIEW_ROLES } from './roles.js';
  * The API key is never returned in full — only a masked preview.
  */
 
-const roleSettingsSchema = z.object({
-	security: z.string().max(200).optional(),
-	perf: z.string().max(200).optional(),
-	correctness: z.string().max(200).optional(),
-	docs: z.string().max(200).optional(),
-	dedup: z.string().max(200).optional(),
-	patterns: z.string().max(200).optional(),
-	testing: z.string().max(200).optional(),
-	errors: z.string().max(200).optional(),
-	concurrency: z.string().max(200).optional(),
-	api: z.string().max(200).optional()
-});
-
 import { REASONING_EFFORTS } from '@recoder/shared';
 
 const modelEntrySchema = z.object({
@@ -45,16 +32,33 @@ export const reviewSettingsSchema = z.object({
 	sharedModelId: z.string().max(100).nullable().optional(),
 	orchestratorModelId: z.string().max(100).nullable().optional(),
 	specialistModelId: z.string().max(100).nullable().optional(),
-	roles: roleSettingsSchema.optional(),
-	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(REASONING_EFFORTS)).optional(),
 	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
-	applyToSpecialists: z.boolean().optional(),
+	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
 	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
 	maxFileChars: z.number().int().positive().max(200_000).optional()
 });
 
 export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
+
+/** Saved files from before models were just Review and Specialist carried per-role picks. */
+const storedFileSchema = reviewSettingsSchema.extend({
+	roles: z.partialRecord(z.enum(REVIEW_ROLES), z.string().max(200)).optional(),
+	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(REASONING_EFFORTS)).optional(),
+	applyToSpecialists: z.boolean().optional()
+});
+
+/** Old per-role picks become one Specialist pick: correctness (always runs) speaks for them all. */
+function migrateLegacy(data: z.infer<typeof storedFileSchema>): ReviewSettingsInput {
+	const { roles, roleEfforts, applyToSpecialists, ...rest } = data;
+	const next: ReviewSettingsInput = { ...rest };
+	if (next.orchestratorEffort === undefined && roleEfforts?.correctness) next.orchestratorEffort = roleEfforts.correctness;
+	if (!applyToSpecialists) {
+		if (!next.specialistModelId && roles?.correctness) next.specialistModelId = roles.correctness;
+		if (next.specialistEffort === undefined && roleEfforts?.correctness) next.specialistEffort = roleEfforts.correctness;
+	}
+	return next;
+}
 
 export interface StoredModelEntry {
 	provider?: 'openai-compatible' | 'codex';
@@ -75,10 +79,8 @@ interface StoredSettings {
 	sharedModelId?: string | null;
 	orchestratorModelId?: string | null;
 	specialistModelId?: string | null;
-	roles?: Partial<Record<ReviewRole, string>>;
-	roleEfforts?: Partial<Record<ReviewRole, ReasoningEffort>>;
 	orchestratorEffort?: ReasoningEffort | null;
-	applyToSpecialists?: boolean;
+	specialistEffort?: ReasoningEffort | null;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;
@@ -109,9 +111,9 @@ function persist(): void {
 export function initReviewSettings(): void {
 	try {
 		const raw = readFileSync(settingsFile(), 'utf8');
-		const parsed = reviewSettingsSchema.safeParse(JSON.parse(raw));
+		const parsed = storedFileSchema.safeParse(JSON.parse(raw));
 		if (parsed.success) {
-			const { apiKey, models, ...rest } = parsed.data;
+			const { apiKey, models, ...rest } = migrateLegacy(parsed.data);
 			const normalized: StoredSettings = {
 				...rest,
 				models: models?.map((e) => ({
@@ -175,31 +177,14 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 		if (clean.sharedModelId && !ids.has(clean.sharedModelId)) delete clean.sharedModelId;
 		if (clean.orchestratorModelId && !ids.has(clean.orchestratorModelId)) delete clean.orchestratorModelId;
 		if (clean.specialistModelId && !ids.has(clean.specialistModelId)) delete clean.specialistModelId;
-		if (clean.roles) {
-			for (const role of REVIEW_ROLES) {
-				if (clean.roles[role] && !ids.has(clean.roles[role] as string)) delete clean.roles[role];
-			}
-		}
 	}
 	if (patch.sharedModelId !== undefined) {
 		clean.sharedModelId = patch.sharedModelId || null;
 	}
 	if (patch.orchestratorModelId !== undefined) clean.orchestratorModelId = patch.orchestratorModelId || null;
 	if (patch.specialistModelId !== undefined) clean.specialistModelId = patch.specialistModelId || null;
-	if (patch.roles !== undefined) {
-		clean.roles = { ...(clean.roles ?? {}) };
-		for (const role of REVIEW_ROLES) {
-			const value = patch.roles[role];
-			if (value !== undefined) {
-				if (value === '') delete clean.roles[role];
-				else clean.roles[role] = value;
-			}
-		}
-		if (Object.keys(clean.roles).length === 0) delete clean.roles;
-	}
-	if (patch.roleEfforts !== undefined) clean.roleEfforts = { ...clean.roleEfforts, ...patch.roleEfforts };
 	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
-	if (patch.applyToSpecialists !== undefined) clean.applyToSpecialists = patch.applyToSpecialists;
+	if (patch.specialistEffort !== undefined) clean.specialistEffort = patch.specialistEffort;
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
 	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;
@@ -224,7 +209,6 @@ export function effectiveReviewEnv(): {
 	baseUrl: string;
 	apiKey: string;
 	model: string;
-	roles: Partial<Record<ReviewRole, string>>;
 	maxFiles: number;
 	maxDiffChars: number;
 	maxFileChars: number;
@@ -235,13 +219,6 @@ export function effectiveReviewEnv(): {
 		baseUrl: pick(overrides.baseUrl, process.env.RECODER_REVIEW_BASE_URL).replace(/\/$/, ''),
 		apiKey: pick(overrides.apiKey, process.env.RECODER_REVIEW_API_KEY),
 		model: shared?.model ?? pick(undefined, process.env.RECODER_REVIEW_MODEL),
-		roles: Object.fromEntries(
-			REVIEW_ROLES.map((role) => [
-				role,
-				pick(overrides.roles?.[role], process.env[`RECODER_${role.toUpperCase()}_MODEL`]) ||
-					undefined
-			])
-		) as Partial<Record<ReviewRole, string>>,
 		maxFiles: pickNumber(overrides.maxFiles, process.env.RECODER_REVIEW_MAX_FILES, 20),
 		maxDiffChars: pickNumber(
 			overrides.maxDiffChars,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app } from '../app';
@@ -10,7 +10,6 @@ const ENV_KEYS = [
 	'RECODER_REVIEW_BASE_URL',
 	'RECODER_REVIEW_API_KEY',
 	'RECODER_REVIEW_MODEL',
-	'RECODER_SECURITY_MODEL',
 	'RECODER_DATA_DIR'
 ];
 const savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
@@ -37,7 +36,7 @@ describe('review settings', () => {
 				models: [
 					{ id: 'lead', label: 'Lead', model: 'lead-model', provider: 'codex' },
 					{ id: 'worker', label: 'Worker', model: 'worker-model', provider: 'codex' }
-				], orchestratorModelId: 'lead', specialistModelId: 'worker', roles: { security: 'lead' }
+				], orchestratorModelId: 'lead', specialistModelId: 'worker'
 			})
 		});
 		expect(response.status).toBe(200);
@@ -45,85 +44,58 @@ describe('review settings', () => {
 		initReviewSettings();
 		expect(configForOrchestrator().model).toBe('lead-model');
 		expect(configForRole('correctness').model).toBe('worker-model');
-		expect(configForRole('security').model).toBe('lead-model');
+		expect(configForRole('security').model).toBe('worker-model');
 		const settings = await (await app.request('/api/settings/models')).json();
 		expect(settings.orchestratorModelId).toBe('lead');
 		expect(settings.specialistModelId).toBe('worker');
 	});
-	test('PATCH merges role efforts, persists across reload, and preserves model routing', async () => {
-		setReviewOverrides({
-			models: [{ id: 'sub', label: 'Subscription', model: 'test-model', provider: 'codex' }],
-			roles: { security: 'sub' },
-			roleEfforts: { perf: 'medium' }
-		});
+	test('Review and Specialist efforts persist across reload and survive a model change', async () => {
+		setReviewOverrides({ models: [{ id: 'sub', label: 'Subscription', model: 'test-model', provider: 'codex' }] });
 		const patch = await app.request('/api/settings/models', {
-			method: 'PATCH',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ roleEfforts: { security: 'high' } })
+			method: 'PATCH', headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ orchestratorEffort: 'low', specialistEffort: 'high' })
 		});
 		expect(patch.status).toBe(200);
-		expect((await patch.json()).roleEfforts).toEqual({ security: 'high', perf: 'medium' });
+		expect(await patch.json()).toMatchObject({ orchestratorEffort: 'low', specialistEffort: 'high' });
 		setReviewOverrides({});
 		initReviewSettings();
-		expect(getStoredSettings().roles).toEqual({ security: 'sub' });
-		expect(configForRole('security').reasoningEffort).toBe('high');
-		expect(configForRole('perf').reasoningEffort).toBe('medium');
-		expect(configForRole('docs').reasoningEffort).toBe('medium');
-		const put = await app.request('/api/settings/models', {
-			method: 'PUT', headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ maxFiles: 10, roleEfforts: {} })
-		});
-		expect(put.status).toBe(200);
-		expect((await put.json()).roleEfforts).toEqual({ security: 'high', perf: 'medium' });
-		const get = await app.request('/api/settings/models');
-		expect((await get.json()).roleEfforts).toEqual({ security: 'high', perf: 'medium' });
+		expect(configForOrchestrator().reasoningEffort).toBe('low');
+		expect(configForRole('docs').reasoningEffort).toBe('high');
 		const changedModel = await app.request('/api/settings/models', {
 			method: 'PATCH', headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ models: [{ id: 'new', label: 'New', model: 'new-model', provider: 'codex' }] })
 		});
 		expect(changedModel.status).toBe(200);
-		expect((await changedModel.json()).roleEfforts).toEqual({ security: 'high', perf: 'medium' });
 		expect(configForRole('security')).toMatchObject({ model: 'new-model', reasoningEffort: 'high' });
-		const changedEffort = await app.request('/api/settings/models', {
-			method: 'PATCH', headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ roleEfforts: { security: 'low' } })
-		});
-		expect(changedEffort.status).toBe(200);
-		setReviewOverrides({});
-		initReviewSettings();
-		expect(getStoredSettings().roleEfforts).toEqual({ security: 'low', perf: 'medium' });
 	});
 
-	test('invalid effort values and unknown roles are rejected without changing settings', async () => {
-		setReviewOverrides({ roleEfforts: { security: 'high' } });
-		for (const roleEfforts of [{ security: 'ultra' }, { security: null }, { security: '' }, { security: 1 }, { unknown: 'low' }, [], null]) {
+	test('invalid effort values are rejected without changing settings', async () => {
+		setReviewOverrides({ specialistEffort: 'high' });
+		for (const specialistEffort of ['ultra', '', 1, [], {}]) {
 			const res = await app.request('/api/settings/models', {
 				method: 'PATCH', headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ roleEfforts })
+				body: JSON.stringify({ specialistEffort })
 			});
 			expect(res.status).toBe(400);
-			expect(getStoredSettings().roleEfforts).toEqual({ security: 'high' });
+			expect(getStoredSettings().specialistEffort).toBe('high');
 		}
 	});
 
-	test('legacy settings without efforts reload with no API effort override', async () => {
-		const res = await app.request('/api/settings/models', {
-			method: 'PUT', headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ baseUrl: 'https://example.test/v1', apiKey: 'test', roles: { security: 'legacy-model' } })
-		});
-		expect(res.status).toBe(200);
-		setReviewOverrides({});
+	test('a saved file with per-role picks loads as one Specialist pick', async () => {
+		const legacy = (extra: object) => writeFileSync(join(process.env.RECODER_DATA_DIR!, 'review-config.json'), JSON.stringify({
+			models: [{ id: 'lead', label: 'Lead', model: 'lead-model', provider: 'codex' }, { id: 'worker', label: 'Worker', model: 'worker-model', provider: 'codex' }],
+			orchestratorModelId: 'lead', roles: { correctness: 'worker', security: 'lead' }, roleEfforts: { correctness: 'high', docs: 'low' }, ...extra
+		}));
+		legacy({});
 		initReviewSettings();
-		process.env.RECODER_REVIEW_MODEL = 'shared';
-		expect(configForRole('security')).toMatchObject({ model: 'legacy-model' });
-		expect(configForRole('security').reasoningEffort).toBeUndefined();
-		expect((await (await app.request('/api/settings/models')).json()).roleEfforts).toEqual({});
-		const patch = await app.request('/api/settings/models', {
-			method: 'PATCH', headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ roleEfforts: { security: 'high' } })
-		});
-		expect(patch.status).toBe(200);
-		expect(configForRole('security')).toMatchObject({ model: 'legacy-model', reasoningEffort: 'high' });
+		expect(getStoredSettings()).toMatchObject({ specialistModelId: 'worker', specialistEffort: 'high', orchestratorEffort: 'high' });
+		expect(getStoredSettings()).not.toHaveProperty('roles');
+		expect(configForRole('security')).toMatchObject({ model: 'worker-model', reasoningEffort: 'high' });
+		setReviewOverrides({});
+		legacy({ applyToSpecialists: true });
+		initReviewSettings();
+		expect(getStoredSettings().specialistModelId).toBeUndefined();
+		expect(configForRole('security').model).toBe('lead-model');
 	});
 
 	test('PUT stores config and GET masks the key', async () => {
@@ -138,8 +110,7 @@ describe('review settings', () => {
 					{ id: 'm1', label: 'Qwen coder', model: 'qwen/qwen-2.5-coder-32b-instruct' },
 					{ label: 'Qwen max', model: 'qwen/qwen-max' }
 				],
-				sharedModelId: 'm1',
-				roles: { security: 'm1' }
+				sharedModelId: 'm1'
 			})
 		});
 		expect(put.status).toBe(200);
@@ -155,8 +126,6 @@ describe('review settings', () => {
 		expect(body.models).toHaveLength(2);
 		expect(body.models[0]).toMatchObject({ id: 'm1', label: 'Qwen coder' });
 		expect(typeof body.models[1].id).toBe('string');
-		expect(body.roles.security).toBe('m1');
-		expect(body.roles.perf).toBeNull();
 		expect(isReviewConfigured()).toBe(true);
 	});
 
@@ -193,8 +162,7 @@ describe('review settings', () => {
 				models: [
 					{ provider: 'codex', id: codexId, label: 'GPT 5 · subscription', model: 'gpt-5', apiKey: '' }
 				],
-				sharedModelId: codexId,
-				roles: {}
+				sharedModelId: codexId
 			})
 		});
 		expect(put.status).toBe(200);
@@ -216,8 +184,7 @@ describe('review settings', () => {
 					{ provider: 'codex', id: codexId, label: 'GPT 5 · subscription', model: 'gpt-5', apiKey: '' },
 					{ provider: 'openai-compatible', id: apiId, label: 'Qwen', model: 'qwen/x', baseUrl: 'https://x/v1', apiKey: '' }
 				],
-				sharedModelId: codexId,
-				roles: {}
+				sharedModelId: codexId
 			})
 		});
 		expect(put2.status).toBe(200);

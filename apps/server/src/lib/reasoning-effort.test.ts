@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, expect, test } from 'bun:test';
 import { chatCompletion, resetLlmLimiter, streamChatCompletion } from './llm';
 import { configForRole } from './models';
@@ -15,15 +18,8 @@ afterEach(() => {
 	resetLlmLimiter();
 });
 
-test('API completions send only explicit role efforts, for shared, override, and fallback models', async () => {
-	setReviewOverrides({
-		models: [
-			{ id: 'shared', label: 'Shared', model: 'shared-model', baseUrl: 'https://example.test/v1', apiKey: 'test' },
-			{ id: 'special', label: 'Special', model: 'special-model', baseUrl: 'https://example.test/v1', apiKey: 'test' }
-		],
-		roles: { security: 'special', docs: 'deleted' },
-		roleEfforts: { security: 'high', perf: 'low', docs: 'medium' }
-	});
+test('API completions send the Specialist effort only when one is set', async () => {
+	const endpoint = { baseUrl: 'https://example.test/v1', apiKey: 'test' };
 	const bodies: Record<string, unknown>[] = [];
 	globalThis.fetch = (async (_url, init) => {
 		const body = JSON.parse(init!.body as string);
@@ -32,25 +28,27 @@ test('API completions send only explicit role efforts, for shared, override, and
 			? new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n')
 			: Response.json({ choices: [{ message: { content: 'ok' } }] });
 	}) as typeof fetch;
-	for (const role of ['security', 'perf', 'docs', 'testing'] as const) {
-		const opts = { ...configForRole(role), messages: [{ role: 'user' as const, content: 'Review' }] };
+	const call = async () => {
+		const opts = { ...configForRole('security'), messages: [{ role: 'user' as const, content: 'Review' }] };
 		await chatCompletion(opts);
 		await streamChatCompletion(opts, () => {});
-	}
+	};
+	const models = [{ id: 'review', label: 'Review', model: 'review-model', ...endpoint }, { id: 'special', label: 'Special', model: 'special-model', ...endpoint }];
+	setReviewOverrides({ models, specialistModelId: 'special', specialistEffort: 'high' });
+	await call();
+	setReviewOverrides({ models, specialistModelId: 'special' });
+	await call();
 	expect(bodies.map((body) => [body.model, body.reasoning_effort])).toEqual([
 		['special-model', 'high'], ['special-model', 'high'],
-		['shared-model', 'low'], ['shared-model', 'low'],
-		['shared-model', 'medium'], ['shared-model', 'medium'],
-		['shared-model', undefined], ['shared-model', undefined]
+		['special-model', undefined], ['special-model', undefined]
 	]);
-	expect(bodies[6]).not.toHaveProperty('reasoning_effort');
-	expect(bodies[7]).not.toHaveProperty('reasoning_effort');
+	expect(bodies[2]).not.toHaveProperty('reasoning_effort');
 });
 
 test('review agent, discussion, streaming discussion, and fix consume resolved role effort', async () => {
 	setReviewOverrides({
 		models: [{ id: 'shared', label: 'Shared', model: 'shared-model', baseUrl: 'https://example.test/v1', apiKey: 'test' }],
-		roleEfforts: { security: 'high' }
+		specialistEffort: 'high'
 	});
 	const efforts: string[] = [];
 	globalThis.fetch = (async (_url, init) => {
@@ -58,12 +56,14 @@ test('review agent, discussion, streaming discussion, and fix consume resolved r
 		efforts.push(body.reasoning_effort);
 		return body.stream
 			? new Response(`data: ${JSON.stringify({ choices: [{ delta: { content: body.response_format ? '{"message":"Checked the evidence","ok":true}' : 'ok' } }] })}\n\ndata: [DONE]\n\n`)
-			: Response.json({ choices: [{ message: { content: JSON.stringify({ summary: 'Fix', patch: '--- a/test.ts\n+++ b/test.ts\n' }) } }] });
+			: Response.json({ choices: [{ message: { content: JSON.stringify({ summary: 'Fix', edits: [{ file: 'test.ts', find: 'old', replace: 'new' }] }) } }] });
 	}) as typeof fetch;
 	const finding = { agent: 'security', file: 'test.ts', line: 1, endLine: 1, severity: 'warning', message: 'Issue', diff: '', sandboxPath: null };
 	await discussFinding({ ...finding, history: [], question: 'Why?' });
 	await streamDiscussFinding({ ...finding, history: [], question: 'Why?' }, () => {});
-	await suggestFix(finding);
+	const checkout = mkdtempSync(join(tmpdir(), 'recoder-effort-fix-'));
+	writeFileSync(join(checkout, 'test.ts'), 'old\n');
+	await suggestFix({ ...finding, sandboxPath: checkout });
 	const result = await runJsonAgent({
 		label: 'security', system: '', user: '', config: configForRole('security'),
 		budget: new ModelBudget(), evidence: new EvidenceStore(null, buildInventory(''), 1000),

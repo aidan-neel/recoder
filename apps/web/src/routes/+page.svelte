@@ -203,16 +203,17 @@
 	/* ── Sessions ──────────────────────────────────────────────── */
 
 	/** `chat` opens the Orchestrator panel beside the diff (interactive review). */
-	function openReview(review: Review, repo: Repo, diff = false, chat = false): void {
+	function openReview(review: Review, repo: Repo, view: 'findings' | 'diff' | null = null, chat = false): void {
 		const status = review.status === 'running' || review.status === 'queued' ? 'reviewing' : 'ready';
 		sessionState.ensureSession(review.id, repo.name, `#${review.prNumber}`, status);
-		void goto(`/session/${review.id}${diff ? `?view=diff${chat ? '&chat=1' : ''}` : ''}`);
+		void goto(`/session/${review.id}${view ? `?view=${view}${chat ? '&chat=1' : ''}` : ''}`);
 	}
 
 	/**
-	 * Review queues an automated review. With Interactive review on it opens the
-	 * diff right away; otherwise it runs from Home and gets a tab. Interactive
-	 * opens a chat-first session with the Orchestrator.
+	 * Review queues an automated review. With Interactive review on it opens
+	 * Findings right away, where results land as they're found; otherwise it runs
+	 * from Home and gets a tab. Interactive opens a chat-first session with the
+	 * Orchestrator beside the diff.
 	 */
 	async function start(pr: PullRequest, repo: Repo, mode: 'review' | 'interactive'): Promise<void> {
 		const key = prKey(repo.id, pr.number);
@@ -229,7 +230,8 @@
 			if (pr.headRef) recentSessions.branches[key] = pr.headRef;
 			await recentSessions.refresh();
 			if (mode === 'interactive' || interactiveReview) {
-				openReview(review, repo, true, mode === 'interactive');
+				if (mode === 'interactive') openReview(review, repo, 'diff', true);
+				else openReview(review, repo, 'findings');
 				return;
 			}
 			sessionState.ensureSession(review.id, repo.name, `#${pr.number}`, 'reviewing');
