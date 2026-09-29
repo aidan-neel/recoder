@@ -94,7 +94,7 @@
 
 	/** Strongest open finding per new-side line, for row markers. */
 	const lineMarks = $derived.by(() => {
-		const rank: Record<FindingSeverity, number> = { high: 0, medium: 1, low: 2, info: 3 };
+		const rank: Record<FindingSeverity, number> = { high: 0, medium: 1, low: 2 };
 		const map = new Map<number, Finding>();
 		for (const finding of findings) {
 			if (finding.status === 'dismissed') continue;

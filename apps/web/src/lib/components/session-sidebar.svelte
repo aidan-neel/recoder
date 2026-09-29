@@ -30,12 +30,11 @@
 	const tree = $derived(fileDiffs ? buildFileTree(fileDiffs) : changedFiles);
 	const fileCount = $derived(fileDiffs ? fileDiffs.length : changedFileCount);
 
-	const severityRank: Record<FindingSeverity, number> = { high: 0, medium: 1, low: 2, info: 3 };
+	const severityRank: Record<FindingSeverity, number> = { high: 0, medium: 1, low: 2 };
 	const severityKind: Record<FindingSeverity, FindingKind> = {
 		high: 'error',
 		medium: 'warning',
-		low: 'info',
-		info: 'info'
+		low: 'info'
 	};
 
 	/** Open findings per file → badge with count, strongest severity, first finding. */

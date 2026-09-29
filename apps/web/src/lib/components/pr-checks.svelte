@@ -101,5 +101,5 @@
 	</Popover.Root>
 {/if}
 
-<!-- The pushed fix starts new runs; check back shortly. -->
+<!-- Applying only edits the checkout; checks rerun once the developer pushes. -->
 <CheckFixDialog {reviewId} check={fixing} bind:open={fixOpen} onApplied={() => setTimeout(() => void load(), 5000)} />

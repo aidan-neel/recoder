@@ -211,8 +211,7 @@ test('a specialist failure does not cancel the other assignment', async () => {
 	}) as unknown as typeof fetch;
 	const result = await runAdaptiveReview({ diff: DIFF, sandboxPath: null, prTitle: 'x', prBody: '' });
 	expect(result.assignments.find((assignment) => assignment.id === 'correctness-core')?.status).toBe('error');
-	const patternsStatus = result.assignments.find((assignment) => assignment.id === 'patterns-core')?.status;
-	expect(patternsStatus === 'done' || patternsStatus === 'partial').toBe(true);
+	expect(result.assignments.find((assignment) => assignment.id === 'patterns-core')?.status).toBe('done');
 	expect(calls).toBeGreaterThan(1);
 });
 

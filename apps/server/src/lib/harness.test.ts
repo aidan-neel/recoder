@@ -74,6 +74,51 @@ test('a resumed review reruns only unfinished specialists and keeps the finished
 	expect(resumed.findings.map((finding) => finding.message)).toEqual(['[bug] possible miss']);
 });
 
+test('a review whose consolidation fails still finishes with its findings', async () => {
+	setReviewOverrides({ baseUrl: 'http://model.test/v1', apiKey: 'test', models: [{ id: 'test', label: 'Test', model: 'test' }] });
+	const calls: string[] = [];
+	stubModel(calls, 'ok');
+	const answer = globalThis.fetch;
+	globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+		const system = String(JSON.parse(String(init?.body)).messages[0]?.content ?? '');
+		if (!system.includes('review orchestrator') && !system.includes('(correctness)') && !system.includes('(patterns)')) {
+			return Response.json({ choices: [{ message: { content: 'not json' } }] });
+		}
+		return answer(url, init);
+	}) as unknown as typeof fetch;
+	const result = await runAdaptiveReview({ diff: DIFF, sandboxPath: null });
+	expect(result.outcome).toBe('complete');
+	expect(result.findings.map((finding) => finding.message)).toEqual(['[bug] possible miss']);
+	expect(result.assignments.every((record) => record.status === 'done')).toBe(true);
+});
+
+test('the orchestrator can retry a specialist that failed', async () => {
+	setReviewOverrides({ baseUrl: 'http://model.test/v1', apiKey: 'test', models: [{ id: 'test', label: 'Test', model: 'test' }] });
+	const calls: string[] = [];
+	let patternsCalls = 0;
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const messages = JSON.parse(String(init?.body)).messages as { content: string }[];
+		const system = String(messages[0]?.content ?? '');
+		const retryPass = messages.some((message) => message.content.includes('Specialists that failed'));
+		const kind = system.includes('review orchestrator') ? (retryPass ? 'retry-planner' : 'planner')
+			: system.includes('(patterns)') ? 'patterns'
+			: system.includes('(correctness)') ? 'correctness'
+			: 'consolidation';
+		calls.push(kind);
+		if (kind === 'patterns' && ++patternsCalls === 1) return new Response('bad request', { status: 400 });
+		const reply = kind === 'planner' ? PLAN
+			: kind === 'retry-planner' ? { ...PLAN, assignments: [assignment('retry-patterns-core', 'patterns', 2)] }
+			: kind === 'consolidation' ? { keep: [], merge: [], reject: [], recommendedChecks: [] }
+			: NOTHING;
+		return Response.json({ choices: [{ message: { content: JSON.stringify({ message: 'ok', ...reply }) } }] });
+	}) as unknown as typeof fetch;
+	const result = await runAdaptiveReview({ diff: DIFF, sandboxPath: null });
+	expect(calls.filter((kind) => kind === 'retry-planner')).toHaveLength(1);
+	expect(result.assignments.map((record) => [record.id, record.status])).toEqual([
+		['correctness-core', 'done'], ['patterns-core', 'error'], ['retry-patterns-core', 'done']
+	]);
+});
+
 test('a follow-up reusing a launched assignment id gets its own id', () => {
 	const follow = [assignment('patterns-core', 'patterns', 3), assignment('follow-x', 'security', 4), assignment('follow-x', 'security', 5)];
 	expect(uniqueIds(follow, ['patterns-core', 'follow-patterns-core', 'follow-x']).map((item) => item.id))

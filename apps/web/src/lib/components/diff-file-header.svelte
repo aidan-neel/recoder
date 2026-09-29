@@ -16,6 +16,7 @@
 	</span>
 	<span class="diff-file-stats"><span class="text-success">+{diff.additions}</span><span class="text-danger">−{diff.deletions}</span></span>
 	<span class="ms-auto"></span>
+	<Checkbox class="diff-viewed" label="Full file" checked={diffPrefs.fullFile} onCheckedChange={(checked: boolean) => diffPrefs.setFullFile(checked)} />
 	<Checkbox class="diff-viewed" label="Viewed" checked={diffPrefs.isViewed(diff.path)} onCheckedChange={(checked: boolean) => diffPrefs.setViewed(diff.path, checked)} />
 	<Tabs.Root value={diffPrefs.mode} onValueChange={(value) => diffPrefs.setMode(value as 'unified' | 'split')} variant="segmented" class="view-switch diff-mode-switch">
 		<Tabs.List {...{ 'aria-label': 'Diff layout' }}>

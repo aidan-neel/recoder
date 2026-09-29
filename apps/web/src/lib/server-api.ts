@@ -4,6 +4,7 @@ import type { DiscoveredModel,
 	CodexModel,
 	ApplyFixRequest,
 	ApplyFixResponse,
+	PendingChanges,
 	CreateRepoInput,
 	FailureAction,
 	CreateReviewInput,
@@ -197,6 +198,15 @@ export const serverApi = {
 			method: 'POST',
 			body: JSON.stringify(input)
 		}),
+	/** Uncommitted files and unpushed commits in the review checkout. */
+	getChanges: (id: string) => req<PendingChanges>(`/api/reviews/${id}/changes`),
+	commitChanges: (id: string, paths: string[], message: string) =>
+		req<{ sha: string }>(`/api/reviews/${id}/changes/commit`, { method: 'POST', body: JSON.stringify({ paths, message }) }),
+	discardChanges: (id: string, paths: string[]) =>
+		req<{ ok: true }>(`/api/reviews/${id}/changes/discard`, { method: 'POST', body: JSON.stringify({ paths }) }),
+	undoCommit: (id: string) => req<{ ok: true }>(`/api/reviews/${id}/changes/undo-commit`, { method: 'POST' }),
+	pushChanges: (id: string) =>
+		req<{ sha: string; pushed: number; branch: string }>(`/api/reviews/${id}/changes/push`, { method: 'POST' }),
 	queueReview: (input: CreateReviewInput) =>
 		req<Review>('/api/reviews', { method: 'POST', body: JSON.stringify(input) }),
 	/** CI checks for the PR head, or `ref` (a branch or sha, e.g. a fix's verify branch). */

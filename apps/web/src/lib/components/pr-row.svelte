@@ -1,12 +1,10 @@
 <script lang="ts">
-	import Check from '@lucide/svelte/icons/check';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
 	import * as Avatar from '@sivir-ui/svelte/components/avatar';
 	import { initials } from '$lib/shell-state.svelte';
 	import Link2 from '@lucide/svelte/icons/link-2';
 	import LoaderCircle from '@lucide/svelte/icons/loader';
-	import MessageSquare from '@lucide/svelte/icons/message-square';
 	import Play from '@lucide/svelte/icons/play';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
@@ -22,13 +20,10 @@
 		progress?: { tasksDone: number; tasksTotal: number };
 		/** Review request in flight from this row. */
 		starting?: boolean;
-		/** Finished while Home was open: check icon, count fades in. */
-		justFinished?: boolean;
 		highlighted?: boolean;
 		disabled?: boolean;
 		onOpen: () => void;
 		onReview: () => void;
-		onInteractive: () => void;
 	}
 
 	let {
@@ -36,16 +31,14 @@
 		review,
 		progress,
 		starting = false,
-		justFinished = false,
 		highlighted = false,
 		disabled = false,
 		onOpen,
-		onReview,
-		onInteractive
+		onReview
 	}: Props = $props();
 
 	const running = $derived(!starting && isRunning(review));
-	const state = $derived(starting ? 'starting' : running ? 'running' : justFinished ? 'done' : 'idle');
+	const state = $derived(starting ? 'starting' : running ? 'running' : 'idle');
 	const status = $derived(prStatus(review));
 	const title = $derived(pr.title === '' ? `PR #${pr.number}` : pr.title);
 	const assignees = $derived(pr.assignees ?? []);
@@ -62,8 +55,6 @@
 		<span class="pr-row-icon" aria-hidden="true">
 			{#if state === 'starting' || state === 'running'}
 				<LoaderCircle size={16} strokeWidth={1.75} class="spin" />
-			{:else if state === 'done'}
-				<Check size={16} strokeWidth={1.75} />
 			{:else}
 				<GitPullRequest size={16} strokeWidth={1.75} />
 			{/if}
@@ -120,7 +111,7 @@
 			<span class="pr-row-rest">
 				{#if status}
 					{#key status.label}
-						<Badge variant="secondary" class="status-chip {justFinished ? 'enter-rise' : ''}" data-tone={status.tone}>
+						<Badge variant="secondary" class="status-chip" data-tone={status.tone}>
 							{status.label}
 						</Badge>
 					{/key}
@@ -129,10 +120,6 @@
 			</span>
 			{#if !running}
 				<span class="pr-row-actions">
-					<Button variant="outline" class="pr-row-btn" {disabled} onclick={onInteractive}>
-						<MessageSquare size={14} strokeWidth={1.75} aria-hidden="true" />
-						Interactive
-					</Button>
 					<Button class="pr-row-btn pr-row-review" {disabled} aria-busy={starting} onclick={onReview}>
 						{#if starting}
 							<Spinner size={12} aria-hidden="true" />
@@ -154,9 +141,6 @@
 		{/if}
 		<ContextMenu.Item callback={onReview}>
 			<span class="flex items-center gap-2"><Play size={14} aria-hidden="true" /> Start a new review</span>
-		</ContextMenu.Item>
-		<ContextMenu.Item callback={onInteractive}>
-			<span class="flex items-center gap-2"><MessageSquare size={14} aria-hidden="true" /> Interactive review</span>
 		</ContextMenu.Item>
 		<ContextMenu.Item callback={copyLink}>
 			<span class="flex items-center gap-2"><Link2 size={14} aria-hidden="true" /> Copy link</span>

@@ -10,6 +10,7 @@ export type Provider = 'github' | 'gitlab';
 
 export type ReviewStatus = 'draft' | 'queued' | 'running' | 'passed' | 'failed';
 
+/** `info` is the lowest reported severity (a reviewer's "low"); informational notes are never reported. */
 export type FindingSeverity = 'info' | 'warning' | 'error';
 
 export type RunStatus = 'running' | 'succeeded' | 'failed' | 'killed' | 'rejected';
@@ -416,11 +417,36 @@ export interface ApplyFixRequest {
 	edits?: FixEdit[];
 }
 
+/** A fix applied to the review checkout's working tree; nothing is committed or pushed. */
 export interface ApplyFixResponse {
-	sha: string;
-	/** PR head branch the commit was pushed to. */
+	/** Files the fix changed. */
+	files: string[];
+	/** PR head branch the changes will be pushed to. */
 	branch: string;
-	pushed: boolean;
+}
+
+/** One uncommitted file in a review checkout. */
+export interface PendingFile {
+	path: string;
+	status: 'added' | 'modified' | 'deleted' | 'renamed';
+	/** Unified diff against HEAD. */
+	patch: string;
+}
+
+/** A local commit not yet pushed to the PR branch. */
+export interface PendingCommit {
+	sha: string;
+	subject: string;
+	author: string;
+	at: string;
+}
+
+/** What the developer has changed in a review checkout and not yet pushed. */
+export interface PendingChanges {
+	files: PendingFile[];
+	commits: PendingCommit[];
+	/** PR head branch a push goes to. */
+	branch?: string;
 }
 
 /**

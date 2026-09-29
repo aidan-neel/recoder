@@ -70,11 +70,17 @@ export class LlmError extends Error {
 const TRANSIENT_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 const TRANSIENT_NETWORK = /stalled|socket|ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|EAI_AGAIN|fetch failed|network|connection (?:was )?(?:closed|reset|refused|lost)|other side closed|Unable to connect|terminated/i;
 
+/** ChatGPT's own wording for a dropped or cut-short response stream. */
+const CODEX_TRANSIENT = /response failed|incomplete response|could not complete/i;
+
 /** Dropped sockets and overloaded servers (vLLM restarts, proxies) are worth another try; bad requests are not. */
-export function isTransientLlmError(err: unknown): boolean {
+export function isTransientLlmError(err: unknown, provider?: ChatOptions['provider']): boolean {
 	if (!(err instanceof LlmError)) return false;
+	// ChatGPT's 429 is a usage cap that lasts hours, not a momentary rate limit.
+	if (provider === 'codex' && err.status === 429) return false;
 	if (TRANSIENT_STATUS.has(err.status)) return true;
-	return err.status === 0 && TRANSIENT_NETWORK.test(err.message) && !/cancelled|timed out|truncated/i.test(err.message);
+	if (err.status !== 0 || /cancelled|timed out|truncated/i.test(err.message)) return false;
+	return TRANSIENT_NETWORK.test(err.message) || (provider === 'codex' && CODEX_TRANSIENT.test(err.message));
 }
 
 /** A stream with no bytes for this long is dead (RECODER_LLM_IDLE_MS, default 45s). */
@@ -103,7 +109,7 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
  * callers stop once text has reached the user.
  */
 async function withRetries<T>(
-	opts: Pick<ChatOptions, 'signal' | 'timeoutMs'>,
+	opts: Pick<ChatOptions, 'signal' | 'timeoutMs' | 'provider'>,
 	deadline: number,
 	attempt: (timeoutMs: number) => Promise<T>,
 	canRetry: () => boolean = () => true
@@ -114,7 +120,7 @@ async function withRetries<T>(
 			return await attempt(Math.max(1, deadline - Date.now()));
 		} catch (err) {
 			const wait = Math.min(15_000, 1_000 * 2 ** tries);
-			if (tries >= max || !isTransientLlmError(err) || !canRetry() || Date.now() + wait >= deadline - 5_000) throw err;
+			if (tries >= max || !isTransientLlmError(err, opts.provider) || !canRetry() || Date.now() + wait >= deadline - 5_000) throw err;
 			console.warn(`[llm] ${(err as Error).message} — retrying in ${wait / 1000}s (${tries + 1}/${max})`);
 			await sleep(wait, opts.signal);
 		}
@@ -206,8 +212,10 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 		let result: string;
 		if (opts.provider === 'codex') {
 			const { codex } = await import('./codex');
-			try { result = await codex.complete(remaining); }
-			catch (error) { if (error instanceof LlmError) throw error; throw new LlmError(0, 'ChatGPT request failed'); }
+			result = await withRetries(opts, deadline, async (timeoutMs) => {
+				try { return await codex.complete({ ...remaining, timeoutMs }); }
+				catch (error) { if (error instanceof LlmError) throw error; throw new LlmError(0, 'ChatGPT request failed'); }
+			});
 		} else result = await withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => opts.onReasoning
 			? streamChatCompletionInner({ ...remaining, timeoutMs }, () => {})
 			: chatCompletionInner({ ...remaining, timeoutMs })));
@@ -310,7 +318,7 @@ export async function streamChatCompletion(
 		let streamed = false;
 		const forward = (text: string) => { streamed = true; onToken(text); };
 		const result = opts.provider === 'codex'
-			? await (await import('./codex')).codex.complete(remaining, onToken)
+			? await withRetries(opts, deadline, async (timeoutMs) => (await import('./codex')).codex.complete({ ...remaining, timeoutMs }, forward), () => !streamed)
 			: await withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => streamChatCompletionInner({ ...remaining, timeoutMs }, forward)), () => !streamed);
 		success = true;
 		return result;

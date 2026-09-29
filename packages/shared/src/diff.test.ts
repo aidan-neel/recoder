@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { expandFileDiff, parseUnifiedDiff } from './diff';
+import { collapseFileDiff, expandFileDiff, parseUnifiedDiff } from './diff';
 
 const SINGLE = `diff --git a/a.ts b/a.ts
 --- a/a.ts
@@ -85,5 +85,27 @@ describe('expandFileDiff', () => {
 			['context', 5, 5, 'line5'],
 			['context', 6, 6, 'line6']
 		]);
+	});
+});
+
+describe('collapseFileDiff', () => {
+	const full = expandFileDiff(parseUnifiedDiff(`diff --git a/a.ts b/a.ts
+--- a/a.ts
++++ b/a.ts
+@@ -10,1 +10,1 @@
+-old
++new
+`)[0], Array.from({ length: 30 }, (_, i) => (i === 9 ? 'new' : `line ${i + 1}`)).join('\n'));
+
+	test('keeps only changed lines with three lines of context', () => {
+		const collapsed = collapseFileDiff(full);
+		expect(collapsed.hunks).toHaveLength(1);
+		expect(collapsed.hunks[0].lines.map((line) => line.newNo ?? line.oldNo)).toEqual([7, 8, 9, 10, 10, 11, 12, 13]);
+		expect(collapsed.hunks[0]).toMatchObject({ oldStart: 7, oldCount: 7, newStart: 7, newCount: 7 });
+	});
+
+	test('keeps requested lines as their own hunk', () => {
+		const collapsed = collapseFileDiff(full, [25]);
+		expect(collapsed.hunks.map((hunk) => [hunk.newStart, hunk.newCount])).toEqual([[7, 7], [22, 7]]);
 	});
 });

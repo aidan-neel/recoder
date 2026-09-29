@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { ReviewStream } from '$lib/review-stream.svelte';
-	import type { Review, ReviewAssignment } from '@recoder/shared';
+	import type { Review, ReviewAssignment, ReviewCodeContext } from '@recoder/shared';
 	import ReviewingView, { type ReviewingFinding } from './reviewing-view.svelte';
 	import { serverApi } from '$lib/server-api';
 	import { recentSessions } from '$lib/recent-sessions.svelte';
@@ -22,8 +22,13 @@
 		onContinue?: (() => Promise<void>) | null;
 		actionError?: string | null;
 		restarting?: boolean;
+		/** Render inside the diff page's Ask reviewer drawer. */
+		embedded?: boolean;
+		draft?: string;
+		codeContext?: ReviewCodeContext | null;
+		focusKey?: number;
 	}
-	let { review, stream, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onShowView = null, onOpenFinding = null, onRestart = null, onStartReview = null, onContinue = null, actionError = null, restarting = false }: Props = $props();
+	let { review, stream, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onShowView = null, onOpenFinding = null, onRestart = null, onStartReview = null, onContinue = null, actionError = null, restarting = false, embedded = false, draft = $bindable(''), codeContext = $bindable(null), focusKey }: Props = $props();
 	const progress = $derived(stream.progress);
 	const connection = $derived(stream.connection);
 	let now = $state(Date.now());
@@ -42,13 +47,14 @@
 		return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
 	}
 	// One entry per id (latest wins): reviews saved before follow-up ids were made unique can repeat one.
-	const assignments = $derived<ReviewAssignment[]>([...new Map((progress.assignments ?? []).map((assignment) => [assignment.id, assignment])).values()]);
+	// Reviews saved before every specialist had to finish can carry a `partial` status; it meant finished.
+	const assignments = $derived<ReviewAssignment[]>([...new Map((progress.assignments ?? []).map((assignment) => [assignment.id, (assignment.status as string) === 'partial' ? { ...assignment, status: 'done' as const } : assignment])).values()]);
 	// Planner/consolidation events are review-level, never another correctness assignment.
 	const pipelineId = '__pipeline';
 	const confirmed = $derived(status === 'passed');
 	const viewFindings = $derived<ReviewingFinding[]>(!active ? review.findings.map((finding, i) => ({
 		id: 'F-' + String(i + 1).padStart(2, '0'), agent: finding.agent ?? null,
-		severity: finding.severity === 'error' ? 'high' : finding.severity === 'warning' ? 'medium' : 'info',
+		severity: finding.severity === 'error' ? 'high' : finding.severity === 'warning' ? 'medium' : 'low',
 		title: mapBackendFinding(finding, i).title || finding.file,
 		location: finding.file + (finding.line ? ':' + finding.line : ''),
 		file: finding.file,
@@ -68,7 +74,7 @@
 	);
 	const currentStage = $derived(
 		status === 'passed' ? 'Review complete'
-			: status === 'failed' ? (progress.outcome === 'partial' ? 'Review incomplete' : 'Review interrupted')
+			: status === 'failed' ? 'Review failed'
 			: ['Checkout', 'Understand changes', 'Running checks', 'Specialist review', 'Verifying findings', 'Consolidation'][stageIndex]
 	);
 	const displayAssignments = $derived<ReviewAssignment[]>([...assignments, {
@@ -83,6 +89,10 @@
 
 <ReviewingView
 	fullscreen
+	{embedded}
+	bind:draft
+	bind:codeContext
+	{focusKey}
 	{reviewId}
 	{awaitingPrompt}
 	onStartReview={awaitingPrompt ? onStartReview : null}
@@ -93,7 +103,7 @@
 	assignments={displayAssignments}
 	messages={progress.messages ?? []}
 	orchestratorModel={progress.orchestratorModel}
-	onSend={async (assignmentId, text) => { await serverApi.sendReviewMessage(reviewId, assignmentId, text); }}
+	onSend={async (assignmentId, text, context) => { await serverApi.sendReviewMessage(reviewId, assignmentId, text, context); }}
 	onStop={async (assignmentId) => { await serverApi.stopReviewMessage(reviewId, assignmentId); }}
 	findings={viewFindings}
 	pendingCount={assignments.filter((assignment) => assignment.status === 'running' || assignment.status === 'queued' || assignment.status === 'waiting').length}
@@ -112,7 +122,7 @@
 	stageDetail={stageIndex === 0 ? progress.tasks[['fetch', 'sandbox', 'diff'].find((id) => progress.tasks[id]?.status === 'running') ?? 'fetch']?.message
 		: stageIndex === 2 ? (progress.tasks.checks ?? progress.tasks.setup)?.message : undefined}
 	failed={status === 'failed'}
-	errorMessage={actionError ?? (status === 'failed' && !progress.failure && progress.outcome !== 'partial' ? review.summary : null)}
+	errorMessage={actionError ?? (status === 'failed' && !progress.failure ? review.summary : null)}
 	failure={progress.failure ?? null}
 	{connectionLabel}
 	connectionLost={connection === 'reconnecting'}

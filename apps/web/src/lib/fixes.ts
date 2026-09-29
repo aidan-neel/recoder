@@ -2,6 +2,7 @@ import { findingsStore, type Finding, type FixVerify } from './findings.svelte';
 import { errorToast, undoToast } from './notify';
 import { ApiError, serverApi } from './server-api';
 import { threadsStore } from './threads.svelte';
+import { changesStore } from './changes.svelte';
 
 /** The finding fields the fix endpoints need. */
 export function toFixInput(finding: Finding) {
@@ -30,7 +31,7 @@ export async function suggestFix(finding: Finding, opts: { quiet?: boolean; queu
 	}
 }
 
-/** Push the ready patch to the PR head branch and mark the finding fixed. */
+/** Apply the ready patch to the review checkout (no commit, no push) and mark the finding fixed. */
 export async function applyFix(finding: Finding, opts: { quiet?: boolean } = {}): Promise<void> {
 	const reviewId = threadsStore.reviewId;
 	const suggestion = findingsStore.suggestions[finding.id];
@@ -46,12 +47,12 @@ export async function applyFix(finding: Finding, opts: { quiet?: boolean } = {})
 			edits: suggestion.edits
 		});
 		const verifyBranch = findingsStore.suggestions[finding.id]?.verify?.branch;
-		findingsStore.applyReady(finding.id, { sha: result.sha, branch: result.branch });
-		findingsStore.accept(finding.id, finding.agent, { sha: result.sha, branch: result.branch, summary: suggestion.summary ?? finding.body, at: new Date().toISOString(), agent: finding.agent });
+		findingsStore.applyReady(finding.id, { branch: result.branch });
+		findingsStore.accept(finding.id, finding.agent, { sha: '', branch: result.branch, summary: suggestion.summary ?? finding.body, at: new Date().toISOString(), agent: finding.agent });
 		// The temporary CI branch has served its purpose.
 		if (verifyBranch) void serverApi.deleteVerifyBranch(reviewId, verifyBranch).catch(() => undefined);
-		// Pushed commits can't be reverted from here, so the toast has no Undo.
-		if (!opts.quiet) undoToast(`Fix applied to ${finding.file.split('/').at(-1)}`);
+		void changesStore.refresh();
+		if (!opts.quiet) undoToast(`Fix applied to ${finding.file.split('/').at(-1)}. Commit it from Changes.`);
 	} catch (e) {
 		const message = e instanceof Error ? e.message : 'Could not apply the fix.';
 		findingsStore.applyFailed(finding.id, message);
@@ -59,7 +60,7 @@ export async function applyFix(finding: Finding, opts: { quiet?: boolean } = {})
 	}
 }
 
-/** A finding with a patch ready to push (not pushed yet). */
+/** A finding with a patch ready to apply (not applied yet). */
 export function hasReadyFix(finding: Finding): boolean {
 	const s = findingsStore.suggestions[finding.id];
 	return finding.status === 'open' && s?.status === 'ready' && !!s.patch && s.apply !== 'applied';
@@ -88,7 +89,7 @@ export async function fixFindings(findings: Finding[]): Promise<void> {
 	if (failed) errorToast(`${failed} ${failed === 1 ? 'fix' : 'fixes'} couldn't be written`, shared?.error ?? 'Retry from the finding.', shared?.action);
 }
 
-/** Push every ready fix, one commit each, in order. */
+/** Apply every ready fix to the checkout, in order. Committing is up to the developer. */
 export async function applyReadyFixes(findings: Finding[]): Promise<void> {
 	const ready = findings.filter(hasReadyFix);
 	let pushed = 0;
@@ -96,7 +97,7 @@ export async function applyReadyFixes(findings: Finding[]): Promise<void> {
 		await applyFix(f, { quiet: true });
 		if (findingsStore.suggestions[f.id]?.apply === 'applied') pushed += 1;
 	}
-	if (pushed) undoToast(`Applied ${pushed} ${pushed === 1 ? 'fix' : 'fixes'}`);
+	if (pushed) undoToast(`Applied ${pushed} ${pushed === 1 ? 'fix' : 'fixes'}. Commit them from Changes.`);
 	if (pushed < ready.length) errorToast(`${ready.length - pushed} ${ready.length - pushed === 1 ? 'fix' : 'fixes'} couldn't be applied`, 'Retry from the finding.');
 }
 

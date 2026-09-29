@@ -6,7 +6,7 @@ import type { ReviewToolCall } from '@recoder/shared';
  * render the finished review by jumping to `DEMO_END`.
  */
 
-export type Severity = 'high' | 'medium' | 'low' | 'info';
+export type Severity = 'high' | 'medium' | 'low';
 export type SpecialistStatus = 'queued' | 'running' | 'done';
 
 export const AT = {
@@ -47,7 +47,7 @@ export const plan =
 	'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI’m sending five specialists. Correctness and repository consistency always run; performance, docs and security were picked for this diff.';
 
 export const summary =
-	'The class refactor is sound, but two things should block the merge.\n\n`index.ts` still re-exports `allow()`, which no longer exists, so all 14 call sites break at import. And `refill()` reads `Date.now()` directly, so the injected clock does nothing in tests.\n\nThe rest is small: an unbounded buckets Map, an unvalidated capacity, and a stale doc comment. Four of the six have a suggested patch ready.';
+	'The class refactor is sound, but two things should block the merge.\n\n`index.ts` still re-exports `allow()`, which no longer exists, so all 14 call sites break at import. And `refill()` reads `Date.now()` directly, so the injected clock does nothing in tests.\n\nThe rest is small: an unbounded buckets Map, an unvalidated capacity, and a stale doc comment. Four of the five have a suggested patch ready.';
 
 type Specialist = {
 	id: string;
@@ -78,11 +78,10 @@ const findings: Finding[] = [
 	{ id: 'f2', agent: 'docs', severity: 'low', title: 'Doc comment still describes a free function', location: 'src/rate-limit/limiter.ts:19', at: 2000 },
 	{ id: 'f3', agent: 'correctness', severity: 'medium', title: 'refill() ignores the injected Clock', location: 'src/rate-limit/limiter.ts:23', at: 2700 },
 	{ id: 'f4', agent: 'correctness', severity: 'low', title: 'capacity is never validated', location: 'src/rate-limit/limiter.ts:16', at: 3300 },
-	{ id: 'f5', agent: 'correctness', severity: 'info', title: 'Confirm refill timing moves onto Clock', location: 'src/rate-limit/limiter.ts:1', at: 3600 },
 	{ id: 'f6', agent: 'perf', severity: 'medium', title: 'buckets Map has no eviction', location: 'src/rate-limit/limiter.ts:11', at: 4300 }
 ];
 
-const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2, info: 3 };
+const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
 
 /** Streams `text` word by word between `start` and `end`. */
 function stream(text: string, t: number, start: number, end: number): { text: string; streaming: boolean } | null {
@@ -153,6 +152,6 @@ function clock(t: number): string {
 }
 
 export const findingCounts = (items: { severity: Severity }[]) =>
-	(['high', 'medium', 'low', 'info'] as const)
+	(['high', 'medium', 'low'] as const)
 		.map((severity) => ({ severity, count: items.filter((item) => item.severity === severity).length }))
 		.filter((item) => item.count > 0);

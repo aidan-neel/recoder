@@ -41,11 +41,12 @@ import {
 	type PlannerAssignment,
 	type PlannerOutput
 } from './planner.js';
-import { GUIDELINES_PATH, type ReviewGuidelinesUsed } from '@recoder/shared';
+import { GUIDELINES_PATH, settleAssignments, type ReviewGuidelinesUsed } from '@recoder/shared';
 import { composeGuidelines, readGlobalGuidelines, withGuidelines, type GuidelinesInput } from './guidelines.js';
 import { parseSpecialistOutput, specialistSystemPrompt, specialistUserPrompt, specialistValidationError } from './specialist.js';
 import { ExecWorkspace, type SetupReport } from './exec-workspace.js';
 import { execUnavailableReason } from './exec-sandbox.js';
+import { hasPendingChanges } from './pending-changes.js';
 import { EXEC_EXAMPLES } from './prompts.js';
 import { parseVerdict, settleVerdict, verdictValidationError, verifierSystemPrompt, verifierUserPrompt } from './verify.js';
 import {
@@ -74,7 +75,7 @@ const INSTRUCTION_PATHS = [
  * - inputs are the PR diff + git objects from the sandbox checkout;
  * - the model is instructed (and the output schema enforces) review-only
  *   findings — no patches, pushes or comments;
- * - when bubblewrap is available, agents may run commands and write scratch
+ * - when the OS sandbox is available, agents may run commands and write scratch
  *   files, but only inside an isolated, offline copy of the checkout
  *   (`exec-sandbox.ts`); tracked files are restored after every command.
  *
@@ -111,7 +112,7 @@ export interface HarnessEvents {
 export type ReviewProgressCheckpoint = Omit<ReviewCheckpoint, 'id' | 'headSha' | 'mergeBaseSha'>;
 
 /** Assignments whose work a resumed review keeps. */
-const FINISHED: ReadonlySet<AssignmentStatus> = new Set(['done', 'partial']);
+const FINISHED: ReadonlySet<AssignmentStatus> = new Set(['done']);
 
 /** Safely read a sandbox file (stays inside the checkout, capped length). */
 export async function readSandboxFile(sandboxPath: string, file: string, maxChars: number): Promise<string | null> {
@@ -234,7 +235,10 @@ export async function runAdaptiveReview(
 	const evidence = new EvidenceStore(input.revision ?? null, inventory, limits.maxFileChars);
 	const coverage = new CoverageLedger();
 	coverage.seed(inventory);
-	const execReason = input.revision ? await execUnavailableReason() : 'Running code needs a local checkout of the pull request.';
+	// Agents restore tracked files after every command, which would wipe the developer's uncommitted fixes.
+	const execReason = !input.revision ? 'Running code needs a local checkout of the pull request.'
+		: await hasPendingChanges(input.revision.checkoutPath) ? 'The checkout has fixes that aren\'t committed and pushed yet. Push or discard them to let reviewers run code.'
+		: await execUnavailableReason();
 	const workspace = input.revision && !execReason ? new ExecWorkspace(input.revision.checkoutPath, input.revision.headSha) : null;
 	if (workspace) {
 		workspace.deadlineAt = deadlineAt - REVIEW_POLICY.reserveMsForConsolidation;
@@ -418,14 +422,17 @@ export async function runAdaptiveReview(
 		publishBudget();
 		events?.onCandidates?.(candidates.filter((candidate) => candidate.valid).length);
 
+		// The orchestrator hears which specialists failed and may re-dispatch them alongside follow-ups.
+		const retries = followUpsDone ? [] : failedAssignments(items, assignments);
+		for (const retry of retries) events?.onLog?.(`${retry.item.title} failed: ${retry.error}`, { assignmentId: retry.item.id, role: retry.item.role });
 		if (
 			!followUpsDone &&
-			followUps.length > 0 &&
+			(followUps.length > 0 || retries.length > 0) &&
 			canLaunchInvestigation(investigationDeadline, budget) &&
-			assignments.length < REVIEW_POLICY.maxInitialAssignments + REVIEW_POLICY.maxFollowUpAssignments
+			assignments.length < REVIEW_POLICY.maxInitialAssignments + REVIEW_POLICY.maxFollowUpAssignments + REVIEW_POLICY.maxRetryAssignments
 		) {
 			const extra = uniqueIds(
-				await selectFollowUps(followUps, inventory, evidence, budget, investigationDeadline, controller.signal, events),
+				await selectFollowUps(followUps, retries, inventory, evidence, budget, investigationDeadline, controller.signal, events),
 				assignments.map((record) => record.id)
 			);
 			followUpsDone = true;
@@ -494,8 +501,8 @@ export async function runAdaptiveReview(
 		});
 
 		let confirmed: Finding[] = [];
-		let unconfirmed: Finding[] = [];
-		let outcome: ReviewOutcome = 'complete';
+		const unconfirmed: Finding[] = [];
+		const outcome: ReviewOutcome = 'complete';
 		let error: string | undefined;
 		const checks = [...recommended];
 
@@ -503,10 +510,8 @@ export async function runAdaptiveReview(
 			confirmed = [];
 			task('consolidation', 'Consolidating findings', 'done', 'No candidates to consolidate', { kind: 'consolidation' });
 		} else if (!budget.canSpend(1, { consumeReserve: true }) || reviewNow() >= deadlineAt) {
-			unconfirmed = valid;
-			outcome = 'partial';
 			error = 'Reserved consolidation call was unavailable';
-			task('consolidation', 'Consolidating findings', 'error', error, { kind: 'consolidation' });
+			confirmed = keepUnconsolidated(valid, error, task);
 		} else {
 			try {
 				const cfg = configForOrchestrator();
@@ -546,26 +551,21 @@ export async function runAdaptiveReview(
 						kind: 'consolidation'
 					});
 				} else {
-					unconfirmed = valid;
-					outcome = 'partial';
 					error = result.error ?? 'Consolidation failed';
-					task('consolidation', 'Consolidating findings', 'error', error, { kind: 'consolidation' });
+					confirmed = keepUnconsolidated(valid, error, task);
 				}
 			} catch (err) {
 				if (err instanceof AuthConfigError) throw err;
-				unconfirmed = valid;
-				outcome = 'partial';
+				if (err instanceof ReviewAbortedError) throw err;
 				error = err instanceof Error ? err.message : 'Consolidation failed';
-				task('consolidation', 'Consolidating findings', 'error', error, { kind: 'consolidation' });
+				confirmed = keepUnconsolidated(valid, error, task);
 			}
 		}
 
 		publishCoverage();
 		publishBudget();
-		if (outcome === 'complete' && !coverage.complete()) outcome = 'partial';
-		if (outcome === 'complete' && assignments.some((assignment) => assignment.status === 'error' || assignment.status === 'partial')) {
-			outcome = 'partial';
-		}
+		// Coverage gaps and failed specialists are reported in the summary and the
+		// coverage rail; a review that reaches this point has finished.
 
 		const summary = buildSummary({
 			plan,
@@ -608,6 +608,19 @@ export async function runAdaptiveReview(
 	}
 }
 
+/**
+ * Consolidation couldn't run or answer: the validated candidates stand as
+ * findings, unmerged, so the review still finishes.
+ */
+function keepUnconsolidated(
+	valid: CandidateFinding[],
+	reason: string,
+	task: (id: string, label: string, status: ReviewTask['status'], message: string, extra?: Partial<ReviewTask>) => void
+): Finding[] {
+	task('consolidation', 'Consolidating findings', 'done', `Kept ${valid.length} finding${valid.length === 1 ? '' : 's'} as reported (${reason})`, { kind: 'consolidation' });
+	return valid.map((candidate) => ({ ...candidate }));
+}
+
 function failReview(
 	assignments: ReviewAssignment[],
 	coverage: CoverageLedger,
@@ -623,7 +636,7 @@ function failReview(
 		recommendedChecks: [],
 		coverage: coverage.summary(),
 		coverageGaps: coverage.gaps(),
-		assignments,
+		assignments: settleAssignments(assignments, error),
 		planningDegraded: true,
 		error
 	};
@@ -680,8 +693,29 @@ async function runPlanner(input: {
 	};
 }
 
+interface FailedAssignment {
+	/** The failed assignment, re-scoped under a `retry-` id. */
+	item: PlannerAssignment;
+	error: string;
+}
+
+/** First-pass assignments that ended in an error, as retry candidates for the orchestrator. */
+export function failedAssignments(items: PlannerAssignment[], records: ReviewAssignment[]): FailedAssignment[] {
+	return items.flatMap((item) => {
+		const record = records.find((entry) => entry.id === item.id);
+		if (record?.status !== 'error' || item.id.startsWith('retry-')) return [];
+		const error = (record.currentOperation || 'Specialist failed').slice(0, 400);
+		return [{
+			// Planner ids and reasons have length limits; keep the retry inside them.
+			item: { ...item, id: `retry-${item.id}`.slice(0, 80), reason: `Retry of "${item.title}", whose first attempt failed: ${error}`.slice(0, 1000) },
+			error
+		}];
+	}).slice(0, REVIEW_POLICY.maxRetryAssignments);
+}
+
 async function selectFollowUps(
 	requests: PlannerAssignment[],
+	retries: FailedAssignment[],
 	inventory: ReviewInventory,
 	evidence: EvidenceStore,
 	budget: ModelBudget,
@@ -707,29 +741,40 @@ async function selectFollowUps(
 		unique.push({ ...sanitized.assignments[0], id: request.id.startsWith('follow-') ? request.id : `follow-${request.id}` });
 		if (unique.length >= REVIEW_POLICY.maxFollowUpAssignments) break;
 	}
-	if (unique.length === 0) return [];
-	if (!canLaunchInvestigation(deadlineAt, budget)) return unique.slice(0, REVIEW_POLICY.maxFollowUpAssignments);
+	const retryIds = new Set(retries.map((retry) => retry.item.id));
+	// Retries don't eat into the follow-up allowance, and follow-ups don't eat into theirs.
+	// A pass called only for retries dispatches nothing else.
+	const cap = (picked: PlannerAssignment[]) => [
+		...picked.filter((item) => retryIds.has(item.id)).slice(0, REVIEW_POLICY.maxRetryAssignments),
+		...(unique.length ? picked.filter((item) => !retryIds.has(item.id)).slice(0, REVIEW_POLICY.maxFollowUpAssignments) : [])
+	];
+	if (unique.length === 0 && retries.length === 0) return [];
+	// Retries are the orchestrator's call; without one, only the requested follow-ups run.
+	if (!canLaunchInvestigation(deadlineAt, budget)) return cap(unique);
 	const cfg = configForOrchestrator();
+	const failedList = retries.length
+		? `\n\nSpecialists that failed (the error came from the model call or the specialist's output, not from the code under review):\n${retries.map((retry) => `- ${retry.item.id} (${retry.item.role}, "${retry.item.title}"): ${retry.error}`).join('\n')}\n\nTo retry one, include its assignment unchanged (same id, role and scope):\n${JSON.stringify(retries.map((retry) => retry.item), null, 2)}\nSkip a retry when the error would simply repeat (rejected credentials, a context window too small for the scope).`
+		: '';
 	const result = await runJsonAgent({
 		label: 'follow-up planning',
 		getDiscussion: () => events?.getDiscussion?.() ?? '',
 		onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
-		system: withGuidelines(plannerSystemPrompt() + '\nThis is a follow-up pass. Dispatch at most two narrowly scoped investigations.', inventory.guidelines),
-		user: `Pending follow-up requests:\n${JSON.stringify(unique, null, 2)}\n\nSelect at most two. Return planner JSON.`,
+		system: withGuidelines(plannerSystemPrompt() + `\nThis is a follow-up pass. Dispatch at most ${REVIEW_POLICY.maxFollowUpAssignments} narrowly scoped investigations, plus retries of failed specialists worth another attempt.`, inventory.guidelines),
+		user: `Pending follow-up requests:\n${unique.length ? JSON.stringify(unique, null, 2) : '(none)'}${failedList}\n\nSelect at most ${REVIEW_POLICY.maxFollowUpAssignments} follow-ups and any retries. Return planner JSON.`,
 		config: cfg,
 		budget,
 		evidence,
 		maxTurns: REVIEW_POLICY.maxPlannerTurns,
 		signal,
 		deadlineAt,
-		parse: (raw) => sanitizePlannerOutput(raw, inventory, true),
+		parse: (raw) => sanitizePlannerOutput(raw, inventory, true, REVIEW_POLICY.maxFollowUpAssignments + REVIEW_POLICY.maxRetryAssignments),
 		validationError: plannerValidationError,
 		onLog: (message) => events?.onLog?.(message),
 		onReasoning: (reasoning) =>
 			events?.onReasoning?.({ ...reasoning, role: 'correctness', model: cfg.model }),
 		onTool: (tool) => events?.onTool?.({ ...tool, role: 'correctness' })
 	});
-	return (result.value?.assignments ?? unique).slice(0, REVIEW_POLICY.maxFollowUpAssignments);
+	return cap(result.value?.assignments ?? unique);
 }
 
 interface PoolContext {
@@ -930,17 +975,14 @@ async function runOneAssignment(
 			});
 		}
 		const validCount = ctx.candidates.filter((candidate) => candidate.assignmentId === item.id && candidate.valid).length;
-		const status: AssignmentStatus = examined.length === assignedHunks.size ? 'done' : 'partial';
+		// A specialist that answered has finished; hunks it couldn't examine show up as coverage gaps.
 		updateAssignment(records, item.id, {
-			status,
+			status: 'done',
 			candidateCount: validCount,
-			currentOperation:
-				status === 'done'
-					? `Finished · ${validCount} candidate${validCount === 1 ? '' : 's'}`
-					: `Partial coverage · ${validCount} candidate${validCount === 1 ? '' : 's'}`,
+			currentOperation: `Finished · ${validCount} candidate${validCount === 1 ? '' : 's'}`,
 			completedAt: new Date().toISOString()
 		});
-		ctx.task(taskId, item.title, status === 'done' ? 'done' : 'partial', records.find((record) => record.id === item.id)?.currentOperation ?? 'Finished', {
+		ctx.task(taskId, item.title, 'done', records.find((record) => record.id === item.id)?.currentOperation ?? 'Finished', {
 			kind: 'assignment',
 			assignmentId: item.id,
 			agent: item.role,
@@ -1298,9 +1340,11 @@ function buildSummary(input: {
 	checks: string[];
 	coverage: CoverageSummary;
 }): string {
-	const incomplete = input.assignments.filter((assignment) => assignment.status !== 'done');
+	// A failed specialist whose retry finished doesn't count; partial coverage is reported by the last line.
+	const retried = new Set(input.assignments.filter((assignment) => FINISHED.has(assignment.status)).map((assignment) => assignment.id.replace(/^retry-/, '')));
+	const incomplete = input.assignments.filter((assignment) => (assignment.status === 'error' || assignment.status === 'skipped') && !retried.has(assignment.id));
 	const bits = [
-		`${input.outcome === 'complete' ? 'Review complete' : 'Review incomplete'}. ${input.confirmed.length} confirmed finding${input.confirmed.length === 1 ? '' : 's'}.`,
+		`${input.outcome === 'complete' ? 'Review complete' : 'Review failed'}. ${input.confirmed.length} confirmed finding${input.confirmed.length === 1 ? '' : 's'}.`,
 		verifiedSummary(input.confirmed),
 		input.unconfirmed.length ? `${input.unconfirmed.length} candidate${input.unconfirmed.length === 1 ? '' : 's'} could not be confirmed.` : '',
 		incomplete.length ? `${incomplete.length} specialist review${incomplete.length === 1 ? '' : 's'} did not finish.` : '',

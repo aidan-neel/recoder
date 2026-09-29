@@ -8,7 +8,7 @@
 import type { Finding as BackendFinding, FindingSeverity as BackendSeverity } from '@recoder/shared';
 import { findingTitle } from './finding-title';
 
-export type FindingSeverity = 'high' | 'medium' | 'low' | 'info';
+export type FindingSeverity = 'high' | 'medium' | 'low';
 export type FindingStatus = 'open' | 'accepted' | 'dismissed';
 
 /** On-demand fix suggestion state for one finding (client-side only). */
@@ -40,14 +40,13 @@ export interface FixSuggestion {
 	verify?: FixVerify;
 }
 
-export const SEVERITIES: FindingSeverity[] = ['high', 'medium', 'low', 'info'];
+export const SEVERITIES: FindingSeverity[] = ['high', 'medium', 'low'];
 
 /** Severity → marker color (diff bars, line numbers). */
 export const SEVERITY_DOT: Record<FindingSeverity, string> = {
 	high: 'var(--sev-high-icon)',
 	medium: 'var(--sev-medium)',
-	low: 'var(--sev-low)',
-	info: 'var(--sev-info)'
+	low: 'var(--sev-low)'
 };
 
 export interface Finding {
@@ -154,19 +153,6 @@ function initialFindings(): Finding[] {
 			startLine: 13,
 			endLine: 16,
 			status: 'open'
-		},
-		{
-			id: 'f-note-clock',
-			code: 'F-06',
-			title: 'Clock integration needs verification',
-			severity: 'info',
-			category: 'note',
-			agent: 'docs',
-			body: 'Clock is imported here — confirm refill timing moves onto it before removing the Date.now call.',
-			file: FILE,
-			startLine: 1,
-			endLine: 1,
-			status: 'open'
 		}
 	];
 }
@@ -176,7 +162,7 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 	const severityMap: Record<BackendSeverity, FindingSeverity> = {
 		error: 'high',
 		warning: 'medium',
-		info: 'info'
+		info: 'low'
 	};
 	const match = /^\[([^\]]+)\]\s*/.exec(f.message);
 	const category = match?.[1] ?? 'review';
@@ -204,16 +190,6 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 	};
 }
 
-const HIDE_INFO_KEY = 'recoder.hideInfo';
-
-function loadHideInfo(): boolean {
-	try {
-		return localStorage.getItem(HIDE_INFO_KEY) === '1';
-	} catch {
-		return false;
-	}
-}
-
 class FindingsStore {
 	items = $state<Finding[]>(initialFindings());
 	/** Fix suggestions by finding id (fetched on demand, never persisted). */
@@ -223,14 +199,12 @@ class FindingsStore {
 	hoveredId = $state<string | null>(null);
 	/** While true (a selection drag is in progress), hovering never cross-highlights. */
 	suppressHover = $state(false);
-	/** When true, info findings are omitted from the tree, diff, and navigator. */
-	hideInfo = $state(loadHideInfo());
 	hiddenSeverities = $state<FindingSeverity[]>([]);
 	/** Findings view: list dismissed findings (dimmed, with Restore) below the open ones. */
 	showDismissed = $state(false);
 
 	isSeverityShown(severity: FindingSeverity): boolean {
-		return !this.hiddenSeverities.includes(severity) && !(this.hideInfo && severity === 'info');
+		return !this.hiddenSeverities.includes(severity);
 	}
 
 	isShown(finding: Finding): boolean {
@@ -238,7 +212,6 @@ class FindingsStore {
 	}
 
 	toggleSeverity(severity: FindingSeverity): void {
-		if (severity === 'info') { this.setHideInfo(!this.hideInfo); return; }
 		this.hiddenSeverities = this.hiddenSeverities.includes(severity)
 			? this.hiddenSeverities.filter((item) => item !== severity)
 			: [...this.hiddenSeverities, severity];
@@ -252,28 +225,13 @@ class FindingsStore {
 	/** Findings each chat reply asked to fix, by message id, so the reply shows their fixes. */
 	fixBatches = $state<Record<string, string[]>>({});
 
-	/** Clear every severity filter (Info included). */
+	/** Clear every severity filter. */
 	showAllSeverities(): void {
 		this.hiddenSeverities = [];
-		if (this.hideInfo) this.setHideInfo(false);
 	}
 
 	forFile(file: string): Finding[] {
 		return this.items.filter((f) => f.file === file && this.isShown(f));
-	}
-
-	setHideInfo(hide: boolean): void {
-		this.hideInfo = hide;
-		try {
-			localStorage.setItem(HIDE_INFO_KEY, hide ? '1' : '0');
-		} catch {
-			// Preference just won't survive refresh.
-		}
-		const active = this.items.find((f) => f.id === this.activeId);
-		if (active && !this.isShown(active)) {
-			this.activeId = null;
-			this.hoveredId = null;
-		}
 	}
 
 	get active(): Finding | undefined {
@@ -330,7 +288,7 @@ class FindingsStore {
 		}
 	}
 
-	applyReady(id: string, result: { sha: string; branch: string }): void {
+	applyReady(id: string, result: { sha?: string; branch: string }): void {
 		const current = this.suggestions[id];
 		if (current?.status === 'ready') {
 			this.suggestions[id] = { ...current, apply: 'applied', ...result };

@@ -48,13 +48,24 @@ At most 4 actions per turn. Truncated results include continuation tokens — re
 
 `;
 
+/** How a finding's body reads in the UI: short markdown, not a paragraph of prose. */
+export const FINDING_BODY_STYLE = `Write each finding "body" as short markdown, at most about 80 words:
+- First line: one sentence saying what breaks and when.
+- Then, only if it helps, 2–4 bullets with the trigger path or evidence, citing \`file:line\`.
+- End with one short line on the fix when it is clear.
+Wrap identifiers, calls and file:line in backticks. Separate parts with blank lines. Don't restate the title, hedge, or narrate history beyond one clause.
+Example body:
+"\`get_dynamic_arguments\` can raise \`EOFError\` if the child exits mid-request.\\n\\n- The child's \`finally\` now closes \`response_queue\` (\`mission.py:612\`).\\n- \`response_queue.get(timeout=5.0)\` only catches \`queue.Empty\` (\`mission.py:550\`).\\n\\nCatch \`EOFError\`/\`OSError\` like the status listener does (\`mission.py:510\`)."`;
+
 const FINAL_SHAPE = `When finished, output STRICT JSON. Every top-level field is required; use [] or null when empty. A finish with no issues looks like:
 {"message":"The queue split is consistent; no issues found.","findings":[],"examinedHunks":["src/runner/mission.py:9,7:9,7"],"coverageGaps":[],"blockers":[],"followUp":null,"recommendedChecks":[]}
 Full shape:
-{"message":string,"findings":[{"title":string,"file":string,"line":number|null,"endLine":number|null,"severity":"high"|"medium"|"low"|"info","category":string,"body":string,"evidenceIds":string[],"relatedLocations":[{"file":string,"line":number,"endLine":number,"side":"old"|"new"}],"side":"old"|"new"}],"examinedHunks":string[],"coverageGaps":[{"hunkId":string,"reason":string}],"blockers":string[],"followUp":{"id":string,"role":string,"title":string,"reason":string,"scope":[{"path":string,"hunkIds":string[]}],"questions":string[],"priority":number}|null,"recommendedChecks":string[]}
+{"message":string,"findings":[{"title":string,"file":string,"line":number|null,"endLine":number|null,"severity":"high"|"medium"|"low","category":string,"body":string,"evidenceIds":string[],"relatedLocations":[{"file":string,"line":number,"endLine":number,"side":"old"|"new"}],"side":"old"|"new"}],"examinedHunks":string[],"coverageGaps":[{"hunkId":string,"reason":string}],"blockers":string[],"followUp":{"id":string,"role":string,"title":string,"reason":string,"scope":[{"path":string,"hunkIds":string[]}],"questions":string[],"priority":number}|null,"recommendedChecks":string[]}
 Give every finding a concise, issue-specific title (about 4–9 words, at most 120 characters). Use plain sentence case without an ID, severity, or category prefix. Keep the detailed explanation and evidence in body.
+${FINDING_BODY_STYLE}
 "line" is a NEW-side number unless "side":"old". Deleted-only issues may omit line (file-level) or use an old-side location. Never invent a new-side line for deleted code.
-Use "high" only for issues that are certainly reachable and damaging.`;
+"coverageGaps" lists only assigned hunks you could not read or reason about. Missing tests or other problems in code you did read are findings (or nothing), never coverage gaps.
+Use "high" only for issues that are certainly reachable and damaging. Do not report informational notes, nits or style preferences.`;
 
 function reviewContract(exec: boolean): string {
 	return `${exec ? EXEC_RULES : READ_ONLY_RULES}

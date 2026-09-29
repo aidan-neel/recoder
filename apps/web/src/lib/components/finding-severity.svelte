@@ -20,8 +20,7 @@
 	const chipLabel: Record<FindingSeverity, string> = {
 		high: 'High',
 		medium: 'Med',
-		low: 'Low',
-		info: 'Info'
+		low: 'Low'
 	};
 </script>
 

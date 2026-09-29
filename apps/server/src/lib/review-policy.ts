@@ -6,6 +6,8 @@
 export const REVIEW_POLICY = {
 	maxInitialAssignments: 6,
 	maxFollowUpAssignments: 2,
+	/** Failed specialists the orchestrator may re-dispatch after the first pass. */
+	maxRetryAssignments: 3,
 	/** Every specialist starts at once; the model limiter (`RECODER_LLM_CONCURRENCY`) is the only throttle. */
 	maxConcurrentAssignments: 8,
 	maxSpecialistTurns: 12,

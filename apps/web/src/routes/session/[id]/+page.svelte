@@ -22,11 +22,13 @@
 	import DiffFileHeader from '$lib/components/diff-file-header.svelte';
 	import FindingsFocus from '$lib/components/findings-focus.svelte';
 	import { diffPrefs } from '$lib/diff-prefs.svelte';
+	import { changesStore } from '$lib/changes.svelte';
+	import ChangesButton from '$lib/components/changes-button.svelte';
+	import ChangesPanel from '$lib/components/changes-panel.svelte';
 	import FindingsBar from '$lib/components/findings-bar.svelte';
 	import PrChecks from '$lib/components/pr-checks.svelte';
 	import CodeDiff from '$lib/components/code-diff.svelte';
 	import ThreadPanel from '$lib/components/thread-panel.svelte';
-	import ReviewConversation from '$lib/components/review-conversation.svelte';
 	import { getFileDiff } from '$lib/diff';
 	import { findingsStore, mapBackendFinding } from '$lib/findings.svelte';
 	import { fixFindings } from '$lib/fixes';
@@ -43,7 +45,7 @@
 	import { recentSessions } from '$lib/recent-sessions.svelte';
 	import { closeSessionTab } from '$lib/session-tabs';
 	import { paletteContext } from '$lib/palette.svelte';
-	import { ORCHESTRATOR_ID, type FileDiff, type Review, type ReviewCodeContext, type ReviewAssignment } from '@recoder/shared';
+	import { collapseFileDiff, ORCHESTRATOR_ID, type FileDiff, type Review, type ReviewCodeContext, type ReviewAssignment } from '@recoder/shared';
 
 	const id = $derived(page.params.id ?? '');
 	const session = $derived(sessionState.sessions.find((s) => s.id === id));
@@ -204,6 +206,7 @@
 		void setView(open ? 'diff' : 'conversation');
 	}
 	$effect(() => diffPrefs.useReview(backendReview?.id ?? null));
+	$effect(() => changesStore.use(backendReview && backendReview.source !== 'stub' ? backendReview.id : null));
 	let chatOpen = $state(false);
 	let chatDraft = $state('');
 	let codeContext = $state<ReviewCodeContext | null>(null);
@@ -334,12 +337,12 @@
 		setTreeWidth(next);
 	}
 	const showChat = $derived(chatOpen && !threadsStore.openId);
+	// Findings starts with Ask reviewer collapsed; it opens on request.
+	$effect(() => {
+		if (workspaceView === 'findings') untrack(() => { chatOpen = false; });
+	});
 	const sidePanelOpen = $derived(!!threadsStore.openId || showChat);
 	const reviewing = $derived(backendReview?.status === 'running' || backendReview?.status === 'queued');
-	const orchestrator = $derived<ReviewAssignment>({
-		id: ORCHESTRATOR_ID, role: 'orchestrator', title: 'Orchestrator', reason: '', scope: [],
-		status: reviewing ? 'running' : backendReview?.status === 'draft' ? 'waiting' : backendReview?.status === 'failed' ? 'error' : 'done'
-	});
 	function openChat(context?: ReviewCodeContext): void {
 		chatReturnFocus = context ? document.getElementById('ask-review') : document.activeElement instanceof HTMLElement ? document.activeElement : null;
 		threadsStore.close();
@@ -471,16 +474,26 @@
 			null
 		);
 	});
+	function findingLines(path: string): number[] {
+		return findingsStore.forFile(path).flatMap((finding) => Array.from({ length: finding.endLine - finding.startLine + 1 }, (_, i) => finding.startLine + i));
+	}
+	/** Jumping to a line the trimmed diff hides switches to the full file. */
+	function showLine(path: string, line: number | null): void {
+		const diff = backendFiles?.find((file) => file.path === path);
+		if (line === null || !diff || diffPrefs.fullFile) return;
+		if (!collapseFileDiff(diff, findingLines(path)).hunks.some((hunk) => hunk.lines.some((row) => row.newNo === line))) diffPrefs.setFullFile(true);
+	}
 	const fileDiff = $derived.by((): FileDiff => {
 		if (!isBackend) return getFileDiff(sessionFile.currentId);
-		if (liveDiff) return liveDiff;
+		// Files arrive expanded to the whole file; the diff view trims them back to the changes, keeping lines with findings.
+		if (liveDiff) return diffPrefs.fullFile ? liveDiff : collapseFileDiff(liveDiff, findingLines(liveDiff.path));
 		return { path: sessionFile.currentId, additions: 0, deletions: 0, hunks: [] };
 	});
 	const displayFindings = $derived(findingsStore.forFile(sessionFile.currentId));
 
 	// Smart initial file: the strongest open finding's file wins over the
 	// alphabetic-first file, and any explicit user pick sticks. Resets per session.
-	const SEV_RANK = { high: 0, medium: 1, low: 2, info: 3 } as const;
+	const SEV_RANK = { high: 0, medium: 1, low: 2 } as const;
 	let lastAutoFile: string | null = $state(null);
 	let userPickedFile = $state(false);
 	let resetSessionId: string | null = null;
@@ -697,7 +710,7 @@
 			<FindingsBar part="actions">
 				{#snippet trailing()}
 					{#if backendReview}
-						{#if backendReview.source !== 'stub'}<PrChecks reviewId={backendReview.id} />{/if}
+						{#if backendReview.source !== 'stub'}<PrChecks reviewId={backendReview.id} /><ChangesButton />{/if}
 						{#if reviewing || backendReview.status === 'failed'}
 							<Typography.Metadata class="review-state" role="status">
 								{#if reviewing}<Spinner size={13} class="text-sev-medium" aria-hidden="true" />Review running{:else}Review interrupted{/if}
@@ -728,8 +741,8 @@
 							onAsk={isBackend ? () => openChat() : null}
 							onConversation={() => setView('conversation')}
 							onRestart={isBackend ? () => void rerunReview() : null}
-							onOpenAt={(file, line) => { sessionFile.select(file); userPickedFile = true; void setView('diff').then(() => { if (line !== null) revealDiffLine(line); }); }}
-							onFullFile={(finding) => { sessionFile.select(finding.file); userPickedFile = true; findingsStore.discuss(finding.id); setView('diff'); requestAnimationFrame(() => document.getElementById(`finding-${finding.id}`)?.scrollIntoView({ block: 'center' })); }} />
+							onOpenAt={(file, line) => { sessionFile.select(file); userPickedFile = true; showLine(file, line); void setView('diff').then(() => { if (line !== null) revealDiffLine(line); }); }}
+							onFullFile={(finding) => { sessionFile.select(finding.file); userPickedFile = true; diffPrefs.setFullFile(true); findingsStore.discuss(finding.id); setView('diff'); requestAnimationFrame(() => document.getElementById(`finding-${finding.id}`)?.scrollIntoView({ block: 'center' })); }} />
 					</div>
 				{:else}
 				<div class="diff-tree hidden lg:block" data-beside-panel={sidePanelOpen || undefined} style="width: {treeWidth}rem">
@@ -797,12 +810,19 @@
 						<div class="chat-drawer-clip">
 							<section id="interactive-review" aria-label="Interactive review" class="chat-drawer-panel" inert={!showChat}>
 								<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
-									{#if reviewStream.connection === 'reconnecting'}<Typography.Text role="status" class="px-4 py-2 text-sm text-warning">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
-									<ReviewConversation compact onStartReview={backendReview?.status === 'draft' ? startDraftReview : null} assignment={orchestrator} messages={reviewStream.progress.messages ?? []}
-										reasoning={[]} toolCalls={[]} tasks={[]} active={reviewing} now={Date.now()}
+									<!-- The same conversation as the Conversation view, specialists and progress included. -->
+									<LiveReviewProgress embedded review={backendReview} stream={reviewStream} repo={session?.name ?? ''}
+										files={backendFiles ? backendFiles.length : null}
+										additions={backendFiles ? backendFiles.reduce((sum, f) => sum + f.additions, 0) : null}
+										deletions={backendFiles ? backendFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
 										bind:draft={chatDraft} bind:codeContext focusKey={chatFocus}
-										onSend={async (assignmentId, text, context) => { await serverApi.sendReviewMessage(id, assignmentId, text, context); }}
-										onStop={async (assignmentId) => { await serverApi.stopReviewMessage(id, assignmentId); }} />
+										onOpenDiff={() => setView('findings')}
+										onShowView={(view) => setView(view)}
+										onOpenFinding={(finding) => { if (finding.file) { sessionFile.select(finding.file); userPickedFile = true; showLine(finding.file, finding.line ?? null); if (finding.line) revealDiffLine(finding.line); } setView('diff'); }}
+										onRestart={() => void rerunReview()}
+										onStartReview={backendReview.status === 'draft' ? startDraftReview : null}
+										onContinue={backendReview.status === 'failed' ? continueReview : null}
+										restarting={queueing} actionError={backendError} />
 								</Card.Root>
 							</section>
 						</div>
@@ -812,3 +832,5 @@
 	</div>
 	{#if backendReview}<ReviewMetricsModal reviewId={backendReview.id} bind:open={usageOpen} showTrigger={false} />{/if}
 {/snippet}
+
+{#if backendReview && backendReview.source !== 'stub'}<ChangesPanel branch={recentSessions.recent.find((item) => item.id === id)?.branch ?? null} />{/if}

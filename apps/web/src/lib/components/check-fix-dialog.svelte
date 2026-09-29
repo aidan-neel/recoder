@@ -8,7 +8,7 @@
 	import FailureNotice from './failure-notice.svelte';
 	import SuggestedFix from './suggested-fix.svelte';
 
-	/** Review a failing check's fix, then push it. */
+	/** Review a failing check's fix, then apply it to the checkout (commit and push from Changes). */
 	let { reviewId, check, open = $bindable(false), onApplied }: { reviewId: string; check: PrCheck | null; open?: boolean; onApplied?: () => void } = $props();
 	const fix = $derived(check ? checkFixes.get(reviewId, check) : undefined);
 
@@ -38,7 +38,7 @@
 			<Modal.Close>Close</Modal.Close>
 			{#if fix?.status === 'ready'}
 				{#if fix.apply === 'applied'}
-					<Button variant="outline" disabled><Check size={14} aria-hidden="true" />Pushed</Button>
+					<Button variant="outline" disabled><Check size={14} aria-hidden="true" />Applied</Button>
 				{:else}
 					<Button variant="primary" loading={fix.apply === 'applying'} onclick={() => void apply()}>Apply fix</Button>
 				{/if}

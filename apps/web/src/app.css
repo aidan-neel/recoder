@@ -655,11 +655,6 @@ body {
 	color: var(--sev-low);
 	background-color: var(--sev-low-tint);
 }
-[data-ui='button'].severity-chip[data-sev='info'],
-[data-ui='button'].severity-chip[data-sev='info']:hover {
-	color: var(--sev-info);
-	background-color: var(--sev-info-tint);
-}
 
 /* Modals and sheets. */
 [data-ui='modal-panel'].sivir-modal-frame {
@@ -1668,8 +1663,9 @@ kbd.keycap {
 [data-ui='card'].review-notice.message-failure:first-child {
 	margin-top: 0;
 }
-/* New session: the Findings empty-state card, at the top of the transcript. */
-.focus-empty.review-intro {
+/* New session, and checkout/setup before the orchestrator speaks: the Findings empty-state card, in the transcript. */
+.focus-empty.review-intro,
+.focus-empty.review-preparing {
 	flex: none;
 	overflow: visible;
 	padding: 40px 0 16px;
@@ -2004,19 +2000,6 @@ kbd.keycap {
 }
 .repo-chips [data-state='active'] .chip-count {
 	color: var(--text-subtle);
-}
-.home-switch > div {
-	align-items: center;
-	gap: 9px;
-}
-.home-switch [role='presentation'] {
-	padding-top: 0;
-}
-.home-switch [role='presentation'] > span {
-	font-size: 13px;
-	font-weight: 400;
-	letter-spacing: 0;
-	color: var(--text-muted);
 }
 
 .group-head {
@@ -3456,16 +3439,35 @@ mark.palette-hit {
 	font-size: 13px;
 }
 
-/* Model reasoning reads as quiet notes: gray, regular weight, headings included. */
+/* Model reasoning reads as quiet notes: gray and regular weight, with headings
+   and bold one step brighter so its structure still shows. Long traces scroll
+   inside a capped box instead of pushing the conversation away. */
+.reasoning-trace {
+	max-height: min(24rem, 55vh);
+}
+.reasoning-trace > [data-ui='scroll-area-viewport'] {
+	padding-right: 8px;
+}
 .thought-body [data-ui='markdown'],
-.thought-body [data-ui='markdown'] :is(p, li, h1, h2, h3, h4, h5, h6, strong, b) {
+.thought-body [data-ui='markdown'] :is(p, li) {
 	font-weight: 400;
 	color: var(--text-subtle);
 }
+.thought-body [data-ui='markdown'] :is(h1, h2, h3, h4, h5, h6, strong, b) {
+	font-weight: 500;
+	color: var(--text-muted);
+}
 .thought-body [data-ui='markdown'] :is(h1, h2, h3, h4, h5, h6) {
+	margin: 12px 0 4px;
 	font-size: inherit;
 	line-height: inherit;
 	letter-spacing: normal;
+}
+.thought-body [data-ui='markdown'] :is(p, ul, ol) {
+	margin: 0 0 10px;
+}
+.thought-body [data-ui='markdown'] pre {
+	white-space: pre;
 }
 
 /* Thinking → Thought for: crossfade through a blur, timer glides, glyph folds away. */
@@ -5770,4 +5772,119 @@ button.diff-num:hover {
 		) {
 		animation: none;
 	}
+}
+
+/* Changes sheet: applied fixes the developer commits and pushes by hand. */
+.changes-panel {
+	display: flex;
+	height: 100%;
+	min-height: 0;
+	flex-direction: column;
+}
+.changes-head {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 10px;
+	padding: 16px 20px 12px;
+	border-bottom: 1px solid var(--line-divider);
+}
+.changes-head .changes-title {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 500;
+}
+.changes-branch {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	font-size: 12px;
+	color: var(--text-faint);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.changes-body {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	padding: 16px 20px 24px;
+}
+.changes-empty {
+	font-size: 13.5px;
+	color: var(--text-subtle);
+}
+.changes-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.changes-section-head {
+	display: flex;
+	align-items: center;
+}
+.changes-section .changes-label {
+	margin: 0;
+	font-size: 12.5px;
+	font-weight: 500;
+	color: var(--text-muted);
+}
+.changes-files,
+.changes-commits {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.changes-file {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 4px;
+	padding: 8px 10px;
+	border-radius: 10px;
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+}
+.changes-file-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+}
+.changes-check {
+	min-width: 0;
+	font-family: var(--font-code);
+	font-size: 12.5px;
+	overflow-wrap: anywhere;
+}
+.changes-diff .review-file-diff {
+	overflow-x: auto;
+	border-radius: 8px;
+}
+.changes-commit {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.changes-commit-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 10px;
+	min-height: 32px;
+	font-size: 13px;
+}
+.changes-sha {
+	flex-shrink: 0;
+	font-size: 12px;
+	color: var(--text-faint);
+}
+.changes-subject {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }

@@ -1,5 +1,6 @@
 /** Diff layout and per-file "Viewed" marks. Both are conveniences, so storage failures are ignored. */
 const MODE_KEY = 'recoder.diff-mode';
+const FULL_FILE_KEY = 'recoder.diff-full-file';
 const VIEWED_KEY = 'recoder.viewed.';
 
 function read(key: string): string | null {
@@ -20,6 +21,8 @@ function write(key: string, value: string): void {
 
 class DiffPrefs {
 	mode = $state<'unified' | 'split'>(read(MODE_KEY) === 'split' ? 'split' : 'unified');
+	/** Show whole files instead of just the changes and the lines around them. */
+	fullFile = $state(read(FULL_FILE_KEY) === '1');
 	/** Files marked viewed in the current review. */
 	viewed = $state<string[]>([]);
 	#reviewId: string | null = null;
@@ -27,6 +30,11 @@ class DiffPrefs {
 	setMode(mode: 'unified' | 'split'): void {
 		this.mode = mode;
 		write(MODE_KEY, mode);
+	}
+
+	setFullFile(fullFile: boolean): void {
+		this.fullFile = fullFile;
+		write(FULL_FILE_KEY, fullFile ? '1' : '0');
 	}
 
 	/** Load the viewed marks for a review (called when a session opens). */

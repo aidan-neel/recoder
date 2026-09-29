@@ -1,4 +1,4 @@
-import { emptyReviewProgress, parseUnifiedDiff, type CreateReviewInput, type Finding, type Review } from '@recoder/shared';
+import { emptyReviewProgress, settleAssignments, parseUnifiedDiff, type CreateReviewInput, type Finding, type Review } from '@recoder/shared';
 import { closeReviewControl, openReviewControl, runWithReviewControl, type ReviewControl } from '../lib/review-control';
 import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
 import {
@@ -99,7 +99,7 @@ export function startReviewSession(reviewId: string): Review {
 export function continueReviewSession(reviewId: string): Review {
 	const current = db.reviews.get(reviewId);
 	if (!current) throw new Error('review not found');
-	if (current.status !== 'failed') throw new Error('Only an incomplete review can be continued.');
+	if (current.status !== 'failed') throw new Error('Only a failed review can be continued.');
 	if (!isReviewConfigured()) throw new Error('Add a reviewer model in settings before continuing the review.');
 	const review = touch(reviewId, { status: 'queued' });
 	emitReviewEvent(reviewId, { type: 'step', step: 'queued', message: '', data: { stage: 'checkout', outcome: null, failure: null } });
@@ -300,7 +300,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		reportReviewTask(reviewId, {
 			id: 'finalize',
 			label: 'Saving results',
-			message: result.outcome === 'complete' ? 'Review complete' : 'Review incomplete',
+			message: result.outcome === 'complete' ? 'Review complete' : 'Review failed',
 			status: result.outcome === 'complete' ? 'done' : 'error',
 			kind: 'other'
 		});
@@ -323,7 +323,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		const failure = !cancelled && err instanceof AuthConfigError ? err.failure : undefined;
 		try {
 			const snapshot = reviewProgress.get(reviewId);
-			if (snapshot) reviewProgress.set({ ...snapshot, outcome: 'failed', ...(failure ? { failure } : {}) });
+			if (snapshot) reviewProgress.set({ ...snapshot, outcome: 'failed', assignments: settleAssignments(snapshot.assignments ?? [], message), ...(failure ? { failure } : {}) });
 			touch(reviewId, { status: 'failed', summary: message });
 		} catch {
 			// Review was deleted mid-run (e.g. its session was closed) — nothing to update.

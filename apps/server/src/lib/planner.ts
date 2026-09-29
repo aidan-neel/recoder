@@ -112,7 +112,7 @@ export function plannerUserPrompt(input: {
 		.join('\n\n');
 }
 
-export function sanitizePlannerOutput(raw: unknown, inventory: ReviewInventory, followUp = false): PlannerOutput | null {
+export function sanitizePlannerOutput(raw: unknown, inventory: ReviewInventory, followUp = false, maxAssignments?: number): PlannerOutput | null {
 	const parsed = plannerOutputSchema.safeParse(raw);
 	if (!parsed.success) return null;
 	const knownPaths = new Map(inventory.files.map((file) => [file.path, file]));
@@ -135,7 +135,7 @@ export function sanitizePlannerOutput(raw: unknown, inventory: ReviewInventory, 
 		usedIds.add(assignment.id);
 		assignments.push({ ...assignment, scope });
 	}
-	const limit = followUp ? REVIEW_POLICY.maxFollowUpAssignments : REVIEW_POLICY.maxInitialAssignments;
+	const limit = maxAssignments ?? (followUp ? REVIEW_POLICY.maxFollowUpAssignments : REVIEW_POLICY.maxInitialAssignments);
 	let clipped = assignments.sort((a, b) => a.priority - b.priority).slice(0, limit);
 	if (!followUp && inventory.executable) {
 		clipped = ensureMandatory(clipped, inventory);

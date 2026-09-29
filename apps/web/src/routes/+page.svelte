@@ -11,7 +11,6 @@
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import { Switch } from '@sivir-ui/svelte/components/switch';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import { keepPillAligned } from '$lib/tab-pill';
 	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
@@ -44,16 +43,11 @@
 	import { sessionState } from '$lib/session-state.svelte';
 	import { shellState } from '$lib/shell-state.svelte';
 
-	const INTERACTIVE_KEY = 'recoder.interactiveReview';
-
 	let filter = $state('');
 	let repoChip = $state('all');
-	let interactiveReview = $state(false);
 	let filterEl = $state<HTMLInputElement>();
 	/** Review request in flight, by `repoId#pr`. */
 	let starting = $state<string | null>(null);
-	/** Reviews started from Home this visit; they show the Done state when they finish. */
-	let watching = $state<Set<string>>(new Set());
 	let preview = $state<PullPreview | null>(null);
 	let previewRepoId = $state<string | null>(null);
 	let fetchingPreview = $state(false);
@@ -62,11 +56,6 @@
 	let briefFailed = $state(false);
 
 	onMount(() => {
-		try {
-			interactiveReview = localStorage.getItem(INTERACTIVE_KEY) === 'true';
-		} catch {
-			// Storage unavailable: default off.
-		}
 		void openPrs.load();
 		void modelSettingsUi.load();
 		void loadAuth();
@@ -102,14 +91,6 @@
 			!!modelSettingsUi.config &&
 			(!modelSettingsUi.config.configured || openPrs.repos.length === 0)
 	);
-
-	$effect(() => {
-		try {
-			localStorage.setItem(INTERACTIVE_KEY, String(interactiveReview));
-		} catch {
-			// Not persisted; the switch still works for this visit.
-		}
-	});
 
 	const needsModel = $derived(!openPrs.apiDown && !!modelSettingsUi.config && !modelSettingsUi.config.configured);
 	const latest = $derived(latestReviews(recentSessions.reviews));
@@ -202,20 +183,15 @@
 
 	/* ── Sessions ──────────────────────────────────────────────── */
 
-	/** `chat` opens the Orchestrator panel beside the diff (interactive review). */
-	function openReview(review: Review, repo: Repo, view: 'findings' | 'diff' | null = null, chat = false): void {
+	/** Every review opens on its conversation. */
+	function openReview(review: Review, repo: Repo): void {
 		const status = review.status === 'running' || review.status === 'queued' ? 'reviewing' : 'ready';
 		sessionState.ensureSession(review.id, repo.name, `#${review.prNumber}`, status);
-		void goto(`/session/${review.id}${view ? `?view=${view}${chat ? '&chat=1' : ''}` : ''}`);
+		void goto(`/session/${review.id}`);
 	}
 
-	/**
-	 * Review queues an automated review. With Interactive review on it opens
-	 * Findings right away, where results land as they're found; otherwise it runs
-	 * from Home and gets a tab. Interactive opens a chat-first session with the
-	 * Orchestrator beside the diff.
-	 */
-	async function start(pr: PullRequest, repo: Repo, mode: 'review' | 'interactive'): Promise<void> {
+	/** Queue a review and open its conversation right away. */
+	async function start(pr: PullRequest, repo: Repo): Promise<void> {
 		const key = prKey(repo.id, pr.number);
 		if (starting) return;
 		starting = key;
@@ -224,18 +200,12 @@
 			const review = await serverApi.queueReview({
 				repoId: repo.id,
 				prNumber: pr.number,
-				start: mode === 'review',
+				start: true,
 				prTitle: pr.title
 			});
 			if (pr.headRef) recentSessions.branches[key] = pr.headRef;
 			await recentSessions.refresh();
-			if (mode === 'interactive' || interactiveReview) {
-				if (mode === 'interactive') openReview(review, repo, 'diff', true);
-				else openReview(review, repo, 'findings');
-				return;
-			}
-			sessionState.ensureSession(review.id, repo.name, `#${pr.number}`, 'reviewing');
-			watching = new Set(watching).add(key);
+			openReview(review, repo);
 		} catch (e) {
 			errorToast('Could not start the review', e instanceof Error ? e.message : undefined);
 		} finally {
@@ -246,7 +216,7 @@
 	function openRow(pr: PullRequest, repo: Repo): void {
 		const review = latest.get(prKey(repo.id, pr.number));
 		if (review) openReview(review, repo);
-		else void start(pr, repo, 'review');
+		else void start(pr, repo);
 	}
 
 	function refreshAll(): void {
@@ -457,7 +427,7 @@
 								<Button
 									class="brief-action"
 									loading={starting === prKey(pick.repo.id, pick.pr.number)}
-									onclick={() => void start(pick.pr, pick.repo, 'review')}
+									onclick={() => void start(pick.pr, pick.repo)}
 								>
 									<Play size={12} fill="currentColor" aria-hidden="true" />
 									Review #{pick.pr.number}
@@ -538,7 +508,6 @@
 					<Skeleton class="h-[30px] w-56" />
 				{/if}
 				<span class="flex-1"></span>
-				<span class="home-switch"><Switch bind:switched={interactiveReview} label="Interactive review" /></span>
 			</div>
 
 			{#if openPrs.apiDown}
@@ -593,12 +562,10 @@
 												{review}
 												progress={review ? recentSessions.summaries[review.id] : undefined}
 												starting={starting === key}
-												justFinished={watching.has(key) && !!review && (review.status === 'passed' || review.status === 'failed')}
 												highlighted={previewRepoId === group.repo.id && preview?.pr.number === pr.number}
 												disabled={!!starting && starting !== key}
 												onOpen={() => openRow(pr, group.repo)}
-												onReview={() => void start(pr, group.repo, 'review')}
-												onInteractive={() => void start(pr, group.repo, 'interactive')}
+												onReview={() => void start(pr, group.repo)}
 											/>
 										</div>
 									{/each}

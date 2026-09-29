@@ -15,7 +15,7 @@
 	const model = 'GPT 5.6 Sol';
 	// `?state=draft` previews a new session: the opening card, then the orchestrator's first pass.
 	const draft = page.url.searchParams.get('state') === 'draft';
-	// `?state=failed` previews an incomplete review with Continue review.
+	// `?state=failed` previews a failed review with Continue review.
 	let failed = $state(page.url.searchParams.get('state') === 'failed');
 	let continuing = $state(false);
 	let awaitingPrompt = $state(draft);

@@ -316,7 +316,7 @@ import {
 		<AlertDialog.Content>
 			<AlertDialog.Header>
 				<AlertDialog.Title>Apply {readyFixes.length} {readyFixes.length === 1 ? 'fix' : 'fixes'}?</AlertDialog.Title>
-				<AlertDialog.Description>Each fix is pushed as its own commit to the pull request branch. Review them on their findings first if you haven't.</AlertDialog.Description>
+				<AlertDialog.Description>Each fix is applied to the review checkout. Nothing is committed or pushed until you do it from Changes.</AlertDialog.Description>
 			</AlertDialog.Header>
 			<AlertDialog.Footer>
 				<AlertDialog.Exit>Cancel</AlertDialog.Exit>

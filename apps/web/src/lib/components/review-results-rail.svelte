@@ -24,7 +24,7 @@
 	}
 	let { findings, specialists, coverage = null, coverageGaps = [], onOpenFinding = null, specialistHref, results = true, children }: Props = $props();
 
-	const RANK = { high: 0, medium: 1, low: 2, info: 3 } as const;
+	const RANK = { high: 0, medium: 1, low: 2 } as const;
 	const ranked = $derived([...findings].sort((a, b) => RANK[a.severity] - RANK[b.severity]));
 	const finished = $derived(specialists.filter((item) => item.status === 'done').length);
 	const partialPaths = $derived([...new Set(coverageGaps.filter((gap) => gap.state === 'partial').map((gap) => gap.path))]);

@@ -2,6 +2,7 @@ import type { PrCheck } from '@recoder/shared';
 import type { FixSuggestion } from './findings.svelte';
 import { errorToast, undoToast } from './notify';
 import { ApiError, serverApi } from './server-api';
+import { changesStore } from './changes.svelte';
 
 /** Fixes for failing CI checks, by review and check id. Kept while the page is open. */
 class CheckFixes {
@@ -29,7 +30,7 @@ class CheckFixes {
 		}
 	}
 
-	/** Push the fix to the PR branch as one commit. */
+	/** Apply the fix to the review checkout; committing and pushing happen in Changes. */
 	async apply(reviewId: string, check: PrCheck): Promise<boolean> {
 		const key = this.key(reviewId, check);
 		const fix = this.items[key];
@@ -44,7 +45,8 @@ class CheckFixes {
 				edits: fix.edits
 			});
 			this.items[key] = { ...fix, apply: 'applied' };
-			undoToast(`Fix for ${check.name} pushed`);
+			void changesStore.refresh();
+			undoToast(`Fix for ${check.name} applied. Commit it from Changes.`);
 			return true;
 		} catch (e) {
 			const message = e instanceof Error ? e.message : 'Could not apply the fix.';

@@ -1,7 +1,9 @@
 <script lang="ts">
 	import type { ReviewReasoningEntry } from '@recoder/shared';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
+	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import { reasoningMarkdown } from '$lib/reasoning-text';
 
 	/**
 	 * Reasoning summaries as quiet step rows. Providers send `**Heading**`
@@ -30,12 +32,14 @@
 </script>
 
 {#if steps.length}
+	<ScrollArea orientation="vertical" showCues={false} class="reasoning-trace">
 	<div class="reasoning-steps">
 		{#each steps as step (step.key)}
 			<div class="reasoning-step" data-streaming={step.streaming || undefined}>
 				{#if step.title}<Typography.Text class="reasoning-step-title {step.streaming && !step.body ? 'shimmer-text' : ''}" title={step.title}>{step.title}</Typography.Text>{/if}
-				{#if step.body}<Markdown content={step.body} streaming={step.streaming} />{/if}
+				{#if step.body}<Markdown content={reasoningMarkdown(step.body)} streaming={step.streaming} />{/if}
 			</div>
 		{/each}
 	</div>
+	</ScrollArea>
 {/if}

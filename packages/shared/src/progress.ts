@@ -23,7 +23,8 @@ export type ReviewTaskKind =
 
 export type CoverageState = 'pending' | 'reviewed' | 'partial' | 'excluded';
 
-export type ReviewOutcome = 'complete' | 'partial' | 'failed';
+/** A review either finishes (every specialist done, failed or skipped) or fails outright; there is no in-between. */
+export type ReviewOutcome = 'complete' | 'failed';
 
 export type RoleDecisionKind = 'selected' | 'not_needed' | 'deferred';
 
@@ -34,9 +35,15 @@ export type AssignmentStatus =
 	| 'waiting'
 	| 'running'
 	| 'done'
-	| 'partial'
 	| 'error'
 	| 'skipped';
+
+/** Close out every specialist still queued or running when a review stops, so none is left hanging. */
+export function settleAssignments(assignments: ReviewAssignment[], reason: string, at = new Date().toISOString()): ReviewAssignment[] {
+	return assignments.map((assignment) => ['queued', 'waiting', 'running'].includes(assignment.status)
+		? { ...assignment, status: 'error', currentOperation: reason, completedAt: at }
+		: assignment);
+}
 
 /** Observable operations only: never model reasoning or generated response text. */
 export interface ReviewTask {
@@ -265,7 +272,6 @@ export function assignmentCounts(assignments: ReviewAssignment[] | undefined): {
 	waiting: number;
 	active: number;
 	complete: number;
-	partial: number;
 	failed: number;
 	total: number;
 } {
@@ -274,17 +280,15 @@ export function assignmentCounts(assignments: ReviewAssignment[] | undefined): {
 	let waiting = 0;
 	let active = 0;
 	let complete = 0;
-	let partial = 0;
 	let failed = 0;
 	for (const assignment of list) {
 		if (assignment.status === 'queued') queued++;
 		else if (assignment.status === 'waiting') waiting++;
 		else if (assignment.status === 'running') active++;
 		else if (assignment.status === 'done') complete++;
-		else if (assignment.status === 'partial') partial++;
 		else if (assignment.status === 'error' || assignment.status === 'skipped') failed++;
 	}
-	return { queued, waiting, active, complete, partial, failed, total: list.length };
+	return { queued, waiting, active, complete, failed, total: list.length };
 }
 
 export function formatAssignmentHeadline(assignments: ReviewAssignment[] | undefined): string {
@@ -295,7 +299,6 @@ export function formatAssignmentHeadline(assignments: ReviewAssignment[] | undef
 	if (counts.waiting) parts.push(`${counts.waiting} waiting for a model`);
 	if (counts.queued) parts.push(`${counts.queued} queued`);
 	if (counts.complete) parts.push(`${counts.complete} complete`);
-	if (counts.partial) parts.push(`${counts.partial} partial`);
 	if (counts.failed) parts.push(`${counts.failed} failed`);
 	return parts.join(' · ') || `${counts.total} specialist${counts.total === 1 ? '' : 's'}`;
 }

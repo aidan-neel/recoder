@@ -1,9 +1,9 @@
 <script lang="ts" module>
-	import type { CoverageGap, CoverageSummary, ModelFailure, ReviewAssignment, ReviewGuidelinesUsed, ReviewChatMessage, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
+	import type { CoverageGap, CoverageSummary, ModelFailure, ReviewAssignment, ReviewGuidelinesUsed, ReviewChatMessage, ReviewCodeContext, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
 	export interface ReviewingFinding {
 		id: string;
 		agent: string | null;
-		severity: 'high' | 'medium' | 'low' | 'info';
+		severity: 'high' | 'medium' | 'low';
 		title: string;
 		location: string | null;
 		file?: string;
@@ -46,6 +46,7 @@
 	import Disclosure from './ui/disclosure.svelte';
 	import ReasoningSteps from './reasoning-steps.svelte';
 	import PrChecks from './pr-checks.svelte';
+	import ChangesButton from './changes-button.svelte';
 	import SessionHeader from './session-header.svelte';
 	import FindingSeverity from './finding-severity.svelte';
 	import FailureNotice from './failure-notice.svelte';
@@ -83,11 +84,21 @@
 		onRestart: (() => void) | null;
 		/** Continue a failed review from where it stopped. */
 		onContinue?: (() => Promise<void>) | null;
-		onSend?: (assignmentId: string, text: string) => Promise<void>;
+		onSend?: (assignmentId: string, text: string, codeContext?: ReviewCodeContext) => Promise<void>;
 		onStop?: (assignmentId: string) => Promise<void>;
 		restarting?: boolean;
 		now?: number;
 		fullscreen?: boolean;
+		/**
+		 * The same conversation inside the diff page's Ask reviewer drawer: no
+		 * session header or results rail, specialists open in place.
+		 */
+		embedded?: boolean;
+		/** Orchestrator composer text and attached code (the drawer shares them with the diff). */
+		draft?: string;
+		codeContext?: ReviewCodeContext | null;
+		/** Bumped to focus the composer. */
+		focusKey?: number;
 		findings: ReviewingFinding[];
 		roleDecisions?: RoleDecision[];
 		tasks?: ReviewTask[];
@@ -113,8 +124,9 @@
 		reviewId, title, meta, assignments = [], messages = [], orchestratorModel,
 		reasoning = [], toolCalls = [], active = true, failed = false,
 		errorMessage = null, failure = null, onStartReview = null, paused = false, connectionLost = false, onOpenDiff, onShowView = null, onOpenFinding = null, onRestart, onContinue = null,
-		onSend, onStop, restarting = false, now = Date.now(), fullscreen = false, stage = 0, tasks = [],
-		planSummary = null, activity = [], showChecks = false, repoId = null, guidelines = null, stageLabel = 'Preparing review', coverage = null, coverageGaps = [],
+		onSend, onStop, restarting = false, now = Date.now(), fullscreen = false,
+		embedded = false, draft = $bindable(''), codeContext = $bindable(null), focusKey, stage = 0, tasks = [],
+		planSummary = null, activity = [], showChecks = false, repoId = null, guidelines = null, stageLabel = 'Preparing review', stageDetail, coverage = null, coverageGaps = [],
 		awaitingPrompt = false, completedAt, findings = []
 	}: Props = $props();
 
@@ -157,18 +169,24 @@
 	const specialists = $derived(assignments.filter((assignment) => assignment.id !== ORCHESTRATOR_ID));
 	const orchestrator = $derived<ReviewAssignment>({
 		id: ORCHESTRATOR_ID, role: 'orchestrator', title: 'Orchestrator', reason: '', scope: [],
-		status: awaitingPrompt ? 'waiting' : active ? 'running' : failed ? 'partial' : 'done',
+		status: awaitingPrompt ? 'waiting' : active ? 'running' : failed ? 'error' : 'done',
 		model: orchestratorModel ?? assignments.find((item) => item.id === ORCHESTRATOR_ID)?.model ??
 			messages.findLast((item) => item.assignmentId === ORCHESTRATOR_ID && item.model)?.model ??
 			reasoning.findLast((item) => (!item.assignmentId || item.assignmentId === ORCHESTRATOR_ID) && item.model)?.model
 	});
-	const selected = $derived(specialists.find((assignment) => assignment.id === page.url.searchParams.get('agent')) ?? orchestrator);
+	/** The drawer keeps its own place; the conversation page keeps it in the URL. */
+	let embeddedAgent = $state<string | null>(null);
+	const selected = $derived(specialists.find((assignment) => assignment.id === (embedded ? embeddedAgent : page.url.searchParams.get('agent'))) ?? orchestrator);
 	const isOrchestrator = $derived(selected.id === ORCHESTRATOR_ID);
 	const finished = $derived(!active && !failed && !awaitingPrompt);
 	const showSteps = $derived(!awaitingPrompt && (active || failed));
 	const showRail = $derived(isOrchestrator && !active && !awaitingPrompt && (findings.length > 0 || specialists.length > 0));
 
 	/** URL-backed chats support browser history, reloads, and opening in a new tab. */
+	/** Link props that open a conversation: a URL on the page, in place in the drawer. */
+	function openProps(assignmentId: string): { href?: string; onclick?: () => void } {
+		return embedded ? { onclick: () => { embeddedAgent = assignmentId === ORCHESTRATOR_ID ? null : assignmentId; } } : { href: conversationHref(assignmentId) };
+	}
 	function conversationHref(assignmentId: string): string {
 		const url = new URL(page.url);
 		if (assignmentId === ORCHESTRATOR_ID) url.searchParams.delete('agent');
@@ -199,7 +217,7 @@
 		return facts;
 	});
 	const chatReasoning = $derived(reasoning.filter((entry) => !finalReasoning.some((item) => item.id === entry.id)));
-	const findingCounts = $derived((['high', 'medium', 'low', 'info'] as const)
+	const findingCounts = $derived((['high', 'medium', 'low'] as const)
 		.map((severity) => ({ severity, count: findings.filter((finding) => finding.severity === severity).length }))
 		.filter((item) => item.count > 0));
 	const currentStep = $derived(!active && !failed ? 6 : Math.min(stage, 5));
@@ -213,16 +231,20 @@
 	}
 	/** Early stages (checkout, inventory, planning) have nothing to open, and the live thinking and tool rows already show the work. */
 	const showProgress = $derived(!active || running.length > 0 || !!finalization);
+	/** Checkout and dependency install have no transcript of their own; until the orchestrator speaks, a loading card stands in. */
+	const setupTask = $derived(tasks.find((task) => task.id === 'setup' && task.status === 'running'));
+	const orchestratorSpoke = $derived(messages.some((message) => (message.assignmentId ?? ORCHESTRATOR_ID) === ORCHESTRATOR_ID && message.from === 'assistant')
+		|| reasoning.some((entry) => entry.assignmentId === ORCHESTRATOR_ID));
+	const preparing = $derived(isOrchestrator && active && !awaitingPrompt && !failed && (stage === 0 || (!!setupTask && !orchestratorSpoke)));
 	const progressHasBody = $derived(finalReasoning.length > 0 || finalFacts.length > 0);
 	const footerLabel = $derived(running.length ? `Waiting on ${nameList(running)}` : stageLabel);
 
 	function statusFor(assignment: ReviewAssignment): { label: string; tone: string } {
 		switch (assignment.status) {
-			case 'running': return active ? { label: 'Reviewing', tone: 'running' } : { label: 'Interrupted', tone: 'danger' };
+			case 'running': return active ? { label: 'Reviewing', tone: 'running' } : { label: 'Failed', tone: 'danger' };
 			case 'waiting': return { label: 'Waiting', tone: 'idle' };
 			case 'queued': return { label: 'Queued', tone: 'idle' };
 			case 'done': return { label: 'Finished', tone: 'success' };
-			case 'partial': return { label: 'Incomplete', tone: 'running' };
 			case 'error': return { label: 'Failed', tone: 'danger' };
 			case 'skipped': return { label: 'Skipped', tone: 'idle' };
 		}
@@ -247,7 +269,7 @@
 		{#each specialists as assignment (assignment.id)}
 			{@const status = statusFor(assignment)}
 			<li>
-				<Button href={conversationHref(assignment.id)} variant="ghost" class="specialist-row" aria-label={`Open ${formatAgentName(assignment.role)} conversation`}>
+				<Button {...openProps(assignment.id)} variant="ghost" class="specialist-row" aria-label={`Open ${formatAgentName(assignment.role)} conversation`}>
 					<span class="specialist-main">
 						<span class="specialist-name-line">
 							<span class="specialist-name">{formatAgentName(assignment.role)}</span>
@@ -282,7 +304,7 @@
 
 {#snippet progressContent()}
 	<Disclosure status={active ? 'running' : failed ? 'error' : 'done'} bodyClass="finalize-body" children={progressHasBody ? progressBody : undefined}>
-		{#snippet label()}{active ? footerLabel : failed ? 'Review incomplete' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
+		{#snippet label()}{active ? footerLabel : failed ? 'Review failed' : `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
 	</Disclosure>
 	{#if failed && !active && onContinue}
 		<div class="review-start-cta">
@@ -322,8 +344,30 @@
 	</div>
 {/snippet}
 
+{#snippet preparingCard()}
+	<div class="focus-empty review-preparing" data-kind="running" role="status">
+		<div class="focus-empty-card enter-rise">
+			<span class="focus-empty-icon" aria-hidden="true"><Spinner size={18} /></span>
+			<Typography.Title level={2} class="focus-empty-title">{stage === 0 ? 'Checking out the pull request' : 'Setting up the environment'}</Typography.Title>
+			<p class="focus-empty-text">{(stage === 0 ? stageDetail : setupTask?.message) || (stage === 0 ? 'Fetching the branch and preparing an isolated checkout.' : 'Installing dependencies so reviewers can run code.')}</p>
+			<div class="focus-empty-facts">
+				{#if meta.files !== null}<span><b>{meta.files}</b> {meta.files === 1 ? 'file' : 'files'}</span>{/if}
+				{#if meta.additions !== null && meta.deletions !== null}<span><b class="text-success">+{meta.additions}</b> <b class="text-danger">−{meta.deletions}</b></span>{/if}
+			</div>
+		</div>
+		<div class="focus-empty-ghosts" data-shimmer aria-hidden="true">
+			{#each [0, 1, 2] as i (i)}
+				<div class="focus-empty-ghost" style="--i: {i}">
+					<span class="focus-empty-ghost-line" style="width: {[34, 28, 40][i]}%"></span>
+					<span class="focus-empty-ghost-line is-faint" style="width: {[86, 64, 78][i]}%"></span>
+				</div>
+			{/each}
+		</div>
+	</div>
+{/snippet}
+
 {#snippet headerChecks()}
-	{#if reviewId}<div class="findings-toolbar-end"><PrChecks {reviewId} /></div>{/if}
+	{#if reviewId}<div class="findings-toolbar-end"><PrChecks {reviewId} /><ChangesButton /></div>{/if}
 {/snippet}
 
 {#snippet resultCard()}
@@ -340,7 +384,8 @@
 	</Card.Root>
 {/snippet}
 
-<div class="review-workspace flex min-h-0 flex-col {fullscreen ? 'h-full' : 'h-[min(56rem,85dvh)]'}">
+<div class="review-workspace flex min-h-0 flex-col {fullscreen || embedded ? 'h-full' : 'h-[min(56rem,85dvh)]'}" data-embedded={embedded || undefined}>
+	{#if !embedded}
 	<SessionHeader
 		{title}
 		branch={meta.branch}
@@ -356,10 +401,11 @@
 		menu={reviewId || onRestart || onOpenDiff || repoId ? sessionMenu : undefined}
 		toolbar={showChecks && reviewId ? headerChecks : undefined}
 	/>
+	{/if}
 	{#if !isOrchestrator}
 		{@const status = statusFor(selected)}
-		<nav aria-label="Specialist conversation" class="agent-nav mx-auto flex w-full max-w-[740px] shrink-0 items-center px-6 pt-3">
-			<Button href={conversationHref(ORCHESTRATOR_ID)} variant="ghost" size="icon" class="shrink-0" aria-label="Back to Orchestrator" title="Back to Orchestrator">
+		<nav aria-label="Specialist conversation" class="agent-nav mx-auto flex w-full max-w-[740px] shrink-0 items-center {embedded ? 'px-3' : 'px-6'} pt-3">
+			<Button {...openProps(ORCHESTRATOR_ID)} variant="ghost" size="icon" class="shrink-0" aria-label="Back to Orchestrator" title="Back to Orchestrator">
 				<ArrowLeft size={15} aria-hidden="true" />
 			</Button>
 			<Typography.Title level={2} class="agent-name min-w-0 truncate">{formatAgentName(selected.role)}</Typography.Title>
@@ -369,9 +415,9 @@
 			</Typography.Metadata>
 		</nav>
 	{/if}
-	{#if connectionLost}<Typography.Text role="status" class="mx-auto w-full max-w-[740px] px-6 py-2 text-sm text-sev-medium">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
+	{#if connectionLost}<Typography.Text role="status" class="mx-auto w-full max-w-[740px] {embedded ? 'px-4' : 'px-6'} py-2 text-sm text-sev-medium">Reconnecting… Your conversation is saved.</Typography.Text>{/if}
 	{#if errorMessage || (failed && failure)}
-		<div class="mx-auto w-full max-w-[740px] px-6 pt-3">
+		<div class="mx-auto w-full max-w-[740px] {embedded ? 'px-4' : 'px-6'} pt-3">
 			<FailureNotice title={failed ? stageLabel : 'Something went wrong'} reason={errorMessage ?? failure?.reason ?? ''}
 				signIn={!errorMessage && failure?.signIn} onRetry={failed && onContinue ? () => void continueRun() : failed && onRestart ? () => (restartOpen = true) : null} retrying={continuing || restarting} />
 		</div>
@@ -379,24 +425,26 @@
 	<div class="flex min-h-0 flex-1">
 		<div class="relative flex min-h-0 min-w-0 flex-1 flex-col">
 			{#each [selected] as target (target.id)}
-				<ReviewConversation {onStartReview} intro={isOrchestrator && showIntro ? reviewIntro : undefined} signInShown={failed && !errorMessage && !!failure?.signIn} assignment={target} {messages} reasoning={isOrchestrator ? chatReasoning : reasoning} {toolCalls} {active} {now}
+				<ReviewConversation compact={embedded} {focusKey} {onStartReview} intro={isOrchestrator && showIntro ? reviewIntro : undefined} signInShown={failed && !errorMessage && !!failure?.signIn} assignment={target} {messages} reasoning={isOrchestrator ? chatReasoning : reasoning} {toolCalls} {active} {now}
 					awaitingPrompt={isOrchestrator && awaitingPrompt}
 					tasks={tasks.filter((task) => (task.assignmentId ?? ORCHESTRATOR_ID) === target.id)}
-					bind:draft={() => drafts[target.id] ?? '', (value) => drafts[target.id] = value} {onSend} {onStop}
+					bind:draft={() => target.id === ORCHESTRATOR_ID ? draft : drafts[target.id] ?? '', (value) => { if (target.id === ORCHESTRATOR_ID) draft = value; else drafts[target.id] = value; }}
+					bind:codeContext {onSend} {onStop}
 					placeholder={!isOrchestrator ? undefined : awaitingPrompt ? undefined : active ? 'Ask Orchestrator anything…' : 'Ask a follow-up about this review…'}
 					inserts={isOrchestrator ? [
 						...(specialists.length ? [{ key: 'specialists', at: specialistsAt, snippet: specialistsContent }] : []),
 						...(!awaitingPrompt && showProgress ? [{ key: 'progress', at: active ? undefined : finalization?.startedAt ?? completedAt, snippet: progressContent }] : []),
-						...(finished ? [{ key: 'result', at: completedAt, snippet: resultCard }] : [])
+						...(finished ? [{ key: 'result', at: completedAt, snippet: resultCard }] : []),
+						...(preparing ? [{ key: 'preparing', at: undefined, snippet: preparingCard }] : [])
 					] : []} />
 			{/each}
 		</div>
-		{#if showRail || (isOrchestrator && showSteps)}
+		{#if !embedded && (showRail || (isOrchestrator && showSteps))}
 			<ReviewResultsRail {findings} {specialists} {coverage} {coverageGaps} {onOpenFinding} specialistHref={conversationHref} results={showRail}>
 				{#if showSteps}
 					<ReviewSteps current={currentStep} {failed} {active} elapsed={meta.elapsed} {paused}
 						onPauseToggle={reviewId && !awaitingPrompt ? togglePause : null} onCancel={reviewId && !awaitingPrompt ? cancelReview : null}
-						specialists={{ done: specialists.filter((item) => ['done', 'skipped', 'error', 'partial'].includes(item.status)).length, total: specialists.length }} />
+						specialists={{ done: specialists.filter((item) => ['done', 'skipped', 'error'].includes(item.status)).length, total: specialists.length }} />
 				{/if}
 			</ReviewResultsRail>
 		{/if}

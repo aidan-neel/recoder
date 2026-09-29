@@ -1,9 +1,10 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { getReviewControl } from '../lib/review-control';
 import { emitReviewEvent } from '../lib/events';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { emptyReviewProgress, expandFileDiff, parseUnifiedDiff } from '@recoder/shared';
+import type { Review } from '@recoder/shared';
 import { createReviewSession, queueReview, continueReviewSession, startReviewSession } from '../commands/pipeline';
 import { configForRole, isReviewConfigured, ModelConfigError } from '../lib/models';
 import { modelFailure } from '../lib/model-failure';
@@ -12,7 +13,7 @@ import { discussFinding, streamDiscussFinding, discussRequestSchema, resolveDisc
 import { runRereview, rereviewRequestSchema } from '../lib/rereview';
 import { readSandboxFile } from '../lib/harness';
 import {
-	applyFixCommit,
+	applyFixToWorktree,
 	applyFixRequestSchema,
 	deleteVerifyBranch,
 	FixError,
@@ -20,7 +21,6 @@ import {
 	VERIFY_BRANCH_PREFIX,
 	withSandboxLock,
 	patchApplies,
-	pushFixBranch,
 	suggestFix,
 	suggestCheckFix,
 	suggestFixRequestSchema
@@ -31,11 +31,12 @@ import { fetchPullHead } from '../lib/github-rest';
 import { fetchMergeHeadRef } from '../lib/glab';
 import { tokenEnv } from '../lib/tokens';
 import { LlmError } from '../lib/llm';
-import { parseSlug, refspecFor } from '../lib/providers';
+import { parseSlug } from '../lib/providers';
 import { db, reviewDiffs, reviewSandboxes, reviewProgress, reviewMetrics, reviewCheckpoints } from '../store';
 import { getReviewMetrics, withReviewMetrics } from '../lib/metrics';
 import { CheckoutError, ensureReviewCheckout, findReviewCheckout } from '../lib/review-checkout';
 import { markFindingFixed } from '../lib/finding-fixes';
+import { commitPendingChanges, discardPendingChanges, listPendingChanges, pushPendingCommits, undoLastCommit } from '../lib/pending-changes';
 import { cancelReviewChats, ReviewChatError, reviewCodeContextSchema, prepareDraftSession, startReviewChat, stopReviewChat } from '../lib/review-chat';
 
 const createReviewSchema = z.object({
@@ -378,8 +379,9 @@ app.post('/:id/checks/fix', async (c) => {
 	}
 });
 /**
- * Apply a suggested patch in the review sandbox, commit it, and push to the
- * PR head branch. Fails cleanly (409) when the patch no longer applies.
+ * Apply a suggested patch to the review checkout's working tree. Committing
+ * and pushing are separate, explicit steps (`/changes`). Fails cleanly (409)
+ * when the patch no longer applies.
  */
 app.post('/:id/fixes/apply', async (c) => {
 	const review = db.reviews.get(c.req.param('id'));
@@ -392,44 +394,21 @@ app.post('/:id/fixes/apply', async (c) => {
 	const repo = db.repos.get(review.repoId);
 	if (!repo) return c.json({ error: 'repo is no longer tracked' }, 409);
 	try {
-		const headRef =
-			review.source === 'gitlab'
-				? await fetchMergeHeadRef(repo.url, review.prNumber, tokenEnv('gitlab', repo.url))
-				: await fetchPullHeadRef(repo.url, review.prNumber);
-		const source = review.source;
+		const headRef = await reviewHeadRef(review, repo.url);
 		const sandboxPath = await ensureReviewCheckout(review);
 		return await withSandboxLock(sandboxPath, async () => {
-			const { sha } = await applyFixCommit({
-				sandboxPath,
-				patch: parsed.data.patch,
-				edits: parsed.data.edits,
-				summary: parsed.data.summary,
-				file: parsed.data.finding.file,
-				line: parsed.data.finding.line,
-				message: parsed.data.finding.message
-			});
-			try {
-				await pushFixBranch({
-					sandboxPath,
-					localBranch: refspecFor(source, review.prNumber).branch,
-					headRef
-				});
-			} catch (err) {
-				if (err instanceof FixError) {
-					return c.json({ error: err.message, sha, pushed: false }, 502);
-				}
-				throw err;
-			}
+			const { paths } = await applyFixToWorktree({ sandboxPath, patch: parsed.data.patch, edits: parsed.data.edits });
 			if (parsed.data.findingId) {
+				// No commit yet: the fix records what was applied; the Changes panel commits it.
 				markFindingFixed(review.id, parsed.data.findingId, {
-					sha,
+					sha: '',
 					branch: headRef,
 					summary: parsed.data.summary,
 					at: new Date().toISOString(),
 					...(parsed.data.agent ? { agent: parsed.data.agent } : {})
 				});
 			}
-			return c.json({ sha, branch: headRef, pushed: true });
+			return c.json({ files: paths, branch: headRef });
 		});
 	} catch (err) {
 		if (err instanceof FixError || err instanceof CheckoutError) return c.json({ error: err.message }, err.status);
@@ -437,6 +416,65 @@ app.post('/:id/fixes/apply', async (c) => {
 		throw err;
 	}
 });
+async function reviewHeadRef(review: Review, repoUrl: string): Promise<string> {
+	return review.source === 'gitlab'
+		? fetchMergeHeadRef(repoUrl, review.prNumber, tokenEnv('gitlab', repoUrl))
+		: fetchPullHeadRef(repoUrl, review.prNumber);
+}
+
+/**
+ * The developer's uncommitted files and unpushed commits in the review checkout.
+ * Every write below runs only on an explicit request: which files, what
+ * message, and when to push are the developer's call.
+ *
+ * These only use a checkout that already exists: restoring one here would
+ * race the pipeline's own clone of the same directory.
+ */
+async function withChanges(c: Context, fn: (sandboxPath: string, review: Review) => Promise<Response>, read?: { empty: () => Response }): Promise<Response> {
+	const empty = read?.empty;
+	const review = db.reviews.get(c.req.param('id') ?? '');
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	if (review.source === 'stub') return empty ? empty() : c.json({ error: 'no checkout for stub reviews' }, 409);
+	try {
+		const sandboxPath = await findReviewCheckout(review);
+		if (!sandboxPath) return empty ? empty() : c.json({ error: 'This review has no checkout yet.' }, 409);
+		// Reads are plain `git status`/`log`; they never wait behind a push or fix apply.
+		return read ? await fn(sandboxPath, review) : await withSandboxLock(sandboxPath, () => fn(sandboxPath, review));
+	} catch (err) {
+		if (err instanceof FixError || err instanceof CheckoutError) return c.json({ error: err.message }, err.status);
+		if (err instanceof GhError) return c.json({ error: err.message }, 502);
+		throw err;
+	}
+}
+
+app.get('/:id/changes', (c) => withChanges(c, async (sandboxPath) => c.json(await listPendingChanges(sandboxPath)), { empty: () => c.json({ files: [], commits: [] }) }));
+
+const pathsSchema = z.object({ paths: z.array(z.string().min(1).max(500)).min(1).max(500) });
+const commitSchema = pathsSchema.extend({ message: z.string().trim().min(1).max(10_000) });
+app.post('/:id/changes/commit', async (c) => {
+	const parsed = commitSchema.safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) return c.json({ error: 'Choose the files to commit and write a commit message.' }, 400);
+	return withChanges(c, async (sandboxPath) => c.json(await commitPendingChanges(sandboxPath, parsed.data.paths, parsed.data.message)));
+});
+app.post('/:id/changes/discard', async (c) => {
+	const parsed = pathsSchema.safeParse(await c.req.json().catch(() => null));
+	if (!parsed.success) return c.json({ error: 'Choose the files to discard.' }, 400);
+	return withChanges(c, async (sandboxPath) => {
+		await discardPendingChanges(sandboxPath, parsed.data.paths);
+		return c.json({ ok: true });
+	});
+});
+app.post('/:id/changes/undo-commit', (c) => withChanges(c, async (sandboxPath) => {
+	await undoLastCommit(sandboxPath);
+	return c.json({ ok: true });
+}));
+app.post('/:id/changes/push', (c) => withChanges(c, async (sandboxPath, review) => {
+	const repo = db.repos.get(review.repoId);
+	if (!repo) return c.json({ error: 'repo is no longer tracked' }, 409);
+	const headRef = await reviewHeadRef(review, repo.url);
+	return c.json({ ...(await pushPendingCommits(sandboxPath, headRef)), branch: headRef });
+}));
+
 /** CI checks for the PR head (default) or any branch/sha of this repo (e.g. a fix's verify branch). */
 app.get('/:id/checks', async (c) => {
 	const review = db.reviews.get(c.req.param('id'));
@@ -542,7 +580,8 @@ app.get('/:id/events', (c) => {
 					const timer = setTimeout(resolve, 5000);
 					wake = () => { clearTimeout(timer); resolve(); };
 				});
-				if (!stream.aborted) await send({ type: 'heartbeat', at: new Date().toISOString(), status: lastStatus });
+				// Read the stored status: restart recovery can fail a review without emitting an event.
+				if (!stream.aborted) await send({ type: 'heartbeat', at: new Date().toISOString(), status: db.reviews.get(review.id)?.status ?? lastStatus });
 			}
 		} finally {
 			unsubscribe();

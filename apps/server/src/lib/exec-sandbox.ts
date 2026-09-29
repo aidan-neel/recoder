@@ -1,19 +1,23 @@
-import { existsSync, lstatSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { env } from '../env.js';
 import { serverDataDir } from './data-dir.js';
 
 /**
- * Runs reviewer commands against a PR checkout inside bubblewrap. PR code is
+ * Runs reviewer commands against a PR checkout inside bubblewrap on Linux and
+ * Seatbelt (`sandbox-exec`) on macOS. Native Windows stays read-only. PR code is
  * untrusted, so every command gets:
  * - a read-only host with $HOME, the data dir (tokens), the work dir (other
  *   reviews' checkouts), /run (docker and dbus sockets) and /mnt hidden;
  * - the host toolchains on PATH bound back in read-only;
  * - only the checkout and a per-checkout cache writable, with `.git` read-only
  *   so HEAD cannot move;
- * - no network (setup's dependency install is the one exception), fresh
- *   PID/IPC/UTS namespaces, a cleared environment and a new session.
+ * - no network (setup's dependency install is the one exception), a cleared
+ *   environment and its own session / process group (plus fresh PID/IPC/UTS
+ *   namespaces under bubblewrap).
+ * Seatbelt can't mount a fresh /tmp, so on macOS /tmp is hidden too and HOME and
+ * TMPDIR point into the per-checkout cache.
  */
 
 export interface SandboxLayout {
@@ -64,19 +68,32 @@ export function toolchainRoot(entry: string, home: string): string {
 	return parent;
 }
 
-/** Where things live on this host, resolved into what bwrap should hide, bind and set. */
+/** Seatbelt matches resolved paths (`/tmp` is `/private/tmp` on macOS). */
+function real(path: string): string {
+	const absolute = resolve(path);
+	try {
+		return realpathSync(absolute);
+	} catch {
+		return absolute;
+	}
+}
+
+/** Where things live on this host, resolved into what the sandbox should hide, bind and set. */
 export function sandboxLayout(checkout: string, host: {
 	home?: string;
 	dataDir?: string;
 	workDir?: string;
 	path?: string;
+	platform?: NodeJS.Platform;
 } = {}): SandboxLayout {
-	const home = resolve(host.home ?? homedir());
-	const dataDir = resolve(host.dataDir ?? serverDataDir());
-	const workDir = resolve(host.workDir ?? env.RECODER_WORKDIR);
-	const root = resolve(checkout);
+	const darwin = (host.platform ?? process.platform) === 'darwin';
+	const home = real(host.home ?? homedir());
+	const dataDir = real(host.dataDir ?? serverDataDir());
+	const workDir = real(host.workDir ?? env.RECODER_WORKDIR);
+	const root = real(checkout);
 	const cacheDir = join(workDir, 'cache', basename(root));
-	const hidden = [home, dataDir, workDir, '/root', '/mnt', '/media', '/run', '/var/run']
+	const hostDirs = darwin ? ['/private/tmp', '/Volumes', '/private/var/root'] : ['/root', '/mnt', '/media', '/run', '/var/run'];
+	const hidden = [home, dataDir, workDir, ...hostDirs]
 		.filter((path, index, all) => all.indexOf(path) === index && isDir(path))
 		.sort((a, b) => a.length - b.length);
 	const isHidden = (path: string) => hidden.some((dir) => inside(path, dir));
@@ -103,9 +120,9 @@ export function sandboxLayout(checkout: string, host: {
 		masked,
 		env: {
 			PATH: kept.join(':') || '/usr/local/bin:/usr/bin:/bin',
-			HOME: '/tmp/home',
-			TMPDIR: '/tmp',
-			LANG: 'C.UTF-8',
+			HOME: darwin ? cache('home') : '/tmp/home',
+			TMPDIR: darwin ? cache('tmp') : '/tmp',
+			LANG: darwin ? 'en_US.UTF-8' : 'C.UTF-8',
 			TERM: 'dumb',
 			CI: '1',
 			NO_COLOR: '1',
@@ -150,6 +167,47 @@ export function bwrapArgs(layout: SandboxLayout, command: string, opts: { networ
 	return args;
 }
 
+/** SBPL string literal. */
+function sbpl(value: string): string {
+	return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+/** Every parent directory of these paths, `/` included. */
+function ancestors(paths: string[]): string[] {
+	const out = new Set<string>();
+	for (const path of paths) {
+		for (let dir = dirname(path); ; dir = dirname(dir)) {
+			out.add(dir);
+			if (dir === dirname(dir)) break;
+		}
+	}
+	return [...out].sort();
+}
+
+/**
+ * The Seatbelt equivalent of `bwrapArgs`. The last matching rule wins, so
+ * broad denies come first and the narrower allows and masks after them.
+ */
+export function seatbeltProfile(layout: SandboxLayout, opts: { network?: boolean } = {}): string {
+	const subpaths = (dirs: string[]) => dirs.map((dir) => `(subpath ${sbpl(dir)})`).join(' ');
+	const git = join(layout.checkout, '.git');
+	const rules = [
+		'(version 1)',
+		'(allow default)',
+		opts.network ? '' : '(deny network*)',
+		layout.hidden.length ? `(deny file-read* file-write* ${subpaths(layout.hidden)})` : '',
+		`(allow file-read* ${subpaths([...layout.toolchains, layout.checkout, layout.cacheDir])})`,
+		// Path walks (mkdir -p, realpath) stat every parent of what's allowed; that reveals
+		// nothing, while listing or reading those parents stays denied.
+		`(allow file-read-metadata ${ancestors([...layout.toolchains, layout.checkout, layout.cacheDir]).map((dir) => `(literal ${sbpl(dir)})`).join(' ')})`,
+		'(deny file-write*)',
+		`(allow file-write* ${subpaths([layout.checkout, layout.cacheDir])} (literal "/dev/null") (literal "/dev/tty") (literal "/dev/dtracehelper") (regex #"^/dev/fd/"))`,
+		existsSync(git) ? `(deny file-write* (subpath ${sbpl(git)}))` : '',
+		...layout.masked.map((file) => `(deny file-read* (literal ${sbpl(file)}))`)
+	];
+	return rules.filter(Boolean).join('\n');
+}
+
 let shellPath: string | null = null;
 function shell(): string {
 	shellPath ??= ['/bin/bash', '/usr/bin/bash'].find((path) => existsSync(path)) ?? '/bin/sh';
@@ -162,7 +220,9 @@ let probe: Promise<string | null> | null = null;
 export function execUnavailableReason(): Promise<string | null> {
 	if (process.env.RECODER_EXEC === 'off') return Promise.resolve('Code execution is turned off (RECODER_EXEC=off).');
 	probe ??= (async () => {
-		if (process.platform !== 'linux') return 'Running code needs bubblewrap, which is Linux only.';
+		if (process.platform === 'darwin') return probeSeatbelt();
+		if (process.platform === 'win32') return 'Running code is not supported on native Windows. Run the Recoder server under WSL to let reviewers run tests.';
+		if (process.platform !== 'linux') return `Running code is not supported on ${process.platform}.`;
 		const bwrap = Bun.which('bwrap');
 		if (!bwrap) return 'Running code needs bubblewrap (`bwrap`). Install it to let reviewers run tests.';
 		try {
@@ -174,6 +234,18 @@ export function execUnavailableReason(): Promise<string | null> {
 		}
 	})();
 	return probe;
+}
+
+async function probeSeatbelt(): Promise<string | null> {
+	const bin = Bun.which('sandbox-exec') ?? (existsSync('/usr/bin/sandbox-exec') ? '/usr/bin/sandbox-exec' : null);
+	if (!bin) return 'Running code needs `sandbox-exec`, which this macOS install is missing.';
+	try {
+		const proc = Bun.spawn([bin, '-p', '(version 1)(allow default)(deny network*)', '/usr/bin/true'], { stdout: 'ignore', stderr: 'pipe' });
+		const [code, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
+		return code === 0 ? null : `sandbox-exec could not start a sandbox: ${stderr.trim().slice(0, 300) || `exit ${code}`}`;
+	} catch (err) {
+		return `sandbox-exec could not start a sandbox: ${err instanceof Error ? err.message : String(err)}`;
+	}
 }
 
 /** Keeps the head and tail of long output, where commands report what matters. */
@@ -190,15 +262,33 @@ export function boundOutput(text: string, max: number): { text: string; truncate
 export async function runSandboxed(layout: SandboxLayout, command: string, opts: RunOptions): Promise<RunResult> {
 	mkdirSync(layout.cacheDir, { recursive: true });
 	if (!statSync(layout.checkout).isDirectory()) throw new Error('review checkout is missing');
+	const darwin = process.platform === 'darwin';
+	if (darwin) {
+		mkdirSync(layout.env.HOME!, { recursive: true });
+		mkdirSync(layout.env.TMPDIR!, { recursive: true });
+	}
 	const started = Date.now();
-	const proc = Bun.spawn(['bwrap', ...bwrapArgs(layout, command, { network: opts.network })], {
+	const argv = darwin
+		? ['sandbox-exec', '-p', seatbeltProfile(layout, { network: opts.network }), shell(), '-c', 'eval "$1" 2>&1', 'recoder', command]
+		: ['bwrap', ...bwrapArgs(layout, command, { network: opts.network })];
+	const proc = Bun.spawn(argv, {
 		stdin: opts.stdin === undefined ? 'ignore' : new Blob([opts.stdin]),
 		stdout: 'pipe',
-		stderr: 'pipe'
+		stderr: 'pipe',
+		// Seatbelt has no PID namespace: the command leads its own process group so a kill reaches its children.
+		...(darwin ? { cwd: layout.checkout, env: layout.env, detached: true } : {})
 	});
 	let timedOut = false;
-	// SIGKILL on bwrap takes the whole sandbox with it (--die-with-parent, PID namespace).
-	const kill = () => proc.kill('SIGKILL');
+	// SIGKILL on bwrap takes the whole sandbox with it (--die-with-parent, PID namespace);
+	// on macOS the whole process group goes.
+	const kill = () => {
+		if (!darwin) return proc.kill('SIGKILL');
+		try {
+			process.kill(-proc.pid, 'SIGKILL');
+		} catch {
+			proc.kill('SIGKILL');
+		}
+	};
 	const timer = setTimeout(() => {
 		timedOut = true;
 		kill();

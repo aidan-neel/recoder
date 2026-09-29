@@ -73,7 +73,7 @@
 		try { await onStartReview(); } finally { starting = false; }
 	}
 
-	const RANK = { high: 0, medium: 1, low: 2, info: 3 } as const;
+	const RANK = { high: 0, medium: 1, low: 2 } as const;
 	let query = $state('');
 	const ranked = $derived(findingsStore.items
 		.filter((finding) => (finding.status !== 'dismissed' || findingsStore.showDismissed) && findingsStore.isShown(finding))
@@ -308,7 +308,7 @@
 					<FixStatus finding={active} />
 					{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks finding={active} />{/if}
 					<div class="focus-detail-foot">
-						<span class="min-w-0 flex-1 truncate">{#if active.fix}Fixed in <span class="font-mono">{active.fix.sha.slice(0, 7)}</span> on <span class="font-mono">{active.fix.branch}</span>{:else if branch && active.status !== 'dismissed'}Pushes one commit to <span class="font-mono">{branch}</span>{/if}</span>
+						<span class="min-w-0 flex-1 truncate">{#if active.fix?.sha}Fixed in <span class="font-mono">{active.fix.sha.slice(0, 7)}</span> on <span class="font-mono">{active.fix.branch}</span>{:else if active.fix}Applied to the checkout. Commit and push it from Changes.{:else if branch && active.status !== 'dismissed'}Applies to the checkout; you commit and push it{/if}</span>
 						{#if active.status === 'open'}
 							<Button variant="ghost" onclick={() => dismiss(active)}>Dismiss</Button>
 							<Button variant="outline" class="gap-1.5" onclick={() => discuss(active)}><MessageSquare size={14} aria-hidden="true" />Discuss</Button>

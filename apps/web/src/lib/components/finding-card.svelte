@@ -69,7 +69,7 @@
 						{formatAgentName(finding.agent)}{#if finding.model}<span> · {modelLabel(finding.model)}</span>{/if}
 					</Typography.Metadata>
 					{#if accepted}
-						{#if suggestion?.sha}<span class="font-mono text-[11.5px] text-fg-faint" title="Pushed to {suggestion.branch}">{suggestion.sha.slice(0, 7)}</span>{/if}
+						{#if finding.fix?.sha}<span class="font-mono text-[11.5px] text-fg-faint" title="Committed for {finding.fix.branch}">{finding.fix.sha.slice(0, 7)}</span>{/if}
 						<FixButton {finding} />
 					{:else if finding.status === 'open'}
 						<Button variant="ghost" class="gap-1.5" aria-expanded={threadsStore.openId === finding.id} aria-controls={threadsStore.openId === finding.id ? 'finding-thread' : undefined} onclick={discuss}>

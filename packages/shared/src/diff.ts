@@ -200,3 +200,46 @@ export function expandFileDiff(file: FileDiff, newText: string): FileDiff {
 		]
 	};
 }
+
+/**
+ * Trim a (possibly full-file) diff back to its changes: changed lines, and
+ * lines in `keep` (new-side numbers, e.g. findings), with `context` unchanged
+ * lines around each. Gaps between the groups become separate hunks.
+ */
+export function collapseFileDiff(file: FileDiff, keep: Iterable<number> = [], context = 3): FileDiff {
+	const lines = file.hunks.flatMap((hunk) => hunk.lines);
+	const kept = new Set(keep);
+	const visible = new Array<boolean>(lines.length).fill(false);
+	lines.forEach((line, i) => {
+		if (line.type === 'context' && !(line.newNo !== null && kept.has(line.newNo))) return;
+		for (let j = Math.max(0, i - context); j <= Math.min(lines.length - 1, i + context); j++) visible[j] = true;
+	});
+	const hunks: DiffHunk[] = [];
+	let lastOld = 0;
+	let lastNew = 0;
+	let group: DiffLine[] = [];
+	const flush = () => {
+		if (!group.length) return;
+		const oldNos = group.flatMap((line) => (line.oldNo === null ? [] : [line.oldNo]));
+		const newNos = group.flatMap((line) => (line.newNo === null ? [] : [line.newNo]));
+		const oldStart = oldNos[0] ?? lastOld + 1;
+		const newStart = newNos[0] ?? lastNew + 1;
+		hunks.push({
+			header: `@@ -${oldStart},${oldNos.length} +${newStart},${newNos.length} @@`,
+			oldStart,
+			oldCount: oldNos.length,
+			newStart,
+			newCount: newNos.length,
+			lines: group
+		});
+		group = [];
+	};
+	lines.forEach((line, i) => {
+		if (visible[i]) group.push(line);
+		else flush();
+		if (line.oldNo !== null) lastOld = line.oldNo;
+		if (line.newNo !== null) lastNew = line.newNo;
+	});
+	flush();
+	return { ...file, hunks };
+}

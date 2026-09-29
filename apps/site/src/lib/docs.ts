@@ -206,7 +206,7 @@ Findings that point outside the change, or cite evidence that was never gathered
 
 ## Sandbox
 
-Commands run in [bubblewrap](https://github.com/containers/bubblewrap) on Linux. Only the checkout is writable, your home and Recoder's data directory are hidden, and there is no network. The dependency install is the one step with network access, and it runs with install scripts off. Edits to tracked files are undone after every command. Without bubblewrap, reviews only read the code, and every finding is marked Unverified. Set \`RECODER_EXEC=off\` to turn running code off.
+Commands run in [bubblewrap](https://github.com/containers/bubblewrap) on Linux and in the built-in \`sandbox-exec\` sandbox on macOS. Only the checkout is writable, your home and Recoder's data directory are hidden, and there is no network. The dependency install is the one step with network access, and it runs with install scripts off. Edits to tracked files are undone after every command. On native Windows, or without a sandbox, reviews only read the code, and every finding is marked Unverified. Run the server under WSL to run code on Windows. Set \`RECODER_EXEC=off\` to turn running code off.
 
 ## After the review
 

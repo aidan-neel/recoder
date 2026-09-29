@@ -43,7 +43,7 @@
 
 	const findings = $derived.by(() => {
 		if (!sessionScope) return [];
-		const rank = { high: 0, medium: 1, low: 2, info: 3 };
+		const rank = { high: 0, medium: 1, low: 2 };
 		const list = findingsStore.items.filter(
 			(f) => f.status === 'open' && (q === '' || `${f.title} ${f.body} ${f.file}`.toLowerCase().includes(q))
 		);
@@ -154,7 +154,7 @@
 		};
 	}
 
-	const sevLabel = { high: 'High', medium: 'Medium', low: 'Low', info: 'Info' } as const;
+	const sevLabel = { high: 'High', medium: 'Medium', low: 'Low' } as const;
 </script>
 
 {#snippet highlighted(text: string)}

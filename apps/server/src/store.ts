@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
-import type { CommandRun, Repo, Review, ReviewProgress, TokenCall } from '@recoder/shared';
+import { settleAssignments, type CommandRun, type Repo, type Review, type ReviewProgress, type TokenCall } from '@recoder/shared';
 import { serverDataDir } from './lib/data-dir';
 import type { ReviewCheckpoint } from './lib/review-checkpoint';
 
@@ -143,7 +143,7 @@ export function recoverStaleReviews(): number {
 			});
 			const progress = reviewProgress.get(review.id);
 			if (progress) {
-				reviewProgress.set({ ...progress, outcome: 'failed', updatedAt: new Date().toISOString() });
+				reviewProgress.set({ ...progress, outcome: 'failed', assignments: settleAssignments(progress.assignments ?? [], 'Stopped by a server restart'), updatedAt: new Date().toISOString() });
 			}
 			recovered++;
 		}

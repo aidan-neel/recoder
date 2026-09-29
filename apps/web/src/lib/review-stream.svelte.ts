@@ -12,6 +12,7 @@ export class ReviewStream {
 	private knownStatus: Review['status'] | undefined;
 	private refreshing = false;
 	private controller = new AbortController();
+	private watchdog: ReturnType<typeof setInterval>;
 
 	constructor(id: string, onReview: (review: Review) => void) {
 		this.progress = emptyReviewProgress(id);
@@ -39,23 +40,44 @@ export class ReviewStream {
 				(!message.step && message.type === 'done' ? 'passed' : !message.step && message.type === 'error' ? 'failed' : null);
 			if (status !== 'passed' && status !== 'failed') return;
 			// Older servers and heartbeat recovery may only provide a status.
-			if (!message.review && status !== this.knownStatus && !this.refreshing) {
-				this.refreshing = true;
-				void serverApi.getReview(id, AbortSignal.any([this.controller.signal, AbortSignal.timeout(15_000)])).then((review) => {
-					if (!this.disposed) {
-						this.knownStatus = review.status;
-						onReview(review);
-					}
-				}).catch(() => { /* Session polling or the next heartbeat will retry. */ })
-					.finally(() => { this.refreshing = false; });
-			}
+			if (!message.review && status !== this.knownStatus) this.refresh(id, onReview);
 		};
+		// Heartbeats arrive every 5s. A stream silent for 20s is dead even if the socket
+		// looks open (a server reload can leave it hanging): reconnect and re-read the review.
+		this.watchdog = setInterval(() => {
+			if (this.disposed || Date.now() - this.lastReceived < 20_000) return;
+			this.connection = 'reconnecting';
+			this.lastReceived = Date.now();
+			this.refresh(id, onReview);
+			this.reconnect(id);
+		}, 5_000);
+	}
+
+	private refresh(id: string, onReview: (review: Review) => void): void {
+		if (this.refreshing) return;
+		this.refreshing = true;
+		void serverApi.getReview(id, AbortSignal.any([this.controller.signal, AbortSignal.timeout(15_000)])).then((review) => {
+			if (!this.disposed) {
+				this.knownStatus = review.status;
+				onReview(review);
+			}
+		}).catch(() => { /* Session polling or the next heartbeat will retry. */ })
+			.finally(() => { this.refreshing = false; });
+	}
+
+	/** Swap in a fresh EventSource with the same handlers; the new snapshot replaces stale progress. */
+	private reconnect(id: string): void {
+		const { onopen, onerror, onmessage } = this.source;
+		this.source.close();
+		this.source = new EventSource(`${apiBase}/api/reviews/${id}/events`);
+		Object.assign(this.source, { onopen, onerror, onmessage });
 	}
 
 	close(): void {
 		this.disposed = true;
 		this.connection = 'closed';
 		this.controller.abort();
+		clearInterval(this.watchdog);
 		this.source.close();
 	}
 }

@@ -52,7 +52,7 @@
 		<AlertDialog.Content>
 			<AlertDialog.Header>
 				<AlertDialog.Title>Apply {count(ready.length)}?</AlertDialog.Title>
-				<AlertDialog.Description>Each fix is pushed as its own commit to the pull request branch.</AlertDialog.Description>
+				<AlertDialog.Description>Each fix is applied to the review checkout. Nothing is committed or pushed until you do it from Changes.</AlertDialog.Description>
 			</AlertDialog.Header>
 			<AlertDialog.Footer>
 				<AlertDialog.Exit>Cancel</AlertDialog.Exit>

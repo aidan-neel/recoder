@@ -23,6 +23,7 @@
 	import CopyAction from './copy-action.svelte';
 	import FailureNotice from './failure-notice.svelte';
 	import StreamingMarkdown from './streaming-markdown.svelte';
+	import ReasoningTrace from './reasoning-trace.svelte';
 	import ReviewComposer from './review-composer.svelte';
 	import ModelPicker from './model-picker.svelte';
 	import { MODEL_ROLES, modelSettingsUi, summarizesReasoning } from '$lib/model-settings.svelte';
@@ -73,7 +74,7 @@
 	const currentTask = $derived(tasks.findLast((task) => task.status === 'running' || task.status === 'waiting'));
 	const currentOperation = $derived(working
 		? currentTask?.message || assignment.currentOperation || 'Waiting for this specialist…'
-		: assignment.status === 'done' ? 'Specialist finished' : assignment.status === 'skipped' ? 'Specialist skipped' : 'Specialist review incomplete');
+		: assignment.status === 'done' ? 'Specialist finished' : assignment.status === 'skipped' ? 'Specialist skipped' : 'Specialist failed');
 	const entries = $derived(groupTranscript(conversationMessages, conversationTools));
 	// Keep inserted blocks (specialists, results) at their point in time as follow-ups arrive.
 	const placed = $derived(inserts.map((insert) => {
@@ -207,21 +208,40 @@
 		} catch (cause) { error = cause instanceof Error ? cause.message : 'Could not read the file.'; }
 		finally { input.value = ''; }
 	}
+	/**
+	 * Sent, but the streaming reply hasn't reached this page yet. Send is Stop
+	 * from the click until the reply finishes, with no gap in between.
+	 */
+	let awaitingReply = $state(false);
+	let stopAfterSend = false;
+	let awaitTimer: ReturnType<typeof setTimeout> | undefined;
+	$effect(() => {
+		if (generating) awaitingReply = false;
+	});
+	const replying = $derived(sending || awaitingReply || generating);
 	async function send(value: string) {
-		if (!onSend || sending || generating || !value.trim()) return;
+		if (!onSend || replying || !value.trim()) return;
 		if (value.trim().length > 8000) { error = 'Keep your message under 8,000 characters.'; return; }
 		sending = true;
+		stopAfterSend = false;
 		error = '';
 		const selection = codeContext;
 		try {
 			await onSend(assignment.id, value.trim(), selection ?? undefined);
 			draft = '';
 			if (codeContext === selection) codeContext = null;
+			awaitingReply = true;
+			clearTimeout(awaitTimer);
+			awaitTimer = setTimeout(() => { awaitingReply = false; }, 15_000);
 		}
 		catch (cause) { error = cause instanceof Error ? cause.message : 'Message could not be sent.'; }
 		finally { sending = false; }
+		// Stop was pressed while the message was still on its way; the reply exists now.
+		if (stopAfterSend) { stopAfterSend = false; void stop(); }
 	}
 	async function stop() {
+		if (sending) { stopAfterSend = true; return; }
+		awaitingReply = false;
 		if (stopping) return;
 		stopping = true;
 		error = '';
@@ -270,7 +290,7 @@
 		<Disclosure bodyClass="thought-body !gap-3" children={hasBody(item) ? thoughtText : undefined}>
 			{#snippet label()}{@render headLabel(head)}{/snippet}
 		</Disclosure>
-		{#snippet thoughtText()}<StreamingMarkdown content={entry.text} streaming={live} />{/snippet}
+		{#snippet thoughtText()}<ReasoningTrace text={entry.text} streaming={live} />{/snippet}
 	{/if}
 {/snippet}
 
@@ -369,7 +389,7 @@
 		describedBy={error ? errorId : undefined}
 		invalid={!!error}
 		{sending}
-		{generating}
+		generating={replying}
 		busy={working || conversationMessages.some((message) => message.status === 'streaming')}
 		disabled={!onSend}
 		onSubmit={send}

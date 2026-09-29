@@ -16,7 +16,7 @@ const findingSchema = z.object({
 	file: z.string().min(1).max(500),
 	line: z.number().int().positive().nullable().optional(),
 	endLine: z.number().int().positive().nullable().optional(),
-	severity: z.enum(['high', 'medium', 'low', 'info']),
+	severity: z.enum(['high', 'medium', 'low']),
 	category: z.string().min(1).max(50),
 	body: z.string().min(1).max(2000),
 	evidenceIds: z.array(z.string().min(1).max(40)).max(12).default([]),
@@ -89,8 +89,11 @@ export function specialistUserPrompt(assignment: PlannerAssignment, remainingTur
 const SEVERITY_ALIASES: Record<string, string> = {
 	critical: 'high', blocker: 'high', major: 'high', error: 'high',
 	moderate: 'medium', warning: 'medium', warn: 'medium',
-	minor: 'low', nit: 'info', trivial: 'info', note: 'info', suggestion: 'info', style: 'info'
+	minor: 'low'
 };
+
+/** Informational notes aren't reported; a finding with one of these severities is dropped. */
+const DROPPED_SEVERITIES = new Set(['info', 'informational', 'nit', 'trivial', 'note', 'suggestion', 'style']);
 
 function positiveInt(value: unknown): number | null | undefined {
 	if (value === null) return null;
@@ -122,6 +125,7 @@ export function normalizeSpecialistRaw(raw: unknown): unknown {
 		f.body ??= f.description ?? f.explanation ?? f.details ?? f.message;
 		if (typeof f.severity === 'string') {
 			const severity = f.severity.trim().toLowerCase();
+			if (DROPPED_SEVERITIES.has(severity)) return [];
 			f.severity = SEVERITY_ALIASES[severity] ?? severity;
 		}
 		f.category ??= 'correctness';

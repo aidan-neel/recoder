@@ -2,14 +2,14 @@ import { z } from 'zod';
 import type { Finding, FindingSeverity } from '@recoder/shared';
 import type { EvidenceStore } from './evidence.js';
 import type { ReviewInventory } from './inventory.js';
+import { FINDING_BODY_STYLE } from './prompts.js';
 import type { SpecialistFinding } from './specialist.js';
 import type { ReviewRole } from './roles.js';
 
 const toBackendSeverity: Record<string, FindingSeverity> = {
 	high: 'error',
 	medium: 'warning',
-	low: 'info',
-	info: 'info'
+	low: 'info'
 };
 
 export interface CandidateFinding extends Finding {
@@ -44,6 +44,7 @@ Do not drop an issue solely because a previous review reported it.
 Do not merge distinct issues that happen to share a file or line.
 A candidate marked "verified" was reproduced by a command that ran in the review sandbox; reject it only as a duplicate or when it is out of this PR's scope. An "unverified" candidate could not be proven by running code: keep it only when the cited code evidence clearly supports it.
 Output STRICT JSON: {"message":string,"keep":[candidateId],"merge":[{"keepId","mergeIds","body?"}],"reject":[{"id","reason"}],"recommendedChecks":[string]}
+A merged "body" follows the finding format: ${FINDING_BODY_STYLE}
 Every candidate id must appear in keep, merge, or reject.`;
 }
 
