@@ -1062,23 +1062,30 @@ kbd.keycap {
 	background: currentColor;
 }
 /* Working: a full faint track with a bright arc around Send (or Stop) reads
-   as "still working" at a glance. Drawn on the button so it hugs its edge. */
-[data-ui='composer-submit'].rc-send[data-busy] {
+   as "still working" at a glance. Drawn on the button so it hugs its edge.
+   Keyed on data-working, not data-busy: Sivir's Submit sets data-busy itself
+   (stop/queue only) and would drop the ring while a review works. Sivir's own
+   ring is switched off so the two never stack. */
+[data-ui='composer-submit'].rc-send:not([data-working])::after {
+	content: none;
+}
+[data-ui='composer-submit'].rc-send[data-working] {
 	position: relative;
 	overflow: visible;
 }
-[data-ui='composer-submit'].rc-send[data-busy]::after {
+[data-ui='composer-submit'].rc-send[data-working]::after {
 	content: '';
 	position: absolute;
 	inset: 0;
 	pointer-events: none;
+	opacity: 1;
 	border: 2px solid var(--line-control);
 	border-top-color: var(--text-primary);
 	border-radius: 999px;
 	animation: rc-spin var(--dur-spinner) linear infinite;
 }
 /* Typed text turns Send cream: a dark arc on it. */
-[data-ui='composer-submit'].rc-send[data-busy]:not(:disabled):not([data-state='stop'])::after {
+[data-ui='composer-submit'].rc-send[data-working]:not(:disabled):not([data-state='stop'])::after {
 	border-color: color-mix(in oklab, var(--bg-canvas) 18%, transparent);
 	border-top-color: var(--bg-canvas);
 }

@@ -120,7 +120,7 @@
 		{@render leading?.()}
 		<span class="flex-1"></span>
 		{@render picker?.()}
-		<Composer.Submit class="rc-send" data-busy={(busy || generating) && !sending ? '' : undefined} disabled={generating && !onStop} onclick={stopClick}>
+		<Composer.Submit class="rc-send" data-working={(busy || generating) && !sending ? '' : undefined} disabled={generating && !onStop} onclick={stopClick}>
 			{#snippet children({ action })}
 				{#if sending && !generating}
 					<Spinner size={size === 'panel' ? 14 : 15} aria-hidden="true" />
