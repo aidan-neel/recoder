@@ -1,13 +1,11 @@
 <script lang="ts">
 	import { page } from '$app/state';
-	import House from '@lucide/svelte/icons/house';
 	import { Button } from '@sivir-ui/svelte/components/button';
-	import ProviderMark from '$web/components/provider-mark.svelte';
 	import { hoverHighlight } from '$web/hover-highlight';
 	import { docs } from '$lib/docs';
 
 	const repo = 'https://github.com/aidan-neel/recoder';
-	const links = [{ href: '/', title: 'Home', icon: House }, ...docs.map((doc) => ({ href: `/docs/${doc.slug}`, title: doc.title, icon: doc.icon }))];
+	const links = [{ href: '/', title: 'Home' }, ...docs.map((doc) => ({ href: `/docs/${doc.slug}`, title: doc.title }))];
 
 	const current = $derived(page.url.pathname.replace(/\/$/, '') || '/');
 
@@ -53,7 +51,6 @@
 			></span>
 		{/if}
 		{#each links as link, i (link.href)}
-			{@const Icon = link.icon}
 			<Button
 				href={link.href}
 				variant="ghost"
@@ -61,12 +58,10 @@
 				style={`--i: ${i}`}
 				aria-current={current === link.href ? 'page' : undefined}
 			>
-				<Icon size={16} strokeWidth={1.7} aria-hidden="true" />
 				{link.title}
 			</Button>
 		{/each}
 		<Button href={repo} variant="ghost" class="site-nav-item enter-rise" style={`--i: ${links.length}`}>
-			<span class="flex" aria-hidden="true"><ProviderMark provider="github" size={16} /></span>
 			GitHub
 		</Button>
 	</div>

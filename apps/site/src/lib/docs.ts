@@ -1,15 +1,6 @@
-import BookOpen from '@lucide/svelte/icons/book-open';
-import Cpu from '@lucide/svelte/icons/cpu';
-import GitBranch from '@lucide/svelte/icons/git-branch';
-import Rocket from '@lucide/svelte/icons/rocket';
-import ScanSearch from '@lucide/svelte/icons/scan-search';
-import Settings2 from '@lucide/svelte/icons/settings-2';
-import type { Component } from 'svelte';
-
 export interface DocPage {
 	slug: string;
 	title: string;
-	icon: Component<{ size?: number | string; strokeWidth?: number | string }>;
 	body: string;
 }
 
@@ -18,7 +9,6 @@ export const docs: DocPage[] = [
 	{
 		slug: 'getting-started',
 		title: 'Getting started',
-		icon: Rocket,
 		body: `Recoder reviews pull requests on your own machine. It checks out each change, reads the code around it and shows findings you can discuss, fix or dismiss.
 
 ## Run with Docker
@@ -50,7 +40,6 @@ The web app opens on [localhost:5173](http://localhost:5173) and the server list
 	{
 		slug: 'configuration',
 		title: 'Configuration',
-		icon: Settings2,
 		body: `Recoder reads its settings from environment variables. With Docker, copy \`.env.example\` to \`.env\` and fill in what you need. Model settings saved in the app take priority over the variables.
 
 ## Server
@@ -82,7 +71,6 @@ The web app opens on [localhost:5173](http://localhost:5173) and the server list
 	{
 		slug: 'models',
 		title: 'Models',
-		icon: Cpu,
 		body: `Recoder works with any OpenAI-compatible endpoint, such as OpenRouter, vLLM or DashScope. You can also sign in with ChatGPT in Settings and use your ChatGPT plan.
 
 ## Settings
@@ -123,7 +111,6 @@ The model picker lists the effort levels the chosen model supports.`
 	{
 		slug: 'git-hosts',
 		title: 'Git hosts',
-		icon: GitBranch,
 		body: `Recoder reads pull requests from GitHub and merge requests from GitLab, including self-managed GitLab.
 
 ## GitHub
@@ -148,7 +135,6 @@ Tokens connected in Settings are saved in the data directory with \`0600\` permi
 	{
 		slug: 'guidelines',
 		title: 'Guidelines',
-		icon: BookOpen,
 		body: `Guidelines tell Recoder what your team cares about. They are plain Markdown.
 
 ## Two layers
@@ -177,7 +163,6 @@ Recoder reads the repository file from the pull request's base commit, so a pull
 	{
 		slug: 'how-reviews-work',
 		title: 'How reviews work',
-		icon: ScanSearch,
 		body: `A review runs in a few steps. You can watch each one live, and pause or cancel it.
 
 ## Checkout
