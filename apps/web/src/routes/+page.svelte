@@ -291,14 +291,14 @@
 			: null
 	);
 
-	/** Old brief softens out while the new one sharpens in, in the same spot (no skeleton, no jump). */
+	/** Old brief fades out while the new one fades in, in the same spot (no skeleton, no jump). */
 	function morph(_node: Element, { delay = 0 }: { delay?: number } = {}) {
 		const reduce = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 		return {
 			delay: reduce ? 0 : delay,
-			duration: reduce ? 1 : 420,
+			duration: reduce ? 1 : 180,
 			easing: (t: number) => 1 - Math.pow(1 - t, 3),
-			css: (t: number) => `opacity: ${t}; filter: blur(${(1 - t) * 6}px); transform: translateY(${(1 - t) * 3}px)`
+			css: (t: number) => `opacity: ${t}; transform: translateY(${(1 - t) * 2}px)`
 		};
 	}
 
@@ -411,7 +411,7 @@
 					{:else if briefText}
 						<div class="home-brief-stack">
 						{#key briefText}
-						<div class="home-brief-layer" in:morph={{ delay: 120 }} out:morph>
+						<div class="home-brief-layer" in:morph={{ delay: 60 }} out:morph>
 						<Typography.Text class="home-brief ai-voice">
 							<!-- Kept on tight lines: whitespace between these tags renders as stray spaces. -->
 							{#each briefSegments(briefText) as segment, i (i)}{#if segment.kind === 'strong'}<span class="text-fg">{segment.text}</span>{:else if segment.kind === 'pr' && items.some((item) => item.pr.number === segment.number)}{@const item = items.find((candidate) => candidate.pr.number === segment.number)!}<span class="brief-ref-wrap">{@render prRef(item, segment.text)}</span>{:else}{segment.text}{/if}{/each}

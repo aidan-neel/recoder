@@ -93,13 +93,16 @@ component specs, layout and behavior rules.
 - **Quiet at rest.** Triggers, icon buttons and ghost buttons have no
   background until hovered. One cream primary button per region.
 - **Hover highlight is instant** (`hoverHighlight` in `$lib/hover-highlight.ts`
-  or Sivir's item highlight): snap to the item, fade 120ms. Only the active
+  or Sivir's item highlight): snap to the item, fade 60ms. Only the active
   tab pill animates position.
+- **Motion is for an everyday tool, not a demo.** Use the `--dur-*` tokens in
+  `app.css`, never a raw duration. Menus and modals fade in under ~120ms with
+  no scale or blur; nothing the user opens repeatedly gets an entrance.
 - **Every async action has visible states**: idle → pending (spinner, same
   width) → success or failure. Destructive or pushed-to-git actions get a
   toast with Undo where possible (`$lib/notify.ts`).
 - **Lists load with skeletons** (`$lib/components/ui/skeleton.svelte`), then
-  fade in with a 40ms stagger (`.enter-rise` + `--i`). No spinner in place of a list.
+  fade in with a short capped stagger (`.enter-rise` + `--i`). No spinner in place of a list.
 - **Panel headers are 44px**, matching the diff header, so borders line up.
 - Respect `prefers-reduced-motion`. Keep body text at 4.5:1; use `text-fg-faint`
   and below only for metadata.

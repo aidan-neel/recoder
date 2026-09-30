@@ -89,17 +89,20 @@
 	--shadow-layered: 0 0 0 1px var(--line-card), 0 6px 20px rgba(0, 0, 0, 0.25);
 	--scrim: rgba(8, 7, 6, 0.6);
 
-	/* Motion */
+	/* Motion: tuned for a tool opened thousands of times a day. Feedback is
+	   near-instant; only movement that explains a change (the tab pill, a
+	   panel unfolding) gets a short ease. Tune the app's feel here. */
 	--ease-pill: cubic-bezier(0.3, 0.7, 0.2, 1);
 	--ease-menu: cubic-bezier(0.2, 0.8, 0.2, 1);
-	--dur-hover: 120ms;
-	--dur-press: 80ms;
-	--dur-highlight: 120ms;
-	--dur-pill: 240ms;
-	--dur-menu: 150ms;
-	--dur-submenu: 120ms;
-	--dur-enter: 270ms;
-	--dur-toast: 220ms;
+	--dur-hover: 60ms;
+	--dur-press: 60ms;
+	--dur-highlight: 60ms;
+	--dur-toggle: 100ms;
+	--dur-pill: 150ms;
+	--dur-disclose: 150ms;
+	--dur-menu: 90ms;
+	--dur-enter: 140ms;
+	--dur-toast: 160ms;
 	--dur-shimmer: 1.6s;
 	--dur-skeleton: 1.4s;
 	--dur-spinner: 0.9s;
@@ -219,11 +222,13 @@
 	--overlay-blur: 0px;
 	--overlay-brightness: 1;
 
-	/* Density: controls 30px (md), 28px (sm), 34px (lg). */
+	/* Density: controls 30px (md), 28px (sm), 34px (lg); square icon buttons
+	   match md so they line up in toolbars. The spacing unit stays at 4px:
+	   Tailwind sizes run off it too, and a fractional unit blurs icons. */
 	--sivir-space-unit: 4px;
-	--size-control-sm: 30px;
-	--size-control-md: 32px;
-	--size-control-lg: 36px;
+	--size-control-sm: 28px;
+	--size-control-md: 30px;
+	--size-control-lg: 34px;
 	--size-icon-md: 30px;
 
 	--radius-sm: 6px;
@@ -258,19 +263,23 @@
 	--motion-duration-item: 0ms;
 	--motion-duration-panel: var(--dur-menu);
 	--motion-duration-panel-in: var(--dur-menu);
-	--motion-duration-panel-out: 110ms;
-	--motion-duration-modal-in: 180ms;
-	--motion-duration-modal-out: 110ms;
+	--motion-duration-panel-out: 60ms;
+	--motion-duration-modal-in: 120ms;
+	--motion-duration-modal-out: 70ms;
+	--motion-duration-modal-stack-in: 140ms;
+	--motion-duration-modal-stack-out: 90ms;
+	--motion-duration-sheet: 180ms;
+	--motion-duration-sheet-out: 120ms;
 	--motion-duration-overlay: var(--dur-menu);
 	--motion-duration-toast-in: var(--dur-toast);
-	--motion-duration-toast-out: 160ms;
-	--motion-panel-y: 4px;
-	--motion-panel-scale-start: 0.98;
-	--motion-menu-y: 4px;
-	--motion-menu-scale-start: 0.98;
+	--motion-duration-toast-out: 120ms;
+	--motion-panel-y: 2px;
+	--motion-panel-scale-start: 1;
+	--motion-menu-y: 2px;
+	--motion-menu-scale-start: 1;
 	--motion-menu-blur: 0px;
-	--motion-modal-y: 4px;
-	--motion-modal-scale-start: 0.98;
+	--motion-modal-y: 2px;
+	--motion-modal-scale-start: 1;
 	--motion-modal-blur: 0px;
 	--ease-out: var(--ease-menu);
 	--ui-cursor-interactive: default;
@@ -346,10 +355,11 @@ body {
 	animation: rc-blink 1s steps(1) infinite;
 }
 
-/* Rows fade in rising 4px; stagger via --i. */
+/* Rows fade in rising 2px; stagger via --i, capped at 8 rows so long lists
+   are fully in within ~300ms. */
 .enter-rise {
 	animation: rc-enter var(--dur-enter) var(--ease-menu) both;
-	animation-delay: calc(80ms + var(--i, 0) * 40ms);
+	animation-delay: calc(min(var(--i, 0), 8) * 20ms);
 }
 
 .spin {
@@ -377,7 +387,7 @@ body {
 @keyframes rc-enter {
 	from {
 		opacity: 0;
-		transform: translateY(4px);
+		transform: translateY(2px);
 	}
 	to {
 		opacity: 1;
@@ -505,11 +515,11 @@ body {
 	padding: 0;
 }
 [data-ui='popover-content'][role='menu'] > .sivir-inset-surface > div {
-	padding: 6px;
+	padding: 5px;
 	gap: 1px;
 }
 [data-ui='popover-content']:is([role='menu'], [role='listbox']) .sivir-menu-item {
-	height: 32px;
+	height: 30px;
 	border-radius: 7px;
 	padding-inline: 10px;
 	font-size: 13px;
@@ -518,7 +528,7 @@ body {
 }
 .sivir-menu-separator {
 	background-color: var(--line-control);
-	margin-block: 4px;
+	margin-block: 3px;
 }
 .sivir-menu-label {
 	font-size: 11.5px;
@@ -526,7 +536,7 @@ body {
 	color: var(--text-faint);
 }
 
-/* Hover highlight: instant position, 120ms opacity fade. Never travels. */
+/* Hover highlight: instant position, 60ms opacity fade. Never travels. */
 .sivir-item-highlight {
 	border-radius: 7px;
 	transition-property: opacity;
@@ -694,7 +704,7 @@ body {
 	height: 18px;
 	padding: 2px;
 	border: 0;
-	transition: background-color 160ms var(--ease-pill);
+	transition: background-color var(--dur-toggle) var(--ease-pill);
 }
 [data-ui='switch'][data-state='checked'] {
 	background-color: var(--primary);
@@ -708,7 +718,7 @@ body {
 	height: 14px;
 	box-shadow: none;
 	--tw-ring-shadow: 0 0 #0000;
-	transition: transform 160ms var(--ease-pill);
+	transition: transform var(--dur-toggle) var(--ease-pill);
 }
 [data-ui='switch'][data-state='checked'] > span {
 	background-color: var(--on-primary);
@@ -765,7 +775,7 @@ kbd.keycap {
 	box-shadow: none;
 }
 
-/* Toast: rises 12px over 220ms, compact single line. */
+/* Toast: rises over 160ms, compact single line. */
 [data-ui='toast'] {
 	border: 0;
 	border-radius: 10px;
@@ -827,7 +837,7 @@ kbd.keycap {
 	background-color: var(--line-tab);
 	--tw-ring-shadow: 0 0 #0000;
 	box-shadow: none;
-	transition-duration: 200ms;
+	transition-duration: var(--dur-pill);
 	transition-timing-function: var(--ease-pill);
 }
 [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
@@ -1106,7 +1116,7 @@ kbd.keycap {
 .quiet-trigger-label {
 	display: inline-flex;
 	gap: 5px;
-	animation: rc-label-in 230ms var(--ease-menu);
+	animation: rc-label-in var(--dur-toggle) var(--ease-menu);
 }
 
 /* Model menu: 250px, sits on top of its trigger, right edges aligned.
@@ -1150,8 +1160,8 @@ kbd.keycap {
 }
 [data-ui='popover-content'].submenu-left .sivir-menu-item.model-option {
 	height: auto;
-	min-height: 32px;
-	padding-block: 7px;
+	min-height: 30px;
+	padding-block: 6px;
 	align-items: flex-start;
 	line-height: 1.3;
 }
@@ -1321,7 +1331,7 @@ kbd.keycap {
 .code-ref-chevron {
 	flex-shrink: 0;
 	color: var(--text-faint);
-	transition: transform 200ms var(--ease-menu);
+	transition: transform var(--dur-toggle) var(--ease-menu);
 }
 .code-ref[data-open] .code-ref-chevron {
 	transform: rotate(90deg);
@@ -1331,8 +1341,8 @@ kbd.keycap {
 	grid-template-rows: 0fr;
 	opacity: 0;
 	transition:
-		grid-template-rows 220ms var(--ease-menu),
-		opacity 160ms ease-out;
+		grid-template-rows var(--dur-disclose) var(--ease-menu),
+		opacity var(--dur-toggle) ease-out;
 }
 .code-ref[data-open] .code-ref-panel {
 	grid-template-rows: 1fr;
@@ -1462,7 +1472,7 @@ kbd.keycap {
 	flex-shrink: 0;
 	color: var(--text-ghost);
 	transition:
-		transform 200ms var(--ease-menu),
+		transform var(--dur-toggle) var(--ease-menu),
 		color var(--dur-hover) ease-out;
 }
 .disclosure-trigger:hover .disclosure-chevron {
@@ -1478,15 +1488,15 @@ kbd.keycap {
 	grid-template-rows: 0fr;
 	opacity: 0;
 	transition:
-		grid-template-rows 220ms cubic-bezier(0.4, 0, 0.2, 1),
-		opacity 140ms ease-out;
+		grid-template-rows var(--dur-disclose) cubic-bezier(0.4, 0, 0.2, 1),
+		opacity var(--dur-toggle) ease-out;
 }
 .disclosure[data-open] > .disclosure-panel {
 	grid-template-rows: 1fr;
 	opacity: 1;
 	transition:
-		grid-template-rows 280ms cubic-bezier(0.4, 0, 0.2, 1),
-		opacity 220ms ease-out 60ms;
+		grid-template-rows var(--dur-disclose) cubic-bezier(0.4, 0, 0.2, 1),
+		opacity var(--dur-toggle) ease-out;
 }
 .disclosure-clip {
 	min-height: 0;
@@ -1531,7 +1541,7 @@ kbd.keycap {
 .disclosure[data-size='row'] > .disclosure-trigger .disclosure-chevron {
 	opacity: 0;
 	transition:
-		transform 200ms var(--ease-menu),
+		transform var(--dur-toggle) var(--ease-menu),
 		opacity var(--dur-hover) ease-out;
 }
 .disclosure[data-size='row'] > .disclosure-trigger:hover .disclosure-chevron,
@@ -1585,7 +1595,7 @@ kbd.keycap {
 /* Newly opened discussions get a short, interruptible continuity cue. */
 .thread-panel-enter {
 	opacity: 1;
-	transition: opacity 150ms var(--ease-menu);
+	transition: opacity var(--dur-toggle) var(--ease-menu);
 	@starting-style {
 		opacity: 0;
 	}
@@ -1965,10 +1975,10 @@ kbd.keycap {
 	background-color: var(--line-subtle);
 	box-shadow: none;
 	transition:
-		left 240ms var(--ease-menu),
-		width 240ms var(--ease-menu),
-		top 240ms var(--ease-menu),
-		height 240ms var(--ease-menu);
+		left var(--dur-pill) var(--ease-menu),
+		width var(--dur-pill) var(--ease-menu),
+		top var(--dur-pill) var(--ease-menu),
+		height var(--dur-pill) var(--ease-menu);
 }
 @media (prefers-reduced-motion: reduce) {
 	.repo-chips [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true'] {
@@ -2137,7 +2147,7 @@ kbd.keycap {
 	align-items: center;
 	gap: 14px;
 	pointer-events: none;
-	transition: opacity 150ms ease-out;
+	transition: opacity var(--dur-hover) ease-out;
 }
 .pr-row-actions {
 	display: flex;
@@ -2145,7 +2155,7 @@ kbd.keycap {
 	opacity: 0;
 	translate: 6px 0;
 	pointer-events: none;
-	transition: opacity 150ms ease-out, translate 180ms var(--ease-menu);
+	transition: opacity var(--dur-hover) ease-out, translate var(--dur-toggle) var(--ease-menu);
 }
 .pr-row:is(:hover, :focus-within) .pr-row-actions,
 .pr-row[data-state='starting'] .pr-row-actions {
@@ -3247,10 +3257,10 @@ mark.palette-hit {
 	background-color: var(--line-tab);
 	box-shadow: none;
 	transition:
-		left 240ms var(--ease-menu),
-		width 240ms var(--ease-menu),
-		top 240ms var(--ease-menu),
-		height 240ms var(--ease-menu);
+		left var(--dur-pill) var(--ease-menu),
+		width var(--dur-pill) var(--ease-menu),
+		top var(--dur-pill) var(--ease-menu),
+		height var(--dur-pill) var(--ease-menu);
 }
 :is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
 	height: 28px;
@@ -3479,7 +3489,7 @@ mark.palette-hit {
 
 /* Thinking → Thought for: crossfade through a blur, timer glides, glyph folds away. */
 .thought-label {
-	--tl-settle: 350ms;
+	--tl-settle: 200ms;
 	display: inline-flex;
 	align-items: center;
 	vertical-align: top;
@@ -3664,7 +3674,7 @@ button.fact-link {
 	text-decoration-color: var(--line-strong);
 	text-underline-offset: 3px;
 	cursor: pointer;
-	transition: color 120ms ease-out, text-decoration-color 120ms ease-out;
+	transition: color var(--dur-hover) ease-out, text-decoration-color var(--dur-hover) ease-out;
 }
 button.fact-link:hover {
 	color: var(--text-primary);
@@ -4257,7 +4267,7 @@ button.fact-link:hover {
 	width: 0;
 	min-height: 0;
 	flex-shrink: 0;
-	transition: width 260ms var(--ease-menu);
+	transition: width var(--dur-disclose) var(--ease-menu);
 }
 .chat-drawer[data-open] {
 	width: var(--chat-width);
@@ -4290,11 +4300,11 @@ button.fact-link:hover {
 	flex-shrink: 0;
 	flex-direction: column;
 	opacity: 0;
-	transition: opacity 180ms ease-out;
+	transition: opacity var(--dur-toggle) ease-out;
 }
 .chat-drawer[data-open] .chat-drawer-panel {
 	opacity: 1;
-	transition: opacity 220ms ease-out 60ms;
+	transition: opacity var(--dur-toggle) ease-out;
 }
 /* Drag edge on the drawer's left border; stays at the right edge when collapsed
    (with a small grip) so the chat can be dragged back out. */
@@ -4567,8 +4577,8 @@ button.fact-link:hover {
 }
 .diff-lines [data-diff-row].diff-row {
 	transition:
-		--row-tint 220ms ease-out,
-		box-shadow 220ms ease-out;
+		--row-tint var(--dur-toggle) ease-out,
+		box-shadow var(--dur-toggle) ease-out;
 }
 /* Selecting code stays instant. */
 .diff-lines [data-diff-row].diff-row[data-pending] {
@@ -5455,15 +5465,15 @@ button.diff-num:hover {
 	grid-template-rows: 0fr;
 	opacity: 0;
 	transition:
-		grid-template-rows 220ms var(--ease-menu),
-		opacity 140ms ease-out;
+		grid-template-rows var(--dur-disclose) var(--ease-menu),
+		opacity var(--dur-toggle) ease-out;
 }
 [data-ui='card'].focus-card[data-active] .focus-card-reveal {
 	grid-template-rows: 1fr;
 	opacity: 1;
 	transition:
-		grid-template-rows 240ms var(--ease-menu),
-		opacity 200ms ease-out 60ms;
+		grid-template-rows var(--dur-disclose) var(--ease-menu),
+		opacity var(--dur-toggle) ease-out;
 }
 .focus-card-reveal-clip {
 	min-height: 0;
@@ -5739,7 +5749,7 @@ button.diff-num:hover {
 		.focus-detail-column > *
 	) {
 	animation: rc-enter var(--dur-enter) var(--ease-menu) both;
-	animation-delay: calc(40ms + var(--stage, 0) * 45ms);
+	animation-delay: calc(var(--stage, 0) * 20ms);
 }
 .home-column > :nth-child(2) { --stage: 2; }
 .setup > :nth-child(2) { --stage: 2; }
@@ -5760,10 +5770,9 @@ button.diff-num:hover {
 .focus-list-head { --stage: 0; }
 .focus-detail-column > :nth-child(1) { --stage: 0; }
 .focus-detail-column > :nth-child(2) { --stage: 2; }
-/* A file switch in the diff re-mounts only the code, so it gets a quicker rise. */
+/* A file switch in the diff re-mounts only the code; show it at once. */
 .diff-file-header ~ [data-ui='scroll-area'] .review-file-diff {
-	animation-duration: 180ms;
-	animation-delay: 30ms;
+	animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
 	:is(

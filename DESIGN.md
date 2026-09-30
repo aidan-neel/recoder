@@ -108,7 +108,7 @@ Heights are 28 (panel), 30 (default) and 32–34 (toolbar or hero).
 ### Model picker
 The one pattern used everywhere a model is picked (composer, side panels, Settings → Models roles).
 - **Trigger**: quiet text button, 30px (28px in side panels), padding `0 9px`, radius 8, 12.5px. Model name in `#ede9e3`, then the effort word in full in `#8a857d` (`5.6 Sol Medium`, never `Med`). Models without an effort control show only the name. In the composer it sits just before the send button.
-- **Menu**: 250px, opens upward, anchored to the trigger's right edge. Rows are 32px, radius 7: `Model ›`, `Reasoning effort ›` (dimmed "Not supported" with no chevron when the model has none), a divider, then `Model settings…` (opens Settings → Models). No Speed row. There are two model picks, Review and Specialists; Specialists can follow Review ("Same as Review"). No per-role models.
+- **Menu**: 250px, opens upward, anchored to the trigger's right edge. Rows are 30px, radius 7: `Model ›`, `Reasoning effort ›` (dimmed "Not supported" with no chevron when the model has none), a divider, then `Model settings…` (opens Settings → Models). No Speed row. There are two model picks, Review and Specialists; Specialists can follow Review ("Same as Review"). No per-role models.
 - **Submenus** open to the left, top-aligned to their row, with a 6px invisible bridge. Effort options come from the selected model's capabilities. Switching to a model that lacks the current effort resets it to that model's default.
 - Settings roles use the same trigger, never a separate Low/Medium/High control. Inheriting roles show "Same as Orchestrator".
 
@@ -122,11 +122,11 @@ The one pattern used everywhere a model is picked (composer, side panels, Settin
 - **Modal**: radius 16, `bg.raised-2`, modal elevation over the scrim.
 
 ## Behavior
-- **Composer**: focus moves the ring from `#2a2826` to `#3d3935` over 150ms. Send is disabled (`#232120` bg, `#57534d` icon) while empty and turns primary with text. Enter sends; Shift+Enter inserts a newline. While a reply is pending, Send becomes Stop (a 9px square inside a spinning ring) and the reply shows a shimmering "Thinking" line.
-- **Streaming**: tool rows grow in (200ms) with a spinner that becomes a check, then their duration fades in. Streaming text shows a 2px caret blinking at 1s.
+- **Composer**: focus moves the ring from `#2a2826` to `#3d3935` over 90ms. Send is disabled (`#232120` bg, `#57534d` icon) while empty and turns primary with text. Enter sends; Shift+Enter inserts a newline. While a reply is pending, Send becomes Stop (a 9px square inside a spinning ring) and the reply shows a shimmering "Thinking" line.
+- **Streaming**: tool rows grow in (150ms) with a spinner that becomes a check, then their duration fades in. Streaming text shows a 2px caret blinking at 1s.
 - **Async buttons keep a fixed width** across states. Apply fix is 112px: Apply fix → Applying (spinner) → Applied (check, transparent bg, success text). The finding's pill crossfades to "Fixed" and its title dims. A toast follows with Undo.
 - **Copy** flips to "✓ Copied" in success green for 1.2s.
-- **Trigger label changes** fade in and rise 2px over 180ms.
+- **Trigger label changes** fade in and rise 2px over 100ms.
 - **Menus** close on outside click and Esc.
 
 ## Assets
@@ -135,16 +135,23 @@ The one pattern used everywhere a model is picked (composer, side panels, Settin
 - No images or logo mark. The brand is the "Recoder" wordmark.
 
 ## Motion
+Recoder is an everyday tool: menus and modals open thousands of times a day,
+so motion confirms an action and gets out of the way. Feedback is near-instant,
+nothing scales or blurs, and only movement that explains a change (the tab pill,
+a panel unfolding) gets a short ease. The tokens live in `app.css` (`--dur-*`).
+
 | Token | Value |
 |---|---|
-| `hover` | color/background 120ms ease-out |
+| `hover` | color/background 60ms ease-out |
 | `press` | none: controls never scale when pressed |
-| `highlight` | instant position, 120ms opacity fade |
-| `tab-pill` | 240ms cubic-bezier(.3,.7,.2,1) |
-| `menu` | 150ms cubic-bezier(.2,.8,.2,1), 4px rise, scale .98 → 1, origin at the trigger |
-| `submenu` | 120ms, 4px horizontal |
-| `enter` | 220ms fade + 4px rise, 40ms stagger. Not on the file tree panel, which stays still; its folders open instantly |
-| `toast` | 220ms rise 12px, 5s dwell |
+| `highlight` | instant position, 60ms opacity fade |
+| `toggle` | 100ms: chevrons, switches, label swaps, row actions |
+| `tab-pill` | 150ms cubic-bezier(.3,.7,.2,1); segmented thumbs too |
+| `disclose` | 150ms height for panels and drawers that unfold |
+| `menu` | 90ms fade + 2px rise in, 60ms out. No scale, no blur |
+| `modal` | 120ms fade + 2px rise in, 70ms out. No scale, no blur |
+| `enter` | 140ms fade + 2px rise, 20ms stagger capped at 8 rows. Not on the file tree panel or a diff file switch, which show at once |
+| `toast` | 160ms rise, 5s dwell |
 | `shimmer` | 1.6s linear (text), 1.4s (skeleton) |
 | `spinner` | 0.9s linear |
 | `reduced-motion` | transitions snap to 1ms; spinners stay |
