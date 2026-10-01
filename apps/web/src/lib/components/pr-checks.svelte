@@ -52,17 +52,22 @@
 	async function load(): Promise<void> {
 		if (loading) return;
 		loading = true;
+		// The review can change while a load is in flight; never file its checks under the new one.
+		const id = reviewId;
 		try {
-			const result = await serverApi.getChecks(reviewId);
+			const result = await serverApi.getChecks(id);
+			if (id !== reviewId) return;
 			checks = result.checks;
 			ref = result.ref;
 			pipeline = result.provider === 'gitlab';
 			error = null;
-			lastChecks.set(reviewId, { checks: result.checks, ref: result.ref, pipeline });
+			lastChecks.set(id, { checks: result.checks, ref: result.ref, pipeline });
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not load checks.';
+			if (id === reviewId) error = e instanceof Error ? e.message : 'Could not load checks.';
 		} finally {
 			loading = false;
+			// The switch's own load() returned early while this one ran; load the new review now.
+			if (id !== reviewId) void load();
 		}
 	}
 

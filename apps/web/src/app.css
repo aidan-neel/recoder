@@ -341,7 +341,6 @@
 	--elevation-button-outline: inset 0 0 0 1px var(--line-menu);
 
 	--motion-duration-hover: 120ms;
-	--motion-duration-menu: var(--dur-hover);
 	--motion-duration-press: var(--dur-press);
 	--motion-duration-item: 0ms;
 	--motion-duration-menu: 40ms;

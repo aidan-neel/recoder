@@ -128,6 +128,18 @@ describe('hung model calls', () => {
 		setTimeout(() => controller.abort(), 20);
 		await expect(pending).rejects.toThrow(/cancelled/);
 	});
+
+	test('a response that lands after the deadline reports no usage', async () => {
+		globalThis.fetch = (() => new Promise((resolve) => setTimeout(
+			() => resolve(Response.json({ choices: [{ message: { content: 'late' } }], usage: { prompt_tokens: 10, completion_tokens: 5 } })),
+			400
+		))) as unknown as typeof fetch;
+		let usage = 0;
+		const pending = chatCompletion({ baseUrl: 'http://model.test/v1', apiKey: 'k', model: 'm', messages: [{ role: 'user', content: 'hi' }], timeoutMs: 50, onUsage: () => usage++ });
+		await expect(pending).rejects.toThrow(/timed out/);
+		await new Promise((resolve) => setTimeout(resolve, 500));
+		expect(usage).toBe(0);
+	});
 });
 
 test('OpenRouter gets effort as a reasoning object, other endpoints as reasoning_effort', () => {

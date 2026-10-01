@@ -52,14 +52,17 @@
 
 	let disconnecting = $state(false);
 
-	async function disconnect(): Promise<void> {
-		if (disconnecting) return;
+	/** Resolves true once disconnected; a failure is already toasted. */
+	async function disconnect(): Promise<boolean> {
+		if (disconnecting) return false;
 		disconnecting = true;
 		try {
 			await hostedProviders.disconnect(provider.id);
 			toast.success(`Disconnected ${provider.name}`);
+			return true;
 		} catch (e) {
 			errorToast(`Could not disconnect ${provider.name}`, e instanceof Error ? e.message : undefined);
+			return false;
 		} finally {
 			disconnecting = false;
 		}
@@ -220,7 +223,7 @@
 			{/if}
 		</Modal.Body>
 		<Modal.Footer>
-			<Button variant="ghost" loading={disconnecting} disabled={saving} onclick={() => void disconnect().then(() => (modelsOpen = false))}>Disconnect</Button>
+			<Button variant="ghost" loading={disconnecting} disabled={saving} onclick={() => void disconnect().then((ok) => { if (ok) modelsOpen = false; })}>Disconnect</Button>
 			<span class="me-auto ps-2 text-[12.5px] text-fg-faint tabular-nums">{picked.size} selected</span>
 			<Modal.Close disabled={saving}>Cancel</Modal.Close>
 			<Button loading={saving} disabled={!catalog || changes === 0} onclick={() => void saveModels()}>Save</Button>

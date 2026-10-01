@@ -107,7 +107,7 @@ Heights are 28 (panel), 30 (default) and 32–34 (toolbar or hero).
 
 ### Model picker
 The one pattern used everywhere a model is picked (composer, side panels, Settings → Models roles).
-- **Trigger**: quiet text button, 30px (28px in side panels), padding `0 9px`, radius 8, 12.5px. Model name in `#ede9e3`, then the effort word in full in `#8a857d` (`5.6 Sol Medium`, never `Med`). Models without an effort control show only the name. In the composer it sits just before the send button.
+- **Trigger**: quiet text button, 30px (28px in side panels), padding `0 9px`, radius 8, 12.5px. Model name in `#ede9e3`, then the effort word in full in `#8a857d` (`5.6 Sol Medium`, never `Med`). Models without an effort control show only the name.
 - **Menu**: 250px, opens upward, anchored to the trigger's right edge. Rows are 30px, radius 7: `Model ›`, `Reasoning effort ›` (dimmed "Not supported" with no chevron when the model has none), a divider, then `Model settings…` (opens Settings → Models). No Speed row. There are two model picks, Review and Specialists; Specialists can follow Review ("Same as Review"). No per-role models.
 - **Submenus** open to the left, top-aligned to their row, with a 6px invisible bridge. Effort options come from the selected model's capabilities. Switching to a model that lacks the current effort resets it to that model's default.
 - Settings roles use the same trigger, never a separate Low/Medium/High control. Inheriting roles show "Same as Orchestrator".
@@ -148,9 +148,10 @@ When a model's plan runs out (ChatGPT's cap, a hosted provider's 429 or 402 afte
 
 ## Motion
 Recoder is an everyday tool: menus and modals open thousands of times a day,
-so motion confirms an action and gets out of the way. Feedback is quick but smooth,
-nothing scales or blurs, and only movement that explains a change (the tab pill,
-a panel unfolding) gets a short ease. The tokens live in `app.css` (`--dur-*`).
+so motion confirms an action and gets out of the way. Feedback is quick but smooth;
+menus and modals settle in from a slight scale and blur, and only movement that
+explains a change (the tab pill, a panel unfolding) gets a short ease. The tokens
+live in `app.css` (`--dur-*`, and Sivir's `--motion-*`).
 
 | Token | Value |
 |---|---|
@@ -160,8 +161,8 @@ a panel unfolding) gets a short ease. The tokens live in `app.css` (`--dur-*`).
 | `toggle` | 180ms: chevrons, switches, label swaps, row actions |
 | `tab-pill` | 240ms cubic-bezier(.3,.7,.2,1); segmented thumbs too |
 | `disclose` | 240ms height for panels and drawers that unfold |
-| `menu` | 150ms fade + 3px rise in, 110ms out. No scale, no blur |
-| `modal` | 200ms fade + 4px rise in, 120ms out. No scale, no blur |
+| `menu` | 130ms fade + 3px rise in from 0.95 scale and 2px blur, 80ms out |
+| `modal` | 150ms fade + 3px rise in from 0.95 scale and 2px blur, 70ms out |
 | `enter` | None. Content replaces its skeleton in place with no fade, rise or stagger |
 | `toast` | 220ms rise, 5s dwell |
 | `shimmer` | 1.6s linear (text), 1.4s (skeleton) |

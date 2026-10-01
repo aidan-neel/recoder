@@ -68,6 +68,7 @@ async function withThinkingFallback<T>(opts: ChatOptions, run: () => Promise<T>)
 	} catch (err) {
 		if (opts.thinking === false && !noTemplateKwargs.has(opts.baseUrl) && err instanceof LlmError && err.status >= 400 && err.status < 500 && /chat_template_kwargs|enable_thinking|unrecognized|unknown (field|parameter)|extra (fields|inputs)/i.test(err.message)) {
 			noTemplateKwargs.add(opts.baseUrl);
+			if (opts.signal?.aborted) throw err;
 			return run();
 		}
 		throw err;
@@ -136,7 +137,7 @@ async function withRetries<T>(
 			return await attempt(Math.max(1, deadline - Date.now()));
 		} catch (err) {
 			const wait = Math.min(15_000, 1_000 * 2 ** tries);
-			if (tries >= max || !isTransientLlmError(err, opts.provider) || !canRetry() || Date.now() + wait >= deadline - 5_000) throw err;
+			if (opts.signal?.aborted || tries >= max || !isTransientLlmError(err, opts.provider) || !canRetry() || Date.now() + wait >= deadline - 5_000) throw err;
 			console.warn(`[llm] ${(err as Error).message} — retrying in ${wait / 1000}s (${tries + 1}/${max})`);
 			await sleep(wait, opts.signal);
 		}
@@ -168,6 +169,18 @@ function withHardDeadline<T>(work: Promise<T>, deadline: number, timeoutMs: numb
 		clearTimeout(timer);
 		if (onAbort) signal?.removeEventListener('abort', onAbort);
 	});
+}
+
+/**
+ * One call's lifetime. Its signal aborts with the caller's or once the call
+ * settles, so retries and the thinking fallback stop, and `live` drops
+ * callbacks from work that outlived the call (a transport that ignored abort).
+ */
+function requestScope(signal?: AbortSignal) {
+	const settled = new AbortController();
+	const scoped = signal ? AbortSignal.any([signal, settled.signal]) : settled.signal;
+	const live = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => { if (!scoped.aborted) fn(...args); };
+	return { signal: scoped, live, end: () => settled.abort() };
 }
 
 /**
@@ -244,6 +257,7 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 	let acquired = false;
 	let tracking: ReturnType<typeof trackTokenCall> | undefined;
 	let success = false;
+	const scope = requestScope(opts.signal);
 	try {
 		await acquireLlmSlot(opts.signal, Math.max(1, deadline - Date.now()));
 		acquired = true;
@@ -251,19 +265,26 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 		started = Date.now();
 		report();
 		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
-		const remaining = { ...opts, timeoutMs: Math.max(1, deadline - Date.now()), onUsage: (usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); } };
+		const remaining = {
+			...opts,
+			signal: scope.signal,
+			timeoutMs: Math.max(1, deadline - Date.now()),
+			onUsage: scope.live((usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); }),
+			onReasoning: opts.onReasoning && scope.live(opts.onReasoning)
+		};
 		const work = opts.provider === 'codex'
-			? import('./codex').then(({ codex }) => withRetries(opts, deadline, async (timeoutMs) => {
+			? import('./codex').then(({ codex }) => withRetries(remaining, deadline, async (timeoutMs) => {
 				try { return await codex.complete({ ...remaining, timeoutMs }); }
 				catch (error) { if (error instanceof LlmError) throw error; throw new LlmError(0, 'ChatGPT request failed'); }
 			}))
-			: withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => opts.onReasoning
+			: withRetries(remaining, deadline, (timeoutMs) => withThinkingFallback(remaining, () => remaining.onReasoning
 				? streamChatCompletionInner({ ...remaining, timeoutMs }, () => {})
 				: chatCompletionInner({ ...remaining, timeoutMs })));
 		const result = await withHardDeadline(work, deadline, opts.timeoutMs ?? 120_000, opts.signal);
 		success = true;
 		return result;
 	} finally {
+		scope.end();
 		clearInterval(heartbeat);
 		if (acquired) releaseLlmSlot();
 		tracking?.finish(success);
@@ -348,6 +369,7 @@ export async function streamChatCompletion(
 	let acquired = false;
 	let tracking: ReturnType<typeof trackTokenCall> | undefined;
 	let success = false;
+	const scope = requestScope(opts.signal);
 	try {
 		await acquireLlmSlot(opts.signal, Math.max(1, deadline - Date.now()));
 		acquired = true;
@@ -355,17 +377,24 @@ export async function streamChatCompletion(
 		started = Date.now();
 		report();
 		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
-		const remaining = { ...opts, timeoutMs: Math.max(1, deadline - Date.now()), onUsage: (usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); } };
+		const remaining = {
+			...opts,
+			signal: scope.signal,
+			timeoutMs: Math.max(1, deadline - Date.now()),
+			onUsage: scope.live((usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); }),
+			onReasoning: opts.onReasoning && scope.live(opts.onReasoning)
+		};
 		// Once text has streamed to the user a retry would repeat it, so only retry before the first token.
 		let streamed = false;
-		const forward = (text: string) => { streamed = true; onToken(text); };
+		const forward = scope.live((text: string) => { streamed = true; onToken(text); });
 		const work = opts.provider === 'codex'
-			? withRetries(opts, deadline, async (timeoutMs) => (await import('./codex')).codex.complete({ ...remaining, timeoutMs }, forward), () => !streamed)
-			: withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => streamChatCompletionInner({ ...remaining, timeoutMs }, forward)), () => !streamed);
+			? withRetries(remaining, deadline, async (timeoutMs) => (await import('./codex')).codex.complete({ ...remaining, timeoutMs }, forward), () => !streamed)
+			: withRetries(remaining, deadline, (timeoutMs) => withThinkingFallback(remaining, () => streamChatCompletionInner({ ...remaining, timeoutMs }, forward)), () => !streamed);
 		const result = await withHardDeadline(work, deadline, opts.timeoutMs ?? 120_000, opts.signal);
 		success = true;
 		return result;
 	} finally {
+		scope.end();
 		clearInterval(heartbeat);
 		if (acquired) releaseLlmSlot();
 		tracking?.finish(success);
