@@ -150,7 +150,7 @@
 
 {#if ranked.length === 0 && !query.trim()}
 	<div class="focus-empty" data-kind={emptyKind}>
-		<div class="focus-empty-card enter-rise">
+		<div class="focus-empty-card">
 			<span class="focus-empty-icon" aria-hidden="true">
 				{#if emptyKind === 'draft'}<ScanSearch size={20} />
 				{:else if emptyKind === 'running'}<Spinner size={18} />
@@ -233,7 +233,7 @@
 					{@const isActive = finding.id === active?.id}
 					{@const dismissed = finding.status === 'dismissed'}
 					<div class="focus-card-slot" in:collapse out:collapse>
-					<Card.Root class="focus-card enter-rise" data-active={isActive || undefined} data-dismissed={dismissed || undefined} {...{ style: `--i: ${i}` }}>
+					<Card.Root class="focus-card" data-active={isActive || undefined} data-dismissed={dismissed || undefined} {...{ style: `--i: ${i}` }}>
 						<Button unstyled class="focus-card-select" aria-current={isActive || undefined} onclick={() => select(finding)}>
 							<span class="focus-card-head">
 								{#if dismissed}<SeverityPill tone="info">Dismissed</SeverityPill>{:else}<FindingSeverity severity={finding.severity} />{#if finding.verification && finding.status !== 'accepted'}<VerificationBadge verification={finding.verification} />{/if}{/if}

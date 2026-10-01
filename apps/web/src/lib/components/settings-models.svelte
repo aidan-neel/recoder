@@ -1,10 +1,13 @@
 <script lang="ts">
+	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type { CodexModel, ModelEntry } from '@recoder/shared';
 	import CodexConnection from './codex-connection.svelte';
-	import EndpointCard from './endpoint-card.svelte';
+	import CustomEndpointRow from './custom-endpoint-row.svelte';
+	import HostedProviderRow from './hosted-provider-row.svelte';
 	import ModelPicker from './model-picker.svelte';
+	import { hostedProviders } from '$lib/hosted-providers.svelte';
 	import { modelSettingsUi } from '$lib/model-settings.svelte';
 	import { settingsDraft } from '$lib/settings-draft.svelte';
 
@@ -45,11 +48,21 @@
 </script>
 
 <section class="settings-section" aria-labelledby="models-provider">
-	<Typography.H3 id="models-provider" class="settings-label">Provider</Typography.H3>
-	<div class="provider-grid">
+	<Typography.H3 id="models-provider" class="settings-label">Providers</Typography.H3>
+	<Card.Root class="settings-list provider-list">
 		<CodexConnection active={modelSettingsUi.open} onSync={syncCodexModels} onClear={clearCodexModels} disabled={modelSettingsUi.saving} />
-		<EndpointCard />
-	</div>
+		{#if hostedProviders.list}
+			{#each hostedProviders.list as provider (provider.id)}
+				<HostedProviderRow {provider} />
+			{/each}
+		{:else if hostedProviders.error}
+			<div class="settings-row">
+				<p class="settings-row-desc m-0 min-w-0 flex-1 text-danger">{hostedProviders.error}</p>
+				<Button variant="outline" onclick={() => void hostedProviders.load()}>Retry</Button>
+			</div>
+		{/if}
+		<CustomEndpointRow />
+	</Card.Root>
 </section>
 
 <section class="settings-section" aria-labelledby="models-roles">

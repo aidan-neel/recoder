@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { ModelBudget, runJsonAgent } from './agent-loop';
+import { ModelBlockedError, ModelBudget, runJsonAgent } from './agent-loop';
 import { EvidenceStore } from './evidence';
 import { buildInventory } from './inventory';
 import { REVIEW_POLICY } from './review-policy';
@@ -70,5 +70,17 @@ test('retrieval cannot consume the consolidation reserve or bypass the deadline'
 	expect(calls).toBe(1);
 	const expired = await runJsonAgent({ ...options, budget: new ModelBudget(), deadlineAt: Date.now() + REVIEW_POLICY.reserveMsForConsolidation - 1 });
 	expect(expired.error).toContain('deadline');
+	expect(calls).toBe(1);
+});
+
+test('a spent hosted plan stops the review with an out-of-usage failure instead of one error per specialist', async () => {
+	let calls = 0;
+	globalThis.fetch = (async () => { calls++; return new Response('{"error":{"message":"Monthly limit reached"}}', { status: 429 }); }) as unknown as typeof fetch;
+	const error = await runJsonAgent({ label: 'planner', system: '', user: '', config: { ...config, source: 'opencode-go' },
+		budget: new ModelBudget(), evidence: new EvidenceStore(null, buildInventory(diff), 12000),
+		maxTurns: 2, signal: new AbortController().signal, deadlineAt: Date.now() + 300_000, parse: parseSpecialistOutput
+	}).catch((err: unknown) => err);
+	expect(error).toBeInstanceOf(ModelBlockedError);
+	expect((error as ModelBlockedError).failure.usageLimit).toMatchObject({ provider: 'opencode-go', name: 'OpenCode Go' });
 	expect(calls).toBe(1);
 });

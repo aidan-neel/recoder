@@ -150,7 +150,7 @@ export function startReviewChat(reviewId: string, assignmentId: string, text: st
 		} catch (error) {
 			// The reason renders as a notice, not as the model's words.
 			if (controller.signal.aborted) reply.text = `${reply.text}${reply.text ? '\n\n' : ''}Reply stopped.`;
-			else reply.failure = modelFailure(error, config.provider, 'The model could not finish this reply. Try again.');
+			else reply.failure = modelFailure(error, config, 'The model could not finish this reply. Try again.');
 			flush('error');
 		} finally {
 			pending.delete(key);
@@ -215,8 +215,8 @@ function startDraftOpener(reviewId: string, fetched: { pr: { title: string; head
 			// and say so up front when signing in to ChatGPT would fix every reply.
 			const partial = reply.text.trim();
 			reply.text = partial || `Ready to review #${review.prNumber}. Tell me what to focus on, or press Run full review below.`;
-			const failure = controller.signal.aborted ? null : modelFailure(error, config.provider, '');
-			if (failure?.signIn) reply.failure = failure;
+			const failure = controller.signal.aborted ? null : modelFailure(error, config, '');
+			if (failure?.signIn || failure?.usageLimit) reply.failure = failure;
 			flush(partial && !controller.signal.aborted ? 'error' : 'done');
 		} finally {
 			pending.delete(key);

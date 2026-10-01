@@ -14,23 +14,17 @@ class SettingsDraft {
 	orchestrator = $state<ModelChoice | null>(null);
 	/** Null follows the Review model. */
 	specialist = $state<ModelChoice | null>(null);
-	baseUrl = $state('');
-	/** Typed API key; empty keeps the saved one. */
-	apiKey = $state('');
 	limits = $state<Limits>({ maxFiles: 0, maxDiffChars: 0, maxFileChars: 0 });
 	seeded = $state(false);
-	private initial: { orchestrator: ModelChoice | null; specialist: ModelChoice | null; baseUrl: string; limits: Limits } | null = null;
+	private initial: { orchestrator: ModelChoice | null; specialist: ModelChoice | null; limits: Limits } | null = null;
 
 	seed(config: ModelSettings): void {
 		this.orchestrator = modelSettingsUi.orchestrator;
 		this.specialist = config.specialistModelId ? modelSettingsUi.specialist : null;
-		this.baseUrl = config.baseUrl ?? '';
-		this.apiKey = '';
 		this.limits = { ...config.limits };
 		this.initial = {
 			orchestrator: this.orchestrator,
 			specialist: this.specialist,
-			baseUrl: this.baseUrl,
 			limits: { ...this.limits }
 		};
 		this.seeded = true;
@@ -39,7 +33,6 @@ class SettingsDraft {
 	reset(): void {
 		this.seeded = false;
 		this.initial = null;
-		this.apiKey = '';
 	}
 
 	/** Only what changed since the modal opened. */
@@ -55,8 +48,6 @@ class SettingsDraft {
 			patch.specialistModelId = this.specialist?.modelId ?? null;
 			patch.specialistEffort = this.specialist?.effort ?? null;
 		}
-		if (this.baseUrl.trim() !== initial.baseUrl) patch.baseUrl = this.baseUrl.trim();
-		if (this.apiKey.trim()) patch.apiKey = this.apiKey.trim();
 		if (this.limits.maxFiles !== initial.limits.maxFiles) patch.maxFiles = this.limits.maxFiles;
 		if (this.limits.maxDiffChars !== initial.limits.maxDiffChars) patch.maxDiffChars = this.limits.maxDiffChars;
 		if (this.limits.maxFileChars !== initial.limits.maxFileChars) patch.maxFileChars = this.limits.maxFileChars;

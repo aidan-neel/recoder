@@ -46,6 +46,22 @@ function thinkingFields(opts: ChatOptions): Record<string, unknown> {
 }
 
 /** Retry once without the thinking switch when an endpoint refuses it. */
+/** OpenRouter takes effort as `reasoning: { effort }`; other OpenAI-compatible servers take `reasoning_effort`. */
+export function reasoningFields(opts: Pick<ChatOptions, 'baseUrl' | 'reasoningEffort'>): Record<string, unknown> {
+	if (opts.reasoningEffort === undefined) return {};
+	return /(^|\.)openrouter\.ai$/i.test(hostOf(opts.baseUrl))
+		? { reasoning: { effort: opts.reasoningEffort } }
+		: { reasoning_effort: opts.reasoningEffort };
+}
+
+function hostOf(url: string): string {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return '';
+	}
+}
+
 async function withThinkingFallback<T>(opts: ChatOptions, run: () => Promise<T>): Promise<T> {
 	try {
 		return await run();
@@ -125,6 +141,33 @@ async function withRetries<T>(
 			await sleep(wait, opts.signal);
 		}
 	}
+}
+
+
+/**
+ * Settle at the deadline (or on cancel) no matter what `work` is stuck on.
+ * Every layer below aborts its own fetch, but a socket can wedge somewhere an
+ * abort doesn't reach; without this a review waits on that call forever and
+ * the model slot it holds is never given back.
+ */
+function withHardDeadline<T>(work: Promise<T>, deadline: number, timeoutMs: number, signal?: AbortSignal): Promise<T> {
+	work.catch(() => {});
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let onAbort: (() => void) | undefined;
+	const backstop = new Promise<never>((_, reject) => {
+		timer = setTimeout(
+			() => reject(new LlmError(0, `Model request timed out after ${Math.round(timeoutMs / 1000)}s`)),
+			// A little grace so the request can report its own timeout (or a stall) first.
+			Math.max(0, deadline - Date.now()) + Math.min(5_000, Math.max(250, timeoutMs / 10))
+		);
+		onAbort = () => reject(new LlmError(0, 'Model request cancelled'));
+		if (signal?.aborted) onAbort();
+		else signal?.addEventListener('abort', onAbort, { once: true });
+	});
+	return Promise.race([work, backstop]).finally(() => {
+		clearTimeout(timer);
+		if (onAbort) signal?.removeEventListener('abort', onAbort);
+	});
 }
 
 /**
@@ -209,16 +252,15 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 		report();
 		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
 		const remaining = { ...opts, timeoutMs: Math.max(1, deadline - Date.now()), onUsage: (usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); } };
-		let result: string;
-		if (opts.provider === 'codex') {
-			const { codex } = await import('./codex');
-			result = await withRetries(opts, deadline, async (timeoutMs) => {
+		const work = opts.provider === 'codex'
+			? import('./codex').then(({ codex }) => withRetries(opts, deadline, async (timeoutMs) => {
 				try { return await codex.complete({ ...remaining, timeoutMs }); }
 				catch (error) { if (error instanceof LlmError) throw error; throw new LlmError(0, 'ChatGPT request failed'); }
-			});
-		} else result = await withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => opts.onReasoning
-			? streamChatCompletionInner({ ...remaining, timeoutMs }, () => {})
-			: chatCompletionInner({ ...remaining, timeoutMs })));
+			}))
+			: withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => opts.onReasoning
+				? streamChatCompletionInner({ ...remaining, timeoutMs }, () => {})
+				: chatCompletionInner({ ...remaining, timeoutMs })));
+		const result = await withHardDeadline(work, deadline, opts.timeoutMs ?? 120_000, opts.signal);
 		success = true;
 		return result;
 	} finally {
@@ -247,7 +289,7 @@ async function chatCompletionInner(opts: ChatOptions): Promise<string> {
 				messages: opts.messages,
 				temperature: opts.temperature ?? 0.2,
 				max_tokens: opts.maxTokens ?? 4000,
-				...(opts.reasoningEffort !== undefined ? { reasoning_effort: opts.reasoningEffort } : {}),
+				...reasoningFields(opts),
 				...(opts.seed !== undefined ? { seed: opts.seed } : {}),
 				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
 				...thinkingFields(opts)
@@ -317,9 +359,10 @@ export async function streamChatCompletion(
 		// Once text has streamed to the user a retry would repeat it, so only retry before the first token.
 		let streamed = false;
 		const forward = (text: string) => { streamed = true; onToken(text); };
-		const result = opts.provider === 'codex'
-			? await withRetries(opts, deadline, async (timeoutMs) => (await import('./codex')).codex.complete({ ...remaining, timeoutMs }, forward), () => !streamed)
-			: await withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => streamChatCompletionInner({ ...remaining, timeoutMs }, forward)), () => !streamed);
+		const work = opts.provider === 'codex'
+			? withRetries(opts, deadline, async (timeoutMs) => (await import('./codex')).codex.complete({ ...remaining, timeoutMs }, forward), () => !streamed)
+			: withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => streamChatCompletionInner({ ...remaining, timeoutMs }, forward)), () => !streamed);
+		const result = await withHardDeadline(work, deadline, opts.timeoutMs ?? 120_000, opts.signal);
 		success = true;
 		return result;
 	} finally {
@@ -366,7 +409,7 @@ async function streamChatCompletionInner(
 				max_tokens: opts.maxTokens ?? 4000,
 				stream: true,
 				stream_options: { include_usage: true },
-				...(opts.reasoningEffort !== undefined ? { reasoning_effort: opts.reasoningEffort } : {}),
+				...reasoningFields(opts),
 				...(opts.seed !== undefined ? { seed: opts.seed } : {}),
 				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
 				...thinkingFields(opts)
@@ -440,7 +483,10 @@ async function streamChatCompletionInner(
 		clearInterval(watchdog);
 		opts.signal?.removeEventListener('abort', abort);
 		controller.signal.removeEventListener('abort', cancelReader);
-		await reader?.cancel().catch(() => {});
-		reader?.releaseLock();
+		// Cancelling a wedged stream can itself never settle; don't wait on it for long.
+		if (reader) {
+			await Promise.race([reader.cancel().catch(() => {}), sleep(1_000).catch(() => {})]);
+			try { reader.releaseLock(); } catch { /* a read is still pending on the dead socket */ }
+		}
 	}
 }

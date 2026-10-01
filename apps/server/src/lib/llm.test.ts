@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { chatCompletion, resetLlmLimiter } from './llm';
+import { chatCompletion, reasoningFields, resetLlmLimiter, streamChatCompletion } from './llm';
 
 describe('llm concurrency limiter', () => {
 	const realFetch = globalThis.fetch;
@@ -96,4 +96,42 @@ describe('llm concurrency limiter', () => {
 		globalThis.fetch = (async () => Response.json({ choices: [{ message: { content: 'ok' } }] })) as unknown as typeof fetch;
 		expect(await chatCompletion(options)).toBe('ok');
 	});
+});
+
+describe('hung model calls', () => {
+	const realFetch = globalThis.fetch;
+	afterEach(() => {
+		globalThis.fetch = realFetch;
+		resetLlmLimiter();
+		delete process.env.RECODER_LLM_CONCURRENCY;
+	});
+
+	// A request stuck below the abort (a half-dead socket) must still end at its
+	// deadline and give its slot back, or the review waits on it forever.
+	test('a request that ignores abort still times out and frees its slot', async () => {
+		process.env.RECODER_LLM_CONCURRENCY = '1';
+		globalThis.fetch = (() => new Promise(() => {})) as unknown as typeof fetch;
+		const call = (stream: boolean) => {
+			const opts = { baseUrl: 'http://model.test/v1', apiKey: 'k', model: 'm', messages: [{ role: 'user' as const, content: 'hi' }], timeoutMs: 50 };
+			return stream ? streamChatCompletion(opts, () => {}) : chatCompletion(opts);
+		};
+		await expect(call(true)).rejects.toThrow(/timed out/);
+		await expect(call(false)).rejects.toThrow(/timed out/);
+		globalThis.fetch = (async () => Response.json({ choices: [{ message: { content: 'ok' } }] })) as unknown as typeof fetch;
+		expect(await call(false)).toBe('ok');
+	});
+
+	test('cancelling a hung request ends it at once', async () => {
+		globalThis.fetch = (() => new Promise(() => {})) as unknown as typeof fetch;
+		const controller = new AbortController();
+		const pending = streamChatCompletion({ baseUrl: 'http://model.test/v1', apiKey: 'k', model: 'm', messages: [{ role: 'user', content: 'hi' }], timeoutMs: 60_000, signal: controller.signal }, () => {});
+		setTimeout(() => controller.abort(), 20);
+		await expect(pending).rejects.toThrow(/cancelled/);
+	});
+});
+
+test('OpenRouter gets effort as a reasoning object, other endpoints as reasoning_effort', () => {
+	expect(reasoningFields({ baseUrl: 'https://openrouter.ai/api/v1', reasoningEffort: 'high' })).toEqual({ reasoning: { effort: 'high' } });
+	expect(reasoningFields({ baseUrl: 'http://localhost:8000/v1', reasoningEffort: 'low' })).toEqual({ reasoning_effort: 'low' });
+	expect(reasoningFields({ baseUrl: 'https://openrouter.ai/api/v1' })).toEqual({});
 });

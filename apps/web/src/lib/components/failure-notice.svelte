@@ -3,6 +3,8 @@
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
+	import type { UsageLimit } from '@recoder/shared';
+	import UsageLimitNotice from './usage-limit-notice.svelte';
 	import { chatGptStatus } from '$lib/chatgpt-status.svelte';
 	import { modelSettingsUi } from '$lib/model-settings.svelte';
 
@@ -11,11 +13,13 @@
 		reason: string;
 		/** Signing in to ChatGPT fixes this. */
 		signIn?: boolean;
+		/** The model's plan ran out: shows when it resets and offers another model. */
+		usageLimit?: UsageLimit | null;
 		onRetry?: (() => void) | null;
 		retrying?: boolean;
 		class?: string;
 	}
-	let { title, reason, signIn = false, onRetry = null, retrying = false, class: className = '' }: Props = $props();
+	let { title, reason, signIn = false, usageLimit = null, onRetry = null, retrying = false, class: className = '' }: Props = $props();
 
 	$effect(() => {
 		if (signIn && chatGptStatus.signedIn === null) void chatGptStatus.check();
@@ -25,7 +29,9 @@
 </script>
 
 <!-- A sign-in prompt with nothing to retry has done its job once ChatGPT is signed in. -->
-{#if needsSignIn || !signIn || onRetry}
+{#if usageLimit}
+	<UsageLimitNotice limit={usageLimit} {onRetry} {retrying} class={className} />
+{:else if needsSignIn || !signIn || onRetry}
 <Card.Root class="review-notice {className}" {...{ role: 'alert' }}>
 	<CircleAlert size={15} class="review-notice-icon" aria-hidden="true" />
 	<div class="min-w-0 flex-1">

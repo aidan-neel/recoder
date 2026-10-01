@@ -6,6 +6,7 @@ import { parseActions, formatToolResults, type EvidenceStore, type ToolCallRepor
 import { REVIEW_POLICY } from './review-policy.js';
 import type { RoleConfig } from './models.js';
 import { isAuthFailure } from './planner.js';
+import { isUsageLimit } from './model-failure.js';
 import type { ModelFailure, ReviewReasoningEntry } from '@recoder/shared';
 import { modelFailure } from './model-failure.js';
 import { CHAT_STYLE, RETRIEVAL_EXAMPLES } from './prompts';
@@ -18,10 +19,11 @@ export class ReviewAbortedError extends Error {
 	}
 }
 
-export class AuthConfigError extends Error {
+/** Every model call will fail the same way (signed out, bad key, out of usage): stop the whole review. */
+export class ModelBlockedError extends Error {
 	constructor(readonly failure: ModelFailure) {
 		super(failure.reason);
-		this.name = 'AuthConfigError';
+		this.name = 'ModelBlockedError';
 	}
 }
 
@@ -185,7 +187,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			}
 			flushResponse('error');
 			flushReasoning(overthought ? 'done' : 'error');
-			if (isAuthFailure(err)) throw new AuthConfigError(modelFailure(err, opts.config.provider, 'The model rejected the request.'));
+			if (isAuthFailure(err) || isUsageLimit(err, opts.config)) throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));
 			if (!opts.signal.aborted && (overthought || (err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message))) && repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns) {
 				repaired++;
 				lastError = overthought ? 'reasoning ran too long without an answer' : (err as Error).message;

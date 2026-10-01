@@ -26,6 +26,7 @@ import {
 	suggestFixRequestSchema
 } from '../lib/fix';
 import { GhError, fetchPullHeadRef } from '../lib/gh';
+import { TtlCache } from '../lib/ttl-cache';
 import { failureExcerpt, fetchCheckLog, fetchChecks } from '../lib/checks';
 import { fetchPullHead } from '../lib/github-rest';
 import { fetchMergeHeadRef } from '../lib/glab';
@@ -344,8 +345,8 @@ app.post('/:id/fixes/suggest', async (c) => {
 		return c.json({ ...result, applies });
 	} catch (err) {
 		if (err instanceof LlmError) {
-			const failure = modelFailure(err, configForRole(resolveDiscussRole(parsed.data.agent)).provider, 'The model could not write a fix. Try again.');
-			return c.json({ error: failure.reason, ...(failure.signIn ? { action: 'sign-in' } : {}) }, 502);
+			const failure = modelFailure(err, configForRole(resolveDiscussRole(parsed.data.agent)), 'The model could not write a fix. Try again.');
+			return c.json({ error: failure.reason, ...(failure.signIn ? { action: 'sign-in' } : {}), ...(failure.usageLimit ? { usageLimit: failure.usageLimit } : {}) }, 502);
 		}
 		throw err;
 	}
@@ -372,8 +373,8 @@ app.post('/:id/checks/fix', async (c) => {
 		if (err instanceof CheckoutError) return c.json({ error: `Fixes need a local checkout of the pull request. ${err.message}` }, err.status);
 		if (err instanceof GhError) return c.json({ error: `Couldn't read the check's log: ${err.message}` }, 502);
 		if (err instanceof LlmError) {
-			const failure = modelFailure(err, configForRole('correctness').provider, 'The model could not write a fix. Try again.');
-			return c.json({ error: failure.reason, ...(failure.signIn ? { action: 'sign-in' } : {}) }, 502);
+			const failure = modelFailure(err, configForRole('correctness'), 'The model could not write a fix. Try again.');
+			return c.json({ error: failure.reason, ...(failure.signIn ? { action: 'sign-in' } : {}), ...(failure.usageLimit ? { usageLimit: failure.usageLimit } : {}) }, 502);
 		}
 		throw err;
 	}
@@ -475,6 +476,8 @@ app.post('/:id/changes/push', (c) => withChanges(c, async (sandboxPath, review) 
 	return c.json({ ...(await pushPendingCommits(sandboxPath, headRef)), branch: headRef });
 }));
 
+const checksCache = new TtlCache<unknown>(15_000);
+
 /** CI checks for the PR head (default) or any branch/sha of this repo (e.g. a fix's verify branch). */
 app.get('/:id/checks', async (c) => {
 	const review = db.reviews.get(c.req.param('id'));
@@ -484,14 +487,17 @@ app.get('/:id/checks', async (c) => {
 	try {
 		const requested = c.req.query('ref');
 		const provider = review.source;
-		if (requested) return c.json({ ref: requested, provider, checks: await fetchChecks(repo, requested) });
-		if (review.source === 'gitlab') {
-			const ref = await fetchMergeHeadRef(repo.url, review.prNumber, tokenEnv('gitlab', repo.url));
-			return c.json({ ref, provider, checks: await fetchChecks(repo, ref) });
-		}
-		// Checks run on the head commit; its sha also covers PRs from forks.
-		const head = await fetchPullHead(parseSlug(repo.url), review.prNumber);
-		return c.json({ ref: head.ref, provider, checks: await fetchChecks(repo, head.sha) });
+		// Checks poll every 20s while any run, so a 15s cache only saves repeat opens.
+		return c.json(await checksCache.get(`${review.id}|${requested ?? ''}`, async () => {
+			if (requested) return { ref: requested, provider, checks: await fetchChecks(repo, requested) };
+			if (review.source === 'gitlab') {
+				const ref = await fetchMergeHeadRef(repo.url, review.prNumber, tokenEnv('gitlab', repo.url));
+				return { ref, provider, checks: await fetchChecks(repo, ref) };
+			}
+			// Checks run on the head commit; its sha also covers PRs from forks.
+			const head = await fetchPullHead(parseSlug(repo.url), review.prNumber);
+			return { ref: head.ref, provider, checks: await fetchChecks(repo, head.sha) };
+		}));
 	} catch (err) {
 		if (err instanceof GhError) return c.json({ error: err.message }, 502);
 		throw err;

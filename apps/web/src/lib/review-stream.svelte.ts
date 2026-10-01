@@ -7,12 +7,15 @@ export class ReviewStream {
 	progress = $state(emptyReviewProgress(''));
 	connection = $state<'connecting' | 'live' | 'reconnecting' | 'closed'>('connecting');
 	lastReceived = $state(Date.now());
+	/** The first snapshot arrived (or the stream gave up), so the session can paint in one go. */
+	ready = $state(false);
 	private source: EventSource;
 	private disposed = false;
 	private knownStatus: Review['status'] | undefined;
 	private refreshing = false;
 	private controller = new AbortController();
 	private watchdog: ReturnType<typeof setInterval>;
+	private readyTimer: ReturnType<typeof setTimeout>;
 
 	constructor(id: string, onReview: (review: Review) => void) {
 		this.progress = emptyReviewProgress(id);
@@ -22,7 +25,13 @@ export class ReviewStream {
 			this.connection = 'live';
 			this.lastReceived = Date.now();
 		};
-		this.source.onerror = () => { if (!this.disposed) this.connection = 'reconnecting'; };
+		// Never hold the page for a stream that is slow or down; polling still fills it in.
+		this.readyTimer = setTimeout(() => { this.ready = true; }, 1500);
+		this.source.onerror = () => {
+			if (this.disposed) return;
+			this.connection = 'reconnecting';
+			this.ready = true;
+		};
 		this.source.onmessage = (event) => {
 			if (this.disposed) return;
 			let message: ProgressMessage;
@@ -36,6 +45,7 @@ export class ReviewStream {
 				this.knownStatus = message.review.status;
 				onReview(message.review);
 			}
+			this.ready = true;
 			const status = message.review?.status ?? message.status ??
 				(!message.step && message.type === 'done' ? 'passed' : !message.step && message.type === 'error' ? 'failed' : null);
 			if (status !== 'passed' && status !== 'failed') return;
@@ -78,6 +88,7 @@ export class ReviewStream {
 		this.connection = 'closed';
 		this.controller.abort();
 		clearInterval(this.watchdog);
+		clearTimeout(this.readyTimer);
 		this.source.close();
 	}
 }

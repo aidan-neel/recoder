@@ -1,5 +1,7 @@
 import { env } from '$env/dynamic/public';
 import type { DiscoveredModel,
+	CatalogModel,
+	HostedProvider,
 	CodexConnection,
 	CodexModel,
 	ApplyFixRequest,
@@ -34,7 +36,8 @@ import type { DiscoveredModel,
 	RereviewRequest,
 	RereviewResponse,
 	SuggestFixRequest,
-	SuggestFixResponse
+	SuggestFixResponse,
+	UsageLimit
 } from '@recoder/shared';
 
 const base = (env.PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
@@ -44,7 +47,7 @@ export const apiBase = base;
 
 /** A failed request, with what the developer can do about it when the server says. */
 export class ApiError extends Error {
-	constructor(message: string, readonly action?: FailureAction) {
+	constructor(message: string, readonly action?: FailureAction, readonly usageLimit?: UsageLimit) {
 		super(message);
 		this.name = 'ApiError';
 	}
@@ -56,8 +59,12 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 		headers: { 'content-type': 'application/json', ...init?.headers }
 	});
 	if (!res.ok) {
-		const body = (await res.json().catch(() => null)) as { error?: string; action?: FailureAction } | null;
-		throw new ApiError(body?.error ?? `API ${res.status}`, body?.action === 'sign-in' || body?.action === 'settings' ? body.action : undefined);
+		const body = (await res.json().catch(() => null)) as { error?: string; action?: FailureAction; usageLimit?: UsageLimit } | null;
+		throw new ApiError(
+			body?.error ?? `API ${res.status}`,
+			body?.action === 'sign-in' || body?.action === 'settings' ? body.action : undefined,
+			body?.usageLimit && typeof body.usageLimit.name === 'string' ? body.usageLimit : undefined
+		);
 	}
 	return (await res.json()) as T;
 }
@@ -240,5 +247,13 @@ export const serverApi = {
 	discoverModels: (input: { baseUrl?: string; apiKey?: string }) =>
 		req<{ baseUrl: string; models: DiscoveredModel[] }>('/api/settings/models/discover', { method: 'POST', body: JSON.stringify(input) }),
 	saveModelSettings: (patch: ModelSettingsPatch) =>
-		req<ModelSettings>('/api/settings/models', { method: 'PUT', body: JSON.stringify(patch) })
+		req<ModelSettings>('/api/settings/models', { method: 'PUT', body: JSON.stringify(patch) }),
+	listHostedProviders: () => req<HostedProvider[]>('/api/settings/providers'),
+	/** Checks the key without running a model, then saves it. */
+	connectHostedProvider: (id: string, apiKey: string) =>
+		req<{ providers: HostedProvider[]; settings: ModelSettings }>(`/api/settings/providers/${id}/connect`, { method: 'POST', body: JSON.stringify({ apiKey }) }),
+	/** Forgets the key and every model added from the provider. */
+	disconnectHostedProvider: (id: string) =>
+		req<{ providers: HostedProvider[]; settings: ModelSettings }>(`/api/settings/providers/${id}`, { method: 'DELETE' }),
+	hostedProviderCatalog: (id: string) => req<CatalogModel[]>(`/api/settings/providers/${id}/catalog`)
 };

@@ -615,7 +615,7 @@
 	}
 }} />
 
-{#if !backendChecked}
+{#if !backendChecked || (backendReview && !reviewStream?.ready)}
 	{@const loadingView = page.url.searchParams.get('view')}
 	<SessionSkeleton view={loadingView === 'findings' || loadingView === 'diff' ? loadingView : page.url.searchParams.get('agent') ? 'specialist' : 'conversation'} />
 {:else if backendDown && !backendReview}

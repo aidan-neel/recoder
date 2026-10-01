@@ -15,6 +15,8 @@ import { REASONING_EFFORTS } from '@recoder/shared';
 
 const modelEntrySchema = z.object({
 	provider: z.enum(['openai-compatible', 'codex']).optional(),
+	/** Hosted provider id; the entry uses that provider's endpoint and connected key. */
+	source: z.string().max(40).optional(),
 	id: z.string().max(100).optional(),
 	label: z.string().min(1).max(100),
 	model: z.string().min(1).max(200),
@@ -43,6 +45,7 @@ export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
 
 /** Saved files from before models were just Review and Specialist carried per-role picks. */
 const storedFileSchema = reviewSettingsSchema.extend({
+	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional(),
 	roles: z.partialRecord(z.enum(REVIEW_ROLES), z.string().max(200)).optional(),
 	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(REASONING_EFFORTS)).optional(),
 	applyToSpecialists: z.boolean().optional()
@@ -62,6 +65,7 @@ function migrateLegacy(data: z.infer<typeof storedFileSchema>): ReviewSettingsIn
 
 export interface StoredModelEntry {
 	provider?: 'openai-compatible' | 'codex';
+	source?: string;
 	id: string;
 	label: string;
 	model: string;
@@ -73,6 +77,8 @@ export interface StoredModelEntry {
 }
 
 interface StoredSettings {
+	/** API keys for hosted providers, by provider id. */
+	connections?: Record<string, { apiKey: string }>;
 	baseUrl?: string;
 	apiKey?: string;
 	models?: StoredModelEntry[];
@@ -116,15 +122,18 @@ export function initReviewSettings(): void {
 			const { apiKey, models, ...rest } = migrateLegacy(parsed.data);
 			const normalized: StoredSettings = {
 				...rest,
+				...(parsed.data.connections ? { connections: parsed.data.connections } : {}),
 				models: models?.map((e) => ({
 					provider: e.provider,
+					...(e.source ? { source: e.source } : {}),
 					id: e.id ?? crypto.randomUUID(),
 					label: e.label,
 					model: e.model,
 					...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
 					...(e.apiKey ? { apiKey: e.apiKey } : {}),
 					...(e.efforts?.length ? { efforts: e.efforts } : {}),
-					...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {})
+					...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
+					...(e.contextWindow ? { contextWindow: e.contextWindow } : {})
 				}))
 			};
 			overrides = apiKey ? { ...normalized, apiKey } : normalized;
@@ -144,6 +153,19 @@ export function getStoredSettings(): StoredSettings {
 	return overrides;
 }
 
+/** Save or drop a hosted provider's key. Dropping it also removes that provider's models. */
+export function setConnection(providerId: string, apiKey: string | null): StoredSettings {
+	const connections = { ...overrides.connections };
+	if (apiKey) connections[providerId] = { apiKey };
+	else delete connections[providerId];
+	overrides = { ...overrides, connections };
+	if (!apiKey && overrides.models?.some((entry) => entry.source === providerId)) {
+		return saveReviewSettings({ models: overrides.models.filter((entry) => entry.source !== providerId) });
+	}
+	persist();
+	return overrides;
+}
+
 /** Merge a validated patch over the stored settings and persist. */
 export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	const clean: StoredSettings = { ...overrides };
@@ -159,14 +181,17 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 				label: entry.label,
 				model: entry.model
 			};
+			const source = entry.source ?? kept?.source;
+			if (source && next.provider !== 'codex') next.source = source;
 			const baseUrl = entry.baseUrl?.replace(/\/$/, '');
-			if (baseUrl && next.provider !== 'codex') next.baseUrl = baseUrl;
+			if (baseUrl && next.provider !== 'codex' && !next.source) next.baseUrl = baseUrl;
 			if (entry.efforts?.length) next.efforts = entry.efforts;
 			if (entry.defaultEffort) next.defaultEffort = entry.defaultEffort;
 			const contextWindow = entry.contextWindow ?? kept?.contextWindow;
 			if (contextWindow) next.contextWindow = contextWindow;
 			// Empty key keeps the existing entry key; new entries store what was given.
-			if (next.provider !== 'codex') {
+			// Hosted-provider entries use the provider's connected key instead.
+			if (next.provider !== 'codex' && !next.source) {
 				if (entry.apiKey) next.apiKey = entry.apiKey;
 				else if (kept?.apiKey) next.apiKey = kept.apiKey;
 			}

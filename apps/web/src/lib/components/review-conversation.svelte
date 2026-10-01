@@ -25,7 +25,6 @@
 	import StreamingMarkdown from './streaming-markdown.svelte';
 	import ReasoningTrace from './reasoning-trace.svelte';
 	import ReviewComposer from './review-composer.svelte';
-	import ModelPicker from './model-picker.svelte';
 	import { MODEL_ROLES, modelSettingsUi, summarizesReasoning } from '$lib/model-settings.svelte';
 	import type { ReviewRole } from '@recoder/shared';
 	import { groupTranscript, taskGroupLabel, taskGroupStatus } from '$lib/review-transcript';
@@ -33,7 +32,7 @@
 	import { parseFixRequest, parseModelNotes, stripModelNotes } from '$lib/model-notes';
 	import { fileIconUrl } from '$lib/material-icons';
 
-	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, inserts = [], placeholder, awaitingPrompt = false, onStartReview = null, signInShown = false, intro }: {
+	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, onStopReview = null, inserts = [], placeholder, awaitingPrompt = false, onStartReview = null, signInShown = false, intro }: {
 		assignment: ReviewAssignment;
 		messages: ReviewChatMessage[];
 		reasoning: ReviewReasoningEntry[];
@@ -47,6 +46,8 @@
 		focusKey?: number;
 		onSend?: (id: string, text: string, context?: ReviewCodeContext) => Promise<void>;
 		onStop?: (id: string) => Promise<void>;
+		/** Stops the whole review while it runs; Send becomes Stop when nothing is typed. */
+		onStopReview?: (() => Promise<void>) | null;
 		/** Blocks placed in the transcript before the first entry newer than `at` (or at the end). */
 		inserts?: { key: string; at?: string; snippet: Snippet }[];
 		placeholder?: string;
@@ -83,6 +84,7 @@
 	}));
 	/** Only the latest sign-in failure carries the notice; earlier ones would repeat it. */
 	const lastSignInIndex = $derived(signInShown ? -1 : entries.findLastIndex((entry) => entry.kind === 'message' && !!entry.message.failure?.signIn));
+	const lastUsageIndex = $derived(entries.findLastIndex((entry) => entry.kind === 'message' && !!entry.message.failure?.usageLimit));
 	const lastAssistantIndex = $derived(entries.findLastIndex((entry) => entry.kind === 'message' && entry.message.from === 'assistant'));
 	/** Agent turns reply as `message_<reasoning id>`; discussion replies think as `reason_<reply id>`. Either way thinking sits with its reply. */
 	const reasoningByMessage = $derived(new Map<string, ReviewReasoningEntry>(conversationReasoning.flatMap((entry) => [[`message_${entry.id}`, entry], [entry.id.replace(/^reason_/, ''), entry]])));
@@ -121,12 +123,15 @@
 		| { kind: 'insert'; key: string; snippet: Snippet }
 		| { kind: 'message'; key: string; message: ReviewChatMessage; index: number }
 		| { kind: 'traces'; key: string; traces: Trace[] };
-	/** Transcript in order, with back-to-back thoughts and tool groups folded into one row. */
+	/**
+	 * Transcript in order. Back-to-back tool groups fold into one row; every
+	 * thought is its own row with its own timer, never nested in another.
+	 */
 	const rows = $derived.by(() => {
 		const out: Row[] = [];
 		const trace = (item: Trace) => {
 			const previous = out.at(-1);
-			if (previous?.kind === 'traces') previous.traces.push(item);
+			if (item.kind === 'tasks' && previous?.kind === 'traces' && previous.traces.every((trace) => trace.kind === 'tasks')) previous.traces.push(item);
 			else out.push({ kind: 'traces', key: `traces-${item.key}`, traces: [item] });
 		};
 		const before = (index: number) => {
@@ -219,6 +224,14 @@
 		if (generating) awaitingReply = false;
 	});
 	const replying = $derived(sending || awaitingReply || generating);
+	/** No reply in flight and nothing typed: the composer's Stop stops the review itself. */
+	const stopsReview = $derived(!!onStopReview && !replying && !draft.trim());
+	let stoppingReview = $state(false);
+	async function stopReview(): Promise<void> {
+		if (stoppingReview || !onStopReview) return;
+		stoppingReview = true;
+		try { await onStopReview(); } finally { stoppingReview = false; }
+	}
 	async function send(value: string) {
 		if (!onSend || replying || !value.trim()) return;
 		if (value.trim().length > 8000) { error = 'Keep your message under 8,000 characters.'; return; }
@@ -318,9 +331,11 @@
 					{/if}
 					{#if message.failure?.signIn && index !== lastSignInIndex}
 						{#if message.status === 'error'}<Typography.Metadata class="text-fg-faint">Not answered: signed out of ChatGPT</Typography.Metadata>{/if}
+					{:else if message.failure?.usageLimit && index !== lastUsageIndex}
+						{#if message.status === 'error'}<Typography.Metadata class="text-fg-faint">Not answered: {message.failure.usageLimit.name} was out of usage</Typography.Metadata>{/if}
 					{:else if message.failure}
 						<FailureNotice class="message-failure" title={message.failure.signIn ? 'Signed out of ChatGPT' : 'Reply failed'}
-							reason={message.failure.reason} signIn={message.failure.signIn}
+							reason={message.failure.reason} signIn={message.failure.signIn} usageLimit={message.failure.usageLimit}
 							onRetry={message.status === 'error' && message.discussion && !generating ? retryFor(index) : null} />
 					{/if}
 					<!-- The message's own actions (start the review) sit in it, above Copy and Retry. -->
@@ -389,11 +404,11 @@
 		describedBy={error ? errorId : undefined}
 		invalid={!!error}
 		{sending}
-		generating={replying}
-		busy={working || conversationMessages.some((message) => message.status === 'streaming')}
-		disabled={!onSend}
+		generating={replying || stopsReview}
+		busy={working || stoppingReview || conversationMessages.some((message) => message.status === 'streaming')}
+		disabled={!onSend && !stopsReview}
 		onSubmit={send}
-		onStop={onStop ? stop : undefined}
+		onStop={stopsReview ? stopReview : onStop ? stop : undefined}
 		onAttach={() => fileInput?.click()}
 		attachLabel="Attach a text file"
 		oninput={() => error = ''}
@@ -410,24 +425,6 @@
 		{/snippet}
 		{#snippet leading()}
 			{#if specialist}<Typography.Metadata class="truncate text-[12px] text-fg-faint">Shared with Orchestrator</Typography.Metadata>{/if}
-		{/snippet}
-		{#snippet picker()}
-			{#if !specialist}
-				<ModelPicker
-					value={modelSettingsUi.orchestrator}
-					onSelect={(choice) => void modelSettingsUi.selectOrchestrator(choice)}
-					size={compact ? 'panel' : 'md'}
-					composerExtras
-					label="Orchestrator model"
-				/>
-			{:else}
-				<ModelPicker
-					value={modelSettingsUi.specialist}
-					onSelect={(choice) => void modelSettingsUi.selectSpecialist(choice)}
-					size={compact ? 'panel' : 'md'}
-					label="Specialist model"
-				/>
-			{/if}
 		{/snippet}
 	</ReviewComposer>
 	</div>

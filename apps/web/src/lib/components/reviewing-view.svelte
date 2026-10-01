@@ -346,7 +346,7 @@
 
 {#snippet preparingCard()}
 	<div class="focus-empty review-preparing" data-kind="running" role="status">
-		<div class="focus-empty-card enter-rise">
+		<div class="focus-empty-card">
 			<span class="focus-empty-icon" aria-hidden="true"><Spinner size={18} /></span>
 			<Typography.Title level={2} class="focus-empty-title">{stage === 0 ? 'Checking out the pull request' : 'Setting up the environment'}</Typography.Title>
 			<p class="focus-empty-text">{(stage === 0 ? stageDetail : setupTask?.message) || (stage === 0 ? 'Fetching the branch and preparing an isolated checkout.' : 'Installing dependencies so reviewers can run code.')}</p>
@@ -419,7 +419,7 @@
 	{#if errorMessage || (failed && failure)}
 		<div class="mx-auto w-full max-w-[740px] {embedded ? 'px-4' : 'px-6'} pt-3">
 			<FailureNotice title={failed ? stageLabel : 'Something went wrong'} reason={errorMessage ?? failure?.reason ?? ''}
-				signIn={!errorMessage && failure?.signIn} onRetry={failed && onContinue ? () => void continueRun() : failed && onRestart ? () => (restartOpen = true) : null} retrying={continuing || restarting} />
+				signIn={!errorMessage && failure?.signIn} usageLimit={errorMessage ? null : failure?.usageLimit} onRetry={failed && onContinue ? () => void continueRun() : failed && onRestart ? () => (restartOpen = true) : null} retrying={continuing || restarting} />
 		</div>
 	{/if}
 	<div class="flex min-h-0 flex-1">
@@ -430,6 +430,7 @@
 					tasks={tasks.filter((task) => (task.assignmentId ?? ORCHESTRATOR_ID) === target.id)}
 					bind:draft={() => target.id === ORCHESTRATOR_ID ? draft : drafts[target.id] ?? '', (value) => { if (target.id === ORCHESTRATOR_ID) draft = value; else drafts[target.id] = value; }}
 					bind:codeContext {onSend} {onStop}
+					onStopReview={isOrchestrator && active && reviewId && !awaitingPrompt && !paused ? cancelReview : null}
 					placeholder={!isOrchestrator ? undefined : awaitingPrompt ? undefined : active ? 'Ask Orchestrator anything…' : 'Ask a follow-up about this review…'}
 					inserts={isOrchestrator ? [
 						...(specialists.length ? [{ key: 'specialists', at: specialistsAt, snippet: specialistsContent }] : []),

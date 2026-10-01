@@ -16,7 +16,7 @@ import { fetchMergeRequest } from '../lib/glab';
 import { fetchPrContext } from '../lib/pr-context';
 import { runAdaptiveReview } from '../lib/harness';
 import { configForOrchestrator, configForRole, isReviewConfigured } from '../lib/models';
-import { AuthConfigError } from '../lib/agent-loop';
+import { ModelBlockedError } from '../lib/agent-loop';
 import { codex } from '../lib/codex';
 import { discussionContext, recordChatMessage } from '../lib/review-chat';
 import { detectProvider, locateRepo, refspecFor } from '../lib/providers';
@@ -134,7 +134,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		if (!repo) throw new Error('repo not found');
 		// Planning and the correctness pass always run: fail now, not after a long checkout.
 		if ([configForOrchestrator(), configForRole('correctness')].some((config) => config.provider === 'codex') && !(await codex.signedIn())) {
-			throw new AuthConfigError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });
+			throw new ModelBlockedError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });
 		}
 		emitReviewEvent(reviewId, { type: 'step', step: 'orchestrator', message: '', data: { orchestratorModel: configForOrchestrator().model } });
 		const provider = repo.provider ?? detectProvider(repo.url);
@@ -320,7 +320,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		const cancelled = analysis.signal.aborted;
 		analysis.abort();
 		const message = cancelled ? 'Review cancelled.' : err instanceof Error ? err.message : 'pipeline failed';
-		const failure = !cancelled && err instanceof AuthConfigError ? err.failure : undefined;
+		const failure = !cancelled && err instanceof ModelBlockedError ? err.failure : undefined;
 		try {
 			const snapshot = reviewProgress.get(reviewId);
 			if (snapshot) reviewProgress.set({ ...snapshot, outcome: 'failed', assignments: settleAssignments(snapshot.assignments ?? [], message), ...(failure ? { failure } : {}) });

@@ -22,7 +22,7 @@ import { configForOrchestrator, configForRole, reviewLimits, type ReviewRole } f
 import { extraExcludes } from './review-scope.js';
 import { REVIEW_POLICY } from './review-policy.js';
 import {
-	AuthConfigError,
+	ModelBlockedError,
 	ModelBudget,
 	ReviewAbortedError,
 	canLaunchInvestigation,
@@ -318,7 +318,7 @@ export async function runAdaptiveReview(
 				plan = planned.plan;
 				planningDegraded = planned.degraded;
 			} catch (err) {
-				if (err instanceof AuthConfigError) throw err;
+				if (err instanceof ModelBlockedError) throw err;
 				planningDegraded = true;
 				plan = fallbackPlan(inventory, err instanceof Error ? err.message : 'Planning failed');
 			}
@@ -555,7 +555,7 @@ export async function runAdaptiveReview(
 					confirmed = keepUnconsolidated(valid, error, task);
 				}
 			} catch (err) {
-				if (err instanceof AuthConfigError) throw err;
+				if (err instanceof ModelBlockedError) throw err;
 				if (err instanceof ReviewAbortedError) throw err;
 				error = err instanceof Error ? err.message : 'Consolidation failed';
 				confirmed = keepUnconsolidated(valid, error, task);
@@ -590,7 +590,7 @@ export async function runAdaptiveReview(
 			error
 		};
 	} catch (err) {
-		if (err instanceof AuthConfigError) {
+		if (err instanceof ModelBlockedError) {
 			return { ...failReview(assignments, coverage, budget, err.message, 'failed'), failure: err.failure };
 		}
 		if (err instanceof ReviewAbortedError || controller.signal.aborted) {
@@ -994,7 +994,7 @@ async function runOneAssignment(
 		ctx.events?.onCandidates?.(ctx.candidates.filter((candidate) => candidate.valid).length);
 		ctx.onFinished?.();
 	} catch (err) {
-		if (err instanceof AuthConfigError) throw err;
+		if (err instanceof ModelBlockedError) throw err;
 		if (err instanceof ReviewAbortedError) throw err;
 		updateAssignment(records, item.id, {
 			status: 'error',
@@ -1316,7 +1316,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: Parameters<typeof ver
 		}
 		ctx.task(taskId, label, 'done', settled.status === 'verified' ? 'Verified by a run' : 'Could not prove by running code', meta);
 	} catch (err) {
-		if (err instanceof AuthConfigError || err instanceof ReviewAbortedError) throw err;
+		if (err instanceof ModelBlockedError || err instanceof ReviewAbortedError) throw err;
 		candidate.verification = { status: 'unverified', reason: `Not verified: ${err instanceof Error ? err.message : 'verification failed'}.` };
 		ctx.task(taskId, label, 'error', 'Verification failed', meta);
 	}

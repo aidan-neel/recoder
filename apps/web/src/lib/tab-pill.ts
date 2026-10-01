@@ -54,7 +54,7 @@ export function carryPill(list: HTMLElement, group: string, value: string): () =
 			pill.style.transition = 'none';
 			pill.animate(
 				[{ left: `${from.rect.left}px`, width: `${from.rect.width}px` }, { left: `${rect.left}px`, width: `${rect.width}px` }],
-				{ duration: 150, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
+				{ duration: 240, easing: 'cubic-bezier(0.2, 0, 0, 1)' }
 			).finished.catch(() => {}).finally(() => pill.style.removeProperty('transition'));
 		}
 		onScreen.add(list);

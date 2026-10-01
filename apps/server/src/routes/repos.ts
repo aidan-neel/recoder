@@ -6,7 +6,11 @@ import { listMergeRequests } from '../lib/glab';
 import { detectProvider } from '../lib/providers';
 import { fetchPullPreview } from '../lib/pull-preview';
 import { tokenEnv } from '../lib/tokens';
+import { TtlCache } from '../lib/ttl-cache';
 import { db } from '../store';
+
+const pullsCache = new TtlCache<unknown>(30_000);
+const previewCache = new TtlCache<unknown>(60_000);
 
 const createRepoSchema = z.object({
 	name: z.string().min(1).max(200),
@@ -36,7 +40,10 @@ app.get('/:id', (c) => {
 });
 
 app.delete('/:id', (c) => {
-	if (!db.repos.delete(c.req.param('id'))) return c.json({ error: 'repo not found' }, 404);
+	const id = c.req.param('id');
+	if (!db.repos.delete(id)) return c.json({ error: 'repo not found' }, 404);
+	pullsCache.delete(id);
+	previewCache.delete(`${id}#`);
 	return c.json({ deleted: true });
 });
 
@@ -49,10 +56,11 @@ app.get('/:id/pulls', async (c) => {
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
 	const provider = repo.provider ?? detectProvider(repo.url);
 	try {
-		const prs =
+		const prs = await pullsCache.get(repo.id, () =>
 			provider === 'gitlab'
-				? await listMergeRequests(repo.url, { env: tokenEnv('gitlab', repo.url) })
-				: await listPullRequests(repo.url, { env: tokenEnv('github') });
+				? listMergeRequests(repo.url, { env: tokenEnv('gitlab', repo.url) })
+				: listPullRequests(repo.url, { env: tokenEnv('github') })
+		);
 		return c.json(prs);
 	} catch (err) {
 		if (err instanceof GhError) return c.json({ error: err.message, kind: err.kind }, 502);
@@ -70,7 +78,7 @@ app.get('/:id/pulls/:pr', async (c) => {
 	const n = Number(c.req.param('pr'));
 	if (!Number.isInteger(n) || n <= 0) return c.json({ error: 'invalid PR number' }, 400);
 	try {
-		return c.json(await fetchPullPreview(repo, n));
+		return c.json(await previewCache.get(`${repo.id}#${n}`, () => fetchPullPreview(repo, n)));
 	} catch (err) {
 		if (err instanceof GhError) return c.json({ error: err.message, kind: err.kind }, 502);
 		throw err;

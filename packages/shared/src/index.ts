@@ -190,6 +190,8 @@ export type ReviewRole =
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {
 	provider?: 'openai-compatible' | 'codex';
+	/** Hosted provider this model came from (`opencode-go`, `openrouter`…); unset for ChatGPT and the custom endpoint. */
+	source?: string;
 	id: string;
 	label: string;
 	model: string;
@@ -212,6 +214,7 @@ export interface DiscoveredModel {
 
 export interface ModelEntryPatch {
 	provider?: 'openai-compatible' | 'codex';
+	source?: string;
 	id?: string;
 	label: string;
 	model: string;
@@ -220,6 +223,34 @@ export interface ModelEntryPatch {
 	efforts?: ReasoningEffort[];
 	defaultEffort?: ReasoningEffort;
 	contextWindow?: number;
+}
+
+/** A hosted model provider you connect with an API key (OpenCode Go, OpenRouter…). */
+export interface HostedProvider {
+	id: string;
+	name: string;
+	/** One line on what the plan gives you. */
+	blurb: string;
+	/** Where to create an API key. */
+	keyUrl: string;
+	/** Where to check usage; null when the provider has no page for it. */
+	usageUrl: string | null;
+	connected: boolean;
+	apiKeyPreview: string | null;
+}
+
+/** A model a hosted provider serves, from its catalog. */
+export interface CatalogModel {
+	id: string;
+	name: string;
+	contextWindow: number | null;
+	/** Input price in USD per million tokens, when known. */
+	inputCost: number | null;
+	/** False when the model needs an API Recoder doesn't speak yet (Responses, Anthropic Messages). */
+	supported: boolean;
+	/** Reasoning levels the model accepts, when the provider reports them. */
+	efforts?: ReasoningEffort[];
+	defaultEffort?: ReasoningEffort;
 }
 
 /** Reasoning levels in ascending depth; providers offer a subset. */

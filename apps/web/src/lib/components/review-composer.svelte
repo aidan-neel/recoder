@@ -33,8 +33,6 @@
 		context?: Snippet;
 		/** Footer items after the paperclip ("Shared with Orchestrator", Resolve…). */
 		leading?: Snippet;
-		/** The model picker, just before Send. */
-		picker?: Snippet;
 	}
 
 	let {
@@ -57,8 +55,7 @@
 		attachLabel = 'Attach a file',
 		oninput,
 		context,
-		leading,
-		picker
+		leading
 	}: Props = $props();
 
 	function stopClick(event: MouseEvent): void {
@@ -119,7 +116,6 @@
 		{/if}
 		{@render leading?.()}
 		<span class="flex-1"></span>
-		{@render picker?.()}
 		<Composer.Submit class="rc-send" data-working={(busy || generating) && !sending ? '' : undefined} disabled={generating && !onStop} onclick={stopClick}>
 			{#snippet children({ action })}
 				{#if sending && !generating}

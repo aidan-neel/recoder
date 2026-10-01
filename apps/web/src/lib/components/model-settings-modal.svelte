@@ -16,6 +16,7 @@
 	import { modelSettingsUi, type SettingsSection } from '$lib/model-settings.svelte';
 	import { settingsDraft } from '$lib/settings-draft.svelte';
 	import { guidelinesStore } from '$lib/guidelines.svelte';
+	import { hostedProviders } from '$lib/hosted-providers.svelte';
 
 	const SECTIONS: { id: SettingsSection; label: string }[] = [
 		{ id: 'models', label: 'Models' },
@@ -28,6 +29,12 @@
 	const config = $derived(modelSettingsUi.config);
 	const title = $derived(SECTIONS.find((s) => s.id === modelSettingsUi.section)?.label ?? 'Settings');
 	let saveError = $state<string | null>(null);
+
+	// Providers load with the settings, so the Models tab paints once instead of rows popping in.
+	$effect(() => {
+		if (modelSettingsUi.open) void hostedProviders.load();
+	});
+	const providersPending = $derived(modelSettingsUi.section === 'models' && hostedProviders.list === null && !hostedProviders.error);
 
 	$effect(() => {
 		if (!modelSettingsUi.open) {
@@ -106,27 +113,26 @@
 								<Alert.Description>{modelSettingsUi.error}</Alert.Description>
 								<Button variant="outline" class="mt-2 w-fit" onclick={() => void modelSettingsUi.load()}>Retry</Button>
 							</Alert.Root>
-						{:else if !config || !settingsDraft.seeded}
+						{:else if !config || !settingsDraft.seeded || providersPending}
 							<!-- Built from the real settings classes so rows land where the loaded section puts them. -->
 							<div class="flex flex-col gap-6" role="status" aria-label="Loading settings">
 								{#if modelSettingsUi.section === 'models'}
 									<section class="settings-section" aria-hidden="true">
-										<Typography.H3 class="settings-label">Provider</Typography.H3>
-										<div class="provider-grid">
-											{#each [0, 1] as i (i)}
-												<Card.Root class="provider-card">
-													<div class="flex h-5 items-center gap-2"><Skeleton class="size-1.5 !rounded-full" /><Skeleton class="h-3.5 w-24" /><Skeleton class="ms-auto h-3 w-12" /></div>
-													<Skeleton class="h-3 w-3/4" />
-													<Skeleton class="h-3 w-1/2" />
-												</Card.Root>
+										<Typography.H3 class="settings-label">Providers</Typography.H3>
+										<Card.Root class="settings-list">
+											{#each [0, 1, 2, 3, 4] as i (i)}
+												<div class="settings-row">
+													<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={[18, 22, 26, 20, 24][i]} unit="%" /><Skeleton class="h-2.5" w={[40, 48, 44, 42, 50][i]} unit="%" /></div>
+													<Skeleton class="h-[30px] w-20" />
+												</div>
 											{/each}
-										</div>
+										</Card.Root>
 									</section>
 								{/if}
 								<section class="settings-section" aria-hidden="true">
-									{#if modelSettingsUi.section === 'models'}<Typography.H3 class="settings-label">Roles</Typography.H3>{:else}<div class="flex h-[17.5px] items-center"><Skeleton class="h-3 w-24" /></div>{/if}
+									{#if modelSettingsUi.section === 'models'}<Typography.H3 class="settings-label">Models</Typography.H3>{:else}<div class="flex h-[17.5px] items-center"><Skeleton class="h-3 w-24" /></div>{/if}
 									<Card.Root class="settings-list">
-										{#each [0, 1, 2, 3, 4] as i (i)}
+										{#each modelSettingsUi.section === 'models' ? [0, 1] : [0, 1, 2, 3, 4] as i (i)}
 											<div class="settings-row">
 												<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={[28, 36, 24, 32, 26][i]} unit="%" /><Skeleton class="h-2.5" w={[44, 38, 30, 34, 40][i]} unit="%" /></div>
 												<Skeleton class="h-3 w-24" />

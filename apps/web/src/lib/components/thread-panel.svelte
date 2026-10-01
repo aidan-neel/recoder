@@ -13,9 +13,7 @@
 	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import ModelPicker from './model-picker.svelte';
 	import ReviewComposer from './review-composer.svelte';
-	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
 	import type { ReviewRole } from '@recoder/shared';
 	import { findingsStore } from '$lib/findings.svelte';
 	import { serverApi } from '$lib/server-api';
@@ -362,14 +360,6 @@
 				>
 					{#snippet leading()}
 						<Typography.Metadata class="truncate text-[12px] text-fg-faint">Shared with Orchestrator</Typography.Metadata>
-					{/snippet}
-					{#snippet picker()}
-						<ModelPicker
-							value={modelSettingsUi.specialist}
-							onSelect={(choice) => void modelSettingsUi.selectSpecialist(choice)}
-							size="panel"
-							label="Specialist model"
-						/>
 					{/snippet}
 				</ReviewComposer>
 			</div>

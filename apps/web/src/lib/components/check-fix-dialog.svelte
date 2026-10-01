@@ -28,7 +28,7 @@
 				<p class="fix-status" role="status"><Spinner size={12} aria-hidden="true" /><span class="shimmer-text">Reading the log and writing a fix…</span></p>
 			{:else if fix?.status === 'error' && check}
 				{@const target = check}
-				<FailureNotice title="Couldn't write a fix" reason={fix.error ?? ''} signIn={fix.action === 'sign-in'} onRetry={() => void checkFixes.suggest(reviewId, target)} />
+				<FailureNotice title="Couldn't write a fix" reason={fix.error ?? ''} signIn={fix.action === 'sign-in'} usageLimit={fix.usageLimit} onRetry={() => void checkFixes.suggest(reviewId, target)} />
 			{:else if fix?.status === 'ready' && fix.patch}
 				<SuggestedFix suggestion={fix} />
 				{#if fix.applyError}<p class="conversation-fix-error" role="status">{fix.applyError}</p>{/if}

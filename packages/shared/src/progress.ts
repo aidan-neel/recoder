@@ -195,6 +195,19 @@ export interface ModelFailure {
 	reason: string;
 	/** ChatGPT is signed out or its sign-in expired; signing in fixes it. */
 	signIn?: boolean;
+	/** The model's plan ran out of usage; another model or waiting fixes it. */
+	usageLimit?: UsageLimit;
+}
+
+export interface UsageLimit {
+	/** `codex` for ChatGPT, else the hosted provider id (`opencode-go`…); `custom` for your own endpoint. */
+	provider: string;
+	/** "ChatGPT", "OpenCode Go"… */
+	name: string;
+	/** Unix seconds when usage resets, when the provider says. */
+	resetsAt?: number | null;
+	/** Where to check or top up usage. */
+	usageUrl?: string | null;
 }
 
 export interface ReviewChatMessage {

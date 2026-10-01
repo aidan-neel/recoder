@@ -9,9 +9,16 @@
 
 /*
  * Recoder design tokens (DESIGN.md). Components reference these, never raw hex.
- * The app is dark-only: `html.dark` is set statically in app.html.
+ * Dark is the default; `html.dark` is toggled by $lib/theme.svelte.ts and app.html.
  */
 :root {
+	color-scheme: dark;
+	--wash-rgb: 255 245 230;
+	--ink-rgb: 237 233 227;
+	--shade-rgb: 0 0 0;
+	/* Drop shadows under cards and the composer; off in light mode (menus and modals keep theirs). */
+	--drop: 1;
+
 	/* Surfaces */
 	--bg-chrome: #0d0c0b;
 	--bg-canvas: #141312;
@@ -66,7 +73,7 @@
 	--sev-low: #82b3fb;
 	--sev-low-tint: rgba(130, 179, 251, 0.14);
 	--sev-info: #b9b3aa;
-	--sev-info-tint: rgba(255, 245, 230, 0.07);
+	--sev-info-tint: rgb(var(--wash-rgb) / 0.07);
 	--success: #67da7e;
 	--success-tint: rgba(103, 218, 126, 0.13);
 	--danger: #fb756e;
@@ -90,27 +97,104 @@
 	--scrim: rgba(8, 7, 6, 0.6);
 
 	/* Motion: tuned for a tool opened thousands of times a day. Feedback is
-	   near-instant; only movement that explains a change (the tab pill, a
+	   quick but smooth; only movement that explains a change (the tab pill, a
 	   panel unfolding) gets a short ease. Tune the app's feel here. */
 	--ease-pill: cubic-bezier(0.3, 0.7, 0.2, 1);
 	--ease-menu: cubic-bezier(0.2, 0.8, 0.2, 1);
-	--dur-hover: 60ms;
-	--dur-press: 60ms;
-	--dur-highlight: 60ms;
-	--dur-toggle: 100ms;
-	--dur-pill: 150ms;
-	--dur-disclose: 150ms;
-	--dur-menu: 90ms;
-	--dur-enter: 140ms;
-	--dur-toast: 160ms;
+	--dur-hover: 100ms;
+	--dur-press: 80ms;
+	--dur-highlight: 100ms;
+	--dur-toggle: 180ms;
+	--dur-pill: 240ms;
+	--dur-disclose: 240ms;
+	--dur-menu: 150ms;
+	--dur-toast: 220ms;
 	--dur-shimmer: 1.6s;
 	--dur-skeleton: 1.4s;
+	--skeleton-delay: 200ms;
 	--dur-spinner: 0.9s;
 
 	/* Type */
 	--font-ui: 'Geist Sans', 'Geist', system-ui, sans-serif;
 	--font-code: 'Geist Mono', ui-monospace, monospace;
 	--font-ai: 'Lora', Georgia, serif;
+}
+
+/* Light theme: same tokens, warm paper. Applied when `html.dark` is absent. */
+:root:not(.dark) {
+	color-scheme: light;
+	--wash-rgb: 60 45 30;
+	--ink-rgb: 29 27 24;
+	--shade-rgb: 60 45 30;
+	--drop: 0;
+
+	--bg-chrome: #ebe8e2;
+	--bg-canvas: #f7f5f1;
+	--bg-canvas-deep: #f1eee9;
+	--bg-panel: #f4f2ee;
+	--bg-raised: #fffefc;
+	--bg-raised-2: #fbfaf7;
+	--bg-menu: #ffffff;
+	--bg-hover: #ece9e3;
+	--bg-selected: #e4e0d9;
+	--bg-bubble: #ece9e3;
+	--bg-field: #ffffff;
+	--bg-search: #efece7;
+
+	--line-divider: #e6e2db;
+	--line-subtle: #e9e5de;
+	--line-subtle-2: #e9e5de;
+	--line-canvas: #e4e0d9;
+	--line-card: #dfdad2;
+	--line-tab: #dbd6ce;
+	--line-control: #d6d1c8;
+	--line-menu: #d3cec5;
+	--line-strong: #c9c3b9;
+	--line-hover: #bdb7ac;
+	--line-focus: #a9a398;
+
+	--text-primary: #1d1b18;
+	--text-ai: #26231f;
+	--text-secondary: #35322d;
+	--text-tertiary: #47433d;
+	--text-muted: #5c5750;
+	--text-subtle: #6a655e;
+	--text-faint: #86817a;
+	--text-ghost: #a8a39b;
+	--text-brief-body: #6a655e;
+
+	--primary: #1d1b18;
+	--primary-hover: #000000;
+	--on-primary: #faf8f4;
+
+	--sev-high: #b3261e;
+	--sev-high-icon: #d6352c;
+	--sev-high-tint: rgba(214, 53, 44, 0.1);
+	--sev-medium: #8a5a00;
+	--sev-medium-tint: rgba(214, 140, 0, 0.15);
+	--sev-low: #1f5fbf;
+	--sev-low-tint: rgba(31, 95, 191, 0.1);
+	--sev-info: #5c5750;
+	--sev-info-tint: rgba(60, 45, 30, 0.07);
+	--success: #1a7f37;
+	--success-tint: rgba(26, 127, 55, 0.12);
+	--danger: #c4302b;
+	--danger-tint: rgba(196, 48, 43, 0.1);
+
+	--diff-add: rgba(26, 127, 55, 0.1);
+	--diff-del: rgba(214, 53, 44, 0.09);
+	--selection: rgba(31, 95, 191, 0.14);
+	--selection-bar: #2f6fdb;
+	--syn-keyword: #b3402a;
+	--syn-function: #7a3fb0;
+	--syn-type: #1f7a68;
+	--syn-plain: #3a3631;
+
+	--shadow-menu: 0 0 0 1px var(--line-menu), 0 12px 32px rgba(60, 45, 30, 0.16);
+	--shadow-modal: 0 0 0 1px var(--line-control), 0 24px 60px rgba(60, 45, 30, 0.22);
+	--shadow-composer: 0 0 0 1px var(--line-control);
+	--shadow-layered: 0 0 0 1px var(--line-card);
+	--scrim: rgba(30, 25, 20, 0.35);
 }
 
 /* Tailwind utilities for the tokens: bg-canvas, text-fg-faint, ring-line-card… */
@@ -171,7 +255,6 @@
 /* Sivir theme mapped onto the Recoder tokens. */
 :root,
 .dark {
-	color-scheme: dark;
 
 	--font-sans: var(--font-ui);
 	--font-mono: var(--font-code);
@@ -196,7 +279,7 @@
 	--color-on-primary: var(--on-primary);
 	--color-primary-stroke: transparent;
 	--color-accent-tint: var(--bg-selected);
-	--color-ring: rgba(237, 233, 227, 0.2);
+	--color-ring: rgb(var(--ink-rgb) / 0.2);
 	--color-overlay: var(--scrim);
 	--color-success: var(--success);
 	--color-warning: var(--sev-medium);
@@ -257,30 +340,34 @@
 	--elevation-control: inset 0 0 0 1px var(--line-control);
 	--elevation-button-outline: inset 0 0 0 1px var(--line-menu);
 
-	--motion-duration-hover: var(--dur-hover);
+	--motion-duration-hover: 120ms;
 	--motion-duration-menu: var(--dur-hover);
 	--motion-duration-press: var(--dur-press);
 	--motion-duration-item: 0ms;
-	--motion-duration-panel: var(--dur-menu);
-	--motion-duration-panel-in: var(--dur-menu);
-	--motion-duration-panel-out: 60ms;
-	--motion-duration-modal-in: 120ms;
+	--motion-duration-menu: 40ms;
+	--motion-duration-panel: 180ms;
+	--motion-duration-panel-in: 130ms;
+	--motion-duration-panel-out: 80ms;
+	--motion-duration-modal-in: 150ms;
 	--motion-duration-modal-out: 70ms;
-	--motion-duration-modal-stack-in: 140ms;
-	--motion-duration-modal-stack-out: 90ms;
-	--motion-duration-sheet: 180ms;
-	--motion-duration-sheet-out: 120ms;
-	--motion-duration-overlay: var(--dur-menu);
-	--motion-duration-toast-in: var(--dur-toast);
-	--motion-duration-toast-out: 120ms;
-	--motion-panel-y: 2px;
+	--motion-duration-modal-stack-in: 220ms;
+	--motion-duration-modal-stack-out: 140ms;
+	--motion-duration-sheet: 320ms;
+	--motion-duration-sheet-out: 224ms;
+	--motion-duration-overlay: 120ms;
+	--motion-duration-step-in: 360ms;
+	--motion-duration-step-out: 130ms;
+	--motion-duration-toast-in: 320ms;
+	--motion-duration-toast-out: 240ms;
+	--motion-panel-y: 3px;
 	--motion-panel-scale-start: 1;
-	--motion-menu-y: 2px;
-	--motion-menu-scale-start: 1;
-	--motion-menu-blur: 0px;
-	--motion-modal-y: 2px;
-	--motion-modal-scale-start: 1;
-	--motion-modal-blur: 0px;
+	--motion-menu-y: 3px;
+	--motion-menu-scale-start: 0.95;
+	--motion-menu-opacity-start: 0;
+	--motion-menu-blur: 2px;
+	--motion-modal-y: 3px;
+	--motion-modal-scale-start: 0.95;
+	--motion-modal-blur: 2px;
 	--ease-out: var(--ease-menu);
 	--ui-cursor-interactive: default;
 
@@ -355,13 +442,6 @@ body {
 	animation: rc-blink 1s steps(1) infinite;
 }
 
-/* Rows fade in rising 2px; stagger via --i, capped at 8 rows so long lists
-   are fully in within ~300ms. */
-.enter-rise {
-	animation: rc-enter var(--dur-enter) var(--ease-menu) both;
-	animation-delay: calc(min(var(--i, 0), 8) * 20ms);
-}
-
 .spin {
 	animation: rc-spin var(--dur-spinner) linear infinite;
 }
@@ -384,20 +464,10 @@ body {
 		opacity: 0;
 	}
 }
-@keyframes rc-enter {
-	from {
-		opacity: 0;
-		transform: translateY(2px);
-	}
-	to {
-		opacity: 1;
-		transform: none;
-	}
-}
 @keyframes rc-label-in {
 	from {
 		opacity: 0;
-		transform: translateY(2px);
+		transform: translateY(4px);
 	}
 	to {
 		opacity: 1;
@@ -536,7 +606,7 @@ body {
 	color: var(--text-faint);
 }
 
-/* Hover highlight: instant position, 60ms opacity fade. Never travels. */
+/* Hover highlight: instant position, 100ms opacity fade. Never travels. */
 .sivir-item-highlight {
 	border-radius: 7px;
 	transition-property: opacity;
@@ -556,7 +626,7 @@ body {
 	left: 0;
 	z-index: 0;
 	border-radius: 8px;
-	background-color: rgba(255, 245, 230, 0.05);
+	background-color: rgb(var(--wash-rgb) / 0.05);
 	opacity: 0;
 	transition: opacity var(--dur-highlight) ease-out;
 }
@@ -690,7 +760,7 @@ body {
 }
 [data-ui='input']:focus-within {
 	background-color: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-focus), 0 0 0 3px rgba(237, 233, 227, 0.06);
+	box-shadow: inset 0 0 0 1px var(--line-focus), 0 0 0 3px rgb(var(--ink-rgb) / 0.06);
 }
 [data-ui='input-control']::placeholder,
 [data-ui='textarea']::placeholder,
@@ -757,7 +827,7 @@ kbd.keycap {
 	line-height: 1.4;
 }
 [data-variant='primary'] kbd.keycap {
-	background-color: rgba(0, 0, 0, 0.12);
+	background-color: rgb(var(--shade-rgb) / 0.12);
 	color: var(--on-primary);
 }
 
@@ -765,7 +835,27 @@ kbd.keycap {
 .rc-skeleton {
 	background: linear-gradient(90deg, var(--bg-menu) 0%, var(--line-tab) 50%, var(--bg-menu) 100%);
 	background-size: 200% 100%;
-	animation: rc-shimmer var(--dur-skeleton) linear infinite;
+	animation: rc-skeleton-hold 1ms linear var(--skeleton-delay) backwards, rc-shimmer var(--dur-skeleton) linear infinite;
+}
+
+/* A skeleton stays invisible for its first 200ms. Data that lands sooner
+   (most of it, on a local server) replaces blank space with content in one
+   step instead of flashing a skeleton for a frame. */
+:is(
+		[role='status'][aria-label^='Loading'],
+		[role='status'][aria-label^='Fetching'],
+		[role='status'][aria-label^='Listing'],
+		[role='status'][aria-label='Writing the brief']
+	) {
+	animation: rc-skeleton-hold 1ms linear var(--skeleton-delay) backwards;
+}
+@keyframes rc-skeleton-hold {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
 }
 
 /* Badges: 11px/500, radius 5, padding 1px 6px. */
@@ -775,7 +865,7 @@ kbd.keycap {
 	box-shadow: none;
 }
 
-/* Toast: rises over 160ms, compact single line. */
+/* Toast: rises over 220ms, compact single line. */
 [data-ui='toast'] {
 	border: 0;
 	border-radius: 10px;
@@ -890,7 +980,7 @@ kbd.keycap {
 }
 .top-tabs [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover {
 	color: var(--text-primary);
-	background-color: rgba(255, 245, 230, 0.04);
+	background-color: rgb(var(--wash-rgb) / 0.04);
 }
 .top-tabs [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
 	color: var(--text-primary);
@@ -906,7 +996,7 @@ kbd.keycap {
 }
 .tab-badge[data-tone='running'] {
 	color: var(--text-muted);
-	background-color: rgba(255, 245, 230, 0.06);
+	background-color: rgb(var(--wash-rgb) / 0.06);
 }
 .tab-badge[data-tone='failed'] {
 	color: var(--danger);
@@ -996,7 +1086,7 @@ kbd.keycap {
 }
 [data-ui='composer-form'].rc-composer:focus-within {
 	border: 0;
-	box-shadow: 0 0 0 1px var(--line-focus), 0 10px 30px rgba(0, 0, 0, 0.35);
+	box-shadow: 0 0 0 1px var(--line-focus), 0 10px 30px rgb(var(--shade-rgb) / calc(0.35 * var(--drop)));
 }
 [data-ui='composer-form'].rc-composer[data-size='panel'] {
 	gap: 8px;
@@ -1116,6 +1206,8 @@ kbd.keycap {
 .quiet-trigger-label {
 	display: inline-flex;
 	gap: 5px;
+}
+.quiet-trigger-label[data-picked] {
 	animation: rc-label-in var(--dur-toggle) var(--ease-menu);
 }
 
@@ -1308,7 +1400,7 @@ kbd.keycap {
 	height: 24px;
 	padding: 0 6px 0 7px;
 	border-radius: 7px;
-	background: rgba(0, 0, 0, 0.18);
+	background: rgb(var(--shade-rgb) / 0.18);
 	box-shadow: inset 0 0 0 1px var(--line-card);
 	font-family: var(--font-code);
 	font-size: 11.5px;
@@ -1317,7 +1409,7 @@ kbd.keycap {
 	transition: background-color var(--dur-hover) ease-out;
 }
 .code-ref-badge:hover {
-	background: rgba(0, 0, 0, 0.3);
+	background: rgb(var(--shade-rgb) / 0.3);
 }
 .code-ref-badge:focus-visible {
 	outline: 2px solid var(--color-ring);
@@ -1611,7 +1703,7 @@ kbd.keycap {
 }
 [data-ui='input-control']:focus-within {
 	background-color: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-focus), 0 0 0 3px rgba(237, 233, 227, 0.06);
+	box-shadow: inset 0 0 0 1px var(--line-focus), 0 0 0 3px rgb(var(--ink-rgb) / 0.06);
 }
 [data-ui='input-control'] [data-ui='input'],
 [data-ui='input-control'] [data-ui='input']:focus-within {
@@ -1752,7 +1844,7 @@ kbd.keycap {
 	border: 0;
 	border-radius: 14px;
 	background-color: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card), 0 8px 24px rgba(0, 0, 0, 0.25);
+	box-shadow: 0 0 0 1px var(--line-card), 0 8px 24px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 	overflow: hidden;
 }
 .setup-step {
@@ -1908,7 +2000,7 @@ kbd.keycap {
 	font: inherit;
 	letter-spacing: inherit;
 	text-decoration: underline;
-	text-decoration-color: #4a453f;
+	text-decoration-color: var(--line-hover);
 	text-decoration-thickness: 1px;
 	text-underline-offset: 5px;
 	border-radius: 4px;
@@ -1949,7 +2041,7 @@ kbd.keycap {
 }
 .home-filter [data-ui='input-trailing'] kbd.keycap {
 	padding: 2px 6px;
-	background-color: #221f1d;
+	background-color: var(--bg-hover);
 	color: var(--text-subtle);
 }
 [data-ui='button'].home-refresh {
@@ -1996,7 +2088,7 @@ kbd.keycap {
 	transition: background-color var(--dur-hover) ease-out, color var(--dur-hover) ease-out;
 }
 .repo-chips [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover:not([data-state='active']) {
-	background-color: rgba(255, 245, 230, 0.04);
+	background-color: rgb(var(--wash-rgb) / 0.04);
 	color: var(--text-primary);
 }
 .repo-chips [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
@@ -2202,7 +2294,7 @@ kbd.keycap {
 	font-weight: 400;
 	line-height: 1.35;
 	color: var(--text-muted);
-	background-color: rgba(255, 245, 230, 0.06);
+	background-color: rgb(var(--wash-rgb) / 0.06);
 }
 [data-ui='badge'].status-chip[data-tone='success'] {
 	color: var(--success);
@@ -2245,7 +2337,7 @@ kbd.keycap {
 	width: 200px;
 	padding: 18px 10px 16px;
 	border-right: 1px solid var(--line-subtle);
-	background-color: #121110;
+	background-color: var(--bg-chrome);
 	border-radius: 16px 0 0 16px;
 }
 .settings-nav-label {
@@ -2373,66 +2465,10 @@ kbd.keycap {
 }
 
 /* Provider cards: two columns, radius 12, padding 14. */
-.provider-grid {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 12px;
-}
-@media (max-width: 720px) {
-	.provider-grid {
-		grid-template-columns: 1fr;
-	}
-}
-[data-ui='card'].provider-card {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-	min-height: 168px;
-	padding: 14px;
-	border: 0;
-	border-radius: 12px;
-	background-color: var(--bg-raised-2);
-	box-shadow: inset 0 0 0 1px var(--line-card);
-}
-[data-ui='card'].provider-card[data-active] {
-	background-color: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-control);
-}
-.provider-card-head {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-.provider-dot {
-	width: 6px;
-	height: 6px;
-	flex-shrink: 0;
-	border-radius: 3px;
-	background-color: var(--text-ghost);
-}
-.provider-dot[data-on] {
-	background-color: var(--success);
-}
-.provider-card-title {
-	flex: 1;
-	min-width: 0;
-	font-size: 14px;
-	font-weight: 500;
-	letter-spacing: 0;
-	color: var(--text-primary);
-}
-.provider-status {
-	flex-shrink: 0;
-	font-size: 12.5px;
-	color: var(--text-faint);
-}
-.provider-status[data-on] {
-	color: var(--success);
-}
-.provider-account {
-	font-size: 12.5px;
-	line-height: 1.5;
-	color: var(--text-muted);
+/* One action per provider row ("Connect" or "Models"), all the same width. */
+.provider-list [data-ui='button'].provider-action {
+	width: 96px;
+	justify-content: center;
 }
 [data-ui='progress'].usage-bar {
 	height: 3px;
@@ -2442,20 +2478,62 @@ kbd.keycap {
 [data-ui='progress'].usage-bar > div {
 	background-color: var(--text-secondary);
 }
-.provider-fields {
+[data-ui='progress'].usage-bar[data-full] > div {
+	background-color: var(--danger);
+}
+
+/* Out of usage: actions sit under the explanation so the switcher has room. */
+.usage-notice-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-top: 10px;
+}
+[data-ui='card'].usage-notice .review-notice-icon {
+	color: var(--sev-medium);
+}
+
+/* Model picker: long lists scroll inside the submenu, grouped by provider. */
+[data-ui='dropdown-menu-sub-content'].model-menu-models,
+.model-menu-models {
+	max-height: min(60dvh, 520px);
+	overflow-y: auto;
+}
+.model-menu-group {
+	padding: 6px 10px 4px;
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-faint);
+}
+
+/* Provider model catalog: checkbox rows with context and price on the right. */
+.catalog-list {
 	display: flex;
 	flex-direction: column;
-	gap: 8px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
 }
-.provider-fields [data-ui='input'] {
-	height: 30px;
-	min-height: 30px;
-	padding: 0 10px;
-	border-radius: 8px;
-	background-color: var(--bg-canvas);
-	box-shadow: inset 0 0 0 1px var(--line-tab);
+.catalog-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 48px;
+	padding: 6px 2px;
+	border-bottom: 1px solid var(--line-subtle-2);
+}
+.catalog-row[data-unsupported] {
+	opacity: 0.55;
+}
+.catalog-meta {
+	display: flex;
+	flex-shrink: 0;
+	gap: 10px;
 	font-family: var(--font-code);
-	font-size: 12px;
+	font-size: 11.5px;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
 }
 [data-ui='button'].provider-link {
 	height: 26px;
@@ -2521,7 +2599,7 @@ kbd.keycap {
 	padding: 9px 12px 9px 14px;
 }
 .settings-row + .settings-row,
-.settings-list > .enter-rise + .enter-rise {
+.settings-list > .settings-row + .settings-row {
 	border-top: 1px solid var(--line-subtle-2);
 }
 .settings-row-name {
@@ -2540,7 +2618,7 @@ kbd.keycap {
 	color: var(--text-subtle);
 }
 .settings-number {
-	width: 120px;
+	width: 96px;
 }
 .settings-number [data-ui='input'] {
 	height: 30px;
@@ -2697,10 +2775,11 @@ main[data-route] .suggested-fix-code::-webkit-scrollbar-thumb {
 	*::after {
 		transition-duration: 1ms !important;
 	}
+	.rc-skeleton {
+		animation: rc-skeleton-hold 1ms linear var(--skeleton-delay) backwards;
+	}
 	.shimmer-text,
-	.rc-skeleton,
-	.stream-caret::after,
-	.enter-rise {
+	.stream-caret::after {
 		animation: none;
 	}
 	.shimmer-text {
@@ -2718,7 +2797,7 @@ main[data-route] .suggested-fix-code::-webkit-scrollbar-thumb {
 	translate: -50% 0;
 	border-radius: 14px;
 	background-color: var(--bg-field);
-	box-shadow: 0 0 0 1px var(--line-menu), 0 30px 80px rgba(0, 0, 0, 0.6);
+	box-shadow: 0 0 0 1px var(--line-menu), 0 30px 80px rgb(var(--shade-rgb) / 0.6);
 }
 [data-ui='command-content'] [data-ui='modal-surface'] {
 	border-radius: 14px;
@@ -2798,7 +2877,7 @@ main[data-route] .suggested-fix-code::-webkit-scrollbar-thumb {
 }
 [data-ui='command-content'] .sivir-item-highlight {
 	border-radius: 9px;
-	background-color: #24221f;
+	background-color: var(--bg-selected);
 }
 .palette-icon {
 	display: flex;
@@ -2954,7 +3033,7 @@ mark.palette-hit {
 	margin-bottom: 8px;
 	border-radius: 12px;
 	background: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-card), 0 4px 16px rgba(0, 0, 0, 0.25);
+	box-shadow: inset 0 0 0 1px var(--line-card), 0 4px 16px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 	color: var(--text-secondary);
 }
 .focus-empty[data-kind='running'] .focus-empty-icon { color: var(--sev-medium); }
@@ -3489,7 +3568,7 @@ mark.palette-hit {
 
 /* Thinking → Thought for: crossfade through a blur, timer glides, glyph folds away. */
 .thought-label {
-	--tl-settle: 200ms;
+	--tl-settle: 300ms;
 	display: inline-flex;
 	align-items: center;
 	vertical-align: top;
@@ -3807,7 +3886,7 @@ button.fact-link:hover {
 	border: 0;
 	border-radius: 14px;
 	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-tab), 0 8px 24px rgba(0, 0, 0, 0.25);
+	box-shadow: 0 0 0 1px var(--line-tab), 0 8px 24px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 }
 .review-result-text {
 	display: flex;
@@ -3838,7 +3917,7 @@ button.fact-link:hover {
 	bottom: 0;
 	left: 0;
 	padding: 40px 24px 22px;
-	background: linear-gradient(to bottom, rgba(20, 19, 18, 0), var(--bg-canvas) 40%);
+	background: linear-gradient(to bottom, transparent, var(--bg-canvas) 40%);
 	pointer-events: none;
 }
 .review-dock-inner {
@@ -3931,7 +4010,7 @@ button.fact-link:hover {
 	border: 0;
 	border-radius: 12px;
 	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card), 0 4px 16px rgba(0, 0, 0, 0.25);
+	box-shadow: 0 0 0 1px var(--line-card), 0 4px 16px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 }
 .rail-card-head {
 	display: flex;
@@ -4115,6 +4194,12 @@ button.fact-link:hover {
 [data-ui='modal-footer'] {
 	gap: 8px;
 	padding: 4px 20px 20px;
+	justify-content: flex-end;
+}
+/* Sivir's Close/Exit carry `mr-auto`, which strands Cancel on the far left
+   with a gap before the confirm button. Keep both actions together. */
+[data-ui='modal-footer'] > [data-ui='button'] {
+	margin-inline: 0;
 }
 
 /* ── Motion: page transitions and streaming text ───────────── */
@@ -4192,7 +4277,7 @@ button.fact-link:hover {
 	min-width: 18px;
 	padding: 0 5px;
 	border-radius: 5px;
-	background: rgba(0, 0, 0, 0.16);
+	background: rgb(var(--shade-rgb) / 0.16);
 	font-family: var(--font-code);
 	font-size: 11px;
 	line-height: 18px;
@@ -4420,7 +4505,7 @@ button.fact-link:hover {
 	transition: background-color var(--dur-hover) ease-out, color var(--dur-hover) ease-out;
 }
 .tree-folder:hover {
-	background: rgba(255, 245, 230, 0.03);
+	background: rgb(var(--wash-rgb) / 0.03);
 	color: var(--text-primary);
 }
 /* Same 8px icon-to-name gap as file rows (the row gap is 6px for the chevron). */
@@ -4449,7 +4534,7 @@ button.fact-link:hover {
 	transition: background-color var(--dur-hover) ease-out;
 }
 .tree-file:hover {
-	background: rgba(255, 245, 230, 0.03);
+	background: rgb(var(--wash-rgb) / 0.03);
 }
 .tree-file[data-selected] {
 	background: var(--bg-menu);
@@ -4646,7 +4731,7 @@ button.diff-num:hover {
 	border-left: 1px solid var(--line-divider);
 }
 .diff-half[data-type='empty'] {
-	background: rgba(255, 245, 230, 0.015);
+	background: rgb(var(--wash-rgb) / 0.015);
 }
 .diff-skip {
 	display: flex;
@@ -4683,7 +4768,7 @@ button.diff-num:hover {
 	transition: box-shadow var(--dur-hover) ease-out;
 }
 [data-ui='card'].inline-finding[data-focused] {
-	box-shadow: 0 0 0 1px var(--line-hover), 0 6px 20px rgba(0, 0, 0, 0.25);
+	box-shadow: 0 0 0 1px var(--line-hover), 0 6px 20px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 }
 .inline-finding-head {
 	display: flex;
@@ -5068,7 +5153,6 @@ button.diff-num:hover {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
-	animation: rc-enter var(--dur-enter) var(--ease-menu) both;
 }
 [data-ui='button'][data-variant].guidelines-preset {
 	border-radius: 999px;
@@ -5085,7 +5169,6 @@ button.diff-num:hover {
 	padding-left: 4px;
 	font-size: 12.5px;
 	color: var(--text-muted);
-	animation: rc-enter var(--dur-enter) var(--ease-menu) both;
 }
 .guidelines-error {
 	padding-left: 4px;
@@ -5269,8 +5352,8 @@ button.diff-num:hover {
 }
 /* PR checks summary in the session bar. */
 [data-ui='button'][data-variant].pr-checks {
-	height: 32px;
-	min-height: 32px;
+	height: 30px;
+	min-height: 30px;
 	gap: 6px;
 	padding: 0 10px;
 	font-size: 12.5px;
@@ -5280,11 +5363,13 @@ button.diff-num:hover {
 [data-ui='button'][data-variant].pr-checks[data-tone='passed'] svg { color: var(--success); }
 [data-ui='button'][data-variant].pr-checks[data-tone='failed'] { color: var(--danger); }
 [data-ui='button'][data-variant].pr-checks[data-tone='running'] svg { color: var(--sev-medium); }
+/* Holds the loaded button's usual width ("4/4 checks") so the header doesn't shift when checks land. */
 .pr-checks-pending {
 	display: inline-flex;
-	width: 32px;
+	width: 108px;
 	justify-content: center;
 	color: var(--text-ghost);
+	animation: rc-skeleton-hold 1ms linear var(--skeleton-delay) backwards;
 }
 .pr-checks-head {
 	display: flex;
@@ -5396,14 +5481,14 @@ button.diff-num:hover {
 	border: 0;
 	border-radius: 12px;
 	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card), 0 4px 14px rgba(0, 0, 0, 0.22);
+	box-shadow: 0 0 0 1px var(--line-card), 0 4px 14px rgb(var(--shade-rgb) / calc(0.22 * var(--drop)));
 	transition: box-shadow var(--dur-hover) ease-out;
 }
 [data-ui='card'].focus-card:hover {
-	box-shadow: 0 0 0 1px var(--line-control), 0 4px 14px rgba(0, 0, 0, 0.22);
+	box-shadow: 0 0 0 1px var(--line-control), 0 4px 14px rgb(var(--shade-rgb) / calc(0.22 * var(--drop)));
 }
 [data-ui='card'].focus-card[data-active] {
-	box-shadow: 0 0 0 1px var(--line-hover), 0 6px 20px rgba(0, 0, 0, 0.3);
+	box-shadow: 0 0 0 1px var(--line-hover), 0 6px 20px rgb(var(--shade-rgb) / calc(0.3 * var(--drop)));
 }
 /* Dismissed findings (Show dismissed): flat and dimmed, below the open ones. */
 [data-ui='card'].focus-card[data-dismissed] {
@@ -5506,7 +5591,7 @@ button.diff-num:hover {
 	border: 0;
 	border-radius: 12px;
 	background: var(--bg-panel);
-	box-shadow: 0 0 0 1px var(--line-card), 0 6px 20px rgba(0, 0, 0, 0.25);
+	box-shadow: 0 0 0 1px var(--line-card), 0 6px 20px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 }
 .focus-hunk-head {
 	display: flex;
@@ -5731,63 +5816,6 @@ button.diff-num:hover {
 }
 .diff-num {
 	align-self: start;
-}
-
-/* ── Entrances: each page stages its own pieces ───────────────
-   Content rises 4px and fades in (like Connections after its skeleton),
-   one step at a time. Chrome that stays put (top bar, session header, file tree) never moves.
-   Hidden views replay this when shown again, since display:none restarts animations. */
-:is(
-		.home-column > *,
-		.setup > *,
-		.review-transcript > *,
-		.review-dock-inner,
-		.results-rail-body > *,
-		.diff-file-header,
-		.review-file-diff,
-		.focus-list-head,
-		.focus-detail-column > *
-	) {
-	animation: rc-enter var(--dur-enter) var(--ease-menu) both;
-	animation-delay: calc(var(--stage, 0) * 20ms);
-}
-.home-column > :nth-child(2) { --stage: 2; }
-.setup > :nth-child(2) { --stage: 2; }
-.home-column > :nth-child(3) { --stage: 3; }
-.home-column > :nth-child(n + 4) { --stage: 4; }
-.review-transcript > :nth-child(1) { --stage: 1; }
-.review-transcript > :nth-child(2) { --stage: 2; }
-.review-transcript > :nth-child(3) { --stage: 3; }
-.review-transcript > :nth-child(4) { --stage: 4; }
-.review-transcript > :nth-child(5) { --stage: 5; }
-.review-transcript > :nth-child(n + 6) { --stage: 1; }
-.review-dock-inner { --stage: 3; }
-.results-rail-body > :nth-child(1) { --stage: 2; }
-.results-rail-body > :nth-child(2) { --stage: 4; }
-.results-rail-body > :nth-child(3) { --stage: 6; }
-.diff-file-header { --stage: 1; }
-.review-file-diff { --stage: 2; }
-.focus-list-head { --stage: 0; }
-.focus-detail-column > :nth-child(1) { --stage: 0; }
-.focus-detail-column > :nth-child(2) { --stage: 2; }
-/* A file switch in the diff re-mounts only the code; show it at once. */
-.diff-file-header ~ [data-ui='scroll-area'] .review-file-diff {
-	animation: none;
-}
-@media (prefers-reduced-motion: reduce) {
-	:is(
-			.home-column > *,
-			.setup > *,
-				.review-transcript > *,
-			.review-dock-inner,
-			.results-rail-body > *,
-			.diff-file-header,
-			.review-file-diff,
-			.focus-list-head,
-			.focus-detail-column > *
-		) {
-		animation: none;
-	}
 }
 
 /* Changes sheet: applied fixes the developer commits and pushes by hand. */
