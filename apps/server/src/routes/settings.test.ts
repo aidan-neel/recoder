@@ -194,3 +194,21 @@ describe('review settings', () => {
 		expect(saved2.configured).toBe(true);
 	});
 });
+
+test('a disconnect during a pending connect stays final', async () => {
+	const realFetch = globalThis.fetch;
+	let finishVerify!: () => void;
+	globalThis.fetch = (() => new Promise((resolve) => { finishVerify = () => resolve(Response.json({ data: [] })); })) as unknown as typeof fetch;
+	try {
+		const connecting = app.request('/api/settings/providers/opencode-go/connect', {
+			method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ apiKey: 'sk-late' })
+		});
+		await new Promise((resolve) => setTimeout(resolve, 10));
+		expect((await app.request('/api/settings/providers/opencode-go', { method: 'DELETE' })).status).toBe(200);
+		finishVerify();
+		expect((await connecting).status).toBe(409);
+		expect(getStoredSettings().connections?.['opencode-go']).toBeUndefined();
+	} finally {
+		globalThis.fetch = realFetch;
+	}
+});
