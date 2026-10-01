@@ -297,13 +297,7 @@
 
 							<div class="review-dock">
 								<div class="review-dock-inner">
-									<ReviewComposer label="Message Orchestrator" placeholder={demo.finished ? 'Ask a follow-up about this review…' : 'Ask Orchestrator anything…'} onSubmit={() => {}} onAttach={() => {}}>
-										{#snippet picker()}
-											<Button variant="quiet" class="quiet-trigger">
-												<span class="quiet-trigger-label">GPT 5.6 Sol <span class="text-fg-subtle">Medium</span></span>
-											</Button>
-										{/snippet}
-									</ReviewComposer>
+									<ReviewComposer label="Message Orchestrator" placeholder={demo.finished ? 'Ask a follow-up about this review…' : 'Ask Orchestrator anything…'} onSubmit={() => {}} onAttach={() => {}} />
 								</div>
 							</div>
 						</div>
