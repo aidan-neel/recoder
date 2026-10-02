@@ -10,7 +10,8 @@ import {
 	setConnection
 } from '../lib/review-settings';
 import { HOSTED_PROVIDERS, KeyRejectedError, hostedProvider, providerCatalog, verifyKey } from '../lib/model-providers';
-import type { HostedProvider } from '@recoder/shared';
+import type { HostedProvider, ModelEntry } from '@recoder/shared';
+import { opencode } from '../lib/opencode';
 import { isReviewConfigured } from '../lib/models';
 import { REVIEW_ROLES } from '../lib/roles';
 import { z } from 'zod';
@@ -26,8 +27,17 @@ function mask(key: string | undefined): string | null {
 const app = new Hono();
 app.route('/codex', codexRoutes);
 
-/** Effective reviewer model config. Keys are never returned in full. */
-function settingsPayload() {
+/** The agent's models; empty while OpenCode is missing or down, so Settings still opens. */
+async function agentModels(): Promise<ModelEntry[]> {
+	try {
+		return await opencode.models();
+	} catch {
+		return [];
+	}
+}
+
+/** Effective reviewer model config. Keys are never returned in full. Models come from the agent. */
+async function settingsPayload() {
 	const eff = effectiveReviewEnv();
 	const stored = getStoredSettings();
 	return {
@@ -38,18 +48,7 @@ function settingsPayload() {
 		sharedModelId: stored.sharedModelId ?? null,
 		orchestratorModelId: stored.orchestratorModelId ?? null,
 		specialistModelId: stored.specialistModelId ?? null,
-		models: (stored.models ?? []).map((e) => ({
-			provider: e.provider ?? 'openai-compatible',
-			...(e.source ? { source: e.source } : {}),
-			id: e.id,
-			label: e.label,
-			model: e.model,
-			baseUrl: e.baseUrl ?? null,
-			apiKeyPreview: mask(e.apiKey),
-			...(e.efforts?.length ? { efforts: e.efforts } : {}),
-			...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
-			...(e.contextWindow ? { contextWindow: e.contextWindow } : {})
-		})),
+		models: await agentModels(),
 		orchestratorEffort: stored.orchestratorEffort ?? null,
 		specialistEffort: stored.specialistEffort ?? null,
 		specialistDispatch: effectiveDispatchLevel(),
@@ -62,7 +61,7 @@ function settingsPayload() {
 	};
 }
 
-app.get('/models', (c) => c.json(settingsPayload()));
+app.get('/models', async (c) => c.json(await settingsPayload()));
 
 /** Merge a validated patch over the stored model settings. Empty key keeps the existing one. */
 app.on(['PUT', 'PATCH'], '/models', async (c) => {
@@ -71,7 +70,7 @@ app.on(['PUT', 'PATCH'], '/models', async (c) => {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
 	}
 	saveReviewSettings(parsed.data);
-	return c.json(settingsPayload());
+	return c.json(await settingsPayload());
 });
 
 const discoverSchema = z.object({ baseUrl: z.string().max(500).optional(), apiKey: z.string().max(500).optional() });
@@ -132,16 +131,16 @@ app.post('/providers/:id/connect', async (c) => {
 		return c.json({ error: `${provider.name} was disconnected while the key was being checked.` }, 409);
 	}
 	setConnection(provider.id, parsed.data.apiKey);
-	return c.json({ providers: providersPayload(), settings: settingsPayload() });
+	return c.json({ providers: providersPayload(), settings: await settingsPayload() });
 });
 
 /** Forget the key and every model added from this provider. */
-app.delete('/providers/:id', (c) => {
+app.delete('/providers/:id', async (c) => {
 	const provider = hostedProvider(c.req.param('id'));
 	if (!provider) return c.json({ error: 'unknown provider' }, 404);
 	disconnects.set(provider.id, (disconnects.get(provider.id) ?? 0) + 1);
 	setConnection(provider.id, null);
-	return c.json({ providers: providersPayload(), settings: settingsPayload() });
+	return c.json({ providers: providersPayload(), settings: await settingsPayload() });
 });
 
 /** Every model the provider serves, marked by whether Recoder can call it. */

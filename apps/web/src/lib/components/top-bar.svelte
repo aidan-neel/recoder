@@ -9,7 +9,6 @@
 	import Plus from '@lucide/svelte/icons/plus';
 	import Search from '@lucide/svelte/icons/search';
 	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
-	import * as Avatar from '@sivir-ui/svelte/components/avatar';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as ContextMenu from '@sivir-ui/svelte/components/context-menu';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
@@ -24,7 +23,7 @@
 	import { sessionState } from '$lib/session-state.svelte';
 	import { closeSessionTab, sessionTab, type SessionTab } from '$lib/session-tabs';
 	import { requestDeleteSession } from '$lib/delete-session.svelte';
-	import { initials, shellState } from '$lib/shell-state.svelte';
+	import { shellState } from '$lib/shell-state.svelte';
 	import { keepPillAligned } from '$lib/tab-pill';
 
 	const HOME = 'home';
@@ -339,36 +338,7 @@
 		</Tooltip.Root>
 	{/if}
 
-	<Tooltip.Root delay={600}>
-		<Tooltip.Trigger class="flex shrink-0">
-			<Button variant="ghost" size="icon" aria-label="Settings" onclick={() => modelSettingsUi.show()}>
-				<SlidersHorizontal size={15} aria-hidden="true" />
-			</Button>
-		</Tooltip.Trigger>
-		<Tooltip.Content>Settings</Tooltip.Content>
-	</Tooltip.Root>
-
-	<DropdownMenu.Root>
-		<DropdownMenu.Trigger
-			variant="quiet"
-			size="icon"
-			class="top-avatar-trigger"
-			aria-label={shellState.account ? `Account: ${shellState.account.user}` : 'Account'}
-		>
-			<Avatar.Root class="size-[26px] bg-selected text-[10.5px] font-medium text-fg-secondary">
-				<Avatar.Fallback>{shellState.account ? initials(shellState.account.user) : '··'}</Avatar.Fallback>
-			</Avatar.Root>
-		</DropdownMenu.Trigger>
-		<DropdownMenu.Content class="min-w-[220px]">
-			<DropdownMenu.Label>
-				{#if shellState.account}
-					Signed in as <span class="font-mono text-fg-subtle">{shellState.account.user}</span>
-				{:else}
-					Not signed in to GitHub or GitLab
-				{/if}
-			</DropdownMenu.Label>
-			<DropdownMenu.Separator />
-			<DropdownMenu.Item callback={() => modelSettingsUi.show()}>Settings</DropdownMenu.Item>
-		</DropdownMenu.Content>
-	</DropdownMenu.Root>
+	<Button variant="ghost" size="icon" aria-label="Settings" onclick={() => modelSettingsUi.show()}>
+		<SlidersHorizontal size={15} aria-hidden="true" />
+	</Button>
 </header>

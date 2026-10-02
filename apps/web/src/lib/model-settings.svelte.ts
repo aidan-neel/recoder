@@ -134,7 +134,7 @@ export function resolveEffort(model: ModelOption | undefined, effort: ReasoningE
 export type SettingsSection = 'models' | 'connections' | 'harness' | 'guidelines' | 'appearance';
 
 /** A dialog to open inside the section as soon as Settings shows it. */
-export type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-repos' } | { kind: 'chatgpt-sign-in' };
+export type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-repos' } | { kind: 'add-provider' };
 
 /** Global open state + cached config for the model settings modal. */
 class ModelSettingsUi {
@@ -203,70 +203,11 @@ class ModelSettingsUi {
 		return this.update({ specialistModelId: choice.modelId, specialistEffort: choice.effort });
 	}
 
-	private capabilitiesChecked = false;
-
-	/**
-	 * ChatGPT entries saved before effort discovery worked have no effort list.
-	 * Fill them in from the live catalog once, so pickers show real options.
-	 */
-	private async refreshCodexCapabilities(): Promise<void> {
-		const config = this.config;
-		if (this.capabilitiesChecked || !config) return;
-		if (!config.models.some((entry) => entry.provider === 'codex' && !entry.efforts?.length)) return;
-		this.capabilitiesChecked = true;
-		try {
-			const catalog = new Map((await serverApi.getCodexModels()).map((model) => [model.id, model] as const));
-			let changed = false;
-			const models = config.models.map((entry) => {
-				const live = entry.provider === 'codex' ? catalog.get(entry.model) : undefined;
-				if (!live?.efforts?.length) return entry;
-				changed = true;
-				return { ...entry, efforts: live.efforts, defaultEffort: live.defaultEffort };
-			});
-			if (!changed) return;
-			this.config = { ...config, models };
-			await this.save({
-				models: models.map((entry) => ({
-					id: entry.id,
-					provider: entry.provider ?? 'openai-compatible',
-					label: entry.label,
-					model: entry.model,
-					...(entry.baseUrl ? { baseUrl: entry.baseUrl } : {}),
-					apiKey: '',
-					...(entry.efforts?.length ? { efforts: entry.efforts } : {}),
-					...(entry.defaultEffort ? { defaultEffort: entry.defaultEffort } : {}),
-				...(entry.contextWindow ? { contextWindow: entry.contextWindow } : {})
-				}))
-			});
-		} catch {
-			// Catalog unavailable (signed out, offline): keep what's saved.
-		}
-	}
-
-	/** Replace the model registry (catalog sync, endpoint models). `newKey` sets an entry's key. */
-	saveModels(models: (ModelEntry & { newKey?: string })[]): Promise<boolean> {
-		return this.save({
-			models: models.map((entry) => ({
-				id: entry.id,
-				provider: entry.provider ?? 'openai-compatible',
-				...(entry.source ? { source: entry.source } : {}),
-				label: entry.label,
-				model: entry.model,
-				...(entry.baseUrl ? { baseUrl: entry.baseUrl } : {}),
-				apiKey: entry.newKey ?? '',
-				...(entry.efforts?.length ? { efforts: entry.efforts } : {}),
-				...(entry.defaultEffort ? { defaultEffort: entry.defaultEffort } : {}),
-				...(entry.contextWindow ? { contextWindow: entry.contextWindow } : {})
-			}))
-		});
-	}
-
 	async load(): Promise<void> {
 		this.loading = true;
 		this.error = null;
 		try {
 			this.config = await serverApi.getModelSettings();
-			void this.refreshCodexCapabilities();
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : 'Failed to load model settings.';
 		} finally {

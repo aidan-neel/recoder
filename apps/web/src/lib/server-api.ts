@@ -1,5 +1,9 @@
 import { env } from '$env/dynamic/public';
 import type { DiscoveredModel,
+	AgentOAuthAttempt,
+	AgentOAuthStatus,
+	AgentProvider,
+	AgentStatus,
 	CatalogModel,
 	HostedProvider,
 	CodexConnection,
@@ -277,6 +281,18 @@ export const serverApi = {
 		req<{ baseUrl: string; models: DiscoveredModel[] }>('/api/settings/models/discover', { method: 'POST', body: JSON.stringify(input) }),
 	saveModelSettings: (patch: ModelSettingsPatch) =>
 		req<ModelSettings>('/api/settings/models', { method: 'PUT', body: JSON.stringify(patch) }),
+	agentStatus: (refresh = false) => req<{ agents: AgentStatus[] }>(`/api/agent${refresh ? '?refresh=1' : ''}`),
+	agentProviders: () => req<{ providers: AgentProvider[] }>('/api/agent/providers'),
+	agentSetKey: (id: string, key: string, inputs: Record<string, string>) =>
+		req<{ providers: AgentProvider[] }>(`/api/agent/providers/${encodeURIComponent(id)}/key`, { method: 'PUT', body: JSON.stringify({ key, inputs }) }),
+	agentRemoveProvider: (id: string) =>
+		req<{ providers: AgentProvider[] }>(`/api/agent/providers/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+	agentStartOAuth: (id: string, method: number, inputs: Record<string, string>) =>
+		req<AgentOAuthAttempt>(`/api/agent/providers/${encodeURIComponent(id)}/oauth`, { method: 'POST', body: JSON.stringify({ method, inputs }) }),
+	agentOAuthStatus: (attemptId: string) => req<AgentOAuthStatus>(`/api/agent/oauth/${attemptId}`),
+	agentOAuthCode: (attemptId: string, code: string) =>
+		req<AgentOAuthStatus>(`/api/agent/oauth/${attemptId}/code`, { method: 'POST', body: JSON.stringify({ code }) }),
+	agentCancelOAuth: (attemptId: string) => req<{ ok: boolean }>(`/api/agent/oauth/${attemptId}`, { method: 'DELETE' }),
 	listHostedProviders: () => req<HostedProvider[]>('/api/settings/providers'),
 	/** Checks the key without running a model, then saves it. */
 	connectHostedProvider: (id: string, apiKey: string) =>

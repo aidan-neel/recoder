@@ -39,7 +39,7 @@
 		<p class="review-notice-body">{needsSignIn || !signIn ? reason : 'Signed in to ChatGPT. Retry to continue.'}</p>
 	</div>
 	{#if needsSignIn}
-		<Button variant="outline" class="shrink-0" onclick={() => modelSettingsUi.show('models', { kind: 'chatgpt-sign-in' })}>Sign in to ChatGPT</Button>
+		<Button variant="outline" class="shrink-0" onclick={() => modelSettingsUi.show('models', { kind: 'add-provider' })}>Add a provider</Button>
 	{:else if onRetry}
 		<Button variant="outline" class="shrink-0" loading={retrying} onclick={onRetry}>
 			<RotateCcw size={13} aria-hidden="true" /> Retry

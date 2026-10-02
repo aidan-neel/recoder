@@ -54,7 +54,7 @@
 	/** Home's setup checklist opens Settings straight into a dialog. */
 	$effect(() => {
 		const intent = modelSettingsUi.intent;
-		if (!intent || intent.kind === 'chatgpt-sign-in') return;
+		if (!intent || intent.kind === 'add-provider') return;
 		untracked(() => {
 			modelSettingsUi.intent = null;
 			if (intent.kind === 'connect') openToken(intent.provider);

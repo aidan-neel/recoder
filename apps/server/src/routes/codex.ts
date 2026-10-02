@@ -1,23 +1,11 @@
 import { Hono } from 'hono';
 import { codex } from '../lib/codex';
 import { LlmError } from '../lib/llm';
-import { env } from '../env';
+import { trustedOrigin } from '../lib/trusted-origin';
 
 const app = new Hono();
 
-// Recoder is a single-user server. Do not let arbitrary websites initiate or
-// observe its subscription login, even though the legacy API permits CORS '*'.
-app.use('*', async (c, next) => {
-	const origin = c.req.header('origin');
-	const allowed = new Set([new URL(env.FRONTEND_URL).origin, new URL(c.req.url).origin]);
-	if (process.env.NODE_ENV !== 'production') {
-		allowed.add('http://localhost:5173');
-		allowed.add('http://127.0.0.1:5173');
-	}
-	if (origin && !allowed.has(origin)) return c.json({ error: 'Untrusted origin' }, 403);
-	c.header('Cache-Control', 'no-store');
-	await next();
-});
+app.use('*', trustedOrigin);
 
 app.get('/status', async (c) => c.json(await codex.status()));
 app.post('/connect', async (c) => {

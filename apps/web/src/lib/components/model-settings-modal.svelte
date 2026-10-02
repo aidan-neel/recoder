@@ -7,19 +7,19 @@
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import SettingsAgent from './settings-agent.svelte';
 	import SettingsAppearance from './settings-appearance.svelte';
 	import SettingsConnections from './settings-connections.svelte';
 	import SettingsGuidelines from './settings-guidelines.svelte';
 	import SettingsHarness from './settings-harness.svelte';
-	import SettingsModels from './settings-models.svelte';
-	import Skeleton from './ui/skeleton.svelte';
+		import Skeleton from './ui/skeleton.svelte';
 	import { modelSettingsUi, type SettingsSection } from '$lib/model-settings.svelte';
 	import { settingsDraft } from '$lib/settings-draft.svelte';
 	import { guidelinesStore } from '$lib/guidelines.svelte';
-	import { hostedProviders } from '$lib/hosted-providers.svelte';
+	import { agent } from '$lib/agent.svelte';
 
 	const SECTIONS: { id: SettingsSection; label: string }[] = [
-		{ id: 'models', label: 'Models' },
+		{ id: 'models', label: 'Agent' },
 		{ id: 'connections', label: 'Connections' },
 		{ id: 'harness', label: 'Review harness' },
 		{ id: 'guidelines', label: 'Guidelines' },
@@ -30,11 +30,11 @@
 	const title = $derived(SECTIONS.find((s) => s.id === modelSettingsUi.section)?.label ?? 'Settings');
 	let saveError = $state<string | null>(null);
 
-	// Providers load with the settings, so the Models tab paints once instead of rows popping in.
+	// The agent loads with the settings, so the Agent tab paints once instead of rows popping in.
 	$effect(() => {
-		if (modelSettingsUi.open) void hostedProviders.load();
+		if (modelSettingsUi.open) void agent.load();
 	});
-	const providersPending = $derived(modelSettingsUi.section === 'models' && hostedProviders.list === null && !hostedProviders.error);
+	const agentPending = $derived(modelSettingsUi.section === 'models' && !agent.error && (agent.status === null || agent.providers === null));
 
 	$effect(() => {
 		if (!modelSettingsUi.open) {
@@ -113,17 +113,26 @@
 								<Alert.Description>{modelSettingsUi.error}</Alert.Description>
 								<Button variant="outline" class="mt-2 w-fit" onclick={() => void modelSettingsUi.load()}>Retry</Button>
 							</Alert.Root>
-						{:else if !config || !settingsDraft.seeded || providersPending}
+						{:else if !config || !settingsDraft.seeded || agentPending}
 							<!-- Built from the real settings classes so rows land where the loaded section puts them. -->
 							<div class="flex flex-col gap-6" role="status" aria-label="Loading settings">
 								{#if modelSettingsUi.section === 'models'}
 									<section class="settings-section" aria-hidden="true">
+										<Typography.H3 class="settings-label">CLI</Typography.H3>
+										<Card.Root class="settings-list">
+											<div class="settings-row">
+												<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={16} unit="%" /><Skeleton class="h-2.5" w={46} unit="%" /></div>
+												<Skeleton class="h-[22px] w-12" />
+											</div>
+										</Card.Root>
+									</section>
+									<section class="settings-section" aria-hidden="true">
 										<Typography.H3 class="settings-label">Providers</Typography.H3>
 										<Card.Root class="settings-list">
-											{#each [0, 1, 2, 3, 4] as i (i)}
+											{#each [0, 1, 2] as i (i)}
 												<div class="settings-row">
-													<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={[18, 22, 26, 20, 24][i]} unit="%" /><Skeleton class="h-2.5" w={[40, 48, 44, 42, 50][i]} unit="%" /></div>
-													<Skeleton class="h-[30px] w-20" />
+													<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={[18, 22, 16][i]} unit="%" /><Skeleton class="h-2.5" w={[26, 30, 24][i]} unit="%" /></div>
+													<Skeleton class="h-[26px] w-20" />
 												</div>
 											{/each}
 										</Card.Root>
@@ -142,7 +151,7 @@
 								</section>
 							</div>
 						{:else}
-							<Tabs.Content value="models"><SettingsModels /></Tabs.Content>
+							<Tabs.Content value="models"><SettingsAgent /></Tabs.Content>
 							<Tabs.Content value="connections"><SettingsConnections /></Tabs.Content>
 							<Tabs.Content value="harness"><SettingsHarness /></Tabs.Content>
 							<Tabs.Content value="guidelines"><SettingsGuidelines /></Tabs.Content>

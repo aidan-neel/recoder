@@ -142,9 +142,11 @@ describe('review settings', () => {
 		const body = await get.json();
 		expect(body.baseUrl).toBe('https://openrouter.ai/api/v1');
 		expect(body.model).toBe('qwen/qwen-2.5-coder-32b-instruct');
-		expect(body.models).toHaveLength(2);
-		expect(body.models[0]).toMatchObject({ id: 'm1', label: 'Qwen coder' });
-		expect(typeof body.models[1].id).toBe('string');
+		// The payload lists the agent's models; the HTTP registry stays in storage.
+		const stored = getStoredSettings().models ?? [];
+		expect(stored).toHaveLength(2);
+		expect(stored[0]).toMatchObject({ id: 'm1', label: 'Qwen coder' });
+		expect(typeof stored[1].id).toBe('string');
 		expect(isReviewConfigured()).toBe(true);
 	});
 
@@ -186,8 +188,8 @@ describe('review settings', () => {
 		});
 		expect(put.status).toBe(200);
 		const saved = await put.json();
-		expect(saved.models).toHaveLength(1);
-		expect(saved.models[0]).toMatchObject({ provider: 'codex', id: codexId, model: 'gpt-5' });
+		expect(getStoredSettings().models).toHaveLength(1);
+		expect(getStoredSettings().models?.[0]).toMatchObject({ provider: 'codex', id: codexId, model: 'gpt-5' });
 		expect(saved.sharedModelId).toBe(codexId);
 		expect(saved.model).toBe('gpt-5');
 		expect(saved.configured).toBe(true);
@@ -208,7 +210,7 @@ describe('review settings', () => {
 		});
 		expect(put2.status).toBe(200);
 		const saved2 = await put2.json();
-		expect(saved2.models).toHaveLength(2);
+		expect(getStoredSettings().models).toHaveLength(2);
 		expect(saved2.sharedModelId).toBe(codexId);
 		expect(saved2.configured).toBe(true);
 	});

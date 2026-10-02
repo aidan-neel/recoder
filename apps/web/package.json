@@ -30,7 +30,7 @@
 	"dependencies": {
 		"@lucide/svelte": "^1.39.0",
 		"@recoder/shared": "workspace:*",
-		"@sivir-ui/svelte": "^0.3.3",
+		"@sivir-ui/svelte": "^0.3.4",
 		"material-icon-theme": "5.38.1"
 	}
 }
