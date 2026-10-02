@@ -3,6 +3,7 @@ import type { CandidateFinding } from './consolidate.js';
 import type { CoverageEntry } from './coverage.js';
 import type { EvidenceSnapshot } from './evidence.js';
 import type { PlannerAssignment, PlannerOutput } from './planner.js';
+import type { ReviewDirective } from './directive.js';
 
 /**
  * Where an unfinished review stopped. Saved after planning and after each
@@ -17,6 +18,8 @@ export interface ReviewCheckpoint {
 	headSha: string;
 	mergeBaseSha: string;
 	plan: PlannerOutput;
+	/** The developer's instructions as read at the start; reapplied on resume. */
+	directive: ReviewDirective | null;
 	planningDegraded: boolean;
 	/** Every assignment the review launched, the planner's and follow-ups. */
 	items: PlannerAssignment[];

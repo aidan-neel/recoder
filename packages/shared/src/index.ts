@@ -263,6 +263,10 @@ export interface CatalogModel {
 export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
+/** How many specialists one review may dispatch, and how long each may dig. */
+export const DISPATCH_LEVELS = ['low', 'medium', 'high'] as const;
+export type DispatchLevel = (typeof DISPATCH_LEVELS)[number];
+
 /** Reviewer model configuration (keys are never exposed). */
 export interface ModelSettings {
 	configured: boolean;
@@ -278,6 +282,8 @@ export interface ModelSettings {
 	orchestratorEffort?: ReasoningEffort | null;
 	/** Specialist reasoning effort; null follows the Review effort when the model does too. */
 	specialistEffort?: ReasoningEffort | null;
+	/** Specialist dispatch: how many specialists a review may run (medium by default). */
+	specialistDispatch: DispatchLevel;
 	/** Where overrides are saved, e.g. `~/.recoder/data/review-config.json`. */
 	configPath?: string;
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
@@ -292,6 +298,7 @@ export interface ModelSettingsPatch {
 	specialistModelId?: string | null;
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
+	specialistDispatch?: DispatchLevel;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;

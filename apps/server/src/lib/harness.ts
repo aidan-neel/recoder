@@ -21,6 +21,8 @@ import { extractFindingsJson } from './json-extract.js';
 import { configForOrchestrator, configForRole, reviewLimits, type ReviewRole } from './models.js';
 import { extraExcludes } from './review-scope.js';
 import { REVIEW_POLICY } from './review-policy.js';
+import { currentDispatch, type DispatchPolicy } from './dispatch.js';
+import { applyDirective, describeDirective, interpretInstructions, type ReviewDirective } from './directive.js';
 import {
 	ModelBlockedError,
 	ModelBudget,
@@ -34,6 +36,7 @@ import { CoverageLedger } from './coverage.js';
 import type { ReviewCheckpoint } from './review-checkpoint.js';
 import {
 	fallbackPlan,
+	plannerResponseSchema,
 	plannerSystemPrompt,
 	plannerValidationError,
 	plannerUserPrompt,
@@ -47,7 +50,7 @@ import { parseSpecialistOutput, prematureSpecialistFinal, specialistResponseSche
 import { ExecWorkspace, type SetupReport } from './exec-workspace.js';
 import { execUnavailableReason } from './exec-sandbox.js';
 import { hasPendingChanges } from './pending-changes.js';
-import { EXEC_EXAMPLES } from './prompts.js';
+import { EXEC_EXAMPLES, isCompactModel } from './prompts.js';
 import { parseVerdict, settleVerdict, verdictValidationError, verifierRanNothing, verifierResponseSchema, verifierSystemPrompt, verifierUserPrompt } from './verify.js';
 import {
 	applyConsolidation,
@@ -194,6 +197,10 @@ export interface AdaptiveReviewInput {
 	/** Reviewers, assignees, linked issues (untrusted). */
 	prContext?: string | null;
 	signal?: AbortSignal;
+	/** What the developer asked for in the session before starting the review, verbatim. */
+	instructions?: string | null;
+	/** How many specialists to dispatch; defaults to the saved setting. */
+	dispatch?: DispatchPolicy;
 	/** Continue a failed review: skip planning and the specialists that finished. */
 	resume?: ReviewProgressCheckpoint | null;
 }
@@ -226,6 +233,7 @@ export async function runAdaptiveReview(
 	const timeout = setInterval(() => { if (reviewNow() >= deadlineAt) controller.abort(); }, 1_000);
 	const budget = new ModelBudget();
 	const limits = reviewLimits();
+	const dispatch = input.dispatch ?? currentDispatch();
 	const inventory = buildInventory(input.diff, extraExcludes());
 	const revision = input.revision ?? (input.sandboxPath
 		? {
@@ -238,7 +246,6 @@ export async function runAdaptiveReview(
 		: null);
 	const evidence = new EvidenceStore(input.revision ?? null, inventory, limits.maxFileChars);
 	const coverage = new CoverageLedger();
-	coverage.seed(inventory);
 	// Agents restore tracked files after every command, which would wipe the developer's uncommitted fixes.
 	const execReason = !input.revision ? 'Running code needs a local checkout of the pull request.'
 		: await hasPendingChanges(input.revision.checkoutPath) ? 'The checkout has fixes that aren\'t committed and pushed yet. Push or discard them to let reviewers run code.'
@@ -257,6 +264,7 @@ export async function runAdaptiveReview(
 	// Shared with the catch below: a review that runs out of time after planning
 	// still finishes with the candidates its specialists found.
 	let plan: PlannerOutput | null = null;
+	let directive: ReviewDirective | null = input.resume?.directive ?? null;
 	let planningDegraded = input.resume?.planningDegraded ?? false;
 	const candidates: CandidateFinding[] = (input.resume?.candidates ?? []).map((candidate) => ({ ...candidate }));
 	const recommended = new Set<string>(input.resume?.recommended ?? []);
@@ -281,6 +289,18 @@ export async function runAdaptiveReview(
 	try {
 		events?.onStage?.('understand');
 		task('inventory', 'Understand changes', 'running', 'Building the change inventory', { kind: 'inventory' });
+		// The developer's instructions narrow the inventory before anything reads it, so
+		// "only the Python files" holds for planning, sweeps and coverage alike.
+		if (!directive && input.instructions?.trim()) {
+			task('instructions', 'Reading your instructions', 'running', 'Working out which files and lenses you asked for', { kind: 'planning', agent: 'correctness' });
+			directive = await interpretInstructions(input.instructions.trim(), inventory, configForOrchestrator(), controller.signal, (message) => events?.onLog?.(message));
+		}
+		if (directive) {
+			const applied = applyDirective(inventory, directive);
+			for (const glob of applied.droppedIncludes) events?.onLog?.(`Your instructions name ${glob}, which matches no changed file; reviewing the rest.`);
+			task('instructions', 'Reading your instructions', 'done', describeDirective(directive, applied), { kind: 'planning', agent: 'correctness' });
+		}
+		coverage.seed(inventory);
 		await loadGuidance(inventory, evidence, controller.signal, events?.onTool);
 		const guidelines = composeGuidelines({
 			global: readGlobalGuidelines().content,
@@ -313,6 +333,8 @@ export async function runAdaptiveReview(
 					inventory,
 					evidence,
 					budget,
+					dispatch,
+					directive,
 					deadlineAt: investigationDeadline,
 					exec: Boolean(workspace),
 					execNotes,
@@ -328,11 +350,11 @@ export async function runAdaptiveReview(
 			} catch (err) {
 				if (err instanceof ModelBlockedError) throw err;
 				planningDegraded = true;
-				plan = fallbackPlan(inventory, err instanceof Error ? err.message : 'Planning failed');
+				plan = fallbackPlan(inventory, err instanceof Error ? err.message : 'Planning failed', { dispatch, directive });
 			}
 		}
 		if (plan.assignments.length === 0) {
-			plan = fallbackPlan(inventory);
+			plan = fallbackPlan(inventory, undefined, { dispatch, directive });
 			planningDegraded = true;
 		}
 
@@ -349,7 +371,7 @@ export async function runAdaptiveReview(
 				}
 				assignments.push(toAssignmentRecord(item, 'queued'));
 			}
-			coverage.excludeUnassigned(inventory);
+			coverage.excludeUnassigned(inventory, `not assigned: specialist dispatch is ${dispatch.level} (Settings → Review harness)`);
 		}
 		events?.onPlan?.({
 			planVersion: 1,
@@ -362,7 +384,7 @@ export async function runAdaptiveReview(
 			kind: 'planning',
 			agent: 'correctness'
 		});
-		if (!resume && items.length > REVIEW_POLICY.approvalThreshold) {
+		if (!resume && items.length > dispatch.approvalThreshold) {
 			const approval: ReviewPlanApproval = { status: 'pending', requested: items.length };
 			events?.onApproval?.(approval);
 			task('approval', 'Waiting for your go-ahead', 'waiting', `This review needs ${items.length} specialists. Run them?`, { kind: 'planning' });
@@ -395,6 +417,7 @@ export async function runAdaptiveReview(
 			const kept = candidates.filter((candidate) => candidate.assignmentId && finished.has(candidate.assignmentId));
 			events.onCheckpoint({
 				plan,
+				directive,
 				planningDegraded,
 				items: [...items],
 				assignments: assignments.map((record) => ({ ...record })),
@@ -456,6 +479,8 @@ export async function runAdaptiveReview(
 				followUps,
 				exec: Boolean(workspace),
 				setupNotes,
+				dispatch,
+				directive,
 				onFinished: checkpoint
 			}
 		);
@@ -465,12 +490,12 @@ export async function runAdaptiveReview(
 
 		// The orchestrator hears which specialists failed and may re-dispatch them alongside follow-ups.
 		// Failed specialists always rerun, adjusted for how they failed; the orchestrator says so in its conversation.
-		const retries = followUpsDone ? [] : failedAssignments(items, assignments);
+		const retries = followUpsDone ? [] : failedAssignments(items, assignments, dispatch.maxRetryAssignments);
 		for (const retry of retries) events?.onLog?.(`${retry.item.title} failed: ${retry.error}`, { assignmentId: retry.item.id, role: retry.item.role });
 		if (!followUpsDone && (followUps.length > 0 || retries.length > 0) && canLaunchInvestigation(investigationDeadline, budget)) {
 			if (retries.length) reportRetries(retries, events);
 			const extra = uniqueIds(
-				[...retries.map((retry) => retry.item), ...await selectFollowUps(followUps, inventory, evidence, budget, investigationDeadline, controller.signal, events)],
+				[...retries.map((retry) => retry.item), ...await selectFollowUps(followUps, inventory, evidence, budget, investigationDeadline, controller.signal, dispatch, directive, events)],
 				assignments.map((record) => record.id)
 			);
 			followUpsDone = true;
@@ -507,6 +532,8 @@ export async function runAdaptiveReview(
 					followUps: [],
 					exec: Boolean(workspace),
 					setupNotes,
+					dispatch,
+					directive,
 					onFinished: checkpoint
 				});
 			}
@@ -563,7 +590,7 @@ export async function runAdaptiveReview(
 					label: 'consolidation',
 					getDiscussion: () => events?.getDiscussion?.() ?? '',
 					onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
-					system: withGuidelines(consolidationSystemPrompt(), inventory.guidelines),
+					system: withGuidelines(consolidationSystemPrompt(directive), inventory.guidelines),
 					user: consolidationUserPrompt(valid, evidence),
 					config: cfg,
 					budget,
@@ -740,6 +767,8 @@ async function runPlanner(input: {
 	inventory: ReviewInventory;
 	evidence: EvidenceStore;
 	budget: ModelBudget;
+	dispatch: DispatchPolicy;
+	directive: ReviewDirective | null;
 	deadlineAt: number;
 	exec: boolean;
 	execNotes?: string;
@@ -751,23 +780,26 @@ async function runPlanner(input: {
 	task: (id: string, label: string, status: ReviewTask['status'], message: string, extra?: Partial<ReviewTask>) => void;
 }): Promise<{ plan: PlannerOutput; degraded: boolean }> {
 	const cfg = configForOrchestrator();
+	const planOptions = { dispatch: input.dispatch, directive: input.directive };
 	if (!canLaunchInvestigation(input.deadlineAt, input.budget)) {
-		return { plan: fallbackPlan(input.inventory, 'No model budget remained for planning.'), degraded: true };
+		return { plan: fallbackPlan(input.inventory, 'No model budget remained for planning.', planOptions), degraded: true };
 	}
 	const result = await runJsonAgent({
 		label: 'planner',
 		getDiscussion: () => input.events?.getDiscussion?.() ?? '',
 		onMessage: (message) => input.events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
-		system: withGuidelines(plannerSystemPrompt(input.exec), input.inventory.guidelines),
-		user: plannerUserPrompt({ title: input.title, body: input.body, context: input.context, inventory: input.inventory, execNotes: input.execNotes }),
+		system: withGuidelines(plannerSystemPrompt({ exec: input.exec, compact: isCompactModel(cfg.model), ...planOptions }), input.inventory.guidelines),
+		user: plannerUserPrompt({ title: input.title, body: input.body, context: input.context, inventory: input.inventory, execNotes: input.execNotes, directive: input.directive }),
 		config: cfg,
 		budget: input.budget,
 		evidence: input.evidence,
 		maxTurns: REVIEW_POLICY.maxPlannerTurns,
 		signal: input.signal,
 		deadlineAt: input.deadlineAt,
-		parse: (raw) => sanitizePlannerOutput(raw, input.inventory),
+		parse: (raw) => sanitizePlannerOutput(raw, input.inventory, planOptions),
 		validationError: plannerValidationError,
+		responseSchema: plannerResponseSchema,
+		finalExample: '{"message":"One correctness specialist on the changed module.","summary":"...","assignments":[{"id":"correctness-main","role":"correctness","title":"...","reason":"...","scope":[{"path":"src/a.ts","hunkIds":[]}],"questions":[],"contextEvidenceIds":[],"priority":1}],"roleDecisions":[{"role":"correctness","decision":"selected","reason":"..."}]}',
 		onProgress: (state, elapsedMs, detail) =>
 			input.task('planning', 'Planning the review', state === 'queued' ? 'waiting' : 'running', detail, {
 				kind: 'planning',
@@ -782,7 +814,7 @@ async function runPlanner(input: {
 	});
 	if (result.value) return { plan: result.value, degraded: false };
 	return {
-		plan: fallbackPlan(input.inventory, result.error ?? 'Planner output was invalid; using bounded fallback assignments.'),
+		plan: fallbackPlan(input.inventory, result.error ?? 'Planner output was invalid; using bounded fallback assignments.', planOptions),
 		degraded: true
 	};
 }
@@ -819,7 +851,7 @@ export function retryAdvice(error: string): { advice: string; remedy: string } {
  * failure is rerun, told how the first attempt failed; one that failed from
  * size is split into two halves of its hunks.
  */
-export function failedAssignments(items: PlannerAssignment[], records: ReviewAssignment[]): FailedAssignment[] {
+export function failedAssignments(items: PlannerAssignment[], records: ReviewAssignment[], maxRetries: number = REVIEW_POLICY.maxRetryAssignments): FailedAssignment[] {
 	return items.flatMap((item) => {
 		const record = records.find((entry) => entry.id === item.id);
 		if (record?.status !== 'error' || item.id.startsWith('retry-')) return [];
@@ -837,7 +869,7 @@ export function failedAssignments(items: PlannerAssignment[], records: ReviewAss
 		const half = Math.ceil(hunks.length / 2);
 		const regroup = (part: typeof hunks) => [...new Set(part.map((hunk) => hunk.path))].map((path) => ({ path, hunkIds: part.filter((hunk) => hunk.path === path).map((hunk) => hunk.hunkId) }));
 		return [retry(regroup(hunks.slice(0, half)), '-a'), retry(regroup(hunks.slice(half)), '-b')];
-	}).slice(0, REVIEW_POLICY.maxRetryAssignments);
+	}).slice(0, maxRetries);
 }
 
 /** Follow-ups specialists asked for, narrowed by the orchestrator. */
@@ -848,8 +880,12 @@ async function selectFollowUps(
 	budget: ModelBudget,
 	deadlineAt: number,
 	signal: AbortSignal,
+	dispatch: DispatchPolicy,
+	directive: ReviewDirective | null,
 	events?: HarnessEvents
 ): Promise<PlannerAssignment[]> {
+	const max = dispatch.maxFollowUpAssignments;
+	if (max <= 0) return [];
 	const unique: PlannerAssignment[] = [];
 	const seen = new Set<string>();
 	for (const request of requests) {
@@ -861,12 +897,12 @@ async function selectFollowUps(
 				roleDecisions: []
 			},
 			inventory,
-			true
+			{ followUp: true, dispatch, directive }
 		);
 		if (!sanitized?.assignments[0]) continue;
 		seen.add(request.id);
 		unique.push({ ...sanitized.assignments[0], id: request.id.startsWith('follow-') ? request.id : `follow-${request.id}` });
-		if (unique.length >= REVIEW_POLICY.maxFollowUpAssignments) break;
+		if (unique.length >= max) break;
 	}
 	if (unique.length === 0) return [];
 	if (!canLaunchInvestigation(deadlineAt, budget)) return unique;
@@ -875,22 +911,23 @@ async function selectFollowUps(
 		label: 'follow-up planning',
 		getDiscussion: () => events?.getDiscussion?.() ?? '',
 		onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
-		system: withGuidelines(plannerSystemPrompt() + `\nThis is a follow-up pass. Dispatch at most ${REVIEW_POLICY.maxFollowUpAssignments} narrowly scoped investigations.`, inventory.guidelines),
-		user: `Pending follow-up requests:\n${JSON.stringify(unique, null, 2)}\n\nSelect at most ${REVIEW_POLICY.maxFollowUpAssignments} follow-ups. Return planner JSON.`,
+		system: withGuidelines(plannerSystemPrompt({ dispatch, directive, compact: isCompactModel(cfg.model) }) + `\nThis is a follow-up pass. Dispatch at most ${max} narrowly scoped investigations.`, inventory.guidelines),
+		user: `Pending follow-up requests:\n${JSON.stringify(unique, null, 2)}\n\nSelect at most ${max} follow-ups. Return planner JSON.`,
 		config: cfg,
 		budget,
 		evidence,
 		maxTurns: REVIEW_POLICY.maxPlannerTurns,
 		signal,
 		deadlineAt,
-		parse: (raw) => sanitizePlannerOutput(raw, inventory, true, REVIEW_POLICY.maxFollowUpAssignments),
+		parse: (raw) => sanitizePlannerOutput(raw, inventory, { followUp: true, maxAssignments: max, dispatch, directive }),
 		validationError: plannerValidationError,
+		responseSchema: plannerResponseSchema,
 		onLog: (message) => events?.onLog?.(message),
 		onReasoning: (reasoning) =>
 			events?.onReasoning?.({ ...reasoning, role: 'correctness', model: cfg.model }),
 		onTool: (tool) => events?.onTool?.({ ...tool, role: 'correctness' })
 	});
-	return (result.value?.assignments ?? unique).slice(0, REVIEW_POLICY.maxFollowUpAssignments);
+	return (result.value?.assignments ?? unique).slice(0, max);
 }
 
 interface PoolContext {
@@ -910,6 +947,8 @@ interface PoolContext {
 	exec: boolean;
 	/** Dependency setup and baseline check results, shared with every specialist. */
 	setupNotes: string;
+	dispatch: DispatchPolicy;
+	directive: ReviewDirective | null;
 	/** Called after each assignment settles, to save a checkpoint. */
 	onFinished?: () => void;
 }
@@ -980,15 +1019,15 @@ async function runOneAssignment(
 		);
 		const result = await runJsonAgent({
 			label: item.title,
-			system: withGuidelines(specialistSystemPrompt(item.role, ctx.exec), ctx.inventory.guidelines),
+			system: withGuidelines(specialistSystemPrompt(item.role, ctx.exec, { compact: isCompactModel(cfg.model), directive: ctx.directive }), ctx.inventory.guidelines),
 			actionExamples: ctx.exec ? EXEC_EXAMPLES : undefined,
 			getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
 			onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model: cfg.model }),
-			user: specialistUserPrompt(item, REVIEW_POLICY.maxSpecialistTurns, ctx.budget.remaining()) + (ctx.setupNotes ? `\n\n${ctx.setupNotes}` : '') + '\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' + formatToolResults(initialEvidence),
+			user: specialistUserPrompt(item, ctx.dispatch.maxSpecialistTurns, ctx.budget.remaining(), ctx.directive) + (ctx.setupNotes ? `\n\n${ctx.setupNotes}` : '') + '\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' + formatToolResults(initialEvidence),
 			config: cfg,
 			budget: ctx.budget,
 			evidence: ctx.evidence,
-			maxTurns: REVIEW_POLICY.maxSpecialistTurns,
+			maxTurns: ctx.dispatch.maxSpecialistTurns,
 			signal: ctx.signal,
 			deadlineAt: ctx.deadlineAt,
 			parse: parseSpecialistOutput,

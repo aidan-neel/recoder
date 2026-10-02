@@ -5,6 +5,7 @@ import { getStoredSettings, setReviewOverrides } from './review-settings';
 import { failedAssignments, runAdaptiveReview, unfinishedAssignments, uniqueIds, type ReviewProgressCheckpoint } from './harness';
 import { ReviewControl, runWithReviewControl } from './review-control';
 import { REVIEW_POLICY } from './review-policy';
+import { dispatchPolicy } from './dispatch';
 
 const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();
@@ -139,7 +140,7 @@ test('a follow-up reusing a launched assignment id gets its own id', () => {
 
 test('a plan past the approval threshold waits for the developer, then runs every specialist', async () => {
 	setReviewOverrides({ baseUrl: 'http://model.test/v1', apiKey: 'test', models: [{ id: 'test', label: 'Test', model: 'test' }] });
-	const roles: ReviewRole[] = ['correctness', 'patterns', 'security', 'perf', 'errors', 'api', 'testing'];
+	const roles: ReviewRole[] = ['correctness', 'patterns', 'security', 'perf', 'errors', 'api', 'testing', 'concurrency', 'data'];
 	const plan = { ...PLAN, assignments: roles.map((role, index) => assignment(`${role}-core`, role, index + 1)), roleDecisions: REVIEW_ROLES.map((role) => ({ role, decision: roles.includes(role) ? 'selected' : 'not_needed', reason: 'r' })) };
 	const ran = new Set<string>();
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -151,7 +152,7 @@ test('a plan past the approval threshold waits for the developer, then runs ever
 	}) as unknown as typeof fetch;
 	const control = new ReviewControl();
 	const approvals: string[] = [];
-	const result = await runWithReviewControl(control, () => runAdaptiveReview({ diff: DIFF, sandboxPath: null }, {
+	const result = await runWithReviewControl(control, () => runAdaptiveReview({ diff: DIFF, sandboxPath: null, dispatch: dispatchPolicy('high') }, {
 		onApproval: (approval) => {
 			approvals.push(approval.status);
 			// The developer answers a moment later; the review must be holding until then.
@@ -193,4 +194,38 @@ test('a specialist whose retry also failed counts as one unfinished review, and 
 	const record = (id: string, status: 'done' | 'error' | 'skipped') => ({ id, role: 'correctness' as const, title: id, reason: 'r', scope: [], status });
 	expect(unfinishedAssignments([record('a', 'error'), record('retry-a', 'error'), record('b', 'error'), record('retry-b', 'done'), record('c', 'skipped')]).map((item) => item.id)).toEqual(['retry-a']);
 	expect(unfinishedAssignments([record('d', 'error'), record('retry-d-a', 'done'), record('retry-d-b', 'error')]).map((item) => item.id)).toEqual(['retry-d-b']);
+});
+
+test('a review told to look only at Python files keeps every specialist, sweep and prompt to those files', async () => {
+	setReviewOverrides({ baseUrl: 'http://model.test/v1', apiKey: 'test', models: [{ id: 'test', label: 'Test', model: 'test' }] });
+	const diff = `${DIFF}diff --git a/src/b.py b/src/b.py
+--- a/src/b.py
++++ b/src/b.py
+@@ -1 +1 @@
+-old
++new
+`;
+	const pyHunk = 'src/b.py:1,1:1,1';
+	const systems: string[] = [];
+	const users: string[] = [];
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const messages = JSON.parse(String(init?.body)).messages as { content: string }[];
+		const system = String(messages[0]?.content ?? '');
+		systems.push(system);
+		users.push(String(messages[1]?.content ?? ''));
+		const reply = system.includes('file filter') ? { includeGlobs: ['**/*.py'], excludeGlobs: [], roles: [] }
+			: system.includes('review orchestrator') ? { ...PLAN, assignments: [{ ...assignment('correctness-all', 'correctness', 1), scope: [{ path: 'src/a.ts', hunkIds: [] }, { path: 'src/b.py', hunkIds: [] }] }] }
+			: system.includes('Role:') ? { ...NOTHING, examinedHunks: [pyHunk] }
+			: { keep: [], merge: [], reject: [], recommendedChecks: [] };
+		return Response.json({ choices: [{ message: { content: JSON.stringify({ message: 'ok', ...reply }) } }] });
+	}) as unknown as typeof fetch;
+	const result = await runAdaptiveReview({ diff, sandboxPath: null, instructions: 'review only python files' });
+	expect(result.outcome).toBe('complete');
+	expect(result.assignments.length).toBeGreaterThan(0);
+	expect(result.assignments.flatMap((record) => record.scope.map((entry) => entry.path))).toEqual(result.assignments.map(() => 'src/b.py'));
+	expect(result.coverageGaps.find((gap) => gap.path === 'src/a.ts')?.reason).toContain('outside your instructions');
+	// The words reach the planner and every specialist, not just the file filter.
+	expect(systems.filter((system) => system.includes('review orchestrator')).every((system) => system.includes('review only python files'))).toBe(true);
+	expect(systems.filter((system) => system.includes('Role:')).every((system) => system.includes('review only python files'))).toBe(true);
+	expect(systems.filter((system) => system.includes('Role:')).length).toBeGreaterThan(0);
 });

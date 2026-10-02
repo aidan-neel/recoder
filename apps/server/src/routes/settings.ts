@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import {
 	apiKeyPreview,
+	effectiveDispatchLevel,
 	effectiveReviewEnv,
 	getStoredSettings,
 	settingsFileDisplay,
@@ -51,6 +52,7 @@ function settingsPayload() {
 		})),
 		orchestratorEffort: stored.orchestratorEffort ?? null,
 		specialistEffort: stored.specialistEffort ?? null,
+		specialistDispatch: effectiveDispatchLevel(),
 		configPath: settingsFileDisplay(),
 		limits: {
 			maxFiles: eff.maxFiles,

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
-import type { ReasoningEffort } from '@recoder/shared';
+import type { DispatchLevel, ReasoningEffort } from '@recoder/shared';
 import { serverDataDir } from './data-dir.js';
 import type { ReviewRole } from './models.js';
 import { REVIEW_ROLES } from './roles.js';
@@ -11,7 +11,7 @@ import { REVIEW_ROLES } from './roles.js';
  * The API key is never returned in full — only a masked preview.
  */
 
-import { REASONING_EFFORTS } from '@recoder/shared';
+import { DISPATCH_LEVELS, REASONING_EFFORTS } from '@recoder/shared';
 
 const modelEntrySchema = z.object({
 	provider: z.enum(['openai-compatible', 'codex']).optional(),
@@ -36,6 +36,7 @@ export const reviewSettingsSchema = z.object({
 	specialistModelId: z.string().max(100).nullable().optional(),
 	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
+	specialistDispatch: z.enum(DISPATCH_LEVELS).optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
 	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
 	maxFileChars: z.number().int().positive().max(200_000).optional()
@@ -87,6 +88,7 @@ interface StoredSettings {
 	specialistModelId?: string | null;
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
+	specialistDispatch?: DispatchLevel;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;
@@ -210,6 +212,7 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.specialistModelId !== undefined) clean.specialistModelId = patch.specialistModelId || null;
 	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
 	if (patch.specialistEffort !== undefined) clean.specialistEffort = patch.specialistEffort;
+	if (patch.specialistDispatch !== undefined) clean.specialistDispatch = patch.specialistDispatch;
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
 	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;
@@ -256,6 +259,13 @@ export function effectiveReviewEnv(): {
 			12000
 		)
 	};
+}
+
+/** Specialist dispatch level: the saved pick, else `RECODER_REVIEW_DISPATCH`, else medium. */
+export function effectiveDispatchLevel(): DispatchLevel {
+	if (overrides.specialistDispatch) return overrides.specialistDispatch;
+	const env = process.env.RECODER_REVIEW_DISPATCH?.trim().toLowerCase();
+	return (DISPATCH_LEVELS as readonly string[]).includes(env ?? '') ? (env as DispatchLevel) : 'medium';
 }
 
 /** Masked key preview for the UI (`••••1234` or null). */

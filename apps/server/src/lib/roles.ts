@@ -66,3 +66,29 @@ export const ROLE_FOCUS: Record<ReviewRole, string> = {
 	data:
 		'Persistent and shared state: storage formats, migrations, serialization, caches and their invalidation, settings or data written by older versions, state that must survive a restart or reload, and partial writes on failure.'
 };
+
+/** Words models and developers use for a role, mapped to its id. */
+const ROLE_ALIASES: Record<string, ReviewRole> = {
+	bug: 'correctness', bugs: 'correctness', logic: 'correctness', correct: 'correctness', behavior: 'correctness', behaviour: 'correctness',
+	performance: 'perf', speed: 'perf', efficiency: 'perf',
+	documentation: 'docs', comments: 'docs', doc: 'docs',
+	duplication: 'dedup', duplicate: 'dedup', duplicates: 'dedup', reuse: 'dedup',
+	conventions: 'patterns', convention: 'patterns', consistency: 'patterns', style: 'patterns', idioms: 'patterns', repository_consistency: 'patterns', repo_consistency: 'patterns',
+	tests: 'testing', test: 'testing', coverage: 'testing', test_coverage: 'testing',
+	error: 'errors', error_handling: 'errors', exceptions: 'errors', failures: 'errors', failure: 'errors', resilience: 'errors',
+	races: 'concurrency', race: 'concurrency', threading: 'concurrency', async: 'concurrency', concurrent: 'concurrency',
+	interface: 'api', interfaces: 'api', compatibility: 'api', api_design: 'api',
+	blast_radius: 'impact', callers: 'impact', consumers: 'impact',
+	ui: 'frontend', front_end: 'frontend', svelte: 'frontend', react: 'frontend',
+	database: 'data', storage: 'data', migrations: 'data', persistence: 'data', state: 'data', data_state: 'data',
+	sec: 'security', vulnerabilities: 'security', vulnerability: 'security', auth: 'security'
+};
+
+/** "Security", "error-handling", "Repository consistency" → the role id; null when it is none of them. */
+export function resolveRole(raw: string): ReviewRole | null {
+	const key = raw.trim().toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z_&]/g, '');
+	if ((REVIEW_ROLES as readonly string[]).includes(key)) return key as ReviewRole;
+	if (ROLE_ALIASES[key]) return ROLE_ALIASES[key];
+	const label = (Object.keys(ROLE_LABELS) as ReviewRole[]).find((role) => ROLE_LABELS[role].toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z_&]/g, '') === key);
+	return label ?? null;
+}

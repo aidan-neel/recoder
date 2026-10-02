@@ -18,7 +18,7 @@ import { runAdaptiveReview } from '../lib/harness';
 import { configForOrchestrator, configForRole, isReviewConfigured } from '../lib/models';
 import { ModelBlockedError } from '../lib/agent-loop';
 import { codex } from '../lib/codex';
-import { discussionContext, recordChatMessage } from '../lib/review-chat';
+import { discussionContext, recordChatMessage, reviewInstructions } from '../lib/review-chat';
 import { detectProvider, locateRepo, refspecFor } from '../lib/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../lib/sandbox';
 import { tokenEnv } from '../lib/tokens';
@@ -234,6 +234,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 				prTitle: review.prTitle,
 				prBody,
 				prContext: await prContext,
+				instructions: reviewInstructions(reviewId, initial.startedAt),
 				signal: analysis.signal,
 				resume
 			},

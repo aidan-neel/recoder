@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app } from '../app';
-import { effectiveReviewEnv, getStoredSettings, initReviewSettings, setReviewOverrides } from '../lib/review-settings';
+import { effectiveDispatchLevel, effectiveReviewEnv, getStoredSettings, initReviewSettings, setReviewOverrides } from '../lib/review-settings';
 import { configForOrchestrator, configForRole, isReviewConfigured } from '../lib/models';
 
 const ENV_KEYS = [
@@ -67,6 +67,25 @@ describe('review settings', () => {
 		});
 		expect(changedModel.status).toBe(200);
 		expect(configForRole('security')).toMatchObject({ model: 'new-model', reasoningEffort: 'high' });
+	});
+
+	test('the specialist dispatch level persists across reload and rejects unknown levels', async () => {
+		expect((await (await app.request('/api/settings/models')).json()).specialistDispatch).toBe('medium');
+		const patch = await app.request('/api/settings/models', {
+			method: 'PATCH', headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ specialistDispatch: 'low' })
+		});
+		expect(patch.status).toBe(200);
+		expect((await patch.json()).specialistDispatch).toBe('low');
+		setReviewOverrides({});
+		initReviewSettings();
+		expect(effectiveDispatchLevel()).toBe('low');
+		const bad = await app.request('/api/settings/models', {
+			method: 'PATCH', headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ specialistDispatch: 'ultra' })
+		});
+		expect(bad.status).toBe(400);
+		expect(effectiveDispatchLevel()).toBe('low');
 	});
 
 	test('invalid effort values are rejected without changing settings', async () => {

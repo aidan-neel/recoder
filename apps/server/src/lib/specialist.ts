@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { REVIEW_ROLES, ROLE_FOCUS, ROLE_LABELS, type ReviewRole } from './roles.js';
 import { REVIEW_POLICY } from './review-policy.js';
-import { EXEC_REVIEW_CONTRACT, SHARED_REVIEW_CONTRACT } from './prompts.js';
+import { EXEC_REVIEW_CONTRACT, EXEC_REVIEW_CONTRACT_COMPACT, SHARED_REVIEW_CONTRACT, SHARED_REVIEW_CONTRACT_COMPACT } from './prompts.js';
 import type { PlannerAssignment } from './planner.js';
+import { directiveBlock, type ReviewDirective } from './directive.js';
 
 const locationSchema = z.object({
 	file: z.string().min(1).max(500),
@@ -59,19 +60,22 @@ export const specialistOutputSchema = z.object({
 export type SpecialistOutput = z.infer<typeof specialistOutputSchema>;
 export type SpecialistFinding = z.infer<typeof findingSchema>;
 
-export function specialistSystemPrompt(role: ReviewRole, exec = false): string {
-	return `${exec ? EXEC_REVIEW_CONTRACT : SHARED_REVIEW_CONTRACT}
+export function specialistSystemPrompt(role: ReviewRole, exec = false, options: { compact?: boolean; directive?: ReviewDirective | null } = {}): string {
+	const contract = options.compact ? (exec ? EXEC_REVIEW_CONTRACT_COMPACT : SHARED_REVIEW_CONTRACT_COMPACT) : (exec ? EXEC_REVIEW_CONTRACT : SHARED_REVIEW_CONTRACT);
+	const directive = directiveBlock(options.directive);
+	return `${contract}
 
 Role: ${ROLE_LABELS[role]} (${role})
-Focus: ${ROLE_FOCUS[role]}`;
+Focus: ${ROLE_FOCUS[role]}${directive ? `\n\n${directive}\nReport only what these instructions ask for; findings outside them are dropped.` : ''}`;
 }
 
-export function specialistUserPrompt(assignment: PlannerAssignment, remainingTurns: number, remainingCalls: number): string {
+export function specialistUserPrompt(assignment: PlannerAssignment, remainingTurns: number, remainingCalls: number, directive?: ReviewDirective | null): string {
 	const scope = assignment.scope
 		.map((entry) => `- ${entry.path}\n  hunks: ${entry.hunkIds.join(', ') || '(file)'}`)
 		.join('\n');
 	const questions = assignment.questions.map((question, i) => `${i + 1}. ${question}`).join('\n');
 	return [
+		directive?.instructions.trim() ? `Developer instructions for this review (trusted; follow them):\n${directive.instructions.trim()}` : '',
 		`Assignment ${assignment.id}: ${assignment.title}`,
 		`Why this assignment exists: ${assignment.reason}`,
 		`Questions:\n${questions || '(none)'}`,

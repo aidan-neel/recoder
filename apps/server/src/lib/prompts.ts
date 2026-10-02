@@ -69,13 +69,27 @@ ${FINDING_BODY_STYLE}
 "coverageGaps" lists only assigned hunks you could not read or reason about. Missing tests or other problems in code you did read are findings (or nothing), never coverage gaps.
 Use "high" only for issues that are certainly reachable and damaging. Do not report informational notes, nits or style preferences.`;
 
-function reviewContract(exec: boolean): string {
+/** The same rules as REVIEW_RULES, as a short checklist: small models follow this and lose the long form. */
+const REVIEW_RULES_COMPACT = `How to review:
+- Read the whole changed function, not just the hunk; find its callers; check what removed code used to guarantee.
+- Try empty, null, boundary, concurrent and failure inputs in your head.
+- Report every issue you can tie to evidence, even when unsure, and say how sure you are: a later stage verifies candidates.
+- Cite evidence IDs for every finding. Never invent files, lines or behavior you cannot see.
+- A convention finding needs an explicit repository rule or two existing examples.
+- Zero findings is valid only after you have read the code the change touches.
+- You cannot spawn agents. On your final turn, finish with the evidence you have.
+
+`;
+
+function reviewContract(exec: boolean, compact = false): string {
 	return `${exec ? EXEC_RULES : READ_ONLY_RULES}
-${REVIEW_RULES}${exec ? EXEC_ACTIONS : READ_ONLY_ACTIONS}${FINAL_SHAPE}`;
+${compact ? REVIEW_RULES_COMPACT : REVIEW_RULES}${exec ? EXEC_ACTIONS : READ_ONLY_ACTIONS}${FINAL_SHAPE}`;
 }
 
 export const SHARED_REVIEW_CONTRACT = reviewContract(false);
 export const EXEC_REVIEW_CONTRACT = reviewContract(true);
+export const SHARED_REVIEW_CONTRACT_COMPACT = reviewContract(false, true);
+export const EXEC_REVIEW_CONTRACT_COMPACT = reviewContract(true, true);
 
 /** Copyable request shapes: weaker models follow an example far better than a type signature. */
 export const RETRIEVAL_EXAMPLES = `To read code, reply with ONLY this JSON shape (one to four actions):
