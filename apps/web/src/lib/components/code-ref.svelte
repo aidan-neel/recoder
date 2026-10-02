@@ -11,12 +11,23 @@
 	let panelEl = $state<HTMLElement>();
 	const id = $props.id();
 	const name = $derived(context.file.split('/').at(-1) ?? context.file);
-	const lines = $derived(context.endLine !== context.startLine ? `${context.startLine}–${context.endLine}` : `${context.startLine}`);
+	const lines = $derived(
+		context.endLine !== context.startLine ? `${context.startLine}–${context.endLine}` : `${context.startLine}`
+	);
 </script>
 
 <div class="code-ref" data-open={open || undefined}>
-	<button type="button" class="code-ref-badge" aria-expanded={open} aria-controls="{id}-code"
-		title="{context.file}:{lines}{context.side === 'old' ? ' (before)' : ''}" onclick={(event) => { anchorToggle(event.currentTarget, !open, () => panelEl); open = !open; }}>
+	<button
+		type="button"
+		class="code-ref-badge"
+		aria-expanded={open}
+		aria-controls="{id}-code"
+		title="{context.file}:{lines}{context.side === 'old' ? ' (before)' : ''}"
+		onclick={(event) => {
+			anchorToggle(event.currentTarget, !open, () => panelEl);
+			open = !open;
+		}}
+	>
 		<img src={fileIconUrl(name)} alt="" width="14" height="14" class="code-ref-icon" />
 		<span class="min-w-0 truncate">{name}:{lines}</span>
 		<ChevronRight size={12} class="code-ref-chevron" aria-hidden="true" />

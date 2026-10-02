@@ -19,14 +19,31 @@ class CheckFixes {
 	/** Read the check's log and have a model write a fix. */
 	async suggest(reviewId: string, check: PrCheck): Promise<void> {
 		if (!check.id) return;
+
 		const key = this.key(reviewId, check);
+
 		if (this.items[key]?.status === 'loading') return;
 		this.items[key] = { status: 'loading', name: check.name };
+
 		try {
 			const result = await serverApi.suggestCheckFix(reviewId, { id: check.id, name: check.name });
-			this.items[key] = { status: 'ready', name: check.name, summary: result.summary, patch: result.patch, edits: result.edits, applies: result.applies };
+
+			this.items[key] = {
+				status: 'ready',
+				name: check.name,
+				summary: result.summary,
+				patch: result.patch,
+				edits: result.edits,
+				applies: result.applies
+			};
 		} catch (e) {
-			this.items[key] = { status: 'error', name: check.name, error: e instanceof Error ? e.message : 'Could not write a fix.', ...(e instanceof ApiError && e.action ? { action: e.action } : {}), ...(e instanceof ApiError && e.usageLimit ? { usageLimit: e.usageLimit } : {}) };
+			this.items[key] = {
+				status: 'error',
+				name: check.name,
+				error: e instanceof Error ? e.message : 'Could not write a fix.',
+				...(e instanceof ApiError && e.action ? { action: e.action } : {}),
+				...(e instanceof ApiError && e.usageLimit ? { usageLimit: e.usageLimit } : {})
+			};
 		}
 	}
 
@@ -34,9 +51,12 @@ class CheckFixes {
 	async apply(reviewId: string, check: PrCheck): Promise<boolean> {
 		const key = this.key(reviewId, check);
 		const fix = this.items[key];
+
 		if (fix?.status !== 'ready' || !fix.patch || fix.apply === 'applying') return false;
 		this.items[key] = { ...fix, apply: 'applying', applyError: undefined };
+
 		const file = fix.edits?.[0]?.file ?? /^\+\+\+ b\/(.+)$/m.exec(fix.patch)?.[1] ?? 'ci';
+
 		try {
 			await serverApi.applyFix(reviewId, {
 				finding: { file, line: 1, endLine: 1, severity: 'error', message: `Fix the failing ${check.name} check` },
@@ -44,14 +64,18 @@ class CheckFixes {
 				patch: fix.patch,
 				edits: fix.edits
 			});
+
 			this.items[key] = { ...fix, apply: 'applied' };
 			void changesStore.refresh();
 			undoToast(`Fix for ${check.name} applied. Commit it from Changes.`);
+
 			return true;
 		} catch (e) {
 			const message = e instanceof Error ? e.message : 'Could not apply the fix.';
+
 			this.items[key] = { ...fix, apply: 'error', applyError: message };
 			errorToast('Could not apply the fix', message);
+
 			return false;
 		}
 	}

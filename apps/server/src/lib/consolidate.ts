@@ -32,7 +32,10 @@ export const consolidationSchema = z.object({
 		)
 		.max(40)
 		.default([]),
-	reject: z.array(z.object({ id: z.string(), reason: z.string().max(400) })).max(80).default([]),
+	reject: z
+		.array(z.object({ id: z.string(), reason: z.string().max(400) }))
+		.max(80)
+		.default([]),
 	recommendedChecks: z.array(z.string().max(400)).max(20).default([])
 });
 
@@ -40,6 +43,7 @@ export type ConsolidationPlan = z.infer<typeof consolidationSchema>;
 
 export function consolidationSystemPrompt(directive?: ReviewDirective | null): string {
 	const instructions = directiveBlock(directive);
+
 	return `${instructions ? `${instructions}\nReject candidates outside these instructions (reason: "outside the developer's instructions").\n\n` : ''}You consolidate Recoder specialist candidates into confirmed findings.
 You may keep, merge, clarify, or reject candidates. You cannot invent findings or evidence.
 Do not drop an issue solely because a previous review reported it.
@@ -52,24 +56,41 @@ Every candidate id must appear in keep, merge, or reject.`;
 
 export function consolidationUserPrompt(candidates: CandidateFinding[], evidence: EvidenceStore): string {
 	const lines = candidates.map((candidate) => {
-		const loc = candidate.side === 'old' ? `${candidate.file}${candidate.line ? `:${candidate.line}` : ''} (old)` : `${candidate.file}${candidate.line ? `:${candidate.line}` : ''}`;
+		const loc =
+			candidate.side === 'old'
+				? `${candidate.file}${candidate.line ? `:${candidate.line}` : ''} (old)`
+				: `${candidate.file}${candidate.line ? `:${candidate.line}` : ''}`;
+
 		const verification = candidate.verification
 			? `\n${candidate.verification.status}: ${candidate.verification.reason}${candidate.verification.command ? ` (\`${candidate.verification.command}\`)` : ''}`
 			: '';
+
 		return `${candidate.candidateId} [${candidate.agent}/${candidate.assignmentId}] ${candidate.severity} ${loc}\n${candidate.message}${verification}\nevidence: ${(candidate.evidenceIds ?? []).join(', ') || '(none)'}`;
 	});
+
 	const cited = new Set(candidates.flatMap((candidate) => candidate.evidenceIds ?? []));
 	const records = [...evidence.records.values()].filter((record) => cited.has(record.id));
 	const perRecord = Math.max(200, Math.floor(32_000 / Math.max(1, records.length)));
+
 	const evidenceNotes = records
-		.map((record) => `${record.id} ${record.kind === 'run' ? `run: ${record.command}` : `${record.revision} ${record.path}:${record.startLine}-${record.endLine}`}\nUNTRUSTED EVIDENCE:\n${record.content.slice(0, perRecord)}${record.content.length > perRecord ? '\n[excerpt truncated; do not assume omitted content]' : ''}`)
+		.map(
+			(record) =>
+				`${record.id} ${record.kind === 'run' ? `run: ${record.command}` : `${record.revision} ${record.path}:${record.startLine}-${record.endLine}`}\nUNTRUSTED EVIDENCE:\n${record.content.slice(0, perRecord)}${record.content.length > perRecord ? '\n[excerpt truncated; do not assume omitted content]' : ''}`
+		)
 		.join('\n');
+
 	return `Candidates:\n${lines.join('\n\n')}\n\nEvidence index:\n${evidenceNotes || '(none)'}`;
 }
 
 export function validateCandidate(
 	raw: SpecialistFinding,
-	meta: { candidateId: string; assignmentId: string; role: ReviewRole; model: string; fingerprint: (file: string, category: string, start: number, end: number, side: 'old' | 'new') => string },
+	meta: {
+		candidateId: string;
+		assignmentId: string;
+		role: ReviewRole;
+		model: string;
+		fingerprint: (file: string, category: string, start: number, end: number, side: 'old' | 'new') => string;
+	},
 	inventory: ReviewInventory,
 	evidence: EvidenceStore
 ): CandidateFinding {
@@ -81,6 +102,7 @@ export function validateCandidate(
 	const provided = evidence.providedIds();
 	const evidenceIds = (raw.evidenceIds ?? []).filter((id) => provided.has(id));
 	let dropReason: string | undefined;
+
 	if (!file) dropReason = 'path is not in the change inventory';
 	else if (file.excludeReason) dropReason = `path is excluded (${file.excludeReason})`;
 	else if (side === 'new' && line) {
@@ -88,9 +110,11 @@ export function validateCandidate(
 	} else if (side === 'new' && !line && file.status !== 'deleted') {
 		dropReason = 'file-level finding on a non-deleted file needs a line';
 	}
+
 	if (!dropReason && (raw.evidenceIds ?? []).length > 0 && evidenceIds.length === 0) {
 		dropReason = 'cited evidence was not provided';
 	}
+
 	const finding: CandidateFinding = {
 		id: crypto.randomUUID(),
 		title: raw.title,
@@ -111,18 +135,23 @@ export function validateCandidate(
 		valid: !dropReason,
 		dropReason
 	};
+
 	return finding;
 }
 
 function newSideAnchored(inventory: ReviewInventory, path: string, line: number): boolean {
 	const file = inventory.diffs.find((entry) => entry.path === path);
+
 	if (!file) return false;
+
 	for (const hunk of file.hunks) {
 		for (const entry of hunk.lines) {
 			if (entry.newNo === line) return true;
 		}
+
 		if (line >= hunk.newStart && line < hunk.newStart + Math.max(hunk.newCount, 1)) return true;
 	}
+
 	return false;
 }
 
@@ -130,30 +159,41 @@ export function applyConsolidation(
 	plan: ConsolidationPlan,
 	candidates: CandidateFinding[]
 ): { confirmed: Finding[]; rejected: Array<{ id: string; reason: string }> } {
-	const byId = new Map(candidates.filter((candidate) => candidate.valid).map((candidate) => [candidate.candidateId, candidate]));
+	const byId = new Map(
+		candidates.filter((candidate) => candidate.valid).map((candidate) => [candidate.candidateId, candidate])
+	);
+
 	const consumed = new Set<string>();
 	const confirmed: Finding[] = [];
 	const rejected: Array<{ id: string; reason: string }> = [];
 
 	for (const merge of plan.merge) {
 		const keep = byId.get(merge.keepId);
+
 		if (!keep || consumed.has(merge.keepId)) continue;
+
 		const related = [...(keep.relatedLocations ?? [])];
 		let verification = keep.verification;
 		let evidenceIds = keep.evidenceIds;
+
 		for (const id of merge.mergeIds) {
 			const extra = byId.get(id);
+
 			if (!extra) continue;
 			consumed.add(id);
+
 			// A merged duplicate that was reproduced proves the kept finding too.
 			if (extra.verification?.status === 'verified' && verification?.status !== 'verified') {
 				verification = extra.verification;
 				evidenceIds = [...new Set([...(extra.evidenceIds ?? []), ...(evidenceIds ?? [])])];
 			}
+
 			related.push({ file: extra.file, line: extra.line, endLine: extra.endLine, side: extra.side });
 			related.push(...(extra.relatedLocations ?? []));
 		}
+
 		consumed.add(merge.keepId);
+
 		confirmed.push({
 			...keep,
 			message: merge.body ? `[${keep.category ?? 'issue'}] ${merge.body}` : keep.message,
@@ -165,7 +205,9 @@ export function applyConsolidation(
 
 	for (const id of plan.keep) {
 		if (consumed.has(id)) continue;
+
 		const candidate = byId.get(id);
+
 		if (!candidate) continue;
 		consumed.add(id);
 		confirmed.push(candidate);
@@ -192,18 +234,23 @@ export function deterministicConsolidate(candidates: CandidateFinding[]): {
 	const confirmed: Finding[] = [];
 	const rejected: Array<{ id: string; reason: string }> = [];
 	const seen = new Set<string>();
+
 	for (const candidate of candidates) {
 		if (!candidate.valid) {
 			rejected.push({ id: candidate.candidateId, reason: candidate.dropReason ?? 'invalid candidate' });
 			continue;
 		}
+
 		const key = candidate.fingerprint ?? candidate.candidateId;
+
 		if (seen.has(key)) {
 			rejected.push({ id: candidate.candidateId, reason: 'duplicate of an earlier candidate' });
 			continue;
 		}
+
 		seen.add(key);
 		confirmed.push(candidate);
 	}
+
 	return { confirmed, rejected };
 }

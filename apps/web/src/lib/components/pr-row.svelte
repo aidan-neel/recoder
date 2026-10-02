@@ -51,7 +51,12 @@
 </script>
 
 <ContextMenu.Root>
-	<ContextMenu.Trigger class="pr-row" data-state={state} data-highlighted={highlighted || undefined} data-pr={String(pr.number)}>
+	<ContextMenu.Trigger
+		class="pr-row"
+		data-state={state}
+		data-highlighted={highlighted || undefined}
+		data-pr={String(pr.number)}
+	>
 		<span class="pr-row-icon" aria-hidden="true">
 			{#if state === 'starting' || state === 'running'}
 				<LoaderCircle size={16} strokeWidth={1.75} class="spin" />
@@ -65,7 +70,12 @@
 					<span class="pr-row-people" title="Assigned to {assigneeNames}" aria-label="Assigned to {assigneeNames}">
 						{#each assignees.slice(0, 4) as person (person.login)}
 							<Avatar.Root size="sm" class="pr-row-avatar">
-								{#if person.avatarUrl}<Avatar.Image src={person.avatarUrl} alt="" loading="lazy" referrerpolicy="no-referrer" />{/if}
+								{#if person.avatarUrl}<Avatar.Image
+										src={person.avatarUrl}
+										alt=""
+										loading="lazy"
+										referrerpolicy="no-referrer"
+									/>{/if}
 								<Avatar.Fallback>{initials(person.name ?? person.login)}</Avatar.Fallback>
 							</Avatar.Root>
 						{/each}

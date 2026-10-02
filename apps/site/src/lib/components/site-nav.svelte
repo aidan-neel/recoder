@@ -16,7 +16,9 @@
 
 	function measure(): HTMLElement | null {
 		const el = listEl?.querySelector<HTMLElement>('[aria-current="page"]') ?? null;
+
 		pill = el ? { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight } : null;
+
 		return el;
 	}
 
@@ -31,15 +33,22 @@
 	// Re-measure when fonts load or the layout switches between the side column and the top row.
 	$effect(() => {
 		if (!listEl) return;
+
 		const ro = new ResizeObserver(() => measure());
+
 		ro.observe(listEl);
 		for (const item of listEl.querySelectorAll('.site-nav-item')) ro.observe(item);
+
 		return () => ro.disconnect();
 	});
 </script>
 
 <nav class="site-nav" aria-label="Site">
-	<div class="site-nav-list" bind:this={listEl} {@attach hoverHighlight({ items: '.site-nav-item', class: 'site-nav-hl' })}>
+	<div
+		class="site-nav-list"
+		bind:this={listEl}
+		{@attach hoverHighlight({ items: '.site-nav-item', class: 'site-nav-hl' })}
+	>
 		{#if pill}
 			<span
 				class="site-nav-pill"
@@ -61,9 +70,6 @@
 				{link.title}
 			</Button>
 		{/each}
-		<Button href={repo} variant="ghost" class="site-nav-item enter-rise" style={`--i: ${links.length}`}>
-			GitHub
-		</Button>
+		<Button href={repo} variant="ghost" class="site-nav-item enter-rise" style={`--i: ${links.length}`}>GitHub</Button>
 	</div>
 </nav>
-

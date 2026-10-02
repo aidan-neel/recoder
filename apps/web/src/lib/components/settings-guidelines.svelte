@@ -51,7 +51,9 @@
 			{#each [0, 1] as i (i)}
 				<div class="settings-row" role="status" aria-label="Loading repositories">
 					<Skeleton class="size-4 shrink-0" />
-					<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={i ? 30 : 38} unit="%" /><Skeleton class="h-2.5" w={i ? 44 : 52} unit="%" /></div>
+					<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+						<Skeleton class="h-3" w={i ? 30 : 38} unit="%" /><Skeleton class="h-2.5" w={i ? 44 : 52} unit="%" />
+					</div>
 					<Skeleton class="h-8 w-14" />
 				</div>
 			{/each}
@@ -75,13 +77,24 @@
 					{#if state?.status === 'ready'}
 						{#if state.data.pending}
 							<a href={state.data.pending.url} target="_blank" rel="noopener" class="guidelines-chip-link">
-								<Badge variant="secondary" class="status-chip" data-tone="running">Pending in #{state.data.pending.number}</Badge>
+								<Badge variant="secondary" class="status-chip" data-tone="running"
+									>Pending in #{state.data.pending.number}</Badge
+								>
 							</a>
 						{:else if state.data.content}
-							<Badge variant="secondary" class="status-chip" data-tone="success" title="{state.data.ref} {state.data.sha ?? ''}">Active · {state.data.ref}</Badge>
+							<Badge
+								variant="secondary"
+								class="status-chip"
+								data-tone="success"
+								title="{state.data.ref} {state.data.sha ?? ''}">Active · {state.data.ref}</Badge
+							>
 						{/if}
 					{/if}
-					<Button variant="outline" disabled={state?.status === 'loading' || !state} onclick={() => guidelinesStore.open({ kind: 'repo', repoId: repo.id })}>
+					<Button
+						variant="outline"
+						disabled={state?.status === 'loading' || !state}
+						onclick={() => guidelinesStore.open({ kind: 'repo', repoId: repo.id })}
+					>
 						{state?.status === 'ready' && (state.data.content || state.data.pending) ? 'Edit' : 'Write'}
 					</Button>
 				</div>

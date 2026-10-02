@@ -32,6 +32,7 @@
 		shellState.load();
 		void openPrs.load();
 		void recentSessions.load();
+
 		return recentSessions.watchRunning();
 	});
 
@@ -39,6 +40,7 @@
 	const tabs = $derived<SessionTab[]>(
 		sessionState.sessions.map((session) => {
 			const review = recentSessions.reviews.find((item) => item.id === session.id);
+
 			return sessionTab(
 				session,
 				review,
@@ -50,6 +52,7 @@
 
 	const activeValue = $derived.by(() => {
 		const match = /^\/session\/([^/]+)/.exec(page.url.pathname);
+
 		return match ? match[1] : page.url.pathname === '/' ? HOME : '';
 	});
 
@@ -79,9 +82,12 @@
 		void tabs;
 		void regionWidth;
 		if (!measureEl) return;
+
 		const el = measureEl;
+
 		void tick().then(() => {
 			const items = Array.from(el.children) as HTMLElement[];
+
 			scale = parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
 			fixedWidth = items[0]?.offsetWidth ?? 0;
 			widths = items.slice(1).map((item) => item.offsetWidth);
@@ -90,24 +96,33 @@
 
 	const visibleIds = $derived.by(() => {
 		const all = tabs.map((tab) => tab.id);
+
 		if (!regionWidth || widths.length !== all.length) return all;
+
 		const fit = (budget: number): string[] => {
 			const shown: string[] = [];
 			let used = fixedWidth;
+
 			for (let i = 0; i < all.length; i++) {
 				used += widths[i];
 				if (used > budget) break;
 				shown.push(all[i]);
 			}
+
 			return shown;
 		};
+
 		const budget = regionWidth - PLUS_BUTTON * scale;
 		let shown = fit(budget);
+
 		if (shown.length < all.length) shown = fit(budget - OVERFLOW_BUTTON * scale);
+
 		const active = all.indexOf(activeValue);
+
 		if (active >= shown.length && shown.length > 0) {
 			shown = [...shown.slice(0, -1), all[active]];
 		}
+
 		return shown;
 	});
 	const visibleTabs = $derived(tabs.filter((tab) => visibleIds.includes(tab.id)));
@@ -122,7 +137,9 @@
 		const onMenu = (event: MouseEvent) => {
 			menuTabId = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-tab]')?.dataset.tab ?? null;
 		};
+
 		node.addEventListener('contextmenu', onMenu, true);
+
 		return () => node.removeEventListener('contextmenu', onMenu, true);
 	}
 
@@ -155,34 +172,47 @@
 <svelte:window
 	onkeydown={(event) => {
 		if (event.defaultPrevented) return;
+
 		const mod = event.metaKey || event.ctrlKey;
+
 		if (mod && event.key.toLowerCase() === 'k' && !event.shiftKey && !event.altKey) {
 			event.preventDefault();
 			shellState.paletteOpen = !shellState.paletteOpen;
+
 			return;
 		}
+
 		if (mod && event.key === ',') {
 			event.preventDefault();
 			modelSettingsUi.show();
+
 			return;
 		}
+
 		// Ctrl+Tab / Ctrl+Shift+Tab: next / previous tab (Home, then sessions), wrapping.
 		if (event.ctrlKey && event.key === 'Tab' && !event.altKey && !event.metaKey) {
 			if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
 			event.preventDefault();
+
 			const order = [HOME, ...tabs.map((tab) => tab.id)];
 			const at = order.indexOf(activeValue);
 			const step = event.shiftKey ? -1 : 1;
+
 			navigate(order[at < 0 ? (step > 0 ? 0 : order.length - 1) : (at + step + order.length) % order.length]);
+
 			return;
 		}
+
 		if (mod && (event.key === '1' || event.key === '2') && paletteContext.showView) {
 			event.preventDefault();
 			paletteContext.showView(event.key === '1' ? 'conversation' : 'diff');
+
 			return;
 		}
+
 		// R: review a pull request, unless typing or a dialog is open.
 		const target = event.target as HTMLElement | null;
+
 		if (
 			event.key.toLowerCase() === 'r' &&
 			!mod &&
@@ -198,108 +228,126 @@
 />
 
 <header class="top-bar flex h-[46px] shrink-0 items-center gap-1 bg-chrome pr-[10px] pl-2 select-none">
-
 	<nav aria-label="Sessions" class="relative flex min-w-0 flex-1 items-center" bind:clientWidth={regionWidth}>
 		<ContextMenu.Root>
-		<ContextMenu.Trigger class="flex min-w-0 flex-1 items-center" {@attach trackMenuTab}>
-		<Tabs.Root value={activeValue} onValueChange={navigate} variant="segmented" class="top-tabs min-w-0">
-			<Tabs.List {...{ 'aria-label': 'Open sessions' }} {@attach keepPillAligned}>
-				<Tabs.Trigger value={HOME} {...{ 'aria-controls': 'app-canvas' }}>
-					<Inbox size={14} strokeWidth={1.75} aria-hidden="true" />
-					Home
-					{#if openPrs.count}<span class="font-mono text-[11.5px] text-fg-faint" aria-label="{openPrs.count} open pull requests">{openPrs.count}</span>{/if}
-				</Tabs.Trigger>
+			<ContextMenu.Trigger class="flex min-w-0 flex-1 items-center" {@attach trackMenuTab}>
+				<Tabs.Root value={activeValue} onValueChange={navigate} variant="segmented" class="top-tabs min-w-0">
+					<Tabs.List {...{ 'aria-label': 'Open sessions' }} {@attach keepPillAligned}>
+						<Tabs.Trigger value={HOME} {...{ 'aria-controls': 'app-canvas' }}>
+							<Inbox size={14} strokeWidth={1.75} aria-hidden="true" />
+							Home
+							{#if openPrs.count}<span
+									class="font-mono text-[11.5px] text-fg-faint"
+									aria-label="{openPrs.count} open pull requests">{openPrs.count}</span
+								>{/if}
+						</Tabs.Trigger>
+						{#if tabs.length > 0}
+							<span class="tab-sep mx-1.5 h-4 w-px shrink-0 bg-line-tab" aria-hidden="true"></span>
+						{/if}
+						{#each visibleTabs as tab (tab.id)}
+							<Tabs.Trigger
+								value={tab.id}
+								{...{
+									'aria-controls': 'app-canvas',
+									'data-tab': tab.id,
+									title: `${tab.title} · ${tab.repo} ${tab.pr ?? ''}`,
+									onauxclick: (event: MouseEvent) => {
+										if (event.button === 1) {
+											event.preventDefault();
+											void closeSessionTab(tab.id);
+										}
+									}
+								}}
+							>
+								{@render tabBody(tab)}
+							</Tabs.Trigger>
+						{/each}
+					</Tabs.List>
+				</Tabs.Root>
+
+				{#if hiddenTabs.length > 0}
+					<DropdownMenu.Root>
+						<DropdownMenu.Trigger
+							variant="ghost"
+							class="h-7 shrink-0 gap-1 px-2 font-mono text-[11px] text-fg-faint"
+							aria-label="{hiddenTabs.length} more sessions"
+						>
+							+{hiddenTabs.length}
+							<ChevronDown size={12} aria-hidden="true" />
+						</DropdownMenu.Trigger>
+						<DropdownMenu.Content class="min-w-[240px]">
+							{#each hiddenTabs as tab (tab.id)}
+								<DropdownMenu.Item callback={() => navigate(tab.id)}>
+									<span class="flex min-w-0 flex-1 items-center gap-[7px]">{@render tabBody(tab)}</span>
+								</DropdownMenu.Item>
+							{/each}
+						</DropdownMenu.Content>
+					</DropdownMenu.Root>
+				{/if}
+
 				{#if tabs.length > 0}
-					<span class="tab-sep mx-1.5 h-4 w-px shrink-0 bg-line-tab" aria-hidden="true"></span>
+					<Tooltip.Root delay={600}>
+						<Tooltip.Trigger class="flex shrink-0">
+							<Button
+								variant="ghost"
+								size="icon"
+								class="top-plus"
+								aria-label="Review a pull request"
+								onclick={() => void newReview()}
+							>
+								<Plus size={14} aria-hidden="true" />
+							</Button>
+						</Tooltip.Trigger>
+						<Tooltip.Content>Review a pull request</Tooltip.Content>
+					</Tooltip.Root>
 				{/if}
-				{#each visibleTabs as tab (tab.id)}
-					<Tabs.Trigger
-						value={tab.id}
-						{...{
-							'aria-controls': 'app-canvas',
-							'data-tab': tab.id,
-							title: `${tab.title} · ${tab.repo} ${tab.pr ?? ''}`,
-							onauxclick: (event: MouseEvent) => {
-								if (event.button === 1) {
-									event.preventDefault();
-									void closeSessionTab(tab.id);
-								}
-							}
-						}}
+			</ContextMenu.Trigger>
+			<ContextMenu.Content class="min-w-[13rem]">
+				{#if menuTab}
+					{@const tab = menuTab}
+					{#if tab.id !== activeValue}
+						<ContextMenu.Item callback={() => navigate(tab.id)}>Open</ContextMenu.Item>
+					{/if}
+					<ContextMenu.Item callback={() => void goto(`/session/${tab.id}?view=diff`)}>Open diff</ContextMenu.Item>
+					{#if menuTabUrl}
+						{@const url = menuTabUrl}
+						<ContextMenu.Item callback={() => void navigator.clipboard?.writeText(url).catch(() => {})}
+							>Copy pull request link</ContextMenu.Item
+						>
+					{/if}
+					<ContextMenu.Separator />
+					<ContextMenu.Item callback={() => void closeSessionTab(tab.id)}>Close tab</ContextMenu.Item>
+					<ContextMenu.Item
+						disabled={tabs.length < 2}
+						callback={() => void closeTabs(tabs.filter((t) => t.id !== tab.id))}
 					>
-						{@render tabBody(tab)}
-					</Tabs.Trigger>
-				{/each}
-			</Tabs.List>
-		</Tabs.Root>
-
-		{#if hiddenTabs.length > 0}
-			<DropdownMenu.Root>
-				<DropdownMenu.Trigger
-					variant="ghost"
-					class="h-7 shrink-0 gap-1 px-2 font-mono text-[11px] text-fg-faint"
-					aria-label="{hiddenTabs.length} more sessions"
-				>
-					+{hiddenTabs.length}
-					<ChevronDown size={12} aria-hidden="true" />
-				</DropdownMenu.Trigger>
-				<DropdownMenu.Content class="min-w-[240px]">
-					{#each hiddenTabs as tab (tab.id)}
-						<DropdownMenu.Item callback={() => navigate(tab.id)}>
-							<span class="flex min-w-0 flex-1 items-center gap-[7px]">{@render tabBody(tab)}</span>
-						</DropdownMenu.Item>
-					{/each}
-				</DropdownMenu.Content>
-			</DropdownMenu.Root>
-		{/if}
-
-		{#if tabs.length > 0}
-			<Tooltip.Root delay={600}>
-				<Tooltip.Trigger class="flex shrink-0">
-					<Button variant="ghost" size="icon" class="top-plus" aria-label="Review a pull request" onclick={() => void newReview()}>
-						<Plus size={14} aria-hidden="true" />
-					</Button>
-				</Tooltip.Trigger>
-				<Tooltip.Content>Review a pull request</Tooltip.Content>
-			</Tooltip.Root>
-		{/if}
-
-		</ContextMenu.Trigger>
-		<ContextMenu.Content class="min-w-[13rem]">
-			{#if menuTab}
-				{@const tab = menuTab}
-				{#if tab.id !== activeValue}
-					<ContextMenu.Item callback={() => navigate(tab.id)}>Open</ContextMenu.Item>
+						Close other tabs
+					</ContextMenu.Item>
+					<ContextMenu.Item
+						disabled={tabs.at(-1)?.id === tab.id}
+						callback={() => void closeTabs(tabs.slice(tabs.findIndex((t) => t.id === tab.id) + 1))}
+					>
+						Close tabs to the right
+					</ContextMenu.Item>
+					<ContextMenu.Separator />
+					<ContextMenu.Item class="menu-danger" callback={() => requestDeleteSession(tab.id)}
+						>Delete session</ContextMenu.Item
+					>
+				{:else}
+					<ContextMenu.Item callback={() => void newReview()}>Review a pull request…</ContextMenu.Item>
+					<ContextMenu.Item disabled={tabs.length === 0} callback={() => void closeTabs(tabs)}
+						>Close all tabs</ContextMenu.Item
+					>
 				{/if}
-				<ContextMenu.Item callback={() => void goto(`/session/${tab.id}?view=diff`)}>Open diff</ContextMenu.Item>
-				{#if menuTabUrl}
-					{@const url = menuTabUrl}
-					<ContextMenu.Item callback={() => void navigator.clipboard?.writeText(url).catch(() => {})}>Copy pull request link</ContextMenu.Item>
-				{/if}
-				<ContextMenu.Separator />
-				<ContextMenu.Item callback={() => void closeSessionTab(tab.id)}>Close tab</ContextMenu.Item>
-				<ContextMenu.Item disabled={tabs.length < 2} callback={() => void closeTabs(tabs.filter((t) => t.id !== tab.id))}>
-					Close other tabs
-				</ContextMenu.Item>
-				<ContextMenu.Item
-					disabled={tabs.at(-1)?.id === tab.id}
-					callback={() => void closeTabs(tabs.slice(tabs.findIndex((t) => t.id === tab.id) + 1))}
-				>
-					Close tabs to the right
-				</ContextMenu.Item>
-				<ContextMenu.Separator />
-				<ContextMenu.Item class="menu-danger" callback={() => requestDeleteSession(tab.id)}>Delete session</ContextMenu.Item>
-			{:else}
-				<ContextMenu.Item callback={() => void newReview()}>Review a pull request…</ContextMenu.Item>
-				<ContextMenu.Item disabled={tabs.length === 0} callback={() => void closeTabs(tabs)}>Close all tabs</ContextMenu.Item>
-			{/if}
-		</ContextMenu.Content>
+			</ContextMenu.Content>
 		</ContextMenu.Root>
 
 		<!-- Measures every tab at rest so overflow can be computed without flicker. -->
 		<div bind:this={measureEl} class="top-tabs-measure" aria-hidden="true">
 			<span class="top-tab-measure">
-				<Inbox size={14} strokeWidth={1.75} />Home{#if openPrs.count}<span class="font-mono text-[11.5px]">{openPrs.count}</span>{/if}<span class="mx-1.5 h-4 w-px"></span>
+				<Inbox size={14} strokeWidth={1.75} />Home{#if openPrs.count}<span class="font-mono text-[11.5px]"
+						>{openPrs.count}</span
+					>{/if}<span class="mx-1.5 h-4 w-px"></span>
 			</span>
 			{#each tabs as tab (tab.id)}
 				<span class="top-tab-measure">{@render tabBody(tab)}</span>
@@ -330,7 +378,11 @@
 					aria-haspopup="dialog"
 					onclick={() => (shellState.usageOpen = true)}
 				>
-					<Progress value={usage.percent} class="usage-track h-[3px] w-[26px] rounded-[2px] bg-hover" {...{ 'aria-hidden': 'true' }} />
+					<Progress
+						value={usage.percent}
+						class="usage-track h-[3px] w-[26px] rounded-[2px] bg-hover"
+						{...{ 'aria-hidden': 'true' }}
+					/>
 					{usage.percent}%
 				</Button>
 			</Tooltip.Trigger>

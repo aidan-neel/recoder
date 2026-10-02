@@ -22,20 +22,25 @@ function gitEnv(overrides?: Record<string, string>, provider?: Provider): Record
 	return {
 		...overrides,
 		GIT_TERMINAL_PROMPT: '0',
-		...(provider === 'github' ? {
-			GIT_CONFIG_COUNT: '2',
-			GIT_CONFIG_KEY_0: 'credential.https://github.com.helper',
-			GIT_CONFIG_VALUE_0: '',
-			GIT_CONFIG_KEY_1: 'credential.https://github.com.helper',
-			GIT_CONFIG_VALUE_1: '!gh auth git-credential'
-		} : {}),
-		...(provider === 'gitlab' && overrides?.GITLAB_TOKEN ? gitlabCredentials(overrides.GITLAB_HOST || 'gitlab.com') : {})
+		...(provider === 'github'
+			? {
+					GIT_CONFIG_COUNT: '2',
+					GIT_CONFIG_KEY_0: 'credential.https://github.com.helper',
+					GIT_CONFIG_VALUE_0: '',
+					GIT_CONFIG_KEY_1: 'credential.https://github.com.helper',
+					GIT_CONFIG_VALUE_1: '!gh auth git-credential'
+				}
+			: {}),
+		...(provider === 'gitlab' && overrides?.GITLAB_TOKEN
+			? gitlabCredentials(overrides.GITLAB_HOST || 'gitlab.com')
+			: {})
 	};
 }
 
 /** The connected GitLab token as the git password, read from the env at call time so it never lands in args or URLs. */
 function gitlabCredentials(host: string): Record<string, string> {
 	const scope = `credential.https://${host}.helper`;
+
 	return {
 		GIT_CONFIG_COUNT: '2',
 		GIT_CONFIG_KEY_0: scope,
@@ -45,21 +50,42 @@ function gitlabCredentials(host: string): Record<string, string> {
 	};
 }
 
-async function git(cwd: string, args: string[], label: string, overrides?: Record<string, string>, provider?: Provider, onProgress?: (message: string) => void): Promise<string> {
+async function git(
+	cwd: string,
+	args: string[],
+	label: string,
+	overrides?: Record<string, string>,
+	provider?: Provider,
+	onProgress?: (message: string) => void
+): Promise<string> {
 	let lastReport = 0;
-	const run = await runCommand({ label, command: 'git', args, cwd, env: gitEnv(overrides, provider),
+
+	const run = await runCommand({
+		label,
+		command: 'git',
+		args,
+		cwd,
+		env: gitEnv(overrides, provider),
 		onOutput: (chunk) => {
-			const matches = [...chunk.matchAll(/(Receiving objects|Resolving deltas|Updating files|Counting objects|Compressing objects):\s+(\d+)%/g)];
+			const matches = [
+				...chunk.matchAll(
+					/(Receiving objects|Resolving deltas|Updating files|Counting objects|Compressing objects):\s+(\d+)%/g
+				)
+			];
+
 			const match = matches.at(-1);
+
 			if (match && Date.now() - lastReport > 500) {
 				lastReport = Date.now();
 				onProgress?.(match[1] + ': ' + match[2] + '%');
 			}
 		}
 	});
+
 	if (run.status !== 'succeeded') {
 		throw new Error(`git ${args[0]} failed: ${run.logs.slice(-2000)}`);
 	}
+
 	return run.logs.trim();
 }
 
@@ -87,6 +113,7 @@ export async function prepareSandbox(opts: {
 	const { repoSlug, prNumber, repoUrl, fetchRef, branch } = opts;
 	const key = sandboxKey(repoSlug, prNumber) + (opts.reviewId ? '__' + opts.reviewId : '');
 	const path = join(env.RECODER_WORKDIR, 'repos', key);
+
 	await mkdir(path, { recursive: true });
 
 	const inside = await git(path, ['rev-parse', '--is-inside-work-tree'], 'sandbox check')
@@ -95,8 +122,17 @@ export async function prepareSandbox(opts: {
 
 	if (!inside) {
 		opts.onProgress?.('Cloning repository into the review checkout');
+
 		const cloneUrl = opts.provider === 'github' ? 'https://github.com/' + repoSlug + '.git' : repoUrl;
-		await git(env.RECODER_WORKDIR, ['clone', '--progress', '--no-checkout', '--', cloneUrl, path], 'sandbox clone', opts.env, opts.provider, opts.onProgress);
+
+		await git(
+			env.RECODER_WORKDIR,
+			['clone', '--progress', '--no-checkout', '--', cloneUrl, path],
+			'sandbox clone',
+			opts.env,
+			opts.provider,
+			opts.onProgress
+		);
 	}
 
 	// Fetch into FETCH_HEAD (never refuses, unlike fetching into a ref),
@@ -104,14 +140,26 @@ export async function prepareSandbox(opts: {
 	// Re-runs of the same PR would otherwise fail with "refusing to fetch
 	// into branch checked out at <path>".
 	opts.onProgress?.('Fetching the pull request head');
-	await git(path, ['fetch', '--progress', 'origin', fetchRef.split(':')[0], '--force'], 'sandbox fetch', opts.env, opts.provider, opts.onProgress);
+
+	await git(
+		path,
+		['fetch', '--progress', 'origin', fetchRef.split(':')[0], '--force'],
+		'sandbox fetch',
+		opts.env,
+		opts.provider,
+		opts.onProgress
+	);
+
 	const fetchedSha = await git(path, ['rev-parse', 'FETCH_HEAD'], 'sandbox fetched sha');
+
 	if (opts.expectedHeadSha && fetchedSha !== opts.expectedHeadSha) {
 		throw new Error('PR head changed while preparing the review; retry to review the latest commit');
 	}
+
 	opts.onProgress?.('Checking out the pull request files');
 	await git(path, ['checkout', '--force', '--detach', 'FETCH_HEAD'], 'sandbox detach');
 	await git(path, ['checkout', '--force', '-B', branch, 'FETCH_HEAD'], 'sandbox checkout');
+
 	const headSha = await git(path, ['rev-parse', 'HEAD'], 'sandbox sha');
 
 	return { key, path, repoSlug, prNumber, headSha };
@@ -126,16 +174,41 @@ export async function sandboxRevisionDiff(
 ): Promise<{ revision: ReviewRevision; diff: string }> {
 	await git(path, ['check-ref-format', 'refs/heads/' + baseRef], 'sandbox validate base');
 	await git(path, ['fetch', 'origin', 'refs/heads/' + baseRef], 'sandbox fetch base', overrides, provider);
+
 	const targetSha = await git(path, ['rev-parse', 'FETCH_HEAD'], 'sandbox target sha');
 	const mergeBaseSha = await git(path, ['merge-base', 'FETCH_HEAD', 'HEAD'], 'sandbox merge base');
 	const headSha = await git(path, ['rev-parse', 'HEAD'], 'sandbox head sha');
-	const proc = Bun.spawn(['git', '-c', 'core.quotePath=false', 'diff', '--no-ext-diff', '--no-textconv', '--no-color', '--src-prefix=a/', '--dst-prefix=b/', mergeBaseSha, headSha, '--'], {
-		cwd: path, stdout: 'pipe', stderr: 'pipe'
-	});
+
+	const proc = Bun.spawn(
+		[
+			'git',
+			'-c',
+			'core.quotePath=false',
+			'diff',
+			'--no-ext-diff',
+			'--no-textconv',
+			'--no-color',
+			'--src-prefix=a/',
+			'--dst-prefix=b/',
+			mergeBaseSha,
+			headSha,
+			'--'
+		],
+		{
+			cwd: path,
+			stdout: 'pipe',
+			stderr: 'pipe'
+		}
+	);
+
 	const [diff, stderr, code] = await Promise.all([
-		new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited
+		new Response(proc.stdout).text(),
+		new Response(proc.stderr).text(),
+		proc.exited
 	]);
+
 	if (code !== 0) throw new Error('Local PR diff failed: ' + stderr.slice(-2000));
+
 	return {
 		revision: { checkoutPath: path, headSha, targetSha, mergeBaseSha, targetRef: baseRef },
 		diff
@@ -143,7 +216,12 @@ export async function sandboxRevisionDiff(
 }
 
 /** Compute the PR patch from its merge base, without API limits or log truncation. */
-export async function sandboxDiff(path: string, baseRef: string, overrides?: Record<string, string>, provider?: Provider): Promise<string> {
+export async function sandboxDiff(
+	path: string,
+	baseRef: string,
+	overrides?: Record<string, string>,
+	provider?: Provider
+): Promise<string> {
 	return (await sandboxRevisionDiff(path, baseRef, overrides, provider)).diff;
 }
 

@@ -12,7 +12,7 @@
 	import SettingsConnections from './settings-connections.svelte';
 	import SettingsGuidelines from './settings-guidelines.svelte';
 	import SettingsHarness from './settings-harness.svelte';
-		import Skeleton from './ui/skeleton.svelte';
+	import Skeleton from './ui/skeleton.svelte';
 	import { modelSettingsUi, type SettingsSection } from '$lib/model-settings.svelte';
 	import { settingsDraft } from '$lib/settings-draft.svelte';
 	import { guidelinesStore } from '$lib/guidelines.svelte';
@@ -34,25 +34,33 @@
 	$effect(() => {
 		if (modelSettingsUi.open) void agent.load();
 	});
-	const agentPending = $derived(modelSettingsUi.section === 'models' && !agent.error && (agent.status === null || agent.providers === null));
+	const agentPending = $derived(
+		modelSettingsUi.section === 'models' && !agent.error && (agent.status === null || agent.providers === null)
+	);
 
 	$effect(() => {
 		if (!modelSettingsUi.open) {
 			settingsDraft.reset();
 			saveError = null;
+
 			return;
 		}
+
 		if (config && !settingsDraft.seeded) settingsDraft.seed(config);
 	});
 
 	/** Save what changed; nothing changed just closes. */
 	async function save(): Promise<void> {
 		if (modelSettingsUi.saving) return;
+
 		const patch = settingsDraft.patch();
+
 		if (Object.keys(patch).length === 0) {
 			modelSettingsUi.hide();
+
 			return;
 		}
+
 		saveError = null;
 		if (await modelSettingsUi.save(patch)) modelSettingsUi.hide();
 		else saveError = modelSettingsUi.error ?? 'Settings were not saved.';
@@ -60,7 +68,14 @@
 
 	function onKey(event: KeyboardEvent): void {
 		// The guidelines editor stacks on top and owns ⌘↵ while it is open.
-		if (!modelSettingsUi.open || guidelinesStore.editing || modelSettingsUi.section === 'guidelines' || event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return;
+		if (
+			!modelSettingsUi.open ||
+			guidelinesStore.editing ||
+			modelSettingsUi.section === 'guidelines' ||
+			event.key !== 'Enter' ||
+			!(event.metaKey || event.ctrlKey)
+		)
+			return;
 		event.preventDefault();
 		void save();
 	}
@@ -100,7 +115,13 @@
 			<div class="settings-main">
 				<header class="settings-head">
 					<Modal.Title class="settings-title">{title}</Modal.Title>
-					<Modal.Close variant="ghost" size="icon" class="mr-0 ml-auto" aria-label="Close settings" disabled={modelSettingsUi.saving}>
+					<Modal.Close
+						variant="ghost"
+						size="icon"
+						class="mr-0 ml-auto"
+						aria-label="Close settings"
+						disabled={modelSettingsUi.saving}
+					>
 						<X size={16} aria-hidden="true" />
 					</Modal.Close>
 				</header>
@@ -121,7 +142,9 @@
 										<Typography.H3 class="settings-label">CLI</Typography.H3>
 										<Card.Root class="settings-list">
 											<div class="settings-row">
-												<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={16} unit="%" /><Skeleton class="h-2.5" w={46} unit="%" /></div>
+												<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+													<Skeleton class="h-3" w={16} unit="%" /><Skeleton class="h-2.5" w={46} unit="%" />
+												</div>
 												<Skeleton class="h-[22px] w-12" />
 											</div>
 										</Card.Root>
@@ -131,7 +154,13 @@
 										<Card.Root class="settings-list">
 											{#each [0, 1, 2] as i (i)}
 												<div class="settings-row">
-													<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={[18, 22, 16][i]} unit="%" /><Skeleton class="h-2.5" w={[26, 30, 24][i]} unit="%" /></div>
+													<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+														<Skeleton class="h-3" w={[18, 22, 16][i]} unit="%" /><Skeleton
+															class="h-2.5"
+															w={[26, 30, 24][i]}
+															unit="%"
+														/>
+													</div>
 													<Skeleton class="h-[26px] w-20" />
 												</div>
 											{/each}
@@ -139,11 +168,18 @@
 									</section>
 								{/if}
 								<section class="settings-section" aria-hidden="true">
-									{#if modelSettingsUi.section === 'models'}<Typography.H3 class="settings-label">Models</Typography.H3>{:else}<div class="flex h-[17.5px] items-center"><Skeleton class="h-3 w-24" /></div>{/if}
+									{#if modelSettingsUi.section === 'models'}<Typography.H3 class="settings-label">Models</Typography.H3
+										>{:else}<div class="flex h-[17.5px] items-center"><Skeleton class="h-3 w-24" /></div>{/if}
 									<Card.Root class="settings-list">
 										{#each modelSettingsUi.section === 'models' ? [0, 1] : [0, 1, 2, 3, 4] as i (i)}
 											<div class="settings-row">
-												<div class="flex min-w-0 flex-1 flex-col gap-1.5"><Skeleton class="h-3" w={[28, 36, 24, 32, 26][i]} unit="%" /><Skeleton class="h-2.5" w={[44, 38, 30, 34, 40][i]} unit="%" /></div>
+												<div class="flex min-w-0 flex-1 flex-col gap-1.5">
+													<Skeleton class="h-3" w={[28, 36, 24, 32, 26][i]} unit="%" /><Skeleton
+														class="h-2.5"
+														w={[44, 38, 30, 34, 40][i]}
+														unit="%"
+													/>
+												</div>
 												<Skeleton class="h-3 w-24" />
 											</div>
 										{/each}
@@ -164,7 +200,11 @@
 					{#if saveError}
 						<span class="min-w-0 flex-1 truncate text-danger" role="alert">{saveError}</span>
 					{:else}
-						<span class="min-w-0 flex-1 truncate">{modelSettingsUi.section === 'guidelines' ? 'Guidelines save from their own editor' : 'Overrides RECODER_REVIEW_* env vars'}</span>
+						<span class="min-w-0 flex-1 truncate"
+							>{modelSettingsUi.section === 'guidelines'
+								? 'Guidelines save from their own editor'
+								: 'Overrides RECODER_REVIEW_* env vars'}</span
+						>
 					{/if}
 					{#if modelSettingsUi.section === 'guidelines'}
 						<Modal.Close variant="ghost" class="settings-cancel mr-0">

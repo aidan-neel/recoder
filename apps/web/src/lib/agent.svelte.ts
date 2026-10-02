@@ -17,8 +17,10 @@ class AgentState {
 	/** Status, then providers once the agent is up. `refresh` re-detects the binary. */
 	async load(refresh = false): Promise<void> {
 		this.checking = refresh;
+
 		try {
 			const { agents } = await serverApi.agentStatus(refresh);
+
 			this.status = agents[0] ?? null;
 			this.error = null;
 			if (this.status?.installed && !this.status.error) this.providers = (await serverApi.agentProviders()).providers;

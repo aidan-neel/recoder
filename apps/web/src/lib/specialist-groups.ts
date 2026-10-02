@@ -16,7 +16,9 @@ const PRECEDENCE: ReviewAssignment['status'][] = ['running', 'waiting', 'queued'
 
 export function groupSpecialists(items: ReviewAssignment[]): SpecialistGroup[] {
 	const groups = new Map<string, ReviewAssignment[]>();
+
 	for (const item of items) groups.set(item.role, [...(groups.get(item.role) ?? []), item]);
+
 	return [...groups].map(([role, members]) => ({
 		role,
 		items: members,
@@ -28,10 +30,13 @@ export function groupSpecialists(items: ReviewAssignment[]): SpecialistGroup[] {
 /** "9 of 14 finished · 2 reviewing · 1 failed". */
 export function groupProgress(group: SpecialistGroup): string {
 	const count = (status: ReviewAssignment['status']) => group.items.filter((item) => item.status === status).length;
+
 	return [
 		`${group.finished} of ${group.items.length} finished`,
 		count('running') ? `${count('running')} reviewing` : '',
 		count('error') ? `${count('error')} failed` : '',
 		count('skipped') ? `${count('skipped')} not run` : ''
-	].filter(Boolean).join(' · ');
+	]
+		.filter(Boolean)
+		.join(' · ');
 }

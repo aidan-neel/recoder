@@ -16,8 +16,10 @@ const DIFF = 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-ol
 /** PATH shim dir with a fake `gh`. Passed explicitly — Bun ignores process.env PATH mutation. */
 async function fakeBin(script: string): Promise<{ env: Record<string, string> }> {
 	const dir = await mkdtemp(join(tmpdir(), 'fakebin-'));
+
 	await writeFile(join(dir, 'gh'), script);
 	await chmod(join(dir, 'gh'), 0o755);
+
 	return { env: { PATH: `${dir}:${process.env.PATH ?? ''}` } };
 }
 
@@ -39,17 +41,22 @@ describe('fetchPullRequest', () => {
 		const opts = await fakeBin(
 			`#!/bin/sh\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then echo '${VIEW_JSON}'; exit 0; fi\necho 'HTTP 406: diff too large' >&2; exit 1\n`
 		);
+
 		const { pr, diff } = await fetchPullRequest('o/r', 7, { ...opts, metadataOnly: true });
+
 		expect(pr.number).toBe(7);
 		expect(diff).toBe('');
 	});
+
 	test('returns metadata + diff via gh', async () => {
 		const opts = await fakeBin(
 			`#!/bin/sh\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then echo '${VIEW_JSON}'; exit 0; fi\n` +
 				`if [ "$1" = "pr" ] && [ "$2" = "diff" ]; then printf '%s\\n' '${DIFF}'; exit 0; fi\n` +
 				`echo 'unexpected' >&2; exit 1\n`
 		);
+
 		const { pr, diff } = await fetchPullRequest('https://github.com/o/r', 7, opts);
+
 		expect(pr.title).toBe('Fix it');
 		expect(pr.author).toBe('octo');
 		expect(pr.headSha).toBe('abc123');
@@ -61,6 +68,7 @@ describe('fetchPullRequest', () => {
 	test('classifies missing PRs as not-found', async () => {
 		const opts = await fakeBin(`#!/bin/sh\necho 'no pull requests found' >&2\nexit 1\n`);
 		const err = await fetchPullRequest('o/r', 9, opts).catch((e) => e);
+
 		expect(err).toBeInstanceOf(GhError);
 		expect((err as GhError).kind).toBe('not-found');
 	});
@@ -68,6 +76,7 @@ describe('fetchPullRequest', () => {
 	test('missing binary is unavailable', async () => {
 		const dir = await mkdtemp(join(tmpdir(), 'emptybin-'));
 		const err = await fetchPullRequest('o/r', 9, { env: { PATH: dir } }).catch((e) => e);
+
 		expect(err).toBeInstanceOf(GhError);
 		expect((err as GhError).kind).toBe('unavailable');
 	});
@@ -87,6 +96,7 @@ describe('listPullRequests', () => {
 	test('returns open PRs via gh pr list', async () => {
 		const opts = await fakeBin(`#!/bin/sh\necho '${LIST_JSON}'; exit 0\n`);
 		const prs = await listPullRequests('https://github.com/o/r', opts);
+
 		expect(prs).toHaveLength(2);
 		expect(prs[0].number).toBe(7);
 		expect(prs[0].author).toBe('octo');
@@ -98,6 +108,7 @@ describe('listPullRequests', () => {
 	test('rejects non-array output', async () => {
 		const opts = await fakeBin(`#!/bin/sh\necho '{"number":7}'; exit 0\n`);
 		const err = await listPullRequests('o/r', opts).catch((e) => e);
+
 		expect(err).toBeInstanceOf(GhError);
 	});
 });
@@ -107,5 +118,4 @@ describe('extractJson', () => {
 		expect(extractJson('[{"a":1}]')).toEqual([{ a: 1 }]);
 		expect(extractJson('noise\n[{"a":1}]\n')).toEqual([{ a: 1 }]);
 	});
-
 });

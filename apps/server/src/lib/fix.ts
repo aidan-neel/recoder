@@ -30,10 +30,12 @@ const editSchema = z.object({
 	find: z.string().min(1).max(20000),
 	replace: z.string().max(20000)
 });
+
 const fixOutputSchema = z.object({
 	summary: z.string().min(1).max(500),
 	edits: z.array(editSchema).min(1).max(12)
 });
+
 export const fixEditsSchema = z.array(editSchema).min(1).max(12);
 
 export interface SuggestFixInput {
@@ -53,7 +55,9 @@ function extractJsonObject(output: string): unknown {
 	const candidate = fenced ? fenced[1] : output;
 	const start = candidate.indexOf('{');
 	const end = candidate.lastIndexOf('}');
+
 	if (start === -1 || end <= start) throw new Error('no JSON object in model output');
+
 	return JSON.parse(candidate.slice(start, end + 1));
 }
 
@@ -64,10 +68,14 @@ export class EditMismatchError extends Error {}
 async function readCheckoutFile(root: string, file: string): Promise<string | null> {
 	const base = resolve(root);
 	const path = resolve(base, file);
+
 	if (!path.startsWith(base + '/')) return null;
+
 	try {
 		const info = await lstat(path);
+
 		if (info.isSymbolicLink() || !info.isFile()) return null;
+
 		return await readFile(path, 'utf8');
 	} catch {
 		return null;
@@ -78,52 +86,86 @@ async function readCheckoutFile(root: string, file: string): Promise<string | nu
 export function locateEdit(content: string, find: string): { start: number; end: number } | null {
 	const once = (needle: string) => {
 		const at = content.indexOf(needle);
+
 		return at >= 0 && content.indexOf(needle, at + 1) < 0 ? { start: at, end: at + needle.length } : null;
 	};
+
 	const exact = once(find);
+
 	if (exact) return exact;
+
 	const lines = find.replace(/\n$/, '').split('\n');
+
 	// The excerpt the model saw was numbered; a verbatim copy may keep the numbers.
-	const unnumbered = lines.every((line) => /^\s*\d+: /.test(line)) ? lines.map((line) => line.replace(/^\s*\d+: /, '')) : lines;
+	const unnumbered = lines.every((line) => /^\s*\d+: /.test(line))
+		? lines.map((line) => line.replace(/^\s*\d+: /, ''))
+		: lines;
+
 	if (unnumbered !== lines) {
 		const stripped = once(unnumbered.join('\n'));
+
 		if (stripped) return stripped;
 	}
+
 	// Last resort: whole lines equal after trimming, matching exactly one window.
 	const want = unnumbered.map((line) => line.trim());
+
 	while (want.length && want[0] === '') want.shift();
 	while (want.length && want.at(-1) === '') want.pop();
 	if (!want.length) return null;
+
 	const have = content.split('\n');
 	const offsets: number[] = [];
-	for (let i = 0, at = 0; i < have.length; i++) { offsets.push(at); at += have[i].length + 1; }
+
+	for (let i = 0, at = 0; i < have.length; i++) {
+		offsets.push(at);
+		at += have[i].length + 1;
+	}
+
 	let found: { start: number; end: number } | null = null;
+
 	for (let i = 0; i + want.length <= have.length; i++) {
 		if (!want.every((line, j) => have[i + j].trim() === line)) continue;
 		if (found) return null;
+
 		const last = i + want.length - 1;
+
 		found = { start: offsets[i], end: offsets[last] + have[last].length };
 	}
+
 	return found;
 }
 
 /** Apply edits to the checkout's current files (in memory). Throws EditMismatchError. */
-async function editedFiles(sandboxPath: string, edits: FixEdit[]): Promise<Map<string, { before: string; after: string }>> {
+async function editedFiles(
+	sandboxPath: string,
+	edits: FixEdit[]
+): Promise<Map<string, { before: string; after: string }>> {
 	const files = new Map<string, { before: string; after: string }>();
+
 	for (const [index, edit] of edits.entries()) {
 		const file = edit.file.replace(/^[ab]\//, '');
-		if (file.startsWith('/') || file.split('/').includes('..')) throw new EditMismatchError(`edit ${index + 1}: invalid path ${edit.file}`);
+
+		if (file.startsWith('/') || file.split('/').includes('..'))
+			throw new EditMismatchError(`edit ${index + 1}: invalid path ${edit.file}`);
+
 		let entry = files.get(file);
+
 		if (!entry) {
 			const before = await readCheckoutFile(sandboxPath, file);
+
 			if (before === null) throw new EditMismatchError(`edit ${index + 1}: ${file} does not exist`);
 			entry = { before, after: before };
 			files.set(file, entry);
 		}
+
 		const span = locateEdit(entry.after, edit.find);
-		if (!span) throw new EditMismatchError(`edit ${index + 1}: the "find" text does not match exactly one place in ${file}`);
+
+		if (!span)
+			throw new EditMismatchError(`edit ${index + 1}: the "find" text does not match exactly one place in ${file}`);
 		entry.after = entry.after.slice(0, span.start) + edit.replace + entry.after.slice(span.end);
 	}
+
 	return files;
 }
 
@@ -131,20 +173,35 @@ async function editedFiles(sandboxPath: string, edits: FixEdit[]): Promise<Map<s
 export async function patchFromEdits(sandboxPath: string, edits: FixEdit[]): Promise<string> {
 	const files = await editedFiles(sandboxPath, edits);
 	const dir = await mkdtemp(join(tmpdir(), 'recoder-fix-'));
+
 	try {
 		const parts: string[] = [];
+
 		for (const [file, { before, after }] of files) {
 			if (before === after) continue;
-			for (const [side, text] of [['a', before], ['b', after]] as const) {
+
+			for (const [side, text] of [
+				['a', before],
+				['b', after]
+			] as const) {
 				await mkdir(dirname(join(dir, side, file)), { recursive: true });
 				await writeFile(join(dir, side, file), text);
 			}
-			const proc = Bun.spawn(['git', 'diff', '--no-index', '--no-color', '--no-prefix', '--', `a/${file}`, `b/${file}`], { cwd: dir, stdout: 'pipe', stderr: 'pipe' });
+
+			const proc = Bun.spawn(
+				['git', 'diff', '--no-index', '--no-color', '--no-prefix', '--', `a/${file}`, `b/${file}`],
+				{ cwd: dir, stdout: 'pipe', stderr: 'pipe' }
+			);
+
 			const [out] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+
 			parts.push(out);
 		}
+
 		const patch = parts.join('');
+
 		if (!patch.trim()) throw new EditMismatchError('the edits change nothing');
+
 		return patch;
 	} finally {
 		await rm(dir, { recursive: true, force: true });
@@ -157,17 +214,28 @@ export async function suggestFix(
 	const role = resolveDiscussRole(input.agent);
 	const cfg = configForRole(role);
 
-	const parts = [
-		`Finding (${input.severity}, ${input.file}:${input.line}-${input.endLine}): ${input.message}`
-	];
+	const parts = [`Finding (${input.severity}, ${input.file}:${input.line}-${input.endLine}): ${input.message}`];
 	const span = Math.max(0, input.endLine - input.line);
-	const excerpt = await readExcerpt(input.sandboxPath, input.file, input.line + Math.floor(span / 2), Math.max(40, Math.ceil(span / 2) + 25), 16000);
+
+	const excerpt = await readExcerpt(
+		input.sandboxPath,
+		input.file,
+		input.line + Math.floor(span / 2),
+		Math.max(40, Math.ceil(span / 2) + 25),
+		16000
+	);
+
 	if (excerpt !== null) parts.push(`--- ${input.file} (current, numbered) ---\n${excerpt}`);
-	const trimmedDiff =
-		input.diff.length > 20000 ? input.diff.slice(0, 20000) + '\n…[diff truncated]' : input.diff;
+
+	const trimmedDiff = input.diff.length > 20000 ? input.diff.slice(0, 20000) + '\n…[diff truncated]' : input.diff;
+
 	parts.push(`--- unified diff (capped) ---\n${trimmedDiff}`);
 
-	return { agent: role, model: cfg.model, ...await writeFix(cfg, SYSTEM_PROMPT, parts.join('\n\n'), input.sandboxPath) };
+	return {
+		agent: role,
+		model: cfg.model,
+		...(await writeFix(cfg, SYSTEM_PROMPT, parts.join('\n\n'), input.sandboxPath))
+	};
 }
 
 /** Ask for edits, build the patch from them, and give the model one more try when they don't land. */
@@ -181,11 +249,14 @@ async function writeFix(
 		{ role: 'system', content: system },
 		{ role: 'user', content: user }
 	];
+
 	// Reasoning models spend output tokens thinking; after one cut-off, ask again without the thinking phase.
 	let thinking: boolean | undefined;
+
 	try {
 		for (let attempt = 1; ; attempt++) {
 			let output: string;
+
 			try {
 				output = await chatCompletion({
 					provider: cfg.provider,
@@ -204,21 +275,45 @@ async function writeFix(
 				if (thinking === false || !(err instanceof LlmError) || !/output truncated/i.test(err.message)) throw err;
 				thinking = false;
 				attempt--;
-				messages.push({ role: 'user', content: 'Your reply hit the output limit. Answer now without deliberating: one or two small edits, each "find" only the few lines that change, JSON only.' });
+
+				messages.push({
+					role: 'user',
+					content:
+						'Your reply hit the output limit. Answer now without deliberating: one or two small edits, each "find" only the few lines that change, JSON only.'
+				});
+
 				continue;
 			}
+
 			let problem: string;
+
 			try {
 				const parsed = fixOutputSchema.safeParse(extractJsonObject(output));
+
 				if (!parsed.success) throw new EditMismatchError('the reply was not {"summary", "edits"} JSON');
+
 				const patch = await patchFromEdits(sandboxPath, parsed.data.edits);
+
 				return { summary: parsed.data.summary.trim(), patch, edits: parsed.data.edits };
 			} catch (err) {
-				if (!(err instanceof EditMismatchError) && !(err instanceof SyntaxError) && !(err instanceof Error && err.message === 'no JSON object in model output')) throw err;
+				if (
+					!(err instanceof EditMismatchError) &&
+					!(err instanceof SyntaxError) &&
+					!(err instanceof Error && err.message === 'no JSON object in model output')
+				)
+					throw err;
 				problem = err.message;
 			}
+
 			if (attempt >= 2) throw new LlmError(0, 'The model could not write a fix that matches the code. Try again.');
-			messages.push({ role: 'assistant', content: output }, { role: 'user', content: `That fix could not be used: ${problem}. Copy "find" verbatim from the file and reply with the JSON again.` });
+
+			messages.push(
+				{ role: 'assistant', content: output },
+				{
+					role: 'user',
+					content: `That fix could not be used: ${problem}. Copy "find" verbatim from the file and reply with the JSON again.`
+				}
+			);
 		}
 	} catch (err) {
 		if (err instanceof LlmError) throw err;
@@ -229,18 +324,24 @@ async function writeFix(
 const CHECK_SYSTEM_PROMPT = SYSTEM_PROMPT.replace(
 	'You write minimal code fixes for a single review finding.',
 	'You write minimal code fixes that make a failing CI check pass on a pull request.'
-).replace('Fix only the reported finding.', 'Fix only what the log shows is failing. Fix the code, not the check: never skip, delete or weaken a test or CI step to make it pass.');
+).replace(
+	'Fix only the reported finding.',
+	'Fix only what the log shows is failing. Fix the code, not the check: never skip, delete or weaken a test or CI step to make it pass.'
+);
 
 /** Source files a CI log points at, e.g. `src/a.ts:12`, that exist in the checkout. */
 async function filesInLog(sandboxPath: string, log: string, limit = 3): Promise<{ file: string; line: number }[]> {
 	const found: { file: string; line: number }[] = [];
+
 	for (const match of log.matchAll(/((?:[\w@.-]+\/)*[\w@.-]+\.[a-z]{1,6})(?::(\d+))?/gi)) {
 		const file = match[1].replace(/^\.\//, '');
+
 		if (found.some((entry) => entry.file === file) || file.includes('..')) continue;
-		if (await readCheckoutFile(sandboxPath, file) === null) continue;
+		if ((await readCheckoutFile(sandboxPath, file)) === null) continue;
 		found.push({ file, line: Number(match[2] ?? 1) || 1 });
 		if (found.length >= limit) break;
 	}
+
 	return found;
 }
 
@@ -253,27 +354,40 @@ export async function suggestCheckFix(input: {
 }): Promise<{ agent: string; model: string; summary: string; patch: string; edits: FixEdit[] }> {
 	const cfg = configForRole('correctness');
 	const parts = [`Failing CI check: ${input.check}`, `--- failure log (untrusted, excerpt) ---\n${input.log}`];
+
 	for (const { file, line } of await filesInLog(input.sandboxPath, input.log)) {
 		const excerpt = await readExcerpt(input.sandboxPath, file, line, 40, 8000);
+
 		if (excerpt !== null) parts.push(`--- ${file} (current, numbered) ---\n${excerpt}`);
 	}
+
 	const trimmedDiff = input.diff.length > 20000 ? input.diff.slice(0, 20000) + '\n…[diff truncated]' : input.diff;
+
 	parts.push(`--- pull request diff (capped) ---\n${trimmedDiff}`);
-	return { agent: 'correctness', model: cfg.model, ...await writeFix(cfg, CHECK_SYSTEM_PROMPT, parts.join('\n\n'), input.sandboxPath) };
+
+	return {
+		agent: 'correctness',
+		model: cfg.model,
+		...(await writeFix(cfg, CHECK_SYSTEM_PROMPT, parts.join('\n\n'), input.sandboxPath))
+	};
 }
 
 /** Check a patch against a checkout without applying it. */
 export async function patchApplies(sandboxPath: string, patch: string): Promise<boolean> {
 	const dir = await mkdtemp(join(tmpdir(), 'recoder-fix-'));
+
 	try {
 		const file = join(dir, 'fix.patch');
+
 		await writeFile(file, patch.endsWith('\n') ? patch : `${patch}\n`);
+
 		const run = await runCommand({
 			label: 'fix apply check',
 			command: 'git',
 			args: ['apply', '--recount', '--check', file],
 			cwd: sandboxPath
 		});
+
 		return run.status === 'succeeded';
 	} catch {
 		return false;
@@ -319,33 +433,41 @@ export class FixError extends Error {
 /** Run git in a checkout, mapping failures to FixError. */
 export async function git(cwd: string, args: string[], label: string, status: 409 | 502 = 502): Promise<string> {
 	let run;
+
 	try {
 		run = await runCommand({ label, command: 'git', args, cwd });
 	} catch (err) {
 		throw new FixError(status, err instanceof Error ? err.message : String(err));
 	}
+
 	if (run.status !== 'succeeded') {
 		throw new FixError(status, `git ${args[0]} failed: ${run.logs.slice(-2000)}`);
 	}
+
 	return run.logs.trim();
 }
 
 async function writeTempPatch(patch: string): Promise<{ dir: string; file: string }> {
 	const dir = await mkdtemp(join(tmpdir(), 'recoder-fix-'));
 	const file = join(dir, 'fix.patch');
+
 	await writeFile(file, patch.endsWith('\n') ? patch : `${patch}\n`);
+
 	return { dir, file };
 }
 
 /** Repo-relative paths a patch touches (`+++ b/<path>` lines). */
 function patchPaths(patch: string): string[] {
 	const paths = new Set<string>();
+
 	for (const match of patch.matchAll(/^\+\+\+\s+b\/(.+)$/gm)) {
 		const path = match[1].trim();
+
 		if (path !== '/dev/null' && path !== '' && !path.startsWith('/') && !path.includes('..')) {
 			paths.add(path);
 		}
 	}
+
 	return [...paths];
 }
 
@@ -365,62 +487,82 @@ export interface ApplyFixInput {
  * Nothing is staged or committed: the developer chooses what to commit, with
  * their own message, and when to push (`pending-changes.ts`).
  */
-export async function applyFixToWorktree(input: Omit<ApplyFixInput, 'summary' | 'file' | 'line' | 'message'>): Promise<{ paths: string[] }> {
+export async function applyFixToWorktree(
+	input: Omit<ApplyFixInput, 'summary' | 'file' | 'line' | 'message'>
+): Promise<{ paths: string[] }> {
 	let patch = input.patch.trim();
+
 	if (input.edits?.length) {
 		try {
 			patch = await patchFromEdits(input.sandboxPath, input.edits);
 		} catch (err) {
-			if (err instanceof EditMismatchError) throw new FixError(409, 'The code changed since this fix was written. Write the fix again.');
+			if (err instanceof EditMismatchError)
+				throw new FixError(409, 'The code changed since this fix was written. Write the fix again.');
 			throw err;
 		}
 	}
+
 	if (!/^---\s/m.test(patch) || !/^\+\+\+\s/m.test(patch)) {
 		throw new FixError(409, 'not a unified diff patch');
 	}
+
 	const paths = patchPaths(patch);
+
 	if (paths.length === 0) throw new FixError(409, 'patch touches no files');
+
 	const { dir, file } = await writeTempPatch(patch);
+
 	try {
 		try {
 			await git(input.sandboxPath, ['apply', '--recount', '--check', file], 'fix apply check', 409);
 		} catch (err) {
 			if (err instanceof FixError) {
-				throw new FixError(
-					409,
-					'This fix no longer applies to the latest code. Write the fix again.'
-				);
+				throw new FixError(409, 'This fix no longer applies to the latest code. Write the fix again.');
 			}
+
 			throw err;
 		}
+
 		await git(input.sandboxPath, ['apply', '--recount', file], 'fix apply', 409);
 	} finally {
 		await rm(dir, { recursive: true, force: true });
 	}
+
 	return { paths };
 }
 
 /** Apply a suggested patch and commit it (the throwaway CI verify branch only). */
 export async function applyFixCommit(input: ApplyFixInput): Promise<{ sha: string }> {
 	const { paths } = await applyFixToWorktree(input);
+
 	await git(input.sandboxPath, ['add', '--', ...paths], 'fix stage', 409);
+
 	const message = `recoder: ${input.summary}\n\nFixes ${input.file}:${input.line} — ${input.message}`;
+
 	await git(
 		input.sandboxPath,
 		['-c', 'user.name=recoder', '-c', 'user.email=recoder@localhost', 'commit', '-m', message],
 		'fix commit',
 		502
 	);
+
 	const sha = await git(input.sandboxPath, ['rev-parse', 'HEAD'], 'fix sha');
+
 	return { sha };
 }
 
 /** One git operation at a time per sandbox (apply and verify both move HEAD). */
 const sandboxLocks = new Map<string, Promise<unknown>>();
+
 export function withSandboxLock<T>(sandboxPath: string, fn: () => Promise<T>): Promise<T> {
 	const previous = sandboxLocks.get(sandboxPath) ?? Promise.resolve();
 	const run = previous.catch(() => undefined).then(fn);
-	sandboxLocks.set(sandboxPath, run.catch(() => undefined));
+
+	sandboxLocks.set(
+		sandboxPath,
+		run.catch(() => undefined)
+	);
+
 	return run;
 }
 
@@ -434,17 +576,23 @@ export const VERIFY_BRANCH_PREFIX = 'recoder/fix-';
  */
 export async function pushVerifyBranch(input: ApplyFixInput & { branch: string }): Promise<{ sha: string }> {
 	if (!input.branch.startsWith(VERIFY_BRANCH_PREFIX)) throw new FixError(409, 'invalid verify branch');
+
 	const path = input.sandboxPath;
 	const worktree = await mkdtemp(join(tmpdir(), 'recoder-verify-'));
+
 	await git(path, ['worktree', 'add', '-q', '--detach', worktree, 'HEAD'], 'verify worktree', 409);
+
 	try {
 		const { sha } = await applyFixCommit({ ...input, sandboxPath: worktree });
+
 		try {
 			await git(worktree, ['push', '-f', 'origin', `HEAD:refs/heads/${input.branch}`], 'verify push', 502);
 		} catch (err) {
-			if (err instanceof FixError) throw new FixError(502, `couldn't push the fix branch (check push access): ${err.message}`);
+			if (err instanceof FixError)
+				throw new FixError(502, `couldn't push the fix branch (check push access): ${err.message}`);
 			throw err;
 		}
+
 		return { sha };
 	} finally {
 		await git(path, ['worktree', 'remove', '--force', worktree], 'verify cleanup').catch(() => undefined);
@@ -457,4 +605,3 @@ export async function deleteVerifyBranch(sandboxPath: string, branch: string): P
 	if (!branch.startsWith(VERIFY_BRANCH_PREFIX)) throw new FixError(409, 'invalid verify branch');
 	await git(sandboxPath, ['push', 'origin', '--delete', branch], 'verify delete', 502);
 }
-

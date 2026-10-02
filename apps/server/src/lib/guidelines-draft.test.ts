@@ -11,7 +11,16 @@ beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-draft-'));
 });
 
-const repo: Repo = { id: 'r1', name: 'acme/ledger', url: 'https://github.com/acme/ledger', provider: 'github', defaultBranch: 'main', createdAt: '', updatedAt: '' };
+const repo: Repo = {
+	id: 'r1',
+	name: 'acme/ledger',
+	url: 'https://github.com/acme/ledger',
+	provider: 'github',
+	defaultBranch: 'main',
+	createdAt: '',
+	updatedAt: ''
+};
+
 const host = (files: Record<string, string>): RepoFileHost => ({
 	canWrite: () => true,
 	defaultBranch: async () => ({ branch: 'main', sha: 's' }),
@@ -19,14 +28,40 @@ const host = (files: Record<string, string>): RepoFileHost => ({
 	findPending: async () => null,
 	propose: async () => ({ number: 1, url: '', branch: '' })
 });
-const review = (findings: Review['findings']): Review => ({ id: 'v', repoId: 'r1', prNumber: 1, status: 'passed', findings, updatedAt: '2026-09-01T00:00:00Z' } as unknown as Review);
+
+const review = (findings: Review['findings']): Review =>
+	({
+		id: 'v',
+		repoId: 'r1',
+		prNumber: 1,
+		status: 'passed',
+		findings,
+		updatedAt: '2026-09-01T00:00:00Z'
+	}) as unknown as Review;
 
 test('repo drafts include the request, global rules, untrusted instruction files, and recent findings', async () => {
 	writeGlobalGuidelines('## Focus\n- Flag data loss');
+
 	const prompt = await draftUserPrompt(
 		{ scope: 'repo', repoId: 'r1', prompt: 'Stop flagging naming', include: {} },
-		{ repo, host: host({ 'AGENTS.md': 'Use pnpm.' }), reviews: [review([{ id: 'f', file: 'a.ts', severity: 'info', message: 'Rename foo', title: 'Rename foo to bar', agent: 'patterns' }])] }
+		{
+			repo,
+			host: host({ 'AGENTS.md': 'Use pnpm.' }),
+			reviews: [
+				review([
+					{
+						id: 'f',
+						file: 'a.ts',
+						severity: 'info',
+						message: 'Rename foo',
+						title: 'Rename foo to bar',
+						agent: 'patterns'
+					}
+				])
+			]
+		}
 	);
+
 	expect(prompt).toContain("Owner's request:\nStop flagging naming");
 	expect(prompt).toContain('.recoder/REVIEW.md');
 	expect(prompt).toContain('- Flag data loss');

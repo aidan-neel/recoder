@@ -30,10 +30,13 @@ const app = new Hono();
 /** AI brief for the Home screen, written by the orchestrator's model. */
 app.post('/brief', async (c) => {
 	const parsed = briefSchema.safeParse(await c.req.json().catch(() => null));
+
 	if (!parsed.success) {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
 	}
+
 	if (!isReviewConfigured()) return c.json({ error: 'No orchestrator model configured.' }, 503);
+
 	try {
 		return c.json(await homeBrief(parsed.data, db.reviews.list()));
 	} catch (err) {

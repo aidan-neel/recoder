@@ -56,30 +56,48 @@
 				{@render marker('provider', 1)}
 				<div class="setup-step-body">
 					<div class="setup-step-text">
-						<span class="setup-step-title">{signedIn ? `Connect ${signedIn.provider === 'gitlab' ? 'GitLab' : 'GitHub'}` : 'Connect GitHub or GitLab'}</span>
+						<span class="setup-step-title"
+							>{signedIn
+								? `Connect ${signedIn.provider === 'gitlab' ? 'GitLab' : 'GitHub'}`
+								: 'Connect GitHub or GitLab'}</span
+						>
 						<span class="setup-step-desc">
 							{#if signedIn}
-								Signed in as <span class="font-mono">{signedIn.user}</span>{#if signedIn.host}<span> on </span><span class="font-mono">{signedIn.host}</span>{/if}
+								Signed in as <span class="font-mono">{signedIn.user}</span>{#if signedIn.host}<span> on </span><span
+										class="font-mono">{signedIn.host}</span
+									>{/if}
 							{:else if done.provider}
 								Reading public repositories without a token
 							{:else}
-								Recoder lists pull requests and checks out code with your account. A signed-in <span class="font-mono">gh</span> or <span class="font-mono">glab</span> CLI is picked up automatically.
+								Recoder lists pull requests and checks out code with your account. A signed-in <span class="font-mono"
+									>gh</span
+								>
+								or <span class="font-mono">glab</span> CLI is picked up automatically.
 							{/if}
 						</span>
 					</div>
 					{#if current === 'provider'}
 						<div class="setup-actions">
-							<Button class="setup-action" onclick={() => modelSettingsUi.show('connections', { kind: 'connect', provider: 'github' })}>
+							<Button
+								class="setup-action"
+								onclick={() => modelSettingsUi.show('connections', { kind: 'connect', provider: 'github' })}
+							>
 								<ProviderMark provider="github" size={14} /> Connect GitHub
 							</Button>
-							<Button variant="outline" class="setup-action" onclick={() => modelSettingsUi.show('connections', { kind: 'connect', provider: 'gitlab' })}>
+							<Button
+								variant="outline"
+								class="setup-action"
+								onclick={() => modelSettingsUi.show('connections', { kind: 'connect', provider: 'gitlab' })}
+							>
 								<ProviderMark provider="gitlab" size={14} /> Connect GitLab
 							</Button>
 						</div>
 					{/if}
 				</div>
 				{#if signedIn}
-					<span class="flex shrink-0 self-center text-fg-faint"><ProviderMark provider={signedIn.provider} size={16} /></span>
+					<span class="flex shrink-0 self-center text-fg-faint"
+						><ProviderMark provider={signedIn.provider} size={16} /></span
+					>
 				{/if}
 			</li>
 
@@ -103,12 +121,16 @@
 							<Button class="setup-action" onclick={() => modelSettingsUi.show('models', { kind: 'add-provider' })}>
 								<Plus size={14} aria-hidden="true" /> Add a provider
 							</Button>
-							<Button variant="outline" class="setup-action" onclick={() => modelSettingsUi.show('models')}>Pick a model</Button>
+							<Button variant="outline" class="setup-action" onclick={() => modelSettingsUi.show('models')}
+								>Pick a model</Button
+							>
 						</div>
 					{/if}
 				</div>
 				{#if state('model') === 'pending'}
-					<Button variant="outline" class="setup-pending-action" onclick={() => modelSettingsUi.show('models')}>Add model</Button>
+					<Button variant="outline" class="setup-pending-action" onclick={() => modelSettingsUi.show('models')}
+						>Add model</Button
+					>
 				{/if}
 			</li>
 
@@ -118,12 +140,17 @@
 					<div class="setup-step-text">
 						<span class="setup-step-title">Track a repository</span>
 						<span class="setup-step-desc">
-							{done.repo ? `Tracking ${repoCount} ${repoCount === 1 ? 'repository' : 'repositories'}` : 'Its open pull requests show up on Home'}
+							{done.repo
+								? `Tracking ${repoCount} ${repoCount === 1 ? 'repository' : 'repositories'}`
+								: 'Its open pull requests show up on Home'}
 						</span>
 					</div>
 					{#if current === 'repo'}
 						<div class="setup-actions">
-							<Button class="setup-action" onclick={() => modelSettingsUi.show('connections', { kind: 'browse-repos' })}>
+							<Button
+								class="setup-action"
+								onclick={() => modelSettingsUi.show('connections', { kind: 'browse-repos' })}
+							>
 								<Plus size={14} aria-hidden="true" /> Browse repos
 							</Button>
 						</div>

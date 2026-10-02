@@ -265,7 +265,6 @@
 /* Sivir theme mapped onto the Recoder tokens. */
 :root,
 .dark {
-
 	--font-sans: var(--font-ui);
 	--font-mono: var(--font-code);
 	--font-header: var(--font-ui);
@@ -538,7 +537,9 @@ body {
 	box-shadow: inset 0 0 0 1px var(--line-hover);
 }
 [data-ui='button'][data-variant='outline']:focus-visible {
-	box-shadow: var(--focus-ring), inset 0 0 0 1px var(--line-hover);
+	box-shadow:
+		var(--focus-ring),
+		inset 0 0 0 1px var(--line-hover);
 }
 [data-ui='button'][data-variant='secondary'] {
 	background-color: var(--bg-menu);
@@ -742,7 +743,9 @@ body {
 	border-radius: 9px;
 	font-size: 12.5px;
 	font-weight: 500;
-	transition: opacity var(--dur-hover) ease-out, filter var(--dur-hover) ease-out;
+	transition:
+		opacity var(--dur-hover) ease-out,
+		filter var(--dur-hover) ease-out;
 }
 [data-ui='button'].severity-chip:hover:not(:disabled) {
 	filter: brightness(1.15);
@@ -783,11 +786,15 @@ body {
 	background-color: var(--bg-field);
 	box-shadow: inset 0 0 0 1px var(--line-card);
 	border-color: transparent;
-	transition: background-color var(--dur-menu) ease-out, box-shadow var(--dur-menu) ease-out;
+	transition:
+		background-color var(--dur-menu) ease-out,
+		box-shadow var(--dur-menu) ease-out;
 }
 [data-ui='input']:focus-within {
 	background-color: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-focus), 0 0 0 3px rgb(var(--ink-rgb) / 0.06);
+	box-shadow:
+		inset 0 0 0 1px var(--line-focus),
+		0 0 0 3px rgb(var(--ink-rgb) / 0.06);
 }
 [data-ui='input-control']::placeholder,
 [data-ui='textarea']::placeholder,
@@ -862,18 +869,20 @@ kbd.keycap {
 .rc-skeleton {
 	background: linear-gradient(90deg, var(--bg-menu) 0%, var(--line-tab) 50%, var(--bg-menu) 100%);
 	background-size: 200% 100%;
-	animation: rc-skeleton-hold 1ms linear var(--skeleton-delay) backwards, rc-shimmer var(--dur-skeleton) linear infinite;
+	animation:
+		rc-skeleton-hold 1ms linear var(--skeleton-delay) backwards,
+		rc-shimmer var(--dur-skeleton) linear infinite;
 }
 
 /* A skeleton stays invisible for its first 200ms. Data that lands sooner
    (most of it, on a local server) replaces blank space with content in one
    step instead of flashing a skeleton for a frame. */
 :is(
-		[role='status'][aria-label^='Loading'],
-		[role='status'][aria-label^='Fetching'],
-		[role='status'][aria-label^='Listing'],
-		[role='status'][aria-label='Writing the brief']
-	) {
+	[role='status'][aria-label^='Loading'],
+	[role='status'][aria-label^='Fetching'],
+	[role='status'][aria-label^='Listing'],
+	[role='status'][aria-label='Writing the brief']
+) {
 	animation: rc-skeleton-hold 1ms linear var(--skeleton-delay) backwards;
 }
 @keyframes rc-skeleton-hold {
@@ -1003,7 +1012,9 @@ kbd.keycap {
 	color: var(--text-muted);
 }
 .top-tabs [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
-	transition: background-color var(--dur-hover) ease-out, color var(--dur-hover) ease-out;
+	transition:
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
 }
 .top-tabs [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover {
 	color: var(--text-primary);
@@ -1106,7 +1117,9 @@ kbd.keycap {
 }
 [data-ui='composer-form'].rc-composer:focus-within {
 	border: 0;
-	box-shadow: 0 0 0 1px var(--line-focus), 0 10px 30px rgb(var(--shade-rgb) / calc(0.35 * var(--drop)));
+	box-shadow:
+		0 0 0 1px var(--line-focus),
+		0 10px 30px rgb(var(--shade-rgb) / calc(0.35 * var(--drop)));
 }
 [data-ui='composer-form'].rc-composer[data-size='panel'] {
 	gap: 8px;
@@ -1292,24 +1305,60 @@ kbd.keycap {
    can't reach, while the icon inside scales with the root font. Restate the
    box in CSS (compiled to rem) so it grows with the icon on large screens.
    A collapsed spinner has width 0px and matches none of these. */
-[data-ui='spinner'][style*='height: 10px'] { height: 10px !important; }
-[data-ui='spinner'][style*='width: 10px'] { width: 10px !important; }
-[data-ui='spinner'][style*='height: 11px'] { height: 11px !important; }
-[data-ui='spinner'][style*='width: 11px'] { width: 11px !important; }
-[data-ui='spinner'][style*='height: 12px'] { height: 12px !important; }
-[data-ui='spinner'][style*='width: 12px'] { width: 12px !important; }
-[data-ui='spinner'][style*='height: 13px'] { height: 13px !important; }
-[data-ui='spinner'][style*='width: 13px'] { width: 13px !important; }
-[data-ui='spinner'][style*='height: 14px'] { height: 14px !important; }
-[data-ui='spinner'][style*='width: 14px'] { width: 14px !important; }
-[data-ui='spinner'][style*='height: 15px'] { height: 15px !important; }
-[data-ui='spinner'][style*='width: 15px'] { width: 15px !important; }
-[data-ui='spinner'][style*='height: 16px'] { height: 16px !important; }
-[data-ui='spinner'][style*='width: 16px'] { width: 16px !important; }
-[data-ui='spinner'][style*='height: 18px'] { height: 18px !important; }
-[data-ui='spinner'][style*='width: 18px'] { width: 18px !important; }
-[data-ui='spinner'][style*='height: 20px'] { height: 20px !important; }
-[data-ui='spinner'][style*='width: 20px'] { width: 20px !important; }
+[data-ui='spinner'][style*='height: 10px'] {
+	height: 10px !important;
+}
+[data-ui='spinner'][style*='width: 10px'] {
+	width: 10px !important;
+}
+[data-ui='spinner'][style*='height: 11px'] {
+	height: 11px !important;
+}
+[data-ui='spinner'][style*='width: 11px'] {
+	width: 11px !important;
+}
+[data-ui='spinner'][style*='height: 12px'] {
+	height: 12px !important;
+}
+[data-ui='spinner'][style*='width: 12px'] {
+	width: 12px !important;
+}
+[data-ui='spinner'][style*='height: 13px'] {
+	height: 13px !important;
+}
+[data-ui='spinner'][style*='width: 13px'] {
+	width: 13px !important;
+}
+[data-ui='spinner'][style*='height: 14px'] {
+	height: 14px !important;
+}
+[data-ui='spinner'][style*='width: 14px'] {
+	width: 14px !important;
+}
+[data-ui='spinner'][style*='height: 15px'] {
+	height: 15px !important;
+}
+[data-ui='spinner'][style*='width: 15px'] {
+	width: 15px !important;
+}
+[data-ui='spinner'][style*='height: 16px'] {
+	height: 16px !important;
+}
+[data-ui='spinner'][style*='width: 16px'] {
+	width: 16px !important;
+}
+[data-ui='spinner'][style*='height: 18px'] {
+	height: 18px !important;
+}
+[data-ui='spinner'][style*='width: 18px'] {
+	width: 18px !important;
+}
+[data-ui='spinner'][style*='height: 20px'] {
+	height: 20px !important;
+}
+[data-ui='spinner'][style*='width: 20px'] {
+	width: 20px !important;
+}
 
 /* Scroll areas never show cues; keep native scrollbars quiet. */
 * {
@@ -1723,11 +1772,15 @@ kbd.keycap {
 	background-color: var(--bg-field);
 	border-color: transparent;
 	box-shadow: inset 0 0 0 1px var(--line-card);
-	transition: background-color var(--dur-menu) ease-out, box-shadow var(--dur-menu) ease-out;
+	transition:
+		background-color var(--dur-menu) ease-out,
+		box-shadow var(--dur-menu) ease-out;
 }
 [data-ui='input-control']:focus-within {
 	background-color: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-focus), 0 0 0 3px rgb(var(--ink-rgb) / 0.06);
+	box-shadow:
+		inset 0 0 0 1px var(--line-focus),
+		0 0 0 3px rgb(var(--ink-rgb) / 0.06);
 }
 [data-ui='input-control'] [data-ui='input'],
 [data-ui='input-control'] [data-ui='input']:focus-within {
@@ -1893,7 +1946,9 @@ kbd.keycap {
 	border: 0;
 	border-radius: 14px;
 	background-color: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card), 0 8px 24px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
+	box-shadow:
+		0 0 0 1px var(--line-card),
+		0 8px 24px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 	overflow: hidden;
 }
 .setup-step {
@@ -2134,7 +2189,9 @@ kbd.keycap {
 	border-radius: 8px;
 	font-size: 13px;
 	color: var(--text-muted);
-	transition: background-color var(--dur-hover) ease-out, color var(--dur-hover) ease-out;
+	transition:
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
 }
 .repo-chips [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover:not([data-state='active']) {
 	background-color: rgb(var(--wash-rgb) / 0.04);
@@ -2296,7 +2353,9 @@ kbd.keycap {
 	opacity: 0;
 	translate: 6px 0;
 	pointer-events: none;
-	transition: opacity var(--dur-hover) ease-out, translate var(--dur-toggle) var(--ease-menu);
+	transition:
+		opacity var(--dur-hover) ease-out,
+		translate var(--dur-toggle) var(--ease-menu);
 }
 .pr-row:is(:hover, :focus-within) .pr-row-actions,
 .pr-row[data-state='starting'] .pr-row-actions {
@@ -2413,7 +2472,9 @@ kbd.keycap {
 	font-size: 13px;
 	font-weight: 400;
 	color: var(--text-muted);
-	transition: background-color var(--dur-hover) ease-out, color var(--dur-hover) ease-out;
+	transition:
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
 }
 .settings-nav-list [role='tab']:hover {
 	background-color: var(--bg-hover);
@@ -2957,7 +3018,9 @@ main[data-route] .suggested-fix-code::-webkit-scrollbar-thumb {
 	translate: -50% 0;
 	border-radius: 14px;
 	background-color: var(--bg-field);
-	box-shadow: 0 0 0 1px var(--line-menu), 0 30px 80px rgb(var(--shade-rgb) / 0.6);
+	box-shadow:
+		0 0 0 1px var(--line-menu),
+		0 30px 80px rgb(var(--shade-rgb) / 0.6);
 }
 [data-ui='command-content'] [data-ui='modal-surface'] {
 	border-radius: 14px;
@@ -3206,14 +3269,24 @@ mark.palette-hit {
 	margin-bottom: 8px;
 	border-radius: 12px;
 	background: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-card), 0 4px 16px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
+	box-shadow:
+		inset 0 0 0 1px var(--line-card),
+		0 4px 16px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 	color: var(--text-secondary);
 }
-.focus-empty[data-kind='running'] .focus-empty-icon { color: var(--sev-medium); }
-.focus-empty[data-kind='running'][data-waiting] .focus-empty-icon { color: var(--text-primary); }
-.focus-empty[data-kind='failed'] .focus-empty-icon { color: var(--danger); }
+.focus-empty[data-kind='running'] .focus-empty-icon {
+	color: var(--sev-medium);
+}
+.focus-empty[data-kind='running'][data-waiting] .focus-empty-icon {
+	color: var(--text-primary);
+}
+.focus-empty[data-kind='failed'] .focus-empty-icon {
+	color: var(--danger);
+}
 .focus-empty[data-kind='clean'] .focus-empty-icon,
-.focus-empty[data-kind='caught-up'] .focus-empty-icon { color: var(--success); }
+.focus-empty[data-kind='caught-up'] .focus-empty-icon {
+	color: var(--success);
+}
 .focus-empty .focus-empty-title {
 	margin: 0;
 	font-size: 17px;
@@ -3255,8 +3328,12 @@ mark.palette-hit {
 	font-weight: 500;
 	color: var(--text-secondary);
 }
-.focus-empty-facts b.text-success { color: var(--success); }
-.focus-empty-facts b.text-danger { color: var(--danger); }
+.focus-empty-facts b.text-success {
+	color: var(--success);
+}
+.focus-empty-facts b.text-danger {
+	color: var(--danger);
+}
 .focus-empty-actions {
 	display: flex;
 	flex-wrap: wrap;
@@ -3289,9 +3366,15 @@ mark.palette-hit {
 	border-radius: 5px;
 	background: var(--sev-info-tint);
 }
-.focus-empty-ghost-pill[data-sev='high'] { background: var(--sev-high-tint); }
-.focus-empty-ghost-pill[data-sev='medium'] { background: var(--sev-medium-tint); }
-.focus-empty-ghost-pill[data-sev='low'] { background: var(--sev-low-tint); }
+.focus-empty-ghost-pill[data-sev='high'] {
+	background: var(--sev-high-tint);
+}
+.focus-empty-ghost-pill[data-sev='medium'] {
+	background: var(--sev-medium-tint);
+}
+.focus-empty-ghost-pill[data-sev='low'] {
+	background: var(--sev-low-tint);
+}
 .focus-empty-ghost-line {
 	height: 8px;
 	border-radius: 4px;
@@ -3378,9 +3461,15 @@ mark.palette-hit {
 		background-color var(--dur-hover) ease-out,
 		color var(--dur-hover) ease-out;
 }
-.findings-nav-filter[data-severity='high'] { --sev: var(--sev-high); }
-.findings-nav-filter[data-severity='medium'] { --sev: var(--sev-medium); }
-.findings-nav-filter[data-severity='low'] { --sev: var(--sev-low); }
+.findings-nav-filter[data-severity='high'] {
+	--sev: var(--sev-high);
+}
+.findings-nav-filter[data-severity='medium'] {
+	--sev: var(--sev-medium);
+}
+.findings-nav-filter[data-severity='low'] {
+	--sev: var(--sev-low);
+}
 .findings-nav-filter:hover {
 	background: var(--bg-hover);
 	color: var(--text-secondary);
@@ -3504,7 +3593,10 @@ mark.palette-hit {
 	background: transparent;
 	box-shadow: none;
 }
-:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true'] {
+:is(.session-header, .guidelines-head)
+	.view-switch
+	[data-ui='tabs-list'][data-variant='segmented']
+	> [aria-hidden='true'] {
 	display: block;
 	border-radius: 7px;
 	background-color: var(--line-tab);
@@ -3515,7 +3607,10 @@ mark.palette-hit {
 		top var(--dur-pill) var(--ease-menu),
 		height var(--dur-pill) var(--ease-menu);
 }
-:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
+:is(.session-header, .guidelines-head)
+	.view-switch
+	[data-ui='tabs-list'][data-variant='segmented']
+	[data-ui='tabs-trigger'] {
 	height: 28px;
 	min-height: 28px;
 	padding: 0 9px;
@@ -3526,17 +3621,29 @@ mark.palette-hit {
 	color: var(--text-faint);
 	transition: color var(--dur-hover) ease-out;
 }
-:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover:not(:disabled):not([data-state='active']) {
+:is(.session-header, .guidelines-head)
+	.view-switch
+	[data-ui='tabs-list'][data-variant='segmented']
+	[data-ui='tabs-trigger']:hover:not(:disabled):not([data-state='active']) {
 	color: var(--text-secondary);
 }
-:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
+:is(.session-header, .guidelines-head)
+	.view-switch
+	[data-ui='tabs-list'][data-variant='segmented']
+	[data-ui='tabs-trigger'][data-state='active'] {
 	color: var(--text-primary);
 }
-:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:disabled {
+:is(.session-header, .guidelines-head)
+	.view-switch
+	[data-ui='tabs-list'][data-variant='segmented']
+	[data-ui='tabs-trigger']:disabled {
 	color: var(--text-ghost);
 }
 @media (prefers-reduced-motion: reduce) {
-	:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true'] {
+	:is(.session-header, .guidelines-head)
+		.view-switch
+		[data-ui='tabs-list'][data-variant='segmented']
+		> [aria-hidden='true'] {
 		transition: none;
 	}
 }
@@ -3833,8 +3940,13 @@ mark.palette-hit {
 	animation-delay: calc(var(--d) * 110ms);
 }
 @keyframes rc-dot-wave {
-	0%, 100% { opacity: 0.18; }
-	40% { opacity: 1; }
+	0%,
+	100% {
+		opacity: 0.18;
+	}
+	40% {
+		opacity: 1;
+	}
 }
 @media (prefers-reduced-motion: reduce) {
 	.dot-loader > span {
@@ -3944,7 +4056,9 @@ button.fact-link {
 	text-decoration-color: var(--line-strong);
 	text-underline-offset: 3px;
 	cursor: pointer;
-	transition: color var(--dur-hover) ease-out, text-decoration-color var(--dur-hover) ease-out;
+	transition:
+		color var(--dur-hover) ease-out,
+		text-decoration-color var(--dur-hover) ease-out;
 }
 button.fact-link:hover {
 	color: var(--text-primary);
@@ -4297,7 +4411,9 @@ button.fact-link:hover {
 	border: 0;
 	border-radius: 12px;
 	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card), 0 4px 16px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
+	box-shadow:
+		0 0 0 1px var(--line-card),
+		0 4px 16px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 }
 .rail-card-head {
 	display: flex;
@@ -4812,7 +4928,9 @@ button.fact-link:hover {
 	font-size: 12.5px;
 	text-align: left;
 	color: var(--text-subtle);
-	transition: background-color var(--dur-hover) ease-out, color var(--dur-hover) ease-out;
+	transition:
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
 }
 .tree-folder:hover {
 	background: rgb(var(--wash-rgb) / 0.03);
@@ -5078,7 +5196,9 @@ button.diff-num:hover {
 	transition: box-shadow var(--dur-hover) ease-out;
 }
 [data-ui='card'].inline-finding[data-focused] {
-	box-shadow: 0 0 0 1px var(--line-hover), 0 6px 20px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
+	box-shadow:
+		0 0 0 1px var(--line-hover),
+		0 6px 20px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 }
 .inline-finding-head {
 	display: flex;
@@ -5531,10 +5651,22 @@ button.diff-num:hover {
 	background: var(--bg-hover);
 	color: var(--text-subtle);
 }
-.focus-card-fix[data-state='fixing'] { color: var(--sev-medium); background: var(--sev-medium-tint); }
-.focus-card-fix[data-state='ready'] { color: var(--selection-bar); background: color-mix(in oklab, var(--selection-bar) 14%, transparent); }
-.focus-card-fix[data-state='fixed'] { color: var(--success); background: color-mix(in oklab, var(--success) 14%, transparent); }
-.focus-card-fix[data-state='failed'] { color: var(--danger); background: color-mix(in oklab, var(--danger) 14%, transparent); }
+.focus-card-fix[data-state='fixing'] {
+	color: var(--sev-medium);
+	background: var(--sev-medium-tint);
+}
+.focus-card-fix[data-state='ready'] {
+	color: var(--selection-bar);
+	background: color-mix(in oklab, var(--selection-bar) 14%, transparent);
+}
+.focus-card-fix[data-state='fixed'] {
+	color: var(--success);
+	background: color-mix(in oklab, var(--success) 14%, transparent);
+}
+.focus-card-fix[data-state='failed'] {
+	color: var(--danger);
+	background: color-mix(in oklab, var(--danger) 14%, transparent);
+}
 /* CI checks: shared list (PR checks popover, a fix's verify panel). */
 .check-list {
 	display: flex;
@@ -5564,10 +5696,16 @@ button.diff-num:hover {
 	justify-content: center;
 	color: var(--text-faint);
 }
-.check-row[data-state='passed'] .check-icon { color: var(--success); }
+.check-row[data-state='passed'] .check-icon {
+	color: var(--success);
+}
 .check-row[data-state='failed'] .check-icon,
-.check-row[data-state='failed'] .check-state { color: var(--danger); }
-.check-row[data-state='running'] .check-icon { color: var(--sev-medium); }
+.check-row[data-state='failed'] .check-state {
+	color: var(--danger);
+}
+.check-row[data-state='running'] .check-icon {
+	color: var(--sev-medium);
+}
 .check-name {
 	min-width: 0;
 	flex: 1;
@@ -5625,12 +5763,18 @@ button.diff-num:hover {
 	flex-shrink: 0;
 	color: var(--text-faint);
 }
-.fix-checks[data-status='passed'] .fix-checks-icon { color: var(--success); }
+.fix-checks[data-status='passed'] .fix-checks-icon {
+	color: var(--success);
+}
 .fix-checks[data-status='failed'] .fix-checks-icon,
-.fix-checks[data-status='error'] .fix-checks-icon { color: var(--danger); }
+.fix-checks[data-status='error'] .fix-checks-icon {
+	color: var(--danger);
+}
 .fix-checks[data-status='waiting'] .fix-checks-icon,
 .fix-checks[data-status='running'] .fix-checks-icon,
-.fix-checks[data-status='pushing'] .fix-checks-icon { color: var(--sev-medium); }
+.fix-checks[data-status='pushing'] .fix-checks-icon {
+	color: var(--sev-medium);
+}
 .fix-checks-title {
 	min-width: 0;
 	flex: 1;
@@ -5670,9 +5814,15 @@ button.diff-num:hover {
 	font-weight: 400;
 	color: var(--text-subtle);
 }
-[data-ui='button'][data-variant].pr-checks[data-tone='passed'] svg { color: var(--success); }
-[data-ui='button'][data-variant].pr-checks[data-tone='failed'] { color: var(--danger); }
-[data-ui='button'][data-variant].pr-checks[data-tone='running'] svg { color: var(--sev-medium); }
+[data-ui='button'][data-variant].pr-checks[data-tone='passed'] svg {
+	color: var(--success);
+}
+[data-ui='button'][data-variant].pr-checks[data-tone='failed'] {
+	color: var(--danger);
+}
+[data-ui='button'][data-variant].pr-checks[data-tone='running'] svg {
+	color: var(--sev-medium);
+}
 /* Holds the loaded button's usual width ("4/4 checks") so the header doesn't shift when checks land. */
 .pr-checks-pending {
 	display: inline-flex;
@@ -5791,14 +5941,20 @@ button.diff-num:hover {
 	border: 0;
 	border-radius: 12px;
 	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card), 0 4px 14px rgb(var(--shade-rgb) / calc(0.22 * var(--drop)));
+	box-shadow:
+		0 0 0 1px var(--line-card),
+		0 4px 14px rgb(var(--shade-rgb) / calc(0.22 * var(--drop)));
 	transition: box-shadow var(--dur-hover) ease-out;
 }
 [data-ui='card'].focus-card:hover {
-	box-shadow: 0 0 0 1px var(--line-control), 0 4px 14px rgb(var(--shade-rgb) / calc(0.22 * var(--drop)));
+	box-shadow:
+		0 0 0 1px var(--line-control),
+		0 4px 14px rgb(var(--shade-rgb) / calc(0.22 * var(--drop)));
 }
 [data-ui='card'].focus-card[data-active] {
-	box-shadow: 0 0 0 1px var(--line-hover), 0 6px 20px rgb(var(--shade-rgb) / calc(0.3 * var(--drop)));
+	box-shadow:
+		0 0 0 1px var(--line-hover),
+		0 6px 20px rgb(var(--shade-rgb) / calc(0.3 * var(--drop)));
 }
 /* Dismissed findings (Show dismissed): flat and dimmed, below the open ones. */
 [data-ui='card'].focus-card[data-dismissed] {
@@ -5901,7 +6057,9 @@ button.diff-num:hover {
 	border: 0;
 	border-radius: 12px;
 	background: var(--bg-panel);
-	box-shadow: 0 0 0 1px var(--line-card), 0 6px 20px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
+	box-shadow:
+		0 0 0 1px var(--line-card),
+		0 6px 20px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
 }
 .focus-hunk-head {
 	display: flex;
@@ -6078,8 +6236,13 @@ button.diff-num:hover {
 	animation: diff-row-flash 1.6s ease-out;
 }
 @keyframes diff-row-flash {
-	0%, 35% { background-color: var(--sev-medium-tint); }
-	100% { background-color: transparent; }
+	0%,
+	35% {
+		background-color: var(--sev-medium-tint);
+	}
+	100% {
+		background-color: transparent;
+	}
 }
 @media (prefers-reduced-motion: reduce) {
 	[data-diff-row][data-flash] {

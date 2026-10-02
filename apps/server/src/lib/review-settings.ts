@@ -56,11 +56,16 @@ const storedFileSchema = reviewSettingsSchema.extend({
 function migrateLegacy(data: z.infer<typeof storedFileSchema>): ReviewSettingsInput {
 	const { roles, roleEfforts, applyToSpecialists, ...rest } = data;
 	const next: ReviewSettingsInput = { ...rest };
-	if (next.orchestratorEffort === undefined && roleEfforts?.correctness) next.orchestratorEffort = roleEfforts.correctness;
+
+	if (next.orchestratorEffort === undefined && roleEfforts?.correctness)
+		next.orchestratorEffort = roleEfforts.correctness;
+
 	if (!applyToSpecialists) {
 		if (!next.specialistModelId && roles?.correctness) next.specialistModelId = roles.correctness;
-		if (next.specialistEffort === undefined && roleEfforts?.correctness) next.specialistEffort = roleEfforts.correctness;
+		if (next.specialistEffort === undefined && roleEfforts?.correctness)
+			next.specialistEffort = roleEfforts.correctness;
 	}
+
 	return next;
 }
 
@@ -104,6 +109,7 @@ function settingsFile(): string {
 export function settingsFileDisplay(): string {
 	const home = process.env.HOME ?? process.env.USERPROFILE;
 	const file = settingsFile();
+
 	return home && file.startsWith(home) ? `~${file.slice(home.length)}` : file;
 }
 
@@ -120,8 +126,10 @@ export function initReviewSettings(): void {
 	try {
 		const raw = readFileSync(settingsFile(), 'utf8');
 		const parsed = storedFileSchema.safeParse(JSON.parse(raw));
+
 		if (parsed.success) {
 			const { apiKey, models, ...rest } = migrateLegacy(parsed.data);
+
 			const normalized: StoredSettings = {
 				...rest,
 				...(parsed.data.connections ? { connections: parsed.data.connections } : {}),
@@ -138,6 +146,7 @@ export function initReviewSettings(): void {
 					...(e.contextWindow ? { contextWindow: e.contextWindow } : {})
 				}))
 			};
+
 			overrides = apiKey ? { ...normalized, apiKey } : normalized;
 		}
 	} catch {
@@ -158,56 +167,76 @@ export function getStoredSettings(): StoredSettings {
 /** Save or drop a hosted provider's key. Dropping it also removes that provider's models. */
 export function setConnection(providerId: string, apiKey: string | null): StoredSettings {
 	const connections = { ...overrides.connections };
+
 	if (apiKey) connections[providerId] = { apiKey };
 	else delete connections[providerId];
 	overrides = { ...overrides, connections };
+
 	if (!apiKey && overrides.models?.some((entry) => entry.source === providerId)) {
 		return saveReviewSettings({ models: overrides.models.filter((entry) => entry.source !== providerId) });
 	}
+
 	persist();
+
 	return overrides;
 }
 
 /** Merge a validated patch over the stored settings and persist. */
 export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	const clean: StoredSettings = { ...overrides };
+
 	if (patch.baseUrl !== undefined) clean.baseUrl = patch.baseUrl.replace(/\/$/, '') || undefined;
 	if (patch.apiKey !== undefined && patch.apiKey !== '') clean.apiKey = patch.apiKey;
+
 	if (patch.models !== undefined) {
 		const previous = new Map((clean.models ?? []).map((e) => [e.id, e]));
+
 		clean.models = patch.models.map((entry) => {
 			const kept = entry.id ? previous.get(entry.id) : undefined;
+
 			const next: StoredModelEntry = {
 				provider: entry.provider ?? kept?.provider ?? 'openai-compatible',
 				id: entry.id ?? crypto.randomUUID(),
 				label: entry.label,
 				model: entry.model
 			};
+
 			const source = entry.source ?? kept?.source;
+
 			if (source && next.provider !== 'codex') next.source = source;
+
 			const baseUrl = entry.baseUrl?.replace(/\/$/, '');
+
 			if (baseUrl && next.provider !== 'codex' && !next.source) next.baseUrl = baseUrl;
 			if (entry.efforts?.length) next.efforts = entry.efforts;
 			if (entry.defaultEffort) next.defaultEffort = entry.defaultEffort;
+
 			const contextWindow = entry.contextWindow ?? kept?.contextWindow;
+
 			if (contextWindow) next.contextWindow = contextWindow;
+
 			// Empty key keeps the existing entry key; new entries store what was given.
 			// Hosted-provider entries use the provider's connected key instead.
 			if (next.provider !== 'codex' && !next.source) {
 				if (entry.apiKey) next.apiKey = entry.apiKey;
 				else if (kept?.apiKey) next.apiKey = kept.apiKey;
 			}
+
 			return next;
 		});
+
 		// Drop routing pointers to deleted entries.
 		const ids = new Set(clean.models.map((e) => e.id));
+
 		if (clean.sharedModelId && !ids.has(clean.sharedModelId)) delete clean.sharedModelId;
 		if (clean.orchestratorModelId && !ids.has(clean.orchestratorModelId)) delete clean.orchestratorModelId;
 		if (clean.specialistModelId && !ids.has(clean.specialistModelId)) delete clean.specialistModelId;
 	}
+
 	if (patch.sharedModelId !== undefined) {
 		clean.sharedModelId = patch.sharedModelId || null;
 	}
+
 	if (patch.orchestratorModelId !== undefined) clean.orchestratorModelId = patch.orchestratorModelId || null;
 	if (patch.specialistModelId !== undefined) clean.specialistModelId = patch.specialistModelId || null;
 	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
@@ -218,17 +247,21 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;
 	overrides = clean;
 	persist();
+
 	return clean;
 }
 
 function pick(stored: string | undefined, envValue: string | undefined): string {
 	if (stored !== undefined && stored !== '') return stored;
+
 	return envValue ?? '';
 }
 
 function pickNumber(stored: number | undefined, envValue: string | undefined, fallback: number): number {
 	if (stored !== undefined) return stored;
+
 	const parsed = Number(envValue);
+
 	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
@@ -243,34 +276,31 @@ export function effectiveReviewEnv(): {
 } {
 	const entries = overrides.models ?? [];
 	const shared = entries.find((e) => e.id === overrides.sharedModelId) ?? entries[0];
+
 	return {
 		baseUrl: pick(overrides.baseUrl, process.env.RECODER_REVIEW_BASE_URL).replace(/\/$/, ''),
 		apiKey: pick(overrides.apiKey, process.env.RECODER_REVIEW_API_KEY),
 		model: shared?.model ?? pick(undefined, process.env.RECODER_REVIEW_MODEL),
 		maxFiles: pickNumber(overrides.maxFiles, process.env.RECODER_REVIEW_MAX_FILES, 20),
-		maxDiffChars: pickNumber(
-			overrides.maxDiffChars,
-			process.env.RECODER_REVIEW_MAX_DIFF_CHARS,
-			60000
-		),
-		maxFileChars: pickNumber(
-			overrides.maxFileChars,
-			process.env.RECODER_REVIEW_MAX_FILE_CHARS,
-			12000
-		)
+		maxDiffChars: pickNumber(overrides.maxDiffChars, process.env.RECODER_REVIEW_MAX_DIFF_CHARS, 60000),
+		maxFileChars: pickNumber(overrides.maxFileChars, process.env.RECODER_REVIEW_MAX_FILE_CHARS, 12000)
 	};
 }
 
 /** Specialist dispatch level: the saved pick, else `RECODER_REVIEW_DISPATCH`, else medium. */
 export function effectiveDispatchLevel(): DispatchLevel {
 	if (overrides.specialistDispatch) return overrides.specialistDispatch;
+
 	const env = process.env.RECODER_REVIEW_DISPATCH?.trim().toLowerCase();
+
 	return (DISPATCH_LEVELS as readonly string[]).includes(env ?? '') ? (env as DispatchLevel) : 'medium';
 }
 
 /** Masked key preview for the UI (`••••1234` or null). */
 export function apiKeyPreview(): string | null {
 	const key = effectiveReviewEnv().apiKey;
+
 	if (!key) return null;
+
 	return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
 }

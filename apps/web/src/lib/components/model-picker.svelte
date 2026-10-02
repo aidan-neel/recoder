@@ -46,17 +46,23 @@
 	 */
 	$effect(() => {
 		if (!open || !triggerEl) return;
+
 		const trigger = triggerEl;
+
 		const frame = requestAnimationFrame(() => {
 			const panel = [...document.querySelectorAll<HTMLElement>("[data-ui='popover-content'].model-menu")].at(-1);
 			const floating = panel?.closest<HTMLElement>('[data-floating-content]');
+
 			if (!panel || !floating) return;
+
 			const current = parseFloat(floating.style.getPropertyValue('--menu-shift')) || 0;
 			const rect = panel.getBoundingClientRect();
 			const wanted = current + trigger.getBoundingClientRect().right - rect.right;
 			const minShift = current + 8 - rect.left;
+
 			floating.style.setProperty('--menu-shift', `${Math.max(wanted, minShift)}px`);
 		});
+
 		return () => cancelAnimationFrame(frame);
 	});
 
@@ -68,7 +74,9 @@
 	/** Models by provider, providers A to Z. */
 	const groups = $derived.by(() => {
 		const byProvider = new Map<string, ModelOption[]>();
+
 		for (const option of models) byProvider.set(option.provider, [...(byProvider.get(option.provider) ?? []), option]);
+
 		return [...byProvider.entries()].sort(([a], [b]) => a.localeCompare(b));
 	});
 	const model = $derived<ModelOption | undefined>(models.find((item) => item.id === value?.modelId));
@@ -123,7 +131,9 @@
 			<DropdownMenu.SubContent class="submenu-left model-menu-models w-[250px]">
 				{#if onFollow}
 					<DropdownMenu.Item callback={onFollow} class="model-option" aria-checked={!value} role="menuitemradio">
-						<span class="flex w-3 shrink-0 justify-center" aria-hidden="true">{#if !value}<Check size={12} />{/if}</span>
+						<span class="flex w-3 shrink-0 justify-center" aria-hidden="true"
+							>{#if !value}<Check size={12} />{/if}</span
+						>
 						<span class="flex-1 truncate text-left text-[13px]">{placeholder}</span>
 					</DropdownMenu.Item>
 					<DropdownMenu.Separator />
@@ -134,7 +144,9 @@
 						<DropdownMenu.Sub>
 							<DropdownMenu.SubTrigger class="model-menu-row">
 								<span class="flex w-full items-center gap-2">
-									<span class="flex w-3 shrink-0 justify-center" aria-hidden="true">{#if model?.provider === provider}<Check size={12} />{/if}</span>
+									<span class="flex w-3 shrink-0 justify-center" aria-hidden="true"
+										>{#if model?.provider === provider}<Check size={12} />{/if}</span
+									>
 									<span class="min-w-0 flex-1 truncate">{provider}</span>
 									<span class="model-menu-value">{options.length}</span>
 								</span>
@@ -203,7 +215,14 @@
 		<span class="flex min-w-0 flex-1 flex-col gap-px text-left">
 			<span class="truncate text-[13px]">{option.displayName}</span>
 			{#if showProvider || option.contextWindow}
-				<span class="truncate text-[11px] text-fg-faint">{[showProvider ? option.provider : null, option.contextWindow ? `${formatContextWindow(option.contextWindow)} context` : null].filter(Boolean).join(' · ')}</span>
+				<span class="truncate text-[11px] text-fg-faint"
+					>{[
+						showProvider ? option.provider : null,
+						option.contextWindow ? `${formatContextWindow(option.contextWindow)} context` : null
+					]
+						.filter(Boolean)
+						.join(' · ')}</span
+				>
 			{/if}
 		</span>
 	</DropdownMenu.Item>

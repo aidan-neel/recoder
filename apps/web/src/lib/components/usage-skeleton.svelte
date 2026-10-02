@@ -13,7 +13,9 @@
 	<div class="flex flex-col gap-4" aria-hidden="true">
 		{#each Array(meters) as _, i (i)}
 			<div class="flex flex-col gap-2">
-				<div class="flex h-[18px] items-center justify-between gap-3"><Skeleton class="h-3 w-32" /><Skeleton class="h-3 w-16" /></div>
+				<div class="flex h-[18px] items-center justify-between gap-3">
+					<Skeleton class="h-3 w-32" /><Skeleton class="h-3 w-16" />
+				</div>
 				<Skeleton class="h-[3px] w-full" />
 				<div class="flex h-4 items-center"><Skeleton class="h-2.5" w={i % 2 ? 44 : 58} unit="%" /></div>
 			</div>

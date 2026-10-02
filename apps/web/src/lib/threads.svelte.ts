@@ -41,6 +41,7 @@ const AGENT_LABELS: Record<string, string> = {
 
 export function formatAgentName(id?: string | null): string {
 	if (!id) return '';
+
 	return AGENT_LABELS[id] ?? id.charAt(0).toUpperCase() + id.slice(1);
 }
 
@@ -96,12 +97,16 @@ class ThreadStore {
 
 	send(findingId: string, body: string, hunkRef?: string): void {
 		const text = body.trim();
+
 		if (!text) return;
+
 		let thread = this.threads[findingId];
+
 		if (!thread) {
 			thread = { findingId, messages: [] };
 			this.threads[findingId] = thread;
 		}
+
 		thread.messages.push({
 			id: crypto.randomUUID(),
 			role: 'user',
@@ -113,10 +118,12 @@ class ThreadStore {
 
 	reply(findingId: string, author: string, body: string, model?: string): void {
 		let thread = this.threads[findingId];
+
 		if (!thread) {
 			thread = { findingId, messages: [] };
 			this.threads[findingId] = thread;
 		}
+
 		thread.messages.push({
 			id: crypto.randomUUID(),
 			role: 'agent',
@@ -130,11 +137,14 @@ class ThreadStore {
 	/** Insert an empty agent message for an in-flight stream; returns its id. */
 	beginReply(findingId: string, author: string): string {
 		let thread = this.threads[findingId];
+
 		if (!thread) {
 			thread = { findingId, messages: [] };
 			this.threads[findingId] = thread;
 		}
+
 		const id = crypto.randomUUID();
+
 		thread.messages.push({
 			id,
 			role: 'agent',
@@ -143,16 +153,19 @@ class ThreadStore {
 			body: '',
 			streaming: true
 		});
+
 		return id;
 	}
 
 	appendReply(findingId: string, id: string, text: string): void {
 		const message = this.threads[findingId]?.messages.find((m) => m.id === id);
+
 		if (message) message.body += text;
 	}
 
 	finishReply(findingId: string, id: string, author?: string, model?: string): void {
 		const message = this.threads[findingId]?.messages.find((m) => m.id === id);
+
 		if (!message) return;
 		message.streaming = false;
 		if (author) message.author = author;
@@ -162,6 +175,7 @@ class ThreadStore {
 	/** Remove a streamed placeholder (e.g. the stream failed before any token). */
 	dropReply(findingId: string, id: string): void {
 		const thread = this.threads[findingId];
+
 		if (!thread) return;
 		thread.messages = thread.messages.filter((m) => m.id !== id);
 	}

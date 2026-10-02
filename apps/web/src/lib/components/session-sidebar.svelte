@@ -6,7 +6,14 @@
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import FileTreeNode from './file-tree-node.svelte';
-	import { buildFileTree, changedFileCount, changedFiles, type FileBadge, type FindingKind, type TreeNode } from '$lib/file-tree';
+	import {
+		buildFileTree,
+		changedFileCount,
+		changedFiles,
+		type FileBadge,
+		type FindingKind,
+		type TreeNode
+	} from '$lib/file-tree';
 	import type { FileDiff } from '@recoder/shared';
 	import { findingsStore, type FindingSeverity } from '$lib/findings.svelte';
 	import { sessionFile } from '$lib/session-file.svelte';
@@ -40,20 +47,28 @@
 	/** Open findings per file → badge with count, strongest severity, first finding. */
 	const badges = $derived.by(() => {
 		const byFile = new Map<string, typeof findingsStore.items>();
+
 		for (const finding of findingsStore.items) {
 			if (finding.status === 'dismissed' || !findingsStore.isShown(finding)) continue;
+
 			const list = byFile.get(finding.file) ?? [];
+
 			list.push(finding);
 			byFile.set(finding.file, list);
 		}
+
 		const map = new Map<string, FileBadge>();
+
 		for (const [file, list] of byFile) {
 			const sorted = [...list].sort(
 				(a, b) => severityRank[a.severity] - severityRank[b.severity] || a.startLine - b.startLine
 			);
+
 			const top = [...list].sort((a, b) => a.startLine - b.startLine)[0];
+
 			map.set(file, { count: list.length, kind: severityKind[sorted[0].severity], findingId: top.id });
 		}
+
 		return map;
 	});
 
@@ -74,25 +89,26 @@
 	const findingsFileCount = $derived(filesWithFindings.size);
 
 	/** Recursively keep matching files; drop folders left empty. */
-	function filterTree(
-		nodes: TreeNode[],
-		withFindings: Set<string> | null,
-		query: string
-	): TreeNode[] {
+	function filterTree(nodes: TreeNode[], withFindings: Set<string> | null, query: string): TreeNode[] {
 		const q = query.trim().toLowerCase();
 		const out: TreeNode[] = [];
+
 		for (const node of nodes) {
 			if (node.kind === 'file') {
 				if (withFindings && !withFindings.has(node.id)) continue;
+
 				if (q !== '' && !node.id.toLowerCase().includes(q) && !node.name.toLowerCase().includes(q)) {
 					continue;
 				}
+
 				out.push(node);
 			} else {
 				const children = filterTree(node.children, withFindings, query);
+
 				if (children.length > 0) out.push({ ...node, children });
 			}
 		}
+
 		return out;
 	}
 
@@ -103,21 +119,21 @@
 	);
 	const visibleCount = $derived.by(() => {
 		let n = 0;
+
 		const walk = (nodes: TreeNode[]) => {
 			for (const node of nodes) {
 				if (node.kind === 'file') n += 1;
 				else walk(node.children);
 			}
 		};
+
 		walk(visibleTree);
+
 		return n;
 	});
 </script>
 
-<aside
-	aria-label="Session files"
-	class="file-panel"
->
+<aside aria-label="Session files" class="file-panel">
 	{@render header?.()}
 	<div class="flex min-h-0 flex-1 flex-col gap-2.5">
 		<div class="file-panel-head {inSheet ? 'pe-10' : ''}">
@@ -127,12 +143,7 @@
 			</Typography.Metadata>
 		</div>
 		<div class="shrink-0">
-			<Input
-				placeholder="Filter files"
-				aria-label="Filter files"
-				bind:value={fileQuery}
-				class="file-filter"
-			>
+			<Input placeholder="Filter files" aria-label="Filter files" bind:value={fileQuery} class="file-filter">
 				{#snippet leading()}<Search size={14} aria-hidden="true" />{/snippet}
 			</Input>
 		</div>
@@ -147,23 +158,23 @@
 		</div>
 		<ScrollArea aria-label="Changed files" class="min-h-0 flex-1" showCues={false}>
 			<div class="file-tree">
-			{#each visibleTree as node (node.kind === 'file' ? node.id : node.name)}
-				<FileTreeNode
-					{node}
-					selectedId={sessionFile.currentId}
-					onSelect={selectFile}
-					{badges}
-					onJump={(fileId, findingId) => void jumpToFinding(fileId, findingId)}
-				/>
-			{:else}
-				<Typography.Text class="px-2 py-3 text-sm text-foreground-muted">
-					{#if fileQuery.trim() !== ''}
-						No files match “{fileQuery.trim()}”.
-					{:else}
-						No files with findings. Clear the filter to see all changed files.
-					{/if}
-				</Typography.Text>
-			{/each}
+				{#each visibleTree as node (node.kind === 'file' ? node.id : node.name)}
+					<FileTreeNode
+						{node}
+						selectedId={sessionFile.currentId}
+						onSelect={selectFile}
+						{badges}
+						onJump={(fileId, findingId) => void jumpToFinding(fileId, findingId)}
+					/>
+				{:else}
+					<Typography.Text class="px-2 py-3 text-sm text-foreground-muted">
+						{#if fileQuery.trim() !== ''}
+							No files match “{fileQuery.trim()}”.
+						{:else}
+							No files with findings. Clear the filter to see all changed files.
+						{/if}
+					</Typography.Text>
+				{/each}
 			</div>
 		</ScrollArea>
 	</div>

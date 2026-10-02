@@ -1,6 +1,13 @@
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
-import { settleAssignments, type CommandRun, type Repo, type Review, type ReviewProgress, type TokenCall } from '@recoder/shared';
+import {
+	settleAssignments,
+	type CommandRun,
+	type Repo,
+	type Review,
+	type ReviewProgress,
+	type TokenCall
+} from '@recoder/shared';
 import { serverDataDir } from './lib/data-dir';
 import type { ReviewCheckpoint } from './lib/review-checkpoint';
 
@@ -22,10 +29,9 @@ function getDb(): Database {
 		handle.run('CREATE TABLE IF NOT EXISTS review_progress (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS review_metrics (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS review_checkpoints (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
-		handle.run(
-			'CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)'
-		);
+		handle.run('CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)');
 	}
+
 	return handle;
 }
 
@@ -40,6 +46,7 @@ export function closeStore(): void {
 
 function createCollection<T extends { id: string }>(table: string) {
 	const database = () => getDb();
+
 	return {
 		list: (): T[] =>
 			(database().query(`SELECT value FROM ${table} ORDER BY rowid`).all() as { value: string }[]).map(
@@ -49,16 +56,17 @@ function createCollection<T extends { id: string }>(table: string) {
 			const row = database().query(`SELECT value FROM ${table} WHERE id = ?`).get(id) as {
 				value: string;
 			} | null;
+
 			return row ? (JSON.parse(row.value) as T) : undefined;
 		},
 		set: (item: T): T => {
 			database()
 				.query(`INSERT INTO ${table} (id, value) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value`)
 				.run(item.id, JSON.stringify(item));
+
 			return item;
 		},
-		delete: (id: string): boolean =>
-			database().query(`DELETE FROM ${table} WHERE id = ?`).run(id).changes > 0,
+		delete: (id: string): boolean => database().query(`DELETE FROM ${table} WHERE id = ?`).run(id).changes > 0,
 		clear: (): void => {
 			database().query(`DELETE FROM ${table}`).run();
 		}
@@ -89,16 +97,20 @@ export function flushReviewProgress(): void {
 		clearTimeout(progressTimer);
 		progressTimer = null;
 	}
+
 	let failure: unknown;
+
 	for (const id of [...progressDirty]) {
 		try {
 			const snapshot = progressCache.get(id);
+
 			if (snapshot) progressTable.set(snapshot);
 			progressDirty.delete(id);
 		} catch (error) {
 			failure ??= error;
 		}
 	}
+
 	if (failure !== undefined) throw failure;
 }
 
@@ -122,29 +134,37 @@ function flushOnTimer(): void {
 export const reviewProgress = {
 	list: (): ReviewProgress[] => {
 		flushReviewProgress();
+
 		return progressTable.list().map((item) => progressCache.get(item.id) ?? item);
 	},
 	get: (id: string): ReviewProgress | undefined => {
 		const cached = progressCache.get(id);
+
 		if (cached) {
 			// Most recently used last.
 			progressCache.delete(id);
 			progressCache.set(id, cached);
+
 			return cached;
 		}
+
 		const stored = progressTable.get(id);
+
 		if (stored) remember(stored);
+
 		return stored;
 	},
 	set: (item: ReviewProgress): ReviewProgress => {
 		remember(item);
 		progressDirty.add(item.id);
 		progressTimer ??= setTimeout(flushOnTimer, PROGRESS_FLUSH_MS);
+
 		return item;
 	},
 	delete: (id: string): boolean => {
 		progressCache.delete(id);
 		progressDirty.delete(id);
+
 		return progressTable.delete(id);
 	},
 	clear: (): void => {
@@ -158,12 +178,15 @@ export const reviewProgress = {
 function remember(item: ReviewProgress): void {
 	progressCache.delete(item.id);
 	progressCache.set(item.id, item);
+
 	while (progressCache.size > PROGRESS_CACHE_SIZE) {
 		const oldest = progressCache.keys().next().value as string;
+
 		if (progressDirty.has(oldest)) {
 			progressTable.set(progressCache.get(oldest)!);
 			progressDirty.delete(oldest);
 		}
+
 		progressCache.delete(oldest);
 	}
 }
@@ -172,10 +195,13 @@ function remember(item: ReviewProgress): void {
 // server. Registered once per process; `--hot` re-evaluates this module and must not stack listeners.
 const hooks = globalThis as { __recoderProgressFlush?: () => void };
 const registered = hooks.__recoderProgressFlush !== undefined;
+
 // The handlers call whichever module instance is current, so a reload's cache is the one flushed.
 hooks.__recoderProgressFlush = flushReviewProgress;
+
 if (!registered) {
 	process.on('exit', () => hooks.__recoderProgressFlush?.());
+
 	for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 		process.on(signal, () => {
 			hooks.__recoderProgressFlush?.();
@@ -200,9 +226,10 @@ export const reviewSandboxes = new Map<string, string>();
 /** Raw unified diffs by review id. Populated by the pipeline's fetch step. */
 export const reviewDiffs = {
 	get: (reviewId: string): string | undefined => {
-		const row = getDb()
-			.query('SELECT diff FROM review_diffs WHERE review_id = ?')
-			.get(reviewId) as { diff: string } | null;
+		const row = getDb().query('SELECT diff FROM review_diffs WHERE review_id = ?').get(reviewId) as {
+			diff: string;
+		} | null;
+
 		return row?.diff;
 	},
 	has: (reviewId: string): boolean => reviewDiffs.get(reviewId) !== undefined,
@@ -225,9 +252,17 @@ export const reviewDiffs = {
  */
 export function settlePipelineStreams(reviewId: string): ReviewProgress | null {
 	const progress = reviewProgress.get(reviewId);
+
 	if (!progress) return null;
+
 	const open = (status?: string) => status === 'streaming';
-	if (!progress.messages?.some((m) => open(m.status) && !m.discussion) && !progress.reasoning?.some((r) => open(r.status))) return null;
+
+	if (
+		!progress.messages?.some((m) => open(m.status) && !m.discussion) &&
+		!progress.reasoning?.some((r) => open(r.status))
+	)
+		return null;
+
 	const settled: ReviewProgress = {
 		...progress,
 		messages: progress.messages
@@ -237,7 +272,9 @@ export function settlePipelineStreams(reviewId: string): ReviewProgress | null {
 			?.filter((r) => !(open(r.status) && !r.text.trim()))
 			.map((r) => (open(r.status) ? { ...r, status: 'done' as const } : r))
 	};
+
 	reviewProgress.set(settled);
+
 	return settled;
 }
 
@@ -247,6 +284,7 @@ export function settlePipelineStreams(reviewId: string): ReviewProgress | null {
  */
 export function recoverStaleReviews(): number {
 	let recovered = 0;
+
 	for (const review of db.reviews.list()) {
 		if (review.status === 'running' || review.status === 'queued') {
 			db.reviews.set({
@@ -255,23 +293,46 @@ export function recoverStaleReviews(): number {
 				summary: 'The server restarted mid-review. Progress so far was kept.',
 				updatedAt: new Date().toISOString()
 			});
+
 			const progress = reviewProgress.get(review.id);
+
 			if (progress) {
-				reviewProgress.set({ ...progress, outcome: 'failed', assignments: settleAssignments(progress.assignments ?? [], 'Stopped by a server restart'), updatedAt: new Date().toISOString() });
+				reviewProgress.set({
+					...progress,
+					outcome: 'failed',
+					assignments: settleAssignments(progress.assignments ?? [], 'Stopped by a server restart'),
+					updatedAt: new Date().toISOString()
+				});
 			}
+
 			recovered++;
 		}
+
 		const progress = reviewProgress.get(review.id);
-		if (progress?.messages?.some((message) => message.status === 'streaming') || progress?.reasoning?.some((entry) => entry.status === 'streaming')) {
+
+		if (
+			progress?.messages?.some((message) => message.status === 'streaming') ||
+			progress?.reasoning?.some((entry) => entry.status === 'streaming')
+		) {
 			reviewProgress.set({
 				...progress,
-				messages: progress.messages?.map((message) => message.status === 'streaming'
-					? { ...message, status: 'error', text: `${message.text}${message.text ? '\n\n' : ''}Interrupted by a server restart.` }
-					: message),
-				reasoning: progress.reasoning?.map((entry) => entry.status === 'streaming' ? { ...entry, status: 'error' } : entry)
+				messages: progress.messages?.map((message) =>
+					message.status === 'streaming'
+						? {
+								...message,
+								status: 'error',
+								text: `${message.text}${message.text ? '\n\n' : ''}Interrupted by a server restart.`
+							}
+						: message
+				),
+				reasoning: progress.reasoning?.map((entry) =>
+					entry.status === 'streaming' ? { ...entry, status: 'error' } : entry
+				)
 			});
 		}
 	}
+
 	if (recovered > 0) console.warn(`[store] marked ${recovered} stale review(s) as failed`);
+
 	return recovered;
 }

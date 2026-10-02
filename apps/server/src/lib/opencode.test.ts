@@ -12,7 +12,12 @@ const CONFIG_PROVIDERS = {
 			source: 'api',
 			key: 'sk-or-secret',
 			models: {
-				a: { id: 'a', name: 'Model A', limit: { context: 131072 }, variants: { high: {}, none: {}, low: {}, medium: {} } },
+				a: {
+					id: 'a',
+					name: 'Model A',
+					limit: { context: 131072 },
+					variants: { high: {}, none: {}, low: {}, medium: {} }
+				},
 				old: { id: 'old', name: 'Old', status: 'deprecated' },
 				embed: { id: 'embed', name: 'Embed', capabilities: { toolcall: false } }
 			}
@@ -22,10 +27,15 @@ const CONFIG_PROVIDERS = {
 		{ id: 'local', name: 'Local box', source: 'config', models: { c: { id: 'c' } } }
 	]
 };
+
 const AUTH = {
-	openai: [{ type: 'oauth', label: 'ChatGPT' }, { type: 'api', label: 'API key' }],
+	openai: [
+		{ type: 'oauth', label: 'ChatGPT' },
+		{ type: 'api', label: 'API key' }
+	],
 	openrouter: [{ type: 'api', label: 'API key' }]
 };
+
 const CATALOG = [
 	{ id: 'openrouter', name: 'OpenRouter', modelCount: 300 },
 	{ id: 'openai', name: 'OpenAI', modelCount: 20 },
@@ -37,6 +47,7 @@ describe('normalizeProviders', () => {
 	test('classifies how each provider is connected and never copies keys', () => {
 		const list = normalizeProviders(CATALOG, CONFIG_PROVIDERS, AUTH);
 		const by = Object.fromEntries(list.map((p) => [p.id, p]));
+
 		expect(by.openrouter).toMatchObject({ connected: true, via: 'key', removable: true, modelCount: 1 });
 		expect(by.openai).toMatchObject({ connected: true, via: 'oauth', removable: true });
 		expect(by.opencode).toMatchObject({ connected: true, via: 'builtin', removable: false });
@@ -50,8 +61,16 @@ describe('normalizeProviders', () => {
 describe('normalizeModels', () => {
 	test('keeps usable models and orders their efforts from variants', () => {
 		const models = normalizeModels(CONFIG_PROVIDERS);
+
 		expect(models.map((m) => m.id)).toEqual(['opencode:openrouter/a', 'opencode:openai/b', 'opencode:local/c']);
-		expect(models[0]).toMatchObject({ efforts: ['low', 'medium', 'high'], defaultEffort: 'medium', contextWindow: 131072, source: 'OpenRouter' });
+
+		expect(models[0]).toMatchObject({
+			efforts: ['low', 'medium', 'high'],
+			defaultEffort: 'medium',
+			contextWindow: 131072,
+			source: 'OpenRouter'
+		});
+
 		expect(models[1].efforts).toBeUndefined();
 	});
 });
@@ -60,6 +79,7 @@ describe('normalizeModels', () => {
 async function fakeOpenCode(): Promise<Record<string, string | undefined>> {
 	const dir = await mkdtemp(join(tmpdir(), 'fake-opencode-'));
 	const bin = join(dir, 'opencode');
+
 	await writeFile(
 		bin,
 		`#!/usr/bin/env bun
@@ -81,11 +101,14 @@ const server = Bun.serve({ port: 0, hostname: '127.0.0.1', async fetch(req) {
 console.log('opencode server listening on http://127.0.0.1:' + server.port);
 `
 	);
+
 	await chmod(bin, 0o755);
+
 	return { PATH: `${dir}:${process.env.PATH ?? ''}`, HOME: dir };
 }
 
 let agent: OpenCodeAgent | null = null;
+
 afterEach(() => {
 	agent?.stop();
 	agent = null;
@@ -105,7 +128,9 @@ describe('OpenCodeAgent', () => {
 
 	test('a browser sign-in stays pending until OpenCode finishes it', async () => {
 		agent = new OpenCodeAgent(await fakeOpenCode());
+
 		const attempt = await agent.startOAuth('openai', 0);
+
 		expect(attempt).toMatchObject({ mode: 'auto', instructions: 'Enter code: ABCD' });
 		expect(agent.attempt(attempt.attemptId)).toEqual({ status: 'pending' });
 		await agent.request('/test/finish-browser');

@@ -32,6 +32,7 @@ export type NoteInput = Pick<
 	ReviewNote,
 	'file' | 'startLine' | 'endLine' | 'side' | 'quote' | 'body' | 'newText' | 'oldText' | 'diffContext' | 'hunkHeader'
 >;
+
 class NotesStore {
 	items = $state<ReviewNote[]>([]);
 	/** Backend review the notes belong to (null = local-only / no backend). */
@@ -45,12 +46,15 @@ class NotesStore {
 
 	add(input: NoteInput): string {
 		const id = crypto.randomUUID();
+
 		this.items.push({ ...input, id, createdAt: new Date().toISOString() });
+
 		return id;
 	}
 
 	update(id: string, body: string): void {
 		const note = this.items.find((item) => item.id === id);
+
 		if (note) note.body = body;
 	}
 

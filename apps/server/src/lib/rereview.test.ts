@@ -5,6 +5,7 @@ import { runRereview } from './rereview';
 
 const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();
+
 afterEach(() => {
 	globalThis.fetch = originalFetch;
 	setReviewOverrides(originalSettings);
@@ -43,9 +44,12 @@ const NOTE = {
 
 test('runRereview answers each note and maps new findings', async () => {
 	setup();
+
 	let captured = '';
+
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		captured = String(init?.body ?? '');
+
 		return Response.json({
 			choices: [
 				{
@@ -54,7 +58,14 @@ test('runRereview answers each note and maps new findings', async () => {
 							summary: 'One note is valid.',
 							assessments: [{ noteIndex: 0, verdict: 'valid', response: 'Agreed — extract a constant.' }],
 							findings: [
-								{ title: 'Extract the unexplained constant', file: 'src/a.ts', line: 2, severity: 'medium', category: 'patterns', body: 'Magic number' }
+								{
+									title: 'Extract the unexplained constant',
+									file: 'src/a.ts',
+									line: 2,
+									severity: 'medium',
+									category: 'patterns',
+									body: 'Magic number'
+								}
 							]
 						})
 					}
@@ -67,10 +78,9 @@ test('runRereview answers each note and maps new findings', async () => {
 
 	expect(result.agent).toBe('orchestrator');
 	expect(result.summary).toBe('One note is valid.');
-	expect(result.assessments).toEqual([
-		{ noteIndex: 0, verdict: 'valid', response: 'Agreed — extract a constant.' }
-	]);
+	expect(result.assessments).toEqual([{ noteIndex: 0, verdict: 'valid', response: 'Agreed — extract a constant.' }]);
 	expect(result.findings).toHaveLength(1);
+
 	expect(result.findings[0]).toMatchObject({
 		title: 'Extract the unexplained constant',
 		file: 'src/a.ts',
@@ -79,6 +89,7 @@ test('runRereview answers each note and maps new findings', async () => {
 		message: '[patterns] Magic number',
 		agent: 'orchestrator'
 	});
+
 	// The richer selection context reaches the model.
 	expect(captured).toContain('Original code:');
 	expect(captured).toContain('const x = 1;');
@@ -87,9 +98,9 @@ test('runRereview answers each note and maps new findings', async () => {
 
 test('runRereview rejects invalid model output', async () => {
 	setup();
+
 	globalThis.fetch = (async () =>
 		Response.json({ choices: [{ message: { content: 'not json at all' } }] })) as unknown as typeof fetch;
-	await expect(
-		runRereview({ notes: [NOTE], diff: DIFF, sandboxPath: null, existingFindings: [] })
-	).rejects.toThrow();
+
+	await expect(runRereview({ notes: [NOTE], diff: DIFF, sandboxPath: null, existingFindings: [] })).rejects.toThrow();
 });

@@ -30,7 +30,17 @@
 	let { open = $bindable(), providerId = null }: Props = $props();
 
 	/** Shown first, in this order, while nothing is typed. */
-	const POPULAR = ['opencode', 'opencode-go', 'anthropic', 'openai', 'github-copilot', 'openrouter', 'google', 'xai', 'deepseek'];
+	const POPULAR = [
+		'opencode',
+		'opencode-go',
+		'anthropic',
+		'openai',
+		'github-copilot',
+		'openrouter',
+		'google',
+		'xai',
+		'deepseek'
+	];
 	/** Providers without listed methods take an API key. */
 	const KEY_ONLY: AgentAuthMethod = { index: -1, type: 'api', label: 'API key', prompts: [] };
 
@@ -51,9 +61,12 @@
 	$effect(() => {
 		if (!open) return;
 		reset();
+
 		const preset = providerId ? agent.providers?.find((p) => p.id === providerId) : null;
+
 		if (preset) choose(preset, false);
 		else step = 'pick';
+
 		return stopPolling;
 	});
 
@@ -73,11 +86,15 @@
 	const method = $derived(methods.find((m) => String(m.index) === methodIndex) ?? methods[0]);
 	/** Prompts whose condition holds for the answers so far. */
 	const prompts = $derived((method?.prompts ?? []).filter((p) => visible(p, inputs)));
-	const missing = $derived(prompts.some((p) => p.type === 'text' && !p.message.includes('optional') && !inputs[p.key]?.trim()));
+	const missing = $derived(
+		prompts.some((p) => p.type === 'text' && !p.message.includes('optional') && !inputs[p.key]?.trim())
+	);
 
 	function visible(prompt: AgentAuthPrompt, answers: Record<string, string>): boolean {
 		if (!prompt.when) return true;
+
 		const value = answers[prompt.when.key] ?? '';
+
 		return prompt.when.op === 'eq' ? value === prompt.when.value : value !== prompt.when.value;
 	}
 
@@ -85,11 +102,17 @@
 	function choose(next: AgentProvider, viaList = true): void {
 		provider = next;
 		fromList = viaList;
+
 		const first = next.methods[0] ?? KEY_ONLY;
+
 		methodIndex = String(first.index);
+
 		inputs = Object.fromEntries(
-			next.methods.flatMap((m) => m.prompts).flatMap((p) => (p.type === 'select' && p.options[0] ? [[p.key, p.options[0].value]] : []))
+			next.methods
+				.flatMap((m) => m.prompts)
+				.flatMap((p) => (p.type === 'select' && p.options[0] ? [[p.key, p.options[0].value]] : []))
 		);
+
 		key = '';
 		error = null;
 		direction = 1;
@@ -111,6 +134,7 @@
 	/** Steps crossfade with a short slide in the direction of travel; the dialog's height follows. */
 	function swap(_node: Element, { into }: { into: boolean }): TransitionConfig {
 		const shift = 16 * direction * (into ? 1 : -1);
+
 		return {
 			duration: reduce ? 0 : into ? 200 : 120,
 			delay: reduce || !into ? 0 : 40,
@@ -126,14 +150,21 @@
 	const all = $derived(agent.providers ?? []);
 	const popular = $derived(POPULAR.flatMap((id) => all.filter((p) => p.id === id)));
 	const shown = $derived(
-		q ? all.filter((p) => p.name.toLowerCase().includes(q) || p.id.includes(q)) : all.filter((p) => !POPULAR.includes(p.id))
+		q
+			? all.filter((p) => p.name.toLowerCase().includes(q) || p.id.includes(q))
+			: all.filter((p) => !POPULAR.includes(p.id))
 	);
 
 	/* ── Connect ─────────────────────────────────────────────── */
 
 	function answers(): Record<string, string> {
 		const visibleKeys = new Set(prompts.map((p) => p.key));
-		return Object.fromEntries(Object.entries(inputs).filter(([k, v]) => visibleKeys.has(k) && v.trim()).map(([k, v]) => [k, v.trim()]));
+
+		return Object.fromEntries(
+			Object.entries(inputs)
+				.filter(([k, v]) => visibleKeys.has(k) && v.trim())
+				.map(([k, v]) => [k, v.trim()])
+		);
 	}
 
 	async function submit(event: SubmitEvent): Promise<void> {
@@ -142,6 +173,7 @@
 		if (attempt?.mode === 'code') return void sendCode();
 		error = null;
 		busy = true;
+
 		try {
 			if (method.type === 'api') {
 				await agent.changed((await serverApi.agentSetKey(provider.id, key.trim(), answers())).providers);
@@ -162,33 +194,43 @@
 		if (!attempt || !code.trim()) return;
 		busy = true;
 		error = null;
+
 		try {
 			const state = await serverApi.agentOAuthCode(attempt.attemptId, code.trim());
+
 			if (state.status === 'complete') return void (await finish());
 			error = state.status === 'failed' ? state.message : 'Sign-in did not finish.';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Sign-in failed.';
 		}
+
 		busy = false;
 	}
 
 	function schedulePoll(): void {
 		stopPolling();
+
 		poll = setTimeout(async () => {
 			if (!attempt) return;
+
 			try {
 				const state = await serverApi.agentOAuthStatus(attempt.attemptId);
+
 				if (state.status === 'complete') return void (await finish());
+
 				if (state.status === 'failed') {
 					error = state.message;
 					attempt = null;
+
 					return;
 				}
 			} catch (e) {
 				error = e instanceof Error ? e.message : 'Lost track of the sign-in.';
 				attempt = null;
+
 				return;
 			}
+
 			schedulePoll();
 		}, 1500);
 	}
@@ -206,6 +248,7 @@
 
 	function done(): void {
 		const name = provider?.name;
+
 		busy = false;
 		open = false;
 		toast.success(`Connected ${name}`);
@@ -214,7 +257,9 @@
 	/** "Enter code: AULF-57S8B" → the code, so it can be shown large and copied. */
 	const deviceCode = $derived(attempt?.instructions.match(/code[:\s]+([A-Z0-9]{3,}(?:-[A-Z0-9]{3,})+)/i)?.[1] ?? null);
 	const title = $derived(step === 'pick' ? 'Add provider' : `Connect ${provider?.name ?? ''}`);
-	const submitLabel = $derived(attempt?.mode === 'code' ? 'Finish sign-in' : method?.type === 'oauth' ? 'Sign in' : 'Connect');
+	const submitLabel = $derived(
+		attempt?.mode === 'code' ? 'Finish sign-in' : method?.type === 'oauth' ? 'Sign in' : 'Connect'
+	);
 	const canSubmit = $derived(
 		attempt ? attempt.mode === 'code' && !!code.trim() : method?.type === 'api' ? !!key.trim() && !missing : !missing
 	);
@@ -251,7 +296,13 @@
 							</ScrollArea>
 						</div>
 					{:else if provider && method}
-						<form id="agent-connect" class="agent-step grid gap-4" onsubmit={submit} in:swap={{ into: true }} out:swap={{ into: false }}>
+						<form
+							id="agent-connect"
+							class="agent-step grid gap-4"
+							onsubmit={submit}
+							in:swap={{ into: true }}
+							out:swap={{ into: false }}
+						>
 							{#if attempt}
 								<div class="agent-signin" aria-live="polite">
 									{#if deviceCode}
@@ -267,7 +318,13 @@
 										Open sign-in page <ArrowUpRight size={14} aria-hidden="true" />
 									</Button>
 									{#if attempt.mode === 'code'}
-										<Input label="Code from the provider" autocomplete="off" spellcheck={false} bind:value={code} autofocus />
+										<Input
+											label="Code from the provider"
+											autocomplete="off"
+											spellcheck={false}
+											bind:value={code}
+											autofocus
+										/>
 									{:else}
 										<p class="agent-waiting"><Spinner size={13} /> Waiting for you to finish in the browser</p>
 									{/if}
@@ -312,10 +369,21 @@
 									{/if}
 								{/each}
 								{#if method.type === 'api'}
-									<Input type="password" label="API key" autocomplete="off" spellcheck={false} bind:value={key} autofocus />
-									<Typography.Text variant="supporting" class="text-[12.5px]">Saved by OpenCode on this machine.</Typography.Text>
+									<Input
+										type="password"
+										label="API key"
+										autocomplete="off"
+										spellcheck={false}
+										bind:value={key}
+										autofocus
+									/>
+									<Typography.Text variant="supporting" class="text-[12.5px]"
+										>Saved by OpenCode on this machine.</Typography.Text
+									>
 								{:else}
-									<Typography.Text variant="supporting" class="text-[12.5px]">Opens the provider’s sign-in page in a new tab.</Typography.Text>
+									<Typography.Text variant="supporting" class="text-[12.5px]"
+										>Opens the provider’s sign-in page in a new tab.</Typography.Text
+									>
 								{/if}
 							{/if}
 							{#if error}<p class="m-0 text-[12.5px] text-danger" role="alert">{error}</p>{/if}
@@ -326,7 +394,9 @@
 		</Modal.Body>
 		<Modal.Footer>
 			{#if step === 'connect' && fromList}
-				<Button variant="ghost" class="modal-footer-start" onclick={back}><ArrowLeft size={14} aria-hidden="true" /> Back</Button>
+				<Button variant="ghost" class="modal-footer-start" onclick={back}
+					><ArrowLeft size={14} aria-hidden="true" /> Back</Button
+				>
 			{/if}
 			<Modal.Close>Cancel</Modal.Close>
 			{#if step === 'connect' && !(attempt && attempt.mode === 'auto')}

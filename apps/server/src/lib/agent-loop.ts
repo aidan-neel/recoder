@@ -35,16 +35,21 @@ export class ModelBudget {
 		/** Calls held back from ordinary spending; raised while later stages need a guaranteed share. */
 		public reserve: number = REVIEW_POLICY.reserveCallsForConsolidation
 	) {}
+
 	remaining(): number {
 		return Math.max(0, this.limit - this.used);
 	}
+
 	canSpend(n = 1, opts?: { consumeReserve?: boolean }): boolean {
 		const hold = opts?.consumeReserve ? 0 : this.reserve;
+
 		return this.used + n + hold <= this.limit;
 	}
+
 	spend(): void {
 		this.used++;
 	}
+
 	snapshot(): { used: number; remaining: number; reserved: number; limit: number } {
 		return { used: this.used, remaining: this.remaining(), reserved: this.reserve, limit: this.limit };
 	}
@@ -101,15 +106,25 @@ export interface JsonAgentOptions<T> {
 export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
 	// Reserve time throughout an investigation, not merely when dispatching it.
 	const startedAt = reviewNow();
+
 	const deadlineAt = Math.min(
 		opts.deadlineAt - (opts.consumeReserve ? 0 : REVIEW_POLICY.reserveMsForConsolidation),
 		opts.timeLimit ? startedAt + opts.timeLimit.maxWallMs : Infinity
 	);
+
 	const finalTurnAt = opts.timeLimit ? startedAt + opts.timeLimit.finalTurnAfterMs : Infinity;
+
 	const messages: ChatMessage[] = [
-		{ role: 'system', content: opts.system + '\nIn every JSON response, put "message" first: a concise, reader-facing Markdown explanation of your current investigation or conclusion. Then include EITHER "actions" (when you still want to read or run something) OR the final result fields (only once you are done). Never send final result fields while you still intend to look at more code: that ends your work. Describe actual evidence and decisions; do not narrate JSON formatting or budget compliance. This text is shown live to the developer. ' + chatStyle(opts.config.model) },
+		{
+			role: 'system',
+			content:
+				opts.system +
+				'\nIn every JSON response, put "message" first: a concise, reader-facing Markdown explanation of your current investigation or conclusion. Then include EITHER "actions" (when you still want to read or run something) OR the final result fields (only once you are done). Never send final result fields while you still intend to look at more code: that ends your work. Describe actual evidence and decisions; do not narrate JSON formatting or budget compliance. This text is shown live to the developer. ' +
+				chatStyle(opts.config.model)
+		},
 		{ role: 'user', content: opts.user }
 	];
+
 	let repaired = 0;
 	let retrievals = 0;
 	let runs = 0;
@@ -124,94 +139,149 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 	// Each successful retrieval advances the investigation; the final turn is
 	// reserved for the result, with the global budget/deadline enforced throughout.
 	let turn = 1;
+
 	for (let call = 1; call <= opts.maxTurns + REVIEW_POLICY.schemaRepairAttempts; call++) {
 		throwIfAborted(opts.signal);
 		await reviewPausePoint(opts.signal);
 		throwIfAborted(opts.signal);
+
 		if (reviewNow() >= deadlineAt) {
 			const ownLimit = opts.timeLimit && deadlineAt === startedAt + opts.timeLimit.maxWallMs;
-			return { value: null, error: ownLimit ? `Ran out of time: no answer within ${Math.round(opts.timeLimit!.maxWallMs / 60_000)} minutes` : 'Investigation deadline reached; remaining time reserved for consolidation' };
+
+			return {
+				value: null,
+				error: ownLimit
+					? `Ran out of time: no answer within ${Math.round(opts.timeLimit!.maxWallMs / 60_000)} minutes`
+					: 'Investigation deadline reached; remaining time reserved for consolidation'
+			};
 		}
+
 		if (!opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve })) {
 			return { value: null, error: 'model-call budget exhausted' };
 		}
-		const lastTurn = stuck || turn >= opts.maxTurns || !opts.budget.canSpend(2, { consumeReserve: opts.consumeReserve }) || reviewNow() >= finalTurnAt;
-		if (lastTurn && !messages.at(-1)?.content.startsWith('This is your final turn.')) messages.push({ role: 'user', content: 'This is your final turn. Return the required compact result JSON using available evidence, with the reader-facing "message" first. Do not request retrieval. Omit other optional fields when unnecessary.' });
+
+		const lastTurn =
+			stuck ||
+			turn >= opts.maxTurns ||
+			!opts.budget.canSpend(2, { consumeReserve: opts.consumeReserve }) ||
+			reviewNow() >= finalTurnAt;
+
+		if (lastTurn && !messages.at(-1)?.content.startsWith('This is your final turn.'))
+			messages.push({
+				role: 'user',
+				content:
+					'This is your final turn. Return the required compact result JSON using available evidence, with the reader-facing "message" first. Do not request retrieval. Omit other optional fields when unnecessary.'
+			});
 		opts.budget.spend();
 		opts.onLog?.(`${opts.label} model turn ${turn}/${opts.maxTurns} (${opts.config.model})`);
+
 		const started = Date.now();
 		const reasoningId = `reason_${opts.label.slice(0, 24)}_${turn}_${Math.random().toString(36).slice(2, 8)}`;
 		let reasoningText = '';
 		let reasoningEmittedAt = 0;
+
 		const flushReasoning = (status: ReviewReasoningEntry['status'] = 'streaming') => {
 			if (!opts.onReasoning || !reasoningText) return;
 			// ChatGPT sends a summary, not its reasoning; keep the timing, drop the text.
 			if (opts.config.provider === 'codex') opts.onReasoning({ id: reasoningId, text: '', status, summary: true });
 			else opts.onReasoning({ id: reasoningId, text: reasoningText, status });
 		};
+
 		// Cut off runaway reasoning: a stuck model otherwise thinks until the call times out.
 		const callAbort = new AbortController();
 		const forwardAbort = () => callAbort.abort();
+
 		opts.signal.addEventListener('abort', forwardAbort, { once: true });
+
 		// Pausing the review stops this call; it is re-run on resume.
 		const control = currentReviewControl();
 		const pauseSignal = control?.pauseSignal;
+
 		pauseSignal?.addEventListener('abort', forwardAbort, { once: true });
+
 		let overthought = false;
 		let output: string;
 		let response = '';
 		let responseEmittedAt = 0;
 		const responseId = `message_${reasoningId}`;
+
 		const flushResponse = (status: 'streaming' | 'done' | 'error', cutOff?: string) => {
 			const text = streamedMessage(response);
+
 			if (text) opts.onMessage?.({ id: responseId, text, status, ...(cutOff ? { cutOff } : {}) });
 		};
+
 		try {
 			const discussion = opts.getDiscussion?.();
-			output = await streamChatCompletion({
-				provider: opts.config.provider,
-				reasoningEffort: opts.config.reasoningEffort,
-				baseUrl: opts.config.baseUrl,
-				apiKey: opts.config.apiKey,
-				model: opts.config.model,
-				messages: discussion ? [...messages, { role: 'user', content: `Developer conversations since the review started (consider these with the review evidence):\n${discussion}` }] : messages,
-				jsonMode: true,
-				jsonSchema: opts.responseSchema?.(lastTurn),
-				temperature: 0,
-				maxTokens: 8000,
-				timeoutMs: Math.min(REVIEW_POLICY.perCallDeadlineMs, Math.max(1, deadlineAt - reviewNow())),
-				signal: callAbort.signal,
-				onReasoning: opts.onReasoning
-					? (chunk) => {
-							reasoningText = (reasoningText + chunk).slice(0, 64_000);
-							if (!overthought && (reasoningText.length > REVIEW_POLICY.maxReasoningChars || isLooping(reasoningText))) {
-								overthought = true;
-								opts.onLog?.(`${opts.label} reasoning ran long; asking for an answer`);
-								callAbort.abort();
+
+			output = await streamChatCompletion(
+				{
+					provider: opts.config.provider,
+					reasoningEffort: opts.config.reasoningEffort,
+					baseUrl: opts.config.baseUrl,
+					apiKey: opts.config.apiKey,
+					model: opts.config.model,
+					messages: discussion
+						? [
+								...messages,
+								{
+									role: 'user',
+									content: `Developer conversations since the review started (consider these with the review evidence):\n${discussion}`
+								}
+							]
+						: messages,
+					jsonMode: true,
+					jsonSchema: opts.responseSchema?.(lastTurn),
+					temperature: 0,
+					maxTokens: 8000,
+					timeoutMs: Math.min(REVIEW_POLICY.perCallDeadlineMs, Math.max(1, deadlineAt - reviewNow())),
+					signal: callAbort.signal,
+					onReasoning: opts.onReasoning
+						? (chunk) => {
+								reasoningText = (reasoningText + chunk).slice(0, 64_000);
+
+								if (
+									!overthought &&
+									(reasoningText.length > REVIEW_POLICY.maxReasoningChars || isLooping(reasoningText))
+								) {
+									overthought = true;
+									opts.onLog?.(`${opts.label} reasoning ran long; asking for an answer`);
+									callAbort.abort();
+								}
+
+								const now = Date.now();
+
+								// Throttle: reasoning can stream token-by-token, and every emit
+								// carries the whole accumulated text to each subscriber.
+								if (now - reasoningEmittedAt > 500) {
+									reasoningEmittedAt = now;
+									flushReasoning();
+								}
 							}
-							const now = Date.now();
-							// Throttle: reasoning can stream token-by-token, and every emit
-							// carries the whole accumulated text to each subscriber.
-							if (now - reasoningEmittedAt > 500) {
-								reasoningEmittedAt = now;
-								flushReasoning();
-							}
-						}
-					: undefined,
-				onProgress: (state, elapsedMs) =>
-					opts.onProgress?.(state, elapsedMs, state === 'queued' ? 'Waiting for a model slot' : `Running ${opts.label}`)
-			}, (chunk) => {
-				response += chunk;
-				if (Date.now() - responseEmittedAt > 200) {
-					responseEmittedAt = Date.now();
-					flushResponse('streaming');
+						: undefined,
+					onProgress: (state, elapsedMs) =>
+						opts.onProgress?.(
+							state,
+							elapsedMs,
+							state === 'queued' ? 'Waiting for a model slot' : `Running ${opts.label}`
+						)
+				},
+				(chunk) => {
+					response += chunk;
+
+					if (Date.now() - responseEmittedAt > 200) {
+						responseEmittedAt = Date.now();
+						flushResponse('streaming');
+					}
 				}
-			});
+			);
+
 			response = output;
 			flushResponse('done');
 		} catch (err) {
 			opts.signal.removeEventListener('abort', forwardAbort);
 			pauseSignal?.removeEventListener('abort', forwardAbort);
+
 			if (!opts.signal.aborted && pauseSignal?.aborted) {
 				// Paused mid-call: give the call back and redo this turn after resume.
 				flushResponse('done');
@@ -220,72 +290,135 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 				call--;
 				continue;
 			}
+
 			const retrying = !opts.signal.aborted && repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns;
-			const dropped = !overthought && err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message);
+
+			const dropped =
+				!overthought && err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message);
+
 			const truncated = err instanceof Error && /output truncated/i.test(err.message);
-			flushResponse('error', !retrying ? undefined
-				: overthought ? 'It thought for too long without answering, so it was asked to answer now.'
-				: dropped ? `The connection to the model dropped (${(err as Error).message}). Trying again.`
-				: truncated ? 'The reply hit the output limit. Asking for a shorter one.'
-				: undefined);
+
+			flushResponse(
+				'error',
+				!retrying
+					? undefined
+					: overthought
+						? 'It thought for too long without answering, so it was asked to answer now.'
+						: dropped
+							? `The connection to the model dropped (${(err as Error).message}). Trying again.`
+							: truncated
+								? 'The reply hit the output limit. Asking for a shorter one.'
+								: undefined
+			);
+
 			flushReasoning(overthought ? 'done' : 'error');
-			if (isAuthFailure(err) || isUsageLimit(err, opts.config)) throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));
+			if (isAuthFailure(err) || isUsageLimit(err, opts.config))
+				throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));
+
 			if (retrying && (overthought || dropped)) {
 				repaired++;
 				lastError = overthought ? 'reasoning ran too long without an answer' : (err as Error).message;
-				messages.push({ role: 'user', content: `You spent too long thinking without replying. Stop deliberating and reply now with JSON only: request the evidence you need, or give your final result with what you already know.\n\n${shapes}` });
+
+				messages.push({
+					role: 'user',
+					content: `You spent too long thinking without replying. Stop deliberating and reply now with JSON only: request the evidence you need, or give your final result with what you already know.\n\n${shapes}`
+				});
+
 				continue;
 			}
+
 			if (opts.signal.aborted || (!overthought && err instanceof LlmError && /cancel/i.test(err.message))) {
 				throw new ReviewAbortedError('review aborted');
 			}
+
 			lastError = err instanceof Error ? err.message : String(err);
 			opts.onLog?.(`${opts.label} failed: ${lastError}`);
-			if (/output truncated/i.test(lastError) && repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns) {
+
+			if (
+				/output truncated/i.test(lastError) &&
+				repaired < REVIEW_POLICY.schemaRepairAttempts &&
+				turn <= opts.maxTurns
+			) {
 				repaired++;
-				messages.push({ role: 'user', content: 'Your response exceeded the output limit. Return compact valid JSON. Keep explanations short, omit optional fields and repeated gaps, and prioritize the most important findings.' });
+
+				messages.push({
+					role: 'user',
+					content:
+						'Your response exceeded the output limit. Return compact valid JSON. Keep explanations short, omit optional fields and repeated gaps, and prioritize the most important findings.'
+				});
+
 				continue;
 			}
+
 			return { value: null, error: lastError };
 		}
+
 		opts.signal.removeEventListener('abort', forwardAbort);
 		pauseSignal?.removeEventListener('abort', forwardAbort);
 		flushReasoning('done');
+
 		let parsed: unknown;
+
 		try {
 			parsed = extractJsonValue(output);
 		} catch (err) {
 			lastError = err instanceof Error ? err.message : 'invalid JSON';
+
 			if (repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns) {
 				repaired++;
 				messages.push({ role: 'assistant', content: output });
+
 				messages.push({
 					role: 'user',
 					content: `Your previous reply was not valid JSON (${lastError}).\n\n${shapes}`
 				});
+
 				continue;
 			}
+
 			return { value: null, error: lastError };
 		}
-		if (!streamedMessage(output) && parsed && typeof parsed === 'object' && 'message' in parsed && typeof parsed.message === 'string') {
+
+		if (
+			!streamedMessage(output) &&
+			parsed &&
+			typeof parsed === 'object' &&
+			'message' in parsed &&
+			typeof parsed.message === 'string'
+		) {
 			opts.onMessage?.({ id: responseId, text: parsed.message, status: 'done' });
 		}
+
 		const actions = parseActions(parsed);
-		if (actions && !lastTurn && opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve }) && reviewNow() < deadlineAt) {
+
+		if (
+			actions &&
+			!lastTurn &&
+			opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve }) &&
+			reviewNow() < deadlineAt
+		) {
 			opts.onProgress?.('retrieval', Date.now() - started, `Reading repository evidence for ${opts.label}`);
+
 			const results = await opts.evidence.executeRound(actions, opts.signal, opts.onTool);
+
 			retrievals++;
 			runs += actions.filter((action) => action.action === 'run').length;
+
 			for (const result of results) {
-				if (result.ok && result.path) opts.onLog?.(`Reading ${result.path}${result.startLine ? `:${result.startLine}` : ''}`);
+				if (result.ok && result.path)
+					opts.onLog?.(`Reading ${result.path}${result.startLine ? `:${result.startLine}` : ''}`);
 			}
+
 			const round = results.length > 0 && results.every((result) => !result.ok) ? JSON.stringify(actions) : '';
+
 			if (round && round === failedRound) {
 				stuck = true;
 				opts.onLog?.(`${opts.label} repeated a request that failed; asking for its answer`);
 			}
+
 			failedRound = round;
 			messages.push({ role: 'assistant', content: output });
+
 			messages.push({
 				role: 'user',
 				content:
@@ -294,13 +427,17 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 						? '\n\nThis is your final turn. Finish with the required JSON result. Do not request more retrieval.'
 						: '\n\nContinue. Finish with the required JSON when you have enough evidence.')
 			});
+
 			turn++;
 			continue;
 		}
+
 		const value = opts.parse(parsed);
+
 		if (value) {
 			// One push-back, and only while a turn remains to act on it.
 			const nudge = !finalNudged && !lastTurn ? opts.checkFinal?.(value, { retrievals, runs }) : null;
+
 			if (!nudge) return { value };
 			finalNudged = true;
 			opts.onLog?.(`${opts.label} finished early; asking it to investigate first`);
@@ -308,10 +445,13 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			messages.push({ role: 'user', content: `${nudge}\n\n${shapes}` });
 			continue;
 		}
+
 		lastError = opts.validationError?.(parsed) ?? 'output did not match the required schema';
+
 		if (repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns && !actions) {
 			repaired++;
 			messages.push({ role: 'assistant', content: output });
+
 			messages.push({
 				role: 'user',
 				// Small models often send only the narration and close the object. Saying
@@ -320,29 +460,49 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 					? `Your reply only had "message", so nothing was read: it had no "actions" list. Reply again with your "message" AND the "actions" that read what you described.${lastTurn ? '' : ' Only once you are done, send the final result instead.'}\n\n${shapes}`
 					: `Your JSON was neither a retrieval request nor a valid final result. Problems: ${lastError}.\n\n${shapes}`
 			});
-			lastError = isCommentaryOnly(parsed) ? 'the model kept replying with only a message, without actions or a result' : lastError;
+
+			lastError = isCommentaryOnly(parsed)
+				? 'the model kept replying with only a message, without actions or a result'
+				: lastError;
+
 			continue;
 		}
-		if (actions) return { value: null, error: lastTurn ? 'final turn requested retrieval instead of completing' : 'No model capacity or investigation time remained to inspect the requested evidence' };
+
+		if (actions)
+			return {
+				value: null,
+				error: lastTurn
+					? 'final turn requested retrieval instead of completing'
+					: 'No model capacity or investigation time remained to inspect the requested evidence'
+			};
+
 		return { value: null, error: lastError };
 	}
+
 	return { value: null, error: lastError };
 }
 
 /** `{"message": "…"}` and nothing else: narration without a request or a result. */
 export function isCommentaryOnly(parsed: unknown): boolean {
 	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+
 	const entries = Object.entries(parsed as Record<string, unknown>);
-	return entries.some(([key, value]) => key === 'message' && typeof value === 'string')
-		&& entries.every(([key, value]) => key === 'message' || value == null || (Array.isArray(value) && value.length === 0));
+
+	return (
+		entries.some(([key, value]) => key === 'message' && typeof value === 'string') &&
+		entries.every(([key, value]) => key === 'message' || value == null || (Array.isArray(value) && value.length === 0))
+	);
 }
 
 /** The tail of the reasoning keeps reappearing: the model is going in circles. */
 export function isLooping(text: string): boolean {
 	if (text.length < 4_000) return false;
+
 	const tail = text.slice(-240);
 	let count = 0;
+
 	for (let at = text.indexOf(tail); at !== -1 && count < 3; at = text.indexOf(tail, at + 1)) count++;
+
 	return count >= 3;
 }
 

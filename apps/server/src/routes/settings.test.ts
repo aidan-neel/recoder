@@ -3,15 +3,16 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app } from '../app';
-import { effectiveDispatchLevel, effectiveReviewEnv, getStoredSettings, initReviewSettings, setReviewOverrides } from '../lib/review-settings';
+import {
+	effectiveDispatchLevel,
+	effectiveReviewEnv,
+	getStoredSettings,
+	initReviewSettings,
+	setReviewOverrides
+} from '../lib/review-settings';
 import { configForOrchestrator, configForRole, isReviewConfigured } from '../lib/models';
 
-const ENV_KEYS = [
-	'RECODER_REVIEW_BASE_URL',
-	'RECODER_REVIEW_API_KEY',
-	'RECODER_REVIEW_MODEL',
-	'RECODER_DATA_DIR'
-];
+const ENV_KEYS = ['RECODER_REVIEW_BASE_URL', 'RECODER_REVIEW_API_KEY', 'RECODER_REVIEW_MODEL', 'RECODER_DATA_DIR'];
 const savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 
 afterEach(() => {
@@ -19,6 +20,7 @@ afterEach(() => {
 		if (savedEnv[k] === undefined) delete process.env[k];
 		else process.env[k] = savedEnv[k];
 	}
+
 	setReviewOverrides({});
 });
 
@@ -31,83 +33,122 @@ beforeEach(isolateDataDir);
 describe('review settings', () => {
 	test('orchestrator and specialist models route independently and survive reload', async () => {
 		const response = await app.request('/api/settings/models', {
-			method: 'PATCH', headers: { 'content-type': 'application/json' },
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({
 				models: [
 					{ id: 'lead', label: 'Lead', model: 'lead-model', provider: 'codex' },
 					{ id: 'worker', label: 'Worker', model: 'worker-model', provider: 'codex' }
-				], orchestratorModelId: 'lead', specialistModelId: 'worker'
+				],
+				orchestratorModelId: 'lead',
+				specialistModelId: 'worker'
 			})
 		});
+
 		expect(response.status).toBe(200);
 		setReviewOverrides({});
 		initReviewSettings();
 		expect(configForOrchestrator().model).toBe('lead-model');
 		expect(configForRole('correctness').model).toBe('worker-model');
 		expect(configForRole('security').model).toBe('worker-model');
+
 		const settings = await (await app.request('/api/settings/models')).json();
+
 		expect(settings.orchestratorModelId).toBe('lead');
 		expect(settings.specialistModelId).toBe('worker');
 	});
+
 	test('Review and Specialist efforts persist across reload and survive a model change', async () => {
 		setReviewOverrides({ models: [{ id: 'sub', label: 'Subscription', model: 'test-model', provider: 'codex' }] });
+
 		const patch = await app.request('/api/settings/models', {
-			method: 'PATCH', headers: { 'content-type': 'application/json' },
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ orchestratorEffort: 'low', specialistEffort: 'high' })
 		});
+
 		expect(patch.status).toBe(200);
 		expect(await patch.json()).toMatchObject({ orchestratorEffort: 'low', specialistEffort: 'high' });
 		setReviewOverrides({});
 		initReviewSettings();
 		expect(configForOrchestrator().reasoningEffort).toBe('low');
 		expect(configForRole('docs').reasoningEffort).toBe('high');
+
 		const changedModel = await app.request('/api/settings/models', {
-			method: 'PATCH', headers: { 'content-type': 'application/json' },
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ models: [{ id: 'new', label: 'New', model: 'new-model', provider: 'codex' }] })
 		});
+
 		expect(changedModel.status).toBe(200);
 		expect(configForRole('security')).toMatchObject({ model: 'new-model', reasoningEffort: 'high' });
 	});
 
 	test('the specialist dispatch level persists across reload and rejects unknown levels', async () => {
 		expect((await (await app.request('/api/settings/models')).json()).specialistDispatch).toBe('medium');
+
 		const patch = await app.request('/api/settings/models', {
-			method: 'PATCH', headers: { 'content-type': 'application/json' },
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ specialistDispatch: 'low' })
 		});
+
 		expect(patch.status).toBe(200);
 		expect((await patch.json()).specialistDispatch).toBe('low');
 		setReviewOverrides({});
 		initReviewSettings();
 		expect(effectiveDispatchLevel()).toBe('low');
+
 		const bad = await app.request('/api/settings/models', {
-			method: 'PATCH', headers: { 'content-type': 'application/json' },
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ specialistDispatch: 'ultra' })
 		});
+
 		expect(bad.status).toBe(400);
 		expect(effectiveDispatchLevel()).toBe('low');
 	});
 
 	test('invalid effort values are rejected without changing settings', async () => {
 		setReviewOverrides({ specialistEffort: 'high' });
+
 		for (const specialistEffort of ['ultra', '', 1, [], {}]) {
 			const res = await app.request('/api/settings/models', {
-				method: 'PATCH', headers: { 'content-type': 'application/json' },
+				method: 'PATCH',
+				headers: { 'content-type': 'application/json' },
 				body: JSON.stringify({ specialistEffort })
 			});
+
 			expect(res.status).toBe(400);
 			expect(getStoredSettings().specialistEffort).toBe('high');
 		}
 	});
 
 	test('a saved file with per-role picks loads as one Specialist pick', async () => {
-		const legacy = (extra: object) => writeFileSync(join(process.env.RECODER_DATA_DIR!, 'review-config.json'), JSON.stringify({
-			models: [{ id: 'lead', label: 'Lead', model: 'lead-model', provider: 'codex' }, { id: 'worker', label: 'Worker', model: 'worker-model', provider: 'codex' }],
-			orchestratorModelId: 'lead', roles: { correctness: 'worker', security: 'lead' }, roleEfforts: { correctness: 'high', docs: 'low' }, ...extra
-		}));
+		const legacy = (extra: object) =>
+			writeFileSync(
+				join(process.env.RECODER_DATA_DIR!, 'review-config.json'),
+				JSON.stringify({
+					models: [
+						{ id: 'lead', label: 'Lead', model: 'lead-model', provider: 'codex' },
+						{ id: 'worker', label: 'Worker', model: 'worker-model', provider: 'codex' }
+					],
+					orchestratorModelId: 'lead',
+					roles: { correctness: 'worker', security: 'lead' },
+					roleEfforts: { correctness: 'high', docs: 'low' },
+					...extra
+				})
+			);
+
 		legacy({});
 		initReviewSettings();
-		expect(getStoredSettings()).toMatchObject({ specialistModelId: 'worker', specialistEffort: 'high', orchestratorEffort: 'high' });
+
+		expect(getStoredSettings()).toMatchObject({
+			specialistModelId: 'worker',
+			specialistEffort: 'high',
+			orchestratorEffort: 'high'
+		});
+
 		expect(getStoredSettings()).not.toHaveProperty('roles');
 		expect(configForRole('security')).toMatchObject({ model: 'worker-model', reasoningEffort: 'high' });
 		setReviewOverrides({});
@@ -119,6 +160,7 @@ describe('review settings', () => {
 
 	test('PUT stores config and GET masks the key', async () => {
 		isolateDataDir();
+
 		const put = await app.request('/api/settings/models', {
 			method: 'PUT',
 			headers: { 'content-type': 'application/json' },
@@ -132,18 +174,24 @@ describe('review settings', () => {
 				sharedModelId: 'm1'
 			})
 		});
+
 		expect(put.status).toBe(200);
+
 		const saved = await put.json();
+
 		expect(saved.configured).toBe(true);
 		expect(saved.apiKeyPreview).toBe('••••1234');
 		expect(saved.sharedModelId).toBe('m1');
 
 		const get = await app.request('/api/settings/models');
 		const body = await get.json();
+
 		expect(body.baseUrl).toBe('https://openrouter.ai/api/v1');
 		expect(body.model).toBe('qwen/qwen-2.5-coder-32b-instruct');
+
 		// The payload lists the agent's models; the HTTP registry stays in storage.
 		const stored = getStoredSettings().models ?? [];
+
 		expect(stored).toHaveLength(2);
 		expect(stored[0]).toMatchObject({ id: 'm1', label: 'Qwen coder' });
 		expect(typeof stored[1].id).toBe('string');
@@ -153,21 +201,25 @@ describe('review settings', () => {
 	test('empty key keeps the existing one', async () => {
 		isolateDataDir();
 		setReviewOverrides({ apiKey: 'keepme' });
+
 		const put = await app.request('/api/settings/models', {
 			method: 'PUT',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({ baseUrl: 'http://localhost:8000/v1', apiKey: '', model: 'm' })
 		});
+
 		expect(put.status).toBe(200);
 		expect(effectiveReviewEnv().apiKey).toBe('keepme');
 	});
 
 	test('stored settings win over env', async () => {
 		process.env.RECODER_REVIEW_MODEL = 'env-model';
+
 		setReviewOverrides({
 			models: [{ id: 'm1', label: 'UI', model: 'ui-model' }],
 			sharedModelId: 'm1'
 		});
+
 		expect(effectiveReviewEnv().model).toBe('ui-model');
 		setReviewOverrides({});
 		expect(effectiveReviewEnv().model).toBe('env-model');
@@ -175,19 +227,22 @@ describe('review settings', () => {
 
 	test('codex subscription model is listed and selectable as shared', async () => {
 		isolateDataDir();
+
 		const codexId = 'codex-shared-1';
+
 		const put = await app.request('/api/settings/models', {
 			method: 'PUT',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({
-				models: [
-					{ provider: 'codex', id: codexId, label: 'GPT 5 · subscription', model: 'gpt-5', apiKey: '' }
-				],
+				models: [{ provider: 'codex', id: codexId, label: 'GPT 5 · subscription', model: 'gpt-5', apiKey: '' }],
 				sharedModelId: codexId
 			})
 		});
+
 		expect(put.status).toBe(200);
+
 		const saved = await put.json();
+
 		expect(getStoredSettings().models).toHaveLength(1);
 		expect(getStoredSettings().models?.[0]).toMatchObject({ provider: 'codex', id: codexId, model: 'gpt-5' });
 		expect(saved.sharedModelId).toBe(codexId);
@@ -197,19 +252,30 @@ describe('review settings', () => {
 
 		// Shared selection survives a round-trip and a second save alongside an API model.
 		const apiId = 'api-1';
+
 		const put2 = await app.request('/api/settings/models', {
 			method: 'PUT',
 			headers: { 'content-type': 'application/json' },
 			body: JSON.stringify({
 				models: [
 					{ provider: 'codex', id: codexId, label: 'GPT 5 · subscription', model: 'gpt-5', apiKey: '' },
-					{ provider: 'openai-compatible', id: apiId, label: 'Qwen', model: 'qwen/x', baseUrl: 'https://x/v1', apiKey: '' }
+					{
+						provider: 'openai-compatible',
+						id: apiId,
+						label: 'Qwen',
+						model: 'qwen/x',
+						baseUrl: 'https://x/v1',
+						apiKey: ''
+					}
 				],
 				sharedModelId: codexId
 			})
 		});
+
 		expect(put2.status).toBe(200);
+
 		const saved2 = await put2.json();
+
 		expect(getStoredSettings().models).toHaveLength(2);
 		expect(saved2.sharedModelId).toBe(codexId);
 		expect(saved2.configured).toBe(true);
@@ -219,11 +285,19 @@ describe('review settings', () => {
 test('a disconnect during a pending connect stays final', async () => {
 	const realFetch = globalThis.fetch;
 	let finishVerify!: () => void;
-	globalThis.fetch = (() => new Promise((resolve) => { finishVerify = () => resolve(Response.json({ data: [] })); })) as unknown as typeof fetch;
+
+	globalThis.fetch = (() =>
+		new Promise((resolve) => {
+			finishVerify = () => resolve(Response.json({ data: [] }));
+		})) as unknown as typeof fetch;
+
 	try {
 		const connecting = app.request('/api/settings/providers/opencode-go/connect', {
-			method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ apiKey: 'sk-late' })
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ apiKey: 'sk-late' })
 		});
+
 		await new Promise((resolve) => setTimeout(resolve, 10));
 		expect((await app.request('/api/settings/providers/opencode-go', { method: 'DELETE' })).status).toBe(200);
 		finishVerify();

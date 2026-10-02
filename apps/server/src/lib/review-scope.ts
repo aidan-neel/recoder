@@ -9,15 +9,7 @@ import type { FileDiff } from '@recoder/shared';
  * reviewable evidence (lockfiles may be summarized rather than fully read).
  */
 
-export type FileClassification =
-	| 'source'
-	| 'test'
-	| 'docs'
-	| 'config'
-	| 'lockfile'
-	| 'generated'
-	| 'binary'
-	| 'other';
+export type FileClassification = 'source' | 'test' | 'docs' | 'config' | 'lockfile' | 'generated' | 'binary' | 'other';
 
 /** Path segments that mark a file as generated, built, or vendored. */
 const SKIP_SEGMENTS = new Set([
@@ -151,6 +143,7 @@ const SOURCE_EXTENSIONS = new Set([
 ]);
 
 const DOC_EXTENSIONS = new Set(['.md', '.mdx', '.rst', '.txt', '.adoc', '.html']);
+
 const CONFIG_BASENAMES = new Set([
 	'package.json',
 	'tsconfig.json',
@@ -198,16 +191,21 @@ export function extraExcludes(): string[] {
 
 function extOf(basename: string): string {
 	const lower = basename.toLowerCase();
+
 	if (lower.endsWith('.d.ts')) return '.d.ts';
 	if (lower.endsWith('.d.mts')) return '.d.mts';
 	if (lower.endsWith('.d.cts')) return '.d.cts';
+
 	const dot = lower.lastIndexOf('.');
+
 	return dot >= 0 ? lower.slice(dot) : '';
 }
 
 function looksLikeTest(path: string, basename: string): boolean {
 	const lower = path.toLowerCase();
+
 	if (/(^|\/)(tests?|__tests__|spec)(\/|$)/.test(lower)) return true;
+
 	return /\.(test|spec)\.[^.]+$/.test(basename.toLowerCase());
 }
 
@@ -215,7 +213,9 @@ export function classifyPath(path: string, extra: string[] = []): FileClass {
 	if (path === '' || path === 'unknown') {
 		return { classification: 'other', excludeReason: 'unresolvable path', language: null };
 	}
+
 	const lower = path.toLowerCase();
+
 	for (const pattern of extra) {
 		if (pattern !== '' && lower.includes(pattern)) {
 			return {
@@ -225,40 +225,60 @@ export function classifyPath(path: string, extra: string[] = []): FileClass {
 			};
 		}
 	}
+
 	const segments = lower.split('/').filter(Boolean);
 	const basename = segments[segments.length - 1] ?? '';
+
 	if (segments.some((s) => SKIP_SEGMENTS.has(s) || s.endsWith('.egg-info'))) {
 		return { classification: 'generated', excludeReason: 'generated/build output', language: null };
 	}
+
 	if (LOCKFILE_BASENAMES.has(basename) || (basename.endsWith('.lock') && basename !== '.lock')) {
 		return { classification: 'lockfile', summarize: true, language: null };
 	}
+
 	if (BINARY_EXTENSIONS.some((ext) => basename.endsWith(ext))) {
 		return { classification: 'binary', excludeReason: 'binary or minified asset', language: null };
 	}
+
 	const ext = extOf(basename);
 	const language = ext ? ext.slice(1) : null;
+
 	if (looksLikeTest(path, basename)) {
 		return { classification: 'test', language };
 	}
+
 	if (DOC_EXTENSIONS.has(ext) || basename === 'license' || basename === 'copying') {
 		return { classification: 'docs', language };
 	}
-	if (CONFIG_BASENAMES.has(basename) || basename.startsWith('.') || ext === '.toml' || ext === '.yml' || ext === '.yaml' || ext === '.json') {
+
+	if (
+		CONFIG_BASENAMES.has(basename) ||
+		basename.startsWith('.') ||
+		ext === '.toml' ||
+		ext === '.yml' ||
+		ext === '.yaml' ||
+		ext === '.json'
+	) {
 		return { classification: 'config', language };
 	}
+
 	if (SOURCE_EXTENSIONS.has(ext) || ext === '.svg') {
 		return { classification: 'source', language: ext === '.svg' ? 'svg' : language };
 	}
+
 	return { classification: 'other', language };
 }
 
 export function packageBoundary(path: string): string | null {
 	const parts = path.split('/').filter(Boolean);
+
 	if (parts[0] === 'apps' || parts[0] === 'packages' || parts[0] === 'services') {
 		return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : parts[0];
 	}
+
 	if (parts[0] === 'src' || parts[0] === 'lib') return parts[0];
+
 	return parts[0] ?? null;
 }
 
@@ -266,13 +286,16 @@ export function packageBoundary(path: string): string | null {
 export function scopeReviewFiles(files: FileDiff[], extra: string[] = []): ReviewScope {
 	const included: FileDiff[] = [];
 	const skipped: SkippedFile[] = [];
+
 	for (const file of files) {
 		const classified = classifyPath(file.path, extra);
+
 		if (classified.excludeReason) {
 			skipped.push({ path: file.path === '' ? '(empty path)' : file.path, reason: classified.excludeReason });
 		} else {
 			included.push(file);
 		}
 	}
+
 	return { included, skipped };
 }

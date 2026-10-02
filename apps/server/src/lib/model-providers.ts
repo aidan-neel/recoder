@@ -63,19 +63,23 @@ export class KeyRejectedError extends Error {}
 export async function verifyKey(provider: HostedProviderDef, apiKey: string): Promise<void> {
 	const headers = { Authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' };
 	let response: Response;
+
 	try {
-		response = provider.verify.kind === 'probe'
-			? await fetch(`${provider.baseUrl}/chat/completions`, {
-				method: 'POST',
-				headers,
-				body: JSON.stringify({ model: provider.verify.model, messages: [] }),
-				signal: AbortSignal.timeout(15_000)
-			})
-			: await fetch(`${provider.baseUrl}${provider.verify.path}`, { headers, signal: AbortSignal.timeout(15_000) });
+		response =
+			provider.verify.kind === 'probe'
+				? await fetch(`${provider.baseUrl}/chat/completions`, {
+						method: 'POST',
+						headers,
+						body: JSON.stringify({ model: provider.verify.model, messages: [] }),
+						signal: AbortSignal.timeout(15_000)
+					})
+				: await fetch(`${provider.baseUrl}${provider.verify.path}`, { headers, signal: AbortSignal.timeout(15_000) });
 	} catch (err) {
 		throw new Error(`Couldn't reach ${provider.name}: ${err instanceof Error ? err.message : String(err)}`);
 	}
-	if (response.status === 401 || response.status === 403) throw new KeyRejectedError(`${provider.name} didn't accept that key.`);
+
+	if (response.status === 401 || response.status === 403)
+		throw new KeyRejectedError(`${provider.name} didn't accept that key.`);
 	if (response.status >= 500) throw new Error(`${provider.name} returned ${response.status}. Try again.`);
 }
 
@@ -90,29 +94,38 @@ const CHAT_COMPLETIONS = new Set(['@ai-sdk/openai-compatible']);
 export function parseModelsDev(body: unknown, providerId: string): CatalogModel[] {
 	const provider = (body as Record<string, unknown> | null)?.[providerId] as Record<string, unknown> | undefined;
 	const models = provider?.models;
+
 	if (!models || typeof models !== 'object') return [];
+
 	const providerNpm = typeof provider.npm === 'string' ? provider.npm : '@ai-sdk/openai-compatible';
+
 	return Object.entries(models as Record<string, Record<string, unknown>>).flatMap(([key, raw]): CatalogModel[] => {
 		if (!raw || typeof raw !== 'object') return [];
+
 		const id = typeof raw.id === 'string' ? raw.id : key;
 		const override = (raw.provider as Record<string, unknown> | undefined)?.npm;
 		const npm = typeof override === 'string' ? override : providerNpm;
 		const context = (raw.limit as Record<string, unknown> | undefined)?.context;
 		const input = (raw.cost as Record<string, unknown> | undefined)?.input;
-		return [{
-			id,
-			name: typeof raw.name === 'string' && raw.name ? raw.name : id,
-			contextWindow: typeof context === 'number' && context > 0 ? context : null,
-			inputCost: typeof input === 'number' ? input : null,
-			supported: CHAT_COMPLETIONS.has(npm)
-		}];
+
+		return [
+			{
+				id,
+				name: typeof raw.name === 'string' && raw.name ? raw.name : id,
+				contextWindow: typeof context === 'number' && context > 0 ? context : null,
+				inputCost: typeof input === 'number' ? input : null,
+				supported: CHAT_COMPLETIONS.has(npm)
+			}
+		];
 	});
 }
 
 /** Known effort words in Recoder's order (lowest first); anything else is dropped. */
 function efforts(raw: unknown): ReasoningEffort[] {
 	if (!Array.isArray(raw)) return [];
+
 	const offered = new Set(raw.filter((value): value is string => typeof value === 'string'));
+
 	return REASONING_EFFORTS.filter((effort) => offered.has(effort));
 }
 
@@ -123,31 +136,40 @@ function efforts(raw: unknown): ReasoningEffort[] {
  */
 export function parseOpenRouter(body: unknown): CatalogModel[] {
 	const rows = (body as { data?: unknown } | null)?.data;
+
 	if (!Array.isArray(rows)) return [];
+
 	return rows.flatMap((raw): CatalogModel[] => {
 		const row = raw as Record<string, unknown>;
+
 		if (typeof row.id !== 'string' || !row.id) return [];
+
 		const perToken = Number((row.pricing as Record<string, unknown> | undefined)?.prompt);
 		const reasoning = row.reasoning as Record<string, unknown> | undefined;
 		const offered = efforts(reasoning?.supported_efforts);
 		const fallback = reasoning?.default_effort;
 		const defaultEffort = offered.find((effort) => effort === fallback);
-		return [{
-			id: row.id,
-			// "DeepSeek: DeepSeek V4 Flash" → "DeepSeek V4 Flash"; the vendor shows in the id.
-			name: typeof row.name === 'string' && row.name ? row.name.replace(/^[^:]{1,40}:\s+/, '') : row.id,
-			contextWindow: typeof row.context_length === 'number' && row.context_length > 0 ? row.context_length : null,
-			inputCost: Number.isFinite(perToken) && perToken >= 0 ? Math.round(perToken * 1_000_000 * 1000) / 1000 : null,
-			supported: true,
-			...(offered.length ? { efforts: offered } : {}),
-			...(defaultEffort ? { defaultEffort } : {})
-		}];
+
+		return [
+			{
+				id: row.id,
+				// "DeepSeek: DeepSeek V4 Flash" → "DeepSeek V4 Flash"; the vendor shows in the id.
+				name: typeof row.name === 'string' && row.name ? row.name.replace(/^[^:]{1,40}:\s+/, '') : row.id,
+				contextWindow: typeof row.context_length === 'number' && row.context_length > 0 ? row.context_length : null,
+				inputCost: Number.isFinite(perToken) && perToken >= 0 ? Math.round(perToken * 1_000_000 * 1000) / 1000 : null,
+				supported: true,
+				...(offered.length ? { efforts: offered } : {}),
+				...(defaultEffort ? { defaultEffort } : {})
+			}
+		];
 	});
 }
 
 async function getJson(url: string): Promise<unknown> {
 	const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+
 	if (!response.ok) throw new Error(`${new URL(url).host} returned ${response.status}`);
+
 	return response.json();
 }
 
@@ -157,10 +179,13 @@ const catalogCache = new TtlCache<CatalogModel[]>(60 * 60 * 1000, 20);
 /** The provider's models, supported ones first, then by name. */
 export function providerCatalog(provider: HostedProviderDef): Promise<CatalogModel[]> {
 	return catalogCache.get(provider.id, async () => {
-		const models = provider.catalog.kind === 'openrouter'
-			? parseOpenRouter(await getJson(`${provider.baseUrl}/models`))
-			: parseModelsDev(await getJson('https://models.dev/api.json'), provider.catalog.id);
+		const models =
+			provider.catalog.kind === 'openrouter'
+				? parseOpenRouter(await getJson(`${provider.baseUrl}/models`))
+				: parseModelsDev(await getJson('https://models.dev/api.json'), provider.catalog.id);
+
 		if (models.length === 0) throw new Error(`${provider.name} didn't return any models.`);
+
 		return models.sort((a, b) => Number(b.supported) - Number(a.supported) || a.name.localeCompare(b.name));
 	});
 }

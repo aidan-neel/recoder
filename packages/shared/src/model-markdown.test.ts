@@ -2,12 +2,14 @@ import { expect, test } from 'bun:test';
 import { normalizeModelMarkdown } from './model-markdown';
 
 test('literal \\n escapes in a one-line reply become real line breaks', () => {
-	expect(normalizeModelMarkdown('I checked `refill()`.\\n\\nTwo problems:\\n- `tokens` goes negative\\n- the timer leaks'))
-		.toBe('I checked `refill()`.\n\nTwo problems:\n\n- `tokens` goes negative\n- the timer leaks');
+	expect(
+		normalizeModelMarkdown('I checked `refill()`.\\n\\nTwo problems:\\n- `tokens` goes negative\\n- the timer leaks')
+	).toBe('I checked `refill()`.\n\nTwo problems:\n\n- `tokens` goes negative\n- the timer leaks');
 });
 
 test('text that already has line breaks keeps a "\\n" written in code', () => {
 	const text = 'Split on newlines:\n\n`line.split("\\n")`';
+
 	expect(normalizeModelMarkdown(text)).toBe(text);
 });
 
@@ -22,6 +24,7 @@ test('headings become bold lines, and stay plain while the line is still streami
 
 test('code fences are left untouched', () => {
 	const text = 'Run this:\n\n```sh\n# comment\n• not a bullet\n```';
+
 	expect(normalizeModelMarkdown(text)).toBe(text);
 });
 
@@ -41,6 +44,7 @@ test('an unclosed code fence is closed', () => {
 
 test('a fence line inside a longer fence is content, not a close', () => {
 	const text = 'Example:\n\n````md\n```ts\n# not a heading\n```\n````';
+
 	expect(normalizeModelMarkdown(text)).toBe(text);
 	expect(normalizeModelMarkdown('Try:\n\n~~~\n```\n# still code')).toBe('Try:\n\n~~~\n```\n# still code\n~~~');
 });

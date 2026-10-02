@@ -13,6 +13,7 @@ let calls: { url: string; headers: Record<string, string> }[] = [];
 function respond(status: number, body: unknown, headers: Record<string, string> = {}): void {
 	globalThis.fetch = (async (url: string, init?: RequestInit) => {
 		calls.push({ url, headers: init?.headers as Record<string, string> });
+
 		return new Response(JSON.stringify(body), { status, headers });
 	}) as typeof fetch;
 }
@@ -23,9 +24,12 @@ beforeEach(() => {
 	delete process.env.GITHUB_TOKEN;
 	calls = [];
 });
+
 afterEach(() => {
 	globalThis.fetch = realFetch;
-	for (const [key, value] of Object.entries(env)) if (value === undefined) delete process.env[key]; else process.env[key] = value;
+	for (const [key, value] of Object.entries(env))
+		if (value === undefined) delete process.env[key];
+		else process.env[key] = value;
 });
 
 test('sends the saved GitHub token as a bearer token', async () => {
@@ -49,7 +53,9 @@ test('falls back to GITHUB_TOKEN and works without any token', async () => {
 test('maps a rejected token to an auth error', async () => {
 	setToken('github', 'bad');
 	respond(401, { message: 'Bad credentials' });
+
 	const error = await githubRest('repos/o/r').catch((err) => err);
+
 	expect(error).toBeInstanceOf(GhError);
 	expect((error as GhError).kind).toBe('auth');
 });

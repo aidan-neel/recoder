@@ -255,10 +255,7 @@ export interface AgentOAuthAttempt {
 	instructions: string;
 }
 
-export type AgentOAuthStatus =
-	| { status: 'pending' }
-	| { status: 'complete' }
-	| { status: 'failed'; message: string };
+export type AgentOAuthStatus = { status: 'pending' } | { status: 'complete' } | { status: 'failed'; message: string };
 
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {

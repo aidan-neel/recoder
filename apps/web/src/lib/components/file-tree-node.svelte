@@ -65,10 +65,7 @@
 					<span class="text-danger">−{node.deletions}</span>
 				{/if}
 				{#if !(badge && onJump) && node.finding}
-					<span
-						class="h-1.5 w-1.5 shrink-0 rounded-full"
-						style:background-color={FINDING_DOT[node.finding]}
-					></span>
+					<span class="h-1.5 w-1.5 shrink-0 rounded-full" style:background-color={FINDING_DOT[node.finding]}></span>
 				{/if}
 			</span>
 		</Button>

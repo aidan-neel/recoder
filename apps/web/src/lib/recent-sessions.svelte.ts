@@ -35,6 +35,7 @@ function mapRecent(
 			const summary = summaries[review.id];
 			const start = Date.parse(review.startedAt ?? review.createdAt);
 			const end = Date.parse(review.updatedAt);
+
 			return {
 				id: review.id,
 				repo: names.get(review.repoId) ?? review.repoId.slice(0, 8),
@@ -43,10 +44,7 @@ function mapRecent(
 				branch: branches[`${review.repoId}#${review.prNumber}`] ?? null,
 				findings: review.findings.length,
 				status: review.status,
-				durationMs:
-					Number.isFinite(start) && Number.isFinite(end)
-						? Math.max(0, end - start)
-						: undefined,
+				durationMs: Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : undefined,
 				tasksDone: summary?.tasksDone,
 				tasksTotal: summary?.tasksTotal,
 				specialists: summary?.specialists,
@@ -59,16 +57,26 @@ function mapRecent(
 
 export function timeAgo(iso: string): string {
 	const t = Date.parse(iso);
+
 	if (Number.isNaN(t)) return '';
+
 	const s = Math.max(0, (Date.now() - t) / 1000);
+
 	if (s < 60) return 'just now';
+
 	const m = Math.floor(s / 60);
+
 	if (m < 60) return `${m}m ago`;
+
 	const h = Math.floor(m / 60);
+
 	if (h < 24) return `${h}h ago`;
+
 	const d = Math.floor(h / 24);
+
 	if (d === 1) return 'yesterday';
 	if (d < 30) return `${d}d ago`;
+
 	return new Date(t).toLocaleDateString();
 }
 
@@ -78,30 +86,41 @@ function plural(n: number, word: string): string {
 
 export function recentHeadline(session: RecentSession): string {
 	if (session.status === 'draft') return 'Waiting for your prompt';
+
 	if (session.status === 'running' || session.status === 'queued') {
 		const parts: string[] = [];
+
 		if (session.tasksTotal) {
 			parts.push(`${session.tasksDone ?? 0} of ${session.tasksTotal} tasks`);
 		}
+
 		if (session.specialists) {
 			parts.push(`${plural(session.specialists, 'specialist')} working`);
 		}
+
 		if (parts.length === 0) {
 			parts.push(session.findings > 0 ? `${plural(session.findings, 'finding')} so far` : 'Starting…');
 		}
+
 		return parts.join(' · ');
 	}
+
 	const parts: string[] = [];
+
 	if (session.status === 'failed') {
 		parts.push(session.reason?.split('\n')[0] ?? 'Review failed');
 	} else {
 		parts.push(plural(session.findings, 'finding'));
 	}
+
 	if (session.durationMs !== undefined) {
 		const seconds = Math.max(0, Math.floor(session.durationMs / 1000));
+
 		parts.push(`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`);
 	}
+
 	if (session.updatedAt) parts.push(timeAgo(session.updatedAt));
+
 	return parts.join(' · ');
 }
 
@@ -124,25 +143,31 @@ class RecentSessionsState {
 
 	get recent(): RecentSession[] {
 		if (this.apiDown) return [];
+
 		const names = new Map(this.repos.map((r) => [r.id, r.name] as const));
+
 		return mapRecent(this.reviews, names, this.summaries, this.branches);
 	}
 
 	get recentByRepo(): [string, RecentSession[]][] {
 		const groups = new Map<string, RecentSession[]>();
+
 		for (const session of this.recent) {
 			const list = groups.get(session.repo) ?? [];
+
 			list.push(session);
 			groups.set(session.repo, list);
 		}
+
 		const order = new Map(this.repos.map((r, i) => [r.name, i] as const));
+
 		return [...groups.entries()].sort((a, b) => {
 			const oa = order.get(a[0]) ?? 1_000;
 			const ob = order.get(b[0]) ?? 1_000;
+
 			if (oa !== ob) return oa - ob;
-			return (
-				(Date.parse(b[1][0]?.updatedAt ?? '') || 0) - (Date.parse(a[1][0]?.updatedAt ?? '') || 0)
-			);
+
+			return (Date.parse(b[1][0]?.updatedAt ?? '') || 0) - (Date.parse(a[1][0]?.updatedAt ?? '') || 0);
 		});
 	}
 
@@ -153,8 +178,14 @@ class RecentSessionsState {
 	/** Single-flight load shared by every consumer (sidebar + home page helpers). */
 	load(): Promise<void> {
 		if (!this.inflight) {
-			const cached = this.seeded ? null : readCache<{ repos: Repo[]; reviews: Review[]; summaries: Record<string, ProgressSummary> }>('recent-sessions');
+			const cached = this.seeded
+				? null
+				: readCache<{ repos: Repo[]; reviews: Review[]; summaries: Record<string, ProgressSummary> }>(
+						'recent-sessions'
+					);
+
 			this.seeded = true;
+
 			if (cached) {
 				// Show the last list at once; the fetch below replaces it quietly.
 				this.repos = cached.repos;
@@ -162,10 +193,12 @@ class RecentSessionsState {
 				this.summaries = cached.summaries;
 				this.loading = false;
 			}
+
 			this.inflight = this.fetchAll(!!cached).finally(() => {
 				this.inflight = null;
 			});
 		}
+
 		return this.inflight;
 	}
 
@@ -175,12 +208,14 @@ class RecentSessionsState {
 
 	private async fetchAll(quiet = false): Promise<void> {
 		if (!quiet) this.loading = true;
+
 		try {
 			const [repos, reviews, summaries] = await Promise.all([
 				serverApi.listRepos(),
 				serverApi.listReviews(),
 				serverApi.reviewSummaries().catch(() => this.summaries)
 			]);
+
 			this.repos = repos;
 			this.reviews = reviews.filter((review) => !this.hidden.has(review.id));
 			this.summaries = summaries;
@@ -204,10 +239,12 @@ class RecentSessionsState {
 	watchRunning(intervalMs = 4000): () => void {
 		const timer = setInterval(() => {
 			if (this.reviewingCount === 0 || this.inflight) return;
+
 			this.inflight = this.fetchAll(true).finally(() => {
 				this.inflight = null;
 			});
 		}, intervalMs);
+
 		return () => clearInterval(timer);
 	}
 
@@ -215,33 +252,45 @@ class RecentSessionsState {
 	private async loadBranches(reviews: Review[]): Promise<void> {
 		const pending = reviews.filter((review) => {
 			const key = `${review.repoId}#${review.prNumber}`;
+
 			if (review.source === 'stub' || key in this.branches || this.branchRequests.has(key)) return false;
 			this.branchRequests.add(key);
+
 			return true;
 		});
+
 		// Bound provider requests when a long review history is loaded.
 		for (let i = 0; i < pending.length; i += 4) {
-			await Promise.all(pending.slice(i, i + 4).map(async (review) => {
-				const key = `${review.repoId}#${review.prNumber}`;
-				try {
-					const { pr } = await serverApi.previewPr(review.repoId, review.prNumber);
-					this.branches[key] = pr.headRef || null;
-				} catch {
-					// Keep the session usable when the provider or branch is unavailable.
-				} finally {
-					this.branchRequests.delete(key);
-				}
-			}));
+			await Promise.all(
+				pending.slice(i, i + 4).map(async (review) => {
+					const key = `${review.repoId}#${review.prNumber}`;
+
+					try {
+						const { pr } = await serverApi.previewPr(review.repoId, review.prNumber);
+
+						this.branches[key] = pr.headRef || null;
+					} catch {
+						// Keep the session usable when the provider or branch is unavailable.
+					} finally {
+						this.branchRequests.delete(key);
+					}
+				})
+			);
 		}
 	}
 
 	/** Drop a review from the list until `unhide` or `forget`; returns where it was. */
 	hide(id: string): { review: Review; index: number } | null {
 		this.hidden.add(id);
+
 		const index = this.reviews.findIndex((review) => review.id === id);
+
 		if (index < 0) return null;
+
 		const review = this.reviews[index];
+
 		this.reviews = this.reviews.filter((item) => item.id !== id);
+
 		return { review, index };
 	}
 

@@ -59,19 +59,23 @@
 	const dirty = $derived(text !== original);
 	const length = $derived(text.trim().length);
 	const over = $derived(length > max);
-	const hasRules = $derived(text.split('\n').some((line) => {
-		const trimmed = line.trim();
-		return trimmed && !trimmed.startsWith('#') && trimmed !== '-';
-	}));
+	const hasRules = $derived(
+		text.split('\n').some((line) => {
+			const trimmed = line.trim();
+
+			return trimmed && !trimmed.startsWith('#') && trimmed !== '-';
+		})
+	);
 	/** Template placeholders (`-` with nothing after it) would render as empty bullets. */
 	const previewText = $derived(text.replace(/^[ \t]*[-*][ \t]*$/gm, ''));
 
 	// Seed once per open, when the source text is known.
 	$effect(() => {
 		if (!key || !ready || seededFor === key) return;
-		const source = editing?.kind === 'global'
-			? overview!.global.content
-			: repo!.pending?.content ?? repo!.content ?? '';
+
+		const source =
+			editing?.kind === 'global' ? overview!.global.content : (repo!.pending?.content ?? repo!.content ?? '');
+
 		text = source || overview!.template;
 		original = text;
 		seededFor = key;
@@ -89,19 +93,33 @@
 	});
 
 	const title = $derived(editing?.kind === 'repo' ? guidelinesStore.repoName(editing.repoId) : 'Global guidelines');
-	const primaryLabel = $derived(editing?.kind === 'global' ? 'Save' : repo?.pending ? 'Update pull request' : 'Open pull request');
-	const blockedReason = $derived(editing?.kind === 'repo' && repo && !repo.canPropose
-		? 'Connect a token with write access in Settings → Connections to open a pull request.'
-		: null);
+	const primaryLabel = $derived(
+		editing?.kind === 'global' ? 'Save' : repo?.pending ? 'Update pull request' : 'Open pull request'
+	);
+	const blockedReason = $derived(
+		editing?.kind === 'repo' && repo && !repo.canPropose
+			? 'Connect a token with write access in Settings → Connections to open a pull request.'
+			: null
+	);
 
 	/** One-click requests; the repo gets one that mines its instruction files. */
 	const presets = $derived([
 		{ label: 'Security first', prompt: 'Prioritize security, auth and data-loss issues and report them as errors.' },
 		{ label: 'Skip style nits', prompt: 'Stop flagging naming, formatting and other style-only issues.' },
-		{ label: 'Stricter severity', prompt: 'Be stricter about severity: only real bugs are errors; everything else is a warning or info.' },
+		{
+			label: 'Stricter severity',
+			prompt: 'Be stricter about severity: only real bugs are errors; everything else is a warning or info.'
+		},
 		{ label: 'Require tests', prompt: 'Flag behavior changes that ship without tests.' },
 		...(editing?.kind === 'repo'
-			? [{ label: 'From repo instructions', prompt: 'Turn the rules in this repo’s instruction files (AGENTS.md, CLAUDE.md, CONTRIBUTING.md) into review guidelines.', instructions: true }]
+			? [
+					{
+						label: 'From repo instructions',
+						prompt:
+							'Turn the rules in this repo’s instruction files (AGENTS.md, CLAUDE.md, CONTRIBUTING.md) into review guidelines.',
+						instructions: true
+					}
+				]
 			: [])
 	]);
 
@@ -111,27 +129,37 @@
 		if (drafting || !editing) return;
 		drafting = true;
 		draftError = null;
+
 		const revising = hasRules;
 		const before = text;
+
 		abort = new AbortController();
+
 		let streamed = '';
+
 		if (revising) proposal = '';
 		else {
 			text = '';
 			pane = 'preview';
 		}
+
 		try {
-			const result = await serverApi.draftGuidelines({
-				scope: editing.kind,
-				repoId: editing.kind === 'repo' ? editing.repoId : undefined,
-				prompt: request,
-				current: revising ? before : undefined,
-				include: editing.kind === 'repo' ? { ...include, findings: false } : { findings: false }
-			}, (token) => {
-				streamed += token;
-				if (revising) proposal = streamed;
-				else text = streamed;
-			}, abort.signal);
+			const result = await serverApi.draftGuidelines(
+				{
+					scope: editing.kind,
+					repoId: editing.kind === 'repo' ? editing.repoId : undefined,
+					prompt: request,
+					current: revising ? before : undefined,
+					include: editing.kind === 'repo' ? { ...include, findings: false } : { findings: false }
+				},
+				(token) => {
+					streamed += token;
+					if (revising) proposal = streamed;
+					else text = streamed;
+				},
+				abort.signal
+			);
+
 			if (revising) proposal = result;
 			else text = result;
 			prompt = '';
@@ -140,7 +168,8 @@
 			else text = before;
 			// Keep the request so it can be retried or edited.
 			if (!prompt) prompt = request;
-			if (!(e instanceof DOMException && e.name === 'AbortError')) draftError = e instanceof Error ? e.message : 'The orchestrator did not respond.';
+			if (!(e instanceof DOMException && e.name === 'AbortError'))
+				draftError = e instanceof Error ? e.message : 'The orchestrator did not respond.';
 		} finally {
 			drafting = false;
 			abort = null;
@@ -157,20 +186,26 @@
 		if (!editing || saving || over || proposal !== null || drafting || blockedReason) return;
 		saving = true;
 		saveError = null;
+
 		try {
 			if (editing.kind === 'global') {
 				const previous = await guidelinesStore.saveGlobal(text);
+
 				undoToast('Global guidelines saved', () => {
-					void guidelinesStore.saveGlobal(previous).catch((e) => errorToast('Could not restore the guidelines', e instanceof Error ? e.message : undefined));
+					void guidelinesStore
+						.saveGlobal(previous)
+						.catch((e) => errorToast('Could not restore the guidelines', e instanceof Error ? e.message : undefined));
 				});
 			} else {
 				const result = await guidelinesStore.propose(editing.repoId, text);
+
 				toast.success(result.updated ? `Updated #${result.number}` : `Opened #${result.number}`, {
 					description: 'Guidelines apply to pull requests opened after it merges.',
 					duration: 6000,
 					actions: [{ label: 'View', variant: 'ghost', callback: () => window.open(result.url, '_blank', 'noopener') }]
 				});
 			}
+
 			guidelinesStore.close();
 		} catch (e) {
 			saveError = e instanceof Error ? e.message : 'Could not save.';
@@ -206,16 +241,36 @@
 {#snippet sources()}
 	<DropdownMenu.Root bind:open={sourcesOpen}>
 		<DropdownMenu.Trigger variant="quiet" class="guidelines-sources gap-1" disabled={drafting}>
-			{sourceCount === 0 ? 'No context' : `${sourceCount} ${sourceCount === 1 ? 'source' : 'sources'}`}<ChevronDown size={13} aria-hidden="true" />
+			{sourceCount === 0 ? 'No context' : `${sourceCount} ${sourceCount === 1 ? 'source' : 'sources'}`}<ChevronDown
+				size={13}
+				aria-hidden="true"
+			/>
 		</DropdownMenu.Trigger>
 		<DropdownMenu.Content>
-			<DropdownMenu.CheckboxItem checked={include.instructions} onCheckedChange={(on) => (include.instructions = on)} onclick={(event) => event.preventDefault()}><span class="flex-1 text-left">Repo instruction files</span></DropdownMenu.CheckboxItem>
-			<DropdownMenu.CheckboxItem checked={include.global} onCheckedChange={(on) => (include.global = on)} onclick={(event) => event.preventDefault()}><span class="flex-1 text-left">Global guidelines</span></DropdownMenu.CheckboxItem>
+			<DropdownMenu.CheckboxItem
+				checked={include.instructions}
+				onCheckedChange={(on) => (include.instructions = on)}
+				onclick={(event) => event.preventDefault()}
+				><span class="flex-1 text-left">Repo instruction files</span></DropdownMenu.CheckboxItem
+			>
+			<DropdownMenu.CheckboxItem
+				checked={include.global}
+				onCheckedChange={(on) => (include.global = on)}
+				onclick={(event) => event.preventDefault()}
+				><span class="flex-1 text-left">Global guidelines</span></DropdownMenu.CheckboxItem
+			>
 		</DropdownMenu.Content>
 	</DropdownMenu.Root>
 {/snippet}
 
-<Modal.Root bind:open={() => editing !== null, (open) => { if (!open) guidelinesStore.close(); }}>
+<Modal.Root
+	bind:open={
+		() => editing !== null,
+		(open) => {
+			if (!open) guidelinesStore.close();
+		}
+	}
+>
 	<Modal.Content
 		size="xl"
 		class="guidelines-modal"
@@ -229,30 +284,52 @@
 			<Modal.Title class="guidelines-title">{title}</Modal.Title>
 			<p class="guidelines-meta">
 				{#if repo}
-					<span title="Reviewers read this file from each pull request’s base branch">{repo.path} · {repo.content !== null ? `${repo.ref} ${repo.sha?.slice(0, 7) ?? ''}` : `not on ${repo.ref} yet`}</span>
-					{#if repo.pending}<a class="guidelines-pending" href={repo.pending.url} target="_blank" rel="noopener">Pending in #{repo.pending.number} <ArrowUpRight size={12} aria-hidden="true" /></a>{/if}
+					<span title="Reviewers read this file from each pull request’s base branch"
+						>{repo.path} · {repo.content !== null
+							? `${repo.ref} ${repo.sha?.slice(0, 7) ?? ''}`
+							: `not on ${repo.ref} yet`}</span
+					>
+					{#if repo.pending}<a class="guidelines-pending" href={repo.pending.url} target="_blank" rel="noopener"
+							>Pending in #{repo.pending.number} <ArrowUpRight size={12} aria-hidden="true" /></a
+						>{/if}
 				{/if}
-				{#if ready}<span class="guidelines-count" data-over={over || undefined}>{length.toLocaleString()} / {max.toLocaleString()}</span>{/if}
+				{#if ready}<span class="guidelines-count" data-over={over || undefined}
+						>{length.toLocaleString()} / {max.toLocaleString()}</span
+					>{/if}
 			</p>
 			{#if ready && proposal === null}
-				<Tabs.Root value={pane} onValueChange={(value) => (pane = value as 'write' | 'preview')} variant="segmented" class="view-switch">
+				<Tabs.Root
+					value={pane}
+					onValueChange={(value) => (pane = value as 'write' | 'preview')}
+					variant="segmented"
+					class="view-switch"
+				>
 					<Tabs.List {...{ 'aria-label': 'Editor view' }} {@attach keepPillAligned}>
 						<Tabs.Trigger value="write">Write</Tabs.Trigger>
 						<Tabs.Trigger value="preview">Preview</Tabs.Trigger>
 					</Tabs.List>
 				</Tabs.Root>
 			{/if}
-			<Button class="guidelines-save" loading={saving} disabled={!ready || over || !dirty || drafting || proposal !== null || !!blockedReason} onclick={() => void save()}>
+			<Button
+				class="guidelines-save"
+				loading={saving}
+				disabled={!ready || over || !dirty || drafting || proposal !== null || !!blockedReason}
+				onclick={() => void save()}
+			>
 				{primaryLabel} <kbd class="keycap">⌘↵</kbd>
 			</Button>
-			<Button variant="ghost" size="icon" aria-label="Close" disabled={saving} onclick={() => guidelinesStore.close()}><X size={16} aria-hidden="true" /></Button>
+			<Button variant="ghost" size="icon" aria-label="Close" disabled={saving} onclick={() => guidelinesStore.close()}
+				><X size={16} aria-hidden="true" /></Button
+			>
 		</header>
 
 		{#if loadError}
 			<div class="guidelines-doc">
 				<Alert.Root variant="error">
 					<Alert.Title>{loadError}</Alert.Title>
-					<Button variant="outline" class="mt-2 w-fit" onclick={() => editing && guidelinesStore.open(editing)}>Retry</Button>
+					<Button variant="outline" class="mt-2 w-fit" onclick={() => editing && guidelinesStore.open(editing)}
+						>Retry</Button
+					>
 				</Alert.Root>
 			</div>
 		{:else if !ready}
@@ -261,13 +338,19 @@
 				{#each [[62, 48, 70], [54, 40]] as bullets, g (g)}
 					<Skeleton class="mt-2 h-4 w-24 first:mt-0" />
 					{#each bullets as width, i (i)}
-						<div class="flex items-center gap-3"><Skeleton class="size-1.5 shrink-0 !rounded-full" /><Skeleton class="h-3" w={width} unit="%" /></div>
+						<div class="flex items-center gap-3">
+							<Skeleton class="size-1.5 shrink-0 !rounded-full" /><Skeleton class="h-3" w={width} unit="%" />
+						</div>
 					{/each}
 				{/each}
 			</div>
 			<div class="guidelines-dock" aria-hidden="true">
-				<div class="flex gap-2">{#each ['w-32', 'w-40', 'w-28'] as w, i (i)}<Skeleton class="h-8 {w}" />{/each}</div>
-				<Card.Root class="h-[85px] justify-between rounded-[18px] border-0 bg-raised !px-4 !py-3.5 shadow-none ring-1 ring-line-card">
+				<div class="flex gap-2">
+					{#each ['w-32', 'w-40', 'w-28'] as w, i (i)}<Skeleton class="h-8 {w}" />{/each}
+				</div>
+				<Card.Root
+					class="h-[85px] justify-between rounded-[18px] border-0 bg-raised !px-4 !py-3.5 shadow-none ring-1 ring-line-card"
+				>
 					<Skeleton class="h-3.5 w-64 max-w-full" />
 					<div class="flex justify-end"><Skeleton class="size-7 !rounded-full" /></div>
 				</Card.Root>
@@ -284,16 +367,32 @@
 						<FileDiff.Root class="guidelines-proposal-diff" lang="markdown">
 							<FileDiff.Content>
 								{#each lineDiff(text, proposal) as line, i (i)}
-									<FileDiff.Row type={line.type} oldLine={line.oldLineNumber} newLine={line.newLineNumber} code={line.content} />
+									<FileDiff.Row
+										type={line.type}
+										oldLine={line.oldLineNumber}
+										newLine={line.newLineNumber}
+										code={line.content}
+									/>
 								{/each}
 							</FileDiff.Content>
 						</FileDiff.Root>
 					{:else if pane === 'write'}
-						<Textarea bind:value={text} autoresize class="guidelines-input" spellcheck="true" aria-label="Guidelines (Markdown)" readonly={drafting} />
+						<Textarea
+							bind:value={text}
+							autoresize
+							class="guidelines-input"
+							spellcheck="true"
+							aria-label="Guidelines (Markdown)"
+							readonly={drafting}
+						/>
 					{:else if hasRules}
 						<div class="guidelines-preview"><Markdown content={previewText} streaming={drafting} /></div>
 					{:else}
-						<p class="guidelines-empty">{drafting ? 'Drafting…' : 'No rules yet. Write them, or describe what matters below and Recoder drafts them.'}</p>
+						<p class="guidelines-empty">
+							{drafting
+								? 'Drafting…'
+								: 'No rules yet. Write them, or describe what matters below and Recoder drafts them.'}
+						</p>
 					{/if}
 				</div>
 			</ScrollArea>
@@ -309,10 +408,15 @@
 				{#if proposal === null && !drafting}
 					<div class="guidelines-presets" role="group" aria-label="Suggested requests">
 						{#each presets as preset (preset.label)}
-							<Button variant="outline" class="guidelines-preset" title={preset.prompt} onclick={() => {
-								if ('instructions' in preset) include.instructions = true;
-								void draft(preset.prompt);
-							}}>{preset.label}</Button>
+							<Button
+								variant="outline"
+								class="guidelines-preset"
+								title={preset.prompt}
+								onclick={() => {
+									if ('instructions' in preset) include.instructions = true;
+									void draft(preset.prompt);
+								}}>{preset.label}</Button
+							>
 						{/each}
 					</div>
 				{/if}

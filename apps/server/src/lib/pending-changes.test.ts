@@ -3,15 +3,33 @@ import { existsSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { commitPendingChanges, discardPendingChanges, listPendingChanges, pushPendingCommits, safePaths, undoLastCommit } from './pending-changes';
+import {
+	commitPendingChanges,
+	discardPendingChanges,
+	listPendingChanges,
+	pushPendingCommits,
+	safePaths,
+	undoLastCommit
+} from './pending-changes';
 
 let base = '';
 let repo = '';
 let remote = '';
 
 const git = (cwd: string, ...args: string[]) => {
-	const run = Bun.spawnSync(['git', ...args], { cwd, env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } });
+	const run = Bun.spawnSync(['git', ...args], {
+		cwd,
+		env: {
+			...process.env,
+			GIT_AUTHOR_NAME: 't',
+			GIT_AUTHOR_EMAIL: 't@t',
+			GIT_COMMITTER_NAME: 't',
+			GIT_COMMITTER_EMAIL: 't@t'
+		}
+	});
+
 	if (run.exitCode !== 0) throw new Error(run.stderr.toString());
+
 	return run.stdout.toString().trim();
 };
 
@@ -37,10 +55,17 @@ test('commits only the chosen files, with the message as written', async () => {
 	await writeFile(join(repo, 'a.ts'), 'a2\n');
 	await writeFile(join(repo, 'b.ts'), 'b2\n');
 	await writeFile(join(repo, 'new.ts'), 'n\n');
-	expect((await listPendingChanges(repo)).files.map((file) => [file.path, file.status])).toEqual([['a.ts', 'modified'], ['b.ts', 'modified'], ['new.ts', 'added']]);
+
+	expect((await listPendingChanges(repo)).files.map((file) => [file.path, file.status])).toEqual([
+		['a.ts', 'modified'],
+		['b.ts', 'modified'],
+		['new.ts', 'added']
+	]);
 
 	await commitPendingChanges(repo, ['a.ts', 'new.ts'], 'Fix the thing\n\nBecause reasons.');
+
 	const pending = await listPendingChanges(repo);
+
 	expect(pending.files.map((file) => file.path)).toEqual(['b.ts']);
 	expect(pending.commits.map((commit) => commit.subject)).toEqual(['Fix the thing']);
 	expect(git(repo, 'log', '-1', '--format=%B')).toBe('Fix the thing\n\nBecause reasons.');
@@ -60,7 +85,9 @@ test('undoing an unpushed commit puts its changes back in the working tree', asy
 	await writeFile(join(repo, 'a.ts'), 'a2\n');
 	await commitPendingChanges(repo, ['a.ts'], 'Change a');
 	await undoLastCommit(repo);
+
 	const pending = await listPendingChanges(repo);
+
 	expect(pending.commits).toEqual([]);
 	expect(pending.files.map((file) => file.path)).toEqual(['a.ts']);
 	await expect(undoLastCommit(repo)).rejects.toThrow('already pushed');
@@ -83,6 +110,7 @@ test('paths outside the checkout are refused', () => {
 
 test('a checkout still being cloned lists no changes and refuses writes', async () => {
 	const cloning = join(base, 'cloning');
+
 	git(base, 'init', '-q', cloning);
 	await writeFile(join(cloning, 'a.ts'), 'a\n');
 	expect(await listPendingChanges(cloning)).toEqual({ files: [], commits: [] });

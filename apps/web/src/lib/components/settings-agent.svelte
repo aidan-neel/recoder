@@ -38,6 +38,7 @@
 	/** Home and failure toasts open Settings straight into Add provider. */
 	$effect(() => {
 		if (modelSettingsUi.intent?.kind !== 'add-provider' || !ready) return;
+
 		untrack(() => {
 			modelSettingsUi.intent = null;
 			openAdd();
@@ -51,6 +52,7 @@
 
 	function describe(provider: AgentProvider): string {
 		const models = `${provider.modelCount} ${provider.modelCount === 1 ? 'model' : 'models'}`;
+
 		const via = {
 			key: 'API key',
 			oauth: 'Signed in',
@@ -58,11 +60,13 @@
 			env: 'From environment',
 			builtin: 'Free tier'
 		}[provider.via ?? 'builtin'];
+
 		return `${models} · ${via}`;
 	}
 
 	async function remove(provider: AgentProvider): Promise<void> {
 		removing = provider.id;
+
 		try {
 			await agent.remove(provider.id);
 			toast.success(`Disconnected ${provider.name}`);
@@ -84,7 +88,8 @@
 					{#if agent.error}{agent.error}
 					{:else if !status?.installed}Not installed
 					{:else if status.error}{status.error}
-					{:else}<span class="font-mono">{status.version ?? 'unknown version'}</span> · <span class="font-mono" title={status.path ?? ''}>{status.path}</span>{/if}
+					{:else}<span class="font-mono">{status.version ?? 'unknown version'}</span> ·
+						<span class="font-mono" title={status.path ?? ''}>{status.path}</span>{/if}
 				</p>
 			</div>
 			{#if ready && !agent.error}
@@ -183,7 +188,8 @@
 		<AlertDialog.Header>
 			<AlertDialog.Title>Disconnect {confirming?.name}?</AlertDialog.Title>
 			<AlertDialog.Description>
-				OpenCode forgets {confirming?.via === 'oauth' ? 'this sign-in' : 'this key'}. Reviews set to its models stop until you connect it again.
+				OpenCode forgets {confirming?.via === 'oauth' ? 'this sign-in' : 'this key'}. Reviews set to its models stop
+				until you connect it again.
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>

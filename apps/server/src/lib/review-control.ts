@@ -28,6 +28,7 @@ export class ReviewControl {
 		this.paused = true;
 		this.pausedAt = Date.now();
 		this.pauseController.abort();
+
 		return true;
 	}
 
@@ -37,6 +38,7 @@ export class ReviewControl {
 		this.pausedTotal += Date.now() - this.pausedAt;
 		this.pauseController = new AbortController();
 		for (const wake of this.waiters.splice(0)) wake();
+
 		return true;
 	}
 
@@ -46,7 +48,11 @@ export class ReviewControl {
 	}
 
 	pausedMs(): number {
-		return this.pausedTotal + (this.paused ? Date.now() - this.pausedAt : 0) + (this.approval ? Date.now() - this.approval.since : 0);
+		return (
+			this.pausedTotal +
+			(this.paused ? Date.now() - this.pausedAt : 0) +
+			(this.approval ? Date.now() - this.approval.since : 0)
+		);
 	}
 
 	/**
@@ -56,14 +62,17 @@ export class ReviewControl {
 	 */
 	requestApproval(): Promise<void> {
 		if (this.abort.signal.aborted) return Promise.resolve();
+
 		return new Promise((resolve) => {
 			const since = Date.now();
+
 			const settle = () => {
 				if (this.approval?.settle !== settle) return;
 				this.pausedTotal += Date.now() - since;
 				this.approval = null;
 				resolve();
 			};
+
 			this.approval = { since, settle };
 			this.abort.signal.addEventListener('abort', settle, { once: true });
 		});
@@ -73,6 +82,7 @@ export class ReviewControl {
 	approve(): boolean {
 		if (!this.approval) return false;
 		this.approval.settle();
+
 		return true;
 	}
 
@@ -95,7 +105,9 @@ const current = new AsyncLocalStorage<ReviewControl>();
 
 export function openReviewControl(reviewId: string): ReviewControl {
 	const control = new ReviewControl();
+
 	controls.set(reviewId, control);
+
 	return control;
 }
 

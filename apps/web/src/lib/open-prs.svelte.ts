@@ -8,6 +8,7 @@ function readBrief(): HomeBriefResponse | null {
 	try {
 		const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(BRIEF_KEY);
 		const value = raw ? (JSON.parse(raw) as HomeBriefResponse) : null;
+
 		return value && typeof value.text === 'string' ? value : null;
 	} catch {
 		return null;
@@ -34,6 +35,7 @@ class OpenPrsState {
 
 	setBrief(brief: HomeBriefResponse | null): void {
 		this.brief = brief;
+
 		try {
 			if (brief) localStorage.setItem(BRIEF_KEY, JSON.stringify(brief));
 			else localStorage.removeItem(BRIEF_KEY);
@@ -41,11 +43,13 @@ class OpenPrsState {
 			// Not persisted; it still shows this visit.
 		}
 	}
+
 	private started = false;
 
 	/** Open PRs across every tracked repo; null until every repo has loaded. */
 	get count(): number | null {
 		if (this.loading || this.repos.some((repo) => this.loadingByRepo[repo.id])) return null;
+
 		return this.repos.reduce((n, repo) => n + (this.prsByRepo[repo.id]?.length ?? 0), 0);
 	}
 
@@ -53,13 +57,16 @@ class OpenPrsState {
 	async load(): Promise<void> {
 		if (this.started) return;
 		this.started = true;
+
 		const cached = readCache<{ repos: Repo[]; prsByRepo: Record<string, PullRequest[]> }>('open-prs');
+
 		if (cached) {
 			// Paint the last list at once and revalidate behind it.
 			this.repos = cached.repos;
 			this.prsByRepo = cached.prsByRepo;
 			this.loading = false;
 		}
+
 		try {
 			this.repos = await serverApi.listRepos();
 			this.apiDown = false;
@@ -75,6 +82,7 @@ class OpenPrsState {
 	async loadRepo(repo: Repo, quiet = false): Promise<void> {
 		if (!quiet) this.loadingByRepo[repo.id] = true;
 		this.errorByRepo[repo.id] = null;
+
 		try {
 			this.prsByRepo[repo.id] = await serverApi.listPrs(repo.id);
 		} catch (e) {
@@ -92,18 +100,22 @@ class OpenPrsState {
 	private persist(): void {
 		const ids = new Set(this.repos.map((repo) => repo.id));
 		const prsByRepo = Object.fromEntries(Object.entries(this.prsByRepo).filter(([id]) => ids.has(id)));
+
 		writeCache('open-prs', { repos: $state.snapshot(this.repos), prsByRepo: $state.snapshot(prsByRepo) });
 	}
 
 	async refresh(): Promise<void> {
 		if (this.refreshing) return;
 		this.refreshing = true;
+
 		try {
 			if (this.apiDown) {
 				this.started = false;
 				await this.load();
+
 				return;
 			}
+
 			this.repos = await serverApi.listRepos();
 			await this.loadAll(true);
 			this.persist();

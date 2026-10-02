@@ -37,9 +37,7 @@ function stripPrefix(path: string): string {
 
 /** Remove git's double-quoting around paths containing spaces. */
 function unquote(path: string): string {
-	return path.startsWith('"') && path.endsWith('"') && path.length >= 2
-		? path.slice(1, -1)
-		: path;
+	return path.startsWith('"') && path.endsWith('"') && path.length >= 2 ? path.slice(1, -1) : path;
 }
 
 function blankFile(path: string): FileDiff {
@@ -65,44 +63,58 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 	for (const raw of input.split('\n')) {
 		if (raw.startsWith('diff --git ')) {
 			pushHunk();
+
 			const parts = raw.split(' ');
 			let rawPath = parts[2] ?? 'unknown';
+
 			// Quoted paths (spaces in name): rejoin tokens through the closing quote.
 			if (rawPath.startsWith('"')) {
 				const collected = [rawPath];
 				let i = 3;
+
 				while (!rawPath.endsWith('"') && i < parts.length) {
 					rawPath = parts[i];
 					collected.push(rawPath);
 					i++;
 				}
+
 				rawPath = collected.join(' ').replace(/^"|"$/g, '');
 			}
+
 			current = blankFile(stripPrefix(rawPath));
 			files.push(current);
 			pendingOld = null;
 			pendingNew = null;
 			continue;
 		}
+
 		if (raw.startsWith('--- ') || raw.startsWith('+++ ')) {
 			const p = raw.slice(4).trim();
 			const path = p === '/dev/null' ? null : stripPrefix(unquote(p.split('\t')[0]));
+
 			if (raw.startsWith('--- ')) pendingOld = path;
 			else pendingNew = path;
+
 			if (current && current.path === 'unknown' && path) {
 				current.path = path;
 			}
+
 			continue;
 		}
+
 		const m = HUNK_RE.exec(raw);
+
 		if (m) {
 			pushHunk();
+
 			if (!current) {
 				current = blankFile(pendingNew ?? pendingOld ?? 'unknown');
 				files.push(current);
 			}
+
 			oldNo = Number(m[1]);
 			newNo = Number(m[3]);
+
 			hunk = {
 				header: raw,
 				oldStart: oldNo,
@@ -111,13 +123,16 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 				newCount: Number(m[4] ?? '1'),
 				lines: []
 			};
+
 			continue;
 		}
+
 		if (!hunk || !current) continue;
 		if (raw.startsWith('\\')) continue; // "\ No newline at end of file"
 
 		const marker = raw[0] ?? ' ';
 		const text = raw.slice(1);
+
 		if (marker === '-') {
 			hunk.lines.push({ type: 'del', oldNo: oldNo++, newNo: null, text });
 			current.deletions++;
@@ -128,14 +143,19 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 			hunk.lines.push({ type: 'context', oldNo: oldNo++, newNo: newNo++, text: marker === ' ' ? text : raw });
 		}
 	}
+
 	pushHunk();
+
 	return files.filter((f) => f.hunks.length > 0);
 }
 
 function splitFileLines(text: string): string[] {
 	if (text === '') return [];
+
 	const lines = text.split('\n');
+
 	if (lines[lines.length - 1] === '') lines.pop();
+
 	return lines;
 }
 
@@ -148,6 +168,7 @@ const MAX_EXPAND_LINES = 8000;
  */
 export function expandFileDiff(file: FileDiff, newText: string): FileDiff {
 	const newLines = splitFileLines(newText);
+
 	if (newLines.length === 0 || newLines.length > MAX_EXPAND_LINES || file.hunks.length === 0) {
 		return file;
 	}
@@ -164,16 +185,20 @@ export function expandFileDiff(file: FileDiff, newText: string): FileDiff {
 				newNo: newCursor,
 				text: newLines[newCursor - 1] ?? ''
 			});
+
 			newCursor += 1;
 			oldCursor += 1;
 		}
+
 		oldCursor = hunk.oldStart > 0 ? hunk.oldStart : oldCursor;
+
 		for (const line of hunk.lines) {
 			out.push(line);
 			if (line.newNo !== null) newCursor = line.newNo + 1;
 			if (line.oldNo !== null) oldCursor = line.oldNo + 1;
 		}
 	}
+
 	while (newCursor <= newLines.length) {
 		out.push({
 			type: 'context',
@@ -181,11 +206,13 @@ export function expandFileDiff(file: FileDiff, newText: string): FileDiff {
 			newNo: newCursor,
 			text: newLines[newCursor - 1] ?? ''
 		});
+
 		newCursor += 1;
 		oldCursor += 1;
 	}
 
 	const lastOld = out.reduce((max, line) => (line.oldNo !== null && line.oldNo > max ? line.oldNo : max), 0);
+
 	return {
 		...file,
 		hunks: [
@@ -210,20 +237,25 @@ export function collapseFileDiff(file: FileDiff, keep: Iterable<number> = [], co
 	const lines = file.hunks.flatMap((hunk) => hunk.lines);
 	const kept = new Set(keep);
 	const visible = new Array<boolean>(lines.length).fill(false);
+
 	lines.forEach((line, i) => {
 		if (line.type === 'context' && !(line.newNo !== null && kept.has(line.newNo))) return;
 		for (let j = Math.max(0, i - context); j <= Math.min(lines.length - 1, i + context); j++) visible[j] = true;
 	});
+
 	const hunks: DiffHunk[] = [];
 	let lastOld = 0;
 	let lastNew = 0;
 	let group: DiffLine[] = [];
+
 	const flush = () => {
 		if (!group.length) return;
+
 		const oldNos = group.flatMap((line) => (line.oldNo === null ? [] : [line.oldNo]));
 		const newNos = group.flatMap((line) => (line.newNo === null ? [] : [line.newNo]));
 		const oldStart = oldNos[0] ?? lastOld + 1;
 		const newStart = newNos[0] ?? lastNew + 1;
+
 		hunks.push({
 			header: `@@ -${oldStart},${oldNos.length} +${newStart},${newNos.length} @@`,
 			oldStart,
@@ -232,14 +264,18 @@ export function collapseFileDiff(file: FileDiff, keep: Iterable<number> = [], co
 			newCount: newNos.length,
 			lines: group
 		});
+
 		group = [];
 	};
+
 	lines.forEach((line, i) => {
 		if (visible[i]) group.push(line);
 		else flush();
 		if (line.oldNo !== null) lastOld = line.oldNo;
 		if (line.newNo !== null) lastNew = line.newNo;
 	});
+
 	flush();
+
 	return { ...file, hunks };
 }

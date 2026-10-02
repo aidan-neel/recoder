@@ -36,10 +36,16 @@
 			{@const suggestion = findingsStore.suggestions[finding.id]}
 			<Card.Root class="conversation-fix">
 				<div class="conversation-fix-head">
-					{#if finding.status === 'accepted'}<SeverityPill tone="success">Fixed</SeverityPill>{:else}<FindingSeverity severity={finding.severity} />{/if}
+					{#if finding.status === 'accepted'}<SeverityPill tone="success">Fixed</SeverityPill>{:else}<FindingSeverity
+							severity={finding.severity}
+						/>{/if}
 					<span class="conversation-fix-title">{finding.title}</span>
 					<span class="conversation-fix-loc">{finding.file.split('/').at(-1)}:{finding.startLine}</span>
-					{#if suggestion?.status === 'ready' || finding.status === 'accepted'}<FixButton {finding} variant="outline" class="ms-auto shrink-0" />{/if}
+					{#if suggestion?.status === 'ready' || finding.status === 'accepted'}<FixButton
+							{finding}
+							variant="outline"
+							class="ms-auto shrink-0"
+						/>{/if}
 				</div>
 				<FixStatus {finding} />
 				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} />{/if}
@@ -52,11 +58,19 @@
 		<AlertDialog.Content>
 			<AlertDialog.Header>
 				<AlertDialog.Title>Apply {count(ready.length)}?</AlertDialog.Title>
-				<AlertDialog.Description>Each fix is applied to the review checkout. Nothing is committed or pushed until you do it from Changes.</AlertDialog.Description>
+				<AlertDialog.Description
+					>Each fix is applied to the review checkout. Nothing is committed or pushed until you do it from Changes.</AlertDialog.Description
+				>
 			</AlertDialog.Header>
 			<AlertDialog.Footer>
 				<AlertDialog.Exit>Cancel</AlertDialog.Exit>
-				<AlertDialog.Confirm variant="primary" onclick={() => { confirmOpen = false; void applyReadyFixes(ready); }}>Apply {count(ready.length)}</AlertDialog.Confirm>
+				<AlertDialog.Confirm
+					variant="primary"
+					onclick={() => {
+						confirmOpen = false;
+						void applyReadyFixes(ready);
+					}}>Apply {count(ready.length)}</AlertDialog.Confirm
+				>
 			</AlertDialog.Footer>
 		</AlertDialog.Content>
 	</AlertDialog.Root>

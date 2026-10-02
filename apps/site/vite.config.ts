@@ -11,6 +11,7 @@ const pxToRem = {
 	postcssPlugin: 'recoder-px-to-rem',
 	Declaration(decl: { value: string }) {
 		if (!decl.value.includes('px') || decl.value.includes('url(')) return;
+
 		decl.value = decl.value.replace(/(-?\d*\.?\d+)px\b/g, (match, n: string) =>
 			Math.abs(Number(n)) < 2 ? match : `${Number(n) / 16}rem`
 		);
@@ -32,10 +33,13 @@ function webLibForWebFiles(): Plugin {
 		enforce: 'pre',
 		resolveId(source, importer, options) {
 			if (!importer?.startsWith(webSrc)) return null;
+
 			let rest: string | null = null;
+
 			if (source === '$lib' || source.startsWith('$lib/')) rest = source.slice(4);
 			else if (source.startsWith(siteLib)) rest = source.slice(siteLib.length);
 			if (rest === null) return null;
+
 			return this.resolve(webLib + rest, importer, { ...options, skipSelf: true });
 		}
 	};

@@ -38,20 +38,44 @@ export interface ReviewMetrics {
 }
 
 export function emptyTokenUsage(): TokenUsage {
-	return { inputTokens: null, outputTokens: null, totalTokens: null, cachedInputTokens: null, cacheWriteInputTokens: null, reasoningOutputTokens: null };
+	return {
+		inputTokens: null,
+		outputTokens: null,
+		totalTokens: null,
+		cachedInputTokens: null,
+		cacheWriteInputTokens: null,
+		reasoningOutputTokens: null
+	};
 }
 
 export function aggregateTokenCalls(calls: TokenCall[]): TokenAggregate {
 	const usage = emptyTokenUsage();
-	const reportedCalls = { inputTokens: 0, outputTokens: 0, totalTokens: 0, cachedInputTokens: 0, cacheWriteInputTokens: 0, reasoningOutputTokens: 0 };
+
+	const reportedCalls = {
+		inputTokens: 0,
+		outputTokens: 0,
+		totalTokens: 0,
+		cachedInputTokens: 0,
+		cacheWriteInputTokens: 0,
+		reasoningOutputTokens: 0
+	};
+
 	for (const call of calls) {
 		for (const key of Object.keys(usage) as (keyof TokenUsage)[]) {
 			const value = call.usage[key];
+
 			if (value !== null) {
 				usage[key] = (usage[key] ?? 0) + value;
 				reportedCalls[key]++;
 			}
 		}
 	}
-	return { calls: calls.length, pendingCalls: calls.filter((call) => call.status === 'pending').length, failedCalls: calls.filter((call) => call.status === 'failed').length, usage, reportedCalls };
+
+	return {
+		calls: calls.length,
+		pendingCalls: calls.filter((call) => call.status === 'pending').length,
+		failedCalls: calls.filter((call) => call.status === 'failed').length,
+		usage,
+		reportedCalls
+	};
 }

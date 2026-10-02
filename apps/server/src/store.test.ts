@@ -7,6 +7,7 @@ import { closeStore, reviewProgress } from './store';
 
 test('review progress written moments ago survives the store closing before its write-behind timer fires', () => {
 	const id = crypto.randomUUID();
+
 	reviewProgress.set({ ...emptyReviewProgress(id), sequence: 3, planSummary: 'two specialists' });
 	// Nothing has reached SQLite yet; closing must flush, and a fresh handle must read it back.
 	closeStore();
@@ -20,12 +21,15 @@ test('a snapshot that fails to save does not crash the write-behind timer or hol
 	const quiet = spyOn(console, 'error').mockImplementation(() => {});
 	const bad = crypto.randomUUID();
 	const good = crypto.randomUUID();
+
 	// A BigInt can't be serialized, so this snapshot's write throws every time.
 	reviewProgress.set({ ...emptyReviewProgress(bad), sequence: 1n as unknown as number });
 	reviewProgress.set({ ...emptyReviewProgress(good), sequence: 2 });
 	await Bun.sleep(1000);
+
 	const reader = new Database(join(serverDataDir(), 'recoder.db'), { readonly: true });
 	const row = reader.query('SELECT value FROM review_progress WHERE id = ?').get(good) as { value: string } | null;
+
 	reader.close();
 	expect(row && JSON.parse(row.value).sequence).toBe(2);
 	reviewProgress.delete(bad);

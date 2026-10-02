@@ -44,15 +44,16 @@ export interface DiscussInput {
 
 /** Shared prompt assembly for the discuss endpoints (batch + streaming). */
 async function buildDiscussMessages(input: DiscussInput, role: ReviewRole): Promise<ChatMessage[]> {
-	const parts = [
-		`Finding (${input.severity}, ${input.file}:${input.line}-${input.endLine}): ${input.message}`
-	];
+	const parts = [`Finding (${input.severity}, ${input.file}:${input.line}-${input.endLine}): ${input.message}`];
+
 	if (input.sandboxPath) {
 		const excerpt = await readExcerpt(input.sandboxPath, input.file, input.line);
+
 		if (excerpt !== null) parts.push(`--- ${input.file} (lines around ${input.line}) ---\n${excerpt}`);
 	}
-	const trimmedDiff =
-		input.diff.length > 20000 ? input.diff.slice(0, 20000) + '\n…[diff truncated]' : input.diff;
+
+	const trimmedDiff = input.diff.length > 20000 ? input.diff.slice(0, 20000) + '\n…[diff truncated]' : input.diff;
+
 	parts.push(`--- unified diff (capped) ---\n${trimmedDiff}`);
 
 	const history = input.history
@@ -84,6 +85,7 @@ export async function discussFinding(input: DiscussInput): Promise<{ agent: stri
 			messages: await buildDiscussMessages(input, role),
 			timeoutMs: 120_000
 		});
+
 		return { agent: role, model: cfg.model, reply: reply.trim() };
 	} catch (err) {
 		if (err instanceof LlmError) throw err;
@@ -112,6 +114,7 @@ export async function streamDiscussFinding(
 			},
 			onToken
 		);
+
 		return { agent: role, model: cfg.model, reply: reply.trim() };
 	} catch (err) {
 		if (err instanceof LlmError) throw err;

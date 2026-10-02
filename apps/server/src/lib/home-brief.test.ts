@@ -4,6 +4,7 @@ import { cleanBrief, clearHomeBriefCache, homeBrief, latestReviews } from './hom
 import { setReviewOverrides } from './review-settings';
 
 const realFetch = globalThis.fetch;
+
 afterEach(() => {
 	globalThis.fetch = realFetch;
 	setReviewOverrides({});
@@ -36,8 +37,26 @@ const input: HomeBriefRequest = {
 	name: 'Aidan',
 	dayPart: 'evening',
 	prs: [
-		{ repoId: 'r2', repo: 'aidan-neel/sivir-ui', number: 158, title: 'Theme Studio', additions: 604, deletions: 137, changedFiles: 12, createdAt: hoursAgo(5) },
-		{ repoId: 'r1', repo: 'aidan-neel/recoder', number: 88, title: 'Adaptive planning', additions: 312, deletions: 96, changedFiles: 9, createdAt: hoursAgo(50) }
+		{
+			repoId: 'r2',
+			repo: 'aidan-neel/sivir-ui',
+			number: 158,
+			title: 'Theme Studio',
+			additions: 604,
+			deletions: 137,
+			changedFiles: 12,
+			createdAt: hoursAgo(5)
+		},
+		{
+			repoId: 'r1',
+			repo: 'aidan-neel/recoder',
+			number: 88,
+			title: 'Adaptive planning',
+			additions: 312,
+			deletions: 96,
+			changedFiles: 9,
+			createdAt: hoursAgo(50)
+		}
 	],
 	emptyRepos: ['aidan-neel/skills']
 };
@@ -45,6 +64,7 @@ const input: HomeBriefRequest = {
 test('a real review outranks a newer empty draft', () => {
 	const done = review({ status: 'passed', updatedAt: hoursAgo(10) });
 	const draft = review({ status: 'draft', updatedAt: hoursAgo(1) });
+
 	expect(latestReviews([done, draft]).get('r1#88')?.id).toBe(done.id);
 });
 
@@ -59,15 +79,19 @@ test('the brief uses the orchestrator model, drops its greeting and is kept acro
 		models: [{ id: 'o', label: 'Orchestrator', model: 'orch-model', provider: 'openai-compatible' }],
 		orchestratorModelId: 'o'
 	});
+
 	const bodies: { model: string }[] = [];
+
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		bodies.push(JSON.parse(String(init?.body)));
+
 		return Response.json({ choices: [{ message: { content: '**Evening, Aidan.** Two PRs are open.' } }] });
 	}) as unknown as typeof fetch;
 
 	const first = await homeBrief(input, []);
 	// A PR opening changes the facts but not the brief: it is kept for 12 hours.
 	const second = await homeBrief({ ...input, prs: [] }, []);
+
 	// The page adds its own greeting, so the model's is dropped.
 	expect(first.text).toBe('Two PRs are open.');
 	expect(first.model).toBe('orch-model');

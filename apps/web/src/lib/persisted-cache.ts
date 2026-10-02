@@ -10,9 +10,13 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 export function readCache<T>(key: string): T | null {
 	try {
 		if (typeof localStorage === 'undefined') return null;
+
 		const raw = localStorage.getItem(PREFIX + key);
+
 		if (!raw) return null;
+
 		const entry = JSON.parse(raw) as { at: number; value: T };
+
 		return Date.now() - entry.at < MAX_AGE_MS ? entry.value : null;
 	} catch {
 		return null;

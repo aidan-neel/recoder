@@ -23,7 +23,9 @@
 	// so an open modal inerts it and toast actions (Undo, View) stop responding.
 	// Overlay roots are exempt from that inert, so mark the toaster as one.
 	$effect(() => {
-		document.querySelector('[role="region"][aria-label="Notifications"]')?.parentElement?.setAttribute('data-overlay-root', '');
+		document
+			.querySelector('[role="region"][aria-label="Notifications"]')
+			?.parentElement?.setAttribute('data-overlay-root', '');
 	});
 </script>
 
@@ -40,7 +42,9 @@
 <div class="flex h-dvh flex-col overflow-hidden bg-chrome text-fg">
 	<TopBar />
 	<main id="app-canvas" class="flex min-h-0 flex-1 px-2 pb-2" data-route={page.route.id}>
-		<Card.Root class="app-canvas min-h-0 min-w-0 flex-1 gap-0 overflow-hidden rounded-[14px] border border-line-canvas bg-canvas p-0 shadow-none">
+		<Card.Root
+			class="app-canvas min-h-0 min-w-0 flex-1 gap-0 overflow-hidden rounded-[14px] border border-line-canvas bg-canvas p-0 shadow-none"
+		>
 			{@render children()}
 		</Card.Root>
 	</main>

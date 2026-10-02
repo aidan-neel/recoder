@@ -47,13 +47,17 @@
 			{#if dismissed}
 				<div class="inline-finding-dismissed">
 					<span class="size-1.5 shrink-0 rounded-full" style:background-color={SEVERITY_DOT[finding.severity]}></span>
-					<Typography.Metadata class="min-w-0 flex-1 truncate" title={finding.title}>{finding.title}</Typography.Metadata>
+					<Typography.Metadata class="min-w-0 flex-1 truncate" title={finding.title}
+						>{finding.title}</Typography.Metadata
+					>
 					<span class="shrink-0">Dismissed</span>
 					<Button variant="ghost" onclick={() => findingsStore.reopen(finding.id)}>Undo</Button>
 				</div>
 			{:else}
 				<div class="inline-finding-head">
-					{#if accepted}<SeverityPill tone="success">Fixed</SeverityPill>{:else}<FindingSeverity severity={finding.severity} />{/if}
+					{#if accepted}<SeverityPill tone="success">Fixed</SeverityPill>{:else}<FindingSeverity
+							severity={finding.severity}
+						/>{/if}
 					{#if finding.verification && !accepted}<VerificationBadge verification={finding.verification} />{/if}
 					<span class="min-w-0 truncate">{finding.category}</span>
 					{#if finding.code}<span class="inline-finding-id">{finding.code}</span>{/if}
@@ -63,22 +67,40 @@
 				<Typography.Title level={3} class="sr-only">{finding.title}</Typography.Title>
 				<div class="inline-finding-body ai-voice"><ModelMarkdown content={finding.body} /></div>
 				<FixStatus {finding} />
-				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks {finding} />{/if}
+				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks
+						{finding}
+					/>{/if}
 				<div class="inline-finding-foot">
-					<Typography.Metadata class="min-w-0 flex-1 truncate" title={`${finding.category} · ${formatAgentName(finding.agent)}${finding.model ? ` · ${finding.model}` : ''}`}>
+					<Typography.Metadata
+						class="min-w-0 flex-1 truncate"
+						title={`${finding.category} · ${formatAgentName(finding.agent)}${finding.model ? ` · ${finding.model}` : ''}`}
+					>
 						{formatAgentName(finding.agent)}{#if finding.model}<span> · {modelLabel(finding.model)}</span>{/if}
 					</Typography.Metadata>
 					{#if accepted}
-						{#if finding.fix?.sha}<span class="font-mono text-[11.5px] text-fg-faint" title="Committed for {finding.fix.branch}">{finding.fix.sha.slice(0, 7)}</span>{/if}
+						{#if finding.fix?.sha}<span
+								class="font-mono text-[11.5px] text-fg-faint"
+								title="Committed for {finding.fix.branch}">{finding.fix.sha.slice(0, 7)}</span
+							>{/if}
 						<FixButton {finding} />
 					{:else if finding.status === 'open'}
-						<Button variant="ghost" class="gap-1.5" aria-expanded={threadsStore.openId === finding.id} aria-controls={threadsStore.openId === finding.id ? 'finding-thread' : undefined} onclick={discuss}>
+						<Button
+							variant="ghost"
+							class="gap-1.5"
+							aria-expanded={threadsStore.openId === finding.id}
+							aria-controls={threadsStore.openId === finding.id ? 'finding-thread' : undefined}
+							onclick={discuss}
+						>
 							<MessageSquare size={14} aria-hidden="true" />Discuss
 						</Button>
-						<Button variant="ghost" class="text-fg-muted" onclick={() => {
-							findingsStore.dismiss(finding.id);
-							if (threadsStore.openId === finding.id) threadsStore.close();
-						}}>Dismiss</Button>
+						<Button
+							variant="ghost"
+							class="text-fg-muted"
+							onclick={() => {
+								findingsStore.dismiss(finding.id);
+								if (threadsStore.openId === finding.id) threadsStore.close();
+							}}>Dismiss</Button
+						>
 						<FixButton {finding} />
 					{/if}
 				</div>

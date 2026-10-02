@@ -2,12 +2,16 @@ import { serverApi } from './server-api';
 import { errorToast } from './notify';
 
 /** A plan waiting on the developer: the review being approved, and the one whose "No" waits on DeclinePlanDialog. */
-export const planApproval = $state<{ approving: string | null; declining: string | null }>({ approving: null, declining: null });
+export const planApproval = $state<{ approving: string | null; declining: string | null }>({
+	approving: null,
+	declining: null
+});
 
 /** Yes: every planned specialist runs. */
 export async function approvePlan(reviewId: string): Promise<void> {
 	if (planApproval.approving) return;
 	planApproval.approving = reviewId;
+
 	try {
 		await serverApi.approvePlan(reviewId);
 	} catch (e) {

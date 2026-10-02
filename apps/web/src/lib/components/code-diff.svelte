@@ -34,61 +34,88 @@
 		readonly?: boolean;
 	}
 
-	let { diff, findings = [], onAsk, mode = 'unified', cards = true, activeRange = null, onClearRange, readonly = false }: Props = $props();
+	let {
+		diff,
+		findings = [],
+		onAsk,
+		mode = 'unified',
+		cards = true,
+		activeRange = null,
+		onClearRange,
+		readonly = false
+	}: Props = $props();
 
 	/** Index of each hunk's first line within `flatLines`. */
-	const hunkOffsets = $derived(diff.hunks.reduce<number[]>((acc, hunk, i) => {
-		acc.push(i === 0 ? 0 : acc[i - 1] + diff.hunks[i - 1].lines.length);
-		return acc;
-	}, []));
+	const hunkOffsets = $derived(
+		diff.hunks.reduce<number[]>((acc, hunk, i) => {
+			acc.push(i === 0 ? 0 : acc[i - 1] + diff.hunks[i - 1].lines.length);
 
-	interface SplitCell { line: DiffLine; i: number }
+			return acc;
+		}, [])
+	);
+
+	interface SplitCell {
+		line: DiffLine;
+		i: number;
+	}
 	/** Side-by-side rows: context on both sides, deletions paired with the additions that follow. */
-	const splitRows = $derived(diff.hunks.map((hunk) => {
-		const rows: { left: SplitCell | null; right: SplitCell | null }[] = [];
-		let dels: SplitCell[] = [];
-		let adds: SplitCell[] = [];
-		const flush = () => {
-			for (let k = 0; k < Math.max(dels.length, adds.length); k++) rows.push({ left: dels[k] ?? null, right: adds[k] ?? null });
-			dels = [];
-			adds = [];
-		};
-		hunk.lines.forEach((line, i) => {
-			if (line.type === 'del') { if (adds.length) flush(); dels.push({ line, i }); }
-			else if (line.type === 'add') adds.push({ line, i });
-			else { flush(); rows.push({ left: { line, i }, right: { line, i } }); }
-		});
-		flush();
-		return rows;
-	}));
+	const splitRows = $derived(
+		diff.hunks.map((hunk) => {
+			const rows: { left: SplitCell | null; right: SplitCell | null }[] = [];
+			let dels: SplitCell[] = [];
+			let adds: SplitCell[] = [];
+
+			const flush = () => {
+				for (let k = 0; k < Math.max(dels.length, adds.length); k++)
+					rows.push({ left: dels[k] ?? null, right: adds[k] ?? null });
+				dels = [];
+				adds = [];
+			};
+
+			hunk.lines.forEach((line, i) => {
+				if (line.type === 'del') {
+					if (adds.length) flush();
+					dels.push({ line, i });
+				} else if (line.type === 'add') adds.push({ line, i });
+				else {
+					flush();
+					rows.push({ left: { line, i }, right: { line, i } });
+				}
+			});
+
+			flush();
+
+			return rows;
+		})
+	);
 
 	/** Hunks annotated with how many unchanged lines were skipped before them. */
 	const hunks = $derived(
 		diff.hunks.map((hunk, i) => {
 			const prev = diff.hunks[i - 1];
 			const prevEnd = prev ? prev.oldStart + prev.oldCount : hunk.oldStart;
+
 			return { hunk, skipped: Math.max(0, hunk.oldStart - prevEnd) };
 		})
 	);
 
 	/** Per-line highlighted HTML, aligned 1:1 with hunks → lines. */
-	const highlighted = $derived(
-		diff.hunks.map((h) => highlightLines(h.lines.map((l) => l.text)))
-	);
+	const highlighted = $derived(diff.hunks.map((h) => highlightLines(h.lines.map((l) => l.text))));
 
 	/** Flat line list with its hunk, aligned 1:1 with rendered diff rows. */
-	const flatLines = $derived(
-		diff.hunks.flatMap((hunk) => hunk.lines.map((line) => ({ line, hunk })))
-	);
+	const flatLines = $derived(diff.hunks.flatMap((hunk) => hunk.lines.map((line) => ({ line, hunk }))));
 
 	/** Open findings grouped by the line their card anchors under. */
 	const byLine = $derived.by(() => {
 		const map = new Map<number, Finding[]>();
+
 		for (const finding of findings) {
 			const list = map.get(finding.endLine) ?? [];
+
 			list.push(finding);
 			map.set(finding.endLine, list);
 		}
+
 		return map;
 	});
 
@@ -96,15 +123,19 @@
 	const lineMarks = $derived.by(() => {
 		const rank: Record<FindingSeverity, number> = { high: 0, medium: 1, low: 2 };
 		const map = new Map<number, Finding>();
+
 		for (const finding of findings) {
 			if (finding.status === 'dismissed') continue;
+
 			for (let n = finding.startLine; n <= finding.endLine; n++) {
 				const current = map.get(n);
+
 				if (!current || rank[finding.severity] < rank[current.severity]) {
 					map.set(n, finding);
 				}
 			}
 		}
+
 		return map;
 	});
 
@@ -113,29 +144,39 @@
 	/** Notes grouped by the line their card renders under, keyed per diff side. */
 	const notesByNewLine = $derived.by(() => {
 		const map = new Map<number, ReviewNote[]>();
+
 		for (const note of fileNotes) {
 			if (note.side !== 'new') continue;
+
 			const list = map.get(note.endLine) ?? [];
+
 			list.push(note);
 			map.set(note.endLine, list);
 		}
+
 		return map;
 	});
 	const notesByOldLine = $derived.by(() => {
 		const map = new Map<number, ReviewNote[]>();
+
 		for (const note of fileNotes) {
 			if (note.side !== 'old') continue;
+
 			const list = map.get(note.endLine) ?? [];
+
 			list.push(note);
 			map.set(note.endLine, list);
 		}
+
 		return map;
 	});
 
 	function notesForRow(line: DiffLine): ReviewNote[] {
 		const list: ReviewNote[] = [];
+
 		if (line.newNo !== null) list.push(...(notesByNewLine.get(line.newNo) ?? []));
 		if (line.oldNo !== null) list.push(...(notesByOldLine.get(line.oldNo) ?? []));
+
 		return list;
 	}
 
@@ -177,6 +218,7 @@
 
 	function cap(text: string, max = 4000): string {
 		const suffix = '\n…[truncated]';
+
 		return text.length > max ? text.slice(0, max - suffix.length) + suffix : text;
 	}
 
@@ -187,11 +229,8 @@
 
 	function onPointerDown(event: PointerEvent): void {
 		const target = event.target as HTMLElement | null;
-		if (
-			target?.closest(
-				'[data-note-composer], button, a, input, textarea, select, [role="button"]'
-			)
-		) return;
+
+		if (target?.closest('[data-note-composer], button, a, input, textarea, select, [role="button"]')) return;
 		pressAt = target?.closest('[data-diff-row]') ? { x: event.clientX, y: event.clientY } : null;
 		pointerDown = true;
 		findingsStore.suppressHover = true;
@@ -210,12 +249,21 @@
 		selectionTimer = undefined;
 		if (readonly) return;
 		if (pointerDown || !rootEl) return;
+
 		const selection = window.getSelection();
+
 		if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+
 		const range = selection.getRangeAt(0);
+
 		if (!rootEl.contains(range.startContainer) || !rootEl.contains(range.endContainer)) return;
-		const cells = Array.from(rootEl.querySelectorAll<HTMLElement>('[data-flat]')).filter((cell) => range.intersectsNode(cell));
+
+		const cells = Array.from(rootEl.querySelectorAll<HTMLElement>('[data-flat]')).filter((cell) =>
+			range.intersectsNode(cell)
+		);
+
 		if (cells.length === 0) return;
+
 		const indexes = cells.map((cell) => Number(cell.dataset.flat));
 		const from = Math.min(...indexes);
 		const to = Math.max(...indexes);
@@ -224,14 +272,17 @@
 		const oldNos = slice.map(({ line }) => line.oldNo).filter((n): n is number => n !== null);
 		const side: 'old' | 'new' = newNos.length > 0 ? 'new' : 'old';
 		const lines = side === 'new' ? newNos : oldNos;
+
 		if (lines.length === 0) return;
 
 		const context = flatLines.slice(Math.max(0, from - 3), Math.min(flatLines.length, to + 4));
 		const rootRect = rootEl.getBoundingClientRect();
 		const rangeRect = range.getBoundingClientRect();
 		const lastRow = cells.at(-1)!.closest<HTMLElement>('[data-diff-row]') ?? cells.at(-1)!;
+
 		anchorTop = lastRow.offsetTop + lastRow.offsetHeight - 2;
 		anchorLeft = Math.max(0, rangeRect.left - rootRect.left);
+
 		pending = {
 			mode: 'create',
 			file: diff.path,
@@ -239,26 +290,46 @@
 			endLine: Math.max(...lines),
 			side,
 			// Whole lines on the chosen side, not the raw selection (which carries gutter numbers and partial lines).
-			quote: slice.filter(({ line }) => (side === 'new' ? line.newNo : line.oldNo) !== null).map(({ line }) => line.text).join('\n').slice(0, 2000),
-			newText: cap(slice.filter(({ line }) => line.newNo !== null).map(({ line }) => line.text).join('\n')),
-			oldText: cap(slice.filter(({ line }) => line.oldNo !== null).map(({ line }) => line.text).join('\n')),
+			quote: slice
+				.filter(({ line }) => (side === 'new' ? line.newNo : line.oldNo) !== null)
+				.map(({ line }) => line.text)
+				.join('\n')
+				.slice(0, 2000),
+			newText: cap(
+				slice
+					.filter(({ line }) => line.newNo !== null)
+					.map(({ line }) => line.text)
+					.join('\n')
+			),
+			oldText: cap(
+				slice
+					.filter(({ line }) => line.oldNo !== null)
+					.map(({ line }) => line.text)
+					.join('\n')
+			),
 			diffContext: cap(context.map(({ line }) => `${marker(line)}${line.text}`).join('\n')),
 			hunkHeader: slice[slice.length - 1]?.hunk.header
 		};
+
 		// With a chat, the selection goes straight into its composer as a quote;
 		// notes come from the model when asked. Without one, keep the note popover.
 		if (onAsk) {
 			const { file, startLine, endLine, side, quote, diffContext } = pending;
+
 			pending = null;
 			onAsk({ file, startLine, endLine, side, quote, diffContext });
+
 			return;
 		}
+
 		popoverOpen = true;
 	}
 
 	async function askAboutSelection(): Promise<void> {
 		if (!pending || !onAsk) return;
+
 		const { file, startLine, endLine, side, quote, diffContext } = pending;
+
 		popoverOpen = false;
 		window.getSelection()?.removeAllRanges();
 		// Wait for the popover to restore focus before focusing the discussion.
@@ -269,23 +340,40 @@
 	/** Line controls provide a keyboard/touch alternative to highlighting text. */
 	function selectLine(line: DiffLine, target: HTMLElement): void {
 		const row = target.closest<HTMLElement>('[data-diff-row]');
+
 		if (!rootEl || !row) return;
+
 		const index = flatLines.findIndex((item) => item.line === line);
 		const number = line.newNo ?? line.oldNo;
+
 		if (number === null) return;
 		anchorTop = row.offsetTop + row.offsetHeight;
 		anchorLeft = 0;
+
 		pending = {
-			mode: 'create', file: diff.path, startLine: number, endLine: number,
-			side: line.newNo === null ? 'old' : 'new', quote: line.text.slice(0, 2000),
-			diffContext: cap(flatLines.slice(Math.max(0, index - 3), index + 4).map(({ line }) => `${marker(line)}${line.text}`).join('\n'))
+			mode: 'create',
+			file: diff.path,
+			startLine: number,
+			endLine: number,
+			side: line.newNo === null ? 'old' : 'new',
+			quote: line.text.slice(0, 2000),
+			diffContext: cap(
+				flatLines
+					.slice(Math.max(0, index - 3), index + 4)
+					.map(({ line }) => `${marker(line)}${line.text}`)
+					.join('\n')
+			)
 		};
+
 		if (onAsk) {
 			const { file, startLine, endLine, side, quote, diffContext } = pending;
+
 			pending = null;
 			onAsk({ file, startLine, endLine, side, quote, diffContext });
+
 			return;
 		}
+
 		popoverOpen = true;
 	}
 
@@ -293,34 +381,41 @@
 	function isPendingRow(line: DiffLine): boolean {
 		if (activeRange && activeRange.file === diff.path) {
 			const n = activeRange.side === 'new' ? line.newNo : line.oldNo;
+
 			if (n !== null && n >= activeRange.startLine && n <= activeRange.endLine) return true;
 		}
+
 		if (!popoverOpen || !pending) return false;
+
 		if (pending.side === 'new') {
 			return line.newNo !== null && line.newNo >= pending.startLine && line.newNo <= pending.endLine;
 		}
+
 		return line.oldNo !== null && line.oldNo >= pending.startLine && line.oldNo <= pending.endLine;
 	}
 
 	$effect(() => {
 		const onSelectionChange = () => scheduleSelection();
+
 		document.addEventListener('selectionchange', onSelectionChange);
+
 		return () => {
 			document.removeEventListener('selectionchange', onSelectionChange);
 			clearTimeout(selectionTimer);
 		};
 	});
 
-
 	function openEdit(note: ReviewNote): void {
-		const card =
-			(document.getElementById(`note-${note.id}`) as HTMLElement | null) ?? rootEl ?? null;
+		const card = (document.getElementById(`note-${note.id}`) as HTMLElement | null) ?? rootEl ?? null;
+
 		if (rootEl && card) {
 			const rootRect = rootEl.getBoundingClientRect();
 			const cardRect = card.getBoundingClientRect();
+
 			anchorTop = cardRect.bottom - rootRect.top;
 			anchorLeft = Math.max(0, cardRect.left - rootRect.left);
 		}
+
 		pending = {
 			mode: 'edit',
 			id: note.id,
@@ -330,14 +425,19 @@
 			side: note.side,
 			quote: note.quote
 		};
+
 		popoverOpen = true;
 	}
 
 	function saveNote(body: string): void {
 		const current = pending;
+
 		if (!current) return;
+
 		const text = body.trim();
+
 		if (!text) return;
+
 		if (current.mode === 'edit' && current.id) {
 			notesStore.update(current.id, text);
 		} else {
@@ -354,6 +454,7 @@
 				hunkHeader: current.hunkHeader
 			});
 		}
+
 		popoverOpen = false;
 	}
 
@@ -363,16 +464,23 @@
 			if (!pointerDown) return;
 			pointerDown = false;
 			findingsStore.suppressHover = false;
+
 			const click = pressAt && Math.hypot(event.clientX - pressAt.x, event.clientY - pressAt.y) < 4;
+
 			pressAt = null;
+
 			if (click && activeRange && window.getSelection()?.isCollapsed !== false) {
 				onClearRange?.();
+
 				return;
 			}
+
 			scheduleSelection();
 		};
+
 		window.addEventListener('pointerup', release);
 		window.addEventListener('pointercancel', release);
+
 		return () => {
 			window.removeEventListener('pointerup', release);
 			window.removeEventListener('pointercancel', release);
@@ -384,9 +492,13 @@
 	{@const n = side === 'old' ? line.oldNo : line.newNo}
 	{@const selectable = side === 'new' ? n !== null : line.newNo === null && n !== null}
 	{#if selectable && !readonly}
-		<Button unstyled class="diff-num" style={mark && side === 'new' ? `color: ${SEVERITY_DOT[mark.severity]}` : undefined}
+		<Button
+			unstyled
+			class="diff-num"
+			style={mark && side === 'new' ? `color: ${SEVERITY_DOT[mark.severity]}` : undefined}
 			aria-label={side === 'new' ? `Discuss line ${n}` : `Discuss deleted line ${n}`}
-			onclick={(event: MouseEvent) => selectLine(line, event.currentTarget as HTMLElement)}>{n}</Button>
+			onclick={(event: MouseEvent) => selectLine(line, event.currentTarget as HTMLElement)}>{n}</Button
+		>
 	{:else}
 		<span class="diff-num" style:color={mark && side === 'new' ? SEVERITY_DOT[mark.severity] : null}>{n ?? ''}</span>
 	{/if}
@@ -399,23 +511,38 @@
 
 {#snippet attachments(line: DiffLine, key: number)}
 	{#each notesForRow(line) as note (note.id)}
-		<div id={`note-${note.id}`} data-note-card class="diff-attachment {findingsStore.suppressHover ? 'pointer-events-none' : ''}">
+		<div
+			id={`note-${note.id}`}
+			data-note-card
+			class="diff-attachment {findingsStore.suppressHover ? 'pointer-events-none' : ''}"
+		>
 			<article>
-			<Card.Root class="inline-finding">
-				<div class="inline-finding-head">
-					<Badge variant="info">Note</Badge>
-					<span class="min-w-0 flex-1 truncate font-mono">{note.file}:{note.startLine === note.endLine ? note.startLine : `${note.startLine}-${note.endLine}`}</span>
-					<Button variant="ghost" size="icon" class="shrink-0" aria-label="Edit note" onclick={() => openEdit(note)}><Pencil size={13} /></Button>
-				</div>
-				{#if note.quote}<CodeBlock code={note.quote} lang="plaintext" copy="overlay" class="mt-2 max-h-32" />{/if}
-				<div class="mt-1.5 min-w-0 text-[13.5px]"><Markdown content={note.body} /></div>
-			</Card.Root>
+				<Card.Root class="inline-finding">
+					<div class="inline-finding-head">
+						<Badge variant="info">Note</Badge>
+						<span class="min-w-0 flex-1 truncate font-mono"
+							>{note.file}:{note.startLine === note.endLine
+								? note.startLine
+								: `${note.startLine}-${note.endLine}`}</span
+						>
+						<Button variant="ghost" size="icon" class="shrink-0" aria-label="Edit note" onclick={() => openEdit(note)}
+							><Pencil size={13} /></Button
+						>
+					</div>
+					{#if note.quote}<CodeBlock code={note.quote} lang="plaintext" copy="overlay" class="mt-2 max-h-32" />{/if}
+					<div class="mt-1.5 min-w-0 text-[13.5px]"><Markdown content={note.body} /></div>
+				</Card.Root>
 			</article>
 		</div>
 	{/each}
 	{#if cards}
 		{#each byLine.get(key) ?? [] as finding (finding.id)}
-			<div id={`finding-${finding.id}`} class="diff-attachment {findingsStore.suppressHover ? 'pointer-events-none' : ''}" in:collapse out:collapse>
+			<div
+				id={`finding-${finding.id}`}
+				class="diff-attachment {findingsStore.suppressHover ? 'pointer-events-none' : ''}"
+				in:collapse
+				out:collapse
+			>
 				<FindingCard {finding} />
 			</div>
 		{/each}
@@ -433,28 +560,58 @@
 				{#each splitRows[hi] as row, r (r)}
 					{@const right = row.right?.line}
 					{@const mark = right?.newNo != null ? lineMarks.get(right.newNo) : undefined}
-					<div role="row" tabindex="-1" data-diff-row class="diff-row diff-split-row"
-						data-new-no={right?.newNo ?? ''} data-old-no={row.left?.line.oldNo ?? ''}
+					<div
+						role="row"
+						tabindex="-1"
+						data-diff-row
+						class="diff-row diff-split-row"
+						data-new-no={right?.newNo ?? ''}
+						data-old-no={row.left?.line.oldNo ?? ''}
 						style:box-shadow={mark ? `inset 2px 0 0 ${SEVERITY_DOT[mark.severity]}` : null}
 						style:--row-tint={mark ? rowTint(SEVERITY_DOT[mark.severity], 12) : null}
-						onmouseenter={() => { if (!findingsStore.suppressHover) findingsStore.hoveredId = mark?.id ?? null; }}
-						onmouseleave={() => (findingsStore.hoveredId = null)}>
-						<div class="diff-half" data-type={row.left ? (row.left.line.type === 'context' ? 'context' : 'del') : 'empty'}>
-							{#if row.left}{@render number(row.left.line, 'old', undefined)}{@render code(row.left.line, hi, row.left.i)}{/if}
+						onmouseenter={() => {
+							if (!findingsStore.suppressHover) findingsStore.hoveredId = mark?.id ?? null;
+						}}
+						onmouseleave={() => (findingsStore.hoveredId = null)}
+					>
+						<div
+							class="diff-half"
+							data-type={row.left ? (row.left.line.type === 'context' ? 'context' : 'del') : 'empty'}
+						>
+							{#if row.left}{@render number(row.left.line, 'old', undefined)}{@render code(
+									row.left.line,
+									hi,
+									row.left.i
+								)}{/if}
 						</div>
-						<div class="diff-half" data-type={row.right ? (row.right.line.type === 'context' ? 'context' : 'add') : 'empty'}>
-							{#if row.right}{@render number(row.right.line, 'new', mark)}{@render code(row.right.line, hi, row.right.i)}{/if}
+						<div
+							class="diff-half"
+							data-type={row.right ? (row.right.line.type === 'context' ? 'context' : 'add') : 'empty'}
+						>
+							{#if row.right}{@render number(row.right.line, 'new', mark)}{@render code(
+									row.right.line,
+									hi,
+									row.right.i
+								)}{/if}
 						</div>
 					</div>
-					{#if row.right}{@render attachments(row.right.line, row.right.line.newNo ?? -1)}{:else if row.left}{@render attachments(row.left.line, -1)}{/if}
+					{#if row.right}{@render attachments(
+							row.right.line,
+							row.right.line.newNo ?? -1
+						)}{:else if row.left}{@render attachments(row.left.line, -1)}{/if}
 				{/each}
 			{:else}
 				{#each hunk.lines as line, i (`${line.oldNo}-${line.newNo}-${i}`)}
 					{@const key = line.newNo ?? -1}
 					{@const mark = lineMarks.get(key)}
 					{@const noteCount = noteCountForRow(line)}
-					<div role="row" tabindex="-1" data-diff-row data-type={line.type}
-						data-new-no={line.newNo ?? ''} data-old-no={line.oldNo ?? ''}
+					<div
+						role="row"
+						tabindex="-1"
+						data-diff-row
+						data-type={line.type}
+						data-new-no={line.newNo ?? ''}
+						data-old-no={line.oldNo ?? ''}
 						class="diff-row"
 						data-pending={isPendingRow(line) || undefined}
 						style:box-shadow={isPendingRow(line)
@@ -471,8 +628,11 @@
 								: noteCount > 0
 									? rowTint('var(--selection-bar)', 12)
 									: null}
-						onmouseenter={() => { if (!findingsStore.suppressHover) findingsStore.hoveredId = mark?.id ?? null; }}
-						onmouseleave={() => (findingsStore.hoveredId = null)}>
+						onmouseenter={() => {
+							if (!findingsStore.suppressHover) findingsStore.hoveredId = mark?.id ?? null;
+						}}
+						onmouseleave={() => (findingsStore.hoveredId = null)}
+					>
 						{@render number(line, 'old', mark)}
 						{@render number(line, 'new', mark)}
 						{@render code(line, hi, i)}
@@ -481,7 +641,9 @@
 				{/each}
 			{/if}
 		{/each}
-		{#if hunks.length === 0}<Typography.Text class="px-5 py-3 text-sm text-fg-muted">No text changes to display for this file.</Typography.Text>{/if}
+		{#if hunks.length === 0}<Typography.Text class="px-5 py-3 text-sm text-fg-muted"
+				>No text changes to display for this file.</Typography.Text
+			>{/if}
 	</div>
 
 	<Popover.Root bind:open={popoverOpen} placement="bottom-start" inert={false}>
@@ -499,9 +661,15 @@
 			lockScroll={false}
 		>
 			{#if pending}
-				<Typography.Metadata class="truncate font-mono text-xs" title={pending.file}>{pending.file.split('/').at(-1)}:{pending.startLine}{pending.endLine !== pending.startLine ? `–${pending.endLine}` : ''} · {pending.side === 'old' ? 'Before' : 'After'}</Typography.Metadata>
+				<Typography.Metadata class="truncate font-mono text-xs" title={pending.file}
+					>{pending.file.split('/').at(-1)}:{pending.startLine}{pending.endLine !== pending.startLine
+						? `–${pending.endLine}`
+						: ''} · {pending.side === 'old' ? 'Before' : 'After'}</Typography.Metadata
+				>
 				{#if onAsk && pending.mode === 'create'}
-					<Button variant="secondary" class="w-full justify-start gap-2 font-normal" onclick={askAboutSelection}><MessageSquare size={15} aria-hidden="true" />Ask about this code</Button>
+					<Button variant="secondary" class="w-full justify-start gap-2 font-normal" onclick={askAboutSelection}
+						><MessageSquare size={15} aria-hidden="true" />Ask about this code</Button
+					>
 				{/if}
 				<NoteComposer
 					initialBody={pending.mode === 'edit' && pending.id

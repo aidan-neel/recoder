@@ -70,7 +70,13 @@
 			auth = await serverApi.authStatus();
 		} catch {
 			// Unknown reads as not connected; a tracked repo still counts.
-			const none = (provider: 'github' | 'gitlab'): ProviderAuth => ({ provider, available: false, authenticated: false, user: null });
+			const none = (provider: 'github' | 'gitlab'): ProviderAuth => ({
+				provider,
+				available: false,
+				authenticated: false,
+				user: null
+			});
+
 			auth = { github: none('github'), gitlab: none('gitlab') };
 		}
 	}
@@ -79,6 +85,7 @@
 	let settingsWasOpen = false;
 	$effect(() => {
 		const open = modelSettingsUi.open;
+
 		if (settingsWasOpen && !open) void loadAuth();
 		settingsWasOpen = open;
 	});
@@ -107,21 +114,29 @@
 
 	function parsePrNumber(text: string): number | null {
 		const trimmed = text.trim();
+
 		if (trimmed === '') return null;
+
 		const url = trimmed.match(/(?:pull|merge_requests)\/(\d+)/i);
 		const digits = (url?.[1] ?? (/^#?\d+$/.test(trimmed) ? trimmed : '')).replace(/\D/g, '');
+
 		if (digits === '') return null;
+
 		const n = Number.parseInt(digits, 10);
+
 		return Number.isSafeInteger(n) && n > 0 ? n : null;
 	}
 
 	/** The tracked repo a pasted PR belongs to (URL match), else the chip's repo, else the first. */
 	function repoForPaste(text: string): Repo | undefined {
 		const url = text.match(/(?:github|gitlab)\.com\/([^/\s]+)\/([^/\s#?]+)/i);
+
 		if (url) {
 			const slug = `${url[1]}/${url[2]}`.toLowerCase();
+
 			return openPrs.repos.find((r) => r.name.toLowerCase() === slug || r.url.toLowerCase().includes(slug));
 		}
+
 		return repoById.get(repoChip) ?? openPrs.repos[0];
 	}
 
@@ -132,6 +147,7 @@
 	function matches(pr: PullRequest, repo: Repo): boolean {
 		if (query === '') return true;
 		if (isUrl) return pr.number === pastedNumber && repoForPaste(filter)?.id === repo.id;
+
 		return (
 			repo.name.toLowerCase().includes(query) ||
 			`#${pr.number}`.includes(query) ||
@@ -147,10 +163,13 @@
 			.filter((repo) => repoChip === 'all' || repo.id === repoChip)
 			.map((repo) => {
 				let prs = (openPrs.prsByRepo[repo.id] ?? []).filter((pr) => matches(pr, repo));
+
 				if (preview && previewRepoId === repo.id && !prs.some((pr) => pr.number === preview!.pr.number)) {
 					prs = [preview.pr, ...prs];
 				}
+
 				prs = [...prs].sort((a, b) => (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0));
+
 				return { repo, prs, loading: !!openPrs.loadingByRepo[repo.id], error: openPrs.errorByRepo[repo.id] };
 			})
 	);
@@ -168,9 +187,11 @@
 
 	async function fetchPreview(n: number): Promise<void> {
 		const repo = repoForPaste(filter);
+
 		if (!repo || fetchingPreview) return;
 		fetchingPreview = true;
 		prError = null;
+
 		try {
 			preview = await serverApi.previewPr(repo.id, n);
 			previewRepoId = repo.id;
@@ -186,6 +207,7 @@
 	/** Every review opens on its conversation. */
 	function openReview(review: Review, repo: Repo): void {
 		const status = review.status === 'running' || review.status === 'queued' ? 'reviewing' : 'ready';
+
 		sessionState.ensureSession(review.id, repo.name, `#${review.prNumber}`, status);
 		void goto(`/session/${review.id}`);
 	}
@@ -193,9 +215,11 @@
 	/** Queue a review and open its conversation right away. */
 	async function start(pr: PullRequest, repo: Repo): Promise<void> {
 		const key = prKey(repo.id, pr.number);
+
 		if (starting) return;
 		starting = key;
 		prError = null;
+
 		try {
 			const review = await serverApi.queueReview({
 				repoId: repo.id,
@@ -203,6 +227,7 @@
 				start: true,
 				prTitle: pr.title
 			});
+
 			if (pr.headRef) recentSessions.branches[key] = pr.headRef;
 			await recentSessions.refresh();
 			openReview(review, repo);
@@ -215,6 +240,7 @@
 
 	function openRow(pr: PullRequest, repo: Repo): void {
 		const review = latest.get(prKey(repo.id, pr.number));
+
 		if (review) openReview(review, repo);
 		else void start(pr, repo);
 	}
@@ -237,9 +263,12 @@
 		if (!briefReady || openPrs.apiDown || needsModel || openPrs.briefRequested) return;
 		if (items.length === 0) return;
 		openPrs.briefRequested = true;
+
 		const controller = new AbortController();
+
 		briefLoading = true;
 		briefFailed = false;
+
 		serverApi
 			.homeBrief(
 				{
@@ -255,7 +284,9 @@
 						changedFiles: pr.changedFiles,
 						createdAt: pr.createdAt
 					})),
-					emptyRepos: openPrs.repos.filter((repo) => (openPrs.prsByRepo[repo.id] ?? []).length === 0).map((repo) => repo.name)
+					emptyRepos: openPrs.repos
+						.filter((repo) => (openPrs.prsByRepo[repo.id] ?? []).length === 0)
+						.map((repo) => repo.name)
 				},
 				controller.signal
 			)
@@ -268,6 +299,7 @@
 			.finally(() => {
 				if (!controller.signal.aborted) briefLoading = false;
 			});
+
 		return () => {
 			if (briefLoading) openPrs.briefRequested = false;
 			controller.abort();
@@ -275,11 +307,15 @@
 	});
 
 	/** The greeting is ours, for the current time of day; the brief body can be hours old. */
-	const greeting = $derived(`**${{ morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', night: 'Evening' }[part]}${name ? `, ${name}` : ''}.**`);
+	const greeting = $derived(
+		`**${{ morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', night: 'Evening' }[part]}${name ? `, ${name}` : ''}.**`
+	);
 	const briefText = $derived(
 		openPrs.brief && items.length > 0
 			? `${greeting} ${openPrs.brief.text.replace(/^\**\s*(good\s+)?(morning|afternoon|evening|night)\b[^.!*]*[.!]\s*\**\s*/i, '')}`
-			: briefReady ? fallbackBrief(items, name, part) : null
+			: briefReady
+				? fallbackBrief(items, name, part)
+				: null
 	);
 	// A skeleton only until the PR list is in: after that the built-in summary shows at
 	// once, and the AI brief replaces it in place whenever (if ever) it arrives.
@@ -293,7 +329,9 @@
 
 	function focusFilter(event: KeyboardEvent): void {
 		if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
+
 		const target = event.target as HTMLElement | null;
+
 		if (target?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
 		event.preventDefault();
 		filterEl?.focus();
@@ -309,9 +347,14 @@
 			href={item.review ? `/session/${item.review.id}` : item.pr.url}
 			class="brief-ref"
 			{...item.review
-				? { onclick: (event: MouseEvent) => { event.preventDefault(); if (item.review) openReview(item.review, item.repo); } }
-				: { target: '_blank', rel: 'noopener noreferrer' }}
-		>{text}</HoverCard.Trigger><HoverCard.Content
+				? {
+						onclick: (event: MouseEvent) => {
+							event.preventDefault();
+							if (item.review) openReview(item.review, item.repo);
+						}
+					}
+				: { target: '_blank', rel: 'noopener noreferrer' }}>{text}</HoverCard.Trigger
+		><HoverCard.Content
 			side="bottom"
 			align="start"
 			class="pr-card"
@@ -346,9 +389,14 @@
 				{:else}
 					<span class="shimmer-text text-[12px]">Review running</span>
 				{/if}
-				<span class="text-[11.5px] text-fg-faint">{item.review ? 'Click to open the review' : 'Click to open on ' + (item.repo.provider === 'gitlab' ? 'GitLab' : 'GitHub')}</span>
+				<span class="text-[11.5px] text-fg-faint"
+					>{item.review
+						? 'Click to open the review'
+						: 'Click to open on ' + (item.repo.provider === 'gitlab' ? 'GitLab' : 'GitHub')}</span
+				>
 			</div>
-		</HoverCard.Content></HoverCard.Root>
+		</HoverCard.Content></HoverCard.Root
+	>
 {/snippet}
 
 {#snippet skeletonRows(n: number)}
@@ -399,14 +447,19 @@
 						</div>
 					{:else if briefText}
 						<div class="home-brief-stack">
-						{#key briefText}
-						<div class="home-brief-layer">
-						<Typography.Text class="home-brief ai-voice">
-							<!-- Kept on tight lines: whitespace between these tags renders as stray spaces. -->
-							{#each briefSegments(briefText) as segment, i (i)}{#if segment.kind === 'strong'}<span class="text-fg">{segment.text}</span>{:else if segment.kind === 'pr' && items.some((item) => item.pr.number === segment.number)}{@const item = items.find((candidate) => candidate.pr.number === segment.number)!}<span class="brief-ref-wrap">{@render prRef(item, segment.text)}</span>{:else}{segment.text}{/if}{/each}
-						</Typography.Text>
-						</div>
-						{/key}
+							{#key briefText}
+								<div class="home-brief-layer">
+									<Typography.Text class="home-brief ai-voice">
+										<!-- Kept on tight lines: whitespace between these tags renders as stray spaces. -->
+										{#each briefSegments(briefText) as segment, i (i)}{#if segment.kind === 'strong'}<span
+													class="text-fg">{segment.text}</span
+												>{:else if segment.kind === 'pr' && items.some((item) => item.pr.number === segment.number)}{@const item =
+													items.find((candidate) => candidate.pr.number === segment.number)!}<span
+													class="brief-ref-wrap">{@render prRef(item, segment.text)}</span
+												>{:else}{segment.text}{/if}{/each}
+									</Typography.Text>
+								</div>
+							{/key}
 						</div>
 					{/if}
 					{#if briefReady && (reviewPick || openPick)}
@@ -424,9 +477,15 @@
 							{/if}
 							{#if openPick?.review}
 								{@const pick = openPick}
-								<Button variant="outline" class="brief-action" onclick={() => pick.review && openReview(pick.review, pick.repo)}>
+								<Button
+									variant="outline"
+									class="brief-action"
+									onclick={() => pick.review && openReview(pick.review, pick.repo)}
+								>
 									Open #{pick.pr.number}
-									<Badge variant="secondary" data-sev="high" class="severity-pill font-mono">{highCount(pick.review)} high</Badge>
+									<Badge variant="secondary" data-sev="high" class="severity-pill font-mono"
+										>{highCount(pick.review)} high</Badge
+									>
 								</Button>
 							{/if}
 						</div>
@@ -468,7 +527,11 @@
 							disabled={openPrs.refreshing || openPrs.repos.length === 0}
 							onclick={refreshAll}
 						>
-							{#if openPrs.refreshing}<Spinner size={16} />{:else}<RefreshCw size={16} strokeWidth={1.75} aria-hidden="true" />{/if}
+							{#if openPrs.refreshing}<Spinner size={16} />{:else}<RefreshCw
+									size={16}
+									strokeWidth={1.75}
+									aria-hidden="true"
+								/>{/if}
 						</Button>
 					</Tooltip.Trigger>
 					<Tooltip.Content>Refresh</Tooltip.Content>
@@ -477,7 +540,12 @@
 
 			<div class="mt-3.5 flex flex-wrap items-center gap-x-4 gap-y-2">
 				{#if openPrs.repos.length > 0}
-					<Tabs.Root value={repoChip} onValueChange={(value) => (repoChip = value)} variant="segmented" class="repo-chips">
+					<Tabs.Root
+						value={repoChip}
+						onValueChange={(value) => (repoChip = value)}
+						variant="segmented"
+						class="repo-chips"
+					>
 						<Tabs.List {...{ 'aria-label': 'Filter by repository' }} {@attach keepPillAligned}>
 							<Tabs.Trigger value="all">
 								All
@@ -517,7 +585,9 @@
 					<p class="min-w-0 flex-1 truncate font-mono text-[12.5px] text-fg-faint">
 						#{pastedNumber} isn't in the open list.
 					</p>
-					<Button variant="outline" loading={fetchingPreview} onclick={() => void fetchPreview(pastedNumber)}>Fetch</Button>
+					<Button variant="outline" loading={fetchingPreview} onclick={() => void fetchPreview(pastedNumber)}
+						>Fetch</Button
+					>
 				</div>
 			{/if}
 
@@ -538,7 +608,9 @@
 								<Alert.Root variant="error">
 									<Alert.Title>Could not load pull requests</Alert.Title>
 									<Alert.Description>{group.error}</Alert.Description>
-									<Button variant="outline" class="mt-2 w-fit" onclick={() => void openPrs.loadRepo(group.repo)}>Retry</Button>
+									<Button variant="outline" class="mt-2 w-fit" onclick={() => void openPrs.loadRepo(group.repo)}
+										>Retry</Button
+									>
 								</Alert.Root>
 							{:else}
 								<div class="pr-list" {@attach hoverHighlight({ items: '.pr-row', class: 'hl-row' })}>

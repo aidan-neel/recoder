@@ -75,15 +75,22 @@ Include exactly one assessment per note, using the note's index.`;
 }
 
 function formatNote(note: RereviewNote, index: number): string {
-	const loc = note.side === 'old' ? `${note.file}:${note.line}-${note.endLine} (old side)` : `${note.file}:${note.line}-${note.endLine}`;
+	const loc =
+		note.side === 'old'
+			? `${note.file}:${note.line}-${note.endLine} (old side)`
+			: `${note.file}:${note.line}-${note.endLine}`;
+
 	const blocks = [`Note ${index} — ${loc}`, `Comment: ${note.body.trim()}`];
+
 	if (note.quote?.trim()) {
 		blocks.push(`Highlighted selection:\n"""\n${note.quote.trim().slice(0, 1200)}\n"""`);
 	}
+
 	if (note.hunkHeader) blocks.push(`Hunk: ${note.hunkHeader}`);
 	if (note.newText?.trim()) blocks.push(`New code:\n"""\n${note.newText.trim().slice(0, 1600)}\n"""`);
 	if (note.oldText?.trim()) blocks.push(`Original code:\n"""\n${note.oldText.trim().slice(0, 1600)}\n"""`);
 	if (note.diffContext?.trim()) blocks.push(`Diff context:\n${note.diffContext.trim().slice(0, 1600)}`);
+
 	return blocks.join('\n');
 }
 
@@ -99,9 +106,12 @@ async function buildMessages(input: RereviewInput): Promise<ChatMessage[]> {
 
 	// Scoped excerpts around each note, when a checkout is available.
 	const excerpts: string[] = [];
+
 	for (const [index, note] of input.notes.entries()) {
 		if (!input.sandboxPath || note.side === 'old') continue;
+
 		const excerpt = await readExcerpt(input.sandboxPath, note.file, note.line);
+
 		if (excerpt !== null) excerpts.push(`--- ${note.file} (note ${index}) ---\n${excerpt}`);
 	}
 
@@ -113,10 +123,11 @@ async function buildMessages(input: RereviewInput): Promise<ChatMessage[]> {
 		.slice(0, 40)
 		.map((f) => `- ${f.file}${f.line ? `:${f.line}` : ''} [${f.severity}] ${f.message}`)
 		.join('\n');
+
 	if (existing) parts.push(`Existing findings (do not duplicate):\n${existing}`);
 
-	const trimmedDiff =
-		input.diff.length > 24000 ? input.diff.slice(0, 24000) + '\n…[diff truncated]' : input.diff;
+	const trimmedDiff = input.diff.length > 24000 ? input.diff.slice(0, 24000) + '\n…[diff truncated]' : input.diff;
+
 	parts.push(`--- unified diff (capped) ---\n${trimmedDiff}`);
 
 	parts.push('Respond with the strict JSON object described in the system prompt.');
@@ -129,29 +140,33 @@ async function buildMessages(input: RereviewInput): Promise<ChatMessage[]> {
 
 function toFindings(output: RereviewOutput, agent: string, model: string): Finding[] {
 	// Informational notes aren't reported, even when the model sends one anyway.
-	return output.findings.filter((raw) => raw.severity !== 'info').map((raw) => {
-		const line = raw.line ?? undefined;
-		const endLine = raw.endLine && line && raw.endLine >= line ? raw.endLine : line;
-		return {
-			id: crypto.randomUUID(),
-			title: raw.title,
-			file: raw.file,
-			line,
-			endLine,
-			severity: toBackendSeverity[raw.severity],
-			message: `[${raw.category}] ${raw.body}`,
-			agent,
-			model,
-			category: raw.category,
-			side: 'new'
-		} satisfies Finding;
-	});
+	return output.findings
+		.filter((raw) => raw.severity !== 'info')
+		.map((raw) => {
+			const line = raw.line ?? undefined;
+			const endLine = raw.endLine && line && raw.endLine >= line ? raw.endLine : line;
+
+			return {
+				id: crypto.randomUUID(),
+				title: raw.title,
+				file: raw.file,
+				line,
+				endLine,
+				severity: toBackendSeverity[raw.severity],
+				message: `[${raw.category}] ${raw.body}`,
+				agent,
+				model,
+				category: raw.category,
+				side: 'new'
+			} satisfies Finding;
+		});
 }
 
 /** Run the batch re-review. Returns prose assessments plus any new findings. */
 export async function runRereview(input: RereviewInput): Promise<RereviewResponse> {
 	const cfg = configForRole('correctness');
 	const agent = 'orchestrator';
+
 	try {
 		const raw = await chatCompletion({
 			provider: cfg.provider,
@@ -163,13 +178,17 @@ export async function runRereview(input: RereviewInput): Promise<RereviewRespons
 			jsonMode: true,
 			timeoutMs: 120_000
 		});
+
 		const parsed = rereviewOutputSchema.safeParse(extractJsonValue(raw));
+
 		if (!parsed.success) {
 			throw new LlmError(0, 'The re-review response was not valid JSON.');
 		}
+
 		const assessments: RereviewAssessment[] = parsed.data.assessments.filter(
 			(assessment) => assessment.noteIndex < input.notes.length
 		);
+
 		return {
 			agent,
 			model: cfg.model,

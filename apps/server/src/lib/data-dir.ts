@@ -10,6 +10,8 @@ import { join } from 'node:path';
  */
 export function serverDataDir(): string {
 	const dir = process.env.RECODER_DATA_DIR ?? join(homedir(), '.recoder', 'data');
+
 	mkdirSync(dir, { recursive: true });
+
 	return dir;
 }

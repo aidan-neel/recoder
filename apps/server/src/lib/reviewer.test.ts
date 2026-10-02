@@ -1,19 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import {
-	clearReviewEvents,
-	emitReviewEvent,
-	reviewEventBuffer,
-	subscribeReview
-} from './events';
+import { clearReviewEvents, emitReviewEvent, reviewEventBuffer, subscribeReview } from './events';
 import { extractFindingsJson, filterNewFindings, fingerprintFinding } from './harness';
 import { configForRole, isReviewConfigured } from './models';
 
-const ENV_KEYS = [
-	'RECODER_REVIEW_BASE_URL',
-	'RECODER_REVIEW_API_KEY',
-	'RECODER_REVIEW_MODEL',
-	'RECODER_PERF_MODEL'
-];
+const ENV_KEYS = ['RECODER_REVIEW_BASE_URL', 'RECODER_REVIEW_API_KEY', 'RECODER_REVIEW_MODEL', 'RECODER_PERF_MODEL'];
 
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 
@@ -47,6 +37,7 @@ describe('extractFindingsJson', () => {
 
 	test('tolerates fences and prose', () => {
 		const out = 'Here you go:\n```json\n[{"file":"a.ts"}]\n```';
+
 		expect(extractFindingsJson(out)).toEqual([{ file: 'a.ts' }]);
 	});
 
@@ -59,11 +50,13 @@ describe('finding stability', () => {
 	test('same issue twice → same fingerprint (wording/whitespace independent)', () => {
 		const a = fingerprintFinding('a.ts', 'sec', 'const  buckets  =  new Map();\n');
 		const b = fingerprintFinding('a.ts', 'sec', 'const buckets = new Map();');
+
 		expect(a).toBe(b);
 	});
 
 	test('different file, category, or code → different fingerprint', () => {
 		const base = fingerprintFinding('a.ts', 'sec', 'x = 1;');
+
 		expect(fingerprintFinding('b.ts', 'sec', 'x = 1;')).not.toBe(base);
 		expect(fingerprintFinding('a.ts', 'perf', 'x = 1;')).not.toBe(base);
 		expect(fingerprintFinding('a.ts', 'sec', 'x = 2;')).not.toBe(base);
@@ -78,6 +71,7 @@ describe('finding stability', () => {
 			message: id,
 			fingerprint
 		});
+
 		const current = [
 			mk('old', 'fp-old'),
 			mk('new', 'fp-new'),
@@ -85,7 +79,9 @@ describe('finding stability', () => {
 			mk('dup-b', 'fp-dup'),
 			mk('nofp')
 		];
+
 		const { fresh, suppressed } = filterNewFindings(current, new Set(['fp-old']));
+
 		expect(fresh.map((f) => f.id)).toEqual(['new', 'dup-a']);
 		expect(suppressed).toBe(3);
 	});
@@ -102,6 +98,7 @@ describe('events', () => {
 		const off = subscribeReview('r2', () => {
 			throw new Error('boom');
 		});
+
 		expect(() => emitReviewEvent('r2', { type: 'log', message: 'x' })).not.toThrow();
 		off();
 		clearReviewEvents('r2');
@@ -111,8 +108,10 @@ describe('events', () => {
 		emitReviewEvent('r3', { type: 'log', step: 'agent:security', message: 'hello' });
 		emitReviewEvent('r3', { type: 'finding', message: 'one', data: { items: [{ id: 'f1' }] } });
 		expect(reviewEventBuffer('r3').map((e) => e.message)).toEqual(['hello', 'one']);
+
 		const seen: string[] = [];
 		const off = subscribeReview('r3', (e) => seen.push(e.message));
+
 		expect(seen).toEqual(['hello', 'one']);
 		emitReviewEvent('r3', { type: 'log', message: 'live' });
 		expect(seen).toEqual(['hello', 'one', 'live']);

@@ -54,7 +54,9 @@
 	/** Home's setup checklist opens Settings straight into a dialog. */
 	$effect(() => {
 		const intent = modelSettingsUi.intent;
+
 		if (!intent || intent.kind === 'add-provider') return;
+
 		untracked(() => {
 			modelSettingsUi.intent = null;
 			if (intent.kind === 'connect') openToken(intent.provider);
@@ -64,6 +66,7 @@
 
 	async function loadAuth(): Promise<void> {
 		authError = null;
+
 		try {
 			auth = await serverApi.authStatus();
 		} catch (e) {
@@ -84,6 +87,7 @@
 		if (!connecting || !token.trim() || tokenSaving) return;
 		tokenSaving = true;
 		tokenError = null;
+
 		try {
 			await serverApi.saveToken(connecting, token.trim(), connecting === 'gitlab' ? gitlabHost.trim() : undefined);
 			tokenOpen = false;
@@ -99,6 +103,7 @@
 
 	async function disconnect(provider: Provider): Promise<void> {
 		disconnecting = provider;
+
 		try {
 			await serverApi.clearToken(provider);
 			await loadAuth();
@@ -113,6 +118,7 @@
 	const trackedUrls = $derived(new Set(openPrs.repos.map((repo) => repo.url.replace(/\/$/, ''))));
 	const filteredRemote = $derived.by(() => {
 		const q = remoteQuery.trim().toLowerCase();
+
 		return q === '' ? remote : remote.filter((repo) => repo.name.toLowerCase().includes(q));
 	});
 
@@ -122,9 +128,11 @@
 		if (remote.length > 0 || remoteLoading) return;
 		remoteLoading = true;
 		remoteError = null;
+
 		try {
 			const status = auth ?? (await serverApi.authStatus());
 			const providers = PROVIDERS.map((p) => p.id).filter((id) => status[id].authenticated);
+
 			remote = (await Promise.all(providers.map((id) => serverApi.remoteRepos(id)))).flat();
 		} catch (e) {
 			remoteError = e instanceof Error ? e.message : 'Could not list repositories.';
@@ -135,6 +143,7 @@
 
 	async function track(repo: RemoteRepo): Promise<void> {
 		trackingUrl = repo.url;
+
 		try {
 			openPrs.track(await serverApi.createRepo({ name: repo.name, url: repo.url, provider: repo.provider }));
 		} catch (e) {
@@ -146,9 +155,11 @@
 
 	async function untrack(repo: Repo): Promise<void> {
 		untracking = repo.id;
+
 		try {
 			await serverApi.deleteRepo(repo.id);
 			openPrs.untrack(repo.id);
+
 			undoToast(`Stopped tracking ${repo.name}`, () => {
 				void serverApi
 					.createRepo({ name: repo.name, url: repo.url, provider: repo.provider, defaultBranch: repo.defaultBranch })
@@ -180,7 +191,8 @@
 						<p class="settings-row-name">{provider.label}</p>
 						<p class="settings-row-desc">
 							{#if !state}Checking…
-							{:else if state.authenticated}Signed in as <span class="font-mono">{state.user}</span>{#if state.host}<span> on </span><span class="font-mono">{state.host}</span>{/if}
+							{:else if state.authenticated}Signed in as <span class="font-mono">{state.user}</span
+								>{#if state.host}<span> on </span><span class="font-mono">{state.host}</span>{/if}
 							{:else if !state.available}CLI not installed. Connect with a token instead.
 							{:else}Not connected{/if}
 						</p>
@@ -231,7 +243,9 @@
 				<div class="settings-row" style:--i={i}>
 					<span class="flex shrink-0 text-fg-subtle"><ProviderMark provider={repo.provider} size={14} /></span>
 					<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{repo.name}</span>
-					<span class="shrink-0 font-mono text-[11.5px] text-fg-faint">{openPrs.prsByRepo[repo.id]?.length ?? '–'} open</span>
+					<span class="shrink-0 font-mono text-[11.5px] text-fg-faint"
+						>{openPrs.prsByRepo[repo.id]?.length ?? '–'} open</span
+					>
 					<Button
 						variant="ghost"
 						size="icon"
@@ -321,7 +335,13 @@
 									<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{repo.name}</span>
 									{#if repo.isPrivate}<Badge variant="secondary" class="status-chip">private</Badge>{/if}
 									{#if tracked}
-										<Button variant="ghost" size="icon" disabled aria-label="{repo.name} is tracked" class="text-ok disabled:opacity-100">
+										<Button
+											variant="ghost"
+											size="icon"
+											disabled
+											aria-label="{repo.name} is tracked"
+											class="text-ok disabled:opacity-100"
+										>
 											<Check size={15} aria-hidden="true" />
 										</Button>
 									{:else}
@@ -332,7 +352,10 @@
 											disabled={trackingUrl === repo.url}
 											onclick={() => void track(repo)}
 										>
-											{#if trackingUrl === repo.url}<Spinner size={14} />{:else}<Plus size={15} aria-hidden="true" />{/if}
+											{#if trackingUrl === repo.url}<Spinner size={14} />{:else}<Plus
+													size={15}
+													aria-hidden="true"
+												/>{/if}
 										</Button>
 									{/if}
 								</li>

@@ -75,18 +75,29 @@ const SNAPSHOT_KEYS = [
 export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): void {
 	const snapshot = reviewProgress.get(reviewId) ?? emptyReviewProgress(reviewId);
 	const message: ReviewEvent = { ...event, at: new Date().toISOString(), sequence: snapshot.sequence + 1 };
+
 	snapshot.sequence = message.sequence!;
 	snapshot.updatedAt = message.at;
+
 	if (event.type === 'task' && event.data?.task) {
 		const task = event.data.task as ReviewTask;
 		const previous = snapshot.tasks[task.id];
-		const startedAt = previous?.startedAt ?? task.startedAt ??
+
+		const startedAt =
+			previous?.startedAt ??
+			task.startedAt ??
 			(task.status === 'running' || task.status === 'waiting' ? message.at : undefined);
+
 		snapshot.tasks[task.id] = {
-			...previous, ...task, startedAt, updatedAt: message.at,
+			...previous,
+			...task,
+			startedAt,
+			updatedAt: message.at,
 			elapsedMs: task.elapsedMs ?? (startedAt ? Date.parse(message.at) - Date.parse(startedAt) : previous?.elapsedMs)
 		};
+
 		message.data = { ...message.data, task: snapshot.tasks[task.id] };
+
 		if (previous?.message !== task.message || previous?.status !== task.status) {
 			snapshot.activity.push({ sequence: snapshot.sequence, message: task.message, at: message.at, agent: task.agent });
 		}
@@ -95,6 +106,7 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 		const entries = [...(snapshot.messages ?? [])];
 		const index = entries.findIndex((item) => item.id === entry.id);
 		const next = { ...entry, text: entry.text.slice(0, 64_000), at: entries[index]?.at ?? entry.at ?? message.at };
+
 		if (index >= 0) entries[index] = next;
 		else entries.push(next);
 		snapshot.messages = entries.slice(-500);
@@ -105,7 +117,13 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 		const entry = event.data.reasoning as Omit<ReviewReasoningEntry, 'at'>;
 		const reasoning = [...(snapshot.reasoning ?? [])];
 		const index = reasoning.findIndex((item) => item.id === entry.id);
-		const next: ReviewReasoningEntry = { ...entry, text: entry.text.slice(0, 64_000), at: reasoning[index]?.at ?? message.at };
+
+		const next: ReviewReasoningEntry = {
+			...entry,
+			text: entry.text.slice(0, 64_000),
+			at: reasoning[index]?.at ?? message.at
+		};
+
 		message.data = { ...message.data, reasoning: next };
 		if (index >= 0) reasoning[index] = next;
 		else reasoning.push(next);
@@ -114,9 +132,11 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 		const tool = event.data.tool as ReviewToolCall;
 		const toolCalls = [...(snapshot.toolCalls ?? [])];
 		const index = toolCalls.findIndex((item) => item.id === tool.id);
+
 		if (index >= 0) toolCalls[index] = tool;
 		else toolCalls.push(tool);
 		snapshot.toolCalls = toolCalls.slice(-300);
+
 		if (tool.status !== 'running') {
 			snapshot.activity.push({
 				sequence: snapshot.sequence,
@@ -131,18 +151,30 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 	} else if (event.type === 'finding') {
 		// Candidate/finding payloads stay off the activity transcript.
 	} else if (message.message) {
-		snapshot.activity.push({ sequence: snapshot.sequence, message: message.message, at: message.at, agent: event.data?.agent as string | undefined ?? (event.step?.startsWith('agent:') ? event.step.slice(6) : undefined) });
+		snapshot.activity.push({
+			sequence: snapshot.sequence,
+			message: message.message,
+			at: message.at,
+			agent:
+				(event.data?.agent as string | undefined) ??
+				(event.step?.startsWith('agent:') ? event.step.slice(6) : undefined)
+		});
 	}
+
 	applySnapshotPatch(snapshot, event.data);
 	snapshot.activity = snapshot.activity.slice(-100);
 	reviewProgress.set(snapshot);
+
 	let buf = buffers.get(reviewId);
+
 	if (!buf) {
 		buf = [];
 		buffers.set(reviewId, buf);
 	}
+
 	buf.push(message);
 	if (buf.length > MAX_BUFFER) buf.splice(0, buf.length - MAX_BUFFER);
+
 	listeners.get(reviewId)?.forEach((fn) => {
 		try {
 			fn(message);
@@ -154,31 +186,38 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 
 function applySnapshotPatch(snapshot: ReviewProgress, data?: Record<string, unknown>): void {
 	if (!data) return;
+
 	// A finished pipeline settles its half-streamed replies and reasoning in one go.
 	const settled = data.settled as Pick<ReviewProgress, 'messages' | 'reasoning'> | undefined;
+
 	if (settled) {
 		snapshot.messages = settled.messages;
 		snapshot.reasoning = settled.reasoning;
 	}
+
 	for (const key of SNAPSHOT_KEYS) {
 		if (key in data) (snapshot as unknown as Record<string, unknown>)[key] = data[key];
 	}
 }
 
 export function subscribeReview(reviewId: string, fn: Listener, replay = true): () => void {
-	for (const event of replay ? buffers.get(reviewId) ?? [] : []) {
+	for (const event of replay ? (buffers.get(reviewId) ?? []) : []) {
 		try {
 			fn(event);
 		} catch {
 			// Replay failures must never break subscribe.
 		}
 	}
+
 	let set = listeners.get(reviewId);
+
 	if (!set) {
 		set = new Set();
 		listeners.set(reviewId, set);
 	}
+
 	set.add(fn);
+
 	return () => {
 		set.delete(fn);
 		if (set.size === 0) listeners.delete(reviewId);
@@ -230,8 +269,10 @@ export function reportReviewAssignment(reviewId: string, assignment: ReviewAssig
 	const snapshot = reviewProgress.get(reviewId);
 	const assignments = [...(snapshot?.assignments ?? [])];
 	const index = assignments.findIndex((item) => item.id === assignment.id);
+
 	if (index >= 0) assignments[index] = assignment;
 	else assignments.push(assignment);
+
 	emitReviewEvent(reviewId, {
 		type: 'assignment',
 		step: `assignment:${assignment.id}`,
@@ -241,10 +282,7 @@ export function reportReviewAssignment(reviewId: string, assignment: ReviewAssig
 }
 
 /** Report accumulated provider reasoning for an assignment turn (upsert by id). */
-export function reportReviewReasoning(
-	reviewId: string,
-	reasoning: Omit<ReviewReasoningEntry, 'at'>
-): void {
+export function reportReviewReasoning(reviewId: string, reasoning: Omit<ReviewReasoningEntry, 'at'>): void {
 	emitReviewEvent(reviewId, {
 		type: 'reasoning',
 		step: reasoning.assignmentId ? `assignment:${reasoning.assignmentId}` : 'review',
@@ -288,14 +326,30 @@ export async function trackReviewTask<T>(
 ): Promise<T> {
 	const started = Date.now();
 	let latestMessage = label;
-	const update = (status: ReviewTask['status'], message = latestMessage) => reportReviewTask(reviewId, {
-		id, label, status, message, startedAt: new Date(started).toISOString(), elapsedMs: Date.now() - started, kind: 'checkout'
-	});
+
+	const update = (status: ReviewTask['status'], message = latestMessage) =>
+		reportReviewTask(reviewId, {
+			id,
+			label,
+			status,
+			message,
+			startedAt: new Date(started).toISOString(),
+			elapsedMs: Date.now() - started,
+			kind: 'checkout'
+		});
+
 	update('running');
+
 	const timer = setInterval(() => update('running'), 5000);
+
 	try {
-		const result = await work((message) => { latestMessage = message; update('running'); });
+		const result = await work((message) => {
+			latestMessage = message;
+			update('running');
+		});
+
 		update('done');
+
 		return result;
 	} catch (err) {
 		update('error', err instanceof Error ? err.message : 'Operation failed');

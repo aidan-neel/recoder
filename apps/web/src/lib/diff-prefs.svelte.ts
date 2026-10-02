@@ -41,12 +41,15 @@ class DiffPrefs {
 	useReview(reviewId: string | null): void {
 		if (this.#reviewId === reviewId) return;
 		this.#reviewId = reviewId;
+
 		let stored: unknown = [];
+
 		try {
 			stored = reviewId ? JSON.parse(read(VIEWED_KEY + reviewId) ?? '[]') : [];
 		} catch {
 			stored = [];
 		}
+
 		this.viewed = Array.isArray(stored) ? stored.filter((item): item is string => typeof item === 'string') : [];
 	}
 

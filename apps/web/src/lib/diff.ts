@@ -2,13 +2,7 @@
  * Frontend diff mocks + lookup. Parsing lives in @recoder/shared so the
  * server pipeline uses the same implementation.
  */
-import {
-	parseUnifiedDiff,
-	type DiffHunk,
-	type DiffLine,
-	type DiffLineType,
-	type FileDiff
-} from '@recoder/shared';
+import { parseUnifiedDiff, type DiffHunk, type DiffLine, type DiffLineType, type FileDiff } from '@recoder/shared';
 
 export type { DiffHunk, DiffLine, DiffLineType, FileDiff };
 
@@ -164,6 +158,8 @@ const emptyDiff = (id: string): FileDiff => ({ path: id, additions: 0, deletions
 /** Parsed diff for a tree file id. Falls back to an empty diff. */
 export function getFileDiff(id: string): FileDiff {
 	const source = FILE_DIFFS[id];
+
 	if (!source) return emptyDiff(id);
+
 	return parseUnifiedDiff(source)[0] ?? emptyDiff(id);
 }

@@ -18,7 +18,12 @@ beforeAll(async () => {
 	await writeFile(join(base, 'data/tokens.json'), '{"github":"secret"}');
 	await mkdir(join(base, 'work/repos/pr-1/.git'), { recursive: true });
 	await mkdir(join(base, 'outside'), { recursive: true });
-	layout = sandboxLayout(join(base, 'work/repos/pr-1'), { home: join(base, 'home'), dataDir: join(base, 'data'), workDir: join(base, 'work') });
+
+	layout = sandboxLayout(join(base, 'work/repos/pr-1'), {
+		home: join(base, 'home'),
+		dataDir: join(base, 'data'),
+		workDir: join(base, 'work')
+	});
 });
 
 afterAll(async () => {
@@ -28,7 +33,10 @@ afterAll(async () => {
 const run = (command: string, timeoutMs = 10_000) => runSandboxed(layout, command, { timeoutMs });
 
 test.skipIf(!available)('a sandboxed command cannot read the home or data directories', async () => {
-	const result = await run(`cat ${join(base, 'home/.ssh/id_ed25519')}; cat ${join(base, 'data/tokens.json')}; echo done`);
+	const result = await run(
+		`cat ${join(base, 'home/.ssh/id_ed25519')}; cat ${join(base, 'data/tokens.json')}; echo done`
+	);
+
 	expect(result.output).not.toContain('PRIVATE KEY');
 	expect(result.output).not.toContain('secret');
 	expect(result.output).toContain('done');
@@ -42,31 +50,45 @@ test.skipIf(!available)('a sandboxed command can write the checkout but nothing 
 
 test.skipIf(!available)('the checkout .git directory is read-only inside the sandbox', async () => {
 	const result = await run('touch .git/HEAD.lock && echo wrote');
+
 	expect(result.output).not.toContain('wrote');
 	expect(existsSync(join(base, 'work/repos/pr-1/.git/HEAD.lock'))).toBe(false);
 });
 
 test.skipIf(!available)('a sandboxed command has no network', async () => {
 	const result = await run('(exec 3<>/dev/tcp/1.1.1.1/53) 2>/dev/null && echo open || echo closed');
+
 	expect(result.output.trim()).toBe('closed');
 });
 
 test.skipIf(!available)('a timed-out command is killed along with its background children', async () => {
 	const marker = `sleep ${40_000 + Math.floor(Math.random() * 1000)}`;
 	const result = await run(`${marker} & ${marker}`, 300);
+
 	expect(result.timedOut).toBe(true);
 	expect(result.exitCode).toBeNull();
 	await Bun.sleep(200);
+
 	const ps = Bun.spawnSync(['pgrep', '-f', marker]);
+
 	expect(ps.stdout.toString().trim()).toBe('');
 });
 
-test.skipIf(!available)('a command that leaves a child in its own session holding the output pipe still returns', async () => {
-	// The child calls setsid, so the timeout's process-group kill can't reach it, and it keeps stdout open.
-	const marker = 40_000 + Math.floor(Math.random() * 1000);
-	const started = Date.now();
-	const result = await run(`perl -MPOSIX -e 'if (fork() == 0) { POSIX::setsid(); sleep ${marker}; exit }'; echo done`, 5_000);
-	expect(result.output).toContain('done');
-	expect(Date.now() - started).toBeLessThan(8_000);
-	Bun.spawnSync(['pkill', '-f', `sleep ${marker}`]);
-}, 20_000);
+test.skipIf(!available)(
+	'a command that leaves a child in its own session holding the output pipe still returns',
+	async () => {
+		// The child calls setsid, so the timeout's process-group kill can't reach it, and it keeps stdout open.
+		const marker = 40_000 + Math.floor(Math.random() * 1000);
+		const started = Date.now();
+
+		const result = await run(
+			`perl -MPOSIX -e 'if (fork() == 0) { POSIX::setsid(); sleep ${marker}; exit }'; echo done`,
+			5_000
+		);
+
+		expect(result.output).toContain('done');
+		expect(Date.now() - started).toBeLessThan(8_000);
+		Bun.spawnSync(['pkill', '-f', `sleep ${marker}`]);
+	},
+	20_000
+);

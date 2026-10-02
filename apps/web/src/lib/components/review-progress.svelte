@@ -1,7 +1,5 @@
 <script lang="ts">
-	import ReviewingView, {
-		type ReviewingFinding
-	} from '$lib/components/reviewing-view.svelte';
+	import ReviewingView, { type ReviewingFinding } from '$lib/components/reviewing-view.svelte';
 
 	interface Props {
 		title: string;
@@ -81,23 +79,55 @@
 			{ severity: 'high', title: 'Tenant budget drain via raw IP bucket key', location: 'gateway.ts:88' },
 			{ severity: 'medium', title: 'Refill window leaks bucket state across tenants', location: 'limiter.ts:44' }
 		],
-		perf: [
-			{ severity: 'medium', title: 'buckets Map has no eviction — unbounded growth', location: 'limiter.ts:24' }
-		],
+		perf: [{ severity: 'medium', title: 'buckets Map has no eviction — unbounded growth', location: 'limiter.ts:24' }],
 		correctness: [
 			{ severity: 'medium', title: 'refill() reads Date.now, ignoring injected clock', location: 'limiter.ts:61' }
 		],
-		docs: [
-			{ severity: 'low', title: 'allow() doc comment predates the class move', location: 'limiter.ts:12' }
-		]
+		docs: [{ severity: 'low', title: 'allow() doc comment predates the class move', location: 'limiter.ts:12' }]
 	};
 
 	function initialAgents(): AgentSim[] {
 		return [
-			{ id: 'security', name: 'security', model: 'qwen3.8-flash', rate: 4.2, status: 'running', progress: 2, doneAt: null, logs: [] },
-			{ id: 'perf', name: 'perf', model: 'qwen3.8-flash', rate: 6.5, status: 'running', progress: 2, doneAt: null, logs: [] },
-			{ id: 'correctness', name: 'correctness', model: 'qwen3.8-flash', rate: 3.4, status: 'running', progress: 2, doneAt: null, logs: [] },
-			{ id: 'docs', name: 'docs', model: 'qwen3.8-flash', rate: 7.5, status: 'running', progress: 2, doneAt: null, logs: [] }
+			{
+				id: 'security',
+				name: 'security',
+				model: 'qwen3.8-flash',
+				rate: 4.2,
+				status: 'running',
+				progress: 2,
+				doneAt: null,
+				logs: []
+			},
+			{
+				id: 'perf',
+				name: 'perf',
+				model: 'qwen3.8-flash',
+				rate: 6.5,
+				status: 'running',
+				progress: 2,
+				doneAt: null,
+				logs: []
+			},
+			{
+				id: 'correctness',
+				name: 'correctness',
+				model: 'qwen3.8-flash',
+				rate: 3.4,
+				status: 'running',
+				progress: 2,
+				doneAt: null,
+				logs: []
+			},
+			{
+				id: 'docs',
+				name: 'docs',
+				model: 'qwen3.8-flash',
+				rate: 7.5,
+				status: 'running',
+				progress: 2,
+				doneAt: null,
+				logs: []
+			}
 		];
 	}
 
@@ -109,7 +139,9 @@
 
 	function revealed(agent: AgentSim): ScriptedFinding[] {
 		const script = FINDING_SCRIPTS[agent.id] ?? [];
+
 		if (agent.status === 'done') return script;
+
 		return script.slice(0, Math.min(script.length, Math.floor(agent.progress / 35)));
 	}
 
@@ -119,7 +151,12 @@
 			role: agent.id,
 			title: agent.name === 'patterns' ? 'Repository consistency' : agent.name,
 			reason: 'Demo specialist assignment',
-			status: agent.status === 'done' ? 'done' as const : agent.status === 'running' ? 'running' as const : 'queued' as const,
+			status:
+				agent.status === 'done'
+					? ('done' as const)
+					: agent.status === 'running'
+						? ('running' as const)
+						: ('queued' as const),
 			scope: [{ path: 'src/rate-limit/limiter.ts', hunkIds: [] }],
 			model: agent.model,
 			candidateCount: revealed(agent).length,
@@ -131,9 +168,11 @@
 	const viewFindings = $derived.by(() => {
 		const out: ReviewingFinding[] = [];
 		let n = 0;
+
 		for (const agent of agents) {
 			for (const finding of revealed(agent)) {
 				n += 1;
+
 				out.push({
 					id: `F-${String(n).padStart(2, '0')}`,
 					agent: agent.name,
@@ -143,6 +182,7 @@
 				});
 			}
 		}
+
 		return out;
 	});
 
@@ -206,7 +246,6 @@
 		])
 	);
 
-
 	function confirmRestart() {
 		start();
 	}
@@ -224,26 +263,33 @@
 		elapsed = 0;
 		notified = false;
 		clock = setInterval(() => (elapsed += 1), 1000);
+
 		timer = setInterval(() => {
 			let allDone = true;
+
 			for (const agent of agents) {
 				if (agent.status !== 'running') {
 					if (agent.status !== 'done') allDone = false;
 					continue;
 				}
+
 				allDone = false;
 				agent.progress = Math.min(100, agent.progress + agent.rate * (0.5 + Math.random()));
+
 				const script = LOG_SCRIPTS[agent.id];
-				const line =
-					script[Math.min(script.length - 1, Math.floor((agent.progress / 100) * script.length))];
+				const line = script[Math.min(script.length - 1, Math.floor((agent.progress / 100) * script.length))];
+
 				if (agent.logs[agent.logs.length - 1] !== line) agent.logs.push(line);
+
 				if (agent.progress >= 100) {
 					agent.status = 'done';
 					agent.doneAt = elapsed;
 				}
 			}
+
 			if (allDone) {
 				stop();
+
 				if (!notified) {
 					notified = true;
 					onDone();
@@ -254,18 +300,20 @@
 
 	$effect(() => {
 		start();
+
 		return stop;
 	});
 
 	function formatElapsed(total: number): string {
 		const m = Math.floor(total / 60);
 		const s = total % 60;
+
 		return `${m}:${String(s).padStart(2, '0')}`;
 	}
 </script>
 
 <ReviewingView
-	title={title}
+	{title}
 	meta={{
 		prLabel: prLabel ?? '',
 		repo,

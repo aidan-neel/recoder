@@ -7,10 +7,16 @@ class ChatGptStatus {
 	private pending: Promise<void> | null = null;
 
 	check(): Promise<void> {
-		this.pending ??= serverApi.getCodexStatus()
-			.then((status) => { this.signedIn = status.authenticated; })
+		this.pending ??= serverApi
+			.getCodexStatus()
+			.then((status) => {
+				this.signedIn = status.authenticated;
+			})
 			.catch(() => {})
-			.finally(() => { this.pending = null; });
+			.finally(() => {
+				this.pending = null;
+			});
+
 		return this.pending;
 	}
 }

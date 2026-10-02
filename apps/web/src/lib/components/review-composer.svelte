@@ -68,8 +68,16 @@
 	/** A press anywhere on the composer's surface (padding, footer gaps, chips) focuses the input. */
 	function focusInput(event: PointerEvent): void {
 		if (disabled || event.button !== 0 || !inputEl) return;
+
 		const target = event.target as HTMLElement;
-		if (target === inputEl || target.closest('button, a, input, textarea, select, label, [role="button"], [role="combobox"], [contenteditable="true"]')) return;
+
+		if (
+			target === inputEl ||
+			target.closest(
+				'button, a, input, textarea, select, label, [role="button"], [role="combobox"], [contenteditable="true"]'
+			)
+		)
+			return;
 		event.preventDefault();
 		if (document.activeElement === inputEl) return;
 		inputEl.focus();
@@ -116,7 +124,12 @@
 		{/if}
 		{@render leading?.()}
 		<span class="flex-1"></span>
-		<Composer.Submit class="rc-send" data-working={(busy || generating) && !sending ? '' : undefined} disabled={generating && !onStop} onclick={stopClick}>
+		<Composer.Submit
+			class="rc-send"
+			data-working={(busy || generating) && !sending ? '' : undefined}
+			disabled={generating && !onStop}
+			onclick={stopClick}
+		>
 			{#snippet children({ action })}
 				{#if sending && !generating}
 					<Spinner size={size === 'panel' ? 14 : 15} aria-hidden="true" />

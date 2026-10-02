@@ -12,7 +12,6 @@
 	/** Index of a sentence's first word, so the reveal staggers across both sentences. */
 	const words = (sentence: number) => headline.slice(0, sentence).reduce((n, text) => n + text.split(' ').length, 0);
 
-
 	const description = headline.join(' ');
 </script>
 
@@ -38,7 +37,8 @@
 			{/each}
 		</Typography.Title>
 		<div class="hero-rise mt-[22px] flex flex-wrap items-start gap-2" style="--d: 0">
-			<Button href={repo} class="brief-action">Self-host on GitHub <ArrowUpRight size={14} aria-hidden="true" /></Button>
+			<Button href={repo} class="brief-action">Self-host on GitHub <ArrowUpRight size={14} aria-hidden="true" /></Button
+			>
 			<WaitlistForm />
 		</div>
 	</section>

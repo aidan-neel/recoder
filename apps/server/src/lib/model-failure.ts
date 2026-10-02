@@ -15,12 +15,15 @@ type ModelRef = Pick<RoleConfig, 'provider' | 'source'> | undefined;
 export function isUsageLimit(err: unknown, config: ModelRef): boolean {
 	if (!(err instanceof LlmError)) return false;
 	if (config?.provider === 'codex') return err.status === 429;
+
 	return !!hostedProvider(config?.source) && (err.status === 402 || err.status === 429);
 }
 
 function usageLimitFor(config: ModelRef): UsageLimit {
 	if (config?.provider === 'codex') return { provider: 'codex', name: 'ChatGPT', usageUrl: null };
+
 	const hosted = hostedProvider(config?.source);
+
 	return { provider: hosted?.id ?? 'custom', name: hosted?.name ?? 'Your server', usageUrl: hosted?.usageUrl ?? null };
 }
 
@@ -32,15 +35,28 @@ function usageLimitFor(config: ModelRef): UsageLimit {
 export function modelFailure(err: unknown, config: ModelRef, fallback: string): ModelFailure {
 	if (isUsageLimit(err, config)) {
 		const usageLimit = usageLimitFor(config);
-		return { reason: `${usageLimit.name} is out of usage. Switch to another model, or wait for it to reset.`, usageLimit };
+
+		return {
+			reason: `${usageLimit.name} is out of usage. Switch to another model, or wait for it to reset.`,
+			usageLimit
+		};
 	}
+
 	if (config?.provider === 'codex' && err instanceof LlmError) {
 		return err.status === 401 ? { reason: err.message, signIn: true } : { reason: err.message };
 	}
+
 	if (isAuthFailure(err)) {
 		const hosted = hostedProvider(config?.source);
-		return { reason: hosted ? `${hosted.name} rejected the API key. Reconnect it in Settings → Models.` : 'The model endpoint rejected the API key. Update it in Settings → Models.' };
+
+		return {
+			reason: hosted
+				? `${hosted.name} rejected the API key. Reconnect it in Settings → Models.`
+				: 'The model endpoint rejected the API key. Update it in Settings → Models.'
+		};
 	}
+
 	if (err instanceof LlmError && err.message && !/^LLM\b/.test(err.message)) return { reason: err.message };
+
 	return { reason: fallback };
 }

@@ -9,6 +9,7 @@ export const deleteConfirm = $state<{ id: string | null }>({ id: null });
 
 export function isSessionRunning(id: string): boolean {
 	const status = recentSessions.reviews.find((review) => review.id === id)?.status;
+
 	return status === 'running' || status === 'queued';
 }
 
@@ -22,7 +23,9 @@ export async function deleteSession(id: string): Promise<void> {
 	const tabIndex = sessionState.sessions.findIndex((session) => session.id === id);
 	const tab = sessionState.sessions[tabIndex];
 	const snapshot = recentSessions.hide(id);
+
 	await closeSessionTab(id);
+
 	try {
 		await serverApi.deleteReview(id);
 	} catch (e) {
@@ -31,9 +34,11 @@ export async function deleteSession(id: string): Promise<void> {
 			recentSessions.unhide(id, snapshot);
 			if (tab) sessionState.restore(tab, tabIndex);
 			errorToast('Could not delete the session', e instanceof Error ? e.message : undefined);
+
 			return;
 		}
 	}
+
 	recentSessions.forget(id);
 	undoToast(snapshot ? `Deleted session #${snapshot.review.prNumber}` : 'Session deleted');
 }

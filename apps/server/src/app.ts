@@ -18,6 +18,7 @@ import { ModelConfigError } from './lib/models';
 export const app = new Hono();
 
 app.use('*', logger());
+
 app.use(
 	'*',
 	cors({
@@ -29,9 +30,7 @@ app.use(
 	})
 );
 
-app.get('/', (c) =>
-	c.json({ name: 'recoder', version: VERSION, frontend: env.FRONTEND_URL, health: '/health' })
-);
+app.get('/', (c) => c.json({ name: 'recoder', version: VERSION, frontend: env.FRONTEND_URL, health: '/health' }));
 app.route('/health', health);
 app.route('/api/auth', auth);
 app.route('/api/home', home);
@@ -44,9 +43,11 @@ app.route('/api/runs', runs);
 app.route('/api/webhooks', webhooks);
 
 app.notFound((c) => c.json({ error: 'not found' }, 404));
+
 app.onError((err, c) => {
 	// Any route that needs a model: say what to set up instead of a bare 500.
 	if (err instanceof ModelConfigError) return c.json({ error: err.message, action: 'settings' }, 409);
 	console.error('[recoder] unhandled error', err);
+
 	return c.json({ error: 'internal server error' }, 500);
 });

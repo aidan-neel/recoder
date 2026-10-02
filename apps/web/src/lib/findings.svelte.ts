@@ -111,7 +111,10 @@ function initialFindings(): Finding[] {
 			category: 'perf',
 			agent: 'perf',
 			body: 'buckets Map has no eviction, so it grows once per key forever',
-			verification: { status: 'unverified', reason: 'Growth over hours of traffic cannot be reproduced in a short run.' },
+			verification: {
+				status: 'unverified',
+				reason: 'Growth over hours of traffic cannot be reproduced in a short run.'
+			},
 			file: FILE,
 			startLine: 10,
 			endLine: 12,
@@ -166,10 +169,12 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 		warning: 'medium',
 		info: 'low'
 	};
+
 	const match = /^\[([^\]]+)\]\s*/.exec(f.message);
 	const category = match?.[1] ?? 'review';
 	const body = match ? f.message.slice(match[0].length) : f.message;
 	const line = f.line ?? 1;
+
 	return {
 		id: f.id,
 		code: `F-${String(index + 1).padStart(2, '0')}`,
@@ -217,6 +222,7 @@ class FindingsStore {
 		this.hiddenSeverities = this.hiddenSeverities.includes(severity)
 			? this.hiddenSeverities.filter((item) => item !== severity)
 			: [...this.hiddenSeverities, severity];
+
 		if (this.active && !this.isShown(this.active)) {
 			this.activeId = null;
 			this.hoveredId = null;
@@ -246,6 +252,7 @@ class FindingsStore {
 
 	accept(id: string, fixedBy?: string, fix?: import('@recoder/shared').FindingFix): void {
 		const finding = this.items.find((f) => f.id === id);
+
 		if (finding) {
 			finding.status = 'accepted';
 			finding.fixedBy = fixedBy ?? null;
@@ -255,6 +262,7 @@ class FindingsStore {
 
 	dismiss(id: string): void {
 		const finding = this.items.find((f) => f.id === id);
+
 		if (finding) {
 			finding.status = 'dismissed';
 			if (this.activeId === id) this.activeId = null;
@@ -263,6 +271,7 @@ class FindingsStore {
 
 	reopen(id: string): void {
 		const finding = this.items.find((f) => f.id === id);
+
 		if (finding) finding.status = 'open';
 	}
 
@@ -270,7 +279,10 @@ class FindingsStore {
 		this.suggestions[id] = { status: 'loading' };
 	}
 
-	suggestReady(id: string, suggestion: { summary: string; patch: string; edits?: import('@recoder/shared').FixEdit[]; applies: boolean | null }): void {
+	suggestReady(
+		id: string,
+		suggestion: { summary: string; patch: string; edits?: import('@recoder/shared').FixEdit[]; applies: boolean | null }
+	): void {
 		this.suggestions[id] = { status: 'ready', ...suggestion };
 	}
 
@@ -280,11 +292,13 @@ class FindingsStore {
 
 	setVerify(id: string, verify: FixVerify | undefined): void {
 		const current = this.suggestions[id];
+
 		if (current?.status === 'ready') this.suggestions[id] = { ...current, verify };
 	}
 
 	applyingFix(id: string): void {
 		const current = this.suggestions[id];
+
 		if (current?.status === 'ready') {
 			this.suggestions[id] = { ...current, apply: 'applying', applyError: undefined };
 		}
@@ -292,6 +306,7 @@ class FindingsStore {
 
 	applyReady(id: string, result: { sha?: string; branch: string }): void {
 		const current = this.suggestions[id];
+
 		if (current?.status === 'ready') {
 			this.suggestions[id] = { ...current, apply: 'applied', ...result };
 		}
@@ -299,6 +314,7 @@ class FindingsStore {
 
 	applyFailed(id: string, error: string): void {
 		const current = this.suggestions[id];
+
 		if (current?.status === 'ready') {
 			this.suggestions[id] = { ...current, apply: 'error', applyError: error };
 		}

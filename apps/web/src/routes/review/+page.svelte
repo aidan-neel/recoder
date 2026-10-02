@@ -13,6 +13,6 @@
 	files={13}
 	additions={1204}
 	deletions={318}
-	sessionHref={sessionHref}
+	{sessionHref}
 	onOpenDiff={() => void goto(sessionHref)}
 />

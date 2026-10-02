@@ -6,8 +6,27 @@
 
 	// Indent and width per line, so the block reads as code rather than a paragraph.
 	const lines: [number, number][] = [
-		[0, 46], [0, 0], [0, 38], [0, 0], [0, 30], [1, 52], [2, 64], [0, 0], [2, 34], [2, 42],
-		[2, 70], [1, 8], [0, 0], [1, 40], [2, 58], [0, 0], [2, 48], [1, 8], [0, 0], [1, 44], [2, 36]
+		[0, 46],
+		[0, 0],
+		[0, 38],
+		[0, 0],
+		[0, 30],
+		[1, 52],
+		[2, 64],
+		[0, 0],
+		[2, 34],
+		[2, 42],
+		[2, 70],
+		[1, 8],
+		[0, 0],
+		[1, 40],
+		[2, 58],
+		[0, 0],
+		[2, 48],
+		[1, 8],
+		[0, 0],
+		[1, 44],
+		[2, 36]
 	];
 </script>
 
@@ -24,7 +43,9 @@
 				<Skeleton class="ms-auto me-2 h-2.5 w-3" />
 				<span></span>
 				<span></span>
-				{#if width}<div style:padding-inline-start="{indent * 28}px"><Skeleton class="h-2.5" w={width} unit="%" /></div>{/if}
+				{#if width}<div style:padding-inline-start="{indent * 28}px">
+						<Skeleton class="h-2.5" w={width} unit="%" />
+					</div>{/if}
 			</div>
 		{/each}
 	</div>

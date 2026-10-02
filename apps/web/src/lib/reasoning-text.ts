@@ -9,14 +9,21 @@ const BLOCK_START = /^\s*(?:```|~~~|[-*+]\s|\d+[.)]\s|#{1,6}\s|>|\|)/;
 export function reasoningMarkdown(text: string): string {
 	const lines = text.split('\n');
 	let fenced = false;
-	return lines.map((line, i) => {
-		if (/^\s*(?:```|~~~)/.test(line)) {
-			fenced = !fenced;
-			return line;
-		}
-		const next = lines[i + 1];
-		if (fenced || !line.trim() || next === undefined || !next.trim() || BLOCK_START.test(next)) return line;
-		if (/^\s*(?:#{1,6}\s|\|)/.test(line) || /(?: {2}|\\)$/.test(line)) return line;
-		return `${line}\\`;
-	}).join('\n');
+
+	return lines
+		.map((line, i) => {
+			if (/^\s*(?:```|~~~)/.test(line)) {
+				fenced = !fenced;
+
+				return line;
+			}
+
+			const next = lines[i + 1];
+
+			if (fenced || !line.trim() || next === undefined || !next.trim() || BLOCK_START.test(next)) return line;
+			if (/^\s*(?:#{1,6}\s|\|)/.test(line) || /(?: {2}|\\)$/.test(line)) return line;
+
+			return `${line}\\`;
+		})
+		.join('\n');
 }

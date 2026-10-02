@@ -1,4 +1,11 @@
-import type { ModelEntry, Provider, ModelSettings, ModelSettingsPatch, ReasoningEffort, ReviewRole } from '@recoder/shared';
+import type {
+	ModelEntry,
+	Provider,
+	ModelSettings,
+	ModelSettingsPatch,
+	ReasoningEffort,
+	ReviewRole
+} from '@recoder/shared';
 import { errorToast } from './notify';
 import { serverApi } from './server-api';
 
@@ -39,6 +46,7 @@ export interface ModelOption {
 /** 131072 → "128K", 1048576 → "1M". */
 export function formatContextWindow(tokens: number): string {
 	if (tokens >= 1024 * 1024) return `${Math.round((tokens / (1024 * 1024)) * 10) / 10}M`;
+
 	return `${Math.round(tokens / 1024)}K`;
 }
 
@@ -64,21 +72,30 @@ export function effortLabel(effort: ReasoningEffort): string {
 /** "GPT-5.6-Sol" → "5.6 Sol" for subscription models; API entries keep their label. */
 function displayName(entry: ModelEntry): string {
 	const label = entry.label.replace(/\s*·\s*subscription$/i, '');
+
 	return entry.provider === 'codex' ? label.replace(/^gpt-(?=\d)/i, '').replace(/-/g, ' ') : label;
 }
 
 /** Names for hosted providers, so pickers can group by them before the provider list loads. */
-const HOSTED_NAMES: Record<string, string> = { 'opencode-go': 'OpenCode Go', opencode: 'OpenCode Zen', openrouter: 'OpenRouter' };
+const HOSTED_NAMES: Record<string, string> = {
+	'opencode-go': 'OpenCode Go',
+	opencode: 'OpenCode Zen',
+	openrouter: 'OpenRouter'
+};
 
 export function providerName(entry: ModelEntry): string {
 	if (entry.provider === 'codex') return 'ChatGPT';
 	if (entry.source) return HOSTED_NAMES[entry.source] ?? entry.source;
+
 	const url = entry.baseUrl ?? '';
+
 	if (/openrouter/i.test(url)) return 'OpenRouter';
 	if (/dashscope/i.test(url)) return 'DashScope';
 	if (/openai\.com/i.test(url)) return 'OpenAI';
+
 	try {
 		const host = new URL(url).hostname;
+
 		return /^(localhost|127\.|10\.|192\.168\.)/.test(host) ? 'Local endpoint' : host;
 	} catch {
 		return 'OpenAI-compatible';
@@ -87,20 +104,25 @@ export function providerName(entry: ModelEntry): string {
 
 export function toModelOption(entry: ModelEntry): ModelOption {
 	const efforts = entry.efforts?.length ? entry.efforts : null;
+
 	const defaultEffort = efforts
 		? entry.defaultEffort && efforts.includes(entry.defaultEffort)
 			? entry.defaultEffort
-			: efforts.includes('medium') ? 'medium' : efforts[0]
+			: efforts.includes('medium')
+				? 'medium'
+				: efforts[0]
 		: null;
+
 	return {
 		id: entry.id,
 		displayName: displayName(entry),
 		provider: providerName(entry),
-		efforts: efforts?.map((id) => ({
-			id,
-			label: EFFORT_TEXT[id].label,
-			description: id === defaultEffort ? 'Model default' : EFFORT_TEXT[id].description
-		})) ?? null,
+		efforts:
+			efforts?.map((id) => ({
+				id,
+				label: EFFORT_TEXT[id].label,
+				description: id === defaultEffort ? 'Model default' : EFFORT_TEXT[id].description
+			})) ?? null,
 		defaultEffort,
 		contextWindow: entry.contextWindow ?? null
 	};
@@ -114,27 +136,41 @@ export function toModelOption(entry: ModelEntry): ModelOption {
 /** ChatGPT models only return summaries of their reasoning, never the reasoning itself. */
 export function summarizesReasoning(modelId: string | null | undefined): boolean {
 	if (!modelId) return false;
-	return modelSettingsUi.config?.models.some((item) => (item.model === modelId || item.id === modelId) && item.provider === 'codex') ?? false;
+
+	return (
+		modelSettingsUi.config?.models.some(
+			(item) => (item.model === modelId || item.id === modelId) && item.provider === 'codex'
+		) ?? false
+	);
 }
 
 export function modelLabel(modelId: string | null | undefined): string {
 	if (!modelId) return '';
+
 	const entry = modelSettingsUi.config?.models.find((item) => item.model === modelId || item.id === modelId);
+
 	if (entry) return toModelOption(entry).displayName;
+
 	const tail = modelId.split('/').pop() ?? modelId;
+
 	return /^gpt-\d/i.test(tail) ? tail.replace(/^gpt-/i, 'GPT-') : tail.replace(/[-_]+/g, ' ').trim();
 }
 
 /** Keep an effort only when the model offers it; otherwise use the model default. */
-export function resolveEffort(model: ModelOption | undefined, effort: ReasoningEffort | null | undefined): ReasoningEffort | null {
+export function resolveEffort(
+	model: ModelOption | undefined,
+	effort: ReasoningEffort | null | undefined
+): ReasoningEffort | null {
 	if (!model?.efforts) return null;
+
 	return effort && model.efforts.some((option) => option.id === effort) ? effort : model.defaultEffort;
 }
 
 export type SettingsSection = 'models' | 'connections' | 'harness' | 'guidelines' | 'appearance';
 
 /** A dialog to open inside the section as soon as Settings shows it. */
-export type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-repos' } | { kind: 'add-provider' };
+export type SettingsIntent =
+	{ kind: 'connect'; provider: Provider } | { kind: 'browse-repos' } | { kind: 'add-provider' };
 
 /** Global open state + cached config for the model settings modal. */
 class ModelSettingsUi {
@@ -167,31 +203,48 @@ class ModelSettingsUi {
 	/** The Review model and effort (the orchestrator): what the composer picker shows. */
 	get orchestrator(): ModelChoice | null {
 		const config = this.config;
+
 		if (!config) return null;
+
 		const modelId = config.orchestratorModelId ?? config.sharedModelId ?? config.models[0]?.id;
 		const model = this.models.find((item) => item.id === modelId);
+
 		if (!model) return null;
+
 		return { modelId: model.id, effort: resolveEffort(model, config.orchestratorEffort) };
 	}
 
 	/** The one model every specialist runs on, mirroring the server: unset follows Review. */
 	get specialist(): ModelChoice | null {
 		const config = this.config;
+
 		if (!config?.specialistModelId) return this.orchestrator;
+
 		const model = this.models.find((item) => item.id === config.specialistModelId);
+
 		if (!model) return this.orchestrator;
+
 		return { modelId: model.id, effort: resolveEffort(model, config.specialistEffort) };
 	}
 
 	/** Optimistically apply a patch, then persist; reverts and reports on failure. */
-	async update(patch: Pick<ModelSettingsPatch, 'orchestratorModelId' | 'orchestratorEffort' | 'specialistModelId' | 'specialistEffort'>): Promise<boolean> {
+	async update(
+		patch: Pick<
+			ModelSettingsPatch,
+			'orchestratorModelId' | 'orchestratorEffort' | 'specialistModelId' | 'specialistEffort'
+		>
+	): Promise<boolean> {
 		const previous = this.config;
+
 		if (previous) this.config = { ...previous, ...patch };
+
 		const ok = await this.save(patch);
+
 		if (!ok) {
 			this.config = previous;
 			errorToast('Model settings were not saved', this.error ?? undefined);
 		}
+
 		return ok;
 	}
 
@@ -206,6 +259,7 @@ class ModelSettingsUi {
 	async load(): Promise<void> {
 		this.loading = true;
 		this.error = null;
+
 		try {
 			this.config = await serverApi.getModelSettings();
 		} catch (e) {
@@ -218,11 +272,14 @@ class ModelSettingsUi {
 	async save(patch: ModelSettingsPatch): Promise<boolean> {
 		this.saving = true;
 		this.error = null;
+
 		try {
 			this.config = await serverApi.saveModelSettings(patch);
+
 			return true;
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : 'Failed to save model settings.';
+
 			return false;
 		} finally {
 			this.saving = false;

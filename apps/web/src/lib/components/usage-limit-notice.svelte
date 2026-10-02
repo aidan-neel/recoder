@@ -34,11 +34,15 @@
 	/** Models on other providers, grouped by provider. */
 	const alternatives = $derived.by(() => {
 		const groups = new Map<string, ModelEntry[]>();
+
 		for (const entry of modelSettingsUi.config?.models ?? []) {
 			if (providerKey(entry) === limit.provider) continue;
+
 			const name = providerName(entry);
+
 			groups.set(name, [...(groups.get(name) ?? []), entry]);
 		}
+
 		return [...groups.entries()];
 	});
 
@@ -50,30 +54,47 @@
 	$effect(() => {
 		resetsAt = limit.resetsAt ?? null;
 		if (limit.provider !== 'codex' || resetsAt) return;
+
 		// ChatGPT reports its windows; the one that ran out decides when reviews can run again.
 		let cancelled = false;
-		void serverApi.getCodexStatus().then((status) => {
-			if (cancelled) return;
-			const spent = (status.limits ?? []).filter((item) => item.usedPercent >= 100 && item.resetsAt);
-			const next = spent.length ? Math.max(...spent.map((item) => item.resetsAt!)) : null;
-			resetsAt = next;
-		}).catch(() => {});
-		return () => { cancelled = true; };
+
+		void serverApi
+			.getCodexStatus()
+			.then((status) => {
+				if (cancelled) return;
+
+				const spent = (status.limits ?? []).filter((item) => item.usedPercent >= 100 && item.resetsAt);
+				const next = spent.length ? Math.max(...spent.map((item) => item.resetsAt!)) : null;
+
+				resetsAt = next;
+			})
+			.catch(() => {});
+
+		return () => {
+			cancelled = true;
+		};
 	});
 
 	$effect(() => {
 		if (!resetsAt) return;
+
 		const timer = setInterval(() => (now = Date.now()), 30_000);
+
 		return () => clearInterval(timer);
 	});
 
 	const resetText = $derived.by(() => {
 		if (!resetsAt) return limit.usageUrl ? `Check your ${limit.name} plan for when it resets.` : null;
+
 		const minutes = Math.ceil((resetsAt * 1000 - now) / 60_000);
+
 		if (minutes <= 0) return 'It should have reset. Try again.';
 		if (minutes < 60) return `Resets in ${minutes} min.`;
+
 		const hours = Math.floor(minutes / 60);
+
 		if (hours < 24) return `Resets in ${hours}h${minutes % 60 ? ` ${minutes % 60}m` : ''}.`;
+
 		return `Resets ${new Date(resetsAt * 1000).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.`;
 	});
 
@@ -84,19 +105,28 @@
 	/** Review moves to the new model; Specialists follow it when they were on the spent plan too. */
 	async function switchTo(entry: ModelEntry): Promise<void> {
 		const config = modelSettingsUi.config;
+
 		if (!config || switching) return;
 		switching = true;
+
 		const specialist = config.models.find((item) => item.id === config.specialistModelId);
+
 		const ok = await modelSettingsUi.update({
 			orchestratorModelId: entry.id,
 			orchestratorEffort: resolveEffort(toModelOption(entry), null),
-			...(specialist && providerKey(specialist) === limit.provider ? { specialistModelId: null, specialistEffort: null } : {})
+			...(specialist && providerKey(specialist) === limit.provider
+				? { specialistModelId: null, specialistEffort: null }
+				: {})
 		});
+
 		switching = false;
+
 		if (!ok) {
 			errorToast('Could not switch models');
+
 			return;
 		}
+
 		onRetry?.();
 	}
 </script>
@@ -106,14 +136,19 @@
 	<div class="min-w-0 flex-1">
 		<p class="review-notice-title">{limit.name} is out of usage</p>
 		<p class="review-notice-body">
-			{#if resetText}{resetText}{' '}{/if}{alternatives.length ? 'Switch to another model to keep going now.' : 'Connect another provider to keep going now.'}
+			{#if resetText}{resetText}{' '}{/if}{alternatives.length
+				? 'Switch to another model to keep going now.'
+				: 'Connect another provider to keep going now.'}
 		</p>
 		<div class="usage-notice-actions">
 			{#if alternatives.length}
 				<DropdownMenu.Root>
 					<DropdownMenu.Trigger variant="outline" class="gap-1.5" disabled={switching || retrying}>
 						Switch model
-						{#if switching || retrying}<Spinner size={13} aria-hidden="true" />{:else}<ChevronDown size={13} aria-hidden="true" />{/if}
+						{#if switching || retrying}<Spinner size={13} aria-hidden="true" />{:else}<ChevronDown
+								size={13}
+								aria-hidden="true"
+							/>{/if}
 					</DropdownMenu.Trigger>
 					<DropdownMenu.Content class="model-menu-models w-[260px]">
 						{#each alternatives as [provider, entries], g (provider)}

@@ -27,11 +27,10 @@ export interface FileBadge {
 /** Folders first, then files; alphabetical (case-insensitive) within each group. */
 export function sortTreeNodes(nodes: TreeNode[]): TreeNode[] {
 	return [...nodes]
-		.map((node) =>
-			node.kind === 'folder' ? { ...node, children: sortTreeNodes(node.children) } : node
-		)
+		.map((node) => (node.kind === 'folder' ? { ...node, children: sortTreeNodes(node.children) } : node))
 		.sort((a, b) => {
 			if (a.kind !== b.kind) return a.kind === 'folder' ? -1 : 1;
+
 			return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
 		});
 }
@@ -82,9 +81,7 @@ export const changedFiles: TreeNode[] = sortTreeNodes([
 			{
 				kind: 'folder',
 				name: 'time',
-				children: [
-					{ kind: 'file', id: 'src/time/clock.ts', name: 'clock.ts', additions: 6, deletions: 0 }
-				]
+				children: [{ kind: 'file', id: 'src/time/clock.ts', name: 'clock.ts', additions: 6, deletions: 0 }]
 			}
 		]
 	},
@@ -106,28 +103,32 @@ export const changedFiles: TreeNode[] = sortTreeNodes([
 export const changedFileCount = 6;
 
 /** Build a folder tree from flat file paths (e.g. live review FileDiffs). */
-export function buildFileTree(
-	files: { path: string; additions: number; deletions: number }[]
-): TreeNode[] {
+export function buildFileTree(files: { path: string; additions: number; deletions: number }[]): TreeNode[] {
 	interface FolderEntry {
 		name: string;
 		children: Map<string, FolderEntry | FileEntry>;
 	}
+
 	interface FileEntry {
 		name: string;
 		fullPath: string;
 		additions: number;
 		deletions: number;
 	}
+
 	const root = new Map<string, FolderEntry | FileEntry>();
 
 	for (const file of files) {
 		const parts = file.path.split('/').filter(Boolean);
+
 		if (parts.length === 0) continue;
+
 		let level = root;
+
 		for (let i = 0; i < parts.length; i++) {
 			const part = parts[i];
 			const last = i === parts.length - 1;
+
 			if (last) {
 				level.set(part, {
 					name: part,
@@ -137,10 +138,12 @@ export function buildFileTree(
 				} satisfies FileEntry);
 			} else {
 				let folder = level.get(part) as FolderEntry | undefined;
+
 				if (!folder || !('children' in folder)) {
 					folder = { name: part, children: new Map() };
 					level.set(part, folder);
 				}
+
 				level = folder.children;
 			}
 		}
@@ -154,7 +157,9 @@ export function buildFileTree(
 				children: [...entry.children.values()].map(toNode)
 			};
 		}
+
 		const name = entry.name.split('/').pop() ?? entry.name;
+
 		return {
 			kind: 'file',
 			id: entry.fullPath,
@@ -163,5 +168,6 @@ export function buildFileTree(
 			deletions: entry.deletions
 		};
 	};
+
 	return sortTreeNodes([...root.values()].map(toNode));
 }

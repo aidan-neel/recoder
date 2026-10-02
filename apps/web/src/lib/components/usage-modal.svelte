@@ -26,6 +26,7 @@
 		loading = true;
 		error = null;
 		now = Date.now();
+
 		try {
 			connection = await serverApi.getCodexStatus();
 			void shellState.refreshUsage();
@@ -39,24 +40,32 @@
 	function limitName(name: string): string {
 		return name.replace(/\b(\d+)\s+min\b/gi, (match, value: string) => {
 			const minutes = Number(value);
+
 			if (minutes === 10080) return 'Weekly';
 			if (minutes > 0 && minutes % 1440 === 0) return `${minutes / 1440}-day`;
 			if (minutes > 0 && minutes % 60 === 0) return `${minutes / 60}-hour window`;
+
 			return match;
 		});
 	}
 
 	function resetText(resetsAt: number | null): string {
 		if (!resetsAt || !Number.isFinite(resetsAt)) return 'Reset time unavailable';
+
 		const minutes = Math.ceil((resetsAt * 1000 - now) / 60_000);
+
 		if (minutes <= 0) return 'Resetting now';
+
 		const at = new Date(resetsAt * 1000);
+
 		const when =
 			minutes < 24 * 60
 				? at.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 				: at.toLocaleDateString(undefined, { weekday: 'long', hour: 'numeric', minute: '2-digit' });
+
 		const h = Math.floor(minutes / 60);
 		const rel = minutes < 60 ? `${minutes}m` : h < 24 ? `${h}h ${minutes % 60}m` : `${Math.floor(h / 24)}d ${h % 24}h`;
+
 		return `Resets in ${rel} · ${when}`;
 	}
 
@@ -83,19 +92,27 @@
 			{:else if !connection}
 				<UsageSkeleton label="Loading usage" />
 			{:else if !connection.authenticated}
-				<Typography.Text variant="supporting">Sign in to ChatGPT in Settings to review with your plan and track its limits here.</Typography.Text>
+				<Typography.Text variant="supporting"
+					>Sign in to ChatGPT in Settings to review with your plan and track its limits here.</Typography.Text
+				>
 			{:else}
 				<Typography.Text class="usage-account">
-					{connection.email ?? 'ChatGPT'}{#if connection.planType}<span class="mx-1.5 text-fg-faint" aria-hidden="true">·</span>{planName(connection.planType)}{/if}
+					{connection.email ?? 'ChatGPT'}{#if connection.planType}<span class="mx-1.5 text-fg-faint" aria-hidden="true"
+							>·</span
+						>{planName(connection.planType)}{/if}
 				</Typography.Text>
 				<div class="flex flex-col gap-4">
 					{#each connection.limits ?? [] as limit (limit.name)}
 						{@const name = limitName(limit.name)}
-						{@const percent = Number.isFinite(limit.usedPercent) ? Math.max(0, Math.min(100, Math.round(limit.usedPercent))) : null}
+						{@const percent = Number.isFinite(limit.usedPercent)
+							? Math.max(0, Math.min(100, Math.round(limit.usedPercent)))
+							: null}
 						<div class="flex flex-col gap-2">
 							<div class="flex items-baseline justify-between gap-3">
 								<span class="text-[13px] text-fg">{name}</span>
-								<span class="font-mono text-[12.5px] text-fg-muted tabular-nums">{percent === null ? '—' : `${percent}% used`}</span>
+								<span class="font-mono text-[12.5px] text-fg-muted tabular-nums"
+									>{percent === null ? '—' : `${percent}% used`}</span
+								>
 							</div>
 							{#if percent !== null}
 								<Progress value={percent} class="usage-bar" {...{ 'aria-label': `${name} usage` }} />
@@ -109,7 +126,7 @@
 			{/if}
 		</Modal.Body>
 		<Modal.Footer>
-			<Button variant="ghost" class="mr-auto" loading={loading} disabled={loading} onclick={() => void refresh()}>
+			<Button variant="ghost" class="mr-auto" {loading} disabled={loading} onclick={() => void refresh()}>
 				<RefreshCw size={14} aria-hidden="true" /> Refresh
 			</Button>
 			<Button

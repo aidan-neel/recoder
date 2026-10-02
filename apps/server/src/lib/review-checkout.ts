@@ -9,7 +9,10 @@ import { tokenEnv } from './tokens.js';
 
 /** The checkout could not be found or recreated. */
 export class CheckoutError extends Error {
-	constructor(message: string, readonly status: 409 | 502) {
+	constructor(
+		message: string,
+		readonly status: 409 | 502
+	) {
 		super(message);
 	}
 }
@@ -20,7 +23,10 @@ export function reviewCheckoutPath(review: Review, repo: Repo): string {
 }
 
 async function isCheckout(path: string): Promise<boolean> {
-	return stat(join(path, '.git')).then(() => true, () => false);
+	return stat(join(path, '.git')).then(
+		() => true,
+		() => false
+	);
 }
 
 /**
@@ -29,12 +35,18 @@ async function isCheckout(path: string): Promise<boolean> {
  */
 export async function findReviewCheckout(review: Review): Promise<string | null> {
 	const known = reviewSandboxes.get(review.id);
-	if (known && await isCheckout(known)) return known;
+
+	if (known && (await isCheckout(known))) return known;
+
 	const repo = review.source === 'stub' ? null : db.repos.get(review.repoId);
+
 	if (!repo) return null;
+
 	const path = reviewCheckoutPath(review, repo);
-	if (!await isCheckout(path)) return null;
+
+	if (!(await isCheckout(path))) return null;
 	reviewSandboxes.set(review.id, path);
+
 	return path;
 }
 
@@ -46,14 +58,22 @@ const restoring = new Map<string, Promise<string>>();
  */
 export async function ensureReviewCheckout(review: Review): Promise<string> {
 	if (review.source === 'stub') throw new CheckoutError('Stub reviews have no checkout.', 409);
+
 	const found = await findReviewCheckout(review);
+
 	if (found) return found;
+
 	const repo = db.repos.get(review.repoId);
+
 	if (!repo) throw new CheckoutError('The repository is no longer tracked.', 409);
+
 	const pending = restoring.get(review.id);
+
 	if (pending) return pending;
+
 	const source = review.source;
 	const { fetchRef, branch } = refspecFor(source, review.prNumber);
+
 	const task = prepareSandbox({
 		repoSlug: locateRepo(repo.url).slug,
 		prNumber: review.prNumber,
@@ -66,12 +86,18 @@ export async function ensureReviewCheckout(review: Review): Promise<string> {
 	})
 		.then((sandbox) => {
 			reviewSandboxes.set(review.id, sandbox.path);
+
 			return sandbox.path;
 		})
 		.catch((err: unknown) => {
-			throw new CheckoutError(`Could not restore the pull request checkout: ${err instanceof Error ? err.message.slice(0, 300) : String(err)}`, 502);
+			throw new CheckoutError(
+				`Could not restore the pull request checkout: ${err instanceof Error ? err.message.slice(0, 300) : String(err)}`,
+				502
+			);
 		})
 		.finally(() => restoring.delete(review.id));
+
 	restoring.set(review.id, task);
+
 	return task;
 }

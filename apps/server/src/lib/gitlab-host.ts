@@ -13,13 +13,19 @@ function hostFile(): string {
 
 /** "https://gitlab.dev.acme.com/" → "gitlab.dev.acme.com". Null when it isn't a host. */
 export function normalizeGitlabHost(input: string): string | null {
-	const host = input.trim().replace(/^[a-z][a-z0-9+.-]*:\/\//i, '').replace(/\/+$/, '').toLowerCase();
+	const host = input
+		.trim()
+		.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '')
+		.replace(/\/+$/, '')
+		.toLowerCase();
+
 	return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:\d{1,5})?$/.test(host) ? host : null;
 }
 
 function readStored(): string | null {
 	try {
 		const parsed = JSON.parse(readFileSync(hostFile(), 'utf8')) as { host?: unknown };
+
 		return typeof parsed.host === 'string' ? normalizeGitlabHost(parsed.host) : null;
 	} catch {
 		return null;
@@ -30,12 +36,14 @@ function readStored(): string | null {
 export function getGitlabHost(): string | null {
 	const fromEnv = process.env.GITLAB_HOST ? normalizeGitlabHost(process.env.GITLAB_HOST) : null;
 	const host = fromEnv ?? readStored();
+
 	return host === 'gitlab.com' ? null : host;
 }
 
 /** Null (or gitlab.com) clears it. */
 export function setGitlabHost(host: string | null): void {
 	const value = host && host !== 'gitlab.com' ? host : null;
+
 	writeFileSync(hostFile(), JSON.stringify({ host: value }), { mode: 0o600 });
 }
 
@@ -43,5 +51,6 @@ export function setGitlabHost(host: string | null): void {
 export function hostOfRepoUrl(url: string): string | null {
 	const clean = url.trim();
 	const host = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@/]+@)?([^/]+)/i.exec(clean)?.[1] ?? /^[^@\s]+@([^:]+):/.exec(clean)?.[1];
+
 	return host ? normalizeGitlabHost(host) : null;
 }

@@ -25,25 +25,32 @@ app.get('/', (c) => c.json(db.repos.list()));
 
 app.post('/', async (c) => {
 	const parsed = createRepoSchema.safeParse(await c.req.json().catch(() => null));
+
 	if (!parsed.success) {
 		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
 	}
+
 	const now = new Date().toISOString();
 	const repo: Repo = { id: crypto.randomUUID(), ...parsed.data, createdAt: now, updatedAt: now };
+
 	return c.json(db.repos.set(repo), 201);
 });
 
 app.get('/:id', (c) => {
 	const repo = db.repos.get(c.req.param('id'));
+
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
+
 	return c.json(repo);
 });
 
 app.delete('/:id', (c) => {
 	const id = c.req.param('id');
+
 	if (!db.repos.delete(id)) return c.json({ error: 'repo not found' }, 404);
 	pullsCache.delete(id);
 	previewCache.delete(`${id}#`);
+
 	return c.json({ deleted: true });
 });
 
@@ -53,14 +60,18 @@ app.delete('/:id', (c) => {
  */
 app.get('/:id/pulls', async (c) => {
 	const repo = db.repos.get(c.req.param('id'));
+
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
+
 	const provider = repo.provider ?? detectProvider(repo.url);
+
 	try {
 		const prs = await pullsCache.get(repo.id, () =>
 			provider === 'gitlab'
 				? listMergeRequests(repo.url, { env: tokenEnv('gitlab', repo.url) })
 				: listPullRequests(repo.url, { env: tokenEnv('github') })
 		);
+
 		return c.json(prs);
 	} catch (err) {
 		if (err instanceof GhError) return c.json({ error: err.message, kind: err.kind }, 502);
@@ -74,9 +85,13 @@ app.get('/:id/pulls', async (c) => {
  */
 app.get('/:id/pulls/:pr', async (c) => {
 	const repo = db.repos.get(c.req.param('id'));
+
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
+
 	const n = Number(c.req.param('pr'));
+
 	if (!Number.isInteger(n) || n <= 0) return c.json({ error: 'invalid PR number' }, 400);
+
 	try {
 		return c.json(await previewCache.get(`${repo.id}#${n}`, () => fetchPullPreview(repo, n)));
 	} catch (err) {

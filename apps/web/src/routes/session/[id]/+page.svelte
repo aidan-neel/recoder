@@ -46,7 +46,15 @@
 	import { recentSessions } from '$lib/recent-sessions.svelte';
 	import { closeSessionTab } from '$lib/session-tabs';
 	import { paletteContext } from '$lib/palette.svelte';
-	import { collapseFileDiff, ORCHESTRATOR_ID, type FileDiff, type Review, type ReviewCodeContext, type ReviewAssignment, type ReviewProgress as ReviewProgressState } from '@recoder/shared';
+	import {
+		collapseFileDiff,
+		ORCHESTRATOR_ID,
+		type FileDiff,
+		type Review,
+		type ReviewCodeContext,
+		type ReviewAssignment,
+		type ReviewProgress as ReviewProgressState
+	} from '@recoder/shared';
 
 	const id = $derived(page.params.id ?? '');
 	const session = $derived(sessionState.sessions.find((s) => s.id === id));
@@ -78,18 +86,31 @@
 	function acceptReview(review: Review): void {
 		if (page.params.id !== review.id) return;
 		// A polling request started before the terminal SSE must not rewind the UI.
-		if (backendReview?.id === review.id &&
+		if (
+			backendReview?.id === review.id &&
 			(backendReview.status === 'passed' || backendReview.status === 'failed') &&
-			(review.status === 'queued' || review.status === 'running')) return;
+			(review.status === 'queued' || review.status === 'running')
+		)
+			return;
 		if (backendReview?.id === review.id && backendReview.status !== 'draft' && review.status === 'draft') return;
 		backendReview = review;
+
 		// Keep the session list's status in sync with terminal and live stream events.
 		const recentIndex = recentSessions.reviews.findIndex((item) => item.id === review.id);
+
 		if (recentIndex >= 0) recentSessions.reviews[recentIndex] = review;
+
 		const running = review.status === 'queued' || review.status === 'running';
+
 		if (!sessionState.sessions.some((s) => s.id === review.id)) {
-			sessionState.ensureSession(review.id, review.prTitle || `PR #${review.prNumber}`, `#${review.prNumber}`, running ? 'reviewing' : 'ready');
+			sessionState.ensureSession(
+				review.id,
+				review.prTitle || `PR #${review.prNumber}`,
+				`#${review.prNumber}`,
+				running ? 'reviewing' : 'ready'
+			);
 		}
+
 		if (!running && sessionState.sessions.find((s) => s.id === review.id)?.status === 'reviewing') {
 			sessionState.markReady(review.id);
 		}
@@ -99,26 +120,44 @@
 	const liveReviewStatus = $derived(backendReview?.status);
 	$effect(() => {
 		const currentId = liveReviewId;
-		if (!currentId) { reviewStream = null; return; }
+
+		if (!currentId) {
+			reviewStream = null;
+
+			return;
+		}
+
 		const stream = new ReviewStream(currentId, acceptReview);
+
 		reviewStream = stream;
+
 		return () => stream.close();
 	});
 
 	async function refreshBackend(currentId: string, signal: AbortSignal): Promise<boolean> {
 		try {
 			const review = await serverApi.getReview(currentId, AbortSignal.any([signal, AbortSignal.timeout(15_000)]));
+
 			if (signal.aborted || page.params.id !== currentId) return false;
 			backendDown = false;
 			acceptReview(review);
 			backendError = null;
+
 			return review.status === 'draft' || review.status === 'queued' || review.status === 'running';
 		} catch (e) {
 			if (signal.aborted || page.params.id !== currentId) return false;
+
 			// Unknown id → mock fallback (demo sessions). Anything else means
 			// the API itself is unreachable — surfaced, not silently mocked.
-			backendError = e instanceof Error && e.name === 'TimeoutError' ? 'Loading the session timed out. Try again.' : e instanceof Error ? e.message : 'Could not load the session.';
+			backendError =
+				e instanceof Error && e.name === 'TimeoutError'
+					? 'Loading the session timed out. Try again.'
+					: e instanceof Error
+						? e.message
+						: 'Could not load the session.';
+
 			backendDown = !(e instanceof Error && /review not found/i.test(e.message));
+
 			return backendDown;
 		} finally {
 			if (!signal.aborted && page.params.id === currentId) backendChecked = true;
@@ -127,6 +166,7 @@
 
 	$effect(() => {
 		const currentId = id;
+
 		void retryNonce;
 		backendReview = null;
 		backendFiles = cachedReviewFiles(currentId);
@@ -134,12 +174,16 @@
 		backendChecked = false;
 		backendError = null;
 		backendDown = false;
+
 		const controller = new AbortController();
 		let timer: ReturnType<typeof setTimeout> | undefined;
+
 		async function poll() {
 			const more = await refreshBackend(currentId, controller.signal);
+
 			if (!controller.signal.aborted && more) timer = setTimeout(poll, 2500);
 		}
+
 		void poll();
 
 		return () => {
@@ -153,15 +197,22 @@
 	$effect(() => {
 		const currentId = liveReviewId;
 		const status = liveReviewStatus;
+
 		void filesRetryNonce;
 		if (!currentId || !status) return;
+
 		const controller = new AbortController();
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		// Drafts (interactive review) get their diff fetched in the background after creation.
 		let loaded = false;
+
 		async function loadFiles() {
 			try {
-				const files = await serverApi.getReviewFiles(currentId!, AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)]));
+				const files = await serverApi.getReviewFiles(
+					currentId!,
+					AbortSignal.any([controller.signal, AbortSignal.timeout(30_000)])
+				);
+
 				if (controller.signal.aborted || page.params.id !== currentId) return;
 				backendFiles = files;
 				filesError = null;
@@ -171,10 +222,16 @@
 				// A diff is not available during checkout or after an early failure.
 				if (status === 'passed' || status === 'failed') filesError = 'Could not load the code diff. Try again.';
 			} finally {
-				if (!controller.signal.aborted && (status === 'queued' || status === 'running' || (status === 'draft' && !loaded))) timer = setTimeout(loadFiles, 2500);
+				if (
+					!controller.signal.aborted &&
+					(status === 'queued' || status === 'running' || (status === 'draft' && !loaded))
+				)
+					timer = setTimeout(loadFiles, 2500);
 			}
 		}
+
 		void loadFiles();
+
 		return () => {
 			controller.abort();
 			if (timer) clearTimeout(timer);
@@ -184,13 +241,16 @@
 	/** Review (the conversation), Findings (focus mode) or Diff (inline mode), kept in the URL. */
 	const workspaceView = $derived.by((): 'findings' | 'diff' | null => {
 		const view = page.url.searchParams.get('view');
+
 		return view === 'findings' || view === 'diff' ? view : null;
 	});
 	const peekDiff = $derived(workspaceView !== null);
 	function setView(view: SessionView, replaceState = false): Promise<void> {
 		const url = new URL(page.url);
+
 		if (view === 'conversation') url.searchParams.delete('view');
 		else url.searchParams.set('view', view);
+
 		return goto(`${url.pathname}${url.search}`, { noScroll: true, keepFocus: true, replaceState });
 	}
 	/* A finished review opens on Findings, once per session visit, so choosing
@@ -199,6 +259,7 @@
 	let findingsDefaultFor: string | null = null;
 	$effect(() => {
 		const review = backendReview;
+
 		if (!review || findingsDefaultFor === review.id) return;
 		findingsDefaultFor = review.id;
 		// A review that finishes while you watch stays put; its summary links to the findings.
@@ -229,6 +290,7 @@
 	$effect(() => {
 		try {
 			const stored = Number(localStorage.getItem(TREE_KEY));
+
 			if (stored >= TREE_MIN && stored <= TREE_MAX) treeWidth = stored;
 		} catch {
 			// Storage unavailable: default width.
@@ -236,6 +298,7 @@
 	});
 	function setTreeWidth(rem: number): void {
 		treeWidth = Math.min(TREE_MAX, Math.max(TREE_MIN, rem));
+
 		try {
 			localStorage.setItem(TREE_KEY, String(treeWidth));
 		} catch {
@@ -244,19 +307,26 @@
 	}
 	function startTreeResize(event: PointerEvent): void {
 		if (event.button !== 0) return;
+
 		const handle = event.currentTarget as HTMLElement;
+
 		handle.setPointerCapture(event.pointerId);
+
 		const startX = event.clientX;
 		const start = treeWidth;
 		const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+
 		document.documentElement.dataset.resizing = '';
+
 		const move = (e: PointerEvent) => setTreeWidth(start + (e.clientX - startX) / rootPx);
+
 		const end = () => {
 			handle.removeEventListener('pointermove', move);
 			handle.removeEventListener('pointerup', end);
 			handle.removeEventListener('pointercancel', end);
 			delete document.documentElement.dataset.resizing;
 		};
+
 		handle.addEventListener('pointermove', move);
 		handle.addEventListener('pointerup', end);
 		handle.addEventListener('pointercancel', end);
@@ -272,6 +342,7 @@
 	$effect(() => {
 		try {
 			const stored = Number(localStorage.getItem(CHAT_KEY));
+
 			if (stored >= CHAT_MIN && stored <= CHAT_MAX) chatWidth = stored;
 		} catch {
 			// Storage unavailable: default width.
@@ -279,6 +350,7 @@
 	});
 	function setChatWidth(rem: number): void {
 		chatWidth = Math.min(CHAT_MAX, Math.max(CHAT_MIN, rem));
+
 		try {
 			localStorage.setItem(CHAT_KEY, String(chatWidth));
 		} catch {
@@ -287,33 +359,45 @@
 	}
 	function startChatResize(event: PointerEvent): void {
 		if (event.button !== 0) return;
+
 		const handle = event.currentTarget as HTMLElement;
+
 		handle.setPointerCapture(event.pointerId);
+
 		const startX = event.clientX;
 		const start = showChat ? chatWidth : 0;
 		const rootPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
 		let moved = false;
+
 		document.documentElement.dataset.resizing = '';
+
 		const move = (e: PointerEvent) => {
 			const width = start + (startX - e.clientX) / rootPx;
+
 			if (Math.abs(e.clientX - startX) > 3) moved = true;
 			if (!moved) return;
+
 			if (width < CHAT_COLLAPSE) {
 				if (chatOpen) chatOpen = false;
+
 				return;
 			}
+
 			if (!chatOpen) {
 				threadsStore.close();
 				chatOpen = true;
 			}
+
 			setChatWidth(width);
 		};
+
 		const end = () => {
 			handle.removeEventListener('pointermove', move);
 			handle.removeEventListener('pointerup', end);
 			handle.removeEventListener('pointercancel', end);
 			delete document.documentElement.dataset.resizing;
 		};
+
 		handle.addEventListener('pointermove', move);
 		handle.addEventListener('pointerup', end);
 		handle.addEventListener('pointercancel', end);
@@ -323,13 +407,21 @@
 			event.preventDefault();
 			if (showChat) void closeChat();
 			else openChat();
+
 			return;
 		}
+
 		if (!showChat) {
-			if (event.key === 'ArrowLeft') { event.preventDefault(); openChat(); }
+			if (event.key === 'ArrowLeft') {
+				event.preventDefault();
+				openChat();
+			}
+
 			return;
 		}
+
 		const next = { ArrowLeft: chatWidth + 1, ArrowRight: chatWidth - 1, Home: CHAT_MAX, End: CHAT_MIN }[event.key];
+
 		if (next === undefined) return;
 		event.preventDefault();
 		if (event.key === 'ArrowRight' && chatWidth <= CHAT_MIN) chatOpen = false;
@@ -338,6 +430,7 @@
 
 	function treeResizeKey(event: KeyboardEvent): void {
 		const next = { ArrowLeft: treeWidth - 1, ArrowRight: treeWidth + 1, Home: TREE_MIN, End: TREE_MAX }[event.key];
+
 		if (next === undefined) return;
 		event.preventDefault();
 		setTreeWidth(next);
@@ -345,14 +438,27 @@
 	const showChat = $derived(chatOpen && !threadsStore.openId);
 	// Findings starts with Ask reviewer collapsed; it opens on request.
 	$effect(() => {
-		if (workspaceView === 'findings') untrack(() => { chatOpen = false; });
+		if (workspaceView === 'findings')
+			untrack(() => {
+				chatOpen = false;
+			});
 	});
 	const sidePanelOpen = $derived(!!threadsStore.openId || showChat);
 	const reviewing = $derived(backendReview?.status === 'running' || backendReview?.status === 'queued');
 	function openChat(context?: ReviewCodeContext): void {
-		chatReturnFocus = context ? document.getElementById('ask-review') : document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		chatReturnFocus = context
+			? document.getElementById('ask-review')
+			: document.activeElement instanceof HTMLElement
+				? document.activeElement
+				: null;
+
 		threadsStore.close();
-		if (context) { codeContext = context; userPickedFile = true; }
+
+		if (context) {
+			codeContext = context;
+			userPickedFile = true;
+		}
+
 		chatOpen = true;
 		chatFocus++;
 	}
@@ -368,14 +474,20 @@
 	// ⌘K palette: this session's scope, files, and the Orchestrator.
 	$effect(() => {
 		const review = backendReview;
+
 		if (!review) return;
+
 		const repo = recentSessions.repos.find((item) => item.id === review.repoId)?.name ?? review.repoId.slice(0, 8);
+
 		paletteContext.session = { id: review.id, repo: repo.split('/').pop() ?? repo, pr: review.prNumber };
+
 		paletteContext.ask = async (text) => {
 			setDiffView(false);
 			await serverApi.sendReviewMessage(review.id, ORCHESTRATOR_ID, text);
 		};
+
 		paletteContext.showView = (view) => setDiffView(view === 'diff');
+
 		return () => {
 			paletteContext.session = null;
 			paletteContext.ask = null;
@@ -384,6 +496,7 @@
 	});
 	$effect(() => {
 		paletteContext.files = backendFiles ?? [];
+
 		return () => {
 			paletteContext.files = [];
 		};
@@ -404,19 +517,33 @@
 	/** Only replies started after this page opened can trigger fixes (history never re-runs). */
 	const openedAt = Date.now();
 	$effect(() => {
-		const finished = (reviewStream?.progress.messages ?? []).filter((message) =>
-			message.from === 'assistant' && message.status === 'done' && message.text.includes('```recoder-fix')
-			&& Date.parse(message.at) >= openedAt - 2000);
+		const finished = (reviewStream?.progress.messages ?? []).filter(
+			(message) =>
+				message.from === 'assistant' &&
+				message.status === 'done' &&
+				message.text.includes('```recoder-fix') &&
+				Date.parse(message.at) >= openedAt - 2000
+		);
+
 		if (!backendReview) return;
+
 		untrack(() => {
 			for (const message of finished) {
 				if (fixedReplies.has(message.id)) continue;
 				fixedReplies.add(message.id);
+
 				const ids = parseFixRequest(message.text);
+
 				if (!ids) continue;
+
 				// Same as Fix all, for those findings.
 				const open = findingsStore.items.filter((f) => f.status === 'open');
-				const targets = ids === 'all' ? open : open.filter((f) => ids.some((id) => id === f.id || id.toUpperCase() === f.code?.toUpperCase()));
+
+				const targets =
+					ids === 'all'
+						? open
+						: open.filter((f) => ids.some((id) => id === f.id || id.toUpperCase() === f.code?.toUpperCase()));
+
 				findingsStore.fixBatches[message.id] = targets.map((f) => f.id);
 				if (targets.length) void fixFindings(targets);
 			}
@@ -424,24 +551,44 @@
 	});
 	$effect(() => {
 		const files = backendFiles;
+
 		// Read status/text here (tracked): replies finish by updating in place.
-		const finished = (reviewStream?.progress.messages ?? []).filter((message) =>
-			message.from === 'assistant' && message.status === 'done' && message.text.includes('```recoder-note'));
+		const finished = (reviewStream?.progress.messages ?? []).filter(
+			(message) => message.from === 'assistant' && message.status === 'done' && message.text.includes('```recoder-note')
+		);
+
 		if (!files || !backendReview || finished.length === 0) return;
+
 		untrack(() => {
 			for (const message of finished) {
 				if (notedReplies.has(message.id)) continue;
 				notedReplies.add(message.id);
+
 				for (const note of parseModelNotes(message.text)) {
-					const file = files.find((f) => f.path === note.file) ?? files.find((f) => f.path.endsWith(`/${note.file}`) || note.file.endsWith(`/${f.path}`));
+					const file =
+						files.find((f) => f.path === note.file) ??
+						files.find((f) => f.path.endsWith(`/${note.file}`) || note.file.endsWith(`/${f.path}`));
+
 					if (!file) continue;
-					const lines = file.hunks.flatMap((hunk) => hunk.lines).filter((line) => {
-						const n = note.side === 'old' ? line.oldNo : line.newNo;
-						return n !== null && n >= note.startLine && n <= note.endLine;
-					});
+
+					const lines = file.hunks
+						.flatMap((hunk) => hunk.lines)
+						.filter((line) => {
+							const n = note.side === 'old' ? line.oldNo : line.newNo;
+
+							return n !== null && n >= note.startLine && n <= note.endLine;
+						});
+
 					notesStore.add({
-						file: file.path, startLine: note.startLine, endLine: note.endLine, side: note.side, body: note.body,
-						quote: lines.map((line) => line.text).join('\n').slice(0, 2000)
+						file: file.path,
+						startLine: note.startLine,
+						endLine: note.endLine,
+						side: note.side,
+						body: note.body,
+						quote: lines
+							.map((line) => line.text)
+							.join('\n')
+							.slice(0, 2000)
 					});
 				}
 			}
@@ -449,12 +596,14 @@
 	});
 	$effect(() => {
 		if (!backendChecked) return;
+
 		if (isBackend && backendReview) {
 			threadsStore.reviewId = backendReview.id;
 			notesStore.reviewId = backendReview.id;
+
 			const mapped = backendReview.findings.map((f, i) => mapBackendFinding(f, i));
-			const terminal =
-				backendReview.status === 'passed' || backendReview.status === 'failed';
+			const terminal = backendReview.status === 'passed' || backendReview.status === 'failed';
+
 			if (terminal) {
 				if (findingsSyncedFor !== backendReview.id) {
 					findingsStore.replaceAll(mapped);
@@ -466,6 +615,7 @@
 			}
 		} else {
 			threadsStore.reviewId = null;
+
 			if (findingsSyncedFor !== 'local') {
 				findingsStore.reset();
 				findingsSyncedFor = 'local';
@@ -474,25 +624,29 @@
 	});
 	const liveDiff = $derived.by(() => {
 		if (!backendFiles) return null;
-		return (
-			backendFiles.find((f) => f.path === sessionFile.currentId) ??
-			backendFiles[0] ??
-			null
-		);
+
+		return backendFiles.find((f) => f.path === sessionFile.currentId) ?? backendFiles[0] ?? null;
 	});
 	function findingLines(path: string): number[] {
-		return findingsStore.forFile(path).flatMap((finding) => Array.from({ length: finding.endLine - finding.startLine + 1 }, (_, i) => finding.startLine + i));
+		return findingsStore
+			.forFile(path)
+			.flatMap((finding) =>
+				Array.from({ length: finding.endLine - finding.startLine + 1 }, (_, i) => finding.startLine + i)
+			);
 	}
 	/** Jumping to a line the trimmed diff hides switches to the full file. */
 	function showLine(path: string, line: number | null): void {
 		const diff = backendFiles?.find((file) => file.path === path);
+
 		if (line === null || !diff || diffPrefs.fullFile) return;
-		if (!collapseFileDiff(diff, findingLines(path)).hunks.some((hunk) => hunk.lines.some((row) => row.newNo === line))) diffPrefs.setFullFile(true);
+		if (!collapseFileDiff(diff, findingLines(path)).hunks.some((hunk) => hunk.lines.some((row) => row.newNo === line)))
+			diffPrefs.setFullFile(true);
 	}
 	const fileDiff = $derived.by((): FileDiff => {
 		if (!isBackend) return getFileDiff(sessionFile.currentId);
 		// Files arrive expanded to the whole file; the diff view trims them back to the changes, keeping lines with findings.
 		if (liveDiff) return diffPrefs.fullFile ? liveDiff : collapseFileDiff(liveDiff, findingLines(liveDiff.path));
+
 		return { path: sessionFile.currentId, additions: 0, deletions: 0, hunks: [] };
 	});
 	const displayFindings = $derived(findingsStore.forFile(sessionFile.currentId));
@@ -506,8 +660,10 @@
 
 	$effect(() => {
 		const currentId = id;
+
 		if (resetSessionId === currentId) return;
 		resetSessionId = currentId;
+
 		untrack(() => {
 			lastAutoFile = null;
 			userPickedFile = false;
@@ -532,22 +688,24 @@
 	// Selections that didn't come from the auto-picker are the user's choice.
 	$effect(() => {
 		const cur = sessionFile.currentId;
+
 		if (lastAutoFile !== null && cur !== lastAutoFile) userPickedFile = true;
 	});
 
 	$effect(() => {
 		if (!isBackend || !backendReview || !backendFiles || backendFiles.length === 0) return;
 		if (userPickedFile) return;
+
 		// Filters are read untracked: toggling a severity must not switch files.
-		const open = findingsStore.items.filter(
-			(f) => f.status !== 'dismissed' && untrack(() => findingsStore.isShown(f))
-		);
-		open.sort(
-			(a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || a.startLine - b.startLine
-		);
+		const open = findingsStore.items.filter((f) => f.status !== 'dismissed' && untrack(() => findingsStore.isShown(f)));
+
+		open.sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || a.startLine - b.startLine);
+
 		// A selected finding (the first-finding jump, the stepper) decides the file.
 		let target = findingsStore.active?.file ?? open[0]?.file ?? backendFiles[0].path;
+
 		if (!backendFiles.some((f) => f.path === target)) target = backendFiles[0].path;
+
 		if (target !== sessionFile.currentId) {
 			lastAutoFile = target;
 			sessionFile.select(target);
@@ -563,14 +721,23 @@
 	$effect(() => {
 		const review = backendReview;
 		const files = backendFiles;
+
 		if (!review || workspaceView !== 'diff' || !files?.length || firstFindingFor === review.id) return;
 		if (review.status !== 'passed' && review.status !== 'failed') return;
+
 		const first = findingsStore.items
-			.filter((f) => f.status !== 'dismissed' && untrack(() => findingsStore.isShown(f)) && files.some((file) => file.path === f.file))
+			.filter(
+				(f) =>
+					f.status !== 'dismissed' &&
+					untrack(() => findingsStore.isShown(f)) &&
+					files.some((file) => file.path === f.file)
+			)
 			.sort((a, b) => a.file.localeCompare(b.file) || a.startLine - b.startLine || a.id.localeCompare(b.id))[0];
+
 		// Findings load after the review; wait for them.
 		if (!first) return;
 		firstFindingFor = review.id;
+
 		untrack(() => {
 			if (userPickedFile || findingsStore.activeId) return;
 			findingsStore.discuss(first.id);
@@ -587,6 +754,7 @@
 	/** Findings empty state: run a draft's full review directly. */
 	async function startDraftReview(): Promise<void> {
 		if (!backendReview) return;
+
 		try {
 			backendReview = await serverApi.startReview(backendReview.id);
 			findingsDefaultFor = backendReview.id;
@@ -599,18 +767,24 @@
 	/** "Running checks · bun test": the stage and its running step, for the Findings empty state. */
 	function liveStage(progress: ReviewProgressState, status: Review['status']): string {
 		const stage = reviewStage(progress, status);
+
 		return [stage.label, stage.detail].filter(Boolean).join(' · ');
 	}
 
 	/** Continue a failed review where it stopped, in this session. */
 	async function continueReview(): Promise<void> {
 		if (!backendReview) return;
+
 		try {
 			backendReview = await serverApi.continueReview(backendReview.id);
 			findingsDefaultFor = backendReview.id;
 			void setView('findings');
 		} catch (e) {
-			errorToast('Could not continue the review', e instanceof Error ? e.message : undefined, e instanceof ApiError ? e.action : undefined);
+			errorToast(
+				'Could not continue the review',
+				e instanceof Error ? e.message : undefined,
+				e instanceof ApiError ? e.action : undefined
+			);
 		}
 	}
 
@@ -618,6 +792,7 @@
 		if (!backendReview || queueing) return;
 		queueing = true;
 		backendError = null;
+
 		try {
 			const review = await serverApi.queueReview({
 				repoId: backendReview.repoId,
@@ -625,12 +800,8 @@
 				prTitle: backendReview.prTitle ?? undefined,
 				start: false
 			});
-			sessionState.ensureSession(
-				review.id,
-				session?.name ?? 'session',
-				`#${review.prNumber}`,
-				'ready'
-			);
+
+			sessionState.ensureSession(review.id, session?.name ?? 'session', `#${review.prNumber}`, 'ready');
 			await goto(`/session/${review.id}`);
 		} catch (e) {
 			backendError = e instanceof Error ? e.message : 'Failed to queue review.';
@@ -640,23 +811,38 @@
 	}
 </script>
 
-<svelte:window onkeydown={(event) => {
-	// Escape lets go of attached code first (from the composer or the diff), then collapses the chat.
-	if (event.key === 'Escape' && !event.defaultPrevented && codeContext && showChat
-		&& (document.activeElement?.closest('#interactive-review, #diff-panel') || document.activeElement === document.body)) {
-		event.preventDefault();
-		codeContext = null;
-		return;
-	}
-	if (event.key === 'Escape' && !event.defaultPrevented && document.activeElement?.closest('#interactive-review')) {
-		event.preventDefault();
-		void closeChat();
-	}
-}} />
+<svelte:window
+	onkeydown={(event) => {
+		// Escape lets go of attached code first (from the composer or the diff), then collapses the chat.
+		if (
+			event.key === 'Escape' &&
+			!event.defaultPrevented &&
+			codeContext &&
+			showChat &&
+			(document.activeElement?.closest('#interactive-review, #diff-panel') || document.activeElement === document.body)
+		) {
+			event.preventDefault();
+			codeContext = null;
+
+			return;
+		}
+
+		if (event.key === 'Escape' && !event.defaultPrevented && document.activeElement?.closest('#interactive-review')) {
+			event.preventDefault();
+			void closeChat();
+		}
+	}}
+/>
 
 {#if !backendChecked || (backendReview && !reviewStream?.ready)}
 	{@const loadingView = page.url.searchParams.get('view')}
-	<SessionSkeleton view={loadingView === 'findings' || loadingView === 'diff' ? loadingView : page.url.searchParams.get('agent') ? 'specialist' : 'conversation'} />
+	<SessionSkeleton
+		view={loadingView === 'findings' || loadingView === 'diff'
+			? loadingView
+			: page.url.searchParams.get('agent')
+				? 'specialist'
+				: 'conversation'}
+	/>
 {:else if backendDown && !backendReview}
 	<div class="mx-auto flex h-full w-full max-w-[776px] flex-col justify-center px-4 sm:px-6">
 		<Alert.Root variant="error">
@@ -680,32 +866,39 @@
 {:else if backendReview && reviewStream}
 	{@const diffFiles = backendFiles ?? []}
 	<div class="flex h-full flex-col" class:hidden={peekDiff}>
-	{#if filesError}
-		<Alert.Root variant="error" class="mx-4 mt-2 shrink-0">
-			<Alert.Title>{filesError}</Alert.Title>
-			<Button variant="outline" class="mt-2 w-fit" onclick={() => filesRetryNonce++}>Retry loading diff</Button>
-		</Alert.Root>
-	{/if}
-	<div class="min-h-0 flex-1">
-	{#key backendReview.id}
-	<LiveReviewProgress
-		review={backendReview}
-		stream={reviewStream}
-		repo={session.name}
-		files={backendFiles ? diffFiles.length : null}
-		additions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.additions, 0) : null}
-		deletions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
-		onOpenDiff={() => setDiffView(true)}
-		onShowView={(view) => setView(view)}
-		onOpenFinding={(finding) => { if (finding.file) { sessionFile.select(finding.file); userPickedFile = true; } setDiffView(true); }}
-		onRestart={() => void rerunReview()}
-		onStartReview={backendReview?.status === 'draft' ? startDraftReview : null}
-		onContinue={backendReview?.status === 'failed' ? continueReview : null}
-		restarting={queueing}
-		actionError={backendError}
-	/>
-	{/key}
-	</div>
+		{#if filesError}
+			<Alert.Root variant="error" class="mx-4 mt-2 shrink-0">
+				<Alert.Title>{filesError}</Alert.Title>
+				<Button variant="outline" class="mt-2 w-fit" onclick={() => filesRetryNonce++}>Retry loading diff</Button>
+			</Alert.Root>
+		{/if}
+		<div class="min-h-0 flex-1">
+			{#key backendReview.id}
+				<LiveReviewProgress
+					review={backendReview}
+					stream={reviewStream}
+					repo={session.name}
+					files={backendFiles ? diffFiles.length : null}
+					additions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.additions, 0) : null}
+					deletions={backendFiles ? diffFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
+					onOpenDiff={() => setDiffView(true)}
+					onShowView={(view) => setView(view)}
+					onOpenFinding={(finding) => {
+						if (finding.file) {
+							sessionFile.select(finding.file);
+							userPickedFile = true;
+						}
+
+						setDiffView(true);
+					}}
+					onRestart={() => void rerunReview()}
+					onStartReview={backendReview?.status === 'draft' ? startDraftReview : null}
+					onContinue={backendReview?.status === 'failed' ? continueReview : null}
+					restarting={queueing}
+					actionError={backendError}
+				/>
+			{/key}
+		</div>
 	</div>
 	{#if peekDiff}{@render diffWorkspace()}{/if}
 {:else}
@@ -714,8 +907,10 @@
 
 {#snippet diffMenu()}
 	{#if backendReview}<DropdownMenu.Item callback={() => setDiffView(false)}>Show review</DropdownMenu.Item>{/if}
-	{#if backendReview}<DropdownMenu.Item callback={() => usageOpen = true}>View token usage</DropdownMenu.Item>{/if}
-	{#if backendReview && backendReview.source !== 'stub'}{@const repoId = backendReview.repoId}<DropdownMenu.Item callback={() => guidelinesStore.open({ kind: 'repo', repoId })}>Review guidelines</DropdownMenu.Item>{/if}
+	{#if backendReview}<DropdownMenu.Item callback={() => (usageOpen = true)}>View token usage</DropdownMenu.Item>{/if}
+	{#if backendReview && backendReview.source !== 'stub'}{@const repoId = backendReview.repoId}<DropdownMenu.Item
+			callback={() => guidelinesStore.open({ kind: 'repo', repoId })}>Review guidelines</DropdownMenu.Item
+		>{/if}
 	<DropdownMenu.Separator />
 	<DropdownMenu.Item callback={() => void closeSessionTab(id)}>Close tab</DropdownMenu.Item>
 {/snippet}
@@ -724,29 +919,36 @@
 	{@const files = backendFiles ?? (isBackend ? [] : [fileDiff])}
 	{@const recent = recentSessions.recent.find((item) => item.id === id)}
 	<div class="review-workspace flex h-full min-h-0 flex-col">
-	<SessionHeader
-		title={backendReview?.prTitle || session?.name || 'Review'}
-		branch={recent?.branch}
-		repo={recent?.repo ?? session?.name}
-		prLabel={backendReview ? `#${backendReview.prNumber}` : session?.ref}
-		prUrl={backendReview?.prUrl}
-		files={files.length}
-		additions={files.reduce((sum, file) => sum + file.additions, 0)}
-		deletions={files.reduce((sum, file) => sum + file.deletions, 0)}
-		view={workspaceView ?? 'diff'}
-		onView={backendReview ? setView : null}
-		onFiles={() => (filesOpen = true)}
-		filesLabel="Browse changed files"
-		menu={diffMenu}
-		toolbar={workspaceToolbar}
-	/>
-	<Sheet.Root bind:open={filesOpen}>
-		<Sheet.Content side="left" class="w-[400px] max-w-[calc(100%-1rem)] [&>[data-ui=sheet-surface]]:bg-background [&>[data-ui=sheet-surface]]:p-0">
-			<Sheet.Title class="sr-only">Changed files</Sheet.Title>
-			<SessionSidebar inSheet fileDiffs={isBackend ? (backendFiles ?? []) : null} onFileSelect={() => filesOpen = false} />
-		</Sheet.Content>
-	</Sheet.Root>
-	{#snippet workspaceToolbar()}
+		<SessionHeader
+			title={backendReview?.prTitle || session?.name || 'Review'}
+			branch={recent?.branch}
+			repo={recent?.repo ?? session?.name}
+			prLabel={backendReview ? `#${backendReview.prNumber}` : session?.ref}
+			prUrl={backendReview?.prUrl}
+			files={files.length}
+			additions={files.reduce((sum, file) => sum + file.additions, 0)}
+			deletions={files.reduce((sum, file) => sum + file.deletions, 0)}
+			view={workspaceView ?? 'diff'}
+			onView={backendReview ? setView : null}
+			onFiles={() => (filesOpen = true)}
+			filesLabel="Browse changed files"
+			menu={diffMenu}
+			toolbar={workspaceToolbar}
+		/>
+		<Sheet.Root bind:open={filesOpen}>
+			<Sheet.Content
+				side="left"
+				class="w-[400px] max-w-[calc(100%-1rem)] [&>[data-ui=sheet-surface]]:bg-background [&>[data-ui=sheet-surface]]:p-0"
+			>
+				<Sheet.Title class="sr-only">Changed files</Sheet.Title>
+				<SessionSidebar
+					inSheet
+					fileDiffs={isBackend ? (backendFiles ?? []) : null}
+					onFileSelect={() => (filesOpen = false)}
+				/>
+			</Sheet.Content>
+		</Sheet.Root>
+		{#snippet workspaceToolbar()}
 			<FindingsBar part="actions">
 				{#snippet trailing()}
 					{#if backendReview}
@@ -754,42 +956,95 @@
 						{#if backendReview.status === 'failed'}
 							<Typography.Metadata class="review-state" role="status">Review interrupted</Typography.Metadata>
 						{/if}
-						{#if backendReview.status === 'passed'}<Button id="ask-review" variant="outline" class="gap-2" aria-pressed={showChat} aria-expanded={showChat} aria-controls="interactive-review" onclick={() => showChat ? void closeChat() : openChat()}><MessageSquare size={15} aria-hidden="true" />Ask reviewer</Button>{/if}
+						{#if backendReview.status === 'passed'}<Button
+								id="ask-review"
+								variant="outline"
+								class="gap-2"
+								aria-pressed={showChat}
+								aria-expanded={showChat}
+								aria-controls="interactive-review"
+								onclick={() => (showChat ? void closeChat() : openChat())}
+								><MessageSquare size={15} aria-hidden="true" />Ask reviewer</Button
+							>{/if}
 					{/if}
 				{/snippet}
 			</FindingsBar>
-	{/snippet}
-	{#if filesError}
-		<Alert.Root variant="error" class="mx-3 my-3 shrink-0"><Alert.Title>{filesError}</Alert.Title><Button variant="outline" class="mt-2 w-fit" onclick={() => filesRetryNonce++}>Retry loading diff</Button></Alert.Root>
-	{/if}
-	{#if backendError}
-		<Alert.Root variant="error" class="mx-3 mt-3 shrink-0">
-			<Alert.Title>Review data unavailable</Alert.Title>
-			<Alert.Description>{backendDown ? `Review API unreachable (${backendError}) — showing local demo content.` : backendError}</Alert.Description>
-			<Button variant="outline" class="mt-2 w-fit" onclick={() => (retryNonce += 1)}>Retry</Button>
-		</Alert.Root>
-	{/if}
-			<div class="flex min-h-0 flex-1">
-				{#if workspaceView === 'findings'}
-					<div class="flex min-h-0 min-w-0 flex-1 {sidePanelOpen ? 'max-xl:hidden' : ''}">
-						<FindingsFocus files={files} toolCalls={reviewStream?.progress.toolCalls ?? []} branch={recent?.branch}
-							status={!backendReview ? 'done' : reviewing ? 'running' : backendReview.status === 'draft' ? 'draft' : backendReview.status === 'failed' ? 'failed' : 'done'}
-							stageLabel={reviewStream && backendReview ? liveStage(reviewStream.progress, backendReview.status) : null}
-							paused={reviewStream?.progress.paused ?? false}
-							approval={reviewStream?.progress.approval ?? null}
-							onApprove={backendReview ? () => approvePlan(backendReview!.id) : null}
-							onDecline={backendReview ? () => declinePlan(backendReview!.id) : null}
-							approving={!!backendReview && planApproval.approving === backendReview.id}
-							onStartReview={backendReview?.status === 'draft' ? startDraftReview : null}
-							onOpenDiff={() => setView('diff')}
-							onAsk={isBackend ? () => openChat() : null}
-							onConversation={() => setView('conversation')}
-							onRestart={isBackend ? () => void rerunReview() : null}
-							onOpenAt={(file, line) => { sessionFile.select(file); userPickedFile = true; showLine(file, line); void setView('diff').then(() => { if (line !== null) revealDiffLine(line); }); }}
-							onFullFile={(finding) => { sessionFile.select(finding.file); userPickedFile = true; diffPrefs.setFullFile(true); findingsStore.discuss(finding.id); setView('diff'); requestAnimationFrame(() => document.getElementById(`finding-${finding.id}`)?.scrollIntoView({ block: 'center' })); }} />
-					</div>
-				{:else}
-				<div class="diff-tree hidden lg:block" data-beside-panel={sidePanelOpen || undefined} style="width: {treeWidth}rem">
+		{/snippet}
+		{#if filesError}
+			<Alert.Root variant="error" class="mx-3 my-3 shrink-0"
+				><Alert.Title>{filesError}</Alert.Title><Button
+					variant="outline"
+					class="mt-2 w-fit"
+					onclick={() => filesRetryNonce++}>Retry loading diff</Button
+				></Alert.Root
+			>
+		{/if}
+		{#if backendError}
+			<Alert.Root variant="error" class="mx-3 mt-3 shrink-0">
+				<Alert.Title>Review data unavailable</Alert.Title>
+				<Alert.Description
+					>{backendDown
+						? `Review API unreachable (${backendError}) — showing local demo content.`
+						: backendError}</Alert.Description
+				>
+				<Button variant="outline" class="mt-2 w-fit" onclick={() => (retryNonce += 1)}>Retry</Button>
+			</Alert.Root>
+		{/if}
+		<div class="flex min-h-0 flex-1">
+			{#if workspaceView === 'findings'}
+				<div class="flex min-h-0 min-w-0 flex-1 {sidePanelOpen ? 'max-xl:hidden' : ''}">
+					<FindingsFocus
+						{files}
+						toolCalls={reviewStream?.progress.toolCalls ?? []}
+						branch={recent?.branch}
+						status={!backendReview
+							? 'done'
+							: reviewing
+								? 'running'
+								: backendReview.status === 'draft'
+									? 'draft'
+									: backendReview.status === 'failed'
+										? 'failed'
+										: 'done'}
+						stageLabel={reviewStream && backendReview ? liveStage(reviewStream.progress, backendReview.status) : null}
+						paused={reviewStream?.progress.paused ?? false}
+						approval={reviewStream?.progress.approval ?? null}
+						onApprove={backendReview ? () => approvePlan(backendReview!.id) : null}
+						onDecline={backendReview ? () => declinePlan(backendReview!.id) : null}
+						approving={!!backendReview && planApproval.approving === backendReview.id}
+						onStartReview={backendReview?.status === 'draft' ? startDraftReview : null}
+						onOpenDiff={() => setView('diff')}
+						onAsk={isBackend ? () => openChat() : null}
+						onConversation={() => setView('conversation')}
+						onRestart={isBackend ? () => void rerunReview() : null}
+						onOpenAt={(file, line) => {
+							sessionFile.select(file);
+							userPickedFile = true;
+							showLine(file, line);
+
+							void setView('diff').then(() => {
+								if (line !== null) revealDiffLine(line);
+							});
+						}}
+						onFullFile={(finding) => {
+							sessionFile.select(finding.file);
+							userPickedFile = true;
+							diffPrefs.setFullFile(true);
+							findingsStore.discuss(finding.id);
+							setView('diff');
+
+							requestAnimationFrame(() =>
+								document.getElementById(`finding-${finding.id}`)?.scrollIntoView({ block: 'center' })
+							);
+						}}
+					/>
+				</div>
+			{:else}
+				<div
+					class="diff-tree hidden lg:block"
+					data-beside-panel={sidePanelOpen || undefined}
+					style="width: {treeWidth}rem"
+				>
 					<SessionSidebar fileDiffs={isBackend ? (backendFiles ?? []) : null}>
 						{#snippet header()}<FindingsBar part="nav" />{/snippet}
 					</SessionSidebar>
@@ -808,11 +1063,16 @@
 						ondblclick={() => setTreeWidth(TREE_DEFAULT)}
 					></div>
 				</div>
-				<div id="diff-panel" class="relative flex min-h-0 min-w-0 flex-1 flex-col {sidePanelOpen ? 'max-xl:hidden' : ''}">
+				<div
+					id="diff-panel"
+					class="relative flex min-h-0 min-w-0 flex-1 flex-col {sidePanelOpen ? 'max-xl:hidden' : ''}"
+				>
 					{#if isBackend && backendReview?.status === 'failed' && !backendFiles}
 						<Alert.Root variant="error" class="m-4">
 							<Alert.Title>Review failed</Alert.Title>
-							<Alert.Description class="max-w-md">{backendReview.summary ?? 'The pipeline failed before producing a diff.'}</Alert.Description>
+							<Alert.Description class="max-w-md"
+								>{backendReview.summary ?? 'The pipeline failed before producing a diff.'}</Alert.Description
+							>
 							<Alert.Description>Fix the cause, then restart the review from the conversation.</Alert.Description>
 						</Alert.Root>
 					{:else if isBackend && !backendFiles}
@@ -822,59 +1082,94 @@
 						<ScrollArea orientation="vertical" aria-label="Code diff" class="min-h-0 flex-1" showCues={false}>
 							{#key fileDiff.path}
 								<div class="min-w-0 page-enter">
-									<CodeDiff diff={fileDiff} findings={displayFindings} mode={diffPrefs.mode} onAsk={isBackend && backendReview?.status === 'passed' ? openChat : undefined} activeRange={showChat ? codeContext : null} onClearRange={() => (codeContext = null)} />
+									<CodeDiff
+										diff={fileDiff}
+										findings={displayFindings}
+										mode={diffPrefs.mode}
+										onAsk={isBackend && backendReview?.status === 'passed' ? openChat : undefined}
+										activeRange={showChat ? codeContext : null}
+										onClearRange={() => (codeContext = null)}
+									/>
 								</div>
 							{/key}
 						</ScrollArea>
 					{/if}
 				</div>
-				{/if}
-				{#if threadsStore.openId}
-					{#key threadsStore.openId}
-						<ThreadPanel />
-					{/key}
-				{:else if backendReview && reviewStream}
-					<!-- Drawer: stays mounted; drag its left edge to resize, past the minimum to collapse, back out to reopen. -->
-					<div class="chat-drawer" data-open={showChat || undefined} style="--chat-width: {chatWidth}rem">
-						<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-						<div
-							class="chat-resizer"
-							role="separator"
-							aria-orientation="vertical"
-							aria-label={showChat ? 'Resize chat. Drag right to collapse.' : 'Chat collapsed. Drag left or press Enter to open.'}
-							aria-controls="interactive-review"
-							aria-valuemin={0}
-							aria-valuemax={CHAT_MAX * 16}
-							aria-valuenow={showChat ? Math.round(chatWidth * 16) : 0}
-							tabindex="0"
-							onpointerdown={startChatResize}
-							onkeydown={chatResizeKey}
-							ondblclick={() => (showChat ? void closeChat() : openChat())}
-						></div>
-						<div class="chat-drawer-clip">
-							<section id="interactive-review" aria-label="Interactive review" class="chat-drawer-panel" inert={!showChat}>
-								<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
-									<!-- The same conversation as the Review view, specialists and progress included. -->
-									<LiveReviewProgress embedded review={backendReview} stream={reviewStream} repo={session?.name ?? ''}
-										files={backendFiles ? backendFiles.length : null}
-										additions={backendFiles ? backendFiles.reduce((sum, f) => sum + f.additions, 0) : null}
-										deletions={backendFiles ? backendFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
-										bind:draft={chatDraft} bind:codeContext focusKey={chatFocus}
-										onOpenDiff={() => setView('findings')}
-										onShowView={(view) => setView(view)}
-										onOpenFinding={(finding) => { if (finding.file) { sessionFile.select(finding.file); userPickedFile = true; showLine(finding.file, finding.line ?? null); if (finding.line) revealDiffLine(finding.line); } setView('diff'); }}
-										onRestart={() => void rerunReview()}
-										onStartReview={backendReview.status === 'draft' ? startDraftReview : null}
-										onContinue={backendReview.status === 'failed' ? continueReview : null}
-										restarting={queueing} actionError={backendError} />
-								</Card.Root>
-							</section>
-						</div>
+			{/if}
+			{#if threadsStore.openId}
+				{#key threadsStore.openId}
+					<ThreadPanel />
+				{/key}
+			{:else if backendReview && reviewStream}
+				<!-- Drawer: stays mounted; drag its left edge to resize, past the minimum to collapse, back out to reopen. -->
+				<div class="chat-drawer" data-open={showChat || undefined} style="--chat-width: {chatWidth}rem">
+					<!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+					<div
+						class="chat-resizer"
+						role="separator"
+						aria-orientation="vertical"
+						aria-label={showChat
+							? 'Resize chat. Drag right to collapse.'
+							: 'Chat collapsed. Drag left or press Enter to open.'}
+						aria-controls="interactive-review"
+						aria-valuemin={0}
+						aria-valuemax={CHAT_MAX * 16}
+						aria-valuenow={showChat ? Math.round(chatWidth * 16) : 0}
+						tabindex="0"
+						onpointerdown={startChatResize}
+						onkeydown={chatResizeKey}
+						ondblclick={() => (showChat ? void closeChat() : openChat())}
+					></div>
+					<div class="chat-drawer-clip">
+						<section
+							id="interactive-review"
+							aria-label="Interactive review"
+							class="chat-drawer-panel"
+							inert={!showChat}
+						>
+							<Card.Root
+								class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none"
+							>
+								<!-- The same conversation as the Review view, specialists and progress included. -->
+								<LiveReviewProgress
+									embedded
+									review={backendReview}
+									stream={reviewStream}
+									repo={session?.name ?? ''}
+									files={backendFiles ? backendFiles.length : null}
+									additions={backendFiles ? backendFiles.reduce((sum, f) => sum + f.additions, 0) : null}
+									deletions={backendFiles ? backendFiles.reduce((sum, f) => sum + f.deletions, 0) : null}
+									bind:draft={chatDraft}
+									bind:codeContext
+									focusKey={chatFocus}
+									onOpenDiff={() => setView('findings')}
+									onShowView={(view) => setView(view)}
+									onOpenFinding={(finding) => {
+										if (finding.file) {
+											sessionFile.select(finding.file);
+											userPickedFile = true;
+											showLine(finding.file, finding.line ?? null);
+											if (finding.line) revealDiffLine(finding.line);
+										}
+
+										setView('diff');
+									}}
+									onRestart={() => void rerunReview()}
+									onStartReview={backendReview.status === 'draft' ? startDraftReview : null}
+									onContinue={backendReview.status === 'failed' ? continueReview : null}
+									restarting={queueing}
+									actionError={backendError}
+								/>
+							</Card.Root>
+						</section>
 					</div>
-				{/if}
-			</div>
+				</div>
+			{/if}
+		</div>
 	</div>
 	{#if backendReview}<ReviewMetricsModal reviewId={backendReview.id} bind:open={usageOpen} showTrigger={false} />{/if}
 {/snippet}
 
-{#if backendReview && backendReview.source !== 'stub'}<ChangesPanel branch={recentSessions.recent.find((item) => item.id === id)?.branch ?? null} />{/if}
+{#if backendReview && backendReview.source !== 'stub'}<ChangesPanel
+		branch={recentSessions.recent.find((item) => item.id === id)?.branch ?? null}
+	/>{/if}

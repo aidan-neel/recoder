@@ -29,51 +29,101 @@
 		codeContext?: ReviewCodeContext | null;
 		focusKey?: number;
 	}
-	let { review, stream, repo, files = null, additions = null, deletions = null, onOpenDiff = null, onShowView = null, onOpenFinding = null, onRestart = null, onStartReview = null, onContinue = null, actionError = null, restarting = false, embedded = false, draft = $bindable(''), codeContext = $bindable(null), focusKey }: Props = $props();
+	let {
+		review,
+		stream,
+		repo,
+		files = null,
+		additions = null,
+		deletions = null,
+		onOpenDiff = null,
+		onShowView = null,
+		onOpenFinding = null,
+		onRestart = null,
+		onStartReview = null,
+		onContinue = null,
+		actionError = null,
+		restarting = false,
+		embedded = false,
+		draft = $bindable(''),
+		codeContext = $bindable(null),
+		focusKey
+	}: Props = $props();
 	const progress = $derived(stream.progress);
 	const connection = $derived(stream.connection);
 	let now = $state(Date.now());
 	const reviewId = $derived(review.id);
 
 	$effect(() => {
-		const timer = setInterval(() => now = Date.now(), 1000);
+		const timer = setInterval(() => (now = Date.now()), 1000);
+
 		return () => clearInterval(timer);
 	});
 	const status = $derived(review.status);
 	const awaitingPrompt = $derived(status === 'draft');
 	const active = $derived(status === 'queued' || status === 'running');
-	const elapsed = $derived(awaitingPrompt ? '0:00' : formatDuration((active ? now : Date.parse(review.updatedAt)) - Date.parse(review.startedAt ?? review.createdAt)));
+	const elapsed = $derived(
+		awaitingPrompt
+			? '0:00'
+			: formatDuration((active ? now : Date.parse(review.updatedAt)) - Date.parse(review.startedAt ?? review.createdAt))
+	);
 	function formatDuration(ms: number): string {
 		const seconds = Math.max(0, Math.floor(ms / 1000));
+
 		return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
 	}
 	// One entry per id (latest wins): reviews saved before follow-up ids were made unique can repeat one.
 	// Reviews saved before every specialist had to finish can carry a `partial` status; it meant finished.
-	const assignments = $derived<ReviewAssignment[]>([...new Map((progress.assignments ?? []).map((assignment) => [assignment.id, (assignment.status as string) === 'partial' ? { ...assignment, status: 'done' as const } : assignment])).values()]);
+	const assignments = $derived<ReviewAssignment[]>([
+		...new Map(
+			(progress.assignments ?? []).map((assignment) => [
+				assignment.id,
+				(assignment.status as string) === 'partial' ? { ...assignment, status: 'done' as const } : assignment
+			])
+		).values()
+	]);
 	// Planner/consolidation events are review-level, never another correctness assignment.
 	const pipelineId = '__pipeline';
 	const confirmed = $derived(status === 'passed');
-	const viewFindings = $derived<ReviewingFinding[]>(!active ? review.findings.map((finding, i) => ({
-		id: 'F-' + String(i + 1).padStart(2, '0'), agent: finding.agent ?? null,
-		severity: finding.severity === 'error' ? 'high' : finding.severity === 'warning' ? 'medium' : 'low',
-		title: mapBackendFinding(finding, i).title || finding.file,
-		location: finding.file + (finding.line ? ':' + finding.line : ''),
-		file: finding.file,
-		line: finding.line ?? null,
-		confirmed
-	})) : []);
+	const viewFindings = $derived<ReviewingFinding[]>(
+		!active
+			? review.findings.map((finding, i) => ({
+					id: 'F-' + String(i + 1).padStart(2, '0'),
+					agent: finding.agent ?? null,
+					severity: finding.severity === 'error' ? 'high' : finding.severity === 'warning' ? 'medium' : 'low',
+					title: mapBackendFinding(finding, i).title || finding.file,
+					location: finding.file + (finding.line ? ':' + finding.line : ''),
+					file: finding.file,
+					line: finding.line ?? null,
+					confirmed
+				}))
+			: []
+	);
 	// Indexes match the steps in review-steps.svelte.
 	const stage = $derived(reviewStage(progress, status));
 	const stageIndex = $derived(stage.index);
 	const currentStage = $derived(stage.label);
-	const displayAssignments = $derived<ReviewAssignment[]>([...assignments, {
-		id: pipelineId, role: 'pipeline', title: 'Review pipeline', reason: 'Planning and saving results',
-		status: active ? 'running' : status === 'passed' ? 'done' : 'error', scope: [],
-		currentOperation: currentStage
-	}]);
-	const connectionLabel = $derived(connection === 'closed' ? 'Updates complete'
-		: connection === 'reconnecting' ? 'Reconnecting · keeping the latest progress'
-		: connection === 'connecting' ? 'Connecting to review' : 'Live updates connected');
+	const displayAssignments = $derived<ReviewAssignment[]>([
+		...assignments,
+		{
+			id: pipelineId,
+			role: 'pipeline',
+			title: 'Review pipeline',
+			reason: 'Planning and saving results',
+			status: active ? 'running' : status === 'passed' ? 'done' : 'error',
+			scope: [],
+			currentOperation: currentStage
+		}
+	]);
+	const connectionLabel = $derived(
+		connection === 'closed'
+			? 'Updates complete'
+			: connection === 'reconnecting'
+				? 'Reconnecting · keeping the latest progress'
+				: connection === 'connecting'
+					? 'Connecting to review'
+					: 'Live updates connected'
+	);
 </script>
 
 <ReviewingView
@@ -89,14 +139,29 @@
 	approval={progress.approval ?? null}
 	completedAt={!active && !awaitingPrompt ? review.updatedAt : undefined}
 	title={review.prTitle || `PR #${review.prNumber}`}
-	meta={{ prLabel: '#' + review.prNumber, prUrl: review.prUrl, repo: recentSessions.repos.find((item) => item.id === review.repoId)?.name ?? repo, files, additions, deletions, elapsed, branch: recentSessions.branches[`${review.repoId}#${review.prNumber}`] }}
+	meta={{
+		prLabel: '#' + review.prNumber,
+		prUrl: review.prUrl,
+		repo: recentSessions.repos.find((item) => item.id === review.repoId)?.name ?? repo,
+		files,
+		additions,
+		deletions,
+		elapsed,
+		branch: recentSessions.branches[`${review.repoId}#${review.prNumber}`]
+	}}
 	assignments={displayAssignments}
 	messages={progress.messages ?? []}
 	orchestratorModel={progress.orchestratorModel}
-	onSend={async (assignmentId, text, context) => { await serverApi.sendReviewMessage(reviewId, assignmentId, text, context); }}
-	onStop={async (assignmentId) => { await serverApi.stopReviewMessage(reviewId, assignmentId); }}
+	onSend={async (assignmentId, text, context) => {
+		await serverApi.sendReviewMessage(reviewId, assignmentId, text, context);
+	}}
+	onStop={async (assignmentId) => {
+		await serverApi.stopReviewMessage(reviewId, assignmentId);
+	}}
 	findings={viewFindings}
-	pendingCount={assignments.filter((assignment) => assignment.status === 'running' || assignment.status === 'queued' || assignment.status === 'waiting').length}
+	pendingCount={assignments.filter(
+		(assignment) => assignment.status === 'running' || assignment.status === 'queued' || assignment.status === 'waiting'
+	).length}
 	activity={progress.activity}
 	showChecks={review.source !== 'stub'}
 	repoId={review.source !== 'stub' ? review.repoId : null}

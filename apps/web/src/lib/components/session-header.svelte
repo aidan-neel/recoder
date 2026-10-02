@@ -33,8 +33,22 @@
 	}
 
 	let {
-		title, branch = null, repo = null, prLabel = null, prUrl = null, bordered = true, files = null, additions = null, deletions = null,
-		view, onView = null, diffDisabled = false, onFiles = null, filesLabel = 'Open diff', menu, toolbar
+		title,
+		branch = null,
+		repo = null,
+		prLabel = null,
+		prUrl = null,
+		bordered = true,
+		files = null,
+		additions = null,
+		deletions = null,
+		view,
+		onView = null,
+		diffDisabled = false,
+		onFiles = null,
+		filesLabel = 'Open diff',
+		menu,
+		toolbar
 	}: Props = $props();
 
 	/** The PR number opens the pull request on its host in a new tab (the trigger forwards these to its link). */
@@ -55,6 +69,7 @@
 	$effect(() => () => (mounted = false));
 	function choose(next: string): void {
 		if (next === view) return;
+
 		// A view switch can unmount this header; only a surviving one snaps back.
 		void Promise.resolve(onView?.(next as SessionView)).finally(() => {
 			if (mounted) current = view;
@@ -66,7 +81,9 @@
      view's actions (toolbar) far right. The title, repo, branch and diffstat live in the hover card. -->
 <header class="session-header" data-bordered={bordered || undefined} data-merged="">
 	<HoverCard.Root>
-		<HoverCard.Trigger class="session-pr" href={prUrl ?? undefined} {...prLinkAttrs}>{prLabel || repo || 'Review'}</HoverCard.Trigger>
+		<HoverCard.Trigger class="session-pr" href={prUrl ?? undefined} {...prLinkAttrs}
+			>{prLabel || repo || 'Review'}</HoverCard.Trigger
+		>
 		<HoverCard.Content side="bottom" align="start" class="session-pr-card">
 			<HoverCard.Title class="session-pr-title">{title}</HoverCard.Title>
 			{#if source}<Typography.Metadata class="session-pr-meta">{source}</Typography.Metadata>{/if}
@@ -74,14 +91,22 @@
 				<Typography.Metadata class="session-pr-meta">
 					{#if branch}<span class="truncate">{branch}</span>{/if}
 					{#if branch && files !== null}<span aria-hidden="true">·</span>{/if}
-					{#if files !== null}<span class="shrink-0">{files} {files === 1 ? 'file' : 'files'} <span class="text-success">+{additions ?? 0}</span> <span class="text-danger">−{deletions ?? 0}</span></span>{/if}
+					{#if files !== null}<span class="shrink-0"
+							>{files}
+							{files === 1 ? 'file' : 'files'} <span class="text-success">+{additions ?? 0}</span>
+							<span class="text-danger">−{deletions ?? 0}</span></span
+						>{/if}
 				</Typography.Metadata>
 			{/if}
 		</HoverCard.Content>
 	</HoverCard.Root>
 	{#if onView}
 		<Tabs.Root bind:value={current} onValueChange={choose} variant="segmented" class="view-switch">
-			<Tabs.List {...{ 'aria-label': 'Session view' }} {@attach keepPillAligned} {@attach (list: HTMLElement) => carryPill(list, 'session-view', view)}>
+			<Tabs.List
+				{...{ 'aria-label': 'Session view' }}
+				{@attach keepPillAligned}
+				{@attach (list: HTMLElement) => carryPill(list, 'session-view', view)}
+			>
 				<Tabs.Trigger value="conversation">Review</Tabs.Trigger>
 				<Tabs.Trigger value="findings" disabled={diffDisabled}>Findings</Tabs.Trigger>
 				<Tabs.Trigger value="diff" disabled={diffDisabled}>Diff</Tabs.Trigger>
@@ -90,7 +115,9 @@
 	{/if}
 	{#if menu}
 		<DropdownMenu.Root>
-			<DropdownMenu.Trigger variant="ghost" size="icon" aria-label="Session actions"><Ellipsis size={16} aria-hidden="true" /></DropdownMenu.Trigger>
+			<DropdownMenu.Trigger variant="ghost" size="icon" aria-label="Session actions"
+				><Ellipsis size={16} aria-hidden="true" /></DropdownMenu.Trigger
+			>
 			<DropdownMenu.Content>{@render menu()}</DropdownMenu.Content>
 		</DropdownMenu.Root>
 	{/if}

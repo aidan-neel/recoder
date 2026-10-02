@@ -10,10 +10,8 @@ describe('scopeReviewFiles', () => {
 			file('src/rate-limit/limiter.ts'),
 			file('apps/web/src/routes/+page.svelte')
 		]);
-		expect(included.map((f) => f.path)).toEqual([
-			'src/rate-limit/limiter.ts',
-			'apps/web/src/routes/+page.svelte'
-		]);
+
+		expect(included.map((f) => f.path)).toEqual(['src/rate-limit/limiter.ts', 'apps/web/src/routes/+page.svelte']);
 		expect(skipped).toEqual([]);
 	});
 
@@ -24,6 +22,7 @@ describe('scopeReviewFiles', () => {
 			file('node_modules/acme/index.js'),
 			file('src/index.ts')
 		]);
+
 		expect(included.map((f) => f.path)).toEqual(['src/index.ts']);
 		expect(skipped).toHaveLength(3);
 		expect(skipped[0].reason).toMatch(/generated|build/);
@@ -35,6 +34,7 @@ describe('scopeReviewFiles', () => {
 			file('assets/logo.svg'),
 			file('src/app.ts')
 		]);
+
 		expect(included.map((f) => f.path)).toEqual(['src/types.d.ts', 'assets/logo.svg', 'src/app.ts']);
 		expect(skipped).toEqual([]);
 	});
@@ -42,7 +42,9 @@ describe('scopeReviewFiles', () => {
 	test('keeps lockfiles as summarized evidence rather than dropping them', () => {
 		expect(classifyPath('bun.lock')).toMatchObject({ classification: 'lockfile', summarize: true });
 		expect(classifyPath('package-lock.json').excludeReason).toBeUndefined();
+
 		const { included } = scopeReviewFiles([file('bun.lock'), file('src/app.ts')]);
+
 		expect(included.map((f) => f.path)).toEqual(['bun.lock', 'src/app.ts']);
 	});
 
@@ -53,19 +55,20 @@ describe('scopeReviewFiles', () => {
 			file('assets/logo.png'),
 			file('src/app.ts')
 		]);
+
 		expect(included.map((f) => f.path)).toEqual(['src/app.ts']);
 		expect(skipped.map((s) => s.path)).toEqual(['assets/app.min.js', 'assets/app.js.map', 'assets/logo.png']);
 	});
 
 	test('skips unresolvable paths', () => {
 		const { included } = scopeReviewFiles([file('unknown'), file('a.ts')]);
+
 		expect(included.map((f) => f.path)).toEqual(['a.ts']);
 	});
 
 	test('honors extra substring patterns', () => {
-		const { included } = scopeReviewFiles([file('db/migrations/001.sql'), file('src/a.ts')], [
-			'migrations'
-		]);
+		const { included } = scopeReviewFiles([file('db/migrations/001.sql'), file('src/a.ts')], ['migrations']);
+
 		expect(included.map((f) => f.path)).toEqual(['src/a.ts']);
 	});
 });

@@ -130,12 +130,17 @@ const byExactName: Record<string, string> = {
 export function getFileIcon(filename: string): string {
 	const lower = filename.toLowerCase();
 	const exact = byExactName[lower];
+
 	if (exact) return exact;
+
 	const dot = lower.lastIndexOf('.');
+
 	if (dot !== -1) {
 		const icon = byExtension[lower.slice(dot + 1)];
+
 		if (icon) return icon;
 	}
+
 	return fileSvg;
 }
 
@@ -181,5 +186,6 @@ const folderPairs: Record<string, FolderPair> = {
 /** Raw SVG markup for a folder icon, honoring the open state. */
 export function getFolderIcon(folderName: string, opened: boolean): string {
 	const folder = folderPairs[folderName.toLowerCase()] ?? defaultFolder;
+
 	return opened ? folder.opened : folder.closed;
 }

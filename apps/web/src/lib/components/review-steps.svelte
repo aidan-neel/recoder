@@ -29,19 +29,44 @@
 		onDecline?: (() => void) | null;
 		approving?: boolean;
 	}
-	let { current, failed = false, active, elapsed, specialists = null, paused = false, onPauseToggle = null, onCancel = null, approval = null, onApprove = null, onDecline = null, approving = false }: Props = $props();
+	let {
+		current,
+		failed = false,
+		active,
+		elapsed,
+		specialists = null,
+		paused = false,
+		onPauseToggle = null,
+		onCancel = null,
+		approval = null,
+		onApprove = null,
+		onDecline = null,
+		approving = false
+	}: Props = $props();
 	let pending = $state<'pause' | 'cancel' | null>(null);
 	async function run(kind: 'pause' | 'cancel', action: (() => Promise<void>) | null): Promise<void> {
 		if (!action || pending) return;
 		pending = kind;
-		try { await action(); } finally { pending = null; }
+
+		try {
+			await action();
+		} finally {
+			pending = null;
+		}
 	}
 
 	const steps = $derived([
 		{ id: 'checkout', label: 'Prepare repository', meta: '' },
 		{ id: 'plan', label: 'Plan review', meta: '' },
 		{ id: 'checks', label: 'Run checks', meta: '' },
-		{ id: 'specialists', label: 'Specialist reviews', meta: specialists?.total && current >= 3 ? `${specialists.done}/${specialists.total}${specialists.failed ? ` · ${specialists.failed} failed` : ''}` : '' },
+		{
+			id: 'specialists',
+			label: 'Specialist reviews',
+			meta:
+				specialists?.total && current >= 3
+					? `${specialists.done}/${specialists.total}${specialists.failed ? ` · ${specialists.failed} failed` : ''}`
+					: ''
+		},
 		{ id: 'verify', label: 'Verify findings', meta: '' },
 		{ id: 'consolidate', label: 'Consolidate findings', meta: '' }
 	]);
@@ -49,15 +74,33 @@
 		// Past the specialist step with some of them failed: it ran, but not all of it.
 		if (index < current) return steps[index].id === 'specialists' && specialists?.failed ? 'partial' : 'done';
 		if (index > current) return 'pending';
+
 		return failed ? 'error' : active ? 'active' : 'pending';
 	}
-	const liveLabel = $derived(active ? (approval?.status === 'pending' ? 'Waiting for you' : paused ? 'Paused' : 'Live') : failed ? 'Stopped' : 'Finished');
+	const liveLabel = $derived(
+		active
+			? approval?.status === 'pending'
+				? 'Waiting for you'
+				: paused
+					? 'Paused'
+					: 'Live'
+			: failed
+				? 'Stopped'
+				: 'Finished'
+	);
 </script>
 
 <Card.Root class="rail-card rail-progress">
 	<div class="rail-card-head">
 		<Typography.Title level={2} class="rail-card-title">Progress</Typography.Title>
-		<span class="review-live" data-live={(active && !paused) || undefined} data-paused={(active && paused) || undefined} data-failed={failed || undefined} role="timer" aria-label="{liveLabel}, {elapsed} elapsed">
+		<span
+			class="review-live"
+			data-live={(active && !paused) || undefined}
+			data-paused={(active && paused) || undefined}
+			data-failed={failed || undefined}
+			role="timer"
+			aria-label="{liveLabel}, {elapsed} elapsed"
+		>
 			<span class="review-live-dot" aria-hidden="true"></span>{liveLabel} · {elapsed}
 		</span>
 	</div>
@@ -79,20 +122,40 @@
 		<div class="progress-approval" role="group" aria-label="Plan approval">
 			<Typography.Text class="progress-approval-text">Run specialists?</Typography.Text>
 			<div class="progress-approval-actions">
-				{#if onDecline}<Button variant="outline" class="progress-approve" disabled={approving} onclick={onDecline}>No</Button>{/if}
-				<Button class="progress-approve" loading={approving} disabled={approving} onclick={() => void onApprove()}>Yes</Button>
+				{#if onDecline}<Button variant="outline" class="progress-approve" disabled={approving} onclick={onDecline}
+						>No</Button
+					>{/if}
+				<Button class="progress-approve" loading={approving} disabled={approving} onclick={() => void onApprove()}
+					>Yes</Button
+				>
 			</div>
 		</div>
 	{/if}
 	{#if active && (onPauseToggle || onCancel)}
 		<div class="progress-controls">
 			{#if onPauseToggle}
-				<Button variant="ghost" class="progress-control" loading={pending === 'pause'} disabled={!!pending} onclick={() => void run('pause', onPauseToggle)}>
-					{#if paused}<Play size={13} strokeWidth={1.75} aria-hidden="true" /> Resume{:else}<Pause size={13} strokeWidth={1.75} aria-hidden="true" /> Pause{/if}
+				<Button
+					variant="ghost"
+					class="progress-control"
+					loading={pending === 'pause'}
+					disabled={!!pending}
+					onclick={() => void run('pause', onPauseToggle)}
+				>
+					{#if paused}<Play size={13} strokeWidth={1.75} aria-hidden="true" /> Resume{:else}<Pause
+							size={13}
+							strokeWidth={1.75}
+							aria-hidden="true"
+						/> Pause{/if}
 				</Button>
 			{/if}
 			{#if onCancel}
-				<Button variant="ghost" class="progress-control progress-cancel" loading={pending === 'cancel'} disabled={!!pending} onclick={() => void run('cancel', onCancel)}>
+				<Button
+					variant="ghost"
+					class="progress-control progress-cancel"
+					loading={pending === 'cancel'}
+					disabled={!!pending}
+					onclick={() => void run('cancel', onCancel)}
+				>
 					<CircleStop size={13} strokeWidth={1.75} aria-hidden="true" /> Cancel
 				</Button>
 			{/if}

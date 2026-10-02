@@ -58,14 +58,17 @@ export class ModelConfigError extends Error {
 /** Raw routing table. Throws when the shared base URL/key is missing. */
 export function reviewConfig(): { baseUrl: string; apiKey: string; model: string } {
 	const eff = effectiveReviewEnv();
+
 	const parsed = configSchema.safeParse({
 		baseUrl: eff.baseUrl,
 		apiKey: eff.apiKey,
 		model: eff.model
 	});
+
 	if (!parsed.success) {
 		throw new ModelConfigError('No model is set up. Add one in Settings → Models.');
 	}
+
 	return parsed.data;
 }
 
@@ -74,6 +77,7 @@ export function isReviewConfigured(): boolean {
 	try {
 		configForRole('security');
 		configForOrchestrator();
+
 		return true;
 	} catch {
 		return false;
@@ -104,31 +108,61 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 	// specialist. An unset Specialist pick follows the Review model and its effort.
 	const followsReview = orchestrator || !stored.specialistModelId;
 	const entryId = followsReview ? reviewId : stored.specialistModelId;
+
 	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) {
-		throw new ModelConfigError('Reviews on OpenCode models are not wired up yet. They arrive with the OpenCode adapter.');
+		throw new ModelConfigError(
+			'Reviews on OpenCode models are not wired up yet. They arrive with the OpenCode adapter.'
+		);
 	}
-	const requested = orchestrator ? stored.orchestratorEffort
-		: stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined);
+
+	const requested = orchestrator
+		? stored.orchestratorEffort
+		: (stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
+
 	// A dangling pointer (entry deleted out-of-band) falls back to the first entry.
 	const entry = entries.find((e) => e.id === entryId) ?? entries[0];
+
 	if (entry) {
 		const reasoningEffort = supportedEffort(requested ?? undefined, entry.efforts, entry.defaultEffort);
+
 		if (entry.provider === 'codex') {
-			return { role, provider: 'codex', model: entry.model, baseUrl: '', apiKey: '', reasoningEffort: reasoningEffort ?? entry.defaultEffort ?? 'medium' };
+			return {
+				role,
+				provider: 'codex',
+				model: entry.model,
+				baseUrl: '',
+				apiKey: '',
+				reasoningEffort: reasoningEffort ?? entry.defaultEffort ?? 'medium'
+			};
 		}
+
 		const hosted = hostedProvider(entry.source);
+
 		if (hosted) {
 			const apiKey = stored.connections?.[hosted.id]?.apiKey;
+
 			if (!apiKey) throw new ModelConfigError(`${hosted.name} isn't connected. Connect it in Settings → Models.`);
+
 			return { role, source: hosted.id, baseUrl: hosted.baseUrl, apiKey, model: entry.model, reasoningEffort };
 		}
+
 		const baseUrl = entry.baseUrl || eff.baseUrl;
 		const apiKey = entry.apiKey || eff.apiKey;
+
 		if (!baseUrl) throw new ModelConfigError(`${entry.label} has no endpoint. Set a base URL in Settings → Models.`);
+
 		return { role, baseUrl, apiKey, model: entry.model, reasoningEffort };
 	}
+
 	const shared = reviewConfig();
-	return { role, baseUrl: shared.baseUrl, apiKey: shared.apiKey, model: shared.model, reasoningEffort: requested ?? undefined };
+
+	return {
+		role,
+		baseUrl: shared.baseUrl,
+		apiKey: shared.apiKey,
+		model: shared.model,
+		reasoningEffort: requested ?? undefined
+	};
 }
 
 /**
@@ -143,12 +177,14 @@ function supportedEffort(
 	if (!requested) return undefined;
 	if (!offered?.length || offered.includes(requested)) return requested;
 	if (fallback && offered.includes(fallback)) return fallback;
+
 	return offered.includes('medium') ? 'medium' : offered[0];
 }
 
 /** Caps so one PR can't blow the context window. */
 export function reviewLimits(): { maxFiles: number; maxDiffChars: number; maxFileChars: number } {
 	const eff = effectiveReviewEnv();
+
 	return {
 		maxFiles: eff.maxFiles,
 		maxDiffChars: eff.maxDiffChars,

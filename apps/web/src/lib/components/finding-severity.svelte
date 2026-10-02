@@ -38,6 +38,8 @@
 	</Button>
 {:else}
 	<SeverityPill tone={severity}>
-		{#if count !== null}{chipLabel[severity]} {count}{:else}{chipLabel[severity] === 'Med' ? 'Medium' : chipLabel[severity]}{/if}
+		{#if count !== null}{chipLabel[severity]} {count}{:else}{chipLabel[severity] === 'Med'
+				? 'Medium'
+				: chipLabel[severity]}{/if}
 	</SeverityPill>
 {/if}

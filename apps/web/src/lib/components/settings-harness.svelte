@@ -27,6 +27,7 @@
 
 	function setLimit(key: (typeof FIELDS)[number]['key'], max: number, raw: string): void {
 		const n = Math.round(Number(raw));
+
 		if (Number.isFinite(n) && n > 0) settingsDraft.limits = { ...settingsDraft.limits, [key]: Math.min(n, max) };
 	}
 </script>

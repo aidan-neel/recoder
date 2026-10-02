@@ -12,19 +12,25 @@ function tokenFile(): string {
 
 function readFileTokens(file: string): Tokens | undefined {
 	let raw: string;
+
 	try {
 		raw = readFileSync(file, 'utf8');
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
 		throw new Error('Could not read saved provider tokens');
 	}
+
 	try {
 		const parsed = JSON.parse(raw);
+
 		if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error();
+
 		const tokens: Tokens = {};
+
 		for (const provider of ['github', 'gitlab'] as const) {
 			if (typeof parsed[provider] === 'string' && parsed[provider]) tokens[provider] = parsed[provider];
 		}
+
 		return tokens;
 	} catch {
 		throw new Error('Saved provider tokens are invalid; refusing to overwrite them');
@@ -35,31 +41,43 @@ function readFileTokens(file: string): Tokens | undefined {
 function persist(tokens: Tokens): void {
 	const file = tokenFile();
 	const temporary = file + '.' + crypto.randomUUID() + '.tmp';
+
 	try {
 		const fd = openSync(temporary, 'wx', 0o600);
+
 		try {
 			writeFileSync(fd, JSON.stringify(tokens));
 			fsyncSync(fd);
 		} finally {
 			closeSync(fd);
 		}
+
 		renameSync(temporary, file);
 	} catch {
 		throw new Error('Could not save provider tokens to disk');
 	} finally {
-		try { unlinkSync(temporary); } catch { /* Already renamed or never created. */ }
+		try {
+			unlinkSync(temporary);
+		} catch {
+			/* Already renamed or never created. */
+		}
 	}
 }
 
 function readStored(): Tokens {
 	const primary = readFileTokens(tokenFile());
+
 	// An empty primary is intentional (disconnect); never resurrect legacy tokens.
 	if (primary !== undefined) return primary;
+
 	const legacy = readFileTokens(join(process.cwd(), 'data', 'tokens.json'));
+
 	if (legacy !== undefined) {
 		persist(legacy);
+
 		return legacy;
 	}
+
 	return {};
 }
 
@@ -74,6 +92,7 @@ export function setToken(provider: Provider, token: string): void {
 
 export function clearToken(provider: Provider): void {
 	const tokens = readStored();
+
 	delete tokens[provider];
 	persist(tokens);
 }
@@ -93,7 +112,10 @@ export function hasToken(provider: Provider): boolean {
  */
 export function tokenEnv(provider: Provider, repoUrl?: string): Record<string, string> {
 	const token = getToken(provider);
+
 	if (provider === 'github') return token ? { GH_TOKEN: token } : {};
+
 	const host = (repoUrl ? hostOfRepoUrl(repoUrl) : null) ?? getGitlabHost();
+
 	return { ...(token ? { GITLAB_TOKEN: token } : {}), ...(host ? { GITLAB_HOST: host } : {}) };
 }

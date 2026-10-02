@@ -8,7 +8,11 @@
 	 * most, and keeps draining after the stream ends rather than snapping.
 	 * Text that was already complete when mounted renders at once.
 	 */
-	let { content: raw, streaming = false, normalize = true }: {
+	let {
+		content: raw,
+		streaming = false,
+		normalize = true
+	}: {
 		content: string;
 		streaming?: boolean;
 		/** Repair model markdown (off for the developer's own messages). */
@@ -24,12 +28,22 @@
 
 	function tick(now: number) {
 		const dt = last ? Math.min(64, now - last) : 16;
+
 		last = now;
+
 		const backlog = content.length - shown.length;
-		if (backlog <= 0) { frame = undefined; last = 0; return; }
+
+		if (backlog <= 0) {
+			frame = undefined;
+			last = 0;
+
+			return;
+		}
+
 		// ~45 chars/s baseline, faster when behind; land on a word end when one is close.
 		let step = Math.max(1, Math.round((dt / 1000) * Math.max(45, backlog * 3)));
 		const space = content.indexOf(' ', shown.length + step);
+
 		if (space > 0 && space - (shown.length + step) < 6) step = space - shown.length + 1;
 		shown = content.slice(0, Math.min(content.length, shown.length + step));
 		frame = requestAnimationFrame(tick);
@@ -37,10 +51,18 @@
 
 	$effect(() => {
 		const target = content;
-		if (reduced || !target.startsWith(shown)) { shown = target; return; }
+
+		if (reduced || !target.startsWith(shown)) {
+			shown = target;
+
+			return;
+		}
+
 		if (target.length > shown.length && frame === undefined) frame = requestAnimationFrame(tick);
 	});
-	$effect(() => () => { if (frame !== undefined) cancelAnimationFrame(frame); });
+	$effect(() => () => {
+		if (frame !== undefined) cancelAnimationFrame(frame);
+	});
 </script>
 
 <Markdown content={shown} streaming={streaming || shown.length < content.length} />

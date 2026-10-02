@@ -9,7 +9,12 @@
 	import SuggestedFix from './suggested-fix.svelte';
 
 	/** Review a failing check's fix, then apply it to the checkout (commit and push from Changes). */
-	let { reviewId, check, open = $bindable(false), onApplied }: { reviewId: string; check: PrCheck | null; open?: boolean; onApplied?: () => void } = $props();
+	let {
+		reviewId,
+		check,
+		open = $bindable(false),
+		onApplied
+	}: { reviewId: string; check: PrCheck | null; open?: boolean; onApplied?: () => void } = $props();
 	const fix = $derived(check ? checkFixes.get(reviewId, check) : undefined);
 
 	async function apply(): Promise<void> {
@@ -25,10 +30,18 @@
 		</Modal.Header>
 		<Modal.Body>
 			{#if fix?.status === 'loading'}
-				<p class="fix-status" role="status"><Spinner size={12} aria-hidden="true" /><span class="shimmer-text">Reading the log and writing a fix…</span></p>
+				<p class="fix-status" role="status">
+					<Spinner size={12} aria-hidden="true" /><span class="shimmer-text">Reading the log and writing a fix…</span>
+				</p>
 			{:else if fix?.status === 'error' && check}
 				{@const target = check}
-				<FailureNotice title="Couldn't write a fix" reason={fix.error ?? ''} signIn={fix.action === 'sign-in'} usageLimit={fix.usageLimit} onRetry={() => void checkFixes.suggest(reviewId, target)} />
+				<FailureNotice
+					title="Couldn't write a fix"
+					reason={fix.error ?? ''}
+					signIn={fix.action === 'sign-in'}
+					usageLimit={fix.usageLimit}
+					onRetry={() => void checkFixes.suggest(reviewId, target)}
+				/>
 			{:else if fix?.status === 'ready' && fix.patch}
 				<SuggestedFix suggestion={fix} />
 				{#if fix.applyError}<p class="conversation-fix-error" role="status">{fix.applyError}</p>{/if}

@@ -36,11 +36,14 @@
 		listOpen = false;
 		fixing = check;
 		fixOpen = true;
+
 		const fix = checkFixes.get(reviewId, check);
+
 		if (!fix || fix.status === 'error') void checkFixes.suggest(reviewId, check);
 	}
 	function fixLabel(check: PrCheck): string {
 		const fix = checkFixes.get(reviewId, check);
+
 		return fix?.status === 'loading' ? 'Writing fix' : fix?.status === 'ready' ? 'View fix' : 'Suggest fix';
 	}
 
@@ -52,10 +55,13 @@
 	async function load(): Promise<void> {
 		if (loading) return;
 		loading = true;
+
 		// The review can change while a load is in flight; never file its checks under the new one.
 		const id = reviewId;
+
 		try {
 			const result = await serverApi.getChecks(id);
+
 			if (id !== reviewId) return;
 			checks = result.checks;
 			ref = result.ref;
@@ -73,16 +79,22 @@
 
 	$effect(() => {
 		void reviewId;
+
 		// Untracked: load() reads and writes its own state.
 		untrack(() => {
 			const cached = lastChecks.get(reviewId);
+
 			checks = cached?.checks ?? null;
 			ref = cached?.ref ?? '';
 			pipeline = cached?.pipeline ?? false;
 			error = null;
 			void load();
 		});
-		const timer = setInterval(() => { if (active) void load(); }, 20_000);
+
+		const timer = setInterval(() => {
+			if (active) void load();
+		}, 20_000);
+
 		return () => clearInterval(timer);
 	});
 </script>
@@ -91,7 +103,12 @@
 	<span class="pr-checks-pending" aria-label="Loading checks"><Spinner size={12} aria-hidden="true" /></span>
 {:else}
 	<Popover.Root placement="bottom-end" bind:open={listOpen}>
-		<Popover.Trigger variant="ghost" class="pr-checks" data-tone={tone} aria-label={pipeline ? 'Merge request pipeline' : 'Pull request checks'}>
+		<Popover.Trigger
+			variant="ghost"
+			class="pr-checks"
+			data-tone={tone}
+			aria-label={pipeline ? 'Merge request pipeline' : 'Pull request checks'}
+		>
 			{#if pipeline}
 				{#if error}<CircleDashed size={14} aria-hidden="true" />Pipeline
 				{:else if tone === 'failed'}<X size={14} aria-hidden="true" />Pipeline failing
@@ -108,11 +125,22 @@
 			<div class="pr-checks-head">
 				<Popover.Title class="text-[13px] font-medium">{pipeline ? 'Pipeline' : 'Checks'}</Popover.Title>
 				{#if ref}<code class="pr-checks-ref" title={ref}>{ref}</code>{/if}
-				<Button variant="ghost" size="icon" class="pr-checks-refresh" aria-label="Refresh checks" disabled={loading} onclick={() => void load()}><RefreshCw size={13} aria-hidden="true" /></Button>
+				<Button
+					variant="ghost"
+					size="icon"
+					class="pr-checks-refresh"
+					aria-label="Refresh checks"
+					disabled={loading}
+					onclick={() => void load()}><RefreshCw size={13} aria-hidden="true" /></Button
+				>
 			</div>
 			{#if error}<p class="pr-checks-empty">{error}</p>
 			{:else if checks?.length}<CheckList {checks} onFix={openFix} {fixLabel} />
-			{:else}<p class="pr-checks-empty">{pipeline ? "No pipeline has run on this merge request's latest commit." : "No checks have run on this pull request's latest commit."}</p>{/if}
+			{:else}<p class="pr-checks-empty">
+					{pipeline
+						? "No pipeline has run on this merge request's latest commit."
+						: "No checks have run on this pull request's latest commit."}
+				</p>{/if}
 		</Popover.Content>
 	</Popover.Root>
 {/if}

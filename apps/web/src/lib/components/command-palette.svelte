@@ -43,38 +43,49 @@
 
 	const findings = $derived.by(() => {
 		if (!sessionScope) return [];
+
 		const rank = { high: 0, medium: 1, low: 2 };
+
 		const list = findingsStore.items.filter(
 			(f) => f.status === 'open' && (q === '' || `${f.title} ${f.body} ${f.file}`.toLowerCase().includes(q))
 		);
+
 		return list.sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, LIMIT);
 	});
 
 	/** Path matches first, then files whose diff mentions the query. */
 	const files = $derived.by(() => {
 		if (!sessionScope || q === '') return [];
+
 		const byPath: { file: FileDiff; matches: number }[] = [];
 		const byContent: { file: FileDiff; matches: number }[] = [];
+
 		for (const file of paletteContext.files) {
 			if (file.path.toLowerCase().includes(q)) {
 				byPath.push({ file, matches: 0 });
 				continue;
 			}
+
 			let matches = 0;
+
 			for (const hunk of file.hunks) {
 				for (const line of hunk.lines) if (line.type !== 'del' && line.text.toLowerCase().includes(q)) matches++;
 			}
+
 			if (matches > 0) byContent.push({ file, matches });
 		}
+
 		return [...byPath, ...byContent.sort((a, b) => b.matches - a.matches)].slice(0, LIMIT);
 	});
 
 	const openIds = $derived(new Set(sessionState.sessions.map((s) => s.id)));
 	const sessions = $derived.by(() => {
 		if (sessionScope) return [];
+
 		const list = recentSessions.recent.filter(
 			(s) => q === '' || `${s.title ?? ''} ${s.repo} #${s.pr} ${s.branch ?? ''}`.toLowerCase().includes(q)
 		);
+
 		return [...list.filter((s) => openIds.has(s.id)), ...list.filter((s) => !openIds.has(s.id))].slice(0, q ? 8 : 6);
 	});
 
@@ -83,21 +94,26 @@
 	/** Split text around case-insensitive matches of the query. */
 	function hits(text: string): { text: string; hit: boolean }[] {
 		if (q === '') return [{ text, hit: false }];
+
 		const out: { text: string; hit: boolean }[] = [];
 		const lower = text.toLowerCase();
 		let at = 0;
+
 		for (let i = lower.indexOf(q); i !== -1; i = lower.indexOf(q, i + q.length)) {
 			if (i > at) out.push({ text: text.slice(at, i), hit: false });
 			out.push({ text: text.slice(i, i + q.length), hit: true });
 			at = i + q.length;
 		}
+
 		if (at < text.length) out.push({ text: text.slice(at), hit: false });
+
 		return out;
 	}
 
 	async function ask(text = query.trim()): Promise<void> {
 		if (!text || !paletteContext.ask) return;
 		shellState.paletteOpen = false;
+
 		try {
 			await paletteContext.ask(text);
 		} catch (e) {
@@ -118,6 +134,7 @@
 
 	function openSession(s: RecentSession): void {
 		const status = s.status === 'running' || s.status === 'queued' ? 'reviewing' : 'ready';
+
 		sessionState.ensureSession(s.id, s.repo, `#${s.pr}`, status);
 		void goto(`/session/${s.id}`);
 	}
@@ -143,11 +160,14 @@
 				allSessions = !allSessions;
 			}
 		};
+
 		const onInput = (event: Event) => {
 			query = (event.target as HTMLInputElement).value;
 		};
+
 		node.addEventListener('keydown', onKey, true);
 		node.addEventListener('input', onInput);
+
 		return () => {
 			node.removeEventListener('keydown', onKey, true);
 			node.removeEventListener('input', onInput);
@@ -158,15 +178,22 @@
 </script>
 
 {#snippet highlighted(text: string)}
-	{#each hits(text) as part, i (i)}{#if part.hit}<mark class="palette-hit">{part.text}</mark>{:else}{part.text}{/if}{/each}
+	{#each hits(text) as part, i (i)}{#if part.hit}<mark class="palette-hit">{part.text}</mark
+			>{:else}{part.text}{/if}{/each}
 {/snippet}
 
 {#snippet sessionItem(s: RecentSession)}
 	{@const title = s.title?.trim() || `PR #${s.pr}`}
 	{@const running = s.status === 'running' || s.status === 'queued'}
 	<Command.Item value={q} callback={() => openSession(s)}>
-		<span class="palette-icon" style:color={running ? 'var(--sev-medium)' : s.status === 'failed' ? 'var(--danger)' : 'var(--success)'}>
-			{#if running}<LoaderCircle size={14} class="spin" aria-hidden="true" />{:else}<GitPullRequest size={14} aria-hidden="true" />{/if}
+		<span
+			class="palette-icon"
+			style:color={running ? 'var(--sev-medium)' : s.status === 'failed' ? 'var(--danger)' : 'var(--success)'}
+		>
+			{#if running}<LoaderCircle size={14} class="spin" aria-hidden="true" />{:else}<GitPullRequest
+					size={14}
+					aria-hidden="true"
+				/>{/if}
 		</span>
 		<span class="min-w-0 flex-1 truncate">{@render highlighted(title)}</span>
 		<span class="palette-meta font-mono">{s.repo.split('/').at(-1)} #{s.pr}</span>
@@ -177,7 +204,9 @@
 <Command.Root bind:open={shellState.paletteOpen}>
 	<Command.Content class="palette" label="Search or ask Recoder">
 		<div class="palette-search" {@attach searchKeys}>
-			<Command.Search placeholder={sessionScope ? 'Search this session or ask the Orchestrator' : 'Search sessions and actions'} />
+			<Command.Search
+				placeholder={sessionScope ? 'Search this session or ask the Orchestrator' : 'Search sessions and actions'}
+			/>
 			<span class="palette-scope" aria-live="polite">
 				{#if sessionScope && session}in {session.repo} #{session.pr}{:else}all sessions{/if}
 			</span>
@@ -187,7 +216,9 @@
 				{#if canAsk}
 					<Command.Item value={q} class="palette-ask" callback={() => void ask()}>
 						<MessageSquare size={15} strokeWidth={1.75} class="palette-icon" aria-hidden="true" />
-						<span class="min-w-0 flex-1 truncate">Ask Orchestrator: <span class="text-fg-muted">“{query.trim()}”</span></span>
+						<span class="min-w-0 flex-1 truncate"
+							>Ask Orchestrator: <span class="text-fg-muted">“{query.trim()}”</span></span
+						>
 						<kbd class="keycap">⌘↵</kbd>
 					</Command.Item>
 				{/if}
@@ -213,7 +244,8 @@
 							<Command.Item value={q} callback={() => openFile(file)}>
 								<FileIcon size={15} strokeWidth={1.75} class="palette-icon" aria-hidden="true" />
 								<span class="min-w-0 flex-1 truncate font-mono text-[13px]">
-									<span class="text-fg-faint">{@render highlighted(file.path.slice(0, slash))}</span>{@render highlighted(file.path.slice(slash))}
+									<span class="text-fg-faint">{@render highlighted(file.path.slice(0, slash))}</span
+									>{@render highlighted(file.path.slice(slash))}
 								</span>
 								{#if matches > 0}
 									<span class="palette-meta">{matches} match{matches === 1 ? '' : 'es'}</span>
@@ -241,7 +273,13 @@
 					</Command.Item>
 					{#if sessionScope && paletteContext.fixAll}
 						{@const fixAll = paletteContext.fixAll}
-						<Command.Item value={q} callback={() => { paletteContext.showView?.('diff'); fixAll.run(); }}>
+						<Command.Item
+							value={q}
+							callback={() => {
+								paletteContext.showView?.('diff');
+								fixAll.run();
+							}}
+						>
 							<Wrench size={15} strokeWidth={1.75} class="palette-icon" aria-hidden="true" />
 							<span class="flex-1">Fix all open findings</span>
 							<span class="palette-meta">{fixAll.count}</span>

@@ -19,7 +19,15 @@
 		retrying?: boolean;
 		class?: string;
 	}
-	let { title, reason, signIn = false, usageLimit = null, onRetry = null, retrying = false, class: className = '' }: Props = $props();
+	let {
+		title,
+		reason,
+		signIn = false,
+		usageLimit = null,
+		onRetry = null,
+		retrying = false,
+		class: className = ''
+	}: Props = $props();
 
 	$effect(() => {
 		if (signIn && chatGptStatus.signedIn === null) void chatGptStatus.check();
@@ -32,18 +40,22 @@
 {#if usageLimit}
 	<UsageLimitNotice limit={usageLimit} {onRetry} {retrying} class={className} />
 {:else if needsSignIn || !signIn || onRetry}
-<Card.Root class="review-notice {className}" {...{ role: 'alert' }}>
-	<CircleAlert size={15} class="review-notice-icon" aria-hidden="true" />
-	<div class="min-w-0 flex-1">
-		<p class="review-notice-title">{title}</p>
-		<p class="review-notice-body">{needsSignIn || !signIn ? reason : 'Signed in to ChatGPT. Retry to continue.'}</p>
-	</div>
-	{#if needsSignIn}
-		<Button variant="outline" class="shrink-0" onclick={() => modelSettingsUi.show('models', { kind: 'add-provider' })}>Add a provider</Button>
-	{:else if onRetry}
-		<Button variant="outline" class="shrink-0" loading={retrying} onclick={onRetry}>
-			<RotateCcw size={13} aria-hidden="true" /> Retry
-		</Button>
-	{/if}
-</Card.Root>
+	<Card.Root class="review-notice {className}" {...{ role: 'alert' }}>
+		<CircleAlert size={15} class="review-notice-icon" aria-hidden="true" />
+		<div class="min-w-0 flex-1">
+			<p class="review-notice-title">{title}</p>
+			<p class="review-notice-body">{needsSignIn || !signIn ? reason : 'Signed in to ChatGPT. Retry to continue.'}</p>
+		</div>
+		{#if needsSignIn}
+			<Button
+				variant="outline"
+				class="shrink-0"
+				onclick={() => modelSettingsUi.show('models', { kind: 'add-provider' })}>Add a provider</Button
+			>
+		{:else if onRetry}
+			<Button variant="outline" class="shrink-0" loading={retrying} onclick={onRetry}>
+				<RotateCcw size={13} aria-hidden="true" /> Retry
+			</Button>
+		{/if}
+	</Card.Root>
 {/if}
