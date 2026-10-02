@@ -1,6 +1,7 @@
 import { app } from './app';
 import { env } from './env';
 import { serverDataDir } from './lib/data-dir';
+import { opencode } from './lib/opencode';
 import { initReviewSettings } from './lib/review-settings';
 import { initTokenStore } from './lib/tokens';
 import { recoverStaleReviews } from './store';
@@ -8,6 +9,8 @@ import { recoverStaleReviews } from './store';
 initTokenStore();
 initReviewSettings();
 recoverStaleReviews();
+// Start the agent now so Settings never waits on a cold start, and warm its provider catalog.
+void opencode.detect().then((status) => (status.error ? undefined : opencode.providers())).catch(() => {});
 
 const server = Bun.serve({
 	fetch(request, server) {

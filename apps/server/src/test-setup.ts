@@ -8,6 +8,8 @@ process.env.RECODER_WORKDIR = mkdtempSync(join(tmpdir(), 'recoder-test-work-'));
 writeFileSync(join(process.env.RECODER_DATA_DIR, 'tokens.json'), '{}', { mode: 0o600 });
 delete process.env.GH_TOKEN;
 delete process.env.GITLAB_TOKEN;
+// Never start the developer's real OpenCode (or touch its logins); agent tests bring a fake one.
+process.env.RECODER_OPENCODE_BIN = '';
 
 // Tests simulate provider failures and expect them to surface at once; llm-retry.test.ts opts back in.
 process.env.RECODER_LLM_RETRIES ??= '0';

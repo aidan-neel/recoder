@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ReasoningEffort } from '@recoder/shared';
 import { hostedProvider } from './model-providers.js';
+import { OPENCODE_MODEL_PREFIX } from './opencode.js';
 import { effectiveReviewEnv, getStoredSettings } from './review-settings.js';
 
 /**
@@ -103,6 +104,9 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 	// specialist. An unset Specialist pick follows the Review model and its effort.
 	const followsReview = orchestrator || !stored.specialistModelId;
 	const entryId = followsReview ? reviewId : stored.specialistModelId;
+	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) {
+		throw new ModelConfigError('Reviews on OpenCode models are not wired up yet. They arrive with the OpenCode adapter.');
+	}
 	const requested = orchestrator ? stored.orchestratorEffort
 		: stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined);
 	// A dangling pointer (entry deleted out-of-band) falls back to the first entry.

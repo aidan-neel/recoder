@@ -94,14 +94,16 @@
 								{@const model = modelSettingsUi.models.find((item) => item.id === choice?.modelId)}
 								{model ? `Orchestrator runs on ${model.displayName}` : 'Configured'}
 							{:else}
-								Reviews won't start without one. Use your ChatGPT plan, or any OpenAI-compatible endpoint.
+								Reviews won't start without one. Connect a provider in OpenCode, then pick its model.
 							{/if}
 						</span>
 					</div>
 					{#if current === 'model'}
 						<div class="setup-actions">
-							<Button class="setup-action" onclick={() => modelSettingsUi.show('models')}>Sign in with ChatGPT</Button>
-							<Button variant="outline" class="setup-action" onclick={() => modelSettingsUi.show('models')}>Use an API endpoint</Button>
+							<Button class="setup-action" onclick={() => modelSettingsUi.show('models', { kind: 'add-provider' })}>
+								<Plus size={14} aria-hidden="true" /> Add a provider
+							</Button>
+							<Button variant="outline" class="setup-action" onclick={() => modelSettingsUi.show('models')}>Pick a model</Button>
 						</div>
 					{/if}
 				</div>
