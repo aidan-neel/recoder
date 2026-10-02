@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
-import { codex } from '../lib/codex';
-import { LlmError } from '../lib/llm';
-import { trustedOrigin } from '../lib/trusted-origin';
+import { codex } from '../agents/codex/codex';
+import { LlmError } from '../models/llm';
+import { trustedOrigin } from './trusted-origin';
 
 const app = new Hono();
 

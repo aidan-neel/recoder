@@ -13,7 +13,7 @@ import reviews from './routes/reviews';
 import runs from './routes/runs';
 import webhooks from './routes/webhooks';
 import { VERSION } from './version';
-import { ModelConfigError } from './lib/models';
+import { ModelConfigError } from './models/models';
 
 export const app = new Hono();
 

@@ -8,8 +8,8 @@ import {
 	type ReviewProgress,
 	type TokenCall
 } from '@recoder/shared';
-import { serverDataDir } from './lib/data-dir';
-import type { ReviewCheckpoint } from './lib/review-checkpoint';
+import { serverDataDir } from './util/data-dir';
+import type { ReviewCheckpoint } from './review/session/review-checkpoint';
 
 /**
  * SQLite-backed store. Everything the UI treats as durable (repos, reviews,

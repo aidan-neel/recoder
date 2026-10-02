@@ -1,9 +1,9 @@
 import { app } from './app';
 import { env } from './env';
-import { serverDataDir } from './lib/data-dir';
-import { opencode } from './lib/opencode';
-import { initReviewSettings } from './lib/review-settings';
-import { initTokenStore } from './lib/tokens';
+import { serverDataDir } from './util/data-dir';
+import { opencode } from './agents/opencode/opencode';
+import { initReviewSettings } from './review/session/review-settings';
+import { initTokenStore } from './forge/tokens';
 import { recoverStaleReviews } from './store';
 
 initTokenStore();

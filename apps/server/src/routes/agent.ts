@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { OpenCodeError, opencode } from '../lib/opencode';
-import { trustedOrigin } from '../lib/trusted-origin';
+import { OpenCodeError, opencode } from '../agents/opencode/opencode';
+import { trustedOrigin } from './trusted-origin';
 
 /** The coding agent behind reviews (OpenCode for now): detection, providers and sign-in. */
 const app = new Hono();

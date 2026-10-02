@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { ProviderAuth } from '@recoder/shared';
-import { ghAuth, ghAvailable, listGhRepos } from '../lib/gh';
-import { glabAuth, glabAvailable, listGlabRepos } from '../lib/glab';
-import { GhError } from '../lib/gh';
-import { getGitlabHost, normalizeGitlabHost, setGitlabHost } from '../lib/gitlab-host';
-import { clearAllCaches, TtlCache } from '../lib/ttl-cache';
-import { clearToken, setToken, tokenEnv } from '../lib/tokens';
+import { ghAuth, ghAvailable, listGhRepos } from '../forge/gh';
+import { glabAuth, glabAvailable, listGlabRepos } from '../forge/glab';
+import { GhError } from '../forge/gh';
+import { getGitlabHost, normalizeGitlabHost, setGitlabHost } from '../forge/gitlab-host';
+import { clearAllCaches, TtlCache } from '../util/ttl-cache';
+import { clearToken, setToken, tokenEnv } from '../forge/tokens';
 
 const tokenSchema = z.object({
 	provider: z.enum(['github', 'gitlab']),

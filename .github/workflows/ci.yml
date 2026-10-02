@@ -21,6 +21,7 @@ jobs:
           - { package: server, task: check }
           - { package: server, task: test }
           - { package: web, task: check }
+          - { package: web, task: test }
           - { package: web, task: build }
           - { package: site, task: check }
           - { package: site, task: build }

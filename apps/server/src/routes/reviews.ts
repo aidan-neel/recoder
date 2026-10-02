@@ -1,17 +1,17 @@
 import { Hono, type Context } from 'hono';
-import { getReviewControl } from '../lib/review-control';
-import { emitReviewEvent } from '../lib/events';
+import { getReviewControl } from '../review/session/review-control';
+import { emitReviewEvent } from '../review/session/events';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { emptyReviewProgress, expandFileDiff, parseUnifiedDiff } from '@recoder/shared';
 import type { Review } from '@recoder/shared';
 import { createReviewSession, queueReview, continueReviewSession, startReviewSession } from '../commands/pipeline';
-import { configForRole, isReviewConfigured, ModelConfigError } from '../lib/models';
-import { modelFailure } from '../lib/model-failure';
-import { clearReviewEvents, subscribeReview } from '../lib/events';
-import { discussFinding, streamDiscussFinding, discussRequestSchema, resolveDiscussRole } from '../lib/discuss';
-import { runRereview, rereviewRequestSchema } from '../lib/rereview';
-import { readSandboxFile } from '../lib/harness';
+import { configForRole, isReviewConfigured, ModelConfigError } from '../models/models';
+import { modelFailure } from '../models/model-failure';
+import { clearReviewEvents, subscribeReview } from '../review/session/events';
+import { discussFinding, streamDiscussFinding, discussRequestSchema, resolveDiscussRole } from '../review/chat/discuss';
+import { runRereview, rereviewRequestSchema } from '../review/session/rereview';
+import { readSandboxFile } from '../review/pipeline/harness';
 import {
 	applyFixToWorktree,
 	applyFixRequestSchema,
@@ -24,26 +24,26 @@ import {
 	suggestFix,
 	suggestCheckFix,
 	suggestFixRequestSchema
-} from '../lib/fix';
-import { GhError, fetchPullHeadRef } from '../lib/gh';
-import { TtlCache } from '../lib/ttl-cache';
-import { failureExcerpt, fetchCheckLog, fetchChecks } from '../lib/checks';
-import { fetchPullHead } from '../lib/github-rest';
-import { fetchMergeHeadRef } from '../lib/glab';
-import { tokenEnv } from '../lib/tokens';
-import { LlmError } from '../lib/llm';
-import { parseSlug } from '../lib/providers';
+} from '../review/fixes/fix';
+import { GhError, fetchPullHeadRef } from '../forge/gh';
+import { TtlCache } from '../util/ttl-cache';
+import { failureExcerpt, fetchCheckLog, fetchChecks } from '../forge/checks';
+import { fetchPullHead } from '../forge/github-rest';
+import { fetchMergeHeadRef } from '../forge/glab';
+import { tokenEnv } from '../forge/tokens';
+import { LlmError } from '../models/llm';
+import { parseSlug } from '../forge/providers';
 import { db, reviewDiffs, reviewSandboxes, reviewProgress, reviewMetrics, reviewCheckpoints } from '../store';
-import { getReviewMetrics, withReviewMetrics } from '../lib/metrics';
-import { CheckoutError, ensureReviewCheckout, findReviewCheckout } from '../lib/review-checkout';
-import { markFindingFixed } from '../lib/finding-fixes';
+import { getReviewMetrics, withReviewMetrics } from '../models/metrics';
+import { CheckoutError, ensureReviewCheckout, findReviewCheckout } from '../review/session/review-checkout';
+import { markFindingFixed } from '../review/fixes/finding-fixes';
 import {
 	commitPendingChanges,
 	discardPendingChanges,
 	listPendingChanges,
 	pushPendingCommits,
 	undoLastCommit
-} from '../lib/pending-changes';
+} from '../review/session/pending-changes';
 import {
 	cancelReviewChats,
 	ReviewChatError,
@@ -51,7 +51,7 @@ import {
 	prepareDraftSession,
 	startReviewChat,
 	stopReviewChat
-} from '../lib/review-chat';
+} from '../review/chat/review-chat';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),

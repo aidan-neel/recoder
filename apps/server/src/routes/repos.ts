@@ -1,12 +1,12 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { Repo } from '@recoder/shared';
-import { GhError, listPullRequests } from '../lib/gh';
-import { listMergeRequests } from '../lib/glab';
-import { detectProvider } from '../lib/providers';
-import { fetchPullPreview } from '../lib/pull-preview';
-import { tokenEnv } from '../lib/tokens';
-import { TtlCache } from '../lib/ttl-cache';
+import { GhError, listPullRequests } from '../forge/gh';
+import { listMergeRequests } from '../forge/glab';
+import { detectProvider } from '../forge/providers';
+import { fetchPullPreview } from '../forge/pull-preview';
+import { tokenEnv } from '../forge/tokens';
+import { TtlCache } from '../util/ttl-cache';
 import { db } from '../store';
 
 const pullsCache = new TtlCache<unknown>(30_000);

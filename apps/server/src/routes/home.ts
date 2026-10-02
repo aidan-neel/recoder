@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { homeBrief } from '../lib/home-brief';
-import { LlmError } from '../lib/llm';
-import { isReviewConfigured } from '../lib/models';
+import { homeBrief } from '../home/home-brief';
+import { LlmError } from '../models/llm';
+import { isReviewConfigured } from '../models/models';
 import { db } from '../store';
 
 const briefSchema = z.object({

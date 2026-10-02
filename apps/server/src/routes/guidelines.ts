@@ -7,12 +7,12 @@ import {
 	type GuidelinesProposal,
 	type RepoGuidelines
 } from '@recoder/shared';
-import { GhError } from '../lib/gh';
-import { GUIDELINES_TEMPLATE, normalize, readGlobalGuidelines, writeGlobalGuidelines } from '../lib/guidelines';
-import { streamGuidelinesDraft } from '../lib/guidelines-draft';
-import { LlmError } from '../lib/llm';
-import { isReviewConfigured } from '../lib/models';
-import { repoFileHost } from '../lib/repo-files';
+import { GhError } from '../forge/gh';
+import { GUIDELINES_TEMPLATE, normalize, readGlobalGuidelines, writeGlobalGuidelines } from '../review/guidelines/guidelines';
+import { streamGuidelinesDraft } from '../review/guidelines/guidelines-draft';
+import { LlmError } from '../models/llm';
+import { isReviewConfigured } from '../models/models';
+import { repoFileHost } from '../forge/repo-files';
 import { db } from '../store';
 
 /** Branches Recoder opens for guideline changes; one pending change per repo. */

@@ -6,7 +6,7 @@ import {
 	type Finding,
 	type Review
 } from '@recoder/shared';
-import { closeReviewControl, openReviewControl, runWithReviewControl, type ReviewControl } from '../lib/review-control';
+import { closeReviewControl, openReviewControl, runWithReviewControl, type ReviewControl } from '../review/session/review-control';
 import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
 import {
 	emitReviewEvent,
@@ -17,20 +17,20 @@ import {
 	reportReviewTask,
 	reportReviewTool,
 	trackReviewTask
-} from '../lib/events';
-import { fetchPullRequest } from '../lib/gh';
-import { fetchMergeRequest } from '../lib/glab';
-import { fetchPrContext } from '../lib/pr-context';
-import { runAdaptiveReview } from '../lib/harness';
-import { configForOrchestrator, configForRole, isReviewConfigured } from '../lib/models';
-import { ModelBlockedError } from '../lib/agent-loop';
-import { codex } from '../lib/codex';
-import { discussionContext, recordChatMessage, reviewInstructions } from '../lib/review-chat';
-import { detectProvider, locateRepo, refspecFor } from '../lib/providers';
-import { prepareSandbox, sandboxRevisionDiff } from '../lib/sandbox';
-import { tokenEnv } from '../lib/tokens';
-import { withReviewMetrics } from '../lib/metrics';
-import { carryFixes } from '../lib/finding-fixes';
+} from '../review/session/events';
+import { fetchPullRequest } from '../forge/gh';
+import { fetchMergeRequest } from '../forge/glab';
+import { fetchPrContext } from '../forge/pr-context';
+import { runAdaptiveReview } from '../review/pipeline/harness';
+import { configForOrchestrator, configForRole, isReviewConfigured } from '../models/models';
+import { ModelBlockedError } from '../review/pipeline/agent-loop';
+import { codex } from '../agents/codex/codex';
+import { discussionContext, recordChatMessage, reviewInstructions } from '../review/chat/review-chat';
+import { detectProvider, locateRepo, refspecFor } from '../forge/providers';
+import { prepareSandbox, sandboxRevisionDiff } from '../sandbox/sandbox';
+import { tokenEnv } from '../forge/tokens';
+import { withReviewMetrics } from '../models/metrics';
+import { carryFixes } from '../review/fixes/finding-fixes';
 
 export type QueueReviewInput = CreateReviewInput;
 

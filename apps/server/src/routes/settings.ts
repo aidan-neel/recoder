@@ -8,14 +8,14 @@ import {
 	reviewSettingsSchema,
 	saveReviewSettings,
 	setConnection
-} from '../lib/review-settings';
-import { HOSTED_PROVIDERS, KeyRejectedError, hostedProvider, providerCatalog, verifyKey } from '../lib/model-providers';
+} from '../review/session/review-settings';
+import { HOSTED_PROVIDERS, KeyRejectedError, hostedProvider, providerCatalog, verifyKey } from '../models/model-providers';
 import type { HostedProvider, ModelEntry } from '@recoder/shared';
-import { opencode } from '../lib/opencode';
-import { isReviewConfigured } from '../lib/models';
-import { REVIEW_ROLES } from '../lib/roles';
+import { opencode } from '../agents/opencode/opencode';
+import { isReviewConfigured } from '../models/models';
+import { REVIEW_ROLES } from '../review/pipeline/roles';
 import { z } from 'zod';
-import { discoverModels } from '../lib/model-discovery';
+import { discoverModels } from '../models/model-discovery';
 import codexRoutes from './codex';
 
 function mask(key: string | undefined): string | null {
