@@ -92,7 +92,8 @@ export default ts.config(
 				{ argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrors: 'none' }
 			],
 			'@typescript-eslint/no-explicit-any': 'error',
-			'no-empty': ['error', { allowEmptyCatch: true }]
+			'no-empty': ['error', { allowEmptyCatch: true }],
+			'svelte/no-navigation-without-resolve': 'off'
 		}
 	},
 	{
