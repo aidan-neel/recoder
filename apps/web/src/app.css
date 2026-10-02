@@ -7,6 +7,15 @@
 @import '@fontsource/lora/latin-400-italic.css';
 @import '@sivir-ui/svelte/ui.css';
 
+/* Cal Sans (variable): the default UI face. Geist stays as the fallback and for code. */
+@font-face {
+	font-family: 'Cal Sans';
+	src: url('/fonts/CalSansVF.ttf') format('truetype');
+	font-weight: 100 900;
+	font-style: normal;
+	font-display: swap;
+}
+
 /*
  * Recoder design tokens (DESIGN.md). Components reference these, never raw hex.
  * Dark is the default; `html.dark` is toggled by $lib/theme.svelte.ts and app.html.
@@ -16,8 +25,8 @@
 	--wash-rgb: 255 245 230;
 	--ink-rgb: 237 233 227;
 	--shade-rgb: 0 0 0;
-	/* Drop shadows under cards and the composer; off in light mode (menus and modals keep theirs). */
-	--drop: 1;
+	/* Drop shadows under cards, panels and the composer: off in both themes. Only menus and modals float. */
+	--drop: 0;
 
 	/* Surfaces */
 	--bg-chrome: #0d0c0b;
@@ -91,9 +100,10 @@
 
 	/* Elevation */
 	--shadow-menu: 0 0 0 1px var(--line-menu), 0 20px 50px rgba(0, 0, 0, 0.55);
-	--shadow-modal: 0 0 0 1px var(--line-control), 0 30px 80px rgba(0, 0, 0, 0.6);
-	--shadow-composer: 0 0 0 1px var(--line-control), 0 10px 30px rgba(0, 0, 0, 0.35);
-	--shadow-layered: 0 0 0 1px var(--line-card), 0 6px 20px rgba(0, 0, 0, 0.25);
+	/* Centred and tight: an offset blur pooled as a dark band under the dialog. */
+	--shadow-modal: 0 0 0 1px var(--line-control), 0 4px 24px rgba(0, 0, 0, 0.35);
+	--shadow-composer: 0 0 0 1px var(--line-control);
+	--shadow-layered: 0 0 0 1px var(--line-card);
 	--scrim: rgba(8, 7, 6, 0.6);
 
 	/* Motion: tuned for a tool opened thousands of times a day. Feedback is
@@ -115,7 +125,7 @@
 	--dur-spinner: 0.9s;
 
 	/* Type */
-	--font-ui: 'Geist Sans', 'Geist', system-ui, sans-serif;
+	--font-ui: 'Cal Sans', 'Geist Sans', 'Geist', system-ui, sans-serif;
 	--font-code: 'Geist Mono', ui-monospace, monospace;
 	--font-ai: 'Lora', Georgia, serif;
 }
@@ -567,6 +577,8 @@ body {
 
 /* Floating surfaces: menus, popovers, selects, command palette. */
 .sivir-modal-frame {
+	/* Paneling off: no inset frame around the surface. */
+	--sivir-modal-inset: 0px;
 	padding: 0;
 	gap: 0;
 	border: 0;
@@ -1075,8 +1087,8 @@ kbd.keycap {
 /* ───────────────────── Composer (5c) ───────────────────── */
 [data-ui='composer-form'].rc-composer {
 	cursor: text;
-	gap: 10px;
-	padding: 12px 12px 10px 16px;
+	gap: 12px;
+	padding: 14px 12px 10px 16px;
 	border: 0;
 	border-radius: 18px;
 	background-color: var(--bg-raised);
@@ -1107,6 +1119,10 @@ kbd.keycap {
 	font-size: 14px;
 	line-height: 21px;
 	color: var(--text-primary);
+}
+/* The main composer opens two lines tall; the side panel stays compact. */
+[data-ui='composer-form'].rc-composer:not([data-size='panel']) [data-ui='composer-input'].rc-composer-input {
+	min-height: 44px;
 }
 [data-ui='composer-input'].rc-composer-input::placeholder {
 	color: var(--text-faint);
@@ -1732,6 +1748,30 @@ kbd.keycap {
 }
 [data-ui='button'][data-variant='ghost'][data-size].progress-cancel:hover {
 	color: var(--danger);
+}
+/* A plan waiting for the go-ahead asks here too, so the question is never only in the conversation. */
+.progress-approval {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 12px 12px;
+	border-top: 1px solid var(--line-subtle-2);
+}
+.progress-approval-text {
+	font-size: 12.5px;
+	line-height: 18px;
+	color: var(--text-secondary);
+}
+.progress-approval-actions {
+	display: flex;
+	gap: 6px;
+}
+[data-ui='button'][data-variant][data-size].progress-approve {
+	height: 28px;
+	min-height: 28px;
+	padding: 0 10px;
+	border-radius: 7px;
+	font-size: 12.5px;
 }
 .review-live[data-paused] .review-live-dot {
 	background-color: var(--sev-medium);
@@ -2929,18 +2969,52 @@ mark.palette-hit {
 .session-header[data-bordered] {
 	border-bottom: 1px solid var(--line-divider);
 }
-.session-header .session-title {
-	flex: 1;
-	min-width: 0;
-	margin: 0;
-	overflow: hidden;
-	white-space: nowrap;
-	text-overflow: ellipsis;
-	font-size: 14px;
-	font-weight: 400;
+.session-header .session-pr {
+	flex: 0 0 auto;
+	font-family: var(--font-mono);
+	font-size: 13px;
 	line-height: 20px;
-	letter-spacing: normal;
 	color: var(--text-primary);
+	text-decoration-line: none;
+	text-underline-offset: 3px;
+	text-decoration-color: var(--text-muted);
+	border-radius: 4px;
+}
+/* A link at rest reads as plain text; hover shows it's a link to the PR. */
+.session-header a.session-pr:hover {
+	text-decoration-line: underline;
+}
+.session-header a.session-pr:focus-visible {
+	outline: none;
+	box-shadow: var(--focus-ring);
+}
+.session-pr-card {
+	width: auto;
+	min-width: 220px;
+	max-width: 360px;
+	margin-top: 6px;
+}
+.session-pr-card > .sivir-inset-surface {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px 14px;
+}
+.session-pr-card .session-pr-title {
+	margin-bottom: 2px;
+	font-size: 13.5px;
+	font-weight: 500;
+	line-height: 19px;
+	color: var(--text-primary);
+}
+.session-pr-card .session-pr-meta {
+	display: flex;
+	min-width: 0;
+	gap: 6px;
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 17px;
+	color: var(--text-muted);
 }
 /* Diff view: one bar. Title far left · view tabs centred · ⋯, status,
    Ask reviewer, Fix all far right (the toolbar's pieces join the header row).
@@ -2948,16 +3022,6 @@ mark.palette-hit {
 .session-header[data-merged] {
 	gap: 8px;
 	padding: 0 12px 0 18px;
-}
-.session-header[data-merged] .session-title {
-	flex: 0 1 auto;
-	min-width: 40px;
-}
-@media (min-width: 1280px) {
-	/* Never run under the centred tabs. */
-	.session-header[data-merged] .session-title {
-		max-width: calc(50% - 190px);
-	}
 }
 .session-toolbar,
 .session-toolbar .findings-toolbar {
@@ -2968,19 +3032,8 @@ mark.palette-hit {
 }
 .session-header[data-merged] .view-switch {
 	order: 1;
-	margin-left: auto;
-}
-/* Centred in the bar when there's room; otherwise it flows before the actions. */
-@media (min-width: 1280px) {
-	.session-header[data-merged] .view-switch {
-		position: absolute;
-		left: 50%;
-		transform: translateX(-50%);
-	}
-	.session-header[data-merged] > [data-ui='dropdown-menu-trigger'],
-	.session-header[data-merged] > [data-ui='button'] {
-		margin-left: auto;
-	}
+	/* Tabs sit left beside the PR number; the actions push to the far right. */
+	margin-right: auto;
 }
 .session-header[data-merged] > [data-ui='dropdown-menu-trigger'],
 .session-header[data-merged] > [data-ui='button'] {
@@ -3036,6 +3089,7 @@ mark.palette-hit {
 	color: var(--text-secondary);
 }
 .focus-empty[data-kind='running'] .focus-empty-icon { color: var(--sev-medium); }
+.focus-empty[data-kind='running'][data-waiting] .focus-empty-icon { color: var(--text-primary); }
 .focus-empty[data-kind='failed'] .focus-empty-icon { color: var(--danger); }
 .focus-empty[data-kind='clean'] .focus-empty-icon,
 .focus-empty[data-kind='caught-up'] .focus-empty-icon { color: var(--success); }
@@ -3431,6 +3485,22 @@ mark.palette-hit {
 .progress-step[data-status='error'] .progress-label {
 	color: var(--danger);
 }
+/* Ran, but some of it failed (specialists that never returned a result). */
+.progress-step[data-status='partial'] .progress-mark {
+	box-shadow: none;
+	color: var(--sev-medium);
+}
+.progress-step[data-status='partial'] .progress-meta {
+	color: var(--sev-medium);
+}
+.review-result-failed {
+	color: var(--sev-medium);
+}
+/* Finished, but a specialist never returned a result. */
+.review-result-mark[data-warn] {
+	background: color-mix(in srgb, var(--sev-medium) 16%, transparent);
+	color: var(--sev-medium);
+}
 .progress-label {
 	flex: 1;
 	min-width: 0;
@@ -3500,10 +3570,11 @@ mark.palette-hit {
 	max-width: 100%;
 	color: var(--text-ai);
 }
+/* Chat replies read in the UI sans, like the rest of the conversation. */
 .review-prose [data-ui='markdown'] {
-	font-family: var(--font-ai);
-	font-size: 15.5px;
-	line-height: 1.5;
+	font-family: var(--font-ui);
+	font-size: 14.5px;
+	line-height: 1.55;
 	color: var(--text-ai);
 }
 .review-prose [data-ui='markdown'] :is(p, li, h1, h2, h3, h4, h5, h6) {
@@ -3525,7 +3596,7 @@ mark.palette-hit {
 	color: var(--text-ai);
 }
 .review-chat[data-compact] .review-prose [data-ui='markdown'] {
-	font-size: 14.5px;
+	font-size: 14px;
 }
 .review-chat[data-compact] .review-prose [data-ui='markdown'] :not(pre) > code {
 	font-size: 12.5px;
@@ -3841,6 +3912,81 @@ button.fact-link:hover {
 	flex-shrink: 0;
 	color: var(--text-ghost);
 }
+/* A role with several parts: the same row, as a Collapsible trigger that opens to them. */
+[data-ui='collapsible-trigger'].specialist-row {
+	display: flex;
+	width: 100%;
+	align-items: center;
+	gap: 14px;
+	padding: 10px 10px;
+	border-radius: 10px;
+	text-align: left;
+}
+[data-ui='collapsible-trigger'].specialist-row:hover {
+	background-color: var(--bg-hover);
+}
+[data-ui='collapsible-trigger'].specialist-row .specialist-chevron {
+	transition: rotate var(--dur-menu) ease-out;
+}
+[data-ui='collapsible-trigger'][data-state='open'].specialist-row .specialist-chevron {
+	rotate: 90deg;
+}
+.specialist-count {
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-muted);
+}
+/* Parts sit under their role on a thin rail, named by what they read. */
+.specialist-list.specialist-parts {
+	margin: 2px 0 4px 14px;
+	padding-left: 8px;
+	border-left: 1px solid var(--line-divider);
+}
+.specialist-parts .specialist-name {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* Plan approval: asks before a large review runs. */
+[data-ui='card'].review-approval {
+	flex-direction: row;
+	align-items: center;
+	gap: 16px;
+	padding: 14px 14px 14px 16px;
+	border: 0;
+	border-radius: 14px;
+	background: var(--bg-raised);
+	box-shadow: 0 0 0 1px var(--line-card);
+}
+.review-approval-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+}
+.review-approval-title {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 22px;
+	color: var(--text-primary);
+}
+.review-approval-meta {
+	font-size: 12.5px;
+	line-height: 18px;
+	color: var(--text-muted);
+}
+.review-approval-actions {
+	display: flex;
+	flex-shrink: 0;
+	gap: 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+	[data-ui='collapsible-trigger'].specialist-row .specialist-chevron {
+		transition: none;
+	}
+}
 /* Specialist conversation bar: back to Orchestrator, name, status on the right. */
 .agent-nav {
 	gap: 6px;
@@ -3879,34 +4025,55 @@ button.fact-link:hover {
 /* Finished card (4f). */
 [data-ui='card'].review-result {
 	flex-direction: row;
-	align-items: center;
-	gap: 16px;
-	padding: 14px 14px 14px 16px;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 14px 14px 14px 14px;
 	border: 0;
 	border-radius: 14px;
 	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-tab), 0 8px 24px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
+	box-shadow: 0 0 0 1px var(--line-card);
+}
+/* Success mark: a tinted disc, aligned to the title line. */
+.review-result-mark {
+	display: inline-flex;
+	width: 24px;
+	height: 24px;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	margin-top: 1px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--success) 16%, transparent);
+	color: var(--success);
 }
 .review-result-text {
 	display: flex;
 	min-width: 0;
 	flex: 1;
 	flex-direction: column;
-	gap: 8px;
+	gap: 2px;
 }
 .review-result-title {
-	display: flex;
-	align-items: center;
-	gap: 8px;
 	margin: 0;
 	font-size: 14px;
+	font-weight: 500;
+	line-height: 22px;
 	color: var(--text-primary);
+}
+.review-result-meta {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 18px;
+	color: var(--text-muted);
 }
 .review-result-pills {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
-	padding-left: 24px;
+	margin-top: 8px;
+}
+[data-ui='card'].review-result > [data-ui='button'] {
+	align-self: center;
 }
 
 /* Composer floats over the transcript on a fade. */

@@ -161,6 +161,25 @@ export function normalizeSpecialistRaw(raw: unknown): unknown {
 	return out;
 }
 
+/** "Let me check…", "I'll gather…": the model is describing work it hasn't done yet. */
+const ANNOUNCES_WORK = /\b(let me|i'll|i will|i'm going to|i am going to|i need to|i'm (?:investigating|checking|looking|reading|gathering)|next,? i|going to (?:check|look|read|inspect|gather|verify))\b/i;
+
+/**
+ * Weaker models (often behind vLLM) send the final shape with an empty
+ * findings list while announcing what they're about to read, which would end
+ * the specialist before it looked at anything. Push back once.
+ */
+export function prematureSpecialistFinal(output: SpecialistOutput, state: { retrievals: number }): string | null {
+	if (output.findings.length) return null;
+	if (output.message && ANNOUNCES_WORK.test(output.message)) {
+		return 'Your reply says you are still investigating, but it has the final result fields, which would end your review with no findings. If you want to read code, reply with "actions" now. Only send the final result once you have actually finished.';
+	}
+	if (state.retrievals === 0) {
+		return 'You concluded with no findings without reading any code beyond the patch. Before concluding, read what the change touches: the full functions it edits, their callers, and anything it removed or replaced. Reply with "actions" now. If you are certain there is nothing more to read, send the same final result again.';
+	}
+	return null;
+}
+
 export function parseSpecialistOutput(raw: unknown): SpecialistOutput | null {
 	const parsed = specialistOutputSchema.safeParse(normalizeSpecialistRaw(raw));
 	return parsed.success ? parsed.data : null;
@@ -172,4 +191,60 @@ export function specialistValidationError(raw: unknown): string {
 	const parsed = specialistOutputSchema.safeParse(normalizeSpecialistRaw(raw));
 	if (parsed.success) return 'output did not match the required schema';
 	return parsed.error.issues.slice(0, 6).map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`).join('; ');
+}
+
+const SCHEMA_ACTIONS = ['readDiff', 'readFile', 'search', 'listFiles'];
+const SCHEMA_EXEC_ACTIONS = [...SCHEMA_ACTIONS, 'run', 'writeFile'];
+
+/**
+ * What a specialist turn may look like, for endpoints with guided decoding:
+ * a retrieval request with at least one action, or the final result. On the
+ * final turn only the result is allowed. Kept looser than the zod schema:
+ * it shapes the reply, and `parseSpecialistOutput` still validates it.
+ */
+export function specialistResponseSchema(exec: boolean, finalTurn: boolean): { name: string; schema: Record<string, unknown> } {
+	const str = { type: 'string' };
+	const strings = { type: 'array', items: str };
+	const line = { type: ['integer', 'null'] };
+	const action = {
+		type: 'object',
+		properties: {
+			action: { type: 'string', enum: exec ? SCHEMA_EXEC_ACTIONS : SCHEMA_ACTIONS },
+			revision: { type: 'string', enum: ['head', 'target', 'mergeBase'] },
+			path: str, query: str, prefix: str, cursor: str, hunkIds: strings,
+			startLine: { type: 'integer' }, endLine: { type: 'integer' },
+			...(exec ? { command: str, content: str, timeoutSec: { type: 'integer' } } : {})
+		},
+		required: ['action']
+	};
+	const retrieval = {
+		type: 'object',
+		properties: { message: str, actions: { type: 'array', items: action, minItems: 1, maxItems: REVIEW_POLICY.maxRetrievalsPerTurn } },
+		required: ['message', 'actions'],
+		additionalProperties: false
+	};
+	const finding = {
+		type: 'object',
+		properties: {
+			title: str, file: str, line, endLine: line,
+			severity: { type: 'string', enum: ['high', 'medium', 'low'] },
+			category: str, body: str, evidenceIds: strings,
+			side: { type: 'string', enum: ['old', 'new'] }
+		},
+		required: ['title', 'file', 'severity', 'category', 'body', 'evidenceIds']
+	};
+	const final = {
+		type: 'object',
+		properties: {
+			message: str,
+			findings: { type: 'array', items: finding, maxItems: 30 },
+			examinedHunks: strings,
+			coverageGaps: { type: 'array', items: { type: 'object', properties: { hunkId: str, reason: str }, required: ['hunkId', 'reason'] } },
+			blockers: strings,
+			followUp: { anyOf: [{ type: 'object' }, { type: 'null' }] },
+			recommendedChecks: strings
+		},
+		required: ['message', 'findings', 'examinedHunks']
+	};
+	return { name: finalTurn ? 'specialist_result' : 'specialist_turn', schema: finalTurn ? final : { anyOf: [retrieval, final] } };
 }

@@ -5,6 +5,7 @@
 
 export * from './diff';
 export * from './metrics';
+export * from './model-markdown';
 
 export type Provider = 'github' | 'gitlab';
 
@@ -45,6 +46,8 @@ export interface FindingVerification {
 	status: 'verified' | 'unverified';
 	/** What the run showed, or why it could not be proven. */
 	reason: string;
+	/** `run`: a command's output proves it. `trace`: code could not run, and the verifier traced it through the code it read. */
+	method?: 'run' | 'trace';
 	/** The command whose output proves the finding. */
 	command?: string;
 	exitCode?: number | null;
@@ -185,7 +188,10 @@ export type ReviewRole =
 	| 'testing'
 	| 'errors'
 	| 'concurrency'
-	| 'api';
+	| 'api'
+	| 'impact'
+	| 'frontend'
+	| 'data';
 
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {

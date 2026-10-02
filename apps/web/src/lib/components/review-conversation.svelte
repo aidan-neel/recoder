@@ -2,9 +2,7 @@
 	import { ORCHESTRATOR_ID, type ReviewAssignment, type ReviewChatMessage, type ReviewCodeContext, type ReviewReasoningEntry, type ReviewTask, type ReviewToolCall } from '@recoder/shared';
 	import type { Snippet } from 'svelte';
 	import Play from '@lucide/svelte/icons/play';
-	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import X from '@lucide/svelte/icons/x';
-	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
 	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
@@ -20,7 +18,6 @@
 	import CodeRef from './code-ref.svelte';
 	import { findingsStore } from '$lib/findings.svelte';
 	import ConversationFixes from './conversation-fixes.svelte';
-	import CopyAction from './copy-action.svelte';
 	import FailureNotice from './failure-notice.svelte';
 	import StreamingMarkdown from './streaming-markdown.svelte';
 	import ReasoningTrace from './reasoning-trace.svelte';
@@ -129,14 +126,21 @@
 	 */
 	const rows = $derived.by(() => {
 		const out: Row[] = [];
+		// A thought is keyed under its reply id and its own id, so two messages can
+		// both claim it; place each one once (duplicate keys crash the keyed list).
+		const placedTraces = new Set<string>();
 		const trace = (item: Trace) => {
+			if (placedTraces.has(item.key)) return;
+			placedTraces.add(item.key);
 			const previous = out.at(-1);
 			if (item.kind === 'tasks' && previous?.kind === 'traces' && previous.traces.every((trace) => trace.kind === 'tasks')) previous.traces.push(item);
 			else out.push({ kind: 'traces', key: `traces-${item.key}`, traces: [item] });
 		};
 		const before = (index: number) => {
 			for (const insert of placed) if (insert.index === index) out.push({ kind: 'insert', key: `insert-${insert.key}`, snippet: insert.snippet });
-			for (const entry of orphansAt.get(index) ?? []) trace({ kind: 'thought', key: `thought-${entry.id}`, entry });
+			// Something later in the transcript means the thought is over, even if its entry was never closed.
+			const next = entries[index]?.at;
+			for (const entry of orphansAt.get(index) ?? []) trace({ kind: 'thought', key: `thought-${entry.id}`, entry, until: next });
 		};
 		entries.forEach((item, index) => {
 			before(index);
@@ -281,7 +285,7 @@
 			<p class="model-note-added">Fixes for {fixRequest === 'all' ? 'every open finding' : `${fixRequest.length} ${fixRequest.length === 1 ? 'finding' : 'findings'}`} are on the Findings tab.</p>
 		{/if}
 	{:else}
-		<StreamingMarkdown content={message.text} streaming={message.status === 'streaming'} />
+		<StreamingMarkdown content={message.text} streaming={message.status === 'streaming'} normalize={message.from === 'assistant'} />
 	{/if}
 {/snippet}
 
@@ -322,7 +326,7 @@
 					class="[--font-weight-body:400]"
 					name={message.forwardedFrom ? `${message.from === 'user' ? 'You →' : 'Reply from'} ${message.forwardedFrom}` : undefined}>
 					{#if message.text.trim() || !message.failure}
-						<Message.Content class={message.from === 'assistant' ? 'review-prose ai-voice' : message.from === 'user' ? 'review-bubble' : '!max-w-full text-sm'}>
+						<Message.Content class={message.from === 'assistant' ? 'review-prose' : message.from === 'user' ? 'review-bubble' : '!max-w-full text-sm'}>
 							{@render response(message)}
 						</Message.Content>
 					{/if}
@@ -338,27 +342,13 @@
 							reason={message.failure.reason} signIn={message.failure.signIn} usageLimit={message.failure.usageLimit}
 							onRetry={message.status === 'error' && message.discussion && !generating ? retryFor(index) : null} />
 					{/if}
-					<!-- The message's own actions (start the review) sit in it, above Copy and Retry. -->
+					<!-- The message's own action (start the review) sits in it. -->
 					{#if onStartReview && !intro && !specialist && index === lastAssistantIndex && message.status !== 'streaming'}
 						<div class="review-start-cta">
 							<Button class="brief-action" loading={startingReview} onclick={() => void startReview()}>
 								<Play size={12} fill="currentColor" aria-hidden="true" /> Run full review
 							</Button>
 						</div>
-					{/if}
-					{#if message.from === 'assistant' && message.status !== 'streaming' && message.text.trim() && (message.discussion || (index === lastAssistantIndex && !working))}
-						{@const retry = message.discussion && !generating && !message.failure ? retryFor(index) : null}
-						<Message.Actions class="message-actions">
-							{#if retry}
-								<Tooltip.Root placement="top" delay={750} closeDelay={80}>
-									<Tooltip.Trigger class="flex">
-										<Button variant="ghost" size="icon" aria-label="Retry" onclick={retry}><RotateCcw aria-hidden="true" /></Button>
-									</Tooltip.Trigger>
-									<Tooltip.Content>Retry</Tooltip.Content>
-								</Tooltip.Root>
-							{/if}
-							<CopyAction text={stripModelNotes(message.text)} />
-						</Message.Actions>
 					{/if}
 				</Message.Root>
 			{:else if row.traces.length === 1}

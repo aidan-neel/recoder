@@ -20,6 +20,17 @@ test('pause holds model calls and stops the review clock; resume releases both',
 	});
 });
 
+test('a plan nobody approves settles as a timeout, and an answer in time wins over the timer', async () => {
+	const unanswered = new ReviewControl();
+	expect(await unanswered.requestApproval(20)).toBe('timeout');
+	expect(unanswered.awaitingApproval).toBe(false);
+	const answered = new ReviewControl();
+	const pending = answered.requestApproval(5_000);
+	expect(answered.approve('all')).toBe(true);
+	expect(await pending).toBe('all');
+	expect(answered.approve('limited')).toBe(false);
+});
+
 test('cancel releases anyone waiting on a pause', async () => {
 	const control = new ReviewControl();
 	control.pause();

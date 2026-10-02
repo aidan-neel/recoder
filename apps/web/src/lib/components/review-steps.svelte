@@ -8,6 +8,7 @@
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import type { ReviewPlanApproval } from '@recoder/shared';
 
 	interface Props {
 		/** Index of the running step; equal to the step count when done. */
@@ -15,14 +16,18 @@
 		failed?: boolean;
 		active: boolean;
 		elapsed: string;
-		/** "4 of 6" progress for the specialist step. */
-		specialists?: { done: number; total: number } | null;
+		/** "4/6" progress for the specialist step; failed and skipped specialists are not "done". */
+		specialists?: { done: number; failed: number; total: number } | null;
 		paused?: boolean;
 		/** Present while the review runs. */
 		onPauseToggle?: (() => Promise<void>) | null;
 		onCancel?: (() => Promise<void>) | null;
+		/** A plan waiting for the developer: the review is blocked until one of these is pressed. */
+		approval?: ReviewPlanApproval | null;
+		onApprove?: ((choice: 'all' | 'limited') => Promise<void>) | null;
+		approving?: 'all' | 'limited' | null;
 	}
-	let { current, failed = false, active, elapsed, specialists = null, paused = false, onPauseToggle = null, onCancel = null }: Props = $props();
+	let { current, failed = false, active, elapsed, specialists = null, paused = false, onPauseToggle = null, onCancel = null, approval = null, onApprove = null, approving = null }: Props = $props();
 	let pending = $state<'pause' | 'cancel' | null>(null);
 	async function run(kind: 'pause' | 'cancel', action: (() => Promise<void>) | null): Promise<void> {
 		if (!action || pending) return;
@@ -34,16 +39,17 @@
 		{ id: 'checkout', label: 'Prepare repository', meta: '' },
 		{ id: 'plan', label: 'Plan review', meta: '' },
 		{ id: 'checks', label: 'Run checks', meta: '' },
-		{ id: 'specialists', label: 'Specialist reviews', meta: specialists?.total && current >= 3 ? `${specialists.done}/${specialists.total}` : '' },
+		{ id: 'specialists', label: 'Specialist reviews', meta: specialists?.total && current >= 3 ? `${specialists.done}/${specialists.total}${specialists.failed ? ` · ${specialists.failed} failed` : ''}` : '' },
 		{ id: 'verify', label: 'Verify findings', meta: '' },
 		{ id: 'consolidate', label: 'Consolidate findings', meta: '' }
 	]);
-	function statusOf(index: number): 'done' | 'active' | 'error' | 'pending' {
-		if (index < current) return 'done';
+	function statusOf(index: number): 'done' | 'partial' | 'active' | 'error' | 'pending' {
+		// Past the specialist step with some of them failed: it ran, but not all of it.
+		if (index < current) return steps[index].id === 'specialists' && specialists?.failed ? 'partial' : 'done';
 		if (index > current) return 'pending';
 		return failed ? 'error' : active ? 'active' : 'pending';
 	}
-	const liveLabel = $derived(active ? (paused ? 'Paused' : 'Live') : failed ? 'Stopped' : 'Finished');
+	const liveLabel = $derived(active ? (approval?.status === 'pending' ? 'Waiting for you' : paused ? 'Paused' : 'Live') : failed ? 'Stopped' : 'Finished');
 </script>
 
 <Card.Root class="rail-card rail-progress">
@@ -60,13 +66,22 @@
 				<span class="progress-mark" aria-hidden="true">
 					{#if status === 'done'}<Check size={11} strokeWidth={2.5} />
 					{:else if status === 'active'}<Spinner size={12} />
-					{:else if status === 'error'}<CircleAlert size={12} />{/if}
+					{:else if status === 'error' || status === 'partial'}<CircleAlert size={12} />{/if}
 				</span>
 				<span class="progress-label">{step.label}</span>
 				{#if step.meta}<span class="progress-meta">{step.meta}</span>{/if}
 			</li>
 		{/each}
 	</ol>
+	{#if active && approval?.status === 'pending' && onApprove}
+		<div class="progress-approval" role="group" aria-label="Plan approval">
+			<Typography.Text class="progress-approval-text">Run {approval.requested} specialists? Up to {approval.limit} run without asking.</Typography.Text>
+			<div class="progress-approval-actions">
+				<Button variant="outline" class="progress-approve" loading={approving === 'limited'} disabled={approving !== null} onclick={() => void onApprove('limited')}>Run {approval.limit}</Button>
+				<Button class="progress-approve" loading={approving === 'all'} disabled={approving !== null} onclick={() => void onApprove('all')}>Run all {approval.requested}</Button>
+			</div>
+		</div>
+	{/if}
 	{#if active && (onPauseToggle || onCancel)}
 		<div class="progress-controls">
 			{#if onPauseToggle}

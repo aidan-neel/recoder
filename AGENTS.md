@@ -83,8 +83,12 @@ component specs, layout and behavior rules.
   Sivir `outline`; design "ghost" = `ghost`; quiet triggers = `quiet`.
 - **Top bar shell only.** Sessions are tabs next to Home. Do not reintroduce
   the left sidebar.
-- **Serif is for the AI's words only** (summaries, findings, replies, the Home
-  brief) via `.ai-voice`. Everything else is Geist; code and metadata are Geist Mono.
+- **Cal Sans is the default UI face** (`--font-ui`, served from
+  `static/fonts/CalSansVF.ttf`, Geist as fallback); code and metadata are Geist Mono.
+  Chat replies in the conversation use the UI sans. Serif (`.ai-voice`) remains
+  only for summaries, findings and the Home brief.
+- **No drop shadows on panels, cards or the composer** in either theme
+  (`--drop: 0`); only menus and modals float.
 - **No logo mark** anywhere, including next to AI messages.
 - **One model picker pattern**: the quiet trigger (`5.6 Sol Medium`) opening the
   Model / Reasoning effort menu with submenus. Effort options come from the

@@ -15,6 +15,8 @@ export class ReviewControl {
 	private pausedAt = 0;
 	private waiters: (() => void)[] = [];
 	paused = false;
+	/** Set while the review waits for the developer to approve a large plan. */
+	private approval: { since: number; settle: (choice: PlanChoice | 'timeout') => void } | null = null;
 
 	/** Aborts when a pause starts; renewed on resume. */
 	get pauseSignal(): AbortSignal {
@@ -44,7 +46,42 @@ export class ReviewControl {
 	}
 
 	pausedMs(): number {
-		return this.pausedTotal + (this.paused ? Date.now() - this.pausedAt : 0);
+		return this.pausedTotal + (this.paused ? Date.now() - this.pausedAt : 0) + (this.approval ? Date.now() - this.approval.since : 0);
+	}
+
+	/**
+	 * Hold until the developer picks how many specialists to run. Like a pause,
+	 * the wait doesn't count against the review's time. Cancelling settles it
+	 * as 'limited' so the pipeline unwinds; with nobody answering for
+	 * `timeoutMs` it settles as 'timeout' so a review never waits forever.
+	 */
+	requestApproval(timeoutMs?: number): Promise<PlanChoice | 'timeout'> {
+		if (this.abort.signal.aborted) return Promise.resolve('limited');
+		return new Promise((resolve) => {
+			const since = Date.now();
+			let timer: ReturnType<typeof setTimeout> | undefined;
+			const settle = (choice: PlanChoice | 'timeout') => {
+				if (this.approval?.settle !== settle) return;
+				clearTimeout(timer);
+				this.pausedTotal += Date.now() - since;
+				this.approval = null;
+				resolve(choice);
+			};
+			this.approval = { since, settle };
+			this.abort.signal.addEventListener('abort', () => settle('limited'), { once: true });
+			if (timeoutMs !== undefined && Number.isFinite(timeoutMs)) timer = setTimeout(() => settle('timeout'), timeoutMs);
+		});
+	}
+
+	/** The developer's answer; false when nothing is waiting for one. */
+	approve(choice: PlanChoice): boolean {
+		if (!this.approval) return false;
+		this.approval.settle(choice);
+		return true;
+	}
+
+	get awaitingApproval(): boolean {
+		return this.approval !== null;
 	}
 
 	async wait(signal?: AbortSignal): Promise<void> {
@@ -56,6 +93,9 @@ export class ReviewControl {
 		}
 	}
 }
+
+/** Run every planned specialist, or only the ones that run without asking. */
+export type PlanChoice = 'all' | 'limited';
 
 const controls = new Map<string, ReviewControl>();
 const current = new AsyncLocalStorage<ReviewControl>();

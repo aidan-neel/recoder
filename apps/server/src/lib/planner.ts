@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { REVIEW_ROLES, ROLE_FOCUS, type ReviewRole } from './roles.js';
 import { REVIEW_POLICY } from './review-policy.js';
-import { eligibleFiles, inventorySummary, rankFiles, type ReviewInventory } from './inventory.js';
+import { eligibleFiles, inventorySummary, rankFiles, type InventoryFile, type InventoryHunk, type ReviewInventory } from './inventory.js';
 import { UNTRUSTED_PREFIX } from './prompts.js';
 
 const assignmentSchema = z.object({
@@ -62,7 +62,9 @@ Rules:
 - Give a roleDecisions entry for every role, and give each selected role an assignment.
 - Group related changes by behavior/package, not fixed file counts. Each specialist has up to ${REVIEW_POLICY.maxSpecialistTurns - 1} evidence-retrieval rounds and a final result turn. Aim for at most 24,000 patch characters and 40 hunks per assignment. Leave unreviewable scope explicitly uncovered.
 - Use an empty hunkIds array to select all hunks of a file; do not repeat long inventories in your output.
+- Use one assignment per role. Split a role into several assignments only when its changes are too large for one, and then give each a disjoint scope; two assignments with the same role never share hunks.
 - Avoid overlapping assignments unless different review questions justify it.
+- Code hunks you leave without a correctness assignment are swept by extra correctness assignments after planning, so spend your assignments on the sharpest questions, not on blanket coverage.
 - Treat uncertain high-risk changes as investigation candidates.
 - Identify unassigned areas honestly in the summary.
 - At most ${REVIEW_POLICY.maxInitialAssignments} assignments. Correctness and patterns are the floor, not the default: think hard about every other role before leaving it out.
@@ -74,6 +76,9 @@ Rules:
   - security: trust boundaries, input parsing, deserialization (including pickling), auth, secrets, shell or SQL.
   - perf: hot loops, blocking calls on hot paths, unbounded growth, N+1 access.
   - docs: public behavior whose docs, docstrings or comments no longer match.
+  - impact: a changed or removed exported symbol, route, event, CLI flag, config key or file that other code consumes; changed function contracts (arguments, return shape, thrown errors, timing).
+  - frontend: components, stores, reactive state, effects, event handlers, routing, styles or markup.
+  - data: storage, migrations, schemas, serialization, caches, settings files, anything written to disk or a database, state that must survive a restart.
 - Every roleDecisions reason must cite the specific file, symbol or pattern that decided it. "deferred" and "not_needed" need a concrete reason the signal is absent, not a guess that behavior is unchanged.${exec ? `
 - "checks": up to ${REVIEW_POLICY.maxBaselineChecks} shell commands that exercise the changed code: the type check, lint and tests for the packages this PR touches, taken from the repository scripts and instruction files. They run once, in order, from the repository root, offline, before specialists start, and every specialist sees their output. Prefer scoped commands (one package's tests) over the whole monorepo. Use [] when nothing can be run.` : ''}
 - Repository retrieval is available through JSON requests that Recoder executes between model turns, even though no native function tools are exposed. Return {"message":"What you are checking","actions":[{"action":"readDiff","path":"src/a.ts"},{"action":"search","revision":"head","query":"literalText"}]}, where each action's "action" is exactly readDiff, readFile, search or listFiles, before finishing. Only when explicitly told this is your final turn must you return the plan JSON without more actions.
@@ -121,7 +126,7 @@ export function sanitizePlannerOutput(raw: unknown, inventory: ReviewInventory, 
 	for (const assignment of parsed.data.assignments) {
 		if (ROLE_SET.has(assignment.id)) continue;
 		if (usedIds.has(assignment.id)) continue;
-		const scope = assignment.scope
+		let scope = assignment.scope
 			.map((entry) => {
 				const file = knownPaths.get(entry.path);
 				if (!file || file.excludeReason) return null;
@@ -132,6 +137,22 @@ export function sanitizePlannerOutput(raw: unknown, inventory: ReviewInventory, 
 			})
 			.filter((entry): entry is { path: string; hunkIds: string[] } => entry !== null);
 		if (scope.length === 0) continue;
+		if (!followUp) {
+			// Two specialists of one role reading the same hunks duplicate work; keep
+			// same-role splits disjoint and fold a fully duplicated one into the first.
+			const sameRole = assignments.filter((other) => other.role === assignment.role);
+			const taken = new Set(sameRole.flatMap((other) => other.scope.flatMap((entry) => entry.hunkIds)));
+			const fresh = scope
+				.map((entry) => ({ ...entry, hunkIds: entry.hunkIds.filter((id) => !taken.has(id)) }))
+				.filter((entry) => entry.hunkIds.length > 0);
+			if (fresh.length === 0) {
+				const ids = new Set(scope.flatMap((entry) => entry.hunkIds));
+				const host = sameRole.find((other) => other.scope.some((entry) => entry.hunkIds.some((id) => ids.has(id))));
+				if (host) host.questions = [...new Set([...host.questions, ...assignment.questions])].slice(0, 12);
+				continue;
+			}
+			scope = fresh;
+		}
 		usedIds.add(assignment.id);
 		assignments.push({ ...assignment, scope });
 	}
@@ -153,6 +174,7 @@ export function sanitizePlannerOutput(raw: unknown, inventory: ReviewInventory, 
 		}
 	}
 	if (clipped.length === 0) return null;
+	if (!followUp) clipped.push(...coverageSweep(clipped, inventory));
 	const selected = new Set(clipped.map((assignment) => assignment.role));
 	const roleDecisions = REVIEW_ROLES.map((role) => {
 		const provided = parsed.data.roleDecisions.find((decision) => decision.role === role);
@@ -198,16 +220,50 @@ export function fallbackPlan(inventory: ReviewInventory, reason = 'Planner outpu
 	}
 	// Split fallback work into bounded package-local scopes. Both baseline
 	// responsibilities inspect each scope rather than duplicating one huge batch.
+	const groups = groupHunks(rankFiles(eligibleFiles(inventory)), inventory);
+	const fallback = groups.slice(0, REVIEW_POLICY.maxInitialAssignments / 2).flatMap((scope, index) =>
+		(['correctness', 'patterns'] as const).map((role, roleIndex) => ({
+			...fallbackAssignment(`${role}-core${index ? `-${index + 1}` : ''}`, role, inventory, index * 2 + roleIndex + 1),
+			scope,
+			title: `${role === 'patterns' ? 'Repository consistency' : 'Correctness'}: ${scope[0].path}${scope.length > 1 ? ` and ${scope.length - 1} related files` : ''}`,
+			reason: 'Bounded fallback scope after planning failed.'
+		})));
+	const assignments = [...fallback, ...coverageSweep(fallback, inventory)];
+	return {
+		summary: reason,
+		assignments,
+		roleDecisions: roleDecisionsFor(
+			assignments.map((assignment) => assignment.role),
+			'Fallback after invalid or incomplete planning'
+		)
+	};
+}
+
+interface GroupLimits {
+	chars: number;
+	hunks: number;
+	files: number;
+	/** Start a new group at each package boundary. */
+	byPackage: boolean;
+}
+
+/** One specialist can read a whole group: ~24k patch characters, 40 hunks, 8 files, one package. */
+const ASSIGNMENT_GROUP: GroupLimits = { chars: 24_000, hunks: 40, files: 8, byPackage: true };
+/** Sweeps cover more ground each, across packages, and page through their patch. */
+const SWEEP_GROUP: GroupLimits = { chars: 48_000, hunks: 80, files: 16, byPackage: false };
+
+function groupHunks(files: InventoryFile[], inventory: ReviewInventory, include: (hunk: InventoryHunk) => boolean = () => true, limits: GroupLimits = ASSIGNMENT_GROUP): PlannerAssignment['scope'][] {
 	const groups: PlannerAssignment['scope'][] = [];
 	let group: PlannerAssignment['scope'] = [];
 	let chars = 0;
 	let hunks = 0;
 	let boundary: string | null = null;
-	for (const file of rankFiles(eligibleFiles(inventory))) {
+	for (const file of files) {
 		const diff = inventory.diffs.find((entry) => entry.path === file.path);
 		for (const hunk of file.hunks) {
+			if (!include(hunk)) continue;
 			const size = diff?.hunks.find((entry) => entry.header === hunk.header)?.lines.reduce((sum, line) => sum + line.text.length + 2, 0) ?? 0;
-			if (group.length && (chars + size > 24_000 || hunks >= 40 || group.length >= 8 || boundary !== file.packageId)) {
+			if (group.length && (chars + size > limits.chars || hunks >= limits.hunks || group.length >= limits.files || (limits.byPackage && boundary !== file.packageId))) {
 				groups.push(group);
 				group = []; chars = 0; hunks = 0;
 			}
@@ -219,21 +275,35 @@ export function fallbackPlan(inventory: ReviewInventory, reason = 'Planner outpu
 		}
 	}
 	if (group.length) groups.push(group);
-	const assignments = groups.slice(0, REVIEW_POLICY.maxInitialAssignments / 2).flatMap((scope, index) =>
-		(['correctness', 'patterns'] as const).map((role, roleIndex) => ({
-			...fallbackAssignment(`${role}-core${index ? `-${index + 1}` : ''}`, role, inventory, index * 2 + roleIndex + 1),
-			scope,
-			title: `${role === 'patterns' ? 'Repository consistency' : 'Correctness'}: ${scope[0].path}${scope.length > 1 ? ` and ${scope.length - 1} related files` : ''}`,
-			reason: 'Bounded fallback scope after planning failed; remaining changes are reported as uncovered.'
-		})));
-	return {
-		summary: reason,
-		assignments,
-		roleDecisions: roleDecisionsFor(
-			assignments.map((assignment) => assignment.role),
-			'Fallback after invalid or incomplete planning'
-		)
-	};
+	return groups;
+}
+
+/**
+ * Correctness assignments over the code hunks no correctness assignment covers.
+ * Every changed code hunk gets read; a plan this large asks the developer
+ * before it runs (`approvalThreshold`). Docs and summarized files (lockfiles)
+ * are left out.
+ */
+export function coverageSweep(assignments: PlannerAssignment[], inventory: ReviewInventory): PlannerAssignment[] {
+	const covered = new Set(assignments.filter((assignment) => assignment.role === 'correctness').flatMap((assignment) => assignment.scope.flatMap((entry) => entry.hunkIds)));
+	const files = rankFiles(eligibleFiles(inventory).filter((file) => file.classification !== 'docs' && !file.summarize));
+	const ids = new Set(assignments.map((assignment) => assignment.id));
+	return groupHunks(files, inventory, (hunk) => !covered.has(hunk.id), SWEEP_GROUP)
+		.slice(0, REVIEW_POLICY.maxSweepAssignments)
+		.map((scope, index) => {
+			let id = `sweep-${index + 1}`;
+			while (ids.has(id)) id = `${id}x`;
+			return {
+				id,
+				role: 'correctness' as const,
+				title: `Correctness sweep: ${scope[0].path}${scope.length > 1 ? ` and ${scope.length - 1} related file${scope.length > 2 ? 's' : ''}` : ''}`,
+				reason: 'No planned correctness assignment covered these changes; swept so every changed code hunk is read.',
+				scope,
+				questions: ['What behavioral regressions or broken invariants does this introduce?', 'Do the callers and consumers of this code still work with it?'],
+				contextEvidenceIds: [],
+				priority: 100 + index
+			};
+		});
 }
 
 function fallbackAssignment(id: string, role: ReviewRole, inventory: ReviewInventory, priority: number): PlannerAssignment {

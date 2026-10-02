@@ -12,7 +12,10 @@ export const MODEL_ROLES: ReviewRole[] = [
 	'testing',
 	'errors',
 	'concurrency',
-	'api'
+	'api',
+	'impact',
+	'frontend',
+	'data'
 ];
 
 export interface EffortOption {

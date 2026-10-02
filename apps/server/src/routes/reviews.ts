@@ -112,6 +112,17 @@ app.post('/:id/cancel', (c) => {
 	return c.json({ cancelled: true });
 });
 
+/** Answer a plan waiting for approval: run every specialist, or only the first few. */
+app.post('/:id/approve-plan', async (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const body = await c.req.json().catch(() => null) as { choice?: unknown } | null;
+	if (body?.choice !== 'all' && body?.choice !== 'limited') return c.json({ error: 'Choose "all" or "limited".' }, 400);
+	const control = getReviewControl(review.id);
+	if (!control?.approve(body.choice)) return c.json({ error: 'This review is not waiting for approval.' }, 409);
+	return c.json({ choice: body.choice });
+});
+
 /** Hold a running review: in-flight model calls stop and re-run on resume. */
 app.post('/:id/pause', (c) => {
 	const review = db.reviews.get(c.req.param('id'));
@@ -131,23 +142,36 @@ app.post('/:id/resume', (c) => {
 	return c.json({ paused: false });
 });
 
-/** Parsed unified diff for a review (404 until the fetch step stores one). */
+/**
+ * Expanded diffs, briefly: the page polls while a review runs, and re-reading
+ * every changed file each time is the slow part. Short enough that fixes
+ * written to the checkout show up within seconds.
+ */
+const filesCache = new TtlCache<{ body: string; etag: string }>(10_000, 50);
+
+/** Parsed unified diff for a review (404 until the fetch step stores one), with an ETag so polls get 304. */
 app.get('/:id/files', async (c) => {
 	const review = db.reviews.get(c.req.param('id'));
 	if (!review) return c.json({ error: 'review not found' }, 404);
 	const diff = reviewDiffs.get(review.id);
 	if (!diff) return c.json({ error: 'no diff yet' }, 404);
-	const files = parseUnifiedDiff(diff);
 	const sandboxPath = await findReviewCheckout(review);
-	if (!sandboxPath) return c.json(files);
-	const expanded = await Promise.all(
-		files.map(async (file) => {
-			const text = await readSandboxFile(sandboxPath, file.path, 400_000);
-			if (!text || text.endsWith('…[truncated]')) return file;
-			return expandFileDiff(file, text);
-		})
-	);
-	return c.json(expanded);
+	const { body, etag } = await filesCache.get(`${review.id}:${review.headSha}:${sandboxPath ?? ''}:${Bun.hash(diff)}`, async () => {
+		const files = parseUnifiedDiff(diff);
+		const expanded = !sandboxPath ? files : await Promise.all(
+			files.map(async (file) => {
+				const text = await readSandboxFile(sandboxPath, file.path, 400_000);
+				if (!text || text.endsWith('…[truncated]')) return file;
+				return expandFileDiff(file, text);
+			})
+		);
+		const body = JSON.stringify(expanded);
+		return { body, etag: `"${Bun.hash(body).toString(36)}"` };
+	});
+	c.header('ETag', etag);
+	c.header('Cache-Control', 'private, no-cache');
+	if (c.req.header('if-none-match') === etag) return c.body(null, 304);
+	return c.body(body, 200, { 'content-type': 'application/json; charset=utf-8' });
 });
 
 /** Start a draft (interactive) review directly, without going through the orchestrator chat. */

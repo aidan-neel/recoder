@@ -54,6 +54,7 @@ const MAX_BUFFER = 400;
 
 const SNAPSHOT_KEYS = [
 	'paused',
+	'approval',
 	'planVersion',
 	'planSummary',
 	'assignments',

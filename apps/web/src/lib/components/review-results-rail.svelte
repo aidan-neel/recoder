@@ -8,6 +8,7 @@
 	import FindingSeverity from './finding-severity.svelte';
 	import type { ReviewingFinding } from './reviewing-view.svelte';
 	import { formatAgentName } from '$lib/threads.svelte';
+	import { groupProgress, groupSpecialists } from '$lib/specialist-groups';
 	import { modelLabel } from '$lib/model-settings.svelte';
 
 	interface Props {
@@ -67,12 +68,13 @@
 						<Typography.Title level={2} class="rail-card-title">Specialists</Typography.Title>
 						<span class="rail-card-meta">{finished} finished</span>
 					</div>
-					{#each specialists as specialist (specialist.id)}
-						<Button href={specialistHref(specialist.id)} variant="ghost" class="rail-specialist" title={specialist.title}>
-							<span class="rail-dot" data-status={specialist.status} aria-hidden="true"></span>
-							<span class="rail-specialist-name">{formatAgentName(specialist.role)}</span>
-							<span class="rail-specialist-meta">{[modelLabel(specialist.model), duration(specialist.elapsedMs)].filter(Boolean).join(' · ')}</span>
-							<span class="rail-specialist-count" aria-label="{countFor(specialist.role)} findings">{countFor(specialist.role)}</span>
+					{#each groupSpecialists(specialists) as group (group.role)}
+						{@const first = group.items.find((item) => item.status !== 'done') ?? group.items[0]}
+						<Button href={specialistHref(first.id)} variant="ghost" class="rail-specialist" title={group.items.length > 1 ? groupProgress(group) : first.title}>
+							<span class="rail-dot" data-status={group.status} aria-hidden="true"></span>
+							<span class="rail-specialist-name">{formatAgentName(group.role)}{group.items.length > 1 ? ` ×${group.items.length}` : ''}</span>
+							<span class="rail-specialist-meta">{group.items.length > 1 ? `${group.finished}/${group.items.length} · ${modelLabel(first.model)}` : [modelLabel(first.model), duration(first.elapsedMs)].filter(Boolean).join(' · ')}</span>
+							<span class="rail-specialist-count" aria-label="{countFor(group.role)} findings">{countFor(group.role)}</span>
 						</Button>
 					{/each}
 				</Card.Root>

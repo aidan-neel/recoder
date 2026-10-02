@@ -1,5 +1,5 @@
 <script lang="ts" module>
-	import type { CoverageGap, CoverageSummary, ModelFailure, ReviewAssignment, ReviewGuidelinesUsed, ReviewChatMessage, ReviewCodeContext, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
+	import type { CoverageGap, CoverageSummary, ModelFailure, ReviewAssignment, ReviewGuidelinesUsed, ReviewPlanApproval, ReviewChatMessage, ReviewCodeContext, ReviewReasoningEntry, ReviewTask, ReviewToolCall, RoleDecision } from '@recoder/shared';
 	export interface ReviewingFinding {
 		id: string;
 		agent: string | null;
@@ -12,6 +12,8 @@
 	}
 	export interface ReviewingMeta {
 		prLabel: string;
+		/** The pull request on its host; the PR number links to it. */
+		prUrl?: string | null;
 		repo: string;
 		files: number | null;
 		additions: number | null;
@@ -28,6 +30,7 @@
 	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import Check from '@lucide/svelte/icons/check';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Play from '@lucide/svelte/icons/play';
 	import ScanSearch from '@lucide/svelte/icons/scan-search';
@@ -35,9 +38,10 @@
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
+	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import { Markdown } from '@sivir-ui/svelte/components/markdown';
+	import ModelMarkdown from './model-markdown.svelte';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import ReviewMetricsModal from './review-metrics-modal.svelte';
 	import ReviewConversation from './review-conversation.svelte';
@@ -53,6 +57,7 @@
 	import { closeSessionTab } from '$lib/session-tabs';
 	import { requestDeleteSession } from '$lib/delete-session.svelte';
 	import { formatAgentName } from '$lib/threads.svelte';
+	import { groupProgress, groupSpecialists } from '$lib/specialist-groups';
 	import { guidelinesStore } from '$lib/guidelines.svelte';
 	import { errorToast } from '$lib/notify';
 	import { serverApi } from '$lib/server-api';
@@ -76,6 +81,8 @@
 		failure?: ModelFailure | null;
 		onStartReview?: (() => Promise<void>) | null;
 		paused?: boolean;
+		/** A plan waiting for the developer to approve more specialists. */
+		approval?: ReviewPlanApproval | null;
 		connectionLost?: boolean;
 		onOpenDiff: (() => void) | null;
 		/** Switch to the Findings or Diff workspace. Falls back to `onOpenDiff`. */
@@ -123,7 +130,7 @@
 	let {
 		reviewId, title, meta, assignments = [], messages = [], orchestratorModel,
 		reasoning = [], toolCalls = [], active = true, failed = false,
-		errorMessage = null, failure = null, onStartReview = null, paused = false, connectionLost = false, onOpenDiff, onShowView = null, onOpenFinding = null, onRestart, onContinue = null,
+		errorMessage = null, failure = null, onStartReview = null, paused = false, approval = null, connectionLost = false, onOpenDiff, onShowView = null, onOpenFinding = null, onRestart, onContinue = null,
 		onSend, onStop, restarting = false, now = Date.now(), fullscreen = false,
 		embedded = false, draft = $bindable(''), codeContext = $bindable(null), focusKey, stage = 0, tasks = [],
 		planSummary = null, activity = [], showChecks = false, repoId = null, guidelines = null, stageLabel = 'Preparing review', stageDetail, coverage = null, coverageGaps = [],
@@ -167,6 +174,21 @@
 		}
 	}
 	const specialists = $derived(assignments.filter((assignment) => assignment.id !== ORCHESTRATOR_ID));
+	const specialistGroups = $derived(groupSpecialists(specialists));
+	/** Specialists that ended without a result, a retried one counted by its retry (the server's summary counts the same way). */
+	const failedSpecialists = $derived(specialists.filter((item) => item.status === 'error' && !specialists.some((other) => other.id !== item.id && other.id.startsWith(`retry-${item.id}`))).length);
+	let approving = $state<'all' | 'limited' | null>(null);
+	async function approvePlan(choice: 'all' | 'limited'): Promise<void> {
+		if (!reviewId || approving) return;
+		approving = choice;
+		try {
+			await serverApi.approvePlan(reviewId, choice);
+		} catch (e) {
+			errorToast('Could not start the specialists', e instanceof Error ? e.message : undefined);
+		} finally {
+			approving = null;
+		}
+	}
 	const orchestrator = $derived<ReviewAssignment>({
 		id: ORCHESTRATOR_ID, role: 'orchestrator', title: 'Orchestrator', reason: '', scope: [],
 		status: awaitingPrompt ? 'waiting' : active ? 'running' : failed ? 'error' : 'done',
@@ -224,20 +246,29 @@
 
 	/** "correctness and performance", "security, docs and 2 more". */
 	function nameList(items: ReviewAssignment[]): string {
-		const names = items.map((item) => formatAgentName(item.role).toLowerCase());
+		const names = groupSpecialists(items).map((group) => `${formatAgentName(group.role).toLowerCase()}${group.items.length > 1 ? ` ×${group.items.length}` : ''}`);
 		if (names.length <= 1) return names[0] ?? '';
 		if (names.length <= 3) return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 		return `${names.slice(0, 2).join(', ')} and ${names.length - 2} more`;
 	}
 	/** Early stages (checkout, inventory, planning) have nothing to open, and the live thinking and tool rows already show the work. */
-	const showProgress = $derived(!active || running.length > 0 || !!finalization);
+	/** Nothing runs until the developer answers the approval card, so no "Waiting on …" loader yet. */
+	const awaitingApproval = $derived(active && approval?.status === 'pending');
+	const showProgress = $derived(!awaitingApproval && (!active || running.length > 0 || !!finalization));
 	/** Checkout and dependency install have no transcript of their own; until the orchestrator speaks, a loading card stands in. */
 	const setupTask = $derived(tasks.find((task) => task.id === 'setup' && task.status === 'running'));
 	const orchestratorSpoke = $derived(messages.some((message) => (message.assignmentId ?? ORCHESTRATOR_ID) === ORCHESTRATOR_ID && message.from === 'assistant')
 		|| reasoning.some((entry) => entry.assignmentId === ORCHESTRATOR_ID));
 	const preparing = $derived(isOrchestrator && active && !awaitingPrompt && !failed && (stage === 0 || (!!setupTask && !orchestratorSpoke)));
 	const progressHasBody = $derived(finalReasoning.length > 0 || finalFacts.length > 0);
-	const footerLabel = $derived(running.length ? `Waiting on ${nameList(running)}` : stageLabel);
+	/** Specialists a model is actually working for; queued ones are waiting on the stage before them. */
+	const working = $derived(specialists.filter((item) => item.status === 'running' || item.status === 'waiting'));
+	/** Before the specialist stage, name the stage (installing, running checks), not the specialists waiting for it. */
+	const footerLabel = $derived(paused ? 'Paused'
+		: stage < 3 ? [stageLabel, stageDetail].filter(Boolean).join(' · ')
+		: working.length ? `Waiting on ${nameList(working)}`
+		: running.length ? `${running.length} ${running.length === 1 ? 'specialist' : 'specialists'} queued`
+		: stageLabel);
 
 	function statusFor(assignment: ReviewAssignment): { label: string; tone: string } {
 		switch (assignment.status) {
@@ -265,36 +296,86 @@
 {/snippet}
 
 {#snippet specialistRows()}
+	<!-- One row per role; a role with several parts (a large PR's correctness sweep) opens to them. -->
 	<ul class="specialist-list" aria-label="Specialists">
-		{#each specialists as assignment (assignment.id)}
-			{@const status = statusFor(assignment)}
-			<li>
-				<Button {...openProps(assignment.id)} variant="ghost" class="specialist-row" aria-label={`Open ${formatAgentName(assignment.role)} conversation`}>
-					<span class="specialist-main">
-						<span class="specialist-name-line">
-							<span class="specialist-name">{formatAgentName(assignment.role)}</span>
-							{#if assignment.model}<span class="specialist-model" title={assignment.model}>{modelLabel(assignment.model)}</span>{/if}
-						</span>
-						<span class="specialist-op" title={assignment.currentOperation || assignment.title}>{assignment.currentOperation || assignment.title}</span>
-					</span>
-					<Badge variant="secondary" class="status-chip" data-tone={status.tone}>
-						{#if assignment.status === 'running' && active}<Spinner size={12} aria-hidden="true" />{/if}
-						{status.label}
-					</Badge>
-					<ChevronRight size={16} class="specialist-chevron" aria-hidden="true" />
-				</Button>
-			</li>
+		{#each specialistGroups as group (group.role)}
+			{#if group.items.length === 1}
+				{@render specialistRow(group.items[0], formatAgentName(group.role))}
+			{:else}
+				{@const status = statusFor({ ...group.items[0], status: group.status })}
+				<li>
+					<Collapsible.Root>
+						<Collapsible.Trigger class="specialist-row specialist-group-row" aria-label={`${formatAgentName(group.role)}: ${group.items.length} specialists`}>
+							<span class="specialist-main">
+								<span class="specialist-name-line">
+									<span class="specialist-name">{formatAgentName(group.role)}</span>
+									<span class="specialist-count">×{group.items.length}</span>
+									{#if group.items[0].model}<span class="specialist-model" title={group.items[0].model}>{modelLabel(group.items[0].model)}</span>{/if}
+								</span>
+								<span class="specialist-op">{groupProgress(group)}</span>
+							</span>
+							<Badge variant="secondary" class="status-chip" data-tone={status.tone}>
+								{#if group.status === 'running' && active}<Spinner size={12} aria-hidden="true" />{/if}
+								{status.label}
+							</Badge>
+							<ChevronRight size={16} class="specialist-chevron" aria-hidden="true" />
+						</Collapsible.Trigger>
+						<Collapsible.Content>
+							<ul class="specialist-list specialist-parts" aria-label={`${formatAgentName(group.role)} parts`}>
+								{#each group.items as assignment (assignment.id)}
+									{@render specialistRow(assignment, assignment.title)}
+								{/each}
+							</ul>
+						</Collapsible.Content>
+					</Collapsible.Root>
+				</li>
+			{/if}
 		{/each}
 	</ul>
+{/snippet}
+
+{#snippet specialistRow(assignment: ReviewAssignment, name: string)}
+	{@const status = statusFor(assignment)}
+	<li>
+		<Button {...openProps(assignment.id)} variant="ghost" class="specialist-row" aria-label={`Open ${formatAgentName(assignment.role)} conversation`}>
+			<span class="specialist-main">
+				<span class="specialist-name-line">
+					<span class="specialist-name">{name}</span>
+					{#if assignment.model}<span class="specialist-model" title={assignment.model}>{modelLabel(assignment.model)}</span>{/if}
+				</span>
+				<span class="specialist-op" title={assignment.currentOperation || assignment.title}>{assignment.currentOperation || assignment.title}</span>
+			</span>
+			<Badge variant="secondary" class="status-chip" data-tone={status.tone}>
+				{#if assignment.status === 'running' && active}<Spinner size={12} aria-hidden="true" />{/if}
+				{status.label}
+			</Badge>
+			<ChevronRight size={16} class="specialist-chevron" aria-hidden="true" />
+		</Button>
+	</li>
+{/snippet}
+
+{#snippet approvalCard()}
+	{#if approval}
+		<Card.Root class="review-approval">
+			<div class="review-approval-text">
+				<Typography.Text class="review-approval-title">Run {approval.requested} specialists?</Typography.Text>
+				<Typography.Metadata class="review-approval-meta">Reading every changed hunk takes {approval.requested}. Up to {approval.limit} run without asking; the rest of the changes would be marked not reviewed.</Typography.Metadata>
+			</div>
+			<div class="review-approval-actions">
+				<Button variant="outline" loading={approving === 'limited'} disabled={approving !== null} onclick={() => void approvePlan('limited')}>Run {approval.limit}</Button>
+				<Button loading={approving === 'all'} disabled={approving !== null} onclick={() => void approvePlan('all')}>Run all {approval.requested}</Button>
+			</div>
+		</Card.Root>
+	{/if}
 {/snippet}
 
 {#snippet specialistsContent()}
 	<section class="specialists" aria-label="Specialists">
 		<Disclosure>
 			{#snippet label()}Created {specialists.length} {specialists.length === 1 ? 'specialist' : 'specialists'}{/snippet}
-			{#if planSummary}<Markdown content={planSummary} />{/if}
-			{#each specialists as assignment (assignment.id)}
-				<Typography.Text><span class="text-fg-secondary">{formatAgentName(assignment.role)}:</span> {assignment.reason || assignment.title}</Typography.Text>
+			{#if planSummary}<ModelMarkdown content={planSummary} />{/if}
+			{#each specialistGroups as group (group.role)}
+				<Typography.Text><span class="text-fg-secondary">{formatAgentName(group.role)}{group.items.length > 1 ? ` ×${group.items.length}` : ''}:</span> {group.items[0].reason || group.items[0].title}</Typography.Text>
 			{/each}
 			{#if finished}{@render specialistRows()}{/if}
 		</Disclosure>
@@ -372,15 +453,18 @@
 
 {#snippet resultCard()}
 	<Card.Root class="review-result">
+		<span class="review-result-mark" data-warn={failedSpecialists > 0 || undefined} aria-hidden="true">{#if failedSpecialists}<CircleAlert size={14} strokeWidth={2.25} />{:else}<Check size={14} strokeWidth={2.25} />{/if}</span>
 		<div class="review-result-text">
-			<Typography.Text class="review-result-title"><Check size={16} class="shrink-0 text-success" aria-hidden="true" />Review finished with {findings.length} {findings.length === 1 ? 'finding' : 'findings'}</Typography.Text>
+			<Typography.Text class="review-result-title">Review finished</Typography.Text>
+			<Typography.Metadata class="review-result-meta">{findings.length ? `${findings.length} ${findings.length === 1 ? 'finding' : 'findings'}` : 'No findings'}{meta.elapsed ? ` · ${meta.elapsed}` : ''}{meta.files !== null ? ` · ${meta.files} ${meta.files === 1 ? 'file' : 'files'}` : ''}{#if failedSpecialists}{' · '}<span class="review-result-failed">{failedSpecialists} {failedSpecialists === 1 ? 'specialist' : 'specialists'} failed</span>{/if}</Typography.Metadata>
 			{#if findingCounts.length}
 				<div class="review-result-pills" aria-label="Findings by severity">
 					{#each findingCounts as item (item.severity)}<FindingSeverity severity={item.severity} count={item.count} />{/each}
 				</div>
 			{/if}
 		</div>
-		<Button onclick={onOpenDiff ?? undefined} disabled={!onOpenDiff} class="shrink-0 gap-2">Open review <ArrowUpRight size={14} aria-hidden="true" /></Button>
+		<!-- Findings is the review's main page; the diff is one click from there. -->
+		<Button onclick={onShowView ? () => void onShowView('findings') : onOpenDiff ?? undefined} disabled={!onShowView && !onOpenDiff} class="shrink-0 gap-2">Open findings <ArrowUpRight size={14} aria-hidden="true" /></Button>
 	</Card.Root>
 {/snippet}
 
@@ -391,6 +475,7 @@
 		branch={meta.branch}
 		repo={meta.repo}
 		prLabel={meta.prLabel}
+		prUrl={meta.prUrl}
 		files={meta.files}
 		additions={meta.additions}
 		deletions={meta.deletions}
@@ -434,6 +519,7 @@
 					placeholder={!isOrchestrator ? undefined : awaitingPrompt ? undefined : active ? 'Ask Orchestrator anything…' : 'Ask a follow-up about this review…'}
 					inserts={isOrchestrator ? [
 						...(specialists.length ? [{ key: 'specialists', at: specialistsAt, snippet: specialistsContent }] : []),
+						...(approval?.status === 'pending' && active ? [{ key: 'approval', at: undefined, snippet: approvalCard }] : []),
 						...(!awaitingPrompt && showProgress ? [{ key: 'progress', at: active ? undefined : finalization?.startedAt ?? completedAt, snippet: progressContent }] : []),
 						...(finished ? [{ key: 'result', at: completedAt, snippet: resultCard }] : []),
 						...(preparing ? [{ key: 'preparing', at: undefined, snippet: preparingCard }] : [])
@@ -445,7 +531,8 @@
 				{#if showSteps}
 					<ReviewSteps current={currentStep} {failed} {active} elapsed={meta.elapsed} {paused}
 						onPauseToggle={reviewId && !awaitingPrompt ? togglePause : null} onCancel={reviewId && !awaitingPrompt ? cancelReview : null}
-						specialists={{ done: specialists.filter((item) => ['done', 'skipped', 'error'].includes(item.status)).length, total: specialists.length }} />
+						approval={awaitingApproval ? approval : null} onApprove={reviewId ? approvePlan : null} {approving}
+						specialists={{ done: specialists.filter((item) => item.status === 'done').length, failed: failedSpecialists, total: specialists.length }} />
 				{/if}
 			</ReviewResultsRail>
 		{/if}

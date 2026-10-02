@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
-	import Paperclip from '@lucide/svelte/icons/paperclip';
+	import Plus from '@lucide/svelte/icons/plus';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Composer from '@sivir-ui/svelte/components/composer';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
@@ -31,7 +31,7 @@
 		oninput?: () => void;
 		/** Chips above the input (selected code, attachments). */
 		context?: Snippet;
-		/** Footer items after the paperclip ("Shared with Orchestrator", Resolve…). */
+		/** Footer items after the + button ("Shared with Orchestrator", Resolve…). */
 		leading?: Snippet;
 	}
 
@@ -111,7 +111,7 @@
 				disabled={disabled || attachDisabled || sending}
 				onclick={onAttach}
 			>
-				<Paperclip size={14} aria-hidden="true" />
+				<Plus size={16} strokeWidth={1.75} aria-hidden="true" />
 			</Button>
 		{/if}
 		{@render leading?.()}

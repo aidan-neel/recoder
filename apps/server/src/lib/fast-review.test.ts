@@ -137,7 +137,12 @@ test('adaptive review plans specialists instead of a 680-task batch fan-out', as
 	expect(result.assignments.some((assignment) => assignment.role === 'patterns')).toBe(true);
 	expect(result.findings.length + result.unconfirmed.length).toBeGreaterThanOrEqual(0);
 	expect(seen.some((assignment) => assignment.status === 'queued')).toBe(true);
-	expect(models).toEqual(['lead', 'worker', 'worker', 'lead']);
+	// Each specialist's empty, read-nothing answer is sent back once; then the candidate is
+	// traced through the code by a verifier on the worker model, since nothing can run here.
+	expect(models[0]).toBe('lead');
+	expect(models.at(-1)).toBe('lead');
+	expect(models.slice(1, -1).every((model) => model === 'worker')).toBe(true);
+	expect(models.length).toBeGreaterThan(6);
 	expect(contexts[0]).toContain('Shared specialist conversation');
 	expect(contexts[1]).toContain('Specialist question');
 	expect(contexts.at(-1)).toContain('Shared specialist conversation');
@@ -221,7 +226,8 @@ test('invalid planner output falls back to correctness and repository consistenc
 		Response.json({ choices: [{ message: { content: '{"nope":true}' } }] })) as unknown as typeof fetch;
 	const result = await runAdaptiveReview({ diff: DIFF, sandboxPath: null, prTitle: 'x', prBody: '' });
 	expect(result.planningDegraded).toBe(true);
-	expect(result.assignments.map((assignment) => assignment.role).sort()).toEqual(['correctness', 'patterns']);
+	// Both fallback specialists fail on the same junk and are retried once each.
+	expect([...new Set(result.assignments.map((assignment) => assignment.role))].sort()).toEqual(['correctness', 'patterns']);
 });
 
 test('review startup only reads guidance files that exist on the target revision', async () => {
@@ -384,7 +390,7 @@ test.skipIf((await execUnavailableReason()) !== null)('verification drops a find
 		expect(specialists[0]).toContain('`cat src/a.ts` → passed');
 		expect(result.findings).toHaveLength(1);
 		expect(result.findings[0].message).toContain('Real bug.');
-		expect(result.findings[0].verification).toEqual({ status: 'verified', reason: 'grep shows it.', command: 'grep -c new src/a.ts', exitCode: 0 });
+		expect(result.findings[0].verification).toEqual({ status: 'verified', method: 'run', reason: 'grep shows it.', command: 'grep -c new src/a.ts', exitCode: 0 });
 		expect(result.summary).toContain('1 verified by running code');
 	} finally {
 		await rm(root, { recursive: true, force: true });

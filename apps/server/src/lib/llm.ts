@@ -21,6 +21,11 @@ export interface ChatOptions {
 	messages: ChatMessage[];
 	/** Response format hint; ignored by servers that don't support it. */
 	jsonMode?: boolean;
+	/**
+	 * Constrain the reply to this JSON schema (vLLM/SGLang guided decoding,
+	 * OpenAI structured outputs). Endpoints that refuse it fall back to `jsonMode`.
+	 */
+	jsonSchema?: { name: string; schema: Record<string, unknown> };
 	temperature?: number;
 	/** Fixed seed for deterministic output. Only sent when set (some servers reject unknown fields). */
 	seed?: number;
@@ -43,6 +48,28 @@ const noTemplateKwargs = new Set<string>();
 /** vLLM/SGLang templates read `enable_thinking`; strict providers may reject the field. */
 function thinkingFields(opts: ChatOptions): Record<string, unknown> {
 	return opts.thinking === false && !noTemplateKwargs.has(opts.baseUrl) ? { chat_template_kwargs: { enable_thinking: false } } : {};
+}
+
+/** Endpoints that rejected `json_schema` response formats; later calls send plain JSON mode. */
+const noJsonSchema = new Set<string>();
+
+function responseFormat(opts: ChatOptions): Record<string, unknown> {
+	if (opts.jsonSchema && !noJsonSchema.has(opts.baseUrl)) return { response_format: { type: 'json_schema', json_schema: { name: opts.jsonSchema.name, schema: opts.jsonSchema.schema } } };
+	return opts.jsonMode || opts.jsonSchema ? { response_format: { type: 'json_object' } } : {};
+}
+
+/** Retry in plain JSON mode when an endpoint refuses a schema-constrained reply. */
+async function withSchemaFallback<T>(opts: ChatOptions, run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (err) {
+		if (opts.jsonSchema && !noJsonSchema.has(opts.baseUrl) && err instanceof LlmError && err.status >= 400 && err.status < 500 && /response_format|json_schema|schema|guided|structured/i.test(err.message)) {
+			noJsonSchema.add(opts.baseUrl);
+			if (opts.signal?.aborted) throw err;
+			return run();
+		}
+		throw err;
+	}
 }
 
 /** Retry once without the thinking switch when an endpoint refuses it. */
@@ -277,9 +304,9 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 				try { return await codex.complete({ ...remaining, timeoutMs }); }
 				catch (error) { if (error instanceof LlmError) throw error; throw new LlmError(0, 'ChatGPT request failed'); }
 			}))
-			: withRetries(remaining, deadline, (timeoutMs) => withThinkingFallback(remaining, () => remaining.onReasoning
+			: withRetries(remaining, deadline, (timeoutMs) => withThinkingFallback(remaining, () => withSchemaFallback(remaining, () => remaining.onReasoning
 				? streamChatCompletionInner({ ...remaining, timeoutMs }, () => {})
-				: chatCompletionInner({ ...remaining, timeoutMs })));
+				: chatCompletionInner({ ...remaining, timeoutMs }))));
 		const result = await withHardDeadline(work, deadline, opts.timeoutMs ?? 120_000, opts.signal);
 		success = true;
 		return result;
@@ -312,7 +339,7 @@ async function chatCompletionInner(opts: ChatOptions): Promise<string> {
 				max_tokens: opts.maxTokens ?? 4000,
 				...reasoningFields(opts),
 				...(opts.seed !== undefined ? { seed: opts.seed } : {}),
-				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+				...responseFormat(opts),
 				...thinkingFields(opts)
 			}),
 			signal: controller.signal
@@ -389,7 +416,7 @@ export async function streamChatCompletion(
 		const forward = scope.live((text: string) => { streamed = true; onToken(text); });
 		const work = opts.provider === 'codex'
 			? withRetries(remaining, deadline, async (timeoutMs) => (await import('./codex')).codex.complete({ ...remaining, timeoutMs }, forward), () => !streamed)
-			: withRetries(remaining, deadline, (timeoutMs) => withThinkingFallback(remaining, () => streamChatCompletionInner({ ...remaining, timeoutMs }, forward)), () => !streamed);
+			: withRetries(remaining, deadline, (timeoutMs) => withThinkingFallback(remaining, () => withSchemaFallback(remaining, () => streamChatCompletionInner({ ...remaining, timeoutMs }, forward))), () => !streamed);
 		const result = await withHardDeadline(work, deadline, opts.timeoutMs ?? 120_000, opts.signal);
 		success = true;
 		return result;
@@ -440,7 +467,7 @@ async function streamChatCompletionInner(
 				stream_options: { include_usage: true },
 				...reasoningFields(opts),
 				...(opts.seed !== undefined ? { seed: opts.seed } : {}),
-				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+				...responseFormat(opts),
 				...thinkingFields(opts)
 			}),
 			signal: controller.signal

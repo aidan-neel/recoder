@@ -155,8 +155,12 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 				: await fetchPullRequest(repo.url, review.prNumber, { env, metadataOnly: true }));
 		baseRef = pr.base;
 		prBody = pr.body ?? '';
-		// People and linked issues for the planner; fetched while the sandbox clones.
-		prContext = fetchPrContext(repo, review.prNumber, provider);
+		// People and linked issues for the planner; fetched while the sandbox clones. Best
+		// effort: a slow host API must not hold the review once the checkout is ready.
+		prContext = Promise.race([
+			fetchPrContext(repo, review.prNumber, provider),
+			new Promise<string>((resolve) => setTimeout(() => resolve(''), 30_000))
+		]);
 		reviewDiffs.set(reviewId, diff);
 		review = touch(reviewId, {
 			headSha: pr.headSha,
@@ -248,6 +252,12 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 						data: { agent: meta?.role, assignmentId: meta?.assignmentId }
 					}),
 				onPlan: (data) => reportReviewPlan(reviewId, data),
+				onApproval: (approval) => emitReviewEvent(reviewId, {
+					type: 'step',
+					step: 'review',
+					message: approval.status === 'pending' ? `Waiting for approval to run ${approval.requested} specialists` : approval.status === 'all' ? `Running all ${approval.requested} specialists` : `Running ${approval.limit} of ${approval.requested} specialists`,
+					data: { approval }
+				}),
 				onAssignment: (assignment) => reportReviewAssignment(reviewId, assignment),
 				onCoverage: (coverage, gaps) => reportReviewCoverage(reviewId, coverage, gaps),
 				onBudget: (budget) => {
@@ -335,6 +345,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			const settled = settlePipelineStreams(reviewId);
 			if (settled) emitReviewEvent(reviewId, { type: 'log', step: 'review', message: '', data: { settled: { messages: settled.messages, reasoning: settled.reasoning } } });
 		} catch { /* Review deleted mid-run. */ }
+		// The final state reaches SQLite now, not on the write-behind timer.
+		reviewProgress.flush();
 	}
 }
 

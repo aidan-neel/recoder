@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { reviewNow } from './review-control.js';
+import { currentReviewControl, reviewNow, type PlanChoice } from './review-control.js';
 import { lstat, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type {
@@ -41,14 +41,14 @@ import {
 	type PlannerAssignment,
 	type PlannerOutput
 } from './planner.js';
-import { GUIDELINES_PATH, settleAssignments, type ReviewGuidelinesUsed } from '@recoder/shared';
+import { GUIDELINES_PATH, ORCHESTRATOR_ID, settleAssignments, type ReviewGuidelinesUsed, type ReviewPlanApproval } from '@recoder/shared';
 import { composeGuidelines, readGlobalGuidelines, withGuidelines, type GuidelinesInput } from './guidelines.js';
-import { parseSpecialistOutput, specialistSystemPrompt, specialistUserPrompt, specialistValidationError } from './specialist.js';
+import { parseSpecialistOutput, prematureSpecialistFinal, specialistResponseSchema, specialistSystemPrompt, specialistUserPrompt, specialistValidationError } from './specialist.js';
 import { ExecWorkspace, type SetupReport } from './exec-workspace.js';
 import { execUnavailableReason } from './exec-sandbox.js';
 import { hasPendingChanges } from './pending-changes.js';
 import { EXEC_EXAMPLES } from './prompts.js';
-import { parseVerdict, settleVerdict, verdictValidationError, verifierSystemPrompt, verifierUserPrompt } from './verify.js';
+import { parseVerdict, settleVerdict, verdictValidationError, verifierRanNothing, verifierResponseSchema, verifierSystemPrompt, verifierUserPrompt } from './verify.js';
 import {
 	applyConsolidation,
 	consolidationSchema,
@@ -86,6 +86,8 @@ const INSTRUCTION_PATHS = [
 export interface HarnessEvents {
 	onTask?: (task: Omit<ReviewTask, 'updatedAt'>) => void;
 	onLog?: (message: string, meta?: { assignmentId?: string; role?: string }) => void;
+	/** A plan past `approvalThreshold` waits for the developer; reported when asked and when answered. */
+	onApproval?: (approval: ReviewPlanApproval) => void;
 	onPlan?: (data: {
 		planVersion: number;
 		summary: string;
@@ -215,11 +217,13 @@ export async function runAdaptiveReview(
 	input: AdaptiveReviewInput,
 	events?: HarnessEvents
 ): Promise<AdaptiveReviewResult> {
-	const deadlineAt = reviewNow() + REVIEW_POLICY.analysisDeadlineMs;
+	// Extended once the developer approves a large plan.
+	let deadlineAt = reviewNow() + REVIEW_POLICY.analysisDeadlineMs;
 	const controller = new AbortController();
 	const onAbort = () => controller.abort();
 	input.signal?.addEventListener('abort', onAbort, { once: true });
-	const timeout = setTimeout(() => controller.abort(), REVIEW_POLICY.analysisDeadlineMs);
+	// On the review clock, which stands still while paused or waiting for approval.
+	const timeout = setInterval(() => { if (reviewNow() >= deadlineAt) controller.abort(); }, 1_000);
 	const budget = new ModelBudget();
 	const limits = reviewLimits();
 	const inventory = buildInventory(input.diff, extraExcludes());
@@ -247,9 +251,15 @@ export async function runAdaptiveReview(
 		evidence.execUnavailable = execReason;
 	}
 	// Planning and specialists stop early enough for verification to run.
-	const investigationDeadline = workspace ? deadlineAt - REVIEW_POLICY.reserveMsForVerification : deadlineAt;
+	let investigationDeadline = workspace ? deadlineAt - REVIEW_POLICY.reserveMsForVerification : deadlineAt;
 	budget.reserve = REVIEW_POLICY.reserveCallsForConsolidation + (workspace ? REVIEW_POLICY.reserveCallsForVerification : 0);
 	const assignments: ReviewAssignment[] = [];
+	// Shared with the catch below: a review that runs out of time after planning
+	// still finishes with the candidates its specialists found.
+	let plan: PlannerOutput | null = null;
+	let planningDegraded = input.resume?.planningDegraded ?? false;
+	const candidates: CandidateFinding[] = (input.resume?.candidates ?? []).map((candidate) => ({ ...candidate }));
+	const recommended = new Set<string>(input.resume?.recommended ?? []);
 	const publishCoverage = () => events?.onCoverage?.(coverage.summary(), coverage.gaps());
 	const publishBudget = () => events?.onBudget?.(budget.snapshot());
 	const task = (
@@ -288,8 +298,6 @@ export async function runAdaptiveReview(
 		const execNotes = workspace ? await plannerExecNotes(workspace) : undefined;
 
 		const resume = input.resume ?? null;
-		let planningDegraded = resume?.planningDegraded ?? false;
-		let plan: PlannerOutput;
 		if (resume) {
 			plan = resume.plan;
 			evidence.restore(resume.evidence);
@@ -354,17 +362,59 @@ export async function runAdaptiveReview(
 			kind: 'planning',
 			agent: 'correctness'
 		});
+		if (!resume && items.length > REVIEW_POLICY.approvalThreshold) {
+			const limit = REVIEW_POLICY.approvalThreshold;
+			const approval: ReviewPlanApproval = { status: 'pending', requested: items.length, limit };
+			events?.onApproval?.(approval);
+			task('approval', 'Waiting for your go-ahead', 'waiting', `This review needs ${items.length} specialists to read every changed hunk. Run all of them, or the ${limit} most important?`, { kind: 'planning' });
+			// Without a live control (tests, scripts) there is nobody to ask. With one, nobody
+			// answering for a while means the review goes on with the safe subset instead of hanging.
+			const control = currentReviewControl();
+			const answer = control ? await control.requestApproval(REVIEW_POLICY.approvalTimeoutMs) : 'all';
+			if (controller.signal.aborted) throw new ReviewAbortedError('review aborted');
+			const choice: PlanChoice = answer === 'timeout' ? 'limited' : answer;
+			if (answer === 'timeout') {
+				events?.onLog?.(`No answer in ${Math.round(REVIEW_POLICY.approvalTimeoutMs / 60_000)} minutes; running the ${limit} most important specialists`);
+				events?.onMessage?.({
+					id: 'message_approval_timeout',
+					text: `Nobody answered in ${Math.round(REVIEW_POLICY.approvalTimeoutMs / 60_000)} minutes, so I'm running the ${limit} most important specialists. The rest of the changes are marked as not reviewed.`,
+					status: 'done',
+					assignmentId: ORCHESTRATOR_ID,
+					model: configForOrchestrator().model
+				});
+			}
+			if (choice === 'limited') {
+				const kept = new Set([...items].sort((a, b) => a.priority - b.priority).slice(0, limit).map((item) => item.id));
+				for (const item of items.filter((entry) => !kept.has(entry.id))) {
+					for (const scope of item.scope) {
+						for (const hunkId of scope.hunkIds) coverage.partial(hunkId, scope.path, item.role, 'not run: you chose fewer specialists');
+					}
+					updateAssignment(assignments, item.id, { status: 'skipped', currentOperation: `Not run: you chose ${limit} specialists` });
+					events?.onAssignment?.(assignments.find((record) => record.id === item.id)!);
+				}
+				items.splice(0, items.length, ...items.filter((item) => kept.has(item.id)));
+			}
+			events?.onApproval?.({ ...approval, status: choice });
+			task('approval', choice === 'all' ? `Running all ${approval.requested} specialists` : `Running ${limit} specialists`, 'done', choice === 'all' ? 'You approved the full review.' : 'You chose the most important specialists; the rest of the changes are marked as not reviewed.', { kind: 'planning' });
+		}
+		// A larger review gets proportionally more model calls and time.
+		const extra = Math.max(0, items.length - REVIEW_POLICY.maxInitialAssignments / 2);
+		if (extra) {
+			budget.limit = REVIEW_POLICY.maxModelCalls + extra * REVIEW_POLICY.callsPerExtraAssignment;
+			const waves = Math.ceil(items.length / REVIEW_POLICY.maxConcurrentAssignments) - 1;
+			deadlineAt += waves * REVIEW_POLICY.msPerExtraWave;
+			investigationDeadline += waves * REVIEW_POLICY.msPerExtraWave;
+			if (workspace) workspace.deadlineAt = deadlineAt - REVIEW_POLICY.reserveMsForConsolidation;
+		}
 		publishCoverage();
 		publishBudget();
 
-		const candidates: CandidateFinding[] = (resume?.candidates ?? []).map((candidate) => ({ ...candidate }));
 		let nextCandidate = 1 + Math.max(0, ...candidates.map((candidate) => Number(candidate.candidateId.slice(1)) || 0));
-		const recommended = new Set<string>(resume?.recommended ?? []);
 		const followUps: PlannerAssignment[] = [...(resume?.followUps ?? [])];
 		let followUpsDone = resume?.followUpsDone ?? false;
 		const finishedIds = () => new Set(assignments.filter((record) => FINISHED.has(record.status)).map((record) => record.id));
 		const checkpoint = () => {
-			if (!events?.onCheckpoint) return;
+			if (!events?.onCheckpoint || !plan) return;
 			const finished = finishedIds();
 			const kept = candidates.filter((candidate) => candidate.assignmentId && finished.has(candidate.assignmentId));
 			events.onCheckpoint({
@@ -387,15 +437,30 @@ export async function runAdaptiveReview(
 
 		let setupNotes = '';
 		if (workspace) {
+			// Specialists start once setup and the baseline checks finish; say so rather than "queued".
+			for (const record of assignments) {
+				if (record.status !== 'queued') continue;
+				record.currentOperation = 'Waiting for setup and checks';
+				events?.onAssignment?.({ ...record });
+			}
 			// The step covers waiting on the dependency install as well as the checks.
 			events?.onStage?.('checks');
+			const prepStarted = reviewNow();
 			const report = await setup;
 			const checks = (plan.checks ?? []).slice(0, REVIEW_POLICY.maxBaselineChecks);
 			const baseline = await runBaselineChecks(checks, evidence, controller.signal, events, task);
 			setupNotes = describeSandbox(report, baseline);
+			// Preparing the environment is not analysis: give the specialists that time back.
+			const prepMs = Math.min(REVIEW_POLICY.maxPrepExtensionMs, Math.max(0, reviewNow() - prepStarted));
+			if (prepMs > 0) {
+				deadlineAt += prepMs;
+				investigationDeadline += prepMs;
+				workspace.deadlineAt = deadlineAt - REVIEW_POLICY.reserveMsForConsolidation;
+			}
 		}
 
 		events?.onStage?.('specialists');
+		if (controller.signal.aborted) throw new ReviewAbortedError('review aborted');
 		const finishedAtStart = finishedIds();
 		await runAssignmentPool(
 			items.filter((item) => !finishedAtStart.has(item.id)),
@@ -423,16 +488,13 @@ export async function runAdaptiveReview(
 		events?.onCandidates?.(candidates.filter((candidate) => candidate.valid).length);
 
 		// The orchestrator hears which specialists failed and may re-dispatch them alongside follow-ups.
+		// Failed specialists always rerun, adjusted for how they failed; the orchestrator says so in its conversation.
 		const retries = followUpsDone ? [] : failedAssignments(items, assignments);
 		for (const retry of retries) events?.onLog?.(`${retry.item.title} failed: ${retry.error}`, { assignmentId: retry.item.id, role: retry.item.role });
-		if (
-			!followUpsDone &&
-			(followUps.length > 0 || retries.length > 0) &&
-			canLaunchInvestigation(investigationDeadline, budget) &&
-			assignments.length < REVIEW_POLICY.maxInitialAssignments + REVIEW_POLICY.maxFollowUpAssignments + REVIEW_POLICY.maxRetryAssignments
-		) {
+		if (!followUpsDone && (followUps.length > 0 || retries.length > 0) && canLaunchInvestigation(investigationDeadline, budget)) {
+			if (retries.length) reportRetries(retries, events);
 			const extra = uniqueIds(
-				await selectFollowUps(followUps, retries, inventory, evidence, budget, investigationDeadline, controller.signal, events),
+				[...retries.map((retry) => retry.item), ...await selectFollowUps(followUps, inventory, evidence, budget, investigationDeadline, controller.signal, events)],
 				assignments.map((record) => record.id)
 			);
 			followUpsDone = true;
@@ -478,7 +540,13 @@ export async function runAdaptiveReview(
 		// A resumed review keeps the verdicts it already has.
 		const unverified = candidates.filter((candidate) => candidate.valid && !candidate.verification);
 		if (unverified.length) {
-			if (workspace) events?.onStage?.('verify');
+			events?.onStage?.('verify');
+			// Every finding is verified: make room in calls and time for all of them.
+			const toVerify = Math.min(unverified.length, REVIEW_POLICY.maxVerifications);
+			budget.limit = Math.max(budget.limit, budget.used + toVerify * REVIEW_POLICY.maxVerifierTurns + REVIEW_POLICY.reserveCallsForConsolidation);
+			deadlineAt = Math.max(deadlineAt, reviewNow() + Math.ceil(toVerify / REVIEW_POLICY.maxConcurrentVerifications) * REVIEW_POLICY.msPerVerificationWave + REVIEW_POLICY.reserveMsForConsolidation);
+			if (workspace) workspace.deadlineAt = deadlineAt - REVIEW_POLICY.reserveMsForConsolidation;
+			publishBudget();
 			await verifyCandidates(unverified, {
 				evidence,
 				budget,
@@ -594,11 +662,19 @@ export async function runAdaptiveReview(
 			return { ...failReview(assignments, coverage, budget, err.message, 'failed'), failure: err.failure };
 		}
 		if (err instanceof ReviewAbortedError || controller.signal.aborted) {
-			return failReview(assignments, coverage, budget, 'Review analysis deadline reached', 'failed');
+			// The developer cancelled: the pipeline reports that; nothing here is kept.
+			if (input.signal?.aborted) return failReview(assignments, coverage, budget, 'Review cancelled.', 'failed');
+			// Out of time. With a plan, the review still finishes: every candidate the
+			// specialists reported stands, unconsolidated, instead of being thrown away.
+			const minutes = Math.round(REVIEW_POLICY.analysisDeadlineMs / 60_000);
+			if (plan) {
+				return finishOutOfTime({ plan, planningDegraded, assignments, candidates, coverage, recommended, minutes, task });
+			}
+			return failReview(assignments, coverage, budget, `The review ran out of time (${minutes} minutes) before planning finished.`, 'failed');
 		}
 		return failReview(assignments, coverage, budget, err instanceof Error ? err.message : 'Review failed', 'failed');
 	} finally {
-		clearTimeout(timeout);
+		clearInterval(timeout);
 		input.signal?.removeEventListener('abort', onAbort);
 		if (workspace) {
 			// Stop an install still running after an early exit, then clean up.
@@ -619,6 +695,48 @@ function keepUnconsolidated(
 ): Finding[] {
 	task('consolidation', 'Consolidating findings', 'done', `Kept ${valid.length} finding${valid.length === 1 ? '' : 's'} as reported (${reason})`, { kind: 'consolidation' });
 	return valid.map((candidate) => ({ ...candidate }));
+}
+
+/**
+ * The clock ran out mid-review. Specialists still running are closed out, and
+ * the valid candidates found so far become the findings, as reported.
+ */
+function finishOutOfTime(input: {
+	plan: PlannerOutput;
+	planningDegraded: boolean;
+	assignments: ReviewAssignment[];
+	candidates: CandidateFinding[];
+	coverage: CoverageLedger;
+	recommended: Set<string>;
+	minutes: number;
+	task: TaskFn;
+}): AdaptiveReviewResult {
+	const reason = `the review ran out of time after ${input.minutes} minutes`;
+	const settled = settleAssignments(input.assignments, 'Not finished: the review ran out of time');
+	const valid = input.candidates.filter((candidate) => candidate.valid);
+	const confirmed = keepUnconsolidated(valid, reason, input.task);
+	const summary = buildSummary({
+		plan: input.plan,
+		assignments: settled,
+		confirmed,
+		unconfirmed: [],
+		outcome: 'complete',
+		planningDegraded: input.planningDegraded,
+		checks: [...input.recommended],
+		coverage: input.coverage.summary()
+	});
+	return {
+		findings: confirmed,
+		unconfirmed: [],
+		summary: `${summary} The review ran out of time after ${input.minutes} minutes; findings were kept as the specialists reported them.`,
+		outcome: 'complete',
+		recommendedChecks: [...input.recommended],
+		coverage: input.coverage.summary(),
+		coverageGaps: input.coverage.gaps(),
+		assignments: settled,
+		planningDegraded: input.planningDegraded,
+		error: `Ran out of time after ${input.minutes} minutes`
+	};
 }
 
 function failReview(
@@ -694,28 +812,61 @@ async function runPlanner(input: {
 }
 
 interface FailedAssignment {
-	/** The failed assignment, re-scoped under a `retry-` id. */
+	/** The failed assignment, re-scoped under a `retry-` id (two when its scope was split). */
 	item: PlannerAssignment;
 	error: string;
+	/** What the retry does differently, in a few words, for the orchestrator's note. */
+	remedy: string;
 }
 
-/** First-pass assignments that ended in an error, as retry candidates for the orchestrator. */
+/** Failures that would repeat exactly: a cancelled review, a request the endpoint rejects outright. */
+const UNRETRYABLE = /cancel|aborted|unauthori[sz]ed|forbidden|invalid api key|\bLLM 4(?:0[0-9]|1[0-9])\b/i;
+/** Failures from doing too much in one go: the retry gets half the scope each. */
+const TOO_BIG = /truncated|output limit|context length|maximum context|too many tokens|prompt is too long|deadline|ran out of time/i;
+
+/** How the retry should behave differently, given how the first attempt failed. */
+export function retryAdvice(error: string): { advice: string; remedy: string } {
+	if (/only a message|expected array|schema|not valid JSON|no JSON|neither a retrieval/i.test(error)) {
+		return { remedy: 'with a strict reply format', advice: 'The first attempt failed because its replies had no "actions" and no final result. Every reply must be either {"message", "actions": [...]} to read code, or the final result JSON with "findings" and "examinedHunks".' };
+	}
+	if (/final turn requested retrieval/i.test(error)) {
+		return { remedy: 'finishing on its last turn', advice: 'The first attempt asked for more code on its final turn. When told it is the final turn, finish with the result.' };
+	}
+	if (TOO_BIG.test(error)) {
+		return { remedy: 'split in two', advice: 'The first attempt ran out of room or time on a larger scope. Keep replies short and read only what the questions need.' };
+	}
+	return { remedy: 'as is', advice: '' };
+}
+
+/**
+ * First-pass assignments that ended in an error, as retries. Every retryable
+ * failure is rerun, told how the first attempt failed; one that failed from
+ * size is split into two halves of its hunks.
+ */
 export function failedAssignments(items: PlannerAssignment[], records: ReviewAssignment[]): FailedAssignment[] {
 	return items.flatMap((item) => {
 		const record = records.find((entry) => entry.id === item.id);
 		if (record?.status !== 'error' || item.id.startsWith('retry-')) return [];
 		const error = (record.currentOperation || 'Specialist failed').slice(0, 400);
-		return [{
-			// Planner ids and reasons have length limits; keep the retry inside them.
-			item: { ...item, id: `retry-${item.id}`.slice(0, 80), reason: `Retry of "${item.title}", whose first attempt failed: ${error}`.slice(0, 1000) },
-			error
-		}];
+		if (UNRETRYABLE.test(error) && !TOO_BIG.test(error)) return [];
+		const { advice, remedy } = retryAdvice(error);
+		// Planner ids and reasons have length limits; keep the retry inside them.
+		const retry = (scope: PlannerAssignment['scope'], suffix = '') => ({
+			item: { ...item, id: `retry-${item.id}${suffix}`.slice(0, 80), scope, reason: `${item.reason}\n\nRetry: the first attempt failed (${error}). ${advice}`.slice(0, 1000) },
+			error,
+			remedy
+		});
+		const hunks = item.scope.flatMap((entry) => entry.hunkIds.map((hunkId) => ({ path: entry.path, hunkId })));
+		if (!TOO_BIG.test(error) || hunks.length < 2) return [retry(item.scope)];
+		const half = Math.ceil(hunks.length / 2);
+		const regroup = (part: typeof hunks) => [...new Set(part.map((hunk) => hunk.path))].map((path) => ({ path, hunkIds: part.filter((hunk) => hunk.path === path).map((hunk) => hunk.hunkId) }));
+		return [retry(regroup(hunks.slice(0, half)), '-a'), retry(regroup(hunks.slice(half)), '-b')];
 	}).slice(0, REVIEW_POLICY.maxRetryAssignments);
 }
 
+/** Follow-ups specialists asked for, narrowed by the orchestrator. */
 async function selectFollowUps(
 	requests: PlannerAssignment[],
-	retries: FailedAssignment[],
 	inventory: ReviewInventory,
 	evidence: EvidenceStore,
 	budget: ModelBudget,
@@ -741,40 +892,29 @@ async function selectFollowUps(
 		unique.push({ ...sanitized.assignments[0], id: request.id.startsWith('follow-') ? request.id : `follow-${request.id}` });
 		if (unique.length >= REVIEW_POLICY.maxFollowUpAssignments) break;
 	}
-	const retryIds = new Set(retries.map((retry) => retry.item.id));
-	// Retries don't eat into the follow-up allowance, and follow-ups don't eat into theirs.
-	// A pass called only for retries dispatches nothing else.
-	const cap = (picked: PlannerAssignment[]) => [
-		...picked.filter((item) => retryIds.has(item.id)).slice(0, REVIEW_POLICY.maxRetryAssignments),
-		...(unique.length ? picked.filter((item) => !retryIds.has(item.id)).slice(0, REVIEW_POLICY.maxFollowUpAssignments) : [])
-	];
-	if (unique.length === 0 && retries.length === 0) return [];
-	// Retries are the orchestrator's call; without one, only the requested follow-ups run.
-	if (!canLaunchInvestigation(deadlineAt, budget)) return cap(unique);
+	if (unique.length === 0) return [];
+	if (!canLaunchInvestigation(deadlineAt, budget)) return unique;
 	const cfg = configForOrchestrator();
-	const failedList = retries.length
-		? `\n\nSpecialists that failed (the error came from the model call or the specialist's output, not from the code under review):\n${retries.map((retry) => `- ${retry.item.id} (${retry.item.role}, "${retry.item.title}"): ${retry.error}`).join('\n')}\n\nTo retry one, include its assignment unchanged (same id, role and scope):\n${JSON.stringify(retries.map((retry) => retry.item), null, 2)}\nSkip a retry when the error would simply repeat (rejected credentials, a context window too small for the scope).`
-		: '';
 	const result = await runJsonAgent({
 		label: 'follow-up planning',
 		getDiscussion: () => events?.getDiscussion?.() ?? '',
 		onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: cfg.model }),
-		system: withGuidelines(plannerSystemPrompt() + `\nThis is a follow-up pass. Dispatch at most ${REVIEW_POLICY.maxFollowUpAssignments} narrowly scoped investigations, plus retries of failed specialists worth another attempt.`, inventory.guidelines),
-		user: `Pending follow-up requests:\n${unique.length ? JSON.stringify(unique, null, 2) : '(none)'}${failedList}\n\nSelect at most ${REVIEW_POLICY.maxFollowUpAssignments} follow-ups and any retries. Return planner JSON.`,
+		system: withGuidelines(plannerSystemPrompt() + `\nThis is a follow-up pass. Dispatch at most ${REVIEW_POLICY.maxFollowUpAssignments} narrowly scoped investigations.`, inventory.guidelines),
+		user: `Pending follow-up requests:\n${JSON.stringify(unique, null, 2)}\n\nSelect at most ${REVIEW_POLICY.maxFollowUpAssignments} follow-ups. Return planner JSON.`,
 		config: cfg,
 		budget,
 		evidence,
 		maxTurns: REVIEW_POLICY.maxPlannerTurns,
 		signal,
 		deadlineAt,
-		parse: (raw) => sanitizePlannerOutput(raw, inventory, true, REVIEW_POLICY.maxFollowUpAssignments + REVIEW_POLICY.maxRetryAssignments),
+		parse: (raw) => sanitizePlannerOutput(raw, inventory, true, REVIEW_POLICY.maxFollowUpAssignments),
 		validationError: plannerValidationError,
 		onLog: (message) => events?.onLog?.(message),
 		onReasoning: (reasoning) =>
 			events?.onReasoning?.({ ...reasoning, role: 'correctness', model: cfg.model }),
 		onTool: (tool) => events?.onTool?.({ ...tool, role: 'correctness' })
 	});
-	return cap(result.value?.assignments ?? unique);
+	return (result.value?.assignments ?? unique).slice(0, REVIEW_POLICY.maxFollowUpAssignments);
 }
 
 interface PoolContext {
@@ -833,6 +973,7 @@ async function runOneAssignment(
 ): Promise<void> {
 	const cfg = configForRole(item.role);
 	const started = new Date().toISOString();
+	let runningSince: string | undefined;
 	updateAssignment(records, item.id, {
 		status: 'queued',
 		model: cfg.model,
@@ -876,14 +1017,18 @@ async function runOneAssignment(
 			deadlineAt: ctx.deadlineAt,
 			parse: parseSpecialistOutput,
 			validationError: specialistValidationError,
+			checkFinal: prematureSpecialistFinal,
+			responseSchema: (finalTurn) => specialistResponseSchema(ctx.exec, finalTurn),
+			timeLimit: { finalTurnAfterMs: REVIEW_POLICY.specialistFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.specialistMaxMs },
 			finalExample: '{"message":"No issues in the queue split.","findings":[],"examinedHunks":[],"coverageGaps":[],"blockers":[],"followUp":null,"recommendedChecks":[]}',
 			onProgress: (state, elapsedMs, detail) => {
 				const status = state === 'queued' ? 'waiting' : 'running';
+				// The specialist's clock starts when a model first works for it, not when it was queued.
+				runningSince ??= status === 'running' ? new Date().toISOString() : undefined;
 				updateAssignment(records, item.id, {
 					status,
 					currentOperation: detail,
-					startedAt: started,
-					elapsedMs: Date.now() - Date.parse(started),
+					...(runningSince ? { startedAt: runningSince, elapsedMs: Date.now() - Date.parse(runningSince) } : {}),
 					model: cfg.model
 				});
 				ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
@@ -915,9 +1060,11 @@ async function runOneAssignment(
 			}
 			updateAssignment(records, item.id, {
 				status: 'error',
+				candidateCount: 0,
 				currentOperation: result.error ?? 'Specialist failed',
 				completedAt: new Date().toISOString()
 			});
+			reportSpecialistFailure(ctx, item, cfg.model, result.error ?? 'Specialist failed');
 			ctx.task(taskId, item.title, 'error', result.error ?? 'Specialist failed', {
 				kind: 'assignment',
 				assignmentId: item.id,
@@ -998,9 +1145,11 @@ async function runOneAssignment(
 		if (err instanceof ReviewAbortedError) throw err;
 		updateAssignment(records, item.id, {
 			status: 'error',
+			candidateCount: 0,
 			currentOperation: err instanceof Error ? err.message : 'Specialist failed',
 			completedAt: new Date().toISOString()
 		});
+		reportSpecialistFailure(ctx, item, cfg.model, err instanceof Error ? err.message : 'Specialist failed');
 		ctx.task(taskId, item.title, 'error', err instanceof Error ? err.message : 'Specialist failed', {
 			kind: 'assignment',
 			assignmentId: item.id,
@@ -1008,6 +1157,34 @@ async function runOneAssignment(
 		});
 		ctx.events?.onAssignment?.(records.find((record) => record.id === item.id)!);
 	}
+}
+
+/** The orchestrator's note on what failed and how each retry differs. */
+function reportRetries(retries: FailedAssignment[], events: HarnessEvents | undefined): void {
+	const byOriginal = new Map<string, FailedAssignment[]>();
+	for (const retry of retries) {
+		const key = retry.item.id.replace(/-[ab]$/, '');
+		byOriginal.set(key, [...(byOriginal.get(key) ?? []), retry]);
+	}
+	const lines = [...byOriginal.values()].map((parts) => `- **${parts[0].item.title}**: ${parts[0].error.replace(/\s+/g, ' ').slice(0, 140)}. Rerunning ${parts.length > 1 ? 'split in two' : parts[0].remedy}.`);
+	events?.onMessage?.({
+		id: `message_retries_${retries[0].item.id}`,
+		text: `${byOriginal.size === 1 ? 'One specialist' : `${byOriginal.size} specialists`} failed, so I'm running ${byOriginal.size === 1 ? 'it' : 'them'} again:\n\n${lines.join('\n')}`,
+		status: 'done',
+		assignmentId: ORCHESTRATOR_ID,
+		model: configForOrchestrator().model
+	});
+}
+
+/** A specialist that stopped without an answer still reports: its conversation says what happened and that it has no findings. */
+function reportSpecialistFailure(ctx: PoolContext, item: PlannerAssignment, model: string, reason: string): void {
+	ctx.events?.onMessage?.({
+		id: `message_failed_${item.id}`,
+		text: `**${item.title}** stopped before finishing: ${reason}\n\nFindings: none reported. The hunks assigned to this specialist are marked partially covered.`,
+		status: 'done',
+		assignmentId: item.id,
+		model
+	});
 }
 
 /**
@@ -1181,14 +1358,26 @@ async function plannerExecNotes(workspace: ExecWorkspace): Promise<string> {
 	].join('\n');
 }
 
-/** The planner's checks, run once on the PR head; every specialist sees the results. */
+/**
+ * The planner's checks, run once on the PR head; every specialist sees the
+ * results. Bounded per check and as a set, so a slow suite can't eat the time
+ * the specialists need.
+ */
 async function runBaselineChecks(commands: string[], evidence: EvidenceStore, signal: AbortSignal, events: HarnessEvents | undefined, task: TaskFn): Promise<BaselineResult[]> {
 	const results: BaselineResult[] = [];
+	const started = reviewNow();
+	let skipped = 0;
 	for (const [index, command] of commands.entries()) {
 		if (signal.aborted) break;
+		const left = REVIEW_POLICY.maxBaselineChecksMs - (reviewNow() - started);
+		if (left < 10_000) {
+			skipped = commands.length - index;
+			events?.onLog?.(`Skipped ${skipped} baseline check${skipped === 1 ? '' : 's'}: the checks already took ${Math.round(REVIEW_POLICY.maxBaselineChecksMs / 60_000)} minutes`);
+			break;
+		}
 		task('checks', 'Run checks', 'running', `Running ${command} (${index + 1}/${commands.length})`, { kind: 'checks' });
 		const [result] = await evidence.executeRound(
-			[{ action: 'run', command, timeoutSec: REVIEW_POLICY.maxRunTimeoutMs / 1000 }],
+			[{ action: 'run', command, timeoutSec: Math.floor(Math.min(REVIEW_POLICY.baselineCheckTimeoutMs, left) / 1000) }],
 			signal,
 			(tool) => events?.onTool?.({ ...tool, role: 'correctness' })
 		);
@@ -1197,7 +1386,8 @@ async function runBaselineChecks(commands: string[], evidence: EvidenceStore, si
 	}
 	if (commands.length) {
 		const failed = results.filter((result) => result.exitCode !== 0).length;
-		task('checks', 'Run checks', failed ? 'partial' : 'done', failed ? `${failed} of ${results.length} checks failed on the PR head` : `${results.length} check${results.length === 1 ? '' : 's'} passed`, { kind: 'checks' });
+		const tail = skipped ? ` · ${skipped} not run (out of time)` : '';
+		task('checks', 'Run checks', failed || skipped ? 'partial' : 'done', (failed ? `${failed} of ${results.length} checks failed on the PR head` : `${results.length} check${results.length === 1 ? '' : 's'} passed`) + tail, { kind: 'checks' });
 	}
 	return results;
 }
@@ -1241,10 +1431,6 @@ async function verifyCandidates(candidates: CandidateFinding[], ctx: {
 	/** Called after each verdict, to save a checkpoint. */
 	onVerified?: () => void;
 }): Promise<void> {
-	if (ctx.unavailable) {
-		for (const candidate of candidates) candidate.verification = { status: 'unverified', reason: `Not run: ${ctx.unavailable}` };
-		return;
-	}
 	const queue = [...candidates].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3));
 	for (const skipped of queue.splice(REVIEW_POLICY.maxVerifications)) {
 		skipped.verification = { status: 'unverified', reason: `Not run: this review already verified ${REVIEW_POLICY.maxVerifications} findings.` };
@@ -1271,13 +1457,17 @@ async function verifyOne(candidate: CandidateFinding, ctx: Parameters<typeof ver
 	const taskId = `verify:${candidate.candidateId}`;
 	const label = `Verify: ${candidate.title ?? candidate.file}`;
 	const meta = { kind: 'verification' as const, agent: role, model: cfg.model, assignmentId: candidate.assignmentId, files: [candidate.file] };
-	ctx.task(taskId, label, 'running', 'Reproducing the finding', meta);
+	const exec = !ctx.unavailable;
+	ctx.task(taskId, label, 'running', exec ? 'Reproducing the finding' : 'Tracing the finding through the code', meta);
 	try {
 		const result = await runJsonAgent({
 			label: `verify ${candidate.candidateId}`,
-			system: verifierSystemPrompt(),
+			system: verifierSystemPrompt(ctx.unavailable),
 			user: verifierUserPrompt(candidate, ctx.evidence, ctx.setupNotes),
-			actionExamples: EXEC_EXAMPLES,
+			actionExamples: exec ? EXEC_EXAMPLES : undefined,
+			checkFinal: exec ? verifierRanNothing : undefined,
+			timeLimit: { finalTurnAfterMs: REVIEW_POLICY.verifierFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.verifierMaxMs },
+			responseSchema: (finalTurn) => verifierResponseSchema(exec, finalTurn),
 			finalExample: '{"message":"The repro fails on an empty bucket.","verdict":"confirmed","reason":"`bun test src/recoder-repro.test.ts` fails: refill() returns NaN for an empty bucket.","evidenceIds":["ev_7"]}',
 			config: cfg,
 			budget: ctx.budget,
@@ -1291,7 +1481,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: Parameters<typeof ver
 			// Verification is shown in the conversation of the specialist who raised the finding.
 			onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: candidate.assignmentId ?? '__pipeline', model: cfg.model }),
 			onProgress: (state, elapsedMs, detail) =>
-				ctx.task(taskId, label, state === 'queued' ? 'waiting' : 'running', state === 'retrieval' ? 'Running code' : detail, { ...meta, elapsedMs }),
+				ctx.task(taskId, label, state === 'queued' ? 'waiting' : 'running', state === 'retrieval' ? (exec ? 'Running code' : 'Reading code') : detail, { ...meta, elapsedMs }),
 			onLog: (message) => ctx.events?.onLog?.(message, { assignmentId: candidate.assignmentId, role }),
 			onReasoning: (reasoning) => ctx.events?.onReasoning?.({ ...reasoning, assignmentId: candidate.assignmentId, role, model: cfg.model }),
 			onTool: (tool) => ctx.events?.onTool?.({ ...tool, assignmentId: candidate.assignmentId, role })
@@ -1314,7 +1504,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: Parameters<typeof ver
 			const proof = result.value.evidenceIds.filter((id) => ctx.evidence.get(id)?.kind === 'run');
 			candidate.evidenceIds = [...new Set([...proof, ...(candidate.evidenceIds ?? [])])];
 		}
-		ctx.task(taskId, label, 'done', settled.status === 'verified' ? 'Verified by a run' : 'Could not prove by running code', meta);
+		ctx.task(taskId, label, 'done', settled.status !== 'verified' ? 'Could not prove it' : settled.method === 'run' ? 'Verified by a run' : 'Traced through the code', meta);
 	} catch (err) {
 		if (err instanceof ModelBlockedError || err instanceof ReviewAbortedError) throw err;
 		candidate.verification = { status: 'unverified', reason: `Not verified: ${err instanceof Error ? err.message : 'verification failed'}.` };
@@ -1322,12 +1512,19 @@ async function verifyOne(candidate: CandidateFinding, ctx: Parameters<typeof ver
 	}
 }
 
+/** Specialists that ended without a result, counting a retried one by its retry. */
+export function unfinishedAssignments(records: ReviewAssignment[]): ReviewAssignment[] {
+	const retried = (record: ReviewAssignment) => records.some((other) => other.id !== record.id && other.id.startsWith(`retry-${record.id}`));
+	return records.filter((record) => record.status === 'error' && !retried(record));
+}
+
 /** "2 verified by running code, 1 unverified." — empty when nothing was checked. */
 function verifiedSummary(findings: Finding[]): string {
-	const verified = findings.filter((finding) => finding.verification?.status === 'verified').length;
+	const verified = findings.filter((finding) => finding.verification?.status === 'verified' && finding.verification.method !== 'trace').length;
+	const traced = findings.filter((finding) => finding.verification?.method === 'trace').length;
 	const unverified = findings.filter((finding) => finding.verification?.status === 'unverified').length;
-	if (!verified && !unverified) return '';
-	return [verified ? `${verified} verified by running code` : '', unverified ? `${unverified} unverified` : ''].filter(Boolean).join(', ') + '.';
+	if (!verified && !traced && !unverified) return '';
+	return [verified ? `${verified} verified by running code` : '', traced ? `${traced} traced through the code` : '', unverified ? `${unverified} unverified` : ''].filter(Boolean).join(', ') + '.';
 }
 
 function buildSummary(input: {
@@ -1340,9 +1537,9 @@ function buildSummary(input: {
 	checks: string[];
 	coverage: CoverageSummary;
 }): string {
-	// A failed specialist whose retry finished doesn't count; partial coverage is reported by the last line.
-	const retried = new Set(input.assignments.filter((assignment) => FINISHED.has(assignment.status)).map((assignment) => assignment.id.replace(/^retry-/, '')));
-	const incomplete = input.assignments.filter((assignment) => (assignment.status === 'error' || assignment.status === 'skipped') && !retried.has(assignment.id));
+	// One failure per specialist: a retry stands in for the attempt it replaced. Specialists the
+	// developer chose not to run aren't failures; partial coverage is reported by the last line.
+	const incomplete = unfinishedAssignments(input.assignments);
 	const bits = [
 		`${input.outcome === 'complete' ? 'Review complete' : 'Review failed'}. ${input.confirmed.length} confirmed finding${input.confirmed.length === 1 ? '' : 's'}.`,
 		verifiedSummary(input.confirmed),

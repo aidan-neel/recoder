@@ -259,6 +259,54 @@ export function boundOutput(text: string, max: number): { text: string; truncate
 	};
 }
 
+/** How long output may keep arriving after the command exits. */
+const PIPE_DRAIN_MS = 1_500;
+/** Raw output kept from each pipe: the head and a rolling tail, so a flood can't exhaust memory. */
+const PIPE_KEEP_CHARS = 64_000;
+
+/**
+ * Read a pipe in the background. `stop()` cancels a read that is still waiting
+ * (someone outside the command holds the pipe) and returns what arrived.
+ */
+function collect(stream: ReadableStream<Uint8Array>): { done: Promise<void>; stop: () => Promise<string> } {
+	const reader = stream.getReader();
+	const decoder = new TextDecoder();
+	let head = '';
+	let tail = '';
+	let omitted = 0;
+	let finished = false;
+	const add = (chunk: string) => {
+		if (head.length < PIPE_KEEP_CHARS) {
+			const room = PIPE_KEEP_CHARS - head.length;
+			head += chunk.slice(0, room);
+			chunk = chunk.slice(room);
+		}
+		tail += chunk;
+		if (tail.length > PIPE_KEEP_CHARS) {
+			omitted += tail.length - PIPE_KEEP_CHARS;
+			tail = tail.slice(-PIPE_KEEP_CHARS);
+		}
+	};
+	const done = (async () => {
+		try {
+			for (;;) {
+				const { done: end, value } = await reader.read();
+				if (end) break;
+				add(decoder.decode(value, { stream: true }));
+			}
+			add(decoder.decode());
+		} catch { /* cancelled or the pipe broke: keep what arrived */ }
+		finally { finished = true; }
+	})();
+	return {
+		done,
+		stop: async () => {
+			if (!finished) await Promise.race([reader.cancel().catch(() => {}), Bun.sleep(500)]);
+			return omitted ? `${head}\n…[${omitted} characters omitted]…\n${tail}` : head + tail;
+		}
+	};
+}
+
 export async function runSandboxed(layout: SandboxLayout, command: string, opts: RunOptions): Promise<RunResult> {
 	mkdirSync(layout.cacheDir, { recursive: true });
 	if (!statSync(layout.checkout).isDirectory()) throw new Error('review checkout is missing');
@@ -294,12 +342,18 @@ export async function runSandboxed(layout: SandboxLayout, command: string, opts:
 		kill();
 	}, opts.timeoutMs);
 	opts.signal?.addEventListener('abort', kill, { once: true });
+	const out = collect(proc.stdout);
+	const err = collect(proc.stderr);
 	try {
-		const [stdout, stderr, code] = await Promise.all([
-			new Response(proc.stdout).text(),
-			new Response(proc.stderr).text(),
-			proc.exited
-		]);
+		const code = await proc.exited;
+		// A child that left the command's process group (setsid, a daemon, a test that starts a
+		// server) can hold the pipes open forever after the command itself is gone. Give them a
+		// moment to drain, then stop reading and clean up whatever the command left behind.
+		await Promise.race([Promise.all([out.done, err.done]), Bun.sleep(PIPE_DRAIN_MS)]);
+		if (darwin) {
+			try { process.kill(-proc.pid, 'SIGKILL'); } catch { /* the group is already gone */ }
+		}
+		const [stdout, stderr] = await Promise.all([out.stop(), err.stop()]);
 		const combined = stderr.trim() ? `${stdout}${stdout.endsWith('\n') || !stdout ? '' : '\n'}${stderr}` : stdout;
 		const bounded = boundOutput(combined, 20_000);
 		return {

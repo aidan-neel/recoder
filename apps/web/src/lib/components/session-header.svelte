@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import Ellipsis from '@lucide/svelte/icons/ellipsis';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
+	import * as HoverCard from '@sivir-ui/svelte/components/hover-card';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import { carryPill, keepPillAligned } from '$lib/tab-pill';
@@ -13,6 +14,8 @@
 		branch?: string | null;
 		repo?: string | null;
 		prLabel?: string | null;
+		/** The pull request on its host; the PR number links there. */
+		prUrl?: string | null;
 		/** Off when the step row below carries the divider. */
 		bordered?: boolean;
 		files?: number | null;
@@ -30,12 +33,15 @@
 	}
 
 	let {
-		title, branch = null, repo = null, prLabel = null, bordered = true, files = null, additions = null, deletions = null,
+		title, branch = null, repo = null, prLabel = null, prUrl = null, bordered = true, files = null, additions = null, deletions = null,
 		view, onView = null, diffDisabled = false, onFiles = null, filesLabel = 'Open diff', menu, toolbar
 	}: Props = $props();
 
-	/** Branch, repo and diffstat, shown in the title's tooltip. */
-	const tooltip = $derived([title, [repo, prLabel].filter(Boolean).join(' '), branch, files !== null ? `${files} ${files === 1 ? 'file' : 'files'} +${additions ?? 0} −${deletions ?? 0}` : null].filter(Boolean).join(' · '));
+	/** The PR number opens the pull request on its host in a new tab (the trigger forwards these to its link). */
+	const prLinkAttrs = $derived<Record<string, string>>(prUrl ? { target: '_blank', rel: 'noreferrer' } : {});
+
+	/** "ai/ark #209": the repo, unless the caller only knows the PR title. */
+	const source = $derived([repo && repo !== title ? repo : null, prLabel].filter(Boolean).join(' '));
 
 	/**
 	 * Sivir Tabs keeps its own value after a click. The conversation header stays
@@ -56,10 +62,23 @@
 	}
 </script>
 
-<!-- Same bar in every view: title far left · view tabs centred · ⋯ and the
-     view's actions (toolbar) far right. Branch/repo/diffstat live in the title's tooltip. -->
+<!-- Same bar in every view: PR number (hover card) and view tabs far left · ⋯ and the
+     view's actions (toolbar) far right. The title, repo, branch and diffstat live in the hover card. -->
 <header class="session-header" data-bordered={bordered || undefined} data-merged="">
-	<Typography.Title level={1} class="session-title" title={tooltip}>{title}</Typography.Title>
+	<HoverCard.Root>
+		<HoverCard.Trigger class="session-pr" href={prUrl ?? undefined} {...prLinkAttrs}>{prLabel || repo || 'Review'}</HoverCard.Trigger>
+		<HoverCard.Content side="bottom" align="start" class="session-pr-card">
+			<HoverCard.Title class="session-pr-title">{title}</HoverCard.Title>
+			{#if source}<Typography.Metadata class="session-pr-meta">{source}</Typography.Metadata>{/if}
+			{#if branch || files !== null}
+				<Typography.Metadata class="session-pr-meta">
+					{#if branch}<span class="truncate">{branch}</span>{/if}
+					{#if branch && files !== null}<span aria-hidden="true">·</span>{/if}
+					{#if files !== null}<span class="shrink-0">{files} {files === 1 ? 'file' : 'files'} <span class="text-success">+{additions ?? 0}</span> <span class="text-danger">−{deletions ?? 0}</span></span>{/if}
+				</Typography.Metadata>
+			{/if}
+		</HoverCard.Content>
+	</HoverCard.Root>
 	{#if onView}
 		<Tabs.Root bind:value={current} onValueChange={choose} variant="segmented" class="view-switch">
 			<Tabs.List {...{ 'aria-label': 'Session view' }} {@attach keepPillAligned} {@attach (list: HTMLElement) => carryPill(list, 'session-view', view)}>

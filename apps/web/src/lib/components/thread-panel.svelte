@@ -9,6 +9,7 @@
 	import * as Conversation from '@sivir-ui/svelte/components/conversation';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
+	import ModelMarkdown from './model-markdown.svelte';
 	import * as Message from '@sivir-ui/svelte/components/message';
 	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
@@ -29,7 +30,10 @@
 		'testing',
 		'errors',
 		'concurrency',
-		'api'
+		'api',
+		'impact',
+		'frontend',
+		'data'
 	];
 
 	let active = $state(BASE_PARTICIPANTS[0]);
@@ -243,7 +247,7 @@
 					<span class="truncate">{finding.file}:{finding.startLine}</span>
 				</Typography.Metadata>
 				<div class="mt-2 min-w-0 text-sm">
-					<Markdown content={finding.body} class="text-sm" />
+					<ModelMarkdown content={finding.body} class="text-sm" />
 				</div>
 				{#if finding.status !== 'open'}
 					<div class="mt-2 flex items-center gap-2">
@@ -282,7 +286,7 @@
 									{#if message.streaming}
 										<ResponseStream textStream={message.body} streaming class="font-normal" />
 									{:else}
-										<Markdown content={message.body} />
+										<ModelMarkdown content={message.body} />
 									{/if}
 								</Message.Content>
 						</Message.Root>

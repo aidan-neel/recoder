@@ -247,6 +247,18 @@ export interface ReviewGuidelinesUsed {
 	hash: string;
 }
 
+/**
+ * A plan with more specialists than run without asking waits for the
+ * developer: run all of them, or only the first `limit` by priority.
+ */
+export interface ReviewPlanApproval {
+	status: 'pending' | 'all' | 'limited';
+	/** Specialists the plan needs to read every changed hunk. */
+	requested: number;
+	/** How many run without asking. */
+	limit: number;
+}
+
 export interface ReviewProgress {
 	id: string;
 	sequence: number;
@@ -274,6 +286,8 @@ export interface ReviewProgress {
 	guidelines?: ReviewGuidelinesUsed;
 	/** Held by the developer; model calls wait until resumed. */
 	paused?: boolean;
+	/** Set when the plan needed more specialists than run without asking. */
+	approval?: ReviewPlanApproval;
 }
 
 export function emptyReviewProgress(id: string): ReviewProgress {

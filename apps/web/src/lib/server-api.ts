@@ -69,6 +69,34 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 	return (await res.json()) as T;
 }
 
+/**
+ * Each review's last diff and its ETag. Revisiting a review shows the diff at
+ * once, and a poll that gets 304 hands back the same array, so nothing re-renders.
+ */
+const reviewFiles = new Map<string, { etag: string; files: FileDiff[] }>();
+
+/** The last diff loaded for this review in this tab, if any. */
+export function cachedReviewFiles(id: string): FileDiff[] | null {
+	return reviewFiles.get(id)?.files ?? null;
+}
+
+async function getReviewFiles(id: string, signal?: AbortSignal): Promise<FileDiff[]> {
+	const cached = reviewFiles.get(id);
+	const res = await fetch(`${base}/api/reviews/${id}/files`, {
+		signal,
+		headers: cached ? { 'if-none-match': cached.etag } : undefined
+	});
+	if (res.status === 304 && cached) return cached.files;
+	if (!res.ok) {
+		const body = (await res.json().catch(() => null)) as { error?: string } | null;
+		throw new ApiError(body?.error ?? `API ${res.status}`);
+	}
+	const files = (await res.json()) as FileDiff[];
+	const etag = res.headers.get('etag');
+	if (etag) reviewFiles.set(id, { etag, files });
+	return files;
+}
+
 /** Read a `data: {...}` server-sent event stream, one parsed payload per event. */
 async function readSse(res: Response, onEvent: (data: unknown) => void): Promise<void> {
 	if (!res.ok || !res.body) {
@@ -125,7 +153,7 @@ export const serverApi = {
 	stopReviewMessage: (id: string, assignmentId: string) =>
 		req<{ stopped: boolean }>(`/api/reviews/${id}/chat/stop`, { method: 'POST', body: JSON.stringify({ assignmentId }) }),
 	getReviewMetrics: (id: string, signal?: AbortSignal) => req<ReviewMetrics | null>(`/api/reviews/${id}/metrics`, { signal }),
-	getReviewFiles: (id: string, signal?: AbortSignal) => req<FileDiff[]>(`/api/reviews/${id}/files`, { signal }),
+	getReviewFiles,
 	discuss: (reviewId: string, input: DiscussRequest) =>
 		req<DiscussResponse>(`/api/reviews/${reviewId}/discuss`, {
 			method: 'POST',
@@ -231,6 +259,7 @@ export const serverApi = {
 	cancelReview: (id: string) => req<{ cancelled: boolean }>(`/api/reviews/${id}/cancel`, { method: 'POST' }),
 	pauseReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/pause`, { method: 'POST' }),
 	resumeReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/resume`, { method: 'POST' }),
+	approvePlan: (id: string, choice: 'all' | 'limited') => req<{ choice: string }>(`/api/reviews/${id}/approve-plan`, { method: 'POST', body: JSON.stringify({ choice }) }),
 	deleteReview: (id: string) =>
 		req<{ deleted: boolean }>(`/api/reviews/${id}`, { method: 'DELETE' }),
 	authStatus: () => req<{ github: ProviderAuth; gitlab: ProviderAuth }>('/api/auth/status'),

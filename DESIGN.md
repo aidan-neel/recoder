@@ -4,7 +4,7 @@ The source of truth for Recoder's UI.
 
 ## Principles
 - **Warm near-black surfaces, flat by default.** Depth comes from 1px rings and a few surface steps. Shadows are for floating things only (menus, modals, toasts, the composer).
-- **Two voices.** The UI speaks in Geist sans. The AI speaks in Lora serif: summaries, findings, replies and the Home brief. Never mix them in one block.
+- **Two voices.** The UI speaks in Cal Sans (Geist as fallback). The AI speaks in Lora serif in summaries, findings and the Home brief; chat replies use the UI sans. Never mix them in one block.
 - **Quiet chrome.** Controls stay transparent until they're hovered. There is one cream primary action per region.
 - **No brand mark on AI output.** The serif alone tells you who is speaking.
 
@@ -72,7 +72,7 @@ Vivid, not pastel: chroma sits at 70–95% of the sRGB maximum for each hue (OKL
 ## Type
 | Role | Font | Size / line-height |
 |---|---|---|
-| UI | Geist 400/500 | 12–14.5px. Body 13.5, controls 12.5–13, titles 14–15 |
+| UI | Cal Sans (variable), Geist fallback | 12–14.5px. Body 13.5, controls 12.5–13, titles 14–15 |
 | Code / meta | Geist Mono 400 | 11–12.5px. Diff 12.5/22 |
 | AI voice | Lora 400 | Brief 27/1.38; transcript 18/1.55; findings 16.5/1.45–1.5; compact cards 15.5/1.42 |
 

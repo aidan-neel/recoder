@@ -107,3 +107,64 @@ describe('planner validation', () => {
 		expect(plan.assignments.every((assignment) => assignment.role === 'docs')).toBe(true);
 	});
 });
+
+describe('planner coverage', () => {
+	const bigDiff = Array.from({ length: 30 }, (_, index) => `diff --git a/src/f${index}.ts b/src/f${index}.ts
+--- a/src/f${index}.ts
++++ b/src/f${index}.ts
+@@ -1 +1 @@
+-old
++${'x'.repeat(3000)}
+`).join('');
+	const inventory = buildInventory(bigDiff);
+	const assignment = (id: string, role: string, paths: string[]) => ({
+		id, role, title: id, reason: 'r', questions: [`q-${id}`], contextEvidenceIds: [], priority: 1,
+		scope: paths.map((path) => ({ path, hunkIds: [] }))
+	});
+
+	test('every code hunk the plan left out is swept by a correctness assignment', () => {
+		const plan = sanitizePlannerOutput({
+			summary: 's',
+			assignments: [assignment('correctness-top', 'correctness', ['src/f0.ts']), assignment('patterns-top', 'patterns', ['src/f0.ts'])],
+			roleDecisions: decisions(['correctness', 'patterns'])
+		}, inventory)!;
+		const read = new Set(plan.assignments.filter((a) => a.role === 'correctness').flatMap((a) => a.scope.flatMap((entry) => entry.hunkIds)));
+		for (const hunkId of inventory.hunksById.keys()) expect(read.has(hunkId)).toBe(true);
+		expect(plan.assignments.filter((a) => a.id.startsWith('sweep-')).length).toBeGreaterThan(1);
+	});
+
+	test('every hunk of a huge PR is covered by wide sweeps', () => {
+		const huge = buildInventory(Array.from({ length: 300 }, (_, index) => `diff --git a/src/g${index}.ts b/src/g${index}.ts
+--- a/src/g${index}.ts
++++ b/src/g${index}.ts
+@@ -1 +1 @@
+-old
++${'y'.repeat(3000)}
+`).join(''));
+		const plan = sanitizePlannerOutput({
+			summary: 's',
+			assignments: [assignment('correctness-top', 'correctness', ['src/g0.ts']), assignment('patterns-top', 'patterns', ['src/g0.ts'])],
+			roleDecisions: decisions(['correctness', 'patterns'])
+		}, huge)!;
+		const read = new Set(plan.assignments.filter((a) => a.role === 'correctness').flatMap((a) => a.scope.flatMap((entry) => entry.hunkIds)));
+		expect(read.size).toBe(huge.hunksById.size);
+		// ~900k patch characters in 48k-character sweeps, not 24k-character ones.
+		expect(plan.assignments.filter((a) => a.id.startsWith('sweep-')).length).toBeLessThanOrEqual(20);
+	});
+
+	test('a same-role assignment over hunks already assigned is folded into the first', () => {
+		const plan = sanitizePlannerOutput({
+			summary: 's',
+			assignments: [
+				assignment('security-a', 'security', ['src/f1.ts', 'src/f2.ts']),
+				assignment('security-b', 'security', ['src/f2.ts']),
+				assignment('security-c', 'security', ['src/f2.ts', 'src/f3.ts'])
+			],
+			roleDecisions: decisions(['security'])
+		}, inventory)!;
+		const security = plan.assignments.filter((a) => a.role === 'security');
+		expect(security.map((a) => a.id)).toEqual(['security-a', 'security-c']);
+		expect(security[0].questions).toContain('q-security-b');
+		expect(security[1].scope.map((entry) => entry.path)).toEqual(['src/f3.ts']);
+	});
+});

@@ -1,7 +1,7 @@
 /**
  * Reviewer role registry (leaf module — no imports, safe to require anywhere).
  *
- * Ten specialized lenses. The orchestrator assigns a bounded subset per
+ * Thirteen specialized lenses. The orchestrator assigns a bounded subset per
  * review; assignment identity is never the role id.
  */
 
@@ -15,7 +15,10 @@ export const REVIEW_ROLES = [
 	'testing',
 	'errors',
 	'concurrency',
-	'api'
+	'api',
+	'impact',
+	'frontend',
+	'data'
 ] as const;
 
 export type ReviewRole = (typeof REVIEW_ROLES)[number];
@@ -31,7 +34,10 @@ export const ROLE_LABELS: Record<ReviewRole, string> = {
 	testing: 'Testing',
 	errors: 'Errors',
 	concurrency: 'Concurrency',
-	api: 'API'
+	api: 'API',
+	impact: 'Impact',
+	frontend: 'Frontend',
+	data: 'Data & state'
 };
 
 /** What each lens hunts. Fed to the planner and specialists. */
@@ -52,5 +58,11 @@ export const ROLE_FOCUS: Record<ReviewRole, string> = {
 	'Failure behavior: swallowed errors, unhandled rejections, missing retries/timeouts, leaked resources on failure paths, misleading error messages.',
 	concurrency:
 	'Shared mutable state, races, lock discipline, async interleavings, non-atomic check-then-act, ordering assumptions across threads/tasks.',
-	api: 'Interface design: signatures, naming, boundaries, leaky abstractions, backwards compatibility, surprising defaults.'
+	api: 'Interface design: signatures, naming, boundaries, leaky abstractions, backwards compatibility, surprising defaults.',
+	impact:
+		'Blast radius outside the diff: every caller, importer and consumer of a changed or removed symbol, route, event, config key or file. Find each one by search and check it still works with the new behavior.',
+	frontend:
+		'UI behavior: reactive state that goes stale or loops, effects without cleanup, event handlers and races between user actions and async results, missing loading/empty/error states, focus and keyboard access, layout that breaks at other sizes.',
+	data:
+		'Persistent and shared state: storage formats, migrations, serialization, caches and their invalidation, settings or data written by older versions, state that must survive a restart or reload, and partial writes on failure.'
 };

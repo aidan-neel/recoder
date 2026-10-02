@@ -22,7 +22,9 @@ app.use(
 	cors({
 		origin: '*',
 		allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-		allowHeaders: ['Content-Type', 'Authorization', 'X-Hub-Signature-256']
+		allowHeaders: ['Content-Type', 'Authorization', 'X-Hub-Signature-256', 'If-None-Match'],
+		// The web app revalidates the review diff by ETag.
+		exposeHeaders: ['ETag']
 	})
 );
 

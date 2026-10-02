@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { normalizeModelMarkdown } from '@recoder/shared';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
 
 	/**
@@ -7,7 +8,13 @@
 	 * most, and keeps draining after the stream ends rather than snapping.
 	 * Text that was already complete when mounted renders at once.
 	 */
-	let { content, streaming = false }: { content: string; streaming?: boolean } = $props();
+	let { content: raw, streaming = false, normalize = true }: {
+		content: string;
+		streaming?: boolean;
+		/** Repair model markdown (off for the developer's own messages). */
+		normalize?: boolean;
+	} = $props();
+	const content = $derived(normalize ? normalizeModelMarkdown(raw, { complete: !streaming }) : raw);
 
 	const reduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 	// svelte-ignore state_referenced_locally

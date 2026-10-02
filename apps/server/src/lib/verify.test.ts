@@ -18,16 +18,19 @@ test('verifier answers with verdict synonyms and alternate field names are repai
 	expect(parseVerdict({ verdict: 'maybe', reason: 'x' })).toBeNull();
 });
 
-test('a confirmed verdict counts only when it cites a command that ran', () => {
+test('a confirmed verdict is proven by a cited run, traced by cited reads, and unverified with nothing cited', () => {
 	const evidence = store();
-	expect(settleVerdict({ verdict: 'confirmed', reason: 'Read the code.', evidenceIds: ['ev_2'] }, evidence)).toMatchObject({ status: 'unverified' });
 	expect(settleVerdict({ verdict: 'confirmed', reason: 'The test fails.', evidenceIds: ['ev_2', 'ev_1'] }, evidence)).toEqual({
-		status: 'verified', reason: 'The test fails.', command: 'bun test', exitCode: 1
+		status: 'verified', method: 'run', reason: 'The test fails.', command: 'bun test', exitCode: 1
 	});
+	expect(settleVerdict({ verdict: 'confirmed', reason: 'Read the code.', evidenceIds: ['ev_2'] }, evidence)).toEqual({ status: 'verified', method: 'trace', reason: 'Read the code.' });
+	expect(settleVerdict({ verdict: 'confirmed', reason: 'Trust me.', evidenceIds: [] }, evidence)).toMatchObject({ status: 'unverified' });
 });
 
-test('a refutation without a cited run keeps the finding as unverified', () => {
+test('only a cited run can refute a finding', () => {
 	const evidence = store();
 	expect(settleVerdict({ verdict: 'refuted', reason: 'Looks fine.', evidenceIds: [] }, evidence)).toMatchObject({ status: 'unverified' });
+	// Reading alone never drops a finding: a misread would hide a real bug.
+	expect(settleVerdict({ verdict: 'refuted', reason: 'Guarded above.', evidenceIds: ['ev_2'] }, evidence)).toMatchObject({ status: 'unverified' });
 	expect(settleVerdict({ verdict: 'refuted', reason: 'The test passes.', evidenceIds: ['ev_1'] }, evidence)).toBe('refuted');
 });

@@ -60,3 +60,13 @@ test.skipIf(!available)('a timed-out command is killed along with its background
 	const ps = Bun.spawnSync(['pgrep', '-f', marker]);
 	expect(ps.stdout.toString().trim()).toBe('');
 });
+
+test.skipIf(!available)('a command that leaves a child in its own session holding the output pipe still returns', async () => {
+	// The child calls setsid, so the timeout's process-group kill can't reach it, and it keeps stdout open.
+	const marker = 40_000 + Math.floor(Math.random() * 1000);
+	const started = Date.now();
+	const result = await run(`perl -MPOSIX -e 'if (fork() == 0) { POSIX::setsid(); sleep ${marker}; exit }'; echo done`, 5_000);
+	expect(result.output).toContain('done');
+	expect(Date.now() - started).toBeLessThan(8_000);
+	Bun.spawnSync(['pkill', '-f', `sleep ${marker}`]);
+}, 20_000);

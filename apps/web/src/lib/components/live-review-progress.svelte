@@ -5,6 +5,7 @@
 	import { serverApi } from '$lib/server-api';
 	import { recentSessions } from '$lib/recent-sessions.svelte';
 	import { mapBackendFinding } from '$lib/findings.svelte';
+	import { reviewStage } from '$lib/review-progress-state';
 
 	interface Props {
 		review: Review;
@@ -62,21 +63,9 @@
 		confirmed
 	})) : []);
 	// Indexes match the steps in review-steps.svelte.
-	const stageIndex = $derived(
-		status === 'passed' ? 6
-			: progress.stage === 'consolidation' || progress.tasks.finalize ? 5
-			: progress.stage === 'verify' ? 4
-			: progress.stage === 'specialists' ? 3
-			: progress.stage === 'checks' ? 2
-			: assignments.length > 0 ? 3
-			: progress.stage === 'understand' || progress.tasks.inventory || progress.tasks.planning ? 1
-			: 0
-	);
-	const currentStage = $derived(
-		status === 'passed' ? 'Review complete'
-			: status === 'failed' ? 'Review failed'
-			: ['Checkout', 'Understand changes', 'Running checks', 'Specialist review', 'Verifying findings', 'Consolidation'][stageIndex]
-	);
+	const stage = $derived(reviewStage(progress, status));
+	const stageIndex = $derived(stage.index);
+	const currentStage = $derived(stage.label);
 	const displayAssignments = $derived<ReviewAssignment[]>([...assignments, {
 		id: pipelineId, role: 'pipeline', title: 'Review pipeline', reason: 'Planning and saving results',
 		status: active ? 'running' : status === 'passed' ? 'done' : 'error', scope: [],
@@ -97,9 +86,10 @@
 	{awaitingPrompt}
 	onStartReview={awaitingPrompt ? onStartReview : null}
 	paused={progress.paused ?? false}
+	approval={progress.approval ?? null}
 	completedAt={!active && !awaitingPrompt ? review.updatedAt : undefined}
 	title={review.prTitle || `PR #${review.prNumber}`}
-	meta={{ prLabel: '#' + review.prNumber, repo, files, additions, deletions, elapsed, branch: recentSessions.branches[`${review.repoId}#${review.prNumber}`] }}
+	meta={{ prLabel: '#' + review.prNumber, prUrl: review.prUrl, repo: recentSessions.repos.find((item) => item.id === review.repoId)?.name ?? repo, files, additions, deletions, elapsed, branch: recentSessions.branches[`${review.repoId}#${review.prNumber}`] }}
 	assignments={displayAssignments}
 	messages={progress.messages ?? []}
 	orchestratorModel={progress.orchestratorModel}
@@ -119,8 +109,7 @@
 	{restarting}
 	stage={stageIndex}
 	stageLabel={currentStage}
-	stageDetail={stageIndex === 0 ? progress.tasks[['fetch', 'sandbox', 'diff'].find((id) => progress.tasks[id]?.status === 'running') ?? 'fetch']?.message
-		: stageIndex === 2 ? (progress.tasks.checks ?? progress.tasks.setup)?.message : undefined}
+	stageDetail={stage.detail}
 	failed={status === 'failed'}
 	errorMessage={actionError ?? (status === 'failed' && !progress.failure ? review.summary : null)}
 	failure={progress.failure ?? null}
