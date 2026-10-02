@@ -1,0 +1,220 @@
+	gap: 2px;
+}
+.review-approval-title {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 22px;
+	color: var(--text-primary);
+}
+.review-approval-actions {
+	display: flex;
+	flex-shrink: 0;
+	gap: 8px;
+}
+/* Yes and No read as a pair: same width. */
+.review-approval-actions [data-ui='button'][data-variant][data-size] {
+	width: 72px;
+	min-width: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+	[data-ui='collapsible-trigger'].specialist-row .specialist-chevron {
+		transition: none;
+	}
+}
+/* Specialist conversation bar: back to Orchestrator, name, status on the right. */
+.agent-nav {
+	gap: 6px;
+}
+.agent-name {
+	font-size: 14px;
+	font-weight: 500;
+	color: var(--text-primary);
+}
+.agent-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	white-space: nowrap;
+}
+.agent-status[data-tone='danger'] {
+	color: var(--sev-high);
+}
+[data-ui='badge'].status-chip {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+}
+[data-ui='badge'].status-chip[data-tone='running'] {
+	color: var(--sev-medium);
+	background-color: var(--sev-medium-tint);
+}
+.review-log {
+	margin-bottom: 6px;
+	overflow-wrap: anywhere;
+	font-size: 12px;
+	color: var(--text-faint);
+}
+
+/* Finished card (4f). */
+[data-ui='card'].review-result {
+	flex-direction: row;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 14px 14px 14px 14px;
+	border: 0;
+	border-radius: 14px;
+	background: var(--bg-raised);
+	box-shadow: 0 0 0 1px var(--line-card);
+}
+/* Success mark: a tinted disc, aligned to the title line. */
+.review-result-mark {
+	display: inline-flex;
+	width: 24px;
+	height: 24px;
+	flex: 0 0 auto;
+	align-items: center;
+	justify-content: center;
+	margin-top: 1px;
+	border-radius: 999px;
+	background: color-mix(in srgb, var(--success) 16%, transparent);
+	color: var(--success);
+}
+.review-result-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+}
+.review-result-title {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 500;
+	line-height: 22px;
+	color: var(--text-primary);
+}
+.review-result-meta {
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 18px;
+	color: var(--text-muted);
+}
+.review-result-pills {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 8px;
+}
+[data-ui='card'].review-result > [data-ui='button'] {
+	align-self: center;
+}
+
+/* Composer floats over the transcript on a fade. */
+.review-dock {
+	position: absolute;
+	right: 0;
+	bottom: 0;
+	left: 0;
+	padding: 40px 24px 22px;
+	background: linear-gradient(to bottom, transparent, var(--bg-canvas) 40%);
+	pointer-events: none;
+}
+.review-dock-inner {
+	max-width: 740px;
+	margin: 0 auto;
+	padding: 0 24px;
+	pointer-events: auto;
+}
+/* Side-panel chat: the composer spans the panel (the dock's 12px margin only). */
+.review-chat[data-compact] .review-dock-inner {
+	max-width: none;
+	padding: 0;
+}
+
+/* Transcript secondary text (thinking, disclosures, tool rows, status lines)
+   sits at body size next to the model's prose, not UI-caption size.
+   Geist reads larger than Lora at the same px, so 15px pairs with 16px prose. */
+.review-transcript .disclosure-trigger,
+.review-transcript .disclosure-body,
+.review-transcript .disclosure-body [data-ui='markdown'],
+.review-transcript .review-thinking,
+.review-transcript .review-log,
+.review-transcript .model-note-added,
+.review-transcript .specialist-name {
+	font-size: 15px;
+	line-height: 22px;
+}
+.review-transcript .disclosure[data-size='row'] > .disclosure-trigger {
+	min-height: 30px;
+	font-size: 14px;
+}
+.review-transcript .tool-row-target {
+	font-size: 13px;
+}
+.review-transcript .disclosure-meta,
+.review-transcript .tool-row-duration,
+.review-transcript .specialist-op {
+	font-size: 12.5px;
+}
+.review-transcript .specialist-model {
+	font-size: 12px;
+}
+.review-transcript .tool-row-action {
+	width: 96px;
+}
+.review-transcript .reasoning-step-title {
+	font-size: 15px;
+	line-height: 22px;
+}
+.review-transcript .fact-row {
+	min-height: 30px;
+	font-size: 14px;
+}
+.review-transcript .fact-label {
+	width: 96px;
+}
+.review-transcript .fact-value.font-mono,
+.review-transcript .fact-meta {
+	font-size: 13px;
+}
+.review-transcript .fact-meta {
+	font-size: 12.5px;
+}
+/* Side-panel chat: one step down, matching its 15px prose. */
+.review-chat[data-compact] .disclosure-trigger,
+.review-chat[data-compact] .disclosure-body,
+.review-chat[data-compact] .disclosure-body [data-ui='markdown'],
+.review-chat[data-compact] .review-thinking,
+.review-chat[data-compact] .model-note-added {
+	font-size: 14px;
+	line-height: 21px;
+}
+
+/* ── Results rail (4f) ────────────────────────────────────── */
+.results-rail {
+	width: 372px;
+	min-height: 0;
+	flex-shrink: 0;
+}
+.results-rail-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 16px;
+}
+[data-ui='card'].rail-card {
+	gap: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	border-radius: 12px;
+	background: var(--bg-raised);
+	box-shadow:
+		0 0 0 1px var(--line-card),
+		0 4px 16px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
+}
+.rail-card-head {
+	display: flex;
+	align-items: baseline;

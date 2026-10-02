@@ -3,7 +3,7 @@
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
-	import { findingsStore, type Finding } from '$lib/findings/findings.svelte';
+	import { findingsStore } from '$lib/findings/findings.svelte';
 	import { applyReadyFixes, hasReadyFix } from '$lib/findings/fixes';
 	import FindingSeverity from './finding-severity.svelte';
 	import FixButton from './fix-button.svelte';

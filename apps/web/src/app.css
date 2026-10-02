@@ -14,7 +14,8 @@
 @import './styles/05-components.css';
 @import './styles/06-topbar.css';
 @import './styles/07-composer-base.css';
-@import './styles/08-composer-ui.css';
+@import './styles/08a-composer-input.css';
+@import './styles/08b-composer-models.css';
 @import './styles/09-firstrun.css';
 @import './styles/10-home.css';
 @import './styles/11-settings-panel.css';

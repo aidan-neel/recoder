@@ -15,7 +15,6 @@
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import ReviewComposer from '../review/review-composer.svelte';
-	import type { ReviewRole } from '@recoder/shared';
 	import { findingsStore } from '$lib/findings/findings.svelte';
 	import { serverApi } from '$lib/api/server-api';
 	import { formatAgentName, threadsStore, type Thread } from '$lib/findings/threads.svelte';

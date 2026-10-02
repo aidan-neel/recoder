@@ -1,0 +1,325 @@
+}
+.settings-modal > [data-ui='modal-surface'].settings-surface {
+	padding: 0;
+	gap: 0;
+	overflow: hidden;
+}
+[data-ui='tabs'].settings-layout,
+.settings-layout {
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
+	flex: 1;
+	min-height: 0;
+	gap: 0;
+}
+.settings-nav {
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	width: 200px;
+	padding: 18px 10px 16px;
+	border-right: 1px solid var(--line-subtle);
+	background-color: var(--bg-chrome);
+	border-radius: 16px 0 0 16px;
+}
+.settings-nav-label {
+	display: block;
+	padding: 0 10px 10px;
+	font-size: 12.5px;
+	color: var(--text-faint);
+}
+.settings-nav-list[data-ui='tabs-list'] {
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 2px;
+	padding: 0;
+	border: 0;
+	background: none;
+}
+.settings-nav-list [role='tab'] {
+	justify-content: flex-start;
+	height: 32px;
+	min-height: 32px;
+	padding: 0 10px;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--text-muted);
+	transition:
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
+}
+.settings-nav-list [role='tab']:hover {
+	background-color: var(--bg-hover);
+	color: var(--text-primary);
+}
+.settings-nav-list [role='tab'][data-state='active'] {
+	background-color: var(--line-subtle);
+	color: var(--text-primary);
+}
+/* The ghost variant's sliding fill: the active item is its own pill here. */
+.settings-nav-list > [aria-hidden='true'] {
+	display: none;
+}
+.settings-path {
+	margin-top: auto;
+	padding: 0 10px;
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	line-height: 1.5;
+	color: var(--text-faint);
+	overflow-wrap: anywhere;
+}
+.settings-main {
+	display: flex;
+	flex: 1;
+	min-width: 0;
+	min-height: 0;
+	max-height: 100%;
+	flex-direction: column;
+}
+.settings-head {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: space-between;
+	height: 56px;
+	padding: 0 12px 0 24px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.settings-title {
+	font-size: 15px;
+	font-weight: 500;
+	letter-spacing: 0;
+	color: var(--text-primary);
+}
+.settings-scroll {
+	flex: 1;
+	min-height: 0;
+}
+.settings-body {
+	display: flex;
+	flex-direction: column;
+	padding: 20px 24px 24px;
+}
+.settings-body [data-ui='tabs-content'] {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+}
+.settings-body [data-ui='tabs-content'][hidden] {
+	display: none;
+}
+.settings-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.settings-label {
+	font-size: 12.5px;
+	font-weight: 400;
+	letter-spacing: 0;
+	line-height: 1.4;
+	color: var(--text-subtle);
+}
+.settings-empty {
+	font-size: 13px;
+	color: var(--text-faint);
+}
+.settings-foot {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 12px;
+	height: 60px;
+	padding: 0 16px 0 24px;
+	border-top: 1px solid var(--line-subtle);
+	font-size: 12.5px;
+	color: var(--text-faint);
+}
+[data-ui='button'].settings-cancel {
+	gap: 8px;
+	color: var(--text-muted);
+}
+[data-ui='button'].settings-save {
+	gap: 10px;
+	padding: 0 12px 0 14px;
+	font-weight: 500;
+}
+
+/* Provider cards: two columns, radius 12, padding 14. */
+/* One action per provider row ("Connect" or "Models"), all the same width. */
+.provider-list [data-ui='button'].provider-action {
+	width: 96px;
+	justify-content: center;
+}
+[data-ui='progress'].usage-bar {
+	height: 3px;
+	border-radius: 2px;
+	background-color: var(--line-tab);
+}
+[data-ui='progress'].usage-bar > div {
+	background-color: var(--text-secondary);
+}
+[data-ui='progress'].usage-bar[data-full] > div {
+	background-color: var(--danger);
+}
+
+/* Out of usage: actions sit under the explanation so the switcher has room. */
+.usage-notice-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-top: 10px;
+}
+[data-ui='card'].usage-notice .review-notice-icon {
+	color: var(--sev-medium);
+}
+
+/* Model picker: long lists scroll inside the submenu, grouped by provider. */
+[data-ui='dropdown-menu-sub-content'].model-menu-models,
+.model-menu-models {
+	max-height: min(60dvh, 520px);
+	overflow-y: auto;
+}
+.model-menu-group {
+	padding: 6px 10px 4px;
+	font-size: 11px;
+	font-weight: 500;
+	color: var(--text-faint);
+}
+
+/* Provider model catalog: checkbox rows with context and price on the right. */
+.catalog-list {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.catalog-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 48px;
+	padding: 6px 2px;
+	border-bottom: 1px solid var(--line-subtle-2);
+}
+.catalog-row[data-unsupported] {
+	opacity: 0.55;
+}
+.catalog-meta {
+	display: flex;
+	flex-shrink: 0;
+	gap: 10px;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+[data-ui='button'].provider-link {
+	height: 26px;
+	min-height: 26px;
+	gap: 6px;
+	padding: 0 8px;
+	font-size: 12.5px;
+	color: var(--text-subtle);
+}
+[data-ui='button'].provider-link:hover {
+	color: var(--text-primary);
+}
+.endpoint-models {
+	display: flex;
+	flex-direction: column;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	border-top: 1px solid var(--line-subtle-2);
+}
+.endpoint-models li {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 32px;
+	font-size: 12.5px;
+	color: var(--text-secondary);
+	border-bottom: 1px solid var(--line-subtle-2);
+}
+.endpoint-ctx {
+	flex-shrink: 0;
+	padding: 1px 5px;
+	border-radius: 4px;
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	color: var(--text-subtle);
+	background-color: var(--bg-hover);
+}
+[data-ui='button'].endpoint-remove {
+	width: 28px;
+	height: 28px;
+	min-height: 28px;
+	color: var(--text-faint);
+}
+
+/* Settings lists: ring #242220, radius 12, rows split by #211f1d. */
+[data-ui='card'].settings-list {
+	display: flex;
+	flex-direction: column;
+	gap: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 12px;
+	background-color: transparent;
+	box-shadow: inset 0 0 0 1px var(--line-card);
+	overflow: hidden;
+}
+.settings-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-height: 50px;
+	padding: 9px 12px 9px 14px;
+}
+/* Add provider: a searchable list of OpenCode's providers, one row each. */
+.agent-pick-list {
+	display: flex;
+	flex-direction: column;
+	padding-right: 8px;
+}
+[data-ui='typography-metadata'].agent-pick-group,
+.agent-pick-group {
+	display: block;
+	padding: 12px 10px 4px;
+	font-size: 11px;
+	color: var(--text-faint);
+}
+.agent-pick-group:first-child {
+	padding-top: 2px;
+}
+[data-ui='button'].agent-pick-row {
+	display: flex;
+	width: 100%;
+	height: 36px;
+	min-height: 36px;
+	flex-shrink: 0;
+	justify-content: flex-start;
+	gap: 10px;
+	padding: 0 10px;
+	font-size: 13px;
+	font-weight: 400;
+	color: var(--text-primary);
+}
+.agent-pick-meta {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+.agent-pick-meta.text-ok {

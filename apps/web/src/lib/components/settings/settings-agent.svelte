@@ -2,7 +2,6 @@
 	import { untrack } from 'svelte';
 	import Plus from '@lucide/svelte/icons/plus';
 	import RotateCw from '@lucide/svelte/icons/rotate-cw';
-	import * as Alert from '@sivir-ui/svelte/components/alert';
 	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';

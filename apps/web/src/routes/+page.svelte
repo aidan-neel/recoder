@@ -595,7 +595,7 @@
 				{#if openPrs.loading}
 					{@render skeletonGroup()}
 				{:else}
-					{#each listedGroups as group, gi (group.repo.id)}
+					{#each listedGroups as group, _gi (group.repo.id)}
 						<section class="flex min-w-0 flex-col" aria-label="Pull requests in {group.repo.name}">
 							<Typography.H2 class="group-head">
 								<ProviderMark provider={group.repo.provider} size={14} />
@@ -614,7 +614,7 @@
 								</Alert.Root>
 							{:else}
 								<div class="pr-list" {@attach hoverHighlight({ items: '.pr-row', class: 'hl-row' })}>
-									{#each group.prs as pr, i (pr.number)}
+									{#each group.prs as pr, _i (pr.number)}
 										{@const key = prKey(group.repo.id, pr.number)}
 										{@const review = latest.get(key)}
 										<div class="contents">

@@ -1,0 +1,80 @@
+	max-width: none;
+	height: min(88vh, calc(var(--sivir-viewport-height, 100vh) - 48px));
+}
+.fix-review-modal [data-ui='modal-surface'] {
+	display: flex;
+	min-height: 0;
+	flex-direction: column;
+	overflow: hidden;
+}
+.fix-review-head {
+	display: flex;
+	flex-direction: row !important;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 12px;
+	padding: 14px 56px 14px 20px;
+	border-bottom: 1px solid var(--line-divider);
+}
+.fix-review-modal .fix-review-title {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 500;
+}
+.fix-review-meta {
+	display: flex;
+	gap: 6px;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-subtle);
+}
+.fix-review-mode {
+	margin-left: auto;
+}
+.fix-review-summary {
+	flex-shrink: 0;
+	margin: 0;
+	padding: 12px 20px;
+	border-bottom: 1px solid var(--line-divider);
+	font-size: 13px;
+	line-height: 19px;
+	color: var(--text-muted);
+}
+.fix-review-files {
+	min-height: 0;
+	flex: 1;
+	overflow: auto;
+	overscroll-behavior: contain;
+}
+.fix-review-file + .fix-review-file {
+	border-top: 1px solid var(--line-divider);
+}
+.fix-review-file-head {
+	position: sticky;
+	top: 0;
+	z-index: 2;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 40px;
+	padding: 0 20px;
+	border-bottom: 1px solid var(--line-divider);
+	background: var(--bg-raised);
+	font-size: 12.5px;
+}
+.fix-review-file-stats {
+	margin-left: auto;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+}
+/* ── Review guidelines: Settings rows and the editor ─────────── */
+.guidelines-row-rule {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+.guidelines-chip-link {
+	flex-shrink: 0;
+	border-radius: 6px;
+}

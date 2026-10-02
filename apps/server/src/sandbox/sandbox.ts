@@ -1,10 +1,9 @@
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { runCommand } from '../commands/runner.js';
 import { env } from '../env.js';
 import type { Provider } from '@recoder/shared';
 import type { ReviewRevision } from '../evidence/evidence.js';
-import { sandboxLayout } from './exec-sandbox.js';
 
 export interface Sandbox {
 	key: string;

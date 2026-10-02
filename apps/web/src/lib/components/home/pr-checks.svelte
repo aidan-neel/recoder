@@ -2,6 +2,7 @@
 	import type { PrCheck } from '@recoder/shared';
 
 	/** Last checks per review, so reopening a session paints them at once while they refresh. */
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- module-level Map, not reactive state
 	const lastChecks = new Map<string, { checks: PrCheck[]; ref: string; pipeline: boolean }>();
 </script>
 

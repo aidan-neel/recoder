@@ -107,6 +107,7 @@
 
 	/** Open findings grouped by the line their card anchors under. */
 	const byLine = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived, not reactive state
 		const map = new Map<number, Finding[]>();
 
 		for (const finding of findings) {
@@ -122,6 +123,7 @@
 	/** Strongest open finding per new-side line, for row markers. */
 	const lineMarks = $derived.by(() => {
 		const rank: Record<FindingSeverity, number> = { high: 0, medium: 1, low: 2 };
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived, not reactive state
 		const map = new Map<number, Finding>();
 
 		for (const finding of findings) {
@@ -143,6 +145,7 @@
 
 	/** Notes grouped by the line their card renders under, keyed per diff side. */
 	const notesByNewLine = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived, not reactive state
 		const map = new Map<number, ReviewNote[]>();
 
 		for (const note of fileNotes) {
@@ -159,6 +162,7 @@
 	const notesByOldLine = $derived.by(() => {
 		const map = new Map<number, ReviewNote[]>();
 
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived, not reactive state
 		for (const note of fileNotes) {
 			if (note.side !== 'old') continue;
 

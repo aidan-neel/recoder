@@ -1,0 +1,457 @@
+		0 0 0 1px var(--line-control),
+		0 4px 14px rgb(var(--shade-rgb) / calc(0.22 * var(--drop)));
+}
+[data-ui='card'].focus-card[data-active] {
+	box-shadow:
+		0 0 0 1px var(--line-hover),
+		0 6px 20px rgb(var(--shade-rgb) / calc(0.3 * var(--drop)));
+}
+/* Dismissed findings (Show dismissed): flat and dimmed, below the open ones. */
+[data-ui='card'].focus-card[data-dismissed] {
+	background: transparent;
+	box-shadow: 0 0 0 1px var(--line-card);
+}
+[data-ui='card'].focus-card[data-dismissed] .focus-card-body {
+	color: var(--text-subtle);
+}
+.focus-filter-row {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 8px;
+	padding: 8px 4px 2px;
+	border-top: 1px solid var(--line-subtle);
+}
+.focus-filter-count {
+	margin-left: auto;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-faint);
+}
+.focus-card-select {
+	display: flex;
+	width: 100%;
+	flex-direction: column;
+	gap: 8px;
+	padding: 12px 14px;
+	text-align: left;
+}
+.focus-card-head {
+	display: flex;
+	min-width: 0;
+	width: 100%;
+	align-items: center;
+	gap: 8px;
+	font-size: 12.5px;
+	color: var(--text-subtle);
+}
+.focus-card-loc {
+	min-width: 0;
+	margin-left: auto;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	direction: rtl;
+	font-family: var(--font-code);
+	font-size: 11px;
+	color: var(--text-faint);
+}
+.focus-card-body {
+	font-size: 15px;
+	line-height: 1.42;
+}
+/* Active card's footer opens with a height transition instead of popping in. */
+.focus-card-reveal {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows var(--dur-disclose) var(--ease-menu),
+		opacity var(--dur-toggle) ease-out;
+}
+[data-ui='card'].focus-card[data-active] .focus-card-reveal {
+	grid-template-rows: 1fr;
+	opacity: 1;
+	transition:
+		grid-template-rows var(--dur-disclose) var(--ease-menu),
+		opacity var(--dur-toggle) ease-out;
+}
+.focus-card-reveal-clip {
+	min-height: 0;
+	overflow: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+	.focus-card-reveal,
+	[data-ui='card'].focus-card[data-active] .focus-card-reveal {
+		transition: none;
+	}
+}
+.focus-card-foot {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 0 12px 10px 14px;
+	font-size: 12px;
+	color: var(--text-faint);
+}
+.focus-detail-column {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 2px 2px 12px;
+}
+[data-ui='card'].focus-hunk {
+	gap: 0;
+	padding: 0;
+	overflow: hidden;
+	border: 0;
+	border-radius: 12px;
+	background: var(--bg-panel);
+	box-shadow:
+		0 0 0 1px var(--line-card),
+		0 6px 20px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
+}
+.focus-hunk-head {
+	display: flex;
+	height: 42px;
+	align-items: center;
+	gap: 10px;
+	padding: 0 8px 0 16px;
+	border-bottom: 1px solid var(--line-divider);
+}
+.focus-hunk-range {
+	flex-shrink: 0;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-faint);
+}
+.focus-hunk .diff-lines {
+	padding: 4px 0 6px;
+}
+[data-ui='card'].focus-detail {
+	gap: 12px;
+	padding: 14px 16px;
+	border: 0;
+	border-radius: 12px;
+	background: var(--bg-raised);
+	box-shadow: 0 0 0 1px var(--line-control);
+}
+.focus-detail-head {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 10px;
+}
+.focus-detail .focus-detail-title {
+	min-width: 0;
+	flex: 1;
+	margin: 0;
+	font-size: 13.5px;
+	font-weight: 500;
+	line-height: 19px;
+	letter-spacing: normal;
+	color: var(--text-primary);
+}
+.focus-detail-meta {
+	flex-shrink: 0;
+	font-family: var(--font-code);
+	font-size: 11px;
+	color: var(--text-faint);
+}
+.focus-evidence {
+	overflow: hidden;
+	border: 0;
+	border-radius: 10px;
+	background: var(--bg-canvas);
+	box-shadow: 0 0 0 1px var(--line-card);
+}
+[data-ui='file-diff'].focus-evidence {
+	--file-diff-max-height: 240px;
+	--file-diff-line-height: 20px;
+}
+/* Evidence diffs sit flush in their frame (no Sivir inset padding). */
+[data-ui='file-diff'].focus-evidence,
+[data-ui='file-diff'].evidence-lightbox-diff {
+	gap: 0;
+	padding: 0;
+}
+/* One line-number column when there is no old side (new files, excerpts). */
+[data-ui='file-diff'][data-single-gutter] [data-ui='file-diff-row'] {
+	grid-template-columns: 52px 24px minmax(0, 1fr);
+}
+[data-ui='file-diff'][data-single-gutter] [data-ui='file-diff-row'] > span:first-child {
+	display: none;
+}
+.focus-evidence-head {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 10px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--line-divider);
+	font-size: 12px;
+	color: var(--text-muted);
+}
+.focus-evidence-label {
+	flex-shrink: 0;
+}
+/* Evidence file: type icon + file name; the full path is the tooltip. */
+.evidence-file {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 6px;
+}
+.evidence-file-icon {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+.evidence-file-name {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-tertiary);
+}
+.fix-review-head .evidence-file {
+	flex: 0 1 auto;
+}
+.fix-review-head .evidence-file-name {
+	font-size: 12.5px;
+}
+.focus-evidence-command {
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	font-family: var(--font-code);
+	font-size: 11px;
+	font-weight: 400;
+	color: var(--text-faint);
+}
+.focus-evidence-head [data-ui='file-diff-plus-minus'] {
+	font-size: 11px;
+	font-weight: 400;
+}
+.focus-evidence-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+	margin: -4px -6px -4px 4px;
+}
+[data-ui='button'][data-variant].evidence-open {
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--text-subtle);
+}
+[data-ui='button'][data-variant].evidence-open:hover {
+	color: var(--text-primary);
+}
+/* Evidence lightbox: the same frame as the fix review, the diff fills it. */
+/* The lightbox fits its content, up to the viewport cap, then the diff scrolls. */
+.fix-review-modal.evidence-lightbox {
+	height: auto;
+	max-height: min(88vh, calc(var(--sivir-viewport-height, 100vh) - 48px));
+}
+.evidence-lightbox [data-ui='modal-surface'] {
+	max-height: min(88vh, calc(var(--sivir-viewport-height, 100vh) - 48px));
+}
+[data-ui='file-diff'].evidence-lightbox-diff {
+	--file-diff-max-height: none;
+	--file-diff-line-height: 22px;
+	min-height: 0;
+	flex: 0 1 auto;
+	border: 0;
+	border-radius: 0;
+	box-shadow: none;
+	background: var(--bg-canvas);
+}
+.evidence-lightbox-diff [data-ui='file-diff-content'] {
+	min-height: 0;
+	flex: 0 1 auto;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-size: 13px;
+	overscroll-behavior: contain;
+}
+/* "Open in diff" lands on a row: a short wash so the eye finds it. */
+[data-diff-row][data-flash] {
+	animation: diff-row-flash 1.6s ease-out;
+}
+@keyframes diff-row-flash {
+	0%,
+	35% {
+		background-color: var(--sev-medium-tint);
+	}
+	100% {
+		background-color: transparent;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	[data-diff-row][data-flash] {
+		animation: none;
+		outline: 1px solid var(--sev-medium);
+		outline-offset: -1px;
+	}
+}
+.focus-evidence-range {
+	flex-shrink: 0;
+	font-family: var(--font-code);
+	font-size: 11px;
+	color: var(--text-ghost);
+}
+.focus-evidence [data-ui='file-diff-content'] {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-size: 12px;
+}
+.focus-evidence [data-ui='code-block'] {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	font-size: 12px;
+}
+.focus-detail-foot {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	font-size: 12px;
+	color: var(--text-faint);
+}
+@media (max-width: 1200px) {
+	.focus-body {
+		grid-template-columns: 340px minmax(0, 1fr);
+	}
+}
+.diff-viewed,
+.diff-viewed * {
+	font-size: 12.5px;
+}
+.diff-num {
+	align-self: start;
+}
+
+/* Changes sheet: applied fixes the developer commits and pushes by hand. */
+.changes-panel {
+	display: flex;
+	height: 100%;
+	min-height: 0;
+	flex-direction: column;
+}
+.changes-head {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 10px;
+	padding: 16px 20px 12px;
+	border-bottom: 1px solid var(--line-divider);
+}
+.changes-head .changes-title {
+	margin: 0;
+	font-size: 15px;
+	font-weight: 500;
+}
+.changes-branch {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	font-size: 12px;
+	color: var(--text-faint);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.changes-body {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	padding: 16px 20px 24px;
+}
+.changes-empty {
+	font-size: 13.5px;
+	color: var(--text-subtle);
+}
+.changes-section {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.changes-section-head {
+	display: flex;
+	align-items: center;
+}
+.changes-section .changes-label {
+	margin: 0;
+	font-size: 12.5px;
+	font-weight: 500;
+	color: var(--text-muted);
+}
+.changes-files,
+.changes-commits {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.changes-file {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 4px;
+	padding: 8px 10px;
+	border-radius: 10px;
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+}
+.changes-file-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+}
+.changes-check {
+	min-width: 0;
+	font-family: var(--font-code);
+	font-size: 12.5px;
+	overflow-wrap: anywhere;
+}
+.changes-diff .review-file-diff {
+	overflow-x: auto;
+	border-radius: 8px;
+}
+.changes-commit {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.changes-commit-row {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 10px;
+	min-height: 32px;
+	font-size: 13px;
+}
+.changes-sha {
+	flex-shrink: 0;
+	font-size: 12px;
+	color: var(--text-faint);
+}
+.changes-subject {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-secondary);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

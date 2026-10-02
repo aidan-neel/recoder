@@ -3,7 +3,6 @@
 	import { page } from '$app/state';
 	import { tick, untrack } from 'svelte';
 	import MessageSquare from '@lucide/svelte/icons/message-square';
-	import Check from '@lucide/svelte/icons/check';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Alert from '@sivir-ui/svelte/components/alert';
 	import * as Card from '@sivir-ui/svelte/components/card';
@@ -52,7 +51,6 @@
 		type FileDiff,
 		type Review,
 		type ReviewCodeContext,
-		type ReviewAssignment,
 		type ReviewProgress as ReviewProgressState
 	} from '@recoder/shared';
 

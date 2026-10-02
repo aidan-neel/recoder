@@ -140,6 +140,7 @@
 	);
 	/** Agent turns reply as `message_<reasoning id>`; discussion replies think as `reason_<reply id>`. Either way thinking sits with its reply. */
 	const reasoningByMessage = $derived(
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived, not reactive state
 		new Map<string, ReviewReasoningEntry>(
 			conversationReasoning.flatMap((entry) => [
 				[`message_${entry.id}`, entry],
@@ -147,6 +148,7 @@
 			])
 		)
 	);
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Set in $derived, not reactive state
 	const messageIds = $derived(new Set(entries.flatMap((entry) => (entry.kind === 'message' ? [entry.id] : []))));
 	const orphanReasoning = $derived(conversationReasoning.filter((entry) => !messageIds.has(`message_${entry.id}`)));
 	/** Specialists narrate tasks by title ("Running Correctness of …"); only show a status that says something new. */
@@ -171,6 +173,7 @@
 		const byIndex = new Map<number, ReviewReasoningEntry[]>();
 
 		for (const entry of orphanReasoning) {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived.by, not reactive state
 			if (!entry.text.trim() && entry.status !== 'streaming') continue;
 
 			const found = entries.findIndex((item) => Date.parse(item.at) > Date.parse(entry.at));
@@ -196,6 +199,7 @@
 		const out: Row[] = [];
 		// A thought is keyed under its reply id and its own id, so two messages can
 		// both claim it; place each one once (duplicate keys crash the keyed list).
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Set in $derived.by, not reactive state
 		const placedTraces = new Set<string>();
 
 		const trace = (item: Trace) => {

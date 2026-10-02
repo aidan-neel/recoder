@@ -47,6 +47,7 @@
 	/** Open findings per file → badge with count, strongest severity, first finding. */
 	const badges = $derived.by(() => {
 		const byFile = new Map<string, typeof findingsStore.items>();
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived.by, not reactive state
 
 		for (const finding of findingsStore.items) {
 			if (finding.status === 'dismissed' || !findingsStore.isShown(finding)) continue;
@@ -59,6 +60,7 @@
 
 		const map = new Map<string, FileBadge>();
 
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived.by, not reactive state
 		for (const [file, list] of byFile) {
 			const sorted = [...list].sort(
 				(a, b) => severityRank[a.severity] - severityRank[b.severity] || a.startLine - b.startLine
@@ -85,6 +87,7 @@
 	let onlyWithFindings = $state(false);
 	let fileQuery = $state('');
 
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Set in $derived, not reactive state
 	const filesWithFindings = $derived(new Set(badges.keys()));
 	const findingsFileCount = $derived(filesWithFindings.size);
 
