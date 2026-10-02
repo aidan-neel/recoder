@@ -16,9 +16,9 @@ import { fetchMergeRequest } from '../lib/glab';
 import { fetchPrContext } from '../lib/pr-context';
 import { runAdaptiveReview } from '../lib/harness';
 import { configForOrchestrator, configForRole, isReviewConfigured } from '../lib/models';
-import { AuthConfigError } from '../lib/agent-loop';
+import { ModelBlockedError } from '../lib/agent-loop';
 import { codex } from '../lib/codex';
-import { discussionContext, recordChatMessage } from '../lib/review-chat';
+import { discussionContext, recordChatMessage, reviewInstructions } from '../lib/review-chat';
 import { detectProvider, locateRepo, refspecFor } from '../lib/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../lib/sandbox';
 import { tokenEnv } from '../lib/tokens';
@@ -134,7 +134,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		if (!repo) throw new Error('repo not found');
 		// Planning and the correctness pass always run: fail now, not after a long checkout.
 		if ([configForOrchestrator(), configForRole('correctness')].some((config) => config.provider === 'codex') && !(await codex.signedIn())) {
-			throw new AuthConfigError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });
+			throw new ModelBlockedError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });
 		}
 		emitReviewEvent(reviewId, { type: 'step', step: 'orchestrator', message: '', data: { orchestratorModel: configForOrchestrator().model } });
 		const provider = repo.provider ?? detectProvider(repo.url);
@@ -155,8 +155,12 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 				: await fetchPullRequest(repo.url, review.prNumber, { env, metadataOnly: true }));
 		baseRef = pr.base;
 		prBody = pr.body ?? '';
-		// People and linked issues for the planner; fetched while the sandbox clones.
-		prContext = fetchPrContext(repo, review.prNumber, provider);
+		// People and linked issues for the planner; fetched while the sandbox clones. Best
+		// effort: a slow host API must not hold the review once the checkout is ready.
+		prContext = Promise.race([
+			fetchPrContext(repo, review.prNumber, provider),
+			new Promise<string>((resolve) => setTimeout(() => resolve(''), 30_000))
+		]);
 		reviewDiffs.set(reviewId, diff);
 		review = touch(reviewId, {
 			headSha: pr.headSha,
@@ -230,6 +234,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 				prTitle: review.prTitle,
 				prBody,
 				prContext: await prContext,
+				instructions: reviewInstructions(reviewId, initial.startedAt),
 				signal: analysis.signal,
 				resume
 			},
@@ -248,6 +253,12 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 						data: { agent: meta?.role, assignmentId: meta?.assignmentId }
 					}),
 				onPlan: (data) => reportReviewPlan(reviewId, data),
+				onApproval: (approval) => emitReviewEvent(reviewId, {
+					type: 'step',
+					step: 'review',
+					message: approval.status === 'pending' ? `Waiting for approval to run ${approval.requested} specialists` : `Running ${approval.requested} specialists`,
+					data: { approval }
+				}),
 				onAssignment: (assignment) => reportReviewAssignment(reviewId, assignment),
 				onCoverage: (coverage, gaps) => reportReviewCoverage(reviewId, coverage, gaps),
 				onBudget: (budget) => {
@@ -320,7 +331,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		const cancelled = analysis.signal.aborted;
 		analysis.abort();
 		const message = cancelled ? 'Review cancelled.' : err instanceof Error ? err.message : 'pipeline failed';
-		const failure = !cancelled && err instanceof AuthConfigError ? err.failure : undefined;
+		const failure = !cancelled && err instanceof ModelBlockedError ? err.failure : undefined;
 		try {
 			const snapshot = reviewProgress.get(reviewId);
 			if (snapshot) reviewProgress.set({ ...snapshot, outcome: 'failed', assignments: settleAssignments(snapshot.assignments ?? [], message), ...(failure ? { failure } : {}) });
@@ -335,6 +346,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			const settled = settlePipelineStreams(reviewId);
 			if (settled) emitReviewEvent(reviewId, { type: 'log', step: 'review', message: '', data: { settled: { messages: settled.messages, reasoning: settled.reasoning } } });
 		} catch { /* Review deleted mid-run. */ }
+		// The final state reaches SQLite now, not on the write-behind timer.
+		reviewProgress.flush();
 	}
 }
 

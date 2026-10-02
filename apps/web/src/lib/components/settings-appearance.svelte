@@ -1,6 +1,14 @@
 <script lang="ts">
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import SegmentedControl from '$lib/components/ui/segmented-control.svelte';
+	import { theme, type ThemeChoice } from '$lib/theme.svelte';
+
+	const ITEMS = [
+		{ value: 'system', label: 'System' },
+		{ value: 'light', label: 'Light' },
+		{ value: 'dark', label: 'Dark' }
+	];
 </script>
 
 <section class="settings-section" aria-labelledby="appearance-display">
@@ -9,9 +17,14 @@
 		<div class="settings-row">
 			<div class="min-w-0 flex-1">
 				<p class="settings-row-name">Theme</p>
-				<p class="settings-row-desc">Recoder uses a dark theme</p>
+				<p class="settings-row-desc">System follows your device</p>
 			</div>
-			<span class="text-[12.5px] text-fg-subtle">Dark</span>
+			<SegmentedControl
+				label="Theme"
+				items={ITEMS}
+				value={theme.choice}
+				onValueChange={(value) => theme.set(value as ThemeChoice)}
+			/>
 		</div>
 	</Card.Root>
 </section>

@@ -26,6 +26,7 @@ import {
 	suggestFixRequestSchema
 } from '../lib/fix';
 import { GhError, fetchPullHeadRef } from '../lib/gh';
+import { TtlCache } from '../lib/ttl-cache';
 import { failureExcerpt, fetchCheckLog, fetchChecks } from '../lib/checks';
 import { fetchPullHead } from '../lib/github-rest';
 import { fetchMergeHeadRef } from '../lib/glab';
@@ -111,6 +112,15 @@ app.post('/:id/cancel', (c) => {
 	return c.json({ cancelled: true });
 });
 
+/** Approve a plan waiting for the developer: its specialists run. Declining is a cancel. */
+app.post('/:id/approve-plan', (c) => {
+	const review = db.reviews.get(c.req.param('id'));
+	if (!review) return c.json({ error: 'review not found' }, 404);
+	const control = getReviewControl(review.id);
+	if (!control?.approve()) return c.json({ error: 'This review is not waiting for approval.' }, 409);
+	return c.json({ approved: true });
+});
+
 /** Hold a running review: in-flight model calls stop and re-run on resume. */
 app.post('/:id/pause', (c) => {
 	const review = db.reviews.get(c.req.param('id'));
@@ -130,23 +140,36 @@ app.post('/:id/resume', (c) => {
 	return c.json({ paused: false });
 });
 
-/** Parsed unified diff for a review (404 until the fetch step stores one). */
+/**
+ * Expanded diffs, briefly: the page polls while a review runs, and re-reading
+ * every changed file each time is the slow part. Short enough that fixes
+ * written to the checkout show up within seconds.
+ */
+const filesCache = new TtlCache<{ body: string; etag: string }>(10_000, 50);
+
+/** Parsed unified diff for a review (404 until the fetch step stores one), with an ETag so polls get 304. */
 app.get('/:id/files', async (c) => {
 	const review = db.reviews.get(c.req.param('id'));
 	if (!review) return c.json({ error: 'review not found' }, 404);
 	const diff = reviewDiffs.get(review.id);
 	if (!diff) return c.json({ error: 'no diff yet' }, 404);
-	const files = parseUnifiedDiff(diff);
 	const sandboxPath = await findReviewCheckout(review);
-	if (!sandboxPath) return c.json(files);
-	const expanded = await Promise.all(
-		files.map(async (file) => {
-			const text = await readSandboxFile(sandboxPath, file.path, 400_000);
-			if (!text || text.endsWith('…[truncated]')) return file;
-			return expandFileDiff(file, text);
-		})
-	);
-	return c.json(expanded);
+	const { body, etag } = await filesCache.get(`${review.id}:${review.headSha}:${sandboxPath ?? ''}:${Bun.hash(diff)}`, async () => {
+		const files = parseUnifiedDiff(diff);
+		const expanded = !sandboxPath ? files : await Promise.all(
+			files.map(async (file) => {
+				const text = await readSandboxFile(sandboxPath, file.path, 400_000);
+				if (!text || text.endsWith('…[truncated]')) return file;
+				return expandFileDiff(file, text);
+			})
+		);
+		const body = JSON.stringify(expanded);
+		return { body, etag: `"${Bun.hash(body).toString(36)}"` };
+	});
+	c.header('ETag', etag);
+	c.header('Cache-Control', 'private, no-cache');
+	if (c.req.header('if-none-match') === etag) return c.body(null, 304);
+	return c.body(body, 200, { 'content-type': 'application/json; charset=utf-8' });
 });
 
 /** Start a draft (interactive) review directly, without going through the orchestrator chat. */
@@ -344,8 +367,8 @@ app.post('/:id/fixes/suggest', async (c) => {
 		return c.json({ ...result, applies });
 	} catch (err) {
 		if (err instanceof LlmError) {
-			const failure = modelFailure(err, configForRole(resolveDiscussRole(parsed.data.agent)).provider, 'The model could not write a fix. Try again.');
-			return c.json({ error: failure.reason, ...(failure.signIn ? { action: 'sign-in' } : {}) }, 502);
+			const failure = modelFailure(err, configForRole(resolveDiscussRole(parsed.data.agent)), 'The model could not write a fix. Try again.');
+			return c.json({ error: failure.reason, ...(failure.signIn ? { action: 'sign-in' } : {}), ...(failure.usageLimit ? { usageLimit: failure.usageLimit } : {}) }, 502);
 		}
 		throw err;
 	}
@@ -372,8 +395,8 @@ app.post('/:id/checks/fix', async (c) => {
 		if (err instanceof CheckoutError) return c.json({ error: `Fixes need a local checkout of the pull request. ${err.message}` }, err.status);
 		if (err instanceof GhError) return c.json({ error: `Couldn't read the check's log: ${err.message}` }, 502);
 		if (err instanceof LlmError) {
-			const failure = modelFailure(err, configForRole('correctness').provider, 'The model could not write a fix. Try again.');
-			return c.json({ error: failure.reason, ...(failure.signIn ? { action: 'sign-in' } : {}) }, 502);
+			const failure = modelFailure(err, configForRole('correctness'), 'The model could not write a fix. Try again.');
+			return c.json({ error: failure.reason, ...(failure.signIn ? { action: 'sign-in' } : {}), ...(failure.usageLimit ? { usageLimit: failure.usageLimit } : {}) }, 502);
 		}
 		throw err;
 	}
@@ -475,6 +498,8 @@ app.post('/:id/changes/push', (c) => withChanges(c, async (sandboxPath, review) 
 	return c.json({ ...(await pushPendingCommits(sandboxPath, headRef)), branch: headRef });
 }));
 
+const checksCache = new TtlCache<unknown>(15_000);
+
 /** CI checks for the PR head (default) or any branch/sha of this repo (e.g. a fix's verify branch). */
 app.get('/:id/checks', async (c) => {
 	const review = db.reviews.get(c.req.param('id'));
@@ -484,14 +509,17 @@ app.get('/:id/checks', async (c) => {
 	try {
 		const requested = c.req.query('ref');
 		const provider = review.source;
-		if (requested) return c.json({ ref: requested, provider, checks: await fetchChecks(repo, requested) });
-		if (review.source === 'gitlab') {
-			const ref = await fetchMergeHeadRef(repo.url, review.prNumber, tokenEnv('gitlab', repo.url));
-			return c.json({ ref, provider, checks: await fetchChecks(repo, ref) });
-		}
-		// Checks run on the head commit; its sha also covers PRs from forks.
-		const head = await fetchPullHead(parseSlug(repo.url), review.prNumber);
-		return c.json({ ref: head.ref, provider, checks: await fetchChecks(repo, head.sha) });
+		// Checks poll every 20s while any run, so a 15s cache only saves repeat opens.
+		return c.json(await checksCache.get(`${review.id}|${requested ?? ''}`, async () => {
+			if (requested) return { ref: requested, provider, checks: await fetchChecks(repo, requested) };
+			if (review.source === 'gitlab') {
+				const ref = await fetchMergeHeadRef(repo.url, review.prNumber, tokenEnv('gitlab', repo.url));
+				return { ref, provider, checks: await fetchChecks(repo, ref) };
+			}
+			// Checks run on the head commit; its sha also covers PRs from forks.
+			const head = await fetchPullHead(parseSlug(repo.url), review.prNumber);
+			return { ref: head.ref, provider, checks: await fetchChecks(repo, head.sha) };
+		}));
 	} catch (err) {
 		if (err instanceof GhError) return c.json({ error: err.message }, 502);
 		throw err;

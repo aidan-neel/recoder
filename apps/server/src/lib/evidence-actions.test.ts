@@ -18,3 +18,7 @@ test('accepts the type/args shape and field aliases from the ark review', () => 
 	expect(parseActions({ actions: [{ action: 'readFile', path: 'a.py', revision: 'base' }] }))
 		.toEqual([{ action: 'readFile', path: 'a.py', revision: 'target' }]);
 });
+
+test('a file sent as a list of lines is written as one string', () => {
+	expect(parseActions({ actions: [{ action: 'writeFile', path: 'a.ts', content: ['one', 'two'] }] })).toEqual([{ action: 'writeFile', path: 'a.ts', content: 'one\ntwo' }]);
+});

@@ -1,4 +1,5 @@
 import type { Repo, Review } from '@recoder/shared';
+import { readCache, writeCache } from '$lib/persisted-cache';
 import { serverApi } from '$lib/server-api';
 
 export interface RecentSession {
@@ -116,6 +117,7 @@ class RecentSessionsState {
 	loading = $state(true);
 	apiDown = $state(false);
 	private inflight: Promise<void> | null = null;
+	private seeded = false;
 	/** Deleted in the UI, DELETE still pending (undo window): kept out of refreshes. */
 	private hidden = new Set<string>();
 	private branchRequests = new Set<string>();
@@ -151,7 +153,16 @@ class RecentSessionsState {
 	/** Single-flight load shared by every consumer (sidebar + home page helpers). */
 	load(): Promise<void> {
 		if (!this.inflight) {
-			this.inflight = this.fetchAll().finally(() => {
+			const cached = this.seeded ? null : readCache<{ repos: Repo[]; reviews: Review[]; summaries: Record<string, ProgressSummary> }>('recent-sessions');
+			this.seeded = true;
+			if (cached) {
+				// Show the last list at once; the fetch below replaces it quietly.
+				this.repos = cached.repos;
+				this.reviews = cached.reviews.filter((review) => !this.hidden.has(review.id));
+				this.summaries = cached.summaries;
+				this.loading = false;
+			}
+			this.inflight = this.fetchAll(!!cached).finally(() => {
 				this.inflight = null;
 			});
 		}
@@ -174,6 +185,7 @@ class RecentSessionsState {
 			this.reviews = reviews.filter((review) => !this.hidden.has(review.id));
 			this.summaries = summaries;
 			this.apiDown = false;
+			writeCache('recent-sessions', { repos, reviews, summaries });
 			void this.loadBranches(reviews);
 		} catch {
 			if (quiet) return;

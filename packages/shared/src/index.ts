@@ -5,6 +5,7 @@
 
 export * from './diff';
 export * from './metrics';
+export * from './model-markdown';
 
 export type Provider = 'github' | 'gitlab';
 
@@ -45,6 +46,8 @@ export interface FindingVerification {
 	status: 'verified' | 'unverified';
 	/** What the run showed, or why it could not be proven. */
 	reason: string;
+	/** `run`: a command's output proves it. `trace`: code could not run, and the verifier traced it through the code it read. */
+	method?: 'run' | 'trace';
 	/** The command whose output proves the finding. */
 	command?: string;
 	exitCode?: number | null;
@@ -185,11 +188,16 @@ export type ReviewRole =
 	| 'testing'
 	| 'errors'
 	| 'concurrency'
-	| 'api';
+	| 'api'
+	| 'impact'
+	| 'frontend'
+	| 'data';
 
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {
 	provider?: 'openai-compatible' | 'codex';
+	/** Hosted provider this model came from (`opencode-go`, `openrouter`…); unset for ChatGPT and the custom endpoint. */
+	source?: string;
 	id: string;
 	label: string;
 	model: string;
@@ -212,6 +220,7 @@ export interface DiscoveredModel {
 
 export interface ModelEntryPatch {
 	provider?: 'openai-compatible' | 'codex';
+	source?: string;
 	id?: string;
 	label: string;
 	model: string;
@@ -222,9 +231,41 @@ export interface ModelEntryPatch {
 	contextWindow?: number;
 }
 
+/** A hosted model provider you connect with an API key (OpenCode Go, OpenRouter…). */
+export interface HostedProvider {
+	id: string;
+	name: string;
+	/** One line on what the plan gives you. */
+	blurb: string;
+	/** Where to create an API key. */
+	keyUrl: string;
+	/** Where to check usage; null when the provider has no page for it. */
+	usageUrl: string | null;
+	connected: boolean;
+	apiKeyPreview: string | null;
+}
+
+/** A model a hosted provider serves, from its catalog. */
+export interface CatalogModel {
+	id: string;
+	name: string;
+	contextWindow: number | null;
+	/** Input price in USD per million tokens, when known. */
+	inputCost: number | null;
+	/** False when the model needs an API Recoder doesn't speak yet (Responses, Anthropic Messages). */
+	supported: boolean;
+	/** Reasoning levels the model accepts, when the provider reports them. */
+	efforts?: ReasoningEffort[];
+	defaultEffort?: ReasoningEffort;
+}
+
 /** Reasoning levels in ascending depth; providers offer a subset. */
 export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
+
+/** How many specialists one review may dispatch, and how long each may dig. */
+export const DISPATCH_LEVELS = ['low', 'medium', 'high'] as const;
+export type DispatchLevel = (typeof DISPATCH_LEVELS)[number];
 
 /** Reviewer model configuration (keys are never exposed). */
 export interface ModelSettings {
@@ -241,6 +282,8 @@ export interface ModelSettings {
 	orchestratorEffort?: ReasoningEffort | null;
 	/** Specialist reasoning effort; null follows the Review effort when the model does too. */
 	specialistEffort?: ReasoningEffort | null;
+	/** Specialist dispatch: how many specialists a review may run (medium by default). */
+	specialistDispatch: DispatchLevel;
 	/** Where overrides are saved, e.g. `~/.recoder/data/review-config.json`. */
 	configPath?: string;
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
@@ -255,6 +298,7 @@ export interface ModelSettingsPatch {
 	specialistModelId?: string | null;
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
+	specialistDispatch?: DispatchLevel;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;

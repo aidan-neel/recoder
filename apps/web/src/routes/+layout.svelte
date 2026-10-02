@@ -9,10 +9,15 @@
 	import ModelSettingsModal from '$lib/components/model-settings-modal.svelte';
 	import UsageModal from '$lib/components/usage-modal.svelte';
 	import DeleteSessionDialog from '$lib/components/delete-session-dialog.svelte';
+	import DeclinePlanDialog from '$lib/components/decline-plan-dialog.svelte';
 	import TopBar from '$lib/components/top-bar.svelte';
+	import { theme } from '$lib/theme.svelte';
+	import { onMount } from 'svelte';
 	import '../app.css';
 
 	let { children } = $props();
+
+	onMount(() => theme.init());
 
 	// Sivir's Toaster portals to <body> without marking itself an overlay root,
 	// so an open modal inerts it and toast actions (Undo, View) stop responding.
@@ -43,6 +48,7 @@
 	<GuidelinesEditor />
 	<UsageModal />
 	<DeleteSessionDialog />
+	<DeclinePlanDialog />
 	<CommandPalette />
 	<Toaster />
 </div>

@@ -1,5 +1,7 @@
 import { env } from '$env/dynamic/public';
 import type { DiscoveredModel,
+	CatalogModel,
+	HostedProvider,
 	CodexConnection,
 	CodexModel,
 	ApplyFixRequest,
@@ -34,7 +36,8 @@ import type { DiscoveredModel,
 	RereviewRequest,
 	RereviewResponse,
 	SuggestFixRequest,
-	SuggestFixResponse
+	SuggestFixResponse,
+	UsageLimit
 } from '@recoder/shared';
 
 const base = (env.PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
@@ -44,7 +47,7 @@ export const apiBase = base;
 
 /** A failed request, with what the developer can do about it when the server says. */
 export class ApiError extends Error {
-	constructor(message: string, readonly action?: FailureAction) {
+	constructor(message: string, readonly action?: FailureAction, readonly usageLimit?: UsageLimit) {
 		super(message);
 		this.name = 'ApiError';
 	}
@@ -56,10 +59,42 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 		headers: { 'content-type': 'application/json', ...init?.headers }
 	});
 	if (!res.ok) {
-		const body = (await res.json().catch(() => null)) as { error?: string; action?: FailureAction } | null;
-		throw new ApiError(body?.error ?? `API ${res.status}`, body?.action === 'sign-in' || body?.action === 'settings' ? body.action : undefined);
+		const body = (await res.json().catch(() => null)) as { error?: string; action?: FailureAction; usageLimit?: UsageLimit } | null;
+		throw new ApiError(
+			body?.error ?? `API ${res.status}`,
+			body?.action === 'sign-in' || body?.action === 'settings' ? body.action : undefined,
+			body?.usageLimit && typeof body.usageLimit.name === 'string' ? body.usageLimit : undefined
+		);
 	}
 	return (await res.json()) as T;
+}
+
+/**
+ * Each review's last diff and its ETag. Revisiting a review shows the diff at
+ * once, and a poll that gets 304 hands back the same array, so nothing re-renders.
+ */
+const reviewFiles = new Map<string, { etag: string; files: FileDiff[] }>();
+
+/** The last diff loaded for this review in this tab, if any. */
+export function cachedReviewFiles(id: string): FileDiff[] | null {
+	return reviewFiles.get(id)?.files ?? null;
+}
+
+async function getReviewFiles(id: string, signal?: AbortSignal): Promise<FileDiff[]> {
+	const cached = reviewFiles.get(id);
+	const res = await fetch(`${base}/api/reviews/${id}/files`, {
+		signal,
+		headers: cached ? { 'if-none-match': cached.etag } : undefined
+	});
+	if (res.status === 304 && cached) return cached.files;
+	if (!res.ok) {
+		const body = (await res.json().catch(() => null)) as { error?: string } | null;
+		throw new ApiError(body?.error ?? `API ${res.status}`);
+	}
+	const files = (await res.json()) as FileDiff[];
+	const etag = res.headers.get('etag');
+	if (etag) reviewFiles.set(id, { etag, files });
+	return files;
 }
 
 /** Read a `data: {...}` server-sent event stream, one parsed payload per event. */
@@ -118,7 +153,7 @@ export const serverApi = {
 	stopReviewMessage: (id: string, assignmentId: string) =>
 		req<{ stopped: boolean }>(`/api/reviews/${id}/chat/stop`, { method: 'POST', body: JSON.stringify({ assignmentId }) }),
 	getReviewMetrics: (id: string, signal?: AbortSignal) => req<ReviewMetrics | null>(`/api/reviews/${id}/metrics`, { signal }),
-	getReviewFiles: (id: string, signal?: AbortSignal) => req<FileDiff[]>(`/api/reviews/${id}/files`, { signal }),
+	getReviewFiles,
 	discuss: (reviewId: string, input: DiscussRequest) =>
 		req<DiscussResponse>(`/api/reviews/${reviewId}/discuss`, {
 			method: 'POST',
@@ -224,6 +259,7 @@ export const serverApi = {
 	cancelReview: (id: string) => req<{ cancelled: boolean }>(`/api/reviews/${id}/cancel`, { method: 'POST' }),
 	pauseReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/pause`, { method: 'POST' }),
 	resumeReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/resume`, { method: 'POST' }),
+	approvePlan: (id: string) => req<{ approved: boolean }>(`/api/reviews/${id}/approve-plan`, { method: 'POST' }),
 	deleteReview: (id: string) =>
 		req<{ deleted: boolean }>(`/api/reviews/${id}`, { method: 'DELETE' }),
 	authStatus: () => req<{ github: ProviderAuth; gitlab: ProviderAuth }>('/api/auth/status'),
@@ -240,5 +276,13 @@ export const serverApi = {
 	discoverModels: (input: { baseUrl?: string; apiKey?: string }) =>
 		req<{ baseUrl: string; models: DiscoveredModel[] }>('/api/settings/models/discover', { method: 'POST', body: JSON.stringify(input) }),
 	saveModelSettings: (patch: ModelSettingsPatch) =>
-		req<ModelSettings>('/api/settings/models', { method: 'PUT', body: JSON.stringify(patch) })
+		req<ModelSettings>('/api/settings/models', { method: 'PUT', body: JSON.stringify(patch) }),
+	listHostedProviders: () => req<HostedProvider[]>('/api/settings/providers'),
+	/** Checks the key without running a model, then saves it. */
+	connectHostedProvider: (id: string, apiKey: string) =>
+		req<{ providers: HostedProvider[]; settings: ModelSettings }>(`/api/settings/providers/${id}/connect`, { method: 'POST', body: JSON.stringify({ apiKey }) }),
+	/** Forgets the key and every model added from the provider. */
+	disconnectHostedProvider: (id: string) =>
+		req<{ providers: HostedProvider[]; settings: ModelSettings }>(`/api/settings/providers/${id}`, { method: 'DELETE' }),
+	hostedProviderCatalog: (id: string) => req<CatalogModel[]>(`/api/settings/providers/${id}/catalog`)
 };

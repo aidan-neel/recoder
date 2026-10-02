@@ -16,7 +16,9 @@ Distinguish intentional PR behavior from accidental inconsistency.
 Check whether a suspected issue is introduced or worsened by this PR.
 Cite evidence IDs for every finding. Do not invent files, lines, or behavior you cannot see.
 Report which assigned hunks you actually examined.
-Zero findings is a valid, honorable outcome.
+Hunt, don't skim. For each changed function: read the whole function, not just the hunk; find its callers and check they still hold; check what removed or replaced code used to guarantee and whether something still does; try empty, null, boundary, concurrent and failure inputs in your head.
+Investigate every suspicious pattern and report any issue you can tie to evidence, even when you are not fully sure: a later stage verifies and filters candidates, so a missed bug costs more than a rejected candidate. Say how sure you are in the body.
+Zero findings is a valid outcome only after you have read the code the change touches.
 Convention findings need either an applicable explicit repository rule or at least two comparable existing examples. Mixed local conventions are uncertainty, not a mandate to normalize code.
 Concrete naming, formatting, documentation, and structure deviations are allowed and are normally informational. Group repeated manifestations of one rule into one finding with related locations.
 You cannot spawn agents. On your final allowed turn you must finish with the evidence you have.
@@ -67,13 +69,27 @@ ${FINDING_BODY_STYLE}
 "coverageGaps" lists only assigned hunks you could not read or reason about. Missing tests or other problems in code you did read are findings (or nothing), never coverage gaps.
 Use "high" only for issues that are certainly reachable and damaging. Do not report informational notes, nits or style preferences.`;
 
-function reviewContract(exec: boolean): string {
+/** The same rules as REVIEW_RULES, as a short checklist: small models follow this and lose the long form. */
+const REVIEW_RULES_COMPACT = `How to review:
+- Read the whole changed function, not just the hunk; find its callers; check what removed code used to guarantee.
+- Try empty, null, boundary, concurrent and failure inputs in your head.
+- Report every issue you can tie to evidence, even when unsure, and say how sure you are: a later stage verifies candidates.
+- Cite evidence IDs for every finding. Never invent files, lines or behavior you cannot see.
+- A convention finding needs an explicit repository rule or two existing examples.
+- Zero findings is valid only after you have read the code the change touches.
+- You cannot spawn agents. On your final turn, finish with the evidence you have.
+
+`;
+
+function reviewContract(exec: boolean, compact = false): string {
 	return `${exec ? EXEC_RULES : READ_ONLY_RULES}
-${REVIEW_RULES}${exec ? EXEC_ACTIONS : READ_ONLY_ACTIONS}${FINAL_SHAPE}`;
+${compact ? REVIEW_RULES_COMPACT : REVIEW_RULES}${exec ? EXEC_ACTIONS : READ_ONLY_ACTIONS}${FINAL_SHAPE}`;
 }
 
 export const SHARED_REVIEW_CONTRACT = reviewContract(false);
 export const EXEC_REVIEW_CONTRACT = reviewContract(true);
+export const SHARED_REVIEW_CONTRACT_COMPACT = reviewContract(false, true);
+export const EXEC_REVIEW_CONTRACT_COMPACT = reviewContract(true, true);
 
 /** Copyable request shapes: weaker models follow an example far better than a type signature. */
 export const RETRIEVAL_EXAMPLES = `To read code, reply with ONLY this JSON shape (one to four actions):
@@ -83,6 +99,35 @@ Every action object has an "action" key whose value is exactly one of readDiff, 
 export const EXEC_EXAMPLES = `To read or run code, reply with ONLY this JSON shape (one to four actions, at most two runs):
 {"message":"Reading the refill path, then running a repro for it.","actions":[{"action":"readFile","revision":"head","path":"src/limiter.ts","startLine":40,"endLine":120},{"action":"writeFile","path":"src/recoder-repro.test.ts","content":"..."},{"action":"run","command":"bun test src/recoder-repro.test.ts"}]}
 Every action object has an "action" key whose value is exactly one of readDiff, readFile, search, listFiles, run, writeFile. run takes a shell "command" string; writeFile takes "path" and "content".`;
+
+/**
+ * Smaller and open-weight models follow a short rule with one example far
+ * better than a long style guide, and get rich markdown wrong (headings,
+ * nested lists, escapes inside JSON). Like opencode's per-family prompts, they
+ * get the compact style; frontier families get the full one. A parameter count
+ * in the name decides when present ("35B", "8b", MoE "A3B").
+ */
+export function isCompactModel(model: string): boolean {
+	const id = model.toLowerCase();
+	const sizes = [...id.matchAll(/(?:^|[^a-z0-9.])a?(\d+(?:\.\d+)?)b(?![a-z0-9])/g)].map((match) => Number(match[1]));
+	if (sizes.length) return Math.max(...sizes) <= 70;
+	if (/claude|gpt-[45]|\bo[134]\b|gemini-(?!.*lite)|grok|kimi|glm-4\.[5-9]|glm-[5-9]|deepseek-(?:v3|r1|chat|reasoner)/.test(id)) return false;
+	return /llama|mistral|ministral|gemma|phi|granite|smol|tiny|nano|mini|lite|qwen|olmo|falcon|deepseek-coder/.test(id);
+}
+
+/** Writing style for model text shown to the developer, sized to the model. */
+export function chatStyle(model: string): string {
+	return isCompactModel(model) ? CHAT_STYLE_COMPACT : CHAT_STYLE;
+}
+
+const CHAT_STYLE_COMPACT = `Writing rules (follow exactly):
+- Talk to the reader as "you". At most 60 words, in one to three short paragraphs.
+- Allowed formatting: \`backticks\` around code, file paths and commands; "- " bullets, one per line, with a blank line before the list; **bold** at most once.
+- Not allowed: headings (#), tables, numbered lists, nested lists, emoji, horizontal rules, code fences in chat text.
+- No preamble, no closing summary, no offers of more help.
+- Inside a JSON string, a line break is \\n and a paragraph break is \\n\\n.
+Example "message" value:
+"I checked \`refill()\` in \`src/limiter.ts\`.\\n\\nTwo problems:\\n\\n- \`tokens\` can go negative on a burst.\\n- The timer is never cleared on stop."`;
 
 /** How anything shown to the developer in the review chat should read. */
 export const CHAT_STYLE = `Writing style: be minimal. Use as few words as the point needs, usually one to three short sentences in total, and never more than 60 words unless the developer asks for detail. Put each separate subject in its own short paragraph, with a blank line between paragraphs; never run different subjects together in one paragraph. No preamble, no restating the question, no closing summary, no offers of more help. Use a list only for three or more parallel items.

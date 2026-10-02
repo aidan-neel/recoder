@@ -31,6 +31,9 @@ function getDb(): Database {
 
 /** Test helper: close + forget the handle (e.g. after switching data dirs). */
 export function closeStore(): void {
+	flushReviewProgress();
+	progressCache.clear();
+	progressDirty.clear();
 	handle?.close();
 	handle = null;
 }
@@ -68,7 +71,118 @@ export const db = {
 	runs: createCollection<CommandRun>('runs')
 };
 
-export const reviewProgress = createCollection<ReviewProgress>('review_progress');
+const progressTable = createCollection<ReviewProgress>('review_progress');
+const progressCache = new Map<string, ReviewProgress>();
+const progressDirty = new Set<string>();
+let progressTimer: ReturnType<typeof setTimeout> | null = null;
+/** Snapshots kept in memory; the oldest untouched one is written out and dropped past this. */
+const PROGRESS_CACHE_SIZE = 24;
+/** How long a snapshot may sit in memory before it reaches SQLite. */
+const PROGRESS_FLUSH_MS = 750;
+
+/**
+ * Write every pending snapshot to SQLite now. A snapshot stays pending until
+ * its own write succeeds, and one failed write doesn't hold back the rest.
+ */
+export function flushReviewProgress(): void {
+	if (progressTimer) {
+		clearTimeout(progressTimer);
+		progressTimer = null;
+	}
+	let failure: unknown;
+	for (const id of [...progressDirty]) {
+		try {
+			const snapshot = progressCache.get(id);
+			if (snapshot) progressTable.set(snapshot);
+			progressDirty.delete(id);
+		} catch (error) {
+			failure ??= error;
+		}
+	}
+	if (failure !== undefined) throw failure;
+}
+
+/** The write-behind timer. A throw here would crash the server, so log it and try again later. */
+function flushOnTimer(): void {
+	try {
+		flushReviewProgress();
+	} catch (error) {
+		console.error('[store] failed to flush review progress', error);
+		progressTimer ??= setTimeout(flushOnTimer, PROGRESS_FLUSH_MS);
+	}
+}
+
+/**
+ * Live review progress. A running review updates its snapshot many times a
+ * second (streamed reasoning and replies from every specialist), and each
+ * snapshot is a large JSON blob: serializing it to SQLite on every event
+ * stalled the server. Reads and writes go through memory; SQLite gets the
+ * latest snapshot shortly after, on a terminal event, and at exit.
+ */
+export const reviewProgress = {
+	list: (): ReviewProgress[] => {
+		flushReviewProgress();
+		return progressTable.list().map((item) => progressCache.get(item.id) ?? item);
+	},
+	get: (id: string): ReviewProgress | undefined => {
+		const cached = progressCache.get(id);
+		if (cached) {
+			// Most recently used last.
+			progressCache.delete(id);
+			progressCache.set(id, cached);
+			return cached;
+		}
+		const stored = progressTable.get(id);
+		if (stored) remember(stored);
+		return stored;
+	},
+	set: (item: ReviewProgress): ReviewProgress => {
+		remember(item);
+		progressDirty.add(item.id);
+		progressTimer ??= setTimeout(flushOnTimer, PROGRESS_FLUSH_MS);
+		return item;
+	},
+	delete: (id: string): boolean => {
+		progressCache.delete(id);
+		progressDirty.delete(id);
+		return progressTable.delete(id);
+	},
+	clear: (): void => {
+		progressCache.clear();
+		progressDirty.clear();
+		progressTable.clear();
+	},
+	flush: flushReviewProgress
+};
+
+function remember(item: ReviewProgress): void {
+	progressCache.delete(item.id);
+	progressCache.set(item.id, item);
+	while (progressCache.size > PROGRESS_CACHE_SIZE) {
+		const oldest = progressCache.keys().next().value as string;
+		if (progressDirty.has(oldest)) {
+			progressTable.set(progressCache.get(oldest)!);
+			progressDirty.delete(oldest);
+		}
+		progressCache.delete(oldest);
+	}
+}
+
+// Nothing in memory may be lost on the way out: flush on exit and on the signals that end a dev
+// server. Registered once per process; `--hot` re-evaluates this module and must not stack listeners.
+const hooks = globalThis as { __recoderProgressFlush?: () => void };
+const registered = hooks.__recoderProgressFlush !== undefined;
+// The handlers call whichever module instance is current, so a reload's cache is the one flushed.
+hooks.__recoderProgressFlush = flushReviewProgress;
+if (!registered) {
+	process.on('exit', () => hooks.__recoderProgressFlush?.());
+	for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+		process.on(signal, () => {
+			hooks.__recoderProgressFlush?.();
+			process.exit(signal === 'SIGINT' ? 130 : 143);
+		});
+	}
+}
 
 export const reviewMetrics = createCollection<{
 	id: string;

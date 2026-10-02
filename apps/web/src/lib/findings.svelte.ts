@@ -32,6 +32,8 @@ export interface FixSuggestion {
 	error?: string;
 	/** What fixes a failed suggestion: signing in to ChatGPT, or setting up a model. */
 	action?: import('@recoder/shared').FailureAction;
+	/** The model's plan ran out while writing the fix. */
+	usageLimit?: import('@recoder/shared').UsageLimit;
 	/** Apply-to-PR state for a ready suggestion. */
 	apply?: 'applying' | 'applied' | 'error';
 	applyError?: string;

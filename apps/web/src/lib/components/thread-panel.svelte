@@ -9,13 +9,12 @@
 	import * as Conversation from '@sivir-ui/svelte/components/conversation';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Markdown } from '@sivir-ui/svelte/components/markdown';
+	import ModelMarkdown from './model-markdown.svelte';
 	import * as Message from '@sivir-ui/svelte/components/message';
 	import { ResponseStream } from '@sivir-ui/svelte/components/response-stream';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import ModelPicker from './model-picker.svelte';
 	import ReviewComposer from './review-composer.svelte';
-	import { MODEL_ROLES, modelSettingsUi } from '$lib/model-settings.svelte';
 	import type { ReviewRole } from '@recoder/shared';
 	import { findingsStore } from '$lib/findings.svelte';
 	import { serverApi } from '$lib/server-api';
@@ -31,7 +30,10 @@
 		'testing',
 		'errors',
 		'concurrency',
-		'api'
+		'api',
+		'impact',
+		'frontend',
+		'data'
 	];
 
 	let active = $state(BASE_PARTICIPANTS[0]);
@@ -245,7 +247,7 @@
 					<span class="truncate">{finding.file}:{finding.startLine}</span>
 				</Typography.Metadata>
 				<div class="mt-2 min-w-0 text-sm">
-					<Markdown content={finding.body} class="text-sm" />
+					<ModelMarkdown content={finding.body} class="text-sm" />
 				</div>
 				{#if finding.status !== 'open'}
 					<div class="mt-2 flex items-center gap-2">
@@ -284,7 +286,7 @@
 									{#if message.streaming}
 										<ResponseStream textStream={message.body} streaming class="font-normal" />
 									{:else}
-										<Markdown content={message.body} />
+										<ModelMarkdown content={message.body} />
 									{/if}
 								</Message.Content>
 						</Message.Root>
@@ -362,14 +364,6 @@
 				>
 					{#snippet leading()}
 						<Typography.Metadata class="truncate text-[12px] text-fg-faint">Shared with Orchestrator</Typography.Metadata>
-					{/snippet}
-					{#snippet picker()}
-						<ModelPicker
-							value={modelSettingsUi.specialist}
-							onSelect={(choice) => void modelSettingsUi.selectSpecialist(choice)}
-							size="panel"
-							label="Specialist model"
-						/>
 					{/snippet}
 				</ReviewComposer>
 			</div>

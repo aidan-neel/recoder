@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { REVIEW_ROLES, ROLE_FOCUS, ROLE_LABELS, type ReviewRole } from './roles.js';
 import { REVIEW_POLICY } from './review-policy.js';
-import { EXEC_REVIEW_CONTRACT, SHARED_REVIEW_CONTRACT } from './prompts.js';
+import { EXEC_REVIEW_CONTRACT, EXEC_REVIEW_CONTRACT_COMPACT, SHARED_REVIEW_CONTRACT, SHARED_REVIEW_CONTRACT_COMPACT } from './prompts.js';
 import type { PlannerAssignment } from './planner.js';
+import { directiveBlock, type ReviewDirective } from './directive.js';
 
 const locationSchema = z.object({
 	file: z.string().min(1).max(500),
@@ -59,19 +60,22 @@ export const specialistOutputSchema = z.object({
 export type SpecialistOutput = z.infer<typeof specialistOutputSchema>;
 export type SpecialistFinding = z.infer<typeof findingSchema>;
 
-export function specialistSystemPrompt(role: ReviewRole, exec = false): string {
-	return `${exec ? EXEC_REVIEW_CONTRACT : SHARED_REVIEW_CONTRACT}
+export function specialistSystemPrompt(role: ReviewRole, exec = false, options: { compact?: boolean; directive?: ReviewDirective | null } = {}): string {
+	const contract = options.compact ? (exec ? EXEC_REVIEW_CONTRACT_COMPACT : SHARED_REVIEW_CONTRACT_COMPACT) : (exec ? EXEC_REVIEW_CONTRACT : SHARED_REVIEW_CONTRACT);
+	const directive = directiveBlock(options.directive);
+	return `${contract}
 
 Role: ${ROLE_LABELS[role]} (${role})
-Focus: ${ROLE_FOCUS[role]}`;
+Focus: ${ROLE_FOCUS[role]}${directive ? `\n\n${directive}\nReport only what these instructions ask for; findings outside them are dropped.` : ''}`;
 }
 
-export function specialistUserPrompt(assignment: PlannerAssignment, remainingTurns: number, remainingCalls: number): string {
+export function specialistUserPrompt(assignment: PlannerAssignment, remainingTurns: number, remainingCalls: number, directive?: ReviewDirective | null): string {
 	const scope = assignment.scope
 		.map((entry) => `- ${entry.path}\n  hunks: ${entry.hunkIds.join(', ') || '(file)'}`)
 		.join('\n');
 	const questions = assignment.questions.map((question, i) => `${i + 1}. ${question}`).join('\n');
 	return [
+		directive?.instructions.trim() ? `Developer instructions for this review (trusted; follow them):\n${directive.instructions.trim()}` : '',
 		`Assignment ${assignment.id}: ${assignment.title}`,
 		`Why this assignment exists: ${assignment.reason}`,
 		`Questions:\n${questions || '(none)'}`,
@@ -161,6 +165,25 @@ export function normalizeSpecialistRaw(raw: unknown): unknown {
 	return out;
 }
 
+/** "Let me check…", "I'll gather…": the model is describing work it hasn't done yet. */
+const ANNOUNCES_WORK = /\b(let me|i'll|i will|i'm going to|i am going to|i need to|i'm (?:investigating|checking|looking|reading|gathering)|next,? i|going to (?:check|look|read|inspect|gather|verify))\b/i;
+
+/**
+ * Weaker models (often behind vLLM) send the final shape with an empty
+ * findings list while announcing what they're about to read, which would end
+ * the specialist before it looked at anything. Push back once.
+ */
+export function prematureSpecialistFinal(output: SpecialistOutput, state: { retrievals: number }): string | null {
+	if (output.findings.length) return null;
+	if (output.message && ANNOUNCES_WORK.test(output.message)) {
+		return 'Your reply says you are still investigating, but it has the final result fields, which would end your review with no findings. If you want to read code, reply with "actions" now. Only send the final result once you have actually finished.';
+	}
+	if (state.retrievals === 0) {
+		return 'You concluded with no findings without reading any code beyond the patch. Before concluding, read what the change touches: the full functions it edits, their callers, and anything it removed or replaced. Reply with "actions" now. If you are certain there is nothing more to read, send the same final result again.';
+	}
+	return null;
+}
+
 export function parseSpecialistOutput(raw: unknown): SpecialistOutput | null {
 	const parsed = specialistOutputSchema.safeParse(normalizeSpecialistRaw(raw));
 	return parsed.success ? parsed.data : null;
@@ -172,4 +195,60 @@ export function specialistValidationError(raw: unknown): string {
 	const parsed = specialistOutputSchema.safeParse(normalizeSpecialistRaw(raw));
 	if (parsed.success) return 'output did not match the required schema';
 	return parsed.error.issues.slice(0, 6).map((issue) => `${issue.path.join('.') || 'root'}: ${issue.message}`).join('; ');
+}
+
+const SCHEMA_ACTIONS = ['readDiff', 'readFile', 'search', 'listFiles'];
+const SCHEMA_EXEC_ACTIONS = [...SCHEMA_ACTIONS, 'run', 'writeFile'];
+
+/**
+ * What a specialist turn may look like, for endpoints with guided decoding:
+ * a retrieval request with at least one action, or the final result. On the
+ * final turn only the result is allowed. Kept looser than the zod schema:
+ * it shapes the reply, and `parseSpecialistOutput` still validates it.
+ */
+export function specialistResponseSchema(exec: boolean, finalTurn: boolean): { name: string; schema: Record<string, unknown> } {
+	const str = { type: 'string' };
+	const strings = { type: 'array', items: str };
+	const line = { type: ['integer', 'null'] };
+	const action = {
+		type: 'object',
+		properties: {
+			action: { type: 'string', enum: exec ? SCHEMA_EXEC_ACTIONS : SCHEMA_ACTIONS },
+			revision: { type: 'string', enum: ['head', 'target', 'mergeBase'] },
+			path: str, query: str, prefix: str, cursor: str, hunkIds: strings,
+			startLine: { type: 'integer' }, endLine: { type: 'integer' },
+			...(exec ? { command: str, content: str, timeoutSec: { type: 'integer' } } : {})
+		},
+		required: ['action']
+	};
+	const retrieval = {
+		type: 'object',
+		properties: { message: str, actions: { type: 'array', items: action, minItems: 1, maxItems: REVIEW_POLICY.maxRetrievalsPerTurn } },
+		required: ['message', 'actions'],
+		additionalProperties: false
+	};
+	const finding = {
+		type: 'object',
+		properties: {
+			title: str, file: str, line, endLine: line,
+			severity: { type: 'string', enum: ['high', 'medium', 'low'] },
+			category: str, body: str, evidenceIds: strings,
+			side: { type: 'string', enum: ['old', 'new'] }
+		},
+		required: ['title', 'file', 'severity', 'category', 'body', 'evidenceIds']
+	};
+	const final = {
+		type: 'object',
+		properties: {
+			message: str,
+			findings: { type: 'array', items: finding, maxItems: 30 },
+			examinedHunks: strings,
+			coverageGaps: { type: 'array', items: { type: 'object', properties: { hunkId: str, reason: str }, required: ['hunkId', 'reason'] } },
+			blockers: strings,
+			followUp: { anyOf: [{ type: 'object' }, { type: 'null' }] },
+			recommendedChecks: strings
+		},
+		required: ['message', 'findings', 'examinedHunks']
+	};
+	return { name: finalTurn ? 'specialist_result' : 'specialist_turn', schema: finalTurn ? final : { anyOf: [retrieval, final] } };
 }

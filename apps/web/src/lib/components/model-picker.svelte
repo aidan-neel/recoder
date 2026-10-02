@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
-	import Shortcut from '@sivir-ui/svelte/components/shortcut';
 	import type { ReasoningEffort } from '@recoder/shared';
 	import {
 		effortLabel,
@@ -19,8 +18,6 @@
 		onSelect: (choice: ModelChoice) => void;
 		/** 30px in composers, 28px in side panels. */
 		size?: 'md' | 'panel';
-		/** Composer extra: "Model settings…". */
-		composerExtras?: boolean;
 		/** Trigger text when `value` is null (e.g. "Same as Review"). */
 		placeholder?: string;
 		/** Offers `placeholder` as the first model option, to go back to following another pick. */
@@ -33,7 +30,6 @@
 		value,
 		onSelect,
 		size = 'md',
-		composerExtras = false,
 		placeholder = 'Choose a model',
 		onFollow,
 		disabled = false,
@@ -69,22 +65,28 @@
 	});
 
 	const models = $derived(modelSettingsUi.models);
+	/** Models by provider, in the order providers first appear. */
+	const groups = $derived.by(() => {
+		const byProvider = new Map<string, ModelOption[]>();
+		for (const option of models) byProvider.set(option.provider, [...(byProvider.get(option.provider) ?? []), option]);
+		return [...byProvider.entries()];
+	});
 	const model = $derived<ModelOption | undefined>(models.find((item) => item.id === value?.modelId));
 	const effort = $derived(resolveEffort(model, value?.effort));
 	const triggerKey = $derived(`${model?.id ?? ''}:${effort ?? ''}`);
 
+	/** The label only animates when the developer changes it, never when it first loads. */
+	let picked = $state(false);
+
 	function pickModel(next: ModelOption): void {
+		picked = true;
 		// Switching to a model that lacks the current effort resets to its default.
 		onSelect({ modelId: next.id, effort: resolveEffort(next, effort) });
 	}
 
 	function pickEffort(next: ReasoningEffort): void {
+		picked = true;
 		if (model) onSelect({ modelId: model.id, effort: next });
-	}
-
-	function openModelSettings(): void {
-		open = false;
-		modelSettingsUi.show();
 	}
 </script>
 
@@ -100,7 +102,7 @@
 		aria-label="{label}: {model ? `${model.displayName}${effort ? ` ${effortLabel(effort)}` : ''}` : placeholder}"
 	>
 		{#key triggerKey}
-			<span class="quiet-trigger-label">
+			<span class="quiet-trigger-label" data-picked={picked || undefined}>
 				{#if model}
 					{model.displayName}
 					{#if effort}<span class="text-fg-subtle">{effortLabel(effort)}</span>{/if}
@@ -118,7 +120,7 @@
 					<span class="model-menu-value">{model?.displayName ?? (onFollow ? placeholder : 'None')}</span>
 				</span>
 			</DropdownMenu.SubTrigger>
-			<DropdownMenu.SubContent class="submenu-left w-[230px]">
+			<DropdownMenu.SubContent class="submenu-left model-menu-models w-[250px]">
 				{#if onFollow}
 					<DropdownMenu.Item callback={onFollow} class="model-option" aria-checked={!value} role="menuitemradio">
 						<span class="flex w-3 shrink-0 justify-center" aria-hidden="true">{#if !value}<Check size={12} />{/if}</span>
@@ -126,21 +128,29 @@
 					</DropdownMenu.Item>
 					<DropdownMenu.Separator />
 				{/if}
-				{#each models as option (option.id)}
-					<DropdownMenu.Item
-						callback={() => pickModel(option)}
-						class="model-option"
-						aria-checked={option.id === model?.id}
-						role="menuitemradio"
-					>
-						<span class="flex w-3 shrink-0 justify-center" aria-hidden="true">
-							{#if option.id === model?.id}<Check size={12} />{/if}
-						</span>
-						<span class="flex min-w-0 flex-1 flex-col gap-px text-left">
-							<span class="truncate text-[13px]">{option.displayName}</span>
-							<span class="truncate text-[11px] text-fg-faint">{option.provider}{#if option.contextWindow}<span> · {formatContextWindow(option.contextWindow)} context</span>{/if}</span>
-						</span>
-					</DropdownMenu.Item>
+				{#each groups as [provider, options], g (provider)}
+					{#if groups.length > 1}
+						{#if g > 0}<DropdownMenu.Separator />{/if}
+						<DropdownMenu.Label class="model-menu-group">{provider}</DropdownMenu.Label>
+					{/if}
+					{#each options as option (option.id)}
+						<DropdownMenu.Item
+							callback={() => pickModel(option)}
+							class="model-option"
+							aria-checked={option.id === model?.id}
+							role="menuitemradio"
+						>
+							<span class="flex w-3 shrink-0 justify-center" aria-hidden="true">
+								{#if option.id === model?.id}<Check size={12} />{/if}
+							</span>
+							<span class="flex min-w-0 flex-1 flex-col gap-px text-left">
+								<span class="truncate text-[13px]">{option.displayName}</span>
+								{#if groups.length === 1 || option.contextWindow}
+									<span class="truncate text-[11px] text-fg-faint">{[groups.length === 1 ? option.provider : null, option.contextWindow ? `${formatContextWindow(option.contextWindow)} context` : null].filter(Boolean).join(' · ')}</span>
+								{/if}
+							</span>
+						</DropdownMenu.Item>
+					{/each}
 				{/each}
 			</DropdownMenu.SubContent>
 		</DropdownMenu.Sub>
@@ -176,14 +186,6 @@
 			<DropdownMenu.Item disabled class="model-menu-row">
 				<span class="flex-1 text-left">Reasoning effort</span>
 				<span class="model-menu-value">Not supported</span>
-			</DropdownMenu.Item>
-		{/if}
-
-		{#if composerExtras}
-			<DropdownMenu.Separator />
-			<DropdownMenu.Item callback={openModelSettings} class="model-menu-row text-fg-subtle">
-				<span class="flex-1 text-left">Model settings…</span>
-				<Shortcut shortcut="cmd+," class="keycap" ontrigger={openModelSettings} />
 			</DropdownMenu.Item>
 		{/if}
 	</DropdownMenu.Content>

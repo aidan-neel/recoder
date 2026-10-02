@@ -2,9 +2,9 @@
 	import { ORCHESTRATOR_ID, type ReviewAssignment, type ReviewChatMessage, type ReviewCodeContext, type ReviewReasoningEntry, type ReviewTask, type ReviewToolCall } from '@recoder/shared';
 	import type { Snippet } from 'svelte';
 	import Play from '@lucide/svelte/icons/play';
-	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import X from '@lucide/svelte/icons/x';
-	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
@@ -20,12 +20,10 @@
 	import CodeRef from './code-ref.svelte';
 	import { findingsStore } from '$lib/findings.svelte';
 	import ConversationFixes from './conversation-fixes.svelte';
-	import CopyAction from './copy-action.svelte';
 	import FailureNotice from './failure-notice.svelte';
 	import StreamingMarkdown from './streaming-markdown.svelte';
 	import ReasoningTrace from './reasoning-trace.svelte';
 	import ReviewComposer from './review-composer.svelte';
-	import ModelPicker from './model-picker.svelte';
 	import { MODEL_ROLES, modelSettingsUi, summarizesReasoning } from '$lib/model-settings.svelte';
 	import type { ReviewRole } from '@recoder/shared';
 	import { groupTranscript, taskGroupLabel, taskGroupStatus } from '$lib/review-transcript';
@@ -33,7 +31,7 @@
 	import { parseFixRequest, parseModelNotes, stripModelNotes } from '$lib/model-notes';
 	import { fileIconUrl } from '$lib/material-icons';
 
-	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, inserts = [], placeholder, awaitingPrompt = false, onStartReview = null, signInShown = false, intro }: {
+	let { assignment, messages, reasoning, toolCalls, tasks, active, now, draft = $bindable(''), codeContext = $bindable(null), compact = false, focusKey, onSend, onStop, onStopReview = null, inserts = [], placeholder, awaitingPrompt = false, onStartReview = null, signInShown = false, intro }: {
 		assignment: ReviewAssignment;
 		messages: ReviewChatMessage[];
 		reasoning: ReviewReasoningEntry[];
@@ -47,6 +45,8 @@
 		focusKey?: number;
 		onSend?: (id: string, text: string, context?: ReviewCodeContext) => Promise<void>;
 		onStop?: (id: string) => Promise<void>;
+		/** Stops the whole review while it runs; Send becomes Stop when nothing is typed. */
+		onStopReview?: (() => Promise<void>) | null;
 		/** Blocks placed in the transcript before the first entry newer than `at` (or at the end). */
 		inserts?: { key: string; at?: string; snippet: Snippet }[];
 		placeholder?: string;
@@ -83,6 +83,7 @@
 	}));
 	/** Only the latest sign-in failure carries the notice; earlier ones would repeat it. */
 	const lastSignInIndex = $derived(signInShown ? -1 : entries.findLastIndex((entry) => entry.kind === 'message' && !!entry.message.failure?.signIn));
+	const lastUsageIndex = $derived(entries.findLastIndex((entry) => entry.kind === 'message' && !!entry.message.failure?.usageLimit));
 	const lastAssistantIndex = $derived(entries.findLastIndex((entry) => entry.kind === 'message' && entry.message.from === 'assistant'));
 	/** Agent turns reply as `message_<reasoning id>`; discussion replies think as `reason_<reply id>`. Either way thinking sits with its reply. */
 	const reasoningByMessage = $derived(new Map<string, ReviewReasoningEntry>(conversationReasoning.flatMap((entry) => [[`message_${entry.id}`, entry], [entry.id.replace(/^reason_/, ''), entry]])));
@@ -121,17 +122,27 @@
 		| { kind: 'insert'; key: string; snippet: Snippet }
 		| { kind: 'message'; key: string; message: ReviewChatMessage; index: number }
 		| { kind: 'traces'; key: string; traces: Trace[] };
-	/** Transcript in order, with back-to-back thoughts and tool groups folded into one row. */
+	/**
+	 * Transcript in order. Back-to-back tool groups fold into one row; every
+	 * thought is its own row with its own timer, never nested in another.
+	 */
 	const rows = $derived.by(() => {
 		const out: Row[] = [];
+		// A thought is keyed under its reply id and its own id, so two messages can
+		// both claim it; place each one once (duplicate keys crash the keyed list).
+		const placedTraces = new Set<string>();
 		const trace = (item: Trace) => {
+			if (placedTraces.has(item.key)) return;
+			placedTraces.add(item.key);
 			const previous = out.at(-1);
-			if (previous?.kind === 'traces') previous.traces.push(item);
+			if (item.kind === 'tasks' && previous?.kind === 'traces' && previous.traces.every((trace) => trace.kind === 'tasks')) previous.traces.push(item);
 			else out.push({ kind: 'traces', key: `traces-${item.key}`, traces: [item] });
 		};
 		const before = (index: number) => {
 			for (const insert of placed) if (insert.index === index) out.push({ kind: 'insert', key: `insert-${insert.key}`, snippet: insert.snippet });
-			for (const entry of orphansAt.get(index) ?? []) trace({ kind: 'thought', key: `thought-${entry.id}`, entry });
+			// Something later in the transcript means the thought is over, even if its entry was never closed.
+			const next = entries[index]?.at;
+			for (const entry of orphansAt.get(index) ?? []) trace({ kind: 'thought', key: `thought-${entry.id}`, entry, until: next });
 		};
 		entries.forEach((item, index) => {
 			before(index);
@@ -219,6 +230,14 @@
 		if (generating) awaitingReply = false;
 	});
 	const replying = $derived(sending || awaitingReply || generating);
+	/** No reply in flight and nothing typed: the composer's Stop stops the review itself. */
+	const stopsReview = $derived(!!onStopReview && !replying && !draft.trim());
+	let stoppingReview = $state(false);
+	async function stopReview(): Promise<void> {
+		if (stoppingReview || !onStopReview) return;
+		stoppingReview = true;
+		try { await onStopReview(); } finally { stoppingReview = false; }
+	}
 	async function send(value: string) {
 		if (!onSend || replying || !value.trim()) return;
 		if (value.trim().length > 8000) { error = 'Keep your message under 8,000 characters.'; return; }
@@ -268,7 +287,7 @@
 			<p class="model-note-added">Fixes for {fixRequest === 'all' ? 'every open finding' : `${fixRequest.length} ${fixRequest.length === 1 ? 'finding' : 'findings'}`} are on the Findings tab.</p>
 		{/if}
 	{:else}
-		<StreamingMarkdown content={message.text} streaming={message.status === 'streaming'} />
+		<StreamingMarkdown content={message.text} streaming={message.status === 'streaming'} normalize={message.from === 'assistant'} />
 	{/if}
 {/snippet}
 
@@ -304,12 +323,12 @@
 			{:else if row.kind === 'message'}
 				{@const message = row.message}
 				{@const index = row.index}
-				<!-- A failure explains itself in a notice, so it gets no "Failed" label or empty reply. -->
-				<Message.Root from={message.from} status={message.status === 'done' || message.failure ? 'idle' : message.status}
+				<!-- A failure explains itself in a notice or a note, so it gets no "Failed" label or empty reply. -->
+				<Message.Root from={message.from} status={message.status === 'streaming' ? 'streaming' : 'idle'}
 					class="[--font-weight-body:400]"
 					name={message.forwardedFrom ? `${message.from === 'user' ? 'You →' : 'Reply from'} ${message.forwardedFrom}` : undefined}>
 					{#if message.text.trim() || !message.failure}
-						<Message.Content class={message.from === 'assistant' ? 'review-prose ai-voice' : message.from === 'user' ? 'review-bubble' : '!max-w-full text-sm'}>
+						<Message.Content class={message.from === 'assistant' ? 'review-prose' : message.from === 'user' ? 'review-bubble' : '!max-w-full text-sm'}>
 							{@render response(message)}
 						</Message.Content>
 					{/if}
@@ -318,32 +337,26 @@
 					{/if}
 					{#if message.failure?.signIn && index !== lastSignInIndex}
 						{#if message.status === 'error'}<Typography.Metadata class="text-fg-faint">Not answered: signed out of ChatGPT</Typography.Metadata>{/if}
+					{:else if message.failure?.usageLimit && index !== lastUsageIndex}
+						{#if message.status === 'error'}<Typography.Metadata class="text-fg-faint">Not answered: {message.failure.usageLimit.name} was out of usage</Typography.Metadata>{/if}
 					{:else if message.failure}
 						<FailureNotice class="message-failure" title={message.failure.signIn ? 'Signed out of ChatGPT' : 'Reply failed'}
-							reason={message.failure.reason} signIn={message.failure.signIn}
+							reason={message.failure.reason} signIn={message.failure.signIn} usageLimit={message.failure.usageLimit}
 							onRetry={message.status === 'error' && message.discussion && !generating ? retryFor(index) : null} />
+					{:else if message.status === 'error' && message.from === 'assistant'}
+						<!-- The reply stopped partway; say why, and whether the agent carried on. -->
+						<Typography.Metadata class="message-cut-off">
+							{#if message.cutOff}<RotateCcw size={12} class="message-cut-off-icon" aria-hidden="true" />{:else}<CircleAlert size={12} class="message-cut-off-icon" aria-hidden="true" />{/if}
+							<span><span class="message-cut-off-title">Reply cut off.</span> {message.cutOff ?? 'The model stopped before it finished this reply.'}</span>
+						</Typography.Metadata>
 					{/if}
-					<!-- The message's own actions (start the review) sit in it, above Copy and Retry. -->
+					<!-- The message's own action (start the review) sits in it. -->
 					{#if onStartReview && !intro && !specialist && index === lastAssistantIndex && message.status !== 'streaming'}
 						<div class="review-start-cta">
 							<Button class="brief-action" loading={startingReview} onclick={() => void startReview()}>
 								<Play size={12} fill="currentColor" aria-hidden="true" /> Run full review
 							</Button>
 						</div>
-					{/if}
-					{#if message.from === 'assistant' && message.status !== 'streaming' && message.text.trim() && (message.discussion || (index === lastAssistantIndex && !working))}
-						{@const retry = message.discussion && !generating && !message.failure ? retryFor(index) : null}
-						<Message.Actions class="message-actions">
-							{#if retry}
-								<Tooltip.Root placement="top" delay={750} closeDelay={80}>
-									<Tooltip.Trigger class="flex">
-										<Button variant="ghost" size="icon" aria-label="Retry" onclick={retry}><RotateCcw aria-hidden="true" /></Button>
-									</Tooltip.Trigger>
-									<Tooltip.Content>Retry</Tooltip.Content>
-								</Tooltip.Root>
-							{/if}
-							<CopyAction text={stripModelNotes(message.text)} />
-						</Message.Actions>
 					{/if}
 				</Message.Root>
 			{:else if row.traces.length === 1}
@@ -389,11 +402,11 @@
 		describedBy={error ? errorId : undefined}
 		invalid={!!error}
 		{sending}
-		generating={replying}
-		busy={working || conversationMessages.some((message) => message.status === 'streaming')}
-		disabled={!onSend}
+		generating={replying || stopsReview}
+		busy={working || stoppingReview || conversationMessages.some((message) => message.status === 'streaming')}
+		disabled={!onSend && !stopsReview}
 		onSubmit={send}
-		onStop={onStop ? stop : undefined}
+		onStop={stopsReview ? stopReview : onStop ? stop : undefined}
 		onAttach={() => fileInput?.click()}
 		attachLabel="Attach a text file"
 		oninput={() => error = ''}
@@ -410,24 +423,6 @@
 		{/snippet}
 		{#snippet leading()}
 			{#if specialist}<Typography.Metadata class="truncate text-[12px] text-fg-faint">Shared with Orchestrator</Typography.Metadata>{/if}
-		{/snippet}
-		{#snippet picker()}
-			{#if !specialist}
-				<ModelPicker
-					value={modelSettingsUi.orchestrator}
-					onSelect={(choice) => void modelSettingsUi.selectOrchestrator(choice)}
-					size={compact ? 'panel' : 'md'}
-					composerExtras
-					label="Orchestrator model"
-				/>
-			{:else}
-				<ModelPicker
-					value={modelSettingsUi.specialist}
-					onSelect={(choice) => void modelSettingsUi.selectSpecialist(choice)}
-					size={compact ? 'panel' : 'md'}
-					label="Specialist model"
-				/>
-			{/if}
 		{/snippet}
 	</ReviewComposer>
 	</div>

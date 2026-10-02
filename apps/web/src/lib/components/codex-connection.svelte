@@ -3,8 +3,6 @@
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
-	import * as Card from '@sivir-ui/svelte/components/card';
-	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import type { CodexConnection, CodexModel } from '@recoder/shared';
 	import { serverApi } from '$lib/server-api';
@@ -30,6 +28,7 @@
 	let refreshError = $state('');
 	let refreshing = $state(false);
 	let signInOpen = $state(false);
+	let modelsOpen = $state(false);
 	let now = $state(Date.now());
 	const loginPending = $derived(Boolean(connection?.login));
 	let generation = 0;
@@ -181,71 +180,78 @@
 	});
 </script>
 
-<Card.Root class="provider-card" data-active={connection?.authenticated || undefined} {...{ "aria-labelledby": `${id}-title` }}>
-	<div class="provider-card-head">
-		<span class="provider-dot" data-on={connection?.authenticated || undefined} aria-hidden="true"></span>
-		<Typography.Title level={3} id={`${id}-title`} class="provider-card-title">ChatGPT</Typography.Title>
-		<span class="provider-status" data-on={connection?.authenticated || undefined} role="status">
+<div class="settings-row" {...{ 'aria-labelledby': `${id}-title` }}>
+	<div class="min-w-0 flex-1">
+		<p class="settings-row-name" id={`${id}-title`}>ChatGPT</p>
+		<p class="settings-row-desc" role="status">
 			{#if !connection}{refreshError ? 'Unavailable' : 'Checking…'}
-			{:else if connection.authenticated}Signed in
+			{:else if connection.authenticated}{connection.email ?? 'Signed in'}{#if connection.planType}<span class="mx-1.5" aria-hidden="true">·</span>{planName(connection.planType)}{/if}
 			{:else if connection.login}Waiting for sign-in
-			{:else}Not connected{/if}
-		</span>
-	</div>
-
-	{#if connection?.authenticated}
-		<p class="provider-account">
-			{connection.email ?? 'Signed in'}{#if connection.planType}<span class="mx-1.5" aria-hidden="true">·</span>{planName(connection.planType)}{/if}
+			{:else if error || connection.error}<span class="text-danger">{error || connection.error}</span>
+			{:else}Run reviews on your ChatGPT plan{/if}
 		</p>
-		<div class="flex flex-col gap-3">
-			{#each limits as limit (limit.name)}
-				{@const name = limitName(limit.name)}
-				{@const percent = Number.isFinite(limit.usedPercent) ? Math.max(0, Math.min(100, limit.usedPercent)) : null}
-				<div class="flex flex-col gap-2">
-					<div class="flex items-baseline justify-between gap-3 text-[12.5px]">
-						<span class="text-fg-muted">{name}</span>
-						<span class="font-mono text-[12px] text-fg-muted tabular-nums">
-							{percent === null ? '—' : `${Math.round(percent)}%`}<span class="mx-1.5 text-fg-faint">·</span>{resetShort(limit.resetsAt)}
-						</span>
-					</div>
-					{#if percent !== null}
-						<Progress
-							value={percent}
-							max={100}
-							class="usage-bar"
-							{...{ 'aria-label': `${name} usage`, 'aria-valuetext': `${Math.round(percent)}% used. ${resetLabel(limit.resetsAt)}` }}
-						/>
-					{/if}
-				</div>
-			{:else}
-				<p class="m-0 text-[12.5px] text-fg-faint" role="status">{refreshing ? 'Loading usage…' : 'Usage limits unavailable.'}</p>
-			{/each}
-		</div>
-		<div class="mt-auto flex justify-end pt-1">
-			<Button variant="ghost" class="provider-link" loading={busy} disabled={disabled || busy} onclick={disconnect}>Sign out</Button>
-		</div>
+	</div>
+	{#if connection?.authenticated}
+		<Button variant="outline" class="provider-action" onclick={() => (modelsOpen = true)}>Models</Button>
+	{:else if connection?.login}
+		<Button variant="outline" class="provider-action" onclick={() => (signInOpen = true)}>Connect</Button>
 	{:else}
-		<p class="provider-account">Run reviews on your ChatGPT plan.</p>
-		<div class="mt-auto flex flex-wrap items-center gap-2 pt-1">
-			{#if connection?.login}
-				<Button variant="outline" onclick={() => (signInOpen = true)}>Show sign-in code</Button>
-				<Button variant="ghost" class="provider-link" disabled={busy} onclick={disconnect}>Cancel</Button>
-			{:else}
-				<Button loading={busy} disabled={disabled || busy || (!connection && refreshing)} onclick={connect}>Sign in with ChatGPT</Button>
-			{/if}
-		</div>
+		<Button variant="outline" class="provider-action" loading={busy} disabled={disabled || busy || (!connection && refreshing)} onclick={connect}>Connect</Button>
 	{/if}
+</div>
 
-	{#if error || refreshError || connection?.error}
-		<div class="flex flex-wrap items-center gap-2">
-			<p class="m-0 min-w-0 text-[12px] text-danger [overflow-wrap:anywhere]" role="alert">
-				{error || refreshError || connection?.error}
+<Modal.Root bind:open={modelsOpen}>
+	<Modal.Content size="md">
+		<Modal.Header><Modal.Title>ChatGPT</Modal.Title></Modal.Header>
+		<Modal.Body class="gap-4">
+			<p class="m-0 text-[13px] text-fg-muted">
+				{connection?.email ?? 'Signed in'}{#if connection?.planType}<span class="mx-1.5" aria-hidden="true">·</span>{planName(connection.planType)}{/if}
 			</p>
-			{#if refreshError || connection?.error}
-				<Button variant="ghost" class="provider-link" loading={refreshing} disabled={busy || refreshing} onclick={() => void refresh()}>Retry</Button>
+			{#if limits.length > 0}
+				<div class="flex flex-col gap-3">
+					{#each limits as limit (limit.name)}
+						{@const name = limitName(limit.name)}
+						{@const percent = Number.isFinite(limit.usedPercent) ? Math.max(0, Math.min(100, limit.usedPercent)) : null}
+						<div class="flex flex-col gap-2">
+							<div class="flex items-baseline justify-between gap-3 text-[12.5px]">
+								<span class="text-fg-muted">{name}</span>
+								<span class="font-mono text-[12px] text-fg-muted tabular-nums">
+									{percent === null ? '—' : `${Math.round(percent)}%`}<span class="mx-1.5 text-fg-faint">·</span>{resetShort(limit.resetsAt)}
+								</span>
+							</div>
+							{#if percent !== null}
+								<Progress
+									value={percent}
+									max={100}
+									class="usage-bar"
+									data-full={percent >= 100 || undefined}
+									{...{ 'aria-label': `${name} usage`, 'aria-valuetext': `${Math.round(percent)}% used. ${resetLabel(limit.resetsAt)}` }}
+								/>
+							{/if}
+						</div>
+					{/each}
+				</div>
 			{/if}
-		</div>
-	{/if}
+			{#if models.length > 0}
+				<ul class="endpoint-models" aria-label="ChatGPT models">
+					{#each models as model (model.id)}
+						<li><span class="min-w-0 flex-1 truncate">{model.label}</span><span class="font-mono text-[11.5px] text-fg-faint">{model.id}</span></li>
+					{/each}
+				</ul>
+			{/if}
+			{#if refreshError || connection?.error}
+				<div class="flex flex-wrap items-center gap-2">
+					<p class="m-0 min-w-0 text-[12px] text-danger [overflow-wrap:anywhere]" role="alert">{refreshError || connection?.error}</p>
+					<Button variant="ghost" class="provider-link" loading={refreshing} disabled={busy || refreshing} onclick={() => void refresh()}>Retry</Button>
+				</div>
+			{/if}
+		</Modal.Body>
+		<Modal.Footer>
+			<Button variant="ghost" class="me-auto" loading={busy} disabled={disabled || busy} onclick={() => void disconnect().then(() => (modelsOpen = false))}>Sign out</Button>
+			<Modal.Close>Done</Modal.Close>
+		</Modal.Footer>
+	</Modal.Content>
+</Modal.Root>
 
 	<Modal.Root bind:open={signInOpen}>
 		<Modal.Content size="lg" aria-label="Sign in to ChatGPT">
@@ -287,4 +293,3 @@
 			</Modal.Footer>
 		</Modal.Content>
 	</Modal.Root>
-</Card.Root>

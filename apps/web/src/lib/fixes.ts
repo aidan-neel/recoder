@@ -25,7 +25,8 @@ export async function suggestFix(finding: Finding, opts: { quiet?: boolean; queu
 		findingsStore.suggestReady(finding.id, { summary: result.summary, patch: result.patch, edits: result.edits, applies: result.applies });
 	} catch (e) {
 		const message = e instanceof Error ? e.message : 'Could not suggest a fix.';
-		const action = e instanceof ApiError ? e.action : undefined;
+		// Out of usage: settings is where another model gets picked.
+		const action = e instanceof ApiError ? (e.usageLimit ? 'settings' : e.action) : undefined;
 		findingsStore.suggestError(finding.id, message, action);
 		if (!opts.quiet) errorToast('Could not suggest a fix', message, action);
 	}

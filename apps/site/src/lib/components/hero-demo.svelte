@@ -297,13 +297,7 @@
 
 							<div class="review-dock">
 								<div class="review-dock-inner">
-									<ReviewComposer label="Message Orchestrator" placeholder={demo.finished ? 'Ask a follow-up about this review…' : 'Ask Orchestrator anything…'} onSubmit={() => {}} onAttach={() => {}}>
-										{#snippet picker()}
-											<Button variant="quiet" class="quiet-trigger">
-												<span class="quiet-trigger-label">GPT 5.6 Sol <span class="text-fg-subtle">Medium</span></span>
-											</Button>
-										{/snippet}
-									</ReviewComposer>
+									<ReviewComposer label="Message Orchestrator" placeholder={demo.finished ? 'Ask a follow-up about this review…' : 'Ask Orchestrator anything…'} onSubmit={() => {}} onAttach={() => {}} />
 								</div>
 							</div>
 						</div>
@@ -315,7 +309,7 @@
 								{#if !demo.finished}
 									<div out:slide={{ duration: 240 }}>
 										<ReviewSteps current={demo.step} active={!demo.finished} elapsed={demo.elapsed}
-											specialists={{ done: demo.specialistsDone, total: demo.specialists.length || 5 }} />
+											specialists={{ done: demo.specialistsDone, failed: 0, total: demo.specialists.length || 5 }} />
 									</div>
 								{/if}
 

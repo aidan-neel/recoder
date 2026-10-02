@@ -4,7 +4,7 @@ import { app } from '../app';
 import { createReviewSession, startReviewSession } from '../commands/pipeline';
 import { db, recoverStaleReviews, reviewProgress } from '../store';
 import { clearReviewEvents, subscribeReview } from './events';
-import { discussionContext, startReviewChat, stopReviewChat } from './review-chat';
+import { discussionContext, looksLikeReviewRequest, reviewInstructions, startReviewChat, stopReviewChat } from './review-chat';
 import { getStoredSettings, setReviewOverrides } from './review-settings';
 
 const originalFetch = globalThis.fetch;
@@ -107,15 +107,42 @@ test('an orchestrator start decision launches once in the same session and retai
 	const terminal = new Promise<void>((resolve) => {
 		const off = subscribeReview(review.id, event => { if (event.type === 'error' && !event.step) { off(); resolve(); } }, false);
 	});
-	startReviewChat(review.id, ORCHESTRATOR_ID, 'Start the review and focus on missing tests.');
+	startReviewChat(review.id, ORCHESTRATOR_ID, 'Missing tests worry me. Ready when you are.');
 	await terminal;
 	const stored = db.reviews.get(review.id)!;
 	expect(stored.status).toBe('failed');
 	expect(stored.summary).toBe('repo not found');
 	expect(stored.startedAt).toBeTruthy();
-	expect(discussionContext(review.id)).toContain('Start the review and focus on missing tests.');
+	expect(discussionContext(review.id)).toContain('Missing tests worry me. Ready when you are.');
 	expect(reviewProgress.get(review.id)?.messages?.at(-1)?.text).toBe('I’ll begin the review, focusing on missing tests.');
 	expect(() => startReviewSession(review.id)).toThrow('already started');
+});
+
+test('a plain request to review starts the review without asking the model, and its words become the brief', async () => {
+	const review = draft();
+	db.repos.delete(review.repoId);
+	let calls = 0;
+	globalThis.fetch = (async () => { calls++; return Response.json({ choices: [{ message: { content: JSON.stringify({ message: 'Here is my review: looks fine.', action: 'reply' }) } }] }); }) as unknown as typeof fetch;
+	const terminal = new Promise<void>((resolve) => {
+		const off = subscribeReview(review.id, event => { if (event.type === 'error' && !event.step) { off(); resolve(); } }, false);
+	});
+	startReviewChat(review.id, ORCHESTRATOR_ID, 'review only the python files please');
+	await terminal;
+	expect(calls).toBe(0);
+	const stored = db.reviews.get(review.id)!;
+	expect(stored.status).toBe('failed');
+	expect(stored.startedAt).toBeTruthy();
+	expect(reviewInstructions(review.id, stored.startedAt)).toBe('review only the python files please');
+	expect(reviewProgress.get(review.id)?.messages?.at(-1)).toMatchObject({ from: 'assistant', status: 'done', text: 'Starting the full review now, with your message as its brief.' });
+});
+
+test('review requests are recognised from their wording, and questions are left to the model', () => {
+	for (const text of ['review only python files', 'Please review the python files only', 'ok run the review', 'Start the review and focus on missing tests.', 'can you review this?', 'go ahead', 'yes', 'Run it', 'kick off a full review', "let's do a thorough review", 'check the python files for bugs', 'just review src/auth.py', 'Only review the tests', 'audit the auth module']) {
+		expect(looksLikeReviewRequest(text), text).toBe(true);
+	}
+	for (const text of ['What should I tell you before starting?', 'Missing tests worry me. Ready when you are.', 'did you review the tests?', 'what does this PR change', 'how long does a review take?', 'hi', 'the review from yesterday was wrong', 'should I review the tests myself?', '']) {
+		expect(looksLikeReviewRequest(text), text).toBe(false);
+	}
 });
 
 test('invalid draft decisions do not launch analysis or expose raw JSON in chat', async () => {
@@ -136,7 +163,7 @@ test('stopping an initial prompt leaves the session unstarted and retryable', as
 		return new Response();
 	}) as typeof fetch;
 	const done = settled(review.id);
-	startReviewChat(review.id, ORCHESTRATOR_ID, 'Start the review');
+	startReviewChat(review.id, ORCHESTRATOR_ID, 'What do you make of this diff?');
 	await new Promise(resolve => setTimeout(resolve, 10));
 	stopReviewChat(review.id, ORCHESTRATOR_ID);
 	await done;

@@ -62,7 +62,7 @@
 		<Card.Root class="settings-list">
 			{#each overview.repos as repo, i (repo.id)}
 				{@const state = guidelinesStore.repos[repo.id]}
-				<div class="settings-row enter-rise" {...{ style: `--i: ${i}` }}>
+				<div class="settings-row" {...{ style: `--i: ${i}` }}>
 					<span class="flex shrink-0 text-fg-secondary"><ProviderMark provider={repo.provider} size={16} /></span>
 					<div class="min-w-0 flex-1">
 						<p class="settings-row-name">{repo.name}</p>

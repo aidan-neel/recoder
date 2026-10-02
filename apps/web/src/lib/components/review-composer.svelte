@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import ArrowUp from '@lucide/svelte/icons/arrow-up';
-	import Paperclip from '@lucide/svelte/icons/paperclip';
+	import Plus from '@lucide/svelte/icons/plus';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Composer from '@sivir-ui/svelte/components/composer';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
@@ -31,10 +31,8 @@
 		oninput?: () => void;
 		/** Chips above the input (selected code, attachments). */
 		context?: Snippet;
-		/** Footer items after the paperclip ("Shared with Orchestrator", Resolve…). */
+		/** Footer items after the + button ("Shared with Orchestrator", Resolve…). */
 		leading?: Snippet;
-		/** The model picker, just before Send. */
-		picker?: Snippet;
 	}
 
 	let {
@@ -57,8 +55,7 @@
 		attachLabel = 'Attach a file',
 		oninput,
 		context,
-		leading,
-		picker
+		leading
 	}: Props = $props();
 
 	function stopClick(event: MouseEvent): void {
@@ -114,13 +111,12 @@
 				disabled={disabled || attachDisabled || sending}
 				onclick={onAttach}
 			>
-				<Paperclip size={14} aria-hidden="true" />
+				<Plus size={16} strokeWidth={1.75} aria-hidden="true" />
 			</Button>
 		{/if}
 		{@render leading?.()}
 		<span class="flex-1"></span>
-		{@render picker?.()}
-		<Composer.Submit class="rc-send" data-busy={(busy || generating) && !sending ? '' : undefined} disabled={generating && !onStop} onclick={stopClick}>
+		<Composer.Submit class="rc-send" data-working={(busy || generating) && !sending ? '' : undefined} disabled={generating && !onStop} onclick={stopClick}>
 			{#snippet children({ action })}
 				{#if sending && !generating}
 					<Spinner size={size === 'panel' ? 14 : 15} aria-hidden="true" />

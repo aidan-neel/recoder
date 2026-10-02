@@ -1,5 +1,11 @@
-<script lang="ts">
+<script lang="ts" module>
 	import type { PrCheck } from '@recoder/shared';
+
+	/** Last checks per review, so reopening a session paints them at once while they refresh. */
+	const lastChecks = new Map<string, { checks: PrCheck[]; ref: string; pipeline: boolean }>();
+</script>
+
+<script lang="ts">
 	import { untrack } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
 	import CircleDashed from '@lucide/svelte/icons/circle-dashed';
@@ -46,16 +52,22 @@
 	async function load(): Promise<void> {
 		if (loading) return;
 		loading = true;
+		// The review can change while a load is in flight; never file its checks under the new one.
+		const id = reviewId;
 		try {
-			const result = await serverApi.getChecks(reviewId);
+			const result = await serverApi.getChecks(id);
+			if (id !== reviewId) return;
 			checks = result.checks;
 			ref = result.ref;
 			pipeline = result.provider === 'gitlab';
 			error = null;
+			lastChecks.set(id, { checks: result.checks, ref: result.ref, pipeline });
 		} catch (e) {
-			error = e instanceof Error ? e.message : 'Could not load checks.';
+			if (id === reviewId) error = e instanceof Error ? e.message : 'Could not load checks.';
 		} finally {
 			loading = false;
+			// The switch's own load() returned early while this one ran; load the new review now.
+			if (id !== reviewId) void load();
 		}
 	}
 
@@ -63,7 +75,11 @@
 		void reviewId;
 		// Untracked: load() reads and writes its own state.
 		untrack(() => {
-			checks = null;
+			const cached = lastChecks.get(reviewId);
+			checks = cached?.checks ?? null;
+			ref = cached?.ref ?? '';
+			pipeline = cached?.pipeline ?? false;
+			error = null;
 			void load();
 		});
 		const timer = setInterval(() => { if (active) void load(); }, 20_000);

@@ -9,7 +9,6 @@
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
-	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Sheet from '@sivir-ui/svelte/components/sheet';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import SessionSkeleton from '$lib/components/session-skeleton.svelte';
@@ -40,12 +39,14 @@
 	import { DEFAULT_FILE, sessionFile } from '$lib/session-file.svelte';
 	import { revealDiffLine } from '$lib/reveal-line';
 	import { guidelinesStore } from '$lib/guidelines.svelte';
-	import { ApiError, serverApi } from '$lib/server-api';
+	import { ApiError, cachedReviewFiles, serverApi } from '$lib/server-api';
+	import { approvePlan, declinePlan, planApproval } from '$lib/plan-approval.svelte';
 	import { ReviewStream } from '$lib/review-stream.svelte';
+	import { reviewStage } from '$lib/review-progress-state';
 	import { recentSessions } from '$lib/recent-sessions.svelte';
 	import { closeSessionTab } from '$lib/session-tabs';
 	import { paletteContext } from '$lib/palette.svelte';
-	import { collapseFileDiff, ORCHESTRATOR_ID, type FileDiff, type Review, type ReviewCodeContext, type ReviewAssignment } from '@recoder/shared';
+	import { collapseFileDiff, ORCHESTRATOR_ID, type FileDiff, type Review, type ReviewCodeContext, type ReviewAssignment, type ReviewProgress as ReviewProgressState } from '@recoder/shared';
 
 	const id = $derived(page.params.id ?? '');
 	const session = $derived(sessionState.sessions.find((s) => s.id === id));
@@ -60,7 +61,8 @@
 
 	// Review metadata and repository files load independently of the live chat.
 	let backendReview = $state<Review | null>(null);
-	let backendFiles = $state<FileDiff[] | null>(null);
+	/** Raw: a large, read-only diff; reassigning the cached array is a no-op. */
+	let backendFiles = $state.raw<FileDiff[] | null>(null);
 	let backendChecked = $state(false);
 	let backendError = $state<string | null>(null);
 	let filesError = $state<string | null>(null);
@@ -127,7 +129,7 @@
 		const currentId = id;
 		void retryNonce;
 		backendReview = null;
-		backendFiles = null;
+		backendFiles = cachedReviewFiles(currentId);
 		filesError = null;
 		backendChecked = false;
 		backendError = null;
@@ -179,7 +181,7 @@
 		};
 	});
 
-	/** Conversation, Findings (focus mode) or Diff (inline mode), kept in the URL. */
+	/** Review (the conversation), Findings (focus mode) or Diff (inline mode), kept in the URL. */
 	const workspaceView = $derived.by((): 'findings' | 'diff' | null => {
 		const view = page.url.searchParams.get('view');
 		return view === 'findings' || view === 'diff' ? view : null;
@@ -191,16 +193,20 @@
 		else url.searchParams.set('view', view);
 		return goto(`${url.pathname}${url.search}`, { noScroll: true, keepFocus: true, replaceState });
 	}
-	/* A running review opens on Findings, where results land as they are
-	   found. Once per session visit, so choosing Conversation sticks. */
+	/* A finished review opens on Findings, once per session visit, so choosing
+	   Review sticks. Drafts and failed reviews open on the review, where their
+	   next step is. */
 	let findingsDefaultFor: string | null = null;
 	$effect(() => {
 		const review = backendReview;
 		if (!review || findingsDefaultFor === review.id) return;
 		findingsDefaultFor = review.id;
-		if ((review.status === 'queued' || review.status === 'running') && !page.url.searchParams.get('view')) {
-			untrack(() => void setView('findings', true));
-		}
+		// A review that finishes while you watch stays put; its summary links to the findings.
+		if (review.status === 'passed' && !page.url.searchParams.get('view')) untrack(() => void setView('findings', true));
+	});
+	/* A running review is one page: Findings and Diff open once it finishes. */
+	$effect(() => {
+		if (reviewing && workspaceView !== null) untrack(() => void setView('conversation', true));
 	});
 	function setDiffView(open: boolean): void {
 		void setView(open ? 'diff' : 'conversation');
@@ -505,6 +511,7 @@
 		untrack(() => {
 			lastAutoFile = null;
 			userPickedFile = false;
+			firstFindingFor = null;
 			findingsSyncedFor = null;
 			chatOpen = page.url.searchParams.has('chat');
 			chatDraft = '';
@@ -538,7 +545,8 @@
 		open.sort(
 			(a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || a.startLine - b.startLine
 		);
-		let target = open[0]?.file ?? backendFiles[0].path;
+		// A selected finding (the first-finding jump, the stepper) decides the file.
+		let target = findingsStore.active?.file ?? open[0]?.file ?? backendFiles[0].path;
 		if (!backendFiles.some((f) => f.path === target)) target = backendFiles[0].path;
 		if (target !== sessionFile.currentId) {
 			lastAutoFile = target;
@@ -546,6 +554,31 @@
 		} else if (lastAutoFile === null) {
 			lastAutoFile = target;
 		}
+	});
+
+	/* Opening the diff of a finished review lands on its first finding, in the
+	   stepper's order (file, then line), once per visit. A finding the user
+	   opened explicitly wins. */
+	let firstFindingFor: string | null = null;
+	$effect(() => {
+		const review = backendReview;
+		const files = backendFiles;
+		if (!review || workspaceView !== 'diff' || !files?.length || firstFindingFor === review.id) return;
+		if (review.status !== 'passed' && review.status !== 'failed') return;
+		const first = findingsStore.items
+			.filter((f) => f.status !== 'dismissed' && untrack(() => findingsStore.isShown(f)) && files.some((file) => file.path === f.file))
+			.sort((a, b) => a.file.localeCompare(b.file) || a.startLine - b.startLine || a.id.localeCompare(b.id))[0];
+		// Findings load after the review; wait for them.
+		if (!first) return;
+		firstFindingFor = review.id;
+		untrack(() => {
+			if (userPickedFile || findingsStore.activeId) return;
+			findingsStore.discuss(first.id);
+			lastAutoFile = first.file;
+			sessionFile.select(first.file);
+			showLine(first.file, first.startLine);
+			revealDiffLine(first.startLine);
+		});
 	});
 
 	// Live pipeline log while the backend is working (fetch/sandbox/agents).
@@ -561,6 +594,12 @@
 		} catch (e) {
 			errorToast('Could not start the review', e instanceof Error ? e.message : undefined);
 		}
+	}
+
+	/** "Running checks · bun test": the stage and its running step, for the Findings empty state. */
+	function liveStage(progress: ReviewProgressState, status: Review['status']): string {
+		const stage = reviewStage(progress, status);
+		return [stage.label, stage.detail].filter(Boolean).join(' · ');
 	}
 
 	/** Continue a failed review where it stopped, in this session. */
@@ -615,7 +654,7 @@
 	}
 }} />
 
-{#if !backendChecked}
+{#if !backendChecked || (backendReview && !reviewStream?.ready)}
 	{@const loadingView = page.url.searchParams.get('view')}
 	<SessionSkeleton view={loadingView === 'findings' || loadingView === 'diff' ? loadingView : page.url.searchParams.get('agent') ? 'specialist' : 'conversation'} />
 {:else if backendDown && !backendReview}
@@ -674,7 +713,7 @@
 {/if}
 
 {#snippet diffMenu()}
-	{#if backendReview}<DropdownMenu.Item callback={() => setDiffView(false)}>Show conversation</DropdownMenu.Item>{/if}
+	{#if backendReview}<DropdownMenu.Item callback={() => setDiffView(false)}>Show review</DropdownMenu.Item>{/if}
 	{#if backendReview}<DropdownMenu.Item callback={() => usageOpen = true}>View token usage</DropdownMenu.Item>{/if}
 	{#if backendReview && backendReview.source !== 'stub'}{@const repoId = backendReview.repoId}<DropdownMenu.Item callback={() => guidelinesStore.open({ kind: 'repo', repoId })}>Review guidelines</DropdownMenu.Item>{/if}
 	<DropdownMenu.Separator />
@@ -688,8 +727,9 @@
 	<SessionHeader
 		title={backendReview?.prTitle || session?.name || 'Review'}
 		branch={recent?.branch}
-		repo={session?.name}
+		repo={recent?.repo ?? session?.name}
 		prLabel={backendReview ? `#${backendReview.prNumber}` : session?.ref}
+		prUrl={backendReview?.prUrl}
 		files={files.length}
 		additions={files.reduce((sum, file) => sum + file.additions, 0)}
 		deletions={files.reduce((sum, file) => sum + file.deletions, 0)}
@@ -711,12 +751,10 @@
 				{#snippet trailing()}
 					{#if backendReview}
 						{#if backendReview.source !== 'stub'}<PrChecks reviewId={backendReview.id} /><ChangesButton />{/if}
-						{#if reviewing || backendReview.status === 'failed'}
-							<Typography.Metadata class="review-state" role="status">
-								{#if reviewing}<Spinner size={13} class="text-sev-medium" aria-hidden="true" />Review running{:else}Review interrupted{/if}
-							</Typography.Metadata>
+						{#if backendReview.status === 'failed'}
+							<Typography.Metadata class="review-state" role="status">Review interrupted</Typography.Metadata>
 						{/if}
-						<Button id="ask-review" variant="outline" class="gap-2" aria-pressed={showChat} aria-expanded={showChat} aria-controls="interactive-review" onclick={() => showChat ? void closeChat() : openChat()}><MessageSquare size={15} aria-hidden="true" />Ask reviewer</Button>
+						{#if backendReview.status === 'passed'}<Button id="ask-review" variant="outline" class="gap-2" aria-pressed={showChat} aria-expanded={showChat} aria-controls="interactive-review" onclick={() => showChat ? void closeChat() : openChat()}><MessageSquare size={15} aria-hidden="true" />Ask reviewer</Button>{/if}
 					{/if}
 				{/snippet}
 			</FindingsBar>
@@ -736,6 +774,12 @@
 					<div class="flex min-h-0 min-w-0 flex-1 {sidePanelOpen ? 'max-xl:hidden' : ''}">
 						<FindingsFocus files={files} toolCalls={reviewStream?.progress.toolCalls ?? []} branch={recent?.branch}
 							status={!backendReview ? 'done' : reviewing ? 'running' : backendReview.status === 'draft' ? 'draft' : backendReview.status === 'failed' ? 'failed' : 'done'}
+							stageLabel={reviewStream && backendReview ? liveStage(reviewStream.progress, backendReview.status) : null}
+							paused={reviewStream?.progress.paused ?? false}
+							approval={reviewStream?.progress.approval ?? null}
+							onApprove={backendReview ? () => approvePlan(backendReview!.id) : null}
+							onDecline={backendReview ? () => declinePlan(backendReview!.id) : null}
+							approving={!!backendReview && planApproval.approving === backendReview.id}
 							onStartReview={backendReview?.status === 'draft' ? startDraftReview : null}
 							onOpenDiff={() => setView('diff')}
 							onAsk={isBackend ? () => openChat() : null}
@@ -778,7 +822,7 @@
 						<ScrollArea orientation="vertical" aria-label="Code diff" class="min-h-0 flex-1" showCues={false}>
 							{#key fileDiff.path}
 								<div class="min-w-0 page-enter">
-									<CodeDiff diff={fileDiff} findings={displayFindings} mode={diffPrefs.mode} onAsk={isBackend ? openChat : undefined} activeRange={showChat ? codeContext : null} onClearRange={() => (codeContext = null)} />
+									<CodeDiff diff={fileDiff} findings={displayFindings} mode={diffPrefs.mode} onAsk={isBackend && backendReview?.status === 'passed' ? openChat : undefined} activeRange={showChat ? codeContext : null} onClearRange={() => (codeContext = null)} />
 								</div>
 							{/key}
 						</ScrollArea>
@@ -810,7 +854,7 @@
 						<div class="chat-drawer-clip">
 							<section id="interactive-review" aria-label="Interactive review" class="chat-drawer-panel" inert={!showChat}>
 								<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
-									<!-- The same conversation as the Conversation view, specialists and progress included. -->
+									<!-- The same conversation as the Review view, specialists and progress included. -->
 									<LiveReviewProgress embedded review={backendReview} stream={reviewStream} repo={session?.name ?? ''}
 										files={backendFiles ? backendFiles.length : null}
 										additions={backendFiles ? backendFiles.reduce((sum, f) => sum + f.additions, 0) : null}

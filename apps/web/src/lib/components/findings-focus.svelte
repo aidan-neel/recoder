@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ReviewToolCall } from '@recoder/shared';
+	import type { ReviewPlanApproval, ReviewToolCall } from '@recoder/shared';
 	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import CheckCheck from '@lucide/svelte/icons/check-check';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
@@ -15,7 +15,7 @@
 	import { Switch } from '@sivir-ui/svelte/components/switch';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Input } from '@sivir-ui/svelte/components/input';
-	import { Markdown } from '@sivir-ui/svelte/components/markdown';
+	import ModelMarkdown from './model-markdown.svelte';
 	import * as Popover from '@sivir-ui/svelte/components/popover';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
@@ -50,8 +50,18 @@
 		onAsk?: (() => void) | null;
 		onConversation?: (() => void) | null;
 		onRestart?: (() => void) | null;
+		/** What a running review is doing right now ("Running checks · bun test"). */
+		stageLabel?: string | null;
+		paused?: boolean;
+		/** A plan waiting for the developer; the review is blocked until answered. */
+		approval?: ReviewPlanApproval | null;
+		onApprove?: (() => Promise<void>) | null;
+		/** Asks to confirm, since declining cancels the review. */
+		onDecline?: (() => void) | null;
+		approving?: boolean;
 	}
-	let { files, toolCalls = [], branch = null, onFullFile, onOpenAt = null, status = 'done', onStartReview = null, onOpenDiff = null, onAsk = null, onConversation = null, onRestart = null }: Props = $props();
+	let { files, toolCalls = [], branch = null, onFullFile, onOpenAt = null, status = 'done', onStartReview = null, onOpenDiff = null, onAsk = null, onConversation = null, onRestart = null, stageLabel = null, paused = false, approval = null, onApprove = null, onDecline = null, approving = false }: Props = $props();
+	const awaitingApproval = $derived(status === 'running' && approval?.status === 'pending');
 
 	/* Empty states: what the page says when there's nothing in the list. */
 	const fixedCount = $derived(findingsStore.items.filter((f) => f.status === 'accepted').length);
@@ -149,21 +159,27 @@
 {/snippet}
 
 {#if ranked.length === 0 && !query.trim()}
-	<div class="focus-empty" data-kind={emptyKind}>
-		<div class="focus-empty-card enter-rise">
+	<div class="focus-empty" data-kind={emptyKind} data-waiting={awaitingApproval || paused || undefined}>
+		<div class="focus-empty-card">
 			<span class="focus-empty-icon" aria-hidden="true">
 				{#if emptyKind === 'draft'}<ScanSearch size={20} />
+				{:else if emptyKind === 'running' && (awaitingApproval || paused)}<CircleAlert size={20} />
 				{:else if emptyKind === 'running'}<Spinner size={18} />
 				{:else if emptyKind === 'failed'}<CircleAlert size={20} />
 				{:else if emptyKind === 'clean'}<CircleCheck size={20} />
 				{:else}<CheckCheck size={20} />{/if}
 			</span>
 			<Typography.Title level={2} class="focus-empty-title">
-				{emptyKind === 'draft' ? 'No findings yet' : emptyKind === 'running' ? 'Reviewing this pull request' : emptyKind === 'failed' ? "The review didn't finish" : emptyKind === 'clean' ? 'Nothing to fix' : 'All caught up'}
+				{emptyKind === 'draft' ? 'No findings yet'
+					: emptyKind === 'running' && awaitingApproval ? 'Run specialists?'
+					: emptyKind === 'running' && paused ? 'Review paused'
+					: emptyKind === 'running' ? 'Reviewing this pull request'
+					: emptyKind === 'failed' ? "The review didn't finish" : emptyKind === 'clean' ? 'Nothing to fix' : 'All caught up'}
 			</Typography.Title>
 			<p class="focus-empty-text">
 				{#if emptyKind === 'draft'}Run the full review and specialists will check every change. Findings land here, ranked by severity.
-				{:else if emptyKind === 'running'}Specialists are working through the diff. Findings appear here once the review consolidates them.
+				{:else if emptyKind === 'running' && paused}Model calls are on hold. Resume from the progress card in the conversation.
+				{:else if emptyKind === 'running'}{stageLabel ? `${stageLabel}.` : 'Specialists are working through the diff.'} Findings appear here once the review consolidates them.
 				{:else if emptyKind === 'failed'}No findings were saved. Restart the review to try again.
 				{:else if emptyKind === 'clean'}The review found nothing in this pull request that needs a change.
 				{:else}Every finding is fixed, dismissed or hidden by a filter.{/if}
@@ -181,6 +197,9 @@
 			<div class="focus-empty-actions">
 				{#if emptyKind === 'draft' && onStartReview}
 					<Button variant="primary" loading={starting} disabled={starting} onclick={() => void start()}>Start review</Button>
+				{:else if emptyKind === 'running' && awaitingApproval && onApprove && approval}
+					{#if onDecline}<Button variant="outline" disabled={approving} onclick={onDecline}>No</Button>{/if}
+					<Button variant="primary" loading={approving} disabled={approving} onclick={() => void onApprove()}>Yes</Button>
 				{:else if emptyKind === 'running' && onConversation}
 					<Button variant="outline" onclick={onConversation}>Watch progress</Button>
 				{:else if emptyKind === 'failed' && onRestart}
@@ -195,7 +214,7 @@
 				{#if onAsk && emptyKind !== 'running'}<Button variant="ghost" class="gap-1.5" onclick={onAsk}><MessageSquare size={14} aria-hidden="true" />Ask reviewer</Button>{/if}
 			</div>
 		</div>
-		{#if emptyKind === 'draft' || emptyKind === 'running'}{@render ghostCards(emptyKind === 'running')}{/if}
+		{#if emptyKind === 'draft' || emptyKind === 'running'}{@render ghostCards(emptyKind === 'running' && !awaitingApproval && !paused)}{/if}
 	</div>
 {:else}
 <div class="focus-body">
@@ -233,7 +252,7 @@
 					{@const isActive = finding.id === active?.id}
 					{@const dismissed = finding.status === 'dismissed'}
 					<div class="focus-card-slot" in:collapse out:collapse>
-					<Card.Root class="focus-card enter-rise" data-active={isActive || undefined} data-dismissed={dismissed || undefined} {...{ style: `--i: ${i}` }}>
+					<Card.Root class="focus-card" data-active={isActive || undefined} data-dismissed={dismissed || undefined} {...{ style: `--i: ${i}` }}>
 						<Button unstyled class="focus-card-select" aria-current={isActive || undefined} onclick={() => select(finding)}>
 							<span class="focus-card-head">
 								{#if dismissed}<SeverityPill tone="info">Dismissed</SeverityPill>{:else}<FindingSeverity severity={finding.severity} />{#if finding.verification && finding.status !== 'accepted'}<VerificationBadge verification={finding.verification} />{/if}{/if}
@@ -294,12 +313,12 @@
 						<Typography.Title level={3} class="focus-detail-title">{active.title}</Typography.Title>
 						<span class="focus-detail-meta">{[active.code, formatAgentName(active.agent), modelLabel(active.model)].filter(Boolean).join(' · ')}</span>
 					</div>
-					<div class="focus-detail-body ai-voice"><Markdown content={active.body} /></div>
+					<div class="focus-detail-body ai-voice"><ModelMarkdown content={active.body} /></div>
 					{#if active.verification}
 						<p class="verify-note" data-status={active.verification.status}>
 							{#if active.verification.status === 'verified'}<CircleCheck size={14} class="verify-note-icon" aria-hidden="true" />{:else}<CircleAlert size={14} class="verify-note-icon" aria-hidden="true" />{/if}
 							<span>
-								{active.verification.status === 'verified' ? 'Verified' : 'Not verified'}: {active.verification.reason}
+								{active.verification.status !== 'verified' ? 'Not verified' : active.verification.method === 'trace' ? 'Traced through the code' : 'Verified'}: {active.verification.reason}
 								{#if active.verification.command}<code>{active.verification.command}</code>{#if active.verification.exitCode !== undefined && active.verification.exitCode !== null} exited {active.verification.exitCode}.{/if}{/if}
 							</span>
 						</p>

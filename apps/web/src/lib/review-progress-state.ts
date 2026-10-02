@@ -34,6 +34,7 @@ export interface ProgressMessage {
 
 const SNAPSHOT_KEYS = [
 	'paused',
+	'approval',
 	'planVersion',
 	'planSummary',
 	'assignments',
@@ -124,6 +125,34 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 		}].slice(-100);
 	}
 	return next;
+}
+
+/** Pipeline stages in order; the index is what `review-steps.svelte` renders. */
+export const STAGE_LABELS = ['Checkout', 'Understand changes', 'Running checks', 'Specialist review', 'Verifying findings', 'Consolidation'] as const;
+
+/**
+ * Where a review stands, from its stored status and live progress: the stage
+ * index (6 once passed), its label, and the running step's own message.
+ */
+export function reviewStage(progress: ReviewProgress, status: Review['status']): { index: number; label: string; detail?: string } {
+	const assignments = progress.assignments ?? [];
+	const index = status === 'passed' ? 6
+		: progress.stage === 'consolidation' || progress.tasks.finalize ? 5
+		: progress.stage === 'verify' ? 4
+		: progress.stage === 'specialists' ? 3
+		: progress.stage === 'checks' ? 2
+		: assignments.length > 0 ? 3
+		: progress.stage === 'understand' || progress.tasks.inventory || progress.tasks.planning ? 1
+		: 0;
+	const label = status === 'passed' ? 'Review complete'
+		: status === 'failed' ? 'Review failed'
+		: progress.paused ? 'Paused'
+		: progress.approval?.status === 'pending' ? 'Waiting for your go-ahead'
+		: (STAGE_LABELS as readonly string[])[index] ?? 'Review complete';
+	const detail = index === 0 ? progress.tasks[['fetch', 'sandbox', 'diff'].find((id) => progress.tasks[id]?.status === 'running') ?? 'fetch']?.message
+		: index === 2 ? (progress.tasks.checks?.status === 'running' ? progress.tasks.checks : progress.tasks.setup)?.message
+		: undefined;
+	return { index, label, detail };
 }
 
 export function taskSummary(tasks: ReviewTask[]) {

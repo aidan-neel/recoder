@@ -20,6 +20,22 @@ test('pause holds model calls and stops the review clock; resume releases both',
 	});
 });
 
+test('a plan waiting for approval holds until approved, and a cancel releases it too', async () => {
+	const approved = new ReviewControl();
+	let settled = false;
+	const pending = approved.requestApproval().then(() => { settled = true; });
+	await Bun.sleep(20);
+	expect(settled).toBe(false);
+	expect(approved.approve()).toBe(true);
+	await pending;
+	expect(approved.approve()).toBe(false);
+	const cancelled = new ReviewControl();
+	const waiting = cancelled.requestApproval();
+	cancelled.cancel();
+	await waiting;
+	expect(cancelled.awaitingApproval).toBe(false);
+});
+
 test('cancel releases anyone waiting on a pause', async () => {
 	const control = new ReviewControl();
 	control.pause();

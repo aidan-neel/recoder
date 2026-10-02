@@ -228,7 +228,7 @@
 	{:else}
 		<Card.Root class="settings-list">
 			{#each openPrs.repos as repo, i (repo.id)}
-				<div class="settings-row enter-rise" style:--i={i}>
+				<div class="settings-row" style:--i={i}>
 					<span class="flex shrink-0 text-fg-subtle"><ProviderMark provider={repo.provider} size={14} /></span>
 					<span class="min-w-0 flex-1 truncate font-mono text-[12.5px]">{repo.name}</span>
 					<span class="shrink-0 font-mono text-[11.5px] text-fg-faint">{openPrs.prsByRepo[repo.id]?.length ?? '–'} open</span>

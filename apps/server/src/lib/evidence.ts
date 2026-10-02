@@ -190,7 +190,10 @@ export class EvidenceStore {
 	private async writeFile(action: RetrievalAction, signal?: AbortSignal): Promise<ToolResult> {
 		const path = sanitizeRepoPath(action.path);
 		if (!path) return { action: 'writeFile', ok: false, error: 'invalid path', content: '', truncated: false };
-		if (typeof action.content !== 'string') return { action: 'writeFile', ok: false, error: 'content must be a string', content: '', truncated: false, path };
+		if (typeof action.content !== 'string') {
+			const got = action.content === undefined ? 'no content field' : Array.isArray(action.content) ? 'an array' : typeof action.content;
+			return { action: 'writeFile', ok: false, error: `"content" must be the whole file as one string; got ${got}`, content: '', truncated: false, path };
+		}
 		if (!this.exec) return { action: 'writeFile', ok: false, error: this.execUnavailable, content: '', truncated: false, path };
 		const written = await this.exec.writeFile(path, action.content, signal);
 		if (!written.ok) return { action: 'writeFile', ok: false, error: written.error, content: '', truncated: false, path };
@@ -531,7 +534,11 @@ function canonicalFields(args: Record<string, unknown>, action?: string): Record
 		if (Array.isArray(out.command)) out.command = out.command.filter((part) => typeof part === 'string').join(' ');
 		if (out.timeoutSec !== undefined) out.timeoutSec = toInt(out.timeoutSec);
 	}
-	if (action === 'writeFile') pick('content', 'contents', 'text', 'body', 'code', 'data');
+	if (action === 'writeFile') {
+		pick('content', 'contents', 'text', 'body', 'code', 'data');
+		// Some models send a file as its list of lines.
+		if (Array.isArray(out.content) && out.content.every((line) => typeof line === 'string')) out.content = out.content.join('\n');
+	}
 	pick('query', 'pattern', 'regex', 'text', 'term', 'q', 'keyword', 'symbol');
 	pick('path', 'file', 'filePath', 'file_path', 'filepath', 'filename', 'fileName');
 	pick('prefix', 'dir', 'directory', 'folder', 'scope');

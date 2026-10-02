@@ -15,6 +15,8 @@ export class ReviewControl {
 	private pausedAt = 0;
 	private waiters: (() => void)[] = [];
 	paused = false;
+	/** Set while the review waits for the developer to approve a large plan. */
+	private approval: { since: number; settle: () => void } | null = null;
 
 	/** Aborts when a pause starts; renewed on resume. */
 	get pauseSignal(): AbortSignal {
@@ -44,7 +46,38 @@ export class ReviewControl {
 	}
 
 	pausedMs(): number {
-		return this.pausedTotal + (this.paused ? Date.now() - this.pausedAt : 0);
+		return this.pausedTotal + (this.paused ? Date.now() - this.pausedAt : 0) + (this.approval ? Date.now() - this.approval.since : 0);
+	}
+
+	/**
+	 * Hold until the developer approves the plan, however long that takes. Like
+	 * a pause, the wait doesn't count against the review's time. Declining is a
+	 * cancel, which also settles the wait so the pipeline unwinds.
+	 */
+	requestApproval(): Promise<void> {
+		if (this.abort.signal.aborted) return Promise.resolve();
+		return new Promise((resolve) => {
+			const since = Date.now();
+			const settle = () => {
+				if (this.approval?.settle !== settle) return;
+				this.pausedTotal += Date.now() - since;
+				this.approval = null;
+				resolve();
+			};
+			this.approval = { since, settle };
+			this.abort.signal.addEventListener('abort', settle, { once: true });
+		});
+	}
+
+	/** The developer said yes; false when nothing is waiting for an answer. */
+	approve(): boolean {
+		if (!this.approval) return false;
+		this.approval.settle();
+		return true;
+	}
+
+	get awaitingApproval(): boolean {
+		return this.approval !== null;
 	}
 
 	async wait(signal?: AbortSignal): Promise<void> {

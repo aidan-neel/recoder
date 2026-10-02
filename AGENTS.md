@@ -53,8 +53,50 @@ change makes a test obsolete, delete the test.
   form controls or bespoke overlays as a substitute for Sivir primitives.
 - **Verify it actually works before finishing.** At minimum run
   `bun run --filter @recoder/web check` and `bun run --filter @recoder/web build`,
-  and confirm the interaction/render is correct. Do not claim a UI change works
-  without this verification.
+  then follow **Visual verification** below. Do not claim a UI change works
+  without both.
+
+## Visual verification (mandatory for UI work)
+
+`check` and `build` passing does not mean a UI change looks right. Any change to
+UI, styling, tokens, layout, motion, or interface copy must be seen in a real
+browser before you report it done.
+
+1. Use the running web dev server at the URL it printed (Vite defaults to
+   `http://localhost:5173` and moves to the next free port when that one is
+   taken). If none is running, start `bun run dev` from the repo root.
+2. Open every screen the change touches. Screenshot each one in dark and light
+   mode at 1280 and 1440 wide. Also check 1920 when the change touches sizing,
+   because the root font scales up there.
+3. Exercise the states the change affects: hover, press, focus, open menus and
+   modals, pending, success, failure, loading skeleton, empty, and error.
+   Screenshot each.
+4. For motion (menu and modal entrances, the hover highlight, tab pill,
+   skeleton-to-content swap, layout shift), capture 8 to 10 frames across the
+   transition. Do not judge motion from code alone.
+5. Read every screenshot yourself against `DESIGN.md`. Look for clipping
+   (especially the top bar), layout shift, horizontal overflow, low contrast,
+   and anything inconsistent with neighboring UI. Check the console for errors
+   and hydration warnings.
+6. Fix what you find and capture again. Repeat until the result is clean.
+7. In your final summary, list what you captured and what you fixed. If you
+   could not verify visually, say so plainly. Never claim a visual change
+   looks right without screenshots.
+
+A browser is always available on this machine. Never conclude otherwise:
+
+- Try the Playwright MCP (`browser_*` tools) first. If it fails with
+  "Chromium distribution 'chrome' is not found", use the fallbacks below
+  instead of stopping.
+- For a one-off screenshot:
+  `bunx playwright@1.60.0 screenshot --color-scheme=dark --viewport-size=1440,900 --wait-for-timeout=1000 <url> <out.png>`
+- For interaction or frame capture, write a script in your scratchpad, outside
+  the repo, that imports `chromium` from `'playwright@1.60.0'`, and run it with
+  `bun script.mjs`. Bun installs it automatically. Never add these scripts or
+  Playwright to the repo.
+- The theme follows `prefers-color-scheme` unless `localStorage['recoder-theme']`
+  is set, so emulate the color scheme to switch modes.
+- Open the PNGs with the Read tool to view them.
 
 ## UI conventions
 
@@ -83,8 +125,12 @@ component specs, layout and behavior rules.
   Sivir `outline`; design "ghost" = `ghost`; quiet triggers = `quiet`.
 - **Top bar shell only.** Sessions are tabs next to Home. Do not reintroduce
   the left sidebar.
-- **Serif is for the AI's words only** (summaries, findings, replies, the Home
-  brief) via `.ai-voice`. Everything else is Geist; code and metadata are Geist Mono.
+- **Cal Sans is the default UI face** (`--font-ui`, served from
+  `static/fonts/CalSansVF.ttf`, Geist as fallback); code and metadata are Geist Mono.
+  Chat replies in the conversation use the UI sans. Serif (`.ai-voice`) remains
+  only for summaries, findings and the Home brief.
+- **No drop shadows on panels, cards or the composer** in either theme
+  (`--drop: 0`); only menus and modals float.
 - **No logo mark** anywhere, including next to AI messages.
 - **One model picker pattern**: the quiet trigger (`5.6 Sol Medium`) opening the
   Model / Reasoning effort menu with submenus. Effort options come from the
@@ -93,13 +139,18 @@ component specs, layout and behavior rules.
 - **Quiet at rest.** Triggers, icon buttons and ghost buttons have no
   background until hovered. One cream primary button per region.
 - **Hover highlight is instant** (`hoverHighlight` in `$lib/hover-highlight.ts`
-  or Sivir's item highlight): snap to the item, fade 120ms. Only the active
+  or Sivir's item highlight): snap to the item, fade 60ms. Only the active
   tab pill animates position.
+- **Motion is for an everyday tool, not a demo.** Use the `--dur-*` and
+  `--motion-*` tokens in `app.css`, never a raw duration. Menus and modals
+  enter with a short fade, a 0.95 scale and a 2px blur (the `--motion-*`
+  tokens, under ~200ms); don't add other entrances to things the user opens
+  repeatedly.
 - **Every async action has visible states**: idle → pending (spinner, same
   width) → success or failure. Destructive or pushed-to-git actions get a
   toast with Undo where possible (`$lib/notify.ts`).
 - **Lists load with skeletons** (`$lib/components/ui/skeleton.svelte`), then
-  fade in with a 40ms stagger (`.enter-rise` + `--i`). No spinner in place of a list.
+  swap in place with no entrance animation. No spinner in place of a list.
 - **Panel headers are 44px**, matching the diff header, so borders line up.
 - Respect `prefers-reduced-motion`. Keep body text at 4.5:1; use `text-fg-faint`
   and below only for metadata.

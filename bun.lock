@@ -28,7 +28,7 @@
         "@lucide/svelte": "^1.39.0",
         "@neondatabase/serverless": "1.1.0",
         "@recoder/shared": "workspace:*",
-        "@sivir-ui/svelte": "^0.3.2",
+        "@sivir-ui/svelte": "^0.3.3",
       },
       "devDependencies": {
         "@fontsource/geist-mono": "^5.3.0",
@@ -53,7 +53,7 @@
       "dependencies": {
         "@lucide/svelte": "^1.39.0",
         "@recoder/shared": "workspace:*",
-        "@sivir-ui/svelte": "^0.3.2",
+        "@sivir-ui/svelte": "^0.3.3",
         "material-icon-theme": "5.38.1",
       },
       "devDependencies": {
@@ -279,7 +279,7 @@
 
     "@scritto/svelte": ["@scritto/svelte@0.1.0", "", { "dependencies": { "@scritto/core": "0.1.0" }, "peerDependencies": { "svelte": "^5" } }, "sha512-zKyNZ0SmDIH2zlM630dpPjfFbzTRevGwCMP+VWqOhWqDlBfpQu6lWh3ouH1opNHW8qvhjluqEzNB5fcidFX2Eg=="],
 
-    "@sivir-ui/svelte": ["@sivir-ui/svelte@0.3.2", "", { "dependencies": { "@floating-ui/dom": "^1.7.6", "@fontsource/inter": "^5.3.0", "@fontsource/jetbrains-mono": "^5.3.0", "@lucide/svelte": "^1.7.0", "@scritto/core": "^0.1.0", "@scritto/svelte": "^0.1.0", "cnfast": "^0.0.8", "fuse.js": "^7.1.0", "highlight.js": "^11.11.1", "marked": "^18.0.7", "tailwind-merge": "^3.6.0", "tailwind-variants": "^3.2.2" }, "peerDependencies": { "@sveltejs/kit": "^2.0.0", "svelte": "^5.0.0", "tailwindcss": "^4.0.0" }, "bin": { "sivir": "dist/index.js" } }, "sha512-ibKUwf2ZcTKXntfh6BgmGK3YqIP+HoaHrzkZwdFiF5WcyKPvB9ZEbaK/ydNRBtSfRZsuib/impv2dnyJ9YGLnQ=="],
+    "@sivir-ui/svelte": ["@sivir-ui/svelte@0.3.3", "", { "dependencies": { "@floating-ui/dom": "^1.7.6", "@fontsource/inter": "^5.3.0", "@fontsource/jetbrains-mono": "^5.3.0", "@lucide/svelte": "^1.7.0", "@scritto/core": "^0.1.0", "@scritto/svelte": "^0.1.0", "cnfast": "^0.0.8", "fuse.js": "^7.1.0", "highlight.js": "^11.11.1", "marked": "^18.0.7", "tailwind-merge": "^3.6.0", "tailwind-variants": "^3.2.2" }, "peerDependencies": { "@sveltejs/kit": "^2.0.0", "svelte": "^5.0.0", "tailwindcss": "^4.0.0" }, "bin": { "sivir": "dist/index.js" } }, "sha512-2XNqe/b8MYKGpUh9qQWjFX8Xckna0zFaNZDXOZSI1XL/eCKk6O57Jkh4x8+gNBnfOHP+ImmflN3w4n9OZCscuA=="],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 

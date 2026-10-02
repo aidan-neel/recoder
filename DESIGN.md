@@ -4,7 +4,7 @@ The source of truth for Recoder's UI.
 
 ## Principles
 - **Warm near-black surfaces, flat by default.** Depth comes from 1px rings and a few surface steps. Shadows are for floating things only (menus, modals, toasts, the composer).
-- **Two voices.** The UI speaks in Geist sans. The AI speaks in Lora serif: summaries, findings, replies and the Home brief. Never mix them in one block.
+- **Two voices.** The UI speaks in Cal Sans (Geist as fallback). The AI speaks in Lora serif in summaries, findings and the Home brief; chat replies use the UI sans. Never mix them in one block.
 - **Quiet chrome.** Controls stay transparent until they're hovered. There is one cream primary action per region.
 - **No brand mark on AI output.** The serif alone tells you who is speaking.
 
@@ -72,7 +72,7 @@ Vivid, not pastel: chroma sits at 70–95% of the sRGB maximum for each hue (OKL
 ## Type
 | Role | Font | Size / line-height |
 |---|---|---|
-| UI | Geist 400/500 | 12–14.5px. Body 13.5, controls 12.5–13, titles 14–15 |
+| UI | Cal Sans (variable), Geist fallback | 12–14.5px. Body 13.5, controls 12.5–13, titles 14–15 |
 | Code / meta | Geist Mono 400 | 11–12.5px. Diff 12.5/22 |
 | AI voice | Lora 400 | Brief 27/1.38; transcript 18/1.55; findings 16.5/1.45–1.5; compact cards 15.5/1.42 |
 
@@ -107,10 +107,22 @@ Heights are 28 (panel), 30 (default) and 32–34 (toolbar or hero).
 
 ### Model picker
 The one pattern used everywhere a model is picked (composer, side panels, Settings → Models roles).
-- **Trigger**: quiet text button, 30px (28px in side panels), padding `0 9px`, radius 8, 12.5px. Model name in `#ede9e3`, then the effort word in full in `#8a857d` (`5.6 Sol Medium`, never `Med`). Models without an effort control show only the name. In the composer it sits just before the send button.
-- **Menu**: 250px, opens upward, anchored to the trigger's right edge. Rows are 32px, radius 7: `Model ›`, `Reasoning effort ›` (dimmed "Not supported" with no chevron when the model has none), a divider, then `Model settings…` (opens Settings → Models). No Speed row. There are two model picks, Review and Specialists; Specialists can follow Review ("Same as Review"). No per-role models.
+- **Trigger**: quiet text button, 30px (28px in side panels), padding `0 9px`, radius 8, 12.5px. Model name in `#ede9e3`, then the effort word in full in `#8a857d` (`5.6 Sol Medium`, never `Med`). Models without an effort control show only the name.
+- **Menu**: 250px, opens upward, anchored to the trigger's right edge. Rows are 30px, radius 7: `Model ›`, `Reasoning effort ›` (dimmed "Not supported" with no chevron when the model has none), a divider, then `Model settings…` (opens Settings → Models). No Speed row. There are two model picks, Review and Specialists; Specialists can follow Review ("Same as Review"). No per-role models.
 - **Submenus** open to the left, top-aligned to their row, with a 6px invisible bridge. Effort options come from the selected model's capabilities. Switching to a model that lacks the current effort resets it to that model's default.
 - Settings roles use the same trigger, never a separate Low/Medium/High control. Inheriting roles show "Same as Orchestrator".
+- **Model list** groups by provider (menu labels) once more than one provider has models; the list scrolls inside the submenu.
+
+### Model providers (Settings → Models)
+
+- **One list, a row per provider**: ChatGPT (sign in), hosted providers (OpenCode Go, OpenCode Zen, OpenRouter: connect with an API key), then "Your own server". A row is name + one line (what it offers, or "N models · ••••key") + one action. Adding a provider means adding it to the server catalog, not new UI.
+- **Connect** opens a small modal: API key, "Get a key ↗", inline error. The key is checked with a request that runs no model. Success goes straight to the provider's models.
+- **Hosted models** come from the provider's catalog in a searchable checkbox list: added models checked and on top, context and input price in mono on the right. Models that need an API Recoder doesn't speak are listed dimmed and disabled, with the reason. Small catalogs (≤40) start with every supported model picked; OpenRouter starts with none.
+- **Detect models** is only for your own server (vLLM, Ollama, LM Studio), inside its Manage modal with base URL, key and Add by ID.
+
+### Out of usage
+
+When a model's plan runs out (ChatGPT's cap, a hosted provider's 429 or 402 after retries), the review stops at once and the failure shows the out-of-usage notice instead of a generic error: a gauge icon in `sev-medium`, "{Provider} is out of usage", when it resets (a live countdown for ChatGPT, else a link to the provider's usage page), then **Switch model** (models from other providers, grouped; picking one moves Review, and Specialists if they were on the spent plan, then retries), View or Check usage, and Retry. With no other provider it offers "Add a provider". In chat only the latest such reply carries the notice. A full usage bar in Settings turns `danger`.
 
 ## Layout
 - **Top bar**: 46px, bg `bg.chrome`. Left: the "Recoder" wordmark (no logo mark), Home, a 1px × 16px divider, one tab per open session, and `+`. Right: search (max 260px, shrinks to 170px), usage meter, settings, avatar. Tabs overflow into a menu rather than clipping.
@@ -123,7 +135,7 @@ The one pattern used everywhere a model is picked (composer, side panels, Settin
 
 ## Behavior
 - **Composer**: focus moves the ring from `#2a2826` to `#3d3935` over 150ms. Send is disabled (`#232120` bg, `#57534d` icon) while empty and turns primary with text. Enter sends; Shift+Enter inserts a newline. While a reply is pending, Send becomes Stop (a 9px square inside a spinning ring) and the reply shows a shimmering "Thinking" line.
-- **Streaming**: tool rows grow in (200ms) with a spinner that becomes a check, then their duration fades in. Streaming text shows a 2px caret blinking at 1s.
+- **Streaming**: tool rows grow in (240ms) with a spinner that becomes a check, then their duration fades in. Streaming text shows a 2px caret blinking at 1s.
 - **Async buttons keep a fixed width** across states. Apply fix is 112px: Apply fix → Applying (spinner) → Applied (check, transparent bg, success text). The finding's pill crossfades to "Fixed" and its title dims. A toast follows with Undo.
 - **Copy** flips to "✓ Copied" in success green for 1.2s.
 - **Trigger label changes** fade in and rise 2px over 180ms.
@@ -135,16 +147,25 @@ The one pattern used everywhere a model is picked (composer, side panels, Settin
 - No images or logo mark. The brand is the "Recoder" wordmark.
 
 ## Motion
+Recoder is an everyday tool: menus and modals open thousands of times a day,
+so motion confirms an action and gets out of the way. Feedback is quick but smooth;
+menus and modals settle in from a slight scale and blur, and only movement that
+explains a change (the tab pill, a panel unfolding) gets a short ease. The tokens
+live in `app.css` (`--dur-*`, and Sivir's `--motion-*`).
+
 | Token | Value |
 |---|---|
-| `hover` | color/background 120ms ease-out |
+| `hover` | color/background 100ms ease-out |
 | `press` | none: controls never scale when pressed |
-| `highlight` | instant position, 120ms opacity fade |
-| `tab-pill` | 240ms cubic-bezier(.3,.7,.2,1) |
-| `menu` | 150ms cubic-bezier(.2,.8,.2,1), 4px rise, scale .98 → 1, origin at the trigger |
-| `submenu` | 120ms, 4px horizontal |
-| `enter` | 220ms fade + 4px rise, 40ms stagger. Not on the file tree panel, which stays still; its folders open instantly |
-| `toast` | 220ms rise 12px, 5s dwell |
+| `highlight` | instant position, 100ms opacity fade |
+| `toggle` | 180ms: chevrons, switches, label swaps, row actions |
+| `tab-pill` | 240ms cubic-bezier(.3,.7,.2,1); segmented thumbs too |
+| `disclose` | 240ms height for panels and drawers that unfold |
+| `menu` | 130ms fade + 3px rise in from 0.95 scale and 2px blur, 80ms out |
+| `modal` | 150ms fade + 3px rise in from 0.95 scale and 2px blur, 70ms out |
+| `enter` | None. Content replaces its skeleton in place with no fade, rise or stagger |
+| `toast` | 220ms rise, 5s dwell |
 | `shimmer` | 1.6s linear (text), 1.4s (skeleton) |
+| `skeleton` | Hidden for the first 200ms, so data that lands sooner never flashes one |
 | `spinner` | 0.9s linear |
 | `reduced-motion` | transitions snap to 1ms; spinners stay |

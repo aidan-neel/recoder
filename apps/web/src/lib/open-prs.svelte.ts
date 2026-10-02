@@ -1,4 +1,5 @@
 import type { HomeBriefResponse, PullRequest, Repo } from '@recoder/shared';
+import { readCache, writeCache } from '$lib/persisted-cache';
 import { serverApi } from '$lib/server-api';
 
 const BRIEF_KEY = 'recoder.homeBrief';
@@ -52,11 +53,19 @@ class OpenPrsState {
 	async load(): Promise<void> {
 		if (this.started) return;
 		this.started = true;
+		const cached = readCache<{ repos: Repo[]; prsByRepo: Record<string, PullRequest[]> }>('open-prs');
+		if (cached) {
+			// Paint the last list at once and revalidate behind it.
+			this.repos = cached.repos;
+			this.prsByRepo = cached.prsByRepo;
+			this.loading = false;
+		}
 		try {
 			this.repos = await serverApi.listRepos();
 			this.apiDown = false;
 			this.loading = false;
-			await this.loadAll();
+			await this.loadAll(!!cached);
+			this.persist();
 		} catch {
 			this.apiDown = true;
 			this.loading = false;
@@ -80,6 +89,12 @@ class OpenPrsState {
 		await Promise.all(this.repos.map((repo) => this.loadRepo(repo, quiet)));
 	}
 
+	private persist(): void {
+		const ids = new Set(this.repos.map((repo) => repo.id));
+		const prsByRepo = Object.fromEntries(Object.entries(this.prsByRepo).filter(([id]) => ids.has(id)));
+		writeCache('open-prs', { repos: $state.snapshot(this.repos), prsByRepo: $state.snapshot(prsByRepo) });
+	}
+
 	async refresh(): Promise<void> {
 		if (this.refreshing) return;
 		this.refreshing = true;
@@ -91,6 +106,7 @@ class OpenPrsState {
 			}
 			this.repos = await serverApi.listRepos();
 			await this.loadAll(true);
+			this.persist();
 		} catch {
 			// Keep the last list; per-repo errors render inline.
 		} finally {

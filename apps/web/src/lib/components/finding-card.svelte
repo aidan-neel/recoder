@@ -3,7 +3,7 @@
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
-	import { Markdown } from '@sivir-ui/svelte/components/markdown';
+	import ModelMarkdown from './model-markdown.svelte';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import FindingSeverity from './finding-severity.svelte';
 	import FixButton from './fix-button.svelte';
@@ -61,7 +61,7 @@
 			{/if}
 			<Collapsible.Content>
 				<Typography.Title level={3} class="sr-only">{finding.title}</Typography.Title>
-				<div class="inline-finding-body ai-voice"><Markdown content={finding.body} /></div>
+				<div class="inline-finding-body ai-voice"><ModelMarkdown content={finding.body} /></div>
 				<FixStatus {finding} />
 				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks {finding} />{/if}
 				<div class="inline-finding-foot">

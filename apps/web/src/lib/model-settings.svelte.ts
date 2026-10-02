@@ -12,7 +12,10 @@ export const MODEL_ROLES: ReviewRole[] = [
 	'testing',
 	'errors',
 	'concurrency',
-	'api'
+	'api',
+	'impact',
+	'frontend',
+	'data'
 ];
 
 export interface EffortOption {
@@ -64,8 +67,12 @@ function displayName(entry: ModelEntry): string {
 	return entry.provider === 'codex' ? label.replace(/^gpt-(?=\d)/i, '').replace(/-/g, ' ') : label;
 }
 
-function providerName(entry: ModelEntry): string {
+/** Names for hosted providers, so pickers can group by them before the provider list loads. */
+const HOSTED_NAMES: Record<string, string> = { 'opencode-go': 'OpenCode Go', opencode: 'OpenCode Zen', openrouter: 'OpenRouter' };
+
+export function providerName(entry: ModelEntry): string {
 	if (entry.provider === 'codex') return 'ChatGPT';
+	if (entry.source) return HOSTED_NAMES[entry.source] ?? entry.source;
 	const url = entry.baseUrl ?? '';
 	if (/openrouter/i.test(url)) return 'OpenRouter';
 	if (/dashscope/i.test(url)) return 'DashScope';
@@ -242,6 +249,7 @@ class ModelSettingsUi {
 			models: models.map((entry) => ({
 				id: entry.id,
 				provider: entry.provider ?? 'openai-compatible',
+				...(entry.source ? { source: entry.source } : {}),
 				label: entry.label,
 				model: entry.model,
 				...(entry.baseUrl ? { baseUrl: entry.baseUrl } : {}),

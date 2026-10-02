@@ -181,18 +181,32 @@ async function writeFix(
 		{ role: 'system', content: system },
 		{ role: 'user', content: user }
 	];
+	// Reasoning models spend output tokens thinking; after one cut-off, ask again without the thinking phase.
+	let thinking: boolean | undefined;
 	try {
 		for (let attempt = 1; ; attempt++) {
-			const output = await chatCompletion({
-				provider: cfg.provider,
-				reasoningEffort: cfg.reasoningEffort,
-				baseUrl: cfg.baseUrl,
-				apiKey: cfg.apiKey,
-				model: cfg.model,
-				messages,
-				temperature: 0,
-				timeoutMs: 120_000
-			});
+			let output: string;
+			try {
+				output = await chatCompletion({
+					provider: cfg.provider,
+					reasoningEffort: cfg.reasoningEffort,
+					baseUrl: cfg.baseUrl,
+					apiKey: cfg.apiKey,
+					model: cfg.model,
+					messages,
+					temperature: 0,
+					// Thinking counts against this on reasoning models; 4k was often spent before any JSON.
+					maxTokens: 16_000,
+					thinking,
+					timeoutMs: 180_000
+				});
+			} catch (err) {
+				if (thinking === false || !(err instanceof LlmError) || !/output truncated/i.test(err.message)) throw err;
+				thinking = false;
+				attempt--;
+				messages.push({ role: 'user', content: 'Your reply hit the output limit. Answer now without deliberating: one or two small edits, each "find" only the few lines that change, JSON only.' });
+				continue;
+			}
 			let problem: string;
 			try {
 				const parsed = fixOutputSchema.safeParse(extractJsonObject(output));

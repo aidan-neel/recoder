@@ -21,6 +21,11 @@ export interface ChatOptions {
 	messages: ChatMessage[];
 	/** Response format hint; ignored by servers that don't support it. */
 	jsonMode?: boolean;
+	/**
+	 * Constrain the reply to this JSON schema (vLLM/SGLang guided decoding,
+	 * OpenAI structured outputs). Endpoints that refuse it fall back to `jsonMode`.
+	 */
+	jsonSchema?: { name: string; schema: Record<string, unknown> };
 	temperature?: number;
 	/** Fixed seed for deterministic output. Only sent when set (some servers reject unknown fields). */
 	seed?: number;
@@ -45,13 +50,52 @@ function thinkingFields(opts: ChatOptions): Record<string, unknown> {
 	return opts.thinking === false && !noTemplateKwargs.has(opts.baseUrl) ? { chat_template_kwargs: { enable_thinking: false } } : {};
 }
 
+/** Endpoints that rejected `json_schema` response formats; later calls send plain JSON mode. */
+const noJsonSchema = new Set<string>();
+
+function responseFormat(opts: ChatOptions): Record<string, unknown> {
+	if (opts.jsonSchema && !noJsonSchema.has(opts.baseUrl)) return { response_format: { type: 'json_schema', json_schema: { name: opts.jsonSchema.name, schema: opts.jsonSchema.schema } } };
+	return opts.jsonMode || opts.jsonSchema ? { response_format: { type: 'json_object' } } : {};
+}
+
+/** Retry in plain JSON mode when an endpoint refuses a schema-constrained reply. */
+async function withSchemaFallback<T>(opts: ChatOptions, run: () => Promise<T>): Promise<T> {
+	try {
+		return await run();
+	} catch (err) {
+		if (opts.jsonSchema && !noJsonSchema.has(opts.baseUrl) && err instanceof LlmError && (err.status === 400 || err.status === 422) && /response_format|json_schema|guided|structured/i.test(err.message)) {
+			noJsonSchema.add(opts.baseUrl);
+			if (opts.signal?.aborted) throw err;
+			return run();
+		}
+		throw err;
+	}
+}
+
 /** Retry once without the thinking switch when an endpoint refuses it. */
+/** OpenRouter takes effort as `reasoning: { effort }`; other OpenAI-compatible servers take `reasoning_effort`. */
+export function reasoningFields(opts: Pick<ChatOptions, 'baseUrl' | 'reasoningEffort'>): Record<string, unknown> {
+	if (opts.reasoningEffort === undefined) return {};
+	return /(^|\.)openrouter\.ai$/i.test(hostOf(opts.baseUrl))
+		? { reasoning: { effort: opts.reasoningEffort } }
+		: { reasoning_effort: opts.reasoningEffort };
+}
+
+function hostOf(url: string): string {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return '';
+	}
+}
+
 async function withThinkingFallback<T>(opts: ChatOptions, run: () => Promise<T>): Promise<T> {
 	try {
 		return await run();
 	} catch (err) {
 		if (opts.thinking === false && !noTemplateKwargs.has(opts.baseUrl) && err instanceof LlmError && err.status >= 400 && err.status < 500 && /chat_template_kwargs|enable_thinking|unrecognized|unknown (field|parameter)|extra (fields|inputs)/i.test(err.message)) {
 			noTemplateKwargs.add(opts.baseUrl);
+			if (opts.signal?.aborted) throw err;
 			return run();
 		}
 		throw err;
@@ -120,11 +164,50 @@ async function withRetries<T>(
 			return await attempt(Math.max(1, deadline - Date.now()));
 		} catch (err) {
 			const wait = Math.min(15_000, 1_000 * 2 ** tries);
-			if (tries >= max || !isTransientLlmError(err, opts.provider) || !canRetry() || Date.now() + wait >= deadline - 5_000) throw err;
+			if (opts.signal?.aborted || tries >= max || !isTransientLlmError(err, opts.provider) || !canRetry() || Date.now() + wait >= deadline - 5_000) throw err;
 			console.warn(`[llm] ${(err as Error).message} — retrying in ${wait / 1000}s (${tries + 1}/${max})`);
 			await sleep(wait, opts.signal);
 		}
 	}
+}
+
+
+/**
+ * Settle at the deadline (or on cancel) no matter what `work` is stuck on.
+ * Every layer below aborts its own fetch, but a socket can wedge somewhere an
+ * abort doesn't reach; without this a review waits on that call forever and
+ * the model slot it holds is never given back.
+ */
+function withHardDeadline<T>(work: Promise<T>, deadline: number, timeoutMs: number, signal?: AbortSignal): Promise<T> {
+	work.catch(() => {});
+	let timer: ReturnType<typeof setTimeout> | undefined;
+	let onAbort: (() => void) | undefined;
+	const backstop = new Promise<never>((_, reject) => {
+		timer = setTimeout(
+			() => reject(new LlmError(0, `Model request timed out after ${Math.round(timeoutMs / 1000)}s`)),
+			// A little grace so the request can report its own timeout (or a stall) first.
+			Math.max(0, deadline - Date.now()) + Math.min(5_000, Math.max(250, timeoutMs / 10))
+		);
+		onAbort = () => reject(new LlmError(0, 'Model request cancelled'));
+		if (signal?.aborted) onAbort();
+		else signal?.addEventListener('abort', onAbort, { once: true });
+	});
+	return Promise.race([work, backstop]).finally(() => {
+		clearTimeout(timer);
+		if (onAbort) signal?.removeEventListener('abort', onAbort);
+	});
+}
+
+/**
+ * One call's lifetime. Its signal aborts with the caller's or once the call
+ * settles, so retries and the thinking fallback stop, and `live` drops
+ * callbacks from work that outlived the call (a transport that ignored abort).
+ */
+function requestScope(signal?: AbortSignal) {
+	const settled = new AbortController();
+	const scoped = signal ? AbortSignal.any([signal, settled.signal]) : settled.signal;
+	const live = <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => { if (!scoped.aborted) fn(...args); };
+	return { signal: scoped, live, end: () => settled.abort() };
 }
 
 /**
@@ -201,6 +284,7 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 	let acquired = false;
 	let tracking: ReturnType<typeof trackTokenCall> | undefined;
 	let success = false;
+	const scope = requestScope(opts.signal);
 	try {
 		await acquireLlmSlot(opts.signal, Math.max(1, deadline - Date.now()));
 		acquired = true;
@@ -208,20 +292,26 @@ export async function chatCompletion(opts: ChatOptions): Promise<string> {
 		started = Date.now();
 		report();
 		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
-		const remaining = { ...opts, timeoutMs: Math.max(1, deadline - Date.now()), onUsage: (usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); } };
-		let result: string;
-		if (opts.provider === 'codex') {
-			const { codex } = await import('./codex');
-			result = await withRetries(opts, deadline, async (timeoutMs) => {
+		const remaining = {
+			...opts,
+			signal: scope.signal,
+			timeoutMs: Math.max(1, deadline - Date.now()),
+			onUsage: scope.live((usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); }),
+			onReasoning: opts.onReasoning && scope.live(opts.onReasoning)
+		};
+		const work = opts.provider === 'codex'
+			? import('./codex').then(({ codex }) => withRetries(remaining, deadline, async (timeoutMs) => {
 				try { return await codex.complete({ ...remaining, timeoutMs }); }
 				catch (error) { if (error instanceof LlmError) throw error; throw new LlmError(0, 'ChatGPT request failed'); }
-			});
-		} else result = await withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => opts.onReasoning
-			? streamChatCompletionInner({ ...remaining, timeoutMs }, () => {})
-			: chatCompletionInner({ ...remaining, timeoutMs })));
+			}))
+			: withRetries(remaining, deadline, (timeoutMs) => withThinkingFallback(remaining, () => withSchemaFallback(remaining, () => remaining.onReasoning
+				? streamChatCompletionInner({ ...remaining, timeoutMs }, () => {})
+				: chatCompletionInner({ ...remaining, timeoutMs }))));
+		const result = await withHardDeadline(work, deadline, opts.timeoutMs ?? 120_000, opts.signal);
 		success = true;
 		return result;
 	} finally {
+		scope.end();
 		clearInterval(heartbeat);
 		if (acquired) releaseLlmSlot();
 		tracking?.finish(success);
@@ -247,9 +337,9 @@ async function chatCompletionInner(opts: ChatOptions): Promise<string> {
 				messages: opts.messages,
 				temperature: opts.temperature ?? 0.2,
 				max_tokens: opts.maxTokens ?? 4000,
-				...(opts.reasoningEffort !== undefined ? { reasoning_effort: opts.reasoningEffort } : {}),
+				...reasoningFields(opts),
 				...(opts.seed !== undefined ? { seed: opts.seed } : {}),
-				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+				...responseFormat(opts),
 				...thinkingFields(opts)
 			}),
 			signal: controller.signal
@@ -306,6 +396,7 @@ export async function streamChatCompletion(
 	let acquired = false;
 	let tracking: ReturnType<typeof trackTokenCall> | undefined;
 	let success = false;
+	const scope = requestScope(opts.signal);
 	try {
 		await acquireLlmSlot(opts.signal, Math.max(1, deadline - Date.now()));
 		acquired = true;
@@ -313,16 +404,24 @@ export async function streamChatCompletion(
 		started = Date.now();
 		report();
 		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
-		const remaining = { ...opts, timeoutMs: Math.max(1, deadline - Date.now()), onUsage: (usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); } };
+		const remaining = {
+			...opts,
+			signal: scope.signal,
+			timeoutMs: Math.max(1, deadline - Date.now()),
+			onUsage: scope.live((usage: TokenUsage) => { tracking!.usage(usage); opts.onUsage?.(usage); }),
+			onReasoning: opts.onReasoning && scope.live(opts.onReasoning)
+		};
 		// Once text has streamed to the user a retry would repeat it, so only retry before the first token.
 		let streamed = false;
-		const forward = (text: string) => { streamed = true; onToken(text); };
-		const result = opts.provider === 'codex'
-			? await withRetries(opts, deadline, async (timeoutMs) => (await import('./codex')).codex.complete({ ...remaining, timeoutMs }, forward), () => !streamed)
-			: await withRetries(opts, deadline, (timeoutMs) => withThinkingFallback(opts, () => streamChatCompletionInner({ ...remaining, timeoutMs }, forward)), () => !streamed);
+		const forward = scope.live((text: string) => { streamed = true; onToken(text); });
+		const work = opts.provider === 'codex'
+			? withRetries(remaining, deadline, async (timeoutMs) => (await import('./codex')).codex.complete({ ...remaining, timeoutMs }, forward), () => !streamed)
+			: withRetries(remaining, deadline, (timeoutMs) => withThinkingFallback(remaining, () => withSchemaFallback(remaining, () => streamChatCompletionInner({ ...remaining, timeoutMs }, forward))), () => !streamed);
+		const result = await withHardDeadline(work, deadline, opts.timeoutMs ?? 120_000, opts.signal);
 		success = true;
 		return result;
 	} finally {
+		scope.end();
 		clearInterval(heartbeat);
 		if (acquired) releaseLlmSlot();
 		tracking?.finish(success);
@@ -366,9 +465,9 @@ async function streamChatCompletionInner(
 				max_tokens: opts.maxTokens ?? 4000,
 				stream: true,
 				stream_options: { include_usage: true },
-				...(opts.reasoningEffort !== undefined ? { reasoning_effort: opts.reasoningEffort } : {}),
+				...reasoningFields(opts),
 				...(opts.seed !== undefined ? { seed: opts.seed } : {}),
-				...(opts.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+				...responseFormat(opts),
 				...thinkingFields(opts)
 			}),
 			signal: controller.signal
@@ -440,7 +539,10 @@ async function streamChatCompletionInner(
 		clearInterval(watchdog);
 		opts.signal?.removeEventListener('abort', abort);
 		controller.signal.removeEventListener('abort', cancelReader);
-		await reader?.cancel().catch(() => {});
-		reader?.releaseLock();
+		// Cancelling a wedged stream can itself never settle; don't wait on it for long.
+		if (reader) {
+			await Promise.race([reader.cancel().catch(() => {}), sleep(1_000).catch(() => {})]);
+			try { reader.releaseLock(); } catch { /* a read is still pending on the dead socket */ }
+		}
 	}
 }

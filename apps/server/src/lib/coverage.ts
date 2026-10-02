@@ -77,7 +77,7 @@ export class CoverageLedger {
 		}
 	}
 
-	excludeUnassigned(inventory: ReviewInventory): void {
+	excludeUnassigned(inventory: ReviewInventory, reason = 'not assigned within the review budget'): void {
 		for (const file of inventory.files) {
 			for (const hunk of file.hunks) {
 				const bare = this.entries.get(hunk.id);
@@ -86,7 +86,7 @@ export class CoverageLedger {
 						hunkId: hunk.id,
 						path: file.path,
 						state: 'partial',
-						reason: 'not assigned within the review budget'
+						reason
 					});
 				}
 			}

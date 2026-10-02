@@ -5,6 +5,7 @@ import { ghAuth, ghAvailable, listGhRepos } from '../lib/gh';
 import { glabAuth, glabAvailable, listGlabRepos } from '../lib/glab';
 import { GhError } from '../lib/gh';
 import { getGitlabHost, normalizeGitlabHost, setGitlabHost } from '../lib/gitlab-host';
+import { clearAllCaches, TtlCache } from '../lib/ttl-cache';
 import { clearToken, setToken, tokenEnv } from '../lib/tokens';
 
 const tokenSchema = z.object({
@@ -31,12 +32,18 @@ async function gitlabStatus(): Promise<ProviderAuth> {
 	return { provider: 'gitlab', available, authenticated, user, host };
 }
 
+const statusCache = new TtlCache<{ github: ProviderAuth; gitlab: ProviderAuth }>(30_000);
+
 const app = new Hono();
 
-app.get('/status', async (c) => {
-	const [github, gitlab] = await Promise.all([githubStatus(), gitlabStatus()]);
-	return c.json({ github, gitlab });
-});
+app.get('/status', async (c) =>
+	c.json(
+		await statusCache.get('status', async () => {
+			const [github, gitlab] = await Promise.all([githubStatus(), gitlabStatus()]);
+			return { github, gitlab };
+		})
+	)
+);
 
 app.post('/token', async (c) => {
 	const parsed = tokenSchema.safeParse(await c.req.json().catch(() => null));
@@ -61,6 +68,7 @@ app.post('/token', async (c) => {
 	}
 	setToken(provider, token);
 	if (provider === 'gitlab') setGitlabHost(host);
+	clearAllCaches();
 	return c.json({ provider, user: check.user });
 });
 
@@ -70,6 +78,7 @@ app.delete('/token/:provider', (c) => {
 		return c.json({ error: 'unknown provider' }, 400);
 	}
 	clearToken(provider);
+	clearAllCaches();
 	return c.json({ cleared: true });
 });
 

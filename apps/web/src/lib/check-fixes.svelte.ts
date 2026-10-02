@@ -26,7 +26,7 @@ class CheckFixes {
 			const result = await serverApi.suggestCheckFix(reviewId, { id: check.id, name: check.name });
 			this.items[key] = { status: 'ready', name: check.name, summary: result.summary, patch: result.patch, edits: result.edits, applies: result.applies };
 		} catch (e) {
-			this.items[key] = { status: 'error', name: check.name, error: e instanceof Error ? e.message : 'Could not write a fix.', ...(e instanceof ApiError && e.action ? { action: e.action } : {}) };
+			this.items[key] = { status: 'error', name: check.name, error: e instanceof Error ? e.message : 'Could not write a fix.', ...(e instanceof ApiError && e.action ? { action: e.action } : {}), ...(e instanceof ApiError && e.usageLimit ? { usageLimit: e.usageLimit } : {}) };
 		}
 	}
 

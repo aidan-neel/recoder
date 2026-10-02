@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ReasoningEffort } from '@recoder/shared';
+import { hostedProvider } from './model-providers.js';
 import { effectiveReviewEnv, getStoredSettings } from './review-settings.js';
 
 /**
@@ -37,6 +38,8 @@ export interface RoleConfig {
 	/** Unset API effort is omitted for endpoints that do not support reasoning. */
 	reasoningEffort?: ReasoningEffort;
 	provider?: 'openai-compatible' | 'codex';
+	/** Hosted provider id (`opencode-go`…) when the model came from one. */
+	source?: string;
 	role: ReviewRole;
 	baseUrl: string;
 	apiKey: string;
@@ -108,6 +111,12 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 		const reasoningEffort = supportedEffort(requested ?? undefined, entry.efforts, entry.defaultEffort);
 		if (entry.provider === 'codex') {
 			return { role, provider: 'codex', model: entry.model, baseUrl: '', apiKey: '', reasoningEffort: reasoningEffort ?? entry.defaultEffort ?? 'medium' };
+		}
+		const hosted = hostedProvider(entry.source);
+		if (hosted) {
+			const apiKey = stored.connections?.[hosted.id]?.apiKey;
+			if (!apiKey) throw new ModelConfigError(`${hosted.name} isn't connected. Connect it in Settings → Models.`);
+			return { role, source: hosted.id, baseUrl: hosted.baseUrl, apiKey, model: entry.model, reasoningEffort };
 		}
 		const baseUrl = entry.baseUrl || eff.baseUrl;
 		const apiKey = entry.apiKey || eff.apiKey;

@@ -33,7 +33,10 @@ const AGENT_LABELS: Record<string, string> = {
 	testing: 'Testing',
 	errors: 'Errors',
 	concurrency: 'Concurrency',
-	api: 'API'
+	api: 'API',
+	impact: 'Impact',
+	frontend: 'Frontend',
+	data: 'Data & state'
 };
 
 export function formatAgentName(id?: string | null): string {
