@@ -3,6 +3,8 @@
 	import type { Snippet } from 'svelte';
 	import Play from '@lucide/svelte/icons/play';
 	import X from '@lucide/svelte/icons/x';
+	import CircleAlert from '@lucide/svelte/icons/circle-alert';
+	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
@@ -321,8 +323,8 @@
 			{:else if row.kind === 'message'}
 				{@const message = row.message}
 				{@const index = row.index}
-				<!-- A failure explains itself in a notice, so it gets no "Failed" label or empty reply. -->
-				<Message.Root from={message.from} status={message.status === 'done' || message.failure ? 'idle' : message.status}
+				<!-- A failure explains itself in a notice or a note, so it gets no "Failed" label or empty reply. -->
+				<Message.Root from={message.from} status={message.status === 'streaming' ? 'streaming' : 'idle'}
 					class="[--font-weight-body:400]"
 					name={message.forwardedFrom ? `${message.from === 'user' ? 'You →' : 'Reply from'} ${message.forwardedFrom}` : undefined}>
 					{#if message.text.trim() || !message.failure}
@@ -341,6 +343,12 @@
 						<FailureNotice class="message-failure" title={message.failure.signIn ? 'Signed out of ChatGPT' : 'Reply failed'}
 							reason={message.failure.reason} signIn={message.failure.signIn} usageLimit={message.failure.usageLimit}
 							onRetry={message.status === 'error' && message.discussion && !generating ? retryFor(index) : null} />
+					{:else if message.status === 'error' && message.from === 'assistant'}
+						<!-- The reply stopped partway; say why, and whether the agent carried on. -->
+						<Typography.Metadata class="message-cut-off">
+							{#if message.cutOff}<RotateCcw size={12} class="message-cut-off-icon" aria-hidden="true" />{:else}<CircleAlert size={12} class="message-cut-off-icon" aria-hidden="true" />{/if}
+							<span><span class="message-cut-off-title">Reply cut off.</span> {message.cutOff ?? 'The model stopped before it finished this reply.'}</span>
+						</Typography.Metadata>
 					{/if}
 					<!-- The message's own action (start the review) sits in it. -->
 					{#if onStartReview && !intro && !specialist && index === lastAssistantIndex && message.status !== 'streaming'}

@@ -94,7 +94,7 @@ export interface JsonAgentOptions<T> {
 	/** Accumulated provider reasoning for a turn, upserted by `id`. */
 	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status' | 'summary'>) => void;
 	onTool?: (tool: ToolCallReport) => void;
-	onMessage?: (message: { id: string; text: string; status: 'streaming' | 'done' | 'error' }) => void;
+	onMessage?: (message: { id: string; text: string; status: 'streaming' | 'done' | 'error'; cutOff?: string }) => void;
 	getDiscussion?: () => string;
 }
 
@@ -114,6 +114,10 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 	let retrievals = 0;
 	let runs = 0;
 	let finalNudged = false;
+	// The previous round when every action in it failed: asking for the same thing
+	// again won't go differently, so the next turn is the last.
+	let failedRound = '';
+	let stuck = false;
 	let lastError = 'no model output';
 	const shapes = `${opts.actionExamples ?? RETRIEVAL_EXAMPLES}\nTo finish, reply with ONLY the final JSON object${opts.finalExample ? `, for example:\n${opts.finalExample}` : '.'}\nNo prose outside the JSON, no code fences.`;
 	// Schema repairs cost model calls, but must not consume an evidence round.
@@ -131,7 +135,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		if (!opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve })) {
 			return { value: null, error: 'model-call budget exhausted' };
 		}
-		const lastTurn = turn >= opts.maxTurns || !opts.budget.canSpend(2, { consumeReserve: opts.consumeReserve }) || reviewNow() >= finalTurnAt;
+		const lastTurn = stuck || turn >= opts.maxTurns || !opts.budget.canSpend(2, { consumeReserve: opts.consumeReserve }) || reviewNow() >= finalTurnAt;
 		if (lastTurn && !messages.at(-1)?.content.startsWith('This is your final turn.')) messages.push({ role: 'user', content: 'This is your final turn. Return the required compact result JSON using available evidence, with the reader-facing "message" first. Do not request retrieval. Omit other optional fields when unnecessary.' });
 		opts.budget.spend();
 		opts.onLog?.(`${opts.label} model turn ${turn}/${opts.maxTurns} (${opts.config.model})`);
@@ -158,9 +162,9 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		let response = '';
 		let responseEmittedAt = 0;
 		const responseId = `message_${reasoningId}`;
-		const flushResponse = (status: 'streaming' | 'done' | 'error') => {
+		const flushResponse = (status: 'streaming' | 'done' | 'error', cutOff?: string) => {
 			const text = streamedMessage(response);
-			if (text) opts.onMessage?.({ id: responseId, text, status });
+			if (text) opts.onMessage?.({ id: responseId, text, status, ...(cutOff ? { cutOff } : {}) });
 		};
 		try {
 			const discussion = opts.getDiscussion?.();
@@ -216,10 +220,17 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 				call--;
 				continue;
 			}
-			flushResponse('error');
+			const retrying = !opts.signal.aborted && repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns;
+			const dropped = !overthought && err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message);
+			const truncated = err instanceof Error && /output truncated/i.test(err.message);
+			flushResponse('error', !retrying ? undefined
+				: overthought ? 'It thought for too long without answering, so it was asked to answer now.'
+				: dropped ? `The connection to the model dropped (${(err as Error).message}). Trying again.`
+				: truncated ? 'The reply hit the output limit. Asking for a shorter one.'
+				: undefined);
 			flushReasoning(overthought ? 'done' : 'error');
 			if (isAuthFailure(err) || isUsageLimit(err, opts.config)) throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));
-			if (!opts.signal.aborted && (overthought || (err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message))) && repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns) {
+			if (retrying && (overthought || dropped)) {
 				repaired++;
 				lastError = overthought ? 'reasoning ran too long without an answer' : (err as Error).message;
 				messages.push({ role: 'user', content: `You spent too long thinking without replying. Stop deliberating and reply now with JSON only: request the evidence you need, or give your final result with what you already know.\n\n${shapes}` });
@@ -268,12 +279,18 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			for (const result of results) {
 				if (result.ok && result.path) opts.onLog?.(`Reading ${result.path}${result.startLine ? `:${result.startLine}` : ''}`);
 			}
+			const round = results.length > 0 && results.every((result) => !result.ok) ? JSON.stringify(actions) : '';
+			if (round && round === failedRound) {
+				stuck = true;
+				opts.onLog?.(`${opts.label} repeated a request that failed; asking for its answer`);
+			}
+			failedRound = round;
 			messages.push({ role: 'assistant', content: output });
 			messages.push({
 				role: 'user',
 				content:
 					formatToolResults(results) +
-					(turn + 1 >= opts.maxTurns
+					(stuck || turn + 1 >= opts.maxTurns
 						? '\n\nThis is your final turn. Finish with the required JSON result. Do not request more retrieval.'
 						: '\n\nContinue. Finish with the required JSON when you have enough evidence.')
 			});

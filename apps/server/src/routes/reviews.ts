@@ -112,15 +112,13 @@ app.post('/:id/cancel', (c) => {
 	return c.json({ cancelled: true });
 });
 
-/** Answer a plan waiting for approval: run every specialist, or only the first few. */
-app.post('/:id/approve-plan', async (c) => {
+/** Approve a plan waiting for the developer: its specialists run. Declining is a cancel. */
+app.post('/:id/approve-plan', (c) => {
 	const review = db.reviews.get(c.req.param('id'));
 	if (!review) return c.json({ error: 'review not found' }, 404);
-	const body = await c.req.json().catch(() => null) as { choice?: unknown } | null;
-	if (body?.choice !== 'all' && body?.choice !== 'limited') return c.json({ error: 'Choose "all" or "limited".' }, 400);
 	const control = getReviewControl(review.id);
-	if (!control?.approve(body.choice)) return c.json({ error: 'This review is not waiting for approval.' }, 409);
-	return c.json({ choice: body.choice });
+	if (!control?.approve()) return c.json({ error: 'This review is not waiting for approval.' }, 409);
+	return c.json({ approved: true });
 });
 
 /** Hold a running review: in-flight model calls stop and re-run on resume. */

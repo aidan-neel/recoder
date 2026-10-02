@@ -24,10 +24,12 @@
 		onCancel?: (() => Promise<void>) | null;
 		/** A plan waiting for the developer: the review is blocked until one of these is pressed. */
 		approval?: ReviewPlanApproval | null;
-		onApprove?: ((choice: 'all' | 'limited') => Promise<void>) | null;
-		approving?: 'all' | 'limited' | null;
+		onApprove?: (() => Promise<void>) | null;
+		/** Asks to confirm, since declining cancels the review. */
+		onDecline?: (() => void) | null;
+		approving?: boolean;
 	}
-	let { current, failed = false, active, elapsed, specialists = null, paused = false, onPauseToggle = null, onCancel = null, approval = null, onApprove = null, approving = null }: Props = $props();
+	let { current, failed = false, active, elapsed, specialists = null, paused = false, onPauseToggle = null, onCancel = null, approval = null, onApprove = null, onDecline = null, approving = false }: Props = $props();
 	let pending = $state<'pause' | 'cancel' | null>(null);
 	async function run(kind: 'pause' | 'cancel', action: (() => Promise<void>) | null): Promise<void> {
 		if (!action || pending) return;
@@ -75,10 +77,10 @@
 	</ol>
 	{#if active && approval?.status === 'pending' && onApprove}
 		<div class="progress-approval" role="group" aria-label="Plan approval">
-			<Typography.Text class="progress-approval-text">Run {approval.requested} specialists? Up to {approval.limit} run without asking.</Typography.Text>
+			<Typography.Text class="progress-approval-text">Run specialists?</Typography.Text>
 			<div class="progress-approval-actions">
-				<Button variant="outline" class="progress-approve" loading={approving === 'limited'} disabled={approving !== null} onclick={() => void onApprove('limited')}>Run {approval.limit}</Button>
-				<Button class="progress-approve" loading={approving === 'all'} disabled={approving !== null} onclick={() => void onApprove('all')}>Run all {approval.requested}</Button>
+				{#if onDecline}<Button variant="outline" class="progress-approve" disabled={approving} onclick={onDecline}>No</Button>{/if}
+				<Button class="progress-approve" loading={approving} disabled={approving} onclick={() => void onApprove()}>Yes</Button>
 			</div>
 		</div>
 	{/if}

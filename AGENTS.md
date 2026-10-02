@@ -53,8 +53,50 @@ change makes a test obsolete, delete the test.
   form controls or bespoke overlays as a substitute for Sivir primitives.
 - **Verify it actually works before finishing.** At minimum run
   `bun run --filter @recoder/web check` and `bun run --filter @recoder/web build`,
-  and confirm the interaction/render is correct. Do not claim a UI change works
-  without this verification.
+  then follow **Visual verification** below. Do not claim a UI change works
+  without both.
+
+## Visual verification (mandatory for UI work)
+
+`check` and `build` passing does not mean a UI change looks right. Any change to
+UI, styling, tokens, layout, motion, or interface copy must be seen in a real
+browser before you report it done.
+
+1. Use the running web dev server at the URL it printed (Vite defaults to
+   `http://localhost:5173` and moves to the next free port when that one is
+   taken). If none is running, start `bun run dev` from the repo root.
+2. Open every screen the change touches. Screenshot each one in dark and light
+   mode at 1280 and 1440 wide. Also check 1920 when the change touches sizing,
+   because the root font scales up there.
+3. Exercise the states the change affects: hover, press, focus, open menus and
+   modals, pending, success, failure, loading skeleton, empty, and error.
+   Screenshot each.
+4. For motion (menu and modal entrances, the hover highlight, tab pill,
+   skeleton-to-content swap, layout shift), capture 8 to 10 frames across the
+   transition. Do not judge motion from code alone.
+5. Read every screenshot yourself against `DESIGN.md`. Look for clipping
+   (especially the top bar), layout shift, horizontal overflow, low contrast,
+   and anything inconsistent with neighboring UI. Check the console for errors
+   and hydration warnings.
+6. Fix what you find and capture again. Repeat until the result is clean.
+7. In your final summary, list what you captured and what you fixed. If you
+   could not verify visually, say so plainly. Never claim a visual change
+   looks right without screenshots.
+
+A browser is always available on this machine. Never conclude otherwise:
+
+- Try the Playwright MCP (`browser_*` tools) first. If it fails with
+  "Chromium distribution 'chrome' is not found", use the fallbacks below
+  instead of stopping.
+- For a one-off screenshot:
+  `bunx playwright@1.60.0 screenshot --color-scheme=dark --viewport-size=1440,900 --wait-for-timeout=1000 <url> <out.png>`
+- For interaction or frame capture, write a script in your scratchpad, outside
+  the repo, that imports `chromium` from `'playwright@1.60.0'`, and run it with
+  `bun script.mjs`. Bun installs it automatically. Never add these scripts or
+  Playwright to the repo.
+- The theme follows `prefers-color-scheme` unless `localStorage['recoder-theme']`
+  is set, so emulate the color scheme to switch modes.
+- Open the PNGs with the Read tool to view them.
 
 ## UI conventions
 

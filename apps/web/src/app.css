@@ -404,6 +404,14 @@ body {
 	background: var(--selection);
 }
 
+/* Clip truncated text sideways only: `overflow: hidden` also cuts Cal Sans's
+   descenders when the glyphs run taller than the line box. */
+@utility truncate {
+	overflow: clip visible;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 /* ───────────────────────── Voices ───────────────────────── */
 
 /* The AI speaks in Lora. Summaries, findings, replies and the Home brief only. */
@@ -1767,6 +1775,7 @@ kbd.keycap {
 	gap: 6px;
 }
 [data-ui='button'][data-variant][data-size].progress-approve {
+	flex: 1;
 	height: 28px;
 	min-height: 28px;
 	padding: 0 10px;
@@ -3972,15 +3981,15 @@ button.fact-link:hover {
 	line-height: 22px;
 	color: var(--text-primary);
 }
-.review-approval-meta {
-	font-size: 12.5px;
-	line-height: 18px;
-	color: var(--text-muted);
-}
 .review-approval-actions {
 	display: flex;
 	flex-shrink: 0;
 	gap: 8px;
+}
+/* Yes and No read as a pair: same width. */
+.review-approval-actions [data-ui='button'][data-variant][data-size] {
+	width: 72px;
+	min-width: 0;
 }
 @media (prefers-reduced-motion: reduce) {
 	[data-ui='collapsible-trigger'].specialist-row .specialist-chevron {
@@ -4379,6 +4388,25 @@ button.fact-link:hover {
 	-webkit-mask-size: 200% 100%;
 	mask-size: 200% 100%;
 	animation: rc-stream-sweep var(--dur-skeleton) linear infinite;
+}
+/* Under a reply that stopped partway: why, in one quiet line. */
+.message-cut-off {
+	display: flex;
+	align-items: flex-start;
+	gap: 6px;
+	font-family: var(--font-ui);
+	font-size: 12.5px;
+	line-height: 18px;
+	letter-spacing: 0;
+	color: var(--text-muted);
+}
+.message-cut-off-icon {
+	flex-shrink: 0;
+	margin-top: 3px;
+	color: var(--sev-medium);
+}
+.message-cut-off-title {
+	color: var(--text-secondary);
 }
 /* Under a reply that is still being written. */
 .message-writing {

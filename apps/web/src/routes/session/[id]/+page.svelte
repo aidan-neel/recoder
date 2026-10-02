@@ -40,6 +40,7 @@
 	import { revealDiffLine } from '$lib/reveal-line';
 	import { guidelinesStore } from '$lib/guidelines.svelte';
 	import { ApiError, cachedReviewFiles, serverApi } from '$lib/server-api';
+	import { approvePlan, declinePlan, planApproval } from '$lib/plan-approval.svelte';
 	import { ReviewStream } from '$lib/review-stream.svelte';
 	import { reviewStage } from '$lib/review-progress-state';
 	import { recentSessions } from '$lib/recent-sessions.svelte';
@@ -180,7 +181,7 @@
 		};
 	});
 
-	/** Conversation, Findings (focus mode) or Diff (inline mode), kept in the URL. */
+	/** Review (the conversation), Findings (focus mode) or Diff (inline mode), kept in the URL. */
 	const workspaceView = $derived.by((): 'findings' | 'diff' | null => {
 		const view = page.url.searchParams.get('view');
 		return view === 'findings' || view === 'diff' ? view : null;
@@ -192,18 +193,20 @@
 		else url.searchParams.set('view', view);
 		return goto(`${url.pathname}${url.search}`, { noScroll: true, keepFocus: true, replaceState });
 	}
-	/* Findings is the main page: a running review opens there, where results
-	   land as they are found, and so does a finished one. Once per session
-	   visit, so choosing Conversation sticks. Drafts and failed reviews open
-	   on the conversation, where their next step is. */
+	/* A finished review opens on Findings, once per session visit, so choosing
+	   Review sticks. Drafts and failed reviews open on the review, where their
+	   next step is. */
 	let findingsDefaultFor: string | null = null;
 	$effect(() => {
 		const review = backendReview;
 		if (!review || findingsDefaultFor === review.id) return;
 		findingsDefaultFor = review.id;
-		if ((review.status === 'queued' || review.status === 'running' || review.status === 'passed') && !page.url.searchParams.get('view')) {
-			untrack(() => void setView('findings', true));
-		}
+		// A review that finishes while you watch stays put; its summary links to the findings.
+		if (review.status === 'passed' && !page.url.searchParams.get('view')) untrack(() => void setView('findings', true));
+	});
+	/* A running review is one page: Findings and Diff open once it finishes. */
+	$effect(() => {
+		if (reviewing && workspaceView !== null) untrack(() => void setView('conversation', true));
 	});
 	function setDiffView(open: boolean): void {
 		void setView(open ? 'diff' : 'conversation');
@@ -599,16 +602,6 @@
 		return [stage.label, stage.detail].filter(Boolean).join(' · ');
 	}
 
-	/** Answer a plan waiting for approval from the Findings view. */
-	async function approvePlan(choice: 'all' | 'limited'): Promise<void> {
-		if (!backendReview) return;
-		try {
-			await serverApi.approvePlan(backendReview.id, choice);
-		} catch (e) {
-			errorToast('Could not start the specialists', e instanceof Error ? e.message : undefined);
-		}
-	}
-
 	/** Continue a failed review where it stopped, in this session. */
 	async function continueReview(): Promise<void> {
 		if (!backendReview) return;
@@ -720,7 +713,7 @@
 {/if}
 
 {#snippet diffMenu()}
-	{#if backendReview}<DropdownMenu.Item callback={() => setDiffView(false)}>Show conversation</DropdownMenu.Item>{/if}
+	{#if backendReview}<DropdownMenu.Item callback={() => setDiffView(false)}>Show review</DropdownMenu.Item>{/if}
 	{#if backendReview}<DropdownMenu.Item callback={() => usageOpen = true}>View token usage</DropdownMenu.Item>{/if}
 	{#if backendReview && backendReview.source !== 'stub'}{@const repoId = backendReview.repoId}<DropdownMenu.Item callback={() => guidelinesStore.open({ kind: 'repo', repoId })}>Review guidelines</DropdownMenu.Item>{/if}
 	<DropdownMenu.Separator />
@@ -784,7 +777,9 @@
 							stageLabel={reviewStream && backendReview ? liveStage(reviewStream.progress, backendReview.status) : null}
 							paused={reviewStream?.progress.paused ?? false}
 							approval={reviewStream?.progress.approval ?? null}
-							onApprove={backendReview ? approvePlan : null}
+							onApprove={backendReview ? () => approvePlan(backendReview!.id) : null}
+							onDecline={backendReview ? () => declinePlan(backendReview!.id) : null}
+							approving={!!backendReview && planApproval.approving === backendReview.id}
 							onStartReview={backendReview?.status === 'draft' ? startDraftReview : null}
 							onOpenDiff={() => setView('diff')}
 							onAsk={isBackend ? () => openChat() : null}
@@ -859,7 +854,7 @@
 						<div class="chat-drawer-clip">
 							<section id="interactive-review" aria-label="Interactive review" class="chat-drawer-panel" inert={!showChat}>
 								<Card.Root class="h-full !gap-0 overflow-hidden rounded-none border-0 border-s border-border-subtle bg-background !p-0 shadow-none">
-									<!-- The same conversation as the Conversation view, specialists and progress included. -->
+									<!-- The same conversation as the Review view, specialists and progress included. -->
 									<LiveReviewProgress embedded review={backendReview} stream={reviewStream} repo={session?.name ?? ''}
 										files={backendFiles ? backendFiles.length : null}
 										additions={backendFiles ? backendFiles.reduce((sum, f) => sum + f.additions, 0) : null}

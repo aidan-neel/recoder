@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { currentReviewControl, reviewNow, type PlanChoice } from './review-control.js';
+import { currentReviewControl, reviewNow } from './review-control.js';
 import { lstat, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type {
@@ -363,39 +363,15 @@ export async function runAdaptiveReview(
 			agent: 'correctness'
 		});
 		if (!resume && items.length > REVIEW_POLICY.approvalThreshold) {
-			const limit = REVIEW_POLICY.approvalThreshold;
-			const approval: ReviewPlanApproval = { status: 'pending', requested: items.length, limit };
+			const approval: ReviewPlanApproval = { status: 'pending', requested: items.length };
 			events?.onApproval?.(approval);
-			task('approval', 'Waiting for your go-ahead', 'waiting', `This review needs ${items.length} specialists to read every changed hunk. Run all of them, or the ${limit} most important?`, { kind: 'planning' });
-			// Without a live control (tests, scripts) there is nobody to ask. With one, nobody
-			// answering for a while means the review goes on with the safe subset instead of hanging.
-			const control = currentReviewControl();
-			const answer = control ? await control.requestApproval(REVIEW_POLICY.approvalTimeoutMs) : 'all';
+			task('approval', 'Waiting for your go-ahead', 'waiting', `This review needs ${items.length} specialists. Run them?`, { kind: 'planning' });
+			// Without a live control (tests, scripts) there is nobody to ask. With one, the
+			// review waits for a yes; a no cancels it.
+			await currentReviewControl()?.requestApproval();
 			if (controller.signal.aborted) throw new ReviewAbortedError('review aborted');
-			const choice: PlanChoice = answer === 'timeout' ? 'limited' : answer;
-			if (answer === 'timeout') {
-				events?.onLog?.(`No answer in ${Math.round(REVIEW_POLICY.approvalTimeoutMs / 60_000)} minutes; running the ${limit} most important specialists`);
-				events?.onMessage?.({
-					id: 'message_approval_timeout',
-					text: `Nobody answered in ${Math.round(REVIEW_POLICY.approvalTimeoutMs / 60_000)} minutes, so I'm running the ${limit} most important specialists. The rest of the changes are marked as not reviewed.`,
-					status: 'done',
-					assignmentId: ORCHESTRATOR_ID,
-					model: configForOrchestrator().model
-				});
-			}
-			if (choice === 'limited') {
-				const kept = new Set([...items].sort((a, b) => a.priority - b.priority).slice(0, limit).map((item) => item.id));
-				for (const item of items.filter((entry) => !kept.has(entry.id))) {
-					for (const scope of item.scope) {
-						for (const hunkId of scope.hunkIds) coverage.partial(hunkId, scope.path, item.role, 'not run: you chose fewer specialists');
-					}
-					updateAssignment(assignments, item.id, { status: 'skipped', currentOperation: `Not run: you chose ${limit} specialists` });
-					events?.onAssignment?.(assignments.find((record) => record.id === item.id)!);
-				}
-				items.splice(0, items.length, ...items.filter((item) => kept.has(item.id)));
-			}
-			events?.onApproval?.({ ...approval, status: choice });
-			task('approval', choice === 'all' ? `Running all ${approval.requested} specialists` : `Running ${limit} specialists`, 'done', choice === 'all' ? 'You approved the full review.' : 'You chose the most important specialists; the rest of the changes are marked as not reviewed.', { kind: 'planning' });
+			events?.onApproval?.({ ...approval, status: 'approved' });
+			task('approval', `Running ${approval.requested} specialists`, 'done', 'You approved the review.', { kind: 'planning' });
 		}
 		// A larger review gets proportionally more model calls and time.
 		const extra = Math.max(0, items.length - REVIEW_POLICY.maxInitialAssignments / 2);
@@ -1481,7 +1457,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: Parameters<typeof ver
 			// Verification is shown in the conversation of the specialist who raised the finding.
 			onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: candidate.assignmentId ?? '__pipeline', model: cfg.model }),
 			onProgress: (state, elapsedMs, detail) =>
-				ctx.task(taskId, label, state === 'queued' ? 'waiting' : 'running', state === 'retrieval' ? (exec ? 'Running code' : 'Reading code') : detail, { ...meta, elapsedMs }),
+				ctx.task(taskId, label, state === 'queued' ? 'waiting' : 'running', state === 'retrieval' ? (exec ? 'Running code' : 'Reading code') : state === 'queued' ? detail : 'Thinking', { ...meta, elapsedMs }),
 			onLog: (message) => ctx.events?.onLog?.(message, { assignmentId: candidate.assignmentId, role }),
 			onReasoning: (reasoning) => ctx.events?.onReasoning?.({ ...reasoning, assignmentId: candidate.assignmentId, role, model: cfg.model }),
 			onTool: (tool) => ctx.events?.onTool?.({ ...tool, assignmentId: candidate.assignmentId, role })

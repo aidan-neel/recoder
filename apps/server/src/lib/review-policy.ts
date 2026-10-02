@@ -14,8 +14,6 @@ export const REVIEW_POLICY = {
 	maxSweepAssignments: 48,
 	/** Plans with more specialists than this wait for the developer's go-ahead. */
 	approvalThreshold: 5,
-	/** A plan nobody answers runs the `approvalThreshold` most important specialists after this long. */
-	approvalTimeoutMs: 10 * 60 * 1000,
 	/** Each specialist past the baseline adds this many model calls to the budget… */
 	callsPerExtraAssignment: 10,
 	/** …and each wave of `maxConcurrentAssignments` past the first adds this much time. */

@@ -122,3 +122,22 @@ test('an agent past its own time limit is given its final turn instead of more r
 	expect(prompts).toHaveLength(2);
 	expect(prompts[1]).toContain('This is your final turn');
 });
+
+test('an agent repeating a request that failed is given its final turn instead of retrying until it runs out', async () => {
+	const failing = JSON.stringify({ message: 'Writing the repro.', actions: [{ action: 'writeFile', path: 'repro.test.ts' }] });
+	const prompts: string[] = [];
+	globalThis.fetch = (async (_url, init) => {
+		const body = JSON.parse(init?.body as string);
+		prompts.push(body.messages.at(-1).content);
+		return Response.json({ choices: [{ message: { content: prompts.length <= 2 ? failing : '{"message":"Done.","findings":[],"examinedHunks":[]}' } }] });
+	}) as typeof fetch;
+	const result = await runJsonAgent({ label: 'verify', system: '', user: '', config,
+		budget: new ModelBudget(), evidence: new EvidenceStore(null, buildInventory(diff), 12000),
+		maxTurns: 10, signal: new AbortController().signal, deadlineAt: Date.now() + 300_000,
+		parse: parseSpecialistOutput
+	});
+	expect(result.value?.message).toBe('Done.');
+	expect(prompts).toHaveLength(3);
+	expect(prompts[1]).not.toContain('This is your final turn');
+	expect(prompts[2]).toContain('This is your final turn');
+});

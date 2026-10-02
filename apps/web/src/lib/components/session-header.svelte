@@ -82,7 +82,7 @@
 	{#if onView}
 		<Tabs.Root bind:value={current} onValueChange={choose} variant="segmented" class="view-switch">
 			<Tabs.List {...{ 'aria-label': 'Session view' }} {@attach keepPillAligned} {@attach (list: HTMLElement) => carryPill(list, 'session-view', view)}>
-				<Tabs.Trigger value="conversation">Conversation</Tabs.Trigger>
+				<Tabs.Trigger value="conversation">Review</Tabs.Trigger>
 				<Tabs.Trigger value="findings" disabled={diffDisabled}>Findings</Tabs.Trigger>
 				<Tabs.Trigger value="diff" disabled={diffDisabled}>Diff</Tabs.Trigger>
 			</Tabs.List>

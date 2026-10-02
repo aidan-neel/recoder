@@ -80,8 +80,12 @@
 			result: { content: `$ bun test ${repro}\n(fail) status prints a line for an empty queue\n  Expected: "No pending jobs"\n  Received: ""\n\n 0 pass\n 1 fail\n[exit 1 · 1.8s]`, truncated: false, evidenceId: 'ev_9' }
 		}
 	];
-	// `?state=running` previews artboard 3b: a review mid-flight.
-	const running = page.url.searchParams.get('state') === 'running';
+	// `?state=running` previews artboard 3b: a review mid-flight. `approval` holds it at
+	// the plan's go-ahead; `verify` shows verifiers checking findings, one reply cut off.
+	const liveState = page.url.searchParams.get('state');
+	const running = liveState === 'running' || liveState === 'approval' || liveState === 'verify';
+	const verifyPreview = liveState === 'verify';
+	const approvalPreview = liveState === 'approval';
 	const liveSpecs = [
 		{ id: 'correctness', model: 'gpt-5-codex', status: 'running', op: 'Reading src/rate-limit/limiter.ts:20-46' },
 		{ id: 'patterns', model: 'gpt-5-codex', status: 'done', op: 'Compared exports against 14 call sites · 1 finding' },
@@ -91,8 +95,22 @@
 	] as const;
 	const liveAssignments: ReviewAssignment[] = liveSpecs.map((spec) => ({
 		id: spec.id, role: spec.id, title: spec.id, reason: spec.op, status: spec.status, scope: [],
-		model: spec.model, currentOperation: spec.op, startedAt: iso(60)
+		model: spec.model, currentOperation: spec.op, startedAt: iso(60),
+		...(verifyPreview ? { status: 'done' as const } : approvalPreview ? { status: 'queued' as const } : {})
 	}));
+	const verifyTasks: ReviewTask[] = [
+		{ title: 'Refill ignores the injected clock', status: 'running', message: 'Running code', started: 41 },
+		{ title: 'Old free allow() export removed without a shim', status: 'done', message: 'Verified by a run', started: 70, ms: 28_000 },
+		{ title: 'Bucket map never evicts idle keys', status: 'waiting', message: 'Waiting for a model slot', started: 12 }
+	].map((item, index) => ({
+		id: `verify:c${index + 1}`, label: `Verify: ${item.title}`, status: item.status as ReviewTask['status'], message: item.message, kind: 'verification',
+		assignmentId: 'correctness', startedAt: iso(item.started), updatedAt: iso(0), elapsedMs: item.ms
+	}));
+	const verifyReasoning: ReviewReasoningEntry[] = [{ id: 'verify-reasoning', assignmentId: 'correctness', model, at: iso(30), status: 'streaming',
+		text: '**Writing a repro for refill timing**\n\nThe test advances a fake clock by 1s and expects one token back. If `refill()` still reads `Date.now()`, the bucket stays empty and the assertion fails.' }];
+	const cutOffMessage: ReviewChatMessage = { id: 'cut-off', assignmentId: ORCHESTRATOR_ID, from: 'assistant', model, at: iso(50), status: 'error',
+		cutOff: 'It thought for too long without answering, so it was asked to answer now.',
+		text: 'Specialists reported 3 candidates. I’m checking each one before I consolidate: the clock finding first, since it decides whether refill works at all.' };
 	const liveMessages: ReviewChatMessage[] = [
 		{ id: 'ask', assignmentId: ORCHESTRATOR_ID, from: 'user', text: 'Review this. Focus on the clock injection and anything that breaks existing callers.', at: iso(140), status: 'done' },
 		{ id: 'plan', assignmentId: ORCHESTRATOR_ID, from: 'assistant', model, at: iso(120), status: 'done',
@@ -138,8 +156,11 @@
 	<ReviewingView fullscreen
 		title="Move rate limiter into a class with injectable clock"
 		meta={{ prLabel: '#4127', repo: 'ledger-api', branch: 'rate-limit/clock', files: 6, additions: 73, deletions: 34, elapsed: '2:14' }}
-		assignments={liveAssignments} messages={liveMessages} toolCalls={liveTools} reasoning={liveReasoning} orchestratorModel={model}
-		findings={[]} stage={3} stageLabel="Specialist review" active completedAt={undefined}
+		assignments={liveAssignments} messages={verifyPreview ? [...liveMessages, cutOffMessage] : liveMessages} toolCalls={liveTools}
+		reasoning={verifyPreview ? [...liveReasoning, ...verifyReasoning] : liveReasoning} orchestratorModel={model}
+		tasks={verifyPreview ? verifyTasks : []} reviewId={approvalPreview ? 'example' : undefined}
+		approval={approvalPreview ? { status: 'pending', requested: 7 } : null}
+		findings={[]} stage={verifyPreview ? 4 : approvalPreview ? 1 : 3} stageLabel={verifyPreview ? 'Verifying findings' : approvalPreview ? 'Waiting for your go-ahead' : 'Specialist review'} active completedAt={undefined}
 		onSend={send} onOpenDiff={() => diffOpen = true} onRestart={null} />
 {:else}
 {#key previewKey}

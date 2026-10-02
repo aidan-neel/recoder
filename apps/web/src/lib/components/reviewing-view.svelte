@@ -61,6 +61,7 @@
 	import { guidelinesStore } from '$lib/guidelines.svelte';
 	import { errorToast } from '$lib/notify';
 	import { serverApi } from '$lib/server-api';
+	import { approvePlan, declinePlan, planApproval } from '$lib/plan-approval.svelte';
 	import { modelLabel } from '$lib/model-settings.svelte';
 
 	interface Props {
@@ -177,18 +178,7 @@
 	const specialistGroups = $derived(groupSpecialists(specialists));
 	/** Specialists that ended without a result, a retried one counted by its retry (the server's summary counts the same way). */
 	const failedSpecialists = $derived(specialists.filter((item) => item.status === 'error' && !specialists.some((other) => other.id !== item.id && other.id.startsWith(`retry-${item.id}`))).length);
-	let approving = $state<'all' | 'limited' | null>(null);
-	async function approvePlan(choice: 'all' | 'limited'): Promise<void> {
-		if (!reviewId || approving) return;
-		approving = choice;
-		try {
-			await serverApi.approvePlan(reviewId, choice);
-		} catch (e) {
-			errorToast('Could not start the specialists', e instanceof Error ? e.message : undefined);
-		} finally {
-			approving = null;
-		}
-	}
+	const approving = $derived(reviewId !== null && planApproval.approving === reviewId);
 	const orchestrator = $derived<ReviewAssignment>({
 		id: ORCHESTRATOR_ID, role: 'orchestrator', title: 'Orchestrator', reason: '', scope: [],
 		status: awaitingPrompt ? 'waiting' : active ? 'running' : failed ? 'error' : 'done',
@@ -239,6 +229,22 @@
 		return facts;
 	});
 	const chatReasoning = $derived(reasoning.filter((entry) => !finalReasoning.some((item) => item.id === entry.id)));
+	/* Verifiers work in the threads of the specialists whose findings they check;
+	   here they show as one live step: a row per finding and their thinking. */
+	const verifying = $derived(active && stage === 4);
+	const verifications = $derived(tasks.filter((task) => task.kind === 'verification'));
+	const verifiedCount = $derived(verifications.filter((task) => !['running', 'waiting', 'queued'].includes(task.status)).length);
+	const verifyStartedAt = $derived(verifications.map((task) => task.startedAt).filter((at): at is string => !!at).sort()[0]);
+	const verifyReasoning = $derived(verifying && verifyStartedAt
+		? reasoning.filter((entry) => (entry.assignmentId ?? ORCHESTRATOR_ID) !== ORCHESTRATOR_ID && Date.parse(entry.at) >= Date.parse(verifyStartedAt))
+		: []);
+	const VERIFY_STATE: Partial<Record<ReviewTask['status'], string>> = { running: 'Checking', waiting: 'Queued', queued: 'Queued', done: 'Done', partial: 'Unproven', error: 'Failed' };
+	function verifyRow(task: ReviewTask): { state: string; title: string; meta: string } {
+		const live = task.status === 'running' || task.status === 'waiting';
+		const ms = live && task.startedAt ? now - Date.parse(task.startedAt) : task.elapsedMs;
+		const time = ms !== undefined ? `${Math.max(0, Math.round(ms / 1000))}s` : '';
+		return { state: VERIFY_STATE[task.status] ?? 'Checking', title: task.label.replace(/^Verify: /, ''), meta: [task.message, time].filter(Boolean).join(' · ') };
+	}
 	const findingCounts = $derived((['high', 'medium', 'low'] as const)
 		.map((severity) => ({ severity, count: findings.filter((finding) => finding.severity === severity).length }))
 		.filter((item) => item.count > 0));
@@ -254,18 +260,19 @@
 	/** Early stages (checkout, inventory, planning) have nothing to open, and the live thinking and tool rows already show the work. */
 	/** Nothing runs until the developer answers the approval card, so no "Waiting on …" loader yet. */
 	const awaitingApproval = $derived(active && approval?.status === 'pending');
-	const showProgress = $derived(!awaitingApproval && (!active || running.length > 0 || !!finalization));
+	const showProgress = $derived(!awaitingApproval && (!active || running.length > 0 || verifying || !!finalization));
 	/** Checkout and dependency install have no transcript of their own; until the orchestrator speaks, a loading card stands in. */
 	const setupTask = $derived(tasks.find((task) => task.id === 'setup' && task.status === 'running'));
 	const orchestratorSpoke = $derived(messages.some((message) => (message.assignmentId ?? ORCHESTRATOR_ID) === ORCHESTRATOR_ID && message.from === 'assistant')
 		|| reasoning.some((entry) => entry.assignmentId === ORCHESTRATOR_ID));
 	const preparing = $derived(isOrchestrator && active && !awaitingPrompt && !failed && (stage === 0 || (!!setupTask && !orchestratorSpoke)));
-	const progressHasBody = $derived(finalReasoning.length > 0 || finalFacts.length > 0);
+	const progressHasBody = $derived(verifying ? verifications.length > 0 : finalReasoning.length > 0 || finalFacts.length > 0);
 	/** Specialists a model is actually working for; queued ones are waiting on the stage before them. */
 	const working = $derived(specialists.filter((item) => item.status === 'running' || item.status === 'waiting'));
 	/** Before the specialist stage, name the stage (installing, running checks), not the specialists waiting for it. */
 	const footerLabel = $derived(paused ? 'Paused'
 		: stage < 3 ? [stageLabel, stageDetail].filter(Boolean).join(' · ')
+		: verifying ? `Verifying findings${verifications.length ? ` · ${verifiedCount}/${verifications.length}` : ''}`
 		: working.length ? `Waiting on ${nameList(working)}`
 		: running.length ? `${running.length} ${running.length === 1 ? 'specialist' : 'specialists'} queued`
 		: stageLabel);
@@ -284,7 +291,7 @@
 </script>
 
 {#snippet sessionMenu()}
-	{#if onOpenDiff}<DropdownMenu.Item callback={onOpenDiff}>Open diff</DropdownMenu.Item>{/if}
+	{#if onOpenDiff && !active}<DropdownMenu.Item callback={onOpenDiff}>Open diff</DropdownMenu.Item>{/if}
 	{#if reviewId}<DropdownMenu.Item callback={() => metricsOpen = true}>View token usage</DropdownMenu.Item>{/if}
 	{#if repoId}{@const id = repoId}<DropdownMenu.Item callback={() => guidelinesStore.open({ kind: 'repo', repoId: id })}>Review guidelines</DropdownMenu.Item>{/if}
 	{#if reviewId && active && !awaitingPrompt}
@@ -358,12 +365,11 @@
 	{#if approval}
 		<Card.Root class="review-approval">
 			<div class="review-approval-text">
-				<Typography.Text class="review-approval-title">Run {approval.requested} specialists?</Typography.Text>
-				<Typography.Metadata class="review-approval-meta">Reading every changed hunk takes {approval.requested}. Up to {approval.limit} run without asking; the rest of the changes would be marked not reviewed.</Typography.Metadata>
+				<Typography.Text class="review-approval-title">Run specialists?</Typography.Text>
 			</div>
 			<div class="review-approval-actions">
-				<Button variant="outline" loading={approving === 'limited'} disabled={approving !== null} onclick={() => void approvePlan('limited')}>Run {approval.limit}</Button>
-				<Button loading={approving === 'all'} disabled={approving !== null} onclick={() => void approvePlan('all')}>Run all {approval.requested}</Button>
+				<Button variant="outline" disabled={approving || !reviewId} onclick={() => reviewId && declinePlan(reviewId)}>No</Button>
+				<Button loading={approving} disabled={approving || !reviewId} onclick={() => reviewId && void approvePlan(reviewId)}>Yes</Button>
 			</div>
 		</Card.Root>
 	{/if}
@@ -397,6 +403,15 @@
 {/snippet}
 
 {#snippet progressBody()}
+	{#if verifying}
+		<div class="fact-rows" aria-label="Findings being verified">
+			{#each verifications as task (task.id)}
+				{@const row = verifyRow(task)}
+				<Typography.Text class="fact-row"><span class="fact-label">{row.state}</span><span class="fact-value" title={row.title}>{row.title}</span>{#if row.meta}<span class="fact-meta">{row.meta}</span>{/if}</Typography.Text>
+			{/each}
+		</div>
+		<ReasoningSteps entries={verifyReasoning} live />
+	{:else}
 		<ReasoningSteps entries={finalReasoning} live={active} />
 		{#if finalFacts.length}
 			<div class="fact-rows" aria-label="Finalization summary">
@@ -405,6 +420,7 @@
 				{/each}
 			</div>
 		{/if}
+	{/if}
 {/snippet}
 
 {#snippet reviewIntro()}
@@ -480,9 +496,9 @@
 		additions={meta.additions}
 		deletions={meta.deletions}
 		view="conversation"
-		onView={(view) => { if (view !== 'conversation') return onShowView ? onShowView(view) : onOpenDiff?.(); }}
+		onView={active ? null : (view) => { if (view !== 'conversation') return onShowView ? onShowView(view) : onOpenDiff?.(); }}
 		diffDisabled={!onOpenDiff}
-		onFiles={onOpenDiff}
+		onFiles={active ? null : onOpenDiff}
 		menu={reviewId || onRestart || onOpenDiff || repoId ? sessionMenu : undefined}
 		toolbar={showChecks && reviewId ? headerChecks : undefined}
 	/>
@@ -531,7 +547,7 @@
 				{#if showSteps}
 					<ReviewSteps current={currentStep} {failed} {active} elapsed={meta.elapsed} {paused}
 						onPauseToggle={reviewId && !awaitingPrompt ? togglePause : null} onCancel={reviewId && !awaitingPrompt ? cancelReview : null}
-						approval={awaitingApproval ? approval : null} onApprove={reviewId ? approvePlan : null} {approving}
+						approval={awaitingApproval ? approval : null} onApprove={reviewId ? () => approvePlan(reviewId) : null} onDecline={reviewId ? () => declinePlan(reviewId) : null} {approving}
 						specialists={{ done: specialists.filter((item) => item.status === 'done').length, failed: failedSpecialists, total: specialists.length }} />
 				{/if}
 			</ReviewResultsRail>

@@ -225,6 +225,8 @@ export interface ReviewChatMessage {
 	codeContext?: ReviewCodeContext;
 	/** Set on a reply the model could not finish. */
 	failure?: ModelFailure;
+	/** Why a reply stopped partway when the agent carried on after it ("It thought too long…"). */
+	cutOff?: string;
 }
 
 /** One layer of owner review guidelines a review ran with. */
@@ -249,14 +251,12 @@ export interface ReviewGuidelinesUsed {
 
 /**
  * A plan with more specialists than run without asking waits for the
- * developer: run all of them, or only the first `limit` by priority.
+ * developer to approve it. Declining cancels the review.
  */
 export interface ReviewPlanApproval {
-	status: 'pending' | 'all' | 'limited';
+	status: 'pending' | 'approved';
 	/** Specialists the plan needs to read every changed hunk. */
 	requested: number;
-	/** How many run without asking. */
-	limit: number;
 }
 
 export interface ReviewProgress {

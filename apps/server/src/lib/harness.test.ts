@@ -137,7 +137,7 @@ test('a follow-up reusing a launched assignment id gets its own id', () => {
 		.toEqual(['follow-patterns-core-2', 'follow-x-2', 'follow-x-3']);
 });
 
-test('a plan past the approval threshold waits for the developer, and "limited" runs only the first few', async () => {
+test('a plan past the approval threshold waits for the developer, then runs every specialist', async () => {
 	setReviewOverrides({ baseUrl: 'http://model.test/v1', apiKey: 'test', models: [{ id: 'test', label: 'Test', model: 'test' }] });
 	const roles: ReviewRole[] = ['correctness', 'patterns', 'security', 'perf', 'errors', 'api', 'testing'];
 	const plan = { ...PLAN, assignments: roles.map((role, index) => assignment(`${role}-core`, role, index + 1)), roleDecisions: REVIEW_ROLES.map((role) => ({ role, decision: roles.includes(role) ? 'selected' : 'not_needed', reason: 'r' })) };
@@ -155,12 +155,12 @@ test('a plan past the approval threshold waits for the developer, and "limited" 
 		onApproval: (approval) => {
 			approvals.push(approval.status);
 			// The developer answers a moment later; the review must be holding until then.
-			if (approval.status === 'pending') setTimeout(() => expect(control.approve('limited')).toBe(true), 20);
+			if (approval.status === 'pending') setTimeout(() => expect(control.approve()).toBe(true), 20);
 		}
 	}));
-	expect(approvals).toEqual(['pending', 'limited']);
-	expect([...ran].sort()).toEqual(['correctness', 'errors', 'patterns', 'perf', 'security']);
-	expect(result.assignments.filter((record) => record.status === 'skipped').map((record) => record.role).sort()).toEqual(['api', 'testing']);
+	expect(approvals).toEqual(['pending', 'approved']);
+	expect([...ran].sort()).toEqual([...roles].sort());
+	expect(result.assignments.filter((record) => record.status === 'skipped')).toEqual([]);
 });
 
 test('a review that runs out of time finishes with the findings its specialists reported instead of failing', async () => {

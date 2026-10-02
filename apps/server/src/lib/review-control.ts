@@ -16,7 +16,7 @@ export class ReviewControl {
 	private waiters: (() => void)[] = [];
 	paused = false;
 	/** Set while the review waits for the developer to approve a large plan. */
-	private approval: { since: number; settle: (choice: PlanChoice | 'timeout') => void } | null = null;
+	private approval: { since: number; settle: () => void } | null = null;
 
 	/** Aborts when a pause starts; renewed on resume. */
 	get pauseSignal(): AbortSignal {
@@ -50,33 +50,29 @@ export class ReviewControl {
 	}
 
 	/**
-	 * Hold until the developer picks how many specialists to run. Like a pause,
-	 * the wait doesn't count against the review's time. Cancelling settles it
-	 * as 'limited' so the pipeline unwinds; with nobody answering for
-	 * `timeoutMs` it settles as 'timeout' so a review never waits forever.
+	 * Hold until the developer approves the plan, however long that takes. Like
+	 * a pause, the wait doesn't count against the review's time. Declining is a
+	 * cancel, which also settles the wait so the pipeline unwinds.
 	 */
-	requestApproval(timeoutMs?: number): Promise<PlanChoice | 'timeout'> {
-		if (this.abort.signal.aborted) return Promise.resolve('limited');
+	requestApproval(): Promise<void> {
+		if (this.abort.signal.aborted) return Promise.resolve();
 		return new Promise((resolve) => {
 			const since = Date.now();
-			let timer: ReturnType<typeof setTimeout> | undefined;
-			const settle = (choice: PlanChoice | 'timeout') => {
+			const settle = () => {
 				if (this.approval?.settle !== settle) return;
-				clearTimeout(timer);
 				this.pausedTotal += Date.now() - since;
 				this.approval = null;
-				resolve(choice);
+				resolve();
 			};
 			this.approval = { since, settle };
-			this.abort.signal.addEventListener('abort', () => settle('limited'), { once: true });
-			if (timeoutMs !== undefined && Number.isFinite(timeoutMs)) timer = setTimeout(() => settle('timeout'), timeoutMs);
+			this.abort.signal.addEventListener('abort', settle, { once: true });
 		});
 	}
 
-	/** The developer's answer; false when nothing is waiting for one. */
-	approve(choice: PlanChoice): boolean {
+	/** The developer said yes; false when nothing is waiting for an answer. */
+	approve(): boolean {
 		if (!this.approval) return false;
-		this.approval.settle(choice);
+		this.approval.settle();
 		return true;
 	}
 
@@ -93,9 +89,6 @@ export class ReviewControl {
 		}
 	}
 }
-
-/** Run every planned specialist, or only the ones that run without asking. */
-export type PlanChoice = 'all' | 'limited';
 
 const controls = new Map<string, ReviewControl>();
 const current = new AsyncLocalStorage<ReviewControl>();

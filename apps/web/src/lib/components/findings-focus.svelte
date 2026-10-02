@@ -55,16 +55,13 @@
 		paused?: boolean;
 		/** A plan waiting for the developer; the review is blocked until answered. */
 		approval?: ReviewPlanApproval | null;
-		onApprove?: ((choice: 'all' | 'limited') => Promise<void>) | null;
+		onApprove?: (() => Promise<void>) | null;
+		/** Asks to confirm, since declining cancels the review. */
+		onDecline?: (() => void) | null;
+		approving?: boolean;
 	}
-	let { files, toolCalls = [], branch = null, onFullFile, onOpenAt = null, status = 'done', onStartReview = null, onOpenDiff = null, onAsk = null, onConversation = null, onRestart = null, stageLabel = null, paused = false, approval = null, onApprove = null }: Props = $props();
+	let { files, toolCalls = [], branch = null, onFullFile, onOpenAt = null, status = 'done', onStartReview = null, onOpenDiff = null, onAsk = null, onConversation = null, onRestart = null, stageLabel = null, paused = false, approval = null, onApprove = null, onDecline = null, approving = false }: Props = $props();
 	const awaitingApproval = $derived(status === 'running' && approval?.status === 'pending');
-	let approving = $state<'all' | 'limited' | null>(null);
-	async function approve(choice: 'all' | 'limited'): Promise<void> {
-		if (!onApprove || approving) return;
-		approving = choice;
-		try { await onApprove(choice); } finally { approving = null; }
-	}
 
 	/* Empty states: what the page says when there's nothing in the list. */
 	const fixedCount = $derived(findingsStore.items.filter((f) => f.status === 'accepted').length);
@@ -174,14 +171,13 @@
 			</span>
 			<Typography.Title level={2} class="focus-empty-title">
 				{emptyKind === 'draft' ? 'No findings yet'
-					: emptyKind === 'running' && awaitingApproval ? `Run ${approval?.requested} specialists?`
+					: emptyKind === 'running' && awaitingApproval ? 'Run specialists?'
 					: emptyKind === 'running' && paused ? 'Review paused'
 					: emptyKind === 'running' ? 'Reviewing this pull request'
 					: emptyKind === 'failed' ? "The review didn't finish" : emptyKind === 'clean' ? 'Nothing to fix' : 'All caught up'}
 			</Typography.Title>
 			<p class="focus-empty-text">
 				{#if emptyKind === 'draft'}Run the full review and specialists will check every change. Findings land here, ranked by severity.
-				{:else if emptyKind === 'running' && awaitingApproval}Reading every changed hunk takes {approval?.requested} specialists. Up to {approval?.limit} run without asking; with fewer, the rest of the changes are marked not reviewed. Nothing runs until you choose.
 				{:else if emptyKind === 'running' && paused}Model calls are on hold. Resume from the progress card in the conversation.
 				{:else if emptyKind === 'running'}{stageLabel ? `${stageLabel}.` : 'Specialists are working through the diff.'} Findings appear here once the review consolidates them.
 				{:else if emptyKind === 'failed'}No findings were saved. Restart the review to try again.
@@ -202,8 +198,8 @@
 				{#if emptyKind === 'draft' && onStartReview}
 					<Button variant="primary" loading={starting} disabled={starting} onclick={() => void start()}>Start review</Button>
 				{:else if emptyKind === 'running' && awaitingApproval && onApprove && approval}
-					<Button variant="outline" loading={approving === 'limited'} disabled={approving !== null} onclick={() => void approve('limited')}>Run {approval.limit}</Button>
-					<Button variant="primary" loading={approving === 'all'} disabled={approving !== null} onclick={() => void approve('all')}>Run all {approval.requested}</Button>
+					{#if onDecline}<Button variant="outline" disabled={approving} onclick={onDecline}>No</Button>{/if}
+					<Button variant="primary" loading={approving} disabled={approving} onclick={() => void onApprove()}>Yes</Button>
 				{:else if emptyKind === 'running' && onConversation}
 					<Button variant="outline" onclick={onConversation}>Watch progress</Button>
 				{:else if emptyKind === 'failed' && onRestart}
