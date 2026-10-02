@@ -309,7 +309,7 @@
 								{#if !demo.finished}
 									<div out:slide={{ duration: 240 }}>
 										<ReviewSteps current={demo.step} active={!demo.finished} elapsed={demo.elapsed}
-											specialists={{ done: demo.specialistsDone, total: demo.specialists.length || 5 }} />
+											specialists={{ done: demo.specialistsDone, failed: 0, total: demo.specialists.length || 5 }} />
 									</div>
 								{/if}
 
