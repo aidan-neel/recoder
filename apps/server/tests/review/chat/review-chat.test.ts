@@ -5,7 +5,7 @@ import { app } from '../../../src/app';
 import { discussionContext, startReviewChat, stopReviewChat } from '../../../src/review/chat/review-chat';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { subscribeReview, clearReviewEvents, reviewEventBuffer } from '../../../src/review/session/events';
-import { applyProgressMessage } from '../../../../web/src/lib/review-progress-state';
+import { applyProgressMessage } from '../../../../web/src/lib/review/review-progress-state';
 
 const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();

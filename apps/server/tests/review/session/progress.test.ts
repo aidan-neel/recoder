@@ -11,7 +11,7 @@ import {
 	trackReviewTask
 } from '../../../src/review/session/events';
 import { chatCompletion, resetLlmLimiter } from '../../../src/models/llm';
-import { applyProgressMessage, emptyReviewProgress, taskSummary } from '../../../../web/src/lib/review-progress-state';
+import { applyProgressMessage, emptyReviewProgress, taskSummary } from '../../../../web/src/lib/review/review-progress-state';
 
 test('streamed traces match persisted reconnect snapshots and keep assignment ownership', () => {
 	const id = crypto.randomUUID();

@@ -22,14 +22,14 @@
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	// The app's own components, so the demo is the product, not a drawing of it.
-	import FindingSeverity from '$web/components/finding-severity.svelte';
-	import ReviewComposer from '$web/components/review-composer.svelte';
-	import ReviewSteps from '$web/components/review-steps.svelte';
-	import ReviewToolCallView from '$web/components/review-tool-call.svelte';
-	import SessionHeader from '$web/components/session-header.svelte';
+	import FindingSeverity from '$web/components/findings/finding-severity.svelte';
+	import ReviewComposer from '$web/components/review/review-composer.svelte';
+	import ReviewSteps from '$web/components/review/review-steps.svelte';
+	import ReviewToolCallView from '$web/components/review/review-tool-call.svelte';
+	import SessionHeader from '$web/components/session/session-header.svelte';
 	import Disclosure from '$web/components/ui/disclosure.svelte';
-	import { taskGroupLabel } from '$web/review-transcript';
-	import { keepPillAligned } from '$web/tab-pill';
+	import { taskGroupLabel } from '$web/review/review-transcript';
+	import { keepPillAligned } from '$web/shell/tab-pill';
 	import { DEMO_END, DEMO_FADE, DEMO_HOLD, DEMO_LOOP, demoState, findingCounts, request } from '$lib/demo-script';
 
 	let t = $state(0);

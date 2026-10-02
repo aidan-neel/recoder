@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { Button } from '@sivir-ui/svelte/components/button';
-	import { hoverHighlight } from '$web/hover-highlight';
+	import { hoverHighlight } from '$web/shell/hover-highlight';
 	import { docs } from '$lib/docs';
 
 	const repo = 'https://github.com/aidan-neel/recoder';

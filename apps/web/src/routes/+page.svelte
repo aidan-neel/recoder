@@ -12,13 +12,13 @@
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
-	import { keepPillAligned } from '$lib/tab-pill';
+	import { keepPillAligned } from '$lib/shell/tab-pill';
 	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type { ProviderAuth, PullPreview, PullRequest, Repo, Review } from '@recoder/shared';
-	import PrRow from '$lib/components/pr-row.svelte';
-	import ProviderMark from '$lib/components/provider-mark.svelte';
-	import SetupChecklist from '$lib/components/setup-checklist.svelte';
+	import PrRow from '$lib/components/home/pr-row.svelte';
+	import ProviderMark from '$lib/components/settings/provider-mark.svelte';
+	import SetupChecklist from '$lib/components/home/setup-checklist.svelte';
 	import Skeleton from '$lib/components/ui/skeleton.svelte';
 	import {
 		briefSegments,
@@ -33,15 +33,15 @@
 		prStatus,
 		shortAge,
 		type BriefPick
-	} from '$lib/home';
-	import { hoverHighlight } from '$lib/hover-highlight';
-	import { modelSettingsUi } from '$lib/model-settings.svelte';
-	import { errorToast } from '$lib/notify';
-	import { openPrs } from '$lib/open-prs.svelte';
-	import { recentSessions } from '$lib/recent-sessions.svelte';
-	import { serverApi } from '$lib/server-api';
-	import { sessionState } from '$lib/session-state.svelte';
-	import { shellState } from '$lib/shell-state.svelte';
+	} from '$lib/home/home';
+	import { hoverHighlight } from '$lib/shell/hover-highlight';
+	import { modelSettingsUi } from '$lib/settings/model-settings.svelte';
+	import { errorToast } from '$lib/shell/notify';
+	import { openPrs } from '$lib/home/open-prs.svelte';
+	import { recentSessions } from '$lib/session/recent-sessions.svelte';
+	import { serverApi } from '$lib/api/server-api';
+	import { sessionState } from '$lib/session/session-state.svelte';
+	import { shellState } from '$lib/shell/shell-state.svelte';
 
 	let filter = $state('');
 	let repoChip = $state('all');

@@ -4,14 +4,14 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Toaster } from '@sivir-ui/svelte/components/toast';
-	import CommandPalette from '$lib/components/command-palette.svelte';
-	import GuidelinesEditor from '$lib/components/guidelines-editor.svelte';
-	import ModelSettingsModal from '$lib/components/model-settings-modal.svelte';
-	import UsageModal from '$lib/components/usage-modal.svelte';
-	import DeleteSessionDialog from '$lib/components/delete-session-dialog.svelte';
-	import DeclinePlanDialog from '$lib/components/decline-plan-dialog.svelte';
-	import TopBar from '$lib/components/top-bar.svelte';
-	import { theme } from '$lib/theme.svelte';
+	import CommandPalette from '$lib/components/shell/command-palette.svelte';
+	import GuidelinesEditor from '$lib/components/settings/guidelines-editor.svelte';
+	import ModelSettingsModal from '$lib/components/settings/model-settings-modal.svelte';
+	import UsageModal from '$lib/components/settings/usage-modal.svelte';
+	import DeleteSessionDialog from '$lib/components/session/delete-session-dialog.svelte';
+	import DeclinePlanDialog from '$lib/components/review/decline-plan-dialog.svelte';
+	import TopBar from '$lib/components/shell/top-bar.svelte';
+	import { theme } from '$lib/settings/theme.svelte';
 	import { onMount } from 'svelte';
 	import '../app.css';
 

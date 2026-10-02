@@ -1,0 +1,149 @@
+<script lang="ts" module>
+	import type { PrCheck } from '@recoder/shared';
+
+	/** Last checks per review, so reopening a session paints them at once while they refresh. */
+	const lastChecks = new Map<string, { checks: PrCheck[]; ref: string; pipeline: boolean }>();
+</script>
+
+<script lang="ts">
+	import { untrack } from 'svelte';
+	import Check from '@lucide/svelte/icons/check';
+	import CircleDashed from '@lucide/svelte/icons/circle-dashed';
+	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
+	import X from '@lucide/svelte/icons/x';
+	import { Button } from '@sivir-ui/svelte/components/button';
+	import * as Popover from '@sivir-ui/svelte/components/popover';
+	import { Spinner } from '@sivir-ui/svelte/components/spinner';
+	import CheckList from './check-list.svelte';
+	import CheckFixDialog from '../findings/check-fix-dialog.svelte';
+	import { checkFixes } from '$lib/findings/check-fixes.svelte';
+	import { serverApi } from '$lib/api/server-api';
+
+	/** The pull request's CI checks: a summary button with the list in a popover. Polls while any run. */
+	let { reviewId }: { reviewId: string } = $props();
+	let checks = $state<PrCheck[] | null>(null);
+	let ref = $state('');
+	/** GitLab runs pipelines: summarize as one pass/fail instead of counting jobs. */
+	let pipeline = $state(false);
+	let error = $state<string | null>(null);
+	let loading = $state(false);
+	let listOpen = $state(false);
+	let fixing = $state<PrCheck | null>(null);
+	let fixOpen = $state(false);
+
+	/** Open the fix for a failed check, writing it first if there isn't one. */
+	function openFix(check: PrCheck): void {
+		listOpen = false;
+		fixing = check;
+		fixOpen = true;
+
+		const fix = checkFixes.get(reviewId, check);
+
+		if (!fix || fix.status === 'error') void checkFixes.suggest(reviewId, check);
+	}
+	function fixLabel(check: PrCheck): string {
+		const fix = checkFixes.get(reviewId, check);
+
+		return fix?.status === 'loading' ? 'Writing fix' : fix?.status === 'ready' ? 'View fix' : 'Suggest fix';
+	}
+
+	const failed = $derived((checks ?? []).filter((c) => c.state === 'failed').length);
+	const active = $derived((checks ?? []).filter((c) => c.state === 'running' || c.state === 'pending').length);
+	const passed = $derived((checks ?? []).filter((c) => c.state === 'passed').length);
+	const tone = $derived(!checks ? 'idle' : failed ? 'failed' : active ? 'running' : checks.length ? 'passed' : 'idle');
+
+	async function load(): Promise<void> {
+		if (loading) return;
+		loading = true;
+
+		// The review can change while a load is in flight; never file its checks under the new one.
+		const id = reviewId;
+
+		try {
+			const result = await serverApi.getChecks(id);
+
+			if (id !== reviewId) return;
+			checks = result.checks;
+			ref = result.ref;
+			pipeline = result.provider === 'gitlab';
+			error = null;
+			lastChecks.set(id, { checks: result.checks, ref: result.ref, pipeline });
+		} catch (e) {
+			if (id === reviewId) error = e instanceof Error ? e.message : 'Could not load checks.';
+		} finally {
+			loading = false;
+			// The switch's own load() returned early while this one ran; load the new review now.
+			if (id !== reviewId) void load();
+		}
+	}
+
+	$effect(() => {
+		void reviewId;
+
+		// Untracked: load() reads and writes its own state.
+		untrack(() => {
+			const cached = lastChecks.get(reviewId);
+
+			checks = cached?.checks ?? null;
+			ref = cached?.ref ?? '';
+			pipeline = cached?.pipeline ?? false;
+			error = null;
+			void load();
+		});
+
+		const timer = setInterval(() => {
+			if (active) void load();
+		}, 20_000);
+
+		return () => clearInterval(timer);
+	});
+</script>
+
+{#if checks === null && !error}
+	<span class="pr-checks-pending" aria-label="Loading checks"><Spinner size={12} aria-hidden="true" /></span>
+{:else}
+	<Popover.Root placement="bottom-end" bind:open={listOpen}>
+		<Popover.Trigger
+			variant="ghost"
+			class="pr-checks"
+			data-tone={tone}
+			aria-label={pipeline ? 'Merge request pipeline' : 'Pull request checks'}
+		>
+			{#if pipeline}
+				{#if error}<CircleDashed size={14} aria-hidden="true" />Pipeline
+				{:else if tone === 'failed'}<X size={14} aria-hidden="true" />Pipeline failing
+				{:else if tone === 'running'}<Spinner size={12} aria-hidden="true" />Pipeline running
+				{:else if tone === 'passed'}<Check size={14} aria-hidden="true" />Pipeline passing
+				{:else}<CircleDashed size={14} aria-hidden="true" />No pipeline{/if}
+			{:else if error}<CircleDashed size={14} aria-hidden="true" />Checks
+			{:else if tone === 'failed'}<X size={14} aria-hidden="true" />{failed} failing
+			{:else if tone === 'running'}<Spinner size={12} aria-hidden="true" />{active} running
+			{:else if tone === 'passed'}<Check size={14} aria-hidden="true" />{passed}/{checks?.length} checks
+			{:else}<CircleDashed size={14} aria-hidden="true" />No checks{/if}
+		</Popover.Trigger>
+		<Popover.Content class="w-[22rem] max-w-[calc(100vw-2rem)]" surfaceClass="!gap-2 !p-3">
+			<div class="pr-checks-head">
+				<Popover.Title class="text-[13px] font-medium">{pipeline ? 'Pipeline' : 'Checks'}</Popover.Title>
+				{#if ref}<code class="pr-checks-ref" title={ref}>{ref}</code>{/if}
+				<Button
+					variant="ghost"
+					size="icon"
+					class="pr-checks-refresh"
+					aria-label="Refresh checks"
+					disabled={loading}
+					onclick={() => void load()}><RefreshCw size={13} aria-hidden="true" /></Button
+				>
+			</div>
+			{#if error}<p class="pr-checks-empty">{error}</p>
+			{:else if checks?.length}<CheckList {checks} onFix={openFix} {fixLabel} />
+			{:else}<p class="pr-checks-empty">
+					{pipeline
+						? "No pipeline has run on this merge request's latest commit."
+						: "No checks have run on this pull request's latest commit."}
+				</p>{/if}
+		</Popover.Content>
+	</Popover.Root>
+{/if}
+
+<!-- Applying only edits the checkout; checks rerun once the developer pushes. -->
+<CheckFixDialog {reviewId} check={fixing} bind:open={fixOpen} onApplied={() => setTimeout(() => void load(), 5000)} />

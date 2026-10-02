@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import ReviewProgress from '$lib/components/review-progress.svelte';
+	import ReviewProgress from '$lib/components/review/review-progress.svelte';
 
 	const sessionHref = '/session/ledger-api';
 </script>

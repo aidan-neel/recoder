@@ -10,11 +10,11 @@
 	} from '@recoder/shared';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
-	import ReviewingView, { type ReviewingFinding } from '$lib/components/reviewing-view.svelte';
-	import CodeDiff from '$lib/components/code-diff.svelte';
-	import { findingsStore } from '$lib/findings.svelte';
-	import { getFileDiff } from '$lib/diff';
-	import { DEFAULT_FILE } from '$lib/session-file.svelte';
+	import ReviewingView, { type ReviewingFinding } from '$lib/components/review/reviewing-view.svelte';
+	import CodeDiff from '$lib/components/diff/code-diff.svelte';
+	import { findingsStore } from '$lib/findings/findings.svelte';
+	import { getFileDiff } from '$lib/diff/diff';
+	import { DEFAULT_FILE } from '$lib/session/session-file.svelte';
 
 	// Interactive design fixture. Real sessions use the same view with API/SSE data.
 	const now = Date.now();

@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { findingTitle } from '../src/lib/finding-title';
+import { findingTitle } from '../src/lib/findings/finding-title';
 
 test('finding titles prefer authored text and support older Markdown findings', () => {
 	expect(findingTitle('The detailed explanation.', 'Compare semantic versions')).toBe('Compare semantic versions');
