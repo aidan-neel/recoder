@@ -80,17 +80,36 @@ const PROGRESS_CACHE_SIZE = 24;
 /** How long a snapshot may sit in memory before it reaches SQLite. */
 const PROGRESS_FLUSH_MS = 750;
 
-/** Write every pending snapshot to SQLite now. */
+/**
+ * Write every pending snapshot to SQLite now. A snapshot stays pending until
+ * its own write succeeds, and one failed write doesn't hold back the rest.
+ */
 export function flushReviewProgress(): void {
 	if (progressTimer) {
 		clearTimeout(progressTimer);
 		progressTimer = null;
 	}
-	for (const id of progressDirty) {
-		const snapshot = progressCache.get(id);
-		if (snapshot) progressTable.set(snapshot);
+	let failure: unknown;
+	for (const id of [...progressDirty]) {
+		try {
+			const snapshot = progressCache.get(id);
+			if (snapshot) progressTable.set(snapshot);
+			progressDirty.delete(id);
+		} catch (error) {
+			failure ??= error;
+		}
 	}
-	progressDirty.clear();
+	if (failure !== undefined) throw failure;
+}
+
+/** The write-behind timer. A throw here would crash the server, so log it and try again later. */
+function flushOnTimer(): void {
+	try {
+		flushReviewProgress();
+	} catch (error) {
+		console.error('[store] failed to flush review progress', error);
+		progressTimer ??= setTimeout(flushOnTimer, PROGRESS_FLUSH_MS);
+	}
 }
 
 /**
@@ -120,7 +139,7 @@ export const reviewProgress = {
 	set: (item: ReviewProgress): ReviewProgress => {
 		remember(item);
 		progressDirty.add(item.id);
-		progressTimer ??= setTimeout(flushReviewProgress, PROGRESS_FLUSH_MS);
+		progressTimer ??= setTimeout(flushOnTimer, PROGRESS_FLUSH_MS);
 		return item;
 	},
 	delete: (id: string): boolean => {

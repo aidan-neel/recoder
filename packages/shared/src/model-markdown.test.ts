@@ -38,3 +38,9 @@ test('an unclosed bold or backtick is dropped once the reply is complete, not wh
 test('an unclosed code fence is closed', () => {
 	expect(normalizeModelMarkdown('Try:\n\n```ts\nconst x = 1;')).toBe('Try:\n\n```ts\nconst x = 1;\n```');
 });
+
+test('a fence line inside a longer fence is content, not a close', () => {
+	const text = 'Example:\n\n````md\n```ts\n# not a heading\n```\n````';
+	expect(normalizeModelMarkdown(text)).toBe(text);
+	expect(normalizeModelMarkdown('Try:\n\n~~~\n```\n# still code')).toBe('Try:\n\n~~~\n```\n# still code\n~~~');
+});

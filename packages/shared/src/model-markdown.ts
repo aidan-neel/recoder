@@ -24,11 +24,12 @@ export function normalizeModelMarkdown(text: string, opts: { complete?: boolean 
 	}
 
 	const lines = out.split('\n');
-	let inFence = false;
+	let fence: string | null = null;
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
-		if (/^\s*```/.test(line)) { inFence = !inFence; continue; }
-		if (inFence) continue;
+		const next = fenceAfter(line, fence);
+		if (next !== undefined) { fence = next; continue; }
+		if (fence) continue;
 		// Headings read as shouting in a chat reply; keep the words, as bold once the line is whole.
 		const heading = /^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
 		if (heading) {
@@ -51,13 +52,12 @@ export function normalizeModelMarkdown(text: string, opts: { complete?: boolean 
 
 /** Close a code fence left open, and drop a lone `**` or backtick that would swallow the rest of a line. */
 function balanceMarkers(text: string): string {
-	let out = text;
-	if ((out.match(/^\s*```/gm)?.length ?? 0) % 2 === 1) out += '\n```';
-	const lines = out.split('\n');
-	let inFence = false;
+	const lines = text.split('\n');
+	let fence: string | null = null;
 	for (let i = 0; i < lines.length; i++) {
-		if (/^\s*```/.test(lines[i])) { inFence = !inFence; continue; }
-		if (inFence) continue;
+		const next = fenceAfter(lines[i], fence);
+		if (next !== undefined) { fence = next; continue; }
+		if (fence) continue;
 		let line = lines[i];
 		if ((line.match(/`/g)?.length ?? 0) % 2 === 1) line = dropLast(line, '`');
 		// Count bold markers outside code spans.
@@ -65,7 +65,22 @@ function balanceMarkers(text: string): string {
 		if ((bare.match(/\*\*/g)?.length ?? 0) % 2 === 1) line = dropLast(line, '**');
 		lines[i] = line;
 	}
+	if (fence) lines.push(fence);
 	return lines.join('\n');
+}
+
+/**
+ * The open fence after `line`, or undefined when the line opens or closes
+ * nothing. As in CommonMark, only a run of the same character, at least as
+ * long, with nothing after it closes a fence, so a ```ts line inside a
+ * ```` block is content.
+ */
+function fenceAfter(line: string, open: string | null): string | null | undefined {
+	const match = /^\s*(`{3,}|~{3,})(.*)$/.exec(line);
+	if (!match) return undefined;
+	const [, run, rest] = match;
+	if (open === null) return run[0] === '`' && rest.includes('`') ? undefined : run;
+	return run[0] === open[0] && run.length >= open.length && !rest.trim() ? null : undefined;
 }
 
 function dropLast(line: string, marker: string): string {

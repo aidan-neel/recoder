@@ -225,7 +225,8 @@ export async function runAdaptiveReview(
 	events?: HarnessEvents
 ): Promise<AdaptiveReviewResult> {
 	// Extended once the developer approves a large plan.
-	let deadlineAt = reviewNow() + REVIEW_POLICY.analysisDeadlineMs;
+	const startedAt = reviewNow();
+	let deadlineAt = startedAt + REVIEW_POLICY.analysisDeadlineMs;
 	const controller = new AbortController();
 	const onAbort = () => controller.abort();
 	input.signal?.addEventListener('abort', onAbort, { once: true });
@@ -669,7 +670,8 @@ export async function runAdaptiveReview(
 			if (input.signal?.aborted) return failReview(assignments, coverage, budget, 'Review cancelled.', 'failed');
 			// Out of time. With a plan, the review still finishes: every candidate the
 			// specialists reported stands, unconsolidated, instead of being thrown away.
-			const minutes = Math.round(REVIEW_POLICY.analysisDeadlineMs / 60_000);
+			// The deadline grows with approval waits, prep and verification, so report what actually elapsed.
+			const minutes = Math.max(1, Math.round((reviewNow() - startedAt) / 60_000));
 			if (plan) {
 				return finishOutOfTime({ plan, planningDegraded, assignments, candidates, coverage, recommended, minutes, task });
 			}

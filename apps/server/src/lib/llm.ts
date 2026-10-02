@@ -63,7 +63,7 @@ async function withSchemaFallback<T>(opts: ChatOptions, run: () => Promise<T>): 
 	try {
 		return await run();
 	} catch (err) {
-		if (opts.jsonSchema && !noJsonSchema.has(opts.baseUrl) && err instanceof LlmError && err.status >= 400 && err.status < 500 && /response_format|json_schema|schema|guided|structured/i.test(err.message)) {
+		if (opts.jsonSchema && !noJsonSchema.has(opts.baseUrl) && err instanceof LlmError && (err.status === 400 || err.status === 422) && /response_format|json_schema|guided|structured/i.test(err.message)) {
 			noJsonSchema.add(opts.baseUrl);
 			if (opts.signal?.aborted) throw err;
 			return run();
