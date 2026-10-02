@@ -56,7 +56,7 @@ export class ModelConfigError extends Error {
 }
 
 /** Raw routing table. Throws when the shared base URL/key is missing. */
-export function reviewConfig(): { baseUrl: string; apiKey: string; model: string } {
+function reviewConfig(): { baseUrl: string; apiKey: string; model: string } {
 	const eff = effectiveReviewEnv();
 
 	const parsed = configSchema.safeParse({

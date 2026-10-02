@@ -3,7 +3,12 @@ import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Repo, Review } from '@recoder/shared';
 import { db, reviewSandboxes } from '../../../src/store';
-import { CheckoutError, ensureReviewCheckout, findReviewCheckout, reviewCheckoutPath } from '../../../src/review/session/review-checkout';
+import {
+	CheckoutError,
+	ensureReviewCheckout,
+	findReviewCheckout,
+	reviewCheckoutPath
+} from '../../../src/review/session/review-checkout';
 
 const cleanup: (() => Promise<void> | void)[] = [];
 

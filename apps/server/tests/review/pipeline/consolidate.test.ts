@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test';
 import { buildInventory } from '../../../src/review/pipeline/inventory';
 import { EvidenceStore } from '../../../src/evidence/evidence';
-import { applyConsolidation, deterministicConsolidate, validateCandidate } from '../../../src/review/pipeline/consolidate';
+import {
+	applyConsolidation,
+	deterministicConsolidate,
+	validateCandidate
+} from '../../../src/review/pipeline/consolidate';
 import { parseSpecialistOutput } from '../../../src/review/pipeline/specialist';
 
 const DIFF = `diff --git a/a.ts b/a.ts

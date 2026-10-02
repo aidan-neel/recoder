@@ -483,7 +483,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 }
 
 /** `{"message": "…"}` and nothing else: narration without a request or a result. */
-export function isCommentaryOnly(parsed: unknown): boolean {
+function isCommentaryOnly(parsed: unknown): boolean {
 	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
 
 	const entries = Object.entries(parsed as Record<string, unknown>);

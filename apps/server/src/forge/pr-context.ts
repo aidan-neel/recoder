@@ -182,7 +182,7 @@ async function githubContext(repo: Repo, number: number): Promise<PrContext> {
 	};
 }
 
-export function formatPrContext(ctx: PrContext): string {
+function formatPrContext(ctx: PrContext): string {
 	const lines = [
 		ctx.author ? `Author: ${ctx.author}` : '',
 		`Reviewers: ${ctx.reviewers.join(', ') || '(none)'}`,

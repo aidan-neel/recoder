@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { ReviewChatMessage, ReviewToolCall } from '@recoder/shared';
-import { groupTranscript, taskGroupLabel, toolPresentation } from '../src/lib/review/review-transcript';
-import { applyProgressMessage, emptyReviewProgress } from '../src/lib/review/review-progress-state';
+import { groupTranscript, taskGroupLabel, toolPresentation } from '../../src/lib/review/review-transcript';
+import { applyProgressMessage, emptyReviewProgress } from '../../src/lib/review/review-progress-state';
 
 const tool = (id: string, second: number, action = 'readDiff'): ReviewToolCall => ({
 	id,

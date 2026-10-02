@@ -36,7 +36,7 @@ const fixOutputSchema = z.object({
 	edits: z.array(editSchema).min(1).max(12)
 });
 
-export const fixEditsSchema = z.array(editSchema).min(1).max(12);
+const fixEditsSchema = z.array(editSchema).min(1).max(12);
 
 export interface SuggestFixInput {
 	agent: string;
@@ -62,7 +62,7 @@ function extractJsonObject(output: string): unknown {
 }
 
 /** Why edits could not be placed in the current code. */
-export class EditMismatchError extends Error {}
+class EditMismatchError extends Error {}
 
 /** A checkout file's full text; null when it is missing, a symlink, or outside the checkout. */
 async function readCheckoutFile(root: string, file: string): Promise<string | null> {
@@ -396,7 +396,7 @@ export async function patchApplies(sandboxPath: string, patch: string): Promise<
 	}
 }
 
-export const suggestFixFindingSchema = z.object({
+const suggestFixFindingSchema = z.object({
 	file: z.string().min(1).max(500),
 	line: z.number().int().positive(),
 	endLine: z.number().int().positive(),

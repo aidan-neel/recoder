@@ -62,7 +62,7 @@ function inside(path: string, dir: string): boolean {
 }
 
 /** A PATH entry's toolchain root: `~/.bun/bin` → `~/.bun`, `~/.nvm/versions/node/v24/bin` → `…/v24`. */
-export function toolchainRoot(entry: string, home: string): string {
+function toolchainRoot(entry: string, home: string): string {
 	const parent = dirname(entry);
 
 	if (basename(entry) !== 'bin' || parent === home || parent === join(home, '.local') || parent === '/') return entry;
@@ -169,7 +169,7 @@ export function sandboxLayout(
 	};
 }
 
-export function bwrapArgs(layout: SandboxLayout, command: string, opts: { network?: boolean } = {}): string[] {
+function bwrapArgs(layout: SandboxLayout, command: string, opts: { network?: boolean } = {}): string[] {
 	const args = ['--die-with-parent', '--new-session', '--unshare-all'];
 
 	if (opts.network) args.push('--share-net');
@@ -220,7 +220,7 @@ function ancestors(paths: string[]): string[] {
  * The Seatbelt equivalent of `bwrapArgs`. The last matching rule wins, so
  * broad denies come first and the narrower allows and masks after them.
  */
-export function seatbeltProfile(layout: SandboxLayout, opts: { network?: boolean } = {}): string {
+function seatbeltProfile(layout: SandboxLayout, opts: { network?: boolean } = {}): string {
 	const subpaths = (dirs: string[]) => dirs.map((dir) => `(subpath ${sbpl(dir)})`).join(' ');
 	const git = join(layout.checkout, '.git');
 
@@ -321,7 +321,7 @@ async function probeSeatbelt(): Promise<string | null> {
 }
 
 /** Keeps the head and tail of long output, where commands report what matters. */
-export function boundOutput(text: string, max: number): { text: string; truncated: boolean } {
+function boundOutput(text: string, max: number): { text: string; truncated: boolean } {
 	if (text.length <= max) return { text, truncated: false };
 
 	const head = Math.floor(max * 0.3);

@@ -105,7 +105,7 @@ export function latestReviews(reviews: Review[]): Map<string, Review> {
 	return latest;
 }
 
-export function briefFacts(input: HomeBriefRequest, reviews: Review[], now = Date.now()): string {
+function briefFacts(input: HomeBriefRequest, reviews: Review[], now = Date.now()): string {
 	const latest = latestReviews(reviews);
 	const repos = new Set(input.prs.map((pr) => pr.repo));
 	const lines = [`Open PRs: ${input.prs.length} across ${repos.size} repo${repos.size === 1 ? '' : 's'}.`];

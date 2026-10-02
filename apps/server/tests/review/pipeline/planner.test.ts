@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { buildInventory } from '../../../src/review/pipeline/inventory';
-import { fallbackPlan, normalizePlannerRaw, sanitizePlannerOutput, plannerValidationError } from '../../../src/review/pipeline/planner';
+import {
+	fallbackPlan,
+	normalizePlannerRaw,
+	sanitizePlannerOutput,
+	plannerValidationError
+} from '../../../src/review/pipeline/planner';
 import { dispatchPolicy } from '../../../src/review/pipeline/dispatch';
 import type { ReviewDirective } from '../../../src/review/chat/directive';
 import { REVIEW_ROLES } from '../../../src/review/pipeline/roles';

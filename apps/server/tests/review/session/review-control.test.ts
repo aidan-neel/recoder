@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { ReviewControl, reviewNow, reviewPausePoint, runWithReviewControl } from '../../../src/review/session/review-control';
+import {
+	ReviewControl,
+	reviewNow,
+	reviewPausePoint,
+	runWithReviewControl
+} from '../../../src/review/session/review-control';
 
 test('pause holds model calls and stops the review clock; resume releases both', async () => {
 	const control = new ReviewControl();

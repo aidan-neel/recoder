@@ -23,7 +23,7 @@ export interface ReviewDirective {
 	roles: ReviewRole[];
 }
 
-export const EXCLUDED_BY_INSTRUCTIONS = 'outside your instructions';
+const EXCLUDED_BY_INSTRUCTIONS = 'outside your instructions';
 
 const directiveSchema = z.object({
 	includeGlobs: z.array(z.string().trim().min(1).max(200)).max(40).default([]),
@@ -100,7 +100,7 @@ export function normalizeGlob(raw: string): string | null {
 	return glob;
 }
 
-export function matchesGlob(path: string, glob: string): boolean {
+function matchesGlob(path: string, glob: string): boolean {
 	try {
 		return new Bun.Glob(glob).match(path);
 	} catch {

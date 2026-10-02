@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { clearReviewEvents, emitReviewEvent, reviewEventBuffer, subscribeReview } from '../../../src/review/session/events';
+import {
+	clearReviewEvents,
+	emitReviewEvent,
+	reviewEventBuffer,
+	subscribeReview
+} from '../../../src/review/session/events';
 import { extractFindingsJson, filterNewFindings, fingerprintFinding } from '../../../src/review/pipeline/harness';
 import { configForRole, isReviewConfigured } from '../../../src/models/models';
 

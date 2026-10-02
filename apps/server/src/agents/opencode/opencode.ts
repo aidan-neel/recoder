@@ -44,7 +44,7 @@ const REQUEST_TIMEOUT_MS = 20_000;
 const OAUTH_TIMEOUT_MS = 10 * 60_000;
 
 /** `RECODER_OPENCODE_BIN` when set (empty means none), else the binary on PATH, else OpenCode's installer location. */
-export function findOpenCode(env: Record<string, string | undefined> = process.env): string | null {
+function findOpenCode(env: Record<string, string | undefined> = process.env): string | null {
 	const pinned = env.RECODER_OPENCODE_BIN;
 
 	if (pinned !== undefined) return pinned && existsSync(pinned) ? pinned : null;
@@ -59,12 +59,12 @@ export function findOpenCode(env: Record<string, string | undefined> = process.e
 }
 
 /** `1.18.31`, `opencode 1.18.31` or `v1.18.31` → `1.18.31`. */
-export function parseVersion(output: string): string | null {
+function parseVersion(output: string): string | null {
 	return output.match(/\bv?(\d+\.\d+\.\d+(?:[-+][\w.]+)?)\b/)?.[1] ?? null;
 }
 
 /** The URL `opencode serve` prints once it's listening. */
-export function parseListenUrl(line: string): string | null {
+function parseListenUrl(line: string): string | null {
 	return line.match(/listening on (https?:\/\/[^\s]+)/)?.[1]?.replace(/\/$/, '') ?? null;
 }
 
@@ -183,7 +183,7 @@ function usableModels(raw: Record<string, unknown> | undefined): z.infer<typeof 
 }
 
 /** `/provider` (every provider OpenCode knows, ~6 MB) → names and model counts. Drops everything else, keys included. */
-export function normalizeCatalog(providerJson: unknown): CatalogProvider[] {
+function normalizeCatalog(providerJson: unknown): CatalogProvider[] {
 	const list = providerListSchema.safeParse(providerJson);
 
 	if (!list.success) throw new OpenCodeError('OpenCode returned a provider list Recoder could not read.');

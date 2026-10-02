@@ -16,7 +16,12 @@
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import FindingSeverity from './finding-severity.svelte';
 	import { onDestroy, tick } from 'svelte';
-	import { SEVERITIES, findingsStore, type Finding, type FindingSeverity as Severity } from '$lib/findings/findings.svelte';
+	import {
+		SEVERITIES,
+		findingsStore,
+		type Finding,
+		type FindingSeverity as Severity
+	} from '$lib/findings/findings.svelte';
 	import { sessionFile } from '$lib/session/session-file.svelte';
 	import { threadsStore } from '$lib/findings/threads.svelte';
 	import { applyReadyFixes, fixFindings, hasReadyFix } from '$lib/findings/fixes';

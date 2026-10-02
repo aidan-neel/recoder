@@ -11,17 +11,13 @@ import { getToken } from './tokens.js';
  * push to the default branch.
  */
 
-export interface RepoFile {
-	content: string;
-}
-
-export interface PendingChange {
+interface PendingChange {
 	number: number;
 	url: string;
 	branch: string;
 }
 
-export interface ProposeInput {
+interface ProposeInput {
 	path: string;
 	content: string;
 	/** New branch name when there is no pending change to update. */
@@ -36,7 +32,7 @@ export interface ProposeInput {
 export interface RepoFileHost {
 	canWrite(): boolean;
 	defaultBranch(): Promise<{ branch: string; sha: string }>;
-	readFile(path: string, ref: string): Promise<RepoFile | null>;
+	readFile(path: string, ref: string): Promise<{ content: string } | null>;
 	/** An open pull/merge request from a branch starting with `prefix` into the default branch. */
 	findPending(prefix: string): Promise<PendingChange | null>;
 	propose(input: ProposeInput): Promise<PendingChange>;

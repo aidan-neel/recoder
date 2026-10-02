@@ -13,7 +13,6 @@ import { HOSTED_PROVIDERS, KeyRejectedError, hostedProvider, providerCatalog, ve
 import type { HostedProvider, ModelEntry } from '@recoder/shared';
 import { opencode } from '../agents/opencode/opencode';
 import { isReviewConfigured } from '../models/models';
-import { REVIEW_ROLES } from '../review/pipeline/roles';
 import { z } from 'zod';
 import { discoverModels } from '../models/model-discovery';
 import codexRoutes from './codex';

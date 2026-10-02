@@ -150,6 +150,7 @@ export async function fetchCheckLog(repo: Repo, id: string): Promise<string> {
 		.join('\n');
 }
 
+// eslint-disable-next-line no-control-regex -- strip ANSI color/cursor sequences from logs
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
 const TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z ?/;
 const FAILURE_LINE = /error|fail|✗|✘|panic|exception|assert/i;

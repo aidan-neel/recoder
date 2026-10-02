@@ -122,7 +122,7 @@ export async function streamDiscussFinding(
 	}
 }
 
-export const discussFindingSchema = z.object({
+const discussFindingSchema = z.object({
 	file: z.string().min(1).max(500),
 	line: z.number().int().positive(),
 	endLine: z.number().int().positive(),
@@ -130,7 +130,7 @@ export const discussFindingSchema = z.object({
 	message: z.string().min(1).max(4000)
 });
 
-export const discussHistorySchema = z.object({
+const discussHistorySchema = z.object({
 	role: z.enum(['user', 'assistant']),
 	body: z.string().min(1).max(8000)
 });

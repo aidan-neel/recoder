@@ -81,7 +81,6 @@
 	}: Props = $props();
 	const awaitingApproval = $derived(status === 'running' && approval?.status === 'pending');
 
-	/* Empty states: what the page says when there's nothing in the list. */
 	const fixedCount = $derived(findingsStore.items.filter((f) => f.status === 'accepted').length);
 	const dismissedCount = $derived(findingsStore.items.filter((f) => f.status === 'dismissed').length);
 	const hiddenCount = $derived(

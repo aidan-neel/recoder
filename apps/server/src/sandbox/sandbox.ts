@@ -224,9 +224,3 @@ export async function sandboxDiff(
 ): Promise<string> {
 	return (await sandboxRevisionDiff(path, baseRef, overrides, provider)).diff;
 }
-
-/** Remove a sandbox checkout and its dependency cache. No retention policy yet — call explicitly. */
-export async function removeSandbox(path: string): Promise<void> {
-	await rm(path, { recursive: true, force: true });
-	await rm(sandboxLayout(path).cacheDir, { recursive: true, force: true });
-}

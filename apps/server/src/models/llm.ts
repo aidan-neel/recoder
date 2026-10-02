@@ -552,7 +552,8 @@ export async function streamChatCompletion(opts: ChatOptions, onToken: (text: st
 				? withRetries(
 						remaining,
 						deadline,
-						async (timeoutMs) => (await import('../agents/codex/codex')).codex.complete({ ...remaining, timeoutMs }, forward),
+						async (timeoutMs) =>
+							(await import('../agents/codex/codex')).codex.complete({ ...remaining, timeoutMs }, forward),
 						() => !streamed
 					)
 				: withRetries(
