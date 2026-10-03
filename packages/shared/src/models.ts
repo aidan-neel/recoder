@@ -6,9 +6,12 @@ export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 export const DISPATCH_LEVELS = ['low', 'medium', 'high'] as const;
 export type DispatchLevel = (typeof DISPATCH_LEVELS)[number];
 
+/** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode CLI. */
+export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode';
+
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {
-	provider?: 'openai-compatible' | 'codex' | 'opencode';
+	provider?: ModelProvider;
 	/** Hosted provider this model came from (`opencode-go`, `openrouter`…); unset for ChatGPT and the custom endpoint. */
 	source?: string;
 	id: string;

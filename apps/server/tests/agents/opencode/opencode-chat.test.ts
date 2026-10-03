@@ -1,0 +1,115 @@
+import { afterEach, describe, expect, test } from 'bun:test';
+import type { TokenUsage } from '@recoder/shared';
+import { OpenCodeAgent } from '../../../src/agents/opencode/opencode';
+import type { ChatOptions } from '../../../src/models/llm/types';
+import { fakeOpenCode } from '../../helpers/fake-opencode';
+
+interface Call {
+	method: string;
+	path: string;
+	body: Record<string, unknown> | null;
+}
+
+let agent: OpenCodeAgent | null = null;
+
+afterEach(() => {
+	agent?.stop();
+	agent = null;
+});
+
+async function start(): Promise<OpenCodeAgent> {
+	agent = new OpenCodeAgent(await fakeOpenCode());
+
+	return agent;
+}
+
+function ask(prompt: string, extra: Partial<ChatOptions> = {}): ChatOptions {
+	return { baseUrl: '', apiKey: '', model: 'openai/m', messages: [{ role: 'user', content: prompt }], ...extra };
+}
+
+async function calls(target: OpenCodeAgent): Promise<Call[]> {
+	return (await target.request('/test/calls')) as Call[];
+}
+
+describe('OpenCode chat', () => {
+	test('streams only its own session text and reasoning, in order, and reports usage', async () => {
+		const target = await start();
+		const tokens: string[] = [];
+		const reasoning: string[] = [];
+		let usage: TokenUsage | undefined;
+
+		const text = await target.complete(
+			ask('hi', { onReasoning: (r) => reasoning.push(r), onUsage: (u) => (usage = u) }),
+			(t) => tokens.push(t)
+		);
+
+		expect(text).toBe('Hello world');
+		expect(tokens).toEqual(['Hello', ' world']);
+		expect(reasoning).toEqual(['Thinking']);
+		expect(usage).toMatchObject({ inputTokens: 10, outputTokens: 4, cachedInputTokens: 1, reasoningOutputTokens: 2 });
+	});
+
+	test('runs with every tool and permission off, then deletes the session', async () => {
+		const target = await start();
+
+		await target.complete(ask('hi'));
+
+		const log = await calls(target);
+
+		expect(log[0]).toMatchObject({
+			method: 'POST',
+			path: '/session',
+			body: { permission: [{ permission: '*', pattern: '*', action: 'deny' }] }
+		});
+
+		expect(log[1].body).toMatchObject({ model: { providerID: 'openai', modelID: 'm' }, tools: { '*': false } });
+		expect(log.at(-1)).toMatchObject({ method: 'DELETE', path: '/session/ses_1' });
+	});
+
+	test('sends an effort only when the model offers it as a variant', async () => {
+		const target = await start();
+
+		await target.complete(ask('hi', { reasoningEffort: 'high' }));
+		await target.complete(ask('hi', { reasoningEffort: 'low' }));
+
+		const messages = (await calls(target)).filter((c) => c.path.endsWith('/message'));
+
+		expect(messages[0].body?.variant).toBe('high');
+		expect(messages[1].body).not.toHaveProperty('variant');
+	});
+
+	test('returns the structured object as JSON when a schema was sent', async () => {
+		const target = await start();
+		const schema = { name: 'r', schema: { type: 'object' } };
+
+		expect(JSON.parse(await target.complete(ask('structured', { jsonSchema: schema })))).toEqual({ ok: true });
+	});
+
+	test("keeps the provider's status on a failed reply", async () => {
+		const target = await start();
+
+		await expect(target.complete(ask('denied'))).rejects.toMatchObject({
+			status: 403,
+			message: 'Free tier is not available here.'
+		});
+
+		await expect(target.complete(ask('auth'))).rejects.toMatchObject({ status: 401 });
+	});
+
+	test('a cancelled call aborts and deletes its session', async () => {
+		const target = await start();
+		const controller = new AbortController();
+		const call = target.complete(ask('slow', { signal: controller.signal }));
+
+		for (let i = 0; i < 100 && !(await calls(target)).some((c) => c.path.endsWith('/message')); i++)
+			await Bun.sleep(10);
+		controller.abort();
+
+		await expect(call).rejects.toMatchObject({ message: 'Model request cancelled' });
+
+		const paths = (await calls(target)).map((c) => `${c.method} ${c.path}`);
+
+		expect(paths).toContain('POST /session/ses_1/abort');
+		expect(paths).toContain('DELETE /session/ses_1');
+	});
+});

@@ -18,6 +18,8 @@ export interface ServerRequest {
 	method?: string;
 	body?: unknown;
 	timeoutMs?: number;
+	/** The caller's cancellation; an abort rejects with the signal's reason. */
+	signal?: AbortSignal;
 }
 
 const START_TIMEOUT_MS = 15_000;
@@ -151,26 +153,8 @@ export class OpenCodeServer {
 
 	/** JSON request to the managed server. Errors carry OpenCode's own message when it gives one. */
 	async request(path: string, init: ServerRequest = {}): Promise<unknown> {
-		const server = await this.ensure();
-		let response: Response;
-
-		try {
-			response = await fetch(`${server.url}${path}`, {
-				method: init.method ?? 'GET',
-				headers: {
-					authorization: `Basic ${btoa(`opencode:${server.password}`)}`,
-					...(init.body !== undefined ? { 'content-type': 'application/json' } : {})
-				},
-				body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
-				signal: AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS)
-			});
-		} catch (e) {
-			if (e instanceof Error && e.name === 'TimeoutError')
-				throw new OpenCodeError('OpenCode took too long to answer.', 504);
-			this.running = null;
-			throw new OpenCodeError('Lost the connection to OpenCode. Try again.');
-		}
-
+		const timeout = AbortSignal.timeout(init.timeoutMs ?? REQUEST_TIMEOUT_MS);
+		const response = await this.send(path, init, init.signal ? AbortSignal.any([init.signal, timeout]) : timeout);
 		const text = await response.text();
 		const json = text ? safeJson(text) : null;
 
@@ -181,6 +165,43 @@ export class OpenCodeServer {
 			);
 
 		return json;
+	}
+
+	/** Open the server's event stream (SSE). It stays open until `signal` aborts. */
+	async stream(path: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
+		const response = await this.send(path, {}, signal);
+
+		if (!response.ok || !response.body) throw new OpenCodeError(`OpenCode answered HTTP ${response.status}.`, 502);
+
+		return response.body;
+	}
+
+	/**
+	 * One authenticated fetch. A timeout or the caller's abort leaves the
+	 * server alone; any other network failure means it went away, so the next
+	 * call starts a new one.
+	 */
+	private async send(path: string, init: ServerRequest, signal: AbortSignal): Promise<Response> {
+		const server = await this.ensure();
+
+		try {
+			return await fetch(`${server.url}${path}`, {
+				method: init.method ?? 'GET',
+				headers: {
+					authorization: `Basic ${btoa(`opencode:${server.password}`)}`,
+					...(init.body !== undefined ? { 'content-type': 'application/json' } : {})
+				},
+				body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+				signal
+			});
+		} catch (e) {
+			if (init.signal?.aborted) throw init.signal.reason;
+			if (e instanceof Error && e.name === 'TimeoutError')
+				throw new OpenCodeError('OpenCode took too long to answer.', 504);
+			if (signal.aborted) throw signal.reason;
+			this.running = null;
+			throw new OpenCodeError('Lost the connection to OpenCode. Try again.');
+		}
 	}
 
 	/** Start `opencode serve` once; later calls share it. */

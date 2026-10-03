@@ -27,10 +27,11 @@ const CODEX_TRANSIENT = /response failed|incomplete response|could not complete/
 /**
  * Dropped sockets and overloaded servers (vLLM restarts, proxies) are worth another try; bad requests are not.
  * ChatGPT's 429 is a usage cap that lasts hours, not a momentary rate limit, so it never retries.
+ * OpenCode already retries rate limits itself, so a 429 that reaches Recoder is final too.
  */
 export function isTransientLlmError(err: unknown, provider?: ChatOptions['provider']): boolean {
 	if (!(err instanceof LlmError)) return false;
-	if (provider === 'codex' && err.status === 429) return false;
+	if ((provider === 'codex' || provider === 'opencode') && err.status === 429) return false;
 	if (TRANSIENT_STATUS.has(err.status)) return true;
 	if (err.status !== 0 || /cancelled|timed out|truncated/i.test(err.message)) return false;
 

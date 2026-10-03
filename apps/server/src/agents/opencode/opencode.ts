@@ -1,7 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { TtlCache } from '../../util/ttl-cache';
-import type { AgentOAuthAttempt, AgentOAuthStatus, AgentProvider, AgentStatus, ModelEntry } from '@recoder/shared';
+import type {
+	AgentOAuthAttempt,
+	AgentOAuthStatus,
+	AgentProvider,
+	AgentStatus,
+	ModelEntry,
+	ReasoningEffort
+} from '@recoder/shared';
+import type { ChatOptions } from '../../models/llm/types';
+import { openCodeChat } from './opencode-chat';
 import { normalizeCatalog, normalizeModels, normalizeProviders, type CatalogProvider } from './opencode-catalog';
 import { OpenCodeError } from './opencode-error';
 import { OpenCodeServer, findOpenCode, probeVersion, type ServerRequest } from './opencode-server';
@@ -32,6 +41,8 @@ export class OpenCodeAgent {
 	private readonly server: OpenCodeServer;
 	private status: AgentStatus | null = null;
 	private attempts = new Map<string, Attempt>();
+	/** The last model list, keyed by `provider/model`, for efforts and provider names. */
+	private known = new Map<string, ModelEntry>();
 
 	constructor(private readonly env: Record<string, string | undefined> = process.env) {
 		this.server = new OpenCodeServer(env);
@@ -75,7 +86,31 @@ export class OpenCodeAgent {
 	}
 
 	async models(): Promise<ModelEntry[]> {
-		return normalizeModels(await this.request('/config/providers'));
+		const entries = normalizeModels(await this.request('/config/providers'));
+
+		this.known = new Map(entries.map((entry) => [entry.model, entry]));
+
+		return entries;
+	}
+
+	/** The reasoning levels a model offers as variants; null when it has none or is unknown. */
+	async efforts(model: string): Promise<ReasoningEffort[] | null> {
+		if (!this.known.has(model)) await this.models();
+
+		return this.known.get(model)?.efforts ?? null;
+	}
+
+	/** The name OpenCode shows for a provider, once its models have been listed; else the id. */
+	providerName(providerId: string): string {
+		for (const entry of this.known.values())
+			if (entry.model.startsWith(`${providerId}/`)) return entry.source ?? providerId;
+
+		return providerId;
+	}
+
+	/** One model call through the server. See {@link openCodeChat}. */
+	complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
+		return openCodeChat({ server: this.server, efforts: (model) => this.efforts(model) }, opts, onToken);
 	}
 
 	private catalog(): Promise<CatalogProvider[]> {

@@ -2,7 +2,8 @@ import { LlmError } from './errors';
 import { requestChat } from './openai-compatible';
 import { streamChat } from './openai-stream';
 import { withSchemaFallback, withThinkingFallback } from './request-fields';
-import type { ChatOptions, ChatProvider } from './types';
+import type { ModelProvider } from '@recoder/shared';
+import type { ChatOptions } from './types';
 
 /**
  * One attempt at a model call through a provider's API. `opts.timeoutMs` is
@@ -41,9 +42,17 @@ const chatgpt: Transport = async (opts, onToken) => {
 	}
 };
 
-const TRANSPORTS: Record<ChatProvider, Transport> = {
+/** A model reached through the user's OpenCode CLI. Loaded lazily for the same reason as ChatGPT. */
+const openCode: Transport = async (opts, onToken) => {
+	const { opencode } = await import('../../agents/opencode/opencode');
+
+	return opencode.complete(opts, onToken);
+};
+
+const TRANSPORTS: Record<ModelProvider, Transport> = {
 	'openai-compatible': openAiCompatible,
-	codex: chatgpt
+	codex: chatgpt,
+	opencode: openCode
 };
 
 export function transportFor(provider: ChatOptions['provider']): Transport {

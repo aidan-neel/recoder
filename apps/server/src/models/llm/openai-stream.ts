@@ -2,6 +2,7 @@ import { normalizeTokenUsage } from '../metrics';
 import { LlmError } from './errors';
 import { abortedPromise, attemptController, attemptFailure, postChat, readChatResponse } from './openai-compatible';
 import { sleep } from './retry';
+import { sseData } from './sse';
 import type { ChatOptions } from './types';
 
 /** SSE `data:` payload shape for OpenAI-compatible chat chunk streams. */
@@ -49,38 +50,6 @@ function idleWatchdog(controller: AbortController, idleMs: number) {
 		stalled: () => stalled,
 		stop: () => clearInterval(interval)
 	};
-}
-
-/** Yield each SSE `data:` payload, racing every read against `aborted` so a wedged socket can't hang it. */
-async function* sseData(
-	reader: ReadableStreamDefaultReader<Uint8Array>,
-	signal: AbortSignal,
-	aborted: Promise<never>,
-	onRead: () => void
-): AsyncGenerator<string> {
-	const decoder = new TextDecoder();
-	let buffer = '';
-
-	for (;;) {
-		signal.throwIfAborted();
-
-		const { done, value } = await Promise.race([reader.read(), aborted]);
-
-		onRead();
-		signal.throwIfAborted();
-		buffer += done ? decoder.decode() + '\n' : decoder.decode(value, { stream: true });
-
-		let idx: number;
-
-		while ((idx = buffer.indexOf('\n')) >= 0) {
-			const line = buffer.slice(0, idx).trim();
-
-			buffer = buffer.slice(idx + 1);
-			if (line.startsWith('data:')) yield line.slice(5).trim();
-		}
-
-		if (done) return;
-	}
 }
 
 /**
