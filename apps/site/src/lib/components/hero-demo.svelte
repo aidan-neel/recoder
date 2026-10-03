@@ -21,7 +21,6 @@
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	// The app's own components, so the demo is the product, not a drawing of it.
 	import FindingSeverity from '$web/components/findings/finding-severity.svelte';
 	import ReviewComposer from '$web/components/review/review-composer.svelte';
 	import ReviewSteps from '$web/components/review/review-steps.svelte';
@@ -30,7 +29,7 @@
 	import Disclosure from '$web/components/ui/disclosure.svelte';
 	import { taskGroupLabel } from '$web/review/review-transcript';
 	import { keepPillAligned } from '$web/shell/tab-pill';
-	import { DEMO_END, DEMO_FADE, DEMO_HOLD, DEMO_LOOP, demoState, findingCounts, request } from '$lib/demo-script';
+	import { DEMO_END, DEMO_HOLD, DEMO_LOOP, demoState, findingCounts, request } from '$lib/demo-script';
 
 	let t = $state(0);
 	let fading = $state(false);
@@ -38,14 +37,14 @@
 	let rootEl = $state<HTMLElement>();
 	const demo = $derived(demoState(t));
 
-	// The window is laid out at desktop size and scaled down to fit narrower screens.
+	/** The window is laid out at desktop size and scaled down to fit narrower screens. */
 	let stageWidth = $state(0);
 	let naturalWidth = $state(0);
 	let naturalHeight = $state(0);
 	const scale = $derived(naturalWidth && stageWidth ? Math.min(1, stageWidth / naturalWidth) : 1);
 	/** Root font scale (app.css raises it on large monitors); JS px constants follow it. */
 	let rootScale = $state(1);
-	// Narrow screens drop the rail and lay the window out at tablet width, so it scales down less.
+	/** Narrow screens drop the rail and lay the window out at tablet width, so it scales down less. */
 	const compact = $derived(stageWidth > 0 && stageWidth < 900 * rootScale);
 
 	onMount(() => {
@@ -66,7 +65,6 @@
 				t = 0;
 			} else {
 				fading = elapsed >= DEMO_END + DEMO_HOLD;
-				// Hold the finished review; the fade covers the jump back to the start.
 				t = Math.min(elapsed, DEMO_END);
 			}
 
@@ -97,7 +95,6 @@
 			} else play();
 		}
 
-		// Only animate while on screen and the tab is visible.
 		const io = new IntersectionObserver(([entry]) => {
 			visible = entry.isIntersecting;
 			sync();

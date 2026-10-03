@@ -6,10 +6,11 @@ import type { ReviewToolCall } from '@recoder/shared';
  * render the finished review by jumping to `DEMO_END`.
  */
 
-export type Severity = 'high' | 'medium' | 'low';
-export type SpecialistStatus = 'queued' | 'running' | 'done';
+type Severity = 'high' | 'medium' | 'low';
 
-export const AT = {
+type SpecialistStatus = 'queued' | 'running' | 'done';
+
+const AT = {
 	user: 300,
 	reasonStart: 900,
 	reasonEnd: 2500,
@@ -28,12 +29,14 @@ export const AT = {
 /** Held on the finished review, then the loop fades out and replays. */
 export const DEMO_END = 18400;
 export const DEMO_HOLD = 6500;
-export const DEMO_FADE = 450;
+
+const DEMO_FADE = 450;
+
 export const DEMO_LOOP = DEMO_END + DEMO_HOLD + DEMO_FADE;
 
 export const request = 'Review this. Focus on the clock injection and anything that breaks existing callers.';
 
-export const reasoning =
+const reasoning =
 	'Reading the diff to scope specialists. The limiter moves from module state into a class, so the old free `allow()` and every caller of it matter most.';
 
 const tools = [
@@ -43,10 +46,10 @@ const tools = [
 	{ action: 'readFile', path: 'src/time/clock.ts', at: 1250, ms: 200 }
 ];
 
-export const plan =
+const plan =
 	'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI’m sending five specialists. Correctness and repository consistency always run; performance, docs and security were picked for this diff.';
 
-export const summary =
+const summary =
 	'The class refactor is sound, but two things should block the merge.\n\n`index.ts` still re-exports `allow()`, which no longer exists, so all 14 call sites break at import. And `refill()` reads `Date.now()` directly, so the injected clock does nothing in tests.\n\nThe rest is small: an unbounded buckets Map, an unvalidated capacity, and a stale doc comment. Four of the five have a suggested patch ready.';
 
 type Specialist = {
@@ -239,8 +242,6 @@ export function demoState(t: number) {
 		elapsed: clock(t)
 	};
 }
-
-export type DemoState = ReturnType<typeof demoState>;
 
 /** The Progress card's timer: the demo runs at roughly 8x real time. */
 function clock(t: number): string {

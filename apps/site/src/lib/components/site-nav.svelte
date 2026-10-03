@@ -9,7 +9,7 @@
 
 	const current = $derived(page.url.pathname.replace(/\/$/, '') || '/');
 
-	/* The active pill slides to the current link; hover uses the instant highlight. */
+	/** The active pill slides to the current link; hover uses the instant highlight. */
 	let listEl = $state<HTMLElement>();
 	let pill = $state<{ left: number; top: number; width: number; height: number } | null>(null);
 	let pillReady = $state(false);
@@ -24,13 +24,10 @@
 
 	$effect(() => {
 		void current;
-		// On mobile the links scroll sideways; keep the current one in view.
 		measure()?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-		// Place the pill without travel on first paint, then let it slide.
 		requestAnimationFrame(() => (pillReady = true));
 	});
 
-	// Re-measure when fonts load or the layout switches between the side column and the top row.
 	$effect(() => {
 		if (!listEl) return;
 

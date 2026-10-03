@@ -28,9 +28,7 @@
 				email = joined;
 				status = 'done';
 			}
-		} catch {
-			// Storage blocked (private mode, disabled cookies): show the form.
-		}
+		} catch {}
 	});
 
 	async function expand() {
@@ -75,9 +73,7 @@
 
 			try {
 				localStorage.setItem(STORAGE_KEY, address);
-			} catch {
-				// Not remembered across visits; joining still worked.
-			}
+			} catch {}
 		} catch {
 			status = 'error';
 			error = 'That didn’t go through. Check your connection and try again.';
