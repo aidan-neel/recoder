@@ -21,7 +21,7 @@ test('a checkpoint saved before review units is discarded instead of resumed', (
 	expect(old.checkpoint).toBeNull();
 	expect(old.discarded).toContain('older Recoder');
 
-	const current = { ...plannerEra, version: CHECKPOINT_VERSION };
+	const current: ReviewCheckpoint = { ...plannerEra, version: CHECKPOINT_VERSION };
 
 	expect(resumableCheckpoint(current, revision)).toEqual({ checkpoint: current, discarded: null });
 });
