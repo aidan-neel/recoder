@@ -16,8 +16,8 @@ import {
 	providerCatalog,
 	verifyKey
 } from '../models/model-providers';
-import type { HostedProvider, ModelEntry } from '@recoder/shared';
-import { opencode } from '../agents/opencode/opencode';
+import type { HostedProvider } from '@recoder/shared';
+import { agentModels } from '../agents/registry';
 import { isReviewConfigured } from '../models/models';
 import { z } from 'zod';
 import { discoverModels } from '../models/model-discovery';
@@ -27,15 +27,6 @@ import { parseBody } from './parse-body';
 const app = new Hono();
 
 app.route('/codex', codexRoutes);
-
-/** The agent's models; empty while OpenCode is missing or down, so Settings still opens. */
-async function agentModels(): Promise<ModelEntry[]> {
-	try {
-		return await opencode.models();
-	} catch {
-		return [];
-	}
-}
 
 /** Effective reviewer model config. Keys are never returned in full. Models come from the agent. */
 async function settingsPayload() {

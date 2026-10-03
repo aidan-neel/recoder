@@ -12,12 +12,10 @@
 	import type { AgentProvider } from '@recoder/shared';
 	import AgentProviderModal from './agent-provider-modal.svelte';
 	import ModelPicker from './model-picker.svelte';
-	import { agent } from '$lib/settings/agent.svelte';
+	import { agent, isReady } from '$lib/settings/agent.svelte';
 	import { modelSettingsUi } from '$lib/settings/model-settings.svelte';
 	import { errorToast } from '$lib/shell/notify';
 	import { settingsDraft } from '$lib/settings/settings-draft.svelte';
-
-	const INSTALL = 'curl -fsSL https://opencode.ai/install | bash';
 
 	let addOpen = $state(false);
 	let addId = $state<string | null>(null);
@@ -32,7 +30,8 @@
 	}
 
 	const status = $derived(agent.status);
-	const ready = $derived(!!status?.installed && !status.error);
+	/** The provider-managing agent (OpenCode) is up, so its Providers section shows. */
+	const ready = $derived(!!status && isReady(status));
 
 	/** Home and failure toasts open Settings straight into Add provider. */
 	$effect(() => {
@@ -55,7 +54,7 @@
 		const via = {
 			key: 'API key',
 			oauth: 'Signed in',
-			config: 'From OpenCode config',
+			config: `From ${status?.name ?? 'agent'} config`,
 			env: 'From environment',
 			builtin: 'Free tier'
 		}[provider.via ?? 'builtin'];
@@ -80,38 +79,56 @@
 <section class="settings-section" aria-labelledby="agent-cli">
 	<Typography.H3 id="agent-cli" class="settings-label">CLI</Typography.H3>
 	<Card.Root class="settings-list">
-		<div class="settings-row">
-			<div class="min-w-0 flex-1">
-				<p class="settings-row-name">OpenCode</p>
-				<p class="settings-row-desc">
-					{#if agent.error}{agent.error}
-					{:else if !status?.installed}Not installed
-					{:else if status.error}{status.error}
-					{:else}<span class="font-mono">{status.version ?? 'unknown version'}</span> ·
-						<span class="font-mono" title={status.path ?? ''}>{status.path}</span>{/if}
-				</p>
-			</div>
-			{#if ready && !agent.error}
-				<Badge class="status-chip" data-tone="success">Ready</Badge>
-			{:else}
-				<Button variant="outline" loading={agent.checking} onclick={() => void agent.load(true)}>
-					<RotateCw size={13} aria-hidden="true" /> Check again
-				</Button>
-			{/if}
-		</div>
-		{#if !agent.error && status && !status.installed}
-			<div class="settings-row agent-install">
-				<div class="min-w-0 flex-1">
-					<p class="settings-row-desc mb-2">Install it, then check again.</p>
-					<div class="agent-install-cmd">
-						<code>{INSTALL}</code>
-						<CopyButton text={INSTALL} label="Copy command" />
-					</div>
-				</div>
+		{#if agent.error}
+			<div class="settings-row">
+				<p class="settings-row-desc min-w-0 flex-1">{agent.error}</p>
+				{@render checkAgain()}
 			</div>
 		{/if}
+		{#each agent.statuses ?? [] as cli (cli.id)}
+			<div class="settings-row">
+				<div class="min-w-0 flex-1">
+					<p class="settings-row-name">{cli.name}</p>
+					<p class="settings-row-desc">
+						{#if !cli.installed}Not installed
+						{:else if cli.error}{cli.error}
+						{:else}<span class="font-mono">{cli.version ?? 'unknown version'}</span> ·
+							<span class="font-mono" title={cli.path ?? ''}>{cli.path}</span
+							>{#if cli.signedIn === false}{' · Not signed in'}{/if}{/if}
+					</p>
+				</div>
+				{#if isReady(cli)}
+					<Badge class="status-chip" data-tone="success">Ready</Badge>
+				{:else}
+					{@render checkAgain()}
+				{/if}
+			</div>
+			{#if !cli.installed}
+				{@render command('Install it, then check again.', cli.install)}
+			{:else if !cli.error && cli.signedIn === false && cli.login}
+				{@render command('Sign in from a terminal, then check again.', cli.login)}
+			{/if}
+		{/each}
 	</Card.Root>
 </section>
+
+{#snippet checkAgain()}
+	<Button variant="outline" loading={agent.checking} onclick={() => void agent.load(true)}>
+		<RotateCw size={13} aria-hidden="true" /> Check again
+	</Button>
+{/snippet}
+
+{#snippet command(hint: string, text: string)}
+	<div class="settings-row agent-install">
+		<div class="min-w-0 flex-1">
+			<p class="settings-row-desc mb-2">{hint}</p>
+			<div class="agent-install-cmd">
+				<code>{text}</code>
+				<CopyButton {text} label="Copy command" />
+			</div>
+		</div>
+	</div>
+{/snippet}
 
 {#if ready && !agent.error}
 	<section class="settings-section" aria-labelledby="agent-providers">
@@ -148,7 +165,9 @@
 			</Card.Root>
 		{/if}
 	</section>
+{/if}
 
+{#if agent.anyReady && !agent.error}
 	<section class="settings-section" aria-labelledby="agent-roles">
 		<Typography.H3 id="agent-roles" class="settings-label">Models</Typography.H3>
 		<Card.Root class="settings-list">
@@ -187,8 +206,8 @@
 		<AlertDialog.Header>
 			<AlertDialog.Title>Disconnect {confirming?.name}?</AlertDialog.Title>
 			<AlertDialog.Description>
-				OpenCode forgets {confirming?.via === 'oauth' ? 'this sign-in' : 'this key'}. Reviews set to its models stop
-				until you connect it again.
+				{status?.name} forgets {confirming?.via === 'oauth' ? 'this sign-in' : 'this key'}. Reviews set to its models
+				stop until you connect it again.
 			</AlertDialog.Description>
 		</AlertDialog.Header>
 		<AlertDialog.Footer>

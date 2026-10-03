@@ -10,6 +10,7 @@ import type {
 	ReasoningEffort
 } from '@recoder/shared';
 import type { ChatOptions } from '../../models/llm/types';
+import type { AgentAdapter } from '../registry';
 import { openCodeChat } from './opencode-chat';
 import { normalizeCatalog, normalizeModels, normalizeProviders, type CatalogProvider } from './opencode-catalog';
 import { OpenCodeError } from './opencode-error';
@@ -17,6 +18,8 @@ import { OpenCodeServer, findOpenCode, probeVersion, type ServerRequest } from '
 
 export { OPENCODE_MODEL_PREFIX, normalizeModels, normalizeProviders } from './opencode-catalog';
 export { OpenCodeError } from './opencode-error';
+
+const INSTALL = 'curl -fsSL https://opencode.ai/install | bash';
 
 /** Device-code sign-ins give the user a few minutes to finish in the browser. */
 const OAUTH_TIMEOUT_MS = 10 * 60_000;
@@ -37,7 +40,9 @@ type Attempt = AgentOAuthAttempt & { providerId: string; method: number; state: 
  * Recoder never reads OpenCode's credential file. Sign-in, keys and the model
  * catalog all go through the server's HTTP API.
  */
-export class OpenCodeAgent {
+export class OpenCodeAgent implements AgentAdapter {
+	readonly id = 'opencode';
+	readonly name = 'OpenCode';
 	private readonly server: OpenCodeServer;
 	private status: AgentStatus | null = null;
 	private attempts = new Map<string, Attempt>();
@@ -53,7 +58,19 @@ export class OpenCodeAgent {
 		if (this.status && !refresh) return this.status;
 
 		const path = findOpenCode(this.env);
-		const base: AgentStatus = { id: 'opencode', name: 'OpenCode', installed: !!path, version: null, path, error: null };
+
+		const base: AgentStatus = {
+			id: this.id,
+			name: this.name,
+			installed: !!path,
+			version: null,
+			path,
+			error: null,
+			install: INSTALL,
+			signedIn: null,
+			login: null,
+			providers: true
+		};
 
 		if (!path) return (this.status = base);
 

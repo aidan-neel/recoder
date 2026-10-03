@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { OpenCodeError, opencode } from '../agents/opencode/opencode';
+import { agentStatuses } from '../agents/registry';
 import { trustedOrigin } from './trusted-origin';
 
-/** The coding agent behind reviews (OpenCode for now): detection, providers and sign-in. */
+/** The agent CLIs: every one's status, then OpenCode's providers and sign-in. */
 const app = new Hono();
 
 app.use('*', trustedOrigin);
@@ -14,8 +15,8 @@ function fail(e: unknown, fallback: string) {
 	return { body: { error: e instanceof Error ? e.message : fallback }, status: status as 400 | 404 | 502 | 504 };
 }
 
-/** Is OpenCode installed, which version, and did its server start. `?refresh=1` checks again. */
-app.get('/', async (c) => c.json({ agents: [await opencode.detect(c.req.query('refresh') === '1')] }));
+/** Every known agent: installed, version, sign-in state. `?refresh=1` checks again. */
+app.get('/', async (c) => c.json({ agents: await agentStatuses(c.req.query('refresh') === '1') }));
 
 app.get('/providers', async (c) => {
 	try {

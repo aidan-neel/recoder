@@ -34,7 +34,7 @@
 		if (modelSettingsUi.open) void agent.load();
 	});
 	const agentPending = $derived(
-		modelSettingsUi.section === 'models' && !agent.error && (agent.status === null || agent.providers === null)
+		modelSettingsUi.section === 'models' && !agent.error && (agent.statuses === null || agent.providers === null)
 	);
 
 	$effect(() => {

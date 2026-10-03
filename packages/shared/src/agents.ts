@@ -1,6 +1,6 @@
-/** A coding-agent CLI Recoder can drive. Only OpenCode for now. */
+/** A coding-agent CLI Recoder knows about, installed or not. */
 export interface AgentStatus {
-	id: 'opencode';
+	id: string;
 	name: string;
 	installed: boolean;
 	version: string | null;
@@ -8,6 +8,14 @@ export interface AgentStatus {
 	path: string | null;
 	/** Why the agent can't be used (failed to start, too old…); null when it's fine. */
 	error: string | null;
+	/** The shell command that installs it, shown while it's missing. */
+	install: string;
+	/** Signed in to its vendor account; null for agents that sign in per provider, like OpenCode. */
+	signedIn: boolean | null;
+	/** The CLI's own sign-in command, for agents tied to one vendor account. */
+	login: string | null;
+	/** Connects model providers itself, so Settings shows its Providers section. */
+	providers: boolean;
 }
 
 /** One way to sign in to a provider, as the agent describes it. */
