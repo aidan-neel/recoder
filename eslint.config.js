@@ -93,7 +93,8 @@ export default ts.config(
 			],
 			'@typescript-eslint/no-explicit-any': 'error',
 			'no-empty': ['error', { allowEmptyCatch: true }],
-			'svelte/no-navigation-without-resolve': 'off'
+			'svelte/no-navigation-without-resolve': 'off',
+			'svelte/no-useless-mustaches': 'off'
 		}
 	},
 	{

@@ -23,6 +23,14 @@
 		"@recoder/site#check": {
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/**"]
+		},
+		"lint": {
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"$TURBO_ROOT$/eslint.config.js",
+				"$TURBO_ROOT$/.prettierrc.json",
+				"$TURBO_ROOT$/.prettierignore"
+			]
 		}
 	}
 }

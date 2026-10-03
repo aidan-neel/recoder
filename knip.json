@@ -2,7 +2,10 @@
 	"$schema": "https://unpkg.com/knip@5/schema.json",
 	"ignore": ["shot.mjs", ".agents/**"],
 	"workspaces": {
-		"apps/server": { "entry": ["tests/**/*.test.ts"], "project": ["src/**/*.ts", "tests/**/*.ts"] },
+		"apps/server": {
+			"entry": ["tests/**/*.test.ts"],
+			"project": ["src/**/*.ts", "tests/**/*.ts"]
+		},
 		"apps/web": {
 			"project": ["src/**/*.{ts,svelte}", "tests/**/*.ts"],
 			"ignoreDependencies": ["@fontsource/geist-sans", "@fontsource/geist-mono", "@fontsource/lora"]
@@ -11,6 +14,9 @@
 			"project": ["src/**/*.{ts,svelte}"],
 			"ignoreDependencies": ["@fontsource/geist-sans", "@fontsource/geist-mono", "@fontsource/lora"]
 		},
-		"packages/shared": { "entry": ["src/**/*.test.ts"], "project": ["src/**/*.ts"] }
+		"packages/shared": {
+			"entry": ["tests/**/*.test.ts"],
+			"project": ["src/**/*.ts", "tests/**/*.ts"]
+		}
 	}
 }

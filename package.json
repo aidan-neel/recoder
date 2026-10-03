@@ -14,7 +14,9 @@
 		"dev:server": "bun --filter @recoder/server dev",
 		"build": "turbo build",
 		"check": "turbo check",
-		"test": "turbo test"
+		"test": "turbo test",
+		"lint": "turbo lint",
+		"deadcode": "knip && jscpd"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
