@@ -25,7 +25,7 @@ export interface FileBadge {
 }
 
 /** Folders first, then files; alphabetical (case-insensitive) within each group. */
-export function sortTreeNodes(nodes: TreeNode[]): TreeNode[] {
+function sortTreeNodes(nodes: TreeNode[]): TreeNode[] {
 	return [...nodes]
 		.map((node) => (node.kind === 'folder' ? { ...node, children: sortTreeNodes(node.children) } : node))
 		.sort((a, b) => {

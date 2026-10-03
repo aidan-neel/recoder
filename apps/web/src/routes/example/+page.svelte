@@ -16,13 +16,13 @@
 	import { getFileDiff } from '$lib/diff/diff';
 	import { DEFAULT_FILE } from '$lib/session/session-file.svelte';
 
-	// Interactive design fixture. Real sessions use the same view with API/SSE data.
+	/** Interactive design fixture: real sessions render the same view with API/SSE data. */
 	const now = Date.now();
 	const iso = (secondsAgo: number) => new Date(now - secondsAgo * 1000).toISOString();
 	const model = 'GPT 5.6 Sol';
-	// `?state=draft` previews a new session: the opening card, then the orchestrator's first pass.
+	/** `?state=draft` previews a new session: the opening card, then the orchestrator's first pass. */
 	const draft = page.url.searchParams.get('state') === 'draft';
-	// `?state=failed` previews a failed review with Continue review.
+	/** `?state=failed` previews a failed review with Continue review. */
 	let failed = $state(page.url.searchParams.get('state') === 'failed');
 	let continuing = $state(false);
 	let awaitingPrompt = $state(draft);
@@ -71,7 +71,7 @@
 		status: 'done',
 		text: 'This pull request moves `sivir list` formatting into its own module and adds a `sivir status` command.\n\nRisk areas:\n- `status.ts`: an empty queue prints nothing instead of a message.\n- `list.ts`: column widths changed, so scripts that parse the output may break.\n\nYou can comment on the diff, ask about anything, or press Run full review.'
 	};
-	// `?state=fixes` previews fixes a reply asked for: one being written, one ready to apply.
+	/** `?state=fixes` previews fixes a reply asked for: one being written, one ready to apply. */
 	const fixesPreview = page.url.searchParams.get('state') === 'fixes';
 	const fixReply: ReviewChatMessage = {
 		id: 'fix-reply',
@@ -174,8 +174,10 @@
 			}
 		}
 	];
-	// `?state=running` previews artboard 3b: a review mid-flight. `approval` holds it at
-	// the plan's go-ahead; `verify` shows verifiers checking findings, one reply cut off.
+	/**
+	 * `?state=running` previews a review mid-flight. `approval` holds it at the plan's go-ahead; `verify`
+	 * shows verifiers checking findings, one reply cut off.
+	 */
 	const liveState = page.url.searchParams.get('state');
 	const running = liveState === 'running' || liveState === 'approval' || liveState === 'verify';
 	const verifyPreview = liveState === 'verify';
@@ -259,6 +261,7 @@
 			text: 'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI’m sending five specialists. Correctness and repository consistency always run; performance, docs and security were picked for this diff.'
 		}
 	];
+	/** The last reads are still going, so the preview shows the live labels. */
 	const liveTools: ReviewToolCall[] = [
 		['readDiff', 'src/rate-limit/limiter.ts', 400],
 		['search', 'allow\\( in src/', 1100],
@@ -269,12 +272,12 @@
 		assignmentId: ORCHESTRATOR_ID,
 		command: `${action} ${target}`,
 		input: { action: action as string, path: target as string },
-		// The last reads are still going, so the preview shows the live labels.
 		...(i >= 2
 			? { status: 'running' as const, exitCode: null }
 			: { status: 'done' as const, exitCode: 0, elapsedMs: ms as number }),
 		startedAt: iso(118 - i)
 	}));
+	const planSummary = 'I created 3 specialists for this review:\n\n- Test coverage\n- Complexity\n- Documentation';
 	const liveReasoning: ReviewReasoningEntry[] = [
 		{
 			id: 'live-reasoning',
@@ -286,7 +289,7 @@
 		}
 	];
 
-	/** Streams the canned reply in network-sized chunks, like a live provider. */
+	/** Like the real API, sending resolves at once and the canned reply streams after in network-sized chunks. */
 	async function send(assignmentId: string, text: string) {
 		const at = new Date().toISOString();
 
@@ -304,7 +307,6 @@
 		const update = (patch: Partial<ReviewChatMessage>) =>
 			(messages = messages.map((message) => (message.id === id ? { ...message, ...patch } : message)));
 
-		// Like the real API: sending resolves at once, the reply streams after.
 		void (async () => {
 			await new Promise((resolve) => setTimeout(resolve, 700));
 
@@ -403,7 +405,7 @@
 						continuing = false;
 					}
 				: null}
-			planSummary={'I created 3 specialists for this review:\n\n- Test coverage\n- Complexity\n- Documentation'}
+			{planSummary}
 			onSend={send}
 			onOpenDiff={() => (diffOpen = true)}
 			onStartReview={awaitingPrompt

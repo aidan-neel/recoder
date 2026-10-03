@@ -15,6 +15,7 @@
 	import type { FileDiff } from '@recoder/shared';
 	import SeverityPill from '../ui/severity-pill.svelte';
 	import { findingsStore, type Finding } from '$lib/findings/findings.svelte';
+	import { compareSeverity } from '$lib/findings/severity';
 	import { modelSettingsUi } from '$lib/settings/model-settings.svelte';
 	import { errorToast } from '$lib/shell/notify';
 	import { paletteContext } from '$lib/shell/palette.svelte';
@@ -44,13 +45,11 @@
 	const findings = $derived.by(() => {
 		if (!sessionScope) return [];
 
-		const rank = { high: 0, medium: 1, low: 2 };
-
 		const list = findingsStore.items.filter(
 			(f) => f.status === 'open' && (q === '' || `${f.title} ${f.body} ${f.file}`.toLowerCase().includes(q))
 		);
 
-		return list.sort((a, b) => rank[a.severity] - rank[b.severity]).slice(0, LIMIT);
+		return list.sort(compareSeverity).slice(0, LIMIT);
 	});
 
 	/** Path matches first, then files whose diff mentions the query. */

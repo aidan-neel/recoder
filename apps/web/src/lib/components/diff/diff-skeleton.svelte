@@ -4,7 +4,7 @@
 	/** Placeholder for the diff pane: the 44px file header, then code lines on the 22px diff grid. */
 	let { label = 'Loading diff' }: { label?: string } = $props();
 
-	// Indent and width per line, so the block reads as code rather than a paragraph.
+	/** Indent and width per line, so the block reads as code rather than a paragraph. */
 	const lines: [number, number][] = [
 		[0, 46],
 		[0, 0],

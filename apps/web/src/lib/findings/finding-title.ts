@@ -1,4 +1,7 @@
-/** Prefer authored titles; older saved findings use their opening heading or clause. */
+/**
+ * Prefer authored titles; older saved findings use their opening heading or clause. Punctuation inside
+ * code spans is not a clause boundary.
+ */
 export function findingTitle(body: string, supplied?: string): string {
 	const plain = (value: string) =>
 		value
@@ -14,7 +17,6 @@ export function findingTitle(body: string, supplied?: string): string {
 	if (authored) return authored;
 
 	const line = body.split('\n').find((value) => value.trim() && !value.trim().startsWith('```')) ?? '';
-	// Punctuation inside code identifiers is not a sentence/clause boundary.
 	const code: string[] = [];
 
 	const masked = line.replace(/`+([^`]+)`+/g, (_, value: string) => {

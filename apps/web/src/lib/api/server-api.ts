@@ -154,10 +154,6 @@ async function readSse(res: Response, onEvent: (data: unknown) => void): Promise
 	}
 }
 
-export function detectProvider(url: string): 'github' | 'gitlab' {
-	return /gitlab\./i.test(url) ? 'gitlab' : 'github';
-}
-
 export const serverApi = {
 	getCodexStatus: () => req<CodexConnection>('/api/settings/codex/status'),
 	connectCodex: () => req<CodexConnection>('/api/settings/codex/connect', { method: 'POST' }),

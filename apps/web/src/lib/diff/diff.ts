@@ -2,9 +2,9 @@
  * Frontend diff mocks + lookup. Parsing lives in @recoder/shared so the
  * server pipeline uses the same implementation.
  */
-import { parseUnifiedDiff, type DiffHunk, type DiffLine, type DiffLineType, type FileDiff } from '@recoder/shared';
+import { parseUnifiedDiff, type DiffLine, type FileDiff } from '@recoder/shared';
 
-export type { DiffHunk, DiffLine, DiffLineType, FileDiff };
+export type { DiffLine, FileDiff };
 
 const MOCK_LIMITER_DIFF = `diff --git a/src/rate-limit/limiter.ts b/src/rate-limit/limiter.ts
 --- a/src/rate-limit/limiter.ts
@@ -48,9 +48,6 @@ const MOCK_LIMITER_DIFF = `diff --git a/src/rate-limit/limiter.ts b/src/rate-lim
 +    return bucket;
    }
 `;
-
-/** Stand-in file diff until the review pipeline produces real ones. */
-export const mockLimiterDiff: FileDiff = parseUnifiedDiff(MOCK_LIMITER_DIFF)[0];
 
 const MOCK_INDEX_DIFF = `diff --git a/src/rate-limit/index.ts b/src/rate-limit/index.ts
 --- a/src/rate-limit/index.ts

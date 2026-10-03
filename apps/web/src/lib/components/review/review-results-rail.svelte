@@ -8,6 +8,7 @@
 	import FindingSeverity from '../findings/finding-severity.svelte';
 	import type { ReviewingFinding } from './reviewing-view.svelte';
 	import { formatAgentName } from '$lib/findings/threads.svelte';
+	import { compareSeverity } from '$lib/findings/severity';
 	import { groupProgress, groupSpecialists } from '$lib/review/specialist-groups';
 	import { modelLabel } from '$lib/settings/model-settings.svelte';
 
@@ -34,8 +35,7 @@
 		children
 	}: Props = $props();
 
-	const RANK = { high: 0, medium: 1, low: 2 } as const;
-	const ranked = $derived([...findings].sort((a, b) => RANK[a.severity] - RANK[b.severity]));
+	const ranked = $derived([...findings].sort(compareSeverity));
 	const finished = $derived(specialists.filter((item) => item.status === 'done').length);
 	const partialPaths = $derived([
 		...new Set(coverageGaps.filter((gap) => gap.state === 'partial').map((gap) => gap.path))
@@ -135,7 +135,7 @@
 							{#if partialPaths.length}
 								{coverage.partial} partial in <code>{partialPaths[0]}</code>{partialPaths.length > 1
 									? ` and ${partialPaths.length - 1} more`
-									: ''}.{#if partialReason}{' '}{partialReason}{/if}
+									: ''}.{#if partialReason}{` ${partialReason}`}{/if}
 							{:else if coverage.reviewed === coverage.total}
 								Every changed hunk was reviewed.
 							{:else}

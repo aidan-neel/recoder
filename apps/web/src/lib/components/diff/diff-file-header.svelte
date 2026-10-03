@@ -1,9 +1,9 @@
 <script lang="ts">
 	import FileIcon from '@lucide/svelte/icons/file';
 	import { Checkbox } from '@sivir-ui/svelte/components/checkbox';
-	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import type { FileDiff } from '$lib/diff/diff';
 	import { diffPrefs } from '$lib/diff/diff-prefs.svelte';
+	import DiffModeSwitch from './diff-mode-switch.svelte';
 
 	let { diff }: { diff: FileDiff } = $props();
 	const slash = $derived(diff.path.lastIndexOf('/'));
@@ -32,15 +32,5 @@
 		checked={diffPrefs.isViewed(diff.path)}
 		onCheckedChange={(checked: boolean) => diffPrefs.setViewed(diff.path, checked)}
 	/>
-	<Tabs.Root
-		value={diffPrefs.mode}
-		onValueChange={(value) => diffPrefs.setMode(value as 'unified' | 'split')}
-		variant="segmented"
-		class="view-switch diff-mode-switch"
-	>
-		<Tabs.List {...{ 'aria-label': 'Diff layout' }}>
-			<Tabs.Trigger value="unified">Unified</Tabs.Trigger>
-			<Tabs.Trigger value="split">Split</Tabs.Trigger>
-		</Tabs.List>
-	</Tabs.Root>
+	<DiffModeSwitch />
 </header>

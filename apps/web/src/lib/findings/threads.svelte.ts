@@ -3,7 +3,9 @@
  * Only F-01 is seeded; other findings start empty and accept messages.
  */
 
-export interface ThreadMessage {
+import { ROLE_LABELS } from '@recoder/shared';
+
+interface ThreadMessage {
 	id: string;
 	role: 'agent' | 'user';
 	author: string;
@@ -19,25 +21,10 @@ export interface Thread {
 	messages: ThreadMessage[];
 }
 
-export const PARTICIPANT_MODEL = '32b';
+const PARTICIPANT_MODEL = '32b';
 
 /** Display labels for agent ids (ids stay lowercase for backend payloads). */
-const AGENT_LABELS: Record<string, string> = {
-	security: 'Security',
-	orchestrator: 'Orchestrator',
-	perf: 'Perf',
-	correctness: 'Correctness',
-	docs: 'Docs',
-	dedup: 'Dedup',
-	patterns: 'Repository consistency',
-	testing: 'Testing',
-	errors: 'Errors',
-	concurrency: 'Concurrency',
-	api: 'API',
-	impact: 'Impact',
-	frontend: 'Frontend',
-	data: 'Data & state'
-};
+const AGENT_LABELS: Record<string, string> = { ...ROLE_LABELS, orchestrator: 'Orchestrator' };
 
 export function formatAgentName(id?: string | null): string {
 	if (!id) return '';
@@ -95,17 +82,17 @@ class ThreadStore {
 		return this.threads[findingId];
 	}
 
+	/** The finding's thread, created empty on first use. */
+	private ensure(findingId: string): Thread {
+		return (this.threads[findingId] ??= { findingId, messages: [] });
+	}
+
 	send(findingId: string, body: string, hunkRef?: string): void {
 		const text = body.trim();
 
 		if (!text) return;
 
-		let thread = this.threads[findingId];
-
-		if (!thread) {
-			thread = { findingId, messages: [] };
-			this.threads[findingId] = thread;
-		}
+		const thread = this.ensure(findingId);
 
 		thread.messages.push({
 			id: crypto.randomUUID(),
@@ -117,12 +104,7 @@ class ThreadStore {
 	}
 
 	reply(findingId: string, author: string, body: string, model?: string): void {
-		let thread = this.threads[findingId];
-
-		if (!thread) {
-			thread = { findingId, messages: [] };
-			this.threads[findingId] = thread;
-		}
+		const thread = this.ensure(findingId);
 
 		thread.messages.push({
 			id: crypto.randomUUID(),
@@ -136,12 +118,7 @@ class ThreadStore {
 
 	/** Insert an empty agent message for an in-flight stream; returns its id. */
 	beginReply(findingId: string, author: string): string {
-		let thread = this.threads[findingId];
-
-		if (!thread) {
-			thread = { findingId, messages: [] };
-			this.threads[findingId] = thread;
-		}
+		const thread = this.ensure(findingId);
 
 		const id = crypto.randomUUID();
 

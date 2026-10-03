@@ -73,6 +73,7 @@
 	const models = $derived(modelSettingsUi.models);
 	/** Models by provider, providers A to Z. */
 	const groups = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived.by, not reactive state
 		const byProvider = new Map<string, ModelOption[]>();
 
 		for (const option of models) byProvider.set(option.provider, [...(byProvider.get(option.provider) ?? []), option]);
@@ -86,9 +87,9 @@
 	/** The label only animates when the developer changes it, never when it first loads. */
 	let picked = $state(false);
 
+	/** Switching to a model that lacks the current effort resets to its default. */
 	function pickModel(next: ModelOption): void {
 		picked = true;
-		// Switching to a model that lacks the current effort resets to its default.
 		onSelect({ modelId: next.id, effort: resolveEffort(next, effort) });
 	}
 
@@ -139,7 +140,6 @@
 					<DropdownMenu.Separator />
 				{/if}
 				{#if groups.length > 1}
-					<!-- Many providers: one submenu each, so hundreds of models never share a list. -->
 					{#each groups as [provider, options] (provider)}
 						<DropdownMenu.Sub>
 							<DropdownMenu.SubTrigger class="model-menu-row">

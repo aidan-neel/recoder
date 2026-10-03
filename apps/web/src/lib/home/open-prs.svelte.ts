@@ -33,15 +33,14 @@ class OpenPrsState {
 	/** The server rewrites the brief at most every 12 hours; ask once per app session. */
 	briefRequested = false;
 
+	/** Shows a brief and keeps it for the next visit when storage allows. */
 	setBrief(brief: HomeBriefResponse | null): void {
 		this.brief = brief;
 
 		try {
 			if (brief) localStorage.setItem(BRIEF_KEY, JSON.stringify(brief));
 			else localStorage.removeItem(BRIEF_KEY);
-		} catch {
-			// Not persisted; it still shows this visit.
-		}
+		} catch {}
 	}
 
 	private started = false;
@@ -53,7 +52,7 @@ class OpenPrsState {
 		return this.repos.reduce((n, repo) => n + (this.prsByRepo[repo.id]?.length ?? 0), 0);
 	}
 
-	/** Load once per app session; later calls are no-ops. */
+	/** Load once per app session; later calls are no-ops. A cached list paints at once and revalidates behind it. */
 	async load(): Promise<void> {
 		if (this.started) return;
 		this.started = true;
@@ -61,7 +60,6 @@ class OpenPrsState {
 		const cached = readCache<{ repos: Repo[]; prsByRepo: Record<string, PullRequest[]> }>('open-prs');
 
 		if (cached) {
-			// Paint the last list at once and revalidate behind it.
 			this.repos = cached.repos;
 			this.prsByRepo = cached.prsByRepo;
 			this.loading = false;
@@ -104,6 +102,7 @@ class OpenPrsState {
 		writeCache('open-prs', { repos: $state.snapshot(this.repos), prsByRepo: $state.snapshot(prsByRepo) });
 	}
 
+	/** Re-fetches repos and their PRs. On failure the last list stays; per-repo errors render inline. */
 	async refresh(): Promise<void> {
 		if (this.refreshing) return;
 		this.refreshing = true;
@@ -120,7 +119,6 @@ class OpenPrsState {
 			await this.loadAll(true);
 			this.persist();
 		} catch {
-			// Keep the last list; per-repo errors render inline.
 		} finally {
 			this.refreshing = false;
 		}

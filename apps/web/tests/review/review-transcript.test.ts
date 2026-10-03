@@ -46,8 +46,7 @@ test('tools form stable groups between messages and summary dumps stay out of th
 });
 
 test('persisted malformed retrievals render through both snapshots and live events', () => {
-	// Actual legacy shape: the model supplied type instead of action, and the
-	// failed retrieval was persisted without a command after JSON serialization.
+	/** Legacy shape: the model sent `type` instead of `action`, and the failed retrieval was saved without a command. */
 	const malformed = JSON.parse(
 		JSON.stringify({
 			id: 'tool_7',

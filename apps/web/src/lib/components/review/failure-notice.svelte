@@ -32,11 +32,10 @@
 	$effect(() => {
 		if (signIn && chatGptStatus.signedIn === null) void chatGptStatus.check();
 	});
-	// Once signed in, the way forward is to try again.
+	/** Once ChatGPT is signed in the way forward is to try again, and a sign-in prompt with nothing to retry is done. */
 	const needsSignIn = $derived(signIn && chatGptStatus.signedIn !== true);
 </script>
 
-<!-- A sign-in prompt with nothing to retry has done its job once ChatGPT is signed in. -->
 {#if usageLimit}
 	<UsageLimitNotice limit={usageLimit} {onRetry} {retrying} class={className} />
 {:else if needsSignIn || !signIn || onRetry}

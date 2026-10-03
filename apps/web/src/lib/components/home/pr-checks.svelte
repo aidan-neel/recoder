@@ -53,11 +53,14 @@
 	const passed = $derived((checks ?? []).filter((c) => c.state === 'passed').length);
 	const tone = $derived(!checks ? 'idle' : failed ? 'failed' : active ? 'running' : checks.length ? 'passed' : 'idle');
 
+	/**
+	 * Loads the review's checks. The review can change while a load is in flight: its checks are never filed
+	 * under the new one, and the new review loads once this one settles (its own call returned early).
+	 */
 	async function load(): Promise<void> {
 		if (loading) return;
 		loading = true;
 
-		// The review can change while a load is in flight; never file its checks under the new one.
 		const id = reviewId;
 
 		try {
@@ -73,7 +76,6 @@
 			if (id === reviewId) error = e instanceof Error ? e.message : 'Could not load checks.';
 		} finally {
 			loading = false;
-			// The switch's own load() returned early while this one ran; load the new review now.
 			if (id !== reviewId) void load();
 		}
 	}
@@ -81,7 +83,6 @@
 	$effect(() => {
 		void reviewId;
 
-		// Untracked: load() reads and writes its own state.
 		untrack(() => {
 			const cached = lastChecks.get(reviewId);
 
@@ -146,5 +147,4 @@
 	</Popover.Root>
 {/if}
 
-<!-- Applying only edits the checkout; checks rerun once the developer pushes. -->
 <CheckFixDialog {reviewId} check={fixing} bind:open={fixOpen} onApplied={() => setTimeout(() => void load(), 5000)} />

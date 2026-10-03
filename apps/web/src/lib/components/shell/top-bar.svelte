@@ -67,7 +67,7 @@
 		document.getElementById('home-filter')?.focus();
 	}
 
-	/* ── Overflow: tabs that don't fit move into a menu; the active tab stays visible. ── */
+	/** Overflow: tabs that don't fit move into a menu, and the active tab stays visible. */
 	let regionWidth = $state(0);
 	let measureEl = $state<HTMLElement>();
 	let widths = $state<number[]>([]);
@@ -128,7 +128,7 @@
 	const visibleTabs = $derived(tabs.filter((tab) => visibleIds.includes(tab.id)));
 	const hiddenTabs = $derived(tabs.filter((tab) => !visibleIds.includes(tab.id)));
 
-	/* ── Context menu: acts on the tab under the pointer, or the bar itself. ── */
+	/** The context menu acts on the tab under the pointer, or the bar itself. */
 	let menuTabId = $state<string | null>(null);
 	const menuTab = $derived(tabs.find((tab) => tab.id === menuTabId) ?? null);
 	const menuTabUrl = $derived(recentSessions.reviews.find((review) => review.id === menuTabId)?.prUrl ?? null);
@@ -154,23 +154,12 @@
 		failed: 'var(--danger)',
 		high: 'var(--success)'
 	};
-</script>
 
-{#snippet tabBody(tab: SessionTab)}
-	<span class="flex shrink-0 items-center" style:color={toneColor[tab.tone]}>
-		{#if tab.tone === 'running'}
-			<LoaderCircle size={12} strokeWidth={1.75} class="spin" aria-hidden="true" />
-		{:else}
-			<GitPullRequest size={13} strokeWidth={1.75} aria-hidden="true" />
-		{/if}
-	</span>
-	<span class="whitespace-nowrap">{tab.repo}</span>
-	{#if tab.pr}<span class="font-mono text-[11.5px] text-fg-faint">{tab.pr}</span>{/if}
-	{#if tab.badge}<span class="tab-badge" data-tone={tab.tone}>{tab.badge}</span>{/if}
-{/snippet}
-
-<svelte:window
-	onkeydown={(event) => {
+	/**
+	 * Global shortcuts: ⌘K palette, ⌘, settings, Ctrl+Tab / Ctrl+Shift+Tab next / previous tab (Home, then
+	 * sessions, wrapping), ⌘1 / ⌘2 session view, and R to review a pull request unless typing or in a dialog.
+	 */
+	function onShortcut(event: KeyboardEvent): void {
 		if (event.defaultPrevented) return;
 
 		const mod = event.metaKey || event.ctrlKey;
@@ -189,7 +178,6 @@
 			return;
 		}
 
-		// Ctrl+Tab / Ctrl+Shift+Tab: next / previous tab (Home, then sessions), wrapping.
 		if (event.ctrlKey && event.key === 'Tab' && !event.altKey && !event.metaKey) {
 			if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
 			event.preventDefault();
@@ -210,7 +198,6 @@
 			return;
 		}
 
-		// R: review a pull request, unless typing or a dialog is open.
 		const target = event.target as HTMLElement | null;
 
 		if (
@@ -224,8 +211,23 @@
 			event.preventDefault();
 			void newReview();
 		}
-	}}
-/>
+	}
+</script>
+
+{#snippet tabBody(tab: SessionTab)}
+	<span class="flex shrink-0 items-center" style:color={toneColor[tab.tone]}>
+		{#if tab.tone === 'running'}
+			<LoaderCircle size={12} strokeWidth={1.75} class="spin" aria-hidden="true" />
+		{:else}
+			<GitPullRequest size={13} strokeWidth={1.75} aria-hidden="true" />
+		{/if}
+	</span>
+	<span class="whitespace-nowrap">{tab.repo}</span>
+	{#if tab.pr}<span class="font-mono text-[11.5px] text-fg-faint">{tab.pr}</span>{/if}
+	{#if tab.badge}<span class="tab-badge" data-tone={tab.tone}>{tab.badge}</span>{/if}
+{/snippet}
+
+<svelte:window onkeydown={onShortcut} />
 
 <header class="top-bar flex h-[46px] shrink-0 items-center gap-1 bg-chrome pr-[10px] pl-2 select-none">
 	<nav aria-label="Sessions" class="relative flex min-w-0 flex-1 items-center" bind:clientWidth={regionWidth}>
@@ -342,7 +344,6 @@
 			</ContextMenu.Content>
 		</ContextMenu.Root>
 
-		<!-- Measures every tab at rest so overflow can be computed without flicker. -->
 		<div bind:this={measureEl} class="top-tabs-measure" aria-hidden="true">
 			<span class="top-tab-measure">
 				<Inbox size={14} strokeWidth={1.75} />Home{#if openPrs.count}<span class="font-mono text-[11.5px]"

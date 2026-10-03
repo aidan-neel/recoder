@@ -7,9 +7,7 @@
 	import Search from '@lucide/svelte/icons/search';
 	import Wrench from '@lucide/svelte/icons/wrench';
 	import type { Snippet } from 'svelte';
-	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import { Button } from '@sivir-ui/svelte/components/button';
-	import * as Card from '@sivir-ui/svelte/components/card';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Popover from '@sivir-ui/svelte/components/popover';
@@ -24,16 +22,17 @@
 	} from '$lib/findings/findings.svelte';
 	import { sessionFile } from '$lib/session/session-file.svelte';
 	import { threadsStore } from '$lib/findings/threads.svelte';
-	import { applyReadyFixes, fixFindings, hasReadyFix } from '$lib/findings/fixes';
+	import { fixFindings, hasReadyFix } from '$lib/findings/fixes';
+	import ApplyFixesDialog from './apply-fixes-dialog.svelte';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 
 	/**
 	 * `trailing`: status and actions shown before Fix all at the toolbar's right end.
 	 * `part`: 'actions' renders only those actions + Fix all (the session header);
 	 * 'nav' renders the findings stepper, severity filters and search as a
-	 * sidebar section; 'all' is the original single toolbar.
+	 * sidebar section.
 	 */
-	let { trailing, part = 'all' }: { trailing?: Snippet; part?: 'all' | 'nav' | 'actions' } = $props();
+	let { trailing, part }: { trailing?: Snippet; part: 'nav' | 'actions' } = $props();
 	let searchOpen = $state(false);
 	let query = $state('');
 	let index = $state(0);
@@ -73,14 +72,13 @@
 		document.getElementById(`finding-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 
-	/** Jump to a finding, switching files first when it lives elsewhere. */
+	/** Jump to a finding. One in another file switches files and waits for the new diff to render first. */
 	async function jumpTo(finding: Finding): Promise<void> {
 		searchOpen = false;
 
 		if (finding.file !== sessionFile.currentId) {
 			sessionFile.select(finding.file);
 			await tick();
-			// Let the new diff render before scrolling to the card.
 			await tick();
 		}
 
@@ -126,7 +124,7 @@
 	}
 
 	async function copyFindings(): Promise<void> {
-		let done = false;
+		let done: boolean;
 
 		if (typeof navigator !== 'undefined' && navigator.clipboard) {
 			try {
@@ -169,8 +167,10 @@
 		return lines.join('\n').trimEnd();
 	});
 
-	/* Fix all: specialists write a patch per finding in the background; each is
-	   reviewed on its finding. The button follows along, then applies the ready ones. */
+	/**
+	 * Fix all: specialists write a patch per finding in the background, each reviewed on its finding.
+	 * The button follows along, then applies the ready ones.
+	 */
 	const openList = $derived(openItems.filter((f) => f.status === 'open'));
 	const writing = $derived(openList.filter((f) => findingsStore.suggestions[f.id]?.status === 'loading').length);
 	const readyFixes = $derived(openList.filter(hasReadyFix));
@@ -186,7 +186,6 @@
 
 	const fixAllDisabled = $derived(toFix.length === 0 || !reviewId);
 	$effect(() => {
-		// Only the instance that owns Fix all registers it with ⌘K.
 		if (part === 'nav') return;
 		paletteContext.fixAll = fixAllDisabled ? null : { count: toFix.length, run: () => startFixAll() };
 
@@ -200,7 +199,7 @@
 		void fixFindings(targets);
 	}
 
-	// Search findings without changing the active finding until a result is chosen.
+	/** ⌘F opens the findings search, which leaves the active finding alone until a result is chosen. */
 	function onKeydown(event: KeyboardEvent): void {
 		if (!event.defaultPrevented && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') {
 			event.preventDefault();
@@ -330,59 +329,6 @@
 	{/if}
 {:else}
 	<div class="findings-toolbar flex w-full min-w-0 max-w-full shrink-0 flex-wrap items-center gap-2">
-		{#if part === 'all'}
-			<Card.Root
-				class="!h-8 shrink-0 !flex-row items-center !gap-0 rounded-[9px] border-0 bg-transparent !p-0 shadow-none"
-			>
-				<Popover.Root bind:open={searchOpen} placement="bottom-start">
-					<Popover.Trigger
-						variant="ghost"
-						class="!h-8 gap-2 rounded-s-[9px] rounded-e-none !px-2.5 text-sm !font-normal"
-						aria-label="Search findings"
-					>
-						Findings
-						<span class="font-mono text-xs tabular-nums text-foreground-muted"
-							>{visible.length === 0 ? 0 : position + 1}/{visible.length}</span
-						>
-					</Popover.Trigger>
-					<Popover.Content class="w-[28rem] max-w-[calc(100vw-2rem)]" surfaceClass="!gap-0 !p-0"
-						>{@render searchPanel()}</Popover.Content
-					>
-				</Popover.Root>
-				<Button
-					variant="quiet"
-					size="icon"
-					class="!size-8 !min-w-8 rounded-none text-foreground-muted hover:text-foreground"
-					aria-label="Previous finding"
-					disabled={visible.length === 0}
-					onclick={() => go(position - 1)}
-				>
-					<ChevronUp size={14} />
-				</Button>
-				<Button
-					variant="quiet"
-					size="icon"
-					class="!size-8 !min-w-8 rounded-s-none rounded-e-[9px] text-foreground-muted hover:text-foreground"
-					aria-label="Next finding"
-					title="Next finding"
-					disabled={visible.length === 0}
-					onclick={() => go(position + 1)}
-				>
-					<ChevronDown size={14} />
-				</Button>
-			</Card.Root>
-
-			{#each SEVERITIES as severity (severity)}
-				<FindingSeverity
-					{severity}
-					count={counts[severity]}
-					interactive
-					pressed={findingsStore.isSeverityShown(severity)}
-					onToggle={() => toggle(severity)}
-				/>
-			{/each}
-		{/if}
-
 		<div class="findings-toolbar-end">
 			{@render trailing?.()}
 			{#if writing}
@@ -410,25 +356,6 @@
 			{/if}
 		</div>
 
-		<AlertDialog.Root bind:open={applyConfirmOpen}>
-			<AlertDialog.Content>
-				<AlertDialog.Header>
-					<AlertDialog.Title>Apply {readyFixes.length} {readyFixes.length === 1 ? 'fix' : 'fixes'}?</AlertDialog.Title>
-					<AlertDialog.Description
-						>Each fix is applied to the review checkout. Nothing is committed or pushed until you do it from Changes.</AlertDialog.Description
-					>
-				</AlertDialog.Header>
-				<AlertDialog.Footer>
-					<AlertDialog.Exit>Cancel</AlertDialog.Exit>
-					<AlertDialog.Confirm
-						variant="primary"
-						onclick={() => {
-							applyConfirmOpen = false;
-							void applyReadyFixes(readyFixes);
-						}}>Apply {readyFixes.length} {readyFixes.length === 1 ? 'fix' : 'fixes'}</AlertDialog.Confirm
-					>
-				</AlertDialog.Footer>
-			</AlertDialog.Content>
-		</AlertDialog.Root>
+		<ApplyFixesDialog bind:open={applyConfirmOpen} ready={readyFixes} />
 	</div>
 {/if}

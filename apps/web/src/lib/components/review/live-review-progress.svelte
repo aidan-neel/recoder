@@ -72,8 +72,10 @@
 
 		return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
 	}
-	// One entry per id (latest wins): reviews saved before follow-up ids were made unique can repeat one.
-	// Reviews saved before every specialist had to finish can carry a `partial` status; it meant finished.
+	/**
+	 * One entry per id, latest wins: reviews saved before follow-up ids were made unique can repeat one.
+	 * Reviews saved before every specialist had to finish can carry a `partial` status, which meant finished.
+	 */
 	const assignments = $derived<ReviewAssignment[]>([
 		...new Map(
 			(progress.assignments ?? []).map((assignment) => [
@@ -82,7 +84,7 @@
 			])
 		).values()
 	]);
-	// Planner/consolidation events are review-level, never another correctness assignment.
+	/** Planner/consolidation events are review-level, never another correctness assignment. */
 	const pipelineId = '__pipeline';
 	const confirmed = $derived(status === 'passed');
 	const viewFindings = $derived<ReviewingFinding[]>(
@@ -99,7 +101,7 @@
 				}))
 			: []
 	);
-	// Indexes match the steps in review-steps.svelte.
+	/** Indexes match the steps in review-steps.svelte. */
 	const stage = $derived(reviewStage(progress, status));
 	const stageIndex = $derived(stage.index);
 	const currentStage = $derived(stage.label);

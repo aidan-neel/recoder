@@ -58,19 +58,20 @@ export function anchorToggle(
 		return Math.max(ceiling, Math.min(before, fit));
 	};
 
+	/** Undoes drift each frame and on every scroll, so any other scroll is undone before it paints. */
 	const hold = () => {
 		const drift = trigger.getBoundingClientRect().top - targetTop();
 
 		if (Math.abs(drift) > 0.5) container.scrollTop += drift;
 	};
 
-	// The chat's stick-to-bottom re-pins with scrollTo() on every resize while
-	// the panel grows; that would fight the anchor each frame (the page lurches,
-	// then snaps back). Mute it on this viewport for the transition only.
+	/**
+	 * The chat's stick-to-bottom re-pins with scrollTo() on every resize while the panel grows, which would
+	 * fight the anchor each frame. It is muted on this viewport for the transition only.
+	 */
 	const muted = !Object.prototype.hasOwnProperty.call(container, 'scrollTo');
 
 	if (muted) container.scrollTo = () => {};
-	// Corrects on scroll too, so any other scroll is undone before it paints.
 	container.addEventListener('scroll', hold);
 
 	const tick = () => {

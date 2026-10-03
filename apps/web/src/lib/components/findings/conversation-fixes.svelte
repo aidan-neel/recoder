@@ -1,10 +1,10 @@
 <script lang="ts">
 	import Check from '@lucide/svelte/icons/check';
-	import * as AlertDialog from '@sivir-ui/svelte/components/alert-dialog';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { findingsStore } from '$lib/findings/findings.svelte';
-	import { applyReadyFixes, hasReadyFix } from '$lib/findings/fixes';
+	import { hasReadyFix } from '$lib/findings/fixes';
+	import ApplyFixesDialog from './apply-fixes-dialog.svelte';
 	import FindingSeverity from './finding-severity.svelte';
 	import FixButton from './fix-button.svelte';
 	import FixStatus from './fix-status.svelte';
@@ -54,24 +54,5 @@
 		{/each}
 	</section>
 
-	<AlertDialog.Root bind:open={confirmOpen}>
-		<AlertDialog.Content>
-			<AlertDialog.Header>
-				<AlertDialog.Title>Apply {count(ready.length)}?</AlertDialog.Title>
-				<AlertDialog.Description
-					>Each fix is applied to the review checkout. Nothing is committed or pushed until you do it from Changes.</AlertDialog.Description
-				>
-			</AlertDialog.Header>
-			<AlertDialog.Footer>
-				<AlertDialog.Exit>Cancel</AlertDialog.Exit>
-				<AlertDialog.Confirm
-					variant="primary"
-					onclick={() => {
-						confirmOpen = false;
-						void applyReadyFixes(ready);
-					}}>Apply {count(ready.length)}</AlertDialog.Confirm
-				>
-			</AlertDialog.Footer>
-		</AlertDialog.Content>
-	</AlertDialog.Root>
+	<ApplyFixesDialog bind:open={confirmOpen} {ready} />
 {/if}

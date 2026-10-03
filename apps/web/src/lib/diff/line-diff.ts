@@ -2,7 +2,8 @@ import type { FileDiffLine } from '@sivir-ui/svelte/components/file-diff';
 
 /**
  * Line diff of two texts (LCS), as rows for Sivir FileDiff. Guidelines are a
- * few hundred lines at most, so the quadratic table is fine.
+ * few hundred lines at most, so the quadratic table is fine. Within a change,
+ * removals come before additions, as unified diffs read.
  */
 export function lineDiff(before: string, after: string): FileDiffLine[] {
 	const a = before.replace(/\n$/, '').split('\n');
@@ -29,7 +30,6 @@ export function lineDiff(before: string, after: string): FileDiffLine[] {
 			i++;
 			j++;
 		} else if (i < a.length && (j === b.length || lcs[i + 1][j] >= lcs[i][j + 1])) {
-			// Removals before additions within a change, as unified diffs read.
 			rows.push({ type: 'remove', oldLineNumber: i + 1, content: a[i] });
 			i++;
 		} else {

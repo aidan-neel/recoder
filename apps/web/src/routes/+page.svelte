@@ -1,13 +1,10 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import Play from '@lucide/svelte/icons/play';
 	import RefreshCw from '@lucide/svelte/icons/refresh-cw';
 	import Search from '@lucide/svelte/icons/search';
 	import * as Alert from '@sivir-ui/svelte/components/alert';
-	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
-	import * as HoverCard from '@sivir-ui/svelte/components/hover-card';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
@@ -15,25 +12,22 @@
 	import { keepPillAligned } from '$lib/shell/tab-pill';
 	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import type { ProviderAuth, PullPreview, PullRequest, Repo, Review } from '@recoder/shared';
+	import {
+		latestReviews,
+		type ProviderAuth,
+		type PullPreview,
+		type PullRequest,
+		type Repo,
+		type Review
+	} from '@recoder/shared';
+	import HomeBrief from '$lib/components/home/home-brief.svelte';
 	import PrRow from '$lib/components/home/pr-row.svelte';
+	import PrSkeletonRows from '$lib/components/home/pr-skeleton-rows.svelte';
 	import ProviderMark from '$lib/components/settings/provider-mark.svelte';
 	import SetupChecklist from '$lib/components/home/setup-checklist.svelte';
 	import Skeleton from '$lib/components/ui/skeleton.svelte';
-	import {
-		briefSegments,
-		dayPart,
-		fallbackBrief,
-		firstName,
-		highCount,
-		latestReviews,
-		pickToOpen,
-		pickToReview,
-		prKey,
-		prStatus,
-		shortAge,
-		type BriefPick
-	} from '$lib/home/home';
+	import { prKey, type BriefPick } from '$lib/home/home';
+	import { matchesPr, parsePrNumber, repoForPaste } from '$lib/home/pr-filter';
 	import { hoverHighlight } from '$lib/shell/hover-highlight';
 	import { modelSettingsUi } from '$lib/settings/model-settings.svelte';
 	import { errorToast } from '$lib/shell/notify';
@@ -41,19 +35,18 @@
 	import { recentSessions } from '$lib/session/recent-sessions.svelte';
 	import { serverApi } from '$lib/api/server-api';
 	import { sessionState } from '$lib/session/session-state.svelte';
-	import { shellState } from '$lib/shell/shell-state.svelte';
 
 	let filter = $state('');
 	let repoChip = $state('all');
 	let filterEl = $state<HTMLInputElement>();
+
 	/** Review request in flight, by `repoId#pr`. */
 	let starting = $state<string | null>(null);
+
 	let preview = $state<PullPreview | null>(null);
 	let previewRepoId = $state<string | null>(null);
 	let fetchingPreview = $state(false);
 	let prError = $state<string | null>(null);
-	let briefLoading = $state(false);
-	let briefFailed = $state(false);
 
 	onMount(() => {
 		void openPrs.load();
@@ -61,15 +54,13 @@
 		void loadAuth();
 	});
 
-	/* ── First run ─────────────────────────────────────────────── */
-
 	let auth = $state<{ github: ProviderAuth; gitlab: ProviderAuth } | null>(null);
 
+	/** Reads provider sign-in; unknown reads as not connected, and a tracked repo still counts. */
 	async function loadAuth(): Promise<void> {
 		try {
 			auth = await serverApi.authStatus();
 		} catch {
-			// Unknown reads as not connected; a tracked repo still counts.
 			const none = (provider: 'github' | 'gitlab'): ProviderAuth => ({
 				provider,
 				available: false,
@@ -81,8 +72,9 @@
 		}
 	}
 
-	// Settings is where every setup step happens, so recheck when it closes.
+	/** Settings is where every setup step happens, so auth is rechecked when it closes. */
 	let settingsWasOpen = false;
+
 	$effect(() => {
 		const open = modelSettingsUi.open;
 
@@ -101,7 +93,6 @@
 
 	const needsModel = $derived(!openPrs.apiDown && !!modelSettingsUi.config && !modelSettingsUi.config.configured);
 	const latest = $derived(latestReviews(recentSessions.reviews));
-	const repoById = $derived(new Map(openPrs.repos.map((repo) => [repo.id, repo] as const)));
 
 	/** Every open PR with its repo and latest review; the brief and the actions read this. */
 	const items = $derived.by<BriefPick[]>(() =>
@@ -110,59 +101,26 @@
 		)
 	);
 
-	/* ── Filtering ─────────────────────────────────────────────── */
-
-	function parsePrNumber(text: string): number | null {
-		const trimmed = text.trim();
-
-		if (trimmed === '') return null;
-
-		const url = trimmed.match(/(?:pull|merge_requests)\/(\d+)/i);
-		const digits = (url?.[1] ?? (/^#?\d+$/.test(trimmed) ? trimmed : '')).replace(/\D/g, '');
-
-		if (digits === '') return null;
-
-		const n = Number.parseInt(digits, 10);
-
-		return Number.isSafeInteger(n) && n > 0 ? n : null;
-	}
-
-	/** The tracked repo a pasted PR belongs to (URL match), else the chip's repo, else the first. */
-	function repoForPaste(text: string): Repo | undefined {
-		const url = text.match(/(?:github|gitlab)\.com\/([^/\s]+)\/([^/\s#?]+)/i);
-
-		if (url) {
-			const slug = `${url[1]}/${url[2]}`.toLowerCase();
-
-			return openPrs.repos.find((r) => r.name.toLowerCase() === slug || r.url.toLowerCase().includes(slug));
-		}
-
-		return repoById.get(repoChip) ?? openPrs.repos[0];
-	}
-
 	const query = $derived(filter.trim().toLowerCase());
 	const pastedNumber = $derived(parsePrNumber(filter));
 	const isUrl = $derived(/https?:\/\//i.test(filter));
 
-	function matches(pr: PullRequest, repo: Repo): boolean {
-		if (query === '') return true;
-		if (isUrl) return pr.number === pastedNumber && repoForPaste(filter)?.id === repo.id;
-
-		return (
-			repo.name.toLowerCase().includes(query) ||
-			`#${pr.number}`.includes(query) ||
-			String(pr.number).includes(query) ||
-			pr.title.toLowerCase().includes(query) ||
-			pr.headRef.toLowerCase().includes(query) ||
-			pr.author.toLowerCase().includes(query)
-		);
-	}
+	/** The tracked repo a pasted PR belongs to, falling back to the chosen repo chip. */
+	const pastedRepo = $derived(
+		repoForPaste(
+			filter,
+			openPrs.repos,
+			openPrs.repos.find((repo) => repo.id === repoChip)
+		)
+	);
 
 	const groups = $derived.by(() =>
 		openPrs.repos
 			.filter((repo) => repoChip === 'all' || repo.id === repoChip)
 			.map((repo) => {
-				let prs = (openPrs.prsByRepo[repo.id] ?? []).filter((pr) => matches(pr, repo));
+				let prs = (openPrs.prsByRepo[repo.id] ?? []).filter((pr) =>
+					matchesPr(pr, repo, { query, isUrl, pastedNumber, pastedRepo })
+				);
 
 				if (preview && previewRepoId === repo.id && !prs.some((pr) => pr.number === preview!.pr.number)) {
 					prs = [preview.pr, ...prs];
@@ -181,12 +139,12 @@
 		pastedNumber !== null &&
 			openPrs.repos.length > 0 &&
 			!anyLoading &&
-			!items.some((item) => item.pr.number === pastedNumber && item.repo.id === repoForPaste(filter)?.id) &&
+			!items.some((item) => item.pr.number === pastedNumber && item.repo.id === pastedRepo?.id) &&
 			preview?.pr.number !== pastedNumber
 	);
 
 	async function fetchPreview(n: number): Promise<void> {
-		const repo = repoForPaste(filter);
+		const repo = pastedRepo;
 
 		if (!repo || fetchingPreview) return;
 		fetchingPreview = true;
@@ -201,8 +159,6 @@
 			fetchingPreview = false;
 		}
 	}
-
-	/* ── Sessions ──────────────────────────────────────────────── */
 
 	/** Every review opens on its conversation. */
 	function openReview(review: Review, repo: Repo): void {
@@ -250,83 +206,6 @@
 		void recentSessions.refresh();
 	}
 
-	/* ── Brief ─────────────────────────────────────────────────── */
-
-	const name = $derived(firstName(shellState.account?.user));
-	const part = $derived(dayPart());
-	const reviewPick = $derived(pickToReview(items));
-	const openPick = $derived(pickToOpen(items));
-	const briefReady = $derived(openPrs.count !== null && !recentSessions.loading);
-	// One request per app session; the server keeps the brief for 12 hours, so
-	// reviews finishing or PRs opening don't rewrite it.
-	$effect(() => {
-		if (!briefReady || openPrs.apiDown || needsModel || openPrs.briefRequested) return;
-		if (items.length === 0) return;
-		openPrs.briefRequested = true;
-
-		const controller = new AbortController();
-
-		briefLoading = true;
-		briefFailed = false;
-
-		serverApi
-			.homeBrief(
-				{
-					name,
-					dayPart: part,
-					prs: items.map(({ pr, repo }) => ({
-						repoId: repo.id,
-						repo: repo.name,
-						number: pr.number,
-						title: pr.title,
-						additions: pr.additions,
-						deletions: pr.deletions,
-						changedFiles: pr.changedFiles,
-						createdAt: pr.createdAt
-					})),
-					emptyRepos: openPrs.repos
-						.filter((repo) => (openPrs.prsByRepo[repo.id] ?? []).length === 0)
-						.map((repo) => repo.name)
-				},
-				controller.signal
-			)
-			.then((brief) => {
-				openPrs.setBrief(brief);
-			})
-			.catch(() => {
-				if (!controller.signal.aborted) briefFailed = true;
-			})
-			.finally(() => {
-				if (!controller.signal.aborted) briefLoading = false;
-			});
-
-		return () => {
-			if (briefLoading) openPrs.briefRequested = false;
-			controller.abort();
-		};
-	});
-
-	/** The greeting is ours, for the current time of day; the brief body can be hours old. */
-	const greeting = $derived(
-		`**${{ morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', night: 'Evening' }[part]}${name ? `, ${name}` : ''}.**`
-	);
-	const briefText = $derived(
-		openPrs.brief && items.length > 0
-			? `${greeting} ${openPrs.brief.text.replace(/^\**\s*(good\s+)?(morning|afternoon|evening|night)\b[^.!*]*[.!]\s*\**\s*/i, '')}`
-			: briefReady
-				? fallbackBrief(items, name, part)
-				: null
-	);
-	// A skeleton only until the PR list is in: after that the built-in summary shows at
-	// once, and the AI brief replaces it in place whenever (if ever) it arrives.
-	const showBriefSkeleton = $derived(!openPrs.brief && !briefReady);
-	const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-	const updatedAt = $derived(
-		openPrs.brief && !briefFailed
-			? new Date(openPrs.brief.generatedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-			: null
-	);
-
 	function focusFilter(event: KeyboardEvent): void {
 		if (event.key !== '/' || event.metaKey || event.ctrlKey || event.altKey) return;
 
@@ -340,157 +219,13 @@
 
 <svelte:window onkeydown={focusFilter} />
 
-{#snippet prRef(item: BriefPick, text: string)}
-	{@const status = prStatus(item.review)}
-	<HoverCard.Root openDelay={250}>
-		<HoverCard.Trigger
-			href={item.review ? `/session/${item.review.id}` : item.pr.url}
-			class="brief-ref"
-			{...item.review
-				? {
-						onclick: (event: MouseEvent) => {
-							event.preventDefault();
-							if (item.review) openReview(item.review, item.repo);
-						}
-					}
-				: { target: '_blank', rel: 'noopener noreferrer' }}>{text}</HoverCard.Trigger
-		><HoverCard.Content
-			side="bottom"
-			align="start"
-			class="pr-card"
-			{...{
-				onclick: () => {
-					if (item.review) openReview(item.review, item.repo);
-					else window.open(item.pr.url, '_blank', 'noopener,noreferrer');
-				}
-			}}
-		>
-			<div class="flex items-center gap-2 font-mono text-[11.5px] text-fg-faint">
-				<ProviderMark provider={item.repo.provider} size={12} />
-				<span class="truncate">{item.repo.name}</span>
-				<span>#{item.pr.number}</span>
-			</div>
-			<HoverCard.Title class="pr-card-title">{item.pr.title || `PR #${item.pr.number}`}</HoverCard.Title>
-			<HoverCard.Description class="pr-card-meta">
-				<span class="truncate text-fg-subtle">{item.pr.headRef}</span>
-				<span aria-hidden="true">→</span>
-				<span>{item.pr.base}</span>
-			</HoverCard.Description>
-			<div class="pr-card-meta">
-				<span>{item.pr.changedFiles} file{item.pr.changedFiles === 1 ? '' : 's'}</span>
-				<span class="text-ok">+{item.pr.additions}</span>
-				<span class="text-danger">−{item.pr.deletions}</span>
-				{#if item.pr.createdAt}<span aria-hidden="true">·</span><span>{shortAge(item.pr.createdAt)} old</span>{/if}
-				<span aria-hidden="true">·</span><span class="truncate">{item.pr.author}</span>
-			</div>
-			<div class="mt-2 flex items-center justify-between gap-2">
-				{#if status}
-					<Badge variant="secondary" class="status-chip" data-tone={status.tone}>{status.label}</Badge>
-				{:else}
-					<span class="shimmer-text text-[12px]">Review running</span>
-				{/if}
-				<span class="text-[11.5px] text-fg-faint"
-					>{item.review
-						? 'Click to open the review'
-						: 'Click to open on ' + (item.repo.provider === 'gitlab' ? 'GitLab' : 'GitHub')}</span
-				>
-			</div>
-		</HoverCard.Content></HoverCard.Root
-	>
-{/snippet}
-
-{#snippet skeletonRows(n: number)}
-	<!-- Same box as .pr-row: 14px 12px padding, 20px title line over an 18px mono meta line. -->
-	<div role="status" aria-label="Loading pull requests" class="pr-list">
-		{#each Array(n) as _, i (i)}
-			<div class="flex items-center gap-3.5 border-b border-line-subtle px-3 py-3.5" aria-hidden="true">
-				<Skeleton class="size-4 shrink-0 self-start" />
-				<div class="flex min-w-0 flex-1 flex-col gap-1.5">
-					<div class="flex h-5 items-center"><Skeleton class="h-3.5" w={[62, 48, 56][i % 3]} unit="%" /></div>
-					<div class="flex h-[18px] items-center"><Skeleton class="h-2.5" w={[40, 34, 44][i % 3]} unit="%" /></div>
-				</div>
-				<Skeleton class="h-5 w-14" />
-				<Skeleton class="size-3.5" />
-			</div>
-		{/each}
-	</div>
-{/snippet}
-
-{#snippet skeletonGroup()}
-	<section class="flex min-w-0 flex-col">
-		<div class="group-head h-[27px]" aria-hidden="true"><Skeleton class="size-3.5" /><Skeleton class="h-3 w-36" /></div>
-		{@render skeletonRows(3)}
-	</section>
-{/snippet}
-
 <ScrollArea class="h-full min-h-0" aria-label="Home" showCues={false}>
 	{#if needsSetup && auth}
 		<SetupChecklist {auth} repoCount={openPrs.repos.length} />
 	{:else}
 		<div class="home-column">
 			{#if !openPrs.apiDown}
-				<section aria-label="Brief" class="flex flex-col">
-					<Typography.Metadata class="flex items-center gap-2 text-[12.5px] text-fg-faint">
-						<span class="font-medium text-fg-muted">Brief</span>
-						<span aria-hidden="true">·</span>
-						<span>{today}</span>
-						{#if updatedAt}
-							<span aria-hidden="true">·</span>
-							<span>updated {updatedAt}</span>
-						{/if}
-					</Typography.Metadata>
-					{#if showBriefSkeleton}
-						<!-- Two lines on the brief's 27px / 1.38 line box, so the page doesn't shift when it lands. -->
-						<div class="mt-4 flex flex-col" role="status" aria-label="Writing the brief">
-							<div class="flex h-[37px] items-center"><Skeleton class="h-[22px] w-[94%]" /></div>
-							<div class="flex h-[37px] items-center"><Skeleton class="h-[22px] w-[58%]" /></div>
-						</div>
-					{:else if briefText}
-						<div class="home-brief-stack">
-							{#key briefText}
-								<div class="home-brief-layer">
-									<Typography.Text class="home-brief ai-voice">
-										<!-- Kept on tight lines: whitespace between these tags renders as stray spaces. -->
-										{#each briefSegments(briefText) as segment, i (i)}{#if segment.kind === 'strong'}<span
-													class="text-fg">{segment.text}</span
-												>{:else if segment.kind === 'pr' && items.some((item) => item.pr.number === segment.number)}{@const item =
-													items.find((candidate) => candidate.pr.number === segment.number)!}<span
-													class="brief-ref-wrap">{@render prRef(item, segment.text)}</span
-												>{:else}{segment.text}{/if}{/each}
-									</Typography.Text>
-								</div>
-							{/key}
-						</div>
-					{/if}
-					{#if briefReady && (reviewPick || openPick)}
-						<div class="mt-[22px] flex flex-wrap gap-2">
-							{#if reviewPick}
-								{@const pick = reviewPick}
-								<Button
-									class="brief-action"
-									loading={starting === prKey(pick.repo.id, pick.pr.number)}
-									onclick={() => void start(pick.pr, pick.repo)}
-								>
-									<Play size={12} fill="currentColor" aria-hidden="true" />
-									Review #{pick.pr.number}
-								</Button>
-							{/if}
-							{#if openPick?.review}
-								{@const pick = openPick}
-								<Button
-									variant="outline"
-									class="brief-action"
-									onclick={() => pick.review && openReview(pick.review, pick.repo)}
-								>
-									Open #{pick.pr.number}
-									<Badge variant="secondary" data-sev="high" class="severity-pill font-mono"
-										>{highCount(pick.review)} high</Badge
-									>
-								</Button>
-							{/if}
-						</div>
-					{/if}
-				</section>
+				<HomeBrief {items} {needsModel} {starting} onStart={(pr, repo) => void start(pr, repo)} onOpen={openReview} />
 			{/if}
 
 			<div class="mt-11 flex items-center gap-2">
@@ -593,9 +328,14 @@
 
 			<div class="mt-[30px] flex flex-col gap-7" aria-busy={anyLoading || openPrs.loading}>
 				{#if openPrs.loading}
-					{@render skeletonGroup()}
+					<section class="flex min-w-0 flex-col">
+						<div class="group-head h-[27px]" aria-hidden="true">
+							<Skeleton class="size-3.5" /><Skeleton class="h-3 w-36" />
+						</div>
+						<PrSkeletonRows count={3} />
+					</section>
 				{:else}
-					{#each listedGroups as group, _gi (group.repo.id)}
+					{#each listedGroups as group (group.repo.id)}
 						<section class="flex min-w-0 flex-col" aria-label="Pull requests in {group.repo.name}">
 							<Typography.H2 class="group-head">
 								<ProviderMark provider={group.repo.provider} size={14} />
@@ -603,7 +343,7 @@
 								{#if !group.loading}<span class="font-mono text-fg-ghost">{group.prs.length}</span>{/if}
 							</Typography.H2>
 							{#if group.loading}
-								{@render skeletonRows(2)}
+								<PrSkeletonRows count={2} />
 							{:else if group.error}
 								<Alert.Root variant="error">
 									<Alert.Title>Could not load pull requests</Alert.Title>
@@ -614,7 +354,7 @@
 								</Alert.Root>
 							{:else}
 								<div class="pr-list" {@attach hoverHighlight({ items: '.pr-row', class: 'hl-row' })}>
-									{#each group.prs as pr, _i (pr.number)}
+									{#each group.prs as pr (pr.number)}
 										{@const key = prKey(group.repo.id, pr.number)}
 										{@const review = latest.get(key)}
 										<div class="contents">

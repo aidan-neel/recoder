@@ -128,8 +128,6 @@
 		step = 'pick';
 	}
 
-	/* ── Step motion ─────────────────────────────────────────── */
-
 	const reduce = typeof window !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 	/** Steps crossfade with a short slide in the direction of travel; the dialog's height follows. */
 	function swap(_node: Element, { into }: { into: boolean }): TransitionConfig {
@@ -144,8 +142,6 @@
 	}
 	let stepHeight = $state<number | null>(null);
 
-	/* ── Provider list ───────────────────────────────────────── */
-
 	const q = $derived(query.trim().toLowerCase());
 	const all = $derived(agent.providers ?? []);
 	const popular = $derived(POPULAR.flatMap((id) => all.filter((p) => p.id === id)));
@@ -154,8 +150,6 @@
 			? all.filter((p) => p.name.toLowerCase().includes(q) || p.id.includes(q))
 			: all.filter((p) => !POPULAR.includes(p.id))
 	);
-
-	/* ── Connect ─────────────────────────────────────────────── */
 
 	function answers(): Record<string, string> {
 		const visibleKeys = new Set(prompts.map((p) => p.key));

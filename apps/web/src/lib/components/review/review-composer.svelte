@@ -58,8 +58,8 @@
 		leading
 	}: Props = $props();
 
+	/** While a reply is pending the button is always Stop, even with text typed. */
 	function stopClick(event: MouseEvent): void {
-		// While a reply is pending the button is always Stop, even with text typed.
 		if (!generating) return;
 		event.preventDefault();
 		void onStop?.();

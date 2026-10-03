@@ -26,6 +26,7 @@
 	let frame: number | undefined;
 	let last = 0;
 
+	/** Reveals ~45 chars/s, faster when behind, landing on a word end when one is close. */
 	function tick(now: number) {
 		const dt = last ? Math.min(64, now - last) : 16;
 
@@ -40,7 +41,6 @@
 			return;
 		}
 
-		// ~45 chars/s baseline, faster when behind; land on a word end when one is close.
 		let step = Math.max(1, Math.round((dt / 1000) * Math.max(45, backlog * 3)));
 		const space = content.indexOf(' ', shown.length + step);
 

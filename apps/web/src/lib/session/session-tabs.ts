@@ -3,7 +3,7 @@ import { goto } from '$app/navigation';
 import { sessionState, type Session } from './session-state.svelte';
 
 /** Visual state of a session tab, derived from its backend review. */
-export type TabTone = 'draft' | 'running' | 'passed' | 'failed' | 'high';
+type TabTone = 'draft' | 'running' | 'passed' | 'failed' | 'high';
 
 export interface SessionTab {
 	id: string;

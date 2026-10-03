@@ -14,7 +14,12 @@ export class ReviewStream {
 	private knownStatus: Review['status'] | undefined;
 	private refreshing = false;
 	private controller = new AbortController();
+	/**
+	 * Heartbeats arrive every 5s. A stream silent for 20s is dead even if the socket looks open (a server
+	 * reload can leave it hanging), so the watchdog reconnects and re-reads the review.
+	 */
 	private watchdog: ReturnType<typeof setInterval>;
+	/** Never holds the page for a stream that is slow or down; polling still fills it in. */
 	private readyTimer: ReturnType<typeof setTimeout>;
 
 	constructor(id: string, onReview: (review: Review) => void) {
@@ -27,7 +32,6 @@ export class ReviewStream {
 			this.lastReceived = Date.now();
 		};
 
-		// Never hold the page for a stream that is slow or down; polling still fills it in.
 		this.readyTimer = setTimeout(() => {
 			this.ready = true;
 		}, 1500);
@@ -71,12 +75,9 @@ export class ReviewStream {
 						: null);
 
 			if (status !== 'passed' && status !== 'failed') return;
-			// Older servers and heartbeat recovery may only provide a status.
 			if (!message.review && status !== this.knownStatus) this.refresh(id, onReview);
 		};
 
-		// Heartbeats arrive every 5s. A stream silent for 20s is dead even if the socket
-		// looks open (a server reload can leave it hanging): reconnect and re-read the review.
 		this.watchdog = setInterval(() => {
 			if (this.disposed || Date.now() - this.lastReceived < 20_000) return;
 			this.connection = 'reconnecting';
@@ -86,6 +87,10 @@ export class ReviewStream {
 		}, 5_000);
 	}
 
+	/**
+	 * Re-reads the review: when the stream dies, and when a final status arrives without the review (older
+	 * servers and heartbeat recovery send only a status). Failures are left to session polling.
+	 */
 	private refresh(id: string, onReview: (review: Review) => void): void {
 		if (this.refreshing) return;
 		this.refreshing = true;
@@ -98,9 +103,7 @@ export class ReviewStream {
 					onReview(review);
 				}
 			})
-			.catch(() => {
-				/* Session polling or the next heartbeat will retry. */
-			})
+			.catch(() => {})
 			.finally(() => {
 				this.refreshing = false;
 			});

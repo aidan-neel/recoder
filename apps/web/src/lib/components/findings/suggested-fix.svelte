@@ -3,8 +3,8 @@
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
-	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import CodeDiff from '../diff/code-diff.svelte';
+	import DiffModeSwitch from '../diff/diff-mode-switch.svelte';
 	import type { FixSuggestion } from '$lib/findings/findings.svelte';
 	import { diffPrefs } from '$lib/diff/diff-prefs.svelte';
 	import { highlightLines } from '$lib/diff/highlight';
@@ -47,11 +47,13 @@
 		{/if}
 	</figcaption>
 	{#if suggestion.summary}<p class="suggested-fix-summary">{suggestion.summary}</p>{/if}
+	<!-- eslint-disable svelte/no-at-html-tags -- highlightLines escapes the code; only its own color spans are markup -->
 	<pre class="suggested-fix-code">{#each lines as line, i (i)}<span data-sign={line[0]}
-				><span class="suggested-fix-sign" aria-hidden="true">{line[0]}</span>{#if line.length > 1}{@html highlighted[
-						i
-					]}{:else}{' '}{/if}</span
+				><span class="suggested-fix-sign" aria-hidden="true">{line[0]}</span>{@html line.length > 1
+					? highlighted[i]
+					: ' '}</span
 			>{/each}</pre>
+	<!-- eslint-enable svelte/no-at-html-tags -->
 </figure>
 
 <Modal.Root bind:open={reviewOpen}>
@@ -65,17 +67,7 @@
 				{#if suggestion.applies === true}<span class="text-success">· applies cleanly</span>
 				{:else if suggestion.applies === false}<span class="text-sev-medium">· may not apply cleanly</span>{/if}
 			</span>
-			<Tabs.Root
-				value={diffPrefs.mode}
-				onValueChange={(value) => diffPrefs.setMode(value as 'unified' | 'split')}
-				variant="segmented"
-				class="view-switch diff-mode-switch fix-review-mode"
-			>
-				<Tabs.List {...{ 'aria-label': 'Diff layout' }}>
-					<Tabs.Trigger value="unified">Unified</Tabs.Trigger>
-					<Tabs.Trigger value="split">Split</Tabs.Trigger>
-				</Tabs.List>
-			</Tabs.Root>
+			<DiffModeSwitch class="fix-review-mode" />
 		</Modal.Header>
 		{#if suggestion.summary}<p class="fix-review-summary">{suggestion.summary}</p>{/if}
 		<div class="fix-review-files">

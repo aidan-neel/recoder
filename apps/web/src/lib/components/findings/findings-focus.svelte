@@ -1,39 +1,20 @@
 <script lang="ts">
 	import type { ReviewPlanApproval, ReviewToolCall } from '@recoder/shared';
-	import ArrowUpRight from '@lucide/svelte/icons/arrow-up-right';
 	import CheckCheck from '@lucide/svelte/icons/check-check';
-	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
-	import ScanSearch from '@lucide/svelte/icons/scan-search';
-	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import FileIcon from '@lucide/svelte/icons/file';
-	import ListFilter from '@lucide/svelte/icons/list-filter';
 	import MessageSquare from '@lucide/svelte/icons/message-square';
-	import Search from '@lucide/svelte/icons/search';
+	import ScanSearch from '@lucide/svelte/icons/scan-search';
 	import { Button } from '@sivir-ui/svelte/components/button';
-	import { Switch } from '@sivir-ui/svelte/components/switch';
-	import * as Card from '@sivir-ui/svelte/components/card';
-	import { Input } from '@sivir-ui/svelte/components/input';
-	import ModelMarkdown from '../review/model-markdown.svelte';
-	import * as Popover from '@sivir-ui/svelte/components/popover';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
+	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import CodeDiff from '../diff/code-diff.svelte';
-	import FindingSeverity from './finding-severity.svelte';
-	import FixButton from './fix-button.svelte';
-	import SuggestedFix from './suggested-fix.svelte';
-	import EvidenceView from './evidence-view.svelte';
-	import { collapse } from '$lib/shell/collapse';
-	import { evidenceView } from '$lib/findings/evidence';
-	import FixStatus from './fix-status.svelte';
-	import FixChecks from './fix-checks.svelte';
-	import SeverityPill from '../ui/severity-pill.svelte';
-	import VerificationBadge from './verification-badge.svelte';
 	import type { FileDiff } from '$lib/diff/diff';
 	import { SEVERITIES, findingsStore, type Finding } from '$lib/findings/findings.svelte';
-	import { formatAgentName, threadsStore } from '$lib/findings/threads.svelte';
-	import { modelLabel } from '$lib/settings/model-settings.svelte';
+	import { compareSeverity } from '$lib/findings/severity';
+	import { PendingAction } from '$lib/shell/pending-action.svelte';
+	import FindingDetail from './finding-detail.svelte';
+	import FindingsList from './findings-list.svelte';
 
 	interface Props {
 		files: FileDiff[];
@@ -99,19 +80,8 @@
 	);
 	const additions = $derived(files.reduce((sum, file) => sum + file.additions, 0));
 	const deletions = $derived(files.reduce((sum, file) => sum + file.deletions, 0));
-	let starting = $state(false);
-	async function start(): Promise<void> {
-		if (!onStartReview || starting) return;
-		starting = true;
+	const start = new PendingAction(() => onStartReview);
 
-		try {
-			await onStartReview();
-		} finally {
-			starting = false;
-		}
-	}
-
-	const RANK = { high: 0, medium: 1, low: 2 } as const;
 	let query = $state('');
 	const ranked = $derived(
 		findingsStore.items
@@ -128,86 +98,18 @@
 			.sort(
 				(a, b) =>
 					Number(a.status === 'dismissed') - Number(b.status === 'dismissed') ||
-					RANK[a.severity] - RANK[b.severity] ||
+					compareSeverity(a, b) ||
 					a.file.localeCompare(b.file) ||
 					a.startLine - b.startLine
 			)
 	);
 	const needsYou = $derived(ranked.filter((finding) => finding.status !== 'dismissed').length);
 	const active = $derived(ranked.find((finding) => finding.id === findingsStore.activeId) ?? ranked[0]);
-	const suggestion = $derived(active ? findingsStore.suggestions[active.id] : undefined);
-
-	/** The finding's hunk, trimmed to its lines plus three either side. */
-	const focused = $derived.by((): FileDiff | null => {
-		if (!active) return null;
-
-		const file = files.find((item) => item.path === active.file);
-
-		if (!file) return null;
-
-		const hunk =
-			file.hunks.find((item) =>
-				item.lines.some((line) => line.newNo !== null && line.newNo >= active.startLine && line.newNo <= active.endLine)
-			) ??
-			file.hunks.find(
-				(item) => active.startLine >= item.newStart && active.startLine < item.newStart + Math.max(1, item.newCount)
-			);
-
-		if (!hunk) return null;
-
-		const near = (n: number | null) => n !== null && n >= active.startLine - 3 && n <= active.endLine + 3;
-		const first = hunk.lines.findIndex((line) => near(line.newNo));
-		const last = hunk.lines.findLastIndex((line) => near(line.newNo));
-		const lines = first < 0 ? hunk.lines : hunk.lines.slice(first, last + 1);
-
-		return { ...file, hunks: [{ ...hunk, lines }] };
-	});
-	const range = $derived.by(() => {
-		const numbers = focused?.hunks[0].lines.map((line) => line.newNo).filter((n): n is number => n !== null) ?? [];
-
-		return numbers.length ? [Math.min(...numbers), Math.max(...numbers)] : null;
-	});
-	/** The first cited result in citation order (a verified finding cites its proving run first). */
-	const evidence = $derived.by(() => {
-		for (const id of active?.evidenceIds ?? []) {
-			const cited = toolCalls.filter((tool) => tool.result?.evidenceId === id && tool.result.content);
-			const pick = cited.find((tool) => tool.assignmentId === active!.assignmentId) ?? cited[0];
-
-			if (pick) return pick;
-		}
-
-		return null;
-	});
-
-	/** "Open in diff" only when the cited file is part of this pull request. */
-	const evidenceInDiff = $derived.by(() => {
-		const shown = evidence ? evidenceView(evidence) : null;
-
-		return !!shown && shown.kind !== 'text' && files.some((file) => file.path === shown.file);
-	});
-
-	function select(finding: Finding): void {
-		findingsStore.discuss(finding.id);
-	}
-	function discuss(finding: Finding): void {
-		findingsStore.discuss(finding.id);
-		threadsStore.open(finding.id);
-	}
-	function dismiss(finding: Finding): void {
-		findingsStore.dismiss(finding.id);
-		if (threadsStore.openId === finding.id) threadsStore.close();
-	}
-	function restore(finding: Finding): void {
-		findingsStore.reopen(finding.id);
-		findingsStore.discuss(finding.id);
-	}
-	const dir = (path: string) => path.slice(0, path.lastIndexOf('/') + 1);
-	const base = (path: string) => path.slice(path.lastIndexOf('/') + 1);
 </script>
 
 {#snippet ghostCards(shimmer: boolean)}
 	<div class="focus-empty-ghosts" data-shimmer={shimmer || undefined} aria-hidden="true">
-		{#each ['high', 'medium', 'low'] as sev, i (sev)}
+		{#each SEVERITIES as sev, i (sev)}
 			<div class="focus-empty-ghost" style="--i: {i}">
 				<span class="focus-empty-ghost-pill" data-sev={sev}></span>
 				<span class="focus-empty-ghost-line" style="width: {[58, 72, 46][i]}%"></span>
@@ -266,7 +168,7 @@
 			</div>
 			<div class="focus-empty-actions">
 				{#if emptyKind === 'draft' && onStartReview}
-					<Button variant="primary" loading={starting} disabled={starting} onclick={() => void start()}
+					<Button variant="primary" loading={start.running} disabled={start.running} onclick={() => void start.run()}
 						>Start review</Button
 					>
 				{:else if emptyKind === 'running' && awaitingApproval && onApprove && approval}
@@ -296,220 +198,12 @@
 	</div>
 {:else}
 	<div class="focus-body">
-		<section class="focus-list" aria-label="Findings that need you">
-			<header class="focus-list-head">
-				<Typography.Title level={2} class="focus-list-title">Needs you</Typography.Title>
-				<span class="focus-list-meta"><span class="font-mono">{needsYou}</span> by severity</span>
-				<span class="ms-auto"></span>
-				<Popover.Root placement="bottom-end">
-					<Popover.Trigger variant="ghost" size="icon" aria-label="Filter by severity"
-						><ListFilter size={15} aria-hidden="true" /></Popover.Trigger
-					>
-					<Popover.Content class="w-auto" surfaceClass="!p-2">
-						<Popover.Title class="sr-only">Severities</Popover.Title>
-						<div class="flex gap-1.5">
-							{#each SEVERITIES as severity (severity)}
-								<FindingSeverity
-									{severity}
-									count={findingsStore.items.filter((item) => item.status !== 'dismissed' && item.severity === severity)
-										.length}
-									interactive
-									pressed={findingsStore.isSeverityShown(severity)}
-									onToggle={() => findingsStore.toggleSeverity(severity)}
-								/>
-							{/each}
-						</div>
-						<div class="focus-filter-row">
-							<Switch
-								switched={findingsStore.showDismissed}
-								disabled={dismissedCount === 0}
-								onclick={() => (findingsStore.showDismissed = !findingsStore.showDismissed)}
-								label="Show dismissed"
-							/>
-							<span class="focus-filter-count">{dismissedCount}</span>
-						</div>
-					</Popover.Content>
-				</Popover.Root>
-				<Popover.Root placement="bottom-end">
-					<Popover.Trigger variant="ghost" size="icon" aria-label="Search findings"
-						><Search size={15} aria-hidden="true" /></Popover.Trigger
-					>
-					<Popover.Content class="w-72" surfaceClass="!p-2">
-						<Popover.Title class="sr-only">Search findings</Popover.Title>
-						<Input bind:value={query} placeholder="Search text or file…" aria-label="Search findings" />
-					</Popover.Content>
-				</Popover.Root>
-			</header>
-			<ScrollArea class="min-h-0 flex-1" showCues={false} aria-label="Findings">
-				<div class="focus-cards">
-					{#each ranked as finding, i (finding.id)}
-						{@const isActive = finding.id === active?.id}
-						{@const dismissed = finding.status === 'dismissed'}
-						<div class="focus-card-slot" in:collapse out:collapse>
-							<Card.Root
-								class="focus-card"
-								data-active={isActive || undefined}
-								data-dismissed={dismissed || undefined}
-								{...{ style: `--i: ${i}` }}
-							>
-								<Button
-									unstyled
-									class="focus-card-select"
-									aria-current={isActive || undefined}
-									onclick={() => select(finding)}
-								>
-									<span class="focus-card-head">
-										{#if dismissed}<SeverityPill tone="info">Dismissed</SeverityPill>{:else}<FindingSeverity
-												severity={finding.severity}
-											/>{#if finding.verification && finding.status !== 'accepted'}<VerificationBadge
-													verification={finding.verification}
-												/>{/if}{/if}
-										<span class="min-w-0 truncate">{finding.category}</span>
-										<span class="focus-card-loc" title="{finding.file}:{finding.startLine}"
-											>{finding.file}:{finding.startLine}</span
-										>
-										{#if findingsStore.suggestions[finding.id]}
-											{@const fix = findingsStore.suggestions[finding.id]}
-											{@const fixState =
-												fix.apply === 'applied' || finding.status === 'accepted'
-													? 'fixed'
-													: fix.status === 'loading'
-														? 'fixing'
-														: fix.status === 'ready'
-															? 'ready'
-															: 'failed'}
-											<span class="focus-card-fix" data-state={fixState}
-												>{#if fixState === 'fixing'}<Spinner size={10} aria-hidden="true" />{/if}{fixState === 'fixing'
-													? 'Fixing'
-													: fixState === 'ready'
-														? 'Fix ready'
-														: fixState === 'fixed'
-															? 'Fixed'
-															: 'Fix failed'}</span
-											>
-										{/if}
-									</span>
-									<span class="focus-card-body ai-voice">{finding.title}</span>
-								</Button>
-								<!-- Always rendered; opens on the active card with a height transition (no jump). -->
-								<div class="focus-card-reveal" inert={!isActive}>
-									<div class="focus-card-reveal-clip">
-										<div class="focus-card-foot">
-											<span class="min-w-0 flex-1 truncate">{formatAgentName(finding.agent)}</span>
-											{#if dismissed}
-												<Button variant="outline" class="gap-1.5" onclick={() => restore(finding)}
-													><RotateCcw size={14} aria-hidden="true" />Restore</Button
-												>
-											{:else}
-												<Button variant="ghost" onclick={() => dismiss(finding)}>Dismiss</Button>
-												<Button variant="outline" class="gap-1.5" onclick={() => discuss(finding)}
-													><MessageSquare size={14} aria-hidden="true" />Discuss</Button
-												>
-											{/if}
-										</div>
-									</div>
-								</div>
-							</Card.Root>
-						</div>
-					{:else}
-						<Typography.Text class="px-1 py-3 text-sm text-fg-muted"
-							>{query
-								? 'No findings match your search.'
-								: 'Nothing needs you. Every finding is fixed, dismissed or filtered out.'}</Typography.Text
-						>
-					{/each}
-				</div>
-			</ScrollArea>
-		</section>
+		<FindingsList {ranked} activeId={active?.id} {needsYou} {dismissedCount} bind:query />
 
 		<ScrollArea class="min-h-0" showCues={false} aria-label="Focused finding">
 			{#if active}
 				{#key active.id}
-					<div class="focus-detail-column">
-						<Card.Root class="focus-hunk">
-							<header class="focus-hunk-head">
-								<FileIcon size={14} class="shrink-0 text-fg-faint" aria-hidden="true" />
-								<span class="diff-file-path" title={active.file}
-									><span class="diff-file-dir">{dir(active.file)}</span><span class="diff-file-name"
-										>{base(active.file)}</span
-									></span
-								>
-								{#if range}<span class="focus-hunk-range">lines {range[0]}–{range[1]}</span>{/if}
-								<Button variant="ghost" class="ms-auto gap-1.5" onclick={() => onFullFile(active)}
-									>Full file <ArrowUpRight size={13} aria-hidden="true" /></Button
-								>
-							</header>
-							{#if focused}
-								{#key active.id}<CodeDiff diff={focused} findings={[active]} cards={false} />{/key}
-							{:else}
-								<Typography.Text class="px-5 py-4 text-sm text-fg-muted"
-									>The diff for this file isn't loaded yet.</Typography.Text
-								>
-							{/if}
-						</Card.Root>
-
-						<Card.Root class="focus-detail">
-							<div class="focus-detail-head">
-								{#if active.status === 'accepted'}<SeverityPill tone="success">Fixed</SeverityPill
-									>{:else if active.status === 'dismissed'}<SeverityPill tone="info">Dismissed</SeverityPill
-									>{:else}<FindingSeverity severity={active.severity} />{#if active.verification}<VerificationBadge
-											verification={active.verification}
-										/>{/if}{/if}
-								<Typography.Title level={3} class="focus-detail-title">{active.title}</Typography.Title>
-								<span class="focus-detail-meta"
-									>{[active.code, formatAgentName(active.agent), modelLabel(active.model)]
-										.filter(Boolean)
-										.join(' · ')}</span
-								>
-							</div>
-							<div class="focus-detail-body ai-voice"><ModelMarkdown content={active.body} /></div>
-							{#if active.verification}
-								<p class="verify-note" data-status={active.verification.status}>
-									{#if active.verification.status === 'verified'}<CircleCheck
-											size={14}
-											class="verify-note-icon"
-											aria-hidden="true"
-										/>{:else}<CircleAlert size={14} class="verify-note-icon" aria-hidden="true" />{/if}
-									<span>
-										{active.verification.status !== 'verified'
-											? 'Not verified'
-											: active.verification.method === 'trace'
-												? 'Traced through the code'
-												: 'Verified'}: {active.verification.reason}
-										{#if active.verification.command}<code>{active.verification.command}</code
-											>{#if active.verification.exitCode !== undefined && active.verification.exitCode !== null}
-												exited {active.verification.exitCode}.{/if}{/if}
-									</span>
-								</p>
-							{/if}
-							{#if evidence}<EvidenceView tool={evidence} onOpenInDiff={evidenceInDiff ? onOpenAt : null} />{/if}
-							<FixStatus finding={active} />
-							{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks
-									finding={active}
-								/>{/if}
-							<div class="focus-detail-foot">
-								<span class="min-w-0 flex-1 truncate"
-									>{#if active.fix?.sha}Fixed in <span class="font-mono">{active.fix.sha.slice(0, 7)}</span> on
-										<span class="font-mono">{active.fix.branch}</span>{:else if active.fix}Applied to the checkout.
-										Commit and push it from Changes.{:else if branch && active.status !== 'dismissed'}Applies to the
-										checkout; you commit and push it{/if}</span
-								>
-								{#if active.status === 'open'}
-									<Button variant="ghost" onclick={() => dismiss(active)}>Dismiss</Button>
-									<Button variant="outline" class="gap-1.5" onclick={() => discuss(active)}
-										><MessageSquare size={14} aria-hidden="true" />Discuss</Button
-									>
-								{/if}
-								{#if active.status === 'dismissed'}
-									<Button variant="primary" class="gap-1.5" onclick={() => restore(active)}
-										><RotateCcw size={14} aria-hidden="true" />Restore</Button
-									>
-								{:else}
-									<FixButton finding={active} />
-								{/if}
-							</div>
-						</Card.Root>
-					</div>
+					<FindingDetail {active} {files} {toolCalls} {branch} {onFullFile} {onOpenAt} />
 				{/key}
 			{/if}
 		</ScrollArea>

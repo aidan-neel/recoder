@@ -145,7 +145,6 @@
 									</li>
 								{/each}
 							</ul>
-							<!-- The branch is in the header; the button stays short. -->
 							<Button
 								variant="primary"
 								class="self-end"

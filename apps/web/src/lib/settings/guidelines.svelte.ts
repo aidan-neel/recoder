@@ -1,7 +1,7 @@
 import type { GuidelinesOverview, GuidelinesProposal, RepoGuidelines } from '@recoder/shared';
 import { serverApi } from '$lib/api/server-api';
 
-export type GuidelinesScope = { kind: 'global' } | { kind: 'repo'; repoId: string };
+type GuidelinesScope = { kind: 'global' } | { kind: 'repo'; repoId: string };
 
 type RepoState = { status: 'loading' } | { status: 'ready'; data: RepoGuidelines } | { status: 'error'; error: string };
 

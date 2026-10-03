@@ -19,7 +19,7 @@
 	}
 
 	let { node, selectedId, onSelect, parentPath = '', badges, onJump }: Props = $props();
-	// Stable identity for this node instance (props never change per instance).
+	/** Stable identity for this node instance (props never change per instance). */
 	const key = untrack(() =>
 		node.kind === 'folder' ? (parentPath ? `${parentPath}/${node.name}` : node.name) : node.id
 	);

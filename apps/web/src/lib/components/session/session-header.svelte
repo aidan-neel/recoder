@@ -9,6 +9,10 @@
 
 	export type SessionView = 'conversation' | 'findings' | 'diff';
 
+	/**
+	 * One bar for every view: PR number and view tabs on the left, the menu and the view's toolbar on the right.
+	 * The title, repo, branch and diffstat live in the PR hover card.
+	 */
 	interface Props {
 		title: string;
 		branch?: string | null;
@@ -25,8 +29,6 @@
 		onView?: ((view: SessionView) => void | Promise<void>) | null;
 		/** The diff exists only once the review has checked out the PR. */
 		diffDisabled?: boolean;
-		onFiles?: (() => void) | null;
-		filesLabel?: string;
 		menu?: Snippet;
 		/** Diff workspace: its toolbar (findings stepper, filters, actions) takes the meta's place, so the view has one bar. */
 		toolbar?: Snippet;
@@ -45,8 +47,6 @@
 		view,
 		onView = null,
 		diffDisabled = false,
-		onFiles = null,
-		filesLabel = 'Open diff',
 		menu,
 		toolbar
 	}: Props = $props();
@@ -61,24 +61,19 @@
 	 * Sivir Tabs keeps its own value after a click. The conversation header stays
 	 * mounted while hidden, so snap back to the real view once navigation settles.
 	 */
-	let current = $state<string>('conversation');
-	$effect.pre(() => {
-		current = view;
-	});
+	let current = $derived<string>(view);
 	let mounted = true;
 	$effect(() => () => (mounted = false));
+	/** Switches view. The switch can unmount this header, so only a surviving one snaps back. */
 	function choose(next: string): void {
 		if (next === view) return;
 
-		// A view switch can unmount this header; only a surviving one snaps back.
 		void Promise.resolve(onView?.(next as SessionView)).finally(() => {
 			if (mounted) current = view;
 		});
 	}
 </script>
 
-<!-- Same bar in every view: PR number (hover card) and view tabs far left · ⋯ and the
-     view's actions (toolbar) far right. The title, repo, branch and diffstat live in the hover card. -->
 <header class="session-header" data-bordered={bordered || undefined} data-merged="">
 	<HoverCard.Root>
 		<HoverCard.Trigger class="session-pr" href={prUrl ?? undefined} {...prLinkAttrs}

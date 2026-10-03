@@ -31,7 +31,6 @@
 			</span>
 			<span class="check-name" title={check.name}>{check.name}</span>
 			{#if onFix && check.state === 'failed' && check.id}
-				<!-- Dense popover row: the compact size is intentional. -->
 				<Button variant="ghost" size="sm" class="check-fix" onclick={() => onFix(check)}
 					><Wrench size={12} aria-hidden="true" />{fixLabel(check)}</Button
 				>

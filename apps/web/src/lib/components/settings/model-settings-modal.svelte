@@ -30,7 +30,6 @@
 	const title = $derived(SECTIONS.find((s) => s.id === modelSettingsUi.section)?.label ?? 'Settings');
 	let saveError = $state<string | null>(null);
 
-	// The agent loads with the settings, so the Agent tab paints once instead of rows popping in.
 	$effect(() => {
 		if (modelSettingsUi.open) void agent.load();
 	});
@@ -66,8 +65,8 @@
 		else saveError = modelSettingsUi.error ?? 'Settings were not saved.';
 	}
 
+	/** ⌘↵ saves, unless the guidelines editor is stacked on top: it owns ⌘↵ while open. */
 	function onKey(event: KeyboardEvent): void {
-		// The guidelines editor stacks on top and owns ⌘↵ while it is open.
 		if (
 			!modelSettingsUi.open ||
 			guidelinesStore.editing ||
@@ -135,7 +134,6 @@
 								<Button variant="outline" class="mt-2 w-fit" onclick={() => void modelSettingsUi.load()}>Retry</Button>
 							</Alert.Root>
 						{:else if !config || !settingsDraft.seeded || agentPending}
-							<!-- Built from the real settings classes so rows land where the loaded section puts them. -->
 							<div class="flex flex-col gap-6" role="status" aria-label="Loading settings">
 								{#if modelSettingsUi.section === 'models'}
 									<section class="settings-section" aria-hidden="true">

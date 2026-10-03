@@ -20,7 +20,7 @@
 	type StepId = 'provider' | 'model' | 'repo';
 
 	const signedIn = $derived(auth.github.authenticated ? auth.github : auth.gitlab.authenticated ? auth.gitlab : null);
-	// Public repos work without a token, so a tracked repo counts as connected.
+	/** Public repos work without a token, so a tracked repo counts as connected. */
 	const done = $derived<Record<StepId, boolean>>({
 		provider: !!signedIn || repoCount > 0,
 		model: !!modelSettingsUi.config?.configured,

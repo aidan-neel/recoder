@@ -19,14 +19,17 @@
 
 	onMount(() => theme.init());
 
-	// Sivir's Toaster portals to <body> without marking itself an overlay root,
-	// so an open modal inerts it and toast actions (Undo, View) stop responding.
-	// Overlay roots are exempt from that inert, so mark the toaster as one.
-	$effect(() => {
+	/**
+	 * Sivir's Toaster portals to <body> without marking itself an overlay root, so an open modal inerts it
+	 * and toast actions (Undo, View) stop responding. Overlay roots are exempt from that inert.
+	 */
+	function markToasterOverlayRoot(): void {
 		document
 			.querySelector('[role="region"][aria-label="Notifications"]')
 			?.parentElement?.setAttribute('data-overlay-root', '');
-	});
+	}
+
+	$effect(markToasterOverlayRoot);
 </script>
 
 <svelte:head>

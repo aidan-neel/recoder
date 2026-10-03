@@ -23,10 +23,9 @@ export function readCache<T>(key: string): T | null {
 	}
 }
 
+/** Caches a value. When storage is full or blocked the page just loads from the network. */
 export function writeCache(key: string, value: unknown): void {
 	try {
 		localStorage.setItem(PREFIX + key, JSON.stringify({ at: Date.now(), value }));
-	} catch {
-		// Storage full or blocked; the page just loads from the network.
-	}
+	} catch {}
 }

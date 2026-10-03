@@ -11,7 +11,7 @@
  * legible in light and dark mode.
  */
 
-export interface HlState {
+interface HlState {
 	inBlockComment: boolean;
 }
 
@@ -86,7 +86,7 @@ function highlightRest(line: string, out: string[]): void {
 }
 
 /** Highlight one line, threading block-comment state. Returns HTML + next state. */
-export function highlightLine(line: string, state: HlState): { html: string; state: HlState } {
+function highlightLine(line: string, state: HlState): { html: string; state: HlState } {
 	const out: string[] = [];
 
 	if (state.inBlockComment) {

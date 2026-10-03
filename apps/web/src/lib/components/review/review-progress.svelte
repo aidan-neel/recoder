@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ReviewingView, { type ReviewingFinding } from '$lib/components/review/reviewing-view.svelte';
+	import { ROLE_LABELS, type ReviewRole } from '@recoder/shared';
 
 	interface Props {
 		title: string;
@@ -28,7 +29,7 @@
 
 	interface AgentSim {
 		id: string;
-		name: string;
+		name: ReviewRole;
 		model: string;
 		/** Independent completion speed — subagents run in parallel. */
 		rate: number;
@@ -149,7 +150,7 @@
 		agents.map((agent) => ({
 			id: `${agent.id}-demo`,
 			role: agent.id,
-			title: agent.name === 'patterns' ? 'Repository consistency' : agent.name,
+			title: ROLE_LABELS[agent.name],
 			reason: 'Demo specialist assignment',
 			status:
 				agent.status === 'done'

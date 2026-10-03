@@ -1,0 +1,407 @@
+/* Diff view: one bar. Title far left · view tabs centred · ⋯, status,
+   Ask reviewer, Fix all far right (the toolbar's pieces join the header row).
+   The findings stepper and filters live in the sidebar (.findings-nav). */
+.session-header[data-merged] {
+	gap: 8px;
+	padding: 0 12px 0 18px;
+}
+.session-toolbar,
+.session-toolbar .findings-toolbar {
+	display: contents;
+}
+.session-header[data-merged] {
+	position: relative;
+}
+.session-header[data-merged] .view-switch {
+	order: 1;
+	/* Tabs sit left beside the PR number; the actions push to the far right. */
+	margin-right: auto;
+}
+.session-header[data-merged] > [data-ui='dropdown-menu-trigger'],
+.session-header[data-merged] > [data-ui='button'] {
+	order: 2;
+}
+.session-toolbar .findings-toolbar-end {
+	order: 3;
+	margin-left: 4px;
+}
+@media (max-width: 1279px) {
+	.session-toolbar .review-state {
+		display: none;
+	}
+}
+@media (max-width: 1179px) {
+	.session-toolbar #ask-review {
+		gap: 0;
+		width: 32px;
+		padding: 0;
+		font-size: 0;
+	}
+}
+/* Findings view empty states: centred message, facts, actions; faded
+   placeholder cards underneath before/while the review runs. */
+.focus-empty {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	gap: 32px;
+	overflow-y: auto;
+	padding: min(14vh, 120px) 24px 40px;
+}
+.focus-empty-card {
+	display: flex;
+	max-width: 440px;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	text-align: center;
+}
+.focus-empty-icon {
+	display: flex;
+	width: 44px;
+	height: 44px;
+	align-items: center;
+	justify-content: center;
+	margin-bottom: 8px;
+	border-radius: 12px;
+	background: var(--bg-raised);
+	box-shadow:
+		inset 0 0 0 1px var(--line-card),
+		0 4px 16px rgb(var(--shade-rgb) / calc(0.25 * var(--drop)));
+	color: var(--text-secondary);
+}
+.focus-empty[data-kind='running'] .focus-empty-icon {
+	color: var(--sev-medium);
+}
+.focus-empty[data-kind='running'][data-waiting] .focus-empty-icon {
+	color: var(--text-primary);
+}
+.focus-empty[data-kind='failed'] .focus-empty-icon {
+	color: var(--danger);
+}
+.focus-empty[data-kind='clean'] .focus-empty-icon,
+.focus-empty[data-kind='caught-up'] .focus-empty-icon {
+	color: var(--success);
+}
+.focus-empty .focus-empty-title {
+	margin: 0;
+	font-size: 17px;
+	font-weight: 500;
+	line-height: 24px;
+	letter-spacing: normal;
+	color: var(--text-primary);
+}
+.focus-empty-text {
+	margin: 0;
+	font-size: 13.5px;
+	line-height: 20px;
+	color: var(--text-subtle);
+	text-wrap: balance;
+}
+.focus-empty-facts {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 6px;
+	margin-top: 6px;
+}
+.focus-empty-facts:empty {
+	display: none;
+}
+.focus-empty-facts > span {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	height: 24px;
+	padding: 0 9px;
+	border-radius: 7px;
+	background: var(--bg-bubble);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-faint);
+}
+.focus-empty-facts b {
+	font-weight: 500;
+	color: var(--text-secondary);
+}
+.focus-empty-facts b.text-success {
+	color: var(--success);
+}
+.focus-empty-facts b.text-danger {
+	color: var(--danger);
+}
+.focus-empty-actions {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 8px;
+	margin-top: 12px;
+}
+.focus-empty-ghosts {
+	display: flex;
+	width: min(560px, 100%);
+	flex-direction: column;
+	gap: 8px;
+	-webkit-mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 100%);
+	mask-image: linear-gradient(to bottom, #000 0%, rgba(0, 0, 0, 0.5) 45%, transparent 100%);
+	pointer-events: none;
+	user-select: none;
+}
+.focus-empty-ghost {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	padding: 14px 16px;
+	border-radius: 12px;
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+}
+.focus-empty-ghost-pill {
+	width: 44px;
+	height: 16px;
+	border-radius: 5px;
+	background: var(--sev-info-tint);
+}
+.focus-empty-ghost-pill[data-sev='high'] {
+	background: var(--sev-high-tint);
+}
+.focus-empty-ghost-pill[data-sev='medium'] {
+	background: var(--sev-medium-tint);
+}
+.focus-empty-ghost-pill[data-sev='low'] {
+	background: var(--sev-low-tint);
+}
+.focus-empty-ghost-line {
+	height: 8px;
+	border-radius: 4px;
+	background: var(--line-control);
+}
+.focus-empty-ghost-line.is-faint {
+	opacity: 0.6;
+}
+.focus-empty-ghosts[data-shimmer] .focus-empty-ghost-line {
+	background: linear-gradient(90deg, var(--bg-hover) 0%, var(--line-strong) 50%, var(--bg-hover) 100%);
+	background-size: 200% 100%;
+	animation: rc-shimmer var(--dur-skeleton) linear infinite;
+	animation-delay: calc(var(--i, 0) * 120ms);
+}
+@media (prefers-reduced-motion: reduce) {
+	.focus-empty-ghosts[data-shimmer] .focus-empty-ghost-line {
+		animation: none;
+	}
+}
+/* Findings navigator at the top of the file sidebar: position + stepper,
+   severity toggles (2×2), and search. */
+.findings-nav {
+	display: flex;
+	flex-shrink: 0;
+	flex-direction: column;
+	gap: 8px;
+	margin: 0 -10px 12px;
+	padding: 0 10px 12px;
+	border-bottom: 1px solid var(--line-divider);
+}
+.findings-nav-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	height: 24px;
+	padding-left: 3px;
+}
+.findings-nav-title {
+	font-size: 13px;
+	font-weight: 500;
+	color: var(--text-primary);
+}
+.findings-nav-pos {
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-faint);
+}
+.findings-nav-steps {
+	display: flex;
+	margin-left: auto;
+}
+.findings-nav-steps [data-ui='button'][data-variant][data-size] {
+	width: 24px;
+	height: 24px;
+	min-width: 0;
+	min-height: 0;
+	padding: 0;
+	border-radius: 6px;
+	color: var(--text-faint);
+}
+.findings-nav-steps [data-ui='button'][data-variant][data-size]:hover:not(:disabled) {
+	background: var(--bg-hover);
+	color: var(--text-primary);
+}
+.findings-nav-filters {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 4px;
+}
+.findings-nav-filter {
+	--sev: var(--sev-info);
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 7px;
+	height: 28px;
+	padding: 0 8px;
+	border-radius: 7px;
+	font-size: 12.5px;
+	color: var(--text-ghost);
+	cursor: pointer;
+	transition:
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
+}
+.findings-nav-filter[data-severity='high'] {
+	--sev: var(--sev-high);
+}
+.findings-nav-filter[data-severity='medium'] {
+	--sev: var(--sev-medium);
+}
+.findings-nav-filter[data-severity='low'] {
+	--sev: var(--sev-low);
+}
+.findings-nav-filter:hover {
+	background: var(--bg-hover);
+	color: var(--text-secondary);
+}
+.findings-nav-filter[aria-pressed='true'] {
+	background: color-mix(in oklab, var(--sev) 10%, transparent);
+	color: var(--text-secondary);
+}
+.findings-nav-filter:focus-visible {
+	outline: 2px solid var(--color-ring);
+	outline-offset: 1px;
+}
+.findings-nav-dot {
+	width: 7px;
+	height: 7px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	box-shadow: inset 0 0 0 1.5px var(--sev);
+}
+.findings-nav-filter[aria-pressed='true'] .findings-nav-dot {
+	background: var(--sev);
+}
+.findings-nav-label {
+	flex: 1;
+	min-width: 0;
+	text-align: left;
+}
+.findings-nav-count {
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
+	color: var(--text-faint);
+}
+.findings-nav-filter[aria-pressed='true'] .findings-nav-count {
+	color: var(--sev);
+}
+[data-ui='button'][data-variant].findings-nav-search {
+	width: 100%;
+	height: 30px;
+	min-height: 30px;
+	justify-content: flex-start;
+	gap: 8px;
+	padding: 0 10px;
+	border-radius: 8px;
+	background: var(--bg-field);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+	font-size: 12.5px;
+	font-weight: 400;
+	color: var(--text-faint);
+}
+[data-ui='button'][data-variant].findings-nav-search:hover {
+	color: var(--text-secondary);
+}
+.session-meta {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 14px;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	white-space: nowrap;
+	color: var(--text-subtle);
+}
+.session-branch {
+	display: flex;
+	min-width: 0;
+	max-width: 200px;
+	align-items: center;
+	gap: 6px;
+}
+[data-ui='button'][data-variant].session-files {
+	height: 26px;
+	min-height: 26px;
+	gap: 6px;
+	padding: 0 4px;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	font-weight: 400;
+	color: var(--text-subtle);
+}
+[data-ui='button'][data-variant].session-files:hover:not(:disabled) {
+	color: var(--text-primary);
+}
+[data-ui='button'][data-variant].session-files:disabled {
+	opacity: 1;
+}
+.view-switch [data-ui='tabs-list'][data-variant='segmented'] {
+	gap: 0;
+	padding: 3px;
+	border-radius: 9px;
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--bg-hover);
+}
+.view-switch [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true'] {
+	border-radius: 7px;
+	background-color: var(--line-tab);
+	box-shadow: none;
+	transition: none;
+}
+.view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
+	height: 26px;
+	min-height: 26px;
+	padding: 0 10px;
+	border-radius: 7px;
+	font-size: 12.5px;
+	font-weight: 400;
+	color: var(--text-subtle);
+	transition: color var(--dur-hover) ease-out;
+}
+.view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover:not(:disabled),
+.view-switch [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
+	color: var(--text-primary);
+}
+/* Session header and guidelines editor: quiet text tabs with one pill that travels to the selected
+   view (Sivir's segmented indicator; carryPill in $lib/tab-pill.ts continues the
+   slide across header instances). */
+:is(.session-header, .guidelines-head) .view-switch [data-ui='tabs-list'][data-variant='segmented'] {
+	gap: 0;
+	padding: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+}
+:is(.session-header, .guidelines-head)
+	.view-switch
+	[data-ui='tabs-list'][data-variant='segmented']
+	> [aria-hidden='true'] {
+	display: block;
+	border-radius: 7px;
+	background-color: var(--line-tab);
+	box-shadow: none;
+	transition:
+		left var(--dur-pill) var(--ease-menu),
+		width var(--dur-pill) var(--ease-menu),
+		top var(--dur-pill) var(--ease-menu),
+		height var(--dur-pill) var(--ease-menu);
+}

@@ -9,7 +9,9 @@
 		<script>
 			(() => {
 				let choice = 'system';
-				try { choice = localStorage.getItem('recoder-theme') || 'system'; } catch {}
+				try {
+					choice = localStorage.getItem('recoder-theme') || 'system';
+				} catch {}
 				const light = choice === 'light' || (choice !== 'dark' && matchMedia('(prefers-color-scheme: light)').matches);
 				const root = document.documentElement;
 				root.classList.toggle('dark', !light);

@@ -18,7 +18,10 @@ export function requestDeleteSession(id: string): void {
 	deleteConfirm.id = id;
 }
 
-/** Hide the session and close its tab right away; put both back if the server refuses. */
+/**
+ * Hide the session and close its tab right away; put both back if the server refuses. A review that is
+ * already gone (a tab whose review was never created) counts as deleted.
+ */
 export async function deleteSession(id: string): Promise<void> {
 	const tabIndex = sessionState.sessions.findIndex((session) => session.id === id);
 	const tab = sessionState.sessions[tabIndex];
@@ -29,7 +32,6 @@ export async function deleteSession(id: string): Promise<void> {
 	try {
 		await serverApi.deleteReview(id);
 	} catch (e) {
-		// Already gone (e.g. a tab whose review was never created) counts as deleted.
 		if (!(e instanceof Error && /not found/i.test(e.message))) {
 			recentSessions.unhide(id, snapshot);
 			if (tab) sessionState.restore(tab, tabIndex);

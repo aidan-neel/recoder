@@ -33,6 +33,7 @@
 
 	/** Models on other providers, grouped by provider. */
 	const alternatives = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived.by, not reactive state
 		const groups = new Map<string, ModelEntry[]>();
 
 		for (const entry of modelSettingsUi.config?.models ?? []) {
@@ -46,8 +47,7 @@
 		return [...groups.entries()];
 	});
 
-	/* ── When it resets ──────────────────────────────────────── */
-
+	/** When usage resets, in epoch seconds. ChatGPT reports its windows; the spent one that resets last decides. */
 	let resetsAt = $state<number | null>(null);
 	let now = $state(Date.now());
 
@@ -55,7 +55,6 @@
 		resetsAt = limit.resetsAt ?? null;
 		if (limit.provider !== 'codex' || resetsAt) return;
 
-		// ChatGPT reports its windows; the one that ran out decides when reviews can run again.
 		let cancelled = false;
 
 		void serverApi
@@ -98,8 +97,6 @@
 		return `Resets ${new Date(resetsAt * 1000).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' })}.`;
 	});
 
-	/* ── Switch ──────────────────────────────────────────────── */
-
 	let switching = $state(false);
 
 	/** Review moves to the new model; Specialists follow it when they were on the spent plan too. */
@@ -136,7 +133,7 @@
 	<div class="min-w-0 flex-1">
 		<p class="review-notice-title">{limit.name} is out of usage</p>
 		<p class="review-notice-body">
-			{#if resetText}{resetText}{' '}{/if}{alternatives.length
+			{#if resetText}{`${resetText} `}{/if}{alternatives.length
 				? 'Switch to another model to keep going now.'
 				: 'Connect another provider to keep going now.'}
 		</p>

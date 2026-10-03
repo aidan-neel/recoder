@@ -70,8 +70,8 @@
 		{ id: 'verify', label: 'Verify findings', meta: '' },
 		{ id: 'consolidate', label: 'Consolidate findings', meta: '' }
 	]);
+	/** A passed specialist step with some specialists failed is `partial`: it ran, but not all of it. */
 	function statusOf(index: number): 'done' | 'partial' | 'active' | 'error' | 'pending' {
-		// Past the specialist step with some of them failed: it ran, but not all of it.
 		if (index < current) return steps[index].id === 'specialists' && specialists?.failed ? 'partial' : 'done';
 		if (index > current) return 'pending';
 

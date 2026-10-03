@@ -1,7 +1,5 @@
 import {
-	assignmentCounts,
 	emptyReviewProgress,
-	formatAssignmentHeadline,
 	type Review,
 	type ReviewAssignment,
 	type ReviewChatMessage,
@@ -162,7 +160,7 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 }
 
 /** Pipeline stages in order; the index is what `review-steps.svelte` renders. */
-export const STAGE_LABELS = [
+const STAGE_LABELS = [
 	'Checkout',
 	'Understand changes',
 	'Running checks',
@@ -228,4 +226,4 @@ export function taskSummary(tasks: ReviewTask[]) {
 	return { done, failed, running, total: tasks.length, settled: done + failed };
 }
 
-export { assignmentCounts, emptyReviewProgress, formatAssignmentHeadline };
+export { emptyReviewProgress };

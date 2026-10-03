@@ -7,7 +7,7 @@ export type EvidenceView =
 const HUNK = /^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/;
 
 /** Unified diff text → rows with old/new line numbers (file headers dropped). */
-export function parseUnifiedDiff(text: string): { file: string; lines: FileDiffLine[] } | null {
+function parseUnifiedDiff(text: string): { file: string; lines: FileDiffLine[] } | null {
 	let file = '';
 	let oldNo = 0;
 	let newNo = 0;
@@ -58,7 +58,10 @@ function parseNumberedFile(text: string): FileDiffLine[] | null {
 	return lines.length ? lines : null;
 }
 
-/** How to show a cited tool result: as a diff, a file excerpt, or plain text. */
+/**
+ * How to show a cited tool result: as a diff, a file excerpt, or plain text. Command output stays plain text,
+ * since test runners print lines like `--- FAIL`.
+ */
 export function evidenceView(tool: ReviewToolCall): EvidenceView | null {
 	const text = tool.result?.content;
 
@@ -66,7 +69,6 @@ export function evidenceView(tool: ReviewToolCall): EvidenceView | null {
 
 	const input = (tool.input ?? {}) as { action?: string; type?: string; path?: string };
 
-	// Command output is shown as-is: test runners print lines like `--- FAIL`.
 	if (input.action === 'run') return { kind: 'text', text };
 
 	const path = typeof input.path === 'string' ? input.path : '';

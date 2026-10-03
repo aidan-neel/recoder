@@ -9,7 +9,8 @@ import type { Finding as BackendFinding, FindingSeverity as BackendSeverity } fr
 import { findingTitle } from './finding-title';
 
 export type FindingSeverity = 'high' | 'medium' | 'low';
-export type FindingStatus = 'open' | 'accepted' | 'dismissed';
+
+type FindingStatus = 'open' | 'accepted' | 'dismissed';
 
 /** On-demand fix suggestion state for one finding (client-side only). */
 /** CI verification of a fix on its temporary branch. */
@@ -162,7 +163,10 @@ function initialFindings(): Finding[] {
 	];
 }
 
-/** Map a backend finding (harness output) onto the local card/thread model. */
+/**
+ * Map a backend finding (harness output) onto the local card/thread model. A fix Recoder pushed earlier
+ * keeps the finding Fixed across reloads.
+ */
 export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 	const severityMap: Record<BackendSeverity, FindingSeverity> = {
 		error: 'high',
@@ -190,7 +194,6 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 		evidenceIds: f.evidenceIds ?? [],
 		assignmentId: f.assignmentId,
 		verification: f.verification,
-		// A fix Recoder pushed earlier keeps the finding Fixed across reloads.
 		status: f.fix ? 'accepted' : 'open',
 		fixedBy: f.fix?.agent ?? null,
 		fix: f.fix

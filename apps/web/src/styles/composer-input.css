@@ -1,0 +1,394 @@
+.agent-install-cmd code {
+	min-width: 0;
+	flex: 1;
+	overflow-x: auto;
+	white-space: nowrap;
+	font-family: var(--font-code);
+	font-size: 12px;
+	color: var(--text-secondary);
+}
+.settings-row.agent-install {
+	border-top: 1px solid var(--line-subtle-2);
+}
+
+.settings-row + .settings-row,
+.settings-list > .settings-row + .settings-row {
+	border-top: 1px solid var(--line-subtle-2);
+}
+.settings-row-name {
+	font-size: 13px;
+	line-height: 1.4;
+	color: var(--text-primary);
+}
+.settings-row-desc {
+	margin-top: 1px;
+	font-size: 11.5px;
+	line-height: 1.4;
+	color: var(--text-faint);
+}
+.role-row .quiet-trigger:disabled {
+	opacity: 1;
+	color: var(--text-subtle);
+}
+.settings-number {
+	width: 96px;
+}
+.settings-number [data-ui='input'] {
+	height: 30px;
+	min-height: 30px;
+	border-radius: 8px;
+	font-family: var(--font-code);
+	font-size: 12.5px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	appearance: textfield;
+}
+/* The native spinner reserves ~14px on the right even when hidden; drop it so padding is even. */
+.settings-number [data-ui='input']::-webkit-inner-spin-button,
+.settings-number [data-ui='input']::-webkit-outer-spin-button {
+	appearance: none;
+	margin: 0;
+}
+
+/* Switch: no knob stretch on press. */
+[data-ui='switch'] > span,
+[data-ui='switch']:active > span {
+	scale: none;
+}
+
+/* Session page: scroll without visible scrollbars. */
+main[data-route^='/session'] * {
+	scrollbar-width: none;
+}
+main[data-route^='/session'] *::-webkit-scrollbar {
+	display: none;
+}
+/* Except code boxes capped in a finding (evidence, suggested fix): like an
+   editor, a thin bar shows there is more code. */
+main[data-route] [data-ui='file-diff-content'],
+main[data-route] .suggested-fix-code {
+	--code-thumb: color-mix(in oklab, var(--text-primary) 20%, transparent);
+	scrollbar-width: thin;
+	scrollbar-color: var(--code-thumb) transparent;
+}
+main[data-route] [data-ui='file-diff-content']:hover,
+main[data-route] .suggested-fix-code:hover {
+	--code-thumb: color-mix(in oklab, var(--text-primary) 34%, transparent);
+}
+main[data-route] [data-ui='file-diff-content']::-webkit-scrollbar,
+main[data-route] .suggested-fix-code::-webkit-scrollbar {
+	display: block;
+	width: 8px;
+	height: 8px;
+}
+main[data-route] [data-ui='file-diff-content']::-webkit-scrollbar-thumb,
+main[data-route] .suggested-fix-code::-webkit-scrollbar-thumb {
+	border: 2px solid transparent;
+	border-radius: 999px;
+	background: var(--code-thumb) padding-box;
+}
+
+/* PR hover card (brief references). */
+[data-ui='popover-content'].pr-card {
+	width: 320px;
+	cursor: pointer;
+}
+[data-ui='popover-content'].pr-card > div {
+	box-shadow: inset 0 0 0 100vmax transparent;
+	transition: box-shadow var(--dur-hover) var(--ease-menu);
+}
+@media (hover: hover) {
+	[data-ui='popover-content'].pr-card:hover > div {
+		box-shadow: inset 0 0 0 100vmax color-mix(in oklab, var(--text-primary) 4%, transparent);
+	}
+}
+.pr-card > .sivir-inset-surface,
+[data-ui='popover-content'].pr-card > div {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 12px 14px;
+	font-family: var(--font-ui);
+	letter-spacing: 0;
+}
+.pr-card-title {
+	font-size: 13.5px;
+	font-weight: 500;
+	line-height: 1.35;
+	color: var(--text-primary);
+}
+.pr-card-meta {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 7px;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
+/* Large monitors (1440p and up at 100% OS scaling). Every px length in CSS is
+   compiled to rem (vite.config.ts), so raising the root size scales the whole
+   UI evenly. Media queries stay in px. */
+@media (min-width: 1920px) {
+	html {
+		font-size: 112.5%;
+	}
+}
+@media (min-width: 2400px) {
+	html {
+		font-size: 125%;
+	}
+}
+/* Lucide sets icon size as width/height attributes; restate them in CSS so
+   icons scale with the text. Base layer, so utility size classes still win. */
+@layer base {
+	svg.lucide[width='10'] {
+		width: 10px;
+		height: 10px;
+	}
+	svg.lucide[width='11'] {
+		width: 11px;
+		height: 11px;
+	}
+	svg.lucide[width='12'] {
+		width: 12px;
+		height: 12px;
+	}
+	svg.lucide[width='13'] {
+		width: 13px;
+		height: 13px;
+	}
+	svg.lucide[width='14'] {
+		width: 14px;
+		height: 14px;
+	}
+	svg.lucide[width='15'] {
+		width: 15px;
+		height: 15px;
+	}
+	svg.lucide[width='16'] {
+		width: 16px;
+		height: 16px;
+	}
+	svg.lucide[width='18'] {
+		width: 18px;
+		height: 18px;
+	}
+	svg.lucide[width='20'] {
+		width: 20px;
+		height: 20px;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition-duration: 1ms !important;
+	}
+	.rc-skeleton {
+		animation: rc-skeleton-hold 1ms linear var(--skeleton-delay) backwards;
+	}
+	.shimmer-text,
+	.stream-caret::after {
+		animation: none;
+	}
+	.shimmer-text {
+		color: var(--text-faint);
+	}
+	.thread-panel-enter {
+		transition: none;
+	}
+}
+
+/* ⌘K palette: 660px, 118px from the top, radius 14, #181716 with a #2e2b28 ring. */
+[data-ui='command-content'].sivir-modal-frame {
+	top: 118px;
+	max-width: 660px;
+	translate: -50% 0;
+	border-radius: 14px;
+	background-color: var(--bg-field);
+	box-shadow:
+		0 0 0 1px var(--line-menu),
+		0 30px 80px rgb(var(--shade-rgb) / 0.6);
+}
+[data-ui='command-content'] [data-ui='modal-surface'] {
+	border-radius: 14px;
+}
+[data-ui='command-content'].sivir-modal-frame {
+	max-height: calc(100dvh - 158px);
+}
+/* Sivir's result count; the scope hint takes that spot. */
+.palette-search > div > span:not(.sr-only) {
+	display: none;
+}
+.palette-search {
+	position: relative;
+}
+.palette-search > div {
+	height: 54px;
+	gap: 12px;
+	padding: 0 18px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.palette-search > div > svg {
+	width: 16px;
+	height: 16px;
+	color: var(--text-muted);
+}
+.palette-search input {
+	padding-right: 170px;
+	font-size: 15.5px;
+	color: var(--text-primary);
+}
+.palette-search input::placeholder {
+	color: var(--text-faint);
+}
+.palette-scope {
+	position: absolute;
+	top: 50%;
+	right: 18px;
+	max-width: 160px;
+	translate: 0 -50%;
+	overflow: hidden;
+	font-size: 12.5px;
+	color: var(--text-faint);
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	pointer-events: none;
+}
+[data-ui='command-content'] [role='listbox'] {
+	padding: 8px 8px 6px;
+	scrollbar-gutter: auto;
+}
+/* Group labels stay visible while searching; Sivir's own label hides then. */
+[data-ui='command-content'] [role='group'] > p.sivir-menu-label:not(.palette-label) {
+	display: none;
+}
+[data-ui='command-content'] [role='group'] {
+	gap: 0;
+	padding-top: 2px;
+}
+.palette-label {
+	padding: 8px 10px 5px;
+	font-size: 11.5px;
+	color: var(--text-faint);
+}
+[data-ui='command-content'] .sivir-menu-item {
+	min-height: 38px;
+	padding: 0 10px;
+	border-radius: 9px;
+	font-size: 14px;
+	color: var(--text-primary);
+}
+[data-ui='command-content'] .sivir-menu-item > div {
+	gap: 12px;
+}
+[data-ui='command-content'] .sivir-menu-item.palette-ask {
+	min-height: 40px;
+	margin-bottom: 2px;
+}
+[data-ui='command-content'] .sivir-item-highlight {
+	border-radius: 9px;
+	background-color: var(--bg-selected);
+}
+.palette-icon {
+	display: flex;
+	flex-shrink: 0;
+	color: var(--text-muted);
+}
+.palette-meta {
+	flex-shrink: 0;
+	font-size: 12.5px;
+	color: var(--text-faint);
+}
+[data-ui='badge'].palette-sev {
+	min-width: 58px;
+	justify-content: center;
+	padding: 2px 8px;
+	border-radius: 6px;
+	font-size: 12px;
+}
+mark.palette-hit {
+	border-radius: 3px;
+	background-color: color-mix(in srgb, var(--sev-medium) 20%, transparent);
+	color: var(--text-primary);
+}
+.palette-footer {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 16px;
+	height: 36px;
+	padding: 0 18px;
+	border-top: 1px solid var(--line-subtle);
+	font-size: 12px;
+	color: var(--text-faint);
+}
+.palette-footer > span {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+}
+
+/* ── Session header (3b, 3c, 4f) ───────────────────────────── */
+.session-header {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 14px;
+	height: 52px;
+	padding: 0 10px 0 18px;
+}
+.session-header[data-bordered] {
+	border-bottom: 1px solid var(--line-divider);
+}
+.session-header .session-pr {
+	flex: 0 0 auto;
+	font-family: var(--font-mono);
+	font-size: 13px;
+	line-height: 20px;
+	color: var(--text-primary);
+	text-decoration-line: none;
+	text-underline-offset: 3px;
+	text-decoration-color: var(--text-muted);
+	border-radius: 4px;
+}
+/* A link at rest reads as plain text; hover shows it's a link to the PR. */
+.session-header a.session-pr:hover {
+	text-decoration-line: underline;
+}
+.session-header a.session-pr:focus-visible {
+	outline: none;
+	box-shadow: var(--focus-ring);
+}
+.session-pr-card {
+	width: auto;
+	min-width: 220px;
+	max-width: 360px;
+	margin-top: 6px;
+}
+.session-pr-card > .sivir-inset-surface {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px 14px;
+}
+.session-pr-card .session-pr-title {
+	margin-bottom: 2px;
+	font-size: 13.5px;
+	font-weight: 500;
+	line-height: 19px;
+	color: var(--text-primary);
+}
+.session-pr-card .session-pr-meta {
+	display: flex;
+	min-width: 0;
+	gap: 6px;
+	font-family: var(--font-mono);
+	font-size: 12px;
+	line-height: 17px;
+	color: var(--text-muted);
+}

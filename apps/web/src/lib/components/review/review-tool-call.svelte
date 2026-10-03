@@ -13,7 +13,7 @@
 	const action = $derived(presentation.action);
 	const isRun = $derived(action === 'run' || action === '$');
 	const live = $derived(tool.status === 'running' && active);
-	// "Reading file" while it runs, "Read file" once it's done.
+	/** "Reading file" while it runs, "Read file" once it's done. */
 	const actionLabel = $derived(
 		isRun
 			? live

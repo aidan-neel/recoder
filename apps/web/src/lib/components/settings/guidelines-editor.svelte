@@ -69,7 +69,6 @@
 	/** Template placeholders (`-` with nothing after it) would render as empty bullets. */
 	const previewText = $derived(text.replace(/^[ \t]*[-*][ \t]*$/gm, ''));
 
-	// Seed once per open, when the source text is known.
 	$effect(() => {
 		if (!key || !ready || seededFor === key) return;
 
@@ -125,6 +124,7 @@
 
 	const sourceCount = $derived(Number(include.instructions) + Number(include.global));
 
+	/** Streams a draft or revision from the orchestrator. On failure the request is kept so it can be retried or edited. */
 	async function draft(request: string): Promise<void> {
 		if (drafting || !editing) return;
 		drafting = true;
@@ -166,7 +166,6 @@
 		} catch (e) {
 			if (revising) proposal = null;
 			else text = before;
-			// Keep the request so it can be retried or edited.
 			if (!prompt) prompt = request;
 			if (!(e instanceof DOMException && e.name === 'AbortError'))
 				draftError = e instanceof Error ? e.message : 'The orchestrator did not respond.';
@@ -226,8 +225,8 @@
 		sourcesOpen = false;
 	}
 
+	/** ⌘↵ saves, except inside the composer, which sends on Enter itself. */
 	function onKey(event: KeyboardEvent): void {
-		// The composer sends on Enter itself; ⌘↵ elsewhere saves.
 		if (!editing || event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return;
 		if (document.activeElement?.closest('.rc-composer')) return;
 		event.preventDefault();
@@ -333,7 +332,6 @@
 				</Alert.Root>
 			</div>
 		{:else if !ready}
-			<!-- Same frame as the loaded editor: a Markdown heading with bullets, then the dock. -->
 			<div class="guidelines-doc guidelines-loading" role="status" aria-label="Loading guidelines">
 				{#each [[62, 48, 70], [54, 40]] as bullets, g (g)}
 					<Skeleton class="mt-2 h-4 w-24 first:mt-0" />
@@ -359,7 +357,6 @@
 			<ScrollArea class="guidelines-scroll" showCues={false} aria-label="Guidelines">
 				<div class="guidelines-doc">
 					{#if proposal !== null && drafting}
-						<!-- A partial revision would diff as mostly deletions; stream it as text, diff once done. -->
 						<div class="guidelines-preview">
 							{#if proposal}<Markdown content={proposal} streaming />{:else}<Markdown content={previewText} />{/if}
 						</div>

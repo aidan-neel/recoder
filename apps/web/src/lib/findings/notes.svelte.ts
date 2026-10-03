@@ -28,7 +28,7 @@ export interface ReviewNote {
 	hunkHeader?: string;
 }
 
-export type NoteInput = Pick<
+type NoteInput = Pick<
 	ReviewNote,
 	'file' | 'startLine' | 'endLine' | 'side' | 'quote' | 'body' | 'newText' | 'oldText' | 'diffContext' | 'hunkHeader'
 >;

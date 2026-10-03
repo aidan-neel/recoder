@@ -64,7 +64,6 @@
 		if (findingId) contextOpen = true;
 	});
 
-	// A card's "Suggest fix" queues a canned message; send it like typed text.
 	$effect(() => {
 		const pending = threadsStore.pendingMessage;
 
@@ -115,7 +114,6 @@
 		window.getSelection()?.removeAllRanges();
 	}
 
-	// Follow the finding's own reviewer when the thread changes.
 	$effect(() => {
 		const agent = finding?.agent;
 
@@ -124,8 +122,12 @@
 		}
 	});
 
+	/**
+	 * Sends the draft to the open thread. Stream callbacks stay on that finding even if the panel closes
+	 * or switches, and local-only demo threads get no reply. A stream that fails before any text arrives
+	 * is retried once; a partial reply is kept as-is.
+	 */
 	async function send(): Promise<void> {
-		// Keep stream callbacks on this finding even if the panel closes or switches.
 		const findingId = threadsStore.openId;
 
 		if (!findingId || composerBusy) return;
@@ -154,7 +156,6 @@
 		sendError = null;
 		if (inputEl) inputEl.style.height = 'auto';
 
-		// Local-only demo threads have no backend review to answer.
 		const reviewId = threadsStore.reviewId;
 
 		if (!reviewId || !finding) return;
@@ -195,8 +196,6 @@
 
 				threadsStore.finishReply(findingId, placeholderId, result.agent, result.model);
 			} catch (e) {
-				// Nothing arrived — likely transient (model hiccup, dropped stream).
-				// Retry once before giving up; a partial reply is kept as-is.
 				if (controller.signal.aborted || streamedSoFar() !== '') throw e;
 
 				const result = await serverApi.discussStream(reviewId, payload, push, controller.signal);
@@ -217,6 +216,14 @@
 		}
 	}
 
+	/** Escape closes the panel, unless a menu inside it (the agent picker) consumed it first. */
+	function onWindowKeydown(event: KeyboardEvent): void {
+		if (event.key === 'Escape' && !event.defaultPrevented && document.activeElement?.closest('#finding-thread')) {
+			event.preventDefault();
+			void close();
+		}
+	}
+
 	$effect(() => {
 		document.addEventListener('selectionchange', onSelectionChange);
 
@@ -224,15 +231,7 @@
 	});
 </script>
 
-<svelte:window
-	onkeydown={(event) => {
-		// Let the agent menu consume Escape before closing its parent panel.
-		if (event.key === 'Escape' && !event.defaultPrevented && document.activeElement?.closest('#finding-thread')) {
-			event.preventDefault();
-			void close();
-		}
-	}}
-/>
+<svelte:window onkeydown={onWindowKeydown} />
 
 <section
 	id="finding-thread"
@@ -244,7 +243,6 @@
 	>
 		<div class="flex min-h-12 w-full shrink-0 items-center gap-2 border-b border-border-subtle px-4">
 			{#if finding}
-				<!-- No visible title: the finding card below names it. Kept for screen readers. -->
 				<Typography.Title level={2} class="sr-only">{finding.title}</Typography.Title>
 				<Button
 					variant="ghost"

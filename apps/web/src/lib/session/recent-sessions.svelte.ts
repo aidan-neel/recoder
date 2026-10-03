@@ -8,13 +8,7 @@ export interface RecentSession {
 	pr: number;
 	title: string | null;
 	branch: string | null;
-	findings: number;
 	status: Review['status'];
-	durationMs?: number;
-	tasksDone?: number;
-	tasksTotal?: number;
-	specialists?: number;
-	reason?: string;
 	updatedAt: string;
 }
 
@@ -27,31 +21,18 @@ interface ProgressSummary {
 function mapRecent(
 	reviews: Review[],
 	names: Map<string, string>,
-	summaries: Record<string, ProgressSummary>,
 	branches: Record<string, string | null>
 ): RecentSession[] {
 	return reviews
-		.map((review) => {
-			const summary = summaries[review.id];
-			const start = Date.parse(review.startedAt ?? review.createdAt);
-			const end = Date.parse(review.updatedAt);
-
-			return {
-				id: review.id,
-				repo: names.get(review.repoId) ?? review.repoId.slice(0, 8),
-				pr: review.prNumber,
-				title: review.prTitle,
-				branch: branches[`${review.repoId}#${review.prNumber}`] ?? null,
-				findings: review.findings.length,
-				status: review.status,
-				durationMs: Number.isFinite(start) && Number.isFinite(end) ? Math.max(0, end - start) : undefined,
-				tasksDone: summary?.tasksDone,
-				tasksTotal: summary?.tasksTotal,
-				specialists: summary?.specialists,
-				reason: review.status === 'failed' ? (review.summary ?? undefined) : undefined,
-				updatedAt: review.updatedAt
-			};
-		})
+		.map((review) => ({
+			id: review.id,
+			repo: names.get(review.repoId) ?? review.repoId.slice(0, 8),
+			pr: review.prNumber,
+			title: review.prTitle,
+			branch: branches[`${review.repoId}#${review.prNumber}`] ?? null,
+			status: review.status,
+			updatedAt: review.updatedAt
+		}))
 		.sort((a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0));
 }
 
@@ -77,55 +58,8 @@ export function timeAgo(iso: string): string {
 	if (d === 1) return 'yesterday';
 	if (d < 30) return `${d}d ago`;
 
+	// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive
 	return new Date(t).toLocaleDateString();
-}
-
-function plural(n: number, word: string): string {
-	return `${n} ${word}${n === 1 ? '' : 's'}`;
-}
-
-export function recentHeadline(session: RecentSession): string {
-	if (session.status === 'draft') return 'Waiting for your prompt';
-
-	if (session.status === 'running' || session.status === 'queued') {
-		const parts: string[] = [];
-
-		if (session.tasksTotal) {
-			parts.push(`${session.tasksDone ?? 0} of ${session.tasksTotal} tasks`);
-		}
-
-		if (session.specialists) {
-			parts.push(`${plural(session.specialists, 'specialist')} working`);
-		}
-
-		if (parts.length === 0) {
-			parts.push(session.findings > 0 ? `${plural(session.findings, 'finding')} so far` : 'Starting…');
-		}
-
-		return parts.join(' · ');
-	}
-
-	const parts: string[] = [];
-
-	if (session.status === 'failed') {
-		parts.push(session.reason?.split('\n')[0] ?? 'Review failed');
-	} else {
-		parts.push(plural(session.findings, 'finding'));
-	}
-
-	if (session.durationMs !== undefined) {
-		const seconds = Math.max(0, Math.floor(session.durationMs / 1000));
-
-		parts.push(`${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`);
-	}
-
-	if (session.updatedAt) parts.push(timeAgo(session.updatedAt));
-
-	return parts.join(' · ');
-}
-
-export function recentStatusLabel(session: RecentSession): string {
-	return session.status === 'running' || session.status === 'queued' ? 'reviewing' : session.status;
 }
 
 class RecentSessionsState {
@@ -146,36 +80,14 @@ class RecentSessionsState {
 
 		const names = new Map(this.repos.map((r) => [r.id, r.name] as const));
 
-		return mapRecent(this.reviews, names, this.summaries, this.branches);
-	}
-
-	get recentByRepo(): [string, RecentSession[]][] {
-		const groups = new Map<string, RecentSession[]>();
-
-		for (const session of this.recent) {
-			const list = groups.get(session.repo) ?? [];
-
-			list.push(session);
-			groups.set(session.repo, list);
-		}
-
-		const order = new Map(this.repos.map((r, i) => [r.name, i] as const));
-
-		return [...groups.entries()].sort((a, b) => {
-			const oa = order.get(a[0]) ?? 1_000;
-			const ob = order.get(b[0]) ?? 1_000;
-
-			if (oa !== ob) return oa - ob;
-
-			return (Date.parse(b[1][0]?.updatedAt ?? '') || 0) - (Date.parse(a[1][0]?.updatedAt ?? '') || 0);
-		});
+		return mapRecent(this.reviews, names, this.branches);
 	}
 
 	get reviewingCount(): number {
 		return this.recent.filter((s) => s.status === 'running' || s.status === 'queued').length;
 	}
 
-	/** Single-flight load shared by every consumer (sidebar + home page helpers). */
+	/** Single-flight load shared by every consumer. A cached list shows at once; the fetch replaces it quietly. */
 	load(): Promise<void> {
 		if (!this.inflight) {
 			const cached = this.seeded
@@ -187,7 +99,6 @@ class RecentSessionsState {
 			this.seeded = true;
 
 			if (cached) {
-				// Show the last list at once; the fetch below replaces it quietly.
 				this.repos = cached.repos;
 				this.reviews = cached.reviews.filter((review) => !this.hidden.has(review.id));
 				this.summaries = cached.summaries;
@@ -248,7 +159,10 @@ class RecentSessionsState {
 		return () => clearInterval(timer);
 	}
 
-	/** Resolve each PR once, including closed PRs, without delaying the session list. */
+	/**
+	 * Resolve each PR once, including closed PRs, without delaying the session list. Requests go four at a
+	 * time, and a failed one leaves the session usable without its branch.
+	 */
 	private async loadBranches(reviews: Review[]): Promise<void> {
 		const pending = reviews.filter((review) => {
 			const key = `${review.repoId}#${review.prNumber}`;
@@ -259,7 +173,6 @@ class RecentSessionsState {
 			return true;
 		});
 
-		// Bound provider requests when a long review history is loaded.
 		for (let i = 0; i < pending.length; i += 4) {
 			await Promise.all(
 				pending.slice(i, i + 4).map(async (review) => {
@@ -270,7 +183,6 @@ class RecentSessionsState {
 
 						this.branches[key] = pr.headRef || null;
 					} catch {
-						// Keep the session usable when the provider or branch is unavailable.
 					} finally {
 						this.branchRequests.delete(key);
 					}

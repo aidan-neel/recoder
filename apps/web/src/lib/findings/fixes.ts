@@ -5,7 +5,7 @@ import { threadsStore } from './threads.svelte';
 import { changesStore } from '../diff/changes.svelte';
 
 /** The finding fields the fix endpoints need. */
-export function toFixInput(finding: Finding) {
+function toFixInput(finding: Finding) {
 	return {
 		file: finding.file,
 		line: finding.startLine,
@@ -15,7 +15,10 @@ export function toFixInput(finding: Finding) {
 	};
 }
 
-/** Ask the finding's reviewer for a patch. The result lands in `findingsStore.suggestions`. */
+/**
+ * Ask the finding's reviewer for a patch. The result lands in `findingsStore.suggestions`. Out of usage,
+ * the way out is settings, where another model gets picked.
+ */
 export async function suggestFix(finding: Finding, opts: { quiet?: boolean; queued?: boolean } = {}): Promise<void> {
 	const reviewId = threadsStore.reviewId;
 
@@ -33,7 +36,6 @@ export async function suggestFix(finding: Finding, opts: { quiet?: boolean; queu
 		});
 	} catch (e) {
 		const message = e instanceof Error ? e.message : 'Could not suggest a fix.';
-		// Out of usage: settings is where another model gets picked.
 		const action = e instanceof ApiError ? (e.usageLimit ? 'settings' : e.action) : undefined;
 
 		findingsStore.suggestError(finding.id, message, action);
@@ -41,7 +43,10 @@ export async function suggestFix(finding: Finding, opts: { quiet?: boolean; queu
 	}
 }
 
-/** Apply the ready patch to the review checkout (no commit, no push) and mark the finding fixed. */
+/**
+ * Apply the ready patch to the review checkout (no commit, no push) and mark the finding fixed. Its
+ * temporary CI branch, if any, is deleted.
+ */
 export async function applyFix(finding: Finding, opts: { quiet?: boolean } = {}): Promise<void> {
 	const reviewId = threadsStore.reviewId;
 	const suggestion = findingsStore.suggestions[finding.id];
@@ -71,7 +76,6 @@ export async function applyFix(finding: Finding, opts: { quiet?: boolean } = {})
 			agent: finding.agent
 		});
 
-		// The temporary CI branch has served its purpose.
 		if (verifyBranch) void serverApi.deleteVerifyBranch(reviewId, verifyBranch).catch(() => undefined);
 		void changesStore.refresh();
 		if (!opts.quiet) undoToast(`Fix applied to ${finding.file.split('/').at(-1)}. Commit it from Changes.`);
@@ -93,7 +97,8 @@ export function hasReadyFix(finding: Finding): boolean {
 /**
  * Fix all / "fix these" from the chat: each finding's specialist writes a patch
  * in the background (three at a time). Nothing is pushed; each fix is reviewed
- * on its finding, then applied there or with Apply all.
+ * on its finding, then applied there or with Apply all. One shared failure cause
+ * (signed out, no model) gets a toast with its way out; mixed causes live on each finding.
  */
 export async function fixFindings(findings: Finding[]): Promise<void> {
 	const queue = findings.filter((f) => {
@@ -120,7 +125,6 @@ export async function fixFindings(findings: Finding[]): Promise<void> {
 
 	const failed = errors.length;
 
-	// One shared cause (signed out, no model) is worth saying, with its way out; mixed causes live on each finding.
 	const shared =
 		failed > 0 && errors.every((s) => s.error && s.error === errors[0].error && s.action === errors[0].action)
 			? errors[0]
@@ -152,13 +156,13 @@ export async function applyReadyFixes(findings: Finding[]): Promise<void> {
 		);
 }
 
-/* CI verification: push the ready fix to a temporary branch, then poll its checks. */
 const verifyTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const POLL_MS = 8000;
 /** No checks at all by then: the repo's CI probably doesn't run on branch pushes. */
 const NO_CHECKS_AFTER_MS = 3 * 60_000;
 const GIVE_UP_AFTER_MS = 45 * 60_000;
 
+/** CI verification: push the ready fix to a temporary branch, then poll its checks. */
 export async function verifyFix(finding: Finding): Promise<void> {
 	const reviewId = threadsStore.reviewId;
 	const suggestion = findingsStore.suggestions[finding.id];
@@ -193,7 +197,7 @@ export async function verifyFix(finding: Finding): Promise<void> {
 	const poll = async () => {
 		const current = findingsStore.suggestions[finding.id]?.verify;
 
-		if (current?.sha !== pushed.sha) return; // re-run or discarded
+		if (current?.sha !== pushed.sha) return;
 
 		try {
 			const { checks } = await serverApi.getChecks(reviewId, pushed.sha);

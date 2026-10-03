@@ -14,9 +14,7 @@ function read(key: string): string | null {
 function write(key: string, value: string): void {
 	try {
 		localStorage.setItem(key, value);
-	} catch {
-		// Preference just won't survive a refresh.
-	}
+	} catch {}
 }
 
 class DiffPrefs {
@@ -42,7 +40,7 @@ class DiffPrefs {
 		if (this.#reviewId === reviewId) return;
 		this.#reviewId = reviewId;
 
-		let stored: unknown = [];
+		let stored: unknown;
 
 		try {
 			stored = reviewId ? JSON.parse(read(VIEWED_KEY + reviewId) ?? '[]') : [];

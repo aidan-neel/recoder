@@ -87,7 +87,7 @@ export function carryPill(list: HTMLElement, group: string, value: string): () =
 		settled.set(group, { value, rect });
 	};
 
-	// Two frames: Sivir re-measures its pill on the first after a resize.
+	/** Waits two frames: Sivir re-measures its pill on the first after a resize. */
 	const schedule = () => {
 		cancelAnimationFrame(frame);
 		frame = requestAnimationFrame(() => (frame = requestAnimationFrame(settle)));

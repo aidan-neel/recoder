@@ -13,6 +13,7 @@ export interface ModelNote {
 
 const BLOCK = /```recoder-note[^\n]*\n([\s\S]*?)```/g;
 
+/** Valid notes in the reply, deduplicated (the model sometimes repeats one). Malformed blocks are left out. */
 export function parseModelNotes(text: string): ModelNote[] {
 	const notes: ModelNote[] = [];
 	const seen = new Set<string>();
@@ -35,15 +36,12 @@ export function parseModelNotes(text: string): ModelNote[] {
 				body: raw.body.trim().slice(0, 4000)
 			};
 
-			// The model sometimes repeats a note (e.g. in both the text and the notes field).
 			const key = JSON.stringify(note);
 
 			if (seen.has(key)) continue;
 			seen.add(key);
 			notes.push(note);
-		} catch {
-			// Malformed block: leave it out rather than guess.
-		}
+		} catch {}
 	}
 
 	return notes;
@@ -51,7 +49,7 @@ export function parseModelNotes(text: string): ModelNote[] {
 
 const FIX_BLOCK = /```recoder-fix[^\n]*\n([\s\S]*?)```/;
 
-/** A fix request the model made when asked (```recoder-fix {"findings": [...] | "all"}). */
+/** A fix request the model made when asked (```recoder-fix {"findings": [...] | "all"}). A malformed block is ignored. */
 export function parseFixRequest(text: string): string[] | 'all' | null {
 	const match = FIX_BLOCK.exec(text);
 
@@ -67,9 +65,7 @@ export function parseFixRequest(text: string): string[] | 'all' | null {
 
 			return ids.length ? ids : null;
 		}
-	} catch {
-		// Malformed block: ignore rather than guess.
-	}
+	} catch {}
 
 	return null;
 }

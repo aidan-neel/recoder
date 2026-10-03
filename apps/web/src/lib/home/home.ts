@@ -1,26 +1,5 @@
 import type { HomeBriefRequest, PullRequest, Repo, Review } from '@recoder/shared';
 
-/** Latest review per `repoId#pr`; a real review outranks a newer empty draft. */
-export function latestReviews(reviews: Review[]): Map<string, Review> {
-	const latest = new Map<string, Review>();
-	const rank = (review: Review) => (review.status === 'draft' ? 0 : 1);
-
-	for (const review of reviews) {
-		const key = `${review.repoId}#${review.prNumber}`;
-		const current = latest.get(key);
-
-		if (
-			!current ||
-			rank(review) > rank(current) ||
-			(rank(review) === rank(current) && Date.parse(review.updatedAt) > Date.parse(current.updatedAt))
-		) {
-			latest.set(key, review);
-		}
-	}
-
-	return latest;
-}
-
 export const prKey = (repoId: string, n: number): string => `${repoId}#${n}`;
 
 export function highCount(review: Review | undefined): number {

@@ -1,31 +1,8 @@
-import type {
-	ModelEntry,
-	Provider,
-	ModelSettings,
-	ModelSettingsPatch,
-	ReasoningEffort,
-	ReviewRole
-} from '@recoder/shared';
+import type { ModelEntry, Provider, ModelSettings, ModelSettingsPatch, ReasoningEffort } from '@recoder/shared';
 import { errorToast } from '../shell/notify';
 import { serverApi } from '../api/server-api';
 
-export const MODEL_ROLES: ReviewRole[] = [
-	'security',
-	'perf',
-	'correctness',
-	'docs',
-	'dedup',
-	'patterns',
-	'testing',
-	'errors',
-	'concurrency',
-	'api',
-	'impact',
-	'frontend',
-	'data'
-];
-
-export interface EffortOption {
+interface EffortOption {
 	id: ReasoningEffort;
 	label: string;
 	description: string;
@@ -94,6 +71,7 @@ export function providerName(entry: ModelEntry): string {
 	if (/openai\.com/i.test(url)) return 'OpenAI';
 
 	try {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive
 		const host = new URL(url).hostname;
 
 		return /^(localhost|127\.|10\.|192\.168\.)/.test(host) ? 'Local endpoint' : host;
@@ -128,11 +106,6 @@ export function toModelOption(entry: ModelEntry): ModelOption {
 	};
 }
 
-/**
- * What to show for a model id in the UI: the configured entry's name
- * ("Ornith 1.5 35B"), else a tidied id ("ornith-ai/Ornith-1.5-35B-A3B" → "Ornith 1.5 35B A3B").
- * Raw ids stay available in tooltips.
- */
 /** ChatGPT models only return summaries of their reasoning, never the reasoning itself. */
 export function summarizesReasoning(modelId: string | null | undefined): boolean {
 	if (!modelId) return false;
@@ -144,6 +117,11 @@ export function summarizesReasoning(modelId: string | null | undefined): boolean
 	);
 }
 
+/**
+ * What to show for a model id in the UI: the configured entry's name
+ * ("Ornith 1.5 35B"), else a tidied id ("ornith-ai/Ornith-1.5-35B-A3B" → "Ornith 1.5 35B A3B").
+ * Raw ids stay available in tooltips.
+ */
 export function modelLabel(modelId: string | null | undefined): string {
 	if (!modelId) return '';
 
@@ -169,8 +147,7 @@ export function resolveEffort(
 export type SettingsSection = 'models' | 'connections' | 'harness' | 'guidelines' | 'appearance';
 
 /** A dialog to open inside the section as soon as Settings shows it. */
-export type SettingsIntent =
-	{ kind: 'connect'; provider: Provider } | { kind: 'browse-repos' } | { kind: 'add-provider' };
+type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-repos' } | { kind: 'add-provider' };
 
 /** Global open state + cached config for the model settings modal. */
 class ModelSettingsUi {

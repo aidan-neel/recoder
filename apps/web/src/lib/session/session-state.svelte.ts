@@ -43,6 +43,7 @@ function loadStored(): { sessions: Session[]; activeId: string } {
 class SessionState {
 	sessions = $state<Session[]>([]);
 	activeId = $state<string>('');
+	/** Highest untitled-N in use, restored on start so numbering never collides across restarts. */
 	private counter = $state(0);
 
 	constructor() {
@@ -51,7 +52,6 @@ class SessionState {
 		this.sessions = stored.sessions;
 		this.activeId = stored.activeId;
 
-		// Keep untitled-N numbering collision-free across restarts.
 		for (const s of stored.sessions) {
 			const m = /^untitled-(\d+)$/.exec(s.name);
 
@@ -59,13 +59,12 @@ class SessionState {
 		}
 	}
 
+	/** Saves the tabs. When storage is full or unavailable they just won't survive a refresh. */
 	private persist(): void {
 		try {
 			if (typeof localStorage === 'undefined') return;
 			localStorage.setItem(STORAGE_KEY, JSON.stringify({ sessions: this.sessions, activeId: this.activeId }));
-		} catch {
-			// Storage full or unavailable — sessions just won't survive refresh.
-		}
+		} catch {}
 	}
 
 	get active(): Session | undefined {
@@ -192,6 +191,7 @@ class SessionState {
 		this.persist();
 	}
 
+	/** Closes a tab. Closing the active one activates the next sibling, else the previous one. */
 	close(id: string): void {
 		const index = this.sessions.findIndex((s) => s.id === id);
 
@@ -199,7 +199,6 @@ class SessionState {
 		this.sessions = this.sessions.filter((s) => s.id !== id);
 
 		if (this.activeId === id) {
-			// Fall through to the next sibling, else the previous one.
 			this.activeId = this.sessions[index]?.id ?? this.sessions[index - 1]?.id ?? '';
 		}
 
