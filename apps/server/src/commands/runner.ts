@@ -13,6 +13,7 @@ export interface RunOptions {
 	timeoutMs?: number;
 	/** Extra env vars merged over process.env for this run only. */
 	env?: Record<string, string>;
+	/** Each output chunk as it arrives. A throw here is ignored: reporting cannot break a command. */
 	onOutput?: (chunk: string) => void;
 }
 
@@ -103,9 +104,7 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 
 					try {
 						opts.onOutput?.(chunk);
-					} catch {
-						/* Reporting cannot break a command. */
-					}
+					} catch {}
 				}
 
 				return text + decoder.decode();

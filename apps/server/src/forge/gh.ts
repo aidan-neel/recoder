@@ -1,16 +1,7 @@
 import type { PrPerson, PullFile, PullRequest, RemoteRepo } from '@recoder/shared';
-import { runCommand } from '../commands/runner.js';
+import { extractJson, forgeCliAvailable, forgeCliUser, GhError, runForgeCli } from './cli.js';
 
-export type GhErrorKind = 'unavailable' | 'auth' | 'not-found' | 'unknown';
-
-export class GhError extends Error {
-	kind: GhErrorKind;
-
-	constructor(kind: GhErrorKind, message: string) {
-		super(message);
-		this.kind = kind;
-	}
-}
+export { extractJson, GhError } from './cli.js';
 
 /** `https://github.com/o/r(.git)`, `git@github.com:o/r(.git)`, or bare `o/r` → `o/r`. */
 export function parseRepoSlug(url: string): string {
@@ -22,6 +13,7 @@ export function parseRepoSlug(url: string): string {
 	throw new GhError('unknown', `cannot parse repo slug from ${url}`);
 }
 
+/** A failed `gh` run's logs as an auth, not-found or unknown GhError. */
 function classifyFailure(logs: string): GhError {
 	const text = logs.toLowerCase();
 
@@ -44,44 +36,9 @@ function classifyFailure(logs: string): GhError {
 	return new GhError('unknown', logs.slice(-2000));
 }
 
-export function extractJson(logs: string): unknown {
-	const objStart = logs.indexOf('{');
-	const arrStart = logs.indexOf('[');
-	let start = -1;
-	let end = -1;
-
-	if (objStart !== -1 && (arrStart === -1 || objStart < arrStart)) {
-		start = objStart;
-		end = logs.lastIndexOf('}');
-	} else if (arrStart !== -1) {
-		start = arrStart;
-		end = logs.lastIndexOf(']');
-	}
-
-	if (start === -1 || end <= start) {
-		throw new GhError('unknown', `gh returned non-JSON: ${logs.slice(-500)}`);
-	}
-
-	try {
-		return JSON.parse(logs.slice(start, end + 1));
-	} catch {
-		throw new GhError('unknown', `gh returned invalid JSON: ${logs.slice(-500)}`);
-	}
-}
-
 /** Run `gh`, capturing stdout. Never throws raw — always GhError. */
-async function gh(args: string[], env?: Record<string, string>): Promise<string> {
-	let run;
-
-	try {
-		run = await runCommand({ label: `gh ${args.slice(0, 2).join(' ')}`, command: 'gh', args, env });
-	} catch (err) {
-		throw new GhError('unavailable', err instanceof Error ? err.message : String(err));
-	}
-
-	if (run.status !== 'succeeded') throw classifyFailure(run.logs);
-
-	return run.logs;
+function gh(args: string[], env?: Record<string, string>): Promise<string> {
+	return runForgeCli('gh', args, env, classifyFailure);
 }
 
 export interface FetchedPull {
@@ -117,54 +74,20 @@ export async function listPullFiles(
 }
 
 /** Is the gh binary usable at all? */
-export async function ghAvailable(): Promise<boolean> {
-	try {
-		const run = await runCommand({ label: 'gh version', command: 'gh', args: ['--version'] });
-
-		return run.status === 'succeeded';
-	} catch {
-		return false;
-	}
+export function ghAvailable(): Promise<boolean> {
+	return forgeCliAvailable('gh');
 }
 
 /** Authenticated user (if any). Never throws. */
-export async function ghAuth(env?: Record<string, string>): Promise<{ authenticated: boolean; user: string | null }> {
-	try {
-		const run = await runCommand({
-			label: 'gh auth',
-			command: 'gh',
-			args: ['api', 'user', '--jq', '.login'],
-			env
-		});
-
-		if (run.status !== 'succeeded') return { authenticated: false, user: null };
-
-		const user = run.logs.trim();
-
-		return { authenticated: true, user: user === '' ? null : user };
-	} catch {
-		return { authenticated: false, user: null };
-	}
+export function ghAuth(env?: Record<string, string>): Promise<{ authenticated: boolean; user: string | null }> {
+	return forgeCliUser('gh', '.login', env);
 }
 
 /** User's repos (newest activity first). Throws GhError. */
 export async function listGhRepos(env?: Record<string, string>): Promise<RemoteRepo[]> {
-	let run;
+	const logs = await gh(['repo', 'list', '--limit', '50', '--json', 'nameWithOwner,url,isPrivate,updatedAt'], env);
 
-	try {
-		run = await runCommand({
-			label: 'gh repo list',
-			command: 'gh',
-			args: ['repo', 'list', '--limit', '50', '--json', 'nameWithOwner,url,isPrivate,updatedAt'],
-			env
-		});
-	} catch (err) {
-		throw new GhError('unavailable', err instanceof Error ? err.message : String(err));
-	}
-
-	if (run.status !== 'succeeded') throw classifyFailure(run.logs);
-
-	const items = extractJson(run.logs);
+	const items = extractJson(logs);
 
 	if (!Array.isArray(items)) throw new GhError('unknown', 'gh repo list returned non-array JSON');
 

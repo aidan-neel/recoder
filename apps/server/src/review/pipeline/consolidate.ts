@@ -155,6 +155,7 @@ function newSideAnchored(inventory: ReviewInventory, path: string, line: number)
 	return false;
 }
 
+/** Apply the consolidator's merges. A merged duplicate that was reproduced proves the kept finding too. */
 export function applyConsolidation(
 	plan: ConsolidationPlan,
 	candidates: CandidateFinding[]
@@ -182,7 +183,6 @@ export function applyConsolidation(
 			if (!extra) continue;
 			consumed.add(id);
 
-			// A merged duplicate that was reproduced proves the kept finding too.
 			if (extra.verification?.status === 'verified' && verification?.status !== 'verified') {
 				verification = extra.verification;
 				evidenceIds = [...new Set([...(extra.evidenceIds ?? []), ...(evidenceIds ?? [])])];

@@ -1,15 +1,9 @@
-import type { HomeBriefRequest, HomeBriefResponse, Review } from '@recoder/shared';
+import { latestReviews, type HomeBriefRequest, type HomeBriefResponse, type Review } from '@recoder/shared';
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serverDataDir } from '../util/data-dir';
 import { chatCompletion, LlmError } from '../models/llm.js';
 import { configForOrchestrator } from '../models/models.js';
-
-/**
- * The Home brief: a short, conversational read of the open PRs, written by the
- * orchestrator's model. Facts come from the client's PR list joined with the
- * stored reviews, so the model never guesses at review state.
- */
 
 const SYSTEM_PROMPT = `You write the one-line brief at the top of a code-review app's home screen.
 Say only the single most useful thing: the one pull request that most needs attention and why (open high-severity findings, a failed review, or the biggest one nobody has reviewed). Mention a second only if it is just as urgent. Do not list, count, or summarize the rest; leave everything unremarkable out.
@@ -19,6 +13,12 @@ Use only the facts provided. One or two short sentences, at most 25 words. Plain
 
 /** Bump when the prompt changes so a saved brief written by the old one is replaced. */
 const BRIEF_VERSION = 3;
+
+/** Output budget: reasoning models spend output tokens thinking before the brief itself. */
+const BRIEF_MAX_TOKENS = 4000;
+
+/** Never let one stuck call hold every later request. */
+const BRIEF_TIMEOUT_MS = 90_000;
 
 /**
  * One brief, kept on disk and rewritten at most every 12 hours
@@ -84,27 +84,6 @@ function reviewText(review: Review | undefined, now: number): string {
 	return `${when}, ${parts.join(', ')} finding${review.findings.length === 1 ? '' : 's'}`;
 }
 
-/** Latest review per repo#pr, ignoring empty drafts when a real review exists. */
-export function latestReviews(reviews: Review[]): Map<string, Review> {
-	const latest = new Map<string, Review>();
-
-	for (const review of reviews) {
-		const key = `${review.repoId}#${review.prNumber}`;
-		const current = latest.get(key);
-		const rank = (r: Review) => (r.status === 'draft' ? 0 : 1);
-
-		if (
-			!current ||
-			rank(review) > rank(current) ||
-			(rank(review) === rank(current) && Date.parse(review.updatedAt) > Date.parse(current.updatedAt))
-		) {
-			latest.set(key, review);
-		}
-	}
-
-	return latest;
-}
-
 function briefFacts(input: HomeBriefRequest, reviews: Review[], now = Date.now()): string {
 	const latest = latestReviews(reviews);
 	const repos = new Set(input.prs.map((pr) => pr.repo));
@@ -123,20 +102,25 @@ function briefFacts(input: HomeBriefRequest, reviews: Review[], now = Date.now()
 	return lines.join('\n');
 }
 
-/** Trim model output down to the brief itself. */
+/**
+ * Trim model output down to the brief itself. A greeting is dropped: Home adds
+ * its own for the current time of day, and a cached one would go stale.
+ */
 export function cleanBrief(raw: string): string {
-	return (
-		raw
-			.replace(/^\s*(brief:)?\s*/i, '')
-			// Home adds its own greeting for the current time of day; a cached one would go stale.
-			.replace(/^\**\s*(good\s+)?(morning|afternoon|evening|night)\b[^.!*]*[.!]\s*\**\s*/i, '')
-			.replace(/^["“]|["”]$/g, '')
-			.replace(/\s+/g, ' ')
-			.trim()
-			.slice(0, 600)
-	);
+	return raw
+		.replace(/^\s*(brief:)?\s*/i, '')
+		.replace(/^\**\s*(good\s+)?(morning|afternoon|evening|night)\b[^.!*]*[.!]\s*\**\s*/i, '')
+		.replace(/^["“]|["”]$/g, '')
+		.replace(/\s+/g, ' ')
+		.trim()
+		.slice(0, 600);
 }
 
+/**
+ * The Home brief: a short, conversational read of the open PRs, written by the
+ * orchestrator's model. Facts come from the client's PR list joined with the
+ * stored reviews, so the model never guesses at review state.
+ */
 export async function homeBrief(input: HomeBriefRequest, reviews: Review[]): Promise<HomeBriefResponse> {
 	const facts = briefFacts(input, reviews);
 	const cfg = configForOrchestrator();
@@ -148,17 +132,12 @@ export async function homeBrief(input: HomeBriefRequest, reviews: Review[]): Pro
 	const run = (async () => {
 		try {
 			const raw = await chatCompletion({
-				provider: cfg.provider,
-				reasoningEffort: cfg.reasoningEffort,
-				baseUrl: cfg.baseUrl,
-				apiKey: cfg.apiKey,
-				model: cfg.model,
+				...cfg,
 				messages: [
 					{ role: 'system', content: SYSTEM_PROMPT },
 					{ role: 'user', content: facts }
 				],
-				// Reasoning models spend output tokens thinking before the brief itself.
-				maxTokens: 4000,
+				maxTokens: BRIEF_MAX_TOKENS,
 				thinking: false,
 				timeoutMs: 60_000
 			});
@@ -173,9 +152,7 @@ export async function homeBrief(input: HomeBriefRequest, reviews: Review[]): Pro
 
 			try {
 				writeFileSync(briefFile(), JSON.stringify({ ...value, version: BRIEF_VERSION }));
-			} catch {
-				/* Kept in memory for this run. */
-			}
+			} catch {}
 
 			return value;
 		} finally {
@@ -183,10 +160,9 @@ export async function homeBrief(input: HomeBriefRequest, reviews: Review[]): Pro
 		}
 	})();
 
-	// Never let one stuck call hold every later request.
 	inflight = Promise.race([
 		run,
-		new Promise<never>((_, reject) => setTimeout(() => reject(new LlmError(0, 'brief timed out')), 90_000))
+		new Promise<never>((_, reject) => setTimeout(() => reject(new LlmError(0, 'brief timed out')), BRIEF_TIMEOUT_MS))
 	]).finally(() => {
 		inflight = null;
 	});
@@ -199,7 +175,5 @@ export function clearHomeBriefCache(): void {
 
 	try {
 		rmSync(briefFile(), { force: true });
-	} catch {
-		/* Nothing stored. */
-	}
+	} catch {}
 }

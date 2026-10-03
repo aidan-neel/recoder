@@ -18,6 +18,29 @@ const usageSchema = z.object({
 	additional_rate_limits: z.array(z.object({ limit_name: z.string(), rate_limit: rateSchema.nullish() })).nullish()
 });
 
+/** Reasoning levels arrive as `{ effort, description }` objects; older catalogs used plain strings. */
+const levelSchema = z.union([z.string(), z.object({ effort: z.string() }).passthrough()]);
+
+const catalogSchema = z.object({
+	models: z.array(
+		z
+			.object({
+				slug: z.string().min(1),
+				display_name: z.string().optional(),
+				visibility: z.string().optional(),
+				default_reasoning_level: z.string().nullish(),
+				supported_reasoning_levels: z.array(levelSchema).nullish(),
+				supported_reasoning_efforts: z.array(z.string()).nullish(),
+				reasoning_efforts: z.array(z.string()).nullish(),
+				efforts: z.array(z.string()).nullish()
+			})
+			.passthrough()
+	)
+});
+
+const isEffort = (value: unknown): value is ReasoningEffort =>
+	(REASONING_EFFORTS as readonly unknown[]).includes(value);
+
 /** Direct ChatGPT OAuth provider. `codex` remains the persisted provider ID. */
 export class ChatGptProvider {
 	private active = 0;
@@ -106,8 +129,8 @@ export class ChatGptProvider {
 		this.auth.disconnect();
 	}
 
+	/** The account's model catalog. `client_version` names the catalog wire contract, not a local CLI requirement. */
 	async models(): Promise<CodexModel[]> {
-		// Version describes the catalog wire contract, not a local CLI requirement.
 		const response = await this.auth.authorizedFetch('/codex/models?client_version=0.153.4');
 
 		await this.checkResponse(response, 'models');
@@ -116,32 +139,9 @@ export class ChatGptProvider {
 			throw new LlmError(502, 'ChatGPT returned an invalid model catalog. Try again.');
 		});
 
-		// Levels arrive as `{ effort, description }` objects; older catalogs used plain strings.
-		const level = z.union([z.string(), z.object({ effort: z.string() }).passthrough()]);
-
-		const parsed = z
-			.object({
-				models: z.array(
-					z
-						.object({
-							slug: z.string().min(1),
-							display_name: z.string().optional(),
-							visibility: z.string().optional(),
-							default_reasoning_level: z.string().nullish(),
-							supported_reasoning_levels: z.array(level).nullish(),
-							supported_reasoning_efforts: z.array(z.string()).nullish(),
-							reasoning_efforts: z.array(z.string()).nullish(),
-							efforts: z.array(z.string()).nullish()
-						})
-						.passthrough()
-				)
-			})
-			.safeParse(raw);
+		const parsed = catalogSchema.safeParse(raw);
 
 		if (!parsed.success) throw new LlmError(502, 'ChatGPT returned an invalid model catalog. Try again.');
-
-		const isEffort = (value: unknown): value is ReasoningEffort =>
-			(REASONING_EFFORTS as readonly unknown[]).includes(value);
 
 		return parsed.data.models
 			.filter((model) => !model.visibility || model.visibility === 'list')

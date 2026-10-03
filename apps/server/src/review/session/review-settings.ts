@@ -1,17 +1,14 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
-import type { DispatchLevel, ReasoningEffort } from '@recoder/shared';
+import {
+	DISPATCH_LEVELS,
+	REASONING_EFFORTS,
+	type DispatchLevel,
+	type ModelEntryPatch,
+	type ModelSettingsPatch
+} from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
-import type { ReviewRole } from '../../models/models.js';
 import { REVIEW_ROLES } from '../pipeline/roles.js';
-
-/**
- * Reviewer model settings, editable from the UI and persisted to disk.
- * Stored overrides win over process env; unset fields fall back to env.
- * The API key is never returned in full — only a masked preview.
- */
-
-import { DISPATCH_LEVELS, REASONING_EFFORTS } from '@recoder/shared';
 
 const modelEntrySchema = z.object({
 	provider: z.enum(['openai-compatible', 'codex']).optional(),
@@ -69,36 +66,18 @@ function migrateLegacy(data: z.infer<typeof storedFileSchema>): ReviewSettingsIn
 	return next;
 }
 
-export interface StoredModelEntry {
-	provider?: 'openai-compatible' | 'codex';
-	source?: string;
+/** A saved model entry: the settings patch's entry, always with an id. */
+interface StoredModelEntry extends ModelEntryPatch {
 	id: string;
-	label: string;
-	model: string;
-	baseUrl?: string;
-	apiKey?: string;
-	efforts?: ReasoningEffort[];
-	defaultEffort?: ReasoningEffort;
-	contextWindow?: number;
 }
 
-interface StoredSettings {
+interface StoredSettings extends Omit<ModelSettingsPatch, 'models'> {
 	/** API keys for hosted providers, by provider id. */
 	connections?: Record<string, { apiKey: string }>;
-	baseUrl?: string;
-	apiKey?: string;
 	models?: StoredModelEntry[];
-	sharedModelId?: string | null;
-	orchestratorModelId?: string | null;
-	specialistModelId?: string | null;
-	orchestratorEffort?: ReasoningEffort | null;
-	specialistEffort?: ReasoningEffort | null;
-	specialistDispatch?: DispatchLevel;
-	maxFiles?: number;
-	maxDiffChars?: number;
-	maxFileChars?: number;
 }
 
+/** Reviewer model settings saved from the UI. They win over process env; unset fields fall back to env. */
 let overrides: StoredSettings = {};
 
 function settingsFile(): string {
@@ -121,7 +100,7 @@ function persist(): void {
 	}
 }
 
-/** Load persisted settings into memory. Call once at boot. */
+/** Load persisted settings into memory. Call once at boot. A missing or corrupt file starts empty, and env covers it. */
 export function initReviewSettings(): void {
 	try {
 		const raw = readFileSync(settingsFile(), 'utf8');
@@ -150,7 +129,7 @@ export function initReviewSettings(): void {
 			overrides = apiKey ? { ...normalized, apiKey } : normalized;
 		}
 	} catch {
-		// Missing or corrupt file → start empty (env fallback covers it).
+		return;
 	}
 }
 
@@ -181,6 +160,53 @@ export function setConnection(providerId: string, apiKey: string | null): Stored
 	return overrides;
 }
 
+/**
+ * A saved model entry from the UI's version and the stored one it replaces. An empty key keeps the
+ * stored key and new entries store what was given; hosted-provider entries use the provider's
+ * connected key instead.
+ */
+function mergeModelEntry(
+	entry: z.infer<typeof modelEntrySchema>,
+	kept: StoredModelEntry | undefined
+): StoredModelEntry {
+	const next: StoredModelEntry = {
+		provider: entry.provider ?? kept?.provider ?? 'openai-compatible',
+		id: entry.id ?? crypto.randomUUID(),
+		label: entry.label,
+		model: entry.model
+	};
+
+	const source = entry.source ?? kept?.source;
+
+	if (source && next.provider !== 'codex') next.source = source;
+
+	const baseUrl = entry.baseUrl?.replace(/\/$/, '');
+
+	if (baseUrl && next.provider !== 'codex' && !next.source) next.baseUrl = baseUrl;
+	if (entry.efforts?.length) next.efforts = entry.efforts;
+	if (entry.defaultEffort) next.defaultEffort = entry.defaultEffort;
+
+	const contextWindow = entry.contextWindow ?? kept?.contextWindow;
+
+	if (contextWindow) next.contextWindow = contextWindow;
+
+	if (next.provider !== 'codex' && !next.source) {
+		if (entry.apiKey) next.apiKey = entry.apiKey;
+		else if (kept?.apiKey) next.apiKey = kept.apiKey;
+	}
+
+	return next;
+}
+
+/** Drop routing pointers to model entries that no longer exist. */
+function dropDeletedRoutes(settings: StoredSettings, models: StoredModelEntry[]): void {
+	const ids = new Set(models.map((e) => e.id));
+
+	if (settings.sharedModelId && !ids.has(settings.sharedModelId)) delete settings.sharedModelId;
+	if (settings.orchestratorModelId && !ids.has(settings.orchestratorModelId)) delete settings.orchestratorModelId;
+	if (settings.specialistModelId && !ids.has(settings.specialistModelId)) delete settings.specialistModelId;
+}
+
 /** Merge a validated patch over the stored settings and persist. */
 export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	const clean: StoredSettings = { ...overrides };
@@ -191,46 +217,8 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.models !== undefined) {
 		const previous = new Map((clean.models ?? []).map((e) => [e.id, e]));
 
-		clean.models = patch.models.map((entry) => {
-			const kept = entry.id ? previous.get(entry.id) : undefined;
-
-			const next: StoredModelEntry = {
-				provider: entry.provider ?? kept?.provider ?? 'openai-compatible',
-				id: entry.id ?? crypto.randomUUID(),
-				label: entry.label,
-				model: entry.model
-			};
-
-			const source = entry.source ?? kept?.source;
-
-			if (source && next.provider !== 'codex') next.source = source;
-
-			const baseUrl = entry.baseUrl?.replace(/\/$/, '');
-
-			if (baseUrl && next.provider !== 'codex' && !next.source) next.baseUrl = baseUrl;
-			if (entry.efforts?.length) next.efforts = entry.efforts;
-			if (entry.defaultEffort) next.defaultEffort = entry.defaultEffort;
-
-			const contextWindow = entry.contextWindow ?? kept?.contextWindow;
-
-			if (contextWindow) next.contextWindow = contextWindow;
-
-			// Empty key keeps the existing entry key; new entries store what was given.
-			// Hosted-provider entries use the provider's connected key instead.
-			if (next.provider !== 'codex' && !next.source) {
-				if (entry.apiKey) next.apiKey = entry.apiKey;
-				else if (kept?.apiKey) next.apiKey = kept.apiKey;
-			}
-
-			return next;
-		});
-
-		// Drop routing pointers to deleted entries.
-		const ids = new Set(clean.models.map((e) => e.id));
-
-		if (clean.sharedModelId && !ids.has(clean.sharedModelId)) delete clean.sharedModelId;
-		if (clean.orchestratorModelId && !ids.has(clean.orchestratorModelId)) delete clean.orchestratorModelId;
-		if (clean.specialistModelId && !ids.has(clean.specialistModelId)) delete clean.specialistModelId;
+		clean.models = patch.models.map((entry) => mergeModelEntry(entry, entry.id ? previous.get(entry.id) : undefined));
+		dropDeletedRoutes(clean, clean.models);
 	}
 
 	if (patch.sharedModelId !== undefined) {
@@ -296,10 +284,8 @@ export function effectiveDispatchLevel(): DispatchLevel {
 	return (DISPATCH_LEVELS as readonly string[]).includes(env ?? '') ? (env as DispatchLevel) : 'medium';
 }
 
-/** Masked key preview for the UI (`••••1234` or null). */
-export function apiKeyPreview(): string | null {
-	const key = effectiveReviewEnv().apiKey;
-
+/** API keys are never returned in full; the UI gets this masked preview (`••••1234` or null). */
+export function maskKey(key: string | undefined): string | null {
 	if (!key) return null;
 
 	return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;

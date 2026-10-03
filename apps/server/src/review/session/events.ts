@@ -3,24 +3,16 @@ import {
 	type CoverageGap,
 	type CoverageSummary,
 	type ReviewAssignment,
-	type ReviewBudgetSnapshot,
 	type ReviewChatMessage,
 	type ReviewProgress,
 	type ReviewReasoningEntry,
-	type ReviewStage,
 	type ReviewTask,
 	type ReviewToolCall,
 	type RoleDecision
 } from '@recoder/shared';
 import { reviewProgress } from '../../store';
 
-/**
- * In-memory per-review event bus backing the SSE endpoint.
- * A short ring buffer is replayed to new subscribers so a late-opening
- * in-progress page (or EventSource reconnect) still sees agent output.
- */
-
-export type ReviewEventType =
+type ReviewEventType =
 	| 'step'
 	| 'log'
 	| 'done'
@@ -48,6 +40,8 @@ export interface ReviewEvent {
 type Listener = (event: ReviewEvent) => void;
 
 const listeners = new Map<string, Set<Listener>>();
+
+/** Short ring buffers replayed to new subscribers, so a late-opening page (or an EventSource reconnect) still sees agent output. */
 const buffers = new Map<string, ReviewEvent[]>();
 
 const MAX_BUFFER = 400;
@@ -72,85 +66,96 @@ const SNAPSHOT_KEYS = [
 	'guidelines'
 ] as const;
 
-export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): void {
-	const snapshot = reviewProgress.get(reviewId) ?? emptyReviewProgress(reviewId);
-	const message: ReviewEvent = { ...event, at: new Date().toISOString(), sequence: snapshot.sequence + 1 };
+/** Hand an event to one listener. A listener's failure must never break the pipeline or a replay. */
+function deliver(fn: Listener, event: ReviewEvent): void {
+	try {
+		fn(event);
+	} catch {
+		return;
+	}
+}
 
-	snapshot.sequence = message.sequence!;
-	snapshot.updatedAt = message.at;
+function applyTask(snapshot: ReviewProgress, message: ReviewEvent, task: ReviewTask): void {
+	const previous = snapshot.tasks[task.id];
 
-	if (event.type === 'task' && event.data?.task) {
-		const task = event.data.task as ReviewTask;
-		const previous = snapshot.tasks[task.id];
+	const startedAt =
+		previous?.startedAt ??
+		task.startedAt ??
+		(task.status === 'running' || task.status === 'waiting' ? message.at : undefined);
 
-		const startedAt =
-			previous?.startedAt ??
-			task.startedAt ??
-			(task.status === 'running' || task.status === 'waiting' ? message.at : undefined);
+	snapshot.tasks[task.id] = {
+		...previous,
+		...task,
+		startedAt,
+		updatedAt: message.at,
+		elapsedMs: task.elapsedMs ?? (startedAt ? Date.parse(message.at) - Date.parse(startedAt) : previous?.elapsedMs)
+	};
 
-		snapshot.tasks[task.id] = {
-			...previous,
-			...task,
-			startedAt,
-			updatedAt: message.at,
-			elapsedMs: task.elapsedMs ?? (startedAt ? Date.parse(message.at) - Date.parse(startedAt) : previous?.elapsedMs)
-		};
+	message.data = { ...message.data, task: snapshot.tasks[task.id] };
 
-		message.data = { ...message.data, task: snapshot.tasks[task.id] };
+	if (previous?.message !== task.message || previous?.status !== task.status) {
+		snapshot.activity.push({ sequence: snapshot.sequence, message: task.message, at: message.at, agent: task.agent });
+	}
+}
 
-		if (previous?.message !== task.message || previous?.status !== task.status) {
-			snapshot.activity.push({ sequence: snapshot.sequence, message: task.message, at: message.at, agent: task.agent });
-		}
-	} else if (event.type === 'message' && event.data?.chatMessage) {
-		const entry = event.data.chatMessage as ReviewChatMessage;
-		const entries = [...(snapshot.messages ?? [])];
-		const index = entries.findIndex((item) => item.id === entry.id);
-		const next = { ...entry, text: entry.text.slice(0, 64_000), at: entries[index]?.at ?? entry.at ?? message.at };
+function applyChatMessage(snapshot: ReviewProgress, message: ReviewEvent, entry: ReviewChatMessage): void {
+	const entries = [...(snapshot.messages ?? [])];
+	const index = entries.findIndex((item) => item.id === entry.id);
+	const next = { ...entry, text: entry.text.slice(0, 64_000), at: entries[index]?.at ?? entry.at ?? message.at };
 
-		if (index >= 0) entries[index] = next;
-		else entries.push(next);
-		snapshot.messages = entries.slice(-500);
-		message.data = { ...message.data, chatMessage: next };
-	} else if (event.type === 'reasoning' && event.data?.reasoning) {
-		// Reasoning text streams as growing deltas sharing one id; upsert so the
-		// entry holds the accumulated text instead of every token.
-		const entry = event.data.reasoning as Omit<ReviewReasoningEntry, 'at'>;
-		const reasoning = [...(snapshot.reasoning ?? [])];
-		const index = reasoning.findIndex((item) => item.id === entry.id);
+	if (index >= 0) entries[index] = next;
+	else entries.push(next);
+	snapshot.messages = entries.slice(-500);
+	message.data = { ...message.data, chatMessage: next };
+}
 
-		const next: ReviewReasoningEntry = {
-			...entry,
-			text: entry.text.slice(0, 64_000),
-			at: reasoning[index]?.at ?? message.at
-		};
+/** Reasoning streams as growing deltas sharing one id; upsert so the entry holds the accumulated text, not every token. */
+function applyReasoning(snapshot: ReviewProgress, message: ReviewEvent, entry: Omit<ReviewReasoningEntry, 'at'>): void {
+	const reasoning = [...(snapshot.reasoning ?? [])];
+	const index = reasoning.findIndex((item) => item.id === entry.id);
 
-		message.data = { ...message.data, reasoning: next };
-		if (index >= 0) reasoning[index] = next;
-		else reasoning.push(next);
-		snapshot.reasoning = reasoning.slice(-200);
-	} else if (event.type === 'tool' && event.data?.tool) {
-		const tool = event.data.tool as ReviewToolCall;
-		const toolCalls = [...(snapshot.toolCalls ?? [])];
-		const index = toolCalls.findIndex((item) => item.id === tool.id);
+	const next: ReviewReasoningEntry = {
+		...entry,
+		text: entry.text.slice(0, 64_000),
+		at: reasoning[index]?.at ?? message.at
+	};
 
-		if (index >= 0) toolCalls[index] = tool;
-		else toolCalls.push(tool);
-		snapshot.toolCalls = toolCalls.slice(-300);
+	message.data = { ...message.data, reasoning: next };
+	if (index >= 0) reasoning[index] = next;
+	else reasoning.push(next);
+	snapshot.reasoning = reasoning.slice(-200);
+}
 
-		if (tool.status !== 'running') {
-			snapshot.activity.push({
-				sequence: snapshot.sequence,
-				message:
-					tool.status === 'error'
-						? `${tool.command} · failed`
-						: `${tool.command} · ${tool.exitCode === null ? 'complete' : `exit ${tool.exitCode}`}`,
-				at: message.at,
-				agent: tool.role
-			});
-		}
-	} else if (event.type === 'finding') {
-		// Candidate/finding payloads stay off the activity transcript.
-	} else if (message.message) {
+function applyTool(snapshot: ReviewProgress, message: ReviewEvent, tool: ReviewToolCall): void {
+	const toolCalls = [...(snapshot.toolCalls ?? [])];
+	const index = toolCalls.findIndex((item) => item.id === tool.id);
+
+	if (index >= 0) toolCalls[index] = tool;
+	else toolCalls.push(tool);
+	snapshot.toolCalls = toolCalls.slice(-300);
+
+	if (tool.status !== 'running') {
+		snapshot.activity.push({
+			sequence: snapshot.sequence,
+			message:
+				tool.status === 'error'
+					? `${tool.command} · failed`
+					: `${tool.command} · ${tool.exitCode === null ? 'complete' : `exit ${tool.exitCode}`}`,
+			at: message.at,
+			agent: tool.role
+		});
+	}
+}
+
+/** Fold one event into the review's snapshot. Finding events carry candidate payloads that stay off the activity transcript. */
+function applyEvent(snapshot: ReviewProgress, event: Omit<ReviewEvent, 'at'>, message: ReviewEvent): void {
+	if (event.type === 'task' && event.data?.task) applyTask(snapshot, message, event.data.task as ReviewTask);
+	else if (event.type === 'message' && event.data?.chatMessage)
+		applyChatMessage(snapshot, message, event.data.chatMessage as ReviewChatMessage);
+	else if (event.type === 'reasoning' && event.data?.reasoning)
+		applyReasoning(snapshot, message, event.data.reasoning as Omit<ReviewReasoningEntry, 'at'>);
+	else if (event.type === 'tool' && event.data?.tool) applyTool(snapshot, message, event.data.tool as ReviewToolCall);
+	else if (event.type !== 'finding' && message.message) {
 		snapshot.activity.push({
 			sequence: snapshot.sequence,
 			message: message.message,
@@ -160,7 +165,16 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 				(event.step?.startsWith('agent:') ? event.step.slice(6) : undefined)
 		});
 	}
+}
 
+/** Record an event on the in-memory per-review bus behind the SSE endpoint, and in the review's progress snapshot. */
+export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): void {
+	const snapshot = reviewProgress.get(reviewId) ?? emptyReviewProgress(reviewId);
+	const message: ReviewEvent = { ...event, at: new Date().toISOString(), sequence: snapshot.sequence + 1 };
+
+	snapshot.sequence = message.sequence!;
+	snapshot.updatedAt = message.at;
+	applyEvent(snapshot, event, message);
 	applySnapshotPatch(snapshot, event.data);
 	snapshot.activity = snapshot.activity.slice(-100);
 	reviewProgress.set(snapshot);
@@ -175,19 +189,13 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 	buf.push(message);
 	if (buf.length > MAX_BUFFER) buf.splice(0, buf.length - MAX_BUFFER);
 
-	listeners.get(reviewId)?.forEach((fn) => {
-		try {
-			fn(message);
-		} catch {
-			// Listener failures must never break the pipeline.
-		}
-	});
+	listeners.get(reviewId)?.forEach((fn) => deliver(fn, message));
 }
 
+/** Copy snapshot fields an event carries. A finished pipeline settles its half-streamed replies and reasoning in one go. */
 function applySnapshotPatch(snapshot: ReviewProgress, data?: Record<string, unknown>): void {
 	if (!data) return;
 
-	// A finished pipeline settles its half-streamed replies and reasoning in one go.
 	const settled = data.settled as Pick<ReviewProgress, 'messages' | 'reasoning'> | undefined;
 
 	if (settled) {
@@ -201,13 +209,7 @@ function applySnapshotPatch(snapshot: ReviewProgress, data?: Record<string, unkn
 }
 
 export function subscribeReview(reviewId: string, fn: Listener, replay = true): () => void {
-	for (const event of replay ? (buffers.get(reviewId) ?? []) : []) {
-		try {
-			fn(event);
-		} catch {
-			// Replay failures must never break subscribe.
-		}
-	}
+	for (const event of replay ? (buffers.get(reviewId) ?? []) : []) deliver(fn, event);
 
 	let set = listeners.get(reviewId);
 
@@ -306,14 +308,6 @@ export function reportReviewCoverage(reviewId: string, coverage: CoverageSummary
 		type: 'coverage',
 		message: `Coverage ${coverage.reviewed}/${coverage.total} reviewed`,
 		data: { coverage, coverageGaps }
-	});
-}
-
-export function reportReviewBudget(reviewId: string, budget: ReviewBudgetSnapshot): void {
-	emitReviewEvent(reviewId, {
-		type: 'log',
-		message: `Model budget ${budget.used}/${budget.limit} used`,
-		data: { budget }
 	});
 }
 

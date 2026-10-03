@@ -1,15 +1,8 @@
 import type { PendingChanges, PendingFile } from '@recoder/shared';
-import { FixError } from '../fixes/fix.js';
+import { processOutput } from '../../util/process.js';
+import { FixError } from '../fixes/fix-apply.js';
 
-/**
- * The developer's own changes in a review checkout: applied fixes sit in the
- * working tree until they pick which files to commit, write the message, and
- * push. Nothing here runs without an explicit request.
- *
- * `refs/recoder/pushed` marks the last commit known to be on the PR branch,
- * so local commits that haven't been pushed yet can be listed and undone.
- */
-
+/** Marks the last commit known to be on the PR branch, so local commits not yet pushed can be listed and undone. */
 const PUSHED_REF = 'refs/recoder/pushed';
 
 async function git(cwd: string, args: string[], status: 409 | 502 = 409, stdin?: string): Promise<string> {
@@ -21,11 +14,7 @@ async function git(cwd: string, args: string[], status: 409 | 502 = 409, stdin?:
 		env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0' }
 	});
 
-	const [stdout, stderr, code] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited
-	]);
+	const { stdout, stderr, code } = await processOutput(proc);
 
 	if (code !== 0) throw new FixError(status, `git ${args[0]} failed: ${(stderr || stdout).trim().slice(-1500)}`);
 
@@ -56,11 +45,11 @@ async function requireReady(cwd: string): Promise<void> {
 	if (!(await isReady(cwd))) throw new FixError(409, 'The checkout is still being prepared. Try again in a moment.');
 }
 
+/** The last pushed commit. Checkouts made before PUSHED_REF existed start it at HEAD: anything committed then was pushed. */
 async function pushedBase(cwd: string): Promise<string> {
 	try {
 		return (await git(cwd, ['rev-parse', '--verify', '-q', PUSHED_REF])).trim();
 	} catch {
-		// Checkouts made before this ref existed: anything committed then was pushed with it.
 		const head = (await git(cwd, ['rev-parse', 'HEAD'])).trim();
 
 		await git(cwd, ['update-ref', PUSHED_REF, head]);
@@ -70,31 +59,43 @@ async function pushedBase(cwd: string): Promise<string> {
 }
 
 /** Mark the checkout's current HEAD as what the PR branch has (after checkout or push). */
-export async function markPushed(cwd: string): Promise<void> {
+async function markPushed(cwd: string): Promise<void> {
 	await git(cwd, ['update-ref', PUSHED_REF, 'HEAD']);
 }
 
-/** Uncommitted files (with their diffs) and local commits not yet pushed. */
-export async function listPendingChanges(cwd: string): Promise<PendingChanges> {
-	if (!(await isReady(cwd))) return { files: [], commits: [] };
-
-	const base = await pushedBase(cwd);
-
-	// -z keeps paths with spaces intact; untracked files are listed individually.
+/**
+ * Changed paths with their two-letter status codes. `-z` keeps paths with spaces intact, untracked
+ * files are listed one by one, and a rename's original path (its own entry) is skipped.
+ */
+async function statusEntries(cwd: string): Promise<{ code: string; path: string }[]> {
 	const status = (await git(cwd, ['status', '--porcelain=v1', '-z', '--untracked-files=all']))
 		.split('\0')
 		.filter(Boolean);
 
-	const files: PendingFile[] = [];
+	const entries: { code: string; path: string }[] = [];
 
 	for (let i = 0; i < status.length; i++) {
-		const entry = status[i];
-		const code = entry.slice(0, 2);
-		const path = entry.slice(3);
+		const code = status[i].slice(0, 2);
 
-		// A rename's original path follows as its own entry.
+		entries.push({ code, path: status[i].slice(3) });
 		if (code.includes('R')) i++;
+	}
 
+	return entries;
+}
+
+/**
+ * Uncommitted files (with their diffs) and local commits not yet pushed. Applied fixes sit in the
+ * working tree until the developer picks which files to commit, writes the message and pushes;
+ * nothing here runs without an explicit request.
+ */
+export async function listPendingChanges(cwd: string): Promise<PendingChanges> {
+	if (!(await isReady(cwd))) return { files: [], commits: [] };
+
+	const base = await pushedBase(cwd);
+	const files: PendingFile[] = [];
+
+	for (const { code, path } of await statusEntries(cwd)) {
 		const kind: PendingFile['status'] =
 			code === '??' || code.includes('A')
 				? 'added'
@@ -141,7 +142,11 @@ async function untrackedPatch(cwd: string, path: string): Promise<string> {
 	);
 }
 
-/** Commit exactly the chosen files with the developer's message, as the host's git identity. */
+/**
+ * Commit exactly the chosen files with the developer's message (verbatim), as the host's git identity.
+ * The pushed base is pinned before HEAD moves so this commit counts as unpushed, and pathspecs keep
+ * anything else that was staged out of it.
+ */
 export async function commitPendingChanges(cwd: string, paths: string[], message: string): Promise<{ sha: string }> {
 	await requireReady(cwd);
 
@@ -149,7 +154,6 @@ export async function commitPendingChanges(cwd: string, paths: string[], message
 
 	if (!chosen.length) throw new FixError(400, 'Choose at least one file to commit.');
 	if (!message.trim()) throw new FixError(400, 'Write a commit message.');
-	// Pin what's already pushed before HEAD moves, so this commit counts as unpushed.
 	await pushedBase(cwd);
 	await git(cwd, ['add', '-A', '--', ...chosen]);
 
@@ -157,7 +161,6 @@ export async function commitPendingChanges(cwd: string, paths: string[], message
 		? []
 		: ['-c', 'user.name=Recoder', '-c', 'user.email=recoder@localhost'];
 
-	// Pathspecs commit only these files, even if something else was staged. The message goes in verbatim.
 	await git(
 		cwd,
 		[...identity, 'commit', '-q', '--cleanup=verbatim', '-F', '-', '--', ...chosen],

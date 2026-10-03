@@ -8,6 +8,7 @@ import { fetchPullPreview } from '../forge/pull-preview';
 import { tokenEnv } from '../forge/tokens';
 import { TtlCache } from '../util/ttl-cache';
 import { db } from '../store';
+import { parseBody } from './parse-body';
 
 const pullsCache = new TtlCache<unknown>(30_000);
 const previewCache = new TtlCache<unknown>(60_000);
@@ -24,14 +25,12 @@ const app = new Hono();
 app.get('/', (c) => c.json(db.repos.list()));
 
 app.post('/', async (c) => {
-	const parsed = createRepoSchema.safeParse(await c.req.json().catch(() => null));
+	const body = await parseBody(c, createRepoSchema);
 
-	if (!parsed.success) {
-		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
-	}
+	if (body instanceof Response) return body;
 
 	const now = new Date().toISOString();
-	const repo: Repo = { id: crypto.randomUUID(), ...parsed.data, createdAt: now, updatedAt: now };
+	const repo: Repo = { id: crypto.randomUUID(), ...body, createdAt: now, updatedAt: now };
 
 	return c.json(db.repos.set(repo), 201);
 });

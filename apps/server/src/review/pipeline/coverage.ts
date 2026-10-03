@@ -165,12 +165,12 @@ export class CoverageLedger {
 	}
 }
 
+/** One hunk's state across its responsibilities: reviewed only if one reviewed it and none remain pending or partial. */
 function combine(current: CoverageState | undefined, next: CoverageState): CoverageState {
 	if (!current) return next;
 
 	const rank: Record<CoverageState, number> = { pending: 0, partial: 1, excluded: 2, reviewed: 3 };
 
-	// A hunk is reviewed if any assigned responsibility reviewed it and none remain pending.
 	if (current === 'pending' || next === 'pending') return 'pending';
 	if (current === 'partial' || next === 'partial') return 'partial';
 

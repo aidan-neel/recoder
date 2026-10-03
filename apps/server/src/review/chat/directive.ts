@@ -100,6 +100,11 @@ export function normalizeGlob(raw: string): string | null {
 	return glob;
 }
 
+/** Includes minus any glob also excluded: "only python files, not tests" means the exclude wins. */
+function withoutExcluded(includes: string[], excludes: string[]): string[] {
+	return includes.filter((glob) => !excludes.includes(glob));
+}
+
 function matchesGlob(path: string, glob: string): boolean {
 	try {
 		return new Bun.Glob(glob).match(path);
@@ -143,10 +148,8 @@ export function heuristicDirective(instructions: string): Pick<ReviewDirective, 
 		new RegExp(String.raw`(?:^|[\s,;:(])${subject}\s+(?:only|exclusively|alone)\b`, 'g')
 	))
 		add(include, match[1]);
-	// "only python files, not tests": excludes win over a matching include.
-	for (const glob of exclude) include.delete(glob);
 
-	return { includeGlobs: [...include], excludeGlobs: [...exclude] };
+	return { includeGlobs: withoutExcluded([...include], [...exclude]), excludeGlobs: [...exclude] };
 }
 
 /** The developer's words, as a prompt block every stage sees. */
@@ -293,8 +296,7 @@ export async function interpretInstructions(
 		);
 	}
 
-	// An exclude also named as an include means "not that": the exclude wins.
-	directive.includeGlobs = directive.includeGlobs.filter((glob) => !directive.excludeGlobs.includes(glob));
+	directive.includeGlobs = withoutExcluded(directive.includeGlobs, directive.excludeGlobs);
 
 	return directive;
 }

@@ -53,10 +53,7 @@ const SETUP_MARKERS: Marker[][] = [
 ];
 
 /** Install steps for the repo root's lockfiles; tools missing from PATH are reported, not run. */
-export function setupPlan(
-	rootFiles: Set<string>,
-	has: (tool: string) => boolean
-): { steps: SetupStep[]; missing: string[] } {
+function setupPlan(rootFiles: Set<string>, has: (tool: string) => boolean): { steps: SetupStep[]; missing: string[] } {
 	const steps: SetupStep[] = [];
 	const missing: string[] = [];
 

@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import {
 	GUIDELINES_PATH,
@@ -8,7 +8,12 @@ import {
 	type RepoGuidelines
 } from '@recoder/shared';
 import { GhError } from '../forge/gh';
-import { GUIDELINES_TEMPLATE, normalize, readGlobalGuidelines, writeGlobalGuidelines } from '../review/guidelines/guidelines';
+import {
+	GUIDELINES_TEMPLATE,
+	normalize,
+	readGlobalGuidelines,
+	writeGlobalGuidelines
+} from '../review/guidelines/guidelines';
 import { streamGuidelinesDraft } from '../review/guidelines/guidelines-draft';
 import { LlmError } from '../models/llm';
 import { isReviewConfigured } from '../models/models';
@@ -35,10 +40,20 @@ const draftSchema = z.object({
 
 const app = new Hono();
 
-function providerError(err: unknown): { error: string; status: 401 | 404 | 502 } | null {
-	if (!(err instanceof GhError)) return null;
+/** Run a request against the repo's host, answering a forge error with its own status (401, 404 or 502). */
+async function withHost(c: Context, fn: () => Promise<Response>): Promise<Response> {
+	try {
+		return await fn();
+	} catch (err) {
+		if (!(err instanceof GhError)) throw err;
 
-	return { error: err.message, status: err.kind === 'auth' ? 401 : err.kind === 'not-found' ? 404 : 502 };
+		return c.json({ error: err.message }, err.kind === 'auth' ? 401 : err.kind === 'not-found' ? 404 : 502);
+	}
+}
+
+/** The 400 for guidelines over the length cap. */
+function tooLong(c: Context): Response {
+	return c.json({ error: `Guidelines are limited to ${MAX_GUIDELINES_CHARS.toLocaleString()} characters.` }, 400);
 }
 
 app.get('/', (c) => {
@@ -61,9 +76,7 @@ app.put('/global', async (c) => {
 
 	if (!parsed.success) return c.json({ error: 'invalid body' }, 400);
 
-	if (normalize(parsed.data.content).length > MAX_GUIDELINES_CHARS) {
-		return c.json({ error: `Guidelines are limited to ${MAX_GUIDELINES_CHARS.toLocaleString()} characters.` }, 400);
-	}
+	if (normalize(parsed.data.content).length > MAX_GUIDELINES_CHARS) return tooLong(c);
 
 	try {
 		return c.json(writeGlobalGuidelines(parsed.data.content));
@@ -80,7 +93,7 @@ app.get('/repos/:id', async (c) => {
 
 	const host = repoFileHost(repo);
 
-	try {
+	return withHost(c, async () => {
 		const head = await host.defaultBranch();
 
 		const [file, pending] = await Promise.all([
@@ -101,12 +114,7 @@ app.get('/repos/:id', async (c) => {
 		};
 
 		return c.json(body);
-	} catch (err) {
-		const mapped = providerError(err);
-
-		if (mapped) return c.json({ error: mapped.error }, mapped.status);
-		throw err;
-	}
+	});
 });
 
 /** Open a pull/merge request with the file, or push to the pending one. */
@@ -121,8 +129,7 @@ app.post('/repos/:id/propose', async (c) => {
 
 	const content = normalize(parsed.data.content);
 
-	if (content.length > MAX_GUIDELINES_CHARS)
-		return c.json({ error: `Guidelines are limited to ${MAX_GUIDELINES_CHARS.toLocaleString()} characters.` }, 400);
+	if (content.length > MAX_GUIDELINES_CHARS) return tooLong(c);
 
 	const host = repoFileHost(repo);
 
@@ -134,7 +141,7 @@ app.post('/repos/:id/propose', async (c) => {
 			401
 		);
 
-	try {
+	return withHost(c, async () => {
 		const pending = await host.findPending(BRANCH_PREFIX);
 		const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
 
@@ -157,12 +164,7 @@ app.post('/repos/:id/propose', async (c) => {
 		const body: GuidelinesProposal = { ...result, updated: !!pending };
 
 		return c.json(body);
-	} catch (err) {
-		const mapped = providerError(err);
-
-		if (mapped) return c.json({ error: mapped.error }, mapped.status);
-		throw err;
-	}
+	});
 });
 
 /** Draft or revise guidelines with the orchestrator model, streamed as SSE tokens. */

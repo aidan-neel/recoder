@@ -1,7 +1,7 @@
 import { parseUnifiedDiff, type DiffHunk, type FileDiff } from '@recoder/shared';
 import { classifyPath, extraExcludes, packageBoundary, type FileClassification } from './review-scope.js';
 
-export type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
+type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
 
 export interface InventoryHunk {
 	id: string;
@@ -28,7 +28,7 @@ export interface InventoryFile {
 	summarize?: boolean;
 }
 
-export interface InstructionFile {
+interface InstructionFile {
 	path: string;
 	excerpt: string;
 	truncated: boolean;
@@ -46,13 +46,11 @@ export interface ReviewInventory {
 	docsOnly: boolean;
 }
 
-export function hunkId(path: string, hunk: DiffHunk): string {
+function hunkId(path: string, hunk: DiffHunk): string {
 	return `${path}:${hunk.oldStart},${hunk.oldCount}:${hunk.newStart},${hunk.newCount}`;
 }
 
 function changeStatus(file: FileDiff): ChangeStatus {
-	const oldPath = file.hunks.length && file.additions === 0 && file.deletions > 0 ? file.path : undefined;
-
 	if (file.deletions === 0 && file.additions > 0 && file.hunks.every((h) => h.oldStart === 0 || h.oldCount === 0)) {
 		return 'added';
 	}
@@ -60,8 +58,6 @@ function changeStatus(file: FileDiff): ChangeStatus {
 	if (file.additions === 0 && file.deletions > 0 && file.hunks.every((h) => h.newStart === 0 || h.newCount === 0)) {
 		return 'deleted';
 	}
-
-	void oldPath;
 
 	return 'modified';
 }

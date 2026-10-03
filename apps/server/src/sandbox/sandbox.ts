@@ -4,6 +4,7 @@ import { runCommand } from '../commands/runner.js';
 import { env } from '../env.js';
 import type { Provider } from '@recoder/shared';
 import type { ReviewRevision } from '../evidence/evidence.js';
+import { processOutput } from '../util/process.js';
 
 export interface Sandbox {
 	key: string;
@@ -94,6 +95,11 @@ async function git(
  * Review IDs give concurrent reviews separate checkouts.
  * GitHub auth uses the saved token through gh's credential helper, supplied
  * only in the subprocess environment, never in URLs or command arguments.
+ *
+ * The head is fetched into FETCH_HEAD (which never refuses, unlike fetching
+ * into a ref) and checked out detached before the branch is reset onto it.
+ * Re-runs of the same PR would otherwise fail with "refusing to fetch into
+ * branch checked out at <path>".
  */
 export async function prepareSandbox(opts: {
 	repoSlug: string;
@@ -134,10 +140,6 @@ export async function prepareSandbox(opts: {
 		);
 	}
 
-	// Fetch into FETCH_HEAD (never refuses, unlike fetching into a ref),
-	// detach so the target branch is never checked out, then reset it.
-	// Re-runs of the same PR would otherwise fail with "refusing to fetch
-	// into branch checked out at <path>".
 	opts.onProgress?.('Fetching the pull request head');
 
 	await git(
@@ -200,11 +202,7 @@ export async function sandboxRevisionDiff(
 		}
 	);
 
-	const [diff, stderr, code] = await Promise.all([
-		new Response(proc.stdout).text(),
-		new Response(proc.stderr).text(),
-		proc.exited
-	]);
+	const { stdout: diff, stderr, code } = await processOutput(proc);
 
 	if (code !== 0) throw new Error('Local PR diff failed: ' + stderr.slice(-2000));
 

@@ -5,9 +5,7 @@ export function extractJsonValue(output: string): unknown {
 
 	try {
 		return JSON.parse(candidate);
-	} catch {
-		// Models often wrap JSON in prose.
-	}
+	} catch {}
 
 	const objStart = candidate.indexOf('{');
 	const arrStart = candidate.indexOf('[');

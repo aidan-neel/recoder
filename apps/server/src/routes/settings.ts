@@ -1,27 +1,28 @@
 import { Hono } from 'hono';
 import {
-	apiKeyPreview,
 	effectiveDispatchLevel,
 	effectiveReviewEnv,
 	getStoredSettings,
+	maskKey,
 	settingsFileDisplay,
 	reviewSettingsSchema,
 	saveReviewSettings,
 	setConnection
 } from '../review/session/review-settings';
-import { HOSTED_PROVIDERS, KeyRejectedError, hostedProvider, providerCatalog, verifyKey } from '../models/model-providers';
+import {
+	HOSTED_PROVIDERS,
+	KeyRejectedError,
+	hostedProvider,
+	providerCatalog,
+	verifyKey
+} from '../models/model-providers';
 import type { HostedProvider, ModelEntry } from '@recoder/shared';
 import { opencode } from '../agents/opencode/opencode';
 import { isReviewConfigured } from '../models/models';
 import { z } from 'zod';
 import { discoverModels } from '../models/model-discovery';
 import codexRoutes from './codex';
-
-function mask(key: string | undefined): string | null {
-	if (!key) return null;
-
-	return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
-}
+import { parseBody } from './parse-body';
 
 const app = new Hono();
 
@@ -45,7 +46,7 @@ async function settingsPayload() {
 		configured: isReviewConfigured(),
 		baseUrl: eff.baseUrl,
 		model: eff.model,
-		apiKeyPreview: apiKeyPreview(),
+		apiKeyPreview: maskKey(eff.apiKey),
 		sharedModelId: stored.sharedModelId ?? null,
 		orchestratorModelId: stored.orchestratorModelId ?? null,
 		specialistModelId: stored.specialistModelId ?? null,
@@ -66,13 +67,11 @@ app.get('/models', async (c) => c.json(await settingsPayload()));
 
 /** Merge a validated patch over the stored model settings. Empty key keeps the existing one. */
 app.on(['PUT', 'PATCH'], '/models', async (c) => {
-	const parsed = reviewSettingsSchema.safeParse(await c.req.json().catch(() => null));
+	const body = await parseBody(c, reviewSettingsSchema);
 
-	if (!parsed.success) {
-		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
-	}
+	if (body instanceof Response) return body;
 
-	saveReviewSettings(parsed.data);
+	saveReviewSettings(body);
 
 	return c.json(await settingsPayload());
 });
@@ -108,7 +107,7 @@ function providersPayload(): HostedProvider[] {
 		keyUrl: provider.keyUrl,
 		usageUrl: provider.usageUrl,
 		connected: !!connections[provider.id],
-		apiKeyPreview: mask(connections[provider.id]?.apiKey)
+		apiKeyPreview: maskKey(connections[provider.id]?.apiKey)
 	}));
 }
 

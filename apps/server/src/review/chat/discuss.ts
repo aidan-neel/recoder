@@ -1,15 +1,17 @@
 import { z } from 'zod';
 import type { DiscussMessage } from '@recoder/shared';
 import { readExcerpt } from '../pipeline/harness.js';
-import { chatCompletion, streamChatCompletion, LlmError, type ChatMessage } from '../../models/llm.js';
+import {
+	asLlmError,
+	chatCompletion,
+	streamChatCompletion,
+	type ChatMessage,
+	type ChatOptions
+} from '../../models/llm.js';
 import { configForRole, REVIEW_ROLES, type ReviewRole } from '../../models/models.js';
+import { capDiff } from '../pipeline/prompts.js';
 import { ROLE_FOCUS } from '../pipeline/roles.js';
-
-/**
- * Follow-up discussion about a single finding. Same read-only contract as
- * the review harness: the model gets the finding, file context, and thread
- * history — never tools, never writes.
- */
+import { describeFinding, findingRequestSchema } from './finding-request.js';
 
 /**
  * Fierce senior-engineer discuss persona: defend the finding with evidence,
@@ -29,6 +31,11 @@ export function resolveDiscussRole(agent: string): ReviewRole {
 	return (REVIEW_ROLES as readonly string[]).includes(agent) ? (agent as ReviewRole) : 'security';
 }
 
+/**
+ * A follow-up question about a single finding. Same read-only contract as the
+ * review harness: the model gets the finding, file context, and thread history,
+ * never tools or writes.
+ */
 export interface DiscussInput {
 	agent: string;
 	file: string;
@@ -42,9 +49,15 @@ export interface DiscussInput {
 	sandboxPath: string | null;
 }
 
+interface DiscussReply {
+	agent: string;
+	model: string;
+	reply: string;
+}
+
 /** Shared prompt assembly for the discuss endpoints (batch + streaming). */
 async function buildDiscussMessages(input: DiscussInput, role: ReviewRole): Promise<ChatMessage[]> {
-	const parts = [`Finding (${input.severity}, ${input.file}:${input.line}-${input.endLine}): ${input.message}`];
+	const parts = [describeFinding(input)];
 
 	if (input.sandboxPath) {
 		const excerpt = await readExcerpt(input.sandboxPath, input.file, input.line);
@@ -52,9 +65,7 @@ async function buildDiscussMessages(input: DiscussInput, role: ReviewRole): Prom
 		if (excerpt !== null) parts.push(`--- ${input.file} (lines around ${input.line}) ---\n${excerpt}`);
 	}
 
-	const trimmedDiff = input.diff.length > 20000 ? input.diff.slice(0, 20000) + '\n…[diff truncated]' : input.diff;
-
-	parts.push(`--- unified diff (capped) ---\n${trimmedDiff}`);
+	parts.push(`--- unified diff (capped) ---\n${capDiff(input.diff)}`);
 
 	const history = input.history
 		.slice(-12)
@@ -71,64 +82,35 @@ async function buildDiscussMessages(input: DiscussInput, role: ReviewRole): Prom
 	];
 }
 
-export async function discussFinding(input: DiscussInput): Promise<{ agent: string; model: string; reply: string }> {
+/** Ask the finding's reviewer role, sending the request through `complete` (batch or streaming). */
+async function answerDiscussion(
+	input: DiscussInput,
+	complete: (opts: ChatOptions) => Promise<string>
+): Promise<DiscussReply> {
 	const role = resolveDiscussRole(input.agent);
 	const cfg = configForRole(role);
 
 	try {
-		const reply = await chatCompletion({
-			provider: cfg.provider,
-			reasoningEffort: cfg.reasoningEffort,
-			baseUrl: cfg.baseUrl,
-			apiKey: cfg.apiKey,
-			model: cfg.model,
+		const reply = await complete({
+			...cfg,
 			messages: await buildDiscussMessages(input, role),
 			timeoutMs: 120_000
 		});
 
 		return { agent: role, model: cfg.model, reply: reply.trim() };
 	} catch (err) {
-		if (err instanceof LlmError) throw err;
-		throw new LlmError(0, err instanceof Error ? err.message : String(err));
+		throw asLlmError(err);
 	}
+}
+
+export function discussFinding(input: DiscussInput): Promise<DiscussReply> {
+	return answerDiscussion(input, chatCompletion);
 }
 
 /** Streaming variant of {@link discussFinding} for the SSE endpoint. */
-export async function streamDiscussFinding(
-	input: DiscussInput,
-	onToken: (text: string) => void
-): Promise<{ agent: string; model: string; reply: string }> {
-	const role = resolveDiscussRole(input.agent);
-	const cfg = configForRole(role);
-
-	try {
-		const reply = await streamChatCompletion(
-			{
-				provider: cfg.provider,
-				reasoningEffort: cfg.reasoningEffort,
-				baseUrl: cfg.baseUrl,
-				apiKey: cfg.apiKey,
-				model: cfg.model,
-				messages: await buildDiscussMessages(input, role),
-				timeoutMs: 120_000
-			},
-			onToken
-		);
-
-		return { agent: role, model: cfg.model, reply: reply.trim() };
-	} catch (err) {
-		if (err instanceof LlmError) throw err;
-		throw new LlmError(0, err instanceof Error ? err.message : String(err));
-	}
+export function streamDiscussFinding(input: DiscussInput, onToken: (text: string) => void): Promise<DiscussReply> {
+	return answerDiscussion(input, (opts) => streamChatCompletion(opts, onToken));
 }
-
-const discussFindingSchema = z.object({
-	file: z.string().min(1).max(500),
-	line: z.number().int().positive(),
-	endLine: z.number().int().positive(),
-	severity: z.string().min(1).max(20),
-	message: z.string().min(1).max(4000)
-});
 
 const discussHistorySchema = z.object({
 	role: z.enum(['user', 'assistant']),
@@ -137,7 +119,7 @@ const discussHistorySchema = z.object({
 
 export const discussRequestSchema = z.object({
 	agent: z.string().min(1).max(50),
-	finding: discussFindingSchema,
+	finding: findingRequestSchema,
 	history: z.array(discussHistorySchema).max(50).default([]),
 	question: z.string().min(1).max(4000)
 });

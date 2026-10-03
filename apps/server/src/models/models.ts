@@ -1,9 +1,3 @@
-import { z } from 'zod';
-import type { ReasoningEffort } from '@recoder/shared';
-import { hostedProvider } from './model-providers.js';
-import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode.js';
-import { effectiveReviewEnv, getStoredSettings } from '../review/session/review-settings.js';
-
 /**
  * Model routing for the review harness.
  *
@@ -24,13 +18,19 @@ import { effectiveReviewEnv, getStoredSettings } from '../review/session/review-
  *   RECODER_PERF_MODEL=...
  */
 
+import { z } from 'zod';
+import type { ReasoningEffort } from '@recoder/shared';
+import { hostedProvider } from './model-providers.js';
+import type { ChatProvider } from './llm/types.js';
+import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode.js';
+import { effectiveReviewEnv, getStoredSettings } from '../review/session/review-settings.js';
 import { REVIEW_ROLES, type ReviewRole } from '../review/pipeline/roles.js';
 
 export { REVIEW_ROLES, type ReviewRole };
 
 const configSchema = z.object({
 	baseUrl: z.string().min(1),
-	// Optional: local servers (vLLM, Ollama, LM Studio) usually run without a key.
+	/** Optional: local servers (vLLM, Ollama, LM Studio) usually run without a key. */
 	apiKey: z.string().default(''),
 	model: z.string().min(1)
 });
@@ -38,7 +38,7 @@ const configSchema = z.object({
 export interface RoleConfig {
 	/** Unset API effort is omitted for endpoints that do not support reasoning. */
 	reasoningEffort?: ReasoningEffort;
-	provider?: 'openai-compatible' | 'codex';
+	provider?: ChatProvider;
 	/** Hosted provider id (`opencode-go`…) when the model came from one. */
 	source?: string;
 	role: ReviewRole;
@@ -84,28 +84,30 @@ export function isReviewConfigured(): boolean {
 	}
 }
 
-/**
- * Resolve a role to its concrete model.
- *
- * Registry first: role entry → shared entry → first entry, each falling back
- * to the global base URL/key. Legacy env trio still works when no entries
- * (or no matching entry) exist.
- */
+/** The Review model: planning, summary and chat. */
 export function configForOrchestrator(): RoleConfig {
 	return resolveConfig('correctness', true);
 }
 
+/** The Specialist model for one review role. */
 export function configForRole(role: ReviewRole): RoleConfig {
 	return resolveConfig(role, false);
 }
 
+/**
+ * Resolve a role to its concrete model.
+ *
+ * There are two picks: the Review model and one Specialist model for every
+ * specialist. An unset Specialist pick follows the Review model and its effort.
+ * A pick whose entry was deleted out-of-band falls back to the first entry,
+ * each entry falling back to the global base URL/key. The legacy env trio
+ * still works when no entries exist.
+ */
 function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 	const stored = getStoredSettings();
 	const eff = effectiveReviewEnv();
 	const entries = stored.models ?? [];
 	const reviewId = stored.orchestratorModelId ?? stored.sharedModelId ?? entries[0]?.id;
-	// Two picks: the Review model (planning, summary, chat) and one Specialist model for every
-	// specialist. An unset Specialist pick follows the Review model and its effort.
 	const followsReview = orchestrator || !stored.specialistModelId;
 	const entryId = followsReview ? reviewId : stored.specialistModelId;
 
@@ -119,7 +121,6 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 		? stored.orchestratorEffort
 		: (stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
 
-	// A dangling pointer (entry deleted out-of-band) falls back to the first entry.
 	const entry = entries.find((e) => e.id === entryId) ?? entries[0];
 
 	if (entry) {

@@ -17,7 +17,7 @@ function readFileTokens(file: string): Tokens | undefined {
 		raw = readFileSync(file, 'utf8');
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
-		throw new Error('Could not read saved provider tokens');
+		throw new Error('Could not read saved provider tokens', { cause: err });
 	}
 
 	try {
@@ -58,16 +58,17 @@ function persist(tokens: Tokens): void {
 	} finally {
 		try {
 			unlinkSync(temporary);
-		} catch {
-			/* Already renamed or never created. */
-		}
+		} catch {}
 	}
 }
 
+/**
+ * The saved tokens, migrating the legacy file only when there is no primary
+ * one. An empty primary is intentional (disconnect), so legacy tokens never come back.
+ */
 function readStored(): Tokens {
 	const primary = readFileTokens(tokenFile());
 
-	// An empty primary is intentional (disconnect); never resurrect legacy tokens.
 	if (primary !== undefined) return primary;
 
 	const legacy = readFileTokens(join(process.cwd(), 'data', 'tokens.json'));
@@ -97,8 +98,8 @@ export function clearToken(provider: Provider): void {
 	persist(tokens);
 }
 
+/** The provider's token: the environment override first, which is never copied into the saved credentials. */
 export function getToken(provider: Provider): string | undefined {
-	// Environment overrides are never copied into the persisted credentials.
 	return (provider === 'gitlab' ? process.env.GITLAB_TOKEN : process.env.GH_TOKEN) || readStored()[provider];
 }
 

@@ -53,7 +53,8 @@ app.post('/github', async (c) => {
 		) {
 			const repo = p.repository as Record<string, unknown>;
 
-			const repoUrl = (typeof repo.html_url === 'string' ? repo.html_url : null) ??
+			const repoUrl =
+				(typeof repo.html_url === 'string' ? repo.html_url : null) ??
 				(typeof repo.clone_url === 'string' ? repo.clone_url : null);
 
 			if (repoUrl && typeof repoUrl === 'string') {
@@ -71,9 +72,10 @@ app.post('/github', async (c) => {
 					const review = queueReview({
 						repoId: tracked.id,
 						prNumber: pr.number,
-						headSha: typeof (pr.head as Record<string, unknown>)?.sha === 'string'
-							? ((pr.head as Record<string, unknown>).sha as string)
-							: undefined
+						headSha:
+							typeof (pr.head as Record<string, unknown>)?.sha === 'string'
+								? ((pr.head as Record<string, unknown>).sha as string)
+								: undefined
 					});
 
 					return c.json({ received: true, reviewCreated: true, reviewId: review.id }, 201);

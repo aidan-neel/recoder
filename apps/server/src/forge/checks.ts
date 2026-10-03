@@ -17,6 +17,7 @@ export async function fetchChecks(repo: Repo, ref: string): Promise<PrCheck[]> {
 	return provider === 'gitlab' ? gitlabChecks(slug, ref, repo.url) : githubChecks(slug, ref);
 }
 
+/** Check runs plus legacy commit statuses. Statuses come newest first, so only the first per context is kept. */
 async function githubChecks(slug: string, ref: string): Promise<PrCheck[]> {
 	const target = encodeURIComponent(ref);
 
@@ -52,7 +53,6 @@ async function githubChecks(slug: string, ref: string): Promise<PrCheck[]> {
 		url: run.html_url ?? run.details_url
 	}));
 
-	// Statuses come newest first; keep one per context.
 	const seen = new Set<string>();
 
 	for (const status of combined.statuses ?? []) {
@@ -158,7 +158,8 @@ const FAILURE_LINE = /error|fail|✗|✘|panic|exception|assert/i;
 /**
  * The part of a CI log that says why it failed, for the model: colors and
  * timestamps stripped, the lines that mention a failure (with a little
- * context) plus the tail, capped.
+ * context) plus the tail. Over the cap the end of the log wins, since that is
+ * where runners report the failure.
  */
 export function failureExcerpt(log: string, maxChars = 16_000): string {
 	const lines = log
@@ -186,6 +187,5 @@ export function failureExcerpt(log: string, maxChars = 16_000): string {
 
 	const text = out.join('\n').trim();
 
-	// Over the cap, the end of the log (where runners report the failure) wins.
 	return text.length > maxChars ? '…' + text.slice(text.length - maxChars) : text;
 }

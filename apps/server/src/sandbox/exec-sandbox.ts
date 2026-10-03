@@ -1,36 +1,8 @@
-import { existsSync, lstatSync, mkdirSync, realpathSync, statSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { basename, dirname, join, resolve, sep } from 'node:path';
-import { env } from '../env.js';
-import { serverDataDir } from '../util/data-dir.js';
+import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { inside, type SandboxLayout } from './sandbox-layout.js';
 
-/**
- * Runs reviewer commands against a PR checkout inside bubblewrap on Linux and
- * Seatbelt (`sandbox-exec`) on macOS. Native Windows stays read-only. PR code is
- * untrusted, so every command gets:
- * - a read-only host with $HOME, the data dir (tokens), the work dir (other
- *   reviews' checkouts), /run (docker and dbus sockets) and /mnt hidden;
- * - the host toolchains on PATH bound back in read-only;
- * - only the checkout and a per-checkout cache writable, with `.git` read-only
- *   so HEAD cannot move;
- * - no network (setup's dependency install is the one exception), a cleared
- *   environment and its own session / process group (plus fresh PID/IPC/UTS
- *   namespaces under bubblewrap).
- * Seatbelt can't mount a fresh /tmp, so on macOS /tmp is hidden too and HOME and
- * TMPDIR point into the per-checkout cache.
- */
-
-export interface SandboxLayout {
-	checkout: string;
-	cacheDir: string;
-	/** Host directories replaced by an empty tmpfs, parents before children. */
-	hidden: string[];
-	/** Toolchain directories bound back read-only on top of `hidden`. */
-	toolchains: string[];
-	/** Files masked with /dev/null inside bound toolchains (registry credentials). */
-	masked: string[];
-	env: Record<string, string>;
-}
+export { sandboxLayout, type SandboxLayout } from './sandbox-layout.js';
 
 export interface RunOptions {
 	network?: boolean;
@@ -47,128 +19,14 @@ export interface RunResult {
 	elapsedMs: number;
 }
 
-const CREDENTIAL_FILES = ['credentials', 'credentials.toml', '.credentials.json', 'auth.json', '.npmrc', '.netrc'];
-
-function isDir(path: string): boolean {
-	try {
-		return lstatSync(path).isDirectory();
-	} catch {
-		return false;
-	}
-}
-
-function inside(path: string, dir: string): boolean {
-	return path === dir || path.startsWith(dir.endsWith(sep) ? dir : dir + sep);
-}
-
-/** A PATH entry's toolchain root: `~/.bun/bin` → `~/.bun`, `~/.nvm/versions/node/v24/bin` → `…/v24`. */
-function toolchainRoot(entry: string, home: string): string {
-	const parent = dirname(entry);
-
-	if (basename(entry) !== 'bin' || parent === home || parent === join(home, '.local') || parent === '/') return entry;
-
-	return parent;
-}
-
-/** Seatbelt matches resolved paths (`/tmp` is `/private/tmp` on macOS). */
-function real(path: string): string {
-	const absolute = resolve(path);
-
-	try {
-		return realpathSync(absolute);
-	} catch {
-		return absolute;
-	}
-}
-
-/** Where things live on this host, resolved into what the sandbox should hide, bind and set. */
-export function sandboxLayout(
-	checkout: string,
-	host: {
-		home?: string;
-		dataDir?: string;
-		workDir?: string;
-		path?: string;
-		platform?: NodeJS.Platform;
-	} = {}
-): SandboxLayout {
-	const darwin = (host.platform ?? process.platform) === 'darwin';
-	const home = real(host.home ?? homedir());
-	const dataDir = real(host.dataDir ?? serverDataDir());
-	const workDir = real(host.workDir ?? env.RECODER_WORKDIR);
-	const root = real(checkout);
-	const cacheDir = join(workDir, 'cache', basename(root));
-
-	const hostDirs = darwin
-		? ['/private/tmp', '/Volumes', '/private/var/root']
-		: ['/root', '/mnt', '/media', '/run', '/var/run'];
-
-	const hidden = [home, dataDir, workDir, ...hostDirs]
-		.filter((path, index, all) => all.indexOf(path) === index && isDir(path))
-		.sort((a, b) => a.length - b.length);
-
-	const isHidden = (path: string) => hidden.some((dir) => inside(path, dir));
-
-	const pathEntries = (host.path ?? process.env.PATH ?? '').split(':').filter((entry) => entry.startsWith('/'));
-
-	// Windows drives (WSL) and anything else under a hidden dir that isn't a toolchain drops off PATH.
-	const kept = pathEntries.filter(
-		(entry) => !inside(entry, '/mnt') && !inside(entry, dataDir) && !inside(entry, workDir)
-	);
-
-	const toolchains = new Set<string>();
-
-	for (const entry of kept) {
-		if (!isHidden(entry) || !existsSync(entry)) continue;
-
-		const bind = toolchainRoot(entry, home);
-
-		if (bind !== home && !inside(dataDir, bind) && !inside(workDir, bind)) toolchains.add(bind);
-	}
-
-	const rustup = join(home, '.rustup');
-
-	if (isDir(rustup)) toolchains.add(rustup);
-
-	const masked = [...toolchains]
-		.flatMap((dir) => CREDENTIAL_FILES.map((file) => join(dir, file)))
-		.filter((file) => existsSync(file));
-
-	const cache = (name: string) => join(cacheDir, name);
-
-	return {
-		checkout: root,
-		cacheDir,
-		hidden,
-		toolchains: [...toolchains].sort((a, b) => a.length - b.length),
-		masked,
-		env: {
-			PATH: kept.join(':') || '/usr/local/bin:/usr/bin:/bin',
-			HOME: darwin ? cache('home') : '/tmp/home',
-			TMPDIR: darwin ? cache('tmp') : '/tmp',
-			LANG: darwin ? 'en_US.UTF-8' : 'C.UTF-8',
-			TERM: 'dumb',
-			CI: '1',
-			NO_COLOR: '1',
-			FORCE_COLOR: '0',
-			PYTHONDONTWRITEBYTECODE: '1',
-			XDG_CACHE_HOME: cache('xdg'),
-			BUN_INSTALL_CACHE_DIR: cache('bun'),
-			npm_config_cache: cache('npm'),
-			YARN_CACHE_FOLDER: cache('yarn'),
-			PNPM_HOME: cache('pnpm-home'),
-			npm_config_store_dir: cache('pnpm'),
-			PIP_CACHE_DIR: cache('pip'),
-			UV_CACHE_DIR: cache('uv'),
-			GOMODCACHE: cache('gomod'),
-			GOCACHE: cache('gobuild'),
-			GOPATH: cache('gopath'),
-			CARGO_HOME: cache('cargo'),
-			...(isDir(rustup) ? { RUSTUP_HOME: rustup } : {})
-		}
-	};
-}
-
+/**
+ * bubblewrap arguments for one command: a read-only host with the layout's
+ * hidden dirs emptied (a fresh /tmp already covers its children), toolchains
+ * bound back, the checkout and cache writable with `.git` read-only so HEAD
+ * cannot move, a cleared environment and fresh namespaces. The networked
+ * install also gets systemd-resolved's DNS stub, which lives under /run. stderr
+ * joins stdout so the agent sees output in the order it was written.
+ */
 function bwrapArgs(layout: SandboxLayout, command: string, opts: { network?: boolean } = {}): string[] {
 	const args = ['--die-with-parent', '--new-session', '--unshare-all'];
 
@@ -176,11 +34,9 @@ function bwrapArgs(layout: SandboxLayout, command: string, opts: { network?: boo
 	args.push('--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--dir', '/tmp/home');
 
 	for (const dir of layout.hidden) {
-		// /tmp is already a fresh tmpfs; its children need no second one.
 		if (!inside(dir, '/tmp')) args.push('--tmpfs', dir);
 	}
 
-	// DNS for the networked install; systemd-resolved keeps its stub under /run.
 	if (opts.network) args.push('--ro-bind-try', '/run/systemd/resolve', '/run/systemd/resolve');
 	for (const dir of layout.toolchains) args.push('--ro-bind', dir, dir);
 	for (const file of layout.masked) args.push('--ro-bind', '/dev/null', file);
@@ -191,7 +47,6 @@ function bwrapArgs(layout: SandboxLayout, command: string, opts: { network?: boo
 	if (existsSync(git)) args.push('--ro-bind', git, git);
 	args.push('--bind', layout.cacheDir, layout.cacheDir, '--chdir', layout.checkout, '--clearenv');
 	for (const [key, value] of Object.entries(layout.env)) args.push('--setenv', key, value);
-	// stderr joins stdout so the agent sees output in the order it was written.
 	args.push('--', shell(), '-c', 'eval "$1" 2>&1', 'recoder', command);
 
 	return args;
@@ -202,7 +57,11 @@ function sbpl(value: string): string {
 	return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
-/** Every parent directory of these paths, `/` included. */
+/**
+ * Every parent directory of these paths, `/` included. Path walks (mkdir -p,
+ * realpath) stat each parent of what's allowed; that reveals nothing, while
+ * listing or reading those parents stays denied.
+ */
 function ancestors(paths: string[]): string[] {
 	const out = new Set<string>();
 
@@ -230,8 +89,6 @@ function seatbeltProfile(layout: SandboxLayout, opts: { network?: boolean } = {}
 		opts.network ? '' : '(deny network*)',
 		layout.hidden.length ? `(deny file-read* file-write* ${subpaths(layout.hidden)})` : '',
 		`(allow file-read* ${subpaths([...layout.toolchains, layout.checkout, layout.cacheDir])})`,
-		// Path walks (mkdir -p, realpath) stat every parent of what's allowed; that reveals
-		// nothing, while listing or reading those parents stays denied.
 		`(allow file-read-metadata ${ancestors([...layout.toolchains, layout.checkout, layout.cacheDir])
 			.map((dir) => `(literal ${sbpl(dir)})`)
 			.join(' ')})`,
@@ -246,6 +103,7 @@ function seatbeltProfile(layout: SandboxLayout, opts: { network?: boolean } = {}
 
 let shellPath: string | null = null;
 
+/** bash when the host has it, else sh. */
 function shell(): string {
 	shellPath ??= ['/bin/bash', '/usr/bin/bash'].find((path) => existsSync(path)) ?? '/bin/sh';
 
@@ -268,32 +126,19 @@ export function execUnavailableReason(): Promise<string | null> {
 
 		if (!bwrap) return 'Running code needs bubblewrap (`bwrap`). Install it to let reviewers run tests.';
 
-		try {
-			const proc = Bun.spawn(
-				[
-					bwrap,
-					'--die-with-parent',
-					'--unshare-all',
-					'--ro-bind',
-					'/',
-					'/',
-					'--dev',
-					'/dev',
-					'--proc',
-					'/proc',
-					'true'
-				],
-				{ stdout: 'ignore', stderr: 'pipe' }
-			);
-
-			const [code, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
-
-			return code === 0
-				? null
-				: `bubblewrap could not start a sandbox: ${stderr.trim().slice(0, 300) || `exit ${code}`}`;
-		} catch (err) {
-			return `bubblewrap could not start a sandbox: ${err instanceof Error ? err.message : String(err)}`;
-		}
+		return probeSandbox('bubblewrap', [
+			bwrap,
+			'--die-with-parent',
+			'--unshare-all',
+			'--ro-bind',
+			'/',
+			'/',
+			'--dev',
+			'/dev',
+			'--proc',
+			'/proc',
+			'true'
+		]);
 	})();
 
 	return probe;
@@ -304,19 +149,18 @@ async function probeSeatbelt(): Promise<string | null> {
 
 	if (!bin) return 'Running code needs `sandbox-exec`, which this macOS install is missing.';
 
-	try {
-		const proc = Bun.spawn([bin, '-p', '(version 1)(allow default)(deny network*)', '/usr/bin/true'], {
-			stdout: 'ignore',
-			stderr: 'pipe'
-		});
+	return probeSandbox('sandbox-exec', [bin, '-p', '(version 1)(allow default)(deny network*)', '/usr/bin/true']);
+}
 
+/** Start a trivial sandboxed command: null when it runs, otherwise why `name` could not start a sandbox. */
+async function probeSandbox(name: string, argv: string[]): Promise<string | null> {
+	try {
+		const proc = Bun.spawn(argv, { stdout: 'ignore', stderr: 'pipe' });
 		const [code, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()]);
 
-		return code === 0
-			? null
-			: `sandbox-exec could not start a sandbox: ${stderr.trim().slice(0, 300) || `exit ${code}`}`;
+		return code === 0 ? null : `${name} could not start a sandbox: ${stderr.trim().slice(0, 300) || `exit ${code}`}`;
 	} catch (err) {
-		return `sandbox-exec could not start a sandbox: ${err instanceof Error ? err.message : String(err)}`;
+		return `${name} could not start a sandbox: ${err instanceof Error ? err.message : String(err)}`;
 	}
 }
 
@@ -333,7 +177,11 @@ function boundOutput(text: string, max: number): { text: string; truncated: bool
 	};
 }
 
-/** How long output may keep arriving after the command exits. */
+/**
+ * How long output may keep arriving after the command exits. A child that left
+ * the command's process group (setsid, a daemon, a test that starts a server)
+ * can hold the pipes open forever after the command itself is gone.
+ */
 const PIPE_DRAIN_MS = 1_500;
 /** Raw output kept from each pipe: the head and a rolling tail, so a flood can't exhaust memory. */
 const PIPE_KEEP_CHARS = 64_000;
@@ -377,7 +225,6 @@ function collect(stream: ReadableStream<Uint8Array>): { done: Promise<void>; sto
 
 			add(decoder.decode());
 		} catch {
-			/* cancelled or the pipe broke: keep what arrived */
 		} finally {
 			finished = true;
 		}
@@ -393,6 +240,64 @@ function collect(stream: ReadableStream<Uint8Array>): { done: Promise<void>; sto
 	};
 }
 
+/** The argv that runs `command` inside bubblewrap, or Seatbelt on macOS. */
+function sandboxArgv(layout: SandboxLayout, command: string, network: boolean | undefined, darwin: boolean): string[] {
+	if (!darwin) return ['bwrap', ...bwrapArgs(layout, command, { network })];
+
+	return [
+		'sandbox-exec',
+		'-p',
+		seatbeltProfile(layout, { network }),
+		shell(),
+		'-c',
+		'eval "$1" 2>&1',
+		'recoder',
+		command
+	];
+}
+
+/** SIGKILL a process group, if it is still there. */
+function killGroup(pid: number): void {
+	try {
+		process.kill(-pid, 'SIGKILL');
+	} catch {}
+}
+
+/**
+ * SIGKILL a sandboxed command. Under bubblewrap that takes the whole sandbox
+ * with it (--die-with-parent, PID namespace); on macOS the command leads its
+ * own process group, so the whole group goes.
+ */
+function killSandbox(proc: Bun.Subprocess, darwin: boolean): void {
+	if (!darwin) {
+		proc.kill('SIGKILL');
+
+		return;
+	}
+
+	try {
+		process.kill(-proc.pid, 'SIGKILL');
+	} catch {
+		proc.kill('SIGKILL');
+	}
+}
+
+/** stdout with stderr after it, on its own line. */
+function combineOutput(stdout: string, stderr: string): string {
+	if (!stderr.trim()) return stdout;
+
+	return `${stdout}${stdout.endsWith('\n') || !stdout ? '' : '\n'}${stderr}`;
+}
+
+/**
+ * Run a reviewer command against a PR checkout inside the sandbox: bubblewrap
+ * on Linux, Seatbelt (`sandbox-exec`) on macOS. Every command gets its own
+ * session and process group, no network (setup's dependency install is the one
+ * exception) and a cleared environment. Seatbelt has no PID namespace, so there
+ * the command leads its own process group and a kill reaches its children.
+ * After it exits, stray children get a moment to drain the pipes before the
+ * reads stop and whatever it left behind is killed.
+ */
 export async function runSandboxed(layout: SandboxLayout, command: string, opts: RunOptions): Promise<RunResult> {
 	mkdirSync(layout.cacheDir, { recursive: true });
 	if (!statSync(layout.checkout).isDirectory()) throw new Error('review checkout is missing');
@@ -406,40 +311,15 @@ export async function runSandboxed(layout: SandboxLayout, command: string, opts:
 
 	const started = Date.now();
 
-	const argv = darwin
-		? [
-				'sandbox-exec',
-				'-p',
-				seatbeltProfile(layout, { network: opts.network }),
-				shell(),
-				'-c',
-				'eval "$1" 2>&1',
-				'recoder',
-				command
-			]
-		: ['bwrap', ...bwrapArgs(layout, command, { network: opts.network })];
-
-	const proc = Bun.spawn(argv, {
+	const proc = Bun.spawn(sandboxArgv(layout, command, opts.network, darwin), {
 		stdin: opts.stdin === undefined ? 'ignore' : new Blob([opts.stdin]),
 		stdout: 'pipe',
 		stderr: 'pipe',
-		// Seatbelt has no PID namespace: the command leads its own process group so a kill reaches its children.
 		...(darwin ? { cwd: layout.checkout, env: layout.env, detached: true } : {})
 	});
 
 	let timedOut = false;
-
-	// SIGKILL on bwrap takes the whole sandbox with it (--die-with-parent, PID namespace);
-	// on macOS the whole process group goes.
-	const kill = () => {
-		if (!darwin) return proc.kill('SIGKILL');
-
-		try {
-			process.kill(-proc.pid, 'SIGKILL');
-		} catch {
-			proc.kill('SIGKILL');
-		}
-	};
+	const kill = () => killSandbox(proc, darwin);
 
 	const timer = setTimeout(() => {
 		timedOut = true;
@@ -454,22 +334,11 @@ export async function runSandboxed(layout: SandboxLayout, command: string, opts:
 	try {
 		const code = await proc.exited;
 
-		// A child that left the command's process group (setsid, a daemon, a test that starts a
-		// server) can hold the pipes open forever after the command itself is gone. Give them a
-		// moment to drain, then stop reading and clean up whatever the command left behind.
 		await Promise.race([Promise.all([out.done, err.done]), Bun.sleep(PIPE_DRAIN_MS)]);
-
-		if (darwin) {
-			try {
-				process.kill(-proc.pid, 'SIGKILL');
-			} catch {
-				/* the group is already gone */
-			}
-		}
+		if (darwin) killGroup(proc.pid);
 
 		const [stdout, stderr] = await Promise.all([out.stop(), err.stop()]);
-		const combined = stderr.trim() ? `${stdout}${stdout.endsWith('\n') || !stdout ? '' : '\n'}${stderr}` : stdout;
-		const bounded = boundOutput(combined, 20_000);
+		const bounded = boundOutput(combineOutput(stdout, stderr), 20_000);
 
 		return {
 			exitCode: timedOut || opts.signal?.aborted ? null : code,

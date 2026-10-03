@@ -23,9 +23,10 @@ export async function discoverModels(
 				signal: AbortSignal.timeout(10_000)
 			});
 		} catch (err) {
-			const cause = err instanceof Error ? (err.cause instanceof Error ? err.cause.message : err.message) : String(err);
+			const reason =
+				err instanceof Error ? (err.cause instanceof Error ? err.cause.message : err.message) : String(err);
 
-			throw new Error(`Couldn't reach ${new URL(candidate).host}: ${cause}`);
+			throw new Error(`Couldn't reach ${new URL(candidate).host}: ${reason}`, { cause: err });
 		}
 
 		if (response.status === 401 || response.status === 403)

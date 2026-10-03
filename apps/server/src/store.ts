@@ -92,7 +92,7 @@ const PROGRESS_FLUSH_MS = 750;
  * Write every pending snapshot to SQLite now. A snapshot stays pending until
  * its own write succeeds, and one failed write doesn't hold back the rest.
  */
-export function flushReviewProgress(): void {
+function flushReviewProgress(): void {
 	if (progressTimer) {
 		clearTimeout(progressTimer);
 		progressTimer = null;
@@ -141,7 +141,6 @@ export const reviewProgress = {
 		const cached = progressCache.get(id);
 
 		if (cached) {
-			// Most recently used last.
 			progressCache.delete(id);
 			progressCache.set(id, cached);
 
@@ -175,6 +174,7 @@ export const reviewProgress = {
 	flush: flushReviewProgress
 };
 
+/** Cache a snapshot as the most recently used (the map's last entry), writing out and dropping the oldest past the cap. */
 function remember(item: ReviewProgress): void {
 	progressCache.delete(item.id);
 	progressCache.set(item.id, item);
@@ -191,15 +191,20 @@ function remember(item: ReviewProgress): void {
 	}
 }
 
-// Nothing in memory may be lost on the way out: flush on exit and on the signals that end a dev
-// server. Registered once per process; `--hot` re-evaluates this module and must not stack listeners.
-const hooks = globalThis as { __recoderProgressFlush?: () => void };
-const registered = hooks.__recoderProgressFlush !== undefined;
+/**
+ * Nothing in memory may be lost on the way out: flush on exit and on the
+ * signals that end a dev server. The listeners are registered once per process,
+ * since `--hot` re-evaluates this module and must not stack them, and they call
+ * whichever module instance is current, so a reload's cache is the one flushed.
+ */
+function flushOnShutdown(): void {
+	const hooks = globalThis as { __recoderProgressFlush?: () => void };
+	const registered = hooks.__recoderProgressFlush !== undefined;
 
-// The handlers call whichever module instance is current, so a reload's cache is the one flushed.
-hooks.__recoderProgressFlush = flushReviewProgress;
+	hooks.__recoderProgressFlush = flushReviewProgress;
 
-if (!registered) {
+	if (registered) return;
+
 	process.on('exit', () => hooks.__recoderProgressFlush?.());
 
 	for (const signal of ['SIGINT', 'SIGTERM'] as const) {
@@ -209,6 +214,8 @@ if (!registered) {
 		});
 	}
 }
+
+flushOnShutdown();
 
 export const reviewMetrics = createCollection<{
 	id: string;

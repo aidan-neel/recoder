@@ -41,7 +41,6 @@ export const REVIEW_POLICY = {
 	reserveMsForConsolidation: 90_000,
 	maxListPage: 200,
 
-	// Code execution in the review sandbox.
 	/** Dependency install before any check or repro runs (network on, scripts off). */
 	setupTimeoutMs: 8 * 60 * 1000,
 	/** Commands the planner picks to run on the PR head before specialists start. */
@@ -61,8 +60,7 @@ export const REVIEW_POLICY = {
 	maxRunOutputChars: 20_000,
 	maxWriteFileChars: 64_000,
 
-	// Verification: every candidate finding is re-proven by running code.
-	/** Every valid candidate is verified; budgets grow to fit. This only guards a runaway review. */
+	/** Every valid candidate is re-proven by running code; budgets grow to fit. This only guards a runaway review. */
 	maxVerifications: 120,
 	maxConcurrentVerifications: 4,
 	maxVerifierTurns: 10,
@@ -78,5 +76,3 @@ export const REVIEW_POLICY = {
 	reserveMsForVerification: 8 * 60 * 1000,
 	reserveCallsForVerification: 50
 } as const;
-
-export type ReviewPolicy = typeof REVIEW_POLICY;

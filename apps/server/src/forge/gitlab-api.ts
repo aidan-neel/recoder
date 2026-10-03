@@ -233,9 +233,7 @@ export async function apiMergeRequests(
 
 				Object.assign(pr, diffStats(entries));
 				pr.changedFiles = entries.length;
-			} catch {
-				/* keep zeroed stats for this MR */
-			}
+			} catch {}
 		})
 	);
 

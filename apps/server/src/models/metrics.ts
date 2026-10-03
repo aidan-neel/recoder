@@ -9,7 +9,7 @@ import {
 } from '@recoder/shared';
 import { db, reviewMetrics } from '../store';
 
-// Async context covers nested agent loops/retries without threading review IDs through model config.
+/** Async context covers nested agent loops and retries without threading review IDs through model config. */
 const context = new AsyncLocalStorage<{ reviewId: string; scope: TokenScope }>();
 
 export function withReviewMetrics<T>(reviewId: string, scope: TokenScope, run: () => T): T {
@@ -65,24 +65,32 @@ export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 	};
 }
 
+/** `raw[key]` when `raw` is a non-null object, else undefined. */
+function field(raw: unknown, key: string): unknown {
+	return raw && typeof raw === 'object' ? (raw as Record<string, unknown>)[key] : undefined;
+}
+
 /** Accept numbers, never coerce null, strings, negative values, or invalid counts to zero. */
 export function normalizeTokenUsage(raw: unknown, provider: TokenCall['provider']): TokenUsage {
-	const value = raw && typeof raw === 'object' ? (raw as Record<string, any>) : {};
 	const count = (n: unknown): number | null => (typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null);
 	const codex = provider === 'codex';
-	const inputTokens = count(codex ? value.inputTokens : value.prompt_tokens);
-	const outputTokens = count(codex ? value.outputTokens : value.completion_tokens);
+	const read = (codexKey: string, openAiKey: string) => count(field(raw, codex ? codexKey : openAiKey));
+	const promptDetails = field(raw, 'prompt_tokens_details');
+	const inputTokens = read('inputTokens', 'prompt_tokens');
+	const outputTokens = read('outputTokens', 'completion_tokens');
 
 	return {
 		inputTokens,
 		outputTokens,
 		totalTokens:
-			count(codex ? value.totalTokens : value.total_tokens) ??
+			read('totalTokens', 'total_tokens') ??
 			(inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null),
-		cachedInputTokens: count(codex ? value.cachedInputTokens : value.prompt_tokens_details?.cached_tokens),
-		cacheWriteInputTokens: count(codex ? value.cacheWriteInputTokens : value.prompt_tokens_details?.cache_write_tokens),
+		cachedInputTokens: count(codex ? field(raw, 'cachedInputTokens') : field(promptDetails, 'cached_tokens')),
+		cacheWriteInputTokens: count(
+			codex ? field(raw, 'cacheWriteInputTokens') : field(promptDetails, 'cache_write_tokens')
+		),
 		reasoningOutputTokens: count(
-			codex ? value.reasoningOutputTokens : value.completion_tokens_details?.reasoning_tokens
+			codex ? field(raw, 'reasoningOutputTokens') : field(field(raw, 'completion_tokens_details'), 'reasoning_tokens')
 		)
 	};
 }

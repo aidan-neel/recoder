@@ -75,7 +75,9 @@ export async function verifyKey(provider: HostedProviderDef, apiKey: string): Pr
 					})
 				: await fetch(`${provider.baseUrl}${provider.verify.path}`, { headers, signal: AbortSignal.timeout(15_000) });
 	} catch (err) {
-		throw new Error(`Couldn't reach ${provider.name}: ${err instanceof Error ? err.message : String(err)}`);
+		throw new Error(`Couldn't reach ${provider.name}: ${err instanceof Error ? err.message : String(err)}`, {
+			cause: err
+		});
 	}
 
 	if (response.status === 401 || response.status === 403)
@@ -129,6 +131,11 @@ function efforts(raw: unknown): ReasoningEffort[] {
 	return REASONING_EFFORTS.filter((effort) => offered.has(effort));
 }
 
+/** "DeepSeek: DeepSeek V4 Flash" → "DeepSeek V4 Flash"; the vendor already shows in the id. */
+function displayName(name: unknown, id: string): string {
+	return typeof name === 'string' && name ? name.replace(/^[^:]{1,40}:\s+/, '') : id;
+}
+
 /**
  * OpenRouter's `/models`: prices are USD per token as strings; every model
  * speaks chat completions. `reasoning.supported_efforts` lists the effort
@@ -153,8 +160,7 @@ export function parseOpenRouter(body: unknown): CatalogModel[] {
 		return [
 			{
 				id: row.id,
-				// "DeepSeek: DeepSeek V4 Flash" → "DeepSeek V4 Flash"; the vendor shows in the id.
-				name: typeof row.name === 'string' && row.name ? row.name.replace(/^[^:]{1,40}:\s+/, '') : row.id,
+				name: displayName(row.name, row.id),
 				contextWindow: typeof row.context_length === 'number' && row.context_length > 0 ? row.context_length : null,
 				inputCost: Number.isFinite(perToken) && perToken >= 0 ? Math.round(perToken * 1_000_000 * 1000) / 1000 : null,
 				supported: true,

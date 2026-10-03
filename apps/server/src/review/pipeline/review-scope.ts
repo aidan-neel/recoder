@@ -1,14 +1,10 @@
 import type { FileDiff } from '@recoder/shared';
 
 /**
- * Classify changed files for inventory and coverage.
- *
- * Generated, vendored, binary, explicitly excluded, and oversized content
- * stay in the coverage ledger with a reason — they are never silently
- * dropped. Hand-written declaration files, text SVGs, and lockfiles are
- * reviewable evidence (lockfiles may be summarized rather than fully read).
+ * How a changed file counts for inventory and coverage. Generated, vendored, binary, excluded and
+ * oversized files stay in the coverage ledger with a reason, never silently dropped. Hand-written
+ * declaration files, text SVGs and lockfiles are reviewable evidence (lockfiles may be summarized).
  */
-
 export type FileClassification = 'source' | 'test' | 'docs' | 'config' | 'lockfile' | 'generated' | 'binary' | 'other';
 
 /** Path segments that mark a file as generated, built, or vendored. */
@@ -164,7 +160,7 @@ const CONFIG_BASENAMES = new Set([
 	'.clang-format'
 ]);
 
-export interface SkippedFile {
+interface SkippedFile {
 	path: string;
 	reason: string;
 }

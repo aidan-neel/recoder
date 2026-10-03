@@ -4,20 +4,18 @@ import {
 	parseUnifiedDiff,
 	type CreateReviewInput,
 	type Finding,
+	type Provider,
+	type Repo,
 	type Review
 } from '@recoder/shared';
-import { closeReviewControl, openReviewControl, runWithReviewControl, type ReviewControl } from '../review/session/review-control';
-import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
 import {
-	emitReviewEvent,
-	reportReviewAssignment,
-	reportReviewCoverage,
-	reportReviewPlan,
-	reportReviewReasoning,
-	reportReviewTask,
-	reportReviewTool,
-	trackReviewTask
-} from '../review/session/events';
+	closeReviewControl,
+	openReviewControl,
+	runWithReviewControl,
+	type ReviewControl
+} from '../review/session/review-control';
+import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
+import { emitReviewEvent, reportReviewTask, trackReviewTask } from '../review/session/events';
 import { fetchPullRequest } from '../forge/gh';
 import { fetchMergeRequest } from '../forge/glab';
 import { fetchPrContext } from '../forge/pr-context';
@@ -25,7 +23,8 @@ import { runAdaptiveReview } from '../review/pipeline/harness';
 import { configForOrchestrator, configForRole, isReviewConfigured } from '../models/models';
 import { ModelBlockedError } from '../review/pipeline/agent-loop';
 import { codex } from '../agents/codex/codex';
-import { discussionContext, recordChatMessage, reviewInstructions } from '../review/chat/review-chat';
+import { reviewInstructions } from '../review/chat/review-chat';
+import { harnessCallbacks } from './pipeline-callbacks';
 import { detectProvider, locateRepo, refspecFor } from '../forge/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../sandbox/sandbox';
 import { tokenEnv } from '../forge/tokens';
@@ -168,13 +167,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	try {
 		if (!repo) throw new Error('repo not found');
 
-		// Planning and the correctness pass always run: fail now, not after a long checkout.
-		if (
-			[configForOrchestrator(), configForRole('correctness')].some((config) => config.provider === 'codex') &&
-			!(await codex.signedIn())
-		) {
-			throw new ModelBlockedError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });
-		}
+		await assertChatGptSignedIn();
 
 		emitReviewEvent(reviewId, {
 			type: 'step',
@@ -203,12 +196,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		baseRef = pr.base;
 		prBody = pr.body ?? '';
 
-		// People and linked issues for the planner; fetched while the sandbox clones. Best
-		// effort: a slow host API must not hold the review once the checkout is ready.
-		prContext = Promise.race([
-			fetchPrContext(repo, review.prNumber, provider),
-			new Promise<string>((resolve) => setTimeout(() => resolve(''), 30_000))
-		]);
+		prContext = prContextWithin(repo, review.prNumber, provider);
 
 		reviewDiffs.set(reviewId, diff);
 
@@ -310,72 +298,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 					signal: analysis.signal,
 					resume
 				},
-				{
-					onTask: (task) => reportReviewTask(reviewId, task),
-					onMessage: (message) =>
-						recordChatMessage(reviewId, { ...message, from: 'assistant', at: new Date().toISOString() }),
-					getDiscussion: (assignmentId) =>
-						[
-							discussionContext(reviewId),
-							assignmentId && assignmentId !== '__pipeline' ? discussionContext(reviewId, assignmentId) : ''
-						]
-							.filter(Boolean)
-							.join('\n\n'),
-					onLog: (message, meta) =>
-						emitReviewEvent(reviewId, {
-							type: 'log',
-							step: meta?.assignmentId ? `assignment:${meta.assignmentId}` : 'review',
-							message,
-							data: { agent: meta?.role, assignmentId: meta?.assignmentId }
-						}),
-					onPlan: (data) => reportReviewPlan(reviewId, data),
-					onApproval: (approval) =>
-						emitReviewEvent(reviewId, {
-							type: 'step',
-							step: 'review',
-							message:
-								approval.status === 'pending'
-									? `Waiting for approval to run ${approval.requested} specialists`
-									: `Running ${approval.requested} specialists`,
-							data: { approval }
-						}),
-					onAssignment: (assignment) => reportReviewAssignment(reviewId, assignment),
-					onCoverage: (coverage, gaps) => reportReviewCoverage(reviewId, coverage, gaps),
-					onBudget: (budget) => {
-						const snapshot = reviewProgress.get(reviewId);
-
-						if (snapshot) reviewProgress.set({ ...snapshot, budget });
-					},
-					onReasoning: (reasoning) => reportReviewReasoning(reviewId, reasoning),
-					onTool: (tool) => reportReviewTool(reviewId, tool),
-					onCandidates: (count) => {
-						const snapshot = reviewProgress.get(reviewId);
-
-						if (snapshot) reviewProgress.set({ ...snapshot, candidateCount: count });
-
-						emitReviewEvent(reviewId, {
-							type: 'finding',
-							message: `${count} candidate finding${count === 1 ? '' : 's'}`,
-							data: { candidateCount: count }
-						});
-					},
-					onGuidelines: (guidelines) => {
-						const sources = guidelines.layers
-							.map((layer) => (layer.source === 'global' ? 'global' : layer.path))
-							.join(' + ');
-
-						emitReviewEvent(reviewId, {
-							type: 'step',
-							step: 'review',
-							message: `Following review guidelines (${sources})`,
-							data: { guidelines }
-						});
-					},
-					onStage: (stage) => {
-						emitReviewEvent(reviewId, { type: 'step', step: stage, message: '', data: { stage } });
-					},
-					onCheckpoint: (checkpoint) => reviewCheckpoints.set({ ...checkpoint, id: reviewId, headSha, mergeBaseSha })
-				}
+				harnessCallbacks(reviewId, { headSha, mergeBaseSha })
 			)
 		);
 
@@ -446,42 +369,73 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		const message = cancelled ? 'Review cancelled.' : err instanceof Error ? err.message : 'pipeline failed';
 		const failure = !cancelled && err instanceof ModelBlockedError ? err.failure : undefined;
 
-		try {
-			const snapshot = reviewProgress.get(reviewId);
-
-			if (snapshot)
-				reviewProgress.set({
-					...snapshot,
-					outcome: 'failed',
-					assignments: settleAssignments(snapshot.assignments ?? [], message),
-					...(failure ? { failure } : {})
-				});
-			touch(reviewId, { status: 'failed', summary: message });
-		} catch {
-			// Review was deleted mid-run (e.g. its session was closed) — nothing to update.
-		}
+		markFailed(reviewId, message, failure);
 
 		emitReviewEvent(reviewId, { type: 'error', message, data: { paused: false, ...(failure ? { failure } : {}) } });
 	} finally {
 		closeReviewControl(reviewId, control);
-
-		try {
-			const settled = settlePipelineStreams(reviewId);
-
-			if (settled)
-				emitReviewEvent(reviewId, {
-					type: 'log',
-					step: 'review',
-					message: '',
-					data: { settled: { messages: settled.messages, reasoning: settled.reasoning } }
-				});
-		} catch {
-			/* Review deleted mid-run. */
-		}
-
-		// The final state reaches SQLite now, not on the write-behind timer.
-		reviewProgress.flush();
+		settleRun(reviewId);
 	}
+}
+
+/** Planning and the correctness pass always run, so a missing ChatGPT sign-in fails now, not after a long checkout. */
+async function assertChatGptSignedIn(): Promise<void> {
+	const usesCodex = [configForOrchestrator(), configForRole('correctness')].some(
+		(config) => config.provider === 'codex'
+	);
+
+	if (usesCodex && !(await codex.signedIn())) {
+		throw new ModelBlockedError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });
+	}
+}
+
+/**
+ * People and linked issues for the planner, fetched while the sandbox clones.
+ * Best effort: after 30s it gives up with nothing, so a slow host API can't
+ * hold the review once the checkout is ready.
+ */
+function prContextWithin(repo: Repo, prNumber: number, provider: Provider): Promise<string> {
+	return Promise.race([
+		fetchPrContext(repo, prNumber, provider),
+		new Promise<string>((resolve) => setTimeout(() => resolve(''), 30_000))
+	]);
+}
+
+/** Record a failed run. A review deleted mid-run (its session closed) has nothing left to update. */
+function markFailed(reviewId: string, message: string, failure: ModelBlockedError['failure'] | undefined): void {
+	try {
+		const snapshot = reviewProgress.get(reviewId);
+
+		if (snapshot)
+			reviewProgress.set({
+				...snapshot,
+				outcome: 'failed',
+				assignments: settleAssignments(snapshot.assignments ?? [], message),
+				...(failure ? { failure } : {})
+			});
+		touch(reviewId, { status: 'failed', summary: message });
+	} catch {}
+}
+
+/**
+ * Close out a run, however it ended: settle the streamed messages and
+ * reasoning (skipped when the review was deleted mid-run), then write the
+ * final state to SQLite now rather than on the write-behind timer.
+ */
+function settleRun(reviewId: string): void {
+	try {
+		const settled = settlePipelineStreams(reviewId);
+
+		if (settled)
+			emitReviewEvent(reviewId, {
+				type: 'log',
+				step: 'review',
+				message: '',
+				data: { settled: { messages: settled.messages, reasoning: settled.reasoning } }
+			});
+	} catch {}
+
+	reviewProgress.flush();
 }
 
 function throwIfCancelled(control: ReviewControl): void {

@@ -117,11 +117,7 @@ export async function streamGuidelinesDraft(
 
 	const raw = await streamChatCompletion(
 		{
-			provider: cfg.provider,
-			reasoningEffort: cfg.reasoningEffort,
-			baseUrl: cfg.baseUrl,
-			apiKey: cfg.apiKey,
-			model: cfg.model,
+			...cfg,
 			messages: [
 				{ role: 'system', content: SYSTEM_PROMPT },
 				{ role: 'user', content: await draftUserPrompt(request, sources) }

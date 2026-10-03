@@ -3,14 +3,7 @@ import type { FindingVerification } from '@recoder/shared';
 import type { EvidenceStore } from '../../evidence/evidence.js';
 import type { CandidateFinding } from './consolidate.js';
 import { REVIEW_POLICY } from '../session/review-policy.js';
-
-/**
- * The verify stage: every candidate finding gets a fresh agent whose only job
- * is to prove or disprove it with tools: by running code in the review
- * sandbox, or by tracing it through the code when nothing can run. Each
- * verdict must cite what it ran or read; anything else stays unverified, with
- * the reason shown to the developer.
- */
+import { clip, retrievalTurnSchema } from './schemas.js';
 
 const VERDICT_ALIASES: Record<string, 'confirmed' | 'refuted' | 'unverified'> = {
 	confirmed: 'confirmed',
@@ -35,7 +28,7 @@ const VERDICT_ALIASES: Record<string, 'confirmed' | 'refuted' | 'unverified'> = 
 	unproven: 'unverified'
 };
 
-export const verdictSchema = z.object({
+const verdictSchema = z.object({
 	message: z.string().max(12000).optional(),
 	verdict: z.enum(['confirmed', 'refuted', 'unverified']),
 	reason: z.string().trim().min(1).max(600),
@@ -54,7 +47,7 @@ export function parseVerdict(raw: unknown): VerdictOutput | null {
 	if (typeof verdict === 'string') out.verdict = VERDICT_ALIASES[verdict.trim().toLowerCase()] ?? verdict;
 	else if (typeof verdict === 'boolean') out.verdict = verdict ? 'confirmed' : 'refuted';
 	out.reason ??= out.explanation ?? out.details ?? out.summary ?? out.message;
-	if (typeof out.reason === 'string' && out.reason.length > 600) out.reason = `${out.reason.slice(0, 599)}…`;
+	out.reason = clip(out.reason, 600);
 	if (typeof out.evidenceIds === 'string') out.evidenceIds = [out.evidenceIds];
 	if (Array.isArray(out.evidenceIds))
 		out.evidenceIds = out.evidenceIds.filter((id) => typeof id === 'string' && id).slice(0, 12);
@@ -108,7 +101,12 @@ export function settleVerdict(output: VerdictOutput, evidence: EvidenceStore): F
 	};
 }
 
-/** Why code cannot run here, or null when the verifier has a sandboxed shell. */
+/**
+ * The verify stage gives every candidate finding a fresh agent whose only job
+ * is to prove or disprove it with tools: by running code in the review
+ * sandbox, or by tracing it through the code when nothing can run.
+ * `cannotRun` is why code cannot run here, or null when the verifier has a sandboxed shell.
+ */
 export function verifierSystemPrompt(cannotRun: string | null = null): string {
 	const shared = `The finding came from another reviewer and may be wrong. Your job is to prove or disprove it with tools, not to agree with it.
 - The reason is shown to the developer: one or two plain sentences about what you ran or read, naming the command or \`file:line\`.
@@ -160,39 +158,7 @@ export function verifierResponseSchema(
 
 	if (finalTurn) return { name: 'verifier_verdict', schema: verdict };
 
-	const action = {
-		type: 'object',
-		properties: {
-			action: {
-				type: 'string',
-				enum: exec
-					? ['readDiff', 'readFile', 'search', 'listFiles', 'run', 'writeFile']
-					: ['readDiff', 'readFile', 'search', 'listFiles']
-			},
-			revision: { type: 'string', enum: ['head', 'target', 'mergeBase'] },
-			path: str,
-			query: str,
-			prefix: str,
-			cursor: str,
-			hunkIds: { type: 'array', items: str },
-			startLine: { type: 'integer' },
-			endLine: { type: 'integer' },
-			...(exec ? { command: str, content: str, timeoutSec: { type: 'integer' } } : {})
-		},
-		required: ['action']
-	};
-
-	const turn = {
-		type: 'object',
-		properties: {
-			message: str,
-			actions: { type: 'array', items: action, minItems: 1, maxItems: REVIEW_POLICY.maxRetrievalsPerTurn }
-		},
-		required: ['message', 'actions'],
-		additionalProperties: false
-	};
-
-	return { name: 'verifier_turn', schema: { anyOf: [turn, verdict] } };
+	return { name: 'verifier_turn', schema: { anyOf: [retrievalTurnSchema(exec), verdict] } };
 }
 
 export function verifierUserPrompt(candidate: CandidateFinding, evidence: EvidenceStore, setupNotes: string): string {

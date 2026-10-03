@@ -1,10 +1,11 @@
+/** Every cache, so `clearAllCaches` can reach them. */
+const registry = new Set<TtlCache<unknown>>();
+
 /**
  * Short-lived cache for slow provider lookups (CLI spawns, REST calls).
  * Concurrent callers for one key share a single load, a failed load is never
  * cached, and `clearAllCaches` drops everything when credentials change.
  */
-const registry = new Set<TtlCache<unknown>>();
-
 export class TtlCache<T> {
 	private entries = new Map<string, { value: T; expires: number }>();
 	private inflight = new Map<string, Promise<T>>();
@@ -16,6 +17,10 @@ export class TtlCache<T> {
 		registry.add(this as TtlCache<unknown>);
 	}
 
+	/**
+	 * The cached value, or `load`'s result. A value whose load overlapped a
+	 * clear is returned but not stored, since it may predate a credential change.
+	 */
 	get(key: string, load: () => Promise<T>): Promise<T> {
 		const hit = this.entries.get(key);
 
@@ -29,7 +34,6 @@ export class TtlCache<T> {
 
 		const promise = load()
 			.then((value) => {
-				// A clear while loading means the value may predate a credential change.
 				if (generation === this.generation) this.store(key, value);
 
 				return value;

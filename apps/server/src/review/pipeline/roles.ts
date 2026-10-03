@@ -1,44 +1,10 @@
+import { REVIEW_ROLES, ROLE_LABELS, type ReviewRole } from '@recoder/shared';
+
 /**
- * Reviewer role registry (leaf module — no imports, safe to require anywhere).
- *
- * Thirteen specialized lenses. The orchestrator assigns a bounded subset per
- * review; assignment identity is never the role id.
+ * Review lens prompts and name resolution. The role list and labels live in `@recoder/shared`
+ * and are re-exported here; this module imports nothing else, so anything can use it.
  */
-
-export const REVIEW_ROLES = [
-	'security',
-	'perf',
-	'correctness',
-	'docs',
-	'dedup',
-	'patterns',
-	'testing',
-	'errors',
-	'concurrency',
-	'api',
-	'impact',
-	'frontend',
-	'data'
-] as const;
-
-export type ReviewRole = (typeof REVIEW_ROLES)[number];
-
-/** Short display labels for role ids. */
-export const ROLE_LABELS: Record<ReviewRole, string> = {
-	security: 'Security',
-	perf: 'Perf',
-	correctness: 'Correctness',
-	docs: 'Docs',
-	dedup: 'Dedup',
-	patterns: 'Repository consistency',
-	testing: 'Testing',
-	errors: 'Errors',
-	concurrency: 'Concurrency',
-	api: 'API',
-	impact: 'Impact',
-	frontend: 'Frontend',
-	data: 'Data & state'
-};
+export { REVIEW_ROLES, ROLE_LABELS, type ReviewRole };
 
 /** What each lens hunts. Fed to the planner and specialists. */
 export const ROLE_FOCUS: Record<ReviewRole, string> = {

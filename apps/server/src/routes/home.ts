@@ -4,6 +4,7 @@ import { homeBrief } from '../home/home-brief';
 import { LlmError } from '../models/llm';
 import { isReviewConfigured } from '../models/models';
 import { db } from '../store';
+import { parseBody } from './parse-body';
 
 const briefSchema = z.object({
 	name: z.string().max(60).nullish(),
@@ -29,16 +30,14 @@ const app = new Hono();
 
 /** AI brief for the Home screen, written by the orchestrator's model. */
 app.post('/brief', async (c) => {
-	const parsed = briefSchema.safeParse(await c.req.json().catch(() => null));
+	const body = await parseBody(c, briefSchema);
 
-	if (!parsed.success) {
-		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
-	}
+	if (body instanceof Response) return body;
 
 	if (!isReviewConfigured()) return c.json({ error: 'No orchestrator model configured.' }, 503);
 
 	try {
-		return c.json(await homeBrief(parsed.data, db.reviews.list()));
+		return c.json(await homeBrief(body, db.reviews.list()));
 	} catch (err) {
 		if (err instanceof LlmError) return c.json({ error: err.message }, 502);
 		throw err;

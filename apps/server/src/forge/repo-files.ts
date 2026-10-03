@@ -51,6 +51,16 @@ async function orNull<T>(run: () => Promise<T>): Promise<T | null> {
 	}
 }
 
+/** The file's blob on a branch, if it exists: the contents API needs its sha to overwrite it. */
+function githubBlob(slug: string, path: string, branch: string): Promise<{ sha?: string } | null> {
+	return orNull(
+		() =>
+			githubRest(`repos/${slug}/contents/${encodePath(path)}?ref=${encodeURIComponent(branch)}`) as Promise<{
+				sha?: string;
+			}>
+	);
+}
+
 function githubHost(repo: Repo): RepoFileHost {
 	const slug = parseSlug(repo.url);
 
@@ -98,13 +108,7 @@ function githubHost(repo: Repo): RepoFileHost {
 				await githubRest(`repos/${slug}/git/refs`, { method: 'POST', body: { ref: `refs/heads/${branch}`, sha } });
 			}
 
-			// The contents API needs the file's blob sha on that branch when it already exists.
-			const existing = await orNull(
-				() =>
-					githubRest(`repos/${slug}/contents/${encodePath(input.path)}?ref=${encodeURIComponent(branch)}`) as Promise<{
-						sha?: string;
-					}>
-			);
+			const existing = await githubBlob(slug, input.path, branch);
 
 			await githubRest(`repos/${slug}/contents/${encodePath(input.path)}`, {
 				method: 'PUT',

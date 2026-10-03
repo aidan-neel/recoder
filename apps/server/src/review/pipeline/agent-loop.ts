@@ -1,110 +1,30 @@
-import type { ChatMessage } from '../../models/llm.js';
-import { streamChatCompletion, LlmError } from '../../models/llm.js';
+import { LlmError, type ChatMessage } from '../../models/llm.js';
 import { streamedMessage } from '../../models/response-text.js';
 import { extractJsonValue } from '../../models/json-extract.js';
-import { parseActions, formatToolResults, type EvidenceStore, type ToolCallReport } from '../../evidence/evidence.js';
+import { parseActions, formatToolResults } from '../../evidence/evidence.js';
 import { REVIEW_POLICY } from '../session/review-policy.js';
-import type { RoleConfig } from '../../models/models.js';
 import { isAuthFailure } from './planner.js';
-import { isUsageLimit } from '../../models/model-failure.js';
-import type { ModelFailure, ReviewReasoningEntry } from '@recoder/shared';
-import { modelFailure } from '../../models/model-failure.js';
-import { chatStyle, RETRIEVAL_EXAMPLES } from './prompts';
-import { currentReviewControl, reviewNow, reviewPausePoint } from '../session/review-control.js';
+import { isUsageLimit, modelFailure } from '../../models/model-failure.js';
+import { chatStyle, RETRIEVAL_EXAMPLES } from './prompts.js';
+import { reviewNow, reviewPausePoint } from '../session/review-control.js';
+import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
+import type { JsonAgentOptions } from './agent-loop/options.js';
+import { streamTurn, type TurnResult } from './agent-loop/stream-turn.js';
 
-export class ReviewAbortedError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = 'ReviewAbortedError';
-	}
-}
+export { ModelBlockedError, ModelBudget, ReviewAbortedError, canLaunchInvestigation } from './agent-loop/budget.js';
+export { isLooping } from './agent-loop/stream-turn.js';
 
-/** Every model call will fail the same way (signed out, bad key, out of usage): stop the whole review. */
-export class ModelBlockedError extends Error {
-	constructor(readonly failure: ModelFailure) {
-		super(failure.reason);
-		this.name = 'ModelBlockedError';
-	}
-}
+const REPLY_RULES =
+	'\nIn every JSON response, put "message" first: a concise, reader-facing Markdown explanation of your current investigation or conclusion. Then include EITHER "actions" (when you still want to read or run something) OR the final result fields (only once you are done). Never send final result fields while you still intend to look at more code: that ends your work. Describe actual evidence and decisions; do not narrate JSON formatting or budget compliance. This text is shown live to the developer. ';
 
-export class ModelBudget {
-	used = 0;
-	constructor(
-		/** Raised when the developer approves a plan larger than the baseline. */
-		public limit: number = REVIEW_POLICY.maxModelCalls,
-		/** Calls held back from ordinary spending; raised while later stages need a guaranteed share. */
-		public reserve: number = REVIEW_POLICY.reserveCallsForConsolidation
-	) {}
+const FINAL_TURN =
+	'This is your final turn. Return the required compact result JSON using available evidence, with the reader-facing "message" first. Do not request retrieval. Omit other optional fields when unnecessary.';
 
-	remaining(): number {
-		return Math.max(0, this.limit - this.used);
-	}
-
-	canSpend(n = 1, opts?: { consumeReserve?: boolean }): boolean {
-		const hold = opts?.consumeReserve ? 0 : this.reserve;
-
-		return this.used + n + hold <= this.limit;
-	}
-
-	spend(): void {
-		this.used++;
-	}
-
-	snapshot(): { used: number; remaining: number; reserved: number; limit: number } {
-		return { used: this.used, remaining: this.remaining(), reserved: this.reserve, limit: this.limit };
-	}
-}
-
-export function canLaunchInvestigation(deadlineAt: number, budget: ModelBudget): boolean {
-	return budget.canSpend(1) && reviewNow() + REVIEW_POLICY.reserveMsForConsolidation < deadlineAt;
-}
-
-export interface JsonAgentOptions<T> {
-	label: string;
-	system: string;
-	user: string;
-	config: RoleConfig;
-	budget: ModelBudget;
-	evidence: EvidenceStore;
-	maxTurns: number;
-	signal: AbortSignal;
-	deadlineAt: number;
-	consumeReserve?: boolean;
-	parse: (raw: unknown) => T | null;
-	validationError?: (raw: unknown) => string;
-	/**
-	 * A valid final answer that looks premature (it announces more work, or
-	 * concludes without reading anything) gets sent back once with this nudge.
-	 * `retrievals` counts evidence rounds this agent has run.
-	 */
-	checkFinal?: (value: T, state: { retrievals: number; runs: number }) => string | null;
-	/**
-	 * JSON schemas the reply must match: `turn` while retrieval is allowed,
-	 * `final` on the last turn. Endpoints with guided decoding can then only
-	 * produce a usable reply (no message-only answers, no retrieval on the final turn).
-	 */
-	responseSchema?: (finalTurn: boolean) => { name: string; schema: Record<string, unknown> };
-	/**
-	 * This agent's own time limit, on the review clock. Past `finalTurnAfterMs`
-	 * the next turn is the final one, so it answers with what it has instead of
-	 * running into `maxWallMs`, where it stops without an answer.
-	 */
-	timeLimit?: { finalTurnAfterMs: number; maxWallMs: number };
-	/** A minimal valid final answer, quoted back when the model gets the shape wrong. */
-	finalExample?: string;
-	/** Action request examples quoted back on a malformed reply; defaults to read-only retrieval. */
-	actionExamples?: string;
-	onProgress?: (state: 'queued' | 'running' | 'retrieval', elapsedMs: number, detail: string) => void;
-	onLog?: (message: string) => void;
-	/** Accumulated provider reasoning for a turn, upserted by `id`. */
-	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status' | 'summary'>) => void;
-	onTool?: (tool: ToolCallReport) => void;
-	onMessage?: (message: { id: string; text: string; status: 'streaming' | 'done' | 'error'; cutOff?: string }) => void;
-	getDiscussion?: () => string;
-}
-
-export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
-	// Reserve time throughout an investigation, not merely when dispatching it.
+/**
+ * When this agent must stop and when its next turn must be the final one.
+ * Consolidation time is reserved throughout an investigation, not merely when dispatching it.
+ */
+function agentDeadlines<T>(opts: JsonAgentOptions<T>): { startedAt: number; deadlineAt: number; finalTurnAt: number } {
 	const startedAt = reviewNow();
 
 	const deadlineAt = Math.min(
@@ -114,14 +34,95 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 
 	const finalTurnAt = opts.timeLimit ? startedAt + opts.timeLimit.finalTurnAfterMs : Infinity;
 
+	return { startedAt, deadlineAt, finalTurnAt };
+}
+
+/** The note shown under a reply that was cut off and is being retried. */
+function cutOffNote(err: unknown, overthought: boolean, dropped: boolean, truncated: boolean): string | undefined {
+	if (overthought) return 'It thought for too long without answering, so it was asked to answer now.';
+	if (dropped) return `The connection to the model dropped (${(err as Error).message}). Trying again.`;
+	if (truncated) return 'The reply hit the output limit. Asking for a shorter one.';
+
+	return undefined;
+}
+
+/**
+ * Decides what follows a failed model call: a repair prompt to retry with,
+ * or the error to stop on. Throws when the whole review must stop, because
+ * the model is blocked or the review was aborted.
+ */
+function afterFailedCall<T>(
+	opts: JsonAgentOptions<T>,
+	failure: Extract<TurnResult, { kind: 'failed' }>,
+	canRepair: boolean,
+	shapes: string
+): { retry?: string; error: string } {
+	const { err, overthought } = failure;
+	const retrying = !opts.signal.aborted && canRepair;
+	const dropped = !overthought && err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message);
+	const truncated = err instanceof Error && /output truncated/i.test(err.message);
+
+	failure.settle(retrying ? cutOffNote(err, overthought, dropped, truncated) : undefined);
+
+	if (isAuthFailure(err) || isUsageLimit(err, opts.config))
+		throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));
+
+	if (retrying && (overthought || dropped)) {
+		return {
+			retry: `You spent too long thinking without replying. Stop deliberating and reply now with JSON only: request the evidence you need, or give your final result with what you already know.\n\n${shapes}`,
+			error: overthought ? 'reasoning ran too long without an answer' : (err as Error).message
+		};
+	}
+
+	if (opts.signal.aborted || (!overthought && err instanceof LlmError && /cancel/i.test(err.message))) {
+		throw new ReviewAbortedError('review aborted');
+	}
+
+	const error = err instanceof Error ? err.message : String(err);
+
+	opts.onLog?.(`${opts.label} failed: ${error}`);
+
+	if (/output truncated/i.test(error) && canRepair) {
+		return {
+			retry:
+				'Your response exceeded the output limit. Return compact valid JSON. Keep explanations short, omit optional fields and repeated gaps, and prioritize the most important findings.',
+			error
+		};
+	}
+
+	return { error };
+}
+
+/** `{"message": "…"}` and nothing else: narration without a request or a result. */
+function isCommentaryOnly(parsed: unknown): boolean {
+	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
+
+	const entries = Object.entries(parsed as Record<string, unknown>);
+
+	return (
+		entries.some(([key, value]) => key === 'message' && typeof value === 'string') &&
+		entries.every(([key, value]) => key === 'message' || value == null || (Array.isArray(value) && value.length === 0))
+	);
+}
+
+/**
+ * The repair prompt for a reply that was neither a request nor a valid result.
+ * Small models often send only the narration and close the object; saying
+ * exactly that works, where listing the final schema's missing fields does not.
+ */
+function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean, shapes: string): string {
+	if (isCommentaryOnly(parsed))
+		return `Your reply only had "message", so nothing was read: it had no "actions" list. Reply again with your "message" AND the "actions" that read what you described.${lastTurn ? '' : ' Only once you are done, send the final result instead.'}\n\n${shapes}`;
+
+	return `Your JSON was neither a retrieval request nor a valid final result. Problems: ${problems}.\n\n${shapes}`;
+}
+
+export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
+	const { startedAt, deadlineAt, finalTurnAt } = agentDeadlines(opts);
+	const spendOpts = { consumeReserve: opts.consumeReserve };
+
 	const messages: ChatMessage[] = [
-		{
-			role: 'system',
-			content:
-				opts.system +
-				'\nIn every JSON response, put "message" first: a concise, reader-facing Markdown explanation of your current investigation or conclusion. Then include EITHER "actions" (when you still want to read or run something) OR the final result fields (only once you are done). Never send final result fields while you still intend to look at more code: that ends your work. Describe actual evidence and decisions; do not narrate JSON formatting or budget compliance. This text is shown live to the developer. ' +
-				chatStyle(opts.config.model)
-		},
+		{ role: 'system', content: opts.system + REPLY_RULES + chatStyle(opts.config.model) },
 		{ role: 'user', content: opts.user }
 	];
 
@@ -129,16 +130,19 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 	let retrievals = 0;
 	let runs = 0;
 	let finalNudged = false;
-	// The previous round when every action in it failed: asking for the same thing
-	// again won't go differently, so the next turn is the last.
+
+	/** The previous round when every action in it failed: asking again won't go differently, so the next turn is the last. */
 	let failedRound = '';
 	let stuck = false;
 	let lastError = 'no model output';
 	const shapes = `${opts.actionExamples ?? RETRIEVAL_EXAMPLES}\nTo finish, reply with ONLY the final JSON object${opts.finalExample ? `, for example:\n${opts.finalExample}` : '.'}\nNo prose outside the JSON, no code fences.`;
-	// Schema repairs cost model calls, but must not consume an evidence round.
-	// Each successful retrieval advances the investigation; the final turn is
-	// reserved for the result, with the global budget/deadline enforced throughout.
+
+	/**
+	 * The evidence round in progress. Schema repairs cost model calls but not a
+	 * round; each successful retrieval advances it, and the final round is reserved for the result.
+	 */
 	let turn = 1;
+	const canRepair = () => repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns;
 
 	for (let call = 1; call <= opts.maxTurns + REVIEW_POLICY.schemaRepairAttempts; call++) {
 		throwIfAborted(opts.signal);
@@ -156,207 +160,41 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 			};
 		}
 
-		if (!opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve })) {
+		if (!opts.budget.canSpend(1, spendOpts)) {
 			return { value: null, error: 'model-call budget exhausted' };
 		}
 
 		const lastTurn =
-			stuck ||
-			turn >= opts.maxTurns ||
-			!opts.budget.canSpend(2, { consumeReserve: opts.consumeReserve }) ||
-			reviewNow() >= finalTurnAt;
+			stuck || turn >= opts.maxTurns || !opts.budget.canSpend(2, spendOpts) || reviewNow() >= finalTurnAt;
 
 		if (lastTurn && !messages.at(-1)?.content.startsWith('This is your final turn.'))
-			messages.push({
-				role: 'user',
-				content:
-					'This is your final turn. Return the required compact result JSON using available evidence, with the reader-facing "message" first. Do not request retrieval. Omit other optional fields when unnecessary.'
-			});
+			messages.push({ role: 'user', content: FINAL_TURN });
+
 		opts.budget.spend();
 		opts.onLog?.(`${opts.label} model turn ${turn}/${opts.maxTurns} (${opts.config.model})`);
 
 		const started = Date.now();
-		const reasoningId = `reason_${opts.label.slice(0, 24)}_${turn}_${Math.random().toString(36).slice(2, 8)}`;
-		let reasoningText = '';
-		let reasoningEmittedAt = 0;
+		const result = await streamTurn(opts, messages, turn, lastTurn, deadlineAt);
 
-		const flushReasoning = (status: ReviewReasoningEntry['status'] = 'streaming') => {
-			if (!opts.onReasoning || !reasoningText) return;
-			// ChatGPT sends a summary, not its reasoning; keep the timing, drop the text.
-			if (opts.config.provider === 'codex') opts.onReasoning({ id: reasoningId, text: '', status, summary: true });
-			else opts.onReasoning({ id: reasoningId, text: reasoningText, status });
-		};
-
-		// Cut off runaway reasoning: a stuck model otherwise thinks until the call times out.
-		const callAbort = new AbortController();
-		const forwardAbort = () => callAbort.abort();
-
-		opts.signal.addEventListener('abort', forwardAbort, { once: true });
-
-		// Pausing the review stops this call; it is re-run on resume.
-		const control = currentReviewControl();
-		const pauseSignal = control?.pauseSignal;
-
-		pauseSignal?.addEventListener('abort', forwardAbort, { once: true });
-
-		let overthought = false;
-		let output: string;
-		let response = '';
-		let responseEmittedAt = 0;
-		const responseId = `message_${reasoningId}`;
-
-		const flushResponse = (status: 'streaming' | 'done' | 'error', cutOff?: string) => {
-			const text = streamedMessage(response);
-
-			if (text) opts.onMessage?.({ id: responseId, text, status, ...(cutOff ? { cutOff } : {}) });
-		};
-
-		try {
-			const discussion = opts.getDiscussion?.();
-
-			output = await streamChatCompletion(
-				{
-					provider: opts.config.provider,
-					reasoningEffort: opts.config.reasoningEffort,
-					baseUrl: opts.config.baseUrl,
-					apiKey: opts.config.apiKey,
-					model: opts.config.model,
-					messages: discussion
-						? [
-								...messages,
-								{
-									role: 'user',
-									content: `Developer conversations since the review started (consider these with the review evidence):\n${discussion}`
-								}
-							]
-						: messages,
-					jsonMode: true,
-					jsonSchema: opts.responseSchema?.(lastTurn),
-					temperature: 0,
-					maxTokens: 8000,
-					timeoutMs: Math.min(REVIEW_POLICY.perCallDeadlineMs, Math.max(1, deadlineAt - reviewNow())),
-					signal: callAbort.signal,
-					onReasoning: opts.onReasoning
-						? (chunk) => {
-								reasoningText = (reasoningText + chunk).slice(0, 64_000);
-
-								if (
-									!overthought &&
-									(reasoningText.length > REVIEW_POLICY.maxReasoningChars || isLooping(reasoningText))
-								) {
-									overthought = true;
-									opts.onLog?.(`${opts.label} reasoning ran long; asking for an answer`);
-									callAbort.abort();
-								}
-
-								const now = Date.now();
-
-								// Throttle: reasoning can stream token-by-token, and every emit
-								// carries the whole accumulated text to each subscriber.
-								if (now - reasoningEmittedAt > 500) {
-									reasoningEmittedAt = now;
-									flushReasoning();
-								}
-							}
-						: undefined,
-					onProgress: (state, elapsedMs) =>
-						opts.onProgress?.(
-							state,
-							elapsedMs,
-							state === 'queued' ? 'Waiting for a model slot' : `Running ${opts.label}`
-						)
-				},
-				(chunk) => {
-					response += chunk;
-
-					if (Date.now() - responseEmittedAt > 200) {
-						responseEmittedAt = Date.now();
-						flushResponse('streaming');
-					}
-				}
-			);
-
-			response = output;
-			flushResponse('done');
-		} catch (err) {
-			opts.signal.removeEventListener('abort', forwardAbort);
-			pauseSignal?.removeEventListener('abort', forwardAbort);
-
-			if (!opts.signal.aborted && pauseSignal?.aborted) {
-				// Paused mid-call: give the call back and redo this turn after resume.
-				flushResponse('done');
-				flushReasoning('done');
-				opts.budget.used = Math.max(0, opts.budget.used - 1);
-				call--;
-				continue;
-			}
-
-			const retrying = !opts.signal.aborted && repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns;
-
-			const dropped =
-				!overthought && err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message);
-
-			const truncated = err instanceof Error && /output truncated/i.test(err.message);
-
-			flushResponse(
-				'error',
-				!retrying
-					? undefined
-					: overthought
-						? 'It thought for too long without answering, so it was asked to answer now.'
-						: dropped
-							? `The connection to the model dropped (${(err as Error).message}). Trying again.`
-							: truncated
-								? 'The reply hit the output limit. Asking for a shorter one.'
-								: undefined
-			);
-
-			flushReasoning(overthought ? 'done' : 'error');
-			if (isAuthFailure(err) || isUsageLimit(err, opts.config))
-				throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));
-
-			if (retrying && (overthought || dropped)) {
-				repaired++;
-				lastError = overthought ? 'reasoning ran too long without an answer' : (err as Error).message;
-
-				messages.push({
-					role: 'user',
-					content: `You spent too long thinking without replying. Stop deliberating and reply now with JSON only: request the evidence you need, or give your final result with what you already know.\n\n${shapes}`
-				});
-
-				continue;
-			}
-
-			if (opts.signal.aborted || (!overthought && err instanceof LlmError && /cancel/i.test(err.message))) {
-				throw new ReviewAbortedError('review aborted');
-			}
-
-			lastError = err instanceof Error ? err.message : String(err);
-			opts.onLog?.(`${opts.label} failed: ${lastError}`);
-
-			if (
-				/output truncated/i.test(lastError) &&
-				repaired < REVIEW_POLICY.schemaRepairAttempts &&
-				turn <= opts.maxTurns
-			) {
-				repaired++;
-
-				messages.push({
-					role: 'user',
-					content:
-						'Your response exceeded the output limit. Return compact valid JSON. Keep explanations short, omit optional fields and repeated gaps, and prioritize the most important findings.'
-				});
-
-				continue;
-			}
-
-			return { value: null, error: lastError };
+		if (result.kind === 'paused') {
+			opts.budget.used = Math.max(0, opts.budget.used - 1);
+			call--;
+			continue;
 		}
 
-		opts.signal.removeEventListener('abort', forwardAbort);
-		pauseSignal?.removeEventListener('abort', forwardAbort);
-		flushReasoning('done');
+		if (result.kind === 'failed') {
+			const step = afterFailedCall(opts, result, canRepair(), shapes);
 
+			lastError = step.error;
+
+			if (step.retry === undefined) return { value: null, error: lastError };
+
+			repaired++;
+			messages.push({ role: 'user', content: step.retry });
+			continue;
+		}
+
+		const { output, responseId } = result;
 		let parsed: unknown;
 
 		try {
@@ -364,15 +202,10 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		} catch (err) {
 			lastError = err instanceof Error ? err.message : 'invalid JSON';
 
-			if (repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns) {
+			if (canRepair()) {
 				repaired++;
 				messages.push({ role: 'assistant', content: output });
-
-				messages.push({
-					role: 'user',
-					content: `Your previous reply was not valid JSON (${lastError}).\n\n${shapes}`
-				});
-
+				messages.push({ role: 'user', content: `Your previous reply was not valid JSON (${lastError}).\n\n${shapes}` });
 				continue;
 			}
 
@@ -391,12 +224,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 
 		const actions = parseActions(parsed);
 
-		if (
-			actions &&
-			!lastTurn &&
-			opts.budget.canSpend(1, { consumeReserve: opts.consumeReserve }) &&
-			reviewNow() < deadlineAt
-		) {
+		if (actions && !lastTurn && opts.budget.canSpend(1, spendOpts) && reviewNow() < deadlineAt) {
 			opts.onProgress?.('retrieval', Date.now() - started, `Reading repository evidence for ${opts.label}`);
 
 			const results = await opts.evidence.executeRound(actions, opts.signal, opts.onTool);
@@ -435,10 +263,11 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		const value = opts.parse(parsed);
 
 		if (value) {
-			// One push-back, and only while a turn remains to act on it.
+			/** One push-back, and only while a turn remains to act on it. */
 			const nudge = !finalNudged && !lastTurn ? opts.checkFinal?.(value, { retrievals, runs }) : null;
 
 			if (!nudge) return { value };
+
 			finalNudged = true;
 			opts.onLog?.(`${opts.label} finished early; asking it to investigate first`);
 			messages.push({ role: 'assistant', content: output });
@@ -448,18 +277,10 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 
 		lastError = opts.validationError?.(parsed) ?? 'output did not match the required schema';
 
-		if (repaired < REVIEW_POLICY.schemaRepairAttempts && turn <= opts.maxTurns && !actions) {
+		if (canRepair() && !actions) {
 			repaired++;
 			messages.push({ role: 'assistant', content: output });
-
-			messages.push({
-				role: 'user',
-				// Small models often send only the narration and close the object. Saying
-				// exactly that works; listing the final schema's missing fields does not.
-				content: isCommentaryOnly(parsed)
-					? `Your reply only had "message", so nothing was read: it had no "actions" list. Reply again with your "message" AND the "actions" that read what you described.${lastTurn ? '' : ' Only once you are done, send the final result instead.'}\n\n${shapes}`
-					: `Your JSON was neither a retrieval request nor a valid final result. Problems: ${lastError}.\n\n${shapes}`
-			});
+			messages.push({ role: 'user', content: invalidReplyPrompt(parsed, lastError, lastTurn, shapes) });
 
 			lastError = isCommentaryOnly(parsed)
 				? 'the model kept replying with only a message, without actions or a result'
@@ -480,32 +301,4 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 	}
 
 	return { value: null, error: lastError };
-}
-
-/** `{"message": "…"}` and nothing else: narration without a request or a result. */
-function isCommentaryOnly(parsed: unknown): boolean {
-	if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return false;
-
-	const entries = Object.entries(parsed as Record<string, unknown>);
-
-	return (
-		entries.some(([key, value]) => key === 'message' && typeof value === 'string') &&
-		entries.every(([key, value]) => key === 'message' || value == null || (Array.isArray(value) && value.length === 0))
-	);
-}
-
-/** The tail of the reasoning keeps reappearing: the model is going in circles. */
-export function isLooping(text: string): boolean {
-	if (text.length < 4_000) return false;
-
-	const tail = text.slice(-240);
-	let count = 0;
-
-	for (let at = text.indexOf(tail); at !== -1 && count < 3; at = text.indexOf(tail, at + 1)) count++;
-
-	return count >= 3;
-}
-
-function throwIfAborted(signal: AbortSignal): void {
-	if (signal.aborted) throw new ReviewAbortedError('review aborted');
 }

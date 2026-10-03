@@ -7,6 +7,7 @@ import { GhError } from '../forge/gh';
 import { getGitlabHost, normalizeGitlabHost, setGitlabHost } from '../forge/gitlab-host';
 import { clearAllCaches, TtlCache } from '../util/ttl-cache';
 import { clearToken, setToken, tokenEnv } from '../forge/tokens';
+import { parseBody } from './parse-body';
 
 const tokenSchema = z.object({
 	provider: z.enum(['github', 'gitlab']),
@@ -25,12 +26,12 @@ async function githubStatus(): Promise<ProviderAuth> {
 	return { provider: 'github', available, authenticated, user };
 }
 
+/** GitLab's connection. A connected token talks to the REST API, so the CLI is optional. */
 async function gitlabStatus(): Promise<ProviderAuth> {
 	const env = tokenEnv('gitlab');
 	const host = getGitlabHost();
 	const available = await glabAvailable();
 
-	// A connected token talks to the REST API, so the CLI is optional.
 	if (!available && !env.GITLAB_TOKEN) return { provider: 'gitlab', available, authenticated: false, user: null, host };
 
 	const { authenticated, user } = await glabAuth(env);
@@ -53,14 +54,12 @@ app.get('/status', async (c) =>
 );
 
 app.post('/token', async (c) => {
-	const parsed = tokenSchema.safeParse(await c.req.json().catch(() => null));
+	const body = await parseBody(c, tokenSchema);
 
-	if (!parsed.success) {
-		return c.json({ error: 'invalid body', details: parsed.error.flatten() }, 400);
-	}
+	if (body instanceof Response) return body;
 
-	const { provider, token } = parsed.data;
-	const rawHost = provider === 'gitlab' ? (parsed.data.host?.trim() ?? '') : '';
+	const { provider, token } = body;
+	const rawHost = provider === 'gitlab' ? (body.host?.trim() ?? '') : '';
 	const host = rawHost === '' ? null : normalizeGitlabHost(rawHost);
 
 	if (rawHost !== '' && !host) {

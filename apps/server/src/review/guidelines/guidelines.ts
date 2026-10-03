@@ -9,16 +9,6 @@ import {
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
 
-/**
- * Owner review guidelines: what the people running this reviewer want it to
- * care about. Two layers, composed into one trusted prompt block:
- * - global: Markdown in Recoder's data dir, edited in Settings;
- * - repo: `.recoder/REVIEW.md`, read at the PR's base commit so a pull request
- *   can never change the rules it is reviewed by.
- * They rank below Recoder's safety contract and above repository instruction
- * files and PR text, which stay untrusted.
- */
-
 export const GUIDELINES_TEMPLATE = `## Focus
 -
 
@@ -45,7 +35,16 @@ export function readGlobalGuidelines(): GlobalGuidelines {
 		return { content, updatedAt: statSync(file).mtime.toISOString() };
 	} catch (err) {
 		if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { content: '', updatedAt: null };
-		throw new Error('Could not read the global review guidelines');
+		throw new Error('Could not read the global review guidelines', { cause: err });
+	}
+}
+
+/** Delete a temporary file, which may never have been created. */
+function removeTemporary(path: string): void {
+	try {
+		unlinkSync(path);
+	} catch {
+		return;
 	}
 }
 
@@ -63,11 +62,7 @@ export function writeGlobalGuidelines(content: string): GlobalGuidelines {
 		writeFileSync(temporary, text, { mode: 0o600 });
 		renameSync(temporary, file);
 	} catch {
-		try {
-			unlinkSync(temporary);
-		} catch {
-			/* never created */
-		}
+		removeTemporary(temporary);
 
 		throw new Error('Could not save the global review guidelines');
 	}
@@ -107,7 +102,13 @@ function cap(text: string): { text: string; truncated: boolean } {
 		: { text, truncated: false };
 }
 
-/** Compose the trusted guidelines block, or null when neither layer has rules. */
+/**
+ * Compose the owner's review guidelines into one trusted block, or null when neither layer has rules.
+ * The global layer is Markdown in Recoder's data dir, edited in Settings; the repo layer is
+ * `.recoder/REVIEW.md`, read at the PR's base commit so a pull request can never change the rules it
+ * is reviewed by. They rank below Recoder's safety contract and above repository instruction files
+ * and PR text, which stay untrusted.
+ */
 export function composeGuidelines(input: GuidelinesInput): ComposedGuidelines | null {
 	const layers: ReviewGuidelinesLayer[] = [];
 	const sections: string[] = [];

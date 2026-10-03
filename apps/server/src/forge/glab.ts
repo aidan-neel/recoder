@@ -1,6 +1,5 @@
 import type { PullRequest, RemoteRepo } from '@recoder/shared';
-import { runCommand } from '../commands/runner.js';
-import { extractJson, GhError } from './gh.js';
+import { extractJson, forgeCliAvailable, forgeCliUser, GhError, runForgeCli } from './cli.js';
 import {
 	apiMergeHeadRef,
 	apiMergeRequest,
@@ -13,6 +12,7 @@ import {
 } from './gitlab-api.js';
 import { parseSlug } from './providers.js';
 
+/** A failed `glab` run's logs as an auth, not-found or unknown GhError. */
 function classifyFailure(logs: string): GhError {
 	const text = logs.toLowerCase();
 
@@ -33,7 +33,6 @@ function classifyFailure(logs: string): GhError {
 	return new GhError('unknown', logs.slice(-2000));
 }
 
-/** Run `glab`, capturing stdout. Never throws raw — always GhError. */
 /** `glab api <path>` parsed as JSON. */
 export async function glabApi(path: string, env?: Record<string, string>): Promise<unknown> {
 	if (useGitlabApi(env)) return gitlabGet(path, env!);
@@ -48,18 +47,21 @@ export async function glabApiText(path: string, env?: Record<string, string>): P
 	return glab(['api', path], env);
 }
 
-async function glab(args: string[], env?: Record<string, string>): Promise<string> {
-	let run;
+/** Run `glab`, capturing stdout. Never throws raw — always GhError. */
+function glab(args: string[], env?: Record<string, string>): Promise<string> {
+	return runForgeCli('glab', args, env, classifyFailure);
+}
 
-	try {
-		run = await runCommand({ label: `glab ${args.slice(0, 2).join(' ')}`, command: 'glab', args, env });
-	} catch (err) {
-		throw new GhError('unavailable', err instanceof Error ? err.message : String(err));
-	}
+/** One MR's `glab mr view` JSON. */
+async function viewMerge(slug: string, iid: number, env?: Record<string, string>): Promise<Record<string, unknown>> {
+	return extractJson(await glab(['mr', 'view', String(iid), '-R', slug, '-F', 'json'], env)) as Record<string, unknown>;
+}
 
-	if (run.status !== 'succeeded') throw classifyFailure(run.logs);
-
-	return run.logs;
+/** The MR author's username, or `unknown`. */
+function mergeAuthor(row: Record<string, unknown>): string {
+	return typeof row.author === 'object' && row.author !== null
+		? String((row.author as Record<string, unknown>).username ?? 'unknown')
+		: 'unknown';
 }
 
 export interface FetchedMerge {
@@ -69,14 +71,8 @@ export interface FetchedMerge {
 }
 
 /** Is the glab binary usable at all? */
-export async function glabAvailable(): Promise<boolean> {
-	try {
-		const run = await runCommand({ label: 'glab version', command: 'glab', args: ['--version'] });
-
-		return run.status === 'succeeded';
-	} catch {
-		return false;
-	}
+export function glabAvailable(): Promise<boolean> {
+	return forgeCliAvailable('glab');
 }
 
 /** Authenticated user (if any). Never throws; `error` says why a token didn't work. */
@@ -91,44 +87,16 @@ export async function glabAuth(
 		}
 	}
 
-	try {
-		const run = await runCommand({
-			label: 'glab auth',
-			command: 'glab',
-			args: ['api', 'user', '--jq', '.username'],
-			env
-		});
-
-		if (run.status !== 'succeeded') return { authenticated: false, user: null };
-
-		const user = run.logs.trim();
-
-		return { authenticated: true, user: user === '' ? null : user };
-	} catch {
-		return { authenticated: false, user: null };
-	}
+	return forgeCliUser('glab', '.username', env);
 }
 
 /** User's projects (recent activity first). Throws GhError. */
 export async function listGlabRepos(env?: Record<string, string>): Promise<RemoteRepo[]> {
 	if (useGitlabApi(env)) return apiProjects(env!);
 
-	let run;
+	const logs = await glab(['repo', 'list', '-F', 'json', '--per-page', '50'], env);
 
-	try {
-		run = await runCommand({
-			label: 'glab repo list',
-			command: 'glab',
-			args: ['repo', 'list', '-F', 'json', '--per-page', '50'],
-			env
-		});
-	} catch (err) {
-		throw new GhError('unavailable', err instanceof Error ? err.message : String(err));
-	}
-
-	if (run.status !== 'succeeded') throw classifyFailure(run.logs);
-
-	const items = extractJson(run.logs);
+	const items = extractJson(logs);
 
 	if (!Array.isArray(items)) throw new GhError('unknown', 'glab repo list returned non-array JSON');
 
@@ -163,10 +131,7 @@ export async function fetchMergeHeadRef(repoUrl: string, iid: number, env?: Reco
 
 	const slug = parseSlug(repoUrl);
 
-	const view = (await glab(['mr', 'view', String(iid), '-R', slug, '-F', 'json'], env).then(extractJson)) as Record<
-		string,
-		unknown
-	>;
+	const view = await viewMerge(slug, iid, env);
 
 	const headRef = typeof view.source_branch === 'string' ? view.source_branch : '';
 
@@ -185,14 +150,8 @@ export async function fetchMergeRequest(
 
 	const slug = parseSlug(repoUrl);
 
-	const view = (await glab(['mr', 'view', String(iid), '-R', slug, '-F', 'json'], opts?.env).then(
-		extractJson
-	)) as Record<string, unknown>;
-
-	const author =
-		typeof view.author === 'object' && view.author !== null
-			? String((view.author as Record<string, unknown>).username ?? 'unknown')
-			: 'unknown';
+	const view = await viewMerge(slug, iid, opts?.env);
+	const author = mergeAuthor(view);
 
 	const diff = await glab(['mr', 'diff', String(iid), '-R', slug, '--raw'], opts?.env);
 
@@ -215,9 +174,11 @@ export async function fetchMergeRequest(
 	};
 }
 
-/** Open MRs for a repo, newest first. Stats come from per-MR views (the list
- *  endpoint omits diff stats); an MR whose view fails keeps zeroed stats
- *  rather than failing the whole list. Throws GhError. */
+/**
+ * Open MRs for a repo, newest first. Stats come from per-MR views (the list
+ * endpoint omits diff stats); an MR whose view fails keeps zeroed stats
+ * rather than failing the whole list. Throws GhError.
+ */
 export async function listMergeRequests(
 	repoUrl: string,
 	opts?: { env?: Record<string, string>; limit?: number }
@@ -237,10 +198,7 @@ export async function listMergeRequests(
 
 		const item = row as Record<string, unknown>;
 
-		const author =
-			typeof item.author === 'object' && item.author !== null
-				? String((item.author as Record<string, unknown>).username ?? 'unknown')
-				: 'unknown';
+		const author = mergeAuthor(item);
 
 		const pr: PullRequest = {
 			number: Number(item.iid ?? 0),
@@ -263,17 +221,13 @@ export async function listMergeRequests(
 	await Promise.all(
 		prs.map(async (pr) => {
 			try {
-				const view = (await glab(['mr', 'view', String(pr.number), '-R', slug, '-F', 'json'], opts?.env).then(
-					extractJson
-				)) as Record<string, unknown>;
+				const view = await viewMerge(slug, pr.number, opts?.env);
 
 				pr.additions = Number(view.additions ?? 0);
 				pr.deletions = Number(view.deletions ?? 0);
 				pr.changedFiles = Number(view.changes_count ?? 0);
 				if (typeof view.sha === 'string') pr.headSha = view.sha;
-			} catch {
-				/* keep zeroed stats for this MR */
-			}
+			} catch {}
 		})
 	);
 

@@ -1,21 +1,13 @@
 import { z } from 'zod';
 import type { Finding, FindingSeverity, RereviewAssessment, RereviewNote, RereviewResponse } from '@recoder/shared';
 import { readExcerpt } from '../pipeline/harness.js';
-import { chatCompletion, LlmError, type ChatMessage } from '../../models/llm.js';
+import { asLlmError, chatCompletion, LlmError, type ChatMessage } from '../../models/llm.js';
 import { extractJsonValue } from '../../models/json-extract.js';
 import { configForRole } from '../../models/models.js';
-import { FINDING_BODY_STYLE } from '../pipeline/prompts.js';
+import { capDiff, FINDING_BODY_STYLE } from '../pipeline/prompts.js';
+import { findingShape } from '../pipeline/schemas.js';
 
-/**
- * Developer-driven re-review pass.
- *
- * The developer highlights text in the diff and leaves notes. This module sends
- * the whole batch to a reviewer model, which responds to each note (valid,
- * invalid, or uncertain) and may surface new, evidence-backed findings. It is
- * read-only, like the rest of the harness: no tools, no writes.
- */
-
-export const rereviewNoteSchema = z.object({
+const rereviewNoteSchema = z.object({
 	file: z.string().min(1).max(500),
 	line: z.number().int().positive(),
 	endLine: z.number().int().positive(),
@@ -38,17 +30,9 @@ const assessmentSchema = z.object({
 	response: z.string().min(1).max(2000)
 });
 
-const findingSchema = z.object({
-	title: z.string().trim().min(1).max(120).optional(),
-	file: z.string().min(1).max(500),
-	line: z.number().int().positive().nullable().optional(),
-	endLine: z.number().int().positive().nullable().optional(),
-	severity: z.enum(['high', 'medium', 'low', 'info']),
-	category: z.string().min(1).max(50),
-	body: z.string().min(1).max(2000)
-});
+const findingSchema = z.object(findingShape(z.enum(['high', 'medium', 'low', 'info'])));
 
-export const rereviewOutputSchema = z.object({
+const rereviewOutputSchema = z.object({
 	summary: z.string().min(1).max(2000),
 	assessments: z.array(assessmentSchema).max(50).default([]),
 	findings: z.array(findingSchema).max(20).default([])
@@ -101,10 +85,8 @@ export interface RereviewInput {
 	existingFindings: Finding[];
 }
 
-async function buildMessages(input: RereviewInput): Promise<ChatMessage[]> {
-	const parts: string[] = [];
-
-	// Scoped excerpts around each note, when a checkout is available.
+/** File excerpts around each new-side note, read from the checkout when there is one. */
+async function noteExcerpts(input: RereviewInput): Promise<string[]> {
 	const excerpts: string[] = [];
 
 	for (const [index, note] of input.notes.entries()) {
@@ -114,6 +96,13 @@ async function buildMessages(input: RereviewInput): Promise<ChatMessage[]> {
 
 		if (excerpt !== null) excerpts.push(`--- ${note.file} (note ${index}) ---\n${excerpt}`);
 	}
+
+	return excerpts;
+}
+
+async function buildMessages(input: RereviewInput): Promise<ChatMessage[]> {
+	const parts: string[] = [];
+	const excerpts = await noteExcerpts(input);
 
 	parts.push(`Developer notes:\n\n${input.notes.map((note, i) => formatNote(note, i)).join('\n\n')}`);
 
@@ -126,9 +115,7 @@ async function buildMessages(input: RereviewInput): Promise<ChatMessage[]> {
 
 	if (existing) parts.push(`Existing findings (do not duplicate):\n${existing}`);
 
-	const trimmedDiff = input.diff.length > 24000 ? input.diff.slice(0, 24000) + '\n…[diff truncated]' : input.diff;
-
-	parts.push(`--- unified diff (capped) ---\n${trimmedDiff}`);
+	parts.push(`--- unified diff (capped) ---\n${capDiff(input.diff, 24000)}`);
 
 	parts.push('Respond with the strict JSON object described in the system prompt.');
 
@@ -138,8 +125,8 @@ async function buildMessages(input: RereviewInput): Promise<ChatMessage[]> {
 	];
 }
 
+/** Maps the model's findings onto backend findings, dropping informational ones even when the model sends them. */
 function toFindings(output: RereviewOutput, agent: string, model: string): Finding[] {
-	// Informational notes aren't reported, even when the model sends one anyway.
 	return output.findings
 		.filter((raw) => raw.severity !== 'info')
 		.map((raw) => {
@@ -162,18 +149,18 @@ function toFindings(output: RereviewOutput, agent: string, model: string): Findi
 		});
 }
 
-/** Run the batch re-review. Returns prose assessments plus any new findings. */
+/**
+ * Sends the developer's notes on highlighted diff lines to a reviewer model in
+ * one batch. It answers each note (valid, invalid or uncertain) and may raise
+ * new, evidence-backed findings. Read-only like the rest of the harness: no tools, no writes.
+ */
 export async function runRereview(input: RereviewInput): Promise<RereviewResponse> {
 	const cfg = configForRole('correctness');
 	const agent = 'orchestrator';
 
 	try {
 		const raw = await chatCompletion({
-			provider: cfg.provider,
-			reasoningEffort: cfg.reasoningEffort,
-			baseUrl: cfg.baseUrl,
-			apiKey: cfg.apiKey,
-			model: cfg.model,
+			...cfg,
 			messages: await buildMessages(input),
 			jsonMode: true,
 			timeoutMs: 120_000
@@ -197,7 +184,6 @@ export async function runRereview(input: RereviewInput): Promise<RereviewRespons
 			findings: toFindings(parsed.data, agent, cfg.model)
 		};
 	} catch (err) {
-		if (err instanceof LlmError) throw err;
-		throw new LlmError(0, err instanceof Error ? err.message : String(err));
+		throw asLlmError(err);
 	}
 }

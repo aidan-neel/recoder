@@ -11,10 +11,19 @@ type OutputItem = {
 	summary?: Array<{ type?: string; text?: string }>;
 };
 
+/** Token counts as the Responses API reports them; values are checked by `normalizeTokenUsage`. */
+type ResponseUsage = {
+	input_tokens?: unknown;
+	output_tokens?: unknown;
+	total_tokens?: unknown;
+	input_tokens_details?: { cached_tokens?: unknown; cache_write_tokens?: unknown };
+	output_tokens_details?: { reasoning_tokens?: unknown };
+};
+
 type ResponseData = {
 	status?: string;
 	output?: OutputItem[];
-	usage?: Record<string, any>;
+	usage?: ResponseUsage;
 	incomplete_details?: { reason?: string };
 	error?: { code?: string };
 };
@@ -33,7 +42,12 @@ type ResponseEvent = {
 	code?: string;
 };
 
-/** Preserve roles instead of embedding the conversation in one JSON user message. */
+/**
+ * The Responses request body. Roles are preserved instead of embedding the
+ * conversation in one JSON user message. The ChatGPT endpoint does not accept
+ * max_output_tokens, temperature or seed; Recoder keeps its own deadlines and
+ * bounded evidence/tool loop instead.
+ */
 export function chatGptRequest(opts: ChatOptions): Record<string, unknown> {
 	const instructions = opts.messages.filter((message) => message.role === 'system').map((message) => message.content);
 
@@ -56,8 +70,6 @@ export function chatGptRequest(opts: ChatOptions): Record<string, unknown> {
 		tool_choice: 'none',
 		parallel_tool_calls: false,
 		include: []
-		// The ChatGPT endpoint does not accept max_output_tokens, temperature or
-		// seed. Recoder retains its deadlines and bounded evidence/tool loop.
 	};
 }
 
