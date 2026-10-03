@@ -30,7 +30,7 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 		if (plan.units.length) {
 			reportSubagents(run, plan.dropped, cap);
 			publishUnits(run, 3);
-		} else if (ASKS_FOR_SUBAGENTS.test(run.input.instructions ?? '')) {
+		} else if (asksForSubagents(run.input.instructions)) {
 			orchestratorSays(run.events, 'message_subagents', noSubagentsNote(cap));
 		}
 
@@ -46,8 +46,14 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 	await runUnitPool(pending, run.assignments, poolContext(run));
 }
 
-/** The developer's brief mentions subagents ("this time use subagents"). */
-const ASKS_FOR_SUBAGENTS = /\bsub-?agents?\b/i;
+/**
+ * The developer's latest words mention subagents ("this time use subagents").
+ * The brief is every message they sent, newest last, so an older question
+ * ("did you run subagents?") doesn't count on a later run.
+ */
+function asksForSubagents(instructions: string | null | undefined): boolean {
+	return /\bsub-?agents?\b/i.test(instructions?.split('\n\n').at(-1) ?? '');
+}
 
 /** Why a brief that asked for subagents got none. */
 function noSubagentsNote(cap: number): string {

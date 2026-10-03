@@ -39,7 +39,7 @@ interface VerifyContext {
 	onVerified?: () => void;
 }
 
-/** A verifier that errors or stops before a verdict runs once more. */
+/** A verifier that errors or stops before a verdict runs once more, after every candidate's first attempt. */
 const VERIFIER_ATTEMPTS = 2;
 
 const SEVERITY_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
@@ -97,33 +97,39 @@ export async function verifyStage(run: ReviewRun): Promise<void> {
 /**
  * Re-prove every candidate by running code, most severe first. Refuted candidates
  * are dropped; the rest carry a verification (verified, or unverified with the reason).
+ * A verifier that errors or stops before a verdict gets one more attempt at the
+ * back of the queue, so a retry only spends what's left after every candidate had its first.
  */
 async function verifyCandidates(candidates: CandidateFinding[], ctx: VerifyContext): Promise<void> {
-	const queue = [...candidates].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3));
+	const sorted = [...candidates].sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 3) - (SEVERITY_ORDER[b.severity] ?? 3));
 
-	for (const skipped of queue.splice(REVIEW_POLICY.maxVerifications)) {
+	for (const skipped of sorted.splice(REVIEW_POLICY.maxVerifications)) {
 		skipped.verification = {
 			status: 'unverified',
 			reason: `Not run: this review already verified ${REVIEW_POLICY.maxVerifications} findings.`
 		};
 	}
 
+	const queue = sorted.map((candidate) => ({ candidate, attempt: 1 }));
 	let cursor = 0;
 
 	const workers = Array.from({ length: Math.min(REVIEW_POLICY.maxConcurrentVerifications, queue.length) }, async () => {
 		while (cursor < queue.length) {
-			const candidate = queue[cursor++]!;
+			const { candidate, attempt } = queue[cursor++]!;
 
 			if (ctx.signal.aborted || !canLaunchInvestigation(ctx.deadlineAt, ctx.budget)) {
-				candidate.verification = {
-					status: 'unverified',
-					reason: 'Not run: the review ran out of time or model calls before verifying this.'
-				};
+				if (attempt === 1)
+					candidate.verification = {
+						status: 'unverified',
+						reason: 'Not run: the review ran out of time or model calls before verifying this.'
+					};
 
 				continue;
 			}
 
-			await verifyOne(candidate, ctx);
+			const settled = await verifyOne(candidate, ctx, attempt);
+
+			if (!settled && attempt < VERIFIER_ATTEMPTS) queue.push({ candidate, attempt: attempt + 1 });
 			ctx.onVerified?.();
 		}
 	});
@@ -133,15 +139,15 @@ async function verifyCandidates(candidates: CandidateFinding[], ctx: VerifyConte
 }
 
 /**
- * Settles one candidate. Its verifier's thinking, tools and messages are its
- * own (owned by its task), so they show in the Verify step rather than in the
- * thread that raised the finding. A verifier that errors or stops before a
- * verdict gets one fresh attempt, so a flaky turn doesn't leave a finding unchecked.
+ * One attempt at settling a candidate. Returns false when the verifier gave no
+ * verdict, leaving the candidate unverified with the reason. Its thinking, tools
+ * and messages are its own (owned by its task), so they show in the Verify step
+ * rather than in the thread that raised the finding.
  */
-async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promise<void> {
+async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attempt: number): Promise<boolean> {
 	const taskId = `verify:${candidate.candidateId}`;
 	const label = `Verify: ${candidate.title ?? candidate.file}`;
-	const exec = !ctx.unavailable;
+	const doing = ctx.unavailable ? 'Tracing the finding through the code' : 'Reproducing the finding';
 
 	const meta = {
 		kind: 'verification' as const,
@@ -151,28 +157,20 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promi
 		files: [candidate.file]
 	};
 
-	let failure = 'the verifier did not finish';
+	ctx.task(taskId, label, 'running', attempt > 1 ? `${doing}, second attempt` : doing, meta);
 
-	for (let attempt = 1; attempt <= VERIFIER_ATTEMPTS; attempt++) {
-		if (attempt > 1 && !canLaunchInvestigation(ctx.deadlineAt, ctx.budget)) break;
+	const outcome = await runVerifier(candidate, ctx, { taskId, label, meta });
 
-		const doing = exec ? 'Reproducing the finding' : 'Tracing the finding through the code';
+	if (typeof outcome !== 'string') {
+		settle(candidate, outcome, ctx, { taskId, label, meta });
 
-		ctx.task(taskId, label, 'running', attempt > 1 ? `${doing}, second attempt` : doing, meta);
-
-		const outcome = await runVerifier(candidate, ctx, { taskId, label, meta });
-
-		if (typeof outcome !== 'string') {
-			settle(candidate, outcome, ctx, { taskId, label, meta });
-
-			return;
-		}
-
-		failure = outcome;
+		return true;
 	}
 
-	candidate.verification = { status: 'unverified', reason: `Not verified: ${failure}.` };
+	candidate.verification = { status: 'unverified', reason: `Not verified: ${outcome}.` };
 	ctx.task(taskId, label, 'partial', 'Could not verify', meta);
+
+	return false;
 }
 
 interface VerifierTask {
