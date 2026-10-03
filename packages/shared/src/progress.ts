@@ -1,11 +1,4 @@
-export type ReviewTaskStatus =
-	| 'queued'
-	| 'waiting'
-	| 'running'
-	| 'done'
-	| 'error'
-	| 'skipped'
-	| 'partial';
+export type ReviewTaskStatus = 'queued' | 'waiting' | 'running' | 'done' | 'error' | 'skipped' | 'partial';
 
 /** Child operation under an assignment — never itself a reviewer identity. */
 export type ReviewTaskKind =
@@ -30,19 +23,19 @@ export type RoleDecisionKind = 'selected' | 'not_needed' | 'deferred';
 
 export type ReviewStage = 'checkout' | 'understand' | 'checks' | 'specialists' | 'verify' | 'consolidation';
 
-export type AssignmentStatus =
-	| 'queued'
-	| 'waiting'
-	| 'running'
-	| 'done'
-	| 'error'
-	| 'skipped';
+export type AssignmentStatus = 'queued' | 'waiting' | 'running' | 'done' | 'error' | 'skipped';
 
 /** Close out every specialist still queued or running when a review stops, so none is left hanging. */
-export function settleAssignments(assignments: ReviewAssignment[], reason: string, at = new Date().toISOString()): ReviewAssignment[] {
-	return assignments.map((assignment) => ['queued', 'waiting', 'running'].includes(assignment.status)
-		? { ...assignment, status: 'error', currentOperation: reason, completedAt: at }
-		: assignment);
+export function settleAssignments(
+	assignments: ReviewAssignment[],
+	reason: string,
+	at = new Date().toISOString()
+): ReviewAssignment[] {
+	return assignments.map((assignment) =>
+		['queued', 'waiting', 'running'].includes(assignment.status)
+			? { ...assignment, status: 'error', currentOperation: reason, completedAt: at }
+			: assignment
+	);
 }
 
 /** Observable operations only: never model reasoning or generated response text. */
@@ -308,6 +301,7 @@ export function assignmentCounts(assignments: ReviewAssignment[] | undefined): {
 	let active = 0;
 	let complete = 0;
 	let failed = 0;
+
 	for (const assignment of list) {
 		if (assignment.status === 'queued') queued++;
 		else if (assignment.status === 'waiting') waiting++;
@@ -315,17 +309,22 @@ export function assignmentCounts(assignments: ReviewAssignment[] | undefined): {
 		else if (assignment.status === 'done') complete++;
 		else if (assignment.status === 'error' || assignment.status === 'skipped') failed++;
 	}
+
 	return { queued, waiting, active, complete, failed, total: list.length };
 }
 
 export function formatAssignmentHeadline(assignments: ReviewAssignment[] | undefined): string {
 	const counts = assignmentCounts(assignments);
+
 	if (counts.total === 0) return 'No specialists assigned yet';
+
 	const parts: string[] = [];
+
 	if (counts.active) parts.push(`${counts.active} reviewer${counts.active === 1 ? '' : 's'} active`);
 	if (counts.waiting) parts.push(`${counts.waiting} waiting for a model`);
 	if (counts.queued) parts.push(`${counts.queued} queued`);
 	if (counts.complete) parts.push(`${counts.complete} complete`);
 	if (counts.failed) parts.push(`${counts.failed} failed`);
+
 	return parts.join(' · ') || `${counts.total} specialist${counts.total === 1 ? '' : 's'}`;
 }

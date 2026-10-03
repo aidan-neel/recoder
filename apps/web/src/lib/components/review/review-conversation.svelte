@@ -1,0 +1,253 @@
+<script lang="ts">
+	import {
+		ORCHESTRATOR_ID,
+		type ReviewAssignment,
+		type ReviewChatMessage,
+		type ReviewCodeContext,
+		type ReviewReasoningEntry,
+		type ReviewTask,
+		type ReviewToolCall
+	} from '@recoder/shared';
+	import type { Snippet } from 'svelte';
+	import * as Conversation from '@sivir-ui/svelte/components/conversation';
+	import { Spinner } from '@sivir-ui/svelte/components/spinner';
+	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import ThoughtLabel from '../ui/thought-label.svelte';
+	import ReviewMessage from './review-message.svelte';
+	import ReviewTraces from './review-traces.svelte';
+	import ReviewDock from './review-dock.svelte';
+	import { groupTranscript } from '$lib/review/review-transcript';
+	import {
+		buildRows,
+		elapsed,
+		orphansByIndex,
+		placeInserts,
+		reasoningByMessage,
+		type TranscriptInsert
+	} from '$lib/review/conversation-rows';
+
+	let {
+		assignment,
+		messages,
+		reasoning,
+		toolCalls,
+		tasks,
+		active,
+		now,
+		draft = $bindable(''),
+		codeContext = $bindable(null),
+		compact = false,
+		focusKey,
+		onSend,
+		onStop,
+		onStopReview = null,
+		inserts = [],
+		placeholder,
+		awaitingPrompt = false,
+		onStartReview = null,
+		signInShown = false,
+		intro
+	}: {
+		assignment: ReviewAssignment;
+		messages: ReviewChatMessage[];
+		reasoning: ReviewReasoningEntry[];
+		toolCalls: ReviewToolCall[];
+		tasks: ReviewTask[];
+		active: boolean;
+		now: number;
+		draft?: string;
+		codeContext?: ReviewCodeContext | null;
+		compact?: boolean;
+		focusKey?: number;
+		onSend?: (id: string, text: string, context?: ReviewCodeContext) => Promise<void>;
+		onStop?: (id: string) => Promise<void>;
+		/** Stops the whole review while it runs; Send becomes Stop when nothing is typed. */
+		onStopReview?: (() => Promise<void>) | null;
+		/** Blocks placed in the transcript before the first entry newer than `at` (or at the end). */
+		inserts?: TranscriptInsert[];
+		placeholder?: string;
+		awaitingPrompt?: boolean;
+		/** Draft (interactive) reviews: the orchestrator offers the full review, so its latest reply carries the button. */
+		onStartReview?: (() => Promise<void>) | null;
+		/** A sign-in notice already shows above the transcript. */
+		signInShown?: boolean;
+		/** Opening card at the top of a new session; it carries Run full review while it shows. */
+		intro?: Snippet;
+	} = $props();
+
+	let startingReview = $state(false);
+	let clock = $state(Date.now());
+
+	const belongs = (id?: string) => (id ?? ORCHESTRATOR_ID) === assignment.id;
+	const conversationMessages = $derived(messages.filter((message) => belongs(message.assignmentId)));
+	const conversationReasoning = $derived(reasoning.filter((entry) => belongs(entry.assignmentId)));
+	const conversationTools = $derived(toolCalls.filter((tool) => belongs(tool.assignmentId)));
+	const specialist = $derived(assignment.id !== ORCHESTRATOR_ID);
+	const working = $derived(active && ['running', 'waiting', 'queued'].includes(assignment.status));
+	const currentTask = $derived(tasks.findLast((task) => task.status === 'running' || task.status === 'waiting'));
+	const entries = $derived(groupTranscript(conversationMessages, conversationTools));
+
+	const generating = $derived(
+		conversationMessages.some(
+			(message) => message.discussion && !message.forwardedFrom && message.status === 'streaming'
+		)
+	);
+
+	/** Only the latest sign-in failure carries the notice; earlier ones would repeat it. */
+	const lastSignInIndex = $derived(
+		signInShown ? -1 : entries.findLastIndex((entry) => entry.kind === 'message' && !!entry.message.failure?.signIn)
+	);
+
+	const lastUsageIndex = $derived(
+		entries.findLastIndex((entry) => entry.kind === 'message' && !!entry.message.failure?.usageLimit)
+	);
+
+	const lastAssistantIndex = $derived(
+		entries.findLastIndex((entry) => entry.kind === 'message' && entry.message.from === 'assistant')
+	);
+
+	const ownThoughts = $derived(reasoningByMessage(conversationReasoning));
+
+	const orphanReasoning = $derived.by(() => {
+		const messageIds = new Set(entries.flatMap((entry) => (entry.kind === 'message' ? [entry.id] : [])));
+
+		return conversationReasoning.filter((entry) => !messageIds.has(`message_${entry.id}`));
+	});
+
+	/** Specialists narrate tasks by title ("Running Correctness of …"); only show a status that says something new. Finished states are on the badge at the top. */
+	const specialistStatus = $derived.by(() => {
+		if (!specialist || !working) return null;
+		if (orphanReasoning.some((entry) => entry.status === 'streaming')) return null;
+
+		const op = currentTask?.message || assignment.currentOperation || '';
+
+		return /^Running\b/.test(op) || op === assignment.title ? null : op || null;
+	});
+
+	/** Only while a reply is actually pending and nothing (text or thinking) has streamed for it yet. */
+	const thinking = $derived(
+		generating &&
+			!conversationMessages.some((message) => message.status === 'streaming' && message.text.trim()) &&
+			!conversationReasoning.some((entry) => entry.status === 'streaming')
+	);
+
+	const rows = $derived(
+		buildRows({
+			entries,
+			placed: placeInserts(inserts, entries),
+			orphansAt: orphansByIndex(orphanReasoning, entries),
+			ownThoughts
+		})
+	);
+
+	/** Pending reply with nothing streamed yet: time it from when it was asked for. */
+	const pendingSince = $derived(
+		conversationMessages.findLast(
+			(message) => message.discussion && !message.forwardedFrom && message.status === 'streaming'
+		)?.at
+	);
+
+	const anyLive = $derived(
+		thinking || conversationReasoning.some((entry) => entry.status === 'streaming' && (active || generating))
+	);
+
+	$effect(() => {
+		if (!anyLive) return;
+		clock = Date.now();
+
+		const timer = setInterval(() => (clock = Date.now()), 100);
+
+		return () => clearInterval(timer);
+	});
+
+	async function startReview(): Promise<void> {
+		if (!onStartReview || startingReview) return;
+		startingReview = true;
+
+		try {
+			await onStartReview();
+		} finally {
+			startingReview = false;
+		}
+	}
+
+	/** Re-ask the question that led to this reply. */
+	function retryFor(index: number): (() => void) | null {
+		if (!onSend) return null;
+
+		const previous = entries
+			.slice(0, index)
+			.findLast((item) => item.kind === 'message' && item.message.from === 'user');
+
+		if (!previous || previous.kind !== 'message') return null;
+
+		const question = previous.message;
+
+		return () => void onSend?.(assignment.id, question.text, question.codeContext);
+	}
+</script>
+
+<div class="review-chat" data-compact={compact || undefined}>
+	<Conversation.Root class="min-h-0 w-full flex-1">
+		<Conversation.Content
+			aria-label={`${assignment.title} messages`}
+			transcriptClass={compact ? '!max-w-[776px] !gap-3 !px-4 !pt-5 !pb-2' : 'review-transcript'}
+			class="![scrollbar-gutter:auto]"
+		>
+			{#if intro}{@render intro()}{/if}
+			{#each rows as row (row.key)}
+				{#if row.kind === 'insert'}
+					{@render row.snippet()}
+				{:else if row.kind === 'message'}
+					{@const message = row.message}
+					<ReviewMessage
+						{message}
+						quietSignIn={row.index !== lastSignInIndex}
+						quietUsage={row.index !== lastUsageIndex}
+						onRetry={message.status === 'error' && message.discussion && !generating ? retryFor(row.index) : null}
+						{startingReview}
+						onStartReview={onStartReview &&
+						!intro &&
+						!specialist &&
+						row.index === lastAssistantIndex &&
+						message.status !== 'streaming'
+							? () => void startReview()
+							: null}
+					/>
+				{:else}
+					<ReviewTraces traces={row.traces} {active} streaming={active || generating} {now} {clock} />
+				{/if}
+			{/each}
+			{#if specialist}
+				{#if specialistStatus}
+					<Typography.Text role="status" class="flex items-start gap-2 text-sm text-foreground-muted">
+						{#if working}<Spinner size={14} class="mt-1 shrink-0" aria-hidden="true" />{/if}
+						<span class="min-w-0 break-words">{specialistStatus}</span>
+					</Typography.Text>
+				{/if}
+			{/if}
+			{#if thinking}
+				<Typography.Text role="status" class="review-thinking"
+					><ThoughtLabel working time={elapsed(clock, pendingSince)} /></Typography.Text
+				>
+			{/if}
+		</Conversation.Content>
+		<Conversation.ScrollButton />
+	</Conversation.Root>
+
+	<ReviewDock
+		{assignment}
+		bind:draft
+		bind:codeContext
+		{compact}
+		{focusKey}
+		{onSend}
+		{onStop}
+		{onStopReview}
+		{placeholder}
+		{awaitingPrompt}
+		{generating}
+		{working}
+		streaming={conversationMessages.some((message) => message.status === 'streaming')}
+	/>
+</div>

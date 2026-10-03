@@ -54,7 +54,9 @@ html::-webkit-scrollbar {
 	border-radius: 10px;
 	background-color: var(--bg-field);
 	box-shadow: inset 0 0 0 1px var(--line-card);
-	transition: box-shadow var(--dur-hover) ease-out, background-color var(--dur-hover) ease-out;
+	transition:
+		box-shadow var(--dur-hover) ease-out,
+		background-color var(--dur-hover) ease-out;
 }
 [data-ui='code-block'].install-command:hover {
 	background-color: var(--bg-raised);
@@ -339,7 +341,11 @@ html::-webkit-scrollbar {
 	left: 0;
 	z-index: 0;
 	height: 560px;
-	background: radial-gradient(55% 50% at 50% 45%, color-mix(in oklab, var(--text-primary) 10%, transparent), transparent 72%);
+	background: radial-gradient(
+		55% 50% at 50% 45%,
+		color-mix(in oklab, var(--text-primary) 10%, transparent),
+		transparent 72%
+	);
 	filter: blur(40px);
 	pointer-events: none;
 	animation: hero-glow 14s ease-in-out infinite alternate;

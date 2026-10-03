@@ -6,10 +6,11 @@ import type { ReviewToolCall } from '@recoder/shared';
  * render the finished review by jumping to `DEMO_END`.
  */
 
-export type Severity = 'high' | 'medium' | 'low';
-export type SpecialistStatus = 'queued' | 'running' | 'done';
+type Severity = 'high' | 'medium' | 'low';
 
-export const AT = {
+type SpecialistStatus = 'queued' | 'running' | 'done';
+
+const AT = {
 	user: 300,
 	reasonStart: 900,
 	reasonEnd: 2500,
@@ -28,12 +29,14 @@ export const AT = {
 /** Held on the finished review, then the loop fades out and replays. */
 export const DEMO_END = 18400;
 export const DEMO_HOLD = 6500;
-export const DEMO_FADE = 450;
+
+const DEMO_FADE = 450;
+
 export const DEMO_LOOP = DEMO_END + DEMO_HOLD + DEMO_FADE;
 
 export const request = 'Review this. Focus on the clock injection and anything that breaks existing callers.';
 
-export const reasoning =
+const reasoning =
 	'Reading the diff to scope specialists. The limiter moves from module state into a class, so the old free `allow()` and every caller of it matter most.';
 
 const tools = [
@@ -43,10 +46,10 @@ const tools = [
 	{ action: 'readFile', path: 'src/time/clock.ts', at: 1250, ms: 200 }
 ];
 
-export const plan =
+const plan =
 	'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI’m sending five specialists. Correctness and repository consistency always run; performance, docs and security were picked for this diff.';
 
-export const summary =
+const summary =
 	'The class refactor is sound, but two things should block the merge.\n\n`index.ts` still re-exports `allow()`, which no longer exists, so all 14 call sites break at import. And `refill()` reads `Date.now()` directly, so the injected clock does nothing in tests.\n\nThe rest is small: an unbounded buckets Map, an unvalidated capacity, and a stale doc comment. Four of the five have a suggested patch ready.';
 
 type Specialist = {
@@ -63,22 +66,102 @@ type Specialist = {
 };
 
 const specialists: Specialist[] = [
-	{ id: 'correctness', name: 'Correctness', model: 'gpt-5-codex', op: 'Reading src/rate-limit/limiter.ts:20-46', doneOp: 'Traced refill() and capacity through the class · 3 findings', starts: 0, finishes: 3600, elapsed: '1m 12s' },
-	{ id: 'patterns', name: 'Repository consistency', model: 'gpt-5-codex', op: 'Comparing exports against 14 call sites', doneOp: 'Compared exports against 14 call sites · 1 finding', starts: 0, finishes: 1300, elapsed: '38s' },
-	{ id: 'perf', name: 'Performance', model: 'qwen3-coder', op: 'Searching src/ for Map eviction patterns', doneOp: 'Checked the buckets Map lifecycle · 1 finding', starts: 300, finishes: 4300, elapsed: '51s' },
-	{ id: 'docs', name: 'Documentation', model: 'qwen3-coder', op: 'Checking doc comments in src/rate-limit', doneOp: 'Checked doc comments in src/rate-limit · 1 finding', starts: 300, finishes: 2000, elapsed: '22s' },
-	{ id: 'security', name: 'Security', model: 'gpt-5-codex', op: 'Waiting for a free slot', doneOp: 'Checked key handling and limits · no findings', starts: 1400, finishes: 4800, elapsed: '44s' }
+	{
+		id: 'correctness',
+		name: 'Correctness',
+		model: 'gpt-5-codex',
+		op: 'Reading src/rate-limit/limiter.ts:20-46',
+		doneOp: 'Traced refill() and capacity through the class · 3 findings',
+		starts: 0,
+		finishes: 3600,
+		elapsed: '1m 12s'
+	},
+	{
+		id: 'patterns',
+		name: 'Repository consistency',
+		model: 'gpt-5-codex',
+		op: 'Comparing exports against 14 call sites',
+		doneOp: 'Compared exports against 14 call sites · 1 finding',
+		starts: 0,
+		finishes: 1300,
+		elapsed: '38s'
+	},
+	{
+		id: 'perf',
+		name: 'Performance',
+		model: 'qwen3-coder',
+		op: 'Searching src/ for Map eviction patterns',
+		doneOp: 'Checked the buckets Map lifecycle · 1 finding',
+		starts: 300,
+		finishes: 4300,
+		elapsed: '51s'
+	},
+	{
+		id: 'docs',
+		name: 'Documentation',
+		model: 'qwen3-coder',
+		op: 'Checking doc comments in src/rate-limit',
+		doneOp: 'Checked doc comments in src/rate-limit · 1 finding',
+		starts: 300,
+		finishes: 2000,
+		elapsed: '22s'
+	},
+	{
+		id: 'security',
+		name: 'Security',
+		model: 'gpt-5-codex',
+		op: 'Waiting for a free slot',
+		doneOp: 'Checked key handling and limits · no findings',
+		starts: 1400,
+		finishes: 4800,
+		elapsed: '44s'
+	}
 ];
 
 type Finding = { id: string; agent: string; severity: Severity; title: string; location: string; at: number };
 
 /** `at` is an offset from AT.specialists, at or before its specialist finishes. */
 const findings: Finding[] = [
-	{ id: 'f1', agent: 'patterns', severity: 'high', title: 'index.ts re-exports allow(), which no longer exists', location: 'src/rate-limit/index.ts:3', at: 1300 },
-	{ id: 'f2', agent: 'docs', severity: 'low', title: 'Doc comment still describes a free function', location: 'src/rate-limit/limiter.ts:19', at: 2000 },
-	{ id: 'f3', agent: 'correctness', severity: 'medium', title: 'refill() ignores the injected Clock', location: 'src/rate-limit/limiter.ts:23', at: 2700 },
-	{ id: 'f4', agent: 'correctness', severity: 'low', title: 'capacity is never validated', location: 'src/rate-limit/limiter.ts:16', at: 3300 },
-	{ id: 'f6', agent: 'perf', severity: 'medium', title: 'buckets Map has no eviction', location: 'src/rate-limit/limiter.ts:11', at: 4300 }
+	{
+		id: 'f1',
+		agent: 'patterns',
+		severity: 'high',
+		title: 'index.ts re-exports allow(), which no longer exists',
+		location: 'src/rate-limit/index.ts:3',
+		at: 1300
+	},
+	{
+		id: 'f2',
+		agent: 'docs',
+		severity: 'low',
+		title: 'Doc comment still describes a free function',
+		location: 'src/rate-limit/limiter.ts:19',
+		at: 2000
+	},
+	{
+		id: 'f3',
+		agent: 'correctness',
+		severity: 'medium',
+		title: 'refill() ignores the injected Clock',
+		location: 'src/rate-limit/limiter.ts:23',
+		at: 2700
+	},
+	{
+		id: 'f4',
+		agent: 'correctness',
+		severity: 'low',
+		title: 'capacity is never validated',
+		location: 'src/rate-limit/limiter.ts:16',
+		at: 3300
+	},
+	{
+		id: 'f6',
+		agent: 'perf',
+		severity: 'medium',
+		title: 'buckets Map has no eviction',
+		location: 'src/rate-limit/limiter.ts:11',
+		at: 4300
+	}
 ];
 
 const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
@@ -87,8 +170,10 @@ const RANK: Record<Severity, number> = { high: 0, medium: 1, low: 2 };
 function stream(text: string, t: number, start: number, end: number): { text: string; streaming: boolean } | null {
 	if (t < start) return null;
 	if (t >= end) return { text, streaming: false };
+
 	const words = text.split(/(?<=\s)/);
 	const shown = Math.max(1, Math.ceil(((t - start) / (end - start)) * words.length));
+
 	return { text: words.slice(0, shown).join(''), streaming: true };
 }
 
@@ -101,6 +186,7 @@ export function demoState(t: number) {
 		.filter((tool) => t >= AT.toolsStart + tool.at)
 		.map((tool, i) => {
 			const done = t >= AT.toolsStart + tool.at + tool.ms;
+
 			return {
 				id: `tool-${i}`,
 				command: `${tool.action} ${tool.path ?? tool.query}`,
@@ -113,11 +199,25 @@ export function demoState(t: number) {
 		});
 
 	const sinceSpecialists = t - AT.specialists;
-	const specialistRows = t < AT.specialists ? [] : specialists.map((item) => {
-		const status: SpecialistStatus = sinceSpecialists >= item.finishes ? 'done' : sinceSpecialists >= item.starts ? 'running' : 'queued';
-		return { ...item, status, current: status === 'done' ? item.doneOp : status === 'queued' ? 'Waiting for a free slot' : item.op };
-	});
-	const found = findings.filter((finding) => t >= AT.specialists + finding.at).sort((a, b) => RANK[a.severity] - RANK[b.severity]);
+
+	const specialistRows =
+		t < AT.specialists
+			? []
+			: specialists.map((item) => {
+					const status: SpecialistStatus =
+						sinceSpecialists >= item.finishes ? 'done' : sinceSpecialists >= item.starts ? 'running' : 'queued';
+
+					return {
+						...item,
+						status,
+						current: status === 'done' ? item.doneOp : status === 'queued' ? 'Waiting for a free slot' : item.op
+					};
+				});
+
+	const found = findings
+		.filter((finding) => t >= AT.specialists + finding.at)
+		.sort((a, b) => RANK[a.severity] - RANK[b.severity]);
+
 	const specialistsDone = specialistRows.filter((item) => item.status === 'done').length;
 	const finished = t >= AT.result;
 
@@ -143,11 +243,10 @@ export function demoState(t: number) {
 	};
 }
 
-export type DemoState = ReturnType<typeof demoState>;
-
 /** The Progress card's timer: the demo runs at roughly 8x real time. */
 function clock(t: number): string {
 	const seconds = Math.floor(Math.min(t, AT.result) * 0.0075);
+
 	return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 }
 

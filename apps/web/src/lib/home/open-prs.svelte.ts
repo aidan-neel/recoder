@@ -1,0 +1,140 @@
+import type { HomeBriefResponse, PullRequest, Repo } from '@recoder/shared';
+import { readCache, writeCache } from '$lib/shell/persisted-cache';
+import { serverApi } from '$lib/api/server-api';
+
+const BRIEF_KEY = 'recoder.homeBrief';
+
+function readBrief(): HomeBriefResponse | null {
+	try {
+		const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(BRIEF_KEY);
+		const value = raw ? (JSON.parse(raw) as HomeBriefResponse) : null;
+
+		return value && typeof value.text === 'string' ? value : null;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Tracked repos and their open PRs. Lives outside the Home page so the Home
+ * tab can show the open-PR count and revisiting Home doesn't refetch.
+ */
+class OpenPrsState {
+	repos = $state<Repo[]>([]);
+	prsByRepo = $state<Record<string, PullRequest[]>>({});
+	loadingByRepo = $state<Record<string, boolean>>({});
+	errorByRepo = $state<Record<string, string | null>>({});
+	/** Repos are loading for the first time. */
+	loading = $state(true);
+	refreshing = $state(false);
+	apiDown = $state(false);
+	/** Last brief shown, kept across reloads so Home paints it immediately. */
+	brief = $state<HomeBriefResponse | null>(readBrief());
+	/** The server rewrites the brief at most every 12 hours; ask once per app session. */
+	briefRequested = false;
+
+	/** Shows a brief and keeps it for the next visit when storage allows. */
+	setBrief(brief: HomeBriefResponse | null): void {
+		this.brief = brief;
+
+		try {
+			if (brief) localStorage.setItem(BRIEF_KEY, JSON.stringify(brief));
+			else localStorage.removeItem(BRIEF_KEY);
+		} catch {}
+	}
+
+	private started = false;
+
+	/** Open PRs across every tracked repo; null until every repo has loaded. */
+	get count(): number | null {
+		if (this.loading || this.repos.some((repo) => this.loadingByRepo[repo.id])) return null;
+
+		return this.repos.reduce((n, repo) => n + (this.prsByRepo[repo.id]?.length ?? 0), 0);
+	}
+
+	/** Load once per app session; later calls are no-ops. A cached list paints at once and revalidates behind it. */
+	async load(): Promise<void> {
+		if (this.started) return;
+		this.started = true;
+
+		const cached = readCache<{ repos: Repo[]; prsByRepo: Record<string, PullRequest[]> }>('open-prs');
+
+		if (cached) {
+			this.repos = cached.repos;
+			this.prsByRepo = cached.prsByRepo;
+			this.loading = false;
+		}
+
+		try {
+			this.repos = await serverApi.listRepos();
+			this.apiDown = false;
+			this.loading = false;
+			await this.loadAll(!!cached);
+			this.persist();
+		} catch {
+			this.apiDown = true;
+			this.loading = false;
+		}
+	}
+
+	async loadRepo(repo: Repo, quiet = false): Promise<void> {
+		if (!quiet) this.loadingByRepo[repo.id] = true;
+		this.errorByRepo[repo.id] = null;
+
+		try {
+			this.prsByRepo[repo.id] = await serverApi.listPrs(repo.id);
+		} catch (e) {
+			if (!quiet) this.prsByRepo[repo.id] = [];
+			this.errorByRepo[repo.id] = e instanceof Error ? e.message : 'Failed to list pull requests.';
+		} finally {
+			this.loadingByRepo[repo.id] = false;
+		}
+	}
+
+	async loadAll(quiet = false): Promise<void> {
+		await Promise.all(this.repos.map((repo) => this.loadRepo(repo, quiet)));
+	}
+
+	private persist(): void {
+		const ids = new Set(this.repos.map((repo) => repo.id));
+		const prsByRepo = Object.fromEntries(Object.entries(this.prsByRepo).filter(([id]) => ids.has(id)));
+
+		writeCache('open-prs', { repos: $state.snapshot(this.repos), prsByRepo: $state.snapshot(prsByRepo) });
+	}
+
+	/** Re-fetches repos and their PRs. On failure the last list stays; per-repo errors render inline. */
+	async refresh(): Promise<void> {
+		if (this.refreshing) return;
+		this.refreshing = true;
+
+		try {
+			if (this.apiDown) {
+				this.started = false;
+				await this.load();
+
+				return;
+			}
+
+			this.repos = await serverApi.listRepos();
+			await this.loadAll(true);
+			this.persist();
+		} catch {
+		} finally {
+			this.refreshing = false;
+		}
+	}
+
+	/** A repo tracked from Settings → Connections. */
+	track(repo: Repo): void {
+		if (this.repos.some((item) => item.id === repo.id)) return;
+		this.repos = [repo, ...this.repos];
+		void this.loadRepo(repo);
+	}
+
+	untrack(id: string): void {
+		this.repos = this.repos.filter((repo) => repo.id !== id);
+		delete this.prsByRepo[id];
+	}
+}
+
+export const openPrs = new OpenPrsState();

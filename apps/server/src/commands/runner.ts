@@ -13,6 +13,7 @@ export interface RunOptions {
 	timeoutMs?: number;
 	/** Extra env vars merged over process.env for this run only. */
 	env?: Record<string, string>;
+	/** Each output chunk as it arrives. A throw here is ignored: reporting cannot break a command. */
 	onOutput?: (chunk: string) => void;
 }
 
@@ -21,14 +22,17 @@ const MAX_LOG_CHARS = 200_000;
 /** process.env minus undefined values, merged with overrides (Bun needs Record<string, string>). */
 function withEnv(overrides: Record<string, string>): Record<string, string> {
 	const base: Record<string, string> = {};
+
 	for (const [key, value] of Object.entries(process.env)) {
 		if (value !== undefined) base[key] = value;
 	}
+
 	return { ...base, ...overrides };
 }
 
 function truncate(logs: string): string {
 	if (logs.length <= MAX_LOG_CHARS) return logs;
+
 	return `…[truncated ${logs.length - MAX_LOG_CHARS} chars]\n` + logs.slice(-MAX_LOG_CHARS);
 }
 
@@ -38,6 +42,7 @@ function truncate(logs: string): string {
  */
 export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 	const args = opts.args ?? [];
+
 	const run: CommandRun = {
 		id: crypto.randomUUID(),
 		label: opts.label ?? null,
@@ -60,6 +65,7 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 
 	const cwd = opts.cwd ?? env.RECODER_WORKDIR;
 	const timeoutMs = opts.timeoutMs ?? env.RECODER_COMMAND_TIMEOUT_MS;
+
 	await mkdir(cwd, { recursive: true });
 
 	db.runs.set(run);
@@ -73,6 +79,7 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 		});
 
 		let timedOut = false;
+
 		const timer = setTimeout(() => {
 			timedOut = true;
 			proc.kill();
@@ -80,33 +87,44 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 
 		const read = async (stream: ReadableStream<Uint8Array> | null): Promise<string> => {
 			if (!stream) return '';
+
 			const reader = stream.getReader();
 			const decoder = new TextDecoder();
 			let text = '';
+
 			try {
 				while (true) {
 					const { done, value } = await reader.read();
+
 					if (done) break;
+
 					const chunk = decoder.decode(value, { stream: true });
+
 					text += chunk;
-					try { opts.onOutput?.(chunk); } catch { /* Reporting cannot break a command. */ }
+
+					try {
+						opts.onOutput?.(chunk);
+					} catch {}
 				}
+
 				return text + decoder.decode();
-			} finally { reader.releaseLock(); }
+			} finally {
+				reader.releaseLock();
+			}
 		};
-		const [stdout, stderr, exitCode] = await Promise.all([
-			read(proc.stdout),
-			read(proc.stderr),
-			proc.exited
-		]);
+
+		const [stdout, stderr, exitCode] = await Promise.all([read(proc.stdout), read(proc.stderr), proc.exited]);
+
 		clearTimeout(timer);
 
 		const combined = [stdout, stderr ? `\n[stderr]\n${stderr}` : ''].join('').trim();
+
 		run.logs = truncate(combined);
 		run.exitCode = exitCode;
 		run.status = timedOut ? 'killed' : exitCode === 0 ? 'succeeded' : 'failed';
 		run.finishedAt = new Date().toISOString();
 		db.runs.set(run);
+
 		return run;
 	} catch (err) {
 		run.status = 'failed';

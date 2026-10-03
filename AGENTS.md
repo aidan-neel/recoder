@@ -2,19 +2,67 @@
 
 ## Commands
 
-- Web (SvelteKit): `bun run --filter @recoder/web check` · `bun run --filter @recoder/web build`
-- Server: `bun run --filter @recoder/server check` · `bun run --filter @recoder/server test`
-- Shared: `bun run --filter @recoder/shared check`
+- Web (SvelteKit): `bun run --filter @recoder/web check` · `test` · `build`
+- Server: `bun run --filter @recoder/server check` · `test`
+- Shared: `bun run --filter @recoder/shared check` · `test`
+- Site: `bun run --filter @recoder/site check` · `build`
+- Lint (any package): `bun run --filter @recoder/<package> lint` runs ESLint
+  and `prettier --check`.
+- Dead and duplicated code (repo): `bun run deadcode` runs knip and jscpd.
+- Format: `bunx prettier --write <paths>` then `bunx eslint --fix <paths>`.
 
-Run the relevant `check` (and tests) before finishing a change.
+Run the relevant `check`, `lint` and tests before finishing a change, and
+`deadcode` when you remove or move code.
 
-CI runs each package's `check`, `test` and `build` as its own job
-(`.github/workflows/ci.yml`), so a failure names the package and task. Add a
-matrix entry when a package gains a new task.
+CI runs each package's `check`, `test`, `build` and `lint` as its own job,
+plus one `deadcode` job for the repo (`.github/workflows/ci.yml`), so a failure
+names the package and task. Add a matrix entry when a package gains a new task.
+jscpd fails on any clone (`.jscpd.json`); CSS is excluded.
+
+## Code style (mandatory)
+
+ESLint (`eslint.config.js`) and Prettier (`.prettierrc.json`) enforce most of
+this. Treat a lint error as a bug, not a suggestion.
+
+- **Formatting.** Prettier owns layout: tabs, single quotes, 120 columns.
+  Never hand-format against it.
+- **Line spacing.** Code reads in blocks, never as one dense wall. Leave a
+  blank line after imports, before `return`, around multi-line statements and
+  blocks, around groups of declarations, and between functions, classes,
+  types and exports. `eslint --fix` applies the padding rule.
+- **Comments are JSDoc docstrings only.** No `//` comments and no plain
+  `/* */` blocks in TS, JS or Svelte, and no `<!-- -->` in markup. Put the why
+  in a short `/** … */` on the declaration it explains. If a step inside a
+  function needs a comment, extract it into a named function with a docstring
+  instead. Don't narrate what the next line does. Tool directives
+  (`eslint-disable-next-line rule -- reason`, `@ts-expect-error`,
+  `svelte-ignore`) are allowed. CSS keeps short `/* */` section comments.
+- **Files stay under 500 lines**, tests included (`max-lines`). Split along
+  real seams before a file gets there. When you split a module, keep its
+  original path as the entry so imports don't churn.
+- **Scoped folders.** Code lives in a folder named for its feature, not in a
+  flat `lib/`:
+  - Server `apps/server/src/`: `agents/<cli>/`, `models/`,
+    `review/{pipeline,session,chat,guidelines,fixes}/`, `evidence/`,
+    `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `util/`.
+  - Web `apps/web/src/lib/`: `api/`, `review/`, `findings/`, `diff/`,
+    `session/`, `settings/`, `home/`, `shell/`, with components under
+    `lib/components/<feature>/` and Sivir wrappers in `lib/components/ui/`.
+  - Web styles: `apps/web/src/app.css` imports the parts in
+    `apps/web/src/styles/`.
+  - Shared: `packages/shared/src/` by topic, re-exported from `index.ts`.
+- **No duplicated code.** Before writing a helper, search for one. When two
+  places need the same logic, move it to one module both import. Code used by
+  both server and web belongs in `@recoder/shared`.
+- **No dead code.** Delete unused files, exports, parameters, branches and
+  commented-out code in the same change that makes them unused. Don't export
+  what only the file itself uses.
 
 ## Unit tests
 
-Tests are `bun test`, next to the code they cover (`foo.ts` → `foo.test.ts`).
+Tests are `bun test` files in each package's `tests/` folder, which mirrors
+`src/` (`apps/server/src/forge/gh.ts` →
+`apps/server/tests/forge/gh.test.ts`). Never put a test next to the code.
 Only write a test when it would catch a bug that `check` and a quick manual run
 would not.
 
@@ -138,7 +186,7 @@ component specs, layout and behavior rules.
   no speed option.
 - **Quiet at rest.** Triggers, icon buttons and ghost buttons have no
   background until hovered. One cream primary button per region.
-- **Hover highlight is instant** (`hoverHighlight` in `$lib/hover-highlight.ts`
+- **Hover highlight is instant** (`hoverHighlight` in `$lib/shell/hover-highlight.ts`
   or Sivir's item highlight): snap to the item, fade 60ms. Only the active
   tab pill animates position.
 - **Motion is for an everyday tool, not a demo.** Use the `--dur-*` and
@@ -148,7 +196,7 @@ component specs, layout and behavior rules.
   repeatedly.
 - **Every async action has visible states**: idle → pending (spinner, same
   width) → success or failure. Destructive or pushed-to-git actions get a
-  toast with Undo where possible (`$lib/notify.ts`).
+  toast with Undo where possible (`$lib/shell/notify.ts`).
 - **Lists load with skeletons** (`$lib/components/ui/skeleton.svelte`), then
   swap in place with no entrance animation. No spinner in place of a list.
 - **Panel headers are 44px**, matching the diff header, so borders line up.

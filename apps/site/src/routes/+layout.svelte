@@ -14,7 +14,9 @@
 </svelte:head>
 
 <div class="site-shell bg-chrome text-fg">
-	<Card.Root class="app-canvas site-card min-w-0 flex-1 gap-0 rounded-[14px] border border-line-canvas bg-canvas p-0 shadow-none">
+	<Card.Root
+		class="app-canvas site-card min-w-0 flex-1 gap-0 rounded-[14px] border border-line-canvas bg-canvas p-0 shadow-none"
+	>
 		<SiteNav />
 		<main class="site-main">
 			{@render children()}

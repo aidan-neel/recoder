@@ -1,0 +1,292 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { z } from 'zod';
+import {
+	DISPATCH_LEVELS,
+	REASONING_EFFORTS,
+	type DispatchLevel,
+	type ModelEntryPatch,
+	type ModelSettingsPatch
+} from '@recoder/shared';
+import { serverDataDir } from '../../util/data-dir.js';
+import { REVIEW_ROLES } from '../pipeline/roles.js';
+
+const modelEntrySchema = z.object({
+	provider: z.enum(['openai-compatible', 'codex']).optional(),
+	/** Hosted provider id; the entry uses that provider's endpoint and connected key. */
+	source: z.string().max(40).optional(),
+	id: z.string().max(100).optional(),
+	label: z.string().min(1).max(100),
+	model: z.string().min(1).max(200),
+	baseUrl: z.string().max(500).optional(),
+	apiKey: z.string().max(500).optional(),
+	efforts: z.array(z.enum(REASONING_EFFORTS)).max(8).optional(),
+	defaultEffort: z.enum(REASONING_EFFORTS).optional(),
+	contextWindow: z.number().int().positive().max(100_000_000).optional()
+});
+
+export const reviewSettingsSchema = z.object({
+	baseUrl: z.string().max(500).optional(),
+	apiKey: z.string().max(500).optional(),
+	models: z.array(modelEntrySchema).max(50).optional(),
+	sharedModelId: z.string().max(100).nullable().optional(),
+	orchestratorModelId: z.string().max(100).nullable().optional(),
+	specialistModelId: z.string().max(100).nullable().optional(),
+	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
+	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
+	specialistDispatch: z.enum(DISPATCH_LEVELS).optional(),
+	maxFiles: z.number().int().positive().max(200).optional(),
+	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
+	maxFileChars: z.number().int().positive().max(200_000).optional()
+});
+
+export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
+
+/** Saved files from before models were just Review and Specialist carried per-role picks. */
+const storedFileSchema = reviewSettingsSchema.extend({
+	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional(),
+	roles: z.partialRecord(z.enum(REVIEW_ROLES), z.string().max(200)).optional(),
+	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(REASONING_EFFORTS)).optional(),
+	applyToSpecialists: z.boolean().optional()
+});
+
+/** Old per-role picks become one Specialist pick: correctness (always runs) speaks for them all. */
+function migrateLegacy(data: z.infer<typeof storedFileSchema>): ReviewSettingsInput {
+	const { roles, roleEfforts, applyToSpecialists, ...rest } = data;
+	const next: ReviewSettingsInput = { ...rest };
+
+	if (next.orchestratorEffort === undefined && roleEfforts?.correctness)
+		next.orchestratorEffort = roleEfforts.correctness;
+
+	if (!applyToSpecialists) {
+		if (!next.specialistModelId && roles?.correctness) next.specialistModelId = roles.correctness;
+		if (next.specialistEffort === undefined && roleEfforts?.correctness)
+			next.specialistEffort = roleEfforts.correctness;
+	}
+
+	return next;
+}
+
+/** A saved model entry: the settings patch's entry, always with an id. */
+interface StoredModelEntry extends ModelEntryPatch {
+	id: string;
+}
+
+interface StoredSettings extends Omit<ModelSettingsPatch, 'models'> {
+	/** API keys for hosted providers, by provider id. */
+	connections?: Record<string, { apiKey: string }>;
+	models?: StoredModelEntry[];
+}
+
+/** Reviewer model settings saved from the UI. They win over process env; unset fields fall back to env. */
+let overrides: StoredSettings = {};
+
+function settingsFile(): string {
+	return `${serverDataDir()}/review-config.json`;
+}
+
+/** Where overrides are saved, with the home directory shortened to `~`. */
+export function settingsFileDisplay(): string {
+	const home = process.env.HOME ?? process.env.USERPROFILE;
+	const file = settingsFile();
+
+	return home && file.startsWith(home) ? `~${file.slice(home.length)}` : file;
+}
+
+function persist(): void {
+	try {
+		writeFileSync(settingsFile(), JSON.stringify(overrides, null, 2), { mode: 0o600 });
+	} catch (err) {
+		console.warn('[settings] could not persist review config', err instanceof Error ? err.message : err);
+	}
+}
+
+/** Load persisted settings into memory. Call once at boot. A missing or corrupt file starts empty, and env covers it. */
+export function initReviewSettings(): void {
+	try {
+		const raw = readFileSync(settingsFile(), 'utf8');
+		const parsed = storedFileSchema.safeParse(JSON.parse(raw));
+
+		if (parsed.success) {
+			const { apiKey, models, ...rest } = migrateLegacy(parsed.data);
+
+			const normalized: StoredSettings = {
+				...rest,
+				...(parsed.data.connections ? { connections: parsed.data.connections } : {}),
+				models: models?.map((e) => ({
+					provider: e.provider,
+					...(e.source ? { source: e.source } : {}),
+					id: e.id ?? crypto.randomUUID(),
+					label: e.label,
+					model: e.model,
+					...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
+					...(e.apiKey ? { apiKey: e.apiKey } : {}),
+					...(e.efforts?.length ? { efforts: e.efforts } : {}),
+					...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
+					...(e.contextWindow ? { contextWindow: e.contextWindow } : {})
+				}))
+			};
+
+			overrides = apiKey ? { ...normalized, apiKey } : normalized;
+		}
+	} catch {
+		return;
+	}
+}
+
+/** Test helper: replace the in-memory overrides. */
+export function setReviewOverrides(next: StoredSettings): void {
+	overrides = next;
+}
+
+/** Read-only access to the stored settings (server-side only). */
+export function getStoredSettings(): StoredSettings {
+	return overrides;
+}
+
+/** Save or drop a hosted provider's key. Dropping it also removes that provider's models. */
+export function setConnection(providerId: string, apiKey: string | null): StoredSettings {
+	const connections = { ...overrides.connections };
+
+	if (apiKey) connections[providerId] = { apiKey };
+	else delete connections[providerId];
+	overrides = { ...overrides, connections };
+
+	if (!apiKey && overrides.models?.some((entry) => entry.source === providerId)) {
+		return saveReviewSettings({ models: overrides.models.filter((entry) => entry.source !== providerId) });
+	}
+
+	persist();
+
+	return overrides;
+}
+
+/**
+ * A saved model entry from the UI's version and the stored one it replaces. An empty key keeps the
+ * stored key and new entries store what was given; hosted-provider entries use the provider's
+ * connected key instead.
+ */
+function mergeModelEntry(
+	entry: z.infer<typeof modelEntrySchema>,
+	kept: StoredModelEntry | undefined
+): StoredModelEntry {
+	const next: StoredModelEntry = {
+		provider: entry.provider ?? kept?.provider ?? 'openai-compatible',
+		id: entry.id ?? crypto.randomUUID(),
+		label: entry.label,
+		model: entry.model
+	};
+
+	const source = entry.source ?? kept?.source;
+
+	if (source && next.provider !== 'codex') next.source = source;
+
+	const baseUrl = entry.baseUrl?.replace(/\/$/, '');
+
+	if (baseUrl && next.provider !== 'codex' && !next.source) next.baseUrl = baseUrl;
+	if (entry.efforts?.length) next.efforts = entry.efforts;
+	if (entry.defaultEffort) next.defaultEffort = entry.defaultEffort;
+
+	const contextWindow = entry.contextWindow ?? kept?.contextWindow;
+
+	if (contextWindow) next.contextWindow = contextWindow;
+
+	if (next.provider !== 'codex' && !next.source) {
+		if (entry.apiKey) next.apiKey = entry.apiKey;
+		else if (kept?.apiKey) next.apiKey = kept.apiKey;
+	}
+
+	return next;
+}
+
+/** Drop routing pointers to model entries that no longer exist. */
+function dropDeletedRoutes(settings: StoredSettings, models: StoredModelEntry[]): void {
+	const ids = new Set(models.map((e) => e.id));
+
+	if (settings.sharedModelId && !ids.has(settings.sharedModelId)) delete settings.sharedModelId;
+	if (settings.orchestratorModelId && !ids.has(settings.orchestratorModelId)) delete settings.orchestratorModelId;
+	if (settings.specialistModelId && !ids.has(settings.specialistModelId)) delete settings.specialistModelId;
+}
+
+/** Merge a validated patch over the stored settings and persist. */
+export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
+	const clean: StoredSettings = { ...overrides };
+
+	if (patch.baseUrl !== undefined) clean.baseUrl = patch.baseUrl.replace(/\/$/, '') || undefined;
+	if (patch.apiKey !== undefined && patch.apiKey !== '') clean.apiKey = patch.apiKey;
+
+	if (patch.models !== undefined) {
+		const previous = new Map((clean.models ?? []).map((e) => [e.id, e]));
+
+		clean.models = patch.models.map((entry) => mergeModelEntry(entry, entry.id ? previous.get(entry.id) : undefined));
+		dropDeletedRoutes(clean, clean.models);
+	}
+
+	if (patch.sharedModelId !== undefined) {
+		clean.sharedModelId = patch.sharedModelId || null;
+	}
+
+	if (patch.orchestratorModelId !== undefined) clean.orchestratorModelId = patch.orchestratorModelId || null;
+	if (patch.specialistModelId !== undefined) clean.specialistModelId = patch.specialistModelId || null;
+	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
+	if (patch.specialistEffort !== undefined) clean.specialistEffort = patch.specialistEffort;
+	if (patch.specialistDispatch !== undefined) clean.specialistDispatch = patch.specialistDispatch;
+	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
+	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
+	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;
+	overrides = clean;
+	persist();
+
+	return clean;
+}
+
+function pick(stored: string | undefined, envValue: string | undefined): string {
+	if (stored !== undefined && stored !== '') return stored;
+
+	return envValue ?? '';
+}
+
+function pickNumber(stored: number | undefined, envValue: string | undefined, fallback: number): number {
+	if (stored !== undefined) return stored;
+
+	const parsed = Number(envValue);
+
+	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/** Effective reviewer env: stored UI settings win, process env is the fallback. */
+export function effectiveReviewEnv(): {
+	baseUrl: string;
+	apiKey: string;
+	model: string;
+	maxFiles: number;
+	maxDiffChars: number;
+	maxFileChars: number;
+} {
+	const entries = overrides.models ?? [];
+	const shared = entries.find((e) => e.id === overrides.sharedModelId) ?? entries[0];
+
+	return {
+		baseUrl: pick(overrides.baseUrl, process.env.RECODER_REVIEW_BASE_URL).replace(/\/$/, ''),
+		apiKey: pick(overrides.apiKey, process.env.RECODER_REVIEW_API_KEY),
+		model: shared?.model ?? pick(undefined, process.env.RECODER_REVIEW_MODEL),
+		maxFiles: pickNumber(overrides.maxFiles, process.env.RECODER_REVIEW_MAX_FILES, 20),
+		maxDiffChars: pickNumber(overrides.maxDiffChars, process.env.RECODER_REVIEW_MAX_DIFF_CHARS, 60000),
+		maxFileChars: pickNumber(overrides.maxFileChars, process.env.RECODER_REVIEW_MAX_FILE_CHARS, 12000)
+	};
+}
+
+/** Specialist dispatch level: the saved pick, else `RECODER_REVIEW_DISPATCH`, else medium. */
+export function effectiveDispatchLevel(): DispatchLevel {
+	if (overrides.specialistDispatch) return overrides.specialistDispatch;
+
+	const env = process.env.RECODER_REVIEW_DISPATCH?.trim().toLowerCase();
+
+	return (DISPATCH_LEVELS as readonly string[]).includes(env ?? '') ? (env as DispatchLevel) : 'medium';
+}
+
+/** API keys are never returned in full; the UI gets this masked preview (`••••1234` or null). */
+export function maskKey(key: string | undefined): string | null {
+	if (!key) return null;
+
+	return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
+}

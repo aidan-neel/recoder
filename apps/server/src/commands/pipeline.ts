@@ -1,37 +1,47 @@
-import { emptyReviewProgress, settleAssignments, parseUnifiedDiff, type CreateReviewInput, type Finding, type Review } from '@recoder/shared';
-import { closeReviewControl, openReviewControl, runWithReviewControl, type ReviewControl } from '../lib/review-control';
-import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
 import {
-	emitReviewEvent,
-	reportReviewAssignment,
-	reportReviewCoverage,
-	reportReviewPlan,
-	reportReviewReasoning,
-	reportReviewTask,
-	reportReviewTool,
-	trackReviewTask
-} from '../lib/events';
-import { fetchPullRequest } from '../lib/gh';
-import { fetchMergeRequest } from '../lib/glab';
-import { fetchPrContext } from '../lib/pr-context';
-import { runAdaptiveReview } from '../lib/harness';
-import { configForOrchestrator, configForRole, isReviewConfigured } from '../lib/models';
-import { ModelBlockedError } from '../lib/agent-loop';
-import { codex } from '../lib/codex';
-import { discussionContext, recordChatMessage, reviewInstructions } from '../lib/review-chat';
-import { detectProvider, locateRepo, refspecFor } from '../lib/providers';
-import { prepareSandbox, sandboxRevisionDiff } from '../lib/sandbox';
-import { tokenEnv } from '../lib/tokens';
-import { withReviewMetrics } from '../lib/metrics';
-import { carryFixes } from '../lib/finding-fixes';
+	emptyReviewProgress,
+	settleAssignments,
+	parseUnifiedDiff,
+	type CreateReviewInput,
+	type Finding,
+	type Provider,
+	type Repo,
+	type Review
+} from '@recoder/shared';
+import {
+	closeReviewControl,
+	openReviewControl,
+	runWithReviewControl,
+	type ReviewControl
+} from '../review/session/review-control';
+import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
+import { emitReviewEvent, reportReviewTask, trackReviewTask } from '../review/session/events';
+import { fetchPullRequest } from '../forge/gh';
+import { fetchMergeRequest } from '../forge/glab';
+import { fetchPrContext } from '../forge/pr-context';
+import { runAdaptiveReview } from '../review/pipeline/harness';
+import { configForOrchestrator, configForRole, isReviewConfigured } from '../models/models';
+import { ModelBlockedError } from '../review/pipeline/agent-loop';
+import { codex } from '../agents/codex/codex';
+import { reviewInstructions } from '../review/chat/review-chat';
+import { harnessCallbacks } from './pipeline-callbacks';
+import { detectProvider, locateRepo, refspecFor } from '../forge/providers';
+import { prepareSandbox, sandboxRevisionDiff } from '../sandbox/sandbox';
+import { tokenEnv } from '../forge/tokens';
+import { withReviewMetrics } from '../models/metrics';
+import { carryFixes } from '../review/fixes/finding-fixes';
 
 export type QueueReviewInput = CreateReviewInput;
 
 function touch(reviewId: string, patch: Partial<Review>): Review {
 	const current = db.reviews.get(reviewId);
+
 	if (!current) throw new Error(`review ${reviewId} not found`);
+
 	const next: Review = { ...current, ...patch, updatedAt: new Date().toISOString() };
+
 	db.reviews.set(next);
+
 	return next;
 }
 
@@ -47,18 +57,24 @@ export function queueReview(input: QueueReviewInput): Review {
 			'reviewer not configured: add a reviewer model in settings (or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL)'
 		);
 	}
+
 	const review = createReviewSession(input);
+
 	return startReviewSession(review.id);
 }
 
 /** Opening a PR creates durable chat state without running models or the pipeline. */
 export function createReviewSession(input: CreateReviewInput): Review {
 	const repo = db.repos.get(input.repoId);
+
 	if (!repo) throw new Error('repo not found');
+
 	if (!Number.isInteger(input.prNumber) || input.prNumber <= 0) {
 		throw new Error('invalid prNumber');
 	}
+
 	const now = new Date().toISOString();
+
 	const review: Review = {
 		id: crypto.randomUUID(),
 		repoId: input.repoId,
@@ -74,20 +90,26 @@ export function createReviewSession(input: CreateReviewInput): Review {
 		createdAt: now,
 		updatedAt: now
 	};
+
 	db.reviews.set(review);
 	reviewProgress.set(emptyReviewProgress(review.id));
+
 	return review;
 }
 
 /** Claim the draft synchronously so concurrent prompts cannot launch two pipelines. */
 export function startReviewSession(reviewId: string): Review {
 	const current = db.reviews.get(reviewId);
+
 	if (!current) throw new Error('review not found');
 	if (current.status !== 'draft') throw new Error('This review has already started.');
 	if (!isReviewConfigured()) throw new Error('Add a reviewer model in settings before starting the review.');
+
 	const review = touch(reviewId, { status: 'queued', startedAt: new Date().toISOString() });
+
 	emitReviewEvent(reviewId, { type: 'step', step: 'queued', message: '', data: { stage: 'checkout' } });
 	void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
+
 	return review;
 }
 
@@ -98,12 +120,22 @@ export function startReviewSession(reviewId: string): Review {
  */
 export function continueReviewSession(reviewId: string): Review {
 	const current = db.reviews.get(reviewId);
+
 	if (!current) throw new Error('review not found');
 	if (current.status !== 'failed') throw new Error('Only a failed review can be continued.');
 	if (!isReviewConfigured()) throw new Error('Add a reviewer model in settings before continuing the review.');
+
 	const review = touch(reviewId, { status: 'queued' });
-	emitReviewEvent(reviewId, { type: 'step', step: 'queued', message: '', data: { stage: 'checkout', outcome: null, failure: null } });
+
+	emitReviewEvent(reviewId, {
+		type: 'step',
+		step: 'queued',
+		message: '',
+		data: { stage: 'checkout', outcome: null, failure: null }
+	});
+
 	void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
+
 	return review;
 }
 
@@ -120,7 +152,9 @@ export async function runReviewPipeline(reviewId: string): Promise<void> {
 
 async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	const initial = db.reviews.get(reviewId);
+
 	if (!initial) return;
+
 	const repo = db.repos.get(initial.repoId);
 	let review = touch(reviewId, { status: 'running' });
 	let sandboxPath: string | null = null;
@@ -132,42 +166,47 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 
 	try {
 		if (!repo) throw new Error('repo not found');
-		// Planning and the correctness pass always run: fail now, not after a long checkout.
-		if ([configForOrchestrator(), configForRole('correctness')].some((config) => config.provider === 'codex') && !(await codex.signedIn())) {
-			throw new ModelBlockedError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });
-		}
-		emitReviewEvent(reviewId, { type: 'step', step: 'orchestrator', message: '', data: { orchestratorModel: configForOrchestrator().model } });
+
+		await assertChatGptSignedIn();
+
+		emitReviewEvent(reviewId, {
+			type: 'step',
+			step: 'orchestrator',
+			message: '',
+			data: { orchestratorModel: configForOrchestrator().model }
+		});
+
 		const provider = repo.provider ?? detectProvider(repo.url);
 		const env = tokenEnv(provider, repo.url);
-		const viewCmd =
-			provider === 'gitlab'
-				? `glab mr view ${review.prNumber}`
-				: `gh pr view ${review.prNumber}`;
+		const viewCmd = provider === 'gitlab' ? `glab mr view ${review.prNumber}` : `gh pr view ${review.prNumber}`;
+
 		emitReviewEvent(reviewId, {
 			type: 'step',
 			step: 'fetch',
 			message: `Fetching PR #${review.prNumber}…`,
 			data: { command: viewCmd, stage: 'checkout' }
 		});
+
 		const { pr, diff } = await trackReviewTask(reviewId, 'fetch', 'Fetching PR metadata', async () =>
 			provider === 'gitlab'
 				? await fetchMergeRequest(repo.url, review.prNumber, { env })
-				: await fetchPullRequest(repo.url, review.prNumber, { env, metadataOnly: true }));
+				: await fetchPullRequest(repo.url, review.prNumber, { env, metadataOnly: true })
+		);
+
 		baseRef = pr.base;
 		prBody = pr.body ?? '';
-		// People and linked issues for the planner; fetched while the sandbox clones. Best
-		// effort: a slow host API must not hold the review once the checkout is ready.
-		prContext = Promise.race([
-			fetchPrContext(repo, review.prNumber, provider),
-			new Promise<string>((resolve) => setTimeout(() => resolve(''), 30_000))
-		]);
+
+		prContext = prContextWithin(repo, review.prNumber, provider);
+
 		reviewDiffs.set(reviewId, diff);
+
 		review = touch(reviewId, {
 			headSha: pr.headSha,
 			prTitle: pr.title,
 			prUrl: pr.url,
 			source: provider
 		});
+
 		emitReviewEvent(reviewId, {
 			type: 'log',
 			step: 'fetch',
@@ -177,30 +216,39 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		const source = review.source === 'stub' ? provider : review.source;
 		const { slug } = locateRepo(repo.url);
 		const { fetchRef, branch } = refspecFor(source, review.prNumber);
+
 		emitReviewEvent(reviewId, {
 			type: 'step',
 			step: 'sandbox',
 			message: 'Preparing sandbox…',
 			data: { command: `git fetch origin ${fetchRef.split(':')[0]}`, stage: 'checkout' }
 		});
-		const sandbox = await trackReviewTask(reviewId, 'sandbox', 'Preparing local checkout', (onProgress) => prepareSandbox({
-			onProgress,
-			repoSlug: slug,
-			prNumber: review.prNumber,
-			repoUrl: repo.url,
-			fetchRef,
-			branch,
-			reviewId,
-			provider: source,
-			env: tokenEnv(source, repo.url),
-			expectedHeadSha: review.headSha
-		}));
+
+		const sandbox = await trackReviewTask(reviewId, 'sandbox', 'Preparing local checkout', (onProgress) =>
+			prepareSandbox({
+				onProgress,
+				repoSlug: slug,
+				prNumber: review.prNumber,
+				repoUrl: repo.url,
+				fetchRef,
+				branch,
+				reviewId,
+				provider: source,
+				env: tokenEnv(source, repo.url),
+				expectedHeadSha: review.headSha
+			})
+		);
+
 		sandboxPath = sandbox.path;
 		reviewSandboxes.set(reviewId, sandbox.path);
 		if (!baseRef) throw new Error('PR base branch is missing');
+
 		const inspected = await trackReviewTask(reviewId, 'diff', 'Computing local PR diff', () =>
-			sandboxRevisionDiff(sandbox.path, baseRef!, tokenEnv(source, repo.url), source));
+			sandboxRevisionDiff(sandbox.path, baseRef!, tokenEnv(source, repo.url), source)
+		);
+
 		reviewDiffs.set(reviewId, inspected.diff);
+
 		emitReviewEvent(reviewId, {
 			type: 'log',
 			step: 'sandbox',
@@ -211,84 +259,53 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		if (!isReviewConfigured()) {
 			throw new Error('reviewer not configured');
 		}
+
 		const files = parseUnifiedDiff(inspected.diff);
+
 		emitReviewEvent(reviewId, {
 			type: 'step',
 			step: 'review',
 			message: `Planning a review of ${files.length} files…`,
 			data: { stage: 'understand' }
 		});
+
 		throwIfCancelled(control);
+
 		const { headSha, mergeBaseSha } = inspected.revision;
 		const saved = reviewCheckpoints.get(reviewId);
 		const resume = saved?.headSha === headSha && saved.mergeBaseSha === mergeBaseSha ? saved : null;
+
 		if (saved && !resume) {
 			reviewCheckpoints.delete(reviewId);
-			emitReviewEvent(reviewId, { type: 'log', step: 'review', message: 'The pull request changed since the last run, so the review starts over.' });
+
+			emitReviewEvent(reviewId, {
+				type: 'log',
+				step: 'review',
+				message: 'The pull request changed since the last run, so the review starts over.'
+			});
 		}
-		const result = await runWithReviewControl(control, async () => runAdaptiveReview(
-			{
-				diff: inspected.diff,
-				sandboxPath,
-				revision: inspected.revision,
-				prTitle: review.prTitle,
-				prBody,
-				prContext: await prContext,
-				instructions: reviewInstructions(reviewId, initial.startedAt),
-				signal: analysis.signal,
-				resume
-			},
-			{
-				onTask: (task) => reportReviewTask(reviewId, task),
-				onMessage: (message) => recordChatMessage(reviewId, { ...message, from: 'assistant', at: new Date().toISOString() }),
-				getDiscussion: (assignmentId) => [
-					discussionContext(reviewId),
-					assignmentId && assignmentId !== '__pipeline' ? discussionContext(reviewId, assignmentId) : ''
-				].filter(Boolean).join('\n\n'),
-				onLog: (message, meta) =>
-					emitReviewEvent(reviewId, {
-						type: 'log',
-						step: meta?.assignmentId ? `assignment:${meta.assignmentId}` : 'review',
-						message,
-						data: { agent: meta?.role, assignmentId: meta?.assignmentId }
-					}),
-				onPlan: (data) => reportReviewPlan(reviewId, data),
-				onApproval: (approval) => emitReviewEvent(reviewId, {
-					type: 'step',
-					step: 'review',
-					message: approval.status === 'pending' ? `Waiting for approval to run ${approval.requested} specialists` : `Running ${approval.requested} specialists`,
-					data: { approval }
-				}),
-				onAssignment: (assignment) => reportReviewAssignment(reviewId, assignment),
-				onCoverage: (coverage, gaps) => reportReviewCoverage(reviewId, coverage, gaps),
-				onBudget: (budget) => {
-					const snapshot = reviewProgress.get(reviewId);
-					if (snapshot) reviewProgress.set({ ...snapshot, budget });
+
+		const result = await runWithReviewControl(control, async () =>
+			runAdaptiveReview(
+				{
+					diff: inspected.diff,
+					sandboxPath,
+					revision: inspected.revision,
+					prTitle: review.prTitle,
+					prBody,
+					prContext: await prContext,
+					instructions: reviewInstructions(reviewId, initial.startedAt),
+					signal: analysis.signal,
+					resume
 				},
-				onReasoning: (reasoning) => reportReviewReasoning(reviewId, reasoning),
-				onTool: (tool) => reportReviewTool(reviewId, tool),
-				onCandidates: (count) => {
-					const snapshot = reviewProgress.get(reviewId);
-					if (snapshot) reviewProgress.set({ ...snapshot, candidateCount: count });
-					emitReviewEvent(reviewId, {
-						type: 'finding',
-						message: `${count} candidate finding${count === 1 ? '' : 's'}`,
-						data: { candidateCount: count }
-					});
-				},
-				onGuidelines: (guidelines) => {
-					const sources = guidelines.layers.map((layer) => layer.source === 'global' ? 'global' : layer.path).join(' + ');
-					emitReviewEvent(reviewId, { type: 'step', step: 'review', message: `Following review guidelines (${sources})`, data: { guidelines } });
-				},
-				onStage: (stage) => {
-					emitReviewEvent(reviewId, { type: 'step', step: stage, message: '', data: { stage } });
-				},
-				onCheckpoint: (checkpoint) => reviewCheckpoints.set({ ...checkpoint, id: reviewId, headSha, mergeBaseSha })
-			}
-		));
+				harnessCallbacks(reviewId, { headSha, mergeBaseSha })
+			)
+		);
+
 		throwIfCancelled(control);
 
 		const snapshot = reviewProgress.get(reviewId);
+
 		if (snapshot) {
 			reviewProgress.set({
 				...snapshot,
@@ -303,11 +320,27 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			});
 		}
 
-		reportReviewTask(reviewId, { id: 'finalize', label: 'Saving results', message: 'Saving review results', status: 'running', kind: 'other' });
-		const findings: Finding[] = result.outcome === 'complete' ? result.findings : [...result.findings, ...result.unconfirmed];
+		reportReviewTask(reviewId, {
+			id: 'finalize',
+			label: 'Saving results',
+			message: 'Saving review results',
+			status: 'running',
+			kind: 'other'
+		});
+
+		const findings: Finding[] =
+			result.outcome === 'complete' ? result.findings : [...result.findings, ...result.unconfirmed];
+
 		const status = result.outcome === 'complete' ? 'passed' : 'failed';
-		touch(reviewId, { status, summary: result.summary, findings: carryFixes(db.reviews.get(reviewId)?.findings ?? [], findings) });
+
+		touch(reviewId, {
+			status,
+			summary: result.summary,
+			findings: carryFixes(db.reviews.get(reviewId)?.findings ?? [], findings)
+		});
+
 		if (status === 'passed') reviewCheckpoints.delete(reviewId);
+
 		reportReviewTask(reviewId, {
 			id: 'finalize',
 			label: 'Saving results',
@@ -315,6 +348,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			status: result.outcome === 'complete' ? 'done' : 'error',
 			kind: 'other'
 		});
+
 		emitReviewEvent(reviewId, {
 			type: result.outcome === 'complete' ? 'done' : 'error',
 			message: result.summary,
@@ -329,26 +363,79 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		});
 	} catch (err) {
 		const cancelled = analysis.signal.aborted;
+
 		analysis.abort();
+
 		const message = cancelled ? 'Review cancelled.' : err instanceof Error ? err.message : 'pipeline failed';
 		const failure = !cancelled && err instanceof ModelBlockedError ? err.failure : undefined;
-		try {
-			const snapshot = reviewProgress.get(reviewId);
-			if (snapshot) reviewProgress.set({ ...snapshot, outcome: 'failed', assignments: settleAssignments(snapshot.assignments ?? [], message), ...(failure ? { failure } : {}) });
-			touch(reviewId, { status: 'failed', summary: message });
-		} catch {
-			// Review was deleted mid-run (e.g. its session was closed) — nothing to update.
-		}
+
+		markFailed(reviewId, message, failure);
+
 		emitReviewEvent(reviewId, { type: 'error', message, data: { paused: false, ...(failure ? { failure } : {}) } });
 	} finally {
 		closeReviewControl(reviewId, control);
-		try {
-			const settled = settlePipelineStreams(reviewId);
-			if (settled) emitReviewEvent(reviewId, { type: 'log', step: 'review', message: '', data: { settled: { messages: settled.messages, reasoning: settled.reasoning } } });
-		} catch { /* Review deleted mid-run. */ }
-		// The final state reaches SQLite now, not on the write-behind timer.
-		reviewProgress.flush();
+		settleRun(reviewId);
 	}
+}
+
+/** Planning and the correctness pass always run, so a missing ChatGPT sign-in fails now, not after a long checkout. */
+async function assertChatGptSignedIn(): Promise<void> {
+	const usesCodex = [configForOrchestrator(), configForRole('correctness')].some(
+		(config) => config.provider === 'codex'
+	);
+
+	if (usesCodex && !(await codex.signedIn())) {
+		throw new ModelBlockedError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });
+	}
+}
+
+/**
+ * People and linked issues for the planner, fetched while the sandbox clones.
+ * Best effort: after 30s it gives up with nothing, so a slow host API can't
+ * hold the review once the checkout is ready.
+ */
+function prContextWithin(repo: Repo, prNumber: number, provider: Provider): Promise<string> {
+	return Promise.race([
+		fetchPrContext(repo, prNumber, provider),
+		new Promise<string>((resolve) => setTimeout(() => resolve(''), 30_000))
+	]);
+}
+
+/** Record a failed run. A review deleted mid-run (its session closed) has nothing left to update. */
+function markFailed(reviewId: string, message: string, failure: ModelBlockedError['failure'] | undefined): void {
+	try {
+		const snapshot = reviewProgress.get(reviewId);
+
+		if (snapshot)
+			reviewProgress.set({
+				...snapshot,
+				outcome: 'failed',
+				assignments: settleAssignments(snapshot.assignments ?? [], message),
+				...(failure ? { failure } : {})
+			});
+		touch(reviewId, { status: 'failed', summary: message });
+	} catch {}
+}
+
+/**
+ * Close out a run, however it ended: settle the streamed messages and
+ * reasoning (skipped when the review was deleted mid-run), then write the
+ * final state to SQLite now rather than on the write-behind timer.
+ */
+function settleRun(reviewId: string): void {
+	try {
+		const settled = settlePipelineStreams(reviewId);
+
+		if (settled)
+			emitReviewEvent(reviewId, {
+				type: 'log',
+				step: 'review',
+				message: '',
+				data: { settled: { messages: settled.messages, reasoning: settled.reasoning } }
+			});
+	} catch {}
+
+	reviewProgress.flush();
 }
 
 function throwIfCancelled(control: ReviewControl): void {

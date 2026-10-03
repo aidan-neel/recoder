@@ -8,13 +8,12 @@
 		"build": "vite build",
 		"preview": "vite preview",
 		"prepare": "svelte-kit sync || echo ''",
-		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+		"check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+		"lint": "eslint . && prettier --check . --ignore-path ../../.prettierignore"
 	},
 	"devDependencies": {
 		"@fontsource/geist-mono": "^5.3.0",
 		"@fontsource/geist-sans": "^5.3.0",
-		"@fontsource/inter": "^5.3.0",
-		"@fontsource/jetbrains-mono": "^5.3.0",
 		"@fontsource/lora": "^5.3.0",
 		"@sveltejs/adapter-vercel": "6.3.4",
 		"@sveltejs/kit": "^2.63.0",

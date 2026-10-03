@@ -1,0 +1,404 @@
+/* Switch: 32×18, knob inset 2px; primary track on, #34312d off. */
+[data-ui='switch'] {
+	width: 32px;
+	height: 18px;
+	padding: 2px;
+	border: 0;
+	transition: background-color var(--dur-toggle) var(--ease-pill);
+}
+[data-ui='switch'][data-state='checked'] {
+	background-color: var(--primary);
+}
+[data-ui='switch'][data-state='unchecked'] {
+	background-color: var(--line-strong);
+}
+[data-ui='switch'] > span {
+	translate: none;
+	width: 14px;
+	height: 14px;
+	box-shadow: none;
+	--tw-ring-shadow: 0 0 #0000;
+	transition: transform var(--dur-toggle) var(--ease-pill);
+}
+[data-ui='switch'][data-state='checked'] > span {
+	background-color: var(--on-primary);
+	transform: translateX(14px);
+}
+[data-ui='switch'][data-state='unchecked'] > span {
+	background-color: var(--text-secondary);
+	transform: none;
+}
+.switch-sm [data-ui='switch'] {
+	width: 26px;
+	height: 15px;
+}
+.switch-sm [data-ui='switch'] > span {
+	width: 11px;
+	height: 11px;
+}
+.switch-sm [data-ui='switch'][data-state='checked'] > span {
+	transform: translateX(11px);
+}
+
+/* Keycap: Geist Mono 10.5, 1px 5px, radius 4, #1f1e1c. */
+kbd.keycap {
+	display: inline-flex;
+	min-height: 0;
+	min-width: 0;
+	align-items: center;
+	padding: 1px 5px;
+	border: 0;
+	border-radius: 4px;
+	background-color: var(--line-subtle);
+	color: var(--text-subtle);
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	font-weight: 400;
+	line-height: 1.4;
+}
+[data-variant='primary'] kbd.keycap {
+	background-color: rgb(var(--shade-rgb) / 0.12);
+	color: var(--on-primary);
+}
+
+/* Skeleton bars shimmer (#1c1b19 → #262422, 1.4s). */
+.rc-skeleton {
+	background: linear-gradient(90deg, var(--bg-menu) 0%, var(--line-tab) 50%, var(--bg-menu) 100%);
+	background-size: 200% 100%;
+	animation:
+		rc-skeleton-hold 1ms linear var(--skeleton-delay) backwards,
+		rc-shimmer var(--dur-skeleton) linear infinite;
+}
+
+/* A skeleton stays invisible for its first 200ms. Data that lands sooner
+   (most of it, on a local server) replaces blank space with content in one
+   step instead of flashing a skeleton for a frame. */
+:is(
+	[role='status'][aria-label^='Loading'],
+	[role='status'][aria-label^='Fetching'],
+	[role='status'][aria-label^='Listing'],
+	[role='status'][aria-label='Writing the brief']
+) {
+	animation: rc-skeleton-hold 1ms linear var(--skeleton-delay) backwards;
+}
+@keyframes rc-skeleton-hold {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+/* Badges: 11px/500, radius 5, padding 1px 6px. */
+[data-ui='badge'] {
+	border-radius: 5px;
+	border: 0;
+	box-shadow: none;
+}
+
+/* Toast: rises over 220ms, compact single line. */
+[data-ui='toast'] {
+	border: 0;
+	border-radius: 10px;
+	background-color: var(--bg-menu);
+	box-shadow: var(--shadow-menu);
+	backdrop-filter: none;
+}
+[data-ui='toast'] > div:first-child {
+	padding: 10px 12px;
+	align-items: center;
+	gap: 10px;
+}
+/* A lone title sits in line with its action; a description stacks under the title. */
+[data-ui='toast'] > div:first-child > div:nth-child(2):not(:has(> p + p)) {
+	flex-direction: row;
+	align-items: center;
+	gap: 10px;
+}
+[data-ui='toast'] > div:first-child:has(p + p) {
+	align-items: flex-start;
+}
+[data-ui='toast'] > div:first-child > div:nth-child(2):has(> p + p) {
+	gap: 2px;
+}
+[data-ui='toast'] p {
+	font-size: 13px;
+	letter-spacing: 0;
+}
+[data-ui='toast'] [data-ui='button'] {
+	margin: 0;
+	color: var(--text-primary) !important;
+	font-size: 13px;
+}
+[data-ui='toast'] .mt-1\.5 {
+	margin-top: 0;
+}
+[data-ui='toast'] > div:first-child > div:nth-child(2):has(> p + p) .mt-1\.5 {
+	margin-top: 6px;
+}
+
+/* Tooltips match menus. */
+.sivir-tooltip {
+	border-radius: 7px;
+	font-size: 12px;
+	font-weight: 400;
+	box-shadow: var(--shadow-menu);
+}
+
+/* Tabs segmented variant = the design's segmented control. */
+[data-ui='tabs-list'][data-variant='segmented'] {
+	padding: 3px;
+	border-radius: 9px;
+	background-color: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--bg-hover);
+	gap: 0;
+}
+[data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true']:not(.hover-highlight):not(.tab-sep) {
+	border-radius: 7px;
+	background-color: var(--line-tab);
+	--tw-ring-shadow: 0 0 #0000;
+	box-shadow: none;
+	transition-duration: var(--dur-pill);
+	transition-timing-function: var(--ease-pill);
+}
+[data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
+	min-height: 26px;
+	height: 26px;
+	padding: 0 10px;
+	border-radius: 7px;
+	font-size: 12.5px;
+	font-weight: 400;
+	color: var(--text-subtle);
+	transition: color var(--dur-hover) ease-out;
+}
+[data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover,
+[data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
+	color: var(--text-primary);
+}
+
+/* ───────────────────────── Top bar ───────────────────────── */
+.top-tabs [data-ui='tabs-list'][data-variant='segmented'] {
+	padding: 0;
+	gap: 2px;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	isolation: isolate;
+	flex-wrap: nowrap;
+}
+/* Active tab: a flat pill that snaps to the tab (no border, no travel). */
+.top-tabs [data-ui='tabs-list'][data-variant='segmented'] > [aria-hidden='true']:not(.tab-sep) {
+	border-radius: 8px;
+	background-color: var(--bg-menu);
+	box-shadow: none;
+	transition: none;
+}
+.top-tabs [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
+	display: inline-flex;
+	align-items: center;
+	gap: 7px;
+	height: 30px;
+	min-height: 30px;
+	padding: 0 10px;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 400;
+	white-space: nowrap;
+	color: var(--text-muted);
+}
+.top-tabs [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'] {
+	transition:
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
+}
+.top-tabs [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger']:hover {
+	color: var(--text-primary);
+	background-color: rgb(var(--wash-rgb) / 0.04);
+}
+.top-tabs [data-ui='tabs-list'][data-variant='segmented'] [data-ui='tabs-trigger'][data-state='active'] {
+	color: var(--text-primary);
+	background-color: transparent;
+}
+.tab-badge {
+	padding: 0 5px;
+	border-radius: 4px;
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	line-height: 16px;
+	color: var(--text-faint);
+}
+.tab-badge[data-tone='running'] {
+	color: var(--text-muted);
+	background-color: rgb(var(--wash-rgb) / 0.06);
+}
+.tab-badge[data-tone='failed'] {
+	color: var(--danger);
+	background-color: var(--danger-tint);
+}
+.tab-badge[data-tone='high'] {
+	color: var(--sev-high);
+	background-color: var(--sev-high-tint);
+}
+.top-tabs-measure {
+	gap: 2px;
+	position: absolute;
+	top: 0;
+	left: 0;
+	display: flex;
+	width: max-content;
+	height: 0;
+	overflow: hidden;
+	visibility: hidden;
+	pointer-events: none;
+}
+.top-tab-measure {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 7px;
+	padding: 0 10px;
+	font-size: 13px;
+	white-space: nowrap;
+}
+[data-ui='button'].top-plus {
+	width: 28px;
+	min-width: 28px;
+	height: 28px;
+	margin-left: 2px;
+	border-radius: 7px;
+	color: var(--text-faint);
+}
+[data-ui='button'].search-trigger {
+	flex: 0 1 260px;
+	min-width: 170px;
+	height: 30px;
+	padding: 0 7px 0 10px;
+	gap: 8px;
+	justify-content: flex-start;
+	border-radius: 8px;
+	background-color: var(--bg-search);
+	box-shadow: inset 0 0 0 1px var(--line-subtle);
+	color: var(--text-faint);
+	font-size: 13px;
+	font-weight: 400;
+}
+[data-ui='button'].search-trigger:hover:not(:disabled) {
+	background-color: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+}
+[data-ui='button'].usage-meter {
+	height: 30px;
+	margin-left: 4px;
+	padding: 0 8px;
+	gap: 7px;
+	font-family: var(--font-code);
+	font-size: 11px;
+	font-weight: 400;
+}
+.usage-track > div {
+	background-color: var(--text-muted);
+}
+
+/* ───────────────────── Composer (5c) ───────────────────── */
+[data-ui='composer-form'].rc-composer {
+	cursor: text;
+	gap: 12px;
+	padding: 14px 12px 10px 16px;
+	border: 0;
+	border-radius: 18px;
+	background-color: var(--bg-raised);
+	box-shadow: var(--shadow-composer);
+	transition: box-shadow var(--dur-menu) ease-out;
+}
+[data-ui='composer-form'].rc-composer:focus-within {
+	border: 0;
+	box-shadow:
+		0 0 0 1px var(--line-focus),
+		0 10px 30px rgb(var(--shade-rgb) / calc(0.35 * var(--drop)));
+}
+[data-ui='composer-form'].rc-composer[data-size='panel'] {
+	gap: 8px;
+	padding: 10px 10px 8px 14px;
+	border-radius: 16px;
+	box-shadow: 0 0 0 1px var(--line-control);
+}
+[data-ui='composer-form'].rc-composer[data-size='panel']:focus-within {
+	box-shadow: 0 0 0 1px var(--line-focus);
+}
+[data-ui='composer-input'].rc-composer-input {
+	min-height: 23px;
+	max-height: 200px;
+	padding: 2px 0 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+	font-size: 14px;
+	line-height: 21px;
+	color: var(--text-primary);
+}
+/* The main composer opens two lines tall; the side panel stays compact. */
+[data-ui='composer-form'].rc-composer:not([data-size='panel']) [data-ui='composer-input'].rc-composer-input {
+	min-height: 44px;
+}
+[data-ui='composer-input'].rc-composer-input::placeholder {
+	color: var(--text-faint);
+}
+[data-ui='composer-toolbar'].rc-composer-footer {
+	min-height: 0;
+	flex-wrap: nowrap;
+	gap: 4px;
+	padding: 0;
+}
+[data-ui='button'].rc-attach {
+	width: 30px;
+	min-width: 30px;
+	height: 30px;
+	margin-left: -6px;
+	border-radius: 999px;
+	color: var(--text-subtle);
+}
+[data-ui='composer-submit'].rc-send {
+	width: 30px;
+	min-width: 30px;
+	height: 30px;
+	padding: 0;
+	border-radius: 999px;
+}
+[data-size='panel'] [data-ui='composer-submit'].rc-send {
+	width: 28px;
+	min-width: 28px;
+	height: 28px;
+}
+[data-ui='composer-submit'].rc-send:disabled {
+	opacity: 1;
+	background-color: var(--bg-hover);
+	color: var(--text-ghost);
+}
+[data-ui='composer-submit'].rc-send .sivir-button-face {
+	gap: 0;
+	font-size: 0;
+}
+[data-ui='composer-submit'].rc-send[data-state='stop'],
+[data-generating] [data-ui='composer-submit'].rc-send {
+	background-color: var(--bg-hover);
+	color: var(--text-primary);
+	filter: none;
+}
+.rc-stop {
+	position: relative;
+	display: block;
+	width: 9px;
+	height: 9px;
+	border-radius: 2px;
+	background: currentColor;
+}
+/* Working: a full faint track with a bright arc around Send (or Stop) reads
+   as "still working" at a glance. Drawn on the button so it hugs its edge.
+   Keyed on data-working, not data-busy: Sivir's Submit sets data-busy itself
+   (stop/queue only) and would drop the ring while a review works. Sivir's own
+   ring is switched off so the two never stack. */
+[data-ui='composer-submit'].rc-send:not([data-working])::after {
+	content: none;
+}

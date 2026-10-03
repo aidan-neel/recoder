@@ -16,8 +16,12 @@
 <span class="thought-label" data-working={working || undefined}>
 	<span class="thought-label-glyph"><DotLoader /></span>
 	<span class="thought-label-stack">
-		<span class="thought-label-text shimmer-text" data-active={working || undefined} bind:offsetWidth={workWidth}>Thinking</span>
-		<span class="thought-label-text" data-active={!working || undefined} bind:offsetWidth={doneWidth}>{time ? 'Thought for' : 'Thought'}</span>
+		<span class="thought-label-text shimmer-text" data-active={working || undefined} bind:offsetWidth={workWidth}
+			>Thinking</span
+		>
+		<span class="thought-label-text" data-active={!working || undefined} bind:offsetWidth={doneWidth}
+			>{time ? 'Thought for' : 'Thought'}</span
+		>
 	</span>
 	{#if time}<span class="thought-label-time" style:transform="translateX({shift}px)">{time}</span>{/if}
 </span>

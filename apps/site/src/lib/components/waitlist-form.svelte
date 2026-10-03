@@ -23,13 +23,12 @@
 	onMount(() => {
 		try {
 			const joined = localStorage.getItem(STORAGE_KEY);
+
 			if (joined) {
 				email = joined;
 				status = 'done';
 			}
-		} catch {
-			// Storage blocked (private mode, disabled cookies): show the form.
-		}
+		} catch {}
 	});
 
 	async function expand() {
@@ -48,28 +47,33 @@
 	async function join(event: SubmitEvent) {
 		event.preventDefault();
 		if (status === 'pending') return;
+
 		const address = email.trim();
+
 		if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
 			status = 'error';
 			error = 'Enter an email address, like you@company.com.';
 			inputEl?.focus();
+
 			return;
 		}
+
 		status = 'pending';
 		error = '';
+
 		try {
 			const response = await fetch('/api/waitlist', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ email: address })
 			});
+
 			if (!response.ok) throw new Error(String(response.status));
 			status = 'done';
+
 			try {
 				localStorage.setItem(STORAGE_KEY, address);
-			} catch {
-				// Not remembered across visits; joining still worked.
-			}
+			} catch {}
 		} catch {
 			status = 'error';
 			error = 'That didn’t go through. Check your connection and try again.';
@@ -107,7 +111,9 @@
 					}
 				}}
 			/>
-			<Button type="submit" variant="outline" class="brief-action" loading={status === 'pending'} loadingLabel="Joining">Join</Button>
+			<Button type="submit" variant="outline" class="brief-action" loading={status === 'pending'} loadingLabel="Joining"
+				>Join</Button
+			>
 		</form>
 		{#if status === 'error'}
 			<Typography.Text id="{id}-error" role="alert" class="waitlist-error">{error}</Typography.Text>

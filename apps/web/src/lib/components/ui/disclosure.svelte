@@ -4,7 +4,7 @@
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import { anchorToggle } from '$lib/scroll-anchor';
+	import { anchorToggle } from '$lib/shell/scroll-anchor';
 
 	/**
 	 * Transcript disclosure: status glyph, label, optional meta, chevron; the body

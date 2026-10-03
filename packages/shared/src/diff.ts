@@ -37,23 +37,46 @@ function stripPrefix(path: string): string {
 
 /** Remove git's double-quoting around paths containing spaces. */
 function unquote(path: string): string {
-	return path.startsWith('"') && path.endsWith('"') && path.length >= 2
-		? path.slice(1, -1)
-		: path;
+	return path.startsWith('"') && path.endsWith('"') && path.length >= 2 ? path.slice(1, -1) : path;
+}
+
+/**
+ * The old-side path from a `diff --git a/x b/x` header. A quoted path (spaces
+ * in the name) spans several space-separated tokens up to its closing quote.
+ */
+function gitHeaderPath(header: string): string {
+	const parts = header.split(' ');
+	let rawPath = parts[2] ?? 'unknown';
+
+	if (!rawPath.startsWith('"')) return rawPath;
+
+	const collected = [rawPath];
+	let i = 3;
+
+	while (!rawPath.endsWith('"') && i < parts.length) {
+		rawPath = parts[i];
+		collected.push(rawPath);
+		i++;
+	}
+
+	return collected.join(' ').replace(/^"|"$/g, '');
 }
 
 function blankFile(path: string): FileDiff {
 	return { path, additions: 0, deletions: 0, hunks: [] };
 }
 
+/**
+ * Parse a unified diff into files and hunks. Some producers (plain patches, MR
+ * raw diffs) omit `diff --git` headers, so the last `---`/`+++` paths are kept
+ * to give orphan hunks a file. `\ No newline at end of file` lines are skipped.
+ */
 export function parseUnifiedDiff(input: string): FileDiff[] {
 	const files: FileDiff[] = [];
 	let current: FileDiff | null = null;
 	let hunk: DiffHunk | null = null;
 	let oldNo = 0;
 	let newNo = 0;
-	// Last seen ---/+++ paths. Some producers (plain patches, MR raw diffs)
-	// omit `diff --git` headers — these let orphan hunks find their file.
 	let pendingOld: string | null = null;
 	let pendingNew: string | null = null;
 
@@ -65,44 +88,41 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 	for (const raw of input.split('\n')) {
 		if (raw.startsWith('diff --git ')) {
 			pushHunk();
-			const parts = raw.split(' ');
-			let rawPath = parts[2] ?? 'unknown';
-			// Quoted paths (spaces in name): rejoin tokens through the closing quote.
-			if (rawPath.startsWith('"')) {
-				const collected = [rawPath];
-				let i = 3;
-				while (!rawPath.endsWith('"') && i < parts.length) {
-					rawPath = parts[i];
-					collected.push(rawPath);
-					i++;
-				}
-				rawPath = collected.join(' ').replace(/^"|"$/g, '');
-			}
-			current = blankFile(stripPrefix(rawPath));
+
+			current = blankFile(stripPrefix(gitHeaderPath(raw)));
 			files.push(current);
 			pendingOld = null;
 			pendingNew = null;
 			continue;
 		}
+
 		if (raw.startsWith('--- ') || raw.startsWith('+++ ')) {
 			const p = raw.slice(4).trim();
 			const path = p === '/dev/null' ? null : stripPrefix(unquote(p.split('\t')[0]));
+
 			if (raw.startsWith('--- ')) pendingOld = path;
 			else pendingNew = path;
+
 			if (current && current.path === 'unknown' && path) {
 				current.path = path;
 			}
+
 			continue;
 		}
+
 		const m = HUNK_RE.exec(raw);
+
 		if (m) {
 			pushHunk();
+
 			if (!current) {
 				current = blankFile(pendingNew ?? pendingOld ?? 'unknown');
 				files.push(current);
 			}
+
 			oldNo = Number(m[1]);
 			newNo = Number(m[3]);
+
 			hunk = {
 				header: raw,
 				oldStart: oldNo,
@@ -111,13 +131,16 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 				newCount: Number(m[4] ?? '1'),
 				lines: []
 			};
+
 			continue;
 		}
+
 		if (!hunk || !current) continue;
-		if (raw.startsWith('\\')) continue; // "\ No newline at end of file"
+		if (raw.startsWith('\\')) continue;
 
 		const marker = raw[0] ?? ' ';
 		const text = raw.slice(1);
+
 		if (marker === '-') {
 			hunk.lines.push({ type: 'del', oldNo: oldNo++, newNo: null, text });
 			current.deletions++;
@@ -128,14 +151,20 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 			hunk.lines.push({ type: 'context', oldNo: oldNo++, newNo: newNo++, text: marker === ' ' ? text : raw });
 		}
 	}
+
 	pushHunk();
+
 	return files.filter((f) => f.hunks.length > 0);
 }
 
-function splitFileLines(text: string): string[] {
+/** File lines without the empty entry a trailing newline leaves behind. */
+export function splitFileLines(text: string): string[] {
 	if (text === '') return [];
+
 	const lines = text.split('\n');
+
 	if (lines[lines.length - 1] === '') lines.pop();
+
 	return lines;
 }
 
@@ -148,6 +177,7 @@ const MAX_EXPAND_LINES = 8000;
  */
 export function expandFileDiff(file: FileDiff, newText: string): FileDiff {
 	const newLines = splitFileLines(newText);
+
 	if (newLines.length === 0 || newLines.length > MAX_EXPAND_LINES || file.hunks.length === 0) {
 		return file;
 	}
@@ -164,16 +194,20 @@ export function expandFileDiff(file: FileDiff, newText: string): FileDiff {
 				newNo: newCursor,
 				text: newLines[newCursor - 1] ?? ''
 			});
+
 			newCursor += 1;
 			oldCursor += 1;
 		}
+
 		oldCursor = hunk.oldStart > 0 ? hunk.oldStart : oldCursor;
+
 		for (const line of hunk.lines) {
 			out.push(line);
 			if (line.newNo !== null) newCursor = line.newNo + 1;
 			if (line.oldNo !== null) oldCursor = line.oldNo + 1;
 		}
 	}
+
 	while (newCursor <= newLines.length) {
 		out.push({
 			type: 'context',
@@ -181,11 +215,13 @@ export function expandFileDiff(file: FileDiff, newText: string): FileDiff {
 			newNo: newCursor,
 			text: newLines[newCursor - 1] ?? ''
 		});
+
 		newCursor += 1;
 		oldCursor += 1;
 	}
 
 	const lastOld = out.reduce((max, line) => (line.oldNo !== null && line.oldNo > max ? line.oldNo : max), 0);
+
 	return {
 		...file,
 		hunks: [
@@ -210,20 +246,25 @@ export function collapseFileDiff(file: FileDiff, keep: Iterable<number> = [], co
 	const lines = file.hunks.flatMap((hunk) => hunk.lines);
 	const kept = new Set(keep);
 	const visible = new Array<boolean>(lines.length).fill(false);
+
 	lines.forEach((line, i) => {
 		if (line.type === 'context' && !(line.newNo !== null && kept.has(line.newNo))) return;
 		for (let j = Math.max(0, i - context); j <= Math.min(lines.length - 1, i + context); j++) visible[j] = true;
 	});
+
 	const hunks: DiffHunk[] = [];
 	let lastOld = 0;
 	let lastNew = 0;
 	let group: DiffLine[] = [];
+
 	const flush = () => {
 		if (!group.length) return;
+
 		const oldNos = group.flatMap((line) => (line.oldNo === null ? [] : [line.oldNo]));
 		const newNos = group.flatMap((line) => (line.newNo === null ? [] : [line.newNo]));
 		const oldStart = oldNos[0] ?? lastOld + 1;
 		const newStart = newNos[0] ?? lastNew + 1;
+
 		hunks.push({
 			header: `@@ -${oldStart},${oldNos.length} +${newStart},${newNos.length} @@`,
 			oldStart,
@@ -232,14 +273,18 @@ export function collapseFileDiff(file: FileDiff, keep: Iterable<number> = [], co
 			newCount: newNos.length,
 			lines: group
 		});
+
 		group = [];
 	};
+
 	lines.forEach((line, i) => {
 		if (visible[i]) group.push(line);
 		else flush();
 		if (line.oldNo !== null) lastOld = line.oldNo;
 		if (line.newNo !== null) lastNew = line.newNo;
 	});
+
 	flush();
+
 	return { ...file, hunks };
 }

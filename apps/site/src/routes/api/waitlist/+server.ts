@@ -18,9 +18,12 @@ export const POST: RequestHandler = async ({ request }) => {
 	const body: unknown = await request.json().catch(() => null);
 	const raw = body && typeof body === 'object' && 'email' in body ? body.email : null;
 	const email = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+
 	if (email.length > 254 || !EMAIL.test(email)) error(400, 'Enter a valid email address');
 
 	const sql = neon(env.DATABASE_URL);
+
 	await sql`insert into waitlist (email) values (${email}) on conflict (email) do nothing`;
+
 	return json({ ok: true });
 };
