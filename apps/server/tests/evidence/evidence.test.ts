@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildInventory } from '../../src/review/pipeline/inventory';
 import { actionCommand, EvidenceStore, sanitizeRepoPath, type ToolCallReport } from '../../src/evidence/evidence';
+import { git } from '../helpers/git';
 
 test('retrieval reports terminal errors and observer failures do not alter results', async () => {
 	const store = new EvidenceStore(null, buildInventory(''), 20_000);
@@ -107,14 +108,6 @@ test('malformed retrievals still report a display command and preserve their fai
 	expect(JSON.parse(JSON.stringify(calls[1])).command).toBe('Unknown tool');
 });
 
-function git(cwd: string, args: string[]): string {
-	const result = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
-
-	if (result.exitCode !== 0) throw new Error(result.stderr.toString());
-
-	return result.stdout.toString().trim();
-}
-
 test('sanitizeRepoPath rejects escapes and absolute paths', () => {
 	expect(sanitizeRepoPath('../secret')).toBeNull();
 	expect(sanitizeRepoPath('/etc/passwd')).toBeNull();
@@ -163,6 +156,17 @@ test('optional file discovery uses the requested revision and skips missing file
 	}
 });
 
+/** An evidence store whose head, target and merge base are all the commit checked out in `checkout`. */
+function storeAtHead(checkout: string): EvidenceStore {
+	const sha = git(checkout, ['rev-parse', 'HEAD']);
+
+	return new EvidenceStore(
+		{ checkoutPath: checkout, headSha: sha, targetSha: sha, mergeBaseSha: sha, targetRef: 'main' },
+		buildInventory(''),
+		20_000
+	);
+}
+
 test('readFile can retrieve late lines without truncating the file head', async () => {
 	const origin = await mkdtemp(join(tmpdir(), 'recoder-ev-'));
 
@@ -176,13 +180,7 @@ test('readFile can retrieve late lines without truncating the file head', async 
 	git(origin, ['add', '.']);
 	git(origin, ['commit', '-m', 'big']);
 
-	const sha = git(origin, ['rev-parse', 'HEAD']);
-
-	const store = new EvidenceStore(
-		{ checkoutPath: origin, headSha: sha, targetSha: sha, mergeBaseSha: sha, targetRef: 'main' },
-		buildInventory(''),
-		20_000
-	);
+	const store = storeAtHead(origin);
 
 	const [result] = await store.executeRound([
 		{ action: 'readFile', revision: 'head', path: 'big.ts', startLine: 350, endLine: 355 }
@@ -205,13 +203,7 @@ test('readFile refuses symlinks and unknown revisions', async () => {
 	git(origin, ['add', '-f', '.']);
 	git(origin, ['commit', '-m', 'link']);
 
-	const sha = git(origin, ['rev-parse', 'HEAD']);
-
-	const store = new EvidenceStore(
-		{ checkoutPath: origin, headSha: sha, targetSha: sha, mergeBaseSha: sha, targetRef: 'main' },
-		buildInventory(''),
-		20_000
-	);
+	const store = storeAtHead(origin);
 
 	const [symlinkRead] = await store.executeRound([
 		{ action: 'readFile', revision: 'head', path: 'link.ts', startLine: 1, endLine: 10 }

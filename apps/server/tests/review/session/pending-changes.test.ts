@@ -11,40 +11,24 @@ import {
 	safePaths,
 	undoLastCommit
 } from '../../../src/review/session/pending-changes';
+import { git } from '../../helpers/git';
 
 let base = '';
 let repo = '';
 let remote = '';
 
-const git = (cwd: string, ...args: string[]) => {
-	const run = Bun.spawnSync(['git', ...args], {
-		cwd,
-		env: {
-			...process.env,
-			GIT_AUTHOR_NAME: 't',
-			GIT_AUTHOR_EMAIL: 't@t',
-			GIT_COMMITTER_NAME: 't',
-			GIT_COMMITTER_EMAIL: 't@t'
-		}
-	});
-
-	if (run.exitCode !== 0) throw new Error(run.stderr.toString());
-
-	return run.stdout.toString().trim();
-};
-
 beforeEach(async () => {
 	base = await mkdtemp(join(tmpdir(), 'recoder-changes-'));
 	remote = join(base, 'remote.git');
 	repo = join(base, 'repo');
-	git(base, 'init', '-q', '--bare', '-b', 'feature', remote);
-	git(base, 'init', '-q', '-b', 'feature', repo);
+	git(base, ['init', '-q', '--bare', '-b', 'feature', remote]);
+	git(base, ['init', '-q', '-b', 'feature', repo]);
 	await writeFile(join(repo, 'a.ts'), 'a\n');
 	await writeFile(join(repo, 'b.ts'), 'b\n');
-	git(repo, 'add', '.');
-	git(repo, 'commit', '-q', '-m', 'init');
-	git(repo, 'remote', 'add', 'origin', remote);
-	git(repo, 'push', '-q', 'origin', 'feature');
+	git(repo, ['add', '.']);
+	git(repo, ['commit', '-q', '-m', 'init']);
+	git(repo, ['remote', 'add', 'origin', remote]);
+	git(repo, ['push', '-q', 'origin', 'feature']);
 });
 
 afterEach(async () => {
@@ -68,16 +52,16 @@ test('commits only the chosen files, with the message as written', async () => {
 
 	expect(pending.files.map((file) => file.path)).toEqual(['b.ts']);
 	expect(pending.commits.map((commit) => commit.subject)).toEqual(['Fix the thing']);
-	expect(git(repo, 'log', '-1', '--format=%B')).toBe('Fix the thing\n\nBecause reasons.');
+	expect(git(repo, ['log', '-1', '--format=%B'])).toBe('Fix the thing\n\nBecause reasons.');
 });
 
 test('nothing reaches the remote until push, and push clears the unpushed list', async () => {
 	await writeFile(join(repo, 'a.ts'), 'a2\n');
 	await commitPendingChanges(repo, ['a.ts'], 'Change a');
-	expect(git(remote, 'log', '-1', '--format=%s', 'feature')).toBe('init');
+	expect(git(remote, ['log', '-1', '--format=%s', 'feature'])).toBe('init');
 
 	await pushPendingCommits(repo, 'feature');
-	expect(git(remote, 'log', '-1', '--format=%s', 'feature')).toBe('Change a');
+	expect(git(remote, ['log', '-1', '--format=%s', 'feature'])).toBe('Change a');
 	expect((await listPendingChanges(repo)).commits).toEqual([]);
 });
 
@@ -111,7 +95,7 @@ test('paths outside the checkout are refused', () => {
 test('a checkout still being cloned lists no changes and refuses writes', async () => {
 	const cloning = join(base, 'cloning');
 
-	git(base, 'init', '-q', cloning);
+	git(base, ['init', '-q', cloning]);
 	await writeFile(join(cloning, 'a.ts'), 'a\n');
 	expect(await listPendingChanges(cloning)).toEqual({ files: [], commits: [] });
 	await expect(commitPendingChanges(cloning, ['a.ts'], 'x')).rejects.toThrow('still being prepared');

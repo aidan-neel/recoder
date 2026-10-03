@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { ModelBlockedError, ModelBudget, runJsonAgent } from '../../../src/review/pipeline/agent-loop';
 import { EvidenceStore } from '../../../src/evidence/evidence';
+import type { JsonAgentOptions } from '../../../src/review/pipeline/agent-loop/options';
 import { buildInventory } from '../../../src/review/pipeline/inventory';
 import { REVIEW_POLICY } from '../../../src/review/session/review-policy';
 import { parseSpecialistOutput, prematureSpecialistFinal } from '../../../src/review/pipeline/specialist';
@@ -23,6 +24,25 @@ const diff = Array.from(
 +new
 `
 ).join('');
+
+type SpecialistOutput = NonNullable<ReturnType<typeof parseSpecialistOutput>>;
+
+/** Specialist agent options with test defaults; each test overrides only what it is about. */
+function agentOptions(overrides: Partial<JsonAgentOptions<SpecialistOutput>> = {}): JsonAgentOptions<SpecialistOutput> {
+	return {
+		label: 'correctness',
+		system: '',
+		user: '',
+		config,
+		budget: new ModelBudget(),
+		evidence: new EvidenceStore(null, buildInventory(diff), 12000),
+		maxTurns: 10,
+		signal: new AbortController().signal,
+		deadlineAt: Date.now() + 300_000,
+		parse: parseSpecialistOutput,
+		...overrides
+	};
+}
 
 const request = (index: number) =>
 	JSON.stringify({ message: 'Inspecting related code.', actions: [{ action: 'readDiff', path: `file${index}.ts` }] });
@@ -53,21 +73,16 @@ test('a schema repair preserves all seven evidence rounds and the final result t
 
 	const tools: string[] = [];
 
-	const result = await runJsonAgent({
-		label: 'correctness',
-		system: '',
-		user: '',
-		config,
-		budget,
-		evidence,
-		maxTurns: 8,
-		signal: new AbortController().signal,
-		deadlineAt: Date.now() + 300_000,
-		parse: parseSpecialistOutput,
-		onTool: (tool) => {
-			if (tool.status === 'done') tools.push(tool.command);
-		}
-	});
+	const result = await runJsonAgent(
+		agentOptions({
+			budget,
+			evidence,
+			maxTurns: 8,
+			onTool: (tool) => {
+				if (tool.status === 'done') tools.push(tool.command);
+			}
+		})
+	);
 
 	expect(result.value?.findings).toEqual([]);
 	expect(calls).toBe(9);
@@ -88,18 +103,11 @@ test('commentary alone is not treated as completed review and can be repaired in
 	globalThis.fetch = (async () =>
 		Response.json({ choices: [{ message: { content: replies.shift() } }] })) as unknown as typeof fetch;
 
-	const result = await runJsonAgent({
-		label: 'correctness',
-		system: '',
-		user: '',
-		config,
-		budget: new ModelBudget(),
-		evidence: new EvidenceStore(null, buildInventory(diff), 12000),
-		maxTurns: 2,
-		signal: new AbortController().signal,
-		deadlineAt: Date.now() + 300_000,
-		parse: parseSpecialistOutput
-	});
+	const result = await runJsonAgent(
+		agentOptions({
+			maxTurns: 2
+		})
+	);
 
 	expect(result.value?.findings).toEqual([]);
 	expect(replies).toHaveLength(0);
@@ -117,18 +125,10 @@ test('retrieval cannot consume the consolidation reserve or bypass the deadline'
 
 	const budget = new ModelBudget(2, 1);
 
-	const options = {
-		label: 'correctness',
-		system: '',
-		user: '',
-		config,
+	const options = agentOptions({
 		budget,
-		evidence: new EvidenceStore(null, buildInventory(diff), 12000),
-		maxTurns: 8,
-		signal: new AbortController().signal,
-		deadlineAt: Date.now() + 300_000,
-		parse: parseSpecialistOutput
-	};
+		maxTurns: 8
+	});
 
 	const result = await runJsonAgent(options);
 
@@ -156,18 +156,13 @@ test('a spent hosted plan stops the review with an out-of-usage failure instead 
 		return new Response('{"error":{"message":"Monthly limit reached"}}', { status: 429 });
 	}) as unknown as typeof fetch;
 
-	const error = await runJsonAgent({
-		label: 'planner',
-		system: '',
-		user: '',
-		config: { ...config, source: 'opencode-go' },
-		budget: new ModelBudget(),
-		evidence: new EvidenceStore(null, buildInventory(diff), 12000),
-		maxTurns: 2,
-		signal: new AbortController().signal,
-		deadlineAt: Date.now() + 300_000,
-		parse: parseSpecialistOutput
-	}).catch((err: unknown) => err);
+	const error = await runJsonAgent(
+		agentOptions({
+			label: 'planner',
+			config: { ...config, source: 'opencode-go' },
+			maxTurns: 2
+		})
+	).catch((err: unknown) => err);
 
 	expect(error).toBeInstanceOf(ModelBlockedError);
 
@@ -195,22 +190,16 @@ test('a final answer that announces more work is sent back once instead of endin
 
 	const tools: string[] = [];
 
-	const result = await runJsonAgent({
-		label: 'patterns',
-		system: '',
-		user: '',
-		config,
-		budget: new ModelBudget(),
-		evidence: new EvidenceStore(null, buildInventory(diff), 12000),
-		maxTurns: 4,
-		signal: new AbortController().signal,
-		deadlineAt: Date.now() + 300_000,
-		parse: parseSpecialistOutput,
-		checkFinal: prematureSpecialistFinal,
-		onTool: (tool) => {
-			if (tool.status === 'done') tools.push(tool.command);
-		}
-	});
+	const result = await runJsonAgent(
+		agentOptions({
+			label: 'patterns',
+			maxTurns: 4,
+			checkFinal: prematureSpecialistFinal,
+			onTool: (tool) => {
+				if (tool.status === 'done') tools.push(tool.command);
+			}
+		})
+	);
 
 	expect(result.value?.message).toBe('Done.');
 	expect(tools).toHaveLength(1);
@@ -220,12 +209,14 @@ test('a final answer that announces more work is sent back once instead of endin
 test('an agent past its own time limit is given its final turn instead of more retrieval', async () => {
 	const prompts: string[] = [];
 
+	/** Each turn outlasts the 20ms after which the next turn must be the final one. */
+	const SLOW_TURN_MS = 30;
+
 	globalThis.fetch = (async (_url, init) => {
 		const body = JSON.parse(init?.body as string);
 
 		prompts.push(body.messages.at(-1).content);
-		// Each turn outlasts the 20ms after which the next turn must be the final one.
-		await Bun.sleep(30);
+		await Bun.sleep(SLOW_TURN_MS);
 
 		return Response.json({
 			choices: [
@@ -238,19 +229,12 @@ test('an agent past its own time limit is given its final turn instead of more r
 		});
 	}) as typeof fetch;
 
-	const result = await runJsonAgent({
-		label: 'verify',
-		system: '',
-		user: '',
-		config,
-		budget: new ModelBudget(),
-		evidence: new EvidenceStore(null, buildInventory(diff), 12000),
-		maxTurns: 10,
-		signal: new AbortController().signal,
-		deadlineAt: Date.now() + 300_000,
-		parse: parseSpecialistOutput,
-		timeLimit: { finalTurnAfterMs: 20, maxWallMs: 60_000 }
-	});
+	const result = await runJsonAgent(
+		agentOptions({
+			label: 'verify',
+			timeLimit: { finalTurnAfterMs: 20, maxWallMs: 60_000 }
+		})
+	);
 
 	expect(result.value?.message).toBe('Done.');
 	expect(prompts).toHaveLength(2);
@@ -277,18 +261,11 @@ test('an agent repeating a request that failed is given its final turn instead o
 		});
 	}) as typeof fetch;
 
-	const result = await runJsonAgent({
-		label: 'verify',
-		system: '',
-		user: '',
-		config,
-		budget: new ModelBudget(),
-		evidence: new EvidenceStore(null, buildInventory(diff), 12000),
-		maxTurns: 10,
-		signal: new AbortController().signal,
-		deadlineAt: Date.now() + 300_000,
-		parse: parseSpecialistOutput
-	});
+	const result = await runJsonAgent(
+		agentOptions({
+			label: 'verify'
+		})
+	);
 
 	expect(result.value?.message).toBe('Done.');
 	expect(prompts).toHaveLength(3);

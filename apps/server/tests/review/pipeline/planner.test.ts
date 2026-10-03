@@ -8,7 +8,7 @@ import {
 } from '../../../src/review/pipeline/planner';
 import { dispatchPolicy } from '../../../src/review/pipeline/dispatch';
 import type { ReviewDirective } from '../../../src/review/chat/directive';
-import { REVIEW_ROLES } from '../../../src/review/pipeline/roles';
+import { decisions } from './harness-fixtures';
 
 const DIFF = `diff --git a/src/a.ts b/src/a.ts
 --- a/src/a.ts
@@ -23,14 +23,6 @@ diff --git a/README.md b/README.md
 -old
 +new
 `;
-
-function decisions(selected: string[]) {
-	return REVIEW_ROLES.map((role) => ({
-		role,
-		decision: selected.includes(role) ? 'selected' : 'not_needed',
-		reason: selected.includes(role) ? 'needed' : 'not this PR'
-	}));
-}
 
 describe('planner validation', () => {
 	const inventory = buildInventory(DIFF);
@@ -185,6 +177,9 @@ describe('planner validation', () => {
 	});
 });
 
+/** The usual sweep group's file cap; a wide sweep takes up to 32. */
+const USUAL_SWEEP_FILES = 16;
+
 describe('planner coverage', () => {
 	const bigDiff = Array.from(
 		{ length: 30 },
@@ -258,8 +253,7 @@ describe('planner coverage', () => {
 		const sweeps = high.assignments.filter((a) => a.id.startsWith('sweep-'));
 
 		expect(sweeps.length).toBe(dispatchPolicy('high').maxSweepAssignments);
-		// Each sweep took the wide group (up to 32 files) rather than the usual 16.
-		expect(sweeps[0].scope.length).toBeGreaterThan(16);
+		expect(sweeps[0].scope.length).toBeGreaterThan(USUAL_SWEEP_FILES);
 
 		const read = new Set(
 			high.assignments.filter((a) => a.role === 'correctness').flatMap((a) => a.scope.flatMap((entry) => entry.hunkIds))

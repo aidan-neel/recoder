@@ -81,7 +81,7 @@ test('a directive marks the changed files it leaves out and drops includes that 
 	).toEqual({ excluded: 0, kept: 4, droppedIncludes: ['**/*.rs'] });
 });
 
-test('the model reading of the instructions is merged with the heuristic, and a failed call leaves the heuristic', async () => {
+test('the model reading of the instructions is merged with the heuristic, its excludes win, and a failed call leaves the heuristic', async () => {
 	const inventory = buildInventory(DIFF);
 	let prompt = '';
 
@@ -109,7 +109,6 @@ test('the model reading of the instructions is merged with the heuristic, and a 
 
 	expect(prompt).toContain('src/app.py');
 
-	// The exclude the model added wins over the same include from the heuristic.
 	expect(directive).toEqual({
 		instructions: 'only python and src, security and tests',
 		includeGlobs: ['**/*.pyi', 'src/**'],

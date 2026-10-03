@@ -158,7 +158,7 @@ describe('review settings', () => {
 		expect(configForRole('security').model).toBe('lead-model');
 	});
 
-	test('PUT stores config and GET masks the key', async () => {
+	test('PUT stores the model registry and GET masks the key', async () => {
 		isolateDataDir();
 
 		const put = await app.request('/api/settings/models', {
@@ -189,7 +189,6 @@ describe('review settings', () => {
 		expect(body.baseUrl).toBe('https://openrouter.ai/api/v1');
 		expect(body.model).toBe('qwen/qwen-2.5-coder-32b-instruct');
 
-		// The payload lists the agent's models; the HTTP registry stays in storage.
 		const stored = getStoredSettings().models ?? [];
 
 		expect(stored).toHaveLength(2);
@@ -225,7 +224,7 @@ describe('review settings', () => {
 		expect(effectiveReviewEnv().model).toBe('env-model');
 	});
 
-	test('codex subscription model is listed and selectable as shared', async () => {
+	test('codex subscription model is listed, selectable as shared, and stays selected beside an API model', async () => {
 		isolateDataDir();
 
 		const codexId = 'codex-shared-1';
@@ -250,7 +249,6 @@ describe('review settings', () => {
 		expect(saved.configured).toBe(true);
 		expect(isReviewConfigured()).toBe(true);
 
-		// Shared selection survives a round-trip and a second save alongside an API model.
 		const apiId = 'api-1';
 
 		const put2 = await app.request('/api/settings/models', {

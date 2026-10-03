@@ -13,6 +13,7 @@ import { codex } from '../../src/agents/codex/codex';
 import { ModelBudget, runJsonAgent } from '../../src/review/pipeline/agent-loop';
 import { EvidenceStore } from '../../src/evidence/evidence';
 import { buildInventory } from '../../src/review/pipeline/inventory';
+import { testReview } from '../helpers/review';
 
 const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();
@@ -35,30 +36,16 @@ const usage = {
 };
 
 function review(): Review {
-	const value: Review = {
-		id: crypto.randomUUID(),
-		repoId: 'missing-repo',
-		prNumber: 1,
-		headSha: 'head',
-		status: 'passed',
-		summary: null,
-		findings: [],
-		runs: [],
-		source: 'github',
-		prTitle: null,
-		prUrl: null,
-		createdAt: new Date().toISOString(),
-		updatedAt: new Date().toISOString()
-	};
+	const value = testReview({ repoId: 'missing-repo', headSha: 'head' });
 
 	ids.push(value.id);
 
 	return db.reviews.set(value);
 }
 
+/** closeStore() reopens SQLite from RECODER_DATA_DIR, so this file owns a temp data dir for its whole run. */
 const originalDataDir = process.env.RECODER_DATA_DIR;
 
-// closeStore() reopens SQLite from RECODER_DATA_DIR, so own it for the whole file.
 beforeAll(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-metrics-'));
 	closeStore();
@@ -370,14 +357,14 @@ test('interrupted calls keep reported usage durably and cannot recreate deleted 
 	expect(getReviewMetrics(a.id)).toBeNull();
 });
 
-test('metrics API distinguishes historical unavailable, tracked no requests, and nonexistent reviews', async () => {
+test('metrics API distinguishes untracked, tracked with no calls (a pipeline that failed before model work), and nonexistent reviews', async () => {
 	const a = review();
 	const response = await app.request(`/api/reviews/${a.id}/metrics`);
 
 	expect(response.status).toBe(200);
 	expect(response.headers.get('cache-control')).toBe('no-store');
 	expect(await response.json()).toBeNull();
-	await runReviewPipeline(a.id); // Missing repo fails before model work, but recording was initialized.
+	await runReviewPipeline(a.id);
 
 	const metrics = await (await app.request(`/api/reviews/${a.id}/metrics`)).json();
 

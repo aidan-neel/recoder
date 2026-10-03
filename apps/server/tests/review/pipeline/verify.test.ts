@@ -74,7 +74,6 @@ test('only a cited run can refute a finding', () => {
 		status: 'unverified'
 	});
 
-	// Reading alone never drops a finding: a misread would hide a real bug.
 	expect(
 		settleVerdict({ verdict: 'refuted', reason: 'Guarded above.', evidenceIds: ['ev_2'] }, evidence)
 	).toMatchObject({ status: 'unverified' });

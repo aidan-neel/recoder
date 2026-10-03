@@ -4,14 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseUnifiedDiff } from '@recoder/shared';
 import { prepareSandbox, sandboxDiff } from '../../src/sandbox/sandbox';
-
-function git(cwd: string, args: string[]): string {
-	const result = Bun.spawnSync(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' });
-
-	if (result.exitCode !== 0) throw new Error(result.stderr.toString());
-
-	return result.stdout.toString().trim();
-}
+import { git } from '../helpers/git';
 
 test('local review checks out PR refs and retains over 300 files and 200KB of diff', async () => {
 	const origin = await mkdtemp(join(tmpdir(), 'recoder-origin-'));

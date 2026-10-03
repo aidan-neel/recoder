@@ -9,7 +9,6 @@ test('review progress written moments ago survives the store closing before its 
 	const id = crypto.randomUUID();
 
 	reviewProgress.set({ ...emptyReviewProgress(id), sequence: 3, planSummary: 'two specialists' });
-	// Nothing has reached SQLite yet; closing must flush, and a fresh handle must read it back.
 	closeStore();
 	expect(reviewProgress.get(id)).toMatchObject({ sequence: 3, planSummary: 'two specialists' });
 	reviewProgress.delete(id);
@@ -22,8 +21,10 @@ test('a snapshot that fails to save does not crash the write-behind timer or hol
 	const bad = crypto.randomUUID();
 	const good = crypto.randomUUID();
 
-	// A BigInt can't be serialized, so this snapshot's write throws every time.
-	reviewProgress.set({ ...emptyReviewProgress(bad), sequence: 1n as unknown as number });
+	/** A BigInt can't be serialized, so this snapshot's write throws every time. */
+	const unsaveable = 1n as unknown as number;
+
+	reviewProgress.set({ ...emptyReviewProgress(bad), sequence: unsaveable });
 	reviewProgress.set({ ...emptyReviewProgress(good), sequence: 2 });
 	await Bun.sleep(1000);
 

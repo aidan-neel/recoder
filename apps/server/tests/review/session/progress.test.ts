@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import type { Review } from '@recoder/shared';
 import { app } from '../../../src/app';
 import { db, reviewProgress } from '../../../src/store';
 import {
@@ -16,6 +17,22 @@ import {
 	emptyReviewProgress,
 	taskSummary
 } from '../../../../web/src/lib/review/review-progress-state';
+import { testReview } from '../../helpers/review';
+
+/** Bun's fetch keeps the socket open after `reader.cancel()`, so aborting is what actually disconnects. */
+async function disconnect(controller: AbortController): Promise<void> {
+	controller.abort();
+	await new Promise((resolve) => setTimeout(resolve, 20));
+}
+
+/** Stores a running GitHub review titled `prTitle` and returns it. */
+function storeRunningReview(prTitle: string): Review {
+	const review = testReview({ headSha: 'abc', status: 'running', prTitle });
+
+	db.reviews.set(review);
+
+	return review;
+}
 
 test('streamed traces match persisted reconnect snapshots and keep assignment ownership', () => {
 	const id = crypto.randomUUID();
@@ -65,26 +82,8 @@ test('streamed traces match persisted reconnect snapshots and keep assignment ow
 });
 
 test('terminal SSE delivers final findings and stays connected for subsequent conversation', async () => {
-	const id = crypto.randomUUID();
-	const now = new Date().toISOString();
-
-	const review = {
-		id,
-		repoId: 'test',
-		prNumber: 1,
-		headSha: 'abc',
-		status: 'running' as const,
-		summary: null,
-		findings: [],
-		runs: [],
-		source: 'github' as const,
-		prTitle: 'Test',
-		prUrl: null,
-		createdAt: now,
-		updatedAt: now
-	};
-
-	db.reviews.set(review);
+	const review = storeRunningReview('Test');
+	const { id } = review;
 
 	const response = await app.request(`/api/reviews/${id}/events`);
 	const reader = response.body!.getReader();
@@ -123,7 +122,7 @@ test('terminal SSE delivers final findings and stays connected for subsequent co
 				assignmentId: '__pipeline',
 				from: 'assistant',
 				text: 'Follow-up answer',
-				at: now,
+				at: review.updatedAt,
 				status: 'done'
 			}
 		}
@@ -152,24 +151,7 @@ test('task snapshots retain early completions after event history overflows', ()
 });
 
 test('reconnecting starts with a complete snapshot and cancelling unsubscribes', async () => {
-	const id = crypto.randomUUID();
-	const now = new Date().toISOString();
-
-	db.reviews.set({
-		id,
-		repoId: 'test',
-		prNumber: 1,
-		headSha: 'abc',
-		status: 'running',
-		summary: null,
-		findings: [],
-		runs: [],
-		source: 'github',
-		prTitle: 'Test',
-		prUrl: null,
-		createdAt: now,
-		updatedAt: now
-	});
+	const { id } = storeRunningReview('Test');
 
 	reportReviewTask(id, { id: 'fetch', label: 'Metadata', status: 'done', message: 'Fetched' });
 
@@ -202,26 +184,8 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 });
 
 test('a real HTTP subscription survives idle periods and still delivers review and chat updates', async () => {
-	const id = crypto.randomUUID();
-	const now = new Date().toISOString();
-
-	const review = {
-		id,
-		repoId: 'test',
-		prNumber: 1,
-		headSha: 'abc',
-		status: 'running' as const,
-		summary: null,
-		findings: [],
-		runs: [],
-		source: 'github' as const,
-		prTitle: 'SSE liveness',
-		prUrl: null,
-		createdAt: now,
-		updatedAt: now
-	};
-
-	db.reviews.set(review);
+	const review = storeRunningReview('SSE liveness');
+	const { id } = review;
 
 	const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: app.fetch });
 	const controller = new AbortController();
@@ -260,16 +224,14 @@ test('a real HTTP subscription survives idle periods and still delivers review a
 					assignmentId: '__pipeline',
 					from: 'assistant',
 					text: 'Still connected.',
-					at: now,
+					at: review.updatedAt,
 					status: 'done'
 				}
 			}
 		});
 
 		expect((await read()).data.chatMessage.text).toBe('Still connected.');
-		// Bun's fetch keeps the socket open after reader.cancel(); abort to actually disconnect.
-		controller.abort();
-		await new Promise((resolve) => setTimeout(resolve, 20));
+		await disconnect(controller);
 		expect(listenerCount(id)).toBe(0);
 	} finally {
 		controller.abort();

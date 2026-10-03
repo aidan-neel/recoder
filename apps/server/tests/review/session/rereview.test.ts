@@ -90,7 +90,6 @@ test('runRereview answers each note and maps new findings', async () => {
 		agent: 'orchestrator'
 	});
 
-	// The richer selection context reaches the model.
 	expect(captured).toContain('Original code:');
 	expect(captured).toContain('const x = 1;');
 	expect(captured).toContain('Should this be a named constant?');

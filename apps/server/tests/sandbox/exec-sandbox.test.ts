@@ -4,8 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execUnavailableReason, runSandboxed, sandboxLayout, type SandboxLayout } from '../../src/sandbox/exec-sandbox';
 
-// Outside /tmp on purpose: the sandbox's /tmp is always a fresh tmpfs, which
-// would hide these directories whether or not the layout does its job.
+/** Test dirs sit outside /tmp: the sandbox's /tmp is always a fresh tmpfs, hiding them whether or not the layout works. */
 let base = '';
 let layout: SandboxLayout;
 const available = (await execUnavailableReason()) === null;
@@ -75,9 +74,8 @@ test.skipIf(!available)('a timed-out command is killed along with its background
 });
 
 test.skipIf(!available)(
-	'a command that leaves a child in its own session holding the output pipe still returns',
+	'a command whose setsid child escapes the group kill and holds the output pipe still returns',
 	async () => {
-		// The child calls setsid, so the timeout's process-group kill can't reach it, and it keeps stdout open.
 		const marker = 40_000 + Math.floor(Math.random() * 1000);
 		const started = Date.now();
 

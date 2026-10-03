@@ -6,6 +6,8 @@ import { discussionContext, startReviewChat, stopReviewChat } from '../../../src
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { subscribeReview, clearReviewEvents, reviewEventBuffer } from '../../../src/review/session/events';
 import { applyProgressMessage } from '../../../../web/src/lib/review/review-progress-state';
+import { fetchUntilAborted } from '../../helpers/fetch';
+import { testReview } from '../../helpers/review';
 
 const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();
@@ -26,23 +28,7 @@ function setup() {
 
 	ids.push(id);
 
-	const at = new Date().toISOString();
-
-	db.reviews.set({
-		id,
-		repoId: 'test',
-		prNumber: 1,
-		headSha: 'abc',
-		status: 'passed',
-		summary: 'Done',
-		findings: [],
-		runs: [],
-		source: 'github',
-		prTitle: 'Review',
-		prUrl: null,
-		createdAt: at,
-		updatedAt: at
-	});
+	db.reviews.set(testReview({ id, headSha: 'abc', summary: 'Done', prTitle: 'Review' }));
 
 	reviewProgress.set({
 		...emptyReviewProgress(id),
@@ -142,13 +128,7 @@ test('specialist chat streams, persists, and is visible in subsequent orchestrat
 test('unknown targets are rejected and duplicate sends are blocked until stop settles', async () => {
 	const id = setup();
 
-	globalThis.fetch = (async (_url, init) => {
-		await new Promise((_resolve, reject) =>
-			init?.signal?.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
-		);
-
-		return new Response();
-	}) as typeof fetch;
+	globalThis.fetch = fetchUntilAborted;
 
 	const bad = await app.request(`/api/reviews/${id}/chat`, {
 		method: 'POST',

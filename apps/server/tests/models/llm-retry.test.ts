@@ -3,12 +3,12 @@ import { chatCompletion, isTransientLlmError, LlmError } from '../../src/models/
 
 let hits = 0;
 
+/** Drops the socket on the first two requests, like a restarting vLLM would. */
 const server = Bun.serve({
 	port: 0,
 	fetch(req, srv) {
 		hits++;
 
-		// First two requests: drop the socket like a restarting vLLM would.
 		if (hits <= 2) {
 			srv.requestIP(req);
 			throw new Error('drop');
@@ -64,6 +64,18 @@ test('classifies which errors are worth retrying', () => {
 	expect(isTransientLlmError(new LlmError(0, 'ChatGPT request timed out.'), 'codex')).toBe(false);
 });
 
+/** One chunk of reasoning, then nothing: the socket stays open. */
+function silentStream(): Response {
+	return new Response(
+		new ReadableStream({
+			start(c) {
+				c.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\n\n'));
+			}
+		}),
+		{ headers: { 'content-type': 'text/event-stream' } }
+	);
+}
+
 test('a stream that goes silent is cut off and retried instead of hanging', async () => {
 	let calls = 0;
 
@@ -72,17 +84,7 @@ test('a stream that goes silent is cut off and retried instead of hanging', asyn
 		fetch() {
 			calls++;
 
-			if (calls === 1) {
-				// One chunk of reasoning, then nothing: the socket stays open.
-				return new Response(
-					new ReadableStream({
-						start(c) {
-							c.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"reasoning_content":"thinking"}}]}\n\n'));
-						}
-					}),
-					{ headers: { 'content-type': 'text/event-stream' } }
-				);
-			}
+			if (calls === 1) return silentStream();
 
 			return Response.json({ choices: [{ message: { content: 'done' }, finish_reason: 'stop' }] });
 		}

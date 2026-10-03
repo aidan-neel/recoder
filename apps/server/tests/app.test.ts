@@ -6,16 +6,27 @@ import { app } from '../src/app';
 import { db, reviewDiffs, reviewSandboxes } from '../src/store';
 import { createReviewSession } from '../src/commands/pipeline';
 
-// Never touch the real data dir (recoder.db) from tests.
 process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-test-'));
+
+/** POSTs `body` to `path` on the app as JSON. */
+async function postJson(path: string, body: unknown): Promise<Response> {
+	return app.request(path, {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify(body)
+	});
+}
+
+/** Adds a repo named `name` at `url` and requests a review of PR `prNumber` on it, returning the review response. */
+async function requestReview(name: string, url: string, prNumber: number): Promise<Response> {
+	const repo = await (await postJson('/api/repos', { name, url })).json();
+
+	return postJson('/api/reviews', { repoId: repo.id, prNumber });
+}
 
 describe('repos', () => {
 	test('CRUD round-trip', async () => {
-		const created = await app.request('/api/repos', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ name: 'demo', url: 'https://github.com/example/demo' })
-		});
+		const created = await postJson('/api/repos', { name: 'demo', url: 'https://github.com/example/demo' });
 
 		expect(created.status).toBe(201);
 
@@ -48,13 +59,9 @@ test('a fix request with no model set up says so instead of a 500', async () => 
 
 	reviewDiffs.set(review.id, 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b\n');
 
-	const res = await app.request(`/api/reviews/${review.id}/fixes/suggest`, {
-		method: 'POST',
-		headers: { 'content-type': 'application/json' },
-		body: JSON.stringify({
-			agent: 'correctness',
-			finding: { file: 'x.ts', line: 1, endLine: 1, severity: 'error', message: 'bug' }
-		})
+	const res = await postJson(`/api/reviews/${review.id}/fixes/suggest`, {
+		agent: 'correctness',
+		finding: { file: 'x.ts', line: 1, endLine: 1, severity: 'error', message: 'bug' }
 	});
 
 	expect(res.status).toBe(409);
@@ -85,19 +92,7 @@ describe('reviews + command runner', () => {
 		delete process.env.RECODER_REVIEW_MODEL;
 
 		try {
-			const createdRepo = await app.request('/api/repos', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ name: 'demo-nomodel', url: 'https://github.com/example/demo' })
-			});
-
-			const repo = await createdRepo.json();
-
-			const res = await app.request('/api/reviews', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ repoId: repo.id, prNumber: 1 })
-			});
+			const res = await requestReview('demo-nomodel', 'https://github.com/example/demo', 1);
 
 			expect(res.status).toBe(400);
 			expect((await res.json()).error).toMatch(/reviewer not configured/);
@@ -109,19 +104,7 @@ describe('reviews + command runner', () => {
 	});
 
 	test('POST /api/reviews queues a review and provider fetch failures fail instead of stub-succeeding', async () => {
-		const createdRepo = await app.request('/api/repos', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ name: 'demo', url: 'https://github.com/example/demo' })
-		});
-
-		const repo = await createdRepo.json();
-
-		const createdReview = await app.request('/api/reviews', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ repoId: repo.id, prNumber: 42 })
-		});
+		const createdReview = await requestReview('demo', 'https://github.com/example/demo', 42);
 
 		expect(createdReview.status).toBe(201);
 
@@ -145,19 +128,7 @@ describe('reviews + command runner', () => {
 	});
 
 	test('DELETE /api/reviews/:id removes the review and its diff', async () => {
-		const createdRepo = await app.request('/api/repos', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ name: 'demo-delete', url: 'https://github.com/example/demo-delete' })
-		});
-
-		const repo = await createdRepo.json();
-
-		const createdReview = await app.request('/api/reviews', {
-			method: 'POST',
-			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ repoId: repo.id, prNumber: 9 })
-		});
+		const createdReview = await requestReview('demo-delete', 'https://github.com/example/demo-delete', 9);
 
 		const review = await createdReview.json();
 
@@ -200,20 +171,9 @@ describe('reviews + command runner', () => {
 			question: 'Is this reachable?'
 		});
 
+		/** A review with a diff and a real checkout of the PR head, so fixes are built against the file. */
 		async function seedReviewWithDiff(): Promise<string> {
-			const createdRepo = await app.request('/api/repos', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ name: 'demo-discuss', url: 'https://github.com/example/demo' })
-			});
-
-			const repo = await createdRepo.json();
-
-			const createdReview = await app.request('/api/reviews', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ repoId: repo.id, prNumber: 7 })
-			});
+			const createdReview = await requestReview('demo-discuss', 'https://github.com/example/demo', 7);
 
 			const review = await createdReview.json();
 
@@ -222,7 +182,6 @@ describe('reviews + command runner', () => {
 				'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,3 +1,4 @@\n ctx\n-old\n+new\n tail'
 			);
 
-			// A real checkout of the PR head, so fixes are built against the file.
 			const checkout = mkdtempSync(join(tmpdir(), 'recoder-fix-checkout-'));
 
 			Bun.spawnSync(['git', 'init', '-q'], { cwd: checkout });
@@ -232,30 +191,13 @@ describe('reviews + command runner', () => {
 			return review.id;
 		}
 
-		test('409 without a fetched diff', async () => {
-			const createdRepo = await app.request('/api/repos', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ name: 'demo-nodiff', url: 'https://github.com/example/demo' })
-			});
-
-			const repo = await createdRepo.json();
-
-			const createdReview = await app.request('/api/reviews', {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify({ repoId: repo.id, prNumber: 8 })
-			});
+		test('409 without a fetched diff, or a model answer if the diff lands first', async () => {
+			const createdReview = await requestReview('demo-nodiff', 'https://github.com/example/demo', 8);
 
 			const review = await createdReview.json();
 
-			const res = await app.request(`/api/reviews/${review.id}/discuss`, {
-				method: 'POST',
-				headers: { 'content-type': 'application/json' },
-				body: JSON.stringify(body())
-			});
+			const res = await postJson(`/api/reviews/${review.id}/discuss`, body());
 
-			// Diff may or may not have arrived yet; either no-diff or a model answer.
 			expect([409, 200, 502]).toContain(res.status);
 		});
 
@@ -268,11 +210,7 @@ describe('reviews + command runner', () => {
 			try {
 				const id = await seedReviewWithDiff();
 
-				const res = await app.request(`/api/reviews/${id}/discuss`, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(body())
-				});
+				const res = await postJson(`/api/reviews/${id}/discuss`, body());
 
 				expect(res.status).toBe(200);
 
@@ -309,11 +247,7 @@ describe('reviews + command runner', () => {
 			try {
 				const id = await seedReviewWithDiff();
 
-				const res = await app.request(`/api/reviews/${id}/discuss/stream`, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(body())
-				});
+				const res = await postJson(`/api/reviews/${id}/discuss/stream`, body());
 
 				expect(res.status).toBe(200);
 				expect(res.headers.get('content-type')).toContain('text/event-stream');
@@ -352,11 +286,7 @@ describe('reviews + command runner', () => {
 			try {
 				const id = await seedReviewWithDiff();
 
-				const res = await app.request(`/api/reviews/${id}/fixes/suggest`, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(body())
-				});
+				const res = await postJson(`/api/reviews/${id}/fixes/suggest`, body());
 
 				expect(res.status).toBe(200);
 
@@ -386,11 +316,7 @@ describe('reviews + command runner', () => {
 			try {
 				const id = await seedReviewWithDiff();
 
-				const res = await app.request(`/api/reviews/${id}/fixes/suggest`, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(body())
-				});
+				const res = await postJson(`/api/reviews/${id}/fixes/suggest`, body());
 
 				expect(res.status).toBe(502);
 			} finally {
@@ -410,11 +336,7 @@ describe('reviews + command runner', () => {
 			try {
 				const id = await seedReviewWithDiff();
 
-				const res = await app.request(`/api/reviews/${id}/discuss`, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify({ ...body(), agent: 'not-a-role' })
-				});
+				const res = await postJson(`/api/reviews/${id}/discuss`, { ...body(), agent: 'not-a-role' });
 
 				const answer = await res.json();
 
@@ -446,11 +368,7 @@ describe('reviews + command runner', () => {
 
 				db.reviews.set({ ...db.reviews.get(id)!, source: 'stub' });
 
-				const res = await app.request(`/api/reviews/${id}/fixes/apply`, {
-					method: 'POST',
-					headers: { 'content-type': 'application/json' },
-					body: JSON.stringify(applyBody())
-				});
+				const res = await postJson(`/api/reviews/${id}/fixes/apply`, applyBody());
 
 				expect(res.status).toBe(409);
 			});

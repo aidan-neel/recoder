@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fetchPullRequest, GhError, listPullRequests, parseRepoSlug } from '../../src/forge/gh';
 import { extractJson } from '../../src/forge/gh';
+import { fakeBin } from '../helpers/fake-bin';
 
 const VIEW_JSON =
 	'{"number":7,"title":"Fix it","url":"https://github.com/o/r/pull/7",' +
@@ -12,16 +13,6 @@ const VIEW_JSON =
 	'"createdAt":"2026-08-30T12:00:00Z"}';
 
 const DIFF = 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1 +1 @@\n-old\n+new';
-
-/** PATH shim dir with a fake `gh`. Passed explicitly — Bun ignores process.env PATH mutation. */
-async function fakeBin(script: string): Promise<{ env: Record<string, string> }> {
-	const dir = await mkdtemp(join(tmpdir(), 'fakebin-'));
-
-	await writeFile(join(dir, 'gh'), script);
-	await chmod(join(dir, 'gh'), 0o755);
-
-	return { env: { PATH: `${dir}:${process.env.PATH ?? ''}` } };
-}
 
 describe('parseRepoSlug', () => {
 	test('parses https, ssh, and bare slugs', () => {
@@ -39,6 +30,7 @@ describe('parseRepoSlug', () => {
 describe('fetchPullRequest', () => {
 	test('metadata-only reviews never request the size-limited diff', async () => {
 		const opts = await fakeBin(
+			'gh',
 			`#!/bin/sh\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then echo '${VIEW_JSON}'; exit 0; fi\necho 'HTTP 406: diff too large' >&2; exit 1\n`
 		);
 
@@ -50,6 +42,7 @@ describe('fetchPullRequest', () => {
 
 	test('returns metadata + diff via gh', async () => {
 		const opts = await fakeBin(
+			'gh',
 			`#!/bin/sh\nif [ "$1" = "pr" ] && [ "$2" = "view" ]; then echo '${VIEW_JSON}'; exit 0; fi\n` +
 				`if [ "$1" = "pr" ] && [ "$2" = "diff" ]; then printf '%s\\n' '${DIFF}'; exit 0; fi\n` +
 				`echo 'unexpected' >&2; exit 1\n`
@@ -66,7 +59,7 @@ describe('fetchPullRequest', () => {
 	});
 
 	test('classifies missing PRs as not-found', async () => {
-		const opts = await fakeBin(`#!/bin/sh\necho 'no pull requests found' >&2\nexit 1\n`);
+		const opts = await fakeBin('gh', `#!/bin/sh\necho 'no pull requests found' >&2\nexit 1\n`);
 		const err = await fetchPullRequest('o/r', 9, opts).catch((e) => e);
 
 		expect(err).toBeInstanceOf(GhError);
@@ -94,7 +87,7 @@ describe('listPullRequests', () => {
 		'"createdAt":"2026-08-29T09:00:00Z"}]';
 
 	test('returns open PRs via gh pr list', async () => {
-		const opts = await fakeBin(`#!/bin/sh\necho '${LIST_JSON}'; exit 0\n`);
+		const opts = await fakeBin('gh', `#!/bin/sh\necho '${LIST_JSON}'; exit 0\n`);
 		const prs = await listPullRequests('https://github.com/o/r', opts);
 
 		expect(prs).toHaveLength(2);
@@ -106,7 +99,7 @@ describe('listPullRequests', () => {
 	});
 
 	test('rejects non-array output', async () => {
-		const opts = await fakeBin(`#!/bin/sh\necho '{"number":7}'; exit 0\n`);
+		const opts = await fakeBin('gh', `#!/bin/sh\necho '{"number":7}'; exit 0\n`);
 		const err = await listPullRequests('o/r', opts).catch((e) => e);
 
 		expect(err).toBeInstanceOf(GhError);

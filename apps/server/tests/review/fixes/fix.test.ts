@@ -115,7 +115,6 @@ describe('fix edits', () => {
 			message: 'x should be 2'
 		});
 
-		// Built when line 1 still said `const x = 1;`; the edit only touches line 2.
 		const edits = [{ file: 'a.ts', find: 'console.log(x);', replace: 'console.info(x);' }];
 
 		await applyFixCommit({

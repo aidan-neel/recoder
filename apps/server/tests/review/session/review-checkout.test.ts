@@ -9,6 +9,7 @@ import {
 	findReviewCheckout,
 	reviewCheckoutPath
 } from '../../../src/review/session/review-checkout';
+import { testReview } from '../../helpers/review';
 
 const cleanup: (() => Promise<void> | void)[] = [];
 
@@ -25,21 +26,7 @@ function fixture(source: Review['source'] = 'github'): { review: Review; repo: R
 		updatedAt: now
 	});
 
-	const review = db.reviews.set({
-		id: crypto.randomUUID(),
-		repoId: repo.id,
-		prNumber: 7,
-		headSha: 'head',
-		status: 'passed',
-		summary: null,
-		findings: [],
-		runs: [],
-		source,
-		prTitle: null,
-		prUrl: null,
-		createdAt: now,
-		updatedAt: now
-	});
+	const review = db.reviews.set(testReview({ repoId: repo.id, prNumber: 7, headSha: 'head', source }));
 
 	cleanup.push(() => {
 		db.reviews.delete(review.id);
@@ -62,7 +49,7 @@ test('finds the checkout the pipeline left on disk after the in-memory registry 
 	await mkdir(join(path, '.git'), { recursive: true });
 	cleanup.push(() => rm(path, { recursive: true, force: true }));
 
-	reviewSandboxes.delete(review.id); // a server restart
+	reviewSandboxes.delete(review.id);
 	expect(await findReviewCheckout(review)).toBe(path);
 	expect(reviewSandboxes.get(review.id)).toBe(path);
 	expect(await ensureReviewCheckout(review)).toBe(path);

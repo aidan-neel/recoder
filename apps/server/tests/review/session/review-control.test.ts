@@ -23,7 +23,6 @@ test('pause holds model calls and stops the review clock; resume releases both',
 
 		await Bun.sleep(150);
 		expect(passed).toBe(false);
-		// Paused time does not count against deadlines.
 		expect(reviewNow() - before).toBeLessThan(50);
 		expect(control.resume()).toBe(true);
 		await gate;

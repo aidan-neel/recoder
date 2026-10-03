@@ -44,14 +44,13 @@ const CATALOG = [
 ];
 
 describe('normalizeProviders', () => {
-	test('classifies how each provider is connected and never copies keys', () => {
+	test('classifies how each provider is connected, includes config-only providers and never copies keys', () => {
 		const list = normalizeProviders(CATALOG, CONFIG_PROVIDERS, AUTH);
 		const by = Object.fromEntries(list.map((p) => [p.id, p]));
 
 		expect(by.openrouter).toMatchObject({ connected: true, via: 'key', removable: true, modelCount: 1 });
 		expect(by.openai).toMatchObject({ connected: true, via: 'oauth', removable: true });
 		expect(by.opencode).toMatchObject({ connected: true, via: 'builtin', removable: false });
-		// Config-only providers show up even though the catalog lacks them.
 		expect(by.local).toMatchObject({ connected: true, via: 'config', removable: false, name: 'Local box' });
 		expect(by.xai).toMatchObject({ connected: false, via: null, modelCount: 9 });
 		expect(JSON.stringify(list)).not.toContain('sk-or-secret');

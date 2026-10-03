@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
-import type { HomeBriefRequest, Review } from '@recoder/shared';
-import { cleanBrief, clearHomeBriefCache, homeBrief, latestReviews } from '../../src/home/home-brief';
+import type { HomeBriefRequest } from '@recoder/shared';
+import { cleanBrief, clearHomeBriefCache, homeBrief } from '../../src/home/home-brief';
 import { setReviewOverrides } from '../../src/review/session/review-settings';
 
 const realFetch = globalThis.fetch;
@@ -13,25 +13,6 @@ afterEach(() => {
 
 const NOW = Date.parse('2026-09-22T19:30:00Z');
 const hoursAgo = (h: number) => new Date(NOW - h * 3_600_000).toISOString();
-
-function review(partial: Partial<Review>): Review {
-	return {
-		id: crypto.randomUUID(),
-		repoId: 'r1',
-		prNumber: 88,
-		headSha: 'x',
-		status: 'passed',
-		summary: null,
-		findings: [],
-		runs: [],
-		source: 'github',
-		prTitle: null,
-		prUrl: null,
-		createdAt: hoursAgo(20),
-		updatedAt: hoursAgo(20),
-		...partial
-	};
-}
 
 const input: HomeBriefRequest = {
 	name: 'Aidan',
@@ -61,18 +42,11 @@ const input: HomeBriefRequest = {
 	emptyRepos: ['aidan-neel/skills']
 };
 
-test('a real review outranks a newer empty draft', () => {
-	const done = review({ status: 'passed', updatedAt: hoursAgo(10) });
-	const draft = review({ status: 'draft', updatedAt: hoursAgo(1) });
-
-	expect(latestReviews([done, draft]).get('r1#88')?.id).toBe(done.id);
-});
-
 test('model output is trimmed to the brief', () => {
 	expect(cleanBrief('Brief: "**Evening.** Two PRs\n are open."')).toBe('**Evening.** Two PRs are open.');
 });
 
-test('the brief uses the orchestrator model, drops its greeting and is kept across fact changes', async () => {
+test('the brief uses the orchestrator model, drops the greeting the page adds itself, and is kept 12 hours across fact changes', async () => {
 	setReviewOverrides({
 		baseUrl: 'http://model.test/v1',
 		apiKey: 'k',
@@ -89,10 +63,8 @@ test('the brief uses the orchestrator model, drops its greeting and is kept acro
 	}) as unknown as typeof fetch;
 
 	const first = await homeBrief(input, []);
-	// A PR opening changes the facts but not the brief: it is kept for 12 hours.
 	const second = await homeBrief({ ...input, prs: [] }, []);
 
-	// The page adds its own greeting, so the model's is dropped.
 	expect(first.text).toBe('Two PRs are open.');
 	expect(first.model).toBe('orch-model');
 	expect(second).toEqual(first);

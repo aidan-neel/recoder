@@ -158,8 +158,11 @@ describe('llm concurrency limiter', () => {
 		const result = chatCompletion({ ...options, signal: controller.signal });
 
 		await ready;
-		// Let the response hand its reader to the stream parser before cancelling.
-		await new Promise((resolve) => setTimeout(resolve, 0));
+
+		/** One macrotask, so the response hands its reader to the stream parser before the cancel. */
+		const readerHandedOff = new Promise((resolve) => setTimeout(resolve, 0));
+
+		await readerHandedOff;
 		controller.abort();
 		await expect(result).rejects.toThrow('cancelled');
 		expect(cancelled).toBe(true);
@@ -180,9 +183,7 @@ describe('hung model calls', () => {
 		delete process.env.RECODER_LLM_CONCURRENCY;
 	});
 
-	// A request stuck below the abort (a half-dead socket) must still end at its
-	// deadline and give its slot back, or the review waits on it forever.
-	test('a request that ignores abort still times out and frees its slot', async () => {
+	test('a request stuck below the abort (a half-dead socket) still times out and frees its slot', async () => {
 		process.env.RECODER_LLM_CONCURRENCY = '1';
 		globalThis.fetch = (() => new Promise(() => {})) as unknown as typeof fetch;
 

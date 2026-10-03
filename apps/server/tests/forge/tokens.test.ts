@@ -10,11 +10,13 @@ beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-tokens-'));
 });
 
-// The last test points RECODER_DATA_DIR at a file; don't leak that into later test files.
-afterAll(() => {
+/** The last test points RECODER_DATA_DIR at a file; this keeps it from leaking into later test files. */
+function restoreDataDir(): void {
 	if (originalDataDir === undefined) delete process.env.RECODER_DATA_DIR;
 	else process.env.RECODER_DATA_DIR = originalDataDir;
-});
+}
+
+afterAll(restoreDataDir);
 
 test('saving another provider preserves tokens not loaded in memory', () => {
 	const file = join(process.env.RECODER_DATA_DIR!, 'tokens.json');
@@ -44,7 +46,8 @@ test('credentials survive a fresh process launched from another directory', () =
 	expect(result.stdout.toString().trim()).toBe('restart-token');
 });
 
-test('falls back to the legacy CWD-relative tokens file', () => {
+/** Runs `fn` from a temp working directory holding a legacy `data/tokens.json` with a GitHub token. */
+function inLegacyCwd(fn: () => void): void {
 	const cwd = process.cwd();
 	const legacy = mkdtempSync(join(tmpdir(), 'recoder-legacy-'));
 
@@ -53,28 +56,28 @@ test('falls back to the legacy CWD-relative tokens file', () => {
 	process.chdir(legacy);
 
 	try {
-		expect(hasToken('github')).toBe(true);
-		expect(tokenEnv('github')).toEqual({ GH_TOKEN: 'legacy' });
+		fn();
 	} finally {
 		process.chdir(cwd);
+	}
+}
+
+test('falls back to the legacy CWD-relative tokens file', () => {
+	try {
+		inLegacyCwd(() => {
+			expect(hasToken('github')).toBe(true);
+			expect(tokenEnv('github')).toEqual({ GH_TOKEN: 'legacy' });
+		});
+	} finally {
 		clearToken('github');
 	}
 });
 
 test('disconnect does not resurrect legacy credentials', () => {
-	const cwd = process.cwd();
-	const legacy = mkdtempSync(join(tmpdir(), 'recoder-legacy-'));
-
-	mkdirSync(join(legacy, 'data'));
-	writeFileSync(join(legacy, 'data', 'tokens.json'), '{"github":"legacy"}');
-	process.chdir(legacy);
-
-	try {
+	inLegacyCwd(() => {
 		clearToken('github');
 		expect(JSON.parse(readFileSync(join(process.env.RECODER_DATA_DIR!, 'tokens.json'), 'utf8'))).toEqual({});
-	} finally {
-		process.chdir(cwd);
-	}
+	});
 });
 
 test('failed writes and invalid stored data are not reported as successful saves', () => {

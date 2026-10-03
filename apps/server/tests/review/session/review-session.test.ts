@@ -12,6 +12,7 @@ import {
 	stopReviewChat
 } from '../../../src/review/chat/review-chat';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
+import { fetchUntilAborted } from '../../helpers/fetch';
 
 const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();
@@ -74,6 +75,22 @@ function settled(id: string) {
 				const message = event.data?.chatMessage as { from: string; status: string } | undefined;
 
 				if (message?.from === 'assistant' && message.status !== 'streaming') {
+					off();
+					resolve();
+				}
+			},
+			false
+		);
+	});
+}
+
+/** Resolves on the review's first error event that isn't tied to a step, which ends a failed run. */
+function terminalError(reviewId: string): Promise<void> {
+	return new Promise((resolve) => {
+		const off = subscribeReview(
+			reviewId,
+			(event) => {
+				if (event.type === 'error' && !event.step) {
 					off();
 					resolve();
 				}
@@ -175,18 +192,7 @@ test('SSE announces the transition from an empty draft to a queued review', asyn
 
 		expect(decode(first.value!).review.status).toBe('draft');
 
-		const terminal = new Promise<void>((resolve) => {
-			const off = subscribeReview(
-				review.id,
-				(event) => {
-					if (event.type === 'error' && !event.step) {
-						off();
-						resolve();
-					}
-				},
-				false
-			);
-		});
+		const terminal = terminalError(review.id);
 
 		startReviewSession(review.id);
 
@@ -203,7 +209,6 @@ test('SSE announces the transition from an empty draft to a queued review', asyn
 test('an orchestrator start decision launches once in the same session and retains developer direction', async () => {
 	const review = draft();
 
-	// Fail before provider I/O; the transition itself must be a real pipeline launch.
 	db.repos.delete(review.repoId);
 
 	globalThis.fetch = (async () =>
@@ -220,18 +225,7 @@ test('an orchestrator start decision launches once in the same session and retai
 			]
 		})) as unknown as typeof fetch;
 
-	const terminal = new Promise<void>((resolve) => {
-		const off = subscribeReview(
-			review.id,
-			(event) => {
-				if (event.type === 'error' && !event.step) {
-					off();
-					resolve();
-				}
-			},
-			false
-		);
-	});
+	const terminal = terminalError(review.id);
 
 	startReviewChat(review.id, ORCHESTRATOR_ID, 'Missing tests worry me. Ready when you are.');
 	await terminal;
@@ -267,18 +261,7 @@ test('a plain request to review starts the review without asking the model, and 
 		});
 	}) as unknown as typeof fetch;
 
-	const terminal = new Promise<void>((resolve) => {
-		const off = subscribeReview(
-			review.id,
-			(event) => {
-				if (event.type === 'error' && !event.step) {
-					off();
-					resolve();
-				}
-			},
-			false
-		);
-	});
+	const terminal = terminalError(review.id);
 
 	startReviewChat(review.id, ORCHESTRATOR_ID, 'review only the python files please');
 	await terminal;
@@ -350,13 +333,7 @@ test('invalid draft decisions do not launch analysis or expose raw JSON in chat'
 test('stopping an initial prompt leaves the session unstarted and retryable', async () => {
 	const review = draft();
 
-	globalThis.fetch = (async (_url, init) => {
-		await new Promise((_resolve, reject) =>
-			init?.signal?.addEventListener('abort', () => reject(new Error('cancelled')), { once: true })
-		);
-
-		return new Response();
-	}) as typeof fetch;
+	globalThis.fetch = fetchUntilAborted;
 
 	const done = settled(review.id);
 

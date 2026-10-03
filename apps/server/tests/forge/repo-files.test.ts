@@ -36,6 +36,12 @@ const repo = (url: string, provider: 'github' | 'gitlab'): Repo => ({
 	updatedAt: ''
 });
 
+/** The GitHub reads every proposal starts with: the default branch, then its head commit `base-sha`. */
+const githubBaseRoutes: typeof routes = [
+	[/^GET .*\/repos\/o\/r$/, () => ({ body: { default_branch: 'main' } })],
+	[/^GET .*\/branches\/main$/, () => ({ body: { commit: { sha: 'base-sha' } } })]
+];
+
 beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-repo-files-'));
 	delete process.env.GH_TOKEN;
@@ -54,8 +60,7 @@ test('GitHub: opens a branch, commits the file, and opens a pull request', async
 	setToken('github', 'tok');
 
 	routes = [
-		[/^GET .*\/repos\/o\/r$/, () => ({ body: { default_branch: 'main' } })],
-		[/^GET .*\/branches\/main$/, () => ({ body: { commit: { sha: 'base-sha' } } })],
+		...githubBaseRoutes,
 		[/^POST .*\/git\/refs$/, () => ({ status: 201, body: {} })],
 		[/^PUT .*\/contents\/\.recoder\/REVIEW\.md$/, () => ({ status: 201, body: {} })],
 		[/^POST .*\/pulls$/, () => ({ status: 201, body: { number: 12, html_url: 'https://github.com/o/r/pull/12' } })]
@@ -96,8 +101,7 @@ test('GitHub: updates the pending branch in place, passing the existing blob sha
 	setToken('github', 'tok');
 
 	routes = [
-		[/^GET .*\/repos\/o\/r$/, () => ({ body: { default_branch: 'main' } })],
-		[/^GET .*\/branches\/main$/, () => ({ body: { commit: { sha: 'base-sha' } } })],
+		...githubBaseRoutes,
 		[
 			/^GET .*\/contents\/\.recoder\/REVIEW\.md\?ref=pending$/,
 			() => ({ body: { type: 'file', sha: 'blob-1', content: Buffer.from('old').toString('base64') } })
