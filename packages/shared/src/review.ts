@@ -4,22 +4,6 @@ export type ReviewStatus = 'draft' | 'queued' | 'running' | 'passed' | 'failed';
 
 export const REVIEW_STATUSES: ReviewStatus[] = ['draft', 'queued', 'running', 'passed', 'failed'];
 
-/** Reviewer agent roles (each can route to its own model). */
-export type ReviewRole =
-	| 'security'
-	| 'perf'
-	| 'correctness'
-	| 'docs'
-	| 'dedup'
-	| 'patterns'
-	| 'testing'
-	| 'errors'
-	| 'concurrency'
-	| 'api'
-	| 'impact'
-	| 'frontend'
-	| 'data';
-
 export interface Review {
 	id: string;
 	repoId: string;

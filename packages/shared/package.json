@@ -8,7 +8,8 @@
 	},
 	"scripts": {
 		"check": "tsc --noEmit",
-		"test": "bun test"
+		"test": "bun test",
+		"lint": "eslint . && prettier --check . --ignore-path ../../.prettierignore"
 	},
 	"devDependencies": {
 		"bun-types": "^1.4.0",

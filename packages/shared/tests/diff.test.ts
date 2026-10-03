@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { collapseFileDiff, expandFileDiff, parseUnifiedDiff } from './diff';
+import { collapseFileDiff, expandFileDiff, parseUnifiedDiff } from '../src/diff';
 
 const SINGLE = `diff --git a/a.ts b/a.ts
 --- a/a.ts

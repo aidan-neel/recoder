@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { normalizeModelMarkdown } from './model-markdown';
+import { normalizeModelMarkdown } from '../src/model-markdown';
 
 test('literal \\n escapes in a one-line reply become real line breaks', () => {
 	expect(

@@ -40,18 +40,43 @@ function unquote(path: string): string {
 	return path.startsWith('"') && path.endsWith('"') && path.length >= 2 ? path.slice(1, -1) : path;
 }
 
+/**
+ * The old-side path from a `diff --git a/x b/x` header. A quoted path (spaces
+ * in the name) spans several space-separated tokens up to its closing quote.
+ */
+function gitHeaderPath(header: string): string {
+	const parts = header.split(' ');
+	let rawPath = parts[2] ?? 'unknown';
+
+	if (!rawPath.startsWith('"')) return rawPath;
+
+	const collected = [rawPath];
+	let i = 3;
+
+	while (!rawPath.endsWith('"') && i < parts.length) {
+		rawPath = parts[i];
+		collected.push(rawPath);
+		i++;
+	}
+
+	return collected.join(' ').replace(/^"|"$/g, '');
+}
+
 function blankFile(path: string): FileDiff {
 	return { path, additions: 0, deletions: 0, hunks: [] };
 }
 
+/**
+ * Parse a unified diff into files and hunks. Some producers (plain patches, MR
+ * raw diffs) omit `diff --git` headers, so the last `---`/`+++` paths are kept
+ * to give orphan hunks a file. `\ No newline at end of file` lines are skipped.
+ */
 export function parseUnifiedDiff(input: string): FileDiff[] {
 	const files: FileDiff[] = [];
 	let current: FileDiff | null = null;
 	let hunk: DiffHunk | null = null;
 	let oldNo = 0;
 	let newNo = 0;
-	// Last seen ---/+++ paths. Some producers (plain patches, MR raw diffs)
-	// omit `diff --git` headers — these let orphan hunks find their file.
 	let pendingOld: string | null = null;
 	let pendingNew: string | null = null;
 
@@ -64,24 +89,7 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 		if (raw.startsWith('diff --git ')) {
 			pushHunk();
 
-			const parts = raw.split(' ');
-			let rawPath = parts[2] ?? 'unknown';
-
-			// Quoted paths (spaces in name): rejoin tokens through the closing quote.
-			if (rawPath.startsWith('"')) {
-				const collected = [rawPath];
-				let i = 3;
-
-				while (!rawPath.endsWith('"') && i < parts.length) {
-					rawPath = parts[i];
-					collected.push(rawPath);
-					i++;
-				}
-
-				rawPath = collected.join(' ').replace(/^"|"$/g, '');
-			}
-
-			current = blankFile(stripPrefix(rawPath));
+			current = blankFile(stripPrefix(gitHeaderPath(raw)));
 			files.push(current);
 			pendingOld = null;
 			pendingNew = null;
@@ -128,7 +136,7 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 		}
 
 		if (!hunk || !current) continue;
-		if (raw.startsWith('\\')) continue; // "\ No newline at end of file"
+		if (raw.startsWith('\\')) continue;
 
 		const marker = raw[0] ?? ' ';
 		const text = raw.slice(1);
@@ -149,7 +157,8 @@ export function parseUnifiedDiff(input: string): FileDiff[] {
 	return files.filter((f) => f.hunks.length > 0);
 }
 
-function splitFileLines(text: string): string[] {
+/** File lines without the empty entry a trailing newline leaves behind. */
+export function splitFileLines(text: string): string[] {
 	if (text === '') return [];
 
 	const lines = text.split('\n');

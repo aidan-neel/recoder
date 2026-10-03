@@ -10,6 +10,7 @@ export * from './progress';
 export * from './repo';
 export * from './findings';
 export * from './review';
+export * from './roles';
 export * from './models';
 export * from './providers';
 export * from './agents';

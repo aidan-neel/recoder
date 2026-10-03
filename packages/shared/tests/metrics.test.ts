@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { aggregateTokenCalls, emptyTokenUsage, type TokenCall } from './metrics';
+import { aggregateTokenCalls, emptyTokenUsage, type TokenCall } from '../src/metrics';
 
 test('empty and unreported usage is not fabricated as zero', () => {
 	expect(aggregateTokenCalls([])).toMatchObject({

@@ -1,3 +1,5 @@
+import type { Review } from './review';
+
 /** One open PR as the Home screen sees it; the server joins its latest review. */
 export interface HomeBriefPr {
 	repoId: string;
@@ -26,4 +28,25 @@ export interface HomeBriefResponse {
 	text: string;
 	generatedAt: string;
 	model: string;
+}
+
+/** Latest review per `repoId#pr`; a real review outranks a newer empty draft. */
+export function latestReviews(reviews: Review[]): Map<string, Review> {
+	const latest = new Map<string, Review>();
+	const rank = (review: Review) => (review.status === 'draft' ? 0 : 1);
+
+	for (const review of reviews) {
+		const key = `${review.repoId}#${review.prNumber}`;
+		const current = latest.get(key);
+
+		if (
+			!current ||
+			rank(review) > rank(current) ||
+			(rank(review) === rank(current) && Date.parse(review.updatedAt) > Date.parse(current.updatedAt))
+		) {
+			latest.set(key, review);
+		}
+	}
+
+	return latest;
 }
