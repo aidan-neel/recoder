@@ -2,7 +2,7 @@
 	import DotLoader from './dot-loader.svelte';
 
 	/**
-	 * "Thinking 3.2s" that settles into "Thought for 3.2s": the words crossfade
+	 * "Thinking 3s" that settles into "Thought for 3s": the words crossfade
 	 * through a slight blur, the timer glides to its new spot and freezes, and
 	 * the dot grid folds away. Keep it mounted across the change to see it.
 	 */

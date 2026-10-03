@@ -47,11 +47,13 @@ function hostOf(url: string): string {
 }
 
 /**
- * Run `run`, and when it fails with an error `refused` recognizes, remember the
- * endpoint in `skip` and run once more (the request then leaves the field off).
+ * Run `run`, and when it fails with an error `refused` recognizes, remember
+ * `key` (an endpoint or model) in `skip` and run once more; the request then
+ * leaves the field off.
  */
-async function withFieldFallback<T>(
+export async function withFieldFallback<T>(
 	opts: ChatOptions,
+	key: string,
 	skip: Set<string>,
 	refused: (err: LlmError) => boolean,
 	run: () => Promise<T>
@@ -59,8 +61,8 @@ async function withFieldFallback<T>(
 	try {
 		return await run();
 	} catch (err) {
-		if (!skip.has(opts.baseUrl) && err instanceof LlmError && refused(err)) {
-			skip.add(opts.baseUrl);
+		if (!skip.has(key) && err instanceof LlmError && refused(err)) {
+			skip.add(key);
 			if (opts.signal?.aborted) throw err;
 
 			return run();
@@ -76,6 +78,7 @@ export function withSchemaFallback<T>(opts: ChatOptions, run: () => Promise<T>):
 
 	return withFieldFallback(
 		opts,
+		opts.baseUrl,
 		noJsonSchema,
 		(err) =>
 			(err.status === 400 || err.status === 422) && /response_format|json_schema|guided|structured/i.test(err.message),
@@ -89,6 +92,7 @@ export function withThinkingFallback<T>(opts: ChatOptions, run: () => Promise<T>
 
 	return withFieldFallback(
 		opts,
+		opts.baseUrl,
 		noTemplateKwargs,
 		(err) =>
 			err.status >= 400 &&
