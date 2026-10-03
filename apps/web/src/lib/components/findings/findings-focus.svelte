@@ -131,12 +131,11 @@
 									: 'All caught up'}
 			</Typography.Title>
 			<p class="focus-empty-text">
-				{#if emptyKind === 'draft'}Run the full review and reviewers will check every change. Findings land here, ranked
-					by severity.
+				{#if emptyKind === 'draft'}Run the full review to check every change. Findings land here, ranked by severity.
 				{:else if emptyKind === 'running' && paused}Model calls are on hold. Resume from the progress card in the
 					conversation.
-				{:else if emptyKind === 'running'}{stageLabel ? `${stageLabel}.` : 'Reviewers are working through the diff.'} Findings
-					appear here once the review consolidates them.
+				{:else if emptyKind === 'running'}{stageLabel ? `${stageLabel}.` : 'Reviewing the diff.'} Findings appear here once
+					the review consolidates them.
 				{:else if emptyKind === 'failed'}No findings were saved. Restart the review to try again.
 				{:else if emptyKind === 'clean'}The review found nothing in this pull request that needs a change.
 				{:else}Every finding is fixed, dismissed or hidden by a filter.{/if}

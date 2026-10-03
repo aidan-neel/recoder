@@ -1,6 +1,5 @@
 <script lang="ts">
 	import {
-		ORCHESTRATOR_ID,
 		type CoverageSummary,
 		type ReviewAssignment,
 		type ReviewGuidelinesUsed,
@@ -71,23 +70,8 @@
 
 	const facts = $derived(finalFacts({ agents, finished, findingCount, coverage, guidelines, repoId, finalization }));
 
-	const verifyStartedAt = $derived(
-		verifications
-			.map((task) => task.startedAt)
-			.filter((at): at is string => !!at)
-			.sort()[0]
-	);
-
-	/** Verifiers work in the threads of the reviewers whose findings they check; here their thinking shows as one live step. */
-	const verifyReasoning = $derived(
-		verifying && verifyStartedAt
-			? reasoning.filter(
-					(entry) =>
-						(entry.assignmentId ?? ORCHESTRATOR_ID) !== ORCHESTRATOR_ID &&
-						Date.parse(entry.at) >= Date.parse(verifyStartedAt)
-				)
-			: []
-	);
+	/** Verifiers have no thread of their own; here their thinking shows as one live step. */
+	const verifyReasoning = $derived(verifying ? reasoning.filter((entry) => entry.role === 'verifier') : []);
 
 	/** While it runs, only verification and the final thinking have something to open; waiting is just a spinner row. */
 	const hasBody = $derived(

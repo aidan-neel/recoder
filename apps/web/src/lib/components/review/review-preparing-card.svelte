@@ -30,7 +30,7 @@
 			{(stage === STAGE.checkout ? stageDetail : setupMessage) ||
 				(stage === STAGE.checkout
 					? 'Fetching the branch and preparing an isolated checkout.'
-					: 'Installing dependencies so reviewers can run code.')}
+					: 'Installing dependencies so the review can run code.')}
 		</p>
 		<ReviewChangeFacts {meta} />
 	</div>

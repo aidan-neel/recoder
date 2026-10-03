@@ -28,13 +28,7 @@ export interface Consolidated {
 
 /** Without this the review ends in silence and reads as if nothing ran. */
 function announceNothingFound(run: ReviewRun): void {
-	const count = run.assignments.length;
-
-	orchestratorSays(
-		run.events,
-		'message_nothing_found',
-		`${count === 1 ? 'The reviewer' : `All ${count} reviewers`} finished without reporting anything worth flagging.`
-	);
+	orchestratorSays(run.events, 'message_nothing_found', 'I finished without finding anything worth flagging.');
 }
 
 /**

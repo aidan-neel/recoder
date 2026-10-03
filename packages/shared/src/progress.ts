@@ -244,7 +244,6 @@ export interface ReviewProgress {
 	orchestratorModel?: string;
 	updatedAt: string;
 	planVersion?: number;
-	planSummary?: string;
 	assignments?: ReviewAssignment[];
 	budget?: ReviewBudgetSnapshot;
 	candidateCount?: number;

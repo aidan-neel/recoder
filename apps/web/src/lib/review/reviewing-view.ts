@@ -88,7 +88,6 @@ export interface ReviewingViewProps {
 	stageLabel?: string;
 	stageDetail?: string;
 	connectionLabel?: string;
-	planSummary?: string | null;
 	pendingCount?: number;
 	coverage?: CoverageSummary | null;
 	coverageGaps?: CoverageGap[];
@@ -164,8 +163,8 @@ function superseded(item: ReviewAssignment, agents: ReviewAssignment[]): boolean
 	);
 }
 
-/** Reviewers that ended without a result, a retried one counted by its retry (the server's summary counts the same way). */
-export function countFailedAgents(agents: ReviewAssignment[]): number {
+/** Units and subagents that ended without a result, a retried one counted by its retry (the server's summary counts the same way). */
+function countFailedAgents(agents: ReviewAssignment[]): number {
 	return agents.filter((item) => item.status === 'error' && !superseded(item, agents)).length;
 }
 
@@ -229,10 +228,7 @@ export function finalFacts(input: {
 	const candidateCount = agents.reduce((sum, item) => sum + (item.candidateCount ?? 0), 0);
 
 	if (candidateCount)
-		facts.push({
-			label: 'Candidates',
-			value: `${candidateCount} from ${agents.length} ${agents.length === 1 ? 'agent' : 'agents'}`
-		});
+		facts.push({ label: 'Candidates', value: `${candidateCount} ${candidateCount === 1 ? 'finding' : 'findings'}` });
 	if (finished)
 		facts.push({ label: 'Confirmed', value: `${findingCount} ${findingCount === 1 ? 'finding' : 'findings'}` });
 	if (coverage)
@@ -268,7 +264,10 @@ export function finalFacts(input: {
 	return facts;
 }
 
-/** Before the reviewer stage, name the stage (installing, running checks), not the reviewers waiting for it. */
+/**
+ * Before the reviewer stage, name the stage (installing, running checks), not the reviewers waiting for it.
+ * Units are the main thread's own work, so they read as "Reviewing"; only subagents are waited on.
+ */
 export function footerLabel(input: {
 	paused: boolean;
 	stage: number;
@@ -278,8 +277,9 @@ export function footerLabel(input: {
 	verifications: ReviewTask[];
 	working: ReviewAssignment[];
 	running: ReviewAssignment[];
+	units: AgentCounts;
 }): string {
-	const { paused, stage, stageLabel, stageDetail, verifying, verifications, working, running } = input;
+	const { paused, stage, stageLabel, stageDetail, verifying, verifications, working, running, units } = input;
 
 	if (paused) return 'Paused';
 	if (stage < STAGE.reviewing) return [stageLabel, stageDetail].filter(Boolean).join(' · ');
@@ -289,6 +289,9 @@ export function footerLabel(input: {
 
 		return `Verifying findings${verifications.length ? ` · ${verified}/${verifications.length}` : ''}`;
 	}
+
+	if (working.some((item) => item.role === 'reviewer'))
+		return units.total > 1 ? `Reviewing · ${units.done} of ${units.total} units` : 'Reviewing';
 
 	if (working.length) return `Waiting on ${nameList(working)}`;
 	if (running.length) return `${running.length} ${running.length === 1 ? 'agent' : 'agents'} queued`;

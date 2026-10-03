@@ -181,7 +181,6 @@
 	failure={progress.failure ?? (status === 'failed' && review.summary ? { reason: review.summary } : null)}
 	{connectionLabel}
 	connectionLost={connection === 'reconnecting'}
-	planSummary={progress.planSummary ?? null}
 	coverage={progress.coverage ?? null}
 	coverageGaps={progress.coverageGaps ?? []}
 	{now}

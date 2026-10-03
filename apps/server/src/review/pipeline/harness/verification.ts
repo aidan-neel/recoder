@@ -129,8 +129,9 @@ async function verifyCandidates(candidates: CandidateFinding[], ctx: VerifyConte
 }
 
 /**
- * Runs one verifier and settles the candidate. Its conversation is shown in the
- * conversation of the reviewer or subagent that raised the finding.
+ * Runs one verifier and settles the candidate. Its thinking, tools and messages
+ * are its own (owned by its task), so they show in the Verify step rather than
+ * in the thread that raised the finding.
  */
 async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promise<void> {
 	const role = candidate.agent ?? 'reviewer';
@@ -138,7 +139,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promi
 	const taskId = `verify:${candidate.candidateId}`;
 	const label = `Verify: ${candidate.title ?? candidate.file}`;
 	const exec = !ctx.unavailable;
-	const owner = { assignmentId: candidate.assignmentId, role };
+	const owner = { assignmentId: taskId, role: 'verifier' };
 	const agentId = newAgentId();
 
 	const meta = {
@@ -171,8 +172,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promi
 			parse: parseVerdict,
 			validationError: verdictValidationError,
 			getDiscussion: () => ctx.events?.getDiscussion?.(candidate.assignmentId) ?? '',
-			onMessage: (message) =>
-				ctx.events?.onMessage?.({ ...message, assignmentId: candidate.assignmentId ?? '__pipeline', model: cfg.model }),
+			onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: taskId, model: cfg.model }),
 			onProgress: (state, elapsedMs, detail) =>
 				ctx.task(
 					taskId,

@@ -48,7 +48,6 @@ const MAX_BUFFER = 400;
 const SNAPSHOT_KEYS = [
 	'paused',
 	'planVersion',
-	'planSummary',
 	'assignments',
 	'budget',
 	'candidateCount',
@@ -256,7 +255,6 @@ export function reportReviewPlan(
 		message: data.summary,
 		data: {
 			planVersion: data.planVersion,
-			planSummary: data.summary,
 			assignments: data.assignments
 		}
 	});

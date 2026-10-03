@@ -43,6 +43,25 @@ test('a failed turn and its retry read as one thought spanning both', () => {
 	});
 });
 
+test('back-to-back thoughts of two units reviewed side by side stay two thoughts', () => {
+	const reasoning = [
+		{ ...thought('reason_a', 0, 'Unit one.'), assignmentId: 'unit-1' },
+		{ ...thought('reason_b', 5, 'Unit two.'), assignmentId: 'unit-2' }
+	];
+
+	const rows = buildRows({
+		entries: [],
+		placed: [],
+		orphansAt: orphansByIndex(reasoning, []),
+		ownThoughts: new Map()
+	});
+
+	expect(rows.flatMap((row) => (row.kind === 'traces' ? row.traces.map((trace) => trace.key) : []))).toEqual([
+		'thought-reason_a',
+		'thought-reason_b'
+	]);
+});
+
 test('a thought before the agents were created sits above them, ending when they start', () => {
 	const snippet = (() => {}) as never;
 	const planning = thought('reason_plan', 5, 'Planning.');

@@ -57,7 +57,7 @@
 			assignmentId: ORCHESTRATOR_ID,
 			from: 'assistant',
 			model,
-			text: 'Okay, beginning a review on Sivir UI. I’ll split it into 3 units, one reviewer each.',
+			text: 'Okay, beginning a review on Sivir UI.',
 			at: iso(100),
 			status: 'done'
 		}
@@ -228,7 +228,8 @@
 	const verifyReasoning: ReviewReasoningEntry[] = [
 		{
 			id: 'verify-reasoning',
-			assignmentId: 'unit-1',
+			assignmentId: 'verify:c1',
+			role: 'verifier',
 			model,
 			at: iso(30),
 			status: 'streaming',
@@ -243,7 +244,7 @@
 		at: iso(50),
 		status: 'error',
 		cutOff: 'Thought too long. Asking for an answer now.',
-		text: 'Reviewers reported 3 candidates. I’m checking each one before I consolidate: the clock finding first, since it decides whether refill works at all.'
+		text: 'I have 3 candidate findings. I’m checking each one before I consolidate: the clock finding first, since it decides whether refill works at all.'
 	};
 	const liveMessages: ReviewChatMessage[] = [
 		{
@@ -261,7 +262,7 @@
 			model,
 			at: iso(120),
 			status: 'done',
-			text: 'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI cut it into 4 units, one reviewer each.'
+			text: 'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.'
 		}
 	];
 	/** The last reads are still going, so the preview shows the live labels. */
@@ -272,10 +273,10 @@
 		['readFile', 'src/time/clock.ts', 200]
 	].map(([action, target, ms], i) => ({
 		id: `live-tool-${i}`,
-		assignmentId: ORCHESTRATOR_ID,
+		assignmentId: i >= 2 ? 'unit-1' : ORCHESTRATOR_ID,
 		command: `${action} ${target}`,
 		input: { action: action as string, path: target as string },
-		...(i >= 2
+		...(i >= 2 && !verifyPreview
 			? { status: 'running' as const, exitCode: null }
 			: { status: 'done' as const, exitCode: 0, elapsedMs: ms as number }),
 		startedAt: iso(118 - i)
@@ -303,7 +304,6 @@
 			updatedAt: iso(0)
 		}
 	];
-	const planSummary = 'Reviewing in 3 units:\n\n- src/cli\n- src/status\n- tests';
 	const liveReasoning: ReviewReasoningEntry[] = [
 		{
 			id: 'live-reasoning',
@@ -445,7 +445,6 @@
 						continuing = false;
 					}
 				: null}
-			{planSummary}
 			onSend={send}
 			onOpenDiff={() => (diffOpen = true)}
 			onStartReview={awaitingPrompt

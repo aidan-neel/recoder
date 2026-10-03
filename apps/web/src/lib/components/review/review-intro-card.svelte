@@ -24,7 +24,7 @@
 	<div class="focus-empty-card">
 		<span class="focus-empty-icon" aria-hidden="true"><ScanSearch size={20} /></span>
 		<Typography.Title level={2} class="focus-empty-title">Nothing reviewed yet</Typography.Title>
-		<p class="focus-empty-text">Ask about any change, or run the full review and reviewers will check every file.</p>
+		<p class="focus-empty-text">Ask about any change, or run the full review to check every file.</p>
 		<ReviewChangeFacts {meta} />
 		<div class="focus-empty-actions">
 			{#if onStartReview}<Button

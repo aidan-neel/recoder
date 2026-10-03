@@ -7,25 +7,22 @@
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import Disclosure from '../ui/disclosure.svelte';
-	import ModelMarkdown from './model-markdown.svelte';
 	import { formatAgentName } from '$lib/findings/threads.svelte';
 	import { statusFor, type OpenProps } from '$lib/review/reviewing-view';
 	import { groupProgress, groupAgents } from '$lib/review/agent-groups';
 	import { modelLabel } from '$lib/settings/model-settings.svelte';
 
 	/**
-	 * The plan's reviewers in the orchestrator's transcript: why each role runs, then one row
-	 * per role. A role with several parts (a large PR's correctness sweep) opens to them.
+	 * The agents the main thread started, in its transcript: why each role runs, then one row
+	 * per role. A role with several members (subagents) opens to them.
 	 */
 	let {
 		agents,
-		planSummary,
 		finished,
 		active,
 		openProps
 	}: {
 		agents: ReviewAssignment[];
-		planSummary: string | null;
 		/** A finished review tucks the rows inside the disclosure. */
 		finished: boolean;
 		active: boolean;
@@ -33,6 +30,8 @@
 	} = $props();
 
 	const agentGroups = $derived(groupAgents(agents));
+
+	const noun = $derived(agents.every((item) => item.role === 'subagent') ? 'subagent' : 'agent');
 </script>
 
 {#snippet agentRows()}
@@ -108,8 +107,7 @@
 
 <section class="agents" aria-label="Agents">
 	<Disclosure>
-		{#snippet label()}Started {agents.length} {agents.length === 1 ? 'agent' : 'agents'}{/snippet}
-		{#if planSummary}<ModelMarkdown content={planSummary} />{/if}
+		{#snippet label()}Started {agents.length} {agents.length === 1 ? noun : `${noun}s`}{/snippet}
 		{#each agentGroups as group (group.role)}
 			<Typography.Text
 				><span class="text-fg-secondary"

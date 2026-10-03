@@ -274,7 +274,7 @@ test('plan and assignment snapshots stay readable for older clients', () => {
 		sequence: 2,
 		message: 'Planning',
 		at: new Date().toISOString(),
-		data: { planVersion: 1, planSummary: 'two specialists', assignments: [assignment], candidateCount: 0 }
+		data: { planVersion: 1, assignments: [assignment], candidateCount: 0 }
 	};
 
 	const next = applyProgressMessage(emptyReviewProgress('review'), event);

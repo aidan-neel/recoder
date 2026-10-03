@@ -124,6 +124,6 @@ export function reportRetries(retries: FailedUnit[], events: HarnessEvents | und
 	orchestratorSays(
 		events,
 		`message_retries_${retries[0].unit.id}`,
-		`${byOriginal.size === 1 ? 'One reviewer' : `${byOriginal.size} reviewers`} failed, so I'm running ${byOriginal.size === 1 ? 'it' : 'them'} again:\n\n${lines.join('\n')}`
+		`${byOriginal.size === 1 ? 'One unit' : `${byOriginal.size} units`} failed, so I'm reviewing ${byOriginal.size === 1 ? 'it' : 'them'} again:\n\n${lines.join('\n')}`
 	);
 }

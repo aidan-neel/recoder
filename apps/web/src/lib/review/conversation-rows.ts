@@ -81,7 +81,8 @@ function timeOf(at?: string): number {
 
 /**
  * Two thoughts with nothing between them (a turn that failed and was asked again) read as one:
- * timed from the first start to the last end, with both texts, under the first one's key.
+ * timed from the first start to the last end, with both texts, under the first one's key. Thoughts
+ * of two units reviewed side by side stay apart.
  */
 function mergeThoughts(first: Extract<Trace, { kind: 'thought' }>, next: Extract<Trace, { kind: 'thought' }>): Trace {
 	const text = [first.entry.text, next.entry.text].filter((part) => part.trim()).join('\n\n');
@@ -95,7 +96,7 @@ function mergeThoughts(first: Extract<Trace, { kind: 'thought' }>, next: Extract
 }
 
 /**
- * Transcript in order. Back-to-back tool groups fold into one row, and back-to-back thoughts merge
+ * Transcript in order. Back-to-back tool groups fold into one row, and back-to-back thoughts of one agent merge
  * into one; a thought is never nested in a tool group. A thought is keyed under its reply id and its
  * own id, so two messages can both claim it; each is placed once (duplicate keys crash the keyed list).
  */
@@ -116,7 +117,12 @@ export function buildRows(input: {
 		const previous = out.at(-1);
 		const last = previous?.kind === 'traces' ? previous.traces.at(-1) : undefined;
 
-		if (item.kind === 'thought' && last?.kind === 'thought' && previous?.kind === 'traces') {
+		if (
+			item.kind === 'thought' &&
+			last?.kind === 'thought' &&
+			previous?.kind === 'traces' &&
+			last.entry.assignmentId === item.entry.assignmentId
+		) {
 			previous.traces[previous.traces.length - 1] = mergeThoughts(last, item);
 
 			return;

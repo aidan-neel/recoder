@@ -6,7 +6,7 @@ import {
 	type ReviewTask
 } from '@recoder/shared';
 import { STAGE } from './review-progress-state';
-import { agentCounts, countFailedAgents, footerLabel, isLive } from './reviewing-view';
+import { agentCounts, footerLabel, isLive } from './reviewing-view';
 
 /** The review snapshot the reviewing view renders. */
 export interface ReviewingInput {
@@ -50,13 +50,18 @@ export class ReviewingState {
 		);
 	});
 
-	readonly agents = $derived(this.#input.assignments.filter((assignment) => assignment.id !== ORCHESTRATOR_ID));
+	/** Every reviewer and subagent record, for counts and progress. */
+	readonly records = $derived(this.#input.assignments.filter((assignment) => assignment.id !== ORCHESTRATOR_ID));
 
-	readonly failedAgents = $derived(countFailedAgents(this.agents));
+	/** The main thread is the reviewer: each unit's work reads as its own, so units never show as agents it started. */
+	readonly units = $derived(this.records.filter((item) => item.role === 'reviewer'));
 
-	readonly reviewerCounts = $derived(agentCounts(this.agents.filter((item) => item.role !== 'subagent')));
+	/** Agents with a thread of their own: the subagents reviewers asked for. */
+	readonly agents = $derived(this.records.filter((item) => item.role !== 'reviewer'));
 
-	readonly subagentCounts = $derived(agentCounts(this.agents.filter((item) => item.role === 'subagent')));
+	readonly reviewerCounts = $derived(agentCounts(this.records.filter((item) => item.role !== 'subagent')));
+
+	readonly subagentCounts = $derived(agentCounts(this.records.filter((item) => item.role === 'subagent')));
 
 	/** The orchestrator as a conversation of its own, with the model it last ran on. */
 	readonly orchestrator = $derived.by((): ReviewAssignment => {
@@ -81,7 +86,7 @@ export class ReviewingState {
 
 	readonly showSteps = $derived(!this.#input.awaitingPrompt && (this.#input.active || this.#input.failed));
 
-	/** When the first reviewer was queued, where the plan's reviewers sit in the transcript. */
+	/** When the first subagent was queued, where they sit in the transcript. */
 	readonly agentsAt = $derived(
 		this.agents
 			.map((item) => item.queuedAt ?? item.startedAt)
@@ -89,10 +94,10 @@ export class ReviewingState {
 			.sort()[0]
 	);
 
-	readonly running = $derived(this.agents.filter((item) => isLive(item.status)));
+	readonly running = $derived(this.records.filter((item) => isLive(item.status)));
 
-	/** Reviewers a model is actually working for; queued ones are waiting on the stage before them. */
-	readonly working = $derived(this.agents.filter((item) => item.status === 'running' || item.status === 'waiting'));
+	/** Units and subagents a model is actually working for; queued ones are waiting on the stage before them. */
+	readonly working = $derived(this.records.filter((item) => item.status === 'running' || item.status === 'waiting'));
 
 	readonly finalization = $derived(this.#input.tasks.find((task) => task.id === 'consolidation'));
 
@@ -112,7 +117,7 @@ export class ReviewingState {
 		this.#input.reasoning.filter((entry) => !this.finalReasoning.some((item) => item.id === entry.id))
 	);
 
-	/** Verifiers work in the threads of the reviewers whose findings they check; here they show as one live step. */
+	/** Verifiers have no thread of their own; they show as one live step in the Verify row. */
 	readonly verifying = $derived(this.#input.active && this.#input.stage === STAGE.verify);
 
 	readonly verifications = $derived(this.#input.tasks.filter((task) => task.kind === 'verification'));
@@ -158,7 +163,8 @@ export class ReviewingState {
 			verifying: this.verifying,
 			verifications: this.verifications,
 			working: this.working,
-			running: this.running
+			running: this.running,
+			units: this.reviewerCounts
 		});
 	});
 }

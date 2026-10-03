@@ -33,7 +33,6 @@ export interface ProgressMessage {
 const SNAPSHOT_KEYS = [
 	'paused',
 	'planVersion',
-	'planSummary',
 	'assignments',
 	'budget',
 	'candidateCount',

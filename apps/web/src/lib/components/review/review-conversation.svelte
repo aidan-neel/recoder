@@ -46,7 +46,8 @@
 		awaitingPrompt = false,
 		onStartReview = null,
 		signInShown = false,
-		intro
+		intro,
+		folded = []
 	}: {
 		assignment: ReviewAssignment;
 		messages: ReviewChatMessage[];
@@ -73,12 +74,14 @@
 		signInShown?: boolean;
 		/** Opening card at the top of a new session; it carries Run full review while it shows. */
 		intro?: Snippet;
+		/** Agents whose work reads as this conversation's own: the units the main thread reviews. */
+		folded?: string[];
 	} = $props();
 
 	let startingReview = $state(false);
 	let clock = $state(Date.now());
 
-	const belongs = (id?: string) => (id ?? ORCHESTRATOR_ID) === assignment.id;
+	const belongs = (id?: string) => (id ?? ORCHESTRATOR_ID) === assignment.id || (!!id && folded.includes(id));
 	const conversationMessages = $derived(messages.filter((message) => belongs(message.assignmentId)));
 	const conversationReasoning = $derived(reasoning.filter((entry) => belongs(entry.assignmentId)));
 	const conversationTools = $derived(toolCalls.filter((tool) => belongs(tool.assignmentId)));

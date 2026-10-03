@@ -56,7 +56,7 @@ function reportSubagents(run: ReviewRun, dropped: UnitRequest[], cap: number): v
 	orchestratorSays(
 		run.events,
 		'message_subagents',
-		`Reviewers asked for a closer look, so I'm running ${units.length === 1 ? 'a subagent' : `${units.length} subagents`}:\n\n${lines.join('\n')}${skipped}`
+		`I'm running ${units.length === 1 ? 'a subagent' : `${units.length} subagents`} for a closer look:\n\n${lines.join('\n')}${skipped}`
 	);
 }
 

@@ -8,9 +8,9 @@ import { closeStore, reviewProgress } from '../src/store';
 test('review progress written moments ago survives the store closing before its write-behind timer fires', () => {
 	const id = crypto.randomUUID();
 
-	reviewProgress.set({ ...emptyReviewProgress(id), sequence: 3, planSummary: 'two specialists' });
+	reviewProgress.set({ ...emptyReviewProgress(id), sequence: 3, planVersion: 2 });
 	closeStore();
-	expect(reviewProgress.get(id)).toMatchObject({ sequence: 3, planSummary: 'two specialists' });
+	expect(reviewProgress.get(id)).toMatchObject({ sequence: 3, planVersion: 2 });
 	reviewProgress.delete(id);
 	closeStore();
 	expect(reviewProgress.get(id)).toBeUndefined();

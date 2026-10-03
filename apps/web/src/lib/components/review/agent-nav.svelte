@@ -8,7 +8,7 @@
 	import { formatAgentName } from '$lib/findings/threads.svelte';
 	import { statusFor, type OpenProps } from '$lib/review/reviewing-view';
 
-	/** The bar above a reviewer's conversation: back to the orchestrator, its name and its status. */
+	/** The bar above a subagent's conversation: back to the orchestrator, its name and its status. */
 	let {
 		assignment,
 		active,
@@ -18,9 +18,9 @@
 
 	const status = $derived(statusFor(assignment, active));
 
-	/** Every reviewer and subagent shares a role, so their header also names the unit or question it took. */
+	/** Every subagent shares a role, so its header also names the question it took. */
 	const name = $derived(
-		assignment.role === 'reviewer' || assignment.role === 'subagent'
+		assignment.role === 'subagent'
 			? `${formatAgentName(assignment.role)} · ${assignment.title}`
 			: formatAgentName(assignment.role)
 	);

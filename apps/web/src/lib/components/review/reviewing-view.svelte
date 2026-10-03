@@ -58,7 +58,6 @@
 		focusKey,
 		stage = 0,
 		tasks = [],
-		planSummary = null,
 		showChecks = false,
 		repoId = null,
 		guidelines = null,
@@ -131,7 +130,7 @@
 	const isOrchestrator = $derived(selected.id === ORCHESTRATOR_ID);
 
 	const showRail = $derived(
-		isOrchestrator && !active && !awaitingPrompt && (findings.length > 0 || view.agents.length > 0)
+		isOrchestrator && !active && !awaitingPrompt && (findings.length > 0 || view.records.length > 0)
 	);
 
 	const inserts = $derived(
@@ -205,7 +204,7 @@
 {/snippet}
 
 {#snippet agentsContent()}
-	<ReviewAgents agents={view.agents} {planSummary} finished={view.finished} {active} {openProps} />
+	<ReviewAgents agents={view.agents} finished={view.finished} {active} {openProps} />
 {/snippet}
 
 {#snippet progressContent()}
@@ -220,7 +219,7 @@
 		{reasoning}
 		finalReasoning={view.finalReasoning}
 		finalization={view.finalization}
-		agents={view.agents}
+		agents={view.records}
 		finished={view.finished}
 		findingCount={findings.length}
 		{coverage}
@@ -245,7 +244,13 @@
 {/snippet}
 
 {#snippet resultCard()}
-	<ReviewResultCard {findings} {meta} failedAgents={view.failedAgents} {onShowView} {onOpenDiff} />
+	<ReviewResultCard
+		{findings}
+		{meta}
+		failed={{ units: view.reviewerCounts.failed, subagents: view.subagentCounts.failed }}
+		{onShowView}
+		{onOpenDiff}
+	/>
 {/snippet}
 
 <div
@@ -305,6 +310,7 @@
 					intro={isOrchestrator && view.showIntro ? reviewIntro : undefined}
 					signInShown={failed && !errorMessage && !!failure?.signIn}
 					assignment={target}
+					folded={isOrchestrator ? view.units.map((unit) => unit.id) : []}
 					{messages}
 					reasoning={isOrchestrator ? view.chatReasoning : reasoning}
 					{toolCalls}
