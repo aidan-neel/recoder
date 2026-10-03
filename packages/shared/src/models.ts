@@ -14,6 +14,8 @@ export interface ModelEntry {
 	provider?: ModelProvider;
 	/** Hosted provider this model came from (`opencode-go`, `openrouter`…); unset for ChatGPT and the custom endpoint. */
 	source?: string;
+	/** The agent CLI that runs this model, by name (`OpenCode`); unset for direct endpoints. */
+	agent?: string;
 	id: string;
 	label: string;
 	model: string;

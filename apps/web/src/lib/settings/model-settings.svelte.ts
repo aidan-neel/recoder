@@ -12,6 +12,8 @@ interface EffortOption {
 export interface ModelOption {
 	id: string;
 	displayName: string;
+	/** The agent CLI that runs it, by name; "Custom" for a direct endpoint. */
+	agent: string;
 	provider: string;
 	/** Null when the model has no reasoning control. */
 	efforts: EffortOption[] | null;
@@ -94,6 +96,7 @@ export function toModelOption(entry: ModelEntry): ModelOption {
 	return {
 		id: entry.id,
 		displayName: displayName(entry),
+		agent: entry.agent ?? 'Custom',
 		provider: providerName(entry),
 		efforts:
 			efforts?.map((id) => ({

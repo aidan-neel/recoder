@@ -71,14 +71,16 @@
 	});
 
 	const models = $derived(modelSettingsUi.models);
-	/** Models by provider, providers A to Z. */
-	const groups = $derived.by(() => {
+	/** Models by agent, then by provider; both A to Z. */
+	const agents = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived.by, not reactive state
-		const byProvider = new Map<string, ModelOption[]>();
+		const byAgent = new Map<string, ModelOption[]>();
 
-		for (const option of models) byProvider.set(option.provider, [...(byProvider.get(option.provider) ?? []), option]);
+		for (const option of models) byAgent.set(option.agent, [...(byAgent.get(option.agent) ?? []), option]);
 
-		return [...byProvider.entries()].sort(([a], [b]) => a.localeCompare(b));
+		return [...byAgent.entries()]
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([agent, options]) => ({ agent, groups: byProvider(options) }));
 	});
 	const model = $derived<ModelOption | undefined>(models.find((item) => item.id === value?.modelId));
 	const effort = $derived(resolveEffort(model, value?.effort));
@@ -86,6 +88,16 @@
 
 	/** The label only animates when the developer changes it, never when it first loads. */
 	let picked = $state(false);
+
+	/** Options by provider, providers A to Z. */
+	function byProvider(options: ModelOption[]): [string, ModelOption[]][] {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map, not reactive state
+		const groups = new Map<string, ModelOption[]>();
+
+		for (const option of options) groups.set(option.provider, [...(groups.get(option.provider) ?? []), option]);
+
+		return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+	}
 
 	/** Switching to a model that lacks the current effort resets to its default. */
 	function pickModel(next: ModelOption): void {
@@ -139,29 +151,24 @@
 					</DropdownMenu.Item>
 					<DropdownMenu.Separator />
 				{/if}
-				{#if groups.length > 1}
-					{#each groups as [provider, options] (provider)}
+				{#if agents.length > 1}
+					{#each agents as { agent, groups } (agent)}
 						<DropdownMenu.Sub>
 							<DropdownMenu.SubTrigger class="model-menu-row">
 								<span class="flex w-full items-center gap-2">
 									<span class="flex w-3 shrink-0 justify-center" aria-hidden="true"
-										>{#if model?.provider === provider}<Check size={12} />{/if}</span
+										>{#if model?.agent === agent}<Check size={12} />{/if}</span
 									>
-									<span class="min-w-0 flex-1 truncate">{provider}</span>
-									<span class="model-menu-value">{options.length}</span>
+									<span class="min-w-0 flex-1 truncate">{agent}</span>
 								</span>
 							</DropdownMenu.SubTrigger>
-							<DropdownMenu.SubContent class="submenu-left model-menu-models w-[270px]">
-								{#each options as option (option.id)}
-									{@render modelItem(option, false)}
-								{/each}
+							<DropdownMenu.SubContent class="submenu-left model-menu-models w-[250px]">
+								{@render providerGroups(groups)}
 							</DropdownMenu.SubContent>
 						</DropdownMenu.Sub>
 					{/each}
 				{:else}
-					{#each groups[0]?.[1] ?? [] as option (option.id)}
-						{@render modelItem(option, true)}
-					{/each}
+					{@render providerGroups(agents[0]?.groups ?? [])}
 				{/if}
 			</DropdownMenu.SubContent>
 		</DropdownMenu.Sub>
@@ -201,6 +208,33 @@
 		{/if}
 	</DropdownMenu.Content>
 </DropdownMenu.Root>
+
+{#snippet providerGroups(groups: [string, ModelOption[]][])}
+	{#if groups.length > 1}
+		{#each groups as [provider, options] (provider)}
+			<DropdownMenu.Sub>
+				<DropdownMenu.SubTrigger class="model-menu-row">
+					<span class="flex w-full items-center gap-2">
+						<span class="flex w-3 shrink-0 justify-center" aria-hidden="true"
+							>{#if model?.provider === provider}<Check size={12} />{/if}</span
+						>
+						<span class="min-w-0 flex-1 truncate">{provider}</span>
+						<span class="model-menu-value">{options.length}</span>
+					</span>
+				</DropdownMenu.SubTrigger>
+				<DropdownMenu.SubContent class="submenu-left model-menu-models w-[270px]">
+					{#each options as option (option.id)}
+						{@render modelItem(option, false)}
+					{/each}
+				</DropdownMenu.SubContent>
+			</DropdownMenu.Sub>
+		{/each}
+	{:else}
+		{#each groups[0]?.[1] ?? [] as option (option.id)}
+			{@render modelItem(option, true)}
+		{/each}
+	{/if}
+{/snippet}
 
 {#snippet modelItem(option: ModelOption, showProvider: boolean)}
 	<DropdownMenu.Item
