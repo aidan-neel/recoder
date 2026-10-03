@@ -1,6 +1,7 @@
 import type { ChatOptions } from '../../models/llm';
 import { LlmError } from '../../models/llm';
 import { normalizeTokenUsage } from '../../models/metrics';
+import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 
 type OutputItem = {
 	id?: string;
@@ -51,7 +52,7 @@ type ResponseEvent = {
 export function chatGptRequest(opts: ChatOptions): Record<string, unknown> {
 	const instructions = opts.messages.filter((message) => message.role === 'system').map((message) => message.content);
 
-	if (opts.jsonMode) instructions.push('Return a single valid JSON object, without markdown fences.');
+	if (opts.jsonMode) instructions.push(JSON_MODE_INSTRUCTION);
 
 	return {
 		model: opts.model,

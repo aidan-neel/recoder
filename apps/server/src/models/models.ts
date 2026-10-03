@@ -19,9 +19,8 @@
  */
 
 import { z } from 'zod';
-import type { ReasoningEffort } from '@recoder/shared';
+import type { ModelProvider, ReasoningEffort } from '@recoder/shared';
 import { hostedProvider } from './model-providers.js';
-import type { ChatProvider } from './llm/types.js';
 import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode.js';
 import { effectiveReviewEnv, getStoredSettings } from '../review/session/review-settings.js';
 import { REVIEW_ROLES, type ReviewRole } from '../review/pipeline/roles.js';
@@ -38,8 +37,8 @@ const configSchema = z.object({
 export interface RoleConfig {
 	/** Unset API effort is omitted for endpoints that do not support reasoning. */
 	reasoningEffort?: ReasoningEffort;
-	provider?: ChatProvider;
-	/** Hosted provider id (`opencode-go`…) when the model came from one. */
+	provider?: ModelProvider;
+	/** Hosted provider id (`opencode-go`…) when the model came from one; for OpenCode, its provider id. */
 	source?: string;
 	role: ReviewRole;
 	baseUrl: string;
@@ -111,15 +110,11 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 	const followsReview = orchestrator || !stored.specialistModelId;
 	const entryId = followsReview ? reviewId : stored.specialistModelId;
 
-	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) {
-		throw new ModelConfigError(
-			'Reviews on OpenCode models are not wired up yet. They arrive with the OpenCode adapter.'
-		);
-	}
-
 	const requested = orchestrator
 		? stored.orchestratorEffort
 		: (stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
+
+	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(role, entryId, requested ?? undefined);
 
 	const entry = entries.find((e) => e.id === entryId) ?? entries[0];
 
@@ -164,6 +159,17 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 		model: shared.model,
 		reasoningEffort: requested ?? undefined
 	};
+}
+
+/**
+ * An OpenCode model is listed live from the CLI rather than stored, so the
+ * config comes from its id (`opencode:<provider>/<model>`). The transport
+ * checks the effort against the model's variants.
+ */
+function openCodeConfig(role: ReviewRole, entryId: string, reasoningEffort: ReasoningEffort | undefined): RoleConfig {
+	const model = entryId.slice(OPENCODE_MODEL_PREFIX.length);
+
+	return { role, provider: 'opencode', source: model.split('/')[0], baseUrl: '', apiKey: '', model, reasoningEffort };
 }
 
 /**

@@ -3,6 +3,7 @@ import { LlmError } from './llm.js';
 import { hostedProvider } from './model-providers.js';
 import type { RoleConfig } from './models.js';
 import { isAuthFailure } from '../review/pipeline/planner.js';
+import { opencode } from '../agents/opencode/opencode.js';
 
 type ModelRef = Pick<RoleConfig, 'provider' | 'source'> | undefined;
 
@@ -11,16 +12,24 @@ type ModelRef = Pick<RoleConfig, 'provider' | 'source'> | undefined;
  * 402 or a 429 that outlasted every retry means a hosted plan or credit balance
  * is spent. Your own server has no plan: its 429 is an overload, reported as a
  * plain failure. Short rate limits are retried in `llm.ts` before this is reached.
+ * OpenCode retries rate limits itself, so its 402 or 429 is a spent plan too.
  */
 export function isUsageLimit(err: unknown, config: ModelRef): boolean {
 	if (!(err instanceof LlmError)) return false;
 	if (config?.provider === 'codex') return err.status === 429;
+	if (config?.provider === 'opencode') return err.status === 402 || err.status === 429;
 
 	return !!hostedProvider(config?.source) && (err.status === 402 || err.status === 429);
 }
 
 function usageLimitFor(config: ModelRef): UsageLimit {
 	if (config?.provider === 'codex') return { provider: 'codex', name: 'ChatGPT', usageUrl: null };
+
+	if (config?.provider === 'opencode') {
+		const name = opencode.providerName(config.source ?? 'opencode');
+
+		return { provider: name, name, usageUrl: null };
+	}
 
 	const hosted = hostedProvider(config?.source);
 
@@ -44,6 +53,14 @@ export function modelFailure(err: unknown, config: ModelRef, fallback: string): 
 
 	if (config?.provider === 'codex' && err instanceof LlmError) {
 		return err.status === 401 ? { reason: err.message, signIn: true } : { reason: err.message };
+	}
+
+	if (config?.provider === 'opencode' && err instanceof LlmError) {
+		const name = opencode.providerName(config.source ?? 'opencode');
+
+		if (err.status === 401) return { reason: `${name} rejected the sign-in. Reconnect it in Settings → Agent.` };
+
+		return { reason: err.status >= 500 ? fallback : err.message || fallback };
 	}
 
 	if (isAuthFailure(err)) {

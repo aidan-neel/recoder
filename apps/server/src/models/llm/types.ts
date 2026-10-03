@@ -1,16 +1,14 @@
-import type { ReasoningEffort, TokenUsage } from '@recoder/shared';
+import type { ModelProvider, ReasoningEffort, TokenUsage } from '@recoder/shared';
 
 export interface ChatMessage {
 	role: 'system' | 'user' | 'assistant';
 	content: string;
 }
 
-/** Selects the transport a call goes through; unset means OpenAI-compatible. */
-export type ChatProvider = 'openai-compatible' | 'codex';
-
 export interface ChatOptions {
 	reasoningEffort?: ReasoningEffort;
-	provider?: ChatProvider;
+	/** Selects the transport a call goes through; unset means OpenAI-compatible. */
+	provider?: ModelProvider;
 	baseUrl: string;
 	apiKey: string;
 	model: string;

@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { OpenCodeAgent, normalizeModels, normalizeProviders } from '../../../src/agents/opencode/opencode';
+import { fakeOpenCode } from '../../helpers/fake-opencode';
 
 const CONFIG_PROVIDERS = {
 	providers: [
@@ -73,38 +74,6 @@ describe('normalizeModels', () => {
 		expect(models[1].efforts).toBeUndefined();
 	});
 });
-
-/** A fake `opencode` on PATH: prints a version, and `serve` runs a tiny password-checked API. */
-async function fakeOpenCode(): Promise<Record<string, string | undefined>> {
-	const dir = await mkdtemp(join(tmpdir(), 'fake-opencode-'));
-	const bin = join(dir, 'opencode');
-
-	await writeFile(
-		bin,
-		`#!/usr/bin/env bun
-const [cmd] = process.argv.slice(2);
-if (cmd === '--version') { console.log('1.2.3'); process.exit(0); }
-let releaseCallback;
-const server = Bun.serve({ port: 0, hostname: '127.0.0.1', async fetch(req) {
-	if (req.headers.get('authorization') !== 'Basic ' + btoa('opencode:' + process.env.OPENCODE_SERVER_PASSWORD)) return new Response('no', { status: 401 });
-	const path = new URL(req.url).pathname;
-	if (path === '/provider') return Response.json({ all: [{ id: 'openai', name: 'OpenAI', models: {} }], connected: [] });
-	if (path === '/config/providers') return Response.json({ providers: [] });
-	if (path === '/provider/auth') return Response.json({ openai: [{ type: 'oauth', label: 'ChatGPT' }] });
-	if (path === '/provider/openai/oauth/authorize') return Response.json({ url: 'https://example.test/device', method: 'auto', instructions: 'Enter code: ABCD' });
-	if (path === '/provider/openai/oauth/callback') { await new Promise((r) => (releaseCallback = r)); return Response.json(true); }
-	if (path === '/test/finish-browser') { releaseCallback?.(); return Response.json(true); }
-	if (path === '/global/dispose') return Response.json(true);
-	return new Response('missing', { status: 404 });
-} });
-console.log('opencode server listening on http://127.0.0.1:' + server.port);
-`
-	);
-
-	await chmod(bin, 0o755);
-
-	return { PATH: `${dir}:${process.env.PATH ?? ''}`, HOME: dir };
-}
 
 let agent: OpenCodeAgent | null = null;
 

@@ -1,6 +1,9 @@
 import { LlmError } from './errors';
 import type { ChatOptions } from './types';
 
+/** The system line for JSON mode on transports with no `response_format`. */
+export const JSON_MODE_INSTRUCTION = 'Return a single valid JSON object, without markdown fences.';
+
 /** Endpoints that rejected `chat_template_kwargs`; later calls leave it off. */
 const noTemplateKwargs = new Set<string>();
 

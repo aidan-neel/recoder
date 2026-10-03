@@ -68,3 +68,34 @@ test('an overloaded self-hosted server is a plain failure, not out of usage', ()
 		reason: 'fallback'
 	});
 });
+
+test('an OpenCode provider that rejects its key points to the Agent settings', () => {
+	const failure = modelFailure(
+		new LlmError(401, 'Key revoked'),
+		{ provider: 'opencode', source: 'openai' },
+		'fallback'
+	);
+
+	expect(failure.reason).toContain('Settings → Agent');
+	expect(failure.signIn).toBeUndefined();
+});
+
+test("an OpenCode 403 keeps the provider's message instead of asking to reconnect", () => {
+	expect(
+		modelFailure(
+			new LlmError(403, 'Free tier is not available here.'),
+			{ provider: 'opencode', source: 'opencode' },
+			'fallback'
+		)
+	).toEqual({ reason: 'Free tier is not available here.' });
+});
+
+test('an OpenCode 429 is out of usage for that provider', () => {
+	const failure = modelFailure(
+		new LlmError(429, 'rate limited'),
+		{ provider: 'opencode', source: 'openai' },
+		'fallback'
+	);
+
+	expect(failure.usageLimit).toMatchObject({ provider: 'openai', usageUrl: null });
+});

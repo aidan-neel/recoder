@@ -1,3 +1,5 @@
+import type { ModelProvider } from './models';
+
 export type TokenScope = 'pipeline' | 'discussion' | 'fix';
 
 /** Provider-reported counts only. Cached/reasoning counts are breakdowns, not added to total. */
@@ -13,7 +15,7 @@ export interface TokenUsage {
 export interface TokenCall {
 	id: string;
 	model: string;
-	provider: 'openai-compatible' | 'codex';
+	provider: ModelProvider;
 	scope: TokenScope;
 	status: 'pending' | 'completed' | 'failed';
 	usage: TokenUsage;

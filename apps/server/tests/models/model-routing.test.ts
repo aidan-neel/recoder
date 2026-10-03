@@ -46,3 +46,14 @@ test('an effort the model does not offer falls back to the model default', () =>
 	setReviewOverrides({ models, orchestratorModelId: 'sol', orchestratorEffort: 'minimal' });
 	expect(configForOrchestrator().reasoningEffort).toBe('medium');
 });
+
+test('an OpenCode model routes through OpenCode instead of the first saved model', () => {
+	setReviewOverrides({ models, orchestratorModelId: 'opencode:openrouter/qwen/qwen3', orchestratorEffort: 'high' });
+
+	expect(configForOrchestrator()).toMatchObject({
+		provider: 'opencode',
+		source: 'openrouter',
+		model: 'openrouter/qwen/qwen3',
+		reasoningEffort: 'high'
+	});
+});
