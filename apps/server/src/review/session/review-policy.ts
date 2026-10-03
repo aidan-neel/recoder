@@ -19,11 +19,18 @@ export const REVIEW_POLICY = {
 	/** …and each wave of `maxConcurrentAssignments` past the first adds this much time. */
 	msPerExtraWave: 8 * 60 * 1000,
 	maxFollowUpAssignments: 2,
-	/** Failed specialists the orchestrator may re-dispatch after the first pass. */
-	maxRetryAssignments: 24,
+	/** Failed units rerun after the first pass; each unit is retried once, split in two when it was too big. */
+	maxRetryUnits: 24,
 	/** Every specialist starts at once; the model limiter (`RECODER_LLM_CONCURRENCY`) is the only throttle. */
 	maxConcurrentAssignments: 8,
-	maxSpecialistTurns: 12,
+	/**
+	 * Patch characters one review unit holds. Matches `maxToolRoundChars`, so a
+	 * reviewer starts with its whole patch in one evidence round.
+	 */
+	unitBudgetChars: 24_000,
+	/** Units up to this many fit the base budget and deadline; each one past it adds `callsPerExtraAssignment`. */
+	baseUnits: 6,
+	maxReviewerTurns: 12,
 	maxPlannerTurns: 5,
 	maxFollowUpPasses: 1,
 	maxConsolidationCalls: 1,
@@ -67,9 +74,9 @@ export const REVIEW_POLICY = {
 	/** One verifier's own clock: told to answer after the first, stopped at the second. */
 	verifierFinalTurnAfterMs: 5 * 60 * 1000,
 	verifierMaxMs: 7 * 60 * 1000,
-	/** The same for one specialist. */
-	specialistFinalTurnAfterMs: 12 * 60 * 1000,
-	specialistMaxMs: 15 * 60 * 1000,
+	/** The same for one reviewer or subagent. */
+	reviewerFinalTurnAfterMs: 12 * 60 * 1000,
+	reviewerMaxMs: 15 * 60 * 1000,
 	/** Each wave of `maxConcurrentVerifications` verifiers adds this much time. */
 	msPerVerificationWave: 5 * 60 * 1000,
 	/** Held back from planning and specialists so verification always gets to run. */

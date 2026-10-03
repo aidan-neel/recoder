@@ -21,7 +21,7 @@ import type { TaskFn } from './types.js';
 
 export interface Consolidated {
 	confirmed: Finding[];
-	/** The specialists' recommended checks plus the orchestrator's. */
+	/** The reviewers' recommended checks plus the orchestrator's. */
 	checks: string[];
 	error?: string;
 }
@@ -33,7 +33,7 @@ function announceNothingFound(run: ReviewRun): void {
 	orchestratorSays(
 		run.events,
 		'message_nothing_found',
-		`${count === 1 ? 'The specialist' : `All ${count} specialists`} finished without reporting anything worth flagging.`
+		`${count === 1 ? 'The reviewer' : `All ${count} reviewers`} finished without reporting anything worth flagging.`
 	);
 }
 

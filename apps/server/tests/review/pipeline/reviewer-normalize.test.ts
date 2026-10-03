@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import { isLooping } from '../../../src/review/pipeline/agent-loop';
-import { parseSpecialistOutput, specialistValidationError } from '../../../src/review/pipeline/specialist';
+import { parseReviewerOutput, reviewerValidationError } from '../../../src/review/pipeline/reviewer';
 
 test('repairs formatting slips in an attempted final answer', () => {
-	const out = parseSpecialistOutput({
+	const out = parseReviewerOutput({
 		message: 'One issue.',
 		findings: [{ path: 'a.py', line: '42', severity: 'Critical', description: 'Responses go to the wrong queue.' }]
 	});
@@ -20,10 +20,10 @@ test('repairs formatting slips in an attempted final answer', () => {
 });
 
 test('commentary alone is still not a finished review, and errors name the field', () => {
-	expect(parseSpecialistOutput({ message: 'Let me gather evidence.' })).toBeNull();
+	expect(parseReviewerOutput({ message: 'Let me gather evidence.' })).toBeNull();
 
 	expect(
-		specialistValidationError({ message: 'x', findings: [{ file: 'a.py', severity: 'bogus', body: 'b' }] })
+		reviewerValidationError({ message: 'x', findings: [{ file: 'a.py', severity: 'bogus', body: 'b' }] })
 	).toContain('findings.0.severity');
 });
 

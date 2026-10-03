@@ -2,7 +2,6 @@ import { afterEach } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { resetLlmLimiter } from '../../../src/models/llm';
-import { REVIEW_ROLES, type ReviewRole } from '../../../src/review/pipeline/roles';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { git } from '../../helpers/git';
 
@@ -16,47 +15,33 @@ export const DIFF = `diff --git a/src/a.ts b/src/a.ts
 
 export const HUNK = 'src/a.ts:1,1:1,1';
 
-/** A planner assignment over the one hunk in `DIFF`. */
-export const assignment = (id: string, role: ReviewRole, priority: number) => ({
-	id,
-	role,
-	title: id,
-	reason: 'must',
-	scope: [{ path: 'src/a.ts', hunkIds: [HUNK] }],
-	questions: ['q'],
-	contextEvidenceIds: [],
-	priority
-});
+/** A new file of `lines` 100-character lines, as one diff section. */
+function addedFile(path: string, lines: number): string {
+	const body = Array.from({ length: lines }, (_, index) => `+${String(index).padEnd(99, 'x')}`).join('\n');
 
-/** Planner role decisions selecting exactly `selected`. */
-export function decisions(selected: string[]) {
-	return REVIEW_ROLES.map((role) => ({
-		role,
-		decision: selected.includes(role) ? 'selected' : 'not_needed',
-		reason: selected.includes(role) ? 'needed' : 'not this PR'
-	}));
+	return `diff --git a/${path} b/${path}\nnew file mode 100644\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1,${lines} @@\n${body}\n`;
 }
 
-export const PLAN = {
-	summary: 'two specialists',
-	assignments: [assignment('correctness-core', 'correctness', 1), assignment('patterns-core', 'patterns', 2)],
-	roleDecisions: decisions(['correctness', 'patterns'])
-};
+/**
+ * Two files in separate folders, each about 14,000 patch characters, so the
+ * change is cut into two units: `unit-1` is `src/a.ts`, `unit-2` is `tests/b.ts`.
+ */
+export const TWO_UNIT_DIFF = addedFile('src/a.ts', 140) + addedFile('tests/b.ts', 140);
 
-/** An empty specialist answer that read nothing; the agent loop sends it back once before accepting it. */
+/** An empty reviewer answer that read nothing; the agent loop sends it back once before accepting it. */
 export const NOTHING = {
 	findings: [],
 	examinedHunks: [HUNK],
-	coverageGaps: [],
+	gaps: [],
 	blockers: [],
-	followUp: null,
+	subagents: [],
 	recommendedChecks: []
 };
 
 /** A consolidation answer that keeps nothing. */
 export const KEEP_NONE = { keep: [], merge: [], reject: [], recommendedChecks: [] };
 
-/** A specialist finding on line 1 of `src/a.ts`. */
+/** A reviewer finding on line 1 of `src/a.ts`. */
 export const finding = (body: string, severity = 'medium') => ({
 	file: 'src/a.ts',
 	line: 1,
@@ -107,30 +92,31 @@ export function restoreAfterEach(): void {
 	});
 }
 
-/** Answers each prompt by its kind; `patterns` decides whether that specialist fails. */
-export function stubModel(calls: string[], patterns: 'fail' | 'ok') {
-	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-		const system = systemOf(init);
+/** The unit a reviewer prompt is for (`unit-1`, `retry-unit-2`…), or null for any other call. */
+export function unitOf(init?: RequestInit): string | null {
+	if (!systemOf(init).includes('primary reviewer')) return null;
 
-		const kind = system.includes('review orchestrator')
-			? 'planner'
-			: system.includes('(correctness)')
-				? 'correctness'
-				: system.includes('(patterns)')
-					? 'patterns'
-					: 'consolidation';
+	return /^Unit (\S+):/m.exec(String(messagesOf(init)[1]?.content ?? ''))?.[1] ?? null;
+}
+
+/**
+ * Answers `TWO_UNIT_DIFF`'s reviewers and consolidation, recording each call by
+ * unit id or `consolidation`. `unit-1` reports one finding; `failing` names a
+ * unit whose reviewer the endpoint rejects.
+ */
+export function stubModel(calls: string[], failing?: string) {
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const kind = unitOf(init) ?? 'consolidation';
 
 		calls.push(kind);
-		if (kind === 'patterns' && patterns === 'fail') return new Response('bad request', { status: 400 });
+		if (kind === failing) return new Response('bad request', { status: 400 });
 
 		const reply =
-			kind === 'planner'
-				? PLAN
-				: kind === 'correctness'
-					? { ...NOTHING, findings: [finding('possible miss')] }
-					: kind === 'patterns'
-						? NOTHING
-						: { keep: ['c1'], merge: [], reject: [], recommendedChecks: [] };
+			kind === 'unit-1'
+				? { ...NOTHING, findings: [finding('possible miss')] }
+				: kind === 'consolidation'
+					? { keep: ['c1'], merge: [], reject: [], recommendedChecks: [] }
+					: NOTHING;
 
 		return modelReply({ message: 'ok', ...reply });
 	}) as unknown as typeof fetch;

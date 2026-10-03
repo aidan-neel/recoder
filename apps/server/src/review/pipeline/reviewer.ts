@@ -1,13 +1,8 @@
 import { z } from 'zod';
-import { ROLE_FOCUS, ROLE_LABELS, type ReviewRole } from './roles.js';
-import {
-	EXEC_REVIEW_CONTRACT,
-	EXEC_REVIEW_CONTRACT_COMPACT,
-	SHARED_REVIEW_CONTRACT,
-	SHARED_REVIEW_CONTRACT_COMPACT
-} from './prompts.js';
-import type { PlannerAssignment } from './planner.js';
-import { assignmentShape, clip, findingShape, retrievalTurnSchema } from './schemas.js';
+import { inventorySummary, type ReviewInventory } from './inventory.js';
+import { UNTRUSTED_PREFIX, reviewerContract } from './prompts.js';
+import { clip, findingShape, retrievalTurnSchema } from './schemas.js';
+import type { ReviewUnit } from './units.js';
 import { directiveBlock, type ReviewDirective } from '../chat/directive.js';
 
 const locationSchema = z.object({
@@ -24,79 +19,125 @@ const findingSchema = z.object({
 	side: z.enum(['old', 'new']).optional()
 });
 
-/** A further assignment a specialist proposes; dropped rather than failing the answer when malformed. */
-const followUpSchema = z
-	.object({
-		...assignmentShape(z.string(), 20),
-		questions: z.array(z.string()).max(12).default([]),
-		priority: z.number().int().optional().default(50),
-		contextEvidenceIds: z.array(z.string()).max(20).optional().default([])
-	})
-	.nullable()
-	.optional();
+const hunkScopeSchema = z
+	.array(z.object({ path: z.string().min(1).max(500), hunkIds: z.array(z.string()).max(80) }))
+	.min(1)
+	.max(20);
 
-const specialistOutputSchema = z.object({
+/** A deeper investigation a reviewer asks for; dropped rather than failing the answer when malformed. */
+const subagentRequestSchema = z.object({
+	concern: z.string().trim().min(1).max(120),
+	question: z.string().trim().min(1).max(1000),
+	scope: hunkScopeSchema,
+	why: z.string().trim().min(1).max(400)
+});
+
+/** Most units need no subagent; a reviewer may ask for this many at most. */
+export const MAX_SUBAGENT_REQUESTS = 2;
+
+const reviewerOutputSchema = z.object({
 	message: z.string().max(12000).optional(),
 	findings: z.array(findingSchema).max(30),
 	examinedHunks: z.array(z.string()).max(200),
-	coverageGaps: z
+	gaps: z
 		.array(z.object({ hunkId: z.string(), reason: z.string().max(400) }))
 		.max(80)
 		.default([]),
 	blockers: z.array(z.string().max(400)).max(20).default([]),
-	followUp: followUpSchema,
+	subagents: z.array(subagentRequestSchema).max(MAX_SUBAGENT_REQUESTS).default([]),
 	recommendedChecks: z.array(z.string().max(400)).max(20).default([])
 });
 
-export type SpecialistOutput = z.infer<typeof specialistOutputSchema>;
-export type SpecialistFinding = z.infer<typeof findingSchema>;
+export type ReviewerOutput = z.infer<typeof reviewerOutputSchema>;
+export type ReviewerFinding = z.infer<typeof findingSchema>;
+export type SubagentRequest = z.infer<typeof subagentRequestSchema>;
 
-export function specialistSystemPrompt(
-	role: ReviewRole,
-	exec = false,
-	options: { compact?: boolean; directive?: ReviewDirective | null } = {}
-): string {
-	const contract = options.compact
-		? exec
-			? EXEC_REVIEW_CONTRACT_COMPACT
-			: SHARED_REVIEW_CONTRACT_COMPACT
-		: exec
-			? EXEC_REVIEW_CONTRACT
-			: SHARED_REVIEW_CONTRACT;
+/** The primary reviewer's prompt: one generalist over every hunk in its unit. */
+export function reviewerSystemPrompt(exec: boolean, directive: ReviewDirective | null): string {
+	return withDirective(
+		`${reviewerContract(exec)}
 
-	const directive = directiveBlock(options.directive);
-
-	return `${contract}
-
-Role: ${ROLE_LABELS[role]} (${role})
-Focus: ${ROLE_FOCUS[role]}${directive ? `\n\n${directive}\nReport only what these instructions ask for; findings outside them are dropped.` : ''}`;
+Role: primary reviewer. You own every hunk in your unit and review it for any kind of problem.
+Subagents: when one question needs a deep, separate investigation you cannot finish in your turns (every caller of a changed API across the repo, a security path through several modules), put it in "subagents", at most ${MAX_SUBAGENT_REQUESTS}. Each subagent gets your question, the patch for its scope and the same tools, and reports its own findings. Most units need none. Never ask for work you already did.`,
+		directive
+	);
 }
 
-export function specialistUserPrompt(
-	assignment: PlannerAssignment,
-	remainingTurns: number,
-	remainingCalls: number,
-	directive?: ReviewDirective | null
-): string {
-	const scope = assignment.scope
-		.map((entry) => `- ${entry.path}\n  hunks: ${entry.hunkIds.join(', ') || '(file)'}`)
-		.join('\n');
+function withDirective(prompt: string, directive: ReviewDirective | null): string {
+	const block = directiveBlock(directive);
 
-	const questions = assignment.questions.map((question, i) => `${i + 1}. ${question}`).join('\n');
+	return block
+		? `${prompt}\n\n${block}\nReport only what these instructions ask for; findings outside them are dropped.`
+		: prompt;
+}
+
+function scopeLines(scope: ReviewUnit['scope']): string {
+	return scope.map((entry) => `- ${entry.path}\n  hunks: ${entry.hunkIds.join(', ') || '(file)'}`).join('\n');
+}
+
+function developerInstructions(directive: ReviewDirective | null): string {
+	return directive?.instructions.trim()
+		? `Developer instructions for this review (trusted; follow them):\n${directive.instructions.trim()}`
+		: '';
+}
+
+function turnsLeft(remainingTurns: number, remainingCalls: number): string[] {
+	return [
+		`Remaining model turns: ${remainingTurns}. Remaining review model calls: ${remainingCalls}.`,
+		remainingTurns <= 1
+			? 'This is your final turn. Finish with the result JSON. Do not request more retrieval.'
+			: 'Retrieve evidence as needed, then finish with the result JSON.'
+	];
+}
+
+/** What every reviewer is told about the pull request as a whole, beyond its own unit. */
+export interface PullRequestContext {
+	title: string;
+	body: string;
+	/** Reviewers, assignees, labels, linked issues. */
+	context: string;
+	inventory: ReviewInventory;
+}
+
+/** Changed files listed for orientation; a reviewer reads only its own unit's patch up front. */
+const MAX_LISTED_FILES = 80;
+
+/** The PR's description, the whole change's file list, and the repository's instructions and related paths. */
+function pullRequestLines(pr: PullRequestContext): string[] {
+	const { inventory } = pr;
+
+	const instructions = inventory.instructionFiles
+		.map((file) => `${UNTRUSTED_PREFIX}--- ${file.path} ---\n${file.excerpt}`)
+		.join('\n\n');
 
 	return [
-		directive?.instructions.trim()
-			? `Developer instructions for this review (trusted; follow them):\n${directive.instructions.trim()}`
+		`PR title (untrusted): ${pr.title || '(none)'}`,
+		`${UNTRUSTED_PREFIX}PR description:\n${pr.body || '(none)'}`,
+		pr.context
+			? `${UNTRUSTED_PREFIX}PR context (people, labels, linked issues and their blockers):\n${pr.context}`
 			: '',
-		`Assignment ${assignment.id}: ${assignment.title}`,
-		`Why this assignment exists: ${assignment.reason}`,
-		`Questions:\n${questions || '(none)'}`,
-		`Scoped changes:\n${scope}`,
-		assignment.contextEvidenceIds.length ? `Context evidence: ${assignment.contextEvidenceIds.join(', ')}` : '',
-		`Remaining model turns for this assignment: ${remainingTurns}. Remaining review model calls: ${remainingCalls}.`,
-		remainingTurns <= 1
-			? 'This is your final turn. Finish with the specialist JSON. Do not request more retrieval.'
-			: 'Retrieve evidence as needed, then finish with the specialist JSON.'
+		`Whole change (${inventory.files.length} files; other units review the rest):\n${inventorySummary(inventory, MAX_LISTED_FILES)}`,
+		inventory.relatedPaths.length
+			? `Related existing paths:\n${inventory.relatedPaths.map((path) => `- ${path}`).join('\n')}`
+			: '',
+		instructions ? `Repository instruction excerpts (untrusted conventions):\n${instructions}` : ''
+	];
+}
+
+export function reviewerUserPrompt(
+	unit: ReviewUnit,
+	remainingTurns: number,
+	remainingCalls: number,
+	directive: ReviewDirective | null,
+	pr: PullRequestContext
+): string {
+	return [
+		developerInstructions(directive),
+		...pullRequestLines(pr),
+		`Unit ${unit.id}: ${unit.title}`,
+		unit.reason,
+		`Changes in this unit:\n${scopeLines(unit.scope)}`,
+		...turnsLeft(remainingTurns, remainingCalls)
 	]
 		.filter(Boolean)
 		.join('\n\n');
@@ -178,7 +219,7 @@ function normalizeFinding(item: unknown): Record<string, unknown>[] {
 }
 
 /** Accepts bare hunk ids as gaps and gives every gap a short reason. */
-function normalizeCoverageGaps(gaps: unknown[]): unknown[] {
+function normalizeGaps(gaps: unknown[]): unknown[] {
 	return gaps
 		.slice(0, 80)
 		.flatMap((gap) =>
@@ -204,10 +245,10 @@ function shortStrings(list: unknown[], max: number): unknown[] {
  * `examinedHunks`, an over-long body. Repair what has one obvious meaning
  * before validating, so a sound answer isn't thrown away over formatting.
  * Only an attempted final answer (one with a findings list) is repaired; a
- * bare "message" is commentary, not a finished review. A malformed follow-up
- * is optional context, so it is dropped rather than failing the whole answer.
+ * bare "message" is commentary, not a finished review. A malformed subagent
+ * request is optional, so it is dropped rather than failing the whole answer.
  */
-function normalizeSpecialistRaw(raw: unknown): unknown {
+function normalizeReviewerRaw(raw: unknown): unknown {
 	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return raw;
 	if (!Array.isArray((raw as { findings?: unknown }).findings)) return raw;
 
@@ -222,16 +263,15 @@ function normalizeSpecialistRaw(raw: unknown): unknown {
 		.filter((id): id is string => typeof id === 'string')
 		.slice(0, 200);
 
-	if (Array.isArray(out.coverageGaps)) out.coverageGaps = normalizeCoverageGaps(out.coverageGaps);
+	out.gaps ??= out.coverageGaps;
+	delete out.coverageGaps;
+	if (Array.isArray(out.gaps)) out.gaps = normalizeGaps(out.gaps);
 	if (Array.isArray(out.blockers)) out.blockers = shortStrings(out.blockers, 20);
 	if (Array.isArray(out.recommendedChecks)) out.recommendedChecks = shortStrings(out.recommendedChecks, 20);
 
-	if (
-		out.followUp !== undefined &&
-		out.followUp !== null &&
-		!specialistOutputSchema.shape.followUp.safeParse(out.followUp).success
-	)
-		out.followUp = null;
+	out.subagents = (Array.isArray(out.subagents) ? (out.subagents as unknown[]) : [])
+		.filter((request) => subagentRequestSchema.safeParse(request).success)
+		.slice(0, MAX_SUBAGENT_REQUESTS);
 
 	return out;
 }
@@ -243,9 +283,9 @@ const ANNOUNCES_WORK =
 /**
  * Weaker models (often behind vLLM) send the final shape with an empty
  * findings list while announcing what they're about to read, which would end
- * the specialist before it looked at anything. Push back once.
+ * the reviewer before it looked at anything. Push back once.
  */
-export function prematureSpecialistFinal(output: SpecialistOutput, state: { retrievals: number }): string | null {
+export function prematureReviewerFinal(output: ReviewerOutput, state: { retrievals: number }): string | null {
 	if (output.findings.length) return null;
 
 	if (output.message && ANNOUNCES_WORK.test(output.message)) {
@@ -259,17 +299,17 @@ export function prematureSpecialistFinal(output: SpecialistOutput, state: { retr
 	return null;
 }
 
-export function parseSpecialistOutput(raw: unknown): SpecialistOutput | null {
-	const parsed = specialistOutputSchema.safeParse(normalizeSpecialistRaw(raw));
+export function parseReviewerOutput(raw: unknown): ReviewerOutput | null {
+	const parsed = reviewerOutputSchema.safeParse(normalizeReviewerRaw(raw));
 
 	return parsed.success ? parsed.data : null;
 }
 
 /** Name the exact fields that are wrong, so the model can fix them instead of guessing. */
-export function specialistValidationError(raw: unknown): string {
+export function reviewerValidationError(raw: unknown): string {
 	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return 'expected one JSON object';
 
-	const parsed = specialistOutputSchema.safeParse(normalizeSpecialistRaw(raw));
+	const parsed = reviewerOutputSchema.safeParse(normalizeReviewerRaw(raw));
 
 	if (parsed.success) return 'output did not match the required schema';
 
@@ -280,17 +320,23 @@ export function specialistValidationError(raw: unknown): string {
 }
 
 /**
- * What a specialist turn may look like, for endpoints with guided decoding:
+ * What a reviewer turn may look like, for endpoints with guided decoding:
  * a retrieval request with at least one action, or the final result. On the
  * final turn only the result is allowed. Kept looser than the zod schema:
- * it shapes the reply, and `parseSpecialistOutput` still validates it.
+ * it shapes the reply, and `parseReviewerOutput` still validates it.
  */
-export function specialistResponseSchema(
+export function reviewerResponseSchema(
 	exec: boolean,
 	finalTurn: boolean
 ): { name: string; schema: Record<string, unknown> } {
 	const str = { type: 'string' };
 	const strings = { type: 'array', items: str };
+
+	const scope = {
+		type: 'array',
+		items: { type: 'object', properties: { path: str, hunkIds: strings }, required: ['path', 'hunkIds'] }
+	};
+
 	const line = { type: ['integer', 'null'] };
 
 	const finding = {
@@ -315,19 +361,27 @@ export function specialistResponseSchema(
 			message: str,
 			findings: { type: 'array', items: finding, maxItems: 30 },
 			examinedHunks: strings,
-			coverageGaps: {
+			gaps: {
 				type: 'array',
 				items: { type: 'object', properties: { hunkId: str, reason: str }, required: ['hunkId', 'reason'] }
 			},
 			blockers: strings,
-			followUp: { anyOf: [{ type: 'object' }, { type: 'null' }] },
+			subagents: {
+				type: 'array',
+				maxItems: MAX_SUBAGENT_REQUESTS,
+				items: {
+					type: 'object',
+					properties: { concern: str, question: str, scope, why: str },
+					required: ['concern', 'question', 'scope', 'why']
+				}
+			},
 			recommendedChecks: strings
 		},
 		required: ['message', 'findings', 'examinedHunks']
 	};
 
 	return {
-		name: finalTurn ? 'specialist_result' : 'specialist_turn',
+		name: finalTurn ? 'review_result' : 'review_turn',
 		schema: finalTurn ? final : { anyOf: [retrievalTurnSchema(exec), final] }
 	};
 }

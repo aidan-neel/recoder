@@ -6,7 +6,7 @@ import {
 	deterministicConsolidate,
 	validateCandidate
 } from '../../../src/review/pipeline/consolidate';
-import { parseSpecialistOutput } from '../../../src/review/pipeline/specialist';
+import { parseReviewerOutput } from '../../../src/review/pipeline/reviewer';
 
 const DIFF = `diff --git a/a.ts b/a.ts
 --- a/a.ts
@@ -104,8 +104,8 @@ test('failed consolidation keeps validated candidates as unconfirmed rather than
 	expect(rejected).toEqual([]);
 });
 
-test('authored finding titles survive specialist parsing, validation, and consolidation', () => {
-	const parsed = parseSpecialistOutput({
+test('authored finding titles survive reviewer parsing, validation, and consolidation', () => {
+	const parsed = parseReviewerOutput({
 		findings: [
 			{
 				title: 'Compare semantic versions',

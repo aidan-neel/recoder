@@ -3,8 +3,7 @@ import type { Finding, FindingSeverity } from '@recoder/shared';
 import type { EvidenceStore } from '../../evidence/evidence.js';
 import type { ReviewInventory } from './inventory.js';
 import { FINDING_BODY_STYLE } from './prompts.js';
-import type { SpecialistFinding } from './specialist.js';
-import type { ReviewRole } from './roles.js';
+import type { ReviewerFinding } from './reviewer.js';
 import { directiveBlock, type ReviewDirective } from '../chat/directive.js';
 
 const toBackendSeverity: Record<string, FindingSeverity> = {
@@ -44,7 +43,7 @@ export type ConsolidationPlan = z.infer<typeof consolidationSchema>;
 export function consolidationSystemPrompt(directive?: ReviewDirective | null): string {
 	const instructions = directiveBlock(directive);
 
-	return `${instructions ? `${instructions}\nReject candidates outside these instructions (reason: "outside the developer's instructions").\n\n` : ''}You consolidate Recoder specialist candidates into confirmed findings.
+	return `${instructions ? `${instructions}\nReject candidates outside these instructions (reason: "outside the developer's instructions").\n\n` : ''}You consolidate Recoder reviewer candidates into confirmed findings.
 You may keep, merge, clarify, or reject candidates. You cannot invent findings or evidence.
 Do not drop an issue solely because a previous review reported it.
 Do not merge distinct issues that happen to share a file or line.
@@ -83,11 +82,11 @@ export function consolidationUserPrompt(candidates: CandidateFinding[], evidence
 }
 
 export function validateCandidate(
-	raw: SpecialistFinding,
+	raw: ReviewerFinding,
 	meta: {
 		candidateId: string;
 		assignmentId: string;
-		role: ReviewRole;
+		role: string;
 		model: string;
 		fingerprint: (file: string, category: string, start: number, end: number, side: 'old' | 'new') => string;
 	},

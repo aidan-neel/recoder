@@ -16,7 +16,6 @@ import type {
 } from '@recoder/shared';
 import type { ReviewRevision, ToolCallReport } from '../../../evidence/evidence.js';
 import type { ReviewCheckpoint } from '../../session/review-checkpoint.js';
-import type { DispatchPolicy } from '../dispatch.js';
 
 /** Callbacks the harness reports progress through; every one is optional. */
 export interface HarnessEvents {
@@ -69,9 +68,7 @@ export interface AdaptiveReviewInput {
 	signal?: AbortSignal;
 	/** What the developer asked for in the session before starting the review, verbatim. */
 	instructions?: string | null;
-	/** How many specialists to dispatch; defaults to the saved setting. */
-	dispatch?: DispatchPolicy;
-	/** Continue a failed review: skip planning and the specialists that finished. */
+	/** Continue a failed review: skip the units that finished. */
 	resume?: ReviewProgressCheckpoint | null;
 }
 

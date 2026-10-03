@@ -12,13 +12,12 @@ import {
 	saveCheckpoint,
 	type ReviewRun
 } from './context.js';
-import { runSecondWave } from './follow-ups.js';
-import { planReview } from './planning.js';
-import { runAssignmentPool } from './pool.js';
-import { plannerExecNotes, prepareSandbox, startSetup } from './sandbox-setup.js';
+import { runUnitPool } from './pool.js';
+import { prepareSandbox, startSetup } from './sandbox-setup.js';
 import { completeReview, stoppedReview } from './summary.js';
 import type { AdaptiveReviewInput, AdaptiveReviewResult, HarnessEvents } from './types.js';
 import { understandChanges } from './understand.js';
+import { cutUnits, retryFailedUnits } from './unit-stage.js';
 import { verifyStage } from './verification.js';
 
 /**
@@ -30,9 +29,10 @@ import { verifyStage } from './verification.js';
  *   files, but only inside an isolated, offline copy of the checkout
  *   (`exec-sandbox.ts`); tracked files are restored after every command.
  *
- * Stages: understand → plan → baseline checks → specialists → verify →
- * consolidate. Verification re-proves every candidate by running code.
- * The deadline runs on the review clock, which stands still while paused or waiting for approval.
+ * Stages: understand → cut units → baseline checks → one reviewer per unit
+ * (failed units retried once) → verify → consolidate. Verification re-proves
+ * every candidate by running code. The deadline runs on the review clock,
+ * which stands still while paused.
  */
 export async function runAdaptiveReview(
 	input: AdaptiveReviewInput,
@@ -65,31 +65,30 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	await understandChanges(run);
 
 	const setup = startSetup(run);
-	const execNotes = run.workspace ? await plannerExecNotes(run.workspace) : undefined;
-	const plan = await planReview(run, execNotes);
 
+	cutUnits(run);
 	publishCoverage(run);
 	publishBudget(run);
 	saveCheckpoint(run);
 
-	await prepareSandbox(run, plan, setup);
+	await prepareSandbox(run, setup);
 
 	run.events?.onStage?.('specialists');
 	if (run.controller.signal.aborted) throw new ReviewAbortedError('review aborted');
 
 	const finishedAtStart = finishedIds(run);
 
-	await runAssignmentPool(
-		run.items.filter((item) => !finishedAtStart.has(item.id)),
+	await runUnitPool(
+		run.units.filter((unit) => !finishedAtStart.has(unit.id)),
 		run.assignments,
-		poolContext(run, run.followUps)
+		poolContext(run)
 	);
 
 	publishCoverage(run);
 	publishBudget(run);
 	publishCandidates(run);
 
-	await runSecondWave(run, plan);
+	await retryFailedUnits(run);
 	await verifyStage(run);
 
 	const consolidated = await consolidate(run);

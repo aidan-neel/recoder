@@ -4,13 +4,16 @@ import { ReviewControl, runWithReviewControl } from '../../../src/review/session
 import { REVIEW_POLICY } from '../../../src/review/session/review-policy';
 import {
 	DIFF,
+	KEEP_NONE,
 	NOTHING,
-	PLAN,
+	TWO_UNIT_DIFF,
 	finding,
+	messagesOf,
 	modelReply,
 	restoreAfterEach,
 	stubModel,
 	systemOf,
+	unitOf,
 	useTestModel
 } from './harness-fixtures';
 
@@ -25,17 +28,17 @@ class SkewedClock extends ReviewControl {
 	}
 }
 
-test('a resumed review reruns only unfinished specialists and keeps the finished ones’ findings', async () => {
+test('a resumed review reruns only unfinished units and keeps the finished ones’ findings', async () => {
 	useTestModel();
 
 	const first: string[] = [];
 
-	stubModel(first, 'fail');
+	stubModel(first, 'unit-2');
 
 	let saved: ReviewProgressCheckpoint | null = null;
 
 	const failed = await runAdaptiveReview(
-		{ diff: DIFF, sandboxPath: null },
+		{ diff: TWO_UNIT_DIFF, sandboxPath: null },
 		{
 			onCheckpoint: (checkpoint) => {
 				saved = checkpoint;
@@ -43,16 +46,16 @@ test('a resumed review reruns only unfinished specialists and keeps the finished
 		}
 	);
 
-	expect(failed.assignments.find((record) => record.id === 'patterns-core')?.status).toBe('error');
-	expect(first).toContain('patterns');
+	expect(failed.assignments.find((record) => record.id === 'unit-2')?.status).toBe('error');
+	expect(first).toContain('unit-2');
 
 	const second: string[] = [];
 
-	stubModel(second, 'ok');
+	stubModel(second);
 
-	const resumed = await runAdaptiveReview({ diff: DIFF, sandboxPath: null, resume: saved });
+	const resumed = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, resume: saved });
 
-	expect(second).toEqual(['patterns', 'patterns', 'consolidation']);
+	expect(second).toEqual(['unit-2', 'unit-2', 'consolidation']);
 	expect(resumed.assignments.map((record) => record.status)).toEqual(['done', 'done']);
 	expect(resumed.findings.map((item) => item.message)).toEqual(['[bug] possible miss']);
 });
@@ -62,20 +65,12 @@ test('a review whose consolidation fails still finishes with its findings', asyn
 
 	const calls: string[] = [];
 
-	stubModel(calls, 'ok');
+	stubModel(calls);
 
 	const answer = globalThis.fetch;
 
 	globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
-		const system = systemOf(init);
-
-		if (
-			!system.includes('review orchestrator') &&
-			!system.includes('(correctness)') &&
-			!system.includes('(patterns)')
-		) {
-			return Response.json({ choices: [{ message: { content: 'not json' } }] });
-		}
+		if (!unitOf(init)) return Response.json({ choices: [{ message: { content: 'not json' } }] });
 
 		return answer(url, init);
 	}) as unknown as typeof fetch;
@@ -87,7 +82,7 @@ test('a review whose consolidation fails still finishes with its findings', asyn
 	expect(result.assignments.every((record) => record.status === 'done')).toBe(true);
 });
 
-test('a review that runs out of time finishes with the findings its specialists reported instead of failing', async () => {
+test('a review that runs out of time finishes with the findings its reviewers reported instead of failing', async () => {
 	useTestModel();
 
 	const control = new SkewedClock();
@@ -102,17 +97,13 @@ test('a review that runs out of time finishes with the findings its specialists 
 	};
 
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-		const system = systemOf(init);
+		if (unitOf(init) === 'unit-2') return stallPastDeadline(init);
 
-		if (system.includes('(patterns)')) return stallPastDeadline(init);
-
-		const reply = system.includes('review orchestrator') ? PLAN : { ...NOTHING, findings: [finding('possible miss')] };
-
-		return modelReply({ message: 'ok', ...reply });
+		return modelReply({ message: 'ok', ...NOTHING, findings: [finding('possible miss')] });
 	}) as unknown as typeof fetch;
 
 	const result = await runWithReviewControl(control, () =>
-		runAdaptiveReview({ diff: DIFF, sandboxPath: null, signal: control.abort.signal })
+		runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, signal: control.abort.signal })
 	);
 
 	expect(result.outcome).toBe('complete');
@@ -120,7 +111,43 @@ test('a review that runs out of time finishes with the findings its specialists 
 	expect(result.findings.map((item) => item.message)).toEqual(['[bug] possible miss']);
 
 	expect(result.assignments.map((record) => [record.id, record.status])).toEqual([
-		['correctness-core', 'done'],
-		['patterns-core', 'error']
+		['unit-1', 'done'],
+		['unit-2', 'error']
 	]);
+});
+
+test('a review told to look only at Python files cuts its units from those files and tells every reviewer why', async () => {
+	useTestModel();
+
+	const diff = `${DIFF}diff --git a/src/b.py b/src/b.py
+--- a/src/b.py
++++ b/src/b.py
+@@ -1 +1 @@
+-old
++new
+`;
+
+	const reviewerPrompts: string[] = [];
+
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const system = systemOf(init);
+
+		if (system.includes('primary reviewer')) reviewerPrompts.push(messagesOf(init)[1].content);
+
+		const reply = system.includes('file filter')
+			? { includeGlobs: ['**/*.py'], excludeGlobs: [], roles: [] }
+			: system.includes('primary reviewer')
+				? { ...NOTHING, examinedHunks: ['src/b.py:1,1:1,1'] }
+				: KEEP_NONE;
+
+		return modelReply({ message: 'ok', ...reply });
+	}) as unknown as typeof fetch;
+
+	const result = await runAdaptiveReview({ diff, sandboxPath: null, instructions: 'review only python files' });
+
+	expect(result.outcome).toBe('complete');
+	expect(result.assignments.flatMap((record) => record.scope.map((entry) => entry.path))).toEqual(['src/b.py']);
+	expect(result.coverageGaps.find((gap) => gap.path === 'src/a.ts')?.reason).toContain('outside your instructions');
+	expect(reviewerPrompts.length).toBeGreaterThan(0);
+	expect(reviewerPrompts.every((prompt) => prompt.includes('review only python files'))).toBe(true);
 });

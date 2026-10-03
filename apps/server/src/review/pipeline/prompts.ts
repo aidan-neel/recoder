@@ -15,18 +15,19 @@ Verify; do not assume. Before you report a finding, prove it by running code: a 
 When something cannot be run here (it needs the network, a service, credentials, or another platform), say so in the finding body and cite the code evidence instead.
 Edits to tracked files are reverted after every command; put experiments in new files, or patch and run in one command.`;
 
-const REVIEW_RULES = `Inspect related existing code before proposing a new abstraction or convention.
-Distinguish intentional PR behavior from accidental inconsistency.
-Check whether a suspected issue is introduced or worsened by this PR.
-Cite evidence IDs for every finding. Do not invent files, lines, or behavior you cannot see.
-Report which assigned hunks you actually examined.
-Hunt, don't skim. For each changed function: read the whole function, not just the hunk; find its callers and check they still hold; check what removed or replaced code used to guarantee and whether something still does; try empty, null, boundary, concurrent and failure inputs in your head.
-Investigate every suspicious pattern and report any issue you can tie to evidence, even when you are not fully sure: a later stage verifies and filters candidates, so a missed bug costs more than a rejected candidate. Say how sure you are in the body.
-Zero findings is a valid outcome only after you have read the code the change touches.
-Convention findings need either an applicable explicit repository rule or at least two comparable existing examples. Mixed local conventions are uncertainty, not a mandate to normalize code.
-Concrete naming, formatting, documentation, and structure deviations are allowed and are normally informational. Group repeated manifestations of one rule into one finding with related locations.
-You cannot spawn agents. On your final allowed turn you must finish with the evidence you have.
-Repository actions are available through JSON action requests executed by Recoder between model turns. You do not need native function tools. If related code is missing, request it now; do not claim the inspection window has closed unless the host explicitly says this is the final turn.
+/** One generalist checklist: every reviewer and subagent works from it, whatever the model. */
+const REVIEW_RULES = `How to review:
+- Read the whole changed function, not just the hunk. Find its callers and check they still hold.
+- Check what removed or replaced code used to guarantee, and whether something still does.
+- Try empty, null, boundary, concurrent and failure inputs in your head.
+- Cover every kind of problem: logic, security, error handling, concurrency, performance, persisted data and migrations, API and caller impact, UI state, tests that cannot fail, docs the change made wrong.
+- Check whether an issue is introduced or worsened by this change, and whether the behavior is intended.
+- Read how the repository already does something before calling it wrong. A convention finding needs an explicit repository rule or two comparable existing examples.
+- Report every issue you can tie to evidence, even when unsure, and say how sure you are: a later stage verifies candidates. Group repeats of one problem into one finding with related locations.
+- Cite evidence IDs for every finding. Never invent files, lines or behavior you cannot see.
+- Zero findings is valid only after you have read the code the change touches.
+- On your final allowed turn, finish with the evidence you have.
+Repository actions are available through JSON action requests executed by Recoder between model turns. You do not need native function tools.
 
 `;
 
@@ -64,36 +65,20 @@ Example body:
 "\`get_dynamic_arguments\` can raise \`EOFError\` if the child exits mid-request.\\n\\n- The child's \`finally\` now closes \`response_queue\` (\`mission.py:612\`).\\n- \`response_queue.get(timeout=5.0)\` only catches \`queue.Empty\` (\`mission.py:550\`).\\n\\nCatch \`EOFError\`/\`OSError\` like the status listener does (\`mission.py:510\`)."`;
 
 const FINAL_SHAPE = `When finished, output STRICT JSON. Every top-level field is required; use [] or null when empty. A finish with no issues looks like:
-{"message":"The queue split is consistent; no issues found.","findings":[],"examinedHunks":["src/runner/mission.py:9,7:9,7"],"coverageGaps":[],"blockers":[],"followUp":null,"recommendedChecks":[]}
+{"message":"The queue split is consistent; no issues found.","findings":[],"examinedHunks":["src/runner/mission.py:9,7:9,7"],"gaps":[],"blockers":[],"subagents":[],"recommendedChecks":[]}
 Full shape:
-{"message":string,"findings":[{"title":string,"file":string,"line":number|null,"endLine":number|null,"severity":"high"|"medium"|"low","category":string,"body":string,"evidenceIds":string[],"relatedLocations":[{"file":string,"line":number,"endLine":number,"side":"old"|"new"}],"side":"old"|"new"}],"examinedHunks":string[],"coverageGaps":[{"hunkId":string,"reason":string}],"blockers":string[],"followUp":{"id":string,"role":string,"title":string,"reason":string,"scope":[{"path":string,"hunkIds":string[]}],"questions":string[],"priority":number}|null,"recommendedChecks":string[]}
+{"message":string,"findings":[{"title":string,"file":string,"line":number|null,"endLine":number|null,"severity":"high"|"medium"|"low","category":string,"body":string,"evidenceIds":string[],"relatedLocations":[{"file":string,"line":number,"endLine":number,"side":"old"|"new"}],"side":"old"|"new"}],"examinedHunks":string[],"gaps":[{"hunkId":string,"reason":string}],"blockers":string[],"subagents":[{"concern":string,"question":string,"scope":[{"path":string,"hunkIds":string[]}],"why":string}],"recommendedChecks":string[]}
 Give every finding a concise, issue-specific title (about 4–9 words, at most 120 characters). Use plain sentence case without an ID, severity, or category prefix. Keep the detailed explanation and evidence in body.
 ${FINDING_BODY_STYLE}
 "line" is a NEW-side number unless "side":"old". Deleted-only issues may omit line (file-level) or use an old-side location. Never invent a new-side line for deleted code.
-"coverageGaps" lists only assigned hunks you could not read or reason about. Missing tests or other problems in code you did read are findings (or nothing), never coverage gaps.
+"examinedHunks" lists the hunks you read. "gaps" lists only hunks you could not read or reason about, with the reason. Missing tests or other problems in code you did read are findings (or nothing), never gaps.
 Use "high" only for issues that are certainly reachable and damaging. Do not report informational notes, nits or style preferences.`;
 
-/** The same rules as REVIEW_RULES, as a short checklist: small models follow this and lose the long form. */
-const REVIEW_RULES_COMPACT = `How to review:
-- Read the whole changed function, not just the hunk; find its callers; check what removed code used to guarantee.
-- Try empty, null, boundary, concurrent and failure inputs in your head.
-- Report every issue you can tie to evidence, even when unsure, and say how sure you are: a later stage verifies candidates.
-- Cite evidence IDs for every finding. Never invent files, lines or behavior you cannot see.
-- A convention finding needs an explicit repository rule or two existing examples.
-- Zero findings is valid only after you have read the code the change touches.
-- You cannot spawn agents. On your final turn, finish with the evidence you have.
-
-`;
-
-function reviewContract(exec: boolean, compact = false): string {
+/** The rules, tools and answer shape every reviewer and subagent gets; `exec` adds the sandbox. */
+export function reviewerContract(exec: boolean): string {
 	return `${exec ? EXEC_RULES : READ_ONLY_RULES}
-${compact ? REVIEW_RULES_COMPACT : REVIEW_RULES}${exec ? EXEC_ACTIONS : READ_ONLY_ACTIONS}${FINAL_SHAPE}`;
+${REVIEW_RULES}${exec ? EXEC_ACTIONS : READ_ONLY_ACTIONS}${FINAL_SHAPE}`;
 }
-
-export const SHARED_REVIEW_CONTRACT = reviewContract(false);
-export const EXEC_REVIEW_CONTRACT = reviewContract(true);
-export const SHARED_REVIEW_CONTRACT_COMPACT = reviewContract(false, true);
-export const EXEC_REVIEW_CONTRACT_COMPACT = reviewContract(true, true);
 
 /** Copyable request shapes: weaker models follow an example far better than a type signature. */
 export const RETRIEVAL_EXAMPLES = `To read code, reply with ONLY this JSON shape (one to four actions):

@@ -10,10 +10,9 @@ import { ModelBudget } from '../agent-loop.js';
 import type { JsonAgentOptions } from '../agent-loop/options.js';
 import type { CandidateFinding } from '../consolidate.js';
 import { CoverageLedger } from '../coverage.js';
-import { currentDispatch, type DispatchPolicy } from '../dispatch.js';
 import { buildInventory, type ReviewInventory } from '../inventory.js';
-import type { PlannerAssignment, PlannerOutput } from '../planner.js';
 import { extraExcludes } from '../review-scope.js';
+import type { ReviewUnit } from '../units.js';
 import { FINISHED } from './assignments.js';
 import type { PoolContext } from './pool.js';
 import type { AdaptiveReviewInput, HarnessEvents, TaskFn } from './types.js';
@@ -25,7 +24,6 @@ export interface ReviewRun {
 	/** Aborted by the developer's signal, the review clock, or cleanup. */
 	controller: AbortController;
 	budget: ModelBudget;
-	dispatch: DispatchPolicy;
 	inventory: ReviewInventory;
 	evidence: EvidenceStore;
 	coverage: CoverageLedger;
@@ -34,22 +32,24 @@ export interface ReviewRun {
 	/** Why code can't run, when it can't. */
 	execReason: string | null;
 	startedAt: number;
-	/** On the review clock; extended once the developer approves a large plan. */
+	/** On the review clock; extended for a large change and for setup time. */
 	deadlineAt: number;
-	/** When planning and specialists stop, early enough for verification to run. */
+	/** When reviewers stop, early enough for verification to run. */
 	investigationDeadline: number;
-	/** Kept for the failure path: a review out of time after planning still finishes with its candidates. */
-	plan: PlannerOutput | null;
+	/**
+	 * Every unit the review launched, retries included. A review out of time
+	 * once units exist still finishes with its candidates.
+	 */
+	units: ReviewUnit[];
 	directive: ReviewDirective | null;
 	planningDegraded: boolean;
-	items: PlannerAssignment[];
 	assignments: ReviewAssignment[];
 	candidates: CandidateFinding[];
 	recommended: Set<string>;
-	followUps: PlannerAssignment[];
-	followUpsDone: boolean;
+	/** Failed units were already retried, so a resume doesn't retry them again. */
+	retriesDone: boolean;
 	nextCandidate: number;
-	/** Dependency setup and baseline check results, shared with every specialist and verifier. */
+	/** Dependency setup and baseline check results, shared with every reviewer and verifier. */
 	setupNotes: string;
 	task: TaskFn;
 }
@@ -66,7 +66,6 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		events,
 		controller: new AbortController(),
 		budget: new ModelBudget(),
-		dispatch: input.dispatch ?? currentDispatch(),
 		inventory,
 		evidence: new EvidenceStore(input.revision ?? null, inventory, reviewLimits().maxFileChars),
 		coverage: new CoverageLedger(),
@@ -75,15 +74,13 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		startedAt,
 		deadlineAt,
 		investigationDeadline: deadlineAt,
-		plan: null,
+		units: [],
 		directive: resume?.directive ?? null,
 		planningDegraded: resume?.planningDegraded ?? false,
-		items: [],
 		assignments: [],
 		candidates: (resume?.candidates ?? []).map((candidate) => ({ ...candidate })),
 		recommended: new Set<string>(resume?.recommended ?? []),
-		followUps: [...(resume?.followUps ?? [])],
-		followUpsDone: resume?.followUpsDone ?? false,
+		retriesDone: resume?.retriesDone ?? false,
 		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
 		setupNotes: '',
 		task: (id, label, status, message, extra) =>
@@ -178,13 +175,15 @@ export function publishCandidates(run: ReviewRun): void {
 	run.events?.onCandidates?.(validCandidates(run.candidates).length);
 }
 
-/** Reports the plan with every assignment record as it stands. */
-export function publishPlan(run: ReviewRun, plan: PlannerOutput, planVersion: number): void {
+/** Reports the units with every assignment record as it stands. */
+export function publishUnits(run: ReviewRun, planVersion: number): void {
+	const count = run.assignments.length;
+
 	run.events?.onPlan?.({
 		planVersion,
-		summary: plan.summary,
+		summary: `Reviewing in ${count} unit${count === 1 ? '' : 's'}`,
 		assignments: run.assignments.map((assignment) => ({ ...assignment })),
-		roleDecisions: plan.roleDecisions,
+		roleDecisions: [],
 		planningDegraded: run.planningDegraded
 	});
 }
@@ -193,37 +192,35 @@ export function finishedIds(run: ReviewRun): Set<string> {
 	return new Set(run.assignments.filter((record) => FINISHED.has(record.status)).map((record) => record.id));
 }
 
-/** Saves where the review stands; only finished assignments' candidates and evidence are kept. */
+/** Saves where the review stands; only finished units' candidates and evidence are kept. */
 export function saveCheckpoint(run: ReviewRun): void {
-	const { events, plan } = run;
+	const { events } = run;
 
-	if (!events?.onCheckpoint || !plan) return;
+	if (!events?.onCheckpoint || !run.units.length) return;
 
 	const finished = finishedIds(run);
 	const kept = run.candidates.filter((candidate) => candidate.assignmentId && finished.has(candidate.assignmentId));
 
 	events.onCheckpoint({
-		plan,
+		units: run.units.map((unit) => ({ ...unit })),
 		directive: run.directive,
 		planningDegraded: run.planningDegraded,
-		items: [...run.items],
 		assignments: run.assignments.map((record) => ({ ...record })),
 		candidates: kept.map((candidate) => ({ ...candidate })),
 		coverage: run.coverage.snapshot(),
-		evidence: run.evidence.snapshot([
-			...kept.flatMap((candidate) => candidate.evidenceIds ?? []),
-			...run.items.flatMap((item) => item.contextEvidenceIds)
-		]),
+		evidence: run.evidence.snapshot(kept.flatMap((candidate) => candidate.evidenceIds ?? [])),
 		recommended: [...run.recommended],
-		followUps: [...run.followUps],
-		followUpsDone: run.followUpsDone
+		retriesDone: run.retriesDone
 	});
 }
 
-/** What a specialist pool needs from the run; `followUps` collects the follow-ups its specialists ask for. */
-export function poolContext(run: ReviewRun, followUps: PlannerAssignment[]): PoolContext {
+/** What a reviewer pool needs from the run. */
+export function poolContext(run: ReviewRun): PoolContext {
+	const { input, inventory } = run;
+
 	return {
-		inventory: run.inventory,
+		inventory,
+		pr: { title: input.prTitle ?? '', body: input.prBody ?? '', context: input.prContext ?? '', inventory },
 		evidence: run.evidence,
 		coverage: run.coverage,
 		budget: run.budget,
@@ -234,10 +231,8 @@ export function poolContext(run: ReviewRun, followUps: PlannerAssignment[]): Poo
 		candidates: run.candidates,
 		nextCandidate: () => `c${run.nextCandidate++}`,
 		recommended: run.recommended,
-		followUps,
 		exec: Boolean(run.workspace),
 		setupNotes: run.setupNotes,
-		dispatch: run.dispatch,
 		directive: run.directive,
 		onFinished: () => saveCheckpoint(run)
 	};

@@ -15,7 +15,7 @@ import type { AdaptiveReviewResult } from './types.js';
 
 /**
  * The result of a review that reached the end. Coverage gaps and failed
- * specialists are reported in the summary and the coverage rail.
+ * units are reported in the summary and the coverage rail.
  */
 export function completeReview(run: ReviewRun, consolidated: Consolidated): AdaptiveReviewResult {
 	const { confirmed, checks, error } = consolidated;
@@ -39,8 +39,8 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
 
 /**
  * The result of a review that threw. A blocked model or a cancel fails it; running
- * out of time after planning still finishes with what the specialists found.
- * The deadline grows with approval waits, prep and verification, so the message reports what actually elapsed.
+ * out of time once units exist still finishes with what the reviewers found.
+ * The deadline grows with change size, prep and verification, so the message reports what actually elapsed.
  */
 export function stoppedReview(run: ReviewRun, err: unknown): AdaptiveReviewResult {
 	const { assignments, coverage } = run;
@@ -57,13 +57,13 @@ export function stoppedReview(run: ReviewRun, err: unknown): AdaptiveReviewResul
 
 	const minutes = Math.max(1, Math.round((reviewNow() - run.startedAt) / 60_000));
 
-	if (run.plan) return finishOutOfTime(run, minutes);
+	if (run.units.length) return finishOutOfTime(run, minutes);
 
-	return failReview(assignments, coverage, `The review ran out of time (${minutes} minutes) before planning finished.`);
+	return failReview(assignments, coverage, `The review ran out of time (${minutes} minutes) before reviewing started.`);
 }
 
 /**
- * The clock ran out mid-review. Specialists still running are closed out, and
+ * The clock ran out mid-review. Reviewers still running are closed out, and
  * the valid candidates found so far become the findings, as reported.
  */
 function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult {
@@ -76,7 +76,7 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 	return {
 		findings: confirmed,
 		unconfirmed: [],
-		summary: `${summary} The review ran out of time after ${minutes} minutes; findings were kept as the specialists reported them.`,
+		summary: `${summary} The review ran out of time after ${minutes} minutes; findings were kept as the reviewers reported them.`,
 		outcome: 'complete',
 		recommendedChecks: [...run.recommended],
 		coverage: run.coverage.summary(),
@@ -132,9 +132,7 @@ function buildSummary(assignments: ReviewAssignment[], confirmed: Finding[], cov
 	const bits = [
 		`Review complete. ${confirmed.length} confirmed finding${confirmed.length === 1 ? '' : 's'}.`,
 		verifiedSummary(confirmed),
-		incomplete.length
-			? `${incomplete.length} specialist review${incomplete.length === 1 ? '' : 's'} did not finish.`
-			: '',
+		incomplete.length ? `${incomplete.length} review unit${incomplete.length === 1 ? '' : 's'} did not finish.` : '',
 		coverage.partial + coverage.pending > 0 ? 'Some changes still need review.' : ''
 	];
 

@@ -1,11 +1,10 @@
 import type { CoverageGap, CoverageState, CoverageSummary } from '@recoder/shared';
 import type { ReviewInventory } from './inventory.js';
-import type { ReviewRole } from './roles.js';
 
 export interface CoverageEntry {
 	hunkId: string;
 	path: string;
-	role?: ReviewRole;
+	role?: string;
 	state: CoverageState;
 	reason: string;
 }
@@ -43,7 +42,7 @@ export class CoverageLedger {
 		}
 	}
 
-	assign(hunkId: string, path: string, role: ReviewRole): void {
+	assign(hunkId: string, path: string, role: string): void {
 		if (this.entries.get(key(hunkId, role))?.state === 'reviewed') return;
 
 		this.entries.set(key(hunkId, role), {
@@ -61,7 +60,7 @@ export class CoverageLedger {
 		}
 	}
 
-	examined(hunkId: string, path: string, role: ReviewRole): void {
+	examined(hunkId: string, path: string, role: string): void {
 		this.entries.set(key(hunkId, role), {
 			hunkId,
 			path,
@@ -73,7 +72,7 @@ export class CoverageLedger {
 		this.entries.set(hunkId, { hunkId, path, state: 'reviewed', reason: `examined by ${role}` });
 	}
 
-	partial(hunkId: string, path: string, role: ReviewRole, reason: string): void {
+	partial(hunkId: string, path: string, role: string, reason: string): void {
 		if (this.entries.get(key(hunkId, role))?.state === 'reviewed') return;
 		this.entries.set(key(hunkId, role), { hunkId, path, role, state: 'partial', reason });
 
@@ -81,23 +80,6 @@ export class CoverageLedger {
 
 		if (!current || current.state === 'pending') {
 			this.entries.set(hunkId, { hunkId, path, state: 'partial', reason });
-		}
-	}
-
-	excludeUnassigned(inventory: ReviewInventory, reason = 'not assigned within the review budget'): void {
-		for (const file of inventory.files) {
-			for (const hunk of file.hunks) {
-				const bare = this.entries.get(hunk.id);
-
-				if (bare && bare.state === 'pending' && bare.reason === 'not yet assigned') {
-					this.entries.set(hunk.id, {
-						hunkId: hunk.id,
-						path: file.path,
-						state: 'partial',
-						reason
-					});
-				}
-			}
 		}
 	}
 

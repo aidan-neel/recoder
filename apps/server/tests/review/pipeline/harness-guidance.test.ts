@@ -9,8 +9,6 @@ import {
 	DIFF,
 	HUNK,
 	NOTHING,
-	assignment,
-	decisions,
 	finding,
 	messagesOf,
 	modelReply,
@@ -33,10 +31,10 @@ test('review startup only reads guidance files that exist on the target revision
 			head: { 'CLAUDE.md': 'Head-only guidance' }
 		});
 
-		let plannerPrompt = '';
+		let reviewerPrompt = '';
 
 		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-			if (systemOf(init).includes('review orchestrator')) plannerPrompt = messagesOf(init)[1].content;
+			if (systemOf(init).includes('primary reviewer')) reviewerPrompt = messagesOf(init)[1].content;
 
 			return modelReply({ findings: [], examinedHunks: [HUNK] });
 		}) as unknown as typeof fetch;
@@ -57,8 +55,8 @@ test('review startup only reads guidance files that exist on the target revision
 		expect(guidanceReads.map((tool) => tool.input?.path)).toEqual(['AGENTS.md']);
 		expect(guidanceReads[0].status).toBe('done');
 		expect(tools.some((tool) => tool.status === 'error')).toBe(false);
-		expect(plannerPrompt).toContain('Base revision guidance');
-		expect(plannerPrompt).not.toContain('Head-only guidance');
+		expect(reviewerPrompt).toContain('Base revision guidance');
+		expect(reviewerPrompt).not.toContain('Head-only guidance');
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
@@ -82,22 +80,14 @@ test('owner guidelines reach every stage, and the repo layer comes from the base
 
 		const systems: string[] = [];
 
-		const plan = {
-			summary: 'one',
-			assignments: [{ ...assignment('correctness-core', 'correctness', 1), questions: [] }],
-			roleDecisions: decisions(['correctness'])
-		};
-
 		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 			const system = systemOf(init);
 
 			systems.push(system);
 
-			const reply = system.includes('review orchestrator')
-				? plan
-				: system.includes('consolidate')
-					? { keep: ['c1'], merge: [], reject: [], recommendedChecks: [] }
-					: { ...NOTHING, findings: [finding('x', 'low')] };
+			const reply = system.includes('consolidate')
+				? { keep: ['c1'], merge: [], reject: [], recommendedChecks: [] }
+				: { ...NOTHING, findings: [finding('x', 'low')] };
 
 			return modelReply(reply);
 		}) as unknown as typeof fetch;
@@ -113,7 +103,7 @@ test('owner guidelines reach every stage, and the repo layer comes from the base
 			{ onGuidelines: (guidelines) => used.push(guidelines) }
 		);
 
-		const stages = ['review orchestrator', 'Role: Correctness', 'consolidate'].map((marker) =>
+		const stages = ['primary reviewer', 'consolidate'].map((marker) =>
 			systems.find((system) => system.includes(marker))
 		);
 

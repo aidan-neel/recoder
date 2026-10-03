@@ -8,7 +8,6 @@ import {
 	DIFF,
 	HUNK,
 	NOTHING,
-	PLAN,
 	finding,
 	messagesOf,
 	modelReply,
@@ -39,16 +38,11 @@ test.skipIf((await execUnavailableReason()) !== null)(
 		const root = await mkdtemp(join(tmpdir(), 'recoder-verify-review-'));
 
 		try {
-			const { targetSha, headSha } = await twoCommitRepo(root);
+			const { targetSha, headSha } = await twoCommitRepo(root, {
+				base: { 'package.json': JSON.stringify({ scripts: { test: 'cat src/a.ts' } }) }
+			});
 
-			const plan = {
-				...PLAN,
-				summary: 'One change',
-				assignments: PLAN.assignments.map((item) => ({ ...item, questions: [] })),
-				checks: ['cat src/a.ts']
-			};
-
-			const specialists: string[] = [];
+			const reviewers: string[] = [];
 
 			globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 				const messages = messagesOf(init);
@@ -56,13 +50,12 @@ test.skipIf((await execUnavailableReason()) !== null)(
 				const user = messages[1].content;
 				let reply: unknown = { findings: [], examinedHunks: [HUNK] };
 
-				if (system.includes('review orchestrator')) reply = plan;
-				else if (system.includes('Role: Correctness')) {
-					specialists.push(user);
+				if (system.includes('primary reviewer')) {
+					reviewers.push(user);
 					reply = { ...NOTHING, findings: [finding('Real bug.'), finding('Imagined bug.')] };
 				} else if (system.includes('You verify one code review finding')) {
 					reply = verifierReply(user, messages.at(-1)!.content);
-				} else if (system.includes('consolidate Recoder specialist candidates')) {
+				} else if (system.includes('consolidate Recoder reviewer candidates')) {
 					reply = { keep: [...new Set(user.match(/\bc\d+\b/g))], merge: [], reject: [], recommendedChecks: [] };
 				}
 
@@ -75,7 +68,7 @@ test.skipIf((await execUnavailableReason()) !== null)(
 				revision: { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' }
 			});
 
-			expect(specialists[0]).toContain('`cat src/a.ts` → passed');
+			expect(reviewers[0]).toContain('`npm run test` → passed');
 			expect(result.findings).toHaveLength(1);
 			expect(result.findings[0].message).toContain('Real bug.');
 
