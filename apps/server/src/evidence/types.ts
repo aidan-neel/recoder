@@ -29,6 +29,8 @@ export interface EvidenceRecord {
 	kind?: 'run';
 	command?: string;
 	exitCode?: number | null;
+	/** The agent that made the run, so a verdict can count only its own. */
+	agentId?: string;
 }
 
 export interface EvidenceSnapshot {
@@ -64,6 +66,8 @@ export interface ToolResult {
 	hunkIds?: string[];
 	/** run: the command's exit code; null when it timed out or was stopped. */
 	exitCode?: number | null;
+	/** The agent that made the run, so a verdict can count only its own. */
+	agentId?: string;
 }
 
 /** A failed result with no content, for the many early-exit validation paths. */

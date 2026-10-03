@@ -47,7 +47,8 @@ function sameRecord(a: Omit<EvidenceRecord, 'id'>, b: Omit<EvidenceRecord, 'id'>
 		a.path === b.path &&
 		a.startLine === b.startLine &&
 		a.endLine === b.endLine &&
-		a.content === b.content
+		a.content === b.content &&
+		a.agentId === b.agentId
 	);
 }
 

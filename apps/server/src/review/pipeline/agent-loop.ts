@@ -119,11 +119,17 @@ function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean
 	return `Your JSON was neither a retrieval request nor a valid final result. Problems: ${problems}.\n\n${shapes}`;
 }
 
-/** Numbers each agent run, so each gets its own scratch files in the shared workspace. */
-let agentSeq = 0;
+/**
+ * A unique agent id, which keeps an agent's scratch files and runs its own.
+ * Random rather than counted, because run records outlive a server restart in
+ * checkpoints and a resumed agent must never share an id with an earlier one.
+ */
+export function newAgentId(): string {
+	return `agent_${crypto.randomUUID()}`;
+}
 
 export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
-	const scratchOwner = `agent_${++agentSeq}`;
+	const agentId = opts.agentId ?? newAgentId();
 	const { startedAt, deadlineAt, finalTurnAt } = agentDeadlines(opts);
 	const spendOpts = { consumeReserve: opts.consumeReserve };
 
@@ -238,7 +244,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 				opts.signal,
 				opts.onTool,
 				REVIEW_POLICY.maxRetrievalsPerTurn,
-				scratchOwner
+				agentId
 			);
 
 			retrievals++;

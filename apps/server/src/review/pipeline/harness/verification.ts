@@ -6,6 +6,7 @@ import {
 	ModelBlockedError,
 	ReviewAbortedError,
 	canLaunchInvestigation,
+	newAgentId,
 	runJsonAgent,
 	type ModelBudget
 } from '../agent-loop.js';
@@ -138,6 +139,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promi
 	const label = `Verify: ${candidate.title ?? candidate.file}`;
 	const exec = !ctx.unavailable;
 	const owner = { assignmentId: candidate.assignmentId, role };
+	const agentId = newAgentId();
 
 	const meta = {
 		kind: 'verification' as const,
@@ -152,6 +154,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promi
 	try {
 		const result = await runJsonAgent({
 			label: `verify ${candidate.candidateId}`,
+			agentId,
 			system: verifierSystemPrompt(ctx.unavailable),
 			user: verifierUserPrompt(candidate, ctx.evidence, ctx.setupNotes),
 			actionExamples: exec ? EXEC_EXAMPLES : undefined,
@@ -194,7 +197,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promi
 			return;
 		}
 
-		const settled = settleVerdict(result.value, ctx.evidence);
+		const settled = settleVerdict(result.value, ctx.evidence, agentId);
 
 		if (settled === 'refuted') {
 			candidate.valid = false;
@@ -205,7 +208,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promi
 		}
 
 		candidate.verification = settled;
-		if (settled.status === 'verified') leadWithProof(candidate, result.value.evidenceIds, ctx.evidence);
+		if (settled.status === 'verified') leadWithProof(candidate, result.value.evidenceIds, ctx.evidence, agentId);
 
 		ctx.task(
 			taskId,
@@ -231,8 +234,17 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promi
 }
 
 /** The proving runs lead the candidate's evidence, so the finding opens on their output. */
-function leadWithProof(candidate: CandidateFinding, evidenceIds: string[], evidence: EvidenceStore): void {
-	const proof = evidenceIds.filter((id) => evidence.get(id)?.kind === 'run');
+function leadWithProof(
+	candidate: CandidateFinding,
+	evidenceIds: string[],
+	evidence: EvidenceStore,
+	agentId: string
+): void {
+	const proof = evidenceIds.filter((id) => {
+		const record = evidence.get(id);
+
+		return record?.kind === 'run' && record.agentId === agentId;
+	});
 
 	candidate.evidenceIds = [...new Set([...proof, ...(candidate.evidenceIds ?? [])])];
 }

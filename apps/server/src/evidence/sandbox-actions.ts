@@ -62,7 +62,8 @@ export async function runCommand(
 			truncated: result.truncated,
 			kind: 'run',
 			command,
-			exitCode: result.exitCode
+			exitCode: result.exitCode,
+			...(owner ? { agentId: owner } : {})
 		}
 	};
 }

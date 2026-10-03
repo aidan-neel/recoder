@@ -19,13 +19,14 @@ import {
 
 restoreAfterEach();
 
-/** Proves the real bug with a grep run and refutes the imagined one with the same run. */
+/** Proves the real bug with a failing grep and refutes the imagined one with a passing grep. */
 function verifierReply(user: string, last: string): unknown {
+	const real = user.includes('Real bug.');
 	const proof = /evidenceId=(ev_\d+)/.exec(last)?.[1];
 
-	if (!proof) return { actions: [{ action: 'run', command: 'grep -c new src/a.ts' }] };
+	if (!proof) return { actions: [{ action: 'run', command: `grep -c ${real ? 'missing' : 'new'} src/a.ts` }] };
 
-	return user.includes('Real bug.')
+	return real
 		? { verdict: 'confirmed', reason: 'grep shows it.', evidenceIds: [proof] }
 		: { verdict: 'refuted', reason: 'grep shows otherwise.', evidenceIds: [proof] };
 }
@@ -82,8 +83,8 @@ test.skipIf((await execUnavailableReason()) !== null)(
 				status: 'verified',
 				method: 'run',
 				reason: 'grep shows it.',
-				command: 'grep -c new src/a.ts',
-				exitCode: 0
+				command: 'grep -c missing src/a.ts',
+				exitCode: 1
 			});
 
 			expect(result.summary).toContain('1 verified by running code');
