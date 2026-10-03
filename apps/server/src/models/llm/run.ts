@@ -46,9 +46,12 @@ function scopedOptions(opts: ChatOptions, scope: RequestScope, tracking: TokenTr
  * slot, track token usage, retry transient failures and settle by the hard
  * deadline. With `onToken` the call streams; once text has reached the caller
  * a retry would repeat it, so a streaming call only retries before the first token.
+ * The budget starts once a slot is held, so a call queued behind others still
+ * gets its full `timeoutMs`; `settleBy` caps the wait and the call together.
  */
 export async function runChat(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
-	const deadline = Date.now() + (opts.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+	const budget = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+	const settleBy = opts.settleBy ?? Infinity;
 	const progress = progressReporter(opts.onProgress);
 	let acquired = false;
 	let tracking: TokenTracking | undefined;
@@ -56,8 +59,11 @@ export async function runChat(opts: ChatOptions, onToken?: (text: string) => voi
 	const scope = requestScope(opts.signal);
 
 	try {
-		await acquireLlmSlot(opts.signal, Math.max(1, deadline - Date.now()));
+		await acquireLlmSlot(opts.signal, Math.max(1, Math.min(budget, settleBy - Date.now())));
 		acquired = true;
+
+		const deadline = Math.min(Date.now() + budget, settleBy);
+
 		progress.running();
 		tracking = trackTokenCall(opts.model, opts.provider ?? 'openai-compatible');
 
@@ -79,7 +85,7 @@ export async function runChat(opts: ChatOptions, onToken?: (text: string) => voi
 			() => !streamed
 		);
 
-		const result = await withHardDeadline(work, deadline, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS, opts.signal);
+		const result = await withHardDeadline(work, deadline, Math.max(1, deadline - Date.now()), opts.signal);
 
 		success = true;
 

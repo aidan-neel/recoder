@@ -7,7 +7,7 @@
 import { runChat } from './llm/run';
 import type { ChatOptions } from './llm/types';
 
-export { asLlmError, isTransientLlmError, LlmError } from './llm/errors';
+export { asLlmError, CapacityError, isTransientLlmError, LlmError } from './llm/errors';
 export { resetLlmLimiter } from './llm/limiter';
 export { reasoningFields } from './llm/request-fields';
 export type { ChatMessage, ChatOptions } from './llm/types';
