@@ -134,16 +134,14 @@ export function buildRows(input: {
 	return out;
 }
 
-/** Seconds from `since` to `until` (or `now`), to a tenth; minutes past 60s. */
+/** Whole seconds from `since` to `until` (or `now`), at least 1s; minutes past 60s. */
 export function elapsed(now: number, since?: string, until?: string): string | undefined {
 	const start = Date.parse(since ?? '');
 	const end = until === undefined ? now : Date.parse(until);
 
 	if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return undefined;
 
-	const tenths = Math.floor((end - start) / 100);
+	const seconds = Math.max(1, Math.floor((end - start) / 1000));
 
-	return tenths < 600
-		? `${(tenths / 10).toFixed(1)}s`
-		: `${Math.floor(tenths / 600)}m ${((tenths % 600) / 10).toFixed(1)}s`;
+	return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
