@@ -7,9 +7,10 @@ import { anchorFn, fingerprintFinding } from './findings.js';
 import type { PoolContext, ScopedPatch } from './pool.js';
 
 /**
- * Records a reviewer's answer: coverage, candidates and recommended checks. A
- * reviewer that answered has finished; hunks it couldn't assess show up as
- * coverage gaps.
+ * Records a reviewer's answer: coverage, candidates, recommended checks and
+ * subagent requests. A reviewer that answered has finished; hunks it couldn't
+ * assess show up as coverage gaps. A subagent's answer adds only candidates
+ * and checks: its hunks are already a unit's, and it can't ask for subagents.
  */
 export function applyUnitResult(
 	item: ReviewUnit,
@@ -21,7 +22,12 @@ export function applyUnitResult(
 ): void {
 	const role = recordFor(records, item.id).role;
 
-	creditCoverage(item, role, ctx, output, initialEvidence);
+	if (role !== 'subagent') {
+		creditCoverage(item, role, ctx, output, initialEvidence);
+
+		for (const request of output.subagents) ctx.requests.push({ unitId: item.id, unitTitle: item.title, request });
+	}
+
 	addCandidates(item, role, ctx, model, output);
 
 	for (const check of output.recommendedChecks) ctx.recommended.add(check);

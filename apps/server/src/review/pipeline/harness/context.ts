@@ -1,4 +1,4 @@
-import { ORCHESTRATOR_ID, type ReviewAssignment } from '@recoder/shared';
+import { DEFAULT_SUBAGENT_CAP, ORCHESTRATOR_ID, type ReviewAssignment } from '@recoder/shared';
 import { EvidenceStore } from '../../../evidence/evidence.js';
 import { configForOrchestrator, reviewLimits, type RoleConfig } from '../../../models/models.js';
 import { execUnavailableReason } from '../../../sandbox/exec-sandbox.js';
@@ -12,6 +12,7 @@ import type { CandidateFinding } from '../consolidate.js';
 import { CoverageLedger } from '../coverage.js';
 import { buildInventory, type ReviewInventory } from '../inventory.js';
 import { extraExcludes } from '../review-scope.js';
+import { emptySubagentState, type SubagentState } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
 import { FINISHED } from './assignments.js';
 import type { PoolContext } from './pool.js';
@@ -48,6 +49,8 @@ export interface ReviewRun {
 	recommended: Set<string>;
 	/** Failed units were already retried, so a resume doesn't retry them again. */
 	retriesDone: boolean;
+	/** Subagents reviewers asked for, and the ones that run; kept apart from `units`, so they're never retried. */
+	subagents: SubagentState;
 	nextCandidate: number;
 	/** Dependency setup and baseline check results, shared with every reviewer and verifier. */
 	setupNotes: string;
@@ -81,6 +84,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		candidates: (resume?.candidates ?? []).map((candidate) => ({ ...candidate })),
 		recommended: new Set<string>(resume?.recommended ?? []),
 		retriesDone: resume?.retriesDone ?? false,
+		subagents: structuredClone(resume?.subagents ?? emptySubagentState()),
 		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
 		setupNotes: '',
 		task: (id, label, status, message, extra) =>
@@ -175,13 +179,14 @@ export function publishCandidates(run: ReviewRun): void {
 	run.events?.onCandidates?.(validCandidates(run.candidates).length);
 }
 
-/** Reports the units with every assignment record as it stands. */
+/** Reports the units and subagents with every assignment record as it stands. */
 export function publishUnits(run: ReviewRun, planVersion: number): void {
-	const count = run.assignments.length;
+	const units = run.units.length;
+	const subagents = run.subagents.units?.length ?? 0;
 
 	run.events?.onPlan?.({
 		planVersion,
-		summary: `Reviewing in ${count} unit${count === 1 ? '' : 's'}`,
+		summary: `Reviewing in ${units} unit${units === 1 ? '' : 's'}${subagents ? ` with ${subagents} subagent${subagents === 1 ? '' : 's'}` : ''}`,
 		assignments: run.assignments.map((assignment) => ({ ...assignment })),
 		roleDecisions: [],
 		planningDegraded: run.planningDegraded
@@ -210,7 +215,8 @@ export function saveCheckpoint(run: ReviewRun): void {
 		coverage: run.coverage.snapshot(),
 		evidence: run.evidence.snapshot(kept.flatMap((candidate) => candidate.evidenceIds ?? [])),
 		recommended: [...run.recommended],
-		retriesDone: run.retriesDone
+		retriesDone: run.retriesDone,
+		subagents: structuredClone(run.subagents)
 	});
 }
 
@@ -234,6 +240,8 @@ export function poolContext(run: ReviewRun): PoolContext {
 		exec: Boolean(run.workspace),
 		setupNotes: run.setupNotes,
 		directive: run.directive,
+		subagentCap: run.input.subagentCap ?? DEFAULT_SUBAGENT_CAP,
+		requests: run.subagents.requests,
 		onFinished: () => saveCheckpoint(run)
 	};
 }

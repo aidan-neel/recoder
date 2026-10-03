@@ -14,6 +14,7 @@ import {
 } from './context.js';
 import { runUnitPool } from './pool.js';
 import { prepareSandbox, startSetup } from './sandbox-setup.js';
+import { runSubagents } from './subagent-stage.js';
 import { completeReview, stoppedReview } from './summary.js';
 import type { AdaptiveReviewInput, AdaptiveReviewResult, HarnessEvents } from './types.js';
 import { understandChanges } from './understand.js';
@@ -30,7 +31,8 @@ import { verifyStage } from './verification.js';
  *   (`exec-sandbox.ts`); tracked files are restored after every command.
  *
  * Stages: understand → cut units → baseline checks → one reviewer per unit
- * (failed units retried once) → verify → consolidate. Verification re-proves
+ * (failed units retried once) → the subagents reviewers asked for → verify →
+ * consolidate. Verification re-proves
  * every candidate by running code. The deadline runs on the review clock,
  * which stands still while paused.
  */
@@ -89,6 +91,12 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	publishCandidates(run);
 
 	await retryFailedUnits(run);
+	await runSubagents(run);
+
+	publishCoverage(run);
+	publishBudget(run);
+	publishCandidates(run);
+
 	await verifyStage(run);
 
 	const consolidated = await consolidate(run);

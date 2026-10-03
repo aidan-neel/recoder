@@ -2,6 +2,7 @@ import type { ReviewAssignment } from '@recoder/shared';
 import type { CandidateFinding } from '../pipeline/consolidate.js';
 import type { CoverageEntry } from '../pipeline/coverage.js';
 import type { EvidenceSnapshot } from '../../evidence/evidence.js';
+import type { SubagentState } from '../pipeline/subagents.js';
 import type { ReviewUnit } from '../pipeline/units.js';
 import type { ReviewDirective } from '../chat/directive.js';
 
@@ -30,4 +31,6 @@ export interface ReviewCheckpoint {
 	recommended: string[];
 	/** Failed units were already retried, so a resume doesn't retry them again. */
 	retriesDone: boolean;
+	/** Subagent requests, and the subagents picked from them once planned. */
+	subagents: SubagentState;
 }

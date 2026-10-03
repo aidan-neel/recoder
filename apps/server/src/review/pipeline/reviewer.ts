@@ -52,13 +52,32 @@ export type ReviewerOutput = z.infer<typeof reviewerOutputSchema>;
 export type ReviewerFinding = z.infer<typeof findingSchema>;
 export type SubagentRequest = z.infer<typeof subagentRequestSchema>;
 
-/** The primary reviewer's prompt: one generalist over every hunk in its unit. */
-export function reviewerSystemPrompt(exec: boolean, directive: ReviewDirective | null): string {
+const SUBAGENTS_OFFER = `Subagents: when one question needs a deep, separate investigation you cannot finish in your turns (every caller of a changed API across the repo, a security path through several modules), put it in "subagents", at most ${MAX_SUBAGENT_REQUESTS}. Each subagent gets your question, the patch for its scope and the same tools, and reports its own findings. Most units need none. Never ask for work you already did.`;
+
+/**
+ * The primary reviewer's prompt: one generalist over every hunk in its unit.
+ * Subagents are offered only when the review may run any.
+ */
+export function reviewerSystemPrompt(
+	exec: boolean,
+	directive: ReviewDirective | null,
+	offerSubagents: boolean
+): string {
 	return withDirective(
 		`${reviewerContract(exec)}
 
 Role: primary reviewer. You own every hunk in your unit and review it for any kind of problem.
-Subagents: when one question needs a deep, separate investigation you cannot finish in your turns (every caller of a changed API across the repo, a security path through several modules), put it in "subagents", at most ${MAX_SUBAGENT_REQUESTS}. Each subagent gets your question, the patch for its scope and the same tools, and reports its own findings. Most units need none. Never ask for work you already did.`,
+${offerSubagents ? SUBAGENTS_OFFER : 'Leave "subagents" empty.'}`,
+		directive
+	);
+}
+
+/** A subagent's prompt: one question a primary reviewer handed on, answered in depth. */
+export function subagentSystemPrompt(exec: boolean, directive: ReviewDirective | null): string {
+	return withDirective(
+		`${reviewerContract(exec)}
+
+Role: subagent. A primary reviewer handed you one question it could not finish in its own turns. Follow the code wherever the question leads, using your tools across the repository, and report findings on that question only. The patch in your scope is where to start, not a limit on what you read. Leave "subagents" and "gaps" empty; you cannot hand work on.`,
 		directive
 	);
 }
@@ -124,19 +143,21 @@ function pullRequestLines(pr: PullRequestContext): string[] {
 	];
 }
 
+/** The user prompt for a unit's reviewer, or for a subagent when `subagent` is set. */
 export function reviewerUserPrompt(
 	unit: ReviewUnit,
 	remainingTurns: number,
 	remainingCalls: number,
 	directive: ReviewDirective | null,
-	pr: PullRequestContext
+	pr: PullRequestContext,
+	subagent = false
 ): string {
 	return [
 		developerInstructions(directive),
 		...pullRequestLines(pr),
-		`Unit ${unit.id}: ${unit.title}`,
+		`${subagent ? 'Subagent' : 'Unit'} ${unit.id}: ${unit.title}`,
 		unit.reason,
-		`Changes in this unit:\n${scopeLines(unit.scope)}`,
+		`${subagent ? 'Changes to start from' : 'Changes in this unit'}:\n${scopeLines(unit.scope)}`,
 		...turnsLeft(remainingTurns, remainingCalls)
 	]
 		.filter(Boolean)

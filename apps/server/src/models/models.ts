@@ -88,6 +88,11 @@ export function configForOrchestrator(): RoleConfig {
 	return resolveConfig('correctness', true);
 }
 
+/** The second model: subagents and verifiers. Unset, it follows the Review model. */
+export function configForSubagent(): RoleConfig {
+	return resolveConfig('correctness', false);
+}
+
 /** The Specialist model for one review role. */
 export function configForRole(role: ReviewRole): RoleConfig {
 	return resolveConfig(role, false);

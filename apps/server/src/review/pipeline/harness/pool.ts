@@ -1,6 +1,6 @@
 import type { ReviewAssignment } from '@recoder/shared';
 import { formatToolResults, type EvidenceStore } from '../../../evidence/evidence.js';
-import { configForOrchestrator, type RoleConfig } from '../../../models/models.js';
+import { configForOrchestrator, configForSubagent, type RoleConfig } from '../../../models/models.js';
 import type { ReviewDirective } from '../../chat/directive.js';
 import { withGuidelines } from '../../guidelines/guidelines.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
@@ -22,8 +22,10 @@ import {
 	reviewerSystemPrompt,
 	reviewerUserPrompt,
 	reviewerValidationError,
+	subagentSystemPrompt,
 	type PullRequestContext
 } from '../reviewer.js';
+import type { UnitRequest } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
 import { recordFor, updateAssignment } from './assignments.js';
 import { applyUnitResult } from './unit-result.js';
@@ -47,6 +49,10 @@ export interface PoolContext {
 	/** Dependency setup and baseline check results, shared with every reviewer. */
 	setupNotes: string;
 	directive: ReviewDirective | null;
+	/** Subagents the review may run in all; reviewers aren't offered any at 0. */
+	subagentCap: number;
+	/** Where finished reviewers' subagent requests collect, in the order they finished. */
+	requests: UnitRequest[];
 	/** Called after each unit settles, to save a checkpoint. */
 	onFinished?: () => void;
 }
@@ -91,10 +97,16 @@ export async function runUnitPool(units: ReviewUnit[], records: ReviewAssignment
 	await Promise.all(workers);
 }
 
-/** Runs one unit's reviewer and records its result; a failure marks only this unit. */
+/**
+ * Runs one unit's reviewer, or one subagent, and records its result; a
+ * failure marks only this record. Reviewers run on the Review model and
+ * subagents on the second model. A subagent's hunks are already some unit's,
+ * so its failure leaves coverage alone.
+ */
 async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
 	const role = recordFor(records, item.id).role;
-	const cfg = configForOrchestrator();
+	const subagent = role === 'subagent';
+	const cfg = subagent ? configForSubagent() : configForOrchestrator();
 	const model = cfg.model;
 
 	queueAssignment(item, records, ctx, model);
@@ -106,11 +118,7 @@ async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: Po
 		if (!result.value) {
 			const reason = result.error ?? 'reviewer failed';
 
-			for (const hunkId of new Set(item.scope.flatMap((entry) => entry.hunkIds))) {
-				const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? item.scope[0]?.path ?? '';
-
-				ctx.coverage.partial(hunkId, path, role, reason);
-			}
+			if (!subagent) markUnitPartial(item, role, reason, ctx);
 
 			failAssignment(item, records, ctx, model, result.error ?? 'Reviewer failed');
 
@@ -123,6 +131,15 @@ async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: Po
 		if (err instanceof ReviewAbortedError) throw err;
 
 		failAssignment(item, records, ctx, model, err instanceof Error ? err.message : 'Reviewer failed');
+	}
+}
+
+/** Every hunk in a unit whose reviewer failed is partially covered, with the reason. */
+function markUnitPartial(item: ReviewUnit, role: string, reason: string, ctx: PoolContext): void {
+	for (const hunkId of new Set(item.scope.flatMap((entry) => entry.hunkIds))) {
+		const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? item.scope[0]?.path ?? '';
+
+		ctx.coverage.partial(hunkId, path, role, reason);
 	}
 }
 
@@ -173,16 +190,28 @@ function askReviewer(
 	initialEvidence: ScopedPatch
 ) {
 	const meta = { assignmentId: item.id, role: recordFor(records, item.id).role };
+	const subagent = meta.role === 'subagent';
 	let runningSince: string | undefined;
+
+	const system = subagent
+		? subagentSystemPrompt(ctx.exec, ctx.directive)
+		: reviewerSystemPrompt(ctx.exec, ctx.directive, ctx.subagentCap > 0);
 
 	return runJsonAgent({
 		label: item.title,
-		system: withGuidelines(reviewerSystemPrompt(ctx.exec, ctx.directive), ctx.inventory.guidelines),
+		system: withGuidelines(system, ctx.inventory.guidelines),
 		actionExamples: ctx.exec ? EXEC_EXAMPLES : undefined,
 		getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
 		onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model: cfg.model }),
 		user:
-			reviewerUserPrompt(item, REVIEW_POLICY.maxReviewerTurns, ctx.budget.remaining(), ctx.directive, ctx.pr) +
+			reviewerUserPrompt(
+				item,
+				REVIEW_POLICY.maxReviewerTurns,
+				ctx.budget.remaining(),
+				ctx.directive,
+				ctx.pr,
+				subagent
+			) +
 			(ctx.setupNotes ? `\n\n${ctx.setupNotes}` : '') +
 			'\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' +
 			formatToolResults(initialEvidence),
@@ -259,7 +288,7 @@ function failAssignment(
 
 	ctx.events?.onMessage?.({
 		id: `message_failed_${item.id}`,
-		text: `**${item.title}** stopped before finishing: ${reason}\n\nFindings: none reported. The hunks in this unit are marked partially covered.`,
+		text: `**${item.title}** stopped before finishing: ${reason}\n\nFindings: none reported.${recordFor(records, item.id).role === 'subagent' ? '' : ' The hunks in this unit are marked partially covered.'}`,
 		status: 'done',
 		assignmentId: item.id,
 		model

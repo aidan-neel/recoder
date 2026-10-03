@@ -11,6 +11,7 @@ import type { CoverageLedger } from '../coverage.js';
 import { unfinishedAssignments } from './assignments.js';
 import { keepUnconsolidated, type Consolidated } from './consolidation.js';
 import { validCandidates, type ReviewRun } from './context.js';
+import { droppedSentence } from './subagent-stage.js';
 import type { AdaptiveReviewResult } from './types.js';
 
 /**
@@ -21,7 +22,7 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
 	const { confirmed, checks, error } = consolidated;
 	const coverage = run.coverage.summary();
 
-	const summary = buildSummary(run.assignments, confirmed, coverage);
+	const summary = buildSummary(run, run.assignments, confirmed, coverage);
 
 	return {
 		findings: confirmed,
@@ -71,7 +72,7 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 	const settled = settleAssignments(run.assignments, 'Not finished: the review ran out of time');
 	const confirmed = keepUnconsolidated(validCandidates(run.candidates), reason, run.task);
 
-	const summary = buildSummary(settled, confirmed, run.coverage.summary());
+	const summary = buildSummary(run, settled, confirmed, run.coverage.summary());
 
 	return {
 		findings: confirmed,
@@ -125,14 +126,26 @@ function verifiedSummary(findings: Finding[]): string {
 	);
 }
 
-/** The review's one-paragraph summary; partial coverage is reported by its last sentence. */
-function buildSummary(assignments: ReviewAssignment[], confirmed: Finding[], coverage: CoverageSummary): string {
+/**
+ * The review's one-paragraph summary: unfinished units and subagents, subagent
+ * requests past the limit, and partial coverage last.
+ */
+function buildSummary(
+	run: ReviewRun,
+	assignments: ReviewAssignment[],
+	confirmed: Finding[],
+	coverage: CoverageSummary
+): string {
 	const incomplete = unfinishedAssignments(assignments);
+	const units = incomplete.filter((record) => record.role !== 'subagent').length;
+	const subagents = incomplete.length - units;
 
 	const bits = [
 		`Review complete. ${confirmed.length} confirmed finding${confirmed.length === 1 ? '' : 's'}.`,
 		verifiedSummary(confirmed),
-		incomplete.length ? `${incomplete.length} review unit${incomplete.length === 1 ? '' : 's'} did not finish.` : '',
+		units ? `${units} review unit${units === 1 ? '' : 's'} did not finish.` : '',
+		subagents ? `${subagents} subagent${subagents === 1 ? '' : 's'} did not finish.` : '',
+		droppedSentence(run.subagents.dropped),
 		coverage.partial + coverage.pending > 0 ? 'Some changes still need review.' : ''
 	];
 

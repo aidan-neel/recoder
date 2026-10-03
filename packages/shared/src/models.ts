@@ -6,6 +6,11 @@ export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 export const DISPATCH_LEVELS = ['low', 'medium', 'high'] as const;
 export type DispatchLevel = (typeof DISPATCH_LEVELS)[number];
 
+/** How many subagents one review may run in all, chosen in Settings → Review harness; 0 turns them off. */
+export const SUBAGENT_CAPS = [0, 2, 4] as const;
+export type SubagentCap = (typeof SUBAGENT_CAPS)[number];
+export const DEFAULT_SUBAGENT_CAP: SubagentCap = 2;
+
 /** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode CLI. */
 export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode';
 

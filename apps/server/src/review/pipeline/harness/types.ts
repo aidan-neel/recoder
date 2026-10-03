@@ -68,6 +68,8 @@ export interface AdaptiveReviewInput {
 	signal?: AbortSignal;
 	/** What the developer asked for in the session before starting the review, verbatim. */
 	instructions?: string | null;
+	/** Subagents the review may run in all, from Settings; the shared default when unset. */
+	subagentCap?: number;
 	/** Continue a failed review: skip the units that finished. */
 	resume?: ReviewProgressCheckpoint | null;
 }
