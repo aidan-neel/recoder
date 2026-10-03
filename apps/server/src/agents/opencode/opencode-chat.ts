@@ -4,8 +4,9 @@ import { z } from 'zod';
 import type { ReasoningEffort, TokenUsage } from '@recoder/shared';
 import { LlmError, cancelledError, timedOutError } from '../../models/llm/errors';
 import { abortedPromise } from '../../models/llm/openai-compatible';
+import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import { sseData } from '../../models/llm/sse';
-import type { ChatMessage, ChatOptions } from '../../models/llm/types';
+import type { ChatOptions } from '../../models/llm/types';
 import { serverDataDir } from '../../util/data-dir';
 import { OpenCodeError } from './opencode-error';
 import type { OpenCodeServer } from './opencode-server';
@@ -18,6 +19,14 @@ export interface OpenCodeChatHost {
 
 /** Every permission denied: a review call only reads the prompt it is given. */
 const DENY_ALL = [{ permission: '*', pattern: '*', action: 'deny' }];
+
+/**
+ * OpenCode answers a JSON schema by calling its `StructuredOutput` tool, so
+ * that one tool stays on when a schema is sent; every other tool is off.
+ */
+function toolsFor(opts: ChatOptions): Record<string, boolean> {
+	return opts.jsonSchema ? { '*': false, StructuredOutput: true } : { '*': false };
+}
 
 /** How long the session cleanup may take after the call settles. */
 const CLEANUP_TIMEOUT_MS = 5_000;
@@ -80,8 +89,11 @@ function splitModel(model: string): { providerID: string; modelID: string } {
 }
 
 /** OpenCode takes one system prompt and one user turn, so earlier turns become a transcript. */
-function promptParts(messages: ChatMessage[]): { system: string; text: string } {
+function promptParts({ messages, jsonMode }: ChatOptions): { system: string; text: string } {
 	const system = messages.filter((m) => m.role === 'system').map((m) => m.content);
+
+	if (jsonMode) system.push(JSON_MODE_INSTRUCTION);
+
 	const turns = messages.filter((m) => m.role !== 'system');
 
 	const text =
@@ -255,7 +267,7 @@ export async function openCodeChat(
 
 		session = z.object({ id: z.string() }).parse(created).id;
 
-		const prompt = promptParts(opts.messages);
+		const prompt = promptParts(opts);
 		const variant = await variantFor(host, opts);
 
 		const raw = await host.server.request(`/session/${encodeURIComponent(session)}/message${query}`, {
@@ -264,7 +276,7 @@ export async function openCodeChat(
 				model: { providerID, modelID },
 				...(prompt.system ? { system: prompt.system } : {}),
 				...(variant ? { variant } : {}),
-				tools: { '*': false },
+				tools: toolsFor(opts),
 				...(opts.jsonSchema ? { format: { type: 'json_schema', schema: opts.jsonSchema.schema } } : {}),
 				parts: [{ type: 'text', text: prompt.text }]
 			},

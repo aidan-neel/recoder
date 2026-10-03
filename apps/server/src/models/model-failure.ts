@@ -58,9 +58,9 @@ export function modelFailure(err: unknown, config: ModelRef, fallback: string): 
 	if (config?.provider === 'opencode' && err instanceof LlmError) {
 		const name = opencode.providerName(config.source ?? 'opencode');
 
-		return err.status === 401
-			? { reason: `${name} rejected the sign-in. Reconnect it in Settings → Agent.` }
-			: { reason: err.message || fallback };
+		if (err.status === 401) return { reason: `${name} rejected the sign-in. Reconnect it in Settings → Agent.` };
+
+		return { reason: err.status >= 500 ? fallback : err.message || fallback };
 	}
 
 	if (isAuthFailure(err)) {

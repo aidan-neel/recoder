@@ -6,6 +6,7 @@ import { fakeBin } from './fake-bin';
  * The fake server's source. It checks the Basic auth password, serves the
  * provider and sign-in routes, and runs chat sessions whose reply depends on
  * the prompt: `structured`, `denied` (the free tier's 403), `auth` and `slow`.
+ * Like OpenCode, a schema request with `StructuredOutput` off fails.
  * Any other prompt streams "Hello" and " world" before replying. `/test/calls`
  * lists every chat request it saw.
  */
@@ -32,6 +33,7 @@ const replies = {
 
 async function chat(session, body, signal) {
 	const text = body.parts[0].text;
+	if (body.format && body.tools.StructuredOutput !== true) return { info: { error: { name: 'StructuredOutputError', data: { message: 'Model did not produce structured output' } } }, parts: [] };
 	if (replies[text]) return replies[text]();
 	if (text === 'slow') {
 		await new Promise((resolve) => signal.addEventListener('abort', resolve));
