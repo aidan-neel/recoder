@@ -2,6 +2,7 @@ import {
 	emptyReviewProgress,
 	settleAssignments,
 	parseUnifiedDiff,
+	REVIEW_CANCELLED,
 	type CreateReviewInput,
 	type Finding,
 	type Provider,
@@ -383,7 +384,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 
 /** Why the review was cancelled, as `ReviewControl.cancel` recorded it. */
 function cancelReason(signal: AbortSignal): string {
-	return signal.reason instanceof Error ? signal.reason.message : 'Review cancelled.';
+	return signal.reason instanceof Error ? signal.reason.message : REVIEW_CANCELLED;
 }
 
 /** Planning and the correctness pass always run, so a missing ChatGPT sign-in fails now, not after a long checkout. */
@@ -447,5 +448,5 @@ function settleRun(reviewId: string): void {
 }
 
 function throwIfCancelled(control: ReviewControl): void {
-	if (control.abort.signal.aborted) throw new Error('Review cancelled.');
+	if (control.abort.signal.aborted) throw new Error(REVIEW_CANCELLED);
 }

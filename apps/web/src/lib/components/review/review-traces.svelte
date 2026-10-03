@@ -18,15 +18,22 @@
 	}: {
 		traces: Trace[];
 		active: boolean;
-		/** The review or a reply is still going, so an open thought is still thinking. */
+		/** This conversation's agent or a reply is still going, so a thought with nothing after it is still thinking, even between retries. */
 		streaming: boolean;
 		now: number;
 		/** Ticks while anything is live, for thought timers. */
 		clock: number;
 	} = $props();
 
-	function thoughtLive(entry: ReviewReasoningEntry, until?: string): boolean {
-		return !until && entry.status === 'streaming' && streaming;
+	function thoughtLive(until?: string): boolean {
+		return !until && streaming;
+	}
+
+	/** A finished thought runs to when it stopped, else to what came next; with neither, it shows no time. */
+	function thoughtTime(entry: ReviewReasoningEntry, until?: string): string | undefined {
+		const end = entry.endedAt ?? until;
+
+		return end ? elapsed(clock, entry.at, end) : undefined;
 	}
 
 	function traceHead(item: Trace): TraceHead {
@@ -39,14 +46,11 @@
 			};
 		}
 
-		const working = thoughtLive(item.entry, item.until);
+		const working = thoughtLive(item.until);
 
 		return {
 			label: '',
-			thought: {
-				working,
-				time: working ? elapsed(clock, item.entry.at) : elapsed(clock, item.entry.at, item.until)
-			}
+			thought: { working, time: working ? elapsed(clock, item.entry.at) : thoughtTime(item.entry, item.until) }
 		};
 	}
 
@@ -69,7 +73,7 @@
 	{:else}
 		{@const head = traceHead(item)}
 		{@const entry = item.entry}
-		{@const live = thoughtLive(item.entry, item.until)}
+		{@const live = thoughtLive(item.until)}
 		<Disclosure bodyClass="thought-body !gap-3" children={hasBody(item) ? thoughtText : undefined}>
 			{#snippet label()}{@render headLabel(head)}{/snippet}
 		</Disclosure>

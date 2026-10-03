@@ -122,6 +122,8 @@ export interface ReviewReasoningEntry {
 	role?: string;
 	model?: string;
 	at: string;
+	/** When the thinking stopped, so a finished thought keeps its length instead of timing to now. */
+	endedAt?: string;
 	text: string;
 	status?: 'streaming' | 'done' | 'error';
 	/** The provider only returns a summary of its reasoning (ChatGPT), so the text is dropped and only the timing is kept. */

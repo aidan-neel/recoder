@@ -324,6 +324,45 @@ button.fact-link:hover {
 	padding: 0 24px;
 	pointer-events: auto;
 }
+/* A cut-off reply being asked again: a small tab on the composer's top edge that
+   unfolds while the retry runs and folds away when the reply resumes. */
+.composer-notice {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows var(--dur-disclose) var(--ease-menu),
+		opacity var(--dur-toggle) ease-out;
+}
+.composer-notice[data-open] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+}
+.composer-notice-clip {
+	min-height: 0;
+	overflow: hidden;
+}
+.composer-notice-tab {
+	display: flex;
+	width: fit-content;
+	align-items: center;
+	gap: 7px;
+	margin: 0 0 -10px 22px;
+	padding: 5px 11px 15px 10px;
+	border-radius: 10px 10px 0 0;
+	background-color: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+	font-family: var(--font-ui);
+	font-size: 12px;
+	line-height: 16px;
+	letter-spacing: 0;
+	color: var(--text-muted);
+}
+@media (prefers-reduced-motion: reduce) {
+	.composer-notice {
+		transition: none;
+	}
+}
 /* Side-panel chat: the composer spans the panel (the dock's 12px margin only). */
 .review-chat[data-compact] .review-dock-inner {
 	max-width: none;

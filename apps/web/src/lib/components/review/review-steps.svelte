@@ -1,16 +1,13 @@
 <script lang="ts">
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
-	import Pause from '@lucide/svelte/icons/pause';
-	import Play from '@lucide/svelte/icons/play';
-	import CircleStop from '@lucide/svelte/icons/circle-stop';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import type { ReviewPlanApproval } from '@recoder/shared';
+	import type { PlanApprovalProps } from '$lib/review/plan-approval.svelte';
 
-	interface Props {
+	interface Props extends PlanApprovalProps {
 		/** Index of the running step; equal to the step count when done. */
 		current: number;
 		failed?: boolean;
@@ -18,16 +15,6 @@
 		elapsed: string;
 		/** "4/6" progress for the specialist step; failed and skipped specialists are not "done". */
 		specialists?: { done: number; failed: number; total: number } | null;
-		paused?: boolean;
-		/** Present while the review runs. */
-		onPauseToggle?: (() => Promise<void>) | null;
-		onCancel?: (() => Promise<void>) | null;
-		/** A plan waiting for the developer: the review is blocked until one of these is pressed. */
-		approval?: ReviewPlanApproval | null;
-		onApprove?: (() => Promise<void>) | null;
-		/** Asks to confirm, since declining cancels the review. */
-		onDecline?: (() => void) | null;
-		approving?: boolean;
 	}
 	let {
 		current,
@@ -36,24 +23,11 @@
 		elapsed,
 		specialists = null,
 		paused = false,
-		onPauseToggle = null,
-		onCancel = null,
 		approval = null,
 		onApprove = null,
 		onDecline = null,
 		approving = false
 	}: Props = $props();
-	let pending = $state<'pause' | 'cancel' | null>(null);
-	async function run(kind: 'pause' | 'cancel', action: (() => Promise<void>) | null): Promise<void> {
-		if (!action || pending) return;
-		pending = kind;
-
-		try {
-			await action();
-		} finally {
-			pending = null;
-		}
-	}
 
 	const steps = $derived([
 		{ id: 'checkout', label: 'Prepare repository', meta: '' },
@@ -129,36 +103,6 @@
 					>Yes</Button
 				>
 			</div>
-		</div>
-	{/if}
-	{#if active && (onPauseToggle || onCancel)}
-		<div class="progress-controls">
-			{#if onPauseToggle}
-				<Button
-					variant="ghost"
-					class="progress-control"
-					loading={pending === 'pause'}
-					disabled={!!pending}
-					onclick={() => void run('pause', onPauseToggle)}
-				>
-					{#if paused}<Play size={13} strokeWidth={1.75} aria-hidden="true" /> Resume{:else}<Pause
-							size={13}
-							strokeWidth={1.75}
-							aria-hidden="true"
-						/> Pause{/if}
-				</Button>
-			{/if}
-			{#if onCancel}
-				<Button
-					variant="ghost"
-					class="progress-control progress-cancel"
-					loading={pending === 'cancel'}
-					disabled={!!pending}
-					onclick={() => void run('cancel', onCancel)}
-				>
-					<CircleStop size={13} strokeWidth={1.75} aria-hidden="true" /> Cancel
-				</Button>
-			{/if}
 		</div>
 	{/if}
 </Card.Root>

@@ -6,7 +6,8 @@ import { fakeBin } from './fake-bin';
  * The fake server's source. It checks the Basic auth password, serves the
  * provider and sign-in routes, and runs chat sessions whose reply depends on
  * the prompt: `structured`, `denied` (the free tier's 403), `auth`, `slow`, and
- * `auto-only` (refuses a schema like a provider that takes only `auto` tool choice).
+ * `auto-only` (refuses a schema like a provider that takes only `auto` tool choice) and
+ * `empty-structured` (answers a schema with `{}`).
  * Like OpenCode, a schema request with `StructuredOutput` off fails.
  * Any other prompt streams "Hello" and " world" before replying. `/test/calls`
  * lists every chat request it saw.
@@ -35,7 +36,8 @@ const replies = {
 async function chat(session, body, signal) {
 	const text = body.parts[0].text;
 	if (body.format && body.tools.StructuredOutput !== true) return { info: { error: { name: 'StructuredOutputError', data: { message: 'Model did not produce structured output' } } }, parts: [] };
-	if (text === 'auto-only') return body.format ? { info: { error: { name: 'APIError', data: { message: 'only auto is supported for tool choice', statusCode: 400 } } }, parts: [] } : { info: { tokens }, parts: [{ type: 'text', text: '{"ok":true}' }] };
+	if (text === 'auto-only') return body.format ? { info: { error: { name: 'APIError', data: { message: 'only \`"auto"\` is supported for \`tool_choice\`. \`"none"\`, \`"required"\`, and named function choices are not currently supported', statusCode: 400 } } }, parts: [] } : { info: { tokens }, parts: [{ type: 'text', text: '{"ok":true}' }] };
+	if (text === 'empty-structured') return body.format ? { info: { tokens, structured: {} }, parts: [] } : { info: { tokens }, parts: [{ type: 'text', text: '{"ok":true}' }] };
 	if (replies[text]) return replies[text]();
 	if (text === 'slow') {
 		await new Promise((resolve) => signal.addEventListener('abort', resolve));

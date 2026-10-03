@@ -10,7 +10,13 @@ import {
 	consolidationUserPrompt,
 	type CandidateFinding
 } from '../consolidate.js';
-import { orchestratorAgentOptions, publishCandidates, validCandidates, type ReviewRun } from './context.js';
+import {
+	orchestratorAgentOptions,
+	orchestratorSays,
+	publishCandidates,
+	validCandidates,
+	type ReviewRun
+} from './context.js';
 import type { TaskFn } from './types.js';
 
 export interface Consolidated {
@@ -18,6 +24,17 @@ export interface Consolidated {
 	/** The specialists' recommended checks plus the orchestrator's. */
 	checks: string[];
 	error?: string;
+}
+
+/** Without this the review ends in silence and reads as if nothing ran. */
+function announceNothingFound(run: ReviewRun): void {
+	const count = run.assignments.length;
+
+	orchestratorSays(
+		run.events,
+		'message_nothing_found',
+		`${count === 1 ? 'The specialist' : `All ${count} specialists`} finished without reporting anything worth flagging.`
+	);
 }
 
 /**
@@ -46,6 +63,8 @@ export async function consolidate(run: ReviewRun): Promise<Consolidated> {
 		task('consolidation', 'Consolidating findings', 'done', 'No candidates to consolidate', {
 			kind: 'consolidation'
 		});
+
+		announceNothingFound(run);
 
 		return { confirmed: [], checks };
 	}

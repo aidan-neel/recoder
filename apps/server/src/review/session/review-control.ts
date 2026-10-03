@@ -1,3 +1,4 @@
+import { REVIEW_CANCELLED } from '@recoder/shared';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
@@ -46,7 +47,7 @@ export class ReviewControl {
 	}
 
 	/** Stop the review; `reason` becomes its failure message. */
-	cancel(reason = 'Review cancelled.'): void {
+	cancel(reason = REVIEW_CANCELLED): void {
 		this.abort.abort(new Error(reason));
 		for (const wake of this.waiters.splice(0)) wake();
 	}

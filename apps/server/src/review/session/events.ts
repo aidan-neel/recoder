@@ -114,10 +114,13 @@ function applyReasoning(snapshot: ReviewProgress, message: ReviewEvent, entry: O
 	const reasoning = [...(snapshot.reasoning ?? [])];
 	const index = reasoning.findIndex((item) => item.id === entry.id);
 
+	const ended = entry.status === 'done' || entry.status === 'error';
+
 	const next: ReviewReasoningEntry = {
 		...entry,
 		text: entry.text.slice(0, 64_000),
-		at: reasoning[index]?.at ?? message.at
+		at: reasoning[index]?.at ?? message.at,
+		...(ended ? { endedAt: reasoning[index]?.endedAt ?? message.at } : {})
 	};
 
 	message.data = { ...message.data, reasoning: next };

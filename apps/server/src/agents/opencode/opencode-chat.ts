@@ -123,14 +123,25 @@ function replyError(error: NonNullable<Reply['info']['error']>): LlmError {
 	return new LlmError(error.data?.statusCode ?? 0, message);
 }
 
-/** The reply text: the structured object when a schema was sent, else the text parts in order. */
+/**
+ * The reply text: the structured object when a schema was sent, else the text parts in order. Some
+ * models answer the structured-output tool with `{}` every time; that counts as refusing it, so the
+ * call is asked again for plain JSON.
+ */
 function replyText(reply: Reply, structured: boolean): string {
-	if (structured && reply.info.structured !== undefined) return JSON.stringify(reply.info.structured);
+	const value = reply.info.structured;
+
+	if (structured && isEmptyObject(value)) throw new LlmError(0, 'The model returned empty structured output.');
+	if (structured && value !== undefined) return JSON.stringify(value);
 
 	return reply.parts
 		.filter((part) => part.type === 'text')
 		.map((part) => part.text ?? '')
 		.join('');
+}
+
+function isEmptyObject(value: unknown): boolean {
+	return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0;
 }
 
 function usage(tokens: NonNullable<Reply['info']['tokens']>): TokenUsage {

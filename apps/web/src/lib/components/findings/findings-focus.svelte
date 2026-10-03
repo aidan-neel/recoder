@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ReviewPlanApproval, ReviewToolCall } from '@recoder/shared';
+	import type { ReviewToolCall } from '@recoder/shared';
 	import CheckCheck from '@lucide/svelte/icons/check-check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
@@ -9,6 +9,7 @@
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import type { PlanApprovalProps } from '$lib/review/plan-approval.svelte';
 	import type { FileDiff } from '$lib/diff/diff';
 	import { SEVERITIES, findingsStore, type Finding } from '$lib/findings/findings.svelte';
 	import { compareSeverity } from '$lib/findings/severity';
@@ -16,7 +17,7 @@
 	import FindingDetail from './finding-detail.svelte';
 	import FindingsList from './findings-list.svelte';
 
-	interface Props {
+	interface Props extends PlanApprovalProps {
 		files: FileDiff[];
 		toolCalls?: ReviewToolCall[];
 		/** Open the whole file in the inline diff. */
@@ -32,13 +33,6 @@
 		onRestart?: (() => void) | null;
 		/** What a running review is doing right now ("Running checks · bun test"). */
 		stageLabel?: string | null;
-		paused?: boolean;
-		/** A plan waiting for the developer; the review is blocked until answered. */
-		approval?: ReviewPlanApproval | null;
-		onApprove?: (() => Promise<void>) | null;
-		/** Asks to confirm, since declining cancels the review. */
-		onDecline?: (() => void) | null;
-		approving?: boolean;
 	}
 	let {
 		files,

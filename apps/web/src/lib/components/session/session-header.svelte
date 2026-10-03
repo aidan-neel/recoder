@@ -10,7 +10,7 @@
 	export type SessionView = 'conversation' | 'findings' | 'diff';
 
 	/**
-	 * One bar for every view: PR number and view tabs on the left, the menu and the view's toolbar on the right.
+	 * One bar for every view: PR number and view tabs on the left; the view's toolbar, its status and the menu on the right.
 	 * The title, repo, branch and diffstat live in the PR hover card.
 	 */
 	interface Props {
@@ -32,6 +32,8 @@
 		menu?: Snippet;
 		/** Diff workspace: its toolbar (findings stepper, filters, actions) takes the meta's place, so the view has one bar. */
 		toolbar?: Snippet;
+		/** Usage and checks: at the far right, just before the menu. */
+		status?: Snippet;
 	}
 
 	let {
@@ -48,7 +50,8 @@
 		onView = null,
 		diffDisabled = false,
 		menu,
-		toolbar
+		toolbar,
+		status
 	}: Props = $props();
 
 	/** The PR number opens the pull request on its host in a new tab (the trigger forwards these to its link). */
@@ -108,15 +111,18 @@
 			</Tabs.List>
 		</Tabs.Root>
 	{/if}
-	{#if menu}
-		<DropdownMenu.Root>
-			<DropdownMenu.Trigger variant="ghost" size="icon" aria-label="Session actions"
-				><Ellipsis size={16} aria-hidden="true" /></DropdownMenu.Trigger
-			>
-			<DropdownMenu.Content>{@render menu()}</DropdownMenu.Content>
-		</DropdownMenu.Root>
-	{/if}
-	{#if toolbar}
-		<div class="session-toolbar">{@render toolbar()}</div>
-	{/if}
+	<div class="session-actions">
+		{#if toolbar}
+			<div class="session-toolbar">{@render toolbar()}</div>
+		{/if}
+		{@render status?.()}
+		{#if menu}
+			<DropdownMenu.Root>
+				<DropdownMenu.Trigger variant="ghost" size="icon" aria-label="Session actions"
+					><Ellipsis size={16} aria-hidden="true" /></DropdownMenu.Trigger
+				>
+				<DropdownMenu.Content>{@render menu()}</DropdownMenu.Content>
+			</DropdownMenu.Root>
+		{/if}
+	</div>
 </header>

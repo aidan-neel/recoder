@@ -176,12 +176,15 @@
 	];
 	/**
 	 * `?state=running` previews a review mid-flight. `approval` holds it at the plan's go-ahead; `verify`
-	 * shows verifiers checking findings, one reply cut off.
+	 * shows verifiers checking findings, one reply cut off; `preparing` is still checking out the pull request;
+	 * `planning` has read the repo and is planning, with nothing streaming yet.
 	 */
 	const liveState = page.url.searchParams.get('state');
-	const running = liveState === 'running' || liveState === 'approval' || liveState === 'verify';
+	const running = ['running', 'approval', 'verify', 'preparing', 'planning'].includes(liveState ?? '');
 	const verifyPreview = liveState === 'verify';
+	const preparingPreview = liveState === 'preparing';
 	const approvalPreview = liveState === 'approval';
+	const planningPreview = liveState === 'planning';
 	const liveSpecs = [
 		{ id: 'correctness', model: 'gpt-5-codex', status: 'running', op: 'Reading src/rate-limit/limiter.ts:20-46' },
 		{ id: 'patterns', model: 'gpt-5-codex', status: 'done', op: 'Compared exports against 14 call sites · 1 finding' },
@@ -239,7 +242,7 @@
 		model,
 		at: iso(50),
 		status: 'error',
-		cutOff: 'It thought for too long without answering, so it was asked to answer now.',
+		cutOff: 'Thought too long. Asking for an answer now.',
 		text: 'Specialists reported 3 candidates. I’m checking each one before I consolidate: the clock finding first, since it decides whether refill works at all.'
 	};
 	const liveMessages: ReviewChatMessage[] = [
@@ -277,6 +280,29 @@
 			: { status: 'done' as const, exitCode: 0, elapsedMs: ms as number }),
 		startedAt: iso(118 - i)
 	}));
+	const planningMessages: ReviewChatMessage[] = [
+		liveMessages[0],
+		{
+			id: 'understand',
+			assignmentId: ORCHESTRATOR_ID,
+			from: 'assistant',
+			model,
+			at: iso(130),
+			status: 'done',
+			text: "Reading the repo's instructions and the code around this change."
+		}
+	];
+	const planningTasks: ReviewTask[] = [
+		{
+			id: 'planning',
+			label: 'Planning the review',
+			status: 'running',
+			message: 'Planning specialist assignments',
+			kind: 'planning',
+			startedAt: iso(20),
+			updatedAt: iso(0)
+		}
+	];
 	const planSummary = 'I created 3 specialists for this review:\n\n- Test coverage\n- Complexity\n- Documentation';
 	const liveReasoning: ReviewReasoningEntry[] = [
 		{
@@ -336,16 +362,30 @@
 			deletions: 34,
 			elapsed: '2:14'
 		}}
-		assignments={liveAssignments}
-		messages={verifyPreview ? [...liveMessages, cutOffMessage] : liveMessages}
-		toolCalls={liveTools}
-		reasoning={verifyPreview ? [...liveReasoning, ...verifyReasoning] : liveReasoning}
+		assignments={preparingPreview || planningPreview ? [] : liveAssignments}
+		messages={preparingPreview
+			? []
+			: planningPreview
+				? planningMessages
+				: verifyPreview
+					? [...liveMessages, cutOffMessage]
+					: liveMessages}
+		toolCalls={preparingPreview
+			? []
+			: planningPreview
+				? liveTools.map((tool) => ({ ...tool, status: 'done' as const, exitCode: 0 }))
+				: liveTools}
+		reasoning={preparingPreview || planningPreview
+			? []
+			: verifyPreview
+				? [...liveReasoning, ...verifyReasoning]
+				: liveReasoning}
 		orchestratorModel={model}
-		tasks={verifyPreview ? verifyTasks : []}
+		tasks={verifyPreview ? verifyTasks : planningPreview ? planningTasks : []}
 		reviewId={approvalPreview ? 'example' : undefined}
 		approval={approvalPreview ? { status: 'pending', requested: 7 } : null}
 		findings={[]}
-		stage={verifyPreview ? 4 : approvalPreview ? 1 : 3}
+		stage={preparingPreview ? 0 : verifyPreview ? 4 : approvalPreview || planningPreview ? 1 : 3}
 		stageLabel={verifyPreview
 			? 'Verifying findings'
 			: approvalPreview

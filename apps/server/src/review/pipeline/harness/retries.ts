@@ -1,7 +1,7 @@
-import { ORCHESTRATOR_ID, type ReviewAssignment } from '@recoder/shared';
-import { configForOrchestrator } from '../../../models/models.js';
+import type { ReviewAssignment } from '@recoder/shared';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import type { PlannerAssignment } from '../planner.js';
+import { orchestratorSays } from './context.js';
 import type { HarnessEvents } from './types.js';
 
 export interface FailedAssignment {
@@ -126,11 +126,9 @@ export function reportRetries(retries: FailedAssignment[], events: HarnessEvents
 			`- **${parts[0].item.title}**: ${parts[0].error.replace(/\s+/g, ' ').slice(0, 140)}. Rerunning ${parts.length > 1 ? 'split in two' : parts[0].remedy}.`
 	);
 
-	events?.onMessage?.({
-		id: `message_retries_${retries[0].item.id}`,
-		text: `${byOriginal.size === 1 ? 'One specialist' : `${byOriginal.size} specialists`} failed, so I'm running ${byOriginal.size === 1 ? 'it' : 'them'} again:\n\n${lines.join('\n')}`,
-		status: 'done',
-		assignmentId: ORCHESTRATOR_ID,
-		model: configForOrchestrator().model
-	});
+	orchestratorSays(
+		events,
+		`message_retries_${retries[0].item.id}`,
+		`${byOriginal.size === 1 ? 'One specialist' : `${byOriginal.size} specialists`} failed, so I'm running ${byOriginal.size === 1 ? 'it' : 'them'} again:\n\n${lines.join('\n')}`
+	);
 }

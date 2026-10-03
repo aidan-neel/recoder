@@ -21,7 +21,7 @@
 	<header class="session-header" data-bordered="" data-merged="" aria-hidden="true">
 		<Skeleton class="h-3.5 w-80 max-w-[40%]" />
 		<div class="view-switch"><Skeleton class="h-7 w-[205px]" /></div>
-		<div class="order-2 flex items-center gap-3 min-[1280px]:ms-auto">
+		<div class="ms-auto flex items-center gap-3">
 			<Skeleton class="h-3 w-20" />
 			{#if workspace}<Skeleton class="h-8 w-28" /><Skeleton class="h-8 w-24" />{/if}
 		</div>

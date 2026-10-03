@@ -1,6 +1,6 @@
-import type { ReviewAssignment } from '@recoder/shared';
+import { ORCHESTRATOR_ID, type ReviewAssignment } from '@recoder/shared';
 import { EvidenceStore } from '../../../evidence/evidence.js';
-import { reviewLimits, type RoleConfig } from '../../../models/models.js';
+import { configForOrchestrator, reviewLimits, type RoleConfig } from '../../../models/models.js';
 import { execUnavailableReason } from '../../../sandbox/exec-sandbox.js';
 import { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import type { ReviewDirective } from '../../chat/directive.js';
@@ -89,6 +89,17 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		task: (id, label, status, message, extra) =>
 			events?.onTask?.({ id, label, status, message, kind: extra?.kind ?? 'other', ...extra })
 	};
+}
+
+/** A finished note from the orchestrator in its conversation, so the developer sees why the review does what it does. */
+export function orchestratorSays(events: HarnessEvents | undefined, id: string, text: string): void {
+	events?.onMessage?.({
+		id,
+		text,
+		status: 'done',
+		assignmentId: ORCHESTRATOR_ID,
+		model: configForOrchestrator().model
+	});
 }
 
 /**

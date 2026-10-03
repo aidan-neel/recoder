@@ -15,7 +15,7 @@ import {
 } from '../planner.js';
 import { isCompactModel } from '../prompts.js';
 import { FINISHED, assignCoverage, toAssignmentRecord } from './assignments.js';
-import { extendDeadlines, orchestratorAgentOptions, publishPlan, type ReviewRun } from './context.js';
+import { extendDeadlines, orchestratorAgentOptions, orchestratorSays, publishPlan, type ReviewRun } from './context.js';
 
 const PLANNER_EXAMPLE =
 	'{"message":"One correctness specialist on the changed module.","summary":"...","assignments":[{"id":"correctness-main","role":"correctness","title":"...","reason":"...","scope":[{"path":"src/a.ts","hunkIds":[]}],"questions":[],"contextEvidenceIds":[],"priority":1}],"roleDecisions":[{"role":"correctness","decision":"selected","reason":"..."}]}';
@@ -39,6 +39,8 @@ export async function planReview(run: ReviewRun, execNotes: string | undefined):
 
 	if (resume) restoreRecords(run);
 	else recordPlan(run, plan);
+
+	if (!resume && run.planningDegraded) announceFallback(run, plan);
 
 	publishPlan(run, plan, 1);
 
@@ -89,6 +91,17 @@ async function planOrFallBack(run: ReviewRun, execNotes: string | undefined): Pr
 			directive: run.directive
 		});
 	}
+}
+
+/** A fallback plan has no planner message of its own, so the orchestrator says why these specialists run. */
+function announceFallback(run: ReviewRun, plan: PlannerOutput): void {
+	const titles = plan.assignments.map((item) => `- ${item.title}`).join('\n');
+
+	orchestratorSays(
+		run.events,
+		'message_plan_fallback',
+		`The model didn't return a usable plan, so I'm running the standard specialists instead:\n\n${titles}`
+	);
 }
 
 /** Finished assignments keep their records; the rest are queued again. */

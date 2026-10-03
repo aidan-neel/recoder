@@ -4,7 +4,7 @@
 	import { requestDeleteSession } from '$lib/session/delete-session.svelte';
 	import { guidelinesStore } from '$lib/settings/guidelines.svelte';
 
-	/** The session header's menu items for a review: diff, usage, guidelines, run control and the tab. */
+	/** The session header's menu items for a review: diff, guidelines, run control and the tab. */
 	let {
 		reviewId,
 		repoId,
@@ -14,7 +14,6 @@
 		restarting,
 		onOpenDiff,
 		onRestart,
-		onMetrics,
 		onTogglePause,
 		onCancel
 	}: {
@@ -27,14 +26,12 @@
 		onOpenDiff: (() => void) | null;
 		/** Asks to restart; the caller confirms first. */
 		onRestart: (() => void) | null;
-		onMetrics: () => void;
 		onTogglePause: () => void;
 		onCancel: () => void;
 	} = $props();
 </script>
 
 {#if onOpenDiff && !active}<DropdownMenu.Item callback={onOpenDiff}>Open diff</DropdownMenu.Item>{/if}
-{#if reviewId}<DropdownMenu.Item callback={onMetrics}>View token usage</DropdownMenu.Item>{/if}
 {#if repoId}{@const id = repoId}<DropdownMenu.Item callback={() => guidelinesStore.open({ kind: 'repo', repoId: id })}
 		>Review guidelines</DropdownMenu.Item
 	>{/if}

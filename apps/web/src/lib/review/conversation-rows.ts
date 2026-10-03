@@ -72,10 +72,32 @@ export function orphansByIndex(
 	return byIndex;
 }
 
+/** Sort key for a point in time; untimed items sort after everything. */
+function timeOf(at?: string): number {
+	const time = Date.parse(at ?? '');
+
+	return Number.isFinite(time) ? time : Number.MAX_SAFE_INTEGER;
+}
+
 /**
- * Transcript in order. Back-to-back tool groups fold into one row; every thought is its own row
- * with its own timer, never nested in another. A thought is keyed under its reply id and its own
- * id, so two messages can both claim it; each is placed once (duplicate keys crash the keyed list).
+ * Two thoughts with nothing between them (a turn that failed and was asked again) read as one:
+ * timed from the first start to the last end, with both texts, under the first one's key.
+ */
+function mergeThoughts(first: Extract<Trace, { kind: 'thought' }>, next: Extract<Trace, { kind: 'thought' }>): Trace {
+	const text = [first.entry.text, next.entry.text].filter((part) => part.trim()).join('\n\n');
+
+	return {
+		kind: 'thought',
+		key: first.key,
+		entry: { ...next.entry, at: first.entry.at, text, summary: first.entry.summary || next.entry.summary },
+		until: next.until
+	};
+}
+
+/**
+ * Transcript in order. Back-to-back tool groups fold into one row, and back-to-back thoughts merge
+ * into one; a thought is never nested in a tool group. A thought is keyed under its reply id and its
+ * own id, so two messages can both claim it; each is placed once (duplicate keys crash the keyed list).
  */
 export function buildRows(input: {
 	entries: TranscriptItem[];
@@ -92,6 +114,13 @@ export function buildRows(input: {
 		placedTraces.add(item.key);
 
 		const previous = out.at(-1);
+		const last = previous?.kind === 'traces' ? previous.traces.at(-1) : undefined;
+
+		if (item.kind === 'thought' && last?.kind === 'thought' && previous?.kind === 'traces') {
+			previous.traces[previous.traces.length - 1] = mergeThoughts(last, item);
+
+			return;
+		}
 
 		if (
 			item.kind === 'tasks' &&
@@ -102,15 +131,27 @@ export function buildRows(input: {
 		else out.push({ kind: 'traces', key: `traces-${item.key}`, traces: [item] });
 	};
 
-	/** Something later in the transcript means a thought is over, even if its entry was never closed. */
+	/**
+	 * Inserts and stray thoughts at one spot, in the order they happened; untimed inserts (live progress)
+	 * come last. Something later in the transcript means a thought is over, even if its entry was never closed.
+	 */
 	const before = (index: number) => {
-		for (const insert of placed)
-			if (insert.index === index) out.push({ kind: 'insert', key: `insert-${insert.key}`, snippet: insert.snippet });
+		const items = [
+			...placed.filter((insert) => insert.index === index).map((insert) => ({ at: insert.at, insert })),
+			...(orphansAt.get(index) ?? []).map((entry) => ({ at: entry.at, entry }))
+		].sort((a, b) => timeOf(a.at) - timeOf(b.at));
 
-		const next = entries[index]?.at;
+		items.forEach((item, position) => {
+			if ('insert' in item) {
+				out.push({ kind: 'insert', key: `insert-${item.insert.key}`, snippet: item.insert.snippet });
 
-		for (const entry of orphansAt.get(index) ?? [])
-			trace({ kind: 'thought', key: `thought-${entry.id}`, entry, until: next });
+				return;
+			}
+
+			const until = items.slice(position + 1).find((next) => next.at)?.at ?? entries[index]?.at;
+
+			trace({ kind: 'thought', key: `thought-${item.entry.id}`, entry: item.entry, until });
+		});
 	};
 
 	entries.forEach((item, index) => {

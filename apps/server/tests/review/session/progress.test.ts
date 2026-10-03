@@ -81,6 +81,23 @@ test('streamed traces match persisted reconnect snapshots and keep assignment ow
 	expect(applyProgressMessage(emptyReviewProgress(id), { type: 'snapshot', snapshot: stored })).toEqual(client);
 });
 
+test('a thought keeps the time it stopped, so a later update does not stretch it', () => {
+	const id = crypto.randomUUID();
+	const turn = { id: 'turn-a', assignmentId: 'correctness-a', text: 'Planning' };
+
+	reportReviewReasoning(id, { ...turn, status: 'streaming' });
+	expect(reviewProgress.get(id)!.reasoning![0].endedAt).toBeUndefined();
+
+	reportReviewReasoning(id, { ...turn, status: 'done' });
+
+	const { endedAt } = reviewProgress.get(id)!.reasoning![0];
+
+	expect(endedAt).toBeString();
+
+	reportReviewReasoning(id, { ...turn, text: 'Planning, again', status: 'error' });
+	expect(reviewProgress.get(id)!.reasoning![0].endedAt).toBe(endedAt);
+});
+
 test('terminal SSE delivers final findings and stays connected for subsequent conversation', async () => {
 	const review = storeRunningReview('Test');
 	const { id } = review;

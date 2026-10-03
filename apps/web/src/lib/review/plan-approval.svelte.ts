@@ -1,5 +1,17 @@
+import type { ReviewPlanApproval } from '@recoder/shared';
 import { serverApi } from '../api/server-api';
 import { errorToast } from '../shell/notify';
+
+/** Props for a surface that shows a running review's pause state and asks for the plan's go-ahead. */
+export interface PlanApprovalProps {
+	paused?: boolean;
+	/** A plan waiting for the developer; the review is blocked until answered. */
+	approval?: ReviewPlanApproval | null;
+	onApprove?: (() => Promise<void>) | null;
+	/** Asks to confirm, since declining cancels the review. */
+	onDecline?: (() => void) | null;
+	approving?: boolean;
+}
 
 /** A plan waiting on the developer: the review being approved, and the one whose "No" waits on DeclinePlanDialog. */
 export const planApproval = $state<{ approving: string | null; declining: string | null }>({

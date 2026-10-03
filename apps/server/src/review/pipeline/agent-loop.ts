@@ -37,11 +37,11 @@ function agentDeadlines<T>(opts: JsonAgentOptions<T>): { startedAt: number; dead
 	return { startedAt, deadlineAt, finalTurnAt };
 }
 
-/** The note shown under a reply that was cut off and is being retried. */
-function cutOffNote(err: unknown, overthought: boolean, dropped: boolean, truncated: boolean): string | undefined {
-	if (overthought) return 'It thought for too long without answering, so it was asked to answer now.';
-	if (dropped) return `The connection to the model dropped (${(err as Error).message}). Trying again.`;
-	if (truncated) return 'The reply hit the output limit. Asking for a shorter one.';
+/** Why a reply was cut off and asked again: a short line on the composer while the retry runs. */
+function cutOffNote(overthought: boolean, dropped: boolean, truncated: boolean): string | undefined {
+	if (overthought) return 'Thought too long. Asking for an answer now.';
+	if (dropped) return 'Connection to the model dropped. Trying again.';
+	if (truncated) return 'Reply hit the output limit. Asking for a shorter one.';
 
 	return undefined;
 }
@@ -62,7 +62,7 @@ function afterFailedCall<T>(
 	const dropped = !overthought && err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message);
 	const truncated = err instanceof Error && /output truncated/i.test(err.message);
 
-	failure.settle(retrying ? cutOffNote(err, overthought, dropped, truncated) : undefined);
+	failure.settle(retrying ? cutOffNote(overthought, dropped, truncated) : undefined);
 
 	if (isAuthFailure(err) || isUsageLimit(err, opts.config))
 		throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));

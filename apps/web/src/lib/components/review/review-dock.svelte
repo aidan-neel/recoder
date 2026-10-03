@@ -3,10 +3,12 @@
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import { Input } from '@sivir-ui/svelte/components/input';
+	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import ReviewComposer from './review-composer.svelte';
 	import { attachmentText, MESSAGE_LIMIT } from '$lib/review/attachment';
 	import { formatAgentName } from '$lib/findings/threads.svelte';
+	import { modelLabel } from '$lib/settings/model-settings.svelte';
 	import { fileIconUrl } from '$lib/diff/material-icons';
 
 	/** The composer under a review conversation: sends, stops a reply or the review, and attaches files or code. */
@@ -23,7 +25,8 @@
 		awaitingPrompt,
 		generating,
 		working,
-		streaming
+		streaming,
+		notice = null
 	}: {
 		assignment: ReviewAssignment;
 		draft?: string;
@@ -43,6 +46,8 @@
 		working: boolean;
 		/** Any message in this conversation is streaming. */
 		streaming: boolean;
+		/** What the agent is doing about a reply that was cut off ("Trying again"), shown on the composer while it lasts. */
+		notice?: string | null;
 	} = $props();
 
 	const specialist = $derived(assignment.id !== ORCHESTRATOR_ID);
@@ -53,6 +58,13 @@
 	let stoppingReview = $state(false);
 	let error = $state('');
 	let composerInput = $state<HTMLTextAreaElement>();
+
+	/** Outlives the notice, so its text holds while the tab folds away. */
+	let shownNotice = $state('');
+
+	$effect(() => {
+		if (notice) shownNotice = notice;
+	});
 
 	/** Hidden file picker. Never write a filename back: Sivir 0.3.2 also binds value on file inputs. */
 	let fileInput = $state<HTMLInputElement>();
@@ -182,6 +194,13 @@
 				onchange={attachFile}
 			/>
 		</div>
+		<div class="composer-notice" data-open={notice ? '' : undefined} role="status">
+			<div class="composer-notice-clip">
+				<Typography.Metadata class="composer-notice-tab" aria-hidden={!notice}>
+					<Spinner size={11} aria-hidden="true" />{shownNotice}
+				</Typography.Metadata>
+			</div>
+		</div>
 		<ReviewComposer
 			bind:value={draft}
 			bind:inputEl={composerInput}
@@ -230,6 +249,11 @@
 			{#snippet leading()}
 				{#if specialist}<Typography.Metadata class="truncate text-[12px] text-fg-faint"
 						>Shared with Orchestrator</Typography.Metadata
+					>{/if}
+			{/snippet}
+			{#snippet trailing()}
+				{#if assignment.model}<Typography.Metadata class="rc-composer-model truncate"
+						>{modelLabel(assignment.model)}</Typography.Metadata
 					>{/if}
 			{/snippet}
 		</ReviewComposer>

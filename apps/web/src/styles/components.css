@@ -186,29 +186,6 @@
 	box-shadow: none;
 }
 
-/* Pause / cancel under the progress steps while a review runs: quiet, inset like the steps. */
-.progress-controls {
-	display: flex;
-	gap: 2px;
-	padding: 6px 8px 8px;
-	border-top: 1px solid var(--line-subtle-2);
-}
-[data-ui='button'][data-variant][data-size].progress-control {
-	height: 28px;
-	min-height: 28px;
-	gap: 6px;
-	padding: 0 8px;
-	border-radius: 7px;
-	font-size: 12.5px;
-	font-weight: 400;
-	color: var(--text-subtle);
-}
-[data-ui='button'][data-variant][data-size].progress-control:hover {
-	color: var(--text-primary);
-}
-[data-ui='button'][data-variant='ghost'][data-size].progress-cancel:hover {
-	color: var(--danger);
-}
 /* A plan waiting for the go-ahead asks here too, so the question is never only in the conversation. */
 .progress-approval {
 	display: flex;
@@ -286,7 +263,22 @@
 	margin-top: 12px;
 }
 
-/* Review stopped (interrupted, failed action): a quiet card, not a red sentence. */
+/* Why a review failed: one line under its closing row, aligned with the label. */
+.finalize-row {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.finalize-reason {
+	margin: 0;
+	padding-left: 22px;
+	font-size: 12.5px;
+	line-height: 18px;
+	color: var(--text-muted);
+	text-wrap: pretty;
+}
+
+/* Sign-in, usage limit or a failed action: a quiet card, not a red sentence. */
 [data-ui='card'].review-notice {
 	flex-direction: row;
 	align-items: center;

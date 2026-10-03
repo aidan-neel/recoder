@@ -124,12 +124,38 @@
 		return /^Running\b/.test(op) || op === assignment.title ? null : op || null;
 	});
 
+	/**
+	 * What the orchestrator is doing while nothing in its transcript moves (between the first reads and the
+	 * plan, say), so a quiet stretch still says something. Inserts and live thoughts or tools speak for themselves.
+	 */
+	const orchestratorStatus = $derived.by(() => {
+		if (specialist || !working || !currentTask) return null;
+		if (conversationMessages.some((message) => message.status === 'streaming')) return null;
+
+		const tail = rows.at(-1);
+		const trace = tail?.kind === 'traces' ? tail.traces.at(-1) : undefined;
+
+		if (tail?.kind === 'insert' || trace?.kind === 'thought') return null;
+		if (trace?.kind === 'tasks' && trace.tools.some((tool) => tool.status === 'running')) return null;
+
+		return currentTask.status === 'waiting' && currentTask.message ? currentTask.message : currentTask.label;
+	});
+
 	/** Only while a reply is actually pending and nothing (text or thinking) has streamed for it yet. */
 	const thinking = $derived(
 		generating &&
 			!conversationMessages.some((message) => message.status === 'streaming' && message.text.trim()) &&
 			!conversationReasoning.some((entry) => entry.status === 'streaming')
 	);
+
+	/** The latest reply was cut off and the agent is asking again: the composer says so until the retry's reply or tools arrive. */
+	const retryNotice = $derived.by(() => {
+		const last = conversationMessages.at(-1);
+
+		if (!active || last?.status !== 'error' || !last.cutOff) return null;
+
+		return conversationTools.some((tool) => Date.parse(tool.startedAt) > Date.parse(last.at)) ? null : last.cutOff;
+	});
 
 	const rows = $derived(
 		buildRows({
@@ -147,8 +173,9 @@
 		)?.at
 	);
 
+	/** A thought with nothing after it keeps counting while the agent works, even between its retries. */
 	const anyLive = $derived(
-		thinking || conversationReasoning.some((entry) => entry.status === 'streaming' && (active || generating))
+		thinking || working || conversationReasoning.some((entry) => entry.status === 'streaming' && (active || generating))
 	);
 
 	$effect(() => {
@@ -215,16 +242,14 @@
 							: null}
 					/>
 				{:else}
-					<ReviewTraces traces={row.traces} {active} streaming={active || generating} {now} {clock} />
+					<ReviewTraces traces={row.traces} {active} streaming={working || generating} {now} {clock} />
 				{/if}
 			{/each}
-			{#if specialist}
-				{#if specialistStatus}
-					<Typography.Text role="status" class="flex items-start gap-2 text-sm text-foreground-muted">
-						{#if working}<Spinner size={14} class="mt-1 shrink-0" aria-hidden="true" />{/if}
-						<span class="min-w-0 break-words">{specialistStatus}</span>
-					</Typography.Text>
-				{/if}
+			{#if specialistStatus || orchestratorStatus}
+				<Typography.Text role="status" class="flex items-start gap-2 text-sm text-foreground-muted">
+					{#if working}<Spinner size={14} class="mt-1 shrink-0" aria-hidden="true" />{/if}
+					<span class="min-w-0 break-words">{specialistStatus ?? orchestratorStatus}</span>
+				</Typography.Text>
 			{/if}
 			{#if thinking}
 				<Typography.Text role="status" class="review-thinking"
@@ -248,6 +273,7 @@
 		{awaitingPrompt}
 		{generating}
 		{working}
+		notice={retryNotice}
 		streaming={conversationMessages.some((message) => message.status === 'streaming')}
 	/>
 </div>

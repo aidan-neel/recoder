@@ -1,4 +1,10 @@
-import { settleAssignments, type CoverageSummary, type Finding, type ReviewAssignment } from '@recoder/shared';
+import {
+	REVIEW_CANCELLED,
+	settleAssignments,
+	type CoverageSummary,
+	type Finding,
+	type ReviewAssignment
+} from '@recoder/shared';
 import { reviewNow } from '../../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError } from '../agent-loop.js';
 import type { CoverageLedger } from '../coverage.js';
@@ -47,7 +53,7 @@ export function stoppedReview(run: ReviewRun, err: unknown): AdaptiveReviewResul
 		return failReview(assignments, coverage, err instanceof Error ? err.message : 'Review failed');
 	}
 
-	if (run.input.signal?.aborted) return failReview(assignments, coverage, 'Review cancelled.');
+	if (run.input.signal?.aborted) return failReview(assignments, coverage, REVIEW_CANCELLED);
 
 	const minutes = Math.max(1, Math.round((reviewNow() - run.startedAt) / 60_000));
 

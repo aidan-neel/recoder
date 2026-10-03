@@ -21,6 +21,8 @@
 	let {
 		active,
 		failed,
+		stopped,
+		reason,
 		footerLabel,
 		verifying,
 		verifications,
@@ -39,6 +41,10 @@
 	}: {
 		active: boolean;
 		failed: boolean;
+		/** The developer stopped it, so it reads as stopped rather than failed. */
+		stopped: boolean;
+		/** Why it failed, under the closing row. */
+		reason: string | null;
 		/** What the live review is doing, shown while it runs. */
 		footerLabel: string;
 		verifying: boolean;
@@ -85,7 +91,10 @@
 			: []
 	);
 
-	const hasBody = $derived(verifying ? verifications.length > 0 : finalReasoning.length > 0 || facts.length > 0);
+	/** While it runs, only verification and the final thinking have something to open; waiting is just a spinner row. */
+	const hasBody = $derived(
+		verifying ? verifications.length > 0 : finalReasoning.length > 0 || (!active && facts.length > 0)
+	);
 </script>
 
 {#snippet progressBody()}
@@ -121,17 +130,24 @@
 	{/if}
 {/snippet}
 
-<Disclosure
-	status={active ? 'running' : failed ? 'error' : 'done'}
-	bodyClass="finalize-body"
-	children={hasBody ? progressBody : undefined}
->
-	{#snippet label()}{active
-			? footerLabel
-			: failed
-				? 'Review failed'
-				: `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
-</Disclosure>
+<div class="finalize-row">
+	<Disclosure
+		status={active ? 'running' : stopped ? undefined : failed ? 'error' : 'done'}
+		bodyClass="finalize-body"
+		children={hasBody ? progressBody : undefined}
+	>
+		{#snippet label()}{active
+				? footerLabel
+				: stopped
+					? 'Review stopped'
+					: failed
+						? 'Review failed'
+						: `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
+	</Disclosure>
+	{#if failed && !active && reason}
+		<Typography.Text class="finalize-reason">{reason}</Typography.Text>
+	{/if}
+</div>
 {#if failed && !active && onContinue}
 	<div class="review-start-cta">
 		<Button class="brief-action" loading={continuing} onclick={onContinue}>

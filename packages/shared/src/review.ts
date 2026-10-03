@@ -4,6 +4,9 @@ export type ReviewStatus = 'draft' | 'queued' | 'running' | 'passed' | 'failed';
 
 export const REVIEW_STATUSES: ReviewStatus[] = ['draft', 'queued', 'running', 'passed', 'failed'];
 
+/** The failure message of a review the developer stopped, so the UI can say it stopped rather than failed. */
+export const REVIEW_CANCELLED = 'Review cancelled.';
+
 export interface Review {
 	id: string;
 	repoId: string;

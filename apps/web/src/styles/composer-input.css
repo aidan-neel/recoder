@@ -50,12 +50,6 @@
 	margin: 0;
 }
 
-/* Switch: no knob stretch on press. */
-[data-ui='switch'] > span,
-[data-ui='switch']:active > span {
-	scale: none;
-}
-
 /* Session page: scroll without visible scrollbars. */
 main[data-route^='/session'] * {
 	scrollbar-width: none;

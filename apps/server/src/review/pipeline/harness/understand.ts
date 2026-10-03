@@ -5,7 +5,7 @@ import { applyDirective, describeDirective, interpretInstructions } from '../../
 import { composeGuidelines, readGlobalGuidelines, type GuidelinesInput } from '../../guidelines/guidelines.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import type { ReviewInventory } from '../inventory.js';
-import { publishCoverage, type ReviewRun } from './context.js';
+import { orchestratorSays, publishCoverage, type ReviewRun } from './context.js';
 import type { HarnessEvents } from './types.js';
 
 /** Instruction files read from the target revision, in this order. */
@@ -28,6 +28,7 @@ export async function understandChanges(run: ReviewRun): Promise<void> {
 	await applyInstructions(run);
 
 	run.coverage.seed(inventory);
+	if (evidence.revision) announceGuidance(events);
 	await loadGuidance(inventory, evidence, signal, events?.onTool);
 
 	const guidelines = composeGuidelines({
@@ -46,6 +47,11 @@ export async function understandChanges(run: ReviewRun): Promise<void> {
 
 	publishCoverage(run);
 	if (!run.workspace) events?.onLog?.(`Reviewing without running code: ${run.execReason}`);
+}
+
+/** The orchestrator says what the reads before planning are for, so they don't appear unexplained. */
+function announceGuidance(events: HarnessEvents | undefined): void {
+	orchestratorSays(events, 'message_understand', "Reading the repo's instructions and the code around this change.");
 }
 
 /**

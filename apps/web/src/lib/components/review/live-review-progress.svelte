@@ -178,8 +178,8 @@
 	stageLabel={currentStage}
 	stageDetail={stage.detail}
 	failed={status === 'failed'}
-	errorMessage={actionError ?? (status === 'failed' && !progress.failure ? review.summary : null)}
-	failure={progress.failure ?? null}
+	errorMessage={actionError}
+	failure={progress.failure ?? (status === 'failed' && review.summary ? { reason: review.summary } : null)}
 	{connectionLabel}
 	connectionLost={connection === 'reconnecting'}
 	planSummary={progress.planSummary ?? null}
