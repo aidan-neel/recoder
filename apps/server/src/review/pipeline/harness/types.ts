@@ -35,8 +35,8 @@ export interface HarnessEvents {
 	onCheckpoint?: (checkpoint: ReviewProgressCheckpoint) => void;
 }
 
-/** A checkpoint as the harness sees it; the pipeline adds the review id and revision. */
-export type ReviewProgressCheckpoint = Omit<ReviewCheckpoint, 'id' | 'headSha' | 'mergeBaseSha'>;
+/** A checkpoint as the harness sees it; the pipeline adds the format version, review id and revision. */
+export type ReviewProgressCheckpoint = Omit<ReviewCheckpoint, 'version' | 'id' | 'headSha' | 'mergeBaseSha'>;
 
 /** Reports a row in the review's task list. */
 export type TaskFn = (

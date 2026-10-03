@@ -2,10 +2,6 @@
 export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
-/** How many specialists one review may dispatch, and how long each may dig. */
-export const DISPATCH_LEVELS = ['low', 'medium', 'high'] as const;
-export type DispatchLevel = (typeof DISPATCH_LEVELS)[number];
-
 /** How many subagents one review may run in all, chosen in Settings → Review harness; 0 turns them off. */
 export const SUBAGENT_CAPS = [0, 2, 4] as const;
 export type SubagentCap = (typeof SUBAGENT_CAPS)[number];
@@ -90,15 +86,15 @@ export interface ModelSettings {
 	apiKeyPreview: string | null;
 	sharedModelId: string | null;
 	orchestratorModelId?: string | null;
-	/** Every specialist runs on this model; null follows the Review model. */
+	/** Subagents and verifiers run on this second model; null follows the Review model. */
 	specialistModelId?: string | null;
 	models: ModelEntry[];
 	/** Review (orchestrator) reasoning effort; null follows the model default. */
 	orchestratorEffort?: ReasoningEffort | null;
-	/** Specialist reasoning effort; null follows the Review effort when the model does too. */
+	/** The second model's reasoning effort; null follows the Review effort when the model does too. */
 	specialistEffort?: ReasoningEffort | null;
-	/** Specialist dispatch: how many specialists a review may run (medium by default). */
-	specialistDispatch: DispatchLevel;
+	/** How many subagents one review may run in all. */
+	subagentCap: SubagentCap;
 	/** Where overrides are saved, e.g. `~/.recoder/data/review-config.json`. */
 	configPath?: string;
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
@@ -113,7 +109,7 @@ export interface ModelSettingsPatch {
 	specialistModelId?: string | null;
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
-	specialistDispatch?: DispatchLevel;
+	subagentCap?: SubagentCap;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;

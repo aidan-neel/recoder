@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { app } from '../../src/app';
 import {
-	effectiveDispatchLevel,
 	effectiveReviewEnv,
+	effectiveSubagentCap,
 	getStoredSettings,
 	initReviewSettings,
 	setReviewOverrides
@@ -84,29 +84,29 @@ describe('review settings', () => {
 		expect(configForSubagent()).toMatchObject({ model: 'new-model', reasoningEffort: 'high' });
 	});
 
-	test('the specialist dispatch level persists across reload and rejects unknown levels', async () => {
-		expect((await (await app.request('/api/settings/models')).json()).specialistDispatch).toBe('medium');
+	test('the subagent cap persists across reload and rejects other values', async () => {
+		expect((await (await app.request('/api/settings/models')).json()).subagentCap).toBe(2);
 
 		const patch = await app.request('/api/settings/models', {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ specialistDispatch: 'low' })
+			body: JSON.stringify({ subagentCap: 0 })
 		});
 
 		expect(patch.status).toBe(200);
-		expect((await patch.json()).specialistDispatch).toBe('low');
+		expect((await patch.json()).subagentCap).toBe(0);
 		setReviewOverrides({});
 		initReviewSettings();
-		expect(effectiveDispatchLevel()).toBe('low');
+		expect(effectiveSubagentCap()).toBe(0);
 
 		const bad = await app.request('/api/settings/models', {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ specialistDispatch: 'ultra' })
+			body: JSON.stringify({ subagentCap: 3 })
 		});
 
 		expect(bad.status).toBe(400);
-		expect(effectiveDispatchLevel()).toBe('low');
+		expect(effectiveSubagentCap()).toBe(0);
 	});
 
 	test('invalid effort values are rejected without changing settings', async () => {

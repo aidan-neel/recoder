@@ -10,6 +10,7 @@ import {
 	reportReviewTool
 } from '../review/session/events';
 import { reviewCheckpoints, reviewProgress } from '../store';
+import { CHECKPOINT_VERSION } from '../review/session/review-checkpoint';
 
 type HarnessCallbacks = Parameters<typeof runAdaptiveReview>[1];
 
@@ -76,6 +77,7 @@ export function harnessCallbacks(
 		onStage: (stage) => {
 			emitReviewEvent(reviewId, { type: 'step', step: stage, message: '', data: { stage } });
 		},
-		onCheckpoint: (checkpoint) => reviewCheckpoints.set({ ...checkpoint, id: reviewId, headSha, mergeBaseSha })
+		onCheckpoint: (checkpoint) =>
+			reviewCheckpoints.set({ ...checkpoint, version: CHECKPOINT_VERSION, id: reviewId, headSha, mergeBaseSha })
 	};
 }

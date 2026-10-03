@@ -16,6 +16,8 @@ import {
 	type ReviewControl
 } from '../review/session/review-control';
 import { supersedeWebhookReviews } from '../review/session/supersede';
+import { resumableCheckpoint } from '../review/session/review-checkpoint';
+import { effectiveSubagentCap } from '../review/session/review-settings';
 import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
 import { emitReviewEvent, reportReviewTask, trackReviewTask } from '../review/session/events';
 import { fetchPullRequest } from '../forge/gh';
@@ -269,24 +271,22 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		emitReviewEvent(reviewId, {
 			type: 'step',
 			step: 'review',
-			message: `Planning a review of ${files.length} files…`,
+			message: `Reading ${files.length} changed files…`,
 			data: { stage: 'understand' }
 		});
 
 		throwIfCancelled(control);
 
 		const { headSha, mergeBaseSha } = inspected.revision;
-		const saved = reviewCheckpoints.get(reviewId);
-		const resume = saved?.headSha === headSha && saved.mergeBaseSha === mergeBaseSha ? saved : null;
 
-		if (saved && !resume) {
+		const { checkpoint: resume, discarded } = resumableCheckpoint(reviewCheckpoints.get(reviewId), {
+			headSha,
+			mergeBaseSha
+		});
+
+		if (discarded) {
 			reviewCheckpoints.delete(reviewId);
-
-			emitReviewEvent(reviewId, {
-				type: 'log',
-				step: 'review',
-				message: 'The pull request changed since the last run, so the review starts over.'
-			});
+			emitReviewEvent(reviewId, { type: 'log', step: 'review', message: discarded });
 		}
 
 		const result = await runWithReviewControl(control, async () =>
@@ -300,6 +300,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 					prContext: await prContext,
 					instructions: reviewInstructions(reviewId, initial.startedAt),
 					signal: analysis.signal,
+					subagentCap: effectiveSubagentCap(),
 					resume
 				},
 				harnessCallbacks(reviewId, { headSha, mergeBaseSha })

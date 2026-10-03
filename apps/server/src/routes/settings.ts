@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import {
-	effectiveDispatchLevel,
 	effectiveReviewEnv,
+	effectiveSubagentCap,
 	getStoredSettings,
 	maskKey,
 	settingsFileDisplay,
@@ -44,7 +44,7 @@ async function settingsPayload() {
 		models: await agentModels(),
 		orchestratorEffort: stored.orchestratorEffort ?? null,
 		specialistEffort: stored.specialistEffort ?? null,
-		specialistDispatch: effectiveDispatchLevel(),
+		subagentCap: effectiveSubagentCap(),
 		configPath: settingsFileDisplay(),
 		limits: {
 			maxFiles: eff.maxFiles,

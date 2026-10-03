@@ -1,4 +1,4 @@
-import type { DispatchLevel, ModelSettings, ModelSettingsPatch } from '@recoder/shared';
+import { DEFAULT_SUBAGENT_CAP, type ModelSettings, type ModelSettingsPatch, type SubagentCap } from '@recoder/shared';
 import { modelSettingsUi, type ModelChoice } from './model-settings.svelte';
 
 type Limits = ModelSettings['limits'];
@@ -15,27 +15,27 @@ class SettingsDraft {
 	/** Null follows the Review model. */
 	specialist = $state<ModelChoice | null>(null);
 	limits = $state<Limits>({ maxFiles: 0, maxDiffChars: 0, maxFileChars: 0 });
-	/** How many specialists a review may dispatch. */
-	dispatch = $state<DispatchLevel>('medium');
+	/** How many subagents one review may run. */
+	subagentCap = $state<SubagentCap>(DEFAULT_SUBAGENT_CAP);
 	seeded = $state(false);
 	private initial: {
 		orchestrator: ModelChoice | null;
 		specialist: ModelChoice | null;
 		limits: Limits;
-		dispatch: DispatchLevel;
+		subagentCap: SubagentCap;
 	} | null = null;
 
 	seed(config: ModelSettings): void {
 		this.orchestrator = modelSettingsUi.orchestrator;
 		this.specialist = config.specialistModelId ? modelSettingsUi.specialist : null;
 		this.limits = { ...config.limits };
-		this.dispatch = config.specialistDispatch ?? 'medium';
+		this.subagentCap = config.subagentCap ?? DEFAULT_SUBAGENT_CAP;
 
 		this.initial = {
 			orchestrator: this.orchestrator,
 			specialist: this.specialist,
 			limits: { ...this.limits },
-			dispatch: this.dispatch
+			subagentCap: this.subagentCap
 		};
 
 		this.seeded = true;
@@ -67,7 +67,7 @@ class SettingsDraft {
 		if (this.limits.maxFiles !== initial.limits.maxFiles) patch.maxFiles = this.limits.maxFiles;
 		if (this.limits.maxDiffChars !== initial.limits.maxDiffChars) patch.maxDiffChars = this.limits.maxDiffChars;
 		if (this.limits.maxFileChars !== initial.limits.maxFileChars) patch.maxFileChars = this.limits.maxFileChars;
-		if (this.dispatch !== initial.dispatch) patch.specialistDispatch = this.dispatch;
+		if (this.subagentCap !== initial.subagentCap) patch.subagentCap = this.subagentCap;
 
 		return patch;
 	}

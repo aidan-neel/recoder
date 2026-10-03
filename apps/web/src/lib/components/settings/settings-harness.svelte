@@ -2,7 +2,7 @@
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import type { DispatchLevel } from '@recoder/shared';
+	import { SUBAGENT_CAPS, type SubagentCap } from '@recoder/shared';
 	import SegmentedControl from '$lib/components/ui/segmented-control.svelte';
 	import { settingsDraft } from '$lib/settings/settings-draft.svelte';
 
@@ -12,17 +12,13 @@
 		{ key: 'maxFileChars', name: 'Characters per file', desc: 'Longer files are truncated', max: 200_000 }
 	] as const;
 
-	const DISPATCH_ITEMS: { value: DispatchLevel; label: string }[] = [
-		{ value: 'low', label: 'Low' },
-		{ value: 'medium', label: 'Medium' },
-		{ value: 'high', label: 'High' }
-	];
+	const SUBAGENT_ITEMS = SUBAGENT_CAPS.map((cap) => ({ value: String(cap), label: cap ? `Up to ${cap}` : 'Off' }));
 
-	/** What each level dispatches; shown under the control for the current pick. */
-	const DISPATCH_DESC: Record<DispatchLevel, string> = {
-		low: 'Up to 3 specialists, no follow-ups. Fewest tokens; unread code shows as gaps',
-		medium: 'Up to 8 specialists and 1 follow-up. Correctness and consistency always run',
-		high: 'Up to 16 specialists and 2 follow-ups, each digging longer. Most tokens'
+	/** What each cap allows; shown under the control for the current pick. */
+	const SUBAGENT_DESC: Record<SubagentCap, string> = {
+		0: 'Each reviewer works alone. Fewest tokens',
+		2: 'Reviewers can hand up to 2 deep questions to subagents',
+		4: 'Up to 4 subagents per review. Most tokens'
 	};
 
 	function setLimit(key: (typeof FIELDS)[number]['key'], max: number, raw: string): void {
@@ -32,19 +28,19 @@
 	}
 </script>
 
-<section class="settings-section" aria-labelledby="harness-specialists">
-	<Typography.H3 id="harness-specialists" class="settings-label">Specialists</Typography.H3>
+<section class="settings-section" aria-labelledby="harness-reviewers">
+	<Typography.H3 id="harness-reviewers" class="settings-label">Reviewers</Typography.H3>
 	<Card.Root class="settings-list">
 		<div class="settings-row">
 			<div class="min-w-0 flex-1">
-				<p class="settings-row-name">Specialist dispatch</p>
-				<p class="settings-row-desc">{DISPATCH_DESC[settingsDraft.dispatch]}</p>
+				<p class="settings-row-name">Subagents</p>
+				<p class="settings-row-desc">{SUBAGENT_DESC[settingsDraft.subagentCap]}</p>
 			</div>
 			<SegmentedControl
-				label="Specialist dispatch"
-				items={DISPATCH_ITEMS}
-				value={settingsDraft.dispatch}
-				onValueChange={(value) => (settingsDraft.dispatch = value as DispatchLevel)}
+				label="Subagents"
+				items={SUBAGENT_ITEMS}
+				value={String(settingsDraft.subagentCap)}
+				onValueChange={(value) => (settingsDraft.subagentCap = Number(value) as SubagentCap)}
 			/>
 		</div>
 	</Card.Root>

@@ -6,6 +6,9 @@ import type { SubagentState } from '../pipeline/subagents.js';
 import type { ReviewUnit } from '../pipeline/units.js';
 import type { ReviewDirective } from '../chat/directive.js';
 
+/** Bumped whenever the checkpoint's shape changes. Version 1 is the first with review units. */
+export const CHECKPOINT_VERSION = 1;
+
 /**
  * Where an unfinished review stopped. Saved once the units are cut and after
  * each reviewer, so "Continue review" reruns only what didn't finish: finished
@@ -13,6 +16,8 @@ import type { ReviewDirective } from '../chat/directive.js';
  * combined set.
  */
 export interface ReviewCheckpoint {
+	/** The checkpoint format; a checkpoint saved in another format is discarded, not resumed. */
+	version: typeof CHECKPOINT_VERSION;
 	/** The review id. */
 	id: string;
 	/** The PR head and merge base the saved work was done on; a different diff starts over. */
@@ -32,4 +37,22 @@ export interface ReviewCheckpoint {
 	retriesDone: boolean;
 	/** Subagent requests, and the subagents picked from them once planned. */
 	subagents: SubagentState;
+}
+
+/** A saved checkpoint this run can resume from, or why the review starts over instead. */
+export function resumableCheckpoint(
+	saved: ReviewCheckpoint | null | undefined,
+	revision: { headSha: string; mergeBaseSha: string }
+): { checkpoint: ReviewCheckpoint | null; discarded: string | null } {
+	if (!saved) return { checkpoint: null, discarded: null };
+
+	if (saved.version !== CHECKPOINT_VERSION) {
+		return { checkpoint: null, discarded: 'This review was saved by an older Recoder, so it starts over.' };
+	}
+
+	if (saved.headSha !== revision.headSha || saved.mergeBaseSha !== revision.mergeBaseSha) {
+		return { checkpoint: null, discarded: 'The pull request changed since the last run, so the review starts over.' };
+	}
+
+	return { checkpoint: saved, discarded: null };
 }
