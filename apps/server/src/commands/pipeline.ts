@@ -30,7 +30,6 @@ import { detectProvider, locateRepo, refspecFor } from '../forge/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../sandbox/sandbox';
 import { tokenEnv } from '../forge/tokens';
 import { withReviewMetrics } from '../models/metrics';
-import { carryFixes } from '../review/fixes/finding-fixes';
 
 export type QueueReviewInput = CreateReviewInput;
 
@@ -340,7 +339,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		touch(reviewId, {
 			status,
 			summary: result.summary,
-			findings: carryFixes(db.reviews.get(reviewId)?.findings ?? [], findings)
+			findings
 		});
 
 		if (status === 'passed') reviewCheckpoints.delete(reviewId);

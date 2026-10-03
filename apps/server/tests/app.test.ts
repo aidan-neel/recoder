@@ -348,31 +348,6 @@ describe('reviews + command runner', () => {
 				delete process.env.RECODER_REVIEW_MODEL;
 			}
 		});
-
-		describe('fixes apply', () => {
-			const applyBody = (patch: object = {}) => ({
-				finding: {
-					file: 'a.ts',
-					line: 2,
-					endLine: 3,
-					severity: 'high',
-					message: '[auth] shared singleton'
-				},
-				summary: 'Namespace buckets per tenant.',
-				patch: 'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,3 +1,4 @@\n ctx\n-old\n+new\n tail',
-				...patch
-			});
-
-			test('409 for stub reviews without a checkout', async () => {
-				const id = await seedReviewWithDiff();
-
-				db.reviews.set({ ...db.reviews.get(id)!, source: 'stub' });
-
-				const res = await postJson(`/api/reviews/${id}/fixes/apply`, applyBody());
-
-				expect(res.status).toBe(409);
-			});
-		});
 	});
 
 	test('disallowed commands are rejected', async () => {

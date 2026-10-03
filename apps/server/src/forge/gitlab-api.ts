@@ -18,7 +18,7 @@ function base(env: Record<string, string>): string {
 }
 
 /** Network errors keep their cause: a self-managed host often fails on DNS or TLS. */
-export async function gitlabGet(path: string, env: Record<string, string>, asText = false): Promise<unknown> {
+export async function gitlabGet(path: string, env: Record<string, string>): Promise<unknown> {
 	const host = env.GITLAB_HOST || 'gitlab.com';
 	let response: Response;
 
@@ -33,7 +33,7 @@ export async function gitlabGet(path: string, env: Record<string, string>, asTex
 		throw new GhError('unavailable', `Couldn't reach ${host}: ${cause}`);
 	}
 
-	if (response.ok) return asText ? response.text() : response.json();
+	if (response.ok) return response.json();
 
 	const text = await response.text().catch(() => '');
 

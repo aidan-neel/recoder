@@ -16,9 +16,6 @@
 	import SessionDiffPane from '$lib/components/session/session-diff-pane.svelte';
 	import SessionFindingsPane from '$lib/components/session/session-findings-pane.svelte';
 	import { diffPrefs } from '$lib/diff/diff-prefs.svelte';
-	import { changesStore } from '$lib/diff/changes.svelte';
-	import ChangesButton from '$lib/components/diff/changes-button.svelte';
-	import ChangesPanel from '$lib/components/diff/changes-panel.svelte';
 	import FindingsBar from '$lib/components/findings/findings-bar.svelte';
 	import PrChecks from '$lib/components/home/pr-checks.svelte';
 	import ThreadPanel from '$lib/components/findings/thread-panel.svelte';
@@ -101,7 +98,6 @@
 	}
 
 	$effect(() => diffPrefs.useReview(data.review?.id ?? null));
-	$effect(() => changesStore.use(data.review && data.review.source !== 'stub' ? data.review.id : null));
 
 	const chat = new SessionChat();
 	const treeWidth = new PanelWidth('recoder.treeWidth', 12.5, 30, 18);
@@ -278,7 +274,7 @@
 	<FindingsBar part="actions">
 		{#snippet trailing()}
 			{#if data.review}
-				{#if data.review.source !== 'stub'}<PrChecks reviewId={data.review.id} /><ChangesButton />{/if}
+				{#if data.review.source !== 'stub'}<PrChecks reviewId={data.review.id} />{/if}
 				{#if data.review.status === 'failed'}
 					<Typography.Metadata class="review-state" role="status">Review interrupted</Typography.Metadata>
 				{/if}
@@ -332,7 +328,6 @@
 					{data}
 					{focus}
 					{files}
-					branch={recent?.branch}
 					{sidePanelOpen}
 					onView={setView}
 					onAsk={() => openChat()}
@@ -373,7 +368,3 @@
 	</div>
 	{#if data.review}<ReviewMetricsModal reviewId={data.review.id} bind:open={usageOpen} showTrigger={false} />{/if}
 {/snippet}
-
-{#if data.review && data.review.source !== 'stub'}<ChangesPanel
-		branch={recentSessions.recent.find((item) => item.id === id)?.branch ?? null}
-	/>{/if}

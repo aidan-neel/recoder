@@ -13,7 +13,7 @@ interface Span {
 export class EditMismatchError extends Error {}
 
 /** A checkout file's full text; null when it is missing, a symlink, or outside the checkout. */
-export async function readCheckoutFile(root: string, file: string): Promise<string | null> {
+async function readCheckoutFile(root: string, file: string): Promise<string | null> {
 	const base = resolve(root);
 	const path = resolve(base, file);
 

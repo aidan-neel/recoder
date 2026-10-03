@@ -16,14 +16,11 @@ const checksCache = new TtlCache<unknown>(15_000);
 const app = new Hono();
 
 /**
- * CI checks for a ref of the review's repo. Without one, the PR head: GitLab
- * checks run on the MR's source branch, GitHub's on the head commit, whose sha
- * also covers PRs from forks.
+ * CI checks for the PR head: GitLab checks run on the MR's source branch,
+ * GitHub's on the head commit, whose sha also covers PRs from forks.
  */
-async function reviewChecks(review: Review, repo: Repo, requested?: string) {
+async function reviewChecks(review: Review, repo: Repo) {
 	const provider = review.source;
-
-	if (requested) return { ref: requested, provider, checks: await fetchChecks(repo, requested) };
 
 	if (review.source === 'gitlab') {
 		const ref = await fetchMergeHeadRef(repo.url, review.prNumber, tokenEnv('gitlab', repo.url));
@@ -36,7 +33,7 @@ async function reviewChecks(review: Review, repo: Repo, requested?: string) {
 	return { ref: head.ref, provider, checks: await fetchChecks(repo, head.sha) };
 }
 
-/** CI checks for the PR head (default) or any branch/sha of this repo (e.g. a fix's verify branch). */
+/** CI checks for the PR head. */
 app.get('/:id/checks', async (c) => {
 	const review = requireReview(c);
 
@@ -47,11 +44,7 @@ app.get('/:id/checks', async (c) => {
 	if (!repo || review.source === 'stub') return c.json({ error: 'checks are unavailable for this review' }, 409);
 
 	try {
-		const requested = c.req.query('ref');
-
-		return c.json(
-			await checksCache.get(`${review.id}|${requested ?? ''}`, () => reviewChecks(review, repo, requested))
-		);
+		return c.json(await checksCache.get(review.id, () => reviewChecks(review, repo)));
 	} catch (err) {
 		if (err instanceof GhError) return c.json({ error: err.message }, 502);
 		throw err;

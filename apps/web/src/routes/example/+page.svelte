@@ -71,7 +71,7 @@
 		status: 'done',
 		text: 'This pull request moves `sivir list` formatting into its own module and adds a `sivir status` command.\n\nRisk areas:\n- `status.ts`: an empty queue prints nothing instead of a message.\n- `list.ts`: column widths changed, so scripts that parse the output may break.\n\nYou can comment on the diff, ask about anything, or press Run full review.'
 	};
-	/** `?state=fixes` previews fixes a reply asked for: one being written, one ready to apply. */
+	/** `?state=fixes` previews fixes a reply asked for: one being written, one ready to read. */
 	const fixesPreview = page.url.searchParams.get('state') === 'fixes';
 	const fixReply: ReviewChatMessage = {
 		id: 'fix-reply',

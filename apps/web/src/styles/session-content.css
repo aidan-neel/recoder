@@ -57,15 +57,11 @@
 	color: var(--selection-bar);
 	background: color-mix(in oklab, var(--selection-bar) 14%, transparent);
 }
-.focus-card-fix[data-state='fixed'] {
-	color: var(--success);
-	background: color-mix(in oklab, var(--success) 14%, transparent);
-}
 .focus-card-fix[data-state='failed'] {
 	color: var(--danger);
 	background: color-mix(in oklab, var(--danger) 14%, transparent);
 }
-/* CI checks: shared list (PR checks popover, a fix's verify panel). */
+/* CI checks: the PR checks popover list. */
 .check-list {
 	display: flex;
 	flex-direction: column;
@@ -111,14 +107,6 @@
 	white-space: nowrap;
 	text-overflow: ellipsis;
 }
-[data-ui='button'].check-fix {
-	flex-shrink: 0;
-	height: 24px;
-	min-height: 24px;
-	gap: 5px;
-	padding: 0 8px;
-	font-size: 12px;
-}
 .check-state {
 	flex-shrink: 0;
 	font-family: var(--font-code);
@@ -135,72 +123,6 @@
 .check-link:hover {
 	background: var(--bg-hover);
 	color: var(--text-primary);
-}
-/* A ready fix's CI verification. */
-.fix-checks {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	margin-top: 8px;
-	padding: 8px 10px;
-	border-radius: 10px;
-	background: var(--bg-bubble);
-	box-shadow: inset 0 0 0 1px var(--line-card);
-}
-.fix-checks-head {
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	gap: 8px;
-	min-height: 26px;
-	font-size: 12.5px;
-	color: var(--text-secondary);
-}
-.fix-checks-icon {
-	display: inline-flex;
-	flex-shrink: 0;
-	color: var(--text-faint);
-}
-.fix-checks[data-status='passed'] .fix-checks-icon {
-	color: var(--success);
-}
-.fix-checks[data-status='failed'] .fix-checks-icon,
-.fix-checks[data-status='error'] .fix-checks-icon {
-	color: var(--danger);
-}
-.fix-checks[data-status='waiting'] .fix-checks-icon,
-.fix-checks[data-status='running'] .fix-checks-icon,
-.fix-checks[data-status='pushing'] .fix-checks-icon {
-	color: var(--sev-medium);
-}
-.fix-checks-title {
-	min-width: 0;
-	flex: 1;
-}
-.fix-checks-title code,
-.fix-checks-hint code {
-	font-family: var(--font-code);
-	font-size: 11.5px;
-	color: var(--text-tertiary);
-}
-.fix-checks-actions {
-	display: flex;
-	flex-shrink: 0;
-	gap: 2px;
-}
-[data-ui='button'][data-variant].fix-checks-run {
-	height: 26px;
-	min-height: 26px;
-	padding: 0 8px;
-	font-size: 12px;
-	font-weight: 400;
-}
-.fix-checks-hint {
-	margin: 0;
-	padding-left: 21px;
-	font-size: 12px;
-	line-height: 17px;
-	color: var(--text-faint);
 }
 /* PR checks summary in the session bar. */
 [data-ui='button'][data-variant].pr-checks {
@@ -260,7 +182,7 @@
 	font-size: 12.5px;
 	color: var(--text-subtle);
 }
-/* Fix button keeps one width across its states. */
+/* Suggest fix keeps one width while it loads. */
 [data-ui='button'][data-variant].fix-button {
 	width: 112px;
 	height: 28px;
@@ -268,16 +190,6 @@
 	gap: 6px;
 	padding: 0 10px;
 	margin-left: 4px;
-}
-[data-ui='button'][data-variant].fix-button[data-state='applied'] {
-	opacity: 1;
-	border: 0;
-	background: transparent;
-	box-shadow: inset 0 0 0 1px var(--line-menu);
-	color: var(--success);
-}
-.conversation-fix-head [data-ui='button'][data-variant].fix-button {
-	margin-left: auto;
 }
 .focus-detail-foot [data-ui='button'][data-variant].fix-button {
 	height: 30px;

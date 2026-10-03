@@ -4,7 +4,6 @@ import { reviewLimits, type RoleConfig } from '../../../models/models.js';
 import { execUnavailableReason } from '../../../sandbox/exec-sandbox.js';
 import { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import type { ReviewDirective } from '../../chat/directive.js';
-import { hasPendingChanges } from '../../session/pending-changes.js';
 import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { ModelBudget } from '../agent-loop.js';
@@ -118,18 +117,13 @@ export function orchestratorAgentOptions(
 	};
 }
 
-/**
- * Opens the sandbox when code can run. Agents restore tracked files after every
- * command, which would wipe the developer's uncommitted fixes, so a dirty checkout runs no code.
- */
+/** Opens the sandbox when code can run. */
 export async function openWorkspace(run: ReviewRun): Promise<void> {
 	const { revision } = run.input;
 
 	run.execReason = !revision
 		? 'Running code needs a local checkout of the pull request.'
-		: (await hasPendingChanges(revision.checkoutPath))
-			? "The checkout has fixes that aren't committed and pushed yet. Push or discard them to let reviewers run code."
-			: await execUnavailableReason();
+		: await execUnavailableReason();
 
 	run.workspace = revision && !run.execReason ? new ExecWorkspace(revision.checkoutPath, revision.headSha) : null;
 

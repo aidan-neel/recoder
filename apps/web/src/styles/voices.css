@@ -244,11 +244,6 @@
 .conversation-fix .suggested-fix {
 	margin-top: 8px;
 }
-.conversation-fix-error {
-	margin: 8px 0 0;
-	font-size: 12.5px;
-	color: var(--danger);
-}
 /* Code a sent message was about: badge that expands to the quoted lines. */
 .code-ref {
 	display: flex;

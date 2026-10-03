@@ -9,9 +9,6 @@ import type {
 	HostedProvider,
 	CodexConnection,
 	CodexModel,
-	ApplyFixRequest,
-	ApplyFixResponse,
-	PendingChanges,
 	CreateRepoInput,
 	FailureAction,
 	CreateReviewInput,
@@ -274,46 +271,10 @@ export const serverApi = {
 			method: 'POST',
 			body: JSON.stringify(input)
 		}),
-	/** A fix for a failing CI check, written from its log. */
-	suggestCheckFix: (reviewId: string, check: { id: string; name: string }) =>
-		req<SuggestFixResponse>(`/api/reviews/${reviewId}/checks/fix`, {
-			method: 'POST',
-			body: JSON.stringify(check)
-		}),
-	applyFix: (reviewId: string, input: ApplyFixRequest) =>
-		req<ApplyFixResponse>(`/api/reviews/${reviewId}/fixes/apply`, {
-			method: 'POST',
-			body: JSON.stringify(input)
-		}),
-	/** Uncommitted files and unpushed commits in the review checkout. */
-	getChanges: (id: string) => req<PendingChanges>(`/api/reviews/${id}/changes`),
-	commitChanges: (id: string, paths: string[], message: string) =>
-		req<{ sha: string }>(`/api/reviews/${id}/changes/commit`, {
-			method: 'POST',
-			body: JSON.stringify({ paths, message })
-		}),
-	discardChanges: (id: string, paths: string[]) =>
-		req<{ ok: true }>(`/api/reviews/${id}/changes/discard`, { method: 'POST', body: JSON.stringify({ paths }) }),
-	undoCommit: (id: string) => req<{ ok: true }>(`/api/reviews/${id}/changes/undo-commit`, { method: 'POST' }),
-	pushChanges: (id: string) =>
-		req<{ sha: string; pushed: number; branch: string }>(`/api/reviews/${id}/changes/push`, { method: 'POST' }),
 	queueReview: (input: CreateReviewInput) =>
 		req<Review>('/api/reviews', { method: 'POST', body: JSON.stringify(input) }),
-	/** CI checks for the PR head, or `ref` (a branch or sha, e.g. a fix's verify branch). */
-	getChecks: (id: string, ref?: string) =>
-		req<{ ref: string; provider?: string; checks: PrCheck[] }>(
-			`/api/reviews/${id}/checks${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`
-		),
-	/** Push a fix to a temporary branch so CI runs on it (the PR branch is untouched). */
-	verifyFix: (id: string, input: ApplyFixRequest & { key: string }) =>
-		req<{ branch: string; sha: string }>(`/api/reviews/${id}/fixes/verify`, {
-			method: 'POST',
-			body: JSON.stringify(input)
-		}),
-	deleteVerifyBranch: (id: string, branch: string) =>
-		req<{ deleted: boolean }>(`/api/reviews/${id}/fixes/verify?branch=${encodeURIComponent(branch)}`, {
-			method: 'DELETE'
-		}),
+	/** CI checks for the PR head. */
+	getChecks: (id: string) => req<{ ref: string; provider?: string; checks: PrCheck[] }>(`/api/reviews/${id}/checks`),
 	/** Start a draft (interactive) review's full pipeline. */
 	startReview: (id: string) => req<Review>(`/api/reviews/${id}/start`, { method: 'POST' }),
 	/** Continue a failed review from where it stopped. */
