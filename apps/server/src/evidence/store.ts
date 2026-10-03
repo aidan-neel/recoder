@@ -101,12 +101,17 @@ export class EvidenceStore {
 		return existingFiles(this, revision, paths, signal);
 	}
 
-	/** Runs up to `maxActions` retrievals whose combined content stays within one round's character budget. */
+	/**
+	 * Runs up to `maxActions` retrievals whose combined content stays within one
+	 * round's character budget. `owner` names the agent, so its runs see only
+	 * the scratch files it wrote.
+	 */
 	async executeRound(
 		rawActions: unknown,
 		signal?: AbortSignal,
 		onTool?: (tool: ToolCallReport) => void,
-		maxActions: number = REVIEW_POLICY.maxRetrievalsPerTurn
+		maxActions: number = REVIEW_POLICY.maxRetrievalsPerTurn,
+		owner?: string
 	): Promise<ToolResult[]> {
 		const actions = normalizeActions(rawActions).slice(0, maxActions);
 		const results: ToolResult[] = [];
@@ -127,7 +132,7 @@ export class EvidenceStore {
 				continue;
 			}
 
-			const result = await this.executeReported(action, used, signal, onTool);
+			const result = await this.executeReported(action, used, signal, onTool, owner);
 
 			results.push(result);
 			used += result.content.length;
@@ -141,7 +146,8 @@ export class EvidenceStore {
 		action: RetrievalAction,
 		used: number,
 		signal: AbortSignal | undefined,
-		onTool: ((tool: ToolCallReport) => void) | undefined
+		onTool: ((tool: ToolCallReport) => void) | undefined,
+		owner: string | undefined
 	): Promise<ToolResult> {
 		const startedMs = Date.now();
 
@@ -157,7 +163,7 @@ export class EvidenceStore {
 		let result: ToolResult;
 
 		try {
-			result = await this.executeOne(action, signal);
+			result = await this.executeOne(action, signal, owner);
 		} catch (error) {
 			notify(onTool, {
 				...started,
@@ -179,16 +185,16 @@ export class EvidenceStore {
 	}
 
 	/** Runs and writes change state, so they are never served from the cache. */
-	private async executeOne(action: RetrievalAction, signal?: AbortSignal): Promise<ToolResult> {
+	private async executeOne(action: RetrievalAction, signal?: AbortSignal, owner?: string): Promise<ToolResult> {
 		if (action.action === 'run') {
-			const { result, record } = await runCommand(this, action, signal);
+			const { result, record } = await runCommand(this, action, signal, owner);
 
 			if (record) result.evidenceId = this.remember(record).id;
 
 			return result;
 		}
 
-		if (action.action === 'writeFile') return writeSandboxFile(this, action, signal);
+		if (action.action === 'writeFile') return writeSandboxFile(this, action, signal, owner);
 
 		const cacheKey = JSON.stringify(action);
 		const cached = this.cache.get(cacheKey);

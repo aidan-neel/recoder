@@ -28,14 +28,15 @@ function runTimeoutMs(action: RetrievalAction): number {
 export async function runCommand(
 	context: SandboxContext,
 	action: RetrievalAction,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	owner?: string
 ): Promise<RunOutcome> {
 	const command = typeof action.command === 'string' ? action.command.trim() : '';
 
 	if (!command || command.length > 4000) return { result: failure('run', 'command must be 1–4000 characters') };
 	if (!context.exec) return { result: failure('run', context.execUnavailable) };
 
-	const result = await context.exec.run(command, runTimeoutMs(action), signal);
+	const result = await context.exec.run(command, runTimeoutMs(action), signal, owner);
 
 	const status = result.timedOut
 		? `timed out after ${(result.elapsedMs / 1000).toFixed(1)}s`
@@ -77,7 +78,8 @@ function contentShape(content: unknown): string {
 export async function writeSandboxFile(
 	context: SandboxContext,
 	action: RetrievalAction,
-	signal?: AbortSignal
+	signal?: AbortSignal,
+	owner?: string
 ): Promise<ToolResult> {
 	const path = sanitizeRepoPath(action.path);
 
@@ -91,7 +93,7 @@ export async function writeSandboxFile(
 
 	if (!context.exec) return failure('writeFile', context.execUnavailable, { path });
 
-	const written = await context.exec.writeFile(path, action.content, signal);
+	const written = await context.exec.writeFile(path, action.content, signal, owner);
 
 	if (!written.ok) return failure('writeFile', written.error, { path });
 

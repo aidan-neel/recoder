@@ -119,7 +119,11 @@ function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean
 	return `Your JSON was neither a retrieval request nor a valid final result. Problems: ${problems}.\n\n${shapes}`;
 }
 
+/** Numbers each agent run, so each gets its own scratch files in the shared workspace. */
+let agentSeq = 0;
+
 export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
+	const scratchOwner = `agent_${++agentSeq}`;
 	const { startedAt, deadlineAt, finalTurnAt } = agentDeadlines(opts);
 	const spendOpts = { consumeReserve: opts.consumeReserve };
 
@@ -229,7 +233,13 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		if (actions && !lastTurn && opts.budget.canSpend(1, spendOpts) && reviewNow() < deadlineAt) {
 			opts.onProgress?.('retrieval', Date.now() - started, `Reading repository evidence for ${opts.label}`);
 
-			const results = await opts.evidence.executeRound(actions, opts.signal, opts.onTool);
+			const results = await opts.evidence.executeRound(
+				actions,
+				opts.signal,
+				opts.onTool,
+				REVIEW_POLICY.maxRetrievalsPerTurn,
+				scratchOwner
+			);
 
 			retrievals++;
 			runs += actions.filter((action) => action.action === 'run').length;

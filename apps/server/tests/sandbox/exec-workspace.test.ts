@@ -70,12 +70,28 @@ test.skipIf(!available)('writeFile cannot follow a planted symlink out of the ch
 	expect(existsSync(join(base, 'outside/escape.txt'))).toBe(false);
 });
 
-test.skipIf(!available)('cleanup removes scratch files the review wrote', async () => {
+test.skipIf(!available)("a scratch file written by one agent is not visible to another agent's run", async () => {
 	const { ws, checkout } = await workspace();
 
-	expect(await ws.writeFile('src/recoder-repro.test.ts', 'test')).toEqual({ ok: true });
-	expect(existsSync(join(checkout, 'src/recoder-repro.test.ts'))).toBe(true);
-	await ws.cleanup();
+	expect(await ws.writeFile('src/recoder-repro.test.ts', 'from a', undefined, 'a')).toEqual({ ok: true });
+	expect(await ws.writeFile('src/recoder-repro.test.ts', 'from b', undefined, 'b')).toEqual({ ok: true });
+
+	expect((await ws.run('cat src/recoder-repro.test.ts', 10_000, undefined, 'a')).output).toBe('from a');
+	expect((await ws.run('cat src/recoder-repro.test.ts', 10_000, undefined, 'b')).output).toBe('from b');
+	expect((await ws.run('test -e src/recoder-repro.test.ts', 10_000, undefined, 'c')).exitCode).toBe(1);
 	expect(existsSync(join(checkout, 'src/recoder-repro.test.ts'))).toBe(false);
-	expect(await readFile(join(checkout, 'a.txt'), 'utf8')).toBe('original\n');
+});
+
+test.skipIf(!available)('writeFile refuses an untracked file already in the checkout', async () => {
+	const { ws, checkout } = await workspace();
+
+	await writeFile(join(checkout, 'installed.js'), 'dependency');
+
+	expect(await ws.writeFile('installed.js', 'scratch')).toEqual({
+		ok: false,
+		error: expect.stringContaining('exists')
+	});
+
+	await ws.run('true', 10_000);
+	expect(await readFile(join(checkout, 'installed.js'), 'utf8')).toBe('dependency');
 });

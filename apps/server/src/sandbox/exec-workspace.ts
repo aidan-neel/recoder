@@ -8,7 +8,9 @@ import { sanitizeRepoPath } from '../evidence/evidence.js';
  * Commands run one at a time (agents share the checkout), start only after
  * dependency setup finishes, and never outlive the review deadline. Tracked
  * files are restored after each command so one agent's edits never leak into
- * another's evidence; scratch files agents write are removed when the review ends.
+ * another's evidence. Scratch files belong to the agent that wrote them: they
+ * are on disk only while that agent's own command runs, so no other agent's
+ * run, test glob or verdict can pick them up.
  */
 
 export interface SetupStep {
@@ -77,7 +79,8 @@ export class ExecWorkspace {
 	deadlineAt = Number.POSITIVE_INFINITY;
 	private queue: Promise<unknown> = Promise.resolve();
 	private setupDone: Promise<SetupReport> | null = null;
-	private readonly scratch = new Set<string>();
+	/** Each agent's scratch files, path → content, placed only around that agent's runs. */
+	private readonly scratch = new Map<string, Map<string, string>>();
 
 	constructor(
 		readonly checkout: string,
@@ -119,38 +122,41 @@ export class ExecWorkspace {
 		return this.setupDone;
 	}
 
-	/** Run one reviewer command, offline, after setup. */
-	async run(command: string, timeoutMs: number, signal?: AbortSignal): Promise<RunResult> {
+	/** Run one reviewer command, offline, after setup, with `owner`'s scratch files in place. */
+	async run(command: string, timeoutMs: number, signal?: AbortSignal, owner = ''): Promise<RunResult> {
 		await this.setupDone?.catch(() => undefined);
 
 		return this.exclusive(async () => {
 			const limit = this.timeout(timeoutMs);
 
-			if (limit <= 0)
-				return {
-					exitCode: null,
-					output: 'Not run: the review is out of time.',
-					truncated: false,
-					timedOut: true,
-					elapsedMs: 0
-				};
+			if (limit <= 0) return notRun('Not run: the review is out of time.', true);
+
+			const files = this.scratch.get(owner) ?? new Map<string, string>();
 
 			try {
+				const placed = await this.place(files, signal);
+
+				if (placed) return notRun(`Not run: could not write scratch file ${placed}.`, false);
+
 				return await runSandboxed(this.layout, command, { timeoutMs: limit, signal });
 			} finally {
+				await this.remove([...files.keys()]);
 				await this.restoreTracked();
 			}
 		});
 	}
 
 	/**
-	 * Create or overwrite an untracked scratch file. The write happens inside the
-	 * sandbox, so a symlink planted in the checkout cannot redirect it to the host.
+	 * Create or overwrite one of `owner`'s scratch files. It is test-written and
+	 * removed at once so a bad path fails here, then kept host-side until the
+	 * owner runs a command. Writes happen inside the sandbox, so a symlink
+	 * planted in the checkout cannot redirect them to the host.
 	 */
 	async writeFile(
 		path: string,
 		content: string,
-		signal?: AbortSignal
+		signal?: AbortSignal,
+		owner = ''
 	): Promise<{ ok: true } | { ok: false; error: string }> {
 		const clean = sanitizeRepoPath(path);
 
@@ -165,16 +171,20 @@ export class ExecWorkspace {
 			return { ok: false, error: 'path is tracked in the PR; write a new scratch file instead' };
 		await this.setupDone?.catch(() => undefined);
 
-		const result = await this.exclusive(() =>
-			runSandboxed(this.layout, `mkdir -p -- "$(dirname -- ${quote(clean)})" && cat > ${quote(clean)}`, {
-				timeoutMs: 10_000,
-				stdin: content,
-				signal
-			})
-		);
+		const result = await this.exclusive(async () => {
+			const written = await this.writeNew(clean, content, signal);
+
+			if (written.exitCode === 0) await this.remove([clean]);
+
+			return written;
+		});
 
 		if (result.exitCode !== 0) return { ok: false, error: result.output.trim().slice(0, 400) || 'write failed' };
-		this.scratch.add(clean);
+
+		const files = this.scratch.get(owner) ?? new Map<string, string>();
+
+		files.set(clean, content);
+		this.scratch.set(owner, files);
 
 		return { ok: true };
 	}
@@ -219,21 +229,48 @@ export class ExecWorkspace {
 		return lines;
 	}
 
-	/** Remove scratch files and restore tracked ones. Safe to call more than once. */
+	/** Remove any scratch file a crashed run left behind and restore tracked ones. Safe to call more than once. */
 	async cleanup(): Promise<void> {
-		const files = [...this.scratch];
+		const files = [...this.scratch.values()].flatMap((owned) => [...owned.keys()]);
 
 		this.scratch.clear();
 
 		await this.exclusive(async () => {
-			if (files.length) {
-				await runSandboxed(this.layout, `rm -f -- ${files.map(quote).join(' ')}`, { timeoutMs: 10_000 }).catch(
-					() => undefined
-				);
-			}
-
+			await this.remove(files);
 			await this.restoreTracked();
 		});
+	}
+
+	/** Writes each scratch file; returns the first path that could not be written. */
+	private async place(files: Map<string, string>, signal?: AbortSignal): Promise<string | null> {
+		for (const [path, content] of files) {
+			if ((await this.writeNew(path, content, signal)).exitCode !== 0) return path;
+		}
+
+		return null;
+	}
+
+	/**
+	 * Writes a file that must not exist yet. An untracked file already there
+	 * (installed dependencies, build output) is refused, because scratch files
+	 * are removed after every run.
+	 */
+	private writeNew(path: string, content: string, signal?: AbortSignal): Promise<RunResult> {
+		const target = quote(path);
+
+		return runSandboxed(
+			this.layout,
+			`if [ -e ${target} ] || [ -L ${target} ]; then echo 'path already exists in the checkout; write a new scratch file instead' >&2; exit 1; fi; mkdir -p -- "$(dirname -- ${target})" && cat > ${target}`,
+			{ timeoutMs: 10_000, stdin: content, signal }
+		);
+	}
+
+	private async remove(paths: string[]): Promise<void> {
+		if (!paths.length) return;
+
+		await runSandboxed(this.layout, `rm -f -- ${paths.map(quote).join(' ')}`, { timeoutMs: 10_000 }).catch(
+			() => undefined
+		);
 	}
 
 	private timeout(requested: number): number {
@@ -269,6 +306,11 @@ export class ExecWorkspace {
 
 		return { code, stdout };
 	}
+}
+
+/** A run that never started, shaped like one that did. */
+function notRun(output: string, timedOut: boolean): RunResult {
+	return { exitCode: null, output, truncated: false, timedOut, elapsedMs: 0 };
 }
 
 function quote(value: string): string {
