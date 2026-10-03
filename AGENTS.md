@@ -89,6 +89,49 @@ Don't write a test for:
 Keep each test to one behavior, named as a sentence about that behavior. When a
 change makes a test obsolete, delete the test.
 
+## Review pipeline
+
+Recoder is a self-hosted PR reviewer that runs the coding agents users already
+have, verifies every finding, and posts the survivors on the PR. The roadmap is
+issue #6. Read it before changing anything under `apps/server/src/review/`,
+`agents/`, `evidence/` or `sandbox/`.
+
+**Direction.** These describe where the code is heading, not all of what it does today.
+
+- Agents run through adapters (`agents/registry.ts`). Don't grow the in-house
+  JSON loop or add small-model workarounds.
+- One primary reviewer, plus targeted subagents only when needed (#15). Don't
+  add roles, planner passes or dispatch levels.
+- GitHub/GitLab inline comments are the primary surface (#17). The dashboard
+  stays, but new review features land on the PR first.
+- The verifier may run on a different vendor than the reviewer (#16).
+
+**Rules that apply now:**
+
+- **Never write to the PR.** No commits, pushes or branch writes. Fixes are
+  suggestions only, and a trivial, mechanical one becomes a GitHub/GitLab
+  suggestion block.
+- **Never hold a user's subscription login.** Run the user's installed agent
+  CLI with its own sign-in. The ChatGPT OAuth path in `agents/codex/` is being
+  removed (#13); don't extend it.
+- **PR code runs only in the sandbox** (`sandbox/exec-sandbox.ts`), offline,
+  with the checkout restored after each command. An agent CLI never gets its
+  own shell or write access to the checkout.
+- **Each agent's scratch files are its own** (`sandbox/exec-workspace.ts`).
+  Never share a scratch path between agents.
+- **Verification settles on the verifier's own runs and their outcome.** Never
+  settle on another agent's run or a baseline check. A refutation without such
+  a run never drops a finding; it stays unverified with the reason.
+- **Webhook reviews are unattended** (`ReviewControl.unattended`). Nothing on
+  that path may wait for a person.
+- **One schema per model output.** On a mismatch, send the validation error
+  back to the agent. Don't add code that repairs the model's text, and don't
+  pick prompts by model name.
+- **Review quality is measured, not argued.** A change meant to improve review
+  quality (prompts, dispatch, verification, consolidation, model or adapter
+  defaults) reports eval-suite results before and after (#7). Until the suite
+  exists, say plainly that the quality effect is unmeasured.
+
 ## UI requirement (mandatory — no exceptions)
 
 - **ALL UI must be built with Sivir UI components** from `@sivir-ui/svelte`.
