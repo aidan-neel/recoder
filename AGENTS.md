@@ -14,9 +14,10 @@
 Run the relevant `check`, `lint` and tests before finishing a change, and
 `deadcode` when you remove or move code.
 
-CI runs each package's `check`, `test`, `build` and `lint` as its own job
-(`.github/workflows/ci.yml`), so a failure names the package and task. Add a
-matrix entry when a package gains a new task.
+CI runs each package's `check`, `test`, `build` and `lint` as its own job,
+plus one `deadcode` job for the repo (`.github/workflows/ci.yml`), so a failure
+names the package and task. Add a matrix entry when a package gains a new task.
+jscpd fails on any clone (`.jscpd.json`); CSS is excluded.
 
 ## Code style (mandatory)
 
