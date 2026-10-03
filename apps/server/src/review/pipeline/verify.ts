@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { FindingVerification } from '@recoder/shared';
-import type { EvidenceStore } from '../../evidence/evidence.js';
+import type { EvidenceRecord, EvidenceStore } from '../../evidence/evidence.js';
 import type { CandidateFinding } from './consolidate.js';
 import { REVIEW_POLICY } from '../session/review-policy.js';
 import { clip, retrievalTurnSchema } from './schemas.js';
@@ -63,23 +63,52 @@ export function verdictValidationError(raw: unknown): string {
 	return 'expected {"message","verdict":"confirmed"|"refuted"|"unverified","reason","evidenceIds"}';
 }
 
+/** Spans the verifier quoted in backticks or double quotes, long enough to mean something. */
+function quotedSpans(reason: string): string[] {
+	return [...reason.matchAll(/`([^`]{4,})`|"([^"]{4,})"/g)].map((match) => (match[1] ?? match[2] ?? '').trim());
+}
+
+/** A run's output, without its `$ command` line and `[exit …]` status line. */
+function runOutput(run: EvidenceRecord): string {
+	return run.content.split('\n').slice(1, -1).join('\n');
+}
+
+/**
+ * A run shows the defect when the repro failed, or when its output holds a
+ * span the verifier quoted. Quoting the command itself proves nothing.
+ */
+function showsDefect(run: EvidenceRecord, reason: string): boolean {
+	if (typeof run.exitCode === 'number' && run.exitCode !== 0) return true;
+
+	const output = runOutput(run);
+
+	return quotedSpans(reason).some((span) => span && !run.command?.includes(span) && output.includes(span));
+}
+
 /**
  * Turn a verifier's answer into the finding's verification, or `refuted`.
- * A cited run proves or disproves it. Without one, a confirmation that cites
- * code the verifier read counts as traced; a disagreement from reading alone
- * never drops a finding (a misread would hide a real bug), it is left to
- * consolidation with the verifier's reason.
+ * Only runs this verifier made count: a baseline check or another agent's run
+ * never settles it. A confirmation needs one of them to show the defect; a
+ * refutation needs one to pass. A run that does not back the verdict leaves
+ * the finding unverified, never dropped. Without a run, a confirmation that
+ * cites code counts as traced, and a disagreement from reading alone is left
+ * to consolidation with the verifier's reason (a misread would hide a real bug).
  */
-export function settleVerdict(output: VerdictOutput, evidence: EvidenceStore): FindingVerification | 'refuted' {
+export function settleVerdict(
+	output: VerdictOutput,
+	evidence: EvidenceStore,
+	agentId: string
+): FindingVerification | 'refuted' {
 	const cited = output.evidenceIds.map((id) => evidence.get(id)).filter((record) => record !== undefined);
-	const runs = cited.filter((record) => record.kind === 'run');
+	const runs = cited.filter((record) => record.kind === 'run' && record.agentId === agentId);
 
 	if (output.verdict === 'unverified') return { status: 'unverified', reason: output.reason };
 
-	if (runs.length) {
-		if (output.verdict === 'refuted') return 'refuted';
+	if (output.verdict === 'confirmed' && runs.length) {
+		const proof = runs.find((run) => showsDefect(run, output.reason));
 
-		const proof = runs[0]!;
+		if (!proof)
+			return { status: 'unverified', reason: `The cited run passed without showing the problem: ${output.reason}` };
 
 		return {
 			status: 'verified',
@@ -90,10 +119,16 @@ export function settleVerdict(output: VerdictOutput, evidence: EvidenceStore): F
 		};
 	}
 
+	if (output.verdict === 'refuted' && runs.length) {
+		if (runs.some((run) => run.exitCode === 0)) return 'refuted';
+
+		return { status: 'unverified', reason: `The verifier disagrees, but its run did not pass: ${output.reason}` };
+	}
+
 	if (output.verdict === 'confirmed' && cited.length)
 		return { status: 'verified', method: 'trace', reason: output.reason };
 	if (output.verdict === 'refuted' && cited.length)
-		return { status: 'unverified', reason: `The verifier read the code and disagrees: ${output.reason}` };
+		return { status: 'unverified', reason: `The verifier disagrees without a run of its own: ${output.reason}` };
 
 	return {
 		status: 'unverified',
@@ -126,7 +161,7 @@ ${shared}
 - Always run something. Write the smallest repro that would fail if the finding is true: a scratch test next to the code, or a script that imports the changed code and calls it with the triggering input. Run it. Existing tests, type checks and linters also count when their output shows the problem.
 - If the first repro does not run (an import path, a missing fixture), fix the script and run it again; read the code to find the right entry point.
 - "confirmed": a command you ran shows the problem. "refuted": a command you ran shows the behavior is correct. "unverified": you could not settle it by running code (needs the network, a service, timing you cannot reproduce).
-- Cite the evidence id of the run that proves your verdict. If no run could show it, a confirmation citing the code you read counts as traced, not proven.
+- Cite the evidence id of a run you made that proves your verdict; baseline checks and the reviewer's runs do not count. A confirming run must fail or print the problem (quote the output); a refuting run must pass. If no run could show it, a confirmation citing the code you read counts as traced, not proven.
 Edits to tracked files are reverted after every command, so put experiments in new files or patch and run in one command.
 When done, output STRICT JSON: {"message":string,"verdict":"confirmed"|"refuted"|"unverified","reason":string,"evidenceIds":string[]}`;
 }

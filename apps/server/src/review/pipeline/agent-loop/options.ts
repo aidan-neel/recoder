@@ -5,6 +5,8 @@ import type { ModelBudget } from './budget.js';
 
 export interface JsonAgentOptions<T> {
 	label: string;
+	/** Names this agent's scratch files and runs; one is made up when absent. */
+	agentId?: string;
 	system: string;
 	user: string;
 	config: RoleConfig;
