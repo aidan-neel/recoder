@@ -47,7 +47,10 @@ export async function planReview(run: ReviewRun, execNotes: string | undefined):
 		agent: 'correctness'
 	});
 
-	if (!resume && run.items.length > run.dispatch.approvalThreshold) await awaitApproval(run);
+	if (!resume && run.items.length > run.dispatch.approvalThreshold && !currentReviewControl()?.unattended) {
+		await awaitApproval(run);
+	}
+
 	scaleForPlanSize(run);
 
 	return plan;
@@ -115,7 +118,8 @@ function recordPlan(run: ReviewRun, plan: PlannerOutput): void {
 /**
  * A plan past the approval threshold waits for the developer. Without a live
  * control (tests, scripts) there is nobody to ask; with one, the review waits
- * for a yes and a no cancels it.
+ * for a yes and a no cancels it. Unattended reviews skip this and run at the
+ * dispatch cap.
  */
 async function awaitApproval(run: ReviewRun): Promise<void> {
 	const approval: ReviewPlanApproval = { status: 'pending', requested: run.items.length };
