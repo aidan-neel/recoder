@@ -78,6 +78,19 @@ describe('OpenCode chat', () => {
 		expect(messages[1].body).not.toHaveProperty('variant');
 	});
 
+	test('a model that refuses forced tool choice gets plain JSON mode, now and on later calls', async () => {
+		const target = await start();
+		const schema = { name: 'r', schema: { type: 'object' } };
+
+		expect(JSON.parse(await target.complete(ask('auto-only', { jsonSchema: schema })))).toEqual({ ok: true });
+		expect(JSON.parse(await target.complete(ask('auto-only', { jsonSchema: schema })))).toEqual({ ok: true });
+
+		const messages = (await calls(target)).filter((c) => c.path.endsWith('/message'));
+
+		expect(messages.map((m) => 'format' in (m.body ?? {}))).toEqual([true, false, false]);
+		expect(messages[1].body?.system).toContain('JSON');
+	});
+
 	test('returns the structured object as JSON when a schema was sent', async () => {
 		const target = await start();
 		const schema = { name: 'r', schema: { type: 'object' } };

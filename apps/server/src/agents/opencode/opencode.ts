@@ -9,6 +9,8 @@ import type {
 	ModelEntry,
 	ReasoningEffort
 } from '@recoder/shared';
+import type { LlmError } from '../../models/llm/errors';
+import { withFieldFallback } from '../../models/llm/request-fields';
 import type { ChatOptions } from '../../models/llm/types';
 import type { AgentAdapter } from '../registry';
 import { openCodeChat } from './opencode-chat';
@@ -32,6 +34,16 @@ const catalogCache = new TtlCache<CatalogProvider[]>(30 * 60_000, 1);
 
 const authorizeSchema = z.object({ url: z.string(), method: z.enum(['auto', 'code']), instructions: z.string() });
 
+/** The provider refused the forced tool call, or the model never made it. */
+function refusesStructuredOutput(err: LlmError): boolean {
+	return /tool[_ ]?choice|structured output/i.test(err.message);
+}
+
+/** The same call with the schema dropped, asking for plain JSON instead. */
+function plainJson(opts: ChatOptions): ChatOptions {
+	return { ...opts, jsonSchema: undefined, jsonMode: true };
+}
+
 type Attempt = AgentOAuthAttempt & { providerId: string; method: number; state: AgentOAuthStatus; expires: number };
 
 /**
@@ -46,6 +58,12 @@ export class OpenCodeAgent implements AgentAdapter {
 	private readonly server: OpenCodeServer;
 	private status: AgentStatus | null = null;
 	private attempts = new Map<string, Attempt>();
+	/**
+	 * Models whose provider refused OpenCode's structured output. OpenCode forces
+	 * its `StructuredOutput` tool call, and some providers accept only an `auto`
+	 * tool choice; later calls to these models ask for JSON in the prompt instead.
+	 */
+	private noStructuredOutput = new Set<string>();
 	/** The last model list, keyed by `provider/model`, for efforts and provider names. */
 	private known = new Map<string, ModelEntry>();
 
@@ -127,7 +145,13 @@ export class OpenCodeAgent implements AgentAdapter {
 
 	/** One model call through the server. See {@link openCodeChat}. */
 	complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
-		return openCodeChat({ server: this.server, efforts: (model) => this.efforts(model) }, opts, onToken);
+		const host = { server: this.server, efforts: (model: string) => this.efforts(model) };
+
+		const run = () => openCodeChat(host, this.noStructuredOutput.has(opts.model) ? plainJson(opts) : opts, onToken);
+
+		if (!opts.jsonSchema) return run();
+
+		return withFieldFallback(opts, opts.model, this.noStructuredOutput, refusesStructuredOutput, run);
 	}
 
 	private catalog(): Promise<CatalogProvider[]> {
