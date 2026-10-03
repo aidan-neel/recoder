@@ -165,11 +165,9 @@ export const serverApi = {
 	/** AI brief for Home, written by the orchestrator's model. */
 	homeBrief: (input: HomeBriefRequest, signal?: AbortSignal) =>
 		req<HomeBriefResponse>('/api/home/brief', { method: 'POST', body: JSON.stringify(input), signal }),
-	/** Compact live progress per review (tasks settled/total, active specialists). */
+	/** Compact live progress per review (tasks settled/total, active reviewers). */
 	reviewSummaries: () =>
-		req<Record<string, { tasksDone: number; tasksTotal: number; specialists: number }>>(
-			'/api/reviews/progress-summaries'
-		),
+		req<Record<string, { tasksDone: number; tasksTotal: number; agents: number }>>('/api/reviews/progress-summaries'),
 	getReview: (id: string, signal?: AbortSignal) => req<Review>(`/api/reviews/${id}`, { signal }),
 	sendReviewMessage: (id: string, assignmentId: string, text: string, codeContext?: ReviewCodeContext) =>
 		req<ReviewChatMessage>(`/api/reviews/${id}/chat`, {

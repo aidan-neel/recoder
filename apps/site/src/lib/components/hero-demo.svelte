@@ -154,8 +154,8 @@
 							<span class="font-mono text-[11.5px] text-fg-faint">#4127</span>
 							{#if demo.finished}
 								<span class="tab-badge" data-tone="high">1 high</span>
-							{:else if demo.specialists.length}
-								<span class="tab-badge" data-tone="running">{demo.specialistsDone}/{demo.specialists.length}</span>
+							{:else if demo.agents.length}
+								<span class="tab-badge" data-tone="running">{demo.agentsDone}/{demo.agents.length}</span>
 							{/if}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="sivir">
@@ -204,6 +204,8 @@
 				<div class="flex h-full min-h-0 flex-col">
 					<SessionHeader
 						title="Move rate limiter into a class with injectable clock"
+						repo="acme/ledger-api"
+						prLabel="#4127"
 						view="conversation"
 						onView={() => {}}
 					/>
@@ -268,27 +270,27 @@
 												</Message.Root>
 											{/if}
 
-											{#if demo.specialists.length}
-												<section class="specialists enter-rise" style:--i="0" aria-label="Specialists">
+											{#if demo.agents.length}
+												<section class="agents enter-rise" style:--i="0" aria-label="Agents">
 													<Disclosure>
-														{#snippet label()}Created {demo.specialists.length} specialists{/snippet}
-														{#each demo.specialists as item (item.id)}
+														{#snippet label()}Started {demo.agents.length} agents{/snippet}
+														{#each demo.agents as item (item.id)}
 															<Typography.Text
 																><span class="text-fg-secondary">{item.name}:</span> {item.op}</Typography.Text
 															>
 														{/each}
 													</Disclosure>
-													{#if !demo.specialistsFinished}
-														<ul class="specialist-list" aria-label="Specialists" out:slide={{ duration: 280 }}>
-															{#each demo.specialists as item, i (item.id)}
+													{#if !demo.agentsFinished}
+														<ul class="agent-list" aria-label="Agents" out:slide={{ duration: 280 }}>
+															{#each demo.agents as item, i (item.id)}
 																<li class="enter-rise" style:--i={i}>
-																	<Button variant="ghost" class="specialist-row">
-																		<span class="specialist-main">
-																			<span class="specialist-name-line">
-																				<span class="specialist-name">{item.name}</span>
-																				<span class="specialist-model">{item.model}</span>
+																	<Button variant="ghost" class="agent-row">
+																		<span class="agent-main">
+																			<span class="agent-name-line">
+																				<span class="agent-row-name">{item.name}</span>
+																				<span class="agent-model">{item.model}</span>
 																			</span>
-																			<span class="specialist-op">{item.current}</span>
+																			<span class="agent-op">{item.current}</span>
 																		</span>
 																		<Badge
 																			variant="secondary"
@@ -317,13 +319,11 @@
 											{#if demo.finalize}
 												<div class="enter-rise" style:--i="0">
 													<Disclosure status={demo.finalize.running ? 'running' : 'done'} bodyClass="finalize-body">
-														{#snippet label()}{demo.finalize?.running
-																? 'Consolidating findings'
-																: 'Finalized review for 18s'}{/snippet}
+														{#snippet label()}{demo.finalize?.label}{/snippet}
 														<div class="fact-rows">
 															<Typography.Text class="fact-row"
 																><span class="fact-label">Findings</span><span class="fact-value"
-																	>6 kept, 2 merged as duplicates</span
+																	>5 kept, 1 merged as a duplicate</span
 																></Typography.Text
 															>
 															<Typography.Text class="fact-row"
@@ -357,12 +357,15 @@
 											{#if demo.finished}
 												<div class="enter-rise" style:--i="0">
 													<Card.Root class="review-result">
+														<span class="review-result-mark" aria-hidden="true"
+															><Check size={14} strokeWidth={2.25} /></span
+														>
 														<div class="review-result-text">
-															<Typography.Text class="review-result-title"
-																><Check size={16} class="shrink-0 text-success" aria-hidden="true" />Review finished
-																with {demo.findings.length} findings</Typography.Text
+															<Typography.Text class="review-result-title">Review finished</Typography.Text>
+															<Typography.Metadata class="review-result-meta"
+																>{demo.findings.length} findings · 2m 14s · 7 files</Typography.Metadata
 															>
-															<div class="review-result-pills">
+															<div class="review-result-pills" aria-label="Findings by severity">
 																{#each findingCounts(demo.findings) as item (item.severity)}<FindingSeverity
 																		severity={item.severity}
 																		count={item.count}
@@ -370,7 +373,7 @@
 															</div>
 														</div>
 														<Button class="shrink-0 gap-2"
-															>Open review <ArrowUpRight size={14} aria-hidden="true" /></Button
+															>Open findings <ArrowUpRight size={14} aria-hidden="true" /></Button
 														>
 													</Card.Root>
 												</div>
@@ -398,10 +401,11 @@
 									{#if !demo.finished}
 										<div out:slide={{ duration: 240 }}>
 											<ReviewSteps
-												current={demo.step}
+												current={demo.stage}
 												active={!demo.finished}
 												elapsed={demo.elapsed}
-												specialists={{ done: demo.specialistsDone, failed: 0, total: demo.specialists.length || 5 }}
+												reviewers={demo.reviewers}
+												subagents={demo.subagents}
 											/>
 										</div>
 									{/if}
@@ -428,21 +432,21 @@
 										</div>
 									{/if}
 
-									{#if demo.specialists.length}
+									{#if demo.agents.length}
 										<div class="enter-rise" style:--i="1">
 											<Card.Root class="rail-card">
 												<div class="rail-card-head">
-													<Typography.Title level={2} class="rail-card-title">Specialists</Typography.Title>
-													<span class="rail-card-meta">{demo.specialistsDone} finished</span>
+													<Typography.Title level={2} class="rail-card-title">Agents</Typography.Title>
+													<span class="rail-card-meta">{demo.agentsDone} finished</span>
 												</div>
-												{#each demo.specialists as item (item.id)}
-													<Button variant="ghost" class="rail-specialist">
+												{#each demo.agents as item (item.id)}
+													<Button variant="ghost" class="rail-agent">
 														<span class="rail-dot" data-status={item.status} aria-hidden="true"></span>
-														<span class="rail-specialist-name">{item.name}</span>
-														<span class="rail-specialist-meta"
+														<span class="rail-agent-row-name">{item.name}</span>
+														<span class="rail-agent-meta"
 															>{item.status === 'done' ? `${item.model} · ${item.elapsed}` : item.model}</span
 														>
-														<span class="rail-specialist-count"
+														<span class="rail-agent-count"
 															>{demo.findings.filter((finding) => finding.agent === item.id).length}</span
 														>
 													</Button>

@@ -193,7 +193,7 @@
 		view={loadingView === 'findings' || loadingView === 'diff'
 			? loadingView
 			: page.url.searchParams.get('agent')
-				? 'specialist'
+				? 'agent'
 				: 'conversation'}
 	/>
 {:else if data.down && !data.review}

@@ -9,34 +9,34 @@
 	import type { ReviewingFinding } from './reviewing-view.svelte';
 	import { formatAgentName } from '$lib/findings/threads.svelte';
 	import { compareSeverity } from '$lib/findings/severity';
-	import { groupProgress, groupSpecialists } from '$lib/review/specialist-groups';
+	import { groupProgress, groupAgents } from '$lib/review/agent-groups';
 	import { modelLabel } from '$lib/settings/model-settings.svelte';
 
 	interface Props {
 		findings: ReviewingFinding[];
-		specialists: ReviewAssignment[];
+		agents: ReviewAssignment[];
 		coverage?: CoverageSummary | null;
 		coverageGaps?: CoverageGap[];
 		onOpenFinding?: ((finding: ReviewingFinding) => void) | null;
-		specialistHref: (assignmentId: string) => string;
-		/** Show the Findings / Specialists / Coverage cards (off while the review runs). */
+		agentHref: (assignmentId: string) => string;
+		/** Show the Findings / Reviewers / Coverage cards (off while the review runs). */
 		results?: boolean;
 		/** Cards above the results, e.g. live progress. */
 		children?: Snippet;
 	}
 	let {
 		findings,
-		specialists,
+		agents,
 		coverage = null,
 		coverageGaps = [],
 		onOpenFinding = null,
-		specialistHref,
+		agentHref,
 		results = true,
 		children
 	}: Props = $props();
 
 	const ranked = $derived([...findings].sort(compareSeverity));
-	const finished = $derived(specialists.filter((item) => item.status === 'done').length);
+	const finished = $derived(agents.filter((item) => item.status === 'done').length);
 	const partialPaths = $derived([
 		...new Set(coverageGaps.filter((gap) => gap.state === 'partial').map((gap) => gap.path))
 	]);
@@ -80,31 +80,30 @@
 					{/each}
 				</Card.Root>
 
-				{#if specialists.length}
+				{#if agents.length}
 					<Card.Root class="rail-card">
 						<div class="rail-card-head">
-							<Typography.Title level={2} class="rail-card-title">Specialists</Typography.Title>
+							<Typography.Title level={2} class="rail-card-title">Agents</Typography.Title>
 							<span class="rail-card-meta">{finished} finished</span>
 						</div>
-						{#each groupSpecialists(specialists) as group (group.role)}
+						{#each groupAgents(agents) as group (group.role)}
 							{@const first = group.items.find((item) => item.status !== 'done') ?? group.items[0]}
 							<Button
-								href={specialistHref(first.id)}
+								href={agentHref(first.id)}
 								variant="ghost"
-								class="rail-specialist"
+								class="rail-agent"
 								title={group.items.length > 1 ? groupProgress(group) : first.title}
 							>
 								<span class="rail-dot" data-status={group.status} aria-hidden="true"></span>
-								<span class="rail-specialist-name"
+								<span class="rail-agent-row-name"
 									>{formatAgentName(group.role)}{group.items.length > 1 ? ` ×${group.items.length}` : ''}</span
 								>
-								<span class="rail-specialist-meta"
+								<span class="rail-agent-meta"
 									>{group.items.length > 1
 										? `${group.finished}/${group.items.length} · ${modelLabel(first.model)}`
 										: [modelLabel(first.model), duration(first.elapsedMs)].filter(Boolean).join(' · ')}</span
 								>
-								<span class="rail-specialist-count" aria-label="{countFor(group.role)} findings"
-									>{countFor(group.role)}</span
+								<span class="rail-agent-count" aria-label="{countFor(group.role)} findings">{countFor(group.role)}</span
 								>
 							</Button>
 						{/each}

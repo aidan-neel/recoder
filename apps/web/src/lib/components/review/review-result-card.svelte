@@ -12,13 +12,13 @@
 	let {
 		findings,
 		meta,
-		failedSpecialists,
+		failedAgents,
 		onShowView,
 		onOpenDiff
 	}: {
 		findings: ReviewingFinding[];
 		meta: ReviewingMeta;
-		failedSpecialists: number;
+		failedAgents: number;
 		onShowView: ((view: 'findings' | 'diff') => void | Promise<void>) | null;
 		onOpenDiff: (() => void) | null;
 	} = $props();
@@ -31,8 +31,8 @@
 </script>
 
 <Card.Root class="review-result">
-	<span class="review-result-mark" data-warn={failedSpecialists > 0 || undefined} aria-hidden="true"
-		>{#if failedSpecialists}<CircleAlert size={14} strokeWidth={2.25} />{:else}<Check
+	<span class="review-result-mark" data-warn={failedAgents > 0 || undefined} aria-hidden="true"
+		>{#if failedAgents}<CircleAlert size={14} strokeWidth={2.25} />{:else}<Check
 				size={14}
 				strokeWidth={2.25}
 			/>{/if}</span
@@ -44,8 +44,8 @@
 				? `${findings.length} ${findings.length === 1 ? 'finding' : 'findings'}`
 				: 'No findings'}{meta.elapsed ? ` · ${meta.elapsed}` : ''}{meta.files !== null
 				? ` · ${meta.files} ${meta.files === 1 ? 'file' : 'files'}`
-				: ''}{#if failedSpecialists}{' · '}<span class="review-result-failed"
-					>{failedSpecialists} {failedSpecialists === 1 ? 'specialist' : 'specialists'} failed</span
+				: ''}{#if failedAgents}{' · '}<span class="review-result-failed"
+					>{failedAgents} {failedAgents === 1 ? 'agent' : 'agents'} failed</span
 				>{/if}</Typography.Metadata
 		>
 		{#if findingCounts.length}

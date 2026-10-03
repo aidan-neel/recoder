@@ -74,7 +74,7 @@
 	}
 	/**
 	 * One entry per id, latest wins: reviews saved before follow-up ids were made unique can repeat one.
-	 * Reviews saved before every specialist had to finish can carry a `partial` status, which meant finished.
+	 * Reviews saved before every reviewer had to finish can carry a `partial` status, which meant finished.
 	 */
 	const assignments = $derived<ReviewAssignment[]>([
 		...new Map(

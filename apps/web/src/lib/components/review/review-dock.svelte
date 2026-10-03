@@ -42,7 +42,7 @@
 		awaitingPrompt: boolean;
 		/** A discussion reply is streaming. */
 		generating: boolean;
-		/** The specialist behind this conversation is still running. */
+		/** The agent behind this conversation is still running. */
 		working: boolean;
 		/** Any message in this conversation is streaming. */
 		streaming: boolean;
@@ -50,7 +50,7 @@
 		notice?: string | null;
 	} = $props();
 
-	const specialist = $derived(assignment.id !== ORCHESTRATOR_ID);
+	const agentThread = $derived(assignment.id !== ORCHESTRATOR_ID);
 	const errorId = $props.id();
 
 	let sending = $state(false);
@@ -211,7 +211,7 @@
 				: (placeholder ??
 					(awaitingPrompt
 						? 'Ask Orchestrator to start a review…'
-						: `Ask ${specialist ? formatAgentName(assignment.role) : assignment.title} anything…`))}
+						: `Ask ${agentThread ? formatAgentName(assignment.role) : assignment.title} anything…`))}
 			maxlength={MESSAGE_LIMIT}
 			describedBy={error ? errorId : undefined}
 			invalid={!!error}
@@ -247,7 +247,7 @@
 				{/if}
 			{/snippet}
 			{#snippet leading()}
-				{#if specialist}<Typography.Metadata class="truncate text-[12px] text-fg-faint"
+				{#if agentThread}<Typography.Metadata class="truncate text-[12px] text-fg-faint"
 						>Shared with Orchestrator</Typography.Metadata
 					>{/if}
 			{/snippet}

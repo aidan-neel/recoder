@@ -5,7 +5,8 @@ import {
 	type ReviewReasoningEntry,
 	type ReviewTask
 } from '@recoder/shared';
-import { countFailedSpecialists, footerLabel, isLive } from './reviewing-view';
+import { STAGE } from './review-progress-state';
+import { agentCounts, countFailedAgents, footerLabel, isLive } from './reviewing-view';
 
 /** The review snapshot the reviewing view renders. */
 export interface ReviewingInput {
@@ -49,9 +50,13 @@ export class ReviewingState {
 		);
 	});
 
-	readonly specialists = $derived(this.#input.assignments.filter((assignment) => assignment.id !== ORCHESTRATOR_ID));
+	readonly agents = $derived(this.#input.assignments.filter((assignment) => assignment.id !== ORCHESTRATOR_ID));
 
-	readonly failedSpecialists = $derived(countFailedSpecialists(this.specialists));
+	readonly failedAgents = $derived(countFailedAgents(this.agents));
+
+	readonly reviewerCounts = $derived(agentCounts(this.agents.filter((item) => item.role !== 'subagent')));
+
+	readonly subagentCounts = $derived(agentCounts(this.agents.filter((item) => item.role === 'subagent')));
 
 	/** The orchestrator as a conversation of its own, with the model it last ran on. */
 	readonly orchestrator = $derived.by((): ReviewAssignment => {
@@ -76,20 +81,18 @@ export class ReviewingState {
 
 	readonly showSteps = $derived(!this.#input.awaitingPrompt && (this.#input.active || this.#input.failed));
 
-	/** When the first specialist was queued, where the plan's specialists sit in the transcript. */
-	readonly specialistsAt = $derived(
-		this.specialists
+	/** When the first reviewer was queued, where the plan's reviewers sit in the transcript. */
+	readonly agentsAt = $derived(
+		this.agents
 			.map((item) => item.queuedAt ?? item.startedAt)
 			.filter((at): at is string => !!at)
 			.sort()[0]
 	);
 
-	readonly running = $derived(this.specialists.filter((item) => isLive(item.status)));
+	readonly running = $derived(this.agents.filter((item) => isLive(item.status)));
 
-	/** Specialists a model is actually working for; queued ones are waiting on the stage before them. */
-	readonly working = $derived(
-		this.specialists.filter((item) => item.status === 'running' || item.status === 'waiting')
-	);
+	/** Reviewers a model is actually working for; queued ones are waiting on the stage before them. */
+	readonly working = $derived(this.agents.filter((item) => item.status === 'running' || item.status === 'waiting'));
 
 	readonly finalization = $derived(this.#input.tasks.find((task) => task.id === 'consolidation'));
 
@@ -109,12 +112,14 @@ export class ReviewingState {
 		this.#input.reasoning.filter((entry) => !this.finalReasoning.some((item) => item.id === entry.id))
 	);
 
-	/** Verifiers work in the threads of the specialists whose findings they check; here they show as one live step. */
-	readonly verifying = $derived(this.#input.active && this.#input.stage === 4);
+	/** Verifiers work in the threads of the reviewers whose findings they check; here they show as one live step. */
+	readonly verifying = $derived(this.#input.active && this.#input.stage === STAGE.verify);
 
 	readonly verifications = $derived(this.#input.tasks.filter((task) => task.kind === 'verification'));
 
-	readonly currentStep = $derived(!this.#input.active && !this.#input.failed ? 6 : Math.min(this.#input.stage, 5));
+	readonly currentStep = $derived(
+		!this.#input.active && !this.#input.failed ? STAGE.done : Math.min(this.#input.stage, STAGE.consolidation)
+	);
 
 	/** Early stages (checkout, inventory, planning) have nothing to open, and the live thinking and tool rows already show the work. */
 	readonly showProgress = $derived(
@@ -134,7 +139,12 @@ export class ReviewingState {
 	readonly preparing = $derived.by(() => {
 		const { active, awaitingPrompt, failed, stage } = this.#input;
 
-		return active && !awaitingPrompt && !failed && (stage === 0 || (!!this.setupTask && !this.orchestratorSpoke));
+		return (
+			active &&
+			!awaitingPrompt &&
+			!failed &&
+			(stage === STAGE.checkout || (!!this.setupTask && !this.orchestratorSpoke))
+		);
 	});
 
 	readonly progressLabel = $derived.by(() => {

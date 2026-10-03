@@ -43,7 +43,7 @@ test('a failed turn and its retry read as one thought spanning both', () => {
 	});
 });
 
-test('a thought before the specialists were created sits above them, ending when they start', () => {
+test('a thought before the agents were created sits above them, ending when they start', () => {
 	const snippet = (() => {}) as never;
 	const planning = thought('reason_plan', 5, 'Planning.');
 
@@ -52,7 +52,7 @@ test('a thought before the specialists were created sits above them, ending when
 		placed: placeInserts(
 			[
 				{ key: 'progress', snippet },
-				{ key: 'specialists', at: '2026-01-01T00:00:30Z', snippet }
+				{ key: 'agents', at: '2026-01-01T00:00:30Z', snippet }
 			],
 			[]
 		),
@@ -60,6 +60,6 @@ test('a thought before the specialists were created sits above them, ending when
 		ownThoughts: new Map()
 	});
 
-	expect(rows.map((row) => row.key)).toEqual(['traces-thought-reason_plan', 'insert-specialists', 'insert-progress']);
+	expect(rows.map((row) => row.key)).toEqual(['traces-thought-reason_plan', 'insert-agents', 'insert-progress']);
 	expect(rows[0].kind === 'traces' && rows[0].traces[0]).toMatchObject({ until: '2026-01-01T00:00:30Z' });
 });

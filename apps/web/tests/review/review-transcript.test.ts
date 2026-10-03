@@ -25,7 +25,7 @@ test('tools form stable groups between messages and summary dumps stay out of th
 	const messages = [
 		message('pending', 0, ''),
 		message('answer', 3),
-		message('review-result', 4, 'Specialists: internal inventory dump')
+		message('review-result', 4, 'Units: internal inventory dump')
 	];
 
 	const tools = [tool('a', 1), tool('b', 2), tool('c', 5, 'search')];

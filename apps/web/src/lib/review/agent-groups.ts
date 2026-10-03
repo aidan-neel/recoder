@@ -1,10 +1,10 @@
 import type { ReviewAssignment } from '@recoder/shared';
 
 /**
- * Specialists of one role, in plan order. Reading a whole large PR takes many
+ * Reviewers of one role, in plan order. Reading a whole large PR takes many
  * correctness parts; they read as one row that opens to its parts.
  */
-export interface SpecialistGroup {
+export interface AgentGroup {
 	role: string;
 	items: ReviewAssignment[];
 	/** The most telling member status: anything still working, then failures, then done. */
@@ -14,7 +14,7 @@ export interface SpecialistGroup {
 
 const PRECEDENCE: ReviewAssignment['status'][] = ['running', 'waiting', 'queued', 'error', 'done', 'skipped'];
 
-export function groupSpecialists(items: ReviewAssignment[]): SpecialistGroup[] {
+export function groupAgents(items: ReviewAssignment[]): AgentGroup[] {
 	const groups = new Map<string, ReviewAssignment[]>();
 
 	for (const item of items) groups.set(item.role, [...(groups.get(item.role) ?? []), item]);
@@ -28,7 +28,7 @@ export function groupSpecialists(items: ReviewAssignment[]): SpecialistGroup[] {
 }
 
 /** "9 of 14 finished · 2 reviewing · 1 failed". */
-export function groupProgress(group: SpecialistGroup): string {
+export function groupProgress(group: AgentGroup): string {
 	const count = (status: ReviewAssignment['status']) => group.items.filter((item) => item.status === status).length;
 
 	return [

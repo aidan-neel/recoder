@@ -397,7 +397,7 @@ async function assertChatGptSignedIn(): Promise<void> {
 }
 
 /**
- * People and linked issues for the planner, fetched while the sandbox clones.
+ * People and linked issues for the reviewers, fetched while the sandbox clones.
  * Best effort: after 30s it gives up with nothing, so a slow host API can't
  * hold the review once the checkout is ready.
  */

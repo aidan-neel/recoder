@@ -1,4 +1,5 @@
 import type { ReviewToolCall } from '@recoder/shared';
+import { STAGE } from '$web/review/review-progress-state';
 
 /**
  * The hero demo: one scripted review, replayed on a loop. Every piece of state
@@ -8,7 +9,7 @@ import type { ReviewToolCall } from '@recoder/shared';
 
 type Severity = 'high' | 'medium' | 'low';
 
-type SpecialistStatus = 'queued' | 'running' | 'done';
+type AgentStatus = 'queued' | 'running' | 'done';
 
 const AT = {
 	user: 300,
@@ -18,8 +19,9 @@ const AT = {
 	toolsEnd: 4300,
 	planStart: 4700,
 	planEnd: 6900,
-	specialists: 7200,
-	finalizeStart: 12300,
+	reviewers: 7200,
+	verifyStart: 12300,
+	consolidateStart: 13000,
 	finalizeEnd: 13600,
 	summaryStart: 13800,
 	summaryEnd: 17600,
@@ -37,7 +39,7 @@ export const DEMO_LOOP = DEMO_END + DEMO_HOLD + DEMO_FADE;
 export const request = 'Review this. Focus on the clock injection and anything that breaks existing callers.';
 
 const reasoning =
-	'Reading the diff to scope specialists. The limiter moves from module state into a class, so the old free `allow()` and every caller of it matter most.';
+	'Reading the diff and the code around it. The limiter moves from module state into a class, so the old free `allow()` and every caller of it matter most.';
 
 const tools = [
 	{ action: 'readDiff', path: 'src/rate-limit/limiter.ts', at: 0, ms: 400 },
@@ -47,84 +49,109 @@ const tools = [
 ];
 
 const plan =
-	'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI’m sending five specialists. Correctness and repository consistency always run; performance, docs and security were picked for this diff.';
+	'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI cut the change into five units by folder, and each gets one reviewer.';
 
 const summary =
-	'The class refactor is sound, but two things should block the merge.\n\n`index.ts` still re-exports `allow()`, which no longer exists, so all 14 call sites break at import. And `refill()` reads `Date.now()` directly, so the injected clock does nothing in tests.\n\nThe rest is small: an unbounded buckets Map, an unvalidated capacity, and a stale doc comment. Four of the five have a suggested patch ready.';
+	'The class refactor is sound, but two things should block the merge.\n\n`index.ts` still re-exports `allow()`, which no longer exists, so all 14 call sites break at import. And `refill()` reads `Date.now()` directly, so the injected clock does nothing in tests.\n\nThe rest is small: an unbounded buckets Map, an unvalidated capacity, and a stale usage example. Four of the five have a suggested patch ready.';
 
-type Specialist = {
+type Agent = {
 	id: string;
+	/** A reviewer is named for its unit, a subagent for the question it was handed. */
 	name: string;
 	model: string;
 	/** What it's doing while running, then its closing line. */
 	op: string;
 	doneOp: string;
-	/** Offset from AT.specialists. */
+	/** Offsets from AT.reviewers: when the row appears, starts and finishes. */
+	shows: number;
 	starts: number;
 	finishes: number;
 	elapsed: string;
 };
 
-const specialists: Specialist[] = [
+/** Reviewers share the Review model; the subagent runs on the second model. */
+const REVIEW_MODEL = 'gpt-5-codex';
+
+const reviewers: Agent[] = [
 	{
-		id: 'correctness',
-		name: 'Correctness',
-		model: 'gpt-5-codex',
-		op: 'Reading src/rate-limit/limiter.ts:20-46',
-		doneOp: 'Traced refill() and capacity through the class · 3 findings',
+		id: 'unit-1',
+		name: 'docs/rate-limiting.md',
+		model: REVIEW_MODEL,
+		op: 'Reading docs/rate-limiting.md',
+		doneOp: 'Checked the usage examples · 1 finding',
+		shows: 0,
 		starts: 0,
-		finishes: 3600,
+		finishes: 1400,
+		elapsed: '24s'
+	},
+	{
+		id: 'unit-2',
+		name: 'src/rate-limit (2 files)',
+		model: REVIEW_MODEL,
+		op: 'Comparing exports against 14 call sites',
+		doneOp: 'Compared exports against 14 call sites · 2 findings',
+		shows: 0,
+		starts: 0,
+		finishes: 3000,
+		elapsed: '58s'
+	},
+	{
+		id: 'unit-3',
+		name: 'src/rate-limit/limiter.ts',
+		model: REVIEW_MODEL,
+		op: 'Reading src/rate-limit/limiter.ts:20-46',
+		doneOp: 'Traced capacity through the class · 1 finding',
+		shows: 0,
+		starts: 0,
+		finishes: 3400,
 		elapsed: '1m 12s'
 	},
 	{
-		id: 'patterns',
-		name: 'Repository consistency',
-		model: 'gpt-5-codex',
-		op: 'Comparing exports against 14 call sites',
-		doneOp: 'Compared exports against 14 call sites · 1 finding',
-		starts: 0,
-		finishes: 1300,
-		elapsed: '38s'
-	},
-	{
-		id: 'perf',
-		name: 'Performance',
-		model: 'qwen3-coder',
-		op: 'Searching src/ for Map eviction patterns',
-		doneOp: 'Checked the buckets Map lifecycle · 1 finding',
+		id: 'unit-4',
+		name: 'src/time/clock.ts',
+		model: REVIEW_MODEL,
+		op: 'Reading src/time/clock.ts',
+		doneOp: 'Checked the Clock interface · no findings',
+		shows: 0,
 		starts: 300,
-		finishes: 4300,
-		elapsed: '51s'
+		finishes: 1800,
+		elapsed: '19s'
 	},
 	{
-		id: 'docs',
-		name: 'Documentation',
-		model: 'qwen3-coder',
-		op: 'Checking doc comments in src/rate-limit',
-		doneOp: 'Checked doc comments in src/rate-limit · 1 finding',
-		starts: 300,
-		finishes: 2000,
-		elapsed: '22s'
-	},
-	{
-		id: 'security',
-		name: 'Security',
-		model: 'gpt-5-codex',
-		op: 'Waiting for a free slot',
-		doneOp: 'Checked key handling and limits · no findings',
-		starts: 1400,
-		finishes: 4800,
-		elapsed: '44s'
+		id: 'unit-5',
+		name: 'tests/rate-limit (2 files)',
+		model: REVIEW_MODEL,
+		op: 'Running bun test tests/rate-limit',
+		doneOp: 'Ran the limiter tests · no findings',
+		shows: 0,
+		starts: 1500,
+		finishes: 3800,
+		elapsed: '41s'
 	}
 ];
 
+/** The limiter's reviewer asks for one subagent; it runs once every reviewer has answered. */
+const subagent: Agent = {
+	id: 'subagent-1',
+	name: 'Refill timing under the injected clock',
+	model: 'qwen3-coder',
+	op: 'Running a repro with a fake Clock',
+	doneOp: 'Ran a repro with a fake Clock · 1 finding',
+	shows: 3400,
+	starts: 3900,
+	finishes: 5100,
+	elapsed: '33s'
+};
+
+const agents = [...reviewers, subagent];
+
 type Finding = { id: string; agent: string; severity: Severity; title: string; location: string; at: number };
 
-/** `at` is an offset from AT.specialists, at or before its specialist finishes. */
+/** `at` is an offset from AT.reviewers, at or before its agent finishes. */
 const findings: Finding[] = [
 	{
 		id: 'f1',
-		agent: 'patterns',
+		agent: 'unit-2',
 		severity: 'high',
 		title: 'index.ts re-exports allow(), which no longer exists',
 		location: 'src/rate-limit/index.ts:3',
@@ -132,35 +159,35 @@ const findings: Finding[] = [
 	},
 	{
 		id: 'f2',
-		agent: 'docs',
+		agent: 'unit-1',
 		severity: 'low',
-		title: 'Doc comment still describes a free function',
-		location: 'src/rate-limit/limiter.ts:19',
-		at: 2000
-	},
-	{
-		id: 'f3',
-		agent: 'correctness',
-		severity: 'medium',
-		title: 'refill() ignores the injected Clock',
-		location: 'src/rate-limit/limiter.ts:23',
-		at: 2700
+		title: 'Usage example still calls the free allow()',
+		location: 'docs/rate-limiting.md:14',
+		at: 1400
 	},
 	{
 		id: 'f4',
-		agent: 'correctness',
+		agent: 'unit-3',
 		severity: 'low',
 		title: 'capacity is never validated',
 		location: 'src/rate-limit/limiter.ts:16',
-		at: 3300
+		at: 2600
 	},
 	{
 		id: 'f6',
-		agent: 'perf',
+		agent: 'unit-2',
 		severity: 'medium',
 		title: 'buckets Map has no eviction',
-		location: 'src/rate-limit/limiter.ts:11',
-		at: 4300
+		location: 'src/rate-limit/bucket.ts:11',
+		at: 3000
+	},
+	{
+		id: 'f3',
+		agent: 'subagent-1',
+		severity: 'medium',
+		title: 'refill() ignores the injected Clock',
+		location: 'src/rate-limit/limiter.ts:23',
+		at: 5000
 	}
 ];
 
@@ -198,27 +225,19 @@ export function demoState(t: number) {
 			};
 		});
 
-	const sinceSpecialists = t - AT.specialists;
+	const since = t - AT.reviewers;
 
-	const specialistRows =
-		t < AT.specialists
-			? []
-			: specialists.map((item) => {
-					const status: SpecialistStatus =
-						sinceSpecialists >= item.finishes ? 'done' : sinceSpecialists >= item.starts ? 'running' : 'queued';
+	const rows =
+		t < AT.reviewers ? [] : agents.filter((item) => since >= item.shows).map((item) => agentRow(item, since));
 
-					return {
-						...item,
-						status,
-						current: status === 'done' ? item.doneOp : status === 'queued' ? 'Waiting for a free slot' : item.op
-					};
-				});
+	const reviewerRows = rows.filter((item) => item.id !== subagent.id);
+	const subagentRow = rows.find((item) => item.id === subagent.id);
 
 	const found = findings
-		.filter((finding) => t >= AT.specialists + finding.at)
+		.filter((finding) => t >= AT.reviewers + finding.at)
 		.sort((a, b) => RANK[a.severity] - RANK[b.severity]);
 
-	const specialistsDone = specialistRows.filter((item) => item.status === 'done').length;
+	const agentsDone = rows.filter((item) => item.status === 'done').length;
 	const finished = t >= AT.result;
 
 	return {
@@ -230,17 +249,54 @@ export function demoState(t: number) {
 		toolsOpen: t >= AT.toolsStart && t < AT.toolsEnd + 400,
 		plan: stream(plan, t, AT.planStart, AT.planEnd),
 		thinking: (t >= AT.toolsEnd && t < AT.planStart) || (t >= AT.finalizeEnd && t < AT.summaryStart),
-		specialists: specialistRows,
-		specialistsDone,
-		specialistsFinished: specialistRows.length > 0 && specialistsDone === specialistRows.length,
+		agents: rows,
+		agentsDone,
+		agentsFinished: since >= subagent.finishes,
+		reviewers: {
+			done: reviewerRows.filter((item) => item.status === 'done').length,
+			failed: 0,
+			total: reviewers.length
+		},
+		subagents: subagentRow ? { done: subagentRow.status === 'done' ? 1 : 0, failed: 0, total: 1 } : null,
 		findings: found,
-		finalize: t >= AT.finalizeStart ? { running: t < AT.finalizeEnd } : null,
+		finalize: finalizeAt(t, found.length),
 		summary: stream(summary, t, AT.summaryStart, AT.summaryEnd),
 		finished,
-		/** ReviewSteps index: prepare, plan, specialists, consolidate. */
-		step: finished ? 6 : t >= AT.finalizeStart ? 5 : t >= AT.specialists ? 3 : t >= AT.reasonStart ? 1 : 0,
+		stage: stageAt(t),
 		elapsed: clock(t)
 	};
+}
+
+/** A queued subagent waits on the reviewers; a queued reviewer waits for a slot in the pool. */
+function agentRow(item: Agent, since: number) {
+	const status: AgentStatus = since >= item.finishes ? 'done' : since >= item.starts ? 'running' : 'queued';
+	const waiting = item.id === subagent.id ? 'Waiting for reviewers to finish' : 'Waiting for a free slot';
+
+	return { ...item, status, current: status === 'done' ? item.doneOp : status === 'queued' ? waiting : item.op };
+}
+
+/** The ReviewSteps index (`STAGE`) the Progress card shows at `t`. */
+function stageAt(t: number): number {
+	if (t >= AT.result) return STAGE.done;
+	if (t >= AT.consolidateStart) return STAGE.consolidation;
+	if (t >= AT.verifyStart) return STAGE.verify;
+	if (t >= AT.reviewers + subagent.starts) return STAGE.subagents;
+	if (t >= AT.reviewers) return STAGE.reviewing;
+	if (t >= AT.toolsEnd) return STAGE.checks;
+	if (t >= AT.reasonStart) return STAGE.understand;
+
+	return STAGE.checkout;
+}
+
+/** Every finding is verified by running code, then the survivors are consolidated. */
+function finalizeAt(t: number, total: number): { running: boolean; label: string } | null {
+	if (t < AT.verifyStart) return null;
+	if (t >= AT.finalizeEnd) return { running: false, label: 'Finalized review for 18s' };
+	if (t >= AT.consolidateStart) return { running: true, label: 'Consolidating findings' };
+
+	const verified = Math.floor(((t - AT.verifyStart) / (AT.consolidateStart - AT.verifyStart)) * total);
+
+	return { running: true, label: `Verifying findings · ${verified}/${total}` };
 }
 
 /** The Progress card's timer: the demo runs at roughly 8x real time. */

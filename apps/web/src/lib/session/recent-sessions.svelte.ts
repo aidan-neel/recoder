@@ -15,7 +15,7 @@ export interface RecentSession {
 interface ProgressSummary {
 	tasksDone: number;
 	tasksTotal: number;
-	specialists: number;
+	agents: number;
 }
 
 function mapRecent(

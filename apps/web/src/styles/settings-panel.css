@@ -30,7 +30,7 @@
 	color: var(--text-faint);
 }
 [data-ui='button'][data-variant].rail-finding,
-[data-ui='button'][data-variant].rail-specialist {
+[data-ui='button'][data-variant].rail-agent {
 	width: 100%;
 	height: auto;
 	min-height: 0;
@@ -74,7 +74,7 @@
 	font-size: 11px;
 	color: var(--text-faint);
 }
-[data-ui='button'][data-variant].rail-specialist {
+[data-ui='button'][data-variant].rail-agent {
 	align-items: center;
 	gap: 10px;
 	padding: 7px 14px;
@@ -96,7 +96,7 @@
 .rail-dot[data-status='error'] {
 	background: var(--danger);
 }
-.rail-specialist-name {
+.rail-agent-row-name {
 	min-width: 0;
 	flex: 1;
 	overflow: hidden;
@@ -105,16 +105,16 @@
 	font-size: 13px;
 	color: var(--text-primary);
 }
-.rail-specialist-meta,
-.rail-specialist-count {
+.rail-agent-meta,
+.rail-agent-count {
 	font-family: var(--font-code);
 	font-size: 11px;
 	white-space: nowrap;
 }
-.rail-specialist-meta {
+.rail-agent-meta {
 	color: var(--text-faint);
 }
-.rail-specialist-count {
+.rail-agent-count {
 	width: 14px;
 	text-align: right;
 	color: var(--text-muted);

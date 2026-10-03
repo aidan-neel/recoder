@@ -15,6 +15,7 @@
 	import { findingsStore } from '$lib/findings/findings.svelte';
 	import { getFileDiff } from '$lib/diff/diff';
 	import { DEFAULT_FILE } from '$lib/session/session-file.svelte';
+	import { STAGE } from '$lib/review/review-progress-state';
 
 	/** Interactive design fixture: real sessions render the same view with API/SSE data. */
 	const now = Date.now();
@@ -27,13 +28,13 @@
 	let continuing = $state(false);
 	let awaitingPrompt = $state(draft);
 	const specs = [
-		{ id: 'testing', title: 'Test Coverage', operation: 'Searching across `/study` for missing tests…' },
-		{ id: 'complexity', title: 'Complexity', operation: 'Searching across `/study` for complexity…' },
-		{ id: 'docs', title: 'Documentation', operation: 'Searching across `/study` for missing documentation…' }
+		{ id: 'unit-1', title: 'packages/cli/src (3 files)', operation: 'Read the command parser and its callers' },
+		{ id: 'unit-2', title: 'packages/cli/src/status.ts', operation: 'Ran the status command on an empty queue' },
+		{ id: 'unit-3', title: 'packages/cli/tests (2 files)', operation: 'Checked the new tests against the change' }
 	];
 	const assignments: ReviewAssignment[] = specs.map((spec) => ({
 		id: spec.id,
-		role: spec.id,
+		role: 'reviewer',
 		title: spec.title,
 		reason: spec.operation,
 		status: 'done',
@@ -56,7 +57,7 @@
 			assignmentId: ORCHESTRATOR_ID,
 			from: 'assistant',
 			model,
-			text: 'Okay, beginning a review on Sivir UI. First, I’ll create 3 specialists for a broad review.',
+			text: 'Okay, beginning a review on Sivir UI. I’ll split it into 3 units, one reviewer each.',
 			at: iso(100),
 			status: 'done'
 		}
@@ -122,7 +123,7 @@
 	}));
 	const findings: ReviewingFinding[] = ['high', 'medium', 'medium', 'low'].map((severity, i) => ({
 		id: `example-${i}`,
-		agent: 'testing',
+		agent: 'reviewer',
 		severity: severity as ReviewingFinding['severity'],
 		title: 'Example finding',
 		location: null
@@ -132,7 +133,7 @@
 		...specs.map((spec) => ({
 			id: `${spec.id}-tool`,
 			assignmentId: spec.id,
-			role: spec.id,
+			role: 'reviewer',
 			command: 'rg -n "status" packages/cli',
 			status: 'done' as const,
 			exitCode: 0,
@@ -141,9 +142,9 @@
 			summary: '3 matches'
 		})),
 		{
-			id: 'testing-write',
-			assignmentId: 'testing',
-			role: 'testing',
+			id: 'unit-2-write',
+			assignmentId: 'unit-2',
+			role: 'reviewer',
 			command: `write ${repro}`,
 			input: { action: 'writeFile', path: repro },
 			status: 'done',
@@ -157,9 +158,9 @@
 			}
 		},
 		{
-			id: 'testing-run',
-			assignmentId: 'testing',
-			role: 'testing',
+			id: 'unit-2-run',
+			assignmentId: 'unit-2',
+			role: 'reviewer',
 			command: `$ bun test ${repro}`,
 			input: { action: 'run', command: `bun test ${repro}` },
 			status: 'done',
@@ -185,21 +186,21 @@
 	const preparingPreview = liveState === 'preparing';
 	const planningPreview = liveState === 'planning';
 	const liveSpecs = [
-		{ id: 'correctness', model: 'gpt-5-codex', status: 'running', op: 'Reading src/rate-limit/limiter.ts:20-46' },
-		{ id: 'patterns', model: 'gpt-5-codex', status: 'done', op: 'Compared exports against 14 call sites · 1 finding' },
-		{ id: 'perf', model: 'qwen3-coder', status: 'running', op: 'Searching src/ for Map eviction patterns' },
-		{ id: 'docs', model: 'qwen3-coder', status: 'done', op: 'Checked doc comments in src/rate-limit' },
-		{ id: 'security', model: 'gpt-5-codex', status: 'queued', op: 'Waiting for a free slot' }
+		['unit-1', 'src/rate-limit/limiter.ts', 'running', 'Reading src/rate-limit/limiter.ts:20-46'],
+		['unit-2', 'src/rate-limit (2 files)', 'done', 'Compared exports against 14 call sites · 1 finding'],
+		['unit-3', 'src/time/clock.ts', 'done', 'Checked the clock interface and its fake'],
+		['unit-4', 'tests/rate-limit (2 files)', 'queued', 'Waiting for a free slot'],
+		['subagent-1', 'Does anything still call the free allow()?', 'running', 'Searching src/ for allow( callers']
 	] as const;
-	const liveAssignments: ReviewAssignment[] = liveSpecs.map((spec) => ({
-		id: spec.id,
-		role: spec.id,
-		title: spec.id,
-		reason: spec.op,
-		status: spec.status,
+	const liveAssignments: ReviewAssignment[] = liveSpecs.map(([id, title, status, op]) => ({
+		id,
+		role: id.startsWith('subagent') ? 'subagent' : 'reviewer',
+		title,
+		reason: op,
+		status,
 		scope: [],
-		model: spec.model,
-		currentOperation: spec.op,
+		model: id.startsWith('subagent') ? 'qwen3-coder' : 'gpt-5-codex',
+		currentOperation: op,
 		startedAt: iso(60),
 		...(verifyPreview ? { status: 'done' as const } : {})
 	}));
@@ -219,7 +220,7 @@
 		status: item.status as ReviewTask['status'],
 		message: item.message,
 		kind: 'verification',
-		assignmentId: 'correctness',
+		assignmentId: 'unit-1',
 		startedAt: iso(item.started),
 		updatedAt: iso(0),
 		elapsedMs: item.ms
@@ -227,7 +228,7 @@
 	const verifyReasoning: ReviewReasoningEntry[] = [
 		{
 			id: 'verify-reasoning',
-			assignmentId: 'correctness',
+			assignmentId: 'unit-1',
 			model,
 			at: iso(30),
 			status: 'streaming',
@@ -242,7 +243,7 @@
 		at: iso(50),
 		status: 'error',
 		cutOff: 'Thought too long. Asking for an answer now.',
-		text: 'Specialists reported 3 candidates. I’m checking each one before I consolidate: the clock finding first, since it decides whether refill works at all.'
+		text: 'Reviewers reported 3 candidates. I’m checking each one before I consolidate: the clock finding first, since it decides whether refill works at all.'
 	};
 	const liveMessages: ReviewChatMessage[] = [
 		{
@@ -260,7 +261,7 @@
 			model,
 			at: iso(120),
 			status: 'done',
-			text: 'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI’m sending five specialists. Correctness and repository consistency always run; performance, docs and security were picked for this diff.'
+			text: 'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI cut it into 4 units, one reviewer each.'
 		}
 	];
 	/** The last reads are still going, so the preview shows the live labels. */
@@ -296,13 +297,13 @@
 			id: 'planning',
 			label: 'Planning the review',
 			status: 'running',
-			message: 'Planning specialist assignments',
+			message: 'Cutting the change into units',
 			kind: 'planning',
 			startedAt: iso(20),
 			updatedAt: iso(0)
 		}
 	];
-	const planSummary = 'I created 3 specialists for this review:\n\n- Test coverage\n- Complexity\n- Documentation';
+	const planSummary = 'Reviewing in 3 units:\n\n- src/cli\n- src/status\n- tests';
 	const liveReasoning: ReviewReasoningEntry[] = [
 		{
 			id: 'live-reasoning',
@@ -310,7 +311,7 @@
 			model,
 			at: iso(132),
 			status: 'done',
-			text: 'Reading the diff to scope specialists.'
+			text: 'Reading the diff to cut it into units.'
 		}
 	];
 
@@ -382,7 +383,13 @@
 		orchestratorModel={model}
 		tasks={verifyPreview ? verifyTasks : planningPreview ? planningTasks : []}
 		findings={[]}
-		stage={preparingPreview ? 0 : verifyPreview ? 4 : planningPreview ? 1 : 3}
+		stage={preparingPreview
+			? STAGE.checkout
+			: verifyPreview
+				? STAGE.verify
+				: planningPreview
+					? STAGE.understand
+					: STAGE.reviewing}
 		stageLabel={verifyPreview ? 'Verifying findings' : 'Reviewing'}
 		active
 		completedAt={undefined}
@@ -423,8 +430,8 @@
 			toolCalls={awaitingPrompt ? [] : toolCalls}
 			orchestratorModel={model}
 			findings={awaitingPrompt ? [] : findings}
-			stage={6}
-			stageLabel={failed ? 'Specialist review' : 'Review complete'}
+			stage={STAGE.done}
+			stageLabel={failed ? 'Reviewing' : 'Review complete'}
 			active={continuing}
 			{failed}
 			{awaitingPrompt}

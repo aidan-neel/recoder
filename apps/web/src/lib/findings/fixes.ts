@@ -49,7 +49,7 @@ export function hasReadyFix(finding: Finding): boolean {
 }
 
 /**
- * Suggest fixes / "fix these" from the chat: each finding's specialist writes a
+ * Suggest fixes / "fix these" from the chat: each finding's reviewer writes a
  * patch in the background (three at a time). Each one shows on its finding for
  * the developer to read and apply themselves. One shared failure cause
  * (signed out, no model) gets a toast with its way out; mixed causes live on each finding.

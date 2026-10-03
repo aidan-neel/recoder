@@ -8,7 +8,7 @@
 	import { formatAgentName } from '$lib/findings/threads.svelte';
 	import { statusFor, type OpenProps } from '$lib/review/reviewing-view';
 
-	/** The bar above a specialist's conversation: back to the orchestrator, its name and its status. */
+	/** The bar above a reviewer's conversation: back to the orchestrator, its name and its status. */
 	let {
 		assignment,
 		active,
@@ -17,10 +17,17 @@
 	}: { assignment: ReviewAssignment; active: boolean; embedded: boolean; openProps: OpenProps } = $props();
 
 	const status = $derived(statusFor(assignment, active));
+
+	/** Every reviewer and subagent shares a role, so their header also names the unit or question it took. */
+	const name = $derived(
+		assignment.role === 'reviewer' || assignment.role === 'subagent'
+			? `${formatAgentName(assignment.role)} · ${assignment.title}`
+			: formatAgentName(assignment.role)
+	);
 </script>
 
 <nav
-	aria-label="Specialist conversation"
+	aria-label="Agent conversation"
 	class="agent-nav mx-auto flex w-full max-w-[740px] shrink-0 items-center {embedded ? 'px-3' : 'px-6'} pt-3"
 >
 	<Button
@@ -33,7 +40,7 @@
 	>
 		<ArrowLeft size={15} aria-hidden="true" />
 	</Button>
-	<Typography.Title level={2} class="agent-name min-w-0 truncate">{formatAgentName(assignment.role)}</Typography.Title>
+	<Typography.Title level={2} class="agent-name min-w-0 truncate" title={name}>{name}</Typography.Title>
 	<Typography.Metadata class="agent-status ms-auto shrink-0" data-tone={status.tone}>
 		{#if assignment.status === 'running' && active}<Spinner size={12} aria-hidden="true" />{/if}
 		{status.label}

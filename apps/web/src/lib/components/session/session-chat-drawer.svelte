@@ -11,7 +11,7 @@
 	import type { Review } from '@recoder/shared';
 
 	/**
-	 * "Ask reviewer": the same conversation as the Review view, specialists and progress included, in a drawer beside
+	 * "Ask reviewer": the same conversation as the Review view, reviewers and progress included, in a drawer beside
 	 * the diff. It stays mounted; drag its left edge to resize, past the minimum to collapse, and back out to reopen.
 	 */
 	interface Props {

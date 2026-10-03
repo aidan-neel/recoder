@@ -72,13 +72,13 @@ button.fact-link:hover {
 	color: var(--text-ghost);
 }
 
-/* Specialists: rows with a live status chip. */
-.specialists {
+/* Reviewers: rows with a live status chip. */
+.agents {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
 }
-.specialist-list {
+.agent-list {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
@@ -86,10 +86,10 @@ button.fact-link:hover {
 	padding: 0;
 	list-style: none;
 }
-.disclosure-body .specialist-list {
+.disclosure-body .agent-list {
 	margin: 0;
 }
-[data-ui='button'][data-variant].specialist-row {
+[data-ui='button'][data-variant].agent-row {
 	width: 100%;
 	height: auto;
 	min-height: 0;
@@ -100,52 +100,52 @@ button.fact-link:hover {
 	font-weight: 400;
 	text-align: left;
 }
-[data-ui='button'][data-variant].specialist-row:hover {
+[data-ui='button'][data-variant].agent-row:hover {
 	background-color: var(--bg-hover);
 }
-.specialist-main {
+.agent-main {
 	display: flex;
 	min-width: 0;
 	flex: 1;
 	flex-direction: column;
 	gap: 3px;
 }
-.specialist-name-line {
+.agent-name-line {
 	display: flex;
 	min-width: 0;
 	align-items: baseline;
 	gap: 8px;
 }
-.specialist-name {
+.agent-row-name {
 	font-size: 13.5px;
 	white-space: nowrap;
 	color: var(--text-primary);
 }
-.specialist-model,
-.specialist-op {
+.agent-model,
+.agent-op {
 	line-height: 16px;
 }
-.specialist-op {
+.agent-op {
 	min-width: 0;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	font-family: var(--font-code);
 }
-.specialist-model {
+.agent-model {
 	font-size: 11px;
 	color: var(--text-ghost);
 }
-.specialist-op {
+.agent-op {
 	font-size: 11.5px;
 	color: var(--text-subtle);
 }
-.specialist-chevron {
+.agent-chevron {
 	flex-shrink: 0;
 	color: var(--text-ghost);
 }
 /* A role with several parts: the same row, as a Collapsible trigger that opens to them. */
-[data-ui='collapsible-trigger'].specialist-row {
+[data-ui='collapsible-trigger'].agent-row {
 	display: flex;
 	width: 100%;
 	align-items: center;
@@ -154,37 +154,37 @@ button.fact-link:hover {
 	border-radius: 10px;
 	text-align: left;
 }
-[data-ui='collapsible-trigger'].specialist-row:hover {
+[data-ui='collapsible-trigger'].agent-row:hover {
 	background-color: var(--bg-hover);
 }
-[data-ui='collapsible-trigger'].specialist-row .specialist-chevron {
+[data-ui='collapsible-trigger'].agent-row .agent-chevron {
 	transition: rotate var(--dur-menu) ease-out;
 }
-[data-ui='collapsible-trigger'][data-state='open'].specialist-row .specialist-chevron {
+[data-ui='collapsible-trigger'][data-state='open'].agent-row .agent-chevron {
 	rotate: 90deg;
 }
-.specialist-count {
+.agent-count {
 	font-family: var(--font-code);
 	font-size: 11.5px;
 	color: var(--text-muted);
 }
 /* Parts sit under their role on a thin rail, named by what they read. */
-.specialist-list.specialist-parts {
+.agent-list.agent-parts {
 	margin: 2px 0 4px 14px;
 	padding-left: 8px;
 	border-left: 1px solid var(--line-divider);
 }
-.specialist-parts .specialist-name {
+.agent-parts .agent-row-name {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
 @media (prefers-reduced-motion: reduce) {
-	[data-ui='collapsible-trigger'].specialist-row .specialist-chevron {
+	[data-ui='collapsible-trigger'].agent-row .agent-chevron {
 		transition: none;
 	}
 }
-/* Specialist conversation bar: back to Orchestrator, name, status on the right. */
+/* Reviewer conversation bar: back to Orchestrator, name, status on the right. */
 .agent-nav {
 	gap: 6px;
 }
@@ -343,7 +343,7 @@ button.fact-link:hover {
 .review-transcript .review-thinking,
 .review-transcript .review-log,
 .review-transcript .model-note-added,
-.review-transcript .specialist-name {
+.review-transcript .agent-row-name {
 	font-size: 15px;
 	line-height: 22px;
 }
@@ -356,10 +356,10 @@ button.fact-link:hover {
 }
 .review-transcript .disclosure-meta,
 .review-transcript .tool-row-duration,
-.review-transcript .specialist-op {
+.review-transcript .agent-op {
 	font-size: 12.5px;
 }
-.review-transcript .specialist-model {
+.review-transcript .agent-model {
 	font-size: 12px;
 }
 .review-transcript .tool-row-action {

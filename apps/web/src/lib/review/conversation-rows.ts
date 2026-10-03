@@ -33,7 +33,7 @@ function indexAfter(entries: TranscriptItem[], at: string): number {
 	return found < 0 ? entries.length : found;
 }
 
-/** Keeps inserted blocks (specialists, results) at their point in time as follow-ups arrive. */
+/** Keeps inserted blocks (reviewers, results) at their point in time as follow-ups arrive. */
 export function placeInserts(
 	inserts: TranscriptInsert[],
 	entries: TranscriptItem[]

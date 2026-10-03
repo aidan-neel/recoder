@@ -82,7 +82,7 @@
 	const conversationMessages = $derived(messages.filter((message) => belongs(message.assignmentId)));
 	const conversationReasoning = $derived(reasoning.filter((entry) => belongs(entry.assignmentId)));
 	const conversationTools = $derived(toolCalls.filter((tool) => belongs(tool.assignmentId)));
-	const specialist = $derived(assignment.id !== ORCHESTRATOR_ID);
+	const orchestratorView = $derived(assignment.id === ORCHESTRATOR_ID);
 	const working = $derived(active && ['running', 'waiting', 'queued'].includes(assignment.status));
 	const currentTask = $derived(tasks.findLast((task) => task.status === 'running' || task.status === 'waiting'));
 	const entries = $derived(groupTranscript(conversationMessages, conversationTools));
@@ -114,9 +114,9 @@
 		return conversationReasoning.filter((entry) => !messageIds.has(`message_${entry.id}`));
 	});
 
-	/** Specialists narrate tasks by title ("Running Correctness of …"); only show a status that says something new. Finished states are on the badge at the top. */
-	const specialistStatus = $derived.by(() => {
-		if (!specialist || !working) return null;
+	/** Reviewers narrate tasks by title ("Running Correctness of …"); only show a status that says something new. Finished states are on the badge at the top. */
+	const agentStatus = $derived.by(() => {
+		if (orchestratorView || !working) return null;
 		if (orphanReasoning.some((entry) => entry.status === 'streaming')) return null;
 
 		const op = currentTask?.message || assignment.currentOperation || '';
@@ -129,7 +129,7 @@
 	 * plan, say), so a quiet stretch still says something. Inserts and live thoughts or tools speak for themselves.
 	 */
 	const orchestratorStatus = $derived.by(() => {
-		if (specialist || !working || !currentTask) return null;
+		if (!orchestratorView || !working || !currentTask) return null;
 		if (conversationMessages.some((message) => message.status === 'streaming')) return null;
 
 		const tail = rows.at(-1);
@@ -235,7 +235,7 @@
 						{startingReview}
 						onStartReview={onStartReview &&
 						!intro &&
-						!specialist &&
+						orchestratorView &&
 						row.index === lastAssistantIndex &&
 						message.status !== 'streaming'
 							? () => void startReview()
@@ -245,10 +245,10 @@
 					<ReviewTraces traces={row.traces} {active} streaming={working || generating} {now} {clock} />
 				{/if}
 			{/each}
-			{#if specialistStatus || orchestratorStatus}
+			{#if agentStatus || orchestratorStatus}
 				<Typography.Text role="status" class="flex items-start gap-2 text-sm text-foreground-muted">
 					{#if working}<Spinner size={14} class="mt-1 shrink-0" aria-hidden="true" />{/if}
-					<span class="min-w-0 break-words">{specialistStatus ?? orchestratorStatus}</span>
+					<span class="min-w-0 break-words">{agentStatus ?? orchestratorStatus}</span>
 				</Typography.Text>
 			{/if}
 			{#if thinking}

@@ -10,21 +10,21 @@
 	import ModelMarkdown from './model-markdown.svelte';
 	import { formatAgentName } from '$lib/findings/threads.svelte';
 	import { statusFor, type OpenProps } from '$lib/review/reviewing-view';
-	import { groupProgress, groupSpecialists } from '$lib/review/specialist-groups';
+	import { groupProgress, groupAgents } from '$lib/review/agent-groups';
 	import { modelLabel } from '$lib/settings/model-settings.svelte';
 
 	/**
-	 * The plan's specialists in the orchestrator's transcript: why each role runs, then one row
+	 * The plan's reviewers in the orchestrator's transcript: why each role runs, then one row
 	 * per role. A role with several parts (a large PR's correctness sweep) opens to them.
 	 */
 	let {
-		specialists,
+		agents,
 		planSummary,
 		finished,
 		active,
 		openProps
 	}: {
-		specialists: ReviewAssignment[];
+		agents: ReviewAssignment[];
 		planSummary: string | null;
 		/** A finished review tucks the rows inside the disclosure. */
 		finished: boolean;
@@ -32,42 +32,42 @@
 		openProps: OpenProps;
 	} = $props();
 
-	const specialistGroups = $derived(groupSpecialists(specialists));
+	const agentGroups = $derived(groupAgents(agents));
 </script>
 
-{#snippet specialistRows()}
-	<ul class="specialist-list" aria-label="Specialists">
-		{#each specialistGroups as group (group.role)}
+{#snippet agentRows()}
+	<ul class="agent-list" aria-label="Agents">
+		{#each agentGroups as group (group.role)}
 			{#if group.items.length === 1}
-				{@render specialistRow(group.items[0], formatAgentName(group.role))}
+				{@render agentRow(group.items[0], formatAgentName(group.role))}
 			{:else}
 				{@const status = statusFor({ ...group.items[0], status: group.status }, active)}
 				<li>
 					<Collapsible.Root>
 						<Collapsible.Trigger
-							class="specialist-row specialist-group-row"
-							aria-label={`${formatAgentName(group.role)}: ${group.items.length} specialists`}
+							class="agent-row agent-group-row"
+							aria-label={`${formatAgentName(group.role)}: ${group.items.length}`}
 						>
-							<span class="specialist-main">
-								<span class="specialist-name-line">
-									<span class="specialist-name">{formatAgentName(group.role)}</span>
-									<span class="specialist-count">×{group.items.length}</span>
-									{#if group.items[0].model}<span class="specialist-model" title={group.items[0].model}
+							<span class="agent-main">
+								<span class="agent-name-line">
+									<span class="agent-row-name">{formatAgentName(group.role)}</span>
+									<span class="agent-count">×{group.items.length}</span>
+									{#if group.items[0].model}<span class="agent-model" title={group.items[0].model}
 											>{modelLabel(group.items[0].model)}</span
 										>{/if}
 								</span>
-								<span class="specialist-op">{groupProgress(group)}</span>
+								<span class="agent-op">{groupProgress(group)}</span>
 							</span>
 							<Badge variant="secondary" class="status-chip" data-tone={status.tone}>
 								{#if group.status === 'running' && active}<Spinner size={12} aria-hidden="true" />{/if}
 								{status.label}
 							</Badge>
-							<ChevronRight size={16} class="specialist-chevron" aria-hidden="true" />
+							<ChevronRight size={16} class="agent-chevron" aria-hidden="true" />
 						</Collapsible.Trigger>
 						<Collapsible.Content>
-							<ul class="specialist-list specialist-parts" aria-label={`${formatAgentName(group.role)} parts`}>
+							<ul class="agent-list agent-parts" aria-label={`${formatAgentName(group.role)} parts`}>
 								{#each group.items as assignment (assignment.id)}
-									{@render specialistRow(assignment, assignment.title)}
+									{@render agentRow(assignment, assignment.title)}
 								{/each}
 							</ul>
 						</Collapsible.Content>
@@ -78,23 +78,22 @@
 	</ul>
 {/snippet}
 
-{#snippet specialistRow(assignment: ReviewAssignment, name: string)}
+{#snippet agentRow(assignment: ReviewAssignment, name: string)}
 	{@const status = statusFor(assignment, active)}
 	<li>
 		<Button
 			{...openProps(assignment.id)}
 			variant="ghost"
-			class="specialist-row"
+			class="agent-row"
 			aria-label={`Open ${formatAgentName(assignment.role)} conversation`}
 		>
-			<span class="specialist-main">
-				<span class="specialist-name-line">
-					<span class="specialist-name">{name}</span>
-					{#if assignment.model}<span class="specialist-model" title={assignment.model}
-							>{modelLabel(assignment.model)}</span
+			<span class="agent-main">
+				<span class="agent-name-line">
+					<span class="agent-row-name">{name}</span>
+					{#if assignment.model}<span class="agent-model" title={assignment.model}>{modelLabel(assignment.model)}</span
 						>{/if}
 				</span>
-				<span class="specialist-op" title={assignment.currentOperation || assignment.title}
+				<span class="agent-op" title={assignment.currentOperation || assignment.title}
 					>{assignment.currentOperation || assignment.title}</span
 				>
 			</span>
@@ -102,16 +101,16 @@
 				{#if assignment.status === 'running' && active}<Spinner size={12} aria-hidden="true" />{/if}
 				{status.label}
 			</Badge>
-			<ChevronRight size={16} class="specialist-chevron" aria-hidden="true" />
+			<ChevronRight size={16} class="agent-chevron" aria-hidden="true" />
 		</Button>
 	</li>
 {/snippet}
 
-<section class="specialists" aria-label="Specialists">
+<section class="agents" aria-label="Agents">
 	<Disclosure>
-		{#snippet label()}Created {specialists.length} {specialists.length === 1 ? 'specialist' : 'specialists'}{/snippet}
+		{#snippet label()}Started {agents.length} {agents.length === 1 ? 'agent' : 'agents'}{/snippet}
 		{#if planSummary}<ModelMarkdown content={planSummary} />{/if}
-		{#each specialistGroups as group (group.role)}
+		{#each agentGroups as group (group.role)}
 			<Typography.Text
 				><span class="text-fg-secondary"
 					>{formatAgentName(group.role)}{group.items.length > 1 ? ` ×${group.items.length}` : ''}:</span
@@ -119,7 +118,7 @@
 				{group.items[0].reason || group.items[0].title}</Typography.Text
 			>
 		{/each}
-		{#if finished}{@render specialistRows()}{/if}
+		{#if finished}{@render agentRows()}{/if}
 	</Disclosure>
-	{#if !finished}{@render specialistRows()}{/if}
+	{#if !finished}{@render agentRows()}{/if}
 </section>

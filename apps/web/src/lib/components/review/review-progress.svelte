@@ -1,5 +1,6 @@
 <script lang="ts">
 	import ReviewingView, { type ReviewingFinding } from '$lib/components/review/reviewing-view.svelte';
+	import { STAGE } from '$lib/review/review-progress-state';
 
 	interface Props {
 		title: string;
@@ -92,7 +93,7 @@
 			{
 				id: 'security',
 				name: 'security',
-				title: 'Security',
+				title: 'src/gateway.ts',
 				model: 'qwen3.8-flash',
 				rate: 4.2,
 				status: 'running',
@@ -103,7 +104,7 @@
 			{
 				id: 'perf',
 				name: 'perf',
-				title: 'Performance',
+				title: 'src/rate-limit/limiter.ts',
 				model: 'qwen3.8-flash',
 				rate: 6.5,
 				status: 'running',
@@ -114,7 +115,7 @@
 			{
 				id: 'correctness',
 				name: 'correctness',
-				title: 'Correctness',
+				title: 'src/rate-limit (3 files)',
 				model: 'qwen3.8-flash',
 				rate: 3.4,
 				status: 'running',
@@ -125,7 +126,7 @@
 			{
 				id: 'docs',
 				name: 'docs',
-				title: 'Docs',
+				title: 'src/time (2 files)',
 				model: 'qwen3.8-flash',
 				rate: 7.5,
 				status: 'running',
@@ -153,9 +154,9 @@
 	const viewAssignments = $derived(
 		agents.map((agent) => ({
 			id: `${agent.id}-demo`,
-			role: agent.id,
+			role: 'reviewer',
 			title: agent.title,
-			reason: 'Demo specialist assignment',
+			reason: 'Demo reviewer assignment',
 			status:
 				agent.status === 'done'
 					? ('done' as const)
@@ -180,7 +181,7 @@
 
 				out.push({
 					id: `F-${String(n).padStart(2, '0')}`,
-					agent: agent.name,
+					agent: 'reviewer',
 					severity: finding.severity,
 					title: finding.title,
 					location: finding.location
@@ -196,11 +197,11 @@
 	const viewTasks = $derived(
 		agents.map((agent) => ({
 			id: `${agent.id}-task`,
-			label: 'Specialist review',
+			label: 'Reviewing',
 			status: agent.status === 'done' ? ('done' as const) : ('running' as const),
 			message: agent.logs.at(-1) ?? 'Reviewing demo changes',
 			assignmentId: `${agent.id}-demo`,
-			agent: agent.id,
+			agent: 'reviewer',
 			batch: Math.max(1, Math.min(3, Math.ceil(agent.progress / 34))),
 			batches: 3,
 			elapsedMs: agent.progress * 40,
@@ -215,7 +216,7 @@
 						{
 							id: `${agent.id}-reason`,
 							assignmentId: `${agent.id}-demo`,
-							role: agent.id,
+							role: 'reviewer',
 							model: agent.model,
 							at: new Date().toISOString(),
 							text: agent.logs.join('\n')
@@ -230,7 +231,7 @@
 			{
 				id: `${agent.id}-t1`,
 				assignmentId: `${agent.id}-demo`,
-				role: agent.id,
+				role: 'reviewer',
 				command: `rg -n ${JSON.stringify(agent.id)} src/rate-limit`,
 				status: 'done' as const,
 				exitCode: 0,
@@ -241,7 +242,7 @@
 			{
 				id: `${agent.id}-t2`,
 				assignmentId: `${agent.id}-demo`,
-				role: agent.id,
+				role: 'reviewer',
 				command: `read limiter.ts:61-84`,
 				status: agent.status === 'done' ? ('done' as const) : ('running' as const),
 				exitCode: agent.status === 'done' ? 0 : null,
@@ -337,7 +338,7 @@
 	{onOpenDiff}
 	onRestart={confirmRestart}
 	doneHref={sessionHref}
-	stage={pendingCount ? 2 : 4}
-	stageLabel={pendingCount ? 'Specialist review' : 'Review complete'}
+	stage={pendingCount ? STAGE.reviewing : STAGE.done}
+	stageLabel={pendingCount ? 'Reviewing' : 'Review complete'}
 	active={pendingCount > 0}
 />

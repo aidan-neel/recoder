@@ -29,7 +29,7 @@
 		reasoning,
 		finalReasoning,
 		finalization,
-		specialists,
+		agents,
 		finished,
 		findingCount,
 		coverage,
@@ -53,7 +53,7 @@
 		/** The orchestrator's thinking since finalization started. */
 		finalReasoning: ReviewReasoningEntry[];
 		finalization: ReviewTask | undefined;
-		specialists: ReviewAssignment[];
+		agents: ReviewAssignment[];
 		finished: boolean;
 		findingCount: number;
 		coverage: CoverageSummary | null;
@@ -69,9 +69,7 @@
 		finalization?.elapsedMs !== undefined ? Math.max(0, Math.round(finalization.elapsedMs / 1000)) : null
 	);
 
-	const facts = $derived(
-		finalFacts({ specialists, finished, findingCount, coverage, guidelines, repoId, finalization })
-	);
+	const facts = $derived(finalFacts({ agents, finished, findingCount, coverage, guidelines, repoId, finalization }));
 
 	const verifyStartedAt = $derived(
 		verifications
@@ -80,7 +78,7 @@
 			.sort()[0]
 	);
 
-	/** Verifiers work in the threads of the specialists whose findings they check; here their thinking shows as one live step. */
+	/** Verifiers work in the threads of the reviewers whose findings they check; here their thinking shows as one live step. */
 	const verifyReasoning = $derived(
 		verifying && verifyStartedAt
 			? reasoning.filter(

@@ -56,7 +56,7 @@ function announceGuidance(events: HarnessEvents | undefined): void {
 
 /**
  * The developer's instructions narrow the inventory before anything reads it, so
- * "only the Python files" holds for planning, sweeps and coverage alike. A resumed
+ * "only the Python files" holds for units, reviewers and coverage alike. A resumed
  * review reapplies the directive it already read.
  */
 async function applyInstructions(run: ReviewRun): Promise<void> {
@@ -64,7 +64,7 @@ async function applyInstructions(run: ReviewRun): Promise<void> {
 	const instructions = run.input.instructions?.trim();
 
 	if (!run.directive && instructions) {
-		task('instructions', 'Reading your instructions', 'running', 'Working out which files and lenses you asked for', {
+		task('instructions', 'Reading your instructions', 'running', 'Working out which files you asked for', {
 			kind: 'planning',
 			agent: 'orchestrator'
 		});

@@ -14,7 +14,8 @@ import {
 import { formatAgentName } from '$lib/findings/threads.svelte';
 import { guidelinesStore } from '$lib/settings/guidelines.svelte';
 import { modelLabel } from '$lib/settings/model-settings.svelte';
-import { groupSpecialists } from './specialist-groups';
+import { groupAgents } from './agent-groups';
+import { STAGE } from './review-progress-state';
 
 export interface ReviewingFinding {
 	id: string;
@@ -73,7 +74,7 @@ export interface ReviewingViewProps {
 	fullscreen?: boolean;
 	/**
 	 * The same conversation inside the diff page's Ask reviewer drawer: no
-	 * session header or results rail, specialists open in place.
+	 * session header or results rail, reviewers open in place.
 	 */
 	embedded?: boolean;
 	/** Orchestrator composer text and attached code (the drawer shares them with the diff). */
@@ -116,7 +117,7 @@ export type OpenProps = (assignmentId: string) => { href?: string; onclick?: () 
 
 const LIVE_STATUSES: ReviewTask['status'][] = ['running', 'waiting', 'queued'];
 
-/** Whether a task or specialist is still running or waiting its turn. */
+/** Whether a task or reviewer is still running or waiting its turn. */
 export function isLive(status: ReviewTask['status'] | ReviewAssignment['status']): boolean {
 	return (LIVE_STATUSES as string[]).includes(status);
 }
@@ -131,7 +132,7 @@ export function conversationHref(current: URL, assignmentId: string): string {
 	return `${url.pathname}${url.search}${url.hash}`;
 }
 
-/** The status chip for a specialist; one still "running" after the review stopped failed. */
+/** The status chip for a reviewer; one still "running" after the review stopped failed. */
 export function statusFor(assignment: ReviewAssignment, active: boolean): { label: string; tone: string } {
 	switch (assignment.status) {
 		case 'running':
@@ -149,18 +150,39 @@ export function statusFor(assignment: ReviewAssignment, active: boolean): { labe
 	}
 }
 
-/** Specialists that ended without a result, a retried one counted by its retry (the server's summary counts the same way). */
-export function countFailedSpecialists(specialists: ReviewAssignment[]): number {
-	return specialists.filter(
-		(item) =>
-			item.status === 'error' &&
-			!specialists.some((other) => other.id !== item.id && other.id.startsWith(`retry-${item.id}`))
-	).length;
+/** "4/6" progress for a step of agents; failed and skipped agents are not "done". */
+export interface AgentCounts {
+	done: number;
+	failed: number;
+	total: number;
+}
+
+/** A failed agent whose work moved to a `retry-` agent, so the retry stands in for it. */
+function superseded(item: ReviewAssignment, agents: ReviewAssignment[]): boolean {
+	return (
+		item.status === 'error' && agents.some((other) => other.id !== item.id && other.id.startsWith(`retry-${item.id}`))
+	);
+}
+
+/** Reviewers that ended without a result, a retried one counted by its retry (the server's summary counts the same way). */
+export function countFailedAgents(agents: ReviewAssignment[]): number {
+	return agents.filter((item) => item.status === 'error' && !superseded(item, agents)).length;
+}
+
+/** Done, failed and total for one step of agents, each retried agent counted once. */
+export function agentCounts(agents: ReviewAssignment[]): AgentCounts {
+	const counted = agents.filter((item) => !superseded(item, agents));
+
+	return {
+		done: counted.filter((item) => item.status === 'done').length,
+		failed: countFailedAgents(agents),
+		total: counted.length
+	};
 }
 
 /** "correctness and performance", "security, docs and 2 more". */
 function nameList(items: ReviewAssignment[]): string {
-	const names = groupSpecialists(items).map(
+	const names = groupAgents(items).map(
 		(group) => `${formatAgentName(group.role).toLowerCase()}${group.items.length > 1 ? ` ×${group.items.length}` : ''}`
 	);
 
@@ -194,7 +216,7 @@ export function verifyRow(task: ReviewTask, now: number): { state: string; title
 
 /** Finalization at a glance: candidates, confirmed findings, coverage, guidelines and the model. */
 export function finalFacts(input: {
-	specialists: ReviewAssignment[];
+	agents: ReviewAssignment[];
 	finished: boolean;
 	findingCount: number;
 	coverage: CoverageSummary | null;
@@ -202,14 +224,14 @@ export function finalFacts(input: {
 	repoId: string | null;
 	finalization: ReviewTask | undefined;
 }): FinalFact[] {
-	const { specialists, finished, findingCount, coverage, guidelines, repoId, finalization } = input;
+	const { agents, finished, findingCount, coverage, guidelines, repoId, finalization } = input;
 	const facts: FinalFact[] = [];
-	const candidateCount = specialists.reduce((sum, item) => sum + (item.candidateCount ?? 0), 0);
+	const candidateCount = agents.reduce((sum, item) => sum + (item.candidateCount ?? 0), 0);
 
 	if (candidateCount)
 		facts.push({
 			label: 'Candidates',
-			value: `${candidateCount} from ${specialists.length} ${specialists.length === 1 ? 'specialist' : 'specialists'}`
+			value: `${candidateCount} from ${agents.length} ${agents.length === 1 ? 'agent' : 'agents'}`
 		});
 	if (finished)
 		facts.push({ label: 'Confirmed', value: `${findingCount} ${findingCount === 1 ? 'finding' : 'findings'}` });
@@ -246,7 +268,7 @@ export function finalFacts(input: {
 	return facts;
 }
 
-/** Before the specialist stage, name the stage (installing, running checks), not the specialists waiting for it. */
+/** Before the reviewer stage, name the stage (installing, running checks), not the reviewers waiting for it. */
 export function footerLabel(input: {
 	paused: boolean;
 	stage: number;
@@ -260,7 +282,7 @@ export function footerLabel(input: {
 	const { paused, stage, stageLabel, stageDetail, verifying, verifications, working, running } = input;
 
 	if (paused) return 'Paused';
-	if (stage < 3) return [stageLabel, stageDetail].filter(Boolean).join(' · ');
+	if (stage < STAGE.reviewing) return [stageLabel, stageDetail].filter(Boolean).join(' · ');
 
 	if (verifying) {
 		const verified = verifications.filter((task) => !isLive(task.status)).length;
@@ -269,7 +291,7 @@ export function footerLabel(input: {
 	}
 
 	if (working.length) return `Waiting on ${nameList(working)}`;
-	if (running.length) return `${running.length} ${running.length === 1 ? 'specialist' : 'specialists'} queued`;
+	if (running.length) return `${running.length} ${running.length === 1 ? 'agent' : 'agents'} queued`;
 
 	return stageLabel;
 }

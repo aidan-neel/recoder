@@ -10,14 +10,14 @@
 	import ReviewConversation from './review-conversation.svelte';
 	import ReviewResultsRail from './review-results-rail.svelte';
 	import ReviewSteps from './review-steps.svelte';
-	import ReviewSpecialists from './review-specialists.svelte';
+	import ReviewAgents from './review-agents.svelte';
 	import ReviewFinalize from './review-finalize.svelte';
 	import ReviewResultCard from './review-result-card.svelte';
 	import ReviewIntroCard from './review-intro-card.svelte';
 	import ReviewPreparingCard from './review-preparing-card.svelte';
 	import ReviewSessionMenu from './review-session-menu.svelte';
 	import RestartReviewDialog from './restart-review-dialog.svelte';
-	import SpecialistNav from './specialist-nav.svelte';
+	import AgentNav from './agent-nav.svelte';
 	import SessionHeader from '../session/session-header.svelte';
 	import FailureNotice from './failure-notice.svelte';
 	import { errorToast } from '$lib/shell/notify';
@@ -123,7 +123,7 @@
 	const stopped = $derived(failed && failure?.reason === REVIEW_CANCELLED);
 
 	const selected = $derived(
-		view.specialists.find(
+		view.agents.find(
 			(assignment) => assignment.id === (embedded ? embeddedAgent : page.url.searchParams.get('agent'))
 		) ?? view.orchestrator
 	);
@@ -131,15 +131,13 @@
 	const isOrchestrator = $derived(selected.id === ORCHESTRATOR_ID);
 
 	const showRail = $derived(
-		isOrchestrator && !active && !awaitingPrompt && (findings.length > 0 || view.specialists.length > 0)
+		isOrchestrator && !active && !awaitingPrompt && (findings.length > 0 || view.agents.length > 0)
 	);
 
 	const inserts = $derived(
 		isOrchestrator
 			? [
-					...(view.specialists.length
-						? [{ key: 'specialists', at: view.specialistsAt, snippet: specialistsContent }]
-						: []),
+					...(view.agents.length ? [{ key: 'agents', at: view.agentsAt, snippet: agentsContent }] : []),
 					...(!awaitingPrompt && view.showProgress
 						? [
 								{
@@ -206,8 +204,8 @@
 	/>
 {/snippet}
 
-{#snippet specialistsContent()}
-	<ReviewSpecialists specialists={view.specialists} {planSummary} finished={view.finished} {active} {openProps} />
+{#snippet agentsContent()}
+	<ReviewAgents agents={view.agents} {planSummary} finished={view.finished} {active} {openProps} />
 {/snippet}
 
 {#snippet progressContent()}
@@ -222,7 +220,7 @@
 		{reasoning}
 		finalReasoning={view.finalReasoning}
 		finalization={view.finalization}
-		specialists={view.specialists}
+		agents={view.agents}
 		finished={view.finished}
 		findingCount={findings.length}
 		{coverage}
@@ -247,7 +245,7 @@
 {/snippet}
 
 {#snippet resultCard()}
-	<ReviewResultCard {findings} {meta} failedSpecialists={view.failedSpecialists} {onShowView} {onOpenDiff} />
+	<ReviewResultCard {findings} {meta} failedAgents={view.failedAgents} {onShowView} {onOpenDiff} />
 {/snippet}
 
 <div
@@ -275,7 +273,7 @@
 			status={reviewId ? headerStatus : undefined}
 		/>
 	{/if}
-	{#if !isOrchestrator}<SpecialistNav assignment={selected} {active} {embedded} {openProps} />{/if}
+	{#if !isOrchestrator}<AgentNav assignment={selected} {active} {embedded} {openProps} />{/if}
 	{#if connectionLost}<Typography.Text
 			role="status"
 			class="mx-auto w-full max-w-[740px] {embedded ? 'px-4' : 'px-6'} py-2 text-sm text-sev-medium"
@@ -343,11 +341,11 @@
 		{#if !embedded && (showRail || (isOrchestrator && view.showSteps))}
 			<ReviewResultsRail
 				{findings}
-				specialists={view.specialists}
+				agents={view.agents}
 				{coverage}
 				{coverageGaps}
 				{onOpenFinding}
-				specialistHref={(assignmentId) => conversationHref(page.url, assignmentId)}
+				agentHref={(assignmentId) => conversationHref(page.url, assignmentId)}
 				results={showRail}
 			>
 				{#if view.showSteps}
@@ -357,11 +355,8 @@
 						{active}
 						elapsed={meta.elapsed}
 						{paused}
-						specialists={{
-							done: view.specialists.filter((item) => item.status === 'done').length,
-							failed: view.failedSpecialists,
-							total: view.specialists.length
-						}}
+						reviewers={view.reviewerCounts}
+						subagents={view.subagentCounts}
 					/>
 				{/if}
 			</ReviewResultsRail>
