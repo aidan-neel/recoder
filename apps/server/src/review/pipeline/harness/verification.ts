@@ -19,7 +19,8 @@ import {
 	verifierRanNothing,
 	verifierResponseSchema,
 	verifierSystemPrompt,
-	verifierUserPrompt
+	verifierUserPrompt,
+	type VerdictOutput
 } from '../verify.js';
 import { publishBudget, saveCheckpoint, syncWorkspaceDeadline, type ReviewRun } from './context.js';
 import type { HarnessEvents, TaskFn } from './types.js';
@@ -37,6 +38,9 @@ interface VerifyContext {
 	/** Called after each verdict, to save a checkpoint. */
 	onVerified?: () => void;
 }
+
+/** A verifier that errors or stops before a verdict runs once more. */
+const VERIFIER_ATTEMPTS = 2;
 
 const SEVERITY_ORDER: Record<string, number> = { error: 0, warning: 1, info: 2 };
 
@@ -129,28 +133,64 @@ async function verifyCandidates(candidates: CandidateFinding[], ctx: VerifyConte
 }
 
 /**
- * Runs one verifier and settles the candidate. Its thinking, tools and messages
- * are its own (owned by its task), so they show in the Verify step rather than
- * in the thread that raised the finding.
+ * Settles one candidate. Its verifier's thinking, tools and messages are its
+ * own (owned by its task), so they show in the Verify step rather than in the
+ * thread that raised the finding. A verifier that errors or stops before a
+ * verdict gets one fresh attempt, so a flaky turn doesn't leave a finding unchecked.
  */
 async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promise<void> {
-	const role = candidate.agent ?? 'reviewer';
-	const cfg = configForSubagent();
 	const taskId = `verify:${candidate.candidateId}`;
 	const label = `Verify: ${candidate.title ?? candidate.file}`;
 	const exec = !ctx.unavailable;
-	const owner = { assignmentId: taskId, role: 'verifier' };
-	const agentId = newAgentId();
 
 	const meta = {
 		kind: 'verification' as const,
-		agent: role,
-		model: cfg.model,
+		agent: candidate.agent ?? 'reviewer',
+		model: configForSubagent().model,
 		assignmentId: candidate.assignmentId,
 		files: [candidate.file]
 	};
 
-	ctx.task(taskId, label, 'running', exec ? 'Reproducing the finding' : 'Tracing the finding through the code', meta);
+	let failure = 'the verifier did not finish';
+
+	for (let attempt = 1; attempt <= VERIFIER_ATTEMPTS; attempt++) {
+		if (attempt > 1 && !canLaunchInvestigation(ctx.deadlineAt, ctx.budget)) break;
+
+		const doing = exec ? 'Reproducing the finding' : 'Tracing the finding through the code';
+
+		ctx.task(taskId, label, 'running', attempt > 1 ? `${doing}, second attempt` : doing, meta);
+
+		const outcome = await runVerifier(candidate, ctx, { taskId, label, meta });
+
+		if (typeof outcome !== 'string') {
+			settle(candidate, outcome, ctx, { taskId, label, meta });
+
+			return;
+		}
+
+		failure = outcome;
+	}
+
+	candidate.verification = { status: 'unverified', reason: `Not verified: ${failure}.` };
+	ctx.task(taskId, label, 'partial', 'Could not verify', meta);
+}
+
+interface VerifierTask {
+	taskId: string;
+	label: string;
+	meta: Parameters<TaskFn>[4];
+}
+
+/** One verifier run: its verdict and the agent that gave it, or why it gave none. */
+async function runVerifier(
+	candidate: CandidateFinding,
+	ctx: VerifyContext,
+	{ taskId, label, meta }: VerifierTask
+): Promise<{ value: VerdictOutput; agentId: string } | string> {
+	const cfg = configForSubagent();
+	const exec = !ctx.unavailable;
+	const owner = { assignmentId: taskId, role: 'verifier' };
+	const agentId = newAgentId();
 
 	try {
 		const result = await runJsonAgent({
@@ -186,51 +226,45 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promi
 			onTool: (tool) => ctx.events?.onTool?.({ ...tool, ...owner })
 		});
 
-		if (!result.value) {
-			candidate.verification = {
-				status: 'unverified',
-				reason: `Not verified: ${result.error ?? 'the verifier did not finish'}.`
-			};
-
-			ctx.task(taskId, label, 'partial', 'Could not verify', meta);
-
-			return;
-		}
-
-		const settled = settleVerdict(result.value, ctx.evidence, agentId);
-
-		if (settled === 'refuted') {
-			candidate.valid = false;
-			candidate.dropReason = `refuted by running code: ${result.value.reason}`;
-			ctx.task(taskId, label, 'done', 'Disproved by a run; dropped', meta);
-
-			return;
-		}
-
-		candidate.verification = settled;
-		if (settled.status === 'verified') leadWithProof(candidate, result.value.evidenceIds, ctx.evidence, agentId);
-
-		ctx.task(
-			taskId,
-			label,
-			'done',
-			settled.status !== 'verified'
-				? 'Could not prove it'
-				: settled.method === 'run'
-					? 'Verified by a run'
-					: 'Traced through the code',
-			meta
-		);
+		return result.value ? { value: result.value, agentId } : (result.error ?? 'the verifier did not finish');
 	} catch (err) {
 		if (err instanceof ModelBlockedError || err instanceof ReviewAbortedError) throw err;
 
-		candidate.verification = {
-			status: 'unverified',
-			reason: `Not verified: ${err instanceof Error ? err.message : 'verification failed'}.`
-		};
-
-		ctx.task(taskId, label, 'error', 'Verification failed', meta);
+		return err instanceof Error ? err.message : 'verification failed';
 	}
+}
+
+/** Apply a verdict: a refuted candidate is dropped, any other carries its verification. */
+function settle(
+	candidate: CandidateFinding,
+	{ value, agentId }: { value: VerdictOutput; agentId: string },
+	ctx: VerifyContext,
+	{ taskId, label, meta }: VerifierTask
+): void {
+	const settled = settleVerdict(value, ctx.evidence, agentId);
+
+	if (settled === 'refuted') {
+		candidate.valid = false;
+		candidate.dropReason = `refuted by running code: ${value.reason}`;
+		ctx.task(taskId, label, 'done', 'Disproved by a run; dropped', meta);
+
+		return;
+	}
+
+	candidate.verification = settled;
+	if (settled.status === 'verified') leadWithProof(candidate, value.evidenceIds, ctx.evidence, agentId);
+
+	ctx.task(
+		taskId,
+		label,
+		'done',
+		settled.status !== 'verified'
+			? 'Could not prove it'
+			: settled.method === 'run'
+				? 'Verified by a run'
+				: 'Traced through the code',
+		meta
+	);
 }
 
 /** The proving runs lead the candidate's evidence, so the finding opens on their output. */

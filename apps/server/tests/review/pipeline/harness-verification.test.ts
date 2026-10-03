@@ -30,6 +30,46 @@ function verifierReply(user: string, last: string): unknown {
 		: { verdict: 'refuted', reason: 'grep shows otherwise.', evidenceIds: [proof] };
 }
 
+interface FakeModel {
+	findings: string[];
+	/** Sees each reviewer prompt. */
+	onReviewer?: (user: string) => void;
+	/** A response that replaces a verifier turn, or null to answer it normally. */
+	interceptVerifier?: (messages: ReturnType<typeof messagesOf>) => Response | null;
+}
+
+/** Reviews a two-commit repo in `root` with a stub model: reviewers raise `findings`, verifiers grep for them. */
+async function reviewWithFakeModel(root: string, base: Record<string, string>, model: FakeModel) {
+	const { targetSha, headSha } = await twoCommitRepo(root, { base });
+
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const messages = messagesOf(init);
+		const system = messages[0].content;
+		const user = messages[1].content;
+		let reply: unknown = { findings: [], examinedHunks: [HUNK] };
+
+		if (system.includes('primary reviewer')) {
+			model.onReviewer?.(user);
+			reply = { ...NOTHING, findings: model.findings.map((message) => finding(message)) };
+		} else if (system.includes('You verify one code review finding')) {
+			const intercepted = model.interceptVerifier?.(messages);
+
+			if (intercepted) return intercepted;
+			reply = verifierReply(user, messages.at(-1)!.content);
+		} else if (system.includes('consolidate Recoder reviewer candidates')) {
+			reply = { keep: [...new Set(user.match(/\bc\d+\b/g))], merge: [], reject: [], recommendedChecks: [] };
+		}
+
+		return modelReply({ message: 'Working.', ...(reply as object) });
+	}) as unknown as typeof fetch;
+
+	return runAdaptiveReview({
+		diff: DIFF,
+		sandboxPath: root,
+		revision: { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' }
+	});
+}
+
 test.skipIf((await execUnavailableReason()) !== null)(
 	'verification drops a finding a run disproves and marks a reproduced one verified',
 	async () => {
@@ -38,35 +78,13 @@ test.skipIf((await execUnavailableReason()) !== null)(
 		const root = await mkdtemp(join(tmpdir(), 'recoder-verify-review-'));
 
 		try {
-			const { targetSha, headSha } = await twoCommitRepo(root, {
-				base: { 'package.json': JSON.stringify({ scripts: { test: 'cat src/a.ts' } }) }
-			});
-
 			const reviewers: string[] = [];
 
-			globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-				const messages = messagesOf(init);
-				const system = messages[0].content;
-				const user = messages[1].content;
-				let reply: unknown = { findings: [], examinedHunks: [HUNK] };
-
-				if (system.includes('primary reviewer')) {
-					reviewers.push(user);
-					reply = { ...NOTHING, findings: [finding('Real bug.'), finding('Imagined bug.')] };
-				} else if (system.includes('You verify one code review finding')) {
-					reply = verifierReply(user, messages.at(-1)!.content);
-				} else if (system.includes('consolidate Recoder reviewer candidates')) {
-					reply = { keep: [...new Set(user.match(/\bc\d+\b/g))], merge: [], reject: [], recommendedChecks: [] };
-				}
-
-				return modelReply({ message: 'Working.', ...(reply as object) });
-			}) as unknown as typeof fetch;
-
-			const result = await runAdaptiveReview({
-				diff: DIFF,
-				sandboxPath: root,
-				revision: { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' }
-			});
+			const result = await reviewWithFakeModel(
+				root,
+				{ 'package.json': JSON.stringify({ scripts: { test: 'cat src/a.ts' } }) },
+				{ findings: ['Real bug.', 'Imagined bug.'], onReviewer: (user) => reviewers.push(user) }
+			);
 
 			expect(reviewers[0]).toContain('`npm run test` → passed');
 			expect(result.findings).toHaveLength(1);
@@ -81,6 +99,34 @@ test.skipIf((await execUnavailableReason()) !== null)(
 			});
 
 			expect(result.summary).toContain('1 verified by running code');
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	}
+);
+
+test.skipIf((await execUnavailableReason()) !== null)(
+	'a verifier that fails before its verdict gets a second attempt',
+	async () => {
+		useTestModel(4);
+
+		const root = await mkdtemp(join(tmpdir(), 'recoder-verify-retry-'));
+
+		try {
+			let verifiers = 0;
+
+			const result = await reviewWithFakeModel(
+				root,
+				{},
+				{
+					findings: ['Real bug.'],
+					interceptVerifier: (messages) =>
+						messages.length === 2 && ++verifiers === 1 ? new Response('bad request', { status: 400 }) : null
+				}
+			);
+
+			expect(verifiers).toBe(2);
+			expect(result.findings[0].verification).toMatchObject({ status: 'verified', method: 'run' });
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}

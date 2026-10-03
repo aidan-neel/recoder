@@ -52,7 +52,7 @@ export type ReviewerOutput = z.infer<typeof reviewerOutputSchema>;
 export type ReviewerFinding = z.infer<typeof findingSchema>;
 export type SubagentRequest = z.infer<typeof subagentRequestSchema>;
 
-const SUBAGENTS_OFFER = `Subagents: when one question needs a deep, separate investigation you cannot finish in your turns (every caller of a changed API across the repo, a security path through several modules), put it in "subagents", at most ${MAX_SUBAGENT_REQUESTS}. Each subagent gets your question, the patch for its scope and the same tools, and reports its own findings. Most units need none. Never ask for work you already did.`;
+const SUBAGENTS_OFFER = `Subagents: ask for one, in "subagents" (at most ${MAX_SUBAGENT_REQUESTS}), whenever a question reaches past this unit's patch and you could not settle it in your own turns: callers or implementations of a changed API elsewhere in the repo, a contract or invariant defined outside your scope, a security or data path through several modules, or behavior that needs its own run to confirm. Each subagent gets your question, the patch for its scope and the same tools, and reports its own findings. A subagent that checks a doubt is worth more than a gap you leave open. When the developer's instructions ask for subagents, request at least one for this unit's most important open question. Never ask for work you already did.`;
 
 /**
  * The primary reviewer's prompt: one generalist over every hunk in its unit.

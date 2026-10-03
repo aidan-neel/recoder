@@ -81,7 +81,7 @@ test('the cap holds across units: the first unit’s requests run on the second 
 	expect(result.summary).toContain('2 subagent requests went over the limit');
 	expect(result.summary).toContain('Test isolation (tests/b.ts)');
 	expect(result.summary).toContain('Fixture reuse (tests/b.ts)');
-	expect(seen.reviewerSystems.every((system) => system.includes('"subagents", at most 2'))).toBe(true);
+	expect(seen.reviewerSystems.every((system) => system.includes('in "subagents" (at most 2)'))).toBe(true);
 });
 
 test('a subagent’s own subagent requests are ignored', async () => {
@@ -111,7 +111,7 @@ test('with subagents off, reviewers aren’t offered any and none run', async ()
 	expect(seen.subagents.size).toBe(0);
 	expect(result.assignments.every((record) => record.role === 'reviewer')).toBe(true);
 	expect(result.summary).not.toContain('subagent');
-	expect(seen.reviewerSystems.some((system) => system.includes('"subagents", at most'))).toBe(false);
+	expect(seen.reviewerSystems.some((system) => system.includes('in "subagents" (at most'))).toBe(false);
 });
 
 test('a resumed review reruns only the subagent that failed, without planning again', async () => {

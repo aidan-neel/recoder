@@ -88,7 +88,10 @@ export class SessionReview {
 		}
 	};
 
-	/** A polling request started before the terminal stream event must not rewind the UI. */
+	/**
+	 * A polling request started before the terminal stream event must not rewind the UI.
+	 * A finished review that goes live with a later start was asked to run again from the chat.
+	 */
 	#isStale(review: Review): boolean {
 		const current = this.review;
 
@@ -96,8 +99,9 @@ export class SessionReview {
 
 		const finished = current.status === 'passed' || current.status === 'failed';
 		const live = review.status === 'queued' || review.status === 'running';
+		const restarted = Date.parse(review.startedAt ?? '') > Date.parse(current.startedAt ?? '');
 
-		return (finished && live) || (current.status !== 'draft' && review.status === 'draft');
+		return (finished && live && !restarted) || (current.status !== 'draft' && review.status === 'draft');
 	}
 
 	/** Runs a draft's full review. Returns the review id once it started, or null after a toast. */

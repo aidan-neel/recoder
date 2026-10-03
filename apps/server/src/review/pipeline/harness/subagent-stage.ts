@@ -30,6 +30,8 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 		if (plan.units.length) {
 			reportSubagents(run, plan.dropped, cap);
 			publishUnits(run, 3);
+		} else if (ASKS_FOR_SUBAGENTS.test(run.input.instructions ?? '')) {
+			orchestratorSays(run.events, 'message_subagents', noSubagentsNote(cap));
 		}
 
 		saveCheckpoint(run);
@@ -42,6 +44,16 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 
 	run.events?.onStage?.('subagents');
 	await runUnitPool(pending, run.assignments, poolContext(run));
+}
+
+/** The developer's brief mentions subagents ("this time use subagents"). */
+const ASKS_FOR_SUBAGENTS = /\bsub-?agents?\b/i;
+
+/** Why a brief that asked for subagents got none. */
+function noSubagentsNote(cap: number): string {
+	return cap
+		? 'You asked for subagents, but no reviewer had an open question that needed one.'
+		: 'You asked for subagents, but the Subagents setting is off. Turn it on under Settings › Harness and run the review again.';
 }
 
 /** The orchestrator's note on the subagents it's running, and any it left out over the cap. */

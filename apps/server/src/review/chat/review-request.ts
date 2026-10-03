@@ -37,3 +37,15 @@ export function looksLikeReviewRequest(text: string): boolean {
 
 	return REQUEST_PATTERNS.some((pattern) => pattern.test(head));
 }
+
+/** A ```recoder-review block, finished or still streaming in, always the last thing in a reply. */
+const RERUN_BLOCK = /\s*```recoder-review[\s\S]*$/;
+
+/**
+ * After a review finished, the orchestrator asks for another run by ending its
+ * reply with a ```recoder-review block. The developer never sees the block,
+ * even while it streams.
+ */
+export function splitRerunRequest(text: string): { text: string; rerun: boolean } {
+	return RERUN_BLOCK.test(text) ? { text: text.replace(RERUN_BLOCK, ''), rerun: true } : { text, rerun: false };
+}

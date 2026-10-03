@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { ORCHESTRATOR_ID, emptyReviewProgress } from '@recoder/shared';
 import { db, recoverStaleReviews, reviewProgress } from '../../../src/store';
 import { app } from '../../../src/app';
+import { rerunReviewSession } from '../../../src/commands/pipeline';
 import { discussionContext, startReviewChat, stopReviewChat } from '../../../src/review/chat/review-chat';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { subscribeReview, clearReviewEvents, reviewEventBuffer } from '../../../src/review/session/events';
@@ -146,4 +147,46 @@ test('unknown targets are rejected and duplicate sends are blocked until stop se
 	stopReviewChat(id, ORCHESTRATOR_ID);
 	await done;
 	expect(reviewProgress.get(id)?.messages?.at(-1)).toMatchObject({ status: 'error', text: 'Reply stopped.' });
+});
+
+test('a reply ending in a recoder-review block reruns the finished review and keeps only the conversation', async () => {
+	const id = setup();
+	const startedAt = new Date(Date.now() - 60_000).toISOString();
+
+	db.reviews.set({ ...db.reviews.get(id)!, startedAt });
+
+	reviewProgress.set({
+		...reviewProgress.get(id)!,
+		reasoning: [
+			{ id: 'old', assignmentId: 'unit-1', role: 'reviewer', model: 'worker', text: 'Old run.', at: startedAt }
+		]
+	});
+
+	globalThis.fetch = (async () =>
+		Response.json({
+			choices: [{ message: { content: 'Starting a new review with subagents.\n\n```recoder-review\n{}\n```' } }]
+		})) as unknown as typeof fetch;
+
+	const events: Array<{ step?: string; data?: Record<string, unknown> }> = [];
+	const off = subscribeReview(id, (event) => events.push(event), false);
+	const done = settled(id, ORCHESTRATOR_ID);
+
+	startReviewChat(id, ORCHESTRATOR_ID, 'Try another review, and use subagents this time.');
+	await done;
+	off();
+
+	const progress = reviewProgress.get(id)!;
+
+	expect(progress.messages?.at(-1)).toMatchObject({ status: 'done', text: 'Starting a new review with subagents.' });
+	expect(progress.messages?.every((message) => message.discussion)).toBe(true);
+	expect(progress.reasoning?.some((entry) => entry.id === 'old')).toBe(false);
+	expect(events.some((event) => event.step === 'queued' && event.data?.reset === true)).toBe(true);
+	expect(Date.parse(db.reviews.get(id)!.startedAt!)).toBeGreaterThan(Date.parse(startedAt));
+});
+
+test('a review that is already running cannot be rerun', () => {
+	const id = setup();
+
+	db.reviews.set({ ...db.reviews.get(id)!, status: 'running' });
+	expect(() => rerunReviewSession(id)).toThrow('already running');
 });

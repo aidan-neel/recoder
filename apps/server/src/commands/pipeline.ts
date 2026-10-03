@@ -7,7 +7,8 @@ import {
 	type Finding,
 	type Provider,
 	type Repo,
-	type Review
+	type Review,
+	type ReviewProgress
 } from '@recoder/shared';
 import {
 	closeReviewControl,
@@ -143,6 +144,47 @@ export function continueReviewSession(reviewId: string): Review {
 	void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
 
 	return review;
+}
+
+/**
+ * Review a finished session again from the start, in place, because the
+ * developer asked for it in the chat. The conversation stays and is the new
+ * run's brief. The last run's findings, units and checkpoint are dropped.
+ */
+export function rerunReviewSession(reviewId: string): Review {
+	const current = db.reviews.get(reviewId);
+
+	if (!current) throw new Error('review not found');
+	if (current.status !== 'passed' && current.status !== 'failed') throw new Error('This review is already running.');
+	if (!isReviewConfigured()) throw new Error('Add a reviewer model in settings before running the review again.');
+
+	reviewCheckpoints.delete(reviewId);
+	reviewProgress.set(conversationOnly(reviewProgress.get(reviewId) ?? emptyReviewProgress(reviewId)));
+
+	const review = touch(reviewId, {
+		status: 'queued',
+		startedAt: new Date().toISOString(),
+		summary: null,
+		findings: []
+	});
+
+	emitReviewEvent(reviewId, { type: 'step', step: 'queued', message: '', data: { stage: 'checkout', reset: true } });
+	void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
+
+	return review;
+}
+
+/** The developer's discussion with its replies and their reasoning; everything the last run produced goes. */
+function conversationOnly(progress: ReviewProgress): ReviewProgress {
+	const messages = (progress.messages ?? []).filter((message) => message.discussion);
+	const replies = new Set(messages.map((message) => `reason_${message.id}`));
+
+	return {
+		...emptyReviewProgress(progress.id),
+		sequence: progress.sequence,
+		messages,
+		reasoning: (progress.reasoning ?? []).filter((entry) => replies.has(entry.id))
+	};
 }
 
 /**
