@@ -179,41 +179,6 @@ button.fact-link:hover {
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
-/* Plan approval: asks before a large review runs. */
-[data-ui='card'].review-approval {
-	flex-direction: row;
-	align-items: center;
-	gap: 16px;
-	padding: 14px 14px 14px 16px;
-	border: 0;
-	border-radius: 14px;
-	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card);
-}
-.review-approval-text {
-	display: flex;
-	min-width: 0;
-	flex: 1;
-	flex-direction: column;
-	gap: 2px;
-}
-.review-approval-title {
-	margin: 0;
-	font-size: 14px;
-	font-weight: 500;
-	line-height: 22px;
-	color: var(--text-primary);
-}
-.review-approval-actions {
-	display: flex;
-	flex-shrink: 0;
-	gap: 8px;
-}
-/* Yes and No read as a pair: same width. */
-.review-approval-actions [data-ui='button'][data-variant][data-size] {
-	width: 72px;
-	min-width: 0;
-}
 @media (prefers-reduced-motion: reduce) {
 	[data-ui='collapsible-trigger'].specialist-row .specialist-chevron {
 		transition: none;

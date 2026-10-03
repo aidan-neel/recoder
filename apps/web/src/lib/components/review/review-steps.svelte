@@ -1,13 +1,11 @@
 <script lang="ts">
 	import Check from '@lucide/svelte/icons/check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
-	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import type { PlanApprovalProps } from '$lib/review/plan-approval.svelte';
 
-	interface Props extends PlanApprovalProps {
+	interface Props {
 		/** Index of the running step; equal to the step count when done. */
 		current: number;
 		failed?: boolean;
@@ -15,19 +13,9 @@
 		elapsed: string;
 		/** "4/6" progress for the specialist step; failed and skipped specialists are not "done". */
 		specialists?: { done: number; failed: number; total: number } | null;
+		paused?: boolean;
 	}
-	let {
-		current,
-		failed = false,
-		active,
-		elapsed,
-		specialists = null,
-		paused = false,
-		approval = null,
-		onApprove = null,
-		onDecline = null,
-		approving = false
-	}: Props = $props();
+	let { current, failed = false, active, elapsed, specialists = null, paused = false }: Props = $props();
 
 	const steps = $derived([
 		{ id: 'checkout', label: 'Prepare repository', meta: '' },
@@ -51,17 +39,7 @@
 
 		return failed ? 'error' : active ? 'active' : 'pending';
 	}
-	const liveLabel = $derived(
-		active
-			? approval?.status === 'pending'
-				? 'Waiting for you'
-				: paused
-					? 'Paused'
-					: 'Live'
-			: failed
-				? 'Stopped'
-				: 'Finished'
-	);
+	const liveLabel = $derived(active ? (paused ? 'Paused' : 'Live') : failed ? 'Stopped' : 'Finished');
 </script>
 
 <Card.Root class="rail-card rail-progress">
@@ -92,17 +70,4 @@
 			</li>
 		{/each}
 	</ol>
-	{#if active && approval?.status === 'pending' && onApprove}
-		<div class="progress-approval" role="group" aria-label="Plan approval">
-			<Typography.Text class="progress-approval-text">Run specialists?</Typography.Text>
-			<div class="progress-approval-actions">
-				{#if onDecline}<Button variant="outline" class="progress-approve" disabled={approving} onclick={onDecline}
-						>No</Button
-					>{/if}
-				<Button class="progress-approve" loading={approving} disabled={approving} onclick={() => void onApprove()}
-					>Yes</Button
-				>
-			</div>
-		</div>
-	{/if}
 </Card.Root>

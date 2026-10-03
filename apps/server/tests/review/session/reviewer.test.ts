@@ -6,7 +6,7 @@ import {
 	subscribeReview
 } from '../../../src/review/session/events';
 import { extractFindingsJson, filterNewFindings, fingerprintFinding } from '../../../src/review/pipeline/harness';
-import { configForRole, isReviewConfigured } from '../../../src/models/models';
+import { configForSubagent, isReviewConfigured } from '../../../src/models/models';
 
 const ENV_KEYS = ['RECODER_REVIEW_BASE_URL', 'RECODER_REVIEW_API_KEY', 'RECODER_REVIEW_MODEL', 'RECODER_PERF_MODEL'];
 
@@ -23,7 +23,7 @@ describe('models', () => {
 	test('unconfigured without env', () => {
 		for (const k of ENV_KEYS) delete process.env[k];
 		expect(isReviewConfigured()).toBe(false);
-		expect(() => configForRole('security')).toThrow();
+		expect(() => configForSubagent()).toThrow();
 	});
 });
 

@@ -1,11 +1,22 @@
 import type { ModelFailure, UsageLimit } from '@recoder/shared';
 import { LlmError } from './llm.js';
 import { hostedProvider } from './model-providers.js';
-import type { RoleConfig } from './models.js';
-import { isAuthFailure } from '../review/pipeline/planner.js';
+import type { ModelConfig } from './models.js';
 import { opencode } from '../agents/opencode/opencode.js';
 
-type ModelRef = Pick<RoleConfig, 'provider' | 'source'> | undefined;
+type ModelRef = Pick<ModelConfig, 'provider' | 'source'> | undefined;
+
+/** The provider rejected the key or token, so retrying cannot help. */
+export function isAuthFailure(err: unknown): boolean {
+	const status =
+		typeof err === 'object' && err !== null && 'status' in err ? Number((err as { status: number }).status) : 0;
+
+	if (status === 401 || status === 403) return true;
+
+	const message = err instanceof Error ? err.message : String(err);
+
+	return /\b401\b|\b403\b|unauthorized|forbidden|invalid api key|invalid token/i.test(message);
+}
 
 /**
  * The plan behind the model ran out: ChatGPT's 429 is its usage cap, and a

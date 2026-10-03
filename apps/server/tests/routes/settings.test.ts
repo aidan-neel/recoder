@@ -10,7 +10,7 @@ import {
 	initReviewSettings,
 	setReviewOverrides
 } from '../../src/review/session/review-settings';
-import { configForOrchestrator, configForRole, isReviewConfigured } from '../../src/models/models';
+import { configForOrchestrator, configForSubagent, isReviewConfigured } from '../../src/models/models';
 
 const ENV_KEYS = ['RECODER_REVIEW_BASE_URL', 'RECODER_REVIEW_API_KEY', 'RECODER_REVIEW_MODEL', 'RECODER_DATA_DIR'];
 const savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
@@ -49,8 +49,8 @@ describe('review settings', () => {
 		setReviewOverrides({});
 		initReviewSettings();
 		expect(configForOrchestrator().model).toBe('lead-model');
-		expect(configForRole('correctness').model).toBe('worker-model');
-		expect(configForRole('security').model).toBe('worker-model');
+		expect(configForSubagent().model).toBe('worker-model');
+		expect(configForSubagent().model).toBe('worker-model');
 
 		const settings = await (await app.request('/api/settings/models')).json();
 
@@ -72,7 +72,7 @@ describe('review settings', () => {
 		setReviewOverrides({});
 		initReviewSettings();
 		expect(configForOrchestrator().reasoningEffort).toBe('low');
-		expect(configForRole('docs').reasoningEffort).toBe('high');
+		expect(configForSubagent().reasoningEffort).toBe('high');
 
 		const changedModel = await app.request('/api/settings/models', {
 			method: 'PATCH',
@@ -81,7 +81,7 @@ describe('review settings', () => {
 		});
 
 		expect(changedModel.status).toBe(200);
-		expect(configForRole('security')).toMatchObject({ model: 'new-model', reasoningEffort: 'high' });
+		expect(configForSubagent()).toMatchObject({ model: 'new-model', reasoningEffort: 'high' });
 	});
 
 	test('the specialist dispatch level persists across reload and rejects unknown levels', async () => {
@@ -150,12 +150,12 @@ describe('review settings', () => {
 		});
 
 		expect(getStoredSettings()).not.toHaveProperty('roles');
-		expect(configForRole('security')).toMatchObject({ model: 'worker-model', reasoningEffort: 'high' });
+		expect(configForSubagent()).toMatchObject({ model: 'worker-model', reasoningEffort: 'high' });
 		setReviewOverrides({});
 		legacy({ applyToSpecialists: true });
 		initReviewSettings();
 		expect(getStoredSettings().specialistModelId).toBeUndefined();
-		expect(configForRole('security').model).toBe('lead-model');
+		expect(configForSubagent().model).toBe('lead-model');
 	});
 
 	test('PUT stores the model registry and GET masks the key', async () => {

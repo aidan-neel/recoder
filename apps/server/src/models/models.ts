@@ -1,21 +1,18 @@
 /**
  * Model routing for the review harness.
  *
- * API-key roles use OpenAI-compatible chat completions, so one client covers
+ * API-key models use OpenAI-compatible chat completions, so one client covers
  * vLLM (`http://host:8000/v1`), OpenRouter
  * (`https://openrouter.ai/api/v1`), and DashScope
  * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). Subscription
  * entries explicitly select the direct ChatGPT OAuth adapter instead; they never
  * inherit an API endpoint or key from the shared environment.
  *
- * One shared model by default; override per role when you want a stronger
- * (or cheaper) model for a specific lens:
+ * With no models saved, the shared environment names one:
  *
  *   RECODER_REVIEW_BASE_URL=https://openrouter.ai/api/v1
  *   RECODER_REVIEW_API_KEY=sk-or-...
  *   RECODER_REVIEW_MODEL=qwen/qwen-2.5-coder-32b-instruct
- *   RECODER_SECURITY_MODEL=qwen/qwen-2.5-coder-32b-instruct
- *   RECODER_PERF_MODEL=...
  */
 
 import { z } from 'zod';
@@ -23,9 +20,6 @@ import type { ModelProvider, ReasoningEffort } from '@recoder/shared';
 import { hostedProvider } from './model-providers.js';
 import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode.js';
 import { effectiveReviewEnv, getStoredSettings } from '../review/session/review-settings.js';
-import { REVIEW_ROLES, type ReviewRole } from '../review/pipeline/roles.js';
-
-export { REVIEW_ROLES, type ReviewRole };
 
 const configSchema = z.object({
 	baseUrl: z.string().min(1),
@@ -34,13 +28,12 @@ const configSchema = z.object({
 	model: z.string().min(1)
 });
 
-export interface RoleConfig {
+export interface ModelConfig {
 	/** Unset API effort is omitted for endpoints that do not support reasoning. */
 	reasoningEffort?: ReasoningEffort;
 	provider?: ModelProvider;
 	/** Hosted provider id (`opencode-go`…) when the model came from one; for OpenCode, its provider id. */
 	source?: string;
-	role: ReviewRole;
 	baseUrl: string;
 	apiKey: string;
 	model: string;
@@ -71,10 +64,10 @@ function reviewConfig(): { baseUrl: string; apiKey: string; model: string } {
 	return parsed.data;
 }
 
-/** True when any role can resolve to a model (registry or legacy env trio). */
+/** True when both models resolve (registry or legacy env trio). */
 export function isReviewConfigured(): boolean {
 	try {
-		configForRole('security');
+		configForSubagent();
 		configForOrchestrator();
 
 		return true;
@@ -83,31 +76,35 @@ export function isReviewConfigured(): boolean {
 	}
 }
 
-/** The Review model: planning, summary and chat. */
-export function configForOrchestrator(): RoleConfig {
-	return resolveConfig('correctness', true);
+/** The Review model: reviewers, consolidation and chat. */
+export function configForOrchestrator(): ModelConfig {
+	return resolveConfig(true);
 }
 
 /** The second model: subagents and verifiers. Unset, it follows the Review model. */
-export function configForSubagent(): RoleConfig {
-	return resolveConfig('correctness', false);
-}
-
-/** The Specialist model for one review role. */
-export function configForRole(role: ReviewRole): RoleConfig {
-	return resolveConfig(role, false);
+export function configForSubagent(): ModelConfig {
+	return resolveConfig(false);
 }
 
 /**
- * Resolve a role to its concrete model.
+ * The model behind an agent's messages, so a follow-up (chat, discussion or
+ * fix) runs where the finding came from: a subagent's on the second model,
+ * everything else on the Review model.
+ */
+export function configForAgent(agent: string | undefined): ModelConfig {
+	return agent === 'subagent' ? configForSubagent() : configForOrchestrator();
+}
+
+/**
+ * Resolve one of the two picks to its concrete model.
  *
- * There are two picks: the Review model and one Specialist model for every
- * specialist. An unset Specialist pick follows the Review model and its effort.
+ * There are two picks: the Review model and the second model for subagents
+ * and verifiers. An unset second pick follows the Review model and its effort.
  * A pick whose entry was deleted out-of-band falls back to the first entry,
  * each entry falling back to the global base URL/key. The legacy env trio
  * still works when no entries exist.
  */
-function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
+function resolveConfig(orchestrator: boolean): ModelConfig {
 	const stored = getStoredSettings();
 	const eff = effectiveReviewEnv();
 	const entries = stored.models ?? [];
@@ -119,7 +116,7 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 		? stored.orchestratorEffort
 		: (stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
 
-	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(role, entryId, requested ?? undefined);
+	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(entryId, requested ?? undefined);
 
 	const entry = entries.find((e) => e.id === entryId) ?? entries[0];
 
@@ -128,7 +125,6 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 
 		if (entry.provider === 'codex') {
 			return {
-				role,
 				provider: 'codex',
 				model: entry.model,
 				baseUrl: '',
@@ -144,7 +140,7 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 
 			if (!apiKey) throw new ModelConfigError(`${hosted.name} isn't connected. Connect it in Settings → Models.`);
 
-			return { role, source: hosted.id, baseUrl: hosted.baseUrl, apiKey, model: entry.model, reasoningEffort };
+			return { source: hosted.id, baseUrl: hosted.baseUrl, apiKey, model: entry.model, reasoningEffort };
 		}
 
 		const baseUrl = entry.baseUrl || eff.baseUrl;
@@ -152,13 +148,12 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
 
 		if (!baseUrl) throw new ModelConfigError(`${entry.label} has no endpoint. Set a base URL in Settings → Models.`);
 
-		return { role, baseUrl, apiKey, model: entry.model, reasoningEffort };
+		return { baseUrl, apiKey, model: entry.model, reasoningEffort };
 	}
 
 	const shared = reviewConfig();
 
 	return {
-		role,
 		baseUrl: shared.baseUrl,
 		apiKey: shared.apiKey,
 		model: shared.model,
@@ -171,10 +166,10 @@ function resolveConfig(role: ReviewRole, orchestrator: boolean): RoleConfig {
  * config comes from its id (`opencode:<provider>/<model>`). The transport
  * checks the effort against the model's variants.
  */
-function openCodeConfig(role: ReviewRole, entryId: string, reasoningEffort: ReasoningEffort | undefined): RoleConfig {
+function openCodeConfig(entryId: string, reasoningEffort: ReasoningEffort | undefined): ModelConfig {
 	const model = entryId.slice(OPENCODE_MODEL_PREFIX.length);
 
-	return { role, provider: 'opencode', source: model.split('/')[0], baseUrl: '', apiKey: '', model, reasoningEffort };
+	return { provider: 'opencode', source: model.split('/')[0], baseUrl: '', apiKey: '', model, reasoningEffort };
 }
 
 /**

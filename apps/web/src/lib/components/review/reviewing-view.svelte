@@ -17,14 +17,12 @@
 	import ReviewPreparingCard from './review-preparing-card.svelte';
 	import ReviewSessionMenu from './review-session-menu.svelte';
 	import RestartReviewDialog from './restart-review-dialog.svelte';
-	import PlanApprovalCard from './plan-approval-card.svelte';
 	import SpecialistNav from './specialist-nav.svelte';
 	import SessionHeader from '../session/session-header.svelte';
 	import FailureNotice from './failure-notice.svelte';
 	import { errorToast } from '$lib/shell/notify';
 	import { PendingAction } from '$lib/shell/pending-action.svelte';
 	import { serverApi } from '$lib/api/server-api';
-	import { approvePlan, declinePlan, planApproval } from '$lib/review/plan-approval.svelte';
 	import { conversationHref, type ReviewingViewProps } from '$lib/review/reviewing-view';
 	import { ReviewingState } from '$lib/review/reviewing-state.svelte';
 
@@ -43,7 +41,6 @@
 		failure = null,
 		onStartReview = null,
 		paused = false,
-		approval = null,
 		connectionLost = false,
 		onOpenDiff,
 		onShowView = null,
@@ -109,9 +106,6 @@
 		get paused() {
 			return paused;
 		},
-		get approval() {
-			return approval;
-		},
 		get stage() {
 			return stage;
 		},
@@ -122,8 +116,6 @@
 			return stageDetail;
 		}
 	});
-
-	const approving = $derived(reviewId !== null && planApproval.approving === reviewId);
 
 	/** Sign-in and usage limits need their own way forward, so they get the notice; any other reason sits on the closing row. */
 	const actionableFailure = $derived(failed && !!(failure?.signIn || failure?.usageLimit));
@@ -147,9 +139,6 @@
 			? [
 					...(view.specialists.length
 						? [{ key: 'specialists', at: view.specialistsAt, snippet: specialistsContent }]
-						: []),
-					...(approval?.status === 'pending' && active
-						? [{ key: 'approval', at: undefined, snippet: approvalCard }]
 						: []),
 					...(!awaitingPrompt && view.showProgress
 						? [
@@ -215,10 +204,6 @@
 		onTogglePause={() => void togglePause()}
 		onCancel={() => void cancelReview()}
 	/>
-{/snippet}
-
-{#snippet approvalCard()}
-	{#if approval}<PlanApprovalCard {reviewId} {approving} />{/if}
 {/snippet}
 
 {#snippet specialistsContent()}
@@ -372,10 +357,6 @@
 						{active}
 						elapsed={meta.elapsed}
 						{paused}
-						approval={view.awaitingApproval ? approval : null}
-						onApprove={reviewId ? () => approvePlan(reviewId) : null}
-						onDecline={reviewId ? () => declinePlan(reviewId) : null}
-						{approving}
 						specialists={{
 							done: view.specialists.filter((item) => item.status === 'done').length,
 							failed: view.failedSpecialists,

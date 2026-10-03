@@ -2,13 +2,7 @@ import { expect, test } from 'bun:test';
 import { applyDirective } from '../../../src/review/chat/directive';
 import { buildInventory } from '../../../src/review/pipeline/inventory';
 import { partitionUnits } from '../../../src/review/pipeline/units';
-
-/** A new file of `lines` 100-character lines, as one diff section (about 102 patch characters a line). */
-function added(path: string, lines: number): string {
-	const body = Array.from({ length: lines }, (_, index) => `+${String(index).padEnd(99, 'x')}`).join('\n');
-
-	return `diff --git a/${path} b/${path}\nnew file mode 100644\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1,${lines} @@\n${body}\n`;
-}
+import { addedFile } from './harness-fixtures';
 
 /** Two hunks in one file, far enough apart to stay separate. */
 function twoHunks(path: string, lines: number): string {
@@ -21,7 +15,7 @@ function twoHunks(path: string, lines: number): string {
 /** Changed lines per file, apart from `lib/big.ts` (two hunks of 100). */
 const LINES: Record<string, number> = { 'src/a.ts': 60, 'src/b.ts': 60, 'docs/readme.md': 10, 'src/nested/c.ts': 30 };
 
-const SECTIONS = [...Object.entries(LINES).map(([path, lines]) => added(path, lines)), twoHunks('lib/big.ts', 100)];
+const SECTIONS = [...Object.entries(LINES).map(([path, lines]) => addedFile(path, lines)), twoHunks('lib/big.ts', 100)];
 
 const units = (diff: string, budget: number) => partitionUnits(buildInventory(diff, []), budget);
 
@@ -59,7 +53,7 @@ test('units stay under the budget and never split a file, and a file over the bu
 });
 
 test('a small change is one unit', () => {
-	const result = units(added('src/a.ts', 5) + added('test/a.test.ts', 5), 24_000);
+	const result = units(addedFile('src/a.ts', 5) + addedFile('test/a.test.ts', 5), 24_000);
 
 	expect(result).toHaveLength(1);
 	expect(result[0].scope.map((entry) => entry.path)).toEqual(['src/a.ts', 'test/a.test.ts']);
@@ -67,11 +61,11 @@ test('a small change is one unit', () => {
 
 test('files the developer excluded, lockfiles and generated files are left out of every unit', () => {
 	const inventory = buildInventory(
-		SECTIONS.join('') + added('bun.lock', 5) + added('dist/out.js', 5) + added('package-lock.json', 5),
+		SECTIONS.join('') + addedFile('bun.lock', 5) + addedFile('dist/out.js', 5) + addedFile('package-lock.json', 5),
 		[]
 	);
 
-	applyDirective(inventory, { instructions: 'skip docs', includeGlobs: [], excludeGlobs: ['docs/**'], roles: [] });
+	applyDirective(inventory, { instructions: 'skip docs', includeGlobs: [], excludeGlobs: ['docs/**'] });
 
 	const paths = partitionUnits(inventory).flatMap((unit) => unit.scope.map((entry) => entry.path));
 

@@ -126,7 +126,7 @@ function flushOnTimer(): void {
 
 /**
  * Live review progress. A running review updates its snapshot many times a
- * second (streamed reasoning and replies from every specialist), and each
+ * second (streamed reasoning and replies from every reviewer), and each
  * snapshot is a large JSON blob: serializing it to SQLite on every event
  * stalled the server. Reads and writes go through memory; SQLite gets the
  * latest snapshot shortly after, on a terminal event, and at exit.

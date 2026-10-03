@@ -91,7 +91,7 @@ export interface GuidelinesInput {
 }
 
 export interface ComposedGuidelines {
-	/** Prompt block for the planner, specialists, and consolidation. */
+	/** Prompt block for reviewers, subagents and consolidation. */
 	block: string;
 	used: ReviewGuidelinesUsed;
 }

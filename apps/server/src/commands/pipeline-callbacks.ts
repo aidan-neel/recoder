@@ -43,16 +43,6 @@ export function harnessCallbacks(
 				data: { agent: meta?.role, assignmentId: meta?.assignmentId }
 			}),
 		onPlan: (data) => reportReviewPlan(reviewId, data),
-		onApproval: (approval) =>
-			emitReviewEvent(reviewId, {
-				type: 'step',
-				step: 'review',
-				message:
-					approval.status === 'pending'
-						? `Waiting for approval to run ${approval.requested} specialists`
-						: `Running ${approval.requested} specialists`,
-				data: { approval }
-			}),
 		onAssignment: (assignment) => reportReviewAssignment(reviewId, assignment),
 		onCoverage: (coverage, gaps) => reportReviewCoverage(reviewId, coverage, gaps),
 		onBudget: (budget) => {

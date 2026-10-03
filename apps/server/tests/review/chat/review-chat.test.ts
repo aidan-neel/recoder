@@ -33,7 +33,7 @@ function setup() {
 	reviewProgress.set({
 		...emptyReviewProgress(id),
 		assignments: [
-			{ id: 'security-auth', role: 'security', title: 'Security', status: 'done', reason: 'Auth changed', scope: [] }
+			{ id: 'subagent-1', role: 'subagent', title: 'Auth checks', status: 'done', reason: 'Auth changed', scope: [] }
 		]
 	});
 
@@ -93,7 +93,7 @@ test('server restart settles interrupted replies even on completed reviews', () 
 	expect(reviewProgress.get(id)?.messages?.[0].text).toContain('server restart');
 });
 
-test('specialist chat streams, persists, and is visible in subsequent orchestrator requests', async () => {
+test('subagent chat runs on the second model, streams, persists and is visible in subsequent orchestrator requests', async () => {
 	const id = setup();
 	const requests: Array<{ model: string; messages: { content: string }[] }> = [];
 
@@ -103,14 +103,14 @@ test('specialist chat streams, persists, and is visible in subsequent orchestrat
 		return Response.json({ choices: [{ message: { content: 'The caller checks the token.' } }] });
 	}) as typeof fetch;
 
-	const done = settled(id, 'security-auth');
+	const done = settled(id, 'subagent-1');
 
-	startReviewChat(id, 'security-auth', 'Is the caller protected?');
+	startReviewChat(id, 'subagent-1', 'Is the caller protected?');
 	await done;
 	expect(requests[0].model).toBe('worker');
 	expect(discussionContext(id)).toContain('Is the caller protected?');
 	expect(discussionContext(id)).toContain('The caller checks the token.');
-	expect(discussionContext(id, 'unrelated-specialist')).toBe('');
+	expect(discussionContext(id, 'unrelated-subagent')).toBe('');
 
 	const leadDone = settled(id, ORCHESTRATOR_ID);
 

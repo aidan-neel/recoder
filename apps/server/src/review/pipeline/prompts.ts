@@ -89,43 +89,7 @@ export const EXEC_EXAMPLES = `To read or run code, reply with ONLY this JSON sha
 {"message":"Reading the refill path, then running a repro for it.","actions":[{"action":"readFile","revision":"head","path":"src/limiter.ts","startLine":40,"endLine":120},{"action":"writeFile","path":"src/recoder-repro.test.ts","content":"..."},{"action":"run","command":"bun test src/recoder-repro.test.ts"}]}
 Every action object has an "action" key whose value is exactly one of readDiff, readFile, search, listFiles, run, writeFile. run takes a shell "command" string; writeFile takes "path" and "content".`;
 
-/**
- * Smaller and open-weight models follow a short rule with one example far
- * better than a long style guide, and get rich markdown wrong (headings,
- * nested lists, escapes inside JSON). Like opencode's per-family prompts, they
- * get the compact style; frontier families get the full one. A parameter count
- * in the name decides when present ("35B", "8b", MoE "A3B").
- */
-export function isCompactModel(model: string): boolean {
-	const id = model.toLowerCase();
-	const sizes = [...id.matchAll(/(?:^|[^a-z0-9.])a?(\d+(?:\.\d+)?)b(?![a-z0-9])/g)].map((match) => Number(match[1]));
-
-	if (sizes.length) return Math.max(...sizes) <= 70;
-	if (
-		/claude|gpt-[45]|\bo[134]\b|gemini-(?!.*lite)|grok|kimi|glm-4\.[5-9]|glm-[5-9]|deepseek-(?:v3|r1|chat|reasoner)/.test(
-			id
-		)
-	)
-		return false;
-
-	return /llama|mistral|ministral|gemma|phi|granite|smol|tiny|nano|mini|lite|qwen|olmo|falcon|deepseek-coder/.test(id);
-}
-
-/** Writing style for model text shown to the developer, sized to the model. */
-export function chatStyle(model: string): string {
-	return isCompactModel(model) ? CHAT_STYLE_COMPACT : CHAT_STYLE;
-}
-
-const CHAT_STYLE_COMPACT = `Writing rules (follow exactly):
-- Talk to the reader as "you". At most 60 words, in one to three short paragraphs.
-- Allowed formatting: \`backticks\` around code, file paths and commands; "- " bullets, one per line, with a blank line before the list; **bold** at most once.
-- Not allowed: headings (#), tables, numbered lists, nested lists, emoji, horizontal rules, code fences in chat text.
-- No preamble, no closing summary, no offers of more help.
-- Inside a JSON string, a line break is \\n and a paragraph break is \\n\\n.
-Example "message" value:
-"I checked \`refill()\` in \`src/limiter.ts\`.\\n\\nTwo problems:\\n\\n- \`tokens\` can go negative on a burst.\\n- The timer is never cleared on stop."`;
-
 /** How anything shown to the developer in the review chat should read. */
-const CHAT_STYLE = `Writing style: be minimal. Use as few words as the point needs, usually one to three short sentences in total, and never more than 60 words unless the developer asks for detail. Put each separate subject in its own short paragraph, with a blank line between paragraphs; never run different subjects together in one paragraph. No preamble, no restating the question, no closing summary, no offers of more help. Use a list only for three or more parallel items.
+export const CHAT_STYLE = `Writing style: be minimal. Use as few words as the point needs, usually one to three short sentences in total, and never more than 60 words unless the developer asks for detail. Put each separate subject in its own short paragraph, with a blank line between paragraphs; never run different subjects together in one paragraph. No preamble, no restating the question, no closing summary, no offers of more help. Use a list only for three or more parallel items.
 Voice: you are talking directly to the person reading this. Address them as "you" and yourself as "I". Never call them "the developer", "the user", or "they".
 Markdown: put identifiers, file paths, and commands in backticks (\`status_queue\`, \`src/runner/mission.py\`). Write lists as "- " bullets, one per line, with a blank line before the list. Use **bold** at most once. No headings. Inside a JSON string, write line breaks as \\n and paragraph breaks as \\n\\n.`;

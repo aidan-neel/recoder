@@ -3,7 +3,7 @@ import { CapacityError, cancelledError } from './errors';
 /**
  * Global cap shared by review assignments and interactive discussions, so the
  * model endpoint is never overwhelmed. Tune with RECODER_LLM_CONCURRENCY
- * (default 8, enough for every specialist at once). A slot is acquired only
+ * (default 8, enough for every reviewer at once). A slot is acquired only
  * when a concrete call is ready, never as hundreds of pre-created waiters.
  */
 let llmActive = 0;

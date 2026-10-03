@@ -12,7 +12,7 @@ afterEach(() => {
 	globalThis.fetch = originalFetch;
 });
 
-const config = { role: 'correctness' as const, model: 'test', baseUrl: 'https://model.test', apiKey: 'test' };
+const config = { model: 'test', baseUrl: 'https://model.test', apiKey: 'test' };
 
 const diff = Array.from(
 	{ length: 7 },
@@ -158,7 +158,7 @@ test('a spent hosted plan stops the review with an out-of-usage failure instead 
 
 	const error = await runJsonAgent(
 		agentOptions({
-			label: 'planner',
+			label: 'reviewer',
 			config: { ...config, source: 'opencode-go' },
 			maxTurns: 2
 		})

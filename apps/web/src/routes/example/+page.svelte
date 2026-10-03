@@ -175,15 +175,14 @@
 		}
 	];
 	/**
-	 * `?state=running` previews a review mid-flight. `approval` holds it at the plan's go-ahead; `verify`
+	 * `?state=running` previews a review mid-flight. `verify`
 	 * shows verifiers checking findings, one reply cut off; `preparing` is still checking out the pull request;
 	 * `planning` has read the repo and is planning, with nothing streaming yet.
 	 */
 	const liveState = page.url.searchParams.get('state');
-	const running = ['running', 'approval', 'verify', 'preparing', 'planning'].includes(liveState ?? '');
+	const running = ['running', 'verify', 'preparing', 'planning'].includes(liveState ?? '');
 	const verifyPreview = liveState === 'verify';
 	const preparingPreview = liveState === 'preparing';
-	const approvalPreview = liveState === 'approval';
 	const planningPreview = liveState === 'planning';
 	const liveSpecs = [
 		{ id: 'correctness', model: 'gpt-5-codex', status: 'running', op: 'Reading src/rate-limit/limiter.ts:20-46' },
@@ -202,7 +201,7 @@
 		model: spec.model,
 		currentOperation: spec.op,
 		startedAt: iso(60),
-		...(verifyPreview ? { status: 'done' as const } : approvalPreview ? { status: 'queued' as const } : {})
+		...(verifyPreview ? { status: 'done' as const } : {})
 	}));
 	const verifyTasks: ReviewTask[] = [
 		{ title: 'Refill ignores the injected clock', status: 'running', message: 'Running code', started: 41 },
@@ -382,15 +381,9 @@
 				: liveReasoning}
 		orchestratorModel={model}
 		tasks={verifyPreview ? verifyTasks : planningPreview ? planningTasks : []}
-		reviewId={approvalPreview ? 'example' : undefined}
-		approval={approvalPreview ? { status: 'pending', requested: 7 } : null}
 		findings={[]}
-		stage={preparingPreview ? 0 : verifyPreview ? 4 : approvalPreview || planningPreview ? 1 : 3}
-		stageLabel={verifyPreview
-			? 'Verifying findings'
-			: approvalPreview
-				? 'Waiting for your go-ahead'
-				: 'Specialist review'}
+		stage={preparingPreview ? 0 : verifyPreview ? 4 : planningPreview ? 1 : 3}
+		stageLabel={verifyPreview ? 'Verifying findings' : 'Reviewing'}
 		active
 		completedAt={undefined}
 		onSend={send}

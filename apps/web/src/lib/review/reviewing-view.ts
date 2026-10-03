@@ -7,11 +7,9 @@ import {
 	type ReviewChatMessage,
 	type ReviewCodeContext,
 	type ReviewGuidelinesUsed,
-	type ReviewPlanApproval,
 	type ReviewReasoningEntry,
 	type ReviewTask,
-	type ReviewToolCall,
-	type RoleDecision
+	type ReviewToolCall
 } from '@recoder/shared';
 import { formatAgentName } from '$lib/findings/threads.svelte';
 import { guidelinesStore } from '$lib/settings/guidelines.svelte';
@@ -60,8 +58,6 @@ export interface ReviewingViewProps {
 	failure?: ModelFailure | null;
 	onStartReview?: (() => Promise<void>) | null;
 	paused?: boolean;
-	/** A plan waiting for the developer to approve more specialists. */
-	approval?: ReviewPlanApproval | null;
 	connectionLost?: boolean;
 	onOpenDiff: (() => void) | null;
 	/** Switch to the Findings or Diff workspace. Falls back to `onOpenDiff`. */
@@ -86,7 +82,6 @@ export interface ReviewingViewProps {
 	/** Bumped to focus the composer. */
 	focusKey?: number;
 	findings: ReviewingFinding[];
-	roleDecisions?: RoleDecision[];
 	tasks?: ReviewTask[];
 	stage?: number;
 	stageLabel?: string;

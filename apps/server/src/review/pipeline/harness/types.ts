@@ -8,11 +8,9 @@ import type {
 	ReviewChatMessage,
 	ReviewGuidelinesUsed,
 	ReviewOutcome,
-	ReviewPlanApproval,
 	ReviewReasoningEntry,
 	ReviewStage,
-	ReviewTask,
-	RoleDecision
+	ReviewTask
 } from '@recoder/shared';
 import type { ReviewRevision, ToolCallReport } from '../../../evidence/evidence.js';
 import type { ReviewCheckpoint } from '../../session/review-checkpoint.js';
@@ -21,15 +19,7 @@ import type { ReviewCheckpoint } from '../../session/review-checkpoint.js';
 export interface HarnessEvents {
 	onTask?: (task: Omit<ReviewTask, 'updatedAt'>) => void;
 	onLog?: (message: string, meta?: { assignmentId?: string; role?: string }) => void;
-	/** A plan past `approvalThreshold` waits for the developer; reported when asked and when answered. */
-	onApproval?: (approval: ReviewPlanApproval) => void;
-	onPlan?: (data: {
-		planVersion: number;
-		summary: string;
-		assignments: ReviewAssignment[];
-		roleDecisions: RoleDecision[];
-		planningDegraded?: boolean;
-	}) => void;
+	onPlan?: (data: { planVersion: number; summary: string; assignments: ReviewAssignment[] }) => void;
 	onAssignment?: (assignment: ReviewAssignment) => void;
 	onCoverage?: (coverage: CoverageSummary, gaps: CoverageGap[]) => void;
 	onBudget?: (budget: ReviewBudgetSnapshot) => void;
@@ -83,7 +73,6 @@ export interface AdaptiveReviewResult {
 	coverage: CoverageSummary;
 	coverageGaps: CoverageGap[];
 	assignments: ReviewAssignment[];
-	planningDegraded: boolean;
 	error?: string;
 	/** Set when a model call stopped the review, e.g. ChatGPT is signed out. */
 	failure?: ModelFailure;

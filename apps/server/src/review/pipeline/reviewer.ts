@@ -33,7 +33,7 @@ const subagentRequestSchema = z.object({
 });
 
 /** Most units need no subagent; a reviewer may ask for this many at most. */
-export const MAX_SUBAGENT_REQUESTS = 2;
+const MAX_SUBAGENT_REQUESTS = 2;
 
 const reviewerOutputSchema = z.object({
 	message: z.string().max(12000).optional(),

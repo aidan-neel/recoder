@@ -56,7 +56,7 @@ function scaleForUnits(run: ReviewRun): void {
 
 	if (!extra) return;
 
-	run.budget.limit = REVIEW_POLICY.maxModelCalls + extra * REVIEW_POLICY.callsPerExtraAssignment;
+	run.budget.limit = REVIEW_POLICY.maxModelCalls + extra * REVIEW_POLICY.callsPerExtraUnit;
 
 	const waves = Math.ceil(run.units.length / REVIEW_POLICY.maxConcurrentAssignments) - 1;
 

@@ -1,6 +1,6 @@
 import type { ReviewAssignment } from '@recoder/shared';
 import { formatToolResults, type EvidenceStore } from '../../../evidence/evidence.js';
-import { configForOrchestrator, configForSubagent, type RoleConfig } from '../../../models/models.js';
+import { configForOrchestrator, configForSubagent, type ModelConfig } from '../../../models/models.js';
 import type { ReviewDirective } from '../../chat/directive.js';
 import { withGuidelines } from '../../guidelines/guidelines.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
@@ -186,7 +186,7 @@ function askReviewer(
 	item: ReviewUnit,
 	records: ReviewAssignment[],
 	ctx: PoolContext,
-	cfg: RoleConfig,
+	cfg: ModelConfig,
 	initialEvidence: ScopedPatch
 ) {
 	const meta = { assignmentId: item.id, role: recordFor(records, item.id).role };

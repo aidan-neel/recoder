@@ -16,7 +16,7 @@ export const DIFF = `diff --git a/src/a.ts b/src/a.ts
 export const HUNK = 'src/a.ts:1,1:1,1';
 
 /** A new file of `lines` 100-character lines, as one diff section. */
-function addedFile(path: string, lines: number): string {
+export function addedFile(path: string, lines: number): string {
 	const body = Array.from({ length: lines }, (_, index) => `+${String(index).padEnd(99, 'x')}`).join('\n');
 
 	return `diff --git a/${path} b/${path}\nnew file mode 100644\n--- /dev/null\n+++ b/${path}\n@@ -0,0 +1,${lines} @@\n${body}\n`;
@@ -75,6 +75,21 @@ export function useTestModel(concurrency?: number): void {
 	});
 
 	if (concurrency !== undefined) process.env.RECODER_LLM_CONCURRENCY = String(concurrency);
+}
+
+/** Two models: the Review model `lead` and the second model `worker`. */
+export function useTwoModels(): void {
+	useTestModel(4);
+
+	setReviewOverrides({
+		...getStoredSettings(),
+		models: [
+			{ id: 'lead', label: 'Lead', model: 'lead' },
+			{ id: 'worker', label: 'Worker', model: 'worker' }
+		],
+		orchestratorModelId: 'lead',
+		specialistModelId: 'worker'
+	});
 }
 
 /** Restores `fetch`, the review settings, LLM concurrency and the LLM limiter after each test in the calling file. */

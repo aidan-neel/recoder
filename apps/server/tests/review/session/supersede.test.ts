@@ -34,7 +34,7 @@ function running(prNumber: number, trigger?: Review['trigger']) {
 		updatedAt: at
 	});
 
-	const control = openReviewControl(id, trigger === 'webhook');
+	const control = openReviewControl(id);
 
 	return { signal: control.abort.signal, close: () => closeReviewControl(id, control) };
 }

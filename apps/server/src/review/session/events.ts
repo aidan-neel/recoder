@@ -7,8 +7,7 @@ import {
 	type ReviewProgress,
 	type ReviewReasoningEntry,
 	type ReviewTask,
-	type ReviewToolCall,
-	type RoleDecision
+	type ReviewToolCall
 } from '@recoder/shared';
 import { reviewProgress } from '../../store';
 
@@ -48,11 +47,9 @@ const MAX_BUFFER = 400;
 
 const SNAPSHOT_KEYS = [
 	'paused',
-	'approval',
 	'planVersion',
 	'planSummary',
 	'assignments',
-	'roleDecisions',
 	'budget',
 	'candidateCount',
 	'coverage',
@@ -61,7 +58,6 @@ const SNAPSHOT_KEYS = [
 	'failure',
 	'recommendedChecks',
 	'stage',
-	'planningDegraded',
 	'orchestratorModel',
 	'guidelines'
 ] as const;
@@ -253,8 +249,6 @@ export function reportReviewPlan(
 		planVersion: number;
 		summary: string;
 		assignments: ReviewAssignment[];
-		roleDecisions: RoleDecision[];
-		planningDegraded?: boolean;
 	}
 ): void {
 	emitReviewEvent(reviewId, {
@@ -263,9 +257,7 @@ export function reportReviewPlan(
 		data: {
 			planVersion: data.planVersion,
 			planSummary: data.summary,
-			assignments: data.assignments,
-			roleDecisions: data.roleDecisions,
-			planningDegraded: data.planningDegraded
+			assignments: data.assignments
 		}
 	});
 }

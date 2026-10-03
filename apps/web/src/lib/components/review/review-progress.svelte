@@ -1,6 +1,5 @@
 <script lang="ts">
 	import ReviewingView, { type ReviewingFinding } from '$lib/components/review/reviewing-view.svelte';
-	import { ROLE_LABELS, type ReviewRole } from '@recoder/shared';
 
 	interface Props {
 		title: string;
@@ -29,7 +28,8 @@
 
 	interface AgentSim {
 		id: string;
-		name: ReviewRole;
+		name: string;
+		title: string;
 		model: string;
 		/** Independent completion speed — subagents run in parallel. */
 		rate: number;
@@ -92,6 +92,7 @@
 			{
 				id: 'security',
 				name: 'security',
+				title: 'Security',
 				model: 'qwen3.8-flash',
 				rate: 4.2,
 				status: 'running',
@@ -102,6 +103,7 @@
 			{
 				id: 'perf',
 				name: 'perf',
+				title: 'Performance',
 				model: 'qwen3.8-flash',
 				rate: 6.5,
 				status: 'running',
@@ -112,6 +114,7 @@
 			{
 				id: 'correctness',
 				name: 'correctness',
+				title: 'Correctness',
 				model: 'qwen3.8-flash',
 				rate: 3.4,
 				status: 'running',
@@ -122,6 +125,7 @@
 			{
 				id: 'docs',
 				name: 'docs',
+				title: 'Docs',
 				model: 'qwen3.8-flash',
 				rate: 7.5,
 				status: 'running',
@@ -150,7 +154,7 @@
 		agents.map((agent) => ({
 			id: `${agent.id}-demo`,
 			role: agent.id,
-			title: ROLE_LABELS[agent.name],
+			title: agent.title,
 			reason: 'Demo specialist assignment',
 			status:
 				agent.status === 'done'

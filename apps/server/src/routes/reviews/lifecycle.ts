@@ -117,18 +117,6 @@ app.post('/:id/cancel', (c) => {
 	return c.json({ cancelled: true });
 });
 
-/** Approve a plan waiting for the developer: its specialists run. Declining is a cancel. */
-app.post('/:id/approve-plan', (c) => {
-	const review = requireReview(c);
-
-	if (review instanceof Response) return review;
-
-	if (!getReviewControl(review.id)?.approve())
-		return c.json({ error: 'This review is not waiting for approval.' }, 409);
-
-	return c.json({ approved: true });
-});
-
 /** Hold a running review: in-flight model calls stop and re-run on resume. */
 app.post('/:id/pause', (c) => {
 	const running = runningControl(c);

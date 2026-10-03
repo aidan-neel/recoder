@@ -22,7 +22,7 @@ import { fetchPullRequest } from '../forge/gh';
 import { fetchMergeRequest } from '../forge/glab';
 import { fetchPrContext } from '../forge/pr-context';
 import { runAdaptiveReview } from '../review/pipeline/harness';
-import { configForOrchestrator, configForRole, isReviewConfigured } from '../models/models';
+import { configForOrchestrator, configForSubagent, isReviewConfigured } from '../models/models';
 import { ModelBlockedError } from '../review/pipeline/agent-loop';
 import { codex } from '../agents/codex/codex';
 import { reviewInstructions } from '../review/chat/review-chat';
@@ -118,7 +118,7 @@ export function startReviewSession(reviewId: string): Review {
 }
 
 /**
- * Continue a failed review where it stopped. Planning and finished specialists
+ * Continue a failed review where it stopped. Units and finished reviewers
  * are kept from the last checkpoint; without one (or when the PR moved on)
  * the review runs again from the start in the same session.
  */
@@ -165,7 +165,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	let baseRef: string | undefined;
 	let prBody = '';
 	let prContext: Promise<string> = Promise.resolve('');
-	const control = openReviewControl(reviewId, initial.trigger === 'webhook');
+	const control = openReviewControl(reviewId);
 	const analysis = control.abort;
 
 	try {
@@ -319,7 +319,6 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 				outcome: result.outcome,
 				failure: result.failure,
 				recommendedChecks: result.recommendedChecks,
-				planningDegraded: result.planningDegraded,
 				candidateCount: result.unconfirmed.length + result.findings.length
 			});
 		}
@@ -389,9 +388,7 @@ function cancelReason(signal: AbortSignal): string {
 
 /** Planning and the correctness pass always run, so a missing ChatGPT sign-in fails now, not after a long checkout. */
 async function assertChatGptSignedIn(): Promise<void> {
-	const usesCodex = [configForOrchestrator(), configForRole('correctness')].some(
-		(config) => config.provider === 'codex'
-	);
+	const usesCodex = [configForOrchestrator(), configForSubagent()].some((config) => config.provider === 'codex');
 
 	if (usesCodex && !(await codex.signedIn())) {
 		throw new ModelBlockedError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });

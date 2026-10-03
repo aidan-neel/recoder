@@ -1,6 +1,6 @@
 import type { ReviewReasoningEntry } from '@recoder/shared';
 import type { EvidenceStore, ToolCallReport } from '../../../evidence/evidence.js';
-import type { RoleConfig } from '../../../models/models.js';
+import type { ModelConfig } from '../../../models/models.js';
 import type { ModelBudget } from './budget.js';
 
 export interface JsonAgentOptions<T> {
@@ -9,7 +9,7 @@ export interface JsonAgentOptions<T> {
 	agentId?: string;
 	system: string;
 	user: string;
-	config: RoleConfig;
+	config: ModelConfig;
 	budget: ModelBudget;
 	evidence: EvidenceStore;
 	maxTurns: number;

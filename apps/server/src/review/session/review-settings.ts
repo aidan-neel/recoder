@@ -8,7 +8,6 @@ import {
 	type ModelSettingsPatch
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
-import { REVIEW_ROLES } from '../pipeline/roles.js';
 
 const modelEntrySchema = z.object({
 	provider: z.enum(['openai-compatible', 'codex']).optional(),
@@ -44,8 +43,8 @@ export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
 /** Saved files from before models were just Review and Specialist carried per-role picks. */
 const storedFileSchema = reviewSettingsSchema.extend({
 	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional(),
-	roles: z.partialRecord(z.enum(REVIEW_ROLES), z.string().max(200)).optional(),
-	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(REASONING_EFFORTS)).optional(),
+	roles: z.record(z.string().max(40), z.string().max(200)).optional(),
+	roleEfforts: z.record(z.string().max(40), z.enum(REASONING_EFFORTS)).optional(),
 	applyToSpecialists: z.boolean().optional()
 });
 

@@ -32,11 +32,9 @@ export interface ProgressMessage {
 
 const SNAPSHOT_KEYS = [
 	'paused',
-	'approval',
 	'planVersion',
 	'planSummary',
 	'assignments',
-	'roleDecisions',
 	'budget',
 	'candidateCount',
 	'coverage',
@@ -45,7 +43,6 @@ const SNAPSHOT_KEYS = [
 	'failure',
 	'recommendedChecks',
 	'stage',
-	'planningDegraded',
 	'orchestratorModel',
 	'guidelines'
 ] as const;
@@ -186,7 +183,7 @@ export function reviewStage(
 				? 5
 				: progress.stage === 'verify'
 					? 4
-					: progress.stage === 'specialists'
+					: progress.stage === 'reviewing' || progress.stage === 'subagents'
 						? 3
 						: progress.stage === 'checks'
 							? 2
@@ -203,9 +200,7 @@ export function reviewStage(
 				? 'Review failed'
 				: progress.paused
 					? 'Paused'
-					: progress.approval?.status === 'pending'
-						? 'Waiting for your go-ahead'
-						: ((STAGE_LABELS as readonly string[])[index] ?? 'Review complete');
+					: ((STAGE_LABELS as readonly string[])[index] ?? 'Review complete');
 
 	const detail =
 		index === 0

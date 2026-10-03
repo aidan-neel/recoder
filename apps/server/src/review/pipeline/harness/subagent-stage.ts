@@ -38,7 +38,10 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 	const finished = finishedIds(run);
 	const pending = state.units.filter((unit) => !finished.has(unit.id));
 
-	if (pending.length) await runUnitPool(pending, run.assignments, poolContext(run));
+	if (!pending.length) return;
+
+	run.events?.onStage?.('subagents');
+	await runUnitPool(pending, run.assignments, poolContext(run));
 }
 
 /** The orchestrator's note on the subagents it's running, and any it left out over the cap. */

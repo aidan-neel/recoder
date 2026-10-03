@@ -138,7 +138,6 @@
 	{awaitingPrompt}
 	onStartReview={awaitingPrompt ? onStartReview : null}
 	paused={progress.paused ?? false}
-	approval={progress.approval ?? null}
 	completedAt={!active && !awaitingPrompt ? review.updatedAt : undefined}
 	title={review.prTitle || `PR #${review.prNumber}`}
 	meta={{
@@ -190,5 +189,4 @@
 	tasks={Object.values(progress.tasks).map((task) => ({ ...task, assignmentId: task.assignmentId ?? pipelineId }))}
 	reasoning={(progress.reasoning ?? []).map((entry) => ({ ...entry, assignmentId: entry.assignmentId ?? pipelineId }))}
 	toolCalls={(progress.toolCalls ?? []).map((tool) => ({ ...tool, assignmentId: tool.assignmentId ?? pipelineId }))}
-	roleDecisions={progress.roleDecisions ?? []}
 />

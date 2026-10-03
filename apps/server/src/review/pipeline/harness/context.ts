@@ -1,6 +1,6 @@
 import { DEFAULT_SUBAGENT_CAP, ORCHESTRATOR_ID, type ReviewAssignment } from '@recoder/shared';
 import { EvidenceStore } from '../../../evidence/evidence.js';
-import { configForOrchestrator, reviewLimits, type RoleConfig } from '../../../models/models.js';
+import { configForOrchestrator, reviewLimits, type ModelConfig } from '../../../models/models.js';
 import { execUnavailableReason } from '../../../sandbox/exec-sandbox.js';
 import { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import type { ReviewDirective } from '../../chat/directive.js';
@@ -43,7 +43,6 @@ export interface ReviewRun {
 	 */
 	units: ReviewUnit[];
 	directive: ReviewDirective | null;
-	planningDegraded: boolean;
 	assignments: ReviewAssignment[];
 	candidates: CandidateFinding[];
 	recommended: Set<string>;
@@ -79,7 +78,6 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		investigationDeadline: deadlineAt,
 		units: [],
 		directive: resume?.directive ?? null,
-		planningDegraded: resume?.planningDegraded ?? false,
 		assignments: [],
 		candidates: (resume?.candidates ?? []).map((candidate) => ({ ...candidate })),
 		recommended: new Set<string>(resume?.recommended ?? []),
@@ -110,7 +108,7 @@ export function orchestratorSays(events: HarnessEvents | undefined, id: string, 
  */
 export function orchestratorAgentOptions(
 	run: ReviewRun,
-	config: RoleConfig
+	config: ModelConfig
 ): Pick<
 	JsonAgentOptions<unknown>,
 	'getDiscussion' | 'onMessage' | 'config' | 'budget' | 'evidence' | 'signal' | 'onReasoning' | 'onTool'
@@ -124,8 +122,8 @@ export function orchestratorAgentOptions(
 		budget: run.budget,
 		evidence: run.evidence,
 		signal: run.controller.signal,
-		onReasoning: (reasoning) => events?.onReasoning?.({ ...reasoning, role: 'correctness', model: config.model }),
-		onTool: (tool) => events?.onTool?.({ ...tool, role: 'correctness' })
+		onReasoning: (reasoning) => events?.onReasoning?.({ ...reasoning, role: 'orchestrator', model: config.model }),
+		onTool: (tool) => events?.onTool?.({ ...tool, role: 'orchestrator' })
 	};
 }
 
@@ -187,9 +185,7 @@ export function publishUnits(run: ReviewRun, planVersion: number): void {
 	run.events?.onPlan?.({
 		planVersion,
 		summary: `Reviewing in ${units} unit${units === 1 ? '' : 's'}${subagents ? ` with ${subagents} subagent${subagents === 1 ? '' : 's'}` : ''}`,
-		assignments: run.assignments.map((assignment) => ({ ...assignment })),
-		roleDecisions: [],
-		planningDegraded: run.planningDegraded
+		assignments: run.assignments.map((assignment) => ({ ...assignment }))
 	});
 }
 
@@ -209,7 +205,6 @@ export function saveCheckpoint(run: ReviewRun): void {
 	events.onCheckpoint({
 		units: run.units.map((unit) => ({ ...unit })),
 		directive: run.directive,
-		planningDegraded: run.planningDegraded,
 		assignments: run.assignments.map((record) => ({ ...record })),
 		candidates: kept.map((candidate) => ({ ...candidate })),
 		coverage: run.coverage.snapshot(),

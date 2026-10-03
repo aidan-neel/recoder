@@ -20,7 +20,6 @@ export interface ReviewCheckpoint {
 	mergeBaseSha: string;
 	/** The developer's instructions as read at the start; reapplied on resume. */
 	directive: ReviewDirective | null;
-	planningDegraded: boolean;
 	/** Every unit the review launched, retries included. */
 	units: ReviewUnit[];
 	assignments: ReviewAssignment[];

@@ -2,7 +2,6 @@ import {
 	ORCHESTRATOR_ID,
 	type ReviewAssignment,
 	type ReviewChatMessage,
-	type ReviewPlanApproval,
 	type ReviewReasoningEntry,
 	type ReviewTask
 } from '@recoder/shared';
@@ -19,7 +18,6 @@ export interface ReviewingInput {
 	failed: boolean;
 	awaitingPrompt: boolean;
 	paused: boolean;
-	approval: ReviewPlanApproval | null;
 	stage: number;
 	stageLabel: string;
 	stageDetail?: string;
@@ -118,12 +116,9 @@ export class ReviewingState {
 
 	readonly currentStep = $derived(!this.#input.active && !this.#input.failed ? 6 : Math.min(this.#input.stage, 5));
 
-	/** Nothing runs until the developer answers the approval card, so no "Waiting on …" loader yet. */
-	readonly awaitingApproval = $derived(this.#input.active && this.#input.approval?.status === 'pending');
-
 	/** Early stages (checkout, inventory, planning) have nothing to open, and the live thinking and tool rows already show the work. */
 	readonly showProgress = $derived(
-		!this.awaitingApproval && (!this.#input.active || this.running.length > 0 || this.verifying || !!this.finalization)
+		!this.#input.active || this.running.length > 0 || this.verifying || !!this.finalization
 	);
 
 	/** Checkout and dependency install have no transcript of their own; until the orchestrator speaks, a loading card stands in. */

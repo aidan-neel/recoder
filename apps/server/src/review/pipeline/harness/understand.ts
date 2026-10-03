@@ -66,7 +66,7 @@ async function applyInstructions(run: ReviewRun): Promise<void> {
 	if (!run.directive && instructions) {
 		task('instructions', 'Reading your instructions', 'running', 'Working out which files and lenses you asked for', {
 			kind: 'planning',
-			agent: 'correctness'
+			agent: 'orchestrator'
 		});
 
 		run.directive = await interpretInstructions(
@@ -87,7 +87,7 @@ async function applyInstructions(run: ReviewRun): Promise<void> {
 
 	task('instructions', 'Reading your instructions', 'done', describeDirective(run.directive, applied), {
 		kind: 'planning',
-		agent: 'correctness'
+		agent: 'orchestrator'
 	});
 }
 

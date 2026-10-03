@@ -2,7 +2,7 @@ import type { Context } from 'hono';
 import type { z } from 'zod';
 import type { Review } from '@recoder/shared';
 import { modelFailure } from '../../models/model-failure';
-import type { RoleConfig } from '../../models/models';
+import type { ModelConfig } from '../../models/models';
 import { db, reviewDiffs } from '../../store';
 import { parseBody } from '../parse-body';
 
@@ -47,7 +47,7 @@ export async function reviewWithDiff<S extends z.ZodType>(
 }
 
 /** A model error from writing a fix, as a 502 that says whether to sign in or wait out a usage limit. */
-export function fixModelFailure(c: Context, err: unknown, config: RoleConfig): Response {
+export function fixModelFailure(c: Context, err: unknown, config: ModelConfig): Response {
 	const failure = modelFailure(err, config, 'The model could not write a fix. Try again.');
 
 	return c.json(

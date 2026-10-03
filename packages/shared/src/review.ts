@@ -21,7 +21,7 @@ export interface Review {
 	source: 'github' | 'gitlab' | 'stub';
 	prTitle: string | null;
 	prUrl: string | null;
-	/** Set when a forge webhook queued the review: nobody is watching, so nothing waits for approval. */
+	/** Set when a forge webhook queued the review: nobody is watching it. */
 	trigger?: 'webhook';
 	/** When analysis began; draft sessions may exist before a review is requested. */
 	startedAt?: string;

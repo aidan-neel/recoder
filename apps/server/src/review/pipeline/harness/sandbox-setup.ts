@@ -82,7 +82,7 @@ async function installDependencies(
 					status: 'running',
 					exitCode: null,
 					startedAt,
-					role: 'correctness'
+					role: 'orchestrator'
 				});
 
 				task('setup', 'Install dependencies', 'running', `Running ${step.command}`, { kind: 'setup' });
@@ -101,7 +101,7 @@ async function installDependencies(
 				elapsedMs: result.elapsedMs,
 				summary: result.timedOut ? 'timed out' : `exit ${result.exitCode}`,
 				result: { content: result.output.slice(-12_000), truncated: result.truncated || result.output.length > 12_000 },
-				role: 'correctness'
+				role: 'orchestrator'
 			});
 		}, signal)
 		.catch((err): SetupReport => {
@@ -162,7 +162,7 @@ async function runBaselineChecks(
 		const [result] = await evidence.executeRound(
 			[{ action: 'run', command, timeoutSec: Math.floor(Math.min(REVIEW_POLICY.baselineCheckTimeoutMs, left) / 1000) }],
 			signal,
-			(tool) => events?.onTool?.({ ...tool, role: 'correctness' })
+			(tool) => events?.onTool?.({ ...tool, role: 'orchestrator' })
 		);
 
 		if (!result) continue;

@@ -3,9 +3,8 @@ import { streamedMessage } from '../../models/response-text.js';
 import { extractJsonValue } from '../../models/json-extract.js';
 import { parseActions, formatToolResults } from '../../evidence/evidence.js';
 import { REVIEW_POLICY } from '../session/review-policy.js';
-import { isAuthFailure } from './planner.js';
-import { isUsageLimit, modelFailure } from '../../models/model-failure.js';
-import { chatStyle, RETRIEVAL_EXAMPLES } from './prompts.js';
+import { isAuthFailure, isUsageLimit, modelFailure } from '../../models/model-failure.js';
+import { CHAT_STYLE, RETRIEVAL_EXAMPLES } from './prompts.js';
 import { reviewNow, reviewPausePoint } from '../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
 import type { JsonAgentOptions } from './agent-loop/options.js';
@@ -134,7 +133,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 	const spendOpts = { consumeReserve: opts.consumeReserve };
 
 	const messages: ChatMessage[] = [
-		{ role: 'system', content: opts.system + REPLY_RULES + chatStyle(opts.config.model) },
+		{ role: 'system', content: opts.system + REPLY_RULES + CHAT_STYLE },
 		{ role: 'user', content: opts.user }
 	];
 

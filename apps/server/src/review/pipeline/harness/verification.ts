@@ -1,5 +1,5 @@
 import type { EvidenceStore } from '../../../evidence/evidence.js';
-import { configForRole, type ReviewRole } from '../../../models/models.js';
+import { configForSubagent } from '../../../models/models.js';
 import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import {
@@ -130,11 +130,11 @@ async function verifyCandidates(candidates: CandidateFinding[], ctx: VerifyConte
 
 /**
  * Runs one verifier and settles the candidate. Its conversation is shown in the
- * conversation of the specialist who raised the finding.
+ * conversation of the reviewer or subagent that raised the finding.
  */
 async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext): Promise<void> {
-	const role = (candidate.agent ?? 'correctness') as ReviewRole;
-	const cfg = configForRole(role);
+	const role = candidate.agent ?? 'reviewer';
+	const cfg = configForSubagent();
 	const taskId = `verify:${candidate.candidateId}`;
 	const label = `Verify: ${candidate.title ?? candidate.file}`;
 	const exec = !ctx.unavailable;

@@ -42,7 +42,7 @@ export interface Finding {
 	 * surface genuinely new findings.
 	 */
 	fingerprint?: string;
-	/** Specialist assignment that produced this finding — never equal to the role id. */
+	/** Reviewer or subagent assignment that produced this finding. */
 	assignmentId?: string;
 	category?: string;
 	evidenceIds?: string[];

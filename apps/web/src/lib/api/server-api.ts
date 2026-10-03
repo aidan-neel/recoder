@@ -282,7 +282,6 @@ export const serverApi = {
 	cancelReview: (id: string) => req<{ cancelled: boolean }>(`/api/reviews/${id}/cancel`, { method: 'POST' }),
 	pauseReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/pause`, { method: 'POST' }),
 	resumeReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/resume`, { method: 'POST' }),
-	approvePlan: (id: string) => req<{ approved: boolean }>(`/api/reviews/${id}/approve-plan`, { method: 'POST' }),
 	deleteReview: (id: string) => req<{ deleted: boolean }>(`/api/reviews/${id}`, { method: 'DELETE' }),
 	authStatus: () => req<{ github: ProviderAuth; gitlab: ProviderAuth }>('/api/auth/status'),
 	saveToken: (provider: Provider, token: string, host?: string) =>

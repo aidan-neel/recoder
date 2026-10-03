@@ -28,7 +28,7 @@ const DIFF = ['src/app.py', 'src/util.ts', 'tests/test_app.py', 'README.md']
 	)
 	.join('');
 
-const config = { role: 'correctness' as const, baseUrl: 'http://model.test/v1', apiKey: 'k', model: 'small-7b' };
+const config = { baseUrl: 'http://model.test/v1', apiKey: 'k', model: 'small-7b' };
 
 test('common phrasings become file globs without a model', () => {
 	expect(heuristicDirective('review only python files')).toEqual({
@@ -57,8 +57,7 @@ test('a directive marks the changed files it leaves out and drops includes that 
 	const directive: ReviewDirective = {
 		instructions: 'only python, no tests',
 		includeGlobs: ['**/*.py', '**/*.rs'],
-		excludeGlobs: ['**/tests/**'],
-		roles: []
+		excludeGlobs: ['**/tests/**']
 	};
 
 	const applied = applyDirective(inventory, directive);
@@ -76,9 +75,11 @@ test('a directive marks the changed files it leaves out and drops includes that 
 
 	const nothing = buildInventory(DIFF);
 
-	expect(
-		applyDirective(nothing, { instructions: 'only rust', includeGlobs: ['**/*.rs'], excludeGlobs: [], roles: [] })
-	).toEqual({ excluded: 0, kept: 4, droppedIncludes: ['**/*.rs'] });
+	expect(applyDirective(nothing, { instructions: 'only rust', includeGlobs: ['**/*.rs'], excludeGlobs: [] })).toEqual({
+		excluded: 0,
+		kept: 4,
+		droppedIncludes: ['**/*.rs']
+	});
 });
 
 test('the model reading of the instructions is merged with the heuristic, its excludes win, and a failed call leaves the heuristic', async () => {
@@ -92,8 +93,7 @@ test('the model reading of the instructions is merged with the heuristic, its ex
 			choices: [
 				{
 					message: {
-						content:
-							'{"includeGlobs":["*.py","src/"],"excludeGlobs":["**/*.py"],"roles":["Security","tests","nonsense"]}'
+						content: '{"includeGlobs":["*.py","src/"],"excludeGlobs":["**/*.py"]}'
 					}
 				}
 			]
@@ -112,8 +112,7 @@ test('the model reading of the instructions is merged with the heuristic, its ex
 	expect(directive).toEqual({
 		instructions: 'only python and src, security and tests',
 		includeGlobs: ['**/*.pyi', 'src/**'],
-		excludeGlobs: ['**/*.py'],
-		roles: ['security', 'testing']
+		excludeGlobs: ['**/*.py']
 	});
 
 	globalThis.fetch = (async () => new Response('down', { status: 500 })) as unknown as typeof fetch;
@@ -128,7 +127,6 @@ test('the model reading of the instructions is merged with the heuristic, its ex
 	expect(fallback).toEqual({
 		instructions: 'review only python files',
 		includeGlobs: ['**/*.py', '**/*.pyi'],
-		excludeGlobs: [],
-		roles: []
+		excludeGlobs: []
 	});
 });

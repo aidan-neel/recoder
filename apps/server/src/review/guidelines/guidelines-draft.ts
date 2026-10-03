@@ -8,7 +8,7 @@ import type { RepoFileHost } from '../../forge/repo-files.js';
 /** Instruction files a repo may already have; read from its default branch. */
 const INSTRUCTION_FILES = ['AGENTS.md', 'CLAUDE.md', 'CONTRIBUTING.md', '.github/CONTRIBUTING.md'];
 
-const SYSTEM_PROMPT = `You write review guidelines for Recoder, an AI code reviewer that plans specialist reviews of pull requests and reports findings.
+const SYSTEM_PROMPT = `You write review guidelines for Recoder, an AI code reviewer that reviews pull requests and reports findings.
 The guidelines tell the reviewer what its owners care about: what to look for, what to leave alone, how severe things are, and which house conventions matter.
 
 Output only Markdown, with exactly these sections in this order:

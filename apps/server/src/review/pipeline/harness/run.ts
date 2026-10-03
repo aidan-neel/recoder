@@ -75,7 +75,7 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 
 	await prepareSandbox(run, setup);
 
-	run.events?.onStage?.('specialists');
+	run.events?.onStage?.('reviewing');
 	if (run.controller.signal.aborted) throw new ReviewAbortedError('review aborted');
 
 	const finishedAtStart = finishedIds(run);

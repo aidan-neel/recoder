@@ -4,7 +4,6 @@
 	import { diffPrefs } from '$lib/diff/diff-prefs.svelte';
 	import { revealDiffLine } from '$lib/diff/reveal-line';
 	import { findingsStore, type Finding } from '$lib/findings/findings.svelte';
-	import { approvePlan, declinePlan, planApproval } from '$lib/review/plan-approval.svelte';
 	import { reviewStage } from '$lib/review/review-progress-state';
 	import type { FileFocus } from '$lib/session/file-focus.svelte';
 	import type { SessionReview } from '$lib/session/session-review.svelte';
@@ -73,10 +72,6 @@
 		{status}
 		{stageLabel}
 		paused={data.stream?.progress.paused ?? false}
-		approval={data.stream?.progress.approval ?? null}
-		onApprove={review ? () => approvePlan(review.id) : null}
-		onDecline={review ? () => declinePlan(review.id) : null}
-		approving={!!review && planApproval.approving === review.id}
 		onStartReview={review?.status === 'draft' ? onStartReview : null}
 		onOpenDiff={() => onView('diff')}
 		onAsk={data.isBackend ? onAsk : null}

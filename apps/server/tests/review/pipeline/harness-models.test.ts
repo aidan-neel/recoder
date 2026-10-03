@@ -1,7 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { ReviewChatMessage } from '@recoder/shared';
 import { runAdaptiveReview } from '../../../src/review/pipeline/harness';
-import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import {
 	NOTHING,
 	TWO_UNIT_DIFF,
@@ -11,23 +10,13 @@ import {
 	restoreAfterEach,
 	systemOf,
 	unitOf,
-	useTestModel
+	useTwoModels
 } from './harness-fixtures';
 
 restoreAfterEach();
 
 test('reviewers and consolidation run on the Review model and verifiers on the second model', async () => {
-	useTestModel(4);
-
-	setReviewOverrides({
-		...getStoredSettings(),
-		models: [
-			{ id: 'lead', label: 'Lead', model: 'lead' },
-			{ id: 'worker', label: 'Worker', model: 'worker' }
-		],
-		orchestratorModelId: 'lead',
-		specialistModelId: 'worker'
-	});
+	useTwoModels();
 
 	const models: Record<string, Set<string>> = { reviewer: new Set(), consolidation: new Set(), other: new Set() };
 	const contexts: string[] = [];

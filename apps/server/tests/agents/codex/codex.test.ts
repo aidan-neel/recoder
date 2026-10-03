@@ -3,7 +3,7 @@ import { codex } from '../../../src/agents/codex/codex';
 import { LlmError, chatCompletion, streamChatCompletion } from '../../../src/models/llm';
 import { db, reviewMetrics } from '../../../src/store';
 import { getReviewMetrics, withReviewMetrics } from '../../../src/models/metrics';
-import { configForRole } from '../../../src/models/models';
+import { configForSubagent } from '../../../src/models/models';
 import {
 	initReviewSettings,
 	saveReviewSettings,
@@ -23,7 +23,7 @@ test('existing codex model routing persists without an API key or endpoint', () 
 	setReviewOverrides({});
 	initReviewSettings();
 
-	expect(configForRole('correctness')).toMatchObject({
+	expect(configForSubagent()).toMatchObject({
 		provider: 'codex',
 		baseUrl: '',
 		apiKey: '',

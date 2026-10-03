@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test';
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../src/review/pipeline/harness';
-import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import {
 	KEEP_NONE,
 	NOTHING,
@@ -11,7 +10,7 @@ import {
 	restoreAfterEach,
 	systemOf,
 	unitOf,
-	useTestModel
+	useTwoModels
 } from './harness-fixtures';
 
 restoreAfterEach();
@@ -61,21 +60,6 @@ function stubSubagents() {
 	}) as unknown as typeof fetch;
 
 	return seen;
-}
-
-/** Two models: the Review model `lead` and the second model `worker`. */
-function useTwoModels(): void {
-	useTestModel(4);
-
-	setReviewOverrides({
-		...getStoredSettings(),
-		models: [
-			{ id: 'lead', label: 'Lead', model: 'lead' },
-			{ id: 'worker', label: 'Worker', model: 'worker' }
-		],
-		orchestratorModelId: 'lead',
-		specialistModelId: 'worker'
-	});
 }
 
 test('the cap holds across units: the first unit’s requests run on the second model, and the rest are named in the summary', async () => {

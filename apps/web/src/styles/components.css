@@ -186,31 +186,6 @@
 	box-shadow: none;
 }
 
-/* A plan waiting for the go-ahead asks here too, so the question is never only in the conversation. */
-.progress-approval {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	padding: 10px 12px 12px;
-	border-top: 1px solid var(--line-subtle-2);
-}
-.progress-approval-text {
-	font-size: 12.5px;
-	line-height: 18px;
-	color: var(--text-secondary);
-}
-.progress-approval-actions {
-	display: flex;
-	gap: 6px;
-}
-[data-ui='button'][data-variant][data-size].progress-approve {
-	flex: 1;
-	height: 28px;
-	min-height: 28px;
-	padding: 0 10px;
-	border-radius: 7px;
-	font-size: 12.5px;
-}
 .review-live[data-paused] .review-live-dot {
 	background-color: var(--sev-medium);
 }

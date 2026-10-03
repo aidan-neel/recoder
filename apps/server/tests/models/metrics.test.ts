@@ -284,10 +284,10 @@ test('nested agent retries count all provider calls, not just the accepted JSON 
 
 	await withReviewMetrics(a.id, 'pipeline', () =>
 		runJsonAgent({
-			label: 'planner',
+			label: 'reviewer',
 			system: '',
 			user: '',
-			config: { ...opts, role: 'correctness' },
+			config: opts,
 			budget: new ModelBudget(),
 			evidence: new EvidenceStore(null, buildInventory(''), 1000),
 			maxTurns: 2,

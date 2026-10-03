@@ -33,7 +33,6 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
 		coverage,
 		coverageGaps: run.coverage.gaps(),
 		assignments: run.assignments,
-		planningDegraded: run.planningDegraded,
 		error
 	};
 }
@@ -83,7 +82,6 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 		coverage: run.coverage.summary(),
 		coverageGaps: run.coverage.gaps(),
 		assignments: settled,
-		planningDegraded: run.planningDegraded,
 		error: `Ran out of time after ${minutes} minutes`
 	};
 }
@@ -99,7 +97,6 @@ function failReview(assignments: ReviewAssignment[], coverage: CoverageLedger, e
 		coverage: coverage.summary(),
 		coverageGaps: coverage.gaps(),
 		assignments: settleAssignments(assignments, error),
-		planningDegraded: true,
 		error
 	};
 }

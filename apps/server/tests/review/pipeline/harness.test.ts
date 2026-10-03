@@ -7,6 +7,7 @@ import {
 	KEEP_NONE,
 	NOTHING,
 	TWO_UNIT_DIFF,
+	addedFile,
 	finding,
 	messagesOf,
 	modelReply,
@@ -135,7 +136,7 @@ test('a review told to look only at Python files cuts its units from those files
 		if (system.includes('primary reviewer')) reviewerPrompts.push(messagesOf(init)[1].content);
 
 		const reply = system.includes('file filter')
-			? { includeGlobs: ['**/*.py'], excludeGlobs: [], roles: [] }
+			? { includeGlobs: ['**/*.py'], excludeGlobs: [] }
 			: system.includes('primary reviewer')
 				? { ...NOTHING, examinedHunks: ['src/b.py:1,1:1,1'] }
 				: KEEP_NONE;
@@ -150,4 +151,19 @@ test('a review told to look only at Python files cuts its units from those files
 	expect(result.coverageGaps.find((gap) => gap.path === 'src/a.ts')?.reason).toContain('outside your instructions');
 	expect(reviewerPrompts.length).toBeGreaterThan(0);
 	expect(reviewerPrompts.every((prompt) => prompt.includes('review only python files'))).toBe(true);
+});
+
+test('an unattended review of many units runs every unit and finishes without waiting on anyone', async () => {
+	useTestModel(8);
+
+	const calls: string[] = [];
+	const diff = Array.from({ length: 8 }, (_, index) => addedFile(`pkg${index}/index.ts`, 140)).join('');
+
+	stubModel(calls);
+
+	const result = await runAdaptiveReview({ diff, sandboxPath: null });
+
+	expect(result.outcome).toBe('complete');
+	expect(result.assignments).toHaveLength(8);
+	expect(result.assignments.every((record) => record.status === 'done')).toBe(true);
 });
