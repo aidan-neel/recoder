@@ -14,6 +14,7 @@ import {
 	runWithReviewControl,
 	type ReviewControl
 } from '../review/session/review-control';
+import { supersedeWebhookReviews } from '../review/session/supersede';
 import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress, settlePipelineStreams } from '../store';
 import { emitReviewEvent, reportReviewTask, trackReviewTask } from '../review/session/events';
 import { fetchPullRequest } from '../forge/gh';
@@ -51,20 +52,22 @@ function touch(reviewId: string, patch: Partial<Review>): Review {
  * A reviewer model is required — stub reviews that finish in seconds with
  * no real findings are worse than refusing outright.
  */
-export function queueReview(input: QueueReviewInput): Review {
+export function queueReview(input: QueueReviewInput, trigger?: Review['trigger']): Review {
 	if (!isReviewConfigured()) {
 		throw new Error(
 			'reviewer not configured: add a reviewer model in settings (or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL)'
 		);
 	}
 
-	const review = createReviewSession(input);
+	if (trigger === 'webhook') supersedeWebhookReviews(input.repoId, input.prNumber);
+
+	const review = createReviewSession(input, trigger);
 
 	return startReviewSession(review.id);
 }
 
 /** Opening a PR creates durable chat state without running models or the pipeline. */
-export function createReviewSession(input: CreateReviewInput): Review {
+export function createReviewSession(input: CreateReviewInput, trigger?: Review['trigger']): Review {
 	const repo = db.repos.get(input.repoId);
 
 	if (!repo) throw new Error('repo not found');
@@ -87,6 +90,7 @@ export function createReviewSession(input: CreateReviewInput): Review {
 		source: repo.provider ?? detectProvider(repo.url),
 		prTitle: input.prTitle ?? null,
 		prUrl: null,
+		...(trigger ? { trigger } : {}),
 		createdAt: now,
 		updatedAt: now
 	};
@@ -161,7 +165,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	let baseRef: string | undefined;
 	let prBody = '';
 	let prContext: Promise<string> = Promise.resolve('');
-	const control = openReviewControl(reviewId);
+	const control = openReviewControl(reviewId, initial.trigger === 'webhook');
 	const analysis = control.abort;
 
 	try {
@@ -366,7 +370,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 
 		analysis.abort();
 
-		const message = cancelled ? 'Review cancelled.' : err instanceof Error ? err.message : 'pipeline failed';
+		const message = cancelled ? cancelReason(analysis.signal) : err instanceof Error ? err.message : 'pipeline failed';
 		const failure = !cancelled && err instanceof ModelBlockedError ? err.failure : undefined;
 
 		markFailed(reviewId, message, failure);
@@ -376,6 +380,11 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		closeReviewControl(reviewId, control);
 		settleRun(reviewId);
 	}
+}
+
+/** Why the review was cancelled, as `ReviewControl.cancel` recorded it. */
+function cancelReason(signal: AbortSignal): string {
+	return signal.reason instanceof Error ? signal.reason.message : 'Review cancelled.';
 }
 
 /** Planning and the correctness pass always run, so a missing ChatGPT sign-in fails now, not after a long checkout. */

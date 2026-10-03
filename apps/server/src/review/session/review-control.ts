@@ -7,6 +7,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * re-run on resume, without costing a turn) and holds new ones at
  * `reviewPausePoint`. Deadlines read `reviewNow()`, a clock that stands still
  * while paused, so a long pause doesn't eat the review's time budget.
+ * An unattended review (started by a webhook) never stops to ask for approval.
  */
 export class ReviewControl {
 	readonly abort = new AbortController();
@@ -17,6 +18,8 @@ export class ReviewControl {
 	paused = false;
 	/** Set while the review waits for the developer to approve a large plan. */
 	private approval: { since: number; settle: () => void } | null = null;
+
+	constructor(readonly unattended = false) {}
 
 	/** Aborts when a pause starts; renewed on resume. */
 	get pauseSignal(): AbortSignal {
@@ -42,8 +45,9 @@ export class ReviewControl {
 		return true;
 	}
 
-	cancel(): void {
-		this.abort.abort(new Error('Review cancelled'));
+	/** Stop the review; `reason` becomes its failure message. */
+	cancel(reason = 'Review cancelled.'): void {
+		this.abort.abort(new Error(reason));
 		for (const wake of this.waiters.splice(0)) wake();
 	}
 
@@ -93,8 +97,13 @@ export class ReviewControl {
 	async wait(signal?: AbortSignal): Promise<void> {
 		while (this.paused && !signal?.aborted && !this.abort.signal.aborted) {
 			await new Promise<void>((resolve) => {
-				this.waiters.push(resolve);
-				signal?.addEventListener('abort', () => resolve(), { once: true });
+				const wake = () => {
+					signal?.removeEventListener('abort', wake);
+					resolve();
+				};
+
+				this.waiters.push(wake);
+				signal?.addEventListener('abort', wake, { once: true });
 			});
 		}
 	}
@@ -103,8 +112,8 @@ export class ReviewControl {
 const controls = new Map<string, ReviewControl>();
 const current = new AsyncLocalStorage<ReviewControl>();
 
-export function openReviewControl(reviewId: string): ReviewControl {
-	const control = new ReviewControl();
+export function openReviewControl(reviewId: string, unattended = false): ReviewControl {
+	const control = new ReviewControl(unattended);
 
 	controls.set(reviewId, control);
 

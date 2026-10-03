@@ -18,28 +18,30 @@ import {
 
 restoreAfterEach();
 
-test('a plan past the approval threshold waits for the developer, then runs every specialist', async () => {
-	useTestModel();
+const NINE_ROLES: ReviewRole[] = [
+	'correctness',
+	'patterns',
+	'security',
+	'perf',
+	'errors',
+	'api',
+	'testing',
+	'concurrency',
+	'data'
+];
 
-	const roles: ReviewRole[] = [
-		'correctness',
-		'patterns',
-		'security',
-		'perf',
-		'errors',
-		'api',
-		'testing',
-		'concurrency',
-		'data'
-	];
+/** Runs a nine-specialist plan, past the high dispatch approval threshold, under `control`. */
+async function runNineSpecialists(control: ReviewControl, onPending?: () => void) {
+	useTestModel();
 
 	const plan = {
 		...PLAN,
-		assignments: roles.map((role, index) => assignment(`${role}-core`, role, index + 1)),
-		roleDecisions: decisions(roles)
+		assignments: NINE_ROLES.map((role, index) => assignment(`${role}-core`, role, index + 1)),
+		roleDecisions: decisions(NINE_ROLES)
 	};
 
 	const ran = new Set<string>();
+	const approvals: string[] = [];
 
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		const system = systemOf(init);
@@ -52,27 +54,40 @@ test('a plan past the approval threshold waits for the developer, then runs ever
 		return modelReply({ message: 'ok', ...reply });
 	}) as unknown as typeof fetch;
 
-	const control = new ReviewControl();
-	const approvals: string[] = [];
-
-	/** The developer answers a moment later; the review must be holding until then. */
-	const approveLater = () => setTimeout(() => expect(control.approve()).toBe(true), 20);
-
 	const result = await runWithReviewControl(control, () =>
 		runAdaptiveReview(
 			{ diff: DIFF, sandboxPath: null, dispatch: dispatchPolicy('high') },
 			{
 				onApproval: (approval) => {
 					approvals.push(approval.status);
-					if (approval.status === 'pending') approveLater();
+					if (approval.status === 'pending') onPending?.();
 				}
 			}
 		)
 	);
 
+	return { ran: [...ran].sort(), approvals, skipped: result.assignments.filter((r) => r.status === 'skipped') };
+}
+
+test('a plan past the approval threshold waits for the developer, then runs every specialist', async () => {
+	const control = new ReviewControl();
+
+	/** The developer answers a moment later; the review must be holding until then. */
+	const approveLater = () => setTimeout(() => expect(control.approve()).toBe(true), 20);
+
+	const { ran, approvals, skipped } = await runNineSpecialists(control, approveLater);
+
 	expect(approvals).toEqual(['pending', 'approved']);
-	expect([...ran].sort()).toEqual([...roles].sort());
-	expect(result.assignments.filter((record) => record.status === 'skipped')).toEqual([]);
+	expect(ran).toEqual([...NINE_ROLES].sort());
+	expect(skipped).toEqual([]);
+});
+
+test('an unattended review runs a plan past the approval threshold without waiting', async () => {
+	const { ran, approvals, skipped } = await runNineSpecialists(new ReviewControl(true));
+
+	expect(approvals).toEqual([]);
+	expect(ran).toEqual([...NINE_ROLES].sort());
+	expect(skipped).toEqual([]);
 });
 
 test('a review told to look only at Python files keeps every specialist, sweep and prompt to those files', async () => {

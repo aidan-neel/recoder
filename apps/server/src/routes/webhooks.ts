@@ -69,14 +69,17 @@ app.post('/github', async (c) => {
 
 					if (typeof pr.number !== 'number') throw new Error('No PR number in webhook');
 
-					const review = queueReview({
-						repoId: tracked.id,
-						prNumber: pr.number,
-						headSha:
-							typeof (pr.head as Record<string, unknown>)?.sha === 'string'
-								? ((pr.head as Record<string, unknown>).sha as string)
-								: undefined
-					});
+					const review = queueReview(
+						{
+							repoId: tracked.id,
+							prNumber: pr.number,
+							headSha:
+								typeof (pr.head as Record<string, unknown>)?.sha === 'string'
+									? ((pr.head as Record<string, unknown>).sha as string)
+									: undefined
+						},
+						'webhook'
+					);
 
 					return c.json({ received: true, reviewCreated: true, reviewId: review.id }, 201);
 				} catch (err) {
