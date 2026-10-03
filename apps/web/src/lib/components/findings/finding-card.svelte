@@ -9,8 +9,6 @@
 	import FixButton from './fix-button.svelte';
 	import SuggestedFix from './suggested-fix.svelte';
 	import FixStatus from './fix-status.svelte';
-	import FixChecks from './fix-checks.svelte';
-	import SeverityPill from '../ui/severity-pill.svelte';
 	import VerificationBadge from './verification-badge.svelte';
 	import { SEVERITY_DOT, findingsStore, type Finding } from '$lib/findings/findings.svelte';
 	import { formatAgentName, threadsStore } from '$lib/findings/threads.svelte';
@@ -23,7 +21,6 @@
 	let { finding }: Props = $props();
 
 	const dismissed = $derived(finding.status === 'dismissed');
-	const accepted = $derived(finding.status === 'accepted');
 	/** Ringed while this is the navigator's current finding. */
 	const focused = $derived(findingsStore.activeId === finding.id);
 	const suggestion = $derived(findingsStore.suggestions[finding.id]);
@@ -55,10 +52,8 @@
 				</div>
 			{:else}
 				<div class="inline-finding-head">
-					{#if accepted}<SeverityPill tone="success">Fixed</SeverityPill>{:else}<FindingSeverity
-							severity={finding.severity}
-						/>{/if}
-					{#if finding.verification && !accepted}<VerificationBadge verification={finding.verification} />{/if}
+					<FindingSeverity severity={finding.severity} />
+					{#if finding.verification}<VerificationBadge verification={finding.verification} />{/if}
 					<span class="min-w-0 truncate">{finding.category}</span>
 					{#if finding.code}<span class="inline-finding-id">{finding.code}</span>{/if}
 				</div>
@@ -67,9 +62,7 @@
 				<Typography.Title level={3} class="sr-only">{finding.title}</Typography.Title>
 				<div class="inline-finding-body ai-voice"><ModelMarkdown content={finding.body} /></div>
 				<FixStatus {finding} />
-				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks
-						{finding}
-					/>{/if}
+				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} />{/if}
 				<div class="inline-finding-foot">
 					<Typography.Metadata
 						class="min-w-0 flex-1 truncate"
@@ -77,13 +70,7 @@
 					>
 						{formatAgentName(finding.agent)}{#if finding.model}<span> · {modelLabel(finding.model)}</span>{/if}
 					</Typography.Metadata>
-					{#if accepted}
-						{#if finding.fix?.sha}<span
-								class="font-mono text-[11.5px] text-fg-faint"
-								title="Committed for {finding.fix.branch}">{finding.fix.sha.slice(0, 7)}</span
-							>{/if}
-						<FixButton {finding} />
-					{:else if finding.status === 'open'}
+					{#if finding.status === 'open'}
 						<Button
 							variant="ghost"
 							class="gap-1.5"

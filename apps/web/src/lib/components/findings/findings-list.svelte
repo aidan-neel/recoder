@@ -98,31 +98,20 @@
 							<span class="focus-card-head">
 								{#if dismissed}<SeverityPill tone="info">Dismissed</SeverityPill>{:else}<FindingSeverity
 										severity={finding.severity}
-									/>{#if finding.verification && finding.status !== 'accepted'}<VerificationBadge
-											verification={finding.verification}
-										/>{/if}{/if}
+									/>{#if finding.verification}<VerificationBadge verification={finding.verification} />{/if}{/if}
 								<span class="min-w-0 truncate">{finding.category}</span>
 								<span class="focus-card-loc" title="{finding.file}:{finding.startLine}"
 									>{finding.file}:{finding.startLine}</span
 								>
 								{#if findingsStore.suggestions[finding.id]}
 									{@const fix = findingsStore.suggestions[finding.id]}
-									{@const fixState =
-										fix.apply === 'applied' || finding.status === 'accepted'
-											? 'fixed'
-											: fix.status === 'loading'
-												? 'fixing'
-												: fix.status === 'ready'
-													? 'ready'
-													: 'failed'}
+									{@const fixState = fix.status === 'loading' ? 'fixing' : fix.status === 'ready' ? 'ready' : 'failed'}
 									<span class="focus-card-fix" data-state={fixState}
 										>{#if fixState === 'fixing'}<Spinner size={10} aria-hidden="true" />{/if}{fixState === 'fixing'
-											? 'Fixing'
+											? 'Writing fix'
 											: fixState === 'ready'
-												? 'Fix ready'
-												: fixState === 'fixed'
-													? 'Fixed'
-													: 'Fix failed'}</span
+												? 'Fix suggested'
+												: 'Fix failed'}</span
 									>
 								{/if}
 							</span>

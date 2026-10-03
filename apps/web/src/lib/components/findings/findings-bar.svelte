@@ -23,12 +23,11 @@
 	import { sessionFile } from '$lib/session/session-file.svelte';
 	import { threadsStore } from '$lib/findings/threads.svelte';
 	import { fixFindings, hasReadyFix } from '$lib/findings/fixes';
-	import ApplyFixesDialog from './apply-fixes-dialog.svelte';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 
 	/**
-	 * `trailing`: status and actions shown before Fix all at the toolbar's right end.
-	 * `part`: 'actions' renders only those actions + Fix all (the session header);
+	 * `trailing`: status and actions shown before Suggest fixes at the toolbar's right end.
+	 * `part`: 'actions' renders only those actions + Suggest fixes (the session header);
 	 * 'nav' renders the findings stepper, severity filters and search as a
 	 * sidebar section.
 	 */
@@ -167,14 +166,10 @@
 		return lines.join('\n').trimEnd();
 	});
 
-	/**
-	 * Fix all: specialists write a patch per finding in the background, each reviewed on its finding.
-	 * The button follows along, then applies the ready ones.
-	 */
-	const openList = $derived(openItems.filter((f) => f.status === 'open'));
-	const writing = $derived(openList.filter((f) => findingsStore.suggestions[f.id]?.status === 'loading').length);
-	const readyFixes = $derived(openList.filter(hasReadyFix));
-	const applying = $derived(openList.some((f) => findingsStore.suggestions[f.id]?.apply === 'applying'));
+	/** Suggest fixes: specialists write a patch per finding in the background, each shown on its finding. */
+	const writing = $derived(
+		openItems.filter((f) => f.status === 'open' && findingsStore.suggestions[f.id]?.status === 'loading').length
+	);
 	const toFix = $derived(
 		fixable.filter((f) => {
 			const s = findingsStore.suggestions[f.id];
@@ -182,8 +177,6 @@
 			return s?.status !== 'loading' && !hasReadyFix(f);
 		})
 	);
-	let applyConfirmOpen = $state(false);
-
 	const fixAllDisabled = $derived(toFix.length === 0 || !reviewId);
 	$effect(() => {
 		if (part === 'nav') return;
@@ -335,27 +328,11 @@
 				<Button class="fix-all gap-2" disabled aria-live="polite"
 					><Spinner size={13} aria-hidden="true" />Writing {writing} {writing === 1 ? 'fix' : 'fixes'}</Button
 				>
-			{:else if applying}
-				<Button class="fix-all gap-2" disabled aria-live="polite"
-					><Spinner size={13} aria-hidden="true" />Applying</Button
-				>
-			{:else if readyFixes.length}
-				<Button
-					class="fix-all gap-2"
-					onclick={() => {
-						searchOpen = false;
-						applyConfirmOpen = true;
-					}}
-				>
-					<Check size={14} aria-hidden="true" />Apply fixes<span class="fix-all-count">{readyFixes.length}</span>
-				</Button>
 			{:else}
-				<Button class="fix-all gap-2" disabled={toFix.length === 0 || !reviewId} onclick={() => startFixAll()}>
-					<Wrench size={14} aria-hidden="true" />Fix all<span class="fix-all-count">{toFix.length}</span>
+				<Button class="fix-all gap-2" disabled={fixAllDisabled} onclick={() => startFixAll()}>
+					<Wrench size={14} aria-hidden="true" />Suggest fixes<span class="fix-all-count">{toFix.length}</span>
 				</Button>
 			{/if}
 		</div>
-
-		<ApplyFixesDialog bind:open={applyConfirmOpen} ready={readyFixes} />
 	</div>
 {/if}

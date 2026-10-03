@@ -4,7 +4,6 @@
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import X from '@lucide/svelte/icons/x';
 	import { Button } from '@sivir-ui/svelte/components/button';
-	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Conversation from '@sivir-ui/svelte/components/conversation';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
@@ -279,16 +278,7 @@
 					</div>
 					{#if finding.status !== 'open'}
 						<div class="mt-2 flex items-center gap-2">
-							{#if finding.status === 'accepted'}
-								<Badge variant="success">Fixed</Badge>
-								{#if finding.fixedBy}
-									<span class="font-mono text-[12px] text-foreground-muted">
-										· {formatAgentName(finding.fixedBy)}
-									</span>
-								{/if}
-							{:else}
-								<span class="font-mono text-[13px] text-foreground-muted">Dismissed</span>
-							{/if}
+							<span class="font-mono text-[13px] text-foreground-muted">Dismissed</span>
 							<Button variant="ghost" class="font-sans text-[14px]" onclick={() => findingsStore.reopen(finding.id)}>
 								Undo
 							</Button>

@@ -21,7 +21,6 @@
 	import EvidenceView from './evidence-view.svelte';
 	import FindingSeverity from './finding-severity.svelte';
 	import FixButton from './fix-button.svelte';
-	import FixChecks from './fix-checks.svelte';
 	import FixStatus from './fix-status.svelte';
 	import SuggestedFix from './suggested-fix.svelte';
 	import VerificationBadge from './verification-badge.svelte';
@@ -30,14 +29,13 @@
 		active: Finding;
 		files: FileDiff[];
 		toolCalls: ReviewToolCall[];
-		branch: string | null;
 		/** Open the whole file in the inline diff. */
 		onFullFile: (finding: Finding) => void;
 		/** Open a file in the inline diff at a line (the evidence's "Open in diff"). */
 		onOpenAt: ((file: string, line: number | null) => void) | null;
 	}
 
-	let { active, files, toolCalls, branch, onFullFile, onOpenAt }: Props = $props();
+	let { active, files, toolCalls, onFullFile, onOpenAt }: Props = $props();
 
 	const suggestion = $derived(findingsStore.suggestions[active.id]);
 
@@ -117,11 +115,9 @@
 
 	<Card.Root class="focus-detail">
 		<div class="focus-detail-head">
-			{#if active.status === 'accepted'}<SeverityPill tone="success">Fixed</SeverityPill
-				>{:else if active.status === 'dismissed'}<SeverityPill tone="info">Dismissed</SeverityPill
-				>{:else}<FindingSeverity severity={active.severity} />{#if active.verification}<VerificationBadge
-						verification={active.verification}
-					/>{/if}{/if}
+			{#if active.status === 'dismissed'}<SeverityPill tone="info">Dismissed</SeverityPill>{:else}<FindingSeverity
+					severity={active.severity}
+				/>{#if active.verification}<VerificationBadge verification={active.verification} />{/if}{/if}
 			<Typography.Title level={3} class="focus-detail-title">{active.title}</Typography.Title>
 			<span class="focus-detail-meta"
 				>{[active.code, formatAgentName(active.agent), modelLabel(active.model)].filter(Boolean).join(' · ')}</span
@@ -149,16 +145,8 @@
 		{/if}
 		{#if evidence}<EvidenceView tool={evidence} onOpenInDiff={evidenceInDiff ? onOpenAt : null} />{/if}
 		<FixStatus finding={active} />
-		{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} /><FixChecks
-				finding={active}
-			/>{/if}
+		{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} />{/if}
 		<div class="focus-detail-foot">
-			<span class="min-w-0 flex-1 truncate"
-				>{#if active.fix?.sha}Fixed in <span class="font-mono">{active.fix.sha.slice(0, 7)}</span> on
-					<span class="font-mono">{active.fix.branch}</span>{:else if active.fix}Applied to the checkout. Commit and
-					push it from Changes.{:else if branch && active.status !== 'dismissed'}Applies to the checkout; you commit and
-					push it{/if}</span
-			>
 			{#if active.status === 'open'}
 				<Button variant="ghost" onclick={() => dismissFinding(active)}>Dismiss</Button>
 				<Button variant="outline" class="gap-1.5" onclick={() => discussFinding(active)}

@@ -15,7 +15,6 @@
 		data: SessionReview;
 		focus: FileFocus;
 		files: FileDiff[];
-		branch?: string | null;
 		sidePanelOpen: boolean;
 		onView: (view: SessionView) => Promise<void>;
 		onAsk: () => void;
@@ -23,7 +22,7 @@
 		onRestart: () => void;
 	}
 
-	let { data, focus, files, branch, sidePanelOpen, onView, onAsk, onStartReview, onRestart }: Props = $props();
+	let { data, focus, files, sidePanelOpen, onView, onAsk, onStartReview, onRestart }: Props = $props();
 
 	const review = $derived(data.review);
 
@@ -71,7 +70,6 @@
 	<FindingsFocus
 		{files}
 		toolCalls={data.stream?.progress.toolCalls ?? []}
-		{branch}
 		{status}
 		{stageLabel}
 		paused={data.stream?.progress.paused ?? false}

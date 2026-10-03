@@ -135,25 +135,6 @@ export async function fetchPullRequest(
 	return { pr: parsePullRow(view, prNumber), diff };
 }
 
-/** Head branch name for a PR (no diff fetch). Throws GhError. */
-export async function fetchPullHeadRef(
-	repoUrl: string,
-	prNumber: number,
-	opts?: { env?: Record<string, string> }
-): Promise<string> {
-	const slug = parseRepoSlug(repoUrl);
-
-	const view = (await gh(['pr', 'view', String(prNumber), '--repo', slug, '--json', 'headRefName'], opts?.env).then(
-		extractJson
-	)) as Record<string, unknown>;
-
-	const headRef = typeof view.headRefName === 'string' ? view.headRefName : '';
-
-	if (!headRef) throw new GhError('unknown', 'PR has no head ref');
-
-	return headRef;
-}
-
 /** Open PRs for a repo, newest first. Throws GhError. */
 export async function listPullRequests(
 	repoUrl: string,

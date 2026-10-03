@@ -50,16 +50,4 @@ export interface Finding {
 	/** Diff side for deleted-code findings. Defaults to `new` when a line exists. */
 	side?: 'old' | 'new';
 	verification?: FindingVerification;
-	/** Set once a Recoder fix for this finding was pushed to the PR branch. */
-	fix?: FindingFix;
-}
-
-/** A fix Recoder pushed for a finding. */
-export interface FindingFix {
-	sha: string;
-	branch: string;
-	summary: string;
-	at: string;
-	/** Reviewer role that wrote the fix. */
-	agent?: string;
 }

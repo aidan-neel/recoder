@@ -18,7 +18,7 @@ export function finishedReplies(messages: ReviewChatMessage[] | undefined, fence
 }
 
 /**
- * Starts the fixes a reply asked for (the same as Fix all, for those findings), once per reply.
+ * Starts the fixes a reply asked for (the same as Suggest fixes, for those findings), once per reply.
  * The batch is recorded under the reply so the fixes show up in it.
  */
 export function startRequestedFixes(replies: ReviewChatMessage[], handled: Set<string>): void {

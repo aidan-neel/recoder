@@ -19,7 +19,6 @@
 	interface Props {
 		files: FileDiff[];
 		toolCalls?: ReviewToolCall[];
-		branch?: string | null;
 		/** Open the whole file in the inline diff. */
 		onFullFile: (finding: Finding) => void;
 		/** Open a file in the inline diff at a line (the evidence's "Open in diff"). */
@@ -44,7 +43,6 @@
 	let {
 		files,
 		toolCalls = [],
-		branch = null,
 		onFullFile,
 		onOpenAt = null,
 		status = 'done',
@@ -62,7 +60,6 @@
 	}: Props = $props();
 	const awaitingApproval = $derived(status === 'running' && approval?.status === 'pending');
 
-	const fixedCount = $derived(findingsStore.items.filter((f) => f.status === 'accepted').length);
 	const dismissedCount = $derived(findingsStore.items.filter((f) => f.status === 'dismissed').length);
 	const hiddenCount = $derived(
 		findingsStore.items.filter((f) => f.status === 'open' && !findingsStore.isShown(f)).length
@@ -158,7 +155,6 @@
 			</p>
 			<div class="focus-empty-facts">
 				{#if emptyKind === 'caught-up'}
-					{#if fixedCount}<span><b class="text-success">{fixedCount}</b> fixed</span>{/if}
 					{#if dismissedCount}<span><b>{dismissedCount}</b> dismissed</span>{/if}
 					{#if hiddenCount}<span><b>{hiddenCount}</b> hidden</span>{/if}
 				{:else if files.length}
@@ -203,7 +199,7 @@
 		<ScrollArea class="min-h-0" showCues={false} aria-label="Focused finding">
 			{#if active}
 				{#key active.id}
-					<FindingDetail {active} {files} {toolCalls} {branch} {onFullFile} {onOpenAt} />
+					<FindingDetail {active} {files} {toolCalls} {onFullFile} {onOpenAt} />
 				{/key}
 			{/if}
 		</ScrollArea>

@@ -1,4 +1,3 @@
-import type { FixEdit } from '@recoder/shared';
 import { z } from 'zod';
 import { describeFinding, findingRequestSchema } from '../chat/finding-request.js';
 import { resolveDiscussRole } from '../chat/discuss.js';
@@ -6,19 +5,10 @@ import { readExcerpt } from '../pipeline/harness.js';
 import { capDiff } from '../pipeline/prompts.js';
 import { asLlmError, chatCompletion, LlmError } from '../../models/llm.js';
 import { configForRole } from '../../models/models.js';
-import { EditMismatchError, patchFromEdits, readCheckoutFile } from './fix-edits.js';
+import { EditMismatchError, patchFromEdits } from './fix-edits.js';
 
 export { locateEdit, patchFromEdits } from './fix-edits.js';
-export {
-	applyFixCommit,
-	applyFixToWorktree,
-	deleteVerifyBranch,
-	FixError,
-	patchApplies,
-	pushVerifyBranch,
-	VERIFY_BRANCH_PREFIX,
-	withSandboxLock
-} from './fix-apply.js';
+export { patchApplies } from './patch-check.js';
 
 /**
  * Prompt for on-demand fix suggestions. The model returns find-and-replace edits, never a diff:
@@ -32,14 +22,6 @@ Output STRICT JSON: {"summary": string, "edits": [{"file": string, "find": strin
 - "find" is text copied verbatim from the current file (without the "12: " line-number prefixes), including indentation, with enough whole lines to match exactly once.
 - "replace" is the full text that takes the place of "find".
 No prose outside the JSON object.`;
-
-const CHECK_SYSTEM_PROMPT = SYSTEM_PROMPT.replace(
-	'You write minimal code fixes for a single review finding.',
-	'You write minimal code fixes that make a failing CI check pass on a pull request.'
-).replace(
-	'Fix only the reported finding.',
-	'Fix only what the log shows is failing. Fix the code, not the check: never skip, delete or weaken a test or CI step to make it pass.'
-);
 
 /** Sent after a reply hits the output limit; the retry also turns thinking off. */
 const TRUNCATED_NUDGE =
@@ -68,15 +50,6 @@ export const suggestFixRequestSchema = z.object({
 	finding: findingRequestSchema
 });
 
-export const applyFixRequestSchema = z.object({
-	findingId: z.string().min(1).max(200).optional(),
-	agent: z.string().min(1).max(50).optional(),
-	finding: findingRequestSchema,
-	summary: z.string().min(1).max(500),
-	patch: z.string().min(1).max(60000),
-	edits: fixEditsSchema.optional()
-});
-
 export interface SuggestFixInput {
 	agent: string;
 	file: string;
@@ -88,11 +61,10 @@ export interface SuggestFixInput {
 	sandboxPath: string;
 }
 
-/** A written fix: what it does, the patch, and the edits it was built from. */
+/** A written fix: what it does and the patch. */
 interface FixDraft {
 	summary: string;
 	patch: string;
-	edits: FixEdit[];
 }
 
 /** A fix plus the role and model that wrote it. */
@@ -131,7 +103,7 @@ async function readFixReply(output: string, sandboxPath: string): Promise<FixDra
 
 		const patch = await patchFromEdits(sandboxPath, parsed.data.edits);
 
-		return { summary: parsed.data.summary.trim(), patch, edits: parsed.data.edits };
+		return { summary: parsed.data.summary.trim(), patch };
 	} catch (err) {
 		if (!isUnusableReply(err)) throw err;
 
@@ -217,46 +189,5 @@ export async function suggestFix(input: SuggestFixInput): Promise<SuggestedFix> 
 		agent: role,
 		model: cfg.model,
 		...(await writeFix(cfg, SYSTEM_PROMPT, parts.join('\n\n'), input.sandboxPath))
-	};
-}
-
-/** Source files a CI log points at, e.g. `src/a.ts:12`, that exist in the checkout. */
-async function filesInLog(sandboxPath: string, log: string, limit = 3): Promise<{ file: string; line: number }[]> {
-	const found: { file: string; line: number }[] = [];
-
-	for (const match of log.matchAll(/((?:[\w@.-]+\/)*[\w@.-]+\.[a-z]{1,6})(?::(\d+))?/gi)) {
-		const file = match[1].replace(/^\.\//, '');
-
-		if (found.some((entry) => entry.file === file) || file.includes('..')) continue;
-		if ((await readCheckoutFile(sandboxPath, file)) === null) continue;
-		found.push({ file, line: Number(match[2] ?? 1) || 1 });
-		if (found.length >= limit) break;
-	}
-
-	return found;
-}
-
-/** A fix for a failing CI check, written from its log, the PR diff and the files the log names. */
-export async function suggestCheckFix(input: {
-	check: string;
-	log: string;
-	diff: string;
-	sandboxPath: string;
-}): Promise<SuggestedFix> {
-	const cfg = configForRole('correctness');
-	const parts = [`Failing CI check: ${input.check}`, `--- failure log (untrusted, excerpt) ---\n${input.log}`];
-
-	for (const { file, line } of await filesInLog(input.sandboxPath, input.log)) {
-		const excerpt = await readExcerpt(input.sandboxPath, file, line, 40, 8000);
-
-		if (excerpt !== null) parts.push(`--- ${file} (current, numbered) ---\n${excerpt}`);
-	}
-
-	parts.push(`--- pull request diff (capped) ---\n${capDiff(input.diff)}`);
-
-	return {
-		agent: 'correctness',
-		model: cfg.model,
-		...(await writeFix(cfg, CHECK_SYSTEM_PROMPT, parts.join('\n\n'), input.sandboxPath))
 	};
 }

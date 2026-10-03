@@ -266,6 +266,7 @@
 	display: flex;
 	min-width: 0;
 	align-items: center;
+	justify-content: flex-end;
 	gap: 6px;
 	font-size: 12px;
 	color: var(--text-faint);
@@ -281,119 +282,4 @@
 }
 .diff-num {
 	align-self: start;
-}
-
-/* Changes sheet: applied fixes the developer commits and pushes by hand. */
-.changes-panel {
-	display: flex;
-	height: 100%;
-	min-height: 0;
-	flex-direction: column;
-}
-.changes-head {
-	display: flex;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 10px;
-	padding: 16px 20px 12px;
-	border-bottom: 1px solid var(--line-divider);
-}
-.changes-head .changes-title {
-	margin: 0;
-	font-size: 15px;
-	font-weight: 500;
-}
-.changes-branch {
-	min-width: 0;
-	flex: 1;
-	overflow: hidden;
-	font-size: 12px;
-	color: var(--text-faint);
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-.changes-body {
-	display: flex;
-	flex-direction: column;
-	gap: 24px;
-	padding: 16px 20px 24px;
-}
-.changes-empty {
-	font-size: 13.5px;
-	color: var(--text-subtle);
-}
-.changes-section {
-	display: flex;
-	flex-direction: column;
-	gap: 10px;
-}
-.changes-section-head {
-	display: flex;
-	align-items: center;
-}
-.changes-section .changes-label {
-	margin: 0;
-	font-size: 12.5px;
-	font-weight: 500;
-	color: var(--text-muted);
-}
-.changes-files,
-.changes-commits {
-	display: flex;
-	flex-direction: column;
-	gap: 6px;
-	margin: 0;
-	padding: 0;
-	list-style: none;
-}
-.changes-file {
-	display: flex;
-	min-width: 0;
-	flex-direction: column;
-	gap: 4px;
-	padding: 8px 10px;
-	border-radius: 10px;
-	background: var(--bg-raised);
-	box-shadow: inset 0 0 0 1px var(--line-card);
-}
-.changes-file-row {
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	gap: 8px;
-}
-.changes-check {
-	min-width: 0;
-	font-family: var(--font-code);
-	font-size: 12.5px;
-	overflow-wrap: anywhere;
-}
-.changes-diff .review-file-diff {
-	overflow-x: auto;
-	border-radius: 8px;
-}
-.changes-commit {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-}
-.changes-commit-row {
-	display: flex;
-	min-width: 0;
-	align-items: center;
-	gap: 10px;
-	min-height: 32px;
-	font-size: 13px;
-}
-.changes-sha {
-	flex-shrink: 0;
-	font-size: 12px;
-	color: var(--text-faint);
-}
-.changes-subject {
-	min-width: 0;
-	overflow: hidden;
-	color: var(--text-secondary);
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }

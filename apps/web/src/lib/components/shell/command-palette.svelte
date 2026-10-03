@@ -280,7 +280,7 @@
 							}}
 						>
 							<Wrench size={15} strokeWidth={1.75} class="palette-icon" aria-hidden="true" />
-							<span class="flex-1">Fix all open findings</span>
+							<span class="flex-1">Suggest fixes for open findings</span>
 							<span class="palette-meta">{fixAll.count}</span>
 						</Command.Item>
 					{/if}

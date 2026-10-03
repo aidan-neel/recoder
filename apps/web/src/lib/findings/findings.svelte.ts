@@ -10,24 +10,13 @@ import { findingTitle } from './finding-title';
 
 export type FindingSeverity = 'high' | 'medium' | 'low';
 
-type FindingStatus = 'open' | 'accepted' | 'dismissed';
+type FindingStatus = 'open' | 'dismissed';
 
 /** On-demand fix suggestion state for one finding (client-side only). */
-/** CI verification of a fix on its temporary branch. */
-export interface FixVerify {
-	status: 'pushing' | 'waiting' | 'running' | 'passed' | 'failed' | 'none' | 'error';
-	branch?: string;
-	sha?: string;
-	checks?: import('@recoder/shared').PrCheck[];
-	error?: string;
-}
-
 export interface FixSuggestion {
 	status: 'loading' | 'ready' | 'error';
 	summary?: string;
 	patch?: string;
-	/** What the patch was built from; applying rebuilds it against the latest code. */
-	edits?: import('@recoder/shared').FixEdit[];
 	/** Whether the patch applies cleanly to the review sandbox (null when unknown). */
 	applies?: boolean | null;
 	error?: string;
@@ -35,12 +24,6 @@ export interface FixSuggestion {
 	action?: import('@recoder/shared').FailureAction;
 	/** The model's plan ran out while writing the fix. */
 	usageLimit?: import('@recoder/shared').UsageLimit;
-	/** Apply-to-PR state for a ready suggestion. */
-	apply?: 'applying' | 'applied' | 'error';
-	applyError?: string;
-	sha?: string;
-	branch?: string;
-	verify?: FixVerify;
 }
 
 export const SEVERITIES: FindingSeverity[] = ['high', 'medium', 'low'];
@@ -64,10 +47,6 @@ export interface Finding {
 	agent: string;
 	/** Model that produced this finding, when known. */
 	model?: string | null;
-	/** Fix attribution, set when the finding is accepted. */
-	fixedBy?: string | null;
-	/** The pushed fix commit, when Recoder fixed it. */
-	fix?: import('@recoder/shared').FindingFix;
 	body: string;
 	file: string;
 	/** New-side line range the finding refers to (inclusive). */
@@ -163,10 +142,7 @@ function initialFindings(): Finding[] {
 	];
 }
 
-/**
- * Map a backend finding (harness output) onto the local card/thread model. A fix Recoder pushed earlier
- * keeps the finding Fixed across reloads.
- */
+/** Map a backend finding (harness output) onto the local card/thread model. */
 export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 	const severityMap: Record<BackendSeverity, FindingSeverity> = {
 		error: 'high',
@@ -194,9 +170,7 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 		evidenceIds: f.evidenceIds ?? [],
 		assignmentId: f.assignmentId,
 		verification: f.verification,
-		status: f.fix ? 'accepted' : 'open',
-		fixedBy: f.fix?.agent ?? null,
-		fix: f.fix
+		status: 'open'
 	};
 }
 
@@ -253,16 +227,6 @@ class FindingsStore {
 		this.activeId = id;
 	}
 
-	accept(id: string, fixedBy?: string, fix?: import('@recoder/shared').FindingFix): void {
-		const finding = this.items.find((f) => f.id === id);
-
-		if (finding) {
-			finding.status = 'accepted';
-			finding.fixedBy = fixedBy ?? null;
-			if (fix) finding.fix = fix;
-		}
-	}
-
 	dismiss(id: string): void {
 		const finding = this.items.find((f) => f.id === id);
 
@@ -282,45 +246,12 @@ class FindingsStore {
 		this.suggestions[id] = { status: 'loading' };
 	}
 
-	suggestReady(
-		id: string,
-		suggestion: { summary: string; patch: string; edits?: import('@recoder/shared').FixEdit[]; applies: boolean | null }
-	): void {
+	suggestReady(id: string, suggestion: { summary: string; patch: string; applies: boolean | null }): void {
 		this.suggestions[id] = { status: 'ready', ...suggestion };
 	}
 
 	suggestError(id: string, error: string, action?: import('@recoder/shared').FailureAction): void {
 		this.suggestions[id] = { status: 'error', error, ...(action ? { action } : {}) };
-	}
-
-	setVerify(id: string, verify: FixVerify | undefined): void {
-		const current = this.suggestions[id];
-
-		if (current?.status === 'ready') this.suggestions[id] = { ...current, verify };
-	}
-
-	applyingFix(id: string): void {
-		const current = this.suggestions[id];
-
-		if (current?.status === 'ready') {
-			this.suggestions[id] = { ...current, apply: 'applying', applyError: undefined };
-		}
-	}
-
-	applyReady(id: string, result: { sha?: string; branch: string }): void {
-		const current = this.suggestions[id];
-
-		if (current?.status === 'ready') {
-			this.suggestions[id] = { ...current, apply: 'applied', ...result };
-		}
-	}
-
-	applyFailed(id: string, error: string): void {
-		const current = this.suggestions[id];
-
-		if (current?.status === 'ready') {
-			this.suggestions[id] = { ...current, apply: 'error', applyError: error };
-		}
 	}
 
 	/** Merge remotely-fetched findings (backend reviews) into the local store. */

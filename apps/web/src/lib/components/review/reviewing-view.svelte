@@ -20,7 +20,6 @@
 	import PlanApprovalCard from './plan-approval-card.svelte';
 	import SpecialistNav from './specialist-nav.svelte';
 	import PrChecks from '../home/pr-checks.svelte';
-	import ChangesButton from '../diff/changes-button.svelte';
 	import SessionHeader from '../session/session-header.svelte';
 	import FailureNotice from './failure-notice.svelte';
 	import { errorToast } from '$lib/shell/notify';
@@ -255,7 +254,7 @@
 {/snippet}
 
 {#snippet headerChecks()}
-	{#if reviewId}<div class="findings-toolbar-end"><PrChecks {reviewId} /><ChangesButton /></div>{/if}
+	{#if reviewId}<div class="findings-toolbar-end"><PrChecks {reviewId} /></div>{/if}
 {/snippet}
 
 {#snippet resultCard()}
