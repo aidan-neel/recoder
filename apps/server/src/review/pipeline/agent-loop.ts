@@ -119,11 +119,13 @@ function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean
 	return `Your JSON was neither a retrieval request nor a valid final result. Problems: ${problems}.\n\n${shapes}`;
 }
 
-let agentSeq = 0;
-
-/** A review-unique agent id, which keeps an agent's scratch files and runs its own. */
+/**
+ * A unique agent id, which keeps an agent's scratch files and runs its own.
+ * Random rather than counted, because run records outlive a server restart in
+ * checkpoints and a resumed agent must never share an id with an earlier one.
+ */
 export function newAgentId(): string {
-	return `agent_${++agentSeq}`;
+	return `agent_${crypto.randomUUID()}`;
 }
 
 export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
