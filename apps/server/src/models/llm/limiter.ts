@@ -1,4 +1,4 @@
-import { cancelledError, LlmError } from './errors';
+import { CapacityError, cancelledError } from './errors';
 
 /**
  * Global cap shared by review assignments and interactive discussions, so the
@@ -36,17 +36,17 @@ export async function acquireLlmSlot(signal?: AbortSignal, timeoutMs = 120_000):
 			resolve();
 		};
 
-		const fail = (message: string) => {
+		const fail = (error: Error) => {
 			const index = llmWaiters.indexOf(grant);
 
 			if (index < 0) return;
 			llmWaiters.splice(index, 1);
 			cleanup();
-			reject(new LlmError(0, message));
+			reject(error);
 		};
 
-		const abort = () => fail('Model request cancelled');
-		const timer = setTimeout(() => fail('Timed out waiting for model capacity'), timeoutMs);
+		const abort = () => fail(cancelledError());
+		const timer = setTimeout(() => fail(new CapacityError()), timeoutMs);
 
 		llmWaiters.push(grant);
 		signal?.addEventListener('abort', abort, { once: true });

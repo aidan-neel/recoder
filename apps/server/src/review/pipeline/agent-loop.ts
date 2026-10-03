@@ -1,4 +1,4 @@
-import { LlmError, type ChatMessage } from '../../models/llm.js';
+import { CapacityError, LlmError, type ChatMessage } from '../../models/llm.js';
 import { streamedMessage } from '../../models/response-text.js';
 import { extractJsonValue } from '../../models/json-extract.js';
 import { parseActions, formatToolResults } from '../../evidence/evidence.js';
@@ -66,6 +66,8 @@ function afterFailedCall<T>(
 
 	if (isAuthFailure(err) || isUsageLimit(err, opts.config))
 		throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));
+
+	if (err instanceof CapacityError) return { error: err.message };
 
 	if (retrying && (overthought || dropped)) {
 		return {

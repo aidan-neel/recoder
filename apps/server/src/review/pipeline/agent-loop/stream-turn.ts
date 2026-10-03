@@ -119,7 +119,8 @@ export async function streamTurn<T>(
 				jsonSchema: opts.responseSchema?.(lastTurn),
 				temperature: 0,
 				maxTokens: 8000,
-				timeoutMs: Math.min(REVIEW_POLICY.perCallDeadlineMs, Math.max(1, deadlineAt - reviewNow())),
+				timeoutMs: REVIEW_POLICY.perCallDeadlineMs,
+				settleBy: Date.now() + Math.max(1, deadlineAt - reviewNow()),
 				signal: callAbort.signal,
 				onReasoning: opts.onReasoning ? onReasoning : undefined,
 				onProgress: (state, elapsedMs) =>

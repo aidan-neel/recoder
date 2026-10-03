@@ -24,7 +24,13 @@ export interface ChatOptions {
 	/** Fixed seed for deterministic output. Only sent when set (some servers reject unknown fields). */
 	seed?: number;
 	maxTokens?: number;
+	/** The call's own budget, counted from when it gets a concurrency slot. */
 	timeoutMs?: number;
+	/**
+	 * Wall-clock time (epoch ms) the call must settle by, slot wait included.
+	 * Unset, the wait for a slot is bounded by `timeoutMs` alone.
+	 */
+	settleBy?: number;
 	signal?: AbortSignal;
 	/** Observable request lifecycle, including time waiting for a concurrency slot. */
 	onProgress?: (state: 'queued' | 'running', elapsedMs: number) => void;

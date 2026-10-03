@@ -1,5 +1,19 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { chatCompletion, reasoningFields, resetLlmLimiter, streamChatCompletion } from '../../src/models/llm';
+import {
+	CapacityError,
+	chatCompletion,
+	reasoningFields,
+	resetLlmLimiter,
+	streamChatCompletion
+} from '../../src/models/llm';
+import { fetchUntilAborted } from '../helpers/fetch';
+
+const slowCall = {
+	baseUrl: 'http://model.test/v1',
+	apiKey: 'k',
+	model: 'm',
+	messages: [{ role: 'user' as const, content: 'hi' }]
+};
 
 describe('llm concurrency limiter', () => {
 	const realFetch = globalThis.fetch;
@@ -42,6 +56,36 @@ describe('llm concurrency limiter', () => {
 
 		expect(results).toEqual(['ok', 'ok', 'ok', 'ok', 'ok']);
 		expect(peak).toBeLessThanOrEqual(2);
+	});
+
+	test('a call that waits for a slot still gets its full budget once it starts', async () => {
+		process.env.RECODER_LLM_CONCURRENCY = '1';
+
+		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+			await new Promise((resolve, reject) => {
+				setTimeout(resolve, 150);
+				init?.signal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+			});
+
+			return Response.json({ choices: [{ message: { content: 'ok' } }] });
+		}) as unknown as typeof fetch;
+
+		const call = () => chatCompletion({ ...slowCall, timeoutMs: 250 });
+
+		expect(await Promise.all([call(), call()])).toEqual(['ok', 'ok']);
+	});
+
+	test('a call with no free slot by its settle time fails as a capacity error', async () => {
+		process.env.RECODER_LLM_CONCURRENCY = '1';
+		globalThis.fetch = fetchUntilAborted;
+
+		const holder = new AbortController();
+		const held = chatCompletion({ ...slowCall, signal: holder.signal }).catch(() => {});
+		const queued = chatCompletion({ ...slowCall, settleBy: Date.now() + 50 });
+
+		await expect(queued).rejects.toBeInstanceOf(CapacityError);
+		holder.abort();
+		await held;
 	});
 
 	test('review reasoning streams before the JSON result, preserving request options and usage', async () => {

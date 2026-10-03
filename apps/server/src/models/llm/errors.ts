@@ -38,6 +38,16 @@ export function isTransientLlmError(err: unknown, provider?: ChatOptions['provid
 	return TRANSIENT_NETWORK.test(err.message) || (provider === 'codex' && CODEX_TRANSIENT.test(err.message));
 }
 
+/**
+ * No concurrency slot freed up in time, so the model never saw the call. It is
+ * not a slow model: retrying or telling it to think less would not help.
+ */
+export class CapacityError extends LlmError {
+	constructor() {
+		super(0, 'No model capacity freed up in time');
+	}
+}
+
 /** The error every layer throws when the caller's signal aborts. */
 export function cancelledError(): LlmError {
 	return new LlmError(0, 'Model request cancelled');
