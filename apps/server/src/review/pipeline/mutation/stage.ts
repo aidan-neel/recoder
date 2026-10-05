@@ -1,10 +1,11 @@
 import type { ReviewRun } from '../harness/context.js';
-import { testStem } from '../change-model/test-files.js';
+import { isTestPath } from '../change-model/test-files.js';
 import { addedLines } from '../detectors/changed-lines.js';
 import { readFilesAt } from '../detectors/repo-files.js';
 import { readTestFiles } from '../detectors/test-files.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { MATRIX_BUDGET_MS, testMatrix } from './matrix.js';
+import { singleFileCommands } from './test-run.js';
 
 const SCRIPT_SOURCE = /\.[cm]?[jt]sx?$/;
 
@@ -27,20 +28,22 @@ export async function runMatrix(run: ReviewRun): Promise<DetectorResult[]> {
 
 	if (!edited.length) return [];
 
-	const stems = new Set(edited.map((file) => testStem(file.path)));
-
 	const candidates = run.inventory.files
 		.filter((file) => !file.excludeReason && file.status !== 'deleted' && SCRIPT_SOURCE.test(file.path))
-		.filter((file) => stems.has(testStem(file.path)))
+		.filter((file) => !isTestPath(file.path))
 		.map((file) => file.path);
 
 	const sources = await readFilesAt(revision.checkoutPath, revision.headSha, candidates, signal);
+	const scriptLines = await workspace.scripts();
 
 	const outcome = await testMatrix({
 		tests: edited,
 		sources,
 		added,
-		baselineCommands: run.baseline.map((check) => check.command),
+		commandFor: singleFileCommands(
+			scriptLines,
+			run.baseline.map((check) => check.command)
+		),
 		run: (command, timeoutMs) => workspace.run(command, timeoutMs, signal, 'mutation'),
 		deadline: Date.now() + MATRIX_BUDGET_MS
 	});

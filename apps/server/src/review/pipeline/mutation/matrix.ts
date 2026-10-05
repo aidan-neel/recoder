@@ -4,7 +4,7 @@ import type { AddedLines } from '../detectors/changed-lines.js';
 import type { TestFileVersions } from '../detectors/test-files.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { mutantsOf, type Mutant } from './mutants.js';
-import { mutantCommand, oldCopyPath, singleFileCommand } from './test-run.js';
+import { mutantCommand, oldCopyPath } from './test-run.js';
 
 /** Time one test run may take in the matrix. */
 const RUN_TIMEOUT_MS = 90_000;
@@ -29,11 +29,28 @@ function verdict(result: RunResult): 'pass' | 'fail' | null {
 	return result.exitCode === 0 ? 'pass' : 'fail';
 }
 
-/** The changed source file a test file is about: the one that shares its stem. */
-function sourceFor(test: string, changedSources: Map<string, string>): string | null {
-	const stem = testStem(test);
+/** Mutants tried per test file at most. */
+const MAX_MUTANTS_PER_TEST = 12;
 
-	return [...changedSources.keys()].find((path) => testStem(path) === stem && !isTestPath(path)) ?? null;
+/**
+ * The changed source files a test may be about, most likely first: those the
+ * test names in an import, then those that share its stem, then the rest.
+ */
+function sourcesFor(file: TestFileVersions, changedSources: Map<string, string>): { path: string; head: string }[] {
+	const stem = testStem(file.path);
+
+	const rank = (path: string): number => {
+		const name = path.slice(path.lastIndexOf('/') + 1).replace(/\.[^.]+$/, '');
+
+		if (new RegExp(`from\\s+['"][^'"]*/${name}(?:\\.[cm]?[jt]sx?)?['"]`).test(file.head)) return 0;
+
+		return testStem(path) === stem ? 1 : 2;
+	};
+
+	return [...changedSources]
+		.filter(([path]) => !isTestPath(path))
+		.map(([path, head]) => ({ path, head }))
+		.sort((a, b) => rank(a.path) - rank(b.path) || a.path.localeCompare(b.path));
 }
 
 /** The first line of the test file that the change adds and that asserts something. */
@@ -65,15 +82,15 @@ function resultFor(file: TestFileVersions, mutant: Mutant, evidence: string): De
  */
 async function fileMatrix(input: {
 	file: TestFileVersions;
-	source: { path: string; head: string };
+	sources: { path: string; head: string }[];
 	command: string;
+	oldCommand: string;
 	added: AddedLines;
 	run: Runner;
 	remaining: () => number;
 }): Promise<{ results: DetectorResult[]; runs: number }> {
-	const { file, source, command, added, run, remaining } = input;
+	const { file, sources, command, oldCommand, added, run, remaining } = input;
 	const oldTest = { path: oldCopyPath(file.path), text: file.base };
-	const oldCommand = singleFileCommand([command], oldTest.path) ?? command;
 	let runs = 0;
 
 	const execute = async (cmd: string): Promise<'pass' | 'fail' | null> => {
@@ -91,8 +108,12 @@ async function fileMatrix(input: {
 
 	if (newOk !== 'pass' || oldOk !== 'pass') return { results: [], runs };
 
-	for (const mutant of mutantsOf(source.path, source.head, added)) {
-		const text = { path: source.path, text: mutant.text };
+	const mutants = sources
+		.flatMap((source) => mutantsOf(source.path, source.head, added))
+		.slice(0, MAX_MUTANTS_PER_TEST);
+
+	for (const mutant of mutants) {
+		const text = { path: mutant.file, text: mutant.text };
 		const newRun = await execute(mutantCommand({ source: text, oldTest: null, run: command }));
 
 		if (newRun !== 'pass') continue;
@@ -118,25 +139,27 @@ export async function testMatrix(input: {
 	tests: TestFileVersions[];
 	sources: Map<string, string>;
 	added: AddedLines;
-	baselineCommands: string[];
+	commandFor: (path: string) => string | null;
 	run: Runner;
 	deadline: number;
 }): Promise<MatrixOutcome> {
-	const { tests, sources, added, baselineCommands, run, deadline } = input;
+	const { tests, sources, added, commandFor, run, deadline } = input;
 	const edited = tests.filter((file) => file.base && file.base !== file.head);
 	const results: DetectorResult[] = [];
 	let runs = 0;
 
 	for (const file of edited) {
-		const sourcePath = sourceFor(file.path, sources);
-		const command = singleFileCommand(baselineCommands, file.path);
+		const command = commandFor(file.path);
+		const oldCommand = commandFor(oldCopyPath(file.path));
+		const candidates = sourcesFor(file, sources);
 
-		if (!sourcePath || !command) continue;
+		if (!command || !oldCommand || !candidates.length) continue;
 
 		const done = await fileMatrix({
 			file,
-			source: { path: sourcePath, head: sources.get(sourcePath)! },
+			sources: candidates,
 			command,
+			oldCommand,
 			added,
 			run,
 			remaining: () => deadline - Date.now()

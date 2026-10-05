@@ -3,38 +3,68 @@ import { posix } from 'node:path';
 /** Paths safe to put in a shell command unquoted. */
 const PLAIN_PATH = /^[\w@][\w./@-]*$/;
 
-/** `cd dir && tool run test …`, the shape the baseline check gives a package's test script. */
-const TEST_COMMAND = /^(?:cd ([^\s&;|]+) && )?(bun|pnpm|yarn|npm) run test\b/;
-
 /** The test file with `.recoder-old` before its `.test` or `.spec` marker, beside the file so its imports still resolve. */
 export function oldCopyPath(path: string): string {
 	return path.replace(/(\.(?:test|spec))?(\.[^./]+)$/, '.recoder-old$1$2');
 }
 
+/** `dir: test → command`, a line of the workspace's script listing. */
+const TEST_SCRIPT = /^(.+?): test → (.*)$/;
+
+/** The package manager a baseline command ran with. */
+const TOOL = /(?:^|&& )(bun|pnpm|yarn|npm) run /;
+
+/** Runners that take a test file path as an argument. */
+const FILE_RUNNER = /^(?:ava|vitest|vp test|jest|bun test)\b/;
+
+/** The command that runs a binary the install put in a package. */
+const EXEC = { npm: 'npx', pnpm: 'pnpm exec', yarn: 'yarn', bun: 'bunx' } as const;
+
+/** The nearest package dir above a path that has a test script. */
+function owningScript(scripts: Map<string, string>, path: string): { dir: string; script: string } | null {
+	const dirs = [...scripts.keys()].filter((dir) => dir === '.' || path.startsWith(`${dir}/`));
+	const dir = dirs.sort((a, b) => b.length - a.length)[0];
+
+	return dir === undefined ? null : { dir, script: scripts.get(dir)! };
+}
+
 /**
- * A command that runs one test file in the package whose test script a
- * baseline check ran, or null when no baseline test command owns the file or
- * the path is not plain.
+ * Runs one test file through the runner a package's test script ends with:
+ * the last step of `xo && tsc && ava` is `ava`, and that step takes a path.
+ * Built from the workspace's script listing and the package manager the
+ * baseline checks used. Null for a file with no such package or runner, or a
+ * path that is not plain.
  */
-export function singleFileCommand(baselineCommands: readonly string[], path: string): string | null {
-	if (!PLAIN_PATH.test(path)) return null;
+export function singleFileCommands(scriptLines: readonly string[], baselineCommands: readonly string[]) {
+	const scripts = new Map<string, string>();
 
-	for (const command of baselineCommands) {
-		const match = TEST_COMMAND.exec(command);
+	for (const line of scriptLines) {
+		const match = TEST_SCRIPT.exec(line);
 
-		if (!match) continue;
-
-		const dir = match[1] ?? '.';
-
-		if (dir !== '.' && !path.startsWith(`${dir}/`)) continue;
-
-		const inner = dir === '.' ? path : path.slice(dir.length + 1);
-		const run = `${match[2]} run test ${match[2] === 'npm' ? '-- ' : ''}${posix.normalize(inner)}`;
-
-		return dir === '.' ? run : `cd ${dir} && ${run}`;
+		if (match) scripts.set(match[1]!, match[2]!);
 	}
 
-	return null;
+	const tool = baselineCommands.map((command) => TOOL.exec(command)?.[1]).find(Boolean) as
+		keyof typeof EXEC | undefined;
+
+	return (path: string): string | null => {
+		const owner = PLAIN_PATH.test(path) ? owningScript(scripts, path) : null;
+
+		if (!owner || (owner.dir !== '.' && !PLAIN_PATH.test(owner.dir))) return null;
+
+		const step = owner.script.split('&&').pop()!.trim();
+
+		if (!FILE_RUNNER.test(step)) return null;
+
+		const inner = owner.dir === '.' ? path : path.slice(owner.dir.length + 1);
+		const prefix = step.startsWith('bun test') ? '' : tool ? `${EXEC[tool]} ` : null;
+
+		if (prefix === null) return null;
+
+		const run = `${prefix}${step} ${posix.normalize(inner)}`;
+
+		return owner.dir === '.' ? run : `cd ${owner.dir} && ${run}`;
+	};
 }
 
 /** A shell step that writes `text` to a repo path, so the file needs no tracked-path scratch write. */

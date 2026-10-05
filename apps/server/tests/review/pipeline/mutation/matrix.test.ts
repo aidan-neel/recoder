@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { RunResult } from '../../../../src/sandbox/exec-sandbox';
 import { testMatrix } from '../../../../src/review/pipeline/mutation/matrix';
-import { mutantCommand, oldCopyPath, singleFileCommand } from '../../../../src/review/pipeline/mutation/test-run';
+import { mutantCommand, oldCopyPath, singleFileCommands } from '../../../../src/review/pipeline/mutation/test-run';
 
 const done = (exitCode: number): RunResult => ({
 	exitCode,
@@ -25,7 +25,7 @@ const input = {
 	],
 	sources: new Map([['src/a.ts', SOURCE]]),
 	added: new Map([['src/a.ts', new Map([[2, '']])]]),
-	baselineCommands: ['pnpm run test src/ --passWithNoTests'],
+	commandFor: singleFileCommands(['.: test → xo && ava'], ['pnpm run test']),
 	deadline: Date.now() + 60_000
 };
 
@@ -41,12 +41,18 @@ function runner(oldFailsOnMutant: boolean) {
 
 describe('single-file commands', () => {
 	test('runs one file through the package test script', () => {
-		expect(singleFileCommand(['cd apps/x && pnpm run test lib/ --passWithNoTests'], 'apps/x/src/a.test.ts')).toBe(
-			'cd apps/x && pnpm run test src/a.test.ts'
-		);
+		const scripts = [
+			'apps/x: test → xo && tsc && ava',
+			'.: test → bun run build && bun test',
+			'apps/y: test → turbo test'
+		];
 
-		expect(singleFileCommand(['pnpm run lint'], 'src/a.test.ts')).toBeNull();
-		expect(singleFileCommand(['pnpm run test'], 'src/a b.test.ts')).toBeNull();
+		const commandFor = singleFileCommands(scripts, ['cd apps/x && pnpm run test']);
+
+		expect(commandFor('apps/x/test/a.ts')).toBe('cd apps/x && pnpm exec ava test/a.ts');
+		expect(commandFor('lib/a.test.ts')).toBe('bun test lib/a.test.ts');
+		expect(commandFor('apps/y/a.test.ts')).toBeNull();
+		expect(commandFor('lib/a b.test.ts')).toBeNull();
 	});
 
 	test('keeps the test marker on the old copy and cleans it up', () => {
