@@ -27,7 +27,7 @@ export function matrixDetail(report: MatrixReport): string {
 	const { counts } = report;
 
 	const failed = counts.sanityOutput
-		? [`sanity output: ${counts.sanityOutput.replace(/\s+/g, ' ').slice(0, 160)}`]
+		? [`sanity output: ${counts.sanityOutput.replace(/\s+/g, ' ').slice(0, 400)}`]
 		: [];
 
 	const skips = Object.entries(counts.skips).map(([reason, count]) => `${reason} ×${count}`);
@@ -41,7 +41,8 @@ export function matrixDetail(report: MatrixReport): string {
 		`${counts.findings} findings`,
 		`${counts.runs} runs in ${Math.round(counts.ms / 1000)}s`,
 		...(skips.length ? [`skips: ${skips.join(', ')}`] : []),
-		...failed
+		...failed,
+		...counts.survivorRows.map((row) => `survivor: ${row}`)
 	].join(' · ');
 }
 

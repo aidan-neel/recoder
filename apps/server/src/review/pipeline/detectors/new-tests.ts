@@ -1,4 +1,4 @@
-import { BROAD_ERRORS, assertsTrue, errorClass, expectedError, instanceCheck, matcherKey } from './assertion-checks.js';
+import { BROAD_ERRORS, boundOf, errorClass, expectedError, instanceCheck, matcherKey } from './assertion-checks.js';
 import { clip, type AddedLines } from './changed-lines.js';
 import type { TestFileVersions } from './test-files.js';
 import { testBlocks, type Assertion, type TestBlock } from './test-source.js';
@@ -18,8 +18,6 @@ const SUBCLASS = /\bclass\s+([A-Z]\w*)\s+extends\s+([A-Z]\w*)/g;
 /** A subject that counts something: `.length`, `.size`, or a name ending in count, calls, attempts or times. */
 const COUNT_SUBJECT = /(?:\.length|\.size|count|calls|attempts|times)$/i;
 
-const LOWER_BOUND = /^(.+?)\s*(>=?)\s*(\d+)$/;
-
 const EVERY_TITLE = /\b(?:every|all|each)\b/i;
 
 /** `const error = await t.throwsAsync(…)`: the value is the thrown error, so it is always truthy. */
@@ -36,20 +34,41 @@ const PRESENCE_MATCHERS = new Set([
 	'not.toBeNull'
 ]);
 
-/** The subject, operator and bound of `t.true(n >= 4)` or `expect(n).toBeGreaterThan(0)`. */
-function boundOf(assertion: Assertion): { subject: string; op: string; bound: string } | null {
-	if (assertsTrue(assertion)) {
-		const match = LOWER_BOUND.exec(assertion.args[0] ?? '');
+/** A subject that holds what a command printed or logged. */
+const OUTPUT_SUBJECT = /(?:writes|stdout|stderr|output|lines|logs|messages)\b/i;
 
-		return match ? { subject: match[1]!, op: match[2]!, bound: match[3]! } : null;
-	}
+/** Words in a test title that promise a message reaches the user. */
+const REPORT_TITLE = /\b(?:reports?|prints?|shows?|warns?|logs?|says?|displays?)\b/i;
 
-	const op = { toBeGreaterThan: '>', toBeGreaterThanOrEqual: '>=' }[matcherKey(assertion)];
-	const bound = assertion.args[1] ?? '';
+/** Words in a test title that promise a choice among several items. */
+const SELECT_TITLE = /\b(?:most|least|highest|lowest|first|last|newest|oldest|preferred|wins|keeps|prefers)\b/i;
 
-	return assertion.family === 'expect' && op && /^\d+$/.test(bound)
-		? { subject: assertion.args[0] ?? '', op, bound }
-		: null;
+/** Assertions that only count: `toHaveLength`, `.length`, `.size`. */
+function countsOnly(assertion: Assertion): boolean {
+	return matcherKey(assertion) === 'toHaveLength' || COUNT_SUBJECT.test(assertion.args[0] ?? '');
+}
+
+/** A test that says it reports something but only checks that the output is not empty. */
+function outputPresence(test: TestBlock, assertion: Assertion): Suspicion | null {
+	const found = boundOf(assertion);
+	const subject = found?.subject.replace(/\.length$/, '') ?? '';
+
+	if (!found || found.bound !== '0' || !OUTPUT_SUBJECT.test(subject) || !REPORT_TITLE.test(test.name)) return null;
+
+	return {
+		title: 'checks only that something was printed',
+		body: `The test asserts \`${clip(assertion.text, 60)}\`, which passes for any output at all, not the message the title promises.`
+	};
+}
+
+/** A test that says it keeps or picks one item but only checks how many came back. */
+function keepsOneOfMany(test: TestBlock): Suspicion | null {
+	if (!SELECT_TITLE.test(test.name) || !test.assertions.length || !test.assertions.every(countsOnly)) return null;
+
+	return {
+		title: 'checks how many items remain, not which one',
+		body: 'The title promises a choice among items, but every assertion only counts the result, so keeping the wrong item passes.'
+	};
 }
 
 /** A count checked only from below at this point in the test. */
@@ -134,13 +153,15 @@ export function addedSubclasses(added: AddedLines): AddedSubclasses {
 }
 
 /** The first suspicious assertion the test adds, as a result on its line. */
-function suspicionIn(file: TestFileVersions, test: TestBlock, subclasses: AddedSubclasses): DetectorResult[] {
+export function suspicionIn(file: TestFileVersions, test: TestBlock, subclasses: AddedSubclasses): DetectorResult[] {
 	const thrown = new Set([...test.body.matchAll(THROWN_BINDING)].map((match) => match[1]!));
 
 	for (const assertion of test.assertions) {
 		if (!file.added.has(assertion.startLine)) continue;
 
 		const found =
+			outputPresence(test, assertion) ??
+			keepsOneOfMany(test) ??
 			lowerBound(assertion) ??
 			someForEvery(test, assertion) ??
 			presenceOfThrown(test, assertion, thrown) ??

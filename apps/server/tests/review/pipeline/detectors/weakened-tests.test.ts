@@ -20,6 +20,26 @@ function summarize(results: ReturnType<typeof detect>) {
 }
 
 describe('weakenedInFile', () => {
+	test('suspects an edited test whose new assertion only counts where the title picks one', () => {
+		const results = detect(
+			["test('keeps the most severe', () => {", '	expect(names).toEqual([high]);', '});'],
+			["test('keeps the most severe', () => {", '	expect(names).toHaveLength(1);', '});']
+		);
+
+		expect(results.map(({ suspected, line }) => ({ suspected, line }))).toEqual([{ suspected: true, line: 2 }]);
+	});
+
+	test('flags an exact count turned into a lower bound on the same count', () => {
+		const results = detect(
+			["test('stops after the budget', async () => {", '	t.is(requestCount, 4);', '});'],
+			["test('stops after the budget', async () => {", '	t.true(requestCount >= 4);', '});']
+		);
+
+		expect(summarize(results)).toEqual([
+			{ title: '`stops after the budget` no longer checks the exact value', line: 2 }
+		]);
+	});
+
 	test('flags toThrow with an error class that became a bare toThrow', () => {
 		const results = detect(
 			["test('rejects a bad url', () => {", '\texpect(() => parse(url)).toThrow(UrlError);', '});'],

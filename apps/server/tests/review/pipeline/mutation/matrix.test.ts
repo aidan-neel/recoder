@@ -178,7 +178,7 @@ describe('testMatrix on a suspected new test', () => {
 		const outcome = await testMatrix({ ...detected, run: detectedRunner({ reaches: false }) });
 
 		expect(outcome.results).toEqual([]);
-		expect(outcome.counts.skips.unreachable).toBe(1);
+		expect(outcome.counts.skips.unreached).toBe(1);
 	});
 
 	test('names the reason when the unmutated test fails', async () => {

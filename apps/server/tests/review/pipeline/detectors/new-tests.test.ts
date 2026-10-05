@@ -21,6 +21,35 @@ function detect(base: string[], head: string[], source: string[] = []) {
 }
 
 describe('weakInNewTests', () => {
+	test('flags a reporting test that only checks something was printed', () => {
+		const head = [
+			"test('reports up to date installs', async () => {",
+			'	await run();',
+			'	expect(writes.length > 0).toBe(true);',
+			'});'
+		];
+
+		expect(detect([], head)).toEqual([
+			{ title: '`reports up to date installs` checks only that something was printed', line: 3, suspected: true }
+		]);
+	});
+
+	test('flags a keeps-the-most-severe test that only counts the result', () => {
+		const head = [
+			"test('the cap keeps the most severe findings', () => {",
+			'	expect(result.findings).toHaveLength(1);',
+			'});'
+		];
+
+		expect(detect([], head)).toEqual([
+			{
+				title: '`the cap keeps the most severe findings` checks how many items remain, not which one',
+				line: 2,
+				suspected: true
+			}
+		]);
+	});
+
 	test('flags a count an added test checks only from below', () => {
 		const head = [
 			"test('retries until the budget runs out', async (t) => {",

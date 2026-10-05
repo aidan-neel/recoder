@@ -1,4 +1,6 @@
+import type { Node } from 'web-tree-sitter';
 import type { AddedLines } from '../detectors/changed-lines.js';
+import { withTree } from '../change-model/parser.js';
 
 /** A one-line change to source the PR added, for the test matrix to run the tests against. */
 export interface Mutant {
@@ -85,6 +87,26 @@ const nudgeLiteral: Edit = (line) => {
 	};
 };
 
+/** A string literal with its last letter changed, so a message the test looks for is gone. */
+const breakString: Edit = (line) => {
+	const match = /(['"`])([^'"`\\\n]{4,}?)([a-z])\1/.exec(line);
+
+	if (!match) return null;
+
+	const text = `${match[1]}${match[2]}${match[3] === 'x' ? 'y' : 'x'}${match[1]}`;
+
+	return { line: line.replace(match[0], text), description: 'change a message' };
+};
+
+/** A sort or comparison turned around, so the code picks the opposite item. */
+const reverseOrder: Edit = (line) => {
+	const sub = /\b(\w+(?:\.\w+)*) - (\w+(?:\.\w+)*)\b/.exec(line);
+
+	if (sub) return { line: line.replace(sub[0], `${sub[2]} - ${sub[1]}`), description: 'reverse a comparator' };
+
+	return flipComparison(line);
+};
+
 const EDITS: Edit[] = [removeGuard, flipComparison, dropNormalizer, dropAwait, nudgeLiteral];
 
 /** Lines that hold no logic to change. */
@@ -132,13 +154,48 @@ export function mutantsAt(file: string, head: string, lines: readonly number[], 
 	return found;
 }
 
-/** The mutant of a line with a `throw` put before it: a test that reaches the line fails with the marker. */
-export function probeOf(file: string, head: string, line: number): Mutant {
-	const source = head.split('\n');
+/** Nodes that end a walk up from an expression: the statements of a function or block body. */
+const BODY_PARENTS = new Set(['statement_block', 'switch_case', 'switch_default']);
 
-	source[line - 1] = `throw new Error('recoder-probe'); ${source[line - 1]}`;
+/** Nodes that only exist for the type checker; no test can reach them. */
+const TYPE_NODES = new Set([
+	'interface_declaration',
+	'type_alias_declaration',
+	'type_annotation',
+	'type_arguments',
+	'ambient_declaration'
+]);
 
-	return { file, line, description: `probe on line ${line}`, text: source.join('\n') };
+/**
+ * The mutant of a line with a `throw` put before its enclosing statement: a
+ * test that reaches the statement fails with the marker. A line at module
+ * level runs on import, so it has no probe and counts as reached; a line in a
+ * type is not code at all.
+ */
+export async function probeOf(file: string, head: string, line: number): Promise<Mutant | 'module' | 'type' | null> {
+	const rows = head.split('\n');
+	const column = rows[line - 1]!.length - rows[line - 1]!.trimStart().length;
+
+	const spot = await withTree(file, head, (root) => {
+		let node: Node | null = root.descendantForPosition({ row: line - 1, column });
+
+		while (node && node.parent) {
+			if (TYPE_NODES.has(node.type)) return 'type' as const;
+			if (BODY_PARENTS.has(node.parent.type)) return { row: node.startPosition.row, column: node.startPosition.column };
+
+			node = node.parent;
+		}
+
+		return 'module' as const;
+	});
+
+	if (!spot || typeof spot === 'string') return spot;
+
+	const target = rows[spot.row]!;
+
+	rows[spot.row] = `${target.slice(0, spot.column)}throw new Error('recoder-probe'); ${target.slice(spot.column)}`;
+
+	return { file, line: spot.row + 1, description: `probe before line ${spot.row + 1}`, text: rows.join('\n') };
 }
 
 /**
@@ -167,5 +224,7 @@ export const EDITS_BY_SHAPE = {
 	lowerBound: [raiseLiteral, flipComparison],
 	someForEvery: [removeGuard, flipComparison],
 	presence: [raiseLiteral, dropNormalizer, flipComparison],
+	output: [breakString],
+	selection: [reverseOrder],
 	generic: EDITS
 } as const;

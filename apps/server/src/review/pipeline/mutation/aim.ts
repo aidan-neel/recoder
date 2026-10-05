@@ -3,7 +3,7 @@ import { testBlocks } from '../detectors/test-source.js';
 import { EDITS_BY_SHAPE, mutantsAt, swapErrorClass, type Edit, type Mutant } from './mutants.js';
 
 /** What a suspicion says about the weak assertion, which picks the mutation. */
-type Shape = 'broadError' | 'lowerBound' | 'someForEvery' | 'presence' | 'generic';
+type Shape = 'broadError' | 'lowerBound' | 'someForEvery' | 'presence' | 'output' | 'selection' | 'generic';
 
 /** Mutants tried per suspicion, at most. */
 const MAX_AIMED = 3;
@@ -14,6 +14,8 @@ const ERROR_CLASS = /\b[A-Z]\w*(?:Error|Exception)\b/g;
 function shapeOf(result: DetectorResult): Shape {
 	const text = `${result.title} ${result.body}`;
 
+	if (/printed/i.test(text)) return 'output';
+	if (/not which one/i.test(text)) return 'selection';
 	if (/accepts any|broader error|never checks which error|error type/i.test(text)) return 'broadError';
 	if (/only from below|exact value/i.test(text)) return 'lowerBound';
 	if (/only some|some items/i.test(text)) return 'someForEvery';

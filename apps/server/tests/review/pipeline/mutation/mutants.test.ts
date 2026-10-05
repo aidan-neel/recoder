@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_MUTANTS, mutantsOf } from '../../../../src/review/pipeline/mutation/mutants';
+import { MAX_MUTANTS, mutantsOf, probeOf } from '../../../../src/review/pipeline/mutation/mutants';
 
 function added(lines: number[]): Map<string, Map<number, string>> {
 	return new Map([['src/a.ts', new Map(lines.map((line) => [line, '']))]]);
@@ -33,5 +33,23 @@ describe('mutantsOf', () => {
 
 		expect(found).toHaveLength(MAX_MUTANTS);
 		expect(found.every((mutant) => mutant.line > 2)).toBe(true);
+	});
+});
+
+describe('probeOf', () => {
+	const head = ['export function f(a: number) {', '\treturn g(', '\t\ta + 1', '\t);', '}', 'export const x = 1;'].join(
+		'\n'
+	);
+
+	test('puts the throw before the statement that holds the line, not inside the expression', async () => {
+		const probe = await probeOf('src/a.ts', head, 3);
+
+		expect(probe).toMatchObject({ line: 2 });
+		expect((probe as { text: string }).text.split('\n')[1]).toBe("\tthrow new Error('recoder-probe'); return g(");
+	});
+
+	test('does not probe module level code or types', async () => {
+		expect(await probeOf('src/a.ts', head, 6)).toBe('module');
+		expect(await probeOf('src/a.ts', 'interface A {\n\tb: number;\n}', 2)).toBe('type');
 	});
 });

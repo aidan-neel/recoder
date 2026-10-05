@@ -23,7 +23,8 @@ export type SkipReason =
 	| 'no-single-file-command'
 	| 'sanity-failed'
 	| 'no-aimed-mutant'
-	| 'unreachable'
+	| 'unreached'
+	| 'probe-broke'
 	| 'budget';
 
 /** What one review's matrix did, for its task row and the benchmark report. */
@@ -39,6 +40,8 @@ export interface MatrixCounts {
 	runs: number;
 	ms: number;
 	skips: Partial<Record<SkipReason, number>>;
+	/** One line per surviving mutant a probe did not prove: where, what, which suspicion, why not. */
+	survivorRows: string[];
 	/** The head of the output of the first sanity run that failed. */
 	sanityOutput?: string;
 }
@@ -66,7 +69,8 @@ export function emptyCounts(): MatrixCounts {
 		findings: 0,
 		runs: 0,
 		ms: 0,
-		skips: {}
+		skips: {},
+		survivorRows: []
 	};
 }
 
@@ -237,8 +241,6 @@ async function suspicionRow(input: {
 		return null;
 	}
 
-	let survived = false;
-
 	for (const mutant of mutants) {
 		session.counts.mutants++;
 
@@ -253,26 +255,50 @@ async function suspicionRow(input: {
 		}
 
 		session.counts.survivors++;
-		session.counts.probes++;
-		survived = true;
 
 		const source = sources.find((candidate) => candidate.path === mutant.file)!;
-		const probe = probeOf(mutant.file, source.head, mutant.line);
+		const probe = await probeOf(mutant.file, source.head, mutant.line);
+
+		if (probe === 'type') {
+			session.counts.survivors--;
+			session.counts.mutants--;
+
+			continue;
+		}
+
+		if (probe === 'module' || probe === null) {
+			return provenResult(
+				suspicion,
+				mutant,
+				`mutant "${mutant.description}" in ${mutant.file}: ${file.path} passed; the line runs when the module loads (${command})`
+			);
+		}
+
+		session.counts.probes++;
 
 		const probed = await session.run(
 			mutantCommand({ source: { path: probe.file, text: probe.text }, oldTest: null, run: command })
 		);
 
-		if (probed?.verdict === 'fail' && probed.output.includes('recoder-probe')) {
+		const reason =
+			probed?.verdict === 'pass' ? 'unreached' : probed?.output.includes('recoder-probe') ? null : 'probe-broke';
+
+		if (probed && reason === null) {
 			return provenResult(
 				suspicion,
 				mutant,
-				`mutant "${mutant.description}" in ${mutant.file}: ${file.path} passed; probe on line ${mutant.line} failed (${command})`
+				`mutant "${mutant.description}" in ${mutant.file}: ${file.path} passed; probe on line ${probe.line} failed (${command})`
+			);
+		}
+
+		if (probed && reason) {
+			session.skip(reason);
+
+			session.counts.survivorRows.push(
+				`${mutant.file}:${mutant.line} ${mutant.description} for "${suspicion.title}": ${reason}`
 			);
 		}
 	}
-
-	if (survived) session.skip('unreachable');
 
 	return null;
 }
@@ -319,7 +345,7 @@ export async function testMatrix(input: {
 		if (sanity?.verdict !== 'pass') {
 			if (sanity) {
 				session.skip('sanity-failed');
-				session.counts.sanityOutput ??= sanity.output.slice(0, 300);
+				session.counts.sanityOutput ??= sanity.output.split('\n').slice(0, 10).join('\n').slice(0, 800);
 			}
 
 			continue;
