@@ -8,9 +8,13 @@ import { complexityResults, deadCodeResults } from './symbols.js';
 import type { DetectorId, DetectorResult } from './types.js';
 import { addedSubclasses, weakInNewTests } from './new-tests.js';
 import { readTestFiles, type TestFileVersions } from './test-files.js';
+import { typeHintResults } from './type-hints.js';
 import { weakenedInFile } from './weakened-tests.js';
 
 const MAX_RESULTS = 40;
+
+/** Diagnostics on added lines are facts, not heuristics, so their cap is wide enough to rarely bind. */
+const MAX_DIAGNOSTICS = 150;
 
 /** No one detector fills the cap and crowds out the rest. */
 const MAX_PER_DETECTOR = 15;
@@ -18,6 +22,7 @@ const MAX_PER_DETECTOR = 15;
 /** Which results survive the cap first: broken builds, then the repo's own rules, then weakened tests, then the rest. */
 const PRIORITY: DetectorId[] = [
 	'typecheck',
+	'type-hint',
 	'rule-check',
 	'weakened-tests',
 	'weak-new-tests',
@@ -78,14 +83,17 @@ function capResults(results: DetectorResult[]): DetectorResult[] {
 	return kept.slice(0, MAX_RESULTS).sort(compareResults);
 }
 
-/** The results that survive the cap, each with the symbol that encloses it. */
+/** Each result with the symbol that encloses it. */
+function withSymbols(run: ReviewRun, results: DetectorResult[]): DetectorResult[] {
+	return results.map((result) => ({
+		...result,
+		symbol: result.symbol ?? enclosingSymbol(run.changeModel, result.file, result.line)
+	}));
+}
+
+/** The results that survive the cap. */
 function finish(run: ReviewRun, results: DetectorResult[]): DetectorResult[] {
-	return capResults(
-		results.map((result) => ({
-			...result,
-			symbol: result.symbol ?? enclosingSymbol(run.changeModel, result.file, result.line)
-		}))
-	);
+	return capResults(withSymbols(run, results));
 }
 
 /**
@@ -94,7 +102,21 @@ function finish(run: ReviewRun, results: DetectorResult[]): DetectorResult[] {
  * detectors, which finish long before the checks do.
  */
 export function runDiagnostics(run: ReviewRun): DetectorResult[] {
-	return finish(run, diagnosticResults(run.baseline, addedLines(run.inventory)));
+	const results = withSymbols(run, diagnosticResults(run.baseline, addedLines(run.inventory)));
+
+	return results.sort(compareResults).slice(0, MAX_DIAGNOSTICS);
+}
+
+/**
+ * Hints from the compiler's types on the added lines, read from the installed
+ * checkout. Empty without a checkout.
+ */
+export function runTypeHints(run: ReviewRun): DetectorResult[] {
+	const revision = run.input.revision;
+
+	if (!revision) return [];
+
+	return finish(run, typeHintResults(revision.checkoutPath, addedLines(run.inventory)));
 }
 
 /**
