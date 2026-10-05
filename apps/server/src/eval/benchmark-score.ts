@@ -1,3 +1,4 @@
+import { summarizeLabels, type LabelSummary, type LabeledRun } from './benchmark-labels';
 import { sumLows, type LowTotals } from './benchmark-lows';
 import { stageTotals, type DefectStage, type StageTotals } from './benchmark-stages';
 
@@ -27,12 +28,10 @@ export interface PrScore {
 	unlabeled: number[];
 }
 
-/** Defects found over planted, and findings that matched over findings that hit something, summed across runs. */
+/** Defects found over planted, summed across runs. */
 export interface Totals {
 	planted: number;
 	found: number;
-	/** Findings that report no planted defect. */
-	unlabeled: number;
 }
 
 /** What reviews hid, judged against the same planted defects. */
@@ -62,6 +61,10 @@ export interface PrRuns {
 	stageRuns?: readonly Record<string, DefectStage>[];
 	/** Published below-bar findings of the passed runs whose candidates were read. */
 	lowRuns?: readonly LowTotals[];
+	/** A PR with no planted defect, which only the noise of its findings says anything about. */
+	control?: boolean;
+	/** The classes of each passed run's findings, when its labels were read. */
+	labeledRuns?: readonly LabeledRun[];
 }
 
 export interface BenchmarkSummary {
@@ -76,10 +79,12 @@ export interface BenchmarkSummary {
 	stages?: StageTotals;
 	/** Published below-bar findings by reason, over the runs whose candidates were read; absent when none were. */
 	lows?: LowTotals;
+	/** The five finding classes, their precision bounds' inputs and control-PR noise. */
+	labels: LabelSummary;
 }
 
 function totalsIn(groups: Record<string, Totals>, key: string): Totals {
-	groups[key] ??= { planted: 0, found: 0, unlabeled: 0 };
+	groups[key] ??= { planted: 0, found: 0 };
 
 	return groups[key];
 }
@@ -91,11 +96,11 @@ function tallyDefect(totals: Totals, found: boolean): void {
 }
 
 /**
- * Sums every passed run of every PR. Kind and category groups only count
- * recall: an unlabeled finding belongs to no planted defect's group.
+ * Sums every passed run of every PR. Recall counts planted defects only; what
+ * the findings are, beyond planted, is `labels`.
  */
 export function summarize(prs: readonly PrRuns[]): BenchmarkSummary {
-	const overall: Totals = { planted: 0, found: 0, unlabeled: 0 };
+	const overall: Totals = { planted: 0, found: 0 };
 	const byCodebase: Record<string, Totals> = {};
 	const byKind: Record<string, Totals> = {};
 	const byCategory: Record<string, Totals> = {};
@@ -115,9 +120,6 @@ export function summarize(prs: readonly PrRuns[]): BenchmarkSummary {
 				tallyDefect(totalsIn(byKind, defect.kind), found);
 				tallyDefect(totalsIn(byCategory, defect.category), found);
 			}
-
-			overall.unlabeled += score.unlabeled.length;
-			totalsIn(byCodebase, pr.codebase).unlabeled += score.unlabeled.length;
 		}
 
 		if (pr.scores.length < 2) continue;
@@ -138,6 +140,13 @@ export function summarize(prs: readonly PrRuns[]): BenchmarkSummary {
 		byCategory,
 		defectStability: multiRun && foundOnce ? foundEvery / foundOnce : null,
 		hidden,
+		labels: summarizeLabels(
+			prs.map((pr) => ({
+				codebase: pr.codebase,
+				control: pr.control ?? false,
+				runs: pr.labeledRuns ?? []
+			}))
+		),
 		...(staged.length ? { stages: stageTotals(staged) } : {}),
 		...(lowRuns.length ? { lows: sumLows(lowRuns) } : {})
 	};
@@ -159,11 +168,3 @@ function hiddenTotals(runs: readonly HiddenRun[]): HiddenTotals {
 }
 
 export const recall = (totals: Totals) => (totals.planted ? totals.found / totals.planted : 0);
-
-/**
- * Duplicates are neither right nor wrong, so precision weighs only matched and
- * unlabeled findings. It is a lower bound: an unlabeled finding may be a real
- * issue the generator didn't plant.
- */
-export const precision = (totals: Totals) =>
-	totals.found + totals.unlabeled ? totals.found / (totals.found + totals.unlabeled) : 0;

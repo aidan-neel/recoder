@@ -46,3 +46,20 @@ test('a run with no findings misses every defect without asking the judge', asyn
 
 	expect(score.missed).toEqual(['d1']);
 });
+
+test('a PR with no planted defect makes no judge call', async () => {
+	let calls = 0;
+
+	const result = await judgePr(
+		async () => {
+			calls++;
+
+			return '{}';
+		},
+		[],
+		[{ file: 'a.ts', message: 'm', severity: 'warning' }]
+	);
+
+	expect(calls).toBe(0);
+	expect(result.unlabeled).toEqual([0]);
+});
