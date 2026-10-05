@@ -4,6 +4,7 @@ import { readExcerpt } from '../pipeline/harness.js';
 import { capDiff } from '../pipeline/prompts.js';
 import { asLlmError, chatCompletion, LlmError } from '../../models/llm.js';
 import { configForAgent, type ModelConfig } from '../../models/models.js';
+import { sampling } from '../../models/runtime-profiles.js';
 import { EditMismatchError, patchFromEdits } from './fix-edits.js';
 
 export { locateEdit, patchFromEdits } from './fix-edits.js';
@@ -127,8 +128,7 @@ async function writeFix(cfg: ModelConfig, system: string, user: string, sandboxP
 				output = await chatCompletion({
 					...cfg,
 					messages,
-					temperature: 0,
-					maxTokens: FIX_MAX_TOKENS,
+					...sampling(cfg, FIX_MAX_TOKENS),
 					thinking,
 					timeoutMs: 180_000
 				});

@@ -2,6 +2,7 @@ import { afterEach } from 'bun:test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { resetLlmLimiter } from '../../../src/models/llm';
+import { LENSES } from '../../../src/review/pipeline/lenses/lenses';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { git } from '../../helpers/git';
 
@@ -25,10 +26,16 @@ export function addedFile(path: string, lines: number): string {
 /**
  * Two files in separate folders, each about 14,000 patch characters, so the
  * change is cut into two units: `unit-1` is `src/a.ts`, `unit-2` is `tests/b.ts`.
+ * Neither is docs, so each runs every lens.
  */
 export const TWO_UNIT_DIFF = addedFile('src/a.ts', 140) + addedFile('tests/b.ts', 140);
 
-/** An empty reviewer answer that read nothing; the agent loop sends it back once before accepting it. */
+/** The lens assignment ids for a unit, in the order the review runs them (`unit-1/correctness`…). */
+export function lensIdsOf(unitId: string): string[] {
+	return LENSES.map((lens) => `${unitId}/${lens.id}`);
+}
+
+/** An empty reviewer answer. */
 export const NOTHING = {
 	findings: [],
 	examinedHunks: [HUNK],
@@ -38,17 +45,22 @@ export const NOTHING = {
 	recommendedChecks: []
 };
 
-/** A consolidation answer that keeps nothing. */
-export const KEEP_NONE = { keep: [], merge: [], reject: [], recommendedChecks: [] };
-
-/** A reviewer finding on line 1 of `src/a.ts`. */
-export const finding = (body: string, severity = 'medium') => ({
+/** A correctness finding on line 1 of `src/a.ts`, with a full claim, titled and described by `body`. */
+export const finding = (body: string, severity = 'medium', evidenceIds: string[] = []) => ({
+	title: body,
 	file: 'src/a.ts',
 	line: 1,
 	severity,
-	category: 'bug',
+	category: 'correctness',
+	symbol: null,
+	claim: {
+		trigger: 'Any call after the change',
+		executionPath: [{ file: 'src/a.ts', line: 1, note: 'the changed line' }],
+		consequence: 'The old value is lost',
+		violatedContract: 'The value must be kept'
+	},
 	body,
-	evidenceIds: []
+	evidenceIds
 });
 
 /** A chat completion whose message content is `body` as JSON. */
@@ -107,33 +119,87 @@ export function restoreAfterEach(): void {
 	});
 }
 
-/** The unit a reviewer prompt is for (`unit-1`, `retry-unit-2`…), or null for any other call. */
+/** Whether a stubbed call is a lens reviewer's. */
+export function isLensReviewer(init?: RequestInit): boolean {
+	return systemOf(init).includes(' lens reviewer.');
+}
+
+/** The lens assignment a reviewer prompt is for (`unit-1/correctness`, `retry-unit-2/security`…), or null for any other call. */
 export function unitOf(init?: RequestInit): string | null {
-	if (!systemOf(init).includes('primary reviewer')) return null;
+	if (!isLensReviewer(init)) return null;
 
 	return /^Unit (\S+):/m.exec(String(messagesOf(init)[1]?.content ?? ''))?.[1] ?? null;
 }
 
+/** Whether a stubbed call is a verifier's. */
+export function isVerifier(init?: RequestInit): boolean {
+	return systemOf(init).includes('You verify one code review finding');
+}
+
+/** The first evidence id anywhere in the call's messages, such as the scoped patch a reviewer starts with. */
+function evidenceIn(init?: RequestInit): string | null {
+	return (
+		/evidenceId=(ev_\d+)/.exec(
+			messagesOf(init)
+				.map((message) => message.content)
+				.join('\n')
+		)?.[1] ?? null
+	);
+}
+
+/** A verifier that confirms its finding citing evidence it was shown, reading the diff first when it saw none. */
+export function confirmingVerifier(init?: RequestInit): unknown {
+	const cited = evidenceIn(init);
+
+	return cited
+		? { message: 'Traced it.', verdict: 'confirmed', reason: 'The changed line drops the value.', evidenceIds: [cited] }
+		: { message: 'Reading the diff.', actions: [{ action: 'readDiff', path: 'src/a.ts' }] };
+}
+
 /**
- * Answers `TWO_UNIT_DIFF`'s reviewers and consolidation, recording each call by
- * unit id or `consolidation`. `unit-1` reports one finding; `failing` names a
- * unit whose reviewer the endpoint rejects.
+ * Answers `TWO_UNIT_DIFF`'s lens reviewers and verifiers, recording each
+ * call by assignment id or `verifier`. `unit-1/correctness` reports one
+ * finding, citing its scoped patch; every verifier confirms; `failing` names
+ * an assignment whose reviewer the endpoint rejects.
  */
 export function stubModel(calls: string[], failing?: string) {
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-		const kind = unitOf(init) ?? 'consolidation';
+		const unit = unitOf(init);
+		const kind = unit ?? (isVerifier(init) ? 'verifier' : 'other');
 
 		calls.push(kind);
 		if (kind === failing) return new Response('bad request', { status: 400 });
+		if (kind === 'verifier') return modelReply(confirmingVerifier(init));
+
+		const cited = evidenceIn(init);
 
 		const reply =
-			kind === 'unit-1'
-				? { ...NOTHING, findings: [finding('possible miss')] }
-				: kind === 'consolidation'
-					? { keep: ['c1'], merge: [], reject: [], recommendedChecks: [] }
-					: NOTHING;
+			unit === 'unit-1/correctness'
+				? { ...NOTHING, findings: [finding('possible miss', 'medium', cited ? [cited] : [])] }
+				: NOTHING;
 
 		return modelReply({ message: 'ok', ...reply });
+	}) as unknown as typeof fetch;
+}
+
+/**
+ * Stubs a review of `addedFile('src/a.ts', 5)` whose correctness reviewers
+ * report `findings` and whose verifiers confirm them; `onVerifier` hears each
+ * verifier call.
+ */
+export function stubFindings(findings: unknown[], onVerifier?: () => void): void {
+	useTestModel();
+
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		if (isVerifier(init)) {
+			onVerifier?.();
+
+			return modelReply(confirmingVerifier(init));
+		}
+
+		const reported = unitOf(init)?.endsWith('/correctness') === true ? findings : [];
+
+		return modelReply({ message: 'ok', ...NOTHING, examinedHunks: ['src/a.ts:0,0:1,5'], findings: reported });
 	}) as unknown as typeof fetch;
 }
 

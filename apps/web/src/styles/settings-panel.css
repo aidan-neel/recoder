@@ -219,26 +219,19 @@
 .message-cut-off {
 	display: flex;
 	align-items: flex-start;
-	gap: 6px;
+	gap: 8px;
 	font-family: var(--font-ui);
-	font-size: 12.5px;
-	line-height: 18px;
+	font-size: 13px;
+	line-height: 19px;
 	letter-spacing: 0;
-	color: var(--text-muted);
+	color: var(--text-subtle);
 }
 .message-cut-off-icon {
 	flex-shrink: 0;
-	margin-top: 3px;
+	margin-top: 2.5px;
 	color: var(--sev-medium);
 }
 .message-cut-off-title {
-	color: var(--text-secondary);
-}
-/* Under a reply that is still being written. */
-.message-writing {
-	display: flex;
-	height: 18px;
-	align-items: center;
 	color: var(--text-muted);
 }
 @keyframes rc-stream-sweep {

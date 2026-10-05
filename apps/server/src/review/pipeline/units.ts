@@ -1,25 +1,31 @@
 import type { ReviewAssignment } from '@recoder/shared';
 import { REVIEW_POLICY } from '../session/review-policy.js';
 import type { InventoryFile, ReviewInventory } from './inventory.js';
+import type { LensId } from './lenses/types.js';
 
 /** The hunks of one file a reviewer reads. */
 export type UnitScope = { path: string; hunkIds: string[] }[];
 
 /**
- * A slice of the change one primary reviewer reads end to end. Units are cut
- * from the inventory without a model call, so the same diff always gives the
- * same units in the same order.
+ * A slice of the change, cut from the inventory without a model call, so the
+ * same diff always gives the same units in the same order. Each unit runs as
+ * one assignment per applicable lens (`lensAssignments`).
  */
 export interface ReviewUnit {
-	/** `unit-1`, `unit-2`…; a retry is `retry-unit-2` (or `-a`/`-b` when split). */
+	/**
+	 * `unit-1`, `unit-2`… for a slice; `unit-2/security` for its lens assignment, whose
+	 * retry is `retry-unit-2/security` (or `-a`/`-b` when split); `subagent-1` for a subagent.
+	 */
 	id: string;
 	title: string;
 	/** Why the unit runs; a retry carries how the first attempt failed. */
 	reason: string;
 	scope: UnitScope;
+	/** The lens a reviewer applies; unset on a slice before fan-out and on a subagent. */
+	lens?: LensId;
 }
 
-const UNIT_REASON = 'Every changed line is read by one reviewer.';
+const UNIT_REASON = 'Every changed line is read by every lens that applies to it.';
 
 /** Patch characters in one file of the diff, counted the way the evidence store pages them. */
 function patchChars(inventory: ReviewInventory, file: InventoryFile): number {
@@ -105,7 +111,7 @@ export function partitionUnits(
 	}));
 }
 
-/** A fresh, queued record for a unit's reviewer. */
+/** A fresh, queued record for a lens assignment or subagent. */
 export function unitRecord(unit: ReviewUnit, role = 'reviewer'): ReviewAssignment {
 	return {
 		id: unit.id,

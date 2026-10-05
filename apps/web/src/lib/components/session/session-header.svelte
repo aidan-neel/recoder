@@ -6,6 +6,7 @@
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import { carryPill, keepPillAligned } from '$lib/shell/tab-pill';
+	import { hostedUrl } from '$lib/shell/links';
 
 	export type SessionView = 'conversation' | 'findings' | 'diff';
 
@@ -55,7 +56,8 @@
 	}: Props = $props();
 
 	/** The PR number opens the pull request on its host in a new tab (the trigger forwards these to its link). */
-	const prLinkAttrs = $derived<Record<string, string>>(prUrl ? { target: '_blank', rel: 'noreferrer' } : {});
+	const prHref = $derived(hostedUrl(prUrl));
+	const prLinkAttrs = $derived<Record<string, string>>(prHref ? { target: '_blank', rel: 'noreferrer' } : {});
 
 	/** "ai/ark #209": the repo, unless the caller only knows the PR title. */
 	const source = $derived([repo && repo !== title ? repo : null, prLabel].filter(Boolean).join(' '));
@@ -79,7 +81,7 @@
 
 <header class="session-header" data-bordered={bordered || undefined} data-merged="">
 	<HoverCard.Root>
-		<HoverCard.Trigger class="session-pr" href={prUrl ?? undefined} {...prLinkAttrs}
+		<HoverCard.Trigger class="session-pr" href={prHref ?? undefined} {...prLinkAttrs}
 			>{prLabel || repo || 'Review'}</HoverCard.Trigger
 		>
 		<HoverCard.Content side="bottom" align="start" class="session-pr-card">

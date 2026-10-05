@@ -29,6 +29,7 @@ function getDb(): Database {
 		handle.run('CREATE TABLE IF NOT EXISTS review_progress (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS review_metrics (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS review_checkpoints (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
+		handle.run('CREATE TABLE IF NOT EXISTS review_replays (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 		handle.run('CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)');
 	}
 
@@ -226,6 +227,18 @@ export const reviewMetrics = createCollection<{
 
 /** Where an unfinished review stopped, so it can continue instead of starting over (see ReviewCheckpoint). */
 export const reviewCheckpoints = createCollection<ReviewCheckpoint>('review_checkpoints');
+
+/** A passed review's last checkpoint, kept so the review can be replayed from verification without its reviewers. */
+export const reviewReplays = createCollection<ReviewCheckpoint>('review_replays');
+
+/** A passed review never resumes, so its checkpoint moves to the replays. */
+export function keepForReplay(reviewId: string): void {
+	const final = reviewCheckpoints.get(reviewId);
+
+	if (final) reviewReplays.set(final);
+
+	reviewCheckpoints.delete(reviewId);
+}
 
 /** Sandbox checkout paths by review id. In memory only; `lib/review-checkout.ts` finds or restores a checkout after a restart. */
 export const reviewSandboxes = new Map<string, string>();

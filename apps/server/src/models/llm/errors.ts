@@ -25,17 +25,47 @@ const TRANSIENT_NETWORK =
 const CODEX_TRANSIENT = /response failed|incomplete response|could not complete/i;
 
 /**
+/** A provider's wording for a request throttle that lifts within a minute. */
+const THROTTLE = /rate limit|too many requests/i;
+
+/** Wording that means the plan or quota is spent, even when the provider also calls it a rate limit. */
+const SPENT_PLAN = /quota|usage|insufficient|balance|billing|credit|exhausted|reset at|per (?:day|week|month)/i;
+
+/**
+ * A 429 from OpenCode that says the provider is throttling requests, not that
+ * the plan is spent. OpenCode retries most rate limits itself but passes some
+ * straight through (Z.AI's "Rate limit reached for requests"), so Recoder
+ * retries these instead of stopping the review as out of usage.
+ */
+export function isOpenCodeThrottle(err: LlmError): boolean {
+	return err.status === 429 && THROTTLE.test(err.message) && !SPENT_PLAN.test(err.message);
+}
+
+/**
  * Dropped sockets and overloaded servers (vLLM restarts, proxies) are worth another try; bad requests are not.
  * ChatGPT's 429 is a usage cap that lasts hours, not a momentary rate limit, so it never retries.
- * OpenCode already retries rate limits itself, so a 429 that reaches Recoder is final too.
+ * OpenCode's 429 is a spent plan unless its wording says it is a throttle.
  */
 export function isTransientLlmError(err: unknown, provider?: ChatOptions['provider']): boolean {
 	if (!(err instanceof LlmError)) return false;
-	if ((provider === 'codex' || provider === 'opencode') && err.status === 429) return false;
+	if (provider === 'codex' && err.status === 429) return false;
+	if (provider === 'opencode' && err.status === 429) return isOpenCodeThrottle(err);
 	if (TRANSIENT_STATUS.has(err.status)) return true;
 	if (err.status !== 0 || /cancelled|timed out|truncated/i.test(err.message)) return false;
 
 	return TRANSIENT_NETWORK.test(err.message) || (provider === 'codex' && CODEX_TRANSIENT.test(err.message));
+}
+
+/**
+ * The provider is shedding load (HTTP 429, 529 or "overloaded"), so the limiter should send fewer calls at once.
+ * A 429 from ChatGPT or OpenCode is not that signal: ChatGPT's is a usage cap that lasts hours, and OpenCode
+ * retries rate limits itself, so its 429 means a spent plan. Easing off would only slow every other model's calls.
+ */
+export function isRateLimitError(err: unknown, provider?: ChatOptions['provider']): boolean {
+	if (!(err instanceof LlmError)) return false;
+	if ((provider === 'codex' || provider === 'opencode') && err.status === 429) return false;
+
+	return err.status === 429 || err.status === 529 || /overloaded/i.test(err.message);
 }
 
 /**

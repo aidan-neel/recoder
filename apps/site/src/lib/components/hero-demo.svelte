@@ -22,14 +22,17 @@
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import FindingSeverity from '$web/components/findings/finding-severity.svelte';
+	import ReasoningTrace from '$web/components/review/reasoning-trace.svelte';
 	import ReviewComposer from '$web/components/review/review-composer.svelte';
 	import ReviewSteps from '$web/components/review/review-steps.svelte';
 	import ReviewToolCallView from '$web/components/review/review-tool-call.svelte';
 	import SessionHeader from '$web/components/session/session-header.svelte';
 	import Disclosure from '$web/components/ui/disclosure.svelte';
+	import ThoughtLabel from '$web/components/ui/thought-label.svelte';
 	import { taskGroupLabel } from '$web/review/review-transcript';
 	import { keepPillAligned } from '$web/shell/tab-pill';
 	import { DEMO_END, DEMO_HOLD, DEMO_LOOP, demoState, findingCounts, request } from '$lib/demo-script';
+	import type { ReviewToolCall } from '@recoder/shared';
 
 	let t = $state(0);
 	let fading = $state(false);
@@ -115,6 +118,13 @@
 
 	/** Every loop restarts from an empty transcript, so keyed blocks replay their enter motion. */
 	const loop = $derived(t < 100 ? 0 : 1);
+
+	/** A tool row's time, from the script's elapsed ms. */
+	function duration(tool: ReviewToolCall): string {
+		const ms = tool.elapsedMs ?? 0;
+
+		return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
+	}
 </script>
 
 {#snippet tabIcon(running: boolean)}
@@ -122,6 +132,18 @@
 		{#if running}<LoaderCircle size={12} strokeWidth={1.75} class="spin" aria-hidden="true" />
 		{:else}<GitPullRequest size={13} strokeWidth={1.75} aria-hidden="true" />{/if}
 	</span>
+{/snippet}
+
+{#snippet finalFacts()}
+	<div class="fact-rows">
+		<Typography.Text class="fact-row"
+			><span class="fact-label">Findings</span><span class="fact-value">5 kept, 1 merged as a duplicate</span
+			></Typography.Text
+		>
+		<Typography.Text class="fact-row"
+			><span class="fact-label">Coverage</span><span class="fact-value font-mono">41 / 43 hunks</span></Typography.Text
+		>
+	</div>
 {/snippet}
 
 <div
@@ -154,8 +176,8 @@
 							<span class="font-mono text-[11.5px] text-fg-faint">#4127</span>
 							{#if demo.finished}
 								<span class="tab-badge" data-tone="high">1 high</span>
-							{:else if demo.agents.length}
-								<span class="tab-badge" data-tone="running">{demo.agentsDone}/{demo.agents.length}</span>
+							{:else if demo.progress}
+								<span class="tab-badge" data-tone="running">{demo.reviewers.done}/{demo.reviewers.total}</span>
 							{/if}
 						</Tabs.Trigger>
 						<Tabs.Trigger value="sivir">
@@ -245,13 +267,7 @@
 														{#snippet label()}{taskGroupLabel(demo.toolCalls)}{/snippet}
 														{#each demo.toolCalls as tool (tool.id)}
 															<div class="enter-rise" style:--i="0">
-																<ReviewToolCallView
-																	{tool}
-																	duration={tool.elapsedMs! < 1000
-																		? `${tool.elapsedMs}ms`
-																		: `${(tool.elapsedMs! / 1000).toFixed(1)}s`}
-																	active
-																/>
+																<ReviewToolCallView {tool} duration={duration(tool)} active />
 															</div>
 														{/each}
 													</Disclosure>
@@ -270,13 +286,35 @@
 												</Message.Root>
 											{/if}
 
+											{#if demo.unitWork}
+												{@const work = demo.unitWork}
+												<div class="enter-rise" style:--i="0">
+													<Disclosure class="work-log" bodyClass="!gap-1">
+														{#snippet label()}
+															<ThoughtLabel working={work.working} time={work.time} doing="Working" done="Worked" />
+															{#if work.doing}<span class="work-log-note">· {work.doing}</span>{/if}
+														{/snippet}
+														<Disclosure size="sm" bodyClass="thought-body !gap-3">
+															{#snippet label()}<ThoughtLabel
+																	working={work.thought.working}
+																	time={work.thought.time}
+																/>{/snippet}
+															<ReasoningTrace text={work.thought.text} streaming={work.thought.working} />
+														</Disclosure>
+														{#each work.tools as tool (tool.id)}
+															<ReviewToolCallView {tool} duration={duration(tool)} active />
+														{/each}
+													</Disclosure>
+												</div>
+											{/if}
+
 											{#if demo.agents.length}
 												<section class="agents enter-rise" style:--i="0" aria-label="Agents">
 													<Disclosure>
-														{#snippet label()}Started {demo.agents.length} agents{/snippet}
+														{#snippet label()}Started 1 subagent{/snippet}
 														{#each demo.agents as item (item.id)}
 															<Typography.Text
-																><span class="text-fg-secondary">{item.name}:</span> {item.op}</Typography.Text
+																><span class="text-fg-secondary">Subagent:</span> {item.name}</Typography.Text
 															>
 														{/each}
 													</Disclosure>
@@ -316,22 +354,14 @@
 												</section>
 											{/if}
 
-											{#if demo.finalize}
+											{#if demo.progress}
 												<div class="enter-rise" style:--i="0">
-													<Disclosure status={demo.finalize.running ? 'running' : 'done'} bodyClass="finalize-body">
-														{#snippet label()}{demo.finalize?.label}{/snippet}
-														<div class="fact-rows">
-															<Typography.Text class="fact-row"
-																><span class="fact-label">Findings</span><span class="fact-value"
-																	>5 kept, 1 merged as a duplicate</span
-																></Typography.Text
-															>
-															<Typography.Text class="fact-row"
-																><span class="fact-label">Coverage</span><span class="fact-value font-mono"
-																	>41 / 43 hunks</span
-																></Typography.Text
-															>
-														</div>
+													<Disclosure
+														status={demo.progress.running ? 'running' : 'done'}
+														bodyClass="finalize-body"
+														children={demo.progress.running ? undefined : finalFacts}
+													>
+														{#snippet label()}{demo.progress?.label}{/snippet}
 													</Disclosure>
 												</div>
 											{/if}

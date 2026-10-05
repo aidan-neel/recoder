@@ -22,7 +22,7 @@
 	import { serverApi } from '$lib/api/server-api';
 	import { shellState } from '$lib/shell/shell-state.svelte';
 
-	const PROVIDERS: { id: Provider; label: string; scope: string }[] = [
+	const PROVIDERS: { id: Exclude<Provider, 'local'>; label: string; scope: string }[] = [
 		{ id: 'github', label: 'GitHub', scope: 'Needs the repo scope.' },
 		{ id: 'gitlab', label: 'GitLab', scope: 'Needs read_api and read_repository. Leave the URL blank for gitlab.com.' }
 	];

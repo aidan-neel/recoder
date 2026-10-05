@@ -7,22 +7,30 @@ import {
 	composeGuidelines,
 	GUIDELINES_TEMPLATE,
 	hasRules,
+	normalize,
 	readGlobalGuidelines,
 	writeGlobalGuidelines
 } from '../../../src/review/guidelines/guidelines';
+import { DEFAULT_GLOBAL_GUIDELINES } from '../../../src/review/guidelines/default-guidelines';
 
 beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-guidelines-'));
 });
 
 test('global guidelines round-trip and clear', () => {
-	expect(readGlobalGuidelines()).toEqual({ content: '', updatedAt: null });
+	expect(readGlobalGuidelines()).toEqual({ content: DEFAULT_GLOBAL_GUIDELINES, updatedAt: null });
 
 	const saved = writeGlobalGuidelines('## Focus\r\n- Flag float money math\r\n\r\n');
 
 	expect(saved.content).toBe('## Focus\n- Flag float money math\n');
 	expect(saved.updatedAt).not.toBeNull();
 	expect(writeGlobalGuidelines('   ').content).toBe('');
+	expect(readGlobalGuidelines().content).toBe('');
+});
+
+test('default guidelines fit the cap and count as rules', () => {
+	expect(normalize(DEFAULT_GLOBAL_GUIDELINES).length).toBeLessThanOrEqual(MAX_GUIDELINES_CHARS);
+	expect(hasRules(DEFAULT_GLOBAL_GUIDELINES)).toBe(true);
 });
 
 test('rejects guidelines over the cap', () => {

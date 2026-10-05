@@ -1,14 +1,18 @@
 import { DEFAULT_SUBAGENT_CAP } from '@recoder/shared';
-import { planSubagents, type UnitRequest } from '../subagents.js';
+import { planBriefSubagents, planSubagents, type UnitRequest } from '../subagents.js';
 import { unitRecord } from '../units.js';
 import { finishedIds, orchestratorSays, poolContext, publishUnits, saveCheckpoint, type ReviewRun } from './context.js';
 import { runUnitPool } from './pool.js';
 
 /**
- * Runs the subagents reviewers asked for, once every reviewer (and retry) has
- * answered, so the cap is applied in unit order rather than finishing order.
- * Planned once and saved, so a resume reruns only the subagents that didn't
- * finish. Subagents are never retried.
+ * Runs the subagents, once every reviewer (and retry) has answered, so the cap
+ * is applied in unit order rather than finishing order. Reviewers' requests
+ * come first, then the brief's open questions they marked unsettled, then
+ * those no reviewer answered or marked, until the cap is reached. A request runs whether or
+ * not the first pass raised a finding: a reviewer asks because it could not
+ * settle a doubt, which is where a miss hides. Planned once and saved, so a
+ * resume reruns only the subagents that didn't finish. Subagents are never
+ * retried.
  */
 export async function runSubagents(run: ReviewRun): Promise<void> {
 	const state = run.subagents;
@@ -16,18 +20,24 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 	if (!state.units) {
 		const cap = run.input.subagentCap ?? DEFAULT_SUBAGENT_CAP;
 		const plan = planSubagents(state.requests, run.units, run.inventory, cap);
+		const brief = { questions: run.intent?.openQuestions ?? [], marks: state.unsettled, answers: state.answered };
+		const fromBrief = planBriefSubagents(brief, plan.units, run.units, run.inventory, cap - plan.units.length);
 
-		state.units = plan.units;
+		state.units = [...plan.units, ...fromBrief.unsettled, ...fromBrief.unaddressed];
 		state.dropped = plan.dropped;
 
-		for (const unit of plan.units) {
+		run.events?.onLog?.(
+			`Planned ${state.units.length} subagents (cap ${cap}): ${plan.units.length} from reviewer requests, ${fromBrief.unsettled.length} from unsettled brief questions, ${fromBrief.unaddressed.length} from unaddressed brief questions.`
+		);
+
+		for (const unit of state.units) {
 			const record = unitRecord(unit, 'subagent');
 
 			run.assignments.push(record);
 			run.events?.onAssignment?.(record);
 		}
 
-		if (plan.units.length) {
+		if (state.units.length) {
 			reportSubagents(run, plan.dropped, cap);
 			publishUnits(run, 3);
 		} else if (asksForSubagents(run.input.instructions)) {

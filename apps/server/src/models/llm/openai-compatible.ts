@@ -57,7 +57,8 @@ export async function postChat(opts: ChatOptions, signal: AbortSignal, stream: b
 		body: JSON.stringify({
 			model: opts.model,
 			messages: opts.messages,
-			temperature: opts.temperature ?? 0.2,
+			...(opts.temperature === null ? {} : { temperature: opts.temperature ?? 0.2 }),
+			...(opts.topP === undefined ? {} : { top_p: opts.topP }),
 			max_tokens: opts.maxTokens ?? 4000,
 			...(stream ? { stream: true, stream_options: { include_usage: true } } : {}),
 			...reasoningFields(opts),

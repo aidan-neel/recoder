@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { parseUnifiedDiff } from '@recoder/shared';
+	import Check from '@lucide/svelte/icons/check';
 	import Maximize2 from '@lucide/svelte/icons/maximize-2';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
@@ -26,6 +27,9 @@
 	const files = $derived(parseUnifiedDiff(suggestion.patch ?? ''));
 	const additions = $derived(files.reduce((sum, file) => sum + file.additions, 0));
 	const deletions = $derived(files.reduce((sum, file) => sum + file.deletions, 0));
+
+	/** Words before the i-th of n checks, so they read as a sentence ("a, b and c"). */
+	const joiner = (i: number, n: number) => (i === 0 ? '' : i === n - 1 ? ' and ' : ', ');
 </script>
 
 <figure class="suggested-fix" aria-label="Suggested fix">
@@ -54,6 +58,15 @@
 					: ' '}</span
 			>{/each}</pre>
 	<!-- eslint-enable svelte/no-at-html-tags -->
+	{#if suggestion.checks?.length}
+		<p class="suggested-fix-checks">
+			<Check size={12} strokeWidth={2.25} class="suggested-fix-checks-icon" aria-hidden="true" />
+			<span
+				>Passed {#each suggestion.checks as check, i (check)}{joiner(i, suggestion.checks.length)}<code>{check}</code
+					>{/each}</span
+			>
+		</p>
+	{/if}
 </figure>
 
 <Modal.Root bind:open={reviewOpen}>

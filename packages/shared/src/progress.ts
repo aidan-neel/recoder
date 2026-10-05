@@ -1,3 +1,5 @@
+import type { OutputRate } from './metrics';
+
 export type ReviewTaskStatus = 'queued' | 'waiting' | 'running' | 'done' | 'error' | 'skipped' | 'partial';
 
 /** Child operation under an assignment — never itself a reviewer identity. */
@@ -117,6 +119,8 @@ export interface ReviewReasoningEntry {
 	status?: 'streaming' | 'done' | 'error';
 	/** The provider only returns a summary of its reasoning (ChatGPT), so the text is dropped and only the timing is kept. */
 	summary?: boolean;
+	/** The speed of the model call this thought came from. */
+	outputRate?: OutputRate;
 }
 
 /** One observable model tool/retrieval call, with its result and timing. */
@@ -211,6 +215,8 @@ export interface ReviewChatMessage {
 	failure?: ModelFailure;
 	/** Why a reply stopped partway when the agent carried on after it ("It thought too long…"). */
 	cutOff?: string;
+	/** The speed of the model call writing this reply. */
+	outputRate?: OutputRate;
 }
 
 /** One layer of owner review guidelines a review ran with. */

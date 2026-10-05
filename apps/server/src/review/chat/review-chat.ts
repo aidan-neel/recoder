@@ -115,7 +115,7 @@ async function rerunFromChat(
 	reply: ReviewChatMessage,
 	flush: (status: 'done' | 'error') => void
 ): Promise<void> {
-	const { rerunReviewSession } = await import('../../commands/pipeline');
+	const { rerunReviewSession } = await import('../../commands/rerun');
 
 	if (signal.aborted || !db.reviews.get(reviewId)) throw new Error('Reply stopped.');
 	flush('done');
@@ -240,7 +240,8 @@ export function startReviewChat(
 					model: config.model,
 					role: assignment?.role ?? 'orchestrator',
 					...(config.provider === 'codex' ? { text: '', summary: true } : { text: reasoning }),
-					status
+					status,
+					outputRate: reply.outputRate
 				});
 			forward({ ...reply, status });
 		};
@@ -298,7 +299,8 @@ export function startReviewChat(
 					onReasoning: (chunk) => {
 						reasoning = (reasoning + chunk).slice(0, 64_000);
 						update();
-					}
+					},
+					onRate: (rate) => (reply.outputRate = rate)
 				},
 				(chunk) => {
 					response = (response + chunk).slice(0, 64_000);

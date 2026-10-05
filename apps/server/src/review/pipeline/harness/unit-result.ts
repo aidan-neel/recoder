@@ -1,16 +1,19 @@
 import type { ReviewAssignment } from '@recoder/shared';
-import { validateCandidate } from '../consolidate.js';
+import { isReportable, validateCandidate } from '../consolidate.js';
+import { isQualityLens } from '../lenses/lenses.js';
 import type { ReviewerOutput } from '../reviewer.js';
+import { recordAnswered, recordUnsettled } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
-import { recordFor, updateAssignment } from './assignments.js';
-import { anchorFn, fingerprintFinding } from './findings.js';
+import { coverageRole, recordFor, updateAssignment } from './assignments.js';
 import type { PoolContext, ScopedPatch } from './pool.js';
 
 /**
- * Records a reviewer's answer: coverage, candidates, recommended checks and
- * subagent requests. A reviewer that answered has finished; hunks it couldn't
- * assess show up as coverage gaps. A subagent's answer adds only candidates
- * and checks: its hunks are already a unit's, and it can't ask for subagents.
+ * Records a lens reviewer's answer: coverage for its lens, candidates,
+ * recommended checks, how a defect lens settled the brief questions it was shown and,
+ * from the correctness lens only, subagent requests.
+ * A reviewer that answered has finished; hunks it couldn't assess show up as
+ * coverage gaps. A subagent's answer adds only candidates and checks: its
+ * hunks are already a lens's, and it can't ask for subagents.
  */
 export function applyUnitResult(
 	item: ReviewUnit,
@@ -23,16 +26,21 @@ export function applyUnitResult(
 	const role = recordFor(records, item.id).role;
 
 	if (role !== 'subagent') {
-		creditCoverage(item, role, ctx, output, initialEvidence);
+		creditCoverage(item, ctx, output, initialEvidence);
+		markQuestions(item, ctx, output);
 
-		for (const request of output.subagents) ctx.requests.push({ unitId: item.id, unitTitle: item.title, request });
+		if (item.lens === 'correctness') {
+			for (const request of output.subagents) ctx.requests.push({ unitId: item.id, unitTitle: item.title, request });
+		}
 	}
 
 	addCandidates(item, role, ctx, model, output);
 
 	for (const check of output.recommendedChecks) ctx.recommended.add(check);
 
-	const validCount = ctx.candidates.filter((candidate) => candidate.assignmentId === item.id && candidate.valid).length;
+	const validCount = ctx.candidates.filter(
+		(candidate) => candidate.assignmentId === item.id && isReportable(candidate)
+	).length;
 
 	updateAssignment(records, item.id, {
 		status: 'done',
@@ -51,8 +59,23 @@ export function applyUnitResult(
 	});
 
 	ctx.events?.onAssignment?.(recordFor(records, item.id));
-	ctx.events?.onCandidates?.(ctx.candidates.filter((candidate) => candidate.valid).length);
+	ctx.events?.onCandidates?.(ctx.candidates.filter(isReportable).length);
 	ctx.onFinished?.();
+}
+
+/**
+ * Notes how a defect lens settled the open questions the brief showed this unit, unsettled or answered; quality
+ * lenses aren't shown any. A "confirmed" from a reviewer that reported no finding settles nothing.
+ */
+function markQuestions(item: ReviewUnit, ctx: PoolContext, output: ReviewerOutput): void {
+	if (!item.lens || isQualityLens(item.lens)) return;
+
+	const paths = new Set(item.scope.map((entry) => entry.path));
+	const shown = (ctx.intent?.openQuestions ?? []).filter((question) => paths.has(question.file));
+	const backed = output.answered.filter((answer) => answer.outcome === 'disproved' || output.findings.length > 0);
+
+	recordUnsettled(ctx.unsettled, item.id, output.unsettled, shown);
+	recordAnswered(ctx.answered, item.id, backed, shown);
 }
 
 /**
@@ -61,11 +84,11 @@ export function applyUnitResult(
  */
 function creditCoverage(
 	item: ReviewUnit,
-	role: string,
 	ctx: PoolContext,
 	output: ReviewerOutput,
 	initialEvidence: ScopedPatch
 ): void {
+	const role = coverageRole(item);
 	const assignedHunks = new Set(item.scope.flatMap((entry) => entry.hunkIds));
 	const shownHunks = new Set(initialEvidence.flatMap((evidence) => evidence.hunkIds ?? []));
 	const listedHunks = new Set(output.examinedHunks);
@@ -91,25 +114,31 @@ function creditCoverage(
 	}
 }
 
-/** Validates each reported finding against the inventory and evidence, fingerprinted by the code it points at. */
+/**
+ * Validates each reported finding against the inventory, evidence, change
+ * model and rule ledger, and hands it on to be verified. A lens's findings are held to its categories; a
+ * subagent's (no lens) may be in any.
+ */
 function addCandidates(item: ReviewUnit, role: string, ctx: PoolContext, model: string, output: ReviewerOutput): void {
-	const anchor = anchorFn(ctx.inventory);
+	const lens = role === 'subagent' ? null : (item.lens ?? null);
+	const dismissed = new Set(ctx.dismissals.map((dismissal) => dismissal.fingerprint));
 
 	for (const raw of output.findings) {
-		ctx.candidates.push(
-			validateCandidate(
-				raw,
-				{
-					candidateId: ctx.nextCandidate(),
-					assignmentId: item.id,
-					role,
-					model,
-					fingerprint: (file, category, start, end, side) =>
-						fingerprintFinding(file, category, anchor(file, start, end, side))
-				},
-				ctx.inventory,
-				ctx.evidence
-			)
+		const candidate = validateCandidate(
+			raw,
+			{ candidateId: ctx.nextCandidate(), assignmentId: item.id, role, model, lens },
+			{
+				inventory: ctx.inventory,
+				evidence: ctx.evidence,
+				changeModel: ctx.changeModel,
+				ledger: ctx.ledger,
+				intent: ctx.intent,
+				reportLowSeverity: ctx.reportLowSeverity,
+				dismissed
+			}
 		);
+
+		ctx.candidates.push(candidate);
+		ctx.onCandidate?.(candidate);
 	}
 }

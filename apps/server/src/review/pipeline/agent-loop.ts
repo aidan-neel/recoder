@@ -1,40 +1,33 @@
-import { CapacityError, LlmError, type ChatMessage } from '../../models/llm.js';
+import { CapacityError, ChatConversation, LlmError, type ChatMessage } from '../../models/llm.js';
 import { streamedMessage } from '../../models/response-text.js';
 import { extractJsonValue } from '../../models/json-extract.js';
 import { parseActions, formatToolResults } from '../../evidence/evidence.js';
 import { REVIEW_POLICY } from '../session/review-policy.js';
 import { isAuthFailure, isUsageLimit, modelFailure } from '../../models/model-failure.js';
-import { CHAT_STYLE, RETRIEVAL_EXAMPLES } from './prompts.js';
+import { CHAT_STYLE, EXEC_EXAMPLES, RETRIEVAL_EXAMPLES } from './prompts.js';
 import { reviewNow, reviewPausePoint } from '../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
+import { agentDeadlines, deadlineError, newAgentId } from './agent-loop/limits.js';
+import { runOpenCodeAgent } from './agent-loop/opencode-engine.js';
 import type { JsonAgentOptions } from './agent-loop/options.js';
 import { streamTurn, type TurnResult } from './agent-loop/stream-turn.js';
 
 export { ModelBlockedError, ModelBudget, ReviewAbortedError, canLaunchInvestigation } from './agent-loop/budget.js';
+export { newAgentId } from './agent-loop/limits.js';
 export { isLooping } from './agent-loop/stream-turn.js';
 
 const REPLY_RULES =
 	'\nIn every JSON response, put "message" first: a concise, reader-facing Markdown explanation of your current investigation or conclusion. Then include EITHER "actions" (when you still want to read or run something) OR the final result fields (only once you are done). Never send final result fields while you still intend to look at more code: that ends your work. Describe actual evidence and decisions; do not narrate JSON formatting or budget compliance. This text is shown live to the developer. ';
 
+/**
+ * Heads the developer's discussion since the review started. It is added to
+ * the transcript when it changes, never rewritten in place, so earlier turns
+ * stay a stable prefix for the provider's cache.
+ */
+const DISCUSSION_NOTE = 'Developer conversations since the review started (consider these with the review evidence):';
+
 const FINAL_TURN =
 	'This is your final turn. Return the required compact result JSON using available evidence, with the reader-facing "message" first. Do not request retrieval. Omit other optional fields when unnecessary.';
-
-/**
- * When this agent must stop and when its next turn must be the final one.
- * Consolidation time is reserved throughout an investigation, not merely when dispatching it.
- */
-function agentDeadlines<T>(opts: JsonAgentOptions<T>): { startedAt: number; deadlineAt: number; finalTurnAt: number } {
-	const startedAt = reviewNow();
-
-	const deadlineAt = Math.min(
-		opts.deadlineAt - (opts.consumeReserve ? 0 : REVIEW_POLICY.reserveMsForConsolidation),
-		opts.timeLimit ? startedAt + opts.timeLimit.maxWallMs : Infinity
-	);
-
-	const finalTurnAt = opts.timeLimit ? startedAt + opts.timeLimit.finalTurnAfterMs : Infinity;
-
-	return { startedAt, deadlineAt, finalTurnAt };
-}
 
 /** Why a reply was cut off and asked again: a short line on the composer while the retry runs. */
 function cutOffNote(overthought: boolean, dropped: boolean, truncated: boolean): string | undefined {
@@ -119,17 +112,31 @@ function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean
 }
 
 /**
- * A unique agent id, which keeps an agent's scratch files and runs its own.
- * Random rather than counted, because run records outlive a server restart in
- * checkpoints and a resumed agent must never share an id with an earlier one.
+ * Run an agent to its answer. OpenCode runs the agent itself, calling
+ * Recoder's tools as it goes. Every other provider is only a model: Recoder
+ * runs the loop, asking for JSON action requests turn by turn. Those calls
+ * share one conversation, so a transport that keeps a session reuses the
+ * provider's prompt cache.
  */
-export function newAgentId(): string {
-	return `agent_${crypto.randomUUID()}`;
+export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
+	if (opts.config.provider === 'opencode') return runOpenCodeAgent(opts);
+
+	const conversation = new ChatConversation();
+
+	try {
+		return await runTurns(opts, conversation);
+	} finally {
+		await conversation.close();
+	}
 }
 
-export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
+async function runTurns<T>(
+	opts: JsonAgentOptions<T>,
+	conversation: ChatConversation
+): Promise<{ value: T | null; error?: string }> {
 	const agentId = opts.agentId ?? newAgentId();
-	const { startedAt, deadlineAt, finalTurnAt } = agentDeadlines(opts);
+	const limits = agentDeadlines(opts);
+	const { deadlineAt, finalTurnAt } = limits;
 	const spendOpts = { consumeReserve: opts.consumeReserve };
 
 	const messages: ChatMessage[] = [
@@ -140,13 +147,16 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 	let repaired = 0;
 	let retrievals = 0;
 	let runs = 0;
-	let finalNudged = false;
+
+	/** Nudges already sent: each distinct one goes out once. */
+	const nudged = new Set<string>();
 
 	/** The previous round when every action in it failed: asking again won't go differently, so the next turn is the last. */
 	let failedRound = '';
 	let stuck = false;
 	let lastError = 'no model output';
-	const shapes = `${opts.actionExamples ?? RETRIEVAL_EXAMPLES}\nTo finish, reply with ONLY the final JSON object${opts.finalExample ? `, for example:\n${opts.finalExample}` : '.'}\nNo prose outside the JSON, no code fences.`;
+	let sentDiscussion = '';
+	const shapes = `${opts.exec ? EXEC_EXAMPLES : RETRIEVAL_EXAMPLES}\nTo finish, reply with ONLY the final JSON object${opts.finalExample ? `, for example:\n${opts.finalExample}` : '.'}\nNo prose outside the JSON, no code fences.`;
 
 	/**
 	 * The evidence round in progress. Schema repairs cost model calls but not a
@@ -160,16 +170,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		await reviewPausePoint(opts.signal);
 		throwIfAborted(opts.signal);
 
-		if (reviewNow() >= deadlineAt) {
-			const ownLimit = opts.timeLimit && deadlineAt === startedAt + opts.timeLimit.maxWallMs;
-
-			return {
-				value: null,
-				error: ownLimit
-					? `Ran out of time: no answer within ${Math.round(opts.timeLimit!.maxWallMs / 60_000)} minutes`
-					: 'Investigation deadline reached; remaining time reserved for consolidation'
-			};
-		}
+		if (reviewNow() >= deadlineAt) return { value: null, error: deadlineError(opts, limits) };
 
 		if (!opts.budget.canSpend(1, spendOpts)) {
 			return { value: null, error: 'model-call budget exhausted' };
@@ -178,6 +179,13 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		const lastTurn =
 			stuck || turn >= opts.maxTurns || !opts.budget.canSpend(2, spendOpts) || reviewNow() >= finalTurnAt;
 
+		const discussion = opts.getDiscussion?.() ?? '';
+
+		if (discussion && discussion !== sentDiscussion) {
+			messages.push({ role: 'user', content: `${DISCUSSION_NOTE}\n${discussion}` });
+			sentDiscussion = discussion;
+		}
+
 		if (lastTurn && !messages.at(-1)?.content.startsWith('This is your final turn.'))
 			messages.push({ role: 'user', content: FINAL_TURN });
 
@@ -185,7 +193,7 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		opts.onLog?.(`${opts.label} model turn ${turn}/${opts.maxTurns} (${opts.config.model})`);
 
 		const started = Date.now();
-		const result = await streamTurn(opts, messages, turn, lastTurn, deadlineAt);
+		const result = await streamTurn(opts, messages, conversation, turn, lastTurn, deadlineAt);
 
 		if (result.kind === 'paused') {
 			opts.budget.used = Math.max(0, opts.budget.used - 1);
@@ -280,12 +288,12 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 		const value = opts.parse(parsed);
 
 		if (value) {
-			/** One push-back, and only while a turn remains to act on it. */
-			const nudge = !finalNudged && !lastTurn ? opts.checkFinal?.(value, { retrievals, runs }) : null;
+			/** Each push-back goes out once, and only while a turn remains to act on it. */
+			const nudge = lastTurn ? null : opts.checkFinal?.(value, { retrievals, runs });
 
-			if (!nudge) return { value };
+			if (!nudge || nudged.has(nudge)) return { value };
 
-			finalNudged = true;
+			nudged.add(nudge);
 			opts.onLog?.(`${opts.label} finished early; asking it to investigate first`);
 			messages.push({ role: 'assistant', content: output });
 			messages.push({ role: 'user', content: `${nudge}\n\n${shapes}` });
@@ -314,7 +322,9 @@ export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ valu
 					: 'No model capacity or investigation time remained to inspect the requested evidence'
 			};
 
-		return { value: null, error: lastError };
+		const kept = opts.salvage?.(parsed);
+
+		return kept ? { value: kept } : { value: null, error: lastError };
 	}
 
 	return { value: null, error: lastError };

@@ -7,6 +7,10 @@
 	top: 3px;
 	height: 14px;
 }
+/* The label scales with the root font but the track doesn't; a label-only switch centers on it. */
+:has(> [data-ui='switch']):not(:has(> label > :nth-child(2))) {
+	align-items: center;
+}
 
 /* Keycap: Geist Mono 10.5, 1px 5px, radius 4, #1f1e1c. */
 kbd.keycap {
@@ -284,7 +288,7 @@ kbd.keycap {
 .rc-composer-box {
 	display: flex;
 	flex-direction: column;
-	padding: 8px 8px 8px 16px;
+	padding: 10px;
 	border-radius: 14px;
 	background-color: var(--bg-raised);
 	box-shadow: var(--shadow-composer);
@@ -300,18 +304,13 @@ kbd.keycap {
 	box-shadow: 0 0 0 1px color-mix(in oklab, var(--danger) 70%, transparent);
 }
 .rc-composer[data-size='panel'] > .rc-composer-box {
-	padding: 6px 6px 6px 12px;
+	padding: 8px;
 	border-radius: 12px;
-}
-.rc-composer-row {
-	display: flex;
-	align-items: flex-end;
-	gap: 8px;
 }
 [data-ui='composer-input'].rc-composer-input {
 	min-height: 28px;
 	max-height: 200px;
-	padding: 4px 0 3px;
+	padding: 2px 6px 3px;
 	border: 0;
 	border-radius: 0;
 	background: transparent;
@@ -324,38 +323,29 @@ kbd.keycap {
 	color: var(--text-faint);
 }
 [data-ui='composer-toolbar'].rc-composer-bar {
-	min-height: 30px;
+	min-height: 24px;
 	flex-wrap: nowrap;
-	gap: 6px;
-	margin-top: 6px;
-	padding: 0 6px 0 4px;
+	gap: 2px;
+	margin-top: 8px;
+	padding: 0;
 	cursor: default;
 }
 .rc-composer[data-size='panel'] [data-ui='composer-toolbar'].rc-composer-bar {
-	min-height: 28px;
-	margin-top: 4px;
+	margin-top: 6px;
 }
 [data-ui='button'].rc-attach {
-	width: 28px;
-	min-width: 28px;
-	height: 28px;
-	border-radius: 8px;
+	width: 24px;
+	min-width: 24px;
+	height: 24px;
+	border-radius: 6px;
 	color: var(--text-subtle);
-}
-.rc-composer-model {
-	font-size: 12.5px;
-	color: var(--text-muted);
-}
-.rc-composer-bar [data-ui='spinner'].rc-working {
-	margin-left: 4px;
-	color: var(--text-muted);
 }
 [data-ui='composer-submit'].rc-send {
 	width: 28px;
 	min-width: 28px;
 	height: 28px;
 	padding: 0;
-	border-radius: 8px;
+	border-radius: 999px;
 }
 [data-ui='composer-submit'].rc-send:disabled {
 	opacity: 1;
@@ -380,7 +370,25 @@ kbd.keycap {
 	border-radius: 2px;
 	background: currentColor;
 }
-/* Sivir rings Send while it stops or queues; the working ring lives in the bar instead. */
+/* Sivir's own Send ring gives way to the working spinner below. */
 [data-ui='composer-submit'].rc-send::after {
 	content: none;
+}
+/* The review is working or a reply is arriving: a spinner circles Send. */
+.rc-send-wrap {
+	position: relative;
+	display: inline-flex;
+	flex-shrink: 0;
+	margin-left: 4px;
+}
+.rc-send-wrap [data-ui='spinner'].rc-send-ring {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	translate: -50% -50%;
+	pointer-events: none;
+	color: var(--text-muted);
+}
+.rc-send-ring svg {
+	stroke-width: 1.25;
 }

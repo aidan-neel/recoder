@@ -233,12 +233,9 @@
 	color: var(--text-faint);
 }
 
-/* Hover highlight: instant position, 100ms opacity fade. Never travels. */
+/* Hover highlight in Sivir menus: one layer that travels between items (--motion-duration-item). */
 .sivir-item-highlight {
 	border-radius: 7px;
-	transition-property: opacity;
-	transition-duration: var(--dur-highlight);
-	transition-timing-function: ease-out;
 }
 .sivir-collection-surface > .sivir-item-highlight,
 .sivir-collection-surface:where(.dark, .dark *) > .sivir-item-highlight {

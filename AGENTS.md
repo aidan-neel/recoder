@@ -44,7 +44,7 @@ this. Treat a lint error as a bug, not a suggestion.
   flat `lib/`:
   - Server `apps/server/src/`: `agents/<cli>/`, `models/`,
     `review/{pipeline,session,chat,guidelines,fixes}/`, `evidence/`,
-    `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `util/`.
+    `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `eval/`, `util/`.
   - Web `apps/web/src/lib/`: `api/`, `review/`, `findings/`, `diff/`,
     `session/`, `settings/`, `home/`, `shell/`, with components under
     `lib/components/<feature>/` and Sivir wrappers in `lib/components/ui/`.
@@ -180,15 +180,16 @@ component specs, layout and behavior rules.
 - **No drop shadows on panels, cards or the composer** in either theme
   (`--drop: 0`); only menus and modals float.
 - **No logo mark** anywhere, including next to AI messages.
-- **One model picker pattern**: the quiet trigger (`5.6 Sol Medium`) opening the
-  Model / Reasoning effort menu with submenus. Effort options come from the
-  model's capabilities; never hardcode Low/Med/High; spell effort words in full;
-  no speed option.
+- **One model picker pattern** (`model-picker.svelte`): a quiet model trigger
+  opening a searchable command dialog grouped by provider, plus a quiet effort
+  select beside it. No nested submenus. Effort options come from the model's
+  capabilities; never hardcode Low/Med/High; spell effort words in full; no
+  speed option.
 - **Quiet at rest.** Triggers, icon buttons and ghost buttons have no
   background until hovered. One cream primary button per region.
-- **Hover highlight is instant** (`hoverHighlight` in `$lib/shell/hover-highlight.ts`
-  or Sivir's item highlight): snap to the item, fade 60ms. Only the active
-  tab pill animates position.
+- **Sivir's item highlight travels** between items (`--motion-duration-item`).
+  Our own lists (`hoverHighlight` in `$lib/shell/hover-highlight.ts`) snap to
+  the item and fade 60ms. The active tab pill also animates position.
 - **Motion is for an everyday tool, not a demo.** Use the `--dur-*` and
   `--motion-*` tokens in `app.css`, never a raw duration. Menus and modals
   enter with a short fade, a 0.95 scale and a 2px blur (the `--motion-*`

@@ -1,4 +1,6 @@
-import type { ModelProvider, ReasoningEffort, TokenUsage } from '@recoder/shared';
+import type { ModelProvider, OutputRate, ReasoningEffort, TokenUsage } from '@recoder/shared';
+
+import type { ChatConversation } from './conversation';
 
 export interface ChatMessage {
 	role: 'system' | 'user' | 'assistant';
@@ -13,6 +15,11 @@ export interface ChatOptions {
 	apiKey: string;
 	model: string;
 	messages: ChatMessage[];
+	/**
+	 * The run of calls this one belongs to. `messages` still carries the whole
+	 * transcript; a transport that keeps a session sends only what was added.
+	 */
+	conversation?: ChatConversation;
 	/** Response format hint; ignored by servers that don't support it. */
 	jsonMode?: boolean;
 	/**
@@ -20,7 +27,9 @@ export interface ChatOptions {
 	 * OpenAI structured outputs). Endpoints that refuse it fall back to `jsonMode`.
 	 */
 	jsonSchema?: { name: string; schema: Record<string, unknown> };
-	temperature?: number;
+	/** `null` leaves the field out of the request; unset sends the default. */
+	temperature?: number | null;
+	topP?: number;
 	/** Fixed seed for deterministic output. Only sent when set (some servers reject unknown fields). */
 	seed?: number;
 	maxTokens?: number;
@@ -38,6 +47,8 @@ export interface ChatOptions {
 	onUsage?: (usage: TokenUsage) => void;
 	/** Provider-disclosed reasoning/thinking text, streamed as deltas when available. */
 	onReasoning?: (text: string) => void;
+	/** Output speed as the call streams (estimated), then its average once it ends. */
+	onRate?: (rate: OutputRate) => void;
 	/** false: ask the model to answer without a thinking phase (quick summaries). */
 	thinking?: boolean;
 }

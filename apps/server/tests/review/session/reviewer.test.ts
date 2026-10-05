@@ -52,19 +52,16 @@ describe('extractFindingsJson', () => {
 });
 
 describe('finding stability', () => {
-	test('same issue twice → same fingerprint (wording/whitespace independent)', () => {
-		const a = fingerprintFinding('a.ts', 'sec', 'const  buckets  =  new Map();\n');
-		const b = fingerprintFinding('a.ts', 'sec', 'const buckets = new Map();');
+	test('the fingerprint ignores wording and line, and changes with the symbol, rule or smell', () => {
+		const base = { file: 'a.ts', category: 'readability', smell: 'deep-nesting', symbol: 'Store.load', hunkId: 'h1' };
 
-		expect(a).toBe(b);
-	});
+		expect(fingerprintFinding({ ...base, hunkId: 'h2' })).toBe(fingerprintFinding(base));
+		expect(fingerprintFinding({ ...base, symbol: 'Store.save' })).not.toBe(fingerprintFinding(base));
+		expect(fingerprintFinding({ ...base, smell: 'magic-value' })).not.toBe(fingerprintFinding(base));
 
-	test('different file, category, or code → different fingerprint', () => {
-		const base = fingerprintFinding('a.ts', 'sec', 'x = 1;');
-
-		expect(fingerprintFinding('b.ts', 'sec', 'x = 1;')).not.toBe(base);
-		expect(fingerprintFinding('a.ts', 'perf', 'x = 1;')).not.toBe(base);
-		expect(fingerprintFinding('a.ts', 'sec', 'x = 2;')).not.toBe(base);
+		expect(fingerprintFinding({ ...base, symbol: undefined })).not.toBe(
+			fingerprintFinding({ ...base, symbol: undefined, hunkId: 'h2' })
+		);
 	});
 
 	test('filterNewFindings suppresses repeats and in-run duplicates', () => {

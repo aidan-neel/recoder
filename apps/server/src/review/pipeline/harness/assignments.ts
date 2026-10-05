@@ -25,14 +25,25 @@ export function updateAssignment(records: ReviewAssignment[], id: string, patch:
 	}
 }
 
-/** Marks every hunk in the unit's scope as owned by its reviewer. */
-export function assignCoverage(coverage: CoverageLedger, unit: ReviewUnit, role: string): void {
+/**
+ * The coverage responsibility a lens assignment holds. Each lens is its own
+ * role, so a hunk counts as reviewed only once every lens that applies to it
+ * has examined it.
+ */
+export function coverageRole(unit: ReviewUnit): string {
+	return unit.lens ?? 'reviewer';
+}
+
+/** Marks every hunk in the unit's scope as owned by its lens. */
+export function assignCoverage(coverage: CoverageLedger, unit: ReviewUnit): void {
+	const role = coverageRole(unit);
+
 	for (const scope of unit.scope) {
 		for (const hunkId of scope.hunkIds) coverage.assign(hunkId, scope.path, role);
 	}
 }
 
-/** Reviewers that ended in an error, one per unit: a retry stands in for the attempt it replaced. */
+/** Reviewers that ended in an error, one per lens assignment: a retry stands in for the attempt it replaced. */
 export function unfinishedAssignments(records: ReviewAssignment[]): ReviewAssignment[] {
 	const retried = (record: ReviewAssignment) =>
 		records.some((other) => other.id !== record.id && other.id.startsWith(`retry-${record.id}`));

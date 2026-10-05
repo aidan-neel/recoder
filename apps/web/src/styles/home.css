@@ -323,6 +323,11 @@ button.fact-link:hover {
 	letter-spacing: 0;
 	color: var(--text-muted);
 }
+/* Stopped or failed review: the same tab, holding Continue and Restart. */
+.composer-notice-tab[data-actions] {
+	gap: 2px;
+	padding: 3px 6px 13px;
+}
 @media (prefers-reduced-motion: reduce) {
 	.composer-notice {
 		transition: none;
@@ -335,8 +340,7 @@ button.fact-link:hover {
 }
 
 /* Transcript secondary text (thinking, disclosures, tool rows, status lines)
-   sits at body size next to the model's prose, not UI-caption size.
-   Geist reads larger than Lora at the same px, so 15px pairs with 16px prose. */
+   sits one step under the model's prose so the work recedes behind the answer. */
 .review-transcript .disclosure-trigger,
 .review-transcript .disclosure-body,
 .review-transcript .disclosure-body [data-ui='markdown'],
@@ -344,15 +348,15 @@ button.fact-link:hover {
 .review-transcript .review-log,
 .review-transcript .model-note-added,
 .review-transcript .agent-row-name {
-	font-size: 15px;
-	line-height: 22px;
+	font-size: 14px;
+	line-height: 20px;
 }
 .review-transcript .disclosure[data-size='row'] > .disclosure-trigger {
-	min-height: 30px;
-	font-size: 14px;
+	min-height: 26px;
+	font-size: 13.5px;
 }
 .review-transcript .tool-row-target {
-	font-size: 13px;
+	font-size: 12.5px;
 }
 .review-transcript .disclosure-meta,
 .review-transcript .tool-row-duration,
@@ -366,8 +370,8 @@ button.fact-link:hover {
 	width: 96px;
 }
 .review-transcript .reasoning-step-title {
-	font-size: 15px;
-	line-height: 22px;
+	font-size: 14px;
+	line-height: 20px;
 }
 .review-transcript .fact-row {
 	min-height: 30px;
@@ -389,8 +393,8 @@ button.fact-link:hover {
 .review-chat[data-compact] .disclosure-body [data-ui='markdown'],
 .review-chat[data-compact] .review-thinking,
 .review-chat[data-compact] .model-note-added {
-	font-size: 14px;
-	line-height: 21px;
+	font-size: 13.5px;
+	line-height: 20px;
 }
 
 /* ── Results rail (4f) ────────────────────────────────────── */

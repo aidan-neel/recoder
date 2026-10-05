@@ -17,12 +17,15 @@ class SettingsDraft {
 	limits = $state<Limits>({ maxFiles: 0, maxDiffChars: 0, maxFileChars: 0 });
 	/** How many subagents one review may run. */
 	subagentCap = $state<SubagentCap>(DEFAULT_SUBAGENT_CAP);
+	/** Whether reviews report low-severity findings. */
+	reportLowSeverity = $state(false);
 	seeded = $state(false);
 	private initial: {
 		orchestrator: ModelChoice | null;
 		specialist: ModelChoice | null;
 		limits: Limits;
 		subagentCap: SubagentCap;
+		reportLowSeverity: boolean;
 	} | null = null;
 
 	seed(config: ModelSettings): void {
@@ -30,12 +33,14 @@ class SettingsDraft {
 		this.specialist = config.specialistModelId ? modelSettingsUi.specialist : null;
 		this.limits = { ...config.limits };
 		this.subagentCap = config.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+		this.reportLowSeverity = config.reportLowSeverity ?? false;
 
 		this.initial = {
 			orchestrator: this.orchestrator,
 			specialist: this.specialist,
 			limits: { ...this.limits },
-			subagentCap: this.subagentCap
+			subagentCap: this.subagentCap,
+			reportLowSeverity: this.reportLowSeverity
 		};
 
 		this.seeded = true;
@@ -68,6 +73,8 @@ class SettingsDraft {
 		if (this.limits.maxDiffChars !== initial.limits.maxDiffChars) patch.maxDiffChars = this.limits.maxDiffChars;
 		if (this.limits.maxFileChars !== initial.limits.maxFileChars) patch.maxFileChars = this.limits.maxFileChars;
 		if (this.subagentCap !== initial.subagentCap) patch.subagentCap = this.subagentCap;
+
+		if (this.reportLowSeverity !== initial.reportLowSeverity) patch.reportLowSeverity = this.reportLowSeverity;
 
 		return patch;
 	}

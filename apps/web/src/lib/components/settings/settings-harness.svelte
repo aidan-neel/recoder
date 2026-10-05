@@ -1,6 +1,7 @@
 <script lang="ts">
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Input } from '@sivir-ui/svelte/components/input';
+	import { Switch } from '@sivir-ui/svelte/components/switch';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import { SUBAGENT_CAPS, type SubagentCap } from '@recoder/shared';
 	import SegmentedControl from '$lib/components/ui/segmented-control.svelte';
@@ -41,6 +42,19 @@
 				items={SUBAGENT_ITEMS}
 				value={String(settingsDraft.subagentCap)}
 				onValueChange={(value) => (settingsDraft.subagentCap = Number(value) as SubagentCap)}
+			/>
+		</div>
+		<div class="settings-row">
+			<div class="min-w-0 flex-1">
+				<p class="settings-row-name">Low severity findings</p>
+				<p class="settings-row-desc">
+					{settingsDraft.reportLowSeverity ? 'Reviews report every severity' : 'Reviews report medium and above'}
+				</p>
+			</div>
+			<Switch
+				switched={settingsDraft.reportLowSeverity}
+				onclick={() => (settingsDraft.reportLowSeverity = !settingsDraft.reportLowSeverity)}
+				aria-label="Low severity findings"
 			/>
 		</div>
 	</Card.Root>

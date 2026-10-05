@@ -3,8 +3,11 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseUnifiedDiff } from '@recoder/shared';
+import { existsSync } from 'node:fs';
+import { locateRepo, refspecFor } from '../../src/forge/providers';
 import { prepareSandbox, sandboxDiff } from '../../src/sandbox/sandbox';
 import { git } from '../helpers/git';
+import { localForgeFixture } from '../helpers/local-forge';
 
 test('local review checks out PR refs and retains over 300 files and 200KB of diff', async () => {
 	const origin = await mkdtemp(join(tmpdir(), 'recoder-origin-'));
@@ -54,4 +57,23 @@ test('local review checks out PR refs and retains over 300 files and 200KB of di
 	expect(diff.length).toBeGreaterThan(200_000);
 	expect(parseUnifiedDiff(diff)).toHaveLength(301);
 	expect(diff).not.toContain('base-only.txt');
+});
+
+test('a local repo PR checks out from its file:// URL at the head, without the metadata file', async () => {
+	const { repo, pull7Head } = await localForgeFixture();
+	const { provider, slug } = locateRepo(repo.url);
+
+	const sandbox = await prepareSandbox({
+		repoSlug: slug,
+		prNumber: 7,
+		repoUrl: repo.url,
+		...refspecFor(provider, 7),
+		reviewId: crypto.randomUUID(),
+		provider,
+		expectedHeadSha: pull7Head
+	});
+
+	expect(provider).toBe('local');
+	expect(sandbox.headSha).toBe(pull7Head);
+	expect(existsSync(join(sandbox.path, '.git', 'recoder-forge.json'))).toBe(false);
 });

@@ -3,6 +3,8 @@ import { z } from 'zod';
 import type { Repo } from '@recoder/shared';
 import { GhError, listPullRequests } from '../forge/gh';
 import { listMergeRequests } from '../forge/glab';
+import { listLocalPulls } from '../forge/local/pulls';
+import { localGitDir } from '../forge/local/schema';
 import { detectProvider } from '../forge/providers';
 import { fetchPullPreview } from '../forge/pull-preview';
 import { tokenEnv } from '../forge/tokens';
@@ -13,12 +15,18 @@ import { parseBody } from './parse-body';
 const pullsCache = new TtlCache<unknown>(30_000);
 const previewCache = new TtlCache<unknown>(60_000);
 
-const createRepoSchema = z.object({
-	name: z.string().min(1).max(200),
-	url: z.string().url().max(2000),
-	provider: z.enum(['github', 'gitlab']).default('github'),
-	defaultBranch: z.string().min(1).max(200).default('main')
-});
+/** A local repo is a `file://` URL, and only a local repo may be one. */
+const createRepoSchema = z
+	.object({
+		name: z.string().min(1).max(200),
+		url: z.string().url().max(2000),
+		provider: z.enum(['github', 'gitlab', 'local']).default('github'),
+		defaultBranch: z.string().min(1).max(200).default('main')
+	})
+	.refine((body) => (body.provider === 'local') === /^file:\/\//i.test(body.url), {
+		message: 'Local repos need a file:// URL, and a file:// URL needs provider "local"',
+		path: ['url']
+	});
 
 const app = new Hono();
 
@@ -28,6 +36,10 @@ app.post('/', async (c) => {
 	const body = await parseBody(c, createRepoSchema);
 
 	if (body instanceof Response) return body;
+
+	if (body.provider === 'local' && !(await localGitDir(body.url).catch(() => null))) {
+		return c.json({ error: `${body.url} is not a git repository` }, 400);
+	}
 
 	const now = new Date().toISOString();
 	const repo: Repo = { id: crypto.randomUUID(), ...body, createdAt: now, updatedAt: now };
@@ -66,9 +78,11 @@ app.get('/:id/pulls', async (c) => {
 
 	try {
 		const prs = await pullsCache.get(repo.id, () =>
-			provider === 'gitlab'
-				? listMergeRequests(repo.url, { env: tokenEnv('gitlab', repo.url) })
-				: listPullRequests(repo.url, { env: tokenEnv('github') })
+			provider === 'local'
+				? listLocalPulls(repo.url)
+				: provider === 'gitlab'
+					? listMergeRequests(repo.url, { env: tokenEnv('gitlab', repo.url) })
+					: listPullRequests(repo.url, { env: tokenEnv('github') })
 		);
 
 		return c.json(prs);

@@ -347,6 +347,10 @@
 }
 
 /* Tool group rows (inside a Disclosure body). */
+.tool-row-icon {
+	flex-shrink: 0;
+	color: var(--text-ghost);
+}
 .tool-row-action {
 	/* Fits the longest live label ("Listing files") so targets stay in one column. */
 	width: 84px;

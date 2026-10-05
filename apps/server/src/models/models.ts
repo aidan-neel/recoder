@@ -15,11 +15,13 @@
  *   RECODER_REVIEW_MODEL=qwen/qwen-2.5-coder-32b-instruct
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
-import type { ModelProvider, ReasoningEffort } from '@recoder/shared';
+import type { ModelProvider, ModelRuntimeProfile, ReasoningEffort } from '@recoder/shared';
 import { hostedProvider } from './model-providers.js';
+import { resolveRuntime } from './runtime-profiles.js';
 import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode.js';
-import { effectiveReviewEnv, getStoredSettings } from '../review/session/review-settings.js';
+import { effectiveReviewEnv, getStoredSettings, type StoredModelEntry } from '../review/session/review-settings.js';
 
 const configSchema = z.object({
 	baseUrl: z.string().min(1),
@@ -32,6 +34,8 @@ export interface ModelConfig {
 	/** Unset API effort is omitted for endpoints that do not support reasoning. */
 	reasoningEffort?: ReasoningEffort;
 	provider?: ModelProvider;
+	/** Sampling for this model: its entry's settings over the built-in profile; unset on transports that take none. */
+	runtime?: ModelRuntimeProfile;
 	/** Hosted provider id (`opencode-go`…) when the model came from one; for OpenCode, its provider id. */
 	source?: string;
 	baseUrl: string;
@@ -76,14 +80,42 @@ export function isReviewConfigured(): boolean {
 	}
 }
 
+/** Both picks as a review saw them when it started. */
+interface LockedModels {
+	orchestrator: ModelConfig;
+	subagent: ModelConfig;
+}
+
+/** The picks of the review whose work is running, held in memory only since a config carries its API key. */
+const locked = new AsyncLocalStorage<LockedModels>();
+
+/**
+ * Runs a review on the models picked when it starts. Changing the picks
+ * mid-run then only affects reviews started after, so two reviews on
+ * different models can run at once and no review mixes models. Resolved
+ * synchronously, before `run` awaits anything. A pick that does not resolve
+ * runs unlocked, so the review fails through its own error handling.
+ */
+export function withLockedModels<T>(run: () => T): T {
+	let picks: LockedModels;
+
+	try {
+		picks = { orchestrator: resolveConfig(true), subagent: resolveConfig(false) };
+	} catch {
+		return run();
+	}
+
+	return locked.run(picks, run);
+}
+
 /** The Review model: reviewers, consolidation and chat. */
 export function configForOrchestrator(): ModelConfig {
-	return resolveConfig(true);
+	return locked.getStore()?.orchestrator ?? resolveConfig(true);
 }
 
 /** The second model: subagents and verifiers. Unset, it follows the Review model. */
 export function configForSubagent(): ModelConfig {
-	return resolveConfig(false);
+	return locked.getStore()?.subagent ?? resolveConfig(false);
 }
 
 /**
@@ -106,7 +138,6 @@ export function configForAgent(agent: string | undefined): ModelConfig {
  */
 function resolveConfig(orchestrator: boolean): ModelConfig {
 	const stored = getStoredSettings();
-	const eff = effectiveReviewEnv();
 	const entries = stored.models ?? [];
 	const reviewId = stored.orchestratorModelId ?? stored.sharedModelId ?? entries[0]?.id;
 	const followsReview = orchestrator || !stored.specialistModelId;
@@ -118,7 +149,29 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
 
 	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(entryId, requested ?? undefined);
 
-	const entry = entries.find((e) => e.id === entryId) ?? entries[0];
+	return entryConfig(entries.find((e) => e.id === entryId) ?? entries[0], requested);
+}
+
+/**
+ * One model by its id at a chosen effort, whatever the two picks are, for a
+ * caller that must stay on the same model while the picks change (the
+ * benchmark judge). Unlike a pick, an unknown id throws instead of falling
+ * back to another model.
+ */
+export function configForModel(id: string, effort: ReasoningEffort | undefined): ModelConfig {
+	if (id.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(id, effort);
+
+	const entry = getStoredSettings().models?.find((e) => e.id === id);
+
+	if (!entry) throw new ModelConfigError(`No model ${id} is set up.`);
+
+	return entryConfig(entry, effort);
+}
+
+/** A saved entry's config, or the shared environment's model when there is no entry. */
+function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEffort | null | undefined): ModelConfig {
+	const stored = getStoredSettings();
+	const eff = effectiveReviewEnv();
 
 	if (entry) {
 		const reasoningEffort = supportedEffort(requested ?? undefined, entry.efforts, entry.defaultEffort);
@@ -133,6 +186,7 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
 			};
 		}
 
+		const runtime = resolveRuntime(entry.model, entry.runtime);
 		const hosted = hostedProvider(entry.source);
 
 		if (hosted) {
@@ -140,7 +194,7 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
 
 			if (!apiKey) throw new ModelConfigError(`${hosted.name} isn't connected. Connect it in Settings → Models.`);
 
-			return { source: hosted.id, baseUrl: hosted.baseUrl, apiKey, model: entry.model, reasoningEffort };
+			return { source: hosted.id, baseUrl: hosted.baseUrl, apiKey, model: entry.model, reasoningEffort, runtime };
 		}
 
 		const baseUrl = entry.baseUrl || eff.baseUrl;
@@ -148,7 +202,7 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
 
 		if (!baseUrl) throw new ModelConfigError(`${entry.label} has no endpoint. Set a base URL in Settings → Models.`);
 
-		return { baseUrl, apiKey, model: entry.model, reasoningEffort };
+		return { baseUrl, apiKey, model: entry.model, reasoningEffort, runtime };
 	}
 
 	const shared = reviewConfig();
@@ -157,6 +211,7 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
 		baseUrl: shared.baseUrl,
 		apiKey: shared.apiKey,
 		model: shared.model,
+		runtime: resolveRuntime(shared.model),
 		reasoningEffort: requested ?? undefined
 	};
 }

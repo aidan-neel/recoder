@@ -12,6 +12,7 @@
 	import type { FileDiff } from '$lib/diff/diff';
 	import { evidenceView } from '$lib/findings/evidence';
 	import { dismissFinding, discussFinding, restoreFinding } from '$lib/findings/finding-actions';
+	import { VERIFY_METHOD_NOTES } from '$lib/findings/finding-labels';
 	import { findingsStore, type Finding } from '$lib/findings/findings.svelte';
 	import { formatAgentName } from '$lib/findings/threads.svelte';
 	import { modelLabel } from '$lib/settings/model-settings.svelte';
@@ -19,6 +20,7 @@
 	import ModelMarkdown from '../review/model-markdown.svelte';
 	import SeverityPill from '../ui/severity-pill.svelte';
 	import EvidenceView from './evidence-view.svelte';
+	import FindingFacets from './finding-facets.svelte';
 	import FindingSeverity from './finding-severity.svelte';
 	import FixButton from './fix-button.svelte';
 	import FixStatus from './fix-status.svelte';
@@ -37,7 +39,7 @@
 
 	let { active, files, toolCalls, onFullFile, onOpenAt }: Props = $props();
 
-	const suggestion = $derived(findingsStore.suggestions[active.id]);
+	const fix = $derived(findingsStore.readyFix(active));
 
 	/** The finding's hunk, trimmed to its lines plus three either side. */
 	const focused = $derived.by((): FileDiff | null => {
@@ -123,6 +125,7 @@
 				>{[active.code, formatAgentName(active.agent), modelLabel(active.model)].filter(Boolean).join(' · ')}</span
 			>
 		</div>
+		<FindingFacets finding={active} class="focus-detail-facets" />
 		<div class="focus-detail-body ai-voice"><ModelMarkdown content={active.body} /></div>
 		{#if active.verification}
 			<p class="verify-note" data-status={active.verification.status}>
@@ -134,9 +137,7 @@
 				<span>
 					{active.verification.status !== 'verified'
 						? 'Not verified'
-						: active.verification.method === 'trace'
-							? 'Traced through the code'
-							: 'Verified'}: {active.verification.reason}
+						: VERIFY_METHOD_NOTES[active.verification.method ?? 'run']}: {active.verification.reason}
 					{#if active.verification.command}<code>{active.verification.command}</code
 						>{#if active.verification.exitCode !== undefined && active.verification.exitCode !== null}
 							exited {active.verification.exitCode}.{/if}{/if}
@@ -145,7 +146,7 @@
 		{/if}
 		{#if evidence}<EvidenceView tool={evidence} onOpenInDiff={evidenceInDiff ? onOpenAt : null} />{/if}
 		<FixStatus finding={active} />
-		{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} />{/if}
+		{#if fix}<SuggestedFix suggestion={fix} />{/if}
 		<div class="focus-detail-foot">
 			{#if active.status === 'open'}
 				<Button variant="ghost" onclick={() => dismissFinding(active)}>Dismiss</Button>

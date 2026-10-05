@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { configForAgent, configForOrchestrator, configForSubagent } from '../../src/models/models';
+import { configForAgent, configForOrchestrator, configForSubagent, withLockedModels } from '../../src/models/models';
 import { setReviewOverrides } from '../../src/review/session/review-settings';
 
 afterEach(() => setReviewOverrides({}));
@@ -56,4 +56,27 @@ test('an OpenCode model routes through OpenCode instead of the first saved model
 		model: 'openrouter/qwen/qwen3',
 		reasoningEffort: 'high'
 	});
+});
+
+test('a review keeps the models picked when it started while the picks change and another review runs', async () => {
+	setReviewOverrides({ models, orchestratorModelId: 'sol', specialistModelId: 'mini' });
+
+	const first = withLockedModels(async () => {
+		await Bun.sleep(5);
+
+		return [configForOrchestrator().model, configForSubagent().model];
+	});
+
+	setReviewOverrides({ models, orchestratorModelId: 'mini', specialistModelId: 'sol' });
+
+	const second = withLockedModels(async () => {
+		await Bun.sleep(1);
+
+		return [configForOrchestrator().model, configForSubagent().model];
+	});
+
+	expect(await Promise.all([first, second])).toEqual([
+		['sol', 'mini'],
+		['mini', 'sol']
+	]);
 });

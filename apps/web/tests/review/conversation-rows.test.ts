@@ -1,5 +1,10 @@
 import { expect, test } from 'bun:test';
-import { ORCHESTRATOR_ID, type ReviewChatMessage, type ReviewReasoningEntry } from '@recoder/shared';
+import {
+	ORCHESTRATOR_ID,
+	type ReviewChatMessage,
+	type ReviewReasoningEntry,
+	type ReviewToolCall
+} from '@recoder/shared';
 import { buildRows, orphansByIndex, placeInserts, reasoningByMessage } from '../../src/lib/review/conversation-rows';
 import { groupTranscript } from '../../src/lib/review/review-transcript';
 
@@ -79,6 +84,39 @@ test('a thought before the agents were created sits above them, ending when they
 		ownThoughts: new Map()
 	});
 
-	expect(rows.map((row) => row.key)).toEqual(['traces-thought-reason_plan', 'insert-agents', 'insert-progress']);
+	expect(rows.map((row) => row.key)).toEqual(['traces-start', 'insert-agents', 'insert-progress']);
 	expect(rows[0].kind === 'traces' && rows[0].traces[0]).toMatchObject({ until: '2026-01-01T00:00:30Z' });
+});
+
+test('an agent still working after a message gets a live row its next tools land in', () => {
+	const entries = groupTranscript([reply], []);
+	const input = { entries, placed: [], orphansAt: new Map(), ownThoughts: new Map() };
+	const waiting = buildRows({ ...input, pending: true }).at(-1);
+
+	const tool: ReviewToolCall = {
+		id: 'tool-1',
+		assignmentId: ORCHESTRATOR_ID,
+		command: 'cat package.json',
+		status: 'running',
+		exitCode: null,
+		startedAt: '2026-01-01T00:00:45Z'
+	};
+
+	const landed = buildRows({ ...input, entries: groupTranscript([reply], [tool]), pending: true }).at(-1);
+
+	expect(waiting).toMatchObject({ kind: 'traces', traces: [], pending: true });
+	expect(landed).toMatchObject({ kind: 'traces', key: waiting?.key, pending: true });
+	expect(buildRows(input).map((row) => row.kind)).toEqual(['message']);
+});
+
+test('live progress at the end of the transcript takes no pending row', () => {
+	const rows = buildRows({
+		entries: [],
+		placed: placeInserts([{ key: 'progress', snippet: (() => {}) as never }], []),
+		orphansAt: new Map(),
+		ownThoughts: new Map(),
+		pending: true
+	});
+
+	expect(rows.map((row) => row.key)).toEqual(['insert-progress']);
 });

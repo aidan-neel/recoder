@@ -1,8 +1,9 @@
 import type { ReviewAssignment } from '@recoder/shared';
 import { formatToolResults, type EvidenceStore } from '../../../evidence/evidence.js';
 import { configForOrchestrator, configForSubagent, type ModelConfig } from '../../../models/models.js';
-import type { ReviewDirective } from '../../chat/directive.js';
 import { withGuidelines } from '../../guidelines/guidelines.js';
+import { dismissalsBlock } from '../../guidelines/learned/prompt.js';
+import type { Dismissal } from '../../guidelines/learned/dismissals.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import {
 	ModelBlockedError,
@@ -14,26 +15,32 @@ import {
 import type { CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
 import type { ReviewInventory } from '../inventory.js';
-import { EXEC_EXAMPLES } from '../prompts.js';
+import { isQualityLens, lensById } from '../lenses/lenses.js';
+import type { LensId } from '../lenses/types.js';
 import {
+	announcedFinal,
 	parseReviewerOutput,
+	salvageReviewerOutput,
 	prematureReviewerFinal,
+	unrunCorrectnessFinal,
 	reviewerResponseSchema,
+	reviewerValidationError
+} from '../reviewer.js';
+import {
 	reviewerSystemPrompt,
 	reviewerUserPrompt,
-	reviewerValidationError,
 	subagentSystemPrompt,
-	type PullRequestContext
-} from '../reviewer.js';
-import type { UnitRequest } from '../subagents.js';
+	type ReviewerPromptContext
+} from '../reviewer-prompts.js';
+import type { AnsweredMark, UnitRequest, UnsettledMark } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
-import { recordFor, updateAssignment } from './assignments.js';
+import { coverageRole, recordFor, updateAssignment } from './assignments.js';
 import { applyUnitResult } from './unit-result.js';
 import type { HarnessEvents, TaskFn } from './types.js';
 
-export interface PoolContext {
+/** What the pool needs from the run; the prompt fields (PR, intent, change model, ledger) come with it. */
+export interface PoolContext extends ReviewerPromptContext {
 	inventory: ReviewInventory;
-	pr: PullRequestContext;
 	evidence: EvidenceStore;
 	coverage: CoverageLedger;
 	budget: ModelBudget;
@@ -46,13 +53,21 @@ export interface PoolContext {
 	recommended: Set<string>;
 	/** Reviewers may run code in the review sandbox. */
 	exec: boolean;
-	/** Dependency setup and baseline check results, shared with every reviewer. */
-	setupNotes: string;
-	directive: ReviewDirective | null;
-	/** Subagents the review may run in all; reviewers aren't offered any at 0. */
+	/** Dependency setup and baseline check results as they stand when a reviewer starts; the checks finish mid-review. */
+	setupNotes: () => string;
+	/** Subagents the review may run in all; correctness lenses aren't offered any at 0. */
 	subagentCap: number;
+	reportLowSeverity: boolean;
+	/** Findings people dismissed in this repository, newest first; a candidate matching one is dropped and a lens reviewer is told of those on its files. */
+	dismissals: Dismissal[];
 	/** Where finished reviewers' subagent requests collect, in the order they finished. */
 	requests: UnitRequest[];
+	/** Where finished defect lenses' unsettled brief questions collect. */
+	unsettled: UnsettledMark[];
+	/** Where the brief questions finished defect lenses answered collect. */
+	answered: AnsweredMark[];
+	/** Called with each candidate a reviewer reports, so its verifier can start while others still review. */
+	onCandidate?: (candidate: CandidateFinding) => void;
 	/** Called after each unit settles, to save a checkpoint. */
 	onFinished?: () => void;
 }
@@ -61,7 +76,7 @@ export interface PoolContext {
 export type ScopedPatch = Awaited<ReturnType<EvidenceStore['executeRound']>>;
 
 const REVIEWER_EXAMPLE =
-	'{"message":"No issues in the queue split.","findings":[],"examinedHunks":[],"gaps":[],"blockers":[],"subagents":[],"recommendedChecks":[]}';
+	'{"message":"No issues in the queue split.","findings":[],"examinedHunks":[],"gaps":[],"blockers":[],"subagents":[],"unsettled":[],"answered":[],"recommendedChecks":[]}';
 
 /**
  * Runs the units in order, a few at a time. Once budget or time is reserved
@@ -98,9 +113,9 @@ export async function runUnitPool(units: ReviewUnit[], records: ReviewAssignment
 }
 
 /**
- * Runs one unit's reviewer, or one subagent, and records its result; a
- * failure marks only this record. Reviewers run on the Review model and
- * subagents on the second model. A subagent's hunks are already some unit's,
+ * Runs one lens assignment, or one subagent, and records its result; a
+ * failure marks only this record. Lens reviewers run on the Review model and
+ * subagents on the second model. A subagent's hunks are already some lens's,
  * so its failure leaves coverage alone.
  */
 async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
@@ -118,7 +133,7 @@ async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: Po
 		if (!result.value) {
 			const reason = result.error ?? 'reviewer failed';
 
-			if (!subagent) markUnitPartial(item, role, reason, ctx);
+			if (!subagent) markUnitPartial(item, reason, ctx);
 
 			failAssignment(item, records, ctx, model, result.error ?? 'Reviewer failed');
 
@@ -134,8 +149,10 @@ async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: Po
 	}
 }
 
-/** Every hunk in a unit whose reviewer failed is partially covered, with the reason. */
-function markUnitPartial(item: ReviewUnit, role: string, reason: string, ctx: PoolContext): void {
+/** Every hunk in a lens assignment that failed is partially covered for that lens, with the reason. */
+function markUnitPartial(item: ReviewUnit, reason: string, ctx: PoolContext): void {
+	const role = coverageRole(item);
+
 	for (const hunkId of new Set(item.scope.flatMap((entry) => entry.hunkIds))) {
 		const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? item.scope[0]?.path ?? '';
 
@@ -181,7 +198,30 @@ function readScopedPatch(item: ReviewUnit, role: string, ctx: PoolContext): Prom
 	);
 }
 
-/** The reviewer's model loop, reporting progress on its record and task row. */
+/** How a reviewer's empty or premature final answer is pushed back, by role and lens. */
+function finalCheck(subagent: boolean, lens: LensId, canRun: boolean) {
+	if (subagent) return prematureReviewerFinal;
+
+	return lens === 'correctness' && canRun ? unrunCorrectnessFinal : announcedFinal;
+}
+
+/** What people already dismissed on a lens reviewer's files, ready to append to its prompt; empty for a subagent or when nothing applies. */
+function dismissedNote(item: ReviewUnit, subagent: boolean, ctx: PoolContext): string {
+	const block = subagent
+		? ''
+		: dismissalsBlock(
+				ctx.dismissals,
+				item.scope.map((entry) => entry.path)
+			);
+
+	return block ? `\n\n${block}` : '';
+}
+
+/**
+ * The reviewer's model loop, reporting progress on its record and task row. A
+ * lens gets a short, fixed procedure and few turns; a subagent's open question
+ * gets more, and must read past its patch before it concludes empty.
+ */
 function askReviewer(
 	item: ReviewUnit,
 	records: ReviewAssignment[],
@@ -193,38 +233,40 @@ function askReviewer(
 	const subagent = meta.role === 'subagent';
 	let runningSince: string | undefined;
 
+	const lens = lensById(item.lens ?? 'correctness');
+	const maxTurns = subagent ? REVIEW_POLICY.maxSubagentTurns : REVIEW_POLICY.maxLensTurns;
+	const defaultCategory = lens.categories[0];
+
 	const system = subagent
 		? subagentSystemPrompt(ctx.exec, ctx.directive)
-		: reviewerSystemPrompt(ctx.exec, ctx.directive, ctx.subagentCap > 0);
+		: reviewerSystemPrompt(lens, ctx.exec, ctx.directive, {
+				subagents: lens.id === 'correctness' && ctx.subagentCap > 0,
+				unsettled: !isQualityLens(lens.id) && ctx.subagentCap > 0
+			});
 
 	return runJsonAgent({
 		label: item.title,
 		system: withGuidelines(system, ctx.inventory.guidelines),
-		actionExamples: ctx.exec ? EXEC_EXAMPLES : undefined,
+		exec: Boolean(ctx.exec),
 		getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
 		onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model: cfg.model }),
 		user:
-			reviewerUserPrompt(
-				item,
-				REVIEW_POLICY.maxReviewerTurns,
-				ctx.budget.remaining(),
-				ctx.directive,
-				ctx.pr,
-				subagent
-			) +
-			(ctx.setupNotes ? `\n\n${ctx.setupNotes}` : '') +
+			reviewerUserPrompt(item, { turns: maxTurns, calls: ctx.budget.remaining() }, ctx, subagent) +
+			(ctx.setupNotes() ? `\n\n${ctx.setupNotes()}` : '') +
+			dismissedNote(item, subagent, ctx) +
 			'\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' +
 			formatToolResults(initialEvidence),
 		config: cfg,
 		budget: ctx.budget,
 		evidence: ctx.evidence,
-		maxTurns: REVIEW_POLICY.maxReviewerTurns,
+		maxTurns,
 		signal: ctx.signal,
 		deadlineAt: ctx.deadlineAt,
-		parse: parseReviewerOutput,
-		validationError: reviewerValidationError,
-		checkFinal: prematureReviewerFinal,
-		responseSchema: (finalTurn) => reviewerResponseSchema(ctx.exec, finalTurn),
+		parse: (raw) => parseReviewerOutput(raw, defaultCategory),
+		validationError: (raw) => reviewerValidationError(raw, defaultCategory),
+		salvage: (raw) => salvageReviewerOutput(raw, defaultCategory),
+		checkFinal: finalCheck(subagent, lens.id, Boolean(ctx.exec)),
+		responseSchema: (finalTurn) => reviewerResponseSchema(ctx.exec, finalTurn, subagent ? [] : lens.categories),
 		timeLimit: {
 			finalTurnAfterMs: REVIEW_POLICY.reviewerFinalTurnAfterMs,
 			maxWallMs: REVIEW_POLICY.reviewerMaxMs

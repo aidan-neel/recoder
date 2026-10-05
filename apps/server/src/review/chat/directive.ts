@@ -3,6 +3,7 @@ import { extractJsonValue } from '../../models/json-extract.js';
 import type { ReviewInventory } from '../pipeline/inventory.js';
 import type { ModelConfig } from '../../models/models.js';
 import { streamChatCompletion } from '../../models/llm.js';
+import { sampling } from '../../models/runtime-profiles.js';
 
 /**
  * What the developer asked this review to do, in their own words, plus the
@@ -101,7 +102,8 @@ function withoutExcluded(includes: string[], excludes: string[]): string[] {
 	return includes.filter((glob) => !excludes.includes(glob));
 }
 
-function matchesGlob(path: string, glob: string): boolean {
+/** Whether `path` matches `glob`; a glob Bun can't parse matches nothing. */
+export function matchesGlob(path: string, glob: string): boolean {
 	try {
 		return new Bun.Glob(glob).match(path);
 	} catch {
@@ -241,8 +243,7 @@ export async function interpretInstructions(
 				...config,
 				signal,
 				timeoutMs: 60_000,
-				maxTokens: 1200,
-				temperature: 0,
+				...sampling(config, 1200),
 				jsonMode: true,
 				thinking: false,
 				messages: [

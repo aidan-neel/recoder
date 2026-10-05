@@ -3,6 +3,8 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
+import { apiFor } from './api/api';
+import type { OpenCodeApi } from './api/types';
 import { OpenCodeError } from './opencode-error';
 
 type Env = Record<string, string | undefined>;
@@ -11,6 +13,8 @@ interface Running {
 	url: string;
 	password: string;
 	proc: Bun.Subprocess;
+	/** The routes of the binary's major version, chosen once when it was started. */
+	api: OpenCodeApi;
 }
 
 /** Options for one JSON call to the managed server. */
@@ -167,6 +171,11 @@ export class OpenCodeServer {
 		return json;
 	}
 
+	/** The API of the server's OpenCode version. Starts the server when it is not running. */
+	async api(): Promise<OpenCodeApi> {
+		return (await this.ensure()).api;
+	}
+
 	/** Open the server's event stream (SSE). It stays open until `signal` aborts. */
 	async stream(path: string, signal: AbortSignal): Promise<ReadableStream<Uint8Array>> {
 		const response = await this.send(path, {}, signal);
@@ -222,6 +231,7 @@ export class OpenCodeServer {
 
 		if (!path) throw new OpenCodeError('OpenCode is not installed.', 404);
 
+		const version = await probeVersion(path, this.env).catch(() => null);
 		const password = randomBytes(24).toString('base64url');
 
 		const proc = Bun.spawn([path, 'serve', '--hostname', '127.0.0.1', '--port', '0'], {
@@ -235,7 +245,7 @@ export class OpenCodeServer {
 			throw e;
 		});
 
-		this.running = { url, password, proc };
+		this.running = { url, password, proc, api: apiFor(version, this) };
 
 		void proc.exited.then(() => {
 			if (this.running?.proc === proc) this.running = null;

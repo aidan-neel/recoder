@@ -1,12 +1,21 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import { createReviewSession, continueReviewSession, queueReview, startReviewSession } from '../../commands/pipeline';
+import { createReviewSession, queueReview, startReviewSession } from '../../commands/pipeline';
+import { continueReviewSession, replayReviewSession } from '../../commands/rerun';
 import { getReviewMetrics } from '../../models/metrics';
 import { isReviewConfigured } from '../../models/models';
 import { cancelReviewChats, prepareDraftSession } from '../../review/chat/review-chat';
 import { clearReviewEvents, emitReviewEvent } from '../../review/session/events';
 import { getReviewControl, type ReviewControl } from '../../review/session/review-control';
-import { db, reviewCheckpoints, reviewDiffs, reviewMetrics, reviewProgress, reviewSandboxes } from '../../store';
+import {
+	db,
+	reviewCheckpoints,
+	reviewDiffs,
+	reviewMetrics,
+	reviewProgress,
+	reviewReplays,
+	reviewSandboxes
+} from '../../store';
 import { parseBody } from '../parse-body';
 import { requireReview } from './shared';
 
@@ -99,6 +108,7 @@ app.delete('/:id', (c) => {
 	reviewDiffs.delete(review.id);
 	reviewMetrics.delete(review.id);
 	reviewCheckpoints.delete(review.id);
+	reviewReplays.delete(review.id);
 	reviewSandboxes.delete(review.id);
 	clearReviewEvents(review.id);
 
@@ -155,6 +165,17 @@ app.post('/:id/start', (c) => sessionAction(c, startReviewSession, 'Could not st
 
 /** Continue a failed review from its last checkpoint. */
 app.post('/:id/continue', (c) => sessionAction(c, continueReviewSession, 'Could not continue the review.'));
+
+const replaySchema = z.object({ reverify: z.boolean().optional() });
+
+/** Replay a passed review from its kept checkpoint, without its reviewers; for evals. */
+app.post('/:id/replay', async (c) => {
+	const body = await parseBody(c, replaySchema);
+
+	if (body instanceof Response) return body;
+
+	return sessionAction(c, (id) => replayReviewSession(id, body.reverify ?? false), 'Could not replay the review.');
+});
 
 app.post('/', async (c) => {
 	const body = await parseBody(c, createReviewSchema);

@@ -226,8 +226,6 @@
 		{guidelines}
 		{repoId}
 		{now}
-		continuing={continueRun.running}
-		onContinue={onContinue ? () => void continueRun.run() : null}
 	/>
 {/snippet}
 
@@ -311,6 +309,14 @@
 					signInShown={failed && !errorMessage && !!failure?.signIn}
 					assignment={target}
 					folded={isOrchestrator ? view.units.map((unit) => unit.id) : []}
+					resume={isOrchestrator && failed && !active && (onContinue || onRestart)
+						? {
+								continuing: continueRun.running,
+								restarting,
+								onContinue: onContinue ? () => void continueRun.run() : null,
+								onRestart: onRestart ? () => (restartOpen = true) : null
+							}
+						: null}
 					{messages}
 					reasoning={isOrchestrator ? view.chatReasoning : reasoning}
 					{toolCalls}

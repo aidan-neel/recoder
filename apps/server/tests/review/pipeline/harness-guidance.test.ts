@@ -9,7 +9,7 @@ import {
 	DIFF,
 	HUNK,
 	NOTHING,
-	finding,
+	isLensReviewer,
 	messagesOf,
 	modelReply,
 	restoreAfterEach,
@@ -34,7 +34,7 @@ test('review startup only reads guidance files that exist on the target revision
 		let reviewerPrompt = '';
 
 		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-			if (systemOf(init).includes('primary reviewer')) reviewerPrompt = messagesOf(init)[1].content;
+			if (isLensReviewer(init)) reviewerPrompt = messagesOf(init)[1].content;
 
 			return modelReply({ findings: [], examinedHunks: [HUNK] });
 		}) as unknown as typeof fetch;
@@ -62,7 +62,7 @@ test('review startup only reads guidance files that exist on the target revision
 	}
 });
 
-test('owner guidelines reach every stage, and the repo layer comes from the base revision', async () => {
+test('owner guidelines reach every lens reviewer, and the repo layer comes from the base revision', async () => {
 	useTestModel(4);
 
 	const root = await mkdtemp(join(tmpdir(), 'recoder-guidelines-review-'));
@@ -81,15 +81,9 @@ test('owner guidelines reach every stage, and the repo layer comes from the base
 		const systems: string[] = [];
 
 		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-			const system = systemOf(init);
+			if (isLensReviewer(init)) systems.push(systemOf(init));
 
-			systems.push(system);
-
-			const reply = system.includes('consolidate')
-				? { keep: ['c1'], merge: [], reject: [], recommendedChecks: [] }
-				: { ...NOTHING, findings: [finding('x', 'low')] };
-
-			return modelReply(reply);
+			return modelReply(NOTHING);
 		}) as unknown as typeof fetch;
 
 		const used: unknown[] = [];
@@ -103,12 +97,9 @@ test('owner guidelines reach every stage, and the repo layer comes from the base
 			{ onGuidelines: (guidelines) => used.push(guidelines) }
 		);
 
-		const stages = ['primary reviewer', 'consolidate'].map((marker) =>
-			systems.find((system) => system.includes(marker))
-		);
+		expect(new Set(systems).size).toBe(8);
 
-		for (const system of stages) {
-			expect(system).toBeDefined();
+		for (const system of systems) {
 			expect(system).toContain('Owner review guidelines (trusted)');
 			expect(system).toContain('Global rule: flag data loss');
 			expect(system).toContain('Base rule: money uses Decimal');

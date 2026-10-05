@@ -90,12 +90,22 @@ test("an OpenCode 403 keeps the provider's message instead of asking to reconnec
 	).toEqual({ reason: 'Free tier is not available here.' });
 });
 
-test('an OpenCode 429 is out of usage for that provider', () => {
+test('an OpenCode 429 about a spent quota is out of usage for that provider', () => {
 	const failure = modelFailure(
-		new LlmError(429, 'rate limited'),
+		new LlmError(429, 'Rate limit reached: usage limit for 5 hours, resets at 09:00'),
 		{ provider: 'opencode', source: 'openai' },
 		'fallback'
 	);
 
 	expect(failure.usageLimit).toMatchObject({ provider: 'openai', usageUrl: null });
+});
+
+test('an OpenCode 429 that only throttles requests is not reported as out of usage', () => {
+	const failure = modelFailure(
+		new LlmError(429, 'Rate limit reached for requests'),
+		{ provider: 'opencode', source: 'zai-coding-plan' },
+		'fallback'
+	);
+
+	expect(failure.usageLimit).toBeUndefined();
 });

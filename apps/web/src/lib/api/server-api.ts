@@ -269,6 +269,17 @@ export const serverApi = {
 			method: 'POST',
 			body: JSON.stringify(input)
 		}),
+	/** Remember a dismissed finding, so later reviews of the repository do not report it again. */
+	dismissFinding: (reviewId: string, findingId: string, reason?: string) =>
+		req<{ dismissed: boolean }>(`/api/reviews/${reviewId}/dismissals`, {
+			method: 'POST',
+			body: JSON.stringify({ findingId, ...(reason ? { reason } : {}) })
+		}),
+	/** Forget a dismissal. */
+	restoreFinding: (reviewId: string, findingId: string) =>
+		req<{ restored: boolean }>(`/api/reviews/${reviewId}/dismissals/${encodeURIComponent(findingId)}`, {
+			method: 'DELETE'
+		}),
 	queueReview: (input: CreateReviewInput) =>
 		req<Review>('/api/reviews', { method: 'POST', body: JSON.stringify(input) }),
 	/** CI checks for the PR head. */

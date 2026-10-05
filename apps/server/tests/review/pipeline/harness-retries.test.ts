@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import { failedUnits, runAdaptiveReview, unfinishedAssignments } from '../../../src/review/pipeline/harness';
 import {
-	KEEP_NONE,
 	NOTHING,
 	TWO_UNIT_DIFF,
+	lensIdsOf,
 	messagesOf,
 	modelReply,
 	restoreAfterEach,
@@ -15,7 +15,7 @@ restoreAfterEach();
 
 /** A failed unit record whose last operation reads `currentOperation`. */
 const failedRecord = (currentOperation: string) => ({
-	id: 'unit-1',
+	id: 'unit-1/security',
 	role: 'reviewer',
 	title: 'c',
 	reason: 'r',
@@ -24,7 +24,7 @@ const failedRecord = (currentOperation: string) => ({
 	currentOperation
 });
 
-test('a unit whose reviewer failed reruns once, told how it failed, and the orchestrator says so', async () => {
+test('a lens assignment that failed reruns once under the same lens, told how it failed, and the orchestrator says so', async () => {
 	useTestModel();
 
 	const prompts: string[] = [];
@@ -32,10 +32,10 @@ test('a unit whose reviewer failed reruns once, told how it failed, and the orch
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		const unit = unitOf(init);
 
-		/** The first unit-2 reviewer only ever narrates, the failure seen with small models. */
-		if (unit?.endsWith('unit-2')) prompts.push(String(messagesOf(init)[1]?.content ?? ''));
+		/** The first unit-2 correctness reviewer only ever narrates, the failure seen with small models. */
+		if (unit?.endsWith('unit-2/correctness')) prompts.push(String(messagesOf(init)[1]?.content ?? ''));
 
-		const reply = unit === 'unit-2' ? {} : unit ? NOTHING : KEEP_NONE;
+		const reply = unit === 'unit-2/correctness' ? {} : NOTHING;
 
 		return modelReply({ message: 'Reading the queue code.', ...reply });
 	}) as unknown as typeof fetch;
@@ -51,22 +51,24 @@ test('a unit whose reviewer failed reruns once, told how it failed, and the orch
 		}
 	);
 
-	expect(result.assignments.map((record) => [record.id, record.status])).toEqual([
-		['unit-1', 'done'],
-		['unit-2', 'error'],
-		['retry-unit-2', 'done']
-	]);
+	const statuses = new Map(result.assignments.map((record) => [record.id, record.status]));
+
+	expect(result.assignments).toHaveLength(2 * lensIdsOf('unit-1').length + 1);
+	expect(statuses.get('unit-2/correctness')).toBe('error');
+	expect(statuses.get('retry-unit-2/correctness')).toBe('done');
+	expect([...statuses].filter(([, status]) => status !== 'done').map(([id]) => id)).toEqual(['unit-2/correctness']);
 
 	expect(prompts.at(-1)).toContain('Retry: the first attempt failed');
 	expect(notes).toHaveLength(1);
 	expect(notes[0]).toContain('with a strict reply format');
 });
 
-test('a unit that ran out of room is retried as two halves of its scope, and a cancelled one is not retried', () => {
+test('a lens assignment that ran out of room is retried under its lens as two halves of its scope, and a cancelled one is not retried', () => {
 	const unit = {
-		id: 'unit-1',
-		title: 'src',
+		id: 'unit-1/security',
+		title: 'src · Security',
 		reason: 'r',
+		lens: 'security' as const,
 		scope: [
 			{ path: 'src/a.ts', hunkIds: ['h1', 'h2'] },
 			{ path: 'src/b.ts', hunkIds: ['h3'] }
@@ -75,9 +77,9 @@ test('a unit that ran out of room is retried as two halves of its scope, and a c
 
 	const retries = failedUnits([unit], [failedRecord('Model output truncated at the output-token limit')]);
 
-	expect(retries.map((retry) => [retry.unit.id, retry.unit.scope])).toEqual([
-		['retry-unit-1-a', [{ path: 'src/a.ts', hunkIds: ['h1', 'h2'] }]],
-		['retry-unit-1-b', [{ path: 'src/b.ts', hunkIds: ['h3'] }]]
+	expect(retries.map((retry) => [retry.unit.id, retry.unit.lens, retry.unit.scope])).toEqual([
+		['retry-unit-1/security-a', 'security', [{ path: 'src/a.ts', hunkIds: ['h1', 'h2'] }]],
+		['retry-unit-1/security-b', 'security', [{ path: 'src/b.ts', hunkIds: ['h3'] }]]
 	]);
 
 	expect(failedUnits([unit], [failedRecord('Review cancelled.')])).toEqual([]);

@@ -1,5 +1,6 @@
 import type { ModelFailure, UsageLimit } from '@recoder/shared';
 import { LlmError } from './llm.js';
+import { isOpenCodeThrottle } from './llm/errors.js';
 import { hostedProvider } from './model-providers.js';
 import type { ModelConfig } from './models.js';
 import { opencode } from '../agents/opencode/opencode.js';
@@ -23,12 +24,13 @@ export function isAuthFailure(err: unknown): boolean {
  * 402 or a 429 that outlasted every retry means a hosted plan or credit balance
  * is spent. Your own server has no plan: its 429 is an overload, reported as a
  * plain failure. Short rate limits are retried in `llm.ts` before this is reached.
- * OpenCode retries rate limits itself, so its 402 or 429 is a spent plan too.
+ * OpenCode retries rate limits itself, so its 402 or 429 is a spent plan too,
+ * unless the 429 says it is a throttle that outlasted Recoder's retries.
  */
 export function isUsageLimit(err: unknown, config: ModelRef): boolean {
 	if (!(err instanceof LlmError)) return false;
 	if (config?.provider === 'codex') return err.status === 429;
-	if (config?.provider === 'opencode') return err.status === 402 || err.status === 429;
+	if (config?.provider === 'opencode') return err.status === 402 || (err.status === 429 && !isOpenCodeThrottle(err));
 
 	return !!hostedProvider(config?.source) && (err.status === 402 || err.status === 429);
 }

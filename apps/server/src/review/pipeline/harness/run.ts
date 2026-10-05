@@ -1,5 +1,6 @@
 import { reviewNow } from '../../session/review-control.js';
 import { ReviewAbortedError } from '../agent-loop.js';
+import { changeModelStage } from './change-model-stage.js';
 import { consolidate } from './consolidation.js';
 import {
 	createRun,
@@ -12,14 +13,16 @@ import {
 	saveCheckpoint,
 	type ReviewRun
 } from './context.js';
+import { intentStage } from './intent-stage.js';
 import { runUnitPool } from './pool.js';
-import { prepareSandbox, startSetup } from './sandbox-setup.js';
+import { detectorStage, diagnosticStage, ruleLedgerStage } from './quality-stage.js';
+import { checksInTime, prepareSandbox, startSetup, waitForBackground } from './sandbox-setup.js';
 import { runSubagents } from './subagent-stage.js';
 import { completeReview, stoppedReview } from './summary.js';
 import type { AdaptiveReviewInput, AdaptiveReviewResult, HarnessEvents } from './types.js';
 import { understandChanges } from './understand.js';
 import { cutUnits, retryFailedUnits } from './unit-stage.js';
-import { verifyStage } from './verification.js';
+import { drainVerification, finishVerification, startVerification } from './verification.js';
 
 /**
  * Custom review harness. Reviewers never change the pull request:
@@ -30,11 +33,15 @@ import { verifyStage } from './verification.js';
  *   files, but only inside an isolated, offline copy of the checkout
  *   (`exec-sandbox.ts`); tracked files are restored after every command.
  *
- * Stages: understand → cut units → baseline checks → one reviewer per unit
- * (failed units retried once) → the subagents reviewers asked for → verify →
- * consolidate. Verification re-proves
- * every candidate by running code. The deadline runs on the review clock,
- * which stands still while paused.
+ * Stages: understand → cut units → change model, intent and rule ledger,
+ * while the sandbox installs → every unit through every lens (failed ones
+ * retried once), then the subagents reviewers asked for when the lenses found
+ * anything → consolidate. Three things overlap the reviewers rather than
+ * follow them: the baseline checks, the detectors, and the verifiers, which
+ * take each candidate as it is reported. Checks still queued once everything
+ * else is done are left behind after a short grace. Only proven findings are shown;
+ * consolidation is deterministic, so the same change gives the same findings.
+ * The deadline runs on the review clock, which stands still while paused.
  */
 export async function runAdaptiveReview(
 	input: AdaptiveReviewInput,
@@ -73,10 +80,20 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	publishBudget(run);
 	saveCheckpoint(run);
 
-	await prepareSandbox(run, setup);
+	const context = Promise.all([changeModelStage(run).then(() => intentStage(run)), ruleLedgerStage(run)]);
+
+	const checks = await prepareSandbox(run, setup);
+
+	await context;
 
 	run.events?.onStage?.('reviewing');
 	if (run.controller.signal.aborted) throw new ReviewAbortedError('review aborted');
+
+	startVerification(run);
+
+	const detectors = detectorStage(run);
+	let closed = false;
+	const diagnostics = checks().then(() => (closed ? undefined : diagnosticStage(run)));
 
 	const finishedAtStart = finishedIds(run);
 
@@ -97,9 +114,14 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	publishBudget(run);
 	publishCandidates(run);
 
-	await verifyStage(run);
+	await waitForBackground(run, detectors);
+	await drainVerification(run);
 
-	const consolidated = await consolidate(run);
+	closed = !(await checksInTime(run, diagnostics));
+
+	await finishVerification(run);
+
+	const consolidated = consolidate(run);
 
 	publishCoverage(run);
 	publishBudget(run);

@@ -5,12 +5,12 @@
 	import { suggestFix } from '$lib/findings/fixes';
 	import { threadsStore } from '$lib/findings/threads.svelte';
 
-	/** Asks the finding's reviewer for a patch. Gone once one is ready, since the patch shows on the finding. */
+	/** Asks the finding's reviewer for a patch. Gone once one is ready or the review checked one, since the patch shows on the finding. */
 	let { finding }: { finding: Finding } = $props();
 	const suggestion = $derived(findingsStore.suggestions[finding.id]);
 </script>
 
-{#if !(suggestion?.status === 'ready' && suggestion.patch)}
+{#if !findingsStore.readyFix(finding)}
 	<Button
 		class="fix-button"
 		disabled={!threadsStore.reviewId}

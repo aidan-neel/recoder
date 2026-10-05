@@ -105,18 +105,20 @@ export class EvidenceStore {
 	/**
 	 * Runs up to `maxActions` retrievals whose combined content stays within one
 	 * round's character budget. `owner` names the agent, so its runs see only
-	 * the scratch files it wrote.
+	 * the scratch files it wrote. `spent` is what the round already used, when
+	 * its actions arrive one call at a time.
 	 */
 	async executeRound(
 		rawActions: unknown,
 		signal?: AbortSignal,
 		onTool?: (tool: ToolCallReport) => void,
 		maxActions: number = REVIEW_POLICY.maxRetrievalsPerTurn,
-		owner?: string
+		owner?: string,
+		spent = 0
 	): Promise<ToolResult[]> {
 		const actions = normalizeActions(rawActions).slice(0, maxActions);
 		const results: ToolResult[] = [];
-		let used = 0;
+		let used = spent;
 		let runs = 0;
 
 		for (const action of actions) {

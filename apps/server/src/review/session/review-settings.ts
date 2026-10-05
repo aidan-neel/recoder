@@ -10,6 +10,12 @@ import {
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
 
+const runtimeSchema = z.object({
+	temperature: z.number().min(0).max(2).nullable().optional(),
+	maxOutputTokens: z.number().int().positive().max(1_000_000).optional(),
+	topP: z.number().gt(0).max(1).optional()
+});
+
 const modelEntrySchema = z.object({
 	provider: z.enum(['openai-compatible', 'codex']).optional(),
 	/** Hosted provider id; the entry uses that provider's endpoint and connected key. */
@@ -21,7 +27,8 @@ const modelEntrySchema = z.object({
 	apiKey: z.string().max(500).optional(),
 	efforts: z.array(z.enum(REASONING_EFFORTS)).max(8).optional(),
 	defaultEffort: z.enum(REASONING_EFFORTS).optional(),
-	contextWindow: z.number().int().positive().max(100_000_000).optional()
+	contextWindow: z.number().int().positive().max(100_000_000).optional(),
+	runtime: runtimeSchema.optional()
 });
 
 export const reviewSettingsSchema = z.object({
@@ -34,6 +41,7 @@ export const reviewSettingsSchema = z.object({
 	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	subagentCap: z.literal(SUBAGENT_CAPS).optional(),
+	reportLowSeverity: z.boolean().optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
 	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
 	maxFileChars: z.number().int().positive().max(200_000).optional()
@@ -92,7 +100,7 @@ function migrateLegacy(data: StoredFile): ReviewSettingsInput {
 }
 
 /** A saved model entry: the settings patch's entry, always with an id. */
-interface StoredModelEntry extends ModelEntryPatch {
+export interface StoredModelEntry extends ModelEntryPatch {
 	id: string;
 }
 
@@ -147,7 +155,8 @@ export function initReviewSettings(): void {
 					...(e.apiKey ? { apiKey: e.apiKey } : {}),
 					...(e.efforts?.length ? { efforts: e.efforts } : {}),
 					...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
-					...(e.contextWindow ? { contextWindow: e.contextWindow } : {})
+					...(e.contextWindow ? { contextWindow: e.contextWindow } : {}),
+					...(e.runtime && Object.keys(e.runtime).length ? { runtime: e.runtime } : {})
 				}))
 			};
 
@@ -216,6 +225,10 @@ function mergeModelEntry(
 
 	if (contextWindow) next.contextWindow = contextWindow;
 
+	const runtime = entry.runtime ?? kept?.runtime;
+
+	if (runtime && Object.keys(runtime).length) next.runtime = runtime;
+
 	if (next.provider !== 'codex' && !next.source) {
 		if (entry.apiKey) next.apiKey = entry.apiKey;
 		else if (kept?.apiKey) next.apiKey = kept.apiKey;
@@ -256,6 +269,7 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
 	if (patch.specialistEffort !== undefined) clean.specialistEffort = patch.specialistEffort;
 	if (patch.subagentCap !== undefined) clean.subagentCap = patch.subagentCap;
+	if (patch.reportLowSeverity !== undefined) clean.reportLowSeverity = patch.reportLowSeverity;
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
 	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;
@@ -304,6 +318,11 @@ export function effectiveReviewEnv(): {
 /** How many subagents one review may run: the saved pick, else the default. */
 export function effectiveSubagentCap(): SubagentCap {
 	return overrides.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+}
+
+/** Whether reviews report low-severity findings: the saved pick, else off. */
+export function effectiveReportLowSeverity(): boolean {
+	return overrides.reportLowSeverity ?? false;
 }
 
 /** API keys are never returned in full; the UI gets this masked preview (`••••1234` or null). */

@@ -11,6 +11,8 @@ export interface SandboxLayout {
 	hidden: string[];
 	/** Toolchain directories bound back read-only on top of `hidden`. */
 	toolchains: string[];
+	/** Host directories bound back read-only, such as the head checkout a merge-base tree links its dependencies from. */
+	readOnly?: string[];
 	/** Files masked with /dev/null inside bound toolchains (registry credentials). */
 	masked: string[];
 	env: Record<string, string>;
@@ -71,7 +73,12 @@ function keptPath(path: string, dataDir: string, workDir: string): string[] {
 		.filter((entry) => !inside(entry, '/mnt') && !inside(entry, dataDir) && !inside(entry, workDir));
 }
 
-/** The environment a sandboxed command starts with: every tool's cache points into the per-checkout cache. */
+/**
+ * The environment a sandboxed command starts with: every tool's cache points
+ * into the per-checkout cache. On macOS pnpm keeps its own version instead of
+ * switching to the one a repo pins, because pnpm 12 can't open its store lock
+ * under Seatbelt and every install and check would fail.
+ */
 function sandboxEnv(path: string[], cacheDir: string, darwin: boolean, rustup: string | null): Record<string, string> {
 	const cache = (name: string) => join(cacheDir, name);
 
@@ -91,6 +98,7 @@ function sandboxEnv(path: string[], cacheDir: string, darwin: boolean, rustup: s
 		YARN_CACHE_FOLDER: cache('yarn'),
 		PNPM_HOME: cache('pnpm-home'),
 		npm_config_store_dir: cache('pnpm'),
+		...(darwin ? { npm_config_manage_package_manager_versions: 'false' } : {}),
 		PIP_CACHE_DIR: cache('pip'),
 		UV_CACHE_DIR: cache('uv'),
 		GOMODCACHE: cache('gomod'),

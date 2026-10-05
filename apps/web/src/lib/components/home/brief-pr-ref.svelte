@@ -4,6 +4,7 @@
 	import * as HoverCard from '@sivir-ui/svelte/components/hover-card';
 	import ProviderMark from '$lib/components/settings/provider-mark.svelte';
 	import { prStatus, shortAge, type BriefPick } from '$lib/home/home';
+	import { hostedUrl } from '$lib/shell/links';
 
 	interface Props {
 		item: BriefPick;
@@ -15,11 +16,16 @@
 	let { item, text, onOpen }: Props = $props();
 
 	const status = $derived(prStatus(item.review));
+
+	/** Where an unreviewed PR opens: its host, or nowhere for a local repo. */
+	const hosted = $derived(hostedUrl(item.pr.url));
+
+	const HOSTS: Record<string, string> = { github: 'GitHub', gitlab: 'GitLab' };
 </script>
 
 <HoverCard.Root openDelay={250}>
 	<HoverCard.Trigger
-		href={item.review ? `/session/${item.review.id}` : item.pr.url}
+		href={item.review ? `/session/${item.review.id}` : (hosted ?? undefined)}
 		class="brief-ref"
 		{...item.review
 			? {
@@ -28,7 +34,9 @@
 						if (item.review) onOpen(item.review, item.repo);
 					}
 				}
-			: { target: '_blank', rel: 'noopener noreferrer' }}>{text}</HoverCard.Trigger
+			: hosted
+				? { target: '_blank', rel: 'noopener noreferrer' }
+				: {}}>{text}</HoverCard.Trigger
 	><HoverCard.Content
 		side="bottom"
 		align="start"
@@ -36,7 +44,7 @@
 		{...{
 			onclick: () => {
 				if (item.review) onOpen(item.review, item.repo);
-				else window.open(item.pr.url, '_blank', 'noopener,noreferrer');
+				else if (hosted) window.open(hosted, '_blank', 'noopener,noreferrer');
 			}
 		}}
 	>
@@ -67,7 +75,9 @@
 			<span class="text-[11.5px] text-fg-faint"
 				>{item.review
 					? 'Click to open the review'
-					: 'Click to open on ' + (item.repo.provider === 'gitlab' ? 'GitLab' : 'GitHub')}</span
+					: hosted
+						? `Click to open on ${HOSTS[item.repo.provider] ?? 'the host'}`
+						: 'Local pull request'}</span
 			>
 		</div>
 	</HoverCard.Content></HoverCard.Root

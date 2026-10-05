@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import {
 	effectiveReviewEnv,
+	effectiveReportLowSeverity,
 	effectiveSubagentCap,
 	getStoredSettings,
 	maskKey,
@@ -45,6 +46,7 @@ async function settingsPayload() {
 		orchestratorEffort: stored.orchestratorEffort ?? null,
 		specialistEffort: stored.specialistEffort ?? null,
 		subagentCap: effectiveSubagentCap(),
+		reportLowSeverity: effectiveReportLowSeverity(),
 		configPath: settingsFileDisplay(),
 		limits: {
 			maxFiles: eff.maxFiles,

@@ -1,5 +1,6 @@
-import type { ReviewReasoningEntry } from '@recoder/shared';
-import { streamChatCompletion, type ChatMessage } from '../../../models/llm.js';
+import type { OutputRate, ReviewReasoningEntry } from '@recoder/shared';
+import { streamChatCompletion, type ChatConversation, type ChatMessage } from '../../../models/llm.js';
+import { sampling } from '../../../models/runtime-profiles.js';
 import { streamedMessage } from '../../../models/response-text.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { currentReviewControl, reviewNow } from '../../session/review-control.js';
@@ -32,19 +33,6 @@ export function isLooping(text: string): boolean {
 	return count >= 3;
 }
 
-/** The conversation sent to the model, with the developer's discussion since the review started appended when there is one. */
-function withDiscussion(messages: ChatMessage[], discussion: string | undefined): ChatMessage[] {
-	if (!discussion) return messages;
-
-	return [
-		...messages,
-		{
-			role: 'user',
-			content: `Developer conversations since the review started (consider these with the review evidence):\n${discussion}`
-		}
-	];
-}
-
 /**
  * One streamed model call for an agent turn, relaying its reasoning and
  * reply as they arrive. Runaway reasoning (too long, or looping) aborts the
@@ -54,6 +42,7 @@ function withDiscussion(messages: ChatMessage[], discussion: string | undefined)
 export async function streamTurn<T>(
 	opts: JsonAgentOptions<T>,
 	messages: ChatMessage[],
+	conversation: ChatConversation,
 	turn: number,
 	lastTurn: boolean,
 	deadlineAt: number
@@ -65,18 +54,20 @@ export async function streamTurn<T>(
 	let response = '';
 	let responseEmittedAt = 0;
 	let overthought = false;
+	let outputRate: OutputRate | undefined;
 
 	/** ChatGPT sends a summary, not its reasoning: keep the timing, drop the text. */
 	const flushReasoning = (status: ReviewReasoningEntry['status'] = 'streaming') => {
 		if (!opts.onReasoning || !reasoningText) return;
-		if (opts.config.provider === 'codex') opts.onReasoning({ id: reasoningId, text: '', status, summary: true });
-		else opts.onReasoning({ id: reasoningId, text: reasoningText, status });
+		if (opts.config.provider === 'codex')
+			opts.onReasoning({ id: reasoningId, text: '', status, summary: true, outputRate });
+		else opts.onReasoning({ id: reasoningId, text: reasoningText, status, outputRate });
 	};
 
 	const flushResponse = (status: 'streaming' | 'done' | 'error', cutOff?: string) => {
 		const text = streamedMessage(response);
 
-		if (text) opts.onMessage?.({ id: responseId, text, status, ...(cutOff ? { cutOff } : {}) });
+		if (text) opts.onMessage?.({ id: responseId, text, status, outputRate, ...(cutOff ? { cutOff } : {}) });
 	};
 
 	const callAbort = new AbortController();
@@ -114,15 +105,16 @@ export async function streamTurn<T>(
 		output = await streamChatCompletion(
 			{
 				...opts.config,
-				messages: withDiscussion(messages, opts.getDiscussion?.()),
+				messages,
+				conversation,
 				jsonMode: true,
 				jsonSchema: opts.responseSchema?.(lastTurn),
-				temperature: 0,
-				maxTokens: 8000,
+				...sampling(opts.config),
 				timeoutMs: REVIEW_POLICY.perCallDeadlineMs,
 				settleBy: Date.now() + Math.max(1, deadlineAt - reviewNow()),
 				signal: callAbort.signal,
 				onReasoning: opts.onReasoning ? onReasoning : undefined,
+				onRate: (rate) => (outputRate = rate),
 				onProgress: (state, elapsedMs) =>
 					opts.onProgress?.(state, elapsedMs, state === 'queued' ? 'Waiting for a model slot' : `Running ${opts.label}`)
 			},

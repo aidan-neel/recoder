@@ -41,11 +41,9 @@ export async function suggestFix(finding: Finding, opts: { quiet?: boolean; queu
 	}
 }
 
-/** A finding with a suggested patch to read. */
+/** A finding with a suggested or checked patch to read. */
 export function hasReadyFix(finding: Finding): boolean {
-	const s = findingsStore.suggestions[finding.id];
-
-	return finding.status === 'open' && s?.status === 'ready' && !!s.patch;
+	return finding.status === 'open' && !!findingsStore.readyFix(finding);
 }
 
 /**

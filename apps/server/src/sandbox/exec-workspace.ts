@@ -2,6 +2,7 @@ import { reviewNow } from '../review/session/review-control.js';
 import { REVIEW_POLICY } from '../review/session/review-policy.js';
 import { runSandboxed, sandboxLayout, type RunResult, type SandboxLayout } from './exec-sandbox.js';
 import { sanitizeRepoPath } from '../evidence/evidence.js';
+import { BaseTree } from './base-tree.js';
 
 /**
  * One review's execution environment: the PR checkout inside bubblewrap.
@@ -54,6 +55,9 @@ const SETUP_MARKERS: Marker[][] = [
 	[{ files: ['Cargo.toml'], tool: 'cargo', command: 'cargo fetch' }]
 ];
 
+/** Interpreters a reviewer might reach for to run a repro, in the order they are listed. */
+const RUNTIMES = ['bun', 'node', 'deno', 'python3'];
+
 /** Install steps for the repo root's lockfiles; tools missing from PATH are reported, not run. */
 function setupPlan(rootFiles: Set<string>, has: (tool: string) => boolean): { steps: SetupStep[]; missing: string[] } {
 	const steps: SetupStep[] = [];
@@ -81,6 +85,8 @@ export class ExecWorkspace {
 	private setupDone: Promise<SetupReport> | null = null;
 	/** Each agent's scratch files, path → content, placed only around that agent's runs. */
 	private readonly scratch = new Map<string, Map<string, string>>();
+	/** The merge-base copy, built the first time a command runs on it. */
+	private baseTree: BaseTree | null = null;
 
 	constructor(
 		readonly checkout: string,
@@ -88,6 +94,11 @@ export class ExecWorkspace {
 		layout?: SandboxLayout
 	) {
 		this.layout = layout ?? sandboxLayout(checkout);
+	}
+
+	/** Which of the common interpreters a sandboxed command can run. */
+	runtimes(): string[] {
+		return RUNTIMES.filter((tool) => Bun.which(tool, { PATH: this.layout.env.PATH }));
 	}
 
 	/** Install dependencies once. Runs wait for this; failures are reported, not thrown. */
@@ -107,7 +118,8 @@ export class ExecWorkspace {
 				const result = await this.exclusive(() =>
 					runSandboxed(this.layout, step.command, {
 						network: true,
-						timeoutMs: this.timeout(REVIEW_POLICY.setupTimeoutMs),
+						tier: 'prep',
+						timeoutMs: () => this.timeout(REVIEW_POLICY.setupTimeoutMs),
 						signal
 					})
 				);
@@ -138,10 +150,51 @@ export class ExecWorkspace {
 
 				if (placed) return notRun(`Not run: could not write scratch file ${placed}.`, false);
 
-				return await runSandboxed(this.layout, command, { timeoutMs: limit, signal });
+				return await runSandboxed(this.layout, command, { timeoutMs: () => this.timeout(timeoutMs), signal });
 			} finally {
 				await this.remove([...files.keys()]);
 				await this.restoreTracked();
+			}
+		});
+	}
+
+	/**
+	 * Run a command, offline, on a copy of the merge-base commit with `owner`'s
+	 * scratch files in place, the way `run` does on the head. The copy is built
+	 * once and put back after every command. `unavailable` says why it could not
+	 * be used: changed dependencies, no time left, or a copy that would not build.
+	 */
+	async runOnBase(
+		command: string,
+		mergeBaseSha: string,
+		timeoutMs: number,
+		signal?: AbortSignal,
+		owner = ''
+	): Promise<RunResult | { unavailable: string }> {
+		await this.setupDone?.catch(() => undefined);
+
+		return this.exclusive(async () => {
+			if (this.timeout(timeoutMs) <= 0) return { unavailable: 'the review is out of time' };
+
+			const tree = (this.baseTree ??= new BaseTree(this.layout, this.headSha, mergeBaseSha));
+
+			const unavailable = await tree.prepare(
+				AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(timeoutMs)])
+			);
+
+			if (unavailable) return { unavailable };
+
+			const files = this.scratch.get(owner) ?? new Map<string, string>();
+
+			try {
+				const placed = await this.place(files, signal, tree.sandbox);
+
+				if (placed) return { unavailable: `could not write scratch file ${placed}` };
+
+				return await runSandboxed(tree.sandbox, command, { timeoutMs: () => this.timeout(timeoutMs), signal });
+			} finally {
+				await this.remove([...files.keys()], tree.sandbox);
+				await tree.restore().catch(() => undefined);
 			}
 		});
 	}
@@ -229,7 +282,7 @@ export class ExecWorkspace {
 		return lines;
 	}
 
-	/** Remove any scratch file a crashed run left behind and restore tracked ones. Safe to call more than once. */
+	/** Remove any scratch file a crashed run left behind, restore tracked ones and drop the merge-base copy. Safe to call more than once. */
 	async cleanup(): Promise<void> {
 		const files = [...this.scratch.values()].flatMap((owned) => [...owned.keys()]);
 
@@ -238,13 +291,18 @@ export class ExecWorkspace {
 		await this.exclusive(async () => {
 			await this.remove(files);
 			await this.restoreTracked();
+			await this.baseTree?.remove().catch(() => undefined);
 		});
 	}
 
-	/** Writes each scratch file; returns the first path that could not be written. */
-	private async place(files: Map<string, string>, signal?: AbortSignal): Promise<string | null> {
+	/** Writes each scratch file under `layout`; returns the first path that could not be written. */
+	private async place(
+		files: Map<string, string>,
+		signal?: AbortSignal,
+		layout: SandboxLayout = this.layout
+	): Promise<string | null> {
 		for (const [path, content] of files) {
-			if ((await this.writeNew(path, content, signal)).exitCode !== 0) return path;
+			if ((await this.writeNew(path, content, signal, layout)).exitCode !== 0) return path;
 		}
 
 		return null;
@@ -255,22 +313,28 @@ export class ExecWorkspace {
 	 * (installed dependencies, build output) is refused, because scratch files
 	 * are removed after every run.
 	 */
-	private writeNew(path: string, content: string, signal?: AbortSignal): Promise<RunResult> {
+	private writeNew(
+		path: string,
+		content: string,
+		signal?: AbortSignal,
+		layout: SandboxLayout = this.layout
+	): Promise<RunResult> {
 		const target = quote(path);
 
 		return runSandboxed(
-			this.layout,
+			layout,
 			`if [ -e ${target} ] || [ -L ${target} ]; then echo 'path already exists in the checkout; write a new scratch file instead' >&2; exit 1; fi; mkdir -p -- "$(dirname -- ${target})" && cat > ${target}`,
-			{ timeoutMs: 10_000, stdin: content, signal }
+			{ timeoutMs: 10_000, stdin: content, signal, tier: 'light' }
 		);
 	}
 
-	private async remove(paths: string[]): Promise<void> {
+	private async remove(paths: string[], layout: SandboxLayout = this.layout): Promise<void> {
 		if (!paths.length) return;
 
-		await runSandboxed(this.layout, `rm -f -- ${paths.map(quote).join(' ')}`, { timeoutMs: 10_000 }).catch(
-			() => undefined
-		);
+		await runSandboxed(layout, `rm -f -- ${paths.map(quote).join(' ')}`, {
+			timeoutMs: 10_000,
+			tier: 'light'
+		}).catch(() => undefined);
 	}
 
 	private timeout(requested: number): number {

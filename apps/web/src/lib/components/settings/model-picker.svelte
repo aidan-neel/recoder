@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Check from '@lucide/svelte/icons/check';
-	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
+	import * as Command from '@sivir-ui/svelte/components/command';
+	import * as Select from '@sivir-ui/svelte/components/select';
 	import type { ReasoningEffort } from '@recoder/shared';
+	import Skeleton from '$lib/components/ui/skeleton.svelte';
 	import {
 		effortLabel,
 		formatContextWindow,
@@ -16,87 +18,219 @@
 		/** Current selection; null while settings load or when nothing is configured. */
 		value: ModelChoice | null;
 		onSelect: (choice: ModelChoice) => void;
-		/** 30px in composers, 28px in side panels. */
-		size?: 'md' | 'panel';
+		/** The role this pick is for, as the dialog's scope hint ("Review"). */
+		role: string;
 		/** Trigger text when `value` is null (e.g. "Same as Review"). */
 		placeholder?: string;
-		/** Offers `placeholder` as the first model option, to go back to following another pick. */
+		/** Offers `placeholder` as the first option, to go back to following another pick. */
 		onFollow?: () => void;
-		disabled?: boolean;
-		label?: string;
 	}
 
-	let {
-		value,
-		onSelect,
-		size = 'md',
-		placeholder = 'Choose a model',
-		onFollow,
-		disabled = false,
-		label = 'Model and reasoning effort'
-	}: Props = $props();
+	let { value, onSelect, role, placeholder = 'Choose a model', onFollow }: Props = $props();
 
 	let open = $state(false);
-	let triggerEl: HTMLElement | undefined;
-
-	/**
-	 * Right-align the menu to the trigger. Sivir's dropdown is always "-start"
-	 * and Floating UI may already have shifted it to fit the viewport, so
-	 * measure after it opens and nudge by the actual gap (kept on screen).
-	 */
-	$effect(() => {
-		if (!open || !triggerEl) return;
-
-		const trigger = triggerEl;
-
-		const frame = requestAnimationFrame(() => {
-			const panel = [...document.querySelectorAll<HTMLElement>("[data-ui='popover-content'].model-menu")].at(-1);
-			const floating = panel?.closest<HTMLElement>('[data-floating-content]');
-
-			if (!panel || !floating) return;
-
-			const current = parseFloat(floating.style.getPropertyValue('--menu-shift')) || 0;
-			const rect = panel.getBoundingClientRect();
-			const wanted = current + trigger.getBoundingClientRect().right - rect.right;
-			const minShift = current + 8 - rect.left;
-
-			floating.style.setProperty('--menu-shift', `${Math.max(wanted, minShift)}px`);
-		});
-
-		return () => cancelAnimationFrame(frame);
-	});
-
-	onMount(() => {
-		if (!modelSettingsUi.config && !modelSettingsUi.loading) void modelSettingsUi.load();
-	});
-
-	const models = $derived(modelSettingsUi.models);
-	/** Models by agent, then by provider; both A to Z. */
-	const agents = $derived.by(() => {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived.by, not reactive state
-		const byAgent = new Map<string, ModelOption[]>();
-
-		for (const option of models) byAgent.set(option.agent, [...(byAgent.get(option.agent) ?? []), option]);
-
-		return [...byAgent.entries()]
-			.sort(([a], [b]) => a.localeCompare(b))
-			.map(([agent, options]) => ({ agent, groups: byProvider(options) }));
-	});
-	const model = $derived<ModelOption | undefined>(models.find((item) => item.id === value?.modelId));
-	const effort = $derived(resolveEffort(model, value?.effort));
-	const triggerKey = $derived(`${model?.id ?? ''}:${effort ?? ''}`);
+	let query = $state('');
 
 	/** The label only animates when the developer changes it, never when it first loads. */
 	let picked = $state(false);
 
-	/** Options by provider, providers A to Z. */
-	function byProvider(options: ModelOption[]): [string, ModelOption[]][] {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map, not reactive state
-		const groups = new Map<string, ModelOption[]>();
+	/**
+	 * Mounting hundreds of rows at once stalls the dialog's open. The first
+	 * frame mounts the rows around the current model, so the dialog paints
+	 * fully formed; the rest fill outward, a chunk each way per frame, behind
+	 * same-height skeletons that stay offscreen.
+	 */
+	const BEFORE = 16;
+	const AFTER = 24;
+	const CHUNK = 20;
 
-		for (const option of options) groups.set(option.provider, [...(groups.get(option.provider) ?? []), option]);
+	/** Frames the window has grown this open. */
+	let grown = $state(0);
 
-		return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
+	onMount(() => {
+		void modelSettingsUi.ensure();
+	});
+
+	const models = $derived(modelSettingsUi.models);
+	const model = $derived<ModelOption | undefined>(models.find((item) => item.id === value?.modelId));
+	const effort = $derived(resolveEffort(model, value?.effort));
+	const q = $derived(query.trim().toLowerCase());
+	const terms = $derived(q.split(/\s+/).filter(Boolean));
+	const multiAgent = $derived(new Set(models.map((option) => option.agent)).size > 1);
+
+	/** Models by provider (and agent, when more than one runs models), A to Z, with each group's first row index. */
+	const groups = $derived.by(() => {
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived.by, not reactive state
+		const byHeading = new Map<string, ModelOption[]>();
+
+		for (const option of models) {
+			const heading = multiAgent ? `${option.agent} · ${option.provider}` : option.provider;
+
+			byHeading.set(heading, [...(byHeading.get(heading) ?? []), option]);
+		}
+
+		let start = 0;
+
+		return [...byHeading.entries()]
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([heading, options]) => {
+				const group = { heading, options, start };
+
+				start += options.length;
+
+				return group;
+			});
+	});
+
+	const currentIndex = $derived(
+		groups.flatMap((group) => group.options).findIndex((option) => option.id === model?.id)
+	);
+	const anchor = $derived(Math.max(0, currentIndex - BEFORE));
+	const lo = $derived(Math.max(0, anchor - grown * CHUNK));
+	const hi = $derived(Math.min(models.length, anchor + BEFORE + AFTER + grown * CHUNK));
+
+	const hits = $derived(
+		new Set(
+			models
+				.filter((option) => matches(`${option.displayName} ${option.provider} ${option.agent} ${option.id}`))
+				.map((option) => option.id)
+		)
+	);
+
+	const followHit = $derived(matches(placeholder));
+
+	/**
+	 * Rows stay mounted while searching, since remounting hundreds of them per
+	 * keystroke is slow. A hit is named after the query, so Sivir's own matcher
+	 * keeps it; a miss gets a name nothing matches, and Sivir hides it.
+	 */
+	const MISS = '\u0000';
+
+	/** Every word of the query appears somewhere, in any order ("openrouter kimi"). */
+	function matches(text: string): boolean {
+		const haystack = text.toLowerCase();
+
+		return terms.every((term) => haystack.includes(term));
+	}
+
+	$effect(() => {
+		if (open) query = '';
+	});
+
+	$effect(() => {
+		if (open) return fillOutward();
+	});
+
+	/**
+	 * Grows the window one chunk per frame, each step just after a paint.
+	 * Sivir's highlight re-measures a frame after every list change, so a step
+	 * inside the frame callback would push it back a frame every time, and the
+	 * current row would only light up once the list finished filling.
+	 */
+	function fillOutward(): () => void {
+		let frame = 0;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+
+		const next = () => {
+			frame = requestAnimationFrame(() => (timer = setTimeout(grow)));
+		};
+
+		const grow = () => {
+			grown += 1;
+			if (lo > 0 || hi < models.length) next();
+		};
+
+		next();
+
+		return () => {
+			cancelAnimationFrame(frame);
+			clearTimeout(timer);
+		};
+	}
+
+	/** A group's rows outside the window, as the skeleton runs before and after its mounted rows. */
+	function pending(start: number, length: number): { before: number; after: number } {
+		const end = start + length;
+
+		return {
+			before: Math.max(0, Math.min(end, lo) - start),
+			after: Math.max(0, end - Math.max(start, hi))
+		};
+	}
+
+	/**
+	 * Opening lands on the current model rather than the top of a long list,
+	 * before the first paint. Sivir's command tracks its active row from
+	 * hover, so the row is hovered once its listeners are attached.
+	 */
+	function landOnCurrent(node: HTMLElement): void {
+		queueMicrotask(() => {
+			const row = node.querySelector('[data-current]')?.closest<HTMLElement>('[role="option"]');
+
+			row?.dispatchEvent(new MouseEvent('mouseenter'));
+			row?.scrollIntoView({ block: 'center' });
+		});
+	}
+
+	/**
+	 * Sivir orders arrow keys by the order rows mounted, which the outward
+	 * fill scrambles, so the arrows walk the rows in the order they're shown.
+	 */
+	function arrowKeys(node: HTMLElement): () => void {
+		const onKeydown = (event: KeyboardEvent) => {
+			if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+
+			const rows = [
+				...(node.closest('.model-dialog')?.querySelectorAll<HTMLElement>('[role="option"]:not([hidden])') ?? [])
+			];
+
+			if (rows.length === 0) return;
+			event.preventDefault();
+			event.stopPropagation();
+
+			const at = rows.findIndex((row) => row.getAttribute('aria-selected') === 'true');
+
+			const next = {
+				ArrowDown: (at + 1) % rows.length,
+				ArrowUp: at <= 0 ? rows.length - 1 : at - 1,
+				Home: 0,
+				End: rows.length - 1
+			}[event.key]!;
+
+			rows[next].dispatchEvent(new MouseEvent('mouseenter'));
+			rows[next].scrollIntoView({ block: 'nearest' });
+		};
+
+		node.addEventListener('keydown', onKeydown, true);
+
+		return () => node.removeEventListener('keydown', onKeydown, true);
+	}
+
+	/**
+	 * Sivir's search input owns its handlers and filters by item name, so the
+	 * query is mirrored here and matched in `hits` instead. A search mounts
+	 * every row at once: each late row resets Sivir's filtered results.
+	 */
+	function mirrorQuery(node: HTMLElement): () => void {
+		const onInput = (event: Event) => {
+			query = (event.target as HTMLInputElement).value;
+			grown = models.length;
+		};
+
+		node.addEventListener('input', onInput);
+
+		return () => node.removeEventListener('input', onInput);
+	}
+
+	/**
+	 * Lands on the current model, and starts the next open from the window
+	 * again once the content unmounts, after its exit, so a closing list
+	 * never shrinks.
+	 */
+	function openWindow(node: HTMLElement): () => void {
+		landOnCurrent(node.closest<HTMLElement>('.model-dialog') ?? node);
+
+		return () => (grown = 0);
 	}
 
 	/** Switching to a model that lacks the current effort resets to its default. */
@@ -105,159 +239,103 @@
 		onSelect({ modelId: next.id, effort: resolveEffort(next, effort) });
 	}
 
-	function pickEffort(next: ReasoningEffort): void {
-		picked = true;
-		if (model) onSelect({ modelId: model.id, effort: next });
+	function pickEffort(next: string): void {
+		if (model && next !== effort) onSelect({ modelId: model.id, effort: next as ReasoningEffort });
 	}
 </script>
 
-<DropdownMenu.Root bind:open>
-	<DropdownMenu.Trigger
-		variant="quiet"
-		class="quiet-trigger"
-		data-size={size}
-		{@attach (node: HTMLElement) => {
-			triggerEl = node;
-		}}
-		disabled={disabled || models.length === 0}
-		aria-label="{label}: {model ? `${model.displayName}${effort ? ` ${effortLabel(effort)}` : ''}` : placeholder}"
-	>
-		{#key triggerKey}
-			<span class="quiet-trigger-label" data-picked={picked || undefined}>
-				{#if model}
-					{model.displayName}
-					{#if effort}<span class="text-fg-subtle">{effortLabel(effort)}</span>{/if}
-				{:else}
-					<span class="text-fg-subtle">{placeholder}</span>
-				{/if}
-			</span>
-		{/key}
-	</DropdownMenu.Trigger>
-	<DropdownMenu.Content class="model-menu">
-		<DropdownMenu.Sub>
-			<DropdownMenu.SubTrigger class="model-menu-row">
-				<span class="flex w-full items-center gap-2">
-					<span class="flex-1">Model</span>
-					<span class="model-menu-value">{model?.displayName ?? (onFollow ? placeholder : 'None')}</span>
+<div class="model-picker">
+	<Command.Root bind:open>
+		<Command.Trigger
+			variant="quiet"
+			class="quiet-trigger"
+			disabled={models.length === 0}
+			aria-label="{role} model: {model?.displayName ?? placeholder}"
+		>
+			{#key model?.id}
+				<span class="quiet-trigger-label" data-picked={picked || undefined}>
+					{#if model}
+						{model.displayName}
+					{:else if !modelSettingsUi.config && !modelSettingsUi.error}
+						<Skeleton class="model-trigger-skeleton" />
+					{:else}
+						<span class="text-fg-subtle">{placeholder}</span>
+					{/if}
 				</span>
-			</DropdownMenu.SubTrigger>
-			<DropdownMenu.SubContent class="submenu-left model-menu-models w-[250px]">
+			{/key}
+		</Command.Trigger>
+		<Command.Content class="model-dialog" label="Choose the {role} model">
+			<div class="palette-search" {@attach mirrorQuery} {@attach arrowKeys}>
+				<Command.Search placeholder="Search {models.length} models" />
+				<span class="palette-scope">{role} model</span>
+			</div>
+			<Command.Results>
+				<span hidden {@attach openWindow}></span>
 				{#if onFollow}
-					<DropdownMenu.Item callback={onFollow} class="model-option" aria-checked={!value} role="menuitemradio">
-						<span class="flex w-3 shrink-0 justify-center" aria-hidden="true"
-							>{#if !value}<Check size={12} />{/if}</span
-						>
-						<span class="flex-1 truncate text-left text-[13px]">{placeholder}</span>
-					</DropdownMenu.Item>
-					<DropdownMenu.Separator />
+					<Command.Item value={followHit ? q : MISS} callback={onFollow}>
+						{@render check(!value)}
+						<span class="min-w-0 flex-1 truncate">{placeholder}</span>
+					</Command.Item>
 				{/if}
-				{#if agents.length > 1}
-					{#each agents as { agent, groups } (agent)}
-						<DropdownMenu.Sub>
-							<DropdownMenu.SubTrigger class="model-menu-row">
-								<span class="flex w-full items-center gap-2">
-									<span class="flex w-3 shrink-0 justify-center" aria-hidden="true"
-										>{#if model?.agent === agent}<Check size={12} />{/if}</span
-									>
-									<span class="min-w-0 flex-1 truncate">{agent}</span>
-								</span>
-							</DropdownMenu.SubTrigger>
-							<DropdownMenu.SubContent class="submenu-left model-menu-models w-[250px]">
-								{@render providerGroups(groups)}
-							</DropdownMenu.SubContent>
-						</DropdownMenu.Sub>
-					{/each}
-				{:else}
-					{@render providerGroups(agents[0]?.groups ?? [])}
-				{/if}
-			</DropdownMenu.SubContent>
-		</DropdownMenu.Sub>
+				{#each groups as { heading, options, start } (heading)}
+					<Command.Group {heading}>
+						{#if options.some((option) => hits.has(option.id))}
+							<p class="palette-label" aria-hidden="true">{heading}</p>
+						{/if}
+						{@const { before, after } = pending(start, options.length)}
+						{@render skeletonRows(before)}
+						{#each options.slice(before, options.length - after) as option (option.id)}
+							<Command.Item value={hits.has(option.id) ? q : MISS} callback={() => pickModel(option)}>
+								{@render check(option.id === model?.id)}
+								<span class="min-w-0 flex-1 truncate">{option.displayName}</span>
+								{#if option.contextWindow}
+									<span class="palette-meta font-mono">{formatContextWindow(option.contextWindow)}</span>
+								{/if}
+							</Command.Item>
+						{/each}
+						{@render skeletonRows(after)}
+					</Command.Group>
+				{/each}
+			</Command.Results>
+			<footer class="palette-footer">
+				<span><kbd class="keycap">↑↓</kbd> navigate</span>
+				<span><kbd class="keycap">↵</kbd> choose</span>
+				<span><kbd class="keycap">esc</kbd> close</span>
+			</footer>
+		</Command.Content>
+	</Command.Root>
 
-		{#if model?.efforts}
-			<DropdownMenu.Sub>
-				<DropdownMenu.SubTrigger class="model-menu-row">
-					<span class="flex w-full items-center gap-2">
-						<span class="flex-1">Reasoning effort</span>
-						<span class="model-menu-value">{effort ? effortLabel(effort) : ''}</span>
-					</span>
-				</DropdownMenu.SubTrigger>
-				<DropdownMenu.SubContent class="submenu-left w-[250px]">
-					{#each model.efforts as option (option.id)}
-						<DropdownMenu.Item
-							callback={() => pickEffort(option.id)}
-							class="model-option"
-							aria-checked={option.id === effort}
-							role="menuitemradio"
-						>
-							<span class="flex w-3 shrink-0 justify-center self-start pt-0.5" aria-hidden="true">
-								{#if option.id === effort}<Check size={12} />{/if}
-							</span>
-							<span class="flex min-w-0 flex-1 flex-col gap-px text-left">
-								<span class="text-[13px]">{option.label}</span>
-								<span class="text-[11.5px] text-fg-faint">{option.description}</span>
-							</span>
-						</DropdownMenu.Item>
-					{/each}
-				</DropdownMenu.SubContent>
-			</DropdownMenu.Sub>
-		{:else if model}
-			<DropdownMenu.Item disabled class="model-menu-row">
-				<span class="flex-1 text-left">Reasoning effort</span>
-				<span class="model-menu-value">Not supported</span>
-			</DropdownMenu.Item>
-		{/if}
-	</DropdownMenu.Content>
-</DropdownMenu.Root>
-
-{#snippet providerGroups(groups: [string, ModelOption[]][])}
-	{#if groups.length > 1}
-		{#each groups as [provider, options] (provider)}
-			<DropdownMenu.Sub>
-				<DropdownMenu.SubTrigger class="model-menu-row">
-					<span class="flex w-full items-center gap-2">
-						<span class="flex w-3 shrink-0 justify-center" aria-hidden="true"
-							>{#if model?.provider === provider}<Check size={12} />{/if}</span
-						>
-						<span class="min-w-0 flex-1 truncate">{provider}</span>
-						<span class="model-menu-value">{options.length}</span>
-					</span>
-				</DropdownMenu.SubTrigger>
-				<DropdownMenu.SubContent class="submenu-left model-menu-models w-[270px]">
-					{#each options as option (option.id)}
-						{@render modelItem(option, false)}
-					{/each}
-				</DropdownMenu.SubContent>
-			</DropdownMenu.Sub>
-		{/each}
-	{:else}
-		{#each groups[0]?.[1] ?? [] as option (option.id)}
-			{@render modelItem(option, true)}
-		{/each}
+	{#if model?.efforts && effort}
+		<Select.Root value={effort} onValueChange={pickEffort}>
+			<Select.Trigger variant="quiet" class="quiet-trigger effort-trigger" aria-label="{role} reasoning effort">
+				{effortLabel(effort)}
+			</Select.Trigger>
+			<Select.Content class="effort-menu">
+				{#each model.efforts as option (option.id)}
+					<Select.Item value={option.id} label={option.label} class="effort-option">
+						<span class="flex min-w-0 flex-1 flex-col gap-px text-left">
+							<span class="text-[13px]">{option.label}</span>
+							<span class="text-[11.5px] text-fg-faint">{option.description}</span>
+						</span>
+					</Select.Item>
+				{/each}
+			</Select.Content>
+		</Select.Root>
 	{/if}
+</div>
+
+{#snippet check(on: boolean)}
+	<span class="flex w-3 shrink-0 justify-center text-fg-muted" data-current={on || undefined} aria-hidden="true">
+		{#if on}<Check size={13} />{/if}
+	</span>
 {/snippet}
 
-{#snippet modelItem(option: ModelOption, showProvider: boolean)}
-	<DropdownMenu.Item
-		callback={() => pickModel(option)}
-		class="model-option"
-		aria-checked={option.id === model?.id}
-		role="menuitemradio"
-	>
-		<span class="flex w-3 shrink-0 justify-center" aria-hidden="true">
-			{#if option.id === model?.id}<Check size={12} />{/if}
+{#snippet skeletonRows(rows: number)}
+	{#if rows > 0}
+		<span class="model-rows-pending" style:--rows={rows} aria-hidden="true">
+			{#each { length: Math.min(rows, 14) } as _, bar (bar)}
+				<Skeleton class="model-row-skeleton" />
+			{/each}
 		</span>
-		<span class="flex min-w-0 flex-1 flex-col gap-px text-left">
-			<span class="truncate text-[13px]">{option.displayName}</span>
-			{#if showProvider || option.contextWindow}
-				<span class="truncate text-[11px] text-fg-faint"
-					>{[
-						showProvider ? option.provider : null,
-						option.contextWindow ? `${formatContextWindow(option.contextWindow)} context` : null
-					]
-						.filter(Boolean)
-						.join(' · ')}</span
-				>
-			{/if}
-		</span>
-	</DropdownMenu.Item>
+	{/if}
 {/snippet}

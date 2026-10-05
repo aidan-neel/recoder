@@ -1,36 +1,36 @@
-import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { canLaunchInvestigation } from '../agent-loop.js';
+import { lensAssignments } from '../lenses/lenses.js';
 import { partitionUnits, unitRecord } from '../units.js';
 import { FINISHED, assignCoverage } from './assignments.js';
-import { extendDeadlines, poolContext, publishUnits, type ReviewRun } from './context.js';
+import { poolContext, publishUnits, type ReviewRun } from './context.js';
 import { runUnitPool } from './pool.js';
 import { failedUnits, reportRetries } from './retries.js';
 
 /**
- * Cuts the change into review units, or restores a resumed review's units, and
- * records a queued assignment for each. A larger change gets more model calls
- * and time.
+ * Cuts the change into review units and fans each out into one assignment per
+ * lens that applies to it, or restores a resumed review's assignments, and
+ * records a queued assignment for each. The model-call budget and deadline
+ * were already scaled to the assignment count when the run was created.
  */
 export function cutUnits(run: ReviewRun): void {
 	const resume = run.input.resume ?? null;
 
 	if (resume) restoreUnits(run);
 	else {
-		run.units = partitionUnits(run.inventory);
+		run.units = lensAssignments(partitionUnits(run.inventory));
 
 		for (const unit of run.units) {
-			assignCoverage(run.coverage, unit, 'reviewer');
+			assignCoverage(run.coverage, unit);
 			run.assignments.push(unitRecord(unit));
 		}
 	}
 
 	publishUnits(run, 1);
-	scaleForUnits(run);
 }
 
 /**
- * Picks a resumed review up from its checkpoint: finished units and subagents
- * keep their records, the rest are queued again.
+ * Picks a resumed review up from its checkpoint: finished lens assignments and
+ * subagents keep their records, the rest are queued again.
  */
 function restoreUnits(run: ReviewRun): void {
 	const resume = run.input.resume!;
@@ -50,21 +50,8 @@ function restoreUnits(run: ReviewRun): void {
 	}
 }
 
-/** Units past `baseUnits` each add model calls, and each wave of concurrent reviewers past the first adds time. */
-function scaleForUnits(run: ReviewRun): void {
-	const extra = Math.max(0, run.units.length - REVIEW_POLICY.baseUnits);
-
-	if (!extra) return;
-
-	run.budget.limit = REVIEW_POLICY.maxModelCalls + extra * REVIEW_POLICY.callsPerExtraUnit;
-
-	const waves = Math.ceil(run.units.length / REVIEW_POLICY.maxConcurrentAssignments) - 1;
-
-	extendDeadlines(run, waves * REVIEW_POLICY.msPerExtraWave);
-}
-
 /**
- * Reruns the units whose reviewer failed, once, adjusted for how each failed;
+ * Reruns the lens assignments that failed, once, adjusted for how each failed;
  * the orchestrator says so in its conversation. Runs at most once per review,
  * including across a resume.
  */
@@ -91,7 +78,7 @@ export async function retryFailedUnits(run: ReviewRun): Promise<void> {
 		const record = unitRecord(unit);
 
 		run.units.push(unit);
-		assignCoverage(run.coverage, unit, 'reviewer');
+		assignCoverage(run.coverage, unit);
 		run.assignments.push(record);
 		run.events?.onAssignment?.(record);
 	}

@@ -1,7 +1,19 @@
 import { processOutput, type ProcessOutput } from '../util/process.js';
 
-export async function git(cwd: string, args: string[], signal?: AbortSignal): Promise<ProcessOutput> {
-	const proc = Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe', stdin: 'ignore' });
+export async function git(
+	cwd: string,
+	args: string[],
+	signal?: AbortSignal,
+	env?: Record<string, string>
+): Promise<ProcessOutput> {
+	const proc = Bun.spawn(['git', ...args], {
+		cwd,
+		stdout: 'pipe',
+		stderr: 'pipe',
+		stdin: 'ignore',
+		...(env ? { env: { ...process.env, ...env } } : {})
+	});
+
 	const abort = () => proc.kill();
 
 	signal?.addEventListener('abort', abort, { once: true });

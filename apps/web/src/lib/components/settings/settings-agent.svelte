@@ -178,8 +178,10 @@
 				</div>
 				<ModelPicker
 					value={settingsDraft.orchestrator}
-					onSelect={(choice) => (settingsDraft.orchestrator = choice)}
-					label="Review model and reasoning effort"
+					onSelect={(choice) => {
+						settingsDraft.orchestrator = choice;
+					}}
+					role="Review"
 				/>
 			</div>
 			<div class="settings-row role-row">
@@ -189,10 +191,14 @@
 				</div>
 				<ModelPicker
 					value={settingsDraft.specialist}
-					onSelect={(choice) => (settingsDraft.specialist = choice)}
+					onSelect={(choice) => {
+						settingsDraft.specialist = choice;
+					}}
 					placeholder="Same as Review"
-					onFollow={() => (settingsDraft.specialist = null)}
-					label="Subagent and verifier model and reasoning effort"
+					onFollow={() => {
+						settingsDraft.specialist = null;
+					}}
+					role="Subagent"
 				/>
 			</div>
 		</Card.Root>

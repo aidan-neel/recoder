@@ -10,6 +10,15 @@ export const DEFAULT_SUBAGENT_CAP: SubagentCap = 2;
 /** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode CLI. */
 export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode';
 
+/** Sampling settings a model wants; an unset field takes the built-in profile for the model, then the default. */
+export interface ModelRuntimeProfile {
+	/** `null` leaves the field out of the request, for models that reject or ignore it. */
+	temperature?: number | null;
+	/** Output-token cap per review turn. */
+	maxOutputTokens?: number;
+	topP?: number;
+}
+
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {
 	provider?: ModelProvider;
@@ -28,6 +37,8 @@ export interface ModelEntry {
 	defaultEffort?: ReasoningEffort;
 	/** Max tokens per request (prompt + output), when the endpoint reports it. */
 	contextWindow?: number;
+	/** Sampling overrides for this model, set in the settings file or API. */
+	runtime?: ModelRuntimeProfile;
 }
 
 /** A model an OpenAI-compatible endpoint serves (`GET {baseUrl}/models`). */
@@ -48,6 +59,7 @@ export interface ModelEntryPatch {
 	efforts?: ReasoningEffort[];
 	defaultEffort?: ReasoningEffort;
 	contextWindow?: number;
+	runtime?: ModelRuntimeProfile;
 }
 
 /** A hosted model provider you connect with an API key (OpenCode Go, OpenRouter…). */
@@ -95,6 +107,8 @@ export interface ModelSettings {
 	specialistEffort?: ReasoningEffort | null;
 	/** How many subagents one review may run in all. */
 	subagentCap: SubagentCap;
+	/** Whether reviews report low-severity findings; off keeps them to medium and above. */
+	reportLowSeverity: boolean;
 	/** Where overrides are saved, e.g. `~/.recoder/data/review-config.json`. */
 	configPath?: string;
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
@@ -110,6 +124,7 @@ export interface ModelSettingsPatch {
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
 	subagentCap?: SubagentCap;
+	reportLowSeverity?: boolean;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;

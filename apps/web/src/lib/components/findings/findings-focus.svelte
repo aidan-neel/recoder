@@ -10,6 +10,7 @@
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type { FileDiff } from '$lib/diff/diff';
+	import { categoryLabel, SMELL_LABELS } from '$lib/findings/finding-labels';
 	import { SEVERITIES, findingsStore, type Finding } from '$lib/findings/findings.svelte';
 	import { compareSeverity } from '$lib/findings/severity';
 	import { PendingAction } from '$lib/shell/pending-action.svelte';
@@ -78,13 +79,14 @@
 			.filter(
 				(finding) =>
 					!query.trim() ||
-					`${finding.title} ${finding.body} ${finding.file} ${finding.category}`
+					`${finding.title} ${finding.body} ${finding.file} ${categoryLabel(finding.category)} ${finding.ruleId ?? ''} ${finding.smell ? SMELL_LABELS[finding.smell] : ''} ${finding.symbol ?? ''}`
 						.toLowerCase()
 						.includes(query.trim().toLowerCase())
 			)
 			.sort(
 				(a, b) =>
 					Number(a.status === 'dismissed') - Number(b.status === 'dismissed') ||
+					Number(a.kind === 'quality') - Number(b.kind === 'quality') ||
 					compareSeverity(a, b) ||
 					a.file.localeCompare(b.file) ||
 					a.startLine - b.startLine

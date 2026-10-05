@@ -8,8 +8,8 @@ import type { ReviewInventory } from '../inventory.js';
 import { orchestratorSays, publishCoverage, type ReviewRun } from './context.js';
 import type { HarnessEvents } from './types.js';
 
-/** Instruction files read from the target revision, in this order. */
-const INSTRUCTION_PATHS = [
+/** Instruction files read from the target revision, in this order; the rule ledger reads them in full. */
+export const INSTRUCTION_PATHS = [
 	'AGENTS.md',
 	'CLAUDE.md',
 	'CONTRIBUTING.md',

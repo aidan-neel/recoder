@@ -17,14 +17,7 @@ export type Trace =
 export type Row =
 	| { kind: 'insert'; key: string; snippet: Snippet }
 	| { kind: 'message'; key: string; message: ReviewChatMessage; index: number }
-	| { kind: 'traces'; key: string; traces: Trace[] };
-
-/** The row a folded run shows: its most recent trace's label and glyph. */
-export interface TraceHead {
-	label: string;
-	status?: 'running' | 'error' | 'done';
-	thought?: { working: boolean; time?: string };
-}
+	| { kind: 'traces'; key: string; traces: Trace[]; pending?: boolean };
 
 /** Index of the first entry newer than `at`, or the end of the transcript. */
 function indexAfter(entries: TranscriptItem[], at: string): number {
@@ -96,17 +89,20 @@ function mergeThoughts(first: Extract<Trace, { kind: 'thought' }>, next: Extract
 }
 
 /**
- * Transcript in order. Back-to-back tool groups fold into one row, and back-to-back thoughts of one agent merge
- * into one; a thought is never nested in a tool group. A thought is keyed under its reply id and its
+ * Transcript in order. Everything the agent did between two messages (thoughts and tool groups) is one
+ * row, and back-to-back thoughts of one agent merge into one. A thought is keyed under its reply id and its
  * own id, so two messages can both claim it; each is placed once (duplicate keys crash the keyed list).
+ * A traces row is keyed by the row before it, so the work shown while the agent is `pending` and the
+ * row its first tool lands in are one row that keeps its live label mounted.
  */
 export function buildRows(input: {
 	entries: TranscriptItem[];
 	placed: (TranscriptInsert & { index: number })[];
 	orphansAt: Map<number, ReviewReasoningEntry[]>;
 	ownThoughts: Map<string, ReviewReasoningEntry>;
+	pending?: boolean;
 }): Row[] {
-	const { entries, placed, orphansAt, ownThoughts } = input;
+	const { entries, placed, orphansAt, ownThoughts, pending = false } = input;
 	const out: Row[] = [];
 	const placedTraces = new Set<string>();
 
@@ -115,26 +111,18 @@ export function buildRows(input: {
 		placedTraces.add(item.key);
 
 		const previous = out.at(-1);
-		const last = previous?.kind === 'traces' ? previous.traces.at(-1) : undefined;
 
-		if (
-			item.kind === 'thought' &&
-			last?.kind === 'thought' &&
-			previous?.kind === 'traces' &&
-			last.entry.assignmentId === item.entry.assignmentId
-		) {
-			previous.traces[previous.traces.length - 1] = mergeThoughts(last, item);
+		if (previous?.kind !== 'traces') {
+			out.push({ kind: 'traces', key: tracesKey(previous), traces: [item] });
 
 			return;
 		}
 
-		if (
-			item.kind === 'tasks' &&
-			previous?.kind === 'traces' &&
-			previous.traces.every((trace) => trace.kind === 'tasks')
-		)
-			previous.traces.push(item);
-		else out.push({ kind: 'traces', key: `traces-${item.key}`, traces: [item] });
+		const last = previous.traces.at(-1);
+
+		if (item.kind === 'thought' && last?.kind === 'thought' && last.entry.assignmentId === item.entry.assignmentId)
+			previous.traces[previous.traces.length - 1] = mergeThoughts(last, item);
+		else previous.traces.push(item);
 	};
 
 	/**
@@ -178,7 +166,24 @@ export function buildRows(input: {
 
 	before(entries.length);
 
-	return out;
+	return pending ? withPendingWork(out) : out;
+}
+
+function tracesKey(previous?: Row): string {
+	return previous ? `traces-after-${previous.key}` : 'traces-start';
+}
+
+/**
+ * The agent is still at it with nothing streaming: its newest work stays live, or after a message a live
+ * row waits for the next tool. Live progress at the end speaks for itself.
+ */
+function withPendingWork(rows: Row[]): Row[] {
+	const last = rows.at(-1);
+
+	if (last?.kind === 'insert') return rows;
+	if (last?.kind === 'traces') return [...rows.slice(0, -1), { ...last, pending: true }];
+
+	return [...rows, { kind: 'traces', key: tracesKey(last), traces: [], pending: true }];
 }
 
 /** Whole seconds from `since` to `until` (or `now`), at least 1s; minutes past 60s. */
@@ -191,4 +196,35 @@ export function elapsed(now: number, since?: string, until?: string): string | u
 	const seconds = Math.max(1, Math.floor((end - start) / 1000));
 
 	return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+/** When a run of traces started and, once nothing in it is still going, when it ended. */
+export function traceSpan(traces: Trace[]): { start?: string; end?: string } {
+	const starts: number[] = [];
+	const ends: number[] = [];
+
+	for (const item of traces) {
+		if (item.kind === 'thought') {
+			starts.push(Date.parse(item.entry.at));
+			ends.push(Date.parse(item.entry.endedAt ?? item.until ?? ''));
+
+			continue;
+		}
+
+		for (const tool of item.tools) {
+			const start = Date.parse(tool.startedAt);
+
+			starts.push(start);
+			ends.push(tool.status === 'running' || tool.elapsedMs === undefined ? NaN : start + tool.elapsedMs);
+		}
+	}
+
+	const known = (times: number[]) => times.filter(Number.isFinite);
+	const first = Math.min(...known(starts));
+	const last = Math.max(...known(ends));
+
+	return {
+		start: Number.isFinite(first) ? new Date(first).toISOString() : undefined,
+		end: Number.isFinite(last) ? new Date(last).toISOString() : undefined
+	};
 }

@@ -8,10 +8,15 @@ export function githubToken(): string | undefined {
 	return getToken('github') || process.env.GITHUB_TOKEN || undefined;
 }
 
+/** The request's own time limit, ended early when the caller's signal aborts. */
+export function withTimeout(ms: number, signal?: AbortSignal): AbortSignal {
+	return signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms);
+}
+
 /** Call a GitHub REST endpoint as JSON with the configured token, no `gh` CLI. Throws GhError. */
 export async function githubRest(
 	path: string,
-	init?: { method?: 'GET' | 'POST' | 'PUT' | 'PATCH'; body?: unknown }
+	init?: { method?: 'GET' | 'POST' | 'PUT' | 'PATCH'; body?: unknown; signal?: AbortSignal }
 ): Promise<unknown> {
 	const token = githubToken();
 	let response: Response;
@@ -27,7 +32,7 @@ export async function githubRest(
 				'User-Agent': 'recoder',
 				...(token ? { Authorization: `Bearer ${token}` } : {})
 			},
-			signal: AbortSignal.timeout(15_000)
+			signal: withTimeout(15_000, init?.signal)
 		});
 	} catch (err) {
 		throw new GhError('unavailable', `GitHub API unreachable: ${err instanceof Error ? err.message : String(err)}`);

@@ -1,16 +1,16 @@
 /**
- * Review findings: model + local store.
+ * Review findings: the local store. The finding model lives in `finding-model.ts`.
  *
  * Findings anchor to a new-side line range within a file diff. The navigator
  * strip and thread panel read the same store.
  */
 
-import type { Finding as BackendFinding, FindingSeverity as BackendSeverity } from '@recoder/shared';
-import { findingTitle } from './finding-title';
+import { demoFindings } from './demo-findings';
+import { syncDismissal } from './dismissals';
+import type { Finding, FindingSeverity } from './finding-model';
 
-export type FindingSeverity = 'high' | 'medium' | 'low';
-
-type FindingStatus = 'open' | 'dismissed';
+export type { Finding, FindingSeverity } from './finding-model';
+export { mapBackendFinding } from './finding-model';
 
 /** On-demand fix suggestion state for one finding (client-side only). */
 export interface FixSuggestion {
@@ -24,6 +24,8 @@ export interface FixSuggestion {
 	action?: import('@recoder/shared').FailureAction;
 	/** The model's plan ran out while writing the fix. */
 	usageLimit?: import('@recoder/shared').UsageLimit;
+	/** Commands that passed with a checked patch applied (`bun run check`). */
+	checks?: string[];
 }
 
 export const SEVERITIES: FindingSeverity[] = ['high', 'medium', 'low'];
@@ -35,147 +37,8 @@ export const SEVERITY_DOT: Record<FindingSeverity, string> = {
 	low: 'var(--sev-low)'
 };
 
-export interface Finding {
-	id: string;
-	/** Legacy reference retained for existing links and searches. */
-	code: string | null;
-	title: string;
-	severity: FindingSeverity;
-	/** Review category, e.g. `perf`, `security`, `docs`. */
-	category: string;
-	/** Reviewer role that owns this finding, e.g. `security`. */
-	agent: string;
-	/** Model that produced this finding, when known. */
-	model?: string | null;
-	body: string;
-	file: string;
-	/** New-side line range the finding refers to (inclusive). */
-	startLine: number;
-	endLine: number;
-	/** Tool results the reviewer cited (`ev_…`), matched against the review's tool calls. */
-	evidenceIds?: string[];
-	assignmentId?: string;
-	/** Whether a run in the review sandbox proved it. Older reviews omit it. */
-	verification?: import('@recoder/shared').FindingVerification;
-	status: FindingStatus;
-}
-
-const FILE = 'src/rate-limit/limiter.ts';
-
-function initialFindings(): Finding[] {
-	return [
-		{
-			id: 'f-security-tenant',
-			code: 'F-01',
-			title: 'Shared buckets leak limits across tenants',
-			severity: 'high',
-			category: 'security',
-			agent: 'security',
-			body: "bucketFor shares one Map across tenants — two tenants behind one egress IP drain each other's budget.",
-			file: FILE,
-			startLine: 28,
-			endLine: 31,
-			verification: {
-				status: 'verified',
-				reason: 'A repro that takes 10 requests as tenant A leaves tenant B with 0 tokens.',
-				command: 'bun test src/rate-limit/recoder-repro.test.ts',
-				exitCode: 1
-			},
-			status: 'open'
-		},
-		{
-			id: 'f-perf-eviction',
-			code: 'F-02',
-			title: 'Unbounded bucket storage',
-			severity: 'medium',
-			category: 'perf',
-			agent: 'perf',
-			body: 'buckets Map has no eviction, so it grows once per key forever',
-			verification: {
-				status: 'unverified',
-				reason: 'Growth over hours of traffic cannot be reproduced in a short run.'
-			},
-			file: FILE,
-			startLine: 10,
-			endLine: 12,
-			status: 'open'
-		},
-		{
-			id: 'f-correctness-clock',
-			code: 'F-03',
-			title: 'Refill ignores the injected clock',
-			severity: 'medium',
-			category: 'correctness',
-			agent: 'correctness',
-			body: 'refill() reads Date.now() directly, so the injected Clock is dead weight and tests cannot control time.',
-			file: FILE,
-			startLine: 20,
-			endLine: 23,
-			status: 'open'
-		},
-		{
-			id: 'f-docs-allow',
-			code: 'F-04',
-			title: 'Outdated allow documentation',
-			severity: 'low',
-			category: 'docs',
-			agent: 'docs',
-			body: '`allow` moved into the class but the doc comment still reads like a free function.',
-			file: FILE,
-			startLine: 19,
-			endLine: 19,
-			status: 'open'
-		},
-		{
-			id: 'f-style-capacity',
-			code: 'F-05',
-			title: 'Zero capacity silently blocks requests',
-			severity: 'low',
-			category: 'style',
-			agent: 'patterns',
-			body: 'Constructor takes capacity but never validates it — zero capacity bricks every bucket silently.',
-			file: FILE,
-			startLine: 13,
-			endLine: 16,
-			status: 'open'
-		}
-	];
-}
-
-/** Map a backend finding (harness output) onto the local card/thread model. */
-export function mapBackendFinding(f: BackendFinding, index: number): Finding {
-	const severityMap: Record<BackendSeverity, FindingSeverity> = {
-		error: 'high',
-		warning: 'medium',
-		info: 'low'
-	};
-
-	const match = /^\[([^\]]+)\]\s*/.exec(f.message);
-	const category = match?.[1] ?? 'review';
-	const body = match ? f.message.slice(match[0].length) : f.message;
-	const line = f.line ?? 1;
-
-	return {
-		id: f.id,
-		code: `F-${String(index + 1).padStart(2, '0')}`,
-		title: findingTitle(body, f.title),
-		severity: severityMap[f.severity],
-		category,
-		agent: f.agent ?? 'reviewer',
-		model: f.model ?? null,
-		body,
-		file: f.file,
-		startLine: line,
-		endLine: f.endLine && f.endLine >= line ? f.endLine : line,
-		evidenceIds: f.evidenceIds ?? [],
-		assignmentId: f.assignmentId,
-		verification: f.verification,
-		status: 'open'
-	};
-}
-
 class FindingsStore {
-	items = $state<Finding[]>(initialFindings());
+	items = $state<Finding[]>(demoFindings());
 	/** Fix suggestions by finding id (fetched on demand, never persisted). */
 	suggestions = $state<Record<string, FixSuggestion>>({});
 	activeId = $state<string | null>(null);
@@ -223,6 +86,17 @@ class FindingsStore {
 		return this.items.find((f) => f.id === this.activeId);
 	}
 
+	/** The fix to show on a finding: its checked patch, else a suggestion that's ready. */
+	readyFix(finding: Finding): FixSuggestion | null {
+		if (finding.patch) {
+			return { status: 'ready', patch: finding.patch.diff, applies: true, checks: finding.patch.checks };
+		}
+
+		const suggestion = this.suggestions[finding.id];
+
+		return suggestion?.status === 'ready' && suggestion.patch ? suggestion : null;
+	}
+
 	discuss(id: string): void {
 		this.activeId = id;
 	}
@@ -233,13 +107,19 @@ class FindingsStore {
 		if (finding) {
 			finding.status = 'dismissed';
 			if (this.activeId === id) this.activeId = null;
+			syncDismissal(id, true);
 		}
 	}
 
 	reopen(id: string): void {
 		const finding = this.items.find((f) => f.id === id);
 
-		if (finding) finding.status = 'open';
+		if (!finding) return;
+
+		const wasDismissed = finding.status === 'dismissed';
+
+		finding.status = 'open';
+		if (wasDismissed) syncDismissal(id, false);
 	}
 
 	suggesting(id: string): void {
@@ -271,7 +151,7 @@ class FindingsStore {
 	}
 
 	reset(): void {
-		this.items = initialFindings();
+		this.items = demoFindings();
 		this.hiddenSeverities = [];
 		this.suggestions = {};
 		this.activeId = null;

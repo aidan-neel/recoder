@@ -6,10 +6,12 @@
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import ReviewComposer from './review-composer.svelte';
+	import ModelPicker from '../settings/model-picker.svelte';
 	import { attachmentText, MESSAGE_LIMIT } from '$lib/review/attachment';
 	import { formatAgentName } from '$lib/findings/threads.svelte';
-	import { modelLabel } from '$lib/settings/model-settings.svelte';
+	import { modelSettingsUi, type ModelChoice } from '$lib/settings/model-settings.svelte';
 	import { fileIconUrl } from '$lib/diff/material-icons';
+	import { formatOutputRate, type MeasuredRate } from '$lib/review/output-rate';
 
 	/** The composer under a review conversation: sends, stops a reply or the review, and attaches files or code. */
 	let {
@@ -26,7 +28,9 @@
 		generating,
 		working,
 		streaming,
-		notice = null
+		notice = null,
+		outputRate = null,
+		resume = null
 	}: {
 		assignment: ReviewAssignment;
 		draft?: string;
@@ -48,10 +52,40 @@
 		streaming: boolean;
 		/** What the agent is doing about a reply that was cut off ("Trying again"), shown on the composer while it lasts. */
 		notice?: string | null;
+		/** The newest model speed in this conversation, shown beside the model picker. */
+		outputRate?: MeasuredRate | null;
+		/** A review that stopped or failed: its next steps sit on the composer's top edge. */
+		resume?: {
+			continuing: boolean;
+			restarting: boolean;
+			onContinue: (() => void) | null;
+			onRestart: (() => void) | null;
+		} | null;
 	} = $props();
 
 	const agentThread = $derived(assignment.id !== ORCHESTRATOR_ID);
+
+	/** Subagents answer on the second model and everyone else on the Review model, as the server routes them. */
+	const subagent = $derived(assignment.role === 'subagent');
+
+	/** Chat answers on the model this agent ran on; picking here changes that setting. */
+	const choice = $derived(subagent ? modelSettingsUi.specialist : modelSettingsUi.orchestrator);
 	const errorId = $props.id();
+
+	/** Which speed reading is showing; a new reading or a new value of the same one changes it. */
+	const rateKey = $derived(
+		outputRate ? `${outputRate.id}:${outputRate.rate.tokensPerSecond}:${outputRate.rate.estimated}` : ''
+	);
+
+	/** A reading taken before the developer picked another model describes the old one, so it hides until the next. */
+	let staleRateKey = $state('');
+
+	const shownRate = $derived(outputRate && rateKey !== staleRateKey ? outputRate.rate : null);
+
+	function pickModel(next: ModelChoice): void {
+		staleRateKey = rateKey;
+		void (subagent ? modelSettingsUi.selectSpecialist(next) : modelSettingsUi.selectOrchestrator(next));
+	}
 
 	let sending = $state(false);
 	let stopping = $state(false);
@@ -201,6 +235,18 @@
 				</Typography.Metadata>
 			</div>
 		</div>
+		<div class="composer-notice" data-open={resume ? '' : undefined}>
+			<div class="composer-notice-clip">
+				<div class="composer-notice-tab" data-actions inert={!resume}>
+					{#if resume?.onContinue}
+						<Button variant="ghost" size="sm" loading={resume.continuing} onclick={resume.onContinue}>Continue</Button>
+					{/if}
+					{#if resume?.onRestart}
+						<Button variant="ghost" size="sm" loading={resume.restarting} onclick={resume.onRestart}>Restart</Button>
+					{/if}
+				</div>
+			</div>
+		</div>
 		<ReviewComposer
 			bind:value={draft}
 			bind:inputEl={composerInput}
@@ -252,9 +298,12 @@
 					>{/if}
 			{/snippet}
 			{#snippet trailing()}
-				{#if assignment.model}<Typography.Metadata class="rc-composer-model truncate"
-						>{modelLabel(assignment.model)}</Typography.Metadata
-					>{/if}
+				{#if shownRate}
+					<Typography.Metadata class="output-rate" title="Model output speed"
+						>{formatOutputRate(shownRate)}</Typography.Metadata
+					>
+				{/if}
+				<ModelPicker value={choice} onSelect={pickModel} role={subagent ? 'Subagent' : 'Review'} />
 			{/snippet}
 		</ReviewComposer>
 	</div>

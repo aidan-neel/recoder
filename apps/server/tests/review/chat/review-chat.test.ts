@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { ORCHESTRATOR_ID, emptyReviewProgress } from '@recoder/shared';
 import { db, recoverStaleReviews, reviewProgress } from '../../../src/store';
 import { app } from '../../../src/app';
-import { rerunReviewSession } from '../../../src/commands/pipeline';
+import { rerunReviewSession } from '../../../src/commands/rerun';
 import { discussionContext, startReviewChat, stopReviewChat } from '../../../src/review/chat/review-chat';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { subscribeReview, clearReviewEvents, reviewEventBuffer } from '../../../src/review/session/events';

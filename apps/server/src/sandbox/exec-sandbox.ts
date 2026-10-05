@@ -1,12 +1,16 @@
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { admitCommand, hostPriorityPrefix, resolveTier, type SandboxTier } from './host-load.js';
 import { inside, type SandboxLayout } from './sandbox-layout.js';
 
 export { sandboxLayout, type SandboxLayout } from './sandbox-layout.js';
 
 export interface RunOptions {
 	network?: boolean;
-	timeoutMs: number;
+	/** Counted from when the command starts, after any wait for a free slot; a function is read at that moment. */
+	timeoutMs: number | (() => number);
+	/** `prep` for the dependency install and baseline checks; the default is `run`. */
+	tier?: SandboxTier;
 	signal?: AbortSignal;
 	stdin?: string;
 }
@@ -19,12 +23,24 @@ export interface RunResult {
 	elapsedMs: number;
 }
 
+/** Where /etc/resolv.conf really lives when it is a link, since a hidden dir can swallow the target. */
+function resolvConfTarget(): string | null {
+	try {
+		const target = realpathSync('/etc/resolv.conf');
+
+		return target === '/etc/resolv.conf' ? null : target;
+	} catch {
+		return null;
+	}
+}
+
 /**
  * bubblewrap arguments for one command: a read-only host with the layout's
  * hidden dirs emptied (a fresh /tmp already covers its children), toolchains
  * bound back, the checkout and cache writable with `.git` read-only so HEAD
  * cannot move, a cleared environment and fresh namespaces. The networked
- * install also gets systemd-resolved's DNS stub, which lives under /run. stderr
+ * install also gets its DNS config back: systemd-resolved's stub under /run,
+ * and the file /etc/resolv.conf links to (WSL keeps it under /mnt). stderr
  * joins stdout so the agent sees output in the order it was written.
  */
 function bwrapArgs(layout: SandboxLayout, command: string, opts: { network?: boolean } = {}): string[] {
@@ -37,8 +53,15 @@ function bwrapArgs(layout: SandboxLayout, command: string, opts: { network?: boo
 		if (!inside(dir, '/tmp')) args.push('--tmpfs', dir);
 	}
 
-	if (opts.network) args.push('--ro-bind-try', '/run/systemd/resolve', '/run/systemd/resolve');
-	for (const dir of layout.toolchains) args.push('--ro-bind', dir, dir);
+	if (opts.network) {
+		args.push('--ro-bind-try', '/run/systemd/resolve', '/run/systemd/resolve');
+
+		const resolver = resolvConfTarget();
+
+		if (resolver) args.push('--ro-bind-try', resolver, resolver);
+	}
+
+	for (const dir of [...layout.toolchains, ...(layout.readOnly ?? [])]) args.push('--ro-bind', dir, dir);
 	for (const file of layout.masked) args.push('--ro-bind', '/dev/null', file);
 	args.push('--bind', layout.checkout, layout.checkout);
 
@@ -88,8 +111,13 @@ function seatbeltProfile(layout: SandboxLayout, opts: { network?: boolean } = {}
 		'(allow default)',
 		opts.network ? '' : '(deny network*)',
 		layout.hidden.length ? `(deny file-read* file-write* ${subpaths(layout.hidden)})` : '',
-		`(allow file-read* ${subpaths([...layout.toolchains, layout.checkout, layout.cacheDir])})`,
-		`(allow file-read-metadata ${ancestors([...layout.toolchains, layout.checkout, layout.cacheDir])
+		`(allow file-read* ${subpaths([...layout.toolchains, ...(layout.readOnly ?? []), layout.checkout, layout.cacheDir])})`,
+		`(allow file-read-metadata ${ancestors([
+			...layout.toolchains,
+			...(layout.readOnly ?? []),
+			layout.checkout,
+			layout.cacheDir
+		])
 			.map((dir) => `(literal ${sbpl(dir)})`)
 			.join(' ')})`,
 		'(deny file-write*)',
@@ -187,6 +215,14 @@ const PIPE_DRAIN_MS = 1_500;
 const PIPE_KEEP_CHARS = 64_000;
 
 /**
+ * Output a command's result keeps. An agent's run is cut to fit its turn; the
+ * install and baseline checks keep everything the pipes held, because the
+ * detectors parse every diagnostic out of them and a lint run over a whole
+ * repo is long.
+ */
+const OUTPUT_CHARS: Record<SandboxTier, number> = { prep: 2 * PIPE_KEEP_CHARS, run: 20_000, light: 20_000 };
+
+/**
  * Read a pipe in the background. `stop()` cancels a read that is still waiting
  * (someone outside the command holds the pipe) and returns what arrived.
  */
@@ -240,9 +276,9 @@ function collect(stream: ReadableStream<Uint8Array>): { done: Promise<void>; sto
 	};
 }
 
-/** The argv that runs `command` inside bubblewrap, or Seatbelt on macOS. */
+/** The argv that runs `command` inside bubblewrap (at low priority), or Seatbelt on macOS. */
 function sandboxArgv(layout: SandboxLayout, command: string, network: boolean | undefined, darwin: boolean): string[] {
-	if (!darwin) return ['bwrap', ...bwrapArgs(layout, command, { network })];
+	if (!darwin) return [...hostPriorityPrefix(), 'bwrap', ...bwrapArgs(layout, command, { network })];
 
 	return [
 		'sandbox-exec',
@@ -289,6 +325,11 @@ function combineOutput(stdout: string, stderr: string): string {
 	return `${stdout}${stdout.endsWith('\n') || !stdout ? '' : '\n'}${stderr}`;
 }
 
+/** A result for a command that never started. */
+function notStarted(output: string, timedOut: boolean): RunResult {
+	return { exitCode: null, output, truncated: false, timedOut, elapsedMs: 0 };
+}
+
 /**
  * Run a reviewer command against a PR checkout inside the sandbox: bubblewrap
  * on Linux, Seatbelt (`sandbox-exec`) on macOS. Every command gets its own
@@ -296,9 +337,34 @@ function combineOutput(stdout: string, stderr: string): string {
  * exception) and a cleared environment. Seatbelt has no PID namespace, so there
  * the command leads its own process group and a kill reaches its children.
  * After it exits, stray children get a moment to drain the pipes before the
- * reads stop and whatever it left behind is killed.
+ * reads stop and whatever it left behind is killed. It first waits for a host
+ * slot (see `host-load.ts`); the timeout and `elapsedMs` cover only the run.
  */
 export async function runSandboxed(layout: SandboxLayout, command: string, opts: RunOptions): Promise<RunResult> {
+	const tier = resolveTier(opts.tier);
+	const release = await admitCommand(tier, opts.signal);
+
+	if (!release) return notStarted('Not run: stopped while waiting for a free sandbox slot.', false);
+
+	try {
+		const timeoutMs = typeof opts.timeoutMs === 'function' ? opts.timeoutMs() : opts.timeoutMs;
+
+		if (timeoutMs <= 0) return notStarted('Not run: the review is out of time.', true);
+
+		return await execute(layout, command, opts, timeoutMs, OUTPUT_CHARS[tier]);
+	} finally {
+		release();
+	}
+}
+
+/** Spawns one sandboxed command and waits for it; the caller holds a slot. */
+async function execute(
+	layout: SandboxLayout,
+	command: string,
+	opts: RunOptions,
+	timeoutMs: number,
+	outputChars: number
+): Promise<RunResult> {
 	mkdirSync(layout.cacheDir, { recursive: true });
 	if (!statSync(layout.checkout).isDirectory()) throw new Error('review checkout is missing');
 
@@ -324,7 +390,7 @@ export async function runSandboxed(layout: SandboxLayout, command: string, opts:
 	const timer = setTimeout(() => {
 		timedOut = true;
 		kill();
-	}, opts.timeoutMs);
+	}, timeoutMs);
 
 	opts.signal?.addEventListener('abort', kill, { once: true });
 
@@ -338,7 +404,7 @@ export async function runSandboxed(layout: SandboxLayout, command: string, opts:
 		if (darwin) killGroup(proc.pid);
 
 		const [stdout, stderr] = await Promise.all([out.stop(), err.stop()]);
-		const bounded = boundOutput(combineOutput(stdout, stderr), 20_000);
+		const bounded = boundOutput(combineOutput(stdout, stderr), outputChars);
 
 		return {
 			exitCode: timedOut || opts.signal?.aborted ? null : code,

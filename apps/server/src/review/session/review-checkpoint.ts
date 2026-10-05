@@ -6,8 +6,12 @@ import type { SubagentState } from '../pipeline/subagents.js';
 import type { ReviewUnit } from '../pipeline/units.js';
 import type { ReviewDirective } from '../chat/directive.js';
 
-/** Bumped whenever the checkpoint's shape changes. Version 1 is the first with review units. */
-export const CHECKPOINT_VERSION = 1;
+/**
+ * Bumped whenever the checkpoint's shape changes. Version 1 is the first with
+ * review units; version 2 saves one assignment per unit and lens, with
+ * claim-bearing candidates.
+ */
+export const CHECKPOINT_VERSION = 2;
 
 /**
  * Where an unfinished review stopped. Saved once the units are cut and after

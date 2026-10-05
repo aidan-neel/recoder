@@ -98,7 +98,7 @@ Heights are 28 (panel), 30 (default) and 32–34 (toolbar or hero).
 - **Icon button**: 28–32 square, same hover as ghost.
 
 ### Other components
-- **Quiet trigger** (model picker): transparent, bg `#232120` on hover, `#2a2826` while its menu is open. The label is `Model Effort`, with the effort word spelled out in full in `#8a857d`.
+- **Quiet trigger** (model picker): transparent, bg `#232120` on hover, `#2a2826` while its menu is open. It shows the model name, or the effort word in full in `#8a857d`.
 - **Segmented control**: container `#1a1918` with inset ring `#232120`, padding 2–3. The active item is `#262422` or `#2a2826`; the thumb slides over 200ms.
 - **Severity pill**: 11–11.5px/500, padding `1px 6–7px`, radius 5.
 - **Keycap**: Geist Mono 10.5, padding `1px 5px`, radius 4, bg `#1f1e1c`–`#24221f`.
@@ -106,12 +106,13 @@ Heights are 28 (panel), 30 (default) and 32–34 (toolbar or hero).
 - **Search field**: 30px, radius 8, bg `#151413`, inset ring `#1f1e1c`, ⌘K keycap. On focus: bg `#1a1918`, ring `#3d3935` plus a 3px `rgba(237,233,227,.06)` halo.
 
 ### Model picker
-The one pattern used everywhere a model is picked (composer, side panels, Settings → Models roles).
-- **Trigger**: quiet text button, 30px (28px in side panels), padding `0 9px`, radius 8, 12.5px. Model name in `#ede9e3`, then the effort word in full in `#8a857d` (`5.6 Sol Medium`, never `Med`). Models without an effort control show only the name.
-- **Menu**: 250px, opens upward, anchored to the trigger's right edge. Rows are 30px, radius 7: `Model ›`, `Reasoning effort ›` (dimmed "Not supported" with no chevron when the model has none), a divider, then `Model settings…` (opens Settings → Models). No Speed row. There are two model picks, Review and Specialists; Specialists can follow Review ("Same as Review"). No per-role models.
-- **Submenus** open to the left, top-aligned to their row, with a 6px invisible bridge. Effort options come from the selected model's capabilities. Switching to a model that lacks the current effort resets it to that model's default.
-- Settings roles use the same trigger, never a separate Low/Medium/High control. Inheriting roles show "Same as Orchestrator".
-- **Model list** groups by provider (menu labels) once more than one provider has models; the list scrolls inside the submenu.
+The one pattern used everywhere a model is picked (Settings → Models roles today).
+- **Two quiet triggers** at the row's right end: the model name, then the effort word in full (`Kimi K3` `High`, never `Med`) as a select with a small chevron. Models without an effort control and roles following another pick show only the model trigger.
+- **Model dialog**: the model trigger opens a ⌘K-style search dialog (Sivir Command): the palette's frame, 560px wide and at most 480px tall, rows 34px. The search placeholder counts the models ("Search 471 models"); the role sits where the palette shows its scope ("Review model"). Footer: ↑↓ navigate, ↵ choose, esc close. The first frame mounts the rows around the current model, centered and highlighted; the rest fill outward after each paint behind same-height skeletons, so a long list opens at once and never moves. Arrow keys walk the rows in the order shown. Model settings are cached in localStorage without key previews.
+- **List**: one scrolling list grouped by provider (labelled "Agent · Provider" when more than one agent runs models), providers A to Z. A row is a check column, the name, and the context window in mono on the right. It opens scrolled to the current model, which is the active row.
+- **Search** matches every word anywhere in the model name, provider, agent or id, in any order ("openrouter kimi"). Providers with no matches drop out; nothing matching shows "No results found".
+- **Effort select**: 230px, right-aligned to its trigger, one row per effort with its description. Options come from the selected model's capabilities. Switching to a model that lacks the current effort resets it to that model's default.
+- There are two model picks, Review and Specialists; Specialists can follow Review ("Same as Review", the first row of its dialog). No per-role models. No Speed option.
 
 ### Model providers (Settings → Models)
 
@@ -134,7 +135,7 @@ When a model's plan runs out (ChatGPT's cap, a hosted provider's 429 or 402 afte
 - **Modal**: radius 16, `bg.raised-2`, modal elevation over the scrim.
 
 ## Behavior
-- **Composer**: focus moves the ring from `#2a2826` to `#3d3935` over 150ms. Send is disabled (`#232120` bg, `#57534d` icon) while empty and turns primary with text. Enter sends; Shift+Enter inserts a newline. While a reply is pending, Send becomes Stop (a 9px square inside a spinning ring) and the reply shows a shimmering "Thinking" line.
+- **Composer**: one box (radius 14, 10px padding all round) holding the input above a toolbar row: + (attach) on the left; the output speed, the model name, the effort select (no chevron, same muted color as the model) and Send on the right. The output speed is the newest reply's tokens per second in faint 11.5px mono with tabular digits (`~84 tok/s` while it is an estimate, `84 tok/s` once the provider's count arrives). It hides when another model is picked until a reply on that model reports one. Focus moves the ring from `#2a2826` to `#3d3935` over 150ms. Send is a round 28px up arrow: quiet while empty, primary with text. Enter sends; Shift+Enter inserts a newline. While a reply is pending Send becomes Stop (a 9px square). While the review or a reply is working, a spinner circles Send. The reply shows a shimmering "Thinking" line.
 - **Streaming**: tool rows grow in (240ms) with a spinner that becomes a check, then their duration fades in. Streaming text shows a 2px caret blinking at 1s.
 - **Async buttons keep a fixed width** across states. Apply fix is 112px: Apply fix → Applying (spinner) → Applied (check, transparent bg, success text). The finding's pill crossfades to "Fixed" and its title dims. A toast follows with Undo.
 - **Copy** flips to "✓ Copied" in success green for 1.2s.
@@ -157,7 +158,7 @@ live in `app.css` (`--dur-*`, and Sivir's `--motion-*`).
 |---|---|
 | `hover` | color/background 100ms ease-out |
 | `press` | none: controls never scale when pressed |
-| `highlight` | instant position, 100ms opacity fade |
+| `highlight` | Sivir menus: travels between items over 160ms; our own lists snap, 100ms opacity fade |
 | `toggle` | 180ms: chevrons, switches, label swaps, row actions |
 | `tab-pill` | 240ms cubic-bezier(.3,.7,.2,1); segmented thumbs too |
 | `disclose` | 240ms height for panels and drawers that unfold |

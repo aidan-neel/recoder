@@ -4,6 +4,7 @@ import { fetchChecks } from '../../forge/checks';
 import { GhError } from '../../forge/gh';
 import { fetchPullHead } from '../../forge/github-rest';
 import { fetchMergeHeadRef } from '../../forge/glab';
+import { findLocalPull, readLocalForge } from '../../forge/local/schema';
 import { parseSlug } from '../../forge/providers';
 import { tokenEnv } from '../../forge/tokens';
 import { db } from '../../store';
@@ -17,10 +18,17 @@ const app = new Hono();
 
 /**
  * CI checks for the PR head: GitLab checks run on the MR's source branch,
- * GitHub's on the head commit, whose sha also covers PRs from forks.
+ * GitHub's on the head commit, whose sha also covers PRs from forks. Local
+ * pull requests name their head branch in the metadata file.
  */
 async function reviewChecks(review: Review, repo: Repo) {
 	const provider = review.source;
+
+	if (review.source === 'local') {
+		const { headRef } = findLocalPull(await readLocalForge(repo.url), review.prNumber);
+
+		return { ref: headRef, provider, checks: await fetchChecks(repo, headRef) };
+	}
 
 	if (review.source === 'gitlab') {
 		const ref = await fetchMergeHeadRef(repo.url, review.prNumber, tokenEnv('gitlab', repo.url));

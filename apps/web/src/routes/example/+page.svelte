@@ -315,6 +315,13 @@
 		}
 	];
 
+	/** The speed the server would report for `chars` streamed since `started`, once half a second has passed. */
+	function previewRate(chars: number, started: number, estimated: boolean): ReviewChatMessage['outputRate'] {
+		const seconds = (performance.now() - started) / 1000;
+
+		return seconds < 0.5 ? undefined : { tokensPerSecond: Math.round(chars / 4 / seconds), estimated };
+	}
+
 	/** Like the real API, sending resolves at once and the canned reply streams after in network-sized chunks. */
 	async function send(assignmentId: string, text: string) {
 		const at = new Date().toISOString();
@@ -336,13 +343,15 @@
 		void (async () => {
 			await new Promise((resolve) => setTimeout(resolve, 700));
 
+			const started = performance.now();
+
 			for (let end = 0; end < reply.length;) {
 				end = Math.min(reply.length, end + 18 + Math.floor(Math.random() * 30));
-				update({ text: reply.slice(0, end) });
+				update({ text: reply.slice(0, end), outputRate: previewRate(end, started, true) });
 				await new Promise((resolve) => setTimeout(resolve, 90 + Math.random() * 160));
 			}
 
-			update({ status: 'done' });
+			update({ status: 'done', outputRate: previewRate(reply.length, started, false) });
 		})();
 	}
 </script>

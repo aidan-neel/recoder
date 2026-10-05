@@ -316,3 +316,118 @@
 	font-size: 11px;
 	color: var(--text-faint);
 }
+/* Code quality: a collapsible group of cards below the bugs. */
+.quality-section {
+	margin-top: 16px;
+}
+.quality-section[data-alone] {
+	margin-top: 0;
+}
+.focus-list .quality-title {
+	margin: 0;
+	font-size: inherit;
+	font-weight: inherit;
+	line-height: inherit;
+	letter-spacing: normal;
+}
+[data-ui='collapsible-trigger'].quality-trigger {
+	display: flex;
+	width: 100%;
+	height: 30px;
+	align-items: center;
+	gap: 8px;
+	padding: 0 8px 0 6px;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+	text-align: left;
+	color: var(--text-secondary);
+	transition:
+		background-color var(--dur-hover) ease-out,
+		color var(--dur-hover) ease-out;
+}
+[data-ui='collapsible-trigger'].quality-trigger:hover {
+	background-color: var(--bg-hover);
+	color: var(--text-primary);
+}
+[data-ui='collapsible-trigger'].quality-trigger:hover [data-ui='badge'].quality-count {
+	background: var(--bg-selected);
+}
+[data-ui='badge'].quality-count {
+	height: 18px;
+	padding: 0 6px;
+	border-radius: 5px;
+	font-family: var(--font-code);
+	font-size: 11px;
+	font-weight: 400;
+	background: var(--bg-hover);
+	color: var(--text-subtle);
+	transition: background-color var(--dur-hover) ease-out;
+}
+.quality-chevron {
+	flex-shrink: 0;
+	margin-left: auto;
+	color: var(--text-ghost);
+	transition: rotate var(--dur-toggle) ease-out;
+}
+[data-ui='collapsible-trigger'][data-state='open'].quality-trigger .quality-chevron {
+	rotate: 90deg;
+}
+.quality-cards {
+	padding: 8px 2px 2px;
+	margin: 0 -2px;
+}
+/* Category, rule id, smell and symbol, dot-separated; the last one truncates. */
+.finding-facets {
+	display: inline-flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 6px;
+	overflow: hidden;
+	white-space: nowrap;
+}
+.finding-facets > * + *::before {
+	content: '·';
+	margin-right: 6px;
+	color: var(--text-ghost);
+}
+.finding-facets > :last-child {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+/* In a list card the facets are short; the file path gives way first. */
+.focus-card-head .finding-facets {
+	flex-shrink: 0;
+	max-width: 60%;
+}
+.finding-facets-mono {
+	font-family: var(--font-code);
+	font-size: 11.5px;
+}
+.focus-detail-facets {
+	font-size: 12.5px;
+	color: var(--text-subtle);
+}
+.suggested-fix-checks {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 8px 0 0;
+	font-size: 12px;
+	color: var(--text-subtle);
+}
+.suggested-fix-checks code {
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	color: var(--text-muted);
+}
+.suggested-fix-checks-icon {
+	flex-shrink: 0;
+	color: var(--success);
+}
+@media (prefers-reduced-motion: reduce) {
+	.quality-chevron {
+		transition: none;
+	}
+}

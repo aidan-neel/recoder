@@ -6,7 +6,6 @@
 		type ReviewReasoningEntry,
 		type ReviewTask
 	} from '@recoder/shared';
-	import Play from '@lucide/svelte/icons/play';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import Disclosure from '../ui/disclosure.svelte';
@@ -34,9 +33,7 @@
 		coverage,
 		guidelines,
 		repoId,
-		now,
-		continuing,
-		onContinue
+		now
 	}: {
 		active: boolean;
 		failed: boolean;
@@ -59,9 +56,6 @@
 		guidelines: ReviewGuidelinesUsed | null;
 		repoId: string | null;
 		now: number;
-		continuing: boolean;
-		/** Continue a failed review from where it stopped. */
-		onContinue: (() => void) | null;
 	} = $props();
 
 	const finalizationSeconds = $derived(
@@ -130,10 +124,3 @@
 		<Typography.Text class="finalize-reason">{reason}</Typography.Text>
 	{/if}
 </div>
-{#if failed && !active && onContinue}
-	<div class="review-start-cta">
-		<Button class="brief-action" loading={continuing} onclick={onContinue}>
-			<Play size={12} fill="currentColor" aria-hidden="true" /> Continue review
-		</Button>
-	</div>
-{/if}

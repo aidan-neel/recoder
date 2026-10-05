@@ -5,7 +5,6 @@
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Message from '@sivir-ui/svelte/components/message';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import DotLoader from '../ui/dot-loader.svelte';
 	import CodeRef from '../findings/code-ref.svelte';
 	import ConversationFixes from '../findings/conversation-fixes.svelte';
 	import FailureNotice from './failure-notice.svelte';
@@ -92,9 +91,6 @@
 			{@render response()}
 		</Message.Content>
 	{/if}
-	{#if message.from === 'assistant' && message.status === 'streaming' && message.text.trim()}
-		<span class="message-writing" role="status" aria-label="Still writing"><DotLoader /></span>
-	{/if}
 	{#if message.failure?.signIn && quietSignIn}
 		{#if message.status === 'error'}<Typography.Metadata class="text-fg-faint"
 				>Not answered: signed out of ChatGPT</Typography.Metadata
@@ -114,7 +110,7 @@
 		/>
 	{:else if message.status === 'error' && message.from === 'assistant' && !message.cutOff}
 		<Typography.Metadata class="message-cut-off">
-			<CircleAlert size={12} class="message-cut-off-icon" aria-hidden="true" />
+			<CircleAlert size={14} class="message-cut-off-icon" aria-hidden="true" />
 			<span
 				><span class="message-cut-off-title">Reply cut off.</span> The model stopped before it finished this reply.</span
 			>
