@@ -14,7 +14,7 @@ export interface Mutant {
 export const MAX_MUTANTS = 6;
 
 /** A source file's line with one edit applied, or null when it has none to apply. */
-type Edit = (line: string) => { line: string; description: string } | null;
+export type Edit = (line: string) => { line: string; description: string } | null;
 
 const COMPARISONS: [RegExp, string][] = [
 	[/ >= /, ' > '],
@@ -90,37 +90,67 @@ const EDITS: Edit[] = [removeGuard, flipComparison, dropNormalizer, dropAwait, n
 /** Lines that hold no logic to change. */
 const INERT = /^\s*(?:\/\/|\/\*|\*|import\b|export\s+(?:type|interface)\b)/;
 
+/** `new Specific(` on a throw line replaced by `new Broad(`, so the code throws the broad class the loose assertion accepts. */
+export function swapErrorClass(broad: string): Edit {
+	return (line) => {
+		const match = /\bnew\s+([A-Z]\w*)\(/.exec(line);
+
+		if (!match || match[1] === broad) return null;
+
+		return { line: line.replace(match[0], `new ${broad}(`), description: `throw ${broad} instead of ${match[1]}` };
+	};
+}
+
+/** A literal raised by one, the direction a lower-bound assertion cannot see. */
+export const raiseLiteral: Edit = nudgeLiteral;
+
+/** The mutants one set of edits makes of the given lines, one per line, in line order. */
+export function mutantsAt(file: string, head: string, lines: readonly number[], edits: readonly Edit[]): Mutant[] {
+	const source = head.split('\n');
+	const found: Mutant[] = [];
+
+	for (const number of lines) {
+		const text = source[number - 1];
+
+		if (text === undefined || INERT.test(text)) continue;
+
+		for (const edit of edits) {
+			const made = edit(text);
+
+			if (!made || made.line === text) continue;
+
+			const copy = [...source];
+
+			copy[number - 1] = made.line;
+
+			found.push({ file, line: number, description: `${made.description} on line ${number}`, text: copy.join('\n') });
+
+			break;
+		}
+	}
+
+	return found;
+}
+
+/** The mutant of a line with a `throw` put before it: a test that reaches the line fails with the marker. */
+export function probeOf(file: string, head: string, line: number): Mutant {
+	const source = head.split('\n');
+
+	source[line - 1] = `throw new Error('recoder-probe'); ${source[line - 1]}`;
+
+	return { file, line, description: `probe on line ${line}`, text: source.join('\n') };
+}
+
 /**
  * Up to `MAX_MUTANTS` single-line mutants of the lines a source file adds, at
  * most one per line and the kinds spread out so a handful covers the change.
  * Same input, same mutants.
  */
 export function mutantsOf(file: string, head: string, added: AddedLines): Mutant[] {
-	const lines = head.split('\n');
+	const lines = [...(added.get(file)?.keys() ?? [])];
 	const perKind = new Map<string, Mutant[]>();
 
-	for (const [number] of added.get(file) ?? []) {
-		const text = lines[number - 1];
-
-		if (text === undefined || INERT.test(text)) continue;
-
-		for (const edit of EDITS) {
-			const made = edit(text);
-
-			if (!made || made.line === text) continue;
-
-			const copy = [...lines];
-
-			copy[number - 1] = made.line;
-
-			const mutants = perKind.get(edit.name) ?? [];
-
-			mutants.push({ file, line: number, description: `${made.description} on line ${number}`, text: copy.join('\n') });
-			perKind.set(edit.name, mutants);
-
-			break;
-		}
-	}
+	for (const edit of EDITS) perKind.set(edit.name, mutantsAt(file, head, lines, [edit]));
 
 	const queues = [...perKind.values()];
 	const picked: Mutant[] = [];
@@ -131,3 +161,11 @@ export function mutantsOf(file: string, head: string, added: AddedLines): Mutant
 
 	return picked;
 }
+
+/** Edits by the shape of the weak assertion, in the order they are tried. */
+export const EDITS_BY_SHAPE = {
+	lowerBound: [raiseLiteral, flipComparison],
+	someForEvery: [removeGuard, flipComparison],
+	presence: [raiseLiteral, dropNormalizer, flipComparison],
+	generic: EDITS
+} as const;

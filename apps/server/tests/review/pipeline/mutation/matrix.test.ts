@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { RunResult } from '../../../../src/sandbox/exec-sandbox';
+import type { DetectorResult } from '../../../../src/review/pipeline/detectors/types';
 import { testMatrix } from '../../../../src/review/pipeline/mutation/matrix';
 import { mutantCommand, oldCopyPath, singleFileCommands } from '../../../../src/review/pipeline/mutation/test-run';
 
@@ -25,6 +26,7 @@ const input = {
 	],
 	sources: new Map([['src/a.ts', SOURCE]]),
 	added: new Map([['src/a.ts', new Map([[2, '']])]]),
+	suspicions: [] as DetectorResult[],
 	commandFor: singleFileCommands(['.: test → xo && ava'], ['pnpm run test']),
 	deadline: Date.now() + 60_000
 };
@@ -91,5 +93,97 @@ describe('testMatrix', () => {
 		const outcome = await testMatrix({ ...input, run: async () => ({ ...done(0), timedOut: true }) });
 
 		expect(outcome.results).toEqual([]);
+	});
+});
+
+const THROWER = [
+	'export class Base extends Error {}',
+	'export class Specific extends Base {}',
+	'export function f(n: number) {',
+	"\tif (n < 0) throw new Specific('negative');",
+	'}'
+].join('\n');
+
+const WEAK_TEST = "it('rejects negatives', () => {\n\texpect(() => f(-1)).toThrow(Base);\n});";
+
+const suspicion: DetectorResult = {
+	detector: 'weak-new-tests',
+	category: 'tests',
+	title: '`rejects negatives` accepts any `Base`',
+	body: 'The test accepts any Base.',
+	file: 'src/b.test.ts',
+	line: 2,
+	evidence: 'PR head',
+	suspected: true
+};
+
+const newTest = {
+	path: 'src/b.test.ts',
+	base: '',
+	head: WEAK_TEST,
+	added: new Set([1, 2, 3]),
+	visible: new Set([1, 2, 3])
+};
+
+const detected = {
+	tests: [newTest],
+	suspicions: [suspicion],
+	sources: new Map([['src/b.ts', THROWER]]),
+	added: new Map([['src/b.ts', new Map([[4, '']])]]),
+	commandFor: singleFileCommands(['.: test → bun test'], []),
+	deadline: Date.now() + 60_000
+};
+
+/** Passes on correct code and on a mutant unless `kills` says otherwise; a probe fails only when `reaches`. */
+function detectedRunner(opts: { kills?: boolean; reaches?: boolean }) {
+	return async (command: string): Promise<RunResult> => {
+		if (command.includes('> src/b.ts') && command.includes('recoder-probe') === false) {
+			const probe = Buffer.from(command.split("printf %s '")[1]!.split("'")[0]!, 'base64').toString();
+
+			if (probe.includes('recoder-probe'))
+				return { ...done(opts.reaches === false ? 0 : 1), output: 'Error: recoder-probe' };
+
+			return done(opts.kills ? 1 : 0);
+		}
+
+		return done(0);
+	};
+}
+
+describe('testMatrix on a suspected new test', () => {
+	test('proves a suspicion when an aimed mutant survives on a line the test reaches', async () => {
+		const outcome = await testMatrix({ ...detected, run: detectedRunner({}) });
+
+		expect(outcome.results).toHaveLength(1);
+		expect(outcome.results[0]).toMatchObject({ detector: 'mutation', file: 'src/b.test.ts', line: 2 });
+		expect(outcome.counts).toMatchObject({ suspicions: 1, sanityPassed: 1, probes: 1, findings: 1 });
+	});
+
+	test('gives no finding when the mutant is killed', async () => {
+		const outcome = await testMatrix({ ...detected, run: detectedRunner({ kills: true }) });
+
+		expect(outcome.results).toEqual([]);
+		expect(outcome.counts.killed).toBeGreaterThan(0);
+	});
+
+	test('gives no finding when the probe shows the line is not reached', async () => {
+		const outcome = await testMatrix({ ...detected, run: detectedRunner({ reaches: false }) });
+
+		expect(outcome.results).toEqual([]);
+		expect(outcome.counts.skips.unreachable).toBe(1);
+	});
+
+	test('names the reason when the unmutated test fails', async () => {
+		const outcome = await testMatrix({ ...detected, run: async () => ({ ...done(1), output: 'cannot find module' }) });
+
+		expect(outcome.counts.skips['sanity-failed']).toBe(1);
+		expect(outcome.counts.sanityOutput).toBe('cannot find module');
+	});
+
+	test('stops at the deadline', async () => {
+		const outcome = await testMatrix({ ...detected, deadline: Date.now() - 1, run: runner(false) });
+
+		expect(outcome.results).toEqual([]);
+		expect(outcome.counts.skips.budget).toBe(1);
 	});
 });

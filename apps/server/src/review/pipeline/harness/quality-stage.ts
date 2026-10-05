@@ -1,10 +1,11 @@
 import { buildRuleLedger } from '../../guidelines/ledger/ledger.js';
 import { runDetectors, runDiagnostics, runTypeHints } from '../detectors/detectors.js';
-import { runMatrix } from '../mutation/stage.js';
+import { matrixDetail, runMatrix } from '../mutation/stage.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { publishBudget, type ReviewRun } from './context.js';
 import { addDetections } from './verification.js';
 
+const MATRIX_TASK = { id: 'matrix', label: 'Testing the tests' } as const;
 const TASK = { id: 'quality', label: "Checking the repo's rules" } as const;
 
 function plural(count: number, word: string): string {
@@ -97,11 +98,23 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean): Pr
 		run.events?.onLog?.(`Type hints skipped: ${errorText(err)}`);
 	}
 
-	try {
-		const found = await runMatrix(run);
+	run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'running', 'Running the changed tests against mutants', {
+		kind: 'checks'
+	});
 
-		if (!closed() && !run.controller.signal.aborted) report(run, found);
+	try {
+		const matrix = await runMatrix(run);
+
+		if (!closed() && !run.controller.signal.aborted) {
+			run.detections.push(...matrix.results);
+			addDetections(run, matrix.results);
+			run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'done', matrixDetail(matrix), { kind: 'checks' });
+		} else {
+			run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'partial', 'Still running when the review finished', {
+				kind: 'checks'
+			});
+		}
 	} catch (err) {
-		run.events?.onLog?.(`Test matrix skipped: ${errorText(err)}`);
+		run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'done', `Skipped: ${errorText(err)}`, { kind: 'checks' });
 	}
 }
