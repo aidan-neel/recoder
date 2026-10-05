@@ -8,6 +8,7 @@ const suspicion = {
 	body: 'This change adds `TimeoutException`, a subclass of `HTTPException`, but the test accepts any `HTTPException`.',
 	file: 'src/a.test.ts',
 	line: 3,
+	evidence: '',
 	suspected: true
 };
 
