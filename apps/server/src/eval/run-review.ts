@@ -21,6 +21,8 @@ const MAX_POLL_ERRORS = 6;
 export interface RunTarget {
 	base: string;
 	timeoutMs: number;
+	/** False asks the server to run every baseline check again. */
+	baselineCache: boolean;
 	/** Rewrite the progress line in place: only on a terminal running one review at a time. */
 	inPlace: boolean;
 }
@@ -134,7 +136,7 @@ async function waitForReview(target: RunTarget, reviewId: string, label: string)
 export async function runReview(
 	target: RunTarget,
 	review: { repoId: string; pr: number; index: number; label: string },
-	start: () => Promise<Review> = () => startReview(target.base, review.repoId, review.pr)
+	start: () => Promise<Review> = () => startReview(target.base, review.repoId, review.pr, target.baselineCache)
 ): Promise<RunRecord> {
 	if (stopping) return new Promise<never>(() => undefined);
 
@@ -163,6 +165,7 @@ export async function runReview(
 		hidden: hiddenFromSummary(result.summary),
 		unconfirmed: result.unconfirmed?.map(toEvalFinding),
 		funnel: result.funnel,
-		candidates: progress?.candidateCount ?? null
+		candidates: progress?.candidateCount ?? null,
+		cachedChecks: progress?.toolCalls?.filter((call) => call.cached).length ?? 0
 	};
 }

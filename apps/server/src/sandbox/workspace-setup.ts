@@ -70,7 +70,7 @@ const SETUP_MARKERS: Marker[][] = [
 const SHARED_COMMANDS = new Set(SETUP_MARKERS[0]!.map((marker) => marker.command));
 
 /** Root lockfiles of those installs; without one the install is not repeatable, so it is not shared. */
-const JS_LOCKFILES = ['bun.lock', 'bun.lockb', 'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json'];
+export const JS_LOCKFILES = ['bun.lock', 'bun.lockb', 'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json'];
 
 /** Install steps for the repo root's lockfiles; tools missing from PATH are reported, not run. */
 export function setupPlan(

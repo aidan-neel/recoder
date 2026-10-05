@@ -45,6 +45,8 @@ export interface Review {
 	prUrl: string | null;
 	/** Set when a forge webhook queued the review: nobody is watching it. */
 	trigger?: 'webhook';
+	/** False runs every baseline check again instead of reusing an earlier review's result; for a suspected flaky suite. */
+	baselineCache?: false;
 	/** When analysis began; draft sessions may exist before a review is requested. */
 	startedAt?: string;
 	createdAt: string;
@@ -57,6 +59,8 @@ export interface CreateReviewInput {
 	headSha?: string;
 	/** False opens an empty chat session; omitted/true queues an automated review. */
 	start?: boolean;
+	/** False skips the baseline check cache for this review. */
+	baselineCache?: false;
 	/** Display metadata from the selected open PR. Refetched before analysis. */
 	prTitle?: string;
 }

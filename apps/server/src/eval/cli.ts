@@ -6,6 +6,8 @@ export interface RunOptions {
 	concurrency: number;
 	base: string;
 	timeoutMs: number;
+	/** False for `--no-baseline-cache`: every baseline check runs again, for a suspected flaky suite. */
+	baselineCache: boolean;
 }
 
 type StringFlags = Record<string, { type: 'string' }>;
@@ -37,23 +39,28 @@ export function parseEvalArgs<Flags extends StringFlags>(
 		return parsed;
 	};
 
-	const values: Record<string, string | undefined> = parseArgs({
+	const parsed: Record<string, string | boolean | undefined> = parseArgs({
 		args: Bun.argv.slice(2),
 		options: {
 			...flags,
 			runs: { type: 'string', default: defaults.runs },
 			concurrency: { type: 'string', default: defaults.concurrency },
 			base: { type: 'string', default: 'http://localhost:3001' },
-			timeout: { type: 'string', default: defaults.timeout }
+			timeout: { type: 'string', default: defaults.timeout },
+			'no-baseline-cache': { type: 'boolean' }
 		},
 		strict: true
 	}).values;
+
+	const { 'no-baseline-cache': noBaselineCache, ...rest } = parsed;
+	const values = rest as Record<string, string | undefined>;
 
 	const run: RunOptions = {
 		runs: positiveInt(values.runs, 'runs'),
 		concurrency: positiveInt(values.concurrency, 'concurrency'),
 		base: values.base ?? '',
-		timeoutMs: positiveInt(values.timeout, 'timeout') * 60_000
+		timeoutMs: positiveInt(values.timeout, 'timeout') * 60_000,
+		baselineCache: !noBaselineCache
 	};
 
 	return { values: values as { [Key in keyof Flags]?: string }, run, fail, positiveInt };

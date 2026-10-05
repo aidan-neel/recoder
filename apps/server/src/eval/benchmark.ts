@@ -34,7 +34,7 @@ import { writeEvalFile, type RunRecord } from './report';
 import { runReview, stopOnInterrupt, toEvalFinding } from './run-review';
 
 const USAGE =
-	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--runs 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45]';
+	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--runs 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
 
 /** One synthetic PR's label file, as the dataset's assemble step writes it. */
 interface PrLabel {

@@ -135,6 +135,8 @@ export interface ReviewToolCall {
 	startedAt: string;
 	finishedAt?: string;
 	elapsedMs?: number;
+	/** A `run` whose result came from an earlier review of the same commit; `elapsedMs` is then the time the run first took. */
+	cached?: boolean;
 	/** Short outcome summary, e.g. `3 matches` or `limiter.ts:61-84`. */
 	summary?: string;
 	/** The actual retrieval request, including revision and range. */

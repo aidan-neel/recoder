@@ -46,11 +46,14 @@ function owningDir(path: string, dirs: string[]): string | null {
 	return owners.sort((a, b) => b.length - a.length)[0] ?? null;
 }
 
+/** The command of the JavaScript install the review ran, or null when nothing JavaScript was installed. */
+export function installCommand(setup: SetupReport | null): string | null {
+	return setup?.steps.find((step) => JS_TOOLS.includes(step.command.split(' ')[0]))?.command ?? null;
+}
+
 /** The JavaScript package manager the install ran with, or null when nothing JavaScript was installed. */
 function installedTool(setup: SetupReport | null): string | null {
-	const first = setup?.steps.find((step) => JS_TOOLS.includes(step.command.split(' ')[0]));
-
-	return first ? first.command.split(' ')[0] : null;
+	return installCommand(setup)?.split(' ')[0] ?? null;
 }
 
 /**

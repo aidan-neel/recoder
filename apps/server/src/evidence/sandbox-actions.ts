@@ -51,20 +51,32 @@ export async function runCommand(
 			error: result.timedOut ? status : undefined,
 			content,
 			truncated: result.truncated,
-			exitCode: result.exitCode
-		},
-		record: {
-			revision: 'head',
-			path: '',
-			startLine: 1,
-			endLine: 1,
-			content,
-			truncated: result.truncated,
-			kind: 'run',
-			command,
 			exitCode: result.exitCode,
-			...(owner ? { agentId: owner } : {})
-		}
+			elapsedMs: result.elapsedMs
+		},
+		record: runRecord(command, content, result.truncated, result.exitCode, owner)
+	};
+}
+
+/** The evidence record of a finished run of `command`, whose `content` is the command, its output and its status line. */
+export function runRecord(
+	command: string,
+	content: string,
+	truncated: boolean,
+	exitCode: number | null,
+	owner?: string
+): Omit<EvidenceRecord, 'id'> {
+	return {
+		revision: 'head',
+		path: '',
+		startLine: 1,
+		endLine: 1,
+		content,
+		truncated,
+		kind: 'run',
+		command,
+		exitCode,
+		...(owner ? { agentId: owner } : {})
 	};
 }
 

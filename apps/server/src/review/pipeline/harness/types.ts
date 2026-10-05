@@ -68,6 +68,8 @@ export interface AdaptiveReviewInput {
 	subagentCap?: number;
 	/** Whether low-severity findings are kept, from Settings; dropped when unset. */
 	reportLowSeverity?: boolean;
+	/** False runs every baseline check again instead of reusing an earlier review's result. */
+	baselineCache?: boolean;
 	/** Continue a failed review: skip the units that finished. */
 	resume?: ReviewProgressCheckpoint | null;
 }
@@ -95,4 +97,6 @@ export interface BaselineResult {
 	exitCode: number | null;
 	output: string;
 	error?: string;
+	/** The result of an earlier review of the same commit; the command did not run again. */
+	cached?: boolean;
 }
