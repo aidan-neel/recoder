@@ -1,6 +1,7 @@
 import type { Repo } from '@recoder/shared';
 import { parseEvalArgs, type RunOptions } from './cli';
 import { resolveRepo } from './client';
+import { captureTree } from './harness-tree';
 import { stabilityMetrics } from './metrics';
 import { printReport, writeReport, type RunRecord, type StabilityReport } from './report';
 import { runReview, stopOnInterrupt } from './run-review';
@@ -54,6 +55,7 @@ async function main(): Promise<void> {
 	const options = parseOptions();
 	const repo = await resolveRepo(options.base, options.repo);
 	const startedAt = new Date().toISOString();
+	const tree = captureTree(import.meta.dir);
 
 	stopOnInterrupt(options.base);
 
@@ -72,6 +74,7 @@ async function main(): Promise<void> {
 		requestedRuns: options.runs,
 		startedAt,
 		finishedAt: new Date().toISOString(),
+		harness: tree ? { tree, reviewers: tree } : undefined,
 		headShas: [...new Set(runs.map((run) => run.headSha).filter((sha) => sha !== 'unknown'))],
 		runs,
 		metrics: passed.length ? stabilityMetrics(passed.map((run) => run.findings)) : null

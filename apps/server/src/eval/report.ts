@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serverDataDir } from '../util/data-dir';
 import type { ReviewFunnel } from '@recoder/shared';
+import type { HarnessRecord } from './harness-tree';
 import type { ConsistencyMetrics, EvalFinding, RankedFinding, StabilityMetrics } from './metrics';
 
 /** How one run ended. Only `passed` runs count toward the metrics. */
@@ -37,6 +38,8 @@ export interface StabilityReport {
 	requestedRuns: number;
 	startedAt: string;
 	finishedAt: string;
+	/** The harness code the runs used; absent outside a git checkout and from reports older than recording it. */
+	harness?: HarnessRecord;
 	/** Distinct PR heads the runs reviewed. More than one means the PR moved and runs are not comparable. */
 	headShas: string[];
 	runs: RunRecord[];

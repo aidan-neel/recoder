@@ -231,11 +231,39 @@ export const reviewCheckpoints = createCollection<ReviewCheckpoint>('review_chec
 /** A passed review's last checkpoint, kept so the review can be replayed from verification without its reviewers. */
 export const reviewReplays = createCollection<ReviewCheckpoint>('review_replays');
 
-/** A passed review never resumes, so its checkpoint moves to the replays. */
+/** Kept checkpoints are dropped oldest first once together they pass this size; `RECODER_REPLAY_BYTES` overrides it. */
+const REPLAY_BYTES = 512 * 1024 * 1024;
+
+/**
+ * Drops the oldest kept checkpoints until the rest fit in `maxBytes`, and never
+ * `keepId`, the one just kept. A dropped review can no longer be replayed.
+ */
+export function evictReplays(maxBytes: number, keepId?: string): void {
+	const rows = getDb().query('SELECT id, length(value) AS bytes FROM review_replays ORDER BY rowid').all() as {
+		id: string;
+		bytes: number;
+	}[];
+
+	let total = rows.reduce((sum, row) => sum + row.bytes, 0);
+
+	for (const row of rows) {
+		if (total <= maxBytes) break;
+		if (row.id === keepId) continue;
+
+		reviewReplays.delete(row.id);
+		total -= row.bytes;
+	}
+}
+
+/** A passed review never resumes, so its checkpoint moves to the replays, newest last, and old ones are evicted by size. */
 export function keepForReplay(reviewId: string): void {
 	const final = reviewCheckpoints.get(reviewId);
 
-	if (final) reviewReplays.set(final);
+	if (final) {
+		reviewReplays.delete(reviewId);
+		reviewReplays.set(final);
+		evictReplays(Number(process.env.RECODER_REPLAY_BYTES) || REPLAY_BYTES, reviewId);
+	}
 
 	reviewCheckpoints.delete(reviewId);
 }

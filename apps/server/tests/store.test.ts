@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { expect, spyOn, test } from 'bun:test';
 import { emptyReviewProgress } from '@recoder/shared';
 import { serverDataDir } from '../src/util/data-dir';
-import { closeStore, reviewProgress } from '../src/store';
+import { closeStore, evictReplays, reviewProgress, reviewReplays } from '../src/store';
+import type { ReviewCheckpoint } from '../src/review/session/review-checkpoint';
 
 test('review progress written moments ago survives the store closing before its write-behind timer fires', () => {
 	const id = crypto.randomUUID();
@@ -37,4 +38,17 @@ test('a snapshot that fails to save does not crash the write-behind timer or hol
 	reviewProgress.delete(good);
 	closeStore();
 	quiet.mockRestore();
+});
+
+test('kept checkpoints are evicted oldest first past the size limit, never the one just kept', () => {
+	const kept = (id: string) => ({ id, padding: 'x'.repeat(1000) }) as unknown as ReviewCheckpoint;
+	const ids = ['a', 'b', 'c'].map((name) => `${name}-${crypto.randomUUID()}`);
+
+	reviewReplays.clear();
+	for (const id of ids) reviewReplays.set(kept(id));
+
+	evictReplays(2500, ids[0]);
+
+	expect(reviewReplays.list().map((item) => item.id)).toEqual([ids[0]!, ids[2]!]);
+	reviewReplays.clear();
 });
