@@ -5,6 +5,7 @@ import { env } from '../env.js';
 import type { Provider } from '@recoder/shared';
 import type { ReviewRevision } from '../evidence/evidence.js';
 import { processOutput } from '../util/process.js';
+import { ensureSharedClone } from './shared-git.js';
 
 export interface Sandbox {
 	key: string;
@@ -130,9 +131,16 @@ export async function prepareSandbox(opts: {
 
 		const cloneUrl = opts.provider === 'github' ? 'https://github.com/' + repoSlug + '.git' : repoUrl;
 
+		const shared = await ensureSharedClone({
+			workDir: env.RECODER_WORKDIR,
+			repoSlug,
+			cloneUrl,
+			run: (cwd, args, label) => git(cwd, args, label, opts.env, opts.provider)
+		});
+
 		await git(
 			env.RECODER_WORKDIR,
-			['clone', '--progress', '--no-checkout', '--', cloneUrl, path],
+			['clone', '--progress', '--no-checkout', ...(shared ? ['--reference', shared] : []), '--', cloneUrl, path],
 			'sandbox clone',
 			opts.env,
 			opts.provider,

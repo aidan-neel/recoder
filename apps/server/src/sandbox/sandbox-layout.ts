@@ -1,12 +1,19 @@
-import { existsSync, lstatSync, realpathSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { env } from '../env.js';
 import { serverDataDir } from '../util/data-dir.js';
+import type { OverlayMount } from './overlay.js';
 
 export interface SandboxLayout {
 	checkout: string;
 	cacheDir: string;
+	/** Where installs and package stores shared by reviews of one repo live; the sandbox never sees it. */
+	sharedDir: string;
+	/** Where overlay layers live; hidden from the sandbox like the rest of the work dir. */
+	layersDir: string;
+	/** Shared directories shown read-only at a path in the checkout or cache, with writes kept in a private layer. Set by setup. */
+	overlays: OverlayMount[];
 	/** Host directories replaced by an empty tmpfs, parents before children. */
 	hidden: string[];
 	/** Toolchain directories bound back read-only on top of `hidden`. */
@@ -93,11 +100,11 @@ function sandboxEnv(path: string[], cacheDir: string, darwin: boolean, rustup: s
 		FORCE_COLOR: '0',
 		PYTHONDONTWRITEBYTECODE: '1',
 		XDG_CACHE_HOME: cache('xdg'),
-		BUN_INSTALL_CACHE_DIR: cache('bun'),
-		npm_config_cache: cache('npm'),
-		YARN_CACHE_FOLDER: cache('yarn'),
+		BUN_INSTALL_CACHE_DIR: cache('store/bun'),
+		npm_config_cache: cache('store/npm'),
+		YARN_CACHE_FOLDER: cache('store/yarn'),
 		PNPM_HOME: cache('pnpm-home'),
-		npm_config_store_dir: cache('pnpm'),
+		npm_config_store_dir: cache('store/pnpm'),
 		...(darwin ? { npm_config_manage_package_manager_versions: 'false' } : {}),
 		PIP_CACHE_DIR: cache('pip'),
 		UV_CACHE_DIR: cache('uv'),
@@ -107,6 +114,25 @@ function sandboxEnv(path: string[], cacheDir: string, darwin: boolean, rustup: s
 		CARGO_HOME: cache('cargo'),
 		...(rustup ? { RUSTUP_HOME: rustup } : {})
 	};
+}
+
+/**
+ * The shared object directories a checkout borrows from (its alternates) that
+ * sit inside the shared clone dir. Only those come back, to be bound read-only;
+ * an alternate anywhere else is ignored.
+ */
+function sharedObjects(checkout: string, workDir: string): string[] {
+	const shared = join(workDir, 'shared', 'git');
+
+	try {
+		return readFileSync(join(checkout, '.git', 'objects', 'info', 'alternates'), 'utf8')
+			.split('\n')
+			.filter((line) => line.startsWith('/'))
+			.map(real)
+			.filter((path) => inside(path, shared) && isDir(path));
+	} catch {
+		return [];
+	}
 }
 
 /**
@@ -156,8 +182,12 @@ export function sandboxLayout(checkout: string, host: HostPaths = {}): SandboxLa
 	return {
 		checkout: root,
 		cacheDir,
+		sharedDir: join(workDir, 'shared'),
+		layersDir: join(workDir, 'cache', `${basename(root)}.layers`),
+		overlays: [],
 		hidden,
 		toolchains: [...toolchains].sort((a, b) => a.length - b.length),
+		readOnly: sharedObjects(root, workDir),
 		masked,
 		env: sandboxEnv(kept, cacheDir, darwin, isDir(rustup) ? rustup : null)
 	};

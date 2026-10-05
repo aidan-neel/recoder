@@ -1,7 +1,8 @@
 import type { EvidenceStore } from '../../../evidence/evidence.js';
 import type { ToolResult } from '../../../evidence/types.js';
 import { trackSandboxWait, withSandboxTier, type WaitMeter } from '../../../sandbox/host-load.js';
-import type { ExecWorkspace, SetupReport } from '../../../sandbox/exec-workspace.js';
+import type { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
+import type { SetupReport } from '../../../sandbox/workspace-setup.js';
 import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { pickBaselineChecks } from './baseline-checks.js';

@@ -3,6 +3,7 @@ import { REVIEW_POLICY } from '../review/session/review-policy.js';
 import { runSandboxed, sandboxLayout, type RunResult, type SandboxLayout } from './exec-sandbox.js';
 import { sanitizeRepoPath } from '../evidence/evidence.js';
 import { BaseTree } from './base-tree.js';
+import { removeLayers, runSetup, setupPlan, type SetupReport, type SetupStep } from './workspace-setup.js';
 
 /**
  * One review's execution environment: the PR checkout inside bubblewrap.
@@ -14,68 +15,8 @@ import { BaseTree } from './base-tree.js';
  * run, test glob or verdict can pick them up.
  */
 
-export interface SetupStep {
-	/** Why this step was picked, e.g. `bun.lock`. */
-	marker: string;
-	command: string;
-}
-
-export interface SetupReport {
-	steps: Array<SetupStep & { exitCode: number | null; output: string; elapsedMs: number }>;
-	/** Lockfiles found whose tool isn't installed on this machine. */
-	missing: string[];
-}
-
-interface Marker {
-	files: string[];
-	tool: string;
-	command: string;
-}
-
-/** First match per ecosystem wins; lifecycle scripts stay off because they run PR code with network access. */
-const SETUP_MARKERS: Marker[][] = [
-	[
-		{ files: ['bun.lock', 'bun.lockb'], tool: 'bun', command: 'bun install --frozen-lockfile --ignore-scripts' },
-		{ files: ['pnpm-lock.yaml'], tool: 'pnpm', command: 'pnpm install --frozen-lockfile --ignore-scripts' },
-		{ files: ['.yarnrc.yml'], tool: 'yarn', command: 'yarn install --immutable --mode=skip-build' },
-		{ files: ['yarn.lock'], tool: 'yarn', command: 'yarn install --frozen-lockfile --ignore-scripts' },
-		{ files: ['package-lock.json'], tool: 'npm', command: 'npm ci --ignore-scripts --no-audit --no-fund' },
-		{ files: ['package.json'], tool: 'npm', command: 'npm install --ignore-scripts --no-audit --no-fund' }
-	],
-	[
-		{ files: ['uv.lock'], tool: 'uv', command: 'uv sync --frozen' },
-		{ files: ['poetry.lock'], tool: 'poetry', command: 'poetry install --no-root --no-interaction' },
-		{
-			files: ['requirements.txt'],
-			tool: 'python3',
-			command: 'python3 -m venv .venv && .venv/bin/pip install -q -r requirements.txt'
-		}
-	],
-	[{ files: ['go.mod'], tool: 'go', command: 'go mod download' }],
-	[{ files: ['Cargo.toml'], tool: 'cargo', command: 'cargo fetch' }]
-];
-
 /** Interpreters a reviewer might reach for to run a repro, in the order they are listed. */
 const RUNTIMES = ['bun', 'node', 'deno', 'python3'];
-
-/** Install steps for the repo root's lockfiles; tools missing from PATH are reported, not run. */
-function setupPlan(rootFiles: Set<string>, has: (tool: string) => boolean): { steps: SetupStep[]; missing: string[] } {
-	const steps: SetupStep[] = [];
-	const missing: string[] = [];
-
-	for (const ecosystem of SETUP_MARKERS) {
-		for (const marker of ecosystem) {
-			const file = marker.files.find((name) => rootFiles.has(name));
-
-			if (!file) continue;
-			if (has(marker.tool)) steps.push({ marker: file, command: marker.command });
-			else missing.push(`${file} (needs ${marker.tool})`);
-			break;
-		}
-	}
-
-	return { steps, missing };
-}
 
 export class ExecWorkspace {
 	readonly layout: SandboxLayout;
@@ -87,11 +28,15 @@ export class ExecWorkspace {
 	private readonly scratch = new Map<string, Map<string, string>>();
 	/** The merge-base copy, built the first time a command runs on it. */
 	private baseTree: BaseTree | null = null;
+	/** Lets go of the shared installs and stores this review holds. */
+	private releaseShared: () => void = () => {};
 
 	constructor(
 		readonly checkout: string,
 		readonly headSha: string,
-		layout?: SandboxLayout
+		layout?: SandboxLayout,
+		/** Lets reviews of one repo share installs: the repo's scope and the merge base. */
+		private readonly share?: { scope: string; baseSha: string }
 	) {
 		this.layout = layout ?? sandboxLayout(checkout);
 	}
@@ -109,26 +54,28 @@ export class ExecWorkspace {
 			);
 
 			const plan = setupPlan(rootFiles, (tool) => Boolean(Bun.which(tool, { PATH: this.layout.env.PATH })));
-			const report: SetupReport = { steps: [], missing: plan.missing };
 
-			for (const step of plan.steps) {
-				if (signal?.aborted) break;
-				onStep?.(step, null);
+			const host = {
+				layout: this.layout,
+				headSha: this.headSha,
+				share: this.share,
+				git: (args: string[]) => this.git(args),
+				install: (command: string) =>
+					this.exclusive(() =>
+						runSandboxed(this.layout, command, {
+							network: true,
+							tier: 'prep',
+							timeoutMs: () => this.timeout(REVIEW_POLICY.setupTimeoutMs),
+							signal
+						})
+					)
+			};
 
-				const result = await this.exclusive(() =>
-					runSandboxed(this.layout, step.command, {
-						network: true,
-						tier: 'prep',
-						timeoutMs: () => this.timeout(REVIEW_POLICY.setupTimeoutMs),
-						signal
-					})
-				);
+			const setup = await runSetup(host, this.checkout, plan.steps, onStep, signal);
 
-				onStep?.(step, result);
-				report.steps.push({ ...step, exitCode: result.exitCode, output: result.output, elapsedMs: result.elapsedMs });
-			}
+			this.releaseShared = setup.release;
 
-			return report;
+			return { steps: setup.steps, missing: plan.missing } satisfies SetupReport;
 		})();
 
 		return this.setupDone;
@@ -293,6 +240,9 @@ export class ExecWorkspace {
 			await this.restoreTracked();
 			await this.baseTree?.remove().catch(() => undefined);
 		});
+
+		this.releaseShared();
+		await removeLayers(this.layout).catch(() => undefined);
 	}
 
 	/** Writes each scratch file under `layout`; returns the first path that could not be written. */
