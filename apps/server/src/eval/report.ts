@@ -26,6 +26,8 @@ export interface RunRecord {
 	funnel?: ReviewFunnel;
 	/** Candidates before verification and merging, from the stored progress; null when unreadable. */
 	candidates: number | null;
+	/** Baseline checks the review took from an earlier review of the same commit instead of running; absent from servers older than the cache. */
+	cachedChecks?: number;
 }
 
 export interface StabilityReport {
@@ -52,7 +54,8 @@ function consistencyLine(label: string, metrics: ConsistencyMetrics): string {
 }
 
 function runLine(run: RunRecord, metrics: StabilityMetrics | null, passedIndex: number): string {
-	const head = `  #${run.index} ${run.outcome.padEnd(9)} ${minutes(run.durationMs).padStart(7)}  ${run.reviewId}`;
+	const cached = run.cachedChecks ? ` · ${run.cachedChecks} cached checks` : '';
+	const head = `  #${run.index} ${run.outcome.padEnd(9)} ${minutes(run.durationMs).padStart(7)}  ${run.reviewId}${cached}`;
 	const counts = run.outcome === 'passed' ? metrics?.perRun[passedIndex] : undefined;
 
 	if (!counts) return `${head}  ${run.summary?.split('\n')[0]?.slice(0, 100) ?? ''}`;

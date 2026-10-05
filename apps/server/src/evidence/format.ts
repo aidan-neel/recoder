@@ -34,7 +34,7 @@ function toolSummary(result: ToolResult): string {
 	if (result.action === 'run') {
 		if (result.exitCode === null || result.exitCode === undefined) return result.error ?? 'timed out';
 
-		return `exit ${result.exitCode}`;
+		return `exit ${result.exitCode}${result.cached ? ' · cached' : ''}`;
 	}
 
 	if (!result.ok) return result.error ?? 'failed';
@@ -63,7 +63,8 @@ export function finishedReport(
 		status: result.ok ? 'done' : 'error',
 		exitCode: result.exitCode ?? null,
 		finishedAt: new Date().toISOString(),
-		elapsedMs: Date.now() - startedMs,
+		elapsedMs: result.cached ? result.elapsedMs : Date.now() - startedMs,
+		...(result.cached ? { cached: true } : {}),
 		summary: toolSummary(result),
 		result: {
 			content: result.content.slice(0, PREVIEW_CHARS),

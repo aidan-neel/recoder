@@ -3,7 +3,15 @@ import { REVIEW_POLICY } from '../review/session/review-policy.js';
 import { runSandboxed, sandboxLayout, type RunResult, type SandboxLayout } from './exec-sandbox.js';
 import { sanitizeRepoPath } from '../evidence/evidence.js';
 import { BaseTree } from './base-tree.js';
-import { removeLayers, runSetup, setupPlan, type SetupReport, type SetupStep } from './workspace-setup.js';
+import { installKey } from './install-inputs.js';
+import {
+	JS_LOCKFILES,
+	removeLayers,
+	runSetup,
+	setupPlan,
+	type SetupReport,
+	type SetupStep
+} from './workspace-setup.js';
 
 /**
  * One review's execution environment: the PR checkout inside bubblewrap.
@@ -17,6 +25,21 @@ import { removeLayers, runSetup, setupPlan, type SetupReport, type SetupStep } f
 
 /** Interpreters a reviewer might reach for to run a repro, in the order they are listed. */
 const RUNTIMES = ['bun', 'node', 'deno', 'python3'];
+
+/** Prints each tool a check may run with and the version the checkout would use, one per line. */
+const TOOL_VERSIONS =
+	'for tool in bun node deno python3 pnpm yarn npm; do if command -v $tool >/dev/null 2>&1; then echo "$tool $($tool --version 2>&1 | head -n 1)"; fi; done';
+
+/** What a check's result depends on besides the commit's files, as far as the sandbox can tell; the cache key is built from it. */
+export interface CheckInputs {
+	/** The repo, as reviews of it share installs. */
+	scope: string;
+	headSha: string;
+	/** A digest of every manifest, lockfile, install setting and patch at the commit, plus the install command. */
+	dependencies: string;
+	/** The version of every tool on the sandbox PATH, plus the host's platform. */
+	tools: string;
+}
 
 export class ExecWorkspace {
 	readonly layout: SandboxLayout;
@@ -44,6 +67,35 @@ export class ExecWorkspace {
 	/** Which of the common interpreters a sandboxed command can run. */
 	runtimes(): string[] {
 		return RUNTIMES.filter((tool) => Bun.which(tool, { PATH: this.layout.env.PATH }));
+	}
+
+	/**
+	 * What a check run here depends on, once the install is done. Null when the
+	 * result could not be told to repeat: the review has no repo scope, the
+	 * install is not keyed by a lockfile (or runs code the key cannot cover), or
+	 * the tool versions could not be read.
+	 */
+	async checkInputs(installCommand: string): Promise<CheckInputs | null> {
+		await this.setupDone?.catch(() => undefined);
+
+		if (!this.share) return null;
+
+		const dependencies = await installKey((args) => this.git(args), this.headSha, installCommand, JS_LOCKFILES);
+
+		if (!dependencies) return null;
+
+		const versions = await this.exclusive(() =>
+			runSandboxed(this.layout, TOOL_VERSIONS, { timeoutMs: 20_000, tier: 'light' })
+		);
+
+		if (versions.exitCode !== 0 || versions.timedOut) return null;
+
+		return {
+			scope: this.share.scope,
+			headSha: this.headSha,
+			dependencies,
+			tools: `${process.platform}-${process.arch}\n${versions.output}`
+		};
 	}
 
 	/** Install dependencies once. Runs wait for this; failures are reported, not thrown. */

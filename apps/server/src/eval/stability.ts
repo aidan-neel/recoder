@@ -6,7 +6,7 @@ import { printReport, writeReport, type RunRecord, type StabilityReport } from '
 import { runReview, stopOnInterrupt } from './run-review';
 
 const USAGE =
-	'Usage: bun run --filter @recoder/server eval:stability -- --repo <id|owner/name> --pr <number> [--runs 5] [--concurrency 1] [--base http://localhost:3001] [--timeout 60]';
+	'Usage: bun run --filter @recoder/server eval:stability -- --repo <id|owner/name> --pr <number> [--runs 5] [--concurrency 1] [--base http://localhost:3001] [--timeout 60] [--no-baseline-cache]';
 
 interface Options extends RunOptions {
 	repo: string;

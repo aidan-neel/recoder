@@ -66,6 +66,10 @@ export interface ToolResult {
 	hunkIds?: string[];
 	/** run: the command's exit code; null when it timed out or was stopped. */
 	exitCode?: number | null;
+	/** run: how long the command ran. */
+	elapsedMs?: number;
+	/** run: the result of an earlier review of the same commit; the command did not run again. */
+	cached?: boolean;
 	/** The agent that made the run, so a verdict can count only its own. */
 	agentId?: string;
 }

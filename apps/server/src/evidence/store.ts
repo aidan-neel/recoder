@@ -4,7 +4,7 @@ import type { ExecWorkspace } from '../sandbox/exec-workspace.js';
 import { actionCommand, finishedReport, reportedInput } from './format.js';
 import { normalizeActions } from './parse-actions.js';
 import { existingFiles, retrieve } from './retrieval.js';
-import { runCommand, writeSandboxFile } from './sandbox-actions.js';
+import { runCommand, runRecord, writeSandboxFile } from './sandbox-actions.js';
 import {
 	failure,
 	type EvidenceRecord,
@@ -142,6 +142,44 @@ export class EvidenceStore {
 		}
 
 		return results;
+	}
+
+	/**
+	 * Records the stored result of an earlier run of `command` as this review's
+	 * evidence, reported like a run that finished just now but marked `cached`.
+	 * `content` is the run's text exactly as the first run recorded it.
+	 */
+	replayRun(
+		command: string,
+		stored: { exitCode: number; content: string; elapsedMs: number },
+		onTool?: (tool: ToolCallReport) => void
+	): ToolResult {
+		const action: RetrievalAction = { action: 'run', command };
+		const startedMs = Date.now();
+
+		const started = {
+			id: `tool_${++this.toolSeq}`,
+			command: actionCommand(action),
+			input: reportedInput(action),
+			startedAt: new Date(startedMs).toISOString()
+		};
+
+		const result: ToolResult = {
+			action: 'run',
+			ok: true,
+			content: stored.content,
+			truncated: false,
+			exitCode: stored.exitCode,
+			elapsedMs: stored.elapsedMs,
+			cached: true
+		};
+
+		result.evidenceId = this.remember(runRecord(command, stored.content, false, stored.exitCode)).id;
+
+		notify(onTool, { ...started, status: 'running', exitCode: null });
+		notify(onTool, finishedReport(started, startedMs, result));
+
+		return result;
 	}
 
 	/** Runs one action between a `running` and a finished dashboard report of its budget-bounded result. */

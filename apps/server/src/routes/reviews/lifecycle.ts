@@ -24,6 +24,7 @@ const createReviewSchema = z.object({
 	prNumber: z.number().int().positive(),
 	headSha: z.string().min(1).max(100).optional(),
 	start: z.boolean().optional(),
+	baselineCache: z.literal(false).optional(),
 	prTitle: z.string().max(500).optional()
 });
 

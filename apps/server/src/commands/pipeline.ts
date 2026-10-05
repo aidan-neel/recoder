@@ -101,6 +101,7 @@ export function createReviewSession(input: CreateReviewInput, trigger?: Review['
 		prTitle: input.prTitle ?? null,
 		prUrl: null,
 		...(trigger ? { trigger } : {}),
+		...(input.baselineCache === false ? { baselineCache: false as const } : {}),
 		createdAt: now,
 		updatedAt: now
 	};
@@ -283,6 +284,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 					signal: analysis.signal,
 					subagentCap: effectiveSubagentCap(),
 					reportLowSeverity: effectiveReportLowSeverity(),
+					baselineCache: review.baselineCache,
 					resume
 				},
 				harnessCallbacks(reviewId, { headSha, mergeBaseSha })

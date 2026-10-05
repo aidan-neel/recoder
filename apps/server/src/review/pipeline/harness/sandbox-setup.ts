@@ -1,10 +1,9 @@
-import type { EvidenceStore } from '../../../evidence/evidence.js';
-import type { ToolResult } from '../../../evidence/types.js';
-import { trackSandboxWait, withSandboxTier, type WaitMeter } from '../../../sandbox/host-load.js';
+import { trackSandboxWait, type WaitMeter } from '../../../sandbox/host-load.js';
 import type { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import type { SetupReport } from '../../../sandbox/workspace-setup.js';
 import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { runBaselineChecks } from './baseline-run.js';
 import { pickBaselineChecks } from './baseline-checks.js';
 import { extendDeadlines, type ReviewRun } from './context.js';
 import type { BaselineResult, HarnessEvents, TaskFn } from './types.js';
@@ -65,7 +64,15 @@ export async function prepareSandbox(run: ReviewRun, setup: PendingSetup): Promi
 
 	if (prepMs > 0) extendDeadlines(run, prepMs);
 
-	const done = runBaselineChecks(checks, run.evidence, run.controller.signal, events, run.task)
+	const done = runBaselineChecks(checks, {
+		evidence: run.evidence,
+		workspace,
+		report,
+		signal: run.controller.signal,
+		events,
+		task: run.task,
+		cache: run.input.baselineCache
+	})
 		.catch((): BaselineResult[] => [])
 		.then((baseline) => {
 			run.baseline = baseline;
@@ -196,72 +203,6 @@ async function installDependencies(
 	return report;
 }
 
-/** A run's whole output from its evidence record; the result handed back is cut to one turn's budget. */
-function fullOutput(evidence: EvidenceStore, result: ToolResult): string {
-	return (result.evidenceId && evidence.get(result.evidenceId)?.content) || result.content;
-}
-
-/**
- * The baseline checks, run at once on the PR head; every reviewer that starts
- * after them sees the results. Each is bounded on its own, so a slow suite
- * can't hold up the detectors and verifiers.
- */
-async function runBaselineChecks(
-	commands: string[],
-	evidence: EvidenceStore,
-	signal: AbortSignal,
-	events: HarnessEvents | undefined,
-	task: TaskFn
-): Promise<BaselineResult[]> {
-	if (!commands.length) return [];
-
-	task('checks', 'Run checks', 'running', `Running ${commands.join(', ')}`, { kind: 'checks' });
-
-	const settled = await Promise.all(commands.map((command) => runCheck(command, evidence, signal, events)));
-	const results = settled.filter((result) => result !== null);
-	const failed = results.filter((result) => result.exitCode !== 0).length;
-
-	task(
-		'checks',
-		'Run checks',
-		failed ? 'partial' : 'done',
-		failed
-			? `${failed} of ${results.length} checks failed on the PR head`
-			: `${results.length} check${results.length === 1 ? '' : 's'} passed`,
-		{ kind: 'checks' }
-	);
-
-	return results;
-}
-
-/** One baseline check in a prep slot, cut short at `baselineCheckTimeoutMs`; null when it did not run. */
-async function runCheck(
-	command: string,
-	evidence: EvidenceStore,
-	signal: AbortSignal,
-	events: HarnessEvents | undefined
-): Promise<BaselineResult | null> {
-	if (signal.aborted) return null;
-
-	const [result] = await withSandboxTier('prep', () =>
-		evidence.executeRound(
-			[{ action: 'run', command, timeoutSec: Math.floor(REVIEW_POLICY.baselineCheckTimeoutMs / 1000) }],
-			signal,
-			(tool) => events?.onTool?.({ ...tool, role: 'orchestrator' })
-		)
-	);
-
-	if (!result) return null;
-
-	return {
-		command,
-		evidenceId: result.evidenceId,
-		exitCode: result.exitCode ?? null,
-		output: fullOutput(evidence, result),
-		error: result.error
-	};
-}
-
 /**
  * How to run a repro here. Reviewers reach for `tsx` or plain `node` on
  * TypeScript and lose the finding when neither works, so name what does.
@@ -313,7 +254,10 @@ function describeSandbox(
 		for (const check of baseline) {
 			const status = check.error ?? (check.exitCode === 0 ? 'passed' : `exit ${check.exitCode}`);
 
-			lines.push(`- ${check.evidenceId ?? '(no evidence)'} \`${check.command}\` → ${status}`);
+			lines.push(
+				`- ${check.evidenceId ?? '(no evidence)'} \`${check.command}\` → ${status}${check.cached ? ' (stored by an earlier review of this commit)' : ''}`
+			);
+
 			if (check.exitCode !== 0) lines.push(`  ${check.output.slice(-1500).split('\n').join('\n  ')}`);
 		}
 	}
