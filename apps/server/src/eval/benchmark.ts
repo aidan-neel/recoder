@@ -1,17 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import { chatCompletion } from '../models/llm';
-import { REASONING_EFFORTS, type Finding, type ReasoningEffort, type Repo } from '@recoder/shared';
-import { configForModel, configForOrchestrator, configForSubagent } from '../models/models';
-import type { CandidateOutcome } from '../review/pipeline/candidate-outcome';
-import { initReviewSettings } from '../review/session/review-settings';
-import { readCache, writeCache } from '../util/json-cache';
-import { JUDGE_VERSION, judgePr, type JudgeChat } from './benchmark-judge';
+import { REASONING_EFFORTS, type ReasoningEffort, type Repo } from '@recoder/shared';
 import {
 	printBenchmark,
+	readReport,
 	reviewerManifest,
 	type BenchmarkReport,
-	type JudgeModel,
 	type PrResult,
 	type ScoredRun
 } from './benchmark-report';
@@ -23,18 +17,18 @@ import {
 	writeAdjudications,
 	type Adjudications
 } from './benchmark-labels';
-import { lowsOfRun } from './benchmark-lows';
-import { summarize, type LabeledDefect, type PrScore } from './benchmark-score';
-import { judgeStages, type PoolCandidate } from './benchmark-stages';
+import { judgeModel, rescoredRecords, scoreRun, type Judge } from './benchmark-scoring';
+import { summarize, type LabeledDefect } from './benchmark-score';
+import { resolvePlan } from './auto-plan';
 import { parseEvalArgs, type RunOptions } from './cli';
 import { stabilityMetrics } from './metrics';
-import { getCandidates, getSettings, replayReview, resolveRepo } from './client';
-import type { EvalFinding } from './metrics';
-import { writeEvalFile, type RunRecord } from './report';
-import { runReview, stopOnInterrupt, toEvalFinding } from './run-review';
+import { getSettings, replayReview, resolveRepo } from './client';
+import { captureTree, sameTree, type TreeState } from './harness-tree';
+import { writeEvalFile } from './report';
+import { runReview, stopOnInterrupt } from './run-review';
 
 const USAGE =
-	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--runs 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
+	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--mode auto --since <report.json>] [--runs 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
 
 /** One synthetic PR's label file, as the dataset's assemble step writes it. */
 interface PrLabel {
@@ -65,17 +59,9 @@ interface Options extends RunOptions {
 	 * reviewers, keeping their verdicts or, with `reverify`, verifying again.
 	 */
 	replay: { report: string; reverify: boolean } | null;
+	/** `--mode auto --since`: the saved report to pick the cheapest covering mode against. */
+	auto: { since: string } | null;
 }
-
-/** The judge model's chat, and the model it names for the report and the verdict cache. */
-interface Judge {
-	chat: JudgeChat;
-	model: JudgeModel;
-}
-
-/** A fixed seed so a rerun of the judge on the same findings agrees with itself. */
-const JUDGE_SEED = 7;
-const JUDGE_TIMEOUT_MS = 5 * 60_000;
 
 function parseOptions(): Options {
 	const { values, run, fail } = parseEvalArgs(
@@ -87,7 +73,9 @@ function parseOptions(): Options {
 			'judge-effort': { type: 'string' },
 			resume: { type: 'string' },
 			replay: { type: 'string' },
-			reverify: { type: 'string' }
+			reverify: { type: 'string' },
+			mode: { type: 'string' },
+			since: { type: 'string' }
 		},
 		{ runs: '1', concurrency: '3', timeout: '45' }
 	);
@@ -106,6 +94,11 @@ function parseOptions(): Options {
 	if (values.replay && values.reverify)
 		return fail('--replay and --reverify each take the report to replay; pass one.');
 	if (replayed && values.resume) return fail('--resume continues a benchmark; it does not combine with a replay.');
+	if (values.mode && values.mode !== 'auto') return fail('--mode is only auto.');
+	if (values.mode && !values.since) return fail('--mode auto needs --since <report.json>.');
+	if (values.since && !values.mode) return fail('--since goes with --mode auto.');
+	if (values.mode && values.resume)
+		return fail('--resume continues a benchmark; it does not combine with --mode auto.');
 
 	return {
 		dataset: resolve(values.dataset),
@@ -114,6 +107,7 @@ function parseOptions(): Options {
 		judgeEffort,
 		resume: values.resume ? resolve(values.resume) : null,
 		replay: replayed ? { report: resolve(replayed), reverify: !values.replay } : null,
+		auto: values.mode && values.since ? { since: resolve(values.since) } : null,
 		...run
 	};
 }
@@ -132,136 +126,12 @@ function readLabels(options: Options): PrLabel[] {
 	return labels;
 }
 
-/**
- * The judge as a chat function, plus the model it names for the report. Only
- * the connection fields go to the call; the config itself, which holds the
- * API key, is never logged or written.
- */
-function judgeModel(choice: string, effort: ReasoningEffort | undefined): Judge {
-	initReviewSettings();
-
-	const config =
-		choice === 'review'
-			? configForOrchestrator()
-			: choice === 'second'
-				? configForSubagent()
-				: configForModel(choice, effort);
-
-	const chat: JudgeChat = (system, user) =>
-		chatCompletion({
-			provider: config.provider,
-			baseUrl: config.baseUrl,
-			apiKey: config.apiKey,
-			model: config.model,
-			reasoningEffort: config.reasoningEffort,
-			messages: [
-				{ role: 'system', content: system },
-				{ role: 'user', content: user }
-			],
-			jsonMode: true,
-			temperature: 0,
-			seed: JUDGE_SEED,
-			timeoutMs: JUDGE_TIMEOUT_MS
-		});
-
-	return {
-		chat,
-		model: {
-			model: config.model,
-			provider: config.provider ?? 'openai-compatible',
-			effort: config.reasoningEffort ?? null
-		}
-	};
-}
-
-function readReport(path: string): BenchmarkReport {
-	return JSON.parse(readFileSync(path, 'utf8')) as BenchmarkReport;
-}
-
 /** Each forge repo once, since several PRs share one. */
 async function resolveRepos(base: string, labels: PrLabel[]): Promise<Map<string, Repo>> {
 	const urls = [...new Set(labels.map((label) => label.repo))];
 	const repos = await Promise.all(urls.map((url) => resolveRepo(base, url)));
 
 	return new Map(urls.map((url, index) => [url, repos[index]!]));
-}
-
-/**
- * The judge's score for these findings, reused when the same model already
- * judged the same findings against the same defects, so a rerun that finds
- * the same things costs no judge call.
- */
-async function cachedJudgement(
-	judge: Judge,
-	defects: readonly LabeledDefect[],
-	findings: readonly EvalFinding[]
-): Promise<PrScore> {
-	const key = JSON.stringify([JUDGE_VERSION, judge.model, defects, findings]);
-	const cached = readCache<PrScore>('benchmark-judge', key);
-
-	if (cached) return cached;
-
-	const score = await judgePr(judge.chat, defects, findings);
-
-	writeCache('benchmark-judge', key, score);
-
-	return score;
-}
-
-/** A review's candidates as the eval keeps them. */
-function candidatePool(candidates: readonly (Finding & CandidateOutcome)[]): PoolCandidate[] {
-	return candidates.map((candidate) => ({
-		...toEvalFinding(candidate),
-		stage: candidate.stage,
-		reason: candidate.reason,
-		verified: candidate.verified
-	}));
-}
-
-/**
- * How far each planted defect got, judged over the run's candidates, and how
- * the judge scored the shown findings that were below the reporting bar. A
- * judge failure here leaves the stages out and keeps the run's score.
- */
-async function scoreStages(judge: Judge, label: PrLabel, run: RunRecord, score: PrScore, base: string) {
-	const candidates = await getCandidates(base, run.reviewId);
-
-	if (!candidates) return {};
-
-	const pool = candidatePool(candidates);
-	const lows = run.findingIds ? { lows: lowsOfRun(run.findingIds, candidates, score) } : {};
-
-	try {
-		const stages = await judgeStages(label.defects, pool, score, (findings) =>
-			cachedJudgement(judge, label.defects, findings)
-		);
-
-		return { pool, stages, ...lows };
-	} catch (error) {
-		console.error(`${label.id} stage judge failed: ${error instanceof Error ? error.message : String(error)}`);
-
-		return { pool, ...lows };
-	}
-}
-
-/** Judges a passed run; a judge failure leaves the run unscored instead of sinking the benchmark. */
-async function scoreRun(judge: Judge, label: PrLabel, run: RunRecord, base: string): Promise<ScoredRun> {
-	if (run.outcome !== 'passed') return { ...run, score: null };
-
-	try {
-		const [score, hiddenScore] = await Promise.all([
-			cachedJudgement(judge, label.defects, run.findings),
-			run.unconfirmed ? cachedJudgement(judge, label.defects, run.unconfirmed) : null
-		]);
-
-		return { ...run, score, hiddenScore, ...(await scoreStages(judge, label, run, score, base)) };
-	} catch (error) {
-		const judgeError = error instanceof Error ? error.message : String(error);
-
-		console.error(`${label.id} judge failed: ${judgeError}`);
-
-		return { ...run, score: null, judgeError };
-	}
 }
 
 /**
@@ -389,20 +259,46 @@ function prResult(label: PrLabel, records: ScoredRun[]): PrResult {
 	};
 }
 
+/** The harness record for a new report: where its reviewers ran is the report their output came from, or this tree for a run that starts them. */
+function harnessRecord(tree: TreeState | null, origin: BenchmarkReport | null, resumed: BenchmarkReport | null) {
+	if (!tree) return undefined;
+	if (origin) return { tree, reviewers: origin.harness?.reviewers ?? null };
+
+	return { tree, reviewers: !resumed || sameTree(resumed.harness?.reviewers, tree) ? tree : null };
+}
+
 async function main(): Promise<void> {
-	const options = parseOptions();
-	const labels = readLabels(options);
+	const requested = parseOptions();
+	const tree = captureTree(import.meta.dir);
+	const plan = resolvePlan(requested, tree, import.meta.dir);
+
+	const options = {
+		...requested,
+		replay: plan.replay,
+		runs: plan.origin && plan.rescore ? plan.origin.runsPerPr : requested.runs
+	};
+
+	const all = readLabels(options);
+	const labels = plan.rescore ? all.filter((label) => plan.origin?.prs.some((pr) => pr.id === label.id)) : all;
 	const judge = judgeModel(options.judge, options.judgeEffort);
-	const repos = await resolveRepos(options.base, labels);
-	const reviewer = reviewerManifest(await getSettings(options.base));
+	const repos = plan.rescore ? new Map<string, Repo>() : await resolveRepos(options.base, labels);
+	const current = reviewerManifest(await getSettings(options.base));
 	const resumed = options.resume ? readReport(options.resume) : null;
+	const reviewer = plan.rescore ? (plan.origin?.reviewer ?? current) : current;
 	const startedAt = resumed?.startedAt ?? new Date().toISOString();
-	const initial = resumed ? resumedRecords(resumed, labels) : labels.map(() => []);
+
+	const initial = plan.rescore
+		? await rescoredRecords(plan.origin!, labels, judge, options.base)
+		: resumed
+			? resumedRecords(resumed, labels)
+			: labels.map(() => []);
 
 	stopOnInterrupt(options.base);
 
+	const verb = plan.rescore ? 'Rescoring' : options.replay ? 'Replaying' : 'Benchmarking';
+
 	console.log(
-		`${options.replay ? 'Replaying' : 'Benchmarking'} ${labels.length} PRs × ${options.runs} runs, ${options.concurrency} at once, against ${options.base}; judge ${judge.model.model}`
+		`${verb} ${labels.length} PRs × ${options.runs} runs, ${options.concurrency} at once, against ${options.base}; judge ${judge.model.model}`
 	);
 
 	const adjudicationFile = adjudicationPath(options.dataset);
@@ -420,6 +316,7 @@ async function main(): Promise<void> {
 			runsPerPr: options.runs,
 			judge: judge.model,
 			reviewer,
+			harness: harnessRecord(tree, plan.origin, resumed),
 			startedAt,
 			finishedAt: new Date().toISOString(),
 			prs,
@@ -444,7 +341,7 @@ async function main(): Promise<void> {
 
 	console.log(`Report: ${save(report(initial))}`);
 
-	const replays = options.replay ? replayedReviews(readReport(options.replay.report), labels) : null;
+	const replays = plan.rescore ? labels.map(() => []) : options.replay ? replayedReviews(plan.origin!, labels) : null;
 
 	const final = report(
 		await runAll(options, labels, repos, judge, initial, replays, (records) => save(report(records)))

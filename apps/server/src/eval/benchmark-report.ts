@@ -1,9 +1,11 @@
+import { readFileSync } from 'node:fs';
 import type { ModelSettings, ReviewFunnel, SubagentCap } from '@recoder/shared';
 import { recall, type BenchmarkSummary, type LabeledDefect, type PrScore, type Totals } from './benchmark-score';
 import { labelLines, percent } from './benchmark-labels-report';
 import { countClasses, type LabeledRun } from './benchmark-labels';
 import type { LowTotals } from './benchmark-lows';
 import type { DefectStage, PoolCandidate, StageTotals } from './benchmark-stages';
+import type { HarnessRecord } from './harness-tree';
 import type { ConsistencyMetrics } from './metrics';
 import type { RunRecord } from './report';
 
@@ -81,10 +83,17 @@ export interface BenchmarkReport {
 	judge: JudgeModel;
 	/** Absent from reports older than recording it. */
 	reviewer?: ReviewerManifest;
+	/** The harness code the report was made with; absent from reports older than recording it. */
+	harness?: HarnessRecord;
 	startedAt: string;
 	finishedAt: string;
 	prs: PrResult[];
 	summary: BenchmarkSummary;
+}
+
+/** A saved benchmark report. */
+export function readReport(path: string): BenchmarkReport {
+	return JSON.parse(readFileSync(path, 'utf8')) as BenchmarkReport;
 }
 
 const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
