@@ -93,7 +93,7 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 
 	const detectors = detectorStage(run);
 	let closed = false;
-	const diagnostics = checks().then(() => (closed ? undefined : diagnosticStage(run, () => closed)));
+	const diagnostics = checks().then(() => (closed ? undefined : diagnosticStage(run, () => closed, detectors)));
 
 	const finishedAtStart = finishedIds(run);
 

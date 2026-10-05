@@ -57,6 +57,14 @@ describe('single-file commands', () => {
 		expect(commandFor('lib/a b.test.ts')).toBeNull();
 	});
 
+	test('follows a test script that only runs another script', () => {
+		const scripts = ['docs: test → bun run test:ci', 'docs: test:ci → vitest run --project unit'];
+
+		const commandFor = singleFileCommands(scripts, ['cd docs && bun run test']);
+
+		expect(commandFor('docs/a.test.ts')).toBe('cd docs && bunx vitest run --project unit a.test.ts');
+	});
+
 	test('keeps the test marker on the old copy and cleans it up', () => {
 		const path = oldCopyPath('src/a.test.ts');
 

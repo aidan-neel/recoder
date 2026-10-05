@@ -8,8 +8,11 @@ export function oldCopyPath(path: string): string {
 	return path.replace(/(\.(?:test|spec))?(\.[^./]+)$/, '.recoder-old$1$2');
 }
 
-/** `dir: test → command`, a line of the workspace's script listing. */
-const TEST_SCRIPT = /^(.+?): test → (.*)$/;
+/** `dir: name → command`, a line of the workspace's script listing. */
+const SCRIPT_LINE = /^(.+?): ([\w:.-]+) → (.*)$/;
+
+/** A step that only runs another script of the package. */
+const SCRIPT_STEP = /^(?:bun|pnpm|npm|yarn) run ([\w:.-]+)$/;
 
 /** The package manager a baseline command ran with. */
 const TOOL = /(?:^|&& )(bun|pnpm|yarn|npm) run /;
@@ -21,11 +24,19 @@ const FILE_RUNNER = /^(?:ava|vitest|vp test|jest|bun test)\b/;
 const EXEC = { npm: 'npx', pnpm: 'pnpm exec', yarn: 'yarn', bun: 'bunx' } as const;
 
 /** The nearest package dir above a path that has a test script. */
-function owningScript(scripts: Map<string, string>, path: string): { dir: string; script: string } | null {
+function owningScript(scripts: Map<string, Map<string, string>>, path: string): { dir: string; script: string } | null {
 	const dirs = [...scripts.keys()].filter((dir) => dir === '.' || path.startsWith(`${dir}/`));
-	const dir = dirs.sort((a, b) => b.length - a.length)[0];
+	const dir = dirs.filter((candidate) => scripts.get(candidate)!.has('test')).sort((a, b) => b.length - a.length)[0];
 
-	return dir === undefined ? null : { dir, script: scripts.get(dir)! };
+	return dir === undefined ? null : { dir, script: lastStep(scripts.get(dir)!, 'test') };
+}
+
+/** The last `&&` step of a script, following a step that only runs another script. */
+function lastStep(named: Map<string, string>, name: string, depth = 0): string {
+	const step = (named.get(name) ?? '').split('&&').pop()!.trim();
+	const next = SCRIPT_STEP.exec(step)?.[1];
+
+	return next && depth < 3 && named.has(next) ? lastStep(named, next, depth + 1) : step;
 }
 
 /**
@@ -36,12 +47,12 @@ function owningScript(scripts: Map<string, string>, path: string): { dir: string
  * path that is not plain.
  */
 export function singleFileCommands(scriptLines: readonly string[], baselineCommands: readonly string[]) {
-	const scripts = new Map<string, string>();
+	const scripts = new Map<string, Map<string, string>>();
 
 	for (const line of scriptLines) {
-		const match = TEST_SCRIPT.exec(line);
+		const match = SCRIPT_LINE.exec(line);
 
-		if (match) scripts.set(match[1]!, match[2]!);
+		if (match) scripts.set(match[1]!, (scripts.get(match[1]!) ?? new Map()).set(match[2]!, match[3]!));
 	}
 
 	const tool = baselineCommands.map((command) => TOOL.exec(command)?.[1]).find(Boolean) as
@@ -52,7 +63,7 @@ export function singleFileCommands(scriptLines: readonly string[], baselineComma
 
 		if (!owner || (owner.dir !== '.' && !PLAIN_PATH.test(owner.dir))) return null;
 
-		const step = owner.script.split('&&').pop()!.trim();
+		const step = owner.script;
 
 		if (!FILE_RUNNER.test(step)) return null;
 

@@ -328,9 +328,10 @@ export async function testMatrix(input: {
 		session.counts.sanityPassed++;
 
 		const found =
+			(await firstProven(session, file, mine, candidates, command)) ??
 			(edited && oldCommand && candidates.length
 				? await oldNewRow({ session, file, sources: candidates, commands: { head: command, old: oldCommand }, added })
-				: null) ?? (await firstProven(session, file, mine, candidates, command));
+				: null);
 
 		if (found) results.push(found);
 	}

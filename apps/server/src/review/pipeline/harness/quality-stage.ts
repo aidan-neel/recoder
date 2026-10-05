@@ -79,7 +79,7 @@ export async function detectorStage(run: ReviewRun): Promise<void> {
  * running the stage and closing the review without the two interleaving. The
  * type hints follow, and are dropped when the review closed meanwhile.
  */
-export async function diagnosticStage(run: ReviewRun, closed: () => boolean): Promise<void> {
+export async function diagnosticStage(run: ReviewRun, closed: () => boolean, detectors: Promise<void>): Promise<void> {
 	if (run.controller.signal.aborted) return;
 
 	try {
@@ -97,6 +97,10 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean): Pr
 	} catch (err) {
 		run.events?.onLog?.(`Type hints skipped: ${errorText(err)}`);
 	}
+
+	await detectors;
+
+	if (closed() || run.controller.signal.aborted) return;
 
 	run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'running', 'Running the changed tests against mutants', {
 		kind: 'checks'
