@@ -3,15 +3,15 @@ import { testBlocks } from '../detectors/test-source.js';
 import { EDITS_BY_SHAPE, mutantsAt, swapErrorClass, type Edit, type Mutant } from './mutants.js';
 
 /** What a suspicion says about the weak assertion, which picks the mutation. */
-export type Shape = 'broadError' | 'lowerBound' | 'someForEvery' | 'presence' | 'generic';
+type Shape = 'broadError' | 'lowerBound' | 'someForEvery' | 'presence' | 'generic';
 
 /** Mutants tried per suspicion, at most. */
-export const MAX_AIMED = 3;
+const MAX_AIMED = 3;
 
 const ERROR_CLASS = /\b[A-Z]\w*(?:Error|Exception)\b/g;
 
 /** The shape of a detector's suspicion, from the words of its title and body. */
-export function shapeOf(result: DetectorResult): Shape {
+function shapeOf(result: DetectorResult): Shape {
 	const text = `${result.title} ${result.body}`;
 
 	if (/accepts any|broader error|never checks which error|error type/i.test(text)) return 'broadError';
@@ -26,7 +26,7 @@ export function shapeOf(result: DetectorResult): Shape {
  * Names the weak test mentions: error classes, called functions and the words
  * of its assertions. Source lines that hold them are the ones the test is about.
  */
-export function termsOf(head: string, line: number): string[] {
+function termsOf(head: string, line: number): string[] {
 	const block = [...testBlocks(head).values()].find((test) => test.startLine <= line && line <= test.endLine);
 
 	if (!block) return [];

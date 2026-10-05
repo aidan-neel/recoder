@@ -17,17 +17,14 @@ export const MATRIX_BUDGET_MS = 2 * 60_000;
 const MAX_OLD_NEW_MUTANTS = 6;
 
 /** Why the matrix did not run or prove something, fixed so an eval can count them. */
-export const SKIP_REASONS = [
-	'no-suspicion',
-	'no-sandbox',
-	'no-single-file-command',
-	'sanity-failed',
-	'no-aimed-mutant',
-	'unreachable',
-	'budget'
-] as const;
-
-export type SkipReason = (typeof SKIP_REASONS)[number];
+export type SkipReason =
+	| 'no-suspicion'
+	| 'no-sandbox'
+	| 'no-single-file-command'
+	| 'sanity-failed'
+	| 'no-aimed-mutant'
+	| 'unreachable'
+	| 'budget';
 
 /** What one review's matrix did, for its task row and the benchmark report. */
 export interface MatrixCounts {

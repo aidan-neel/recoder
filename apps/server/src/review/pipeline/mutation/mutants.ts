@@ -102,7 +102,7 @@ export function swapErrorClass(broad: string): Edit {
 }
 
 /** A literal raised by one, the direction a lower-bound assertion cannot see. */
-export const raiseLiteral: Edit = nudgeLiteral;
+const raiseLiteral: Edit = nudgeLiteral;
 
 /** The mutants one set of edits makes of the given lines, one per line, in line order. */
 export function mutantsAt(file: string, head: string, lines: readonly number[], edits: readonly Edit[]): Mutant[] {
