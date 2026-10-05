@@ -10,7 +10,8 @@ export type DetectorId =
 	| 'complexity'
 	| 'rule-check'
 	| 'weakened-tests'
-	| 'weak-new-tests';
+	| 'weak-new-tests'
+	| 'mutation';
 
 /**
  * A tool's diagnostic as a record. The head has it by construction, since the

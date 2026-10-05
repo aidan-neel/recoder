@@ -1,5 +1,6 @@
 import { buildRuleLedger } from '../../guidelines/ledger/ledger.js';
 import { runDetectors, runDiagnostics, runTypeHints } from '../detectors/detectors.js';
+import { runMatrix } from '../mutation/stage.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { publishBudget, type ReviewRun } from './context.js';
 import { addDetections } from './verification.js';
@@ -94,5 +95,13 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean): Pr
 		report(run, runTypeHints(run));
 	} catch (err) {
 		run.events?.onLog?.(`Type hints skipped: ${errorText(err)}`);
+	}
+
+	try {
+		const found = await runMatrix(run);
+
+		if (!closed() && !run.controller.signal.aborted) report(run, found);
+	} catch (err) {
+		run.events?.onLog?.(`Test matrix skipped: ${errorText(err)}`);
 	}
 }
