@@ -1,32 +1,8 @@
 import { lstat, mkdir, realpath, rm, symlink } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
 import { git } from '../evidence/git.js';
+import { MANIFESTS, packageDirs } from './install-inputs.js';
 import type { SandboxLayout } from './sandbox-layout.js';
-
-/**
- * Files that decide which dependencies get installed. The merge-base tree
- * borrows the head checkout's installed dependencies only when none of them
- * differ between the two commits; a `package.json` counts only by its
- * dependency fields.
- */
-const MANIFESTS = [
-	'package.json',
-	'bun.lock',
-	'bun.lockb',
-	'pnpm-lock.yaml',
-	'pnpm-workspace.yaml',
-	'yarn.lock',
-	'.yarnrc.yml',
-	'package-lock.json',
-	'pyproject.toml',
-	'requirements.txt',
-	'uv.lock',
-	'poetry.lock',
-	'go.mod',
-	'go.sum',
-	'Cargo.toml',
-	'Cargo.lock'
-];
 
 /** The `package.json` fields that decide what gets installed; a change to any other field keeps the same dependencies. */
 const DEPENDENCY_FIELDS = [
@@ -43,12 +19,6 @@ const DEPENDENCY_FIELDS = [
 
 /** Installed-dependency folders the head checkout holds that the merge-base tree links to rather than reinstalls. */
 const INSTALLED = ['node_modules', '.venv'];
-
-/** Package folders linked at most, and how deep, so a huge monorepo stays cheap. */
-const MAX_PACKAGE_DIRS = 40;
-
-/** Folders never searched for packages. */
-const VENDORED = /(?:^|\/)(?:node_modules|vendor|dist|build|fixtures?)\//;
 
 /**
  * A copy of the merge-base commit for running a command where the change had
@@ -175,13 +145,7 @@ export class BaseTree {
 	private async linkInstalled(signal?: AbortSignal): Promise<void> {
 		const listed = await git(this.layout.checkout, ['ls-tree', '-r', '--name-only', this.baseSha], signal);
 
-		const dirs = listed.stdout
-			.split('\n')
-			.filter((path) => /(^|\/)package\.json$/.test(path) && !VENDORED.test(path))
-			.map((path) => dirname(path))
-			.concat('.')
-			.filter((dir, at, all) => all.indexOf(dir) === at)
-			.slice(0, MAX_PACKAGE_DIRS);
+		const dirs = packageDirs(listed.stdout);
 
 		const base = await realpath(this.root);
 

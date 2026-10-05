@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, realpathSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { admitCommand, hostPriorityPrefix, resolveTier, type SandboxTier } from './host-load.js';
+import { overlayArgv, prepareOverlays } from './overlay.js';
 import { inside, type SandboxLayout } from './sandbox-layout.js';
 
 export { sandboxLayout, type SandboxLayout } from './sandbox-layout.js';
@@ -46,6 +47,7 @@ function resolvConfTarget(): string | null {
 function bwrapArgs(layout: SandboxLayout, command: string, opts: { network?: boolean } = {}): string[] {
 	const args = ['--die-with-parent', '--new-session', '--unshare-all'];
 
+	if (layout.overlays.length) args.push('--uid', String(process.getuid!()), '--gid', String(process.getgid!()));
 	if (opts.network) args.push('--share-net');
 	args.push('--ro-bind', '/', '/', '--dev', '/dev', '--proc', '/proc', '--tmpfs', '/tmp', '--dir', '/tmp/home');
 
@@ -278,7 +280,12 @@ function collect(stream: ReadableStream<Uint8Array>): { done: Promise<void>; sto
 
 /** The argv that runs `command` inside bubblewrap (at low priority), or Seatbelt on macOS. */
 function sandboxArgv(layout: SandboxLayout, command: string, network: boolean | undefined, darwin: boolean): string[] {
-	if (!darwin) return [...hostPriorityPrefix(), 'bwrap', ...bwrapArgs(layout, command, { network })];
+	if (!darwin) {
+		return [
+			...hostPriorityPrefix(),
+			...overlayArgv(['bwrap', ...bwrapArgs(layout, command, { network })], layout.overlays)
+		];
+	}
 
 	return [
 		'sandbox-exec',
@@ -366,6 +373,7 @@ async function execute(
 	outputChars: number
 ): Promise<RunResult> {
 	mkdirSync(layout.cacheDir, { recursive: true });
+	prepareOverlays(layout.overlays);
 	if (!statSync(layout.checkout).isDirectory()) throw new Error('review checkout is missing');
 
 	const darwin = process.platform === 'darwin';

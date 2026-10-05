@@ -1,4 +1,4 @@
-import type { SetupReport } from '../../../sandbox/exec-workspace.js';
+import type { SetupReport } from '../../../sandbox/workspace-setup.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 
 /** The type check and lint scripts, in the order they run; the first type check found wins. */

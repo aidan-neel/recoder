@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { SetupReport } from '../../../src/sandbox/exec-workspace';
+import type { SetupReport } from '../../../src/sandbox/workspace-setup';
 import { pickBaselineChecks, pickPatchChecks } from '../../../src/review/pipeline/harness/baseline-checks';
 
 const BUN: SetupReport = {

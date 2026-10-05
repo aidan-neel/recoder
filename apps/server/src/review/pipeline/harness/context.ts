@@ -3,6 +3,7 @@ import { EvidenceStore } from '../../../evidence/evidence.js';
 import { configForOrchestrator, reviewLimits, type ModelConfig } from '../../../models/models.js';
 import { execUnavailableReason } from '../../../sandbox/exec-sandbox.js';
 import { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
+import { scopeOfCheckout } from '../../../sandbox/shared-install.js';
 import type { ReviewDirective } from '../../chat/directive.js';
 import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY, scaledReviewLimits } from '../../session/review-policy.js';
@@ -170,7 +171,17 @@ export async function openWorkspace(run: ReviewRun): Promise<void> {
 		? 'Running code needs a local checkout of the pull request.'
 		: await execUnavailableReason();
 
-	run.workspace = revision && !run.execReason ? new ExecWorkspace(revision.checkoutPath, revision.headSha) : null;
+	const scope = revision ? scopeOfCheckout(revision.checkoutPath) : null;
+
+	run.workspace =
+		revision && !run.execReason
+			? new ExecWorkspace(
+					revision.checkoutPath,
+					revision.headSha,
+					undefined,
+					scope ? { scope, baseSha: revision.mergeBaseSha } : undefined
+				)
+			: null;
 
 	if (run.workspace) {
 		syncWorkspaceDeadline(run);
