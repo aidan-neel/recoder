@@ -93,13 +93,13 @@ export function scoreVerdicts(raw: unknown, defects: readonly LabeledDefect[], f
 	};
 }
 
-/** Asks the judge which findings report which planted defects. */
+/** Asks the judge which findings report which planted defects; with no defect to match it makes no call. */
 export async function judgePr(
 	chat: JudgeChat,
 	defects: readonly LabeledDefect[],
 	findings: readonly EvalFinding[]
 ): Promise<PrScore> {
-	if (!findings.length) return scoreVerdicts({ matches: [] }, defects, 0);
+	if (!findings.length || !defects.length) return scoreVerdicts({ matches: [] }, defects, findings.length);
 
 	const reply = await chat(SYSTEM, judgePrompt(defects, findings));
 

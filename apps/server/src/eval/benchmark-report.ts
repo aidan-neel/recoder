@@ -1,12 +1,7 @@
 import type { ModelSettings, ReviewFunnel, SubagentCap } from '@recoder/shared';
-import {
-	precision,
-	recall,
-	type BenchmarkSummary,
-	type LabeledDefect,
-	type PrScore,
-	type Totals
-} from './benchmark-score';
+import { recall, type BenchmarkSummary, type LabeledDefect, type PrScore, type Totals } from './benchmark-score';
+import { labelLines, percent } from './benchmark-labels-report';
+import { countClasses, type LabeledRun } from './benchmark-labels';
 import type { LowTotals } from './benchmark-lows';
 import type { DefectStage, PoolCandidate, StageTotals } from './benchmark-stages';
 import type { ConsistencyMetrics } from './metrics';
@@ -19,6 +14,8 @@ export interface PrResult {
 	pull: number;
 	verified: boolean;
 	defects: LabeledDefect[];
+	/** No planted defect: the PR only measures what a review publishes wrongly. */
+	control: boolean;
 	/** A run reviewed a different head than the labels describe, so its line numbers may not match. */
 	staleHead: boolean;
 	/** How much the passed runs' findings agree, by fingerprint and by file, category and symbol; null under two passed runs. */
@@ -40,6 +37,8 @@ export type ScoredRun = RunRecord & {
 	stages?: Record<string, DefectStage>;
 	/** The run's shown findings that were below the reporting bar, by why each was published; absent with `pool`. */
 	lows?: LowTotals;
+	/** What each of the run's findings is, by the dataset's adjudications at the time of the report. */
+	labeled?: LabeledRun;
 	judgeError?: string;
 };
 
@@ -88,8 +87,6 @@ export interface BenchmarkReport {
 	summary: BenchmarkSummary;
 }
 
-const percent = (value: number) => `${(value * 100).toFixed(0)}%`.padStart(4);
-
 const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / values.length;
 
 /** Mean over PRs of how alike their runs' finding sets are; nothing with one run a PR. */
@@ -104,12 +101,8 @@ function agreementLines(prs: PrResult[]): string[] {
 	return ['', 'Findings across runs', line('by fingerprint', 'strict'), line('by file+category', 'loose')];
 }
 
-function totalsLine(label: string, totals: Totals, withPrecision: boolean): string {
-	const precise = withPrecision
-		? ` · labeled precision ${percent(precision(totals))} (${totals.unlabeled} unlabeled)`
-		: '';
-
-	return `  ${label.padEnd(18)} recall ${percent(recall(totals))} (${totals.found}/${totals.planted})${precise}`;
+function totalsLine(label: string, totals: Totals): string {
+	return `  ${label.padEnd(18)} recall ${percent(recall(totals))} (${totals.found}/${totals.planted})`;
 }
 
 /** How many hidden candidates reported a planted defect, and how many of those the shown findings missed. */
@@ -209,10 +202,10 @@ function reviewerLine(reviewer: ReviewerManifest | undefined): string[] {
 	];
 }
 
-function groupLines(title: string, groups: Record<string, Totals>, withPrecision: boolean): string[] {
+function groupLines(title: string, groups: Record<string, Totals>): string[] {
 	const keys = Object.keys(groups).sort();
 
-	return ['', title, ...keys.map((key) => totalsLine(key, groups[key]!, withPrecision))];
+	return ['', title, ...keys.map((key) => totalsLine(key, groups[key]!))];
 }
 
 /** "4·3·2": defects found, verified and published in one run. */
@@ -228,16 +221,29 @@ function stageCounts(stages: Record<string, DefectStage>): string {
 		.join('·');
 }
 
+/** "2/5": findings adjudicated false, over findings still unresolved. */
+function noiseOf(labeled: LabeledRun | undefined): string {
+	if (!labeled) return '-';
+
+	const counts = countClasses(labeled.classes);
+
+	return `${counts.false}/${counts.unresolved}`;
+}
+
 function prLine(pr: PrResult): string {
 	const scored = pr.runs.filter((run) => run.score);
-	const found = scored.map((run) => `${Object.keys(run.score!.found).length}/${pr.defects.length}`).join(' ');
-	const unlabeled = scored.map((run) => run.score!.unlabeled.length).join(' ');
+
+	const found = pr.control
+		? 'control'
+		: scored.map((run) => `${Object.keys(run.score!.found).length}/${pr.defects.length}`).join(' ');
+
+	const noise = scored.map((run) => noiseOf(run.labeled)).join(' ');
 	const staged = scored.flatMap((run) => (run.stages ? [stageCounts(run.stages)] : [])).join(' ');
 	const failed = pr.runs.filter((run) => !run.score).map((run) => (run.judgeError ? 'judge failed' : run.outcome));
 	const flags = [pr.verified ? '' : 'unverified', pr.staleHead ? 'STALE HEAD' : '', ...failed].filter(Boolean);
 	const agree = pr.agreement ? `agree ${percent(pr.agreement.strict.meanJaccard)}` : '';
 
-	return `  ${pr.id.padEnd(10)} #${String(pr.pull).padEnd(5)} ${agree.padEnd(10)} found ${found.padEnd(12)} unlabeled ${unlabeled.padEnd(8)} stages ${staged.padEnd(8)} ${flags.join(', ')}`;
+	return `  ${pr.id.padEnd(10)} #${String(pr.pull).padEnd(5)} ${agree.padEnd(10)} found ${found.padEnd(12)} false/? ${noise.padEnd(8)} stages ${staged.padEnd(8)} ${flags.join(', ')}`;
 }
 
 /** Defects some run missed, with how many runs found them, to read against the review's findings. */
@@ -271,22 +277,23 @@ export function printBenchmark(report: BenchmarkReport): void {
 			`Benchmark ${report.dataset}: ${report.prs.length} PRs × ${report.runsPerPr} runs`,
 			`Judge ${report.judge.model} (${report.judge.provider}${report.judge.effort ? `, ${report.judge.effort}` : ''})`,
 			...reviewerLine(report.reviewer),
-			'Labeled precision is a lower bound: an unlabeled finding may be a real issue that was not planted.',
+			'Precision is an interval: unresolved findings are not counted wrong until a human labels them in adjudications.json.',
 			'',
 			'PRs',
 			...report.prs.map(prLine),
 			'',
 			'Overall',
-			totalsLine('all', summary.overall, true),
+			totalsLine('all', summary.overall),
 			...stability,
 			...agreementLines(report.prs),
+			...labelLines(summary.labels),
 			...hiddenLines(summary.hidden),
 			...stageLines(summary.stages),
 			...lowLines(summary.lows),
 			...funnelLines(report.prs),
-			...groupLines('By codebase', summary.byCodebase, true),
-			...groupLines('By kind', summary.byKind, false),
-			...groupLines('By category', summary.byCategory, false),
+			...groupLines('By codebase', summary.byCodebase),
+			...groupLines('By kind', summary.byKind),
+			...groupLines('By category', summary.byCategory),
 			...missedLines(report.prs),
 			...stoppedLines(report.prs)
 		].join('\n')

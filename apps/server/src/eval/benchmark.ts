@@ -15,6 +15,14 @@ import {
 	type PrResult,
 	type ScoredRun
 } from './benchmark-report';
+import {
+	adjudicationPath,
+	labelRun,
+	queueUnresolved,
+	readAdjudications,
+	writeAdjudications,
+	type Adjudications
+} from './benchmark-labels';
 import { lowsOfRun } from './benchmark-lows';
 import { summarize, type LabeledDefect, type PrScore } from './benchmark-score';
 import { judgeStages, type PoolCandidate } from './benchmark-stages';
@@ -340,6 +348,28 @@ async function runAll(
 	return records;
 }
 
+/**
+ * Gives each passed run's findings their class from the dataset's current
+ * adjudications, so a label entered once applies to every run that has the
+ * finding, resumed ones included. Findings with no human label are queued in
+ * the adjudication file as unresolved.
+ */
+function labelRuns(label: PrLabel, runs: ScoredRun[], adjudications: Adjudications): { queued: boolean } {
+	let queued = false;
+
+	for (const run of runs) {
+		if (!run.score) continue;
+
+		run.labeled = labelRun(label.id, { ...run, score: run.score }, adjudications);
+		queued = queueUnresolved(adjudications, run.findings, run.labeled) || queued;
+
+		if (run.labeled.hidden && run.unconfirmed)
+			queued = queueUnresolved(adjudications, run.unconfirmed, run.labeled.hidden) || queued;
+	}
+
+	return { queued };
+}
+
 /** A PR's finished runs so far; runs still going leave holes, which `filter` skips. */
 function prResult(label: PrLabel, records: ScoredRun[]): PrResult {
 	const runs = records.filter(Boolean);
@@ -351,6 +381,7 @@ function prResult(label: PrLabel, records: ScoredRun[]): PrResult {
 		codebase: label.codebase,
 		pull: label.pull,
 		verified: label.verified,
+		control: label.defects.length === 0,
 		defects: label.defects,
 		staleHead: runs.some((run) => run.headSha !== 'unknown' && run.headSha !== label.headSha),
 		agreement: stability && { strict: stability.strict, loose: stability.loose },
@@ -374,8 +405,14 @@ async function main(): Promise<void> {
 		`${options.replay ? 'Replaying' : 'Benchmarking'} ${labels.length} PRs × ${options.runs} runs, ${options.concurrency} at once, against ${options.base}; judge ${judge.model.model}`
 	);
 
+	const adjudicationFile = adjudicationPath(options.dataset);
+	const adjudications = readAdjudications(adjudicationFile);
+
 	const report = (records: ScoredRun[][]): BenchmarkReport => {
 		const prs = labels.map((label, index) => prResult(label, records[index]!));
+		const queued = prs.map((pr, index) => labelRuns(labels[index]!, pr.runs, adjudications).queued);
+
+		if (queued.some(Boolean)) writeAdjudications(adjudicationFile, adjudications);
 
 		return {
 			dataset: basename(options.dataset),
@@ -395,7 +432,9 @@ async function main(): Promise<void> {
 						run.score && run.hiddenScore ? [{ shown: run.score, hidden: run.hiddenScore }] : []
 					),
 					stageRuns: pr.runs.flatMap((run) => (run.score && run.stages ? [run.stages] : [])),
-					lowRuns: pr.runs.flatMap((run) => (run.score && run.lows ? [run.lows] : []))
+					lowRuns: pr.runs.flatMap((run) => (run.score && run.lows ? [run.lows] : [])),
+					control: pr.control,
+					labeledRuns: pr.runs.flatMap((run) => (run.labeled ? [run.labeled] : []))
 				}))
 			)
 		};
