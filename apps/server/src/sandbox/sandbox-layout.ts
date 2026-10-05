@@ -84,7 +84,10 @@ function keptPath(path: string, dataDir: string, workDir: string): string[] {
  * The environment a sandboxed command starts with: every tool's cache points
  * into the per-checkout cache. On macOS pnpm keeps its own version instead of
  * switching to the one a repo pins, because pnpm 12 can't open its store lock
- * under Seatbelt and every install and check would fail.
+ * under Seatbelt and every install and check would fail. pnpm's home sits in
+ * the shared store so the pinned version it fetched is reused, and its install
+ * check before `pnpm run` is off: a shared install records another checkout's
+ * paths, so pnpm would call it stale and reinstall offline.
  */
 function sandboxEnv(path: string[], cacheDir: string, darwin: boolean, rustup: string | null): Record<string, string> {
 	const cache = (name: string) => join(cacheDir, name);
@@ -103,8 +106,9 @@ function sandboxEnv(path: string[], cacheDir: string, darwin: boolean, rustup: s
 		BUN_INSTALL_CACHE_DIR: cache('store/bun'),
 		npm_config_cache: cache('store/npm'),
 		YARN_CACHE_FOLDER: cache('store/yarn'),
-		PNPM_HOME: cache('pnpm-home'),
+		PNPM_HOME: cache('store/pnpm-home'),
 		npm_config_store_dir: cache('store/pnpm'),
+		pnpm_config_verify_deps_before_run: 'false',
 		...(darwin ? { npm_config_manage_package_manager_versions: 'false' } : {}),
 		PIP_CACHE_DIR: cache('pip'),
 		UV_CACHE_DIR: cache('uv'),
