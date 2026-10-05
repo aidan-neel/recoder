@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, test } from 'bun:test';
 import { chatCompletion, resetLlmLimiter, streamChatCompletion } from '../../src/models/llm';
-import { configForRole } from '../../src/models/models';
+import { configForSubagent } from '../../src/models/models';
 import { setReviewOverrides } from '../../src/review/session/review-settings';
 import { discussFinding, streamDiscussFinding } from '../../src/review/chat/discuss';
 import { suggestFix } from '../../src/review/fixes/fix';
@@ -34,7 +34,7 @@ test('API completions send the Specialist effort only when one is set', async ()
 	}) as typeof fetch;
 
 	const call = async () => {
-		const opts = { ...configForRole('security'), messages: [{ role: 'user' as const, content: 'Review' }] };
+		const opts = { ...configForSubagent(), messages: [{ role: 'user' as const, content: 'Review' }] };
 
 		await chatCompletion(opts);
 		await streamChatCompletion(opts, () => {});
@@ -91,7 +91,7 @@ test('review agent, discussion, streaming discussion, and fix consume resolved r
 	}) as typeof fetch;
 
 	const finding = {
-		agent: 'security',
+		agent: 'subagent',
 		file: 'test.ts',
 		line: 1,
 		endLine: 1,
@@ -113,7 +113,7 @@ test('review agent, discussion, streaming discussion, and fix consume resolved r
 		label: 'security',
 		system: '',
 		user: '',
-		config: configForRole('security'),
+		config: configForSubagent(),
 		budget: new ModelBudget(),
 		evidence: new EvidenceStore(null, buildInventory(''), 1000),
 		maxTurns: 1,

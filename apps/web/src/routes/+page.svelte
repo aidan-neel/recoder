@@ -8,6 +8,7 @@
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
+	import { Switch } from '@sivir-ui/svelte/components/switch';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
 	import { keepPillAligned } from '$lib/shell/tab-pill';
 	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
@@ -39,6 +40,9 @@
 	let filter = $state('');
 	let repoChip = $state('all');
 	let filterEl = $state<HTMLInputElement>();
+
+	/** UI only for now: nothing reads it yet. */
+	let autoReview = $state(false);
 
 	/** Review request in flight, by `repoId#pr`. */
 	let starting = $state<string | null>(null);
@@ -300,6 +304,7 @@
 					<Skeleton class="h-[30px] w-56" />
 				{/if}
 				<span class="flex-1"></span>
+				<Switch bind:checked={autoReview} label="Auto-review PRs" class="shrink-0" />
 			</div>
 
 			{#if openPrs.apiDown}

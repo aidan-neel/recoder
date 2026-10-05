@@ -1,13 +1,11 @@
 <script lang="ts">
 	import {
-		ORCHESTRATOR_ID,
 		type CoverageSummary,
 		type ReviewAssignment,
 		type ReviewGuidelinesUsed,
 		type ReviewReasoningEntry,
 		type ReviewTask
 	} from '@recoder/shared';
-	import Play from '@lucide/svelte/icons/play';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import Disclosure from '../ui/disclosure.svelte';
@@ -21,24 +19,28 @@
 	let {
 		active,
 		failed,
+		stopped,
+		reason,
 		footerLabel,
 		verifying,
 		verifications,
 		reasoning,
 		finalReasoning,
 		finalization,
-		specialists,
+		agents,
 		finished,
 		findingCount,
 		coverage,
 		guidelines,
 		repoId,
-		now,
-		continuing,
-		onContinue
+		now
 	}: {
 		active: boolean;
 		failed: boolean;
+		/** The developer stopped it, so it reads as stopped rather than failed. */
+		stopped: boolean;
+		/** Why it failed, under the closing row. */
+		reason: string | null;
 		/** What the live review is doing, shown while it runs. */
 		footerLabel: string;
 		verifying: boolean;
@@ -47,45 +49,28 @@
 		/** The orchestrator's thinking since finalization started. */
 		finalReasoning: ReviewReasoningEntry[];
 		finalization: ReviewTask | undefined;
-		specialists: ReviewAssignment[];
+		agents: ReviewAssignment[];
 		finished: boolean;
 		findingCount: number;
 		coverage: CoverageSummary | null;
 		guidelines: ReviewGuidelinesUsed | null;
 		repoId: string | null;
 		now: number;
-		continuing: boolean;
-		/** Continue a failed review from where it stopped. */
-		onContinue: (() => void) | null;
 	} = $props();
 
 	const finalizationSeconds = $derived(
 		finalization?.elapsedMs !== undefined ? Math.max(0, Math.round(finalization.elapsedMs / 1000)) : null
 	);
 
-	const facts = $derived(
-		finalFacts({ specialists, finished, findingCount, coverage, guidelines, repoId, finalization })
-	);
+	const facts = $derived(finalFacts({ agents, finished, findingCount, coverage, guidelines, repoId, finalization }));
 
-	const verifyStartedAt = $derived(
-		verifications
-			.map((task) => task.startedAt)
-			.filter((at): at is string => !!at)
-			.sort()[0]
-	);
+	/** Verifiers have no thread of their own; here their thinking shows as one live step. */
+	const verifyReasoning = $derived(verifying ? reasoning.filter((entry) => entry.role === 'verifier') : []);
 
-	/** Verifiers work in the threads of the specialists whose findings they check; here their thinking shows as one live step. */
-	const verifyReasoning = $derived(
-		verifying && verifyStartedAt
-			? reasoning.filter(
-					(entry) =>
-						(entry.assignmentId ?? ORCHESTRATOR_ID) !== ORCHESTRATOR_ID &&
-						Date.parse(entry.at) >= Date.parse(verifyStartedAt)
-				)
-			: []
+	/** While it runs, only verification and the final thinking have something to open; waiting is just a spinner row. */
+	const hasBody = $derived(
+		verifying ? verifications.length > 0 : finalReasoning.length > 0 || (!active && facts.length > 0)
 	);
-
-	const hasBody = $derived(verifying ? verifications.length > 0 : finalReasoning.length > 0 || facts.length > 0);
 </script>
 
 {#snippet progressBody()}
@@ -121,21 +106,21 @@
 	{/if}
 {/snippet}
 
-<Disclosure
-	status={active ? 'running' : failed ? 'error' : 'done'}
-	bodyClass="finalize-body"
-	children={hasBody ? progressBody : undefined}
->
-	{#snippet label()}{active
-			? footerLabel
-			: failed
-				? 'Review failed'
-				: `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
-</Disclosure>
-{#if failed && !active && onContinue}
-	<div class="review-start-cta">
-		<Button class="brief-action" loading={continuing} onclick={onContinue}>
-			<Play size={12} fill="currentColor" aria-hidden="true" /> Continue review
-		</Button>
-	</div>
-{/if}
+<div class="finalize-row">
+	<Disclosure
+		status={active ? 'running' : stopped ? undefined : failed ? 'error' : 'done'}
+		bodyClass="finalize-body"
+		children={hasBody ? progressBody : undefined}
+	>
+		{#snippet label()}{active
+				? footerLabel
+				: stopped
+					? 'Review stopped'
+					: failed
+						? 'Review failed'
+						: `Finalized review${finalizationSeconds ? ` for ${finalizationSeconds}s` : ''}`}{/snippet}
+	</Disclosure>
+	{#if failed && !active && reason}
+		<Typography.Text class="finalize-reason">{reason}</Typography.Text>
+	{/if}
+</div>

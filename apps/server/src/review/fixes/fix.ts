@@ -1,10 +1,10 @@
 import { z } from 'zod';
 import { describeFinding, findingRequestSchema } from '../chat/finding-request.js';
-import { resolveDiscussRole } from '../chat/discuss.js';
 import { readExcerpt } from '../pipeline/harness.js';
 import { capDiff } from '../pipeline/prompts.js';
 import { asLlmError, chatCompletion, LlmError } from '../../models/llm.js';
-import { configForRole } from '../../models/models.js';
+import { configForAgent, type ModelConfig } from '../../models/models.js';
+import { sampling } from '../../models/runtime-profiles.js';
 import { EditMismatchError, patchFromEdits } from './fix-edits.js';
 
 export { locateEdit, patchFromEdits } from './fix-edits.js';
@@ -112,12 +112,7 @@ async function readFixReply(output: string, sandboxPath: string): Promise<FixDra
 }
 
 /** Ask for edits, build the patch from them, and give the model one more try when they don't land. */
-async function writeFix(
-	cfg: ReturnType<typeof configForRole>,
-	system: string,
-	user: string,
-	sandboxPath: string
-): Promise<FixDraft> {
+async function writeFix(cfg: ModelConfig, system: string, user: string, sandboxPath: string): Promise<FixDraft> {
 	const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
 		{ role: 'system', content: system },
 		{ role: 'user', content: user }
@@ -133,8 +128,7 @@ async function writeFix(
 				output = await chatCompletion({
 					...cfg,
 					messages,
-					temperature: 0,
-					maxTokens: FIX_MAX_TOKENS,
+					...sampling(cfg, FIX_MAX_TOKENS),
 					thinking,
 					timeoutMs: 180_000
 				});
@@ -168,8 +162,7 @@ async function writeFix(
 
 /** A fix for one review finding, written from the finding, the code around it and the PR diff. */
 export async function suggestFix(input: SuggestFixInput): Promise<SuggestedFix> {
-	const role = resolveDiscussRole(input.agent);
-	const cfg = configForRole(role);
+	const cfg = configForAgent(input.agent);
 	const parts = [describeFinding(input)];
 	const span = Math.max(0, input.endLine - input.line);
 
@@ -186,7 +179,7 @@ export async function suggestFix(input: SuggestFixInput): Promise<SuggestedFix> 
 	parts.push(`--- unified diff (capped) ---\n${capDiff(input.diff)}`);
 
 	return {
-		agent: role,
+		agent: input.agent,
 		model: cfg.model,
 		...(await writeFix(cfg, SYSTEM_PROMPT, parts.join('\n\n'), input.sandboxPath))
 	};

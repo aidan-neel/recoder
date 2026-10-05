@@ -1,8 +1,9 @@
 import type { ReviewAssignment } from '@recoder/shared';
 import { formatToolResults, type EvidenceStore } from '../../../evidence/evidence.js';
-import { configForRole, type RoleConfig } from '../../../models/models.js';
-import type { ReviewDirective } from '../../chat/directive.js';
+import { configForOrchestrator, configForSubagent, type ModelConfig } from '../../../models/models.js';
 import { withGuidelines } from '../../guidelines/guidelines.js';
+import { dismissalsBlock } from '../../guidelines/learned/prompt.js';
+import type { Dismissal } from '../../guidelines/learned/dismissals.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import {
 	ModelBlockedError,
@@ -13,23 +14,32 @@ import {
 } from '../agent-loop.js';
 import type { CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
-import type { DispatchPolicy } from '../dispatch.js';
 import type { ReviewInventory } from '../inventory.js';
-import type { PlannerAssignment } from '../planner.js';
-import { EXEC_EXAMPLES, isCompactModel } from '../prompts.js';
+import { isQualityLens, lensById } from '../lenses/lenses.js';
+import type { LensId } from '../lenses/types.js';
 import {
-	parseSpecialistOutput,
-	prematureSpecialistFinal,
-	specialistResponseSchema,
-	specialistSystemPrompt,
-	specialistUserPrompt,
-	specialistValidationError
-} from '../specialist.js';
-import { recordFor, updateAssignment } from './assignments.js';
-import { applySpecialistResult } from './specialist-result.js';
+	announcedFinal,
+	parseReviewerOutput,
+	salvageReviewerOutput,
+	prematureReviewerFinal,
+	unrunCorrectnessFinal,
+	reviewerResponseSchema,
+	reviewerValidationError
+} from '../reviewer.js';
+import {
+	reviewerSystemPrompt,
+	reviewerUserPrompt,
+	subagentSystemPrompt,
+	type ReviewerPromptContext
+} from '../reviewer-prompts.js';
+import type { AnsweredMark, UnitRequest, UnsettledMark } from '../subagents.js';
+import type { ReviewUnit } from '../units.js';
+import { coverageRole, recordFor, updateAssignment } from './assignments.js';
+import { applyUnitResult } from './unit-result.js';
 import type { HarnessEvents, TaskFn } from './types.js';
 
-export interface PoolContext {
+/** What the pool needs from the run; the prompt fields (PR, intent, change model, ledger) come with it. */
+export interface PoolContext extends ReviewerPromptContext {
 	inventory: ReviewInventory;
 	evidence: EvidenceStore;
 	coverage: CoverageLedger;
@@ -41,33 +51,39 @@ export interface PoolContext {
 	candidates: CandidateFinding[];
 	nextCandidate: () => string;
 	recommended: Set<string>;
-	followUps: PlannerAssignment[];
-	/** Specialists may run code in the review sandbox. */
+	/** Reviewers may run code in the review sandbox. */
 	exec: boolean;
-	/** Dependency setup and baseline check results, shared with every specialist. */
-	setupNotes: string;
-	dispatch: DispatchPolicy;
-	directive: ReviewDirective | null;
-	/** Called after each assignment settles, to save a checkpoint. */
+	/** Dependency setup and baseline check results as they stand when a reviewer starts; the checks finish mid-review. */
+	setupNotes: () => string;
+	/** Subagents the review may run in all; correctness lenses aren't offered any at 0. */
+	subagentCap: number;
+	reportLowSeverity: boolean;
+	/** Findings people dismissed in this repository, newest first; a candidate matching one is dropped and a lens reviewer is told of those on its files. */
+	dismissals: Dismissal[];
+	/** Where finished reviewers' subagent requests collect, in the order they finished. */
+	requests: UnitRequest[];
+	/** Where finished defect lenses' unsettled brief questions collect. */
+	unsettled: UnsettledMark[];
+	/** Where the brief questions finished defect lenses answered collect. */
+	answered: AnsweredMark[];
+	/** Called with each candidate a reviewer reports, so its verifier can start while others still review. */
+	onCandidate?: (candidate: CandidateFinding) => void;
+	/** Called after each unit settles, to save a checkpoint. */
 	onFinished?: () => void;
 }
 
-/** Tool results for the scoped patch a specialist starts with. */
+/** Tool results for the scoped patch a reviewer starts with. */
 export type ScopedPatch = Awaited<ReturnType<EvidenceStore['executeRound']>>;
 
-const SPECIALIST_EXAMPLE =
-	'{"message":"No issues in the queue split.","findings":[],"examinedHunks":[],"coverageGaps":[],"blockers":[],"followUp":null,"recommendedChecks":[]}';
+const REVIEWER_EXAMPLE =
+	'{"message":"No issues in the queue split.","findings":[],"examinedHunks":[],"gaps":[],"blockers":[],"subagents":[],"unsettled":[],"answered":[],"recommendedChecks":[]}';
 
 /**
- * Runs the assignments in priority order, a few at a time. Once budget or time is
- * reserved for later stages, the rest are skipped rather than launched.
+ * Runs the units in order, a few at a time. Once budget or time is reserved
+ * for later stages, the rest are skipped rather than launched.
  */
-export async function runAssignmentPool(
-	items: PlannerAssignment[],
-	records: ReviewAssignment[],
-	ctx: PoolContext
-): Promise<void> {
-	const queue = [...items].sort((a, b) => a.priority - b.priority);
+export async function runUnitPool(units: ReviewUnit[], records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
+	const queue = [...units];
 	let cursor = 0;
 
 	const workers = Array.from({ length: Math.min(REVIEW_POLICY.maxConcurrentAssignments, queue.length) }, async () => {
@@ -89,68 +105,82 @@ export async function runAssignmentPool(
 				return;
 			}
 
-			await runOneAssignment(queue[cursor++], records, ctx);
+			await runOneUnit(queue[cursor++], records, ctx);
 		}
 	});
 
 	await Promise.all(workers);
 }
 
-/** Runs one specialist and records its result; a failure marks only this assignment. */
-async function runOneAssignment(item: PlannerAssignment, records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
-	const cfg = configForRole(item.role);
+/**
+ * Runs one lens assignment, or one subagent, and records its result; a
+ * failure marks only this record. Lens reviewers run on the Review model and
+ * subagents on the second model. A subagent's hunks are already some lens's,
+ * so its failure leaves coverage alone.
+ */
+async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
+	const role = recordFor(records, item.id).role;
+	const subagent = role === 'subagent';
+	const cfg = subagent ? configForSubagent() : configForOrchestrator();
 	const model = cfg.model;
 
 	queueAssignment(item, records, ctx, model);
 
 	try {
-		const initialEvidence = await readScopedPatch(item, ctx);
-		const result = await askSpecialist(item, records, ctx, cfg, initialEvidence);
+		const initialEvidence = await readScopedPatch(item, role, ctx);
+		const result = await askReviewer(item, records, ctx, cfg, initialEvidence);
 
 		if (!result.value) {
-			const reason = result.error ?? 'specialist failed';
+			const reason = result.error ?? 'reviewer failed';
 
-			for (const hunkId of new Set(item.scope.flatMap((entry) => entry.hunkIds))) {
-				const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? item.scope[0]?.path ?? '';
+			if (!subagent) markUnitPartial(item, reason, ctx);
 
-				ctx.coverage.partial(hunkId, path, item.role, reason);
-			}
-
-			failAssignment(item, records, ctx, model, result.error ?? 'Specialist failed');
+			failAssignment(item, records, ctx, model, result.error ?? 'Reviewer failed');
 
 			return;
 		}
 
-		applySpecialistResult(item, records, ctx, model, result.value, initialEvidence);
+		applyUnitResult(item, records, ctx, model, result.value, initialEvidence);
 	} catch (err) {
 		if (err instanceof ModelBlockedError) throw err;
 		if (err instanceof ReviewAbortedError) throw err;
 
-		failAssignment(item, records, ctx, model, err instanceof Error ? err.message : 'Specialist failed');
+		failAssignment(item, records, ctx, model, err instanceof Error ? err.message : 'Reviewer failed');
 	}
 }
 
-/** Marks the assignment queued for a specialist slot. */
-function queueAssignment(item: PlannerAssignment, records: ReviewAssignment[], ctx: PoolContext, model: string): void {
+/** Every hunk in a lens assignment that failed is partially covered for that lens, with the reason. */
+function markUnitPartial(item: ReviewUnit, reason: string, ctx: PoolContext): void {
+	const role = coverageRole(item);
+
+	for (const hunkId of new Set(item.scope.flatMap((entry) => entry.hunkIds))) {
+		const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? item.scope[0]?.path ?? '';
+
+		ctx.coverage.partial(hunkId, path, role, reason);
+	}
+}
+
+/** Marks the unit queued for a reviewer slot. */
+function queueAssignment(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext, model: string): void {
 	const queuedAt = new Date().toISOString();
 
 	updateAssignment(records, item.id, {
 		status: 'queued',
 		model,
 		queuedAt,
-		currentOperation: 'Queued for specialist review'
+		currentOperation: 'Queued for review'
 	});
 
 	ctx.events?.onAssignment?.(recordFor(records, item.id));
 
-	ctx.task(`assignment:${item.id}`, item.title, 'queued', 'Queued for specialist review', {
+	ctx.task(`assignment:${item.id}`, item.title, 'queued', 'Queued for review', {
 		kind: 'assignment',
 		assignmentId: item.id,
-		agent: item.role,
+		agent: recordFor(records, item.id).role,
 		model,
 		files: item.scope.map((entry) => entry.path),
 		queuedAt,
-		queueReason: 'Waiting for a specialist slot'
+		queueReason: 'Waiting for a reviewer slot'
 	});
 }
 
@@ -159,55 +189,89 @@ function queueAssignment(item: PlannerAssignment, records: ReviewAssignment[], c
  * spending a model round asking for it. Every file gets a result (truncated once
  * the round budget is spent), so none silently drops out past the per-turn action limit.
  */
-function readScopedPatch(item: PlannerAssignment, ctx: PoolContext): Promise<ScopedPatch> {
+function readScopedPatch(item: ReviewUnit, role: string, ctx: PoolContext): Promise<ScopedPatch> {
 	return ctx.evidence.executeRound(
 		item.scope.map((entry) => ({ action: 'readDiff', path: entry.path, hunkIds: entry.hunkIds })),
 		ctx.signal,
-		(tool) => ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role: item.role }),
+		(tool) => ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role }),
 		item.scope.length
 	);
 }
 
-/** The specialist's model loop, reporting progress on its record and task row. */
-function askSpecialist(
-	item: PlannerAssignment,
+/** How a reviewer's empty or premature final answer is pushed back, by role and lens. */
+function finalCheck(subagent: boolean, lens: LensId, canRun: boolean) {
+	if (subagent) return prematureReviewerFinal;
+
+	return lens === 'correctness' && canRun ? unrunCorrectnessFinal : announcedFinal;
+}
+
+/** What people already dismissed on a lens reviewer's files, ready to append to its prompt; empty for a subagent or when nothing applies. */
+function dismissedNote(item: ReviewUnit, subagent: boolean, ctx: PoolContext): string {
+	const block = subagent
+		? ''
+		: dismissalsBlock(
+				ctx.dismissals,
+				item.scope.map((entry) => entry.path)
+			);
+
+	return block ? `\n\n${block}` : '';
+}
+
+/**
+ * The reviewer's model loop, reporting progress on its record and task row. A
+ * lens gets a short, fixed procedure and few turns; a subagent's open question
+ * gets more, and must read past its patch before it concludes empty.
+ */
+function askReviewer(
+	item: ReviewUnit,
 	records: ReviewAssignment[],
 	ctx: PoolContext,
-	cfg: RoleConfig,
+	cfg: ModelConfig,
 	initialEvidence: ScopedPatch
 ) {
-	const meta = { assignmentId: item.id, role: item.role };
+	const meta = { assignmentId: item.id, role: recordFor(records, item.id).role };
+	const subagent = meta.role === 'subagent';
 	let runningSince: string | undefined;
+
+	const lens = lensById(item.lens ?? 'correctness');
+	const maxTurns = subagent ? REVIEW_POLICY.maxSubagentTurns : REVIEW_POLICY.maxLensTurns;
+	const defaultCategory = lens.categories[0];
+
+	const system = subagent
+		? subagentSystemPrompt(ctx.exec, ctx.directive)
+		: reviewerSystemPrompt(lens, ctx.exec, ctx.directive, {
+				subagents: lens.id === 'correctness' && ctx.subagentCap > 0,
+				unsettled: !isQualityLens(lens.id) && ctx.subagentCap > 0
+			});
 
 	return runJsonAgent({
 		label: item.title,
-		system: withGuidelines(
-			specialistSystemPrompt(item.role, ctx.exec, { compact: isCompactModel(cfg.model), directive: ctx.directive }),
-			ctx.inventory.guidelines
-		),
-		actionExamples: ctx.exec ? EXEC_EXAMPLES : undefined,
+		system: withGuidelines(system, ctx.inventory.guidelines),
+		exec: Boolean(ctx.exec),
 		getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
 		onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model: cfg.model }),
 		user:
-			specialistUserPrompt(item, ctx.dispatch.maxSpecialistTurns, ctx.budget.remaining(), ctx.directive) +
-			(ctx.setupNotes ? `\n\n${ctx.setupNotes}` : '') +
+			reviewerUserPrompt(item, { turns: maxTurns, calls: ctx.budget.remaining() }, ctx, subagent) +
+			(ctx.setupNotes() ? `\n\n${ctx.setupNotes()}` : '') +
+			dismissedNote(item, subagent, ctx) +
 			'\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' +
 			formatToolResults(initialEvidence),
 		config: cfg,
 		budget: ctx.budget,
 		evidence: ctx.evidence,
-		maxTurns: ctx.dispatch.maxSpecialistTurns,
+		maxTurns,
 		signal: ctx.signal,
 		deadlineAt: ctx.deadlineAt,
-		parse: parseSpecialistOutput,
-		validationError: specialistValidationError,
-		checkFinal: prematureSpecialistFinal,
-		responseSchema: (finalTurn) => specialistResponseSchema(ctx.exec, finalTurn),
+		parse: (raw) => parseReviewerOutput(raw, defaultCategory),
+		validationError: (raw) => reviewerValidationError(raw, defaultCategory),
+		salvage: (raw) => salvageReviewerOutput(raw, defaultCategory),
+		checkFinal: finalCheck(subagent, lens.id, Boolean(ctx.exec)),
+		responseSchema: (finalTurn) => reviewerResponseSchema(ctx.exec, finalTurn, subagent ? [] : lens.categories),
 		timeLimit: {
-			finalTurnAfterMs: REVIEW_POLICY.specialistFinalTurnAfterMs,
-			maxWallMs: REVIEW_POLICY.specialistMaxMs
+			finalTurnAfterMs: REVIEW_POLICY.reviewerFinalTurnAfterMs,
+			maxWallMs: REVIEW_POLICY.reviewerMaxMs
 		},
-		finalExample: SPECIALIST_EXAMPLE,
+		finalExample: REVIEWER_EXAMPLE,
 		onProgress: (state, elapsedMs, detail) => {
 			const status = state === 'queued' ? 'waiting' : 'running';
 
@@ -217,7 +281,7 @@ function askSpecialist(
 			ctx.task(`assignment:${item.id}`, item.title, status, detail, {
 				kind: state === 'retrieval' ? 'retrieval' : 'model',
 				assignmentId: item.id,
-				agent: item.role,
+				agent: meta.role,
 				model: cfg.model,
 				elapsedMs,
 				files: item.scope.map((entry) => entry.path)
@@ -229,9 +293,9 @@ function askSpecialist(
 	});
 }
 
-/** The specialist's clock starts when a model first works for it (`runningSince`), not when it was queued. */
+/** The reviewer's clock starts when a model first works for it (`runningSince`), not when it was queued. */
 function reportProgress(
-	item: PlannerAssignment,
+	item: ReviewUnit,
 	records: ReviewAssignment[],
 	ctx: PoolContext,
 	model: string,
@@ -249,9 +313,9 @@ function reportProgress(
 	ctx.events?.onAssignment?.(recordFor(records, item.id));
 }
 
-/** A specialist that stopped without an answer: its record, task row and conversation all say so. */
+/** A reviewer that stopped without an answer: its record, task row and conversation all say so. */
 function failAssignment(
-	item: PlannerAssignment,
+	item: ReviewUnit,
 	records: ReviewAssignment[],
 	ctx: PoolContext,
 	model: string,
@@ -266,7 +330,7 @@ function failAssignment(
 
 	ctx.events?.onMessage?.({
 		id: `message_failed_${item.id}`,
-		text: `**${item.title}** stopped before finishing: ${reason}\n\nFindings: none reported. The hunks assigned to this specialist are marked partially covered.`,
+		text: `**${item.title}** stopped before finishing: ${reason}\n\nFindings: none reported.${recordFor(records, item.id).role === 'subagent' ? '' : ' The hunks in this unit are marked partially covered.'}`,
 		status: 'done',
 		assignmentId: item.id,
 		model
@@ -275,7 +339,7 @@ function failAssignment(
 	ctx.task(`assignment:${item.id}`, item.title, 'error', reason, {
 		kind: 'assignment',
 		assignmentId: item.id,
-		agent: item.role,
+		agent: recordFor(records, item.id).role,
 		model
 	});
 

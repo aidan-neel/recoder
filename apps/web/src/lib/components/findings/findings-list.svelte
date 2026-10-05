@@ -1,10 +1,14 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import ListFilter from '@lucide/svelte/icons/list-filter';
 	import MessageSquare from '@lucide/svelte/icons/message-square';
 	import RotateCcw from '@lucide/svelte/icons/rotate-ccw';
 	import Search from '@lucide/svelte/icons/search';
+	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
+	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import * as Popover from '@sivir-ui/svelte/components/popover';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
@@ -16,6 +20,7 @@
 	import { formatAgentName } from '$lib/findings/threads.svelte';
 	import { collapse } from '$lib/shell/collapse';
 	import SeverityPill from '../ui/severity-pill.svelte';
+	import FindingFacets from './finding-facets.svelte';
 	import FindingSeverity from './finding-severity.svelte';
 	import VerificationBadge from './verification-badge.svelte';
 
@@ -31,7 +36,91 @@
 	}
 
 	let { ranked, activeId, needsYou, dismissedCount, query = $bindable() }: Props = $props();
+
+	const bugs = $derived(ranked.filter((finding) => finding.kind === 'bug'));
+	const quality = $derived(ranked.filter((finding) => finding.kind === 'quality'));
+
+	/** The developer's own open or close; until then Code quality opens only when there are no bugs. */
+	let qualityToggled = $state<boolean | null>(null);
+	const qualityOpen = $derived(qualityToggled ?? bugs.length === 0);
+
+	/** Last active id seen, so opening a quality finding elsewhere reveals it once and a later close sticks. */
+	let revealedFor: string | undefined;
+
+	$effect(() => {
+		const id = activeId;
+
+		if (id === revealedFor) return;
+		revealedFor = id;
+
+		if (untrack(() => !qualityOpen && quality.some((finding) => finding.id === id))) qualityToggled = true;
+	});
+
+	/** The card's fix chip: a fix being written, ready, failed, or the review's checked patch. */
+	function fixChip(finding: Finding): { state: 'fixing' | 'ready' | 'failed'; label: string } | null {
+		const fix = findingsStore.suggestions[finding.id];
+
+		if (fix?.status === 'loading') return { state: 'fixing', label: 'Writing fix' };
+		if (fix?.status === 'error') return { state: 'failed', label: 'Fix failed' };
+		if (finding.patch) return { state: 'ready', label: 'Checked fix' };
+
+		return fix?.status === 'ready' ? { state: 'ready', label: 'Fix suggested' } : null;
+	}
 </script>
+
+{#snippet card(finding: Finding, i: number)}
+	{@const isActive = finding.id === activeId}
+	{@const dismissed = finding.status === 'dismissed'}
+	{@const chip = fixChip(finding)}
+	<div class="focus-card-slot" in:collapse out:collapse>
+		<Card.Root
+			class="focus-card"
+			data-active={isActive || undefined}
+			data-dismissed={dismissed || undefined}
+			{...{ style: `--i: ${i}` }}
+		>
+			<Button
+				unstyled
+				class="focus-card-select"
+				aria-current={isActive || undefined}
+				onclick={() => findingsStore.discuss(finding.id)}
+			>
+				<span class="focus-card-head">
+					{#if dismissed}<SeverityPill tone="info">Dismissed</SeverityPill>{:else}<FindingSeverity
+							severity={finding.severity}
+						/>{#if finding.verification}<VerificationBadge verification={finding.verification} />{/if}{/if}
+					<FindingFacets {finding} symbol={false} class="min-w-0" />
+					<span class="focus-card-loc" title="{finding.file}:{finding.startLine}"
+						>{finding.file}:{finding.startLine}</span
+					>
+					{#if chip}
+						<span class="focus-card-fix" data-state={chip.state}
+							>{#if chip.state === 'fixing'}<Spinner size={10} aria-hidden="true" />{/if}{chip.label}</span
+						>
+					{/if}
+				</span>
+				<span class="focus-card-body ai-voice">{finding.title}</span>
+			</Button>
+			<div class="focus-card-reveal" inert={!isActive}>
+				<div class="focus-card-reveal-clip">
+					<div class="focus-card-foot">
+						<span class="min-w-0 flex-1 truncate">{formatAgentName(finding.agent)}</span>
+						{#if dismissed}
+							<Button variant="outline" class="gap-1.5" onclick={() => restoreFinding(finding)}
+								><RotateCcw size={14} aria-hidden="true" />Restore</Button
+							>
+						{:else}
+							<Button variant="ghost" onclick={() => dismissFinding(finding)}>Dismiss</Button>
+							<Button variant="outline" class="gap-1.5" onclick={() => discussFinding(finding)}
+								><MessageSquare size={14} aria-hidden="true" />Discuss</Button
+							>
+						{/if}
+					</div>
+				</div>
+			</div>
+		</Card.Root>
+	</div>
+{/snippet}
 
 <section class="focus-list" aria-label="Findings that need you">
 	<header class="focus-list-head">
@@ -79,70 +168,34 @@
 	</header>
 	<ScrollArea class="min-h-0 flex-1" showCues={false} aria-label="Findings">
 		<div class="focus-cards">
-			{#each ranked as finding, i (finding.id)}
-				{@const isActive = finding.id === activeId}
-				{@const dismissed = finding.status === 'dismissed'}
-				<div class="focus-card-slot" in:collapse out:collapse>
-					<Card.Root
-						class="focus-card"
-						data-active={isActive || undefined}
-						data-dismissed={dismissed || undefined}
-						{...{ style: `--i: ${i}` }}
-					>
-						<Button
-							unstyled
-							class="focus-card-select"
-							aria-current={isActive || undefined}
-							onclick={() => findingsStore.discuss(finding.id)}
-						>
-							<span class="focus-card-head">
-								{#if dismissed}<SeverityPill tone="info">Dismissed</SeverityPill>{:else}<FindingSeverity
-										severity={finding.severity}
-									/>{#if finding.verification}<VerificationBadge verification={finding.verification} />{/if}{/if}
-								<span class="min-w-0 truncate">{finding.category}</span>
-								<span class="focus-card-loc" title="{finding.file}:{finding.startLine}"
-									>{finding.file}:{finding.startLine}</span
-								>
-								{#if findingsStore.suggestions[finding.id]}
-									{@const fix = findingsStore.suggestions[finding.id]}
-									{@const fixState = fix.status === 'loading' ? 'fixing' : fix.status === 'ready' ? 'ready' : 'failed'}
-									<span class="focus-card-fix" data-state={fixState}
-										>{#if fixState === 'fixing'}<Spinner size={10} aria-hidden="true" />{/if}{fixState === 'fixing'
-											? 'Writing fix'
-											: fixState === 'ready'
-												? 'Fix suggested'
-												: 'Fix failed'}</span
-									>
-								{/if}
-							</span>
-							<span class="focus-card-body ai-voice">{finding.title}</span>
-						</Button>
-						<div class="focus-card-reveal" inert={!isActive}>
-							<div class="focus-card-reveal-clip">
-								<div class="focus-card-foot">
-									<span class="min-w-0 flex-1 truncate">{formatAgentName(finding.agent)}</span>
-									{#if dismissed}
-										<Button variant="outline" class="gap-1.5" onclick={() => restoreFinding(finding)}
-											><RotateCcw size={14} aria-hidden="true" />Restore</Button
-										>
-									{:else}
-										<Button variant="ghost" onclick={() => dismissFinding(finding)}>Dismiss</Button>
-										<Button variant="outline" class="gap-1.5" onclick={() => discussFinding(finding)}
-											><MessageSquare size={14} aria-hidden="true" />Discuss</Button
-										>
-									{/if}
-								</div>
-							</div>
-						</div>
-					</Card.Root>
-				</div>
-			{:else}
+			{#each bugs as finding, i (finding.id)}
+				{@render card(finding, i)}
+			{/each}
+			{#if ranked.length === 0}
 				<Typography.Text class="px-1 py-3 text-sm text-fg-muted"
 					>{query
 						? 'No findings match your search.'
 						: 'Nothing needs you. Every finding is fixed, dismissed or filtered out.'}</Typography.Text
 				>
-			{/each}
+			{/if}
+			{#if quality.length}
+				<section class="quality-section" data-alone={bugs.length === 0 || undefined} aria-label="Code quality">
+					<Collapsible.Root bind:open={() => qualityOpen, (open) => (qualityToggled = open)}>
+						<Typography.Title level={3} class="quality-title">
+							<Collapsible.Trigger class="quality-trigger">
+								<span>Code quality</span>
+								<Badge variant="secondary" class="quality-count" role={undefined}>{quality.length}</Badge>
+								<ChevronRight size={14} class="quality-chevron" aria-hidden="true" />
+							</Collapsible.Trigger>
+						</Typography.Title>
+						<Collapsible.Content class="quality-cards">
+							{#each quality as finding, i (finding.id)}
+								{@render card(finding, i)}
+							{/each}
+						</Collapsible.Content>
+					</Collapsible.Root>
+				</section>
+			{/if}
 		</div>
 	</ScrollArea>
 </section>

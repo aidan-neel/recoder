@@ -1,6 +1,9 @@
 import type { ModelEntry, Provider, ModelSettings, ModelSettingsPatch, ReasoningEffort } from '@recoder/shared';
 import { errorToast } from '../shell/notify';
+import { readCache, writeCache } from '../shell/persisted-cache';
+import { cacheableModelSettings } from './model-cache';
 import { serverApi } from '../api/server-api';
+import { looksLikeModelId, prettyModelName } from './model-name';
 
 interface EffortOption {
 	id: ReasoningEffort;
@@ -48,11 +51,13 @@ export function effortLabel(effort: ReasoningEffort): string {
 	return EFFORT_TEXT[effort].label;
 }
 
-/** "GPT-5.6-Sol" → "5.6 Sol" for subscription models; API entries keep their label. */
+/** "GPT-5.6-Sol" → "5.6 Sol" for subscription models; an API entry still named by its id reads as a name. */
 function displayName(entry: ModelEntry): string {
 	const label = entry.label.replace(/\s*·\s*subscription$/i, '');
 
-	return entry.provider === 'codex' ? label.replace(/^gpt-(?=\d)/i, '').replace(/-/g, ' ') : label;
+	if (entry.provider === 'codex') return label.replace(/^gpt-(?=\d)/i, '').replace(/-/g, ' ');
+
+	return looksLikeModelId(label) ? prettyModelName(label) : label;
 }
 
 /** Names for hosted providers, so pickers can group by them before the provider list loads. */
@@ -102,7 +107,7 @@ export function toModelOption(entry: ModelEntry): ModelOption {
 			efforts?.map((id) => ({
 				id,
 				label: EFFORT_TEXT[id].label,
-				description: id === defaultEffort ? 'Model default' : EFFORT_TEXT[id].description
+				description: EFFORT_TEXT[id].description
 			})) ?? null,
 		defaultEffort,
 		contextWindow: entry.contextWindow ?? null
@@ -132,9 +137,7 @@ export function modelLabel(modelId: string | null | undefined): string {
 
 	if (entry) return toModelOption(entry).displayName;
 
-	const tail = modelId.split('/').pop() ?? modelId;
-
-	return /^gpt-\d/i.test(tail) ? tail.replace(/^gpt-/i, 'GPT-') : tail.replace(/[-_]+/g, ' ').trim();
+	return prettyModelName(modelId);
 }
 
 /** Keep an effort only when the model offers it; otherwise use the model default. */
@@ -152,6 +155,9 @@ export type SettingsSection = 'models' | 'connections' | 'harness' | 'guidelines
 /** A dialog to open inside the section as soon as Settings shows it. */
 type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-repos' } | { kind: 'add-provider' };
 
+/** Last-seen settings, so pickers paint model names before the server answers. */
+const CACHE_KEY = 'model-settings';
+
 /** Global open state + cached config for the model settings modal. */
 class ModelSettingsUi {
 	open = $state(false);
@@ -164,6 +170,12 @@ class ModelSettingsUi {
 	/** Consumed by the section that owns the dialog. */
 	intent = $state<SettingsIntent | null>(null);
 
+	/** Registry models with their capabilities, mapped once per config. */
+	models = $derived<ModelOption[]>((this.config?.models ?? []).map(toModelOption));
+
+	private inflight: Promise<void> | null = null;
+	private fresh = false;
+
 	show(section: SettingsSection = 'models', intent: SettingsIntent | null = null): void {
 		this.section = section;
 		this.intent = intent;
@@ -173,11 +185,6 @@ class ModelSettingsUi {
 
 	hide(): void {
 		this.open = false;
-	}
-
-	/** Registry models with their capabilities. */
-	get models(): ModelOption[] {
-		return (this.config?.models ?? []).map(toModelOption);
 	}
 
 	/** The Review model and effort (the orchestrator): what the composer picker shows. */
@@ -236,12 +243,30 @@ class ModelSettingsUi {
 		return this.update({ specialistModelId: choice.modelId, specialistEffort: choice.effort });
 	}
 
-	async load(): Promise<void> {
+	/**
+	 * Paints the last-seen settings at once, then fetches the current ones once
+	 * per page load. Call it from onMount: the server render has no storage.
+	 */
+	ensure(): Promise<void> {
+		if (!this.config) this.config = readCache<ModelSettings>(CACHE_KEY);
+
+		return this.fresh ? Promise.resolve() : this.load();
+	}
+
+	/** Concurrent callers share one request. */
+	load(): Promise<void> {
+		this.inflight ??= this.fetch().finally(() => (this.inflight = null));
+
+		return this.inflight;
+	}
+
+	private async fetch(): Promise<void> {
 		this.loading = true;
 		this.error = null;
 
 		try {
-			this.config = await serverApi.getModelSettings();
+			this.apply(await serverApi.getModelSettings());
+			this.fresh = true;
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : 'Failed to load model settings.';
 		} finally {
@@ -249,12 +274,17 @@ class ModelSettingsUi {
 		}
 	}
 
+	private apply(config: ModelSettings): void {
+		this.config = config;
+		writeCache(CACHE_KEY, cacheableModelSettings(config));
+	}
+
 	async save(patch: ModelSettingsPatch): Promise<boolean> {
 		this.saving = true;
 		this.error = null;
 
 		try {
-			this.config = await serverApi.saveModelSettings(patch);
+			this.apply(await serverApi.saveModelSettings(patch));
 
 			return true;
 		} catch (e) {

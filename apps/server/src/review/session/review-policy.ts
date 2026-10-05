@@ -1,31 +1,29 @@
 /**
  * Balanced default ceilings for one adaptive review.
- * These are limits, not targets: a small PR should normally need only the
- * two baseline specialists (correctness + repository consistency).
+ * These are limits, not targets: a small PR is normally one review unit.
  */
 export const REVIEW_POLICY = {
-	/** Assignments the planner may write itself. */
-	maxInitialAssignments: 12,
+	/** Each lens assignment adds this many model calls to the base `maxModelCalls`… */
+	callsPerAssignment: 8,
+	/** …up to this many in all. */
+	maxScaledModelCalls: 2000,
+	/** Each lens assignment adds this much time to the base `analysisDeadlineMs`… */
+	msPerAssignment: 30_000,
+	/** …up to this long in all. */
+	maxScaledDeadlineMs: 2 * 60 * 60 * 1000,
+	/** Failed assignments rerun after the first pass; each is retried once, split in two when it was too big. */
+	maxRetryUnits: 24,
+	/** Reviewers running at once in one review; the model limiter (`RECODER_LLM_CONCURRENCY`) throttles across reviews. */
+	maxConcurrentAssignments: 12,
 	/**
-	 * Extra correctness assignments over code hunks the plan left out, so every
-	 * changed line is read. Each takes a wider scope than a planned one; the cap
-	 * is only a guard against a pathological diff (~2.3M patch characters).
+	 * Patch characters one review unit holds. Matches `maxToolRoundChars`, so a
+	 * reviewer starts with its whole patch in one evidence round.
 	 */
-	maxSweepAssignments: 48,
-	/** Plans with more specialists than this wait for the developer's go-ahead. */
-	approvalThreshold: 5,
-	/** Each specialist past the baseline adds this many model calls to the budget… */
-	callsPerExtraAssignment: 10,
-	/** …and each wave of `maxConcurrentAssignments` past the first adds this much time. */
-	msPerExtraWave: 8 * 60 * 1000,
-	maxFollowUpAssignments: 2,
-	/** Failed specialists the orchestrator may re-dispatch after the first pass. */
-	maxRetryAssignments: 24,
-	/** Every specialist starts at once; the model limiter (`RECODER_LLM_CONCURRENCY`) is the only throttle. */
-	maxConcurrentAssignments: 8,
-	maxSpecialistTurns: 12,
-	maxPlannerTurns: 5,
-	maxFollowUpPasses: 1,
+	unitBudgetChars: 24_000,
+	/** A lens starts with its unit's patch and change-model context, so it needs few turns of its own. */
+	maxLensTurns: 8,
+	/** A subagent follows one question across the repo from scratch. */
+	maxSubagentTurns: 12,
 	maxConsolidationCalls: 1,
 	maxModelCalls: 320,
 	analysisDeadlineMs: 30 * 60 * 1000,
@@ -43,14 +41,19 @@ export const REVIEW_POLICY = {
 
 	/** Dependency install before any check or repro runs (network on, scripts off). */
 	setupTimeoutMs: 8 * 60 * 1000,
-	/** Commands the planner picks to run on the PR head before specialists start. */
+	/** Checks run on the PR head, at once and alongside the reviewers. */
 	maxBaselineChecks: 4,
-	/** Each baseline check is cut short here, and the whole set at `maxBaselineChecksMs`. */
+	/** Each baseline check is cut short here. */
 	baselineCheckTimeoutMs: 180_000,
-	maxBaselineChecksMs: 6 * 60 * 1000,
 	/**
-	 * Setup and baseline checks prepare the environment; they are not analysis.
-	 * The time they take is added back to the review's deadlines, up to this much.
+	 * Once the reviewers and verifiers are done, the review waits this long for
+	 * baseline checks still queued behind other reviews, then finishes without
+	 * their diagnostics.
+	 */
+	baselineGraceMs: 20_000,
+	/**
+	 * The install prepares the environment; it is not analysis. The time it
+	 * takes is added back to the review's deadlines, up to this much.
 	 */
 	maxPrepExtensionMs: 14 * 60 * 1000,
 	maxRunsPerTurn: 2,
@@ -62,17 +65,43 @@ export const REVIEW_POLICY = {
 
 	/** Every valid candidate is re-proven by running code; budgets grow to fit. This only guards a runaway review. */
 	maxVerifications: 120,
-	maxConcurrentVerifications: 4,
+	/** Verifiers running at once, alongside the reviewers still working. */
+	maxConcurrentVerifications: 6,
 	maxVerifierTurns: 10,
+	/**
+	 * A mutation verifier reads the test, reads the code under test, plants the
+	 * bug and runs the test in one command, then answers, so 10 turns ran out
+	 * before the run.
+	 */
+	maxMutationVerifierTurns: 14,
+	/** The proving command, run again on the merge-base tree by the harness; cut short here. */
+	baseRunTimeoutMs: 60_000,
 	/** One verifier's own clock: told to answer after the first, stopped at the second. */
 	verifierFinalTurnAfterMs: 5 * 60 * 1000,
 	verifierMaxMs: 7 * 60 * 1000,
-	/** The same for one specialist. */
-	specialistFinalTurnAfterMs: 12 * 60 * 1000,
-	specialistMaxMs: 15 * 60 * 1000,
+	/** The same for one reviewer or subagent. */
+	reviewerFinalTurnAfterMs: 12 * 60 * 1000,
+	reviewerMaxMs: 15 * 60 * 1000,
 	/** Each wave of `maxConcurrentVerifications` verifiers adds this much time. */
 	msPerVerificationWave: 5 * 60 * 1000,
-	/** Held back from planning and specialists so verification always gets to run. */
-	reserveMsForVerification: 8 * 60 * 1000,
-	reserveCallsForVerification: 50
+	/** Held back from reviewers and subagents so the last verifiers always get to run. */
+	reserveMsForVerification: 8 * 60 * 1000
 } as const;
+
+/**
+ * The model-call budget and analysis deadline for a review of `assignments`
+ * lens assignments: the base, plus a share per assignment, capped.
+ */
+export function scaledReviewLimits(assignments: number): { modelCalls: number; deadlineMs: number } {
+	const policy = REVIEW_POLICY;
+
+	return {
+		modelCalls: Math.min(policy.maxScaledModelCalls, policy.maxModelCalls + assignments * policy.callsPerAssignment),
+		deadlineMs: Math.min(policy.maxScaledDeadlineMs, policy.analysisDeadlineMs + assignments * policy.msPerAssignment)
+	};
+}
+
+/** The turn limit of one verifier; a mutation verifier has more because it works in more steps. */
+export function verifierTurns(mutation: boolean): number {
+	return mutation ? REVIEW_POLICY.maxMutationVerifierTurns : REVIEW_POLICY.maxVerifierTurns;
+}

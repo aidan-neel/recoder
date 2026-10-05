@@ -1,43 +1,15 @@
-/* Switch: 32×18, knob inset 2px; primary track on, #34312d off. */
+/* Switch: Sivir places the thumb in px from JS, so the track stays px at every root size. */
 [data-ui='switch'] {
 	width: 32px;
-	height: 18px;
-	padding: 2px;
-	border: 0;
-	transition: background-color var(--dur-toggle) var(--ease-pill);
+	height: 20px;
 }
-[data-ui='switch'][data-state='checked'] {
-	background-color: var(--primary);
-}
-[data-ui='switch'][data-state='unchecked'] {
-	background-color: var(--line-strong);
-}
-[data-ui='switch'] > span {
-	translate: none;
-	width: 14px;
+[data-ui='switch'] > [data-state] {
+	top: 3px;
 	height: 14px;
-	box-shadow: none;
-	--tw-ring-shadow: 0 0 #0000;
-	transition: transform var(--dur-toggle) var(--ease-pill);
 }
-[data-ui='switch'][data-state='checked'] > span {
-	background-color: var(--on-primary);
-	transform: translateX(14px);
-}
-[data-ui='switch'][data-state='unchecked'] > span {
-	background-color: var(--text-secondary);
-	transform: none;
-}
-.switch-sm [data-ui='switch'] {
-	width: 26px;
-	height: 15px;
-}
-.switch-sm [data-ui='switch'] > span {
-	width: 11px;
-	height: 11px;
-}
-.switch-sm [data-ui='switch'][data-state='checked'] > span {
-	transform: translateX(11px);
+/* The label scales with the root font but the track doesn't; a label-only switch centers on it. */
+:has(> [data-ui='switch']):not(:has(> label > :nth-child(2))) {
+	align-items: center;
 }
 
 /* Keycap: Geist Mono 10.5, 1px 5px, radius 4, #1f1e1c. */
@@ -301,35 +273,44 @@ kbd.keycap {
 }
 
 /* ───────────────────── Composer (5c) ───────────────────── */
-[data-ui='composer-form'].rc-composer {
-	cursor: text;
-	gap: 12px;
-	padding: 14px 12px 10px 16px;
+/* The form is a bare column: a box holds the input and Send, and the bar
+   (attach, context, model, working ring) sits under it on the canvas. */
+[data-ui='composer-form'].rc-composer,
+[data-ui='composer-form'].rc-composer:focus-within,
+[data-ui='composer-form'].rc-composer[data-state='error'] {
+	gap: 0;
+	padding: 0;
 	border: 0;
-	border-radius: 18px;
+	border-radius: 0;
+	background: transparent;
+	box-shadow: none;
+}
+.rc-composer-box {
+	display: flex;
+	flex-direction: column;
+	padding: 10px;
+	border-radius: 14px;
 	background-color: var(--bg-raised);
 	box-shadow: var(--shadow-composer);
+	cursor: text;
 	transition: box-shadow var(--dur-menu) ease-out;
 }
-[data-ui='composer-form'].rc-composer:focus-within {
-	border: 0;
+.rc-composer:focus-within > .rc-composer-box {
 	box-shadow:
 		0 0 0 1px var(--line-focus),
 		0 10px 30px rgb(var(--shade-rgb) / calc(0.35 * var(--drop)));
 }
-[data-ui='composer-form'].rc-composer[data-size='panel'] {
-	gap: 8px;
-	padding: 10px 10px 8px 14px;
-	border-radius: 16px;
-	box-shadow: 0 0 0 1px var(--line-control);
+.rc-composer[data-state='error'] > .rc-composer-box {
+	box-shadow: 0 0 0 1px color-mix(in oklab, var(--danger) 70%, transparent);
 }
-[data-ui='composer-form'].rc-composer[data-size='panel']:focus-within {
-	box-shadow: 0 0 0 1px var(--line-focus);
+.rc-composer[data-size='panel'] > .rc-composer-box {
+	padding: 8px;
+	border-radius: 12px;
 }
 [data-ui='composer-input'].rc-composer-input {
-	min-height: 23px;
+	min-height: 28px;
 	max-height: 200px;
-	padding: 2px 0 0;
+	padding: 2px 6px 3px;
 	border: 0;
 	border-radius: 0;
 	background: transparent;
@@ -338,42 +319,37 @@ kbd.keycap {
 	line-height: 21px;
 	color: var(--text-primary);
 }
-/* The main composer opens two lines tall; the side panel stays compact. */
-[data-ui='composer-form'].rc-composer:not([data-size='panel']) [data-ui='composer-input'].rc-composer-input {
-	min-height: 44px;
-}
 [data-ui='composer-input'].rc-composer-input::placeholder {
 	color: var(--text-faint);
 }
-[data-ui='composer-toolbar'].rc-composer-footer {
-	min-height: 0;
+[data-ui='composer-toolbar'].rc-composer-bar {
+	min-height: 24px;
 	flex-wrap: nowrap;
-	gap: 4px;
+	gap: 2px;
+	margin-top: 8px;
 	padding: 0;
+	cursor: default;
+}
+.rc-composer[data-size='panel'] [data-ui='composer-toolbar'].rc-composer-bar {
+	margin-top: 6px;
 }
 [data-ui='button'].rc-attach {
-	width: 30px;
-	min-width: 30px;
-	height: 30px;
-	margin-left: -6px;
-	border-radius: 999px;
+	width: 24px;
+	min-width: 24px;
+	height: 24px;
+	border-radius: 6px;
 	color: var(--text-subtle);
 }
 [data-ui='composer-submit'].rc-send {
-	width: 30px;
-	min-width: 30px;
-	height: 30px;
-	padding: 0;
-	border-radius: 999px;
-}
-[data-size='panel'] [data-ui='composer-submit'].rc-send {
 	width: 28px;
 	min-width: 28px;
 	height: 28px;
+	padding: 0;
+	border-radius: 999px;
 }
 [data-ui='composer-submit'].rc-send:disabled {
 	opacity: 1;
-	background-color: var(--bg-hover);
+	background-color: transparent;
 	color: var(--text-ghost);
 }
 [data-ui='composer-submit'].rc-send .sivir-button-face {
@@ -394,11 +370,25 @@ kbd.keycap {
 	border-radius: 2px;
 	background: currentColor;
 }
-/* Working: a full faint track with a bright arc around Send (or Stop) reads
-   as "still working" at a glance. Drawn on the button so it hugs its edge.
-   Keyed on data-working, not data-busy: Sivir's Submit sets data-busy itself
-   (stop/queue only) and would drop the ring while a review works. Sivir's own
-   ring is switched off so the two never stack. */
-[data-ui='composer-submit'].rc-send:not([data-working])::after {
+/* Sivir's own Send ring gives way to the working spinner below. */
+[data-ui='composer-submit'].rc-send::after {
 	content: none;
+}
+/* The review is working or a reply is arriving: a spinner circles Send. */
+.rc-send-wrap {
+	position: relative;
+	display: inline-flex;
+	flex-shrink: 0;
+	margin-left: 4px;
+}
+.rc-send-wrap [data-ui='spinner'].rc-send-ring {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	translate: -50% -50%;
+	pointer-events: none;
+	color: var(--text-muted);
+}
+.rc-send-ring svg {
+	stroke-width: 1.25;
 }

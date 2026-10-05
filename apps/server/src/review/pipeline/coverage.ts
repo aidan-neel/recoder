@@ -1,11 +1,10 @@
 import type { CoverageGap, CoverageState, CoverageSummary } from '@recoder/shared';
 import type { ReviewInventory } from './inventory.js';
-import type { ReviewRole } from './roles.js';
 
 export interface CoverageEntry {
 	hunkId: string;
 	path: string;
-	role?: ReviewRole;
+	role?: string;
 	state: CoverageState;
 	reason: string;
 }
@@ -43,16 +42,10 @@ export class CoverageLedger {
 		}
 	}
 
-	assign(hunkId: string, path: string, role: ReviewRole): void {
+	assign(hunkId: string, path: string, role: string): void {
 		if (this.entries.get(key(hunkId, role))?.state === 'reviewed') return;
 
-		this.entries.set(key(hunkId, role), {
-			hunkId,
-			path,
-			role,
-			state: 'pending',
-			reason: `assigned to ${role}`
-		});
+		this.mark(hunkId, path, 'pending', `assigned to ${role}`, role);
 
 		const bare = this.entries.get(hunkId);
 
@@ -61,48 +54,25 @@ export class CoverageLedger {
 		}
 	}
 
-	examined(hunkId: string, path: string, role: ReviewRole): void {
-		this.entries.set(key(hunkId, role), {
-			hunkId,
-			path,
-			role,
-			state: 'reviewed',
-			reason: `examined by ${role}`
-		});
-
-		this.entries.set(hunkId, { hunkId, path, state: 'reviewed', reason: `examined by ${role}` });
+	examined(hunkId: string, path: string, role: string): void {
+		this.mark(hunkId, path, 'reviewed', `examined by ${role}`, role);
+		this.mark(hunkId, path, 'reviewed', `examined by ${role}`);
 	}
 
-	partial(hunkId: string, path: string, role: ReviewRole, reason: string): void {
+	partial(hunkId: string, path: string, role: string, reason: string): void {
 		if (this.entries.get(key(hunkId, role))?.state === 'reviewed') return;
-		this.entries.set(key(hunkId, role), { hunkId, path, role, state: 'partial', reason });
+		this.mark(hunkId, path, 'partial', reason, role);
 
 		const current = this.entries.get(hunkId);
 
 		if (!current || current.state === 'pending') {
-			this.entries.set(hunkId, { hunkId, path, state: 'partial', reason });
+			this.mark(hunkId, path, 'partial', reason);
 		}
 	}
 
-	excludeUnassigned(inventory: ReviewInventory, reason = 'not assigned within the review budget'): void {
-		for (const file of inventory.files) {
-			for (const hunk of file.hunks) {
-				const bare = this.entries.get(hunk.id);
-
-				if (bare && bare.state === 'pending' && bare.reason === 'not yet assigned') {
-					this.entries.set(hunk.id, {
-						hunkId: hunk.id,
-						path: file.path,
-						state: 'partial',
-						reason
-					});
-				}
-			}
-		}
-	}
-
-	private mark(hunkId: string, path: string, state: CoverageState, reason: string): void {
-		this.entries.set(hunkId, { hunkId, path, state, reason });
+	/** Sets a hunk's entry for one role, or its role-less entry when `role` is omitted. */
+	private mark(hunkId: string, path: string, state: CoverageState, reason: string, role?: string): void {
+		this.entries.set(key(hunkId, role), { hunkId, path, ...(role ? { role } : {}), state, reason });
 	}
 
 	summary(): CoverageSummary {

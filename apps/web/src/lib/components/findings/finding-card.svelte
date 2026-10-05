@@ -5,11 +5,13 @@
 	import * as Collapsible from '@sivir-ui/svelte/components/collapsible';
 	import ModelMarkdown from '../review/model-markdown.svelte';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
+	import FindingFacets from './finding-facets.svelte';
 	import FindingSeverity from './finding-severity.svelte';
 	import FixButton from './fix-button.svelte';
 	import SuggestedFix from './suggested-fix.svelte';
 	import FixStatus from './fix-status.svelte';
 	import VerificationBadge from './verification-badge.svelte';
+	import { categoryLabel } from '$lib/findings/finding-labels';
 	import { SEVERITY_DOT, findingsStore, type Finding } from '$lib/findings/findings.svelte';
 	import { formatAgentName, threadsStore } from '$lib/findings/threads.svelte';
 	import { modelLabel } from '$lib/settings/model-settings.svelte';
@@ -23,7 +25,7 @@
 	const dismissed = $derived(finding.status === 'dismissed');
 	/** Ringed while this is the navigator's current finding. */
 	const focused = $derived(findingsStore.activeId === finding.id);
-	const suggestion = $derived(findingsStore.suggestions[finding.id]);
+	const fix = $derived(findingsStore.readyFix(finding));
 
 	function discuss(): void {
 		findingsStore.discuss(finding.id);
@@ -54,7 +56,7 @@
 				<div class="inline-finding-head">
 					<FindingSeverity severity={finding.severity} />
 					{#if finding.verification}<VerificationBadge verification={finding.verification} />{/if}
-					<span class="min-w-0 truncate">{finding.category}</span>
+					<FindingFacets {finding} class="min-w-0" />
 					{#if finding.code}<span class="inline-finding-id">{finding.code}</span>{/if}
 				</div>
 			{/if}
@@ -62,11 +64,11 @@
 				<Typography.Title level={3} class="sr-only">{finding.title}</Typography.Title>
 				<div class="inline-finding-body ai-voice"><ModelMarkdown content={finding.body} /></div>
 				<FixStatus {finding} />
-				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} />{/if}
+				{#if fix}<SuggestedFix suggestion={fix} />{/if}
 				<div class="inline-finding-foot">
 					<Typography.Metadata
 						class="min-w-0 flex-1 truncate"
-						title={`${finding.category} · ${formatAgentName(finding.agent)}${finding.model ? ` · ${finding.model}` : ''}`}
+						title={`${categoryLabel(finding.category)} · ${formatAgentName(finding.agent)}${finding.model ? ` · ${finding.model}` : ''}`}
 					>
 						{formatAgentName(finding.agent)}{#if finding.model}<span> · {modelLabel(finding.model)}</span>{/if}
 					</Typography.Metadata>

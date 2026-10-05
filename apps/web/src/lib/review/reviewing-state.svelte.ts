@@ -2,11 +2,11 @@ import {
 	ORCHESTRATOR_ID,
 	type ReviewAssignment,
 	type ReviewChatMessage,
-	type ReviewPlanApproval,
 	type ReviewReasoningEntry,
 	type ReviewTask
 } from '@recoder/shared';
-import { countFailedSpecialists, footerLabel, isLive } from './reviewing-view';
+import { STAGE } from './review-progress-state';
+import { agentCounts, footerLabel, isLive } from './reviewing-view';
 
 /** The review snapshot the reviewing view renders. */
 export interface ReviewingInput {
@@ -19,7 +19,6 @@ export interface ReviewingInput {
 	failed: boolean;
 	awaitingPrompt: boolean;
 	paused: boolean;
-	approval: ReviewPlanApproval | null;
 	stage: number;
 	stageLabel: string;
 	stageDetail?: string;
@@ -51,9 +50,18 @@ export class ReviewingState {
 		);
 	});
 
-	readonly specialists = $derived(this.#input.assignments.filter((assignment) => assignment.id !== ORCHESTRATOR_ID));
+	/** Every reviewer and subagent record, for counts and progress. */
+	readonly records = $derived(this.#input.assignments.filter((assignment) => assignment.id !== ORCHESTRATOR_ID));
 
-	readonly failedSpecialists = $derived(countFailedSpecialists(this.specialists));
+	/** The main thread is the reviewer: each unit's work reads as its own, so units never show as agents it started. */
+	readonly units = $derived(this.records.filter((item) => item.role === 'reviewer'));
+
+	/** Agents with a thread of their own: the subagents reviewers asked for. */
+	readonly agents = $derived(this.records.filter((item) => item.role !== 'reviewer'));
+
+	readonly reviewerCounts = $derived(agentCounts(this.records.filter((item) => item.role !== 'subagent')));
+
+	readonly subagentCounts = $derived(agentCounts(this.records.filter((item) => item.role === 'subagent')));
 
 	/** The orchestrator as a conversation of its own, with the model it last ran on. */
 	readonly orchestrator = $derived.by((): ReviewAssignment => {
@@ -78,20 +86,18 @@ export class ReviewingState {
 
 	readonly showSteps = $derived(!this.#input.awaitingPrompt && (this.#input.active || this.#input.failed));
 
-	/** When the first specialist was queued, where the plan's specialists sit in the transcript. */
-	readonly specialistsAt = $derived(
-		this.specialists
+	/** When the first subagent was queued, where they sit in the transcript. */
+	readonly agentsAt = $derived(
+		this.agents
 			.map((item) => item.queuedAt ?? item.startedAt)
 			.filter((at): at is string => !!at)
 			.sort()[0]
 	);
 
-	readonly running = $derived(this.specialists.filter((item) => isLive(item.status)));
+	readonly running = $derived(this.records.filter((item) => isLive(item.status)));
 
-	/** Specialists a model is actually working for; queued ones are waiting on the stage before them. */
-	readonly working = $derived(
-		this.specialists.filter((item) => item.status === 'running' || item.status === 'waiting')
-	);
+	/** Units and subagents a model is actually working for; queued ones are waiting on the stage before them. */
+	readonly working = $derived(this.records.filter((item) => item.status === 'running' || item.status === 'waiting'));
 
 	readonly finalization = $derived(this.#input.tasks.find((task) => task.id === 'consolidation'));
 
@@ -111,19 +117,18 @@ export class ReviewingState {
 		this.#input.reasoning.filter((entry) => !this.finalReasoning.some((item) => item.id === entry.id))
 	);
 
-	/** Verifiers work in the threads of the specialists whose findings they check; here they show as one live step. */
-	readonly verifying = $derived(this.#input.active && this.#input.stage === 4);
+	/** Verifiers have no thread of their own; they show as one live step in the Verify row. */
+	readonly verifying = $derived(this.#input.active && this.#input.stage === STAGE.verify);
 
 	readonly verifications = $derived(this.#input.tasks.filter((task) => task.kind === 'verification'));
 
-	readonly currentStep = $derived(!this.#input.active && !this.#input.failed ? 6 : Math.min(this.#input.stage, 5));
-
-	/** Nothing runs until the developer answers the approval card, so no "Waiting on …" loader yet. */
-	readonly awaitingApproval = $derived(this.#input.active && this.#input.approval?.status === 'pending');
+	readonly currentStep = $derived(
+		!this.#input.active && !this.#input.failed ? STAGE.done : Math.min(this.#input.stage, STAGE.consolidation)
+	);
 
 	/** Early stages (checkout, inventory, planning) have nothing to open, and the live thinking and tool rows already show the work. */
 	readonly showProgress = $derived(
-		!this.awaitingApproval && (!this.#input.active || this.running.length > 0 || this.verifying || !!this.finalization)
+		!this.#input.active || this.running.length > 0 || this.verifying || !!this.finalization
 	);
 
 	/** Checkout and dependency install have no transcript of their own; until the orchestrator speaks, a loading card stands in. */
@@ -139,7 +144,12 @@ export class ReviewingState {
 	readonly preparing = $derived.by(() => {
 		const { active, awaitingPrompt, failed, stage } = this.#input;
 
-		return active && !awaitingPrompt && !failed && (stage === 0 || (!!this.setupTask && !this.orchestratorSpoke));
+		return (
+			active &&
+			!awaitingPrompt &&
+			!failed &&
+			(stage === STAGE.checkout || (!!this.setupTask && !this.orchestratorSpoke))
+		);
 	});
 
 	readonly progressLabel = $derived.by(() => {
@@ -153,7 +163,8 @@ export class ReviewingState {
 			verifying: this.verifying,
 			verifications: this.verifications,
 			working: this.working,
-			running: this.running
+			running: this.running,
+			units: this.reviewerCounts
 		});
 	});
 }

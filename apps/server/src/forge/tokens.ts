@@ -100,6 +100,8 @@ export function clearToken(provider: Provider): void {
 
 /** The provider's token: the environment override first, which is never copied into the saved credentials. */
 export function getToken(provider: Provider): string | undefined {
+	if (provider === 'local') return undefined;
+
 	return (provider === 'gitlab' ? process.env.GITLAB_TOKEN : process.env.GH_TOKEN) || readStored()[provider];
 }
 
@@ -109,9 +111,12 @@ export function hasToken(provider: Provider): boolean {
 
 /**
  * Env for a provider CLI call. GitLab also gets `GITLAB_HOST`: the repo's own
- * host when there is one, else the configured self-managed instance.
+ * host when there is one, else the configured self-managed instance. Local
+ * repos need no credentials.
  */
 export function tokenEnv(provider: Provider, repoUrl?: string): Record<string, string> {
+	if (provider === 'local') return {};
+
 	const token = getToken(provider);
 
 	if (provider === 'github') return token ? { GH_TOKEN: token } : {};

@@ -60,6 +60,15 @@ test.skipIf(!available)('a sandboxed command has no network', async () => {
 	expect(result.output.trim()).toBe('closed');
 });
 
+test.skipIf(!available || !existsSync('/etc/resolv.conf'))(
+	'the networked install reads the same DNS config as the host, even when it links into a hidden dir',
+	async () => {
+		const result = await runSandboxed(layout, 'cat /etc/resolv.conf', { timeoutMs: 10_000, network: true });
+
+		expect(result.output).toBe(await readFile('/etc/resolv.conf', 'utf8'));
+	}
+);
+
 test.skipIf(!available)('a timed-out command is killed along with its background children', async () => {
 	const marker = `sleep ${40_000 + Math.floor(Math.random() * 1000)}`;
 	const result = await run(`${marker} & ${marker}`, 300);

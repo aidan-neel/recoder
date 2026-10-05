@@ -4,7 +4,7 @@
 	import { suggestFix } from '$lib/findings/fixes';
 	import { formatAgentName } from '$lib/findings/threads.svelte';
 
-	/** While a finding's specialist writes its fix, or when that failed. The ready fix renders as SuggestedFix. */
+	/** While a finding's reviewer writes its fix, or when that failed. The ready fix renders as SuggestedFix. */
 	let { finding }: { finding: Finding } = $props();
 	const suggestion = $derived(findingsStore.suggestions[finding.id]);
 </script>

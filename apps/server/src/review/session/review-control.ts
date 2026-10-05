@@ -1,3 +1,4 @@
+import { REVIEW_CANCELLED } from '@recoder/shared';
 import { AsyncLocalStorage } from 'node:async_hooks';
 
 /**
@@ -7,7 +8,6 @@ import { AsyncLocalStorage } from 'node:async_hooks';
  * re-run on resume, without costing a turn) and holds new ones at
  * `reviewPausePoint`. Deadlines read `reviewNow()`, a clock that stands still
  * while paused, so a long pause doesn't eat the review's time budget.
- * An unattended review (started by a webhook) never stops to ask for approval.
  */
 export class ReviewControl {
 	readonly abort = new AbortController();
@@ -16,10 +16,6 @@ export class ReviewControl {
 	private pausedAt = 0;
 	private waiters: (() => void)[] = [];
 	paused = false;
-	/** Set while the review waits for the developer to approve a large plan. */
-	private approval: { since: number; settle: () => void } | null = null;
-
-	constructor(readonly unattended = false) {}
 
 	/** Aborts when a pause starts; renewed on resume. */
 	get pauseSignal(): AbortSignal {
@@ -46,52 +42,13 @@ export class ReviewControl {
 	}
 
 	/** Stop the review; `reason` becomes its failure message. */
-	cancel(reason = 'Review cancelled.'): void {
+	cancel(reason = REVIEW_CANCELLED): void {
 		this.abort.abort(new Error(reason));
 		for (const wake of this.waiters.splice(0)) wake();
 	}
 
 	pausedMs(): number {
-		return (
-			this.pausedTotal +
-			(this.paused ? Date.now() - this.pausedAt : 0) +
-			(this.approval ? Date.now() - this.approval.since : 0)
-		);
-	}
-
-	/**
-	 * Hold until the developer approves the plan, however long that takes. Like
-	 * a pause, the wait doesn't count against the review's time. Declining is a
-	 * cancel, which also settles the wait so the pipeline unwinds.
-	 */
-	requestApproval(): Promise<void> {
-		if (this.abort.signal.aborted) return Promise.resolve();
-
-		return new Promise((resolve) => {
-			const since = Date.now();
-
-			const settle = () => {
-				if (this.approval?.settle !== settle) return;
-				this.pausedTotal += Date.now() - since;
-				this.approval = null;
-				resolve();
-			};
-
-			this.approval = { since, settle };
-			this.abort.signal.addEventListener('abort', settle, { once: true });
-		});
-	}
-
-	/** The developer said yes; false when nothing is waiting for an answer. */
-	approve(): boolean {
-		if (!this.approval) return false;
-		this.approval.settle();
-
-		return true;
-	}
-
-	get awaitingApproval(): boolean {
-		return this.approval !== null;
+		return this.pausedTotal + (this.paused ? Date.now() - this.pausedAt : 0);
 	}
 
 	async wait(signal?: AbortSignal): Promise<void> {
@@ -112,8 +69,8 @@ export class ReviewControl {
 const controls = new Map<string, ReviewControl>();
 const current = new AsyncLocalStorage<ReviewControl>();
 
-export function openReviewControl(reviewId: string, unattended = false): ReviewControl {
-	const control = new ReviewControl(unattended);
+export function openReviewControl(reviewId: string): ReviewControl {
+	const control = new ReviewControl();
 
 	controls.set(reviewId, control);
 

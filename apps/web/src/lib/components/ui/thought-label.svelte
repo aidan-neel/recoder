@@ -4,9 +4,15 @@
 	/**
 	 * "Thinking 3s" that settles into "Thought for 3s": the words crossfade
 	 * through a slight blur, the timer glides to its new spot and freezes, and
-	 * the dot grid folds away. Keep it mounted across the change to see it.
+	 * the dot grid folds away. Keep it mounted across the change to see it. The words default to
+	 * Thinking / Thought; a run of work settles from "Working" to "Worked".
 	 */
-	let { working, time }: { working: boolean; time?: string } = $props();
+	let {
+		working,
+		time,
+		doing = 'Thinking',
+		done = 'Thought'
+	}: { working: boolean; time?: string; doing?: string; done?: string } = $props();
 
 	let workWidth = $state(0);
 	let doneWidth = $state(0);
@@ -17,10 +23,10 @@
 	<span class="thought-label-glyph"><DotLoader /></span>
 	<span class="thought-label-stack">
 		<span class="thought-label-text shimmer-text" data-active={working || undefined} bind:offsetWidth={workWidth}
-			>Thinking</span
+			>{doing}</span
 		>
 		<span class="thought-label-text" data-active={!working || undefined} bind:offsetWidth={doneWidth}
-			>{time ? 'Thought for' : 'Thought'}</span
+			>{time ? `${done} for` : done}</span
 		>
 	</span>
 	{#if time}<span class="thought-label-time" style:transform="translateX({shift}px)">{time}</span>{/if}

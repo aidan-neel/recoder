@@ -104,7 +104,7 @@
 .progress-step[data-status='error'] .progress-label {
 	color: var(--danger);
 }
-/* Ran, but some of it failed (specialists that never returned a result). */
+/* Ran, but some of it failed (reviewers that never returned a result). */
 .progress-step[data-status='partial'] .progress-mark {
 	box-shadow: none;
 	color: var(--sev-medium);
@@ -115,7 +115,7 @@
 .review-result-failed {
 	color: var(--sev-medium);
 }
-/* Finished, but a specialist never returned a result. */
+/* Finished, but a reviewer never returned a result. */
 .review-result-mark[data-warn] {
 	background: color-mix(in srgb, var(--sev-medium) 16%, transparent);
 	color: var(--sev-medium);
@@ -347,6 +347,10 @@
 }
 
 /* Tool group rows (inside a Disclosure body). */
+.tool-row-icon {
+	flex-shrink: 0;
+	color: var(--text-ghost);
+}
 .tool-row-action {
 	/* Fits the longest live label ("Listing files") so targets stay in one column. */
 	width: 84px;

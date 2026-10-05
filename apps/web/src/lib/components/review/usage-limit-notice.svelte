@@ -99,21 +99,19 @@
 
 	let switching = $state(false);
 
-	/** Review moves to the new model; Specialists follow it when they were on the spent plan too. */
+	/** Review moves to the new model; Reviewers follow it when they were on the spent plan too. */
 	async function switchTo(entry: ModelEntry): Promise<void> {
 		const config = modelSettingsUi.config;
 
 		if (!config || switching) return;
 		switching = true;
 
-		const specialist = config.models.find((item) => item.id === config.specialistModelId);
+		const second = config.models.find((item) => item.id === config.specialistModelId);
 
 		const ok = await modelSettingsUi.update({
 			orchestratorModelId: entry.id,
 			orchestratorEffort: resolveEffort(toModelOption(entry), null),
-			...(specialist && providerKey(specialist) === limit.provider
-				? { specialistModelId: null, specialistEffort: null }
-				: {})
+			...(second && providerKey(second) === limit.provider ? { specialistModelId: null, specialistEffort: null } : {})
 		});
 
 		switching = false;

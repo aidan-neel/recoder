@@ -6,31 +6,22 @@ import type {
 	ReviewAssignment,
 	ReviewBudgetSnapshot,
 	ReviewChatMessage,
+	ReviewFunnel,
 	ReviewGuidelinesUsed,
 	ReviewOutcome,
-	ReviewPlanApproval,
 	ReviewReasoningEntry,
 	ReviewStage,
-	ReviewTask,
-	RoleDecision
+	ReviewTask
 } from '@recoder/shared';
 import type { ReviewRevision, ToolCallReport } from '../../../evidence/evidence.js';
+import type { GatheredContext, PrRef } from '../intent/types.js';
 import type { ReviewCheckpoint } from '../../session/review-checkpoint.js';
-import type { DispatchPolicy } from '../dispatch.js';
 
 /** Callbacks the harness reports progress through; every one is optional. */
 export interface HarnessEvents {
 	onTask?: (task: Omit<ReviewTask, 'updatedAt'>) => void;
 	onLog?: (message: string, meta?: { assignmentId?: string; role?: string }) => void;
-	/** A plan past `approvalThreshold` waits for the developer; reported when asked and when answered. */
-	onApproval?: (approval: ReviewPlanApproval) => void;
-	onPlan?: (data: {
-		planVersion: number;
-		summary: string;
-		assignments: ReviewAssignment[];
-		roleDecisions: RoleDecision[];
-		planningDegraded?: boolean;
-	}) => void;
+	onPlan?: (data: { planVersion: number; summary: string; assignments: ReviewAssignment[] }) => void;
 	onAssignment?: (assignment: ReviewAssignment) => void;
 	onCoverage?: (coverage: CoverageSummary, gaps: CoverageGap[]) => void;
 	onBudget?: (budget: ReviewBudgetSnapshot) => void;
@@ -46,8 +37,8 @@ export interface HarnessEvents {
 	onCheckpoint?: (checkpoint: ReviewProgressCheckpoint) => void;
 }
 
-/** A checkpoint as the harness sees it; the pipeline adds the review id and revision. */
-export type ReviewProgressCheckpoint = Omit<ReviewCheckpoint, 'id' | 'headSha' | 'mergeBaseSha'>;
+/** A checkpoint as the harness sees it; the pipeline adds the format version, review id and revision. */
+export type ReviewProgressCheckpoint = Omit<ReviewCheckpoint, 'version' | 'id' | 'headSha' | 'mergeBaseSha'>;
 
 /** Reports a row in the review's task list. */
 export type TaskFn = (
@@ -61,31 +52,47 @@ export type TaskFn = (
 export interface AdaptiveReviewInput {
 	diff: string;
 	sandboxPath: string | null;
+	/** The repository under review; findings people dismissed in it are not reported again. Absent for a bare diff. */
+	repoId?: string | null;
 	revision?: ReviewRevision | null;
 	prTitle?: string | null;
 	prBody?: string | null;
-	/** Reviewers, assignees, linked issues (untrusted). */
-	prContext?: string | null;
+	/** PR description, issues, discussion, stack and past reviews, gathered before the review (untrusted). */
+	context?: GatheredContext | null;
+	/** The pull requests a commit landed in, so history can cite older PRs; absent for local reviews. */
+	prsForCommit?: (sha: string, signal: AbortSignal) => Promise<PrRef[]>;
 	signal?: AbortSignal;
 	/** What the developer asked for in the session before starting the review, verbatim. */
 	instructions?: string | null;
-	/** How many specialists to dispatch; defaults to the saved setting. */
-	dispatch?: DispatchPolicy;
-	/** Continue a failed review: skip planning and the specialists that finished. */
+	/** Subagents the review may run in all, from Settings; the shared default when unset. */
+	subagentCap?: number;
+	/** Whether low-severity findings are kept, from Settings; dropped when unset. */
+	reportLowSeverity?: boolean;
+	/** Continue a failed review: skip the units that finished. */
 	resume?: ReviewProgressCheckpoint | null;
 }
 
 export interface AdaptiveReviewResult {
 	findings: Finding[];
 	unconfirmed: Finding[];
+	/** Where the candidates went; absent when the review failed. */
+	funnel?: ReviewFunnel;
 	summary: string;
 	outcome: ReviewOutcome;
 	recommendedChecks: string[];
 	coverage: CoverageSummary;
 	coverageGaps: CoverageGap[];
 	assignments: ReviewAssignment[];
-	planningDegraded: boolean;
 	error?: string;
 	/** Set when a model call stopped the review, e.g. ChatGPT is signed out. */
 	failure?: ModelFailure;
+}
+
+/** One baseline check run on the PR head before review; detectors read its diagnostics. */
+export interface BaselineResult {
+	command: string;
+	evidenceId?: string;
+	exitCode: number | null;
+	output: string;
+	error?: string;
 }

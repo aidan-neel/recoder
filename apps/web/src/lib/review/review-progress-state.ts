@@ -32,11 +32,8 @@ export interface ProgressMessage {
 
 const SNAPSHOT_KEYS = [
 	'paused',
-	'approval',
 	'planVersion',
-	'planSummary',
 	'assignments',
-	'roleDecisions',
 	'budget',
 	'candidateCount',
 	'coverage',
@@ -45,7 +42,6 @@ const SNAPSHOT_KEYS = [
 	'failure',
 	'recommendedChecks',
 	'stage',
-	'planningDegraded',
 	'orchestratorModel',
 	'guidelines'
 ] as const;
@@ -159,42 +155,50 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 	return next;
 }
 
-/** Pipeline stages in order; the index is what `review-steps.svelte` renders. */
+/** Pipeline stages in order; the index is the step `review-steps.svelte` marks as running. */
+export const STAGE = {
+	checkout: 0,
+	understand: 1,
+	checks: 2,
+	reviewing: 3,
+	subagents: 4,
+	verify: 5,
+	consolidation: 6,
+	done: 7
+} as const;
+
 const STAGE_LABELS = [
 	'Checkout',
 	'Understand changes',
 	'Running checks',
-	'Specialist review',
+	'Reviewing',
+	'Running subagents',
 	'Verifying findings',
 	'Consolidation'
 ] as const;
 
+/** The running stage from live progress, before the review's stored status is considered. */
+function liveStage(progress: ReviewProgress): number {
+	if (progress.stage === 'consolidation' || progress.tasks.finalize) return STAGE.consolidation;
+	if (progress.stage === 'verify') return STAGE.verify;
+	if (progress.stage === 'subagents') return STAGE.subagents;
+	if (progress.stage === 'reviewing') return STAGE.reviewing;
+	if (progress.stage === 'checks') return STAGE.checks;
+	if (progress.assignments?.length) return STAGE.reviewing;
+	if (progress.stage === 'understand' || progress.tasks.inventory) return STAGE.understand;
+
+	return STAGE.checkout;
+}
+
 /**
  * Where a review stands, from its stored status and live progress: the stage
- * index (6 once passed), its label, and the running step's own message.
+ * index (`STAGE.done` once passed), its label, and the running step's own message.
  */
 export function reviewStage(
 	progress: ReviewProgress,
 	status: Review['status']
 ): { index: number; label: string; detail?: string } {
-	const assignments = progress.assignments ?? [];
-
-	const index =
-		status === 'passed'
-			? 6
-			: progress.stage === 'consolidation' || progress.tasks.finalize
-				? 5
-				: progress.stage === 'verify'
-					? 4
-					: progress.stage === 'specialists'
-						? 3
-						: progress.stage === 'checks'
-							? 2
-							: assignments.length > 0
-								? 3
-								: progress.stage === 'understand' || progress.tasks.inventory || progress.tasks.planning
-									? 1
-									: 0;
+	const index = status === 'passed' ? STAGE.done : liveStage(progress);
 
 	const label =
 		status === 'passed'
@@ -203,15 +207,13 @@ export function reviewStage(
 				? 'Review failed'
 				: progress.paused
 					? 'Paused'
-					: progress.approval?.status === 'pending'
-						? 'Waiting for your go-ahead'
-						: ((STAGE_LABELS as readonly string[])[index] ?? 'Review complete');
+					: ((STAGE_LABELS as readonly string[])[index] ?? 'Review complete');
 
 	const detail =
-		index === 0
+		index === STAGE.checkout
 			? progress.tasks[['fetch', 'sandbox', 'diff'].find((id) => progress.tasks[id]?.status === 'running') ?? 'fetch']
 					?.message
-			: index === 2
+			: index === STAGE.checks
 				? (progress.tasks.checks?.status === 'running' ? progress.tasks.checks : progress.tasks.setup)?.message
 				: undefined;
 

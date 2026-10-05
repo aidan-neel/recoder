@@ -9,7 +9,6 @@
 	import ModelSettingsModal from '$lib/components/settings/model-settings-modal.svelte';
 	import UsageModal from '$lib/components/settings/usage-modal.svelte';
 	import DeleteSessionDialog from '$lib/components/session/delete-session-dialog.svelte';
-	import DeclinePlanDialog from '$lib/components/review/decline-plan-dialog.svelte';
 	import TopBar from '$lib/components/shell/top-bar.svelte';
 	import { theme } from '$lib/settings/theme.svelte';
 	import { onMount } from 'svelte';
@@ -55,7 +54,6 @@
 	<GuidelinesEditor />
 	<UsageModal />
 	<DeleteSessionDialog />
-	<DeclinePlanDialog />
 	<CommandPalette />
 	<Toaster />
 </div>

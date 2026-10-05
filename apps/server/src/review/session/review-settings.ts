@@ -1,14 +1,20 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import {
-	DISPATCH_LEVELS,
+	DEFAULT_SUBAGENT_CAP,
 	REASONING_EFFORTS,
-	type DispatchLevel,
+	SUBAGENT_CAPS,
 	type ModelEntryPatch,
-	type ModelSettingsPatch
+	type ModelSettingsPatch,
+	type SubagentCap
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
-import { REVIEW_ROLES } from '../pipeline/roles.js';
+
+const runtimeSchema = z.object({
+	temperature: z.number().min(0).max(2).nullable().optional(),
+	maxOutputTokens: z.number().int().positive().max(1_000_000).optional(),
+	topP: z.number().gt(0).max(1).optional()
+});
 
 const modelEntrySchema = z.object({
 	provider: z.enum(['openai-compatible', 'codex']).optional(),
@@ -21,7 +27,8 @@ const modelEntrySchema = z.object({
 	apiKey: z.string().max(500).optional(),
 	efforts: z.array(z.enum(REASONING_EFFORTS)).max(8).optional(),
 	defaultEffort: z.enum(REASONING_EFFORTS).optional(),
-	contextWindow: z.number().int().positive().max(100_000_000).optional()
+	contextWindow: z.number().int().positive().max(100_000_000).optional(),
+	runtime: runtimeSchema.optional()
 });
 
 export const reviewSettingsSchema = z.object({
@@ -33,7 +40,8 @@ export const reviewSettingsSchema = z.object({
 	specialistModelId: z.string().max(100).nullable().optional(),
 	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
-	specialistDispatch: z.enum(DISPATCH_LEVELS).optional(),
+	subagentCap: z.literal(SUBAGENT_CAPS).optional(),
+	reportLowSeverity: z.boolean().optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
 	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
 	maxFileChars: z.number().int().positive().max(200_000).optional()
@@ -41,18 +49,43 @@ export const reviewSettingsSchema = z.object({
 
 export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
 
-/** Saved files from before models were just Review and Specialist carried per-role picks. */
+/**
+ * Saved files from before models were just Review and a second model carried per-role picks,
+ * and files from before subagents carried a specialist dispatch level.
+ */
 const storedFileSchema = reviewSettingsSchema.extend({
 	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional(),
-	roles: z.partialRecord(z.enum(REVIEW_ROLES), z.string().max(200)).optional(),
-	roleEfforts: z.partialRecord(z.enum(REVIEW_ROLES), z.enum(REASONING_EFFORTS)).optional(),
-	applyToSpecialists: z.boolean().optional()
+	roles: z.record(z.string().max(40), z.string().max(200)).optional(),
+	roleEfforts: z.record(z.string().max(40), z.enum(REASONING_EFFORTS)).optional(),
+	applyToSpecialists: z.boolean().optional(),
+	specialistDispatch: z.enum(['low', 'medium', 'high']).optional()
 });
 
-/** Old per-role picks become one Specialist pick: correctness (always runs) speaks for them all. */
-function migrateLegacy(data: z.infer<typeof storedFileSchema>): ReviewSettingsInput {
-	const { roles, roleEfforts, applyToSpecialists, ...rest } = data;
+type StoredFile = z.infer<typeof storedFileSchema>;
+
+/** The subagent cap each old dispatch level stands for. */
+const CAP_FOR_DISPATCH: Record<NonNullable<StoredFile['specialistDispatch']>, SubagentCap> = {
+	low: 0,
+	medium: 2,
+	high: 4
+};
+
+/** Whether a saved file still holds fields that `migrateLegacy` rewrites, so it is saved again in the new shape. */
+function hasLegacyFields(data: StoredFile): boolean {
+	return [data.roles, data.roleEfforts, data.applyToSpecialists, data.specialistDispatch].some(
+		(field) => field !== undefined
+	);
+}
+
+/**
+ * Old per-role picks become one second-model pick: correctness (always ran) speaks for them all.
+ * An old dispatch level becomes the subagent cap it stands for.
+ */
+function migrateLegacy(data: StoredFile): ReviewSettingsInput {
+	const { roles, roleEfforts, applyToSpecialists, specialistDispatch, ...rest } = data;
 	const next: ReviewSettingsInput = { ...rest };
+
+	if (next.subagentCap === undefined && specialistDispatch) next.subagentCap = CAP_FOR_DISPATCH[specialistDispatch];
 
 	if (next.orchestratorEffort === undefined && roleEfforts?.correctness)
 		next.orchestratorEffort = roleEfforts.correctness;
@@ -67,7 +100,7 @@ function migrateLegacy(data: z.infer<typeof storedFileSchema>): ReviewSettingsIn
 }
 
 /** A saved model entry: the settings patch's entry, always with an id. */
-interface StoredModelEntry extends ModelEntryPatch {
+export interface StoredModelEntry extends ModelEntryPatch {
 	id: string;
 }
 
@@ -122,11 +155,13 @@ export function initReviewSettings(): void {
 					...(e.apiKey ? { apiKey: e.apiKey } : {}),
 					...(e.efforts?.length ? { efforts: e.efforts } : {}),
 					...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
-					...(e.contextWindow ? { contextWindow: e.contextWindow } : {})
+					...(e.contextWindow ? { contextWindow: e.contextWindow } : {}),
+					...(e.runtime && Object.keys(e.runtime).length ? { runtime: e.runtime } : {})
 				}))
 			};
 
 			overrides = apiKey ? { ...normalized, apiKey } : normalized;
+			if (hasLegacyFields(parsed.data)) persist();
 		}
 	} catch {
 		return;
@@ -190,6 +225,10 @@ function mergeModelEntry(
 
 	if (contextWindow) next.contextWindow = contextWindow;
 
+	const runtime = entry.runtime ?? kept?.runtime;
+
+	if (runtime && Object.keys(runtime).length) next.runtime = runtime;
+
 	if (next.provider !== 'codex' && !next.source) {
 		if (entry.apiKey) next.apiKey = entry.apiKey;
 		else if (kept?.apiKey) next.apiKey = kept.apiKey;
@@ -229,7 +268,8 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.specialistModelId !== undefined) clean.specialistModelId = patch.specialistModelId || null;
 	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
 	if (patch.specialistEffort !== undefined) clean.specialistEffort = patch.specialistEffort;
-	if (patch.specialistDispatch !== undefined) clean.specialistDispatch = patch.specialistDispatch;
+	if (patch.subagentCap !== undefined) clean.subagentCap = patch.subagentCap;
+	if (patch.reportLowSeverity !== undefined) clean.reportLowSeverity = patch.reportLowSeverity;
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
 	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;
@@ -275,13 +315,14 @@ export function effectiveReviewEnv(): {
 	};
 }
 
-/** Specialist dispatch level: the saved pick, else `RECODER_REVIEW_DISPATCH`, else medium. */
-export function effectiveDispatchLevel(): DispatchLevel {
-	if (overrides.specialistDispatch) return overrides.specialistDispatch;
+/** How many subagents one review may run: the saved pick, else the default. */
+export function effectiveSubagentCap(): SubagentCap {
+	return overrides.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+}
 
-	const env = process.env.RECODER_REVIEW_DISPATCH?.trim().toLowerCase();
-
-	return (DISPATCH_LEVELS as readonly string[]).includes(env ?? '') ? (env as DispatchLevel) : 'medium';
+/** Whether reviews report low-severity findings: the saved pick, else off. */
+export function effectiveReportLowSeverity(): boolean {
+	return overrides.reportLowSeverity ?? false;
 }
 
 /** API keys are never returned in full; the UI gets this masked preview (`••••1234` or null). */

@@ -1,8 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { withReviewMetrics } from '../../models/metrics';
 import { LlmError } from '../../models/llm';
-import { configForRole } from '../../models/models';
-import { resolveDiscussRole } from '../../review/chat/discuss';
+import { configForAgent } from '../../models/models';
 import { patchApplies, suggestFix, suggestFixRequestSchema } from '../../review/fixes/fix';
 import { CheckoutError, ensureReviewCheckout } from '../../review/session/review-checkout';
 import { fixModelFailure, reviewWithDiff } from './shared';
@@ -27,9 +26,8 @@ app.post('/:id/fixes/suggest', async (c) => {
 	if (loaded instanceof Response) return loaded;
 
 	const { review, body, diff } = loaded;
-	const role = resolveDiscussRole(body.agent);
 
-	configForRole(role);
+	configForAgent(body.agent);
 
 	let sandboxPath: string;
 
@@ -51,7 +49,7 @@ app.post('/:id/fixes/suggest', async (c) => {
 
 		return c.json({ ...result, applies });
 	} catch (err) {
-		if (err instanceof LlmError) return fixModelFailure(c, err, configForRole(role));
+		if (err instanceof LlmError) return fixModelFailure(c, err, configForAgent(body.agent));
 
 		throw err;
 	}

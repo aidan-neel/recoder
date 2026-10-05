@@ -6,7 +6,7 @@ import {
 	subscribeReview
 } from '../../../src/review/session/events';
 import { extractFindingsJson, filterNewFindings, fingerprintFinding } from '../../../src/review/pipeline/harness';
-import { configForRole, isReviewConfigured } from '../../../src/models/models';
+import { configForSubagent, isReviewConfigured } from '../../../src/models/models';
 
 const ENV_KEYS = ['RECODER_REVIEW_BASE_URL', 'RECODER_REVIEW_API_KEY', 'RECODER_REVIEW_MODEL', 'RECODER_PERF_MODEL'];
 
@@ -23,7 +23,7 @@ describe('models', () => {
 	test('unconfigured without env', () => {
 		for (const k of ENV_KEYS) delete process.env[k];
 		expect(isReviewConfigured()).toBe(false);
-		expect(() => configForRole('security')).toThrow();
+		expect(() => configForSubagent()).toThrow();
 	});
 });
 
@@ -52,19 +52,16 @@ describe('extractFindingsJson', () => {
 });
 
 describe('finding stability', () => {
-	test('same issue twice → same fingerprint (wording/whitespace independent)', () => {
-		const a = fingerprintFinding('a.ts', 'sec', 'const  buckets  =  new Map();\n');
-		const b = fingerprintFinding('a.ts', 'sec', 'const buckets = new Map();');
+	test('the fingerprint ignores wording and line, and changes with the symbol, rule or smell', () => {
+		const base = { file: 'a.ts', category: 'readability', smell: 'deep-nesting', symbol: 'Store.load', hunkId: 'h1' };
 
-		expect(a).toBe(b);
-	});
+		expect(fingerprintFinding({ ...base, hunkId: 'h2' })).toBe(fingerprintFinding(base));
+		expect(fingerprintFinding({ ...base, symbol: 'Store.save' })).not.toBe(fingerprintFinding(base));
+		expect(fingerprintFinding({ ...base, smell: 'magic-value' })).not.toBe(fingerprintFinding(base));
 
-	test('different file, category, or code → different fingerprint', () => {
-		const base = fingerprintFinding('a.ts', 'sec', 'x = 1;');
-
-		expect(fingerprintFinding('b.ts', 'sec', 'x = 1;')).not.toBe(base);
-		expect(fingerprintFinding('a.ts', 'perf', 'x = 1;')).not.toBe(base);
-		expect(fingerprintFinding('a.ts', 'sec', 'x = 2;')).not.toBe(base);
+		expect(fingerprintFinding({ ...base, symbol: undefined })).not.toBe(
+			fingerprintFinding({ ...base, symbol: undefined, hunkId: 'h2' })
+		);
 	});
 
 	test('filterNewFindings suppresses repeats and in-run duplicates', () => {

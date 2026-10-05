@@ -7,8 +7,12 @@ export interface RepoLocator {
 	slug: string;
 }
 
-/** github.com (or no recognizable host) → github; *gitlab* hosts and the configured GitLab host → gitlab. */
+/**
+ * `file://` → local; github.com (or no recognizable host) → github; *gitlab*
+ * hosts and the configured GitLab host → gitlab.
+ */
 export function detectProvider(repoUrl: string): Provider {
+	if (/^file:\/\//i.test(repoUrl.trim())) return 'local';
 	if (/gitlab\./i.test(repoUrl.trim())) return 'gitlab';
 
 	const host = getGitlabHost();
@@ -45,7 +49,10 @@ export function locateRepo(repoUrl: string): RepoLocator {
 	return { provider, slug };
 }
 
-/** Fetch refspec + local branch per provider (`n` = PR number / MR iid). */
+/**
+ * Fetch refspec + local branch per provider (`n` = PR number / MR iid). Local
+ * repos keep PR heads at `refs/pull/N/head`, like GitHub.
+ */
 export function refspecFor(provider: Provider, n: number): { fetchRef: string; branch: string } {
 	if (provider === 'gitlab') {
 		return { fetchRef: `merge-requests/${n}/head:mr-${n}`, branch: `mr-${n}` };

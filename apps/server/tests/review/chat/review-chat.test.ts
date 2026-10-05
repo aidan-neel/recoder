@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { ORCHESTRATOR_ID, emptyReviewProgress } from '@recoder/shared';
 import { db, recoverStaleReviews, reviewProgress } from '../../../src/store';
 import { app } from '../../../src/app';
+import { rerunReviewSession } from '../../../src/commands/rerun';
 import { discussionContext, startReviewChat, stopReviewChat } from '../../../src/review/chat/review-chat';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { subscribeReview, clearReviewEvents, reviewEventBuffer } from '../../../src/review/session/events';
@@ -33,7 +34,7 @@ function setup() {
 	reviewProgress.set({
 		...emptyReviewProgress(id),
 		assignments: [
-			{ id: 'security-auth', role: 'security', title: 'Security', status: 'done', reason: 'Auth changed', scope: [] }
+			{ id: 'subagent-1', role: 'subagent', title: 'Auth checks', status: 'done', reason: 'Auth changed', scope: [] }
 		]
 	});
 
@@ -93,7 +94,7 @@ test('server restart settles interrupted replies even on completed reviews', () 
 	expect(reviewProgress.get(id)?.messages?.[0].text).toContain('server restart');
 });
 
-test('specialist chat streams, persists, and is visible in subsequent orchestrator requests', async () => {
+test('subagent chat runs on the second model, streams, persists and is visible in subsequent orchestrator requests', async () => {
 	const id = setup();
 	const requests: Array<{ model: string; messages: { content: string }[] }> = [];
 
@@ -103,14 +104,14 @@ test('specialist chat streams, persists, and is visible in subsequent orchestrat
 		return Response.json({ choices: [{ message: { content: 'The caller checks the token.' } }] });
 	}) as typeof fetch;
 
-	const done = settled(id, 'security-auth');
+	const done = settled(id, 'subagent-1');
 
-	startReviewChat(id, 'security-auth', 'Is the caller protected?');
+	startReviewChat(id, 'subagent-1', 'Is the caller protected?');
 	await done;
 	expect(requests[0].model).toBe('worker');
 	expect(discussionContext(id)).toContain('Is the caller protected?');
 	expect(discussionContext(id)).toContain('The caller checks the token.');
-	expect(discussionContext(id, 'unrelated-specialist')).toBe('');
+	expect(discussionContext(id, 'unrelated-subagent')).toBe('');
 
 	const leadDone = settled(id, ORCHESTRATOR_ID);
 
@@ -146,4 +147,46 @@ test('unknown targets are rejected and duplicate sends are blocked until stop se
 	stopReviewChat(id, ORCHESTRATOR_ID);
 	await done;
 	expect(reviewProgress.get(id)?.messages?.at(-1)).toMatchObject({ status: 'error', text: 'Reply stopped.' });
+});
+
+test('a reply ending in a recoder-review block reruns the finished review and keeps only the conversation', async () => {
+	const id = setup();
+	const startedAt = new Date(Date.now() - 60_000).toISOString();
+
+	db.reviews.set({ ...db.reviews.get(id)!, startedAt });
+
+	reviewProgress.set({
+		...reviewProgress.get(id)!,
+		reasoning: [
+			{ id: 'old', assignmentId: 'unit-1', role: 'reviewer', model: 'worker', text: 'Old run.', at: startedAt }
+		]
+	});
+
+	globalThis.fetch = (async () =>
+		Response.json({
+			choices: [{ message: { content: 'Starting a new review with subagents.\n\n```recoder-review\n{}\n```' } }]
+		})) as unknown as typeof fetch;
+
+	const events: Array<{ step?: string; data?: Record<string, unknown> }> = [];
+	const off = subscribeReview(id, (event) => events.push(event), false);
+	const done = settled(id, ORCHESTRATOR_ID);
+
+	startReviewChat(id, ORCHESTRATOR_ID, 'Try another review, and use subagents this time.');
+	await done;
+	off();
+
+	const progress = reviewProgress.get(id)!;
+
+	expect(progress.messages?.at(-1)).toMatchObject({ status: 'done', text: 'Starting a new review with subagents.' });
+	expect(progress.messages?.every((message) => message.discussion)).toBe(true);
+	expect(progress.reasoning?.some((entry) => entry.id === 'old')).toBe(false);
+	expect(events.some((event) => event.step === 'queued' && event.data?.reset === true)).toBe(true);
+	expect(Date.parse(db.reviews.get(id)!.startedAt!)).toBeGreaterThan(Date.parse(startedAt));
+});
+
+test('a review that is already running cannot be rerun', () => {
+	const id = setup();
+
+	db.reviews.set({ ...db.reviews.get(id)!, status: 'running' });
+	expect(() => rerunReviewSession(id)).toThrow('already running');
 });

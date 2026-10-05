@@ -1,3 +1,5 @@
+import type { OutputRate } from './metrics';
+
 export type ReviewTaskStatus = 'queued' | 'waiting' | 'running' | 'done' | 'error' | 'skipped' | 'partial';
 
 /** Child operation under an assignment — never itself a reviewer identity. */
@@ -16,16 +18,14 @@ export type ReviewTaskKind =
 
 export type CoverageState = 'pending' | 'reviewed' | 'partial' | 'excluded';
 
-/** A review either finishes (every specialist done, failed or skipped) or fails outright; there is no in-between. */
+/** A review either finishes (every reviewer done, failed or skipped) or fails outright; there is no in-between. */
 export type ReviewOutcome = 'complete' | 'failed';
 
-export type RoleDecisionKind = 'selected' | 'not_needed' | 'deferred';
-
-export type ReviewStage = 'checkout' | 'understand' | 'checks' | 'specialists' | 'verify' | 'consolidation';
+export type ReviewStage = 'checkout' | 'understand' | 'checks' | 'reviewing' | 'subagents' | 'verify' | 'consolidation';
 
 export type AssignmentStatus = 'queued' | 'waiting' | 'running' | 'done' | 'error' | 'skipped';
 
-/** Close out every specialist still queued or running when a review stops, so none is left hanging. */
+/** Close out every reviewer still queued or running when a review stops, so none is left hanging. */
 export function settleAssignments(
 	assignments: ReviewAssignment[],
 	reason: string,
@@ -74,22 +74,13 @@ export interface ReviewAssignment {
 	reason: string;
 	status: AssignmentStatus;
 	scope: ReviewAssignmentScope[];
-	questions?: string[];
 	model?: string;
 	candidateCount?: number;
 	currentOperation?: string;
-	followUp?: boolean;
-	priority?: number;
 	startedAt?: string;
 	queuedAt?: string;
 	completedAt?: string;
 	elapsedMs?: number;
-}
-
-export interface RoleDecision {
-	role: string;
-	decision: RoleDecisionKind;
-	reason: string;
 }
 
 export interface CoverageGap {
@@ -122,10 +113,14 @@ export interface ReviewReasoningEntry {
 	role?: string;
 	model?: string;
 	at: string;
+	/** When the thinking stopped, so a finished thought keeps its length instead of timing to now. */
+	endedAt?: string;
 	text: string;
 	status?: 'streaming' | 'done' | 'error';
 	/** The provider only returns a summary of its reasoning (ChatGPT), so the text is dropped and only the timing is kept. */
 	summary?: boolean;
+	/** The speed of the model call this thought came from. */
+	outputRate?: OutputRate;
 }
 
 /** One observable model tool/retrieval call, with its result and timing. */
@@ -213,13 +208,15 @@ export interface ReviewChatMessage {
 	model?: string;
 	/** Interactive messages are included in subsequent review turns. */
 	discussion?: boolean;
-	/** Specialist conversation mirrored into the orchestrator transcript. */
+	/** Reviewer conversation mirrored into the orchestrator transcript. */
 	forwardedFrom?: string;
 	codeContext?: ReviewCodeContext;
 	/** Set on a reply the model could not finish. */
 	failure?: ModelFailure;
 	/** Why a reply stopped partway when the agent carried on after it ("It thought too long…"). */
 	cutOff?: string;
+	/** The speed of the model call writing this reply. */
+	outputRate?: OutputRate;
 }
 
 /** One layer of owner review guidelines a review ran with. */
@@ -242,16 +239,6 @@ export interface ReviewGuidelinesUsed {
 	hash: string;
 }
 
-/**
- * A plan with more specialists than run without asking waits for the
- * developer to approve it. Declining cancels the review.
- */
-export interface ReviewPlanApproval {
-	status: 'pending' | 'approved';
-	/** Specialists the plan needs to read every changed hunk. */
-	requested: number;
-}
-
 export interface ReviewProgress {
 	id: string;
 	sequence: number;
@@ -263,9 +250,7 @@ export interface ReviewProgress {
 	orchestratorModel?: string;
 	updatedAt: string;
 	planVersion?: number;
-	planSummary?: string;
 	assignments?: ReviewAssignment[];
-	roleDecisions?: RoleDecision[];
 	budget?: ReviewBudgetSnapshot;
 	candidateCount?: number;
 	coverage?: CoverageSummary;
@@ -275,12 +260,9 @@ export interface ReviewProgress {
 	failure?: ModelFailure;
 	recommendedChecks?: string[];
 	stage?: ReviewStage;
-	planningDegraded?: boolean;
 	guidelines?: ReviewGuidelinesUsed;
 	/** Held by the developer; model calls wait until resumed. */
 	paused?: boolean;
-	/** Set when the plan needed more specialists than run without asking. */
-	approval?: ReviewPlanApproval;
 }
 
 export function emptyReviewProgress(id: string): ReviewProgress {
@@ -316,7 +298,7 @@ export function assignmentCounts(assignments: ReviewAssignment[] | undefined): {
 export function formatAssignmentHeadline(assignments: ReviewAssignment[] | undefined): string {
 	const counts = assignmentCounts(assignments);
 
-	if (counts.total === 0) return 'No specialists assigned yet';
+	if (counts.total === 0) return 'No reviewers assigned yet';
 
 	const parts: string[] = [];
 
@@ -326,5 +308,5 @@ export function formatAssignmentHeadline(assignments: ReviewAssignment[] | undef
 	if (counts.complete) parts.push(`${counts.complete} complete`);
 	if (counts.failed) parts.push(`${counts.failed} failed`);
 
-	return parts.join(' · ') || `${counts.total} specialist${counts.total === 1 ? '' : 's'}`;
+	return parts.join(' · ') || `${counts.total} reviewer${counts.total === 1 ? '' : 's'}`;
 }

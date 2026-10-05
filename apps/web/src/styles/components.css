@@ -14,8 +14,7 @@
 .disclosure[data-status='running'] > .disclosure-trigger .disclosure-glyph {
 	color: var(--sev-medium);
 }
-.disclosure[data-status='error'] > .disclosure-trigger .disclosure-glyph,
-.disclosure[data-status='error'] > .disclosure-trigger .disclosure-label {
+.disclosure[data-status='error'] > .disclosure-trigger .disclosure-glyph {
 	color: var(--danger);
 }
 .disclosure-label {
@@ -115,6 +114,33 @@
 .disclosure[data-size='row'] > .disclosure-trigger:hover .tool-row-target {
 	color: var(--text-primary);
 }
+/* One quiet line per run of agent work: label, then what it is doing now. */
+.work-log > .disclosure-trigger {
+	min-height: 24px;
+}
+.work-log > .disclosure-trigger .disclosure-label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.work-log-scroll {
+	max-height: min(20rem, 45vh);
+}
+.work-log-entries {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+.work-log .disclosure[data-size='sm'] > .disclosure-trigger {
+	min-height: 26px;
+	font-size: 13.5px;
+}
+.work-log-note {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--text-ghost);
+}
 @media (prefers-reduced-motion: reduce) {
 	.disclosure-panel,
 	.disclosure[data-open] > .disclosure-panel,
@@ -186,54 +212,6 @@
 	box-shadow: none;
 }
 
-/* Pause / cancel under the progress steps while a review runs: quiet, inset like the steps. */
-.progress-controls {
-	display: flex;
-	gap: 2px;
-	padding: 6px 8px 8px;
-	border-top: 1px solid var(--line-subtle-2);
-}
-[data-ui='button'][data-variant][data-size].progress-control {
-	height: 28px;
-	min-height: 28px;
-	gap: 6px;
-	padding: 0 8px;
-	border-radius: 7px;
-	font-size: 12.5px;
-	font-weight: 400;
-	color: var(--text-subtle);
-}
-[data-ui='button'][data-variant][data-size].progress-control:hover {
-	color: var(--text-primary);
-}
-[data-ui='button'][data-variant='ghost'][data-size].progress-cancel:hover {
-	color: var(--danger);
-}
-/* A plan waiting for the go-ahead asks here too, so the question is never only in the conversation. */
-.progress-approval {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
-	padding: 10px 12px 12px;
-	border-top: 1px solid var(--line-subtle-2);
-}
-.progress-approval-text {
-	font-size: 12.5px;
-	line-height: 18px;
-	color: var(--text-secondary);
-}
-.progress-approval-actions {
-	display: flex;
-	gap: 6px;
-}
-[data-ui='button'][data-variant][data-size].progress-approve {
-	flex: 1;
-	height: 28px;
-	min-height: 28px;
-	padding: 0 10px;
-	border-radius: 7px;
-	font-size: 12.5px;
-}
 .review-live[data-paused] .review-live-dot {
 	background-color: var(--sev-medium);
 }
@@ -286,7 +264,22 @@
 	margin-top: 12px;
 }
 
-/* Review stopped (interrupted, failed action): a quiet card, not a red sentence. */
+/* Why a review failed: one line under its closing row, aligned with the label. */
+.finalize-row {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.finalize-reason {
+	margin: 0;
+	padding-left: 22px;
+	font-size: 13px;
+	line-height: 19px;
+	color: var(--text-subtle);
+	text-wrap: pretty;
+}
+
+/* Sign-in, usage limit or a failed action: a quiet card, not a red sentence. */
 [data-ui='card'].review-notice {
 	flex-direction: row;
 	align-items: center;
@@ -398,4 +391,25 @@
 }
 .setup-step[data-state='pending'] .setup-step-title {
 	color: var(--text-subtle);
+}
+
+/* A reply still being asked for: three quiet shimmering lines where it will land. */
+.reply-skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: 9px;
+	padding: 4px 0;
+}
+.reply-skeleton-line {
+	height: 13px;
+	border-radius: 5px;
+}
+.reply-skeleton-line:nth-child(1) {
+	width: 88%;
+}
+.reply-skeleton-line:nth-child(2) {
+	width: 72%;
+}
+.reply-skeleton-line:nth-child(3) {
+	width: 44%;
 }

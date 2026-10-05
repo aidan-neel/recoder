@@ -1,4 +1,4 @@
-import { cancelledError, isTransientLlmError, timedOutError } from './errors';
+import { LlmError, cancelledError, isOpenCodeThrottle, isTransientLlmError, timedOutError } from './errors';
 import type { ChatOptions } from './types';
 
 function llmRetries(): number {
@@ -26,8 +26,19 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /**
- * Run one model request, retrying transient failures with backoff (1s, 2s, 4s…
- * capped at 15s) while the request's deadline allows. `canRetry` lets streaming
+ * How long to wait before retry `tries + 1`: 1s, 2s, 4s… capped at 15s, or
+ * 5s, 10s, 20s… capped at 60s when OpenCode passed on a provider's throttle,
+ * which only lifts once the provider's window moves on.
+ */
+function retryWait(err: unknown, tries: number): number {
+	if (err instanceof LlmError && isOpenCodeThrottle(err)) return Math.min(60_000, 5_000 * 2 ** tries);
+
+	return Math.min(15_000, 1_000 * 2 ** tries);
+}
+
+/**
+ * Run one model request, retrying transient failures with backoff
+ * (`retryWait`) while the request's deadline allows. `canRetry` lets streaming
  * callers stop once text has reached the user.
  */
 export async function withRetries<T>(
@@ -42,7 +53,7 @@ export async function withRetries<T>(
 		try {
 			return await attempt(Math.max(1, deadline - Date.now()));
 		} catch (err) {
-			const wait = Math.min(15_000, 1_000 * 2 ** tries);
+			const wait = retryWait(err, tries);
 
 			if (
 				opts.signal?.aborted ||

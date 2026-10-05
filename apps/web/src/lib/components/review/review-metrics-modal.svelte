@@ -9,11 +9,9 @@
 	import { serverApi } from '$lib/api/server-api';
 	import { modelLabel } from '$lib/settings/model-settings.svelte';
 
-	let {
-		reviewId,
-		open = $bindable(false),
-		showTrigger = true
-	}: { reviewId: string; open?: boolean; showTrigger?: boolean } = $props();
+	let { reviewId }: { reviewId: string } = $props();
+
+	let open = $state(false);
 	let metrics = $state<ReviewMetrics | null>(null);
 	let loading = $state(true);
 	let error = $state('');
@@ -104,7 +102,7 @@
 </script>
 
 <Modal.Root bind:open>
-	{#if showTrigger}<Modal.Trigger variant="ghost" class="shrink-0 font-sans">Usage</Modal.Trigger>{/if}
+	<Modal.Trigger variant="ghost" class="shrink-0 font-sans">Usage</Modal.Trigger>
 	<Modal.Content size="md" class="usage-modal" aria-label="Review token usage">
 		<Modal.Header>
 			<Modal.Title>Token usage</Modal.Title>

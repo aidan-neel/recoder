@@ -166,7 +166,7 @@
 		return lines.join('\n').trimEnd();
 	});
 
-	/** Suggest fixes: specialists write a patch per finding in the background, each shown on its finding. */
+	/** Suggest fixes: reviewers write a patch per finding in the background, each shown on its finding. */
 	const writing = $derived(
 		openItems.filter((f) => f.status === 'open' && findingsStore.suggestions[f.id]?.status === 'loading').length
 	);

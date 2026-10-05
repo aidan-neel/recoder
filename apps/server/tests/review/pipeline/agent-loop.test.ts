@@ -4,7 +4,7 @@ import { EvidenceStore } from '../../../src/evidence/evidence';
 import type { JsonAgentOptions } from '../../../src/review/pipeline/agent-loop/options';
 import { buildInventory } from '../../../src/review/pipeline/inventory';
 import { REVIEW_POLICY } from '../../../src/review/session/review-policy';
-import { parseSpecialistOutput, prematureSpecialistFinal } from '../../../src/review/pipeline/specialist';
+import { parseReviewerOutput, prematureReviewerFinal } from '../../../src/review/pipeline/reviewer';
 
 const originalFetch = globalThis.fetch;
 
@@ -12,7 +12,7 @@ afterEach(() => {
 	globalThis.fetch = originalFetch;
 });
 
-const config = { role: 'correctness' as const, model: 'test', baseUrl: 'https://model.test', apiKey: 'test' };
+const config = { model: 'test', baseUrl: 'https://model.test', apiKey: 'test' };
 
 const diff = Array.from(
 	{ length: 7 },
@@ -25,7 +25,7 @@ const diff = Array.from(
 `
 ).join('');
 
-type SpecialistOutput = NonNullable<ReturnType<typeof parseSpecialistOutput>>;
+type SpecialistOutput = NonNullable<ReturnType<typeof parseReviewerOutput>>;
 
 /** Specialist agent options with test defaults; each test overrides only what it is about. */
 function agentOptions(overrides: Partial<JsonAgentOptions<SpecialistOutput>> = {}): JsonAgentOptions<SpecialistOutput> {
@@ -39,7 +39,7 @@ function agentOptions(overrides: Partial<JsonAgentOptions<SpecialistOutput>> = {
 		maxTurns: 10,
 		signal: new AbortController().signal,
 		deadlineAt: Date.now() + 300_000,
-		parse: parseSpecialistOutput,
+		parse: parseReviewerOutput,
 		...overrides
 	};
 }
@@ -111,7 +111,7 @@ test('commentary alone is not treated as completed review and can be repaired in
 
 	expect(result.value?.findings).toEqual([]);
 	expect(replies).toHaveLength(0);
-	expect(parseSpecialistOutput({ message: 'No review performed.' })).toBeNull();
+	expect(parseReviewerOutput({ message: 'No review performed.' })).toBeNull();
 });
 
 test('retrieval cannot consume the consolidation reserve or bypass the deadline', async () => {
@@ -147,7 +147,7 @@ test('retrieval cannot consume the consolidation reserve or bypass the deadline'
 	expect(calls).toBe(1);
 });
 
-test('a spent hosted plan stops the review with an out-of-usage failure instead of one error per specialist', async () => {
+test('a spent hosted plan stops the review with an out-of-usage failure instead of one error per reviewer', async () => {
 	let calls = 0;
 
 	globalThis.fetch = (async () => {
@@ -158,7 +158,7 @@ test('a spent hosted plan stops the review with an out-of-usage failure instead 
 
 	const error = await runJsonAgent(
 		agentOptions({
-			label: 'planner',
+			label: 'reviewer',
 			config: { ...config, source: 'opencode-go' },
 			maxTurns: 2
 		})
@@ -174,7 +174,7 @@ test('a spent hosted plan stops the review with an out-of-usage failure instead 
 	expect(calls).toBe(1);
 });
 
-test('a final answer that announces more work is sent back once instead of ending the specialist', async () => {
+test('a final answer that announces more work is sent back once instead of ending the reviewer', async () => {
 	const replies = [
 		JSON.stringify({
 			message: "I'm investigating the conventions. Let me gather context on the settings patterns.",
@@ -194,7 +194,7 @@ test('a final answer that announces more work is sent back once instead of endin
 		agentOptions({
 			label: 'patterns',
 			maxTurns: 4,
-			checkFinal: prematureSpecialistFinal,
+			checkFinal: prematureReviewerFinal,
 			onTool: (tool) => {
 				if (tool.status === 'done') tools.push(tool.command);
 			}

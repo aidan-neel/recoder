@@ -5,11 +5,11 @@ import { applyDirective, describeDirective, interpretInstructions } from '../../
 import { composeGuidelines, readGlobalGuidelines, type GuidelinesInput } from '../../guidelines/guidelines.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import type { ReviewInventory } from '../inventory.js';
-import { publishCoverage, type ReviewRun } from './context.js';
+import { orchestratorSays, publishCoverage, type ReviewRun } from './context.js';
 import type { HarnessEvents } from './types.js';
 
-/** Instruction files read from the target revision, in this order. */
-const INSTRUCTION_PATHS = [
+/** Instruction files read from the target revision, in this order; the rule ledger reads them in full. */
+export const INSTRUCTION_PATHS = [
 	'AGENTS.md',
 	'CLAUDE.md',
 	'CONTRIBUTING.md',
@@ -28,6 +28,7 @@ export async function understandChanges(run: ReviewRun): Promise<void> {
 	await applyInstructions(run);
 
 	run.coverage.seed(inventory);
+	if (evidence.revision) announceGuidance(events);
 	await loadGuidance(inventory, evidence, signal, events?.onTool);
 
 	const guidelines = composeGuidelines({
@@ -48,9 +49,14 @@ export async function understandChanges(run: ReviewRun): Promise<void> {
 	if (!run.workspace) events?.onLog?.(`Reviewing without running code: ${run.execReason}`);
 }
 
+/** The orchestrator says what the reads before planning are for, so they don't appear unexplained. */
+function announceGuidance(events: HarnessEvents | undefined): void {
+	orchestratorSays(events, 'message_understand', "Reading the repo's instructions and the code around this change.");
+}
+
 /**
  * The developer's instructions narrow the inventory before anything reads it, so
- * "only the Python files" holds for planning, sweeps and coverage alike. A resumed
+ * "only the Python files" holds for units, reviewers and coverage alike. A resumed
  * review reapplies the directive it already read.
  */
 async function applyInstructions(run: ReviewRun): Promise<void> {
@@ -58,9 +64,9 @@ async function applyInstructions(run: ReviewRun): Promise<void> {
 	const instructions = run.input.instructions?.trim();
 
 	if (!run.directive && instructions) {
-		task('instructions', 'Reading your instructions', 'running', 'Working out which files and lenses you asked for', {
+		task('instructions', 'Reading your instructions', 'running', 'Working out which files you asked for', {
 			kind: 'planning',
-			agent: 'correctness'
+			agent: 'orchestrator'
 		});
 
 		run.directive = await interpretInstructions(
@@ -81,7 +87,7 @@ async function applyInstructions(run: ReviewRun): Promise<void> {
 
 	task('instructions', 'Reading your instructions', 'done', describeDirective(run.directive, applied), {
 		kind: 'planning',
-		agent: 'correctness'
+		agent: 'orchestrator'
 	});
 }
 

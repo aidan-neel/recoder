@@ -1,6 +1,7 @@
 import type { Repo } from '@recoder/shared';
 import { GhError } from './gh.js';
 import { githubRest, githubToken } from './github-rest.js';
+import { localFileHost } from './local/files.js';
 import { detectProvider, parseSlug } from './providers.js';
 import { getToken } from './tokens.js';
 
@@ -273,5 +274,9 @@ function gitlabHost(repo: Repo): RepoFileHost {
 }
 
 export function repoFileHost(repo: Repo): RepoFileHost {
-	return (repo.provider ?? detectProvider(repo.url)) === 'gitlab' ? gitlabHost(repo) : githubHost(repo);
+	const provider = repo.provider ?? detectProvider(repo.url);
+
+	if (provider === 'local') return localFileHost(repo);
+
+	return provider === 'gitlab' ? gitlabHost(repo) : githubHost(repo);
 }

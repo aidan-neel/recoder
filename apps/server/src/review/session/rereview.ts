@@ -3,7 +3,7 @@ import type { Finding, FindingSeverity, RereviewAssessment, RereviewNote, Rerevi
 import { readExcerpt } from '../pipeline/harness.js';
 import { asLlmError, chatCompletion, LlmError, type ChatMessage } from '../../models/llm.js';
 import { extractJsonValue } from '../../models/json-extract.js';
-import { configForRole } from '../../models/models.js';
+import { configForOrchestrator } from '../../models/models.js';
 import { capDiff, FINDING_BODY_STYLE } from '../pipeline/prompts.js';
 import { findingShape } from '../pipeline/schemas.js';
 
@@ -155,7 +155,7 @@ function toFindings(output: RereviewOutput, agent: string, model: string): Findi
  * new, evidence-backed findings. Read-only like the rest of the harness: no tools, no writes.
  */
 export async function runRereview(input: RereviewInput): Promise<RereviewResponse> {
-	const cfg = configForRole('correctness');
+	const cfg = configForOrchestrator();
 	const agent = 'orchestrator';
 
 	try {

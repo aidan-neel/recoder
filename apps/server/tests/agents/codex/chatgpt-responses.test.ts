@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { LlmError } from '../../../src/models/llm';
-import { configForRole } from '../../../src/models/models';
+import { configForSubagent } from '../../../src/models/models';
 import { setReviewOverrides } from '../../../src/review/session/review-settings';
 import {
 	cancellableCompletion,
@@ -64,7 +64,7 @@ test.each(['low', 'medium', 'high'] as const)(
 
 		const f = fixture();
 
-		await f.provider.complete({ ...input, ...configForRole('security') });
+		await f.provider.complete({ ...input, ...configForSubagent() });
 
 		expect(f.calls.find((call) => call.url.endsWith('/responses'))!.body).toMatchObject({
 			reasoning: { effort: reasoningEffort }

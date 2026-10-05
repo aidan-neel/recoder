@@ -3,7 +3,7 @@ import { classifyPath, extraExcludes, packageBoundary, type FileClassification }
 
 type ChangeStatus = 'added' | 'modified' | 'deleted' | 'renamed';
 
-export interface InventoryHunk {
+interface InventoryHunk {
 	id: string;
 	header: string;
 	oldStart: number;
@@ -148,11 +148,11 @@ export function inventorySummary(inventory: ReviewInventory, maxFiles = 200): st
 	return rows.join('\n') + extra;
 }
 
-export function eligibleFiles(inventory: ReviewInventory): InventoryFile[] {
+function eligibleFiles(inventory: ReviewInventory): InventoryFile[] {
 	return inventory.files.filter((file) => !file.excludeReason);
 }
 
-export function rankFiles(files: InventoryFile[]): InventoryFile[] {
+function rankFiles(files: InventoryFile[]): InventoryFile[] {
 	return [...files].sort(
 		(a, b) => b.additions + b.deletions - (a.additions + a.deletions) || a.path.localeCompare(b.path)
 	);

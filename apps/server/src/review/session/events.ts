@@ -7,8 +7,7 @@ import {
 	type ReviewProgress,
 	type ReviewReasoningEntry,
 	type ReviewTask,
-	type ReviewToolCall,
-	type RoleDecision
+	type ReviewToolCall
 } from '@recoder/shared';
 import { reviewProgress } from '../../store';
 
@@ -48,11 +47,8 @@ const MAX_BUFFER = 400;
 
 const SNAPSHOT_KEYS = [
 	'paused',
-	'approval',
 	'planVersion',
-	'planSummary',
 	'assignments',
-	'roleDecisions',
 	'budget',
 	'candidateCount',
 	'coverage',
@@ -61,7 +57,6 @@ const SNAPSHOT_KEYS = [
 	'failure',
 	'recommendedChecks',
 	'stage',
-	'planningDegraded',
 	'orchestratorModel',
 	'guidelines'
 ] as const;
@@ -114,10 +109,13 @@ function applyReasoning(snapshot: ReviewProgress, message: ReviewEvent, entry: O
 	const reasoning = [...(snapshot.reasoning ?? [])];
 	const index = reasoning.findIndex((item) => item.id === entry.id);
 
+	const ended = entry.status === 'done' || entry.status === 'error';
+
 	const next: ReviewReasoningEntry = {
 		...entry,
 		text: entry.text.slice(0, 64_000),
-		at: reasoning[index]?.at ?? message.at
+		at: reasoning[index]?.at ?? message.at,
+		...(ended ? { endedAt: reasoning[index]?.endedAt ?? message.at } : {})
 	};
 
 	message.data = { ...message.data, reasoning: next };
@@ -250,8 +248,6 @@ export function reportReviewPlan(
 		planVersion: number;
 		summary: string;
 		assignments: ReviewAssignment[];
-		roleDecisions: RoleDecision[];
-		planningDegraded?: boolean;
 	}
 ): void {
 	emitReviewEvent(reviewId, {
@@ -259,10 +255,7 @@ export function reportReviewPlan(
 		message: data.summary,
 		data: {
 			planVersion: data.planVersion,
-			planSummary: data.summary,
-			assignments: data.assignments,
-			roleDecisions: data.roleDecisions,
-			planningDegraded: data.planningDegraded
+			assignments: data.assignments
 		}
 	});
 }

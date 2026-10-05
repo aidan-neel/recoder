@@ -1,5 +1,12 @@
 <script lang="ts">
 	import type { ReviewToolCall } from '@recoder/shared';
+	import FileText from '@lucide/svelte/icons/file-text';
+	import FolderTree from '@lucide/svelte/icons/folder-tree';
+	import GitCompare from '@lucide/svelte/icons/git-compare';
+	import Pencil from '@lucide/svelte/icons/pencil';
+	import Search from '@lucide/svelte/icons/search';
+	import Terminal from '@lucide/svelte/icons/terminal';
+	import Wrench from '@lucide/svelte/icons/wrench';
 	import { CodeBlock } from '@sivir-ui/svelte/components/code-block';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
@@ -43,11 +50,28 @@
 									? 'Running tool'
 									: 'Run tool'
 	);
+	/** The glyph that says what kind of work the row is, so a column of them scans without reading. */
+	const Icon = $derived(
+		isRun
+			? Terminal
+			: action === 'writeFile'
+				? Pencil
+				: action === 'readDiff'
+					? GitCompare
+					: ['readFile', 'read'].includes(action)
+						? FileText
+						: ['search', 'rg'].includes(action)
+							? Search
+							: ['listFiles', 'list'].includes(action)
+								? FolderTree
+								: Wrench
+	);
 	const target = $derived(presentation.target || 'Details unavailable');
 </script>
 
 <Disclosure size="row" title={target} meta={duration}>
 	{#snippet label()}
+		<Icon size={14} class="tool-row-icon" aria-hidden="true" />
 		<span class="tool-row-action" class:shimmer-text={live}>{actionLabel}</span>
 		<span class="tool-row-target" data-command={isRun || undefined}>{target}</span>
 		{#if isRun && tool.status !== 'running' && tool.exitCode !== null}<span

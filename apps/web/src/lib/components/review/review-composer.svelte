@@ -15,7 +15,7 @@
 		sending?: boolean;
 		/** A reply is streaming; Send becomes Stop. */
 		generating?: boolean;
-		/** The review is working or a reply is arriving: a ring spins around Send, which still sends. */
+		/** The review is working or a reply is arriving: a ring spins around Send; Send still sends. */
 		busy?: boolean;
 		disabled?: boolean;
 		maxlength?: number;
@@ -31,8 +31,10 @@
 		oninput?: () => void;
 		/** Chips above the input (selected code, attachments). */
 		context?: Snippet;
-		/** Footer items after the + button ("Shared with Orchestrator", Resolve…). */
+		/** Bar items after the + button ("Shared with Orchestrator", sources). */
 		leading?: Snippet;
+		/** Bar items on the right (model, effort). */
+		trailing?: Snippet;
 	}
 
 	let {
@@ -55,7 +57,8 @@
 		attachLabel = 'Attach a file',
 		oninput,
 		context,
-		leading
+		leading,
+		trailing
 	}: Props = $props();
 
 	/** While a reply is pending the button is always Stop, even with text typed. */
@@ -96,49 +99,52 @@
 	class="rc-composer"
 	onpointerdown={focusInput}
 >
-	{@render context?.()}
-	<Composer.Input
-		bind:element={inputEl}
-		rows={1}
-		class="rc-composer-input"
-		aria-label={label}
-		aria-describedby={describedBy}
-		aria-invalid={invalid ? 'true' : undefined}
-		{placeholder}
-		{maxlength}
-		{oninput}
-	/>
-	<Composer.Toolbar class="rc-composer-footer" aria-label="Message options">
-		{#if onAttach}
-			<Button
-				variant="ghost"
-				size="icon"
-				class="rc-attach"
-				aria-label={attachLabel}
-				title={attachLabel}
-				disabled={disabled || attachDisabled || sending}
-				onclick={onAttach}
-			>
-				<Plus size={16} strokeWidth={1.75} aria-hidden="true" />
-			</Button>
-		{/if}
-		{@render leading?.()}
-		<span class="flex-1"></span>
-		<Composer.Submit
-			class="rc-send"
-			data-working={(busy || generating) && !sending ? '' : undefined}
-			disabled={generating && !onStop}
-			onclick={stopClick}
-		>
-			{#snippet children({ action })}
-				{#if sending && !generating}
-					<Spinner size={size === 'panel' ? 14 : 15} aria-hidden="true" />
-				{:else if generating || action === 'stop'}
-					<span class="rc-stop" aria-hidden="true"></span>
-				{:else}
-					<ArrowUp size={size === 'panel' ? 15 : 16} strokeWidth={1.75} aria-hidden="true" />
+	<div class="rc-composer-box">
+		{@render context?.()}
+		<Composer.Input
+			bind:element={inputEl}
+			rows={1}
+			class="rc-composer-input"
+			aria-label={label}
+			aria-describedby={describedBy}
+			aria-invalid={invalid ? 'true' : undefined}
+			{placeholder}
+			{maxlength}
+			{oninput}
+		/>
+		<Composer.Toolbar class="rc-composer-bar" aria-label="Message options">
+			{#if onAttach}
+				<Button
+					variant="ghost"
+					size="icon"
+					class="rc-attach"
+					aria-label={attachLabel}
+					title={attachLabel}
+					disabled={disabled || attachDisabled || sending}
+					onclick={onAttach}
+				>
+					<Plus size={16} strokeWidth={1.75} aria-hidden="true" />
+				</Button>
+			{/if}
+			{@render leading?.()}
+			<span class="flex-1"></span>
+			{@render trailing?.()}
+			<span class="rc-send-wrap">
+				<Composer.Submit class="rc-send" disabled={generating && !onStop} onclick={stopClick}>
+					{#snippet children({ action })}
+						{#if sending && !generating}
+							<Spinner size={14} aria-hidden="true" />
+						{:else if generating || action === 'stop'}
+							<span class="rc-stop" aria-hidden="true"></span>
+						{:else}
+							<ArrowUp size={16} strokeWidth={2} aria-hidden="true" />
+						{/if}
+					{/snippet}
+				</Composer.Submit>
+				{#if (busy || generating) && !sending}
+					<Spinner size={36} class="rc-send-ring" aria-label="Working" />
 				{/if}
-			{/snippet}
-		</Composer.Submit>
-	</Composer.Toolbar>
+			</span>
+		</Composer.Toolbar>
+	</div>
 </Composer.Root>

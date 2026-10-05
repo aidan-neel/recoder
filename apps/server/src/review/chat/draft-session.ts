@@ -3,7 +3,7 @@ import { db, reviewDiffs } from '../../store';
 import { configForOrchestrator } from '../../models/models';
 import { streamChatCompletion } from '../../models/llm';
 import { withReviewMetrics } from '../../models/metrics';
-import { fetchPullDiff } from '../../forge/pull-preview';
+import { fetchPull } from '../../forge/pull-preview';
 import { modelFailure } from '../../models/model-failure';
 import { keyFor, pending, recordChatMessage } from './chat-replies';
 
@@ -21,7 +21,7 @@ export async function prepareDraftSession(reviewId: string, opener: boolean): Pr
 
 	if (!review || !repo) return;
 
-	const fetched = await fetchPullDiff(repo, review.prNumber).catch(() => null);
+	const fetched = await fetchPull(repo, review.prNumber).catch(() => null);
 
 	if (fetched?.diff && db.reviews.get(reviewId)?.status === 'draft' && !reviewDiffs.get(reviewId))
 		reviewDiffs.set(reviewId, fetched.diff);
@@ -104,6 +104,7 @@ function startDraftOpener(
 					timeoutMs: 60_000,
 					maxTokens: 4000,
 					thinking: false,
+					onRate: (rate) => (reply.outputRate = rate),
 					messages: [
 						{
 							role: 'system',

@@ -342,7 +342,7 @@
 
 	--motion-duration-hover: 120ms;
 	--motion-duration-press: var(--dur-press);
-	--motion-duration-item: 0ms;
+	--motion-duration-item: 160ms;
 	--motion-duration-menu: 40ms;
 	--motion-duration-panel: 180ms;
 	--motion-duration-panel-in: 130ms;

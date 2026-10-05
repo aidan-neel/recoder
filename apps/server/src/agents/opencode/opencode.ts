@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { z } from 'zod';
 import { TtlCache } from '../../util/ttl-cache';
 import type {
 	AgentOAuthAttempt,
@@ -9,13 +8,15 @@ import type {
 	ModelEntry,
 	ReasoningEffort
 } from '@recoder/shared';
-import type { LlmError } from '../../models/llm/errors';
 import { withFieldFallback } from '../../models/llm/request-fields';
 import type { ChatOptions } from '../../models/llm/types';
 import type { AgentAdapter } from '../registry';
+import { OAUTH_TIMEOUT_MS } from './api/types';
+import { AgentSession, refusesStructuredOutput, type AgentSessionOptions } from './opencode-agent-session';
 import { openCodeChat } from './opencode-chat';
 import { normalizeCatalog, normalizeModels, normalizeProviders, type CatalogProvider } from './opencode-catalog';
 import { OpenCodeError } from './opencode-error';
+import { toolHost } from './opencode-mcp';
 import { OpenCodeServer, findOpenCode, probeVersion, type ServerRequest } from './opencode-server';
 
 export { OPENCODE_MODEL_PREFIX, normalizeModels, normalizeProviders } from './opencode-catalog';
@@ -23,28 +24,22 @@ export { OpenCodeError } from './opencode-error';
 
 const INSTALL = 'curl -fsSL https://opencode.ai/install | bash';
 
-/** Device-code sign-ins give the user a few minutes to finish in the browser. */
-const OAUTH_TIMEOUT_MS = 10 * 60_000;
-
 /** How long a finished or expired sign-in stays readable before it is dropped. */
 const ATTEMPT_GRACE_MS = 60_000;
 
 /** The full catalog is large and slow to build, and only changes when OpenCode refreshes models.dev. */
 const catalogCache = new TtlCache<CatalogProvider[]>(30 * 60_000, 1);
 
-const authorizeSchema = z.object({ url: z.string(), method: z.enum(['auto', 'code']), instructions: z.string() });
-
-/** The provider refused the forced tool call, or the model never made it. */
-function refusesStructuredOutput(err: LlmError): boolean {
-	return /tool[_ ]?choice|structured output/i.test(err.message);
-}
-
 /** The same call with the schema dropped, asking for plain JSON instead. */
 function plainJson(opts: ChatOptions): ChatOptions {
 	return { ...opts, jsonSchema: undefined, jsonMode: true };
 }
 
-type Attempt = AgentOAuthAttempt & { providerId: string; method: number; state: AgentOAuthStatus; expires: number };
+type Attempt = AgentOAuthAttempt & {
+	finish: (code?: string) => Promise<boolean>;
+	state: AgentOAuthStatus;
+	expires: number;
+};
 
 /**
  * OpenCode, driven through its headless server (`opencode serve`).
@@ -111,17 +106,14 @@ export class OpenCodeAgent implements AgentAdapter {
 	}
 
 	async providers(): Promise<AgentProvider[]> {
-		const [catalog, config, auth] = await Promise.all([
-			this.catalog(),
-			this.request('/config/providers'),
-			this.request('/provider/auth')
-		]);
+		const api = await this.server.api();
+		const [catalog, config, auth] = await Promise.all([this.catalog(), api.connected(), api.authMethods()]);
 
 		return normalizeProviders(catalog, config, auth);
 	}
 
 	async models(): Promise<ModelEntry[]> {
-		const entries = normalizeModels(await this.request('/config/providers'));
+		const entries = normalizeModels(await (await this.server.api()).connected());
 
 		this.known = new Map(entries.map((entry) => [entry.model, entry]));
 
@@ -143,39 +135,45 @@ export class OpenCodeAgent implements AgentAdapter {
 		return providerId;
 	}
 
-	/** One model call through the server. See {@link openCodeChat}. */
-	complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
+	/**
+	 * One model call through the server. See {@link openCodeChat}. A server that cannot force a schema, and
+	 * a model that refuses it, are asked for plain JSON instead.
+	 */
+	async complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
+		const api = await this.server.api();
 		const host = { server: this.server, efforts: (model: string) => this.efforts(model) };
 
-		const run = () => openCodeChat(host, this.noStructuredOutput.has(opts.model) ? plainJson(opts) : opts, onToken);
+		if (!opts.jsonSchema) return openCodeChat(host, opts, onToken);
+		if (!api.structuredOutput) return openCodeChat(host, plainJson(opts), onToken);
 
-		if (!opts.jsonSchema) return run();
+		const run = () => openCodeChat(host, this.noStructuredOutput.has(opts.model) ? plainJson(opts) : opts, onToken);
 
 		return withFieldFallback(opts, opts.model, this.noStructuredOutput, refusesStructuredOutput, run);
 	}
 
+	/** A session in which OpenCode runs a whole agent with Recoder's tools. See {@link AgentSession}. */
+	openAgent(options: AgentSessionOptions): Promise<AgentSession> {
+		return AgentSession.open(
+			{
+				server: this.server,
+				efforts: (model: string) => this.efforts(model),
+				noStructuredOutput: this.noStructuredOutput
+			},
+			options
+		);
+	}
+
 	private catalog(): Promise<CatalogProvider[]> {
-		return catalogCache.get('all', async () => normalizeCatalog(await this.request('/provider')));
+		return catalogCache.get('all', async () => normalizeCatalog(await (await this.server.api()).providers()));
 	}
 
 	/** Save an API key (plus any prompt answers) for a provider. */
 	async setKey(providerId: string, key: string, inputs: Record<string, string> = {}): Promise<void> {
-		await this.request(`/auth/${encodeURIComponent(providerId)}`, {
-			method: 'PUT',
-			body: { type: 'api', key, ...(Object.keys(inputs).length ? { metadata: inputs } : {}) }
-		});
-
-		await this.reload();
+		await (await this.server.api()).setKey(providerId, key, inputs);
 	}
 
 	async remove(providerId: string): Promise<void> {
-		await this.request(`/auth/${encodeURIComponent(providerId)}`, { method: 'DELETE' });
-		await this.reload();
-	}
-
-	/** OpenCode caches which providers are connected per instance; drop it after credentials change. */
-	private async reload(): Promise<void> {
-		await this.request('/global/dispose', { method: 'POST' });
+		await (await this.server.api()).removeLogin(providerId);
 	}
 
 	/**
@@ -187,23 +185,16 @@ export class OpenCodeAgent implements AgentAdapter {
 		method: number,
 		inputs: Record<string, string> = {}
 	): Promise<AgentOAuthAttempt> {
-		const raw = await this.request(`/provider/${encodeURIComponent(providerId)}/oauth/authorize`, {
-			method: 'POST',
-			body: { method, ...(Object.keys(inputs).length ? { inputs } : {}) }
-		});
+		const started = await (await this.server.api()).startOAuth(providerId, method, inputs);
 
-		const parsed = authorizeSchema.safeParse(raw);
-
-		if (!parsed.success) throw new OpenCodeError('OpenCode did not return a sign-in link.');
 		this.pruneAttempts();
 
 		const attempt: Attempt = {
 			attemptId: randomUUID(),
-			url: parsed.data.url,
-			mode: parsed.data.method,
-			instructions: parsed.data.instructions,
-			providerId,
-			method,
+			url: started.url,
+			mode: started.mode,
+			instructions: started.instructions,
+			finish: started.finish,
 			state: { status: 'pending' },
 			expires: Date.now() + OAUTH_TIMEOUT_MS
 		};
@@ -244,17 +235,11 @@ export class OpenCodeAgent implements AgentAdapter {
 
 	private async finishOAuth(attempt: Attempt, code?: string): Promise<void> {
 		try {
-			const ok = await this.request(`/provider/${encodeURIComponent(attempt.providerId)}/oauth/callback`, {
-				method: 'POST',
-				body: { method: attempt.method, ...(code ? { code } : {}) },
-				timeoutMs: OAUTH_TIMEOUT_MS
-			});
+			const ok = await attempt.finish(code);
 
-			if (ok === false) attempt.state = { status: 'failed', message: 'The provider did not accept the sign-in.' };
-			else {
-				await this.reload();
-				attempt.state = { status: 'complete' };
-			}
+			attempt.state = ok
+				? { status: 'complete' }
+				: { status: 'failed', message: 'The provider did not accept the sign-in.' };
 		} catch (e) {
 			attempt.state = { status: 'failed', message: e instanceof Error ? e.message : 'Sign-in failed.' };
 		}
@@ -272,6 +257,7 @@ export class OpenCodeAgent implements AgentAdapter {
 	}
 
 	stop(): void {
+		toolHost.stop();
 		this.server.stop();
 	}
 }

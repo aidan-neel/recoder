@@ -75,7 +75,7 @@ The web app opens on [localhost:5173](http://localhost:5173) and the server list
 
 ## Settings
 
-Add models in Settings. Pick one for the orchestrator, which plans the review, and optionally a different one for each specialist. Models added here take priority over the variables below.
+Add models in Settings, then pick two. The Review model runs the reviewers, consolidates the findings and answers in chat. The second, Subagents and verifiers, answers the questions reviewers hand off and checks each finding. Leave it unset to use the Review model for both. Models added here take priority over the variables below.
 
 ## Variables
 
@@ -85,24 +85,7 @@ RECODER_REVIEW_API_KEY=sk-or-...
 RECODER_REVIEW_MODEL=qwen/qwen-2.5-coder-32b-instruct
 \`\`\`
 
-The API key can be left empty for local servers that don't need one.
-
-## Per-role models
-
-Each review is split across specialists. They all use \`RECODER_REVIEW_MODEL\` unless you set a role's variable. These are only used when no models are added in Settings.
-
-| Variable | Role |
-| --- | --- |
-| \`RECODER_SECURITY_MODEL\` | Security |
-| \`RECODER_PERF_MODEL\` | Performance |
-| \`RECODER_CORRECTNESS_MODEL\` | Correctness |
-| \`RECODER_DOCS_MODEL\` | Docs |
-| \`RECODER_DEDUP_MODEL\` | Duplication |
-| \`RECODER_PATTERNS_MODEL\` | Repository consistency |
-| \`RECODER_TESTING_MODEL\` | Testing |
-| \`RECODER_ERRORS_MODEL\` | Errors |
-| \`RECODER_CONCURRENCY_MODEL\` | Concurrency |
-| \`RECODER_API_MODEL\` | API design |
+The API key can be left empty for local servers that don't need one. These are only used when no models are added in Settings, and every part of the review uses this one model.
 
 ## Reasoning effort
 
@@ -169,17 +152,23 @@ Recoder reads the repository file from the pull request's base commit, so a pull
 
 Recoder clones the repository into its work directory and checks out the pull request's head commit.
 
-## Plan
+## Understand
 
-An orchestrator reads the change and assigns parts of it to specialists. There are ten: security, performance, correctness, docs, duplication, repository consistency, testing, errors, concurrency and API design.
+Recoder reads the repository's instructions, such as \`AGENTS.md\` and \`CONTRIBUTING.md\`, and your guidelines. If you asked it to review only part of the change, it leaves out the rest here.
 
 ## Run checks
 
-Recoder installs the dependencies, then runs the type checks, lint and tests the orchestrator picked for the changed packages. Every specialist sees the results.
+Recoder installs the dependencies, then runs the type check, lint and tests from the \`package.json\` scripts of each JavaScript package the change touches. Every reviewer and verifier sees the results.
 
-## Investigate
+## Review
 
-Each specialist reads the diff and the checkout, runs commands, and writes small repro tests to prove what it reports.
+The change is cut into review units: groups of related files, packed by folder up to a size limit. The same diff always gives the same units. Each unit gets one reviewer that reads its files and the code around them, runs commands, and writes small repro tests to prove what it reports.
+
+A reviewer can hand a deep question to a subagent. Subagents run after every reviewer has finished, up to a limit per review that you set in Settings: Off, Up to 2 or Up to 4. The default is 2. Requests past the limit are skipped and named in the summary.
+
+If a reviewer fails, its unit is retried once. A unit that failed for being too big is split in two.
+
+Findings that point outside the change, or cite evidence that was never gathered, are dropped as reviewers report them.
 
 ## Verify
 
@@ -187,7 +176,7 @@ Every finding goes to a fresh agent that tries to reproduce it by running code. 
 
 ## Consolidate
 
-Findings that point outside the change, or cite evidence that was never gathered, are dropped. Duplicates are merged.
+The Review model merges duplicates in one pass. If that call fails, the findings are kept as reported.
 
 ## Sandbox
 

@@ -8,6 +8,7 @@ import {
 	type ReviewGuidelinesUsed
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
+import { DEFAULT_GLOBAL_GUIDELINES } from './default-guidelines.js';
 
 export const GUIDELINES_TEMPLATE = `## Focus
 -
@@ -26,6 +27,7 @@ function globalFile(): string {
 	return join(serverDataDir(), 'review-guidelines.md');
 }
 
+/** Never saved means the defaults; a saved empty file means the owner cleared them. */
 export function readGlobalGuidelines(): GlobalGuidelines {
 	const file = globalFile();
 
@@ -34,7 +36,8 @@ export function readGlobalGuidelines(): GlobalGuidelines {
 
 		return { content, updatedAt: statSync(file).mtime.toISOString() };
 	} catch (err) {
-		if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { content: '', updatedAt: null };
+		if ((err as NodeJS.ErrnoException).code === 'ENOENT')
+			return { content: DEFAULT_GLOBAL_GUIDELINES, updatedAt: null };
 		throw new Error('Could not read the global review guidelines', { cause: err });
 	}
 }
@@ -91,7 +94,7 @@ export interface GuidelinesInput {
 }
 
 export interface ComposedGuidelines {
-	/** Prompt block for the planner, specialists, and consolidation. */
+	/** Prompt block for reviewers, subagents and consolidation. */
 	block: string;
 	used: ReviewGuidelinesUsed;
 }

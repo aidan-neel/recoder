@@ -15,6 +15,7 @@
 	import { findingsStore } from '$lib/findings/findings.svelte';
 	import { getFileDiff } from '$lib/diff/diff';
 	import { DEFAULT_FILE } from '$lib/session/session-file.svelte';
+	import { STAGE } from '$lib/review/review-progress-state';
 
 	/** Interactive design fixture: real sessions render the same view with API/SSE data. */
 	const now = Date.now();
@@ -27,13 +28,13 @@
 	let continuing = $state(false);
 	let awaitingPrompt = $state(draft);
 	const specs = [
-		{ id: 'testing', title: 'Test Coverage', operation: 'Searching across `/study` for missing tests…' },
-		{ id: 'complexity', title: 'Complexity', operation: 'Searching across `/study` for complexity…' },
-		{ id: 'docs', title: 'Documentation', operation: 'Searching across `/study` for missing documentation…' }
+		{ id: 'unit-1', title: 'packages/cli/src (3 files)', operation: 'Read the command parser and its callers' },
+		{ id: 'unit-2', title: 'packages/cli/src/status.ts', operation: 'Ran the status command on an empty queue' },
+		{ id: 'unit-3', title: 'packages/cli/tests (2 files)', operation: 'Checked the new tests against the change' }
 	];
 	const assignments: ReviewAssignment[] = specs.map((spec) => ({
 		id: spec.id,
-		role: spec.id,
+		role: 'reviewer',
 		title: spec.title,
 		reason: spec.operation,
 		status: 'done',
@@ -56,7 +57,7 @@
 			assignmentId: ORCHESTRATOR_ID,
 			from: 'assistant',
 			model,
-			text: 'Okay, beginning a review on Sivir UI. First, I’ll create 3 specialists for a broad review.',
+			text: 'Okay, beginning a review on Sivir UI.',
 			at: iso(100),
 			status: 'done'
 		}
@@ -122,7 +123,7 @@
 	}));
 	const findings: ReviewingFinding[] = ['high', 'medium', 'medium', 'low'].map((severity, i) => ({
 		id: `example-${i}`,
-		agent: 'testing',
+		agent: 'reviewer',
 		severity: severity as ReviewingFinding['severity'],
 		title: 'Example finding',
 		location: null
@@ -132,7 +133,7 @@
 		...specs.map((spec) => ({
 			id: `${spec.id}-tool`,
 			assignmentId: spec.id,
-			role: spec.id,
+			role: 'reviewer',
 			command: 'rg -n "status" packages/cli',
 			status: 'done' as const,
 			exitCode: 0,
@@ -141,9 +142,9 @@
 			summary: '3 matches'
 		})),
 		{
-			id: 'testing-write',
-			assignmentId: 'testing',
-			role: 'testing',
+			id: 'unit-2-write',
+			assignmentId: 'unit-2',
+			role: 'reviewer',
 			command: `write ${repro}`,
 			input: { action: 'writeFile', path: repro },
 			status: 'done',
@@ -157,9 +158,9 @@
 			}
 		},
 		{
-			id: 'testing-run',
-			assignmentId: 'testing',
-			role: 'testing',
+			id: 'unit-2-run',
+			assignmentId: 'unit-2',
+			role: 'reviewer',
 			command: `$ bun test ${repro}`,
 			input: { action: 'run', command: `bun test ${repro}` },
 			status: 'done',
@@ -175,31 +176,33 @@
 		}
 	];
 	/**
-	 * `?state=running` previews a review mid-flight. `approval` holds it at the plan's go-ahead; `verify`
-	 * shows verifiers checking findings, one reply cut off.
+	 * `?state=running` previews a review mid-flight. `verify`
+	 * shows verifiers checking findings, one reply cut off; `preparing` is still checking out the pull request;
+	 * `planning` has read the repo and is planning, with nothing streaming yet.
 	 */
 	const liveState = page.url.searchParams.get('state');
-	const running = liveState === 'running' || liveState === 'approval' || liveState === 'verify';
+	const running = ['running', 'verify', 'preparing', 'planning'].includes(liveState ?? '');
 	const verifyPreview = liveState === 'verify';
-	const approvalPreview = liveState === 'approval';
+	const preparingPreview = liveState === 'preparing';
+	const planningPreview = liveState === 'planning';
 	const liveSpecs = [
-		{ id: 'correctness', model: 'gpt-5-codex', status: 'running', op: 'Reading src/rate-limit/limiter.ts:20-46' },
-		{ id: 'patterns', model: 'gpt-5-codex', status: 'done', op: 'Compared exports against 14 call sites · 1 finding' },
-		{ id: 'perf', model: 'qwen3-coder', status: 'running', op: 'Searching src/ for Map eviction patterns' },
-		{ id: 'docs', model: 'qwen3-coder', status: 'done', op: 'Checked doc comments in src/rate-limit' },
-		{ id: 'security', model: 'gpt-5-codex', status: 'queued', op: 'Waiting for a free slot' }
+		['unit-1', 'src/rate-limit/limiter.ts', 'running', 'Reading src/rate-limit/limiter.ts:20-46'],
+		['unit-2', 'src/rate-limit (2 files)', 'done', 'Compared exports against 14 call sites · 1 finding'],
+		['unit-3', 'src/time/clock.ts', 'done', 'Checked the clock interface and its fake'],
+		['unit-4', 'tests/rate-limit (2 files)', 'queued', 'Waiting for a free slot'],
+		['subagent-1', 'Does anything still call the free allow()?', 'running', 'Searching src/ for allow( callers']
 	] as const;
-	const liveAssignments: ReviewAssignment[] = liveSpecs.map((spec) => ({
-		id: spec.id,
-		role: spec.id,
-		title: spec.id,
-		reason: spec.op,
-		status: spec.status,
+	const liveAssignments: ReviewAssignment[] = liveSpecs.map(([id, title, status, op]) => ({
+		id,
+		role: id.startsWith('subagent') ? 'subagent' : 'reviewer',
+		title,
+		reason: op,
+		status,
 		scope: [],
-		model: spec.model,
-		currentOperation: spec.op,
+		model: id.startsWith('subagent') ? 'qwen3-coder' : 'gpt-5-codex',
+		currentOperation: op,
 		startedAt: iso(60),
-		...(verifyPreview ? { status: 'done' as const } : approvalPreview ? { status: 'queued' as const } : {})
+		...(verifyPreview ? { status: 'done' as const } : {})
 	}));
 	const verifyTasks: ReviewTask[] = [
 		{ title: 'Refill ignores the injected clock', status: 'running', message: 'Running code', started: 41 },
@@ -217,7 +220,7 @@
 		status: item.status as ReviewTask['status'],
 		message: item.message,
 		kind: 'verification',
-		assignmentId: 'correctness',
+		assignmentId: 'unit-1',
 		startedAt: iso(item.started),
 		updatedAt: iso(0),
 		elapsedMs: item.ms
@@ -225,7 +228,8 @@
 	const verifyReasoning: ReviewReasoningEntry[] = [
 		{
 			id: 'verify-reasoning',
-			assignmentId: 'correctness',
+			assignmentId: 'verify:c1',
+			role: 'verifier',
 			model,
 			at: iso(30),
 			status: 'streaming',
@@ -239,8 +243,8 @@
 		model,
 		at: iso(50),
 		status: 'error',
-		cutOff: 'It thought for too long without answering, so it was asked to answer now.',
-		text: 'Specialists reported 3 candidates. I’m checking each one before I consolidate: the clock finding first, since it decides whether refill works at all.'
+		cutOff: 'Thought too long. Asking for an answer now.',
+		text: 'I have 3 candidate findings. I’m checking each one before I consolidate: the clock finding first, since it decides whether refill works at all.'
 	};
 	const liveMessages: ReviewChatMessage[] = [
 		{
@@ -258,7 +262,7 @@
 			model,
 			at: iso(120),
 			status: 'done',
-			text: 'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI’m sending five specialists. Correctness and repository consistency always run; performance, docs and security were picked for this diff.'
+			text: 'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.'
 		}
 	];
 	/** The last reads are still going, so the preview shows the live labels. */
@@ -269,15 +273,37 @@
 		['readFile', 'src/time/clock.ts', 200]
 	].map(([action, target, ms], i) => ({
 		id: `live-tool-${i}`,
-		assignmentId: ORCHESTRATOR_ID,
+		assignmentId: i >= 2 ? 'unit-1' : ORCHESTRATOR_ID,
 		command: `${action} ${target}`,
 		input: { action: action as string, path: target as string },
-		...(i >= 2
+		...(i >= 2 && !verifyPreview
 			? { status: 'running' as const, exitCode: null }
 			: { status: 'done' as const, exitCode: 0, elapsedMs: ms as number }),
 		startedAt: iso(118 - i)
 	}));
-	const planSummary = 'I created 3 specialists for this review:\n\n- Test coverage\n- Complexity\n- Documentation';
+	const planningMessages: ReviewChatMessage[] = [
+		liveMessages[0],
+		{
+			id: 'understand',
+			assignmentId: ORCHESTRATOR_ID,
+			from: 'assistant',
+			model,
+			at: iso(130),
+			status: 'done',
+			text: "Reading the repo's instructions and the code around this change."
+		}
+	];
+	const planningTasks: ReviewTask[] = [
+		{
+			id: 'planning',
+			label: 'Planning the review',
+			status: 'running',
+			message: 'Cutting the change into units',
+			kind: 'planning',
+			startedAt: iso(20),
+			updatedAt: iso(0)
+		}
+	];
 	const liveReasoning: ReviewReasoningEntry[] = [
 		{
 			id: 'live-reasoning',
@@ -285,9 +311,16 @@
 			model,
 			at: iso(132),
 			status: 'done',
-			text: 'Reading the diff to scope specialists.'
+			text: 'Reading the diff to cut it into units.'
 		}
 	];
+
+	/** The speed the server would report for `chars` streamed since `started`, once half a second has passed. */
+	function previewRate(chars: number, started: number, estimated: boolean): ReviewChatMessage['outputRate'] {
+		const seconds = (performance.now() - started) / 1000;
+
+		return seconds < 0.5 ? undefined : { tokensPerSecond: Math.round(chars / 4 / seconds), estimated };
+	}
 
 	/** Like the real API, sending resolves at once and the canned reply streams after in network-sized chunks. */
 	async function send(assignmentId: string, text: string) {
@@ -310,13 +343,15 @@
 		void (async () => {
 			await new Promise((resolve) => setTimeout(resolve, 700));
 
+			const started = performance.now();
+
 			for (let end = 0; end < reply.length;) {
 				end = Math.min(reply.length, end + 18 + Math.floor(Math.random() * 30));
-				update({ text: reply.slice(0, end) });
+				update({ text: reply.slice(0, end), outputRate: previewRate(end, started, true) });
 				await new Promise((resolve) => setTimeout(resolve, 90 + Math.random() * 160));
 			}
 
-			update({ status: 'done' });
+			update({ status: 'done', outputRate: previewRate(reply.length, started, false) });
 		})();
 	}
 </script>
@@ -336,21 +371,35 @@
 			deletions: 34,
 			elapsed: '2:14'
 		}}
-		assignments={liveAssignments}
-		messages={verifyPreview ? [...liveMessages, cutOffMessage] : liveMessages}
-		toolCalls={liveTools}
-		reasoning={verifyPreview ? [...liveReasoning, ...verifyReasoning] : liveReasoning}
+		assignments={preparingPreview || planningPreview ? [] : liveAssignments}
+		messages={preparingPreview
+			? []
+			: planningPreview
+				? planningMessages
+				: verifyPreview
+					? [...liveMessages, cutOffMessage]
+					: liveMessages}
+		toolCalls={preparingPreview
+			? []
+			: planningPreview
+				? liveTools.map((tool) => ({ ...tool, status: 'done' as const, exitCode: 0 }))
+				: liveTools}
+		reasoning={preparingPreview || planningPreview
+			? []
+			: verifyPreview
+				? [...liveReasoning, ...verifyReasoning]
+				: liveReasoning}
 		orchestratorModel={model}
-		tasks={verifyPreview ? verifyTasks : []}
-		reviewId={approvalPreview ? 'example' : undefined}
-		approval={approvalPreview ? { status: 'pending', requested: 7 } : null}
+		tasks={verifyPreview ? verifyTasks : planningPreview ? planningTasks : []}
 		findings={[]}
-		stage={verifyPreview ? 4 : approvalPreview ? 1 : 3}
-		stageLabel={verifyPreview
-			? 'Verifying findings'
-			: approvalPreview
-				? 'Waiting for your go-ahead'
-				: 'Specialist review'}
+		stage={preparingPreview
+			? STAGE.checkout
+			: verifyPreview
+				? STAGE.verify
+				: planningPreview
+					? STAGE.understand
+					: STAGE.reviewing}
+		stageLabel={verifyPreview ? 'Verifying findings' : 'Reviewing'}
 		active
 		completedAt={undefined}
 		onSend={send}
@@ -390,8 +439,8 @@
 			toolCalls={awaitingPrompt ? [] : toolCalls}
 			orchestratorModel={model}
 			findings={awaitingPrompt ? [] : findings}
-			stage={6}
-			stageLabel={failed ? 'Specialist review' : 'Review complete'}
+			stage={STAGE.done}
+			stageLabel={failed ? 'Reviewing' : 'Review complete'}
 			active={continuing}
 			{failed}
 			{awaitingPrompt}
@@ -405,7 +454,6 @@
 						continuing = false;
 					}
 				: null}
-			{planSummary}
 			onSend={send}
 			onOpenDiff={() => (diffOpen = true)}
 			onStartReview={awaitingPrompt

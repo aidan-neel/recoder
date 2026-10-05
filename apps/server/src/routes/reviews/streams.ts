@@ -68,17 +68,18 @@ async function streamReviewEvents(stream: SSEStreamingApi, review: Review): Prom
 		review.id,
 		(event) => {
 			const terminal = !event.step && (event.type === 'done' || event.type === 'error');
+			const restarted = event.data?.reset === true;
 			const current = db.reviews.get(review.id);
 			const statusChanged = current?.status !== lastStatus;
 
 			if (current) lastStatus = current.status;
 
 			void send(
-				terminal || statusChanged
+				terminal || restarted || statusChanged
 					? {
 							...event,
 							review: current,
-							...(terminal ? { snapshot: reviewProgress.get(review.id) } : {})
+							...(terminal || restarted ? { snapshot: reviewProgress.get(review.id) } : {})
 						}
 					: event
 			);

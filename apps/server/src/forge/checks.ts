@@ -7,10 +7,13 @@ import { tokenEnv } from './tokens.js';
 /**
  * CI checks on a commit or branch: GitHub check runs plus legacy commit
  * statuses (REST API with the configured token, not the gh CLI), or GitLab
- * commit statuses. Read-only.
+ * commit statuses. Read-only. Local repos have no CI, so no checks.
  */
 export async function fetchChecks(repo: Repo, ref: string): Promise<PrCheck[]> {
 	const provider = repo.provider ?? detectProvider(repo.url);
+
+	if (provider === 'local') return [];
+
 	const slug = parseSlug(repo.url);
 
 	return provider === 'gitlab' ? gitlabChecks(slug, ref, repo.url) : githubChecks(slug, ref);

@@ -10,14 +10,13 @@
 	import SessionSkeleton from '$lib/components/session/session-skeleton.svelte';
 	import LiveReviewProgress from '$lib/components/review/live-review-progress.svelte';
 	import ReviewProgress from '$lib/components/review/review-progress.svelte';
-	import ReviewMetricsModal from '$lib/components/review/review-metrics-modal.svelte';
+	import ReviewHeaderStatus from '$lib/components/review/review-header-status.svelte';
 	import SessionHeader, { type SessionView } from '$lib/components/session/session-header.svelte';
 	import SessionChatDrawer from '$lib/components/session/session-chat-drawer.svelte';
 	import SessionDiffPane from '$lib/components/session/session-diff-pane.svelte';
 	import SessionFindingsPane from '$lib/components/session/session-findings-pane.svelte';
 	import { diffPrefs } from '$lib/diff/diff-prefs.svelte';
 	import FindingsBar from '$lib/components/findings/findings-bar.svelte';
-	import PrChecks from '$lib/components/home/pr-checks.svelte';
 	import ThreadPanel from '$lib/components/findings/thread-panel.svelte';
 	import { getFileDiff } from '$lib/diff/diff';
 	import { findingsStore } from '$lib/findings/findings.svelte';
@@ -49,8 +48,6 @@
 	$effect(syncActiveTab);
 
 	const data = new SessionReview(() => id);
-
-	let usageOpen = $state(false);
 
 	/** Review (the conversation), Findings (focus mode) or Diff (inline mode), kept in the URL. */
 	const workspaceView = $derived.by((): 'findings' | 'diff' | null => {
@@ -196,7 +193,7 @@
 		view={loadingView === 'findings' || loadingView === 'diff'
 			? loadingView
 			: page.url.searchParams.get('agent')
-				? 'specialist'
+				? 'agent'
 				: 'conversation'}
 	/>
 {:else if data.down && !data.review}
@@ -262,7 +259,6 @@
 
 {#snippet diffMenu()}
 	{#if data.review}<DropdownMenu.Item callback={() => setDiffView(false)}>Show review</DropdownMenu.Item>{/if}
-	{#if data.review}<DropdownMenu.Item callback={() => (usageOpen = true)}>View token usage</DropdownMenu.Item>{/if}
 	{#if data.review && data.review.source !== 'stub'}{@const repoId = data.review.repoId}<DropdownMenu.Item
 			callback={() => guidelinesStore.open({ kind: 'repo', repoId })}>Review guidelines</DropdownMenu.Item
 		>{/if}
@@ -274,7 +270,6 @@
 	<FindingsBar part="actions">
 		{#snippet trailing()}
 			{#if data.review}
-				{#if data.review.source !== 'stub'}<PrChecks reviewId={data.review.id} />{/if}
 				{#if data.review.status === 'failed'}
 					<Typography.Metadata class="review-state" role="status">Review interrupted</Typography.Metadata>
 				{/if}
@@ -290,6 +285,10 @@
 			{/if}
 		{/snippet}
 	</FindingsBar>
+{/snippet}
+
+{#snippet workspaceStatus()}
+	{#if data.review}<ReviewHeaderStatus reviewId={data.review.id} checks={data.review.source !== 'stub'} />{/if}
 {/snippet}
 
 {#snippet diffWorkspace()}
@@ -309,6 +308,7 @@
 			onView={data.review ? setView : null}
 			menu={diffMenu}
 			toolbar={workspaceToolbar}
+			status={workspaceStatus}
 		/>
 		{@render filesErrorAlert('mx-3 my-3 shrink-0')}
 		{#if data.error}
@@ -366,5 +366,4 @@
 			{/if}
 		</div>
 	</div>
-	{#if data.review}<ReviewMetricsModal reviewId={data.review.id} bind:open={usageOpen} showTrigger={false} />{/if}
 {/snippet}

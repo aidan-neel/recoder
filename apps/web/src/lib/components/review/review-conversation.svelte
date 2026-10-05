@@ -8,18 +8,16 @@
 		type ReviewTask,
 		type ReviewToolCall
 	} from '@recoder/shared';
-	import type { Snippet } from 'svelte';
+	import type { ComponentProps, Snippet } from 'svelte';
 	import * as Conversation from '@sivir-ui/svelte/components/conversation';
-	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import ThoughtLabel from '../ui/thought-label.svelte';
+	import Skeleton from '../ui/skeleton.svelte';
 	import ReviewMessage from './review-message.svelte';
 	import ReviewTraces from './review-traces.svelte';
 	import ReviewDock from './review-dock.svelte';
 	import { groupTranscript } from '$lib/review/review-transcript';
+	import { latestOutputRate } from '$lib/review/output-rate';
 	import {
 		buildRows,
-		elapsed,
 		orphansByIndex,
 		placeInserts,
 		reasoningByMessage,
@@ -46,7 +44,9 @@
 		awaitingPrompt = false,
 		onStartReview = null,
 		signInShown = false,
-		intro
+		intro,
+		folded = [],
+		resume = null
 	}: {
 		assignment: ReviewAssignment;
 		messages: ReviewChatMessage[];
@@ -73,16 +73,21 @@
 		signInShown?: boolean;
 		/** Opening card at the top of a new session; it carries Run full review while it shows. */
 		intro?: Snippet;
+		/** Agents whose work reads as this conversation's own: the units the main thread reviews. */
+		folded?: string[];
+		/** A stopped or failed review: Continue and Restart ride on the composer. */
+		resume?: ComponentProps<typeof ReviewDock>['resume'];
 	} = $props();
 
 	let startingReview = $state(false);
 	let clock = $state(Date.now());
 
-	const belongs = (id?: string) => (id ?? ORCHESTRATOR_ID) === assignment.id;
+	const belongs = (id?: string) => (id ?? ORCHESTRATOR_ID) === assignment.id || (!!id && folded.includes(id));
 	const conversationMessages = $derived(messages.filter((message) => belongs(message.assignmentId)));
 	const conversationReasoning = $derived(reasoning.filter((entry) => belongs(entry.assignmentId)));
+	const outputRate = $derived(latestOutputRate(conversationMessages, conversationReasoning));
 	const conversationTools = $derived(toolCalls.filter((tool) => belongs(tool.assignmentId)));
-	const specialist = $derived(assignment.id !== ORCHESTRATOR_ID);
+	const orchestratorView = $derived(assignment.id === ORCHESTRATOR_ID);
 	const working = $derived(active && ['running', 'waiting', 'queued'].includes(assignment.status));
 	const currentTask = $derived(tasks.findLast((task) => task.status === 'running' || task.status === 'waiting'));
 	const entries = $derived(groupTranscript(conversationMessages, conversationTools));
@@ -114,10 +119,13 @@
 		return conversationReasoning.filter((entry) => !messageIds.has(`message_${entry.id}`));
 	});
 
-	/** Specialists narrate tasks by title ("Running Correctness of …"); only show a status that says something new. Finished states are on the badge at the top. */
-	const specialistStatus = $derived.by(() => {
-		if (!specialist || !working) return null;
-		if (orphanReasoning.some((entry) => entry.status === 'streaming')) return null;
+	/**
+	 * What the agent says it is doing, beside its live work. Reviewers narrate tasks by title ("Running
+	 * Correctness of …"), so only a status that says something new; the main thread only says what it waits on.
+	 */
+	const workNote = $derived.by(() => {
+		if (!working || conversationReasoning.some((entry) => entry.status === 'streaming')) return null;
+		if (orchestratorView) return currentTask?.status === 'waiting' && currentTask.message ? currentTask.message : null;
 
 		const op = currentTask?.message || assignment.currentOperation || '';
 
@@ -131,24 +139,28 @@
 			!conversationReasoning.some((entry) => entry.status === 'streaming')
 	);
 
+	/** The latest reply was cut off and the agent is asking again: the composer says so until the retry's reply or tools arrive. */
+	const retryNotice = $derived.by(() => {
+		const last = conversationMessages.at(-1);
+
+		if (!active || last?.status !== 'error' || !last.cutOff) return null;
+
+		return conversationTools.some((tool) => Date.parse(tool.startedAt) > Date.parse(last.at)) ? null : last.cutOff;
+	});
+
 	const rows = $derived(
 		buildRows({
 			entries,
 			placed: placeInserts(inserts, entries),
 			orphansAt: orphansByIndex(orphanReasoning, entries),
-			ownThoughts
+			ownThoughts,
+			pending: working && !thinking && !conversationMessages.some((message) => message.status === 'streaming')
 		})
 	);
 
-	/** Pending reply with nothing streamed yet: time it from when it was asked for. */
-	const pendingSince = $derived(
-		conversationMessages.findLast(
-			(message) => message.discussion && !message.forwardedFrom && message.status === 'streaming'
-		)?.at
-	);
-
+	/** A thought with nothing after it keeps counting while the agent works, even between its retries. */
 	const anyLive = $derived(
-		thinking || conversationReasoning.some((entry) => entry.status === 'streaming' && (active || generating))
+		thinking || working || conversationReasoning.some((entry) => entry.status === 'streaming' && (active || generating))
 	);
 
 	$effect(() => {
@@ -208,28 +220,30 @@
 						{startingReview}
 						onStartReview={onStartReview &&
 						!intro &&
-						!specialist &&
+						orchestratorView &&
 						row.index === lastAssistantIndex &&
 						message.status !== 'streaming'
 							? () => void startReview()
 							: null}
 					/>
 				{:else}
-					<ReviewTraces traces={row.traces} {active} streaming={active || generating} {now} {clock} />
+					<ReviewTraces
+						traces={row.traces}
+						{active}
+						streaming={working || generating}
+						{now}
+						{clock}
+						pending={row.pending}
+						note={row.pending ? workNote : null}
+					/>
 				{/if}
 			{/each}
-			{#if specialist}
-				{#if specialistStatus}
-					<Typography.Text role="status" class="flex items-start gap-2 text-sm text-foreground-muted">
-						{#if working}<Spinner size={14} class="mt-1 shrink-0" aria-hidden="true" />{/if}
-						<span class="min-w-0 break-words">{specialistStatus}</span>
-					</Typography.Text>
-				{/if}
-			{/if}
 			{#if thinking}
-				<Typography.Text role="status" class="review-thinking"
-					><ThoughtLabel working time={elapsed(clock, pendingSince)} /></Typography.Text
-				>
+				<div class="reply-skeleton" role="status" aria-label="Waiting for a reply">
+					<Skeleton class="reply-skeleton-line" />
+					<Skeleton class="reply-skeleton-line" />
+					<Skeleton class="reply-skeleton-line" />
+				</div>
 			{/if}
 		</Conversation.Content>
 		<Conversation.ScrollButton />
@@ -248,6 +262,9 @@
 		{awaitingPrompt}
 		{generating}
 		{working}
+		notice={retryNotice}
+		{outputRate}
+		{resume}
 		streaming={conversationMessages.some((message) => message.status === 'streaming')}
 	/>
 </div>

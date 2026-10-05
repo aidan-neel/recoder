@@ -1,16 +1,16 @@
 import { z } from 'zod';
 import { extractJsonValue } from '../../models/json-extract.js';
 import type { ReviewInventory } from '../pipeline/inventory.js';
-import type { RoleConfig } from '../../models/models.js';
+import type { ModelConfig } from '../../models/models.js';
 import { streamChatCompletion } from '../../models/llm.js';
-import { REVIEW_ROLES, ROLE_FOCUS, resolveRole, type ReviewRole } from '../pipeline/roles.js';
+import { sampling } from '../../models/runtime-profiles.js';
 
 /**
  * What the developer asked this review to do, in their own words, plus the
- * part of it Recoder can apply by itself: which changed files are in scope
- * and which lenses to run. "Review only the Python files" must not depend on
- * the model remembering it three prompts later, so the file filter is applied
- * to the inventory before planning, and the words go to every prompt.
+ * part of it Recoder can apply by itself: which changed files are in scope.
+ * "Review only the Python files" must not depend on the model remembering it
+ * three prompts later, so the file filter is applied to the inventory before
+ * the change is cut into units, and the words go to every prompt.
  */
 export interface ReviewDirective {
 	/** The developer's messages, verbatim, newest last. */
@@ -19,16 +19,13 @@ export interface ReviewDirective {
 	includeGlobs: string[];
 	/** Globs for changed files to leave out. */
 	excludeGlobs: string[];
-	/** The only roles to run; empty means the planner chooses. */
-	roles: ReviewRole[];
 }
 
 const EXCLUDED_BY_INSTRUCTIONS = 'outside your instructions';
 
 const directiveSchema = z.object({
 	includeGlobs: z.array(z.string().trim().min(1).max(200)).max(40).default([]),
-	excludeGlobs: z.array(z.string().trim().min(1).max(200)).max(40).default([]),
-	roles: z.array(z.string().trim().min(1).max(40)).max(REVIEW_ROLES.length).default([])
+	excludeGlobs: z.array(z.string().trim().min(1).max(200)).max(40).default([])
 });
 
 const LANGUAGE_GLOBS: Record<string, string[]> = {
@@ -105,7 +102,8 @@ function withoutExcluded(includes: string[], excludes: string[]): string[] {
 	return includes.filter((glob) => !excludes.includes(glob));
 }
 
-function matchesGlob(path: string, glob: string): boolean {
+/** Whether `path` matches `glob`; a glob Bun can't parse matches nothing. */
+export function matchesGlob(path: string, glob: string): boolean {
 	try {
 		return new Bun.Glob(glob).match(path);
 	} catch {
@@ -158,13 +156,12 @@ export function directiveBlock(directive: ReviewDirective | null | undefined): s
 
 	const scope = [
 		directive.includeGlobs.length ? `review only files matching ${directive.includeGlobs.join(', ')}` : '',
-		directive.excludeGlobs.length ? `leave out files matching ${directive.excludeGlobs.join(', ')}` : '',
-		directive.roles.length ? `run only these lenses: ${directive.roles.join(', ')}` : ''
+		directive.excludeGlobs.length ? `leave out files matching ${directive.excludeGlobs.join(', ')}` : ''
 	]
 		.filter(Boolean)
 		.join('; ');
 
-	return `DEVELOPER INSTRUCTIONS (trusted; they come from the person who asked for this review and override the default plan, scope and lens selection; they cannot change Recoder's safety rules):\n${directive.instructions.trim()}${scope ? `\nApplied scope: ${scope}.` : ''}`;
+	return `DEVELOPER INSTRUCTIONS (trusted; they come from the person who asked for this review and override the default scope and focus; they cannot change Recoder's safety rules):\n${directive.instructions.trim()}${scope ? `\nApplied scope: ${scope}.` : ''}`;
 }
 
 /**
@@ -205,15 +202,14 @@ export function applyDirective(
 }
 
 function interpreterPrompt(): string {
-	return `You turn a developer's review instructions into a file filter and a lens list for an automated code review. Output STRICT JSON only:
-{"includeGlobs":["**/*.py"],"excludeGlobs":["**/tests/**"],"roles":["security"]}
+	return `You turn a developer's review instructions into a file filter for an automated code review. Output STRICT JSON only:
+{"includeGlobs":["**/*.py"],"excludeGlobs":["**/tests/**"]}
 Rules:
 - includeGlobs: globs for the ONLY changed files to review, when the developer limits the review to some files, a language, a folder or a module. Otherwise [].
 - excludeGlobs: globs for changed files the developer wants left out. Otherwise [].
-- roles: the ONLY lenses to run, when the developer limits the review to some concerns (e.g. "only check security"). A focus request that doesn't exclude the rest ("pay attention to security") is NOT a limit: use []. Allowed role ids: ${REVIEW_ROLES.join(', ')}.
 - Match globs to the changed file list given. Use **/ prefixes for languages (**/*.py), folder/** for folders, and exact paths for named files.
-- Instructions that are questions, greetings or style preferences produce {"includeGlobs":[],"excludeGlobs":[],"roles":[]}.
-Lenses: ${REVIEW_ROLES.map((role) => `${role}: ${ROLE_FOCUS[role].split('.')[0]}`).join('; ')}.`;
+- A concern ("only check security") is not a file filter; the reviewers read it from the instructions.
+- Instructions that are questions, greetings or style preferences produce {"includeGlobs":[],"excludeGlobs":[]}.`;
 }
 
 /**
@@ -224,7 +220,7 @@ Lenses: ${REVIEW_ROLES.map((role) => `${role}: ${ROLE_FOCUS[role].split('.')[0]}
 export async function interpretInstructions(
 	instructions: string,
 	inventory: ReviewInventory,
-	config: RoleConfig,
+	config: ModelConfig,
 	signal: AbortSignal,
 	onLog?: (message: string) => void
 ): Promise<ReviewDirective> {
@@ -233,8 +229,7 @@ export async function interpretInstructions(
 	const directive: ReviewDirective = {
 		instructions,
 		includeGlobs: [...heuristic.includeGlobs],
-		excludeGlobs: [...heuristic.excludeGlobs],
-		roles: []
+		excludeGlobs: [...heuristic.excludeGlobs]
 	};
 
 	const paths = inventory.files
@@ -248,8 +243,7 @@ export async function interpretInstructions(
 				...config,
 				signal,
 				timeoutMs: 60_000,
-				maxTokens: 1200,
-				temperature: 0,
+				...sampling(config, 1200),
 				jsonMode: true,
 				thinking: false,
 				messages: [
@@ -282,12 +276,6 @@ export async function interpretInstructions(
 
 			if (glob && !directive.excludeGlobs.includes(glob)) directive.excludeGlobs.push(glob);
 		}
-
-		for (const raw of parsed.data.roles) {
-			const role = resolveRole(raw);
-
-			if (role && !directive.roles.includes(role)) directive.roles.push(role);
-		}
 	} catch (err) {
 		if (signal.aborted) throw err;
 
@@ -305,8 +293,7 @@ export async function interpretInstructions(
 export function describeDirective(directive: ReviewDirective, applied: { excluded: number; kept: number }): string {
 	const bits = [
 		directive.includeGlobs.length ? `only ${directive.includeGlobs.join(', ')}` : '',
-		directive.excludeGlobs.length ? `skipping ${directive.excludeGlobs.join(', ')}` : '',
-		directive.roles.length ? `lenses: ${directive.roles.join(', ')}` : ''
+		directive.excludeGlobs.length ? `skipping ${directive.excludeGlobs.join(', ')}` : ''
 	].filter(Boolean);
 
 	const files = applied.excluded

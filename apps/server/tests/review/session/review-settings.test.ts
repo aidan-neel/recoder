@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { configForOrchestrator } from '../../../src/models/models';
 import {
+	effectiveSubagentCap,
 	getStoredSettings,
 	initReviewSettings,
 	saveReviewSettings,
@@ -57,4 +58,23 @@ test('disconnecting a provider removes its models and the picks that pointed at 
 	setConnection('opencode-go', null);
 	expect(getStoredSettings().models?.map((entry) => entry.id)).toEqual(['local']);
 	expect(getStoredSettings().orchestratorModelId).toBeUndefined();
+});
+
+test('an old dispatch level loads as its subagent cap, is saved that way and survives a restart', () => {
+	const file = join(process.env.RECODER_DATA_DIR!, 'review-config.json');
+
+	for (const [specialistDispatch, cap] of [
+		['low', 0],
+		['medium', 2],
+		['high', 4]
+	] as const) {
+		writeFileSync(file, JSON.stringify({ specialistDispatch }));
+		setReviewOverrides({});
+		initReviewSettings();
+		expect(effectiveSubagentCap()).toBe(cap);
+		expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ subagentCap: cap });
+		setReviewOverrides({});
+		initReviewSettings();
+		expect(effectiveSubagentCap()).toBe(cap);
+	}
 });

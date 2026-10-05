@@ -12,6 +12,13 @@ export interface TokenUsage {
 	reasoningOutputTokens: number | null;
 }
 
+/** How fast one model call produces output, in tokens per second. */
+export interface OutputRate {
+	tokensPerSecond: number;
+	/** Counted from the streamed text, while the call runs or when the provider reports no output tokens. */
+	estimated: boolean;
+}
+
 export interface TokenCall {
 	id: string;
 	model: string;

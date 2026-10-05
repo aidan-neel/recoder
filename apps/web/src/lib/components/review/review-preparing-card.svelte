@@ -3,6 +3,7 @@
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import ReviewChangeFacts from './review-change-facts.svelte';
 	import type { ReviewingMeta } from '$lib/review/reviewing-view';
+	import { STAGE } from '$lib/review/review-progress-state';
 
 	/** Checkout and dependency install have no transcript of their own; until the orchestrator speaks, this card stands in. */
 	let {
@@ -23,13 +24,13 @@
 	<div class="focus-empty-card">
 		<span class="focus-empty-icon" aria-hidden="true"><Spinner size={18} /></span>
 		<Typography.Title level={2} class="focus-empty-title"
-			>{stage === 0 ? 'Checking out the pull request' : 'Setting up the environment'}</Typography.Title
+			>{stage === STAGE.checkout ? 'Checking out the pull request' : 'Setting up the environment'}</Typography.Title
 		>
 		<p class="focus-empty-text">
-			{(stage === 0 ? stageDetail : setupMessage) ||
-				(stage === 0
+			{(stage === STAGE.checkout ? stageDetail : setupMessage) ||
+				(stage === STAGE.checkout
 					? 'Fetching the branch and preparing an isolated checkout.'
-					: 'Installing dependencies so reviewers can run code.')}
+					: 'Installing dependencies so the review can run code.')}
 		</p>
 		<ReviewChangeFacts {meta} />
 	</div>

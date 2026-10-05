@@ -1,32 +1,9 @@
 import { z } from 'zod';
-import { REVIEW_ROLES } from './roles.js';
 import { REVIEW_POLICY } from '../session/review-policy.js';
 
 /** Shortens an over-long string to `max` characters, ending in an ellipsis; anything else passes through. */
 export function clip(value: unknown, max: number): unknown {
 	return typeof value === 'string' && value.length > max ? `${value.slice(0, max - 1)}…` : value;
-}
-
-/**
- * The fields every assignment carries, planned or proposed as a specialist's
- * follow-up. Callers set how strict a hunk id is and how many files a scope may list.
- */
-export function assignmentShape(hunkId: z.ZodString, maxScope: number) {
-	return {
-		id: z.string().min(1).max(80),
-		role: z.enum(REVIEW_ROLES),
-		title: z.string().min(1).max(200),
-		reason: z.string().min(1).max(1000),
-		scope: z
-			.array(
-				z.object({
-					path: z.string().min(1).max(500),
-					hunkIds: z.array(hunkId).max(80)
-				})
-			)
-			.min(1)
-			.max(maxScope)
-	};
 }
 
 /** The fields every model-reported finding carries; callers choose which severities are accepted. */

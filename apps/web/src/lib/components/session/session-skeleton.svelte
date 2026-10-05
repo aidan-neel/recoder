@@ -5,23 +5,23 @@
 
 	/**
 	 * Mirrors the session layout the URL is about to show: the session bar
-	 * (title, centred view tabs, actions), then the conversation, a specialist's
+	 * (title, centred view tabs, actions), then the conversation, a reviewer's
 	 * conversation, the findings list or the diff.
 	 */
-	let { view = 'conversation' }: { view?: 'conversation' | 'specialist' | 'findings' | 'diff' } = $props();
+	let { view = 'conversation' }: { view?: 'conversation' | 'agent' | 'findings' | 'diff' } = $props();
 	const workspace = $derived(view === 'findings' || view === 'diff');
 </script>
 
 <section
 	class="flex h-full min-h-0 flex-col"
 	role="status"
-	aria-label={view === 'specialist' ? 'Loading specialist conversation' : 'Loading session'}
+	aria-label={view === 'agent' ? 'Loading agent conversation' : 'Loading session'}
 	aria-busy="true"
 >
 	<header class="session-header" data-bordered="" data-merged="" aria-hidden="true">
 		<Skeleton class="h-3.5 w-80 max-w-[40%]" />
 		<div class="view-switch"><Skeleton class="h-7 w-[205px]" /></div>
-		<div class="order-2 flex items-center gap-3 min-[1280px]:ms-auto">
+		<div class="ms-auto flex items-center gap-3">
 			<Skeleton class="h-3 w-20" />
 			{#if workspace}<Skeleton class="h-8 w-28" /><Skeleton class="h-8 w-24" />{/if}
 		</div>
@@ -72,7 +72,7 @@
 		{:else}
 			<div class="flex min-w-0 flex-1 flex-col">
 				<div class="mx-auto flex min-h-0 w-full max-w-[740px] flex-1 flex-col px-6">
-					{#if view === 'specialist'}
+					{#if view === 'agent'}
 						<div class="flex items-center gap-1.5 pt-3">
 							<Skeleton class="size-[30px]" />
 							<Skeleton class="h-3.5 w-28" />

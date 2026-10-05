@@ -174,25 +174,31 @@
 			<div class="settings-row role-row">
 				<div class="min-w-0 flex-1">
 					<p class="settings-row-name">Review</p>
-					<p class="settings-row-desc">Plans the review, writes the summary and answers in chat</p>
+					<p class="settings-row-desc">Runs the reviewers, writes the summary and answers in chat</p>
 				</div>
 				<ModelPicker
 					value={settingsDraft.orchestrator}
-					onSelect={(choice) => (settingsDraft.orchestrator = choice)}
-					label="Review model and reasoning effort"
+					onSelect={(choice) => {
+						settingsDraft.orchestrator = choice;
+					}}
+					role="Review"
 				/>
 			</div>
 			<div class="settings-row role-row">
 				<div class="min-w-0 flex-1">
-					<p class="settings-row-name">Specialists</p>
-					<p class="settings-row-desc">Every specialist in a review runs on this model</p>
+					<p class="settings-row-name">Subagents and verifiers</p>
+					<p class="settings-row-desc">Answers the questions reviewers hand off and checks each finding</p>
 				</div>
 				<ModelPicker
 					value={settingsDraft.specialist}
-					onSelect={(choice) => (settingsDraft.specialist = choice)}
+					onSelect={(choice) => {
+						settingsDraft.specialist = choice;
+					}}
 					placeholder="Same as Review"
-					onFollow={() => (settingsDraft.specialist = null)}
-					label="Specialist model and reasoning effort"
+					onFollow={() => {
+						settingsDraft.specialist = null;
+					}}
+					role="Subagent"
 				/>
 			</div>
 		</Card.Root>

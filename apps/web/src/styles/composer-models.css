@@ -1,29 +1,21 @@
-/* Diff view: one bar. Title far left · view tabs centred · ⋯, status,
-   Ask reviewer, Fix all far right (the toolbar's pieces join the header row).
+/* One bar. PR number and view tabs far left; the view's actions, Usage, checks and ⋯ far right.
    The findings stepper and filters live in the sidebar (.findings-nav). */
 .session-header[data-merged] {
+	position: relative;
 	gap: 8px;
 	padding: 0 12px 0 18px;
 }
+.session-actions {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
 .session-toolbar,
-.session-toolbar .findings-toolbar {
-	display: contents;
-}
-.session-header[data-merged] {
-	position: relative;
-}
-.session-header[data-merged] .view-switch {
-	order: 1;
-	/* Tabs sit left beside the PR number; the actions push to the far right. */
-	margin-right: auto;
-}
-.session-header[data-merged] > [data-ui='dropdown-menu-trigger'],
-.session-header[data-merged] > [data-ui='button'] {
-	order: 2;
-}
+.session-toolbar .findings-toolbar,
 .session-toolbar .findings-toolbar-end {
-	order: 3;
-	margin-left: 4px;
+	display: contents;
 }
 @media (max-width: 1279px) {
 	.session-toolbar .review-state {

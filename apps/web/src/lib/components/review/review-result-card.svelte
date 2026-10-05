@@ -12,16 +12,26 @@
 	let {
 		findings,
 		meta,
-		failedSpecialists,
+		failed,
 		onShowView,
 		onOpenDiff
 	}: {
 		findings: ReviewingFinding[];
 		meta: ReviewingMeta;
-		failedSpecialists: number;
+		/** Units and subagents that ended without a result. */
+		failed: { units: number; subagents: number };
 		onShowView: ((view: 'findings' | 'diff') => void | Promise<void>) | null;
 		onOpenDiff: (() => void) | null;
 	} = $props();
+
+	const failedLabel = $derived(
+		[
+			failed.units ? `${failed.units} ${failed.units === 1 ? 'unit' : 'units'}` : '',
+			failed.subagents ? `${failed.subagents} ${failed.subagents === 1 ? 'subagent' : 'subagents'}` : ''
+		]
+			.filter(Boolean)
+			.join(' and ')
+	);
 
 	const findingCounts = $derived(
 		(['high', 'medium', 'low'] as const)
@@ -31,8 +41,8 @@
 </script>
 
 <Card.Root class="review-result">
-	<span class="review-result-mark" data-warn={failedSpecialists > 0 || undefined} aria-hidden="true"
-		>{#if failedSpecialists}<CircleAlert size={14} strokeWidth={2.25} />{:else}<Check
+	<span class="review-result-mark" data-warn={!!failedLabel || undefined} aria-hidden="true"
+		>{#if failedLabel}<CircleAlert size={14} strokeWidth={2.25} />{:else}<Check
 				size={14}
 				strokeWidth={2.25}
 			/>{/if}</span
@@ -44,8 +54,7 @@
 				? `${findings.length} ${findings.length === 1 ? 'finding' : 'findings'}`
 				: 'No findings'}{meta.elapsed ? ` · ${meta.elapsed}` : ''}{meta.files !== null
 				? ` · ${meta.files} ${meta.files === 1 ? 'file' : 'files'}`
-				: ''}{#if failedSpecialists}{' · '}<span class="review-result-failed"
-					>{failedSpecialists} {failedSpecialists === 1 ? 'specialist' : 'specialists'} failed</span
+				: ''}{#if failedLabel}{' · '}<span class="review-result-failed">{failedLabel} failed</span
 				>{/if}</Typography.Metadata
 		>
 		{#if findingCounts.length}

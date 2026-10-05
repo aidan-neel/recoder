@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { ReviewPlanApproval, ReviewToolCall } from '@recoder/shared';
+	import type { ReviewToolCall } from '@recoder/shared';
 	import CheckCheck from '@lucide/svelte/icons/check-check';
 	import CircleAlert from '@lucide/svelte/icons/circle-alert';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
@@ -10,6 +10,7 @@
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type { FileDiff } from '$lib/diff/diff';
+	import { categoryLabel, SMELL_LABELS } from '$lib/findings/finding-labels';
 	import { SEVERITIES, findingsStore, type Finding } from '$lib/findings/findings.svelte';
 	import { compareSeverity } from '$lib/findings/severity';
 	import { PendingAction } from '$lib/shell/pending-action.svelte';
@@ -32,13 +33,8 @@
 		onRestart?: (() => void) | null;
 		/** What a running review is doing right now ("Running checks · bun test"). */
 		stageLabel?: string | null;
+		/** Held by the developer; model calls wait until resumed. */
 		paused?: boolean;
-		/** A plan waiting for the developer; the review is blocked until answered. */
-		approval?: ReviewPlanApproval | null;
-		onApprove?: (() => Promise<void>) | null;
-		/** Asks to confirm, since declining cancels the review. */
-		onDecline?: (() => void) | null;
-		approving?: boolean;
 	}
 	let {
 		files,
@@ -52,13 +48,8 @@
 		onConversation = null,
 		onRestart = null,
 		stageLabel = null,
-		paused = false,
-		approval = null,
-		onApprove = null,
-		onDecline = null,
-		approving = false
+		paused = false
 	}: Props = $props();
-	const awaitingApproval = $derived(status === 'running' && approval?.status === 'pending');
 
 	const dismissedCount = $derived(findingsStore.items.filter((f) => f.status === 'dismissed').length);
 	const hiddenCount = $derived(
@@ -88,13 +79,14 @@
 			.filter(
 				(finding) =>
 					!query.trim() ||
-					`${finding.title} ${finding.body} ${finding.file} ${finding.category}`
+					`${finding.title} ${finding.body} ${finding.file} ${categoryLabel(finding.category)} ${finding.ruleId ?? ''} ${finding.smell ? SMELL_LABELS[finding.smell] : ''} ${finding.symbol ?? ''}`
 						.toLowerCase()
 						.includes(query.trim().toLowerCase())
 			)
 			.sort(
 				(a, b) =>
 					Number(a.status === 'dismissed') - Number(b.status === 'dismissed') ||
+					Number(a.kind === 'quality') - Number(b.kind === 'quality') ||
 					compareSeverity(a, b) ||
 					a.file.localeCompare(b.file) ||
 					a.startLine - b.startLine
@@ -117,11 +109,11 @@
 {/snippet}
 
 {#if ranked.length === 0 && !query.trim()}
-	<div class="focus-empty" data-kind={emptyKind} data-waiting={awaitingApproval || paused || undefined}>
+	<div class="focus-empty" data-kind={emptyKind} data-waiting={paused || undefined}>
 		<div class="focus-empty-card">
 			<span class="focus-empty-icon" aria-hidden="true">
 				{#if emptyKind === 'draft'}<ScanSearch size={20} />
-				{:else if emptyKind === 'running' && (awaitingApproval || paused)}<CircleAlert size={20} />
+				{:else if emptyKind === 'running' && paused}<CircleAlert size={20} />
 				{:else if emptyKind === 'running'}<Spinner size={18} />
 				{:else if emptyKind === 'failed'}<CircleAlert size={20} />
 				{:else if emptyKind === 'clean'}<CircleCheck size={20} />
@@ -130,25 +122,22 @@
 			<Typography.Title level={2} class="focus-empty-title">
 				{emptyKind === 'draft'
 					? 'No findings yet'
-					: emptyKind === 'running' && awaitingApproval
-						? 'Run specialists?'
-						: emptyKind === 'running' && paused
-							? 'Review paused'
-							: emptyKind === 'running'
-								? 'Reviewing this pull request'
-								: emptyKind === 'failed'
-									? "The review didn't finish"
-									: emptyKind === 'clean'
-										? 'Nothing to fix'
-										: 'All caught up'}
+					: emptyKind === 'running' && paused
+						? 'Review paused'
+						: emptyKind === 'running'
+							? 'Reviewing this pull request'
+							: emptyKind === 'failed'
+								? "The review didn't finish"
+								: emptyKind === 'clean'
+									? 'Nothing to fix'
+									: 'All caught up'}
 			</Typography.Title>
 			<p class="focus-empty-text">
-				{#if emptyKind === 'draft'}Run the full review and specialists will check every change. Findings land here,
-					ranked by severity.
+				{#if emptyKind === 'draft'}Run the full review to check every change. Findings land here, ranked by severity.
 				{:else if emptyKind === 'running' && paused}Model calls are on hold. Resume from the progress card in the
 					conversation.
-				{:else if emptyKind === 'running'}{stageLabel ? `${stageLabel}.` : 'Specialists are working through the diff.'} Findings
-					appear here once the review consolidates them.
+				{:else if emptyKind === 'running'}{stageLabel ? `${stageLabel}.` : 'Reviewing the diff.'} Findings appear here once
+					the review consolidates them.
 				{:else if emptyKind === 'failed'}No findings were saved. Restart the review to try again.
 				{:else if emptyKind === 'clean'}The review found nothing in this pull request that needs a change.
 				{:else}Every finding is fixed, dismissed or hidden by a filter.{/if}
@@ -167,11 +156,6 @@
 					<Button variant="primary" loading={start.running} disabled={start.running} onclick={() => void start.run()}
 						>Start review</Button
 					>
-				{:else if emptyKind === 'running' && awaitingApproval && onApprove && approval}
-					{#if onDecline}<Button variant="outline" disabled={approving} onclick={onDecline}>No</Button>{/if}
-					<Button variant="primary" loading={approving} disabled={approving} onclick={() => void onApprove()}
-						>Yes</Button
-					>
 				{:else if emptyKind === 'running' && onConversation}
 					<Button variant="outline" onclick={onConversation}>Watch progress</Button>
 				{:else if emptyKind === 'failed' && onRestart}
@@ -188,9 +172,7 @@
 					>{/if}
 			</div>
 		</div>
-		{#if emptyKind === 'draft' || emptyKind === 'running'}{@render ghostCards(
-				emptyKind === 'running' && !awaitingApproval && !paused
-			)}{/if}
+		{#if emptyKind === 'draft' || emptyKind === 'running'}{@render ghostCards(emptyKind === 'running' && !paused)}{/if}
 	</div>
 {:else}
 	<div class="focus-body">

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { configForOrchestrator, configForRole } from '../../src/models/models';
+import { configForAgent, configForOrchestrator, configForSubagent, withLockedModels } from '../../src/models/models';
 import { setReviewOverrides } from '../../src/review/session/review-settings';
 
 afterEach(() => setReviewOverrides({}));
@@ -21,7 +21,7 @@ const models = [
 	}
 ];
 
-test('every specialist runs on the one Specialist model and effort', () => {
+test('a subagent’s finding follows up on the second model, and every other agent’s on the Review model', () => {
 	setReviewOverrides({
 		models,
 		orchestratorModelId: 'sol',
@@ -30,16 +30,16 @@ test('every specialist runs on the one Specialist model and effort', () => {
 		specialistEffort: 'high'
 	});
 
-	expect(configForOrchestrator()).toMatchObject({ model: 'sol', reasoningEffort: 'low' });
+	expect(configForAgent('subagent')).toMatchObject({ model: 'mini', reasoningEffort: 'high' });
 
-	for (const role of ['correctness', 'security', 'docs'] as const) {
-		expect(configForRole(role)).toMatchObject({ role, model: 'mini', reasoningEffort: 'high' });
+	for (const agent of ['reviewer', 'orchestrator', 'security', undefined]) {
+		expect(configForAgent(agent)).toMatchObject({ model: 'sol', reasoningEffort: 'low' });
 	}
 });
 
-test('an unset Specialist model follows the Review model and its effort', () => {
+test('an unset second model follows the Review model and its effort', () => {
 	setReviewOverrides({ models, orchestratorModelId: 'mini', orchestratorEffort: 'minimal' });
-	expect(configForRole('security')).toMatchObject({ model: 'mini', reasoningEffort: 'minimal' });
+	expect(configForSubagent()).toMatchObject({ model: 'mini', reasoningEffort: 'minimal' });
 });
 
 test('an effort the model does not offer falls back to the model default', () => {
@@ -56,4 +56,27 @@ test('an OpenCode model routes through OpenCode instead of the first saved model
 		model: 'openrouter/qwen/qwen3',
 		reasoningEffort: 'high'
 	});
+});
+
+test('a review keeps the models picked when it started while the picks change and another review runs', async () => {
+	setReviewOverrides({ models, orchestratorModelId: 'sol', specialistModelId: 'mini' });
+
+	const first = withLockedModels(async () => {
+		await Bun.sleep(5);
+
+		return [configForOrchestrator().model, configForSubagent().model];
+	});
+
+	setReviewOverrides({ models, orchestratorModelId: 'mini', specialistModelId: 'sol' });
+
+	const second = withLockedModels(async () => {
+		await Bun.sleep(1);
+
+		return [configForOrchestrator().model, configForSubagent().model];
+	});
+
+	expect(await Promise.all([first, second])).toEqual([
+		['sol', 'mini'],
+		['mini', 'sol']
+	]);
 });

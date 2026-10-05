@@ -41,15 +41,13 @@ export async function suggestFix(finding: Finding, opts: { quiet?: boolean; queu
 	}
 }
 
-/** A finding with a suggested patch to read. */
+/** A finding with a suggested or checked patch to read. */
 export function hasReadyFix(finding: Finding): boolean {
-	const s = findingsStore.suggestions[finding.id];
-
-	return finding.status === 'open' && s?.status === 'ready' && !!s.patch;
+	return finding.status === 'open' && !!findingsStore.readyFix(finding);
 }
 
 /**
- * Suggest fixes / "fix these" from the chat: each finding's specialist writes a
+ * Suggest fixes / "fix these" from the chat: each finding's reviewer writes a
  * patch in the background (three at a time). Each one shows on its finding for
  * the developer to read and apply themselves. One shared failure cause
  * (signed out, no model) gets a toast with its way out; mixed causes live on each finding.

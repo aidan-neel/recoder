@@ -1,5 +1,6 @@
 import type { PrPerson, PullRequest, RemoteRepo } from '@recoder/shared';
 import { GhError } from './gh.js';
+import { withTimeout } from './github-rest.js';
 import { parseSlug } from './providers.js';
 
 /**
@@ -18,14 +19,14 @@ function base(env: Record<string, string>): string {
 }
 
 /** Network errors keep their cause: a self-managed host often fails on DNS or TLS. */
-export async function gitlabGet(path: string, env: Record<string, string>): Promise<unknown> {
+export async function gitlabGet(path: string, env: Record<string, string>, signal?: AbortSignal): Promise<unknown> {
 	const host = env.GITLAB_HOST || 'gitlab.com';
 	let response: Response;
 
 	try {
 		response = await fetch(base(env) + path, {
 			headers: { ...(env.GITLAB_TOKEN ? { 'PRIVATE-TOKEN': env.GITLAB_TOKEN } : {}), Accept: 'application/json' },
-			signal: AbortSignal.timeout(20_000)
+			signal: withTimeout(20_000, signal)
 		});
 	} catch (err) {
 		const cause = err instanceof Error ? (err.cause instanceof Error ? err.cause.message : err.message) : String(err);

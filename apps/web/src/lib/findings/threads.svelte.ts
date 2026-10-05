@@ -3,8 +3,6 @@
  * Only F-01 is seeded; other findings start empty and accept messages.
  */
 
-import { ROLE_LABELS } from '@recoder/shared';
-
 interface ThreadMessage {
 	id: string;
 	role: 'agent' | 'user';
@@ -23,8 +21,12 @@ export interface Thread {
 
 const PARTICIPANT_MODEL = '32b';
 
-/** Display labels for agent ids (ids stay lowercase for backend payloads). */
-const AGENT_LABELS: Record<string, string> = { ...ROLE_LABELS, orchestrator: 'Orchestrator' };
+/** Display labels for agent ids (ids stay lowercase for backend payloads); older reviews' role ids are capitalized. */
+const AGENT_LABELS: Record<string, string> = {
+	reviewer: 'Reviewer',
+	subagent: 'Subagent',
+	orchestrator: 'Orchestrator'
+};
 
 export function formatAgentName(id?: string | null): string {
 	if (!id) return '';

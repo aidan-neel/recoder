@@ -72,13 +72,13 @@ button.fact-link:hover {
 	color: var(--text-ghost);
 }
 
-/* Specialists: rows with a live status chip. */
-.specialists {
+/* Reviewers: rows with a live status chip. */
+.agents {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
 }
-.specialist-list {
+.agent-list {
 	display: flex;
 	flex-direction: column;
 	gap: 2px;
@@ -86,10 +86,10 @@ button.fact-link:hover {
 	padding: 0;
 	list-style: none;
 }
-.disclosure-body .specialist-list {
+.disclosure-body .agent-list {
 	margin: 0;
 }
-[data-ui='button'][data-variant].specialist-row {
+[data-ui='button'][data-variant].agent-row {
 	width: 100%;
 	height: auto;
 	min-height: 0;
@@ -100,52 +100,52 @@ button.fact-link:hover {
 	font-weight: 400;
 	text-align: left;
 }
-[data-ui='button'][data-variant].specialist-row:hover {
+[data-ui='button'][data-variant].agent-row:hover {
 	background-color: var(--bg-hover);
 }
-.specialist-main {
+.agent-main {
 	display: flex;
 	min-width: 0;
 	flex: 1;
 	flex-direction: column;
 	gap: 3px;
 }
-.specialist-name-line {
+.agent-name-line {
 	display: flex;
 	min-width: 0;
 	align-items: baseline;
 	gap: 8px;
 }
-.specialist-name {
+.agent-row-name {
 	font-size: 13.5px;
 	white-space: nowrap;
 	color: var(--text-primary);
 }
-.specialist-model,
-.specialist-op {
+.agent-model,
+.agent-op {
 	line-height: 16px;
 }
-.specialist-op {
+.agent-op {
 	min-width: 0;
 	overflow: hidden;
 	white-space: nowrap;
 	text-overflow: ellipsis;
 	font-family: var(--font-code);
 }
-.specialist-model {
+.agent-model {
 	font-size: 11px;
 	color: var(--text-ghost);
 }
-.specialist-op {
+.agent-op {
 	font-size: 11.5px;
 	color: var(--text-subtle);
 }
-.specialist-chevron {
+.agent-chevron {
 	flex-shrink: 0;
 	color: var(--text-ghost);
 }
 /* A role with several parts: the same row, as a Collapsible trigger that opens to them. */
-[data-ui='collapsible-trigger'].specialist-row {
+[data-ui='collapsible-trigger'].agent-row {
 	display: flex;
 	width: 100%;
 	align-items: center;
@@ -154,72 +154,37 @@ button.fact-link:hover {
 	border-radius: 10px;
 	text-align: left;
 }
-[data-ui='collapsible-trigger'].specialist-row:hover {
+[data-ui='collapsible-trigger'].agent-row:hover {
 	background-color: var(--bg-hover);
 }
-[data-ui='collapsible-trigger'].specialist-row .specialist-chevron {
+[data-ui='collapsible-trigger'].agent-row .agent-chevron {
 	transition: rotate var(--dur-menu) ease-out;
 }
-[data-ui='collapsible-trigger'][data-state='open'].specialist-row .specialist-chevron {
+[data-ui='collapsible-trigger'][data-state='open'].agent-row .agent-chevron {
 	rotate: 90deg;
 }
-.specialist-count {
+.agent-count {
 	font-family: var(--font-code);
 	font-size: 11.5px;
 	color: var(--text-muted);
 }
 /* Parts sit under their role on a thin rail, named by what they read. */
-.specialist-list.specialist-parts {
+.agent-list.agent-parts {
 	margin: 2px 0 4px 14px;
 	padding-left: 8px;
 	border-left: 1px solid var(--line-divider);
 }
-.specialist-parts .specialist-name {
+.agent-parts .agent-row-name {
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
-/* Plan approval: asks before a large review runs. */
-[data-ui='card'].review-approval {
-	flex-direction: row;
-	align-items: center;
-	gap: 16px;
-	padding: 14px 14px 14px 16px;
-	border: 0;
-	border-radius: 14px;
-	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card);
-}
-.review-approval-text {
-	display: flex;
-	min-width: 0;
-	flex: 1;
-	flex-direction: column;
-	gap: 2px;
-}
-.review-approval-title {
-	margin: 0;
-	font-size: 14px;
-	font-weight: 500;
-	line-height: 22px;
-	color: var(--text-primary);
-}
-.review-approval-actions {
-	display: flex;
-	flex-shrink: 0;
-	gap: 8px;
-}
-/* Yes and No read as a pair: same width. */
-.review-approval-actions [data-ui='button'][data-variant][data-size] {
-	width: 72px;
-	min-width: 0;
-}
 @media (prefers-reduced-motion: reduce) {
-	[data-ui='collapsible-trigger'].specialist-row .specialist-chevron {
+	[data-ui='collapsible-trigger'].agent-row .agent-chevron {
 		transition: none;
 	}
 }
-/* Specialist conversation bar: back to Orchestrator, name, status on the right. */
+/* Reviewer conversation bar: back to Orchestrator, name, status on the right. */
 .agent-nav {
 	gap: 6px;
 }
@@ -324,6 +289,50 @@ button.fact-link:hover {
 	padding: 0 24px;
 	pointer-events: auto;
 }
+/* A cut-off reply being asked again: a small tab on the composer's top edge that
+   unfolds while the retry runs and folds away when the reply resumes. */
+.composer-notice {
+	display: grid;
+	grid-template-rows: 0fr;
+	opacity: 0;
+	transition:
+		grid-template-rows var(--dur-disclose) var(--ease-menu),
+		opacity var(--dur-toggle) ease-out;
+}
+.composer-notice[data-open] {
+	grid-template-rows: 1fr;
+	opacity: 1;
+}
+.composer-notice-clip {
+	min-height: 0;
+	overflow: hidden;
+}
+.composer-notice-tab {
+	display: flex;
+	width: fit-content;
+	align-items: center;
+	gap: 7px;
+	margin: 0 0 -10px 22px;
+	padding: 5px 11px 15px 10px;
+	border-radius: 10px 10px 0 0;
+	background-color: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+	font-family: var(--font-ui);
+	font-size: 12px;
+	line-height: 16px;
+	letter-spacing: 0;
+	color: var(--text-muted);
+}
+/* Stopped or failed review: the same tab, holding Continue and Restart. */
+.composer-notice-tab[data-actions] {
+	gap: 2px;
+	padding: 3px 6px 13px;
+}
+@media (prefers-reduced-motion: reduce) {
+	.composer-notice {
+		transition: none;
+	}
+}
 /* Side-panel chat: the composer spans the panel (the dock's 12px margin only). */
 .review-chat[data-compact] .review-dock-inner {
 	max-width: none;
@@ -331,39 +340,38 @@ button.fact-link:hover {
 }
 
 /* Transcript secondary text (thinking, disclosures, tool rows, status lines)
-   sits at body size next to the model's prose, not UI-caption size.
-   Geist reads larger than Lora at the same px, so 15px pairs with 16px prose. */
+   sits one step under the model's prose so the work recedes behind the answer. */
 .review-transcript .disclosure-trigger,
 .review-transcript .disclosure-body,
 .review-transcript .disclosure-body [data-ui='markdown'],
 .review-transcript .review-thinking,
 .review-transcript .review-log,
 .review-transcript .model-note-added,
-.review-transcript .specialist-name {
-	font-size: 15px;
-	line-height: 22px;
+.review-transcript .agent-row-name {
+	font-size: 14px;
+	line-height: 20px;
 }
 .review-transcript .disclosure[data-size='row'] > .disclosure-trigger {
-	min-height: 30px;
-	font-size: 14px;
+	min-height: 26px;
+	font-size: 13.5px;
 }
 .review-transcript .tool-row-target {
-	font-size: 13px;
+	font-size: 12.5px;
 }
 .review-transcript .disclosure-meta,
 .review-transcript .tool-row-duration,
-.review-transcript .specialist-op {
+.review-transcript .agent-op {
 	font-size: 12.5px;
 }
-.review-transcript .specialist-model {
+.review-transcript .agent-model {
 	font-size: 12px;
 }
 .review-transcript .tool-row-action {
 	width: 96px;
 }
 .review-transcript .reasoning-step-title {
-	font-size: 15px;
-	line-height: 22px;
+	font-size: 14px;
+	line-height: 20px;
 }
 .review-transcript .fact-row {
 	min-height: 30px;
@@ -385,8 +393,8 @@ button.fact-link:hover {
 .review-chat[data-compact] .disclosure-body [data-ui='markdown'],
 .review-chat[data-compact] .review-thinking,
 .review-chat[data-compact] .model-note-added {
-	font-size: 14px;
-	line-height: 21px;
+	font-size: 13.5px;
+	line-height: 20px;
 }
 
 /* ── Results rail (4f) ────────────────────────────────────── */

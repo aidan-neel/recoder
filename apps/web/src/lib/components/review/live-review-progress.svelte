@@ -74,7 +74,7 @@
 	}
 	/**
 	 * One entry per id, latest wins: reviews saved before follow-up ids were made unique can repeat one.
-	 * Reviews saved before every specialist had to finish can carry a `partial` status, which meant finished.
+	 * Reviews saved before every reviewer had to finish can carry a `partial` status, which meant finished.
 	 */
 	const assignments = $derived<ReviewAssignment[]>([
 		...new Map(
@@ -138,7 +138,6 @@
 	{awaitingPrompt}
 	onStartReview={awaitingPrompt ? onStartReview : null}
 	paused={progress.paused ?? false}
-	approval={progress.approval ?? null}
 	completedAt={!active && !awaitingPrompt ? review.updatedAt : undefined}
 	title={review.prTitle || `PR #${review.prNumber}`}
 	meta={{
@@ -178,11 +177,10 @@
 	stageLabel={currentStage}
 	stageDetail={stage.detail}
 	failed={status === 'failed'}
-	errorMessage={actionError ?? (status === 'failed' && !progress.failure ? review.summary : null)}
-	failure={progress.failure ?? null}
+	errorMessage={actionError}
+	failure={progress.failure ?? (status === 'failed' && review.summary ? { reason: review.summary } : null)}
 	{connectionLabel}
 	connectionLost={connection === 'reconnecting'}
-	planSummary={progress.planSummary ?? null}
 	coverage={progress.coverage ?? null}
 	coverageGaps={progress.coverageGaps ?? []}
 	{now}
@@ -190,5 +188,4 @@
 	tasks={Object.values(progress.tasks).map((task) => ({ ...task, assignmentId: task.assignmentId ?? pipelineId }))}
 	reasoning={(progress.reasoning ?? []).map((entry) => ({ ...entry, assignmentId: entry.assignmentId ?? pipelineId }))}
 	toolCalls={(progress.toolCalls ?? []).map((tool) => ({ ...tool, assignmentId: tool.assignmentId ?? pipelineId }))}
-	roleDecisions={progress.roleDecisions ?? []}
 />

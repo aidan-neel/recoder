@@ -1,22 +1,29 @@
-import type { ReviewAssignment } from '@recoder/shared';
+import { DEFAULT_SUBAGENT_CAP, ORCHESTRATOR_ID, type ReviewAssignment } from '@recoder/shared';
 import { EvidenceStore } from '../../../evidence/evidence.js';
-import { reviewLimits, type RoleConfig } from '../../../models/models.js';
+import { configForOrchestrator, reviewLimits, type ModelConfig } from '../../../models/models.js';
 import { execUnavailableReason } from '../../../sandbox/exec-sandbox.js';
 import { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import type { ReviewDirective } from '../../chat/directive.js';
 import { reviewNow } from '../../session/review-control.js';
-import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { REVIEW_POLICY, scaledReviewLimits } from '../../session/review-policy.js';
 import { ModelBudget } from '../agent-loop.js';
 import type { JsonAgentOptions } from '../agent-loop/options.js';
-import type { CandidateFinding } from '../consolidate.js';
+import { listDismissals, type Dismissal } from '../../guidelines/learned/dismissals.js';
+import type { RuleLedger } from '../../guidelines/ledger/types.js';
+import type { ChangeModel } from '../change-model/types.js';
+import { isReportable, type CandidateFinding } from '../consolidate.js';
+import type { DetectorResult } from '../detectors/types.js';
 import { CoverageLedger } from '../coverage.js';
-import { currentDispatch, type DispatchPolicy } from '../dispatch.js';
+import type { ChangeIntent } from '../intent/types.js';
 import { buildInventory, type ReviewInventory } from '../inventory.js';
-import type { PlannerAssignment, PlannerOutput } from '../planner.js';
+import { lensAssignments } from '../lenses/lenses.js';
 import { extraExcludes } from '../review-scope.js';
+import { restoreSubagentState, type SubagentState } from '../subagents.js';
+import { partitionUnits, type ReviewUnit } from '../units.js';
 import { FINISHED } from './assignments.js';
 import type { PoolContext } from './pool.js';
-import type { AdaptiveReviewInput, HarnessEvents, TaskFn } from './types.js';
+import type { AdaptiveReviewInput, BaselineResult, HarnessEvents, TaskFn } from './types.js';
+import type { VerifyQueue } from './verify-queue.js';
 
 /** Everything one review run shares between its stages; stages mutate it as they go. */
 export interface ReviewRun {
@@ -25,7 +32,6 @@ export interface ReviewRun {
 	/** Aborted by the developer's signal, the review clock, or cleanup. */
 	controller: AbortController;
 	budget: ModelBudget;
-	dispatch: DispatchPolicy;
 	inventory: ReviewInventory;
 	evidence: EvidenceStore;
 	coverage: CoverageLedger;
@@ -34,22 +40,44 @@ export interface ReviewRun {
 	/** Why code can't run, when it can't. */
 	execReason: string | null;
 	startedAt: number;
-	/** On the review clock; extended once the developer approves a large plan. */
+	/** On the review clock; extended for a large change and for setup time. */
 	deadlineAt: number;
-	/** When planning and specialists stop, early enough for verification to run. */
+	/** When reviewers stop, early enough for verification to run. */
 	investigationDeadline: number;
-	/** Kept for the failure path: a review out of time after planning still finishes with its candidates. */
-	plan: PlannerOutput | null;
+	/**
+	 * Every unit the review launched, retries included. A review out of time
+	 * once units exist still finishes with its candidates.
+	 */
+	units: ReviewUnit[];
 	directive: ReviewDirective | null;
-	planningDegraded: boolean;
-	items: PlannerAssignment[];
 	assignments: ReviewAssignment[];
 	candidates: CandidateFinding[];
+	/** The verifiers, open from before the first reviewer until the last verdict; null until then. */
+	verifying: VerifyQueue | null;
+	/** Every changed symbol with its callers, callees, tests and comparable code; null until built or when nothing parses. */
+	changeModel: ChangeModel | null;
+	/** What the change is meant to do; null when there was no context to distill. */
+	intent: ChangeIntent | null;
+	/** The repo's guidelines as numbered rules; null when the repo has none. */
+	ledger: RuleLedger | null;
+	/** Findings people dismissed in this repository, newest first; empty without a repository. */
+	dismissals: Dismissal[];
+	/** The type check, lint and test runs on the PR head; empty without a sandbox. */
+	baseline: BaselineResult[];
+	/** Deterministic quality results on changed lines; the verifier turns them into proven candidates. */
+	detections: DetectorResult[];
+	/**
+	 * Candidates the verifier could not establish. They are hidden from the
+	 * developer, but kept so the summary and evals can count them.
+	 */
+	hidden: CandidateFinding[];
 	recommended: Set<string>;
-	followUps: PlannerAssignment[];
-	followUpsDone: boolean;
+	/** Failed units were already retried, so a resume doesn't retry them again. */
+	retriesDone: boolean;
+	/** Subagents reviewers asked for, the brief questions they left unsettled or answered, and the subagents that run; kept apart from `units`, so they're never retried. */
+	subagents: SubagentState;
 	nextCandidate: number;
-	/** Dependency setup and baseline check results, shared with every specialist and verifier. */
+	/** Dependency setup and baseline check results, shared with every reviewer and verifier. */
 	setupNotes: string;
 	task: TaskFn;
 }
@@ -57,16 +85,16 @@ export interface ReviewRun {
 /** Builds the run's shared state from the input, restoring what a resumed review carries over. */
 export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): ReviewRun {
 	const startedAt = reviewNow();
-	const deadlineAt = startedAt + REVIEW_POLICY.analysisDeadlineMs;
 	const inventory = buildInventory(input.diff, extraExcludes());
+	const limits = scaledReviewLimits(lensAssignments(partitionUnits(inventory)).length);
+	const deadlineAt = startedAt + limits.deadlineMs;
 	const resume = input.resume;
 
 	return {
 		input,
 		events,
 		controller: new AbortController(),
-		budget: new ModelBudget(),
-		dispatch: input.dispatch ?? currentDispatch(),
+		budget: new ModelBudget(limits.modelCalls),
 		inventory,
 		evidence: new EvidenceStore(input.revision ?? null, inventory, reviewLimits().maxFileChars),
 		coverage: new CoverageLedger(),
@@ -75,20 +103,37 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		startedAt,
 		deadlineAt,
 		investigationDeadline: deadlineAt,
-		plan: null,
+		units: [],
 		directive: resume?.directive ?? null,
-		planningDegraded: resume?.planningDegraded ?? false,
-		items: [],
 		assignments: [],
 		candidates: (resume?.candidates ?? []).map((candidate) => ({ ...candidate })),
+		verifying: null,
+		changeModel: null,
+		intent: null,
+		ledger: null,
+		dismissals: input.repoId ? listDismissals(input.repoId) : [],
+		baseline: [],
+		detections: [],
+		hidden: [],
 		recommended: new Set<string>(resume?.recommended ?? []),
-		followUps: [...(resume?.followUps ?? [])],
-		followUpsDone: resume?.followUpsDone ?? false,
+		retriesDone: resume?.retriesDone ?? false,
+		subagents: restoreSubagentState(resume?.subagents),
 		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
 		setupNotes: '',
 		task: (id, label, status, message, extra) =>
 			events?.onTask?.({ id, label, status, message, kind: extra?.kind ?? 'other', ...extra })
 	};
+}
+
+/** A finished note from the orchestrator in its conversation, so the developer sees why the review does what it does. */
+export function orchestratorSays(events: HarnessEvents | undefined, id: string, text: string): void {
+	events?.onMessage?.({
+		id,
+		text,
+		status: 'done',
+		assignmentId: ORCHESTRATOR_ID,
+		model: configForOrchestrator().model
+	});
 }
 
 /**
@@ -98,7 +143,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
  */
 export function orchestratorAgentOptions(
 	run: ReviewRun,
-	config: RoleConfig
+	config: ModelConfig
 ): Pick<
 	JsonAgentOptions<unknown>,
 	'getDiscussion' | 'onMessage' | 'config' | 'budget' | 'evidence' | 'signal' | 'onReasoning' | 'onTool'
@@ -112,8 +157,8 @@ export function orchestratorAgentOptions(
 		budget: run.budget,
 		evidence: run.evidence,
 		signal: run.controller.signal,
-		onReasoning: (reasoning) => events?.onReasoning?.({ ...reasoning, role: 'correctness', model: config.model }),
-		onTool: (tool) => events?.onTool?.({ ...tool, role: 'correctness' })
+		onReasoning: (reasoning) => events?.onReasoning?.({ ...reasoning, role: 'orchestrator', model: config.model }),
+		onTool: (tool) => events?.onTool?.({ ...tool, role: 'orchestrator' })
 	};
 }
 
@@ -134,9 +179,6 @@ export async function openWorkspace(run: ReviewRun): Promise<void> {
 	} else if (run.execReason) {
 		run.evidence.execUnavailable = run.execReason;
 	}
-
-	run.budget.reserve =
-		REVIEW_POLICY.reserveCallsForConsolidation + (run.workspace ? REVIEW_POLICY.reserveCallsForVerification : 0);
 }
 
 /** Commands in the sandbox stop early enough for consolidation to run. */
@@ -159,22 +201,19 @@ export function publishBudget(run: ReviewRun): void {
 	run.events?.onBudget?.(run.budget.snapshot());
 }
 
-export function validCandidates(candidates: CandidateFinding[]): CandidateFinding[] {
-	return candidates.filter((candidate) => candidate.valid);
-}
-
 export function publishCandidates(run: ReviewRun): void {
-	run.events?.onCandidates?.(validCandidates(run.candidates).length);
+	run.events?.onCandidates?.(run.candidates.filter(isReportable).length);
 }
 
-/** Reports the plan with every assignment record as it stands. */
-export function publishPlan(run: ReviewRun, plan: PlannerOutput, planVersion: number): void {
+/** Reports the units and subagents with every assignment record as it stands. */
+export function publishUnits(run: ReviewRun, planVersion: number): void {
+	const units = run.units.length;
+	const subagents = run.subagents.units?.length ?? 0;
+
 	run.events?.onPlan?.({
 		planVersion,
-		summary: plan.summary,
-		assignments: run.assignments.map((assignment) => ({ ...assignment })),
-		roleDecisions: plan.roleDecisions,
-		planningDegraded: run.planningDegraded
+		summary: `Reviewing in ${units} unit${units === 1 ? '' : 's'}${subagents ? ` with ${subagents} subagent${subagents === 1 ? '' : 's'}` : ''}`,
+		assignments: run.assignments.map((assignment) => ({ ...assignment }))
 	});
 }
 
@@ -182,37 +221,35 @@ export function finishedIds(run: ReviewRun): Set<string> {
 	return new Set(run.assignments.filter((record) => FINISHED.has(record.status)).map((record) => record.id));
 }
 
-/** Saves where the review stands; only finished assignments' candidates and evidence are kept. */
+/** Saves where the review stands; only finished units' candidates and evidence are kept. */
 export function saveCheckpoint(run: ReviewRun): void {
-	const { events, plan } = run;
+	const { events } = run;
 
-	if (!events?.onCheckpoint || !plan) return;
+	if (!events?.onCheckpoint || !run.units.length) return;
 
 	const finished = finishedIds(run);
 	const kept = run.candidates.filter((candidate) => candidate.assignmentId && finished.has(candidate.assignmentId));
 
 	events.onCheckpoint({
-		plan,
+		units: run.units.map((unit) => ({ ...unit })),
 		directive: run.directive,
-		planningDegraded: run.planningDegraded,
-		items: [...run.items],
 		assignments: run.assignments.map((record) => ({ ...record })),
 		candidates: kept.map((candidate) => ({ ...candidate })),
 		coverage: run.coverage.snapshot(),
-		evidence: run.evidence.snapshot([
-			...kept.flatMap((candidate) => candidate.evidenceIds ?? []),
-			...run.items.flatMap((item) => item.contextEvidenceIds)
-		]),
+		evidence: run.evidence.snapshot(kept.flatMap((candidate) => candidate.evidenceIds ?? [])),
 		recommended: [...run.recommended],
-		followUps: [...run.followUps],
-		followUpsDone: run.followUpsDone
+		retriesDone: run.retriesDone,
+		subagents: structuredClone(run.subagents)
 	});
 }
 
-/** What a specialist pool needs from the run; `followUps` collects the follow-ups its specialists ask for. */
-export function poolContext(run: ReviewRun, followUps: PlannerAssignment[]): PoolContext {
+/** What a reviewer pool needs from the run. */
+export function poolContext(run: ReviewRun): PoolContext {
+	const { input, inventory } = run;
+
 	return {
-		inventory: run.inventory,
+		inventory,
+		pr: { title: input.prTitle ?? '', body: input.prBody ?? '', context: input.context?.people ?? '', inventory },
 		evidence: run.evidence,
 		coverage: run.coverage,
 		budget: run.budget,
@@ -223,11 +260,19 @@ export function poolContext(run: ReviewRun, followUps: PlannerAssignment[]): Poo
 		candidates: run.candidates,
 		nextCandidate: () => `c${run.nextCandidate++}`,
 		recommended: run.recommended,
-		followUps,
 		exec: Boolean(run.workspace),
-		setupNotes: run.setupNotes,
-		dispatch: run.dispatch,
+		setupNotes: () => run.setupNotes,
 		directive: run.directive,
+		subagentCap: run.input.subagentCap ?? DEFAULT_SUBAGENT_CAP,
+		reportLowSeverity: run.input.reportLowSeverity ?? false,
+		changeModel: run.changeModel,
+		intent: run.intent,
+		ledger: run.ledger,
+		dismissals: run.dismissals,
+		requests: run.subagents.requests,
+		unsettled: run.subagents.unsettled,
+		answered: run.subagents.answered,
+		onCandidate: (candidate) => run.verifying?.add(candidate),
 		onFinished: () => saveCheckpoint(run)
 	};
 }

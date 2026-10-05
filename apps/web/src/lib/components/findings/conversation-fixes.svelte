@@ -19,7 +19,7 @@
 			{:else}<span>{count(findings.length)}</span>{/if}
 		</header>
 		{#each findings as finding (finding.id)}
-			{@const suggestion = findingsStore.suggestions[finding.id]}
+			{@const fix = findingsStore.readyFix(finding)}
 			<Card.Root class="conversation-fix">
 				<div class="conversation-fix-head">
 					<FindingSeverity severity={finding.severity} />
@@ -27,7 +27,7 @@
 					<span class="conversation-fix-loc">{finding.file.split('/').at(-1)}:{finding.startLine}</span>
 				</div>
 				<FixStatus {finding} />
-				{#if suggestion?.status === 'ready' && suggestion.patch}<SuggestedFix {suggestion} />{/if}
+				{#if fix}<SuggestedFix suggestion={fix} />{/if}
 			</Card.Root>
 		{/each}
 	</section>

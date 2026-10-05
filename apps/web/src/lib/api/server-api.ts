@@ -165,11 +165,9 @@ export const serverApi = {
 	/** AI brief for Home, written by the orchestrator's model. */
 	homeBrief: (input: HomeBriefRequest, signal?: AbortSignal) =>
 		req<HomeBriefResponse>('/api/home/brief', { method: 'POST', body: JSON.stringify(input), signal }),
-	/** Compact live progress per review (tasks settled/total, active specialists). */
+	/** Compact live progress per review (tasks settled/total, active reviewers). */
 	reviewSummaries: () =>
-		req<Record<string, { tasksDone: number; tasksTotal: number; specialists: number }>>(
-			'/api/reviews/progress-summaries'
-		),
+		req<Record<string, { tasksDone: number; tasksTotal: number; agents: number }>>('/api/reviews/progress-summaries'),
 	getReview: (id: string, signal?: AbortSignal) => req<Review>(`/api/reviews/${id}`, { signal }),
 	sendReviewMessage: (id: string, assignmentId: string, text: string, codeContext?: ReviewCodeContext) =>
 		req<ReviewChatMessage>(`/api/reviews/${id}/chat`, {
@@ -271,6 +269,17 @@ export const serverApi = {
 			method: 'POST',
 			body: JSON.stringify(input)
 		}),
+	/** Remember a dismissed finding, so later reviews of the repository do not report it again. */
+	dismissFinding: (reviewId: string, findingId: string, reason?: string) =>
+		req<{ dismissed: boolean }>(`/api/reviews/${reviewId}/dismissals`, {
+			method: 'POST',
+			body: JSON.stringify({ findingId, ...(reason ? { reason } : {}) })
+		}),
+	/** Forget a dismissal. */
+	restoreFinding: (reviewId: string, findingId: string) =>
+		req<{ restored: boolean }>(`/api/reviews/${reviewId}/dismissals/${encodeURIComponent(findingId)}`, {
+			method: 'DELETE'
+		}),
 	queueReview: (input: CreateReviewInput) =>
 		req<Review>('/api/reviews', { method: 'POST', body: JSON.stringify(input) }),
 	/** CI checks for the PR head. */
@@ -282,7 +291,6 @@ export const serverApi = {
 	cancelReview: (id: string) => req<{ cancelled: boolean }>(`/api/reviews/${id}/cancel`, { method: 'POST' }),
 	pauseReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/pause`, { method: 'POST' }),
 	resumeReview: (id: string) => req<{ paused: boolean }>(`/api/reviews/${id}/resume`, { method: 'POST' }),
-	approvePlan: (id: string) => req<{ approved: boolean }>(`/api/reviews/${id}/approve-plan`, { method: 'POST' }),
 	deleteReview: (id: string) => req<{ deleted: boolean }>(`/api/reviews/${id}`, { method: 'DELETE' }),
 	authStatus: () => req<{ github: ProviderAuth; gitlab: ProviderAuth }>('/api/auth/status'),
 	saveToken: (provider: Provider, token: string, host?: string) =>

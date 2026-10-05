@@ -10,6 +10,7 @@ import {
 	reportReviewTool
 } from '../review/session/events';
 import { reviewCheckpoints, reviewProgress } from '../store';
+import { CHECKPOINT_VERSION } from '../review/session/review-checkpoint';
 
 type HarnessCallbacks = Parameters<typeof runAdaptiveReview>[1];
 
@@ -43,16 +44,6 @@ export function harnessCallbacks(
 				data: { agent: meta?.role, assignmentId: meta?.assignmentId }
 			}),
 		onPlan: (data) => reportReviewPlan(reviewId, data),
-		onApproval: (approval) =>
-			emitReviewEvent(reviewId, {
-				type: 'step',
-				step: 'review',
-				message:
-					approval.status === 'pending'
-						? `Waiting for approval to run ${approval.requested} specialists`
-						: `Running ${approval.requested} specialists`,
-				data: { approval }
-			}),
 		onAssignment: (assignment) => reportReviewAssignment(reviewId, assignment),
 		onCoverage: (coverage, gaps) => reportReviewCoverage(reviewId, coverage, gaps),
 		onBudget: (budget) => {
@@ -86,6 +77,7 @@ export function harnessCallbacks(
 		onStage: (stage) => {
 			emitReviewEvent(reviewId, { type: 'step', step: stage, message: '', data: { stage } });
 		},
-		onCheckpoint: (checkpoint) => reviewCheckpoints.set({ ...checkpoint, id: reviewId, headSha, mergeBaseSha })
+		onCheckpoint: (checkpoint) =>
+			reviewCheckpoints.set({ ...checkpoint, version: CHECKPOINT_VERSION, id: reviewId, headSha, mergeBaseSha })
 	};
 }

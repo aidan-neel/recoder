@@ -326,28 +326,6 @@ describe('reviews + command runner', () => {
 				delete process.env.RECODER_REVIEW_MODEL;
 			}
 		});
-
-		test('unknown agent falls back to a known role', async () => {
-			process.env.RECODER_REVIEW_BASE_URL = 'http://localhost:9/v1';
-			process.env.RECODER_REVIEW_API_KEY = 'test';
-			process.env.RECODER_REVIEW_MODEL = 'test-model';
-			stubFetch('ok');
-
-			try {
-				const id = await seedReviewWithDiff();
-
-				const res = await postJson(`/api/reviews/${id}/discuss`, { ...body(), agent: 'not-a-role' });
-
-				const answer = await res.json();
-
-				expect(answer.agent).toBe('security');
-			} finally {
-				globalThis.fetch = realFetch;
-				delete process.env.RECODER_REVIEW_BASE_URL;
-				delete process.env.RECODER_REVIEW_API_KEY;
-				delete process.env.RECODER_REVIEW_MODEL;
-			}
-		});
 	});
 
 	test('disallowed commands are rejected', async () => {

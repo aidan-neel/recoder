@@ -64,6 +64,11 @@ test('classifies which errors are worth retrying', () => {
 	expect(isTransientLlmError(new LlmError(0, 'ChatGPT request timed out.'), 'codex')).toBe(false);
 });
 
+test('an OpenCode throttle retries and an OpenCode spent quota does not', () => {
+	expect(isTransientLlmError(new LlmError(429, 'Rate limit reached for requests'), 'opencode')).toBe(true);
+	expect(isTransientLlmError(new LlmError(429, 'Usage limit reached for 5 hour'), 'opencode')).toBe(false);
+});
+
 /** One chunk of reasoning, then nothing: the socket stays open. */
 function silentStream(): Response {
 	return new Response(

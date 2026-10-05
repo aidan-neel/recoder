@@ -2,12 +2,22 @@
 export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
-/** How many specialists one review may dispatch, and how long each may dig. */
-export const DISPATCH_LEVELS = ['low', 'medium', 'high'] as const;
-export type DispatchLevel = (typeof DISPATCH_LEVELS)[number];
+/** How many subagents one review may run in all, chosen in Settings → Review harness; 0 turns them off. */
+export const SUBAGENT_CAPS = [0, 2, 4] as const;
+export type SubagentCap = (typeof SUBAGENT_CAPS)[number];
+export const DEFAULT_SUBAGENT_CAP: SubagentCap = 2;
 
 /** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode CLI. */
 export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode';
+
+/** Sampling settings a model wants; an unset field takes the built-in profile for the model, then the default. */
+export interface ModelRuntimeProfile {
+	/** `null` leaves the field out of the request, for models that reject or ignore it. */
+	temperature?: number | null;
+	/** Output-token cap per review turn. */
+	maxOutputTokens?: number;
+	topP?: number;
+}
 
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {
@@ -27,6 +37,8 @@ export interface ModelEntry {
 	defaultEffort?: ReasoningEffort;
 	/** Max tokens per request (prompt + output), when the endpoint reports it. */
 	contextWindow?: number;
+	/** Sampling overrides for this model, set in the settings file or API. */
+	runtime?: ModelRuntimeProfile;
 }
 
 /** A model an OpenAI-compatible endpoint serves (`GET {baseUrl}/models`). */
@@ -47,6 +59,7 @@ export interface ModelEntryPatch {
 	efforts?: ReasoningEffort[];
 	defaultEffort?: ReasoningEffort;
 	contextWindow?: number;
+	runtime?: ModelRuntimeProfile;
 }
 
 /** A hosted model provider you connect with an API key (OpenCode Go, OpenRouter…). */
@@ -85,15 +98,17 @@ export interface ModelSettings {
 	apiKeyPreview: string | null;
 	sharedModelId: string | null;
 	orchestratorModelId?: string | null;
-	/** Every specialist runs on this model; null follows the Review model. */
+	/** Subagents and verifiers run on this second model; null follows the Review model. */
 	specialistModelId?: string | null;
 	models: ModelEntry[];
 	/** Review (orchestrator) reasoning effort; null follows the model default. */
 	orchestratorEffort?: ReasoningEffort | null;
-	/** Specialist reasoning effort; null follows the Review effort when the model does too. */
+	/** The second model's reasoning effort; null follows the Review effort when the model does too. */
 	specialistEffort?: ReasoningEffort | null;
-	/** Specialist dispatch: how many specialists a review may run (medium by default). */
-	specialistDispatch: DispatchLevel;
+	/** How many subagents one review may run in all. */
+	subagentCap: SubagentCap;
+	/** Whether reviews report low-severity findings; off keeps them to medium and above. */
+	reportLowSeverity: boolean;
 	/** Where overrides are saved, e.g. `~/.recoder/data/review-config.json`. */
 	configPath?: string;
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
@@ -108,7 +123,8 @@ export interface ModelSettingsPatch {
 	specialistModelId?: string | null;
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
-	specialistDispatch?: DispatchLevel;
+	subagentCap?: SubagentCap;
+	reportLowSeverity?: boolean;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;

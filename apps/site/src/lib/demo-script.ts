@@ -1,4 +1,6 @@
 import type { ReviewToolCall } from '@recoder/shared';
+import { STAGE } from '$web/review/review-progress-state';
+import { taskGroupLabel } from '$web/review/review-transcript';
 
 /**
  * The hero demo: one scripted review, replayed on a loop. Every piece of state
@@ -8,7 +10,7 @@ import type { ReviewToolCall } from '@recoder/shared';
 
 type Severity = 'high' | 'medium' | 'low';
 
-type SpecialistStatus = 'queued' | 'running' | 'done';
+type AgentStatus = 'queued' | 'running' | 'done';
 
 const AT = {
 	user: 300,
@@ -18,8 +20,9 @@ const AT = {
 	toolsEnd: 4300,
 	planStart: 4700,
 	planEnd: 6900,
-	specialists: 7200,
-	finalizeStart: 12300,
+	units: 7200,
+	verifyStart: 12300,
+	consolidateStart: 13000,
 	finalizeEnd: 13600,
 	summaryStart: 13800,
 	summaryEnd: 17600,
@@ -37,9 +40,11 @@ export const DEMO_LOOP = DEMO_END + DEMO_HOLD + DEMO_FADE;
 export const request = 'Review this. Focus on the clock injection and anything that breaks existing callers.';
 
 const reasoning =
-	'Reading the diff to scope specialists. The limiter moves from module state into a class, so the old free `allow()` and every caller of it matter most.';
+	'Reading the diff and the code around it. The limiter moves from module state into a class, so the old free `allow()` and every caller of it matter most.';
 
-const tools = [
+type Tool = { action: string; path?: string; query?: string; command?: string; at: number; ms: number };
+
+const tools: Tool[] = [
 	{ action: 'readDiff', path: 'src/rate-limit/limiter.ts', at: 0, ms: 400 },
 	{ action: 'search', query: 'allow\\( in src/', at: 380, ms: 1100 },
 	{ action: 'readFile', path: 'src/rate-limit/index.ts', at: 900, ms: 200 },
@@ -47,84 +52,55 @@ const tools = [
 ];
 
 const plan =
-	'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI’m sending five specialists. Correctness and repository consistency always run; performance, docs and security were picked for this diff.';
+	'This turns the module-level limiter into a `RateLimiter` class with an injectable `Clock`. The risk sits in two places: callers of the old free `allow()`, and whether refill timing actually uses the new clock.\n\nI split the change into five units, one per folder.';
 
 const summary =
-	'The class refactor is sound, but two things should block the merge.\n\n`index.ts` still re-exports `allow()`, which no longer exists, so all 14 call sites break at import. And `refill()` reads `Date.now()` directly, so the injected clock does nothing in tests.\n\nThe rest is small: an unbounded buckets Map, an unvalidated capacity, and a stale doc comment. Four of the five have a suggested patch ready.';
+	'The class refactor is sound, but two things should block the merge.\n\n`index.ts` still re-exports `allow()`, which no longer exists, so all 14 call sites break at import. And `refill()` reads `Date.now()` directly, so the injected clock does nothing in tests.\n\nThe rest is small: an unbounded buckets Map, an unvalidated capacity, and a stale usage example. Four of the five have a suggested patch ready.';
 
-type Specialist = {
-	id: string;
-	name: string;
-	model: string;
-	/** What it's doing while running, then its closing line. */
-	op: string;
-	doneOp: string;
-	/** Offset from AT.specialists. */
-	starts: number;
-	finishes: number;
-	elapsed: string;
+/**
+ * The main thread reviews the five units itself, so their work shows inline as one work row: a
+ * thought, then the tools the units ran. Offsets are from AT.units.
+ */
+const unitFinishes = [1400, 1800, 3000, 3400, 3800];
+
+const UNITS_END = unitFinishes[unitFinishes.length - 1];
+
+const unitThought = {
+	end: 900,
+	text: 'Five units. The callers of the old `allow()` and the refill path carry the risk, so those come first.'
 };
 
-const specialists: Specialist[] = [
-	{
-		id: 'correctness',
-		name: 'Correctness',
-		model: 'gpt-5-codex',
-		op: 'Reading src/rate-limit/limiter.ts:20-46',
-		doneOp: 'Traced refill() and capacity through the class · 3 findings',
-		starts: 0,
-		finishes: 3600,
-		elapsed: '1m 12s'
-	},
-	{
-		id: 'patterns',
-		name: 'Repository consistency',
-		model: 'gpt-5-codex',
-		op: 'Comparing exports against 14 call sites',
-		doneOp: 'Compared exports against 14 call sites · 1 finding',
-		starts: 0,
-		finishes: 1300,
-		elapsed: '38s'
-	},
-	{
-		id: 'perf',
-		name: 'Performance',
-		model: 'qwen3-coder',
-		op: 'Searching src/ for Map eviction patterns',
-		doneOp: 'Checked the buckets Map lifecycle · 1 finding',
-		starts: 300,
-		finishes: 4300,
-		elapsed: '51s'
-	},
-	{
-		id: 'docs',
-		name: 'Documentation',
-		model: 'qwen3-coder',
-		op: 'Checking doc comments in src/rate-limit',
-		doneOp: 'Checked doc comments in src/rate-limit · 1 finding',
-		starts: 300,
-		finishes: 2000,
-		elapsed: '22s'
-	},
-	{
-		id: 'security',
-		name: 'Security',
-		model: 'gpt-5-codex',
-		op: 'Waiting for a free slot',
-		doneOp: 'Checked key handling and limits · no findings',
-		starts: 1400,
-		finishes: 4800,
-		elapsed: '44s'
-	}
+const unitTools: Tool[] = [
+	{ action: 'readFile', path: 'docs/rate-limiting.md', at: 900, ms: 300 },
+	{ action: 'run', command: 'rg -n "allow\\(" src tests', at: 1000, ms: 500 },
+	{ action: 'readFile', path: 'src/rate-limit/limiter.ts', at: 1500, ms: 300 },
+	{ action: 'readFile', path: 'src/rate-limit/bucket.ts', at: 1900, ms: 250 },
+	{ action: 'run', command: 'bun test tests/rate-limit', at: 2200, ms: 1300 },
+	{ action: 'run', command: 'bunx tsc --noEmit', at: 2600, ms: 1100 }
 ];
 
-type Finding = { id: string; agent: string; severity: Severity; title: string; location: string; at: number };
+/** The one spawned agent: a subagent the limiter's unit asked for, named for its question. */
+const subagent = {
+	id: 'subagent-1',
+	name: 'Refill timing under the injected clock',
+	model: 'qwen3-coder',
+	/** What it's doing while running, then its closing line. */
+	op: 'Running a repro with a fake Clock',
+	doneOp: 'Ran a repro with a fake Clock · 1 finding',
+	/** Offsets from AT.units: queued when asked for, started once the last unit finishes. */
+	shows: 3400,
+	starts: 3800,
+	finishes: 5100,
+	elapsed: '33s'
+};
 
-/** `at` is an offset from AT.specialists, at or before its specialist finishes. */
+/** `agent` is set only on the subagent's finding, which its rail row counts. */
+type Finding = { id: string; agent?: string; severity: Severity; title: string; location: string; at: number };
+
+/** `at` is an offset from AT.units, when the unit or subagent that found it reports it. */
 const findings: Finding[] = [
 	{
 		id: 'f1',
-		agent: 'patterns',
 		severity: 'high',
 		title: 'index.ts re-exports allow(), which no longer exists',
 		location: 'src/rate-limit/index.ts:3',
@@ -132,35 +108,32 @@ const findings: Finding[] = [
 	},
 	{
 		id: 'f2',
-		agent: 'docs',
 		severity: 'low',
-		title: 'Doc comment still describes a free function',
-		location: 'src/rate-limit/limiter.ts:19',
-		at: 2000
-	},
-	{
-		id: 'f3',
-		agent: 'correctness',
-		severity: 'medium',
-		title: 'refill() ignores the injected Clock',
-		location: 'src/rate-limit/limiter.ts:23',
-		at: 2700
+		title: 'Usage example still calls the free allow()',
+		location: 'docs/rate-limiting.md:14',
+		at: 1400
 	},
 	{
 		id: 'f4',
-		agent: 'correctness',
 		severity: 'low',
 		title: 'capacity is never validated',
 		location: 'src/rate-limit/limiter.ts:16',
-		at: 3300
+		at: 2600
 	},
 	{
 		id: 'f6',
-		agent: 'perf',
 		severity: 'medium',
 		title: 'buckets Map has no eviction',
-		location: 'src/rate-limit/limiter.ts:11',
-		at: 4300
+		location: 'src/rate-limit/bucket.ts:11',
+		at: 3000
+	},
+	{
+		id: 'f3',
+		agent: subagent.id,
+		severity: 'medium',
+		title: 'refill() ignores the injected Clock',
+		location: 'src/rate-limit/limiter.ts:23',
+		at: 5000
 	}
 ];
 
@@ -181,45 +154,40 @@ function iso(ms: number): string {
 	return new Date(Date.UTC(2026, 8, 22, 19, 30) + ms).toISOString();
 }
 
-export function demoState(t: number) {
-	const toolCalls: ReviewToolCall[] = tools
-		.filter((tool) => t >= AT.toolsStart + tool.at)
+/** Demo ms as the seconds the app would show: the demo runs at roughly 8x real time. */
+function seconds(ms: number): number {
+	return Math.floor(ms * 0.0075);
+}
+
+/** The tool calls in `list` that have started by `t`, where `base` is when the list begins. */
+function toolCallsAt(list: Tool[], base: number, t: number, prefix: string): ReviewToolCall[] {
+	return list
+		.filter((tool) => t >= base + tool.at)
 		.map((tool, i) => {
-			const done = t >= AT.toolsStart + tool.at + tool.ms;
+			const done = t >= base + tool.at + tool.ms;
 
 			return {
-				id: `tool-${i}`,
-				command: `${tool.action} ${tool.path ?? tool.query}`,
-				input: { action: tool.action, path: tool.path, query: tool.query },
+				id: `${prefix}-${i}`,
+				command: `${tool.action} ${tool.path ?? tool.query ?? tool.command}`,
+				input: { action: tool.action, path: tool.path, query: tool.query, command: tool.command },
 				status: done ? 'done' : 'running',
 				exitCode: done ? 0 : null,
-				startedAt: iso(AT.toolsStart + tool.at),
-				elapsedMs: done ? tool.ms : Math.round(t - AT.toolsStart - tool.at)
+				startedAt: iso(base + tool.at),
+				elapsedMs: done ? tool.ms : Math.round(t - base - tool.at)
 			};
 		});
+}
 
-	const sinceSpecialists = t - AT.specialists;
-
-	const specialistRows =
-		t < AT.specialists
-			? []
-			: specialists.map((item) => {
-					const status: SpecialistStatus =
-						sinceSpecialists >= item.finishes ? 'done' : sinceSpecialists >= item.starts ? 'running' : 'queued';
-
-					return {
-						...item,
-						status,
-						current: status === 'done' ? item.doneOp : status === 'queued' ? 'Waiting for a free slot' : item.op
-					};
-				});
+export function demoState(t: number) {
+	const toolCalls = toolCallsAt(tools, AT.toolsStart, t, 'tool');
+	const since = t - AT.units;
+	const unitsDone = t < AT.units ? 0 : unitFinishes.filter((at) => since >= at).length;
+	const agents = t < AT.units || since < subagent.shows ? [] : [agentRow(since)];
+	const agentsDone = agents.filter((item) => item.status === 'done').length;
 
 	const found = findings
-		.filter((finding) => t >= AT.specialists + finding.at)
+		.filter((finding) => t >= AT.units + finding.at)
 		.sort((a, b) => RANK[a.severity] - RANK[b.severity]);
-
-	const specialistsDone = specialistRows.filter((item) => item.status === 'done').length;
-	const finished = t >= AT.result;
 
 	return {
 		user: t >= AT.user,
@@ -230,24 +198,87 @@ export function demoState(t: number) {
 		toolsOpen: t >= AT.toolsStart && t < AT.toolsEnd + 400,
 		plan: stream(plan, t, AT.planStart, AT.planEnd),
 		thinking: (t >= AT.toolsEnd && t < AT.planStart) || (t >= AT.finalizeEnd && t < AT.summaryStart),
-		specialists: specialistRows,
-		specialistsDone,
-		specialistsFinished: specialistRows.length > 0 && specialistsDone === specialistRows.length,
+		unitWork: t >= AT.units ? workAt(since, toolCallsAt(unitTools, AT.units, t, 'unit-tool')) : null,
+		agents,
+		agentsDone,
+		agentsFinished: since >= subagent.finishes,
+		reviewers: { done: unitsDone, failed: 0, total: unitFinishes.length },
+		subagents: agents.length ? { done: agentsDone, failed: 0, total: agents.length } : null,
 		findings: found,
-		finalize: t >= AT.finalizeStart ? { running: t < AT.finalizeEnd } : null,
+		progress: progressAt(t, unitsDone, found.length),
 		summary: stream(summary, t, AT.summaryStart, AT.summaryEnd),
-		finished,
-		/** ReviewSteps index: prepare, plan, specialists, consolidate. */
-		step: finished ? 6 : t >= AT.finalizeStart ? 5 : t >= AT.specialists ? 3 : t >= AT.reasonStart ? 1 : 0,
+		finished: t >= AT.result,
+		stage: stageAt(t),
 		elapsed: clock(t)
 	};
 }
 
-/** The Progress card's timer: the demo runs at roughly 8x real time. */
-function clock(t: number): string {
-	const seconds = Math.floor(Math.min(t, AT.result) * 0.0075);
+/** The units' work row: "Working 9s · running 2 commands" while they run, then "Worked for 28s". */
+function workAt(since: number, tools: ReviewToolCall[]) {
+	const working = since < UNITS_END;
 
-	return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+	return {
+		working,
+		time: `${seconds(working ? since : UNITS_END)}s`,
+		doing: tools.some((tool) => tool.status === 'running') ? taskGroupLabel(tools, true) : '',
+		thought: {
+			text: unitThought.text,
+			working: since < unitThought.end,
+			time: `${seconds(Math.min(since, unitThought.end))}s`
+		},
+		tools
+	};
+}
+
+/** A queued subagent waits for the units to finish. */
+function agentRow(since: number) {
+	const status: AgentStatus = since >= subagent.finishes ? 'done' : since >= subagent.starts ? 'running' : 'queued';
+
+	return {
+		...subagent,
+		status,
+		current: status === 'done' ? subagent.doneOp : status === 'queued' ? 'Waiting for the units to finish' : subagent.op
+	};
+}
+
+/** The ReviewSteps index (`STAGE`) the Progress card shows at `t`. */
+function stageAt(t: number): number {
+	if (t >= AT.result) return STAGE.done;
+	if (t >= AT.consolidateStart) return STAGE.consolidation;
+	if (t >= AT.verifyStart) return STAGE.verify;
+	if (t >= AT.units + subagent.starts) return STAGE.subagents;
+	if (t >= AT.units) return STAGE.reviewing;
+	if (t >= AT.toolsEnd) return STAGE.checks;
+	if (t >= AT.reasonStart) return STAGE.understand;
+
+	return STAGE.checkout;
+}
+
+/**
+ * The live progress row under the transcript: the units, then the subagent, then every finding
+ * verified by running code and the survivors consolidated.
+ */
+function progressAt(t: number, unitsDone: number, total: number): { running: boolean; label: string } | null {
+	if (t < AT.units) return null;
+	if (t >= AT.finalizeEnd) return { running: false, label: 'Finalized review for 18s' };
+	if (t >= AT.consolidateStart) return { running: true, label: 'Consolidating findings' };
+
+	if (t >= AT.verifyStart) {
+		const verified = Math.floor(((t - AT.verifyStart) / (AT.consolidateStart - AT.verifyStart)) * total);
+
+		return { running: true, label: `Verifying findings · ${verified}/${total}` };
+	}
+
+	if (t >= AT.units + subagent.starts) return { running: true, label: 'Waiting on subagent' };
+
+	return { running: true, label: `Reviewing · ${unitsDone} of ${unitFinishes.length} units` };
+}
+
+/** The Progress card's timer. */
+function clock(t: number): string {
+	const total = seconds(Math.min(t, AT.result));
+
+	return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
 }
 
 export const findingCounts = (items: { severity: Severity }[]) =>

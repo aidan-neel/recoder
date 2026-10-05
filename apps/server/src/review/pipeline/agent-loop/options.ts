@@ -1,6 +1,6 @@
-import type { ReviewReasoningEntry } from '@recoder/shared';
+import type { ReviewChatMessage, ReviewReasoningEntry } from '@recoder/shared';
 import type { EvidenceStore, ToolCallReport } from '../../../evidence/evidence.js';
-import type { RoleConfig } from '../../../models/models.js';
+import type { ModelConfig } from '../../../models/models.js';
 import type { ModelBudget } from './budget.js';
 
 export interface JsonAgentOptions<T> {
@@ -9,7 +9,7 @@ export interface JsonAgentOptions<T> {
 	agentId?: string;
 	system: string;
 	user: string;
-	config: RoleConfig;
+	config: ModelConfig;
 	budget: ModelBudget;
 	evidence: EvidenceStore;
 	maxTurns: number;
@@ -18,9 +18,12 @@ export interface JsonAgentOptions<T> {
 	consumeReserve?: boolean;
 	parse: (raw: unknown) => T | null;
 	validationError?: (raw: unknown) => string;
+	/** What can be kept of an answer that still fails `parse` once no repair turn is left. */
+	salvage?: (raw: unknown) => T | null;
 	/**
 	 * A valid final answer that looks premature (it announces more work, or
-	 * concludes without reading anything) gets sent back once with this nudge.
+	 * concludes without reading anything) gets sent back with this nudge. Each
+	 * distinct nudge is sent once.
 	 * `retrievals` counts evidence rounds this agent has run.
 	 */
 	checkFinal?: (value: T, state: { retrievals: number; runs: number }) => string | null;
@@ -38,13 +41,13 @@ export interface JsonAgentOptions<T> {
 	timeLimit?: { finalTurnAfterMs: number; maxWallMs: number };
 	/** A minimal valid final answer, quoted back when the model gets the shape wrong. */
 	finalExample?: string;
-	/** Action request examples quoted back on a malformed reply; defaults to read-only retrieval. */
-	actionExamples?: string;
+	/** The agent may run commands and write scratch files in the sandbox, not only read. */
+	exec?: boolean;
 	onProgress?: (state: 'queued' | 'running' | 'retrieval', elapsedMs: number, detail: string) => void;
 	onLog?: (message: string) => void;
 	/** Accumulated provider reasoning for a turn, upserted by `id`. */
-	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status' | 'summary'>) => void;
+	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status' | 'summary' | 'outputRate'>) => void;
 	onTool?: (tool: ToolCallReport) => void;
-	onMessage?: (message: { id: string; text: string; status: 'streaming' | 'done' | 'error'; cutOff?: string }) => void;
+	onMessage?: (message: Pick<ReviewChatMessage, 'id' | 'text' | 'status' | 'cutOff' | 'outputRate'>) => void;
 	getDiscussion?: () => string;
 }
