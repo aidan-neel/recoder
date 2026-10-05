@@ -62,7 +62,9 @@ describe('single-file commands', () => {
 
 		const commandFor = singleFileCommands(scripts, ['cd docs && bun run test']);
 
-		expect(commandFor('docs/a.test.ts')).toBe('cd docs && bunx vitest run --project unit a.test.ts');
+		expect(commandFor('docs/a.test.ts')).toBe(
+			'cd docs && bunx vitest run --project unit --reporter=dot --coverage.enabled=false a.test.ts'
+		);
 	});
 
 	test('keeps the test marker on the old copy and cleans it up', () => {

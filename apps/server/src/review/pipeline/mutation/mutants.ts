@@ -221,8 +221,8 @@ export function mutantsOf(file: string, head: string, added: AddedLines): Mutant
 
 /** Edits by the shape of the weak assertion, in the order they are tried. */
 export const EDITS_BY_SHAPE = {
-	lowerBound: [raiseLiteral, flipComparison],
-	someForEvery: [removeGuard, flipComparison],
+	lowerBound: [raiseLiteral, removeGuard],
+	someForEvery: [removeGuard, raiseLiteral],
 	presence: [raiseLiteral, dropNormalizer, flipComparison],
 	output: [breakString],
 	selection: [reverseOrder],

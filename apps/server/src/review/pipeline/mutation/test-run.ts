@@ -72,7 +72,8 @@ export function singleFileCommands(scriptLines: readonly string[], baselineComma
 
 		if (prefix === null) return null;
 
-		const run = `${prefix}${step} ${posix.normalize(inner)}`;
+		const quiet = /^(?:vitest|vp test)\b/.test(step) ? ' --reporter=dot --coverage.enabled=false' : '';
+		const run = `${prefix}${step}${quiet} ${posix.normalize(inner)}`;
 
 		return owner.dir === '.' ? run : `cd ${owner.dir} && ${run}`;
 	};

@@ -233,7 +233,7 @@ async function suspicionRow(input: {
 	command: string;
 }): Promise<DetectorResult | null> {
 	const { session, file, suspicion, sources, command } = input;
-	const mutants = aimedMutants(suspicion, file.head, sources);
+	const mutants = await aimedMutants(suspicion, file.head, sources);
 
 	if (!mutants.length) {
 		session.skip('no-aimed-mutant');
@@ -353,11 +353,11 @@ export async function testMatrix(input: {
 
 		session.counts.sanityPassed++;
 
-		const found =
-			(await firstProven(session, file, mine, candidates, command)) ??
-			(edited && oldCommand && candidates.length
+		const found = mine.length
+			? await firstProven(session, file, mine, candidates, command)
+			: edited && oldCommand && candidates.length
 				? await oldNewRow({ session, file, sources: candidates, commands: { head: command, old: oldCommand }, added })
-				: null);
+				: null;
 
 		if (found) results.push(found);
 	}

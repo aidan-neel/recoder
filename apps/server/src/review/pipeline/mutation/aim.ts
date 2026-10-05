@@ -1,5 +1,6 @@
 import type { DetectorResult } from '../detectors/types.js';
 import { testBlocks } from '../detectors/test-source.js';
+import { symbolsOf } from '../change-model/symbols.js';
 import { EDITS_BY_SHAPE, mutantsAt, swapErrorClass, type Edit, type Mutant } from './mutants.js';
 
 /** What a suspicion says about the weak assertion, which picks the mutation. */
@@ -56,39 +57,75 @@ function linesByTerms(text: string, terms: readonly string[]): number[] {
 		.map((entry) => entry.line);
 }
 
-/** The lines that throw a new error, which a loose error assertion cannot tell apart. */
-function throwLines(text: string): number[] {
-	return text.split('\n').flatMap((content, index) => (/\bthrow\s+new\s+[A-Z]\w*\(/.test(content) ? [index + 1] : []));
+/** The lines that make a new instance of a class that extends `broad` in the sources, else the lines that throw a new error. */
+function specificLines(text: string, specifics: ReadonlySet<string>): number[] {
+	const lines = text.split('\n');
+
+	const made = lines.flatMap((content, index) => {
+		const name = /\bnew\s+([A-Z]\w*)\(/.exec(content)?.[1];
+
+		return name && specifics.has(name) ? [index + 1] : [];
+	});
+
+	return made.length
+		? made
+		: lines.flatMap((content, index) => (/\bthrow\s+new\s+[A-Z]\w*\(/.test(content) ? [index + 1] : []));
+}
+
+/** Classes the sources declare as `extends broad`. */
+function subclassesOf(broad: string, sources: readonly { head: string }[]): Set<string> {
+	const pattern = new RegExp(`\\bclass\\s+([A-Z]\\w*)\\s+extends\\s+${broad}\\b`, 'g');
+
+	return new Set(sources.flatMap((source) => [...source.head.matchAll(pattern)].map((match) => match[1]!)));
+}
+
+/** Names the test calls: `run(`, `.get(`, `new Thing(`. */
+function calledNames(head: string, line: number): Set<string> {
+	const block = [...testBlocks(head).values()].find((test) => test.startLine <= line && line <= test.endLine);
+
+	return new Set([...(block?.body.matchAll(/\b([A-Za-z_$][\w$]*)\s*\(/g) ?? [])].map((match) => match[1]!));
+}
+
+/** Lines inside the functions the test calls, which a change there can reach. */
+async function calledLines(source: { path: string; head: string }, names: ReadonlySet<string>): Promise<number[]> {
+	const symbols = (await symbolsOf(source.path, source.head)) ?? [];
+	const lines: number[] = [];
+
+	for (const symbol of symbols) {
+		if (!['function', 'method'].includes(symbol.kind) || !names.has(symbol.name)) continue;
+
+		for (let line = symbol.startLine; line <= symbol.endLine; line++) lines.push(line);
+	}
+
+	return lines;
 }
 
 /**
- * Up to `MAX_AIMED` mutants for one suspicion: the operator its shape names,
- * on the lines of the changed sources that hold the names the weak test uses.
+ * Up to `MAX_AIMED` mutants for one suspicion: the operator its shape names.
+ * Lines inside the functions the test calls come first, then the lines that
+ * hold the names the weak test uses.
  */
-export function aimedMutants(
+export async function aimedMutants(
 	suspicion: DetectorResult,
 	testHead: string,
 	sources: readonly { path: string; head: string }[]
-): Mutant[] {
+): Promise<Mutant[]> {
 	const shape = shapeOf(suspicion);
 	const terms = termsOf(testHead, suspicion.line);
-	const broad = errorClasses(testHead, suspicion.line)[0];
+	const broad = errorClasses(testHead, suspicion.line)[0] ?? 'Error';
+	const specifics = subclassesOf(broad, sources);
+	const called = calledNames(testHead, suspicion.line);
 
-	const edits: readonly Edit[] =
-		shape === 'broadError'
-			? [swapErrorClass(broad ?? 'Error')]
-			: shape === 'generic'
-				? EDITS_BY_SHAPE.generic
-				: EDITS_BY_SHAPE[shape];
+	const edits: readonly Edit[] = shape === 'broadError' ? [swapErrorClass(broad)] : EDITS_BY_SHAPE[shape];
+	const found: Mutant[] = [];
 
-	return sources
-		.flatMap((source) =>
-			mutantsAt(
-				source.path,
-				source.head,
-				shape === 'broadError' ? throwLines(source.head) : linesByTerms(source.head, terms),
-				edits
-			)
-		)
-		.slice(0, MAX_AIMED);
+	for (const source of sources) {
+		const inside = shape === 'broadError' ? [] : await calledLines(source, called);
+		const lines = shape === 'broadError' ? specificLines(source.head, specifics) : linesByTerms(source.head, terms);
+		const ranked = [...inside, ...lines];
+
+		found.push(...mutantsAt(source.path, source.head, [...new Set(ranked)], edits));
+	}
+
+	return found.slice(0, MAX_AIMED);
 }
