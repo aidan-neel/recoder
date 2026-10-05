@@ -16,6 +16,7 @@
 		"@recoder/shared": "workspace:*",
 		"hono": "^4.13.5",
 		"tree-sitter-wasms": "0.1.13",
+		"typescript5": "npm:typescript@5.9.3",
 		"web-tree-sitter": "0.25.10",
 		"zod": "^4.5.4"
 	},

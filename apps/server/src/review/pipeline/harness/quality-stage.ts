@@ -1,5 +1,5 @@
 import { buildRuleLedger } from '../../guidelines/ledger/ledger.js';
-import { runDetectors, runDiagnostics } from '../detectors/detectors.js';
+import { runDetectors, runDiagnostics, runTypeHints } from '../detectors/detectors.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { publishBudget, type ReviewRun } from './context.js';
 import { addDetections } from './verification.js';
@@ -72,16 +72,27 @@ export async function detectorStage(run: ReviewRun): Promise<void> {
 }
 
 /**
- * The type check and lint diagnostics, once the baseline checks are in.
- * Synchronous, so the caller can decide between running it and closing the
- * review without the two interleaving.
+ * The type check and lint diagnostics, once the baseline checks are in. They
+ * are reported before anything else awaits, so the caller can decide between
+ * running the stage and closing the review without the two interleaving. The
+ * type hints follow, and are dropped when the review closed meanwhile.
  */
-export function diagnosticStage(run: ReviewRun): void {
+export async function diagnosticStage(run: ReviewRun, closed: () => boolean): Promise<void> {
 	if (run.controller.signal.aborted) return;
 
 	try {
 		report(run, runDiagnostics(run));
 	} catch (err) {
 		run.events?.onLog?.(`Diagnostics skipped: ${errorText(err)}`);
+	}
+
+	await new Promise((resolve) => setTimeout(resolve, 0));
+
+	if (closed() || run.controller.signal.aborted) return;
+
+	try {
+		report(run, runTypeHints(run));
+	} catch (err) {
+		run.events?.onLog?.(`Type hints skipped: ${errorText(err)}`);
 	}
 }

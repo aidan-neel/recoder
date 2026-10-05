@@ -1,3 +1,5 @@
+import { parseMachineDiagnostics } from './machine-diagnostics.js';
+
 /** One diagnostic as a tool printed it, before its path is resolved against the repo. */
 export interface RawDiagnostic {
 	path: string;
@@ -7,6 +9,9 @@ export interface RawDiagnostic {
 	rule?: string;
 	/** Type checkers' errors are `typecheck`; linters' findings and warnings are `lint`; `either` defers to the command. */
 	source: 'typecheck' | 'lint' | 'either';
+	/** The tool that printed it, when its format names one (`eslint`, `oxlint`, `tsc`, or a SARIF driver). */
+	tool?: string;
+	severity?: 'error' | 'warning';
 	raw: string;
 }
 
@@ -187,8 +192,20 @@ function remember(line: string, state: ParseState): void {
 	else if (!line.trim()) state.eslintFile = null;
 }
 
-/** Every diagnostic in one check's output, in the order printed. */
+/**
+ * Every diagnostic in one check's output, in the order printed: from a
+ * machine format when the output is one, else from the tools' printed lines.
+ */
 export function parseDiagnostics(output: string): RawDiagnostic[] {
+	const machine = parseMachineDiagnostics(output);
+
+	if (machine) return machine.filter((diagnostic) => diagnostic.line > 0);
+
+	return parseLines(output);
+}
+
+/** Every diagnostic a tool printed as text lines. */
+function parseLines(output: string): RawDiagnostic[] {
 	const state: ParseState = { eslintFile: null, svelteLocation: null, cargo: null, miette: null };
 	const found: RawDiagnostic[] = [];
 

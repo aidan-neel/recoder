@@ -81,6 +81,14 @@ function toResult(diagnostic: RawDiagnostic, file: string, check: BaselineResult
 		body,
 		file,
 		line: diagnostic.line,
+		ruleId: diagnostic.rule,
+		diagnostic: {
+			tool: diagnostic.tool ?? (detector === 'typecheck' ? 'tsc' : 'lint'),
+			rule: diagnostic.rule,
+			severity: diagnostic.severity ?? 'error',
+			base: 'absent',
+			head: 'present'
+		},
 		evidence: `${check.evidenceId ?? check.command}: ${clip(diagnostic.raw, 300)}`
 	};
 }
