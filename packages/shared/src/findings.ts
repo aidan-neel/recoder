@@ -196,4 +196,10 @@ export interface Finding {
 	/** Diff side for deleted-code findings. Defaults to `new` when a line exists. */
 	side?: 'old' | 'new';
 	verification?: FindingVerification;
+	/**
+	 * Ids of the candidates merged into this finding, earliest raised first,
+	 * so an evaluation can trace each published claim to the reports behind it.
+	 * Older saved reviews omit it.
+	 */
+	memberIds?: string[];
 }

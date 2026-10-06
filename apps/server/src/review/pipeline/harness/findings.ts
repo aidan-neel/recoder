@@ -70,6 +70,71 @@ export function dismissalFingerprint(parts: Omit<FingerprintParts, 'hunkId'> & {
 	);
 }
 
+/** Words that say nothing about which defect a claim describes. */
+const FILLER = new Set(
+	'a an and any are as at be been but by can could did do does each for from had has have how if in into is it its may might must no nor not of on or should so such than that the their then there these this those to too was were what when where which while who why will with would'.split(
+		' '
+	)
+);
+
+/** Plural and tense endings, longest first, taken off a claim word so `rejects`, `rejected` and `rejecting` meet. */
+const ENDINGS = ['ing', 'ed', 'es', 's'];
+
+/**
+ * The least share of terms two claims must hold in common (their Dice
+ * coefficient) to be one defect. Reports of one defect in other words still
+ * share its specifics; different defects on one line share mostly the words
+ * of the place. Below it they stay apart, since a duplicate costs less than a
+ * lost bug.
+ */
+const SAME_CLAIM = 0.4;
+
+function stem(word: string): string {
+	if (word.endsWith('ss')) return word;
+
+	const ending = ENDINGS.find((suffix) => word.length - suffix.length >= 3 && word.endsWith(suffix));
+
+	return ending ? word.slice(0, -ending.length) : word;
+}
+
+/**
+ * The terms of what a finding claims, the record two reports of one place
+ * are compared by: its title, trigger, consequence and violated contract, its
+ * body without the category tag, and the rule or smell it names. A detector
+ * result has no claim, so its title, body and rule stand for one. Words are
+ * split at case changes and punctuation, lowercased, stemmed and stripped of
+ * filler, so wording fades and the specifics of the defect remain. The
+ * category, line and evidence ids are left out: different defects in one
+ * place share them.
+ */
+export function claimTerms(finding: Finding): Set<string> {
+	const { claim } = finding;
+
+	const text = [
+		finding.title,
+		claim?.trigger,
+		claim?.consequence,
+		claim?.violatedContract,
+		finding.message.replace(/^\[[^\]]*\]\s*/, ''),
+		finding.ruleId,
+		finding.smell
+	].join(' ');
+
+	const words = text
+		.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+		.toLowerCase()
+		.split(/[^a-z0-9]+/);
+
+	return new Set(words.filter((word) => (word.length > 1 || /\d/.test(word)) && !FILLER.has(word)).map(stem));
+}
+
+/** Whether two claims, as `claimTerms` gives them, describe one defect. */
+export function sameClaim(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+	const shared = [...a].filter((term) => b.has(term)).length;
+
+	return a.size + b.size > 0 && (2 * shared) / (a.size + b.size) >= SAME_CLAIM;
+}
+
 /** Splits a fingerprint shared by two separate places, using what tells them apart. */
 export function refineFingerprint(fingerprint: string, place: string): string {
 	return hash(`${fingerprint}\n${place}`);
