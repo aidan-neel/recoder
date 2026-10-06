@@ -141,14 +141,16 @@ async function resolveRepos(base: string, labels: PrLabel[]): Promise<Map<string
  * time, each judged as it finishes. Jobs go round by round, so a long
  * benchmark stopped early still covers every PR; `onRun` sees the records
  * after each run. With `replays`, each run replays that saved review instead,
- * and runs without one are skipped. Each run is stamped with `identity`, the
- * hash it is reviewed under, and the judge that scores it.
+ * and runs without one are skipped. Each run is judged with the match
+ * corrections in `adjudications`, and stamped with `identity`, the hash it is
+ * reviewed under, and the judge that scores it.
  */
 async function runAll(
 	options: Options,
 	labels: PrLabel[],
 	repos: Map<string, Repo>,
 	judge: Judge,
+	adjudications: Adjudications,
 	identity: string,
 	records: ScoredRun[][],
 	replays: string[][] | null,
@@ -179,7 +181,7 @@ async function runAll(
 				replays ? () => replayReview(options.base, replays[pr]![run]!, reverify) : undefined
 			);
 
-			records[pr]![run] = stamped(label, await scoreRun(judge, label, record, options.base), {
+			records[pr]![run] = stamped(label, await scoreRun(judge, label, record, options.base, adjudications), {
 				review,
 				identity,
 				judge: judge.model
@@ -301,7 +303,12 @@ async function main(): Promise<void> {
 	const bases = new Map(identity.tasks.map((task) => [task.taskId, task.base]));
 
 	const initial = plan.rescore
-		? reusedRuns(await rescoredRecords(plan.origin!, labels, judge, options.base), labels, 'rescore', judge.model)
+		? reusedRuns(
+				await rescoredRecords(plan.origin!, labels, judge, options.base, adjudications),
+				labels,
+				'rescore',
+				judge.model
+			)
 		: resumed
 			? reusedRuns(resumedRecords(resumed, labels), labels, 'resume', judge.model)
 			: labels.map(() => []);
@@ -366,7 +373,9 @@ async function main(): Promise<void> {
 	const replays = plan.rescore ? labels.map(() => []) : options.replay ? replayedReviews(plan.origin!, labels) : null;
 
 	const final = report(
-		await runAll(options, labels, repos, judge, identity.hash, initial, replays, (records) => save(report(records)))
+		await runAll(options, labels, repos, judge, adjudications, identity.hash, initial, replays, (records) =>
+			save(report(records))
+		)
 	);
 
 	printBenchmark(final);

@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ModelSettings } from '@recoder/shared';
+import { JUDGE_VERSION } from '../../src/eval/benchmark-judge';
 import type { Adjudications } from '../../src/eval/benchmark-labels';
 import { captureIdentity, type IdentityInput } from '../../src/eval/identity-capture';
 import type { ServerIdentity } from '../../src/eval/server-identity';
@@ -190,7 +191,7 @@ test('a changed server flag changes the hash; a server without the route records
 		'rule-ledger': 'unknown',
 		'baseline-cache': 'unknown',
 		'review-checkpoint': 'unknown',
-		'benchmark-judge': 'v1'
+		'benchmark-judge': `v${JUDGE_VERSION}`
 	});
 });
 

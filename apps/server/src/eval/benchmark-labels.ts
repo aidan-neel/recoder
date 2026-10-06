@@ -31,10 +31,82 @@ const adjudicationSchema = z.object({
 
 type Adjudication = z.infer<typeof adjudicationSchema>;
 
-/** Adjudications by finding key. */
-export type Adjudications = Record<string, Adjudication>;
+/**
+ * A human's correction of the judge: whether one claim, by its hash, reports
+ * one planted defect, and why. It is filed under `matchKey` and applies
+ * wherever that claim is judged against that defect, at every stage of every run.
+ */
+const matchAdjudicationSchema = z.object({ reports: z.boolean(), reason: z.string().min(1) });
 
-const adjudicationsSchema = z.record(z.string(), adjudicationSchema);
+type MatchAdjudication = z.infer<typeof matchAdjudicationSchema>;
+
+/** Finding labels by finding key, and match corrections by match key. */
+export type Adjudications = Record<string, Adjudication | MatchAdjudication>;
+
+/** A match key's shape: `match:<pr>:<defect id>:<claim hash>`, the hash being 16 hex digits. */
+const MATCH_KEY = /^match:[^:]+:[^:]+:[0-9a-f]{16}$/;
+
+/** An adjudication file entry that is neither a well-formed finding label nor a well-formed match correction. */
+export class AdjudicationError extends Error {
+	override name = 'AdjudicationError';
+
+	constructor(key: string, problem: string) {
+		super(`Adjudication "${key}": ${problem}`);
+	}
+}
+
+/** The issues of a failed parse, one per field. */
+function issues(error: z.ZodError): string {
+	return error.issues.map((issue) => `${issue.path.join('.') || 'value'} ${issue.message}`).join('; ');
+}
+
+/**
+ * One file entry, read by the shape of its key: a `match:` key holds a
+ * correction and any other key a finding label, so a value filed under the
+ * wrong kind of key is an error, not a silent mismatch.
+ */
+function entryOf(key: string, value: unknown): Adjudication | MatchAdjudication {
+	if (key.startsWith('match:')) {
+		if (!MATCH_KEY.test(key))
+			throw new AdjudicationError(key, 'a match key is match:<pr>:<defect>:<16-hex claim hash>');
+
+		const parsed = matchAdjudicationSchema.safeParse(value);
+
+		if (!parsed.success)
+			throw new AdjudicationError(key, `a match correction is { reports, reason }: ${issues(parsed.error)}`);
+
+		return parsed.data;
+	}
+
+	const parsed = adjudicationSchema.safeParse(value);
+
+	if (parsed.success) return parsed.data;
+
+	const misfiled = matchAdjudicationSchema.safeParse(value).success
+		? ' (this is a match correction; file it under match:<pr>:<defect>:<claim hash>)'
+		: '';
+
+	throw new AdjudicationError(key, `a finding label is { label, file, ... }${misfiled}: ${issues(parsed.error)}`);
+}
+
+/** Where a match correction is filed: `match:<pr>:<defect id>:<claim hash>`. */
+export function matchKey(pr: string, defect: string, claim: string): string {
+	return `match:${pr}:${defect}:${claim}`;
+}
+
+/** The match correction filed under `key`, if the entry there is one. */
+export function matchAdjudication(adjudications: Adjudications, key: string): MatchAdjudication | undefined {
+	const entry = adjudications[key];
+
+	return entry && 'reports' in entry ? entry : undefined;
+}
+
+/** The finding label filed under `key`; unresolved when there is none. */
+function findingLabel(adjudications: Adjudications, key: string): Adjudication['label'] {
+	const entry = adjudications[key];
+
+	return entry && 'label' in entry ? entry.label : 'unresolved';
+}
 
 /** One run's findings with their class, evidence group and key, in the order the judge scored them. */
 export interface LabeledFindings {
@@ -65,7 +137,9 @@ export function adjudicationPath(dataset: string): string {
 export function readAdjudications(path: string): Adjudications {
 	if (!existsSync(path)) return {};
 
-	return adjudicationsSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+	const raw = z.record(z.string(), z.unknown()).parse(JSON.parse(readFileSync(path, 'utf8')));
+
+	return Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, entryOf(key, value)]));
 }
 
 /** Writes the adjudications sorted by key, so a diff of the file shows only what changed. */
@@ -116,9 +190,7 @@ function classify(
 		if (planted.has(index)) return 'planted';
 		if (duplicates.has(index)) return 'duplicate';
 
-		const label = adjudications[keys[index]!]?.label ?? 'unresolved';
-
-		return label;
+		return findingLabel(adjudications, keys[index]!);
 	});
 
 	return { keys, classes, evidence: findings.map(evidenceGroup) };
@@ -194,20 +266,27 @@ export interface PrecisionBounds {
 	/** Every unresolved finding counted right. */
 	upper: number;
 	unresolved: number;
+	/** Every published finding, the denominator of both bounds. */
+	published: number;
 }
 
 /**
- * `TP/(TP+FP+U) <= precision <= (TP+U)/(TP+FP+U)`, where TP is planted plus
- * additional true positives. Duplicates are neither right nor wrong and stay
- * out. Null when no finding was judged.
+ * `TP/N <= precision <= (TP+U)/N`, where TP is planted plus additional true
+ * positives and N is every published finding, duplicates included: a
+ * duplicate is a comment the reader did not need. Null when no finding was judged.
  */
 export function precisionBounds(counts: ClassCounts): PrecisionBounds | null {
 	const tp = counts.planted + counts.additional;
-	const total = tp + counts.false + counts.unresolved;
+	const total = FINDING_CLASSES.reduce((sum, kind) => sum + counts[kind], 0);
 
 	if (!total) return null;
 
-	return { lower: tp / total, upper: (tp + counts.unresolved) / total, unresolved: counts.unresolved };
+	return {
+		lower: tp / total,
+		upper: (tp + counts.unresolved) / total,
+		unresolved: counts.unresolved,
+		published: total
+	};
 }
 
 /** One group of findings: counts, and how many runs they came from. */
