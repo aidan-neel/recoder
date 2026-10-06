@@ -77,8 +77,10 @@ export async function briefUnit(run: ReviewRun, cfg: ModelConfig, unit: ReviewUn
 	const summary = isFiller(reply.summary) ? '' : reply.summary.trim();
 	const source = { inventory: run.inventory, model: run.changeModel, unit, revision: run.input.revision?.headSha };
 
-	const record: BriefUnit = input.clipped
-		? { ...base, status: 'partial', reason: 'size', detail: 'the diff was clipped to fit one call', summary }
+	const clipped = input.clipped.map((file) => `${file.path}: ${file.shown} of ${file.total} diff lines shown`);
+
+	const record: BriefUnit = clipped.length
+		? { ...base, status: 'partial', reason: 'size', detail: clipped.join('; '), summary }
 		: { ...base, status: 'included', summary };
 
 	return { record, observed: unitClaims(reply.observedChanges, source), open: unitClaims(reply.openQuestions, source) };

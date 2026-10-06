@@ -180,10 +180,20 @@ test('a 30,000-character first file does not hide the two units after it', async
 		['unit-3', 'c/y.ts', 'included', undefined]
 	]);
 
+	expect(intent?.units?.[0].detail).toBe('a/big.ts: 237 of 300 diff lines shown');
 	expect(intent?.observedChanges.map((claim) => claim.file)).toEqual(['a/big.ts', 'b/x.ts', 'c/y.ts']);
 	expect(intent?.complete).toBe(false);
 	expect(briefBlock(intent, [{ path: 'a/big.ts', hunkIds: [] }], false)).toContain('The brief read a clipped diff');
 	expect(briefBlock(intent, [{ path: 'b/x.ts', hunkIds: [] }], false)).not.toContain('clipped');
+});
+
+test('a unit the partition sized to fit is briefed whole, not as partial', async () => {
+	stub(perFile);
+
+	const intent = await distill(addedFile('a/x.ts', 117) + addedFile('a/y.ts', 117));
+
+	expect(intent?.units?.map((unit) => [unit.status, unit.reason])).toEqual([['included', undefined]]);
+	expect(intent?.complete).toBe(true);
 });
 
 test('a placeholder answer is asked again once, then left out of the brief and the cache', async () => {

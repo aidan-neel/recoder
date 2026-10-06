@@ -1,11 +1,11 @@
+import type { DiffLine } from '@recoder/shared';
+import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { symbolAt, unitContext } from '../change-model/lookup.js';
 import type { ChangeModel } from '../change-model/types.js';
 import type { ReviewInventory } from '../inventory.js';
-import type { ReviewUnit, UnitScope } from '../units.js';
+import { patchChars, patchLineChars, type ReviewUnit, type UnitScope } from '../units.js';
 import type { BriefOmission, ChangeIntent, CodeClaim } from './types.js';
 
-/** The diff one brief call reads at most; a small model has to hold all of it at once. */
-const MAX_DIFF_CHARS = 24_000;
 const MAX_DECLARATION_CHARS = 8_000;
 
 /** Per unit and list. A reviewer is shown only its own unit's claims, so this is what one reviewer reads at most. */
@@ -13,15 +13,60 @@ const MAX_CODE_CLAIMS = 12;
 
 const SIGN = { add: '+', del: '-', context: ' ' } as const;
 
-/** One file's hunks with each new-side line numbered; a removed line has no number, so every cited line is on the new side. */
-function fileDiff(inventory: ReviewInventory, path: string): string {
-	const diff = inventory.diffs.find((entry) => entry.path === path);
+/** A diff line with its new-side number; a removed line has none, so every cited line is on the new side. */
+const numbered = (line: DiffLine) => `${SIGN[line.type]}${line.newNo ?? ''}| ${line.text}`;
 
-	const hunks = (diff?.hunks ?? []).map((hunk) =>
-		[hunk.header, ...hunk.lines.map((line) => `${SIGN[line.type]}${line.newNo ?? ''}| ${line.text}`)].join('\n')
-	);
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
-	return [`--- ${path}`, ...hunks].join('\n');
+/** The first lines of a hunk that fit in `chars`. */
+function linesWithin(lines: DiffLine[], chars: number): DiffLine[] {
+	let left = chars;
+	let count = 0;
+
+	while (count < lines.length && patchLineChars(lines[count]) <= left) left -= patchLineChars(lines[count++]);
+
+	return lines.slice(0, count);
+}
+
+/** A file whose diff did not fit its share of one call, with how many of its lines were shown. */
+export interface ClippedFile {
+	path: string;
+	shown: number;
+	total: number;
+}
+
+/**
+ * One file's diff within `share` patch characters, measured as the partition
+ * measures them, so a unit `partitionUnits` sized to fit is never clipped;
+ * the line numbers and headers are headroom outside the count. Whole hunks
+ * are kept in order while they fit and a hunk that does not is named by its
+ * header only; when no hunk fits, the first is cut at a line.
+ */
+function fileDiff(inventory: ReviewInventory, path: string, share: number): { text: string; clipped?: ClippedFile } {
+	const hunks = inventory.diffs.find((entry) => entry.path === path)?.hunks ?? [];
+	const size = (lines: DiffLine[]) => lines.reduce((sum, line) => sum + patchLineChars(line), 0);
+	const anyFits = hunks.some((hunk) => size(hunk.lines) <= share);
+	let left = share;
+
+	const kept = hunks.map((hunk, index) => {
+		const lines = size(hunk.lines) <= left ? hunk.lines : !anyFits && index === 0 ? linesWithin(hunk.lines, left) : [];
+
+		left -= size(lines);
+
+		return lines;
+	});
+
+	const total = hunks.reduce((sum, hunk) => sum + hunk.lines.length, 0);
+	const shown = kept.reduce((sum, lines) => sum + lines.length, 0);
+
+	const text = hunks.map((hunk, index) => {
+		const rest = hunk.lines.length - kept[index].length;
+		const note = rest ? [`…${plural(rest, 'more line')} of this hunk not shown`] : [];
+
+		return [hunk.header, ...kept[index].map(numbered), ...note].join('\n');
+	});
+
+	return { text: [`--- ${path}`, ...text].join('\n'), ...(shown < total && { clipped: { path, shown, total } }) };
 }
 
 /**
@@ -42,44 +87,31 @@ function shares(sizes: number[], cap: number): number[] {
 	return result;
 }
 
-/** A file's diff cut at the last line break within `chars`, with a note of how many lines were left out. */
-function clip(text: string, chars: number): string {
-	if (text.length <= chars) return text;
-
-	const end = text.lastIndexOf('\n', chars);
-	const kept = text.slice(0, end > 0 ? end : chars);
-	const rest = text.slice(kept.length).split('\n').filter(Boolean).length;
-
-	return `${kept}\n…${rest} more line${rest === 1 ? '' : 's'} of this file's diff not shown`;
-}
-
 /**
  * What one unit's summary is written from: the parser's changed declarations
- * with their references and tests, then every file's diff. A diff larger
- * than one call reads is clipped file by file to each one's share, so a
- * large file never hides the others. Same inventory, model and unit, same
- * text, so it can key a cache.
+ * with their references and tests, then every file's diff. The diff gets the
+ * partition's own budget, so only a file larger than a whole unit is clipped,
+ * and then to its share, so it never hides the others. Same inventory, model
+ * and unit, same text, so it can key a cache.
  */
 export function unitInput(
 	inventory: ReviewInventory,
 	model: ChangeModel | null,
 	scope: UnitScope
-): { text: string; clipped: boolean } {
-	const diffs = scope.map((entry) => fileDiff(inventory, entry.path));
-
+): { text: string; clipped: ClippedFile[] } {
 	const limits = shares(
-		diffs.map((text) => text.length),
-		MAX_DIFF_CHARS
+		scope.map((entry) => patchChars(inventory, entry)),
+		REVIEW_POLICY.unitBudgetChars
 	);
 
-	const shown = diffs.map((text, index) => clip(text, limits[index]));
+	const diffs = scope.map((entry, index) => fileDiff(inventory, entry.path, limits[index]));
 	const declarations = model ? unitContext(model, scope, MAX_DECLARATION_CHARS) : '';
 
-	const diff = `Diff (new-side line numbers before each line; removed lines have none):\n${shown.join('\n\n')}`;
+	const diff = `Diff (new-side line numbers before each line; removed lines have none):\n${diffs.map((entry) => entry.text).join('\n\n')}`;
 
 	return {
 		text: [declarations, diff].filter(Boolean).join('\n\n'),
-		clipped: shown.some((text, index) => text !== diffs[index])
+		clipped: diffs.flatMap((entry) => entry.clipped ?? [])
 	};
 }
 
