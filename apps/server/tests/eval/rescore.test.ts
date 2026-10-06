@@ -201,7 +201,11 @@ test('a rescore with a fake judge reproduces the totals of the report it rescore
 		sha256: sha256(join(root, 'once.json'))
 	});
 
-	expect(twice.report.rescoredFrom?.judge).toEqual({ ...once.report.judge, version: 'not recorded' });
+	expect(twice.report.rescoredFrom?.judge).toEqual({ ...once.report.judge, version: JUDGE_VERSION });
+
+	expect(printed(twice.report)[0]).toBe(
+		`Rescored from ${join(root, 'once.json')} (sha256 ${sha256(join(root, 'once.json')).slice(0, 12)}), judged there by ${first.model} v${JUDGE_VERSION}, here by ${again.model} v${JUDGE_VERSION}`
+	);
 
 	expect((twice.report.derivedFrom as Derivation[]).map((derivation) => derivation.report)).toEqual([
 		'saved.json',

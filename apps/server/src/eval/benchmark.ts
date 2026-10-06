@@ -40,7 +40,8 @@ import { captureIdentity } from './identity-capture';
 import { writeEvalFile } from './report';
 import { runReview, stopOnInterrupt } from './run-review';
 import { readLabels, readTaskSet, selectTasks, subsetLines, type PrLabel } from './task-set';
-import { benchmarkSummary, runAgreement } from './benchmark-merge';
+import { runAgreement } from './benchmark-merge';
+import { benchmarkSummary } from './benchmark-score';
 import { parseShard, shardTasks, type ShardSpec } from './shard';
 
 const USAGE =

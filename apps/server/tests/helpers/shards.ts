@@ -1,6 +1,7 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { benchmarkSummary, runAgreement } from '../../src/eval/benchmark-merge';
+import { runAgreement } from '../../src/eval/benchmark-merge';
+import { benchmarkSummary } from '../../src/eval/benchmark-score';
 import type { BenchmarkReport, PrResult, ScoredRun } from '../../src/eval/benchmark-report';
 import { runIdOf, withHash, type RunIdentity } from '../../src/eval/identity';
 import type { EvalFinding } from '../../src/eval/metrics';

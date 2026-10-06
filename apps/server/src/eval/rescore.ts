@@ -17,7 +17,7 @@ import {
 	type ScoredRun
 } from './benchmark-report';
 import { harnessRecord, reusedRuns, runIdentities } from './benchmark-reuse';
-import { summarize, type PrRuns } from './benchmark-score';
+import { benchmarkSummary } from './benchmark-score';
 import { judgeModel, rescoredRecords, type Judge } from './benchmark-scoring';
 import { captureTree } from './harness-tree';
 import { NOT_RECORDED, contentHash, withHash, type RunIdentity } from './identity';
@@ -84,22 +84,6 @@ function labelsOf(report: BenchmarkReport, dataset: string): PrLabel[] {
 	return report.prs.map((pr) => labels.get(pr.id)!);
 }
 
-/** What `summarize` reads of one PR's runs. */
-function prRuns(pr: PrResult): PrRuns {
-	const scored = pr.runs.filter((run): run is ScoredRun & { score: NonNullable<ScoredRun['score']> } => !!run.score);
-
-	return {
-		codebase: pr.codebase,
-		defects: pr.defects,
-		control: pr.control,
-		scores: scored.map((run) => run.score),
-		hiddenRuns: scored.flatMap((run) => (run.hiddenScore ? [{ shown: run.score, hidden: run.hiddenScore }] : [])),
-		stageRuns: scored.flatMap((run) => (run.stages ? [run.stages] : [])),
-		lowRuns: scored.flatMap((run) => (run.lows ? [run.lows] : [])),
-		labeledRuns: scored.flatMap((run) => (run.labeled ? [run.labeled] : []))
-	};
-}
-
 /**
  * The input's identity with what a rescore changes recorded again: the judge,
  * the labels and adjudications it scored against, the harness code that
@@ -127,6 +111,11 @@ function rescoredIdentity(
 	});
 
 	return { ...next, runs: runIdentities(runs) };
+}
+
+/** The input judge's version: from its identity, or from the rescore that wrote it when it has none. */
+function inputJudgeVersion(input: BenchmarkReport): number | typeof NOT_RECORDED {
+	return input.identity?.judge.version ?? input.rescoredFrom?.rescoredBy.version ?? NOT_RECORDED;
 }
 
 /** Passed runs that saved no pool, and those whose pool or findings record no ids, so their lows cannot be read. */
@@ -187,7 +176,7 @@ async function rescore(source: Source, dataset: string, judge: Judge): Promise<R
 	const rescoredFrom: RescoredFrom = {
 		path: source.path,
 		sha256: createHash('sha256').update(source.bytes).digest('hex'),
-		judge: { ...input.judge, version: input.identity?.judge.version ?? NOT_RECORDED },
+		judge: { ...input.judge, version: inputJudgeVersion(input) },
 		rescoredBy: { ...judge.model, version: JUDGE_VERSION },
 		...untraced(input)
 	};
@@ -214,10 +203,7 @@ async function rescore(source: Source, dataset: string, judge: Judge): Promise<R
 		startedAt,
 		finishedAt: new Date().toISOString(),
 		prs,
-		summary: {
-			...(input.summary.taskSet ? { taskSet: input.summary.taskSet } : {}),
-			...summarize(prs.map(prRuns))
-		}
+		summary: benchmarkSummary(prs, input.summary.taskSet)
 	};
 
 	return { report, notes: notesOf(input, report, labels) };
