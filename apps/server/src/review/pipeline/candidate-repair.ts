@@ -15,9 +15,14 @@ import type { ReviewInventory } from './inventory.js';
 import { lensById } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
 
-/** One correction a repair makes, with the evidence that supports it. */
+/**
+ * One correction a repair makes, with the evidence that supports it. `anchor`
+ * moves the finding onto a changed line; `related` keeps it on its unchanged
+ * line and links it to the changed line in the same file that introduces the defect.
+ */
 export type RepairChange =
 	| { kind: 'anchor'; file: string; line: number; basis: string }
+	| { kind: 'related'; file: string; line: number; basis: string }
 	| { kind: 'category'; category: FindingCategory; basis: string }
 	| { kind: 'citation'; claimId: string; basis: string }
 	| { kind: 'rule'; ruleId: string; basis: string };
@@ -124,12 +129,19 @@ function toReviewerFinding(candidate: CandidateFinding): ReviewerFinding {
 	};
 }
 
-/** The reported finding with the repair's corrections applied; an anchor change keeps the old place as a related location. */
+/**
+ * The reported finding with the repair's corrections applied: an anchor change
+ * keeps the old place as a related location, a related change adds the linked line as one.
+ */
 function withChanges(raw: ReviewerFinding, changes: RepairChange[]): ReviewerFinding {
 	let next: ReviewerFinding = { ...raw, claim: { ...raw.claim } };
 
 	for (const change of changes) {
-		if (change.kind === 'anchor') {
+		if (change.kind === 'related') {
+			const link = { file: change.file, line: change.line, endLine: change.line, side: 'new' as const };
+
+			next = { ...next, relatedLocations: [...(next.relatedLocations ?? []), link] };
+		} else if (change.kind === 'anchor') {
 			const original = {
 				file: raw.file,
 				line: raw.line ?? undefined,
@@ -266,7 +278,13 @@ function categoryRepair(candidate: CandidateFinding, raw: ReviewerFinding, scope
 	return { changes: [], open: [], unsupported: `${found.reason}; a repair never invents one` };
 }
 
-/** The anchor correction for a candidate stopped at location validation. */
+/**
+ * The anchor correction for a candidate stopped at location validation. A
+ * line the candidate's fix edits becomes its anchor. A changed line it only
+ * cites, or that holds a symbol it quotes, does not: the claim may be false
+ * there, so a finding on an unchanged line keeps its line and is linked to the
+ * changed one; a finding without a line is moved onto it.
+ */
 function anchorRepair(candidate: CandidateFinding, inventory: ReviewInventory): RepairPlan {
 	if (!LINE_REASONS.has(candidate.dropReason ?? '')) {
 		return {
@@ -281,11 +299,10 @@ function anchorRepair(candidate: CandidateFinding, inventory: ReviewInventory): 
 	if ('miss' in choice) return { changes: [], open: [{ need: 'line', reason: choice.reason }] };
 
 	const terms = choice.terms.length ? ` holding ${choice.terms.join(', ')}` : '';
+	const kind = choice.tier !== 'patch-target' && candidate.line ? 'related' : 'anchor';
 
 	return {
-		changes: [
-			{ kind: 'anchor', file: candidate.file, line: choice.line, basis: `${choice.tier}${terms}: ${choice.text}` }
-		],
+		changes: [{ kind, file: candidate.file, line: choice.line, basis: `${choice.tier}${terms}: ${choice.text}` }],
 		open: []
 	};
 }
@@ -327,7 +344,9 @@ export function originalOf(candidate: CandidateFinding): CandidateRepair['origin
 /**
  * Validates the repaired candidate again. When it passes, the candidate takes
  * its place (same ids) and goes on to verification; when it fails, the original
- * stays as it was, with its original stop. The caller stores the returned record.
+ * stays as it was, with its original stop. The line the repair chose is pinned:
+ * if validation would snap it elsewhere, the repair is unsupported. A related
+ * change is the only way an unchanged line passes. The caller stores the returned record.
  */
 export function applyRepair(
 	candidate: CandidateFinding,
@@ -346,7 +365,16 @@ export function applyRepair(
 		lens: lensOf(candidate)
 	};
 
-	const repaired = validateCandidate(raw, meta, ctx);
+	const link = changes.find((change) => change.kind === 'related');
+	const anchor = changes.find((change) => change.kind === 'anchor');
+	const pinned = anchor?.line ?? raw.line ?? undefined;
+	const repaired = validateCandidate(raw, meta, ctx, link);
+
+	if (repaired.line !== pinned) {
+		const reason = `validation moved the chosen line ${pinned} to ${repaired.line}`;
+
+		return { original, method, changes, result: 'unsupported', reason };
+	}
 
 	if (!repaired.valid) {
 		return { original, method, changes, result: 'rejected', reason: repaired.dropReason ?? 'failed validation again' };

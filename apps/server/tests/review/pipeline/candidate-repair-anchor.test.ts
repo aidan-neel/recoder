@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { changedLines, chooseAnchor } from '../../../src/review/pipeline/candidate-repair-anchor';
+import { buildInventory } from '../../../src/review/pipeline/inventory';
 import { candidateOf, repairContext, reported } from './candidate-repair-fixtures';
 
 const { inventory } = repairContext();
@@ -33,20 +34,69 @@ test('a quoted symbol the change introduces places the candidate; one the file a
 	});
 });
 
-test('a line range in the candidate’s prose counts as a citation, and the nearest cited line wins', () => {
-	const raw = reported({ line: 46, claim: noPath, body: 'Lines 11-12 shift without a check, and q.ts:44 cleans up.' });
+test('a fix whose find text also sits on a context or removed line, or on two added lines, places nothing', () => {
+	const fixes = ['save(queue);', 'queue.pop();'].map((find) => [{ file: 'src/q.ts', find, replace: 'drop();' }]);
 
-	expect(chooseAnchor(candidateOf(raw), inventory)).toMatchObject({ line: 44, tier: 'cited' });
+	for (const fix of fixes) {
+		expect(chooseAnchor(candidateOf(reported({ claim: noPath, fix })), inventory)).toMatchObject({ miss: 'none' });
+	}
+
+	const twice = buildInventory(
+		`diff --git a/src/r.ts b/src/r.ts
+--- a/src/r.ts
++++ b/src/r.ts
+@@ -1,1 +1,3 @@
+ start();
++if (value === undefined) return null;
++if (value === undefined) return null;
+`,
+		[]
+	);
+
+	const fix = [{ file: 'src/r.ts', find: 'if (value === undefined) return null;', replace: 'throw new Missing();' }];
+	const raw = reported({ file: 'src/r.ts', claim: noPath, fix });
+
+	expect(chooseAnchor(candidateOf(raw, 'correctness', { ...repairContext(), inventory: twice }), twice)).toMatchObject({
+		miss: 'none'
+	});
 });
 
-test('a cited line that also holds a symbol the fix introduces beats a line that is only cited', () => {
+test('prose cites a line only as path:N or path:N-M, never as bare "lines N"', () => {
+	const cites = (body: string) => chooseAnchor(candidateOf(reported({ line: 46, claim: noPath, body })), inventory);
+
+	expect(cites('Lines 11 to 12 shift without a check, and lines 12 and 44 clean up.')).toMatchObject({ miss: 'none' });
+	expect(cites('See other/q.ts:44 for the cleanup.')).toMatchObject({ miss: 'none' });
+
+	expect(cites('src/q.ts:11-12 shift without a check, and q.ts:44 cleans up.')).toMatchObject({
+		line: 44,
+		tier: 'cited'
+	});
+
+	expect(cites('src/q.ts:11-12 shift without a check.')).toMatchObject({ line: 12, tier: 'cited' });
+});
+
+test('a cited line that also holds a symbol the candidate quotes beats a line that is only cited', () => {
 	const steps = [11, 14].map((line) => ({ file: 'src/q.ts', line, note: 'a step' }));
-	const fix = [{ file: 'src/q.ts', find: 'save(queue);', replace: 'persistNext(queue[0]);\nsave(queue);' }];
-	const raw = reported({ line: 9, claim: { ...noPath, executionPath: steps }, fix });
+
+	const raw = reported({
+		line: 9,
+		claim: { ...noPath, executionPath: steps },
+		body: 'Calls `persistNext(next)` early.'
+	});
 
 	expect(chooseAnchor(candidateOf(raw), inventory)).toMatchObject({
 		line: 14,
 		tier: 'cited-symbol',
 		terms: ['persistNext']
 	});
+});
+
+test('a symbol the candidate’s fix holds ties no line to the claim, even when quoted', () => {
+	const steps = [11, 14].map((line) => ({ file: 'src/q.ts', line, note: 'a step' }));
+	const fix = [{ file: 'src/q.ts', find: 'save(queue);', replace: 'persistNext(queue[0]);\nsave(queue);' }];
+	const body = 'Calls `persistNext(next)` early.';
+	const raw = reported({ line: 9, claim: { ...noPath, executionPath: steps }, fix, body });
+
+	expect(chooseAnchor(candidateOf(raw), inventory)).toMatchObject({ line: 11, tier: 'cited', terms: [] });
+	expect(chooseAnchor(candidateOf(reported({ claim: noPath, fix, body })), inventory)).toMatchObject({ miss: 'none' });
 });

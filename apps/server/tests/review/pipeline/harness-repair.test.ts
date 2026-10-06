@@ -93,13 +93,14 @@ function titled(checkpoint: ReviewProgressCheckpoint | null, title: string): Can
 	return checkpoint?.candidates.find((candidate) => candidate.title === title);
 }
 
-test('a supported candidate anchored past the change is re-anchored, verified and reported on the changed line', async () => {
+test('a supported candidate past the change is linked to the changed line it cites, verified and kept on its line', async () => {
 	const { result, checkpoint, verifiers, repairs } = await reviewFindings([lostAnchor('lost anchor')]);
 	const candidate = titled(checkpoint, 'lost anchor');
 
 	expect(repairs).toBe(0);
 	expect(verifiers).toBeGreaterThan(0);
-	expect(result.findings.map((item) => [item.title, item.file, item.line])).toEqual([['lost anchor', 'src/a.ts', 3]]);
+	expect(result.findings.map((item) => [item.title, item.file, item.line])).toEqual([['lost anchor', 'src/a.ts', 400]]);
+	expect(candidate?.relatedLocations).toContainEqual({ file: 'src/a.ts', line: 3, endLine: 3, side: 'new' });
 
 	expect(candidateOutcome(candidate!)).toMatchObject({
 		stage: null,

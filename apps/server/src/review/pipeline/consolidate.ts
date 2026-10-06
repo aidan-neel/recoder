@@ -100,14 +100,17 @@ function locationProblem(
 	inventory: ReviewInventory,
 	path: string,
 	line: number | undefined,
-	side: 'old' | 'new'
+	side: 'old' | 'new',
+	link?: RepairLink
 ): string | undefined {
 	const file = inventory.files.find((entry) => entry.path === path);
 
 	if (!file) return 'path is not in the change inventory';
 	if (file.excludeReason) return `path is excluded (${file.excludeReason})`;
 
-	if (side === 'new' && line && !newSideAnchored(inventory, file.path, line)) {
+	const linked = link?.file === path && addedLine(inventory, path, link.line);
+
+	if (side === 'new' && line && !linked && !newSideAnchored(inventory, file.path, line)) {
 		return 'new-side line is not associated with this change';
 	}
 
@@ -133,6 +136,16 @@ function citesIntentClaim(text: string, intent: ChangeIntent | null | undefined)
 	);
 
 	return cited.some((id) => held.has(id));
+}
+
+/**
+ * A repair's supported link from a finding on an unchanged line to the line
+ * the change added, in the same file, that introduces the defect. It comes
+ * from the finding's own cited line or quoted symbol, never from its fix.
+ */
+export interface RepairLink {
+	file: string;
+	line: number;
 }
 
 /** Which of its category's or lens's requirements a finding breaks, so a repair knows what it may correct. */
@@ -199,11 +212,13 @@ function claimTexts(raw: ReviewerFinding): string[] {
  * wasn't provided, it breaks its category's requirements, or a person already
  * dismissed the same finding in this repository. A low-severity one that
  * Settings keeps out of the review stays valid and is marked `belowBar`.
+ * Only a repair passes `link`, which lets a finding on an unchanged line pass.
  */
 export function validateCandidate(
 	raw: ReviewerFinding,
 	meta: { candidateId: string; assignmentId: string; role: string; model: string; lens: LensId | null },
-	ctx: CandidateContext
+	ctx: CandidateContext,
+	link?: RepairLink
 ): CandidateFinding {
 	const side: 'old' | 'new' = raw.side === 'old' ? 'old' : 'new';
 	const reported = raw.line ?? undefined;
@@ -227,7 +242,7 @@ export function validateCandidate(
 	});
 
 	const drop = firstDrop([
-		['location', locationProblem(ctx.inventory, raw.file, line, side)],
+		['location', locationProblem(ctx.inventory, raw.file, line, side, link)],
 		['evidence', raw.evidenceIds.length > 0 && evidenceIds.length === 0 && 'cited evidence was not provided'],
 		['category', categoryIssue(raw, meta.lens, ctx)?.reason],
 		['dismissed', ctx.dismissed?.has(dismissal) && 'a person dismissed this finding in an earlier review']
@@ -318,6 +333,13 @@ export function candidateFromDetector(
 		valid: !drop.dropReason,
 		...drop
 	};
+}
+
+/** Whether the change added the new-side line. */
+function addedLine(inventory: ReviewInventory, path: string, line: number): boolean {
+	const file = inventory.diffs.find((entry) => entry.path === path);
+
+	return (file?.hunks ?? []).some((hunk) => hunk.lines.some((entry) => entry.type === 'add' && entry.newNo === line));
 }
 
 function newSideAnchored(inventory: ReviewInventory, path: string, line: number): boolean {

@@ -6,7 +6,7 @@ function scopeOf(ctx = repairContext()): RepairScope {
 	return { inventory: ctx.inventory, ledger: ctx.ledger, intent: ctx.intent };
 }
 
-test('a supported candidate anchored on the wrong line moves to the changed line its path cites and passes validation', () => {
+test('a candidate on an unchanged line keeps its line, linked to the changed line its path cites, and passes', () => {
 	const ctx = repairContext();
 	const candidate = candidateOf(reported(), 'correctness', ctx);
 	const { id, candidateId } = candidate;
@@ -17,7 +17,7 @@ test('a supported candidate anchored on the wrong line moves to the changed line
 	const plan = planRepair(candidate, scopeOf(ctx));
 
 	expect(plan).toEqual({
-		changes: [{ kind: 'anchor', file: 'src/q.ts', line: 14, basis: 'cited: persistNext(next);' }],
+		changes: [{ kind: 'related', file: 'src/q.ts', line: 14, basis: 'cited: persistNext(next);' }],
 		open: []
 	});
 
@@ -25,9 +25,61 @@ test('a supported candidate anchored on the wrong line moves to the changed line
 
 	expect(repair.result).toBe('revalidated');
 	expect(repair.original).toMatchObject({ file: 'src/q.ts', line: 30, stage: 'location' });
-	expect(candidate).toMatchObject({ valid: true, file: 'src/q.ts', line: 14, id, candidateId });
+	expect(candidate).toMatchObject({ valid: true, file: 'src/q.ts', line: 30, id, candidateId });
 	expect(candidate.dropStage).toBeUndefined();
+	expect(candidate.relatedLocations).toEqual([{ file: 'src/q.ts', line: 14, endLine: 14, side: 'new' }]);
+});
+
+test('an unchanged line passes only with a link to a line the change added in the same file', () => {
+	const ctx = repairContext();
+
+	for (const [file, line] of [
+		['src/q.ts', 15],
+		['src/q.ts', 30],
+		['src/other.ts', 14]
+	] as const) {
+		const candidate = candidateOf(reported(), 'correctness', ctx);
+		const repair = applyRepair(candidate, [{ kind: 'related', file, line, basis: 'test' }], 'model', ctx);
+
+		expect(repair).toMatchObject({ result: 'rejected', reason: 'new-side line is not associated with this change' });
+		expect(candidate.valid).toBe(false);
+	}
+});
+
+test('a finding without a line moves onto the changed line its path cites', () => {
+	const ctx = repairContext();
+	const candidate = candidateOf(reported({ line: null }), 'correctness', ctx);
+
+	expect(candidate.dropReason).toBe('file-level finding on a non-deleted file needs a line');
+
+	expect(planRepair(candidate, scopeOf(ctx)).changes).toEqual([
+		{ kind: 'anchor', file: 'src/q.ts', line: 14, basis: 'cited: persistNext(next);' }
+	]);
+});
+
+test('the line the candidate’s fix edits becomes its anchor, and keeps the old place as a related location', () => {
+	const ctx = repairContext();
+	const fix = [{ file: 'src/q.ts', find: 'if (!next) return;', replace: 'if (!next) {\n\tsave(queue);\n\treturn;\n}' }];
+	const candidate = candidateOf(reported({ fix }), 'correctness', ctx);
+	const plan = planRepair(candidate, scopeOf(ctx));
+
+	expect(plan.changes).toEqual([
+		{ kind: 'anchor', file: 'src/q.ts', line: 12, basis: 'patch-target: if (!next) return;' }
+	]);
+
+	expect(applyRepair(candidate, plan.changes, 'deterministic', ctx).result).toBe('revalidated');
+	expect(candidate).toMatchObject({ valid: true, line: 12 });
 	expect(candidate.relatedLocations).toContainEqual(expect.objectContaining({ file: 'src/q.ts', line: 30 }));
+});
+
+test('a chosen line that validation would snap to another quoted line makes the repair unsupported', () => {
+	const ctx = repairContext();
+	const candidate = candidateOf(reported({ body: 'The `persistNext(next)` call runs first.' }), 'correctness', ctx);
+	const before = structuredClone(candidate);
+	const repair = applyRepair(candidate, [{ kind: 'anchor', file: 'src/q.ts', line: 12, basis: 'test' }], 'model', ctx);
+
+	expect(repair).toMatchObject({ result: 'unsupported', reason: 'validation moved the chosen line 12 to 14' });
+	expect(candidate).toEqual(before);
 });
 
 test('an invented path stays rejected with its original stop, and the repair says why', () => {
