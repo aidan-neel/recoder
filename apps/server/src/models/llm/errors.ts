@@ -43,12 +43,12 @@ export function isOpenCodeThrottle(err: LlmError): boolean {
 
 /**
  * Dropped sockets and overloaded servers (vLLM restarts, proxies) are worth another try; bad requests are not.
- * ChatGPT's 429 is a usage cap that lasts hours, not a momentary rate limit, so it never retries.
+ * ChatGPT's and Claude Code's 429 is a usage cap that lasts hours, not a momentary rate limit, so it never retries.
  * OpenCode's 429 is a spent plan unless its wording says it is a throttle.
  */
 export function isTransientLlmError(err: unknown, provider?: ChatOptions['provider']): boolean {
 	if (!(err instanceof LlmError)) return false;
-	if (provider === 'codex' && err.status === 429) return false;
+	if ((provider === 'codex' || provider === 'claude-code') && err.status === 429) return false;
 	if (provider === 'opencode' && err.status === 429) return isOpenCodeThrottle(err);
 	if (TRANSIENT_STATUS.has(err.status)) return true;
 	if (err.status !== 0 || /cancelled|timed out|truncated/i.test(err.message)) return false;
@@ -58,12 +58,14 @@ export function isTransientLlmError(err: unknown, provider?: ChatOptions['provid
 
 /**
  * The provider is shedding load (HTTP 429, 529 or "overloaded"), so the limiter should send fewer calls at once.
- * A 429 from ChatGPT or OpenCode is not that signal: ChatGPT's is a usage cap that lasts hours, and OpenCode
- * retries rate limits itself, so its 429 means a spent plan. Easing off would only slow every other model's calls.
+ * A 429 from ChatGPT, Claude Code or OpenCode is not that signal: the first two are usage caps that last hours,
+ * and OpenCode retries rate limits itself, so its 429 means a spent plan. Easing off would only slow every other
+ * model's calls.
  */
 export function isRateLimitError(err: unknown, provider?: ChatOptions['provider']): boolean {
 	if (!(err instanceof LlmError)) return false;
-	if ((provider === 'codex' || provider === 'opencode') && err.status === 429) return false;
+	if ((provider === 'codex' || provider === 'claude-code' || provider === 'opencode') && err.status === 429)
+		return false;
 
 	return err.status === 429 || err.status === 529 || /overloaded/i.test(err.message);
 }

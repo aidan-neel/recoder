@@ -49,10 +49,18 @@ const openCode: Transport = async (opts, onToken) => {
 	return opencode.complete(opts, onToken);
 };
 
+/** A model reached through the user's Claude Code CLI, one process per call. Loaded lazily like the others. */
+const claudeCodeCli: Transport = async (opts, onToken) => {
+	const { claudeCode } = await import('../../agents/claude-code/claude-code');
+
+	return claudeCode.complete(opts, onToken);
+};
+
 const TRANSPORTS: Record<ModelProvider, Transport> = {
 	'openai-compatible': openAiCompatible,
 	codex: chatgpt,
-	opencode: openCode
+	opencode: openCode,
+	'claude-code': claudeCodeCli
 };
 
 export function transportFor(provider: ChatOptions['provider']): Transport {

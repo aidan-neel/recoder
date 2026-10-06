@@ -11,6 +11,8 @@ import {
 
 const savedConcurrency = process.env.RECODER_LLM_CONCURRENCY;
 
+const savedClaudeCode = process.env.RECODER_CLAUDE_CODE_CONCURRENCY;
+
 const A = 'https://a.example/v1';
 
 const B = 'https://b.example/v1';
@@ -35,7 +37,7 @@ async function freeSlots(max: number, endpoint = A): Promise<number> {
 		if (outcome !== 'granted') break;
 	}
 
-	for (let i = 0; i < taken; i++) releaseLlmSlot(A);
+	for (let i = 0; i < taken; i++) releaseLlmSlot(endpoint);
 
 	return taken;
 }
@@ -52,6 +54,9 @@ afterEach(() => {
 
 	if (savedConcurrency === undefined) delete process.env.RECODER_LLM_CONCURRENCY;
 	else process.env.RECODER_LLM_CONCURRENCY = savedConcurrency;
+
+	if (savedClaudeCode === undefined) delete process.env.RECODER_CLAUDE_CODE_CONCURRENCY;
+	else process.env.RECODER_CLAUDE_CODE_CONCURRENCY = savedClaudeCode;
 });
 
 describe('adaptive llm limiter', () => {
@@ -59,6 +64,20 @@ describe('adaptive llm limiter', () => {
 		delete process.env.RECODER_LLM_CONCURRENCY;
 
 		expect(await freeSlots(100)).toBe(64);
+	});
+
+	test('Claude Code runs four processes at once unless its own env var says otherwise, never above the shared ceiling', async () => {
+		delete process.env.RECODER_CLAUDE_CODE_CONCURRENCY;
+
+		expect(await freeSlots(100, 'claude-code')).toBe(4);
+
+		process.env.RECODER_CLAUDE_CODE_CONCURRENCY = '8';
+
+		expect(await freeSlots(100, 'claude-code')).toBe(8);
+
+		process.env.RECODER_LLM_CONCURRENCY = '2';
+
+		expect(await freeSlots(100, 'claude-code')).toBe(2);
 	});
 
 	test('a rate limit halves the limit', async () => {
