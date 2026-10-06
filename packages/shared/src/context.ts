@@ -20,13 +20,7 @@ export interface ContextItem {
  * size, a file read's size, or a patch page.
  */
 export type OmissionReason =
-	| 'contract-unchanged'
-	| 'caller-cap'
-	| 'reference-cap'
-	| 'test-cap'
-	| 'context-cap'
-	| 'file-cap'
-	| 'diff-cap';
+	'contract-unchanged' | 'caller-cap' | 'reference-cap' | 'test-cap' | 'context-cap' | 'file-cap' | 'diff-cap';
 
 /** Context a bound left out, with the bound that did it. */
 export interface ContextOmission extends ContextItem {
