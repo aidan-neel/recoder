@@ -24,16 +24,16 @@ test('obligations are off unless RECODER_OBLIGATIONS is exactly 1', () => {
 	]);
 });
 
-test('the cap defaults to 6 and takes any whole number from 0', () => {
+test('the cap defaults to 8 and takes any whole number from 0', () => {
 	expect(
 		[undefined, '', '-1', '2.5', 'many', '0', '3'].map((value) => read('RECODER_OBLIGATION_CAP', value, obligationCap))
-	).toEqual([6, 6, 6, 6, 6, 0, 3]);
+	).toEqual([8, 8, 8, 8, 8, 0, 3]);
 });
 
-test('an investigation gets 6 turns by default, any whole number held between 3 and 12', () => {
+test('an investigation gets 8 turns by default, any whole number held between 3 and 12', () => {
 	expect(
-		[undefined, 'few', '4.5', '1', '3', '8', '20'].map((value) =>
+		[undefined, 'few', '4.5', '1', '3', '6', '20'].map((value) =>
 			read('RECODER_OBLIGATION_TURNS', value, obligationTurns)
 		)
-	).toEqual([6, 6, 6, 3, 3, 8, 12]);
+	).toEqual([8, 8, 8, 3, 3, 6, 12]);
 });

@@ -3,8 +3,8 @@ export function obligationsOn(): boolean {
 	return process.env.RECODER_OBLIGATIONS === '1';
 }
 
-const DEFAULT_CAP = 6;
-const DEFAULT_TURNS = 6;
+const DEFAULT_CAP = 8;
+const DEFAULT_TURNS = 8;
 const MIN_TURNS = 3;
 const MAX_TURNS = 12;
 

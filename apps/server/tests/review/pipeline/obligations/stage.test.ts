@@ -110,7 +110,7 @@ test('each obligation is investigated once, and its fixed answer is saved with t
 		evidenceIds: [],
 		turns: 1,
 		tokens: 42,
-		maxTurns: 6,
+		maxTurns: 8,
 		launched: true
 	});
 
