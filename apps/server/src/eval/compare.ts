@@ -3,7 +3,7 @@ import { parseArgs } from 'node:util';
 import { identityLine, readReport, type BenchmarkReport } from './benchmark-report';
 import { mergeNotes } from './benchmark-merge';
 import { stageTotals, type StageTotals } from './benchmark-stages';
-import { allowDiffFields, checkCompatibility, compatibilityLines, mergeProblems } from './identity';
+import { allowDiffFields, checkCompatibility, compatibilityLines, EXPERIMENT, mergeProblems } from './identity';
 
 const USAGE =
 	'Usage: bun run --filter @recoder/server eval:compare -- <reportA.json> <reportB.json> [--allow-diff field,field]';
@@ -52,12 +52,27 @@ function declaredAtMerge(reports: readonly BenchmarkReport[], allow: readonly st
 		mergeNotes(report).declared.map((diff) => ({ ...diff, side: 'AB'[index]! }))
 	);
 
-	const covered = (field: string) => allow.some((name) => field === name || field.startsWith(`${name}.`));
+	const declares = (field: string) => allow.some((name) => field === name || field.startsWith(`${name}.`));
+	const undeclared = diffs.filter((diff) => !compareNames(diff.field).every(declares)).map((diff) => diff.field);
 
 	return {
 		lines: diffs.map((diff) => `${diff.side}  declared at merge: ${diff.report} ${diff.field}: ${diff.a} → ${diff.b}`),
-		undeclared: [...new Set(diffs.filter((diff) => !covered(diff.field)).map((diff) => diff.field))]
+		undeclared: [...new Set(undeclared)],
+		names: [...new Set(undeclared.flatMap(compareNames))]
 	};
+}
+
+/**
+ * The `--allow-diff` names a compare takes for a difference a merge declared:
+ * `shard` for a shard field, since a merged identity keeps no shard, and an
+ * experiment field with `runs`, since its runs were reviewed under another hash.
+ */
+function compareNames(field: string): string[] {
+	const section = field.split('.')[0]!;
+
+	if (section === 'shard') return ['shard'];
+
+	return EXPERIMENT.some((name) => name === section) ? [field, 'runs'] : [field];
 }
 
 /**
@@ -119,7 +134,7 @@ function main(): number {
 
 	if (merged.undeclared.length) {
 		console.log(
-			`\nA merged report's sources differ in ${merged.undeclared.join(', ')}, declared at the merge; pass --allow-diff ${merged.undeclared.join(',')} to compare its counts.`
+			`\nA merged report's sources differ in ${merged.undeclared.join(', ')}, declared at the merge; pass --allow-diff ${merged.names.join(',')} to compare its counts.`
 		);
 
 		return 1;

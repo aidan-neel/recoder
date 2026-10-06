@@ -2,7 +2,8 @@ import { afterAll, expect, test } from 'bun:test';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { shardOf, unsplitReport, writeReports } from '../helpers/shards';
+import type { RunIdentity } from '../../src/eval/identity';
+import { changedIdentity, shardOf, unsplitReport, writeReports } from '../helpers/shards';
 
 const dir = mkdtempSync(join(tmpdir(), 'recoder-merge-'));
 const src = join(import.meta.dir, '../../src/eval');
@@ -95,4 +96,32 @@ test('a shard stopped partway is named by its missing runs, not as missing tasks
 
 	expect(run('merge.ts', out, ...shards, '--partial').out).toContain('Partial: runs are missing');
 	expect(run('compare.ts', out, out).out).toContain('PARTIAL merge, runs missing');
+});
+
+test('compare names what to declare for a merge difference: shard as a whole, and runs with an experiment field', () => {
+	const cases: [string, string, (identity: RunIdentity) => void][] = [
+		['shard.count', 'shard', (identity) => (identity.shard!.count = 3)],
+		['code.server', 'code.server,runs', (identity) => (identity.code.server = 'server-2')]
+	];
+
+	for (const [field, names, change] of cases) {
+		const key = field.replace('.', '-');
+
+		const [whole, first, second] = writeReports(dir, {
+			[`${key}-whole`]: unsplit,
+			[`${key}-1`]: shardOf(unsplit, 1, 2),
+			[`${key}-2`]: changedIdentity(shardOf(unsplit, 2, 2), change)
+		});
+
+		const out = join(dir, `${key}-merged.json`);
+
+		expect(run('merge.ts', out, first!, second!, '--allow-diff', field).code).toBe(0);
+
+		const refused = run('compare.ts', whole!, out);
+
+		expect(refused.code).toBe(1);
+		expect(refused.out).toContain(`differ in ${field}, declared at the merge; pass --allow-diff ${names} to compare`);
+		expect(run('compare.ts', whole!, out, '--allow-diff', field).code).toBe(1);
+		expect(run('compare.ts', whole!, out, '--allow-diff', names).code).toBe(0);
+	}
 });

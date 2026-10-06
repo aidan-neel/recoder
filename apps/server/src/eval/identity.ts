@@ -142,7 +142,7 @@ export function runCache(review: RunCache['review']): RunCache {
 	return { review, intent: UNKNOWN, ruleLedger: UNKNOWN, judge: UNKNOWN };
 }
 
-const EXPERIMENT = ['dataset', 'code', 'models', 'judge', 'flags', 'limits', 'caches', 'tools'] as const;
+export const EXPERIMENT = ['dataset', 'code', 'models', 'judge', 'flags', 'limits', 'caches', 'tools'] as const;
 
 /** Sections that describe where and how a report ran; a difference is shown, never refused. */
 const INFORMATIONAL = ['host', 'execution', 'unavailable'];

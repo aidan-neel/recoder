@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { benchmarkSummary, runAgreement } from '../../src/eval/benchmark-merge';
 import type { BenchmarkReport, PrResult, ScoredRun } from '../../src/eval/benchmark-report';
-import { runIdOf, type RunIdentity } from '../../src/eval/identity';
+import { runIdOf, withHash, type RunIdentity } from '../../src/eval/identity';
 import type { EvalFinding } from '../../src/eval/metrics';
 import { splitTasks } from '../../src/eval/shard';
 import { defect, score } from './benchmark';
@@ -168,4 +168,20 @@ export function writeReports(dir: string, reports: Record<string, BenchmarkRepor
 
 		return path;
 	});
+}
+
+/** The report with one identity field changed and its hash and run stamps recomputed, as a run under that change records it. */
+export function changedIdentity(report: BenchmarkReport, change: (identity: RunIdentity) => void): BenchmarkReport {
+	const { version: _version, hash: _hash, ...fields } = structuredClone(report.identity!);
+
+	change(fields as RunIdentity);
+
+	const identity = withHash(fields);
+	const runs = report.prs.flatMap((pr) => pr.runs);
+
+	return {
+		...report,
+		identity: { ...identity, runs: { [identity.hash]: runs.length } },
+		prs: report.prs.map((pr) => ({ ...pr, runs: pr.runs.map((run) => ({ ...run, identity: identity.hash })) }))
+	};
 }

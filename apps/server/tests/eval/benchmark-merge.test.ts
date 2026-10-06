@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
 import { mergeNotes, mergeReports, missingWhat, type MergeSource } from '../../src/eval/benchmark-merge';
 import type { BenchmarkReport } from '../../src/eval/benchmark-report';
-import { withHash, type RunIdentity } from '../../src/eval/identity';
-import { repeatOf, shardOf, unsplitReport } from '../helpers/shards';
+import type { RunIdentity } from '../../src/eval/identity';
+import { changedIdentity, repeatOf, shardOf, unsplitReport } from '../helpers/shards';
 
 const named = (reports: BenchmarkReport[]): MergeSource[] =>
 	reports.map((report) => ({ name: `${report.reportId}.json`, report }));
@@ -17,22 +17,6 @@ function mergedAs(unsplit: BenchmarkReport, reports: BenchmarkReport[]) {
 	expect(JSON.stringify(report!.prs)).toBe(JSON.stringify(unsplit.prs));
 
 	return report!;
-}
-
-/** The report with one identity field changed and its hash and run stamps recomputed, as a run under that change records it. */
-function changedIdentity(report: BenchmarkReport, change: (identity: RunIdentity) => void): BenchmarkReport {
-	const { version: _version, hash: _hash, ...fields } = structuredClone(report.identity!);
-
-	change(fields as RunIdentity);
-
-	const identity = withHash(fields);
-	const runs = report.prs.flatMap((pr) => pr.runs);
-
-	return {
-		...report,
-		identity: { ...identity, runs: { [identity.hash]: runs.length } },
-		prs: report.prs.map((pr) => ({ ...pr, runs: pr.runs.map((run) => ({ ...run, identity: identity.hash })) }))
-	};
 }
 
 test('shards of a report merge to its exact prs, whatever the shard count', () => {
