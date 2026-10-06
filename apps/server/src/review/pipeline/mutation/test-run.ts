@@ -20,10 +20,18 @@ const TOOL = /(?:^|&& )(bun|pnpm|yarn|npm) run /;
 /** Runners that take a test file path as an argument. */
 const FILE_RUNNER = /^(?:ava|vitest|vp test|jest|bun test)\b/;
 
-/** The command that runs a binary the install put in a package. */
-/** `bun test` only picks up files with a test marker in the name, so a helper in a tests folder cannot run alone. */
-const BUN_TEST_FILE = /(?:\.|_)(?:test|spec)\.[cm]?[jt]sx?$/;
+/** A name or folder that marks a file a runner's default globs pick up: `.test.`, `.spec.`, `_test.` or a `__tests__/` folder. */
+const MARKED_TEST_FILE = /(?:(?:\.|_)(?:test|spec)\.[cm]?[jt]sx?$|(?:^|\/)__tests__\/[^/]+\.[cm]?[jt]sx?$)/;
 
+/** AVA's default globs also take any file under a `test/` folder, except its helpers and fixtures. */
+const AVA_TEST_FOLDER = /(?:^|\/)test\/(?!(?:.*\/)?(?:helpers?|fixtures?|_[^/]*)\/)(?:.*\/)?[^/_][^/]*\.[cm]?[jt]sx?$/;
+
+/** Whether a runner's default globs run `path` on its own; a helper in a tests folder is not a test. */
+function runsAlone(step: string, path: string): boolean {
+	return MARKED_TEST_FILE.test(path) || (step.startsWith('ava') && AVA_TEST_FOLDER.test(path));
+}
+
+/** The command that runs a binary the install put in a package. */
 const EXEC = { npm: 'npx', pnpm: 'pnpm exec', yarn: 'yarn', bun: 'bunx' } as const;
 
 /** The nearest package dir above a path that has a test script. */
@@ -69,7 +77,7 @@ export function singleFileCommands(scriptLines: readonly string[], baselineComma
 		const step = owner.script;
 
 		if (!FILE_RUNNER.test(step)) return null;
-		if (step.startsWith('bun test') && !BUN_TEST_FILE.test(path)) return null;
+		if (!runsAlone(step, path)) return null;
 
 		const inner = owner.dir === '.' ? path : path.slice(owner.dir.length + 1);
 		const prefix = step.startsWith('bun test') ? '' : tool ? `${EXEC[tool]} ` : null;

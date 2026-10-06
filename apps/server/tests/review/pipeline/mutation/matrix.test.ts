@@ -206,3 +206,15 @@ describe('singleFileCommands for bun test', () => {
 		expect(commandFor('tests/review.test.ts')).toBe('bun test tests/review.test.ts');
 	});
 });
+
+describe('singleFileCommands by runner defaults', () => {
+	test('runs an AVA file under test/ but not its helper, and a vitest file only with a marker', () => {
+		const ava = singleFileCommands(['.: test → ava'], ['npm run test']);
+		const vitest = singleFileCommands(['.: test → vitest run'], ['pnpm run test']);
+
+		expect(ava('test/retry.ts')).toBe('npx ava test/retry.ts');
+		expect(ava('test/helpers/server.ts')).toBeNull();
+		expect(vitest('tests/helpers/server.ts')).toBeNull();
+		expect(vitest('src/rate-limit/store.test.ts')).toContain('src/rate-limit/store.test.ts');
+	});
+});

@@ -50,6 +50,17 @@ describe('weakInNewTests', () => {
 		]);
 	});
 
+	test('still flags the count when the test also checks an unrelated status', () => {
+		const head = [
+			"test('the cap keeps the most severe findings', () => {",
+			"	expect(result.status).toBe('complete');",
+			'	expect(result.findings).toHaveLength(1);',
+			'});'
+		];
+
+		expect(detect([], head).map(({ line }) => line)).toEqual([3]);
+	});
+
 	test('flags a count an added test checks only from below', () => {
 		const head = [
 			"test('retries until the budget runs out', async (t) => {",
