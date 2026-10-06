@@ -70,6 +70,17 @@ export function findingKind(category: string | undefined): FindingKind {
 	return category && QUALITY_SET.has(category) ? 'quality' : 'bug';
 }
 
+/**
+ * A finding's message split into its `[category]` tag and the body after it.
+ * Candidates and older saved reviews put the tag in front of the message; a
+ * message without one is all body.
+ */
+export function splitCategoryTag(message: string): { tag?: string; body: string } {
+	const match = /^\[([^\]]+)\]\s*/.exec(message);
+
+	return match ? { tag: match[1], body: message.slice(match[0].length) } : { body: message };
+}
+
 /** A code location a claim's execution path or a convention example points at. */
 export interface ClaimStep {
 	file: string;

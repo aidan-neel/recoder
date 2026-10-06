@@ -14,7 +14,14 @@ import type { ChangeModel } from './change-model/types.js';
 import type { CandidateRepair } from './candidate-repair.js';
 import type { DetectorResult } from './detectors/types.js';
 import type { ReviewerFinding } from './finding-schema.js';
-import { dismissalFingerprint, fingerprintFinding, hunkAt, lineAnchor, snapToQuote } from './harness/findings.js';
+import {
+	dismissalFingerprint,
+	fingerprintFinding,
+	hunkAt,
+	lineAnchor,
+	matchesDismissal,
+	snapToQuote
+} from './harness/findings.js';
 import type { ReviewInventory } from './inventory.js';
 import type { ChangeIntent, IntentClaim } from './intent/types.js';
 import { lensById } from './lenses/lenses.js';
@@ -64,7 +71,7 @@ export interface CandidateContext {
 	reportLowSeverity?: boolean;
 	/** The change intent, so a cited claim id is checked against the claims it holds. Absent when none was distilled. */
 	intent?: ChangeIntent | null;
-	/** Dismissal fingerprints of this repository; a candidate matching one is dropped. Absent when the review has no repository. */
+	/** Dismissal fingerprints of this repository, of either form; a candidate one matches (`matchesDismissal`) is dropped. Absent when the review has no repository. */
 	dismissed?: ReadonlySet<string>;
 }
 
@@ -237,20 +244,20 @@ export function validateCandidate(
 	const smell = raw.smell ?? undefined;
 	const shownSymbol = symbol ?? raw.symbol ?? undefined;
 
-	const dismissal = dismissalFingerprint({
-		file: raw.file,
-		category: raw.category,
-		ruleId,
-		smell,
-		symbol: shownSymbol,
-		anchor: lineAnchor(ctx.inventory, raw.file, line, side)
-	});
+	const message = `[${raw.category}] ${raw.body}`;
+
+	const dismissal = dismissalFingerprint(
+		{ ...raw, message, ruleId, smell, symbol: shownSymbol },
+		lineAnchor(ctx.inventory, raw.file, line, side)
+	);
+
+	const dismissed = [...(ctx.dismissed ?? [])].some((held) => matchesDismissal(held, dismissal));
 
 	const drop = firstDrop([
 		['location', locationProblem(ctx.inventory, raw.file, line, side, link)],
 		['evidence', raw.evidenceIds.length > 0 && evidenceIds.length === 0 && 'cited evidence was not provided'],
 		['category', categoryIssue(raw, meta.lens, ctx)?.reason],
-		['dismissed', ctx.dismissed?.has(dismissal) && 'a person dismissed this finding in an earlier review']
+		['dismissed', dismissed && 'a person dismissed this finding in an earlier review']
 	]);
 
 	const belowBar = !drop.dropReason && raw.severity === 'low' && !ctx.reportLowSeverity;
@@ -263,7 +270,7 @@ export function validateCandidate(
 		line,
 		endLine,
 		severity: toBackendSeverity[raw.severity],
-		message: `[${raw.category}] ${raw.body}`,
+		message,
 		agent: meta.role,
 		model: meta.model,
 		assignmentId: meta.assignmentId,
