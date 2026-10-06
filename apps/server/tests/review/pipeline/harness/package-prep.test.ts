@@ -5,6 +5,7 @@ import { EvidenceStore } from '../../../../src/evidence/evidence';
 import { preparePackages, type PrepOptions } from '../../../../src/review/pipeline/harness/package-prep';
 import { prepareSandbox } from '../../../../src/review/pipeline/harness/sandbox-setup';
 import type { ReviewRun } from '../../../../src/review/pipeline/harness/context';
+import { recordBaseline } from '../../../../src/review/pipeline/harness/verify-baseline';
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import { settleVerdict } from '../../../../src/review/pipeline/verify/settle';
 import { execUnavailableReason, sandboxLayout } from '../../../../src/sandbox/exec-sandbox';
@@ -44,12 +45,14 @@ const RUNES = {
 
 /**
  * A committed repo under a temp work dir, with `untracked` written after the
- * commit (installed tools), and the review's workspace on it.
+ * commit (installed tools), `head` committed on top of it as the change under
+ * review, and the review's workspace on the last commit.
  */
 async function checkout(
 	files: Record<string, string>,
-	untracked: Record<string, string> = {}
-): Promise<{ ws: ExecWorkspace; dir: string }> {
+	untracked: Record<string, string> = {},
+	head: Record<string, string> = {}
+): Promise<{ ws: ExecWorkspace; dir: string; baseSha: string }> {
 	const base = await mkdtemp(join(import.meta.dir, '.prep-test-'));
 
 	bases.push(base);
@@ -67,13 +70,21 @@ async function checkout(
 
 	for (const path of Object.keys(untracked)) await chmod(join(dir, path), 0o755);
 
+	const baseSha = git(dir, ['rev-parse', 'HEAD']);
+
+	if (Object.keys(head).length) {
+		for (const [path, content] of Object.entries(head)) await writeFile(join(dir, path), content);
+
+		git(dir, ['commit', '-q', '-am', 'head']);
+	}
+
 	const layout = sandboxLayout(dir, {
 		home: join(base, 'home'),
 		dataDir: join(base, 'data'),
 		workDir: join(base, 'work')
 	});
 
-	return { ws: new ExecWorkspace(dir, git(dir, ['rev-parse', 'HEAD']), layout), dir };
+	return { ws: new ExecWorkspace(dir, git(dir, ['rev-parse', 'HEAD']), layout), dir, baseSha };
 }
 
 function options(changed: string[], extra: Partial<PrepOptions> = {}): PrepOptions {
@@ -214,6 +225,53 @@ test.skipIf(!available)('a bare runtime on rune-free code in a runes package rea
 		)
 	).toMatchObject({ outcome: 'reproduced' });
 });
+
+test.skipIf(!available)(
+	'a proof whose base rerun stops in setup on the unprepared base tree keeps its proof',
+	async () => {
+		const { ws, baseSha } = await checkout(
+			{
+				...GENERATED,
+				'src/cap.ts': 'export const cap = (n: number) => Math.min(n, 3);\n',
+				'value.test.ts':
+					"import { expect, test } from 'bun:test';\nimport { value } from './generated/value.js';\nimport { cap } from './src/cap.ts';\n\ntest('cap', () => {\n\texpect(value).toBe(42);\n\texpect(cap(5)).toBe(3);\n});\n"
+			},
+			{},
+			{ 'src/cap.ts': 'export const cap = (n: number) => Math.min(n, 4);\n' }
+		);
+
+		await preparePackages(ws, options(['src/cap.ts']));
+
+		const evidence = new EvidenceStore(null, buildInventory(''), 20_000);
+
+		evidence.exec = ws;
+
+		const [proof] = await evidence.executeRound(
+			[{ action: 'run', command: 'bun test value.test.ts' }],
+			undefined,
+			undefined,
+			1,
+			'verifier-1'
+		);
+
+		expect(proof).toMatchObject({ exitCode: 1, outcome: 'assertion-failed' });
+
+		const verified = settleVerdict(
+			{ evidenceIds: [proof!.evidenceId!], reason: 'cap(5) returns 4, past the limit of 3.', verdict: 'confirmed' },
+			evidence,
+			'verifier-1'
+		);
+
+		if (verified === 'refuted') throw new Error('the head run should prove the finding');
+
+		const signal = new AbortController().signal;
+		const context = { evidence, workspace: ws, mergeBaseSha: baseSha, deadlineAt: () => Date.now() + 120_000, signal };
+		const baselined = await recordBaseline(verified, context, 'verifier-1');
+
+		expect(baselined).toMatchObject({ outcome: 'reproduced', reason: verified.reason });
+		expect(baselined.evidence?.baseline).toEqual({ unavailable: 'the command could not run on the base commit' });
+	}
+);
 
 test.skipIf(!available)('a run that stops in setup is unresolved: neither proof nor disproof', async () => {
 	const { ws } = await checkout({

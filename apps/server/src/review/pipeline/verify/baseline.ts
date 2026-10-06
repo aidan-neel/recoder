@@ -1,14 +1,20 @@
 import type { FindingVerification, VerificationBaseline } from '@recoder/shared';
 import type { EvidenceRecord } from '../../../evidence/evidence.js';
+import { classifyRun } from '../harness/run-outcome.js';
 import { brokeInSetup, failedOnTarget, quotedSpans, runOutput } from './runs.js';
 
 /** Added to a reason when the proving command ends the same way on the merge-base tree. */
 const SAME_ON_BASE =
 	'The same command also ends this way before this change, so it may be a pre-existing bug or a repro that does not isolate the change.';
 
-/** A run on the merge-base tree, shaped like the recorded runs so the same checks read it. */
+/**
+ * A run on the merge-base tree, shaped like the recorded runs so the same
+ * checks read it, with what it reached: the base tree is never prepared, so a
+ * run there can stop in setup where the head's got through.
+ */
 export function baseRecord(command: string, exitCode: number | null, output: string): EvidenceRecord {
 	const end = output.endsWith('\n') || !output ? '' : '\n';
+	const outcome = classifyRun(command, { exitCode, output, timedOut: exitCode === null }, null);
 
 	return {
 		id: 'base',
@@ -20,7 +26,8 @@ export function baseRecord(command: string, exitCode: number | null, output: str
 		truncated: false,
 		kind: 'run',
 		command,
-		exitCode
+		exitCode,
+		...(outcome ? { outcome } : {})
 	};
 }
 
