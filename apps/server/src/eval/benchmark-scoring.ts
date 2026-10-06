@@ -27,7 +27,8 @@ export interface ScoredLabel {
 }
 
 /** A fixed seed so a rerun of the judge on the same findings agrees with itself. */
-const JUDGE_SEED = 7;
+export const JUDGE_SEED = 7;
+
 const JUDGE_TIMEOUT_MS = 5 * 60_000;
 
 /**
