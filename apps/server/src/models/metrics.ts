@@ -28,7 +28,7 @@ export interface PipelineRun {
 export type RunTokenCall = TokenCall & { run?: number; lockMiss?: true };
 
 /** A review's stored metrics with its pipeline runs; rows older than recording runs have none. */
-type StoredMetrics = NonNullable<ReturnType<typeof reviewMetrics.get>> & {
+export type StoredMetrics = Omit<NonNullable<ReturnType<typeof reviewMetrics.get>>, 'calls'> & {
 	runs?: PipelineRun[];
 	calls: RunTokenCall[];
 };

@@ -1,24 +1,24 @@
 /**
  * Which models a benchmark's reviews ran on, read from the server's stored call metrics.
  *
- *   bun src/eval/reviewer-audit.ts <report.json> <recoder.db>
+ *   bun src/eval/reviewer-audit.ts <report.json> <recoder.db> [--snapshot]
  *
- * Opens the store read-only. Per run it prints the review's pipeline calls by model, split by the pipeline run that
+ * Opens the store read-only: it never writes a row, but as an ordinary SQLite reader of a WAL database it may create
+ * the `-wal` and `-shm` files beside it. `--snapshot` opens the file as immutable instead, which reads it without
+ * any lock or side file; it is only safe on a copy nobody writes to, since SQLite then assumes the file cannot change
+ * and a write during the read can give wrong results. Per run it prints the review's pipeline calls by model, split by the pipeline run that
  * made them (a replay, reverify, continue or rerun runs the pipeline again on the same review), its lock misses, and
  * CLEAN, MIXED or MISSING. A run is MIXED when a pipeline call used a model outside its run's locked picks or the
  * report's reviewer, when its pipeline runs locked different picks, or when a call went without locked models.
  * Calls stored before runs were recorded are judged against the report's reviewer only, by the model name the call
  * stored. Exits 1 when any run is MIXED.
  */
-import { Database } from 'bun:sqlite';
-import type { PipelineRun, RunTokenCall } from '../models/metrics';
+import { constants, Database } from 'bun:sqlite';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
+import type { PipelineRun, StoredMetrics } from '../models/metrics';
 import { readReport, type BenchmarkReport } from './benchmark-report';
-
-/** A review's stored metrics as the audit reads them; rows older than run segments have no `runs`. */
-interface StoredMetrics {
-	runs?: PipelineRun[];
-	calls: RunTokenCall[];
-}
 
 /** The calls of one pipeline run; `run` is null for calls stored before runs were recorded. */
 interface SegmentAudit {
@@ -163,18 +163,35 @@ export function auditLines(report: BenchmarkReport, audits: RunAudit[]): string[
 	];
 }
 
-/** Runs the audit for `args` (report path, store path) and returns the exit code. */
-function main(args: string[]): number {
-	const [reportPath, storePath] = args;
+/** Opens the store read-only; a snapshot opens it immutable, so SQLite takes no lock and writes no side file. */
+function openStore(path: string, snapshot: boolean): Database {
+	if (!snapshot) return new Database(path, { readonly: true });
 
-	if (!reportPath || !storePath) {
-		console.error('Usage: bun src/eval/reviewer-audit.ts <report.json> <recoder.db>');
+	return new Database(
+		`${pathToFileURL(resolve(path)).href}?immutable=1`,
+		constants.SQLITE_OPEN_READONLY | constants.SQLITE_OPEN_URI
+	);
+}
+
+/** Runs the audit for `args` (report path, store path, optional `--snapshot`) and returns the exit code. */
+function main(args: string[]): number {
+	const { values, positionals } = parseArgs({
+		args,
+		options: { snapshot: { type: 'boolean', default: false } },
+		allowPositionals: true,
+		strict: true
+	});
+
+	const [reportPath, storePath] = positionals;
+
+	if (!reportPath || !storePath || positionals.length !== 2) {
+		console.error('Usage: bun src/eval/reviewer-audit.ts <report.json> <recoder.db> [--snapshot]');
 
 		return 2;
 	}
 
 	const report = readReport(reportPath);
-	const store = new Database(storePath, { readonly: true });
+	const store = openStore(storePath, values.snapshot);
 
 	try {
 		const audits = auditReport(report, store);

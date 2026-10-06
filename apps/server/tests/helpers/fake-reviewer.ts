@@ -2,7 +2,7 @@ import { afterEach } from 'bun:test';
 import { resetLlmLimiter } from '../../src/models/llm';
 import { subscribeReview } from '../../src/review/session/events';
 import { getStoredSettings, setReviewOverrides } from '../../src/review/session/review-settings';
-import type { PipelineRun, RunTokenCall } from '../../src/models/metrics';
+import type { PipelineRun, RunTokenCall, StoredMetrics } from '../../src/models/metrics';
 import { db, reviewMetrics } from '../../src/store';
 
 /** The models a review starts on, and the models the developer switches to. */
@@ -149,7 +149,7 @@ export function reviewEnded(reviewId: string): Promise<void> {
 
 /** The review's stored pipeline runs and pipeline calls. */
 export function storedRuns(reviewId: string): { runs: PipelineRun[] | undefined; calls: RunTokenCall[] } {
-	const stored = reviewMetrics.get(reviewId) as { runs?: PipelineRun[]; calls: RunTokenCall[] } | undefined;
+	const stored = reviewMetrics.get(reviewId) as StoredMetrics | undefined;
 
 	return { runs: stored?.runs, calls: stored?.calls.filter((call) => call.scope === 'pipeline') ?? [] };
 }

@@ -1,11 +1,11 @@
 import { afterAll, expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { BenchmarkReport } from '../../src/eval/benchmark-report';
 import { auditLines, auditReport } from '../../src/eval/reviewer-audit';
-import type { PipelineRun, RunTokenCall } from '../../src/models/metrics';
+import type { PipelineRun, RunTokenCall, StoredMetrics } from '../../src/models/metrics';
 
 const dir = mkdtempSync(join(tmpdir(), 'recoder-reviewer-audit-'));
 
@@ -31,7 +31,7 @@ function run(index: number, orchestrator: string, subagent: string): PipelineRun
 }
 
 /** Review metrics by review id: a clean run, the field case of a replay on another model appended untagged, a rerun on the same models, and a rerun on new ones. */
-const ROWS: Record<string, { runs?: PipelineRun[]; calls: RunTokenCall[] }> = {
+const ROWS: Record<string, Pick<StoredMetrics, 'runs' | 'calls'>> = {
 	'review-clean': {
 		runs: [run(0, 'lead-a', 'worker-a')],
 		calls: [...calls('lead-a', 11, 0), ...calls('worker-a', 5, 0)]
@@ -47,11 +47,15 @@ const ROWS: Record<string, { runs?: PipelineRun[]; calls: RunTokenCall[] }> = {
 	}
 };
 
-/** A store holding `ROWS` in the server's review_metrics table, plus a discussion call that is no pipeline call. */
-function writeStore(): string {
-	const path = join(dir, 'recoder.db');
+/**
+ * A store named `name` holding `ROWS` in the server's review_metrics table, plus a discussion call that is no
+ * pipeline call. Like the server's it is a WAL database; closing it leaves no `-wal` or `-shm` file beside it.
+ */
+function writeStore(name = 'recoder.db'): string {
+	const path = join(dir, name);
 	const store = new Database(path);
 
+	store.run('PRAGMA journal_mode = WAL');
 	store.run('CREATE TABLE IF NOT EXISTS review_metrics (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
 
 	for (const [id, row] of Object.entries(ROWS)) {
@@ -84,8 +88,8 @@ function writeReport(name: string, ids: string[]): { path: string; report: Bench
 }
 
 /** Runs the CLI as a developer would, from the server package. */
-function cli(reportPath: string, storePath: string): { code: number; out: string } {
-	const result = Bun.spawnSync(['bun', 'src/eval/reviewer-audit.ts', reportPath, storePath], {
+function cli(reportPath: string, storePath: string, ...flags: string[]): { code: number; out: string } {
+	const result = Bun.spawnSync(['bun', 'src/eval/reviewer-audit.ts', reportPath, storePath, ...flags], {
 		cwd: join(import.meta.dir, '../..')
 	});
 
@@ -175,4 +179,29 @@ test('a run made without locked models is MIXED by its lock misses', () => {
 		unlockedCalls: 1,
 		reasons: ['2 lock misses, 1 unlocked calls']
 	});
+});
+
+/** The file's SHA-256, to show it was not changed. */
+function hashOf(path: string): string {
+	return new Bun.CryptoHasher('sha256').update(readFileSync(path)).digest('hex');
+}
+
+test('--snapshot reads a WAL store as immutable: the same audit, no side files, the file unchanged', () => {
+	const snapshot = writeStore('snapshot.db');
+	const { path } = writeReport('snapshot.json', ['review-clean', 'review-mixed', 'review-gone']);
+	const before = hashOf(snapshot);
+	const sideFiles = () => ['-wal', '-shm', '-journal'].filter((suffix) => existsSync(`${snapshot}${suffix}`));
+
+	expect(sideFiles()).toEqual([]);
+
+	const { code, out } = cli(path, snapshot, '--snapshot');
+
+	expect(code).toBe(1);
+
+	expect(out).toContain(
+		'Summary: 3 runs, 1 clean, 1 mixed, 1 missing from the store, 0 with more than one pipeline run'
+	);
+
+	expect(sideFiles()).toEqual([]);
+	expect(hashOf(snapshot)).toBe(before);
 });
