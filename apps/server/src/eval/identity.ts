@@ -91,6 +91,8 @@ export interface RunIdentity {
 	tasks: TaskIdentity[];
 	/** The task set `tasks` came from: `full`, `only` for `--only`, or a `--set` name; absent from identities older than recording it. */
 	taskSet?: string;
+	/** `--shard`: this host's part of the task set, `tasks` its task ids and `all` every task id the set resolved to; absent unsharded. */
+	shard?: { index: number; count: number; tasks: string[]; all: string[] };
 	host: {
 		/** The harness's hostname; the server's route does not name its machine. */
 		name: string;
@@ -113,6 +115,8 @@ export interface RunIdentity {
 		timeoutMs: number;
 		runsPerPr: number;
 		baselineCache: boolean;
+		/** `--repeat`: which repeat of the experiment the runs are, numbering them after the earlier repeats'; absent for the first. */
+		repeat?: number;
 	};
 	/** Why a field is `unknown`, by field: a server without the identity route, a tree that could not be read. */
 	unavailable: Record<string, string>;
@@ -148,7 +152,7 @@ const INFORMATIONAL = ['host', 'execution', 'unavailable'];
  * for a report that records none, or `runs` for a report whose runs were
  * reviewed under other identities.
  */
-const DECLARABLE = ['identity', 'runs', 'tasks', 'taskSet', ...EXPERIMENT];
+const DECLARABLE = ['identity', 'runs', 'tasks', 'taskSet', 'shard', ...EXPERIMENT];
 
 /** Operations that claim two reports' results are alike, so every run in them must have been reviewed under its report's identity. */
 const RUN_CHECKED: readonly Operation[] = ['compare', 'merge'];
@@ -159,13 +163,13 @@ const RUN_CHECKED: readonly Operation[] = ['compare', 'merge'];
  * to every run, and they decide no defect count. A replay or rescore keeps the
  * reviewers' output and recomputes the rest: the code, the policy and the
  * cache formats are what it measures, and the judge and the labels score it
- * again. Shards of one experiment cover different tasks.
+ * again. Shards of one experiment cover different tasks of one task set.
  */
 const EXEMPT = {
 	resume: ['dataset.adjudications'],
 	replay: ['dataset.adjudications', 'dataset.labels', 'judge', 'code', 'limits.policy', 'caches'],
 	compare: ['dataset.adjudications'],
-	merge: ['dataset.adjudications', 'tasks']
+	merge: ['dataset.adjudications', 'tasks', 'shard.index', 'shard.tasks']
 } satisfies Record<string, string[]>;
 
 export type Operation = keyof typeof EXEMPT;

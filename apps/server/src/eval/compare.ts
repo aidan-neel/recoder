@@ -41,6 +41,11 @@ function stageTable(a: BenchmarkReport, b: BenchmarkReport): string[] {
 	];
 }
 
+/** Marks a merged report that misses tasks, so its counts are never read as a complete score. */
+function partialMark(report: BenchmarkReport): string {
+	return 'partial' in report.summary && report.summary.partial === true ? ' · PARTIAL merge, tasks missing' : '';
+}
+
 /**
  * Prints how two benchmark reports' identities differ and, when they compare,
  * their per-codebase stage counts side by side. Exits 1 when they differ in a
@@ -78,7 +83,7 @@ function main(): number {
 		[
 			...[a!, b!].map(
 				({ path, report }, index) =>
-					`${'AB'[index]}  ${basename(path)} · report ${report.reportId ?? 'id not recorded'} · ${report.prs.length} PRs × ${report.runsPerPr} runs · ${identityLine(report)}`
+					`${'AB'[index]}  ${basename(path)} · report ${report.reportId ?? 'id not recorded'} · ${report.prs.length} PRs × ${report.runsPerPr} runs · ${identityLine(report)}${partialMark(report)}`
 			),
 			'',
 			...compatibilityLines(result),
