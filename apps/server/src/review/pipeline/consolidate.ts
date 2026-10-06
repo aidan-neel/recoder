@@ -11,6 +11,7 @@ import { matchesGlob } from '../chat/directive.js';
 import type { RuleLedger } from '../guidelines/ledger/types.js';
 import { symbolAt } from './change-model/change-model.js';
 import type { ChangeModel } from './change-model/types.js';
+import type { CandidateRepair } from './candidate-repair.js';
 import type { DetectorResult } from './detectors/types.js';
 import type { ReviewerFinding } from './finding-schema.js';
 import { dismissalFingerprint, fingerprintFinding, hunkAt, lineAnchor, snapToQuote } from './harness/findings.js';
@@ -49,6 +50,8 @@ export interface CandidateFinding extends Finding {
 	fix?: FixEdit[];
 	/** Comparable existing code a convention finding rests on; the verifier checks each is on disk. */
 	examples?: ClaimStep[];
+	/** The one repair attempt made after it failed location or category validation; absent when none was made. */
+	repair?: CandidateRepair;
 }
 
 /** What validation and fingerprinting read from the run. */
@@ -132,23 +135,35 @@ function citesIntentClaim(text: string, intent: ChangeIntent | null | undefined)
 	return cited.some((id) => held.has(id));
 }
 
-/** Why the finding breaks its category's or lens's requirements, or undefined when it doesn't. */
-function categoryProblem(raw: ReviewerFinding, lens: LensId | null, ctx: CandidateContext): string | undefined {
+/** Which of its category's or lens's requirements a finding breaks, so a repair knows what it may correct. */
+export type CategoryIssue = 'lens' | 'rule' | 'smell' | 'examples' | 'intent';
+
+/** The category or lens requirement the finding breaks and why, or undefined when it breaks none. */
+export function categoryIssue(
+	raw: ReviewerFinding,
+	lens: LensId | null,
+	ctx: Pick<CandidateContext, 'ledger' | 'intent'>
+): { issue: CategoryIssue; reason: string } | undefined {
 	const { ledger } = ctx;
 
 	if (lens && !lensById(lens).categories.includes(raw.category)) {
-		return `category ${raw.category} is outside the ${lens} lens`;
+		return { issue: 'lens', reason: `category ${raw.category} is outside the ${lens} lens` };
 	}
 
 	if (raw.category === 'repo-rule' && !(raw.ruleId && ledger?.rules.some((rule) => rule.id === raw.ruleId))) {
-		return 'repo-rule finding cites no rule from the ledger';
+		return { issue: 'rule', reason: 'repo-rule finding cites no rule from the ledger' };
 	}
 
-	if (raw.category === 'readability' && !raw.smell) return 'readability finding names no smell';
-	if (raw.category === 'convention' && raw.examples.length < 2) return 'convention finding needs two examples';
+	if (raw.category === 'readability' && !raw.smell) {
+		return { issue: 'smell', reason: 'readability finding names no smell' };
+	}
+
+	if (raw.category === 'convention' && raw.examples.length < 2) {
+		return { issue: 'examples', reason: 'convention finding needs two examples' };
+	}
 
 	if (raw.category === 'intent-mismatch' && !citesIntentClaim(raw.claim.violatedContract, ctx.intent)) {
-		return 'intent-mismatch finding cites no intent claim id';
+		return { issue: 'intent', reason: 'intent-mismatch finding cites no intent claim id' };
 	}
 
 	return undefined;
@@ -214,7 +229,7 @@ export function validateCandidate(
 	const drop = firstDrop([
 		['location', locationProblem(ctx.inventory, raw.file, line, side)],
 		['evidence', raw.evidenceIds.length > 0 && evidenceIds.length === 0 && 'cited evidence was not provided'],
-		['category', categoryProblem(raw, meta.lens, ctx)],
+		['category', categoryIssue(raw, meta.lens, ctx)?.reason],
 		['dismissed', ctx.dismissed?.has(dismissal) && 'a person dismissed this finding in an earlier review']
 	]);
 
@@ -388,6 +403,7 @@ export function toFinding(candidate: CandidateFinding): Finding {
 		refuted: _refuted,
 		fix: _fix,
 		examples: _examples,
+		repair: _repair,
 		...finding
 	} = candidate;
 
