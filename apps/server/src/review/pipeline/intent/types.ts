@@ -61,14 +61,44 @@ export interface CodeClaim {
 	id: string;
 	text: string;
 	file: string;
+	/** A new-side line the diff shows, as the model cited it. */
 	line: number;
+	/** The brief unit whose summary made the claim (`unit-2`), a slice `partitionUnits` cut. */
+	unit?: string;
+	/** The innermost changed declaration around `line`, by qualified name, from the parser; unset outside every one. */
+	symbol?: string;
+	/** The lines a reader should open: the declaration's when there is one, else the diff hunk's new side. */
+	range?: { start: number; end: number };
+	/** The head commit `range` is on; unset for a review without a checkout. */
+	revision?: string;
+}
+
+/** Why the brief left a unit out or read only part of it. */
+export type BriefOmission = 'size' | 'time' | 'budget' | 'model';
+
+/**
+ * One changed unit and what the brief made of it. `partial` means the
+ * summary read a clipped diff (`size`); `omitted` means it has no summary.
+ */
+export interface BriefUnit {
+	/** `unit-1`, as `partitionUnits` numbers the slices. */
+	id: string;
+	title: string;
+	paths: string[];
+	status: 'included' | 'partial' | 'omitted';
+	reason?: BriefOmission;
+	/** The error or limit behind `reason`. */
+	detail?: string;
+	/** The unit's own summary; empty when omitted. */
+	summary: string;
 }
 
 /**
- * What the change is meant to do and what its code does, distilled from the
- * gathered context, the changed declarations and the diff in one
- * cached model call. Lenses check acceptance criteria and constraints against
- * the code; consolidation drops findings a non-goal or the stacked parent covers.
+ * What the change is meant to do and what its code does: one model call per
+ * changed unit reads its declarations and diff, then one call reads the
+ * gathered context with the unit summaries. Each call is cached. Lenses
+ * check acceptance criteria and constraints against the code; consolidation
+ * drops findings a non-goal or the stacked parent covers.
  */
 export interface ChangeIntent {
 	/** One or two sentences: what the PR does and why. */
@@ -86,4 +116,8 @@ export interface ChangeIntent {
 	/** A contract or caller the change may break, for a reviewer to settle against the code. */
 	openQuestions: CodeClaim[];
 	stack: GatheredContext['stack'];
+	/** Every changed unit, in `partitionUnits` order, with whether the brief read it; unset on a brief made by hand. */
+	units?: BriefUnit[];
+	/** False when a unit was clipped or omitted, or the sources could not be distilled; unset on a brief made by hand. */
+	complete?: boolean;
 }

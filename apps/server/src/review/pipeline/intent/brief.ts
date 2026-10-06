@@ -1,20 +1,17 @@
-import { unitContext } from '../change-model/lookup.js';
+import { symbolAt, unitContext } from '../change-model/lookup.js';
 import type { ChangeModel } from '../change-model/types.js';
 import type { ReviewInventory } from '../inventory.js';
-import type { UnitScope } from '../units.js';
+import type { ReviewUnit, UnitScope } from '../units.js';
 import type { ChangeIntent, CodeClaim } from './types.js';
 
-/** The diff a brief reads at most; a small model has to hold all of it at once. */
+/** The diff one brief call reads at most; a small model has to hold all of it at once. */
 const MAX_DIFF_CHARS = 24_000;
 const MAX_DECLARATION_CHARS = 8_000;
+
+/** Per unit and list. A reviewer is shown only its own unit's claims, so this is what one reviewer reads at most. */
 const MAX_CODE_CLAIMS = 12;
 
 const SIGN = { add: '+', del: '-', context: ' ' } as const;
-
-/** Paths the review reads; generated and excluded files tell a brief nothing. */
-function reviewablePaths(inventory: ReviewInventory): string[] {
-	return inventory.files.filter((file) => !file.excludeReason).map((file) => file.path);
-}
 
 /** One file's hunks with each new-side line numbered; a removed line has no number, so every cited line is on the new side. */
 function fileDiff(inventory: ReviewInventory, path: string): string {
@@ -27,48 +24,68 @@ function fileDiff(inventory: ReviewInventory, path: string): string {
 	return [`--- ${path}`, ...hunks].join('\n');
 }
 
-/** The reviewable files' diffs in inventory order, whole files only, up to the cap. */
-function diffExcerpt(inventory: ReviewInventory): string {
-	const paths = reviewablePaths(inventory);
-	const shown: string[] = [];
-	let used = 0;
+/**
+ * Each file's share of `cap` characters: a file smaller than an even split
+ * keeps all of it and leaves the rest to the larger ones, so no file is cut
+ * to nothing because an earlier one is large.
+ */
+function shares(sizes: number[], cap: number): number[] {
+	const order = sizes.map((size, index) => ({ size, index })).sort((a, b) => a.size - b.size || a.index - b.index);
+	const result = sizes.map(() => 0);
+	let left = cap;
 
-	for (const path of paths) {
-		const text = fileDiff(inventory, path);
-
-		if (used + text.length > MAX_DIFF_CHARS && shown.length) break;
-
-		shown.push(
-			text.length > MAX_DIFF_CHARS ? `${text.slice(0, MAX_DIFF_CHARS)}\n…rest of this file's diff not shown` : text
-		);
-
-		used += text.length;
+	for (const [position, { size, index }] of order.entries()) {
+		result[index] = Math.min(size, Math.floor(left / (order.length - position)));
+		left -= result[index];
 	}
 
-	const omitted = paths.length - shown.length;
+	return result;
+}
 
-	return shown.join('\n\n') + (omitted ? `\n\n…${omitted} more changed file${omitted === 1 ? '' : 's'} not shown` : '');
+/** A file's diff cut at the last line break within `chars`, with a note of how many lines were left out. */
+function clip(text: string, chars: number): string {
+	if (text.length <= chars) return text;
+
+	const end = text.lastIndexOf('\n', chars);
+	const kept = text.slice(0, end > 0 ? end : chars);
+	const rest = text.slice(kept.length).split('\n').filter(Boolean).length;
+
+	return `${kept}\n…${rest} more line${rest === 1 ? '' : 's'} of this file's diff not shown`;
 }
 
 /**
- * The code a brief is written from: the parser's changed declarations with
- * their references and tests, then the diff. Empty when nothing reviewable
- * changed. Same inventory and model, same text, so it can key a cache.
+ * What one unit's summary is written from: the parser's changed declarations
+ * with their references and tests, then every file's diff. A diff larger
+ * than one call reads is clipped file by file to each one's share, so a
+ * large file never hides the others. Same inventory, model and unit, same
+ * text, so it can key a cache.
  */
-export function codeInput(inventory: ReviewInventory, model: ChangeModel | null): string {
-	const paths = reviewablePaths(inventory);
+export function unitInput(
+	inventory: ReviewInventory,
+	model: ChangeModel | null,
+	scope: UnitScope
+): { text: string; clipped: boolean } {
+	const diffs = scope.map((entry) => fileDiff(inventory, entry.path));
 
-	if (!paths.length) return '';
+	const limits = shares(
+		diffs.map((text) => text.length),
+		MAX_DIFF_CHARS
+	);
 
-	const scope = paths.map((path) => ({ path, hunkIds: [] }));
+	const shown = diffs.map((text, index) => clip(text, limits[index]));
 	const declarations = model ? unitContext(model, scope, MAX_DECLARATION_CHARS) : '';
 
-	return [
-		declarations,
-		`Diff (new-side line numbers before each line; removed lines have none):\n${diffExcerpt(inventory)}`
-	]
-		.filter(Boolean)
-		.join('\n\n');
+	const diff = `Diff (new-side line numbers before each line; removed lines have none):\n${shown.join('\n\n')}`;
+
+	return {
+		text: [declarations, diff].filter(Boolean).join('\n\n'),
+		clipped: shown.some((text, index) => text !== diffs[index])
+	};
+}
+
+/** Text a model copied from the reply template or left as filler: `...`, `…`, `N/A`, or nothing. */
+export function isFiller(text: string): boolean {
+	return /^[\s.…\-–—_?]*$/.test(text) || /^(n\/a|none|todo|tbd)$/i.test(text.trim());
 }
 
 /** Whether the line is one the diff shows on the new side of the file; any line counts in a file with none, a deleted one. */
@@ -79,29 +96,86 @@ function inDiff(inventory: ReviewInventory, path: string, line: number): boolean
 	return !shown.length || shown.includes(line);
 }
 
-/**
- * Drops statements about files outside the review or lines the diff does not
- * show, so a reviewer is never sent to a place the brief invented, then numbers the rest in
- * (file, line, text) order, so the same statements always get the same ids
- * however the model ordered them.
- */
-export function codeClaims(
-	raw: { text: string; file: string; line: number }[],
-	inventory: ReviewInventory,
-	letter: string
-): CodeClaim[] {
-	const paths = new Set(reviewablePaths(inventory));
+/** The new side of the hunk that shows `line`, or the line alone when none does. */
+function hunkRange(inventory: ReviewInventory, path: string, line: number): { start: number; end: number } {
+	const hunk = inventory.diffs
+		.find((entry) => entry.path === path)
+		?.hunks.find((entry) => entry.newCount && entry.newStart <= line && line < entry.newStart + entry.newCount);
 
-	return raw
+	return hunk ? { start: hunk.newStart, end: hunk.newStart + hunk.newCount - 1 } : { start: line, end: line };
+}
+
+/** Up to `max` claims, each file's next one in turn, so one file's many claims never crowd out another's. */
+function acrossFiles<T extends { file: string }>(claims: T[], max: number): T[] {
+	const byFile = new Map<string, T[]>();
+
+	for (const claim of claims) byFile.set(claim.file, [...(byFile.get(claim.file) ?? []), claim]);
+
+	const queues = [...byFile.values()];
+	const longest = Math.max(0, ...queues.map((queue) => queue.length));
+
+	return Array.from({ length: longest }, (_, round) => queues.flatMap((queue) => queue[round] ?? []))
+		.flat()
+		.slice(0, max);
+}
+
+/** A claim pinned to its source, before ids are given across units. */
+export type PinnedClaim = Omit<CodeClaim, 'id'>;
+
+/** What a brief needs to pin a unit's claims to their source. */
+export interface ClaimSource {
+	inventory: ReviewInventory;
+	model: ChangeModel | null;
+	unit: ReviewUnit;
+	/** The head commit, when the review has a checkout. */
+	revision?: string;
+}
+
+/**
+ * One unit's statements about its code. Drops those about files outside the
+ * unit, lines the diff does not show, or filler, so a reviewer is never sent
+ * to a place the brief invented. Keeps the first few per file in the model's
+ * order, then pins each to the declaration around it (or its hunk) and the
+ * head commit, so a reader can open the code the claim is about.
+ */
+export function unitClaims(raw: { text: string; file: string; line: number }[], source: ClaimSource): PinnedClaim[] {
+	const { inventory, model, unit, revision } = source;
+	const paths = new Set(unit.scope.map((entry) => entry.path));
+
+	const valid = raw
 		.map((claim) => ({ text: claim.text.trim(), file: claim.file.trim(), line: claim.line }))
-		.filter((claim) => claim.text && paths.has(claim.file) && inDiff(inventory, claim.file, claim.line))
-		.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.text.localeCompare(b.text))
-		.slice(0, MAX_CODE_CLAIMS)
+		.filter((claim) => !isFiller(claim.text) && paths.has(claim.file) && inDiff(inventory, claim.file, claim.line));
+
+	return acrossFiles(valid, MAX_CODE_CLAIMS).map((claim) => {
+		const symbol = model ? symbolAt(model, claim.file, claim.line) : null;
+
+		return {
+			...claim,
+			unit: unit.id,
+			...(symbol && { symbol: symbol.qualifiedName }),
+			range: symbol ? { start: symbol.startLine, end: symbol.endLine } : hunkRange(inventory, claim.file, claim.line),
+			...(revision && { revision })
+		};
+	});
+}
+
+/**
+ * Numbers every unit's claims, unit by unit in order and within a unit by
+ * (file, line, text), so the same statements always get the same ids however
+ * the model ordered them.
+ */
+export function numberClaims(byUnit: PinnedClaim[][], letter: string): CodeClaim[] {
+	return byUnit
+		.flatMap((claims) =>
+			[...claims].sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.text.localeCompare(b.text))
+		)
 		.map((claim, index) => ({ id: `${letter}${index + 1}`, ...claim }));
 }
 
 function claimLine(claim: CodeClaim): string {
-	return `${claim.id} ${claim.file}:${claim.line} ${claim.text}`;
+	const at = claim.symbol ? ` (${claim.symbol})` : '';
+
+	return `${claim.id} ${claim.file}:${claim.line}${at} ${claim.text}`;
 }
 
 /**

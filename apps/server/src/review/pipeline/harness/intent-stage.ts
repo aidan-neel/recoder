@@ -32,7 +32,22 @@ function describe(intent: ChangeIntent | null, sources: number): string {
 		intent.openQuestions
 	].flat().length;
 
-	return `${claims} claim${claims === 1 ? '' : 's'} from ${sources} source${sources === 1 ? '' : 's'}`;
+	const all = intent.units ?? [];
+	const read = all.filter((unit) => unit.status !== 'omitted').length;
+	const units = all.length ? `, ${read} of ${all.length} units briefed` : '';
+
+	return `${claims} claim${claims === 1 ? '' : 's'} from ${sources} source${sources === 1 ? '' : 's'}${units}`;
+}
+
+/** One log line per unit the brief read or left out, and how long the stage took, so an omission is never silent. */
+function logBrief(run: ReviewRun, intent: ChangeIntent | null, startedAt: number): void {
+	for (const unit of intent?.units ?? []) {
+		const why = unit.reason ? ` (${unit.reason}: ${unit.detail})` : '';
+
+		run.events?.onLog?.(`Brief ${unit.id} ${unit.title}: ${unit.status}${why}`);
+	}
+
+	run.events?.onLog?.(`Intent stage took ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
 }
 
 /**
@@ -43,6 +58,7 @@ function describe(intent: ChangeIntent | null, sources: number): string {
 export async function intentStage(run: ReviewRun): Promise<void> {
 	const { task, input } = run;
 	const signal = run.controller.signal;
+	const startedAt = Date.now();
 
 	task(TASK.id, TASK.label, 'running', 'Gathering the PR, its issues and history', { kind: 'planning' });
 
@@ -62,6 +78,7 @@ export async function intentStage(run: ReviewRun): Promise<void> {
 		const stack = input.context?.stack ?? { parent: null, children: [] };
 
 		run.intent = await distillIntent(run, sources, stack);
+		logBrief(run, run.intent, startedAt);
 		task(TASK.id, TASK.label, 'done', describe(run.intent, sources.length), { kind: 'planning' });
 	} catch (err) {
 		run.intent = null;

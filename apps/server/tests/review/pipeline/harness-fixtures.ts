@@ -169,6 +169,12 @@ function stageOf(init?: RequestInit): string {
 	return unitOf(init) ?? (isVerifier(init) ? 'verifier' : isIntent(init) ? 'intent' : 'other');
 }
 
+/** A brief unit's answer: one statement about line 1 of `src/a.ts`, dropped for any unit without that file. */
+const BRIEF = {
+	summary: 'Changes src/a.ts.',
+	observedChanges: [{ text: 'Line 1 changed', file: 'src/a.ts', line: 1 }]
+};
+
 /**
  * Answers `TWO_UNIT_DIFF`'s lens reviewers and verifiers, recording each
  * call by assignment id, `verifier`, `intent` or `other`. `unit-1/correctness`
@@ -183,6 +189,7 @@ export function stubModel(calls: string[], failing?: string) {
 		calls.push(kind);
 		if (kind === failing) return new Response('bad request', { status: 400 });
 		if (kind === 'verifier') return modelReply(confirmingVerifier(init));
+		if (kind === 'intent') return modelReply(BRIEF);
 
 		const cited = evidenceIn(init);
 
