@@ -5,13 +5,20 @@ export type IntentSourceKind =
 /** One piece of gathered context. Always untrusted text. */
 export interface IntentSource {
 	kind: IntentSourceKind;
-	/** Stable id the distilled claims cite: `pr`, `issue:#12`, `comment:#12/3`, `commit:abc1234`, `pr:#31`. */
+	/**
+	 * Stable id the distilled claims cite: `pr`, `issue:#12`, `comment:#12/3`,
+	 * `commit:abc1234`, `pr:#31`, `merge:abc1234`, `history:unavailable`.
+	 */
 	ref: string;
 	url?: string;
 	title?: string;
 	author?: string;
 	/** ISO time, when the host reports one. */
 	at?: string;
+	/** History only: the commit the source was read from, such as the merge that landed an earlier PR. */
+	revision?: string;
+	/** History only: the commits that landed together as a `git log` range, `parent..tip`, or a root commit's sha. */
+	range?: string;
 	/** Clipped body text. */
 	text: string;
 }

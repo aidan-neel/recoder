@@ -1,6 +1,6 @@
 import type { PrRef } from '../../review/pipeline/intent/types.js';
 import type { CommentRow, ForgeAdapter, PullRows, StackRow } from '../context/gather.js';
-import { toPrRef, type IssueKey } from '../context/sources.js';
+import { MESSAGE_FIELDS, namedPull, parseMessage, toPrRef, type IssueKey } from '../context/sources.js';
 import { localGit, localGitOutput, localGitSucceeds } from './git.js';
 import { localHeadSha, localPullUrl } from './pulls.js';
 import {
@@ -165,18 +165,19 @@ function isAncestor(repoPath: string, ancestor: string, commit: string, signal: 
 }
 
 /**
- * The pull request a squash-merged commit on the default branch names in its
- * subject, `Fix the parser (#123)`, as GitHub writes them; history imported from
- * GitHub lands this way.
+ * The saved pull request a commit on the default branch names in its message:
+ * a squash subject `Fix the parser (#123)`, a merge `Merge pull request #123
+ * from …` or a PR trailer (`namedPull`), as history imported from GitHub lands.
+ * Null when no saved pull has that number; a pull is never made up from the message.
  */
-async function pullFromSubject(
+async function pullNamedBy(
 	repoPath: string,
 	forge: LocalForge,
 	sha: string,
 	signal: AbortSignal
 ): Promise<LocalPull | null> {
-	const subject = await localGit(repoPath, ['log', '-1', '--format=%s', sha], signal);
-	const number = Number(/\(#(\d+)\)\s*$/.exec(subject)?.[1]);
+	const fields = await localGitOutput(repoPath, ['log', '-1', `--format=${MESSAGE_FIELDS}`, sha], signal);
+	const number = namedPull(parseMessage(fields.split('\x1f')))?.number;
 	const pull = forge.pulls.find((row) => row.number === number);
 
 	if (!pull) return null;
@@ -186,8 +187,8 @@ async function pullFromSubject(
 
 /**
  * The pull requests a commit landed in: an open or merged pull whose commits
- * (`baseSha..head`) include it, one whose `mergeSha` is it, or the pull a
- * default-branch commit names in its subject.
+ * (`baseSha..head`) include it, one whose `mergeSha` is it, or the saved pull a
+ * default-branch commit names in its message.
  */
 export async function localPrsForCommit(repoUrl: string, sha: string, signal: AbortSignal): Promise<PrRef[]> {
 	const repoPath = localRepoPath(repoUrl);
@@ -204,7 +205,7 @@ export async function localPrsForCommit(repoUrl: string, sha: string, signal: Ab
 		})
 	);
 
-	const named = await pullFromSubject(repoPath, forge, commit, signal);
+	const named = await pullNamedBy(repoPath, forge, commit, signal);
 	const found = new Map<number, LocalPull>();
 
 	for (const pull of [...inRange, named]) if (pull) found.set(pull.number, pull);

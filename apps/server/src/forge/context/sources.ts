@@ -58,6 +58,8 @@ export function makeSource(source: IntentSource): IntentSource {
 	if (source.title) out.title = clip(source.title, 200);
 	if (source.author) out.author = source.author;
 	if (source.at) out.at = source.at;
+	if (source.revision) out.revision = source.revision;
+	if (source.range) out.range = source.range;
 
 	return out;
 }
@@ -145,6 +147,72 @@ export function mentionedIssues(text: string, slug: string): IssueKey[] {
 
 			return true;
 		});
+}
+
+/** A commit message as git splits it: the subject line, the body, and the trailer block git recognizes. */
+export interface CommitMessage {
+	subject: string;
+	body: string;
+	trailers: string;
+}
+
+/** The `git log --format` fields `parseMessage` reads back, separated by 0x1f. */
+export const MESSAGE_FIELDS = '%s%x1f%b%x1f%(trailers:only,unfold)';
+
+/** A `CommitMessage` from the three fields `MESSAGE_FIELDS` prints. */
+export function parseMessage([subject, body, trailers]: (string | undefined)[]): CommitMessage {
+	return { subject: subject ?? '', body: (body ?? '').trim(), trailers: trailers ?? '' };
+}
+
+/** A pull request a commit message names, with what the message says of it. */
+export interface NamedPull {
+	number: number;
+	/** Empty when the message names the PR without its title. */
+	title: string;
+	url?: string;
+}
+
+/** Trailer keys that name the pull request a commit came from, lower case. */
+const PULL_TRAILERS = new Set(['pr', 'pr-url', 'pull-request', 'reviewed-on', 'merge-request']);
+
+/** A trailer value naming a PR: `#12`, `!12`, or a GitHub, Gitea or GitLab pull request URL. */
+const PULL_VALUE = /^[#!](\d+)$|^(https?:\/\/\S+\/(?:pull|pulls|merge_requests)\/(\d+))\/?$/;
+
+/** The PR a trailer such as `PR-URL: https://github.com/o/r/pull/12` names. */
+function trailerPull(trailers: string): NamedPull | null {
+	for (const line of trailers.split('\n')) {
+		const [, key = '', value = ''] = /^([\w-]+):\s*(\S+)\s*$/.exec(line.trim()) ?? [];
+		const match = PULL_TRAILERS.has(key.toLowerCase()) ? PULL_VALUE.exec(value) : null;
+
+		if (match) return { number: Number(match[1] ?? match[3]), title: '', ...(match[2] ? { url: match[2] } : {}) };
+	}
+
+	return null;
+}
+
+/**
+ * The pull request a commit message names, in the forms hosts write: a squash
+ * subject `Fix the parser (#123)`, a GitHub merge `Merge pull request #123 from
+ * owner/branch` with the PR title as the body's first line, a GitLab merge body
+ * ending `See merge request group/project!123` after the title, or a `PR`,
+ * `PR-URL`, `Pull-Request`, `Reviewed-on` or `Merge-Request` trailer. Null when
+ * it names none: a PR is never guessed from anything else.
+ */
+export function namedPull(message: CommitMessage): NamedPull | null {
+	const squash = /^(.*?)\s*\(#(\d+)\)\s*$/.exec(message.subject);
+
+	if (squash) return { number: Number(squash[2]), title: squash[1] };
+
+	const firstLine = message.body.split('\n')[0].trim();
+	const github = /^Merge pull request #(\d+) from \S+$/.exec(message.subject.trim());
+
+	if (github) return { number: Number(github[1]), title: firstLine };
+
+	const gitlab = /^See merge request \S*!(\d+)\s*$/m.exec(message.body);
+
+	if (gitlab) return { number: Number(gitlab[1]), title: firstLine.startsWith('See merge request') ? '' : firstLine };
+
+	return trailerPull(message.trailers);
 }
 
 /**
