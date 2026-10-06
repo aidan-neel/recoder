@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, spyOn, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +10,25 @@ restoreAfterEach();
 beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-context-'));
 });
+
+/** The last checkpoint of a two-unit review whose unit-2 correctness reviewer fails, so only unit-1 finished. */
+async function checkpointWithUnitOneDone(): Promise<ReviewProgressCheckpoint | null> {
+	useTestModel();
+	stubModel([], 'unit-2/correctness');
+
+	let saved: ReviewProgressCheckpoint | null = null;
+
+	await runAdaptiveReview(
+		{ diff: TWO_UNIT_DIFF, sandboxPath: null },
+		{
+			onCheckpoint: (checkpoint) => {
+				saved = checkpoint;
+			}
+		}
+	);
+
+	return saved;
+}
 
 /** Finding ids are random per run, so the repeat compares the reviewers' records and how each finding's evidence arrived. */
 test('a review records what each lens reviewer received, the same way every time', async () => {
@@ -40,21 +59,9 @@ test('a review records what each lens reviewer received, the same way every time
 });
 
 test('a checkpoint keeps the prompts and reads of finished assignments, and a resume records the prompt it kept', async () => {
-	useTestModel();
-	stubModel([], 'unit-2/correctness');
+	const saved = await checkpointWithUnitOneDone();
 
-	let saved: ReviewProgressCheckpoint | null = null;
-
-	await runAdaptiveReview(
-		{ diff: TWO_UNIT_DIFF, sandboxPath: null },
-		{
-			onCheckpoint: (checkpoint) => {
-				saved = checkpoint;
-			}
-		}
-	);
-
-	const received = (saved as ReviewProgressCheckpoint | null)?.received;
+	const received = saved?.received;
 	const first = received?.byAssignment ?? {};
 
 	expect(first['unit-1/correctness']?.[0]).toMatchObject({ action: 'readDiff', path: 'src/a.ts', ok: true });
@@ -103,4 +110,27 @@ test('a two-unit review stores each unit prompt once, and every lens reviewer po
 
 	expect(context?.reviewers.every((reviewer) => !('supplied' in reviewer))).toBe(true);
 	expect(context?.units['unit-2'].supplied).toEqual([{ kind: 'diff', path: 'tests/b.ts', startLine: 1, endLine: 140 }]);
+});
+
+test('a review whose context record throws still completes, without the record', async () => {
+	const saved = await checkpointWithUnitOneDone();
+
+	const received = saved?.received;
+
+	/** A kept prompt with no record in it, so measuring the resumed review throws. */
+	for (const id of lensIdsOf('unit-1')) Object.assign(received?.prompts[id] ?? {}, { context: null });
+
+	stubModel([]);
+
+	const warn = spyOn(console, 'warn').mockImplementation(() => {});
+	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, resume: saved });
+
+	const warned = warn.mock.calls.flat().join(' ');
+
+	warn.mockRestore();
+
+	expect(result.error).toBeUndefined();
+	expect(result.outcome).toBe('complete');
+	expect(result.context).toBeUndefined();
+	expect(warned).toContain('context record skipped');
 });

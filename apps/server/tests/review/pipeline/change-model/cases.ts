@@ -76,6 +76,22 @@ const SVELTE_BASE =
 const SVELTE_HEAD =
 	'<script lang="ts" generics="T extends Record<string, unknown>">\n\tlet count = 0;\n\n\tfunction bump() {\n\t\tcount++;\n\t}\n</script>\n\n<button onclick={bump}>{count}</button>\n';
 
+/** `count` files that import and call `take`, the last `tests` of them test files, so the caller cap cuts some. */
+function importers(count: number, tests: number): Record<string, string> {
+	return Object.fromEntries(
+		Array.from({ length: count }, (_, i) => {
+			const test = i >= count - tests;
+			const path = test ? `tests/use-${i}.test.ts` : `src/use-${i}.ts`;
+			const from = test ? '../src/limiter' : './limiter';
+
+			return [path, `import { take } from '${from}';\n\nexport const use${i} = take(${i}, 'a');\n`];
+		})
+	);
+}
+
+const SEVEN = importers(7, 1);
+const TWELVE = importers(12, 3);
+
 /**
  * Every change the change-model tests build, by name, so the behavior tests
  * and the flag-off parity snapshot read the same inputs.
@@ -130,5 +146,13 @@ export const CASES = {
 	decoyedUse: {
 		base: { 'src/limiter.ts': BASE_LIMITER, 'src/use.ts': DECOYED_USE },
 		head: { 'src/limiter.ts': HEAD_LIMITER, 'src/use.ts': DECOYED_USE }
+	},
+	sevenCallers: {
+		base: { 'src/limiter.ts': BASE_LIMITER, ...SEVEN },
+		head: { 'src/limiter.ts': HEAD_LIMITER, ...SEVEN }
+	},
+	twelveCallers: {
+		base: { 'src/limiter.ts': BASE_LIMITER, ...TWELVE },
+		head: { 'src/limiter.ts': HEAD_LIMITER, ...TWELVE }
 	}
 } satisfies Record<string, FixtureCase>;

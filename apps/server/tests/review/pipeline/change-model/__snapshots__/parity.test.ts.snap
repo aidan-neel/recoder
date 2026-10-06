@@ -760,3 +760,271 @@ exports[`the decoyedUse change model is unchanged with caller selection off 1`] 
   "unparsed": [],
 }
 `;
+
+exports[`the sevenCallers change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [
+    {
+      "language": "typescript",
+      "p95": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "sampled": 1,
+    },
+  ],
+  "byHunk": {
+    "src/limiter.ts:1,3:1,3": [
+      "src/limiter.ts#take",
+    ],
+  },
+  "symbols": [
+    {
+      "callers": [
+        {
+          "file": "src/use-0.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use0 = take(0, 'a');",
+        },
+        {
+          "file": "src/use-1.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use1 = take(1, 'a');",
+        },
+        {
+          "file": "src/use-2.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use2 = take(2, 'a');",
+        },
+        {
+          "file": "src/use-3.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use3 = take(3, 'a');",
+        },
+        {
+          "file": "src/use-4.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use4 = take(4, 'a');",
+        },
+      ],
+      "calls": [],
+      "change": "modified",
+      "endLine": 3,
+      "examples": [],
+      "exported": true,
+      "file": "src/limiter.ts",
+      "hunkIds": [
+        "src/limiter.ts:1,3:1,3",
+      ],
+      "id": "src/limiter.ts#take",
+      "kind": "function",
+      "language": "typescript",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "name": "take",
+      "previousSignature": "export function take(n: number): boolean",
+      "qualifiedName": "take",
+      "references": [
+        {
+          "file": "src/use-0.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use0 = take(0, 'a');",
+        },
+        {
+          "file": "src/use-1.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use1 = take(1, 'a');",
+        },
+        {
+          "file": "src/use-2.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use2 = take(2, 'a');",
+        },
+        {
+          "file": "src/use-3.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use3 = take(3, 'a');",
+        },
+        {
+          "file": "src/use-4.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use4 = take(4, 'a');",
+        },
+        {
+          "file": "src/use-5.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use5 = take(5, 'a');",
+        },
+        {
+          "file": "tests/use-6.test.ts",
+          "kind": "test",
+          "line": 3,
+          "text": "export const use6 = take(6, 'a');",
+        },
+        {
+          "file": "src/use-0.ts",
+          "kind": "import",
+          "line": 1,
+          "text": "import { take } from './limiter';",
+        },
+      ],
+      "signature": "export function take(n: number, label: string): boolean",
+      "startLine": 1,
+      "tests": [
+        "tests/use-6.test.ts",
+      ],
+    },
+  ],
+  "unparsed": [],
+}
+`;
+
+exports[`the twelveCallers change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [
+    {
+      "language": "typescript",
+      "p95": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "sampled": 1,
+    },
+  ],
+  "byHunk": {
+    "src/limiter.ts:1,3:1,3": [
+      "src/limiter.ts#take",
+    ],
+  },
+  "symbols": [
+    {
+      "callers": [
+        {
+          "file": "src/use-0.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use0 = take(0, 'a');",
+        },
+        {
+          "file": "src/use-1.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use1 = take(1, 'a');",
+        },
+        {
+          "file": "src/use-2.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use2 = take(2, 'a');",
+        },
+        {
+          "file": "src/use-3.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use3 = take(3, 'a');",
+        },
+        {
+          "file": "src/use-4.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use4 = take(4, 'a');",
+        },
+      ],
+      "calls": [],
+      "change": "modified",
+      "endLine": 3,
+      "examples": [],
+      "exported": true,
+      "file": "src/limiter.ts",
+      "hunkIds": [
+        "src/limiter.ts:1,3:1,3",
+      ],
+      "id": "src/limiter.ts#take",
+      "kind": "function",
+      "language": "typescript",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "name": "take",
+      "previousSignature": "export function take(n: number): boolean",
+      "qualifiedName": "take",
+      "references": [
+        {
+          "file": "src/use-0.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use0 = take(0, 'a');",
+        },
+        {
+          "file": "src/use-1.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use1 = take(1, 'a');",
+        },
+        {
+          "file": "src/use-2.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use2 = take(2, 'a');",
+        },
+        {
+          "file": "src/use-3.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use3 = take(3, 'a');",
+        },
+        {
+          "file": "src/use-4.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use4 = take(4, 'a');",
+        },
+        {
+          "file": "src/use-5.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use5 = take(5, 'a');",
+        },
+        {
+          "file": "src/use-6.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use6 = take(6, 'a');",
+        },
+        {
+          "file": "src/use-7.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const use7 = take(7, 'a');",
+        },
+      ],
+      "signature": "export function take(n: number, label: string): boolean",
+      "startLine": 1,
+      "tests": [
+        "tests/use-10.test.ts",
+        "tests/use-11.test.ts",
+        "tests/use-9.test.ts",
+      ],
+    },
+  ],
+  "unparsed": [],
+}
+`;

@@ -127,6 +127,11 @@ function contractRow(symbol: ChangedSymbol): string {
 	].join('\n');
 }
 
+/** Where a reference is, as `path:line`: how the block lists it and tells a call site from a plain reference. */
+function place(ref: SymbolReference): string {
+	return `${ref.file}:${ref.line}`;
+}
+
 /** Call sites and tests for a changed contract: path:line and the trimmed source line. */
 function callerRows(symbol: ChangedSymbol): string[] {
 	const callers = symbol.callers ?? [];
@@ -138,10 +143,7 @@ function callerRows(symbol: ChangedSymbol): string[] {
 	const tag = (ref: SymbolReference) =>
 		(ref.kind === 'test' ? ' [test]' : ref.inDiff ? ' [in this diff]' : '') + relies(ref);
 
-	return [
-		'  callers:',
-		...callers.map((ref) => `    ${ref.file}:${ref.line}${tag(ref)} ${clip(ref.text, CALLER_LINE_CHARS)}`)
-	];
+	return ['  callers:', ...callers.map((ref) => `    ${place(ref)}${tag(ref)} ${clip(ref.text, CALLER_LINE_CHARS)}`)];
 }
 
 /** One symbol's text in the prompt, with the places it puts there and the ones a bound kept out. */
@@ -155,8 +157,8 @@ interface Block {
 function describe(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefined, withCallers = true): Block {
 	const changed = contractChanged(symbol);
 	const shown = changed && withCallers ? (symbol.callers ?? []) : [];
-	const listed = new Set(shown.map((ref) => `${ref.file}:${ref.line}`));
-	const others = symbol.references.filter((ref) => !listed.has(`${ref.file}:${ref.line}`));
+	const listed = new Set(shown.map(place));
+	const others = symbol.references.filter((ref) => !listed.has(place(ref)));
 
 	const rows = [
 		`- ${symbol.qualifiedName} (${symbol.kind}, ${symbol.change}${symbol.exported ? ', exported' : ''}) ${symbol.file}:${symbol.startLine}-${symbol.endLine}`,
@@ -167,7 +169,7 @@ function describe(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefin
 
 	if (others.length) {
 		rows.push('  referenced at:');
-		for (const ref of others) rows.push(`    ${ref.file}:${ref.line} ${ref.text}`);
+		for (const ref of others) rows.push(`    ${place(ref)} ${ref.text}`);
 	}
 
 	if (symbol.usageUnknown) rows.push('  references: not fully searched, so do not assume it is unused');
@@ -206,8 +208,8 @@ export interface UnitContextParts {
 
 /**
  * The unit's prompt block and a record of it: every place the block puts in
- * front of the reviewer, and every declaration or caller its bounds cut. Same
- * model and scope, same text and same record.
+ * front of the reviewer, and every declaration, caller, reference or test it
+ * leaves out, with the reason. Same model and scope, same text and same record.
  */
 export function unitContextParts(model: ChangeModel, scope: UnitScope, maxChars = DEFAULT_MAX_CHARS): UnitContextParts {
 	const symbols = scopeSymbols(model, scope);
@@ -239,8 +241,10 @@ export function unitContextParts(model: ChangeModel, scope: UnitScope, maxChars 
 /**
  * A plain-text prompt block on the declarations the scope touches: what each
  * is, who references it, what it calls, its tests, comparable code and its
- * size against the repo. A declaration whose signature or export changed also
- * lists its call sites and tests, one source line each. Same model and scope, same text. Empty when the scope
+ * size against the repo. A declaration that was deleted or whose signature or
+ * export changed also lists its call sites and tests, one source line each;
+ * with caller selection on, so does one whose changed lines alter a behavior
+ * callers rely on. Same model and scope, same text. Empty when the scope
  * touches no parsed symbol.
  */
 export function unitContext(model: ChangeModel, scope: UnitScope, maxChars = DEFAULT_MAX_CHARS): string {
