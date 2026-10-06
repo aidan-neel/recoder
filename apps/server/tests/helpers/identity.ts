@@ -27,6 +27,7 @@ export function identityFields(): Omit<RunIdentity, 'version' | 'hash'> {
 		caches: { intent: 'source:abc', 'benchmark-judge': 'v1' },
 		tools: { bun: '1.3.0', node: 'v24.0.0', opencode: 'not installed' },
 		tasks: [{ taskId: 'pr-1@aaa', base: 'base-1' }],
+		taskSet: 'full',
 		host: {
 			name: 'pc',
 			os: 'linux 6',

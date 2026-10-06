@@ -34,7 +34,7 @@ function toolSummary(result: ToolResult): string {
 	if (result.action === 'run') {
 		if (result.exitCode === null || result.exitCode === undefined) return result.error ?? 'timed out';
 
-		return `exit ${result.exitCode}${result.cached ? ' · cached' : ''}`;
+		return `exit ${result.exitCode}${result.cached ? ' · cached' : ''}${result.outcome ? ` · ${result.outcome}` : ''}`;
 	}
 
 	if (!result.ok) return result.error ?? 'failed';
@@ -90,6 +90,7 @@ export function formatToolResults(results: ToolResult[]): string {
 				result.path ? `path=${result.path}` : '',
 				result.revision ? `revision=${result.revision}` : '',
 				result.startLine ? `lines=${result.startLine}-${result.endLine}` : '',
+				result.outcome ? `outcome=${result.outcome}` : '',
 				result.truncated ? 'truncated=true' : '',
 				result.continuation ? `continuation=${result.continuation}` : '',
 				result.error ? `error=${result.error}` : ''
