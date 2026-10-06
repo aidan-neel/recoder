@@ -44,7 +44,7 @@ export interface ObligationAnswer {
 	/** Below, at and above the boundary, or the equivalent classes of input. */
 	inputPartition: { label: string; input: string; expected: string }[];
 	expectedBehavior: string;
-	/** The input tried against the changed code and what it did; `base` is the same run on the merge base. */
+	/** The input tried against the changed code and what it did; `base` is a confirmed answer's run on the merge base. */
 	attemptedCounterexample: {
 		input: string;
 		command: string | null;

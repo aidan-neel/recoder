@@ -1,4 +1,4 @@
-import type { Obligation, ObligationAnswer, ReviewAssignment } from '@recoder/shared';
+import type { Obligation, ObligationAnswer, ReviewAssignment, VerificationBaseline } from '@recoder/shared';
 import type { EvidenceRecord } from '../../../evidence/evidence.js';
 import { withModelTally, type ModelTally } from '../../../models/metrics.js';
 import { configForSubagent, type ModelConfig } from '../../../models/models.js';
@@ -20,6 +20,7 @@ import { addCandidates, finishUnit } from '../harness/unit-result.js';
 import { runOnBaseline } from '../harness/verify-baseline.js';
 import { investigatorSystemPrompt } from '../reviewer-prompts.js';
 import type { ReviewUnit } from '../units.js';
+import { failedOnTarget } from '../verify/runs.js';
 import {
 	INVESTIGATOR_EXAMPLE,
 	investigatorResponseSchema,
@@ -63,9 +64,9 @@ export function blankAnswer(result: ObligationAnswer['result'], reason: string):
  * Runs one obligation's investigation on the second model through the
  * reviewer pool's machinery, in its model turns, and records the answer. A
  * confirmed answer publishes its finding as an ordinary candidate, which the
- * verifier then proves or refutes. Running out of turns, a failed model call
- * or an answer that claims a defect it never ran leaves the answer unresolved
- * and the assignment done; only the review's deadline and cancellation stop
+ * verifier then proves or refutes. Running out of turns, a failed model call,
+ * a confirmed answer its own run does not prove, or one whose every finding
+ * is rejected leaves the answer unresolved and the assignment done; only the review's deadline and cancellation stop
  * it by the clock, and those end the review as usual, as does a blocked model.
  */
 export async function investigate(item: ReviewUnit, records: ReviewAssignment[], ctx: InvestigationContext) {
@@ -99,10 +100,10 @@ export async function investigate(item: ReviewUnit, records: ReviewAssignment[],
 			? await settle(result.value, ctx, agentId)
 			: blankAnswer('unresolved', noAnswerReason(result.error, tally.calls, ctx.maxTurns));
 
-		const candidateId = settled.result === 'confirmed' ? publish(item, ctx, cfg.model, result.value!, settled) : null;
+		const answer = settled.result === 'confirmed' ? publish(item, ctx, cfg.model, result.value!, settled) : settled;
 
-		record(candidateId ? { ...settled, candidateId } : settled);
-		finishUnit(item, records, ctx, cfg.model, () => `Finished · ${settled.result}`);
+		record(answer);
+		finishUnit(item, records, ctx, cfg.model, () => `Finished · ${answer.result}`);
 	} catch (err) {
 		if (err instanceof ModelBlockedError || ctx.signal.aborted) throw err;
 
@@ -161,40 +162,37 @@ function ownRuns(ctx: InvestigationContext, agentId: string): EvidenceRecord[] {
 }
 
 /**
- * The fixed record for a parsed answer. Its counterexample is the run it
- * cites when the investigator made it, else its latest run, and that command
- * is rerun once on the merge-base tree. When code can run, a defect confirmed
- * without any run of its own stays unresolved.
+ * The fixed record for a parsed answer. Its counterexample is the run of its
+ * own that the investigator cites. When code can run, a confirmed answer must
+ * prove its defect with that run, checked against the same command on the
+ * merge-base tree; one that does not becomes unresolved and says why.
  */
 async function settle(value: InvestigatorOutput, ctx: InvestigationContext, agentId: string): Promise<Settled> {
 	const { answer, output } = value;
 	const runs = ownRuns(ctx, agentId);
-	const proof = runs.find((run) => run.id === answer.attemptedCounterexample?.evidenceId) ?? runs.at(-1) ?? null;
-	const baseCtx = { ...ctx, deadlineAt: () => ctx.deadlineAt };
-	const base = proof ? await runOnBaseline(proof.id, answer.reason, baseCtx, agentId) : null;
-
 	const tried = answer.attemptedCounterexample;
+	const proof = runs.find((run) => run.id === tried?.evidenceId) ?? null;
+
+	const checked =
+		ctx.exec && answer.result === 'confirmed' ? await checkProof(proof, answer.reason, ctx, agentId) : null;
+
 	const cited = [tried?.evidenceId, ...output.findings.flatMap((finding) => finding.evidenceIds)];
-	const unproved = ctx.exec && answer.result === 'confirmed' && !proof;
 
 	return {
 		contractEvidence: answer.contractEvidence,
 		inputPartition: answer.inputPartition,
 		expectedBehavior: answer.expectedBehavior,
-		attemptedCounterexample:
-			tried || proof
-				? {
-						input: tried?.input ?? '',
-						command: proof?.command ?? null,
-						evidenceId: proof?.id ?? null,
-						observed: tried?.observed ?? '',
-						...(base ? { base } : {})
-					}
-				: null,
-		result: unproved ? 'unresolved' : answer.result,
-		reason: unproved
-			? `Confirmed without running a counterexample, so nothing was published. ${answer.reason}`
-			: answer.reason,
+		attemptedCounterexample: tried
+			? {
+					input: tried.input,
+					command: proof?.command ?? null,
+					evidenceId: proof?.id ?? null,
+					observed: tried.observed,
+					...(checked?.base ? { base: checked.base } : {})
+				}
+			: null,
+		result: checked?.failure ? 'unresolved' : answer.result,
+		reason: checked?.failure ? `${checked.failure} ${answer.reason}` : answer.reason,
 		evidenceIds: [...new Set([...runs.map((run) => run.id), ...cited])].filter(
 			(id): id is string => typeof id === 'string' && ctx.evidence.get(id) !== undefined
 		)
@@ -202,8 +200,43 @@ async function settle(value: InvestigatorOutput, ctx: InvestigationContext, agen
 }
 
 /**
+ * Whether a confirmed answer's cited run proves a defect: it failed on the
+ * code under test, or it ends differently on the merge-base tree, where it is
+ * rerun once. `failure` says why it does not; `base` is that rerun.
+ */
+async function checkProof(
+	proof: EvidenceRecord | null,
+	reason: string,
+	ctx: InvestigationContext,
+	agentId: string
+): Promise<{ base: VerificationBaseline | null; failure: string | null }> {
+	if (!proof) {
+		return {
+			base: null,
+			failure: 'Confirmed without citing a counterexample run of its own, so nothing was published.'
+		};
+	}
+
+	const base = await runOnBaseline(proof.id, reason, { ...ctx, deadlineAt: () => ctx.deadlineAt }, agentId);
+
+	if (failedOnTarget(proof) || (base && 'differs' in base && base.differs)) return { base, failure: null };
+
+	const there = !base
+		? 'could not be compared with the merge base'
+		: 'unavailable' in base
+			? `could not be rerun on the merge base (${base.unavailable})`
+			: 'ends the same way on the merge base';
+
+	return {
+		base,
+		failure: `Its counterexample \`${proof.command}\` exited ${proof.exitCode} and ${there}, so it shows no defect and nothing was published.`
+	};
+}
+
+/**
  * A confirmed answer's findings as ordinary candidates on the obligation's
- * assignment, each citing the counterexample run; returns the first one's id.
+ * assignment, each citing the counterexample run, with the first valid one's
+ * id. When validation rejects every finding the answer becomes unresolved.
  */
 function publish(
 	item: ReviewUnit,
@@ -211,7 +244,7 @@ function publish(
 	model: string,
 	value: InvestigatorOutput,
 	settled: Settled
-): string | null {
+): Settled {
 	const proof = settled.attemptedCounterexample?.evidenceId;
 
 	const findings = value.output.findings.map((finding) =>
@@ -220,7 +253,20 @@ function publish(
 			: finding
 	);
 
+	const before = ctx.candidates.length;
+
 	addCandidates(item, 'obligation', ctx, model, { ...value.output, findings });
 
-	return ctx.candidates.find((candidate) => candidate.assignmentId === item.id)?.candidateId ?? null;
+	const added = ctx.candidates.slice(before);
+	const kept = added.find((candidate) => candidate.valid);
+
+	if (kept) return { ...settled, candidateId: kept.candidateId };
+
+	const why = [...new Set(added.map((candidate) => candidate.dropReason ?? 'rejected'))].join('; ');
+
+	return {
+		...settled,
+		result: 'unresolved',
+		reason: `Confirmed, but every finding was rejected (${why}), so nothing was published. ${settled.reason}`
+	};
 }

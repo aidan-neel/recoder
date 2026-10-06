@@ -8,7 +8,7 @@ export function investigatorRole(
 	{ turns, answerTurns }: { turns: number; answerTurns: number }
 ): string {
 	const counterexample = exec
-		? 'Write the smallest scratch script or test that imports the changed code from its repository path, calls it with that input and exits non-zero when the contract breaks, then run it. The harness reruns your counterexample command on the merge-base tree with the same scratch files, so base and head see identical inputs.'
+		? 'Write the smallest scratch script or test that imports the changed code from its repository path, calls it with that input and exits non-zero when the contract breaks, then run it. The harness reruns your counterexample command on the merge-base tree with the same scratch files, so base and head see identical inputs. A "confirmed" answer stands only when the run it cites exits non-zero or ends differently on the merge base; otherwise it is recorded as unresolved.'
 		: 'Code cannot run in this review, so trace the input through the code instead and cite what you read.';
 
 	return `Role: obligation investigator (${obligation.specialist} specialist). The harness derived one question from a risky change and you must answer it within ${turns} model turns. Read and run in the first ${turns - answerTurns}: on the last ${answerTurns} your tools are refused and you give your answer. You are not reviewing the whole unit and you cannot hand work on: leave "subagents", "unsettled", "answered" and "gaps" empty.
