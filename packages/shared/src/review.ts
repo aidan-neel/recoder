@@ -11,7 +11,18 @@ export const REVIEW_CANCELLED = 'Review cancelled.';
 /** Where a candidate left the review: a validation check, a person's earlier dismissal, or a verifier's refutation or intent cover. */
 export type DropStage = 'location' | 'evidence' | 'category' | 'severity' | 'dismissed' | 'refuted' | 'covered';
 
-/** How many candidates a finished review raised and where each one went, so an eval can see which stage loses findings. */
+/** One changed unit as the review brief read it: in full, from a clipped diff, or not at all, with the reason. */
+export interface ReviewBriefUnit {
+	id: string;
+	status: 'included' | 'partial' | 'omitted';
+	reason?: string;
+}
+
+/**
+ * How many candidates a finished review raised and where each one went, so an
+ * eval can see which stage loses findings, and how much of the change the
+ * brief those candidates were raised against had read.
+ */
 export interface ReviewFunnel {
 	/** Every candidate a reviewer, subagent or detector reported. */
 	raised: number;
@@ -23,6 +34,8 @@ export interface ReviewFunnel {
 	verified: number;
 	/** Findings shown after merging. */
 	shown: number;
+	/** Every changed unit the brief read or left out; absent without a brief and on reviews older than recording it. */
+	brief?: { complete: boolean; units: ReviewBriefUnit[] };
 }
 
 export interface Review {
