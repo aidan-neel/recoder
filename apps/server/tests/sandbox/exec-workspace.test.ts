@@ -95,3 +95,22 @@ test.skipIf(!available)('writeFile refuses an untracked file already in the chec
 	await ws.run('true', 10_000);
 	expect(await readFile(join(checkout, 'installed.js'), 'utf8')).toBe('dependency');
 });
+
+test.skipIf(!available)('a call whose review aborted while it waited in the queue is skipped, not run', async () => {
+	const { ws, checkout } = await workspace();
+	const head = Bun.spawnSync(['git', 'rev-parse', 'HEAD'], { cwd: checkout }).stdout.toString().trim();
+	const controller = new AbortController();
+	const first = ws.run('sleep 0.3', 10_000);
+	const queued = ws.run('touch ran.txt', 10_000, controller.signal);
+	const written = ws.writeFile('scratch.txt', 'x', controller.signal);
+	const onBase = ws.runOnBase('touch base-ran.txt', head, 10_000, controller.signal);
+
+	await Bun.sleep(50);
+	controller.abort();
+
+	expect(await queued).toMatchObject({ exitCode: null, output: 'Not run: the review was aborted.' });
+	expect(await written).toEqual({ ok: false, error: 'Not run: the review was aborted.' });
+	expect(await onBase).toEqual({ unavailable: 'Not run: the review was aborted.' });
+	expect((await first).exitCode).toBe(0);
+	expect(existsSync(join(checkout, 'ran.txt'))).toBe(false);
+});

@@ -7,7 +7,7 @@ import { isAuthFailure, isUsageLimit, modelFailure } from '../../models/model-fa
 import { CHAT_STYLE, EXEC_EXAMPLES, RETRIEVAL_EXAMPLES } from './prompts.js';
 import { reviewNow, reviewPausePoint } from '../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
-import { agentDeadlines, deadlineError, newAgentId } from './agent-loop/limits.js';
+import { agentDeadlines, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
 import { runOpenCodeAgent } from './agent-loop/opencode-engine.js';
 import type { JsonAgentOptions } from './agent-loop/options.js';
 import { streamTurn, type TurnResult } from './agent-loop/stream-turn.js';
@@ -137,6 +137,7 @@ async function runTurns<T>(
 	const agentId = opts.agentId ?? newAgentId();
 	const limits = agentDeadlines(opts);
 	const { deadlineAt, finalTurnAt } = limits;
+	const lastToolTurn = toolTurns(opts);
 	const spendOpts = { consumeReserve: opts.consumeReserve };
 
 	const messages: ChatMessage[] = [
@@ -176,8 +177,7 @@ async function runTurns<T>(
 			return { value: null, error: 'model-call budget exhausted' };
 		}
 
-		const lastTurn =
-			stuck || turn >= opts.maxTurns || !opts.budget.canSpend(2, spendOpts) || reviewNow() >= finalTurnAt;
+		const lastTurn = stuck || turn > lastToolTurn || !opts.budget.canSpend(2, spendOpts) || reviewNow() >= finalTurnAt;
 
 		const discussion = opts.getDiscussion?.() ?? '';
 
@@ -276,7 +276,7 @@ async function runTurns<T>(
 				role: 'user',
 				content:
 					formatToolResults(results) +
-					(stuck || turn + 1 >= opts.maxTurns
+					(stuck || turn + 1 > lastToolTurn
 						? '\n\nThis is your final turn. Finish with the required JSON result. Do not request more retrieval.'
 						: '\n\nContinue. Finish with the required JSON when you have enough evidence.')
 			});
@@ -311,6 +311,14 @@ async function runTurns<T>(
 				? 'the model kept replying with only a message, without actions or a result'
 				: lastError;
 
+			continue;
+		}
+
+		/** Retrieval asked for on an answer turn that is not the last one is refused, and the next turn asks again. */
+		if (actions && !stuck && turn > lastToolTurn && turn < opts.maxTurns) {
+			messages.push({ role: 'assistant', content: output });
+			messages.push({ role: 'user', content: FINAL_TURN });
+			turn++;
 			continue;
 		}
 

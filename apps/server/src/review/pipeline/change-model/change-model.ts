@@ -121,7 +121,7 @@ function diffHunks(inventory: ReviewInventory, file: InventoryFile): DiffHunk[] 
 }
 
 /** A file's hunks as changed lines on both sides. */
-function fileHunks(inventory: ReviewInventory, file: InventoryFile): HunkLines[] {
+export function fileHunks(inventory: ReviewInventory, file: InventoryFile): HunkLines[] {
 	return hunkLines(
 		file.hunks.map((hunk) => hunk.id),
 		diffHunks(inventory, file)

@@ -15,25 +15,36 @@ export interface BaseRunContext {
 	signal: AbortSignal;
 }
 
-/** The proving command run once on the merge-base tree; anything that goes wrong is reported as unavailable. */
-async function baselineOf(verification: FindingVerification, ctx: BaseRunContext, agentId: string) {
-	const proof = verification.evidence && ctx.evidence.get(verification.evidence.evidenceId);
+/** The recorded run's command run once on the merge-base tree, within `timeoutMs`. */
+async function baselineOf(proofId: string, reason: string, ctx: BaseRunContext, agentId: string, timeoutMs: number) {
+	const proof = ctx.evidence.get(proofId);
 	const { workspace, mergeBaseSha } = ctx;
 
 	if (!proof || !workspace || !mergeBaseSha) return null;
 	if (!proof.command || typeof proof.exitCode !== 'number') return { unavailable: 'the proving run did not finish' };
 	if (ctx.signal.aborted || ctx.deadlineAt() <= reviewNow()) return { unavailable: 'the review is out of time' };
 
-	const timeoutMs = REVIEW_POLICY.baseRunTimeoutMs;
 	const ran = await workspace.runOnBase(proof.command, mergeBaseSha, timeoutMs, ctx.signal, agentId);
 
 	if ('unavailable' in ran) return ran;
 
-	return compareToBase(
-		proof,
-		verification.reason,
-		baseRecord(proof.command, ran.timedOut ? null : ran.exitCode, ran.output)
-	);
+	return compareToBase(proof, reason, baseRecord(proof.command, ran.timedOut ? null : ran.exitCode, ran.output));
+}
+
+/**
+ * How a recorded run's command ends on the merge-base tree: null when there is
+ * no such run or no sandbox, and anything that goes wrong reported as unavailable.
+ */
+export function runOnBaseline(
+	proofId: string,
+	reason: string,
+	ctx: BaseRunContext,
+	agentId: string,
+	timeoutMs: number = REVIEW_POLICY.baseRunTimeoutMs
+): Promise<VerificationBaseline | null> {
+	return baselineOf(proofId, reason, ctx, agentId, timeoutMs).catch((err) => ({
+		unavailable: err instanceof Error ? err.message.slice(0, 120) : 'the base run failed'
+	}));
 }
 
 /**
@@ -49,9 +60,7 @@ export async function recordBaseline(
 ): Promise<FindingVerification> {
 	if (verification.method !== 'run' || !verification.evidence) return verification;
 
-	const baseline: VerificationBaseline | null = await baselineOf(verification, ctx, agentId).catch((err) => ({
-		unavailable: err instanceof Error ? err.message.slice(0, 120) : 'the base run failed'
-	}));
+	const baseline = await runOnBaseline(verification.evidence.evidenceId, verification.reason, ctx, agentId);
 
 	return baseline ? withBaseline(verification, baseline) : verification;
 }

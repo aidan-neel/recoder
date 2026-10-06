@@ -181,3 +181,51 @@ test('groups the stub reviews by lens and counts cut context that was cited and 
 
 	expect(lines.join('\n')).not.toContain('src/');
 });
+
+test('counts an obligation investigator under its role, next to the lens reviewers', async () => {
+	const investigated: ReviewContext = {
+		units: {
+			...CONTEXT.units,
+			'obligation-1': {
+				supplied: [
+					{ kind: 'diff', path: 'src/a.ts', startLine: 2, endLine: 2 },
+					{ kind: 'caller', path: 'src/b.ts', startLine: 9, symbol: 'take', why: 'call outside the diff' }
+				],
+				omitted: []
+			}
+		},
+		reviewers: [
+			...CONTEXT.reviewers,
+			{
+				assignmentId: 'obligation-1',
+				role: 'obligation',
+				unit: 'obligation-1',
+				read: [{ kind: 'source', path: 'src/b.ts', startLine: 1, endLine: 20 }],
+				cited: [
+					{ kind: 'diff', path: 'src/a.ts', startLine: 2, endLine: 2, via: 'supplied' },
+					{ kind: 'source', path: 'src/b.ts', startLine: 9, endLine: 9, via: 'read' }
+				],
+				omitted: []
+			}
+		],
+		findings: []
+	};
+
+	globalThis.fetch = (async () => Response.json({ id: 'r1', context: investigated })) as unknown as typeof fetch;
+
+	const report = {
+		dataset: 'frozen',
+		prs: [{ codebase: 'alpha', runs: [run('r1', 'passed')] }]
+	} as unknown as BenchmarkReport;
+
+	const lines = await contextReport(report, 'http://localhost:3085');
+
+	expect(lines).toContain('all  runs 1 (1 recorded)  reviewers 2');
+	expect(lines).toContain('  supplied 5 (diff 2, caller 2, contract 1)');
+
+	expect(lines.slice(-3)).toEqual([
+		'By lens over all codebases',
+		'  correctness  reviewers 1  supplied 3 (uncited 2)  read 1  cited 2 (supplied 1, read 1, unknown 0)  omitted 2, then cited 0',
+		'  obligation  reviewers 1  supplied 2 (uncited 0)  read 1  cited 2 (supplied 1, read 1, unknown 0)  omitted 0, then cited 0'
+	]);
+});
