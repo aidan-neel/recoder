@@ -94,3 +94,24 @@ test('a repo whose shared copy cannot be made is cloned on its own', async () =>
 	expect(checkout.headSha).toBe(pull7Head);
 	expect(existsSync(join(checkout.path, '.git/objects/info/alternates'))).toBe(false);
 });
+
+test('a shallow clone is not kept as the shared copy, because git refuses it as a reference', async () => {
+	const { ensureSharedClone } = await import('../../src/sandbox/shared-git');
+
+	const shared = await ensureSharedClone({
+		workDir: env.RECODER_WORKDIR,
+		repoSlug: 'synth/shallow',
+		cloneUrl: 'file:///nowhere',
+		run: async (_cwd, args) => {
+			if (args[0] === 'clone') {
+				await mkdir(args.at(-1)!, { recursive: true });
+				await writeFile(join(args.at(-1)!, 'shallow'), 'abc\n');
+			}
+
+			return '';
+		}
+	});
+
+	expect(shared).toBeNull();
+	expect(existsSync(join(env.RECODER_WORKDIR, 'shared', 'git', 'synth__shallow.git'))).toBe(false);
+});
