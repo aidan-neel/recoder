@@ -17,7 +17,8 @@ const running = new Map<string, Promise<string | null>>();
  * from (`git clone --reference`), so the history is downloaded once. It is
  * created beside its final place and renamed in, and refreshed at most once a
  * minute. Automatic garbage collection is off: a collection could drop objects
- * a running checkout still reads. Null when the copy cannot be made, and the
+ * a running checkout still reads. Null when the copy cannot be made or is
+ * shallow, which git refuses as a reference, and the
  * caller clones on its own.
  */
 export function ensureSharedClone(opts: {
@@ -49,6 +50,9 @@ async function refresh(path: string, opts: { workDir: string; cloneUrl: string; 
 				await opts.run(opts.workDir, ['clone', '--bare', '--', opts.cloneUrl, building], 'shared clone');
 				await opts.run(building, ['config', 'gc.auto', '0'], 'shared config');
 				await opts.run(building, ['config', 'maintenance.auto', 'false'], 'shared config');
+
+				if (existsSync(join(building, 'shallow'))) return null;
+
 				await rename(building, path).catch(() => {});
 			} finally {
 				await rm(building, { recursive: true, force: true });
