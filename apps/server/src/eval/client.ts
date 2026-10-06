@@ -1,5 +1,6 @@
 import type { Finding, ModelSettings, Repo, Review, ReviewProgress } from '@recoder/shared';
 import type { CandidateOutcome } from '../review/pipeline/candidate-outcome';
+import type { ServerIdentity } from './server-identity';
 
 /** Live task and reviewer counts for one review, as the home dashboard reads them. */
 export interface ProgressSummary {
@@ -25,6 +26,11 @@ async function request<T>(base: string, path: string, init?: RequestInit): Promi
 /** The server's reviewer settings, as the Settings page reads them. */
 export function getSettings(base: string): Promise<ModelSettings> {
 	return request<ModelSettings>(base, '/api/settings/models');
+}
+
+/** The server's flags, limits, cache versions, tools and checkout; null from a server older than `/health/identity`. */
+export function getServerIdentity(base: string): Promise<ServerIdentity | null> {
+	return request<ServerIdentity>(base, '/health/identity').catch(() => null);
 }
 
 /** The tracked repo the eval was pointed at, by id, `owner/name` or URL. */

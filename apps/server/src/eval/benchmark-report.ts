@@ -6,12 +6,17 @@ import { countClasses, type LabeledRun } from './benchmark-labels';
 import type { LowTotals } from './benchmark-lows';
 import type { DefectStage, PoolCandidate, StageTotals } from './benchmark-stages';
 import type { HarnessRecord } from './harness-tree';
+import type { FieldDiff, RunCache, RunIdentity } from './identity';
 import type { ConsistencyMetrics } from './metrics';
 import type { RunRecord } from './report';
 
 /** One PR's runs, each scored against its labels when it passed. */
 export interface PrResult {
 	id: string;
+	/** `<id>@<headSha>`; absent from reports older than recording it. */
+	taskId?: string;
+	/** The commit the PR was cut from, `unknown` when its forge does not say; absent with `taskId`. */
+	baseSha?: string;
 	codebase: string;
 	pull: number;
 	verified: boolean;
@@ -31,6 +36,10 @@ export interface PrResult {
  * `hiddenScore` judges the candidates the review hid against the same defects.
  */
 export type ScoredRun = RunRecord & {
+	/** `<taskId>#<index>`; absent from reports older than recording it. */
+	runId?: string;
+	/** Which caches the result came from; absent with `runId`. */
+	cache?: RunCache;
 	score: PrScore | null;
 	hiddenScore?: PrScore | null;
 	/** Every candidate the review raised, with the stage that stopped it; absent when the server could not list them. */
@@ -76,6 +85,17 @@ export function reviewerManifest(settings: ModelSettings): ReviewerManifest {
 	};
 }
 
+/** The earlier report a resume, replay or rescore reused, and the identity differences it was allowed. */
+export interface Derivation {
+	operation: 'resume' | 'replay' | 'reverify' | 'rescore';
+	/** The reused report's file name. */
+	report: string;
+	/** Its identity hash, `not recorded` for a report older than identities. */
+	identity: string;
+	/** The differences declared with `--allow-diff`. */
+	declared: FieldDiff[];
+}
+
 export interface BenchmarkReport {
 	dataset: string;
 	base: string;
@@ -85,6 +105,11 @@ export interface BenchmarkReport {
 	reviewer?: ReviewerManifest;
 	/** The harness code the report was made with; absent from reports older than recording it. */
 	harness?: HarnessRecord;
+	/** Everything that decides the result; absent from reports older than recording it. */
+	identity?: RunIdentity;
+	/** Every run's id; two reports that share one cannot be merged. */
+	runIds?: string[];
+	derivedFrom?: Derivation;
 	startedAt: string;
 	finishedAt: string;
 	prs: PrResult[];
@@ -211,6 +236,27 @@ function reviewerLine(reviewer: ReviewerManifest | undefined): string[] {
 	];
 }
 
+/** "Identity 1a2b3c4d5e6f · 25 tasks · 50 runs", or that the report records none. */
+export function identityLine(report: BenchmarkReport): string {
+	const { identity } = report;
+
+	return identity
+		? `Identity ${identity.hash.slice(0, 12)} · ${identity.tasks.length} tasks · ${report.runIds?.length ?? 0} runs`
+		: 'Identity not recorded';
+}
+
+/** What a resume, replay or rescore reused, and the differences it declared. */
+function derivationLines(derivation: Derivation | undefined): string[] {
+	if (!derivation) return [];
+
+	const declared = derivation.declared.map((diff) => `  declared ${diff.field}: ${diff.a} → ${diff.b}`);
+
+	return [
+		`${derivation.operation} of ${derivation.report} (identity ${derivation.identity.slice(0, 12)})`,
+		...declared
+	];
+}
+
 function groupLines(title: string, groups: Record<string, Totals>): string[] {
 	const keys = Object.keys(groups).sort();
 
@@ -286,6 +332,8 @@ export function printBenchmark(report: BenchmarkReport): void {
 			`Benchmark ${report.dataset}: ${report.prs.length} PRs × ${report.runsPerPr} runs`,
 			`Judge ${report.judge.model} (${report.judge.provider}${report.judge.effort ? `, ${report.judge.effort}` : ''})`,
 			...reviewerLine(report.reviewer),
+			identityLine(report),
+			...derivationLines(report.derivedFrom),
 			'Precision is an interval: unresolved findings are not counted wrong until a human labels them in adjudications.json.',
 			'',
 			'PRs',
