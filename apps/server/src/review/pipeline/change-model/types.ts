@@ -64,6 +64,8 @@ export interface ChangedSymbol extends SymbolRange {
 	calls: string[];
 	/** Places outside the symbol that name it at the head, sorted by file then line, capped. */
 	references: SymbolReference[];
+	/** References past the cap, most relevant first and capped themselves; set only when the cap cut some. */
+	omittedReferences?: SymbolReference[];
 	/** The merge-base signature, set when the signature or export status of this modified declaration changed. */
 	previousSignature?: string;
 	/** Call sites and tests that use the declaration, outside the diff first; scripts only count files that import it. */
@@ -78,6 +80,8 @@ export interface ChangedSymbol extends SymbolRange {
 	usageUnknown?: true;
 	/** Test files likely to cover it: path convention first, then files that name it. */
 	tests: string[];
+	/** Test files past the cap, in the same order and capped themselves; set only when the cap cut some. */
+	omittedTests?: string[];
 	/** Up to three comparable existing declarations (same kind, same folder or sibling files), sorted deterministically. */
 	examples: SymbolRange[];
 	metrics: SymbolMetrics;

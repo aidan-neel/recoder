@@ -54,15 +54,28 @@ function contractWhy(symbol: ChangedSymbol): string {
 }
 
 /**
- * Every place one symbol's block puts in the prompt, and the callers left out
- * of it: past the caller cap, or dropped with the call sites to fit the block.
- * A caller the block still lists among its references is not left out.
+ * Every place one symbol's block puts in the prompt, and every caller,
+ * reference and test it leaves out, each with one reason: every caller when
+ * the contract did not change (callers are listed only when it did), every
+ * caller dropped with the call sites to fit the block, every caller past the
+ * caller cap, and every reference or test past its cap. Each caller found is
+ * then either listed or omitted, with caller selection on or off; one left
+ * out may still appear among the plain references.
  */
 export function suppliedBy(
 	symbol: ChangedSymbol,
 	{ changed, withCallers, shown, others }: Shown
 ): { supplied: ContextItem[]; omitted: ContextOmission[] } {
 	const about = { symbol: symbol.qualifiedName };
+
+	const reference = (ref: SymbolReference) => ({
+		kind: 'reference' as const,
+		path: ref.file,
+		startLine: ref.line,
+		...about
+	});
+
+	const test = (path: string) => ({ kind: 'test' as const, path, ...about });
 
 	const supplied: ContextItem[] = [
 		sourceItem(symbol),
@@ -78,8 +91,8 @@ export function suppliedBy(
 				]
 			: []),
 		...shown.map((ref) => callerItem(symbol, ref)),
-		...others.map((ref) => ({ kind: 'reference' as const, path: ref.file, startLine: ref.line, ...about })),
-		...symbol.tests.map((path) => ({ kind: 'test' as const, path, ...about })),
+		...others.map(reference),
+		...symbol.tests.map(test),
 		...symbol.examples.map((example) => ({
 			kind: 'sibling' as const,
 			path: example.file,
@@ -89,21 +102,20 @@ export function suppliedBy(
 		}))
 	];
 
-	if (!changed) return { supplied, omitted: [] };
-
-	const listed = new Set(others.map(place));
-	const absent = (refs: SymbolReference[] | undefined) => (refs ?? []).filter((ref) => !listed.has(place(ref)));
-	const dropped = withCallers ? [] : absent(symbol.callers);
+	const callers = (refs: SymbolReference[] | undefined, reason: OmissionReason) =>
+		(refs ?? []).map((ref) => omission(callerItem(symbol, ref), reason));
 
 	return {
 		supplied,
 		omitted: [
-			...dropped.map((ref) => omission(callerItem(symbol, ref), 'context-cap')),
-			...absent(symbol.omittedCallers).map((ref) => omission(callerItem(symbol, ref), 'caller-cap'))
+			...(changed
+				? [
+						...(withCallers ? [] : callers(symbol.callers, 'context-cap')),
+						...callers(symbol.omittedCallers, 'caller-cap')
+					]
+				: callers([...(symbol.callers ?? []), ...(symbol.omittedCallers ?? [])], 'contract-unchanged')),
+			...(symbol.omittedReferences ?? []).map((ref) => omission(reference(ref), 'reference-cap')),
+			...(symbol.omittedTests ?? []).map((path) => omission(test(path), 'test-cap'))
 		]
 	};
-}
-
-function place(ref: SymbolReference): string {
-	return `${ref.file}:${ref.line}`;
 }

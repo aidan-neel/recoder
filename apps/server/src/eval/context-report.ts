@@ -4,7 +4,16 @@ import { readReport, type BenchmarkReport } from './benchmark-report';
 import { percent } from './benchmark-labels-report';
 import { getReview } from './client';
 
-const OMISSION_REASONS: OmissionReason[] = ['caller-cap', 'context-cap', 'file-cap', 'diff-cap'];
+const OMISSION_REASONS: OmissionReason[] = [
+	'contract-unchanged',
+	'caller-cap',
+	'reference-cap',
+	'test-cap',
+	'context-cap',
+	'file-cap',
+	'diff-cap'
+];
+
 const CITED_VIAS: CitedVia[] = ['supplied', 'read', 'unknown'];
 
 /** What the reviewers of one codebase's passed runs received, as counts only; a prompt shared by lenses counts once per reviewer. */

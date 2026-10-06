@@ -1,5 +1,5 @@
 import { git } from '../../../evidence/git.js';
-import { pickCallers, type ResolvedReference } from './callers.js';
+import { MAX_OMITTED, pickCallers, type ResolvedReference } from './callers.js';
 import { dependence } from './dependence.js';
 import { importsModule, isScriptLanguage } from './imports.js';
 import { languageFor } from './languages.js';
@@ -41,8 +41,10 @@ export interface SymbolUsage {
 	tests: string[];
 	/** Calls and tests that use it, outside the diff first; empty when none was found. */
 	callers: SymbolReference[];
-	/** The next callers in the same order, cut by the cap. */
+	/** The next callers, references and tests in the same order, cut by their caps. */
 	omittedCallers: SymbolReference[];
+	omittedReferences: SymbolReference[];
+	omittedTests: string[];
 	/** Whether the whole checkout was searched for the name; an empty list means unused only then. */
 	searched: boolean;
 }
@@ -270,14 +272,15 @@ function usageOf(symbol: Searched, found: NameHits | undefined, outside: SymbolR
 	const depends = symbol.behavior ? dependence(symbol.name, symbol.metrics?.params ?? 0, symbol.behavior) : undefined;
 	const picked = pickCallers(symbol.language, symbol.file, resolved, depends);
 
+	const references = [...resolved].sort(byRelevance(symbol)).map(({ ref }) => ref);
+
 	return {
-		references: [...resolved]
-			.sort(byRelevance(symbol))
-			.map(({ ref }) => ref)
-			.slice(0, MAX_REFERENCES),
+		references: references.slice(0, MAX_REFERENCES),
+		omittedReferences: references.slice(MAX_REFERENCES, MAX_REFERENCES + MAX_OMITTED),
 		callers: picked.callers,
 		omittedCallers: picked.omitted,
 		tests: tests.slice(0, MAX_TESTS),
+		omittedTests: tests.slice(MAX_TESTS, MAX_TESTS + MAX_OMITTED),
 		searched: found !== undefined && !found.partial && !hidesUse(found, dropped)
 	};
 }

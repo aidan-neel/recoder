@@ -79,7 +79,7 @@ test('totals what reviewers received by codebase and over all, from passed runs 
 		'  supplied 3 (diff 1, caller 1, contract 1)',
 		'  read 1 (+2 past the cap)',
 		'  cited 2 (supplied 1, read 1, unknown 0)',
-		'  omitted caller-cap 1, context-cap 0, file-cap 1, diff-cap 0',
+		'  omitted contract-unchanged 0, caller-cap 1, reference-cap 0, test-cap 0, context-cap 0, file-cap 1, diff-cap 0',
 		'  published findings 4: backed by a read 50%, citing nothing held 25%',
 		'    their citations supplied 3, read 2, unknown 1',
 		'',
@@ -87,7 +87,7 @@ test('totals what reviewers received by codebase and over all, from passed runs 
 		'  supplied 3 (diff 1, caller 1, contract 1)',
 		'  read 1 (+2 past the cap)',
 		'  cited 2 (supplied 1, read 1, unknown 0)',
-		'  omitted caller-cap 1, context-cap 0, file-cap 1, diff-cap 0',
+		'  omitted contract-unchanged 0, caller-cap 1, reference-cap 0, test-cap 0, context-cap 0, file-cap 1, diff-cap 0',
 		'  published findings 4: backed by a read 50%, citing nothing held 25%',
 		'    their citations supplied 3, read 2, unknown 1',
 		'',
@@ -95,7 +95,7 @@ test('totals what reviewers received by codebase and over all, from passed runs 
 		'  supplied 6 (diff 2, caller 2, contract 2)',
 		'  read 2 (+4 past the cap)',
 		'  cited 4 (supplied 2, read 2, unknown 0)',
-		'  omitted caller-cap 2, context-cap 0, file-cap 2, diff-cap 0',
+		'  omitted contract-unchanged 0, caller-cap 2, reference-cap 0, test-cap 0, context-cap 0, file-cap 2, diff-cap 0',
 		'  published findings 8: backed by a read 50%, citing nothing held 25%',
 		'    their citations supplied 6, read 4, unknown 2'
 	]);

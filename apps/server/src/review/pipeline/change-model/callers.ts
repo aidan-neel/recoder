@@ -5,8 +5,9 @@ import type { BehaviorAspect, SymbolReference } from './types.js';
 
 /** Call sites and tests kept per symbol, so the prompt shows the evidence without growing with the repo. */
 const MAX_CALLERS = 5;
-/** Callers past the cap kept by name, so a report can say which ones the prompt left out. */
-const MAX_OMITTED = 20;
+
+/** Callers, references or tests past their cap kept by place, so a report can say which ones the prompt left out. */
+export const MAX_OMITTED = 20;
 
 /** The callers kept for the prompt, and the next ones the cap cut, in the same order. */
 export interface PickedCallers {

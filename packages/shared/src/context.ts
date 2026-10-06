@@ -14,8 +14,19 @@ export interface ContextItem {
 	why?: string;
 }
 
-/** Which bound kept context out: the per-symbol caller cap, the prompt block's size, a file read's size, or a patch page. */
-export type OmissionReason = 'caller-cap' | 'context-cap' | 'file-cap' | 'diff-cap';
+/**
+ * Which bound kept context out: callers not shown because the contract did
+ * not change, the per-symbol caller, reference or test cap, the prompt block's
+ * size, a file read's size, or a patch page.
+ */
+export type OmissionReason =
+	| 'contract-unchanged'
+	| 'caller-cap'
+	| 'reference-cap'
+	| 'test-cap'
+	| 'context-cap'
+	| 'file-cap'
+	| 'diff-cap';
 
 /** Context a bound left out, with the bound that did it. */
 export interface ContextOmission extends ContextItem {
