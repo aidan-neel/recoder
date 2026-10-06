@@ -1,5 +1,13 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { weakenedInFile } from '../../../../src/review/pipeline/detectors/weakened-tests';
+
+beforeAll(() => {
+	process.env.RECODER_TEST_STRENGTH = '1';
+});
+
+afterAll(() => {
+	delete process.env.RECODER_TEST_STRENGTH;
+});
 
 /** Head lines the base lacks count as added; every head line counts as shown in the diff. */
 function detect(base: string[], head: string[]) {
@@ -51,8 +59,8 @@ describe('weakenedInFile', () => {
 		]);
 	});
 
-	test('keeps the older shapes only when RECODER_TEST_STRENGTH is 0', () => {
-		process.env.RECODER_TEST_STRENGTH = '0';
+	test('skips the bound shape when RECODER_TEST_STRENGTH is off', () => {
+		delete process.env.RECODER_TEST_STRENGTH;
 
 		try {
 			const results = detect(
@@ -62,7 +70,7 @@ describe('weakenedInFile', () => {
 
 			expect(results).toEqual([]);
 		} finally {
-			delete process.env.RECODER_TEST_STRENGTH;
+			process.env.RECODER_TEST_STRENGTH = '1';
 		}
 	});
 

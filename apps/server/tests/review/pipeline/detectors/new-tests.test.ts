@@ -1,5 +1,13 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { addedSubclasses, weakInNewTests } from '../../../../src/review/pipeline/detectors/new-tests';
+
+beforeAll(() => {
+	process.env.RECODER_TEST_STRENGTH = '1';
+});
+
+afterAll(() => {
+	delete process.env.RECODER_TEST_STRENGTH;
+});
 
 /** Head lines the base lacks count as added. */
 function detect(base: string[], head: string[], source: string[] = []) {
