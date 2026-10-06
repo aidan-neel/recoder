@@ -168,16 +168,18 @@ function isAncestor(repoPath: string, ancestor: string, commit: string, signal: 
  * The saved pull request a commit on the default branch names in its message:
  * a squash subject `Fix the parser (#123)`, a merge `Merge pull request #123
  * from …` or a PR trailer (`namedPull`), as history imported from GitHub lands.
- * Null when no saved pull has that number; a pull is never made up from the message.
+ * Null when no saved pull has that number, or the message names another
+ * project's; a pull is never made up from the message.
  */
 async function pullNamedBy(
 	repoPath: string,
+	slug: string,
 	forge: LocalForge,
 	sha: string,
 	signal: AbortSignal
 ): Promise<LocalPull | null> {
 	const fields = await localGitOutput(repoPath, ['log', '-1', `--format=${MESSAGE_FIELDS}`, sha], signal);
-	const number = namedPull(parseMessage(fields.split('\x1f')))?.number;
+	const number = namedPull(parseMessage(fields.split('\x1f')), slug)?.number;
 	const pull = forge.pulls.find((row) => row.number === number);
 
 	if (!pull) return null;
@@ -190,7 +192,12 @@ async function pullNamedBy(
  * (`baseSha..head`) include it, one whose `mergeSha` is it, or the saved pull a
  * default-branch commit names in its message.
  */
-export async function localPrsForCommit(repoUrl: string, sha: string, signal: AbortSignal): Promise<PrRef[]> {
+export async function localPrsForCommit(
+	repoUrl: string,
+	slug: string,
+	sha: string,
+	signal: AbortSignal
+): Promise<PrRef[]> {
 	const repoPath = localRepoPath(repoUrl);
 	const forge = await readLocalForge(repoUrl);
 	const commit = await localGit(repoPath, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`], signal);
@@ -205,7 +212,7 @@ export async function localPrsForCommit(repoUrl: string, sha: string, signal: Ab
 		})
 	);
 
-	const named = await pullNamedBy(repoPath, forge, commit, signal);
+	const named = await pullNamedBy(repoPath, slug, forge, commit, signal);
 	const found = new Map<number, LocalPull>();
 
 	for (const pull of [...inRange, named]) if (pull) found.set(pull.number, pull);

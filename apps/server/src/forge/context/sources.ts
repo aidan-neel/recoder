@@ -175,30 +175,44 @@ export interface NamedPull {
 /** Trailer keys that name the pull request a commit came from, lower case. */
 const PULL_TRAILERS = new Set(['pr', 'pr-url', 'pull-request', 'reviewed-on', 'merge-request']);
 
-/** A trailer value naming a PR: `#12`, `!12`, or a GitHub, Gitea or GitLab pull request URL. */
-const PULL_VALUE = /^[#!](\d+)$|^(https?:\/\/\S+\/(?:pull|pulls|merge_requests)\/(\d+))\/?$/;
+/** A GitHub, Gitea or GitLab pull request URL: the project path it names, then the number. */
+const PULL_URL = /^https?:\/\/[^/\s]+\/(\S+?)\/(?:-\/)?(?:pull|pulls|merge_requests)\/(\d+)\/?$/;
 
-/** The PR a trailer such as `PR-URL: https://github.com/o/r/pull/12` names. */
-function trailerPull(trailers: string): NamedPull | null {
+/** Whether a project path a message names is this repo's `slug`; never when the slug isn't known. */
+function sameProject(path: string, slug: string | null): boolean {
+	return slug !== null && path.toLowerCase() === slug.toLowerCase();
+}
+
+/** The PR a trailer names: `PR: #12`, or a URL into this repo such as `PR-URL: https://github.com/o/r/pull/12`. */
+function trailerPull(trailers: string, slug: string | null): NamedPull | null {
 	for (const line of trailers.split('\n')) {
 		const [, key = '', value = ''] = /^([\w-]+):\s*(\S+)\s*$/.exec(line.trim()) ?? [];
-		const match = PULL_TRAILERS.has(key.toLowerCase()) ? PULL_VALUE.exec(value) : null;
 
-		if (match) return { number: Number(match[1] ?? match[3]), title: '', ...(match[2] ? { url: match[2] } : {}) };
+		if (!PULL_TRAILERS.has(key.toLowerCase())) continue;
+
+		const bare = /^[#!](\d+)$/.exec(value);
+
+		if (bare) return { number: Number(bare[1]), title: '' };
+
+		const url = PULL_URL.exec(value);
+
+		if (url && sameProject(url[1], slug)) return { number: Number(url[2]), title: '', url: value.replace(/\/$/, '') };
 	}
 
 	return null;
 }
 
 /**
- * The pull request a commit message names, in the forms hosts write: a squash
- * subject `Fix the parser (#123)`, a GitHub merge `Merge pull request #123 from
- * owner/branch` with the PR title as the body's first line, a GitLab merge body
- * ending `See merge request group/project!123` after the title, or a `PR`,
- * `PR-URL`, `Pull-Request`, `Reviewed-on` or `Merge-Request` trailer. Null when
- * it names none: a PR is never guessed from anything else.
+ * The pull request of this repo a commit message names, in the forms hosts
+ * write: a squash subject `Fix the parser (#123)`, a GitHub merge `Merge pull
+ * request #123 from owner/branch` with the PR title as the body's first line, a
+ * GitLab merge body ending `See merge request group/project!123` after the
+ * title, or a `PR`, `PR-URL`, `Pull-Request`, `Reviewed-on` or `Merge-Request`
+ * trailer. A reference that names a project, a URL or a GitLab footer, counts
+ * only when it names `slug`, so with no slug only the unqualified forms do.
+ * Null when it names none: a PR is never guessed from anything else.
  */
-export function namedPull(message: CommitMessage): NamedPull | null {
+export function namedPull(message: CommitMessage, slug: string | null): NamedPull | null {
 	const squash = /^(.*?)\s*\(#(\d+)\)\s*$/.exec(message.subject);
 
 	if (squash) return { number: Number(squash[2]), title: squash[1] };
@@ -208,11 +222,13 @@ export function namedPull(message: CommitMessage): NamedPull | null {
 
 	if (github) return { number: Number(github[1]), title: firstLine };
 
-	const gitlab = /^See merge request \S*!(\d+)\s*$/m.exec(message.body);
+	const gitlab = /^See merge request (\S*)!(\d+)\s*$/m.exec(message.body);
 
-	if (gitlab) return { number: Number(gitlab[1]), title: firstLine.startsWith('See merge request') ? '' : firstLine };
+	if (gitlab && (!gitlab[1] || sameProject(gitlab[1], slug))) {
+		return { number: Number(gitlab[2]), title: firstLine.startsWith('See merge request') ? '' : firstLine };
+	}
 
-	return trailerPull(message.trailers);
+	return trailerPull(message.trailers, slug);
 }
 
 /**

@@ -4,23 +4,24 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ChangeModel, ChangedSymbol } from '../../../../src/review/pipeline/change-model/types';
 import { gatherHistory } from '../../../../src/review/pipeline/intent/history';
+import type { IntentSource } from '../../../../src/review/pipeline/intent/types';
 import { git } from '../../../helpers/git';
 
-function commit(root: string, body: string, message: string): string {
-	writeFileSync(join(root, 'a.ts'), body);
+function commit(root: string, body: string, message: string, files = ['a.ts']): string {
+	for (const file of files) writeFileSync(join(root, file), body);
 	git(root, ['add', '.']);
 	git(root, ['commit', '-q', '-m', message]);
 
 	return git(root, ['rev-parse', 'HEAD']);
 }
 
-function symbol(change: ChangedSymbol['change']): ChangedSymbol {
+function symbol(change: ChangedSymbol['change'], file = 'a.ts'): ChangedSymbol {
 	return {
-		id: 'a.ts#run',
+		id: `${file}#run`,
 		name: 'run',
 		qualifiedName: 'run',
 		kind: 'function',
-		file: 'a.ts',
+		file,
 		startLine: 1,
 		endLine: 3,
 		change,
@@ -36,8 +37,8 @@ function symbol(change: ChangedSymbol['change']): ChangedSymbol {
 	};
 }
 
-function model(change: ChangedSymbol['change']): ChangeModel {
-	return { symbols: [symbol(change)], byHunk: {}, baselines: [], unparsed: [] };
+function model(change: ChangedSymbol['change'], files = ['a.ts']): ChangeModel {
+	return { symbols: files.map((file) => symbol(change, file)), byHunk: {}, baselines: [], unparsed: [] };
 }
 
 /** `run` returning `value`, the body every commit here rewrites. */
@@ -62,6 +63,13 @@ function merge(root: string, branch: string, ...message: string[]): string {
 }
 
 const short = (sha: string) => sha.slice(0, 7);
+
+/** The short shas the `history:unavailable` source lists, sorted; null when there is no such source. */
+function unavailable(sources: IntentSource[]): string[] | null {
+	const source = sources.find((candidate) => candidate.ref === 'history:unavailable');
+
+	return source ? (source.text.match(/\b[0-9a-f]{7}\b/g) ?? []).sort() : null;
+}
 
 test('history cites the older commits of a modified symbol, grouped by PR, and skips the PR own commits', async () => {
 	const root = repo();
@@ -92,7 +100,8 @@ test('history cites the older commits of a modified symbol, grouped by PR, and s
 	]);
 
 	expect(sources[0].text).toBe(`${second.slice(0, 7)} Return two for retries (touched run)\nCallers retry on 2.`);
-	expect(sources[1].text).toStartWith(`No pull request record is available for ${second.slice(0, 7)},`);
+	expect(sources[1].title).toBe('History unavailable');
+	expect(unavailable(sources)).toEqual([second.slice(0, 7)]);
 
 	expect(
 		await gatherHistory({ model: model('added'), checkoutPath: root, signal: new AbortController().signal })
@@ -138,7 +147,7 @@ test('a merge whose commits carry no PR number keeps the PR it names, and a bran
 	]);
 
 	expect(byRef['pr:#4']).toMatchObject({
-		title: 'Earlier PR #4: Retry on two',
+		title: 'PR #4 named in merge message: Retry on two',
 		revision: pullMerge,
 		range: `${base}..${two}`,
 		text: `${short(two)} Return two (touched run)`
@@ -154,17 +163,15 @@ test('a merge whose commits carry no PR number keeps the PR it names, and a bran
 
 	expect(byRef[`commit:${short(base)}`]).toMatchObject({ title: 'Add run', revision: base, range: base });
 
-	expect(byRef['history:unavailable'].text).toStartWith(
-		`No pull request record is available for ${[base, two, three].map(short).sort().join(', ')},`
-	);
+	expect(unavailable(sources)).toEqual([base, two, three].map(short).sort());
 
 	expect(lookedUp.sort()).toEqual([base, two, three, pullMerge, branchMerge].sort());
 });
 
-test('a PR trailer names its PR, and a commit nothing names gets no invented PR; neither has a record', async () => {
+test('a PR trailer names its PR, and a commit nothing in this repo names gets no invented PR', async () => {
 	const root = repo();
-	const first = commit(root, returning(1), 'Add run\n\nSee #12 for the plan.');
-	const second = commit(root, returning(2), 'Return two\n\nPR-URL: https://github.com/o/r/pull/9');
+	const first = commit(root, returning(1), 'Add run\n\nSee #12.\n\nPR-URL: https://github.com/other/lib/pull/3');
+	const second = commit(root, returning(2), 'Return two\n\nPR: #9');
 	const own = commit(root, returning(3), 'This PR');
 
 	const sources = await gatherHistory({
@@ -178,7 +185,7 @@ test('a PR trailer names its PR, and a commit nothing names gets no invented PR;
 	expect(sources.map((source) => [source.ref, source.title])).toEqual([
 		[`commit:${short(first)}`, 'Add run'],
 		['history:unavailable', 'History unavailable'],
-		['pr:#9', 'Earlier PR #9']
+		['pr:#9', 'PR #9 named in commit message']
 	]);
 
 	expect(sources[0]).toEqual({
@@ -189,16 +196,90 @@ test('a PR trailer names its PR, and a commit nothing names gets no invented PR;
 		at: expect.any(String),
 		revision: first,
 		range: first,
-		text: `${short(first)} Add run (touched run)\nSee #12 for the plan.`
+		text: `${short(first)} Add run (touched run)\nSee #12.\n\nPR-URL: https://github.com/other/lib/pull/3`
 	});
 
-	expect(sources[1].text).toBe(
-		`No pull request record is available for ${[first, second].map(short).sort().join(', ')}, so there is no PR description, issue or review discussion behind these commits beyond their commit and merge messages.`
+	expect(unavailable(sources)).toEqual([first, second].map(short).sort());
+	expect(sources[2]).toMatchObject({ revision: second, range: `${first}..${second}` });
+	expect(sources[2].url).toBeUndefined();
+});
+
+test('a record for the merge outranks a PR the commit names, which outranks a PR the merge names', async () => {
+	const root = repo();
+	const files = ['a.ts', 'b.ts', 'c.ts'];
+	const base = commit(root, returning(1), 'Add run', files);
+
+	git(root, ['checkout', '-q', '-b', 'x']);
+
+	const named = commit(root, returning(2), 'Return two (#7)', ['a.ts']);
+	const recordedMerge = merge(root, 'x', 'Merge pull request #4 from t/x', 'Four');
+
+	git(root, ['checkout', '-q', '-b', 'y']);
+
+	const commitNamed = commit(root, returning(3), 'Return three (#8)', ['b.ts']);
+	const namingMerge = merge(root, 'y', 'Merge pull request #5 from t/y', 'Five');
+
+	git(root, ['checkout', '-q', '-b', 'z']);
+
+	const plain = commit(root, returning(4), 'Return four', ['c.ts']);
+	const lastMerge = merge(root, 'z', 'Merge pull request #6 from t/z', 'Six');
+	const own = commit(root, returning(5), 'This PR', files);
+	const record = { number: 9, title: 'Recorded nine', url: 'https://example.test/pull/9', state: 'merged' };
+
+	const sources = await gatherHistory({
+		model: model('modified', files),
+		checkoutPath: root,
+		signal: new AbortController().signal,
+		headSha: own,
+		mergeBaseSha: lastMerge,
+		prsForCommit: async (sha) => (sha === recordedMerge ? [{ ...record, headRef: 'x', baseRef: 'main' }] : [])
+	});
+
+	const byRef = Object.fromEntries(sources.map((source) => [source.ref, source]));
+
+	expect(Object.keys(byRef)).toEqual([`commit:${short(base)}`, 'history:unavailable', 'pr:#6', 'pr:#8', 'pr:#9']);
+
+	expect(byRef['pr:#9']).toMatchObject({
+		title: 'Earlier PR #9: Recorded nine',
+		url: record.url,
+		revision: recordedMerge,
+		range: `${base}..${named}`
+	});
+
+	expect(byRef['pr:#8']).toMatchObject({
+		title: 'PR #8 named in commit message: Return three',
+		revision: namingMerge,
+		range: `${recordedMerge}..${commitNamed}`
+	});
+
+	expect(byRef['pr:#6']).toMatchObject({
+		title: 'PR #6 named in merge message: Six',
+		revision: lastMerge,
+		range: `${namingMerge}..${plain}`
+	});
+
+	expect(unavailable(sources)).toEqual([base, commitNamed, plain].map(short).sort());
+});
+
+test('a landing git cannot walk reports no revision or range rather than the commit landing alone', async () => {
+	const root = repo();
+	const first = commit(root, returning(1), 'Add run');
+	const second = commit(root, returning(2), 'Return two');
+
+	const sources = await gatherHistory({
+		model: model('modified'),
+		checkoutPath: root,
+		signal: new AbortController().signal,
+		headSha: second,
+		mergeBaseSha: '0'.repeat(40)
+	});
+
+	expect(sources.map((source) => source.ref).sort()).toEqual(
+		[`commit:${short(first)}`, `commit:${short(second)}`, 'history:unavailable'].sort()
 	);
 
-	expect(sources[2]).toMatchObject({
-		url: 'https://github.com/o/r/pull/9',
-		revision: second,
-		range: `${first}..${second}`
-	});
+	for (const source of sources) {
+		expect(source.revision).toBeUndefined();
+		expect(source.range).toBeUndefined();
+	}
 });

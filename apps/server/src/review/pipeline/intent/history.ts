@@ -84,19 +84,27 @@ async function readCommit(cwd: string, sha: string, signal: AbortSignal): Promis
 	return logged?.code === 0 ? (parseLog(logged.stdout)[0] ?? null) : null;
 }
 
-/** Where an older commit joined the base line: the merge that brought it in, and the merged side's commits. */
-interface JoinPoint {
-	merge: string;
+/** How an older commit reached the base line. */
+interface Landing {
+	/** The merge that brought it in; null when it was committed on the line itself. */
+	merge: string | null;
+	/** The commits that landed with it: the merged side, `first..side`, or the commit alone. */
 	range: string;
 }
 
 /**
- * The merge on `tip`'s first-parent line that brought `sha` in. Walking first
- * parents down from `tip` through the commits that descend from `sha`, the
- * merge whose first parent no longer descends from it took it in on another
- * parent. Null when `sha` sits on the line itself, or git can't say.
+ * How `commit` reached `tip`'s first-parent line. Walking first parents down
+ * from `tip` through the commits that descend from it, the walk either reaches
+ * the commit, which then sits on the line, or a merge whose first parent no
+ * longer descends from it, which took it in on another parent. Null when git
+ * can't say, such as a walk that fails or times out, so no landing is reported.
  */
-async function joinPoint(cwd: string, sha: string, tip: string, signal: AbortSignal): Promise<JoinPoint | null> {
+async function landing(cwd: string, commit: LoggedCommit, tip: string, signal: AbortSignal): Promise<Landing | null> {
+	const { sha } = commit;
+	const alone = { merge: null, range: commit.parents[0] ? `${commit.parents[0]}..${sha}` : sha };
+
+	if (sha === tip) return alone;
+
 	const listed = await git(cwd, ['rev-list', '--ancestry-path', '--parents', `${sha}..${tip}`], bounded(signal)).catch(
 		() => null
 	);
@@ -108,9 +116,9 @@ async function joinPoint(cwd: string, sha: string, tip: string, signal: AbortSig
 			.split('\n')
 			.filter(Boolean)
 			.map((line) => {
-				const [commit, ...rest] = line.split(' ');
+				const [child, ...rest] = line.split(' ');
 
-				return [commit, rest];
+				return [child, rest];
 			})
 	);
 
@@ -119,7 +127,7 @@ async function joinPoint(cwd: string, sha: string, tip: string, signal: AbortSig
 	while (parents.has(at)) {
 		const [first = '', ...others] = parents.get(at) ?? [];
 
-		if (first === sha) return null;
+		if (first === sha) return alone;
 
 		if (!parents.has(first)) {
 			const side = others.find((parent) => parent === sha || parents.has(parent));
@@ -156,19 +164,23 @@ interface Touch {
 	symbols: string[];
 }
 
-/** A touched commit and what is recorded about how it landed. */
+/** A PR a touched commit landed in, and what that rests on: a host or local forge record, or only a message. */
+interface Claim {
+	pull: NamedPull;
+	basis: 'record' | 'commit message' | 'merge message';
+}
+
+/** A touched commit and what is known about how it landed. */
 interface Attributed {
 	touch: Touch;
-	/** The PR it landed in, from a record or else a message naming it; null when neither names one. */
-	pr: NamedPull | null;
-	/** Whether the host or local forge has a record of that PR, rather than only a message naming it. */
-	recorded: boolean;
+	/** Null when no record or message names a PR. */
+	claim: Claim | null;
 	/** The merge that brought it onto the base line, when it came in through one. */
 	merge: LoggedCommit | null;
-	/** The commit the attribution was read from: that merge, or the commit itself when it sits on the line. */
-	revision: string;
-	/** The commits that landed with it: the merged side, or the commit alone. */
-	range: string;
+	/** The commit the landing was read from: that merge, or the commit itself on the line. Absent when git couldn't say. */
+	revision?: string;
+	/** The commits that landed with it. Absent when git couldn't say. */
+	range?: string;
 }
 
 /** What `attribute` reads each touched commit's landing with. */
@@ -183,8 +195,10 @@ interface Lookup {
 /**
  * The PR each touched commit landed in, in this order: a host or local forge
  * record for the commit, a record for the merge that brought it in, a PR the
- * commit's message names, a PR the merge's message names. A commit none of
- * these covers keeps no PR, so nothing is ever attributed to a guess.
+ * commit's message names, a PR the merge's message names. The checkout doesn't
+ * know the repo's project path, so only messages that name a PR without one
+ * count (`namedPull`). A commit none of these covers keeps no PR, so nothing is
+ * ever attributed to a guess.
  */
 async function attribute(touches: Touch[], lookup: Lookup): Promise<Attributed[]> {
 	const { cwd, tip, signal } = lookup;
@@ -199,20 +213,23 @@ async function attribute(touches: Touch[], lookup: Lookup): Promise<Attributed[]
 	return Promise.all(
 		touches.map(async (touch): Promise<Attributed> => {
 			const { commit } = touch;
-			const joined = tip ? await joinPoint(cwd, commit.sha, tip, signal) : null;
-			const merge = joined ? await readMerge(joined.merge) : null;
-
+			const landed = tip ? await landing(cwd, commit, tip, signal) : null;
+			const merge = landed?.merge ? await readMerge(landed.merge) : null;
 			const record = (await recorded(commit.sha)) ?? (merge && (await recorded(merge.sha)));
-			const pr = record ?? namedPull(commit) ?? (merge && namedPull(merge));
-			const alone = commit.parents[0] ? `${commit.parents[0]}..${commit.sha}` : commit.sha;
+
+			const claims: [NamedPull | null, Claim['basis']][] = [
+				[record, 'record'],
+				[namedPull(commit, null), 'commit message'],
+				[merge && namedPull(merge, null), 'merge message']
+			];
+
+			const [pull, basis] = claims.find(([named]) => named) ?? [];
 
 			return {
 				touch,
-				pr,
-				recorded: Boolean(record),
+				claim: pull && basis ? { pull, basis } : null,
 				merge,
-				revision: joined?.merge ?? commit.sha,
-				range: joined?.range ?? alone
+				...(landed ? { revision: landed.merge ?? commit.sha, range: landed.range } : {})
 			};
 		})
 	);
@@ -223,24 +240,37 @@ function touchLine(touch: Touch): string {
 }
 
 /** The ref a touched commit is cited under: its PR, else the merge that brought it in, else the commit. */
-function groupRef({ touch, pr, merge }: Attributed): string {
-	if (pr) return `pr:#${pr.number}`;
+function groupRef({ touch, claim, merge }: Attributed): string {
+	if (claim) return `pr:#${claim.pull.number}`;
 
 	return merge ? `merge:${merge.sha.slice(0, 7)}` : `commit:${touch.commit.sha.slice(0, 7)}`;
 }
 
-/** One source for the commits cited under `ref`, carrying where it was read from and the commits that landed. */
+/**
+ * A PR source's title: `Earlier PR #12: …` for a recorded PR, and one saying
+ * which message names it for a PR no record backs, so it never reads as retrieved.
+ */
+function claimTitle({ pull, basis }: Claim): string {
+	const label = basis === 'record' ? `Earlier PR #${pull.number}` : `PR #${pull.number} named in ${basis}`;
+
+	return pull.title ? `${label}: ${pull.title}` : label;
+}
+
+/**
+ * One source for the commits cited under `ref`, carrying where it was read from
+ * and the commits that landed. A recorded item heads a PR group when there is one.
+ */
 function groupSource(ref: string, items: Attributed[]): IntentSource {
-	const [{ touch, pr, merge, revision, range }] = items;
+	const { touch, claim, merge, revision, range } = items.find((item) => item.claim?.basis === 'record') ?? items[0];
 	const latest = items.map((item) => item.touch.commit.at).sort()[items.length - 1];
 	const lines = items.map((item) => touchLine(item.touch));
 
-	if (pr) {
+	if (claim) {
 		return makeSource({
 			kind: 'pr-history',
 			ref,
-			url: pr.url,
-			title: pr.title ? `Earlier PR #${pr.number}: ${pr.title}` : `Earlier PR #${pr.number}`,
+			url: claim.pull.url,
+			title: claimTitle(claim),
 			at: latest,
 			revision,
 			range,
@@ -263,9 +293,9 @@ function groupSource(ref: string, items: Attributed[]): IntentSource {
 }
 
 /**
- * Names the older commits no PR record covers, including those whose PR only a
- * message names, so the brief can say their history is unavailable instead of
- * reading a reason into them.
+ * Names the older commits no retrieved PR record covers, including those whose
+ * PR only a message names, so the brief can say their history is unavailable
+ * instead of reading a reason into them.
  */
 function unavailableSource(items: Attributed[]): IntentSource {
 	const shas = items.map((item) => item.touch.commit.sha.slice(0, 7)).sort();
@@ -274,7 +304,7 @@ function unavailableSource(items: Attributed[]): IntentSource {
 		kind: 'pr-history',
 		ref: 'history:unavailable',
 		title: 'History unavailable',
-		text: `No pull request record is available for ${shas.join(', ')}, so there is no PR description, issue or review discussion behind these commits beyond their commit and merge messages.`
+		text: `No pull request record was retrieved for ${shas.join(', ')}; only their commit and merge messages were read, not a PR description, issue or review discussion.`
 	});
 }
 
@@ -289,7 +319,7 @@ function historySources(attributed: Attributed[]): IntentSource[] {
 	}
 
 	const sources = [...groups].map(([ref, items]) => groupSource(ref, items));
-	const unrecorded = attributed.filter((item) => !item.recorded);
+	const unrecorded = attributed.filter((item) => item.claim?.basis !== 'record');
 
 	return unrecorded.length ? [...sources, unavailableSource(unrecorded)] : sources;
 }
@@ -297,10 +327,10 @@ function historySources(attributed: Attributed[]): IntentSource[] {
 /**
  * Why the changed code looks the way it does: the last few commits before this
  * PR that touched each modified symbol (`git log -L`), and the pull requests
- * those commits landed in, from the host's records or, when it has none, the
- * merge and trailer metadata in git. Each source keeps the revision it was read
- * from and the commits that landed; commits no PR record covers are listed as
- * history unavailable. Added symbols have no history. Best effort: a symbol git
+ * those commits landed in, from the host's records or, when it has none, a PR
+ * their commit or merge messages name, titled as such. Each source keeps the
+ * revision it was read from and the commits that landed, when git can say;
+ * commits no retrieved PR record covers are listed as history unavailable. Added symbols have no history. Best effort: a symbol git
  * can't trace is skipped.
  */
 export async function gatherHistory(input: {

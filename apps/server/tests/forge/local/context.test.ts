@@ -24,14 +24,20 @@ afterEach(() => {
 const numbers = async (repo: Repo, sha: string) =>
 	(await prsForCommit(repo, 'local', sha, signal)).map((ref) => ref.number);
 
+/** Commits `file` on the current branch with `message`, returning the commit. */
+async function commitFile(dir: string, file: string, message: string): Promise<string> {
+	await writeFile(join(dir, file), `${file}\n`);
+	git(dir, ['add', file]);
+	git(dir, ['commit', '-q', '-m', message]);
+
+	return git(dir, ['rev-parse', 'HEAD']);
+}
+
 /** Commits `file` on a new branch and merges it into main with `message`, returning the branch commit and the merge. */
 async function mergeBranch(dir: string, file: string, ...message: string[]) {
 	git(dir, ['checkout', '-q', '-b', file]);
-	await writeFile(join(dir, file), `${file}\n`);
-	git(dir, ['add', file]);
-	git(dir, ['commit', '-q', '-m', `Write ${file}`]);
 
-	const branch = git(dir, ['rev-parse', 'HEAD']);
+	const branch = await commitFile(dir, file, `Write ${file}`);
 
 	git(dir, ['checkout', '-q', 'main']);
 	git(dir, ['merge', '-q', '--no-ff', file, ...message.flatMap((paragraph) => ['-m', paragraph])]);
@@ -105,4 +111,16 @@ test('a local repo never reaches fetch, gh or glab', async () => {
 	expect((await gatherChangeContext(repo, 7, 'local', signal)).sources.length).toBeGreaterThan(0);
 	expect(fetched).toEqual([]);
 	expect(existsSync(marker)).toBe(false);
+});
+
+test('a trailer or GitLab footer naming another project never maps a commit to the local pull with that number', async () => {
+	const { repo } = await localForgeFixture();
+	const dir = fileURLToPath(repo.url);
+	const foreignUrl = await commitFile(dir, 'd.ts', 'Port d\n\nPR-URL: https://github.com/other/lib/pull/3');
+	const foreignFooter = await commitFile(dir, 'e.ts', "Merge branch 'e'\n\nPort e\n\nSee merge request upstream/lib!3");
+	const own = await commitFile(dir, 'f.ts', 'Write f\n\nPR: #3');
+
+	expect(await numbers(repo, foreignUrl)).toEqual([]);
+	expect(await numbers(repo, foreignFooter)).toEqual([]);
+	expect(await numbers(repo, own)).toEqual([3]);
 });

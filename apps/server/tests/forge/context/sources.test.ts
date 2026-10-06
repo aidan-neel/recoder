@@ -39,7 +39,8 @@ test('sources sort by kind then natural ref order, and per-kind and total caps c
 });
 
 test('a commit message names its PR by squash subject, merge, GitLab footer or trailer, and nothing else', () => {
-	const named = (subject: string, body = '', trailers = '') => namedPull({ subject, body, trailers });
+	const named = (subject: string, body = '', trailers = '', slug: string | null = 'o/r') =>
+		namedPull({ subject, body, trailers }, slug);
 
 	expect(named('Fix the parser (#123)')).toEqual({ number: 123, title: 'Fix the parser' });
 
@@ -50,7 +51,7 @@ test('a commit message names its PR by squash subject, merge, GitLab footer or t
 
 	expect(named('Merge pull request #32 from al/empty')).toEqual({ number: 32, title: '' });
 
-	expect(named("Merge branch 'parser' into 'main'", 'Fix the parser\n\nSee merge request g/p!7')).toEqual({
+	expect(named("Merge branch 'parser' into 'main'", 'Fix the parser\n\nSee merge request o/r!7')).toEqual({
 		number: 7,
 		title: 'Fix the parser'
 	});
@@ -61,7 +62,15 @@ test('a commit message names its PR by squash subject, merge, GitLab footer or t
 		url: 'https://github.com/o/r/pull/5'
 	});
 
+	expect(named('Fix', '', 'Merge-Request: https://gitlab.com/G/Sub/P/-/merge_requests/8/\n', 'g/sub/p')).toEqual({
+		number: 8,
+		title: '',
+		url: 'https://gitlab.com/G/Sub/P/-/merge_requests/8'
+	});
+
 	expect(named('Fix the parser', '', 'PR: #6\nSigned-off-by: al <al@x>\n')).toEqual({ number: 6, title: '' });
+	expect(named('Fix the parser (#123)', '', '', null)).toEqual({ number: 123, title: 'Fix the parser' });
+	expect(named('Fix the parser', '', 'PR: #6\n', null)).toEqual({ number: 6, title: '' });
 
 	for (const [subject, body, trailers] of [
 		["Merge branch 'parser'", 'Fix the parser'],
@@ -71,4 +80,15 @@ test('a commit message names its PR by squash subject, merge, GitLab footer or t
 		['Fix the parser', '', 'PR-URL: https://example.com/page\n']
 	])
 		expect(named(subject, body, trailers)).toBeNull();
+});
+
+test('a PR URL or GitLab footer naming another project, or any project when the slug is unknown, names no PR', () => {
+	const named = (body: string, trailers: string, slug: string | null) =>
+		namedPull({ subject: 'Fix the parser', body, trailers }, slug);
+
+	expect(named('', 'PR-URL: https://github.com/other/lib/pull/3\n', 'o/r')).toBeNull();
+	expect(named('', 'Reviewed-on: https://github.com/o/r-fork/pull/3\n', 'o/r')).toBeNull();
+	expect(named('Fix it\n\nSee merge request upstream/lib!3', '', 'o/r')).toBeNull();
+	expect(named('', 'PR-URL: https://github.com/o/r/pull/3\n', null)).toBeNull();
+	expect(named('Fix it\n\nSee merge request o/r!3', '', null)).toBeNull();
 });
