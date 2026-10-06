@@ -41,6 +41,31 @@ test('a base run that stopped before the code under test is unavailable', () => 
 	});
 });
 
+test('a base run that a bundler stopped at an import it could not load is unavailable, not the same failure', () => {
+	const command = 'cd pkg && bunx vitest run src/queue.test.ts';
+	const proof = baseRecord(command, 1, 'FAIL src/queue.test.ts > caps the queue\nAssertionError: expected 4 to be 3');
+
+	const base = baseRecord(
+		command,
+		1,
+		'Error: Failed to resolve import "../generated/limits" from "src/queue.ts". Does the file exist?'
+	);
+
+	expect(base.outcome).toBe('setup-failed');
+
+	expect(compareToBase(proof, 'The queue cap is off by one.', base)).toEqual({
+		unavailable: 'the command could not run on the base commit'
+	});
+
+	expect(
+		compareToBase(
+			proof,
+			'The queue cap is off by one.',
+			baseRecord(command, 1, 'error: Cannot find module "../generated/limits.js"')
+		)
+	).toEqual({ unavailable: 'the command could not run on the base commit' });
+});
+
 test('a verification that ends the same way on the base commit stays verified and says so', () => {
 	const verified: FindingVerification = {
 		status: 'verified',
