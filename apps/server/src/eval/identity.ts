@@ -91,6 +91,8 @@ export interface RunIdentity {
 	tasks: TaskIdentity[];
 	/** The task set `tasks` came from: `full`, `only` for `--only`, or a `--set` name; absent from identities older than recording it. */
 	taskSet?: string;
+	/** `--shard`: this host's part of the task set, `tasks` its task ids and `all` every task id the set resolved to; absent unsharded. */
+	shard?: { index: number; count: number; tasks: string[]; all: string[] };
 	host: {
 		/** The harness's hostname; the server's route does not name its machine. */
 		name: string;
@@ -113,6 +115,8 @@ export interface RunIdentity {
 		timeoutMs: number;
 		runsPerPr: number;
 		baselineCache: boolean;
+		/** `--repeat`: which repeat of the experiment the runs are, numbering them after the earlier repeats'; absent for the first. */
+		repeat?: number;
 	};
 	/** Why a field is `unknown`, by field: a server without the identity route, a tree that could not be read. */
 	unavailable: Record<string, string>;
@@ -138,7 +142,7 @@ export function runCache(review: RunCache['review']): RunCache {
 	return { review, intent: UNKNOWN, ruleLedger: UNKNOWN, judge: UNKNOWN };
 }
 
-const EXPERIMENT = ['dataset', 'code', 'models', 'judge', 'flags', 'limits', 'caches', 'tools'] as const;
+export const EXPERIMENT = ['dataset', 'code', 'models', 'judge', 'flags', 'limits', 'caches', 'tools'] as const;
 
 /** Sections that describe where and how a report ran; a difference is shown, never refused. */
 const INFORMATIONAL = ['host', 'execution', 'unavailable'];
@@ -148,24 +152,26 @@ const INFORMATIONAL = ['host', 'execution', 'unavailable'];
  * for a report that records none, or `runs` for a report whose runs were
  * reviewed under other identities.
  */
-const DECLARABLE = ['identity', 'runs', 'tasks', 'taskSet', ...EXPERIMENT];
+const DECLARABLE = ['identity', 'runs', 'tasks', 'taskSet', 'shard', ...EXPERIMENT];
 
 /** Operations that claim two reports' results are alike, so every run in them must have been reviewed under its report's identity. */
 const RUN_CHECKED: readonly Operation[] = ['compare', 'merge'];
 
 /**
  * Which fields may differ depends on what an operation takes from a report.
- * The adjudications never refuse: every report applies the current ones again
- * to every run, and they decide no defect count. A replay or rescore keeps the
- * reviewers' output and recomputes the rest: the code, the policy and the
- * cache formats are what it measures, and the judge and the labels score it
- * again. Shards of one experiment cover different tasks.
+ * A resume, replay or compare takes the adjudications as they are: every
+ * report applies the current ones again to every run. A merge judges nothing
+ * again, so shards judged under other adjudications refuse unless declared. A
+ * replay or rescore keeps the reviewers' output and recomputes the rest: the
+ * code, the policy and the cache formats are what it measures, and the judge
+ * and the labels score it again. Shards of one experiment cover different
+ * tasks of one task set.
  */
 const EXEMPT = {
 	resume: ['dataset.adjudications'],
 	replay: ['dataset.adjudications', 'dataset.labels', 'judge', 'code', 'limits.policy', 'caches'],
 	compare: ['dataset.adjudications'],
-	merge: ['dataset.adjudications', 'tasks']
+	merge: ['tasks', 'shard.index', 'shard.tasks']
 } satisfies Record<string, string[]>;
 
 export type Operation = keyof typeof EXEMPT;
@@ -454,9 +460,10 @@ function splitHeads(reports: readonly MergeInput[]): string[] {
 /**
  * Why the reports cannot be merged into one: a missing identity, an experiment
  * field that differs, a PR at two heads, or a run counted twice, which would
- * sum one run's defects as new ones. Empty when they merge.
+ * sum one run's defects as new ones. Fields named in `allow` may differ, and
+ * a name in it that is no field refuses. Empty when they merge.
  */
-export function mergeProblems(reports: readonly MergeInput[]): string[] {
+export function mergeProblems(reports: readonly MergeInput[], allow: readonly string[] = []): string[] {
 	const unrecorded = reports.filter((report) => !report.identity);
 
 	if (unrecorded.length) return unrecorded.map((report) => `identity not recorded in ${report.name}`);
@@ -465,8 +472,15 @@ export function mergeProblems(reports: readonly MergeInput[]): string[] {
 	const duplicates = duplicateRuns(reports);
 
 	return [
+		...new Set(
+			rest.flatMap((report) =>
+				checkCompatibility(first!, report, 'merge', allow).undeclarable.map(
+					({ name }) => `--allow-diff ${name} names no field of ${first!.name} or ${report.name}`
+				)
+			)
+		),
 		...rest.flatMap((report) => {
-			const result = checkCompatibility(first!, report, 'merge', []);
+			const result = checkCompatibility(first!, report, 'merge', allow);
 			const line = (diff: FieldDiff) => `${diff.field}: ${diff.a} → ${diff.b}`;
 
 			return [

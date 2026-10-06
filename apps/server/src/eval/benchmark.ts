@@ -17,20 +17,20 @@ import {
 	type Adjudications
 } from './benchmark-labels';
 import { judgeModel, rescoredRecords, scoreRun, type Judge } from './benchmark-scoring';
-import { summarize } from './benchmark-score';
 import { resolvePlan } from './auto-plan';
 import { parseEvalArgs, type RunOptions } from './cli';
-import { stabilityMetrics } from './metrics';
 import { getServerIdentity, getSettings, replayReview, resolveRepo } from './client';
 import { captureTree } from './harness-tree';
-import { UNKNOWN, allowDiffFields, taskIdOf } from './identity';
+import { UNKNOWN, allowDiffFields, taskIdOf, type RunIdentity } from './identity';
 import {
+	checkRepeat,
 	checkReuse,
 	executionMode,
 	harnessRecord,
 	replayedReviews,
 	reportIdOf,
 	resumedRecords,
+	runOffset,
 	reusedRuns,
 	runIdentities,
 	stamped,
@@ -40,9 +40,11 @@ import { captureIdentity } from './identity-capture';
 import { writeEvalFile } from './report';
 import { runReview, stopOnInterrupt } from './run-review';
 import { readLabels, readTaskSet, selectTasks, subsetLines, type PrLabel } from './task-set';
+import { benchmarkSummary, runAgreement } from './benchmark-merge';
+import { parseShard, shardTasks, type ShardSpec } from './shard';
 
 const USAGE =
-	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--set <name> | --only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--mode auto --since <report.json>] [--allow-diff field,field] [--runs 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
+	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--set <name> | --only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--mode auto --since <report.json>] [--allow-diff field,field] [--shard i/n] [--runs 1] [--repeat 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
 
 interface Options extends RunOptions {
 	dataset: string;
@@ -67,10 +69,14 @@ interface Options extends RunOptions {
 	auto: { since: string } | null;
 	/** Identity fields this run may differ in from the report it reuses, shown in the report as declared. */
 	allowDiff: string[];
+	/** `--shard i/n`: this host reviews only its part of the chosen tasks, for `eval:merge` to combine. */
+	shard: ShardSpec | null;
+	/** `--repeat k`: the runs are repeat `k` of the experiment, numbered after the runs of the repeats before it. */
+	repeat: number;
 }
 
 function parseOptions(): Options {
-	const { values, run, fail } = parseEvalArgs(
+	const { values, run, fail, positiveInt } = parseEvalArgs(
 		USAGE,
 		{
 			dataset: { type: 'string' },
@@ -83,7 +89,9 @@ function parseOptions(): Options {
 			reverify: { type: 'string' },
 			mode: { type: 'string' },
 			since: { type: 'string' },
-			'allow-diff': { type: 'string' }
+			'allow-diff': { type: 'string' },
+			shard: { type: 'string' },
+			repeat: { type: 'string' }
 		},
 		{ runs: '1', concurrency: '3', timeout: '45' }
 	);
@@ -114,6 +122,10 @@ function parseOptions(): Options {
 	if (allowDiff.length && !values.resume && !replayed && !values.mode)
 		return fail('--allow-diff declares how this run differs from the report it reuses; pass it with that report.');
 
+	const shard = values.shard ? parseShard(values.shard) : null;
+
+	if (typeof shard === 'string') return fail(shard);
+
 	return {
 		dataset: resolve(values.dataset),
 		only: values.only ? values.only.split(',') : null,
@@ -124,6 +136,8 @@ function parseOptions(): Options {
 		replay: replayed ? { report: resolve(replayed), reverify: !values.replay } : null,
 		auto: values.mode && values.since ? { since: resolve(values.since) } : null,
 		allowDiff,
+		shard,
+		repeat: values.repeat ? positiveInt(values.repeat, 'repeat') : 1,
 		...run
 	};
 }
@@ -156,7 +170,11 @@ async function runAll(
 	replays: string[][] | null,
 	onRun: (records: ScoredRun[][]) => void
 ): Promise<ScoredRun[][]> {
-	const jobs = Array.from({ length: options.runs }, (_, run) => labels.map((label, pr) => ({ label, pr, run })))
+	const offset = runOffset(options.repeat, options.runs);
+
+	const jobs = Array.from({ length: options.runs }, (_, run) =>
+		labels.map((label, pr) => ({ label, pr, run: offset + run }))
+	)
 		.flat()
 		.filter(({ pr, run }) => !records[pr]![run] && (!replays || replays[pr]![run]));
 
@@ -168,7 +186,7 @@ async function runAll(
 	const worker = async () => {
 		while (next < jobs.length) {
 			const { label, pr, run } = jobs[next++]!;
-			const runLabel = options.runs > 1 ? ` run ${run + 1}/${options.runs}` : '';
+			const runLabel = options.runs > 1 ? ` run ${run - offset + 1}/${options.runs}` : '';
 
 			const record = await runReview(
 				{ ...options, inPlace: false },
@@ -221,8 +239,6 @@ function labelRuns(label: PrLabel, runs: ScoredRun[], adjudications: Adjudicatio
 /** A PR's finished runs so far; runs still going leave holes, which `filter` skips. */
 function prResult(label: PrLabel, records: ScoredRun[], bases: Map<string, string>): PrResult {
 	const runs = records.filter(Boolean);
-	const passed = runs.filter((run) => run.outcome === 'passed').map((run) => run.findings);
-	const stability = passed.length > 1 ? stabilityMetrics(passed) : null;
 	const taskId = taskIdOf(label.id, label.headSha);
 
 	return {
@@ -235,9 +251,16 @@ function prResult(label: PrLabel, records: ScoredRun[], bases: Map<string, strin
 		control: label.defects.length === 0,
 		defects: label.defects,
 		staleHead: runs.some((run) => run.headSha !== 'unknown' && run.headSha !== label.headSha),
-		agreement: stability && { strict: stability.strict, loose: stability.loose },
+		agreement: runAgreement(runs),
 		runs
 	};
+}
+
+/** The shard's record in the identity: its tasks and every task of the set, by task id, so a merge can name the missing ones. */
+function shardRecord(spec: ShardSpec, assigned: PrLabel[], all: PrLabel[]): NonNullable<RunIdentity['shard']> {
+	const ids = (labels: PrLabel[]) => labels.map((label) => taskIdOf(label.id, label.headSha));
+
+	return { ...spec, tasks: ids(assigned), all: ids(all) };
 }
 
 async function main(): Promise<void> {
@@ -256,9 +279,11 @@ async function main(): Promise<void> {
 		set: options.set ? readTaskSet(options.dataset, options.set) : null
 	});
 
+	const assigned = options.shard ? shardTasks(chosen.labels, options.shard) : chosen.labels;
+
 	const labels = plan.rescore
-		? chosen.labels.filter((label) => plan.origin?.prs.some((pr) => pr.id === label.id))
-		: chosen.labels;
+		? assigned.filter((label) => plan.origin?.prs.some((pr) => pr.id === label.id))
+		: assigned;
 
 	const judge = judgeModel(options.judge, options.judgeEffort);
 	const repos = plan.rescore ? new Map<string, Repo>() : await resolveRepos(options.base, labels);
@@ -270,7 +295,7 @@ async function main(): Promise<void> {
 	const adjudications = readAdjudications(adjudicationFile);
 	const ran = plan.rescore ? 'rescore' : plan.replay ? (plan.replay.reverify ? 'reverify' : 'replay') : 'full';
 
-	const identity = await captureIdentity({
+	const captured = await captureIdentity({
 		dataset: options.dataset,
 		tasks: labels,
 		taskSet: chosen.name,
@@ -279,14 +304,19 @@ async function main(): Promise<void> {
 		judge: judge.model,
 		server: await getServerIdentity(options.base),
 		execution: {
-			mode: executionMode(ran, !!options.resume, !!options.only || !!options.set),
+			mode: executionMode(ran, !!options.resume, !!options.only || !!options.set || !!options.shard),
 			auto: !!requested.auto,
 			concurrency: options.concurrency,
 			timeoutMs: options.timeoutMs,
 			runsPerPr: options.runs,
-			baselineCache: options.baselineCache
+			baselineCache: options.baselineCache,
+			...(options.repeat > 1 ? { repeat: options.repeat } : {})
 		}
 	});
+
+	const identity = options.shard
+		? { ...captured, shard: shardRecord(options.shard, assigned, chosen.labels) }
+		: captured;
 
 	for (const [part, reason] of Object.entries(identity.unavailable))
 		console.warn(`Identity: ${part} unavailable: ${reason}. Comparisons on it are refused unless declared.`);
@@ -297,6 +327,8 @@ async function main(): Promise<void> {
 			: plan.origin && ran !== 'full'
 				? { path: plan.replay?.report ?? requested.auto!.since, report: plan.origin, operation: ran }
 				: null;
+
+	if (prior) checkRepeat(prior.report, options.repeat, options.runs);
 
 	const derivedFrom = prior ? checkReuse(identity, prior, options.allowDiff) : undefined;
 	const reportId = reportIdOf(prior);
@@ -320,7 +352,12 @@ async function main(): Promise<void> {
 	console.log(
 		[
 			`${verb} ${labels.length} PRs × ${options.runs} runs, ${options.concurrency} at once, against ${options.base}; judge ${judge.model.model}; identity ${identity.hash.slice(0, 12)}`,
-			...subsetLines(chosen.name)
+			...subsetLines(chosen.name),
+			...(options.shard
+				? [
+						`Shard ${options.shard.index}/${options.shard.count}: ${assigned.length} of ${chosen.labels.length} tasks; merge the shards with eval:merge for the set's score.`
+					]
+				: [])
 		].join('\n')
 	);
 
@@ -330,23 +367,7 @@ async function main(): Promise<void> {
 
 		if (queued.some(Boolean)) writeAdjudications(adjudicationFile, adjudications);
 
-		const summary: BenchmarkReport['summary'] = {
-			taskSet: chosen.name,
-			...summarize(
-				prs.map((pr) => ({
-					codebase: pr.codebase,
-					defects: pr.defects,
-					scores: pr.runs.flatMap((run) => (run.score ? [run.score] : [])),
-					hiddenRuns: pr.runs.flatMap((run) =>
-						run.score && run.hiddenScore ? [{ shown: run.score, hidden: run.hiddenScore }] : []
-					),
-					stageRuns: pr.runs.flatMap((run) => (run.score && run.stages ? [run.stages] : [])),
-					lowRuns: pr.runs.flatMap((run) => (run.score && run.lows ? [run.lows] : [])),
-					control: pr.control,
-					labeledRuns: pr.runs.flatMap((run) => (run.labeled ? [run.labeled] : []))
-				}))
-			)
-		};
+		const summary = benchmarkSummary(prs, chosen.name);
 
 		return {
 			dataset: basename(options.dataset),

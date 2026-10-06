@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { identityLine, readReport, type BenchmarkReport, type JudgeModel } from '../../src/eval/benchmark-report';
 import {
+	checkRepeat,
 	checkReuse,
 	executionMode,
 	reportIdOf,
@@ -135,4 +136,20 @@ test('a resume of a report from another task set is refused until --allow-diff t
 	expect(checkReuse(recordedIdentity(), prior, ['taskSet']).at(-1)?.declared).toEqual([
 		{ field: 'taskSet', a: 'quick', b: 'full' }
 	]);
+});
+
+test('a resume of a --repeat run lines its runs up with this one, and a report of another repeat is refused', () => {
+	const fields = identityFields();
+
+	fields.execution = { ...fields.execution, runsPerPr: 2, repeat: 2 };
+
+	const repeat = { ...readReport(writeReport(dir, 'repeat-2.json')), identity: recordedIdentity(fields) };
+
+	expect(() => checkRepeat(repeat, 2, 2)).not.toThrow();
+	expect(() => checkRepeat(repeat, 1, 2)).toThrow("The reused report's runs start after run 2, this run's after run 0");
+	expect(() => checkRepeat(readReport(writeReport(dir, 'first.json')), 2, 1)).toThrow('start after run 0');
+
+	repeat.prs[0]!.runs = [3, 4].map((index) => ({ ...repeat.prs[0]!.runs[0]!, index }));
+
+	expect(resumedRecords(repeat, tasks)[0]!.flatMap((run, slot) => (run ? [slot] : []))).toEqual([2, 3]);
 });
