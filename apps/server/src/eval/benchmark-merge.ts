@@ -24,7 +24,7 @@ export interface Missing {
 interface MergedSource {
 	report: string;
 	reportId: string | null;
-	shard: { index: number; count: number } | null;
+	shard: { index: number; count: number; tasks: string[] } | null;
 	repeat: number;
 	host: RunIdentity['host'];
 	base: string;
@@ -70,6 +70,30 @@ export function benchmarkSummary(prs: readonly PrResult[], taskSet: string | und
 				labeledRuns: pr.runs.flatMap((run) => (run.labeled ? [run.labeled] : []))
 			}))
 		)
+	};
+}
+
+/** Missing runs of tasks that ran in part; the runs of a task that never ran are in its missing task. */
+export function partRuns(missing: Missing): string[] {
+	return missing.runs.filter((run) => !missing.tasks.some((task) => run.startsWith(`${task}#`)));
+}
+
+/** What is missing in words: "tasks", "runs" of tasks that ran in part, or both. */
+export function missingWhat(missing: Missing): string {
+	const runs = partRuns(missing).length > 0;
+
+	return missing.tasks.length ? (runs ? 'tasks and runs' : 'tasks') : 'runs';
+}
+
+/** A merged report's partial and declared marks for a header line, and each difference declared at the merge; none for another report. */
+export function mergeNotes(report: BenchmarkReport): { mark: string; declared: MergedReport['merge']['declared'] } {
+	const { summary, merge } = report as Partial<MergedReport>;
+	const declared = merge?.declared ?? [];
+	const missing = { tasks: summary?.missingTasks ?? [], runs: summary?.missingRuns ?? [] };
+
+	return {
+		mark: `${summary?.partial === true ? ` · PARTIAL merge, ${missingWhat(missing)} missing` : ''}${declared.length ? ` · merged with ${declared.length} declared difference${declared.length === 1 ? '' : 's'}` : ''}`,
+		declared
 	};
 }
 
@@ -183,7 +207,9 @@ function mergedSource({ name, report }: MergeSource): MergedSource {
 	return {
 		report: name,
 		reportId: report.reportId ?? null,
-		shard: identity.shard ? { index: identity.shard.index, count: identity.shard.count } : null,
+		shard: identity.shard
+			? { index: identity.shard.index, count: identity.shard.count, tasks: identity.shard.tasks }
+			: null,
 		repeat: identity.execution.repeat ?? 1,
 		host: identity.host,
 		base: report.base,
@@ -195,7 +221,6 @@ function mergedSource({ name, report }: MergeSource): MergedSource {
 	};
 }
 
-/** The merged report: the first report's experiment over every report's tasks and runs, with each source kept. */
 /**
  * The merged runs' execution: the first report's, over every repeat, and a
  * full run again when shards of the full set leave no task out.
@@ -216,6 +241,7 @@ function declaredDiffs(sources: readonly MergeSource[], allow: readonly string[]
 	);
 }
 
+/** The merged report: the first report's experiment over every report's tasks and runs, with each source kept. */
 function mergedReport(sources: readonly MergeSource[], missing: Missing, allow: readonly string[]): MergedReport {
 	const { identity: firstIdentity, derivedFrom: _derivedFrom, ...first } = sources[0]!.report;
 	const { shard: _shard, ...identity } = firstIdentity!;

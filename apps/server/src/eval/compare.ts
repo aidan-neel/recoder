@@ -1,6 +1,7 @@
 import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { identityLine, readReport, type BenchmarkReport } from './benchmark-report';
+import { mergeNotes } from './benchmark-merge';
 import { stageTotals, type StageTotals } from './benchmark-stages';
 import { allowDiffFields, checkCompatibility, compatibilityLines, mergeProblems } from './identity';
 
@@ -41,15 +42,29 @@ function stageTable(a: BenchmarkReport, b: BenchmarkReport): string[] {
 	];
 }
 
-/** Marks a merged report that misses tasks, so its counts are never read as a complete score. */
-function partialMark(report: BenchmarkReport): string {
-	return 'partial' in report.summary && report.summary.partial === true ? ' · PARTIAL merge, tasks missing' : '';
+/**
+ * Each difference a merge into A or B declared, and the fields among them this
+ * compare does not declare too: a merged report's identity is its first
+ * report's, so such a difference would otherwise leave no trace here.
+ */
+function declaredAtMerge(reports: readonly BenchmarkReport[], allow: readonly string[]) {
+	const diffs = reports.flatMap((report, index) =>
+		mergeNotes(report).declared.map((diff) => ({ ...diff, side: 'AB'[index]! }))
+	);
+
+	const covered = (field: string) => allow.some((name) => field === name || field.startsWith(`${name}.`));
+
+	return {
+		lines: diffs.map((diff) => `${diff.side}  declared at merge: ${diff.report} ${diff.field}: ${diff.a} → ${diff.b}`),
+		undeclared: [...new Set(diffs.filter((diff) => !covered(diff.field)).map((diff) => diff.field))]
+	};
 }
 
 /**
  * Prints how two benchmark reports' identities differ and, when they compare,
  * their per-codebase stage counts side by side. Exits 1 when they differ in a
- * field not declared with `--allow-diff`, or either records it as `unknown`; a report without an identity is
+ * field not declared with `--allow-diff`, or either records it as `unknown`, or
+ * a merge into either declared a difference this compare does not; a report without an identity is
  * compared with a warning, since nothing says the two runs are equivalent.
  */
 function main(): number {
@@ -78,16 +93,18 @@ function main(): number {
 
 	const result = checkCompatibility(reports[0]!, reports[1]!, 'compare', allow);
 	const merge = mergeProblems(reports);
+	const merged = declaredAtMerge([a!.report, b!.report], allow);
 
 	console.log(
 		[
 			...[a!, b!].map(
 				({ path, report }, index) =>
-					`${'AB'[index]}  ${basename(path)} · report ${report.reportId ?? 'id not recorded'} · ${report.prs.length} PRs × ${report.runsPerPr} runs · ${identityLine(report)}${partialMark(report)}`
+					`${'AB'[index]}  ${basename(path)} · report ${report.reportId ?? 'id not recorded'} · ${report.prs.length} PRs × ${report.runsPerPr} runs · ${identityLine(report)}${mergeNotes(report).mark}`
 			),
+			...merged.lines,
 			'',
 			...compatibilityLines(result),
-			...(result.unrecorded.length || !result.compatible
+			...(result.unrecorded.length || !result.compatible || merged.undeclared.length
 				? []
 				: ['Compatible: every checked field matches, or differs as declared or expected.']),
 			`Merge: ${merge.length ? `refused, ${merge.join('; ')}` : 'possible'}`
@@ -96,6 +113,14 @@ function main(): number {
 
 	if (result.undeclarable.length) {
 		console.log('\n--allow-diff names a field neither report has; their counts are not compared.');
+
+		return 1;
+	}
+
+	if (merged.undeclared.length) {
+		console.log(
+			`\nA merged report's sources differ in ${merged.undeclared.join(', ')}, declared at the merge; pass --allow-diff ${merged.undeclared.join(',')} to compare its counts.`
+		);
 
 		return 1;
 	}

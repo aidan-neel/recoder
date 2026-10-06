@@ -159,17 +159,19 @@ const RUN_CHECKED: readonly Operation[] = ['compare', 'merge'];
 
 /**
  * Which fields may differ depends on what an operation takes from a report.
- * The adjudications never refuse: every report applies the current ones again
- * to every run, and they decide no defect count. A replay or rescore keeps the
- * reviewers' output and recomputes the rest: the code, the policy and the
- * cache formats are what it measures, and the judge and the labels score it
- * again. Shards of one experiment cover different tasks of one task set.
+ * A resume, replay or compare takes the adjudications as they are: every
+ * report applies the current ones again to every run. A merge judges nothing
+ * again, so shards judged under other adjudications refuse unless declared. A
+ * replay or rescore keeps the reviewers' output and recomputes the rest: the
+ * code, the policy and the cache formats are what it measures, and the judge
+ * and the labels score it again. Shards of one experiment cover different
+ * tasks of one task set.
  */
 const EXEMPT = {
 	resume: ['dataset.adjudications'],
 	replay: ['dataset.adjudications', 'dataset.labels', 'judge', 'code', 'limits.policy', 'caches'],
 	compare: ['dataset.adjudications'],
-	merge: ['dataset.adjudications', 'tasks', 'shard.index', 'shard.tasks']
+	merge: ['tasks', 'shard.index', 'shard.tasks']
 } satisfies Record<string, string[]>;
 
 export type Operation = keyof typeof EXEMPT;

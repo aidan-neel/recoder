@@ -52,9 +52,11 @@ export function shardTasks<Task extends { id: string; codebase: string }>(
 	tasks: readonly Task[],
 	spec: ShardSpec
 ): Task[] {
+	const plural = tasks.length === 1 ? '' : 's';
+
 	if (spec.count > tasks.length)
 		throw new Error(
-			`--shard ${spec.index}/${spec.count}: ${tasks.length} tasks split into at most ${tasks.length} shards.`
+			`--shard ${spec.index}/${spec.count}: ${tasks.length} task${plural} split into at most ${tasks.length} shard${plural}.`
 		);
 
 	return splitTasks(tasks, spec.count)[spec.index - 1]!;

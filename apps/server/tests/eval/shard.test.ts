@@ -48,4 +48,8 @@ test('a shard past the number of tasks is refused rather than run empty', () => 
 	expect(() => shardTasks(tasks.slice(0, 2), { index: 3, count: 3 })).toThrow(
 		'--shard 3/3: 2 tasks split into at most 2 shards.'
 	);
+
+	expect(() => shardTasks(tasks.slice(0, 1), { index: 2, count: 2 })).toThrow(
+		'--shard 2/2: 1 task split into at most 1 shard.'
+	);
 });

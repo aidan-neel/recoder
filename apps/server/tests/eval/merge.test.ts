@@ -69,4 +69,30 @@ test('an incompatible shard is refused with the field named and nothing written'
 
 	expect(declared.code).toBe(0);
 	expect(declared.out).toContain('Declared: set-2.json taskSet: full → quick');
+
+	const [whole] = writeReports(dir, { 'set-whole': unsplit });
+	const compared = run('compare.ts', whole!, out);
+
+	expect(compared.code).toBe(1);
+	expect(compared.out).toContain('merged with 1 declared difference');
+	expect(compared.out).toContain('B  declared at merge: set-2.json taskSet: full → quick');
+	expect(compared.out).toContain('pass --allow-diff taskSet to compare its counts');
+	expect(compared.out).not.toContain('Compatible:');
+	expect(run('compare.ts', whole!, out, '--allow-diff', 'taskSet').code).toBe(0);
+});
+
+test('a shard stopped partway is named by its missing runs, not as missing tasks', () => {
+	const stopped = shardOf(unsplit, 2, 2);
+
+	stopped.prs = stopped.prs.map((pr, index) => (index ? pr : { ...pr, runs: pr.runs.slice(0, 1) }));
+
+	const shards = writeReports(dir, { 'stop-1': shardOf(unsplit, 1, 2), 'stop-2': stopped });
+	const out = join(dir, 'stopped.json');
+
+	expect(run('merge.ts', out, ...shards).out).toContain(
+		`Missing runs (1):\n  ${stopped.prs[0]!.taskId}#2\nNot merging: the reports miss runs; pass --partial`
+	);
+
+	expect(run('merge.ts', out, ...shards, '--partial').out).toContain('Partial: runs are missing');
+	expect(run('compare.ts', out, out).out).toContain('PARTIAL merge, runs missing');
 });
