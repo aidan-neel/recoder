@@ -203,9 +203,30 @@ function namedIn(candidate: CandidateFinding, ids: string[]): string[] {
 const CLAIM_ID = /\b[ACDGN]\d+\b/g;
 
 /**
+ * Why the named ids can't carry an intent-mismatch: an id the intent records
+ * as a prior decision is a reason the code is shaped as it is, not a goal,
+ * criterion, constraint or non-goal a finding is filed under; any other the
+ * intent does not hold at all.
+ */
+function uncitable(ids: string[], intent: RepairScope['intent']): string {
+	const decisions = new Set((intent?.priorDecisions ?? []).map((claim) => claim.id));
+	const decided = ids.filter((id) => decisions.has(id));
+	const missing = ids.filter((id) => !decisions.has(id));
+
+	const parts = [
+		missing.length ? `${missing.join(', ')}, which the intent does not hold` : '',
+		decided.length
+			? `${decided.join(', ')}, which the intent holds as a prior decision, not a goal, acceptance criterion, constraint or non-goal a finding can be filed under`
+			: ''
+	].filter(Boolean);
+
+	return `the finding cites ${parts.join(', and ')}; a repair never invents a claim`;
+}
+
+/**
  * The correction for an intent-mismatch that cites no claim the intent holds.
- * A claim id the finding names that the intent does not hold makes the finding
- * unsupported; a held one named outside violatedContract is cited. With no id
+ * A claim id the finding names that the intent does not hold, or holds only
+ * as a prior decision, makes the finding unsupported; a held one named outside violatedContract is cited. With no id
  * at all, only the model step may choose another of the lens's categories,
  * and only when the claim's path runs through the change. A category is never
  * picked by elimination.
@@ -215,13 +236,7 @@ function intentRepair(candidate: CandidateFinding, raw: ReviewerFinding, scope: 
 	const named = [...new Set(candidateProse(candidate).join('\n').match(CLAIM_ID) ?? [])];
 	const unheld = scope.intent ? named.filter((id) => !held.has(id)) : [];
 
-	if (unheld.length) {
-		return {
-			changes: [],
-			open: [],
-			unsupported: `the finding cites ${unheld.join(', ')}, which the intent does not hold; a repair never invents a claim`
-		};
-	}
+	if (unheld.length) return { changes: [], open: [], unsupported: uncitable(unheld, scope.intent) };
 
 	const cited = named.filter((id) => held.has(id));
 

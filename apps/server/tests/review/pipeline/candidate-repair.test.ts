@@ -171,12 +171,16 @@ function apiMismatch(violatedContract: string, ctx = repairContext()) {
 	return candidateOf(reported({ line: 14, category: 'intent-mismatch', claim }), 'api-contract', ctx);
 }
 
-test('an intent-mismatch citing a claim the intent does not hold is unsupported, never relabelled', () => {
+test('an intent-mismatch citing a claim the intent does not hold, or holds as a decision, is unsupported, never relabelled', () => {
 	const ctx = repairContext();
 
-	for (const [contract, id] of [
-		['G9: the queue is persisted after each item', 'G9'],
-		['D1 says the queue is persisted after each item', 'D1']
+	const decision =
+		'which the intent holds as a prior decision, not a goal, acceptance criterion, constraint or non-goal a finding can be filed under';
+
+	for (const [contract, cites] of [
+		['G9: the queue is persisted after each item', 'G9, which the intent does not hold'],
+		['D1 says the queue is persisted after each item', `D1, ${decision}`],
+		['G9 and D1 say the queue is persisted after each item', `G9, which the intent does not hold, and D1, ${decision}`]
 	]) {
 		const candidate = apiMismatch(contract, ctx);
 		const before = structuredClone(candidate);
@@ -186,7 +190,7 @@ test('an intent-mismatch citing a claim the intent does not hold is unsupported,
 		expect(planRepair(candidate, scopeOf(ctx))).toEqual({
 			changes: [],
 			open: [],
-			unsupported: `the finding cites ${id}, which the intent does not hold; a repair never invents a claim`
+			unsupported: `the finding cites ${cites}; a repair never invents a claim`
 		});
 
 		expect(candidate).toEqual(before);
