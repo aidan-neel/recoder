@@ -57,3 +57,69 @@ test('a candidate matching a finding dismissed in this repository is dropped as 
 	expect(otherRepo.funnel?.dropped.dismissed).toBe(0);
 	expect(bare.funnel?.dropped.dismissed).toBe(0);
 });
+
+/** Two different defects reported on line 1, which consolidation keeps as two findings. */
+function stubSplitLine(): void {
+	stubFindings([
+		{
+			...finding('expired entry is served'),
+			claim: {
+				trigger: 'a second request reads the entry after it expired',
+				executionPath: [],
+				consequence: 'the caller gets a stale value',
+				violatedContract: 'expired entries are never served'
+			}
+		},
+		{
+			...finding('index wraps around'),
+			claim: {
+				trigger: 'the loop runs past two billion iterations',
+				executionPath: [],
+				consequence: 'the counter turns negative and reads out of bounds',
+				violatedContract: 'indexes stay inside the array'
+			}
+		}
+	]);
+}
+
+/** Remembers `dismissed` under `fingerprint`, or under its own dismissal key. */
+function dismiss(dismissed: Finding, fingerprint = dismissalKey(dismissed, DIFF)): void {
+	recordDismissal({
+		repoId: 'repo-1',
+		fingerprint,
+		file: dismissed.file,
+		category: 'correctness',
+		title: dismissed.title ?? '',
+		dismissedAt: new Date().toISOString()
+	});
+}
+
+test('dismissing one of two findings split from one line drops only that one in the next review', async () => {
+	stubSplitLine();
+
+	const first = await runAdaptiveReview({ diff: DIFF, sandboxPath: null, repoId: 'repo-1' });
+
+	expect(titles(first.findings)).toEqual(['expired entry is served', 'index wraps around']);
+	expect(new Set(first.findings.map((entry) => entry.line))).toEqual(new Set([1]));
+
+	dismiss(first.findings.find((entry) => entry.title === 'index wraps around')!);
+
+	const again = await runAdaptiveReview({ diff: DIFF, sandboxPath: null, repoId: 'repo-1' });
+
+	expect(titles([...again.findings, ...again.unconfirmed])).toEqual(['expired entry is served']);
+	expect(again.funnel?.dropped.dismissed).toBe(1);
+});
+
+test('a dismissal stored in the old place-only form is still read, and drops every finding at its place', async () => {
+	stubSplitLine();
+
+	const first = await runAdaptiveReview({ diff: DIFF, sandboxPath: null, repoId: 'repo-1' });
+	const dismissed = first.findings[0];
+
+	dismiss(dismissed, dismissalKey(dismissed, DIFF).split(':')[0]);
+
+	const again = await runAdaptiveReview({ diff: DIFF, sandboxPath: null, repoId: 'repo-1' });
+
+	expect([...again.findings, ...again.unconfirmed]).toEqual([]);
+	expect(again.funnel?.dropped.dismissed).toBe(2);
+});

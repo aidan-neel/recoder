@@ -1,11 +1,11 @@
 import { randomBytes } from 'node:crypto';
-import { existsSync } from 'node:fs';
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { z } from 'zod';
+import { childEnv, findCli, probeVersion } from '../cli-process';
 import { apiFor } from './api/api';
 import type { OpenCodeApi } from './api/types';
 import { OpenCodeError } from './opencode-error';
+
+export { probeVersion } from '../cli-process';
 
 type Env = Record<string, string | undefined>;
 
@@ -28,51 +28,18 @@ export interface ServerRequest {
 
 const START_TIMEOUT_MS = 15_000;
 const REQUEST_TIMEOUT_MS = 20_000;
-const VERSION_TIMEOUT_MS = 10_000;
 
 /** `RECODER_OPENCODE_BIN` when set (empty means none), else the binary on PATH, else OpenCode's installer location. */
 export function findOpenCode(env: Env = process.env): string | null {
-	const pinned = env.RECODER_OPENCODE_BIN;
-
-	if (pinned !== undefined) return pinned && existsSync(pinned) ? pinned : null;
-
-	const onPath = Bun.which('opencode', { PATH: env.PATH ?? '' });
-
-	if (onPath) return onPath;
-
-	const installed = join(env.HOME ?? homedir(), '.opencode', 'bin', 'opencode');
-
-	return existsSync(installed) ? installed : null;
-}
-
-/** `1.18.31`, `opencode 1.18.31` or `v1.18.31` → `1.18.31`. */
-function parseVersion(output: string): string | null {
-	return output.match(/\bv?(\d+\.\d+\.\d+(?:[-+][\w.]+)?)\b/)?.[1] ?? null;
+	return findCli(
+		{ pin: 'RECODER_OPENCODE_BIN', command: 'opencode', installed: ['.opencode', 'bin', 'opencode'] },
+		env
+	);
 }
 
 /** The URL `opencode serve` prints once it's listening. */
 function parseListenUrl(line: string): string | null {
 	return line.match(/listening on (https?:\/\/[^\s]+)/)?.[1]?.replace(/\/$/, '') ?? null;
-}
-
-/** The environment with unset entries dropped, as `Bun.spawn` expects. */
-function childEnv(env: Env): Record<string, string> {
-	const out: Record<string, string> = {};
-
-	for (const [k, v] of Object.entries(env)) if (v !== undefined) out[k] = v;
-
-	return out;
-}
-
-/** Run `opencode --version`. Throws when the binary cannot be run at all. */
-export async function probeVersion(path: string, env: Env): Promise<string | null> {
-	const proc = Bun.spawn([path, '--version'], { stdout: 'pipe', stderr: 'pipe', env: childEnv(env) });
-	const timer = setTimeout(() => proc.kill(), VERSION_TIMEOUT_MS);
-	const [out] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-
-	clearTimeout(timer);
-
-	return parseVersion(out);
 }
 
 /** Keep reading a stream in the background so a full pipe never blocks the server. */

@@ -26,9 +26,9 @@
 	}
 	let { limit, onRetry = null, retrying = false, class: className = '' }: Props = $props();
 
-	/** `codex`, a hosted provider id, or `custom`: the same keys a UsageLimit uses. */
+	/** `codex`, `claude-code`, a hosted provider id, or `custom`: the same keys a UsageLimit uses. */
 	function providerKey(entry: ModelEntry): string {
-		return entry.provider === 'codex' ? 'codex' : (entry.source ?? 'custom');
+		return entry.provider === 'codex' || entry.provider === 'claude-code' ? entry.provider : (entry.source ?? 'custom');
 	}
 
 	/** Models on other providers, grouped by provider. */

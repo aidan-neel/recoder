@@ -16,6 +16,10 @@ export interface AgentStatus {
 	login: string | null;
 	/** Connects model providers itself, so Settings shows its Providers section. */
 	providers: boolean;
+	/** How the CLI is signed in (Claude Code's `authMethod`, e.g. `claude.ai` for a subscription). */
+	authMethod?: string | null;
+	/** What paid for the CLI's latest call (Claude Code's `apiKeySource`; `none` is the subscription). */
+	apiKeySource?: string | null;
 }
 
 /** One way to sign in to a provider, as the agent describes it. */

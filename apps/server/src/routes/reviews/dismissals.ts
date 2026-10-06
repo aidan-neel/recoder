@@ -1,8 +1,9 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import type { Finding, Review } from '@recoder/shared';
+import { splitCategoryTag, type Finding, type Review } from '@recoder/shared';
 import { recordDismissal, removeDismissal } from '../../review/guidelines/learned/dismissals';
 import { dismissalKey } from '../../review/guidelines/learned/finding-key';
+import { matchesDismissal } from '../../review/pipeline/harness/findings';
 import { reviewDiffs } from '../../store';
 import { parseBody } from '../parse-body';
 import { requireReview } from './shared';
@@ -42,7 +43,7 @@ function dismissalTarget(
 
 /** The title a person saw on the finding: its own, else the first line of its message. */
 function titleOf(finding: Finding): string {
-	const title = finding.title ?? finding.message.replace(/^\[[^\]]+\]\s*/, '').split('\n')[0];
+	const title = finding.title ?? splitCategoryTag(finding.message).body.split('\n')[0];
 
 	return title.slice(0, MAX_TITLE_CHARS);
 }
@@ -72,13 +73,18 @@ app.post('/:id/dismissals', async (c) => {
 	return c.json({ dismissed: true });
 });
 
-/** Forget a dismissal, so later reviews may report the finding again. */
+/**
+ * Forget the finding's dismissal, so later reviews may report it again. Every held key that matches the finding goes,
+ * the old place-only form included; the dismissal of another finding split from the same line stays.
+ */
 app.delete('/:id/dismissals/:findingId', (c) => {
 	const target = dismissalTarget(c, c.req.param('findingId'));
 
 	if (target instanceof Response) return target;
 
-	return c.json({ restored: removeDismissal(target.review.repoId, target.fingerprint) });
+	const { review, fingerprint } = target;
+
+	return c.json({ restored: removeDismissal(review.repoId, (held) => matchesDismissal(held, fingerprint)) });
 });
 
 export default app;

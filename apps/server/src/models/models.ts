@@ -21,6 +21,7 @@ import { lockedModels, runLocked, type LockedModels } from './llm/locked-models.
 import { recordLockMiss } from './metrics.js';
 import { hostedProvider } from './model-providers.js';
 import { resolveRuntime } from './runtime-profiles.js';
+import { CLAUDE_CODE_MODEL_PREFIX, claudeCodeEfforts } from '../agents/claude-code/claude-code-models.js';
 import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode.js';
 import { effectiveReviewEnv, getStoredSettings, type StoredModelEntry } from '../review/session/review-settings.js';
 
@@ -152,6 +153,7 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
 		: (stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
 
 	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(entryId, requested ?? undefined);
+	if (entryId?.startsWith(CLAUDE_CODE_MODEL_PREFIX)) return claudeCodeConfig(entryId, requested);
 
 	return entryConfig(entries.find((e) => e.id === entryId) ?? entries[0], requested);
 }
@@ -164,6 +166,7 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
  */
 export function configForModel(id: string, effort: ReasoningEffort | undefined): ModelConfig {
 	if (id.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(id, effort);
+	if (id.startsWith(CLAUDE_CODE_MODEL_PREFIX)) return claudeCodeConfig(id, effort);
 
 	const entry = getStoredSettings().models?.find((e) => e.id === id);
 
@@ -229,6 +232,19 @@ function openCodeConfig(entryId: string, reasoningEffort: ReasoningEffort | unde
 	const model = entryId.slice(OPENCODE_MODEL_PREFIX.length);
 
 	return { provider: 'opencode', source: model.split('/')[0], baseUrl: '', apiKey: '', model, reasoningEffort };
+}
+
+/**
+ * A Claude Code model is a static entry of the CLI adapter, so the config
+ * comes from its id (`claude-code:<model>`). Like ChatGPT it needs no
+ * endpoint or key, and an unset effort takes the model's default.
+ */
+function claudeCodeConfig(entryId: string, requested: ReasoningEffort | null | undefined): ModelConfig {
+	const model = entryId.slice(CLAUDE_CODE_MODEL_PREFIX.length);
+	const { efforts, defaultEffort } = claudeCodeEfforts(model);
+	const reasoningEffort = efforts ? supportedEffort(requested ?? defaultEffort, efforts, defaultEffort) : undefined;
+
+	return { provider: 'claude-code', baseUrl: '', apiKey: '', model, reasoningEffort };
 }
 
 /**

@@ -172,6 +172,10 @@ export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 			call.usage = usage;
 			save();
 		},
+		apiKeySource: (source: string) => {
+			call.apiKeySource = source;
+			save();
+		},
 		finish: (success: boolean) => {
 			call.status = success ? 'completed' : 'failed';
 			save();
