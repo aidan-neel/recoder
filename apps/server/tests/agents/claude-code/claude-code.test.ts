@@ -1,13 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { mkdtemp, readFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import type { TokenUsage } from '@recoder/shared';
 import { ClaudeCodeAgent } from '../../../src/agents/claude-code/claude-code';
 import { LlmError } from '../../../src/models/llm/errors';
 import { JSON_MODE_INSTRUCTION } from '../../../src/models/llm/request-fields';
 import type { ChatOptions } from '../../../src/models/llm/types';
-import { fakeClaude } from '../../helpers/fake-claude';
+import { allGone, fakeClaude, fakeClaudeLog, spawnedPids } from '../../helpers/fake-claude';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	return {
@@ -38,7 +36,7 @@ describe('ClaudeCodeAgent.detect', () => {
 		const signedIn = await new ClaudeCodeAgent(await fakeClaude({ FAKE_CLAUDE_SIGNED_IN: '1' })).detect();
 
 		expect(signedOut).toMatchObject({ installed: true, version: '2.1.281', error: null, signedIn: false });
-		expect(signedIn.signedIn).toBe(true);
+		expect(signedIn).toMatchObject({ signedIn: true, authMethod: 'claude.ai', apiKeySource: null });
 	});
 
 	test('a pinned empty binary means not installed, without running anything', async () => {
@@ -54,12 +52,21 @@ describe('ClaudeCodeAgent.complete', () => {
 		const reasoning: string[] = [];
 		let usage: TokenUsage | undefined;
 
-		const text = await new ClaudeCodeAgent(await fakeClaude()).complete(
-			call({ onUsage: (u) => (usage = u), onReasoning: (r) => reasoning.push(r) }),
+		const sources: string[] = [];
+		const agent = new ClaudeCodeAgent(await fakeClaude());
+
+		const text = await agent.complete(
+			call({
+				onUsage: (u) => (usage = u),
+				onReasoning: (r) => reasoning.push(r),
+				onApiKeySource: (s) => sources.push(s)
+			}),
 			(t) => tokens.push(t)
 		);
 
 		expect(text).toBe('Hi there');
+		expect(sources).toEqual(['none']);
+		expect((await agent.detect()).apiKeySource).toBe('none');
 		expect(tokens).toEqual(['Hi ', 'there']);
 		expect(reasoning).toEqual(['Hmm.']);
 
@@ -74,7 +81,7 @@ describe('ClaudeCodeAgent.complete', () => {
 	});
 
 	test('sends the prompt on stdin and the system prompt as a file, from an empty directory with tools off', async () => {
-		const log = join(await mkdtemp(join(tmpdir(), 'fake-claude-log-')), 'call.txt');
+		const log = await fakeClaudeLog();
 		const agent = new ClaudeCodeAgent(await fakeClaude({ FAKE_CLAUDE_LOG: log }));
 
 		await agent.complete(call({ jsonSchema: { name: 'review', schema: { type: 'object' } } }));
@@ -91,11 +98,58 @@ describe('ClaudeCodeAgent.complete', () => {
 		expect(written).toMatch(/cwd: .*claude-code-empty\n/);
 	});
 
-	test('a signed-out CLI fails with a 401 that names the login command', async () => {
-		const error = await failure(new ClaudeCodeAgent(await fakeClaude({ FAKE_CLAUDE_MODE: 'auth' })));
+	test('the CLI never sees the server keys, tokens, secrets or Claude Code settings, only the basics', async () => {
+		const log = await fakeClaudeLog();
+
+		const stripped = {
+			ANTHROPIC_API_KEY: 'sk-ant-leak',
+			ANTHROPIC_BASE_URL: 'https://leak.test',
+			CLAUDE_CODE_OAUTH_TOKEN: 'oauth-leak',
+			CLAUDE_CODE_USE_BEDROCK: '1',
+			CLAUDECODE: '1',
+			RECODER_REVIEW_API_KEY: 'recoder-leak',
+			OPENAI_API_KEY: 'openai-leak',
+			GH_TOKEN: 'gh-leak',
+			GITHUB_TOKEN: 'github-leak',
+			NPM_TOKEN: 'npm-leak',
+			DEEPSEEK_API_KEY: 'deepseek-leak',
+			AWS_SECRET_ACCESS_KEY: 'aws-leak'
+		};
+
+		const kept = {
+			HOME: '/home/reviewer',
+			USER: 'reviewer',
+			SHELL: '/bin/sh',
+			TERM: 'xterm',
+			LANG: 'C.UTF-8',
+			LC_ALL: 'C.UTF-8',
+			TMPDIR: '/tmp',
+			XDG_CONFIG_HOME: '/home/reviewer/.config',
+			HTTPS_PROXY: 'http://proxy.test:3128',
+			CLAUDE_CONFIG_DIR: '/home/reviewer/.claude'
+		};
+
+		await new ClaudeCodeAgent({ ...(await fakeClaude({ FAKE_CLAUDE_LOG: log })), ...stripped, ...kept }).complete(
+			call()
+		);
+
+		const env = Object.fromEntries(
+			(await readFile(`${log}.env`, 'utf8')).split('\n').map((line) => line.split(/=(.*)/s).slice(0, 2))
+		);
+
+		for (const key of Object.keys(stripped)) expect(env).not.toHaveProperty(key);
+		expect(await readFile(`${log}.env`, 'utf8')).not.toContain('leak');
+		expect(env).toMatchObject(kept);
+	});
+
+	test('a signed-out CLI fails with a 401 that names the login command, and counts no usage', async () => {
+		const usage: TokenUsage[] = [];
+		const agent = new ClaudeCodeAgent(await fakeClaude({ FAKE_CLAUDE_MODE: 'auth' }));
+		const error = await failure(agent, call({ onUsage: (u) => usage.push(u) }));
 
 		expect(error.status).toBe(401);
 		expect(error.message).toContain('claude auth login');
+		expect(usage).toEqual([]);
 	});
 
 	test('a usage limit fails with a 429 that keeps the reset time', async () => {
@@ -111,6 +165,12 @@ describe('ClaudeCodeAgent.complete', () => {
 		expect(error.message).toBe("Claude Code failed: error: unknown option '--bogus'");
 	});
 
+	test('output it cannot parse on a clean exit is reported as such, quoting the last line', async () => {
+		const error = await failure(new ClaudeCodeAgent(await fakeClaude({ FAKE_CLAUDE_MODE: 'garbage' })));
+
+		expect(error.message).toBe('Claude Code output could not be parsed: the last line was "Welcome to Claude Code!".');
+	});
+
 	test('an aborted call kills the process and reports a cancellation', async () => {
 		const controller = new AbortController();
 		const agent = new ClaudeCodeAgent(await fakeClaude({ FAKE_CLAUDE_MODE: 'hang' }));
@@ -122,6 +182,19 @@ describe('ClaudeCodeAgent.complete', () => {
 
 		expect(error.message).toBe('Model request cancelled');
 		expect(Date.now() - started).toBeLessThan(5_000);
+	});
+
+	test('an aborted call kills the CLI together with everything it started', async () => {
+		const log = await fakeClaudeLog();
+		const controller = new AbortController();
+		const agent = new ClaudeCodeAgent(await fakeClaude({ FAKE_CLAUDE_MODE: 'spawn', FAKE_CLAUDE_LOG: log }));
+		const pending = failure(agent, call({ signal: controller.signal }));
+		const pids = await spawnedPids(log);
+
+		controller.abort();
+
+		expect((await pending).message).toBe('Model request cancelled');
+		expect(await allGone(pids)).toBe(true);
 	});
 
 	test('a call past its budget is killed and reports the timeout', async () => {

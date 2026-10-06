@@ -1,10 +1,16 @@
+import { existsSync } from 'node:fs';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fakeBin } from './fake-bin';
 
 /**
  * A fake `claude` CLI. `--version` and `auth status --json` answer at once (`FAKE_CLAUDE_SIGNED_IN=1` signs it
  * in). Print mode reads the prompt from stdin, writes its arguments, working directory, prompt and system prompt
- * file to `FAKE_CLAUDE_LOG`, then prints the canned `stream-json` lines for `FAKE_CLAUDE_MODE`: a reply (default),
- * `auth`, `limit`, `crash` (stderr only) or `hang`.
+ * file to `FAKE_CLAUDE_LOG` and its environment to `<log>.env`, then prints the canned `stream-json` lines for
+ * `FAKE_CLAUDE_MODE`: a reply (default), `auth`, `limit`, `crash` (stderr only), `garbage` (unparsable output,
+ * exit 0), `hang`, or `spawn` (starts a `sleep` grandchild, writes `<own pid> <grandchild pid>` to `<log>.pids`
+ * and waits for it).
  */
 const SCRIPT = `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "2.1.281 (Claude Code)"; exit 0; fi
@@ -25,9 +31,10 @@ done
 
 if [ -n "$FAKE_CLAUDE_LOG" ]; then
 	{ printf 'args:'; printf ' [%s]' "$@"; printf '\\ncwd: %s\\nprompt: %s\\nsystem: %s\\n' "$(pwd)" "$prompt" "$system"; } > "$FAKE_CLAUDE_LOG"
+	env > "$FAKE_CLAUDE_LOG.env"
 fi
 
-echo '{"type":"system","subtype":"init","tools":[],"mcp_servers":[]}'
+echo '{"type":"system","subtype":"init","tools":[],"mcp_servers":[],"apiKeySource":"none"}'
 
 case "$FAKE_CLAUDE_MODE" in
 auth)
@@ -48,8 +55,16 @@ crash)
 	echo "error: unknown option '--bogus'" >&2
 	exit 1
 	;;
+garbage)
+	echo 'Welcome to Claude Code!'
+	;;
 hang)
 	exec sleep 30
+	;;
+spawn)
+	sleep 30 &
+	echo "$$ $!" > "$FAKE_CLAUDE_LOG.pids"
+	wait
 	;;
 *)
 	cat <<'JSON'
@@ -67,4 +82,32 @@ export async function fakeClaude(settings: Record<string, string> = {}): Promise
 	const { env } = await fakeBin('claude', SCRIPT);
 
 	return { ...env, ...settings };
+}
+
+/** A fresh path for the fake's `FAKE_CLAUDE_LOG`. */
+export async function fakeClaudeLog(): Promise<string> {
+	return join(await mkdtemp(join(tmpdir(), 'fake-claude-log-')), 'call.txt');
+}
+
+/** The pids a `spawn` run wrote (the fake's own and its `sleep` grandchild's), once it has written them. */
+export async function spawnedPids(log: string): Promise<number[]> {
+	for (let i = 0; i < 400 && !existsSync(`${log}.pids`); i++) await Bun.sleep(25);
+
+	return (await readFile(`${log}.pids`, 'utf8')).trim().split(' ').map(Number);
+}
+
+/** Whether `pid` is still a live process; a zombie waiting to be reaped counts as gone. */
+function alive(pid: number): boolean {
+	const stat = Bun.spawnSync(['ps', '-o', 'stat=', '-p', String(pid)])
+		.stdout.toString()
+		.trim();
+
+	return stat !== '' && !stat.startsWith('Z');
+}
+
+/** Whether every one of `pids` has ended within two seconds. */
+export async function allGone(pids: number[]): Promise<boolean> {
+	for (let i = 0; i < 80 && pids.some(alive); i++) await Bun.sleep(25);
+
+	return !pids.some(alive);
 }

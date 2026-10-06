@@ -45,6 +45,8 @@ export interface ChatOptions {
 	onProgress?: (state: 'queued' | 'running', elapsedMs: number) => void;
 	/** Latest cumulative usage for this request, not a delta. */
 	onUsage?: (usage: TokenUsage) => void;
+	/** What pays for the call, for a CLI that says so (Claude Code's `apiKeySource`). */
+	onApiKeySource?: (source: string) => void;
 	/** Provider-disclosed reasoning/thinking text, streamed as deltas when available. */
 	onReasoning?: (text: string) => void;
 	/** Output speed as the call streams (estimated), then its average once it ends. */

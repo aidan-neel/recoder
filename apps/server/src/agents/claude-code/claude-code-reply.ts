@@ -29,6 +29,9 @@ const deltaSchema = z.object({
 	})
 });
 
+/** The CLI's first line. `apiKeySource` says what pays for the call: `none` is the signed-in subscription. */
+const initSchema = z.object({ type: z.literal('system'), subtype: z.literal('init'), apiKeySource: z.string() });
+
 /** An assistant message the CLI wrote in place of a reply when the API call failed. */
 const apiErrorSchema = z.object({
 	type: z.literal('assistant'),
@@ -55,6 +58,9 @@ const ERROR_STATUS: Record<string, number> = {
 
 /** Wording of a failure that has no error code, for older CLIs and plain-text results. */
 const SIGNED_OUT = /not logged in|failed to authenticate|please run \/login|invalid api key|oauth (?:token|session)/i;
+
+/** Longest stretch of unparsed output quoted in an error. */
+const QUOTED_CHARS = 300;
 
 const LIMIT =
 	/usage limit|hit your [\w\s]*limit|limit reached|out of (?:usage|extra usage|credits)|resets? (?:at|in)\b/i;
@@ -99,6 +105,11 @@ function tokenUsage(usage: z.infer<typeof usageSchema>): TokenUsage {
 	};
 }
 
+/** The last non-empty line of `text`, cut to `QUOTED_CHARS`. */
+function lastLine(text: string): string | undefined {
+	return text.trim().split('\n').at(-1)?.trim().slice(0, QUOTED_CHARS) || undefined;
+}
+
 function parseLine(line: string): unknown {
 	try {
 		return JSON.parse(line);
@@ -107,10 +118,11 @@ function parseLine(line: string): unknown {
 	}
 }
 
-/** Where the reader sends streamed text and thinking as it arrives. */
-export interface ReplyHandlers {
+/** Where the reader sends streamed text and thinking as they arrive, and what pays for the call. */
+interface ReplyHandlers {
 	onText?: (delta: string) => void;
 	onThinking?: (delta: string) => void;
+	onApiKeySource?: (source: string) => void;
 }
 
 /**
@@ -121,6 +133,7 @@ export class ReplyReader {
 	private streamed = '';
 	private code: string | null = null;
 	private result: Result | null = null;
+	private last = '';
 
 	constructor(private readonly handlers: ReplyHandlers) {}
 
@@ -128,7 +141,12 @@ export class ReplyReader {
 		const value = parseLine(line);
 		const delta = deltaSchema.safeParse(value);
 
+		this.last = line;
 		if (delta.success) return this.delta(delta.data.event.delta);
+
+		const init = initSchema.safeParse(value);
+
+		if (init.success) return this.handlers.onApiKeySource?.(init.data.apiKeySource);
 
 		const failed = apiErrorSchema.safeParse(value);
 
@@ -143,17 +161,14 @@ export class ReplyReader {
 		if (result.success) this.result = result.data;
 	}
 
-	/** The reply text, after any of it the stream had not delivered is sent. Throws when the call failed. */
+	/**
+	 * The reply text, after any of it the stream had not delivered is sent, and its usage. Throws when the call
+	 * failed, without reporting usage: a failed call is not counted as tokens spent.
+	 */
 	finish(onUsage: ((usage: TokenUsage) => void) | undefined, exit: { code: number; stderr: string }): string {
 		const result = this.result;
 
-		if (!result) {
-			const reason = exit.stderr.trim().split('\n').at(-1);
-
-			throw new LlmError(0, reason ? `Claude Code failed: ${reason}` : `Claude Code exited with code ${exit.code}.`);
-		}
-
-		if (result.usage) onUsage?.(tokenUsage(result.usage));
+		if (!result) throw this.unfinished(exit);
 
 		const text = result.result ?? '';
 
@@ -165,11 +180,33 @@ export class ReplyReader {
 			);
 		}
 
+		if (result.usage) onUsage?.(tokenUsage(result.usage));
+
 		if (text.startsWith(this.streamed) && text.length > this.streamed.length) {
 			this.handlers.onText?.(text.slice(this.streamed.length));
 		}
 
 		return text;
+	}
+
+	/**
+	 * A run that printed no result line. One that exited cleanly printed something this reader cannot parse, so
+	 * the error quotes its last output line (or stderr line); one that failed quotes its last stderr line.
+	 */
+	private unfinished(exit: { code: number; stderr: string }): LlmError {
+		const stdout = lastLine(this.last);
+		const stderr = lastLine(exit.stderr);
+
+		if (exit.code === 0) {
+			const quoted = stdout ?? stderr;
+
+			return new LlmError(
+				0,
+				`Claude Code output could not be parsed: ${quoted ? `the last line was "${quoted}"` : 'it printed nothing'}.`
+			);
+		}
+
+		return new LlmError(0, stderr ? `Claude Code failed: ${stderr}` : `Claude Code exited with code ${exit.code}.`);
 	}
 
 	private delta(delta: { type: string; text?: string; thinking?: string }): void {
