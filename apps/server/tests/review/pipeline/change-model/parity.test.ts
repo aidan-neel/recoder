@@ -9,7 +9,7 @@ import { buildFrom } from './fixtures';
  */
 for (const [name, { base, head }] of Object.entries(CASES)) {
 	test(`the ${name} change model is unchanged with caller selection off`, async () => {
-		const { model } = await buildFrom(base, head);
+		const { model } = await buildFrom(base, head, false);
 
 		expect(model).toMatchSnapshot();
 	});

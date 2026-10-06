@@ -103,9 +103,12 @@ function clip(text: string, chars: number): string {
 	return text.length > chars ? `${text.slice(0, chars)}…` : text;
 }
 
-/** Whether callers are shown: the declaration was deleted, or its signature or export status changed. */
+/**
+ * Whether callers are shown: the declaration was deleted, its signature or
+ * export status changed, or (with caller selection on) a behavior callers rely on changed.
+ */
 function contractChanged(symbol: ChangedSymbol): boolean {
-	return symbol.change === 'deleted' || symbol.previousSignature !== undefined;
+	return symbol.change === 'deleted' || symbol.previousSignature !== undefined || symbol.behavior !== undefined;
 }
 
 /** The declaration as it reads now, and as it read before when that differs. */
@@ -113,7 +116,15 @@ function contractRow(symbol: ChangedSymbol): string {
 	const was = symbol.previousSignature;
 	const before = was !== undefined && was !== symbol.signature ? ` (was: ${clip(was, CONTRACT_CHARS)})` : '';
 
-	return `  contract: ${clip(symbol.signature, CONTRACT_CHARS)}${before}`;
+	const contract = `  contract: ${clip(symbol.signature, CONTRACT_CHARS)}${before}`;
+
+	if (!symbol.behavior) return contract;
+
+	return [
+		contract,
+		`  changed behavior: ${symbol.behavior.join(', ')}`,
+		...(symbol.doc ? [`  documented: ${symbol.doc}`] : [])
+	].join('\n');
 }
 
 /** Call sites and tests for a changed contract: path:line and the trimmed source line. */
@@ -122,7 +133,10 @@ function callerRows(symbol: ChangedSymbol): string[] {
 
 	if (!callers.length) return symbol.usageUnknown ? [] : ['  callers: none found'];
 
-	const tag = (ref: SymbolReference) => (ref.kind === 'test' ? ' [test]' : ref.inDiff ? ' [in this diff]' : '');
+	const relies = (ref: SymbolReference) => (ref.dependsOn ? ` [relies on: ${ref.dependsOn.join(', ')}]` : '');
+
+	const tag = (ref: SymbolReference) =>
+		(ref.kind === 'test' ? ' [test]' : ref.inDiff ? ' [in this diff]' : '') + relies(ref);
 
 	return [
 		'  callers:',

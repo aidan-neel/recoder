@@ -27,8 +27,9 @@ export function sourceItem(symbol: ChangedSymbol): ContextItem {
 	};
 }
 
-/** Why a caller made the list: the group `callerOrder` put it in. */
+/** Why a caller made the list: the changed behavior it relies on, or the group `callerOrder` put it in. */
 function callerWhy(ref: SymbolReference): string {
+	if (ref.dependsOn) return `relies on the changed ${ref.dependsOn.join(', ')}`;
 	if (ref.kind === 'test') return 'test that uses it';
 
 	return ref.inDiff ? 'call this diff adds' : 'call outside the diff';
@@ -44,9 +45,12 @@ function callerItem(symbol: ChangedSymbol, ref: SymbolReference): ContextItem {
 	};
 }
 
-/** Why the block states a contract: the declaration went away, or its signature or export changed. */
+/** Why the block states a contract: the declaration went away, its signature or export changed, or a behavior did. */
 function contractWhy(symbol: ChangedSymbol): string {
-	return symbol.change === 'deleted' ? 'declaration deleted' : 'signature or export changed';
+	if (symbol.change === 'deleted') return 'declaration deleted';
+	if (symbol.previousSignature !== undefined) return 'signature or export changed';
+
+	return `changed ${symbol.behavior?.join(', ')}${symbol.doc ? ', documented' : ''}`;
 }
 
 /**
