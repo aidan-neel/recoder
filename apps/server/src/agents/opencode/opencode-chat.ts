@@ -1,11 +1,9 @@
-import { mkdir } from 'node:fs/promises';
-import { join } from 'node:path';
 import { z } from 'zod';
 import type { ReasoningEffort } from '@recoder/shared';
 import { LlmError, cancelledError, timedOutError } from '../../models/llm/errors';
+import { emptyDirectory } from '../cli-process';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import type { ChatMessage, ChatOptions } from '../../models/llm/types';
-import { serverDataDir } from '../../util/data-dir';
 import { splitModel, type Reply } from './api/types';
 import { OpenCodeError } from './opencode-error';
 import { followSession } from './opencode-events';
@@ -18,17 +16,8 @@ export interface OpenCodeChatHost {
 	efforts(model: string): Promise<ReasoningEffort[] | null>;
 }
 
-/**
- * A directory with nothing in it, so the session never sees the user's files
- * or the PR checkout. OpenCode scopes a session's project to its directory.
- */
-export async function emptyDirectory(): Promise<string> {
-	const dir = join(serverDataDir(), 'opencode-empty');
-
-	await mkdir(dir, { recursive: true });
-
-	return dir;
-}
+/** The empty directory OpenCode sessions run in, see {@link emptyDirectory}. */
+export const OPENCODE_EMPTY_DIR = 'opencode-empty';
 
 /** The system prompt OpenCode takes apart from the turns, and the turns themselves. */
 function promptParts({ messages, jsonMode }: ChatOptions): { system: string; turns: ChatMessage[] } {
@@ -126,7 +115,7 @@ export async function openCodeChat(
 	const timeout = AbortSignal.timeout(timeoutMs);
 	const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
 	const stream = new AbortController();
-	const directory = await emptyDirectory();
+	const directory = await emptyDirectory(OPENCODE_EMPTY_DIR);
 	let turn: SessionTurn | null = null;
 	let settle: (final: string) => void = () => {};
 	let ok = false;

@@ -58,13 +58,17 @@
 	const terms = $derived(q.split(/\s+/).filter(Boolean));
 	const multiAgent = $derived(new Set(models.map((option) => option.agent)).size > 1);
 
-	/** Models by provider (and agent, when more than one runs models), A to Z, with each group's first row index. */
+	/**
+	 * Models by provider (and agent, when more than one runs models and it is not the provider itself, as with
+	 * Claude Code), A to Z, with each group's first row index.
+	 */
 	const groups = $derived.by(() => {
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local Map in $derived.by, not reactive state
 		const byHeading = new Map<string, ModelOption[]>();
 
 		for (const option of models) {
-			const heading = multiAgent ? `${option.agent} · ${option.provider}` : option.provider;
+			const heading =
+				multiAgent && option.agent !== option.provider ? `${option.agent} · ${option.provider}` : option.provider;
 
 			byHeading.set(heading, [...(byHeading.get(heading) ?? []), option]);
 		}

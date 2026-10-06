@@ -68,6 +68,10 @@ function scopedOptions(
 			rate.usage(usage);
 			opts.onUsage?.(usage);
 		}),
+		onApiKeySource: scope.live((source: string) => {
+			tracking.apiKeySource(source);
+			opts.onApiKeySource?.(source);
+		}),
 		onReasoning:
 			onReasoning &&
 			scope.live((text: string) => {

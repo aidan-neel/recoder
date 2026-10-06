@@ -7,8 +7,8 @@ export const SUBAGENT_CAPS = [0, 2, 4] as const;
 export type SubagentCap = (typeof SUBAGENT_CAPS)[number];
 export const DEFAULT_SUBAGENT_CAP: SubagentCap = 2;
 
-/** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode CLI. */
-export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode';
+/** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode or Claude Code CLI. */
+export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode' | 'claude-code';
 
 /** Sampling settings a model wants; an unset field takes the built-in profile for the model, then the default. */
 export interface ModelRuntimeProfile {

@@ -2,11 +2,21 @@ import { CapacityError, cancelledError } from './errors';
 
 const DEFAULT_CEILING = 64;
 
+/**
+ * Endpoints whose every call starts a local process get a small ceiling of their own, read from an env var:
+ * Claude Code runs one `claude` CLI per call, so `RECODER_CLAUDE_CODE_CONCURRENCY` (default 4) caps it,
+ * never above the shared ceiling.
+ */
+const PROCESS_CEILINGS: Record<string, { env: string; fallback: number }> = {
+	'claude-code': { env: 'RECODER_CLAUDE_CODE_CONCURRENCY', fallback: 4 }
+};
+
 const BACKOFF_FLOOR = 4;
 
 const BACKOFF_COOLDOWN_MS = 10_000;
 
 interface EndpointState {
+	endpoint: string;
 	active: number;
 	backedOffLimit: number;
 	lastCutAt: number;
@@ -17,7 +27,8 @@ interface EndpointState {
  * Concurrency cap kept per model endpoint, shared by review assignments and
  * interactive discussions, so no endpoint is overwhelmed and one provider's
  * trouble never slows another. RECODER_LLM_CONCURRENCY sets each endpoint's
- * ceiling (default 64, so a score of reviews can run at once). Below the ceiling
+ * ceiling (default 64, so a score of reviews can run at once); Claude Code's
+ * endpoint is capped lower, see {@link PROCESS_CEILINGS}. Below the ceiling
  * sits an effective limit that backs off when that endpoint pushes back: a rate
  * limit halves it down to a floor of 4, at most once per cooldown so a burst of
  * rejected calls counts as one signal, and after the cooldown every success on
@@ -32,7 +43,7 @@ function stateOf(endpoint: string): EndpointState {
 	let state = endpoints.get(endpoint);
 
 	if (!state) {
-		state = { active: 0, backedOffLimit: Infinity, lastCutAt: -Infinity, waiters: [] };
+		state = { endpoint, active: 0, backedOffLimit: Infinity, lastCutAt: -Infinity, waiters: [] };
 		endpoints.set(endpoint, state);
 	}
 
@@ -58,14 +69,22 @@ export function llmEndpoint(target: { baseUrl?: string; provider?: string }): st
 	}
 }
 
-function llmCeiling(): number {
-	const raw = Number(process.env.RECODER_LLM_CONCURRENCY);
+/** A positive whole count from the environment, or the fallback. */
+function envCount(name: string, fallback: number): number {
+	const raw = Number(process.env[name]);
 
-	return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : DEFAULT_CEILING;
+	return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
+}
+
+function llmCeiling(endpoint: string): number {
+	const shared = envCount('RECODER_LLM_CONCURRENCY', DEFAULT_CEILING);
+	const own = PROCESS_CEILINGS[endpoint];
+
+	return own ? Math.min(shared, envCount(own.env, own.fallback)) : shared;
 }
 
 function llmLimit(state: EndpointState): number {
-	return Math.min(state.backedOffLimit, llmCeiling());
+	return Math.min(state.backedOffLimit, llmCeiling(state.endpoint));
 }
 
 /** Hands free slots to waiters in arrival order while the limit allows. */
@@ -84,7 +103,7 @@ export function recordLlmSuccess(endpoint: string): void {
 
 	const limit = llmLimit(state);
 
-	state.backedOffLimit = limit + 1 >= llmCeiling() ? Infinity : limit + 1;
+	state.backedOffLimit = limit + 1 >= llmCeiling(endpoint) ? Infinity : limit + 1;
 	grantWaiters(state);
 }
 
@@ -96,7 +115,7 @@ export function recordLlmRateLimit(endpoint: string): void {
 	if (now - state.lastCutAt < BACKOFF_COOLDOWN_MS) return;
 
 	state.lastCutAt = now;
-	state.backedOffLimit = Math.max(Math.min(BACKOFF_FLOOR, llmCeiling()), Math.floor(llmLimit(state) / 2));
+	state.backedOffLimit = Math.max(Math.min(BACKOFF_FLOOR, llmCeiling(endpoint)), Math.floor(llmLimit(state) / 2));
 }
 
 export async function acquireLlmSlot(endpoint: string, signal?: AbortSignal, timeoutMs = 120_000): Promise<void> {

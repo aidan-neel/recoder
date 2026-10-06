@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
-import { LlmError } from '../../src/models/llm';
+import { claudeCodeError } from '../../src/agents/claude-code/claude-code-reply';
+import { LlmError, isTransientLlmError } from '../../src/models/llm';
 import { modelFailure } from '../../src/models/model-failure';
 
 test('a signed-out ChatGPT call asks the developer to sign in', () => {
@@ -108,4 +109,29 @@ test('an OpenCode 429 that only throttles requests is not reported as out of usa
 	);
 
 	expect(failure.usageLimit).toBeUndefined();
+});
+
+test('a signed-out Claude Code call names the login command, not a key or a ChatGPT sign-in', () => {
+	const error = claudeCodeError(
+		'Failed to authenticate: OAuth session expired and could not be refreshed',
+		'authentication_failed',
+		null
+	);
+
+	const failure = modelFailure(error, { provider: 'claude-code' }, 'fallback');
+
+	expect(failure.reason).toContain('Claude Code is not signed in');
+	expect(failure.reason).toContain('claude auth login');
+	expect(failure.signIn).toBeUndefined();
+	expect(failure.usageLimit).toBeUndefined();
+});
+
+test('a Claude Code usage limit stops as out of usage with its reset time, and is never retried', () => {
+	const error = claudeCodeError("You've hit your limit · resets 3pm (UTC)", 'rate_limit', 429);
+	const failure = modelFailure(error, { provider: 'claude-code' }, 'fallback');
+
+	expect(failure.usageLimit).toEqual({ provider: 'claude-code', name: 'Claude Code', usageUrl: null });
+	expect(failure.reason).toContain('Claude Code is out of usage');
+	expect(failure.reason).toContain('resets 3pm (UTC)');
+	expect(isTransientLlmError(error, 'claude-code')).toBe(false);
 });

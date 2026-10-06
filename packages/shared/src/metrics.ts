@@ -26,6 +26,8 @@ export interface TokenCall {
 	scope: TokenScope;
 	status: 'pending' | 'completed' | 'failed';
 	usage: TokenUsage;
+	/** What paid for a Claude Code call, as the CLI reports it: `none` is the signed-in subscription, not a key. */
+	apiKeySource?: string;
 }
 
 export interface TokenAggregate {

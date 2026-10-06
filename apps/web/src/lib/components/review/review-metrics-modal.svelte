@@ -7,7 +7,7 @@
 	import type { ReviewMetrics, TokenAggregate } from '@recoder/shared';
 	import UsageSkeleton from '../settings/usage-skeleton.svelte';
 	import { serverApi } from '$lib/api/server-api';
-	import { modelLabel } from '$lib/settings/model-settings.svelte';
+	import { appName, modelLabel } from '$lib/settings/model-settings.svelte';
 
 	let { reviewId }: { reviewId: string } = $props();
 
@@ -140,7 +140,7 @@
 							<div class="flex items-baseline justify-between gap-3">
 								<span class="min-w-0 truncate text-[12.5px] text-fg" title={model.model}
 									>{modelLabel(model.model)}<span class="ms-2 font-sans text-[12px] text-fg-faint"
-										>{model.provider === 'codex' ? 'ChatGPT' : 'Endpoint'}</span
+										>{appName(model.provider) ?? 'Endpoint'}</span
 									></span
 								>
 								<span class="shrink-0 font-mono text-[12.5px] text-fg-muted tabular-nums">{tokens(model.tokens)}</span>

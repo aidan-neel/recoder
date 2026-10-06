@@ -11,9 +11,10 @@ function isolateStorage(): void {
 	delete process.env.GITLAB_TOKEN;
 }
 
-/** Never start the developer's real OpenCode (or touch its logins); agent tests bring a fake one. */
+/** Never start the developer's real OpenCode or Claude Code (or touch their logins); agent tests bring a fake one. */
 function keepRealAgentsOut(): void {
 	process.env.RECODER_OPENCODE_BIN = '';
+	process.env.RECODER_CLAUDE_BIN = '';
 }
 
 /** Tests simulate provider failures and expect them to surface at once; llm-retry.test.ts opts back in. */

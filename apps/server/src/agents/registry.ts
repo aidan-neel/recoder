@@ -1,4 +1,5 @@
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
+import { claudeCode } from './claude-code/claude-code';
 import { opencode } from './opencode/opencode';
 
 /**
@@ -15,7 +16,7 @@ export interface AgentAdapter {
 	models(): Promise<ModelEntry[]>;
 }
 
-const AGENTS: AgentAdapter[] = [opencode];
+const AGENTS: AgentAdapter[] = [opencode, claudeCode];
 
 export function agentStatuses(refresh = false): Promise<AgentStatus[]> {
 	return Promise.all(AGENTS.map((agent) => agent.detect(refresh)));
