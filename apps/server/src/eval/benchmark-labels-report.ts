@@ -9,13 +9,13 @@ import {
 
 export const percent = (value: number) => `${(value * 100).toFixed(0)}%`.padStart(4);
 
-/** "precision 51% to 77% (U 12)": both bounds and how many findings are still unresolved. */
+/** "precision 39% to 87% of 194 (U 94)": both bounds over every published finding, and how many are still unresolved. */
 function boundsText(counts: ClassCounts): string {
 	const bounds = precisionBounds(counts);
 
 	if (!bounds) return 'precision n/a';
 
-	return `precision ${percent(bounds.lower)} to ${percent(bounds.upper)} (U ${bounds.unresolved})`;
+	return `precision ${percent(bounds.lower)} to ${percent(bounds.upper)} of ${bounds.published} (U ${bounds.unresolved})`;
 }
 
 function groupLine(label: string, { counts, runs }: LabelGroup, withRates: boolean): string {
@@ -44,7 +44,7 @@ export function labelLines({ overall, byCodebase, byEvidence, control, hiddenAdd
 
 	return [
 		'',
-		'Findings by class (precision is an interval until every unresolved finding is labeled)',
+		'Findings by class (precision over every published finding is an interval until every unresolved one is labeled)',
 		groupLine('all', overall, true),
 		...Object.keys(byCodebase)
 			.sort()

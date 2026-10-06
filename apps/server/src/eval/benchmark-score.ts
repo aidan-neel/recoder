@@ -26,6 +26,30 @@ export interface PrScore {
 	duplicates: number[];
 	/** Findings that report no planted defect: false positives, or real issues the generator didn't plant. */
 	unlabeled: number[];
+	/** Defect id → the other findings that report it again; absent from scores older than judge version 2. */
+	repeats?: Record<string, number[]>;
+	/** Defect id → what the judge read in the finding it weighed for it; absent as with `repeats`. */
+	notes?: Record<string, JudgeNote>;
+	/** The human corrections applied over the judge's calls; absent when none applied. */
+	adjudicated?: MatchCorrection[];
+}
+
+/** The finding the judge weighed for one defect, the behavior and cause it read there, and whether both are the defect's. */
+export interface JudgeNote {
+	/** Null when no finding came close. */
+	finding: number | null;
+	behavior: string;
+	cause: string;
+	/** False for a claim the judge weighed and rejected: a nearby finding about another behavior or cause. */
+	reports: boolean;
+}
+
+/** A human's call, from the adjudication file, on whether one finding reports one defect, and why. */
+export interface MatchCorrection {
+	defect: string;
+	finding: number;
+	reports: boolean;
+	reason: string;
 }
 
 /** Defects found over planted, summed across runs. */
