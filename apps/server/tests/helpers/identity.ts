@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { RunIdentity, StageModel } from '../../src/eval/identity';
+import { withHash, type RunIdentity, type StageModel } from '../../src/eval/identity';
 
 const stage: StageModel = {
 	model: 'gpt-x',
@@ -39,6 +39,13 @@ export function identityFields(): Omit<RunIdentity, 'version' | 'hash'> {
 		execution: { mode: 'full', ran: 'full', concurrency: 3, timeoutMs: 2_700_000, runsPerPr: 1, baselineCache: true },
 		unavailable: {}
 	};
+}
+
+/** The identity a report written today records: every one of its `runs` reviewed under it. */
+export function recordedIdentity(fields = identityFields(), runs = 1): RunIdentity {
+	const identity = withHash(fields);
+
+	return { ...identity, runs: { [identity.hash]: runs } };
 }
 
 /**

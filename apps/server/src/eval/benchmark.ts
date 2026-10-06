@@ -6,7 +6,6 @@ import {
 	readReport,
 	reviewerManifest,
 	type BenchmarkReport,
-	type Derivation,
 	type PrResult,
 	type ScoredRun
 } from './benchmark-report';
@@ -24,18 +23,18 @@ import { resolvePlan } from './auto-plan';
 import { parseEvalArgs, type RunOptions } from './cli';
 import { stabilityMetrics } from './metrics';
 import { getServerIdentity, getSettings, replayReview, resolveRepo } from './client';
-import { captureTree, sameTree, type TreeState } from './harness-tree';
+import { captureTree } from './harness-tree';
+import { UNKNOWN, allowDiffFields, taskIdOf } from './identity';
 import {
-	UNKNOWN,
-	allowDiffFields,
-	checkCompatibility,
-	compatibilityLines,
-	runCache,
-	runIdOf,
-	taskIdOf,
-	type RunCache,
-	type RunIdentity
-} from './identity';
+	checkReuse,
+	harnessRecord,
+	replayedReviews,
+	resumedRecords,
+	reusedRuns,
+	runIdentities,
+	stamped,
+	type Prior
+} from './benchmark-reuse';
 import { captureIdentity } from './identity-capture';
 import { writeEvalFile } from './report';
 import { runReview, stopOnInterrupt } from './run-review';
@@ -158,56 +157,19 @@ async function resolveRepos(base: string, labels: PrLabel[]): Promise<Map<string
 }
 
 /**
- * The judged runs of a saved report, placed by run number. Failed and unjudged
- * runs are left out so they run again: a restart mid-review fails it without
- * saying anything about the review itself.
- */
-function resumedRecords(report: BenchmarkReport, labels: PrLabel[]): ScoredRun[][] {
-	return labels.map((label) => {
-		const records: ScoredRun[] = [];
-
-		for (const run of report.prs.find((pr) => pr.id === label.id)?.runs ?? []) {
-			if (run.score) records[run.index - 1] = run;
-		}
-
-		return records;
-	});
-}
-
-/** A run with its stable id, and where its review came from. */
-function stamped(label: PrLabel, run: ScoredRun, review: RunCache['review']): ScoredRun {
-	return { ...run, runId: runIdOf(taskIdOf(label.id, label.headSha), run.index), cache: runCache(review) };
-}
-
-/**
- * The review ids of a saved report's passed runs, placed by run number. A
- * replay updates those reviews in place, so replaying a report twice replays
- * the first replay's result.
- */
-function replayedReviews(report: BenchmarkReport, labels: PrLabel[]): string[][] {
-	return labels.map((label) => {
-		const ids: string[] = [];
-
-		for (const run of report.prs.find((pr) => pr.id === label.id)?.runs ?? []) {
-			if (run.outcome === 'passed') ids[run.index - 1] = run.reviewId;
-		}
-
-		return ids;
-	});
-}
-
-/**
  * Every run of every PR not already in `records`, `concurrency` reviews at a
  * time, each judged as it finishes. Jobs go round by round, so a long
  * benchmark stopped early still covers every PR; `onRun` sees the records
  * after each run. With `replays`, each run replays that saved review instead,
- * and runs without one are skipped.
+ * and runs without one are skipped. Each run is stamped with `identity`, the
+ * hash it is reviewed under, and the judge that scores it.
  */
 async function runAll(
 	options: Options,
 	labels: PrLabel[],
 	repos: Map<string, Repo>,
 	judge: Judge,
+	identity: string,
 	records: ScoredRun[][],
 	replays: string[][] | null,
 	onRun: (records: ScoredRun[][]) => void
@@ -237,7 +199,12 @@ async function runAll(
 				replays ? () => replayReview(options.base, replays[pr]![run]!, reverify) : undefined
 			);
 
-			records[pr]![run] = stamped(label, await scoreRun(judge, label, record, options.base), review);
+			records[pr]![run] = stamped(label, await scoreRun(judge, label, record, options.base), {
+				review,
+				identity,
+				judge: judge.model
+			});
+
 			onRun(records);
 		}
 	};
@@ -288,65 +255,6 @@ function prResult(label: PrLabel, records: ScoredRun[], bases: Map<string, strin
 		staleHead: runs.some((run) => run.headSha !== 'unknown' && run.headSha !== label.headSha),
 		agreement: stability && { strict: stability.strict, loose: stability.loose },
 		runs
-	};
-}
-
-/** The harness record for a new report: where its reviewers ran is the report their output came from, or this tree for a run that starts them. */
-function harnessRecord(tree: TreeState | null, origin: BenchmarkReport | null, resumed: BenchmarkReport | null) {
-	if (!tree) return undefined;
-	if (origin) return { tree, reviewers: origin.harness?.reviewers ?? null };
-
-	return { tree, reviewers: !resumed || sameTree(resumed.harness?.reviewers, tree) ? tree : null };
-}
-
-/** The report a resume, replay or rescore reuses, and how. */
-interface Prior {
-	path: string;
-	report: BenchmarkReport;
-	operation: Derivation['operation'];
-}
-
-/**
- * Refuses to reuse a report whose identity differs from this run's in a field
- * the reuse does not expect and `--allow-diff` does not declare, naming each
- * field. A report that records no identity is refused unless `identity` is declared.
- */
-function checkReuse(identity: RunIdentity, prior: Prior, allow: string[]): Derivation {
-	const name = basename(prior.path);
-	const operation = prior.operation === 'resume' ? 'resume' : 'replay';
-
-	const result = checkCompatibility(
-		{ name, identity: prior.report.identity },
-		{ name: 'this run', identity },
-		operation,
-		allow
-	);
-
-	const lines = compatibilityLines(result);
-
-	if (lines.length) console.log([`Identity of ${name} → this run`, ...lines].join('\n'));
-
-	if (!result.compatible) {
-		const fields = result.unrecorded.length
-			? ['identity']
-			: [
-					...new Set(
-						[...result.refused, ...result.unverifiable].map((diff) =>
-							diff.field.startsWith('tasks.') ? 'tasks' : diff.field
-						)
-					)
-				];
-
-		throw new Error(
-			`Not reusing ${name}. To reuse it anyway, declare the difference: --allow-diff ${fields.join(',')}`
-		);
-	}
-
-	return {
-		operation: prior.operation,
-		report: name,
-		identity: prior.report.identity?.hash ?? 'not recorded',
-		declared: result.declared
 	};
 }
 
@@ -404,13 +312,11 @@ async function main(): Promise<void> {
 	const derivedFrom = prior ? checkReuse(identity, prior, options.allowDiff) : undefined;
 	const bases = new Map(identity.tasks.map((task) => [task.taskId, task.base]));
 
-	const initial = (
-		plan.rescore
-			? await rescoredRecords(plan.origin!, labels, judge, options.base)
-			: resumed
-				? resumedRecords(resumed, labels)
-				: labels.map(() => [])
-	).map((runs, index) => runs.map((run) => stamped(labels[index]!, run, plan.rescore ? 'rescore' : 'resume')));
+	const initial = plan.rescore
+		? reusedRuns(await rescoredRecords(plan.origin!, labels, judge, options.base), labels, 'rescore', judge.model)
+		: resumed
+			? reusedRuns(resumedRecords(resumed, labels), labels, 'resume', judge.model)
+			: labels.map(() => []);
 
 	stopOnInterrupt(options.base);
 
@@ -433,7 +339,7 @@ async function main(): Promise<void> {
 			judge: judge.model,
 			reviewer,
 			harness: harnessRecord(tree, plan.origin, resumed),
-			identity,
+			identity: { ...identity, runs: runIdentities(prs.flatMap((pr) => pr.runs)) },
 			runIds: prs.flatMap((pr) => pr.runs.flatMap((run) => (run.runId ? [run.runId] : []))),
 			...(derivedFrom ? { derivedFrom } : {}),
 			startedAt,
@@ -463,7 +369,7 @@ async function main(): Promise<void> {
 	const replays = plan.rescore ? labels.map(() => []) : options.replay ? replayedReviews(plan.origin!, labels) : null;
 
 	const final = report(
-		await runAll(options, labels, repos, judge, initial, replays, (records) => save(report(records)))
+		await runAll(options, labels, repos, judge, identity.hash, initial, replays, (records) => save(report(records)))
 	);
 
 	printBenchmark(final);

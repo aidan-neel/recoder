@@ -6,6 +6,9 @@ export const UNKNOWN = 'unknown';
 
 type Unknown = typeof UNKNOWN;
 
+/** A run's identity or judge stamp when the report it came from recorded none. */
+export const NOT_RECORDED = 'not recorded';
+
 /** The caches the server keeps across reviews, each recorded with the version of its format. */
 export const SERVER_CACHES = ['intent', 'rule-ledger', 'baseline-cache', 'review-checkpoint'] as const;
 
@@ -97,6 +100,12 @@ export interface RunIdentity {
 	};
 	/** Why a field is `unknown`, by field: a server without the identity route, a tree that could not be read. */
 	unavailable: Record<string, string>;
+	/**
+	 * How many of the report's runs were reviewed under each identity hash,
+	 * `not recorded` for runs reused from a report that stamped none. Set when
+	 * the report is written; a run reused under another identity keeps its own.
+	 */
+	runs?: Record<string, number>;
 }
 
 /** Where one run's result came from, by cache. Fields the server does not report are `unknown`. */
@@ -118,8 +127,15 @@ const EXPERIMENT = ['dataset', 'code', 'models', 'judge', 'flags', 'limits', 'ca
 /** Sections that describe where and how a report ran; a difference is shown, never refused. */
 const INFORMATIONAL = ['host', 'execution', 'unavailable'];
 
-/** Field names `--allow-diff` takes: a section or a field under one, or `identity` for a report that records none. */
-const DECLARABLE = ['identity', 'tasks', ...EXPERIMENT];
+/**
+ * Field names `--allow-diff` takes: a section or a field under one, `identity`
+ * for a report that records none, or `runs` for a report whose runs were
+ * reviewed under other identities.
+ */
+const DECLARABLE = ['identity', 'runs', 'tasks', ...EXPERIMENT];
+
+/** Operations that claim two reports' results are alike, so every run in them must have been reviewed under its report's identity. */
+const RUN_CHECKED: readonly Operation[] = ['compare', 'merge'];
 
 /**
  * Which fields may differ depends on what an operation takes from a report.
@@ -156,7 +172,10 @@ export interface Compatibility {
 	/** Reports that record no identity, so nothing can be claimed about them. */
 	unrecorded: string[];
 	refused: FieldDiff[];
-	/** Checked fields `unknown` on either side: equal or not, nothing says the two runs agree on them. */
+	/**
+	 * Checked fields `unknown` on either side, equal or not, and runs reviewed
+	 * under another identity than their report's: nothing says the two agree on them.
+	 */
 	unverifiable: FieldDiff[];
 	/** Differences named with `--allow-diff`. */
 	declared: FieldDiff[];
@@ -209,7 +228,7 @@ export function withHash(fields: Omit<RunIdentity, 'version' | 'hash'>): RunIden
 
 /** Every leaf of the identity by dotted path, tasks keyed by task id, each value as text. */
 function leaves(identity: RunIdentity): Map<string, string> {
-	const { version: _version, hash: _hash, tasks, ...rest } = identity;
+	const { version: _version, hash: _hash, runs: _runs, tasks, ...rest } = identity;
 	const out = new Map<string, string>();
 
 	const walk = (value: unknown, path: string) => {
@@ -225,6 +244,27 @@ function leaves(identity: RunIdentity): Map<string, string> {
 	walk({ ...rest, tasks: Object.fromEntries(tasks.map((task) => [task.taskId, task.base])) }, '');
 
 	return out;
+}
+
+/** True when some run of the report was reviewed under another identity, or by a report that stamped none. */
+function mixedRuns(identity: RunIdentity): boolean {
+	return !identity.runs || Object.keys(identity.runs).some((hash) => hash !== identity.hash);
+}
+
+/** "2 under 1a2b3c4d5e6f, 1 not recorded": the report's runs by the identity they were reviewed under. */
+export function runsText(identity: RunIdentity): string {
+	if (!identity.runs) return 'runs not stamped';
+
+	return (
+		Object.entries(identity.runs)
+			.map(([hash, count]) => `${count} ${hash === NOT_RECORDED ? NOT_RECORDED : `under ${hash.slice(0, 12)}`}`)
+			.join(', ') || 'no runs'
+	);
+}
+
+/** The `runs` field when either report holds runs reviewed under another identity than its own. */
+function runPairs(a: RunIdentity, b: RunIdentity): FieldDiff[] {
+	return mixedRuns(a) || mixedRuns(b) ? [{ field: 'runs', a: runsText(a), b: runsText(b) }] : [];
 }
 
 /** Every field either identity has, with both sides' values, sorted by field. */
@@ -259,19 +299,22 @@ export function allowDiffFields(value: string | undefined): { fields: string[]; 
  * A report without an identity refuses every claim unless `identity` is declared.
  * A checked field `unknown` on either side refuses too, even when both sides
  * are `unknown`: two reports that could not learn a value did not agree on it.
+ * A compare or merge also refuses a report holding runs reviewed under
+ * another identity, which its own identity does not describe.
  */
 export function checkCompatibility(a: Named, b: Named, operation: Operation, allow: readonly string[]): Compatibility {
 	const unrecorded = [a, b].filter((report) => !report.identity).map((report) => report.name);
 	const pairs = a.identity && b.identity ? fieldPairs(a.identity, b.identity) : [];
+	const runs = a.identity && b.identity && RUN_CHECKED.includes(operation) ? runPairs(a.identity, b.identity) : [];
 	const unknown = (pair: FieldDiff) => pair.a === UNKNOWN || pair.b === UNKNOWN;
 	const differs = (pair: FieldDiff) => pair.a !== pair.b;
 	const informational = pairs.filter((pair) => under(pair.field, INFORMATIONAL) && differs(pair));
 	const checked = pairs.filter((pair) => !under(pair.field, INFORMATIONAL));
 	const exempt = checked.filter((pair) => under(pair.field, EXEMPT[operation]) && differs(pair));
 	const rest = checked.filter((pair) => !under(pair.field, EXEMPT[operation]) && (differs(pair) || unknown(pair)));
-	const declared = rest.filter((pair) => under(pair.field, allow));
+	const declared = [...runs, ...rest].filter((pair) => under(pair.field, allow));
 	const undeclared = rest.filter((pair) => !under(pair.field, allow));
-	const unverifiable = undeclared.filter(unknown);
+	const unverifiable = [...runs.filter((pair) => !under(pair.field, allow)), ...undeclared.filter(unknown)];
 	const refused = undeclared.filter((pair) => !unknown(pair));
 
 	return {
@@ -296,7 +339,7 @@ export function compatibilityLines(result: Compatibility): string[] {
 			? [`Identity not recorded in ${result.unrecorded.join(' and ')}; no equivalence can be claimed.`]
 			: []),
 		...section('Incompatible:', result.refused),
-		...section('Unverifiable, unknown on one side or both:', result.unverifiable),
+		...section('Unverifiable:', result.unverifiable),
 		...section('Declared differences:', result.declared),
 		...section('Expected differences:', result.exempt),
 		...section('Recorded, not checked:', result.informational)

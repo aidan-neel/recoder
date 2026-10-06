@@ -2,8 +2,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { withHash } from '../../src/eval/identity';
-import { identityFields, writeReport } from '../helpers/identity';
+import { identityFields, recordedIdentity, writeReport } from '../helpers/identity';
 
 const dir = mkdtempSync(join(tmpdir(), 'recoder-compare-'));
 const script = join(import.meta.dir, '../../src/eval/compare.ts');
@@ -18,9 +17,9 @@ function compare(...args: string[]): { code: number; out: string } {
 	return { code: result.exitCode, out: `${result.stdout.toString()}${result.stderr.toString()}` };
 }
 
-const off = withHash(identityFields());
+const off = recordedIdentity(identityFields());
 
-const on = withHash({
+const on = recordedIdentity({
 	...identityFields(),
 	flags: { RECODER_TEST_STRENGTH: '1', RECODER_OBLIGATIONS: 'unset' }
 });
@@ -53,15 +52,28 @@ test('an undeclared flag difference fails with the field named; declared, the co
 });
 
 test('two reports that could not read the server are refused: unknown flags are unverifiable, not a match', () => {
-	const blind = withHash({ ...identityFields(), flags: 'unknown' });
+	const blind = recordedIdentity({ ...identityFields(), flags: 'unknown' });
 	const a = writeReport(dir, 'blind-a.json', { identity: blind, runIds: ['pr-1@aaa#1'] });
 	const b = writeReport(dir, 'blind-b.json', { identity: blind, runIds: ['pr-1@aaa#2'] });
 	const { code, out } = compare(a, b);
 
 	expect(code).toBe(1);
-	expect(out).toContain('Unverifiable, unknown on one side or both:\n  flags: unknown → unknown');
+	expect(out).toContain('Unverifiable:\n  flags: unknown → unknown');
 	expect(out).not.toContain('Compatible:');
 	expect(out).toContain('Merge: refused, B cannot be checked against A in flags: unknown → unknown');
+});
+
+test('a report holding runs reviewed under no recorded identity is refused, with the counts named', () => {
+	const mixed = { ...off, runs: { [off.hash]: 1, 'not recorded': 2 } };
+	const a = writeReport(dir, 'mixed.json', { identity: mixed, runIds: ['pr-1@aaa#1', 'pr-1@aaa#2', 'pr-1@aaa#3'] });
+	const b = writeReport(dir, 'clean.json', { identity: off, runIds: ['pr-1@aaa#4'] });
+	const short = off.hash.slice(0, 12);
+	const { code, out } = compare(a, b);
+
+	expect(code).toBe(1);
+	expect(out).toContain(`3 runs (mixed: 1 under ${short}, 2 not recorded)`);
+	expect(out).toContain(`Unverifiable:\n  runs: 1 under ${short}, 2 not recorded → 1 under ${short}`);
+	expect(compare(a, b, '--allow-diff', 'runs').code).toBe(0);
 });
 
 test('a report without an identity is compared with a warning, and refuses a merge', () => {

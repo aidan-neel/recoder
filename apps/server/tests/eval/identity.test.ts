@@ -4,10 +4,9 @@ import {
 	checkCompatibility,
 	compatibilityLines,
 	mergeProblems,
-	withHash,
 	type RunIdentity
 } from '../../src/eval/identity';
-import { identityFields } from '../helpers/identity';
+import { identityFields, recordedIdentity } from '../helpers/identity';
 
 /** The fields two identities disagree on, as a comparison refuses them. */
 function compareIdentity(a: RunIdentity, b: RunIdentity) {
@@ -20,12 +19,12 @@ function changed(change: (fields: ReturnType<typeof identityFields>) => void) {
 
 	change(fields);
 
-	return withHash(fields);
+	return recordedIdentity(fields);
 }
 
 test('identical identities compare equal and share a hash', () => {
-	const a = withHash(identityFields());
-	const b = withHash(identityFields());
+	const a = recordedIdentity(identityFields());
+	const b = recordedIdentity(identityFields());
 
 	expect(a.hash).toBe(b.hash);
 	expect(compareIdentity(a, b)).toEqual([]);
@@ -38,7 +37,7 @@ test('identical identities compare equal and share a hash', () => {
 });
 
 test('a changed label file, flag or model changes the hash and is named', () => {
-	const base = withHash(identityFields());
+	const base = recordedIdentity(identityFields());
 
 	const labels = changed((fields) => {
 		fields.dataset.labels = 'labels-2';
@@ -60,7 +59,7 @@ test('a changed label file, flag or model changes the hash and is named', () => 
 });
 
 test('where and how a report ran is recorded but leaves the hash alone and never refuses', () => {
-	const base = withHash(identityFields());
+	const base = recordedIdentity(identityFields());
 
 	const mac = changed((fields) => {
 		fields.host = { ...fields.host, name: 'mini', arch: 'arm64', cpus: 10 };
@@ -81,7 +80,7 @@ test('where and how a report ran is recorded but leaves the hash alone and never
 });
 
 test('an undeclared difference refuses with the field named; declared, it passes and is listed', () => {
-	const off = { name: 'off', identity: withHash(identityFields()) };
+	const off = { name: 'off', identity: recordedIdentity(identityFields()) };
 
 	const on = {
 		name: 'on',
@@ -103,7 +102,7 @@ test('an undeclared difference refuses with the field named; declared, it passes
 });
 
 test('a replay expects new code, labels and adjudications, but a new reviewer model must be declared', () => {
-	const origin = { name: 'origin', identity: withHash(identityFields()) };
+	const origin = { name: 'origin', identity: recordedIdentity(identityFields()) };
 
 	const now = {
 		name: 'now',
@@ -148,7 +147,7 @@ test('a field unknown on both sides is unverifiable: resume, replay, compare and
 	}
 
 	expect(compatibilityLines(checkCompatibility(a, b, 'compare', []))).toEqual([
-		'Unverifiable, unknown on one side or both:',
+		'Unverifiable:',
 		'  flags: unknown → unknown'
 	]);
 
@@ -161,7 +160,7 @@ test('a field unknown on both sides is unverifiable: resume, replay, compare and
 
 	expect(
 		checkCompatibility(
-			{ name: 'A', identity: withHash(identityFields()) },
+			{ name: 'A', identity: recordedIdentity(identityFields()) },
 			{ name: 'B', identity: oneSided },
 			'resume',
 			[]
@@ -171,7 +170,7 @@ test('a field unknown on both sides is unverifiable: resume, replay, compare and
 
 test('a report without an identity is flagged and claims no equivalence unless declared', () => {
 	const old = { name: 'old.json' };
-	const now = { name: 'this run', identity: withHash(identityFields()) };
+	const now = { name: 'this run', identity: recordedIdentity(identityFields()) };
 	const result = checkCompatibility(old, now, 'resume', []);
 
 	expect(result.unrecorded).toEqual(['old.json']);
