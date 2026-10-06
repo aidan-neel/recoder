@@ -1,5 +1,6 @@
 import { summarizeLabels, type LabelSummary, type LabeledRun } from './benchmark-labels';
 import { sumLows, type LowTotals } from './benchmark-lows';
+import type { BenchmarkReport, PrResult } from './benchmark-report';
 import { stageTotals, type DefectStage, type StageTotals } from './benchmark-stages';
 
 /** A planted defect, as the dataset's label file describes it. */
@@ -192,3 +193,24 @@ function hiddenTotals(runs: readonly HiddenRun[]): HiddenTotals {
 }
 
 export const recall = (totals: Totals) => (totals.planted ? totals.found / totals.planted : 0);
+
+/** A report's totals over its PRs, under the task set they came from. */
+export function benchmarkSummary(prs: readonly PrResult[], taskSet: string | undefined): BenchmarkReport['summary'] {
+	return {
+		taskSet,
+		...summarize(
+			prs.map((pr) => ({
+				codebase: pr.codebase,
+				defects: pr.defects,
+				scores: pr.runs.flatMap((run) => (run.score ? [run.score] : [])),
+				hiddenRuns: pr.runs.flatMap((run) =>
+					run.score && run.hiddenScore ? [{ shown: run.score, hidden: run.hiddenScore }] : []
+				),
+				stageRuns: pr.runs.flatMap((run) => (run.score && run.stages ? [run.stages] : [])),
+				lowRuns: pr.runs.flatMap((run) => (run.score && run.lows ? [run.lows] : [])),
+				control: pr.control,
+				labeledRuns: pr.runs.flatMap((run) => (run.labeled ? [run.labeled] : []))
+			}))
+		)
+	};
+}

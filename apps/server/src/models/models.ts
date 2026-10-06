@@ -15,9 +15,10 @@
  *   RECODER_REVIEW_MODEL=qwen/qwen-2.5-coder-32b-instruct
  */
 
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { z } from 'zod';
 import type { ModelProvider, ModelRuntimeProfile, ReasoningEffort } from '@recoder/shared';
+import { lockedModels, runLocked, type LockedModels } from './llm/locked-models.js';
+import { recordLockMiss } from './metrics.js';
 import { hostedProvider } from './model-providers.js';
 import { resolveRuntime } from './runtime-profiles.js';
 import { CLAUDE_CODE_MODEL_PREFIX, claudeCodeEfforts } from '../agents/claude-code/claude-code-models.js';
@@ -81,21 +82,13 @@ export function isReviewConfigured(): boolean {
 	}
 }
 
-/** Both picks as a review saw them when it started. */
-interface LockedModels {
-	orchestrator: ModelConfig;
-	subagent: ModelConfig;
-}
-
-/** The picks of the review whose work is running, held in memory only since a config carries its API key. */
-const locked = new AsyncLocalStorage<LockedModels>();
-
 /**
  * Runs a review on the models picked when it starts. Changing the picks
  * mid-run then only affects reviews started after, so two reviews on
  * different models can run at once and no review mixes models. Resolved
  * synchronously, before `run` awaits anything. A pick that does not resolve
- * runs unlocked, so the review fails through its own error handling.
+ * runs unlocked, so the review fails through its own error handling, and
+ * each model it resolves is recorded as a lock miss in its metrics.
  */
 export function withLockedModels<T>(run: () => T): T {
 	let picks: LockedModels;
@@ -106,17 +99,28 @@ export function withLockedModels<T>(run: () => T): T {
 		return run();
 	}
 
-	return locked.run(picks, run);
+	return runLocked(picks, run);
+}
+
+/** The locked pick, or the live one; inside a pipeline the live one is a lock miss and is recorded as one. */
+function pickFor(orchestrator: boolean): ModelConfig {
+	const picks = lockedModels();
+
+	if (picks) return orchestrator ? picks.orchestrator : picks.subagent;
+
+	recordLockMiss();
+
+	return resolveConfig(orchestrator);
 }
 
 /** The Review model: reviewers, consolidation and chat. */
 export function configForOrchestrator(): ModelConfig {
-	return locked.getStore()?.orchestrator ?? resolveConfig(true);
+	return pickFor(true);
 }
 
 /** The second model: subagents and verifiers. Unset, it follows the Review model. */
 export function configForSubagent(): ModelConfig {
-	return locked.getStore()?.subagent ?? resolveConfig(false);
+	return pickFor(false);
 }
 
 /**
