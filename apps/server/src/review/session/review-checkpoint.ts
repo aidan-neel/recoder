@@ -3,6 +3,7 @@ import type { CandidateFinding } from '../pipeline/consolidate.js';
 import type { CoverageEntry } from '../pipeline/coverage.js';
 import type { EvidenceSnapshot } from '../../evidence/evidence.js';
 import type { SubagentState } from '../pipeline/subagents.js';
+import type { Received } from '../pipeline/harness/received.js';
 import type { ReviewUnit } from '../pipeline/units.js';
 import type { ReviewDirective } from '../chat/directive.js';
 
@@ -41,6 +42,8 @@ export interface ReviewCheckpoint {
 	retriesDone: boolean;
 	/** Subagent requests, and the subagents picked from them once planned. */
 	subagents: SubagentState;
+	/** Finished reviewers' prompts as built and their retrievals, so a replay records them without rebuilding; absent from older checkpoints. */
+	received?: Received;
 	/** Candidate repairs the review already attempted, counted against its cap; absent when none were. */
 	repairs?: number;
 }

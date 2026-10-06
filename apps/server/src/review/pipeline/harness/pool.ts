@@ -12,6 +12,7 @@ import {
 	runJsonAgent,
 	type ModelBudget
 } from '../agent-loop.js';
+import { unitContextParts } from '../change-model/change-model.js';
 import type { CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
 import type { ReviewInventory } from '../inventory.js';
@@ -35,6 +36,7 @@ import {
 import type { AnsweredMark, UnitRequest, UnsettledMark } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
 import { coverageRole, recordFor, updateAssignment } from './assignments.js';
+import { capturePrompt, type Received } from './received.js';
 import { applyUnitResult } from './unit-result.js';
 import type { HarnessEvents, TaskFn } from './types.js';
 
@@ -68,6 +70,8 @@ export interface PoolContext extends ReviewerPromptContext {
 	answered: AnsweredMark[];
 	/** Called with each candidate a reviewer reports, so its verifier can start while others still review. */
 	onCandidate?: (candidate: CandidateFinding) => void;
+	/** Where each reviewer's prompt is recorded as it is built, with the reads its events record. */
+	received: Received;
 	/** Called after each unit settles, to save a checkpoint. */
 	onFinished?: () => void;
 }
@@ -236,6 +240,9 @@ function askReviewer(
 	const lens = lensById(item.lens ?? 'correctness');
 	const maxTurns = subagent ? REVIEW_POLICY.maxSubagentTurns : REVIEW_POLICY.maxLensTurns;
 	const defaultCategory = lens.categories[0];
+	const declarations = ctx.changeModel ? unitContextParts(ctx.changeModel, item.scope) : null;
+
+	capturePrompt(ctx.received, item, ctx.inventory, declarations, initialEvidence);
 
 	const system = subagent
 		? subagentSystemPrompt(ctx.exec, ctx.directive)
@@ -251,7 +258,13 @@ function askReviewer(
 		getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
 		onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model: cfg.model }),
 		user:
-			reviewerUserPrompt(item, { turns: maxTurns, calls: ctx.budget.remaining() }, ctx, subagent) +
+			reviewerUserPrompt(
+				item,
+				{ turns: maxTurns, calls: ctx.budget.remaining() },
+				ctx,
+				declarations?.text ?? '',
+				subagent
+			) +
 			(ctx.setupNotes() ? `\n\n${ctx.setupNotes()}` : '') +
 			dismissedNote(item, subagent, ctx) +
 			'\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' +
