@@ -74,3 +74,17 @@ test('a second resume appends to the chain of reports reused instead of replacin
 		)
 	).toEqual(['first.json', 'third.json']);
 });
+
+test('a resume across a code change is refused, saying any server or shared code change blocks reuse', () => {
+	const before = recordedIdentity();
+	const report = readReport(writeReport(dir, 'before.json', { identity: before, runIds: ['pr-1@aaa#1'] }));
+	const fields = identityFields();
+
+	fields.code.server = 'source:changed';
+
+	expect(() =>
+		checkReuse(recordedIdentity(fields), { path: join(dir, 'before.json'), report, operation: 'resume' }, [])
+	).toThrow(
+		'Not reusing before.json. Any change to server or shared code, their package manifests or bun.lock changes code and blocks reuse. To reuse it anyway, declare the difference: --allow-diff code.server'
+	);
+});

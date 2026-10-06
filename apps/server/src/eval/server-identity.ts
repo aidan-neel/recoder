@@ -1,13 +1,13 @@
-import { createHash } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 import { availableParallelism, hostname, release } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { probeVersion } from '../agents/opencode/opencode-server';
 import { agentStatuses } from '../agents/registry';
 import { CHECKPOINT_VERSION } from '../review/session/review-checkpoint';
 import { REVIEW_POLICY } from '../review/session/review-policy';
 import { resolveLimits } from '../sandbox/host-load';
-import { captureTree, type TreeState } from './harness-tree';
+import { headCommit } from './harness-tree';
 import { UNKNOWN, type ServerCache } from './identity';
+import { fileVersion, sourceVersion } from './source-hash';
 
 /**
  * The environment switches that change what a review does. Only these are
@@ -39,36 +39,26 @@ export interface ServerIdentity {
 		cpus: number;
 		sandbox: Record<string, number>;
 	};
-	/** The server's own checkout as it started, which may differ from the harness that asks. */
-	tree: TreeState | null;
+	/** The content hash of the server's and shared sources and lockfiles, as the harness hashes its own. */
+	code: string;
+	/** The commit the server's checkout is on, `unknown` outside git; recorded, never compared. */
+	commit: string;
 }
 
-function moduleVersion(path: string): string {
-	try {
-		const source = readFileSync(new URL(path, import.meta.url));
-
-		return `source:${createHash('sha256').update(source).digest('hex').slice(0, 16)}`;
-	} catch {
-		return UNKNOWN;
-	}
-}
+const moduleVersion = (path: string) => fileVersion(fileURLToPath(new URL(path, import.meta.url)));
 
 /**
- * The code the server loaded, read once at startup: a file edited while it
- * runs is not code it runs. The intent, rule-ledger and baseline caches keep
- * their format numbers private, so their version is the content hash of the
- * module that owns the format: any change to how it keys or stores entries
- * changes it.
+ * The intent, rule-ledger and baseline caches keep their format numbers
+ * private, so their version is the content hash of the module that owns the
+ * format, read as the server loads: any change to how it keys or stores
+ * entries changes it.
  */
-const loaded = {
-	tree: captureTree(import.meta.dir),
-	caches: {
-		intent: moduleVersion('../review/pipeline/intent/distill.ts'),
-		'rule-ledger': moduleVersion('../review/guidelines/ledger/ledger.ts'),
-		'baseline-cache': moduleVersion('../review/pipeline/harness/baseline-cache.ts'),
-		'review-checkpoint': `v${CHECKPOINT_VERSION}`
-	} satisfies Record<ServerCache, string>
-};
+const caches = {
+	intent: moduleVersion('../review/pipeline/intent/distill.ts'),
+	'rule-ledger': moduleVersion('../review/guidelines/ledger/ledger.ts'),
+	'baseline-cache': moduleVersion('../review/pipeline/harness/baseline-cache.ts'),
+	'review-checkpoint': `v${CHECKPOINT_VERSION}`
+} satisfies Record<ServerCache, string>;
 
 /** The `node` on the server's PATH, which the sandboxed checks run with; `unknown` only when it would not say. */
 async function nodeVersion(): Promise<string> {
@@ -93,7 +83,7 @@ export async function serverIdentity(): Promise<ServerIdentity> {
 	return {
 		flags: Object.fromEntries(FLAGS.map((name) => [name, process.env[name] ?? 'unset'])),
 		policy: { ...REVIEW_POLICY },
-		caches: loaded.caches,
+		caches,
 		tools: { bun: Bun.version, node: await nodeVersion(), opencode: await opencodeVersion() },
 		host: {
 			name: hostname(),
@@ -102,6 +92,7 @@ export async function serverIdentity(): Promise<ServerIdentity> {
 			cpus,
 			sandbox: { ...resolveLimits(cpus, process.env) }
 		},
-		tree: loaded.tree
+		code: sourceVersion(),
+		commit: headCommit(import.meta.dir) ?? UNKNOWN
 	};
 }

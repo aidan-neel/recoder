@@ -285,7 +285,6 @@ async function main(): Promise<void> {
 		dataset: options.dataset,
 		tasks: labels,
 		adjudications,
-		tree,
 		settings,
 		judge: judge.model,
 		server: await getServerIdentity(options.base),

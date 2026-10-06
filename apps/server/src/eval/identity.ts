@@ -57,10 +57,15 @@ export interface RunIdentity {
 		/** Each codebase's forge repo: its HEAD and a hash of the PR metadata the server reads. */
 		forges: Record<string, { head: string; metadata: string }>;
 	};
+	/**
+	 * `source:<hash>` of the server and shared sources, their package
+	 * manifests and the lockfile, by content and never by git state: any
+	 * change to server or shared code changes it.
+	 */
 	code: {
-		/** Hash of the harness tree manifest this report was written from. */
+		/** The checkout the harness wrote this report from. */
 		harness: string;
-		/** Hash of the server's own tree, which ran the reviewers. */
+		/** The server's checkout, which ran the reviewers. */
 		server: string;
 	};
 	/** Verifiers run on the specialist model; there is no separate verifier setting. Reviewer calls send no seed. */

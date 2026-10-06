@@ -158,8 +158,12 @@ export function checkReuse(identity: RunIdentity, prior: Prior, allow: string[])
 					)
 				];
 
+		const code = fields.some((field) => field === 'code' || field.startsWith('code.'))
+			? ' Any change to server or shared code, their package manifests or bun.lock changes code and blocks reuse.'
+			: '';
+
 		throw new Error(
-			`Not reusing ${name}. To reuse it anyway, declare the difference: --allow-diff ${fields.join(',')}`
+			`Not reusing ${name}.${code} To reuse it anyway, declare the difference: --allow-diff ${fields.join(',')}`
 		);
 	}
 

@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { app } from '../../src/app';
 import type { ServerIdentity } from '../../src/eval/server-identity';
+import { sourceVersion } from '../../src/eval/source-hash';
 
 const PLANTED = 'sk-planted-identity-test-key';
 const saved = { key: process.env.RECODER_REVIEW_API_KEY, strength: process.env.RECODER_TEST_STRENGTH };
@@ -28,6 +29,7 @@ test('GET /health/identity reports allowlisted flags, cache versions and tools, 
 	expect(identity.flags.RECODER_TEST_STRENGTH).toBe('1');
 	expect(identity.flags.RECODER_OBLIGATIONS).toBe(process.env.RECODER_OBLIGATIONS ?? 'unset');
 	expect(identity.caches.intent).toMatch(/^source:[0-9a-f]{16}$/);
+	expect(identity.code).toBe(sourceVersion());
 	expect(identity.caches['review-checkpoint']).toMatch(/^v\d+$/);
 	expect(identity.tools.bun).toBe(Bun.version);
 	expect(identity.tools.opencode).toBe('not installed');

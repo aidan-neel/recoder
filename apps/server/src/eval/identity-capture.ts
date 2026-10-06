@@ -8,7 +8,6 @@ import { JUDGE_VERSION } from './benchmark-judge';
 import type { Adjudications } from './benchmark-labels';
 import type { JudgeModel } from './benchmark-report';
 import { JUDGE_SEED } from './benchmark-scoring';
-import type { TreeState } from './harness-tree';
 import {
 	SERVER_CACHES,
 	UNKNOWN,
@@ -20,6 +19,7 @@ import {
 	type TaskIdentity
 } from './identity';
 import type { ServerIdentity } from './server-identity';
+import { sourceVersion } from './source-hash';
 
 /** What the identity reads of a label file. */
 interface TaskLabel {
@@ -38,8 +38,6 @@ export interface IdentityInput {
 	/** The labeled PRs this benchmark covers. */
 	tasks: readonly TaskLabel[];
 	adjudications: Adjudications;
-	/** The harness tree, null outside a git checkout. */
-	tree: TreeState | null;
 	settings: ModelSettings;
 	judge: JudgeModel;
 	/** What `GET /health/identity` answered; null from a server older than the route, which answers 404. */
@@ -196,23 +194,23 @@ function serverParts(server: ServerIdentity | null): Pick<RunIdentity, 'flags' |
 		policy: server.policy,
 		caches: server.caches,
 		tools: server.tools,
-		host: { ...server.host, serverCommit: server.tree?.commit ?? UNKNOWN, inference: INFERENCE },
-		code: server.tree ? contentHash(server.tree) : UNKNOWN
+		host: { ...server.host, serverCommit: server.commit, inference: INFERENCE },
+		code: server.code
 	};
 }
 
 /** Why parts of the identity are `unknown`: each source that could not be read, with the fields it leaves unknown. */
-function unavailable(input: IdentityInput): Record<string, string> {
+function unavailable(server: ServerIdentity | null, harness: string): Record<string, string> {
 	return {
-		...(input.server
-			? input.server.tree
-				? {}
-				: { 'code.server': 'the server is not running from a git checkout' }
+		...(server
+			? server.code === UNKNOWN
+				? { 'code.server': 'the server found none of its source files' }
+				: {}
 			: {
 					server:
 						'the server has no /health/identity route (HTTP 404), so code.server, flags, limits.policy, caches and tools are unknown'
 				}),
-		...(input.tree ? {} : { 'code.harness': 'the harness is not running from a git checkout' })
+		...(harness === UNKNOWN ? { 'code.harness': 'the harness found none of its source files' } : {})
 	};
 }
 
@@ -221,10 +219,11 @@ export async function captureIdentity(input: IdentityInput): Promise<RunIdentity
 	const forge = forgeReader();
 	const { settings, judge } = input;
 	const server = serverParts(input.server);
+	const harness = sourceVersion();
 
 	return withHash({
 		dataset: await datasetIdentity(input.dataset, input.adjudications, forge),
-		code: { harness: input.tree ? contentHash(input.tree) : UNKNOWN, server: server.code },
+		code: { harness, server: server.code },
 		models: stageModels(settings),
 		judge: {
 			model: judge.model,
@@ -247,6 +246,6 @@ export async function captureIdentity(input: IdentityInput): Promise<RunIdentity
 		tasks: await taskIdentities(input.tasks, forge),
 		host: server.host,
 		execution: input.execution,
-		unavailable: unavailable(input)
+		unavailable: unavailable(input.server, harness)
 	});
 }

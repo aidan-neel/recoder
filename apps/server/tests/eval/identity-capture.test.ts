@@ -6,6 +6,7 @@ import type { ModelSettings } from '@recoder/shared';
 import type { Adjudications } from '../../src/eval/benchmark-labels';
 import { captureIdentity, type IdentityInput } from '../../src/eval/identity-capture';
 import type { ServerIdentity } from '../../src/eval/server-identity';
+import { sourceVersion } from '../../src/eval/source-hash';
 import { localForgeFixture, type LocalForgeFixture } from '../helpers/local-forge';
 
 let dataset = '';
@@ -51,7 +52,8 @@ const server: ServerIdentity = {
 		cpus: 16,
 		sandbox: { cpus: 12, runSlots: 6, prepSlots: 2, minFreeMb: 1024 }
 	},
-	tree: { commit: 'server-commit', files: {} }
+	code: 'source:server',
+	commit: 'server-commit'
 };
 
 function writeLabel(id: string, label: Record<string, unknown>): void {
@@ -79,7 +81,6 @@ function capture(change: Partial<IdentityInput> = {}) {
 			{ id: 'pr-7', codebase: 'local', repo: forge.repo.url, pull: 7, headSha: forge.pull7Head }
 		],
 		adjudications: {},
-		tree: { commit: 'harness-commit', files: {} },
 		settings,
 		judge: { model: 'judge-x', provider: 'opencode', effort: 'medium' },
 		server,
@@ -158,6 +159,13 @@ test('only decided adjudications count: a queued unresolved finding leaves the i
 	expect(decided.dataset.adjudications).not.toBe(none.dataset.adjudications);
 });
 
+test('code is the content hash of the harness and the server sources; the server commit is only recorded', async () => {
+	const identity = await capture();
+
+	expect(identity.code).toEqual({ harness: sourceVersion(), server: 'source:server' });
+	expect(identity.host.serverCommit).toBe('server-commit');
+});
+
 test('a changed server flag changes the hash; a server without the route records unknown', async () => {
 	const strong = await capture({ server: { ...server, flags: { ...server.flags, RECODER_TEST_STRENGTH: '1' } } });
 
@@ -170,7 +178,6 @@ test('a changed server flag changes the hash; a server without the route records
 	expect(old.code.server).toBe('unknown');
 	expect(old.host.serverCommit).toBe('unknown');
 	expect(old.unavailable.server).toContain('HTTP 404');
-	expect((await capture({ tree: null })).unavailable['code.harness']).toContain('git checkout');
 
 	expect(old.caches).toEqual({
 		intent: 'unknown',
