@@ -7,6 +7,7 @@ import { isReviewConfigured } from '../../models/models';
 import { cancelReviewChats, prepareDraftSession } from '../../review/chat/review-chat';
 import { clearReviewEvents, emitReviewEvent } from '../../review/session/events';
 import { getReviewControl, type ReviewControl } from '../../review/session/review-control';
+import { isTerminalTask } from '../../review/session/task-state';
 import {
 	db,
 	reviewCheckpoints,
@@ -71,8 +72,7 @@ app.get('/progress-summaries', (c) => {
 
 		summaries[progress.id] = {
 			tasksTotal: tasks.length,
-			tasksDone: tasks.filter((task) => task.status === 'done' || task.status === 'skipped' || task.status === 'error')
-				.length,
+			tasksDone: tasks.filter(isTerminalTask).length,
 			agents: (progress.assignments ?? []).filter((assignment) => assignment.status === 'running').length
 		};
 	}
