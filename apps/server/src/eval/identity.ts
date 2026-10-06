@@ -33,7 +33,7 @@ export interface TaskIdentity {
 	base: string;
 }
 
-/** How a benchmark obtained its runs; a partial benchmark reviews only the `--only` tasks, from scratch. */
+/** How a benchmark obtained its runs; a partial benchmark reviews only the `--only` or `--set` tasks, from scratch. */
 export type ExecutionMode = 'full' | 'partial' | 'resume' | 'replay' | 'reverify' | 'rescore';
 
 /**
@@ -105,7 +105,7 @@ export interface RunIdentity {
 		inference: { weightRevision: string; quantization: string };
 	};
 	execution: {
-		/** How the runs were obtained: full, partial (`--only`), resume, replay, reverify or rescore. */
+		/** How the runs were obtained: full, partial (`--only` or `--set`), resume, replay, reverify or rescore. */
 		mode: ExecutionMode;
 		/** True when `--mode auto` picked the mode. */
 		auto: boolean;
