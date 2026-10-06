@@ -38,6 +38,8 @@ export interface IdentityInput {
 	dataset: string;
 	/** The labeled PRs this benchmark covers. */
 	tasks: readonly TaskLabel[];
+	/** The name of the task set `tasks` came from. */
+	taskSet: string;
 	adjudications: Adjudications;
 	settings: ModelSettings;
 	judge: JudgeModel;
@@ -246,6 +248,7 @@ export async function captureIdentity(input: IdentityInput): Promise<RunIdentity
 		caches: { ...server.caches, 'benchmark-judge': `v${JUDGE_VERSION}` },
 		tools: server.tools,
 		tasks: await taskIdentities(input.tasks, forge),
+		taskSet: input.taskSet,
 		host: { name: hostname(), ...server.host },
 		execution: input.execution,
 		unavailable: unavailable(input.server, harness)

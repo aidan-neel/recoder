@@ -9,6 +9,7 @@ import type { HarnessRecord } from './harness-tree';
 import { NOT_RECORDED, runsText, type FieldDiff, type RunCache, type RunIdentity } from './identity';
 import type { ConsistencyMetrics } from './metrics';
 import type { RunRecord } from './report';
+import { subsetLines } from './task-set';
 
 /** One PR's runs, each scored against its labels when it passed. */
 export interface PrResult {
@@ -125,7 +126,8 @@ export interface BenchmarkReport {
 	startedAt: string;
 	finishedAt: string;
 	prs: PrResult[];
-	summary: BenchmarkSummary;
+	/** `taskSet` names the PRs the totals cover; absent from reports older than recording it. */
+	summary: BenchmarkSummary & { taskSet?: string };
 }
 
 /** A saved benchmark report. */
@@ -347,7 +349,8 @@ export function printBenchmark(report: BenchmarkReport): void {
 	console.log(
 		[
 			'',
-			`Benchmark ${report.dataset}: ${report.prs.length} PRs × ${report.runsPerPr} runs`,
+			`Benchmark ${report.dataset}${summary.taskSet ? `, set ${summary.taskSet}` : ''}: ${report.prs.length} PRs × ${report.runsPerPr} runs`,
+			...subsetLines(summary.taskSet),
 			`Judge ${report.judge.model} (${report.judge.provider}${report.judge.effort ? `, ${report.judge.effort}` : ''})`,
 			...reviewerLine(report.reviewer),
 			identityLine(report),

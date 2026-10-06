@@ -122,3 +122,17 @@ test('the execution mode says how the runs were obtained, a resume included', ()
 	expect(executionMode('full', false, true)).toBe('partial');
 	expect(executionMode('full', false, false)).toBe('full');
 });
+
+test('a resume of a report from another task set is refused until --allow-diff taskSet declares it', () => {
+	const quick = recordedIdentity({ ...identityFields(), taskSet: 'quick' });
+	const path = writeReport(dir, 'quick.json', { identity: quick, runIds: ['pr-1@aaa#1'] });
+	const prior = { path, report: readReport(path), operation: 'resume' as const };
+
+	expect(() => checkReuse(recordedIdentity(), prior, [])).toThrow(
+		'Not reusing quick.json. To reuse it anyway, declare the difference: --allow-diff taskSet'
+	);
+
+	expect(checkReuse(recordedIdentity(), prior, ['taskSet']).at(-1)?.declared).toEqual([
+		{ field: 'taskSet', a: 'quick', b: 'full' }
+	]);
+});

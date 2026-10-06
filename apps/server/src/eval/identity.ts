@@ -89,6 +89,8 @@ export interface RunIdentity {
 	caches: Record<string, string>;
 	tools: { bun: string; node: string; opencode: string };
 	tasks: TaskIdentity[];
+	/** The task set `tasks` came from: `full`, `only` for `--only`, or a `--set` name; absent from identities older than recording it. */
+	taskSet?: string;
 	host: {
 		/** The harness's hostname; the server's route does not name its machine. */
 		name: string;
@@ -146,7 +148,7 @@ const INFORMATIONAL = ['host', 'execution', 'unavailable'];
  * for a report that records none, or `runs` for a report whose runs were
  * reviewed under other identities.
  */
-const DECLARABLE = ['identity', 'runs', 'tasks', ...EXPERIMENT];
+const DECLARABLE = ['identity', 'runs', 'tasks', 'taskSet', ...EXPERIMENT];
 
 /** Operations that claim two reports' results are alike, so every run in them must have been reviewed under its report's identity. */
 const RUN_CHECKED: readonly Operation[] = ['compare', 'merge'];
