@@ -26,7 +26,12 @@ interface ReviewerTotals {
 	omitted: Record<OmissionReason, number>;
 	/** Reads past the per-reviewer cap, counted but not listed. */
 	readsDropped: number;
-	/** Listed prompt omissions a reviewer's candidates cited anyway: context it lacked and went and read. */
+	/**
+	 * Listed prompt omissions a reviewer's candidates cited through context it
+	 * fetched itself (`via` read or unknown). Citations of the prompt's own
+	 * patch pages are left out: a page's record spans from its first hunk to
+	 * its last, so it would touch every cut between them.
+	 */
 	citedOmitted: Record<OmissionReason, number>;
 	/** Supplied places none of the reviewer's candidate citations (`cited`, not only published findings) touch. */
 	suppliedUncited: number;
@@ -87,11 +92,13 @@ function touches(a: ContextItem, b: ContextItem): boolean {
 /**
  * Adds one reviewer: its unit's prompt (supplied and cut), its own reads and
  * read cuts, and what its candidates cited. Cited-after-omission matches only
- * the prompt's listed cuts, not those past the listing cap or its own read cuts.
+ * the prompt's listed cuts, not those past the listing cap or its own read cuts,
+ * and only citations of context the reviewer fetched, not of its prompt.
  */
 function addReviewer(totals: ReviewerTotals, context: ReviewContext, reviewer: ReviewerContext): void {
 	const prompt = reviewer.unit ? context.units[reviewer.unit] : undefined;
 	const cites = (item: ContextItem) => reviewer.cited.some((cited) => touches(cited, item));
+	const fetched = reviewer.cited.filter((cited) => cited.via !== 'supplied');
 
 	totals.reviewers++;
 
@@ -101,7 +108,10 @@ function addReviewer(totals: ReviewerTotals, context: ReviewContext, reviewer: R
 		if (!cites(item)) totals.suppliedUncited++;
 	}
 
-	for (const item of prompt?.omitted ?? []) if (cites(item)) totals.citedOmitted[item.reason]++;
+	for (const item of prompt?.omitted ?? []) {
+		if (fetched.some((cited) => touches(cited, item))) totals.citedOmitted[item.reason]++;
+	}
+
 	for (const item of reviewer.cited) totals.cited[item.via]++;
 	for (const item of [...(prompt?.omitted ?? []), ...reviewer.omitted]) totals.omitted[item.reason]++;
 	for (const reason of OMISSION_REASONS) totals.omitted[reason] += prompt?.omittedPast?.[reason] ?? 0;
