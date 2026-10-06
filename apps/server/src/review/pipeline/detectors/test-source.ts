@@ -198,7 +198,7 @@ function expectChain(mask: string, text: string, close: number) {
 }
 
 const ASSERTION_CALL =
-	'(?<![\\w.$])(?:expect|(t)\\.(is|not|deepEqual|notDeepEqual|true|false|truthy|falsy|throws|throwsAsync|notThrows|notThrowsAsync|regex|notRegex|like)|(assert)(?:\\.(\\w+))?)\\s*\\(';
+	'(?<![\\w.$])(?:expect|(t)\\.(is|not|deepEqual|notDeepEqual|true|false|assert|truthy|falsy|throws|throwsAsync|notThrows|notThrowsAsync|regex|notRegex|like)|(assert)(?:\\.(\\w+))?)\\s*\\(';
 
 /** Every assertion that starts inside `[from, to)`; an assertion nested in another one's arguments belongs to it. */
 function assertionsIn(text: string, mask: string, from: number, to: number, lineOf: (at: number) => number) {

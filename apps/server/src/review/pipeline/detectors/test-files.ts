@@ -3,6 +3,7 @@ import type { ReviewRevision } from '../../../evidence/evidence.js';
 import { isTestPath } from '../change-model/test-files.js';
 import type { ReviewInventory } from '../inventory.js';
 import type { AddedLines } from './changed-lines.js';
+import { testStrengthOn } from '../test-strength.js';
 import { MAX_FILE_BYTES, readFilesAt } from './repo-files.js';
 
 /** One test file at the merge base and the PR head, plus the diff's new-side lines. */
@@ -14,6 +15,9 @@ export interface TestFileVersions {
 	added: ReadonlySet<number>;
 	visible: ReadonlySet<number>;
 }
+
+/** Test files run long and are written by hand, so they get a higher limit than generated or data files. */
+const MAX_TEST_BYTES = 400_000;
 
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/;
 
@@ -34,7 +38,7 @@ function visibleLines(diffs: FileDiff[]): Map<string, Set<number>> {
 
 /**
  * Every added or edited JS or TS test file the review covers, at the merge
- * base and the PR head. An added file's base is empty. Files over the size
+ * base and the PR head. An added file's base is empty. Files over the test size
  * limit are left out.
  */
 export async function readTestFiles(input: {
@@ -78,7 +82,10 @@ export async function readTestFiles(input: {
 		const head = heads.get(file.path);
 
 		if (base === undefined || head === undefined) return [];
-		if (base.length > MAX_FILE_BYTES || head.length > MAX_FILE_BYTES) return [];
+
+		const limit = testStrengthOn() ? MAX_TEST_BYTES : MAX_FILE_BYTES;
+
+		if (base.length > limit || head.length > limit) return [];
 
 		return [
 			{

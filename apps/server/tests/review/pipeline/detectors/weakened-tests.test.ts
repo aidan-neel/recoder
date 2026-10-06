@@ -1,5 +1,13 @@
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { weakenedInFile } from '../../../../src/review/pipeline/detectors/weakened-tests';
+
+beforeAll(() => {
+	process.env.RECODER_TEST_STRENGTH = '1';
+});
+
+afterAll(() => {
+	delete process.env.RECODER_TEST_STRENGTH;
+});
 
 /** Head lines the base lacks count as added; every head line counts as shown in the diff. */
 function detect(base: string[], head: string[]) {
@@ -20,6 +28,52 @@ function summarize(results: ReturnType<typeof detect>) {
 }
 
 describe('weakenedInFile', () => {
+	test('suspects an edited test whose new assertion only counts where the title picks one', () => {
+		const results = detect(
+			["test('keeps the most severe', () => {", '	expect(names).toEqual([high]);', '});'],
+			["test('keeps the most severe', () => {", '	expect(names).toHaveLength(1);', '});']
+		);
+
+		expect(results.map(({ suspected, line }) => ({ suspected, line }))).toEqual([{ suspected: true, line: 2 }]);
+	});
+
+	test('flags an exact count turned into a lower bound on the same count', () => {
+		const results = detect(
+			["test('stops after the budget', async () => {", '	t.is(requestCount, 4);', '});'],
+			["test('stops after the budget', async () => {", '	t.true(requestCount >= 4);', '});']
+		);
+
+		expect(summarize(results)).toEqual([
+			{ title: '`stops after the budget` no longer checks the exact value', line: 2 }
+		]);
+	});
+
+	test('flags an exact count turned into a bound through AVA t.assert', () => {
+		const results = detect(
+			["test('stops after the budget', async (t) => {", '	t.is(requestCount, 4);', '});'],
+			["test('stops after the budget', async (t) => {", '	t.assert(requestCount >= 4);', '});']
+		);
+
+		expect(summarize(results)).toEqual([
+			{ title: '`stops after the budget` no longer checks the exact value', line: 2 }
+		]);
+	});
+
+	test('skips the bound shape when RECODER_TEST_STRENGTH is off', () => {
+		delete process.env.RECODER_TEST_STRENGTH;
+
+		try {
+			const results = detect(
+				["test('stops after the budget', async () => {", '	t.is(requestCount, 4);', '});'],
+				["test('stops after the budget', async () => {", '	t.true(requestCount >= 4);', '});']
+			);
+
+			expect(results).toEqual([]);
+		} finally {
+			process.env.RECODER_TEST_STRENGTH = '1';
+		}
+	});
+
 	test('flags toThrow with an error class that became a bare toThrow', () => {
 		const results = detect(
 			["test('rejects a bad url', () => {", '\texpect(() => parse(url)).toThrow(UrlError);', '});'],

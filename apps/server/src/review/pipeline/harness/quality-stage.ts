@@ -1,9 +1,12 @@
 import { buildRuleLedger } from '../../guidelines/ledger/ledger.js';
 import { runDetectors, runDiagnostics, runTypeHints } from '../detectors/detectors.js';
+import { testStrengthOn } from '../test-strength.js';
+import { matrixDetail, runMatrix } from '../mutation/stage.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { publishBudget, type ReviewRun } from './context.js';
 import { addDetections } from './verification.js';
 
+const MATRIX_TASK = { id: 'matrix', label: 'Testing the tests' } as const;
 const TASK = { id: 'quality', label: "Checking the repo's rules" } as const;
 
 function plural(count: number, word: string): string {
@@ -77,7 +80,7 @@ export async function detectorStage(run: ReviewRun): Promise<void> {
  * running the stage and closing the review without the two interleaving. The
  * type hints follow, and are dropped when the review closed meanwhile.
  */
-export async function diagnosticStage(run: ReviewRun, closed: () => boolean): Promise<void> {
+export async function diagnosticStage(run: ReviewRun, closed: () => boolean, detectors: Promise<void>): Promise<void> {
 	if (run.controller.signal.aborted) return;
 
 	try {
@@ -94,5 +97,29 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean): Pr
 		report(run, runTypeHints(run));
 	} catch (err) {
 		run.events?.onLog?.(`Type hints skipped: ${errorText(err)}`);
+	}
+
+	await detectors;
+
+	if (!testStrengthOn() || closed() || run.controller.signal.aborted) return;
+
+	run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'running', 'Running the changed tests against mutants', {
+		kind: 'checks'
+	});
+
+	try {
+		const matrix = await runMatrix(run);
+
+		if (!closed() && !run.controller.signal.aborted) {
+			run.detections.push(...matrix.results);
+			addDetections(run, matrix.results);
+			run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'done', matrixDetail(matrix), { kind: 'checks' });
+		} else {
+			run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'partial', 'Still running when the review finished', {
+				kind: 'checks'
+			});
+		}
+	} catch (err) {
+		run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'done', `Skipped: ${errorText(err)}`, { kind: 'checks' });
 	}
 }

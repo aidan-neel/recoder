@@ -29,6 +29,8 @@ export interface RunRecord {
 	candidates: number | null;
 	/** Baseline checks the review took from an earlier review of the same commit instead of running; absent from servers older than the cache. */
 	cachedChecks?: number;
+	/** The "Testing the tests" task: its status, message (counts or skip reason) and time; absent when the review had none or the report predates it. */
+	matrix?: { status: string; message: string; elapsedMs: number | null };
 }
 
 export interface StabilityReport {

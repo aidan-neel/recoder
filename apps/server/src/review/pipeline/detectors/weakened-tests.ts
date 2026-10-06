@@ -1,12 +1,15 @@
 import {
 	BROAD_ERRORS,
 	EXACT_MATCHERS,
+	boundOf,
 	LOOSE_MATCHERS,
 	errorClass,
 	expectedError,
 	instanceCheck,
 	matcherKey
 } from './assertion-checks.js';
+import { testStrengthOn } from '../test-strength.js';
+import { suspicionIn } from './new-tests.js';
 import { clip } from './changed-lines.js';
 import type { TestFileVersions } from './test-files.js';
 import { testBlocks, type Assertion, type TestBlock } from './test-source.js';
@@ -80,6 +83,19 @@ function exactWeakness(before: Assertion, after: Assertion): Weakness | null {
 	return {
 		title: 'no longer checks the exact value',
 		body: `The old assertion pinned the value exactly (\`${before.method}\`). The new \`${matcherKey(after)}\` passes for any value that is merely truthy, in range or contained, so a wrong value can slip through.`
+	};
+}
+
+/** An exact comparison of a value replaced by a lower bound on the same value, like `t.is(n, 4)` turned into `t.true(n >= 4)`. */
+function boundWeakness(before: Assertion, after: Assertion): Weakness | null {
+	const bound = testStrengthOn() ? boundOf(after) : null;
+
+	if (!EXACT_MATCHERS.has(matcherKey(before)) || !bound) return null;
+	if (before.args[0] !== bound.subject || before.args[1] !== bound.bound) return null;
+
+	return {
+		title: 'no longer checks the exact value',
+		body: `The old assertion pinned \`${clip(bound.subject, 60)}\` to ${bound.bound}. The new one only requires \`${bound.op} ${bound.bound}\`, so a larger value passes.`
 	};
 }
 
@@ -197,7 +213,9 @@ function pairWeakness(before: Assertion, after: Assertion, head: string): Weakne
 	}
 
 	return (
-		instanceWeakness(before, after, head) ?? (before.args[0] === after.args[0] ? weakness(before, after, head) : null)
+		instanceWeakness(before, after, head) ??
+		boundWeakness(before, after) ??
+		(before.args[0] === after.args[0] ? weakness(before, after, head) : null)
 	);
 }
 
@@ -226,6 +244,10 @@ function compareTest(file: TestFileVersions, before: TestBlock, after: TestBlock
 	}
 
 	if (results.length) return results;
+
+	const added = testStrengthOn() ? suspicionIn(file, after, new Map()) : [];
+
+	if (added.length) return added;
 
 	return removalResults(
 		file,

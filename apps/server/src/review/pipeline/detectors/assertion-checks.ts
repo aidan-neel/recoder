@@ -70,13 +70,13 @@ export function errorClass(expected: string): string | null {
 }
 
 /** Whether the assertion only passes when its first argument is true: `t.true(x)`, `assert(x)`, `expect(x).toBe(true)`. */
-export function assertsTrue(assertion: Assertion): boolean {
+function assertsTrue(assertion: Assertion): boolean {
 	if (assertion.family === 'expect') {
 		return EXACT_MATCHERS.has(assertion.method) && !assertion.modifiers.length && assertion.args[1] === 'true';
 	}
 
 	return assertion.family === 'ava'
-		? assertion.method === 'true'
+		? assertion.method === 'true' || assertion.method === 'assert'
 		: assertion.method === '' || assertion.method === 'ok';
 }
 
@@ -91,4 +91,22 @@ export function instanceCheck(assertion: Assertion): { subject: string; name: st
 	const match = assertsTrue(assertion) ? /^(.+?)\s+instanceof\s+([A-Z]\w*)$/.exec(assertion.args[0] ?? '') : null;
 
 	return match ? { subject: match[1]!, name: match[2]! } : null;
+}
+
+const LOWER_BOUND = /^(.+?)\s*(>=?)\s*(\d+)$/;
+
+/** The subject, operator and bound of `t.true(n >= 4)` or `expect(n).toBeGreaterThan(0)`. */
+export function boundOf(assertion: Assertion): { subject: string; op: string; bound: string } | null {
+	if (assertsTrue(assertion)) {
+		const match = LOWER_BOUND.exec(assertion.args[0] ?? '');
+
+		return match ? { subject: match[1]!, op: match[2]!, bound: match[3]! } : null;
+	}
+
+	const op = { toBeGreaterThan: '>', toBeGreaterThanOrEqual: '>=' }[matcherKey(assertion)];
+	const bound = assertion.args[1] ?? '';
+
+	return assertion.family === 'expect' && op && /^\d+$/.test(bound)
+		? { subject: assertion.args[0] ?? '', op, bound }
+		: null;
 }

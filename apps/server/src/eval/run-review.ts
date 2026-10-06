@@ -129,6 +129,13 @@ async function waitForReview(target: RunTarget, reviewId: string, label: string)
 	}
 }
 
+/** The matrix task's outcome from the stored progress, or undefined when the review ran none. */
+function matrixOf(progress: Awaited<ReturnType<typeof readProgress>>): RunRecord['matrix'] {
+	const task = progress?.tasks.matrix;
+
+	return task ? { status: task.status, message: task.message ?? '', elapsedMs: task.elapsedMs ?? null } : undefined;
+}
+
 /**
  * Runs one review of a PR and records what it found: a full review, or with
  * `start` another way to begin one, such as replaying a finished review.
@@ -166,6 +173,7 @@ export async function runReview(
 		unconfirmed: result.unconfirmed?.map(toEvalFinding),
 		funnel: result.funnel,
 		candidates: progress?.candidateCount ?? null,
-		cachedChecks: progress?.toolCalls?.filter((call) => call.cached).length ?? 0
+		cachedChecks: progress?.toolCalls?.filter((call) => call.cached).length ?? 0,
+		matrix: matrixOf(progress)
 	};
 }
