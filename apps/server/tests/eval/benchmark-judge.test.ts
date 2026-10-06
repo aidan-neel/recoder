@@ -9,6 +9,10 @@ function defect(id: string): LabeledDefect {
 const verdict = (defectId: string, finding: number | null, duplicates: number[] = []) => ({
 	defect: defectId,
 	finding,
+	behavior: 'returns the wrong item',
+	cause: 'the index is taken before filtering',
+	sameBehavior: true,
+	sameCause: true,
 	duplicates,
 	reason: ''
 });
@@ -39,6 +43,37 @@ test('duplicates are only findings no defect claimed as its match', () => {
 	expect(score.duplicates).toEqual([1]);
 	expect(score.unlabeled).toEqual([3]);
 	expect(score.missed).toEqual(['d3']);
+});
+
+test('a nearby finding the judge weighs for a defect but reads as another behavior earns no credit', () => {
+	const nearby = { ...verdict('d1', 0, [1]), behavior: 'recomputes the list on every render', sameBehavior: false };
+	const score = scoreVerdicts({ matches: [nearby] }, [defect('d1')], 2);
+
+	expect(score.found).toEqual({});
+	expect(score.unlabeled).toEqual([0, 1]);
+	expect(score.notes?.d1).toMatchObject({ finding: 0, reports: false });
+});
+
+test('the same behavior with another cause, or the same cause with another behavior, earns no credit', () => {
+	const halves = [
+		{ sameBehavior: true, sameCause: false, reason: 'same symptom, but it blames the cache' },
+		{ sameBehavior: false, sameCause: true, reason: 'same missing check, but it describes a crash' }
+	];
+
+	for (const half of halves) {
+		const score = scoreVerdicts({ matches: [{ ...verdict('d1', 0, [1]), ...half }] }, [defect('d1')], 2);
+
+		expect(score.found).toEqual({});
+		expect(score.duplicates).toEqual([]);
+		expect(score.notes?.d1).toMatchObject({ finding: 0, reports: false });
+		expect(score.reasons.d1).toBe(half.reason);
+	}
+});
+
+test("a verdict that does not say the behavior and cause are the defect's earns no credit", () => {
+	const score = scoreVerdicts({ matches: [{ defect: 'd1', finding: 0 }] }, [defect('d1')], 1);
+
+	expect(score.found).toEqual({});
 });
 
 test('a run with no findings misses every defect without asking the judge', async () => {

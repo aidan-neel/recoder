@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import type { ModelSettings, ReviewFunnel, SubagentCap } from '@recoder/shared';
 import { recall, type BenchmarkSummary, type LabeledDefect, type PrScore, type Totals } from './benchmark-score';
 import { labelLines, percent } from './benchmark-labels-report';
+import { matchLines } from './benchmark-matches-report';
 import { countClasses, type LabeledRun } from './benchmark-labels';
 import type { LowTotals } from './benchmark-lows';
 import type { DefectStage, PoolCandidate, StageTotals } from './benchmark-stages';
@@ -367,6 +368,7 @@ export function printBenchmark(report: BenchmarkReport): void {
 			...labelLines(summary.labels),
 			...hiddenLines(summary.hidden),
 			...stageLines(summary.stages),
+			...matchLines(report.prs),
 			...lowLines(summary.lows),
 			...funnelLines(report.prs),
 			...groupLines('By codebase', summary.byCodebase),

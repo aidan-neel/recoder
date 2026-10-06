@@ -5,6 +5,7 @@ import { matrixDetail, runMatrix } from '../mutation/stage.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { publishBudget, type ReviewRun } from './context.js';
 import { addDetections } from './verification.js';
+import { STILL_RUNNING } from '../../session/task-state.js';
 
 const MATRIX_TASK = { id: 'matrix', label: 'Testing the tests' } as const;
 const TASK = { id: 'quality', label: "Checking the repo's rules" } as const;
@@ -124,7 +125,7 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean, det
 			addDetections(run, matrix.results);
 			run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'done', matrixDetail(matrix), { kind: 'checks' });
 		} else {
-			run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'partial', 'Still running when the review finished', {
+			run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'partial', STILL_RUNNING, {
 				kind: 'checks'
 			});
 		}

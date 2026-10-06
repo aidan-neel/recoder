@@ -4,7 +4,9 @@ import { configForModel, configForOrchestrator, configForSubagent } from '../mod
 import type { CandidateOutcome } from '../review/pipeline/candidate-outcome';
 import { initReviewSettings } from '../review/session/review-settings';
 import { readCache, writeCache } from '../util/json-cache';
+import { correctScore } from './benchmark-corrections';
 import { JUDGE_VERSION, judgePr, type JudgeChat } from './benchmark-judge';
+import type { Adjudications } from './benchmark-labels';
 import type { BenchmarkReport, JudgeModel, ScoredRun } from './benchmark-report';
 import { lowsOfRun } from './benchmark-lows';
 import type { LabeledDefect, PrScore } from './benchmark-score';
@@ -25,6 +27,9 @@ export interface ScoredLabel {
 	id: string;
 	defects: LabeledDefect[];
 }
+
+/** The judge's score for a list of findings against one PR's defects, with the human corrections applied. */
+type Judged = (findings: readonly EvalFinding[]) => Promise<PrScore>;
 
 /** A fixed seed so a rerun of the judge on the same findings agrees with itself. */
 export const JUDGE_SEED = 7;
@@ -95,14 +100,39 @@ async function cachedJudgement(
 	return score;
 }
 
-/** A review's candidates as the eval keeps them. */
+/** A review's candidates as the eval keeps them, with the id each claim is traced by. */
 function candidatePool(candidates: readonly (Finding & CandidateOutcome)[]): PoolCandidate[] {
 	return candidates.map((candidate) => ({
 		...toEvalFinding(candidate),
+		id: candidate.id,
 		stage: candidate.stage,
 		reason: candidate.reason,
-		verified: candidate.verified
+		verified: candidate.verified,
+		...(candidate.publishedBy ? { publishedBy: candidate.publishedBy } : {})
 	}));
+}
+
+/** The pool a run saved, or the server's candidates of its review; null when neither is there. */
+async function poolOf(
+	run: RunRecord,
+	base: string,
+	saved: PoolCandidate[] | undefined
+): Promise<PoolCandidate[] | null> {
+	if (saved) return saved;
+
+	const candidates = await getCandidates(base, run.reviewId);
+
+	return candidates && candidatePool(candidates);
+}
+
+/**
+ * The run's shown findings below the reporting bar, by why each was
+ * published; nothing when the pool records no candidate ids to read that by.
+ */
+function lowsOf(run: RunRecord, pool: readonly PoolCandidate[], score: PrScore) {
+	const traced = pool.filter((candidate): candidate is PoolCandidate & { id: string } => !!candidate.id);
+
+	return run.findingIds && traced.length === pool.length ? { lows: lowsOfRun(run.findingIds, traced, score) } : {};
 }
 
 /**
@@ -110,18 +140,20 @@ function candidatePool(candidates: readonly (Finding & CandidateOutcome)[]): Poo
  * the judge scored the shown findings that were below the reporting bar. A
  * judge failure here leaves the stages out and keeps the run's score.
  */
-async function scoreStages(judge: Judge, label: ScoredLabel, run: RunRecord, score: PrScore, base: string) {
-	const candidates = await getCandidates(base, run.reviewId);
+async function scoreStages(
+	judged: Judged,
+	label: ScoredLabel,
+	run: RunRecord,
+	score: PrScore,
+	pool: PoolCandidate[] | null
+) {
+	if (!pool) return {};
 
-	if (!candidates) return {};
-
-	const pool = candidatePool(candidates);
-	const lows = run.findingIds ? { lows: lowsOfRun(run.findingIds, candidates, score) } : {};
+	const lows = lowsOf(run, pool, score);
 
 	try {
-		const stages = await judgeStages(label.defects, pool, score, (findings) =>
-			cachedJudgement(judge, label.defects, findings)
-		);
+		const published = { findings: run.findings, ids: run.findingIds, score };
+		const stages = await judgeStages(label.defects, pool, published, judged);
 
 		return { pool, stages, ...lows };
 	} catch (error) {
@@ -131,17 +163,40 @@ async function scoreStages(judge: Judge, label: ScoredLabel, run: RunRecord, sco
 	}
 }
 
-/** Judges a passed run; a judge failure leaves the run unscored instead of sinking the benchmark. */
-export async function scoreRun(judge: Judge, label: ScoredLabel, run: RunRecord, base: string): Promise<ScoredRun> {
+/**
+ * Judges a passed run; a judge failure leaves the run unscored instead of
+ * sinking the benchmark. The adjudication file's match corrections apply over
+ * every judgement. A rescore passes the pool the run saved, so it reads no
+ * candidates from the server.
+ */
+export async function scoreRun(
+	judge: Judge,
+	label: ScoredLabel,
+	run: RunRecord,
+	base: string,
+	adjudications: Adjudications,
+	saved?: PoolCandidate[]
+): Promise<ScoredRun> {
 	if (run.outcome !== 'passed') return { ...run, score: null };
+
+	const judged: Judged = async (findings) =>
+		correctScore(
+			label.id,
+			await cachedJudgement(judge, label.defects, findings),
+			label.defects,
+			findings,
+			adjudications
+		);
 
 	try {
 		const [score, hiddenScore] = await Promise.all([
-			cachedJudgement(judge, label.defects, run.findings),
-			run.unconfirmed ? cachedJudgement(judge, label.defects, run.unconfirmed) : null
+			judged(run.findings),
+			run.unconfirmed ? judged(run.unconfirmed) : null
 		]);
 
-		return { ...run, score, hiddenScore, ...(await scoreStages(judge, label, run, score, base)) };
+		const pool = await poolOf(run, base, saved);
+
+		return { ...run, score, hiddenScore, ...(await scoreStages(judged, label, run, score, pool)) };
 	} catch (error) {
 		const judgeError = error instanceof Error ? error.message : String(error);
 
@@ -162,13 +217,15 @@ function unscored(run: ScoredRun): RunRecord {
 /**
  * Every run of a saved report scored again from its stored findings, placed
  * by run number. It starts no review: the judge is called only for findings
- * it has not scored before, and the candidates are read from the server.
+ * it has not scored before, and the candidates are the pool the run saved,
+ * read from the server only for a run that saved none.
  */
 export async function rescoredRecords(
 	report: BenchmarkReport,
 	labels: readonly ScoredLabel[],
 	judge: Judge,
-	base: string
+	base: string,
+	adjudications: Adjudications
 ): Promise<ScoredRun[][]> {
 	return Promise.all(
 		labels.map(async (label) => {
@@ -177,7 +234,7 @@ export async function rescoredRecords(
 			for (const run of report.prs.find((pr) => pr.id === label.id)?.runs ?? []) {
 				const stored = unscored(run);
 
-				records[run.index - 1] = await scoreRun(judge, label, stored, base);
+				records[run.index - 1] = await scoreRun(judge, label, stored, base, adjudications, run.pool);
 			}
 
 			return records;

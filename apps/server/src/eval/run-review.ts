@@ -1,4 +1,4 @@
-import { REVIEW_CANCELLED, type Finding, type Review } from '@recoder/shared';
+import { REVIEW_CANCELLED, type Finding, type Review, type ReviewProgress } from '@recoder/shared';
 import {
 	cancelReview,
 	getReview,
@@ -8,6 +8,7 @@ import {
 	startReview,
 	type ProgressSummary
 } from './client';
+import { unsettledTasks } from '../review/session/task-state';
 import type { EvalFinding } from './metrics';
 import type { RunOutcome, RunRecord } from './report';
 
@@ -27,8 +28,14 @@ export interface RunTarget {
 	inPlace: boolean;
 }
 
+/** How long a stop waits for start requests the server has not answered, so it can cancel those reviews too. */
+const START_GRACE_MS = 15_000;
+
 /** The reviews evals are waiting on, so Ctrl-C can stop them instead of leaving them running on the server. */
 const inFlight = new Set<string>();
+
+/** Start requests still waiting for the server's answer: their reviews exist, or soon will, but have no id here yet. */
+const starting = new Set<Promise<Review>>();
 
 /** Set on Ctrl-C, so a worker freed by a cancelled review doesn't start the next one while the eval exits. */
 let stopping = false;
@@ -36,10 +43,35 @@ let stopping = false;
 /** Cancels every review still running, then exits; for SIGINT. */
 export function stopOnInterrupt(base: string): void {
 	process.on('SIGINT', () => {
-		stopping = true;
 		console.error('\nInterrupted; stopping the running reviews.');
-		void Promise.all([...inFlight].map((id) => cancelReview(base, id))).finally(() => process.exit(130));
+		void stopReviews(base).finally(() => process.exit(130));
 	});
+}
+
+/**
+ * Starts no more reviews and cancels every one the eval is waiting on. A
+ * review whose start request is still pending is cancelled as soon as the
+ * server answers with its id, for up to `START_GRACE_MS`.
+ */
+export async function stopReviews(base: string): Promise<void> {
+	stopping = true;
+
+	const answered = [...starting].map((start) =>
+		start.then(
+			(review) => cancelReview(base, review.id),
+			() => undefined
+		)
+	);
+
+	await Promise.all([
+		...[...inFlight].map((id) => cancelReview(base, id)),
+		Promise.race([Promise.all(answered), Bun.sleep(START_GRACE_MS)])
+	]);
+}
+
+/** What a worker awaits once the eval is stopping: nothing, since the process exits. */
+function held(): Promise<never> {
+	return new Promise<never>(() => undefined);
 }
 
 export function toEvalFinding(finding: Finding): EvalFinding {
@@ -56,7 +88,8 @@ export function toEvalFinding(finding: Finding): EvalFinding {
 		symbol: finding.symbol,
 		severity: finding.severity,
 		title: finding.title,
-		verification: finding.verification
+		verification: finding.verification,
+		memberIds: finding.memberIds
 	};
 }
 
@@ -137,6 +170,20 @@ function matrixOf(progress: Awaited<ReturnType<typeof readProgress>>): RunRecord
 }
 
 /**
+ * Says which tasks a finished review left active, or skipped without a
+ * reason, so a passed run never hides unfinished work behind its outcome.
+ */
+function warnUnsettled(label: string, reviewId: string, progress: ReviewProgress | null): void {
+	const open = unsettledTasks(Object.values(progress?.tasks ?? {}));
+
+	if (!open.length) return;
+
+	console.warn(
+		`${label} · review ${reviewId} finished with ${open.length} unsettled task${open.length === 1 ? '' : 's'}: ${open.map((task) => `${task.id} (${task.status})`).join(', ')}`
+	);
+}
+
+/**
  * Runs one review of a PR and records what it found: a full review, or with
  * `start` another way to begin one, such as replaying a finished review.
  */
@@ -145,10 +192,22 @@ export async function runReview(
 	review: { repoId: string; pr: number; index: number; label: string },
 	start: () => Promise<Review> = () => startReview(target.base, review.repoId, review.pr, target.baselineCache)
 ): Promise<RunRecord> {
-	if (stopping) return new Promise<never>(() => undefined);
+	if (stopping) return held();
 
 	const started = Date.now();
-	const created = await start();
+	const request = start();
+
+	starting.add(request);
+
+	let created: Review;
+
+	try {
+		created = await request;
+	} finally {
+		starting.delete(request);
+	}
+
+	if (stopping) return held();
 
 	inFlight.add(created.id);
 	console.log(`${review.label} · review ${created.id}`);
@@ -159,6 +218,8 @@ export async function runReview(
 
 	const result = finished === 'timeout' ? await getReview(target.base, created.id) : finished;
 	const progress = await readProgress(target.base, created.id);
+
+	warnUnsettled(review.label, created.id, progress);
 
 	return {
 		index: review.index,
