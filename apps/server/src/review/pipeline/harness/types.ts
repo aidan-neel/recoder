@@ -1,4 +1,5 @@
 import type {
+	BriefQuestionReport,
 	CoverageGap,
 	CoverageSummary,
 	Finding,
@@ -94,6 +95,8 @@ export interface AdaptiveReviewResult {
 	failure?: ModelFailure;
 	/** Obligation counts and answers; absent unless `RECODER_OBLIGATIONS=1`. */
 	obligations?: ObligationReport;
+	/** The behavior the review investigated through the brief's open questions, apart from code `coverage`; absent when the brief had none. */
+	questions?: BriefQuestionReport;
 }
 
 /** One baseline check run on the PR head before review; detectors read its diagnostics. */

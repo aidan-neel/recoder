@@ -1,4 +1,5 @@
 import { DEFAULT_SUBAGENT_CAP } from '@recoder/shared';
+import { questionRecord } from '../question-ledger.js';
 import { planBriefSubagents, planSubagents, type UnitRequest } from '../subagents.js';
 import { unitRecord } from '../units.js';
 import { finishedIds, orchestratorSays, poolContext, publishUnits, saveCheckpoint, type ReviewRun } from './context.js';
@@ -7,8 +8,9 @@ import { runUnitPool } from './pool.js';
 /**
  * Runs the subagents, once every reviewer (and retry) has answered, so the cap
  * is applied in unit order rather than finishing order. Reviewers' requests
- * come first, then the brief's open questions they marked unsettled, then
- * those no reviewer answered or marked, until the cap is reached. A request runs whether or
+ * come first, then the brief's open questions they left unresolved, then
+ * the other questions nothing settled, until the cap is reached; each open
+ * question keeps its follow-up, or why it got none. A request runs whether or
  * not the first pass raised a finding: a reviewer asks because it could not
  * settle a doubt, which is where a miss hides. Planned once and saved, so a
  * resume reruns only the subagents that didn't finish. Subagents are never
@@ -20,8 +22,12 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 	if (!state.units) {
 		const cap = run.input.subagentCap ?? DEFAULT_SUBAGENT_CAP;
 		const plan = planSubagents(state.requests, run.units, run.inventory, cap);
-		const brief = { questions: run.intent?.openQuestions ?? [], marks: state.unsettled, answers: state.answered };
+		const brief = { questions: run.intent?.openQuestions ?? [], records: run.questions, candidates: run.candidates };
 		const fromBrief = planBriefSubagents(brief, plan.units, run.units, run.inventory, cap - plan.units.length);
+
+		for (const { question, ...followUp } of fromBrief.followUps) {
+			questionRecord(run.questions, question).followUps.push(followUp);
+		}
 
 		state.units = [...plan.units, ...fromBrief.unsettled, ...fromBrief.unaddressed];
 		state.dropped = plan.dropped;

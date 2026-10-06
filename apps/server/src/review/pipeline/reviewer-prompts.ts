@@ -16,10 +16,19 @@ export const MAX_SUBAGENT_REQUESTS = 2;
 
 const SUBAGENTS_OFFER = `Subagents: ask for one, in "subagents" (at most ${MAX_SUBAGENT_REQUESTS}), whenever a question reaches past this unit's patch and context and you could not settle it in your own turns: callers or implementations of a changed API elsewhere in the repo, a contract or invariant defined outside your scope, a security or data path through several modules, or behavior that needs its own run to confirm. Each subagent gets your question, the patch for its scope and the same tools, and reports its own findings. A subagent that checks a doubt is worth more than a gap you leave open. When the developer's instructions ask for subagents, request at least one for this unit's most important open question. Never ask for work you already did.`;
 
+/** How a brief question is answered, and what each answer must carry to count. */
+const QUESTION_ANSWERS = `- If you looked and could neither confirm it as a defect nor rule it out, put its id (for example "Q3") in "unsettled". A closer look is given to those.
+- Otherwise put one entry for it in "answered", with "questionId" and "outcome":
+  - "confirmed": report the defect as a finding in this same answer, with "questionId":"Q3" on that finding. A confirmation with no such finding counts as unsettled.
+  - "disproved": say in "note" why the code is fine, and back it with "contractEvidence" (each entry a "location" of the form path:line in code you read, and a "note" on what it shows) or with "attemptedCounterexample" (the "input" you tried, the "evidenceId" of the run that tried it, and what you "observed"). A disproof with an empty note, or with neither, counts as unsettled.
+  - "not-applicable": the question is outside what you were asked to review. It stays open for the reviewers it concerns.`;
+
 const UNSETTLED_OFFER = `Open questions: when the review brief lists open questions on your files, account for each one exactly once.
-- If you looked and could neither confirm it as a defect nor rule it out, put its id (for example "Q3") in "unsettled". A closer look is given to those.
-- Otherwise put {"questionId":"Q3","outcome":...,"note":...} in "answered": "confirmed" when you report it as a finding in this same answer, "disproved" with one sentence in "note" on why the code is fine.
+${QUESTION_ANSWERS}
 A question you leave out of both also gets a closer look.`;
+
+const FOLLOW_UP_OFFER = `Brief question: your task names the open question of the review brief you were sent to settle. Account for it exactly once.
+${QUESTION_ANSWERS}`;
 
 /** Which optional answer fields a lens reviewer is offered: subagent requests (the correctness lens) and brief questions to settle (the defect lenses), when subagents are on. */
 interface ReviewerOffers {
@@ -51,12 +60,20 @@ ${offers.subagents ? SUBAGENTS_OFFER : 'Leave "subagents" empty.'}${offers.unset
 	);
 }
 
-/** A subagent's prompt: one question a correctness lens handed on, answered in depth. */
-export function subagentSystemPrompt(exec: boolean, directive: ReviewDirective | null): string {
+/**
+ * A subagent's prompt: one question a correctness lens handed on, answered in
+ * depth. A subagent sent to follow up a brief question is also asked to
+ * answer it.
+ */
+export function subagentSystemPrompt(exec: boolean, directive: ReviewDirective | null, followUp: boolean): string {
+	const ending = followUp
+		? `Leave "subagents" and "gaps" empty; you cannot hand work on.\n\n${FOLLOW_UP_OFFER}`
+		: 'Leave "subagents", "unsettled", "answered" and "gaps" empty; you cannot hand work on.';
+
 	return withDirective(
 		`${reviewerContract(exec, false)}
 
-Role: subagent. You were handed one question that a reviewer could not finish in its own turns, or that no reviewer settled. Follow the code wherever the question leads, using your tools across the repository, and report findings on that question only, in any category from the closed list. The patch in your scope is where to start, not a limit on what you read. Leave "subagents", "unsettled", "answered" and "gaps" empty; you cannot hand work on.`,
+Role: subagent. You were handed one question that a reviewer could not finish in its own turns, or that no reviewer settled. Follow the code wherever the question leads, using your tools across the repository, and report findings on that question only, in any category from the closed list. The patch in your scope is where to start, not a limit on what you read. ${ending}`,
 		directive
 	);
 }

@@ -1,6 +1,7 @@
 import type { ReviewContext } from './context';
 import type { Finding } from './findings';
 import type { ObligationReport } from './obligations';
+import type { BriefQuestionReport } from './questions';
 import type { Provider } from './repo';
 
 export type ReviewStatus = 'draft' | 'queued' | 'running' | 'passed' | 'failed';
@@ -56,6 +57,8 @@ export interface Review {
 	context?: ReviewContext;
 	/** Obligations derived from risky changes and how each investigation ended; absent unless `RECODER_OBLIGATIONS` was on. */
 	obligations?: ObligationReport;
+	/** The brief's open questions and how the review settled each; absent when the brief had none. */
+	questions?: BriefQuestionReport;
 	/** CommandRun ids produced by the review pipeline, in order. */
 	runs: string[];
 	/** Where the PR data came from: live provider fetch or offline stub. */

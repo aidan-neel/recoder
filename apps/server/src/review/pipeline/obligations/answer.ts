@@ -1,5 +1,11 @@
 import { z } from 'zod';
 import {
+	CONTRACT_EVIDENCE_RESPONSE,
+	COUNTEREXAMPLE_RESPONSE,
+	contractEvidenceSchema,
+	counterexampleSchema
+} from '../answer-evidence.js';
+import {
 	parseReviewerOutput,
 	reviewerResponseSchema,
 	reviewerValidationError,
@@ -7,25 +13,18 @@ import {
 } from '../reviewer.js';
 
 const RESULTS = ['confirmed', 'disproved', 'not-applicable', 'unresolved'] as const;
-const CONTRACT_KINDS = ['type', 'test', 'doc', 'intent', 'source'] as const;
 
 const text = (max: number) => z.string().trim().max(max);
 
 /** The fixed answer fields an investigator adds to the reviewer's final result, under `obligation`. */
 const answerSchema = z.object({
-	contractEvidence: z
-		.array(z.object({ kind: z.enum(CONTRACT_KINDS), location: text(300), note: text(600) }))
-		.max(8)
-		.default([]),
+	contractEvidence: contractEvidenceSchema,
 	inputPartition: z
 		.array(z.object({ label: text(80), input: text(400), expected: text(400) }))
 		.max(8)
 		.default([]),
 	expectedBehavior: text(1000),
-	attemptedCounterexample: z
-		.object({ input: text(600), evidenceId: z.string().nullable().default(null), observed: text(1000) })
-		.nullable()
-		.default(null),
+	attemptedCounterexample: counterexampleSchema,
 	result: z.enum(RESULTS),
 	reason: text(1200)
 });
@@ -77,14 +76,7 @@ const str = { type: 'string' };
 const ANSWER_RESPONSE_SCHEMA = {
 	type: 'object',
 	properties: {
-		contractEvidence: {
-			type: 'array',
-			items: {
-				type: 'object',
-				properties: { kind: { type: 'string', enum: [...CONTRACT_KINDS] }, location: str, note: str },
-				required: ['kind', 'location', 'note']
-			}
-		},
+		contractEvidence: CONTRACT_EVIDENCE_RESPONSE,
 		inputPartition: {
 			type: 'array',
 			items: {
@@ -94,11 +86,7 @@ const ANSWER_RESPONSE_SCHEMA = {
 			}
 		},
 		expectedBehavior: str,
-		attemptedCounterexample: {
-			type: ['object', 'null'],
-			properties: { input: str, evidenceId: { type: ['string', 'null'] }, observed: str },
-			required: ['input', 'observed']
-		},
+		attemptedCounterexample: COUNTEREXAMPLE_RESPONSE,
 		result: { type: 'string', enum: [...RESULTS] },
 		reason: str
 	},
