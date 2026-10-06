@@ -7,7 +7,7 @@ import {
 	type FindingSeverity
 } from '@recoder/shared';
 import type { EvidenceStore } from '../../evidence/evidence.js';
-import { matchesGlob } from '../chat/directive.js';
+import { ruleAppliesTo } from '../guidelines/ledger/glob.js';
 import type { RuleLedger } from '../guidelines/ledger/types.js';
 import { symbolAt } from './change-model/change-model.js';
 import type { ChangeModel } from './change-model/types.js';
@@ -16,7 +16,7 @@ import type { DetectorResult } from './detectors/types.js';
 import type { ReviewerFinding } from './finding-schema.js';
 import { dismissalFingerprint, fingerprintFinding, hunkAt, lineAnchor, snapToQuote } from './harness/findings.js';
 import type { ReviewInventory } from './inventory.js';
-import type { ChangeIntent } from './intent/types.js';
+import type { ChangeIntent, IntentClaim } from './intent/types.js';
 import { lensById } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
 import type { PublishedBy } from './published-by.js';
@@ -121,6 +121,11 @@ function locationProblem(
 	return undefined;
 }
 
+/** The claims an intent-mismatch finding may cite: goals, acceptance criteria, stated constraints and non-goals. */
+export function citableClaims(intent: ChangeIntent | null | undefined): IntentClaim[] {
+	return intent ? [intent.goals, intent.acceptanceCriteria, intent.statedConstraints, intent.nonGoals].flat() : [];
+}
+
 /**
  * Whether the text cites a claim an intent-mismatch can rest on. With the
  * intent at hand the id must be one it holds, so a made-up one counts for
@@ -131,9 +136,7 @@ function citesIntentClaim(text: string, intent: ChangeIntent | null | undefined)
 
 	if (!intent) return cited.length > 0;
 
-	const held = new Set(
-		[intent.goals, intent.acceptanceCriteria, intent.statedConstraints, intent.nonGoals].flat().map((claim) => claim.id)
-	);
+	const held = new Set(citableClaims(intent).map((claim) => claim.id));
 
 	return cited.some((id) => held.has(id));
 }
@@ -387,7 +390,7 @@ function isRuleViolation(candidate: CandidateFinding, ledger: RuleLedger | null)
 	return (
 		candidate.category === 'repo-rule' &&
 		rule !== undefined &&
-		(!rule.appliesTo || matchesGlob(candidate.file, rule.appliesTo)) &&
+		ruleAppliesTo(rule, candidate.file) &&
 		verification?.status === 'verified' &&
 		verification.method === 'rule'
 	);

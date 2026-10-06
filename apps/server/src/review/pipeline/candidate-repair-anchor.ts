@@ -1,3 +1,4 @@
+import { escapeRegExp } from './change-model/reference-kinds.js';
 import type { CandidateFinding } from './consolidate.js';
 import type { ReviewInventory } from './inventory.js';
 
@@ -73,10 +74,6 @@ function diffLines(inventory: ReviewInventory, file: string) {
 
 function identifiers(text: string): Set<string> {
 	return new Set([...text.matchAll(/[A-Za-z_$][\w$]{3,}/g)].map((match) => match[0]).filter((id) => !KEYWORDS.has(id)));
-}
-
-function escapeRegExp(text: string): string {
-	return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function holds(text: string, id: string): boolean {

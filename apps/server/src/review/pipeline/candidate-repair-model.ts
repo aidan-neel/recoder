@@ -3,15 +3,8 @@ import type { FindingCategory } from '@recoder/shared';
 import type { EvidenceStore } from '../../evidence/evidence.js';
 import type { RepoRule } from '../guidelines/ledger/types.js';
 import { changedLines, type ChangedLine } from './candidate-repair-anchor.js';
-import {
-	categoryOptions,
-	citableClaims,
-	rulesFor,
-	type RepairChange,
-	type RepairPlan,
-	type RepairScope
-} from './candidate-repair.js';
-import type { CandidateFinding } from './consolidate.js';
+import { categoryOptions, rulesFor, type RepairChange, type RepairPlan, type RepairScope } from './candidate-repair.js';
+import { citableClaims, type CandidateFinding } from './consolidate.js';
 import type { IntentClaim } from './intent/types.js';
 
 /** What one repair call may choose from: lines the change added, categories, claims and rules that exist. */

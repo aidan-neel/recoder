@@ -1,16 +1,16 @@
 import { FINDING_CATEGORIES, type DropStage, type FindingCategory, type FindingSeverity } from '@recoder/shared';
-import { matchesGlob } from '../chat/directive.js';
+import { ruleAppliesTo } from '../guidelines/ledger/glob.js';
 import type { RuleLedger } from '../guidelines/ledger/types.js';
 import { candidateProse, changedLines, chooseAnchor } from './candidate-repair-anchor.js';
 import {
 	categoryIssue,
+	citableClaims,
 	validateCandidate,
 	type CandidateContext,
 	type CandidateFinding,
 	type CategoryIssue
 } from './consolidate.js';
 import type { ReviewerFinding } from './finding-schema.js';
-import type { IntentClaim } from './intent/types.js';
 import type { ReviewInventory } from './inventory.js';
 import { lensById } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
@@ -172,14 +172,9 @@ function lensOf(candidate: CandidateFinding): LensId | null {
 	return (candidate.lens as LensId | undefined) ?? null;
 }
 
-/** The claims an intent-mismatch finding may rest on. */
-export function citableClaims(intent: RepairScope['intent']): IntentClaim[] {
-	return intent ? [intent.goals, intent.acceptanceCriteria, intent.statedConstraints, intent.nonGoals].flat() : [];
-}
-
 /** The ledger rules that apply to the file. */
 export function rulesFor(ledger: RuleLedger | null, file: string) {
-	return (ledger?.rules ?? []).filter((rule) => !rule.appliesTo || matchesGlob(file, rule.appliesTo));
+	return (ledger?.rules ?? []).filter((rule) => ruleAppliesTo(rule, file));
 }
 
 /** The categories a corrected finding may take: its lens's, or any bug category for a subagent, never the one that failed. */
