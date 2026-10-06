@@ -12,6 +12,7 @@
 		"eval:stability": "bun src/eval/stability.ts",
 		"eval:benchmark": "bun src/eval/benchmark.ts",
 		"eval:compare": "bun src/eval/compare.ts",
+		"eval:merge": "bun src/eval/merge.ts",
 		"eval:context": "bun src/eval/context-report.ts",
 		"eval:select-set": "bun src/eval/select-set.ts"
 	},

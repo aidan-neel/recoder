@@ -205,3 +205,22 @@ export function checkReuse(identity: RunIdentity, prior: Prior, allow: string[])
 		}
 	];
 }
+
+/** The index of the run before a repeat's first: repeat `k` of `runs` runs numbers its runs after the `k - 1` repeats before it. */
+export function runOffset(repeat: number, runs: number): number {
+	return (repeat - 1) * runs;
+}
+
+/**
+ * Refuses to reuse a report of another repeat, whose runs are numbered apart
+ * from this one's and would join it as extra runs instead of being reused.
+ */
+export function checkRepeat(prior: BenchmarkReport, repeat: number, runs: number): void {
+	const execution = prior.identity?.execution;
+	const before = execution ? runOffset(execution.repeat ?? 1, execution.runsPerPr) : 0;
+
+	if (before !== runOffset(repeat, runs))
+		throw new Error(
+			`The reused report's runs start after run ${before}, this run's after run ${runOffset(repeat, runs)}; pass the --repeat and --runs it ran with.`
+		);
+}
