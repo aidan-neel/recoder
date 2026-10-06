@@ -60,9 +60,10 @@ const PAGE_AFTER = [
 	...PAGE_BEFORE.slice(3)
 ];
 
-/** A review of a throwaway repo whose change to `src/page.ts` sets off several obligations. */
-export async function riskyReview(root: string): Promise<AdaptiveReviewInput> {
-	const { targetSha, headSha } = await twoCommitRepo(root, file('src/page.ts', PAGE_BEFORE, PAGE_AFTER));
+/** A review of a throwaway repo whose change to `src/page.ts` sets off several obligations; `added` are new files beside it. */
+export async function riskyReview(root: string, added: Record<string, string> = {}): Promise<AdaptiveReviewInput> {
+	const page = file('src/page.ts', PAGE_BEFORE, PAGE_AFTER);
+	const { targetSha, headSha } = await twoCommitRepo(root, { base: page.base, head: { ...page.head, ...added } });
 
 	return {
 		diff: git(root, ['diff', targetSha, headSha]) + '\n',

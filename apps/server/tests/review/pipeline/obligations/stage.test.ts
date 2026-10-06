@@ -3,7 +3,17 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../../src/review/pipeline/harness';
-import { NOTHING, finding, modelReply, restoreAfterEach, useTestModel } from '../harness-fixtures';
+import { REVIEW_POLICY } from '../../../../src/review/session/review-policy';
+import {
+	NOTHING,
+	confirmingVerifier,
+	finding,
+	isVerifier,
+	modelReply,
+	obligationOf,
+	restoreAfterEach,
+	useTestModel
+} from '../harness-fixtures';
 import { ANSWER, investigatorReply, isolateEachTest, riskyReview, stubInvestigations } from './fixtures';
 
 restoreAfterEach();
@@ -176,4 +186,39 @@ test('the cap limits how many obligations are investigated and counts the rest a
 
 	expect(none.calls.filter(isObligation)).toEqual([]);
 	expect(none.result.obligations!.counts).toMatchObject({ derived: DERIVED, launched: 0, overCap: DERIVED });
+});
+
+test("investigations run in the lens reviewers' pool, so no more agents run at once than it allows", async () => {
+	useTestModel(64);
+	process.env.RECODER_OBLIGATIONS = '1';
+
+	const filler = (tag: string) =>
+		Array.from({ length: 140 }, (_, line) => `// ${tag}${String(line).padEnd(96, 'x')}`).join('\n') + '\n';
+
+	const input = await riskyReview(mkdtempSync(join(tmpdir(), 'obligations-repo-')), {
+		'src/x.ts': filler('x'),
+		'src/y.ts': filler('y'),
+		'lib/z.ts': filler('z')
+	});
+
+	let running = 0;
+	let most = 0;
+
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		if (isVerifier(init)) return modelReply(confirmingVerifier(init));
+
+		running++;
+		most = Math.max(most, running);
+		await Bun.sleep(100);
+		running--;
+
+		return obligationOf(init) ? investigatorReply(ANSWER) : modelReply({ message: 'ok', ...NOTHING });
+	}) as unknown as typeof fetch;
+
+	const result = await runAdaptiveReview(input);
+	const agents = result.assignments.filter((record) => record.role === 'reviewer' || record.role === 'obligation');
+
+	expect(agents.length).toBeGreaterThan(REVIEW_POLICY.maxConcurrentAssignments);
+	expect(result.obligations!.counts).toMatchObject({ launched: DERIVED });
+	expect(most).toBeLessThanOrEqual(REVIEW_POLICY.maxConcurrentAssignments);
 });

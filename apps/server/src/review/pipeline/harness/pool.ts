@@ -126,7 +126,7 @@ export async function runUnitPool(
  * subagents on the second model. A subagent's hunks are already some lens's,
  * so its failure leaves coverage alone.
  */
-async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
+export async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
 	const role = recordFor(records, item.id).role;
 	const subagent = role === 'subagent';
 	const cfg = subagent ? configForSubagent() : configForOrchestrator();

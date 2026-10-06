@@ -13,7 +13,7 @@ import {
 	saveCheckpoint,
 	type ReviewRun
 } from './context.js';
-import { deriveObligationsStage, runObligations } from '../obligations/stage.js';
+import { deriveObligationsStage, runUnitsWithObligations } from '../obligations/stage.js';
 import { intentStage } from './intent-stage.js';
 import { runUnitPool } from './pool.js';
 import { detectorStage, diagnosticStage, ruleLedgerStage } from './quality-stage.js';
@@ -36,8 +36,8 @@ import { drainVerification, finishVerification, startVerification } from './veri
  *
  * Stages: understand → cut units → change model, intent (and obligations,
  * with `RECODER_OBLIGATIONS=1`) and rule ledger, while the sandbox installs →
- * every unit through every lens (failed ones retried once) alongside the
- * obligation investigations, then the subagents reviewers asked for when the lenses found
+ * every unit through every lens (failed ones retried once), in one pool with
+ * the obligation investigations, then the subagents reviewers asked for when the lenses found
  * anything → consolidate. Three things overlap the reviewers rather than
  * follow them: the baseline checks, the detectors, and the verifiers, which
  * take each candidate as it is reported. Checks still queued once everything
@@ -103,15 +103,10 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	const diagnostics = checks().then(() => (closed ? undefined : diagnosticStage(run, () => closed, detectors)));
 
 	const finishedAtStart = finishedIds(run);
+	const units = run.units.filter((unit) => !finishedAtStart.has(unit.id));
 
-	const pool = runUnitPool(
-		run.units.filter((unit) => !finishedAtStart.has(unit.id)),
-		run.assignments,
-		poolContext(run)
-	);
-
-	if (run.obligations) await Promise.all([pool, runObligations(run)]);
-	else await pool;
+	if (run.obligations) await runUnitsWithObligations(run, units);
+	else await runUnitPool(units, run.assignments, poolContext(run));
 
 	publishCoverage(run);
 	publishBudget(run);

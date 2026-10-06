@@ -1,7 +1,7 @@
 import type { ObligationAnswer } from '@recoder/shared';
-import { unitRecord } from '../units.js';
+import { unitRecord, type ReviewUnit } from '../units.js';
 import { finishedIds, poolContext, publishUnits, saveCheckpoint, type ReviewRun } from '../harness/context.js';
-import { runUnitPool } from '../harness/pool.js';
+import { runOneUnit, runUnitPool } from '../harness/pool.js';
 import { deriveObligations, selectUnderCap } from './derive.js';
 import { blankAnswer, investigate } from './investigate.js';
 import { obligationUnit } from './prompts.js';
@@ -68,27 +68,24 @@ export async function deriveObligationsStage(run: ReviewRun): Promise<void> {
 }
 
 /**
- * Runs the investigations that have no answer yet, alongside the lens
- * reviewers, through the same pool. The model-call budget grows by what they
- * may spend, so they never starve the lenses. One the budget or deadline kept
- * from starting is recorded as not launched, so it still shows up as unresolved.
+ * Runs the lens units and the investigations that have no answer yet through
+ * one pool, investigations first, so together they never exceed its
+ * concurrency. The model-call budget grows by each pending investigation's
+ * turns. One the budget or deadline kept from starting is recorded as not
+ * launched, so it still shows up as unresolved.
  */
-export async function runObligations(run: ReviewRun): Promise<void> {
-	const state = run.obligations;
-
-	if (!state?.units.length) return;
-
+export async function runUnitsWithObligations(run: ReviewRun, units: ReviewUnit[]): Promise<void> {
+	const state = run.obligations!;
 	const finished = finishedIds(run);
 	const pending = state.units.filter((unit) => !finished.has(unit.id));
 	const waiting = new Set(pending.map((unit) => unit.id));
-
-	if (!pending.length) return;
+	const ctx = poolContext(run);
 
 	state.answers = state.answers.filter((answer) => !waiting.has(answer.obligationId));
 	run.budget.limit += pending.length * state.maxTurns;
 
-	const ctx = {
-		...poolContext(run),
+	const investigation = {
+		...ctx,
 		maxTurns: state.maxTurns,
 		obligationOf: (id: string) => state.derived!.find((obligation) => obligation.id === id)!,
 		workspace: run.workspace,
@@ -96,7 +93,9 @@ export async function runObligations(run: ReviewRun): Promise<void> {
 		onAnswer: (answer: ObligationAnswer) => state.answers.push(answer)
 	};
 
-	await runUnitPool(pending, run.assignments, ctx, (item) => investigate(item, run.assignments, ctx));
+	await runUnitPool([...pending, ...units], run.assignments, ctx, (item) =>
+		waiting.has(item.id) ? investigate(item, run.assignments, investigation) : runOneUnit(item, run.assignments, ctx)
+	);
 
 	if (run.controller.signal.aborted) return;
 
