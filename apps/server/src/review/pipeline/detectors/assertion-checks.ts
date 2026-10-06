@@ -76,7 +76,7 @@ function assertsTrue(assertion: Assertion): boolean {
 	}
 
 	return assertion.family === 'ava'
-		? assertion.method === 'true'
+		? assertion.method === 'true' || assertion.method === 'assert'
 		: assertion.method === '' || assertion.method === 'ok';
 }
 

@@ -3,7 +3,8 @@ import type { ReviewRevision } from '../../../evidence/evidence.js';
 import { isTestPath } from '../change-model/test-files.js';
 import type { ReviewInventory } from '../inventory.js';
 import type { AddedLines } from './changed-lines.js';
-import { readFilesAt } from './repo-files.js';
+import { testStrengthOn } from '../test-strength.js';
+import { MAX_FILE_BYTES, readFilesAt } from './repo-files.js';
 
 /** One test file at the merge base and the PR head, plus the diff's new-side lines. */
 export interface TestFileVersions {
@@ -81,7 +82,10 @@ export async function readTestFiles(input: {
 		const head = heads.get(file.path);
 
 		if (base === undefined || head === undefined) return [];
-		if (base.length > MAX_TEST_BYTES || head.length > MAX_TEST_BYTES) return [];
+
+		const limit = testStrengthOn() ? MAX_TEST_BYTES : MAX_FILE_BYTES;
+
+		if (base.length > limit || head.length > limit) return [];
 
 		return [
 			{

@@ -8,6 +8,7 @@ import {
 	instanceCheck,
 	matcherKey
 } from './assertion-checks.js';
+import { testStrengthOn } from '../test-strength.js';
 import { suspicionIn } from './new-tests.js';
 import { clip } from './changed-lines.js';
 import type { TestFileVersions } from './test-files.js';
@@ -87,7 +88,7 @@ function exactWeakness(before: Assertion, after: Assertion): Weakness | null {
 
 /** An exact comparison of a value replaced by a lower bound on the same value, like `t.is(n, 4)` turned into `t.true(n >= 4)`. */
 function boundWeakness(before: Assertion, after: Assertion): Weakness | null {
-	const bound = boundOf(after);
+	const bound = testStrengthOn() ? boundOf(after) : null;
 
 	if (!EXACT_MATCHERS.has(matcherKey(before)) || !bound) return null;
 	if (before.args[0] !== bound.subject || before.args[1] !== bound.bound) return null;
@@ -244,7 +245,7 @@ function compareTest(file: TestFileVersions, before: TestBlock, after: TestBlock
 
 	if (results.length) return results;
 
-	const added = suspicionIn(file, after, new Map());
+	const added = testStrengthOn() ? suspicionIn(file, after, new Map()) : [];
 
 	if (added.length) return added;
 

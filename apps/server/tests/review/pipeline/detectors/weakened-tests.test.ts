@@ -40,6 +40,32 @@ describe('weakenedInFile', () => {
 		]);
 	});
 
+	test('flags an exact count turned into a bound through AVA t.assert', () => {
+		const results = detect(
+			["test('stops after the budget', async (t) => {", '	t.is(requestCount, 4);', '});'],
+			["test('stops after the budget', async (t) => {", '	t.assert(requestCount >= 4);', '});']
+		);
+
+		expect(summarize(results)).toEqual([
+			{ title: '`stops after the budget` no longer checks the exact value', line: 2 }
+		]);
+	});
+
+	test('keeps the older shapes only when RECODER_TEST_STRENGTH is 0', () => {
+		process.env.RECODER_TEST_STRENGTH = '0';
+
+		try {
+			const results = detect(
+				["test('stops after the budget', async () => {", '	t.is(requestCount, 4);', '});'],
+				["test('stops after the budget', async () => {", '	t.true(requestCount >= 4);', '});']
+			);
+
+			expect(results).toEqual([]);
+		} finally {
+			delete process.env.RECODER_TEST_STRENGTH;
+		}
+	});
+
 	test('flags toThrow with an error class that became a bare toThrow', () => {
 		const results = detect(
 			["test('rejects a bad url', () => {", '\texpect(() => parse(url)).toThrow(UrlError);', '});'],

@@ -1,5 +1,6 @@
 import { buildRuleLedger } from '../../guidelines/ledger/ledger.js';
 import { runDetectors, runDiagnostics, runTypeHints } from '../detectors/detectors.js';
+import { testStrengthOn } from '../test-strength.js';
 import { matrixDetail, runMatrix } from '../mutation/stage.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { publishBudget, type ReviewRun } from './context.js';
@@ -100,7 +101,7 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean, det
 
 	await detectors;
 
-	if (closed() || run.controller.signal.aborted) return;
+	if (!testStrengthOn() || closed() || run.controller.signal.aborted) return;
 
 	run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'running', 'Running the changed tests against mutants', {
 		kind: 'checks'

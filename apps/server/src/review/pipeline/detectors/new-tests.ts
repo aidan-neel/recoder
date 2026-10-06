@@ -1,4 +1,5 @@
 import { BROAD_ERRORS, boundOf, errorClass, expectedError, instanceCheck, matcherKey } from './assertion-checks.js';
+import { testStrengthOn } from '../test-strength.js';
 import { clip, type AddedLines } from './changed-lines.js';
 import type { TestFileVersions } from './test-files.js';
 import { testBlocks, type Assertion, type TestBlock } from './test-source.js';
@@ -170,8 +171,8 @@ export function suspicionIn(file: TestFileVersions, test: TestBlock, subclasses:
 		if (!file.added.has(assertion.startLine)) continue;
 
 		const found =
-			outputPresence(test, assertion) ??
-			(countsOnly(assertion) ? keepsOneOfMany(test) : null) ??
+			(testStrengthOn() ? outputPresence(test, assertion) : null) ??
+			(testStrengthOn() && countsOnly(assertion) ? keepsOneOfMany(test) : null) ??
 			lowerBound(assertion) ??
 			someForEvery(test, assertion) ??
 			presenceOfThrown(test, assertion, thrown) ??
