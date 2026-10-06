@@ -1,12 +1,15 @@
 import { afterEach, expect, test } from 'bun:test';
 import { existsSync } from 'node:fs';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { Repo } from '@recoder/shared';
 import { gatherChangeContext, prsForCommit } from '../../../src/forge/pr-context';
 import { fetchPull, fetchPullPreview } from '../../../src/forge/pull-preview';
 import { repoFileHost } from '../../../src/forge/repo-files';
 import { fakeBin } from '../../helpers/fake-bin';
+import { git } from '../../helpers/git';
 import { localForgeFixture } from '../../helpers/local-forge';
 
 const signal = new AbortController().signal;
@@ -17,6 +20,30 @@ afterEach(() => {
 	globalThis.fetch = realFetch;
 	process.env.PATH = realPath;
 });
+
+const numbers = async (repo: Repo, sha: string) =>
+	(await prsForCommit(repo, 'local', sha, signal)).map((ref) => ref.number);
+
+/** Commits `file` on the current branch with `message`, returning the commit. */
+async function commitFile(dir: string, file: string, message: string): Promise<string> {
+	await writeFile(join(dir, file), `${file}\n`);
+	git(dir, ['add', file]);
+	git(dir, ['commit', '-q', '-m', message]);
+
+	return git(dir, ['rev-parse', 'HEAD']);
+}
+
+/** Commits `file` on a new branch and merges it into main with `message`, returning the branch commit and the merge. */
+async function mergeBranch(dir: string, file: string, ...message: string[]) {
+	git(dir, ['checkout', '-q', '-b', file]);
+
+	const branch = await commitFile(dir, file, `Write ${file}`);
+
+	git(dir, ['checkout', '-q', 'main']);
+	git(dir, ['merge', '-q', '--no-ff', file, ...message.flatMap((paragraph) => ['-m', paragraph])]);
+
+	return { branch, merge: git(dir, ['rev-parse', 'HEAD']) };
+}
 
 test('a local pull gathers its body, closing issue with comments, discussion, thread and commits', async () => {
 	const { repo, pull7Commit } = await localForgeFixture();
@@ -34,12 +61,29 @@ test('a local pull gathers its body, closing issue with comments, discussion, th
 
 test('a commit maps to the pull whose baseSha..head holds it, and a squash names its pull in the subject', async () => {
 	const { repo, root, pull3Commit, squash, pull7Commit } = await localForgeFixture();
-	const numbers = async (sha: string) => (await prsForCommit(repo, 'local', sha, signal)).map((ref) => ref.number);
 
-	expect(await numbers(pull7Commit)).toEqual([7]);
-	expect(await numbers(pull3Commit)).toEqual([3]);
-	expect(await numbers(squash)).toEqual([3]);
-	expect(await numbers(root)).toEqual([]);
+	expect(await numbers(repo, pull7Commit)).toEqual([7]);
+	expect(await numbers(repo, pull3Commit)).toEqual([3]);
+	expect(await numbers(repo, squash)).toEqual([3]);
+	expect(await numbers(repo, root)).toEqual([]);
+});
+
+test('a merge commit names its saved pull when the pull has no mergeSha, and a number with no saved pull maps to none', async () => {
+	const { repo, root } = await localForgeFixture();
+	const dir = fileURLToPath(repo.url);
+	const file = join(git(dir, ['rev-parse', '--absolute-git-dir']), 'recoder-forge.json');
+	const forge = JSON.parse(await readFile(file, 'utf8'));
+
+	forge.pulls.push({ ...forge.pulls[0], number: 9, title: 'Write b', headRef: 'b.ts', baseSha: root });
+	await writeFile(file, JSON.stringify(forge));
+
+	const saved = await mergeBranch(dir, 'b.ts', 'Merge pull request #9 from al/b', 'Write b');
+	const unsaved = await mergeBranch(dir, 'c.ts', 'Merge pull request #11 from al/c', 'Write c');
+
+	expect(await numbers(repo, saved.merge)).toEqual([9]);
+	expect(await numbers(repo, saved.branch)).toEqual([]);
+	expect(await numbers(repo, unsaved.merge)).toEqual([]);
+	expect(await numbers(repo, unsaved.branch)).toEqual([]);
 });
 
 test('a local repo never reaches fetch, gh or glab', async () => {
@@ -67,4 +111,16 @@ test('a local repo never reaches fetch, gh or glab', async () => {
 	expect((await gatherChangeContext(repo, 7, 'local', signal)).sources.length).toBeGreaterThan(0);
 	expect(fetched).toEqual([]);
 	expect(existsSync(marker)).toBe(false);
+});
+
+test('a trailer or GitLab footer naming another project never maps a commit to the local pull with that number', async () => {
+	const { repo } = await localForgeFixture();
+	const dir = fileURLToPath(repo.url);
+	const foreignUrl = await commitFile(dir, 'd.ts', 'Port d\n\nPR-URL: https://github.com/other/lib/pull/3');
+	const foreignFooter = await commitFile(dir, 'e.ts', "Merge branch 'e'\n\nPort e\n\nSee merge request upstream/lib!3");
+	const own = await commitFile(dir, 'f.ts', 'Write f\n\nPR: #3');
+
+	expect(await numbers(repo, foreignUrl)).toEqual([]);
+	expect(await numbers(repo, foreignFooter)).toEqual([]);
+	expect(await numbers(repo, own)).toEqual([3]);
 });

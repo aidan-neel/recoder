@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { CONTEXT_CAPS, finishSources, mentionedIssues } from '../../../src/forge/context/sources';
+import { CONTEXT_CAPS, finishSources, mentionedIssues, namedPull } from '../../../src/forge/context/sources';
 import type { IntentSource } from '../../../src/review/pipeline/intent/types';
 
 test('issue mentions resolve own-repo references and skip entities, anchors and words', () => {
@@ -36,4 +36,59 @@ test('sources sort by kind then natural ref order, and per-kind and total caps c
 	expect(kept.at(-1)?.ref).toBe(`comment:#1/${CONTEXT_CAPS.comments}`);
 	expect(kept.some((source) => source.ref === 'commit:abc')).toBe(false);
 	expect(finishSources([...kept].reverse())).toEqual(kept);
+});
+
+test('a commit message names its PR by squash subject, merge, GitLab footer or trailer, and nothing else', () => {
+	const named = (subject: string, body = '', trailers = '', slug: string | null = 'o/r') =>
+		namedPull({ subject, body, trailers }, slug);
+
+	expect(named('Fix the parser (#123)')).toEqual({ number: 123, title: 'Fix the parser' });
+
+	expect(named('Merge pull request #31 from al/parser', 'Fix the parser\n\nMore detail.')).toEqual({
+		number: 31,
+		title: 'Fix the parser'
+	});
+
+	expect(named('Merge pull request #32 from al/empty')).toEqual({ number: 32, title: '' });
+
+	expect(named("Merge branch 'parser' into 'main'", 'Fix the parser\n\nSee merge request o/r!7')).toEqual({
+		number: 7,
+		title: 'Fix the parser'
+	});
+
+	expect(named('Fix the parser', '', 'Reviewed-on: https://github.com/o/r/pull/5\n')).toEqual({
+		number: 5,
+		title: '',
+		url: 'https://github.com/o/r/pull/5'
+	});
+
+	expect(named('Fix', '', 'Merge-Request: https://gitlab.com/G/Sub/P/-/merge_requests/8/\n', 'g/sub/p')).toEqual({
+		number: 8,
+		title: '',
+		url: 'https://gitlab.com/G/Sub/P/-/merge_requests/8'
+	});
+
+	expect(named('Fix the parser', '', 'PR: #6\nSigned-off-by: al <al@x>\n')).toEqual({ number: 6, title: '' });
+	expect(named('Fix the parser (#123)', '', '', null)).toEqual({ number: 123, title: 'Fix the parser' });
+	expect(named('Fix the parser', '', 'PR: #6\n', null)).toEqual({ number: 6, title: '' });
+
+	for (const [subject, body, trailers] of [
+		["Merge branch 'parser'", 'Fix the parser'],
+		['Merge remote-tracking branch origin/main'],
+		['Fix #12 in the parser', 'Closes #12'],
+		['Fix the parser', '', 'Refs: #12\nSee-also: https://github.com/o/r/issues/4\n'],
+		['Fix the parser', '', 'PR-URL: https://example.com/page\n']
+	])
+		expect(named(subject, body, trailers)).toBeNull();
+});
+
+test('a PR URL or GitLab footer naming another project, or any project when the slug is unknown, names no PR', () => {
+	const named = (body: string, trailers: string, slug: string | null) =>
+		namedPull({ subject: 'Fix the parser', body, trailers }, slug);
+
+	expect(named('', 'PR-URL: https://github.com/other/lib/pull/3\n', 'o/r')).toBeNull();
+	expect(named('', 'Reviewed-on: https://github.com/o/r-fork/pull/3\n', 'o/r')).toBeNull();
+	expect(named('Fix it\n\nSee merge request upstream/lib!3', '', 'o/r')).toBeNull();
+	expect(named('', 'PR-URL: https://github.com/o/r/pull/3\n', null)).toBeNull();
+	expect(named('Fix it\n\nSee merge request o/r!3', '', null)).toBeNull();
 });
