@@ -37,7 +37,7 @@ export function identityFields(): Omit<RunIdentity, 'version' | 'hash'> {
 			serverCommit: 'commit-1',
 			inference: { weightRevision: 'unknown', quantization: 'unknown' }
 		},
-		execution: { mode: 'full', ran: 'full', concurrency: 3, timeoutMs: 2_700_000, runsPerPr: 1, baselineCache: true },
+		execution: { mode: 'full', auto: false, concurrency: 3, timeoutMs: 2_700_000, runsPerPr: 1, baselineCache: true },
 		unavailable: {}
 	};
 }

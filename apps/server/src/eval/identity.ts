@@ -33,6 +33,9 @@ export interface TaskIdentity {
 	base: string;
 }
 
+/** How a benchmark obtained its runs; a partial benchmark reviews only the `--only` tasks, from scratch. */
+export type ExecutionMode = 'full' | 'partial' | 'resume' | 'replay' | 'reverify' | 'rescore';
+
 /**
  * Everything that decides a benchmark result, recorded so two reports can be
  * told apart field by field. `hash` covers the experiment fields: dataset,
@@ -99,10 +102,10 @@ export interface RunIdentity {
 		inference: { weightRevision: string; quantization: string };
 	};
 	execution: {
-		/** What was asked for: full, replay, reverify or auto. */
-		mode: string;
-		/** What it ran as once `--mode auto` decided: full, replay, reverify or rescore. */
-		ran: string;
+		/** How the runs were obtained: full, partial (`--only`), resume, replay, reverify or rescore. */
+		mode: ExecutionMode;
+		/** True when `--mode auto` picked the mode. */
+		auto: boolean;
 		concurrency: number;
 		timeoutMs: number;
 		runsPerPr: number;
@@ -189,6 +192,8 @@ export interface Compatibility {
 	unverifiable: FieldDiff[];
 	/** Differences named with `--allow-diff`. */
 	declared: FieldDiff[];
+	/** `--allow-diff` names that are no field of either identity, each with the fields it could have meant. */
+	undeclarable: { name: string; valid: string[] }[];
 	/** Differences the operation expects. */
 	exempt: FieldDiff[];
 	informational: FieldDiff[];
@@ -291,7 +296,11 @@ function under(field: string, prefixes: readonly string[]): boolean {
 	return prefixes.some((prefix) => field === prefix || field.startsWith(`${prefix}.`));
 }
 
-/** The fields of an `--allow-diff a,b` value, and why it cannot be used when one names no identity field. */
+/**
+ * The fields of an `--allow-diff a,b` value, and why it cannot be used when one
+ * is under no declarable section. Whether the full path is a field is checked
+ * against both identities when they are compared.
+ */
 export function allowDiffFields(value: string | undefined): { fields: string[]; error: string | null } {
 	const fields = (value ?? '').split(',').flatMap((field) => field.trim() || []);
 	const unknown = fields.filter((field) => !DECLARABLE.includes(field.split('.')[0]!));
@@ -305,15 +314,51 @@ export function allowDiffFields(value: string | undefined): { fields: string[]; 
 }
 
 /**
+ * Every name `--allow-diff` can take against these identities: `identity`,
+ * `runs`, each declarable section, and each field of either identity outside
+ * the informational sections, with every dotted prefix of it.
+ */
+function declarablePaths(identities: readonly RunIdentity[]): Set<string> {
+	const paths = new Set(DECLARABLE);
+
+	for (const field of identities.flatMap((identity) => [...leaves(identity).keys()])) {
+		if (under(field, INFORMATIONAL)) continue;
+
+		const parts = field.split('.');
+
+		for (let end = 1; end <= parts.length; end++) paths.add(parts.slice(0, end).join('.'));
+	}
+
+	return paths;
+}
+
+/** Each `--allow-diff` name that is no field, with the valid names under its section, or the sections. */
+function undeclarable(allow: readonly string[], identities: readonly RunIdentity[]) {
+	const paths = declarablePaths(identities);
+
+	return allow
+		.filter((name) => !paths.has(name))
+		.map((name) => {
+			const section = name.split('.')[0]!;
+			const near = [...paths].filter((path) => path.startsWith(`${section}.`) && !path.startsWith('tasks.'));
+
+			return { name, valid: near.length ? near.sort() : DECLARABLE };
+		});
+}
+
+/**
  * Sorts the differences between two reports by what `operation` makes of them.
  * A report without an identity refuses every claim unless `identity` is declared.
  * A checked field `unknown` on either side refuses too, even when both sides
  * are `unknown`: two reports that could not learn a value did not agree on it.
  * A compare or merge also refuses a report holding runs reviewed under
- * another identity, which its own identity does not describe.
+ * another identity, which its own identity does not describe. An
+ * `--allow-diff` name that is no field of either identity refuses as well, so
+ * a typo never declares nothing.
  */
 export function checkCompatibility(a: Named, b: Named, operation: Operation, allow: readonly string[]): Compatibility {
 	const unrecorded = [a, b].filter((report) => !report.identity).map((report) => report.name);
+	const recorded = [a.identity, b.identity].filter((identity): identity is RunIdentity => !!identity);
 	const pairs = a.identity && b.identity ? fieldPairs(a.identity, b.identity) : [];
 	const runs = a.identity && b.identity && RUN_CHECKED.includes(operation) ? runPairs(a.identity, b.identity) : [];
 	const unknown = (pair: FieldDiff) => pair.a === UNKNOWN || pair.b === UNKNOWN;
@@ -326,15 +371,18 @@ export function checkCompatibility(a: Named, b: Named, operation: Operation, all
 	const undeclared = rest.filter((pair) => !under(pair.field, allow));
 	const unverifiable = [...runs.filter((pair) => !under(pair.field, allow)), ...undeclared.filter(unknown)];
 	const refused = undeclared.filter((pair) => !unknown(pair));
+	const unnamed = undeclarable(allow, recorded);
 
 	return {
 		unrecorded,
 		refused,
 		unverifiable,
 		declared,
+		undeclarable: unnamed,
 		exempt,
 		informational,
-		compatible: !refused.length && !unverifiable.length && (!unrecorded.length || allow.includes('identity'))
+		compatible:
+			!refused.length && !unverifiable.length && !unnamed.length && (!unrecorded.length || allow.includes('identity'))
 	};
 }
 
@@ -348,6 +396,9 @@ export function compatibilityLines(result: Compatibility): string[] {
 		...(result.unrecorded.length
 			? [`Identity not recorded in ${result.unrecorded.join(' and ')}; no equivalence can be claimed.`]
 			: []),
+		...result.undeclarable.map(
+			({ name, valid }) => `--allow-diff ${name} is no field of either identity; valid: ${valid.join(', ')}`
+		),
 		...section('Incompatible:', result.refused),
 		...section('Unverifiable:', result.unverifiable),
 		...section('Declared differences:', result.declared),

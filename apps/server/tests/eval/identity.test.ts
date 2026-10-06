@@ -241,3 +241,23 @@ test('--allow-diff takes a comma list of identity fields and rejects names an id
 	expect(allowDiffFields(undefined)).toEqual({ fields: [], error: null });
 	expect(allowDiffFields('flag.RECODER_TEST_STRENGTH').error).toContain('does not know flag.RECODER_TEST_STRENGTH');
 });
+
+test('an --allow-diff path neither identity has refuses, listing the fields under its section', () => {
+	const off = { name: 'off', identity: recordedIdentity(identityFields()) };
+	const on = { name: 'on', identity: recordedIdentity({ ...identityFields(), flags: { RECODER_TEST_STRENGTH: '1' } }) };
+	const typo = checkCompatibility(off, on, 'resume', ['flags.RECODER_TEST_STRENGHT']);
+
+	expect(typo.compatible).toBe(false);
+
+	expect(typo.undeclarable).toEqual([
+		{ name: 'flags.RECODER_TEST_STRENGHT', valid: ['flags.RECODER_LLM_RETRIES', 'flags.RECODER_TEST_STRENGTH'] }
+	]);
+
+	expect(compatibilityLines(typo)[0]).toBe(
+		'--allow-diff flags.RECODER_TEST_STRENGHT is no field of either identity; valid: flags.RECODER_LLM_RETRIES, flags.RECODER_TEST_STRENGTH'
+	);
+
+	expect(checkCompatibility(off, on, 'resume', ['flags']).compatible).toBe(true);
+	expect(checkCompatibility(off, off, 'resume', ['models.orchestrator', 'runs', 'identity']).undeclarable).toEqual([]);
+	expect(checkCompatibility(off, off, 'resume', ['host.os']).undeclarable[0]?.name).toBe('host.os');
+});

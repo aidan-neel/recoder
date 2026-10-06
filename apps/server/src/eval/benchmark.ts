@@ -27,6 +27,7 @@ import { captureTree } from './harness-tree';
 import { UNKNOWN, allowDiffFields, taskIdOf } from './identity';
 import {
 	checkReuse,
+	executionMode,
 	harnessRecord,
 	replayedReviews,
 	reportIdOf,
@@ -290,8 +291,8 @@ async function main(): Promise<void> {
 		judge: judge.model,
 		server: await getServerIdentity(options.base),
 		execution: {
-			mode: requested.auto ? 'auto' : requested.replay ? (requested.replay.reverify ? 'reverify' : 'replay') : 'full',
-			ran,
+			mode: executionMode(ran, !!options.resume, !!options.only),
+			auto: !!requested.auto,
 			concurrency: options.concurrency,
 			timeoutMs: options.timeoutMs,
 			runsPerPr: options.runs,

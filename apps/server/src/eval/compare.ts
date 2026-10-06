@@ -82,12 +82,18 @@ function main(): number {
 			),
 			'',
 			...compatibilityLines(result),
-			...(result.unrecorded.length || result.refused.length || result.unverifiable.length
+			...(result.unrecorded.length || !result.compatible
 				? []
 				: ['Compatible: every checked field matches, or differs as declared or expected.']),
 			`Merge: ${merge.length ? `refused, ${merge.join('; ')}` : 'possible'}`
 		].join('\n')
 	);
+
+	if (result.undeclarable.length) {
+		console.log('\n--allow-diff names a field neither report has; their counts are not compared.');
+
+		return 1;
+	}
 
 	if (result.refused.length || result.unverifiable.length) {
 		console.log(

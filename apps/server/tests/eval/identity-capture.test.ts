@@ -85,7 +85,7 @@ function capture(change: Partial<IdentityInput> = {}) {
 		settings,
 		judge: { model: 'judge-x', provider: 'opencode', effort: 'medium' },
 		server,
-		execution: { mode: 'full', ran: 'full', concurrency: 3, timeoutMs: 2_700_000, runsPerPr: 1, baselineCache: true },
+		execution: { mode: 'full', auto: false, concurrency: 3, timeoutMs: 2_700_000, runsPerPr: 1, baselineCache: true },
 		...change
 	});
 }

@@ -55,6 +55,12 @@ test('an undeclared flag difference fails with the field named; declared, the co
 	expect(declared.code).toBe(0);
 	expect(declared.out).toContain('Declared differences:\n  flags.RECODER_TEST_STRENGTH: (absent) → 1');
 	expect(declared.out).toContain('Planted defects by codebase');
+
+	const typo = compare(a, b, '--allow-diff', 'flags.RECODER_TEST_STRENGHT');
+
+	expect(typo.code).toBe(1);
+	expect(typo.out).toContain('--allow-diff flags.RECODER_TEST_STRENGHT is no field of either identity; valid: flags.');
+	expect(typo.out).not.toContain('Planted defects by codebase');
 });
 
 test('two reports that could not read the server are refused: unknown flags are unverifiable, not a match', () => {

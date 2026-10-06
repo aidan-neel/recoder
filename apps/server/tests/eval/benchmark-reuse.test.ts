@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { identityLine, readReport, type BenchmarkReport, type JudgeModel } from '../../src/eval/benchmark-report';
 import {
 	checkReuse,
+	executionMode,
 	reportIdOf,
 	resumedRecords,
 	reusedRuns,
@@ -103,4 +104,21 @@ test('a resume across a code change is refused, saying any server or shared code
 	).toThrow(
 		'Not reusing before.json. Any change to server or shared code, their package manifests or bun.lock changes code and blocks reuse. To reuse it anyway, declare the difference: --allow-diff code.server'
 	);
+});
+
+test('a misspelt --allow-diff path refuses the reuse instead of declaring nothing', () => {
+	const before = recordedIdentity();
+	const report = readReport(writeReport(dir, 'typo.json', { identity: before, runIds: ['pr-1@aaa#1'] }));
+
+	expect(() =>
+		checkReuse(before, { path: join(dir, 'typo.json'), report, operation: 'resume' }, ['flags.RECODER_TEST_STRENGHT'])
+	).toThrow('Not reusing typo.json: --allow-diff flags.RECODER_TEST_STRENGHT names no field of either identity.');
+});
+
+test('the execution mode says how the runs were obtained, a resume included', () => {
+	expect(executionMode('full', true, false)).toBe('resume');
+	expect(executionMode('reverify', false, false)).toBe('reverify');
+	expect(executionMode('rescore', false, true)).toBe('rescore');
+	expect(executionMode('full', false, true)).toBe('partial');
+	expect(executionMode('full', false, false)).toBe('full');
 });

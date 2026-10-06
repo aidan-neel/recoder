@@ -14,6 +14,7 @@ import {
 	runCache,
 	runIdOf,
 	taskIdOf,
+	type ExecutionMode,
 	type RunCache,
 	type RunIdentity
 } from './identity';
@@ -41,6 +42,22 @@ interface Stamp {
 /** The reused report's id, which a resume, replay, reverify or rescore keeps; a new one for a fresh start or a report that recorded none. */
 export function reportIdOf(prior: Prior | null): string {
 	return prior?.report.reportId ?? crypto.randomUUID();
+}
+
+/**
+ * How a benchmark obtains its runs: continued from a report, reused by a
+ * replay, reverify or rescore of one, or reviewed now for every task or only
+ * the `--only` ones.
+ */
+export function executionMode(
+	reuse: 'full' | 'replay' | 'reverify' | 'rescore',
+	resume: boolean,
+	only: boolean
+): ExecutionMode {
+	if (resume) return 'resume';
+	if (reuse !== 'full') return reuse;
+
+	return only ? 'partial' : 'full';
 }
 
 /** A run with its stable id and its stamp. */
@@ -135,7 +152,8 @@ export function harnessRecord(tree: TreeState | null, origin: BenchmarkReport | 
  * Refuses to reuse a report whose identity differs from this run's in a field
  * the reuse does not expect and `--allow-diff` does not declare, naming each
  * field. A report that records no identity is refused unless `identity` is
- * declared. Returns the reused report's chain with this reuse appended.
+ * declared, and an `--allow-diff` name that is no field of either identity is
+ * refused too. Returns the reused report's chain with this reuse appended.
  */
 export function checkReuse(identity: RunIdentity, prior: Prior, allow: string[]): Derivation[] {
 	const name = basename(prior.path);
@@ -151,6 +169,11 @@ export function checkReuse(identity: RunIdentity, prior: Prior, allow: string[])
 	const lines = compatibilityLines(result);
 
 	if (lines.length) console.log([`Identity of ${name} → this run`, ...lines].join('\n'));
+
+	if (result.undeclarable.length)
+		throw new Error(
+			`Not reusing ${name}: --allow-diff ${result.undeclarable.map((field) => field.name).join(', ')} names no field of either identity.`
+		);
 
 	if (!result.compatible) {
 		const fields = result.unrecorded.length
