@@ -3,7 +3,7 @@ import type { ModelConfig } from '../../../models/models.js';
 import type { ReviewRun } from '../harness/context.js';
 import type { ReviewUnit } from '../units.js';
 import { askBrief } from './ask.js';
-import { isFiller, unitClaims, unitInput, type PinnedClaim } from './brief.js';
+import { isFiller, unitClaims, unitInput, type ClaimSource, type PinnedClaim } from './brief.js';
 import type { BriefUnit } from './types.js';
 
 const codeClaimSchema = z.object({
@@ -35,9 +35,13 @@ Each list item names a file of this unit and a numbered line of its diff, copied
 - observedChanges: one per changed function, method or type that alters behavior. Say what it did before and what it does now ("returned null for a missing key; now throws"), or what a new one does and for which inputs. Only what the diff shows. Every unit has at least one: for a change with no behavior (docs, tests, config), say what it changes.
 - openQuestions: specific things a reviewer must check and you could not settle from the diff: a caller listed under "referenced at" that relied on the old behavior, a boundary value, an error path, an ordering or concurrency assumption, a test that no longer covers what changed. Name the function and the input or caller. No general advice ("check error handling"), and no question the diff already answers.`;
 
-/** A unit's code always says something, so a reply with no real statement only filled in the template. */
-function placeholder(reply: UnitReply): boolean {
-	return [...reply.observedChanges, ...reply.openQuestions].every((claim) => isFiller(claim.text));
+/**
+ * A unit's code always says something, so a reply with no statement the
+ * brief keeps (all filler, or about files and lines the unit does not show)
+ * only filled in the template.
+ */
+function placeholder(reply: UnitReply, source: ClaimSource): boolean {
+	return !unitClaims([...reply.observedChanges, ...reply.openQuestions], source).length;
 }
 
 /** One unit's part of the brief: its record, and its claims pinned to their source. */
@@ -56,13 +60,22 @@ export async function briefUnit(run: ReviewRun, cfg: ModelConfig, unit: ReviewUn
 	const paths = unit.scope.map((entry) => entry.path);
 	const input = unitInput(run.inventory, run.changeModel, unit.scope);
 	const base = { id: unit.id, title: unit.title, paths };
+	const { revision } = run.input;
+
+	const source: ClaimSource = {
+		inventory: run.inventory,
+		model: run.changeModel,
+		unit,
+		revision: revision?.headSha,
+		base: revision?.mergeBaseSha
+	};
 
 	const answer = await askBrief(run, cfg, {
 		label: unit.id,
 		system: SYSTEM,
 		user: `Files: ${paths.join(', ')}\n\n${input.text}`,
 		schema: unitSchema,
-		placeholder
+		placeholder: (reply) => placeholder(reply, source)
 	});
 
 	if (!('value' in answer)) {
@@ -75,15 +88,6 @@ export async function briefUnit(run: ReviewRun, cfg: ModelConfig, unit: ReviewUn
 
 	const reply = answer.value;
 	const summary = isFiller(reply.summary) ? '' : reply.summary.trim();
-	const { revision } = run.input;
-
-	const source = {
-		inventory: run.inventory,
-		model: run.changeModel,
-		unit,
-		revision: revision?.headSha,
-		base: revision?.mergeBaseSha
-	};
 
 	const clipped = input.clipped.map((file) => `${file.path}: ${file.shown} of ${file.total} diff lines shown`);
 

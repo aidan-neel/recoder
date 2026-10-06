@@ -18,7 +18,7 @@ const TIME_SHARE = 1 / 4;
 const NO_SLOT = new CapacityError().message;
 
 const RETRY_NOTE =
-	'\n\nA previous reply to this was a placeholder: a "..." summary or nothing in any list. Answer from the input above.';
+	'\n\nA previous reply to this was a placeholder: a "..." summary, nothing in any list, or only items about files or lines the input does not show. Answer from the input above.';
 
 /** One call that writes part of the brief. */
 export interface BriefCall<T> {
