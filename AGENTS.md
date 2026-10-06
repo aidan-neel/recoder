@@ -212,3 +212,5 @@ component specs, layout and behavior rules.
   `app.css` raises the root font size at 1920px and 2400px widths. Write CSS in
   px as usual; multiply JS pixel constants by the root font scale. Never use
   CSS `zoom` (it breaks Floating UI menu positioning).
+
+Before changing or evaluating the review pipeline, read [docs/review](docs/review/README.md).
