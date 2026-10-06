@@ -1,7 +1,7 @@
 import { REVIEW_POLICY } from '../review/session/review-policy.js';
 import type { ExecWorkspace } from '../sandbox/exec-workspace.js';
 import { sanitizeRepoPath } from './paths.js';
-import { failure, type EvidenceRecord, type RetrievalAction, type ToolResult } from './types.js';
+import { failure, type EvidenceRecord, type ExecutionOutcome, type RetrievalAction, type ToolResult } from './types.js';
 
 /** Where `run` and `writeFile` execute; `exec` is null when the review is read-only, and `execUnavailable` says why. */
 export interface SandboxContext {
@@ -36,7 +36,7 @@ export async function runCommand(
 	if (!command || command.length > 4000) return { result: failure('run', 'command must be 1–4000 characters') };
 	if (!context.exec) return { result: failure('run', context.execUnavailable) };
 
-	const result = await context.exec.run(command, runTimeoutMs(action), signal, owner);
+	const result = await context.exec.runInvestigation(command, runTimeoutMs(action), signal, owner);
 
 	const status = result.timedOut
 		? `timed out after ${(result.elapsedMs / 1000).toFixed(1)}s`
@@ -52,9 +52,10 @@ export async function runCommand(
 			content,
 			truncated: result.truncated,
 			exitCode: result.exitCode,
-			elapsedMs: result.elapsedMs
+			elapsedMs: result.elapsedMs,
+			...(result.outcome ? { outcome: result.outcome } : {})
 		},
-		record: runRecord(command, content, result.truncated, result.exitCode, owner)
+		record: runRecord(command, content, result.truncated, result.exitCode, owner, result.outcome)
 	};
 }
 
@@ -64,7 +65,8 @@ export function runRecord(
 	content: string,
 	truncated: boolean,
 	exitCode: number | null,
-	owner?: string
+	owner?: string,
+	outcome?: ExecutionOutcome
 ): Omit<EvidenceRecord, 'id'> {
 	return {
 		revision: 'head',
@@ -76,7 +78,8 @@ export function runRecord(
 		kind: 'run',
 		command,
 		exitCode,
-		...(owner ? { agentId: owner } : {})
+		...(owner ? { agentId: owner } : {}),
+		...(outcome ? { outcome } : {})
 	};
 }
 
