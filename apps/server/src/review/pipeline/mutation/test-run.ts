@@ -12,7 +12,7 @@ export function oldCopyPath(path: string): string {
 const SCRIPT_LINE = /^(.+?): ([\w:.-]+) → (.*)$/;
 
 /** A step that only runs another script of the package. */
-const SCRIPT_STEP = /^(?:bun|pnpm|npm|yarn) run ([\w:.-]+)$/;
+export const SCRIPT_STEP = /^(?:bun|pnpm|npm|yarn) run ([\w:.-]+)$/;
 
 /** The package manager a baseline command ran with. */
 const TOOL = /(?:^|&& )(bun|pnpm|yarn|npm) run /;
@@ -32,7 +32,7 @@ function runsAlone(step: string, path: string): boolean {
 }
 
 /** The command that runs a binary the install put in a package. */
-const EXEC = { npm: 'npx', pnpm: 'pnpm exec', yarn: 'yarn', bun: 'bunx' } as const;
+export const EXEC = { npm: 'npx', pnpm: 'pnpm exec', yarn: 'yarn', bun: 'bunx' } as const;
 
 /** The nearest package dir above a path that has a test script. */
 function owningScript(scripts: Map<string, Map<string, string>>, path: string): { dir: string; script: string } | null {

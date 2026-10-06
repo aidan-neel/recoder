@@ -8,7 +8,7 @@ const STATIC_SCRIPTS = [['typecheck', 'check'], ['lint']];
 const CHECK_SCRIPTS = [...STATIC_SCRIPTS, ['test']];
 
 /** Package dirs safe to put in a shell command unquoted; any other dir is skipped. */
-const PLAIN_DIR = /^[\w@][\w./@-]*$/;
+export const PLAIN_DIR = /^[\w@][\w./@-]*$/;
 
 /** JavaScript package managers the install may have used, by the command it ran. */
 const JS_TOOLS = ['bun', 'pnpm', 'yarn', 'npm'];
@@ -17,7 +17,7 @@ const JS_TOOLS = ['bun', 'pnpm', 'yarn', 'npm'];
 const FILTERING_RUNNER = /(?:^|\s)(?:vitest|vp test|jest)\b/;
 
 /** Source files whose tests are worth picking; docs and config changes pick none. */
-const CODE_FILE = /\.(?:[cm]?[jt]sx?|svelte|vue)$/;
+export const CODE_FILE = /\.(?:[cm]?[jt]sx?|svelte|vue)$/;
 
 /** Past this many filters the scoped run is no cheaper than the whole suite. */
 const MAX_TEST_FILTERS = 8;
@@ -40,7 +40,7 @@ function scriptsByDir(lines: string[]): Map<string, Map<string, string>> {
 }
 
 /** The package that owns `path`: the deepest package dir that contains it, `.` for the root. */
-function owningDir(path: string, dirs: string[]): string | null {
+export function owningDir(path: string, dirs: string[]): string | null {
 	const owners = dirs.filter((dir) => dir === '.' || path.startsWith(`${dir}/`));
 
 	return owners.sort((a, b) => b.length - a.length)[0] ?? null;
@@ -52,7 +52,7 @@ export function installCommand(setup: SetupReport | null): string | null {
 }
 
 /** The JavaScript package manager the install ran with, or null when nothing JavaScript was installed. */
-function installedTool(setup: SetupReport | null): string | null {
+export function installedTool(setup: SetupReport | null): string | null {
 	return installCommand(setup)?.split(' ')[0] ?? null;
 }
 
