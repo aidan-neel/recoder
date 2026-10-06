@@ -149,7 +149,7 @@ test('a PR with an empty description is briefed from its code alone, and one wit
 	expect(intent?.observedChanges).toHaveLength(1);
 });
 
-test('statements about files or lines outside the unit are dropped, kept ones are pinned, and a moved head is briefed again', async () => {
+test('statements about files or lines outside the unit are dropped, kept ones are pinned, and a changed diff is briefed again', async () => {
 	const intent = await distill();
 
 	expect(intent?.observedChanges).toEqual([

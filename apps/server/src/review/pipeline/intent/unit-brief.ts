@@ -52,11 +52,16 @@ export interface UnitBrief {
 }
 
 /**
- * Summarizes one unit from its own declarations and diff in one cached call.
- * A unit the call could not answer is recorded as omitted with the reason;
+ * Summarizes one unit from its own declarations and diff in one call, cached
+ * under the brief's prompt `version`. A unit the call could not answer is recorded as omitted with the reason;
  * one whose diff was clipped to fit is recorded as partial.
  */
-export async function briefUnit(run: ReviewRun, cfg: ModelConfig, unit: ReviewUnit): Promise<UnitBrief> {
+export async function briefUnit(
+	run: ReviewRun,
+	cfg: ModelConfig,
+	unit: ReviewUnit,
+	version: number
+): Promise<UnitBrief> {
 	const paths = unit.scope.map((entry) => entry.path);
 	const input = unitInput(run.inventory, run.changeModel, unit.scope);
 	const base = { id: unit.id, title: unit.title, paths };
@@ -72,6 +77,7 @@ export async function briefUnit(run: ReviewRun, cfg: ModelConfig, unit: ReviewUn
 
 	const answer = await askBrief(run, cfg, {
 		label: unit.id,
+		version,
 		system: SYSTEM,
 		user: `Files: ${paths.join(', ')}\n\n${input.text}`,
 		schema: unitSchema,

@@ -9,6 +9,13 @@ import { isFiller, numberClaims } from './brief.js';
 import type { BriefUnit, ChangeIntent, GatheredContext, IntentClaim, IntentSource } from './types.js';
 import { briefUnit } from './unit-brief.js';
 
+/**
+ * Raised whenever a brief prompt or reply schema changes, here or in
+ * `unit-brief.ts`, so answers cached for an older one are never read. The
+ * eval's server identity hashes this module as the intent cache's version.
+ */
+const INTENT_VERSION = 3;
+
 const MAX_CLAIMS = 8;
 const MAX_SUMMARY_CHARS = 800;
 
@@ -150,12 +157,17 @@ export async function distillIntent(
 	if (!distill && !units.length) return null;
 
 	const cfg = configForOrchestrator();
-	const briefs = await mapLimit(units, REVIEW_POLICY.maxConcurrentAssignments, (unit) => briefUnit(run, cfg, unit));
+
+	const briefs = await mapLimit(units, REVIEW_POLICY.maxConcurrentAssignments, (unit) =>
+		briefUnit(run, cfg, unit, INTENT_VERSION)
+	);
+
 	const records = briefs.map((brief) => brief.record);
 
 	const context = distill
 		? await askBrief(run, cfg, {
 				label: 'context',
+				version: INTENT_VERSION,
 				system: SYSTEM,
 				user: userPrompt(sources, stack, records),
 				schema: contextSchema,

@@ -7,8 +7,6 @@ import { ModelBlockedError, ReviewAbortedError, runJsonAgent } from '../agent-lo
 import { orchestratorAgentOptions, type ReviewRun } from '../harness/context.js';
 import type { BriefOmission } from './types.js';
 
-/** Raised whenever a brief prompt or reply schema changes, so answers cached for an older one are never read. */
-const INTENT_VERSION = 3;
 const CACHE_NAMESPACE = 'intent';
 
 /** A brief call may take this fraction of the review's remaining time, so the brief never spends what the reviewers need. */
@@ -24,6 +22,8 @@ const RETRY_NOTE =
 export interface BriefCall<T> {
 	/** `unit-2` or `context`, for the log. */
 	label: string;
+	/** The brief's prompt version, so an answer cached for an older prompt or reply schema is never read. */
+	version: number;
 	system: string;
 	user: string;
 	schema: z.ZodType<T>;
@@ -40,9 +40,9 @@ export type BriefAnswer<T> = { value: T } | { omitted: BriefOmission; detail: st
  * A different prompt or model gives a different key, so an older answer is
  * never read back for it.
  */
-function cacheKey(cfg: ModelConfig, call: Pick<BriefCall<unknown>, 'system' | 'user'>): string {
+function cacheKey(cfg: ModelConfig, call: Pick<BriefCall<unknown>, 'version' | 'system' | 'user'>): string {
 	return JSON.stringify({
-		version: INTENT_VERSION,
+		version: call.version,
 		model: { provider: cfg.provider ?? null, source: cfg.source ?? null, id: cfg.model },
 		effort: cfg.reasoningEffort ?? null,
 		system: call.system,
