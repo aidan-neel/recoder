@@ -217,3 +217,28 @@ test('a difference named with --allow-diff merges and is listed in the merged re
 		'--allow-diff tools.nod names no field of shard-1.json or shard-2.json'
 	);
 });
+
+test('a mixed shard refuses the merge as reviewer unless declared, and the merged report is mixed', () => {
+	const unsplit = unsplitReport();
+
+	const withReviewer = (report: BenchmarkReport, mixed: boolean) => ({
+		...report,
+		summary: { ...report.summary, mixedReviewer: mixed }
+	});
+
+	const sources = named([withReviewer(shardOf(unsplit, 1, 2), false), withReviewer(shardOf(unsplit, 2, 2), true)]);
+
+	expect(mergeReports(sources, { partial: false, allow: [] }).problems).toEqual([
+		'shard-2.json differs from shard-1.json in reviewer: clean → mixed'
+	]);
+
+	const { problems, report } = mergeReports(sources, { partial: false, allow: ['reviewer'] });
+
+	expect(problems).toEqual([]);
+	expect(report!.summary.mixedReviewer).toBe(true);
+	expect(report!.merge.declared).toEqual([{ field: 'reviewer', a: 'clean', b: 'mixed', report: 'shard-2.json' }]);
+
+	expect(
+		merge([withReviewer(shardOf(unsplit, 1, 2), false), shardOf(unsplit, 2, 2)]).report!.summary.mixedReviewer
+	).toBe(false);
+});

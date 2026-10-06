@@ -153,6 +153,7 @@ function notesOf(input: BenchmarkReport, output: BenchmarkReport, labels: readon
  * The saved report judged again by `judge` at this harness's judge version,
  * from the findings and candidate pools its runs saved. It starts no review
  * and asks no server anything; the adjudications are read, never written.
+ * Each run's `reviewer` and the summary's `mixedReviewer` are kept as they are.
  */
 async function rescore(source: Source, dataset: string, judge: Judge): Promise<Rescored> {
 	const input = source.report;
@@ -203,7 +204,10 @@ async function rescore(source: Source, dataset: string, judge: Judge): Promise<R
 		startedAt,
 		finishedAt: new Date().toISOString(),
 		prs,
-		summary: benchmarkSummary(prs, input.summary.taskSet)
+		summary: {
+			...benchmarkSummary(prs, input.summary.taskSet),
+			...(input.summary.mixedReviewer !== undefined && { mixedReviewer: input.summary.mixedReviewer })
+		}
 	};
 
 	return { report, notes: notesOf(input, report, labels) };

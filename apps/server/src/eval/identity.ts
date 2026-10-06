@@ -149,10 +149,11 @@ const INFORMATIONAL = ['host', 'execution', 'unavailable'];
 
 /**
  * Field names `--allow-diff` takes: a section or a field under one, `identity`
- * for a report that records none, or `runs` for a report whose runs were
- * reviewed under other identities.
+ * for a report that records none, `runs` for a report whose runs were
+ * reviewed under other identities, or `reviewer` for a report whose reviews
+ * ran on other models than its identity declares.
  */
-const DECLARABLE = ['identity', 'runs', 'tasks', 'taskSet', 'shard', ...EXPERIMENT];
+const DECLARABLE = ['identity', 'runs', 'reviewer', 'tasks', 'taskSet', 'shard', ...EXPERIMENT];
 
 /** Operations that claim two reports' results are alike, so every run in them must have been reviewed under its report's identity. */
 const RUN_CHECKED: readonly Operation[] = ['compare', 'merge'];
@@ -183,10 +184,15 @@ export interface FieldDiff {
 	b: string;
 }
 
+/** Whether some run's review called other models than its report declares, `not recorded` when no run records its reviewer. */
+export type ReviewerMix = boolean | typeof NOT_RECORDED;
+
 /** A report's identity, under the name it is reported by. */
 export interface Named {
 	name: string;
 	identity?: RunIdentity;
+	/** The report's `summary.mixedReviewer`; absent from reports older than recording it. */
+	mixedReviewer?: ReviewerMix;
 }
 
 /** How two reports' identities relate, for one operation. */
@@ -215,11 +221,6 @@ export function taskIdOf(prId: string, headSha: string): string {
 
 export function runIdOf(taskId: string, index: number): string {
 	return `${taskId}#${index}`;
-}
-
-/** The PR a task id names. */
-function prOfTask(taskId: string): string {
-	return taskId.slice(0, taskId.lastIndexOf('@'));
 }
 
 /** JSON with object keys sorted at every level, so equal values always hash alike. */
@@ -289,6 +290,20 @@ export function runsText(identity: RunIdentity): string {
 /** The `runs` field when either report holds runs reviewed under another identity than its own. */
 function runPairs(a: RunIdentity, b: RunIdentity): FieldDiff[] {
 	return mixedRuns(a) || mixedRuns(b) ? [{ field: 'runs', a: runsText(a), b: runsText(b) }] : [];
+}
+
+/** "mixed", "clean" or "not recorded", as a report's summary says of the models its reviews ran on. */
+function reviewerText(mixed: ReviewerMix | undefined): string {
+	if (mixed === undefined || mixed === NOT_RECORDED) return NOT_RECORDED;
+
+	return mixed ? 'mixed' : 'clean';
+}
+
+/** The `reviewer` field when either report holds a review that ran on other models than its report declares. */
+function reviewerPairs(a: Named, b: Named): FieldDiff[] {
+	if (a.mixedReviewer !== true && b.mixedReviewer !== true) return [];
+
+	return [{ field: 'reviewer', a: reviewerText(a.mixedReviewer), b: reviewerText(b.mixedReviewer) }];
 }
 
 /** Every field either identity has, with both sides' values, sorted by field. */
@@ -361,7 +376,8 @@ function undeclarable(allow: readonly string[], identities: readonly RunIdentity
  * A checked field `unknown` on either side refuses too, even when both sides
  * are `unknown`: two reports that could not learn a value did not agree on it.
  * A compare or merge also refuses a report holding runs reviewed under
- * another identity, which its own identity does not describe. An
+ * another identity, which its own identity does not describe, and a report
+ * whose reviews called other models than it declares (`reviewer`). An
  * `--allow-diff` name that is no field of either identity refuses as well, so
  * a typo never declares nothing.
  */
@@ -370,16 +386,17 @@ export function checkCompatibility(a: Named, b: Named, operation: Operation, all
 	const recorded = [a.identity, b.identity].filter((identity): identity is RunIdentity => !!identity);
 	const pairs = a.identity && b.identity ? fieldPairs(a.identity, b.identity) : [];
 	const runs = a.identity && b.identity && RUN_CHECKED.includes(operation) ? runPairs(a.identity, b.identity) : [];
+	const reviewer = RUN_CHECKED.includes(operation) ? reviewerPairs(a, b) : [];
 	const unknown = (pair: FieldDiff) => pair.a === UNKNOWN || pair.b === UNKNOWN;
 	const differs = (pair: FieldDiff) => pair.a !== pair.b;
 	const informational = pairs.filter((pair) => under(pair.field, INFORMATIONAL) && differs(pair));
 	const checked = pairs.filter((pair) => !under(pair.field, INFORMATIONAL));
 	const exempt = checked.filter((pair) => under(pair.field, EXEMPT[operation]) && differs(pair));
 	const rest = checked.filter((pair) => !under(pair.field, EXEMPT[operation]) && (differs(pair) || unknown(pair)));
-	const declared = [...runs, ...rest].filter((pair) => under(pair.field, allow));
+	const declared = [...runs, ...reviewer, ...rest].filter((pair) => under(pair.field, allow));
 	const undeclared = rest.filter((pair) => !under(pair.field, allow));
 	const unverifiable = [...runs.filter((pair) => !under(pair.field, allow)), ...undeclared.filter(unknown)];
-	const refused = undeclared.filter((pair) => !unknown(pair));
+	const refused = [...reviewer, ...undeclared].filter((pair) => !under(pair.field, allow) && !unknown(pair));
 	const unnamed = undeclarable(allow, recorded);
 
 	return {
@@ -413,86 +430,5 @@ export function compatibilityLines(result: Compatibility): string[] {
 		...section('Declared differences:', result.declared),
 		...section('Expected differences:', result.exempt),
 		...section('Recorded, not checked:', result.informational)
-	];
-}
-
-/** A report as a merge reads it. */
-export interface MergeInput extends Named {
-	/** Kept by every reuse of one benchmark; absent from reports older than recording it. */
-	reportId?: string;
-	runIds?: string[];
-}
-
-/**
- * Run ids that appear more than once across the reports, by report id and run
- * id: repeats of one experiment are other runs, while a resume or replay of a
- * report keeps its report id and so its runs.
- */
-function duplicateRuns(reports: readonly MergeInput[]): string[] {
-	const seen = new Set<string>();
-	const repeated = new Set<string>();
-
-	for (const report of reports) {
-		for (const id of report.runIds ?? []) {
-			const key = `${report.reportId ?? NOT_RECORDED}/${id}`;
-
-			if (seen.has(key)) repeated.add(id);
-			seen.add(key);
-		}
-	}
-
-	return [...repeated].sort();
-}
-
-/** PRs the reports name at more than one head. */
-function splitHeads(reports: readonly MergeInput[]): string[] {
-	const tasks = new Map<string, Set<string>>();
-
-	for (const { taskId } of reports.flatMap((report) => report.identity?.tasks ?? [])) {
-		const pr = prOfTask(taskId);
-
-		tasks.set(pr, (tasks.get(pr) ?? new Set()).add(taskId));
-	}
-
-	return [...tasks.values()].filter((ids) => ids.size > 1).map((ids) => [...ids].sort().join(' vs '));
-}
-
-/**
- * Why the reports cannot be merged into one: a missing identity, an experiment
- * field that differs, a PR at two heads, or a run counted twice, which would
- * sum one run's defects as new ones. Fields named in `allow` may differ, and
- * a name in it that is no field refuses. Empty when they merge.
- */
-export function mergeProblems(reports: readonly MergeInput[], allow: readonly string[] = []): string[] {
-	const unrecorded = reports.filter((report) => !report.identity);
-
-	if (unrecorded.length) return unrecorded.map((report) => `identity not recorded in ${report.name}`);
-
-	const [first, ...rest] = reports;
-	const duplicates = duplicateRuns(reports);
-
-	return [
-		...new Set(
-			rest.flatMap((report) =>
-				checkCompatibility(first!, report, 'merge', allow).undeclarable.map(
-					({ name }) => `--allow-diff ${name} names no field of ${first!.name} or ${report.name}`
-				)
-			)
-		),
-		...rest.flatMap((report) => {
-			const result = checkCompatibility(first!, report, 'merge', allow);
-			const line = (diff: FieldDiff) => `${diff.field}: ${diff.a} → ${diff.b}`;
-
-			return [
-				...result.refused.map((diff) => `${report.name} differs from ${first!.name} in ${line(diff)}`),
-				...result.unverifiable.map((diff) => `${report.name} cannot be checked against ${first!.name} in ${line(diff)}`)
-			];
-		}),
-		...splitHeads(reports).map((ids) => `one PR at two heads: ${ids}`),
-		...(duplicates.length
-			? [
-					`run ids listed more than once (${duplicates.length}): ${duplicates.slice(0, 3).join(', ')}${duplicates.length > 3 ? ', …' : ''}; a run counted twice would sum its defects as new ones`
-				]
-			: [])
 	];
 }

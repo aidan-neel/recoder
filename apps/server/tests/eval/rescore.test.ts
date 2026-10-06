@@ -9,6 +9,7 @@ import { printBenchmark, type BenchmarkReport, type Derivation } from '../../src
 import type { Judge } from '../../src/eval/benchmark-scoring';
 import type { EvalFinding } from '../../src/eval/metrics';
 import { judgeChoice, rescoreFile } from '../../src/eval/rescore';
+import type { RunReviewer } from '../../src/eval/run-reviewer';
 import { defect } from '../helpers/benchmark';
 import { identityFields, recordedIdentity } from '../helpers/identity';
 
@@ -316,4 +317,32 @@ test("the input's judge is named again only when its model alone names it, and a
 	await expect(rescoreFile(saved, join(root, 'unlabeled-out.json'), { dataset }, fakeJudge().factory)).rejects.toThrow(
 		'has no labels for pr-9'
 	);
+});
+
+test("a rescore keeps each run's reviewer and the summary's mixedReviewer as the input recorded them", async () => {
+	refuseRequests();
+
+	const saved = writeSaved('reviewer.json');
+	const input = JSON.parse(readFileSync(saved, 'utf8')) as BenchmarkReport;
+
+	const reviewer: RunReviewer = {
+		orchestrator: 'not recorded',
+		specialist: 'not recorded',
+		pipelineRuns: 0,
+		lockMisses: 0,
+		unlockedCalls: 0,
+		calledModels: ['luna', 'muse'],
+		verdict: 'MIXED',
+		mixed: true,
+		reasons: ['runs not recorded called luna']
+	};
+
+	input.prs[0]!.runs[0]!.reviewer = reviewer;
+	input.summary.mixedReviewer = true;
+	writeFileSync(saved, JSON.stringify(input));
+
+	const { report } = await rescoreFile(saved, join(root, 'reviewer-out.json'), { dataset }, fakeJudge().factory);
+
+	expect(report.prs.map((pr) => pr.runs[0]!.reviewer)).toEqual([reviewer, undefined, undefined]);
+	expect(report.summary.mixedReviewer).toBe(true);
 });
