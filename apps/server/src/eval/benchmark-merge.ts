@@ -1,4 +1,4 @@
-import { summarize } from './benchmark-score';
+import { benchmarkSummary } from './benchmark-score';
 import type { BenchmarkReport, PrResult, ScoredRun } from './benchmark-report';
 import { runIdentities, runOffset } from './benchmark-reuse';
 import { checkCompatibility, mergeProblems, runIdOf, type FieldDiff, type RunIdentity } from './identity';
@@ -50,27 +50,6 @@ export function runAgreement(runs: readonly ScoredRun[]): PrResult['agreement'] 
 	const stability = passed.length > 1 ? stabilityMetrics(passed) : null;
 
 	return stability && { strict: stability.strict, loose: stability.loose };
-}
-
-/** A report's totals over its PRs, under the task set they came from. */
-export function benchmarkSummary(prs: readonly PrResult[], taskSet: string | undefined): BenchmarkReport['summary'] {
-	return {
-		taskSet,
-		...summarize(
-			prs.map((pr) => ({
-				codebase: pr.codebase,
-				defects: pr.defects,
-				scores: pr.runs.flatMap((run) => (run.score ? [run.score] : [])),
-				hiddenRuns: pr.runs.flatMap((run) =>
-					run.score && run.hiddenScore ? [{ shown: run.score, hidden: run.hiddenScore }] : []
-				),
-				stageRuns: pr.runs.flatMap((run) => (run.score && run.stages ? [run.stages] : [])),
-				lowRuns: pr.runs.flatMap((run) => (run.score && run.lows ? [run.lows] : [])),
-				control: pr.control,
-				labeledRuns: pr.runs.flatMap((run) => (run.labeled ? [run.labeled] : []))
-			}))
-		)
-	};
 }
 
 /** Missing runs of tasks that ran in part; the runs of a task that never ran are in its missing task. */
