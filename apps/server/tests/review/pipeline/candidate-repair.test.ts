@@ -61,36 +61,48 @@ test('two changed lines equally supported are a tie the diff does not settle', (
 	]);
 });
 
-test('an intent-mismatch whose path runs through the change takes the lens’s one other category', () => {
+/** An intent-mismatch in the api-contract lens on added line 14, whose path runs through the change. */
+function apiMismatch(violatedContract: string, ctx = repairContext()) {
+	const claim = { ...reported().claim, violatedContract };
+
+	return candidateOf(reported({ line: 14, category: 'intent-mismatch', claim }), 'api-contract', ctx);
+}
+
+test('an intent-mismatch citing a claim the intent does not hold is unsupported, never relabelled', () => {
 	const ctx = repairContext();
-	const contract = { ...reported().claim, violatedContract: 'D1 says the queue is persisted after each item' };
 
-	const candidate = candidateOf(
-		reported({ line: 14, category: 'intent-mismatch', claim: contract }),
-		'api-contract',
-		ctx
-	);
+	for (const [contract, id] of [
+		['G9: the queue is persisted after each item', 'G9'],
+		['D1 says the queue is persisted after each item', 'D1']
+	]) {
+		const candidate = apiMismatch(contract, ctx);
+		const before = structuredClone(candidate);
 
-	expect(candidate.dropReason).toBe('intent-mismatch finding cites no intent claim id');
+		expect(candidate.dropReason).toBe('intent-mismatch finding cites no intent claim id');
 
-	const plan = planRepair(candidate, scopeOf(ctx));
+		expect(planRepair(candidate, scopeOf(ctx))).toEqual({
+			changes: [],
+			open: [],
+			unsupported: `the finding cites ${id}, which the intent does not hold; a repair never invents a claim`
+		});
 
-	expect(plan.changes).toEqual([
-		{
-			kind: 'category',
-			category: 'api-contract',
-			basis:
-				"its execution path runs through the change, and api-contract is the api-contract lens's one other category"
-		}
-	]);
+		expect(candidate).toEqual(before);
+	}
+});
 
-	expect(applyRepair(candidate, plan.changes, 'deterministic', ctx).result).toBe('revalidated');
-	expect(candidate).toMatchObject({ valid: true, category: 'api-contract' });
+test('an intent-mismatch citing no claim id leaves the category to the model, even when its lens has one other', () => {
+	const ctx = repairContext();
+	const plan = planRepair(apiMismatch('the queue is persisted after each item', ctx), scopeOf(ctx));
+
+	expect(plan).toEqual({
+		changes: [],
+		open: [{ need: 'category', issue: 'intent', reason: 'intent-mismatch finding cites no intent claim id' }]
+	});
 });
 
 test('an intent-mismatch whose path touches no changed line keeps its category and stays rejected', () => {
 	const steps = [{ file: 'src/q.ts', line: 16, note: 'returns the queue' }];
-	const claim = { ...reported().claim, executionPath: steps, violatedContract: 'D1 is broken' };
+	const claim = { ...reported().claim, executionPath: steps, violatedContract: 'the queue order is broken' };
 	const candidate = candidateOf(reported({ line: 10, category: 'intent-mismatch', claim }), 'api-contract');
 
 	expect(planRepair(candidate, scopeOf())).toEqual({
@@ -100,9 +112,9 @@ test('an intent-mismatch whose path touches no changed line keeps its category a
 	});
 });
 
-test('an intent-mismatch that names a held claim outside its contract cites it; a made-up id is never cited', () => {
+test('an intent-mismatch that names a held claim outside its contract cites it', () => {
 	const ctx = repairContext();
-	const raw = reported({ line: 14, category: 'intent-mismatch', body: 'This reorders items, against G1 and G7.' });
+	const raw = reported({ line: 14, category: 'intent-mismatch', body: 'This reorders items, against G1.' });
 	const plan = planRepair(candidateOf(raw, 'correctness', ctx), scopeOf(ctx));
 
 	expect(plan.changes).toEqual([
@@ -113,6 +125,12 @@ test('an intent-mismatch that names a held claim outside its contract cites it; 
 
 	applyRepair(candidate, plan.changes, 'deterministic', ctx);
 	expect(candidate.claim?.violatedContract).toBe('G1: Each item is handled once');
+
+	const invented = reported({ line: 14, category: 'intent-mismatch', body: 'Against G1 and G7.' });
+
+	expect(planRepair(candidateOf(invented, 'correctness', ctx), scopeOf(ctx)).unsupported).toBe(
+		'the finding cites G7, which the intent does not hold; a repair never invents a claim'
+	);
 });
 
 test('an intent-mismatch in a lens with several other categories leaves the category to choose', () => {

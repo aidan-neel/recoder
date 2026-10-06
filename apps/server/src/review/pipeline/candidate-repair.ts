@@ -192,17 +192,36 @@ function namedIn(candidate: CandidateFinding, ids: string[]): string[] {
 	return ids.filter((id) => new RegExp(`\\b${id}\\b`).test(prose));
 }
 
-/** The correction for an intent-mismatch that cites no claim the intent holds. */
-function intentRepair(candidate: CandidateFinding, raw: ReviewerFinding, scope: RepairScope): RepairPlan {
-	const named = namedIn(
-		candidate,
-		citableClaims(scope.intent).map((claim) => claim.id)
-	);
+/** Claim ids as an intent numbers them: goals, acceptance criteria, constraints, non-goals and prior decisions. */
+const CLAIM_ID = /\b[ACDGN]\d+\b/g;
 
-	if (named.length === 1) {
+/**
+ * The correction for an intent-mismatch that cites no claim the intent holds.
+ * A claim id the finding names that the intent does not hold makes the finding
+ * unsupported; a held one named outside violatedContract is cited. With no id
+ * at all, only the model step may choose another of the lens's categories,
+ * and only when the claim's path runs through the change. A category is never
+ * picked by elimination.
+ */
+function intentRepair(candidate: CandidateFinding, raw: ReviewerFinding, scope: RepairScope): RepairPlan {
+	const held = new Set(citableClaims(scope.intent).map((claim) => claim.id));
+	const named = [...new Set(candidateProse(candidate).join('\n').match(CLAIM_ID) ?? [])];
+	const unheld = scope.intent ? named.filter((id) => !held.has(id)) : [];
+
+	if (unheld.length) {
+		return {
+			changes: [],
+			open: [],
+			unsupported: `the finding cites ${unheld.join(', ')}, which the intent does not hold; a repair never invents a claim`
+		};
+	}
+
+	const cited = named.filter((id) => held.has(id));
+
+	if (cited.length === 1) {
 		return {
 			changes: [
-				{ kind: 'citation', claimId: named[0], basis: `the finding names ${named[0]} outside violatedContract` }
+				{ kind: 'citation', claimId: cited[0], basis: `the finding names ${cited[0]} outside violatedContract` }
 			],
 			open: []
 		};
@@ -212,16 +231,10 @@ function intentRepair(candidate: CandidateFinding, raw: ReviewerFinding, scope: 
 		return { changes: [], open: [], unsupported: 'no step of its execution path is a line the change added' };
 	}
 
-	const options = categoryOptions(candidate);
-	const reason = 'intent-mismatch finding cites no intent claim id';
-
-	if (candidate.lens && options.length === 1) {
-		const basis = `its execution path runs through the change, and ${options[0]} is the ${candidate.lens} lens's one other category`;
-
-		return { changes: [{ kind: 'category', category: options[0], basis }], open: [] };
-	}
-
-	return { changes: [], open: [{ need: 'category', issue: 'intent', reason }] };
+	return {
+		changes: [],
+		open: [{ need: 'category', issue: 'intent', reason: 'intent-mismatch finding cites no intent claim id' }]
+	};
 }
 
 /** The correction for a category or lens requirement the (possibly re-anchored) finding breaks. */
