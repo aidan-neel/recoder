@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { applyRepair, isRepairable, planRepair, type RepairScope } from '../../../src/review/pipeline/candidate-repair';
-import { candidateOf, repairContext, reported } from './candidate-repair-fixtures';
+import { candidateOf, REPAIR_DIFF, repairContext, reported } from './candidate-repair-fixtures';
 
 function scopeOf(ctx = repairContext()): RepairScope {
 	return { inventory: ctx.inventory, ledger: ctx.ledger, intent: ctx.intent };
@@ -44,6 +44,41 @@ test('an unchanged line passes only with a link to a line the change added in th
 		expect(repair).toMatchObject({ result: 'rejected', reason: 'new-side line is not associated with this change' });
 		expect(candidate.valid).toBe(false);
 	}
+});
+
+test('a candidate past the end of an added file is not revalidated by a link to a line of it', () => {
+	const added = `diff --git a/src/new.ts b/src/new.ts
+new file mode 100644
+--- /dev/null
++++ b/src/new.ts
+@@ -0,0 +1,3 @@
++const queue = load();
++persistNext(queue.shift());
++save(queue);
+`;
+
+	const ctx = repairContext(undefined, REPAIR_DIFF + added);
+	const step = { file: 'src/new.ts', line: 2, note: 'persists the shifted item' };
+
+	const candidate = candidateOf(
+		reported({ file: 'src/new.ts', line: 400, claim: { ...reported().claim, executionPath: [step] } }),
+		'correctness',
+		ctx
+	);
+
+	const before = structuredClone(candidate);
+	const plan = planRepair(candidate, scopeOf(ctx));
+
+	expect(plan.changes).toEqual([
+		{ kind: 'related', file: 'src/new.ts', line: 2, basis: 'cited: persistNext(queue.shift());' }
+	]);
+
+	expect(applyRepair(candidate, plan.changes, 'deterministic', ctx)).toMatchObject({
+		result: 'rejected',
+		reason: 'new-side line is not associated with this change'
+	});
+
+	expect(candidate).toEqual(before);
 });
 
 test('a finding without a line moves onto the changed line its path cites', () => {

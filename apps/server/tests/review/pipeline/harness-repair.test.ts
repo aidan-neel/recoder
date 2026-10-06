@@ -7,7 +7,6 @@ import type { CandidateFinding } from '../../../src/review/pipeline/consolidate'
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../src/review/pipeline/harness';
 import {
 	NOTHING,
-	TWO_UNIT_DIFF,
 	addedFile,
 	confirmingVerifier,
 	finding,
@@ -31,6 +30,17 @@ afterEach(() => {
 	delete process.env.RECODER_REPAIR_CAP;
 });
 
+/** A changed file of `lines` 100-character lines, each one replaced, as one diff section. */
+function modifiedFile(path: string, lines: number): string {
+	const body = (sign: string) =>
+		Array.from({ length: lines }, (_, index) => `${sign}${sign}${String(index).padEnd(98, 'x')}`).join('\n');
+
+	return `diff --git a/${path} b/${path}\n--- a/${path}\n+++ b/${path}\n@@ -1,${lines} +1,${lines} @@\n${body('-')}\n${body('+')}\n`;
+}
+
+/** Two changed files large enough to review as two units. */
+const TWO_UNIT_DIFF = modifiedFile('src/a.ts', 140) + modifiedFile('tests/b.ts', 140);
+
 /** A correctness finding in `file` reported on line 400, past the change, whose execution path cites line 3. */
 function lostAnchor(title: string, file = 'src/a.ts') {
 	const base = finding(title);
@@ -44,10 +54,10 @@ function lostAnchor(title: string, file = 'src/a.ts') {
 }
 
 /**
- * Reviews `addedFile('src/a.ts', 5)` with correctness reviewers reporting
+ * Reviews `diff` (a changed 5-line `src/a.ts`) with correctness reviewers reporting
  * `findings`, counting verifier and repair calls; a repair call gets `repairAnswer`.
  */
-async function reviewFindings(findings: unknown[], repairAnswer: unknown = {}) {
+async function reviewFindings(findings: unknown[], repairAnswer: unknown = {}, diff = modifiedFile('src/a.ts', 5)) {
 	let verifiers = 0;
 	let repairs = 0;
 
@@ -63,7 +73,7 @@ async function reviewFindings(findings: unknown[], repairAnswer: unknown = {}) {
 		return modelReply(repairAnswer);
 	}) as unknown as typeof fetch;
 
-	return { ...(await review(addedFile('src/a.ts', 5))), verifiers, repairs };
+	return { ...(await review(diff)), verifiers, repairs };
 }
 
 /** A finding on line 400 whose path cites line 50, which the change does not touch, so the diff leaves its line open. */
@@ -110,6 +120,22 @@ test('a supported candidate past the change is linked to the changed line it cit
 
 	expect(candidate?.repair?.original).toMatchObject({ line: 400, stage: 'location' });
 	expect(checkpoint?.repairs).toBe(1);
+});
+
+test('a candidate past the end of an added file is not revalidated by a link and is never published', async () => {
+	const lost = lostAnchor('past the end');
+	const { result, checkpoint, verifiers, repairs } = await reviewFindings([lost], {}, addedFile('src/a.ts', 5));
+
+	expect(repairs).toBe(0);
+	expect(verifiers).toBe(0);
+	expect(result.findings).toEqual([]);
+
+	expect(candidateOutcome(titled(checkpoint, 'past the end')!)).toMatchObject({
+		stage: 'location',
+		reason: 'new-side line is not associated with this change',
+		verified: false,
+		repair: { result: 'rejected', method: 'deterministic' }
+	});
 });
 
 test('a candidate on an invented path stays rejected with its original stop and is never verified', async () => {

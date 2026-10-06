@@ -108,7 +108,7 @@ function locationProblem(
 	if (!file) return 'path is not in the change inventory';
 	if (file.excludeReason) return `path is excluded (${file.excludeReason})`;
 
-	const linked = link?.file === path && addedLine(inventory, path, link.line);
+	const linked = file.status !== 'added' && link?.file === path && addedLine(inventory, path, link.line);
 
 	if (side === 'new' && line && !linked && !newSideAnchored(inventory, file.path, line)) {
 		return 'new-side line is not associated with this change';
@@ -144,7 +144,9 @@ function citesIntentClaim(text: string, intent: ChangeIntent | null | undefined)
 /**
  * A repair's supported link from a finding on an unchanged line to the line
  * the change added, in the same file, that introduces the defect. It comes
- * from the finding's own cited line or quoted symbol, never from its fix.
+ * from the finding's own cited line or quoted symbol, never from its fix. An
+ * added file's diff is the whole file, so a line outside it does not exist and
+ * a link never lets it pass.
  */
 export interface RepairLink {
 	file: string;

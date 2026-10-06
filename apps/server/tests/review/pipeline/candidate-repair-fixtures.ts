@@ -43,9 +43,9 @@ const INTENT = {
 	openQuestions: []
 } as unknown as ChangeIntent;
 
-/** Validation context over `REPAIR_DIFF`, with or without the intent. */
-export function repairContext(intent: ChangeIntent | null = INTENT): CandidateContext {
-	const inventory = buildInventory(REPAIR_DIFF, []);
+/** Validation context over `REPAIR_DIFF` (or `diff`), with or without the intent. */
+export function repairContext(intent: ChangeIntent | null = INTENT, diff = REPAIR_DIFF): CandidateContext {
+	const inventory = buildInventory(diff, []);
 
 	return {
 		inventory,
