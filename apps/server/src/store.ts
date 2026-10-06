@@ -10,6 +10,7 @@ import {
 } from '@recoder/shared';
 import { serverDataDir } from './util/data-dir';
 import type { ReviewCheckpoint } from './review/session/review-checkpoint';
+import { settleTasks } from './review/session/task-state';
 
 /**
  * SQLite-backed store. Everything the UI treats as durable (repos, reviews,
@@ -326,9 +327,13 @@ export function settlePipelineStreams(reviewId: string): ReviewProgress | null {
 	return settled;
 }
 
+/** Why a review's open work was closed when the server came back up. */
+const RESTARTED = 'Stopped by a server restart';
+
 /**
- * Mark reviews left running/queued by a previous process as failed so the UI
- * never spins forever on orphaned work.
+ * Mark reviews left running/queued by a previous process as failed, with
+ * their reviewers and tasks closed out, so the UI never spins forever on
+ * orphaned work.
  */
 export function recoverStaleReviews(): number {
 	let recovered = 0;
@@ -345,10 +350,13 @@ export function recoverStaleReviews(): number {
 			const progress = reviewProgress.get(review.id);
 
 			if (progress) {
+				const settled = settleTasks(Object.values(progress.tasks), RESTARTED);
+
 				reviewProgress.set({
 					...progress,
 					outcome: 'failed',
-					assignments: settleAssignments(progress.assignments ?? [], 'Stopped by a server restart'),
+					assignments: settleAssignments(progress.assignments ?? [], RESTARTED),
+					tasks: { ...progress.tasks, ...Object.fromEntries(settled.map((task) => [task.id, task])) },
 					updatedAt: new Date().toISOString()
 				});
 			}

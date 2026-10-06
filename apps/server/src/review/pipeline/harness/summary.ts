@@ -43,7 +43,10 @@ function refutedCandidates(run: ReviewRun): CandidateFinding[] {
  * so raised = dropped + unproven + verified. A candidate from a checkpoint
  * older than drop stages counts only as raised.
  */
-export function reviewFunnel(run: Pick<ReviewRun, 'candidates' | 'hidden'>, shown: number): ReviewFunnel {
+export function reviewFunnel(
+	run: Pick<ReviewRun, 'candidates' | 'hidden'> & Partial<Pick<ReviewRun, 'intent'>>,
+	shown: number
+): ReviewFunnel {
 	const dropped: ReviewFunnel['dropped'] = {
 		location: 0,
 		evidence: 0,
@@ -66,8 +69,26 @@ export function reviewFunnel(run: Pick<ReviewRun, 'candidates' | 'hidden'>, show
 		verified: run.candidates.filter(
 			(candidate) => candidate.valid && !isHeldBack(candidate) && candidate.verification?.status === 'verified'
 		).length,
-		shown
+		shown,
+		...briefRecord(run.intent)
 	};
+}
+
+/** Which changed units the brief read, for the eval report; nothing when the review had no brief. */
+function briefRecord(intent: ReviewRun['intent'] | undefined): Pick<ReviewFunnel, 'brief'> {
+	if (!intent?.units) return {};
+
+	const units = intent.units.map(({ id, status, reason }) => ({ id, status, ...(reason && { reason }) }));
+
+	return { brief: { complete: intent.complete ?? true, units } };
+}
+
+/** Says when the brief the reviewers worked from left part of the change unread or clipped. */
+function briefSentence(intent: ReviewRun['intent']): string {
+	const units = intent?.units ?? [];
+	const full = units.filter((unit) => unit.status === 'included').length;
+
+	return full < units.length ? `The review brief read ${full} of ${units.length} changed units in full.` : '';
 }
 
 /**
@@ -211,6 +232,7 @@ function buildSummary(
 		`Review complete. ${confirmed.length} confirmed finding${confirmed.length === 1 ? '' : 's'}.`,
 		verifiedSummary(confirmed),
 		hiddenSentence(run.hidden.length),
+		briefSentence(run.intent),
 		units ? `${units} review unit${units === 1 ? '' : 's'} did not finish.` : '',
 		subagents ? `${subagents} subagent${subagents === 1 ? '' : 's'} did not finish.` : '',
 		droppedSentence(run.subagents.dropped),

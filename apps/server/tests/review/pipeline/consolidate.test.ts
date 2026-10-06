@@ -93,6 +93,31 @@ test('validateCandidate drops paths outside the change and invented new-side lin
 	expect(candidate({ line: 99 }).dropReason).toBe('new-side line is not associated with this change');
 });
 
+test('a repair link lets an unchanged line of a modified file pass, never a line outside an added file', () => {
+	const added = `diff --git a/new.ts b/new.ts
+new file mode 100644
+--- /dev/null
++++ b/new.ts
+@@ -0,0 +1,3 @@
++one
++two
++three
+`;
+
+	const inventory = buildInventory(DIFF + added);
+	const ctx = { ...context(), inventory, evidence: new EvidenceStore(null, inventory, 1000) };
+	const meta = { candidateId: 'c1', assignmentId: 'unit-1/correctness', role: 'reviewer', model: 'm', lens: null };
+
+	expect(inventory.files.find((file) => file.path === 'new.ts')?.status).toBe('added');
+	expect(validateCandidate(raw({ line: 30 }), meta, ctx, { file: 'a.ts', line: 2 })).toMatchObject({ valid: true });
+
+	expect(validateCandidate(raw({ file: 'new.ts', line: 400 }), meta, ctx, { file: 'new.ts', line: 2 })).toMatchObject({
+		valid: false,
+		dropStage: 'location',
+		dropReason: 'new-side line is not associated with this change'
+	});
+});
+
 test('each dropped candidate names the stage that dropped it', () => {
 	expect(candidate().dropStage).toBeUndefined();
 	expect(candidate({ file: 'missing.ts' }).dropStage).toBe('location');
