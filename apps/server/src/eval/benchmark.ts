@@ -22,13 +22,27 @@ import { summarize, type LabeledDefect } from './benchmark-score';
 import { resolvePlan } from './auto-plan';
 import { parseEvalArgs, type RunOptions } from './cli';
 import { stabilityMetrics } from './metrics';
-import { getSettings, replayReview, resolveRepo } from './client';
-import { captureTree, sameTree, type TreeState } from './harness-tree';
+import { getServerIdentity, getSettings, replayReview, resolveRepo } from './client';
+import { captureTree } from './harness-tree';
+import { UNKNOWN, allowDiffFields, taskIdOf } from './identity';
+import {
+	checkReuse,
+	executionMode,
+	harnessRecord,
+	replayedReviews,
+	reportIdOf,
+	resumedRecords,
+	reusedRuns,
+	runIdentities,
+	stamped,
+	type Prior
+} from './benchmark-reuse';
+import { captureIdentity } from './identity-capture';
 import { writeEvalFile } from './report';
 import { runReview, stopOnInterrupt } from './run-review';
 
 const USAGE =
-	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--mode auto --since <report.json>] [--runs 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
+	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--mode auto --since <report.json>] [--allow-diff field,field] [--runs 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
 
 /** One synthetic PR's label file, as the dataset's assemble step writes it. */
 interface PrLabel {
@@ -61,6 +75,8 @@ interface Options extends RunOptions {
 	replay: { report: string; reverify: boolean } | null;
 	/** `--mode auto --since`: the saved report to pick the cheapest covering mode against. */
 	auto: { since: string } | null;
+	/** Identity fields this run may differ in from the report it reuses, shown in the report as declared. */
+	allowDiff: string[];
 }
 
 function parseOptions(): Options {
@@ -75,7 +91,8 @@ function parseOptions(): Options {
 			replay: { type: 'string' },
 			reverify: { type: 'string' },
 			mode: { type: 'string' },
-			since: { type: 'string' }
+			since: { type: 'string' },
+			'allow-diff': { type: 'string' }
 		},
 		{ runs: '1', concurrency: '3', timeout: '45' }
 	);
@@ -100,6 +117,12 @@ function parseOptions(): Options {
 	if (values.mode && values.resume)
 		return fail('--resume continues a benchmark; it does not combine with --mode auto.');
 
+	const { fields: allowDiff, error: allowError } = allowDiffFields(values['allow-diff']);
+
+	if (allowError) return fail(allowError);
+	if (allowDiff.length && !values.resume && !replayed && !values.mode)
+		return fail('--allow-diff declares how this run differs from the report it reuses; pass it with that report.');
+
 	return {
 		dataset: resolve(values.dataset),
 		only: values.only ? values.only.split(',') : null,
@@ -108,6 +131,7 @@ function parseOptions(): Options {
 		resume: values.resume ? resolve(values.resume) : null,
 		replay: replayed ? { report: resolve(replayed), reverify: !values.replay } : null,
 		auto: values.mode && values.since ? { since: resolve(values.since) } : null,
+		allowDiff,
 		...run
 	};
 }
@@ -135,51 +159,19 @@ async function resolveRepos(base: string, labels: PrLabel[]): Promise<Map<string
 }
 
 /**
- * The judged runs of a saved report, placed by run number. Failed and unjudged
- * runs are left out so they run again: a restart mid-review fails it without
- * saying anything about the review itself.
- */
-function resumedRecords(report: BenchmarkReport, labels: PrLabel[]): ScoredRun[][] {
-	return labels.map((label) => {
-		const records: ScoredRun[] = [];
-
-		for (const run of report.prs.find((pr) => pr.id === label.id)?.runs ?? []) {
-			if (run.score) records[run.index - 1] = run;
-		}
-
-		return records;
-	});
-}
-
-/**
- * The review ids of a saved report's passed runs, placed by run number. A
- * replay updates those reviews in place, so replaying a report twice replays
- * the first replay's result.
- */
-function replayedReviews(report: BenchmarkReport, labels: PrLabel[]): string[][] {
-	return labels.map((label) => {
-		const ids: string[] = [];
-
-		for (const run of report.prs.find((pr) => pr.id === label.id)?.runs ?? []) {
-			if (run.outcome === 'passed') ids[run.index - 1] = run.reviewId;
-		}
-
-		return ids;
-	});
-}
-
-/**
  * Every run of every PR not already in `records`, `concurrency` reviews at a
  * time, each judged as it finishes. Jobs go round by round, so a long
  * benchmark stopped early still covers every PR; `onRun` sees the records
  * after each run. With `replays`, each run replays that saved review instead,
- * and runs without one are skipped.
+ * and runs without one are skipped. Each run is stamped with `identity`, the
+ * hash it is reviewed under, and the judge that scores it.
  */
 async function runAll(
 	options: Options,
 	labels: PrLabel[],
 	repos: Map<string, Repo>,
 	judge: Judge,
+	identity: string,
 	records: ScoredRun[][],
 	replays: string[][] | null,
 	onRun: (records: ScoredRun[][]) => void
@@ -189,6 +181,7 @@ async function runAll(
 		.filter(({ pr, run }) => !records[pr]![run] && (!replays || replays[pr]![run]));
 
 	const reverify = options.replay?.reverify ?? false;
+	const review = replays ? (reverify ? 'reverify' : 'replay') : 'fresh';
 
 	let next = 0;
 
@@ -208,7 +201,12 @@ async function runAll(
 				replays ? () => replayReview(options.base, replays[pr]![run]!, reverify) : undefined
 			);
 
-			records[pr]![run] = await scoreRun(judge, label, record, options.base);
+			records[pr]![run] = stamped(label, await scoreRun(judge, label, record, options.base), {
+				review,
+				identity,
+				judge: judge.model
+			});
+
 			onRun(records);
 		}
 	};
@@ -241,13 +239,16 @@ function labelRuns(label: PrLabel, runs: ScoredRun[], adjudications: Adjudicatio
 }
 
 /** A PR's finished runs so far; runs still going leave holes, which `filter` skips. */
-function prResult(label: PrLabel, records: ScoredRun[]): PrResult {
+function prResult(label: PrLabel, records: ScoredRun[], bases: Map<string, string>): PrResult {
 	const runs = records.filter(Boolean);
 	const passed = runs.filter((run) => run.outcome === 'passed').map((run) => run.findings);
 	const stability = passed.length > 1 ? stabilityMetrics(passed) : null;
+	const taskId = taskIdOf(label.id, label.headSha);
 
 	return {
 		id: label.id,
+		taskId,
+		baseSha: bases.get(taskId) ?? UNKNOWN,
 		codebase: label.codebase,
 		pull: label.pull,
 		verified: label.verified,
@@ -257,14 +258,6 @@ function prResult(label: PrLabel, records: ScoredRun[]): PrResult {
 		agreement: stability && { strict: stability.strict, loose: stability.loose },
 		runs
 	};
-}
-
-/** The harness record for a new report: where its reviewers ran is the report their output came from, or this tree for a run that starts them. */
-function harnessRecord(tree: TreeState | null, origin: BenchmarkReport | null, resumed: BenchmarkReport | null) {
-	if (!tree) return undefined;
-	if (origin) return { tree, reviewers: origin.harness?.reviewers ?? null };
-
-	return { tree, reviewers: !resumed || sameTree(resumed.harness?.reviewers, tree) ? tree : null };
 }
 
 async function main(): Promise<void> {
@@ -282,15 +275,49 @@ async function main(): Promise<void> {
 	const labels = plan.rescore ? all.filter((label) => plan.origin?.prs.some((pr) => pr.id === label.id)) : all;
 	const judge = judgeModel(options.judge, options.judgeEffort);
 	const repos = plan.rescore ? new Map<string, Repo>() : await resolveRepos(options.base, labels);
-	const current = reviewerManifest(await getSettings(options.base));
+	const settings = await getSettings(options.base);
 	const resumed = options.resume ? readReport(options.resume) : null;
-	const reviewer = plan.rescore ? (plan.origin?.reviewer ?? current) : current;
+	const reviewer = plan.rescore ? (plan.origin?.reviewer ?? reviewerManifest(settings)) : reviewerManifest(settings);
 	const startedAt = resumed?.startedAt ?? new Date().toISOString();
+	const adjudicationFile = adjudicationPath(options.dataset);
+	const adjudications = readAdjudications(adjudicationFile);
+	const ran = plan.rescore ? 'rescore' : plan.replay ? (plan.replay.reverify ? 'reverify' : 'replay') : 'full';
+
+	const identity = await captureIdentity({
+		dataset: options.dataset,
+		tasks: labels,
+		adjudications,
+		settings,
+		judge: judge.model,
+		server: await getServerIdentity(options.base),
+		execution: {
+			mode: executionMode(ran, !!options.resume, !!options.only),
+			auto: !!requested.auto,
+			concurrency: options.concurrency,
+			timeoutMs: options.timeoutMs,
+			runsPerPr: options.runs,
+			baselineCache: options.baselineCache
+		}
+	});
+
+	for (const [part, reason] of Object.entries(identity.unavailable))
+		console.warn(`Identity: ${part} unavailable: ${reason}. Comparisons on it are refused unless declared.`);
+
+	const prior: Prior | null =
+		resumed && options.resume
+			? { path: options.resume, report: resumed, operation: 'resume' }
+			: plan.origin && ran !== 'full'
+				? { path: plan.replay?.report ?? requested.auto!.since, report: plan.origin, operation: ran }
+				: null;
+
+	const derivedFrom = prior ? checkReuse(identity, prior, options.allowDiff) : undefined;
+	const reportId = reportIdOf(prior);
+	const bases = new Map(identity.tasks.map((task) => [task.taskId, task.base]));
 
 	const initial = plan.rescore
-		? await rescoredRecords(plan.origin!, labels, judge, options.base)
+		? reusedRuns(await rescoredRecords(plan.origin!, labels, judge, options.base), labels, 'rescore', judge.model)
 		: resumed
-			? resumedRecords(resumed, labels)
+			? reusedRuns(resumedRecords(resumed, labels), labels, 'resume', judge.model)
 			: labels.map(() => []);
 
 	stopOnInterrupt(options.base);
@@ -298,14 +325,11 @@ async function main(): Promise<void> {
 	const verb = plan.rescore ? 'Rescoring' : options.replay ? 'Replaying' : 'Benchmarking';
 
 	console.log(
-		`${verb} ${labels.length} PRs × ${options.runs} runs, ${options.concurrency} at once, against ${options.base}; judge ${judge.model.model}`
+		`${verb} ${labels.length} PRs × ${options.runs} runs, ${options.concurrency} at once, against ${options.base}; judge ${judge.model.model}; identity ${identity.hash.slice(0, 12)}`
 	);
 
-	const adjudicationFile = adjudicationPath(options.dataset);
-	const adjudications = readAdjudications(adjudicationFile);
-
 	const report = (records: ScoredRun[][]): BenchmarkReport => {
-		const prs = labels.map((label, index) => prResult(label, records[index]!));
+		const prs = labels.map((label, index) => prResult(label, records[index]!, bases));
 		const queued = prs.map((pr, index) => labelRuns(labels[index]!, pr.runs, adjudications).queued);
 
 		if (queued.some(Boolean)) writeAdjudications(adjudicationFile, adjudications);
@@ -317,6 +341,10 @@ async function main(): Promise<void> {
 			judge: judge.model,
 			reviewer,
 			harness: harnessRecord(tree, plan.origin, resumed),
+			reportId,
+			identity: { ...identity, runs: runIdentities(prs.flatMap((pr) => pr.runs)) },
+			runIds: prs.flatMap((pr) => pr.runs.flatMap((run) => (run.runId ? [run.runId] : []))),
+			...(derivedFrom ? { derivedFrom } : {}),
 			startedAt,
 			finishedAt: new Date().toISOString(),
 			prs,
@@ -344,7 +372,7 @@ async function main(): Promise<void> {
 	const replays = plan.rescore ? labels.map(() => []) : options.replay ? replayedReviews(plan.origin!, labels) : null;
 
 	const final = report(
-		await runAll(options, labels, repos, judge, initial, replays, (records) => save(report(records)))
+		await runAll(options, labels, repos, judge, identity.hash, initial, replays, (records) => save(report(records)))
 	);
 
 	printBenchmark(final);
