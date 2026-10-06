@@ -62,13 +62,15 @@ function received(patch: Parameters<typeof tool>[2], own: string[]) {
 	);
 }
 
+const prompt = (context: ReturnType<typeof received>) => context.units[context.reviewers[0].unit];
+
 const via = (context: ReturnType<typeof received>) =>
 	context.reviewers[0].cited.map((item) => `${item.kind} ${item.path}:${item.startLine}-${item.endLine} ${item.via}`);
 
 test('each hunk is its own supplied range, and only reads inside one count as supplied', () => {
 	const context = received({ evidenceId: 'P1' }, ['W', 'M', 'I', 'P2']);
 
-	expect(context.reviewers[0].supplied).toEqual([
+	expect(prompt(context).supplied).toEqual([
 		{ kind: 'diff', path: 'src/a.ts', startLine: 2, endLine: 5 },
 		{ kind: 'diff', path: 'src/a.ts', startLine: 300, endLine: 303 }
 	]);
@@ -81,16 +83,16 @@ test('each hunk is its own supplied range, and only reads inside one count as su
 		'diff src/a.ts:300-303 supplied'
 	]);
 
-	expect(context.reviewers[0].omitted).toEqual([]);
+	expect(prompt(context).omitted).toEqual([]);
 });
 
 test('a cut first page supplies only the hunks it delivered and omits the rest', () => {
 	const context = received({ evidenceId: 'P1', cut: true, shown: [FIRST] }, ['P2']);
 
-	expect(context.reviewers[0].supplied).toEqual([{ kind: 'diff', path: 'src/a.ts', startLine: 2, endLine: 5 }]);
+	expect(prompt(context).supplied).toEqual([{ kind: 'diff', path: 'src/a.ts', startLine: 2, endLine: 5 }]);
 	expect(via(context)).toEqual(['diff src/a.ts:2-5 supplied', 'diff src/a.ts:300-303 read']);
 
-	expect(context.reviewers[0].omitted).toEqual([
+	expect(prompt(context).omitted).toEqual([
 		{ kind: 'diff', path: 'src/a.ts', startLine: 300, endLine: 303, reason: 'diff-cap' }
 	]);
 });
@@ -98,10 +100,10 @@ test('a cut first page supplies only the hunks it delivered and omits the rest',
 test('a cut first page recorded without its delivered hunks supplies none of the file', () => {
 	const context = received({ evidenceId: 'P1', cut: true }, ['I']);
 
-	expect(context.reviewers[0].supplied).toEqual([]);
+	expect(prompt(context).supplied).toEqual([]);
 	expect(via(context)).toEqual(['diff src/a.ts:2-5 supplied', 'source src/a.ts:3-4 read']);
 
-	expect(context.reviewers[0].omitted).toEqual([
+	expect(prompt(context).omitted).toEqual([
 		{ kind: 'diff', path: 'src/a.ts', startLine: 2, endLine: 5, reason: 'diff-cap' }
 	]);
 });

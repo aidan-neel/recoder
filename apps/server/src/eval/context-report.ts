@@ -7,7 +7,7 @@ import { getReview } from './client';
 const OMISSION_REASONS: OmissionReason[] = ['caller-cap', 'context-cap', 'file-cap', 'diff-cap'];
 const CITED_VIAS: CitedVia[] = ['supplied', 'read', 'unknown'];
 
-/** What the reviewers of one codebase's passed runs received, as counts only. */
+/** What the reviewers of one codebase's passed runs received, as counts only; a prompt shared by lenses counts once per reviewer. */
 export interface ContextTotals {
 	/** Passed runs, and those whose review stored a context record. */
 	runs: number;
@@ -61,9 +61,13 @@ export function addContext(totals: ContextTotals, context: ReviewContext | undef
 	totals.reviewers += context.reviewers.length;
 
 	for (const reviewer of context.reviewers) {
-		for (const item of reviewer.supplied) totals.supplied[item.kind] = (totals.supplied[item.kind] ?? 0) + 1;
+		const prompt = context.units[reviewer.unit];
+
+		for (const item of prompt?.supplied ?? []) totals.supplied[item.kind] = (totals.supplied[item.kind] ?? 0) + 1;
 		for (const item of reviewer.cited) totals.cited[item.via]++;
-		for (const item of reviewer.omitted) totals.omitted[item.reason]++;
+		for (const item of [...(prompt?.omitted ?? []), ...reviewer.omitted]) totals.omitted[item.reason]++;
+		for (const [reason, count] of Object.entries(prompt?.omittedPast ?? {}))
+			totals.omitted[reason as OmissionReason] += count;
 
 		totals.read += reviewer.read.length;
 		totals.readsDropped += reviewer.readsDropped ?? 0;

@@ -63,6 +63,29 @@ function investigate(reads: ReceivedReads, evidence: EvidenceStore): number {
 	return forwarded;
 }
 
+/** A modified, unexported declaration in `src/a.ts` with a test file and no references. */
+function symbol(name: string, startLine: number, signature: string) {
+	return {
+		id: `src/a.ts#${name}`,
+		name,
+		qualifiedName: name,
+		kind: 'function',
+		file: 'src/a.ts',
+		startLine,
+		endLine: startLine + 39,
+		change: 'modified',
+		hunkIds: [],
+		language: 'typescript',
+		signature,
+		exported: false,
+		calls: [],
+		references: [],
+		tests: ['tests/a.test.ts'],
+		examples: [],
+		metrics: { lines: 40, maxDepth: 1, params: 0 }
+	};
+}
+
 describe('recording reads', () => {
 	test('keeps each finished reviewer retrieval as a place, and passes every event on', () => {
 		const reads = emptyReads();
@@ -140,13 +163,17 @@ describe('the review context', () => {
 	}
 
 	test('splits what the prompt gave, what the reviewer read and what it cited, with what a bound cut', () => {
-		const [reviewer] = build([]).reviewers;
+		const context = build([]);
 
-		expect(reviewer).toEqual({
+		expect(context.units).toEqual({
+			'unit-1': { supplied: [{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 3 }], omitted: [] }
+		});
+
+		expect(context.reviewers[0]).toEqual({
 			assignmentId: UNIT,
 			role: 'reviewer',
 			lens: 'correctness',
-			supplied: [{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 3 }],
+			unit: 'unit-1',
 			read: [
 				{ kind: 'source', path: 'src/b.ts', startLine: 10, endLine: 20 },
 				{ kind: 'source', path: 'src/a.ts', startLine: 2, endLine: 2 }
@@ -176,40 +203,48 @@ describe('the review context', () => {
 		]);
 	});
 
-	test('records a patch page a budget cut as a diff-cap omission', () => {
+	test("records a patch page a budget cut as a diff-cap omission of the reviewer's own read", () => {
 		const evidence = store();
 		const reads = emptyReads();
+		const events = recordingReads(reads, evidence, undefined);
 
-		recordingReads(reads, evidence, undefined).onTool?.(tool(UNIT, 'readDiff', { evidenceId: 'E1', cut: true }));
+		events.onTool?.(tool(UNIT, 'readDiff', { evidenceId: 'E1' }));
+		events.onTool?.(tool(UNIT, 'readDiff', { evidenceId: 'E3', cut: true }));
 
-		expect(reviewContext(sources(reads, evidence, []), []).reviewers[0].omitted).toEqual([
-			{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 3, reason: 'diff-cap' }
+		const context = reviewContext(sources(reads, evidence, []), []);
+
+		expect(context.units['unit-1'].omitted).toEqual([]);
+
+		expect(context.reviewers[0].omitted).toEqual([
+			{ kind: 'diff', path: 'src/a.ts', startLine: 2, endLine: 2, reason: 'diff-cap' }
 		]);
+	});
+
+	test('lenses given the same prompt share one stored copy, and a unit lists at most 50 omissions per reason', () => {
+		const declarations = Array.from({ length: 120 }, (_, index) =>
+			symbol(`f${index}`, index * 3 + 1, `function f${index}(${'value: string, '.repeat(8)}last: number): void`)
+		);
+
+		const model = { symbols: declarations, byHunk: {}, baselines: [], unparsed: [] } as unknown as ChangeModel;
+		const lenses = (['correctness', 'security'] as const).map((lens) => ({ ...units[0], id: `unit-1/${lens}`, lens }));
+		const context = reviewContext({ ...sources(emptyReads(), store(), [], model), units: lenses }, []);
+
+		expect(Object.keys(context.units)).toEqual(['unit-1']);
+		expect(context.reviewers.map((reviewer) => reviewer.unit)).toEqual(['unit-1', 'unit-1']);
+
+		const prompt = context.units['unit-1'];
+		const cut = prompt.omitted.filter((item) => item.reason === 'context-cap').length;
+
+		expect(cut).toBe(50);
+
+		expect(cut + (prompt.omittedPast?.['context-cap'] ?? 0)).toBe(
+			120 - prompt.supplied.filter((item) => item.kind === 'source').length
+		);
 	});
 
 	test('a cited place counts as supplied only when the prompt showed all its lines, not when it only named it', () => {
 		const model = {
-			symbols: [
-				{
-					id: 'src/a.ts#f',
-					name: 'f',
-					qualifiedName: 'f',
-					kind: 'function',
-					file: 'src/a.ts',
-					startLine: 1,
-					endLine: 40,
-					change: 'modified',
-					hunkIds: [],
-					language: 'typescript',
-					signature: 'function f()',
-					exported: false,
-					calls: [],
-					references: [{ file: 'src/c.ts', line: 5, text: 'f();' }],
-					tests: ['tests/a.test.ts'],
-					examples: [],
-					metrics: { lines: 40, maxDepth: 1, params: 0 }
-				}
-			],
+			symbols: [{ ...symbol('f', 1, 'function f()'), references: [{ file: 'src/c.ts', line: 5, text: 'f();' }] }],
 			byHunk: {},
 			baselines: [],
 			unparsed: []

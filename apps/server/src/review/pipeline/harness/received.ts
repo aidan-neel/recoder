@@ -6,7 +6,8 @@ import type {
 	Finding,
 	FindingCitation,
 	ReviewContext,
-	ReviewerContext
+	ReviewerContext,
+	UnitContext
 } from '@recoder/shared';
 import type { EvidenceStore, ToolCallReport } from '../../../evidence/evidence.js';
 import { unitContextParts } from '../change-model/lookup.js';
@@ -18,6 +19,9 @@ import type { HarnessEvents } from './types.js';
 
 /** Reads listed per reviewer; the rest are only counted, so a long investigation can't grow the record without bound. */
 const MAX_READS = 200;
+
+/** Omissions a unit lists per reason; past it they are only counted, so a large diff's cut declarations stay small. */
+const MAX_LISTED_OMISSIONS = 50;
 
 /** The retrievals that hand a reviewer code or paths, by the kind of context each returns. */
 const READ_KINDS: Partial<Record<string, ContextKind>> = {
@@ -163,22 +167,46 @@ function readItem(read: RecordedRead): ContextItem {
 	return { kind: READ_KINDS[read.action] ?? 'source', path: read.path, ...(startLine ? { startLine, endLine } : {}) };
 }
 
-/**
- * What bounds cut from the reviewer's reads: a file read past its size cap, a
- * patch page past its budget, and for the initial patch each scoped hunk it did not deliver.
- */
-function readOmissions(unit: ReviewUnit, inventory: ReviewInventory, reads: RecordedRead[], patch: RecordedRead[]) {
+function cutOmission(read: RecordedRead): ContextOmission {
+	return { ...readItem(read), reason: read.action === 'readFile' ? 'file-cap' : 'diff-cap' };
+}
+
+/** What bounds cut from the reviewer's own reads: a file read past its size cap, or a patch page past its budget. */
+function readOmissions(reads: RecordedRead[]): ContextOmission[] {
 	return reads
 		.filter((read) => read.ok && read.truncated && (read.action === 'readFile' || read.action === 'readDiff'))
-		.flatMap((read): ContextOmission[] => {
-			const entry = patch.includes(read) && read.shown ? unit.scope.find((item) => item.path === read.path) : undefined;
+		.map(cutOmission);
+}
 
-			if (!entry) return [{ ...readItem(read), reason: read.action === 'readFile' ? 'file-cap' : 'diff-cap' }];
+/** Each scoped hunk a cut initial patch did not deliver, or the cut page itself when its delivered hunks were not kept. */
+function patchOmissions(unit: ReviewUnit, inventory: ReviewInventory, patch: RecordedRead[]): ContextOmission[] {
+	return patch
+		.filter((read) => read.ok && read.truncated)
+		.flatMap((read): ContextOmission[] => {
+			const entry = unit.scope.find((item) => item.path === read.path);
+
+			if (!entry || !read.shown) return [cutOmission(read)];
 
 			return scopedHunks(entry, inventory)
 				.filter((hunk) => !read.shown?.includes(hunk.id))
 				.map((hunk) => ({ kind: 'diff', path: read.path, ...hunkLines(hunk), reason: 'diff-cap' }));
 		});
+}
+
+/** The first `MAX_LISTED_OMISSIONS` of each reason, and how many more of each there were. */
+function listed(omitted: ContextOmission[]): Pick<UnitContext, 'omitted' | 'omittedPast'> {
+	const kept: ContextOmission[] = [];
+	const past: Partial<Record<ContextOmission['reason'], number>> = {};
+	const seen: Partial<Record<ContextOmission['reason'], number>> = {};
+
+	for (const item of omitted) {
+		seen[item.reason] = (seen[item.reason] ?? 0) + 1;
+
+		if (seen[item.reason]! <= MAX_LISTED_OMISSIONS) kept.push(item);
+		else past[item.reason] = (past[item.reason] ?? 0) + 1;
+	}
+
+	return { omitted: kept, ...(Object.keys(past).length ? { omittedPast: past } : {}) };
 }
 
 /**
@@ -235,11 +263,11 @@ function classifier(
 	};
 }
 
-/** One unit's record, and how it had each evidence id its candidates cited. */
+/** One reviewer's record, what its prompt held, and how it had each evidence id its candidates cited. */
 function reviewerContext(
 	sources: ReceivedSources,
 	unit: ReviewUnit
-): { record: ReviewerContext; classify: Classifier } {
+): { record: Omit<ReviewerContext, 'unit'>; prompt: UnitContext; classify: Classifier } {
 	const parts = sources.changeModel ? unitContextParts(sources.changeModel, unit.scope) : { supplied: [], omitted: [] };
 	const reads = sources.reads.byAssignment[unit.id] ?? [];
 	const patch = patchReads(unit, reads);
@@ -252,19 +280,43 @@ function reviewerContext(
 	);
 
 	const dropped = sources.reads.dropped[unit.id];
+	const ownReads = reads.filter((read) => !patch.includes(read));
 
-	const record: ReviewerContext = {
+	const record = {
 		assignmentId: unit.id,
 		role: sources.roles.get(unit.id) ?? 'reviewer',
 		...(unit.lens ? { lens: unit.lens } : {}),
-		supplied,
-		read: reads.filter((read) => read.ok && !patch.includes(read)).map(readItem),
+		read: ownReads.filter((read) => read.ok).map(readItem),
 		cited,
-		omitted: [...parts.omitted, ...readOmissions(unit, sources.inventory, reads, patch)],
+		omitted: readOmissions(ownReads),
 		...(dropped ? { readsDropped: dropped } : {})
 	};
 
-	return { record, classify };
+	const prompt = { supplied, ...listed([...parts.omitted, ...patchOmissions(unit, sources.inventory, patch)]) };
+
+	return { record, prompt, classify };
+}
+
+/**
+ * Where a reviewer's prompt is stored: under its slice (`unit-2` for `unit-2/security`)
+ * when that holds the same prompt, else under its own id, as a split retry's narrower scope does.
+ */
+function intern(units: Record<string, UnitContext>, assignmentId: string, prompt: UnitContext): string {
+	const slice = assignmentId.split('/')[0];
+
+	for (const key of [slice, assignmentId]) {
+		const stored = units[key];
+
+		if (!stored) {
+			units[key] = prompt;
+
+			return key;
+		}
+
+		if (Bun.deepEquals(stored, prompt)) return key;
+	}
+
+	return assignmentId;
 }
 
 /** How a published finding's reporters had what they cited, counted per member and evidence id rather than the best way. */
@@ -299,14 +351,19 @@ function findingCitation(
 export function reviewContext(sources: ReceivedSources, findings: Finding[]): ReviewContext {
 	const units = new Map([...sources.units, ...(sources.subagents ?? [])].map((unit) => [unit.id, unit]));
 	const classifiers = new Map<string, Classifier>();
+	const prompts: Record<string, UnitContext> = {};
 	const reviewers: ReviewerContext[] = [];
 
 	for (const unit of units.values()) {
-		const { record, classify } = reviewerContext(sources, unit);
+		const { record, prompt, classify } = reviewerContext(sources, unit);
 
-		reviewers.push(record);
+		reviewers.push({ ...record, unit: intern(prompts, unit.id, prompt) });
 		classifiers.set(unit.id, classify);
 	}
 
-	return { reviewers, findings: findings.map((finding) => findingCitation(finding, sources, classifiers)) };
+	return {
+		units: prompts,
+		reviewers,
+		findings: findings.map((finding) => findingCitation(finding, sources, classifiers))
+	};
 }

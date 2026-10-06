@@ -29,17 +29,30 @@ export interface ContextOmission extends ContextItem {
  */
 export type CitedVia = 'supplied' | 'read' | 'unknown';
 
+/**
+ * What one prompt supplied and what bounds left out of it, stored once for
+ * every reviewer given the same prompt (the lens assignments of one slice).
+ */
+export interface UnitContext {
+	/** The scoped patch and the change model's declarations, callers, tests, siblings and contracts. */
+	supplied: ContextItem[];
+	/** The first 50 per reason; the rest are counted in `omittedPast`. */
+	omitted: ContextOmission[];
+	omittedPast?: Partial<Record<OmissionReason, number>>;
+}
+
 /** One reviewer unit (a lens assignment or a subagent) and the context it worked with. */
 export interface ReviewerContext {
 	assignmentId: string;
 	role: string;
 	lens?: string;
-	/** Put in the prompt: the scoped patch and the change model's declarations, callers, tests, siblings and contracts. */
-	supplied: ContextItem[];
+	/** Its prompt's entry in `ReviewContext.units`. */
+	unit: string;
 	/** Fetched by the reviewer's own tool calls. */
 	read: ContextItem[];
 	/** Evidence its candidates cited. */
 	cited: (ContextItem & { via: CitedVia })[];
+	/** What bounds cut from its own reads. */
 	omitted: ContextOmission[];
 	/** Reads past the per-reviewer cap: counted, not listed. */
 	readsDropped?: number;
@@ -59,6 +72,7 @@ export interface FindingCitation {
 
 /** What every reviewer of a review received, read, cited and missed, so an eval can tell missing context from unused context. */
 export interface ReviewContext {
+	units: Record<string, UnitContext>;
 	reviewers: ReviewerContext[];
 	findings: FindingCitation[];
 }

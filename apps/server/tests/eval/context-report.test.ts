@@ -10,25 +10,28 @@ afterEach(() => {
 });
 
 const CONTEXT: ReviewContext = {
-	reviewers: [
-		{
-			assignmentId: 'unit-1/correctness',
-			role: 'reviewer',
-			lens: 'correctness',
+	units: {
+		'unit-1': {
 			supplied: [
 				{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 4 },
 				{ kind: 'caller', path: 'src/b.ts', startLine: 9, symbol: 'take', why: 'call outside the diff' },
 				{ kind: 'contract', path: 'src/a.ts', startLine: 1, symbol: 'take', why: 'signature or export changed' }
 			],
+			omitted: [{ kind: 'caller', path: 'src/d.ts', startLine: 2, symbol: 'take', reason: 'caller-cap' }]
+		}
+	},
+	reviewers: [
+		{
+			assignmentId: 'unit-1/correctness',
+			role: 'reviewer',
+			lens: 'correctness',
+			unit: 'unit-1',
 			read: [{ kind: 'source', path: 'src/c.ts', startLine: 1, endLine: 40 }],
 			cited: [
 				{ kind: 'source', path: 'src/a.ts', startLine: 2, endLine: 2, via: 'supplied' },
 				{ kind: 'source', path: 'src/c.ts', startLine: 3, endLine: 3, via: 'read' }
 			],
-			omitted: [
-				{ kind: 'caller', path: 'src/d.ts', startLine: 2, symbol: 'take', reason: 'caller-cap' },
-				{ kind: 'source', path: 'src/c.ts', startLine: 1, endLine: 40, reason: 'file-cap' }
-			],
+			omitted: [{ kind: 'source', path: 'src/c.ts', startLine: 1, endLine: 40, reason: 'file-cap' }],
 			readsDropped: 2
 		}
 	],

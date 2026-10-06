@@ -25,7 +25,11 @@ test('a review records what each lens reviewer received, the same way every time
 	const [context] = runs;
 
 	expect(context?.reviewers.map((reviewer) => reviewer.assignmentId)).toEqual(lensIdsOf('unit-1'));
-	expect(context?.reviewers[0].supplied).toEqual([{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 1 }]);
+
+	expect(context?.units).toEqual({
+		'unit-1': { supplied: [{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 1 }], omitted: [] }
+	});
+
 	expect(runs[1]?.reviewers).toEqual(context?.reviewers);
 
 	for (const run of runs) {
@@ -72,4 +76,22 @@ test('a checkpoint keeps the reads of finished assignments, and a resumed review
 
 	expect(after['unit-1/correctness']).toEqual(first['unit-1/correctness']);
 	expect(after['unit-2/correctness']?.[0]).toMatchObject({ action: 'readDiff', path: 'tests/b.ts', ok: true });
+});
+
+test('a two-unit review stores each unit prompt once, and every lens reviewer points at its own', async () => {
+	useTestModel();
+	stubModel([]);
+
+	const context = (await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null })).context;
+	const lenses = [...lensIdsOf('unit-1'), ...lensIdsOf('unit-2')];
+
+	expect(Object.keys(context?.units ?? {})).toEqual(['unit-1', 'unit-2']);
+	expect(lenses).toHaveLength(16);
+
+	expect(context?.reviewers.map((reviewer) => [reviewer.assignmentId, reviewer.unit])).toEqual(
+		lenses.map((id) => [id, id.split('/')[0]])
+	);
+
+	expect(context?.reviewers.every((reviewer) => !('supplied' in reviewer))).toBe(true);
+	expect(context?.units['unit-2'].supplied).toEqual([{ kind: 'diff', path: 'tests/b.ts', startLine: 1, endLine: 140 }]);
 });
