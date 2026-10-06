@@ -23,8 +23,9 @@ import {
 /**
  * What one changed line does that a trigger may care about. `key` names the
  * operation across both sides (a parameter, operand pair, guard condition,
- * normalizer, error message or assertion subject); `value` is what can
- * change about it (a default, an operator, a matcher).
+ * normalizer, error message, assertion subject, bounding expression, or a
+ * name the code uses); `value` is what can change about it (a default, an
+ * operator, a matcher).
  */
 export interface Mark {
 	kind:
@@ -39,7 +40,8 @@ export interface Mark {
 		| 'error'
 		| 'exit'
 		| 'assert'
-		| 'skip';
+		| 'skip'
+		| 'name';
 	line: number;
 	key: string;
 	value: string;
@@ -57,7 +59,9 @@ const BOOLEAN_NAME =
 const COUNT_NAME =
 	/^(n|num|count|size|length|limit|total|qty|quantity|amount|pages?|offset|retries|attempts|workers|concurrency|depth|bytes|items|max\w*|min\w*)$|(Count|Size|Length|Limit|Total|Num|Retries|Attempts|Bytes|Items)$/;
 
-const LIMIT_NAME = /max|min|limit|threshold|cap(acity)?$|bound|deadline|timeout|ttl|quota|budget|ceiling|floor/i;
+/** A word of a name that makes it a limit: `maxRetries`, `MIN_SIZE`, `deadlineAt`, but not `admin` or `terminal`. */
+const LIMIT_WORD =
+	/^(max|maximum|min|minimum|limits?|threshold|cap|capacity|bounds?|deadline|timeout|ttl|quota|budget|ceiling|floor)$/i;
 
 /** `MAX_RETRIES`: a module constant, whose literal value is a default for everything that reads it. */
 const CONSTANT_NAME = /^[A-Z][A-Z0-9_]+$/;
@@ -224,7 +228,8 @@ function markNode(node: Node, test: boolean, marks: Mark[]): void {
 			if (!test && exitsEarly(field(node, 'consequence'))) marks.push(guardMark(node));
 			break;
 		default:
-			marks.push(...defaultMarks(node));
+			if (/identifier$/.test(node.type)) marks.push(mark(node, 'name', `uses \`${node.text}\``, { key: node.text }));
+			else marks.push(...defaultMarks(node));
 	}
 }
 
@@ -263,7 +268,7 @@ function binaryMarks(node: Node): Mark[] {
 	if (operator === '||' || operator === '??') return fallbackMarks(node, operator, left, right);
 
 	if ((operator === '/' || operator === '%') && !(isNumber(left) && isNumber(right))) {
-		return [mark(node, 'boundary', operator === '/' ? 'divides' : 'takes a remainder')];
+		return [mark(node, 'boundary', operator === '/' ? 'divides' : 'takes a remainder', { key: squash(node.text) })];
 	}
 
 	return RELATIONAL.has(operator) ? comparisonMarks(node, operator, left, right) : [];
@@ -300,11 +305,16 @@ function comparisonMarks(node: Node, operator: string, left: Node, right: Node):
 		return [compare, mark(node, 'count', `validates \`${names[0]}\` against a number`, { key: names[0] })];
 	}
 
-	if (numeric || names.some((name) => LIMIT_NAME.test(name))) {
-		return [compare, mark(node, 'boundary', `compares \`${clip(node.text)}\``)];
+	if (numeric || names.some(isLimitName)) {
+		return [compare, mark(node, 'boundary', `compares \`${clip(node.text)}\``, { key: squash(node.text) })];
 	}
 
 	return [compare];
+}
+
+/** Whether one of the words of an identifier (split at `_` and camel case) names a limit. */
+function isLimitName(name: string): boolean {
+	return name.split(/_|(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])/).some((word) => LIMIT_WORD.test(word));
 }
 
 /** Whether a comparison decides an early exit or feeds an assertion: it validates input rather than computing. */
@@ -333,7 +343,7 @@ function callMarks(call: Node, test: boolean): Mark[] {
 	const marks: Mark[] = [];
 
 	if (ROUNDING.has(path) || ROUNDING_METHODS.has(name))
-		marks.push(mark(call, 'boundary', `rounds or bounds with \`${path}\``));
+		marks.push(mark(call, 'boundary', `rounds or bounds with \`${path}\``, { key: squash(call.text) }));
 
 	if (INTEGER_CHECKS.has(path) || (NUMBER_REFINEMENTS.has(name) && path.includes('number('))) {
 		marks.push(mark(call, 'count', `validates a number with \`${name}\``, { key: name }));

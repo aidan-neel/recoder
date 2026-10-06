@@ -22,6 +22,12 @@ const SPECIALISTS: Partial<Record<ObligationTrigger, string>> = {
 	'resource-release': 'concurrency'
 };
 
+/**
+ * Triggers about the code under test, which a test's own conditions, timers,
+ * scratch directories and stub errors would only trip; test files derive none.
+ */
+const SOURCE_ONLY = new Set<ObligationTrigger>(['truthy-default', 'boundary', 'resource-release', 'error-contract']);
+
 /** Tests and callers listed per obligation, at most. */
 const MAX_HINTS = 3;
 
@@ -121,7 +127,9 @@ async function fileDrafts(
 			deletes: hunk.deleted.length > 0
 		});
 
-		return hits.flatMap((hit) => draftOf(input.changeModel, file.path, hunk.id, unitId, hit));
+		return hits
+			.filter((hit) => !(test && SOURCE_ONLY.has(hit.trigger)))
+			.flatMap((hit) => draftOf(input.changeModel, file.path, hunk.id, unitId, hit));
 	});
 }
 

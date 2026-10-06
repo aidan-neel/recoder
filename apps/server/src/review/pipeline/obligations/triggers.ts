@@ -67,7 +67,39 @@ function changedFrom(hunk: HunkMarks, mark: Mark): Mark | undefined {
 	return hunk.base.find((old) => old.kind === mark.kind && old.key === mark.key && old.value !== mark.value);
 }
 
-/** A new truthiness test, or a default whose value changed. */
+/** Whether the code the hunk replaced uses `name`, outside comments and strings. */
+function used(hunk: HunkMarks, name: string): boolean {
+	return hunk.base.some((old) => old.kind === 'name' && old.key === name);
+}
+
+/**
+ * A truthiness test on a value the replaced lines handled some other way: not
+ * one in brand-new code, and not one the base already made.
+ */
+function replacedTruthy(hunk: HunkMarks, mark: Mark): boolean {
+	/** The value tested: `status` in `this.status`, `items` in `items[0]`. */
+	const value = mark.key.match(/[A-Za-z_$][\w$]*(?=[^A-Za-z_$]*$)/)?.[0] ?? mark.key;
+
+	return used(hunk, value) && !hunk.base.some((old) => old.kind === 'truthy' && old.key === mark.key);
+}
+
+/**
+ * Rounding, division or a bound in place of code that bounded or compared
+ * something, or that used a value it now bounds; not the same expression the
+ * base already had.
+ */
+function replacedBoundary(hunk: HunkMarks, mark: Mark): boolean {
+	/** The values it bounds: `total` and `size` in `Math.ceil(total / size)`, not `Math`, `ceil` or an object. */
+	const operands = mark.key.match(/[A-Za-z_$][\w$]*(?![\w$]*[.(])/g) ?? [];
+
+	return (
+		(hunk.base.some((old) => old.kind === 'boundary' || old.kind === 'compare') ||
+			operands.some((name) => used(hunk, name))) &&
+		!hunk.base.some((old) => old.kind === 'boundary' && old.key === mark.key)
+	);
+}
+
+/** A truthiness test that replaced other handling of its value, or a default whose value changed. */
 function truthyHits(hunk: HunkMarks): TriggerHit[] {
 	const changed = hunk.head.flatMap((mark) => {
 		const old = mark.kind === 'default' ? changedFrom(hunk, mark) : undefined;
@@ -84,10 +116,15 @@ function truthyHits(hunk: HunkMarks): TriggerHit[] {
 			: [];
 	});
 
-	return [...headHits(hunk, 'truthy', 'truthy-default'), ...changed];
+	const replaced = hunk.head.filter((mark) => mark.kind === 'truthy' && replacedTruthy(hunk, mark));
+
+	return [...replaced.map((mark) => hit('truthy-default', mark, 'new')), ...changed];
 }
 
-/** Rounding, division and comparisons with a number or limit, and any comparison whose operator changed. */
+/**
+ * Rounding, division and comparisons with a number or limit that replaced a
+ * bound, and any comparison whose operator changed.
+ */
 function boundaryHits(hunk: HunkMarks): TriggerHit[] {
 	const changed = hunk.head.flatMap((mark) => {
 		const old = mark.kind === 'compare' ? changedFrom(hunk, mark) : undefined;
@@ -95,7 +132,9 @@ function boundaryHits(hunk: HunkMarks): TriggerHit[] {
 		return old ? [hit('boundary', mark, 'new', `comparison changed from \`${old.value}\` to \`${mark.value}\``)] : [];
 	});
 
-	return [...headHits(hunk, 'boundary', 'boundary'), ...changed];
+	const replaced = hunk.head.filter((mark) => mark.kind === 'boundary' && replacedBoundary(hunk, mark));
+
+	return [...replaced.map((mark) => hit('boundary', mark, 'new')), ...changed];
 }
 
 /** A deleted early exit or assertion call whose condition no longer appears anywhere in the head file. */

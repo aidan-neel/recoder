@@ -316,3 +316,96 @@ describe('removed or weaker assertion', () => {
 		expect(triggers(found)).not.toContain('weaker-assertion');
 	});
 });
+
+describe('test files', () => {
+	/** One change per trigger about the code under test, each of which derives its trigger in a source file. */
+	const changes: [ObligationTrigger, string[], string[]][] = [
+		[
+			'truthy-default',
+			['export function pageSize(limit?: number) {', '\tif (limit === undefined) return 20;', '\treturn limit;', '}'],
+			['export function pageSize(limit?: number) {', '\tif (!limit) return 20;', '\treturn limit;', '}']
+		],
+		[
+			'boundary',
+			['export function isFull(queue: string[], max: number) {', '\treturn queue.length > max;', '}'],
+			['export function isFull(queue: string[], max: number) {', '\treturn queue.length >= max;', '}']
+		],
+		[
+			'resource-release',
+			["import { openSync, readSync } from 'node:fs';", '', 'export function scratch(path: string) {', '}'],
+			[
+				"import { openSync, readSync } from 'node:fs';",
+				'',
+				'export function scratch(path: string) {',
+				"\tconst fd = openSync(path, 'r');",
+				'\treadSync(fd, Buffer.alloc(1), 0, 1, 0);',
+				'}'
+			]
+		],
+		[
+			'error-contract',
+			['export function stub() {', "\tthrow new Error('not found');", '}'],
+			['export function stub() {', "\tthrow new Error('aborted');", '}']
+		]
+	];
+
+	for (const [trigger, before, after] of changes) {
+		test(`derive no ${trigger} obligation from a test's own code`, async () => {
+			const source = await hits(file('src/scratch.ts', before, after));
+			const tested = await hits(file('src/scratch.test.ts', before, after));
+
+			expect(triggers(source)).toContain(trigger);
+			expect(triggers(tested)).not.toContain(trigger);
+		});
+	}
+});
+
+describe('brand-new code', () => {
+	const before = ['export function first(items: string[]) {', '\treturn items[0];', '}'];
+
+	test('a truthiness test or rounding in a function the change adds derives nothing', async () => {
+		const found = await hits(
+			file('src/items.ts', before, [
+				...before,
+				'',
+				'export function pages(revision: string | undefined, total: number, size: number) {',
+				'\tif (!revision) return 0;',
+				'\treturn Math.ceil(total / size);',
+				'}'
+			])
+		);
+
+		expect(found).toEqual([]);
+	});
+
+	test('a truthiness test on a value that only a replaced comment named derives nothing', async () => {
+		const found = await hits(
+			file(
+				'src/items.ts',
+				['export function first(group: string[]) {', '\t/** The group may be empty. */', '\treturn group[0];', '}'],
+				['export function first(group: string[]) {', '\tif (group) return group[0];', '\treturn group[0];', '}']
+			)
+		);
+
+		expect(triggers(found)).not.toContain('truthy-default');
+	});
+});
+
+describe('limit names', () => {
+	const before = ['export function over(used: number, other: number) {', '\treturn used > other;', '}'];
+
+	const compared = (name: string) =>
+		hits(file('src/limit.ts', before, [before[0], `\treturn used > ${name};`, before[2]]));
+
+	test('a comparison with a name whose word is a limit derives a boundary obligation', async () => {
+		for (const name of ['maxRetries', 'MIN_SIZE', 'deadlineAt']) {
+			expect(await compared(name)).toContain('boundary new:2');
+		}
+	});
+
+	test('one whose name only contains a limit word inside another word does not', async () => {
+		for (const name of ['admin', 'terminal', 'minute']) {
+			expect(triggers(await compared(name))).not.toContain('boundary');
+		}
+	});
+});
