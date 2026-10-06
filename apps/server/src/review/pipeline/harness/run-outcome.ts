@@ -7,11 +7,15 @@ import { bareStep, stepRunner, type ExecutionProfile, type TestRunner, type Tran
 export const SETUP_FAILURE =
 	/Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|Module not found|Could not resolve|command not found|No test files found/;
 
-/** More output of a run that never reached its assertion: an import a bundler could not load, or a script that does not exist. */
+/**
+ * More output of a run that never reached its assertion: an import a bundler
+ * could not load, a script that does not exist, or a package download the
+ * offline sandbox could not resolve.
+ */
 const SETUP_STOPPED =
-	/Failed to (?:resolve import|load url)|error: Script not found|Missing script:|could not determine executable to run/;
+	/Failed to (?:resolve import|load url)|error: Script not found|Missing script:|could not determine executable to run|DNSResolveFailed|ENOTFOUND|EAI_AGAIN/;
 
-/** What a runtime prints when it meets code that needed a transform it never applied. */
+/** What a runtime prints when it meets code that needed a transform it never applied, for every transform known. */
 const UNTRANSFORMED: Record<Transform['name'], RegExp> = {
 	svelte:
 		/\$(?:state|derived|effect|props|bindable|inspect|host)\b(?:\.\w+)? is not defined|rune_outside_svelte|lifecycle_function_unavailable|Unknown file extension "\.svelte"/,
@@ -50,11 +54,13 @@ function executor(command: string, profile: ExecutionProfile | null): { by: Exec
  * What a run of `command` reached, read against its package's profile, or
  * undefined for a command that runs no test or code, and for one that timed
  * out or was killed. A run that passed reached its assertion. A failure is
- * unsupported execution when the package needs a transform this executor
- * never applies and the output shows the code ran without it (a file name
- * alone never says so: a `.svelte.ts` file without runes runs fine), setup-failed
- * when it never got past a missing module, script or binary, and otherwise a
- * failed assertion.
+ * unsupported execution when the output shows code that ran without a
+ * transform it needed and the profile does not say this executor applies that
+ * transform: any transform, since code from another package (or a root-level
+ * script importing it) can need one its own profile lacks. A file name alone
+ * never says so: a `.svelte.ts` file without runes runs fine. A failure is
+ * setup-failed when it never got past a missing module, script, binary or
+ * package download, and otherwise a failed assertion.
  */
 export function classifyRun(
 	command: string,
@@ -68,9 +74,11 @@ export function classifyRun(
 	if (!found) return undefined;
 	if (result.exitCode === 0) return 'assertion-passed';
 
-	const untransformed = (profile?.transforms ?? []).some(
-		(transform) =>
-			!(transform.via as string[]).includes(found.by ?? '') && UNTRANSFORMED[transform.name].test(result.output)
+	const via = (name: Transform['name']): string[] =>
+		profile?.transforms.find((transform) => transform.name === name)?.via ?? [];
+
+	const untransformed = (Object.keys(UNTRANSFORMED) as Transform['name'][]).some(
+		(name) => !via(name).includes(found.by ?? '') && UNTRANSFORMED[name].test(result.output)
 	);
 
 	if (untransformed) return 'unsupported-execution';

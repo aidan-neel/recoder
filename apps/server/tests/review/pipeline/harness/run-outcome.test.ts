@@ -71,6 +71,38 @@ test('a run that never got past a missing module, script or binary failed in set
 	expect(classifyRun('bun run test:unit', failed('error: Script not found "test:unit"'), null)).toBe('setup-failed');
 });
 
+test('a run that could not download a package offline failed in setup', () => {
+	const vitest = profile('vitest', ['vitest']);
+
+	for (const output of [
+		'error: DNSResolveFailed downloading package manifest vitest',
+		'npm error getaddrinfo ENOTFOUND registry.npmjs.org',
+		'Error: getaddrinfo EAI_AGAIN registry.npmjs.org'
+	]) {
+		expect(classifyRun('bunx vitest run a.test.ts', failed(output), vitest)).toBe('setup-failed');
+	}
+});
+
+test('untransformed code is unsupported in a package whose own profile names no transform', () => {
+	const root: ExecutionProfile = { ...profile('bun test', []), dir: '.', transforms: [] };
+
+	expect(classifyRun('bun repro.ts', failed('ReferenceError: $state is not defined'), root)).toBe(
+		'unsupported-execution'
+	);
+
+	expect(classifyRun('bun repro.ts', failed('ReferenceError: $state is not defined'), null)).toBe(
+		'unsupported-execution'
+	);
+
+	expect(
+		classifyRun(
+			'bunx vitest run a.test.ts',
+			failed('ReferenceError: $state is not defined'),
+			profile('vitest', ['vitest'])
+		)
+	).toBe('assertion-failed');
+});
+
 test('a run that reached its assertion passed or failed on it', () => {
 	const vitest = profile('vitest', ['vitest']);
 
