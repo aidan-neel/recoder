@@ -61,13 +61,12 @@ export function addContext(totals: ContextTotals, context: ReviewContext | undef
 	totals.reviewers += context.reviewers.length;
 
 	for (const reviewer of context.reviewers) {
-		const prompt = context.units[reviewer.unit];
+		const prompt = reviewer.unit ? context.units[reviewer.unit] : undefined;
 
 		for (const item of prompt?.supplied ?? []) totals.supplied[item.kind] = (totals.supplied[item.kind] ?? 0) + 1;
 		for (const item of reviewer.cited) totals.cited[item.via]++;
 		for (const item of [...(prompt?.omitted ?? []), ...reviewer.omitted]) totals.omitted[item.reason]++;
-		for (const [reason, count] of Object.entries(prompt?.omittedPast ?? {}))
-			totals.omitted[reason as OmissionReason] += count;
+		for (const reason of OMISSION_REASONS) totals.omitted[reason] += prompt?.omittedPast?.[reason] ?? 0;
 
 		totals.read += reviewer.read.length;
 		totals.readsDropped += reviewer.readsDropped ?? 0;

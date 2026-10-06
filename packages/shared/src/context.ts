@@ -46,8 +46,8 @@ export interface ReviewerContext {
 	assignmentId: string;
 	role: string;
 	lens?: string;
-	/** Its prompt's entry in `ReviewContext.units`. */
-	unit: string;
+	/** Its prompt's entry in `ReviewContext.units`; unset when its prompt was not captured (a checkpoint from before prompts were kept). */
+	unit?: string;
 	/** Fetched by the reviewer's own tool calls. */
 	read: ContextItem[];
 	/** Evidence its candidates cited. */

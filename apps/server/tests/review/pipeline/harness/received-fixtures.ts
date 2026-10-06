@@ -1,6 +1,6 @@
 import type { Finding, ReviewToolCall } from '@recoder/shared';
 import { EvidenceStore } from '../../../../src/evidence/evidence';
-import type { EvidenceRecord } from '../../../../src/evidence/types';
+import type { EvidenceRecord, ToolResult } from '../../../../src/evidence/types';
 import type { CandidateFinding } from '../../../../src/review/pipeline/consolidate';
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 
@@ -23,13 +23,13 @@ export function storeOf(diff: string, records: EvidenceRecord[]): EvidenceStore 
 	return evidence;
 }
 
-/** A finished retrieval report; `cut` marks a bound cut, `shown` the hunks a patch page delivered. */
+/** A finished retrieval report; `cut` marks a bound cut. */
 export function tool(
 	assignmentId: string | undefined,
 	action: string,
-	over: Partial<ReviewToolCall> & { evidenceId?: string; cut?: true; shown?: string[] } = {}
+	over: Partial<ReviewToolCall> & { evidenceId?: string; cut?: true } = {}
 ): ReviewToolCall {
-	const { evidenceId, cut, shown, ...rest } = over;
+	const { evidenceId, cut, ...rest } = over;
 
 	return {
 		id: `t-${action}-${evidenceId ?? 'none'}`,
@@ -43,7 +43,6 @@ export function tool(
 			content: 'code',
 			truncated: Boolean(cut),
 			...(cut ? { cut } : {}),
-			...(shown ? { hunkIds: shown } : {}),
 			...(evidenceId ? { evidenceId } : {})
 		},
 		...rest
@@ -56,4 +55,9 @@ export function candidate(id: string, assignmentId: string, evidenceIds: string[
 
 export function published(id: string, memberIds?: string[]): Finding {
 	return { id, ...(memberIds ? { memberIds } : {}) } as unknown as Finding;
+}
+
+/** One file's initial patch page as the reviewer got it: the hunks it delivered, and whether a budget cut it. */
+export function patchPage(path: string, evidenceId: string, hunkIds: string[], truncated = false): ToolResult {
+	return { action: 'readDiff', ok: true, path, content: 'patch', truncated, hunkIds, evidenceId };
 }

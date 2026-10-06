@@ -39,7 +39,7 @@ test('a review records what each lens reviewer received, the same way every time
 	}
 });
 
-test('a checkpoint keeps the reads of finished assignments, and a resumed review carries them on', async () => {
+test('a checkpoint keeps the prompts and reads of finished assignments, and a resume records the prompt it kept', async () => {
 	useTestModel();
 	stubModel([], 'unit-2/correctness');
 
@@ -54,16 +54,23 @@ test('a checkpoint keeps the reads of finished assignments, and a resumed review
 		}
 	);
 
-	const first = (saved as ReviewProgressCheckpoint | null)?.reads?.byAssignment ?? {};
+	const received = (saved as ReviewProgressCheckpoint | null)?.received;
+	const first = received?.byAssignment ?? {};
 
 	expect(first['unit-1/correctness']?.[0]).toMatchObject({ action: 'readDiff', path: 'src/a.ts', ok: true });
 	expect(first['unit-2/correctness']).toBeUndefined();
+	expect(received?.prompts['unit-2/correctness']).toBeUndefined();
+
+	/** A marker only the kept prompts hold, so the resumed record shows it read them instead of rebuilding. */
+	const marker = { kind: 'sibling' as const, path: 'src/kept.ts', startLine: 1, endLine: 2 };
+
+	for (const id of lensIdsOf('unit-1')) received?.prompts[id]?.context.supplied.push(marker);
 
 	stubModel([]);
 
 	let resumed: ReviewProgressCheckpoint | null = null;
 
-	await runAdaptiveReview(
+	const result = await runAdaptiveReview(
 		{ diff: TWO_UNIT_DIFF, sandboxPath: null, resume: saved },
 		{
 			onCheckpoint: (checkpoint) => {
@@ -72,9 +79,11 @@ test('a checkpoint keeps the reads of finished assignments, and a resumed review
 		}
 	);
 
-	const after = (resumed as ReviewProgressCheckpoint | null)?.reads?.byAssignment ?? {};
+	const after = (resumed as ReviewProgressCheckpoint | null)?.received?.byAssignment ?? {};
 
 	expect(after['unit-1/correctness']).toEqual(first['unit-1/correctness']);
+	expect(result.context?.units['unit-1'].supplied).toContainEqual(marker);
+	expect(result.context?.units['unit-2'].supplied).not.toContainEqual(marker);
 	expect(after['unit-2/correctness']?.[0]).toMatchObject({ action: 'readDiff', path: 'tests/b.ts', ok: true });
 });
 

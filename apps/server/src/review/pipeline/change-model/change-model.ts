@@ -10,7 +10,7 @@ import { byCodePoint, readAt, readTracked, trackedFiles } from './repo.js';
 import { symbolsOf, type ParsedSymbol } from './symbols.js';
 import type { ChangedSymbol, ChangeModel } from './types.js';
 
-export { symbolAt, unitContext } from './lookup.js';
+export { symbolAt, unitContext, unitContextParts } from './lookup.js';
 
 /** What the change model is built from. */
 interface ChangeModelInput {

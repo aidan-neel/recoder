@@ -161,8 +161,6 @@ export interface ReviewToolCall {
 		truncated: boolean;
 		/** A retrieval bound cut what the agent got (file size, patch page, round budget); unset when only the preview is cut. */
 		cut?: true;
-		/** `readDiff`: the hunks the page delivered, after any budget cut. */
-		hunkIds?: string[];
 		evidenceId?: string;
 		revision?: string;
 		path?: string;

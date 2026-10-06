@@ -29,7 +29,7 @@ import { restoreSubagentState, type SubagentState } from '../subagents.js';
 import { partitionUnits, type ReviewUnit } from '../units.js';
 import { FINISHED } from './assignments.js';
 import type { PoolContext } from './pool.js';
-import { emptyReads, readsOf, recordingReads, reviewContext, type ReceivedReads } from './received.js';
+import { emptyReceived, receivedOf, recordingReads, reviewContext, type Received } from './received.js';
 import type { AdaptiveReviewInput, BaselineResult, HarnessEvents, TaskFn } from './types.js';
 import type { VerifyQueue } from './verify-queue.js';
 
@@ -85,8 +85,8 @@ export interface ReviewRun {
 	/** Subagents reviewers asked for, the brief questions they left unsettled or answered, and the subagents that run; kept apart from `units`, so they're never retried. */
 	subagents: SubagentState;
 	nextCandidate: number;
-	/** Every reviewer's retrievals, as places, so the review can record what each one read. */
-	reads: ReceivedReads;
+	/** Every reviewer's prompt as built and its retrievals, as places, so the review can record what each one received. */
+	received: Received;
 	/** Dependency setup and baseline check results, shared with every reviewer and verifier. */
 	setupNotes: string;
 	task: TaskFn;
@@ -129,7 +129,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		retriesDone: resume?.retriesDone ?? false,
 		subagents: restoreSubagentState(resume?.subagents),
 		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
-		reads: resume?.reads ? structuredClone(resume.reads) : emptyReads(),
+		received: resume?.received ? structuredClone(resume.received) : emptyReceived(),
 		setupNotes: '',
 		task: (id, label, status, message, extra) =>
 			events?.onTask?.({ id, label, status, message, kind: extra?.kind ?? 'other', ...extra })
@@ -261,7 +261,7 @@ export function saveCheckpoint(run: ReviewRun): void {
 		recommended: [...run.recommended],
 		retriesDone: run.retriesDone,
 		subagents: structuredClone(run.subagents),
-		reads: readsOf(run.reads, finished)
+		received: receivedOf(run.received, finished)
 	});
 }
 
@@ -269,12 +269,9 @@ export function saveCheckpoint(run: ReviewRun): void {
 export function receivedContext(run: ReviewRun, findings: Finding[]): ReviewContext {
 	return reviewContext(
 		{
-			units: run.units,
-			subagents: run.subagents.units,
+			units: [...run.units, ...(run.subagents.units ?? [])],
 			roles: new Map(run.assignments.map((record) => [record.id, record.role])),
-			inventory: run.inventory,
-			changeModel: run.changeModel,
-			reads: run.reads,
+			received: run.received,
 			evidence: run.evidence,
 			candidates: run.candidates
 		},
@@ -294,7 +291,8 @@ export function poolContext(run: ReviewRun): PoolContext {
 		budget: run.budget,
 		deadlineAt: run.investigationDeadline,
 		signal: run.controller.signal,
-		events: recordingReads(run.reads, run.evidence, run.events),
+		events: recordingReads(run.received, run.evidence, run.events),
+		received: run.received,
 		task: run.task,
 		candidates: run.candidates,
 		nextCandidate: () => `c${run.nextCandidate++}`,
