@@ -169,6 +169,52 @@ test.skipIf(!available)('runes code with no runner that compiles them is unsuppo
 	]);
 });
 
+test.skipIf(!available)('a bare runtime on rune-free code in a runes package reaches the bug', async () => {
+	const { ws } = await checkout({
+		'package.json': JSON.stringify({ scripts: { test: 'bun test' }, peerDependencies: { svelte: '^5.0.0' } }),
+		'src/util.svelte.ts': 'export function double(n: number): number {\n\treturn n * 3;\n}\n'
+	});
+
+	await preparePackages(ws, options(['src/util.svelte.ts']));
+
+	const evidence = new EvidenceStore(null, buildInventory(''), 20_000);
+
+	evidence.exec = ws;
+
+	const [result] = await evidence.executeRound(
+		[{ action: 'run', command: `bun -e "import { double } from './src/util.svelte.ts'; console.log(double(1))"` }],
+		undefined,
+		undefined,
+		1,
+		'verifier-1'
+	);
+
+	expect(result).toMatchObject({ exitCode: 0, outcome: 'assertion-passed' });
+
+	const [failing] = await evidence.executeRound(
+		[
+			{
+				action: 'run',
+				command: `bun -e "import { double } from './src/util.svelte.ts'; if (double(1) !== 2) { console.error('expected 2, got ' + double(1)); process.exit(1); }"`
+			}
+		],
+		undefined,
+		undefined,
+		1,
+		'verifier-1'
+	);
+
+	expect(failing).toMatchObject({ exitCode: 1, outcome: 'assertion-failed' });
+
+	expect(
+		settleVerdict(
+			{ evidenceIds: [failing!.evidenceId!], reason: 'double(1) returns 3: `expected 2, got 3`', verdict: 'confirmed' },
+			evidence,
+			'verifier-1'
+		)
+	).toMatchObject({ outcome: 'reproduced' });
+});
+
 test.skipIf(!available)('a run that stops in setup is unresolved: neither proof nor disproof', async () => {
 	const { ws } = await checkout({
 		...GENERATED,

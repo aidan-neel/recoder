@@ -18,12 +18,6 @@ const UNTRANSFORMED: Record<Transform['name'], RegExp> = {
 	vue: /Unknown file extension "\.vue"/
 };
 
-/** Files only a transform can run. */
-const TRANSFORMED_FILE: Record<Transform['name'], RegExp> = {
-	svelte: /\S+\.svelte(?:\.[cm]?[jt]s)?(?=\s|$|['"])/,
-	vue: /\S+\.vue(?=\s|$|['"])/
-};
-
 /** A runtime on a file or inline code: these apply no transform of their own. */
 const RUNTIME_STEP =
 	/^(?:(bun|node)(?:\s+run)?\s+(?:--?[\w-]+(?:=\S+)?\s+)*(?:-e|-p|--eval|--print|\S+\.(?:[cm]?[jt]sx?|svelte|vue))(?=\s|$)|(tsx|ts-node)\s+\S|(deno)\s+(?:run|eval|test)\b|(python3?)\s+\S)/;
@@ -34,19 +28,19 @@ const TEST_SCRIPT_STEP = /^(?:(?:bun|pnpm|npm|yarn)\s+(?:run\s+)?test(?::[\w:.-]
 /** What runs code in a command: a test runner, or a bare runtime that applies no transform. */
 type Executor = TestRunner | 'bun' | 'node' | 'other';
 
-/** The last step of `command` that runs code, with what runs it; null for a command that only reads, builds or lists. */
-function executor(command: string, profile: ExecutionProfile | null): { by: Executor | null; step: string } | null {
+/** What runs code in the last step of `command` that runs any; null for a command that only reads, builds or lists. */
+function executor(command: string, profile: ExecutionProfile | null): { by: Executor | null } | null {
 	const steps = command.split(/&&|\|\||;|\|/).map((step) => step.trim());
 
 	for (const step of steps.reverse()) {
 		const runner = stepRunner(step);
 
-		if (runner) return { by: runner, step };
-		if (TEST_SCRIPT_STEP.test(step)) return { by: profile?.runner ?? null, step };
+		if (runner) return { by: runner };
+		if (TEST_SCRIPT_STEP.test(step)) return { by: profile?.runner ?? null };
 
 		const runtime = RUNTIME_STEP.exec(bareStep(step));
 
-		if (runtime) return { by: runtime[1] === 'bun' ? 'bun' : runtime[1] || runtime[2] ? 'node' : 'other', step };
+		if (runtime) return { by: runtime[1] === 'bun' ? 'bun' : runtime[1] || runtime[2] ? 'node' : 'other' };
 	}
 
 	return null;
@@ -57,9 +51,10 @@ function executor(command: string, profile: ExecutionProfile | null): { by: Exec
  * undefined for a command that runs no test or code, and for one that timed
  * out or was killed. A run that passed reached its assertion. A failure is
  * unsupported execution when the package needs a transform this executor
- * never applies (a `.svelte` file through bare `bun`) and the run shows it,
- * setup-failed when it never got past a missing module, script or binary,
- * and otherwise a failed assertion.
+ * never applies and the output shows the code ran without it (a file name
+ * alone never says so: a `.svelte.ts` file without runes runs fine), setup-failed
+ * when it never got past a missing module, script or binary, and otherwise a
+ * failed assertion.
  */
 export function classifyRun(
 	command: string,
@@ -73,12 +68,9 @@ export function classifyRun(
 	if (!found) return undefined;
 	if (result.exitCode === 0) return 'assertion-passed';
 
-	const bare = found.by === 'bun' || found.by === 'node';
-
 	const untransformed = (profile?.transforms ?? []).some(
 		(transform) =>
-			!(transform.via as string[]).includes(found.by ?? '') &&
-			(UNTRANSFORMED[transform.name].test(result.output) || (bare && TRANSFORMED_FILE[transform.name].test(found.step)))
+			!(transform.via as string[]).includes(found.by ?? '') && UNTRANSFORMED[transform.name].test(result.output)
 	);
 
 	if (untransformed) return 'unsupported-execution';

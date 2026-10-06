@@ -34,7 +34,7 @@ test('a run of code that needed a transform the executor never applies is unsupp
 		classifyRun('cd pkg && bun test src/a.test.ts', failed('ReferenceError: $state is not defined'), bunOnly)
 	).toBe('unsupported-execution');
 
-	expect(classifyRun('bun src/lib.svelte.ts', failed('SyntaxError: Unexpected token'), vitest)).toBe(
+	expect(classifyRun('bun src/lib.svelte.ts', failed('ReferenceError: $derived is not defined'), vitest)).toBe(
 		'unsupported-execution'
 	);
 
@@ -45,6 +45,16 @@ test('a run of code that needed a transform the executor never applies is unsupp
 	expect(
 		classifyRun('node a.mjs', failed('Error [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".svelte"'), vitest)
 	).toBe('unsupported-execution');
+});
+
+test('a file name alone never makes a run unsupported: rune-free code under bare bun reaches its assertion', () => {
+	const repro = `bun -e "import { double } from './src/util.svelte.ts'; if (double(1) !== 2) process.exit(1)"`;
+
+	expect(classifyRun(repro, failed('expected 2, got 3'), profile('bun test', []))).toBe('assertion-failed');
+
+	expect(
+		classifyRun('bun src/lib.svelte.ts', failed('SyntaxError: Unexpected token'), profile('vitest', ['vitest']))
+	).toBe('assertion-failed');
 });
 
 test('a run that never got past a missing module, script or binary failed in setup', () => {

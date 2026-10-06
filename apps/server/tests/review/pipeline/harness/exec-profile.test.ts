@@ -14,7 +14,7 @@ function tree(files: Record<string, string>): CommitTree {
 
 const manifest = (fields: Record<string, unknown>) => JSON.stringify(fields);
 
-/** A Svelte monorepo: a SvelteKit app tested by vitest, and a component package whose tests run after a registry build, under bare `bun test`. */
+/** A Svelte monorepo: a SvelteKit app tested by vitest through a config that merges its vite config, and a component package whose tests run after a registry build, under bare `bun test`. */
 const MONOREPO = {
 	'package.json': manifest({
 		packageManager: 'bun@1.3.14',
@@ -31,8 +31,10 @@ const MONOREPO = {
 		},
 		devDependencies: { '@sveltejs/kit': '^2', svelte: '^5', vitest: '^4' }
 	}),
+	'apps/site/vite.config.ts':
+		"import { sveltekit } from '@sveltejs/kit/vite';\nexport default { plugins: [sveltekit()] };\n",
 	'apps/site/vitest.config.ts':
-		"import { sveltekit } from '@sveltejs/kit/vite';\nexport default { plugins: [sveltekit()], test: { setupFiles: ['test/setup.ts'] } };\n",
+		"import { mergeConfig } from 'vitest/config';\nimport viteConfig from './vite.config';\n\nexport default mergeConfig(viteConfig, { test: { setupFiles: ['test/setup.ts'] } });\n",
 	'apps/site/svelte.config.js': 'export default {};\n',
 	'apps/site/src/lib/Banner.svelte': '<p>banner</p>\n',
 	'apps/site/test/a.browser.test.ts': 'x',
@@ -88,6 +90,19 @@ test('each changed package gets its runner, transforms, generation commands and 
 			}
 		}
 	]);
+});
+
+test('a vitest config that does not import the vite config gets none of its plugins', async () => {
+	const [site] = await buildProfiles(
+		tree({
+			...MONOREPO,
+			'apps/site/vitest.config.ts': "export default { test: { setupFiles: ['test/setup.ts'] } };\n"
+		}),
+		['apps/site/src/lib/Banner.svelte'],
+		'bun'
+	);
+
+	expect(site).toMatchObject({ dir: 'apps/site', runner: 'vitest', transforms: [{ name: 'svelte', via: [] }] });
 });
 
 test('hook installers and fan-out scripts are never generation commands', async () => {

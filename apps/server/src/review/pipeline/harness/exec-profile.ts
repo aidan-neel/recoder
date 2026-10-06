@@ -88,6 +88,9 @@ const TRANSFORMS = {
 	}
 };
 
+/** A vitest config importing the package's vite config to merge it, so the vite config's plugins apply to tests too. */
+const IMPORTS_VITE_CONFIG = /from\s+['"]\.\/vite\.config(?:\.[cm]?[jt]s)?['"]/;
+
 /** Test files a smoke run should pass over when another exists: browser and end-to-end suites, and runes modules. */
 const HEAVY_TEST = /browser|e2e|playwright|\.svelte\./i;
 
@@ -172,12 +175,18 @@ function testChain(scripts: Map<string, string>, name = 'test', depth = 0): { be
 	return { before: [...before, ...inner.before], runner: inner.runner };
 }
 
-/** The package's own config files, by kind, read from the commit. */
+/**
+ * The package's own config files, by kind, read from the commit. Tests see
+ * the vitest config, plus the vite config when there is no vitest config or
+ * the vitest config imports it to merge.
+ */
 async function readConfigs(tree: CommitTree, dir: string, files: string[], manifest: Manifest) {
 	const own = (pattern: RegExp) =>
 		files.find((path) => posix.dirname(path) === dir && pattern.test(posix.basename(path)));
 
 	const vitestConfig = own(/^vitest\.(?:config|workspace)\.[cm]?[jt]s$/);
+	const vitest = await readText(tree, vitestConfig);
+	const viteConfig = own(/^vite\.config\.[cm]?[jt]s$/);
 	const jestConfig = own(/^jest\.config\.(?:[cm]?[jt]s|json)$/);
 	const bunfigPath = own(/^bunfig\.toml$/) ?? (tree.sizes.has('bunfig.toml') ? 'bunfig.toml' : undefined);
 	const bunfig = await readText(tree, bunfigPath);
@@ -186,7 +195,7 @@ async function readConfigs(tree: CommitTree, dir: string, files: string[], manif
 
 	return {
 		hasVitestConfig: vitestConfig !== undefined,
-		vite: await readText(tree, vitestConfig ?? own(/^vite\.config\.[cm]?[jt]s$/)),
+		vite: vitestConfig && !IMPORTS_VITE_CONFIG.test(vitest) ? vitest : `${vitest}\n${await readText(tree, viteConfig)}`,
 		hasJest: jestConfig !== undefined || manifest.jest !== undefined,
 		jest: (await readText(tree, jestConfig)) + (manifest.jest ? JSON.stringify(manifest.jest) : ''),
 		ava: Boolean(own(/^ava\.config\.[cm]?js$/) || manifest.ava),

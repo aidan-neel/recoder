@@ -287,7 +287,7 @@ export function describePrep(report: PrepReport): string[] {
 		for (const transform of profile.transforms) {
 			lines.push(
 				transform.via.length
-					? `  Its ${transform.name} code needs the ${transform.name} transform, which ${transform.via.join(' or ')} applies here; bare \`bun\` or \`node\` on that code is unsupported execution, not a failed assertion.`
+					? `  Its ${transform.name} code needs the ${transform.name} transform, which ${transform.via.join(' or ')} applies here; bare \`bun\` or \`node\` does not, so a run there that fails on untransformed code is unsupported execution, not a failed assertion.`
 					: `  Its ${transform.name} code needs the ${transform.name} transform and no runner here applies it, so running that code is unsupported execution; read it instead.`
 			);
 		}
