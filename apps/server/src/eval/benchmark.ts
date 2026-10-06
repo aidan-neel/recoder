@@ -1,5 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
 import { REASONING_EFFORTS, type ReasoningEffort, type Repo } from '@recoder/shared';
 import {
 	printBenchmark,
@@ -18,7 +17,7 @@ import {
 	type Adjudications
 } from './benchmark-labels';
 import { judgeModel, rescoredRecords, scoreRun, type Judge } from './benchmark-scoring';
-import { summarize, type LabeledDefect } from './benchmark-score';
+import { summarize } from './benchmark-score';
 import { resolvePlan } from './auto-plan';
 import { parseEvalArgs, type RunOptions } from './cli';
 import { stabilityMetrics } from './metrics';
@@ -40,25 +39,16 @@ import {
 import { captureIdentity } from './identity-capture';
 import { writeEvalFile } from './report';
 import { runReview, stopOnInterrupt } from './run-review';
+import { readLabels, readTaskSet, selectTasks, subsetLines, type PrLabel } from './task-set';
 
 const USAGE =
-	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--mode auto --since <report.json>] [--allow-diff field,field] [--runs 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
-
-/** One synthetic PR's label file, as the dataset's assemble step writes it. */
-interface PrLabel {
-	id: string;
-	codebase: string;
-	/** The local forge repo's `file://` URL. */
-	repo: string;
-	pull: number;
-	headSha: string;
-	verified: boolean;
-	defects: LabeledDefect[];
-}
+	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--set <name> | --only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--mode auto --since <report.json>] [--allow-diff field,field] [--runs 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
 
 interface Options extends RunOptions {
 	dataset: string;
 	only: string[] | null;
+	/** `--set`: the name of a task set in the dataset's `sets/` folder. */
+	set: string | null;
 	/**
 	 * Which model judges: the review model, the second model, or one named by
 	 * id (`opencode:openai/gpt-6-luna`) at `judgeEffort`, so runs that swap the
@@ -85,6 +75,7 @@ function parseOptions(): Options {
 		{
 			dataset: { type: 'string' },
 			only: { type: 'string' },
+			set: { type: 'string' },
 			judge: { type: 'string' },
 			'judge-effort': { type: 'string' },
 			resume: { type: 'string' },
@@ -126,6 +117,7 @@ function parseOptions(): Options {
 	return {
 		dataset: resolve(values.dataset),
 		only: values.only ? values.only.split(',') : null,
+		set: values.set ?? null,
 		judge,
 		judgeEffort,
 		resume: values.resume ? resolve(values.resume) : null,
@@ -134,20 +126,6 @@ function parseOptions(): Options {
 		allowDiff,
 		...run
 	};
-}
-
-function readLabels(options: Options): PrLabel[] {
-	const dir = join(options.dataset, 'labels');
-
-	const labels = readdirSync(dir)
-		.filter((name) => name.endsWith('.json'))
-		.map((name) => JSON.parse(readFileSync(join(dir, name), 'utf8')) as PrLabel)
-		.filter((label) => !options.only || options.only.includes(label.id))
-		.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
-
-	if (!labels.length) throw new Error(`No labeled PRs in ${dir}.`);
-
-	return labels;
 }
 
 /** Each forge repo once, since several PRs share one. */
@@ -271,8 +249,15 @@ async function main(): Promise<void> {
 		runs: plan.origin && plan.rescore ? plan.origin.runsPerPr : requested.runs
 	};
 
-	const all = readLabels(options);
-	const labels = plan.rescore ? all.filter((label) => plan.origin?.prs.some((pr) => pr.id === label.id)) : all;
+	const chosen = selectTasks(readLabels(options.dataset), {
+		only: options.only,
+		set: options.set ? readTaskSet(options.dataset, options.set) : null
+	});
+
+	const labels = plan.rescore
+		? chosen.labels.filter((label) => plan.origin?.prs.some((pr) => pr.id === label.id))
+		: chosen.labels;
+
 	const judge = judgeModel(options.judge, options.judgeEffort);
 	const repos = plan.rescore ? new Map<string, Repo>() : await resolveRepos(options.base, labels);
 	const settings = await getSettings(options.base);
@@ -286,12 +271,13 @@ async function main(): Promise<void> {
 	const identity = await captureIdentity({
 		dataset: options.dataset,
 		tasks: labels,
+		taskSet: chosen.name,
 		adjudications,
 		settings,
 		judge: judge.model,
 		server: await getServerIdentity(options.base),
 		execution: {
-			mode: executionMode(ran, !!options.resume, !!options.only),
+			mode: executionMode(ran, !!options.resume, !!options.only || !!options.set),
 			auto: !!requested.auto,
 			concurrency: options.concurrency,
 			timeoutMs: options.timeoutMs,
@@ -325,7 +311,10 @@ async function main(): Promise<void> {
 	const verb = plan.rescore ? 'Rescoring' : options.replay ? 'Replaying' : 'Benchmarking';
 
 	console.log(
-		`${verb} ${labels.length} PRs × ${options.runs} runs, ${options.concurrency} at once, against ${options.base}; judge ${judge.model.model}; identity ${identity.hash.slice(0, 12)}`
+		[
+			`${verb} ${labels.length} PRs × ${options.runs} runs, ${options.concurrency} at once, against ${options.base}; judge ${judge.model.model}; identity ${identity.hash.slice(0, 12)}`,
+			...subsetLines(chosen.name)
+		].join('\n')
 	);
 
 	const report = (records: ScoredRun[][]): BenchmarkReport => {
@@ -333,6 +322,24 @@ async function main(): Promise<void> {
 		const queued = prs.map((pr, index) => labelRuns(labels[index]!, pr.runs, adjudications).queued);
 
 		if (queued.some(Boolean)) writeAdjudications(adjudicationFile, adjudications);
+
+		const summary: BenchmarkReport['summary'] = {
+			taskSet: chosen.name,
+			...summarize(
+				prs.map((pr) => ({
+					codebase: pr.codebase,
+					defects: pr.defects,
+					scores: pr.runs.flatMap((run) => (run.score ? [run.score] : [])),
+					hiddenRuns: pr.runs.flatMap((run) =>
+						run.score && run.hiddenScore ? [{ shown: run.score, hidden: run.hiddenScore }] : []
+					),
+					stageRuns: pr.runs.flatMap((run) => (run.score && run.stages ? [run.stages] : [])),
+					lowRuns: pr.runs.flatMap((run) => (run.score && run.lows ? [run.lows] : [])),
+					control: pr.control,
+					labeledRuns: pr.runs.flatMap((run) => (run.labeled ? [run.labeled] : []))
+				}))
+			)
+		};
 
 		return {
 			dataset: basename(options.dataset),
@@ -348,20 +355,7 @@ async function main(): Promise<void> {
 			startedAt,
 			finishedAt: new Date().toISOString(),
 			prs,
-			summary: summarize(
-				prs.map((pr) => ({
-					codebase: pr.codebase,
-					defects: pr.defects,
-					scores: pr.runs.flatMap((run) => (run.score ? [run.score] : [])),
-					hiddenRuns: pr.runs.flatMap((run) =>
-						run.score && run.hiddenScore ? [{ shown: run.score, hidden: run.hiddenScore }] : []
-					),
-					stageRuns: pr.runs.flatMap((run) => (run.score && run.stages ? [run.stages] : [])),
-					lowRuns: pr.runs.flatMap((run) => (run.score && run.lows ? [run.lows] : [])),
-					control: pr.control,
-					labeledRuns: pr.runs.flatMap((run) => (run.labeled ? [run.labeled] : []))
-				}))
-			)
+			summary
 		};
 	};
 

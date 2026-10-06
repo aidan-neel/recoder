@@ -80,6 +80,7 @@ function capture(change: Partial<IdentityInput> = {}) {
 			{ id: 'pr-9', codebase: 'remote', repo: 'https://example.com/remote.git', pull: 9, headSha: 'remote-head' },
 			{ id: 'pr-7', codebase: 'local', repo: forge.repo.url, pull: 7, headSha: forge.pull7Head }
 		],
+		taskSet: 'full',
 		adjudications: {},
 		settings,
 		judge: { model: 'judge-x', provider: 'opencode', effort: 'medium' },

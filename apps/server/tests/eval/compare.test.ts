@@ -99,3 +99,14 @@ test('a report without an identity is compared with a warning, and refuses a mer
 	expect(out).toContain('Merge: refused, identity not recorded in A');
 	expect(out).toContain('Warning: identity not recorded');
 });
+
+test('reports from different task sets are refused unless the difference is declared', () => {
+	const quick = recordedIdentity({ ...identityFields(), taskSet: 'quick' });
+	const a = writeReport(dir, 'set-quick.json', { identity: quick, runIds: ['pr-1@aaa#1'] });
+	const b = writeReport(dir, 'set-full.json', { identity: off, runIds: ['pr-1@aaa#2'] });
+	const refused = compare(a, b);
+
+	expect(refused.code).toBe(1);
+	expect(refused.out).toContain('Incompatible:\n  taskSet: quick → full');
+	expect(compare(a, b, '--allow-diff', 'taskSet').code).toBe(0);
+});
