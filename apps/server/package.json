@@ -10,7 +10,8 @@
 		"test": "bun test",
 		"lint": "eslint . && prettier --check . --ignore-path ../../.prettierignore",
 		"eval:stability": "bun src/eval/stability.ts",
-		"eval:benchmark": "bun src/eval/benchmark.ts"
+		"eval:benchmark": "bun src/eval/benchmark.ts",
+		"eval:compare": "bun src/eval/compare.ts"
 	},
 	"dependencies": {
 		"@recoder/shared": "workspace:*",

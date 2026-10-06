@@ -1,5 +1,6 @@
 import type { Finding, ModelSettings, Repo, Review, ReviewProgress } from '@recoder/shared';
 import type { CandidateOutcome } from '../review/pipeline/candidate-outcome';
+import type { ServerIdentity } from './server-identity';
 
 /** Live task and reviewer counts for one review, as the home dashboard reads them. */
 export interface ProgressSummary {
@@ -25,6 +26,35 @@ async function request<T>(base: string, path: string, init?: RequestInit): Promi
 /** The server's reviewer settings, as the Settings page reads them. */
 export function getSettings(base: string): Promise<ModelSettings> {
 	return request<ModelSettings>(base, '/api/settings/models');
+}
+
+/** One read of `/health/identity`: null on 404, an error naming the status on any other failure. */
+async function readServerIdentity(base: string): Promise<ServerIdentity | null> {
+	const response = await fetch(new URL('/health/identity', base));
+
+	if (response.status === 404) return null;
+
+	if (!response.ok) {
+		const body = (await response.text().catch(() => '')).trim().slice(0, 200);
+
+		throw new Error(`GET /health/identity: HTTP ${response.status}${body ? ` ${body}` : ''}`);
+	}
+
+	return (await response.json()) as ServerIdentity;
+}
+
+/**
+ * The server's flags, limits, cache versions, tools and code. Null only from a
+ * server older than the route, which answers 404; any other failure is tried
+ * once more and then thrown, so a benchmark never records a server it could
+ * not read as one that has no identity.
+ */
+export async function getServerIdentity(base: string): Promise<ServerIdentity | null> {
+	try {
+		return await readServerIdentity(base);
+	} catch {
+		return readServerIdentity(base);
+	}
 }
 
 /** The tracked repo the eval was pointed at, by id, `owner/name` or URL. */
