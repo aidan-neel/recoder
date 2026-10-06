@@ -43,7 +43,51 @@ type MatchAdjudication = z.infer<typeof matchAdjudicationSchema>;
 /** Finding labels by finding key, and match corrections by match key. */
 export type Adjudications = Record<string, Adjudication | MatchAdjudication>;
 
-const adjudicationsSchema = z.record(z.string(), z.union([adjudicationSchema, matchAdjudicationSchema]));
+/** A match key's shape: `match:<pr>:<defect id>:<claim hash>`, the hash being 16 hex digits. */
+const MATCH_KEY = /^match:[^:]+:[^:]+:[0-9a-f]{16}$/;
+
+/** An adjudication file entry that is neither a well-formed finding label nor a well-formed match correction. */
+export class AdjudicationError extends Error {
+	override name = 'AdjudicationError';
+
+	constructor(key: string, problem: string) {
+		super(`Adjudication "${key}": ${problem}`);
+	}
+}
+
+/** The issues of a failed parse, one per field. */
+function issues(error: z.ZodError): string {
+	return error.issues.map((issue) => `${issue.path.join('.') || 'value'} ${issue.message}`).join('; ');
+}
+
+/**
+ * One file entry, read by the shape of its key: a `match:` key holds a
+ * correction and any other key a finding label, so a value filed under the
+ * wrong kind of key is an error, not a silent mismatch.
+ */
+function entryOf(key: string, value: unknown): Adjudication | MatchAdjudication {
+	if (key.startsWith('match:')) {
+		if (!MATCH_KEY.test(key))
+			throw new AdjudicationError(key, 'a match key is match:<pr>:<defect>:<16-hex claim hash>');
+
+		const parsed = matchAdjudicationSchema.safeParse(value);
+
+		if (!parsed.success)
+			throw new AdjudicationError(key, `a match correction is { reports, reason }: ${issues(parsed.error)}`);
+
+		return parsed.data;
+	}
+
+	const parsed = adjudicationSchema.safeParse(value);
+
+	if (parsed.success) return parsed.data;
+
+	const misfiled = matchAdjudicationSchema.safeParse(value).success
+		? ' (this is a match correction; file it under match:<pr>:<defect>:<claim hash>)'
+		: '';
+
+	throw new AdjudicationError(key, `a finding label is { label, file, ... }${misfiled}: ${issues(parsed.error)}`);
+}
 
 /** Where a match correction is filed: `match:<pr>:<defect id>:<claim hash>`. */
 export function matchKey(pr: string, defect: string, claim: string): string {
@@ -93,7 +137,9 @@ export function adjudicationPath(dataset: string): string {
 export function readAdjudications(path: string): Adjudications {
 	if (!existsSync(path)) return {};
 
-	return adjudicationsSchema.parse(JSON.parse(readFileSync(path, 'utf8')));
+	const raw = z.record(z.string(), z.unknown()).parse(JSON.parse(readFileSync(path, 'utf8')));
+
+	return Object.fromEntries(Object.entries(raw).map(([key, value]) => [key, entryOf(key, value)]));
 }
 
 /** Writes the adjudications sorted by key, so a diff of the file shows only what changed. */

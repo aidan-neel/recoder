@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'bun:test';
 import {
+	AdjudicationError,
 	adjudicationPath,
 	findingKey,
 	labelRun,
@@ -138,12 +139,36 @@ test('an adjudication file holds finding labels and match corrections side by si
 	const dir = mkdtempSync(join(tmpdir(), 'adjudications-'));
 	const label = { label: 'false' as const, file: 'f', line: null, title: '', note: '' };
 	const correction = { reports: false, reason: 'it describes a slow render, not the wrong item' };
+	const key = 'match:pr-1:d1:0123456789abcdef';
 
-	writeFileSync(adjudicationPath(dir), JSON.stringify({ 'ky-1:x': label, 'match:ky-1:d1:abc': correction }));
+	writeFileSync(adjudicationPath(dir), JSON.stringify({ 'pr-1:x': label, [key]: correction }));
 
-	expect(readAdjudications(adjudicationPath(dir))).toEqual({ 'ky-1:x': label, 'match:ky-1:d1:abc': correction });
+	expect(readAdjudications(adjudicationPath(dir))).toEqual({ 'pr-1:x': label, [key]: correction });
 
-	writeFileSync(adjudicationPath(dir), JSON.stringify({ 'match:ky-1:d1:abc': { reports: true, reason: '' } }));
+	writeFileSync(adjudicationPath(dir), JSON.stringify({ [key]: { reports: true, reason: '' } }));
 
-	expect(() => readAdjudications(adjudicationPath(dir))).toThrow();
+	expect(() => readAdjudications(adjudicationPath(dir))).toThrow(AdjudicationError);
+});
+
+test('a misshapen adjudication key or an entry under the wrong kind of key fails naming the key', () => {
+	const dir = mkdtempSync(join(tmpdir(), 'adjudications-'));
+	const label = { label: 'false', file: 'f' };
+	const correction = { reports: true, reason: 'it names the same wrong item' };
+
+	const malformed: [string, unknown][] = [
+		['matchh:pr-1:d1:abc', correction],
+		['match:pr-1:d1', correction],
+		['match:pr-1:d1:0123456789abcdef', label],
+		['pr-1:fp-a', correction],
+		['match:pr-1:d1:0123456789abcdef', { reports: 'yes', reason: 'r' }]
+	];
+
+	for (const [key, value] of malformed) {
+		writeFileSync(adjudicationPath(dir), JSON.stringify({ [key]: value }));
+
+		expect(() => readAdjudications(adjudicationPath(dir))).toThrow(AdjudicationError);
+		expect(() => readAdjudications(adjudicationPath(dir))).toThrow(`Adjudication "${key}": `);
+	}
+
+	expect(() => readAdjudications(adjudicationPath(dir))).toThrow('reports');
 });
