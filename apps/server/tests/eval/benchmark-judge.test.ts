@@ -54,6 +54,22 @@ test('a nearby finding the judge weighs for a defect but reads as another behavi
 	expect(score.notes?.d1).toMatchObject({ finding: 0, reports: false });
 });
 
+test('the same behavior with another cause, or the same cause with another behavior, earns no credit', () => {
+	const halves = [
+		{ sameBehavior: true, sameCause: false, reason: 'same symptom, but it blames the cache' },
+		{ sameBehavior: false, sameCause: true, reason: 'same missing check, but it describes a crash' }
+	];
+
+	for (const half of halves) {
+		const score = scoreVerdicts({ matches: [{ ...verdict('d1', 0, [1]), ...half }] }, [defect('d1')], 2);
+
+		expect(score.found).toEqual({});
+		expect(score.duplicates).toEqual([]);
+		expect(score.notes?.d1).toMatchObject({ finding: 0, reports: false });
+		expect(score.reasons.d1).toBe(half.reason);
+	}
+});
+
 test("a verdict that does not say the behavior and cause are the defect's earns no credit", () => {
 	const score = scoreVerdicts({ matches: [{ defect: 'd1', finding: 0 }] }, [defect('d1')], 1);
 

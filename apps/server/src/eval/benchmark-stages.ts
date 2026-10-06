@@ -101,13 +101,21 @@ function reporters(score: PrScore, id: string): number[] {
 	return [...(first === undefined ? [] : [first]), ...(score.repeats?.[id] ?? [])];
 }
 
-/** The evidence one judgement gives for a defect, crediting the entry at `index`, or none when it is undefined. */
+/**
+ * The evidence one judgement gives for a defect, crediting the entry at
+ * `index`, or none when it is undefined. A human correction decided the call
+ * when it credits that entry, or when it withdrew the judge's own match, so
+ * a repeat promoted in its place, or no credit at all, is the human's call.
+ */
 function judgedMatch({ score, refs }: Judgement, id: string, index: number | undefined): StageMatch {
 	const note = score.notes?.[id];
+	const corrections = score.adjudicated?.filter((item) => item.defect === id) ?? [];
 
-	const correction = score.adjudicated?.find(
-		(item) => item.defect === id && (index === undefined ? !item.reports : item.reports && item.finding === index)
-	);
+	const correction =
+		corrections.find((item) => item.reports && item.finding === index) ??
+		corrections.find(
+			(item) => !item.reports && (index === undefined || (note?.reports && item.finding === note.finding))
+		);
 
 	const weighed = correction && !correction.reports ? correction.finding : note?.reports ? null : note?.finding;
 	const rejected = weighed === null || weighed === undefined || weighed === index ? undefined : refs[weighed];
