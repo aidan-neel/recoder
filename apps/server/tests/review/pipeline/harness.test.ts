@@ -1,4 +1,7 @@
-import { expect, test } from 'bun:test';
+import { beforeEach, expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../src/review/pipeline/harness';
 import { ReviewControl, runWithReviewControl } from '../../../src/review/session/review-control';
 import { scaledReviewLimits } from '../../../src/review/session/review-policy';
@@ -22,6 +25,11 @@ import {
 } from './harness-fixtures';
 
 restoreAfterEach();
+
+/** Each test gets its own data directory, so no intent cached by another test or file decides which stages call the model. */
+beforeEach(() => {
+	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-harness-'));
+});
 
 /** Lens assignments one unit of code fans out into. */
 const LENS_COUNT = lensIdsOf('unit-1').length;
@@ -86,6 +94,11 @@ test('consolidation makes no model call, so the same reviewer and verifier answe
 
 		expect(result.outcome).toBe('complete');
 		expect(calls.filter((kind) => kind === 'other')).toEqual([]);
+
+		expect(calls.filter((kind) => kind !== 'verifier' && kind !== 'intent').sort()).toEqual(
+			[...lensIdsOf('unit-1')].sort()
+		);
+
 		runs.push(result.findings.map((item) => `${item.category}:${item.title}:${item.fingerprint}`));
 	}
 
