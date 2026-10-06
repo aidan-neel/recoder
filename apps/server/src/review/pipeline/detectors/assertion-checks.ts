@@ -1,3 +1,4 @@
+import { testStrengthOn } from '../test-strength.js';
 import type { Assertion } from './test-source.js';
 
 export const EXACT_MATCHERS = new Set([
@@ -69,14 +70,17 @@ export function errorClass(expected: string): string | null {
 	return /^[A-Z]\w*$/.exec(expected)?.[0] ?? /\b(?:instanceOf|is)\s*:\s*([A-Z]\w*)/.exec(expected)?.[1] ?? null;
 }
 
-/** Whether the assertion only passes when its first argument is true: `t.true(x)`, `assert(x)`, `expect(x).toBe(true)`. */
+/**
+ * Whether the assertion only passes when its first argument is true: `t.true(x)`, `assert(x)`, `expect(x).toBe(true)`.
+ * AVA's `t.assert(x)` counts only when the test-strength work is on.
+ */
 function assertsTrue(assertion: Assertion): boolean {
 	if (assertion.family === 'expect') {
 		return EXACT_MATCHERS.has(assertion.method) && !assertion.modifiers.length && assertion.args[1] === 'true';
 	}
 
 	return assertion.family === 'ava'
-		? assertion.method === 'true' || assertion.method === 'assert'
+		? assertion.method === 'true' || (assertion.method === 'assert' && testStrengthOn())
 		: assertion.method === '' || assertion.method === 'ok';
 }
 
