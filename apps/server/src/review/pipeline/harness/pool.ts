@@ -1,4 +1,4 @@
-import type { ReviewAssignment } from '@recoder/shared';
+import type { BriefQuestion, ReviewAssignment } from '@recoder/shared';
 import { formatToolResults, type EvidenceStore } from '../../../evidence/evidence.js';
 import { configForOrchestrator, configForSubagent, type ModelConfig } from '../../../models/models.js';
 import { withGuidelines } from '../../guidelines/guidelines.js';
@@ -35,7 +35,8 @@ import {
 	subagentSystemPrompt,
 	type ReviewerPromptContext
 } from '../reviewer-prompts.js';
-import type { AnsweredMark, UnitRequest, UnsettledMark } from '../subagents.js';
+import { followedUpBy } from '../question-ledger.js';
+import type { UnitRequest } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
 import { coverageRole, recordFor, updateAssignment } from './assignments.js';
 import { capturePrompt, type Received } from './received.js';
@@ -66,10 +67,8 @@ export interface PoolContext extends ReviewerPromptContext {
 	dismissals: Dismissal[];
 	/** Where finished reviewers' subagent requests collect, in the order they finished. */
 	requests: UnitRequest[];
-	/** Where finished defect lenses' unsettled brief questions collect. */
-	unsettled: UnsettledMark[];
-	/** Where the brief questions finished defect lenses answered collect. */
-	answered: AnsweredMark[];
+	/** The brief's questions, where finished reviewers' answers and their evidence collect. */
+	questions: BriefQuestion[];
 	/** Called with each candidate a reviewer reports, so its verifier can start while others still review. */
 	onCandidate?: (candidate: CandidateFinding) => void;
 	/** Where each reviewer's prompt is recorded as it is built, with the reads its events record. */
@@ -248,7 +247,7 @@ function askReviewer(
 	const defaultCategory = lens.categories[0];
 
 	const system = subagent
-		? subagentSystemPrompt(ctx.exec, ctx.directive)
+		? subagentSystemPrompt(ctx.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0)
 		: reviewerSystemPrompt(lens, ctx.exec, ctx.directive, {
 				subagents: lens.id === 'correctness' && ctx.subagentCap > 0,
 				unsettled: !isQualityLens(lens.id) && ctx.subagentCap > 0

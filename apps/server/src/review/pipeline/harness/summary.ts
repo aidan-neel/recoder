@@ -1,6 +1,7 @@
 import {
 	REVIEW_CANCELLED,
 	settleAssignments,
+	type BriefQuestionReport,
 	type CoverageSummary,
 	type Finding,
 	type FindingVerification,
@@ -14,6 +15,7 @@ import { ModelBlockedError, ReviewAbortedError } from '../agent-loop.js';
 import { isHeldBack, toFinding, type CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
 import { obligationReport, obligationSentence } from '../obligations/report.js';
+import { briefQuestionReport, questionSentence } from '../question-report.js';
 import { unfinishedAssignments } from './assignments.js';
 import { confirmedFindings, type Consolidated } from './consolidation.js';
 import { receivedContext, type ReviewRun } from './context.js';
@@ -106,6 +108,19 @@ function measuredContext(run: ReviewRun, findings: Finding[]): { context?: Revie
 	}
 }
 
+/** The brief's questions as `assignments` left them; null when the brief had none. */
+function questionReport(run: ReviewRun, assignments: ReviewAssignment[]): BriefQuestionReport | null {
+	const { candidates, hidden } = run;
+
+	return briefQuestionReport({
+		claims: run.intent?.openQuestions ?? [],
+		records: run.questions,
+		candidates,
+		hidden,
+		assignments
+	});
+}
+
 /**
  * The result of a review that reached the end. Coverage gaps and failed
  * units are reported in the summary and the coverage rail. Unproven
@@ -116,8 +131,9 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
 	const { confirmed, checks } = consolidated;
 	const coverage = run.coverage.summary();
 	const obligations = run.obligations && obligationReport(run.obligations, run.candidates);
+	const questions = questionReport(run, run.assignments);
 
-	const summary = buildSummary(run, run.assignments, confirmed, coverage, obligations);
+	const summary = buildSummary(run, run.assignments, confirmed, coverage, obligations, questions);
 
 	return {
 		findings: confirmed,
@@ -130,7 +146,8 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
 		coverage,
 		coverageGaps: run.coverage.gaps(),
 		assignments: run.assignments,
-		...(obligations ? { obligations } : {})
+		...(obligations ? { obligations } : {}),
+		...(questions ? { questions } : {})
 	};
 }
 
@@ -170,7 +187,8 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 
 	const confirmed = confirmedFindings(run);
 	const obligations = run.obligations && obligationReport(run.obligations, run.candidates);
-	const summary = buildSummary(run, settled, confirmed, run.coverage.summary(), obligations);
+	const questions = questionReport(run, settled);
+	const summary = buildSummary(run, settled, confirmed, run.coverage.summary(), obligations, questions);
 
 	return {
 		findings: confirmed,
@@ -184,7 +202,8 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 		coverageGaps: run.coverage.gaps(),
 		assignments: settled,
 		error: `Ran out of time after ${minutes} minutes`,
-		...(obligations ? { obligations } : {})
+		...(obligations ? { obligations } : {}),
+		...(questions ? { questions } : {})
 	};
 }
 
@@ -232,14 +251,16 @@ function hiddenSentence(hidden: number): string {
 
 /**
  * The review's one-paragraph summary: unfinished units and subagents, subagent
- * requests past the limit, obligation counts when obligations ran, and partial coverage last.
+ * requests past the limit, obligation counts when obligations ran, how the brief's
+ * questions were settled, and partial coverage of the code last.
  */
 function buildSummary(
 	run: ReviewRun,
 	assignments: ReviewAssignment[],
 	confirmed: Finding[],
 	coverage: CoverageSummary,
-	obligations: ObligationReport | null
+	obligations: ObligationReport | null,
+	questions: BriefQuestionReport | null
 ): string {
 	const incomplete = unfinishedAssignments(assignments);
 	const units = incomplete.filter((record) => record.role !== 'subagent' && record.role !== 'obligation').length;
@@ -254,6 +275,7 @@ function buildSummary(
 		subagents ? `${subagents} subagent${subagents === 1 ? '' : 's'} did not finish.` : '',
 		droppedSentence(run.subagents.dropped),
 		obligations ? obligationSentence(obligations) : '',
+		questions ? questionSentence(questions) : '',
 		coverage.partial + coverage.pending > 0 ? 'Some changes still need review.' : ''
 	];
 

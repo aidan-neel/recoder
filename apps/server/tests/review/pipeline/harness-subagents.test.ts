@@ -207,12 +207,13 @@ const QUESTION = 'Does parse() still accept an empty string?';
 
 /**
  * A brief with one open question on `src/a.ts` line 1. The lens assignments in
- * `marking` mark it unsettled; every reviewer is otherwise empty, so any
- * subagent that runs came from the question. Records the user prompt of each
- * subagent by id, and the log lines.
+ * `marking` mark it unsettled; every reviewer is otherwise empty but for what
+ * `extra` adds by assignment id, so any subagent that runs came from the
+ * question. Records the user prompt of each subagent by id, and the lens
+ * assignments that ran.
  */
-function stubBrief(marking: string[]) {
-	const seen = { subagentPrompts: new Map<string, string>() };
+function stubBrief(marking: string[], extra: (assignment: string) => object = () => ({})) {
+	const seen = { subagentPrompts: new Map<string, string>(), lenses: [] as string[] };
 
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		const system = systemOf(init);
@@ -224,16 +225,22 @@ function stubBrief(marking: string[]) {
 		if (system.includes('Role: subagent')) {
 			const prompt = messagesOf(init)[1].content;
 
-			seen.subagentPrompts.set(/^Subagent (\S+):/m.exec(prompt)?.[1] ?? '?', prompt);
+			const id = /^Subagent (\S+):/m.exec(prompt)?.[1] ?? '?';
 
-			return modelReply({ message: 'ok', ...NOTHING });
+			seen.subagentPrompts.set(id, prompt);
+
+			return modelReply({ message: 'ok', ...NOTHING, ...extra(id) });
 		}
 
 		if (isVerifier(init)) return modelReply(confirmingVerifier(init));
 
 		const unit = unitOf(init);
 
-		return modelReply({ message: 'ok', ...NOTHING, unsettled: unit && marking.includes(unit) ? ['Q1', 'Q99'] : [] });
+		if (unit) seen.lenses.push(unit);
+
+		const unsettled = unit && marking.includes(unit) ? ['Q1', 'Q99'] : [];
+
+		return modelReply({ message: 'ok', ...NOTHING, unsettled, ...(unit ? extra(unit) : {}) });
 	}) as unknown as typeof fetch;
 
 	return seen;
@@ -286,7 +293,7 @@ test('with subagents off, an open question runs no subagent', async () => {
 	expect(seen.subagentPrompts.size).toBe(0);
 });
 
-test('a checkpoint saved before unsettled marks existed resumes and still plans its subagents', async () => {
+test('a checkpoint saved before question records existed resumes and still plans its subagents', async () => {
 	useTwoModels();
 	stubSubagents();
 
@@ -302,7 +309,7 @@ test('a checkpoint saved before unsettled marks existed resumes and still plans 
 	);
 
 	const { requests } = beforePlanning!.subagents;
-	const old = { ...beforePlanning!, subagents: { requests, units: null, dropped: [] } };
+	const old = { ...beforePlanning!, questions: undefined, subagents: { requests, units: null, dropped: [] } };
 
 	const resumed = await runAdaptiveReview({
 		diff: TWO_UNIT_DIFF,
@@ -315,4 +322,67 @@ test('a checkpoint saved before unsettled marks existed resumes and still plans 
 		'done',
 		'done'
 	]);
+});
+
+/** A trace through the changed line of `src/a.ts`, which every reviewer of it has read. */
+const TRACED = [{ kind: 'source', location: 'src/a.ts:1', note: 'parse() returns early on an empty string.' }];
+
+/** The correctness lens disproves Q1 with a trace but no note, which settles nothing; `subagent-1` confirms it with a finding. */
+function followUpAnswers(assignment: string): object {
+	if (assignment === 'unit-1/correctness') {
+		return { answered: [{ questionId: 'Q1', outcome: 'disproved', note: '', contractEvidence: TRACED }] };
+	}
+
+	if (assignment !== 'subagent-1') return {};
+
+	return {
+		findings: [{ ...finding('An empty string is lost'), questionId: 'Q1' }],
+		answered: [{ questionId: 'Q1', outcome: 'confirmed', note: 'Reported.' }]
+	};
+}
+
+test('a restart preserves the answer evidence and remaining work, and the follow-up settles the question', async () => {
+	useTwoModels();
+	stubBrief([], followUpAnswers);
+
+	let planned: ReviewProgressCheckpoint | null = null;
+
+	await runAdaptiveReview(
+		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 },
+		{
+			onCheckpoint: (checkpoint) => {
+				if (checkpoint.subagents.units && !planned) planned = structuredClone(checkpoint);
+			}
+		}
+	);
+
+	const lensAnswer = { owner: 'unit-1/correctness', result: 'unresolved', contractEvidence: TRACED };
+
+	expect(planned!.questions).toMatchObject([
+		{ id: 'Q1', answers: [lensAnswer], followUps: [{ unitId: 'subagent-1' }] }
+	]);
+
+	const seen = stubBrief([], followUpAnswers);
+
+	const resumed = await runAdaptiveReview({
+		diff: TWO_UNIT_DIFF,
+		sandboxPath: null,
+		subagentCap: 3,
+		resume: planned!
+	});
+
+	expect(seen.lenses).toEqual([]);
+	expect([...seen.subagentPrompts.keys()]).toEqual(['subagent-1']);
+
+	expect(resumed.questions?.questions).toMatchObject([
+		{
+			id: 'Q1',
+			result: 'confirmed',
+			answers: [lensAnswer, { owner: 'subagent-1', result: 'confirmed', candidateIds: [expect.any(String)] }],
+			followUps: [{ unitId: 'subagent-1' }]
+		}
+	]);
+
+	expect(resumed.questions?.counts).toMatchObject({ asked: 1, confirmed: 1, followUpsRun: 1, followUpsNotRun: 0 });
+	expect(resumed.summary).toContain('Of 1 brief question, 1 was settled (1 confirmed, 0 disproved).');
 });

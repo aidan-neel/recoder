@@ -119,14 +119,18 @@ test('an answer without unsettled still parses and salvages, and only brief ques
 	expect(parseReviewerOutput({ ...bare, unsettled: 'Q3' })?.unsettled).toEqual([]);
 });
 
-test('answered keeps well-formed brief question outcomes, once per question, and drops the rest', () => {
+test('answered keeps well-formed brief question outcomes and evidence, once per question, and drops the rest', () => {
 	const bare = { message: 'Fine.', findings: [], examinedHunks: [] };
+	const trace = [{ kind: 'source' as const, location: 'src/a.ts:4', note: 'The caller rejects empty input.' }];
+	const run = { input: '""', evidenceId: 'E3', observed: 'throws' };
+	const none = { contractEvidence: [], attemptedCounterexample: null };
 
 	expect(parseReviewerOutput(bare)?.answered).toEqual([]);
 
 	const answered = [
-		{ questionId: ' q3 ', outcome: 'Disproved', note: 'Guarded by the caller.' },
-		{ id: 'Q4', outcome: 'confirmed' },
+		{ questionId: ' q3 ', outcome: 'Disproved', note: 'Guarded by the caller.', contractEvidence: trace },
+		{ id: 'Q4', outcome: 'confirmed', contractEvidence: 'src/a.ts:4', attemptedCounterexample: run },
+		{ questionId: 'Q7', outcome: 'Not applicable', note: 'Not about security.', attemptedCounterexample: 'ran it' },
 		{ questionId: 'Q3', outcome: 'confirmed', note: 'again' },
 		{ questionId: 'Q5', outcome: 'maybe', note: 'x' },
 		{ questionId: 'nope', outcome: 'confirmed', note: 'x' },
@@ -134,9 +138,18 @@ test('answered keeps well-formed brief question outcomes, once per question, and
 	];
 
 	expect(parseReviewerOutput({ ...bare, answered })?.answered).toEqual([
-		{ questionId: 'Q3', outcome: 'disproved', note: 'Guarded by the caller.' },
-		{ questionId: 'Q4', outcome: 'confirmed', note: '' }
+		{ questionId: 'Q3', outcome: 'disproved', note: 'Guarded by the caller.', ...none, contractEvidence: trace },
+		{ questionId: 'Q4', outcome: 'confirmed', note: '', ...none, attemptedCounterexample: run },
+		{ questionId: 'Q7', outcome: 'not-applicable', note: 'Not about security.', ...none }
 	]);
 
 	expect(parseReviewerOutput({ ...bare, answered: 'Q3' })?.answered).toEqual([]);
+});
+
+test('a finding keeps the brief question it names as an id, and an unreadable one as none', () => {
+	const claim = { trigger: 't', consequence: 'c', violatedContract: 'v' };
+	const found = (questionId: unknown) => ({ file: 'a.ts', line: 3, severity: 'high', body: 'Bug.', claim, questionId });
+	const raw = { message: 'One bug.', findings: [found(' q2 '), found('the second one')], examinedHunks: [] };
+
+	expect(parseReviewerOutput(raw)?.findings.map((finding) => finding.questionId)).toEqual(['Q2', null]);
 });

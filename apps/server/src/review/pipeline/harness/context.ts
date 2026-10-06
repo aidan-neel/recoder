@@ -1,6 +1,7 @@
 import {
 	DEFAULT_SUBAGENT_CAP,
 	ORCHESTRATOR_ID,
+	type BriefQuestion,
 	type Finding,
 	type ReviewAssignment,
 	type ReviewContext
@@ -26,6 +27,7 @@ import { buildInventory, type ReviewInventory } from '../inventory.js';
 import { lensAssignments } from '../lenses/lenses.js';
 import { obligationsOn } from '../obligations/config.js';
 import { restoreObligationState, type ObligationState } from '../obligations/state.js';
+import { restoreQuestions } from '../question-ledger.js';
 import { extraExcludes } from '../review-scope.js';
 import { restoreSubagentState, type SubagentState } from '../subagents.js';
 import { partitionUnits, type ReviewUnit } from '../units.js';
@@ -84,8 +86,10 @@ export interface ReviewRun {
 	recommended: Set<string>;
 	/** Failed units were already retried, so a resume doesn't retry them again. */
 	retriesDone: boolean;
-	/** Subagents reviewers asked for, the brief questions they left unsettled or answered, and the subagents that run; kept apart from `units`, so they're never retried. */
+	/** Subagents reviewers asked for and the subagents that run; kept apart from `units`, so they're never retried. */
 	subagents: SubagentState;
+	/** The brief's questions with every answer, its evidence and follow-up so far; a question's result is derived from them. */
+	questions: BriefQuestion[];
 	/** Derived obligations and their investigations' answers; null unless `RECODER_OBLIGATIONS=1`. */
 	obligations: ObligationState | null;
 	nextCandidate: number;
@@ -134,6 +138,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		recommended: new Set<string>(resume?.recommended ?? []),
 		retriesDone: resume?.retriesDone ?? false,
 		subagents: restoreSubagentState(resume?.subagents),
+		questions: restoreQuestions(resume?.questions),
 		obligations: obligationsOn() ? restoreObligationState(resume?.obligations) : null,
 		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
 		received: resume?.received ? structuredClone(resume.received) : emptyReceived(),
@@ -265,10 +270,14 @@ export function saveCheckpoint(run: ReviewRun): void {
 		assignments: run.assignments.map((record) => ({ ...record })),
 		candidates: kept.map((candidate) => ({ ...candidate })),
 		coverage: run.coverage.snapshot(),
-		evidence: run.evidence.snapshot(kept.flatMap((candidate) => candidate.evidenceIds ?? [])),
+		evidence: run.evidence.snapshot([
+			...kept.flatMap((candidate) => candidate.evidenceIds ?? []),
+			...run.questions.flatMap((question) => question.answers.flatMap((answer) => answer.evidenceIds))
+		]),
 		recommended: [...run.recommended],
 		retriesDone: run.retriesDone,
 		subagents: structuredClone(run.subagents),
+		questions: structuredClone(run.questions),
 		...(run.repairs ? { repairs: run.repairs } : {}),
 		received: receivedOf(run.received, finished),
 		...(run.obligations ? { obligations: structuredClone(run.obligations) } : {})
@@ -317,8 +326,7 @@ export function poolContext(run: ReviewRun): PoolContext {
 		ledger: run.ledger,
 		dismissals: run.dismissals,
 		requests: run.subagents.requests,
-		unsettled: run.subagents.unsettled,
-		answered: run.subagents.answered,
+		questions: run.questions,
 		onCandidate: (candidate) => run.verifying?.add(candidate),
 		onFinished: () => saveCheckpoint(run)
 	};

@@ -108,6 +108,12 @@ export const reviewerFindingSchema = z.object({
 		.nullable()
 		.optional(),
 	smell: z.enum(READABILITY_SMELLS).nullable().optional(),
+	/** The brief question (`Q3`) this finding confirms; a confirmed answer holds only with a finding that names it. */
+	questionId: z
+		.string()
+		.regex(/^Q\d+$/)
+		.nullable()
+		.optional(),
 	claim: claimSchema,
 	/** Comparable existing code a convention finding rests on. */
 	examples: z.array(stepSchema).max(6).default([]),

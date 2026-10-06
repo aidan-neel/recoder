@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serverDataDir } from '../util/data-dir';
-import type { ObligationReport, ReviewFunnel } from '@recoder/shared';
+import type { BriefQuestionReport, ObligationReport, ReviewFunnel } from '@recoder/shared';
 import type { HarnessRecord } from './harness-tree';
 import type { ConsistencyMetrics, EvalFinding, RankedFinding, StabilityMetrics } from './metrics';
 
@@ -33,6 +33,8 @@ export interface RunRecord {
 	matrix?: { status: string; message: string; elapsedMs: number | null };
 	/** Obligations derived and every investigation's answer, unresolved ones included; absent unless the server ran with `RECODER_OBLIGATIONS=1`. */
 	obligations?: ObligationReport;
+	/** The brief's open questions and how the review settled each; absent when the brief had none or the report predates them. */
+	questions?: BriefQuestionReport;
 }
 
 export interface StabilityReport {
