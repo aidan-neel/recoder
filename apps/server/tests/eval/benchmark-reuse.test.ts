@@ -3,7 +3,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { identityLine, readReport, type BenchmarkReport, type JudgeModel } from '../../src/eval/benchmark-report';
-import { checkReuse, resumedRecords, reusedRuns, runIdentities, stamped } from '../../src/eval/benchmark-reuse';
+import {
+	checkReuse,
+	reportIdOf,
+	resumedRecords,
+	reusedRuns,
+	runIdentities,
+	stamped
+} from '../../src/eval/benchmark-reuse';
 import { checkCompatibility } from '../../src/eval/identity';
 import { identityFields, recordedIdentity, writeReport } from '../helpers/identity';
 
@@ -13,6 +20,15 @@ const judge: JudgeModel = { model: 'judge-x', provider: 'opencode', effort: 'med
 
 afterAll(() => {
 	rmSync(dir, { recursive: true, force: true });
+});
+
+test('a fresh start mints a report id; a reuse keeps the id of the report it reuses', () => {
+	const report = { ...readReport(writeReport(dir, 'ided.json')), reportId: 'report-a' };
+	const fresh = reportIdOf(null);
+
+	expect(fresh).toMatch(/^[0-9a-f-]{36}$/);
+	expect(reportIdOf(null)).not.toBe(fresh);
+	expect(reportIdOf({ path: 'ided.json', report, operation: 'replay' })).toBe('report-a');
 });
 
 test('a resume keeps each reused run its own stamp, so a report mixing old runs says so and compare refuses it', () => {

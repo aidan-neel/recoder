@@ -353,17 +353,27 @@ export function compatibilityLines(result: Compatibility): string[] {
 
 /** A report as a merge reads it. */
 export interface MergeInput extends Named {
+	/** Kept by every reuse of one benchmark; absent from reports older than recording it. */
+	reportId?: string;
 	runIds?: string[];
 }
 
-/** Run ids that appear more than once across the reports. */
+/**
+ * Run ids that appear more than once across the reports, by report id and run
+ * id: repeats of one experiment are other runs, while a resume or replay of a
+ * report keeps its report id and so its runs.
+ */
 function duplicateRuns(reports: readonly MergeInput[]): string[] {
 	const seen = new Set<string>();
 	const repeated = new Set<string>();
 
-	for (const id of reports.flatMap((report) => report.runIds ?? [])) {
-		if (seen.has(id)) repeated.add(id);
-		seen.add(id);
+	for (const report of reports) {
+		for (const id of report.runIds ?? []) {
+			const key = `${report.reportId ?? NOT_RECORDED}/${id}`;
+
+			if (seen.has(key)) repeated.add(id);
+			seen.add(key);
+		}
 	}
 
 	return [...repeated].sort();

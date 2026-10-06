@@ -67,8 +67,8 @@ function main(): number {
 	const [a, b] = positionals.map((path) => ({ path: resolve(path), report: readReport(resolve(path)) }));
 
 	const reports = [
-		{ name: 'A', identity: a!.report.identity, runIds: a!.report.runIds },
-		{ name: 'B', identity: b!.report.identity, runIds: b!.report.runIds }
+		{ name: 'A', identity: a!.report.identity, reportId: a!.report.reportId, runIds: a!.report.runIds },
+		{ name: 'B', identity: b!.report.identity, reportId: b!.report.reportId, runIds: b!.report.runIds }
 	];
 
 	const result = checkCompatibility(reports[0]!, reports[1]!, 'compare', allow);
@@ -78,7 +78,7 @@ function main(): number {
 		[
 			...[a!, b!].map(
 				({ path, report }, index) =>
-					`${'AB'[index]}  ${basename(path)} · ${report.prs.length} PRs × ${report.runsPerPr} runs · ${identityLine(report)}`
+					`${'AB'[index]}  ${basename(path)} · report ${report.reportId ?? 'id not recorded'} · ${report.prs.length} PRs × ${report.runsPerPr} runs · ${identityLine(report)}`
 			),
 			'',
 			...compatibilityLines(result),

@@ -213,6 +213,21 @@ test('shards of one experiment merge; a missing identity, a differing flag, a sp
 	]);
 });
 
+test('repeats of one experiment merge by report id; a replay keeps its report id, so its runs collide', () => {
+	const report = (name: string, reportId: string) => ({
+		name,
+		reportId,
+		identity: recordedIdentity(),
+		runIds: ['pr-1@aaa#1']
+	});
+
+	expect(mergeProblems([report('A', 'r1'), report('B', 'r2'), report('C', 'r3')])).toEqual([]);
+
+	expect(mergeProblems([report('A', 'r1'), report('A replayed', 'r1')])).toEqual([
+		'run ids listed more than once (1): pr-1@aaa#1; a run counted twice would sum its defects as new ones'
+	]);
+});
+
 test('--allow-diff takes a comma list of identity fields and rejects names an identity lacks', () => {
 	expect(allowDiffFields(' flags.RECODER_TEST_STRENGTH, identity ,')).toEqual({
 		fields: ['flags.RECODER_TEST_STRENGTH', 'identity'],

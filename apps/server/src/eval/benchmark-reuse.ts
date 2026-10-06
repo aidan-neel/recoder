@@ -38,6 +38,11 @@ interface Stamp {
 	judge: JudgeModel | typeof NOT_RECORDED;
 }
 
+/** The reused report's id, which a resume, replay, reverify or rescore keeps; a new one for a fresh start or a report that recorded none. */
+export function reportIdOf(prior: Prior | null): string {
+	return prior?.report.reportId ?? crypto.randomUUID();
+}
+
 /** A run with its stable id and its stamp. */
 export function stamped(task: Task, run: ScoredRun, stamp: Stamp): ScoredRun {
 	return {

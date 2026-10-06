@@ -24,15 +24,21 @@ const on = recordedIdentity({
 	flags: { RECODER_TEST_STRENGTH: '1', RECODER_OBLIGATIONS: 'unset' }
 });
 
-test('two reports of one experiment compare, with stage counts side by side and their repeated runs refusing a merge', () => {
-	const a = writeReport(dir, 'a.json', { identity: off, runIds: ['pr-1@aaa#1'] });
-	const b = writeReport(dir, 'b.json', { identity: off, runIds: ['pr-1@aaa#1'] });
+test('two repeats of one experiment compare and merge, with report ids and stage counts side by side', () => {
+	const a = writeReport(dir, 'a.json', { identity: off, runIds: ['pr-1@aaa#1'], reportId: 'report-a' });
+	const b = writeReport(dir, 'b.json', { identity: off, runIds: ['pr-1@aaa#1'], reportId: 'report-b' });
 	const { code, out } = compare(a, b);
 
 	expect(code).toBe(0);
+	expect(out).toContain('A  a.json · report report-a · 1 PRs × 1 runs');
+	expect(out).toContain('B  b.json · report report-b · 1 PRs × 1 runs');
 	expect(out).toContain('Compatible: every checked field matches');
-	expect(out).toContain('Merge: refused, run ids listed more than once (1): pr-1@aaa#1');
+	expect(out).toContain('Merge: possible');
 	expect(out).toMatch(/hono\s+1\/1\/0 of 1\s+1\/1\/0 of 1/);
+
+	const replay = writeReport(dir, 'a-replay.json', { identity: off, runIds: ['pr-1@aaa#1'], reportId: 'report-a' });
+
+	expect(compare(a, replay).out).toContain('Merge: refused, run ids listed more than once (1): pr-1@aaa#1');
 });
 
 test('an undeclared flag difference fails with the field named; declared, the counts are compared', () => {

@@ -50,10 +50,14 @@ export function recordedIdentity(fields = identityFields(), runs = 1): RunIdenti
 
 /**
  * Writes a benchmark report with one hono PR whose one run found its planted
- * defect without publishing it; `identity` and `runIds` are left out for a
- * report older than recording them.
+ * defect without publishing it; `identity`, `runIds` and `reportId` are left
+ * out for a report older than recording them.
  */
-export function writeReport(dir: string, name: string, recorded?: { identity: RunIdentity; runIds: string[] }): string {
+export function writeReport(
+	dir: string,
+	name: string,
+	recorded?: { identity: RunIdentity; runIds: string[]; reportId?: string }
+): string {
 	const path = join(dir, name);
 
 	const report = {

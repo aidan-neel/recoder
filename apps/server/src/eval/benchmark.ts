@@ -29,6 +29,7 @@ import {
 	checkReuse,
 	harnessRecord,
 	replayedReviews,
+	reportIdOf,
 	resumedRecords,
 	reusedRuns,
 	runIdentities,
@@ -309,6 +310,7 @@ async function main(): Promise<void> {
 				: null;
 
 	const derivedFrom = prior ? checkReuse(identity, prior, options.allowDiff) : undefined;
+	const reportId = reportIdOf(prior);
 	const bases = new Map(identity.tasks.map((task) => [task.taskId, task.base]));
 
 	const initial = plan.rescore
@@ -338,6 +340,7 @@ async function main(): Promise<void> {
 			judge: judge.model,
 			reviewer,
 			harness: harnessRecord(tree, plan.origin, resumed),
+			reportId,
 			identity: { ...identity, runs: runIdentities(prs.flatMap((pr) => pr.runs)) },
 			runIds: prs.flatMap((pr) => pr.runs.flatMap((run) => (run.runId ? [run.runId] : []))),
 			...(derivedFrom ? { derivedFrom } : {}),

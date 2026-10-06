@@ -109,6 +109,13 @@ export interface BenchmarkReport {
 	reviewer?: ReviewerManifest;
 	/** The harness code the report was made with; absent from reports older than recording it. */
 	harness?: HarnessRecord;
+	/**
+	 * A uuid minted when a benchmark starts fresh and kept by a resume, replay,
+	 * reverify or rescore of it, so its runs keep their ids across reuses while
+	 * a repeat of the same experiment counts as other runs; absent from reports
+	 * older than recording it.
+	 */
+	reportId?: string;
 	/** Everything that decides the result; absent from reports older than recording it. */
 	identity?: RunIdentity;
 	/** Every run's id; two reports that share one cannot be merged. */
