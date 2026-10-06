@@ -1,10 +1,11 @@
 import { Database } from 'bun:sqlite';
 import { join } from 'node:path';
 import { expect, spyOn, test } from 'bun:test';
-import { emptyReviewProgress } from '@recoder/shared';
+import { emptyReviewProgress, type ReviewTask } from '@recoder/shared';
 import { serverDataDir } from '../src/util/data-dir';
-import { closeStore, evictReplays, reviewProgress, reviewReplays } from '../src/store';
+import { closeStore, db, evictReplays, recoverStaleReviews, reviewProgress, reviewReplays } from '../src/store';
 import type { ReviewCheckpoint } from '../src/review/session/review-checkpoint';
+import { testReview } from './helpers/review';
 
 test('review progress written moments ago survives the store closing before its write-behind timer fires', () => {
 	const id = crypto.randomUUID();
@@ -51,4 +52,37 @@ test('kept checkpoints are evicted oldest first past the size limit, never the o
 
 	expect(reviewReplays.list().map((item) => item.id)).toEqual([ids[0]!, ids[2]!]);
 	reviewReplays.clear();
+});
+
+test('a server restart closes out the tasks a review left running, and the closed state is what reloads', () => {
+	const review = testReview({ status: 'running' });
+
+	const task = (id: string, status: ReviewTask['status']): ReviewTask => ({
+		id,
+		label: id,
+		status,
+		message: id,
+		updatedAt: ''
+	});
+
+	db.reviews.set(review);
+
+	reviewProgress.set({
+		...emptyReviewProgress(review.id),
+		tasks: { fetch: task('fetch', 'done'), unit: task('unit', 'running'), next: task('next', 'queued') }
+	});
+
+	recoverStaleReviews();
+	closeStore();
+
+	const tasks = reviewProgress.get(review.id)!.tasks;
+
+	expect(Object.values(tasks).map((entry) => [entry.id, entry.status, entry.message])).toEqual([
+		['fetch', 'done', 'fetch'],
+		['unit', 'error', 'Stopped by a server restart'],
+		['next', 'error', 'Stopped by a server restart']
+	]);
+
+	db.reviews.delete(review.id);
+	reviewProgress.delete(review.id);
 });
