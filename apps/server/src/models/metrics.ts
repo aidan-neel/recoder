@@ -87,6 +87,19 @@ export function withReviewMetrics<T>(reviewId: string, scope: TokenScope, run: (
 	return context.run({ reviewId, scope }, run);
 }
 
+/** The model calls one piece of work made and the output tokens they spent; tokens stay null until a provider reports a count. */
+export interface ModelTally {
+	calls: number;
+	outputTokens: number | null;
+}
+
+const tallies = new AsyncLocalStorage<ModelTally>();
+
+/** Run `run` with every model call it starts, however nested, counted in `tally` with its output tokens. */
+export function withModelTally<T>(tally: ModelTally, run: () => T): T {
+	return tallies.run(tally, run);
+}
+
 /** The pipeline run the running code belongs to, with its review's stored metrics. */
 function currentRun(): { owner: MetricsOwner; metrics: StoredMetrics; run: PipelineRun } | null {
 	const owner = context.getStore();
@@ -118,7 +131,10 @@ export function recordLockMiss(): void {
 
 export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 	const owner = context.getStore();
+	const tally = tallies.getStore();
 	const pipeline = owner?.run !== undefined;
+
+	if (tally) tally.calls++;
 
 	const call: RunTokenCall = {
 		id: crypto.randomUUID(),
@@ -149,6 +165,10 @@ export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 
 	return {
 		usage: (usage: TokenUsage) => {
+			if (tally && usage.outputTokens !== null) {
+				tally.outputTokens = (tally.outputTokens ?? 0) + usage.outputTokens - (call.usage.outputTokens ?? 0);
+			}
+
 			call.usage = usage;
 			save();
 		},

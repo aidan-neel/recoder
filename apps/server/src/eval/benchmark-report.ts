@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { ModelSettings, ReviewFunnel, SubagentCap } from '@recoder/shared';
+import type { ModelSettings, ObligationAnswer, ObligationCounts, ReviewFunnel, SubagentCap } from '@recoder/shared';
 import { recall, type BenchmarkSummary, type LabeledDefect, type PrScore, type Totals } from './benchmark-score';
 import { labelLines, percent } from './benchmark-labels-report';
 import { matchLines } from './benchmark-matches-report';
@@ -263,6 +263,29 @@ function funnelLines(prs: PrResult[]): string[] {
 	];
 }
 
+/** Every run's obligation counts summed, with what the investigations spent, for runs that derived obligations. */
+function obligationLines(prs: PrResult[]): string[] {
+	const reports = prs.flatMap((pr) => pr.runs.flatMap((run) => (run.obligations ? [run.obligations] : [])));
+
+	if (!reports.length) return [];
+
+	const sum = (pick: (counts: ObligationCounts) => number) =>
+		reports.reduce((total, report) => total + pick(report.counts), 0);
+
+	const launched = reports.flatMap((report) => report.answers.filter((answer) => answer.launched));
+
+	const spent = (pick: (answer: ObligationAnswer) => number | null) =>
+		launched.reduce((total, answer) => total + (pick(answer) ?? 0), 0);
+
+	return [
+		'',
+		`Obligations (${reports.length} runs)`,
+		`  derived ${sum((counts) => counts.derived)} · launched ${sum((counts) => counts.launched)} · over cap ${sum((counts) => counts.overCap)} · not launched ${sum((counts) => counts.notLaunched)}`,
+		`  confirmed ${sum((counts) => counts.confirmed)} (verified ${sum((counts) => counts.verified)}) · disproved ${sum((counts) => counts.disproved)} · not applicable ${sum((counts) => counts.notApplicable)} · unresolved ${sum((counts) => counts.unresolved)}`,
+		`  investigations spent ${spent((answer) => answer.tokens)} output tokens over ${spent((answer) => answer.turns)} model calls and ${Math.round(spent((answer) => answer.elapsedMs) / 1000)} s in all`
+	];
+}
+
 /** "Reviewer gpt (high) · second model x (low) · subagent cap 8 · medium and above". */
 function reviewerLine(reviewer: ReviewerManifest | undefined): string[] {
 	if (!reviewer) return [];
@@ -419,6 +442,7 @@ export function printBenchmark(report: BenchmarkReport): void {
 			...matchLines(report.prs),
 			...lowLines(summary.lows),
 			...funnelLines(report.prs),
+			...obligationLines(report.prs),
 			...groupLines('By codebase', summary.byCodebase),
 			...groupLines('By kind', summary.byKind),
 			...groupLines('By category', summary.byCategory),

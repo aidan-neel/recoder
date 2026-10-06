@@ -16,7 +16,7 @@ import { currentReviewControl, reviewNow, reviewPausePoint } from '../../session
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { CHAT_STYLE, NATIVE_REPLY_RULES, forNativeTools } from '../prompts.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './budget.js';
-import { agentDeadlines, deadlineError, newAgentId, type AgentLimits } from './limits.js';
+import { agentDeadlines, deadlineError, newAgentId, toolTurns, type AgentLimits } from './limits.js';
 import { StepRelay } from './opencode-relay.js';
 import { FINAL_TURN_NOTE, ToolGate } from './opencode-tool-gate.js';
 import type { JsonAgentOptions } from './options.js';
@@ -74,7 +74,7 @@ class OpenCodeRun<T> {
 		this.limits = limits;
 		this.endpoint = llmEndpoint(opts.config);
 		this.spendOpts = { consumeReserve: opts.consumeReserve };
-		this.toolsOn = opts.maxTurns > 1;
+		this.toolsOn = toolTurns(opts) > 0;
 
 		this.relay = new StepRelay(opts, {
 			onStep: (step) => this.stepStarted(step),
@@ -85,7 +85,7 @@ class OpenCodeRun<T> {
 		this.gate = new ToolGate(
 			opts,
 			opts.agentId ?? newAgentId(),
-			{ isFinal: () => this.finalTurn(), nextIsFinal: () => this.relay.finished + 2 >= opts.maxTurns },
+			{ isFinal: () => this.finalTurn(), nextIsFinal: () => this.relay.finished + 1 >= toolTurns(opts) },
 			opts.getDiscussion?.() ?? ''
 		);
 	}
@@ -95,7 +95,7 @@ class OpenCodeRun<T> {
 		return (
 			!this.toolsOn ||
 			this.gate.stuck ||
-			this.relay.finished + 1 >= this.opts.maxTurns ||
+			this.relay.finished >= toolTurns(this.opts) ||
 			!this.opts.budget.canSpend(1, this.spendOpts) ||
 			reviewNow() >= this.limits.finalTurnAt
 		);
@@ -109,9 +109,10 @@ class OpenCodeRun<T> {
 
 	/**
 	 * Steps Recoder will not pay for or wait on are stopped as they start: one
-	 * the budget cannot cover, one past the agent's turns (it is then asked for
-	 * its answer with the tools off), and one from a model that was only asked
-	 * to answer and keeps going instead.
+	 * the budget cannot cover, one past both the agent's turns and the answer
+	 * steps after its last tool turn (it is then asked for its answer with the
+	 * tools off), and one from a model that was only asked to answer and keeps
+	 * going instead.
 	 */
 	private stepStarted(step: number): void {
 		const { opts } = this;
@@ -120,7 +121,7 @@ class OpenCodeRun<T> {
 
 		if (!opts.budget.canSpend(0, this.spendOpts)) this.stop('budget');
 		else if (!this.promptTools && step - this.stepsBefore > ANSWER_STEPS) this.stop('runaway');
-		else if (this.promptTools && step > opts.maxTurns + 1) this.stop('final');
+		else if (this.promptTools && step > Math.max(opts.maxTurns, toolTurns(opts) + ANSWER_STEPS)) this.stop('final');
 	}
 
 	/** A finished step reached the provider, which is what lets a backed-off model limit recover. */

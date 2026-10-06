@@ -170,7 +170,10 @@ export function totalsLines(name: string, totals: ContextTotals): string[] {
 	];
 }
 
-/** One line per lens over all codebases; a reviewer without a lens (a subagent) counts under its role. */
+/**
+ * One line per lens over all codebases; a reviewer without a lens (a subagent
+ * or an obligation investigator) counts under its role.
+ */
 function lensLines(byLens: Map<string, ReviewerTotals>): string[] {
 	return [...byLens.keys()].sort().map((lens) => {
 		const totals = byLens.get(lens)!;

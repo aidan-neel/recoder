@@ -27,6 +27,22 @@ function notify(onTool: ((tool: ToolCallReport) => void) | undefined, tool: Tool
  * Cuts a result to what is left of the round budget, so the dashboard reports the same bounded
  * evidence the agent receives. The cut may land inside the last hunk, so that hunk is not claimed as shown.
  */
+/**
+ * The action's result, or a `review aborted` failure as soon as `signal`
+ * aborts, so an agent stopped mid-round does not wait for a call still queued
+ * for the sandbox; that call settles on its own.
+ */
+function untilAborted(action: string, work: Promise<ToolResult>, signal: AbortSignal | undefined): Promise<ToolResult> {
+	if (!signal) return work;
+
+	return new Promise((resolve, reject) => {
+		const abort = () => resolve(failure(action, 'review aborted'));
+
+		signal.addEventListener('abort', abort, { once: true });
+		work.then(resolve, reject).finally(() => signal.removeEventListener('abort', abort));
+	});
+}
+
 function fitRoundBudget(result: ToolResult, used: number): ToolResult {
 	if (used + result.content.length <= REVIEW_POLICY.maxToolRoundChars) return result;
 
@@ -135,7 +151,11 @@ export class EvidenceStore {
 				continue;
 			}
 
-			const result = await this.executeReported(action, used, signal, onTool, owner);
+			const result = await untilAborted(
+				action.action,
+				this.executeReported(action, used, signal, onTool, owner),
+				signal
+			);
 
 			results.push(result);
 			used += result.content.length;

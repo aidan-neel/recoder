@@ -12,6 +12,7 @@ import {
 	runJsonAgent,
 	type ModelBudget
 } from '../agent-loop.js';
+import type { JsonAgentOptions } from '../agent-loop/options.js';
 import { unitContextParts } from '../change-model/change-model.js';
 import type { CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
@@ -30,6 +31,7 @@ import {
 import {
 	reviewerSystemPrompt,
 	reviewerUserPrompt,
+	type ReviewerHeading,
 	subagentSystemPrompt,
 	type ReviewerPromptContext
 } from '../reviewer-prompts.js';
@@ -83,10 +85,16 @@ const REVIEWER_EXAMPLE =
 	'{"message":"No issues in the queue split.","findings":[],"examinedHunks":[],"gaps":[],"blockers":[],"subagents":[],"unsettled":[],"answered":[],"recommendedChecks":[]}';
 
 /**
- * Runs the units in order, a few at a time. Once budget or time is reserved
+ * Runs the units in order, a few at a time, each through `runOne` (a lens
+ * reviewer or subagent unless told otherwise). Once budget or time is reserved
  * for later stages, the rest are skipped rather than launched.
  */
-export async function runUnitPool(units: ReviewUnit[], records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
+export async function runUnitPool(
+	units: ReviewUnit[],
+	records: ReviewAssignment[],
+	ctx: PoolContext,
+	runOne: (item: ReviewUnit) => Promise<void> = (item) => runOneUnit(item, records, ctx)
+): Promise<void> {
 	const queue = [...units];
 	let cursor = 0;
 
@@ -109,7 +117,7 @@ export async function runUnitPool(units: ReviewUnit[], records: ReviewAssignment
 				return;
 			}
 
-			await runOneUnit(queue[cursor++], records, ctx);
+			await runOne(queue[cursor++]);
 		}
 	});
 
@@ -122,7 +130,7 @@ export async function runUnitPool(units: ReviewUnit[], records: ReviewAssignment
  * subagents on the second model. A subagent's hunks are already some lens's,
  * so its failure leaves coverage alone.
  */
-async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
+export async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
 	const role = recordFor(records, item.id).role;
 	const subagent = role === 'subagent';
 	const cfg = subagent ? configForSubagent() : configForOrchestrator();
@@ -165,7 +173,7 @@ function markUnitPartial(item: ReviewUnit, reason: string, ctx: PoolContext): vo
 }
 
 /** Marks the unit queued for a reviewer slot. */
-function queueAssignment(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext, model: string): void {
+export function queueAssignment(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext, model: string): void {
 	const queuedAt = new Date().toISOString();
 
 	updateAssignment(records, item.id, {
@@ -193,7 +201,7 @@ function queueAssignment(item: ReviewUnit, records: ReviewAssignment[], ctx: Poo
  * spending a model round asking for it. Every file gets a result (truncated once
  * the round budget is spent), so none silently drops out past the per-turn action limit.
  */
-function readScopedPatch(item: ReviewUnit, role: string, ctx: PoolContext): Promise<ScopedPatch> {
+export function readScopedPatch(item: ReviewUnit, role: string, ctx: PoolContext): Promise<ScopedPatch> {
 	return ctx.evidence.executeRound(
 		item.scope.map((entry) => ({ action: 'readDiff', path: entry.path, hunkIds: entry.hunkIds })),
 		ctx.signal,
@@ -233,16 +241,11 @@ function askReviewer(
 	cfg: ModelConfig,
 	initialEvidence: ScopedPatch
 ) {
-	const meta = { assignmentId: item.id, role: recordFor(records, item.id).role };
-	const subagent = meta.role === 'subagent';
-	let runningSince: string | undefined;
+	const subagent = recordFor(records, item.id).role === 'subagent';
 
 	const lens = lensById(item.lens ?? 'correctness');
 	const maxTurns = subagent ? REVIEW_POLICY.maxSubagentTurns : REVIEW_POLICY.maxLensTurns;
 	const defaultCategory = lens.categories[0];
-	const declarations = ctx.changeModel ? unitContextParts(ctx.changeModel, item.scope) : null;
-
-	capturePrompt(ctx.received, item, ctx.inventory, declarations, initialEvidence);
 
 	const system = subagent
 		? subagentSystemPrompt(ctx.exec, ctx.directive)
@@ -255,20 +258,14 @@ function askReviewer(
 		label: item.title,
 		system: withGuidelines(system, ctx.inventory.guidelines),
 		exec: Boolean(ctx.exec),
-		getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
-		onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model: cfg.model }),
-		user:
-			reviewerUserPrompt(
-				item,
-				{ turns: maxTurns, calls: ctx.budget.remaining() },
-				ctx,
-				declarations?.text ?? '',
-				subagent
-			) +
-			(ctx.setupNotes() ? `\n\n${ctx.setupNotes()}` : '') +
-			dismissedNote(item, subagent, ctx) +
-			'\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' +
-			formatToolResults(initialEvidence),
+		user: unitPrompt(
+			item,
+			ctx,
+			maxTurns,
+			subagent ? 'Subagent' : 'Unit',
+			initialEvidence,
+			dismissedNote(item, subagent, ctx)
+		),
 		config: cfg,
 		budget: ctx.budget,
 		evidence: ctx.evidence,
@@ -285,25 +282,80 @@ function askReviewer(
 			maxWallMs: REVIEW_POLICY.reviewerMaxMs
 		},
 		finalExample: REVIEWER_EXAMPLE,
-		onProgress: (state, elapsedMs, detail) => {
-			const status = state === 'queued' ? 'waiting' : 'running';
-
-			runningSince ??= status === 'running' ? new Date().toISOString() : undefined;
-			reportProgress(item, records, ctx, cfg.model, { status, detail, runningSince });
-
-			ctx.task(`assignment:${item.id}`, item.title, status, detail, {
-				kind: state === 'retrieval' ? 'retrieval' : 'model',
-				assignmentId: item.id,
-				agent: meta.role,
-				model: cfg.model,
-				elapsedMs,
-				files: item.scope.map((entry) => entry.path)
-			});
-		},
-		onLog: (message) => ctx.events?.onLog?.(message, meta),
-		onReasoning: (reasoning) => ctx.events?.onReasoning?.({ ...reasoning, ...meta, model: cfg.model }),
-		onTool: (tool) => ctx.events?.onTool?.({ ...tool, ...meta })
+		...agentEvents(item, records, ctx, cfg.model)
 	});
+}
+
+/**
+ * A unit agent's opening message: its brief and budget under `heading`, the
+ * sandbox setup notes, any `note`, then the first page of its scoped patch.
+ * What the prompt holds is captured in `ctx.received` as it is built, for
+ * lens units, subagents and obligation investigators alike.
+ */
+export function unitPrompt(
+	item: ReviewUnit,
+	ctx: PoolContext,
+	turns: number,
+	heading: ReviewerHeading,
+	patch: ScopedPatch,
+	note = ''
+): string {
+	const declarations = ctx.changeModel ? unitContextParts(ctx.changeModel, item.scope) : null;
+
+	capturePrompt(ctx.received, item, ctx.inventory, declarations, patch);
+
+	return (
+		reviewerUserPrompt(item, { turns, calls: ctx.budget.remaining() }, ctx, declarations?.text ?? '', heading) +
+		(ctx.setupNotes() ? `\n\n${ctx.setupNotes()}` : '') +
+		note +
+		'\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' +
+		formatToolResults(patch)
+	);
+}
+
+/** How a unit agent reports to the run: its discussion, messages, progress, logs, reasoning and tool calls. */
+export function agentEvents(
+	item: ReviewUnit,
+	records: ReviewAssignment[],
+	ctx: PoolContext,
+	model: string
+): Pick<JsonAgentOptions<unknown>, 'getDiscussion' | 'onMessage' | 'onProgress' | 'onLog' | 'onReasoning' | 'onTool'> {
+	const meta = { assignmentId: item.id, role: recordFor(records, item.id).role };
+
+	return {
+		getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
+		onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model }),
+		onProgress: progressReporter(item, records, ctx, model),
+		onLog: (message) => ctx.events?.onLog?.(message, meta),
+		onReasoning: (reasoning) => ctx.events?.onReasoning?.({ ...reasoning, ...meta, model }),
+		onTool: (tool) => ctx.events?.onTool?.({ ...tool, ...meta })
+	};
+}
+
+/** An agent loop's progress callback that keeps the unit's record and task row current. */
+function progressReporter(
+	item: ReviewUnit,
+	records: ReviewAssignment[],
+	ctx: PoolContext,
+	model: string
+): NonNullable<JsonAgentOptions<unknown>['onProgress']> {
+	let runningSince: string | undefined;
+
+	return (state, elapsedMs, detail) => {
+		const status = state === 'queued' ? 'waiting' : 'running';
+
+		runningSince ??= status === 'running' ? new Date().toISOString() : undefined;
+		reportProgress(item, records, ctx, model, { status, detail, runningSince });
+
+		ctx.task(`assignment:${item.id}`, item.title, status, detail, {
+			kind: state === 'retrieval' ? 'retrieval' : 'model',
+			assignmentId: item.id,
+			agent: recordFor(records, item.id).role,
+			model,
+			elapsedMs,
+			files: item.scope.map((entry) => entry.path)
+		});
+	};
 }
 
 /** The reviewer's clock starts when a model first works for it (`runningSince`), not when it was queued. */
@@ -327,7 +379,7 @@ function reportProgress(
 }
 
 /** A reviewer that stopped without an answer: its record, task row and conversation all say so. */
-function failAssignment(
+export function failAssignment(
 	item: ReviewUnit,
 	records: ReviewAssignment[],
 	ctx: PoolContext,
@@ -343,7 +395,7 @@ function failAssignment(
 
 	ctx.events?.onMessage?.({
 		id: `message_failed_${item.id}`,
-		text: `**${item.title}** stopped before finishing: ${reason}\n\nFindings: none reported.${recordFor(records, item.id).role === 'subagent' ? '' : ' The hunks in this unit are marked partially covered.'}`,
+		text: `**${item.title}** stopped before finishing: ${reason}\n\nFindings: none reported.${recordFor(records, item.id).role === 'reviewer' ? ' The hunks in this unit are marked partially covered.' : ''}`,
 		status: 'done',
 		assignmentId: item.id,
 		model

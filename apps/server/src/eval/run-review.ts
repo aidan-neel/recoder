@@ -235,6 +235,7 @@ export async function runReview(
 		funnel: result.funnel,
 		candidates: progress?.candidateCount ?? null,
 		cachedChecks: progress?.toolCalls?.filter((call) => call.cached).length ?? 0,
-		matrix: matrixOf(progress)
+		matrix: matrixOf(progress),
+		...(result.obligations ? { obligations: result.obligations } : {})
 	};
 }

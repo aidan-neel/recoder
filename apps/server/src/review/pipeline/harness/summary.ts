@@ -4,6 +4,7 @@ import {
 	type CoverageSummary,
 	type Finding,
 	type FindingVerification,
+	type ObligationReport,
 	type ReviewAssignment,
 	type ReviewContext,
 	type ReviewFunnel
@@ -12,6 +13,7 @@ import { reviewNow } from '../../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError } from '../agent-loop.js';
 import { isHeldBack, toFinding, type CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
+import { obligationReport, obligationSentence } from '../obligations/report.js';
 import { unfinishedAssignments } from './assignments.js';
 import { confirmedFindings, type Consolidated } from './consolidation.js';
 import { receivedContext, type ReviewRun } from './context.js';
@@ -113,8 +115,9 @@ function measuredContext(run: ReviewRun, findings: Finding[]): { context?: Revie
 export function completeReview(run: ReviewRun, consolidated: Consolidated): AdaptiveReviewResult {
 	const { confirmed, checks } = consolidated;
 	const coverage = run.coverage.summary();
+	const obligations = run.obligations && obligationReport(run.obligations, run.candidates);
 
-	const summary = buildSummary(run, run.assignments, confirmed, coverage);
+	const summary = buildSummary(run, run.assignments, confirmed, coverage, obligations);
 
 	return {
 		findings: confirmed,
@@ -126,7 +129,8 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
 		recommendedChecks: [...new Set(checks)],
 		coverage,
 		coverageGaps: run.coverage.gaps(),
-		assignments: run.assignments
+		assignments: run.assignments,
+		...(obligations ? { obligations } : {})
 	};
 }
 
@@ -165,7 +169,8 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 	hideUnproven(run);
 
 	const confirmed = confirmedFindings(run);
-	const summary = buildSummary(run, settled, confirmed, run.coverage.summary());
+	const obligations = run.obligations && obligationReport(run.obligations, run.candidates);
+	const summary = buildSummary(run, settled, confirmed, run.coverage.summary(), obligations);
 
 	return {
 		findings: confirmed,
@@ -178,7 +183,8 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 		coverage: run.coverage.summary(),
 		coverageGaps: run.coverage.gaps(),
 		assignments: settled,
-		error: `Ran out of time after ${minutes} minutes`
+		error: `Ran out of time after ${minutes} minutes`,
+		...(obligations ? { obligations } : {})
 	};
 }
 
@@ -226,17 +232,18 @@ function hiddenSentence(hidden: number): string {
 
 /**
  * The review's one-paragraph summary: unfinished units and subagents, subagent
- * requests past the limit, and partial coverage last.
+ * requests past the limit, obligation counts when obligations ran, and partial coverage last.
  */
 function buildSummary(
 	run: ReviewRun,
 	assignments: ReviewAssignment[],
 	confirmed: Finding[],
-	coverage: CoverageSummary
+	coverage: CoverageSummary,
+	obligations: ObligationReport | null
 ): string {
 	const incomplete = unfinishedAssignments(assignments);
-	const units = incomplete.filter((record) => record.role !== 'subagent').length;
-	const subagents = incomplete.length - units;
+	const units = incomplete.filter((record) => record.role !== 'subagent' && record.role !== 'obligation').length;
+	const subagents = incomplete.filter((record) => record.role === 'subagent').length;
 
 	const bits = [
 		`Review complete. ${confirmed.length} confirmed finding${confirmed.length === 1 ? '' : 's'}.`,
@@ -246,6 +253,7 @@ function buildSummary(
 		units ? `${units} review unit${units === 1 ? '' : 's'} did not finish.` : '',
 		subagents ? `${subagents} subagent${subagents === 1 ? '' : 's'} did not finish.` : '',
 		droppedSentence(run.subagents.dropped),
+		obligations ? obligationSentence(obligations) : '',
 		coverage.partial + coverage.pending > 0 ? 'Some changes still need review.' : ''
 	];
 

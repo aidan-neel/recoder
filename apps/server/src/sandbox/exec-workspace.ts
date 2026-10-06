@@ -177,7 +177,7 @@ export class ExecWorkspace {
 	async run(command: string, timeoutMs: number, signal?: AbortSignal, owner = ''): Promise<RunResult> {
 		await this.setupDone?.catch(() => undefined);
 
-		return this.exclusive(async () => {
+		const work = async () => {
 			const limit = this.timeout(timeoutMs);
 
 			if (limit <= 0) return notRun('Not run: the review is out of time.', true);
@@ -194,7 +194,9 @@ export class ExecWorkspace {
 				await this.remove([...files.keys()]);
 				await this.restoreTracked();
 			}
-		});
+		};
+
+		return this.exclusive(work, { signal, instead: () => notRun(ABORTED, false) });
 	}
 
 	/** Run an investigator's command the way `run` does; once packages are prepared, the result says what it reached. */
@@ -221,7 +223,7 @@ export class ExecWorkspace {
 	): Promise<RunResult | { unavailable: string }> {
 		await this.setupDone?.catch(() => undefined);
 
-		return this.exclusive(async () => {
+		const work = async () => {
 			if (this.timeout(timeoutMs) <= 0) return { unavailable: 'the review is out of time' };
 
 			const tree = (this.baseTree ??= new BaseTree(this.layout, this.headSha, mergeBaseSha));
@@ -244,7 +246,9 @@ export class ExecWorkspace {
 				await this.remove([...files.keys()], tree.sandbox);
 				await tree.restore().catch(() => undefined);
 			}
-		});
+		};
+
+		return this.exclusive(work, { signal, instead: () => ({ unavailable: ABORTED }) });
 	}
 
 	/**
@@ -272,13 +276,15 @@ export class ExecWorkspace {
 			return { ok: false, error: 'path is tracked in the PR; write a new scratch file instead' };
 		await this.setupDone?.catch(() => undefined);
 
-		const result = await this.exclusive(async () => {
+		const work = async () => {
 			const written = await this.writeNew(clean, content, signal);
 
 			if (written.exitCode === 0) await this.remove([clean]);
 
 			return written;
-		});
+		};
+
+		const result = await this.exclusive(work, { signal, instead: () => notRun(ABORTED, false) });
 
 		if (result.exitCode !== 0) return { ok: false, error: result.output.trim().slice(0, 400) || 'write failed' };
 
@@ -403,8 +409,10 @@ export class ExecWorkspace {
 		return Math.max(0, Math.min(requested, this.deadlineAt - reviewNow()));
 	}
 
-	private exclusive<T>(fn: () => Promise<T>): Promise<T> {
-		const next = this.queue.then(fn, fn);
+	/** Runs `fn` after every call queued before it, or `skip.instead` when `skip.signal` aborted while it waited. */
+	private exclusive<T>(fn: () => Promise<T>, skip?: { signal?: AbortSignal; instead: () => T }): Promise<T> {
+		const turn = () => (skip?.signal?.aborted ? Promise.resolve(skip.instead()) : fn());
+		const next = this.queue.then(turn, turn);
 
 		this.queue = next.catch(() => undefined);
 
@@ -433,6 +441,9 @@ export class ExecWorkspace {
 		return { code, stdout };
 	}
 }
+
+/** What a call says when the review aborted while it waited its turn in the queue. */
+const ABORTED = 'Not run: the review was aborted.';
 
 /** A run that never started, shaped like one that did. */
 function notRun(output: string, timedOut: boolean): RunResult {

@@ -29,8 +29,8 @@ export function cutUnits(run: ReviewRun): void {
 }
 
 /**
- * Picks a resumed review up from its checkpoint: finished lens assignments and
- * subagents keep their records, the rest are queued again.
+ * Picks a resumed review up from its checkpoint: finished lens assignments,
+ * subagents and obligation investigations keep their records, the rest are queued again.
  */
 function restoreUnits(run: ReviewRun): void {
 	const resume = run.input.resume!;
@@ -40,7 +40,7 @@ function restoreUnits(run: ReviewRun): void {
 	run.units = resume.units.map((unit) => ({ ...unit }));
 	run.events?.onLog?.('Continuing the review where it stopped');
 
-	const launched = [...run.units, ...(run.subagents.units ?? [])];
+	const launched = [...run.units, ...(run.subagents.units ?? []), ...(run.obligations?.units ?? [])];
 
 	for (const record of resume.assignments) {
 		const unit = launched.find((entry) => entry.id === record.id);

@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildInventory } from '../../src/review/pipeline/inventory';
+import type { ExecWorkspace } from '../../src/sandbox/exec-workspace';
 import { actionCommand, EvidenceStore, sanitizeRepoPath, type ToolCallReport } from '../../src/evidence/evidence';
 import { git } from '../helpers/git';
 
@@ -217,4 +218,42 @@ test('readFile refuses symlinks and unknown revisions', async () => {
 	]);
 
 	expect(badRev.ok).toBe(false);
+});
+
+test('a round stops waiting for a queued run as soon as the review aborts, and runs nothing after it', async () => {
+	const store = new EvidenceStore(null, buildInventory(''), 20_000);
+	const controller = new AbortController();
+	const commands: string[] = [];
+	let release = () => {};
+
+	store.exec = {
+		runInvestigation: (command: string) => {
+			commands.push(command);
+
+			return new Promise((resolve) => {
+				release = () => resolve({ exitCode: 0, output: '', truncated: false, timedOut: false, elapsedMs: 0 });
+			});
+		}
+	} as unknown as ExecWorkspace;
+
+	const round = store.executeRound(
+		[
+			{ action: 'run', command: 'sleep 60' },
+			{ action: 'run', command: 'true' }
+		],
+		controller.signal
+	);
+
+	await Bun.sleep(10);
+	controller.abort();
+
+	const results = await round;
+
+	expect(results.map((result) => [result.ok, result.error])).toEqual([
+		[false, 'review aborted'],
+		[false, 'review aborted']
+	]);
+
+	expect(commands).toEqual(['sleep 60']);
+	release();
 });

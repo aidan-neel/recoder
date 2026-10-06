@@ -1,5 +1,6 @@
 import type { ReviewContext } from './context';
 import type { Finding } from './findings';
+import type { ObligationReport } from './obligations';
 import type { Provider } from './repo';
 
 export type ReviewStatus = 'draft' | 'queued' | 'running' | 'passed' | 'failed';
@@ -53,6 +54,8 @@ export interface Review {
 	funnel?: ReviewFunnel;
 	/** What each reviewer received, read and cited, and what bounds left out; absent on reviews older than recording it. */
 	context?: ReviewContext;
+	/** Obligations derived from risky changes and how each investigation ended; absent unless `RECODER_OBLIGATIONS` was on. */
+	obligations?: ObligationReport;
 	/** CommandRun ids produced by the review pipeline, in order. */
 	runs: string[];
 	/** Where the PR data came from: live provider fetch or offline stub. */
