@@ -83,12 +83,18 @@ function labelFiles(dataset: string): { name: string; text: string }[] {
 		.map((name) => ({ name, text: readFileSync(join(dir, name), 'utf8') }));
 }
 
-/** The human decisions only: an unresolved entry classifies a finding as no entry does, and the benchmark queues those itself. */
+/**
+ * The human decisions only: a finding's label, or whether a claim reports a
+ * defect. An unresolved entry classifies a finding as no entry does, and the
+ * benchmark queues those itself.
+ */
 function decided(adjudications: Adjudications): Record<string, string> {
 	return Object.fromEntries(
-		Object.entries(adjudications)
-			.filter(([, entry]) => entry.label !== 'unresolved')
-			.map(([key, entry]) => [key, entry.label])
+		Object.entries(adjudications).flatMap(([key, entry]) => {
+			if ('reports' in entry) return [[key, entry.reports ? 'reports' : 'does not report']];
+
+			return entry.label === 'unresolved' ? [] : [[key, entry.label]];
+		})
 	);
 }
 

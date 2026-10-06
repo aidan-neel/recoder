@@ -52,11 +52,11 @@ test('labeling a finding once changes the summary of a run scored before the lab
 	expect([after.overall.counts.unresolved, after.overall.counts.false]).toEqual([0, 1]);
 });
 
-test('precision is an interval that counts unresolved findings wrong at the bottom and right at the top', () => {
+test('precision over every published finding counts unresolved findings wrong at the bottom and right at the top', () => {
 	const bounds = precisionBounds({ planted: 4, additional: 1, false: 3, unresolved: 2, duplicate: 9 });
 
-	expect(bounds).toEqual({ lower: 0.5, upper: 0.7, unresolved: 2 });
-	expect(precisionBounds({ planted: 0, additional: 0, false: 0, unresolved: 0, duplicate: 2 })).toBeNull();
+	expect(bounds).toEqual({ lower: 5 / 19, upper: 7 / 19, unresolved: 2, published: 19 });
+	expect(precisionBounds({ planted: 0, additional: 0, false: 0, unresolved: 0, duplicate: 0 })).toBeNull();
 });
 
 test('findings are queued once as unresolved with enough context to decide them', () => {
@@ -66,7 +66,7 @@ test('findings are queued once as unresolved with enough context to decide them'
 
 	expect(queueUnresolved(adjudications, findings, labeled)).toBe(true);
 	expect(adjudications['ky-1:fp-a']).toMatchObject({ label: 'unresolved', file: 'src/a.ts', line: 3 });
-	expect(adjudications['ky-1:fp-b']!.label).toBe('false');
+	expect(adjudications['ky-1:fp-b']).toMatchObject({ label: 'false' });
 	expect(queueUnresolved(adjudications, findings, labeled)).toBe(false);
 });
 
@@ -130,6 +130,20 @@ test('a malformed adjudication file is an error, not an empty set', () => {
 	expect(readAdjudications(adjudicationPath(dir))).toEqual({});
 
 	writeFileSync(adjudicationPath(dir), JSON.stringify({ 'ky-1:x': { label: 'maybe', file: 'f' } }));
+
+	expect(() => readAdjudications(adjudicationPath(dir))).toThrow();
+});
+
+test('an adjudication file holds finding labels and match corrections side by side, and a correction needs a reason', () => {
+	const dir = mkdtempSync(join(tmpdir(), 'adjudications-'));
+	const label = { label: 'false' as const, file: 'f', line: null, title: '', note: '' };
+	const correction = { reports: false, reason: 'it describes a slow render, not the wrong item' };
+
+	writeFileSync(adjudicationPath(dir), JSON.stringify({ 'ky-1:x': label, 'match:ky-1:d1:abc': correction }));
+
+	expect(readAdjudications(adjudicationPath(dir))).toEqual({ 'ky-1:x': label, 'match:ky-1:d1:abc': correction });
+
+	writeFileSync(adjudicationPath(dir), JSON.stringify({ 'match:ky-1:d1:abc': { reports: true, reason: '' } }));
 
 	expect(() => readAdjudications(adjudicationPath(dir))).toThrow();
 });
