@@ -274,11 +274,12 @@ function categoryRepair(candidate: CandidateFinding, raw: ReviewerFinding, scope
 }
 
 /**
- * The anchor correction for a candidate stopped at location validation. A
- * line the candidate's fix edits becomes its anchor. A changed line it only
- * cites, or that holds a symbol it quotes, does not: the claim may be false
- * there, so a finding on an unchanged line keeps its line and is linked to the
- * changed one; a finding without a line is moved onto it.
+ * The anchor correction for a candidate stopped at location validation. The
+ * claim may be false on any other line, so a finding on an unchanged line is
+ * never moved: it keeps its line and is linked to the changed line it cites or
+ * whose symbol it quotes. When its fix edits an added line, that line ranks
+ * first, and since the fix's text may also sit on the unchanged line, the line
+ * is left open for the model step. Only a finding without a line is moved.
  */
 function anchorRepair(candidate: CandidateFinding, inventory: ReviewInventory): RepairPlan {
 	if (!LINE_REASONS.has(candidate.dropReason ?? '')) {
@@ -293,8 +294,15 @@ function anchorRepair(candidate: CandidateFinding, inventory: ReviewInventory): 
 
 	if ('miss' in choice) return { changes: [], open: [{ need: 'line', reason: choice.reason }] };
 
+	if (choice.tier === 'patch-target' && candidate.line) {
+		return {
+			changes: [],
+			open: [{ need: 'line', reason: `the fix edits line ${choice.line}, which is not the reported line` }]
+		};
+	}
+
 	const terms = choice.terms.length ? ` holding ${choice.terms.join(', ')}` : '';
-	const kind = choice.tier !== 'patch-target' && candidate.line ? 'related' : 'anchor';
+	const kind = candidate.line ? 'related' : 'anchor';
 
 	return {
 		changes: [{ kind, file: candidate.file, line: choice.line, basis: `${choice.tier}${terms}: ${choice.text}` }],

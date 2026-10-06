@@ -57,19 +57,35 @@ test('a finding without a line moves onto the changed line its path cites', () =
 	]);
 });
 
-test('the line the candidate’s fix edits becomes its anchor, and keeps the old place as a related location', () => {
+test('a reported line is never moved to the line its fix edits; the model step decides', () => {
 	const ctx = repairContext();
 	const fix = [{ file: 'src/q.ts', find: 'if (!next) return;', replace: 'if (!next) {\n\tsave(queue);\n\treturn;\n}' }];
 	const candidate = candidateOf(reported({ fix }), 'correctness', ctx);
+	const before = structuredClone(candidate);
+
+	expect(planRepair(candidate, scopeOf(ctx))).toEqual({
+		changes: [],
+		open: [{ need: 'line', reason: 'the fix edits line 12, which is not the reported line' }]
+	});
+
+	expect(candidate).toEqual(before);
+});
+
+test('a finding without a line moves onto the line its fix edits, and passes there', () => {
+	const ctx = repairContext();
+	const fix = [{ file: 'src/q.ts', find: 'if (!next) return;', replace: 'if (!next) {\n\tsave(queue);\n\treturn;\n}' }];
+	const candidate = candidateOf(reported({ line: null, fix }), 'correctness', ctx);
 	const plan = planRepair(candidate, scopeOf(ctx));
 
-	expect(plan.changes).toEqual([
-		{ kind: 'anchor', file: 'src/q.ts', line: 12, basis: 'patch-target: if (!next) return;' }
-	]);
+	expect(candidate.dropReason).toBe('file-level finding on a non-deleted file needs a line');
+
+	expect(plan).toEqual({
+		changes: [{ kind: 'anchor', file: 'src/q.ts', line: 12, basis: 'patch-target: if (!next) return;' }],
+		open: []
+	});
 
 	expect(applyRepair(candidate, plan.changes, 'deterministic', ctx).result).toBe('revalidated');
 	expect(candidate).toMatchObject({ valid: true, line: 12 });
-	expect(candidate.relatedLocations).toContainEqual(expect.objectContaining({ file: 'src/q.ts', line: 30 }));
 });
 
 test('a chosen line that validation would snap to another quoted line makes the repair unsupported', () => {
