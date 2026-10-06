@@ -78,9 +78,18 @@ export async function detectorStage(run: ReviewRun): Promise<void> {
  * The type check and lint diagnostics, once the baseline checks are in. They
  * are reported before anything else awaits, so the caller can decide between
  * running the stage and closing the review without the two interleaving. The
- * type hints follow, and are dropped when the review closed meanwhile.
+ * type hints follow, and are dropped when the review closed meanwhile. Only
+ * the matrix waits for the detectors, so with the test-strength work off this
+ * stage never depends on them. A detectors promise that rejects is handled
+ * here, so it can neither go unhandled nor fail this stage; it skips the
+ * matrix, and whoever else awaits the detectors still sees the rejection.
  */
 export async function diagnosticStage(run: ReviewRun, closed: () => boolean, detectors: Promise<void>): Promise<void> {
+	const settled = detectors.then(
+		() => true,
+		() => false
+	);
+
 	if (run.controller.signal.aborted) return;
 
 	try {
@@ -99,9 +108,9 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean, det
 		run.events?.onLog?.(`Type hints skipped: ${errorText(err)}`);
 	}
 
-	await detectors;
+	if (!testStrengthOn()) return;
 
-	if (!testStrengthOn() || closed() || run.controller.signal.aborted) return;
+	if (!(await settled) || closed() || run.controller.signal.aborted) return;
 
 	run.task(MATRIX_TASK.id, MATRIX_TASK.label, 'running', 'Running the changed tests against mutants', {
 		kind: 'checks'
