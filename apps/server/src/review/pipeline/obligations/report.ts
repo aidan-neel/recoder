@@ -27,7 +27,7 @@ export function obligationReport(state: ObligationState, candidates: CandidateFi
 			verified
 		},
 		cap: state.cap,
-		timeBoxMs: state.timeBoxMs,
+		maxTurns: state.maxTurns,
 		obligations: derived,
 		answers
 	};

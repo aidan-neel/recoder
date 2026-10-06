@@ -139,7 +139,13 @@ export function restoreEnvAfterEach(keys: string[]): void {
  * obligation settings are restored afterwards.
  */
 export function isolateEachTest(): void {
-	restoreEnvAfterEach(['RECODER_OBLIGATIONS', 'RECODER_OBLIGATION_CAP', 'RECODER_EXEC', 'RECODER_DATA_DIR']);
+	restoreEnvAfterEach([
+		'RECODER_OBLIGATIONS',
+		'RECODER_OBLIGATION_CAP',
+		'RECODER_OBLIGATION_TURNS',
+		'RECODER_EXEC',
+		'RECODER_DATA_DIR'
+	]);
 
 	beforeEach(() => {
 		process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-obligations-'));

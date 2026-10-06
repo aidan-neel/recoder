@@ -56,11 +56,13 @@ export interface ObligationAnswer {
 	/** Why the investigator gave this result, or why none was reached. */
 	reason: string;
 	evidenceIds: string[];
+	/** Model calls it made: its turns, plus any repair of a malformed reply. */
+	turns: number;
 	elapsedMs: number;
 	/** Output tokens the investigation's model calls reported; null when no call reported usage. */
 	tokens: number | null;
-	/** The time box the investigation ran under. */
-	timeBoxMs: number;
+	/** The model turns the investigation was given. */
+	maxTurns: number;
 	/** False when the cap, the budget or the deadline kept it from starting. */
 	launched: boolean;
 	/** The candidate a confirmed answer published. */
@@ -87,7 +89,8 @@ export interface ObligationCounts {
 export interface ObligationReport {
 	counts: ObligationCounts;
 	cap: number;
-	timeBoxMs: number;
+	/** The model turns each investigation was given. */
+	maxTurns: number;
 	obligations: Obligation[];
 	answers: ObligationAnswer[];
 }

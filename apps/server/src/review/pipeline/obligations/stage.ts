@@ -3,7 +3,7 @@ import { unitRecord } from '../units.js';
 import { finishedIds, poolContext, publishUnits, saveCheckpoint, type ReviewRun } from '../harness/context.js';
 import { runUnitPool } from '../harness/pool.js';
 import { deriveObligations, selectUnderCap } from './derive.js';
-import { blankAnswer, investigate, OBLIGATION_TURNS } from './investigate.js';
+import { blankAnswer, investigate } from './investigate.js';
 import { obligationUnit } from './prompts.js';
 
 const TASK_ID = 'obligations';
@@ -85,11 +85,11 @@ export async function runObligations(run: ReviewRun): Promise<void> {
 	if (!pending.length) return;
 
 	state.answers = state.answers.filter((answer) => !waiting.has(answer.obligationId));
-	run.budget.limit += pending.length * OBLIGATION_TURNS;
+	run.budget.limit += pending.length * state.maxTurns;
 
 	const ctx = {
 		...poolContext(run),
-		timeBoxMs: state.timeBoxMs,
+		maxTurns: state.maxTurns,
 		obligationOf: (id: string) => state.derived!.find((obligation) => obligation.id === id)!,
 		workspace: run.workspace,
 		mergeBaseSha: run.input.revision?.mergeBaseSha || null,
@@ -106,9 +106,10 @@ export async function runObligations(run: ReviewRun): Promise<void> {
 		state.answers.push({
 			obligationId: unit.id,
 			...blankAnswer('unresolved', 'Not launched: budget or time reserved for consolidation'),
+			turns: 0,
 			elapsedMs: 0,
 			tokens: null,
-			timeBoxMs: state.timeBoxMs,
+			maxTurns: state.maxTurns,
 			launched: false
 		});
 	}

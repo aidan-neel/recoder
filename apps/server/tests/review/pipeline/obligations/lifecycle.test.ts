@@ -3,42 +3,32 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../../src/review/pipeline/harness';
-import { ReviewControl, runWithReviewControl } from '../../../../src/review/session/review-control';
-import { restoreAfterEach, useTestModel } from '../harness-fixtures';
+import { modelReply, restoreAfterEach, useTestModel } from '../harness-fixtures';
 import { ANSWER, investigatorReply, isolateEachTest, riskyReview, stall, stubInvestigations } from './fixtures';
 
 restoreAfterEach();
 isolateEachTest();
 
-/** A review clock that can be pushed forward, so a time box runs out without waiting for it. */
-class SkewedClock extends ReviewControl {
-	skew = 0;
-
-	override pausedMs(): number {
-		return super.pausedMs() - this.skew;
-	}
-}
-
 const newRepo = () => riskyReview(mkdtempSync(join(tmpdir(), 'obligations-repo-')));
 
-test('an investigation that outlives its time box is recorded as unresolved and the review completes', async () => {
+/** An investigator that only ever asks to read more. */
+const keepsReading = () => modelReply({ message: 'Reading.', actions: [{ action: 'readDiff', path: 'src/page.ts' }] });
+
+test('an investigation that runs out of turns is done and unresolved, and the review completes', async () => {
 	useTestModel();
 	process.env.RECODER_OBLIGATIONS = '1';
 	process.env.RECODER_OBLIGATION_CAP = '1';
+	process.env.RECODER_OBLIGATION_TURNS = '4';
 
-	const control = new SkewedClock();
+	const prompts: string[] = [];
 
 	stubInvestigations([], (_id, init) => {
-		control.skew = 46_000;
+		prompts.push(JSON.parse(init?.body as string).messages.at(-1).content);
 
-		return stall(init);
+		return keepsReading();
 	});
 
-	const input = await newRepo();
-
-	const result = await runWithReviewControl(control, () =>
-		runAdaptiveReview({ ...input, signal: control.abort.signal })
-	);
+	const result = await runAdaptiveReview(await newRepo());
 
 	expect(result.outcome).toBe('complete');
 
@@ -47,12 +37,14 @@ test('an investigation that outlives its time box is recorded as unresolved and 
 	expect(answer).toMatchObject({
 		result: 'unresolved',
 		launched: true,
-		timeBoxMs: 45_000,
+		turns: 4,
+		maxTurns: 4,
 		attemptedCounterexample: null
 	});
 
-	expect(answer.reason).toContain('45 s time box');
-	expect(answer.elapsedMs).toBeGreaterThanOrEqual(45_000);
+	expect(answer.reason).toStartWith('No answer within 4 turns');
+	expect(prompts.map((prompt) => prompt.startsWith('This is your final turn'))).toEqual([false, false, true, true]);
+	expect(result.assignments.find((record) => record.role === 'obligation')?.status).toBe('done');
 	expect(result.obligations!.counts).toMatchObject({ launched: 1, unresolved: 1 });
 	expect(result.summary).toContain('1 unresolved');
 });

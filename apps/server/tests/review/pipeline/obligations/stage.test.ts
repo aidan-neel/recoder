@@ -98,8 +98,9 @@ test('each obligation is investigated once, and its fixed answer is saved with t
 		result: 'disproved',
 		reason: ANSWER.reason,
 		evidenceIds: [],
+		turns: 1,
 		tokens: 42,
-		timeBoxMs: 45_000,
+		maxTurns: 6,
 		launched: true
 	});
 

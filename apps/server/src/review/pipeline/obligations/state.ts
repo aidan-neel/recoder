@@ -1,6 +1,6 @@
 import type { Obligation, ObligationAnswer } from '@recoder/shared';
 import type { ReviewUnit } from '../units.js';
-import { obligationCap, obligationTimeBoxMs } from './config.js';
+import { obligationCap, obligationTurns } from './config.js';
 
 /** A review's obligations as they stand; saved in its checkpoint so a resume reruns only unanswered ones. */
 export interface ObligationState {
@@ -12,12 +12,13 @@ export interface ObligationState {
 	units: ReviewUnit[];
 	answers: ObligationAnswer[];
 	cap: number;
-	timeBoxMs: number;
+	/** Model turns each investigation gets. */
+	maxTurns: number;
 }
 
-/** A copy of a saved state, or a fresh one under the current cap and time box. */
+/** A copy of a saved state, or a fresh one under the current cap and turns. */
 export function restoreObligationState(saved: ObligationState | undefined): ObligationState {
 	return saved
 		? structuredClone(saved)
-		: { derived: null, skipped: null, units: [], answers: [], cap: obligationCap(), timeBoxMs: obligationTimeBoxMs() };
+		: { derived: null, skipped: null, units: [], answers: [], cap: obligationCap(), maxTurns: obligationTurns() };
 }

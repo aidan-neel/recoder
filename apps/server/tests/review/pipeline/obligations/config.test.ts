@@ -1,8 +1,8 @@
 import { expect, test } from 'bun:test';
-import { obligationCap, obligationTimeBoxMs, obligationsOn } from '../../../../src/review/pipeline/obligations/config';
+import { obligationCap, obligationTurns, obligationsOn } from '../../../../src/review/pipeline/obligations/config';
 import { restoreEnvAfterEach } from './fixtures';
 
-const ENV = ['RECODER_OBLIGATIONS', 'RECODER_OBLIGATION_CAP', 'RECODER_OBLIGATION_TIMEBOX_MS'] as const;
+const ENV = ['RECODER_OBLIGATIONS', 'RECODER_OBLIGATION_CAP', 'RECODER_OBLIGATION_TURNS'] as const;
 
 restoreEnvAfterEach([...ENV]);
 
@@ -30,10 +30,10 @@ test('the cap defaults to 6 and takes any whole number from 0', () => {
 	).toEqual([6, 6, 6, 6, 6, 0, 3]);
 });
 
-test('the time box defaults to 45 seconds and is held between 30 and 60', () => {
+test('an investigation gets 6 turns by default, any whole number held between 3 and 12', () => {
 	expect(
-		[undefined, 'soon', '10000', '30000', '50000', '90000'].map((value) =>
-			read('RECODER_OBLIGATION_TIMEBOX_MS', value, obligationTimeBoxMs)
+		[undefined, 'few', '4.5', '1', '3', '8', '20'].map((value) =>
+			read('RECODER_OBLIGATION_TURNS', value, obligationTurns)
 		)
-	).toEqual([45_000, 45_000, 30_000, 30_000, 50_000, 60_000]);
+	).toEqual([6, 6, 6, 3, 3, 8, 12]);
 });
