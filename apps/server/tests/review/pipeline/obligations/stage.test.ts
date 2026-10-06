@@ -125,6 +125,39 @@ test('each obligation is investigated once, and its fixed answer is saved with t
 	);
 });
 
+test('each investigation records what its prompt held, as a lens unit does, so the context report counts it', async () => {
+	useTestModel();
+	process.env.RECODER_OBLIGATIONS = '1';
+
+	const { result, saved } = await review();
+	const context = result.context!;
+	const investigators = context.reviewers.filter((reviewer) => reviewer.role === 'obligation');
+
+	expect(investigators.map((reviewer) => [reviewer.assignmentId, reviewer.unit])).toEqual(
+		result.obligations!.answers.map((answer) => [answer.obligationId, answer.obligationId])
+	);
+
+	expect(investigators.every((reviewer) => reviewer.lens === undefined)).toBe(true);
+
+	expect(context.units['obligation-1']!.supplied).toContainEqual(
+		expect.objectContaining({ kind: 'diff', path: 'src/page.ts' })
+	);
+
+	expect(Object.keys(saved!.received!.prompts).filter(isObligation)).toHaveLength(DERIVED);
+
+	const patchReads = saved!.received!.prompts['obligation-1']!.patchReads;
+
+	expect(patchReads).toBeGreaterThan(0);
+	expect(saved!.received!.byAssignment['obligation-1']).toHaveLength(patchReads);
+
+	delete process.env.RECODER_OBLIGATIONS;
+
+	const off = await review();
+
+	expect(off.result.context!.reviewers.filter((reviewer) => reviewer.role === 'obligation')).toEqual([]);
+	expect(Object.keys(off.saved!.received!.prompts).filter(isObligation)).toEqual([]);
+});
+
 test('an investigator cannot spawn subagents: asking for one adds no model call', async () => {
 	useTestModel();
 	process.env.RECODER_OBLIGATIONS = '1';
@@ -167,6 +200,7 @@ test('a confirmed counterexample becomes an ordinary candidate that the verifier
 	expect(report.counts).toMatchObject({ confirmed: 1, disproved: DERIVED - 1, verified: 1 });
 	expect(result.findings.map((item) => [item.file, item.title])).toEqual([['src/page.ts', defect.title]]);
 	expect(result.summary).toContain('1 confirmed, 3 disproved');
+	expect(result.context!.findings).toEqual([expect.objectContaining({ members: 1 })]);
 });
 
 test('the cap limits how many obligations are investigated and counts the rest as over the cap', async () => {
