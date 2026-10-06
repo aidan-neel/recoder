@@ -27,7 +27,7 @@ import {
 	reviewProgress,
 	settlePipelineStreams
 } from '../store';
-import { emitReviewEvent, reportReviewTask, trackReviewTask } from '../review/session/events';
+import { emitReviewEvent, reportReviewTask, settleReviewTasks, trackReviewTask } from '../review/session/events';
 import { fetchPull, PULL_VIEW_COMMANDS } from '../forge/pull-preview';
 import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
 import type { GatheredContext } from '../review/pipeline/intent/types';
@@ -340,6 +340,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			kind: 'other'
 		});
 
+		settleReviewTasks(reviewId, result.outcome === 'complete' ? null : result.summary);
+
 		emitReviewEvent(reviewId, {
 			type: result.outcome === 'complete' ? 'done' : 'error',
 			message: result.summary,
@@ -398,7 +400,7 @@ function contextWithin(
 	return gatherChangeContext(repo, prNumber, provider, AbortSignal.any([signal, AbortSignal.timeout(30_000)]));
 }
 
-/** Record a failed run. A review deleted mid-run (its session closed) has nothing left to update. */
+/** Record a failed run and close its open work. A review deleted mid-run (its session closed) has nothing left to update. */
 function markFailed(reviewId: string, message: string, failure: ModelBlockedError['failure'] | undefined): void {
 	try {
 		const snapshot = reviewProgress.get(reviewId);
@@ -410,6 +412,7 @@ function markFailed(reviewId: string, message: string, failure: ModelBlockedErro
 				assignments: settleAssignments(snapshot.assignments ?? [], message),
 				...(failure ? { failure } : {})
 			});
+		settleReviewTasks(reviewId, message);
 		touch(reviewId, { status: 'failed', summary: message });
 	} catch {}
 }
