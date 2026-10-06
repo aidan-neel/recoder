@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { createRun } from '../../../../src/review/pipeline/harness/context';
 import { briefBlock } from '../../../../src/review/pipeline/intent/brief';
 import { distillIntent } from '../../../../src/review/pipeline/intent/distill';
+import { intentBlock } from '../../../../src/review/pipeline/intent/format';
 import type { IntentSource } from '../../../../src/review/pipeline/intent/types';
 import { partitionUnits } from '../../../../src/review/pipeline/units';
 import { reviewNow } from '../../../../src/review/session/review-control';
@@ -181,6 +182,8 @@ test('a 30,000-character first file does not hide the two units after it', async
 
 	expect(intent?.observedChanges.map((claim) => claim.file)).toEqual(['a/big.ts', 'b/x.ts', 'c/y.ts']);
 	expect(intent?.complete).toBe(false);
+	expect(briefBlock(intent, [{ path: 'a/big.ts', hunkIds: [] }], false)).toContain('The brief read a clipped diff');
+	expect(briefBlock(intent, [{ path: 'b/x.ts', hunkIds: [] }], false)).not.toContain('clipped');
 });
 
 test('a placeholder answer is asked again once, then left out of the brief and the cache', async () => {
@@ -239,6 +242,13 @@ test('a unit whose model call fails is recorded as omitted with the reason, and 
 	expect(intent?.summary).toBe(contextReply.summary);
 	expect(intent?.observedChanges.map((claim) => claim.file)).toEqual(['src/a.ts']);
 	expect(intent?.complete).toBe(false);
+
+	expect(briefBlock(intent, [{ path: 'tests/b.ts', hunkIds: [] }], true)).toBe(
+		'The brief did not read this unit: the model call failed.'
+	);
+
+	expect(briefBlock(intent, [{ path: 'src/a.ts', hunkIds: [] }], true)).not.toContain('did not read');
+	expect(intentBlock(intent)).toContain('Brief incomplete (1 of 2 units read in full)');
 });
 
 /** Answers like `perFile` after `ms`, counting the calls in flight at once. */

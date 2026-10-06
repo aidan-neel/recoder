@@ -2,7 +2,7 @@ import { symbolAt, unitContext } from '../change-model/lookup.js';
 import type { ChangeModel } from '../change-model/types.js';
 import type { ReviewInventory } from '../inventory.js';
 import type { ReviewUnit, UnitScope } from '../units.js';
-import type { ChangeIntent, CodeClaim } from './types.js';
+import type { BriefOmission, ChangeIntent, CodeClaim } from './types.js';
 
 /** The diff one brief call reads at most; a small model has to hold all of it at once. */
 const MAX_DIFF_CHARS = 24_000;
@@ -178,11 +178,34 @@ function claimLine(claim: CodeClaim): string {
 	return `${claim.id} ${claim.file}:${claim.line}${at} ${claim.text}`;
 }
 
+/** Why the brief left a unit out, in words a reviewer reads. */
+const OMITTED: Record<BriefOmission, string> = {
+	size: 'its diff did not fit one call',
+	time: 'the review ran out of time',
+	budget: 'the model-call budget was spent',
+	model: 'the model call failed'
+};
+
+/** A note for each unit around the scope that the brief did not read whole, so its silence is never taken for "nothing to say". */
+function unreadNotes(intent: ChangeIntent, paths: Set<string>): string[] {
+	const notes = (intent.units ?? [])
+		.filter((unit) => unit.paths.some((path) => paths.has(path)))
+		.flatMap((unit) => {
+			if (unit.status === 'omitted') return [`The brief did not read this unit: ${OMITTED[unit.reason ?? 'model']}.`];
+			if (unit.status === 'partial') return [`The brief read a clipped diff of this unit (${unit.detail}).`];
+
+			return [];
+		});
+
+	return [...new Set(notes)];
+}
+
 /**
  * The part of the brief about one unit's files, for a reviewer: what the code
  * now does differently and, when `questions` is set, what to settle. It is a
- * model's reading, so it is headed as one; the verifier never sees it. Empty
- * when the brief says nothing about the scope.
+ * model's reading, so it is headed as one; the verifier never sees it. A unit
+ * the brief left out or clipped says so. Empty when the brief read the scope
+ * whole and says nothing about it.
  */
 export function briefBlock(intent: ChangeIntent | null, scope: UnitScope, questions: boolean): string {
 	if (!intent) return '';
@@ -191,11 +214,13 @@ export function briefBlock(intent: ChangeIntent | null, scope: UnitScope, questi
 	const inScope = (claims: CodeClaim[]) => claims.filter((claim) => paths.has(claim.file));
 	const observed = inScope(intent.observedChanges);
 	const open = questions ? inScope(intent.openQuestions) : [];
+	const notes = unreadNotes(intent, paths);
 
-	if (!observed.length && !open.length) return '';
+	if (!observed.length && !open.length) return notes.join('\n');
 
 	const lines = [
-		"Review brief for this unit (another model's reading of the diff, not established fact; confirm against the code before you rely on it):"
+		"Review brief for this unit (another model's reading of the diff, not established fact; confirm against the code before you rely on it):",
+		...notes
 	];
 
 	if (observed.length) lines.push('What changed:', ...observed.map(claimLine));

@@ -33,8 +33,10 @@ function describe(intent: ChangeIntent | null, sources: number): string {
 	].flat().length;
 
 	const all = intent.units ?? [];
-	const read = all.filter((unit) => unit.status !== 'omitted').length;
-	const units = all.length ? `, ${read} of ${all.length} units briefed` : '';
+	const count = (status: string) => all.filter((unit) => unit.status === status).length;
+	const partial = count('partial') ? `, ${count('partial')} clipped` : '';
+	const omitted = count('omitted') ? `, ${count('omitted')} left out` : '';
+	const units = all.length ? `, ${count('included')} of ${all.length} units briefed${partial}${omitted}` : '';
 
 	return `${claims} claim${claims === 1 ? '' : 's'} from ${sources} source${sources === 1 ? '' : 's'}${units}`;
 }
