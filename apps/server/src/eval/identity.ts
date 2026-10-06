@@ -71,7 +71,10 @@ export interface RunIdentity {
 	/** Verifiers run on the specialist model; there is no separate verifier setting. Reviewer calls send no seed. */
 	models: { orchestrator: StageModel; specialist: StageModel };
 	judge: { model: string; provider: string; effort: string; version: number; seed: number };
-	/** Environment switches as the server sees them, `unset` when absent. */
+	/**
+	 * Every `RECODER_*` variable the server runs with, but for keys, endpoints,
+	 * paths and the sandbox's sizing; a switch that is not set is absent.
+	 */
 	flags: Record<string, string> | Unknown;
 	limits: {
 		/** The reviewer settings the server reports. */
@@ -89,6 +92,8 @@ export interface RunIdentity {
 		arch: string;
 		cpus: number | Unknown;
 		sandbox: Record<string, number> | Unknown;
+		/** The `RECODER_SANDBOX_*` sizing variables that are set. */
+		sandboxFlags: Record<string, string> | Unknown;
 		serverCommit: string;
 		/** Local inference only and reported by no provider yet, so recorded and never compared. */
 		inference: { weightRevision: string; quantization: string };

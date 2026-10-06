@@ -9,22 +9,42 @@ import { headCommit } from './harness-tree';
 import { UNKNOWN, type ServerCache } from './identity';
 import { fileVersion, sourceVersion } from './source-hash';
 
+/** Variables that place the server's files or reach its model, and never change what a review does. */
+const NOT_FLAGS = new Set([
+	'RECODER_DATA_DIR',
+	'RECODER_WORKDIR',
+	'RECODER_OPENCODE_BIN',
+	'RECODER_REVIEW_API_KEY',
+	'RECODER_REVIEW_BASE_URL'
+]);
+
+/** A name that holds a key, an endpoint or a host path, by its suffix; never recorded. */
+const HIDDEN = /_(KEY|TOKEN|SECRET|PASSWORD|URL|BIN|DIR|PATH)$/;
+
+/** The sandbox's sizing follows the host's capacity, so it is recorded with the host and never compared. */
+const HOST_FLAGS = new Set([
+	'RECODER_SANDBOX_PREP',
+	'RECODER_SANDBOX_RUNS',
+	'RECODER_SANDBOX_CPUS',
+	'RECODER_SANDBOX_MIN_FREE_MB'
+]);
+
 /**
- * The environment switches that change what a review does. Only these are
- * read, never every `RECODER_*` variable, so no key and no host path is
- * recorded. `RECODER_OBLIGATIONS` is listed before any code reads it.
+ * Every `RECODER_*` variable that is set, so a switch is recorded the day it
+ * is added, split into the flags that change what a review does and the
+ * host's sandbox sizing. Keys, endpoints and paths never are.
  */
-const FLAGS = [
-	'RECODER_TEST_STRENGTH',
-	'RECODER_OBLIGATIONS',
-	'RECODER_LLM_CONCURRENCY',
-	'RECODER_LLM_RETRIES',
-	'RECODER_LLM_IDLE_MS',
-	'RECODER_BASELINE_CACHE',
-	'RECODER_EXEC',
-	'RECODER_OVERLAY',
-	'RECODER_REVIEW_EXCLUDE'
-];
+export function capturedEnv(env: NodeJS.ProcessEnv): { flags: Record<string, string>; host: Record<string, string> } {
+	const names = Object.keys(env)
+		.filter((name) => name.startsWith('RECODER_') && env[name] !== undefined)
+		.filter((name) => !NOT_FLAGS.has(name) && !HIDDEN.test(name))
+		.sort();
+
+	const pick = (host: boolean) =>
+		Object.fromEntries(names.filter((name) => HOST_FLAGS.has(name) === host).map((name) => [name, env[name]!]));
+
+	return { flags: pick(false), host: pick(true) };
+}
 
 /** What the server runs with, as `GET /health/identity` answers. */
 export interface ServerIdentity {
@@ -38,6 +58,8 @@ export interface ServerIdentity {
 		arch: string;
 		cpus: number;
 		sandbox: Record<string, number>;
+		/** The `RECODER_SANDBOX_*` sizing variables that are set. */
+		sandboxFlags: Record<string, string>;
 	};
 	/** The content hash of the server's and shared sources and lockfiles, as the harness hashes its own. */
 	code: string;
@@ -79,9 +101,10 @@ async function opencodeVersion(): Promise<string> {
 
 export async function serverIdentity(): Promise<ServerIdentity> {
 	const cpus = availableParallelism();
+	const env = capturedEnv(process.env);
 
 	return {
-		flags: Object.fromEntries(FLAGS.map((name) => [name, process.env[name] ?? 'unset'])),
+		flags: env.flags,
 		policy: { ...REVIEW_POLICY },
 		caches,
 		tools: { bun: Bun.version, node: await nodeVersion(), opencode: await opencodeVersion() },
@@ -90,7 +113,8 @@ export async function serverIdentity(): Promise<ServerIdentity> {
 			os: `${process.platform} ${release()}`,
 			arch: process.arch,
 			cpus,
-			sandbox: { ...resolveLimits(cpus, process.env) }
+			sandbox: { ...resolveLimits(cpus, process.env) },
+			sandboxFlags: env.host
 		},
 		code: sourceVersion(),
 		commit: headCommit(import.meta.dir) ?? UNKNOWN

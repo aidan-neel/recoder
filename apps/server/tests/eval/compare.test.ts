@@ -21,7 +21,7 @@ const off = recordedIdentity(identityFields());
 
 const on = recordedIdentity({
 	...identityFields(),
-	flags: { RECODER_TEST_STRENGTH: '1', RECODER_OBLIGATIONS: 'unset' }
+	flags: { RECODER_LLM_RETRIES: '2', RECODER_TEST_STRENGTH: '1' }
 });
 
 test('two repeats of one experiment compare and merge, with report ids and stage counts side by side', () => {
@@ -47,13 +47,13 @@ test('an undeclared flag difference fails with the field named; declared, the co
 	const refused = compare(a, b);
 
 	expect(refused.code).toBe(1);
-	expect(refused.out).toContain('Incompatible:\n  flags.RECODER_TEST_STRENGTH: unset → 1');
+	expect(refused.out).toContain('Incompatible:\n  flags.RECODER_TEST_STRENGTH: (absent) → 1');
 	expect(refused.out).not.toContain('Planted defects by codebase');
 
 	const declared = compare(a, b, '--allow-diff', 'flags.RECODER_TEST_STRENGTH');
 
 	expect(declared.code).toBe(0);
-	expect(declared.out).toContain('Declared differences:\n  flags.RECODER_TEST_STRENGTH: unset → 1');
+	expect(declared.out).toContain('Declared differences:\n  flags.RECODER_TEST_STRENGTH: (absent) → 1');
 	expect(declared.out).toContain('Planted defects by codebase');
 });
 

@@ -41,7 +41,7 @@ const settings: ModelSettings = {
 };
 
 const server: ServerIdentity = {
-	flags: { RECODER_TEST_STRENGTH: 'unset', RECODER_OBLIGATIONS: 'unset' },
+	flags: { RECODER_LLM_RETRIES: '2' },
 	policy: { analysisDeadlineMs: 1_800_000 },
 	caches: { intent: 'source:1', 'rule-ledger': 'source:2', 'baseline-cache': 'source:3', 'review-checkpoint': 'v2' },
 	tools: { bun: '1.4.2', node: 'v24.0.0', opencode: 'not installed' },
@@ -50,7 +50,8 @@ const server: ServerIdentity = {
 		os: 'linux 6',
 		arch: 'x64',
 		cpus: 16,
-		sandbox: { cpus: 12, runSlots: 6, prepSlots: 2, minFreeMb: 1024 }
+		sandbox: { cpus: 12, runSlots: 6, prepSlots: 2, minFreeMb: 1024 },
+		sandboxFlags: { RECODER_SANDBOX_RUNS: '6' }
 	},
 	code: 'source:server',
 	commit: 'server-commit'

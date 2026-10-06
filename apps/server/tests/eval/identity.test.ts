@@ -54,7 +54,7 @@ test('a changed label file, flag or model changes the hash and is named', () => 
 	for (const other of [labels, flag, model]) expect(other.hash).not.toBe(base.hash);
 
 	expect(compareIdentity(base, labels)).toEqual([{ field: 'dataset.labels', a: 'labels-1', b: 'labels-2' }]);
-	expect(compareIdentity(base, flag)).toEqual([{ field: 'flags.RECODER_TEST_STRENGTH', a: 'unset', b: '1' }]);
+	expect(compareIdentity(base, flag)).toEqual([{ field: 'flags.RECODER_TEST_STRENGTH', a: '(absent)', b: '1' }]);
 	expect(compareIdentity(base, model)).toEqual([{ field: 'models.specialist.model', a: 'gpt-x', b: 'gpt-y' }]);
 });
 
@@ -92,13 +92,17 @@ test('an undeclared difference refuses with the field named; declared, it passes
 	const refused = checkCompatibility(off, on, 'resume', []);
 
 	expect(refused.compatible).toBe(false);
-	expect(compatibilityLines(refused)).toEqual(['Incompatible:', '  flags.RECODER_TEST_STRENGTH: unset → 1']);
+	expect(compatibilityLines(refused)).toEqual(['Incompatible:', '  flags.RECODER_TEST_STRENGTH: (absent) → 1']);
 
 	const declared = checkCompatibility(off, on, 'resume', ['flags.RECODER_TEST_STRENGTH']);
 
 	expect(declared.compatible).toBe(true);
-	expect(declared.declared).toEqual([{ field: 'flags.RECODER_TEST_STRENGTH', a: 'unset', b: '1' }]);
-	expect(compatibilityLines(declared)).toEqual(['Declared differences:', '  flags.RECODER_TEST_STRENGTH: unset → 1']);
+	expect(declared.declared).toEqual([{ field: 'flags.RECODER_TEST_STRENGTH', a: '(absent)', b: '1' }]);
+
+	expect(compatibilityLines(declared)).toEqual([
+		'Declared differences:',
+		'  flags.RECODER_TEST_STRENGTH: (absent) → 1'
+	]);
 });
 
 test('a replay expects new code, labels and adjudications, but a new reviewer model must be declared', () => {
@@ -202,7 +206,7 @@ test('shards of one experiment merge; a missing identity, a differing flag, a sp
 				fields.flags = { ...(fields.flags as Record<string, string>), RECODER_OBLIGATIONS: 'on' };
 			})
 		])
-	).toEqual(['B differs from A in flags.RECODER_OBLIGATIONS: unset → on']);
+	).toEqual(['B differs from A in flags.RECODER_OBLIGATIONS: (absent) → on']);
 
 	expect(mergeProblems([a, shard('B', 'pr-1@ccc', ['pr-1@ccc#1'])])).toEqual([
 		'one PR at two heads: pr-1@aaa vs pr-1@ccc'

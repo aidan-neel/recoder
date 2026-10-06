@@ -183,6 +183,7 @@ function serverParts(server: ServerIdentity | null): Pick<RunIdentity, 'flags' |
 				arch: UNKNOWN,
 				cpus: UNKNOWN,
 				sandbox: UNKNOWN,
+				sandboxFlags: UNKNOWN,
 				serverCommit: UNKNOWN,
 				inference: INFERENCE
 			},
