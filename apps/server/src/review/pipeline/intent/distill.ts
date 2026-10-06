@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { configForOrchestrator } from '../../../models/models.js';
+import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { mapLimit } from '../change-model/repo.js';
 import type { ReviewRun } from '../harness/context.js';
 import { partitionUnits } from '../units.js';
 import { askBrief } from './ask.js';
@@ -129,9 +131,9 @@ function unitsSummary(units: BriefUnit[]): string {
 /**
  * What the change is meant to do and what its code does. Each review unit
  * `partitionUnits` cuts is summarized from its own declarations and diff in
- * its own call, so a large file never hides the files after it; then one call
- * reads the gathered sources with those summaries for the summary and the
- * source-cited lists. Code claims come only from the unit calls. Every unit
+ * its own call, as many at once as reviewers run, so a large file never hides
+ * the files after it; then one call reads the gathered sources with those
+ * summaries for the summary and the source-cited lists. Code claims come only from the unit calls. Every unit
  * is recorded as included, partial or omitted with the reason, and a brief
  * missing any part says it is incomplete. Each call is cached on its input,
  * prompt and model, so a rerun of the same PR head makes no call. Null when
@@ -148,7 +150,7 @@ export async function distillIntent(
 	if (!distill && !units.length) return null;
 
 	const cfg = configForOrchestrator();
-	const briefs = await Promise.all(units.map((unit) => briefUnit(run, cfg, unit)));
+	const briefs = await mapLimit(units, REVIEW_POLICY.maxConcurrentAssignments, (unit) => briefUnit(run, cfg, unit));
 	const records = briefs.map((brief) => brief.record);
 
 	const context = distill

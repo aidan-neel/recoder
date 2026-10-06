@@ -8,6 +8,7 @@ import { distillIntent } from '../../../../src/review/pipeline/intent/distill';
 import type { IntentSource } from '../../../../src/review/pipeline/intent/types';
 import { partitionUnits } from '../../../../src/review/pipeline/units';
 import { reviewNow } from '../../../../src/review/session/review-control';
+import { REVIEW_POLICY } from '../../../../src/review/session/review-policy';
 import { getStoredSettings, setReviewOverrides } from '../../../../src/review/session/review-settings';
 import {
 	DIFF,
@@ -238,6 +239,55 @@ test('a unit whose model call fails is recorded as omitted with the reason, and 
 	expect(intent?.summary).toBe(contextReply.summary);
 	expect(intent?.observedChanges.map((claim) => claim.file)).toEqual(['src/a.ts']);
 	expect(intent?.complete).toBe(false);
+});
+
+/** Answers like `perFile` after `ms`, counting the calls in flight at once. */
+function slowStub(ms: number): { peak: () => number } {
+	let inFlight = 0;
+	let peak = 0;
+
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const files = unitFiles(init);
+
+		calls.push(files ? files.join(',') : 'context');
+		inFlight++;
+		peak = Math.max(peak, inFlight);
+		await new Promise((resolve) => setTimeout(resolve, ms));
+		inFlight--;
+
+		return modelReply(perFile(files));
+	}) as unknown as typeof fetch;
+
+	return { peak: () => peak };
+}
+
+const manyUnits = (count: number) => Array.from({ length: count }, (_, i) => addedFile(`d${i}/f.ts`, 200)).join('');
+
+test('unit calls run at most as many at once as reviewers do', async () => {
+	const { peak } = slowStub(20);
+	const intent = await distill(manyUnits(20));
+
+	expect(intent?.units).toHaveLength(20);
+	expect(intent?.units?.every((unit) => unit.status === 'included')).toBe(true);
+	expect(peak()).toBe(REVIEW_POLICY.maxConcurrentAssignments);
+});
+
+test('a unit call that found no model slot in time is made again and briefed', async () => {
+	const policy = REVIEW_POLICY as { perCallDeadlineMs: number };
+	const saved = policy.perCallDeadlineMs;
+
+	policy.perCallDeadlineMs = 500;
+	useTestModel(2);
+	slowStub(200);
+
+	try {
+		const intent = await distill(manyUnits(8));
+
+		expect(intent?.units?.map((unit) => unit.status)).toEqual(Array(8).fill('included'));
+		expect(calls.filter((call) => call !== 'context')).toHaveLength(8);
+	} finally {
+		policy.perCallDeadlineMs = saved;
+	}
 });
 
 test('past the review deadline every unit is recorded as omitted for time without a call', async () => {

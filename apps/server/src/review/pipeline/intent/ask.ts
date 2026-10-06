@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import { CapacityError } from '../../../models/llm.js';
 import type { ModelConfig } from '../../../models/models.js';
 import { readCache, writeCache } from '../../../util/json-cache.js';
 import { reviewNow } from '../../session/review-control.js';
@@ -9,6 +10,12 @@ import type { BriefOmission } from './types.js';
 /** Raised whenever a brief prompt or reply schema changes, so answers cached for an older one are never read. */
 const INTENT_VERSION = 3;
 const CACHE_NAMESPACE = 'intent';
+
+/** A brief call may take this fraction of the review's remaining time, so the brief never spends what the reviewers need. */
+const TIME_SHARE = 1 / 4;
+
+/** What a call that waited out its time for a model slot comes back with; the model never saw it. */
+const NO_SLOT = new CapacityError().message;
 
 const RETRY_NOTE =
 	'\n\nA previous reply to this was a placeholder: a "..." summary or nothing in any list. Answer from the input above.';
@@ -58,11 +65,19 @@ function cannotStart(run: ReviewRun): BriefAnswer<never> | null {
 	return null;
 }
 
+/** A call that found no model slot in time ran out of time, not into a model failure. */
 function omissionOf(error: string): BriefOmission {
-	if (/deadline|out of time/i.test(error)) return 'time';
+	if (error === NO_SLOT || /deadline|out of time/i.test(error)) return 'time';
 	if (/budget/i.test(error)) return 'budget';
 
 	return 'model';
+}
+
+/** This call's share of the time left before the review's deadline. */
+function timeLimit(run: ReviewRun): { finalTurnAfterMs: number; maxWallMs: number } {
+	const ms = Math.max(1, Math.floor((run.deadlineAt - reviewNow()) * TIME_SHARE));
+
+	return { finalTurnAfterMs: ms, maxWallMs: ms };
 }
 
 /** One model call; its error comes back as the reason, apart from an abort or a blocked model, which stop every call. */
@@ -80,6 +95,7 @@ async function callOnce<T>(
 			user,
 			maxTurns: 1,
 			deadlineAt: run.deadlineAt,
+			timeLimit: timeLimit(run),
 			parse: (raw) => {
 				const parsed = call.schema.safeParse(raw);
 
@@ -101,10 +117,30 @@ async function callOnce<T>(
 }
 
 /**
+ * One call, made again once when it found no model slot in time: the model
+ * never saw it, so a second wait behind the calls ahead of it can succeed.
+ */
+async function callWithSlot<T>(
+	run: ReviewRun,
+	cfg: ModelConfig,
+	call: BriefCall<T>,
+	user: string
+): Promise<BriefAnswer<T>> {
+	const answer = cannotStart(run) ?? (await callOnce(run, cfg, call, user));
+
+	if (!('omitted' in answer) || answer.detail !== NO_SLOT) return answer;
+
+	run.events?.onLog?.(`intent ${call.label} found no model slot in time; asking again`);
+
+	return cannotStart(run) ?? (await callOnce(run, cfg, call, user));
+}
+
+/**
  * Asks one part of the brief, reading the cache first. A placeholder is
- * asked for again once, while the review has time and calls left; a second
- * placeholder, an error, the deadline or the budget leaves the part
- * unanswered with the reason. Only a real answer is cached.
+ * asked for again once, and a call that found no model slot in time is made
+ * again once, while the review has time and calls left; a second placeholder,
+ * an error, the deadline or the budget leaves the part unanswered with the
+ * reason. Only a real answer is cached.
  */
 export async function askBrief<T>(run: ReviewRun, cfg: ModelConfig, call: BriefCall<T>): Promise<BriefAnswer<T>> {
 	const key = cacheKey(cfg, call);
@@ -113,7 +149,7 @@ export async function askBrief<T>(run: ReviewRun, cfg: ModelConfig, call: BriefC
 	if (cached !== null) return { value: cached };
 
 	for (const user of [call.user, call.user + RETRY_NOTE]) {
-		const answer = cannotStart(run) ?? (await callOnce(run, cfg, call, user));
+		const answer = await callWithSlot(run, cfg, call, user);
 
 		if (!('value' in answer)) return answer;
 
