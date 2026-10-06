@@ -126,3 +126,57 @@ test('the package a command runs in', () => {
 	expect(commandPackage('bun -e "1"', dirs)).toBe('.');
 	expect(commandPackage('bun -e "1"', ['apps/site'])).toBeNull();
 });
+
+test('a run that cannot find a module the diff deleted or moved failed on the change, not in setup', () => {
+	const moved = ['src/limits.ts', 'src/config/limits.ts'];
+
+	expect(
+		classifyRun(
+			'bun test src/queue.test.ts',
+			failed("error: Cannot find module './limits' from '/work/src/queue.ts'"),
+			null,
+			moved
+		)
+	).toBe('assertion-failed');
+
+	expect(
+		classifyRun(
+			'cd pkg && bunx vitest run',
+			failed('Error: Failed to resolve import "../limits.js" from "src/config/queue.ts". Does the file exist?'),
+			null,
+			['pkg/src/limits.ts']
+		)
+	).toBe('assertion-failed');
+
+	expect(
+		classifyRun(
+			'node src/main.mjs',
+			failed(
+				"Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/work/src/config/limits.js' imported from /work/src/main.mjs"
+			),
+			null,
+			moved
+		)
+	).toBe('assertion-failed');
+});
+
+test('a run that cannot find a module the diff never touched, or a package, stays setup-failed', () => {
+	const diff = ['src/limits.ts'];
+
+	expect(
+		classifyRun(
+			'bun test src/queue.test.ts',
+			failed("error: Cannot find module './generated/limits' from '/work/src/q.ts'"),
+			null,
+			diff
+		)
+	).toBe('setup-failed');
+
+	expect(classifyRun('bun test src/queue.test.ts', failed("error: Cannot find package 'limits'"), null, diff)).toBe(
+		'setup-failed'
+	);
+
+	expect(classifyRun('bun test src/queue.test.ts', failed("error: Cannot find module './limits'"), null)).toBe(
+		'setup-failed'
+	);
+});

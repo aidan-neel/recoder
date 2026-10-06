@@ -9,6 +9,7 @@ import { runBaselineChecks } from './baseline-run.js';
 import { installedTool, pickBaselineChecks } from './baseline-checks.js';
 import { extendDeadlines, type ReviewRun } from './context.js';
 import { describePrep, packagePrepEnabled, preparePackages, type PrepReport } from './package-prep.js';
+import { diffPaths } from './run-outcome.js';
 import type { BaselineResult, HarnessEvents, TaskFn } from './types.js';
 
 /** The dependency install, started early, and the time its commands spent waiting for a sandbox slot. */
@@ -244,6 +245,7 @@ async function prepareChanged(
 		preparePackages(workspace, {
 			changed,
 			manager,
+			diffPaths: diffPaths(run.inventory),
 			signal: run.controller.signal,
 			onStep: (step, result, outcome) => {
 				rows(step.command, result, outcome && `exit ${result?.exitCode} · ${outcome}`);

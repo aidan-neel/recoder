@@ -96,7 +96,7 @@ async function checkout(
 }
 
 function options(changed: string[], extra: Partial<PrepOptions> = {}): PrepOptions {
-	return { changed, manager: 'bun', signal: new AbortController().signal, ...extra };
+	return { changed, manager: 'bun', diffPaths: [], signal: new AbortController().signal, ...extra };
 }
 
 async function prepRuns(dir: string): Promise<number> {
@@ -273,11 +273,24 @@ test.skipIf(!available)(
 		if (verified === 'refuted') throw new Error('the head run should prove the finding');
 
 		const signal = new AbortController().signal;
-		const context = { evidence, workspace: ws, mergeBaseSha: baseSha, deadlineAt: () => Date.now() + 120_000, signal };
+
+		const context = {
+			evidence,
+			workspace: ws,
+			mergeBaseSha: baseSha,
+			deadlineAt: () => Date.now() + 120_000,
+			signal,
+			changes: () => ({ added: [], removed: [], symbols: [] })
+		};
+
 		const baselined = await recordBaseline(verified, context, 'verifier-1');
 
 		expect(baselined).toMatchObject({ outcome: 'reproduced', reason: verified.reason });
-		expect(baselined.evidence?.baseline).toEqual({ unavailable: 'the command could not run on the base commit' });
+
+		expect(baselined.evidence?.baseline).toMatchObject({
+			unavailable: 'the command could not run on the base commit',
+			result: 'environment'
+		});
 	}
 );
 
@@ -397,6 +410,7 @@ async function harnessOn(
 		controller: new AbortController(),
 		task: (id: string, _label: string, status: string) => tasks.push(`${id}:${status}`),
 		evidence: new EvidenceStore(null, buildInventory(''), 20_000),
+		inventory: buildInventory(''),
 		input: {},
 		deadlineAt: Date.now() + 600_000,
 		investigationDeadline: Date.now() + 600_000

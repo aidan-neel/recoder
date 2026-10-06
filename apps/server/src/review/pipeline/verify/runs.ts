@@ -9,7 +9,7 @@ const OBSERVED_CHARS = 600;
 const OBSERVED_LINES = 3;
 
 /** An output line that reports a failure, for runs whose reason quotes nothing. */
-const FAILURE_LINE = /\b(?:error|fail(?:ed|ure|s)?|assert\w*|expect\w*|received|exception|panic)\b|[✗✘]/i;
+export const FAILURE_LINE = /\b(?:error|fail(?:ed|ure|s)?|assert\w*|expect\w*|received|exception|panic)\b|[✗✘]/i;
 
 /** A `file:line` location, which verifiers are asked to name and which a run rarely prints. */
 const LOCATION = /^[\w./@-]+:\d+(?:-\d+)?$/;
@@ -50,9 +50,11 @@ const BROKEN_EDIT = /SyntaxError|Unexpected token/;
 /**
  * A failed run that never reached the code under test, so it settles nothing
  * either way: one recorded as setup-failed or unsupported execution, or one
- * whose output shows it. A syntax error counts only for a `mutation` run:
- * there it is the verifier's own edit, while a repro may fail on one as the
- * defect itself.
+ * with no recorded outcome whose output shows it. A recorded failed assertion
+ * is trusted over the output: its missing module can be a path the diff
+ * moved, which is the defect. A syntax error counts only for a `mutation`
+ * run: there it is the verifier's own edit, while a repro may fail on one as
+ * the defect itself.
  */
 export function brokeInSetup(run: EvidenceRecord, mutation = false): boolean {
 	if (!failed(run)) return false;
@@ -60,7 +62,7 @@ export function brokeInSetup(run: EvidenceRecord, mutation = false): boolean {
 
 	const output = runOutput(run);
 
-	return SETUP_FAILURE.test(output) || (mutation && BROKEN_EDIT.test(output));
+	return (run.outcome === undefined && SETUP_FAILURE.test(output)) || (mutation && BROKEN_EDIT.test(output));
 }
 
 /** A run that reached the code under test and exited nonzero there. */
