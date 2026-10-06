@@ -41,9 +41,9 @@ export async function gatherChangeContext(
 /** The pull requests a commit landed in, so history can cite why older code is shaped as it is. Empty on failure. */
 export async function prsForCommit(repo: Repo, provider: Provider, sha: string, signal: AbortSignal): Promise<PrRef[]> {
 	try {
-		if (provider === 'local') return await localPrsForCommit(repo.url, sha, signal);
-
 		const slug = parseSlug(repo.url);
+
+		if (provider === 'local') return await localPrsForCommit(repo.url, slug, sha, signal);
 
 		return provider === 'gitlab'
 			? await gitlabPrsForCommit(slug, sha, tokenEnv('gitlab', repo.url), signal)
