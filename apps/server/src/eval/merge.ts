@@ -3,8 +3,10 @@ import { basename, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { readReport } from './benchmark-report';
 import { mergeReports, type Missing } from './benchmark-merge';
+import { allowDiffFields } from './identity';
 
-const USAGE = 'Usage: bun run --filter @recoder/server eval:merge -- <out.json> <report.json>... [--partial]';
+const USAGE =
+	'Usage: bun run --filter @recoder/server eval:merge -- <out.json> <report.json>... [--partial] [--allow-diff field,field]';
 
 /** Every missing task, then each missing run of a task that ran in part. */
 function missingLines(missing: Missing): string[] {
@@ -28,20 +30,22 @@ function missingLines(missing: Missing): string[] {
 function main(): number {
 	const { values, positionals } = parseArgs({
 		args: Bun.argv.slice(2),
-		options: { partial: { type: 'boolean' } },
+		options: { partial: { type: 'boolean' }, 'allow-diff': { type: 'string' } },
 		allowPositionals: true,
 		strict: true
 	});
 
 	const [out, ...inputs] = positionals.map((path) => resolve(path));
+	const { fields: allow, error } = allowDiffFields(values['allow-diff']);
+	const problem = !out || !inputs.length ? "Pass the merged report's path and at least one report." : error;
 
-	if (!out || !inputs.length) {
-		console.error(`Pass the merged report's path and at least one report.\n${USAGE}`);
+	if (problem) {
+		console.error(`${problem}\n${USAGE}`);
 
 		return 1;
 	}
 
-	if (inputs.includes(out) || existsSync(out)) {
+	if (existsSync(out!)) {
 		console.error(`${out} exists; the merge writes a new file.\n${USAGE}`);
 
 		return 1;
@@ -49,7 +53,7 @@ function main(): number {
 
 	const { problems, missing, report } = mergeReports(
 		inputs.map((path) => ({ name: basename(path), report: readReport(path) })),
-		!!values.partial
+		{ partial: !!values.partial, allow }
 	);
 
 	if (problems.length) {
@@ -69,12 +73,13 @@ function main(): number {
 		return 1;
 	}
 
-	writeFileSync(out, `${JSON.stringify(report, null, '\t')}\n`);
+	writeFileSync(out!, `${JSON.stringify(report, null, '\t')}\n`);
 
 	console.log(
 		[
 			`Merged ${inputs.length} reports: ${report.prs.length} PRs, ${report.runIds?.length ?? 0} runs, identity ${report.identity?.hash.slice(0, 12)}`,
 			...missingLines(missing),
+			...report.merge.declared.map((diff) => `Declared: ${diff.report} ${diff.field}: ${diff.a} → ${diff.b}`),
 			...(report.summary.partial ? ['Partial: tasks are missing, so this is no complete score.'] : []),
 			report.merge.judging,
 			`Report: ${out}`

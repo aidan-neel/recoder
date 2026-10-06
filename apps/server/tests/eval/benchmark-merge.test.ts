@@ -7,6 +7,18 @@ import { repeatOf, shardOf, unsplitReport } from '../helpers/shards';
 const named = (reports: BenchmarkReport[]): MergeSource[] =>
 	reports.map((report) => ({ name: `${report.reportId}.json`, report }));
 
+const merge = (reports: BenchmarkReport[], partial = false) => mergeReports(named(reports), { partial, allow: [] });
+
+/** The merged report of `reports`, which must merge with no problem and hold exactly the prs of `unsplit`. */
+function mergedAs(unsplit: BenchmarkReport, reports: BenchmarkReport[]) {
+	const { problems, report } = merge(reports);
+
+	expect(problems).toEqual([]);
+	expect(JSON.stringify(report!.prs)).toBe(JSON.stringify(unsplit.prs));
+
+	return report!;
+}
+
 /** The report with one identity field changed and its hash and run stamps recomputed, as a run under that change records it. */
 function changedIdentity(report: BenchmarkReport, change: (identity: RunIdentity) => void): BenchmarkReport {
 	const { version: _version, hash: _hash, ...fields } = structuredClone(report.identity!);
@@ -28,10 +40,7 @@ test('shards of a report merge to its exact prs, whatever the shard count', () =
 
 	for (const count of [1, 2, 3, 5]) {
 		const shards = Array.from({ length: count }, (_, index) => shardOf(unsplit, index + 1, count));
-		const { problems, report } = mergeReports(named(shards.reverse()), false);
-
-		expect(problems).toEqual([]);
-		expect(JSON.stringify(report!.prs)).toBe(JSON.stringify(unsplit.prs));
+		const report = mergedAs(unsplit, shards.reverse());
 
 		expect(JSON.stringify(report!.summary)).toBe(
 			JSON.stringify({ ...unsplit.summary, partial: false, missingTasks: [], missingRuns: [] })
@@ -40,15 +49,15 @@ test('shards of a report merge to its exact prs, whatever the shard count', () =
 		expect(report!.identity!.tasks).toEqual(unsplit.identity!.tasks);
 		expect(report!.identity!.hash).toBe(unsplit.identity!.hash);
 		expect(report!.identity!.shard).toBeUndefined();
+		expect(report!.identity!.execution.mode).toBe('full');
 	}
 });
 
 test('repeats run with --repeat merge to the prs of one report with every run, agreement recomputed', () => {
 	const unsplit = unsplitReport(2);
-	const { problems, report } = mergeReports(named([repeatOf(unsplit, 2), repeatOf(unsplit, 1)]), false);
 
-	expect(problems).toEqual([]);
-	expect(JSON.stringify(report!.prs)).toBe(JSON.stringify(unsplit.prs));
+	const report = mergedAs(unsplit, [repeatOf(unsplit, 2), repeatOf(unsplit, 1)]);
+
 	expect(report!.runsPerPr).toBe(2);
 	expect(report!.identity!.execution.runsPerPr).toBe(2);
 });
@@ -57,7 +66,7 @@ test('the merged report keeps each shard host and timing and says judging happen
 	const unsplit = unsplitReport();
 	const pc = { ...shardOf(unsplit, 1, 2, 'pc'), finishedAt: '2026-10-06T01:00:00.000Z' };
 	const mac = { ...shardOf(unsplit, 2, 2, 'mac'), startedAt: '2026-10-06T00:05:00.000Z' };
-	const { report } = mergeReports(named([pc, mac]), false);
+	const { report } = merge([pc, mac]);
 
 	expect(report!.merge.judging).toContain('before the merge');
 
@@ -99,7 +108,7 @@ test('each incompatible identity field refuses the merge and is named', () => {
 	];
 
 	for (const [field, change] of changes) {
-		const { problems, report } = mergeReports(named([first, changedIdentity(second, change)]), false);
+		const { problems, report } = merge([first, changedIdentity(second, change)]);
 
 		expect(report).toBeNull();
 
@@ -112,7 +121,8 @@ test('each incompatible identity field refuses the merge and is named', () => {
 test('a task repeat two reports hold is refused, even under different report ids', () => {
 	const unsplit = unsplitReport(1);
 	const again = { ...shardOf(unsplit, 2, 2), reportId: 'shard-2-again' };
-	const { problems, report } = mergeReports(named([shardOf(unsplit, 1, 2), shardOf(unsplit, 2, 2), again]), false);
+
+	const { problems, report } = merge([shardOf(unsplit, 1, 2), shardOf(unsplit, 2, 2), again]);
 
 	expect(report).toBeNull();
 
@@ -120,26 +130,26 @@ test('a task repeat two reports hold is refused, even under different report ids
 		'task repeats held by more than one report (2): ky-3@ky-3-head#1, zod-1@zod-1-head#1; run each repeat with its own --repeat'
 	]);
 
-	const repeats = mergeReports(
-		named([repeatOf(unsplitReport(2), 1), { ...repeatOf(unsplitReport(2), 1), reportId: 'other' }]),
-		false
-	);
+	const repeats = merge([repeatOf(unsplitReport(2), 1), { ...repeatOf(unsplitReport(2), 1), reportId: 'other' }]);
 
-	expect(repeats.problems[0]).toStartWith('task repeats held by more than one report (5)');
+	expect(repeats.problems).toEqual([
+		'task repeats held by more than one report (5): hono-2@hono-2-head#1, hono-10@hono-10-head#1, ky-1@ky-1-head#1, …; run each repeat with its own --repeat'
+	]);
 });
 
 test('missing tasks refuse the merge unless --partial, which marks the report partial and lists them', () => {
 	const unsplit = unsplitReport(2);
 	const shards = [shardOf(unsplit, 1, 3), shardOf(unsplit, 3, 3)];
-	const refused = mergeReports(named(shards), false);
+	const refused = merge(shards);
 
 	expect(refused.problems).toEqual([]);
 	expect(refused.report).toBeNull();
 	expect(refused.missing.tasks).toEqual(shardOf(unsplit, 2, 3).identity!.shard!.tasks);
 
-	const partial = mergeReports(named(shards), true).report!;
+	const partial = merge(shards, true).report!;
 
 	expect(partial.summary.partial).toBe(true);
+	expect(partial.identity!.execution.mode).toBe('partial');
 	expect(partial.summary.missingTasks).toEqual(refused.missing.tasks);
 	expect(partial.summary.missingRuns).toEqual(refused.missing.tasks.flatMap((task) => [`${task}#1`, `${task}#2`]));
 	expect(partial.prs.map((pr) => pr.taskId)).not.toContain(refused.missing.tasks[0]);
@@ -151,8 +161,29 @@ test('a shard stopped partway lists the runs it did not finish as missing', () =
 
 	stopped.prs = stopped.prs.map((pr, index) => (index ? pr : { ...pr, runs: pr.runs.slice(0, 1) }));
 
-	const { missing, report } = mergeReports(named([shardOf(unsplit, 1, 2), stopped]), false);
+	const { missing, report } = merge([shardOf(unsplit, 1, 2), stopped]);
 
 	expect(report).toBeNull();
 	expect(missing).toEqual({ tasks: [], runs: [`${stopped.prs[0]!.taskId}#2`] });
+});
+
+test('a difference named with --allow-diff merges and is listed in the merged report; a name that is no field refuses', () => {
+	const unsplit = unsplitReport();
+	const mac = changedIdentity(shardOf(unsplit, 2, 2), (identity) => (identity.tools.node = 'v25.0.0'));
+	const sources = named([shardOf(unsplit, 1, 2), mac]);
+
+	expect(mergeReports(sources, { partial: false, allow: [] }).problems).toEqual([
+		'shard-2.json differs from shard-1.json in tools.node: v24.0.0 → v25.0.0'
+	]);
+
+	const { problems, report } = mergeReports(sources, { partial: false, allow: ['tools.node'] });
+
+	expect(problems).toEqual([]);
+	expect(report!.prs.map((pr) => pr.runs.length)).toEqual(unsplit.prs.map((pr) => pr.runs.length));
+	expect(report!.identity!.runs).toEqual({ [unsplit.identity!.hash]: 6, [mac.identity!.hash]: 4 });
+	expect(report!.merge.declared).toEqual([{ field: 'tools.node', a: 'v24.0.0', b: 'v25.0.0', report: 'shard-2.json' }]);
+
+	expect(mergeReports(sources, { partial: false, allow: ['tools.nod'] }).problems[0]).toBe(
+		'--allow-diff tools.nod names no field of shard-1.json or shard-2.json'
+	);
 });

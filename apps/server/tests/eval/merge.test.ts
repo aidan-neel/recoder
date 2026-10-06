@@ -64,4 +64,9 @@ test('an incompatible shard is refused with the field named and nothing written'
 	expect(refused.code).toBe(1);
 	expect(refused.out).toContain('Not merging:\n  set-2.json differs from set-1.json in taskSet: full → quick');
 	expect(existsSync(out)).toBe(false);
+
+	const declared = run('merge.ts', out, join(dir, 'set-1.json'), join(dir, 'set-2.json'), '--allow-diff', 'taskSet');
+
+	expect(declared.code).toBe(0);
+	expect(declared.out).toContain('Declared: set-2.json taskSet: full → quick');
 });

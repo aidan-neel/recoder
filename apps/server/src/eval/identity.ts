@@ -458,9 +458,10 @@ function splitHeads(reports: readonly MergeInput[]): string[] {
 /**
  * Why the reports cannot be merged into one: a missing identity, an experiment
  * field that differs, a PR at two heads, or a run counted twice, which would
- * sum one run's defects as new ones. Empty when they merge.
+ * sum one run's defects as new ones. Fields named in `allow` may differ, and
+ * a name in it that is no field refuses. Empty when they merge.
  */
-export function mergeProblems(reports: readonly MergeInput[]): string[] {
+export function mergeProblems(reports: readonly MergeInput[], allow: readonly string[] = []): string[] {
 	const unrecorded = reports.filter((report) => !report.identity);
 
 	if (unrecorded.length) return unrecorded.map((report) => `identity not recorded in ${report.name}`);
@@ -469,8 +470,15 @@ export function mergeProblems(reports: readonly MergeInput[]): string[] {
 	const duplicates = duplicateRuns(reports);
 
 	return [
+		...new Set(
+			rest.flatMap((report) =>
+				checkCompatibility(first!, report, 'merge', allow).undeclarable.map(
+					({ name }) => `--allow-diff ${name} names no field of ${first!.name} or ${report.name}`
+				)
+			)
+		),
 		...rest.flatMap((report) => {
-			const result = checkCompatibility(first!, report, 'merge', []);
+			const result = checkCompatibility(first!, report, 'merge', allow);
 			const line = (diff: FieldDiff) => `${diff.field}: ${diff.a} → ${diff.b}`;
 
 			return [

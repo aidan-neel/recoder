@@ -184,7 +184,7 @@ async function runAll(
 	const worker = async () => {
 		while (next < jobs.length) {
 			const { label, pr, run } = jobs[next++]!;
-			const runLabel = options.runs > 1 || options.repeat > 1 ? ` run #${run + 1}` : '';
+			const runLabel = options.runs > 1 ? ` run ${run - offset + 1}/${options.runs}` : '';
 
 			const record = await runReview(
 				{ ...options, inPlace: false },

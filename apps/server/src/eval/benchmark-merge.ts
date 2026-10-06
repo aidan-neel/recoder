@@ -1,7 +1,7 @@
 import { summarize } from './benchmark-score';
 import type { BenchmarkReport, PrResult, ScoredRun } from './benchmark-report';
 import { runIdentities, runOffset } from './benchmark-reuse';
-import { mergeProblems, runIdOf, type RunIdentity } from './identity';
+import { checkCompatibility, mergeProblems, runIdOf, type FieldDiff, type RunIdentity } from './identity';
 import { stabilityMetrics } from './metrics';
 import { byId } from './task-set';
 
@@ -40,7 +40,8 @@ interface MergedSource {
 export type MergedReport = Omit<BenchmarkReport, 'summary'> & {
 	/** `partial` is true when tasks or runs are missing, listed in `missingTasks` and `missingRuns`; such a report is no complete score. */
 	summary: BenchmarkReport['summary'] & { partial: boolean; missingTasks: string[]; missingRuns: string[] };
-	merge: { judging: string; reports: MergedSource[] };
+	/** `declared` holds each difference from the first report that `--allow-diff` let through, by the report that has it. */
+	merge: { judging: string; reports: MergedSource[]; declared: (FieldDiff & { report: string })[] };
 };
 
 /** How alike a PR's passed runs' findings are; null under two passed runs. */
@@ -97,7 +98,7 @@ function repeatedRuns(sources: readonly MergeSource[]): string[] {
 }
 
 /** Why the reports cannot be merged: an identity that differs or cannot be checked, a PR at two heads, a run held twice. */
-function problems(sources: readonly MergeSource[]): string[] {
+function problems(sources: readonly MergeSource[], allow: readonly string[]): string[] {
 	const repeated = repeatedRuns(sources);
 
 	const identity = mergeProblems(
@@ -106,14 +107,15 @@ function problems(sources: readonly MergeSource[]): string[] {
 			identity: report.identity,
 			reportId: report.reportId,
 			runIds: report.runIds
-		}))
+		})),
+		allow
 	);
 
 	return [
 		...identity,
 		...(repeated.length && !identity.some((line) => line.startsWith('run ids listed more than once'))
 			? [
-					`task repeats held by more than one report (${repeated.length}): ${repeated.join(', ')}; run each repeat with its own --repeat`
+					`task repeats held by more than one report (${repeated.length}): ${repeated.slice(0, 3).join(', ')}${repeated.length > 3 ? ', …' : ''}; run each repeat with its own --repeat`
 				]
 			: [])
 	];
@@ -194,7 +196,27 @@ function mergedSource({ name, report }: MergeSource): MergedSource {
 }
 
 /** The merged report: the first report's experiment over every report's tasks and runs, with each source kept. */
-function mergedReport(sources: readonly MergeSource[], missing: Missing): MergedReport {
+/**
+ * The merged runs' execution: the first report's, over every repeat, and a
+ * full run again when shards of the full set leave no task out.
+ */
+function mergedExecution(identity: RunIdentity, runsPerPr: number, missing: Missing): RunIdentity['execution'] {
+	const { repeat: _repeat, ...execution } = identity.execution;
+	const whole = execution.mode === 'partial' && identity.taskSet === 'full' && !missing.runs.length;
+
+	return { ...execution, mode: whole ? 'full' : execution.mode, runsPerPr };
+}
+
+/** Each difference `allow` let through between the first report's identity and another's. */
+function declaredDiffs(sources: readonly MergeSource[], allow: readonly string[]): MergedReport['merge']['declared'] {
+	const [first, ...rest] = sources.map(({ name, report }) => ({ name, identity: report.identity }));
+
+	return rest.flatMap((other) =>
+		checkCompatibility(first!, other, 'merge', allow).declared.map((diff) => ({ ...diff, report: other.name }))
+	);
+}
+
+function mergedReport(sources: readonly MergeSource[], missing: Missing, allow: readonly string[]): MergedReport {
 	const { identity: firstIdentity, derivedFrom: _derivedFrom, ...first } = sources[0]!.report;
 	const { shard: _shard, ...identity } = firstIdentity!;
 	const prs = mergedPrs(sources);
@@ -206,7 +228,6 @@ function mergedReport(sources: readonly MergeSource[], missing: Missing): Merged
 	);
 
 	const times = (key: 'startedAt' | 'finishedAt') => sources.map(({ report }) => report[key]).sort();
-	const { repeat: _repeat, ...execution } = identity.execution;
 
 	return {
 		...first,
@@ -215,7 +236,7 @@ function mergedReport(sources: readonly MergeSource[], missing: Missing): Merged
 		identity: {
 			...identity,
 			tasks: prs.flatMap((pr) => bases.get(taskOf(pr)) ?? []),
-			execution: { ...execution, runsPerPr },
+			execution: mergedExecution(identity, runsPerPr, missing),
 			runs: runIdentities(runs)
 		},
 		runIds: prs.flatMap((pr) => pr.runs.map((run) => runIdIn(pr, run))),
@@ -228,7 +249,7 @@ function mergedReport(sources: readonly MergeSource[], missing: Missing): Merged
 			missingTasks: missing.tasks,
 			missingRuns: missing.runs
 		},
-		merge: { judging: JUDGING, reports: sources.map(mergedSource) }
+		merge: { judging: JUDGING, reports: sources.map(mergedSource), declared: declaredDiffs(sources, allow) }
 	};
 }
 
@@ -237,13 +258,14 @@ function mergedReport(sources: readonly MergeSource[], missing: Missing): Merged
  * reason, reports whose identities differ in an undeclared field, a PR at two
  * heads, or a task repeat held twice. Tasks or runs the reports were meant to
  * hold and do not are listed; the merged report is made with them missing only
- * when `partial` is set, and is then marked partial.
+ * when `partial` is set, and is then marked partial. Identity fields named in
+ * `allow` may differ, and the merged report lists how.
  */
 export function mergeReports(
 	sources: readonly MergeSource[],
-	partial: boolean
+	options: { partial: boolean; allow: readonly string[] }
 ): { problems: string[]; missing: Missing; report: MergedReport | null } {
-	const found = problems(sources);
+	const found = problems(sources, options.allow);
 
 	if (found.length) return { problems: found, missing: { tasks: [], runs: [] }, report: null };
 
@@ -253,5 +275,7 @@ export function mergeReports(
 
 	const missing = missingRuns(sources, present);
 
-	return { problems: [], missing, report: missing.runs.length && !partial ? null : mergedReport(sources, missing) };
+	const refused = missing.runs.length && !options.partial;
+
+	return { problems: [], missing, report: refused ? null : mergedReport(sources, missing, options.allow) };
 }
