@@ -22,11 +22,14 @@ import {
 
 restoreAfterEach();
 
-const original = process.env.RECODER_TEST_STRENGTH;
+const original = { strength: process.env.RECODER_TEST_STRENGTH, exec: process.env.RECODER_EXEC };
 
 afterEach(() => {
-	if (original === undefined) delete process.env.RECODER_TEST_STRENGTH;
-	else process.env.RECODER_TEST_STRENGTH = original;
+	if (original.strength === undefined) delete process.env.RECODER_TEST_STRENGTH;
+	else process.env.RECODER_TEST_STRENGTH = original.strength;
+
+	if (original.exec === undefined) delete process.env.RECODER_EXEC;
+	else process.env.RECODER_EXEC = original.exec;
 });
 
 /** Sets or unsets `RECODER_TEST_STRENGTH` for the rest of the test. */
@@ -173,12 +176,15 @@ describe('with RECODER_TEST_STRENGTH=1', () => {
 /** The opening of the intent stage's system prompt. */
 const INTENT_PROMPT = 'You write the brief a code change is reviewed against';
 
-/** Every call the review of a one-file change made at a573205, sorted, apart from the intent brief `modelCalls` leaves out; none was a verifier. */
+/**
+ * Every call the review of a one-file change made at a573205 with code
+ * execution off, sorted, apart from the intent brief `modelCalls` leaves out;
+ * none was a verifier.
+ */
 const MODEL_CALLS_AT_A573205 = [
 	'unit-1/api-contract',
 	'unit-1/concurrency',
 	'unit-1/conventions',
-	'unit-1/correctness',
 	'unit-1/correctness',
 	'unit-1/performance',
 	'unit-1/readability',
@@ -191,9 +197,16 @@ const MODEL_CALLS_AT_A573205 = [
  * every model call, sorted, by assignment id, `verifier` or `other`. The intent
  * brief is left out: its answer is cached on disk under the diff, so only the
  * first review of a diff asks for it, whatever the flag.
+ *
+ * Code execution is turned off. Whether a host can run code (`bwrap` present
+ * and permitted to unshare namespaces, or Seatbelt) decides whether the
+ * correctness lens is sent back once for concluding without running anything
+ * (`unrunCorrectnessFinal`), a second `unit-1/correctness` call that has
+ * nothing to do with the flag, so the calls would differ between machines.
  */
 async function modelCalls(files: { base?: Record<string, string>; head: Record<string, string> }): Promise<string[]> {
 	useTestModel(4);
+	process.env.RECODER_EXEC = 'off';
 
 	const root = await mkdtemp(join(tmpdir(), 'recoder-test-strength-'));
 	const calls: string[] = [];
