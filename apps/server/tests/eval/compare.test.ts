@@ -52,6 +52,18 @@ test('an undeclared flag difference fails with the field named; declared, the co
 	expect(declared.out).toContain('Planted defects by codebase');
 });
 
+test('two reports that could not read the server are refused: unknown flags are unverifiable, not a match', () => {
+	const blind = withHash({ ...identityFields(), flags: 'unknown' });
+	const a = writeReport(dir, 'blind-a.json', { identity: blind, runIds: ['pr-1@aaa#1'] });
+	const b = writeReport(dir, 'blind-b.json', { identity: blind, runIds: ['pr-1@aaa#2'] });
+	const { code, out } = compare(a, b);
+
+	expect(code).toBe(1);
+	expect(out).toContain('Unverifiable, unknown on one side or both:\n  flags: unknown → unknown');
+	expect(out).not.toContain('Compatible:');
+	expect(out).toContain('Merge: refused, B cannot be checked against A in flags: unknown → unknown');
+});
+
 test('a report without an identity is compared with a warning, and refuses a merge', () => {
 	const { code, out } = compare(
 		writeReport(dir, 'old.json'),

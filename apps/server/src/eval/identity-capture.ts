@@ -1,11 +1,13 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { ModelEntry, ModelSettings, ReasoningEffort } from '@recoder/shared';
+import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode-catalog';
 import { localGit } from '../forge/local/git';
 import { localRepoPath, readLocalForge, type LocalForge } from '../forge/local/schema';
 import { JUDGE_VERSION } from './benchmark-judge';
 import type { Adjudications } from './benchmark-labels';
 import type { JudgeModel } from './benchmark-report';
+import { JUDGE_SEED } from './benchmark-scoring';
 import type { TreeState } from './harness-tree';
 import {
 	SERVER_CACHES,
@@ -40,7 +42,7 @@ export interface IdentityInput {
 	tree: TreeState | null;
 	settings: ModelSettings;
 	judge: JudgeModel;
-	/** What `GET /health/identity` answered; null from a server older than the route. */
+	/** What `GET /health/identity` answered; null from a server older than the route, which answers 404. */
 	server: ServerIdentity | null;
 	execution: RunIdentity['execution'];
 }
@@ -128,35 +130,43 @@ async function taskIdentities(tasks: readonly TaskLabel[], forge: ForgeReader): 
 	return identities.sort((a, b) => a.taskId.localeCompare(b.taskId, undefined, { numeric: true }));
 }
 
+/**
+ * One stage's model by its pick. An OpenCode pick names its model and provider
+ * even while OpenCode cannot list it; any other pick the settings do not list
+ * leaves its provider and context size `unknown`.
+ */
 function stageModel(
-	entry: ModelEntry | undefined,
-	fallback: string,
+	settings: ModelSettings,
+	id: string | null | undefined,
 	effort: ReasoningEffort | null | undefined
 ): StageModel {
+	const entry: ModelEntry | undefined = settings.models.find((candidate) => candidate.id === id);
+	const opencode = !entry && id?.startsWith(OPENCODE_MODEL_PREFIX);
+
 	return {
-		model: entry?.model ?? (fallback || UNKNOWN),
-		provider: entry ? (entry.provider ?? 'openai-compatible') : UNKNOWN,
+		model: entry?.model ?? (opencode ? id!.slice(OPENCODE_MODEL_PREFIX.length) : id || settings.model || UNKNOWN),
+		provider: entry ? (entry.provider ?? 'openai-compatible') : opencode ? 'opencode' : UNKNOWN,
 		effort: effort ?? 'default',
 		sampling: entry?.runtime ?? 'default',
-		contextSize: entry?.contextWindow ?? UNKNOWN,
-		weightRevision: UNKNOWN,
-		quantization: UNKNOWN
+		contextSize: entry ? (entry.contextWindow ?? 'default') : UNKNOWN
 	};
 }
 
 /** The two review stages' models as the server resolves them: an unset second model follows the review model and its effort. */
-function stageModels(settings: ModelSettings): Pick<RunIdentity['models'], 'orchestrator' | 'specialist'> {
-	const entry = (id: string | null | undefined) => settings.models.find((candidate) => candidate.id === id);
-	const review = entry(settings.orchestratorModelId ?? settings.sharedModelId);
+function stageModels(settings: ModelSettings): RunIdentity['models'] {
+	const review = settings.orchestratorModelId ?? settings.sharedModelId;
 	const second = settings.specialistModelId;
 
 	return {
-		orchestrator: stageModel(review, settings.model, settings.orchestratorEffort),
+		orchestrator: stageModel(settings, review, settings.orchestratorEffort),
 		specialist: second
-			? stageModel(entry(second), second, settings.specialistEffort)
-			: stageModel(review, settings.model, settings.specialistEffort ?? settings.orchestratorEffort)
+			? stageModel(settings, second, settings.specialistEffort)
+			: stageModel(settings, review, settings.specialistEffort ?? settings.orchestratorEffort)
 	};
 }
+
+/** No provider reports a model's weight revision or quantization yet; recorded so a local run can fill them. */
+const INFERENCE = { weightRevision: UNKNOWN, quantization: UNKNOWN };
 
 /** The server's part of the identity, every field `unknown` when it did not answer. */
 function serverParts(server: ServerIdentity | null): Pick<RunIdentity, 'flags' | 'caches' | 'tools' | 'host'> & {
@@ -169,7 +179,15 @@ function serverParts(server: ServerIdentity | null): Pick<RunIdentity, 'flags' |
 			policy: UNKNOWN,
 			caches: Object.fromEntries(SERVER_CACHES.map((name) => [name, UNKNOWN])),
 			tools: { bun: UNKNOWN, node: UNKNOWN, opencode: UNKNOWN },
-			host: { name: UNKNOWN, os: UNKNOWN, arch: UNKNOWN, cpus: UNKNOWN, sandbox: UNKNOWN, serverCommit: UNKNOWN },
+			host: {
+				name: UNKNOWN,
+				os: UNKNOWN,
+				arch: UNKNOWN,
+				cpus: UNKNOWN,
+				sandbox: UNKNOWN,
+				serverCommit: UNKNOWN,
+				inference: INFERENCE
+			},
 			code: UNKNOWN
 		};
 
@@ -178,8 +196,23 @@ function serverParts(server: ServerIdentity | null): Pick<RunIdentity, 'flags' |
 		policy: server.policy,
 		caches: server.caches,
 		tools: server.tools,
-		host: { ...server.host, serverCommit: server.tree?.commit ?? UNKNOWN },
+		host: { ...server.host, serverCommit: server.tree?.commit ?? UNKNOWN, inference: INFERENCE },
 		code: server.tree ? contentHash(server.tree) : UNKNOWN
+	};
+}
+
+/** Why parts of the identity are `unknown`: each source that could not be read, with the fields it leaves unknown. */
+function unavailable(input: IdentityInput): Record<string, string> {
+	return {
+		...(input.server
+			? input.server.tree
+				? {}
+				: { 'code.server': 'the server is not running from a git checkout' }
+			: {
+					server:
+						'the server has no /health/identity route (HTTP 404), so code.server, flags, limits.policy, caches and tools are unknown'
+				}),
+		...(input.tree ? {} : { 'code.harness': 'the harness is not running from a git checkout' })
 	};
 }
 
@@ -192,13 +225,13 @@ export async function captureIdentity(input: IdentityInput): Promise<RunIdentity
 	return withHash({
 		dataset: await datasetIdentity(input.dataset, input.adjudications, forge),
 		code: { harness: input.tree ? contentHash(input.tree) : UNKNOWN, server: server.code },
-		models: { ...stageModels(settings), seed: UNKNOWN },
+		models: stageModels(settings),
 		judge: {
 			model: judge.model,
 			provider: judge.provider,
 			effort: judge.effort ?? 'default',
 			version: JUDGE_VERSION,
-			seed: UNKNOWN
+			seed: JUDGE_SEED
 		},
 		flags: server.flags,
 		limits: {
@@ -213,6 +246,7 @@ export async function captureIdentity(input: IdentityInput): Promise<RunIdentity
 		tools: server.tools,
 		tasks: await taskIdentities(input.tasks, forge),
 		host: server.host,
-		execution: input.execution
+		execution: input.execution,
+		unavailable: unavailable(input)
 	});
 }

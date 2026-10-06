@@ -43,7 +43,7 @@ const server: ServerIdentity = {
 	flags: { RECODER_TEST_STRENGTH: 'unset', RECODER_OBLIGATIONS: 'unset' },
 	policy: { analysisDeadlineMs: 1_800_000 },
 	caches: { intent: 'source:1', 'rule-ledger': 'source:2', 'baseline-cache': 'source:3', 'review-checkpoint': 'v2' },
-	tools: { bun: '1.4.2', node: 'v24.0.0', opencode: 'unknown' },
+	tools: { bun: '1.4.2', node: 'v24.0.0', opencode: 'not installed' },
 	host: {
 		name: 'pc',
 		os: 'linux 6',
@@ -101,20 +101,20 @@ test('tasks carry their base from the local forge, and a repo it cannot read rec
 	expect(identity.dataset.forges.remote).toEqual({ head: 'unknown', metadata: 'unknown' });
 });
 
-test('an unset second model follows the review model and its effort; local inference fields are unknown', async () => {
-	const { models } = await capture();
+test('an unset second model follows the review model and its effort; the judge records its seed', async () => {
+	const { models, judge, host } = await capture();
 
 	expect(models.orchestrator).toEqual({
 		model: 'gpt-x',
 		provider: 'opencode',
 		effort: 'high',
 		sampling: 'default',
-		contextSize: 200_000,
-		weightRevision: 'unknown',
-		quantization: 'unknown'
+		contextSize: 200_000
 	});
 
 	expect(models.specialist).toEqual(models.orchestrator);
+	expect(judge.seed).toBe(7);
+	expect(host.inference).toEqual({ weightRevision: 'unknown', quantization: 'unknown' });
 
 	const split = await capture({ settings: { ...settings, specialistModelId: 'small', specialistEffort: 'low' } });
 
@@ -123,10 +123,18 @@ test('an unset second model follows the review model and its effort; local infer
 		provider: 'openai-compatible',
 		effort: 'low',
 		sampling: { temperature: 0 },
-		contextSize: 'unknown'
+		contextSize: 'default'
 	});
 
 	expect(split.hash).not.toBe((await capture()).hash);
+
+	const unlisted = await capture({ settings: { ...settings, specialistModelId: 'opencode:zen/gpt-big' } });
+
+	expect(unlisted.models.specialist).toMatchObject({
+		model: 'zen/gpt-big',
+		provider: 'opencode',
+		contextSize: 'unknown'
+	});
 });
 
 test('a changed label file changes the labels hash and the identity hash', async () => {
@@ -161,6 +169,8 @@ test('a changed server flag changes the hash; a server without the route records
 	expect(old.limits.policy).toBe('unknown');
 	expect(old.code.server).toBe('unknown');
 	expect(old.host.serverCommit).toBe('unknown');
+	expect(old.unavailable.server).toContain('HTTP 404');
+	expect((await capture({ tree: null })).unavailable['code.harness']).toContain('git checkout');
 
 	expect(old.caches).toEqual({
 		intent: 'unknown',

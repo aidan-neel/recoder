@@ -70,17 +70,21 @@ const loaded = {
 	} satisfies Record<ServerCache, string>
 };
 
-/** The `node` on the server's PATH, which the sandboxed checks run with. */
+/** The `node` on the server's PATH, which the sandboxed checks run with; `unknown` only when it would not say. */
 async function nodeVersion(): Promise<string> {
 	const path = Bun.which('node');
 
-	return (path && (await probeVersion(path, process.env).catch(() => null))) || UNKNOWN;
+	if (!path) return 'not installed';
+
+	return (await probeVersion(path, process.env).catch(() => null)) || UNKNOWN;
 }
 
 async function opencodeVersion(): Promise<string> {
-	const statuses = await agentStatuses().catch(() => []);
+	const status = (await agentStatuses().catch(() => [])).find((agent) => agent.id === 'opencode');
 
-	return statuses.find((status) => status.id === 'opencode')?.version ?? UNKNOWN;
+	if (status && !status.installed) return 'not installed';
+
+	return status?.version ?? UNKNOWN;
 }
 
 export async function serverIdentity(): Promise<ServerIdentity> {

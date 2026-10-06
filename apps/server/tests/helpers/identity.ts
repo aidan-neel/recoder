@@ -7,9 +7,7 @@ const stage: StageModel = {
 	provider: 'opencode',
 	effort: 'high',
 	sampling: 'default',
-	contextSize: 200_000,
-	weightRevision: 'unknown',
-	quantization: 'unknown'
+	contextSize: 200_000
 };
 
 /** A recorded identity's fields: one experiment on PR `pr-1` at head `aaa`. */
@@ -22,15 +20,24 @@ export function identityFields(): Omit<RunIdentity, 'version' | 'hash'> {
 			forges: { hono: { head: 'forge-head', metadata: 'forge-metadata' } }
 		},
 		code: { harness: 'harness-1', server: 'server-1' },
-		models: { orchestrator: stage, specialist: { ...stage }, seed: 'unknown' },
-		judge: { model: 'judge-x', provider: 'opencode', effort: 'medium', version: 1, seed: 'unknown' },
+		models: { orchestrator: stage, specialist: { ...stage } },
+		judge: { model: 'judge-x', provider: 'opencode', effort: 'medium', version: 1, seed: 7 },
 		flags: { RECODER_TEST_STRENGTH: 'unset', RECODER_OBLIGATIONS: 'unset' },
 		limits: { settings: { subagentCap: 2, reportLowSeverity: false }, policy: { analysisDeadlineMs: 1_800_000 } },
 		caches: { intent: 'source:abc', 'benchmark-judge': 'v1' },
-		tools: { bun: '1.3.0', node: 'v24.0.0', opencode: 'unknown' },
+		tools: { bun: '1.3.0', node: 'v24.0.0', opencode: 'not installed' },
 		tasks: [{ taskId: 'pr-1@aaa', base: 'base-1' }],
-		host: { name: 'pc', os: 'linux 6', arch: 'x64', cpus: 16, sandbox: { runSlots: 4 }, serverCommit: 'commit-1' },
-		execution: { mode: 'full', ran: 'full', concurrency: 3, timeoutMs: 2_700_000, runsPerPr: 1, baselineCache: true }
+		host: {
+			name: 'pc',
+			os: 'linux 6',
+			arch: 'x64',
+			cpus: 16,
+			sandbox: { runSlots: 4 },
+			serverCommit: 'commit-1',
+			inference: { weightRevision: 'unknown', quantization: 'unknown' }
+		},
+		execution: { mode: 'full', ran: 'full', concurrency: 3, timeoutMs: 2_700_000, runsPerPr: 1, baselineCache: true },
+		unavailable: {}
 	};
 }
 

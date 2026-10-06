@@ -2,14 +2,17 @@ import { expect, test } from 'bun:test';
 import {
 	allowDiffFields,
 	checkCompatibility,
-	compareIdentity,
 	compatibilityLines,
 	mergeProblems,
-	runIdOf,
-	taskIdOf,
-	withHash
+	withHash,
+	type RunIdentity
 } from '../../src/eval/identity';
 import { identityFields } from '../helpers/identity';
+
+/** The fields two identities disagree on, as a comparison refuses them. */
+function compareIdentity(a: RunIdentity, b: RunIdentity) {
+	return checkCompatibility({ name: 'A', identity: a }, { name: 'B', identity: b }, 'compare', []).refused;
+}
 
 /** The fixture identity with one change applied to a fresh copy of its fields. */
 function changed(change: (fields: ReturnType<typeof identityFields>) => void) {
@@ -19,11 +22,6 @@ function changed(change: (fields: ReturnType<typeof identityFields>) => void) {
 
 	return withHash(fields);
 }
-
-test('task and run ids name the PR, its head and the repeat', () => {
-	expect(taskIdOf('pr-1', 'aaa')).toBe('pr-1@aaa');
-	expect(runIdOf(taskIdOf('pr-1', 'aaa'), 2)).toBe('pr-1@aaa#2');
-});
 
 test('identical identities compare equal and share a hash', () => {
 	const a = withHash(identityFields());
@@ -126,6 +124,49 @@ test('a replay expects new code, labels and adjudications, but a new reviewer mo
 		'dataset.labels',
 		'models.orchestrator.effort'
 	]);
+});
+
+test('a field unknown on both sides is unverifiable: resume, replay, compare and merge refuse it unless declared', () => {
+	const blind = (name: string) => ({
+		name,
+		identity: changed((fields) => {
+			fields.flags = 'unknown';
+		}),
+		runIds: [`${name}#1`]
+	});
+
+	const a = blind('A');
+	const b = blind('B');
+
+	expect(a.identity.hash).toBe(b.identity.hash);
+
+	for (const operation of ['resume', 'replay', 'compare', 'merge'] as const) {
+		const result = checkCompatibility(a, b, operation, []);
+
+		expect(result.compatible).toBe(false);
+		expect(result.unverifiable).toEqual([{ field: 'flags', a: 'unknown', b: 'unknown' }]);
+	}
+
+	expect(compatibilityLines(checkCompatibility(a, b, 'compare', []))).toEqual([
+		'Unverifiable, unknown on one side or both:',
+		'  flags: unknown → unknown'
+	]);
+
+	expect(mergeProblems([a, b])).toEqual(['B cannot be checked against A in flags: unknown → unknown']);
+	expect(checkCompatibility(a, b, 'resume', ['flags']).compatible).toBe(true);
+
+	const oneSided = changed((fields) => {
+		fields.code.server = 'unknown';
+	});
+
+	expect(
+		checkCompatibility(
+			{ name: 'A', identity: withHash(identityFields()) },
+			{ name: 'B', identity: oneSided },
+			'resume',
+			[]
+		).unverifiable
+	).toEqual([{ field: 'code.server', a: 'server-1', b: 'unknown' }]);
 });
 
 test('a report without an identity is flagged and claims no equivalence unless declared', () => {

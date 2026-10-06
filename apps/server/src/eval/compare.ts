@@ -44,7 +44,7 @@ function stageTable(a: BenchmarkReport, b: BenchmarkReport): string[] {
 /**
  * Prints how two benchmark reports' identities differ and, when they compare,
  * their per-codebase stage counts side by side. Exits 1 when they differ in a
- * field not declared with `--allow-diff`; a report without an identity is
+ * field not declared with `--allow-diff`, or either records it as `unknown`; a report without an identity is
  * compared with a warning, since nothing says the two runs are equivalent.
  */
 function main(): number {
@@ -82,15 +82,17 @@ function main(): number {
 			),
 			'',
 			...compatibilityLines(result),
-			...(result.unrecorded.length || result.refused.length
+			...(result.unrecorded.length || result.refused.length || result.unverifiable.length
 				? []
 				: ['Compatible: every checked field matches, or differs as declared or expected.']),
 			`Merge: ${merge.length ? `refused, ${merge.join('; ')}` : 'possible'}`
 		].join('\n')
 	);
 
-	if (result.refused.length) {
-		console.log('\nThe reports differ in undeclared fields; their counts are not compared.');
+	if (result.refused.length || result.unverifiable.length) {
+		console.log(
+			`\nThe reports ${result.refused.length ? 'differ in' : 'cannot be checked on'} undeclared fields; their counts are not compared.`
+		);
 
 		return 1;
 	}

@@ -30,7 +30,7 @@ test('GET /health/identity reports allowlisted flags, cache versions and tools, 
 	expect(identity.caches.intent).toMatch(/^source:[0-9a-f]{16}$/);
 	expect(identity.caches['review-checkpoint']).toMatch(/^v\d+$/);
 	expect(identity.tools.bun).toBe(Bun.version);
-	expect(identity.tools.opencode).toBe('unknown');
+	expect(identity.tools.opencode).toBe('not installed');
 	expect(identity.policy.analysisDeadlineMs).toBeGreaterThan(0);
 	expect(identity.host.sandbox.runSlots).toBeGreaterThan(0);
 });

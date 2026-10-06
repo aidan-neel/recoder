@@ -329,7 +329,13 @@ function checkReuse(identity: RunIdentity, prior: Prior, allow: string[]): Deriv
 	if (!result.compatible) {
 		const fields = result.unrecorded.length
 			? ['identity']
-			: [...new Set(result.refused.map((diff) => (diff.field.startsWith('tasks.') ? 'tasks' : diff.field)))];
+			: [
+					...new Set(
+						[...result.refused, ...result.unverifiable].map((diff) =>
+							diff.field.startsWith('tasks.') ? 'tasks' : diff.field
+						)
+					)
+				];
 
 		throw new Error(
 			`Not reusing ${name}. To reuse it anyway, declare the difference: --allow-diff ${fields.join(',')}`
@@ -384,6 +390,9 @@ async function main(): Promise<void> {
 			baselineCache: options.baselineCache
 		}
 	});
+
+	for (const [part, reason] of Object.entries(identity.unavailable))
+		console.warn(`Identity: ${part} unavailable: ${reason}. Comparisons on it are refused unless declared.`);
 
 	const prior: Prior | null =
 		resumed && options.resume

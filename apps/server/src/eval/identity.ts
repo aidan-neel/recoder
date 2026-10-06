@@ -19,10 +19,8 @@ export interface StageModel {
 	effort: string;
 	/** The model entry's sampling overrides; `default` when it sets none and the built-in profile applies. */
 	sampling: ModelRuntimeProfile | 'default';
-	contextSize: number | Unknown;
-	/** Local inference only; no provider reports these yet. */
-	weightRevision: string;
-	quantization: string;
+	/** Max tokens per request, `default` when the entry sets none, `unknown` when the server could not name the entry. */
+	contextSize: number | string;
 }
 
 /** One labeled PR at one head, with the base commit it was cut from. */
@@ -62,9 +60,9 @@ export interface RunIdentity {
 		/** Hash of the server's own tree, which ran the reviewers. */
 		server: string;
 	};
-	/** Verifiers run on the specialist model; there is no separate verifier setting. */
-	models: { orchestrator: StageModel; specialist: StageModel; seed: string };
-	judge: { model: string; provider: string; effort: string; version: number; seed: string };
+	/** Verifiers run on the specialist model; there is no separate verifier setting. Reviewer calls send no seed. */
+	models: { orchestrator: StageModel; specialist: StageModel };
+	judge: { model: string; provider: string; effort: string; version: number; seed: number };
 	/** Environment switches as the server sees them, `unset` when absent. */
 	flags: Record<string, string> | Unknown;
 	limits: {
@@ -84,6 +82,8 @@ export interface RunIdentity {
 		cpus: number | Unknown;
 		sandbox: Record<string, number> | Unknown;
 		serverCommit: string;
+		/** Local inference only and reported by no provider yet, so recorded and never compared. */
+		inference: { weightRevision: string; quantization: string };
 	};
 	execution: {
 		/** What was asked for: full, replay, reverify or auto. */
@@ -95,6 +95,8 @@ export interface RunIdentity {
 		runsPerPr: number;
 		baselineCache: boolean;
 	};
+	/** Why a field is `unknown`, by field: a server without the identity route, a tree that could not be read. */
+	unavailable: Record<string, string>;
 }
 
 /** Where one run's result came from, by cache. Fields the server does not report are `unknown`. */
@@ -114,7 +116,7 @@ export function runCache(review: RunCache['review']): RunCache {
 const EXPERIMENT = ['dataset', 'code', 'models', 'judge', 'flags', 'limits', 'caches', 'tools'] as const;
 
 /** Sections that describe where and how a report ran; a difference is shown, never refused. */
-const INFORMATIONAL = ['host', 'execution'];
+const INFORMATIONAL = ['host', 'execution', 'unavailable'];
 
 /** Field names `--allow-diff` takes: a section or a field under one, or `identity` for a report that records none. */
 const DECLARABLE = ['identity', 'tasks', ...EXPERIMENT];
@@ -154,6 +156,8 @@ export interface Compatibility {
 	/** Reports that record no identity, so nothing can be claimed about them. */
 	unrecorded: string[];
 	refused: FieldDiff[];
+	/** Checked fields `unknown` on either side: equal or not, nothing says the two runs agree on them. */
+	unverifiable: FieldDiff[];
 	/** Differences named with `--allow-diff`. */
 	declared: FieldDiff[];
 	/** Differences the operation expects. */
@@ -223,14 +227,13 @@ function leaves(identity: RunIdentity): Map<string, string> {
 	return out;
 }
 
-/** Every field the two identities disagree on, sorted by field; empty for equal identities. */
-export function compareIdentity(a: RunIdentity, b: RunIdentity): FieldDiff[] {
+/** Every field either identity has, with both sides' values, sorted by field. */
+function fieldPairs(a: RunIdentity, b: RunIdentity): FieldDiff[] {
 	const left = leaves(a);
 	const right = leaves(b);
-	const fields = [...new Set([...left.keys(), ...right.keys()])].sort();
 
-	return fields
-		.filter((field) => left.get(field) !== right.get(field))
+	return [...new Set([...left.keys(), ...right.keys()])]
+		.sort()
 		.map((field) => ({ field, a: left.get(field) ?? '(absent)', b: right.get(field) ?? '(absent)' }));
 }
 
@@ -254,24 +257,31 @@ export function allowDiffFields(value: string | undefined): { fields: string[]; 
 /**
  * Sorts the differences between two reports by what `operation` makes of them.
  * A report without an identity refuses every claim unless `identity` is declared.
+ * A checked field `unknown` on either side refuses too, even when both sides
+ * are `unknown`: two reports that could not learn a value did not agree on it.
  */
 export function checkCompatibility(a: Named, b: Named, operation: Operation, allow: readonly string[]): Compatibility {
 	const unrecorded = [a, b].filter((report) => !report.identity).map((report) => report.name);
-	const diffs = a.identity && b.identity ? compareIdentity(a.identity, b.identity) : [];
-	const informational = diffs.filter((diff) => under(diff.field, INFORMATIONAL));
-	const checked = diffs.filter((diff) => !under(diff.field, INFORMATIONAL));
-	const exempt = checked.filter((diff) => under(diff.field, EXEMPT[operation]));
-	const rest = checked.filter((diff) => !under(diff.field, EXEMPT[operation]));
-	const declared = rest.filter((diff) => under(diff.field, allow));
-	const refused = rest.filter((diff) => !under(diff.field, allow));
+	const pairs = a.identity && b.identity ? fieldPairs(a.identity, b.identity) : [];
+	const unknown = (pair: FieldDiff) => pair.a === UNKNOWN || pair.b === UNKNOWN;
+	const differs = (pair: FieldDiff) => pair.a !== pair.b;
+	const informational = pairs.filter((pair) => under(pair.field, INFORMATIONAL) && differs(pair));
+	const checked = pairs.filter((pair) => !under(pair.field, INFORMATIONAL));
+	const exempt = checked.filter((pair) => under(pair.field, EXEMPT[operation]) && differs(pair));
+	const rest = checked.filter((pair) => !under(pair.field, EXEMPT[operation]) && (differs(pair) || unknown(pair)));
+	const declared = rest.filter((pair) => under(pair.field, allow));
+	const undeclared = rest.filter((pair) => !under(pair.field, allow));
+	const unverifiable = undeclared.filter(unknown);
+	const refused = undeclared.filter((pair) => !unknown(pair));
 
 	return {
 		unrecorded,
 		refused,
+		unverifiable,
 		declared,
 		exempt,
 		informational,
-		compatible: !refused.length && (!unrecorded.length || allow.includes('identity'))
+		compatible: !refused.length && !unverifiable.length && (!unrecorded.length || allow.includes('identity'))
 	};
 }
 
@@ -286,6 +296,7 @@ export function compatibilityLines(result: Compatibility): string[] {
 			? [`Identity not recorded in ${result.unrecorded.join(' and ')}; no equivalence can be claimed.`]
 			: []),
 		...section('Incompatible:', result.refused),
+		...section('Unverifiable, unknown on one side or both:', result.unverifiable),
 		...section('Declared differences:', result.declared),
 		...section('Expected differences:', result.exempt),
 		...section('Recorded, not checked:', result.informational)
@@ -337,11 +348,15 @@ export function mergeProblems(reports: readonly MergeInput[]): string[] {
 	const duplicates = duplicateRuns(reports);
 
 	return [
-		...rest.flatMap((report) =>
-			checkCompatibility(first!, report, 'merge', []).refused.map(
-				(diff) => `${report.name} differs from ${first!.name} in ${diff.field}: ${diff.a} → ${diff.b}`
-			)
-		),
+		...rest.flatMap((report) => {
+			const result = checkCompatibility(first!, report, 'merge', []);
+			const line = (diff: FieldDiff) => `${diff.field}: ${diff.a} → ${diff.b}`;
+
+			return [
+				...result.refused.map((diff) => `${report.name} differs from ${first!.name} in ${line(diff)}`),
+				...result.unverifiable.map((diff) => `${report.name} cannot be checked against ${first!.name} in ${line(diff)}`)
+			];
+		}),
 		...splitHeads(reports).map((ids) => `one PR at two heads: ${ids}`),
 		...(duplicates.length
 			? [
