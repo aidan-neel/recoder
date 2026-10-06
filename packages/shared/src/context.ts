@@ -1,0 +1,58 @@
+/** What a piece of reviewer context is: the changed code, its patch, who uses it, what tests or resembles it, or its contract. */
+export type ContextKind =
+	'source' | 'diff' | 'caller' | 'reference' | 'test' | 'sibling' | 'contract' | 'search' | 'list';
+
+/** One place a reviewer was given, read or cited: a path and a line range, never the content. */
+export interface ContextItem {
+	kind: ContextKind;
+	path: string;
+	startLine?: number;
+	endLine?: number;
+	/** The changed declaration it is about, as the change model names it (`Limiter.take`). */
+	symbol?: string;
+	/** Why it was chosen: a caller's selection reason, or the rule that made a contract relevant. */
+	why?: string;
+}
+
+/** Which bound kept context out: the per-symbol caller cap, the prompt block's size, a file read's size, or a patch page. */
+export type OmissionReason = 'caller-cap' | 'context-cap' | 'file-cap' | 'diff-cap';
+
+/** Context a bound left out, with the bound that did it. */
+export interface ContextOmission extends ContextItem {
+	reason: OmissionReason;
+}
+
+/**
+ * How a reviewer had the evidence it cited: put in its prompt, fetched by its
+ * own tool call, or neither as far as the record shows (a checkpoint from
+ * before reads were recorded, or evidence another agent retrieved).
+ */
+export type CitedVia = 'supplied' | 'read' | 'unknown';
+
+/** One reviewer unit (a lens assignment or a subagent) and the context it worked with. */
+export interface ReviewerContext {
+	assignmentId: string;
+	role: string;
+	lens?: string;
+	/** Put in the prompt: the scoped patch and the change model's declarations, callers, tests, siblings and contracts. */
+	supplied: ContextItem[];
+	/** Fetched by the reviewer's own tool calls. */
+	read: ContextItem[];
+	/** Evidence its candidates cited. */
+	cited: (ContextItem & { via: CitedVia })[];
+	omitted: ContextOmission[];
+	/** Reads past the per-reviewer cap: counted, not listed. */
+	readsDropped?: number;
+}
+
+/** A published finding and how its reporters had the evidence they cited; `none` when it cites nothing a reviewer held. */
+export interface FindingCitation {
+	findingId: string;
+	via: CitedVia | 'none';
+}
+
+/** What every reviewer of a review received, read, cited and missed, so an eval can tell missing context from unused context. */
+export interface ReviewContext {
+	reviewers: ReviewerContext[];
+	findings: FindingCitation[];
+}

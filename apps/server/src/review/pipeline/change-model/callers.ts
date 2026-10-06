@@ -5,6 +5,14 @@ import type { SymbolReference } from './types.js';
 
 /** Call sites and tests kept per symbol, so the prompt shows the evidence without growing with the repo. */
 const MAX_CALLERS = 5;
+/** Callers past the cap kept by name, so a report can say which ones the prompt left out. */
+const MAX_OMITTED = 20;
+
+/** The callers kept for the prompt, and the next ones the cap cut, in the same order. */
+export interface PickedCallers {
+	callers: SymbolReference[];
+	omitted: SymbolReference[];
+}
 
 /** A reference with what the search learned about the file it is in. */
 export interface ResolvedReference {
@@ -28,14 +36,14 @@ function callerOrder(a: SymbolReference, b: SymbolReference): number {
 }
 
 /**
- * The calls and tests that use a symbol. For script languages a hit in another
- * file counts only when that file imports the symbol's module, so a method of
- * the same name elsewhere is not a caller.
+ * The calls and tests that use a symbol, up to the cap, and those the cap cut.
+ * For script languages a hit in another file counts only when that file
+ * imports the symbol's module, so a method of the same name elsewhere is not a caller.
  */
-export function pickCallers(language: string, file: string, resolved: ResolvedReference[]): SymbolReference[] {
+export function pickCallers(language: string, file: string, resolved: ResolvedReference[]): PickedCallers {
 	const script = isScriptLanguage(language);
 
-	return resolved
+	const ordered = resolved
 		.filter(({ ref, imports }) => {
 			if (ref.kind !== 'call' && ref.kind !== 'test') return false;
 			if (!sameFamily(ref.file, language)) return false;
@@ -43,6 +51,7 @@ export function pickCallers(language: string, file: string, resolved: ResolvedRe
 			return !script || ref.file === file || imports === true;
 		})
 		.map(({ ref }) => ref)
-		.sort(callerOrder)
-		.slice(0, MAX_CALLERS);
+		.sort(callerOrder);
+
+	return { callers: ordered.slice(0, MAX_CALLERS), omitted: ordered.slice(MAX_CALLERS, MAX_CALLERS + MAX_OMITTED) };
 }

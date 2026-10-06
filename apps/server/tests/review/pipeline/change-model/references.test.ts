@@ -1,31 +1,7 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { unitContext } from '../../../../src/review/pipeline/change-model/change-model';
+import { CASES } from './cases';
 import { buildFrom, type Built } from './fixtures';
-
-const BASE_LIMITER = ['export function take(n: number): boolean {', '\treturn n > 0;', '}', ''].join('\n');
-
-const HEAD_LIMITER = [
-	'export function take(n: number, label: string): boolean {',
-	'\treturn n > 0 && label.length > 0;',
-	'}',
-	''
-].join('\n');
-
-const UNCHANGED = {
-	'src/use.ts': ["import { take } from './limiter';", '', 'export const ok = take(3);', ''].join('\n'),
-	'src/bag.ts': [
-		'export class Bag {',
-		'\ttake(): number {',
-		'\t\treturn 1;',
-		'\t}',
-		'}',
-		'',
-		'export const one = new Bag().take();',
-		''
-	].join('\n'),
-	'src/notes.ts': ['// take the lock before writing', "export const label = 'take';", ''].join('\n'),
-	'tests/limiter.test.ts': ["import { take } from '../src/limiter';", '', "console.log(take(1, 'a'));", ''].join('\n')
-};
 
 describe('a signature change', () => {
 	let built: Built;
@@ -33,10 +9,7 @@ describe('a signature change', () => {
 	const take = () => built.model.symbols.find((symbol) => symbol.name === 'take' && symbol.file === 'src/limiter.ts');
 
 	beforeAll(async () => {
-		built = await buildFrom(
-			{ 'src/limiter.ts': BASE_LIMITER, ...UNCHANGED },
-			{ 'src/limiter.ts': HEAD_LIMITER, ...UNCHANGED }
-		);
+		built = await buildFrom(CASES.signatureChange.base, CASES.signatureChange.head);
 	});
 
 	test('lists a call in an importing file as a call, then the test', () => {
@@ -71,27 +44,13 @@ describe('a signature change', () => {
 });
 
 test('an import of the folder reaches its index file', async () => {
-	const { model } = await buildFrom(
-		{
-			'src/q/index.ts': 'export function parse(a: string) {\n\treturn a;\n}\n',
-			'src/main.ts': "import { parse } from './q';\nparse('x');\n"
-		},
-		{
-			'src/q/index.ts': 'export function parse(a: string, b: string) {\n\treturn a + b;\n}\n',
-			'src/main.ts': "import { parse } from './q';\nparse('x');\n"
-		}
-	);
+	const { model } = await buildFrom(CASES.folderImport.base, CASES.folderImport.head);
 
 	expect(model.symbols[0].callers?.map((ref) => [ref.file, ref.kind])).toEqual([['src/main.ts', 'call']]);
 });
 
 test('a name whose real use sits past a file of comment-only matches stays unknown, not unused', async () => {
-	const decoys = Array.from({ length: 5 }, () => '// take the lock').join('\n');
-
-	const { model } = await buildFrom(
-		{ 'src/limiter.ts': BASE_LIMITER, 'src/use.ts': `${decoys}\nimport { take } from './limiter';\ntake(3);\n` },
-		{ 'src/limiter.ts': HEAD_LIMITER, 'src/use.ts': `${decoys}\nimport { take } from './limiter';\ntake(3);\n` }
-	);
+	const { model } = await buildFrom(CASES.decoyedUse.base, CASES.decoyedUse.head);
 
 	const text = unitContext(model, [{ path: 'src/limiter.ts', hunkIds: [] }]);
 

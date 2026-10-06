@@ -1,6 +1,8 @@
+import type { ContextItem, ContextOmission } from '@recoder/shared';
 import type { UnitScope } from '../units.js';
 import { isMeasured } from './metrics.js';
 import { innermost } from './owners.js';
+import { omission, sourceItem, suppliedBy } from './supplied.js';
 import type { ChangedSymbol, ChangeModel, RepoMetricsBaseline, SymbolReference } from './types.js';
 
 const DEFAULT_MAX_CHARS = 6000;
@@ -128,8 +130,15 @@ function callerRows(symbol: ChangedSymbol): string[] {
 	];
 }
 
+/** One symbol's text in the prompt, with the places it puts there and the ones a bound kept out. */
+interface Block {
+	text: string;
+	supplied: ContextItem[];
+	omitted: ContextOmission[];
+}
+
 /** One symbol's block in the prompt; `withCallers` false drops the call sites when the block would not fit. */
-function describe(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefined, withCallers = true): string {
+function describe(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefined, withCallers = true): Block {
 	const changed = contractChanged(symbol);
 	const shown = changed && withCallers ? (symbol.callers ?? []) : [];
 	const listed = new Set(shown.map((ref) => `${ref.file}:${ref.line}`));
@@ -160,18 +169,57 @@ function describe(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefin
 
 	if (symbol.change !== 'deleted' && isMeasured(symbol)) rows.push(`  size: ${metricsLine(symbol, baseline)}`);
 
-	return rows.join('\n');
+	return { text: rows.join('\n'), ...suppliedBy(symbol, { changed, withCallers, shown, others }) };
 }
 
-/** The symbol's block, without its call sites when the full one would pass the room left. */
-function blockWithin(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefined, room: number): string | null {
+/** The block, without its call sites when the full one would pass the room left. */
+function blockWithin(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefined, room: number): Block | null {
 	const full = describe(symbol, baseline);
 
-	if (full.length + 1 <= room) return full;
+	if (full.text.length + 1 <= room) return full;
 
 	const compact = describe(symbol, baseline, false);
 
-	return compact.length + 1 <= room ? compact : null;
+	return compact.text.length + 1 <= room ? compact : null;
+}
+
+/** The prompt block on a scope's declarations, with what it supplies and what its size cap left out. */
+export interface UnitContextParts {
+	text: string;
+	supplied: ContextItem[];
+	omitted: ContextOmission[];
+}
+
+/**
+ * The unit's prompt block and a record of it: every place the block puts in
+ * front of the reviewer, and every declaration or caller its bounds cut. Same
+ * model and scope, same text and same record.
+ */
+export function unitContextParts(model: ChangeModel, scope: UnitScope, maxChars = DEFAULT_MAX_CHARS): UnitContextParts {
+	const symbols = scopeSymbols(model, scope);
+	const baselines = new Map(model.baselines.map((baseline) => [baseline.language, baseline]));
+	const header = 'Changed declarations (from the parser, not a model):';
+	const blocks: Block[] = [];
+	let used = header.length;
+
+	for (const symbol of symbols) {
+		const block = blockWithin(symbol, baselines.get(symbol.language), maxChars - TAIL_RESERVE - used);
+
+		if (block === null) break;
+
+		blocks.push(block);
+		used += block.text.length + 1;
+	}
+
+	const cut = symbols.slice(blocks.length).map((symbol) => omission(sourceItem(symbol), 'context-cap'));
+	const supplied = blocks.flatMap((block) => block.supplied);
+	const omitted = [...blocks.flatMap((block) => block.omitted), ...cut];
+
+	if (!blocks.length) return { text: '', supplied, omitted };
+
+	const tail = cut.length ? `\n…${cut.length} more changed declaration${cut.length === 1 ? '' : 's'} not shown` : '';
+
+	return { text: [header, ...blocks.map((block) => block.text)].join('\n') + tail, supplied, omitted };
 }
 
 /**
@@ -182,29 +230,5 @@ function blockWithin(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | unde
  * touches no parsed symbol.
  */
 export function unitContext(model: ChangeModel, scope: UnitScope, maxChars = DEFAULT_MAX_CHARS): string {
-	const symbols = scopeSymbols(model, scope);
-
-	if (!symbols.length) return '';
-
-	const baselines = new Map(model.baselines.map((baseline) => [baseline.language, baseline]));
-	const header = 'Changed declarations (from the parser, not a model):';
-	const blocks: string[] = [];
-	let used = header.length;
-
-	for (const symbol of symbols) {
-		const block = blockWithin(symbol, baselines.get(symbol.language), maxChars - TAIL_RESERVE - used);
-
-		if (block === null) break;
-
-		blocks.push(block);
-		used += block.length + 1;
-	}
-
-	const omitted = symbols.length - blocks.length;
-
-	if (!blocks.length) return '';
-
-	const tail = omitted ? `\n…${omitted} more changed declaration${omitted === 1 ? '' : 's'} not shown` : '';
-
-	return [header, ...blocks].join('\n') + tail;
+	return unitContextParts(model, scope, maxChars).text;
 }

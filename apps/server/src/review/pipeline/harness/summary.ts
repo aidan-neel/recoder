@@ -13,7 +13,7 @@ import { isHeldBack, toFinding, type CandidateFinding } from '../consolidate.js'
 import type { CoverageLedger } from '../coverage.js';
 import { unfinishedAssignments } from './assignments.js';
 import { confirmedFindings, type Consolidated } from './consolidation.js';
-import type { ReviewRun } from './context.js';
+import { receivedContext, type ReviewRun } from './context.js';
 import { droppedSentence } from './subagent-stage.js';
 import type { AdaptiveReviewResult } from './types.js';
 import { hideUnproven } from './verification.js';
@@ -84,6 +84,7 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
 		findings: confirmed,
 		unconfirmed: [...run.hidden, ...refutedCandidates(run)].map(toFinding),
 		funnel: reviewFunnel(run, confirmed.length),
+		context: receivedContext(run, confirmed),
 		summary,
 		outcome: 'complete',
 		recommendedChecks: [...new Set(checks)],
@@ -134,6 +135,7 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 		findings: confirmed,
 		unconfirmed: run.hidden.map(toFinding),
 		funnel: reviewFunnel(run, confirmed.length),
+		context: receivedContext(run, confirmed),
 		summary: `${summary} The review ran out of time after ${minutes} minutes; only findings verified by then are shown.`,
 		outcome: 'complete',
 		recommendedChecks: [...run.recommended],

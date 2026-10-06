@@ -1,0 +1,762 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`the limiterClass change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [
+    {
+      "language": "typescript",
+      "p95": {
+        "lines": 7,
+        "maxDepth": 1,
+        "params": 2,
+      },
+      "sampled": 2,
+    },
+  ],
+  "byHunk": {
+    "src/limiter.ts:2,14:2,14": [
+      "src/limiter.ts#Limiter.take",
+      "src/limiter.ts#Limiter.drop",
+      "src/limiter.ts#helper",
+      "src/limiter.ts#limit",
+    ],
+  },
+  "symbols": [
+    {
+      "callers": [
+        {
+          "file": "src/limiter.ts",
+          "inDiff": true,
+          "kind": "call",
+          "line": 14,
+          "text": "return new Limiter().take(max);",
+        },
+      ],
+      "calls": [],
+      "change": "modified",
+      "endLine": 10,
+      "examples": [],
+      "exported": true,
+      "file": "src/limiter.ts",
+      "hunkIds": [
+        "src/limiter.ts:2,14:2,14",
+      ],
+      "id": "src/limiter.ts#Limiter.take",
+      "kind": "method",
+      "language": "typescript",
+      "metrics": {
+        "lines": 7,
+        "maxDepth": 1,
+        "params": 1,
+      },
+      "name": "take",
+      "qualifiedName": "Limiter.take",
+      "references": [
+        {
+          "file": "src/limiter.ts",
+          "inDiff": true,
+          "kind": "call",
+          "line": 14,
+          "text": "return new Limiter().take(max);",
+        },
+      ],
+      "signature": "take(n: number): boolean",
+      "startLine": 4,
+      "tests": [],
+    },
+    {
+      "callers": [],
+      "calls": [],
+      "change": "deleted",
+      "endLine": 10,
+      "examples": [],
+      "exported": true,
+      "file": "src/limiter.ts",
+      "hunkIds": [
+        "src/limiter.ts:2,14:2,14",
+      ],
+      "id": "src/limiter.ts#Limiter.drop",
+      "kind": "method",
+      "language": "typescript",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 0,
+      },
+      "name": "drop",
+      "qualifiedName": "Limiter.drop",
+      "references": [],
+      "signature": "drop(): void",
+      "startLine": 8,
+      "tests": [],
+    },
+    {
+      "callers": [],
+      "calls": [],
+      "change": "deleted",
+      "endLine": 15,
+      "examples": [],
+      "exported": false,
+      "file": "src/limiter.ts",
+      "hunkIds": [
+        "src/limiter.ts:2,14:2,14",
+      ],
+      "id": "src/limiter.ts#helper",
+      "kind": "function",
+      "language": "typescript",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 1,
+      },
+      "name": "helper",
+      "qualifiedName": "helper",
+      "references": [],
+      "signature": "function helper(a: string)",
+      "startLine": 13,
+      "tests": [],
+    },
+    {
+      "callers": [],
+      "calls": [
+        "take",
+        "Limiter",
+      ],
+      "change": "added",
+      "endLine": 15,
+      "examples": [],
+      "exported": true,
+      "file": "src/limiter.ts",
+      "hunkIds": [
+        "src/limiter.ts:2,14:2,14",
+      ],
+      "id": "src/limiter.ts#limit",
+      "kind": "function",
+      "language": "typescript",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "name": "limit",
+      "qualifiedName": "limit",
+      "references": [],
+      "signature": "export const limit = (max: number, label: string) =>",
+      "startLine": 13,
+      "tests": [],
+    },
+  ],
+  "unparsed": [],
+}
+`;
+
+exports[`the pythonMethod change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [
+    {
+      "language": "python",
+      "p95": {
+        "lines": 2,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "sampled": 1,
+    },
+  ],
+  "byHunk": {
+    "app/store.py:0,0:1,3": [
+      "app/store.py#Store",
+      "app/store.py#Store.get",
+    ],
+  },
+  "symbols": [
+    {
+      "callers": [],
+      "calls": [],
+      "change": "added",
+      "endLine": 3,
+      "examples": [],
+      "exported": true,
+      "file": "app/store.py",
+      "hunkIds": [
+        "app/store.py:0,0:1,3",
+      ],
+      "id": "app/store.py#Store",
+      "kind": "class",
+      "language": "python",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 0,
+      },
+      "name": "Store",
+      "qualifiedName": "Store",
+      "references": [],
+      "signature": "class Store:",
+      "startLine": 1,
+      "tests": [],
+    },
+    {
+      "callers": [],
+      "calls": [
+        "get",
+      ],
+      "change": "added",
+      "endLine": 3,
+      "examples": [],
+      "exported": true,
+      "file": "app/store.py",
+      "hunkIds": [
+        "app/store.py:0,0:1,3",
+      ],
+      "id": "app/store.py#Store.get",
+      "kind": "method",
+      "language": "python",
+      "metrics": {
+        "lines": 2,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "name": "get",
+      "qualifiedName": "Store.get",
+      "references": [],
+      "signature": "def get(self, key, default=None):",
+      "startLine": 2,
+      "tests": [],
+    },
+  ],
+  "unparsed": [],
+}
+`;
+
+exports[`the svelteScript change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [
+    {
+      "language": "svelte",
+      "p95": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 0,
+      },
+      "sampled": 1,
+    },
+  ],
+  "byHunk": {
+    "ui/Counter.svelte:1,5:1,9": [
+      "ui/Counter.svelte#Counter",
+      "ui/Counter.svelte#bump",
+    ],
+  },
+  "symbols": [
+    {
+      "callers": [],
+      "calls": [],
+      "change": "modified",
+      "endLine": 9,
+      "examples": [],
+      "exported": true,
+      "file": "ui/Counter.svelte",
+      "hunkIds": [
+        "ui/Counter.svelte:1,5:1,9",
+      ],
+      "id": "ui/Counter.svelte#Counter",
+      "kind": "component",
+      "language": "svelte",
+      "metrics": {
+        "lines": 9,
+        "maxDepth": 0,
+        "params": 0,
+      },
+      "name": "Counter",
+      "qualifiedName": "Counter",
+      "references": [],
+      "signature": "<Counter>",
+      "startLine": 1,
+      "tests": [],
+    },
+    {
+      "callers": [],
+      "calls": [],
+      "change": "added",
+      "endLine": 6,
+      "examples": [],
+      "exported": false,
+      "file": "ui/Counter.svelte",
+      "hunkIds": [
+        "ui/Counter.svelte:1,5:1,9",
+      ],
+      "id": "ui/Counter.svelte#bump",
+      "kind": "function",
+      "language": "svelte",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 0,
+      },
+      "name": "bump",
+      "qualifiedName": "bump",
+      "references": [
+        {
+          "file": "ui/Counter.svelte",
+          "inDiff": true,
+          "kind": "other",
+          "line": 9,
+          "text": "<button onclick={bump}>{count}</button>",
+        },
+      ],
+      "signature": "function bump()",
+      "startLine": 4,
+      "tests": [],
+    },
+  ],
+  "unparsed": [],
+}
+`;
+
+exports[`the noGrammar change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [],
+  "byHunk": {
+    "notes.txt:0,0:1,1": [],
+  },
+  "symbols": [],
+  "unparsed": [
+    "notes.txt",
+  ],
+}
+`;
+
+exports[`the addedExport change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [
+    {
+      "language": "typescript",
+      "p95": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 1,
+      },
+      "sampled": 1,
+    },
+  ],
+  "byHunk": {
+    "src/query/index.test.ts:0,0:1,3": [],
+    "src/query/index.ts:0,0:1,5": [
+      "src/query/index.ts#ParsedQuery",
+      "src/query/index.ts#parseQuery",
+    ],
+  },
+  "symbols": [
+    {
+      "callers": [],
+      "calls": [],
+      "change": "added",
+      "endLine": 1,
+      "examples": [],
+      "exported": true,
+      "file": "src/query/index.ts",
+      "hunkIds": [
+        "src/query/index.ts:0,0:1,5",
+      ],
+      "id": "src/query/index.ts#ParsedQuery",
+      "kind": "type",
+      "language": "typescript",
+      "metrics": {
+        "lines": 1,
+        "maxDepth": 0,
+        "params": 0,
+      },
+      "name": "ParsedQuery",
+      "qualifiedName": "ParsedQuery",
+      "references": [
+        {
+          "file": "src/query/index.ts",
+          "inDiff": true,
+          "kind": "type",
+          "line": 3,
+          "text": "export function parseQuery(input: string): ParsedQuery {",
+        },
+      ],
+      "signature": "export type ParsedQuery = Record<string, string>;",
+      "startLine": 1,
+      "tests": [
+        "src/query/index.test.ts",
+      ],
+    },
+    {
+      "callers": [
+        {
+          "file": "src/query/index.test.ts",
+          "inDiff": true,
+          "kind": "test",
+          "line": 3,
+          "text": "parseQuery('a=1');",
+        },
+      ],
+      "calls": [
+        "fromEntries",
+        "URLSearchParams",
+      ],
+      "change": "added",
+      "endLine": 5,
+      "examples": [],
+      "exported": true,
+      "file": "src/query/index.ts",
+      "hunkIds": [
+        "src/query/index.ts:0,0:1,5",
+      ],
+      "id": "src/query/index.ts#parseQuery",
+      "kind": "function",
+      "language": "typescript",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 1,
+      },
+      "name": "parseQuery",
+      "qualifiedName": "parseQuery",
+      "references": [
+        {
+          "file": "src/query/index.test.ts",
+          "inDiff": true,
+          "kind": "test",
+          "line": 3,
+          "text": "parseQuery('a=1');",
+        },
+        {
+          "file": "src/query/index.test.ts",
+          "inDiff": true,
+          "kind": "import",
+          "line": 1,
+          "text": "import { parseQuery } from '.';",
+        },
+      ],
+      "signature": "export function parseQuery(input: string): ParsedQuery",
+      "startLine": 3,
+      "tests": [
+        "src/query/index.test.ts",
+      ],
+    },
+  ],
+  "unparsed": [],
+}
+`;
+
+exports[`the shortName change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [
+    {
+      "language": "typescript",
+      "p95": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 0,
+      },
+      "sampled": 1,
+    },
+  ],
+  "byHunk": {
+    "src/caller.ts:0,0:1,3": [
+      "src/caller.ts#one",
+    ],
+    "src/fn.ts:0,0:1,3": [
+      "src/fn.ts#fn",
+    ],
+    "src/main.ts:0,0:1,3": [],
+  },
+  "symbols": [
+    {
+      "callers": [],
+      "calls": [
+        "fn",
+      ],
+      "change": "added",
+      "endLine": 3,
+      "examples": [],
+      "exported": true,
+      "file": "src/caller.ts",
+      "hunkIds": [
+        "src/caller.ts:0,0:1,3",
+      ],
+      "id": "src/caller.ts#one",
+      "kind": "variable",
+      "language": "typescript",
+      "metrics": {
+        "lines": 1,
+        "maxDepth": 0,
+        "params": 0,
+      },
+      "name": "one",
+      "qualifiedName": "one",
+      "references": [
+        {
+          "file": "src/main.ts",
+          "inDiff": true,
+          "kind": "import",
+          "line": 1,
+          "text": "import { one } from './caller';",
+        },
+        {
+          "file": "src/main.ts",
+          "inDiff": true,
+          "kind": "other",
+          "line": 3,
+          "text": "console.log(one);",
+        },
+      ],
+      "signature": "export const one = fn();",
+      "startLine": 3,
+      "tests": [],
+    },
+    {
+      "callers": [],
+      "calls": [],
+      "change": "added",
+      "endLine": 3,
+      "examples": [],
+      "exported": true,
+      "file": "src/fn.ts",
+      "hunkIds": [
+        "src/fn.ts:0,0:1,3",
+      ],
+      "id": "src/fn.ts#fn",
+      "kind": "function",
+      "language": "typescript",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 0,
+      },
+      "name": "fn",
+      "qualifiedName": "fn",
+      "references": [],
+      "signature": "export function fn(): number",
+      "startLine": 1,
+      "tests": [],
+      "usageUnknown": true,
+    },
+  ],
+  "unparsed": [],
+}
+`;
+
+exports[`the signatureChange change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [
+    {
+      "language": "typescript",
+      "p95": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "sampled": 2,
+    },
+  ],
+  "byHunk": {
+    "src/limiter.ts:1,3:1,3": [
+      "src/limiter.ts#take",
+    ],
+  },
+  "symbols": [
+    {
+      "callers": [
+        {
+          "file": "src/use.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const ok = take(3);",
+        },
+        {
+          "file": "tests/limiter.test.ts",
+          "kind": "test",
+          "line": 3,
+          "text": "console.log(take(1, 'a'));",
+        },
+      ],
+      "calls": [],
+      "change": "modified",
+      "endLine": 3,
+      "examples": [],
+      "exported": true,
+      "file": "src/limiter.ts",
+      "hunkIds": [
+        "src/limiter.ts:1,3:1,3",
+      ],
+      "id": "src/limiter.ts#take",
+      "kind": "function",
+      "language": "typescript",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "name": "take",
+      "previousSignature": "export function take(n: number): boolean",
+      "qualifiedName": "take",
+      "references": [
+        {
+          "file": "src/use.ts",
+          "kind": "call",
+          "line": 3,
+          "text": "export const ok = take(3);",
+        },
+        {
+          "file": "tests/limiter.test.ts",
+          "kind": "test",
+          "line": 3,
+          "text": "console.log(take(1, 'a'));",
+        },
+        {
+          "file": "src/use.ts",
+          "kind": "import",
+          "line": 1,
+          "text": "import { take } from './limiter';",
+        },
+        {
+          "file": "tests/limiter.test.ts",
+          "kind": "import",
+          "line": 1,
+          "text": "import { take } from '../src/limiter';",
+        },
+        {
+          "file": "src/bag.ts",
+          "kind": "call",
+          "line": 7,
+          "text": "export const one = new Bag().take();",
+        },
+      ],
+      "signature": "export function take(n: number, label: string): boolean",
+      "startLine": 1,
+      "tests": [
+        "tests/limiter.test.ts",
+      ],
+    },
+  ],
+  "unparsed": [],
+}
+`;
+
+exports[`the folderImport change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [
+    {
+      "language": "typescript",
+      "p95": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "sampled": 1,
+    },
+  ],
+  "byHunk": {
+    "src/q/index.ts:1,3:1,3": [
+      "src/q/index.ts#parse",
+    ],
+  },
+  "symbols": [
+    {
+      "callers": [
+        {
+          "file": "src/main.ts",
+          "kind": "call",
+          "line": 2,
+          "text": "parse('x');",
+        },
+      ],
+      "calls": [],
+      "change": "modified",
+      "endLine": 3,
+      "examples": [],
+      "exported": true,
+      "file": "src/q/index.ts",
+      "hunkIds": [
+        "src/q/index.ts:1,3:1,3",
+      ],
+      "id": "src/q/index.ts#parse",
+      "kind": "function",
+      "language": "typescript",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "name": "parse",
+      "previousSignature": "export function parse(a: string)",
+      "qualifiedName": "parse",
+      "references": [
+        {
+          "file": "src/main.ts",
+          "kind": "call",
+          "line": 2,
+          "text": "parse('x');",
+        },
+        {
+          "file": "src/main.ts",
+          "kind": "import",
+          "line": 1,
+          "text": "import { parse } from './q';",
+        },
+      ],
+      "signature": "export function parse(a: string, b: string)",
+      "startLine": 1,
+      "tests": [],
+    },
+  ],
+  "unparsed": [],
+}
+`;
+
+exports[`the decoyedUse change model is unchanged with caller selection off 1`] = `
+{
+  "baselines": [
+    {
+      "language": "typescript",
+      "p95": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "sampled": 1,
+    },
+  ],
+  "byHunk": {
+    "src/limiter.ts:1,3:1,3": [
+      "src/limiter.ts#take",
+    ],
+  },
+  "symbols": [
+    {
+      "callers": [],
+      "calls": [],
+      "change": "modified",
+      "endLine": 3,
+      "examples": [],
+      "exported": true,
+      "file": "src/limiter.ts",
+      "hunkIds": [
+        "src/limiter.ts:1,3:1,3",
+      ],
+      "id": "src/limiter.ts#take",
+      "kind": "function",
+      "language": "typescript",
+      "metrics": {
+        "lines": 3,
+        "maxDepth": 0,
+        "params": 2,
+      },
+      "name": "take",
+      "previousSignature": "export function take(n: number): boolean",
+      "qualifiedName": "take",
+      "references": [],
+      "signature": "export function take(n: number, label: string): boolean",
+      "startLine": 1,
+      "tests": [],
+      "usageUnknown": true,
+    },
+  ],
+  "unparsed": [],
+}
+`;

@@ -1,4 +1,10 @@
-import { DEFAULT_SUBAGENT_CAP, ORCHESTRATOR_ID, type ReviewAssignment } from '@recoder/shared';
+import {
+	DEFAULT_SUBAGENT_CAP,
+	ORCHESTRATOR_ID,
+	type Finding,
+	type ReviewAssignment,
+	type ReviewContext
+} from '@recoder/shared';
 import { EvidenceStore } from '../../../evidence/evidence.js';
 import { configForOrchestrator, reviewLimits, type ModelConfig } from '../../../models/models.js';
 import { execUnavailableReason } from '../../../sandbox/exec-sandbox.js';
@@ -23,6 +29,7 @@ import { restoreSubagentState, type SubagentState } from '../subagents.js';
 import { partitionUnits, type ReviewUnit } from '../units.js';
 import { FINISHED } from './assignments.js';
 import type { PoolContext } from './pool.js';
+import { emptyReads, readsOf, recordingReads, reviewContext, type ReceivedReads } from './received.js';
 import type { AdaptiveReviewInput, BaselineResult, HarnessEvents, TaskFn } from './types.js';
 import type { VerifyQueue } from './verify-queue.js';
 
@@ -78,6 +85,8 @@ export interface ReviewRun {
 	/** Subagents reviewers asked for, the brief questions they left unsettled or answered, and the subagents that run; kept apart from `units`, so they're never retried. */
 	subagents: SubagentState;
 	nextCandidate: number;
+	/** Every reviewer's retrievals, as places, so the review can record what each one read. */
+	reads: ReceivedReads;
 	/** Dependency setup and baseline check results, shared with every reviewer and verifier. */
 	setupNotes: string;
 	task: TaskFn;
@@ -120,6 +129,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		retriesDone: resume?.retriesDone ?? false,
 		subagents: restoreSubagentState(resume?.subagents),
 		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
+		reads: resume?.reads ? structuredClone(resume.reads) : emptyReads(),
 		setupNotes: '',
 		task: (id, label, status, message, extra) =>
 			events?.onTask?.({ id, label, status, message, kind: extra?.kind ?? 'other', ...extra })
@@ -250,8 +260,26 @@ export function saveCheckpoint(run: ReviewRun): void {
 		evidence: run.evidence.snapshot(kept.flatMap((candidate) => candidate.evidenceIds ?? [])),
 		recommended: [...run.recommended],
 		retriesDone: run.retriesDone,
-		subagents: structuredClone(run.subagents)
+		subagents: structuredClone(run.subagents),
+		reads: readsOf(run.reads, finished)
 	});
+}
+
+/** What each reviewer received, read and cited, and how each of `findings` got its evidence. */
+export function receivedContext(run: ReviewRun, findings: Finding[]): ReviewContext {
+	return reviewContext(
+		{
+			units: run.units,
+			subagents: run.subagents.units,
+			roles: new Map(run.assignments.map((record) => [record.id, record.role])),
+			inventory: run.inventory,
+			changeModel: run.changeModel,
+			reads: run.reads,
+			evidence: run.evidence,
+			candidates: run.candidates
+		},
+		findings
+	);
 }
 
 /** What a reviewer pool needs from the run. */
@@ -266,7 +294,7 @@ export function poolContext(run: ReviewRun): PoolContext {
 		budget: run.budget,
 		deadlineAt: run.investigationDeadline,
 		signal: run.controller.signal,
-		events: run.events,
+		events: recordingReads(run.reads, run.evidence, run.events),
 		task: run.task,
 		candidates: run.candidates,
 		nextCandidate: () => `c${run.nextCandidate++}`,

@@ -62,6 +62,8 @@ export interface ChangedSymbol extends SymbolRange {
 	previousSignature?: string;
 	/** Call sites and tests that use the declaration, outside the diff first; scripts only count files that import it. */
 	callers?: SymbolReference[];
+	/** Callers past the cap, in the same order and capped themselves; set only when the cap cut some. */
+	omittedCallers?: SymbolReference[];
 	/** Set when the checkout was not fully searched for the name, so empty `references` does not mean unused. */
 	usageUnknown?: true;
 	/** Test files likely to cover it: path convention first, then files that name it. */

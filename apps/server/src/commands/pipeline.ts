@@ -326,7 +326,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			summary: result.summary,
 			findings,
 			unconfirmed: result.outcome === 'complete' ? result.unconfirmed : [],
-			funnel: result.funnel
+			funnel: result.funnel,
+			context: result.context
 		});
 
 		if (status === 'passed') keepForReplay(reviewId);

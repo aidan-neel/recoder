@@ -212,6 +212,7 @@ export async function buildChangeModel(input: ChangeModelInput): Promise<ChangeM
 		...symbol,
 		references: usage[index].references,
 		callers: usage[index].callers,
+		...(usage[index].omittedCallers.length ? { omittedCallers: usage[index].omittedCallers } : {}),
 		...(usage[index].searched ? {} : { usageUnknown: true as const }),
 		tests: usage[index].tests,
 		examples: symbol.change === 'deleted' ? [] : examples[index]
