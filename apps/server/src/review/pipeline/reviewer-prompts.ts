@@ -1,7 +1,6 @@
 import { directiveBlock, type ReviewDirective } from '../chat/directive.js';
 import { ledgerBlock } from '../guidelines/ledger/ledger.js';
 import type { RuleLedger } from '../guidelines/ledger/types.js';
-import { unitContext } from './change-model/change-model.js';
 import type { ChangeModel } from './change-model/types.js';
 import { briefBlock } from './intent/brief.js';
 import { intentBlock } from './intent/format.js';
@@ -153,14 +152,17 @@ export type ReviewerHeading = 'Unit' | 'Subagent' | 'Obligation';
 
 /**
  * The user prompt for a lens assignment, or under another `heading` for a
- * subagent or an obligation investigator: the PR, its intent, the unit's changes with their change-model context
- * and the brief's reading of them (open questions go to the defect lenses),
- * and the rule ledger for the quality lenses.
+ * subagent or an obligation investigator: the PR, its intent, the unit's
+ * changes with their change-model context (`declarations`, built once by the
+ * caller so it can record what the block holds) and the brief's reading of
+ * them (open questions go to the defect lenses), and the rule ledger for the
+ * quality lenses.
  */
 export function reviewerUserPrompt(
 	unit: ReviewUnit,
 	remaining: { turns: number; calls: number },
 	ctx: ReviewerPromptContext,
+	declarations: string,
 	heading: ReviewerHeading
 ): string {
 	return [
@@ -170,7 +172,7 @@ export function reviewerUserPrompt(
 		`${heading} ${unit.id}: ${unit.title}`,
 		unit.reason,
 		`${heading === 'Unit' ? 'Changes in this unit' : 'Changes to start from'}:\n${scopeLines(unit.scope)}`,
-		ctx.changeModel ? unitContext(ctx.changeModel, unit.scope) : '',
+		declarations,
 		briefBlock(ctx.intent, unit.scope, !unit.lens || !isQualityLens(unit.lens)),
 		ledgerLines(unit, ctx.ledger),
 		...turnsLeft(remaining.turns, remaining.calls)

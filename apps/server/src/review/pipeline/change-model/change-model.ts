@@ -1,4 +1,6 @@
+import type { DiffHunk } from '@recoder/shared';
 import type { InventoryFile, ReviewInventory } from '../inventory.js';
+import { changedAspects, docComment } from './dependence.js';
 import { findExamples } from './examples.js';
 import { languageFor } from './languages.js';
 import { repoBaselines } from './metrics.js';
@@ -8,7 +10,7 @@ import { byCodePoint, readAt, readTracked, trackedFiles } from './repo.js';
 import { symbolsOf, type ParsedSymbol } from './symbols.js';
 import type { ChangedSymbol, ChangeModel } from './types.js';
 
-export { symbolAt, unitContext } from './lookup.js';
+export { symbolAt, unitContext, unitContextParts } from './lookup.js';
 
 /** What the change model is built from. */
 interface ChangeModelInput {
@@ -18,6 +20,12 @@ interface ChangeModelInput {
 	signal: AbortSignal;
 	/** The merge base, when known; deleted declarations are read from it. Without it only head-side symbols are found. */
 	baseSha?: string;
+	/**
+	 * Rank callers by their dependence on the changed behavior and state that
+	 * behavior next to them. Defaults to `RECODER_CALLER_SELECTION=1`; off
+	 * leaves the model exactly as without it.
+	 */
+	callerSelection?: boolean;
 }
 
 /** A changed symbol before references, tests and examples are attached. */
@@ -26,6 +34,8 @@ type Owned = ParsedSymbol & {
 	change: ChangedSymbol['change'];
 	hunkIds: string[];
 	previousSignature?: string;
+	behavior?: ChangedSymbol['behavior'];
+	doc?: string;
 };
 
 /** One changed file's symbols, or why it has none. */
@@ -106,14 +116,29 @@ function deletedOwned(old: ParsedSymbol[], head: ParsedSymbol[], hunks: HunkLine
 		.map(([index, hunkIds]) => ({ ...old[index], id: ids[index], change: 'deleted' as const, hunkIds }));
 }
 
+function diffHunks(inventory: ReviewInventory, file: InventoryFile): DiffHunk[] {
+	return inventory.diffs.find((entry) => entry.path === file.path)?.hunks ?? [];
+}
+
 /** A file's hunks as changed lines on both sides. */
 export function fileHunks(inventory: ReviewInventory, file: InventoryFile): HunkLines[] {
-	const diff = inventory.diffs.find((entry) => entry.path === file.path);
-
 	return hunkLines(
 		file.hunks.map((hunk) => hunk.id),
-		diff?.hunks ?? []
+		diffHunks(inventory, file)
 	);
+}
+
+/** A modified declaration with the behaviors its changed lines alter and the comment that documents it, when any are. */
+function withBehavior(owned: Owned[], hunks: DiffHunk[], source: string | null): Owned[] {
+	return owned.map((symbol) => {
+		const behavior = symbol.change === 'modified' ? changedAspects(symbol, hunks) : [];
+
+		if (!behavior.length) return symbol;
+
+		const doc = source === null ? undefined : docComment(source, symbol.startLine);
+
+		return { ...symbol, behavior, ...(doc ? { doc } : {}) };
+	});
 }
 
 /** File → the head-side lines the diff adds, so a call site can be told apart from code the PR already rewrote. */
@@ -137,7 +162,12 @@ function withPrevious(owned: Owned[], old: ParsedSymbol[]): Owned[] {
 	});
 }
 
-async function modelFile(input: ChangeModelInput, file: InventoryFile, tracked: Set<string>): Promise<FileResult> {
+async function modelFile(
+	input: ChangeModelInput,
+	file: InventoryFile,
+	tracked: Set<string>,
+	selection: boolean
+): Promise<FileResult> {
 	const hunks = fileHunks(input.inventory, file);
 
 	const headSource = file.status === 'deleted' ? null : await readTracked(input.checkoutPath, file.path, tracked);
@@ -148,9 +178,11 @@ async function modelFile(input: ChangeModelInput, file: InventoryFile, tracked: 
 
 	if (!head && !old) return { owned: [], unparsed: true };
 
+	const modified = withPrevious(headOwned(file, head ?? [], hunks), old ?? []);
+
 	return {
 		owned: [
-			...withPrevious(headOwned(file, head ?? [], hunks), old ?? []),
+			...(selection ? withBehavior(modified, diffHunks(input.inventory, file), headSource) : modified),
 			...deletedOwned(old ?? [], head ?? [], hunks)
 		],
 		unparsed: false
@@ -169,6 +201,7 @@ function bySymbolOrder(a: Owned, b: Owned): number {
  */
 export async function buildChangeModel(input: ChangeModelInput): Promise<ChangeModel> {
 	const { inventory, checkoutPath, signal } = input;
+	const selection = input.callerSelection ?? process.env.RECODER_CALLER_SELECTION === '1';
 	const tracked = await trackedFiles(checkoutPath, signal);
 	const trackedSet = new Set(tracked);
 
@@ -180,7 +213,7 @@ export async function buildChangeModel(input: ChangeModelInput): Promise<ChangeM
 	for (const file of files) {
 		throwIfAborted(signal);
 
-		const result = languageFor(file.path) ? await modelFile(input, file, trackedSet) : null;
+		const result = languageFor(file.path) ? await modelFile(input, file, trackedSet, selection) : null;
 
 		if (!result || result.unparsed) unparsed.push(file.path);
 		else owned.push(...result.owned);
@@ -212,8 +245,11 @@ export async function buildChangeModel(input: ChangeModelInput): Promise<ChangeM
 		...symbol,
 		references: usage[index].references,
 		callers: usage[index].callers,
+		...(usage[index].omittedCallers.length ? { omittedCallers: usage[index].omittedCallers } : {}),
+		...(usage[index].omittedReferences.length ? { omittedReferences: usage[index].omittedReferences } : {}),
 		...(usage[index].searched ? {} : { usageUnknown: true as const }),
 		tests: usage[index].tests,
+		...(usage[index].omittedTests.length ? { omittedTests: usage[index].omittedTests } : {}),
 		examples: symbol.change === 'deleted' ? [] : examples[index]
 	}));
 

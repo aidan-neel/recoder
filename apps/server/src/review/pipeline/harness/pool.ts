@@ -13,6 +13,7 @@ import {
 	type ModelBudget
 } from '../agent-loop.js';
 import type { JsonAgentOptions } from '../agent-loop/options.js';
+import { unitContextParts } from '../change-model/change-model.js';
 import type { CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
 import type { ReviewInventory } from '../inventory.js';
@@ -37,6 +38,7 @@ import {
 import type { AnsweredMark, UnitRequest, UnsettledMark } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
 import { coverageRole, recordFor, updateAssignment } from './assignments.js';
+import { capturePrompt, type Received } from './received.js';
 import { applyUnitResult } from './unit-result.js';
 import type { HarnessEvents, TaskFn } from './types.js';
 
@@ -70,6 +72,8 @@ export interface PoolContext extends ReviewerPromptContext {
 	answered: AnsweredMark[];
 	/** Called with each candidate a reviewer reports, so its verifier can start while others still review. */
 	onCandidate?: (candidate: CandidateFinding) => void;
+	/** Where each reviewer's prompt is recorded as it is built, with the reads its events record. */
+	received: Received;
 	/** Called after each unit settles, to save a checkpoint. */
 	onFinished?: () => void;
 }
@@ -285,6 +289,8 @@ function askReviewer(
 /**
  * A unit agent's opening message: its brief and budget under `heading`, the
  * sandbox setup notes, any `note`, then the first page of its scoped patch.
+ * What the prompt holds is captured in `ctx.received` as it is built, for
+ * lens units, subagents and obligation investigators alike.
  */
 export function unitPrompt(
 	item: ReviewUnit,
@@ -294,8 +300,12 @@ export function unitPrompt(
 	patch: ScopedPatch,
 	note = ''
 ): string {
+	const declarations = ctx.changeModel ? unitContextParts(ctx.changeModel, item.scope) : null;
+
+	capturePrompt(ctx.received, item, ctx.inventory, declarations, patch);
+
 	return (
-		reviewerUserPrompt(item, { turns, calls: ctx.budget.remaining() }, ctx, heading) +
+		reviewerUserPrompt(item, { turns, calls: ctx.budget.remaining() }, ctx, declarations?.text ?? '', heading) +
 		(ctx.setupNotes() ? `\n\n${ctx.setupNotes()}` : '') +
 		note +
 		'\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' +

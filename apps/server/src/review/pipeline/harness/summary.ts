@@ -6,6 +6,7 @@ import {
 	type FindingVerification,
 	type ObligationReport,
 	type ReviewAssignment,
+	type ReviewContext,
 	type ReviewFunnel
 } from '@recoder/shared';
 import { reviewNow } from '../../session/review-control.js';
@@ -15,7 +16,7 @@ import type { CoverageLedger } from '../coverage.js';
 import { obligationReport, obligationSentence } from '../obligations/report.js';
 import { unfinishedAssignments } from './assignments.js';
 import { confirmedFindings, type Consolidated } from './consolidation.js';
-import type { ReviewRun } from './context.js';
+import { receivedContext, type ReviewRun } from './context.js';
 import { droppedSentence } from './subagent-stage.js';
 import type { AdaptiveReviewResult } from './types.js';
 import { hideUnproven } from './verification.js';
@@ -92,6 +93,20 @@ function briefSentence(intent: ReviewRun['intent']): string {
 }
 
 /**
+ * What reviewers received, or no record when measuring it throws: the record
+ * is for evaluation, so a bug in it never fails a review that finished.
+ */
+function measuredContext(run: ReviewRun, findings: Finding[]): { context?: ReviewContext } {
+	try {
+		return { context: receivedContext(run, findings) };
+	} catch (err) {
+		console.warn(`[review] context record skipped: ${err instanceof Error ? err.message : String(err)}`);
+
+		return {};
+	}
+}
+
+/**
  * The result of a review that reached the end. Coverage gaps and failed
  * units are reported in the summary and the coverage rail. Unproven
  * and refuted candidates come back as `unconfirmed`, never shown; the summary
@@ -108,6 +123,7 @@ export function completeReview(run: ReviewRun, consolidated: Consolidated): Adap
 		findings: confirmed,
 		unconfirmed: [...run.hidden, ...refutedCandidates(run)].map(toFinding),
 		funnel: reviewFunnel(run, confirmed.length),
+		...measuredContext(run, confirmed),
 		summary,
 		outcome: 'complete',
 		recommendedChecks: [...new Set(checks)],
@@ -160,6 +176,7 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 		findings: confirmed,
 		unconfirmed: run.hidden.map(toFinding),
 		funnel: reviewFunnel(run, confirmed.length),
+		...measuredContext(run, confirmed),
 		summary: `${summary} The review ran out of time after ${minutes} minutes; only findings verified by then are shown.`,
 		outcome: 'complete',
 		recommendedChecks: [...run.recommended],

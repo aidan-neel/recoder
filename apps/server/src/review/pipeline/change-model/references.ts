@@ -1,11 +1,12 @@
 import { git } from '../../../evidence/git.js';
-import { pickCallers, type ResolvedReference } from './callers.js';
+import { MAX_OMITTED, pickCallers, type ResolvedReference } from './callers.js';
+import { dependence } from './dependence.js';
 import { importsModule, isScriptLanguage } from './imports.js';
 import { languageFor } from './languages.js';
 import { fileReferences, inTestFile, lineKind, type FileReferences } from './reference-kinds.js';
 import { byCodePoint, mapLimit, readTracked } from './repo.js';
 import { isTestPath, testStem } from './test-files.js';
-import type { ReferenceKind, SymbolRange, SymbolReference } from './types.js';
+import type { BehaviorAspect, ReferenceKind, SymbolRange, SymbolReference } from './types.js';
 
 /** Symbols whose references are searched; the rest keep an empty list, so cost stays bounded. */
 const MAX_SEARCHED = 60;
@@ -40,12 +41,23 @@ export interface SymbolUsage {
 	tests: string[];
 	/** Calls and tests that use it, outside the diff first; empty when none was found. */
 	callers: SymbolReference[];
+	/** The next callers, references and tests in the same order, cut by their caps. */
+	omittedCallers: SymbolReference[];
+	omittedReferences: SymbolReference[];
+	omittedTests: string[];
 	/** Whether the whole checkout was searched for the name; an empty list means unused only then. */
 	searched: boolean;
 }
 
 /** A symbol as references and tests need it: where it is, and whether it still exists at the head. */
-type Searched = SymbolRange & { language: string; exported: boolean; deleted: boolean };
+type Searched = SymbolRange & {
+	language: string;
+	exported: boolean;
+	deleted: boolean;
+	/** With caller selection on: the behaviors the change alters, and the parameter count a call is checked against. */
+	behavior?: BehaviorAspect[];
+	metrics?: { params: number };
+};
 
 /** Every line at the checkout that names `name` as a whole word, sorted and capped. */
 async function grepName(root: string, name: string, signal: AbortSignal): Promise<NameHits> {
@@ -257,14 +269,18 @@ function usageOf(symbol: Searched, found: NameHits | undefined, outside: SymbolR
 	);
 
 	const tests = [...new Set([...conventionTests(symbol.file, ctx.testFiles), ...named])];
+	const depends = symbol.behavior ? dependence(symbol.name, symbol.metrics?.params ?? 0, symbol.behavior) : undefined;
+	const picked = pickCallers(symbol.language, symbol.file, resolved, depends);
+
+	const references = [...resolved].sort(byRelevance(symbol)).map(({ ref }) => ref);
 
 	return {
-		references: [...resolved]
-			.sort(byRelevance(symbol))
-			.map(({ ref }) => ref)
-			.slice(0, MAX_REFERENCES),
-		callers: pickCallers(symbol.language, symbol.file, resolved),
+		references: references.slice(0, MAX_REFERENCES),
+		omittedReferences: references.slice(MAX_REFERENCES, MAX_REFERENCES + MAX_OMITTED),
+		callers: picked.callers,
+		omittedCallers: picked.omitted,
 		tests: tests.slice(0, MAX_TESTS),
+		omittedTests: tests.slice(MAX_TESTS, MAX_TESTS + MAX_OMITTED),
 		searched: found !== undefined && !found.partial && !hidesUse(found, dropped)
 	};
 }

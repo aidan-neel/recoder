@@ -26,7 +26,13 @@ export interface SymbolReference {
 	kind?: ReferenceKind;
 	/** The line is one this diff adds, so it may already match the new contract. */
 	inDiff?: true;
+	/** The changed behaviors this call relies on; set only with caller selection on. */
+	dependsOn?: BehaviorAspect[];
 }
+
+/** A behavior of a declaration that a caller can rely on and a change can alter. */
+export type BehaviorAspect =
+	'default' | 'return value' | 'error' | 'ordering' | 'expiry' | 'normalization' | 'persisted shape';
 
 /** Shape measures used by the complexity detector and the readability lens. */
 export interface SymbolMetrics {
@@ -58,14 +64,24 @@ export interface ChangedSymbol extends SymbolRange {
 	calls: string[];
 	/** Places outside the symbol that name it at the head, sorted by file then line, capped. */
 	references: SymbolReference[];
+	/** References past the cap, most relevant first and capped themselves; set only when the cap cut some. */
+	omittedReferences?: SymbolReference[];
 	/** The merge-base signature, set when the signature or export status of this modified declaration changed. */
 	previousSignature?: string;
 	/** Call sites and tests that use the declaration, outside the diff first; scripts only count files that import it. */
 	callers?: SymbolReference[];
+	/** Callers past the cap, in the same order and capped themselves; set only when the cap cut some. */
+	omittedCallers?: SymbolReference[];
+	/** Behaviors of a modified declaration its changed lines alter; set only with caller selection on. */
+	behavior?: BehaviorAspect[];
+	/** The comment above the declaration at the head, shown as its documented behavior when `behavior` is set. */
+	doc?: string;
 	/** Set when the checkout was not fully searched for the name, so empty `references` does not mean unused. */
 	usageUnknown?: true;
 	/** Test files likely to cover it: path convention first, then files that name it. */
 	tests: string[];
+	/** Test files past the cap, in the same order and capped themselves; set only when the cap cut some. */
+	omittedTests?: string[];
 	/** Up to three comparable existing declarations (same kind, same folder or sibling files), sorted deterministically. */
 	examples: SymbolRange[];
 	metrics: SymbolMetrics;

@@ -7,6 +7,7 @@ import type {
 	ReviewAssignment,
 	ReviewBudgetSnapshot,
 	ReviewChatMessage,
+	ReviewContext,
 	ReviewFunnel,
 	ReviewGuidelinesUsed,
 	ReviewOutcome,
@@ -80,6 +81,8 @@ export interface AdaptiveReviewResult {
 	unconfirmed: Finding[];
 	/** Where the candidates went; absent when the review failed. */
 	funnel?: ReviewFunnel;
+	/** What each reviewer received, read and cited; absent when the review failed. */
+	context?: ReviewContext;
 	summary: string;
 	outcome: ReviewOutcome;
 	recommendedChecks: string[];
