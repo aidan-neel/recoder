@@ -48,10 +48,15 @@ export function sameTree(a: TreeState | null | undefined, b: TreeState | null | 
 	return Boolean(a && b) && JSON.stringify(a) === JSON.stringify(b);
 }
 
+/** The commit checked out at `cwd`, or null outside a git checkout. */
+export function headCommit(cwd: string): string | null {
+	return git(cwd, ['rev-parse', 'HEAD'])?.trim() || null;
+}
+
 /** The working tree's state against HEAD, or null outside a git checkout. */
 export function captureTree(cwd: string): TreeState | null {
 	const root = git(cwd, ['rev-parse', '--show-toplevel'])?.trim();
-	const commit = root ? git(root, ['rev-parse', 'HEAD'])?.trim() : null;
+	const commit = root ? headCommit(root) : null;
 	const paths = root && commit ? differingPaths(root, commit) : null;
 
 	if (!root || !commit || !paths) return null;
