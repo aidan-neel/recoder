@@ -9,6 +9,9 @@ import { closeStore, db, reviewProgress } from '../../src/store';
 import { fetchUntilAborted } from '../helpers/fetch';
 import { localForgeFixture } from '../helpers/local-forge';
 
+/** How every brief prompt, per unit or for the whole change, begins; reviewers are prompted otherwise. */
+const BRIEF_PROMPT = 'You write the brief a code change is reviewed against';
+
 const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();
 
@@ -21,8 +24,9 @@ afterEach(() => {
 });
 
 /**
- * A draft review of local PR #7 on a fake model that answers the brief with
- * empty JSON and then holds every reviewer's call until the review aborts it.
+ * A draft review of local PR #7 on a fake model that answers every brief call
+ * with empty JSON and holds every other call until the review aborts it, so
+ * the review is cancelled with its reviewers running.
  * The model has its own endpoint, so calls other test files left on a shared
  * one can't hold its concurrency slots.
  */
@@ -39,12 +43,10 @@ async function draftOnFakeModel(): Promise<{ reviewId: string; repoId: string }>
 		specialistModelId: 'lead'
 	});
 
-	let calls = 0;
-
 	globalThis.fetch = (async (url, init) =>
-		++calls > 1
-			? fetchUntilAborted(url, init)
-			: Response.json({ choices: [{ message: { content: '{}' } }] })) as typeof fetch;
+		String(init?.body).includes(BRIEF_PROMPT)
+			? Response.json({ choices: [{ message: { content: '{}' } }] })
+			: fetchUntilAborted(url, init)) as typeof fetch;
 
 	return { reviewId: createReviewSession({ repoId: repo.id, prNumber: 7 }).id, repoId: repo.id };
 }
