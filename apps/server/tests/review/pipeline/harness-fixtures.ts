@@ -104,17 +104,20 @@ export function useTwoModels(): void {
 	});
 }
 
-/** Restores `fetch`, the review settings, LLM concurrency and the LLM limiter after each test in the calling file. */
+/** Restores `fetch`, the review settings, LLM concurrency, the data directory and the LLM limiter after each test in the calling file. */
 export function restoreAfterEach(): void {
 	const originalFetch = globalThis.fetch;
 	const originalSettings = getStoredSettings();
 	const originalConcurrency = process.env.RECODER_LLM_CONCURRENCY;
+	const originalDataDir = process.env.RECODER_DATA_DIR;
 
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
 		setReviewOverrides(originalSettings);
 		if (originalConcurrency === undefined) delete process.env.RECODER_LLM_CONCURRENCY;
 		else process.env.RECODER_LLM_CONCURRENCY = originalConcurrency;
+		if (originalDataDir === undefined) delete process.env.RECODER_DATA_DIR;
+		else process.env.RECODER_DATA_DIR = originalDataDir;
 		resetLlmLimiter();
 	});
 }
@@ -134,6 +137,11 @@ export function unitOf(init?: RequestInit): string | null {
 /** Whether a stubbed call is a verifier's. */
 export function isVerifier(init?: RequestInit): boolean {
 	return systemOf(init).includes('You verify one code review finding');
+}
+
+/** Whether a stubbed call is the intent stage's, which distills the brief before the lenses run. */
+function isIntent(init?: RequestInit): boolean {
+	return systemOf(init).includes('You write the brief a code change is reviewed against');
 }
 
 /** The first evidence id anywhere in the call's messages, such as the scoped patch a reviewer starts with. */
@@ -156,16 +164,21 @@ export function confirmingVerifier(init?: RequestInit): unknown {
 		: { message: 'Reading the diff.', actions: [{ action: 'readDiff', path: 'src/a.ts' }] };
 }
 
+/** The stage a stubbed call belongs to: a lens assignment id, `verifier`, `intent`, or `other` for any stage not expected to call a model. */
+function stageOf(init?: RequestInit): string {
+	return unitOf(init) ?? (isVerifier(init) ? 'verifier' : isIntent(init) ? 'intent' : 'other');
+}
+
 /**
  * Answers `TWO_UNIT_DIFF`'s lens reviewers and verifiers, recording each
- * call by assignment id or `verifier`. `unit-1/correctness` reports one
- * finding, citing its scoped patch; every verifier confirms; `failing` names
- * an assignment whose reviewer the endpoint rejects.
+ * call by assignment id, `verifier`, `intent` or `other`. `unit-1/correctness`
+ * reports one finding, citing its scoped patch; every verifier confirms;
+ * `failing` names an assignment whose reviewer the endpoint rejects.
  */
 export function stubModel(calls: string[], failing?: string) {
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		const unit = unitOf(init);
-		const kind = unit ?? (isVerifier(init) ? 'verifier' : 'other');
+		const kind = stageOf(init);
 
 		calls.push(kind);
 		if (kind === failing) return new Response('bad request', { status: 400 });
