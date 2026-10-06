@@ -1,5 +1,6 @@
 import {
 	findingKind,
+	splitCategoryTag,
 	type Finding as BackendFinding,
 	type FindingKind,
 	type FindingPatch,
@@ -58,9 +59,8 @@ const SEVERITY_MAP: Record<BackendSeverity, FindingSeverity> = {
  * category as a `[category]` prefix on the message and no kind, so both fall back from there.
  */
 export function mapBackendFinding(f: BackendFinding, index: number): Finding {
-	const match = /^\[([^\]]+)\]\s*/.exec(f.message);
-	const category = f.category ?? match?.[1] ?? 'review';
-	const body = match ? f.message.slice(match[0].length) : f.message;
+	const { tag, body } = splitCategoryTag(f.message);
+	const category = f.category ?? tag ?? 'review';
 	const line = f.line ?? 1;
 
 	return {
