@@ -2,6 +2,18 @@ import type { DiffHunk } from '@recoder/shared';
 import type { BehaviorAspect, SymbolRange, SymbolReference } from './types.js';
 
 /**
+ * Word stems that start a word (`sorted`, `Timeout`, `JSON`) or a camelCase
+ * part (`bySort`, `requestTimeout`), but not the middle of one (`border`,
+ * `settle`) or a part after an underscore (`RUN_TIMEOUT_MS`).
+ */
+function stems(...words: string[]): RegExp {
+	const cap = (word: string) => word[0].toUpperCase() + word.slice(1);
+	const starts = words.flatMap((word) => [word, cap(word), word.toUpperCase()]);
+
+	return new RegExp(`\\b(?:${starts.join('|')})|(?<=[a-z])(?:${words.map(cap).join('|')})`);
+}
+
+/**
  * What changed lines must contain for the change to alter each aspect a
  * caller can depend on. A default is `??`, `||` or `or` before a literal, or
  * the word; a bare `||` or arrow is too common in conditions and callbacks.
@@ -10,11 +22,17 @@ const ASPECT_PATTERNS: [BehaviorAspect, RegExp][] = [
 	['default', /\?\?|\|\|\s*(?:['"`\d[{]|null\b|true\b|false\b)|\bdefault|\bfallback|\bor\s+(?:['"\d[{]|None\b)/i],
 	['return value', /\breturn\b|\byield\b/],
 	['error', /\bthrow\b|\braise\b|\breject\b|Error\b|Exception\b/],
-	['ordering', /sort|revers|order|rank/i],
-	['expiry', /ttl|expir|timeout|deadline|max_?age/i],
-	['normalization', /trim|lower|upper|normali[sz]|strip|canonical/i],
-	['persisted shape', /json|serializ|dumps|pickle|persist|schema|insert|writeFile|storage/i]
+	['ordering', stems('sort', 'revers', 'order', 'rank')],
+	['expiry', stems('ttl', 'expir', 'timeout', 'deadline', 'maxAge', 'max_age')],
+	['normalization', stems('trim', 'lower', 'upper', 'normalis', 'normaliz', 'strip', 'canonical')],
+	[
+		'persisted shape',
+		stems('json', 'serializ', 'dumps', 'pickle', 'persist', 'schema', 'insert', 'writeFile', 'storage')
+	]
 ];
+
+/** A blank line or one that is only a comment (`#` then a space for Python and shell), so its words change no behavior. */
+const COMMENT_ONLY = /^\s*(?:\/\/|\/\*|\*|#(?=\s|#|$)|<!--|$)/;
 
 /** The aspects a caller can depend on through the value a call gives back. */
 const RESULT_ASPECTS: BehaviorAspect[] = ['return value', 'ordering', 'expiry', 'normalization', 'persisted shape'];
@@ -25,7 +43,7 @@ const DOC_CHARS = 240;
 /** A parameter default inside the parentheses of a signature. */
 const PARAM_DEFAULT = /\([^)]*[^=!<>]=[^=>][^)]*\)/;
 
-/** The text of the lines a file's hunks add or delete within a head-side declaration's lines. */
+/** The text of the lines a file's hunks add or delete within a head-side declaration's lines, skipping comment-only lines. */
 function changedText(symbol: SymbolRange, hunks: DiffHunk[]): string[] {
 	const texts: string[] = [];
 
@@ -37,8 +55,9 @@ function changedText(symbol: SymbolRange, hunks: DiffHunk[]): string[] {
 
 			const at = line.type === 'add' ? line.newNo : line.type === 'del' ? previousNew : null;
 
-			if (at !== null && at >= symbol.startLine - (line.type === 'del' ? 1 : 0) && at <= symbol.endLine)
-				texts.push(line.text);
+			const inside = at !== null && at >= symbol.startLine - (line.type === 'del' ? 1 : 0) && at <= symbol.endLine;
+
+			if (inside && !COMMENT_ONLY.test(line.text)) texts.push(line.text);
 		}
 	}
 

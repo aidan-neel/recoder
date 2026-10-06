@@ -29,14 +29,25 @@ function sameFamily(file: string, language: string): boolean {
 	return other !== null && (other === language || (isScriptLanguage(other) && isScriptLanguage(language)));
 }
 
-/** Call sites outside the diff first, then those it adds, then tests; each by file and line. */
-function callerOrder(a: SymbolReference, b: SymbolReference): number {
-	const group = (ref: SymbolReference) => (ref.kind === 'test' ? 2 : ref.inDiff ? 1 : 0);
-
-	return group(a) - group(b) || byCodePoint(a.file, b.file) || a.line - b.line;
+/** Call sites outside the diff first, then those it adds, then tests. */
+function group(ref: SymbolReference): number {
+	return ref.kind === 'test' ? 2 : ref.inDiff ? 1 : 0;
 }
 
-/** Callers that rely on more of the changed behaviors first, each marked with what it relies on; then `callerOrder`. */
+function byPlace(a: SymbolReference, b: SymbolReference): number {
+	return byCodePoint(a.file, b.file) || a.line - b.line;
+}
+
+/** `group` first, then file and line. */
+function callerOrder(a: SymbolReference, b: SymbolReference): number {
+	return group(a) - group(b) || byPlace(a, b);
+}
+
+/**
+ * Each caller marked with the changed behaviors it relies on; within its
+ * `group`, those relying on more rank first. A tag never lifts a caller out
+ * of its group, so a tagged test still follows every production caller.
+ */
 function byDependence(refs: SymbolReference[], depends: (ref: SymbolReference) => BehaviorAspect[]): SymbolReference[] {
 	return refs
 		.map((ref) => {
@@ -44,14 +55,14 @@ function byDependence(refs: SymbolReference[], depends: (ref: SymbolReference) =
 
 			return dependsOn.length ? { ...ref, dependsOn } : ref;
 		})
-		.sort((a, b) => (b.dependsOn?.length ?? 0) - (a.dependsOn?.length ?? 0) || callerOrder(a, b));
+		.sort((a, b) => group(a) - group(b) || (b.dependsOn?.length ?? 0) - (a.dependsOn?.length ?? 0) || byPlace(a, b));
 }
 
 /**
  * The calls and tests that use a symbol, up to the cap, and those the cap cut.
  * For script languages a hit in another file counts only when that file
  * imports the symbol's module, so a method of the same name elsewhere is not a caller.
- * With `depends`, callers that rely on the changed behavior rank first; the cap is the same.
+ * With `depends`, callers that rely on the changed behavior rank first within their group; the cap is the same.
  */
 export function pickCallers(
 	language: string,
