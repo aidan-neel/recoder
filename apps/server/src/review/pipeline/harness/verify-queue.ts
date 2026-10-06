@@ -9,6 +9,9 @@ import { publishBudget, saveCheckpoint, syncWorkspaceDeadline, type ReviewRun } 
 /** One attempt at settling a candidate; false when the verifier gave no verdict. */
 type VerifyAttempt = (candidate: CandidateFinding, attempt: number) => Promise<boolean>;
 
+/** A rejected candidate's one repair; true when it passed validation again and is to be verified. */
+type RepairAttempt = (candidate: CandidateFinding) => Promise<boolean>;
+
 interface QueuedAttempt {
 	candidate: CandidateFinding;
 	attempt: number;
@@ -55,6 +58,9 @@ export class VerifyQueue {
 
 	private accepted = 0;
 
+	/** Repairs still running; a candidate one makes valid joins the line when it finishes. */
+	private repairing = 0;
+
 	/** The error that stopped the queue: a blocked model or an aborted review. */
 	private failure: { error: unknown } | null = null;
 
@@ -62,16 +68,27 @@ export class VerifyQueue {
 
 	constructor(
 		private readonly run: ReviewRun,
-		private readonly verify: VerifyAttempt
+		private readonly verify: VerifyAttempt,
+		private readonly repair?: RepairAttempt
 	) {}
 
-	/** Whether any verifier is running or waiting. */
+	/** Whether any verifier or repair is running or waiting. */
 	get busy(): boolean {
-		return this.running > 0 || this.waiting.length > 0;
+		return this.running > 0 || this.waiting.length > 0 || this.repairing > 0;
 	}
 
-	/** Queues a candidate that is valid and has no verdict yet; any other is left as it is. */
+	/**
+	 * Queues a candidate that is valid and has no verdict yet. A rejected one
+	 * goes to its repair first, when the queue has one, and joins if the repair
+	 * makes it valid; any other is left as it is.
+	 */
 	add(candidate: CandidateFinding): void {
+		if (!candidate.valid && this.repair) {
+			this.startRepair(this.repair, candidate);
+
+			return;
+		}
+
 		if (!candidate.valid || candidate.verification) return;
 
 		if (!this.takeSlot(candidate)) {
@@ -176,6 +193,20 @@ export class VerifyQueue {
 		saveCheckpoint(run);
 	}
 
+	private startRepair(repair: RepairAttempt, candidate: CandidateFinding): void {
+		this.repairing++;
+
+		repair(candidate)
+			.then((valid) => {
+				if (valid && !this.failure) this.add(candidate);
+			})
+			.catch((error: unknown) => this.stop(error))
+			.finally(() => {
+				this.repairing--;
+				this.settleIdle();
+			});
+	}
+
 	/** Keeps the first error; attempts still waiting then end unverified instead of starting. */
 	private stop(error: unknown): void {
 		this.failure ??= { error };
@@ -184,7 +215,10 @@ export class VerifyQueue {
 	private finished(): void {
 		this.running--;
 		this.launch();
+		this.settleIdle();
+	}
 
+	private settleIdle(): void {
 		if (!this.busy) for (const resolve of this.idleWaiters.splice(0)) resolve();
 	}
 }
