@@ -23,6 +23,8 @@ afterEach(() => {
 /**
  * A draft review of local PR #7 on a fake model that answers the brief with
  * empty JSON and then holds every reviewer's call until the review aborts it.
+ * The model has its own endpoint, so calls other test files left on a shared
+ * one can't hold its concurrency slots.
  */
 async function draftOnFakeModel(): Promise<{ reviewId: string; repoId: string }> {
 	const { repo } = await localForgeFixture();
@@ -30,7 +32,7 @@ async function draftOnFakeModel(): Promise<{ reviewId: string; repoId: string }>
 	db.repos.set(repo);
 
 	setReviewOverrides({
-		baseUrl: 'http://model.test/v1',
+		baseUrl: 'http://lifecycle-model.test/v1',
 		apiKey: 'test',
 		models: [{ id: 'lead', label: 'Lead', model: 'lead' }],
 		orchestratorModelId: 'lead',
@@ -72,7 +74,8 @@ test('a review cancelled while its reviewers run leaves every task failed as can
 
 	try {
 		startReviewSession(reviewId);
-		await reviewing;
+		await Promise.race([reviewing, ended]);
+		expect(db.reviews.get(reviewId)).toMatchObject({ status: 'running' });
 		getReviewControl(reviewId)!.cancel();
 		await ended;
 
