@@ -197,3 +197,12 @@ describe('testMatrix on a suspected new test', () => {
 		expect(outcome.counts.skips.budget).toBe(1);
 	});
 });
+
+describe('singleFileCommands for bun test', () => {
+	test('gives no command for a helper in a tests folder, which bun test would not run', () => {
+		const commandFor = singleFileCommands(['.: test → bun test'], ['bun run test']);
+
+		expect(commandFor('tests/helpers/review.ts')).toBeNull();
+		expect(commandFor('tests/review.test.ts')).toBe('bun test tests/review.test.ts');
+	});
+});

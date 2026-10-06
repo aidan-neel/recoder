@@ -21,6 +21,9 @@ const TOOL = /(?:^|&& )(bun|pnpm|yarn|npm) run /;
 const FILE_RUNNER = /^(?:ava|vitest|vp test|jest|bun test)\b/;
 
 /** The command that runs a binary the install put in a package. */
+/** `bun test` only picks up files with a test marker in the name, so a helper in a tests folder cannot run alone. */
+const BUN_TEST_FILE = /(?:\.|_)(?:test|spec)\.[cm]?[jt]sx?$/;
+
 const EXEC = { npm: 'npx', pnpm: 'pnpm exec', yarn: 'yarn', bun: 'bunx' } as const;
 
 /** The nearest package dir above a path that has a test script. */
@@ -66,6 +69,7 @@ export function singleFileCommands(scriptLines: readonly string[], baselineComma
 		const step = owner.script;
 
 		if (!FILE_RUNNER.test(step)) return null;
+		if (step.startsWith('bun test') && !BUN_TEST_FILE.test(path)) return null;
 
 		const inner = owner.dir === '.' ? path : path.slice(owner.dir.length + 1);
 		const prefix = step.startsWith('bun test') ? '' : tool ? `${EXEC[tool]} ` : null;

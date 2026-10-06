@@ -48,6 +48,15 @@ function countsOnly(assertion: Assertion): boolean {
 	return matcherKey(assertion) === 'toHaveLength' || COUNT_SUBJECT.test(assertion.args[0] ?? '');
 }
 
+/** An assertion that looks at which item came back, not how many. */
+function namesItem(assertion: Assertion): boolean {
+	return (
+		/^(?:toEqual|toStrictEqual|toContain|toContainEqual|toMatchObject|deepEqual|deepStrictEqual)$/.test(
+			assertion.method
+		) || /\[\d+\]|\.at\(|\.map\(|\.find\(/.test(assertion.args[0] ?? '')
+	);
+}
+
 /** A test that says it reports something but only checks that the output is not empty. */
 function outputPresence(test: TestBlock, assertion: Assertion): Suspicion | null {
 	const found = boundOf(assertion);
@@ -63,11 +72,12 @@ function outputPresence(test: TestBlock, assertion: Assertion): Suspicion | null
 
 /** A test that says it keeps or picks one item but only checks how many came back. */
 function keepsOneOfMany(test: TestBlock): Suspicion | null {
-	if (!SELECT_TITLE.test(test.name) || !test.assertions.length || !test.assertions.every(countsOnly)) return null;
+	if (!SELECT_TITLE.test(test.name) || !test.assertions.some(countsOnly) || test.assertions.some(namesItem))
+		return null;
 
 	return {
 		title: 'checks how many items remain, not which one',
-		body: 'The title promises a choice among items, but every assertion only counts the result, so keeping the wrong item passes.'
+		body: 'The title promises a choice among items, but no assertion looks at which item is left, so keeping the wrong item passes.'
 	};
 }
 
@@ -161,7 +171,7 @@ export function suspicionIn(file: TestFileVersions, test: TestBlock, subclasses:
 
 		const found =
 			outputPresence(test, assertion) ??
-			keepsOneOfMany(test) ??
+			(countsOnly(assertion) ? keepsOneOfMany(test) : null) ??
 			lowerBound(assertion) ??
 			someForEvery(test, assertion) ??
 			presenceOfThrown(test, assertion, thrown) ??
