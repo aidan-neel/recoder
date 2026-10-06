@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import type { CitedVia, OmissionReason, ReviewContext } from '@recoder/shared';
+import type { CitedVia, ContextItem, OmissionReason, ReviewContext, ReviewerContext } from '@recoder/shared';
 import { readReport, type BenchmarkReport } from './benchmark-report';
 import { percent } from './benchmark-labels-report';
 import { getReview } from './client';
@@ -16,11 +16,8 @@ const OMISSION_REASONS: OmissionReason[] = [
 
 const CITED_VIAS: CitedVia[] = ['supplied', 'read', 'unknown'];
 
-/** What the reviewers of one codebase's passed runs received, as counts only; a prompt shared by lenses counts once per reviewer. */
-export interface ContextTotals {
-	/** Passed runs, and those whose review stored a context record. */
-	runs: number;
-	recorded: number;
+/** What a group of reviewers received, as counts only; a prompt shared by lenses counts once per reviewer. */
+interface ReviewerTotals {
 	reviewers: number;
 	/** Places the prompts supplied, by kind of context. */
 	supplied: Record<string, number>;
@@ -29,6 +26,17 @@ export interface ContextTotals {
 	omitted: Record<OmissionReason, number>;
 	/** Reads past the per-reviewer cap, counted but not listed. */
 	readsDropped: number;
+	/** Listed prompt omissions a reviewer's candidates cited anyway: context it lacked and went and read. */
+	citedOmitted: Record<OmissionReason, number>;
+	/** Supplied places none of the reviewer's candidate citations (`cited`, not only published findings) touch. */
+	suppliedUncited: number;
+}
+
+/** One codebase's reviewers, plus its runs and how its published findings' evidence arrived. */
+export interface ContextTotals extends ReviewerTotals {
+	/** Passed runs, and those whose review stored a context record. */
+	runs: number;
+	recorded: number;
 	/** Published findings; those a reporter backed with something it read itself; those citing nothing a reviewer held. */
 	findings: number;
 	foundByReading: number;
@@ -41,16 +49,24 @@ function zero<K extends string>(keys: K[]): Record<K, number> {
 	return Object.fromEntries(keys.map((key) => [key, 0])) as Record<K, number>;
 }
 
-function emptyTotals(): ContextTotals {
+function emptyReviewerTotals(): ReviewerTotals {
 	return {
-		runs: 0,
-		recorded: 0,
 		reviewers: 0,
 		supplied: {},
 		read: 0,
 		cited: zero(CITED_VIAS),
 		omitted: zero(OMISSION_REASONS),
 		readsDropped: 0,
+		citedOmitted: zero(OMISSION_REASONS),
+		suppliedUncited: 0
+	};
+}
+
+function emptyTotals(): ContextTotals {
+	return {
+		...emptyReviewerTotals(),
+		runs: 0,
+		recorded: 0,
 		findings: 0,
 		foundByReading: 0,
 		citingNothing: 0,
@@ -60,6 +76,40 @@ function emptyTotals(): ContextTotals {
 
 const sum = (counts: Record<string, number>) => Object.values(counts).reduce((total, count) => total + count, 0);
 
+/** Whether two places share a line, or a path when either has no lines (a test file, a whole read). */
+function touches(a: ContextItem, b: ContextItem): boolean {
+	if (a.path !== b.path) return false;
+	if (a.startLine === undefined || b.startLine === undefined) return true;
+
+	return a.startLine <= (b.endLine ?? b.startLine) && b.startLine <= (a.endLine ?? a.startLine);
+}
+
+/**
+ * Adds one reviewer: its unit's prompt (supplied and cut), its own reads and
+ * read cuts, and what its candidates cited. Cited-after-omission matches only
+ * the prompt's listed cuts, not those past the listing cap or its own read cuts.
+ */
+function addReviewer(totals: ReviewerTotals, context: ReviewContext, reviewer: ReviewerContext): void {
+	const prompt = reviewer.unit ? context.units[reviewer.unit] : undefined;
+	const cites = (item: ContextItem) => reviewer.cited.some((cited) => touches(cited, item));
+
+	totals.reviewers++;
+
+	for (const item of prompt?.supplied ?? []) {
+		totals.supplied[item.kind] = (totals.supplied[item.kind] ?? 0) + 1;
+
+		if (!cites(item)) totals.suppliedUncited++;
+	}
+
+	for (const item of prompt?.omitted ?? []) if (cites(item)) totals.citedOmitted[item.reason]++;
+	for (const item of reviewer.cited) totals.cited[item.via]++;
+	for (const item of [...(prompt?.omitted ?? []), ...reviewer.omitted]) totals.omitted[item.reason]++;
+	for (const reason of OMISSION_REASONS) totals.omitted[reason] += prompt?.omittedPast?.[reason] ?? 0;
+
+	totals.read += reviewer.read.length;
+	totals.readsDropped += reviewer.readsDropped ?? 0;
+}
+
 /** Adds one passed run's record; a run without one counts only as a run. */
 export function addContext(totals: ContextTotals, context: ReviewContext | undefined): void {
 	totals.runs++;
@@ -67,19 +117,8 @@ export function addContext(totals: ContextTotals, context: ReviewContext | undef
 	if (!context) return;
 
 	totals.recorded++;
-	totals.reviewers += context.reviewers.length;
 
-	for (const reviewer of context.reviewers) {
-		const prompt = reviewer.unit ? context.units[reviewer.unit] : undefined;
-
-		for (const item of prompt?.supplied ?? []) totals.supplied[item.kind] = (totals.supplied[item.kind] ?? 0) + 1;
-		for (const item of reviewer.cited) totals.cited[item.via]++;
-		for (const item of [...(prompt?.omitted ?? []), ...reviewer.omitted]) totals.omitted[item.reason]++;
-		for (const reason of OMISSION_REASONS) totals.omitted[reason] += prompt?.omittedPast?.[reason] ?? 0;
-
-		totals.read += reviewer.read.length;
-		totals.readsDropped += reviewer.readsDropped ?? 0;
-	}
+	for (const reviewer of context.reviewers) addReviewer(totals, context, reviewer);
 
 	for (const finding of context.findings) {
 		totals.findings++;
@@ -97,6 +136,13 @@ const listed = (counts: Record<string, number>) =>
 		.map(([key, count]) => `${key} ${count}`)
 		.join(', ');
 
+const vias = (counts: Record<CitedVia, number>) => CITED_VIAS.map((via) => `${via} ${counts[via]}`).join(', ');
+
+/** Cut from the prompt yet cited, by reason. */
+function citedOmittedText(totals: ReviewerTotals): string {
+	return `${sum(totals.citedOmitted)}${sum(totals.citedOmitted) ? ` (${listed(totals.citedOmitted)})` : ''}`;
+}
+
 /** One codebase's block: supplied, read and cited counts, omissions by reason, and how published evidence arrived. */
 export function totalsLines(name: string, totals: ContextTotals): string[] {
 	const share = (count: number) => (totals.findings ? percent(count / totals.findings).trim() : '-');
@@ -104,12 +150,39 @@ export function totalsLines(name: string, totals: ContextTotals): string[] {
 	return [
 		`${name}  runs ${totals.runs} (${totals.recorded} recorded)  reviewers ${totals.reviewers}`,
 		`  supplied ${sum(totals.supplied)}${sum(totals.supplied) ? ` (${listed(totals.supplied)})` : ''}`,
+		`    cited by none of the reviewer's candidates ${totals.suppliedUncited}`,
 		`  read ${totals.read}${totals.readsDropped ? ` (+${totals.readsDropped} past the cap)` : ''}`,
-		`  cited ${sum(totals.cited)} (${CITED_VIAS.map((via) => `${via} ${totals.cited[via]}`).join(', ')})`,
+		`  cited ${sum(totals.cited)} (${vias(totals.cited)})`,
 		`  omitted ${OMISSION_REASONS.map((reason) => `${reason} ${totals.omitted[reason]}`).join(', ')}`,
+		`    cut from the prompt, then cited ${citedOmittedText(totals)}`,
 		`  published findings ${totals.findings}: backed by a read ${share(totals.foundByReading)}, citing nothing held ${share(totals.citingNothing)}`,
-		`    their citations ${CITED_VIAS.map((via) => `${via} ${totals.findingCited[via]}`).join(', ')}`
+		`    their citations ${vias(totals.findingCited)}`
 	];
+}
+
+/** One line per lens over all codebases; a reviewer without a lens (a subagent) counts under its role. */
+function lensLines(byLens: Map<string, ReviewerTotals>): string[] {
+	return [...byLens.keys()].sort().map((lens) => {
+		const totals = byLens.get(lens)!;
+
+		return [
+			`  ${lens}  reviewers ${totals.reviewers}`,
+			`supplied ${sum(totals.supplied)} (uncited ${totals.suppliedUncited})`,
+			`read ${totals.read}`,
+			`cited ${sum(totals.cited)} (${vias(totals.cited)})`,
+			`omitted ${sum(totals.omitted)}, then cited ${citedOmittedText(totals)}`
+		].join('  ');
+	});
+}
+
+function addByLens(byLens: Map<string, ReviewerTotals>, context: ReviewContext): void {
+	for (const reviewer of context.reviewers) {
+		const lens = reviewer.lens ?? reviewer.role;
+		const totals = byLens.get(lens) ?? emptyReviewerTotals();
+
+		byLens.set(lens, totals);
+		addReviewer(totals, context, reviewer);
+	}
 }
 
 /**
@@ -119,6 +192,7 @@ export function totalsLines(name: string, totals: ContextTotals): string[] {
  */
 export async function contextReport(report: BenchmarkReport, base: string): Promise<string[]> {
 	const byCodebase = new Map<string, ContextTotals>();
+	const byLens = new Map<string, ReviewerTotals>();
 	const all = emptyTotals();
 	let unreadable = 0;
 
@@ -136,6 +210,8 @@ export async function contextReport(report: BenchmarkReport, base: string): Prom
 			byCodebase.set(pr.codebase, totals);
 			addContext(totals, review.context);
 			addContext(all, review.context);
+
+			if (review.context) addByLens(byLens, review.context);
 		}
 	}
 
@@ -145,7 +221,10 @@ export async function contextReport(report: BenchmarkReport, base: string): Prom
 		`Context received by reviewers in ${report.dataset}${unreadable ? ` (${unreadable} unreadable review${unreadable === 1 ? '' : 's'})` : ''}`,
 		...names.flatMap((name) => ['', ...totalsLines(name, byCodebase.get(name)!)]),
 		'',
-		...totalsLines('all', all)
+		...totalsLines('all', all),
+		'',
+		'By lens over all codebases',
+		...lensLines(byLens)
 	];
 }
 
