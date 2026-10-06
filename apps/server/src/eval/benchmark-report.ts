@@ -102,6 +102,29 @@ export interface Derivation {
 	declared: FieldDiff[];
 }
 
+/**
+ * The saved report a rescore judged again, so a reader can tell a rescore
+ * from a fresh benchmark and what it was made from.
+ */
+export interface RescoredFrom {
+	/** The input report's absolute path. */
+	path: string;
+	/** SHA-256 of the input report's bytes, in hex. */
+	sha256: string;
+	/** The judge that scored the input, at the version its identity records; `not recorded` without an identity. */
+	judge: JudgeModel & { version: number | typeof NOT_RECORDED };
+	/** The judge this report was scored with, at this harness's judge version. */
+	rescoredBy: JudgeModel & { version: number };
+	/** Passed runs that saved no candidate pool, so they have no stages and no below-the-bar tallies. */
+	withoutPool: number;
+	/**
+	 * Passed runs whose saved pool records no candidate ids, or whose findings
+	 * record none, as reports from older trees do: their below-the-bar tallies
+	 * are left out of `summary.lows`.
+	 */
+	withoutIds: number;
+}
+
 export interface BenchmarkReport {
 	dataset: string;
 	base: string;
@@ -124,6 +147,8 @@ export interface BenchmarkReport {
 	runIds?: string[];
 	/** The reports this one reused, oldest first; a single derivation in reports that kept only the last. */
 	derivedFrom?: Derivation[] | Derivation;
+	/** Set on a report `eval:rescore` wrote; absent from any other report. */
+	rescoredFrom?: RescoredFrom;
 	startedAt: string;
 	finishedAt: string;
 	prs: PrResult[];
@@ -278,6 +303,28 @@ function derivationLines(report: BenchmarkReport): string[] {
 	]);
 }
 
+/** Where a rescored report came from, and what the input's runs did not let it judge again. */
+function rescoreLines(report: BenchmarkReport): string[] {
+	const from = report.rescoredFrom;
+
+	if (!from) return [];
+
+	const version = (judge: { version: number | string }) =>
+		typeof judge.version === 'number' ? `v${judge.version}` : `version ${judge.version}`;
+
+	return [
+		`Rescored from ${from.path} (sha256 ${from.sha256.slice(0, 12)}), judged there by ${from.judge.model} ${version(from.judge)}, here by ${from.rescoredBy.model} ${version(from.rescoredBy)}`,
+		...(from.withoutPool
+			? [`  ${from.withoutPool} passed runs saved no candidate pool: no stages, no below-the-bar tallies`]
+			: []),
+		...(from.withoutIds
+			? [
+					`  ${from.withoutIds} passed runs record no candidate ids: their below-the-bar tallies are left out${report.summary.lows ? '' : ', so the "Published below the bar" section is absent'}`
+				]
+			: [])
+	];
+}
+
 function groupLines(title: string, groups: Record<string, Totals>): string[] {
 	const keys = Object.keys(groups).sort();
 
@@ -356,6 +403,7 @@ export function printBenchmark(report: BenchmarkReport): void {
 			...reviewerLine(report.reviewer),
 			identityLine(report),
 			...derivationLines(report),
+			...rescoreLines(report),
 			'Precision is an interval: unresolved findings are not counted wrong until a human labels them in adjudications.json.',
 			'',
 			'PRs',

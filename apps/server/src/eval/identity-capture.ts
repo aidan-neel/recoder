@@ -98,6 +98,25 @@ function decided(adjudications: Adjudications): Record<string, string> {
 	);
 }
 
+/** The hashes of the dataset's label files and of its human decisions, which a rescore records again. */
+export function datasetHashes(
+	dataset: string,
+	adjudications: Adjudications
+): Pick<RunIdentity['dataset'], 'labels' | 'adjudications'> {
+	return { labels: contentHash(labelFiles(dataset)), adjudications: contentHash(decided(adjudications)) };
+}
+
+/** The judge as an identity records it: the model, the judge's version and its fixed seed. */
+export function judgeIdentity(judge: JudgeModel): RunIdentity['judge'] {
+	return {
+		model: judge.model,
+		provider: judge.provider,
+		effort: judge.effort ?? 'default',
+		version: JUDGE_VERSION,
+		seed: JUDGE_SEED
+	};
+}
+
 async function datasetIdentity(
 	dataset: string,
 	adjudications: Adjudications,
@@ -117,12 +136,7 @@ async function datasetIdentity(
 		})
 	);
 
-	return {
-		name: basename(dataset),
-		labels: contentHash(files),
-		adjudications: contentHash(decided(adjudications)),
-		forges: Object.fromEntries(forges)
-	};
+	return { name: basename(dataset), ...datasetHashes(dataset, adjudications), forges: Object.fromEntries(forges) };
 }
 
 /** Each task with the base commit its forge says the PR was cut from, sorted by task id. */
@@ -235,13 +249,7 @@ export async function captureIdentity(input: IdentityInput): Promise<RunIdentity
 		dataset: await datasetIdentity(input.dataset, input.adjudications, forge),
 		code: { harness, server: server.code },
 		models: stageModels(settings),
-		judge: {
-			model: judge.model,
-			provider: judge.provider,
-			effort: judge.effort ?? 'default',
-			version: JUDGE_VERSION,
-			seed: JUDGE_SEED
-		},
+		judge: judgeIdentity(judge),
 		flags: server.flags,
 		limits: {
 			settings: {

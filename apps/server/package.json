@@ -14,7 +14,8 @@
 		"eval:compare": "bun src/eval/compare.ts",
 		"eval:merge": "bun src/eval/merge.ts",
 		"eval:context": "bun src/eval/context-report.ts",
-		"eval:select-set": "bun src/eval/select-set.ts"
+		"eval:select-set": "bun src/eval/select-set.ts",
+		"eval:rescore": "bun src/eval/rescore.ts"
 	},
 	"dependencies": {
 		"@recoder/shared": "workspace:*",
