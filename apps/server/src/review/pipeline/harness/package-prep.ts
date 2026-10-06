@@ -49,8 +49,6 @@ interface PrepStep extends PlannedStep {
 
 /** What preparing a checkout's changed packages ran and found. */
 export interface PrepReport {
-	/** The checkout and commit the result holds for. */
-	identity: string;
 	profiles: ExecutionProfile[];
 	steps: PrepStep[];
 	elapsedMs: number;
@@ -128,7 +126,6 @@ async function prepare(workspace: ExecWorkspace, options: PrepOptions): Promise<
 	}
 
 	const report = {
-		identity: `${workspace.checkout}@${workspace.headSha}`,
 		profiles,
 		steps,
 		elapsedMs: Date.now() - started,

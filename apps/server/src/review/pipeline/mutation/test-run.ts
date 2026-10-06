@@ -12,7 +12,7 @@ export function oldCopyPath(path: string): string {
 const SCRIPT_LINE = /^(.+?): ([\w:.-]+) → (.*)$/;
 
 /** A step that only runs another script of the package. */
-export const SCRIPT_STEP = /^(?:bun|pnpm|npm|yarn) run ([\w:.-]+)$/;
+const SCRIPT_STEP = /^(?:bun|pnpm|npm|yarn) run ([\w:.-]+)$/;
 
 /** The package manager a baseline command ran with. */
 const TOOL = /(?:^|&& )(bun|pnpm|yarn|npm) run /;
@@ -39,15 +39,33 @@ function owningScript(scripts: Map<string, Map<string, string>>, path: string): 
 	const dirs = [...scripts.keys()].filter((dir) => dir === '.' || path.startsWith(`${dir}/`));
 	const dir = dirs.filter((candidate) => scripts.get(candidate)!.has('test')).sort((a, b) => b.length - a.length)[0];
 
-	return dir === undefined ? null : { dir, script: lastStep(scripts.get(dir)!, 'test') };
+	return dir === undefined ? null : { dir, script: testChain(scripts.get(dir)!).runner };
 }
 
-/** The last `&&` step of a script, following a step that only runs another script. */
-function lastStep(named: Map<string, string>, name: string, depth = 0): string {
-	const step = (named.get(name) ?? '').split('&&').pop()!.trim();
-	const next = SCRIPT_STEP.exec(step)?.[1];
+/**
+ * The scripts a test script runs before its runner, and the runner step: the
+ * last `&&` step, following a step that only runs another script. `bun run
+ * build:registry && bun test` runs `build:registry` first, then `bun test`.
+ */
+export function testChain(
+	scripts: Map<string, string>,
+	name = 'test',
+	depth = 0
+): { before: string[]; runner: string } {
+	const steps = (scripts.get(name) ?? '')
+		.split('&&')
+		.map((step) => step.trim())
+		.filter(Boolean);
 
-	return next && depth < 3 && named.has(next) ? lastStep(named, next, depth + 1) : step;
+	const last = steps.pop() ?? '';
+	const before = steps.flatMap((step) => SCRIPT_STEP.exec(step)?.[1] ?? []);
+	const next = SCRIPT_STEP.exec(last)?.[1];
+
+	if (!next || depth >= 3 || !scripts.has(next)) return { before, runner: last };
+
+	const inner = testChain(scripts, next, depth + 1);
+
+	return { before: [...before, ...inner.before], runner: inner.runner };
 }
 
 /**

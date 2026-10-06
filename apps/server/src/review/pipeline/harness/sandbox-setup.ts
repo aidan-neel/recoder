@@ -8,7 +8,6 @@ import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { runBaselineChecks } from './baseline-run.js';
 import { installedTool, pickBaselineChecks } from './baseline-checks.js';
 import { extendDeadlines, type ReviewRun } from './context.js';
-import type { PackageManager } from './exec-profile.js';
 import { describePrep, packagePrepEnabled, preparePackages, type PrepReport } from './package-prep.js';
 import type { BaselineResult, HarnessEvents, TaskFn } from './types.js';
 
@@ -237,8 +236,7 @@ async function prepareChanged(
 	const { events, task } = run;
 	const rows = toolRows('prepare', events);
 	const counts = new Map<ExecutionOutcome | 'repaired', number>();
-	const tool = installedTool(setup);
-	const manager = tool && ['bun', 'pnpm', 'yarn', 'npm'].includes(tool) ? (tool as PackageManager) : null;
+	const manager = installedTool(setup);
 
 	task('prepare', 'Prepare packages', 'running', 'Reading how the changed packages run', { kind: 'setup' });
 

@@ -1,6 +1,6 @@
 import { posix } from 'node:path';
 import { packageManifests, type CommitTree } from '../../../sandbox/exec-workspace.js';
-import { EXEC, SCRIPT_STEP, singleFileCommands } from '../mutation/test-run.js';
+import { EXEC, singleFileCommands, testChain } from '../mutation/test-run.js';
 import { CODE_FILE, owningDir, PLAIN_DIR } from './baseline-checks.js';
 
 /** The test runners a profile can name. */
@@ -151,28 +151,6 @@ function dependenciesOf(manifest: Manifest | null): string[] {
 
 		return deps && typeof deps === 'object' ? Object.keys(deps) : [];
 	});
-}
-
-/**
- * The scripts a test script runs before its runner, and the runner step,
- * following a last step that only runs another script: `bun run build:registry
- * && bun test` runs `build:registry` first, then `bun test`.
- */
-function testChain(scripts: Map<string, string>, name = 'test', depth = 0): { before: string[]; runner: string } {
-	const steps = (scripts.get(name) ?? '')
-		.split('&&')
-		.map((step) => step.trim())
-		.filter(Boolean);
-
-	const last = steps.pop() ?? '';
-	const before = steps.flatMap((step) => SCRIPT_STEP.exec(step)?.[1] ?? []);
-	const next = SCRIPT_STEP.exec(last)?.[1];
-
-	if (!next || depth >= 3 || !scripts.has(next)) return { before, runner: last };
-
-	const inner = testChain(scripts, next, depth + 1);
-
-	return { before: [...before, ...inner.before], runner: inner.runner };
 }
 
 /**
