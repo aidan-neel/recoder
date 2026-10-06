@@ -10,6 +10,7 @@
 	import FixButton from './fix-button.svelte';
 	import SuggestedFix from './suggested-fix.svelte';
 	import FixStatus from './fix-status.svelte';
+	import RelatedLocations from './related-locations.svelte';
 	import VerificationBadge from './verification-badge.svelte';
 	import { categoryLabel } from '$lib/findings/finding-labels';
 	import { SEVERITY_DOT, findingsStore, type Finding } from '$lib/findings/findings.svelte';
@@ -63,6 +64,7 @@
 			<Collapsible.Content>
 				<Typography.Title level={3} class="sr-only">{finding.title}</Typography.Title>
 				<div class="inline-finding-body ai-voice"><ModelMarkdown content={finding.body} /></div>
+				<RelatedLocations locations={finding.relatedLocations} />
 				<FixStatus {finding} />
 				{#if fix}<SuggestedFix suggestion={fix} />{/if}
 				<div class="inline-finding-foot">

@@ -13,13 +13,14 @@
 		hunkOffsets as offsetsOf,
 		rowTint,
 		splitRows as splitRowsOf,
-		strongestPerLine,
-		withSkipped
+		strongestPerLine
 	} from '$lib/diff/diff-rows';
+	import { diffGaps, type GapPart } from '$lib/diff/diff-gaps';
 	import { askContext, inRange, lineDraft, rangeDraft, type PendingNote } from '$lib/diff/note-draft';
 	import { notesStore, type ReviewNote } from '$lib/findings/notes.svelte';
 	import DiffAttachments from './diff-attachments.svelte';
 	import DiffNotePopover from './diff-note-popover.svelte';
+	import DiffOutsideRow from './diff-outside-row.svelte';
 
 	interface Props {
 		diff: FileDiff;
@@ -49,7 +50,7 @@
 
 	const hunkOffsets = $derived(offsetsOf(diff));
 	const splitRows = $derived(diff.hunks.map(splitRowsOf));
-	const hunks = $derived(withSkipped(diff));
+	const gaps = $derived(diffGaps(diff, findings));
 
 	/** Per-line highlighted HTML, aligned 1:1 with hunks → lines. */
 	const highlighted = $derived(diff.hunks.map((h) => highlightLines(h.lines.map((l) => l.text))));
@@ -312,13 +313,22 @@
 	<DiffAttachments notes={notesForRow(line)} findings={byLine.get(key) ?? []} {cards} onEdit={openEdit} />
 {/snippet}
 
+{#snippet gap(parts: GapPart[])}
+	{#each parts as part, p (p)}
+		{#if part.kind === 'skip'}
+			<div class="diff-skip"><span>{part.count} unchanged {part.count === 1 ? 'line' : 'lines'}</span></div>
+		{:else}
+			<DiffOutsideRow {...part} mark={lineMarks.get(part.endLine)} onHover={hoverFinding} />
+			<DiffAttachments notes={[]} findings={part.findings} {cards} onEdit={openEdit} />
+		{/if}
+	{/each}
+{/snippet}
+
 <div bind:this={rootEl} class="review-file-diff relative min-w-0" data-mode={mode}>
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="diff-lines" onpointerdown={onPointerDown}>
-		{#each hunks as { hunk, skipped }, hi (hi)}
-			{#if skipped > 0}
-				<div class="diff-skip"><span>{skipped} unchanged {skipped === 1 ? 'line' : 'lines'}</span></div>
-			{/if}
+		{#each diff.hunks as hunk, hi (hi)}
+			{@render gap(gaps[hi])}
 			{#if mode === 'split'}
 				{#each splitRows[hi] as row, r (r)}
 					{@const right = row.right?.line}
@@ -400,7 +410,8 @@
 				{/each}
 			{/if}
 		{/each}
-		{#if hunks.length === 0}<Typography.Text class="px-5 py-3 text-sm text-fg-muted"
+		{@render gap(gaps[diff.hunks.length])}
+		{#if diff.hunks.length === 0}<Typography.Text class="px-5 py-3 text-sm text-fg-muted"
 				>No text changes to display for this file.</Typography.Text
 			>{/if}
 	</div>
