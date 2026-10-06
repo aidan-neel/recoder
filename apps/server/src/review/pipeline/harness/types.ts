@@ -3,6 +3,7 @@ import type {
 	CoverageSummary,
 	Finding,
 	ModelFailure,
+	ObligationReport,
 	ReviewAssignment,
 	ReviewBudgetSnapshot,
 	ReviewChatMessage,
@@ -88,6 +89,8 @@ export interface AdaptiveReviewResult {
 	error?: string;
 	/** Set when a model call stopped the review, e.g. ChatGPT is signed out. */
 	failure?: ModelFailure;
+	/** Obligation counts and answers; absent unless `RECODER_OBLIGATIONS=1`. */
+	obligations?: ObligationReport;
 }
 
 /** One baseline check run on the PR head before review; detectors read its diagnostics. */

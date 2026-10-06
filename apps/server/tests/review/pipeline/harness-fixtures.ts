@@ -134,6 +134,13 @@ export function unitOf(init?: RequestInit): string | null {
 	return /^Unit (\S+):/m.exec(String(messagesOf(init)[1]?.content ?? ''))?.[1] ?? null;
 }
 
+/** The obligation an investigator prompt is for (`obligation-1`…), or null for any other call. */
+export function obligationOf(init?: RequestInit): string | null {
+	if (!systemOf(init).includes('Role: obligation investigator')) return null;
+
+	return /^Obligation (\S+):/m.exec(String(messagesOf(init)[1]?.content ?? ''))?.[1] ?? null;
+}
+
 /** Whether a stubbed call is a verifier's. */
 export function isVerifier(init?: RequestInit): boolean {
 	return systemOf(init).includes('You verify one code review finding');
@@ -164,9 +171,9 @@ export function confirmingVerifier(init?: RequestInit): unknown {
 		: { message: 'Reading the diff.', actions: [{ action: 'readDiff', path: 'src/a.ts' }] };
 }
 
-/** The stage a stubbed call belongs to: a lens assignment id, `verifier`, `intent`, or `other` for any stage not expected to call a model. */
+/** The stage a stubbed call belongs to: a lens assignment or obligation id, `verifier`, `intent`, or `other` for any stage not expected to call a model. */
 function stageOf(init?: RequestInit): string {
-	return unitOf(init) ?? (isVerifier(init) ? 'verifier' : isIntent(init) ? 'intent' : 'other');
+	return unitOf(init) ?? obligationOf(init) ?? (isVerifier(init) ? 'verifier' : isIntent(init) ? 'intent' : 'other');
 }
 
 /**

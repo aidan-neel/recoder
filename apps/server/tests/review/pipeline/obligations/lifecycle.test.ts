@@ -1,0 +1,154 @@
+import { expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../../src/review/pipeline/harness';
+import { ReviewControl, runWithReviewControl } from '../../../../src/review/session/review-control';
+import { restoreAfterEach, useTestModel } from '../harness-fixtures';
+import { ANSWER, investigatorReply, isolateEachTest, riskyReview, stall, stubInvestigations } from './fixtures';
+
+restoreAfterEach();
+isolateEachTest();
+
+/** A review clock that can be pushed forward, so a time box runs out without waiting for it. */
+class SkewedClock extends ReviewControl {
+	skew = 0;
+
+	override pausedMs(): number {
+		return super.pausedMs() - this.skew;
+	}
+}
+
+const newRepo = () => riskyReview(mkdtempSync(join(tmpdir(), 'obligations-repo-')));
+
+test('an investigation that outlives its time box is recorded as unresolved and the review completes', async () => {
+	useTestModel();
+	process.env.RECODER_OBLIGATIONS = '1';
+	process.env.RECODER_OBLIGATION_CAP = '1';
+
+	const control = new SkewedClock();
+
+	stubInvestigations([], (_id, init) => {
+		control.skew = 46_000;
+
+		return stall(init);
+	});
+
+	const input = await newRepo();
+
+	const result = await runWithReviewControl(control, () =>
+		runAdaptiveReview({ ...input, signal: control.abort.signal })
+	);
+
+	expect(result.outcome).toBe('complete');
+
+	const [answer] = result.obligations!.answers;
+
+	expect(answer).toMatchObject({
+		result: 'unresolved',
+		launched: true,
+		timeBoxMs: 45_000,
+		attemptedCounterexample: null
+	});
+
+	expect(answer.reason).toContain('45 s time box');
+	expect(answer.elapsedMs).toBeGreaterThanOrEqual(45_000);
+	expect(result.obligations!.counts).toMatchObject({ launched: 1, unresolved: 1 });
+	expect(result.summary).toContain('1 unresolved');
+});
+
+test('cancelling the review stops a running investigation without recording an answer for it', async () => {
+	useTestModel();
+	process.env.RECODER_OBLIGATIONS = '1';
+	process.env.RECODER_OBLIGATION_CAP = '1';
+
+	const controller = new AbortController();
+	let saved: ReviewProgressCheckpoint | null = null;
+
+	stubInvestigations([], (_id, init) => {
+		queueMicrotask(() => controller.abort());
+
+		return stall(init);
+	});
+
+	const input = await newRepo();
+
+	const result = await runAdaptiveReview(
+		{ ...input, signal: controller.signal },
+		{
+			onCheckpoint: (checkpoint) => {
+				saved = checkpoint;
+			}
+		}
+	);
+
+	expect(result.outcome).toBe('failed');
+
+	const state = (saved as ReviewProgressCheckpoint | null)?.obligations;
+
+	expect(state?.units).toHaveLength(1);
+	expect(state?.answers).toEqual([]);
+});
+
+test('a resumed review investigates only the obligations left unanswered and keeps the saved answers', async () => {
+	useTestModel();
+	process.env.RECODER_OBLIGATIONS = '1';
+	process.env.RECODER_OBLIGATION_CAP = '2';
+
+	const controller = new AbortController();
+	const answered: string[] = [];
+	const derivedIn: string[] = [];
+	let saved: ReviewProgressCheckpoint | null = null;
+
+	stubInvestigations([], (id, init) => {
+		if (answered.length) return stall(init);
+		answered.push(id);
+
+		return investigatorReply(ANSWER);
+	});
+
+	const input = await newRepo();
+
+	const first = await runAdaptiveReview(
+		{ ...input, signal: controller.signal },
+		{
+			onTask: (task) => derivedIn.push(task.id),
+			onCheckpoint: (checkpoint) => {
+				saved = checkpoint;
+				if (checkpoint.obligations?.answers.length) controller.abort();
+			}
+		}
+	);
+
+	expect(first.outcome).toBe('failed');
+	expect(derivedIn).toContain('obligations');
+
+	const checkpoint = saved as unknown as ReviewProgressCheckpoint;
+	const state = checkpoint.obligations!;
+	const [kept] = state.answers;
+
+	expect(state.units).toHaveLength(2);
+	expect(state.answers.map((answer) => answer.obligationId)).toEqual(answered);
+
+	const second: string[] = [];
+	const resumedTasks: string[] = [];
+
+	stubInvestigations(second, () => investigatorReply({ ...ANSWER, result: 'not-applicable' }));
+
+	const resumed = await runAdaptiveReview(
+		{ ...input, resume: checkpoint },
+		{ onTask: (task) => resumedTasks.push(task.id) }
+	);
+
+	const rest = state.units.map((unit) => unit.id).filter((id) => id !== kept.obligationId);
+
+	expect(second.filter((call) => call.startsWith('obligation-'))).toEqual(rest);
+	expect(resumedTasks).not.toContain('obligations');
+	expect(resumed.obligations!.obligations).toEqual(state.derived!);
+	expect(resumed.obligations!.answers[0]).toEqual(kept);
+
+	expect(resumed.obligations!.answers.map((answer) => [answer.obligationId, answer.result])).toEqual([
+		[kept.obligationId, 'disproved'],
+		[rest[0], 'not-applicable']
+	]);
+});

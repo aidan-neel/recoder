@@ -2,6 +2,7 @@ import type { ReviewAssignment } from '@recoder/shared';
 import type { CandidateFinding } from '../pipeline/consolidate.js';
 import type { CoverageEntry } from '../pipeline/coverage.js';
 import type { EvidenceSnapshot } from '../../evidence/evidence.js';
+import type { ObligationState } from '../pipeline/obligations/state.js';
 import type { SubagentState } from '../pipeline/subagents.js';
 import type { ReviewUnit } from '../pipeline/units.js';
 import type { ReviewDirective } from '../chat/directive.js';
@@ -41,6 +42,8 @@ export interface ReviewCheckpoint {
 	retriesDone: boolean;
 	/** Subagent requests, and the subagents picked from them once planned. */
 	subagents: SubagentState;
+	/** Derived obligations and the answers so far; absent unless `RECODER_OBLIGATIONS=1`. */
+	obligations?: ObligationState;
 }
 
 /** A saved checkpoint this run can resume from, or why the review starts over instead. */

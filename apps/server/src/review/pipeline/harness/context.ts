@@ -18,6 +18,8 @@ import { CoverageLedger } from '../coverage.js';
 import type { ChangeIntent } from '../intent/types.js';
 import { buildInventory, type ReviewInventory } from '../inventory.js';
 import { lensAssignments } from '../lenses/lenses.js';
+import { obligationsOn } from '../obligations/config.js';
+import { restoreObligationState, type ObligationState } from '../obligations/state.js';
 import { extraExcludes } from '../review-scope.js';
 import { restoreSubagentState, type SubagentState } from '../subagents.js';
 import { partitionUnits, type ReviewUnit } from '../units.js';
@@ -77,6 +79,8 @@ export interface ReviewRun {
 	retriesDone: boolean;
 	/** Subagents reviewers asked for, the brief questions they left unsettled or answered, and the subagents that run; kept apart from `units`, so they're never retried. */
 	subagents: SubagentState;
+	/** Derived obligations and their investigations' answers; null unless `RECODER_OBLIGATIONS=1`. */
+	obligations: ObligationState | null;
 	nextCandidate: number;
 	/** Dependency setup and baseline check results, shared with every reviewer and verifier. */
 	setupNotes: string;
@@ -119,6 +123,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		recommended: new Set<string>(resume?.recommended ?? []),
 		retriesDone: resume?.retriesDone ?? false,
 		subagents: restoreSubagentState(resume?.subagents),
+		obligations: obligationsOn() ? restoreObligationState(resume?.obligations) : null,
 		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
 		setupNotes: '',
 		task: (id, label, status, message, extra) =>
@@ -250,7 +255,8 @@ export function saveCheckpoint(run: ReviewRun): void {
 		evidence: run.evidence.snapshot(kept.flatMap((candidate) => candidate.evidenceIds ?? [])),
 		recommended: [...run.recommended],
 		retriesDone: run.retriesDone,
-		subagents: structuredClone(run.subagents)
+		subagents: structuredClone(run.subagents),
+		...(run.obligations ? { obligations: structuredClone(run.obligations) } : {})
 	});
 }
 

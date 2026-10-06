@@ -13,6 +13,7 @@ import {
 	saveCheckpoint,
 	type ReviewRun
 } from './context.js';
+import { deriveObligationsStage, runObligations } from '../obligations/stage.js';
 import { intentStage } from './intent-stage.js';
 import { runUnitPool } from './pool.js';
 import { detectorStage, diagnosticStage, ruleLedgerStage } from './quality-stage.js';
@@ -33,9 +34,10 @@ import { drainVerification, finishVerification, startVerification } from './veri
  *   files, but only inside an isolated, offline copy of the checkout
  *   (`exec-sandbox.ts`); tracked files are restored after every command.
  *
- * Stages: understand → cut units → change model, intent and rule ledger,
- * while the sandbox installs → every unit through every lens (failed ones
- * retried once), then the subagents reviewers asked for when the lenses found
+ * Stages: understand → cut units → change model, intent (and obligations,
+ * with `RECODER_OBLIGATIONS=1`) and rule ledger, while the sandbox installs →
+ * every unit through every lens (failed ones retried once) alongside the
+ * obligation investigations, then the subagents reviewers asked for when the lenses found
  * anything → consolidate. Three things overlap the reviewers rather than
  * follow them: the baseline checks, the detectors, and the verifiers, which
  * take each candidate as it is reported. Checks still queued once everything
@@ -80,7 +82,10 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	publishBudget(run);
 	saveCheckpoint(run);
 
-	const context = Promise.all([changeModelStage(run).then(() => intentStage(run)), ruleLedgerStage(run)]);
+	const context = Promise.all([
+		changeModelStage(run).then(() => Promise.all([intentStage(run), deriveObligationsStage(run)])),
+		ruleLedgerStage(run)
+	]);
 
 	const checks = await prepareSandbox(run, setup);
 
@@ -97,11 +102,14 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 
 	const finishedAtStart = finishedIds(run);
 
-	await runUnitPool(
-		run.units.filter((unit) => !finishedAtStart.has(unit.id)),
-		run.assignments,
-		poolContext(run)
-	);
+	await Promise.all([
+		runUnitPool(
+			run.units.filter((unit) => !finishedAtStart.has(unit.id)),
+			run.assignments,
+			poolContext(run)
+		),
+		runObligations(run)
+	]);
 
 	publishCoverage(run);
 	publishBudget(run);

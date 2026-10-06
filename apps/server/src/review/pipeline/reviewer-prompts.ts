@@ -62,6 +62,11 @@ Role: subagent. You were handed one question that a reviewer could not finish in
 	);
 }
 
+/** An obligation investigator's prompt: the reviewer contract, then `role`, the procedure it follows. */
+export function investigatorSystemPrompt(exec: boolean, directive: ReviewDirective | null, role: string): string {
+	return withDirective(`${reviewerContract(exec, false)}\n\n${role}`, directive);
+}
+
 function withDirective(prompt: string, directive: ReviewDirective | null): string {
 	const block = directiveBlock(directive);
 
@@ -143,9 +148,12 @@ function ledgerLines(unit: ReviewUnit, ledger: RuleLedger | null): string {
 	);
 }
 
+/** What a unit agent's opening message calls its assignment. */
+export type ReviewerHeading = 'Unit' | 'Subagent' | 'Obligation';
+
 /**
- * The user prompt for a lens assignment, or for a subagent when `subagent` is
- * set: the PR, its intent, the unit's changes with their change-model context
+ * The user prompt for a lens assignment, or under another `heading` for a
+ * subagent or an obligation investigator: the PR, its intent, the unit's changes with their change-model context
  * and the brief's reading of them (open questions go to the defect lenses),
  * and the rule ledger for the quality lenses.
  */
@@ -153,15 +161,15 @@ export function reviewerUserPrompt(
 	unit: ReviewUnit,
 	remaining: { turns: number; calls: number },
 	ctx: ReviewerPromptContext,
-	subagent = false
+	heading: ReviewerHeading
 ): string {
 	return [
 		developerInstructions(ctx.directive),
 		...pullRequestLines(ctx.pr),
 		intentBlock(ctx.intent),
-		`${subagent ? 'Subagent' : 'Unit'} ${unit.id}: ${unit.title}`,
+		`${heading} ${unit.id}: ${unit.title}`,
 		unit.reason,
-		`${subagent ? 'Changes to start from' : 'Changes in this unit'}:\n${scopeLines(unit.scope)}`,
+		`${heading === 'Unit' ? 'Changes in this unit' : 'Changes to start from'}:\n${scopeLines(unit.scope)}`,
 		ctx.changeModel ? unitContext(ctx.changeModel, unit.scope) : '',
 		briefBlock(ctx.intent, unit.scope, !unit.lens || !isQualityLens(unit.lens)),
 		ledgerLines(unit, ctx.ledger),

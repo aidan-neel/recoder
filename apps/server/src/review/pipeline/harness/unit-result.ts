@@ -38,6 +38,20 @@ export function applyUnitResult(
 
 	for (const check of output.recommendedChecks) ctx.recommended.add(check);
 
+	finishUnit(item, records, ctx, model, (count) => `Finished · ${count} candidate${count === 1 ? '' : 's'}`);
+}
+
+/**
+ * Marks a unit's assignment done with `operation` for its reportable
+ * candidate count, publishes it, then lets the run save a checkpoint.
+ */
+export function finishUnit(
+	item: ReviewUnit,
+	records: ReviewAssignment[],
+	ctx: PoolContext,
+	model: string,
+	operation: (candidates: number) => string
+): void {
 	const validCount = ctx.candidates.filter(
 		(candidate) => candidate.assignmentId === item.id && isReportable(candidate)
 	).length;
@@ -45,14 +59,14 @@ export function applyUnitResult(
 	updateAssignment(records, item.id, {
 		status: 'done',
 		candidateCount: validCount,
-		currentOperation: `Finished · ${validCount} candidate${validCount === 1 ? '' : 's'}`,
+		currentOperation: operation(validCount),
 		completedAt: new Date().toISOString()
 	});
 
 	ctx.task(`assignment:${item.id}`, item.title, 'done', recordFor(records, item.id).currentOperation ?? 'Finished', {
 		kind: 'assignment',
 		assignmentId: item.id,
-		agent: role,
+		agent: recordFor(records, item.id).role,
 		model,
 		candidateCount: validCount,
 		files: item.scope.map((entry) => entry.path)
@@ -119,7 +133,13 @@ function creditCoverage(
  * model and rule ledger, and hands it on to be verified. A lens's findings are held to its categories; a
  * subagent's (no lens) may be in any.
  */
-function addCandidates(item: ReviewUnit, role: string, ctx: PoolContext, model: string, output: ReviewerOutput): void {
+export function addCandidates(
+	item: ReviewUnit,
+	role: string,
+	ctx: PoolContext,
+	model: string,
+	output: ReviewerOutput
+): void {
 	const lens = role === 'subagent' ? null : (item.lens ?? null);
 	const dismissed = new Set(ctx.dismissals.map((dismissal) => dismissal.fingerprint));
 

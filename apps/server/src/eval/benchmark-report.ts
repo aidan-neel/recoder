@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { ModelSettings, ReviewFunnel, SubagentCap } from '@recoder/shared';
+import type { ModelSettings, ObligationCounts, ReviewFunnel, SubagentCap } from '@recoder/shared';
 import { recall, type BenchmarkSummary, type LabeledDefect, type PrScore, type Totals } from './benchmark-score';
 import { labelLines, percent } from './benchmark-labels-report';
 import { countClasses, type LabeledRun } from './benchmark-labels';
@@ -198,6 +198,28 @@ function funnelLines(prs: PrResult[]): string[] {
 	];
 }
 
+/** Every run's obligation counts summed, with what the investigations spent, for runs that derived obligations. */
+function obligationLines(prs: PrResult[]): string[] {
+	const reports = prs.flatMap((pr) => pr.runs.flatMap((run) => (run.obligations ? [run.obligations] : [])));
+
+	if (!reports.length) return [];
+
+	const sum = (pick: (counts: ObligationCounts) => number) =>
+		reports.reduce((total, report) => total + pick(report.counts), 0);
+
+	const launched = reports.flatMap((report) => report.answers.filter((answer) => answer.launched));
+	const tokens = launched.reduce((total, answer) => total + (answer.tokens ?? 0), 0);
+	const seconds = Math.round(launched.reduce((total, answer) => total + answer.elapsedMs, 0) / 1000);
+
+	return [
+		'',
+		`Obligations (${reports.length} runs)`,
+		`  derived ${sum((counts) => counts.derived)} · launched ${sum((counts) => counts.launched)} · over cap ${sum((counts) => counts.overCap)} · not launched ${sum((counts) => counts.notLaunched)}`,
+		`  confirmed ${sum((counts) => counts.confirmed)} (verified ${sum((counts) => counts.verified)}) · disproved ${sum((counts) => counts.disproved)} · not applicable ${sum((counts) => counts.notApplicable)} · unresolved ${sum((counts) => counts.unresolved)}`,
+		`  investigations spent ${tokens} output tokens and ${seconds} s in all`
+	];
+}
+
 /** "Reviewer gpt (high) · second model x (low) · subagent cap 8 · medium and above". */
 function reviewerLine(reviewer: ReviewerManifest | undefined): string[] {
 	if (!reviewer) return [];
@@ -300,6 +322,7 @@ export function printBenchmark(report: BenchmarkReport): void {
 			...stageLines(summary.stages),
 			...lowLines(summary.lows),
 			...funnelLines(report.prs),
+			...obligationLines(report.prs),
 			...groupLines('By codebase', summary.byCodebase),
 			...groupLines('By kind', summary.byKind),
 			...groupLines('By category', summary.byCategory),

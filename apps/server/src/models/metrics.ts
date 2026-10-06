@@ -25,8 +25,21 @@ export function withReviewMetrics<T>(reviewId: string, scope: TokenScope, run: (
 	return context.run({ reviewId, scope }, run);
 }
 
+/** Output tokens one piece of work spent; null until a provider reports a count. */
+export interface TokenTally {
+	outputTokens: number | null;
+}
+
+const tallies = new AsyncLocalStorage<TokenTally>();
+
+/** Run `run` with every model call it starts, however nested, adding its output tokens to `tally`. */
+export function withTokenTally<T>(tally: TokenTally, run: () => T): T {
+	return tallies.run(tally, run);
+}
+
 export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 	const owner = context.getStore();
+	const tally = tallies.getStore();
 
 	const call: TokenCall = {
 		id: crypto.randomUUID(),
@@ -55,6 +68,10 @@ export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 
 	return {
 		usage: (usage: TokenUsage) => {
+			if (tally && usage.outputTokens !== null) {
+				tally.outputTokens = (tally.outputTokens ?? 0) + usage.outputTokens - (call.usage.outputTokens ?? 0);
+			}
+
 			call.usage = usage;
 			save();
 		},

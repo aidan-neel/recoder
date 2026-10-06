@@ -107,7 +107,7 @@ function deletedOwned(old: ParsedSymbol[], head: ParsedSymbol[], hunks: HunkLine
 }
 
 /** A file's hunks as changed lines on both sides. */
-function fileHunks(inventory: ReviewInventory, file: InventoryFile): HunkLines[] {
+export function fileHunks(inventory: ReviewInventory, file: InventoryFile): HunkLines[] {
 	const diff = inventory.diffs.find((entry) => entry.path === file.path);
 
 	return hunkLines(
