@@ -269,9 +269,9 @@ async function prepareChanged(
 		})
 	);
 
-	const generation = report?.profiles.flatMap((profile) => profile.generation) ?? [];
+	const generated = report?.steps.filter((step) => step.kind === 'generate' && step.exitCode === 0) ?? [];
 
-	workspace.preparedWith = generation.length ? `package prep: ${generation.join('; ')}` : '';
+	workspace.preparedWith = generated.length ? `package prep: ${generated.map((step) => step.command).join('; ')}` : '';
 
 	task('prepare', 'Prepare packages', prepStatus(report), prepMessage(report), {
 		kind: 'setup',

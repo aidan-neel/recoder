@@ -3,6 +3,7 @@ import type { ExecutionOutcome } from '../../../evidence/types.js';
 import type { RunResult } from '../../../sandbox/exec-sandbox.js';
 import type { CommitTree, ExecWorkspace, InvestigatorRun, SettledRun } from '../../../sandbox/exec-workspace.js';
 import { withSandboxTier } from '../../../sandbox/host-load.js';
+import { reviewNow } from '../../session/review-control.js';
 import {
 	buildProfiles,
 	packageDirs,
@@ -15,7 +16,7 @@ import { classifyRun, commandPackage } from './run-outcome.js';
 /** Each prerequisite command is cut short after this long. */
 const STEP_TIMEOUT_MS = 120_000;
 
-/** All prerequisite commands of a review together stop starting after this long. */
+/** All prerequisite commands of a checkout together, setup repairs included, run for at most this long. */
 const PREP_BUDGET_MS = 240_000;
 
 /** Characters of a prerequisite command's output kept in its step. */
@@ -112,15 +113,17 @@ async function prepare(workspace: ExecWorkspace, options: PrepOptions): Promise<
 	];
 
 	const steps: PrepStep[] = [];
+	const clock = prepClock(workspace);
 
 	for (const plan of planned) {
-		const left = PREP_BUDGET_MS - (Date.now() - started);
+		const timeoutMs = clock.timeout();
 
-		if (options.signal.aborted || left <= 0) break;
+		if (options.signal.aborted || timeoutMs <= 0) break;
 
 		const profile = profiles.find((candidate) => candidate.dir === plan.dir)!;
-		const step = await runStep(workspace, plan, Math.min(STEP_TIMEOUT_MS, left), options, profile);
+		const step = await runStep(workspace, plan, timeoutMs, options, profile);
 
+		clock.spend(step.elapsedMs);
 		steps.push(step);
 	}
 
@@ -132,9 +135,29 @@ async function prepare(workspace: ExecWorkspace, options: PrepOptions): Promise<
 		cancelled: options.signal.aborted
 	};
 
-	if (!report.cancelled) workspace.settleRun = settleWith(workspace, tree, profiles, options);
+	if (!report.cancelled) workspace.settleRun = settleWith(workspace, tree, profiles, options, clock);
 
 	return report;
+}
+
+/** How long prep commands may still run in a checkout. */
+interface PrepClock {
+	/** The next command's timeout: the step limit, cut to what is left of the budget and of the review. */
+	timeout(): number;
+	/** Takes a command's run time from the budget. */
+	spend(ms: number): void;
+}
+
+/** A checkout's prep budget, shared by its prerequisite commands and later setup repairs. */
+function prepClock(workspace: ExecWorkspace): PrepClock {
+	let spent = 0;
+
+	return {
+		timeout: () => Math.min(STEP_TIMEOUT_MS, PREP_BUDGET_MS - spent, workspace.deadlineAt - reviewNow()),
+		spend: (ms) => {
+			spent += ms;
+		}
+	};
 }
 
 /** One prerequisite command in a prep slot, reported as it starts and ends. */
@@ -173,7 +196,8 @@ function settleWith(
 	workspace: ExecWorkspace,
 	tree: CommitTree,
 	profiles: ExecutionProfile[],
-	options: PrepOptions
+	options: PrepOptions,
+	clock: PrepClock
 ): (run: InvestigatorRun) => Promise<SettledRun> {
 	const dirs = packageDirs(tree);
 	const known = new Map(profiles.map((profile) => [profile.dir, Promise.resolve<ExecutionProfile | null>(profile)]));
@@ -208,7 +232,7 @@ function settleWith(
 
 		if (outcome !== 'setup-failed' || !unprepared || run.signal?.aborted) return settled(run, run.result, outcome);
 
-		if (!repairs.has(profile.dir)) repairs.set(profile.dir, repair(workspace, profile, run.signal, repairs));
+		if (!repairs.has(profile.dir)) repairs.set(profile.dir, repair(workspace, profile, clock, run.signal, repairs));
 
 		if (!(await repairs.get(profile.dir))) return settled(run, run.result, outcome);
 
@@ -224,20 +248,27 @@ function settleWith(
 	};
 }
 
-/** Runs a package's generation commands once; true when one of them succeeded. A cancelled repair is forgotten. */
+/**
+ * Runs a package's generation commands once, on what is left of the prep
+ * budget; true when one of them succeeded. A cancelled repair is forgotten.
+ */
 async function repair(
 	workspace: ExecWorkspace,
 	profile: ExecutionProfile,
+	clock: PrepClock,
 	signal: AbortSignal | undefined,
 	repairs: Map<string, Promise<boolean>>
 ): Promise<boolean> {
 	let succeeded = false;
 
 	for (const command of profile.generation) {
-		if (signal?.aborted) break;
+		const timeoutMs = clock.timeout();
 
-		const result = await withSandboxTier('prep', () => workspace.run(command, STEP_TIMEOUT_MS, signal));
+		if (signal?.aborted || timeoutMs <= 0) break;
 
+		const result = await withSandboxTier('prep', () => workspace.run(command, timeoutMs, signal));
+
+		clock.spend(result.elapsedMs);
 		succeeded ||= result.exitCode === 0;
 	}
 

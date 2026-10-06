@@ -35,6 +35,14 @@ const GENERATED = {
 		"import { expect, test } from 'bun:test';\nimport { value } from './generated/value.js';\n\ntest('value', () => expect(value).toBe(42));\n"
 };
 
+/** A workspace whose changed package `a` needs no prep, beside the generated-file package as `b`, which prep never touches. */
+const UNPREPARED_SIBLING = {
+	'package.json': JSON.stringify({ packageManager: 'bun@1.3.0', workspaces: ['packages/*'] }),
+	'packages/a/package.json': JSON.stringify({ scripts: { test: 'bun test' } }),
+	'packages/a/a.test.ts': "import { test } from 'bun:test';\n\ntest('a', () => {});\n",
+	...Object.fromEntries(Object.entries(GENERATED).map(([path, content]) => [`packages/b/${path}`, content]))
+};
+
 /** Svelte runes code with a test of it; the package's runner decides whether anything compiles the runes. */
 const RUNES = {
 	'src/counter.svelte.ts':
@@ -307,12 +315,7 @@ test.skipIf(!available)('a run that stops in setup is unresolved: neither proof 
 });
 
 test.skipIf(!available)('a run that stops in setup in an unprepared package is repaired, then rerun', async () => {
-	const { ws, dir } = await checkout({
-		'package.json': JSON.stringify({ packageManager: 'bun@1.3.0', workspaces: ['packages/*'] }),
-		'packages/a/package.json': JSON.stringify({ scripts: { test: 'bun test' } }),
-		'packages/a/a.test.ts': "import { test } from 'bun:test';\n\ntest('a', () => {});\n",
-		...Object.fromEntries(Object.entries(GENERATED).map(([path, content]) => [`packages/b/${path}`, content]))
-	});
+	const { ws, dir } = await checkout(UNPREPARED_SIBLING);
 
 	const repaired: boolean[] = [];
 
@@ -324,6 +327,30 @@ test.skipIf(!available)('a run that stops in setup in an unprepared package is r
 	expect(run.output).toStartWith('[Setup repaired: ran `cd packages/b && bun run prepare`, then reran the command]');
 	expect(repaired).toEqual([true]);
 	expect(await prepRuns(join(dir, 'packages/b'))).toBe(1);
+});
+
+test.skipIf(!available)('a setup repair takes its time from the prep budget: with none left, none runs', async () => {
+	const { ws, dir } = await checkout(UNPREPARED_SIBLING);
+
+	const run = ws.run.bind(ws);
+
+	ws.run = async (...args) => ({ ...(await run(...args)), elapsedMs: 240_000 });
+
+	const report = await preparePackages(ws, options(['packages/a/a.test.ts']));
+
+	ws.run = run;
+
+	expect(report.steps).toMatchObject([{ kind: 'smoke', exitCode: 0 }]);
+
+	const stopped = await ws.runInvestigation(
+		'cd packages/b && bun test value.test.ts',
+		30_000,
+		undefined,
+		'investigator'
+	);
+
+	expect(stopped.outcome).toBe('setup-failed');
+	expect(await prepRuns(join(dir, 'packages/b'))).toBe(0);
 });
 
 test.skipIf(!available)('cancelling during a prerequisite stops it and runs nothing after', async () => {
@@ -353,11 +380,14 @@ test.skipIf(!available)('cancelling during a prerequisite stops it and runs noth
 });
 
 /**
- * `prepareSandbox` on the generated-file package, as a review whose run holds
- * only what it reads, with every task row it writes, after its checks finish.
+ * `prepareSandbox` on `files` (the generated-file package by default), as a
+ * review whose run holds only what it reads, with every task row it writes,
+ * after its checks finish.
  */
-async function harnessOn(): Promise<{ ws: ExecWorkspace; dir: string; run: ReviewRun; tasks: string[] }> {
-	const { ws, dir } = await checkout(GENERATED);
+async function harnessOn(
+	files: Record<string, string> = GENERATED
+): Promise<{ ws: ExecWorkspace; dir: string; run: ReviewRun; tasks: string[] }> {
+	const { ws, dir } = await checkout(files);
 	const tasks: string[] = [];
 
 	const run = {
@@ -386,6 +416,17 @@ test.skipIf(!available)('the harness prepares changed packages before investigat
 	expect(tasks).toContain('prepare:done');
 	expect(run.setupNotes).toContain('one test file: `bun test <file>`');
 	expect(ws.settleRun).not.toBeNull();
+	expect(ws.preparedWith).toBe('package prep: bun run prepare');
+});
+
+test.skipIf(!available)('a generation command that failed does not mark the checkout prepared', async () => {
+	const { ws, tasks } = await harnessOn({
+		...GENERATED,
+		'package.json': JSON.stringify({ scripts: { prepare: 'echo ran >> prep.log && exit 1', test: 'bun test' } })
+	});
+
+	expect(tasks).toContain('prepare:partial');
+	expect(ws.preparedWith).toBe('');
 });
 
 test.skipIf(!available)('with RECODER_PACKAGE_PREP=0 no prerequisite runs', async () => {
