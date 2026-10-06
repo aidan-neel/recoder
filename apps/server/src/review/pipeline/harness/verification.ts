@@ -32,6 +32,7 @@ import { isMutationFinding } from '../verify/runs.js';
 import { publishBudget, publishCandidates, type ReviewRun } from './context.js';
 import { checkPatches } from './patch-check.js';
 import type { HarnessEvents, TaskFn } from './types.js';
+import { candidateRepairOn, repairCandidate } from './repair.js';
 import { recordBaseline } from './verify-baseline.js';
 import { VerifyQueue } from './verify-queue.js';
 
@@ -61,8 +62,9 @@ const VERIFIER_EXAMPLE =
 
 /**
  * Opens the review's verifier queue before the reviewers start, so each
- * candidate is verified as soon as its reviewer reports it. Candidates a
- * resumed review hasn't verified join at once.
+ * candidate is verified as soon as its reviewer reports it, or once its one
+ * repair makes a rejected candidate valid. Candidates a resumed review hasn't
+ * verified join at once.
  */
 export function startVerification(run: ReviewRun): void {
 	const ctx: VerifyContext = {
@@ -81,7 +83,8 @@ export function startVerification(run: ReviewRun): void {
 		mergeBaseSha: run.input.revision?.mergeBaseSha ?? null
 	};
 
-	const queue = new VerifyQueue(run, (candidate, attempt) => verifyOne(candidate, ctx, attempt));
+	const repair = candidateRepairOn() ? (candidate: CandidateFinding) => repairCandidate(run, candidate) : undefined;
+	const queue = new VerifyQueue(run, (candidate, attempt) => verifyOne(candidate, ctx, attempt), repair);
 
 	run.verifying = queue;
 

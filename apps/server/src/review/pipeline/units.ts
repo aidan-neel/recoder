@@ -1,4 +1,4 @@
-import type { ReviewAssignment } from '@recoder/shared';
+import type { DiffLine, ReviewAssignment } from '@recoder/shared';
 import { REVIEW_POLICY } from '../session/review-policy.js';
 import type { InventoryFile, ReviewInventory } from './inventory.js';
 import type { LensId } from './lenses/types.js';
@@ -27,12 +27,17 @@ export interface ReviewUnit {
 
 const UNIT_REASON = 'Every changed line is read by every lens that applies to it.';
 
+/** Patch characters in one diff line: its text, its sign and its line break. */
+export function patchLineChars(line: DiffLine): number {
+	return line.text.length + 2;
+}
+
 /** Patch characters in one file of the diff, counted the way the evidence store pages them. */
-function patchChars(inventory: ReviewInventory, file: InventoryFile): number {
+export function patchChars(inventory: ReviewInventory, file: Pick<InventoryFile, 'path'>): number {
 	const diff = inventory.diffs.find((entry) => entry.path === file.path);
 
 	return (diff?.hunks ?? []).reduce(
-		(sum, hunk) => sum + hunk.lines.reduce((lines, line) => lines + line.text.length + 2, 0),
+		(sum, hunk) => sum + hunk.lines.reduce((lines, line) => lines + patchLineChars(line), 0),
 		0
 	);
 }

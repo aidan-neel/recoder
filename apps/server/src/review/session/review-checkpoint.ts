@@ -44,6 +44,8 @@ export interface ReviewCheckpoint {
 	subagents: SubagentState;
 	/** Finished reviewers' prompts as built and their retrievals, so a replay records them without rebuilding; absent from older checkpoints. */
 	received?: Received;
+	/** Candidate repairs the review already attempted, counted against its cap; absent when none were. */
+	repairs?: number;
 }
 
 /** A saved checkpoint this run can resume from, or why the review starts over instead. */

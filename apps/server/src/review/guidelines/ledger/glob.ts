@@ -1,4 +1,10 @@
-import { normalizeGlob } from '../../chat/directive.js';
+import { matchesGlob, normalizeGlob } from '../../chat/directive.js';
+import type { RepoRule } from './types.js';
+
+/** Whether the rule applies to the file: it names no files, or its glob matches the path. */
+export function ruleAppliesTo(rule: RepoRule, path: string): boolean {
+	return !rule.appliesTo || matchesGlob(path, rule.appliesTo);
+}
 
 /**
  * A model-written glob in the form the detectors match with (`*.ts` → `**\/*.ts`),

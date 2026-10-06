@@ -206,7 +206,8 @@ export function inTestFile(file: string, kind: ReferenceKind): ReferenceKind {
 	return kind !== 'import' && isTestPath(file) ? 'test' : kind;
 }
 
-function escapeRegExp(text: string): string {
+/** The text as a regular expression that matches it literally. */
+export function escapeRegExp(text: string): string {
 	return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
