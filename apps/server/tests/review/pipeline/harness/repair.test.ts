@@ -4,7 +4,7 @@ import { createRun, type ReviewRun } from '../../../../src/review/pipeline/harne
 import { candidateRepairOn, repairCandidate } from '../../../../src/review/pipeline/harness/repair';
 import { VerifyQueue } from '../../../../src/review/pipeline/harness/verify-queue';
 import type { ReviewProgressCheckpoint } from '../../../../src/review/pipeline/harness/types';
-import { REPAIR_DIFF, candidateOf, reported } from '../candidate-repair-fixtures';
+import { REPAIR_DIFF, candidateOf, repairContext, reported } from '../candidate-repair-fixtures';
 
 afterEach(() => {
 	delete process.env.RECODER_CANDIDATE_REPAIR;
@@ -107,4 +107,48 @@ test('a candidate repaired once is never repaired again', async () => {
 	expect(candidate.repair?.result).toBe('unsupported');
 	expect(await repairCandidate(run, candidate)).toBe(false);
 	expect(run.repairs).toBe(1);
+});
+
+test('a line left open with no changed code line to offer is unsupported without a model call', async () => {
+	const diff = `diff --git a/src/c.ts b/src/c.ts
+--- a/src/c.ts
++++ b/src/c.ts
+@@ -1,1 +1,2 @@
+ start();
++// a note
+`;
+
+	const run = createRun({ diff, sandboxPath: null, resume: null });
+	const ctx = { ...repairContext(), inventory: run.inventory };
+	const steps = [{ file: 'src/c.ts', line: 3, note: 'unchanged' }];
+
+	const candidate = candidateOf(
+		reported({ file: 'src/c.ts', claim: { ...reported().claim, executionPath: steps } }),
+		'correctness',
+		ctx
+	);
+
+	const answerOthers = globalThis.fetch;
+	let calls = 0;
+
+	globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+		calls++;
+
+		return answerOthers(...args);
+	}) as typeof fetch;
+
+	try {
+		expect(await repairCandidate(run, candidate)).toBe(false);
+	} finally {
+		globalThis.fetch = answerOthers;
+	}
+
+	expect(calls).toBe(0);
+
+	expect(candidate.repair).toMatchObject({
+		method: null,
+		result: 'unsupported',
+		reason:
+			'no changed line in src/c.ts holds code the candidate cites, and no changed line in the files it cites to offer'
+	});
 });

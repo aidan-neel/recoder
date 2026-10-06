@@ -14,9 +14,11 @@ import {
 import {
 	REPAIR_SYSTEM,
 	changesFromAnswer,
+	nothingToOffer,
 	repairAnswerSchema,
 	repairOptions,
-	repairPrompt
+	repairPrompt,
+	type RepairOptions
 } from '../candidate-repair-model.js';
 import type { CandidateContext, CandidateFinding } from '../consolidate.js';
 import { orchestratorAgentOptions, publishCandidates, saveCheckpoint, type ReviewRun } from './context.js';
@@ -59,19 +61,20 @@ function cannotCall(run: ReviewRun): string | null {
 
 /**
  * One model call that chooses what the diff left open, among lines the change
- * added and categories, claims and rules that exist. The changes, or why there are none.
+ * added and categories, claims and rules that exist. The changes, or why there
+ * are none. The call shares the review's budget and may take up to the agent
+ * loop's schema-repair turns on top of its one turn.
  */
 async function askModel(
 	run: ReviewRun,
 	candidate: CandidateFinding,
 	plan: RepairPlan,
-	scope: RepairScope
+	options: RepairOptions
 ): Promise<RepairChange[] | string> {
 	const blocked = cannotCall(run);
 
 	if (blocked) return blocked;
 
-	const options = repairOptions(candidate, plan, scope);
 	const config = configForOrchestrator();
 
 	try {
@@ -88,7 +91,7 @@ async function askModel(
 
 		if (!result.value) return result.error ?? 'the model gave no answer';
 
-		return changesFromAnswer(result.value, plan, options, run.evidence.providedIds());
+		return changesFromAnswer(result.value, plan, options);
 	} catch (err) {
 		if (err instanceof ModelBlockedError || err instanceof ReviewAbortedError) throw err;
 
@@ -101,7 +104,10 @@ function unchanged(candidate: CandidateFinding, result: CandidateRepair['result'
 	return { original: originalOf(candidate), method: null, changes: [], result, reason };
 }
 
-/** The repair itself: the diff's plan, one model call for what it left open, then validation again. */
+/**
+ * The repair itself: the diff's plan, one model call for what it left open,
+ * then validation again. No call is made when an open choice has nothing to offer.
+ */
 async function attemptRepair(run: ReviewRun, candidate: CandidateFinding): Promise<CandidateRepair> {
 	const scope: RepairScope = { inventory: run.inventory, ledger: run.ledger, intent: run.intent };
 	const plan = planRepair(candidate, scope);
@@ -109,7 +115,12 @@ async function attemptRepair(run: ReviewRun, candidate: CandidateFinding): Promi
 	if (plan.unsupported) return unchanged(candidate, 'unsupported', plan.unsupported);
 	if (!plan.open.length) return applyRepair(candidate, plan.changes, 'deterministic', candidateContext(run));
 
-	const changes = await askModel(run, candidate, plan, scope);
+	const options = repairOptions(candidate, plan, scope);
+	const empty = nothingToOffer(plan, options);
+
+	if (empty) return unchanged(candidate, 'unsupported', empty);
+
+	const changes = await askModel(run, candidate, plan, options);
 
 	if (typeof changes === 'string') return unchanged(candidate, 'unsupported', changes);
 

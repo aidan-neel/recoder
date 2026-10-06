@@ -46,6 +46,24 @@ function lineOptions(candidate: CandidateFinding, scope: RepairScope): ChangedLi
 		.slice(0, MAX_LINE_OPTIONS);
 }
 
+/**
+ * Why a call could not repair the candidate: a choice the plan left open with
+ * nothing to offer for it. Null when every open choice has options, so the call is worth making.
+ */
+export function nothingToOffer(plan: RepairPlan, options: RepairOptions): string | null {
+	for (const choice of plan.open) {
+		if (choice.need === 'line' && !options.lines.length) {
+			return `${choice.reason}, and no changed line in the files it cites to offer`;
+		}
+
+		if (choice.need === 'category' && !options.categories.length && !options.claims.length && !options.rules.length) {
+			return `${choice.reason}, and no category, claim or rule to offer`;
+		}
+	}
+
+	return null;
+}
+
 /** The options for what the plan left open; empty lists for what it settled. */
 export function repairOptions(candidate: CandidateFinding, plan: RepairPlan, scope: RepairScope): RepairOptions {
 	const issues = new Set(plan.open.map((choice) => (choice.need === 'line' ? 'line' : choice.issue)));
@@ -62,8 +80,8 @@ export const REPAIR_SYSTEM = [
 	'You repair one code review finding that failed validation, using only the evidence given.',
 	'Choose only among the listed options. Pick a line only when the finding and its evidence show that changed line introduces or carries the defect it describes.',
 	'Pick a category, claim or rule only when the finding and its evidence support it. Never invent a path, line, rule or requirement.',
-	'When no option is supported, answer null for it. Cite in evidenceIds only ids shown to you.',
-	'Answer with JSON: {"file": path of the chosen line or null, "line": its line number or null, "category": string or null, "claimId": string or null, "ruleId": string or null, "evidenceIds": [ids], "reason": "one sentence"}.'
+	'When no option is supported, answer null for it.',
+	'Answer with JSON: {"file": path of the chosen line or null, "line": its line number or null, "category": string or null, "claimId": string or null, "ruleId": string or null, "reason": "one sentence"}.'
 ].join('\n');
 
 /** The evidence records the candidate cites, as the call sees them. */
@@ -122,7 +140,6 @@ export const repairAnswerSchema = z.object({
 	category: z.string().nullable().optional(),
 	claimId: z.string().nullable().optional(),
 	ruleId: z.string().nullable().optional(),
-	evidenceIds: z.array(z.string()).max(12).default([]),
 	reason: z.string().max(600).default('')
 });
 
@@ -140,20 +157,16 @@ function chosenLine(answer: RepairAnswer, lines: ChangedLine[]): ChangedLine | u
 
 /**
  * The model's answer as repair changes, checked against what it was offered:
- * a line outside the options, a category, claim or rule it wasn't shown, or an
- * evidence id that doesn't exist makes the whole answer unsupported. So does
- * leaving open anything the plan needs.
+ * a line outside the options, or a category, claim or rule it wasn't shown,
+ * makes the whole answer unsupported. So does leaving open anything the plan needs.
  */
 export function changesFromAnswer(
 	answer: RepairAnswer,
 	plan: RepairPlan,
-	options: RepairOptions,
-	provided: ReadonlySet<string>
+	options: RepairOptions
 ): RepairChange[] | string {
 	const basis = `model: ${answer.reason || 'no reason given'}`;
 	const changes: RepairChange[] = [];
-
-	if (answer.evidenceIds.some((id) => !provided.has(id))) return 'the answer cites evidence that does not exist';
 
 	if (options.lines.length) {
 		const chosen = chosenLine(answer, options.lines);

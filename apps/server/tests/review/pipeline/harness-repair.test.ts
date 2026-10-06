@@ -147,7 +147,7 @@ test('with RECODER_CANDIDATE_REPAIR=0 the candidate stops at location as before,
 });
 
 test('when the diff leaves the line open, one model call picks an offered changed line and the candidate is verified', async () => {
-	const answer = { file: 'src/a.ts', line: 3, evidenceIds: [], reason: 'line 3 drops the value' };
+	const answer = { file: 'src/a.ts', line: 3, reason: 'line 3 drops the value' };
 	const { result, checkpoint, repairs } = await reviewFindings([uncitedAnchor('model anchor')], answer);
 
 	expect(repairs).toBe(1);
