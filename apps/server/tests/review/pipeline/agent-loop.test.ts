@@ -47,6 +47,21 @@ function agentOptions(overrides: Partial<JsonAgentOptions<SpecialistOutput>> = {
 const request = (index: number) =>
 	JSON.stringify({ message: 'Inspecting related code.', actions: [{ action: 'readDiff', path: `file${index}.ts` }] });
 
+/** Answers the n-th model call with `reply(n)`, and returns the last message of every prompt sent, as it grows. */
+function stubModel(reply: (call: number) => string): string[] {
+	const prompts: string[] = [];
+
+	globalThis.fetch = (async (_url, init) => {
+		const body = JSON.parse(init?.body as string);
+
+		prompts.push(body.messages.at(-1).content);
+
+		return Response.json({ choices: [{ message: { content: reply(prompts.length) } }] });
+	}) as typeof fetch;
+
+	return prompts;
+}
+
 test('a schema repair preserves all seven evidence rounds and the final result turn', async () => {
 	const evidence = new EvidenceStore(null, buildInventory(diff), 12000);
 	const budget = new ModelBudget();
@@ -247,19 +262,7 @@ test('an agent repeating a request that failed is given its final turn instead o
 		actions: [{ action: 'writeFile', path: 'repro.test.ts' }]
 	});
 
-	const prompts: string[] = [];
-
-	globalThis.fetch = (async (_url, init) => {
-		const body = JSON.parse(init?.body as string);
-
-		prompts.push(body.messages.at(-1).content);
-
-		return Response.json({
-			choices: [
-				{ message: { content: prompts.length <= 2 ? failing : '{"message":"Done.","findings":[],"examinedHunks":[]}' } }
-			]
-		});
-	}) as typeof fetch;
+	const prompts = stubModel((call) => (call <= 2 ? failing : '{"message":"Done.","findings":[],"examinedHunks":[]}'));
 
 	const result = await runJsonAgent(
 		agentOptions({
@@ -271,4 +274,25 @@ test('an agent repeating a request that failed is given its final turn instead o
 	expect(prompts).toHaveLength(3);
 	expect(prompts[1]).not.toContain('This is your final turn');
 	expect(prompts[2]).toContain('This is your final turn');
+});
+
+test('with two answer turns, retrieval is refused on both and an agent that keeps asking ends without an answer', async () => {
+	const prompts = stubModel(request);
+	const tools: string[] = [];
+
+	const result = await runJsonAgent(
+		agentOptions({
+			maxTurns: 4,
+			answerTurns: 2,
+			onTool: (tool) => {
+				if (tool.status === 'done') tools.push(tool.command);
+			}
+		})
+	);
+
+	expect(result).toEqual({ value: null, error: 'final turn requested retrieval instead of completing' });
+	expect(prompts).toHaveLength(4);
+	expect(tools).toHaveLength(2);
+	expect(prompts.slice(0, 2).map((prompt) => prompt.startsWith('This is your final turn'))).toEqual([false, false]);
+	expect(prompts.slice(2).map((prompt) => prompt.startsWith('This is your final turn'))).toEqual([true, true]);
 });
