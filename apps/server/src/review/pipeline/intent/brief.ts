@@ -13,8 +13,16 @@ const MAX_CODE_CLAIMS = 12;
 
 const SIGN = { add: '+', del: '-', context: ' ' } as const;
 
-/** A diff line with its new-side number; a removed line has none, so every cited line is on the new side. */
-const numbered = (line: DiffLine) => `${SIGN[line.type]}${line.newNo ?? ''}| ${line.text}`;
+/** Whether the change deleted the file, so it has only an old side to cite. */
+function isDeleted(inventory: ReviewInventory, path: string): boolean {
+	return inventory.files.find((file) => file.path === path)?.status === 'deleted';
+}
+
+/** A line's number on the side its file still has: the new side, or the old side of a deleted file. */
+const lineNo = (line: DiffLine, deleted: boolean) => (deleted ? line.oldNo : line.newNo);
+
+/** A diff line with the number a claim cites; a removed line of a kept file has none. */
+const numbered = (line: DiffLine, deleted: boolean) => `${SIGN[line.type]}${lineNo(line, deleted) ?? ''}| ${line.text}`;
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
 
@@ -44,6 +52,7 @@ export interface ClippedFile {
  */
 function fileDiff(inventory: ReviewInventory, path: string, share: number): { text: string; clipped?: ClippedFile } {
 	const hunks = inventory.diffs.find((entry) => entry.path === path)?.hunks ?? [];
+	const deleted = isDeleted(inventory, path);
 	const size = (lines: DiffLine[]) => lines.reduce((sum, line) => sum + patchLineChars(line), 0);
 	const anyFits = hunks.some((hunk) => size(hunk.lines) <= share);
 	let left = share;
@@ -63,7 +72,7 @@ function fileDiff(inventory: ReviewInventory, path: string, share: number): { te
 		const rest = hunk.lines.length - kept[index].length;
 		const note = rest ? [`…${plural(rest, 'more line')} of this hunk not shown`] : [];
 
-		return [hunk.header, ...kept[index].map(numbered), ...note].join('\n');
+		return [hunk.header, ...kept[index].map((line) => numbered(line, deleted)), ...note].join('\n');
 	});
 
 	return { text: [`--- ${path}`, ...text].join('\n'), ...(shown < total && { clipped: { path, shown, total } }) };
@@ -107,7 +116,7 @@ export function unitInput(
 	const diffs = scope.map((entry, index) => fileDiff(inventory, entry.path, limits[index]));
 	const declarations = model ? unitContext(model, scope, MAX_DECLARATION_CHARS) : '';
 
-	const diff = `Diff (new-side line numbers before each line; removed lines have none):\n${diffs.map((entry) => entry.text).join('\n\n')}`;
+	const diff = `Diff (new-side line numbers before each line, and removed lines have none; a deleted file's lines have their old numbers):\n${diffs.map((entry) => entry.text).join('\n\n')}`;
 
 	return {
 		text: [declarations, diff].filter(Boolean).join('\n\n'),
@@ -120,21 +129,24 @@ export function isFiller(text: string): boolean {
 	return /^[\s.…\-–—_?]*$/.test(text) || /^(n\/a|none|todo|tbd)$/i.test(text.trim());
 }
 
-/** Whether the line is one the diff shows on the new side of the file; any line counts in a file with none, a deleted one. */
+/** Whether the diff shows the line on the side its file still has. */
 function inDiff(inventory: ReviewInventory, path: string, line: number): boolean {
+	const deleted = isDeleted(inventory, path);
 	const hunks = inventory.diffs.find((entry) => entry.path === path)?.hunks ?? [];
-	const shown = hunks.flatMap((hunk) => hunk.lines.flatMap((entry) => entry.newNo ?? []));
 
-	return !shown.length || shown.includes(line);
+	return hunks.some((hunk) => hunk.lines.some((entry) => lineNo(entry, deleted) === line));
 }
 
-/** The new side of the hunk that shows `line`, or the line alone when none does. */
+/** The hunk that shows `line`, on the side its file still has, or the line alone when none does. */
 function hunkRange(inventory: ReviewInventory, path: string, line: number): { start: number; end: number } {
-	const hunk = inventory.diffs
-		.find((entry) => entry.path === path)
-		?.hunks.find((entry) => entry.newCount && entry.newStart <= line && line < entry.newStart + entry.newCount);
+	const deleted = isDeleted(inventory, path);
 
-	return hunk ? { start: hunk.newStart, end: hunk.newStart + hunk.newCount - 1 } : { start: line, end: line };
+	const span = inventory.diffs
+		.find((entry) => entry.path === path)
+		?.hunks.map((hunk) => (deleted ? [hunk.oldStart, hunk.oldCount] : [hunk.newStart, hunk.newCount]))
+		.find(([start, count]) => count && start <= line && line < start + count);
+
+	return span ? { start: span[0], end: span[0] + span[1] - 1 } : { start: line, end: line };
 }
 
 /** Up to `max` claims, each file's next one in turn, so one file's many claims never crowd out another's. */
@@ -161,34 +173,49 @@ export interface ClaimSource {
 	unit: ReviewUnit;
 	/** The head commit, when the review has a checkout. */
 	revision?: string;
+	/** The merge base, which a deleted file's lines are on; unset without a checkout. */
+	base?: string;
+}
+
+/**
+ * Where a claim's line is: the declaration around it (or its hunk) at the
+ * head commit, or for a deleted file its old hunk at the merge base, left
+ * unpinned when the review has no merge base to name.
+ */
+function pinOf(source: ClaimSource, file: string, line: number): Pick<PinnedClaim, 'symbol' | 'range' | 'revision'> {
+	const { inventory, model, revision, base } = source;
+
+	if (isDeleted(inventory, file)) return base ? { range: hunkRange(inventory, file, line), revision: base } : {};
+
+	const symbol = model ? symbolAt(model, file, line) : null;
+
+	return {
+		...(symbol && { symbol: symbol.qualifiedName }),
+		range: symbol ? { start: symbol.startLine, end: symbol.endLine } : hunkRange(inventory, file, line),
+		...(revision && { revision })
+	};
 }
 
 /**
  * One unit's statements about its code. Drops those about files outside the
  * unit, lines the diff does not show, or filler, so a reviewer is never sent
  * to a place the brief invented. Keeps the first few per file in the model's
- * order, then pins each to the declaration around it (or its hunk) and the
- * head commit, so a reader can open the code the claim is about.
+ * order, then pins each to where its line is, so a reader can open the code
+ * the claim is about.
  */
 export function unitClaims(raw: { text: string; file: string; line: number }[], source: ClaimSource): PinnedClaim[] {
-	const { inventory, model, unit, revision } = source;
+	const { inventory, unit } = source;
 	const paths = new Set(unit.scope.map((entry) => entry.path));
 
 	const valid = raw
 		.map((claim) => ({ text: claim.text.trim(), file: claim.file.trim(), line: claim.line }))
 		.filter((claim) => !isFiller(claim.text) && paths.has(claim.file) && inDiff(inventory, claim.file, claim.line));
 
-	return acrossFiles(valid, MAX_CODE_CLAIMS).map((claim) => {
-		const symbol = model ? symbolAt(model, claim.file, claim.line) : null;
-
-		return {
-			...claim,
-			unit: unit.id,
-			...(symbol && { symbol: symbol.qualifiedName }),
-			range: symbol ? { start: symbol.startLine, end: symbol.endLine } : hunkRange(inventory, claim.file, claim.line),
-			...(revision && { revision })
-		};
-	});
+	return acrossFiles(valid, MAX_CODE_CLAIMS).map((claim) => ({
+		...claim,
+		unit: unit.id,
+		...pinOf(source, claim.file, claim.line)
+	}));
 }
 
 /**

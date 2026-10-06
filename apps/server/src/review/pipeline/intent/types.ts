@@ -61,15 +61,15 @@ export interface CodeClaim {
 	id: string;
 	text: string;
 	file: string;
-	/** A new-side line the diff shows, as the model cited it. */
+	/** A line the diff shows, as the model cited it: on the new side, or the old side of a deleted file. */
 	line: number;
 	/** The brief unit whose summary made the claim (`unit-2`), a slice `partitionUnits` cut. */
 	unit?: string;
 	/** The innermost changed declaration around `line`, by qualified name, from the parser; unset outside every one. */
 	symbol?: string;
-	/** The lines a reader should open: the declaration's when there is one, else the diff hunk's new side. */
+	/** The lines a reader should open: the declaration's when there is one, else the diff hunk's on the side `line` is on. */
 	range?: { start: number; end: number };
-	/** The head commit `range` is on; unset for a review without a checkout. */
+	/** The commit `range` is on: the head, or the merge base for a deleted file; unset for a review without a checkout. */
 	revision?: string;
 }
 

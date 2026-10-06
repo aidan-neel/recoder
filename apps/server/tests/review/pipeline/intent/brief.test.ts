@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { createRun } from '../../../../src/review/pipeline/harness/context';
-import { unitInput } from '../../../../src/review/pipeline/intent/brief';
+import { unitClaims, unitInput } from '../../../../src/review/pipeline/intent/brief';
 import { partitionUnits } from '../../../../src/review/pipeline/units';
 import { addedFile } from '../harness-fixtures';
 
@@ -50,4 +50,37 @@ test('a hunk too large for the share is named by its header, and the hunks after
 	expect(input.clipped).toEqual([{ path: 'src/m.ts', shown: 7, total: 257 }]);
 	expect(input.text).toContain('@@ -1001,0 +1001,250 @@\n…250 more lines of this hunk not shown');
 	expect(input.text).toContain('+2003| 2-2');
+});
+
+test('a claim on a deleted file must cite an old line the diff shows, and is pinned to the merge base', () => {
+	const gone =
+		'diff --git a/src/gone.ts b/src/gone.ts\ndeleted file mode 100644\n--- a/src/gone.ts\n+++ /dev/null\n@@ -1,3 +0,0 @@\n-a\n-b\n-c\n';
+
+	const run = createRun({ diff: gone + addedFile('src/z.ts', 3), sandboxPath: null });
+	const [unit] = partitionUnits(run.inventory);
+	const source = { inventory: run.inventory, model: null, unit, revision: 'HEAD', base: 'BASE' };
+
+	const raw = [
+		{ text: 'Removes the third line', file: 'src/gone.ts', line: 3 },
+		{ text: 'Invented line', file: 'src/gone.ts', line: 42 },
+		{ text: 'Adds z', file: 'src/z.ts', line: 1 }
+	];
+
+	expect(unitInput(run.inventory, null, unit.scope).text).toContain('-3| c');
+
+	expect(unitClaims(raw, source)).toEqual([
+		{
+			text: 'Removes the third line',
+			file: 'src/gone.ts',
+			line: 3,
+			unit: 'unit-1',
+			range: { start: 1, end: 3 },
+			revision: 'BASE'
+		},
+		{ text: 'Adds z', file: 'src/z.ts', line: 1, unit: 'unit-1', range: { start: 1, end: 3 }, revision: 'HEAD' }
+	]);
+
+	expect(unitClaims(raw.slice(0, 1), { ...source, base: undefined })).toEqual([
+		{ text: 'Removes the third line', file: 'src/gone.ts', line: 3, unit: 'unit-1' }
+	]);
 });

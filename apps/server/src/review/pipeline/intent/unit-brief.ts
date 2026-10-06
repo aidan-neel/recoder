@@ -75,7 +75,15 @@ export async function briefUnit(run: ReviewRun, cfg: ModelConfig, unit: ReviewUn
 
 	const reply = answer.value;
 	const summary = isFiller(reply.summary) ? '' : reply.summary.trim();
-	const source = { inventory: run.inventory, model: run.changeModel, unit, revision: run.input.revision?.headSha };
+	const { revision } = run.input;
+
+	const source = {
+		inventory: run.inventory,
+		model: run.changeModel,
+		unit,
+		revision: revision?.headSha,
+		base: revision?.mergeBaseSha
+	};
 
 	const clipped = input.clipped.map((file) => `${file.path}: ${file.shown} of ${file.total} diff lines shown`);
 
