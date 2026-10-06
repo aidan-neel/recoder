@@ -157,7 +157,10 @@ export interface ReviewToolCall {
 	/** Bounded preview of the evidence returned to the agent. */
 	result?: {
 		content: string;
+		/** The preview is cut, by a retrieval bound or by the preview's own length. */
 		truncated: boolean;
+		/** A retrieval bound cut what the agent got (file size, patch page, round budget); unset when only the preview is cut. */
+		cut?: true;
 		evidenceId?: string;
 		revision?: string;
 		path?: string;

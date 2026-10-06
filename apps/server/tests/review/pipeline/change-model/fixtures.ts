@@ -35,9 +35,14 @@ async function writeAll(root: string, files: Record<string, string>): Promise<vo
 
 /**
  * Commits `base`, then `head` on top in a throwaway git
- * repo, and builds the change model of the diff between them.
+ * repo, and builds the change model of the diff between them. Caller
+ * selection follows `callerSelection`, or the environment when it is unset.
  */
-export async function buildFrom(base: Record<string, string>, head: Record<string, string>): Promise<Built> {
+export async function buildFrom(
+	base: Record<string, string>,
+	head: Record<string, string>,
+	callerSelection?: boolean
+): Promise<Built> {
 	const root = await mkdtemp(join(tmpdir(), 'change-model-'));
 
 	try {
@@ -58,7 +63,8 @@ export async function buildFrom(base: Record<string, string>, head: Record<strin
 			inventory,
 			checkoutPath: root,
 			signal: new AbortController().signal,
-			baseSha
+			baseSha,
+			callerSelection
 		});
 
 		return { model, inventory };

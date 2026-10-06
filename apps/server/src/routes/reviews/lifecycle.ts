@@ -61,7 +61,8 @@ function sessionAction(c: Context, start: (id: string) => unknown, fallback: str
 	}
 }
 
-app.get('/', (c) => c.json(db.reviews.list()));
+/** Every review without its context record, which only the single-review route serves: the list is polled and the record is large. */
+app.get('/', (c) => c.json(db.reviews.list().map(({ context: _context, ...review }) => review)));
 
 /** Compact live progress per review, for the home dashboard's recent-session list. */
 app.get('/progress-summaries', (c) => {

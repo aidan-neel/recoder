@@ -1,4 +1,10 @@
-import { DEFAULT_SUBAGENT_CAP, ORCHESTRATOR_ID, type ReviewAssignment } from '@recoder/shared';
+import {
+	DEFAULT_SUBAGENT_CAP,
+	ORCHESTRATOR_ID,
+	type Finding,
+	type ReviewAssignment,
+	type ReviewContext
+} from '@recoder/shared';
 import { EvidenceStore } from '../../../evidence/evidence.js';
 import { configForOrchestrator, reviewLimits, type ModelConfig } from '../../../models/models.js';
 import { execUnavailableReason } from '../../../sandbox/exec-sandbox.js';
@@ -23,6 +29,7 @@ import { restoreSubagentState, type SubagentState } from '../subagents.js';
 import { partitionUnits, type ReviewUnit } from '../units.js';
 import { FINISHED } from './assignments.js';
 import type { PoolContext } from './pool.js';
+import { emptyReceived, receivedOf, recordingReads, reviewContext, type Received } from './received.js';
 import type { AdaptiveReviewInput, BaselineResult, HarnessEvents, TaskFn } from './types.js';
 import type { VerifyQueue } from './verify-queue.js';
 
@@ -78,6 +85,8 @@ export interface ReviewRun {
 	/** Subagents reviewers asked for, the brief questions they left unsettled or answered, and the subagents that run; kept apart from `units`, so they're never retried. */
 	subagents: SubagentState;
 	nextCandidate: number;
+	/** Every reviewer's prompt as built and its retrievals, as places, so the review can record what each one received. */
+	received: Received;
 	/** Candidate repairs attempted so far, restored on resume so the review's repair cap holds across a restart. */
 	repairs: number;
 	/** Dependency setup and baseline check results, shared with every reviewer and verifier. */
@@ -122,6 +131,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		retriesDone: resume?.retriesDone ?? false,
 		subagents: restoreSubagentState(resume?.subagents),
 		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
+		received: resume?.received ? structuredClone(resume.received) : emptyReceived(),
 		repairs: resume?.repairs ?? 0,
 		setupNotes: '',
 		task: (id, label, status, message, extra) =>
@@ -254,8 +264,23 @@ export function saveCheckpoint(run: ReviewRun): void {
 		recommended: [...run.recommended],
 		retriesDone: run.retriesDone,
 		subagents: structuredClone(run.subagents),
-		...(run.repairs ? { repairs: run.repairs } : {})
+		...(run.repairs ? { repairs: run.repairs } : {}),
+		received: receivedOf(run.received, finished)
 	});
+}
+
+/** What each reviewer received, read and cited, and how each of `findings` got its evidence. */
+export function receivedContext(run: ReviewRun, findings: Finding[]): ReviewContext {
+	return reviewContext(
+		{
+			units: [...run.units, ...(run.subagents.units ?? [])],
+			roles: new Map(run.assignments.map((record) => [record.id, record.role])),
+			received: run.received,
+			evidence: run.evidence,
+			candidates: run.candidates
+		},
+		findings
+	);
 }
 
 /** What a reviewer pool needs from the run. */
@@ -270,7 +295,8 @@ export function poolContext(run: ReviewRun): PoolContext {
 		budget: run.budget,
 		deadlineAt: run.investigationDeadline,
 		signal: run.controller.signal,
-		events: run.events,
+		events: recordingReads(run.received, run.evidence, run.events),
+		received: run.received,
 		task: run.task,
 		candidates: run.candidates,
 		nextCandidate: () => `c${run.nextCandidate++}`,
