@@ -56,7 +56,8 @@ export function toEvalFinding(finding: Finding): EvalFinding {
 		symbol: finding.symbol,
 		severity: finding.severity,
 		title: finding.title,
-		verification: finding.verification
+		verification: finding.verification,
+		memberIds: finding.memberIds
 	};
 }
 
