@@ -76,11 +76,11 @@ test('a run that reached its assertion passed or failed on it', () => {
 });
 
 test('the package a command runs in', () => {
-	const dirs = ['.', 'apps/docs', 'packages/sivir'];
+	const dirs = ['.', 'apps/site', 'packages/widgets'];
 
-	expect(commandPackage('cd apps/docs && bunx vitest run x.test.ts', dirs)).toBe('apps/docs');
-	expect(commandPackage('cd ./packages/sivir/src && bun test', dirs)).toBe('packages/sivir');
-	expect(commandPackage('bun test packages/sivir/src/a.test.ts', dirs)).toBe('packages/sivir');
+	expect(commandPackage('cd apps/site && bunx vitest run x.test.ts', dirs)).toBe('apps/site');
+	expect(commandPackage('cd ./packages/widgets/src && bun test', dirs)).toBe('packages/widgets');
+	expect(commandPackage('bun test packages/widgets/src/a.test.ts', dirs)).toBe('packages/widgets');
 	expect(commandPackage('bun -e "1"', dirs)).toBe('.');
-	expect(commandPackage('bun -e "1"', ['apps/docs'])).toBeNull();
+	expect(commandPackage('bun -e "1"', ['apps/site'])).toBeNull();
 });

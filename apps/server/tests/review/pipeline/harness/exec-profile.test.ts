@@ -14,77 +14,77 @@ function tree(files: Record<string, string>): CommitTree {
 
 const manifest = (fields: Record<string, unknown>) => JSON.stringify(fields);
 
-/** A Svelte monorepo shaped like the one in the issue: a SvelteKit docs app tested by vitest, and a component package tested by bare `bun test`. */
+/** A Svelte monorepo: a SvelteKit app tested by vitest, and a component package whose tests run after a registry build, under bare `bun test`. */
 const MONOREPO = {
 	'package.json': manifest({
 		packageManager: 'bun@1.3.14',
 		workspaces: ['apps/*', 'packages/*'],
-		scripts: { prepare: 'lefthook install', test: 'turbo run test', generate: 'turbo run generate' }
+		scripts: { prepare: 'husky', test: 'nx run-many -t test', generate: 'nx run-many -t generate' }
 	}),
-	'apps/docs/package.json': manifest({
+	'apps/site/package.json': manifest({
 		scripts: {
-			prepare: "svelte-kit sync || echo ''",
+			prepare: 'svelte-kit sync',
 			check: 'svelte-kit sync && svelte-check',
-			test: 'bun run test:ci',
-			'test:ci': 'vitest run --project unit --project ssr',
+			test: 'bun run test:unit',
+			'test:unit': 'vitest run --project server',
 			'test:watch': 'vitest'
 		},
 		devDependencies: { '@sveltejs/kit': '^2', svelte: '^5', vitest: '^4' }
 	}),
-	'apps/docs/vitest.config.ts':
-		"import { sveltekit } from '@sveltejs/kit/vite';\nexport default { plugins: [sveltekit()], test: { setupFiles: ['tests/setup.ts'] } };\n",
-	'apps/docs/svelte.config.js': 'export default {};\n',
-	'apps/docs/src/lib/toast.svelte': '<p>toast</p>\n',
-	'apps/docs/tests/unit/a.browser.test.ts': 'x',
-	'apps/docs/tests/unit/sivir/toast.test.ts': 'a changed test',
-	'apps/docs/tests/unit/sivir/z-small.test.ts': 'x',
-	'packages/sivir/package.json': manifest({
+	'apps/site/vitest.config.ts':
+		"import { sveltekit } from '@sveltejs/kit/vite';\nexport default { plugins: [sveltekit()], test: { setupFiles: ['test/setup.ts'] } };\n",
+	'apps/site/svelte.config.js': 'export default {};\n',
+	'apps/site/src/lib/Banner.svelte': '<p>banner</p>\n',
+	'apps/site/test/a.browser.test.ts': 'x',
+	'apps/site/test/unit/banner.test.ts': 'a changed test',
+	'apps/site/test/unit/z-small.test.ts': 'x',
+	'packages/widgets/package.json': manifest({
 		scripts: {
-			'build:registry': 'bun scripts/build-registry.ts',
+			'build:registry': 'node tools/registry.js',
 			test: 'bun run build:registry && bun test',
-			dev: 'bun run --watch src/index.ts'
+			dev: 'bun --watch src/index.ts'
 		},
 		peerDependencies: { svelte: '^5', '@sveltejs/kit': '^2' }
 	}),
-	'packages/sivir/src/toast/lib.svelte.ts': 'let items = $state([]);\n',
-	'packages/sivir/cli/registry.test.ts': 'small',
-	'packages/sivir/src/toast/toast.svelte.test.ts': 'x',
-	'changelog/0.3.6.md': 'notes'
+	'packages/widgets/src/menu/state.svelte.ts': 'let open = $state(false);\n',
+	'packages/widgets/tools/registry.test.ts': 'small',
+	'packages/widgets/src/menu/menu.svelte.test.ts': 'x',
+	'notes/release.md': 'notes'
 };
 
 test('each changed package gets its runner, transforms, generation commands and one-file smoke run', async () => {
 	const changed = [
-		'apps/docs/tests/unit/sivir/toast.test.ts',
-		'packages/sivir/src/toast/lib.svelte.ts',
-		'changelog/0.3.6.md'
+		'apps/site/test/unit/banner.test.ts',
+		'packages/widgets/src/menu/state.svelte.ts',
+		'notes/release.md'
 	];
 
 	expect(await buildProfiles(tree(MONOREPO), changed, 'bun')).toEqual([
 		{
-			dir: 'apps/docs',
+			dir: 'apps/site',
 			runtime: 'node',
 			packageManager: 'bun',
 			runner: 'vitest',
 			transforms: [{ name: 'svelte', via: ['vitest'] }],
-			generation: ['cd apps/docs && bun run prepare'],
-			setupFiles: ['tests/setup.ts'],
+			generation: ['cd apps/site && bun run prepare'],
+			setupFiles: ['test/setup.ts'],
 			smoke: {
-				file: 'apps/docs/tests/unit/sivir/toast.test.ts',
+				file: 'apps/site/test/unit/banner.test.ts',
 				command:
-					'cd apps/docs && bunx vitest run --project unit --project ssr --reporter=dot --coverage.enabled=false tests/unit/sivir/toast.test.ts'
+					'cd apps/site && bunx vitest run --project server --reporter=dot --coverage.enabled=false test/unit/banner.test.ts'
 			}
 		},
 		{
-			dir: 'packages/sivir',
+			dir: 'packages/widgets',
 			runtime: 'bun',
 			packageManager: 'bun',
 			runner: 'bun test',
 			transforms: [{ name: 'svelte', via: [] }],
-			generation: ['cd packages/sivir && bun run build:registry'],
+			generation: ['cd packages/widgets && bun run build:registry'],
 			setupFiles: [],
 			smoke: {
-				file: 'packages/sivir/cli/registry.test.ts',
-				command: 'cd packages/sivir && bun test cli/registry.test.ts'
+				file: 'packages/widgets/tools/registry.test.ts',
+				command: 'cd packages/widgets && bun test tools/registry.test.ts'
 			}
 		}
 	]);

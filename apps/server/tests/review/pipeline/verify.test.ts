@@ -320,14 +320,14 @@ test('a run that broke before reaching the code settles nothing either way', () 
 test('a run recorded as never reaching its assertion proves nothing, even when its output is quoted', () => {
 	const evidence = store();
 	const untransformed = 'ReferenceError: $state is not defined';
-	const reason = 'The toast queue breaks: `$state is not defined`.';
+	const reason = 'The counter breaks: `$state is not defined`.';
 
 	evidence.records.set('ev_6', {
-		...run('ev_6', 'bun test src/toast.test.ts', untransformed, 1, 'v'),
+		...run('ev_6', 'bun test src/counter.test.ts', untransformed, 1, 'v'),
 		outcome: 'unsupported-execution'
 	});
 
-	evidence.records.set('ev_7', run('ev_7', 'bun test src/toast.test.ts', untransformed, 1, 'v'));
+	evidence.records.set('ev_7', run('ev_7', 'bun test src/counter.test.ts', untransformed, 1, 'v'));
 
 	evidence.records.set('ev_8', {
 		...run('ev_8', 'bunx vitest run a.test.ts', 'Error: boom', 1, 'v'),
