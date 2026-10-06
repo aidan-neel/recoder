@@ -19,6 +19,8 @@ export interface IntentSource {
 	revision?: string;
 	/** History only: the commits that landed together as a `git log` range, `parent..tip`, or a root commit's sha. */
 	range?: string;
+	/** History PRs only: true when a retrieved PR record backs it, false when only a commit or merge message names it. */
+	recorded?: boolean;
 	/** Clipped body text. */
 	text: string;
 }

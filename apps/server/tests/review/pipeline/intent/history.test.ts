@@ -101,6 +101,7 @@ test('history cites the older commits of a modified symbol, grouped by PR, and s
 
 	expect(sources[0].text).toBe(`${second.slice(0, 7)} Return two for retries (touched run)\nCallers retry on 2.`);
 	expect(sources[1].title).toBe('History unavailable');
+	expect(sources[2].recorded).toBe(true);
 	expect(unavailable(sources)).toEqual([second.slice(0, 7)]);
 
 	expect(
@@ -148,6 +149,7 @@ test('a merge whose commits carry no PR number keeps the PR it names, and a bran
 
 	expect(byRef['pr:#4']).toMatchObject({
 		title: 'PR #4 named in merge message: Retry on two',
+		recorded: false,
 		revision: pullMerge,
 		range: `${base}..${two}`,
 		text: `${short(two)} Return two (touched run)`
@@ -200,7 +202,7 @@ test('a PR trailer names its PR, and a commit nothing in this repo names gets no
 	});
 
 	expect(unavailable(sources)).toEqual([first, second].map(short).sort());
-	expect(sources[2]).toMatchObject({ revision: second, range: `${first}..${second}` });
+	expect(sources[2]).toMatchObject({ recorded: false, revision: second, range: `${first}..${second}` });
 	expect(sources[2].url).toBeUndefined();
 });
 
@@ -241,6 +243,7 @@ test('a record for the merge outranks a PR the commit names, which outranks a PR
 
 	expect(byRef['pr:#9']).toMatchObject({
 		title: 'Earlier PR #9: Recorded nine',
+		recorded: true,
 		url: record.url,
 		revision: recordedMerge,
 		range: `${base}..${named}`
@@ -248,12 +251,14 @@ test('a record for the merge outranks a PR the commit names, which outranks a PR
 
 	expect(byRef['pr:#8']).toMatchObject({
 		title: 'PR #8 named in commit message: Return three',
+		recorded: false,
 		revision: namingMerge,
 		range: `${recordedMerge}..${commitNamed}`
 	});
 
 	expect(byRef['pr:#6']).toMatchObject({
 		title: 'PR #6 named in merge message: Six',
+		recorded: false,
 		revision: lastMerge,
 		range: `${namingMerge}..${plain}`
 	});

@@ -60,6 +60,7 @@ export function makeSource(source: IntentSource): IntentSource {
 	if (source.at) out.at = source.at;
 	if (source.revision) out.revision = source.revision;
 	if (source.range) out.range = source.range;
+	if (source.recorded !== undefined) out.recorded = source.recorded;
 
 	return out;
 }

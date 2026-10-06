@@ -274,6 +274,7 @@ function groupSource(ref: string, items: Attributed[]): IntentSource {
 			at: latest,
 			revision,
 			range,
+			recorded: claim.basis === 'record',
 			text: clip(lines.join('\n'), HISTORY_CHARS)
 		});
 	}
