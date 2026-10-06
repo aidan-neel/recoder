@@ -83,7 +83,9 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	saveCheckpoint(run);
 
 	const context = Promise.all([
-		changeModelStage(run).then(() => Promise.all([intentStage(run), deriveObligationsStage(run)])),
+		changeModelStage(run).then((): Promise<unknown> =>
+			run.obligations ? Promise.all([intentStage(run), deriveObligationsStage(run)]) : intentStage(run)
+		),
 		ruleLedgerStage(run)
 	]);
 
@@ -102,14 +104,14 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 
 	const finishedAtStart = finishedIds(run);
 
-	await Promise.all([
-		runUnitPool(
-			run.units.filter((unit) => !finishedAtStart.has(unit.id)),
-			run.assignments,
-			poolContext(run)
-		),
-		runObligations(run)
-	]);
+	const pool = runUnitPool(
+		run.units.filter((unit) => !finishedAtStart.has(unit.id)),
+		run.assignments,
+		poolContext(run)
+	);
+
+	if (run.obligations) await Promise.all([pool, runObligations(run)]);
+	else await pool;
 
 	publishCoverage(run);
 	publishBudget(run);
