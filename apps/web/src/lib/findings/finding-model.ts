@@ -2,6 +2,7 @@ import {
 	findingKind,
 	type Finding as BackendFinding,
 	type FindingKind,
+	type FindingLocation,
 	type FindingPatch,
 	type FindingSeverity as BackendSeverity,
 	type FindingVerification,
@@ -42,6 +43,8 @@ export interface Finding {
 	/** Tool results the reviewer cited (`ev_…`), matched against the review's tool calls. */
 	evidenceIds?: string[];
 	assignmentId?: string;
+	/** Other places the finding involves, such as the changed line that causes it. */
+	relatedLocations?: FindingLocation[];
 	/** Whether a run in the review sandbox proved it. Older reviews omit it. */
 	verification?: FindingVerification;
 	status: 'open' | 'dismissed';
@@ -82,6 +85,7 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 		endLine: f.endLine && f.endLine >= line ? f.endLine : line,
 		evidenceIds: f.evidenceIds ?? [],
 		assignmentId: f.assignmentId,
+		relatedLocations: f.relatedLocations,
 		verification: f.verification,
 		status: 'open'
 	};

@@ -123,4 +123,24 @@ describe('collapseFileDiff', () => {
 			[22, 7]
 		]);
 	});
+
+	test('keeps the hunks of an unexpanded diff apart', () => {
+		const diff = parseUnifiedDiff(
+			[
+				'diff --git a/a.ts b/a.ts',
+				'--- a/a.ts',
+				'+++ b/a.ts',
+				'@@ -1,6 +1,7 @@',
+				...[' l1', ' l2', ' l3', '+added', ' l4', ' l5', ' l6'],
+				'@@ -20,6 +21,7 @@',
+				...[' l20', ' l21', ' l22', '+added', ' l23', ' l24', ' l25'],
+				''
+			].join('\n')
+		)[0];
+
+		expect(collapseFileDiff(diff).hunks.map((hunk) => [hunk.newStart, hunk.newCount])).toEqual([
+			[1, 7],
+			[21, 7]
+		]);
+	});
 });

@@ -61,16 +61,6 @@ export function splitRows(hunk: DiffHunk): SplitRow[] {
 	return rows;
 }
 
-/** Hunks annotated with how many unchanged lines were skipped before them. */
-export function withSkipped(diff: FileDiff): { hunk: DiffHunk; skipped: number }[] {
-	return diff.hunks.map((hunk, i) => {
-		const prev = diff.hunks[i - 1];
-		const prevEnd = prev ? prev.oldStart + prev.oldCount : hunk.oldStart;
-
-		return { hunk, skipped: Math.max(0, hunk.oldStart - prevEnd) };
-	});
-}
-
 /** Flat line list with its hunk. */
 export function flattenLines(diff: FileDiff): FlatLine[] {
 	return diff.hunks.flatMap((hunk) => hunk.lines.map((line) => ({ line, hunk })));

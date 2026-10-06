@@ -3,7 +3,7 @@ import { diffPrefs } from '$lib/diff/diff-prefs.svelte';
 import { revealDiffLine } from '$lib/diff/reveal-line';
 import { findingsStore } from '$lib/findings/findings.svelte';
 import { compareSeverity } from '$lib/findings/severity';
-import { collapseFileDiff } from '@recoder/shared';
+import { collapseFileDiff, type DiffLine, type FileDiff } from '@recoder/shared';
 import { sessionFile } from './session-file.svelte';
 import type { SessionReview } from './session-review.svelte';
 
@@ -14,6 +14,16 @@ export function findingLines(path: string): number[] {
 		.flatMap((finding) =>
 			Array.from({ length: finding.endLine - finding.startLine + 1 }, (_, i) => finding.startLine + i)
 		);
+}
+
+/** Jumping to a line the trimmed diff hides switches to the full file. */
+export function showDiffLine(files: FileDiff[] | null, path: string, line: number | null, side: 'old' | 'new'): void {
+	const diff = files?.find((file) => file.path === path);
+	const lineOf = (row: DiffLine) => (side === 'old' ? row.oldNo : row.newNo);
+
+	if (line === null || !diff || diffPrefs.fullFile) return;
+	if (!collapseFileDiff(diff, findingLines(path)).hunks.some((hunk) => hunk.lines.some((row) => lineOf(row) === line)))
+		diffPrefs.setFullFile(true);
 }
 
 /**
@@ -49,13 +59,9 @@ export class FileFocus {
 		this.userPicked = true;
 	}
 
-	/** Jumping to a line the trimmed diff hides switches to the full file. */
-	showLine(path: string, line: number | null): void {
-		const diff = this.data.files?.find((file) => file.path === path);
-
-		if (line === null || !diff || diffPrefs.fullFile) return;
-		if (!collapseFileDiff(diff, findingLines(path)).hunks.some((hunk) => hunk.lines.some((row) => row.newNo === line)))
-			diffPrefs.setFullFile(true);
+	/** {@link showDiffLine} on this review's files. */
+	showLine(path: string, line: number | null, side: 'old' | 'new' = 'new'): void {
+		showDiffLine(this.data.files, path, line, side);
 	}
 
 	/** Selections that didn't come from the auto-picker are the user's choice. */
