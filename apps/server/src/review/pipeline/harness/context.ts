@@ -78,6 +78,8 @@ export interface ReviewRun {
 	/** Subagents reviewers asked for, the brief questions they left unsettled or answered, and the subagents that run; kept apart from `units`, so they're never retried. */
 	subagents: SubagentState;
 	nextCandidate: number;
+	/** Candidate repairs attempted so far, restored on resume so the review's repair cap holds across a restart. */
+	repairs: number;
 	/** Dependency setup and baseline check results, shared with every reviewer and verifier. */
 	setupNotes: string;
 	task: TaskFn;
@@ -120,6 +122,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		retriesDone: resume?.retriesDone ?? false,
 		subagents: restoreSubagentState(resume?.subagents),
 		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
+		repairs: resume?.repairs ?? 0,
 		setupNotes: '',
 		task: (id, label, status, message, extra) =>
 			events?.onTask?.({ id, label, status, message, kind: extra?.kind ?? 'other', ...extra })
@@ -250,7 +253,8 @@ export function saveCheckpoint(run: ReviewRun): void {
 		evidence: run.evidence.snapshot(kept.flatMap((candidate) => candidate.evidenceIds ?? [])),
 		recommended: [...run.recommended],
 		retriesDone: run.retriesDone,
-		subagents: structuredClone(run.subagents)
+		subagents: structuredClone(run.subagents),
+		...(run.repairs ? { repairs: run.repairs } : {})
 	});
 }
 

@@ -41,6 +41,8 @@ export interface ReviewCheckpoint {
 	retriesDone: boolean;
 	/** Subagent requests, and the subagents picked from them once planned. */
 	subagents: SubagentState;
+	/** Candidate repairs the review already attempted, counted against its cap; absent when none were. */
+	repairs?: number;
 }
 
 /** A saved checkpoint this run can resume from, or why the review starts over instead. */

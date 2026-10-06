@@ -1,4 +1,5 @@
 import { matchesGlob } from '../../chat/directive.js';
+import { ruleAppliesTo } from '../../guidelines/ledger/glob.js';
 import { ruleCitation } from '../../guidelines/ledger/ledger.js';
 import type { MechanicalCheck, RepoRule, RuleLedger } from '../../guidelines/ledger/types.js';
 import type { ReviewInventory } from '../inventory.js';
@@ -20,7 +21,7 @@ export interface RuleCheckInput {
 }
 
 function inScope(rule: RepoRule, glob: string | undefined, path: string): boolean {
-	return (!rule.appliesTo || matchesGlob(path, rule.appliesTo)) && (!glob || matchesGlob(path, glob));
+	return ruleAppliesTo(rule, path) && (!glob || matchesGlob(path, glob));
 }
 
 function ruleResult(rule: RepoRule, file: string, line: number, body: string, evidence: string): DetectorResult {

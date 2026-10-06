@@ -7,15 +7,16 @@ import {
 	type FindingSeverity
 } from '@recoder/shared';
 import type { EvidenceStore } from '../../evidence/evidence.js';
-import { matchesGlob } from '../chat/directive.js';
+import { ruleAppliesTo } from '../guidelines/ledger/glob.js';
 import type { RuleLedger } from '../guidelines/ledger/types.js';
 import { symbolAt } from './change-model/change-model.js';
 import type { ChangeModel } from './change-model/types.js';
+import type { CandidateRepair } from './candidate-repair.js';
 import type { DetectorResult } from './detectors/types.js';
 import type { ReviewerFinding } from './finding-schema.js';
 import { dismissalFingerprint, fingerprintFinding, hunkAt, lineAnchor, snapToQuote } from './harness/findings.js';
 import type { ReviewInventory } from './inventory.js';
-import type { ChangeIntent } from './intent/types.js';
+import type { ChangeIntent, IntentClaim } from './intent/types.js';
 import { lensById } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
 import type { PublishedBy } from './published-by.js';
@@ -49,6 +50,8 @@ export interface CandidateFinding extends Finding {
 	fix?: FixEdit[];
 	/** Comparable existing code a convention finding rests on; the verifier checks each is on disk. */
 	examples?: ClaimStep[];
+	/** The one repair attempt made after it failed location or category validation; absent when none was made. */
+	repair?: CandidateRepair;
 }
 
 /** What validation and fingerprinting read from the run. */
@@ -97,14 +100,17 @@ function locationProblem(
 	inventory: ReviewInventory,
 	path: string,
 	line: number | undefined,
-	side: 'old' | 'new'
+	side: 'old' | 'new',
+	link?: RepairLink
 ): string | undefined {
 	const file = inventory.files.find((entry) => entry.path === path);
 
 	if (!file) return 'path is not in the change inventory';
 	if (file.excludeReason) return `path is excluded (${file.excludeReason})`;
 
-	if (side === 'new' && line && !newSideAnchored(inventory, file.path, line)) {
+	const linked = file.status !== 'added' && link?.file === path && addedLine(inventory, path, link.line);
+
+	if (side === 'new' && line && !linked && !newSideAnchored(inventory, file.path, line)) {
 		return 'new-side line is not associated with this change';
 	}
 
@@ -113,6 +119,11 @@ function locationProblem(
 	}
 
 	return undefined;
+}
+
+/** The claims an intent-mismatch finding may cite: goals, acceptance criteria, stated constraints and non-goals. */
+export function citableClaims(intent: ChangeIntent | null | undefined): IntentClaim[] {
+	return intent ? [intent.goals, intent.acceptanceCriteria, intent.statedConstraints, intent.nonGoals].flat() : [];
 }
 
 /**
@@ -125,30 +136,52 @@ function citesIntentClaim(text: string, intent: ChangeIntent | null | undefined)
 
 	if (!intent) return cited.length > 0;
 
-	const held = new Set(
-		[intent.goals, intent.acceptanceCriteria, intent.statedConstraints, intent.nonGoals].flat().map((claim) => claim.id)
-	);
+	const held = new Set(citableClaims(intent).map((claim) => claim.id));
 
 	return cited.some((id) => held.has(id));
 }
 
-/** Why the finding breaks its category's or lens's requirements, or undefined when it doesn't. */
-function categoryProblem(raw: ReviewerFinding, lens: LensId | null, ctx: CandidateContext): string | undefined {
+/**
+ * A repair's supported link from a finding on an unchanged line to the line
+ * the change added, in the same file, that introduces the defect. It comes
+ * from the finding's own cited line or quoted symbol, never from its fix. An
+ * added file's diff is the whole file, so a line outside it does not exist and
+ * a link never lets it pass.
+ */
+export interface RepairLink {
+	file: string;
+	line: number;
+}
+
+/** Which of its category's or lens's requirements a finding breaks, so a repair knows what it may correct. */
+export type CategoryIssue = 'lens' | 'rule' | 'smell' | 'examples' | 'intent';
+
+/** The category or lens requirement the finding breaks and why, or undefined when it breaks none. */
+export function categoryIssue(
+	raw: ReviewerFinding,
+	lens: LensId | null,
+	ctx: Pick<CandidateContext, 'ledger' | 'intent'>
+): { issue: CategoryIssue; reason: string } | undefined {
 	const { ledger } = ctx;
 
 	if (lens && !lensById(lens).categories.includes(raw.category)) {
-		return `category ${raw.category} is outside the ${lens} lens`;
+		return { issue: 'lens', reason: `category ${raw.category} is outside the ${lens} lens` };
 	}
 
 	if (raw.category === 'repo-rule' && !(raw.ruleId && ledger?.rules.some((rule) => rule.id === raw.ruleId))) {
-		return 'repo-rule finding cites no rule from the ledger';
+		return { issue: 'rule', reason: 'repo-rule finding cites no rule from the ledger' };
 	}
 
-	if (raw.category === 'readability' && !raw.smell) return 'readability finding names no smell';
-	if (raw.category === 'convention' && raw.examples.length < 2) return 'convention finding needs two examples';
+	if (raw.category === 'readability' && !raw.smell) {
+		return { issue: 'smell', reason: 'readability finding names no smell' };
+	}
+
+	if (raw.category === 'convention' && raw.examples.length < 2) {
+		return { issue: 'examples', reason: 'convention finding needs two examples' };
+	}
 
 	if (raw.category === 'intent-mismatch' && !citesIntentClaim(raw.claim.violatedContract, ctx.intent)) {
-		return 'intent-mismatch finding cites no intent claim id';
+		return { issue: 'intent', reason: 'intent-mismatch finding cites no intent claim id' };
 	}
 
 	return undefined;
@@ -184,11 +217,13 @@ function claimTexts(raw: ReviewerFinding): string[] {
  * wasn't provided, it breaks its category's requirements, or a person already
  * dismissed the same finding in this repository. A low-severity one that
  * Settings keeps out of the review stays valid and is marked `belowBar`.
+ * Only a repair passes `link`, which lets a finding on an unchanged line pass.
  */
 export function validateCandidate(
 	raw: ReviewerFinding,
 	meta: { candidateId: string; assignmentId: string; role: string; model: string; lens: LensId | null },
-	ctx: CandidateContext
+	ctx: CandidateContext,
+	link?: RepairLink
 ): CandidateFinding {
 	const side: 'old' | 'new' = raw.side === 'old' ? 'old' : 'new';
 	const reported = raw.line ?? undefined;
@@ -212,9 +247,9 @@ export function validateCandidate(
 	});
 
 	const drop = firstDrop([
-		['location', locationProblem(ctx.inventory, raw.file, line, side)],
+		['location', locationProblem(ctx.inventory, raw.file, line, side, link)],
 		['evidence', raw.evidenceIds.length > 0 && evidenceIds.length === 0 && 'cited evidence was not provided'],
-		['category', categoryProblem(raw, meta.lens, ctx)],
+		['category', categoryIssue(raw, meta.lens, ctx)?.reason],
 		['dismissed', ctx.dismissed?.has(dismissal) && 'a person dismissed this finding in an earlier review']
 	]);
 
@@ -305,6 +340,13 @@ export function candidateFromDetector(
 	};
 }
 
+/** Whether the change added the new-side line. */
+function addedLine(inventory: ReviewInventory, path: string, line: number): boolean {
+	const file = inventory.diffs.find((entry) => entry.path === path);
+
+	return (file?.hunks ?? []).some((hunk) => hunk.lines.some((entry) => entry.type === 'add' && entry.newNo === line));
+}
+
 function newSideAnchored(inventory: ReviewInventory, path: string, line: number): boolean {
 	const file = inventory.diffs.find((entry) => entry.path === path);
 
@@ -350,7 +392,7 @@ function isRuleViolation(candidate: CandidateFinding, ledger: RuleLedger | null)
 	return (
 		candidate.category === 'repo-rule' &&
 		rule !== undefined &&
-		(!rule.appliesTo || matchesGlob(candidate.file, rule.appliesTo)) &&
+		ruleAppliesTo(rule, candidate.file) &&
 		verification?.status === 'verified' &&
 		verification.method === 'rule'
 	);
@@ -388,6 +430,7 @@ export function toFinding(candidate: CandidateFinding): Finding {
 		refuted: _refuted,
 		fix: _fix,
 		examples: _examples,
+		repair: _repair,
 		...finding
 	} = candidate;
 
