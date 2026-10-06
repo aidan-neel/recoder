@@ -1,4 +1,4 @@
-import { availableParallelism, hostname, release } from 'node:os';
+import { availableParallelism, release } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { probeVersion } from '../agents/opencode/opencode-server';
 import { agentStatuses } from '../agents/registry';
@@ -52,8 +52,8 @@ export interface ServerIdentity {
 	policy: Record<string, number>;
 	caches: Record<string, string>;
 	tools: { bun: string; node: string; opencode: string };
+	/** The machine, unnamed: the route answers anyone who can reach it, and the harness records its own hostname. */
 	host: {
-		name: string;
 		os: string;
 		arch: string;
 		cpus: number;
@@ -109,7 +109,6 @@ export async function serverIdentity(): Promise<ServerIdentity> {
 		caches,
 		tools: { bun: Bun.version, node: await nodeVersion(), opencode: await opencodeVersion() },
 		host: {
-			name: hostname(),
 			os: `${process.platform} ${release()}`,
 			arch: process.arch,
 			cpus,

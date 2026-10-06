@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { basename, join } from 'node:path';
 import type { ModelEntry, ModelSettings, ReasoningEffort } from '@recoder/shared';
 import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode-catalog';
@@ -167,7 +168,8 @@ function stageModels(settings: ModelSettings): RunIdentity['models'] {
 const INFERENCE = { weightRevision: UNKNOWN, quantization: UNKNOWN };
 
 /** The server's part of the identity, every field `unknown` when it did not answer. */
-function serverParts(server: ServerIdentity | null): Pick<RunIdentity, 'flags' | 'caches' | 'tools' | 'host'> & {
+function serverParts(server: ServerIdentity | null): Pick<RunIdentity, 'flags' | 'caches' | 'tools'> & {
+	host: Omit<RunIdentity['host'], 'name'>;
 	policy: RunIdentity['limits']['policy'];
 	code: string;
 } {
@@ -178,7 +180,6 @@ function serverParts(server: ServerIdentity | null): Pick<RunIdentity, 'flags' |
 			caches: Object.fromEntries(SERVER_CACHES.map((name) => [name, UNKNOWN])),
 			tools: { bun: UNKNOWN, node: UNKNOWN, opencode: UNKNOWN },
 			host: {
-				name: UNKNOWN,
 				os: UNKNOWN,
 				arch: UNKNOWN,
 				cpus: UNKNOWN,
@@ -245,7 +246,7 @@ export async function captureIdentity(input: IdentityInput): Promise<RunIdentity
 		caches: { ...server.caches, 'benchmark-judge': `v${JUDGE_VERSION}` },
 		tools: server.tools,
 		tasks: await taskIdentities(input.tasks, forge),
-		host: server.host,
+		host: { name: hostname(), ...server.host },
 		execution: input.execution,
 		unavailable: unavailable(input.server, harness)
 	});

@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { app } from '../../src/app';
 import { capturedEnv, type ServerIdentity } from '../../src/eval/server-identity';
@@ -49,6 +50,8 @@ test('GET /health/identity records every RECODER_ switch, cache versions and too
 	expect(identity.tools.opencode).toBe('not installed');
 	expect(identity.policy.analysisDeadlineMs).toBeGreaterThan(0);
 	expect(identity.host.sandbox.runSlots).toBeGreaterThan(0);
+	expect(identity.host).not.toHaveProperty('name');
+	expect(text).not.toContain(`"${hostname()}"`);
 });
 
 test('sandbox sizing is recorded with the host; keys, endpoints and paths by any name are not recorded', () => {

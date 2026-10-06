@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ModelSettings } from '@recoder/shared';
 import type { Adjudications } from '../../src/eval/benchmark-labels';
@@ -46,7 +46,6 @@ const server: ServerIdentity = {
 	caches: { intent: 'source:1', 'rule-ledger': 'source:2', 'baseline-cache': 'source:3', 'review-checkpoint': 'v2' },
 	tools: { bun: '1.4.2', node: 'v24.0.0', opencode: 'not installed' },
 	host: {
-		name: 'pc',
 		os: 'linux 6',
 		arch: 'x64',
 		cpus: 16,
@@ -165,6 +164,11 @@ test('code is the content hash of the harness and the server sources; the server
 
 	expect(identity.code).toEqual({ harness: sourceVersion(), server: 'source:server' });
 	expect(identity.host.serverCommit).toBe('server-commit');
+});
+
+test('the host is named by the harness, since the server does not name its machine', async () => {
+	expect((await capture()).host.name).toBe(hostname());
+	expect((await capture({ server: null })).host.name).toBe(hostname());
 });
 
 test('a changed server flag changes the hash; a server without the route records unknown', async () => {

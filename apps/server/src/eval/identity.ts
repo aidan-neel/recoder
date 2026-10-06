@@ -90,6 +90,7 @@ export interface RunIdentity {
 	tools: { bun: string; node: string; opencode: string };
 	tasks: TaskIdentity[];
 	host: {
+		/** The harness's hostname; the server's route does not name its machine. */
 		name: string;
 		os: string;
 		arch: string;
