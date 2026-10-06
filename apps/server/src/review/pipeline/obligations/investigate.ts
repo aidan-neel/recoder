@@ -16,6 +16,7 @@ import {
 	type PoolContext,
 	type ScopedPatch
 } from '../harness/pool.js';
+import type { DiffChanges } from '../harness/run-outcome.js';
 import { addCandidates, finishUnit } from '../harness/unit-result.js';
 import { runOnBaseline } from '../harness/verify-baseline.js';
 import { investigatorSystemPrompt } from '../reviewer-prompts.js';
@@ -41,6 +42,8 @@ export interface InvestigationContext extends PoolContext {
 	/** The sandbox and merge base a counterexample is rerun on; either null when code cannot run there. */
 	workspace: ExecWorkspace | null;
 	mergeBaseSha: string | null;
+	/** What the diff added and removed, which a failed base run is checked against. */
+	changes: () => DiffChanges;
 	/** Records an investigation's answer before its assignment is marked finished. */
 	onAnswer: (answer: ObligationAnswer) => void;
 }

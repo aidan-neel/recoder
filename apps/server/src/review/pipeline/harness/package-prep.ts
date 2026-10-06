@@ -61,6 +61,8 @@ export interface PrepOptions {
 	changed: string[];
 	/** The package manager the install ran with, null when none ran. */
 	manager: PackageManager | null;
+	/** Paths the diff added, moved or deleted: a run that cannot find one of them failed on the change, not in setup. */
+	diffPaths: string[];
 	signal: AbortSignal;
 	/** Called as each command starts (with a null result) and finishes. */
 	onStep?: (step: PlannedStep, result: RunResult | null, outcome?: ExecutionOutcome) => void;
@@ -224,7 +226,7 @@ function settleWith(
 	return async (run) => {
 		const dir = commandPackage(run.command, dirs);
 		const profile = dir === null ? null : await profileOf(dir);
-		const outcome = classifyRun(run.command, run.result, profile);
+		const outcome = classifyRun(run.command, run.result, profile, options.diffPaths);
 		const unprepared = profile && !profiles.includes(profile) && profile.generation.length;
 
 		if (outcome !== 'setup-failed' || !unprepared || run.signal?.aborted) return settled(run, run.result, outcome);
@@ -239,7 +241,7 @@ function settleWith(
 		return settled(
 			run,
 			{ ...again, output: `${note}\n${again.output}` },
-			classifyRun(run.command, again, profile),
+			classifyRun(run.command, again, profile, options.diffPaths),
 			true
 		);
 	};

@@ -1,5 +1,8 @@
+import { posix } from 'node:path';
 import type { RunResult } from '../../../sandbox/exec-sandbox.js';
 import type { ExecutionOutcome } from '../../../evidence/types.js';
+import type { ChangeModel } from '../change-model/types.js';
+import type { ReviewInventory } from '../inventory.js';
 import { owningDir } from './baseline-checks.js';
 import { bareStep, stepRunner, type ExecutionProfile, type TestRunner, type Transform } from './exec-profile.js';
 
@@ -14,6 +17,102 @@ export const SETUP_FAILURE =
  */
 const SETUP_STOPPED =
 	/Failed to (?:resolve import|load url)|error: Script not found|Missing script:|could not determine executable to run|DNSResolveFailed|ENOTFOUND|EAI_AGAIN/;
+
+/**
+ * Where a runtime or bundler names the module it could not find: the
+ * specifier, then the importing file or folder when it says.
+ */
+const MISSING_MODULE = [
+	/Cannot find (?:module|package) ['"]([^'"]+)['"](?:\s+(?:from|imported from)\s+['"]?([^'"\s]+))?/g,
+	/Failed to resolve import ['"]([^'"]+)['"](?:\s+from\s+['"]([^'"]+)['"])?/g,
+	/Failed to load url (\S+)/g,
+	/Could not resolve ['"]([^'"]+)['"]/g,
+	/Can't resolve ['"]([^'"]+)['"](?:\s+in\s+['"]([^'"]+)['"])?/g,
+	/ENOENT: no such file or directory, \w+ ['"]([^'"]+)['"]/g
+];
+
+/** A code or data file's extension, dropped so `./a.js` and `src/a.ts` name the same module. */
+const MODULE_EXTENSION = /\.(?:d\.ts|[cm]?[jt]sx?|svelte|vue|json)$/;
+
+/** A module path without its extension or a trailing `/index`. */
+function moduleKey(path: string): string {
+	return path.replace(MODULE_EXTENSION, '').replace(/\/index$/, '');
+}
+
+/**
+ * The repo-relative tail a specifier points at: relative to its importer when
+ * the output names one, else with its `./`, `../`, root or alias prefix
+ * removed. Null for a bare package name, which no diff path can be.
+ */
+function specifierTail(specifier: string, importer: string | undefined): string | null {
+	const spec = specifier.split('?')[0]!;
+
+	if (/^\.{1,2}\//.test(spec) && importer) {
+		const dir = MODULE_EXTENSION.test(importer) ? posix.dirname(importer) : importer;
+
+		return posix.join(dir, spec).replace(/^\/+/, '');
+	}
+
+	if (/^(?:\.{1,2}\/|\/|[$~#]|@\/)/.test(spec)) return spec.replace(/^(?:(?:\.{1,2}\/)+|\/+|[$~#][\w-]*\/|@\/)/, '');
+
+	return null;
+}
+
+/** Whether two module paths name the same file, one maybe a longer (absolute or repo-rooted) form of the other. */
+function sameModule(a: string, b: string): boolean {
+	const [x, y] = [moduleKey(a), moduleKey(b)];
+
+	return x === y || x.endsWith(`/${y}`) || y.endsWith(`/${x}`);
+}
+
+/** What the diff adds and removes, which a run's missing module, file or name is checked against. */
+export interface DiffChanges {
+	/** Paths the diff added, a moved file's new path among them. */
+	added: string[];
+	/** Paths the diff deleted, a moved file's old path among them. */
+	removed: string[];
+	/** Names of the declarations the diff added. */
+	symbols: string[];
+}
+
+/**
+ * The paths the diff added and deleted, by the inventory's file status (a
+ * move is a delete and an add there), and the declarations the change model
+ * says it added.
+ */
+export function diffChanges(inventory: ReviewInventory, changeModel: ChangeModel | null): DiffChanges {
+	const paths = (status: string) => inventory.files.filter((file) => file.status === status).map((file) => file.path);
+	const added = changeModel?.symbols.filter((symbol) => symbol.change === 'added') ?? [];
+
+	return {
+		added: paths('added'),
+		removed: paths('deleted'),
+		symbols: [...new Set(added.map((symbol) => symbol.name))]
+	};
+}
+
+/** Paths the diff added, moved or deleted. */
+export function diffPaths(inventory: ReviewInventory): string[] {
+	const { added, removed } = diffChanges(inventory, null);
+
+	return [...added, ...removed];
+}
+
+/** The repo files and modules, not packages, a run's output says it could not find. */
+export function missingFiles(output: string): string[] {
+	return MISSING_MODULE.flatMap((pattern) => [...output.matchAll(pattern)])
+		.map((match) => specifierTail(match[1]!, match[2]))
+		.filter((tail): tail is string => Boolean(tail));
+}
+
+/** The diff paths among the modules and files a run's output says it could not find. */
+export function missingDiffPaths(output: string, paths: string[]): string[] {
+	if (!paths.length) return [];
+
+	const tails = missingFiles(output);
+
+	return paths.filter((path) => tails.some((tail) => sameModule(tail, path)));
+}
 
 /** What a runtime prints when it meets code that needed a transform it never applied, for every transform known. */
 const UNTRANSFORMED: Record<Transform['name'], RegExp> = {
@@ -60,12 +159,15 @@ function executor(command: string, profile: ExecutionProfile | null): { by: Exec
  * script importing it) can need one its own profile lacks. A file name alone
  * never says so: a `.svelte.ts` file without runes runs fine. A failure is
  * setup-failed when it never got past a missing module, script, binary or
- * package download, and otherwise a failed assertion.
+ * package download, and otherwise a failed assertion. A missing module that
+ * is one of `diffPaths` (paths the diff added, moved or deleted) is the
+ * change under test, not setup, so that run is a failed assertion.
  */
 export function classifyRun(
 	command: string,
 	result: Pick<RunResult, 'exitCode' | 'output' | 'timedOut'>,
-	profile: ExecutionProfile | null
+	profile: ExecutionProfile | null,
+	diffPaths: string[] = []
 ): ExecutionOutcome | undefined {
 	if (result.timedOut || result.exitCode === null) return undefined;
 
@@ -82,7 +184,9 @@ export function classifyRun(
 	);
 
 	if (untransformed) return 'unsupported-execution';
-	if (SETUP_FAILURE.test(result.output) || SETUP_STOPPED.test(result.output)) return 'setup-failed';
+
+	if (SETUP_FAILURE.test(result.output) || SETUP_STOPPED.test(result.output))
+		return missingDiffPaths(result.output, diffPaths).length ? 'assertion-failed' : 'setup-failed';
 
 	return 'assertion-failed';
 }

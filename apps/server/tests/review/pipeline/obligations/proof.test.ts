@@ -81,6 +81,7 @@ async function investigateWith(sandbox: FakeSandbox, final: (runId: string) => R
 		obligationOf: (id) => state.derived!.find((obligation) => obligation.id === id)!,
 		workspace: run.workspace,
 		mergeBaseSha: input.revision!.mergeBaseSha,
+		changes: () => ({ added: [], removed: [], symbols: [] }),
 		onAnswer: (answer) => answers.push(answer)
 	});
 
@@ -117,7 +118,7 @@ test('a passing run that prints something else on the merge base proves it too',
 	);
 
 	expect(answer.result).toBe('confirmed');
-	expect(answer.attemptedCounterexample?.base).toEqual({ exitCode: 0, differs: true });
+	expect(answer.attemptedCounterexample?.base).toMatchObject({ exitCode: 0, differs: true, result: 'regression' });
 });
 
 test('a passing run that ends the same way on the merge base leaves a confirmed answer unresolved', async () => {

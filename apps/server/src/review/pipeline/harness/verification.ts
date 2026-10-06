@@ -33,6 +33,7 @@ import { publishBudget, publishCandidates, type ReviewRun } from './context.js';
 import { checkPatches } from './patch-check.js';
 import type { HarnessEvents, TaskFn } from './types.js';
 import { candidateRepairOn, repairCandidate } from './repair.js';
+import { diffChanges, type DiffChanges } from './run-outcome.js';
 import { recordBaseline } from './verify-baseline.js';
 import { VerifyQueue } from './verify-queue.js';
 
@@ -55,6 +56,8 @@ interface VerifyContext {
 	/** The review's sandbox, where a run-proved bug is run again on the merge-base tree; null when code cannot run. */
 	workspace: ExecWorkspace | null;
 	mergeBaseSha: string | null;
+	/** What the diff added and removed, which a failed base run is checked against. */
+	changes: () => DiffChanges;
 }
 
 const VERIFIER_EXAMPLE =
@@ -80,7 +83,8 @@ export function startVerification(run: ReviewRun): void {
 		checkout: run.input.revision?.checkoutPath ?? null,
 		unavailable: run.workspace ? null : run.execReason,
 		workspace: run.workspace,
-		mergeBaseSha: run.input.revision?.mergeBaseSha ?? null
+		mergeBaseSha: run.input.revision?.mergeBaseSha ?? null,
+		changes: () => diffChanges(run.inventory, run.changeModel)
 	};
 
 	const repair = candidateRepairOn() ? (candidate: CandidateFinding) => repairCandidate(run, candidate) : undefined;

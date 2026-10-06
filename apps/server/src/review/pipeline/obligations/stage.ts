@@ -2,6 +2,7 @@ import type { ObligationAnswer } from '@recoder/shared';
 import { unitRecord, type ReviewUnit } from '../units.js';
 import { finishedIds, poolContext, publishUnits, saveCheckpoint, type ReviewRun } from '../harness/context.js';
 import { runOneUnit, runUnitPool } from '../harness/pool.js';
+import { diffChanges } from '../harness/run-outcome.js';
 import { deriveObligations, selectUnderCap } from './derive.js';
 import { blankAnswer, investigate } from './investigate.js';
 import { obligationUnit } from './prompts.js';
@@ -90,6 +91,7 @@ export async function runUnitsWithObligations(run: ReviewRun, units: ReviewUnit[
 		obligationOf: (id: string) => state.derived!.find((obligation) => obligation.id === id)!,
 		workspace: run.workspace,
 		mergeBaseSha: run.input.revision?.mergeBaseSha || null,
+		changes: () => diffChanges(run.inventory, run.changeModel),
 		onAnswer: (answer: ObligationAnswer) => state.answers.push(answer)
 	};
 
