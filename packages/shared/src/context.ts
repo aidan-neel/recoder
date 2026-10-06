@@ -45,10 +45,16 @@ export interface ReviewerContext {
 	readsDropped?: number;
 }
 
-/** A published finding and how its reporters had the evidence they cited; `none` when it cites nothing a reviewer held. */
+/**
+ * How a published finding's reporters had the evidence they cited: one count
+ * per member and evidence id, by way, all zero when it cites nothing a reviewer
+ * held. `readBy` counts the members that cited something they fetched themselves.
+ */
 export interface FindingCitation {
 	findingId: string;
-	via: CitedVia | 'none';
+	cited: Record<CitedVia, number>;
+	members: number;
+	readBy: number;
 }
 
 /** What every reviewer of a review received, read, cited and missed, so an eval can tell missing context from unused context. */

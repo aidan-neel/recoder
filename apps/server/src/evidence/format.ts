@@ -70,6 +70,7 @@ export function finishedReport(
 			content: result.content.slice(0, PREVIEW_CHARS),
 			truncated: result.truncated || result.content.length > PREVIEW_CHARS,
 			...(result.truncated ? { cut: true as const } : {}),
+			...(result.action === 'readDiff' && result.hunkIds ? { hunkIds: result.hunkIds } : {}),
 			evidenceId: result.evidenceId,
 			revision: result.revision,
 			path: result.path,

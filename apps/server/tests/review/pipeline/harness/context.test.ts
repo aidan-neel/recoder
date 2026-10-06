@@ -26,9 +26,13 @@ test('a review records what each lens reviewer received, the same way every time
 
 	expect(context?.reviewers.map((reviewer) => reviewer.assignmentId)).toEqual(lensIdsOf('unit-1'));
 	expect(context?.reviewers[0].supplied).toEqual([{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 1 }]);
-	expect(context?.findings.map((finding) => finding.via)).toEqual(['supplied']);
 	expect(runs[1]?.reviewers).toEqual(context?.reviewers);
-	expect(runs[1]?.findings.map((finding) => finding.via)).toEqual(['supplied']);
+
+	for (const run of runs) {
+		expect(run?.findings.map(({ cited, readBy }) => ({ cited, readBy }))).toEqual([
+			{ cited: { supplied: 1, read: 0, unknown: 0 }, readBy: 0 }
+		]);
+	}
 });
 
 test('a checkpoint keeps the reads of finished assignments, and a resumed review carries them on', async () => {

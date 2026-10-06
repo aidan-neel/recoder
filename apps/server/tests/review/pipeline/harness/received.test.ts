@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import type { Finding, ReviewToolCall } from '@recoder/shared';
-import { EvidenceStore } from '../../../../src/evidence/evidence';
+import type { Finding } from '@recoder/shared';
+import type { EvidenceStore } from '../../../../src/evidence/evidence';
 import type { EvidenceRecord } from '../../../../src/evidence/types';
 import type { ChangeModel } from '../../../../src/review/pipeline/change-model/types';
 import type { CandidateFinding } from '../../../../src/review/pipeline/consolidate';
@@ -13,6 +13,7 @@ import {
 } from '../../../../src/review/pipeline/harness/received';
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import type { ReviewUnit } from '../../../../src/review/pipeline/units';
+import { candidate, published, record, storeOf, tool } from './received-fixtures';
 
 const DIFF = `diff --git a/src/a.ts b/src/a.ts
 --- a/src/a.ts
@@ -27,13 +28,9 @@ const DIFF = `diff --git a/src/a.ts b/src/a.ts
 const UNIT = 'unit-1/correctness';
 const OTHER = 'unit-1/security';
 
-function record(id: string, path: string, startLine: number, endLine: number, over: Partial<EvidenceRecord> = {}) {
-	return { id, revision: 'head' as const, path, startLine, endLine, content: 'code', truncated: false, ...over };
-}
-
 /**
  * E1 the scoped patch, E2 a file read a size cap cut, E3 a read inside the patch, E4 a run, E5 another reviewer's read,
- * E6 the changed declaration's body past the patch, E7 its test file.
+ * E6 the changed declaration's body past the patch, E7 its test file, E8 the line of a listed reference.
  */
 const RECORDS: EvidenceRecord[] = [
 	record('E1', 'src/a.ts', 1, 3),
@@ -42,40 +39,12 @@ const RECORDS: EvidenceRecord[] = [
 	record('E4', '.', 1, 1, { kind: 'run', command: 'bun test' }),
 	record('E5', 'src/c.ts', 1, 9),
 	record('E6', 'src/a.ts', 10, 12),
-	record('E7', 'tests/a.test.ts', 1, 5)
+	record('E7', 'tests/a.test.ts', 1, 5),
+	record('E8', 'src/c.ts', 5, 5)
 ];
 
 function store(): EvidenceStore {
-	const evidence = new EvidenceStore(null, buildInventory(DIFF), 1000);
-
-	evidence.restore({ records: RECORDS, seq: RECORDS.length, toolSeq: 0 });
-
-	return evidence;
-}
-
-function tool(
-	assignmentId: string | undefined,
-	action: string,
-	over: Partial<ReviewToolCall> & { evidenceId?: string; cut?: true } = {}
-): ReviewToolCall {
-	const { evidenceId, cut, ...rest } = over;
-
-	return {
-		id: `t-${action}-${evidenceId ?? 'none'}`,
-		...(assignmentId ? { assignmentId, role: 'reviewer' } : {}),
-		command: action,
-		status: 'done',
-		exitCode: 0,
-		startedAt: '2026-01-01T00:00:00.000Z',
-		input: { action, path: 'src/a.ts' },
-		result: {
-			content: 'code',
-			truncated: Boolean(cut),
-			...(cut ? { cut } : {}),
-			...(evidenceId ? { evidenceId } : {})
-		},
-		...rest
-	};
+	return storeOf(DIFF, RECORDS);
 }
 
 /** The reads one reviewer makes: its scoped patch, a file a size cap cut, a read inside the patch, then a run. */
@@ -92,14 +61,6 @@ function investigate(reads: ReceivedReads, evidence: EvidenceStore): number {
 	events.onTool?.(tool(undefined, 'readFile', { evidenceId: 'E5' }));
 
 	return forwarded;
-}
-
-function candidate(id: string, assignmentId: string, evidenceIds: string[]): CandidateFinding {
-	return { id, candidateId: id, assignmentId, evidenceIds } as unknown as CandidateFinding;
-}
-
-function published(id: string, memberIds?: string[]): Finding {
-	return { id, ...(memberIds ? { memberIds } : {}) } as unknown as Finding;
 }
 
 describe('recording reads', () => {
@@ -199,7 +160,7 @@ describe('the review context', () => {
 		});
 	});
 
-	test('a published finding takes the best way any of its members had their evidence', () => {
+	test('a published finding counts every way its members had their evidence, and how many read their own', () => {
 		const { findings } = build([
 			published('f1', ['c1']),
 			published('f2', ['c1', 'c2']),
@@ -208,10 +169,10 @@ describe('the review context', () => {
 		]);
 
 		expect(findings).toEqual([
-			{ findingId: 'f1', via: 'read' },
-			{ findingId: 'f2', via: 'supplied' },
-			{ findingId: 'c3', via: 'unknown' },
-			{ findingId: 'f4', via: 'none' }
+			{ findingId: 'f1', cited: { supplied: 0, read: 1, unknown: 0 }, members: 1, readBy: 1 },
+			{ findingId: 'f2', cited: { supplied: 1, read: 1, unknown: 0 }, members: 2, readBy: 1 },
+			{ findingId: 'c3', cited: { supplied: 0, read: 0, unknown: 1 }, members: 1, readBy: 0 },
+			{ findingId: 'f4', cited: { supplied: 0, read: 0, unknown: 0 }, members: 0, readBy: 0 }
 		]);
 	});
 
@@ -226,7 +187,7 @@ describe('the review context', () => {
 		]);
 	});
 
-	test('a cited place counts as supplied only when the prompt showed its text, not when it only named it', () => {
+	test('a cited place counts as supplied only when the prompt showed all its lines, not when it only named it', () => {
 		const model = {
 			symbols: [
 				{
@@ -258,14 +219,16 @@ describe('the review context', () => {
 		const reads = emptyReads();
 		const events = recordingReads(reads, evidence, undefined);
 
-		for (const id of ['E1', 'E6', 'E7', 'E5']) events.onTool?.(tool(UNIT, 'readFile', { evidenceId: id }));
+		for (const id of ['E1', 'E6', 'E7', 'E5', 'E8']) events.onTool?.(tool(UNIT, 'readFile', { evidenceId: id }));
 
-		const context = reviewContext(sources(reads, evidence, [candidate('c1', UNIT, ['E6', 'E7', 'E5'])], model), []);
+		const cited = [candidate('c1', UNIT, ['E6', 'E7', 'E5', 'E8'])];
+		const context = reviewContext(sources(reads, evidence, cited, model), []);
 
-		expect(context.reviewers[0].cited.map((item) => [item.path, item.via])).toEqual([
-			['src/a.ts', 'read'],
-			['tests/a.test.ts', 'read'],
-			['src/c.ts', 'supplied']
+		expect(context.reviewers[0].cited.map((item) => [item.path, item.endLine, item.via])).toEqual([
+			['src/a.ts', 12, 'read'],
+			['tests/a.test.ts', 5, 'read'],
+			['src/c.ts', 9, 'read'],
+			['src/c.ts', 5, 'supplied']
 		]);
 	});
 });

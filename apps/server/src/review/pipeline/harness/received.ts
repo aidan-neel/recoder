@@ -34,6 +34,8 @@ interface RecordedRead {
 	startLine?: number;
 	endLine?: number;
 	hunkIds?: string[];
+	/** `readDiff`: the hunks the page delivered; unset on a record from before they were kept. */
+	shown?: string[];
 	evidenceId?: string;
 	ok: boolean;
 	/** A bound cut the result: the file read's size cap, or the patch page or round budget for a diff. */
@@ -74,6 +76,7 @@ function recordRead(reads: ReceivedReads, evidence: EvidenceStore, tool: Reviewe
 		path,
 		...(stored ? { startLine: stored.startLine, endLine: stored.endLine } : lines(tool.input)),
 		...(tool.input?.hunkIds ? { hunkIds: tool.input.hunkIds } : {}),
+		...(tool.result?.hunkIds ? { shown: tool.result.hunkIds } : {}),
 		...(tool.result?.evidenceId ? { evidenceId: tool.result.evidenceId } : {}),
 		ok: tool.status === 'done',
 		truncated: Boolean(tool.result?.cut || stored?.truncated)
@@ -126,22 +129,32 @@ function patchReads(unit: ReviewUnit, reads: RecordedRead[]): RecordedRead[] {
 	return reads.slice(0, unit.scope.length).filter((read) => read.action === 'readDiff' && paths.has(read.path));
 }
 
-/** Each scoped file's patch, over the new-side lines its hunks span. */
-function patchItems(unit: ReviewUnit, inventory: ReviewInventory): ContextItem[] {
-	return unit.scope.map((entry) => {
-		const file = inventory.files.find((candidate) => candidate.path === entry.path);
-		const wanted = new Set(entry.hunkIds);
-		const hunks = (file?.hunks ?? []).filter((hunk) => !wanted.size || wanted.has(hunk.id));
+/** The hunks of a scope entry: the listed ones, or every hunk of the file when it lists none. */
+function scopedHunks(entry: ReviewUnit['scope'][number], inventory: ReviewInventory) {
+	const file = inventory.files.find((candidate) => candidate.path === entry.path);
+	const wanted = new Set(entry.hunkIds);
 
-		if (!hunks.length) return { kind: 'diff', path: entry.path };
+	return (file?.hunks ?? []).filter((hunk) => !wanted.size || wanted.has(hunk.id));
+}
 
-		return {
-			kind: 'diff',
-			path: entry.path,
-			startLine: Math.min(...hunks.map((hunk) => hunk.newStart)),
-			endLine: Math.max(...hunks.map((hunk) => hunk.newStart + Math.max(hunk.newCount - 1, 0)))
-		};
+/**
+ * The hunks the initial patch put in the prompt, each over its new-side lines.
+ * A page a budget cut keeps only the hunks it delivered, or none when the record
+ * predates delivered hunks; a file with no patch read is taken as asked for.
+ */
+function patchItems(unit: ReviewUnit, inventory: ReviewInventory, patch: RecordedRead[]): ContextItem[] {
+	return unit.scope.flatMap((entry) => {
+		const read = patch.find((candidate) => candidate.path === entry.path);
+		const shown = read?.truncated ? new Set(read.shown) : null;
+
+		return scopedHunks(entry, inventory)
+			.filter((hunk) => !shown || shown.has(hunk.id))
+			.map((hunk) => ({ kind: 'diff' as const, path: entry.path, ...hunkLines(hunk) }));
 	});
+}
+
+function hunkLines(hunk: { newStart: number; newCount: number }): { startLine: number; endLine: number } {
+	return { startLine: hunk.newStart, endLine: hunk.newStart + Math.max(hunk.newCount - 1, 0) };
 }
 
 function readItem(read: RecordedRead): ContextItem {
@@ -150,11 +163,22 @@ function readItem(read: RecordedRead): ContextItem {
 	return { kind: READ_KINDS[read.action] ?? 'source', path: read.path, ...(startLine ? { startLine, endLine } : {}) };
 }
 
-/** A read a bound cut: a file read past its size cap, or a patch page past its budget. */
-function readOmissions(reads: RecordedRead[]): ContextOmission[] {
+/**
+ * What bounds cut from the reviewer's reads: a file read past its size cap, a
+ * patch page past its budget, and for the initial patch each scoped hunk it did not deliver.
+ */
+function readOmissions(unit: ReviewUnit, inventory: ReviewInventory, reads: RecordedRead[], patch: RecordedRead[]) {
 	return reads
 		.filter((read) => read.ok && read.truncated && (read.action === 'readFile' || read.action === 'readDiff'))
-		.map((read) => ({ ...readItem(read), reason: read.action === 'readFile' ? 'file-cap' : 'diff-cap' }));
+		.flatMap((read): ContextOmission[] => {
+			const entry = patch.includes(read) && read.shown ? unit.scope.find((item) => item.path === read.path) : undefined;
+
+			if (!entry) return [{ ...readItem(read), reason: read.action === 'readFile' ? 'file-cap' : 'diff-cap' }];
+
+			return scopedHunks(entry, inventory)
+				.filter((hunk) => !read.shown?.includes(hunk.id))
+				.map((hunk) => ({ kind: 'diff', path: read.path, ...hunkLines(hunk), reason: 'diff-cap' }));
+		});
 }
 
 /**
@@ -164,12 +188,15 @@ function readOmissions(reads: RecordedRead[]): ContextOmission[] {
  */
 const SHOWN_KINDS = new Set<ContextKind>(['diff', 'caller', 'reference', 'contract']);
 
-/** Whether the cited range lies on text the prompt already gave: the same path, overlapping lines when both have them. */
+/**
+ * Whether the cited range lies inside text the prompt already gave: the same
+ * path, and every cited line within the supplied lines. Without line numbers on
+ * either side nothing shows the text was given, so it is not covered.
+ */
 function covers(item: ContextItem, cited: ContextItem): boolean {
-	if (!SHOWN_KINDS.has(item.kind) || item.path !== cited.path) return false;
-	if (!item.startLine || !cited.startLine) return true;
+	if (!SHOWN_KINDS.has(item.kind) || item.path !== cited.path || !item.startLine || !cited.startLine) return false;
 
-	return cited.startLine <= (item.endLine ?? item.startLine) && (cited.endLine ?? cited.startLine) >= item.startLine;
+	return cited.startLine >= item.startLine && (cited.endLine ?? cited.startLine) <= (item.endLine ?? item.startLine);
 }
 
 /** How one reviewer had each evidence id it could cite. */
@@ -216,7 +243,7 @@ function reviewerContext(
 	const parts = sources.changeModel ? unitContextParts(sources.changeModel, unit.scope) : { supplied: [], omitted: [] };
 	const reads = sources.reads.byAssignment[unit.id] ?? [];
 	const patch = patchReads(unit, reads);
-	const supplied = [...patchItems(unit, sources.inventory), ...parts.supplied];
+	const supplied = [...patchItems(unit, sources.inventory, patch), ...parts.supplied];
 	const classify = classifier(sources, supplied, reads, patch);
 	const own = sources.candidates.filter((candidate) => candidate.assignmentId === unit.id);
 
@@ -233,16 +260,14 @@ function reviewerContext(
 		supplied,
 		read: reads.filter((read) => read.ok && !patch.includes(read)).map(readItem),
 		cited,
-		omitted: [...parts.omitted, ...readOmissions(reads)],
+		omitted: [...parts.omitted, ...readOmissions(unit, sources.inventory, reads, patch)],
 		...(dropped ? { readsDropped: dropped } : {})
 	};
 
 	return { record, classify };
 }
 
-const VIA_RANK: Record<FindingCitation['via'], number> = { supplied: 0, read: 1, unknown: 2, none: 3 };
-
-/** How a published finding's reporters had what they cited: supplied wins over read, read over unknown. */
+/** How a published finding's reporters had what they cited, counted per member and evidence id rather than the best way. */
 function findingCitation(
 	finding: Finding,
 	sources: ReceivedSources,
@@ -250,19 +275,19 @@ function findingCitation(
 ): FindingCitation {
 	const ids = new Set(finding.memberIds ?? [finding.id]);
 	const members = sources.candidates.filter((candidate) => ids.has(candidate.id));
+	const cited: Record<CitedVia, number> = { supplied: 0, read: 0, unknown: 0 };
+	let readBy = 0;
 
-	const vias = members.flatMap((member) => {
+	for (const member of members) {
 		const classify = member.assignmentId ? classifiers.get(member.assignmentId) : undefined;
+		const vias = classify ? (member.evidenceIds ?? []).flatMap((id) => classify(id)?.via ?? []) : [];
 
-		return classify ? (member.evidenceIds ?? []).flatMap((id) => classify(id)?.via ?? []) : [];
-	});
+		for (const via of vias) cited[via]++;
 
-	const via = vias.reduce<FindingCitation['via']>(
-		(best, next) => (VIA_RANK[next] < VIA_RANK[best] ? next : best),
-		'none'
-	);
+		if (vias.includes('read')) readBy++;
+	}
 
-	return { findingId: finding.id, via };
+	return { findingId: finding.id, cited, members: members.length, readBy };
 }
 
 /**

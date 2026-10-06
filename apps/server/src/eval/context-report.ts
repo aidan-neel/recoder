@@ -1,14 +1,11 @@
 import { parseArgs } from 'node:util';
-import type { CitedVia, FindingCitation, OmissionReason, ReviewContext } from '@recoder/shared';
+import type { CitedVia, OmissionReason, ReviewContext } from '@recoder/shared';
 import { readReport, type BenchmarkReport } from './benchmark-report';
 import { percent } from './benchmark-labels-report';
 import { getReview } from './client';
 
-type FindingVia = FindingCitation['via'];
-
 const OMISSION_REASONS: OmissionReason[] = ['caller-cap', 'context-cap', 'file-cap', 'diff-cap'];
 const CITED_VIAS: CitedVia[] = ['supplied', 'read', 'unknown'];
-const FINDING_VIAS: FindingVia[] = ['supplied', 'read', 'unknown', 'none'];
 
 /** What the reviewers of one codebase's passed runs received, as counts only. */
 export interface ContextTotals {
@@ -23,8 +20,12 @@ export interface ContextTotals {
 	omitted: Record<OmissionReason, number>;
 	/** Reads past the per-reviewer cap, counted but not listed. */
 	readsDropped: number;
-	/** Published findings, by how their reporters had the evidence they cited. */
-	findings: Record<FindingVia, number>;
+	/** Published findings; those a reporter backed with something it read itself; those citing nothing a reviewer held. */
+	findings: number;
+	foundByReading: number;
+	citingNothing: number;
+	/** The published findings' citations, one per member and evidence id, by how the reporter had it. */
+	findingCited: Record<CitedVia, number>;
 }
 
 function zero<K extends string>(keys: K[]): Record<K, number> {
@@ -41,9 +42,14 @@ function emptyTotals(): ContextTotals {
 		cited: zero(CITED_VIAS),
 		omitted: zero(OMISSION_REASONS),
 		readsDropped: 0,
-		findings: zero(FINDING_VIAS)
+		findings: 0,
+		foundByReading: 0,
+		citingNothing: 0,
+		findingCited: zero(CITED_VIAS)
 	};
 }
+
+const sum = (counts: Record<string, number>) => Object.values(counts).reduce((total, count) => total + count, 0);
 
 /** Adds one passed run's record; a run without one counts only as a run. */
 export function addContext(totals: ContextTotals, context: ReviewContext | undefined): void {
@@ -63,10 +69,15 @@ export function addContext(totals: ContextTotals, context: ReviewContext | undef
 		totals.readsDropped += reviewer.readsDropped ?? 0;
 	}
 
-	for (const finding of context.findings) totals.findings[finding.via]++;
-}
+	for (const finding of context.findings) {
+		totals.findings++;
 
-const sum = (counts: Record<string, number>) => Object.values(counts).reduce((total, count) => total + count, 0);
+		if (finding.readBy) totals.foundByReading++;
+		if (!sum(finding.cited)) totals.citingNothing++;
+
+		for (const via of CITED_VIAS) totals.findingCited[via] += finding.cited[via];
+	}
+}
 
 const listed = (counts: Record<string, number>) =>
 	Object.entries(counts)
@@ -76,8 +87,7 @@ const listed = (counts: Record<string, number>) =>
 
 /** One codebase's block: supplied, read and cited counts, omissions by reason, and how published evidence arrived. */
 export function totalsLines(name: string, totals: ContextTotals): string[] {
-	const published = sum(totals.findings);
-	const share = (via: FindingVia) => `${via} ${published ? percent(totals.findings[via] / published).trim() : '-'}`;
+	const share = (count: number) => (totals.findings ? percent(count / totals.findings).trim() : '-');
 
 	return [
 		`${name}  runs ${totals.runs} (${totals.recorded} recorded)  reviewers ${totals.reviewers}`,
@@ -85,7 +95,8 @@ export function totalsLines(name: string, totals: ContextTotals): string[] {
 		`  read ${totals.read}${totals.readsDropped ? ` (+${totals.readsDropped} past the cap)` : ''}`,
 		`  cited ${sum(totals.cited)} (${CITED_VIAS.map((via) => `${via} ${totals.cited[via]}`).join(', ')})`,
 		`  omitted ${OMISSION_REASONS.map((reason) => `${reason} ${totals.omitted[reason]}`).join(', ')}`,
-		`  published findings ${published}: evidence ${FINDING_VIAS.map(share).join(', ')}`
+		`  published findings ${totals.findings}: backed by a read ${share(totals.foundByReading)}, citing nothing held ${share(totals.citingNothing)}`,
+		`    their citations ${CITED_VIAS.map((via) => `${via} ${totals.findingCited[via]}`).join(', ')}`
 	];
 }
 
