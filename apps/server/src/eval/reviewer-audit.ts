@@ -17,97 +17,11 @@ import { constants, Database } from 'bun:sqlite';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
-import type { PipelineRun, StoredMetrics } from '../models/metrics';
+import type { StoredMetrics } from '../models/metrics';
 import { readReport, type BenchmarkReport } from './benchmark-report';
+import { classifyReview, reportedModels, segmentName, type ReviewVerdict, type SegmentAudit } from './run-reviewer';
 
-/** The calls of one pipeline run; `run` is null for calls stored before runs were recorded. */
-interface SegmentAudit {
-	run: number | null;
-	/** The run's locked models, null when not recorded. */
-	picks: string[] | null;
-	calls: Record<string, number>;
-}
-
-export interface RunAudit {
-	task: string;
-	index: number;
-	reviewId: string;
-	status: 'CLEAN' | 'MIXED' | 'MISSING';
-	segments: SegmentAudit[];
-	/** Pipeline runs the review's metrics hold; more than one means its calls come from several runs. */
-	runs: number;
-	/** Models resolved from the live settings inside a pipeline run. */
-	lockMisses: number;
-	/** Pipeline calls made without locked models. */
-	unlockedCalls: number;
-	/** Why the run is MIXED. */
-	reasons: string[];
-}
-
-/** The models the report says reviewed: its identity's stage models, else its reviewer manifest. */
-function reportedModels(report: BenchmarkReport): string[] | null {
-	const identity = report.identity?.models;
-
-	if (identity) return [identity.orchestrator.model, identity.specialist.model];
-	if (report.reviewer) return [report.reviewer.model, report.reviewer.specialistModel ?? report.reviewer.model];
-
-	return null;
-}
-
-/** A run's locked picks, null when it ran unlocked or the row predates runs. */
-function picksOf(run: PipelineRun | undefined): string[] | null {
-	return run?.orchestrator && run.subagent ? [run.orchestrator, run.subagent] : null;
-}
-
-/** The review's pipeline calls by the run that made them, oldest run first. */
-function segmentsOf(stored: StoredMetrics): SegmentAudit[] {
-	const segments = new Map<number | null, SegmentAudit>();
-
-	for (const run of stored.runs ?? []) segments.set(run.index, { run: run.index, picks: picksOf(run), calls: {} });
-
-	for (const call of stored.calls.filter((item) => item.scope === 'pipeline')) {
-		const run = call.run ?? null;
-		const segment = segments.get(run) ?? { run, picks: null, calls: {} };
-
-		segment.calls[call.model] = (segment.calls[call.model] ?? 0) + 1;
-		segments.set(run, segment);
-	}
-
-	return [...segments.values()].sort((a, b) => (a.run ?? -1) - (b.run ?? -1));
-}
-
-/** Why a review's stored calls do not all come from the reviewer the report names. */
-function mixedReasons(stored: StoredMetrics, segments: SegmentAudit[], reported: string[] | null): string[] {
-	const reasons: string[] = [];
-	const picks = new Set(segments.flatMap((segment) => (segment.picks ? [segment.picks.join('/')] : [])));
-
-	if (picks.size > 1) reasons.push(`runs locked different models: ${[...picks].join(', ')}`);
-
-	for (const segment of segments) {
-		const allowed = [segment.picks, reported].filter((models): models is string[] => models !== null);
-		const foreign = Object.keys(segment.calls).filter((model) => allowed.some((models) => !models.includes(model)));
-
-		if (foreign.length) reasons.push(`${segmentName(segment)} called ${foreign.join(', ')}`);
-	}
-
-	const { lockMisses, unlockedCalls } = missesOf(stored);
-
-	if (lockMisses || unlockedCalls) reasons.push(`${lockMisses} lock misses, ${unlockedCalls} unlocked calls`);
-
-	return reasons;
-}
-
-/** Models the review's pipeline runs resolved from the live settings, and calls they made without locked models. */
-function missesOf(stored: StoredMetrics): { lockMisses: number; unlockedCalls: number } {
-	return {
-		lockMisses: (stored.runs ?? []).reduce((total, run) => total + run.lockMisses, 0),
-		unlockedCalls: stored.calls.filter((call) => call.lockMiss).length
-	};
-}
-
-function segmentName(segment: SegmentAudit): string {
-	return segment.run === null ? 'runs not recorded' : `run ${segment.run}`;
-}
+export type RunAudit = ReviewVerdict & { task: string; index: number; reviewId: string };
 
 /** Audits every run of `report` against the metrics `store` holds for its review. */
 export function auditReport(report: BenchmarkReport, store: Database): RunAudit[] {
@@ -116,24 +30,10 @@ export function auditReport(report: BenchmarkReport, store: Database): RunAudit[
 
 	return report.prs.flatMap((pr) =>
 		pr.runs.map((run): RunAudit => {
-			const base = { task: pr.id, index: run.index, reviewId: run.reviewId };
 			const row = query.get(run.reviewId);
+			const stored = row ? (JSON.parse(row.value) as StoredMetrics) : null;
 
-			if (!row)
-				return { ...base, status: 'MISSING', segments: [], runs: 0, lockMisses: 0, unlockedCalls: 0, reasons: [] };
-
-			const stored = JSON.parse(row.value) as StoredMetrics;
-			const segments = segmentsOf(stored);
-			const reasons = mixedReasons(stored, segments, reported);
-
-			return {
-				...base,
-				status: reasons.length ? 'MIXED' : 'CLEAN',
-				segments,
-				runs: stored.runs?.length ?? 0,
-				...missesOf(stored),
-				reasons
-			};
+			return { task: pr.id, index: run.index, reviewId: run.reviewId, ...classifyReview(stored, reported) };
 		})
 	);
 }

@@ -1,11 +1,6 @@
 import { expect, test } from 'bun:test';
-import {
-	allowDiffFields,
-	checkCompatibility,
-	compatibilityLines,
-	mergeProblems,
-	type RunIdentity
-} from '../../src/eval/identity';
+import { allowDiffFields, checkCompatibility, compatibilityLines, type RunIdentity } from '../../src/eval/identity';
+import { mergeProblems } from '../../src/eval/identity-merge';
 import { identityFields, recordedIdentity } from '../helpers/identity';
 
 /** The fields two identities disagree on, as a comparison refuses them. */

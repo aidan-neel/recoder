@@ -2,6 +2,7 @@ import { REVIEW_CANCELLED, type Finding, type Review, type ReviewProgress } from
 import {
 	cancelReview,
 	getReview,
+	getStoredMetrics,
 	hiddenFromSummary,
 	progressSummary,
 	readProgress,
@@ -11,6 +12,7 @@ import {
 import { unsettledTasks } from '../review/session/task-state';
 import type { EvalFinding } from './metrics';
 import type { RunOutcome, RunRecord } from './report';
+import { runReviewer, type RunReviewer } from './run-reviewer';
 
 /** How often a running review is polled. */
 const POLL_MS = 5000;
@@ -238,4 +240,24 @@ export async function runReview(
 		matrix: matrixOf(progress),
 		...(result.obligations ? { obligations: result.obligations } : {})
 	};
+}
+
+/**
+ * The models a finished review ran on, from its stored metrics, judged against the `declared` models (orchestrator,
+ * then specialist). Undefined, with a warning, when the server cannot serve them, as one older than the route cannot.
+ */
+export async function readReviewer(
+	base: string,
+	reviewId: string,
+	declared: string[] | null
+): Promise<RunReviewer | undefined> {
+	try {
+		return runReviewer(await getStoredMetrics(base, reviewId), declared);
+	} catch (err) {
+		console.warn(
+			`Review ${reviewId}: its stored metrics could not be read (${err instanceof Error ? err.message : err}); its reviewer is not recorded.`
+		);
+
+		return undefined;
+	}
 }

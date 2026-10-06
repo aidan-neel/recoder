@@ -110,3 +110,20 @@ test('reports from different task sets are refused unless the difference is decl
 	expect(refused.out).toContain('Incompatible:\n  taskSet: quick → full');
 	expect(compare(a, b, '--allow-diff', 'taskSet').code).toBe(0);
 });
+
+test('a report whose reviews ran on other models than it declares is refused as reviewer unless declared', () => {
+	const a = writeReport(dir, 'reviewer-clean.json', { identity: off, runIds: ['pr-1@aaa#1'], mixedReviewer: false });
+	const b = writeReport(dir, 'reviewer-mixed.json', { identity: off, runIds: ['pr-1@aaa#2'], mixedReviewer: true });
+	const refused = compare(a, b);
+
+	expect(refused.code).toBe(1);
+	expect(refused.out).toContain('Incompatible:\n  reviewer: clean → mixed');
+	expect(refused.out).toContain('Merge: refused, B differs from A in reviewer: clean → mixed');
+	expect(refused.out).not.toContain('Planted defects by codebase');
+
+	const declared = compare(a, b, '--allow-diff', 'reviewer');
+
+	expect(declared.code).toBe(0);
+	expect(declared.out).toContain('Declared differences:\n  reviewer: clean → mixed');
+	expect(compare(a, a).code).toBe(0);
+});

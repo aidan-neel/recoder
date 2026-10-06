@@ -7,9 +7,10 @@ import { countClasses, type LabeledRun } from './benchmark-labels';
 import type { LowTotals } from './benchmark-lows';
 import type { DefectStage, PoolCandidate, StageTotals } from './benchmark-stages';
 import type { HarnessRecord } from './harness-tree';
-import { NOT_RECORDED, runsText, type FieldDiff, type RunCache, type RunIdentity } from './identity';
+import { NOT_RECORDED, runsText, type FieldDiff, type ReviewerMix, type RunCache, type RunIdentity } from './identity';
 import type { ConsistencyMetrics } from './metrics';
 import type { RunRecord } from './report';
+import { reviewerSummaryLines, type RunReviewer } from './run-reviewer';
 import { subsetLines } from './task-set';
 
 /** One PR's runs, each scored against its labels when it passed. */
@@ -46,6 +47,11 @@ export type ScoredRun = RunRecord & {
 	identity?: string;
 	/** The judge that scored this run, which a resume keeps; `not recorded` as with `identity`. */
 	judge?: JudgeModel | typeof NOT_RECORDED;
+	/**
+	 * The models the run's review ran on, from its stored metrics; a resume keeps it and a replay reads it again.
+	 * Absent from reports older than recording it and when the server could not serve the metrics.
+	 */
+	reviewer?: RunReviewer;
 	score: PrScore | null;
 	hiddenScore?: PrScore | null;
 	/** Every candidate the review raised, with the stage that stopped it; absent when the server could not list them. */
@@ -152,8 +158,11 @@ export interface BenchmarkReport {
 	startedAt: string;
 	finishedAt: string;
 	prs: PrResult[];
-	/** `taskSet` names the PRs the totals cover; absent from reports older than recording it. */
-	summary: BenchmarkSummary & { taskSet?: string };
+	/**
+	 * `taskSet` names the PRs the totals cover; `mixedReviewer` says whether some run's review ran on other models
+	 * than the report declares. Both are absent from reports older than recording them.
+	 */
+	summary: BenchmarkSummary & { taskSet?: string; mixedReviewer?: ReviewerMix };
 }
 
 /** A saved benchmark report. */
@@ -447,7 +456,8 @@ export function printBenchmark(report: BenchmarkReport): void {
 			...groupLines('By kind', summary.byKind),
 			...groupLines('By category', summary.byCategory),
 			...missedLines(report.prs),
-			...stoppedLines(report.prs)
+			...stoppedLines(report.prs),
+			...reviewerSummaryLines(report)
 		].join('\n')
 	);
 }

@@ -1,8 +1,10 @@
 import { benchmarkSummary } from './benchmark-score';
 import type { BenchmarkReport, PrResult, ScoredRun } from './benchmark-report';
 import { runIdentities, runOffset } from './benchmark-reuse';
-import { checkCompatibility, mergeProblems, runIdOf, type FieldDiff, type RunIdentity } from './identity';
+import { checkCompatibility, runIdOf, type FieldDiff, type RunIdentity } from './identity';
+import { mergeProblems } from './identity-merge';
 import { stabilityMetrics } from './metrics';
+import { mergedMixedReviewer } from './run-reviewer';
 import { byId } from './task-set';
 
 /** Where the scores of a merged report were judged; the merge only combines judged runs. */
@@ -108,6 +110,7 @@ function problems(sources: readonly MergeSource[], allow: readonly string[]): st
 		sources.map(({ name, report }) => ({
 			name,
 			identity: report.identity,
+			mixedReviewer: report.summary.mixedReviewer,
 			reportId: report.reportId,
 			runIds: report.runIds
 		})),
@@ -213,7 +216,11 @@ function mergedExecution(identity: RunIdentity, runsPerPr: number, missing: Miss
 
 /** Each difference `allow` let through between the first report's identity and another's. */
 function declaredDiffs(sources: readonly MergeSource[], allow: readonly string[]): MergedReport['merge']['declared'] {
-	const [first, ...rest] = sources.map(({ name, report }) => ({ name, identity: report.identity }));
+	const [first, ...rest] = sources.map(({ name, report }) => ({
+		name,
+		identity: report.identity,
+		mixedReviewer: report.summary.mixedReviewer
+	}));
 
 	return rest.flatMap((other) =>
 		checkCompatibility(first!, other, 'merge', allow).declared.map((diff) => ({ ...diff, report: other.name }))
@@ -250,6 +257,7 @@ function mergedReport(sources: readonly MergeSource[], missing: Missing, allow: 
 		prs,
 		summary: {
 			...benchmarkSummary(prs, identity.taskSet),
+			...mergedMixedReviewer(sources.map(({ report }) => report.summary.mixedReviewer)),
 			partial: missing.runs.length > 0,
 			missingTasks: missing.tasks,
 			missingRuns: missing.runs
@@ -260,8 +268,10 @@ function mergedReport(sources: readonly MergeSource[], missing: Missing, allow: 
 
 /**
  * Merges shard and repeat reports of one experiment. Refuses, with every
- * reason, reports whose identities differ in an undeclared field, a PR at two
- * heads, or a task repeat held twice. Tasks or runs the reports were meant to
+ * reason, reports whose identities differ in an undeclared field, a report
+ * whose reviews ran on other models than it declares unless `reviewer` is
+ * declared, a PR at two heads, or a task repeat held twice. The merged
+ * report's `mixedReviewer` is true when any source's is. Tasks or runs the reports were meant to
  * hold and do not are listed; the merged report is made with them missing only
  * when `partial` is set, and is then marked partial. Identity fields named in
  * `allow` may differ, and the merged report lists how.

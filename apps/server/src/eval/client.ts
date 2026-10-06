@@ -1,4 +1,5 @@
 import type { Finding, ModelSettings, Repo, Review, ReviewProgress } from '@recoder/shared';
+import type { StoredMetrics } from '../models/metrics';
 import type { CandidateOutcome } from '../review/pipeline/candidate-outcome';
 import type { ServerIdentity } from './server-identity';
 
@@ -100,6 +101,11 @@ export function replayReview(base: string, reviewId: string, reverify: boolean):
 
 export function getReview(base: string, reviewId: string): Promise<Review> {
 	return request<Review>(base, `/api/reviews/${reviewId}`);
+}
+
+/** The review's call metrics as the server stores them, with its pipeline runs; null when it has none. */
+export function getStoredMetrics(base: string, reviewId: string): Promise<StoredMetrics | null> {
+	return request<StoredMetrics | null>(base, `/api/reviews/${reviewId}/metrics/stored`);
 }
 
 /** Every candidate a review raised, with the stage that stopped it; null from a server that cannot list them or a review that kept none. */

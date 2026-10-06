@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { withHash, type RunIdentity, type StageModel } from '../../src/eval/identity';
+import { withHash, type ReviewerMix, type RunIdentity, type StageModel } from '../../src/eval/identity';
 
 const stage: StageModel = {
 	model: 'gpt-x',
@@ -52,22 +52,23 @@ export function recordedIdentity(fields = identityFields(), runs = 1): RunIdenti
 
 /**
  * Writes a benchmark report with one hono PR whose one run found its planted
- * defect without publishing it; `identity`, `runIds` and `reportId` are left
- * out for a report older than recording them.
+ * defect without publishing it; `identity`, `runIds`, `reportId` and the
+ * summary's `mixedReviewer` are left out for a report older than recording them.
  */
 export function writeReport(
 	dir: string,
 	name: string,
-	recorded?: { identity: RunIdentity; runIds: string[]; reportId?: string }
+	recorded?: { identity: RunIdentity; runIds: string[]; reportId?: string; mixedReviewer?: ReviewerMix }
 ): string {
 	const path = join(dir, name);
+	const { mixedReviewer, ...stamp } = recorded ?? {};
 
 	const report = {
 		dataset: 'synth',
 		base: 'http://localhost:3001',
 		runsPerPr: 1,
 		judge: { model: 'judge-x', provider: 'opencode', effort: 'medium' },
-		...recorded,
+		...stamp,
 		startedAt: '2026-10-06T00:00:00.000Z',
 		finishedAt: '2026-10-06T00:10:00.000Z',
 		prs: [
@@ -90,7 +91,7 @@ export function writeReport(
 				]
 			}
 		],
-		summary: {}
+		summary: mixedReviewer === undefined ? {} : { mixedReviewer }
 	};
 
 	writeFileSync(path, JSON.stringify(report));

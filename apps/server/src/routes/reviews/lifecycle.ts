@@ -2,7 +2,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { createReviewSession, queueReview, startReviewSession } from '../../commands/pipeline';
 import { continueReviewSession, replayReviewSession } from '../../commands/rerun';
-import { getReviewMetrics } from '../../models/metrics';
+import { getReviewMetrics, type StoredMetrics } from '../../models/metrics';
 import { isReviewConfigured } from '../../models/models';
 import { cancelReviewChats, prepareDraftSession } from '../../review/chat/review-chat';
 import { clearReviewEvents, emitReviewEvent } from '../../review/session/events';
@@ -89,6 +89,20 @@ app.get('/:id/metrics', (c) => {
 	if (review instanceof Response) return review;
 
 	return c.json(getReviewMetrics(review.id));
+});
+
+/**
+ * The review's metrics row as stored, null when it has none: every call with the pipeline run that made it, and
+ * each run's locked models, so a benchmark can record which models its review ran on.
+ */
+app.get('/:id/metrics/stored', (c) => {
+	c.header('Cache-Control', 'no-store');
+
+	const review = requireReview(c);
+
+	if (review instanceof Response) return review;
+
+	return c.json((reviewMetrics.get(review.id) as StoredMetrics | undefined) ?? null);
 });
 
 app.get('/:id', (c) => {

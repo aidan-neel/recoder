@@ -3,7 +3,8 @@ import { parseArgs } from 'node:util';
 import { identityLine, readReport, type BenchmarkReport } from './benchmark-report';
 import { mergeNotes } from './benchmark-merge';
 import { stageTotals, type StageTotals } from './benchmark-stages';
-import { allowDiffFields, checkCompatibility, compatibilityLines, EXPERIMENT, mergeProblems } from './identity';
+import { allowDiffFields, checkCompatibility, compatibilityLines, EXPERIMENT } from './identity';
+import { mergeProblems } from './identity-merge';
 
 const USAGE =
 	'Usage: bun run --filter @recoder/server eval:compare -- <reportA.json> <reportB.json> [--allow-diff field,field]';
@@ -79,6 +80,7 @@ function compareNames(field: string): string[] {
  * Prints how two benchmark reports' identities differ and, when they compare,
  * their per-codebase stage counts side by side. Exits 1 when they differ in a
  * field not declared with `--allow-diff`, or either records it as `unknown`, or
+ * either holds a review that ran on other models than it declares (`reviewer`), or
  * a merge into either declared a difference this compare does not; a report without an identity is
  * compared with a warning, since nothing says the two runs are equivalent.
  */
@@ -101,10 +103,13 @@ function main(): number {
 
 	const [a, b] = positionals.map((path) => ({ path: resolve(path), report: readReport(resolve(path)) }));
 
-	const reports = [
-		{ name: 'A', identity: a!.report.identity, reportId: a!.report.reportId, runIds: a!.report.runIds },
-		{ name: 'B', identity: b!.report.identity, reportId: b!.report.reportId, runIds: b!.report.runIds }
-	];
+	const reports = [a!, b!].map(({ report }, index) => ({
+		name: 'AB'[index]!,
+		identity: report.identity,
+		mixedReviewer: report.summary.mixedReviewer,
+		reportId: report.reportId,
+		runIds: report.runIds
+	}));
 
 	const result = checkCompatibility(reports[0]!, reports[1]!, 'compare', allow);
 	const merge = mergeProblems(reports);

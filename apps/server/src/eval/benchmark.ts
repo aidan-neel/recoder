@@ -38,7 +38,8 @@ import {
 } from './benchmark-reuse';
 import { captureIdentity } from './identity-capture';
 import { writeEvalFile } from './report';
-import { runReview, stopOnInterrupt } from './run-review';
+import { readReviewer, runReview, stopOnInterrupt } from './run-review';
+import { mixedReviewer, reportedModels } from './run-reviewer';
 import { readLabels, readTaskSet, selectTasks, subsetLines, type PrLabel } from './task-set';
 import { runAgreement } from './benchmark-merge';
 import { benchmarkSummary } from './benchmark-score';
@@ -157,8 +158,9 @@ async function resolveRepos(base: string, labels: PrLabel[]): Promise<Map<string
  * benchmark stopped early still covers every PR; `onRun` sees the records
  * after each run. With `replays`, each run replays that saved review instead,
  * and runs without one are skipped. Each run is judged with the match
- * corrections in `adjudications`, and stamped with `identity`, the hash it is
- * reviewed under, and the judge that scores it.
+ * corrections in `adjudications`, stamped with the hash of `identity` it is
+ * reviewed under and the judge that scores it, and records the models its
+ * review ran on, read from the server once the review finished.
  */
 async function runAll(
 	options: Options,
@@ -166,7 +168,7 @@ async function runAll(
 	repos: Map<string, Repo>,
 	judge: Judge,
 	adjudications: Adjudications,
-	identity: string,
+	identity: RunIdentity,
 	records: ScoredRun[][],
 	replays: string[][] | null,
 	onRun: (records: ScoredRun[][]) => void
@@ -181,6 +183,7 @@ async function runAll(
 
 	const reverify = options.replay?.reverify ?? false;
 	const review = replays ? (reverify ? 'reverify' : 'replay') : 'fresh';
+	const declared = reportedModels({ identity });
 
 	let next = 0;
 
@@ -200,11 +203,18 @@ async function runAll(
 				replays ? () => replayReview(options.base, replays[pr]![run]!, reverify) : undefined
 			);
 
-			records[pr]![run] = stamped(label, await scoreRun(judge, label, record, options.base, adjudications), {
-				review,
-				identity,
-				judge: judge.model
-			});
+			const reviewer = await readReviewer(options.base, record.reviewId, declared);
+			const scored = await scoreRun(judge, label, record, options.base, adjudications);
+
+			records[pr]![run] = stamped(
+				label,
+				{ ...scored, ...(reviewer && { reviewer }) },
+				{
+					review,
+					identity: identity.hash,
+					judge: judge.model
+				}
+			);
 
 			onRun(records);
 		}
@@ -368,7 +378,10 @@ async function main(): Promise<void> {
 
 		if (queued.some(Boolean)) writeAdjudications(adjudicationFile, adjudications);
 
-		const summary = benchmarkSummary(prs, chosen.name);
+		const summary = {
+			...benchmarkSummary(prs, chosen.name),
+			mixedReviewer: mixedReviewer(prs.flatMap((pr) => pr.runs))
+		};
 
 		return {
 			dataset: basename(options.dataset),
@@ -395,7 +408,7 @@ async function main(): Promise<void> {
 	const replays = plan.rescore ? labels.map(() => []) : options.replay ? replayedReviews(plan.origin!, labels) : null;
 
 	const final = report(
-		await runAll(options, labels, repos, judge, adjudications, identity.hash, initial, replays, (records) =>
+		await runAll(options, labels, repos, judge, adjudications, identity, initial, replays, (records) =>
 			save(report(records))
 		)
 	);
