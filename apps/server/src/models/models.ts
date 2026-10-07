@@ -119,6 +119,20 @@ export function configForSubagent(): ModelConfig {
 }
 
 /**
+ * Whether the second model is a different model or effort from the Review
+ * model. Only then does handing a reviewer's task to a worker save Review
+ * usage; on the same model it only adds a conversation.
+ */
+export function hasSeparateSpecialist(): boolean {
+	const review = configForOrchestrator();
+	const specialist = configForSubagent();
+
+	return (['provider', 'source', 'baseUrl', 'model', 'reasoningEffort'] as const).some(
+		(key) => review[key] !== specialist[key]
+	);
+}
+
+/**
  * The model behind an agent's messages, so a follow-up (chat, discussion or
  * fix) runs where the finding came from: a subagent's on the second model,
  * everything else on the Review model.

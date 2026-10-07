@@ -82,6 +82,13 @@ export const REVIEW_POLICY = {
 	/** The same for one reviewer or subagent. */
 	reviewerFinalTurnAfterMs: 12 * 60 * 1000,
 	reviewerMaxMs: 15 * 60 * 1000,
+	/** Tasks one lens reviewer may hand to workers on the specialist model. */
+	maxDelegationsPerAgent: 3,
+	/** A worker answers one narrow question, so it gets few turns. */
+	maxWorkerTurns: 6,
+	/** One worker's own clock: told to answer after the first, stopped at the second. */
+	workerFinalTurnAfterMs: 2 * 60 * 1000,
+	workerMaxMs: 3 * 60 * 1000,
 	/** Each wave of `maxConcurrentVerifications` verifiers adds this much time. */
 	msPerVerificationWave: 5 * 60 * 1000,
 	/** Held back from reviewers and subagents so the last verifiers always get to run. */

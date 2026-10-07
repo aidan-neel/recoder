@@ -153,6 +153,8 @@ export interface ReviewToolCall {
 		/** `run`: the shell command executed in the review sandbox. */
 		command?: string;
 		timeoutSec?: number;
+		/** `delegate`: the narrow task a reviewer handed to a worker on the specialist model. */
+		task?: string;
 	};
 	/** Bounded preview of the evidence returned to the agent. */
 	result?: {

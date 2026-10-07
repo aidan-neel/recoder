@@ -1,5 +1,11 @@
 import { afterEach, expect, test } from 'bun:test';
-import { configForAgent, configForOrchestrator, configForSubagent, withLockedModels } from '../../src/models/models';
+import {
+	configForAgent,
+	configForOrchestrator,
+	configForSubagent,
+	hasSeparateSpecialist,
+	withLockedModels
+} from '../../src/models/models';
 import { setReviewOverrides } from '../../src/review/session/review-settings';
 
 afterEach(() => setReviewOverrides({}));
@@ -79,4 +85,32 @@ test('a review keeps the models picked when it started while the picks change an
 		['sol', 'mini'],
 		['mini', 'sol']
 	]);
+});
+
+test('workers are offered only when the second model or its effort differs from Review', () => {
+	setReviewOverrides({ models, orchestratorModelId: 'sol', orchestratorEffort: 'high' });
+	expect(hasSeparateSpecialist()).toBe(false);
+
+	setReviewOverrides({
+		models,
+		orchestratorModelId: 'sol',
+		orchestratorEffort: 'high',
+		specialistModelId: 'sol',
+		specialistEffort: 'high'
+	});
+
+	expect(hasSeparateSpecialist()).toBe(false);
+
+	setReviewOverrides({
+		models,
+		orchestratorModelId: 'sol',
+		orchestratorEffort: 'high',
+		specialistModelId: 'sol',
+		specialistEffort: 'low'
+	});
+
+	expect(hasSeparateSpecialist()).toBe(true);
+
+	setReviewOverrides({ models, orchestratorModelId: 'sol', specialistModelId: 'mini' });
+	expect(hasSeparateSpecialist()).toBe(true);
 });

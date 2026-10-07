@@ -20,6 +20,8 @@ export function actionCommand(action: RetrievalAction): string {
 			return `$ ${action.command ?? ''}`;
 		case 'writeFile':
 			return `write ${action.path ?? ''}`;
+		case 'delegate':
+			return `delegate ${JSON.stringify(action.task ?? '')}`;
 
 		default: {
 			const name = (action as { action?: unknown }).action;

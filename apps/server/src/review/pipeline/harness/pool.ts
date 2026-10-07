@@ -1,6 +1,11 @@
 import type { ReviewAssignment } from '@recoder/shared';
 import { formatToolResults, type EvidenceStore } from '../../../evidence/evidence.js';
-import { configForOrchestrator, configForSubagent, type ModelConfig } from '../../../models/models.js';
+import {
+	configForOrchestrator,
+	configForSubagent,
+	hasSeparateSpecialist,
+	type ModelConfig
+} from '../../../models/models.js';
 import { withGuidelines } from '../../guidelines/guidelines.js';
 import { dismissalsBlock } from '../../guidelines/learned/prompt.js';
 import type { Dismissal } from '../../guidelines/learned/dismissals.js';
@@ -34,6 +39,7 @@ import {
 } from '../reviewer-prompts.js';
 import type { AnsweredMark, UnitRequest, UnsettledMark } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
+import { workerDelegate } from '../workers/worker.js';
 import { coverageRole, recordFor, updateAssignment } from './assignments.js';
 import { applyUnitResult } from './unit-result.js';
 import type { HarnessEvents, TaskFn } from './types.js';
@@ -198,6 +204,28 @@ function readScopedPatch(item: ReviewUnit, role: string, ctx: PoolContext): Prom
 	);
 }
 
+/**
+ * A lens reviewer's workers on the second model. Offered only when that model
+ * differs from the Review model, since only then does handing work off save
+ * Review usage. Their reads show in the reviewer's feed.
+ */
+function delegateFor(item: ReviewUnit, ctx: PoolContext, meta: { assignmentId: string; role: string }) {
+	if (!hasSeparateSpecialist()) return undefined;
+
+	return workerDelegate({
+		evidence: ctx.evidence,
+		budget: ctx.budget,
+		signal: ctx.signal,
+		deadlineAt: ctx.deadlineAt,
+		exec: Boolean(ctx.exec),
+		label: item.title,
+		changedFiles: ctx.inventory.files.filter((file) => !file.excludeReason).map((file) => file.path),
+		setupNotes: ctx.setupNotes,
+		onTool: (tool) => ctx.events?.onTool?.({ ...tool, assignmentId: item.id, role: 'worker' }),
+		onLog: (message) => ctx.events?.onLog?.(message, meta)
+	});
+}
+
 /** How a reviewer's empty or premature final answer is pushed back, by role and lens. */
 function finalCheck(subagent: boolean, lens: LensId, canRun: boolean) {
 	if (subagent) return prematureReviewerFinal;
@@ -237,17 +265,21 @@ function askReviewer(
 	const maxTurns = subagent ? REVIEW_POLICY.maxSubagentTurns : REVIEW_POLICY.maxLensTurns;
 	const defaultCategory = lens.categories[0];
 
+	const delegate = subagent ? undefined : delegateFor(item, ctx, meta);
+
 	const system = subagent
 		? subagentSystemPrompt(ctx.exec, ctx.directive)
 		: reviewerSystemPrompt(lens, ctx.exec, ctx.directive, {
 				subagents: lens.id === 'correctness' && ctx.subagentCap > 0,
-				unsettled: !isQualityLens(lens.id) && ctx.subagentCap > 0
+				unsettled: !isQualityLens(lens.id) && ctx.subagentCap > 0,
+				delegate: Boolean(delegate)
 			});
 
 	return runJsonAgent({
 		label: item.title,
 		system: withGuidelines(system, ctx.inventory.guidelines),
 		exec: Boolean(ctx.exec),
+		delegate,
 		getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
 		onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model: cfg.model }),
 		user:
@@ -266,7 +298,8 @@ function askReviewer(
 		validationError: (raw) => reviewerValidationError(raw, defaultCategory),
 		salvage: (raw) => salvageReviewerOutput(raw, defaultCategory),
 		checkFinal: finalCheck(subagent, lens.id, Boolean(ctx.exec)),
-		responseSchema: (finalTurn) => reviewerResponseSchema(ctx.exec, finalTurn, subagent ? [] : lens.categories),
+		responseSchema: (finalTurn) =>
+			reviewerResponseSchema(ctx.exec, finalTurn, subagent ? [] : lens.categories, Boolean(delegate)),
 		timeLimit: {
 			finalTurnAfterMs: REVIEW_POLICY.reviewerFinalTurnAfterMs,
 			maxWallMs: REVIEW_POLICY.reviewerMaxMs

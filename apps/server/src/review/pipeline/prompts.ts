@@ -71,6 +71,11 @@ At most 4 actions per turn. Truncated results include continuation tokens — re
 
 `;
 
+/** How an agent reaches the repository: JSON action requests, reworded by `forNativeTools` for an agent with function tools. */
+export function toolsContract(exec: boolean): string {
+	return `${ACTIONS_NOTE}${exec ? EXEC_ACTIONS : READ_ONLY_ACTIONS}`;
+}
+
 /** How a finding's body reads in the UI: short markdown, not a paragraph of prose. */
 export const FINDING_BODY_STYLE = `Write each finding "body" as short markdown, at most about 80 words:
 - First line: one sentence saying what breaks and when.
@@ -97,7 +102,7 @@ Use "high" only for issues that are certainly reachable and damaging.`;
  */
 export function reviewerContract(exec: boolean, quality: boolean): string {
 	return `${exec ? EXEC_RULES : READ_ONLY_RULES}
-${SHARED_RULES}${quality ? QUALITY_RULES : BUG_RULES}${ACTIONS_NOTE}${exec ? EXEC_ACTIONS : READ_ONLY_ACTIONS}${FINAL_SHAPE}`;
+${SHARED_RULES}${quality ? QUALITY_RULES : BUG_RULES}${toolsContract(exec)}${FINAL_SHAPE}`;
 }
 
 /** Copyable request shapes: weaker models follow an example far better than a type signature. */
@@ -122,6 +127,7 @@ const NATIVE_WORDING: [string | RegExp, string][] = [
 	[`${ACTIONS_NOTE}${EXEC_ACTIONS}`, NATIVE_EXEC_TOOLS],
 	[`${ACTIONS_NOTE}${READ_ONLY_ACTIONS}`, NATIVE_READ_TOOLS],
 	[/reply with "actions" now/gi, 'call your tools now'],
+	[/the delegate action/g, 'the delegate tool'],
 	[/\bwriteFile\b/g, 'write_file']
 ];
 
