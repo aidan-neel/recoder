@@ -89,7 +89,8 @@ describe('ClaudeCodeAgent.complete', () => {
 		const written = await readFile(log, 'utf8');
 
 		expect(written).toContain('prompt: diff --git a/x b/x');
-		expect(written).toContain(`system: Review the diff.\n\n${JSON_MODE_INSTRUCTION}`);
+		expect(written).toContain('system: Review the diff.\n\nYou have no tools.');
+		expect(written).toContain(JSON_MODE_INSTRUCTION);
 		expect(written).toContain('[--tools] []');
 		expect(written).toContain('[--permission-mode] [dontAsk]');
 		expect(written).toContain('[--no-session-persistence]');

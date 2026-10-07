@@ -9,6 +9,7 @@ import { DEFAULT_TIMEOUT_MS, type ChatMessage, type ChatOptions } from '../../mo
 import { emptyDirectory, findCli, probeVersion } from '../cli-process';
 import type { AgentAdapter } from '../registry';
 import { claudeCodeEfforts, claudeCodeModels } from './claude-code-models';
+import { FailedCallDump } from './claude-code-debug';
 import { claudeCodeEnv, killGroup, stopOnShutdown } from './claude-code-process';
 import { ReplyReader } from './claude-code-reply';
 
@@ -43,6 +44,12 @@ const BASE_ARGS = [
 	'--include-partial-messages'
 ];
 
+/**
+ * Tools are off, but a model that was trained with them can still write a tool call as its reply; the CLI then
+ * reports the call as unparsable. This line keeps the reply to plain text.
+ */
+const NO_TOOLS_INSTRUCTION = 'You have no tools. Never write a tool call. Reply with plain text only.';
+
 /** The CLI takes one prompt, so a conversation's turns are written out as one labeled transcript. */
 function promptText(turns: ChatMessage[]): string {
 	if (turns.length === 1) return turns[0].content;
@@ -56,6 +63,8 @@ function promptText(turns: ChatMessage[]): string {
  */
 function systemText({ messages, jsonMode, jsonSchema }: ChatOptions): string {
 	const system = messages.filter((m) => m.role === 'system').map((m) => m.content);
+
+	system.push(NO_TOOLS_INSTRUCTION);
 
 	if (jsonMode || jsonSchema) system.push(JSON_MODE_INSTRUCTION);
 
@@ -226,6 +235,7 @@ export class ClaudeCodeAgent implements AgentAdapter {
 			}
 		});
 
+		const dump = new FailedCallDump(this.env);
 		let abort = () => {};
 
 		const stopped = new Promise<never>((_, reject) => {
@@ -243,7 +253,10 @@ export class ClaudeCodeAgent implements AgentAdapter {
 		try {
 			const [, stderr, code] = await Promise.race([
 				Promise.all([
-					readLines(proc.stdout, (line) => reader.line(line)),
+					readLines(proc.stdout, (line) => {
+						dump.add(line);
+						reader.line(line);
+					}),
 					new Response(proc.stderr).text(),
 					proc.exited
 				]),
@@ -251,6 +264,9 @@ export class ClaudeCodeAgent implements AgentAdapter {
 			]);
 
 			return reader.finish(opts.onUsage, { code, stderr });
+		} catch (error) {
+			dump.write(opts.model, error);
+			throw error;
 		} finally {
 			signal.removeEventListener('abort', abort);
 			this.running.delete(proc);

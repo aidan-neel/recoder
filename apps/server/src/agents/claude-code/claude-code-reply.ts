@@ -14,6 +14,7 @@ const usageSchema = z.object({
 const resultSchema = z.object({
 	type: z.literal('result'),
 	subtype: z.string(),
+	terminal_reason: z.string().optional(),
 	is_error: z.boolean(),
 	result: z.string().optional(),
 	api_error_status: z.number().nullable().optional(),
@@ -172,7 +173,7 @@ export class ReplyReader {
 
 		const text = result.result ?? '';
 
-		if (result.is_error || result.subtype !== 'success') {
+		if (result.is_error || result.subtype !== 'success' || result.terminal_reason === 'malformed_tool_use_exhausted') {
 			throw claudeCodeError(
 				text || `Claude Code stopped (${result.subtype}).`,
 				this.code,
