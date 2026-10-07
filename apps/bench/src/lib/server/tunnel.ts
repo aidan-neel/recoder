@@ -2,18 +2,25 @@ import { spawn, type ChildProcess } from 'node:child_process';
 import { createConnection, createServer } from 'node:net';
 import type { HostConfig } from '$lib/reports/types';
 
-interface Tunnel {
-	port: number;
-	child: ChildProcess;
-	ready: Promise<void>;
+/** Shared across dev-server module reloads, so a reload reuses the open forwards. */
+interface TunnelState {
+	/** The local URL of each forward by `host:port`, as a promise so callers that arrive together share one. */
+	urls: Map<string, Promise<string>>;
+	children: Set<ChildProcess>;
 }
 
-/**
- * One ssh port forward per remote server, kept open while this app runs. It
- * lives on `globalThis` so a dev-server module reload reuses the open ones.
- */
-const tunnels: Map<string, Tunnel> = ((globalThis as { benchTunnels?: Map<string, Tunnel> }).benchTunnels ??=
-	new Map());
+const state: TunnelState = ((globalThis as { benchTunnels?: TunnelState }).benchTunnels ??= createState());
+
+/** ssh children outlive this process unless they are stopped when it exits. */
+function createState(): TunnelState {
+	const created: TunnelState = { urls: new Map(), children: new Set() };
+
+	process.once('exit', () => {
+		for (const child of created.children) child.kill();
+	});
+
+	return created;
+}
 
 function freePort(): Promise<number> {
 	return new Promise((resolve, reject) => {
@@ -53,7 +60,8 @@ async function waitOpen(port: number, child: ChildProcess): Promise<void> {
 	throw new Error('ssh port forward did not open');
 }
 
-async function open(target: HostConfig, remotePort: number): Promise<Tunnel> {
+/** Opens a forward and calls `closed` when its ssh process exits. */
+async function open(target: HostConfig, remotePort: number, closed: () => void): Promise<string> {
 	const port = await freePort();
 
 	const child = spawn(
@@ -76,37 +84,42 @@ async function open(target: HostConfig, remotePort: number): Promise<Tunnel> {
 		{ stdio: 'ignore' }
 	);
 
-	const tunnel = { port, child, ready: waitOpen(port, child) };
+	state.children.add(child);
 
-	tunnel.ready.catch(() => child.kill());
+	child.once('exit', () => {
+		state.children.delete(child);
+		closed();
+	});
 
-	return tunnel;
+	try {
+		await waitOpen(port, child);
+	} catch (error) {
+		child.kill();
+		throw error;
+	}
+
+	return `http://127.0.0.1:${port}`;
 }
 
 /**
  * The local URL that reaches `base` as the host sees it: `base` itself on
  * this machine, an ssh port forward to it on a remote one. A forward that
- * died is opened again.
+ * failed or died is opened again on the next call.
  */
-export async function reach(target: HostConfig, base: string): Promise<string> {
-	if (!target.ssh) return base;
+export function reach(target: HostConfig, base: string): Promise<string> {
+	if (!target.ssh) return Promise.resolve(base);
 
-	const url = new URL(base);
-	const remotePort = Number(url.port || 80);
+	const remotePort = Number(new URL(base).port || 80);
 	const key = `${target.id}:${remotePort}`;
-	let tunnel = tunnels.get(key);
+	const known = state.urls.get(key);
 
-	if (!tunnel || tunnel.child.exitCode !== null) {
-		tunnel = await open(target, remotePort);
-		tunnels.set(key, tunnel);
-	}
+	if (known) return known;
 
-	try {
-		await tunnel.ready;
-	} catch (error) {
-		tunnels.delete(key);
-		throw error;
-	}
+	const forget = () => state.urls.get(key) === pending && state.urls.delete(key);
+	const pending = open(target, remotePort, forget);
 
-	return `http://127.0.0.1:${tunnel.port}`;
+	state.urls.set(key, pending);
+	pending.catch(forget);
+
+	return pending;
 }

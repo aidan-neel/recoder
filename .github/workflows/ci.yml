@@ -30,6 +30,7 @@ jobs:
           - { package: site, task: build }
           - { package: site, task: lint }
           - { package: bench, task: check }
+          - { package: bench, task: test }
           - { package: bench, task: build }
           - { package: bench, task: lint }
     steps:

@@ -37,7 +37,8 @@
 
 	let width = $state(0);
 	let frame = $state<HTMLDivElement>();
-	let active = $state<XyPoint | null>(null);
+	/** Raw, so the template can match it to a plotted point by identity. */
+	let active = $state.raw<XyPoint | null>(null);
 
 	const margin = $derived({ top: 12, right: 18, bottom: 28, left: categories ? 128 : 42 });
 	const chartHeight = $derived(categories ? categories.length * ROW + margin.top + margin.bottom : height);

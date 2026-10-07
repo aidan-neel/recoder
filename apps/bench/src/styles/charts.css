@@ -87,7 +87,7 @@
 	z-index: 20;
 	width: max-content;
 	min-width: 140px;
-	max-width: 320px;
+	max-width: 400px;
 	padding: 8px 10px;
 	border-radius: 7px;
 	background-color: var(--bg-menu);
@@ -127,7 +127,7 @@
 	font-size: 11.5px;
 	min-width: 0;
 	text-align: right;
-	overflow-wrap: anywhere;
+	overflow-wrap: break-word;
 	color: var(--text-primary);
 }
 
