@@ -7,7 +7,8 @@
 		"**/dist/**",
 		"**/static/**",
 		"**/*.html",
-		"**/*.css"
+		"**/*.css",
+		"**/package.json"
 	],
 	"threshold": 0,
 	"reporters": ["console"],

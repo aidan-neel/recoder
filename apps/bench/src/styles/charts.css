@@ -1,0 +1,323 @@
+/* ── Chart series ──────────────────────────────────────────── */
+
+/*
+ * The validated categorical palette, in its fixed order. A series keeps its
+ * slot when a filter hides others; a ninth series folds into Other.
+ */
+:root {
+	--series-1: #3987e5;
+	--series-2: #d95926;
+	--series-3: #199e70;
+	--series-4: #c98500;
+	--series-5: #d55181;
+	--series-6: #008300;
+	--series-7: #9085e9;
+	--series-8: #e66767;
+	--series-other: #6f6a63;
+}
+:root:not(.dark) {
+	--series-1: #2a78d6;
+	--series-2: #eb6834;
+	--series-3: #1baf7a;
+	--series-4: #eda100;
+	--series-5: #e87ba4;
+	--series-6: #008300;
+	--series-7: #4a3aa7;
+	--series-8: #e34948;
+	--series-other: #a8a39b;
+}
+
+/* ── Chart frame ───────────────────────────────────────────── */
+.chart {
+	position: relative;
+	width: 100%;
+	min-width: 0;
+}
+.chart svg {
+	display: block;
+	overflow: visible;
+}
+.chart-axis text {
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	fill: var(--text-faint);
+}
+.chart-grid line {
+	stroke: var(--line-subtle);
+	stroke-width: 1;
+}
+.chart-baseline {
+	stroke: var(--line-strong);
+	stroke-width: 1;
+}
+.chart-line {
+	fill: none;
+	stroke-width: 2;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+}
+.chart-dot {
+	stroke: var(--bg-panel);
+	stroke-width: 2;
+	transition: r var(--dur-hover) ease;
+}
+.chart-dot[data-active] {
+	r: 6;
+}
+.chart-dot[data-hollow] {
+	fill: var(--bg-panel);
+	stroke-width: 2;
+}
+.chart-crosshair {
+	stroke: var(--line-hover);
+	stroke-width: 1;
+	stroke-dasharray: 2 3;
+}
+.chart-hit {
+	fill: transparent;
+	cursor: crosshair;
+}
+.chart-hit[data-link] {
+	cursor: pointer;
+}
+
+/* ── Tooltip ───────────────────────────────────────────────── */
+.chart-tip {
+	position: absolute;
+	z-index: 20;
+	width: max-content;
+	min-width: 140px;
+	max-width: 320px;
+	padding: 8px 10px;
+	border-radius: 7px;
+	background-color: var(--bg-menu);
+	box-shadow: var(--shadow-menu);
+	font-size: 12px;
+	line-height: 1.35;
+	color: var(--text-secondary);
+	pointer-events: none;
+	transform: translate(-50%, calc(-100% - 12px));
+	white-space: normal;
+}
+.chart-tip[data-below] {
+	transform: translate(-50%, 14px);
+}
+.chart-tip-title {
+	margin-bottom: 4px;
+	color: var(--text-primary);
+}
+.chart-tip-row {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+}
+.chart-tip-row + .chart-tip-row {
+	margin-top: 2px;
+}
+.chart-tip-label {
+	display: flex;
+	flex: none;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-muted);
+}
+.chart-tip-value {
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	min-width: 0;
+	text-align: right;
+	overflow-wrap: anywhere;
+	color: var(--text-primary);
+}
+
+/* ── Legend ────────────────────────────────────────────────── */
+.chart-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 14px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+.chart-legend-item {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+}
+.chart-swatch {
+	display: inline-block;
+	width: 8px;
+	height: 8px;
+	flex-shrink: 0;
+	border-radius: 2px;
+}
+.chart-swatch[data-shape='dot'] {
+	border-radius: 50%;
+}
+.chart-swatch[data-shape='ring'] {
+	border-radius: 50%;
+	background-color: transparent !important;
+	box-shadow: inset 0 0 0 2px currentColor;
+}
+
+/* ── Bar rows ──────────────────────────────────────────────── */
+.bar-rows {
+	display: grid;
+	grid-template-columns: minmax(90px, max-content) minmax(0, 1fr) auto;
+	align-items: center;
+	column-gap: 14px;
+	row-gap: 2px;
+}
+.bar-row {
+	display: contents;
+}
+.bar-row > * {
+	padding: 6px 0;
+}
+.bar-row-label {
+	min-width: 0;
+	max-width: 220px;
+	overflow: hidden;
+	font-size: 12.5px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	color: var(--text-secondary);
+}
+.bar-row-sub {
+	margin-left: 6px;
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	color: var(--text-faint);
+}
+.bar-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.bar-track {
+	position: relative;
+	height: 12px;
+	border-radius: 4px;
+	background-color: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-subtle);
+}
+.bar-stack[data-many] .bar-track {
+	height: 8px;
+}
+.bar-fill {
+	position: absolute;
+	inset: 0 auto 0 0;
+	border-radius: 4px;
+	transition: opacity var(--dur-hover) ease;
+}
+.bar-rows[data-hovering] .bar-row:not([data-active]) .bar-fill {
+	opacity: 0.45;
+}
+.bar-row-value {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	text-align: right;
+	white-space: nowrap;
+	color: var(--text-primary);
+}
+.bar-row-value span[data-faint] {
+	color: var(--text-faint);
+}
+
+/* ── Stacked bars ──────────────────────────────────────────── */
+.stack-rows {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.stack-row-label {
+	margin-bottom: 6px;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+.stack-bar {
+	display: flex;
+	height: 14px;
+	gap: 2px;
+}
+.stack-seg {
+	min-width: 2px;
+	height: 100%;
+	transition: opacity var(--dur-hover) ease;
+}
+.stack-seg:first-child {
+	border-top-left-radius: 4px;
+	border-bottom-left-radius: 4px;
+}
+.stack-seg:last-child {
+	border-top-right-radius: 4px;
+	border-bottom-right-radius: 4px;
+}
+.stack-rows[data-hovering] .stack-seg:not([data-active]) {
+	opacity: 0.45;
+}
+
+/* ── Defect grid ───────────────────────────────────────────── */
+.defect-grid {
+	display: grid;
+	align-items: center;
+	column-gap: 2px;
+	row-gap: 2px;
+}
+.defect-grid-pr {
+	grid-column: 1 / -1;
+	padding: 10px 0 4px;
+	font-family: var(--font-code);
+	font-size: 11px;
+	color: var(--text-faint);
+}
+.defect-grid-pr:first-child {
+	padding-top: 0;
+}
+.defect-grid-label {
+	min-width: 0;
+	padding-right: 12px;
+	overflow: hidden;
+	font-size: 12px;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+	color: var(--text-secondary);
+}
+.defect-grid-label span {
+	margin-right: 6px;
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	color: var(--text-faint);
+}
+.defect-cell {
+	width: 16px;
+	height: 16px;
+	border-radius: 4px;
+	background-color: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+}
+.defect-cell[data-stage='found'] {
+	background-color: color-mix(in oklab, var(--series-1) 30%, var(--bg-panel));
+	box-shadow: none;
+}
+.defect-cell[data-stage='verified'] {
+	background-color: color-mix(in oklab, var(--series-1) 62%, var(--bg-panel));
+	box-shadow: none;
+}
+.defect-cell[data-stage='published'] {
+	background-color: var(--series-1);
+	box-shadow: none;
+}
+.defect-cell[data-stage='none'] {
+	background-color: transparent;
+	box-shadow: inset 0 0 0 1px var(--line-subtle);
+	background-image: repeating-linear-gradient(135deg, transparent 0 3px, var(--line-subtle) 3px 4px);
+}
+.defect-cell:hover {
+	outline: 2px solid var(--text-secondary);
+	outline-offset: 1px;
+}
