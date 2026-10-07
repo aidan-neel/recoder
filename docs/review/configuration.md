@@ -135,6 +135,8 @@ Resolved by `findCli` in `apps/server/src/agents/cli-process.ts`. When the varia
 
 **RECODER_OPENCODE_BIN**: OpenCode binary. Fallback `~/.opencode/bin/opencode`. Read by `findOpenCode` in `apps/server/src/agents/opencode/opencode-server.ts`.
 
+**RECODER_CLAUDE_CODE_DEBUG_DIR**: When set, a failed `claude-code` call writes its raw `stream-json` lines (text and thinking deltas left out) to a file in this directory. Unset by default, which keeps nothing. Read in `apps/server/src/agents/claude-code/claude-code-debug.ts`.
+
 **RECODER_CLAUDE_BIN**: Claude Code binary. Fallback `~/.local/bin/claude`. Read in `apps/server/src/agents/claude-code/claude-code.ts`.
 
 The Claude Code CLI does not inherit `RECODER_*`, `ANTHROPIC_*`, `CLAUDE_CODE_*`, `OPENAI_*` or any token, key, secret or password variable (`claudeCodeEnv` in `apps/server/src/agents/claude-code/claude-code-process.ts`).
