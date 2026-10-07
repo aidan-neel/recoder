@@ -1,17 +1,16 @@
 import { execFile } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { HostConfig } from '$lib/reports/types';
-import { SSH_OPTIONS } from './hosts';
+import { host, SSH_OPTIONS } from './hosts';
+import { swr } from './swr';
 
 /** Remote reports are copied here and read like local ones. Nothing is ever written back. */
 const CACHE = join(homedir(), '.recoder', 'bench-cache');
 
 /** A sync younger than this is reused, so many page loads cost one rsync. */
 const FRESH_MS = 15_000;
-
-const synced = new Map<string, { at: number; pending: Promise<void> }>();
 
 /** The directory holding the host's benchmark reports and run logs. */
 export function evalsDir(target: HostConfig): string {
@@ -58,21 +57,25 @@ async function pull(target: HostConfig): Promise<void> {
 	]);
 }
 
+/** One copy per host at a time; a failed copy keeps what the cache already has. */
+const copies = swr<void>(FRESH_MS, (id) => pull(host(id)).catch(() => undefined));
+
+function hasCopy(target: HostConfig): boolean {
+	const dir = evalsDir(target);
+
+	return existsSync(dir) && readdirSync(dir).length > 0;
+}
+
 /**
  * Copies a remote host's reports, run logs and dataset labels into the local
- * cache when the last copy is older than a few seconds; `force` copies now.
- * A failed copy keeps what the cache already has.
+ * cache when the last copy is older than a few seconds. Once the cache holds
+ * a copy, even one from an earlier start of this app, callers read it at once
+ * and the copy runs in the background.
  */
-export async function syncHost(target: HostConfig, force = false): Promise<void> {
+export async function syncHost(target: HostConfig): Promise<void> {
 	if (!target.ssh) return;
 
-	const last = synced.get(target.id);
+	const copy = copies.read(target.id);
 
-	if (last && Date.now() - last.at < (force ? 2_000 : FRESH_MS)) return last.pending;
-
-	const pending = pull(target).catch(() => undefined);
-
-	synced.set(target.id, { at: Date.now(), pending });
-
-	return pending;
+	if (!hasCopy(target)) await copy;
 }

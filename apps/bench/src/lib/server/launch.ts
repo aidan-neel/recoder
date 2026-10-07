@@ -2,8 +2,10 @@ import { REASONING_EFFORTS } from '@recoder/shared';
 import type { HostConfig, RunRequest } from '$lib/reports/types';
 import { host, quote, shell } from './hosts';
 import { readLabels } from './datasets';
+import { liveRuns } from './live';
 import { flag, probe } from './probe';
 import { getSettings } from './recoder-api';
+import { runSetups } from './run-setup';
 
 const ID = /^[\w.-]+$/;
 const MODEL = /^[\w:./@-]+$/;
@@ -145,6 +147,9 @@ export async function launch(request: RunRequest): Promise<{ host: string; pid: 
 	const pid = Number(out.trim().split('\n').at(-1));
 
 	if (!pid) throw new Error(`The run did not start: ${out.trim() || 'no process id'}`);
+
+	liveRuns.clear();
+	runSetups.clear();
 
 	return { host: target.id, pid };
 }

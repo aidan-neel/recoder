@@ -10,6 +10,8 @@
 	import ChartPanel from '$lib/components/charts/chart-panel.svelte';
 	import PrPicks from '$lib/components/run/pr-picks.svelte';
 	import OptionSelect from '$lib/components/ui/option-select.svelte';
+	import { settled } from '$lib/live/settled.svelte';
+	import Skeleton from '$web/components/ui/skeleton.svelte';
 
 	let { data, form } = $props();
 
@@ -26,6 +28,14 @@
 	/** The host and dataset the picks were made for; a failed start reloads the data but keeps them. */
 	let pickedFor = '';
 
+	/** The host the judge default was picked for; the pick waits for that host's models. */
+	let judgedFor = '';
+
+	const setup = settled(
+		() => data.setup,
+		() => data.host
+	);
+
 	$effect.pre(() => {
 		const key = `${data.host}/${data.dataset}`;
 
@@ -34,15 +44,30 @@
 		pickedFor = key;
 		base = data.base;
 		picked = [];
-		judge = data.models.some((entry) => entry.id === DEFAULT_JUDGE) ? DEFAULT_JUDGE : 'review';
 	});
 
-	const servers = $derived([...new Set([new URL(data.base).port, ...data.servers.map(String)])]);
-	const busy = $derived(data.busy.find((run) => new URL(run.base).port === new URL(base || data.base).port) ?? null);
-	const reviewer = $derived(data.models.find((entry) => entry.id === model) ?? null);
-	const judgeModel = $derived(data.models.find((entry) => entry.id === judge) ?? null);
+	$effect.pre(() => {
+		const offered = setup.current?.models;
+
+		if (!offered || judgedFor === data.host) return;
+
+		judgedFor = data.host;
+		judge = offered.some((entry) => entry.id === DEFAULT_JUDGE) ? DEFAULT_JUDGE : 'review';
+	});
+
+	const running = $derived(setup.current?.servers ?? []);
+	const models = $derived(setup.current?.models ?? []);
+	const servers = $derived([...new Set([new URL(data.base).port, ...running.map(String)])]);
+
+	const busy = $derived(
+		setup.current?.busy.find((run) => new URL(run.base).port === new URL(base || data.base).port) ?? null
+	);
+
+	const reviewer = $derived(models.find((entry) => entry.id === model) ?? null);
+	const judgeModel = $derived(models.find((entry) => entry.id === judge) ?? null);
+
 	const modelOptions = $derived(
-		data.models.map((entry) => ({ value: entry.id, label: entry.label, detail: entry.source ?? undefined }))
+		models.map((entry) => ({ value: entry.id, label: entry.label, detail: entry.source ?? undefined }))
 	);
 
 	function effortOptions(efforts: ReasoningEffort[] | undefined, none: string) {
@@ -94,15 +119,19 @@
 					</div>
 					<div class="form-field">
 						<Label>Server</Label>
-						<OptionSelect
-							bind:value={base}
-							label="Server"
-							options={servers.map((port) => ({
-								value: `http://localhost:${port}`,
-								label: `localhost:${port}`,
-								detail: data.servers.includes(Number(port)) ? 'running' : 'not running'
-							}))}
-						/>
+						{#if setup.current}
+							<OptionSelect
+								bind:value={base}
+								label="Server"
+								options={servers.map((port) => ({
+									value: `http://localhost:${port}`,
+									label: `localhost:${port}`,
+									detail: running.includes(Number(port)) ? 'running' : 'not running'
+								}))}
+							/>
+						{:else}
+							<Skeleton class="field-skeleton" />
+						{/if}
 					</div>
 					<div class="form-field">
 						<Label>Dataset</Label>
@@ -127,55 +156,70 @@
 			{/if}
 
 			<ChartPanel title="Models">
-				{#if !data.servers.length}
+				{#if setup.error}
+					<Alert.Root variant="error" class="mb-4">
+						<Alert.Description>The host did not answer: {setup.error}</Alert.Description>
+					</Alert.Root>
+				{:else if !setup.current}
+					<div class="form-grid">
+						{#each ['Reviewer', 'Reviewer effort', 'Judge', 'Judge effort'] as name (name)}
+							<div class="form-field">
+								<Label>{name}</Label>
+								<Skeleton class="field-skeleton" />
+							</div>
+						{/each}
+					</div>
+				{:else if !running.length}
 					<Alert.Root variant="warning" class="mb-4">
 						<Alert.Description
 							>No Recoder server is running on this host. Start one before you start a run.</Alert.Description
 						>
 					</Alert.Root>
-				{:else if data.modelError}
+				{:else if setup.current.modelError}
 					<Alert.Root variant="error" class="mb-4">
-						<Alert.Description>The server did not list its models: {data.modelError}</Alert.Description>
+						<Alert.Description>The server did not list its models: {setup.current.modelError}</Alert.Description>
 					</Alert.Root>
 				{/if}
-				<div class="form-grid">
-					<div class="form-field">
-						<Label>Reviewer</Label>
-						<OptionSelect
-							bind:value={model}
-							label="Reviewer"
-							options={[{ value: '', label: "Keep the server's picks" }, ...modelOptions]}
-						/>
+				{#if setup.current}
+					<div class="form-grid">
+						<div class="form-field">
+							<Label>Reviewer</Label>
+							<OptionSelect
+								bind:value={model}
+								label="Reviewer"
+								options={[{ value: '', label: "Keep the server's picks" }, ...modelOptions]}
+							/>
+						</div>
+						<div class="form-field">
+							<Label>Reviewer effort</Label>
+							<OptionSelect
+								bind:value={effort}
+								label="Reviewer effort"
+								options={effortOptions(reviewer?.efforts, model ? 'Model default' : "Keep the server's pick")}
+							/>
+						</div>
+						<div class="form-field">
+							<Label>Judge</Label>
+							<OptionSelect
+								bind:value={judge}
+								label="Judge"
+								options={[
+									{ value: 'review', label: 'The review model' },
+									{ value: 'second', label: 'The second review pick' },
+									...modelOptions
+								]}
+							/>
+						</div>
+						<div class="form-field">
+							<Label>Judge effort</Label>
+							<OptionSelect
+								bind:value={judgeEffort}
+								label="Judge effort"
+								options={effortOptions(judgeModel?.efforts ?? [...REASONING_EFFORTS], 'Model default')}
+							/>
+						</div>
 					</div>
-					<div class="form-field">
-						<Label>Reviewer effort</Label>
-						<OptionSelect
-							bind:value={effort}
-							label="Reviewer effort"
-							options={effortOptions(reviewer?.efforts, model ? 'Model default' : "Keep the server's pick")}
-						/>
-					</div>
-					<div class="form-field">
-						<Label>Judge</Label>
-						<OptionSelect
-							bind:value={judge}
-							label="Judge"
-							options={[
-								{ value: 'review', label: 'The review model' },
-								{ value: 'second', label: 'The second review pick' },
-								...modelOptions
-							]}
-						/>
-					</div>
-					<div class="form-field">
-						<Label>Judge effort</Label>
-						<OptionSelect
-							bind:value={judgeEffort}
-							label="Judge effort"
-							options={effortOptions(judgeModel?.efforts ?? [...REASONING_EFFORTS], 'Model default')}
-						/>
-					</div>
-				</div>
+				{/if}
 				{#if busy}
 					<Alert.Root variant="warning" class="mt-4">
 						<Alert.Description>
@@ -206,7 +250,7 @@
 					type="submit"
 					loading={starting}
 					loadingLabel="Starting"
-					disabled={!data.dataset || !data.servers.length || Boolean(busy && model)}>Start run</Button
+					disabled={!data.dataset || !running.length || Boolean(busy && model)}>Start run</Button
 				>
 			</div>
 		</form>

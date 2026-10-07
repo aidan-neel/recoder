@@ -349,6 +349,9 @@
 	flex-direction: column;
 	gap: 3px;
 }
+.run-skeleton {
+	padding: 10px 12px;
+}
 .run-row-name {
 	overflow: hidden;
 	font-size: 13.5px;
@@ -415,6 +418,12 @@
 .form-field [data-ui='button'] {
 	width: 100%;
 	justify-content: space-between;
+}
+/* Same box as the select trigger it stands in for. */
+.form-field .field-skeleton {
+	width: 100%;
+	height: 28px;
+	border-radius: 8px;
 }
 .pr-picks {
 	display: grid;

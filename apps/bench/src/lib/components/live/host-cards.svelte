@@ -1,8 +1,10 @@
 <script lang="ts">
 	import * as Card from '@sivir-ui/svelte/components/card';
+	import Skeleton from '$web/components/ui/skeleton.svelte';
 	import type { HostStatus } from '$lib/reports/types';
 
-	let { hosts }: { hosts: HostStatus[] } = $props();
+	/** Undefined while the hosts load. */
+	let { hosts }: { hosts: HostStatus[] | undefined } = $props();
 
 	function tone(host: HostStatus): 'down' | 'busy' | 'ok' {
 		return host.error ? 'down' : host.runs ? 'busy' : 'ok';
@@ -17,7 +19,20 @@
 </script>
 
 <div class="host-cards">
-	{#each hosts as host (host.id)}
+	{#if !hosts}
+		{#each [0, 1] as index (index)}
+			<Card.Root class="bench-panel">
+				<div class="host-card-body">
+					<div class="host-card-name"><Skeleton class="my-0.5 h-[17px] w-20" /><Skeleton class="h-3.5 w-24" /></div>
+					<div class="host-card-facts flex-col">
+						<Skeleton class="my-[2px] h-[13.3px] w-44" />
+						<Skeleton class="my-[2px] h-[13.3px] w-10" />
+					</div>
+				</div>
+			</Card.Root>
+		{/each}
+	{/if}
+	{#each hosts ?? [] as host (host.id)}
 		<Card.Root class="bench-panel">
 			<div class="host-card-body">
 				<div class="host-card-name">

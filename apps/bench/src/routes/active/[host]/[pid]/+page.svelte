@@ -1,20 +1,24 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import * as Alert from '@sivir-ui/svelte/components/alert';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import StatTile from '$lib/components/charts/stat-tile.svelte';
 	import PrPanels from '$lib/components/reports/pr-panels.svelte';
+	import Skeleton from '$web/components/ui/skeleton.svelte';
 	import { LIVE, poll } from '$lib/live/poll';
+	import { settled } from '$lib/live/settled.svelte';
 	import { minutes, percent, shortDate, shortModel } from '$lib/reports/stats';
 
 	let { data } = $props();
 
 	onMount(() => poll(LIVE, 5_000));
 
-	const run = $derived(data.run);
-	const view = $derived(data.view);
+	const page = settled(() => data.page);
+	const run = $derived(page.current?.run);
+	const view = $derived(page.current?.view ?? null);
 
 	function since(iso: string | null): string {
 		return iso ? minutes(data.now - Date.parse(iso)) : '–';
@@ -23,7 +27,9 @@
 
 <ScrollArea class="h-full min-h-0" aria-label="Run" showCues={false}>
 	<div class="bench-page">
-		{#if !run}
+		{#if page.error}
+			<Alert.Root variant="error"><Alert.Description>{page.error}</Alert.Description></Alert.Root>
+		{:else if page.current && !run}
 			<div class="bench-head">
 				<h1 class="bench-title">Run ended</h1>
 			</div>
@@ -33,6 +39,28 @@
 					<Button href="/reports" variant="outline">Reports</Button>
 				</div>
 			</Card.Root>
+		{:else if !run}
+			<div class="bench-head">
+				<div class="flex min-w-0 flex-col gap-1.5">
+					<Skeleton class="my-[1.2px] h-6 w-64" />
+					<Skeleton class="my-[1.6px] h-3.5 w-96 max-w-full" />
+				</div>
+			</div>
+			<div class="stat-tiles" data-cols="4">
+				{#each ['Reviews done', 'Recall so far', 'Elapsed', 'Per review'] as label (label)}
+					<StatTile {label} value={undefined} />
+				{/each}
+			</div>
+			<section class="bench-section">
+				<h2 class="bench-section-title">Running reviews</h2>
+				<Card.Root class="bench-panel">
+					<ul class="review-list">
+						{#each [0, 1, 2] as index (index)}
+							<li class="review-item"><Skeleton class="h-4 w-full" /></li>
+						{/each}
+					</ul>
+				</Card.Root>
+			</section>
 		{:else}
 			<div class="bench-head">
 				<div class="min-w-0">
@@ -124,7 +152,7 @@
 				<Card.Root class="bench-panel">
 					{#if run.log}
 						<ScrollArea class="max-h-[420px]" aria-label="Log" showCues={false}>
-							<pre class="log-tail">{data.log || 'The log is empty.'}</pre>
+							<pre class="log-tail">{page.current?.log || 'The log is empty.'}</pre>
 						</ScrollArea>
 					{:else}
 						<p class="bench-empty">This run writes its output to a terminal, not a file.</p>

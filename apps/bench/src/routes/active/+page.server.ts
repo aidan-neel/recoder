@@ -1,8 +1,8 @@
 import { LIVE } from '$lib/live/poll';
-import { activeRuns } from '$lib/server/live';
+import { liveRuns } from '$lib/server/live';
 
-export async function load({ depends }) {
+export function load({ depends }) {
 	depends(LIVE);
 
-	return activeRuns();
+	return { live: liveRuns.read() };
 }

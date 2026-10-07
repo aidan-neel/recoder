@@ -7,6 +7,7 @@ import { evalsDir, syncHost } from './mirror';
 import { flag, probe, type Probe } from './probe';
 import { getRepos, getReviews, getSnapshot, getSummaries, type ReviewRow } from './recoder-api';
 import { readReport } from './report-index';
+import { swr } from './swr';
 
 /** The review list is large, so each server's copy is reused for this long. */
 const REVIEWS_FRESH_MS = 20_000;
@@ -161,7 +162,7 @@ async function hostRuns(target: HostConfig, found: Probe): Promise<{ runs: Activ
 }
 
 /** Every host's status and the runs in progress on it. A host that does not answer reports why. */
-export async function activeRuns(): Promise<{ hosts: HostStatus[]; runs: ActiveRun[] }> {
+async function loadActiveRuns(): Promise<{ hosts: HostStatus[]; runs: ActiveRun[] }> {
 	const results = await Promise.all(
 		hosts().map(async (target) => {
 			try {
@@ -200,6 +201,12 @@ export async function activeRuns(): Promise<{ hosts: HostStatus[]; runs: ActiveR
 		runs: results.flatMap((result) => result.runs).sort((a, b) => b.startedAt.localeCompare(a.startedAt))
 	};
 }
+
+/**
+ * The host statuses and active runs, read through a short cache so a page
+ * switch does not wait on ssh. A value over a minute old is not shown.
+ */
+export const liveRuns = swr(3_000, loadActiveRuns, 60_000);
 
 /** Adds each review's running tasks and locked model, for the run page. */
 export async function withTasks(target: HostConfig, run: ActiveRun): Promise<ActiveRun> {

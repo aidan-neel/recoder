@@ -9,13 +9,17 @@
 	import HostCards from '$lib/components/live/host-cards.svelte';
 	import RunList from '$lib/components/live/run-list.svelte';
 	import ReportTable from '$lib/components/reports/report-table.svelte';
+	import * as Alert from '@sivir-ui/svelte/components/alert';
 	import { LIVE, poll } from '$lib/live/poll';
+	import { settled } from '$lib/live/settled.svelte';
 	import { labeledPrecision, minutes, percent, recall, shortDate } from '$lib/reports/stats';
 	import { configColors, configLegend, finished, rankConfigs, trendPoints } from '$lib/reports/trend';
 
 	let { data } = $props();
 
 	onMount(() => poll(LIVE, 10_000));
+
+	const live = settled(() => data.live);
 
 	const ranked = $derived(rankConfigs(data.reports));
 	const colors = $derived(configColors(ranked));
@@ -26,7 +30,11 @@
 	<div class="bench-page">
 		<section class="bench-section">
 			<h2 class="bench-section-title">Hosts</h2>
-			<HostCards hosts={data.hosts} />
+			{#if live.error}
+				<Alert.Root variant="error"><Alert.Description>{live.error}</Alert.Description></Alert.Root>
+			{:else}
+				<HostCards hosts={live.current?.hosts} />
+			{/if}
 		</section>
 
 		<section class="bench-section">
@@ -34,7 +42,7 @@
 				<h2 class="bench-section-title">Active runs</h2>
 				<Button href="/new" variant="outline">New run</Button>
 			</div>
-			<RunList runs={data.runs} />
+			<RunList runs={live.current?.runs} />
 		</section>
 
 		{#if latest}
