@@ -132,6 +132,7 @@ async function runWorker(host: WorkerHost, task: string, name: string): Promise<
 	const agentId = newAgentId();
 
 	const outcome = await runJsonAgent({
+		stage: 'worker',
 		label: `${host.label} · ${name}`,
 		agentId,
 		system: workerSystemPrompt(host.exec),

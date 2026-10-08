@@ -6,7 +6,13 @@ import type { Review } from '@recoder/shared';
 import { app } from '../../src/app';
 import { closeStore, db, reviewDiffs, reviewMetrics, reviewSandboxes } from '../../src/store';
 import { chatCompletion, resetLlmLimiter, streamChatCompletion } from '../../src/models/llm';
-import { getReviewMetrics, normalizeTokenUsage, trackTokenCall, withReviewMetrics } from '../../src/models/metrics';
+import {
+	getReviewMetrics,
+	normalizeTokenUsage,
+	trackTokenCall,
+	withReviewMetrics,
+	withTokenStage
+} from '../../src/models/metrics';
 import { getStoredSettings, setReviewOverrides } from '../../src/review/session/review-settings';
 import { runReviewPipeline } from '../../src/commands/pipeline';
 import { claudeCode } from '../../src/agents/claude-code/claude-code';
@@ -153,6 +159,27 @@ test('concurrent requests remain isolated by review, model and scope and survive
 	expect(getReviewMetrics(b.id)).toMatchObject({ pipelineTracked: false, total: { calls: 1 } });
 	expect(JSON.stringify(reviewMetrics.get(a.id))).not.toContain('private prompt');
 	expect(JSON.stringify(reviewMetrics.get(a.id))).not.toContain(opts.apiKey);
+});
+
+test('concurrent calls keep their own stage, an inner stage wins, and a call outside any stage counts as other', async () => {
+	const a = review();
+
+	await withReviewMetrics(a.id, 'pipeline', () =>
+		Promise.all([
+			withTokenStage('reviewer', () =>
+				Promise.all([chatCompletion(opts), withTokenStage('worker', () => chatCompletion(opts))])
+			),
+			withTokenStage('verifier', () => chatCompletion(opts)),
+			chatCompletion(opts)
+		])
+	);
+
+	expect(getReviewMetrics(a.id)!.stages.map((stage) => [stage.stage, stage.calls])).toEqual([
+		['reviewer', 1],
+		['worker', 1],
+		['verifier', 1],
+		['other', 1]
+	]);
 });
 
 test('streaming requests request usage and replace cumulative reports, including a usage-only chunk', async () => {
@@ -306,6 +333,7 @@ test('nested agent retries count all provider calls, not just the accepted JSON 
 	await withReviewMetrics(a.id, 'pipeline', () =>
 		runJsonAgent({
 			label: 'reviewer',
+			stage: 'reviewer',
 			system: '',
 			user: '',
 			config: opts,

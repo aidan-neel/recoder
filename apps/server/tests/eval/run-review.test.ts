@@ -11,7 +11,14 @@ const STORED = {
 	startedAt: '2026-10-06T19:00:00.000Z',
 	pipelineTracked: true,
 	runs: [{ index: 0, startedAt: '2026-10-06T19:00:00.000Z', orchestrator: 'muse', subagent: 'muse', lockMisses: 0 }],
-	calls: ['muse', 'luna'].map((model) => ({ id: model, model, scope: 'pipeline', status: 'completed', run: 0 }))
+	calls: ['muse', 'luna'].map((model) => ({
+		id: model,
+		model,
+		scope: 'pipeline',
+		status: 'completed',
+		run: 0,
+		usage: {}
+	}))
 };
 
 /** A Recoder server that takes 200ms to answer a start request, and serves stored metrics for `review-stored` only. */

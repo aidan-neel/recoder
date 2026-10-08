@@ -89,6 +89,7 @@ async function callOnce<T>(
 ): Promise<BriefAnswer<T>> {
 	try {
 		const result = await runJsonAgent({
+			stage: 'intent',
 			label: `intent ${call.label}`,
 			...orchestratorAgentOptions(run, cfg),
 			system: call.system,

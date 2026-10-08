@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { ChatConversation } from '../../../src/models/llm/conversation';
+import { isUsageLimit } from '../../../src/models/model-failure';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { useFakeOpenCode } from '../../helpers/fake-opencode';
 import { ask, calls, cancelledChat, expectProviderStatuses, streamedUsage } from '../../helpers/opencode-chat';
@@ -84,6 +85,17 @@ describe('OpenCode chat', () => {
 
 	test("keeps the provider's status on a failed reply", async () => {
 		await expectProviderStatuses(await start());
+	});
+
+	test('a spent plan fails the call at once as a usage limit and stops the retrying session', async () => {
+		const target = await start();
+		const started = Date.now();
+		const error = await target.complete(ask('spent', { timeoutMs: 60_000 })).catch((e: unknown) => e);
+
+		expect(Date.now() - started).toBeLessThan(10_000);
+		expect(error).toMatchObject({ status: 429 });
+		expect(isUsageLimit(error, { provider: 'opencode', source: 'opencode-go' })).toBe(true);
+		expect((await calls(target)).map((c) => `${c.method} ${c.path}`)).toContain('POST /session/ses_1/abort');
 	});
 
 	test('a cancelled call aborts and deletes its session', async () => {

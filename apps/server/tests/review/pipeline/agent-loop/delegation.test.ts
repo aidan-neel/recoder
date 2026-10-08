@@ -19,6 +19,7 @@ test('a turn that mixes reads and a delegation returns results in the order they
 	const results = await executeTurn(
 		{
 			label: 'correctness',
+			stage: 'reviewer',
 			system: '',
 			user: '',
 			config: { model: 'test', baseUrl: 'https://model.test', apiKey: 'test' },

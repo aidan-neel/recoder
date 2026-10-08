@@ -1,4 +1,4 @@
-import type { ReviewChatMessage, ReviewReasoningEntry } from '@recoder/shared';
+import type { ReviewChatMessage, ReviewReasoningEntry, TokenStage } from '@recoder/shared';
 import type { EvidenceStore, ToolCallReport } from '../../../evidence/evidence.js';
 import type { RetrievalAction, ToolResult } from '../../../evidence/types.js';
 import type { ModelConfig } from '../../../models/models.js';
@@ -6,6 +6,8 @@ import type { ModelBudget } from './budget.js';
 
 export interface JsonAgentOptions<T> {
 	label: string;
+	/** The kind of agent, recorded on each of its model calls so a review's tokens split by stage. */
+	stage: TokenStage;
 	/** Names this agent's scratch files and runs; one is made up when absent. */
 	agentId?: string;
 	system: string;

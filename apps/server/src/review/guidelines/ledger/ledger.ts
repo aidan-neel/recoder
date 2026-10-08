@@ -15,6 +15,7 @@ async function distill(run: ReviewRun, sources: LedgerSource[]): Promise<LedgerR
 	const config = configForOrchestrator();
 
 	const result = await runJsonAgent({
+		stage: 'ledger',
 		label: 'rule ledger',
 		...orchestratorAgentOptions(run, config),
 		system: LEDGER_SYSTEM_PROMPT,

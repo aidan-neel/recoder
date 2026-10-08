@@ -5,13 +5,14 @@ import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
 import { LlmError, cancelledError, timedOutError } from '../../models/llm/errors';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
-import { DEFAULT_TIMEOUT_MS, type ChatMessage, type ChatOptions } from '../../models/llm/types';
+import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../../models/llm/types';
 import { emptyDirectory, findCli, probeVersion } from '../cli-process';
 import type { AgentAdapter } from '../registry';
 import { claudeCodeEfforts, claudeCodeModels } from './claude-code-models';
 import { FailedCallDump } from './claude-code-debug';
 import { claudeCodeEnv, killGroup, stopOnShutdown } from './claude-code-process';
 import { ReplyReader } from './claude-code-reply';
+import { sessionCall, sweepSessions, type SessionCall } from './claude-code-session';
 
 type Env = Record<string, string | undefined>;
 
@@ -23,8 +24,10 @@ const STATUS_TIMEOUT_MS = 10_000;
 
 /**
  * Print mode with everything but the model call turned off: no tools, a permission mode that refuses any tool,
- * one turn, no saved session, and `--safe-mode` so the user's CLAUDE.md, hooks, plugins, skills and MCP servers
- * never load. `stream-json` needs `--verbose` in print mode, and carries the error code of a failed call.
+ * and `--safe-mode` so the user's CLAUDE.md, hooks, plugins, skills and MCP servers never load. A model can still
+ * write a tool call; the CLI answers that no such tool exists, which takes a second turn, and the model then
+ * replies in text, so three turns leave room for that without letting a call run on. `stream-json` needs
+ * `--verbose` in print mode, and carries the error code of a failed call.
  */
 const BASE_ARGS = [
 	'-p',
@@ -36,8 +39,7 @@ const BASE_ARGS = [
 	'--permission-mode',
 	'dontAsk',
 	'--max-turns',
-	'1',
-	'--no-session-persistence',
+	'3',
 	'--output-format',
 	'stream-json',
 	'--verbose',
@@ -49,13 +51,6 @@ const BASE_ARGS = [
  * reports the call as unparsable. This line keeps the reply to plain text.
  */
 const NO_TOOLS_INSTRUCTION = 'You have no tools. Never write a tool call. Reply with plain text only.';
-
-/** The CLI takes one prompt, so a conversation's turns are written out as one labeled transcript. */
-function promptText(turns: ChatMessage[]): string {
-	if (turns.length === 1) return turns[0].content;
-
-	return turns.map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}:\n${turn.content}`).join('\n\n');
-}
 
 /**
  * The system prompt replaces Claude Code's own. JSON is asked for in words: the CLI's `--json-schema` runs as a
@@ -163,6 +158,7 @@ export class ClaudeCodeAgent implements AgentAdapter {
 	/**
 	 * One model call. The prompt goes in on stdin and the system prompt in a file, since a review's diff can
 	 * pass the kernel's per-argument limit. Text streams to `onToken`; usage comes from the final result line.
+	 * A conversation's calls continue one saved session, see {@link sessionCall}.
 	 */
 	async complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
 		const path = this.find();
@@ -175,15 +171,44 @@ export class ClaudeCodeAgent implements AgentAdapter {
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-claude-code-'));
 		const systemFile = join(scratch, 'system.md');
 
+		const cwd = await emptyDirectory('claude-code-empty');
+		const system = systemText(opts);
+		const effort = effortArgs(opts);
+
+		const session = sessionCall(
+			{
+				conversation: opts.conversation,
+				model: opts.model,
+				system,
+				variant: effort.join(' '),
+				turns: opts.messages.filter((m) => m.role !== 'system')
+			},
+			this.env,
+			cwd
+		);
+
 		this.scratch.add(scratch);
 
 		try {
-			await writeFile(systemFile, systemText(opts), { mode: 0o600 });
+			await writeFile(systemFile, system, { mode: 0o600 });
 
-			const args = [...BASE_ARGS, '--model', opts.model, ...effortArgs(opts), '--system-prompt-file', systemFile];
+			const args = [
+				...BASE_ARGS,
+				...session.args,
+				'--model',
+				opts.model,
+				...effort,
+				'--system-prompt-file',
+				systemFile
+			];
 
-			return await this.run(path, args, opts, signal, onToken);
+			const text = await this.run(path, args, { cwd, session }, opts, signal, onToken);
+
+			session.commit(text);
+
+			return text;
 		} catch (error) {
+			session.fail();
 			if (opts.signal?.aborted) throw cancelledError();
 			if (timeout.aborted) throw timedOutError(timeoutMs);
 			if (error instanceof LlmError) throw error;
@@ -194,10 +219,11 @@ export class ClaudeCodeAgent implements AgentAdapter {
 		}
 	}
 
-	/** Kill every running call's process group and delete its system prompt file; synchronous, for exit. */
+	/** Kill every running call's process group and delete its system prompt file and saved sessions; synchronous, for exit. */
 	stop(): void {
 		for (const proc of this.running) killGroup(proc);
 		for (const dir of this.scratch) rmSync(dir, { recursive: true, force: true });
+		sweepSessions();
 	}
 
 	private find(): string | null {
@@ -212,15 +238,16 @@ export class ClaudeCodeAgent implements AgentAdapter {
 	private async run(
 		path: string,
 		args: string[],
+		where: { cwd: string; session: SessionCall },
 		opts: ChatOptions,
 		signal: AbortSignal,
 		onToken: ((text: string) => void) | undefined
 	): Promise<string> {
 		const proc = Bun.spawn([path, ...args], {
-			cwd: await emptyDirectory('claude-code-empty'),
+			cwd: where.cwd,
 			env: claudeCodeEnv(this.env),
 			detached: true,
-			stdin: new Blob([promptText(opts.messages.filter((m) => m.role !== 'system'))]),
+			stdin: new Blob([where.session.prompt]),
 			stdout: 'pipe',
 			stderr: 'pipe'
 		});

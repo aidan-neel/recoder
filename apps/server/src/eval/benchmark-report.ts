@@ -3,6 +3,7 @@ import type { ModelSettings, ObligationAnswer, ObligationCounts, ReviewFunnel, S
 import { recall, type BenchmarkSummary, type LabeledDefect, type PrScore, type Totals } from './benchmark-score';
 import { labelLines, percent } from './benchmark-labels-report';
 import { matchLines } from './benchmark-matches-report';
+import { tokenLines } from './benchmark-tokens';
 import { countClasses, type LabeledRun } from './benchmark-labels';
 import type { LowTotals } from './benchmark-lows';
 import type { DefectStage, PoolCandidate, StageTotals } from './benchmark-stages';
@@ -457,6 +458,7 @@ export function printBenchmark(report: BenchmarkReport): void {
 			...groupLines('By category', summary.byCategory),
 			...missedLines(report.prs),
 			...stoppedLines(report.prs),
+			...tokenLines(report.prs.flatMap((pr) => pr.runs)),
 			...reviewerSummaryLines(report)
 		].join('\n')
 	);

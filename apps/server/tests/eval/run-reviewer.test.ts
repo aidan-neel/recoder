@@ -71,7 +71,11 @@ test('a review that called a model outside its locked picks makes the report mix
 		calledModels: ['muse', 'muse-mini'],
 		verdict: 'CLEAN',
 		mixed: false,
-		reasons: []
+		reasons: [],
+		tokens: [
+			{ stage: 'other', model: 'muse', calls: 1, input: 3, cached: 0, written: 0, output: 2 },
+			{ stage: 'other', model: 'muse-mini', calls: 1, input: 3, cached: 0, written: 0, output: 2 }
+		]
 	});
 
 	expect(strayed).toMatchObject({ calledModels: ['luna', 'muse'], verdict: 'MIXED', mixed: true });

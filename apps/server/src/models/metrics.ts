@@ -1,10 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import {
+	TOKEN_STAGES,
 	aggregateTokenCalls,
 	emptyTokenUsage,
 	type ReviewMetrics,
 	type TokenCall,
 	type TokenScope,
+	type TokenStage,
 	type TokenUsage
 } from '@recoder/shared';
 import { db, reviewMetrics } from '../store';
@@ -87,6 +89,13 @@ export function withReviewMetrics<T>(reviewId: string, scope: TokenScope, run: (
 	return context.run({ reviewId, scope }, run);
 }
 
+const stages = new AsyncLocalStorage<TokenStage>();
+
+/** Tags every model call `run` starts, however nested, with the kind of agent making it; an inner stage wins. */
+export function withTokenStage<T>(stage: TokenStage, run: () => T): T {
+	return stages.run(stage, run);
+}
+
 /** The model calls one piece of work made and the output tokens they spent; tokens stay null until a provider reports a count. */
 export interface ModelTally {
 	calls: number;
@@ -132,6 +141,7 @@ export function recordLockMiss(): void {
 export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 	const owner = context.getStore();
 	const tally = tallies.getStore();
+	const stage = stages.getStore();
 	const pipeline = owner?.run !== undefined;
 
 	if (tally) tally.calls++;
@@ -141,6 +151,7 @@ export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 		model,
 		provider,
 		scope: owner?.scope ?? 'pipeline',
+		...(stage && { stage }),
 		status: 'pending',
 		usage: emptyTokenUsage(),
 		...(pipeline && { run: owner.run }),
@@ -213,6 +224,14 @@ export function normalizeTokenUsage(raw: unknown, provider: TokenCall['provider'
 	};
 }
 
+/** Pipeline calls summed by stage, in `TOKEN_STAGES` order; a call without a stage counts as `other`. */
+function stageAggregates(calls: TokenCall[]): ReviewMetrics['stages'] {
+	return TOKEN_STAGES.map((stage) => ({
+		stage,
+		...aggregateTokenCalls(calls.filter((call) => (call.stage ?? 'other') === stage))
+	})).filter((aggregate) => aggregate.calls > 0);
+}
+
 export function getReviewMetrics(reviewId: string): ReviewMetrics | null {
 	const stored = reviewMetrics.get(reviewId);
 
@@ -239,6 +258,7 @@ export function getReviewMetrics(reviewId: string): ReviewMetrics | null {
 		scopes: (['pipeline', 'discussion', 'fix'] as const).map((scope) => ({
 			scope,
 			...aggregateTokenCalls(stored.calls.filter((call) => call.scope === scope))
-		}))
+		})),
+		stages: stageAggregates(stored.calls.filter((call) => call.scope === 'pipeline'))
 	};
 }

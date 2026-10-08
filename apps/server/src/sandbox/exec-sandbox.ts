@@ -217,12 +217,12 @@ const PIPE_DRAIN_MS = 1_500;
 const PIPE_KEEP_CHARS = 64_000;
 
 /**
- * Output a command's result keeps. An agent's run is cut to fit its turn; the
- * install and baseline checks keep everything the pipes held, because the
- * detectors parse every diagnostic out of them and a lint run over a whole
- * repo is long.
+ * Output a command's result keeps. An agent's run keeps a head and tail small enough that the transcript it
+ * stays in, and re-sends on every later turn, stays cheap: a failing test's assertion and stack fit. The
+ * install and baseline checks keep everything the pipes held, because the detectors parse every diagnostic
+ * out of them and a lint run over a whole repo is long.
  */
-const OUTPUT_CHARS: Record<SandboxTier, number> = { prep: 2 * PIPE_KEEP_CHARS, run: 20_000, light: 20_000 };
+const OUTPUT_CHARS: Record<SandboxTier, number> = { prep: 2 * PIPE_KEEP_CHARS, run: 8_000, light: 8_000 };
 
 /**
  * Read a pipe in the background. `stop()` cancels a read that is still waiting

@@ -111,6 +111,7 @@ test('review agent, discussion, streaming discussion, and fix consume resolved r
 
 	const result = await runJsonAgent({
 		label: 'security',
+		stage: 'reviewer',
 		system: '',
 		user: '',
 		config: configForSubagent(),

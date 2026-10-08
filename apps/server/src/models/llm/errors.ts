@@ -31,6 +31,11 @@ const THROTTLE = /rate limit|too many requests/i;
 /** Wording that means the plan or quota is spent, even when the provider also calls it a rate limit. */
 const SPENT_PLAN = /quota|usage|insufficient|balance|billing|credit|exhausted|reset at|per (?:day|week|month)/i;
 
+/** The provider's words say the plan or quota is spent, so waiting minutes will not help. */
+export function isSpentPlan(message: string): boolean {
+	return SPENT_PLAN.test(message);
+}
+
 /**
  * A 429 from OpenCode that says the provider is throttling requests, not that
  * the plan is spent. OpenCode retries most rate limits itself but passes some
@@ -38,7 +43,7 @@ const SPENT_PLAN = /quota|usage|insufficient|balance|billing|credit|exhausted|re
  * retries these instead of stopping the review as out of usage.
  */
 export function isOpenCodeThrottle(err: LlmError): boolean {
-	return err.status === 429 && THROTTLE.test(err.message) && !SPENT_PLAN.test(err.message);
+	return err.status === 429 && THROTTLE.test(err.message) && !isSpentPlan(err.message);
 }
 
 /**
