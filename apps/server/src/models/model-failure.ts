@@ -31,7 +31,8 @@ export function isAuthFailure(err: unknown): boolean {
 export function isUsageLimit(err: unknown, config: ModelRef): boolean {
 	if (!(err instanceof LlmError)) return false;
 	if (config?.provider === 'codex') return err.status === 429;
-	if (config?.provider === 'claude-code') return err.status === 429 || err.status === 402;
+	if (config?.provider === 'claude-code' || config?.provider === 'devin')
+		return err.status === 429 || err.status === 402;
 	if (config?.provider === 'opencode') return err.status === 402 || (err.status === 429 && !isOpenCodeThrottle(err));
 
 	return !!hostedProvider(config?.source) && (err.status === 402 || err.status === 429);
@@ -40,6 +41,7 @@ export function isUsageLimit(err: unknown, config: ModelRef): boolean {
 function usageLimitFor(config: ModelRef): UsageLimit {
 	if (config?.provider === 'codex') return { provider: 'codex', name: 'ChatGPT', usageUrl: null };
 	if (config?.provider === 'claude-code') return { provider: 'claude-code', name: 'Claude Code', usageUrl: null };
+	if (config?.provider === 'devin') return { provider: 'devin', name: 'Devin', usageUrl: null };
 
 	if (config?.provider === 'opencode') {
 		const name = opencode.providerName(config.source ?? 'opencode');
@@ -61,7 +63,11 @@ function usageLimitFor(config: ModelRef): UsageLimit {
 export function modelFailure(err: unknown, config: ModelRef, fallback: string): ModelFailure {
 	if (isUsageLimit(err, config)) {
 		const usageLimit = usageLimitFor(config);
-		const detail = config?.provider === 'claude-code' && err instanceof Error && err.message ? ` (${err.message})` : '';
+
+		const detail =
+			(config?.provider === 'claude-code' || config?.provider === 'devin') && err instanceof Error && err.message
+				? ` (${err.message})`
+				: '';
 
 		return {
 			reason: `${usageLimit.name} is out of usage${detail}. Switch to another model, or wait for it to reset.`,
@@ -69,7 +75,8 @@ export function modelFailure(err: unknown, config: ModelRef, fallback: string): 
 		};
 	}
 
-	if (config?.provider === 'claude-code' && err instanceof LlmError) return { reason: err.message || fallback };
+	if ((config?.provider === 'claude-code' || config?.provider === 'devin') && err instanceof LlmError)
+		return { reason: err.message || fallback };
 
 	if (config?.provider === 'codex' && err instanceof LlmError) {
 		return err.status === 401 ? { reason: err.message, signIn: true } : { reason: err.message };

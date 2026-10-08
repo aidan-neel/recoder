@@ -62,7 +62,11 @@ const HOSTED_NAMES: Record<string, string> = {
 };
 
 /** Providers that are an app or CLI rather than an endpoint, by the name people know them by. */
-const APP_NAMES: Partial<Record<ModelProvider, string>> = { codex: 'ChatGPT', 'claude-code': 'Claude Code' };
+const APP_NAMES: Partial<Record<ModelProvider, string>> = {
+	codex: 'ChatGPT',
+	'claude-code': 'Claude Code',
+	devin: 'Devin'
+};
 
 /** ChatGPT or Claude Code for those providers; null for an endpoint or an OpenCode provider. */
 export function appName(provider: ModelProvider | undefined): string | null {

@@ -1,20 +1,24 @@
-import { rmSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
-import { LlmError, cancelledError, timedOutError } from '../../models/llm/errors';
-import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
-import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../../models/llm/types';
-import { emptyDirectory, findCli, probeVersion } from '../cli-process';
-import type { AgentAdapter } from '../registry';
+import { LlmError } from '../../models/llm/errors';
+import type { ChatOptions } from '../../models/llm/types';
+import {
+	CliAgent,
+	callDeadline,
+	emptyDirectory,
+	findCli,
+	killGroup,
+	killOnAbort,
+	stopOnShutdown
+} from '../cli-process';
+import { systemText } from '../cli-prompt';
 import { claudeCodeEfforts, claudeCodeModels } from './claude-code-models';
 import { FailedCallDump } from './claude-code-debug';
-import { claudeCodeEnv, killGroup, stopOnShutdown } from './claude-code-process';
+import { claudeCodeEnv } from './claude-code-process';
 import { ReplyReader } from './claude-code-reply';
 import { sessionCall, sweepSessions, type SessionCall } from './claude-code-session';
-
-type Env = Record<string, string | undefined>;
 
 const INSTALL = 'curl -fsSL https://claude.ai/install.sh | bash';
 
@@ -45,26 +49,6 @@ const BASE_ARGS = [
 	'--verbose',
 	'--include-partial-messages'
 ];
-
-/**
- * Tools are off, but a model that was trained with them can still write a tool call as its reply; the CLI then
- * reports the call as unparsable. This line keeps the reply to plain text.
- */
-const NO_TOOLS_INSTRUCTION = 'You have no tools. Never write a tool call. Reply with plain text only.';
-
-/**
- * The system prompt replaces Claude Code's own. JSON is asked for in words: the CLI's `--json-schema` runs as a
- * tool call, which this tool-less, one-turn call cannot make.
- */
-function systemText({ messages, jsonMode, jsonSchema }: ChatOptions): string {
-	const system = messages.filter((m) => m.role === 'system').map((m) => m.content);
-
-	system.push(NO_TOOLS_INSTRUCTION);
-
-	if (jsonMode || jsonSchema) system.push(JSON_MODE_INSTRUCTION);
-
-	return system.join('\n\n');
-}
 
 /**
  * The effort flags for a model that takes levels. `thinking: false` turns thinking off; the CLI has no
@@ -103,53 +87,11 @@ async function readLines(stream: ReadableStream<Uint8Array>, onLine: (line: stri
  * runs the CLI, without the server's keys in its environment, and reads what
  * the CLI prints.
  */
-export class ClaudeCodeAgent implements AgentAdapter {
+export class ClaudeCodeAgent extends CliAgent {
 	readonly id = 'claude-code';
 	readonly name = 'Claude Code';
-	private status: AgentStatus | null = null;
-	private running = new Set<Bun.Subprocess>();
-	private scratch = new Set<string>();
-	private apiKeySource: string | null = null;
-
-	constructor(private readonly env: Env = process.env) {}
-
-	/**
-	 * Installed, version, and sign-in from `claude auth status`, which makes no model call, with what paid for the
-	 * latest call. Cached until `refresh`.
-	 */
-	async detect(refresh = false): Promise<AgentStatus> {
-		if (this.status && !refresh) return this.status;
-
-		const path = this.find();
-
-		const base: AgentStatus = {
-			id: this.id,
-			name: this.name,
-			installed: !!path,
-			version: null,
-			path,
-			error: null,
-			install: INSTALL,
-			signedIn: null,
-			login: LOGIN,
-			providers: false,
-			authMethod: null,
-			apiKeySource: this.apiKeySource
-		};
-
-		if (!path) return (this.status = base);
-
-		try {
-			base.version = await probeVersion(path, claudeCodeEnv(this.env));
-			if (!base.version) base.error = 'Claude Code did not report a version.';
-		} catch {
-			base.error = 'Claude Code could not be run.';
-		}
-
-		if (!base.error) Object.assign(base, await this.signIn(path));
-
-		return (this.status = base);
-	}
+	readonly install = INSTALL;
+	readonly login = LOGIN;
 
 	async models(): Promise<ModelEntry[]> {
 		return claudeCodeModels();
@@ -165,9 +107,7 @@ export class ClaudeCodeAgent implements AgentAdapter {
 
 		if (!path) throw new LlmError(0, `Claude Code is not installed. Install it with: ${INSTALL}`);
 
-		const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-		const timeout = AbortSignal.timeout(timeoutMs);
-		const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
+		const deadline = callDeadline(opts);
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-claude-code-'));
 		const systemFile = join(scratch, 'system.md');
 
@@ -202,17 +142,14 @@ export class ClaudeCodeAgent implements AgentAdapter {
 				systemFile
 			];
 
-			const text = await this.run(path, args, { cwd, session }, opts, signal, onToken);
+			const text = await this.run(path, args, { cwd, session }, opts, deadline.signal, onToken);
 
 			session.commit(text);
 
 			return text;
 		} catch (error) {
 			session.fail();
-			if (opts.signal?.aborted) throw cancelledError();
-			if (timeout.aborted) throw timedOutError(timeoutMs);
-			if (error instanceof LlmError) throw error;
-			throw new LlmError(0, error instanceof Error ? error.message : 'Claude Code request failed.');
+			throw deadline.failure(error, 'Claude Code request failed.');
 		} finally {
 			this.scratch.delete(scratch);
 			await rm(scratch, { recursive: true, force: true });
@@ -221,12 +158,11 @@ export class ClaudeCodeAgent implements AgentAdapter {
 
 	/** Kill every running call's process group and delete its system prompt file and saved sessions; synchronous, for exit. */
 	stop(): void {
-		for (const proc of this.running) killGroup(proc);
-		for (const dir of this.scratch) rmSync(dir, { recursive: true, force: true });
+		super.stop();
 		sweepSessions();
 	}
 
-	private find(): string | null {
+	protected find(): string | null {
 		return findCli({ pin: 'RECODER_CLAUDE_BIN', command: 'claude', installed: ['.local', 'bin', 'claude'] }, this.env);
 	}
 
@@ -263,19 +199,10 @@ export class ClaudeCodeAgent implements AgentAdapter {
 		});
 
 		const dump = new FailedCallDump(this.env);
-		let abort = () => {};
 
-		const stopped = new Promise<never>((_, reject) => {
-			abort = () => {
-				killGroup(proc);
-				reject(cancelledError());
-			};
-		});
-
-		stopped.catch(() => {});
 		this.running.add(proc);
-		signal.addEventListener('abort', abort, { once: true });
-		if (signal.aborted) abort();
+
+		const { stopped, release } = killOnAbort(proc, signal);
 
 		try {
 			const [, stderr, code] = await Promise.race([
@@ -295,14 +222,18 @@ export class ClaudeCodeAgent implements AgentAdapter {
 			dump.write(opts.model, error);
 			throw error;
 		} finally {
-			signal.removeEventListener('abort', abort);
+			release();
 			this.running.delete(proc);
 			killGroup(proc);
 		}
 	}
 
 	/** `claude auth status --json` exits 1 when signed out; only its `loggedIn` and `authMethod` fields are read. */
-	private async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn' | 'authMethod'>> {
+	protected childEnv(): Record<string, string> {
+		return claudeCodeEnv(this.env);
+	}
+
+	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn' | 'authMethod'>> {
 		const proc = Bun.spawn([path, 'auth', 'status', '--json'], {
 			stdout: 'pipe',
 			stderr: 'ignore',
@@ -329,4 +260,4 @@ export class ClaudeCodeAgent implements AgentAdapter {
 
 export const claudeCode = new ClaudeCodeAgent();
 
-stopOnShutdown(() => claudeCode.stop());
+stopOnShutdown('claude-code', () => claudeCode.stop());
