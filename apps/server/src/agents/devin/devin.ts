@@ -32,11 +32,18 @@ const MODELS_TIMEOUT_MS = 20_000;
  */
 const BASE_ARGS = ['-p', '--permission-mode', 'auto', '--respect-workspace-trust', 'false'];
 
-/**
- * Tools are denied, but a model trained with them still tries one, and the CLI then ends the turn with no text.
- * This line asks for the answer in plain text.
- */
+/** Tools are denied; this line tells the model so up front, before it tries one. */
 const NO_TOOLS_INSTRUCTION = 'You have no tools. Never write a tool call. Reply with plain text only.';
+
+/**
+ * A model that tries a tool anyway gets a refusal, which ends the turn with no text. The session is resumed with
+ * this note, which makes it answer in text; a resumed session reports its whole token total, so usage is counted
+ * once, from the last export.
+ */
+const TOOL_REFUSED_NUDGE =
+	'That tool is unavailable and nothing can be run. Answer in plain text now, without any tool.';
+
+const TOOL_RETRIES = 2;
 
 const SIGNED_OUT = /not logged in|log ?in required|please (?:log|sign) ?in|unauthenticated|auth login/i;
 
@@ -134,16 +141,25 @@ export class DevinAgent extends CliAgent {
 
 			await writeFile(promptFile, `${system}\n\n${promptText(turns)}`, { mode: 0o600 });
 
-			const args = [...BASE_ARGS, '--prompt-file', promptFile, '--model', opts.model, '--export', exportFile];
-
 			const env = { ...devinEnv(this.env), XDG_CONFIG_HOME: await toolFreeHome(this.env) };
-			const text = await this.run(path, args, { cwd, env }, deadline.signal, onToken);
-			const exported = await this.readExport(exportFile);
+			let text = '';
+			let exported: Export | null = null;
 
-			session = exported?.session_id;
+			for (let attempt = 0; attempt <= TOOL_RETRIES && !text.trim(); attempt++) {
+				if (attempt > 0) await writeFile(promptFile, TOOL_REFUSED_NUDGE, { mode: 0o600 });
+
+				const args = [...BASE_ARGS, '--prompt-file', promptFile, '--model', opts.model, '--export', exportFile];
+
+				if (session) args.push('--resume', session);
+
+				text = await this.run(path, args, { cwd, env }, deadline.signal, onToken);
+				exported = await this.readExport(exportFile);
+				session = exported?.session_id ?? session;
+			}
+
 			if (exported?.final_metrics) opts.onUsage?.(tokenUsage(exported.final_metrics));
 
-			if (!text.trim()) throw new LlmError(0, 'Devin ended without a reply. It may have tried to use a tool.');
+			if (!text.trim()) throw new LlmError(0, 'Devin ended without a reply.');
 
 			return text;
 		} catch (error) {

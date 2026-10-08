@@ -7,7 +7,7 @@ import { fakeBin } from './fake-bin';
  * A fake `devin` CLI. `--version`, `auth status` (`FAKE_DEVIN_SIGNED_IN=1` signs it in) and `models list` answer at
  * once. `rm <id> --force` appends the id to `<log>.rm`. Print mode writes its arguments, prompt file, working
  * directory, config file and environment to `FAKE_DEVIN_LOG`, writes the export file, then acts on
- * `FAKE_DEVIN_MODE`: a reply (default), `signedout`, `empty` (exit 0, no text) or `crash` (stderr, exit 1).
+ * `FAKE_DEVIN_MODE`: a reply (default), `signedout`, `empty` (exit 0, no text), `refused` (no text until the call resumes a session with `--resume`) or `crash` (stderr, exit 1).
  */
 const SCRIPT = `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "devin 3000.11.3 (abc123)"; exit 0; fi
@@ -38,9 +38,11 @@ if [ "$1" = "rm" ]; then echo "$2" >> "$FAKE_DEVIN_LOG.rm"; exit 0; fi
 export_file=""
 prompt_file=""
 previous=""
+resumed=""
 for arg in "$@"; do
 	if [ "$previous" = "--export" ]; then export_file="$arg"; fi
 	if [ "$previous" = "--prompt-file" ]; then prompt_file="$arg"; fi
+	if [ "$arg" = "--resume" ]; then resumed=1; fi
 	previous="$arg"
 done
 
@@ -55,6 +57,7 @@ echo '{"session_id":"quiet-owl","final_metrics":{"total_prompt_tokens":1000,"tot
 case "$FAKE_DEVIN_MODE" in
 signedout) echo "Error: Not logged in. Run devin auth login" >&2; exit 1 ;;
 empty) exit 0 ;;
+refused) if [ -n "$resumed" ]; then echo "the reply"; fi ;;
 crash) echo "boom" >&2; exit 1 ;;
 *) echo "the reply" ;;
 esac

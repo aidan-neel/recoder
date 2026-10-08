@@ -63,6 +63,20 @@ describe('DevinAgent.complete', () => {
 		expect(await readFile(`${env.FAKE_DEVIN_LOG}.rm`, 'utf8')).toBe('quiet-owl\n');
 	});
 
+	test('resumes the session when a refused tool left no text, and counts the usage once', async () => {
+		const env = await fakeDevin({ FAKE_DEVIN_MODE: 'refused' });
+		const usages: TokenUsage[] = [];
+
+		const reply = await new DevinAgent(env).complete(call({ onUsage: (u) => usages.push(u) }));
+
+		const text = await readFile(env.FAKE_DEVIN_LOG ?? '', 'utf8');
+
+		expect(reply).toBe('the reply\n');
+		expect(text).toContain('--resume] [quiet-owl]');
+		expect(text).toContain('nothing can be run');
+		expect(usages).toHaveLength(1);
+	});
+
 	test.each([
 		['signedout', 401, /signed out/],
 		['crash', 0, /boom/],
