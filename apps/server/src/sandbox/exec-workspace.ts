@@ -2,6 +2,7 @@ import { reviewNow } from '../review/session/review-control.js';
 import { REVIEW_POLICY } from '../review/session/review-policy.js';
 import { runSandboxed, sandboxLayout, type RunResult, type SandboxLayout } from './exec-sandbox.js';
 import { sanitizeRepoPath } from '../evidence/evidence.js';
+import type { ExecutionOutcome } from '../evidence/types.js';
 import { BaseTree } from './base-tree.js';
 import { installKey } from './install-inputs.js';
 import {
@@ -41,6 +42,41 @@ export interface CheckInputs {
 	tools: string;
 }
 
+/** The head commit's tracked files, read from git; nothing in the checkout runs. */
+export interface CommitTree {
+	/** Every tracked file's path and size in bytes. */
+	sizes: Map<string, number>;
+	/** A tracked file's content, or null when it cannot be read. */
+	read(path: string): Promise<string | null>;
+}
+
+/** A run of an investigator's command, with what it reached once the review's packages were prepared. */
+export interface SettledRun extends RunResult {
+	outcome?: ExecutionOutcome;
+}
+
+/** An investigator's finished run, handed to the harness to say what it reached. */
+export interface InvestigatorRun {
+	command: string;
+	result: RunResult;
+	owner: string;
+	/** Runs the same command again, the same way. */
+	rerun: () => Promise<RunResult>;
+	signal?: AbortSignal;
+}
+
+/** The `package.json` files worth reading, skipping vendored and build dirs: at most 30, at most four levels deep. */
+export function packageManifests(paths: Iterable<string>): string[] {
+	return [...paths]
+		.filter(
+			(path) =>
+				/(^|\/)package\.json$/.test(path) &&
+				!/(^|\/)(node_modules|vendor|dist|build|fixtures?)\//.test(path) &&
+				path.split('/').length <= 4
+		)
+		.slice(0, 30);
+}
+
 export class ExecWorkspace {
 	readonly layout: SandboxLayout;
 	/** Runs past this moment are cut short; set by the harness. */
@@ -53,6 +89,10 @@ export class ExecWorkspace {
 	private baseTree: BaseTree | null = null;
 	/** Lets go of the shared installs and stores this review holds. */
 	private releaseShared: () => void = () => {};
+	/** Set by the harness once packages are prepared: says what an investigator's run reached. */
+	settleRun: ((run: InvestigatorRun) => Promise<SettledRun>) | null = null;
+	/** What the harness ran in the checkout before the checks; a stored check result is reused only after the same. */
+	preparedWith = '';
 
 	constructor(
 		readonly checkout: string,
@@ -94,7 +134,7 @@ export class ExecWorkspace {
 			scope: this.share.scope,
 			headSha: this.headSha,
 			dependencies,
-			tools: `${process.platform}-${process.arch}\n${versions.output}`
+			tools: `${process.platform}-${process.arch}\n${versions.output}${this.preparedWith && `\n${this.preparedWith}`}`
 		};
 	}
 
@@ -137,7 +177,7 @@ export class ExecWorkspace {
 	async run(command: string, timeoutMs: number, signal?: AbortSignal, owner = ''): Promise<RunResult> {
 		await this.setupDone?.catch(() => undefined);
 
-		return this.exclusive(async () => {
+		const work = async () => {
 			const limit = this.timeout(timeoutMs);
 
 			if (limit <= 0) return notRun('Not run: the review is out of time.', true);
@@ -154,7 +194,18 @@ export class ExecWorkspace {
 				await this.remove([...files.keys()]);
 				await this.restoreTracked();
 			}
-		});
+		};
+
+		return this.exclusive(work, { signal, instead: () => notRun(ABORTED, false) });
+	}
+
+	/** Run an investigator's command the way `run` does; once packages are prepared, the result says what it reached. */
+	async runInvestigation(command: string, timeoutMs: number, signal?: AbortSignal, owner = ''): Promise<SettledRun> {
+		const result = await this.run(command, timeoutMs, signal, owner);
+
+		if (!this.settleRun) return result;
+
+		return this.settleRun({ command, result, owner, rerun: () => this.run(command, timeoutMs, signal, owner), signal });
 	}
 
 	/**
@@ -172,7 +223,7 @@ export class ExecWorkspace {
 	): Promise<RunResult | { unavailable: string }> {
 		await this.setupDone?.catch(() => undefined);
 
-		return this.exclusive(async () => {
+		const work = async () => {
 			if (this.timeout(timeoutMs) <= 0) return { unavailable: 'the review is out of time' };
 
 			const tree = (this.baseTree ??= new BaseTree(this.layout, this.headSha, mergeBaseSha));
@@ -195,7 +246,9 @@ export class ExecWorkspace {
 				await this.remove([...files.keys()], tree.sandbox);
 				await tree.restore().catch(() => undefined);
 			}
-		});
+		};
+
+		return this.exclusive(work, { signal, instead: () => ({ unavailable: ABORTED }) });
 	}
 
 	/**
@@ -223,13 +276,15 @@ export class ExecWorkspace {
 			return { ok: false, error: 'path is tracked in the PR; write a new scratch file instead' };
 		await this.setupDone?.catch(() => undefined);
 
-		const result = await this.exclusive(async () => {
+		const work = async () => {
 			const written = await this.writeNew(clean, content, signal);
 
 			if (written.exitCode === 0) await this.remove([clean]);
 
 			return written;
-		});
+		};
+
+		const result = await this.exclusive(work, { signal, instead: () => notRun(ABORTED, false) });
 
 		if (result.exitCode !== 0) return { ok: false, error: result.output.trim().slice(0, 400) || 'write failed' };
 
@@ -244,16 +299,7 @@ export class ExecWorkspace {
 	/** `package.json` scripts across the repo (skipping vendored dirs), as `dir: name → command` lines. */
 	async scripts(limit = 60): Promise<string[]> {
 		const listed = await this.git(['ls-tree', '-r', '--name-only', this.headSha]);
-
-		const manifests = listed.stdout
-			.split('\n')
-			.filter(
-				(path) =>
-					/(^|\/)package\.json$/.test(path) &&
-					!/(^|\/)(node_modules|vendor|dist|build|fixtures?)\//.test(path) &&
-					path.split('/').length <= 4
-			)
-			.slice(0, 30);
+		const manifests = packageManifests(listed.stdout.split('\n'));
 
 		const lines: string[] = [];
 
@@ -279,6 +325,26 @@ export class ExecWorkspace {
 		}
 
 		return lines;
+	}
+
+	/** The head commit's tracked files and their sizes, with a reader for their content. */
+	async commitTree(): Promise<CommitTree> {
+		const listed = await this.git(['ls-tree', '-r', '-l', '-z', this.headSha]);
+		const sizes = new Map<string, number>();
+
+		for (const entry of listed.stdout.split('\0')) {
+			const match = /^\S+ blob \S+\s+(\d+)\t(.+)$/s.exec(entry);
+
+			if (match) sizes.set(match[2]!, Number(match[1]));
+		}
+
+		const read = async (path: string) => {
+			const shown = await this.git(['show', `${this.headSha}:${path}`]);
+
+			return shown.code === 0 ? shown.stdout : null;
+		};
+
+		return { sizes, read };
 	}
 
 	/** Remove any scratch file a crashed run left behind, restore tracked ones and drop the merge-base copy. Safe to call more than once. */
@@ -343,8 +409,10 @@ export class ExecWorkspace {
 		return Math.max(0, Math.min(requested, this.deadlineAt - reviewNow()));
 	}
 
-	private exclusive<T>(fn: () => Promise<T>): Promise<T> {
-		const next = this.queue.then(fn, fn);
+	/** Runs `fn` after every call queued before it, or `skip.instead` when `skip.signal` aborted while it waited. */
+	private exclusive<T>(fn: () => Promise<T>, skip?: { signal?: AbortSignal; instead: () => T }): Promise<T> {
+		const turn = () => (skip?.signal?.aborted ? Promise.resolve(skip.instead()) : fn());
+		const next = this.queue.then(turn, turn);
 
 		this.queue = next.catch(() => undefined);
 
@@ -373,6 +441,9 @@ export class ExecWorkspace {
 		return { code, stdout };
 	}
 }
+
+/** What a call says when the review aborted while it waited its turn in the queue. */
+const ABORTED = 'Not run: the review was aborted.';
 
 /** A run that never started, shaped like one that did. */
 function notRun(output: string, timedOut: boolean): RunResult {

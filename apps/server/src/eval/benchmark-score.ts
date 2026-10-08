@@ -1,5 +1,6 @@
 import { summarizeLabels, type LabelSummary, type LabeledRun } from './benchmark-labels';
 import { sumLows, type LowTotals } from './benchmark-lows';
+import type { BenchmarkReport, PrResult } from './benchmark-report';
 import { stageTotals, type DefectStage, type StageTotals } from './benchmark-stages';
 
 /** A planted defect, as the dataset's label file describes it. */
@@ -26,6 +27,30 @@ export interface PrScore {
 	duplicates: number[];
 	/** Findings that report no planted defect: false positives, or real issues the generator didn't plant. */
 	unlabeled: number[];
+	/** Defect id → the other findings that report it again; absent from scores older than judge version 2. */
+	repeats?: Record<string, number[]>;
+	/** Defect id → what the judge read in the finding it weighed for it; absent as with `repeats`. */
+	notes?: Record<string, JudgeNote>;
+	/** The human corrections applied over the judge's calls; absent when none applied. */
+	adjudicated?: MatchCorrection[];
+}
+
+/** The finding the judge weighed for one defect, the behavior and cause it read there, and whether both are the defect's. */
+export interface JudgeNote {
+	/** Null when no finding came close. */
+	finding: number | null;
+	behavior: string;
+	cause: string;
+	/** False for a claim the judge weighed and rejected: a nearby finding about another behavior or cause. */
+	reports: boolean;
+}
+
+/** A human's call, from the adjudication file, on whether one finding reports one defect, and why. */
+export interface MatchCorrection {
+	defect: string;
+	finding: number;
+	reports: boolean;
+	reason: string;
 }
 
 /** Defects found over planted, summed across runs. */
@@ -168,3 +193,24 @@ function hiddenTotals(runs: readonly HiddenRun[]): HiddenTotals {
 }
 
 export const recall = (totals: Totals) => (totals.planted ? totals.found / totals.planted : 0);
+
+/** A report's totals over its PRs, under the task set they came from. */
+export function benchmarkSummary(prs: readonly PrResult[], taskSet: string | undefined): BenchmarkReport['summary'] {
+	return {
+		taskSet,
+		...summarize(
+			prs.map((pr) => ({
+				codebase: pr.codebase,
+				defects: pr.defects,
+				scores: pr.runs.flatMap((run) => (run.score ? [run.score] : [])),
+				hiddenRuns: pr.runs.flatMap((run) =>
+					run.score && run.hiddenScore ? [{ shown: run.score, hidden: run.hiddenScore }] : []
+				),
+				stageRuns: pr.runs.flatMap((run) => (run.score && run.stages ? [run.stages] : [])),
+				lowRuns: pr.runs.flatMap((run) => (run.score && run.lows ? [run.lows] : [])),
+				control: pr.control,
+				labeledRuns: pr.runs.flatMap((run) => (run.labeled ? [run.labeled] : []))
+			}))
+		)
+	};
+}

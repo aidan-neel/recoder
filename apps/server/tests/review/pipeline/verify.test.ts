@@ -316,3 +316,34 @@ test('a run that broke before reaching the code settles nothing either way', () 
 	expect(verifierPushBack(verdict('confirmed', 'ev_6'), { runs: 1 }, evidence, 'v')).toContain('before it reached');
 	expect(verifierPushBack(verdict('refuted', 'ev_7'), { runs: 1 }, evidence, 'v', true)).toContain('still compiles');
 });
+
+test('a run recorded as never reaching its assertion proves nothing, even when its output is quoted', () => {
+	const evidence = store();
+	const untransformed = 'ReferenceError: $state is not defined';
+	const reason = 'The counter breaks: `$state is not defined`.';
+
+	evidence.records.set('ev_6', {
+		...run('ev_6', 'bun test src/counter.test.ts', untransformed, 1, 'v'),
+		outcome: 'unsupported-execution'
+	});
+
+	evidence.records.set('ev_7', run('ev_7', 'bun test src/counter.test.ts', untransformed, 1, 'v'));
+
+	evidence.records.set('ev_8', {
+		...run('ev_8', 'bunx vitest run a.test.ts', 'Error: boom', 1, 'v'),
+		outcome: 'setup-failed'
+	});
+
+	const verdict = (kind: 'confirmed' | 'refuted', id: string) => ({ verdict: kind, reason, evidenceIds: [id] });
+
+	expect(settleVerdict(verdict('confirmed', 'ev_6'), evidence, 'v')).toMatchObject({
+		status: 'unverified',
+		outcome: 'inconclusive'
+	});
+
+	expect(settleVerdict(verdict('confirmed', 'ev_8'), evidence, 'v')).toMatchObject({ status: 'unverified' });
+	expect(settleVerdict(verdict('refuted', 'ev_6'), evidence, 'v')).not.toBe('refuted');
+	expect(settleVerdict(verdict('refuted', 'ev_8'), evidence, 'v', true)).not.toBe('refuted');
+	expect(verifierPushBack(verdict('confirmed', 'ev_6'), { runs: 1 }, evidence, 'v')).toContain('before it reached');
+	expect(settleVerdict(verdict('confirmed', 'ev_7'), evidence, 'v')).toMatchObject({ outcome: 'reproduced' });
+});

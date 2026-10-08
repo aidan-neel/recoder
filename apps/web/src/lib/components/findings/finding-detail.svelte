@@ -10,6 +10,7 @@
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import type { FileDiff } from '$lib/diff/diff';
+	import { outsideDiffNote } from '$lib/diff/outside-diff';
 	import { evidenceView } from '$lib/findings/evidence';
 	import { dismissFinding, discussFinding, restoreFinding } from '$lib/findings/finding-actions';
 	import { VERIFY_METHOD_NOTES } from '$lib/findings/finding-labels';
@@ -24,6 +25,7 @@
 	import FindingSeverity from './finding-severity.svelte';
 	import FixButton from './fix-button.svelte';
 	import FixStatus from './fix-status.svelte';
+	import RelatedLocations from './related-locations.svelte';
 	import SuggestedFix from './suggested-fix.svelte';
 	import VerificationBadge from './verification-badge.svelte';
 
@@ -41,10 +43,10 @@
 
 	const fix = $derived(findingsStore.readyFix(active));
 
+	const file = $derived(files.find((item) => item.path === active.file));
+
 	/** The finding's hunk, trimmed to its lines plus three either side. */
 	const focused = $derived.by((): FileDiff | null => {
-		const file = files.find((item) => item.path === active.file);
-
 		if (!file) return null;
 
 		const hunk =
@@ -110,7 +112,10 @@
 		{#if focused}
 			<CodeDiff diff={focused} findings={[active]} cards={false} />
 		{:else}
-			<Typography.Text class="px-5 py-4 text-sm text-fg-muted">The diff for this file isn't loaded yet.</Typography.Text
+			<Typography.Text class="px-5 py-4 text-sm text-fg-muted"
+				>{file
+					? outsideDiffNote(active.startLine, active.endLine)
+					: "The diff for this file isn't loaded yet."}</Typography.Text
 			>
 		{/if}
 	</Card.Root>
@@ -127,6 +132,7 @@
 		</div>
 		<FindingFacets finding={active} class="focus-detail-facets" />
 		<div class="focus-detail-body ai-voice"><ModelMarkdown content={active.body} /></div>
+		<RelatedLocations locations={active.relatedLocations} />
 		{#if active.verification}
 			<p class="verify-note" data-status={active.verification.status}>
 				{#if active.verification.status === 'verified'}<CircleCheck

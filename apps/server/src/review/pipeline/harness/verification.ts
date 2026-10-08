@@ -32,6 +32,8 @@ import { isMutationFinding } from '../verify/runs.js';
 import { publishBudget, publishCandidates, type ReviewRun } from './context.js';
 import { checkPatches } from './patch-check.js';
 import type { HarnessEvents, TaskFn } from './types.js';
+import { candidateRepairOn, repairCandidate } from './repair.js';
+import { diffChanges, type DiffChanges } from './run-outcome.js';
 import { recordBaseline } from './verify-baseline.js';
 import { VerifyQueue } from './verify-queue.js';
 
@@ -54,6 +56,8 @@ interface VerifyContext {
 	/** The review's sandbox, where a run-proved bug is run again on the merge-base tree; null when code cannot run. */
 	workspace: ExecWorkspace | null;
 	mergeBaseSha: string | null;
+	/** What the diff added and removed, which a failed base run is checked against. */
+	changes: () => DiffChanges;
 }
 
 const VERIFIER_EXAMPLE =
@@ -61,8 +65,9 @@ const VERIFIER_EXAMPLE =
 
 /**
  * Opens the review's verifier queue before the reviewers start, so each
- * candidate is verified as soon as its reviewer reports it. Candidates a
- * resumed review hasn't verified join at once.
+ * candidate is verified as soon as its reviewer reports it, or once its one
+ * repair makes a rejected candidate valid. Candidates a resumed review hasn't
+ * verified join at once.
  */
 export function startVerification(run: ReviewRun): void {
 	const ctx: VerifyContext = {
@@ -78,10 +83,12 @@ export function startVerification(run: ReviewRun): void {
 		checkout: run.input.revision?.checkoutPath ?? null,
 		unavailable: run.workspace ? null : run.execReason,
 		workspace: run.workspace,
-		mergeBaseSha: run.input.revision?.mergeBaseSha ?? null
+		mergeBaseSha: run.input.revision?.mergeBaseSha ?? null,
+		changes: () => diffChanges(run.inventory, run.changeModel)
 	};
 
-	const queue = new VerifyQueue(run, (candidate, attempt) => verifyOne(candidate, ctx, attempt));
+	const repair = candidateRepairOn() ? (candidate: CandidateFinding) => repairCandidate(run, candidate) : undefined;
+	const queue = new VerifyQueue(run, (candidate, attempt) => verifyOne(candidate, ctx, attempt), repair);
 
 	run.verifying = queue;
 

@@ -1,7 +1,9 @@
+import type { BriefQuestion, BriefQuestionFollowUp } from '@recoder/shared';
+import type { CandidateFinding } from './consolidate.js';
 import { hunkAt } from './harness/findings.js';
 import type { CodeClaim } from './intent/types.js';
 import type { ReviewInventory } from './inventory.js';
-import type { QuestionAnswer } from './reviewer-questions.js';
+import { questionStatus, unsettledCount } from './question-ledger.js';
 import { clip } from './schemas.js';
 import type { SubagentRequest } from './reviewer.js';
 import type { ReviewUnit, UnitScope } from './units.js';
@@ -13,84 +15,27 @@ export interface UnitRequest {
 	request: SubagentRequest;
 }
 
-/** One lens assignment's note that it could not settle one of the brief's open questions. */
-export interface UnsettledMark {
-	/** The brief's id for the question (`Q3`). */
-	questionId: string;
-	/** The lens assignment that marked it. */
-	unitId: string;
-}
-
-/** One lens assignment's explicit answer to one of the brief's open questions. */
-export interface AnsweredMark {
-	/** The brief's id for the question (`Q3`). */
-	questionId: string;
-	/** The lens assignment that answered it. */
-	unitId: string;
-	/** `confirmed` when the reviewer reported it as a finding, `disproved` when it found the code fine. */
-	outcome: QuestionAnswer['outcome'];
-}
-
 /**
  * The subagent stage as it stands, saved with the checkpoint. `units` is null
- * until the stage is planned, so a resumed review plans it only once.
+ * until the stage is planned, so a resumed review plans it only once. What
+ * reviewers said about the brief's questions is kept with the questions.
  */
 export interface SubagentState {
 	requests: UnitRequest[];
-	/** Brief questions reviewers marked unsettled, in the order they finished. */
-	unsettled: UnsettledMark[];
-	/** Brief questions reviewers answered, in the order they finished. */
-	answered: AnsweredMark[];
 	units: ReviewUnit[] | null;
 	/** Requests past the cap, reported in the summary. */
 	dropped: UnitRequest[];
 }
 
-function emptySubagentState(): SubagentState {
-	return { requests: [], unsettled: [], answered: [], units: null, dropped: [] };
-}
-
-/** A copy of a saved state, with the fields a checkpoint written before they existed lacks left empty. */
+/**
+ * A copy of a saved state, with the fields a checkpoint written before they
+ * existed lacks left empty. The question marks older checkpoints kept here are
+ * dropped: those questions count as unanswered.
+ */
 export function restoreSubagentState(saved: Partial<SubagentState> | undefined): SubagentState {
-	return { ...emptySubagentState(), ...structuredClone(saved ?? {}) };
-}
+	const { requests = [], units = null, dropped = [] } = structuredClone(saved ?? {});
 
-/** The ids of the brief questions a unit was shown. */
-function shownIds(shown: CodeClaim[]): Set<string> {
-	return new Set(shown.map((question) => question.id));
-}
-
-/**
- * Keeps the open questions `unitId` marked unsettled, once each. An id that
- * isn't among the questions its brief showed it is dropped.
- */
-export function recordUnsettled(marks: UnsettledMark[], unitId: string, ids: string[], shown: CodeClaim[]): void {
-	const known = shownIds(shown);
-
-	for (const questionId of ids) {
-		const seen = marks.some((mark) => mark.questionId === questionId && mark.unitId === unitId);
-
-		if (known.has(questionId) && !seen) marks.push({ questionId, unitId });
-	}
-}
-
-/**
- * Keeps the open questions `unitId` answered, once each. An answer for a
- * question its brief didn't show it is dropped.
- */
-export function recordAnswered(
-	marks: AnsweredMark[],
-	unitId: string,
-	answers: QuestionAnswer[],
-	shown: CodeClaim[]
-): void {
-	const known = shownIds(shown);
-
-	for (const { questionId, outcome } of answers) {
-		const seen = marks.some((mark) => mark.questionId === questionId && mark.unitId === unitId);
-
-		if (known.has(questionId) && !seen) marks.push({ questionId, unitId, outcome });
-	}
+	return { requests, units, dropped };
 }
 
 /**
@@ -171,17 +116,22 @@ export function planSubagents(
 /** What the brief and the review so far say about its open questions. */
 export interface BriefPlanInput {
 	questions: CodeClaim[];
-	marks: UnsettledMark[];
-	answers: AnsweredMark[];
+	/** The stored questions, with every answer so far. */
+	records: BriefQuestion[];
+	/** The candidates as they stand, which decide whether a confirmation still holds. */
+	candidates: CandidateFinding[];
 }
+
+/** A follow-up the plan made for an open question: the subagent sent to settle it, or why none was. */
+export type PlannedFollowUp = BriefQuestionFollowUp & { question: CodeClaim };
 
 /** An open question that could get a subagent, with the hunks it would start from. */
 interface PlannedQuestion {
 	question: CodeClaim;
 	scope: UnitScope;
-	/** How many lens assignments marked it unsettled. */
+	/** How many reviewers left it unresolved. */
 	marked: number;
-	/** Whether some lens assignment answered it. */
+	/** Whether some reviewer answered it, though nothing settled it. */
 	answered: boolean;
 }
 
@@ -201,33 +151,52 @@ function questionScope(
 	);
 }
 
-/** Whether a subagent already planned for an explicit request covers the question: same hunks, and the same concern or a citation of it. */
-function coveredByRequest(question: CodeClaim, scope: UnitScope, requested: ReviewUnit[]): boolean {
+/** The subagent already planned for an explicit request that covers the question: same hunks, and the same concern or a citation of it. */
+function coveringRequest(question: CodeClaim, scope: UnitScope, requested: ReviewUnit[]): ReviewUnit | undefined {
 	const cited = new RegExp(`\\b${question.id}\\b`);
 
-	return requested.some(
+	return requested.find(
 		(unit) => overlaps(unit.scope, scope) && (sameConcern(unit.title, question.text) || cited.test(unit.reason))
 	);
 }
 
-/** The questions that can be planned, in the brief's order: not already asked about, and in code the review reads. */
+/**
+ * The open questions that can be planned, in the brief's order, with a
+ * follow-up for those that need no subagent of their own: one an explicit
+ * request already covers, and one in code the review doesn't read. A question
+ * a standing confirmation or a supported disproof settled is left out.
+ */
 function plannableQuestions(
 	brief: BriefPlanInput,
 	requested: ReviewUnit[],
 	units: ReviewUnit[],
 	inventory: ReviewInventory
-): PlannedQuestion[] {
-	return brief.questions.flatMap((question) => {
+): { plannable: PlannedQuestion[]; followUps: PlannedFollowUp[] } {
+	const plannable: PlannedQuestion[] = [];
+	const followUps: PlannedFollowUp[] = [];
+
+	for (const question of brief.questions) {
+		const record = brief.records.find((entry) => entry.id === question.id);
+
+		if (record && questionStatus(record, brief.candidates).result !== 'unresolved') continue;
+
 		const hunkId = hunkAt(inventory, question.file, question.line, 'new');
 		const scope = questionScope(question, hunkId, units, inventory);
+		const covering = scope.length ? coveringRequest(question, scope, requested) : undefined;
 
-		if (!scope.length || coveredByRequest(question, scope, requested)) return [];
+		if (!scope.length) followUps.push({ question, unitId: null, notRun: 'Its file is not among the code reviewed.' });
+		else if (covering) followUps.push({ question, unitId: covering.id });
+		else {
+			plannable.push({
+				question,
+				scope,
+				marked: record ? unsettledCount(record) : 0,
+				answered: Boolean(record?.answers.length)
+			});
+		}
+	}
 
-		const markers = new Set(brief.marks.filter((mark) => mark.questionId === question.id).map((mark) => mark.unitId));
-		const answered = brief.answers.some((answer) => answer.questionId === question.id);
-
-		return [{ question, scope, marked: markers.size, answered }];
-	});
+	return { plannable, followUps };
 }
 
 /** The subagent for one brief question; `why` says why it was picked. */
@@ -240,15 +209,22 @@ function questionUnit({ question, scope }: PlannedQuestion, id: string, why: str
 	};
 }
 
+/** Why an open question no reviewer left unresolved gets a subagent. */
+function quietReason(entry: PlannedQuestion): string {
+	return entry.answered ? 'no reviewer settled it with evidence' : 'no reviewer reported on it';
+}
+
 /**
  * Picks subagents for the brief's open questions, without a model, to fill
  * the `room` the explicit requests left under the cap. First the questions
- * reviewers marked unsettled, the most marked first and ties in question
- * order; then the unaddressed ones: no reviewer marked it unsettled and none
- * answered it. A question some reviewer answered and none marked unsettled is
- * settled and gets no subagent; where findings sit decides nothing. A question
- * an earlier request already covers is left out, and one question gets at most
- * one subagent. Ids continue after the `requested` subagents.
+ * reviewers left unresolved, the most marked first and ties in question
+ * order; then the other open ones: unanswered, answered only by reviewers it
+ * was outside the scope of, or reopened when the finding that confirmed it
+ * fell. A settled question gets no subagent; where findings sit decides
+ * nothing. A question an earlier request already covers is left out, and one
+ * question gets at most one subagent. Ids continue after the `requested`
+ * subagents. Every open question gets a follow-up: its subagent, or why none
+ * could be planned.
  */
 export function planBriefSubagents(
 	brief: BriefPlanInput,
@@ -256,25 +232,29 @@ export function planBriefSubagents(
 	units: ReviewUnit[],
 	inventory: ReviewInventory,
 	room: number
-): { unsettled: ReviewUnit[]; unaddressed: ReviewUnit[] } {
-	if (room <= 0) return { unsettled: [], unaddressed: [] };
-
-	const plannable = plannableQuestions(brief, requested, units, inventory);
+): { unsettled: ReviewUnit[]; unaddressed: ReviewUnit[]; followUps: PlannedFollowUp[] } {
+	const { plannable, followUps } = plannableQuestions(brief, requested, units, inventory);
 	const marked = plannable.filter((entry) => entry.marked > 0).sort((a, b) => b.marked - a.marked);
-
-	const quiet = plannable.filter((entry) => !entry.marked && !entry.answered);
-
+	const quiet = plannable.filter((entry) => !entry.marked);
+	const free = Math.max(0, room);
 	const nextId = (index: number) => `subagent-${requested.length + index + 1}`;
 
-	const unsettled = marked
-		.slice(0, room)
-		.map((entry, index) =>
-			questionUnit(entry, nextId(index), `marked unsettled by ${entry.marked} reviewer${entry.marked === 1 ? '' : 's'}`)
-		);
+	const picked = [
+		...marked
+			.slice(0, free)
+			.map((entry) => ({ entry, why: `marked unsettled by ${entry.marked} reviewer${entry.marked === 1 ? '' : 's'}` })),
+		...quiet.slice(0, Math.max(0, free - marked.length)).map((entry) => ({ entry, why: quietReason(entry) }))
+	].map(({ entry, why }, index) => ({ entry, unit: questionUnit(entry, nextId(index), why) }));
 
-	const unaddressed = quiet
-		.slice(0, room - unsettled.length)
-		.map((entry, index) => questionUnit(entry, nextId(unsettled.length + index), 'no reviewer reported on it'));
+	const cut = plannable.filter((entry) => !picked.some((pick) => pick.entry === entry));
 
-	return { unsettled, unaddressed };
+	return {
+		unsettled: picked.filter(({ entry }) => entry.marked > 0).map(({ unit }) => unit),
+		unaddressed: picked.filter(({ entry }) => !entry.marked).map(({ unit }) => unit),
+		followUps: [
+			...followUps,
+			...picked.map(({ entry, unit }) => ({ question: entry.question, unitId: unit.id })),
+			...cut.map(({ question }) => ({ question, unitId: null, notRun: 'No subagent was left under the cap for it.' }))
+		]
+	};
 }

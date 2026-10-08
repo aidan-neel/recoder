@@ -1,7 +1,9 @@
 import {
 	findingKind,
+	splitCategoryTag,
 	type Finding as BackendFinding,
 	type FindingKind,
+	type FindingLocation,
 	type FindingPatch,
 	type FindingSeverity as BackendSeverity,
 	type FindingVerification,
@@ -42,6 +44,8 @@ export interface Finding {
 	/** Tool results the reviewer cited (`ev_…`), matched against the review's tool calls. */
 	evidenceIds?: string[];
 	assignmentId?: string;
+	/** Other places the finding involves, such as the changed line that causes it. */
+	relatedLocations?: FindingLocation[];
 	/** Whether a run in the review sandbox proved it. Older reviews omit it. */
 	verification?: FindingVerification;
 	status: 'open' | 'dismissed';
@@ -58,9 +62,8 @@ const SEVERITY_MAP: Record<BackendSeverity, FindingSeverity> = {
  * category as a `[category]` prefix on the message and no kind, so both fall back from there.
  */
 export function mapBackendFinding(f: BackendFinding, index: number): Finding {
-	const match = /^\[([^\]]+)\]\s*/.exec(f.message);
-	const category = f.category ?? match?.[1] ?? 'review';
-	const body = match ? f.message.slice(match[0].length) : f.message;
+	const { tag, body } = splitCategoryTag(f.message);
+	const category = f.category ?? tag ?? 'review';
 	const line = f.line ?? 1;
 
 	return {
@@ -82,6 +85,7 @@ export function mapBackendFinding(f: BackendFinding, index: number): Finding {
 		endLine: f.endLine && f.endLine >= line ? f.endLine : line,
 		evidenceIds: f.evidenceIds ?? [],
 		assignmentId: f.assignmentId,
+		relatedLocations: f.relatedLocations,
 		verification: f.verification,
 		status: 'open'
 	};

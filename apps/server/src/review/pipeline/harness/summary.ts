@@ -1,19 +1,24 @@
 import {
 	REVIEW_CANCELLED,
 	settleAssignments,
+	type BriefQuestionReport,
 	type CoverageSummary,
 	type Finding,
 	type FindingVerification,
+	type ObligationReport,
 	type ReviewAssignment,
+	type ReviewContext,
 	type ReviewFunnel
 } from '@recoder/shared';
 import { reviewNow } from '../../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError } from '../agent-loop.js';
 import { isHeldBack, toFinding, type CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
+import { obligationReport, obligationSentence } from '../obligations/report.js';
+import { briefQuestionReport, questionSentence } from '../question-report.js';
 import { unfinishedAssignments } from './assignments.js';
 import { confirmedFindings, type Consolidated } from './consolidation.js';
-import type { ReviewRun } from './context.js';
+import { receivedContext, type ReviewRun } from './context.js';
 import { droppedSentence } from './subagent-stage.js';
 import type { AdaptiveReviewResult } from './types.js';
 import { hideUnproven } from './verification.js';
@@ -41,7 +46,10 @@ function refutedCandidates(run: ReviewRun): CandidateFinding[] {
  * so raised = dropped + unproven + verified. A candidate from a checkpoint
  * older than drop stages counts only as raised.
  */
-export function reviewFunnel(run: Pick<ReviewRun, 'candidates' | 'hidden'>, shown: number): ReviewFunnel {
+export function reviewFunnel(
+	run: Pick<ReviewRun, 'candidates' | 'hidden'> & Partial<Pick<ReviewRun, 'intent'>>,
+	shown: number
+): ReviewFunnel {
 	const dropped: ReviewFunnel['dropped'] = {
 		location: 0,
 		evidence: 0,
@@ -64,8 +72,53 @@ export function reviewFunnel(run: Pick<ReviewRun, 'candidates' | 'hidden'>, show
 		verified: run.candidates.filter(
 			(candidate) => candidate.valid && !isHeldBack(candidate) && candidate.verification?.status === 'verified'
 		).length,
-		shown
+		shown,
+		...briefRecord(run.intent)
 	};
+}
+
+/** Which changed units the brief read, for the eval report; nothing when the review had no brief. */
+function briefRecord(intent: ReviewRun['intent'] | undefined): Pick<ReviewFunnel, 'brief'> {
+	if (!intent?.units) return {};
+
+	const units = intent.units.map(({ id, status, reason }) => ({ id, status, ...(reason && { reason }) }));
+
+	return { brief: { complete: intent.complete ?? true, units } };
+}
+
+/** Says when the brief the reviewers worked from left part of the change unread or clipped. */
+function briefSentence(intent: ReviewRun['intent']): string {
+	const units = intent?.units ?? [];
+	const full = units.filter((unit) => unit.status === 'included').length;
+
+	return full < units.length ? `The review brief read ${full} of ${units.length} changed units in full.` : '';
+}
+
+/**
+ * What reviewers received, or no record when measuring it throws: the record
+ * is for evaluation, so a bug in it never fails a review that finished.
+ */
+function measuredContext(run: ReviewRun, findings: Finding[]): { context?: ReviewContext } {
+	try {
+		return { context: receivedContext(run, findings) };
+	} catch (err) {
+		console.warn(`[review] context record skipped: ${err instanceof Error ? err.message : String(err)}`);
+
+		return {};
+	}
+}
+
+/** The brief's questions as `assignments` left them; null when the brief had none. */
+function questionReport(run: ReviewRun, assignments: ReviewAssignment[]): BriefQuestionReport | null {
+	const { candidates, hidden } = run;
+
+	return briefQuestionReport({
+		claims: run.intent?.openQuestions ?? [],
+		records: run.questions,
+		candidates,
+		hidden,
+		assignments
+	});
 }
 
 /**
@@ -77,19 +130,24 @@ export function reviewFunnel(run: Pick<ReviewRun, 'candidates' | 'hidden'>, show
 export function completeReview(run: ReviewRun, consolidated: Consolidated): AdaptiveReviewResult {
 	const { confirmed, checks } = consolidated;
 	const coverage = run.coverage.summary();
+	const obligations = run.obligations && obligationReport(run.obligations, run.candidates);
+	const questions = questionReport(run, run.assignments);
 
-	const summary = buildSummary(run, run.assignments, confirmed, coverage);
+	const summary = buildSummary(run, run.assignments, confirmed, coverage, obligations, questions);
 
 	return {
 		findings: confirmed,
 		unconfirmed: [...run.hidden, ...refutedCandidates(run)].map(toFinding),
 		funnel: reviewFunnel(run, confirmed.length),
+		...measuredContext(run, confirmed),
 		summary,
 		outcome: 'complete',
 		recommendedChecks: [...new Set(checks)],
 		coverage,
 		coverageGaps: run.coverage.gaps(),
-		assignments: run.assignments
+		assignments: run.assignments,
+		...(obligations ? { obligations } : {}),
+		...(questions ? { questions } : {})
 	};
 }
 
@@ -128,19 +186,24 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 	hideUnproven(run);
 
 	const confirmed = confirmedFindings(run);
-	const summary = buildSummary(run, settled, confirmed, run.coverage.summary());
+	const obligations = run.obligations && obligationReport(run.obligations, run.candidates);
+	const questions = questionReport(run, settled);
+	const summary = buildSummary(run, settled, confirmed, run.coverage.summary(), obligations, questions);
 
 	return {
 		findings: confirmed,
 		unconfirmed: run.hidden.map(toFinding),
 		funnel: reviewFunnel(run, confirmed.length),
+		...measuredContext(run, confirmed),
 		summary: `${summary} The review ran out of time after ${minutes} minutes; only findings verified by then are shown.`,
 		outcome: 'complete',
 		recommendedChecks: [...run.recommended],
 		coverage: run.coverage.summary(),
 		coverageGaps: run.coverage.gaps(),
 		assignments: settled,
-		error: `Ran out of time after ${minutes} minutes`
+		error: `Ran out of time after ${minutes} minutes`,
+		...(obligations ? { obligations } : {}),
+		...(questions ? { questions } : {})
 	};
 }
 
@@ -188,25 +251,31 @@ function hiddenSentence(hidden: number): string {
 
 /**
  * The review's one-paragraph summary: unfinished units and subagents, subagent
- * requests past the limit, and partial coverage last.
+ * requests past the limit, obligation counts when obligations ran, how the brief's
+ * questions were settled, and partial coverage of the code last.
  */
 function buildSummary(
 	run: ReviewRun,
 	assignments: ReviewAssignment[],
 	confirmed: Finding[],
-	coverage: CoverageSummary
+	coverage: CoverageSummary,
+	obligations: ObligationReport | null,
+	questions: BriefQuestionReport | null
 ): string {
 	const incomplete = unfinishedAssignments(assignments);
-	const units = incomplete.filter((record) => record.role !== 'subagent').length;
-	const subagents = incomplete.length - units;
+	const units = incomplete.filter((record) => record.role !== 'subagent' && record.role !== 'obligation').length;
+	const subagents = incomplete.filter((record) => record.role === 'subagent').length;
 
 	const bits = [
 		`Review complete. ${confirmed.length} confirmed finding${confirmed.length === 1 ? '' : 's'}.`,
 		verifiedSummary(confirmed),
 		hiddenSentence(run.hidden.length),
+		briefSentence(run.intent),
 		units ? `${units} review unit${units === 1 ? '' : 's'} did not finish.` : '',
 		subagents ? `${subagents} subagent${subagents === 1 ? '' : 's'} did not finish.` : '',
 		droppedSentence(run.subagents.dropped),
+		obligations ? obligationSentence(obligations) : '',
+		questions ? questionSentence(questions) : '',
 		coverage.partial + coverage.pending > 0 ? 'Some changes still need review.' : ''
 	];
 

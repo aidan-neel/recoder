@@ -10,6 +10,7 @@ import {
 	type ReviewToolCall
 } from '@recoder/shared';
 import { reviewProgress } from '../../store';
+import { settleTasks } from './task-state';
 
 type ReviewEventType =
 	| 'step'
@@ -240,6 +241,17 @@ export function clearReviewEvents(reviewId: string): void {
 
 export function reportReviewTask(reviewId: string, task: Omit<ReviewTask, 'updatedAt'>): void {
 	emitReviewEvent(reviewId, { type: 'task', message: task.message, data: { task } });
+}
+
+/**
+ * Closes every task the review left active as its run ends (see
+ * `settleTasks`): `failure` for a failed or cancelled run, null for a
+ * complete one. Each goes out as a task event, so open pages see it too.
+ */
+export function settleReviewTasks(reviewId: string, failure: string | null): void {
+	const snapshot = reviewProgress.get(reviewId);
+
+	for (const task of settleTasks(Object.values(snapshot?.tasks ?? {}), failure)) reportReviewTask(reviewId, task);
 }
 
 export function reportReviewPlan(

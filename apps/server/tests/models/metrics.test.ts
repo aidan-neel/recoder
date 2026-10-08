@@ -9,6 +9,7 @@ import { chatCompletion, resetLlmLimiter, streamChatCompletion } from '../../src
 import { getReviewMetrics, normalizeTokenUsage, trackTokenCall, withReviewMetrics } from '../../src/models/metrics';
 import { getStoredSettings, setReviewOverrides } from '../../src/review/session/review-settings';
 import { runReviewPipeline } from '../../src/commands/pipeline';
+import { claudeCode } from '../../src/agents/claude-code/claude-code';
 import { codex } from '../../src/agents/codex/codex';
 import { ModelBudget, runJsonAgent } from '../../src/review/pipeline/agent-loop';
 import { EvidenceStore } from '../../src/evidence/evidence';
@@ -18,6 +19,7 @@ import { testReview } from '../helpers/review';
 const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();
 const originalComplete = codex.complete;
+const originalClaudeCode = claudeCode.complete;
 const ids: string[] = [];
 
 const opts = {
@@ -65,6 +67,7 @@ beforeEach(() => {
 afterEach(() => {
 	globalThis.fetch = originalFetch;
 	codex.complete = originalComplete;
+	claudeCode.complete = originalClaudeCode;
 	setReviewOverrides(originalSettings);
 	resetLlmLimiter();
 
@@ -270,6 +273,24 @@ test('Codex chat and streaming followups each count once and separate the same m
 			['openai-compatible', 1, 130]
 		]
 	);
+});
+
+test('a Claude Code call records what paid for it on its call record', async () => {
+	const a = review();
+
+	claudeCode.complete = async (options) => {
+		options.onApiKeySource?.('none');
+
+		return 'ok';
+	};
+
+	await withReviewMetrics(a.id, 'pipeline', () =>
+		chatCompletion({ ...opts, provider: 'claude-code', baseUrl: '', apiKey: '' })
+	);
+
+	expect(reviewMetrics.get(a.id)?.calls).toEqual([
+		expect.objectContaining({ provider: 'claude-code', status: 'completed', apiKeySource: 'none' })
+	]);
 });
 
 test('nested agent retries count all provider calls, not just the accepted JSON result', async () => {

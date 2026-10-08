@@ -1,4 +1,11 @@
-import type { ModelEntry, Provider, ModelSettings, ModelSettingsPatch, ReasoningEffort } from '@recoder/shared';
+import type {
+	ModelEntry,
+	ModelProvider,
+	Provider,
+	ModelSettings,
+	ModelSettingsPatch,
+	ReasoningEffort
+} from '@recoder/shared';
 import { errorToast } from '../shell/notify';
 import { readCache, writeCache } from '../shell/persisted-cache';
 import { cacheableModelSettings } from './model-cache';
@@ -67,8 +74,18 @@ const HOSTED_NAMES: Record<string, string> = {
 	openrouter: 'OpenRouter'
 };
 
+/** Providers that are an app or CLI rather than an endpoint, by the name people know them by. */
+const APP_NAMES: Partial<Record<ModelProvider, string>> = { codex: 'ChatGPT', 'claude-code': 'Claude Code' };
+
+/** ChatGPT or Claude Code for those providers; null for an endpoint or an OpenCode provider. */
+export function appName(provider: ModelProvider | undefined): string | null {
+	return (provider && APP_NAMES[provider]) || null;
+}
+
 export function providerName(entry: ModelEntry): string {
-	if (entry.provider === 'codex') return 'ChatGPT';
+	const app = appName(entry.provider);
+
+	if (app) return app;
 	if (entry.source) return HOSTED_NAMES[entry.source] ?? entry.source;
 
 	const url = entry.baseUrl ?? '';

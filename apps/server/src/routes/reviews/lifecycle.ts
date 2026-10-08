@@ -2,11 +2,12 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { createReviewSession, queueReview, startReviewSession } from '../../commands/pipeline';
 import { continueReviewSession, replayReviewSession } from '../../commands/rerun';
-import { getReviewMetrics } from '../../models/metrics';
+import { getReviewMetrics, type StoredMetrics } from '../../models/metrics';
 import { isReviewConfigured } from '../../models/models';
 import { cancelReviewChats, prepareDraftSession } from '../../review/chat/review-chat';
 import { clearReviewEvents, emitReviewEvent } from '../../review/session/events';
 import { getReviewControl, type ReviewControl } from '../../review/session/review-control';
+import { isTerminalTask } from '../../review/session/task-state';
 import {
 	db,
 	reviewCheckpoints,
@@ -60,7 +61,8 @@ function sessionAction(c: Context, start: (id: string) => unknown, fallback: str
 	}
 }
 
-app.get('/', (c) => c.json(db.reviews.list()));
+/** Every review without its context record, which only the single-review route serves: the list is polled and the record is large. */
+app.get('/', (c) => c.json(db.reviews.list().map(({ context: _context, ...review }) => review)));
 
 /** Compact live progress per review, for the home dashboard's recent-session list. */
 app.get('/progress-summaries', (c) => {
@@ -71,8 +73,7 @@ app.get('/progress-summaries', (c) => {
 
 		summaries[progress.id] = {
 			tasksTotal: tasks.length,
-			tasksDone: tasks.filter((task) => task.status === 'done' || task.status === 'skipped' || task.status === 'error')
-				.length,
+			tasksDone: tasks.filter(isTerminalTask).length,
 			agents: (progress.assignments ?? []).filter((assignment) => assignment.status === 'running').length
 		};
 	}
@@ -88,6 +89,20 @@ app.get('/:id/metrics', (c) => {
 	if (review instanceof Response) return review;
 
 	return c.json(getReviewMetrics(review.id));
+});
+
+/**
+ * The review's metrics row as stored, null when it has none: every call with the pipeline run that made it, and
+ * each run's locked models, so a benchmark can record which models its review ran on.
+ */
+app.get('/:id/metrics/stored', (c) => {
+	c.header('Cache-Control', 'no-store');
+
+	const review = requireReview(c);
+
+	if (review instanceof Response) return review;
+
+	return c.json((reviewMetrics.get(review.id) as StoredMetrics | undefined) ?? null);
 });
 
 app.get('/:id', (c) => {

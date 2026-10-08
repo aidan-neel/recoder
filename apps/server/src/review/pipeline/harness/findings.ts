@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { findingKind, type DiffLine, type Finding } from '@recoder/shared';
+import { findingKind, splitCategoryTag, type DiffLine, type Finding } from '@recoder/shared';
 import type { ReviewInventory } from '../inventory.js';
 
 /** What a finding's identity is made of: never its wording or exact line, so a re-run finds the same id. */
@@ -53,12 +53,11 @@ export function fingerprintFinding(parts: FingerprintParts): string {
 }
 
 /**
- * What a person's dismissal is remembered by: the fingerprint's file, class,
- * rule or smell, symbol and line text, but never the hunk, whose id holds line
- * positions and so changes whenever code above it moves. Review and dismissal
- * both compute it from the finding as stored.
+ * Where a dismissed finding sat: the fingerprint's file, class, rule or smell,
+ * symbol and line text, but never the hunk, whose id holds line positions and
+ * so changes whenever code above it moves.
  */
-export function dismissalFingerprint(parts: Omit<FingerprintParts, 'hunkId'> & { anchor: string }): string {
+function dismissalPlace(parts: Omit<FingerprintParts, 'hunkId'> & { anchor: string }): string {
 	return hash(
 		[
 			parts.file,
@@ -70,9 +69,180 @@ export function dismissalFingerprint(parts: Omit<FingerprintParts, 'hunkId'> & {
 	);
 }
 
-/** Splits a fingerprint shared by two separate places, using what tells them apart. */
-export function refineFingerprint(fingerprint: string, place: string): string {
-	return hash(`${fingerprint}\n${place}`);
+/** Words that say nothing about which defect a claim describes. */
+const FILLER = new Set(
+	'a an and any are as at be been but by can could did do does each for from had has have how if in into is it its may might must no nor not of on or should so such than that the their then there these this those to too was were what when where which while who why will with would'.split(
+		' '
+	)
+);
+
+/**
+ * Plural and tense endings, longest first, each with the shortest stem it may
+ * leave, taken off a claim word so `rejects`, `rejected` and `rejecting` meet.
+ * `ed` and `es` may leave two letters, so `used` and `uses` meet `use`.
+ */
+const ENDINGS: [suffix: string, shortest: number][] = [
+	['ing', 3],
+	['ed', 2],
+	['es', 2],
+	['s', 3]
+];
+
+/**
+ * The least share of terms two claims must hold in common (their Dice
+ * coefficient) to be one defect. Reports of one defect in other words still
+ * share its specifics; different defects on one line share mostly the words
+ * of the place. Below it they stay apart, since a duplicate costs less than a
+ * lost bug.
+ */
+const SAME_CLAIM = 0.4;
+
+/**
+ * A word without its plural or tense ending and without a final `e`, so
+ * `cache`, `caches` and `cached` all give `cach`. A word ending in `eed`
+ * (`need`, `speed`) keeps its `ed`, which is no ending there.
+ */
+function stem(word: string): string {
+	if (word.endsWith('ss')) return word;
+
+	const ending = ENDINGS.find(
+		([suffix, shortest]) =>
+			word.length - suffix.length >= shortest && word.endsWith(suffix) && !(suffix === 'ed' && word.endsWith('eed'))
+	);
+
+	const base = ending ? word.slice(0, -ending[0].length) : word;
+
+	return base.length > 2 && base.endsWith('e') ? base.slice(0, -1) : base;
+}
+
+/** The stemmed terms of `text`, split at case changes and punctuation, lowercased and without filler. */
+function termsOf(text: string): string[] {
+	const words = text
+		.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+		.toLowerCase()
+		.split(/[^a-z0-9]+/);
+
+	return words.filter((word) => (word.length > 1 || /\d/.test(word)) && !FILLER.has(word)).map(stem);
+}
+
+/** The parts of a finding its claim is read from; a stored finding and a fresh candidate both have them. */
+interface ClaimSource {
+	title?: string;
+	message: string;
+	claim?: { trigger: string; consequence: string; violatedContract: string };
+	ruleId?: string;
+	smell?: string;
+	file: string;
+	symbol?: string;
+}
+
+/** What two findings at one place are compared by. */
+export interface ClaimTerms {
+	terms: ReadonlySet<string>;
+	/** A reviewer stated the claim; a detector result has none, so its title, body and rule stand for one. */
+	stated: boolean;
+}
+
+/**
+ * The terms of what a finding claims, the record two reports of one place
+ * are compared by: its title, trigger, consequence and violated contract, its
+ * body without the category tag, and the rule or smell it names. Wording
+ * fades and the specifics of the defect remain. The category, line and
+ * evidence ids are left out: different defects in one place share them. So
+ * are the body's words that only restate `anchor`, the line the finding sits
+ * on, since two defects whose bodies quote the same code would otherwise
+ * merge on the quote. The claim fields keep every word: a term the reviewer
+ * put in a title or consequence is part of the claim even when the line holds
+ * it. Discounting the symbol and file path as well, or the anchor's terms in
+ * the claim fields, split reports of one defect in the measured baseline.
+ */
+export function claimTerms(finding: ClaimSource, anchor: string): ClaimTerms {
+	const { claim } = finding;
+	const restated = new Set(termsOf(anchor));
+
+	const stated = termsOf(
+		[finding.title, claim?.trigger, claim?.consequence, claim?.violatedContract, finding.ruleId, finding.smell].join(
+			' '
+		)
+	);
+
+	const body = termsOf(splitCategoryTag(finding.message).body).filter((term) => !restated.has(term));
+
+	return { terms: new Set([...stated, ...body]), stated: claim !== undefined };
+}
+
+/**
+ * Whether two claims, as `claimTerms` gives them, describe one defect: their
+ * Dice coefficient reaches `SAME_CLAIM`. A detector's result against a
+ * reviewer's claim is measured instead by the share of the result's terms the
+ * claim also holds. A reviewer's report carries a trigger, a contract and a
+ * body the detector's short template never has, so their Dice coefficient
+ * stays under the bar even when both describe one defect, while a different
+ * defect on the line shares few of the result's terms either way.
+ */
+export function sameClaim(a: ClaimTerms, b: ClaimTerms): boolean {
+	const shared = [...a.terms].filter((term) => b.terms.has(term)).length;
+
+	if (a.stated !== b.stated) {
+		const result = a.stated ? b : a;
+
+		return result.terms.size > 0 && shared / result.terms.size >= SAME_CLAIM;
+	}
+
+	return a.terms.size + b.terms.size > 0 && (2 * shared) / (a.terms.size + b.terms.size) >= SAME_CLAIM;
+}
+
+/**
+ * What a person's dismissal is remembered by: `place:kind:terms`, the
+ * dismissed finding's place (`dismissalPlace`), whether a reviewer stated its
+ * claim or a detector raised it, and its claim terms. The claim is part of the
+ * key because consolidation splits one line into one finding per claim, and
+ * dismissing or restoring one of them must leave the others alone. Review and
+ * dismissal both compute it from the finding as stored.
+ *
+ * Migration: a key written before the claim was part of it is the place
+ * alone. It is still read (`matchesDismissal`) and matches every claim at its
+ * place, as it always did. New dismissals are written in the new form, and
+ * restoring a finding removes every key, of either form, that matches it.
+ */
+export function dismissalFingerprint(finding: ClaimSource & { category: string }, anchor: string): string {
+	const claim = claimTerms(finding, anchor);
+
+	return [
+		dismissalPlace({ ...finding, anchor }),
+		claim.stated ? 'claim' : 'result',
+		[...claim.terms].sort().join(' ')
+	].join(':');
+}
+
+/** A key's claim, as `dismissalFingerprint` wrote it. */
+function readClaim(kind: string, terms: string): ClaimTerms {
+	return { stated: kind === 'claim', terms: new Set(terms ? terms.split(' ') : []) };
+}
+
+/**
+ * Whether a held dismissal key drops the finding whose key is `key`: the same
+ * place, and a claim `sameClaim` takes for the same defect, so a report that
+ * re-words a dismissed finding is still dropped. A key in the old place-only
+ * form matches every claim at its place.
+ */
+export function matchesDismissal(held: string, key: string): boolean {
+	const [heldPlace, heldKind, heldTerms = ''] = held.split(':');
+	const [place, kind, terms = ''] = key.split(':');
+
+	if (heldPlace !== place) return false;
+	if (heldKind === undefined || kind === undefined) return true;
+
+	return sameClaim(readClaim(heldKind, heldTerms), readClaim(kind, terms));
+}
+
+/**
+ * The fingerprint the `count`th finding to share one gets, counted from the
+ * one holding the earliest raised report. Only the count tells them apart,
+ * never their line, which a fingerprint was made to ignore.
+ */
+export function refineFingerprint(fingerprint: string, count: number): string {
+	return hash(`${fingerprint}\n${count}`);
 }
 
 /** The id of the inventory hunk that holds `line` on `side` of `file`. */

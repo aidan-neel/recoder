@@ -29,8 +29,8 @@ test('a dismissal is still there when the store is read again, and restoring it 
 	expect(listDismissals('repo-1').map((held) => [held.fingerprint, held.reason])).toEqual([['aaaa', 'intended']]);
 	expect(listDismissals('repo-2')).toEqual([]);
 
-	expect(removeDismissal('repo-1', 'aaaa')).toBe(true);
-	expect(removeDismissal('repo-1', 'aaaa')).toBe(false);
+	expect(removeDismissal('repo-1', (held) => held === 'aaaa')).toBe(true);
+	expect(removeDismissal('repo-1', (held) => held === 'aaaa')).toBe(false);
 	expect(listDismissals('repo-1')).toEqual([]);
 });
 

@@ -1,3 +1,5 @@
+import { testStrengthOn } from '../test-strength.js';
+
 /** An `expect` chain, an AVA `t.*` call or a Node `assert` call; `family` says which. */
 export interface Assertion {
 	family: 'expect' | 'ava' | 'assert';
@@ -197,12 +199,38 @@ function expectChain(mask: string, text: string, close: number) {
 	}
 }
 
-const ASSERTION_CALL =
-	'(?<![\\w.$])(?:expect|(t)\\.(is|not|deepEqual|notDeepEqual|true|false|assert|truthy|falsy|throws|throwsAsync|notThrows|notThrowsAsync|regex|notRegex|like)|(assert)(?:\\.(\\w+))?)\\s*\\(';
+const AVA_METHODS = [
+	'is',
+	'not',
+	'deepEqual',
+	'notDeepEqual',
+	'true',
+	'false',
+	'truthy',
+	'falsy',
+	'throws',
+	'throwsAsync',
+	'notThrows',
+	'notThrowsAsync',
+	'regex',
+	'notRegex',
+	'like'
+];
+
+/**
+ * Matches the start of an assertion call. AVA's `t.assert` is read only when
+ * the test-strength work is on, so the default review counts the assertions it
+ * always has. Built per call because the flag is read from the environment.
+ */
+function assertionCall(): RegExp {
+	const methods = testStrengthOn() ? [...AVA_METHODS, 'assert'] : AVA_METHODS;
+
+	return new RegExp(`(?<![\\w.$])(?:expect|(t)\\.(${methods.join('|')})|(assert)(?:\\.(\\w+))?)\\s*\\(`, 'g');
+}
 
 /** Every assertion that starts inside `[from, to)`; an assertion nested in another one's arguments belongs to it. */
 function assertionsIn(text: string, mask: string, from: number, to: number, lineOf: (at: number) => number) {
-	const pattern = new RegExp(ASSERTION_CALL, 'g');
+	const pattern = assertionCall();
 	const found: Assertion[] = [];
 
 	pattern.lastIndex = from;

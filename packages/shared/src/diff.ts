@@ -240,7 +240,8 @@ export function expandFileDiff(file: FileDiff, newText: string): FileDiff {
 /**
  * Trim a (possibly full-file) diff back to its changes: changed lines, and
  * lines in `keep` (new-side numbers, e.g. findings), with `context` unchanged
- * lines around each. Gaps between the groups become separate hunks.
+ * lines around each. Gaps between the groups, and gaps the diff already had,
+ * become separate hunks.
  */
 export function collapseFileDiff(file: FileDiff, keep: Iterable<number> = [], context = 3): FileDiff {
 	const lines = file.hunks.flatMap((hunk) => hunk.lines);
@@ -278,8 +279,11 @@ export function collapseFileDiff(file: FileDiff, keep: Iterable<number> = [], co
 	};
 
 	lines.forEach((line, i) => {
+		const jumps =
+			(line.oldNo !== null && line.oldNo > lastOld + 1) || (line.newNo !== null && line.newNo > lastNew + 1);
+
+		if (!visible[i] || jumps) flush();
 		if (visible[i]) group.push(line);
-		else flush();
 		if (line.oldNo !== null) lastOld = line.oldNo;
 		if (line.newNo !== null) lastNew = line.newNo;
 	});

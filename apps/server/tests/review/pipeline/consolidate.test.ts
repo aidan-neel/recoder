@@ -32,8 +32,10 @@ const DIFF = `diff --git a/a.ts b/a.ts
 +z
 `;
 
+const INVENTORY = buildInventory(DIFF);
+
 function context(): CandidateContext {
-	const inventory = buildInventory(DIFF);
+	const inventory = INVENTORY;
 
 	return {
 		inventory,
@@ -93,6 +95,31 @@ test('validateCandidate drops paths outside the change and invented new-side lin
 	expect(candidate({ line: 99 }).dropReason).toBe('new-side line is not associated with this change');
 });
 
+test('a repair link lets an unchanged line of a modified file pass, never a line outside an added file', () => {
+	const added = `diff --git a/new.ts b/new.ts
+new file mode 100644
+--- /dev/null
++++ b/new.ts
+@@ -0,0 +1,3 @@
++one
++two
++three
+`;
+
+	const inventory = buildInventory(DIFF + added);
+	const ctx = { ...context(), inventory, evidence: new EvidenceStore(null, inventory, 1000) };
+	const meta = { candidateId: 'c1', assignmentId: 'unit-1/correctness', role: 'reviewer', model: 'm', lens: null };
+
+	expect(inventory.files.find((file) => file.path === 'new.ts')?.status).toBe('added');
+	expect(validateCandidate(raw({ line: 30 }), meta, ctx, { file: 'a.ts', line: 2 })).toMatchObject({ valid: true });
+
+	expect(validateCandidate(raw({ file: 'new.ts', line: 400 }), meta, ctx, { file: 'new.ts', line: 2 })).toMatchObject({
+		valid: false,
+		dropStage: 'location',
+		dropReason: 'new-side line is not associated with this change'
+	});
+});
+
 test('each dropped candidate names the stage that dropped it', () => {
 	expect(candidate().dropStage).toBeUndefined();
 	expect(candidate({ file: 'missing.ts' }).dropStage).toBe('location');
@@ -117,7 +144,7 @@ test('a low-severity finding that fails validation is dropped at that stage, not
 test('a verified candidate below the bar is not published', () => {
 	const held = verified(candidate({ severity: 'low' }));
 
-	expect(consolidateFindings([held])).toEqual([]);
+	expect(consolidateFindings([held], INVENTORY)).toEqual([]);
 	expect(toFinding(held)).not.toHaveProperty('belowBar');
 });
 
@@ -125,7 +152,7 @@ test('a candidate below the bar that merges with one above it is published as th
 	const ctx = context();
 	const above = verified(candidate({ severity: 'medium', line: 2 }, null, ctx));
 	const below = verified(candidate({ severity: 'low', line: 2 }, null, ctx), 'run');
-	const [finding, ...rest] = consolidateFindings([below, above]);
+	const [finding, ...rest] = consolidateFindings([below, above], INVENTORY);
 
 	expect(rest).toHaveLength(0);
 	expect(finding.severity).toBe('warning');
@@ -157,7 +184,7 @@ test('a held-back candidate a run reproduced is published and keeps the severity
 	publishHeldBack(held, null);
 
 	expect(held).toMatchObject({ valid: true, severity: 'info', belowBar: true, publishedBy: 'reproduced' });
-	expect(consolidateFindings([held])).toMatchObject([{ severity: 'info' }]);
+	expect(consolidateFindings([held], INVENTORY)).toMatchObject([{ severity: 'info' }]);
 });
 
 test('a held-back candidate stays held when it was only traced or its run ends the same way before the change', () => {
@@ -174,7 +201,7 @@ test('a held-back candidate stays held when it was only traced or its run ends t
 	publishHeldBack(sameOnBase, null);
 
 	expect([traced.publishedBy, sameOnBase.publishedBy]).toEqual([undefined, undefined]);
-	expect(consolidateFindings([traced, sameOnBase])).toEqual([]);
+	expect(consolidateFindings([traced, sameOnBase], INVENTORY)).toEqual([]);
 });
 
 const RULES: CandidateContext['ledger'] = {
@@ -198,7 +225,7 @@ test('a verified low repo-rule violation of a ledger rule is published as a rule
 	publishHeldBack(held, RULES);
 
 	expect(held.publishedBy).toBe('rule');
-	expect(consolidateFindings([held])).toMatchObject([{ severity: 'info', category: 'repo-rule' }]);
+	expect(consolidateFindings([held], INVENTORY)).toMatchObject([{ severity: 'info', category: 'repo-rule' }]);
 });
 
 test('a low repo-rule finding stays held when its rule id is not in the ledger', () => {
@@ -207,7 +234,7 @@ test('a low repo-rule finding stays held when its rule id is not in the ledger',
 	publishHeldBack(held, RULES);
 
 	expect(held.publishedBy).toBeUndefined();
-	expect(consolidateFindings([held])).toEqual([]);
+	expect(consolidateFindings([held], INVENTORY)).toEqual([]);
 });
 
 test('a low finding of another category stays held even when it names a ledger rule', () => {
@@ -237,7 +264,7 @@ test('a group of a held candidate and one published by a rule is published as th
 
 	publishHeldBack(eligible, RULES);
 
-	const [finding, ...rest] = consolidateFindings([held, eligible]);
+	const [finding, ...rest] = consolidateFindings([held, eligible], INVENTORY);
 
 	expect(rest).toHaveLength(0);
 	expect(finding.id).toBe(eligible.id);
@@ -305,7 +332,7 @@ test('reports of one fingerprint on one line merge and keep the strongest proof'
 	const traced = verified({ ...candidate({ line: 2 }, null, ctx), evidenceIds: ['E1'] });
 	const ran = verified({ ...candidate({ line: 2, endLine: 3 }, null, ctx), evidenceIds: ['E2'] }, 'run');
 	const unproven = candidate({ line: 2 }, null, ctx);
-	const [finding, ...rest] = consolidateFindings([traced, ran, unproven]);
+	const [finding, ...rest] = consolidateFindings([traced, ran, unproven], INVENTORY);
 
 	expect(rest).toHaveLength(0);
 	expect(finding.endLine).toBe(3);
@@ -320,7 +347,7 @@ test('different bugs on overlapping lines of one hunk stay separate findings', (
 	const wide = verified(candidate({ line: 2, endLine: 5, title: 'Variants are unbounded' }, null, ctx), 'run');
 	const inside = verified(candidate({ line: 3, endLine: 5, title: 'Metadata is dropped' }, null, ctx), 'run');
 	const last = verified(candidate({ line: 5, title: 'Recency is not refreshed' }, null, ctx), 'run');
-	const findings = consolidateFindings([wide, inside, last]);
+	const findings = consolidateFindings([wide, inside, last], INVENTORY);
 
 	expect(findings.map((finding) => finding.title).sort()).toEqual([
 		'Metadata is dropped',
@@ -333,8 +360,8 @@ test("a finding's fingerprint does not depend on what else the run found in the 
 	const ctx = context();
 	const alone = verified(candidate({ line: 6 }, null, ctx));
 	const earlier = verified(candidate({ line: 2, category: 'performance' }, null, ctx));
-	const [solo] = consolidateFindings([alone]);
-	const together = consolidateFindings([earlier, alone]);
+	const [solo] = consolidateFindings([alone], INVENTORY);
+	const together = consolidateFindings([earlier, alone], INVENTORY);
 
 	expect(together.map((finding) => finding.fingerprint)).toContain(solo.fingerprint);
 });
@@ -344,7 +371,7 @@ test('two lenses quoting one expression from nearby lines, under different bug c
 	const claim = { ...raw().claim, trigger: 'comparing `installed < latest` as strings' };
 	const correctness = verified(candidate({ line: 2, endLine: 3, claim }, null, ctx), 'run');
 	const contract = verified(candidate({ line: 6, category: 'api-contract', claim }, null, ctx));
-	const findings = consolidateFindings([correctness, contract]);
+	const findings = consolidateFindings([correctness, contract], INVENTORY);
 
 	expect([correctness.line, correctness.endLine, contract.line]).toEqual([4, 5, 4]);
 	expect(findings).toHaveLength(1);
@@ -357,7 +384,7 @@ test('two lenses reporting one bug under the same title from different lines of 
 	const correctness = verified(candidate({ line: 2, title }, null, ctx), 'run');
 	const concurrency = verified(candidate({ line: 6, category: 'concurrency', title: `${title}.` }, null, ctx));
 	const other = verified(candidate({ line: 6, category: 'concurrency', title: 'Expired entries stay' }, null, ctx));
-	const findings = consolidateFindings([correctness, concurrency, other]);
+	const findings = consolidateFindings([correctness, concurrency, other], INVENTORY);
 
 	expect(findings.map((finding) => finding.title).sort()).toEqual(['Expired entries stay', title]);
 	expect(findings.find((finding) => finding.title === title)?.relatedLocations).toHaveLength(1);
@@ -367,7 +394,7 @@ test('consolidation lists bugs first and caps quality findings at medium', () =>
 	const ctx = context();
 	const quality = verified(candidate({ category: 'readability', smell: 'unclear-name', line: 2 }, null, ctx), 'rule');
 	const bug = verified(candidate({ severity: 'medium', line: 44 }, null, ctx));
-	const findings = consolidateFindings([quality, bug]);
+	const findings = consolidateFindings([quality, bug], INVENTORY);
 
 	expect(findings.map((finding) => finding.category)).toEqual(['correctness', 'readability']);
 	expect(findings[1].severity).toBe('warning');

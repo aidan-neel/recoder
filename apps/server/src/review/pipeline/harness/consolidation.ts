@@ -15,7 +15,7 @@ function announceNothingFound(run: ReviewRun): void {
 
 /** The verified candidates, merged by place without a model, so the same candidates always give the same findings. */
 export function confirmedFindings(run: ReviewRun): Finding[] {
-	return consolidateFindings(run.candidates);
+	return consolidateFindings(run.candidates, run.inventory);
 }
 
 /**

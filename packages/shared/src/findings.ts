@@ -70,6 +70,17 @@ export function findingKind(category: string | undefined): FindingKind {
 	return category && QUALITY_SET.has(category) ? 'quality' : 'bug';
 }
 
+/**
+ * A finding's message split into its `[category]` tag and the body after it.
+ * Candidates and older saved reviews put the tag in front of the message; a
+ * message without one is all body.
+ */
+export function splitCategoryTag(message: string): { tag?: string; body: string } {
+	const match = /^\[([^\]]+)\]\s*/.exec(message);
+
+	return match ? { tag: match[1], body: message.slice(match[0].length) } : { body: message };
+}
+
 /** A code location a claim's execution path or a convention example points at. */
 export interface ClaimStep {
 	file: string;
@@ -112,11 +123,44 @@ export interface FindingPatch {
 export type VerificationOutcome = 'reproduced' | 'traced' | 'inconclusive' | 'refuted';
 
 /**
+ * How the proving command on the merge-base tree compares with the head run,
+ * by the failure's cause, never the exit code alone. `regression`: the base
+ * passes and the head violates the same contract. `pre-existing`: both fail
+ * for the same cause. `incompatible`: the base cannot execute the new API or
+ * fixture. `environment`: the environment fails before the behavior check.
+ * `worsened`: the base already fails there, and the change makes it newly
+ * reachable or worse. `unstable`: repeated base runs disagree. Only
+ * `pre-existing` says the head's failure predates the change; `incompatible`,
+ * `environment` and `unstable` settle nothing.
+ */
+export type BaseComparisonResult =
+	'regression' | 'pre-existing' | 'incompatible' | 'environment' | 'worsened' | 'unstable';
+
+/** One run in a base comparison, as recorded for an audit or an eval. */
+export interface ComparedRun {
+	exitCode: number | null;
+	/** The first failing assertion or error line, null when the run printed none. */
+	failure: string | null;
+	/** The first stack frame in the repo's code (`src/a.ts:12:5`), null when none was printed. */
+	location: string | null;
+	/** The sandbox's platform and tool versions, `unknown` when they could not be read. */
+	runtime: string;
+	/** The digest of what the install read (manifests, lockfiles, settings), `unknown` when there is none. */
+	dependencies: string;
+}
+
+/**
  * The same command on the merge-base tree. `differs` is false when it ends the
  * same way there, so the run may not isolate the change. `unavailable` says
- * why the base could not be run.
+ * why the base could not be run or settles nothing. Older saved reviews omit
+ * `result`, `head` and `baseRuns`; `baseRuns` holds the first base run, then
+ * the rerun of an ambiguous one.
  */
-export type VerificationBaseline = { exitCode: number | null; differs: boolean } | { unavailable: string };
+export type VerificationBaseline = ({ exitCode: number | null; differs: boolean } | { unavailable: string }) & {
+	result?: BaseComparisonResult;
+	head?: ComparedRun;
+	baseRuns?: ComparedRun[];
+};
 
 /** What a proving run was meant to show and what it showed, so a reader can audit the proof. */
 export interface VerificationEvidence {
@@ -196,4 +240,10 @@ export interface Finding {
 	/** Diff side for deleted-code findings. Defaults to `new` when a line exists. */
 	side?: 'old' | 'new';
 	verification?: FindingVerification;
+	/**
+	 * Ids of the candidates merged into this finding, earliest raised first,
+	 * so an evaluation can trace each published claim to the reports behind it.
+	 * Older saved reviews omit it.
+	 */
+	memberIds?: string[];
 }

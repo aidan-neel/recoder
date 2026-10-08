@@ -5,7 +5,10 @@ import { serverDataDir } from '../../../util/data-dir.js';
 /** A finding a person dismissed, remembered so a later review of the same repository does not report it again. */
 export interface Dismissal {
 	repoId: string;
-	/** What the finding is matched by in later reviews (`dismissalFingerprint`); it holds no line number. */
+	/**
+	 * What the finding is matched by in later reviews (`dismissalFingerprint`); it holds no line number. Dismissals
+	 * recorded before claims split one line hold the place alone, which `matchesDismissal` still reads.
+	 */
 	fingerprint: string;
 	file: string;
 	category: string;
@@ -58,11 +61,15 @@ export function recordDismissal(dismissal: Dismissal): void {
 	writeTable(table);
 }
 
-/** Forgets a dismissal; false when none was held. */
-export function removeDismissal(repoId: string, fingerprint: string): boolean {
+/**
+ * Forgets every dismissal whose fingerprint `matches` says belongs to the
+ * finding being restored, so a key in the old place-only form is removed as
+ * well as one in the current form; false when none was held.
+ */
+export function removeDismissal(repoId: string, matches: (fingerprint: string) => boolean): boolean {
 	const table = readTable();
 	const held = table[repoId] ?? [];
-	const kept = held.filter((dismissal) => dismissal.fingerprint !== fingerprint);
+	const kept = held.filter((dismissal) => !matches(dismissal.fingerprint));
 
 	if (kept.length === held.length) return false;
 

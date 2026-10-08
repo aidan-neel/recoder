@@ -2,7 +2,8 @@ import { z } from 'zod';
 import type { ReasoningEffort } from '@recoder/shared';
 import { LlmError, cancelledError } from '../../models/llm/errors';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
-import { emptyDirectory, isEmptyObject, variantFor, type OpenCodeChatHost } from './opencode-chat';
+import { emptyDirectory } from '../cli-process';
+import { OPENCODE_EMPTY_DIR, isEmptyObject, variantFor, type OpenCodeChatHost } from './opencode-chat';
 import type { OpenCodeApi } from './api/types';
 import { OpenCodeError } from './opencode-error';
 import { followSession, type SessionHandlers } from './opencode-events';
@@ -75,7 +76,7 @@ export class AgentSession {
 	) {}
 
 	static async open(host: OpenCodeAgentHost, options: AgentSessionOptions): Promise<AgentSession> {
-		const scope = { server: host.server, directory: await emptyDirectory() };
+		const scope = { server: host.server, directory: await emptyDirectory(OPENCODE_EMPTY_DIR) };
 		const api = await host.server.api();
 		const variant = await variantFor(host, options);
 		const lease = options.tools.length ? await toolHost.lease(scope, options.runTool, options.signal) : null;

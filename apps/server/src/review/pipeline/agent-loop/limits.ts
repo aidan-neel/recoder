@@ -35,6 +35,11 @@ export function deadlineError<T>(opts: JsonAgentOptions<T>, limits: AgentLimits)
 		: 'Investigation deadline reached; remaining time reserved for consolidation';
 }
 
+/** The turns on which this agent may still use tools: all but its answer turns. */
+export function toolTurns<T>(opts: JsonAgentOptions<T>): number {
+	return opts.maxTurns - (opts.answerTurns ?? 1);
+}
+
 /**
  * A unique agent id, which keeps an agent's scratch files and runs its own.
  * Random rather than counted, because run records outlive a server restart in

@@ -1,8 +1,10 @@
-import type { ReviewAssignment } from '@recoder/shared';
+import type { BriefQuestion, ReviewAssignment } from '@recoder/shared';
 import type { CandidateFinding } from '../pipeline/consolidate.js';
 import type { CoverageEntry } from '../pipeline/coverage.js';
 import type { EvidenceSnapshot } from '../../evidence/evidence.js';
+import type { ObligationState } from '../pipeline/obligations/state.js';
 import type { SubagentState } from '../pipeline/subagents.js';
+import type { Received } from '../pipeline/harness/received.js';
 import type { ReviewUnit } from '../pipeline/units.js';
 import type { ReviewDirective } from '../chat/directive.js';
 
@@ -41,6 +43,14 @@ export interface ReviewCheckpoint {
 	retriesDone: boolean;
 	/** Subagent requests, and the subagents picked from them once planned. */
 	subagents: SubagentState;
+	/** The brief's questions with their answers, evidence and follow-ups; absent from checkpoints older than storing them. */
+	questions?: BriefQuestion[];
+	/** Finished reviewers' prompts as built and their retrievals, so a replay records them without rebuilding; absent from older checkpoints. */
+	received?: Received;
+	/** Candidate repairs the review already attempted, counted against its cap; absent when none were. */
+	repairs?: number;
+	/** Derived obligations and the answers so far; absent unless `RECODER_OBLIGATIONS=1`. */
+	obligations?: ObligationState;
 }
 
 /** A saved checkpoint this run can resume from, or why the review starts over instead. */

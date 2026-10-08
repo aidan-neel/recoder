@@ -7,7 +7,11 @@
 	import FindingsBar from '$lib/components/findings/findings-bar.svelte';
 	import SessionSidebar from '$lib/components/session/session-sidebar.svelte';
 	import { diffPrefs } from '$lib/diff/diff-prefs.svelte';
+	import { setLocationNav } from '$lib/diff/location-nav';
+	import { revealDiffLine } from '$lib/diff/reveal-line';
 	import type { Finding } from '$lib/findings/findings.svelte';
+	import { showDiffLine } from '$lib/session/file-focus.svelte';
+	import { sessionFile } from '$lib/session/session-file.svelte';
 	import { rootFontPx, trackPointerDrag, type PanelWidth } from '$lib/session/panel-width.svelte';
 	import type { SessionReview } from '$lib/session/session-review.svelte';
 	import type { FileDiff, ReviewCodeContext } from '@recoder/shared';
@@ -27,6 +31,15 @@
 	let { data, treeWidth, sidePanelOpen, diff, findings, activeRange, onAsk, onClearRange }: Props = $props();
 
 	const review = $derived(data.review);
+
+	/** A related location's link: show its file (the user's pick), unhide the line if trimmed, scroll to it. */
+	function openAt(file: string, line: number | null, side: 'old' | 'new'): void {
+		sessionFile.select(file);
+		showDiffLine(data.files, file, line, side);
+		if (line !== null) revealDiffLine(line, side);
+	}
+
+	setLocationNav({ files: () => data.files, open: openAt });
 
 	function startResize(event: PointerEvent): void {
 		if (event.button !== 0) return;

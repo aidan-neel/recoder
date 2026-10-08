@@ -2,6 +2,7 @@
 	import FindingsFocus from '$lib/components/findings/findings-focus.svelte';
 	import type { SessionView } from '$lib/components/session/session-header.svelte';
 	import { diffPrefs } from '$lib/diff/diff-prefs.svelte';
+	import { setLocationNav } from '$lib/diff/location-nav';
 	import { revealDiffLine } from '$lib/diff/reveal-line';
 	import { findingsStore, type Finding } from '$lib/findings/findings.svelte';
 	import { reviewStage } from '$lib/review/review-progress-state';
@@ -46,14 +47,16 @@
 		return [stage.label, stage.detail].filter(Boolean).join(' · ');
 	});
 
-	function openAt(file: string, line: number | null): void {
+	function openAt(file: string, line: number | null, side: 'old' | 'new' = 'new'): void {
 		focus.pick(file);
-		focus.showLine(file, line);
+		focus.showLine(file, line, side);
 
 		void onView('diff').then(() => {
-			if (line !== null) revealDiffLine(line);
+			if (line !== null) revealDiffLine(line, side);
 		});
 	}
+
+	setLocationNav({ files: () => data.files, open: openAt });
 
 	function openFullFile(finding: Finding): void {
 		focus.pick(finding.file);

@@ -1,0 +1,78 @@
+/* A finding's line the diff has no row for (no checkout): the line number and why it isn't shown. */
+.diff-outside-note {
+	min-width: 0;
+	padding-right: 16px;
+	font-family: var(--font-sans);
+	font-size: 12.5px;
+	font-style: italic;
+	color: var(--text-muted);
+	overflow-wrap: anywhere;
+}
+
+/* Related locations on a finding: links into the diff, or the location and why it can't scroll. */
+.related-locations {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 10px;
+	margin-top: 10px;
+}
+.focus-detail .related-locations {
+	margin-top: 14px;
+}
+.related-locations-label {
+	flex-shrink: 0;
+	line-height: 26px;
+}
+.related-locations-list {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 4px;
+}
+.related-location-item {
+	display: flex;
+	min-width: 0;
+	max-width: 100%;
+	flex-wrap: wrap;
+	align-items: center;
+	column-gap: 8px;
+	row-gap: 2px;
+}
+.related-location,
+[data-ui='button'][data-variant].related-location {
+	display: inline-flex;
+	min-width: 0;
+	max-width: 100%;
+	height: 26px;
+	align-items: center;
+	gap: 6px;
+	padding: 0 8px 0 7px;
+	border-radius: 7px;
+	box-shadow: inset 0 0 0 1px var(--line-card);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	font-weight: 400;
+	color: var(--text-secondary);
+}
+.related-location[data-static] {
+	color: var(--text-muted);
+}
+.related-location img {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+.related-location-arrow {
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+.related-location-reason {
+	min-width: 0;
+	flex-basis: 16rem;
+	flex-grow: 1;
+	font-size: 12px;
+	line-height: 1.4;
+}

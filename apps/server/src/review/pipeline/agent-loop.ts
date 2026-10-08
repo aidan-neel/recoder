@@ -1,4 +1,5 @@
 import { CapacityError, ChatConversation, LlmError, type ChatMessage } from '../../models/llm.js';
+import { withTokenStage } from '../../models/metrics.js';
 import { streamedMessage } from '../../models/response-text.js';
 import { extractJsonValue } from '../../models/json-extract.js';
 import { parseActions, formatToolResults } from '../../evidence/evidence.js';
@@ -8,7 +9,7 @@ import { CHAT_STYLE, EXEC_EXAMPLES, RETRIEVAL_EXAMPLES } from './prompts.js';
 import { reviewNow, reviewPausePoint } from '../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
 import { DELEGATE_SHAPE, commandsRun, executeTurn } from './agent-loop/delegation.js';
-import { agentDeadlines, deadlineError, newAgentId } from './agent-loop/limits.js';
+import { agentDeadlines, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
 import { runOpenCodeAgent } from './agent-loop/opencode-engine.js';
 import type { JsonAgentOptions } from './agent-loop/options.js';
 import { streamTurn, type TurnResult } from './agent-loop/stream-turn.js';
@@ -119,16 +120,18 @@ function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean
  * share one conversation, so a transport that keeps a session reuses the
  * provider's prompt cache.
  */
-export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
-	if (opts.config.provider === 'opencode') return runOpenCodeAgent(opts);
+export function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
+	return withTokenStage(opts.stage, async () => {
+		if (opts.config.provider === 'opencode') return runOpenCodeAgent(opts);
 
-	const conversation = new ChatConversation();
+		const conversation = new ChatConversation();
 
-	try {
-		return await runTurns(opts, conversation);
-	} finally {
-		await conversation.close();
-	}
+		try {
+			return await runTurns(opts, conversation);
+		} finally {
+			await conversation.close();
+		}
+	});
 }
 
 async function runTurns<T>(
@@ -138,6 +141,7 @@ async function runTurns<T>(
 	const agentId = opts.agentId ?? newAgentId();
 	const limits = agentDeadlines(opts);
 	const { deadlineAt, finalTurnAt } = limits;
+	const lastToolTurn = toolTurns(opts);
 	const spendOpts = { consumeReserve: opts.consumeReserve };
 
 	const messages: ChatMessage[] = [
@@ -177,8 +181,7 @@ async function runTurns<T>(
 			return { value: null, error: 'model-call budget exhausted' };
 		}
 
-		const lastTurn =
-			stuck || turn >= opts.maxTurns || !opts.budget.canSpend(2, spendOpts) || reviewNow() >= finalTurnAt;
+		const lastTurn = stuck || turn > lastToolTurn || !opts.budget.canSpend(2, spendOpts) || reviewNow() >= finalTurnAt;
 
 		const discussion = opts.getDiscussion?.() ?? '';
 
@@ -271,7 +274,7 @@ async function runTurns<T>(
 				role: 'user',
 				content:
 					formatToolResults(results) +
-					(stuck || turn + 1 >= opts.maxTurns
+					(stuck || turn + 1 > lastToolTurn
 						? '\n\nThis is your final turn. Finish with the required JSON result. Do not request more retrieval.'
 						: '\n\nContinue. Finish with the required JSON when you have enough evidence.')
 			});
@@ -306,6 +309,14 @@ async function runTurns<T>(
 				? 'the model kept replying with only a message, without actions or a result'
 				: lastError;
 
+			continue;
+		}
+
+		/** Retrieval asked for on an answer turn that is not the last one is refused, and the next turn asks again. */
+		if (actions && !stuck && turn > lastToolTurn && turn < opts.maxTurns) {
+			messages.push({ role: 'assistant', content: output });
+			messages.push({ role: 'user', content: FINAL_TURN });
+			turn++;
 			continue;
 		}
 

@@ -1,7 +1,6 @@
 import { directiveBlock, type ReviewDirective } from '../chat/directive.js';
 import { ledgerBlock } from '../guidelines/ledger/ledger.js';
 import type { RuleLedger } from '../guidelines/ledger/types.js';
-import { unitContext } from './change-model/change-model.js';
 import type { ChangeModel } from './change-model/types.js';
 import { briefBlock } from './intent/brief.js';
 import { intentBlock } from './intent/format.js';
@@ -18,12 +17,21 @@ export const MAX_SUBAGENT_REQUESTS = 2;
 
 const SUBAGENTS_OFFER = `Subagents: ask for one, in "subagents" (at most ${MAX_SUBAGENT_REQUESTS}), whenever a question reaches past this unit's patch and context and you could not settle it in your own turns: callers or implementations of a changed API elsewhere in the repo, a contract or invariant defined outside your scope, a security or data path through several modules, or behavior that needs its own run to confirm. Each subagent gets your question, the patch for its scope and the same tools, and reports its own findings. A subagent that checks a doubt is worth more than a gap you leave open. When the developer's instructions ask for subagents, request at least one for this unit's most important open question. Never ask for work you already did.`;
 
+/** How a brief question is answered, and what each answer must carry to count. */
+const QUESTION_ANSWERS = `- If you looked and could neither confirm it as a defect nor rule it out, put its id (for example "Q3") in "unsettled". A closer look is given to those.
+- Otherwise put one entry for it in "answered", with "questionId" and "outcome":
+  - "confirmed": report the defect as a finding in this same answer, with "questionId":"Q3" on that finding. A confirmation with no such finding counts as unsettled.
+  - "disproved": say in "note" why the code is fine, and back it with "contractEvidence" (each entry a "location" of the form path:line in code you read, and a "note" on what it shows) or with "attemptedCounterexample" (the "input" you tried, the "evidenceId" of the run that tried it, and what you "observed"). A disproof with an empty note, or with neither, counts as unsettled.
+  - "not-applicable": the question is outside what you were asked to review. It stays open for the reviewers it concerns.`;
+
 const UNSETTLED_OFFER = `Open questions: when the review brief lists open questions on your files, account for each one exactly once.
-- If you looked and could neither confirm it as a defect nor rule it out, put its id (for example "Q3") in "unsettled". A closer look is given to those.
-- Otherwise put {"questionId":"Q3","outcome":...,"note":...} in "answered": "confirmed" when you report it as a finding in this same answer, "disproved" with one sentence in "note" on why the code is fine.
+${QUESTION_ANSWERS}
 A question you leave out of both also gets a closer look.`;
 
 const DELEGATE_OFFER = `Workers (optional): the delegate action hands one narrow, self-contained task to a worker on a cheaper model, for example: find every caller of a changed function and what each passes; find the tests that cover a symbol; read a contract or config defined elsewhere; write and run one specific repro and return the command, exit code and the output lines that matter. The worker sees only your task text, so name the files, symbols and what to return. It answers with a short summary and evidence ids you can cite. Keep the judgment yourself: you decide what is a defect, and you read the evidence before a finding rests on it. At most ${REVIEW_POLICY.maxDelegationsPerAgent} tasks; tasks sent in one turn run at the same time. Use it when it saves you reading, never for work you already did.`;
+
+const FOLLOW_UP_OFFER = `Brief question: your task names the open question of the review brief you were sent to settle. Account for it exactly once.
+${QUESTION_ANSWERS}`;
 
 /**
  * Which optional parts a lens reviewer is offered: subagent requests (the
@@ -60,14 +68,27 @@ ${offers.subagents ? SUBAGENTS_OFFER : 'Leave "subagents" empty.'}${offers.unset
 	);
 }
 
-/** A subagent's prompt: one question a correctness lens handed on, answered in depth. */
-export function subagentSystemPrompt(exec: boolean, directive: ReviewDirective | null): string {
+/**
+ * A subagent's prompt: one question a correctness lens handed on, answered in
+ * depth. A subagent sent to follow up a brief question is also asked to
+ * answer it.
+ */
+export function subagentSystemPrompt(exec: boolean, directive: ReviewDirective | null, followUp: boolean): string {
+	const ending = followUp
+		? `Leave "subagents" and "gaps" empty; you cannot hand work on.\n\n${FOLLOW_UP_OFFER}`
+		: 'Leave "subagents", "unsettled", "answered" and "gaps" empty; you cannot hand work on.';
+
 	return withDirective(
 		`${reviewerContract(exec, false)}
 
-Role: subagent. You were handed one question that a reviewer could not finish in its own turns, or that no reviewer settled. Follow the code wherever the question leads, using your tools across the repository, and report findings on that question only, in any category from the closed list. The patch in your scope is where to start, not a limit on what you read. Leave "subagents", "unsettled", "answered" and "gaps" empty; you cannot hand work on.`,
+Role: subagent. You were handed one question that a reviewer could not finish in its own turns, or that no reviewer settled. Follow the code wherever the question leads, using your tools across the repository, and report findings on that question only, in any category from the closed list. The patch in your scope is where to start, not a limit on what you read. ${ending}`,
 		directive
 	);
+}
+
+/** An obligation investigator's prompt: the reviewer contract, then `role`, the procedure it follows. */
+export function investigatorSystemPrompt(exec: boolean, directive: ReviewDirective | null, role: string): string {
+	return withDirective(`${reviewerContract(exec, false)}\n\n${role}`, directive);
 }
 
 function withDirective(prompt: string, directive: ReviewDirective | null): string {
@@ -151,26 +172,32 @@ function ledgerLines(unit: ReviewUnit, ledger: RuleLedger | null): string {
 	);
 }
 
+/** What a unit agent's opening message calls its assignment. */
+export type ReviewerHeading = 'Unit' | 'Subagent' | 'Obligation';
+
 /**
- * The user prompt for a lens assignment, or for a subagent when `subagent` is
- * set: the PR, its intent, the unit's changes with their change-model context
- * and the brief's reading of them (open questions go to the defect lenses),
- * and the rule ledger for the quality lenses.
+ * The user prompt for a lens assignment, or under another `heading` for a
+ * subagent or an obligation investigator: the PR, its intent, the unit's
+ * changes with their change-model context (`declarations`, built once by the
+ * caller so it can record what the block holds) and the brief's reading of
+ * them (open questions go to the defect lenses), and the rule ledger for the
+ * quality lenses.
  */
 export function reviewerUserPrompt(
 	unit: ReviewUnit,
 	remaining: { turns: number; calls: number },
 	ctx: ReviewerPromptContext,
-	subagent = false
+	declarations: string,
+	heading: ReviewerHeading
 ): string {
 	return [
 		developerInstructions(ctx.directive),
 		...pullRequestLines(ctx.pr),
 		intentBlock(ctx.intent),
-		`${subagent ? 'Subagent' : 'Unit'} ${unit.id}: ${unit.title}`,
+		`${heading} ${unit.id}: ${unit.title}`,
 		unit.reason,
-		`${subagent ? 'Changes to start from' : 'Changes in this unit'}:\n${scopeLines(unit.scope)}`,
-		ctx.changeModel ? unitContext(ctx.changeModel, unit.scope) : '',
+		`${heading === 'Unit' ? 'Changes in this unit' : 'Changes to start from'}:\n${scopeLines(unit.scope)}`,
+		declarations,
 		briefBlock(ctx.intent, unit.scope, !unit.lens || !isQualityLens(unit.lens)),
 		ledgerLines(unit, ctx.ledger),
 		...turnsLeft(remaining.turns, remaining.calls)

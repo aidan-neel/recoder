@@ -98,6 +98,19 @@ test('tools are refused on the last turn even when a step is reported after its 
 	}
 });
 
+test('with two answer turns, tools are refused on the last two of its turns', async () => {
+	const start = await startAgent();
+	const user = script([[readDiff], [readDiff], [readDiff]]);
+
+	const refused = async (answerTurns?: number) =>
+		(await runOpenCodeAgent(agentOptions({ user, maxTurns: 4, answerTurns }), start)).value?.results?.map(
+			(item) => item.isError
+		);
+
+	expect(await refused()).toEqual([false, false, false]);
+	expect(await refused(2)).toEqual([false, false, true]);
+});
+
 test('an agent with no model calls left is not started', async () => {
 	const budget = new ModelBudget(3, 3);
 	const result = await runOpenCodeAgent(agentOptions({ user: script([[readDiff]]), budget }), await startAgent());

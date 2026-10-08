@@ -1,6 +1,7 @@
 import { findingKind, type Finding, type FindingLocation, type FindingVerification } from '@recoder/shared';
 import { isHeldBack, toFinding, type CandidateFinding } from './consolidate.js';
-import { refineFingerprint } from './harness/findings.js';
+import { claimTerms, lineAnchor, refineFingerprint, sameClaim, type ClaimTerms } from './harness/findings.js';
+import type { ReviewInventory } from './inventory.js';
 
 /** Strongest proof first: a run beats a deterministic check, which beats a trace or a convention. */
 const PROOF_RANK: Record<NonNullable<FindingVerification['method']>, number> = {
@@ -13,8 +14,9 @@ const PROOF_RANK: Record<NonNullable<FindingVerification['method']>, number> = {
 
 const SEVERITY_RANK: Record<string, number> = { error: 0, warning: 1, info: 2 };
 
+/** Earliest raised first; the id settles candidates that share a candidate id, so the order is total. */
 const byId = (a: CandidateFinding, b: CandidateFinding) =>
-	a.candidateId.localeCompare(b.candidateId, 'en', { numeric: true });
+	a.candidateId.localeCompare(b.candidateId, 'en', { numeric: true }) || a.id.localeCompare(b.id);
 
 function proofRank(candidate: CandidateFinding): number {
 	return PROOF_RANK[candidate.verification?.method ?? 'convention'];
@@ -38,8 +40,13 @@ function locationKey(location: FindingLocation): string {
 	return `${location.file}:${location.line ?? ''}:${location.endLine ?? ''}:${location.side ?? 'new'}`;
 }
 
-/** One finding for a merge group: the representative's body, with every member's evidence and locations, and the first checked patch. */
-function mergeCluster(members: CandidateFinding[]): Finding {
+/**
+ * One finding for a merge group: the representative's body, with every
+ * member's evidence and locations, the first checked patch, and every member's
+ * id, so an evaluation can trace the finding to each report behind it.
+ */
+function mergeCluster(group: CandidateFinding[]): Finding {
+	const members = [...group].sort(byId);
 	const lead = representative(members);
 	const own = locationKey(lead);
 	const seen = new Set([own]);
@@ -55,7 +62,7 @@ function mergeCluster(members: CandidateFinding[]): Finding {
 
 	for (const location of lead.relatedLocations ?? []) add(location);
 
-	for (const member of [...members].sort(byId)) {
+	for (const member of members) {
 		if (member === lead) continue;
 		add(member);
 		for (const location of member.relatedLocations ?? []) add(location);
@@ -69,7 +76,8 @@ function mergeCluster(members: CandidateFinding[]): Finding {
 		severity: quality && lead.severity === 'error' ? 'warning' : lead.severity,
 		evidenceIds,
 		relatedLocations: related.length ? related : undefined,
-		patch: lead.patch ?? [...members].sort(byId).find((member) => member.patch)?.patch
+		patch: lead.patch ?? members.find((member) => member.patch)?.patch,
+		memberIds: members.map((member) => member.id)
 	};
 }
 
@@ -85,10 +93,11 @@ function compareFindings(a: Finding, b: Finding): number {
 }
 
 /**
- * The place two reports must share to be one issue: the same fingerprint
- * (file, kind, symbol and first line's text) starting on the same line.
- * Reports on nearby or overlapping lines stay apart, because two different
- * bugs in one function often overlap and a duplicate costs less than a lost bug.
+ * The place two reports must share to be compared as one issue: the same
+ * fingerprint (file, kind, symbol and first line's text) starting on the same
+ * line. Reports on nearby or overlapping lines stay apart, because two
+ * different bugs in one function often overlap and a duplicate costs less than
+ * a lost bug.
  */
 function mergeKey(candidate: CandidateFinding): string {
 	if (!candidate.fingerprint) return candidate.candidateId;
@@ -112,7 +121,7 @@ function titleKey(candidate: CandidateFinding): string | null {
 	return `${candidate.file}\0${title}`;
 }
 
-/** The group a candidate joins: the one its title already opened in this file, else the one at its merge key. */
+/** The place a candidate is compared at: the one its title already opened in this file, else the one at its merge key. */
 function groupKey(candidate: CandidateFinding, byTitle: Map<string, string>): string {
 	const key = mergeKey(candidate);
 	const title = titleKey(candidate);
@@ -124,18 +133,67 @@ function groupKey(candidate: CandidateFinding, byTitle: Map<string, string>): st
 }
 
 /**
- * Deterministic consolidation of verified candidates, without a model.
- * Candidates sharing a merge key, or a bug title in one file, become one finding. Two findings that
- * still share a fingerprint (the same line text in two places) keep apart
- * by their line. Quality findings never rank above medium. This is where the
- * reporting bar applies: a group whose every member is below the bar is held
- * back, and one with a member above it is published.
+ * Splits the reports at one place into the defects they claim. A shared
+ * place, category, fingerprint or title is no proof of one defect, so a report
+ * joins a group only when its claim matches every claim already in it; one
+ * report that mentions two defects cannot chain them together. The text of
+ * each report's line is left out of its claim (`claimTerms`).
  */
-export function consolidateFindings(candidates: CandidateFinding[]): Finding[] {
+function byClaim(reports: CandidateFinding[], inventory: ReviewInventory): CandidateFinding[][] {
+	const groups: { members: CandidateFinding[]; claims: ClaimTerms[] }[] = [];
+
+	for (const report of reports) {
+		const claim = claimTerms(report, lineAnchor(inventory, report.file, report.line, report.side ?? 'new'));
+		const group = groups.find((entry) => entry.claims.every((other) => sameClaim(claim, other)));
+
+		if (group) {
+			group.members.push(report);
+			group.claims.push(claim);
+		} else {
+			groups.push({ members: [report], claims: [claim] });
+		}
+	}
+
+	return groups.map((group) => group.members);
+}
+
+/**
+ * Gives each finding a fingerprint no other holds. `findings` come earliest
+ * raised first (by their first member), so the unrefined fingerprint stays
+ * with the finding holding the earliest report, which is the one that carried
+ * it before a later report was split off it. Each later finding that shares it
+ * is refined by its count alone.
+ */
+function settleFingerprints(findings: Finding[]): void {
+	const holders = new Map<string, number>();
+
+	for (const finding of findings) {
+		if (!finding.fingerprint) continue;
+
+		const count = (holders.get(finding.fingerprint) ?? 0) + 1;
+
+		holders.set(finding.fingerprint, count);
+		if (count > 1) finding.fingerprint = refineFingerprint(finding.fingerprint, count);
+	}
+}
+
+/**
+ * Deterministic consolidation of verified candidates, without a model.
+ * Candidates sharing a merge key, or a bug title in one file, are compared by
+ * what they claim, with the text of their line from `inventory` left out, and
+ * reports of one defect become one finding. Candidates are sorted first, so
+ * the findings do not depend on the order they arrive in. Findings that still
+ * share a fingerprint keep apart by refining it, after they are listed, so
+ * the refinement never reorders them. Quality findings never rank above
+ * medium. This is where the reporting bar applies: a group whose every
+ * member is below the bar is held back, and one with a member above it is
+ * published.
+ */
+export function consolidateFindings(candidates: CandidateFinding[], inventory: ReviewInventory): Finding[] {
 	const groups = new Map<string, CandidateFinding[]>();
 	const byTitle = new Map<string, string>();
 
-	for (const candidate of candidates) {
+	for (const candidate of [...candidates].sort(byId)) {
 		if (!candidate.valid || candidate.verification?.status !== 'verified') continue;
 
 		const key = groupKey(candidate, byTitle);
@@ -144,18 +202,14 @@ export function consolidateFindings(candidates: CandidateFinding[]): Finding[] {
 	}
 
 	const findings = [...groups.values()]
+		.flatMap((group) => byClaim(group, inventory))
 		.filter((members) => members.some((member) => !isHeldBack(member)))
+		.sort((a, b) => byId(a[0], b[0]))
 		.map(mergeCluster);
 
-	const seen = new Set<string>();
+	const ordered = [...findings].sort(compareFindings);
 
-	for (const finding of findings.sort(compareFindings)) {
-		if (finding.fingerprint && seen.has(finding.fingerprint)) {
-			finding.fingerprint = refineFingerprint(finding.fingerprint, `${finding.side ?? 'new'}:${finding.line ?? 0}`);
-		}
+	settleFingerprints(findings);
 
-		if (finding.fingerprint) seen.add(finding.fingerprint);
-	}
-
-	return findings;
+	return ordered;
 }

@@ -1,7 +1,14 @@
 import { z } from 'zod';
 import { FINDING_CATEGORIES, READABILITY_SMELLS, type FindingCategory } from '@recoder/shared';
 import { reviewerFindingSchema } from './finding-schema.js';
-import { answeredSchema, normalizeAnswered, questionIds, MAX_QUESTIONS } from './reviewer-questions.js';
+import {
+	ANSWERED_RESPONSE,
+	answeredSchema,
+	briefQuestionId,
+	normalizeAnswered,
+	questionIds,
+	MAX_QUESTIONS
+} from './reviewer-questions.js';
 import { MAX_SUBAGENT_REQUESTS } from './reviewer-prompts.js';
 import { clip, retrievalTurnSchema } from './schemas.js';
 
@@ -196,6 +203,7 @@ function normalizeFinding(item: unknown, defaultCategory: FindingCategory): Reco
 
 	f.title = clip(f.title, 120);
 	f.body = clip(f.body, 2000);
+	if (f.questionId !== undefined) f.questionId = briefQuestionId(f.questionId);
 
 	repairClaim(f);
 	repairQualityFields(f);
@@ -398,6 +406,7 @@ function findingResponseSchema(categories: readonly FindingCategory[]): Record<s
 			category: { type: 'string', enum: categories.length ? [...categories] : [...FINDING_CATEGORIES] },
 			symbol: nullableStr,
 			ruleId: nullableStr,
+			questionId: nullableStr,
 			smell: { type: ['string', 'null'], enum: [...READABILITY_SMELLS, null] },
 			claim,
 			examples: { type: 'array', items: step },
@@ -460,6 +469,7 @@ export function reviewerResponseSchema(
 				}
 			},
 			unsettled: strings,
+			answered: ANSWERED_RESPONSE,
 			recommendedChecks: strings
 		},
 		required: ['message', 'findings', 'examinedHunks']

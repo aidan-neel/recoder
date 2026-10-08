@@ -1,6 +1,8 @@
+import type { ContextItem, ContextOmission } from '@recoder/shared';
 import type { UnitScope } from '../units.js';
 import { isMeasured } from './metrics.js';
 import { innermost } from './owners.js';
+import { omission, sourceItem, suppliedBy } from './supplied.js';
 import type { ChangedSymbol, ChangeModel, RepoMetricsBaseline, SymbolReference } from './types.js';
 
 const DEFAULT_MAX_CHARS = 6000;
@@ -101,9 +103,12 @@ function clip(text: string, chars: number): string {
 	return text.length > chars ? `${text.slice(0, chars)}…` : text;
 }
 
-/** Whether callers are shown: the declaration was deleted, or its signature or export status changed. */
+/**
+ * Whether callers are shown: the declaration was deleted, its signature or
+ * export status changed, or (with caller selection on) a behavior callers rely on changed.
+ */
 function contractChanged(symbol: ChangedSymbol): boolean {
-	return symbol.change === 'deleted' || symbol.previousSignature !== undefined;
+	return symbol.change === 'deleted' || symbol.previousSignature !== undefined || symbol.behavior !== undefined;
 }
 
 /** The declaration as it reads now, and as it read before when that differs. */
@@ -111,7 +116,20 @@ function contractRow(symbol: ChangedSymbol): string {
 	const was = symbol.previousSignature;
 	const before = was !== undefined && was !== symbol.signature ? ` (was: ${clip(was, CONTRACT_CHARS)})` : '';
 
-	return `  contract: ${clip(symbol.signature, CONTRACT_CHARS)}${before}`;
+	const contract = `  contract: ${clip(symbol.signature, CONTRACT_CHARS)}${before}`;
+
+	if (!symbol.behavior) return contract;
+
+	return [
+		contract,
+		`  changed behavior: ${symbol.behavior.join(', ')}`,
+		...(symbol.doc ? [`  documented: ${symbol.doc}`] : [])
+	].join('\n');
+}
+
+/** Where a reference is, as `path:line`: how the block lists it and tells a call site from a plain reference. */
+function place(ref: SymbolReference): string {
+	return `${ref.file}:${ref.line}`;
 }
 
 /** Call sites and tests for a changed contract: path:line and the trimmed source line. */
@@ -120,20 +138,27 @@ function callerRows(symbol: ChangedSymbol): string[] {
 
 	if (!callers.length) return symbol.usageUnknown ? [] : ['  callers: none found'];
 
-	const tag = (ref: SymbolReference) => (ref.kind === 'test' ? ' [test]' : ref.inDiff ? ' [in this diff]' : '');
+	const relies = (ref: SymbolReference) => (ref.dependsOn ? ` [relies on: ${ref.dependsOn.join(', ')}]` : '');
 
-	return [
-		'  callers:',
-		...callers.map((ref) => `    ${ref.file}:${ref.line}${tag(ref)} ${clip(ref.text, CALLER_LINE_CHARS)}`)
-	];
+	const tag = (ref: SymbolReference) =>
+		(ref.kind === 'test' ? ' [test]' : ref.inDiff ? ' [in this diff]' : '') + relies(ref);
+
+	return ['  callers:', ...callers.map((ref) => `    ${place(ref)}${tag(ref)} ${clip(ref.text, CALLER_LINE_CHARS)}`)];
+}
+
+/** One symbol's text in the prompt, with the places it puts there and the ones a bound kept out. */
+interface Block {
+	text: string;
+	supplied: ContextItem[];
+	omitted: ContextOmission[];
 }
 
 /** One symbol's block in the prompt; `withCallers` false drops the call sites when the block would not fit. */
-function describe(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefined, withCallers = true): string {
+function describe(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefined, withCallers = true): Block {
 	const changed = contractChanged(symbol);
 	const shown = changed && withCallers ? (symbol.callers ?? []) : [];
-	const listed = new Set(shown.map((ref) => `${ref.file}:${ref.line}`));
-	const others = symbol.references.filter((ref) => !listed.has(`${ref.file}:${ref.line}`));
+	const listed = new Set(shown.map(place));
+	const others = symbol.references.filter((ref) => !listed.has(place(ref)));
 
 	const rows = [
 		`- ${symbol.qualifiedName} (${symbol.kind}, ${symbol.change}${symbol.exported ? ', exported' : ''}) ${symbol.file}:${symbol.startLine}-${symbol.endLine}`,
@@ -144,7 +169,7 @@ function describe(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefin
 
 	if (others.length) {
 		rows.push('  referenced at:');
-		for (const ref of others) rows.push(`    ${ref.file}:${ref.line} ${ref.text}`);
+		for (const ref of others) rows.push(`    ${place(ref)} ${ref.text}`);
 	}
 
 	if (symbol.usageUnknown) rows.push('  references: not fully searched, so do not assume it is unused');
@@ -160,35 +185,37 @@ function describe(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefin
 
 	if (symbol.change !== 'deleted' && isMeasured(symbol)) rows.push(`  size: ${metricsLine(symbol, baseline)}`);
 
-	return rows.join('\n');
+	return { text: rows.join('\n'), ...suppliedBy(symbol, { changed, withCallers, shown, others }) };
 }
 
-/** The symbol's block, without its call sites when the full one would pass the room left. */
-function blockWithin(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefined, room: number): string | null {
+/** The block, without its call sites when the full one would pass the room left. */
+function blockWithin(symbol: ChangedSymbol, baseline: RepoMetricsBaseline | undefined, room: number): Block | null {
 	const full = describe(symbol, baseline);
 
-	if (full.length + 1 <= room) return full;
+	if (full.text.length + 1 <= room) return full;
 
 	const compact = describe(symbol, baseline, false);
 
-	return compact.length + 1 <= room ? compact : null;
+	return compact.text.length + 1 <= room ? compact : null;
+}
+
+/** The prompt block on a scope's declarations, with what it supplies and what its size cap left out. */
+export interface UnitContextParts {
+	text: string;
+	supplied: ContextItem[];
+	omitted: ContextOmission[];
 }
 
 /**
- * A plain-text prompt block on the declarations the scope touches: what each
- * is, who references it, what it calls, its tests, comparable code and its
- * size against the repo. A declaration whose signature or export changed also
- * lists its call sites and tests, one source line each. Same model and scope, same text. Empty when the scope
- * touches no parsed symbol.
+ * The unit's prompt block and a record of it: every place the block puts in
+ * front of the reviewer, and every declaration, caller, reference or test it
+ * leaves out, with the reason. Same model and scope, same text and same record.
  */
-export function unitContext(model: ChangeModel, scope: UnitScope, maxChars = DEFAULT_MAX_CHARS): string {
+export function unitContextParts(model: ChangeModel, scope: UnitScope, maxChars = DEFAULT_MAX_CHARS): UnitContextParts {
 	const symbols = scopeSymbols(model, scope);
-
-	if (!symbols.length) return '';
-
 	const baselines = new Map(model.baselines.map((baseline) => [baseline.language, baseline]));
 	const header = 'Changed declarations (from the parser, not a model):';
-	const blocks: string[] = [];
+	const blocks: Block[] = [];
 	let used = header.length;
 
 	for (const symbol of symbols) {
@@ -197,14 +224,29 @@ export function unitContext(model: ChangeModel, scope: UnitScope, maxChars = DEF
 		if (block === null) break;
 
 		blocks.push(block);
-		used += block.length + 1;
+		used += block.text.length + 1;
 	}
 
-	const omitted = symbols.length - blocks.length;
+	const cut = symbols.slice(blocks.length).map((symbol) => omission(sourceItem(symbol), 'context-cap'));
+	const supplied = blocks.flatMap((block) => block.supplied);
+	const omitted = [...blocks.flatMap((block) => block.omitted), ...cut];
 
-	if (!blocks.length) return '';
+	if (!blocks.length) return { text: '', supplied, omitted };
 
-	const tail = omitted ? `\n…${omitted} more changed declaration${omitted === 1 ? '' : 's'} not shown` : '';
+	const tail = cut.length ? `\n…${cut.length} more changed declaration${cut.length === 1 ? '' : 's'} not shown` : '';
 
-	return [header, ...blocks].join('\n') + tail;
+	return { text: [header, ...blocks.map((block) => block.text)].join('\n') + tail, supplied, omitted };
+}
+
+/**
+ * A plain-text prompt block on the declarations the scope touches: what each
+ * is, who references it, what it calls, its tests, comparable code and its
+ * size against the repo. A declaration that was deleted or whose signature or
+ * export changed also lists its call sites and tests, one source line each;
+ * with caller selection on, so does one whose changed lines alter a behavior
+ * callers rely on. Same model and scope, same text. Empty when the scope
+ * touches no parsed symbol.
+ */
+export function unitContext(model: ChangeModel, scope: UnitScope, maxChars = DEFAULT_MAX_CHARS): string {
+	return unitContextParts(model, scope, maxChars).text;
 }

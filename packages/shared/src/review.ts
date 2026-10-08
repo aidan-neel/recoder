@@ -1,4 +1,7 @@
+import type { ReviewContext } from './context';
 import type { Finding } from './findings';
+import type { ObligationReport } from './obligations';
+import type { BriefQuestionReport } from './questions';
 import type { Provider } from './repo';
 
 export type ReviewStatus = 'draft' | 'queued' | 'running' | 'passed' | 'failed';
@@ -11,7 +14,18 @@ export const REVIEW_CANCELLED = 'Review cancelled.';
 /** Where a candidate left the review: a validation check, a person's earlier dismissal, or a verifier's refutation or intent cover. */
 export type DropStage = 'location' | 'evidence' | 'category' | 'severity' | 'dismissed' | 'refuted' | 'covered';
 
-/** How many candidates a finished review raised and where each one went, so an eval can see which stage loses findings. */
+/** One changed unit as the review brief read it: in full, from a clipped diff, or not at all, with the reason. */
+export interface ReviewBriefUnit {
+	id: string;
+	status: 'included' | 'partial' | 'omitted';
+	reason?: string;
+}
+
+/**
+ * How many candidates a finished review raised and where each one went, so an
+ * eval can see which stage loses findings, and how much of the change the
+ * brief those candidates were raised against had read.
+ */
 export interface ReviewFunnel {
 	/** Every candidate a reviewer, subagent or detector reported. */
 	raised: number;
@@ -23,6 +37,8 @@ export interface ReviewFunnel {
 	verified: number;
 	/** Findings shown after merging. */
 	shown: number;
+	/** Every changed unit the brief read or left out; absent without a brief and on reviews older than recording it. */
+	brief?: { complete: boolean; units: ReviewBriefUnit[] };
 }
 
 export interface Review {
@@ -37,6 +53,12 @@ export interface Review {
 	unconfirmed?: Finding[];
 	/** Where a finished review's candidates went; absent on reviews older than counting them. */
 	funnel?: ReviewFunnel;
+	/** What each reviewer received, read and cited, and what bounds left out; absent on reviews older than recording it. */
+	context?: ReviewContext;
+	/** Obligations derived from risky changes and how each investigation ended; absent unless `RECODER_OBLIGATIONS` was on. */
+	obligations?: ObligationReport;
+	/** The brief's open questions and how the review settled each; absent when the brief had none. */
+	questions?: BriefQuestionReport;
 	/** CommandRun ids produced by the review pipeline, in order. */
 	runs: string[];
 	/** Where the PR data came from: live provider fetch or offline stub. */

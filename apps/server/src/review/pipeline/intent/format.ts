@@ -1,7 +1,7 @@
 import type { ChangeIntent, IntentClaim, PrRef } from './types.js';
 
 const SECTIONS: {
-	key: keyof Omit<ChangeIntent, 'summary' | 'stack' | 'observedChanges' | 'openQuestions'>;
+	key: keyof Omit<ChangeIntent, 'summary' | 'stack' | 'observedChanges' | 'openQuestions' | 'units' | 'complete'>;
 	heading: string;
 }[] = [
 	{ key: 'goals', heading: 'Goals' },
@@ -29,19 +29,25 @@ function stackLine(stack: ChangeIntent['stack']): string {
 	return parts.length ? `Stack: ${parts.join('; ')}` : '';
 }
 
+/** How much of the change an incomplete brief read, so a reader never takes its silence for "nothing to say". */
+function incompleteLine(intent: ChangeIntent): string {
+	const units = intent.units ?? [];
+	const full = units.filter((unit) => unit.status === 'included').length;
+
+	return `Brief incomplete (${full} of ${units.length} units read in full): judge what it leaves out from the code alone.`;
+}
+
 /**
  * What the change is meant to do, as a compact block for lens reviewers and
  * the verifier. The brief's reading of the code is left out: it would lead
- * a verifier, and reviewers get their unit's part from `briefBlock`. Claims keep their ids so a finding or verdict can cite them.
- * Empty when there is no intent.
+ * a verifier, and reviewers get their unit's part from `briefBlock`. Claims
+ * keep their ids so a finding or verdict can cite them, and an incomplete
+ * brief says so. Empty when there is no intent or it says nothing.
  */
 export function intentBlock(intent: ChangeIntent | null): string {
 	if (!intent) return '';
 
-	const lines = [
-		'Change intent (distilled from the PR, its issues and discussion; cite claim ids):',
-		`Summary: ${intent.summary}`
-	];
+	const lines: string[] = intent.summary ? [`Summary: ${intent.summary}`] : [];
 
 	for (const { key, heading } of SECTIONS) {
 		if (intent[key].length) lines.push(`${heading}:`, ...intent[key].map(claimLine));
@@ -50,6 +56,8 @@ export function intentBlock(intent: ChangeIntent | null): string {
 	const stack = stackLine(intent.stack);
 
 	if (stack) lines.push(stack);
+	if (intent.complete === false) lines.push(incompleteLine(intent));
+	if (!lines.length) return '';
 
-	return lines.join('\n');
+	return ['Change intent (distilled from the PR, its issues and discussion; cite claim ids):', ...lines].join('\n');
 }

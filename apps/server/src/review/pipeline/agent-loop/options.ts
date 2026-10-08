@@ -14,6 +14,8 @@ export interface JsonAgentOptions<T> {
 	budget: ModelBudget;
 	evidence: EvidenceStore;
 	maxTurns: number;
+	/** Turns at the end of `maxTurns` on which tools are refused, so the agent answers instead of running out; 1 when absent. */
+	answerTurns?: number;
 	signal: AbortSignal;
 	deadlineAt: number;
 	consumeReserve?: boolean;

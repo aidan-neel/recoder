@@ -1,11 +1,14 @@
 import type {
+	BriefQuestionReport,
 	CoverageGap,
 	CoverageSummary,
 	Finding,
 	ModelFailure,
+	ObligationReport,
 	ReviewAssignment,
 	ReviewBudgetSnapshot,
 	ReviewChatMessage,
+	ReviewContext,
 	ReviewFunnel,
 	ReviewGuidelinesUsed,
 	ReviewOutcome,
@@ -79,6 +82,8 @@ export interface AdaptiveReviewResult {
 	unconfirmed: Finding[];
 	/** Where the candidates went; absent when the review failed. */
 	funnel?: ReviewFunnel;
+	/** What each reviewer received, read and cited; absent when the review failed. */
+	context?: ReviewContext;
 	summary: string;
 	outcome: ReviewOutcome;
 	recommendedChecks: string[];
@@ -88,6 +93,10 @@ export interface AdaptiveReviewResult {
 	error?: string;
 	/** Set when a model call stopped the review, e.g. ChatGPT is signed out. */
 	failure?: ModelFailure;
+	/** Obligation counts and answers; absent unless `RECODER_OBLIGATIONS=1`. */
+	obligations?: ObligationReport;
+	/** The behavior the review investigated through the brief's open questions, apart from code `coverage`; absent when the brief had none. */
+	questions?: BriefQuestionReport;
 }
 
 /** One baseline check run on the PR head before review; detectors read its diagnostics. */

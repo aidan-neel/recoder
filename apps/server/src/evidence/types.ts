@@ -18,6 +18,14 @@ export interface ReviewRevision {
 	targetRef: string;
 }
 
+/**
+ * What a run that executes code reached: its assertions, passing or failing,
+ * or not even that, because the package's setup was missing or the code needs
+ * a compiler transform the command ran without. Only the assertion outcomes
+ * say anything about the code under test.
+ */
+export type ExecutionOutcome = 'setup-failed' | 'unsupported-execution' | 'assertion-failed' | 'assertion-passed';
+
 export interface EvidenceRecord {
 	id: string;
 	revision: RevisionAlias;
@@ -32,6 +40,8 @@ export interface EvidenceRecord {
 	exitCode?: number | null;
 	/** The agent that made the run, so a verdict can count only its own. */
 	agentId?: string;
+	/** What the run reached, once the review's packages were prepared. */
+	outcome?: ExecutionOutcome;
 }
 
 export interface EvidenceSnapshot {
@@ -73,6 +83,8 @@ export interface ToolResult {
 	cached?: boolean;
 	/** The agent that made the run, so a verdict can count only its own. */
 	agentId?: string;
+	/** run: what it reached, once the review's packages were prepared. */
+	outcome?: ExecutionOutcome;
 	/** delegate: the commands the worker ran, so the reviewer is not asked to run them again. */
 	runs?: number;
 }

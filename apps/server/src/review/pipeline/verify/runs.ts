@@ -1,5 +1,6 @@
 import type { EvidenceRecord, EvidenceStore } from '../../../evidence/evidence.js';
 import type { CandidateFinding } from '../consolidate.js';
+import { SETUP_FAILURE, unresolved } from '../harness/run-outcome.js';
 
 /** Characters of a run's output kept as the observed excerpt. */
 const OBSERVED_CHARS = 600;
@@ -8,7 +9,7 @@ const OBSERVED_CHARS = 600;
 const OBSERVED_LINES = 3;
 
 /** An output line that reports a failure, for runs whose reason quotes nothing. */
-const FAILURE_LINE = /\b(?:error|fail(?:ed|ure|s)?|assert\w*|expect\w*|received|exception|panic)\b|[✗✘]/i;
+export const FAILURE_LINE = /\b(?:error|fail(?:ed|ure|s)?|assert\w*|expect\w*|received|exception|panic)\b|[✗✘]/i;
 
 /** A `file:line` location, which verifiers are asked to name and which a run rarely prints. */
 const LOCATION = /^[\w./@-]+:\d+(?:-\d+)?$/;
@@ -43,24 +44,25 @@ export function runOutput(run: EvidenceRecord): string {
 	return run.content.split('\n').slice(1, -1).join('\n');
 }
 
-/** Output of a run that stopped before the code under test ran: a missing module, binary or test file. */
-const SETUP_FAILURE =
-	/Cannot find (?:module|package)|ERR_MODULE_NOT_FOUND|Module not found|Could not resolve|command not found|No test files found/;
-
 /** Output of a planted bug that did not parse, so the test failed on the edit and not on the behavior. */
 const BROKEN_EDIT = /SyntaxError|Unexpected token/;
 
 /**
  * A failed run that never reached the code under test, so it settles nothing
- * either way. A syntax error counts only for a `mutation` run: there it is the
- * verifier's own edit, while a repro may fail on one as the defect itself.
+ * either way: one recorded as setup-failed or unsupported execution, or one
+ * with no recorded outcome whose output shows it. A recorded failed assertion
+ * is trusted over the output: its missing module can be a path the diff
+ * moved, which is the defect. A syntax error counts only for a `mutation`
+ * run: there it is the verifier's own edit, while a repro may fail on one as
+ * the defect itself.
  */
 export function brokeInSetup(run: EvidenceRecord, mutation = false): boolean {
 	if (!failed(run)) return false;
+	if (unresolved(run.outcome)) return true;
 
 	const output = runOutput(run);
 
-	return SETUP_FAILURE.test(output) || (mutation && BROKEN_EDIT.test(output));
+	return (run.outcome === undefined && SETUP_FAILURE.test(output)) || (mutation && BROKEN_EDIT.test(output));
 }
 
 /** A run that reached the code under test and exited nonzero there. */
@@ -74,6 +76,7 @@ export function failedOnTarget(run: EvidenceRecord, mutation = false): boolean {
  * itself proves nothing, and neither does a run that broke during setup.
  */
 export function showsDefect(run: EvidenceRecord, reason: string): boolean {
+	if (unresolved(run.outcome)) return false;
 	if (failedOnTarget(run)) return true;
 
 	const output = runOutput(run);
