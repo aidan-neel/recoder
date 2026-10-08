@@ -170,7 +170,7 @@ Hosted provider keys live in `connections`, by provider id. They are not in the 
 
 `apps/server/src/models/llm/limiter.ts` keeps one limiter per endpoint. `llmEndpoint` builds the endpoint key: the base URL without trailing slashes and with a lowercase host, or the provider name when there is no base URL (codex, opencode, claude-code).
 
-- Ceiling: `RECODER_LLM_CONCURRENCY` (default 64) for each endpoint. For `claude-code` it is the smaller of that and `RECODER_CLAUDE_CODE_CONCURRENCY` (default 4). Both are read by `envCount`.
+- Ceiling: `RECODER_LLM_CONCURRENCY` (default 64) for each endpoint. For `claude-code` it is the smaller of that and `RECODER_CLAUDE_CODE_CONCURRENCY` (default 8). Both are read by `envCount`.
 - Backoff: below the ceiling sits an effective limit. A rate-limit error halves it, never below 4 (or the ceiling, if lower). It is cut at most once per 10-second cooldown.
 - Recovery: after the cooldown, each successful call raises the limit by one until it reaches the ceiling.
 - Rate-limit errors are HTTP 429, 529 or an "overloaded" message (`isRateLimitError` in `apps/server/src/models/llm/errors.ts`). A 429 from codex, claude-code or opencode does not count: it means a usage cap or a spent plan.

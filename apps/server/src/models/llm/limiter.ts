@@ -4,11 +4,11 @@ const DEFAULT_CEILING = 64;
 
 /**
  * Endpoints whose every call starts a local process get a small ceiling of their own, read from an env var:
- * Claude Code runs one `claude` CLI per call, so `RECODER_CLAUDE_CODE_CONCURRENCY` (default 4) caps it,
+ * Claude Code runs one `claude` CLI per call, so `RECODER_CLAUDE_CODE_CONCURRENCY` (default 8) caps it,
  * never above the shared ceiling.
  */
 const PROCESS_CEILINGS: Record<string, { env: string; fallback: number }> = {
-	'claude-code': { env: 'RECODER_CLAUDE_CODE_CONCURRENCY', fallback: 4 }
+	'claude-code': { env: 'RECODER_CLAUDE_CODE_CONCURRENCY', fallback: 8 }
 };
 
 const BACKOFF_FLOOR = 4;
