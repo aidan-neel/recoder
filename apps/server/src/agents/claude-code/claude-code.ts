@@ -1,18 +1,22 @@
-import { rmSync } from 'node:fs';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
-import { LlmError, cancelledError, timedOutError } from '../../models/llm/errors';
-import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../../models/llm/types';
-import { emptyDirectory, findCli, killGroup, probeVersion, stopOnShutdown } from '../cli-process';
+import { LlmError } from '../../models/llm/errors';
+import type { ChatOptions } from '../../models/llm/types';
+import {
+	CliAgent,
+	callDeadline,
+	emptyDirectory,
+	findCli,
+	killGroup,
+	killOnAbort,
+	stopOnShutdown
+} from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
-import type { AgentAdapter } from '../registry';
 import { claudeCodeEfforts, claudeCodeModels } from './claude-code-models';
 import { claudeCodeEnv } from './claude-code-process';
 import { ReplyReader } from './claude-code-reply';
-
-type Env = Record<string, string | undefined>;
 
 const INSTALL = 'curl -fsSL https://claude.ai/install.sh | bash';
 
@@ -80,53 +84,11 @@ async function readLines(stream: ReadableStream<Uint8Array>, onLine: (line: stri
  * runs the CLI, without the server's keys in its environment, and reads what
  * the CLI prints.
  */
-export class ClaudeCodeAgent implements AgentAdapter {
+export class ClaudeCodeAgent extends CliAgent {
 	readonly id = 'claude-code';
 	readonly name = 'Claude Code';
-	private status: AgentStatus | null = null;
-	private running = new Set<Bun.Subprocess>();
-	private scratch = new Set<string>();
-	private apiKeySource: string | null = null;
-
-	constructor(private readonly env: Env = process.env) {}
-
-	/**
-	 * Installed, version, and sign-in from `claude auth status`, which makes no model call, with what paid for the
-	 * latest call. Cached until `refresh`.
-	 */
-	async detect(refresh = false): Promise<AgentStatus> {
-		if (this.status && !refresh) return this.status;
-
-		const path = this.find();
-
-		const base: AgentStatus = {
-			id: this.id,
-			name: this.name,
-			installed: !!path,
-			version: null,
-			path,
-			error: null,
-			install: INSTALL,
-			signedIn: null,
-			login: LOGIN,
-			providers: false,
-			authMethod: null,
-			apiKeySource: this.apiKeySource
-		};
-
-		if (!path) return (this.status = base);
-
-		try {
-			base.version = await probeVersion(path, claudeCodeEnv(this.env));
-			if (!base.version) base.error = 'Claude Code did not report a version.';
-		} catch {
-			base.error = 'Claude Code could not be run.';
-		}
-
-		if (!base.error) Object.assign(base, await this.signIn(path));
-
-		return (this.status = base);
-	}
+	readonly install = INSTALL;
+	readonly login = LOGIN;
 
 	async models(): Promise<ModelEntry[]> {
 		return claudeCodeModels();
@@ -141,9 +103,7 @@ export class ClaudeCodeAgent implements AgentAdapter {
 
 		if (!path) throw new LlmError(0, `Claude Code is not installed. Install it with: ${INSTALL}`);
 
-		const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-		const timeout = AbortSignal.timeout(timeoutMs);
-		const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
+		const deadline = callDeadline(opts);
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-claude-code-'));
 		const systemFile = join(scratch, 'system.md');
 
@@ -154,25 +114,16 @@ export class ClaudeCodeAgent implements AgentAdapter {
 
 			const args = [...BASE_ARGS, '--model', opts.model, ...effortArgs(opts), '--system-prompt-file', systemFile];
 
-			return await this.run(path, args, opts, signal, onToken);
+			return await this.run(path, args, opts, deadline.signal, onToken);
 		} catch (error) {
-			if (opts.signal?.aborted) throw cancelledError();
-			if (timeout.aborted) throw timedOutError(timeoutMs);
-			if (error instanceof LlmError) throw error;
-			throw new LlmError(0, error instanceof Error ? error.message : 'Claude Code request failed.');
+			throw deadline.failure(error, 'Claude Code request failed.');
 		} finally {
 			this.scratch.delete(scratch);
 			await rm(scratch, { recursive: true, force: true });
 		}
 	}
 
-	/** Kill every running call's process group and delete its system prompt file; synchronous, for exit. */
-	stop(): void {
-		for (const proc of this.running) killGroup(proc);
-		for (const dir of this.scratch) rmSync(dir, { recursive: true, force: true });
-	}
-
-	private find(): string | null {
+	protected find(): string | null {
 		return findCli({ pin: 'RECODER_CLAUDE_BIN', command: 'claude', installed: ['.local', 'bin', 'claude'] }, this.env);
 	}
 
@@ -207,19 +158,9 @@ export class ClaudeCodeAgent implements AgentAdapter {
 			}
 		});
 
-		let abort = () => {};
-
-		const stopped = new Promise<never>((_, reject) => {
-			abort = () => {
-				killGroup(proc);
-				reject(cancelledError());
-			};
-		});
-
-		stopped.catch(() => {});
 		this.running.add(proc);
-		signal.addEventListener('abort', abort, { once: true });
-		if (signal.aborted) abort();
+
+		const { stopped, release } = killOnAbort(proc, signal);
 
 		try {
 			const [, stderr, code] = await Promise.race([
@@ -233,14 +174,18 @@ export class ClaudeCodeAgent implements AgentAdapter {
 
 			return reader.finish(opts.onUsage, { code, stderr });
 		} finally {
-			signal.removeEventListener('abort', abort);
+			release();
 			this.running.delete(proc);
 			killGroup(proc);
 		}
 	}
 
 	/** `claude auth status --json` exits 1 when signed out; only its `loggedIn` and `authMethod` fields are read. */
-	private async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn' | 'authMethod'>> {
+	protected childEnv(): Record<string, string> {
+		return claudeCodeEnv(this.env);
+	}
+
+	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn' | 'authMethod'>> {
 		const proc = Bun.spawn([path, 'auth', 'status', '--json'], {
 			stdout: 'pipe',
 			stderr: 'ignore',

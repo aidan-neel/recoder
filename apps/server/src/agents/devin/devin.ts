@@ -1,24 +1,28 @@
-import { rmSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry, TokenUsage } from '@recoder/shared';
 import { z } from 'zod';
-import { LlmError, cancelledError, timedOutError } from '../../models/llm/errors';
-import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../../models/llm/types';
-import { emptyDirectory, findCli, killGroup, probeVersion, stopOnShutdown } from '../cli-process';
+import { LlmError } from '../../models/llm/errors';
+import type { ChatOptions } from '../../models/llm/types';
+import {
+	CliAgent,
+	callDeadline,
+	emptyDirectory,
+	findCli,
+	killGroup,
+	killOnAbort,
+	stopOnShutdown
+} from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
-import type { AgentAdapter } from '../registry';
 import { parseDevinModels } from './devin-models';
 import { devinEnv, removeToolFreeHome, toolFreeHome } from './devin-process';
-
-type Env = Record<string, string | undefined>;
 
 const INSTALL = 'curl -fsSL https://cli.devin.ai/install.sh | bash';
 
 const LOGIN = 'devin auth login';
 
-const SHORT_TIMEOUT_MS = 10_000;
+const STATUS_TIMEOUT_MS = 10_000;
 
 const MODELS_TIMEOUT_MS = 20_000;
 
@@ -86,49 +90,11 @@ function devinError(text: string): LlmError {
  * The CLI signs in itself. Recoder never reads its credential file; it runs the CLI without the server's keys
  * in its environment and under a config that denies every tool, and reads what the CLI prints and exports.
  */
-export class DevinAgent implements AgentAdapter {
+export class DevinAgent extends CliAgent {
 	readonly id = 'devin';
 	readonly name = 'Devin';
-	private status: AgentStatus | null = null;
-	private running = new Set<Bun.Subprocess>();
-	private scratch = new Set<string>();
-
-	constructor(private readonly env: Env = process.env) {}
-
-	/** Installed, version, and sign-in from `devin auth status`, which makes no model call. Cached until `refresh`. */
-	async detect(refresh = false): Promise<AgentStatus> {
-		if (this.status && !refresh) return this.status;
-
-		const path = this.find();
-
-		const base: AgentStatus = {
-			id: this.id,
-			name: this.name,
-			installed: !!path,
-			version: null,
-			path,
-			error: null,
-			install: INSTALL,
-			signedIn: null,
-			login: LOGIN,
-			providers: false,
-			authMethod: null,
-			apiKeySource: null
-		};
-
-		if (!path) return (this.status = base);
-
-		try {
-			base.version = await probeVersion(path, devinEnv(this.env));
-			if (!base.version) base.error = 'Devin did not report a version.';
-		} catch {
-			base.error = 'Devin could not be run.';
-		}
-
-		if (!base.error) base.signedIn = (await this.output(path, ['auth', 'status'], SHORT_TIMEOUT_MS)).code === 0;
-
-		return (this.status = base);
-	}
+	readonly install = INSTALL;
+	readonly login = LOGIN;
 
 	/** The account's models, from `devin models list`; throws when the CLI is missing or the list is empty. */
 	async models(): Promise<ModelEntry[]> {
@@ -153,9 +119,7 @@ export class DevinAgent implements AgentAdapter {
 
 		if (!path) throw new LlmError(0, `Devin is not installed. Install it with: ${INSTALL}`);
 
-		const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-		const timeout = AbortSignal.timeout(timeoutMs);
-		const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
+		const deadline = callDeadline(opts);
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-devin-'));
 		const promptFile = join(scratch, 'prompt.md');
 		const exportFile = join(scratch, 'export.json');
@@ -173,7 +137,7 @@ export class DevinAgent implements AgentAdapter {
 			const args = [...BASE_ARGS, '--prompt-file', promptFile, '--model', opts.model, '--export', exportFile];
 
 			const env = { ...devinEnv(this.env), XDG_CONFIG_HOME: await toolFreeHome(this.env) };
-			const text = await this.run(path, args, { cwd, env }, signal, onToken);
+			const text = await this.run(path, args, { cwd, env }, deadline.signal, onToken);
 			const exported = await this.readExport(exportFile);
 
 			session = exported?.session_id;
@@ -184,10 +148,7 @@ export class DevinAgent implements AgentAdapter {
 			return text;
 		} catch (error) {
 			session ??= (await this.readExport(exportFile))?.session_id;
-			if (opts.signal?.aborted) throw cancelledError();
-			if (timeout.aborted) throw timedOutError(timeoutMs);
-			if (error instanceof LlmError) throw error;
-			throw new LlmError(0, error instanceof Error ? error.message : 'Devin request failed.');
+			throw deadline.failure(error, 'Devin request failed.');
 		} finally {
 			this.scratch.delete(scratch);
 			await rm(scratch, { recursive: true, force: true });
@@ -195,15 +156,23 @@ export class DevinAgent implements AgentAdapter {
 		}
 	}
 
-	/** Kill every running call's process group and delete its prompt file and the tool-free config; synchronous, for exit. */
-	stop(): void {
-		for (const proc of this.running) killGroup(proc);
-		for (const dir of this.scratch) rmSync(dir, { recursive: true, force: true });
+	/** Also deletes the tool-free config. */
+	override stop(): void {
+		super.stop();
 		removeToolFreeHome();
 	}
 
-	private find(): string | null {
+	protected find(): string | null {
 		return findCli({ pin: 'RECODER_DEVIN_BIN', command: 'devin', installed: ['.local', 'bin', 'devin'] }, this.env);
+	}
+
+	protected childEnv(): Record<string, string> {
+		return devinEnv(this.env);
+	}
+
+	/** `devin auth status` exits 0 when signed in. */
+	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn'>> {
+		return { signedIn: (await this.output(path, ['auth', 'status'], STATUS_TIMEOUT_MS)).code === 0 };
 	}
 
 	private async readExport(file: string): Promise<Export | null> {
@@ -259,19 +228,9 @@ export class DevinAgent implements AgentAdapter {
 			stderr: 'pipe'
 		});
 
-		let abort = () => {};
-
-		const stopped = new Promise<never>((_, reject) => {
-			abort = () => {
-				killGroup(proc);
-				reject(cancelledError());
-			};
-		});
-
-		stopped.catch(() => {});
 		this.running.add(proc);
-		signal.addEventListener('abort', abort, { once: true });
-		if (signal.aborted) abort();
+
+		const { stopped, release } = killOnAbort(proc, signal);
 
 		try {
 			const [text, stderr, code] = await Promise.race([
@@ -283,7 +242,7 @@ export class DevinAgent implements AgentAdapter {
 
 			return text;
 		} finally {
-			signal.removeEventListener('abort', abort);
+			release();
 			this.running.delete(proc);
 			killGroup(proc);
 		}
