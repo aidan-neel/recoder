@@ -29,6 +29,10 @@ jobs:
           - { package: site, task: check }
           - { package: site, task: build }
           - { package: site, task: lint }
+          - { package: bench, task: check }
+          - { package: bench, task: test }
+          - { package: bench, task: build }
+          - { package: bench, task: lint }
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2

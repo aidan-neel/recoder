@@ -17,7 +17,7 @@ Run the relevant `check`, `lint` and tests before finishing a change, and
 CI runs each package's `check`, `test`, `build` and `lint` as its own job,
 plus one `deadcode` job for the repo (`.github/workflows/ci.yml`), so a failure
 names the package and task. Add a matrix entry when a package gains a new task.
-jscpd fails on any clone (`.jscpd.json`); CSS is excluded.
+jscpd fails on any clone (`.jscpd.json`); CSS and `package.json` are excluded.
 
 ## Code style (mandatory)
 

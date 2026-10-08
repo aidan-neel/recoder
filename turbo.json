@@ -24,6 +24,20 @@
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/**"]
 		},
+		"@recoder/bench#build": {
+			"dependsOn": ["^build"],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"$TURBO_ROOT$/apps/web/src/**",
+				"$TURBO_ROOT$/apps/web/static/**",
+				"$TURBO_ROOT$/apps/server/src/**"
+			],
+			"outputs": ["build/**"]
+		},
+		"@recoder/bench#check": {
+			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/**", "$TURBO_ROOT$/apps/server/src/**"]
+		},
 		"lint": {
 			"inputs": [
 				"$TURBO_DEFAULT$",

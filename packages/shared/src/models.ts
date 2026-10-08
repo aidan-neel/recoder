@@ -2,6 +2,21 @@
 export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
 
+/** Each effort's name and what it costs, for pickers. */
+export const EFFORT_TEXT: Record<ReasoningEffort, { label: string; description: string }> = {
+	minimal: { label: 'Minimal', description: 'Near-instant' },
+	low: { label: 'Low', description: 'Fastest, fewest tokens' },
+	medium: { label: 'Medium', description: 'Balanced speed and depth' },
+	high: { label: 'High', description: 'Slower, uses more of your plan' },
+	xhigh: { label: 'Extra high', description: 'Deeper reasoning for hard problems' },
+	max: { label: 'Max', description: 'Maximum depth, slowest' }
+};
+
+/** Effort words are always spelled out in full ("Medium", never "Med"). */
+export function effortLabel(effort: ReasoningEffort): string {
+	return EFFORT_TEXT[effort].label;
+}
+
 /** How many subagents one review may run in all, chosen in Settings → Review harness; 0 turns them off. */
 export const SUBAGENT_CAPS = [0, 2, 4] as const;
 export type SubagentCap = (typeof SUBAGENT_CAPS)[number];
