@@ -99,6 +99,13 @@ export function reviewNow(): number {
 	return Date.now() - (current.getStore()?.pausedMs() ?? 0);
 }
 
+/** `reviewNow` for the current review, for callbacks that may run outside it (a tool call arriving over HTTP). */
+export function reviewClock(): () => number {
+	const control = current.getStore();
+
+	return () => Date.now() - (control?.pausedMs() ?? 0);
+}
+
 /** Hold here while the current review is paused. */
 export async function reviewPausePoint(signal?: AbortSignal): Promise<void> {
 	await current.getStore()?.wait(signal);

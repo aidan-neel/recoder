@@ -95,3 +95,33 @@ test.skipIf(!available)('writeFile refuses an untracked file already in the chec
 	await ws.run('true', 10_000);
 	expect(await readFile(join(checkout, 'installed.js'), 'utf8')).toBe('dependency');
 });
+
+test.skipIf(!available)(
+	"a watcher hears its owner's call queue, start once another owner's run ends, then end",
+	async () => {
+		const { ws } = await workspace();
+		const startedAt = Date.now();
+		const heard: [string, number][] = [];
+		const note = (event: string) => () => heard.push([event, Date.now() - startedAt]);
+
+		const unwatch = ws.watchQueue('b', {
+			queued: note('queued'),
+			started: note('started'),
+			finished: note('finished')
+		});
+
+		const first = ws.run('sleep 0.3', 10_000, undefined, 'a');
+		const second = ws.run('true', 10_000, undefined, 'b');
+
+		await Bun.sleep(100);
+		expect(heard.map(([event]) => event)).toEqual(['queued']);
+
+		await Promise.all([first, second]);
+		expect(heard.map(([event]) => event)).toEqual(['queued', 'started', 'finished']);
+		expect(heard[1][1]).toBeGreaterThanOrEqual(300);
+
+		unwatch();
+		await ws.writeFile('scratch.txt', 'x', undefined, 'b');
+		expect(heard).toHaveLength(3);
+	}
+);

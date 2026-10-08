@@ -1,4 +1,4 @@
-import type { ObligationReport, ObligationResult } from '@recoder/shared';
+import type { ObligationAnswer, ObligationReport, ObligationResult, ObligationSpend } from '@recoder/shared';
 import type { CandidateFinding } from '../consolidate.js';
 import type { ObligationState } from './state.js';
 
@@ -26,10 +26,25 @@ export function obligationReport(state: ObligationState, candidates: CandidateFi
 			unresolved: count('unresolved'),
 			verified
 		},
+		spent: spentOn(answers.filter((answer) => answer.launched)),
 		cap: state.cap,
 		timeBoxMs: state.timeBoxMs,
 		obligations: derived,
 		answers
+	};
+}
+
+/** The launched investigations' time, model calls and output tokens, summed. */
+function spentOn(launched: ObligationAnswer[]): ObligationSpend {
+	const sum = (pick: (answer: ObligationAnswer) => number) =>
+		launched.reduce((total, answer) => total + pick(answer), 0);
+
+	return {
+		elapsedMs: sum((answer) => answer.elapsedMs),
+		queuedMs: sum((answer) => answer.queuedMs),
+		workingMs: sum((answer) => answer.workingMs),
+		turns: sum((answer) => answer.turns),
+		tokens: launched.some((answer) => answer.tokens !== null) ? sum((answer) => answer.tokens ?? 0) : null
 	};
 }
 

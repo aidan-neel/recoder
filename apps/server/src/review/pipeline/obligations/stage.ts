@@ -107,6 +107,9 @@ export async function runObligations(run: ReviewRun): Promise<void> {
 			obligationId: unit.id,
 			...blankAnswer('unresolved', 'Not launched: budget or time reserved for consolidation'),
 			elapsedMs: 0,
+			queuedMs: 0,
+			workingMs: 0,
+			turns: 0,
 			tokens: null,
 			timeBoxMs: state.timeBoxMs,
 			launched: false

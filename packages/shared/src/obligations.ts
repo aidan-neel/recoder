@@ -57,6 +57,12 @@ export interface ObligationAnswer {
 	reason: string;
 	evidenceIds: string[];
 	elapsedMs: number;
+	/** Of `elapsedMs`, the time its sandbox calls waited behind other agents' calls in the workspace queue. */
+	queuedMs: number;
+	/** `elapsedMs` less `queuedMs`: the time the box measures. */
+	workingMs: number;
+	/** Model calls it made. */
+	turns: number;
 	/** Output tokens the investigation's model calls reported; null when no call reported usage. */
 	tokens: number | null;
 	/** The time box the investigation ran under. */
@@ -83,9 +89,20 @@ export interface ObligationCounts {
 	verified: number;
 }
 
+/** What the launched investigations of a review spent in all. */
+export interface ObligationSpend {
+	elapsedMs: number;
+	queuedMs: number;
+	workingMs: number;
+	turns: number;
+	/** Null when no investigation's model calls reported usage. */
+	tokens: number | null;
+}
+
 /** What a review reports about its obligations; absent when `RECODER_OBLIGATIONS` is off. */
 export interface ObligationReport {
 	counts: ObligationCounts;
+	spent: ObligationSpend;
 	cap: number;
 	timeBoxMs: number;
 	obligations: Obligation[];

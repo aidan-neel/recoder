@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import type { ModelSettings, ObligationCounts, ReviewFunnel, SubagentCap } from '@recoder/shared';
+import type { ModelSettings, ObligationCounts, ObligationSpend, ReviewFunnel, SubagentCap } from '@recoder/shared';
 import { recall, type BenchmarkSummary, type LabeledDefect, type PrScore, type Totals } from './benchmark-score';
 import { labelLines, percent } from './benchmark-labels-report';
 import { countClasses, type LabeledRun } from './benchmark-labels';
@@ -207,16 +207,18 @@ function obligationLines(prs: PrResult[]): string[] {
 	const sum = (pick: (counts: ObligationCounts) => number) =>
 		reports.reduce((total, report) => total + pick(report.counts), 0);
 
-	const launched = reports.flatMap((report) => report.answers.filter((answer) => answer.launched));
-	const tokens = launched.reduce((total, answer) => total + (answer.tokens ?? 0), 0);
-	const seconds = Math.round(launched.reduce((total, answer) => total + answer.elapsedMs, 0) / 1000);
+	const spent = (pick: (spend: ObligationSpend) => number | null) =>
+		reports.reduce((total, report) => total + (pick(report.spent) ?? 0), 0);
+
+	const seconds = (pick: (spend: ObligationSpend) => number) => Math.round(spent(pick) / 1000);
 
 	return [
 		'',
 		`Obligations (${reports.length} runs)`,
 		`  derived ${sum((counts) => counts.derived)} · launched ${sum((counts) => counts.launched)} · over cap ${sum((counts) => counts.overCap)} · not launched ${sum((counts) => counts.notLaunched)}`,
 		`  confirmed ${sum((counts) => counts.confirmed)} (verified ${sum((counts) => counts.verified)}) · disproved ${sum((counts) => counts.disproved)} · not applicable ${sum((counts) => counts.notApplicable)} · unresolved ${sum((counts) => counts.unresolved)}`,
-		`  investigations spent ${tokens} output tokens and ${seconds} s in all`
+		`  investigations spent ${spent((spend) => spend.tokens)} output tokens over ${spent((spend) => spend.turns)} model calls`,
+		`  ${seconds((spend) => spend.workingMs)} s working and ${seconds((spend) => spend.queuedMs)} s waiting in the sandbox queue (${seconds((spend) => spend.elapsedMs)} s elapsed) in all`
 	];
 }
 

@@ -41,11 +41,20 @@ export interface CheckInputs {
 	tools: string;
 }
 
+/** Hears when one owner's calls join the command queue, start running and end. */
+export interface QueueWatcher {
+	queued(): void;
+	started(): void;
+	finished(): void;
+}
+
 export class ExecWorkspace {
 	readonly layout: SandboxLayout;
 	/** Runs past this moment are cut short; set by the harness. */
 	deadlineAt = Number.POSITIVE_INFINITY;
 	private queue: Promise<unknown> = Promise.resolve();
+	/** Who hears about each owner's queued calls; see `watchQueue`. */
+	private readonly watchers = new Map<string, QueueWatcher>();
 	private setupDone: Promise<SetupReport> | null = null;
 	/** Each agent's scratch files, path → content, placed only around that agent's runs. */
 	private readonly scratch = new Map<string, Map<string, string>>();
@@ -154,7 +163,7 @@ export class ExecWorkspace {
 				await this.remove([...files.keys()]);
 				await this.restoreTracked();
 			}
-		});
+		}, owner);
 	}
 
 	/**
@@ -195,7 +204,7 @@ export class ExecWorkspace {
 				await this.remove([...files.keys()], tree.sandbox);
 				await tree.restore().catch(() => undefined);
 			}
-		});
+		}, owner);
 	}
 
 	/**
@@ -229,7 +238,7 @@ export class ExecWorkspace {
 			if (written.exitCode === 0) await this.remove([clean]);
 
 			return written;
-		});
+		}, owner);
 
 		if (result.exitCode !== 0) return { ok: false, error: result.output.trim().slice(0, 400) || 'write failed' };
 
@@ -343,8 +352,25 @@ export class ExecWorkspace {
 		return Math.max(0, Math.min(requested, this.deadlineAt - reviewNow()));
 	}
 
-	private exclusive<T>(fn: () => Promise<T>): Promise<T> {
-		const next = this.queue.then(fn, fn);
+	/** Tells `watcher` as each of `owner`'s calls queues, starts and ends, until the returned function is called. */
+	watchQueue(owner: string, watcher: QueueWatcher): () => void {
+		this.watchers.set(owner, watcher);
+
+		return () => this.watchers.delete(owner);
+	}
+
+	private exclusive<T>(fn: () => Promise<T>, owner = ''): Promise<T> {
+		const watcher = this.watchers.get(owner);
+
+		const start = () => {
+			watcher?.started();
+
+			return fn().finally(() => watcher?.finished());
+		};
+
+		watcher?.queued();
+
+		const next = this.queue.then(start, start);
 
 		this.queue = next.catch(() => undefined);
 

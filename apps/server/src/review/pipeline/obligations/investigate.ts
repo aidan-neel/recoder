@@ -1,10 +1,9 @@
 import type { Obligation, ObligationAnswer, ReviewAssignment } from '@recoder/shared';
 import type { EvidenceRecord } from '../../../evidence/evidence.js';
-import { withTokenTally, type TokenTally } from '../../../models/metrics.js';
+import { withModelTally, type ModelTally } from '../../../models/metrics.js';
 import { configForSubagent, type ModelConfig } from '../../../models/models.js';
 import type { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import { withGuidelines } from '../../guidelines/guidelines.js';
-import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { ModelBlockedError, runJsonAgent } from '../agent-loop.js';
 import { newAgentId } from '../agent-loop/limits.js';
@@ -29,6 +28,7 @@ import {
 	type InvestigatorOutput
 } from './answer.js';
 import { investigatorRole } from './prompts.js';
+import { WorkClock } from './work-clock.js';
 
 /** Model turns an investigation may take; a few, since it answers one question. */
 export const OBLIGATION_TURNS = 6;
@@ -50,7 +50,10 @@ export interface InvestigationContext extends PoolContext {
 	onAnswer: (answer: ObligationAnswer) => void;
 }
 
-type Settled = Omit<ObligationAnswer, 'obligationId' | 'elapsedMs' | 'tokens' | 'timeBoxMs' | 'launched'>;
+/** What an answer records about the investigation's cost and limits rather than its findings. */
+type Spent = 'elapsedMs' | 'queuedMs' | 'workingMs' | 'turns' | 'tokens' | 'timeBoxMs' | 'launched';
+
+type Settled = Omit<ObligationAnswer, 'obligationId' | Spent>;
 
 /** An answer with no investigation behind it: nothing found, tried or cited. */
 export function blankAnswer(result: ObligationAnswer['result'], reason: string): Settled {
@@ -67,29 +70,33 @@ export function blankAnswer(result: ObligationAnswer['result'], reason: string):
 
 /**
  * Runs one obligation's investigation on the second model through the
- * reviewer pool's machinery, inside its time box, and records the answer. A
- * confirmed answer publishes its finding as an ordinary candidate, which the
- * verifier then proves or refutes. Running out of the box, a failed model
- * call or an answer that claims a defect it never ran leaves the answer
+ * reviewer pool's machinery, inside its time box, and records the answer. The
+ * box measures working time: it stops while the investigation's sandbox calls
+ * wait behind other agents' calls, and the review deadline stays the hard
+ * stop. A confirmed answer publishes its finding as an ordinary candidate,
+ * which the verifier then proves or refutes. Running out of the box, a failed
+ * model call or an answer that claims a defect it never ran leaves the answer
  * unresolved; a blocked model or a stopped review ends the review as usual.
  */
 export async function investigate(item: ReviewUnit, records: ReviewAssignment[], ctx: InvestigationContext) {
 	const obligation = ctx.obligationOf(item.id);
 	const cfg = configForSubagent();
 	const agentId = newAgentId();
-	const started = reviewNow();
-	const boxEnd = started + ctx.timeBoxMs;
+	const clock = new WorkClock();
+	const unwatch = ctx.workspace?.watchQueue(agentId, clock);
 	const box = new AbortController();
-	const timer = setInterval(() => reviewNow() >= boxEnd && box.abort(), TICK_MS);
+	const outOfBox = () => clock.workingMs() >= ctx.timeBoxMs;
+	const timer = setInterval(() => outOfBox() && box.abort(), TICK_MS);
 	const boxed = { ...ctx, signal: AbortSignal.any([ctx.signal, box.signal]) };
-	const tally: TokenTally = { outputTokens: null };
+	const tally: ModelTally = { calls: 0, outputTokens: null };
 	const outOfTime = `No answer within the ${Math.round(ctx.timeBoxMs / 1000)} s time box`;
 
 	const record = (settled: Settled) =>
 		ctx.onAnswer({
 			obligationId: obligation.id,
 			...settled,
-			elapsedMs: reviewNow() - started,
+			...clock.reading(),
+			turns: tally.calls,
 			tokens: tally.outputTokens,
 			timeBoxMs: ctx.timeBoxMs,
 			launched: true
@@ -100,14 +107,14 @@ export async function investigate(item: ReviewUnit, records: ReviewAssignment[],
 	try {
 		const patch = await readScopedPatch(item, 'obligation', boxed);
 
-		const result = await withTokenTally(tally, () =>
-			askInvestigator(item, records, boxed, { obligation, cfg, patch, agentId })
+		const result = await withModelTally(tally, () =>
+			askInvestigator(item, records, boxed, { obligation, cfg, patch, agentId, clock })
 		);
 
-		const reason = box.signal.aborted || reviewNow() >= boxEnd ? outOfTime : result.error;
+		const reason = box.signal.aborted || outOfBox() ? outOfTime : result.error;
 
 		const settled = result.value
-			? await settle(result.value, boxed, agentId, boxEnd)
+			? await settle(result.value, boxed, agentId, ctx.timeBoxMs - clock.workingMs())
 			: blankAnswer('unresolved', reason ?? 'The investigator gave no answer');
 
 		const candidateId = settled.result === 'confirmed' ? publish(item, ctx, cfg.model, result.value!, settled) : null;
@@ -123,6 +130,7 @@ export async function investigate(item: ReviewUnit, records: ReviewAssignment[],
 		failAssignment(item, records, ctx, cfg.model, reason);
 	} finally {
 		clearInterval(timer);
+		unwatch?.();
 	}
 }
 
@@ -131,9 +139,9 @@ function askInvestigator(
 	item: ReviewUnit,
 	records: ReviewAssignment[],
 	ctx: InvestigationContext,
-	agent: { obligation: Obligation; cfg: ModelConfig; patch: ScopedPatch; agentId: string }
+	agent: { obligation: Obligation; cfg: ModelConfig; patch: ScopedPatch; agentId: string; clock: WorkClock }
 ) {
-	const { obligation, cfg, patch, agentId } = agent;
+	const { obligation, cfg, patch, agentId, clock } = agent;
 	const role = investigatorRole(obligation, ctx.exec, Math.round(ctx.timeBoxMs / 1000));
 
 	return runJsonAgent<InvestigatorOutput>({
@@ -155,7 +163,11 @@ function askInvestigator(
 				? 'You confirmed a defect without running the counterexample. Write it as a scratch script or test and run it now: reply with "actions". If it cannot run, answer "unresolved".'
 				: null,
 		responseSchema: (finalTurn) => investigatorResponseSchema(ctx.exec, finalTurn),
-		timeLimit: { finalTurnAfterMs: Math.round((ctx.timeBoxMs * 2) / 3), maxWallMs: ctx.timeBoxMs },
+		timeLimit: {
+			finalTurnAfterMs: Math.round((ctx.timeBoxMs * 2) / 3),
+			maxWallMs: ctx.timeBoxMs,
+			elapsed: () => clock.workingMs()
+		},
 		finalExample: INVESTIGATOR_EXAMPLE,
 		...agentEvents(item, records, ctx, cfg.model)
 	});
@@ -169,19 +181,18 @@ function ownRuns(ctx: InvestigationContext, agentId: string): EvidenceRecord[] {
 /**
  * The fixed record for a parsed answer. Its counterexample is the run it
  * cites when the investigator made it, else its latest run, and that command
- * is rerun once on the merge-base tree while the box lasts. When code can run,
- * a defect confirmed without any run of its own stays unresolved.
+ * is rerun once on the merge-base tree with the `left` of the box. When code
+ * can run, a defect confirmed without any run of its own stays unresolved.
  */
 async function settle(
 	value: InvestigatorOutput,
 	ctx: InvestigationContext,
 	agentId: string,
-	boxEnd: number
+	left: number
 ): Promise<Settled> {
 	const { answer, output } = value;
 	const runs = ownRuns(ctx, agentId);
 	const proof = runs.find((run) => run.id === answer.attemptedCounterexample?.evidenceId) ?? runs.at(-1) ?? null;
-	const left = boxEnd - reviewNow();
 	const baseCtx = { ...ctx, deadlineAt: () => ctx.deadlineAt };
 	const timeoutMs = Math.min(REVIEW_POLICY.baseRunTimeoutMs, left);
 

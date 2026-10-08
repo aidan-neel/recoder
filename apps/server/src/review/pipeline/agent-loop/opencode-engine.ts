@@ -169,7 +169,7 @@ class OpenCodeRun<T> {
 			const reply = await this.session!.prompt(final && this.toolsOn ? `${text}\n\n${FINAL_TURN_NOTE}` : text, {
 				tools: !final,
 				schema: this.opts.responseSchema?.(true).schema,
-				timeoutMs: Math.max(1, this.limits.deadlineAt - reviewNow())
+				timeoutMs: Math.max(1, this.limits.settleAt - reviewNow())
 			});
 
 			this.relay.settle(!reply.error);

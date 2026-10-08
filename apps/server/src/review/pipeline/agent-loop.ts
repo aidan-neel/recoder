@@ -136,7 +136,6 @@ async function runTurns<T>(
 ): Promise<{ value: T | null; error?: string }> {
 	const agentId = opts.agentId ?? newAgentId();
 	const limits = agentDeadlines(opts);
-	const { deadlineAt, finalTurnAt } = limits;
 	const spendOpts = { consumeReserve: opts.consumeReserve };
 
 	const messages: ChatMessage[] = [
@@ -170,14 +169,14 @@ async function runTurns<T>(
 		await reviewPausePoint(opts.signal);
 		throwIfAborted(opts.signal);
 
-		if (reviewNow() >= deadlineAt) return { value: null, error: deadlineError(opts, limits) };
+		if (reviewNow() >= limits.deadlineAt) return { value: null, error: deadlineError(opts, limits) };
 
 		if (!opts.budget.canSpend(1, spendOpts)) {
 			return { value: null, error: 'model-call budget exhausted' };
 		}
 
 		const lastTurn =
-			stuck || turn >= opts.maxTurns || !opts.budget.canSpend(2, spendOpts) || reviewNow() >= finalTurnAt;
+			stuck || turn >= opts.maxTurns || !opts.budget.canSpend(2, spendOpts) || reviewNow() >= limits.finalTurnAt;
 
 		const discussion = opts.getDiscussion?.() ?? '';
 
@@ -193,7 +192,7 @@ async function runTurns<T>(
 		opts.onLog?.(`${opts.label} model turn ${turn}/${opts.maxTurns} (${opts.config.model})`);
 
 		const started = Date.now();
-		const result = await streamTurn(opts, messages, conversation, turn, lastTurn, deadlineAt);
+		const result = await streamTurn(opts, messages, conversation, turn, lastTurn, limits.deadlineAt);
 
 		if (result.kind === 'paused') {
 			opts.budget.used = Math.max(0, opts.budget.used - 1);
@@ -243,7 +242,7 @@ async function runTurns<T>(
 
 		const actions = parseActions(parsed);
 
-		if (actions && !lastTurn && opts.budget.canSpend(1, spendOpts) && reviewNow() < deadlineAt) {
+		if (actions && !lastTurn && opts.budget.canSpend(1, spendOpts) && reviewNow() < limits.deadlineAt) {
 			opts.onProgress?.('retrieval', Date.now() - started, `Reading repository evidence for ${opts.label}`);
 
 			const results = await opts.evidence.executeRound(

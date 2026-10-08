@@ -34,11 +34,13 @@ export interface JsonAgentOptions<T> {
 	 */
 	responseSchema?: (finalTurn: boolean) => { name: string; schema: Record<string, unknown> };
 	/**
-	 * This agent's own time limit, on the review clock. Past `finalTurnAfterMs`
-	 * the next turn is the final one, so it answers with what it has instead of
-	 * running into `maxWallMs`, where it stops without an answer.
+	 * This agent's own time limit. Past `finalTurnAfterMs` the next turn is the
+	 * final one, so it answers with what it has instead of running into
+	 * `maxWallMs`, where it stops without an answer. Both are measured on the
+	 * review clock from when it started, or on `elapsed` when given (an
+	 * obligation's time box stops while its tool calls wait in the sandbox queue).
 	 */
-	timeLimit?: { finalTurnAfterMs: number; maxWallMs: number };
+	timeLimit?: { finalTurnAfterMs: number; maxWallMs: number; elapsed?: () => number };
 	/** A minimal valid final answer, quoted back when the model gets the shape wrong. */
 	finalExample?: string;
 	/** The agent may run commands and write scratch files in the sandbox, not only read. */

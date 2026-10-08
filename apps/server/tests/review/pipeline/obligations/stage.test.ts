@@ -98,12 +98,24 @@ test('each obligation is investigated once, and its fixed answer is saved with t
 		result: 'disproved',
 		reason: ANSWER.reason,
 		evidenceIds: [],
+		queuedMs: 0,
+		turns: 1,
 		tokens: 42,
 		timeBoxMs: 45_000,
 		launched: true
 	});
 
 	expect(answer.elapsedMs).toBeGreaterThanOrEqual(0);
+	expect(answer.workingMs).toBe(answer.elapsedMs);
+
+	expect(report.spent).toEqual({
+		elapsedMs: report.answers.reduce((sum, entry) => sum + entry.elapsedMs, 0),
+		queuedMs: 0,
+		workingMs: report.answers.reduce((sum, entry) => sum + entry.workingMs, 0),
+		turns: DERIVED,
+		tokens: 42 * DERIVED
+	});
+
 	expect(saved?.obligations?.answers).toEqual(report.answers);
 	expect(result.summary).toContain('4 obligations derived, 4 investigated: 4 disproved.');
 
