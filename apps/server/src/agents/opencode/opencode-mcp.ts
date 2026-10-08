@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomBytes } from 'node:crypto';
 import { NATIVE_TOOLS } from '../../evidence/native-tools';
 import type { SessionScope } from './opencode-session';
@@ -114,6 +115,9 @@ export class OpenCodeToolHost {
 	 * Gives `runner` a slot and makes sure OpenCode has it registered. It is
 	 * registered again on every lease: OpenCode forgets added servers when it
 	 * restarts or reloads its providers, and adding one it already has is cheap.
+	 * Calls run in the leasing agent's async context, not the server's, so a tool
+	 * that calls a model (a delegated worker) is billed to the agent's review and
+	 * runs on its review's locked models.
 	 */
 	async lease(scope: SessionScope, runner: ToolRunner, signal: AbortSignal): Promise<ToolLease> {
 		const { port } = this.listen();
@@ -125,11 +129,13 @@ export class OpenCodeToolHost {
 		}
 
 		const leased = slot;
+		const inAgentContext = AsyncLocalStorage.snapshot();
+		const bound: ToolRunner = (name, args) => inAgentContext(() => runner(name, args));
 
-		leased.runner = runner;
+		leased.runner = bound;
 
 		const release = () => {
-			if (leased.runner === runner) leased.runner = null;
+			if (leased.runner === bound) leased.runner = null;
 		};
 
 		try {

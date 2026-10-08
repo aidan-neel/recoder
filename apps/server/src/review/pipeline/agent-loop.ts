@@ -1,4 +1,5 @@
 import { CapacityError, ChatConversation, LlmError, type ChatMessage } from '../../models/llm.js';
+import { withTokenStage } from '../../models/metrics.js';
 import { streamedMessage } from '../../models/response-text.js';
 import { extractJsonValue } from '../../models/json-extract.js';
 import { parseActions, formatToolResults } from '../../evidence/evidence.js';
@@ -7,6 +8,7 @@ import { isAuthFailure, isUsageLimit, modelFailure } from '../../models/model-fa
 import { CHAT_STYLE, EXEC_EXAMPLES, RETRIEVAL_EXAMPLES } from './prompts.js';
 import { reviewNow, reviewPausePoint } from '../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
+import { DELEGATE_SHAPE, commandsRun, executeTurn } from './agent-loop/delegation.js';
 import { agentDeadlines, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
 import { runOpenCodeAgent } from './agent-loop/opencode-engine.js';
 import type { JsonAgentOptions } from './agent-loop/options.js';
@@ -118,16 +120,18 @@ function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean
  * share one conversation, so a transport that keeps a session reuses the
  * provider's prompt cache.
  */
-export async function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
-	if (opts.config.provider === 'opencode') return runOpenCodeAgent(opts);
+export function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
+	return withTokenStage(opts.stage, async () => {
+		if (opts.config.provider === 'opencode') return runOpenCodeAgent(opts);
 
-	const conversation = new ChatConversation();
+		const conversation = new ChatConversation();
 
-	try {
-		return await runTurns(opts, conversation);
-	} finally {
-		await conversation.close();
-	}
+		try {
+			return await runTurns(opts, conversation);
+		} finally {
+			await conversation.close();
+		}
+	});
 }
 
 async function runTurns<T>(
@@ -157,7 +161,7 @@ async function runTurns<T>(
 	let stuck = false;
 	let lastError = 'no model output';
 	let sentDiscussion = '';
-	const shapes = `${opts.exec ? EXEC_EXAMPLES : RETRIEVAL_EXAMPLES}\nTo finish, reply with ONLY the final JSON object${opts.finalExample ? `, for example:\n${opts.finalExample}` : '.'}\nNo prose outside the JSON, no code fences.`;
+	const shapes = `${opts.exec ? EXEC_EXAMPLES : RETRIEVAL_EXAMPLES}${opts.delegate ? DELEGATE_SHAPE : ''}\nTo finish, reply with ONLY the final JSON object${opts.finalExample ? `, for example:\n${opts.finalExample}` : '.'}\nNo prose outside the JSON, no code fences.`;
 
 	/**
 	 * The evidence round in progress. Schema repairs cost model calls but not a
@@ -246,16 +250,10 @@ async function runTurns<T>(
 		if (actions && !lastTurn && opts.budget.canSpend(1, spendOpts) && reviewNow() < deadlineAt) {
 			opts.onProgress?.('retrieval', Date.now() - started, `Reading repository evidence for ${opts.label}`);
 
-			const results = await opts.evidence.executeRound(
-				actions,
-				opts.signal,
-				opts.onTool,
-				REVIEW_POLICY.maxRetrievalsPerTurn,
-				agentId
-			);
+			const results = await executeTurn(opts, actions, agentId);
 
 			retrievals++;
-			runs += actions.filter((action) => action.action === 'run').length;
+			runs += commandsRun(actions, results);
 
 			for (const result of results) {
 				if (result.ok && result.path)

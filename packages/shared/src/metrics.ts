@@ -2,6 +2,21 @@ import type { ModelProvider } from './models';
 
 export type TokenScope = 'pipeline' | 'discussion' | 'fix';
 
+/** The kinds of agent that make calls, so a review's tokens can be split by the work that spent them. */
+export const TOKEN_STAGES = [
+	'reviewer',
+	'subagent',
+	'investigator',
+	'worker',
+	'verifier',
+	'repair',
+	'intent',
+	'ledger',
+	'other'
+] as const;
+
+export type TokenStage = (typeof TOKEN_STAGES)[number];
+
 /** Provider-reported counts only. Cached/reasoning counts are breakdowns, not added to total. */
 export interface TokenUsage {
 	inputTokens: number | null;
@@ -24,6 +39,8 @@ export interface TokenCall {
 	model: string;
 	provider: ModelProvider;
 	scope: TokenScope;
+	/** Unset on calls made outside an agent run and on rows stored before stages were recorded. */
+	stage?: TokenStage;
 	status: 'pending' | 'completed' | 'failed';
 	usage: TokenUsage;
 	/** What paid for a Claude Code call, as the CLI reports it: `none` is the signed-in subscription, not a key. */
@@ -46,6 +63,8 @@ export interface ReviewMetrics {
 	total: TokenAggregate;
 	models: (TokenAggregate & { model: string; provider: TokenCall['provider'] })[];
 	scopes: (TokenAggregate & { scope: TokenScope })[];
+	/** Pipeline calls by the kind of agent that made them; stages with no calls are left out. */
+	stages: (TokenAggregate & { stage: TokenStage })[];
 }
 
 export function emptyTokenUsage(): TokenUsage {

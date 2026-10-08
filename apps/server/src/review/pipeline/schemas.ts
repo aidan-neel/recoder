@@ -24,15 +24,17 @@ const EXEC_ACTIONS = [...READ_ACTIONS, 'run', 'writeFile'];
 
 /**
  * A retrieval turn for endpoints with guided decoding: a message and at least
- * one action. With `exec`, actions may also run commands and write files.
+ * one action. With `exec`, actions may also run commands and write files; with
+ * `delegate`, hand a task to a worker.
  */
-export function retrievalTurnSchema(exec: boolean): Record<string, unknown> {
+export function retrievalTurnSchema(exec: boolean, delegate = false): Record<string, unknown> {
 	const str = { type: 'string' };
+	const names = [...(exec ? EXEC_ACTIONS : READ_ACTIONS), ...(delegate ? ['delegate'] : [])];
 
 	const action = {
 		type: 'object',
 		properties: {
-			action: { type: 'string', enum: exec ? EXEC_ACTIONS : READ_ACTIONS },
+			action: { type: 'string', enum: names },
 			revision: { type: 'string', enum: ['head', 'target', 'mergeBase'] },
 			path: str,
 			query: str,
@@ -41,7 +43,8 @@ export function retrievalTurnSchema(exec: boolean): Record<string, unknown> {
 			hunkIds: { type: 'array', items: str },
 			startLine: { type: 'integer' },
 			endLine: { type: 'integer' },
-			...(exec ? { command: str, content: str, timeoutSec: { type: 'integer' } } : {})
+			...(exec ? { command: str, content: str, timeoutSec: { type: 'integer' } } : {}),
+			...(delegate ? { task: str } : {})
 		},
 		required: ['action']
 	};

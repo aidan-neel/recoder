@@ -20,9 +20,11 @@ interface ClaudeCodeModel {
 const MODELS: ClaudeCodeModel[] = [
 	{ model: 'claude-opus-5-5', label: 'Claude Opus 5.5', efforts: CLI_EFFORTS },
 	{ model: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', efforts: CLI_EFFORTS },
+	{ model: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', efforts: CLI_EFFORTS },
 	{ model: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
 	{ model: 'opus', label: 'Opus (latest)', efforts: CLI_EFFORTS },
 	{ model: 'sonnet', label: 'Sonnet (latest)', efforts: CLI_EFFORTS },
+	{ model: 'haiku', label: 'Haiku (latest)', efforts: CLI_EFFORTS },
 	{ model: 'fable', label: 'Fable (latest)', efforts: CLI_EFFORTS }
 ];
 

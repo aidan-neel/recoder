@@ -1,4 +1,4 @@
-import type { ChatConversation } from '../../models/llm/conversation';
+import { addedTurns, promptText, type ChatConversation, type HeldTranscript } from '../../models/llm/conversation';
 import type { ChatMessage } from '../../models/llm/types';
 import type { OpenCodeServer } from './opencode-server';
 
@@ -6,14 +6,8 @@ import type { OpenCodeServer } from './opencode-server';
 export type SessionScope = Pick<TurnRequest, 'server' | 'directory'>;
 
 /** The session a conversation keeps between calls, and what OpenCode already holds of it. */
-interface KeptSession {
+interface KeptSession extends HeldTranscript {
 	id: string;
-	model: string;
-	system: string;
-	variant: string | undefined;
-	/** How many turns of the transcript the session holds, the last reply included. */
-	turns: number;
-	reply: string;
 	/** The last message of the last good call; a failed call's messages come after it. */
 	lastMessageId: string | null;
 }
@@ -40,31 +34,6 @@ interface TurnRequest {
 	turns: ChatMessage[];
 	conversation?: ChatConversation;
 	signal: AbortSignal;
-}
-
-/** OpenCode takes one user turn per message, so a transcript it does not hold yet is sent as one text. */
-function flatten(turns: ChatMessage[]): string {
-	return turns.length === 1
-		? turns[0].content
-		: turns.map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}:\n${m.content}`).join('\n\n');
-}
-
-/** The turns added since the session's last reply, when the transcript only grew by user turns after it. */
-function newTurns(session: KeptSession, request: TurnRequest): ChatMessage[] | null {
-	const { turns } = request;
-	const added = turns.slice(session.turns);
-	const last = turns[session.turns - 1];
-
-	const continues =
-		session.model === request.model &&
-		session.system === request.system &&
-		session.variant === request.variant &&
-		added.length > 0 &&
-		last?.role === 'assistant' &&
-		last.content === session.reply &&
-		added.every((m) => m.role === 'user');
-
-	return continues ? added : null;
 }
 
 /** A session that may use none of OpenCode's own tools; `allow` names the patterns it may call. */
@@ -113,7 +82,7 @@ async function throwawayTurn(request: TurnRequest): Promise<SessionTurn> {
 
 	return {
 		session,
-		text: flatten(request.turns),
+		text: promptText(null, request.turns),
 		commit: () => {},
 		end: async (_ok, aborted) => {
 			await abortSession(request, session, aborted);
@@ -135,7 +104,7 @@ export async function openTurn(request: TurnRequest): Promise<SessionTurn> {
 	if (!conversation) return throwawayTurn(request);
 
 	const existing = kept.get(conversation);
-	const added = existing && newTurns(existing, request);
+	const added = existing ? addedTurns(existing, request) : null;
 
 	if (existing && !added) await deleteSession(request, existing.id);
 	else if (!existing)
@@ -163,7 +132,7 @@ export async function openTurn(request: TurnRequest): Promise<SessionTurn> {
 
 	return {
 		session: session.id,
-		text: added ? added.map((m) => m.content).join('\n\n') : flatten(request.turns),
+		text: promptText(added, request.turns),
 		commit: (reply, messageId) => {
 			session.turns = request.turns.length + 1;
 			session.reply = reply;

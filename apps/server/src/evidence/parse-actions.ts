@@ -35,7 +35,12 @@ const ACTION_ALIASES: Record<string, ActionName> = {
 	write_file: 'writeFile',
 	write: 'writeFile',
 	create_file: 'writeFile',
-	createfile: 'writeFile'
+	createfile: 'writeFile',
+	delegate: 'delegate',
+	handoff: 'delegate',
+	hand_off: 'delegate',
+	worker: 'delegate',
+	ask_worker: 'delegate'
 };
 
 /** Keys models use for the list of requests. */
@@ -148,6 +153,7 @@ function canonicalFields(args: Record<string, unknown>, action?: string): Record
 
 	if (action === 'run') canonicalRunFields(out);
 	if (action === 'writeFile') canonicalWriteFields(out);
+	if (action === 'delegate') pick(out, 'task', 'question', 'prompt', 'request', 'instructions', 'text');
 
 	pick(out, 'query', 'pattern', 'regex', 'text', 'term', 'q', 'keyword', 'symbol');
 	pick(out, 'path', 'file', 'filePath', 'file_path', 'filepath', 'filename', 'fileName');
@@ -184,13 +190,18 @@ function namedAction(item: Record<string, unknown>, named: ActionName): Retrieva
 	} as RetrievalAction;
 }
 
+/** The field a bare string stands for: `{"run": "ls"}` is a command, `{"delegate": "…"}` a task. */
+const BARE_STRING_FIELD: Partial<Record<ActionName, string>> = { run: 'command', delegate: 'task' };
+
 /** `{"readDiff": {…}}`, or `{"run": "ls"}` with the command as a bare string. */
 function keyedAction(args: unknown, key: ActionName): RetrievalAction {
+	const bare = BARE_STRING_FIELD[key];
+
 	const fields =
 		args && typeof args === 'object'
 			? (args as Record<string, unknown>)
-			: typeof args === 'string' && key === 'run'
-				? { command: args }
+			: typeof args === 'string' && bare
+				? { [bare]: args }
 				: {};
 
 	return { ...canonicalFields(fields, key), action: key } as RetrievalAction;

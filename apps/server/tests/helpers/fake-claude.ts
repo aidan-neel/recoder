@@ -7,7 +7,8 @@ import { fakeBin } from './fake-bin';
 /**
  * A fake `claude` CLI. `--version` and `auth status --json` answer at once (`FAKE_CLAUDE_SIGNED_IN=1` signs it
  * in). Print mode reads the prompt from stdin, writes its arguments, working directory, prompt and system prompt
- * file to `FAKE_CLAUDE_LOG` and its environment to `<log>.env`, then prints the canned `stream-json` lines for
+ * file to `FAKE_CLAUDE_LOG` and its environment to `<log>.env`, saves an empty transcript for `--session-id` where
+ * the CLI keeps sessions (under `CLAUDE_CONFIG_DIR`), then prints the canned `stream-json` lines for
  * `FAKE_CLAUDE_MODE`: a reply (default), `auth`, `limit`, `crash` (stderr only), `garbage` (unparsable output,
  * exit 0), `hang`, or `spawn` (starts a `sleep` grandchild, writes `<own pid> <grandchild pid>` to `<log>.pids`
  * and waits for it).
@@ -23,11 +24,19 @@ fi
 
 prompt=$(cat)
 system=""
+session=""
 previous=""
 for arg in "$@"; do
 	if [ "$previous" = "--system-prompt-file" ]; then system=$(cat "$arg"); fi
+	if [ "$previous" = "--session-id" ]; then session="$arg"; fi
 	previous="$arg"
 done
+
+if [ -n "$session" ] && [ -n "$CLAUDE_CONFIG_DIR" ]; then
+	folder="$CLAUDE_CONFIG_DIR/projects/$(pwd | sed 's/[^a-zA-Z0-9]/-/g')"
+	mkdir -p "$folder"
+	: > "$folder/$session.jsonl"
+fi
 
 if [ -n "$FAKE_CLAUDE_LOG" ]; then
 	{ printf 'args:'; printf ' [%s]' "$@"; printf '\\ncwd: %s\\nprompt: %s\\nsystem: %s\\n' "$(pwd)" "$prompt" "$system"; } > "$FAKE_CLAUDE_LOG"

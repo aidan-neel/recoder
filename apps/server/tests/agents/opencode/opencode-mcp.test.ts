@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { OpenCodeToolHost, type ToolRunner } from '../../../src/agents/opencode/opencode-mcp';
 import type { SessionScope } from '../../../src/agents/opencode/opencode-session';
 
@@ -76,4 +77,18 @@ test('a slot OpenCode could not connect to is not leased', async () => {
 	await host.lease(scope(added), runner('second'), signal);
 
 	expect(added[1].name).toBe(added[0].name);
+});
+
+test('a tool call runs in the async context of the agent that leased its slot, not the one that started the server', async () => {
+	const added: { name: string; url: string }[] = [];
+	const review = new AsyncLocalStorage<string>();
+	const seen: (string | undefined)[] = [];
+	const reader: ToolRunner = async () => ({ text: String(seen.push(review.getStore())), isError: false });
+
+	await review.run('first review', () => host.lease(scope(added), reader, signal));
+	await review.run('second review', () => host.lease(scope(added), reader, signal));
+	await call(added[1].url, 'search');
+	await call(added[0].url, 'search');
+
+	expect(seen).toEqual(['second review', 'first review']);
 });

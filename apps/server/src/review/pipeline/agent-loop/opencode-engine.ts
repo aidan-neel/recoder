@@ -146,7 +146,7 @@ class OpenCodeRun<T> {
 			model: opts.config.model,
 			reasoningEffort: opts.config.reasoningEffort,
 			system: forNativeTools(opts.system) + NATIVE_REPLY_RULES + CHAT_STYLE,
-			tools: this.toolsOn ? nativeToolNames(Boolean(opts.exec)) : [],
+			tools: this.toolsOn ? nativeToolNames({ exec: Boolean(opts.exec), delegate: Boolean(opts.delegate) }) : [],
 			runTool: this.gate.run,
 			handlers: this.relay.handlers,
 			signal: opts.signal

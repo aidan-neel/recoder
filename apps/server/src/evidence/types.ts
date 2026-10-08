@@ -4,7 +4,8 @@ export type RevisionAlias = 'head' | 'target' | 'mergeBase';
 
 export const REVISION_ALIASES: RevisionAlias[] = ['head', 'target', 'mergeBase'];
 
-export const ACTION_NAMES = ['listFiles', 'readFile', 'search', 'readDiff', 'run', 'writeFile'] as const;
+/** `delegate` is not evidence: the agent loop hands it to a worker and never to the evidence store. */
+export const ACTION_NAMES = ['listFiles', 'readFile', 'search', 'readDiff', 'run', 'writeFile', 'delegate'] as const;
 
 export type ActionName = (typeof ACTION_NAMES)[number];
 
@@ -84,6 +85,8 @@ export interface ToolResult {
 	agentId?: string;
 	/** run: what it reached, once the review's packages were prepared. */
 	outcome?: ExecutionOutcome;
+	/** delegate: the commands the worker ran, so the reviewer is not asked to run them again. */
+	runs?: number;
 }
 
 /** A failed result with no content, for the many early-exit validation paths. */

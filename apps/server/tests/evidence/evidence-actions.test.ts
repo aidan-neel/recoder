@@ -36,3 +36,13 @@ test('a file sent as a list of lines is written as one string', () => {
 		{ action: 'writeFile', path: 'a.ts', content: 'one\ntwo' }
 	]);
 });
+
+test('a handoff to a worker reads as a delegate action with its task', () => {
+	expect(parseActions({ actions: [{ handoff: 'Find callers of acquire' }] })).toEqual([
+		{ action: 'delegate', task: 'Find callers of acquire' }
+	]);
+
+	expect(parseActions({ actions: [{ tool: 'ask_worker', args: { question: 'Which tests cover acquire?' } }] })).toEqual(
+		[{ action: 'delegate', task: 'Which tests cover acquire?' }]
+	);
+});

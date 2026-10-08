@@ -79,6 +79,7 @@ async function askModel(
 
 	try {
 		const result = await runJsonAgent({
+			stage: 'repair',
 			label: `repair ${candidate.candidateId}`,
 			...orchestratorAgentOptions(run, config),
 			system: REPAIR_SYSTEM,
