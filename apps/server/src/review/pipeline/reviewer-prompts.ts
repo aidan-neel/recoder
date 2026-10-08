@@ -8,6 +8,7 @@ import type { ChangeIntent } from './intent/types.js';
 import { inventorySummary, type ReviewInventory } from './inventory.js';
 import { isQualityLens } from './lenses/lenses.js';
 import type { Lens } from './lenses/types.js';
+import { REVIEW_POLICY } from '../session/review-policy.js';
 import { UNTRUSTED_PREFIX, reviewerContract } from './prompts.js';
 import type { ReviewUnit } from './units.js';
 
@@ -27,13 +28,20 @@ const UNSETTLED_OFFER = `Open questions: when the review brief lists open questi
 ${QUESTION_ANSWERS}
 A question you leave out of both also gets a closer look.`;
 
+const DELEGATE_OFFER = `Workers (optional): the delegate action hands one narrow, self-contained task to a worker on a cheaper model, for example: find every caller of a changed function and what each passes; find the tests that cover a symbol; read a contract or config defined elsewhere; write and run one specific repro and return the command, exit code and the output lines that matter. The worker sees only your task text, so name the files, symbols and what to return. It answers with a short summary and evidence ids you can cite. Keep the judgment yourself: you decide what is a defect, and you read the evidence before a finding rests on it. At most ${REVIEW_POLICY.maxDelegationsPerAgent} tasks; tasks sent in one turn run at the same time. Use it when it saves you reading, never for work you already did.`;
+
 const FOLLOW_UP_OFFER = `Brief question: your task names the open question of the review brief you were sent to settle. Account for it exactly once.
 ${QUESTION_ANSWERS}`;
 
-/** Which optional answer fields a lens reviewer is offered: subagent requests (the correctness lens) and brief questions to settle (the defect lenses), when subagents are on. */
+/**
+ * Which optional parts a lens reviewer is offered: subagent requests (the
+ * correctness lens) and brief questions to settle (the defect lenses), when
+ * subagents are on, and workers when the second model differs from Review.
+ */
 interface ReviewerOffers {
 	subagents: boolean;
 	unsettled: boolean;
+	delegate: boolean;
 }
 
 /**
@@ -55,7 +63,7 @@ Role: ${lens.title} lens reviewer. You apply one fixed procedure to every change
 Procedure (apply each step to each changed symbol, in order):
 ${lens.procedure}
 
-${offers.subagents ? SUBAGENTS_OFFER : 'Leave "subagents" empty.'}${offers.unsettled ? `\n\n${UNSETTLED_OFFER}` : ''}`,
+${offers.subagents ? SUBAGENTS_OFFER : 'Leave "subagents" empty.'}${offers.unsettled ? `\n\n${UNSETTLED_OFFER}` : ''}${offers.delegate ? `\n\n${DELEGATE_OFFER}` : ''}`,
 		directive
 	);
 }

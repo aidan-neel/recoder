@@ -135,6 +135,7 @@ function askInvestigator(
 	const role = investigatorRole(obligation, ctx.exec, { turns: ctx.maxTurns, answerTurns: ANSWER_TURNS });
 
 	return runJsonAgent<InvestigatorOutput>({
+		stage: 'investigator',
 		label: item.title,
 		agentId,
 		system: withGuidelines(investigatorSystemPrompt(ctx.exec, ctx.directive, role), ctx.inventory.guidelines),

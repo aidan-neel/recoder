@@ -31,6 +31,7 @@ type SpecialistOutput = NonNullable<ReturnType<typeof parseReviewerOutput>>;
 function agentOptions(overrides: Partial<JsonAgentOptions<SpecialistOutput>> = {}): JsonAgentOptions<SpecialistOutput> {
 	return {
 		label: 'correctness',
+		stage: 'reviewer',
 		system: '',
 		user: '',
 		config,

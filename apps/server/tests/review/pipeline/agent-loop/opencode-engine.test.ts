@@ -41,6 +41,7 @@ function script(
 function agentOptions(overrides: Partial<JsonAgentOptions<Answer>> = {}): JsonAgentOptions<Answer> {
 	return {
 		label: 'correctness',
+		stage: 'reviewer',
 		system: '',
 		user: '',
 		config: { provider: 'opencode', model: 'openai/m', baseUrl: '', apiKey: '' },

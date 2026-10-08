@@ -14,6 +14,9 @@
 			"project": ["src/**/*.{ts,svelte}"],
 			"ignoreDependencies": ["@fontsource/geist-sans", "@fontsource/geist-mono", "@fontsource/lora"]
 		},
+		"apps/bench": {
+			"project": ["src/**/*.{ts,svelte}"]
+		},
 		"packages/shared": {
 			"entry": ["tests/**/*.test.ts"],
 			"project": ["src/**/*.ts", "tests/**/*.ts"]

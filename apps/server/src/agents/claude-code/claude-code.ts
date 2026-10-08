@@ -13,10 +13,12 @@ import {
 	killOnAbort,
 	stopOnShutdown
 } from '../cli-process';
-import { promptText, systemText } from '../cli-prompt';
+import { systemText } from '../cli-prompt';
 import { claudeCodeEfforts, claudeCodeModels } from './claude-code-models';
+import { FailedCallDump } from './claude-code-debug';
 import { claudeCodeEnv } from './claude-code-process';
 import { ReplyReader } from './claude-code-reply';
+import { sessionCall, sweepSessions, type SessionCall } from './claude-code-session';
 
 const INSTALL = 'curl -fsSL https://claude.ai/install.sh | bash';
 
@@ -26,8 +28,10 @@ const STATUS_TIMEOUT_MS = 10_000;
 
 /**
  * Print mode with everything but the model call turned off: no tools, a permission mode that refuses any tool,
- * one turn, no saved session, and `--safe-mode` so the user's CLAUDE.md, hooks, plugins, skills and MCP servers
- * never load. `stream-json` needs `--verbose` in print mode, and carries the error code of a failed call.
+ * and `--safe-mode` so the user's CLAUDE.md, hooks, plugins, skills and MCP servers never load. A model can still
+ * write a tool call; the CLI answers that no such tool exists, which takes a second turn, and the model then
+ * replies in text, so three turns leave room for that without letting a call run on. `stream-json` needs
+ * `--verbose` in print mode, and carries the error code of a failed call.
  */
 const BASE_ARGS = [
 	'-p',
@@ -39,8 +43,7 @@ const BASE_ARGS = [
 	'--permission-mode',
 	'dontAsk',
 	'--max-turns',
-	'1',
-	'--no-session-persistence',
+	'3',
 	'--output-format',
 	'stream-json',
 	'--verbose',
@@ -97,6 +100,7 @@ export class ClaudeCodeAgent extends CliAgent {
 	/**
 	 * One model call. The prompt goes in on stdin and the system prompt in a file, since a review's diff can
 	 * pass the kernel's per-argument limit. Text streams to `onToken`; usage comes from the final result line.
+	 * A conversation's calls continue one saved session, see {@link sessionCall}.
 	 */
 	async complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
 		const path = this.find();
@@ -107,20 +111,55 @@ export class ClaudeCodeAgent extends CliAgent {
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-claude-code-'));
 		const systemFile = join(scratch, 'system.md');
 
+		const cwd = await emptyDirectory('claude-code-empty');
+		const system = systemText(opts);
+		const effort = effortArgs(opts);
+
+		const session = sessionCall(
+			{
+				conversation: opts.conversation,
+				model: opts.model,
+				system,
+				variant: effort.join(' '),
+				turns: opts.messages.filter((m) => m.role !== 'system')
+			},
+			this.env,
+			cwd
+		);
+
 		this.scratch.add(scratch);
 
 		try {
-			await writeFile(systemFile, systemText(opts), { mode: 0o600 });
+			await writeFile(systemFile, system, { mode: 0o600 });
 
-			const args = [...BASE_ARGS, '--model', opts.model, ...effortArgs(opts), '--system-prompt-file', systemFile];
+			const args = [
+				...BASE_ARGS,
+				...session.args,
+				'--model',
+				opts.model,
+				...effort,
+				'--system-prompt-file',
+				systemFile
+			];
 
-			return await this.run(path, args, opts, deadline.signal, onToken);
+			const text = await this.run(path, args, { cwd, session }, opts, deadline.signal, onToken);
+
+			session.commit(text);
+
+			return text;
 		} catch (error) {
+			session.fail();
 			throw deadline.failure(error, 'Claude Code request failed.');
 		} finally {
 			this.scratch.delete(scratch);
 			await rm(scratch, { recursive: true, force: true });
 		}
+	}
+
+	/** Kill every running call's process group and delete its system prompt file and saved sessions; synchronous, for exit. */
+	stop(): void {
+		super.stop();
+		sweepSessions();
 	}
 
 	protected find(): string | null {
@@ -135,15 +174,16 @@ export class ClaudeCodeAgent extends CliAgent {
 	private async run(
 		path: string,
 		args: string[],
+		where: { cwd: string; session: SessionCall },
 		opts: ChatOptions,
 		signal: AbortSignal,
 		onToken: ((text: string) => void) | undefined
 	): Promise<string> {
 		const proc = Bun.spawn([path, ...args], {
-			cwd: await emptyDirectory('claude-code-empty'),
+			cwd: where.cwd,
 			env: claudeCodeEnv(this.env),
 			detached: true,
-			stdin: new Blob([promptText(opts.messages.filter((m) => m.role !== 'system'))]),
+			stdin: new Blob([where.session.prompt]),
 			stdout: 'pipe',
 			stderr: 'pipe'
 		});
@@ -158,6 +198,8 @@ export class ClaudeCodeAgent extends CliAgent {
 			}
 		});
 
+		const dump = new FailedCallDump(this.env);
+
 		this.running.add(proc);
 
 		const { stopped, release } = killOnAbort(proc, signal);
@@ -165,7 +207,10 @@ export class ClaudeCodeAgent extends CliAgent {
 		try {
 			const [, stderr, code] = await Promise.race([
 				Promise.all([
-					readLines(proc.stdout, (line) => reader.line(line)),
+					readLines(proc.stdout, (line) => {
+						dump.add(line);
+						reader.line(line);
+					}),
 					new Response(proc.stderr).text(),
 					proc.exited
 				]),
@@ -173,6 +218,9 @@ export class ClaudeCodeAgent extends CliAgent {
 			]);
 
 			return reader.finish(opts.onUsage, { code, stderr });
+		} catch (error) {
+			dump.write(opts.model, error);
+			throw error;
 		} finally {
 			release();
 			this.running.delete(proc);

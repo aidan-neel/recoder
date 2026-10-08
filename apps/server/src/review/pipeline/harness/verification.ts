@@ -265,6 +265,7 @@ async function runVerifier(
 
 	try {
 		const result = await runJsonAgent({
+			stage: 'verifier',
 			label: `verify ${candidate.candidateId}`,
 			agentId,
 			system,

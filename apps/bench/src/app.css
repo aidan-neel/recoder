@@ -1,0 +1,10 @@
+/*
+ * The bench devtool runs on the app's design system: tokens, the Sivir theme
+ * mapping and every component style come from apps/web. Only the bench
+ * layout and chart styles below are its own.
+ */
+@import '../../web/src/app.css';
+@import './styles/bench.css';
+@import './styles/charts.css';
+@source '../../web/src/lib/components';
+@source './';

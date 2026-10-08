@@ -431,12 +431,14 @@ function findingResponseSchema(categories: readonly FindingCategory[]): Record<s
  * a retrieval request with at least one action, or the final result. On the
  * final turn only the result is allowed. Kept looser than the zod schema:
  * it shapes the reply, and `parseReviewerOutput` still validates it. An empty
- * category list (a subagent) allows every category.
+ * category list (a subagent) allows every category. `delegate` allows handing
+ * a task to a worker.
  */
 export function reviewerResponseSchema(
 	exec: boolean,
 	finalTurn: boolean,
-	categories: readonly FindingCategory[] = []
+	categories: readonly FindingCategory[] = [],
+	delegate = false
 ): { name: string; schema: Record<string, unknown> } {
 	const str = { type: 'string' };
 	const strings = { type: 'array', items: str };
@@ -475,6 +477,6 @@ export function reviewerResponseSchema(
 
 	return {
 		name: finalTurn ? 'review_result' : 'review_turn',
-		schema: finalTurn ? final : { anyOf: [retrievalTurnSchema(exec), final] }
+		schema: finalTurn ? final : { anyOf: [retrievalTurnSchema(exec, delegate), final] }
 	};
 }

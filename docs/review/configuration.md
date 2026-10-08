@@ -36,7 +36,7 @@ Read by `effectiveReviewEnv`. A saved value wins. A value that is not a positive
 
 **RECODER_LLM_CONCURRENCY**: Ceiling on concurrent calls per model endpoint. Each endpoint gets its own ceiling of this size. Default 64. Read by `envCount` in `apps/server/src/models/llm/limiter.ts`. Must be a positive number.
 
-**RECODER_CLAUDE_CODE_CONCURRENCY**: Ceiling for the `claude-code` endpoint, which starts one CLI process per call. Default 4. The effective ceiling is the smaller of this and `RECODER_LLM_CONCURRENCY`. Read by `envCount` through `PROCESS_CEILINGS` in `apps/server/src/models/llm/limiter.ts`.
+**RECODER_CLAUDE_CODE_CONCURRENCY**: Ceiling for the `claude-code` endpoint, which starts one CLI process per call. Default 8. The effective ceiling is the smaller of this and `RECODER_LLM_CONCURRENCY`. Read by `envCount` through `PROCESS_CEILINGS` in `apps/server/src/models/llm/limiter.ts`.
 
 **RECODER_LLM_RETRIES**: Retries after a transient failure. Default 5. Read in `apps/server/src/models/llm/retry.ts`. Non-negative; fractions are floored. A retry also needs time left before the call's deadline.
 
@@ -134,6 +134,8 @@ Parsed with zod in `apps/server/src/env.ts`.
 Resolved by `findCli` in `apps/server/src/agents/cli-process.ts`. When the variable is set, only that path is used: an empty or missing path means no CLI. Unset, the server tries `PATH`, then the installer's location under `HOME`.
 
 **RECODER_OPENCODE_BIN**: OpenCode binary. Fallback `~/.opencode/bin/opencode`. Read by `findOpenCode` in `apps/server/src/agents/opencode/opencode-server.ts`.
+
+**RECODER_CLAUDE_CODE_DEBUG_DIR**: When set, a failed `claude-code` call writes its raw `stream-json` lines (text and thinking deltas left out) to a file in this directory. Unset by default, which keeps nothing. Read in `apps/server/src/agents/claude-code/claude-code-debug.ts`.
 
 **RECODER_CLAUDE_BIN**: Claude Code binary. Fallback `~/.local/bin/claude`. Read in `apps/server/src/agents/claude-code/claude-code.ts`.
 

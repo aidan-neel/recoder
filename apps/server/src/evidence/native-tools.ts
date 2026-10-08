@@ -72,17 +72,35 @@ const EXEC_TOOLS: NativeTool[] = [
 	)
 ];
 
-/** Every evidence tool; `exec` tools run code and are offered only to agents with a sandbox. */
-export const NATIVE_TOOLS: NativeTool[] = [...READ_TOOLS, ...EXEC_TOOLS];
+const DELEGATE_TOOL = tool(
+	'delegate',
+	'delegate',
+	'Hand one narrow, self-contained evidence task to a worker on a cheaper model, for example finding the callers of a function or running a repro. It returns a short answer and the evidence ids it gathered.',
+	{ task: { type: 'string', description: 'What to find or run, and what to return. The worker sees nothing else.' } },
+	['task']
+);
 
-/** The tools an agent may call: reads always, the sandbox when it can run code. */
-export function nativeToolNames(exec: boolean): string[] {
-	return (exec ? NATIVE_TOOLS : READ_TOOLS).map((item) => item.name);
+/** Every tool; `exec` tools run code and are offered only to agents with a sandbox, `delegate` only to agents with a worker. */
+export const NATIVE_TOOLS: NativeTool[] = [...READ_TOOLS, ...EXEC_TOOLS, DELEGATE_TOOL];
+
+/** What an agent may do besides read: run code in the sandbox, and hand tasks to a worker. */
+export interface ToolOffer {
+	exec: boolean;
+	delegate: boolean;
 }
 
-/** A tool call as the evidence action it stands for; null when the tool is unknown or not offered. */
-export function toolAction(name: string, args: unknown, exec: boolean): RetrievalAction | null {
-	const known = (exec ? NATIVE_TOOLS : READ_TOOLS).find((item) => item.name === name);
+function offered({ exec, delegate }: ToolOffer): NativeTool[] {
+	return [...READ_TOOLS, ...(exec ? EXEC_TOOLS : []), ...(delegate ? [DELEGATE_TOOL] : [])];
+}
+
+/** The tools an agent may call: reads always, the sandbox when it can run code, `delegate` when it has a worker. */
+export function nativeToolNames(offer: ToolOffer): string[] {
+	return offered(offer).map((item) => item.name);
+}
+
+/** A tool call as the action it stands for; null when the tool is unknown or not offered. */
+export function toolAction(name: string, args: unknown, offer: ToolOffer): RetrievalAction | null {
+	const known = offered(offer).find((item) => item.name === name);
 
 	if (!known) return null;
 

@@ -1,4 +1,5 @@
 import type { PipelineRun, StoredMetrics } from '../models/metrics';
+import { stageTokens, type StageTokens } from './benchmark-tokens';
 import type { BenchmarkReport, ScoredRun } from './benchmark-report';
 import { NOT_RECORDED, type ReviewerMix } from './identity';
 
@@ -50,6 +51,8 @@ export interface RunReviewer {
 	mixed: boolean;
 	/** Why the run is mixed. */
 	reasons: string[];
+	/** The review's pipeline tokens by stage and model; absent from reports older than recording it. */
+	tokens?: StageTokens[];
 }
 
 /** The models the report says reviewed: its identity's stage models, else its reviewer manifest. */
@@ -167,7 +170,8 @@ export function runReviewer(stored: StoredMetrics | null, declared: string[] | n
 		calledModels: [...new Set(verdict.segments.flatMap((segment) => Object.keys(segment.calls)))].sort(),
 		verdict: verdict.status,
 		mixed: verdict.status === 'MIXED' || differs.length > 0,
-		reasons: [...verdict.reasons, ...differs]
+		reasons: [...verdict.reasons, ...differs],
+		...(stored && { tokens: stageTokens(stored.calls) })
 	};
 }
 

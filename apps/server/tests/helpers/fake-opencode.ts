@@ -8,8 +8,9 @@ import { fakeBin } from './fake-bin';
  * The fake server's source. It checks the Basic auth password, serves the
  * provider and sign-in routes, and runs chat sessions whose reply depends on
  * the prompt: `structured`, `denied` (the free tier's 403), `auth`, `slow`, and
- * `auto-only` (refuses a schema like a provider that takes only `auto` tool choice) and
- * `empty-structured` (answers a schema with `{}`).
+ * `auto-only` (refuses a schema like a provider that takes only `auto` tool choice),
+ * `empty-structured` (answers a schema with `{}`) and `spent` (retries a spent plan until
+ * aborted, shown only in `/session/status`, as OpenCode 1.x does).
  * Like OpenCode, a schema request with `StructuredOutput` off fails.
  * A prompt that is JSON with `steps` runs an agent: each step calls the listed tools over the
  * MCP servers added through `/mcp` (only tools the request switched on), with step events around
@@ -33,6 +34,7 @@ const history = {};
 const mcp = {};
 const scripts = {};
 const aborted = new Set();
+const statuses = {};
 let parts = 0;
 
 const send = (event) => {
@@ -86,6 +88,11 @@ async function chat(session, body, signal) {
 	if (text === 'auto-only') return body.format ? { info: { error: { name: 'APIError', data: { message: 'only \`"auto"\` is supported for \`tool_choice\`. \`"none"\`, \`"required"\`, and named function choices are not currently supported', statusCode: 400 } } }, parts: [] } : { info: { tokens }, parts: [{ type: 'text', text: '{"ok":true}' }] };
 	if (text === 'empty-structured') return body.format ? { info: { tokens, structured: {} }, parts: [] } : { info: { tokens }, parts: [{ type: 'text', text: '{"ok":true}' }] };
 	if (replies[text]) return replies[text]();
+	if (text === 'spent') {
+		statuses[session] = { type: 'retry', attempt: 1, message: 'weekly usage limit reached. It will reset in 4 days 1 hour.', next: Date.now() + 345600000 };
+		await new Promise((resolve) => signal.addEventListener('abort', resolve));
+		return abortedReply;
+	}
 	if (text === 'slow') {
 		await new Promise((resolve) => signal.addEventListener('abort', resolve));
 		return { info: {}, parts: [] };
@@ -109,6 +116,7 @@ const server = Bun.serve({ port: 0, hostname: '127.0.0.1', idleTimeout: 0, async
 	if (path === '/provider/openai/oauth/callback') { await new Promise((r) => (releaseCallback = r)); return Response.json(true); }
 	if (path === '/test/finish-browser') { releaseCallback?.(); return Response.json(true); }
 	if (path === '/test/calls') return Response.json(calls);
+	if (path === '/session/status') return Response.json(statuses);
 	if (path === '/global/dispose') return Response.json(true);
 	if (path === '/event') {
 		let self;

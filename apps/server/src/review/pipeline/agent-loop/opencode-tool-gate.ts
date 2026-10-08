@@ -1,7 +1,9 @@
 import type { ToolRunner } from '../../../agents/opencode/opencode-mcp.js';
 import { formatToolResults } from '../../../evidence/evidence.js';
 import { toolAction } from '../../../evidence/native-tools.js';
+import type { RetrievalAction, ToolResult } from '../../../evidence/types.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { runDelegation } from './delegation.js';
 import type { JsonAgentOptions } from './options.js';
 
 /** Heads a developer note that reaches the agent with a tool result, mid-run. */
@@ -76,7 +78,7 @@ export class ToolGate<T> {
 		if (opts.signal.aborted) return refusal('The review was stopped.');
 		if (this.turns.isFinal()) return refusal(FINAL_TURN_NOTE);
 
-		const action = toolAction(name, args, Boolean(opts.exec));
+		const action = toolAction(name, args, { exec: Boolean(opts.exec), delegate: Boolean(opts.delegate) });
 
 		if (!action) return refusal(`There is no tool named ${name}.`);
 
@@ -89,7 +91,7 @@ export class ToolGate<T> {
 			return refusal(`At most ${REVIEW_POLICY.maxRunsPerTurn} runs per step. Run this one in your next step.`);
 
 		const key = JSON.stringify(action);
-		const read = action.action !== 'run' && action.action !== 'writeFile';
+		const read = !['run', 'writeFile', 'delegate'].includes(action.action);
 
 		if (read && this.failedReads.has(key)) {
 			this.stuck = true;
@@ -109,15 +111,9 @@ export class ToolGate<T> {
 		this.inFlight++;
 
 		try {
-			const [result] = await opts.evidence.executeRound(
-				[action],
-				opts.signal,
-				opts.onTool,
-				1,
-				this.agentId,
-				this.stepChars
-			);
+			const result = await this.execute(action);
 
+			this.runs += result.runs ?? 0;
 			this.stepChars += result.content.length;
 			if (!result.ok && read) this.failedReads.add(key);
 
@@ -130,6 +126,24 @@ export class ToolGate<T> {
 		} finally {
 			this.inFlight--;
 		}
+	}
+
+	/** A delegation goes to the agent's worker; every other action is one evidence call within the step's budget. */
+	private async execute(action: RetrievalAction): Promise<ToolResult> {
+		const { opts } = this;
+
+		if (action.action === 'delegate') return runDelegation(opts, action);
+
+		const [result] = await opts.evidence.executeRound(
+			[action],
+			opts.signal,
+			opts.onTool,
+			1,
+			this.agentId,
+			this.stepChars
+		);
+
+		return result;
 	}
 
 	/** What the developer said since it was last passed on, once. */

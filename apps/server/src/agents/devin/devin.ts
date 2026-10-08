@@ -32,9 +32,6 @@ const MODELS_TIMEOUT_MS = 20_000;
  */
 const BASE_ARGS = ['-p', '--permission-mode', 'auto', '--respect-workspace-trust', 'false'];
 
-/** Tools are denied; this line tells the model so up front, before it tries one. */
-const NO_TOOLS_INSTRUCTION = 'You have no tools. Never write a tool call. Reply with plain text only.';
-
 /**
  * A model that tries a tool anyway gets a refusal, which ends the turn with no text. The session is resumed with
  * this note, which makes it answer in text; a resumed session reports its whole token total, so usage is counted
@@ -136,7 +133,7 @@ export class DevinAgent extends CliAgent {
 		this.scratch.add(scratch);
 
 		try {
-			const system = [systemText(opts), NO_TOOLS_INSTRUCTION].filter(Boolean).join('\n\n');
+			const system = systemText(opts);
 			const turns = opts.messages.filter((m) => m.role !== 'system');
 
 			await writeFile(promptFile, `${system}\n\n${promptText(turns)}`, { mode: 0o600 });

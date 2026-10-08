@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { LlmError, cancelledError } from '../../../models/llm/errors';
+import { LlmError, cancelledError, isSpentPlan } from '../../../models/llm/errors';
+import { sleep } from '../../../models/llm/retry';
 import type { SessionHandlers } from '../opencode-events';
 import { OpenCodeError } from '../opencode-error';
 import type { OpenCodeServer } from '../opencode-server';
@@ -19,6 +20,9 @@ import { tokensSchema, usage } from './tokens';
 /** How long session cleanup may take after the call settles. */
 const CLEANUP_TIMEOUT_MS = 5_000;
 
+/** How often a prompt in flight looks at its session's status. */
+const STATUS_POLL_MS = 1_000;
+
 const DENY_ALL = { permission: '*', pattern: '*', action: 'deny' };
 
 const errorSchema = z.object({
@@ -37,6 +41,11 @@ const replySchema = z.object({
 });
 
 const messageListSchema = z.array(z.object({ info: z.object({ id: z.string() }) }));
+
+const sessionStatusSchema = z.record(
+	z.string(),
+	z.object({ type: z.string(), message: z.string().optional() }).passthrough()
+);
 
 const mcpStatusSchema = z.record(z.string(), z.object({ status: z.string() }).passthrough());
 
@@ -206,12 +215,51 @@ export class V1Api implements OpenCodeApi {
 		return z.object({ id: z.string() }).parse(created).id;
 	}
 
+	/** Sends the prompt, and stops it early when the provider's plan turns out to be spent. */
+	async prompt(request: Prompt): Promise<Reply> {
+		const watch = new AbortController();
+		const signal = AbortSignal.any([request.signal, watch.signal]);
+
+		const spent = this.spentPlan(request.directory, request.session, signal).then((error) => {
+			void this.abort(request.directory, request.session).catch(() => {});
+
+			throw error;
+		});
+
+		try {
+			return await Promise.race([this.send(request, signal), spent]);
+		} finally {
+			watch.abort();
+		}
+	}
+
+	/**
+	 * OpenCode 1.x keeps retrying a provider error even when the provider says
+	 * the plan is spent and the next try is days away, so the prompt would end
+	 * only at Recoder's timeout. Resolves with a usage-limit error once the
+	 * session's status shows such a retry.
+	 */
+	private async spentPlan(directory: string, session: string, signal: AbortSignal): Promise<LlmError> {
+		for (;;) {
+			await sleep(STATUS_POLL_MS, signal);
+
+			const raw = await this.server
+				.request(`/session/status?directory=${encodeURIComponent(directory)}`, { signal })
+				.catch(() => null);
+
+			const status = sessionStatusSchema.safeParse(raw).data?.[session];
+
+			if (status?.type === 'retry' && status.message && isSpentPlan(status.message))
+				return new LlmError(429, status.message);
+		}
+	}
+
 	/**
 	 * OpenCode answers a JSON schema by calling its `StructuredOutput` tool, so
 	 * that one tool stays on when a schema is sent; every other tool is off but
 	 * the ones named.
 	 */
-	async prompt(request: Prompt): Promise<Reply> {
+	private async send(request: Prompt, signal: AbortSignal): Promise<Reply> {
 		const { schema, variant, system } = request;
 
 		const raw = await this.server.request(this.sessionPath(request.directory, request.session, '/message'), {
@@ -229,7 +277,7 @@ export class V1Api implements OpenCodeApi {
 				parts: [{ type: 'text', text: request.text }]
 			},
 			timeoutMs: request.timeoutMs,
-			signal: request.signal
+			signal
 		});
 
 		const { info, parts } = replySchema.parse(raw);

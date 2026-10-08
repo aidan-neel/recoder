@@ -1,3 +1,4 @@
+import { EFFORT_TEXT } from '@recoder/shared';
 import type {
 	ModelEntry,
 	ModelProvider,
@@ -42,20 +43,6 @@ export function formatContextWindow(tokens: number): string {
 export interface ModelChoice {
 	modelId: string;
 	effort: ReasoningEffort | null;
-}
-
-const EFFORT_TEXT: Record<ReasoningEffort, { label: string; description: string }> = {
-	minimal: { label: 'Minimal', description: 'Near-instant' },
-	low: { label: 'Low', description: 'Fastest, fewest tokens' },
-	medium: { label: 'Medium', description: 'Balanced speed and depth' },
-	high: { label: 'High', description: 'Slower, uses more of your plan' },
-	xhigh: { label: 'Extra high', description: 'Deeper reasoning for hard problems' },
-	max: { label: 'Max', description: 'Maximum depth, slowest' }
-};
-
-/** Effort words are always spelled out in full ("Medium", never "Med"). */
-export function effortLabel(effort: ReasoningEffort): string {
-	return EFFORT_TEXT[effort].label;
 }
 
 /** "GPT-5.6-Sol" → "5.6 Sol" for subscription models; an API entry still named by its id reads as a name. */

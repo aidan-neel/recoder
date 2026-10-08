@@ -20,17 +20,20 @@ export const REVIEW_POLICY = {
 	 * reviewer starts with its whole patch in one evidence round.
 	 */
 	unitBudgetChars: 24_000,
-	/** A lens starts with its unit's patch and change-model context, so it needs few turns of its own. */
-	maxLensTurns: 8,
-	/** A subagent follows one question across the repo from scratch. */
-	maxSubagentTurns: 12,
+	/**
+	 * A lens starts with its unit's patch and change-model context, so it needs few turns of its own. Every turn
+	 * re-sends the whole transcript, so the last turns of a long loop cost the most.
+	 */
+	maxLensTurns: 6,
+	/** A subagent follows one question across the repo from scratch, so it gets a few more turns than a lens. */
+	maxSubagentTurns: 8,
 	maxConsolidationCalls: 1,
 	maxModelCalls: 320,
 	analysisDeadlineMs: 30 * 60 * 1000,
 	perCallDeadlineMs: 90_000,
 	maxRetrievalsPerTurn: 4,
 	maxReadLines: 200,
-	maxSearchMatches: 50,
+	maxSearchMatches: 30,
 	maxToolRoundChars: 24_000,
 	schemaRepairAttempts: 4,
 	/** Reasoning longer than this (or looping) is cut off and the model is told to answer. */
@@ -59,8 +62,6 @@ export const REVIEW_POLICY = {
 	maxRunsPerTurn: 2,
 	defaultRunTimeoutMs: 120_000,
 	maxRunTimeoutMs: 300_000,
-	/** Head and tail of a command's combined output kept as evidence. */
-	maxRunOutputChars: 20_000,
 	maxWriteFileChars: 64_000,
 
 	/** Every valid candidate is re-proven by running code; budgets grow to fit. This only guards a runaway review. */
@@ -82,6 +83,13 @@ export const REVIEW_POLICY = {
 	/** The same for one reviewer or subagent. */
 	reviewerFinalTurnAfterMs: 12 * 60 * 1000,
 	reviewerMaxMs: 15 * 60 * 1000,
+	/** Tasks one lens reviewer may hand to workers on the specialist model. */
+	maxDelegationsPerAgent: 3,
+	/** A worker answers one narrow question, so it gets few turns. */
+	maxWorkerTurns: 6,
+	/** One worker's own clock: told to answer after the first, stopped at the second. */
+	workerFinalTurnAfterMs: 2 * 60 * 1000,
+	workerMaxMs: 3 * 60 * 1000,
 	/** Each wave of `maxConcurrentVerifications` verifiers adds this much time. */
 	msPerVerificationWave: 5 * 60 * 1000,
 	/** Held back from reviewers and subagents so the last verifiers always get to run. */

@@ -1,0 +1,2 @@
+- 03:22Z debug dump added in worktree cc-debug (branch fix/claude-code-debug-dump, RECODER_CLAUDE_CODE_DEBUG_DIR). Started dbg-sonnet on hono-1-control, port 3098, CLI conc 12.
+- 19:22Z user: DeepSeek eval. PC probes: opencode-go/deepseek-v4.1-flash ok, openai/gpt-6-luna ok (quotas back). Launched fin-deepseek: main 4690770, deepseek-v4.1-flash max, conc 2, full set, judge Luna medium, 1 repeat, port 3099. Luna being back means stand-in reports can be rescored to Luna v2 (fin-sonnet, sonnet-5pr).

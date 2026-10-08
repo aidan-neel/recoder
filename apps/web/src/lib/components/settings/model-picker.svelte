@@ -3,10 +3,9 @@
 	import Check from '@lucide/svelte/icons/check';
 	import * as Command from '@sivir-ui/svelte/components/command';
 	import * as Select from '@sivir-ui/svelte/components/select';
-	import type { ReasoningEffort } from '@recoder/shared';
+	import { effortLabel, type ReasoningEffort } from '@recoder/shared';
 	import Skeleton from '$lib/components/ui/skeleton.svelte';
 	import {
-		effortLabel,
 		formatContextWindow,
 		modelSettingsUi,
 		resolveEffort,
