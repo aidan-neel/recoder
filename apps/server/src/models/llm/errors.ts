@@ -48,7 +48,7 @@ export function isOpenCodeThrottle(err: LlmError): boolean {
  */
 export function isTransientLlmError(err: unknown, provider?: ChatOptions['provider']): boolean {
 	if (!(err instanceof LlmError)) return false;
-	if ((provider === 'codex' || provider === 'claude-code') && err.status === 429) return false;
+	if ((provider === 'codex' || provider === 'claude-code' || provider === 'devin') && err.status === 429) return false;
 	if (provider === 'opencode' && err.status === 429) return isOpenCodeThrottle(err);
 	if (TRANSIENT_STATUS.has(err.status)) return true;
 	if (err.status !== 0 || /cancelled|timed out|truncated/i.test(err.message)) return false;
@@ -64,7 +64,10 @@ export function isTransientLlmError(err: unknown, provider?: ChatOptions['provid
  */
 export function isRateLimitError(err: unknown, provider?: ChatOptions['provider']): boolean {
 	if (!(err instanceof LlmError)) return false;
-	if ((provider === 'codex' || provider === 'claude-code' || provider === 'opencode') && err.status === 429)
+	if (
+		(provider === 'codex' || provider === 'claude-code' || provider === 'devin' || provider === 'opencode') &&
+		err.status === 429
+	)
 		return false;
 
 	return err.status === 429 || err.status === 529 || /overloaded/i.test(err.message);

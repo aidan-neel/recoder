@@ -67,3 +67,50 @@ export async function emptyDirectory(name: string): Promise<string> {
 
 	return dir;
 }
+
+/** The server's environment minus every variable whose upper-cased name matches `stripped`, and every unset entry. */
+export function cliEnv(env: Env, stripped: RegExp[]): Record<string, string> {
+	const out: Record<string, string> = {};
+
+	for (const [key, value] of Object.entries(env)) {
+		if (value !== undefined && !stripped.some((pattern) => pattern.test(key.toUpperCase()))) out[key] = value;
+	}
+
+	return out;
+}
+
+/**
+ * Kill a process spawned with `detached: true` together with everything it started: it leads its own process
+ * group, so the negative pid reaches the whole group. A group that is already gone is fine.
+ */
+export function killGroup(proc: Bun.Subprocess): void {
+	try {
+		process.kill(-proc.pid, 'SIGKILL');
+	} catch {
+		proc.kill('SIGKILL');
+	}
+}
+
+/**
+ * Run `stop` when the server exits and on SIGINT and SIGTERM. A signal that has no other listener still ends the
+ * process with its usual code, as it would without this one. Registered once per process, since `--hot`
+ * re-evaluates the module; the listeners call whichever `stop` is current.
+ */
+export function stopOnShutdown(name: string, stop: () => void): void {
+	const hooks = globalThis as { __recoderStops?: Record<string, () => void> };
+	const stops = (hooks.__recoderStops ??= {});
+	const registered = name in stops;
+
+	stops[name] = stop;
+
+	if (registered) return;
+
+	process.once('exit', () => stops[name]());
+
+	for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+		process.on(signal, () => {
+			stops[name]();
+			if (process.listenerCount(signal) === 1) process.exit(signal === 'SIGINT' ? 130 : 143);
+		});
+	}
+}

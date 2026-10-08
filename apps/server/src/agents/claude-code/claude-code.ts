@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
 import { LlmError, cancelledError, timedOutError } from '../../models/llm/errors';
-import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
-import { DEFAULT_TIMEOUT_MS, type ChatMessage, type ChatOptions } from '../../models/llm/types';
-import { emptyDirectory, findCli, probeVersion } from '../cli-process';
+import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../../models/llm/types';
+import { emptyDirectory, findCli, killGroup, probeVersion, stopOnShutdown } from '../cli-process';
+import { promptText, systemText } from '../cli-prompt';
 import type { AgentAdapter } from '../registry';
 import { claudeCodeEfforts, claudeCodeModels } from './claude-code-models';
-import { claudeCodeEnv, killGroup, stopOnShutdown } from './claude-code-process';
+import { claudeCodeEnv } from './claude-code-process';
 import { ReplyReader } from './claude-code-reply';
 
 type Env = Record<string, string | undefined>;
@@ -42,25 +42,6 @@ const BASE_ARGS = [
 	'--verbose',
 	'--include-partial-messages'
 ];
-
-/** The CLI takes one prompt, so a conversation's turns are written out as one labeled transcript. */
-function promptText(turns: ChatMessage[]): string {
-	if (turns.length === 1) return turns[0].content;
-
-	return turns.map((turn) => `${turn.role === 'assistant' ? 'Assistant' : 'User'}:\n${turn.content}`).join('\n\n');
-}
-
-/**
- * The system prompt replaces Claude Code's own. JSON is asked for in words: the CLI's `--json-schema` runs as a
- * tool call, which this tool-less, one-turn call cannot make.
- */
-function systemText({ messages, jsonMode, jsonSchema }: ChatOptions): string {
-	const system = messages.filter((m) => m.role === 'system').map((m) => m.content);
-
-	if (jsonMode || jsonSchema) system.push(JSON_MODE_INSTRUCTION);
-
-	return system.join('\n\n');
-}
 
 /**
  * The effort flags for a model that takes levels. `thinking: false` turns thinking off; the CLI has no
@@ -286,4 +267,4 @@ export class ClaudeCodeAgent implements AgentAdapter {
 
 export const claudeCode = new ClaudeCodeAgent();
 
-stopOnShutdown(() => claudeCode.stop());
+stopOnShutdown('claude-code', () => claudeCode.stop());

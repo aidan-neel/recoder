@@ -56,11 +56,19 @@ const claudeCodeCli: Transport = async (opts, onToken) => {
 	return claudeCode.complete(opts, onToken);
 };
 
+/** A model reached through the user's Devin CLI, one process per call. Loaded lazily like the others. */
+const devinCli: Transport = async (opts, onToken) => {
+	const { devin } = await import('../../agents/devin/devin');
+
+	return devin.complete(opts, onToken);
+};
+
 const TRANSPORTS: Record<ModelProvider, Transport> = {
 	'openai-compatible': openAiCompatible,
 	codex: chatgpt,
 	opencode: openCode,
-	'claude-code': claudeCodeCli
+	'claude-code': claudeCodeCli,
+	devin: devinCli
 };
 
 export function transportFor(provider: ChatOptions['provider']): Transport {

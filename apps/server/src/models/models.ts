@@ -22,6 +22,7 @@ import { recordLockMiss } from './metrics.js';
 import { hostedProvider } from './model-providers.js';
 import { resolveRuntime } from './runtime-profiles.js';
 import { CLAUDE_CODE_MODEL_PREFIX, claudeCodeEfforts } from '../agents/claude-code/claude-code-models.js';
+import { DEVIN_MODEL_PREFIX } from '../agents/devin/devin-models.js';
 import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode.js';
 import { effectiveReviewEnv, getStoredSettings, type StoredModelEntry } from '../review/session/review-settings.js';
 
@@ -154,6 +155,7 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
 
 	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(entryId, requested ?? undefined);
 	if (entryId?.startsWith(CLAUDE_CODE_MODEL_PREFIX)) return claudeCodeConfig(entryId, requested);
+	if (entryId?.startsWith(DEVIN_MODEL_PREFIX)) return devinConfig(entryId);
 
 	return entryConfig(entries.find((e) => e.id === entryId) ?? entries[0], requested);
 }
@@ -167,6 +169,7 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
 export function configForModel(id: string, effort: ReasoningEffort | undefined): ModelConfig {
 	if (id.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(id, effort);
 	if (id.startsWith(CLAUDE_CODE_MODEL_PREFIX)) return claudeCodeConfig(id, effort);
+	if (id.startsWith(DEVIN_MODEL_PREFIX)) return devinConfig(id);
 
 	const entry = getStoredSettings().models?.find((e) => e.id === id);
 
@@ -245,6 +248,14 @@ function claudeCodeConfig(entryId: string, requested: ReasoningEffort | null | u
 	const reasoningEffort = efforts ? supportedEffort(requested ?? defaultEffort, efforts, defaultEffort) : undefined;
 
 	return { provider: 'claude-code', baseUrl: '', apiKey: '', model, reasoningEffort };
+}
+
+/**
+ * A Devin model is listed live from the CLI, so the config comes from its id (`devin:<model>`). Devin names the
+ * effort in the model id (`swe-2-high`), so there is no effort to pass.
+ */
+function devinConfig(entryId: string): ModelConfig {
+	return { provider: 'devin', baseUrl: '', apiKey: '', model: entryId.slice(DEVIN_MODEL_PREFIX.length) };
 }
 
 /**
