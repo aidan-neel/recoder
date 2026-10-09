@@ -92,6 +92,7 @@ describe('ClaudeCodeAgent.complete', () => {
 		expect(written).toContain('system: Review the diff.\n\nYou have no tools.');
 		expect(written).toContain(JSON_MODE_INSTRUCTION);
 		expect(written).toContain('[--tools] []');
+		expect(written).toContain('[--setting-sources] []');
 		expect(written).toContain('[--permission-mode] [dontAsk]');
 		expect(written).toContain('[--no-session-persistence]');
 		expect(written).toContain('[--model] [claude-opus-5-5] [--effort] [high]');
