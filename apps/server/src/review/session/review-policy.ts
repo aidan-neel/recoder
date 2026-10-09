@@ -32,6 +32,12 @@ export const REVIEW_POLICY = {
 	analysisDeadlineMs: 30 * 60 * 1000,
 	perCallDeadlineMs: 90_000,
 	/**
+	 * About 60k tokens. Past it, an agent that Recoder runs turn by turn has its
+	 * oldest tool output stubbed before the next call. Reviews stay under about
+	 * 53k tokens per call today, so this is a safety net; OpenCode compacts its own sessions.
+	 */
+	maxTranscriptChars: 240_000,
+	/**
 	 * One second-look call. It rereads a whole unit, and a CLI model that prints
 	 * its reply only at the end often needs longer than 90s to answer that; a
 	 * timed-out call is sent again in full and times out again.
