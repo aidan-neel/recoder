@@ -180,7 +180,7 @@ test('an investigator cannot spawn subagents: asking for one adds no model call'
 	expect(result.assignments.filter((record) => record.role === 'subagent')).toEqual([]);
 });
 
-test('a confirmed counterexample becomes an ordinary candidate that the verifier proves', async () => {
+test('a confirmed counterexample becomes an ordinary candidate, published unverified where code cannot run', async () => {
 	useTestModel();
 	process.env.RECODER_OBLIGATIONS = '1';
 
@@ -197,7 +197,7 @@ test('a confirmed counterexample becomes an ordinary candidate that the verifier
 
 	expect(answer.result).toBe('confirmed');
 	expect(answer.candidateId).toBeString();
-	expect(report.counts).toMatchObject({ confirmed: 1, disproved: DERIVED - 1, verified: 1 });
+	expect(report.counts).toMatchObject({ confirmed: 1, disproved: DERIVED - 1, verified: 0 });
 	expect(result.findings.map((item) => [item.file, item.title])).toEqual([['src/page.ts', defect.title]]);
 	expect(result.summary).toContain('1 confirmed, 3 disproved');
 	expect(result.context!.findings).toEqual([expect.objectContaining({ members: 1 })]);

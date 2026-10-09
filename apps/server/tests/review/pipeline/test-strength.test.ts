@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test';
+import type { Finding } from '@recoder/shared';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -178,7 +179,7 @@ const INTENT_PROMPT = 'You write the brief a code change is reviewed against';
 
 /**
  * Every call the review of a one-file change made at a573205 with code
- * execution off, sorted, apart from the intent brief `modelCalls` leaves out;
+ * execution off, sorted, apart from the intent brief `reviewOf` leaves out;
  * none was a verifier.
  */
 const MODEL_CALLS_AT_A573205 = [
@@ -194,17 +195,17 @@ const MODEL_CALLS_AT_A573205 = [
 
 /**
  * Reviews a repo whose head commit adds or edits an AVA test file, and returns
- * every model call, sorted, by assignment id, `verifier` or `other`. The intent
- * brief is left out: its answer is cached on disk under the diff, so only the
- * first review of a diff asks for it, whatever the flag.
+ * every model call, sorted, by assignment id, `verifier` or `other`, with the
+ * findings. The intent brief is left out: its answer is cached on disk under
+ * the diff, so only the first review of a diff asks for it, whatever the flag.
  *
- * Code execution is turned off. Whether a host can run code (`bwrap` present
+ * Code execution is turned off, so a bug is shown without a verifier. Whether a host can run code (`bwrap` present
  * and permitted to unshare namespaces, or Seatbelt) decides whether the
  * correctness lens is sent back once for concluding without running anything
  * (`unrunCorrectnessFinal`), a second `unit-1/correctness` call that has
  * nothing to do with the flag, so the calls would differ between machines.
  */
-async function modelCalls(files: { base?: Record<string, string>; head: Record<string, string> }): Promise<string[]> {
+async function reviewOf(files: { base?: Record<string, string>; head: Record<string, string> }) {
 	useTestModel(4);
 	process.env.RECODER_EXEC = 'off';
 
@@ -222,16 +223,21 @@ async function modelCalls(files: { base?: Record<string, string>; head: Record<s
 			return modelReply({ message: 'ok', ...((isVerifier(init) ? confirmingVerifier(init) : NOTHING) as object) });
 		}) as unknown as typeof fetch;
 
-		await runAdaptiveReview({
+		const { findings } = await runAdaptiveReview({
 			diff: `${git(root, ['diff', targetSha, headSha])}\n`,
 			sandboxPath: root,
 			revision: { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' }
 		});
+
+		return { calls: calls.sort(), findings };
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
+}
 
-	return calls.sort();
+/** Each finding's title and how its verification ended. */
+function outcomes(findings: Finding[]): [string, string | undefined][] {
+	return findings.map((finding) => [finding.title ?? '', finding.verification?.outcome]);
 }
 
 const ADDED_TEST_FILE = { head: { 'test/client.test.ts': NEW_TEST } };
@@ -241,30 +247,33 @@ describe('the model calls of a review', () => {
 	test('with the flag unset, an added t.assert test makes the calls a573205 made', async () => {
 		flag(false);
 
-		expect(await modelCalls(ADDED_TEST_FILE)).toEqual(MODEL_CALLS_AT_A573205);
+		expect((await reviewOf(ADDED_TEST_FILE)).calls).toEqual(MODEL_CALLS_AT_A573205);
 	});
 
 	test('with the flag unset, a removed t.assert line makes the calls a573205 made', async () => {
 		flag(false);
 
-		expect(await modelCalls(EDITED_TEST_FILE)).toEqual(MODEL_CALLS_AT_A573205);
+		expect((await reviewOf(EDITED_TEST_FILE)).calls).toEqual(MODEL_CALLS_AT_A573205);
 	});
 
-	test('with the flag set, an added t.assert test also sends a verifier', async () => {
+	test('with the flag set, an added t.assert test shows a weak-test finding, unverified, with no new model call', async () => {
 		flag(true);
 
-		const calls = await modelCalls(ADDED_TEST_FILE);
+		const { calls, findings } = await reviewOf(ADDED_TEST_FILE);
 
-		expect(calls.filter((call) => call !== 'verifier')).toEqual(MODEL_CALLS_AT_A573205);
-		expect(calls).toContain('verifier');
+		expect(calls).toEqual(MODEL_CALLS_AT_A573205);
+
+		expect(outcomes(findings)).toEqual([
+			['`retries after a failure` checks `calls.length` only from below', 'not-run']
+		]);
 	});
 
-	test('with the flag set, a removed t.assert line also sends a verifier', async () => {
+	test('with the flag set, a removed t.assert line shows a weak-test finding, unverified, with no new model call', async () => {
 		flag(true);
 
-		const calls = await modelCalls(EDITED_TEST_FILE);
+		const { calls, findings } = await reviewOf(EDITED_TEST_FILE);
 
-		expect(calls.filter((call) => call !== 'verifier')).toEqual(MODEL_CALLS_AT_A573205);
-		expect(calls).toContain('verifier');
+		expect(calls).toEqual(MODEL_CALLS_AT_A573205);
+		expect(outcomes(findings)).toEqual([['`retries after a failure` has fewer assertions', 'not-run']]);
 	});
 });

@@ -96,7 +96,7 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	run.events?.onStage?.('reviewing');
 	if (run.controller.signal.aborted) throw new ReviewAbortedError('review aborted');
 
-	startVerification(run);
+	startVerification(run, checks);
 
 	const detectors = detectorStage(run);
 	let closed = false;

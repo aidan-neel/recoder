@@ -7,6 +7,7 @@ import { execUnavailableReason } from '../../../src/sandbox/exec-sandbox';
 import {
 	DIFF,
 	NOTHING,
+	RUNNABLE,
 	TWO_UNIT_DIFF,
 	confirmingVerifier,
 	finding,
@@ -14,6 +15,7 @@ import {
 	messagesOf,
 	modelReply,
 	restoreAfterEach,
+	runnableCheckout,
 	twoCommitRepo,
 	unitOf,
 	useTestModel
@@ -79,11 +81,7 @@ test.skipIf((await execUnavailableReason()) !== null)(
 		const root = await mkdtemp(join(tmpdir(), 'recoder-verify-review-'));
 
 		try {
-			const result = await reviewWithFakeModel(
-				root,
-				{ 'package.json': JSON.stringify({ scripts: { test: 'cat src/a.ts' } }) },
-				{ findings: ['Real bug.', 'Imagined bug.'] }
-			);
+			const result = await reviewWithFakeModel(root, RUNNABLE, { findings: ['Real bug.', 'Imagined bug.'] });
 
 			expect(result.findings).toHaveLength(1);
 			expect(result.findings[0].message).toContain('Real bug.');
@@ -127,13 +125,69 @@ async function baselineOf(realCommand: string, head?: Record<string, string>) {
 	const root = await mkdtemp(join(tmpdir(), 'recoder-verify-base-'));
 
 	try {
-		const result = await reviewWithFakeModel(root, {}, { findings: ['Real bug.'], realCommand, head });
+		const result = await reviewWithFakeModel(root, RUNNABLE, { findings: ['Real bug.'], realCommand, head });
 
 		return result.findings[0].verification;
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}
 }
+
+/** Reviews a repo with `base` that raises one bug, and returns the review and how many verifier calls it made. */
+async function reviewOneBug(base: Record<string, string>) {
+	useTestModel(4);
+
+	const root = await mkdtemp(join(tmpdir(), 'recoder-verify-unrun-'));
+	let verifiers = 0;
+
+	try {
+		const result = await reviewWithFakeModel(root, base, {
+			findings: ['Real bug.'],
+			interceptVerifier: () => {
+				verifiers++;
+
+				return null;
+			}
+		});
+
+		return { result, verifiers };
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+}
+
+test.skipIf((await execUnavailableReason()) !== null)(
+	'a bug in a review where no check passes is shown unverified as not run, with no verifier call',
+	async () => {
+		const { result, verifiers } = await reviewOneBug({
+			'package.json': JSON.stringify({ scripts: { test: 'exit 1' } })
+		});
+
+		expect(verifiers).toBe(0);
+
+		expect(result.findings[0].verification).toMatchObject({
+			status: 'unverified',
+			outcome: 'not-run',
+			reason: expect.stringContaining("none of this repository's checks passed")
+		});
+
+		expect(result.funnel).toMatchObject({ raised: 1, unproven: 0, verified: 0, notRun: 1, shown: 1 });
+	}
+);
+
+test.skipIf((await execUnavailableReason()) !== null)(
+	'a bug in a review with no check to run is shown unverified as not run, with no verifier call',
+	async () => {
+		const { result, verifiers } = await reviewOneBug({});
+
+		expect(verifiers).toBe(0);
+
+		expect(result.findings[0].verification).toMatchObject({
+			outcome: 'not-run',
+			reason: expect.stringContaining('no type check, lint or test command')
+		});
+	}
+);
 
 test.skipIf((await execUnavailableReason()) !== null)(
 	'a repro that passes on the base commit is marked as changed by this change',
@@ -180,15 +234,11 @@ test.skipIf((await execUnavailableReason()) !== null)(
 		try {
 			let verifiers = 0;
 
-			const result = await reviewWithFakeModel(
-				root,
-				{},
-				{
-					findings: ['Real bug.'],
-					interceptVerifier: (messages) =>
-						messages.length === 2 && ++verifiers === 1 ? new Response('bad request', { status: 400 }) : null
-				}
-			);
+			const result = await reviewWithFakeModel(root, RUNNABLE, {
+				findings: ['Real bug.'],
+				interceptVerifier: (messages) =>
+					messages.length === 2 && ++verifiers === 1 ? new Response('bad request', { status: 400 }) : null
+			});
 
 			expect(verifiers).toBe(2);
 			expect(result.findings[0].verification).toMatchObject({ status: 'verified', method: 'run' });
@@ -198,41 +248,51 @@ test.skipIf((await execUnavailableReason()) !== null)(
 	}
 );
 
-test('a finding is verified while later reviewers are still working', async () => {
-	useTestModel(4);
+test.skipIf((await execUnavailableReason()) !== null)(
+	'a finding is verified while later reviewers are still working',
+	async () => {
+		useTestModel(4);
 
-	let verified = () => {};
-	const verdict = new Promise<void>((resolve) => (verified = resolve));
-	const order: string[] = [];
+		let verified = () => {};
+		const verdict = new Promise<void>((resolve) => (verified = resolve));
+		const order: string[] = [];
+		let raised = false;
 
-	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-		const unit = unitOf(init);
+		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+			const unit = unitOf(init);
 
-		if (isVerifier(init)) {
-			const reply = confirmingVerifier(init) as { verdict?: string };
+			if (isVerifier(init)) {
+				const reply = confirmingVerifier(init) as { verdict?: string };
 
-			if (reply.verdict) {
-				order.push('verdict');
-				verified();
+				if (reply.verdict) {
+					order.push('verdict');
+					verified();
+				}
+
+				return modelReply(reply);
 			}
 
-			return modelReply(reply);
+			if (unit === 'unit-2/readability') {
+				await verdict;
+				order.push(unit);
+			}
+
+			const raises = unit === 'unit-1/correctness' && !raised;
+
+			if (raises) raised = true;
+
+			return modelReply({ message: 'ok', ...NOTHING, findings: raises ? [finding('possible miss')] : [] });
+		}) as unknown as typeof fetch;
+
+		const checkout = await runnableCheckout();
+
+		try {
+			const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, ...checkout.input });
+
+			expect(order.slice(0, 2)).toEqual(['verdict', 'unit-2/readability']);
+			expect(result.findings.map((item) => item.title)).toEqual(['possible miss']);
+		} finally {
+			await checkout.remove();
 		}
-
-		if (unit === 'unit-2/readability') {
-			await verdict;
-			order.push(unit);
-		}
-
-		return modelReply({
-			message: 'ok',
-			...NOTHING,
-			findings: unit === 'unit-1/correctness' ? [finding('possible miss')] : []
-		});
-	}) as unknown as typeof fetch;
-
-	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null });
-
-	expect(order).toEqual(['verdict', 'unit-2/readability']);
-	expect(result.findings.map((item) => item.title)).toEqual(['possible miss']);
-});
+	}
+);

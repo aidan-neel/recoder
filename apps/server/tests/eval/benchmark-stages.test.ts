@@ -82,6 +82,14 @@ test('a published defect counts as found and verified even when no candidate car
 	expect(stages.d1!.matches!.found.by).toBe('reused');
 });
 
+test('a published defect whose only carrying candidate is unverified counts as found and published, not verified', () => {
+	const pool = [candidate(wrongIndex)];
+	const published = { findings: [candidate(wrongIndex)], score: score({ d1: 0 }) };
+	const stages = defectStages([defect], pool, published, none);
+
+	expect(stages.d1).toMatchObject({ found: true, verified: false, published: true });
+});
+
 test('a candidate with the published claim word for word takes its verdict, so it is never a stage loss', async () => {
 	const asked: string[][] = [];
 	const pool = [candidate({ ...slowRender, verified: true })];

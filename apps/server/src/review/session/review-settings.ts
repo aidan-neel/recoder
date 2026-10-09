@@ -320,9 +320,9 @@ export function effectiveSubagentCap(): SubagentCap {
 	return overrides.subagentCap ?? DEFAULT_SUBAGENT_CAP;
 }
 
-/** Whether reviews report low-severity findings: the saved pick, else off. */
+/** Whether reviews report low-severity findings: the saved pick, else on. */
 export function effectiveReportLowSeverity(): boolean {
-	return overrides.reportLowSeverity ?? false;
+	return overrides.reportLowSeverity ?? true;
 }
 
 /** API keys are never returned in full; the UI gets this masked preview (`••••1234` or null). */

@@ -18,7 +18,7 @@ class SettingsDraft {
 	/** How many subagents one review may run. */
 	subagentCap = $state<SubagentCap>(DEFAULT_SUBAGENT_CAP);
 	/** Whether reviews report low-severity findings. */
-	reportLowSeverity = $state(false);
+	reportLowSeverity = $state(true);
 	seeded = $state(false);
 	private initial: {
 		orchestrator: ModelChoice | null;
@@ -33,7 +33,7 @@ class SettingsDraft {
 		this.specialist = config.specialistModelId ? modelSettingsUi.specialist : null;
 		this.limits = { ...config.limits };
 		this.subagentCap = config.subagentCap ?? DEFAULT_SUBAGENT_CAP;
-		this.reportLowSeverity = config.reportLowSeverity ?? false;
+		this.reportLowSeverity = config.reportLowSeverity ?? true;
 
 		this.initial = {
 			orchestrator: this.orchestrator,
