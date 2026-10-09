@@ -59,11 +59,17 @@ const exportSchema = z.object({
 
 type Export = z.infer<typeof exportSchema>;
 
-/** The last non-empty line, trimmed and cut, to quote in an error. */
-function lastLine(text: string): string | undefined {
-	const line = text.trim().split('\n').pop()?.trim();
+/**
+ * The line to quote in an error, trimmed and cut: the CLI's `Error:` line when it printed one, since a JSON body
+ * can follow it (a rate limit ends in `}`), else the last non-empty line.
+ */
+function errorLine(text: string): string | undefined {
+	const lines = text
+		.split('\n')
+		.map((line) => line.trim())
+		.filter(Boolean);
 
-	return line ? line.slice(0, 300) : undefined;
+	return (lines.find((line) => /^error\b/i.test(line)) ?? lines.at(-1))?.slice(0, 300);
 }
 
 /** `prompt_tokens` already counts the cached ones, as the export's own totals show. */
@@ -251,7 +257,7 @@ export class DevinAgent extends CliAgent {
 				stopped
 			]);
 
-			if (code !== 0) throw devinError(lastLine(stderr) ?? lastLine(text) ?? `Devin exited with code ${code}.`);
+			if (code !== 0) throw devinError(errorLine(stderr) ?? errorLine(text) ?? `Devin exited with code ${code}.`);
 
 			return text;
 		} finally {

@@ -7,7 +7,7 @@ import { fakeBin } from './fake-bin';
  * A fake `devin` CLI. `--version`, `auth status` (`FAKE_DEVIN_SIGNED_IN=1` signs it in) and `models list` answer at
  * once. `rm <id> --force` appends the id to `<log>.rm`. Print mode writes its arguments, prompt file, working
  * directory, config file and environment to `FAKE_DEVIN_LOG`, writes the export file, then acts on
- * `FAKE_DEVIN_MODE`: a reply (default), `signedout`, `empty` (exit 0, no text), `refused` (no text until the call resumes a session with `--resume`) or `crash` (stderr, exit 1).
+ * `FAKE_DEVIN_MODE`: a reply (default), `signedout`, `empty` (exit 0, no text), `refused` (no text until the call resumes a session with `--resume`), `crash` (stderr, exit 1) or `limited` (the CLI's rate-limit error, a line and a JSON body, exit 1).
  */
 const SCRIPT = `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "devin 3000.11.3 (abc123)"; exit 0; fi
@@ -59,6 +59,7 @@ signedout) echo "Error: Not logged in. Run devin auth login" >&2; exit 1 ;;
 empty) exit 0 ;;
 refused) if [ -n "$resumed" ]; then echo "the reply"; fi ;;
 crash) echo "boom" >&2; exit 1 ;;
+limited) printf '%s\n' 'Error: Agent error: Reached free model rate limit. Your limit will reset in 3 hours (at Oct 9 00:01 UTC). (trace ID: 21f5): {' '  "cognition.ai/errorKind": "unavailable",' '  "cognition.ai/retryable": true' '}' >&2; exit 1 ;;
 *) echo "the reply" ;;
 esac
 `;
