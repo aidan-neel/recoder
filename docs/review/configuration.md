@@ -139,4 +139,4 @@ Resolved by `findCli` in `apps/server/src/agents/cli-process.ts`. When the varia
 
 **RECODER_CLAUDE_BIN**: Claude Code binary. Fallback `~/.local/bin/claude`. Read in `apps/server/src/agents/claude-code/claude-code.ts`.
 
-The Claude Code CLI does not inherit `RECODER_*`, `ANTHROPIC_*`, `CLAUDE_CODE_*`, `OPENAI_*` or any token, key, secret or password variable (`claudeCodeEnv` in `apps/server/src/agents/claude-code/claude-code-process.ts`).
+The Claude Code CLI does not inherit `RECODER_*`, `ANTHROPIC_*`, `OPENAI_*`, `CLAUDE_*` other than `CLAUDE_CONFIG_DIR` and `CLAUDE_SECURESTORAGE_CONFIG_DIR`, `DISABLE_PROMPT_CACHING*`, `ENABLE_PROMPT_CACHING*`, `MAX_THINKING_TOKENS`, `DISABLE_INTERLEAVED_THINKING`, `DISABLE_COMPACT`, `DISABLE_AUTO_COMPACT`, or any token, key, secret or password variable (`claudeCodeEnv` in `apps/server/src/agents/claude-code/claude-code-process.ts`). It reads no settings file, so a settings `env` block cannot set them either.
