@@ -5,9 +5,9 @@ type Env = Record<string, string | undefined>;
 /**
  * Variables the CLI must not inherit from the server: API keys and endpoints that would make it bill an account
  * other than the user's subscription (`ANTHROPIC_*`, `CLAUDE_CODE_*`), the state of a Claude Code session the
- * server runs inside (`CLAUDE_*`, which sets the thinking budget and compaction), switches that turn off prompt
- * caching or change thinking, the server's own settings and keys, and any token or secret. The CLI keeps the
- * rest: PATH, HOME, locale, temp and XDG dirs, proxies, and the two dirs that hold its config and sign-in.
+ * server runs inside (`CLAUDE_*`, such as its compaction threshold), switches that turn off prompt caching or set
+ * the thinking budget, the server's own settings and keys, and any token or secret. The CLI keeps the rest: PATH,
+ * HOME, locale, temp and XDG dirs, proxies, and the two dirs that hold its config and sign-in.
  */
 const STRIPPED = [
 	/^ANTHROPIC_/,
