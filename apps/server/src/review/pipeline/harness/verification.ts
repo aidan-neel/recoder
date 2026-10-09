@@ -2,7 +2,7 @@ import { findingKind, type FindingVerification } from '@recoder/shared';
 import type { EvidenceStore } from '../../../evidence/evidence.js';
 import type { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import type { RuleLedger } from '../../guidelines/ledger/types.js';
-import { configForSubagent } from '../../../models/models.js';
+import { configForOrchestrator, configForSubagent, type ModelConfig } from '../../../models/models.js';
 import { REVIEW_POLICY, verifierTurns } from '../../session/review-policy.js';
 import { ModelBlockedError, ReviewAbortedError, newAgentId, runJsonAgent, type ModelBudget } from '../agent-loop.js';
 import { candidateFromDetector, isHeldBack, publishHeldBack, type CandidateFinding } from '../consolidate.js';
@@ -28,6 +28,7 @@ import {
 	type VerdictOutput,
 	type VerifierNotes
 } from '../verify.js';
+import { escalateOn, escalates, escalationNote } from '../verify/escalate.js';
 import { isMutationFinding } from '../verify/runs.js';
 import { publishBudget, publishCandidates, type ReviewRun } from './context.js';
 import { checkPatches } from './patch-check.js';
@@ -202,14 +203,18 @@ function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext): Verifier
 
 /**
  * One attempt at settling a candidate. Returns false when the verifier gave no
- * verdict, leaving the candidate unverified with the reason. Its thinking, tools
+ * verdict, leaving the candidate unverified with the reason, or when the verdict
+ * `escalates` to a second verifier on the Review model. Its thinking, tools
  * and messages are its own (owned by its task), so they show in the Verify step
  * rather than in the thread that raised the finding.
  */
 async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attempt: number): Promise<boolean> {
 	const taskId = `verify:${candidate.candidateId}`;
 	const label = `Verify: ${candidate.title ?? candidate.file}`;
-	const spec = verifierSpec(candidate, ctx);
+	const escalated = attempt > 1 && escalateOn();
+	const cfg = escalated ? configForOrchestrator() : configForSubagent();
+	const base = verifierSpec(candidate, ctx);
+	const spec = escalated ? { ...base, user: base.user + escalationNote(candidate) } : base;
 
 	delete candidate.publishedBy;
 
@@ -218,7 +223,7 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 	const meta = {
 		kind: 'verification' as const,
 		agent: candidate.agent ?? 'reviewer',
-		model: configForSubagent().model,
+		model: cfg.model,
 		assignmentId: candidate.assignmentId,
 		files: [candidate.file]
 	};
@@ -232,12 +237,12 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 
 	ctx.task(taskId, label, 'running', attempt > 1 ? `${doing}, second attempt` : doing, meta);
 
-	const outcome = await runVerifier(candidate, spec, ctx, { taskId, label, meta });
+	const outcome = await runVerifier(candidate, spec, cfg, ctx, { taskId, label, meta });
 
 	if (typeof outcome !== 'string') {
 		await settle(candidate, outcome, ctx, { taskId, label, meta });
 
-		return true;
+		return !escalates(candidate, attempt);
 	}
 
 	candidate.verification = { status: 'unverified', reason: `Not verified: ${outcome}.` };
@@ -256,10 +261,10 @@ interface VerifierTask {
 async function runVerifier(
 	candidate: CandidateFinding,
 	{ system, user, exec, mutation, turns }: VerifierSpec,
+	cfg: ModelConfig,
 	ctx: VerifyContext,
 	{ taskId, label, meta }: VerifierTask
 ): Promise<{ value: VerdictOutput; agentId: string } | string> {
-	const cfg = configForSubagent();
 	const owner = { assignmentId: taskId, role: 'verifier' };
 	const agentId = newAgentId();
 

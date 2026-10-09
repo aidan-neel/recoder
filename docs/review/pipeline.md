@@ -30,7 +30,7 @@ Execution order inside the harness, with overlaps:
 3. `changeModelStage`, then `intentStage` (and `deriveObligationsStage` when obligations are on), run in parallel with `ruleLedgerStage`.
 4. The harness `prepareSandbox` waits for setup and starts baseline checks. `startVerification` opens the verify queue.
 5. `detectorStage` and the diagnostics run in the background. The unit pool runs reviewers. Verifiers start as candidates arrive.
-6. `retryFailedUnits`, then `runSubagents`. Then the harness waits for detectors, drains verification and waits for checks (`checksInTime`).
+6. `retryFailedUnits`, then `runSubagents`, then `runHuntRounds` (only with `RECODER_HUNT=1`, see [configuration.md](configuration.md)). Then the harness waits for detectors, drains verification and waits for checks (`checksInTime`).
 7. `finishVerification`, `consolidate`, `completeReview`.
 
 ## Where candidates are lost
@@ -204,7 +204,7 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 
 - `startVerification` and `finishVerification` are in `apps/server/src/review/pipeline/harness/verification.ts`.
 - `startVerification` opens a `VerifyQueue`, defined in `apps/server/src/review/pipeline/harness/verify-queue.ts`. Verifiers run while reviewers still run.
-- The queue ranks publishable candidates before below-bar ones, bugs before quality, then by severity. It verifies at most `maxVerifications` per review, two attempts each.
+- The queue ranks publishable candidates before below-bar ones, bugs before quality, then by severity. It verifies at most `maxVerifications` per review, two attempts each. The second attempt runs only when the first gave no verdict, or, with `RECODER_VERIFY_ESCALATE=1`, when the first left a publishable bug unsettled (`escalates` in `apps/server/src/review/pipeline/verify/escalate.ts`); with that flag every second attempt runs on the Review model.
 - A convention finding whose examples are missing stops with "The examples it cites are not in the repository." (`examplesOnDisk`).
 - Quality findings settle through `settleQualityVerdict`. Bugs settle through `settleVerdict` in `apps/server/src/review/pipeline/verify/settle.ts`.
 - The verifier answers confirmed, refuted or unverified. A refutation counts only with the verifier's own passing run. For a mutation finding (`isMutationFinding`) it needs a failing run. Otherwise it is inconclusive.

@@ -13,6 +13,7 @@ import {
 	saveCheckpoint,
 	type ReviewRun
 } from './context.js';
+import { runHuntRounds } from '../hunt/stage.js';
 import { deriveObligationsStage, runUnitsWithObligations } from '../obligations/stage.js';
 import { intentStage } from './intent-stage.js';
 import { runUnitPool } from './pool.js';
@@ -37,8 +38,9 @@ import { drainVerification, finishVerification, startVerification } from './veri
  * Stages: understand → cut units → change model, intent (and obligations,
  * with `RECODER_OBLIGATIONS=1`) and rule ledger, while the sandbox installs →
  * every unit through every lens (failed ones retried once), in one pool with
- * the obligation investigations, then the subagents reviewers asked for when the lenses found
- * anything → consolidate. Three things overlap the reviewers rather than
+ * the obligation investigations, then the subagents reviewers asked for, then
+ * (with `RECODER_HUNT=1`) hunt rounds that look again past what was reported →
+ * consolidate. Three things overlap the reviewers rather than
  * follow them: the baseline checks, the detectors, and the verifiers, which
  * take each candidate as it is reported. Checks still queued once everything
  * else is done are left behind after a short grace. Only proven findings are shown;
@@ -114,6 +116,7 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 
 	await retryFailedUnits(run);
 	await runSubagents(run);
+	await runHuntRounds(run);
 
 	publishCoverage(run);
 	publishBudget(run);

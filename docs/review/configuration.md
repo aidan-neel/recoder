@@ -6,7 +6,7 @@ The server reads the environment variables below. All are optional. An unset var
 
 ## Experiment flags, kill switches and tuning knobs
 
-- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are three: `RECODER_OBLIGATIONS`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`. No other variable is an opt-in flag.
+- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are five: `RECODER_OBLIGATIONS`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`, `RECODER_HUNT`, `RECODER_VERIFY_ESCALATE`. No other variable is an opt-in flag.
 - **Kill switches.** On by default. Setting one turns a stage off: `RECODER_EXEC=off`, `RECODER_OVERLAY=off`, `RECODER_BASELINE_CACHE=off`, `RECODER_PACKAGE_PREP=0`, `RECODER_CANDIDATE_REPAIR=0`. Any other value leaves the stage on.
 - **Tuning knobs.** Every other variable. They size, place or credential work and do not add or remove a stage.
 
@@ -84,6 +84,12 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 - a larger read limit for test files (`MAX_TEST_BYTES` in `apps/server/src/review/pipeline/detectors/test-files.ts`).
 
 **RECODER_CALLER_SELECTION**: `1` turns on caller selection in the change model. Callers are ranked by how much they depend on the changed behavior, and that behavior is stated next to them. It does not choose models. Read by `buildChangeModel` in `apps/server/src/review/pipeline/change-model/change-model.ts`. A caller can override it with the `callerSelection` input.
+
+**RECODER_HUNT**: `1` turns on hunt rounds. After the subagents, every first-pass defect-lens assignment (correctness, security, concurrency, api-contract, performance) runs again on the Review model, told every report already made on its files and asked for what was missed. Rounds repeat until one adds no valid candidate more than 3 lines from an earlier report, or `RECODER_HUNT_ROUNDS` have run. Each hunter adds the per-assignment calls and time to the budget. Read by `huntOn` in `apps/server/src/review/pipeline/hunt/config.ts`.
+
+**RECODER_HUNT_ROUNDS**: Most hunt rounds. Default 2. An integer is clamped to 1 through 4; anything else gives the default. Read only when hunt rounds are on.
+
+**RECODER_VERIFY_ESCALATE**: `1` turns on verifier escalation. A bug that could be published and whose first verifier gave a verdict that is neither verified nor refuted gets one more verifier, on the Review model, told why the first could not settle it. A second attempt after a verifier that gave no verdict also runs on the Review model. Read by `escalateOn` in `apps/server/src/review/pipeline/verify/escalate.ts`.
 
 ## Data and caches
 

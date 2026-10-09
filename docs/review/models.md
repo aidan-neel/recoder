@@ -39,7 +39,7 @@ Effort checked (`supportedEffort`):
 Other entry points:
 
 - `configForOrchestrator()` returns the Review pick. It is used by reviewers, consolidation, repair and chat.
-- `configForSubagent()` returns the second pick, for subagents and verifiers.
+- `configForSubagent()` returns the second pick, for subagents and verifiers. With `RECODER_VERIFY_ESCALATE=1`, a verifier's second attempt uses the Review pick instead.
 - `configForAgent(agent)` returns the second pick when `agent` is `subagent`, else the Review pick. Follow-ups use it so a finding is discussed on the model that made it.
 - `configForModel(id, effort)` resolves one model by id, whatever the picks are. A saved-entry id that does not exist throws instead of falling back. The benchmark judge uses it (`apps/server/src/eval/benchmark-scoring.ts`).
 - `isReviewConfigured()` is true when both picks resolve.
