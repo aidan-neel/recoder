@@ -84,9 +84,11 @@ Claude Code (`apps/server/src/agents/claude-code/`):
 `transportFor` in `apps/server/src/models/llm/transports.ts` maps a provider to one attempt at a call:
 
 - openai-compatible: `streamChat` or `requestChat`. A non-streaming call that wants reasoning text still streams.
-- codex: `codex.complete()` from `apps/server/src/agents/codex/codex.ts`.
+- codex: `codex.complete()` from `apps/server/src/agents/codex/codex.ts`. A call that belongs to a `ChatConversation` sends its id as `prompt_cache_key`, so the turns of one agent share a prompt cache.
 - opencode: `opencode.complete()`.
 - claude-code: `claudeCode.complete()`.
+
+An agent Recoder runs turn by turn resends its whole transcript on transports that keep no session. Past `maxTranscriptChars` (`REVIEW_POLICY`), `compactTranscript` in `apps/server/src/review/pipeline/agent-loop/compaction.ts` stubs its oldest tool results, keeping the brief and the latest two.
 
 `runChat` in `apps/server/src/models/llm/run.ts` wraps the transport. It takes a limiter slot, records token usage, retries transient failures (`withRetries` in `apps/server/src/models/llm/retry.ts`) and settles by a hard deadline.
 

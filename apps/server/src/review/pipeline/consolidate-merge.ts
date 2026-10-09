@@ -132,6 +132,23 @@ function groupKey(candidate: CandidateFinding, byTitle: Map<string, string>): st
 	return byTitle.get(title)!;
 }
 
+/** What a report claims, with the text of its own line left out. */
+function claimOf(report: CandidateFinding, inventory: ReviewInventory): ClaimTerms {
+	return claimTerms(report, lineAnchor(inventory, report.file, report.line, report.side ?? 'new'));
+}
+
+/**
+ * Whether consolidation would compare two reports as one issue and find them
+ * claiming the same defect: they share a merge key or a bug title in one
+ * file, and their claims match.
+ */
+export function sameIssue(a: CandidateFinding, b: CandidateFinding, inventory: ReviewInventory): boolean {
+	const title = titleKey(a);
+	const placed = mergeKey(a) === mergeKey(b) || (title !== null && title === titleKey(b));
+
+	return placed && sameClaim(claimOf(a, inventory), claimOf(b, inventory));
+}
+
 /**
  * Splits the reports at one place into the defects they claim. A shared
  * place, category, fingerprint or title is no proof of one defect, so a report
@@ -143,7 +160,7 @@ function byClaim(reports: CandidateFinding[], inventory: ReviewInventory): Candi
 	const groups: { members: CandidateFinding[]; claims: ClaimTerms[] }[] = [];
 
 	for (const report of reports) {
-		const claim = claimTerms(report, lineAnchor(inventory, report.file, report.line, report.side ?? 'new'));
+		const claim = claimOf(report, inventory);
 		const group = groups.find((entry) => entry.claims.every((other) => sameClaim(claim, other)));
 
 		if (group) {
