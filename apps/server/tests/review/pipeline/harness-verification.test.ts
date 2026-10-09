@@ -315,3 +315,34 @@ test.skipIf((await execUnavailableReason()) !== null)(
 		}
 	}
 );
+
+test.skipIf((await execUnavailableReason()) !== null)(
+	'two low reports of one bug share a reproduction and are both published and counted as verified',
+	async () => {
+		useTestModel(4);
+
+		const root = await mkdtemp(join(tmpdir(), 'recoder-verify-share-'));
+		let verifiers = 0;
+
+		try {
+			const result = await reviewWithFakeModel(root, RUNNABLE, {
+				findings: [finding('Real bug.', 'low'), { ...finding('Real bug.', 'low'), body: 'Real bug. Seen again.' }],
+				realCommand: 'grep -c old src/a.ts',
+				interceptVerifier: (messages) => {
+					if (messages.length === 2) verifiers++;
+
+					return null;
+				}
+			});
+
+			expect(verifiers).toBe(1);
+			expect(result.findings).toHaveLength(1);
+			expect(result.findings[0].memberIds).toHaveLength(2);
+			expect(result.findings[0].verification).toMatchObject({ status: 'verified', outcome: 'reproduced' });
+			expect(result.funnel).toMatchObject({ raised: 2, verified: 2, shown: 1 });
+			expect(result.funnel?.dropped.severity).toBe(0);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	}
+);
