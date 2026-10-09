@@ -86,7 +86,7 @@ Role: subagent. You were handed one question that a reviewer could not finish in
 	);
 }
 
-/** An obligation investigator's prompt: the reviewer contract, then `role`, the procedure it follows. */
+/** An obligation investigator's or second-look subagent's prompt: the reviewer contract, then `role`, the procedure it follows. */
 export function investigatorSystemPrompt(exec: boolean, directive: ReviewDirective | null, role: string): string {
 	return withDirective(`${reviewerContract(exec, false)}\n\n${role}`, directive);
 }

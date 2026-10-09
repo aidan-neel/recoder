@@ -32,9 +32,46 @@ function ledger(rules: RuleLedger['rules']): RuleLedger {
 	return { rules, sourcesHash: 'x' };
 }
 
+/**
+ * The lines a require-braces rule reports in `src/flow.ts`, a file whose head
+ * is `lines` and whose diff adds the 1-based lines in `addedRows`.
+ */
+async function braceLines(lines: string[], addedRows: number[]): Promise<number[]> {
+	const unchanged = lines.length - addedRows.length;
+
+	const diff = [
+		'diff --git a/src/flow.ts b/src/flow.ts',
+		'--- a/src/flow.ts',
+		'+++ b/src/flow.ts',
+		`@@ -${unchanged ? 1 : 0},${unchanged} +1,${lines.length} @@`,
+		...lines.map((text, index) => `${addedRows.includes(index + 1) ? '+' : ' '}${text}`),
+		''
+	].join('\n');
+
+	const flowInventory = buildInventory(diff, []);
+
+	const results = await ruleCheckResults(
+		ledger([
+			{
+				id: 'R4',
+				text: 'Always use braces for control flow.',
+				source: { path: 'AGENTS.md' },
+				check: { kind: 'require-braces', glob: '**/*.ts' }
+			}
+		]),
+		{
+			inventory: flowInventory,
+			added: addedLines(flowInventory),
+			heads: new Map([['src/flow.ts', `${lines.join('\n')}\n`]])
+		}
+	);
+
+	return results.flatMap((result) => [result.line, ...(result.relatedLocations ?? []).map((other) => other.line)]);
+}
+
 describe('ruleCheckResults', () => {
-	test('runs a forbid-pattern only on added lines of files its globs cover', () => {
-		const results = ruleCheckResults(
+	test('runs a forbid-pattern only on added lines of files its globs cover', async () => {
+		const results = await ruleCheckResults(
 			ledger([
 				{
 					id: 'R1',
@@ -52,8 +89,8 @@ describe('ruleCheckResults', () => {
 		]);
 	});
 
-	test('flags a changed file over the line limit and leaves files under it', () => {
-		const results = ruleCheckResults(
+	test('flags a changed file over the line limit and leaves files under it', async () => {
+		const results = await ruleCheckResults(
 			ledger([
 				{
 					id: 'R2',
@@ -79,8 +116,8 @@ describe('ruleCheckResults', () => {
 		expect(results[0].evidence).toContain('5 lines');
 	});
 
-	test('flags an added file outside the folder a path rule requires', () => {
-		const results = ruleCheckResults(
+	test('flags an added file outside the folder a path rule requires', async () => {
+		const results = await ruleCheckResults(
 			ledger([
 				{
 					id: 'R3',
@@ -93,5 +130,25 @@ describe('ruleCheckResults', () => {
 		);
 
 		expect(results.map(({ file, line }) => ({ file, line }))).toEqual([{ file: 'src/new.test.ts', line: 1 }]);
+	});
+
+	test('flags an added if whose body has no braces', async () => {
+		expect(await braceLines(['if (ready) start();', 'export {};'], [1])).toEqual([1]);
+	});
+
+	test('leaves an added if whose body is a braced block', async () => {
+		expect(await braceLines(['if (ready) {', '\tstart();', '}'], [1, 2, 3])).toEqual([]);
+	});
+
+	test('flags an added else without braces after a braced if', async () => {
+		expect(await braceLines(['if (ready) {', '\tstart();', '} else stop();'], [1, 2, 3])).toEqual([3]);
+	});
+
+	test('leaves an added arrow function with an expression body', async () => {
+		expect(await braceLines(['export const next = (x: number) => x + 1;'], [1])).toEqual([]);
+	});
+
+	test('leaves a brace-less if on a line the diff does not add', async () => {
+		expect(await braceLines(['if (ready) start();', 'export const x = 1;'], [2])).toEqual([]);
 	});
 });

@@ -6,7 +6,7 @@ The server reads the environment variables below. All are optional. An unset var
 
 ## Experiment flags, kill switches and tuning knobs
 
-- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are three: `RECODER_OBLIGATIONS`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`. No other variable is an opt-in flag.
+- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are six: `RECODER_OBLIGATIONS`, `RECODER_OBLIGATIONS_NEW_CODE`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`, `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`. No other variable is an opt-in flag.
 - **Kill switches.** On by default. Setting one turns a stage off: `RECODER_EXEC=off`, `RECODER_OVERLAY=off`, `RECODER_BASELINE_CACHE=off`, `RECODER_PACKAGE_PREP=0`, `RECODER_CANDIDATE_REPAIR=0`. Any other value leaves the stage on.
 - **Tuning knobs.** Every other variable. They size, place or credential work and do not add or remove a stage.
 
@@ -76,6 +76,8 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 
 **RECODER_OBLIGATION_TURNS**: Model turns per investigation. Default 8. An integer is clamped to 3 through 12; anything else gives the default. Read only when obligations are on.
 
+**RECODER_OBLIGATIONS_NEW_CODE**: `1` lets a hunk that only adds lines oblige an investigation. Its truthiness tests, bounds and normalizers fire the truthy-default, boundary and normalization triggers with nothing on the base side to compare. Off, only replaced code fires them. Read by `obligationsNewCodeOn` in `apps/server/src/review/pipeline/obligations/config.ts`. It has no effect unless obligations are on.
+
 **RECODER_TEST_STRENGTH**: `1` turns on test-strength work. Read by `testStrengthOn` in `apps/server/src/review/pipeline/test-strength.ts`. It adds:
 
 - the matrix stage, which runs the changed tests against mutants (`apps/server/src/review/pipeline/harness/quality-stage.ts`);
@@ -84,6 +86,14 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 - a larger read limit for test files (`MAX_TEST_BYTES` in `apps/server/src/review/pipeline/detectors/test-files.ts`).
 
 **RECODER_CALLER_SELECTION**: `1` turns on caller selection in the change model. Callers are ranked by how much they depend on the changed behavior, and that behavior is stated next to them. It does not choose models. Read by `buildChangeModel` in `apps/server/src/review/pipeline/change-model/change-model.ts`. A caller can override it with the `callerSelection` input.
+
+**RECODER_RESIDUAL**: `1` turns on the residual pass. After the lens reviewers answer, each review unit gets one second-look subagent on the specialist model. It is told what the review already raised (its unit's files first) and the files that usually change with the unit's files but that the change leaves alone (read from the base's git history). It runs outside the subagent cap. Read by `residualOn` in `apps/server/src/review/pipeline/second-look/config.ts`.
+
+**RECODER_RESIDUAL_CAP**: Most residual passes one review launches, one per unit in unit order. Default 6. A non-negative integer. Read only when the residual pass is on.
+
+**RECODER_CONTRACT_CHECKS**: `1` turns on contract checks. Each valid readability candidate whose smell is `stale-comment`, `misleading-name` or `hidden-side-effect` gets one second-look subagent on the specialist model, which decides whether the comment, name or doc is wrong or the code is. It runs outside the subagent cap. Read by `contractChecksOn` in `apps/server/src/review/pipeline/second-look/config.ts`.
+
+**RECODER_CONTRACT_CHECK_CAP**: Most contract checks one review launches, one per place. Default 4. A non-negative integer. Read only when contract checks are on.
 
 ## Data and caches
 
