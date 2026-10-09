@@ -3,6 +3,7 @@ import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY, verifierTurns } from '../../session/review-policy.js';
 import { canLaunchInvestigation } from '../agent-loop.js';
 import { isNotRun, type CandidateFinding } from '../consolidate.js';
+import { sameIssue } from '../consolidate-merge.js';
 import { isMutationFinding } from '../verify/runs.js';
 import { publishBudget, saveCheckpoint, syncWorkspaceDeadline, type ReviewRun } from './context.js';
 
@@ -11,6 +12,9 @@ type VerifyAttempt = (candidate: CandidateFinding, attempt: number) => Promise<b
 
 /** A rejected candidate's one repair; true when it passed validation again and is to be verified. */
 type RepairAttempt = (candidate: CandidateFinding) => Promise<boolean>;
+
+/** Gives `follower` the verdict a verifier proved for `leader`, which claims the same issue. */
+type ShareVerdict = (follower: CandidateFinding, leader: CandidateFinding) => void;
 
 interface QueuedAttempt {
 	candidate: CandidateFinding;
@@ -64,6 +68,12 @@ export class VerifyQueue {
 	/** The model calls each candidate added to the budget when it joined. */
 	private readonly room = new Map<CandidateFinding, number>();
 
+	/** Bugs whose verifier is waiting or running, in the order they joined; a later report of one waits for it. */
+	private readonly leaders: CandidateFinding[] = [];
+
+	/** Reports waiting for a leader's verdict instead of a verifier of their own. */
+	private readonly followers = new Map<CandidateFinding, CandidateFinding[]>();
+
 	/** The error that stopped the queue: a blocked model or an aborted review. */
 	private failure: { error: unknown } | null = null;
 
@@ -72,7 +82,8 @@ export class VerifyQueue {
 	constructor(
 		private readonly run: ReviewRun,
 		private readonly verify: VerifyAttempt,
-		private readonly repair?: RepairAttempt
+		private readonly repair?: RepairAttempt,
+		private readonly share?: ShareVerdict
 	) {}
 
 	/** Whether any verifier or repair is running or waiting. */
@@ -83,7 +94,8 @@ export class VerifyQueue {
 	/**
 	 * Queues a candidate that is valid and has no verdict yet. A rejected one
 	 * goes to its repair first, when the queue has one, and joins if the repair
-	 * makes it valid; any other is left as it is.
+	 * makes it valid; any other is left as it is. A bug that claims the same
+	 * issue as one already being verified waits for that verdict instead.
 	 */
 	add(candidate: CandidateFinding): void {
 		if (!candidate.valid && this.repair) {
@@ -92,7 +104,7 @@ export class VerifyQueue {
 			return;
 		}
 
-		if (!candidate.valid || candidate.verification) return;
+		if (!candidate.valid || candidate.verification || this.follow(candidate)) return;
 
 		if (!this.takeSlot(candidate)) {
 			candidate.verification = {
@@ -105,7 +117,66 @@ export class VerifyQueue {
 
 		this.waiting.push({ candidate, attempt: 1 });
 		this.room.set(candidate, this.makeRoom(verifierTurns(isMutationFinding(candidate, this.run.workspace !== null))));
+
+		if (this.canLead(candidate)) {
+			this.leaders.push(candidate);
+			this.followers.set(candidate, []);
+		}
+
 		this.launch();
+	}
+
+	/**
+	 * A bug report can share a verifier: consolidation merges reports of one
+	 * issue, so one proof covers them all. Weak-test findings plant their own
+	 * bug, so they never share. A report below the reporting bar is verified
+	 * last, so it shares only with another below the bar ({@link follow}).
+	 */
+	private canLead(candidate: CandidateFinding): boolean {
+		return (
+			this.share !== undefined &&
+			findingKind(candidate.category) === 'bug' &&
+			!isMutationFinding(candidate, this.run.workspace !== null)
+		);
+	}
+
+	/**
+	 * Waits for the verifier of a leader that claims the same issue, or takes
+	 * its verdict at once when that verifier already proved it. False when no
+	 * leader is waiting, running or proved, so the candidate gets its own.
+	 */
+	private follow(candidate: CandidateFinding): boolean {
+		if (!this.canLead(candidate)) return false;
+
+		const leader = this.leaders.find(
+			(other) =>
+				Boolean(other.belowBar) === Boolean(candidate.belowBar) &&
+				(this.followers.has(other) || proved(other)) &&
+				sameIssue(other, candidate, this.run.inventory)
+		);
+
+		if (!leader) return false;
+
+		if (proved(leader)) this.share!(candidate, leader);
+		else this.followers.get(leader)!.push(candidate);
+
+		return true;
+	}
+
+	/**
+	 * A leader's verifier is done. Its followers take a proof; with no proof
+	 * (unverified, refuted, not run) each joins the queue for a verifier of
+	 * its own, so a report is never dropped on another's verdict.
+	 */
+	private release(leader: CandidateFinding): void {
+		const waiting = this.followers.get(leader) ?? [];
+
+		this.followers.delete(leader);
+
+		for (const follower of waiting) {
+			if (proved(leader)) this.share!(follower, leader);
+			else this.add(follower);
+		}
 	}
 
 	/**
@@ -134,6 +205,8 @@ export class VerifyQueue {
 			status: 'unverified',
 			reason: 'Not run: findings that can be published were verified first.'
 		};
+
+		this.release(displaced);
 
 		return true;
 	}
@@ -200,6 +273,7 @@ export class VerifyQueue {
 
 		if (this.failure || run.controller.signal.aborted || !canLaunchInvestigation(run.deadlineAt, run.budget)) {
 			if (attempt === 1) candidate.verification = { status: 'unverified', reason: NOT_RUN };
+			this.release(candidate);
 
 			return;
 		}
@@ -208,6 +282,7 @@ export class VerifyQueue {
 
 		if (isNotRun(candidate)) this.handBack(candidate);
 		if (!settled && attempt < VERIFIER_ATTEMPTS) this.waiting.push({ candidate, attempt: attempt + 1 });
+		else this.release(candidate);
 
 		saveCheckpoint(run);
 	}
@@ -240,4 +315,9 @@ export class VerifyQueue {
 	private settleIdle(): void {
 		if (!this.busy) for (const resolve of this.idleWaiters.splice(0)) resolve();
 	}
+}
+
+/** A candidate a verifier proved, still valid. */
+function proved(candidate: CandidateFinding): boolean {
+	return candidate.valid && candidate.verification?.status === 'verified';
 }
