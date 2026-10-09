@@ -23,7 +23,16 @@ export interface ReviewUnit {
 	scope: UnitScope;
 	/** The lens a reviewer applies; unset on a slice before fan-out and on a subagent. */
 	lens?: LensId;
+	/** Set on a subagent the harness sends for a second look rather than one a reviewer asked for. */
+	purpose?: SecondLookPurpose;
 }
+
+/**
+ * Why the harness sends a second-look subagent: `residual` looks for the
+ * defects a unit's lenses missed, `contract-check` settles whether a comment
+ * or the code it describes is wrong.
+ */
+export type SecondLookPurpose = 'residual' | 'contract-check';
 
 const UNIT_REASON = 'Every changed line is read by every lens that applies to it.';
 

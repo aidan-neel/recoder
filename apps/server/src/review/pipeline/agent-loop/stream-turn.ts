@@ -110,7 +110,7 @@ export async function streamTurn<T>(
 				jsonMode: true,
 				jsonSchema: opts.responseSchema?.(lastTurn),
 				...sampling(opts.config),
-				timeoutMs: REVIEW_POLICY.perCallDeadlineMs,
+				timeoutMs: opts.callDeadlineMs ?? REVIEW_POLICY.perCallDeadlineMs,
 				settleBy: Date.now() + Math.max(1, deadlineAt - reviewNow()),
 				signal: callAbort.signal,
 				onReasoning: opts.onReasoning ? onReasoning : undefined,

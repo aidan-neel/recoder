@@ -142,6 +142,7 @@ export function restoreEnvAfterEach(keys: string[]): void {
 export function isolateEachTest(): void {
 	restoreEnvAfterEach([
 		'RECODER_OBLIGATIONS',
+		'RECODER_OBLIGATIONS_NEW_CODE',
 		'RECODER_OBLIGATION_CAP',
 		'RECODER_OBLIGATION_TURNS',
 		'RECODER_EXEC',

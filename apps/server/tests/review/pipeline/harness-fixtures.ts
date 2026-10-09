@@ -1,7 +1,9 @@
 import { afterEach } from 'bun:test';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { resetLlmLimiter } from '../../../src/models/llm';
+import type { AdaptiveReviewInput } from '../../../src/review/pipeline/harness/types';
 import { LENSES } from '../../../src/review/pipeline/lenses/lenses';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { git } from '../../helpers/git';
@@ -264,4 +266,28 @@ export async function twoCommitRepo(
 	run(['commit', '-q', '-m', 'head']);
 
 	return { targetSha, headSha: run(['rev-parse', 'HEAD']) };
+}
+
+/** A base whose test script passes, so the review's baseline checks show its code can run and bugs are verified. */
+export const RUNNABLE = { 'package.json': JSON.stringify({ scripts: { test: 'cat src/a.ts' } }) };
+
+/**
+ * A two-commit checkout whose test script passes, in a new temp folder, as the
+ * review input that opens a sandbox on it. A bug is verified only where code
+ * runs, so a test that needs a bug verifier reviews against one of these.
+ */
+export async function runnableCheckout(): Promise<{
+	input: Pick<AdaptiveReviewInput, 'sandboxPath' | 'revision'>;
+	remove: () => Promise<void>;
+}> {
+	const root = await mkdtemp(join(tmpdir(), 'recoder-runnable-'));
+	const { targetSha, headSha } = await twoCommitRepo(root, { base: RUNNABLE });
+
+	return {
+		input: {
+			sandboxPath: root,
+			revision: { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' }
+		},
+		remove: () => rm(root, { recursive: true, force: true })
+	};
 }

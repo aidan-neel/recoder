@@ -103,18 +103,18 @@ function titled(checkpoint: ReviewProgressCheckpoint | null, title: string): Can
 	return checkpoint?.candidates.find((candidate) => candidate.title === title);
 }
 
-test('a supported candidate past the change is linked to the changed line it cites, verified and kept on its line', async () => {
-	const { result, checkpoint, verifiers, repairs } = await reviewFindings([lostAnchor('lost anchor')]);
+test('a supported candidate past the change is linked to the changed line it cites and kept on its line', async () => {
+	const { result, checkpoint, repairs } = await reviewFindings([lostAnchor('lost anchor')]);
 	const candidate = titled(checkpoint, 'lost anchor');
 
 	expect(repairs).toBe(0);
-	expect(verifiers).toBeGreaterThan(0);
+	expect(candidate?.verification?.outcome).toBe('not-run');
 	expect(result.findings.map((item) => [item.title, item.file, item.line])).toEqual([['lost anchor', 'src/a.ts', 400]]);
 	expect(candidate?.relatedLocations).toContainEqual({ file: 'src/a.ts', line: 3, endLine: 3, side: 'new' });
 
 	expect(candidateOutcome(candidate!)).toMatchObject({
 		stage: null,
-		verified: true,
+		verified: false,
 		repair: { result: 'revalidated' }
 	});
 
@@ -172,7 +172,7 @@ test('with RECODER_CANDIDATE_REPAIR=0 the candidate stops at location as before,
 	);
 });
 
-test('when the diff leaves the line open, one model call picks an offered changed line and the candidate is verified', async () => {
+test('when the diff leaves the line open, one model call picks an offered changed line and the candidate is published', async () => {
 	const answer = { file: 'src/a.ts', line: 3, reason: 'line 3 drops the value' };
 	const { result, checkpoint, repairs } = await reviewFindings([uncitedAnchor('model anchor')], answer);
 
@@ -181,7 +181,7 @@ test('when the diff leaves the line open, one model call picks an offered change
 
 	expect(candidateOutcome(titled(checkpoint, 'model anchor')!)).toMatchObject({
 		stage: null,
-		verified: true,
+		verified: false,
 		repair: { method: 'model', result: 'revalidated', changes: [{ kind: 'anchor', line: 3 }] }
 	});
 });

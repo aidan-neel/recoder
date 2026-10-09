@@ -1,6 +1,8 @@
 import type { ObligationTrigger } from '@recoder/shared';
 import { describe, expect, test } from 'bun:test';
-import { deriveFrom, file } from './fixtures';
+import { deriveFrom, file, restoreEnvAfterEach } from './fixtures';
+
+restoreEnvAfterEach(['RECODER_OBLIGATIONS_NEW_CODE']);
 
 /** The triggers a change sets off on `path`, with the side and line of each. */
 async function hits(change: ReturnType<typeof file>, path?: string): Promise<string[]> {
@@ -363,19 +365,69 @@ describe('test files', () => {
 describe('brand-new code', () => {
 	const before = ['export function first(items: string[]) {', '\treturn items[0];', '}'];
 
-	test('a truthiness test or rounding in a function the change adds derives nothing', async () => {
-		const found = await hits(
-			file('src/items.ts', before, [
-				...before,
-				'',
-				'export function pages(revision: string | undefined, total: number, size: number) {',
-				'\tif (!revision) return 0;',
-				'\treturn Math.ceil(total / size);',
-				'}'
-			])
-		);
+	/** `before` and a function added after it, with a truthiness test on line 6 and rounding on line 7. */
+	const pages = (path: string) =>
+		file(path, before, [
+			...before,
+			'',
+			'export function pages(revision: string | undefined, total: number, size: number) {',
+			'\tif (!revision) return 0;',
+			'\treturn Math.ceil(total / size);',
+			'}'
+		]);
 
-		expect(found).toEqual([]);
+	/** `before` and a function added after it that normalizes on line 6. */
+	const keyed = file('src/items.ts', before, [
+		...before,
+		'',
+		'export function key(email: string) {',
+		'\treturn email.trim().toLowerCase();',
+		'}'
+	]);
+
+	/** Turns `RECODER_OBLIGATIONS_NEW_CODE` on or off for the calling test. */
+	function newCode(on: boolean): void {
+		if (on) process.env.RECODER_OBLIGATIONS_NEW_CODE = '1';
+		else delete process.env.RECODER_OBLIGATIONS_NEW_CODE;
+	}
+
+	test('a truthiness test or rounding in a function the change adds derives nothing', async () => {
+		newCode(false);
+
+		expect(await hits(pages('src/items.ts'))).toEqual([]);
+	});
+
+	test('with new code on, a truthiness test in a function the change adds derives the obligation', async () => {
+		newCode(true);
+
+		expect(await hits(pages('src/items.ts'))).toContain('truthy-default new:6');
+	});
+
+	test('with new code on, rounding in a function the change adds derives a boundary obligation', async () => {
+		newCode(true);
+
+		expect(await hits(pages('src/items.ts'))).toContain('boundary new:7');
+	});
+
+	test('a normalizer in a function the change adds derives nothing', async () => {
+		newCode(false);
+
+		expect(await hits(keyed)).toEqual([]);
+	});
+
+	test('with new code on, a normalizer in a function the change adds derives the obligation', async () => {
+		newCode(true);
+
+		expect(await hits(keyed)).toContain('normalization new:6');
+	});
+
+	test("with new code on, a test's own new truthiness test or rounding still derives nothing", async () => {
+		newCode(true);
+
+		const found = triggers(await hits(pages('src/items.test.ts')));
+
+		expect(found).not.toContain('truthy-default');
+		expect(found).not.toContain('boundary');
 	});
 
 	test('a truthiness test on a value that only a replaced comment named derives nothing', async () => {

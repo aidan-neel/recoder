@@ -29,6 +29,11 @@ export interface HunkMarks {
 	baseText: string;
 	/** The hunk deletes or replaces lines, rather than only adding them. */
 	deletes: boolean;
+	/**
+	 * The hunk only adds lines and brand-new code may oblige: its truthiness
+	 * tests, bounds and normalizers fire with nothing on the base side to compare.
+	 */
+	newCode: boolean;
 }
 
 /** A trigger set off at one line; `side: 'old'` for code the hunk removed. */
@@ -99,7 +104,10 @@ function replacedBoundary(hunk: HunkMarks, mark: Mark): boolean {
 	);
 }
 
-/** A truthiness test that replaced other handling of its value, or a default whose value changed. */
+/**
+ * A truthiness test that replaced other handling of its value or sits in
+ * brand-new code that may oblige, or a default whose value changed.
+ */
 function truthyHits(hunk: HunkMarks): TriggerHit[] {
 	const changed = hunk.head.flatMap((mark) => {
 		const old = mark.kind === 'default' ? changedFrom(hunk, mark) : undefined;
@@ -116,14 +124,15 @@ function truthyHits(hunk: HunkMarks): TriggerHit[] {
 			: [];
 	});
 
-	const replaced = hunk.head.filter((mark) => mark.kind === 'truthy' && replacedTruthy(hunk, mark));
+	const replaced = hunk.head.filter((mark) => mark.kind === 'truthy' && (hunk.newCode || replacedTruthy(hunk, mark)));
 
 	return [...replaced.map((mark) => hit('truthy-default', mark, 'new')), ...changed];
 }
 
 /**
  * Rounding, division and comparisons with a number or limit that replaced a
- * bound, and any comparison whose operator changed.
+ * bound or sit in brand-new code that may oblige, and any comparison whose
+ * operator changed.
  */
 function boundaryHits(hunk: HunkMarks): TriggerHit[] {
 	const changed = hunk.head.flatMap((mark) => {
@@ -132,7 +141,9 @@ function boundaryHits(hunk: HunkMarks): TriggerHit[] {
 		return old ? [hit('boundary', mark, 'new', `comparison changed from \`${old.value}\` to \`${mark.value}\``)] : [];
 	});
 
-	const replaced = hunk.head.filter((mark) => mark.kind === 'boundary' && replacedBoundary(hunk, mark));
+	const replaced = hunk.head.filter(
+		(mark) => mark.kind === 'boundary' && (hunk.newCode || replacedBoundary(hunk, mark))
+	);
 
 	return [...replaced.map((mark) => hit('boundary', mark, 'new')), ...changed];
 }
@@ -144,9 +155,12 @@ function removedGuards(hunk: HunkMarks): TriggerHit[] {
 		.map((mark) => hit('removed-guard', mark, 'old', `removed: ${mark.detail}`));
 }
 
-/** The hunk replaces code and the normalizers applied differ between the two sides. */
+/**
+ * The hunk replaces code, or adds brand-new code that may oblige, and the
+ * normalizers applied differ between the two sides.
+ */
 function normalizationHits(hunk: HunkMarks): TriggerHit[] {
-	if (!hunk.deletes) return [];
+	if (!hunk.deletes && !hunk.newCode) return [];
 
 	const before = hunk.base.filter((mark) => mark.kind === 'normalize');
 	const after = hunk.head.filter((mark) => mark.kind === 'normalize');

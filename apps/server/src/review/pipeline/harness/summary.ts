@@ -12,7 +12,7 @@ import {
 } from '@recoder/shared';
 import { reviewNow } from '../../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError } from '../agent-loop.js';
-import { isHeldBack, toFinding, type CandidateFinding } from '../consolidate.js';
+import { isHeldBack, isNotRun, toFinding, type CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
 import { obligationReport, obligationSentence } from '../obligations/report.js';
 import { briefQuestionReport, questionSentence } from '../question-report.js';
@@ -43,8 +43,8 @@ function refutedCandidates(run: ReviewRun): CandidateFinding[] {
 /**
  * Counts where the run's candidates went. A candidate held back for being
  * below the reporting bar counts as dropped at `severity` however far it got,
- * so raised = dropped + unproven + verified. A candidate from a checkpoint
- * older than drop stages counts only as raised.
+ * so raised = dropped + unproven + verified + not run. A candidate from a
+ * checkpoint older than drop stages counts only as raised.
  */
 export function reviewFunnel(
 	run: Pick<ReviewRun, 'candidates' | 'hidden'> & Partial<Pick<ReviewRun, 'intent'>>,
@@ -65,6 +65,8 @@ export function reviewFunnel(
 		if (isHeldBack(candidate)) dropped.severity++;
 	}
 
+	const notRun = notRunCandidates(run.candidates).length;
+
 	return {
 		raised: run.candidates.length,
 		dropped,
@@ -72,9 +74,26 @@ export function reviewFunnel(
 		verified: run.candidates.filter(
 			(candidate) => candidate.valid && !isHeldBack(candidate) && candidate.verification?.status === 'verified'
 		).length,
+		...(notRun && { notRun }),
 		shown,
 		...briefRecord(run.intent)
 	};
+}
+
+/** The shown bugs no verifier tried, because no code could run in the review. */
+function notRunCandidates(candidates: CandidateFinding[]): CandidateFinding[] {
+	return candidates.filter((candidate) => candidate.valid && !isHeldBack(candidate) && isNotRun(candidate));
+}
+
+/** "2 bugs are not verified: no type check, lint or test command was found to run here." — empty when none are. */
+function notRunSentence(candidates: CandidateFinding[]): string {
+	const notRun = notRunCandidates(candidates);
+
+	if (!notRun.length) return '';
+
+	const reason = notRun[0].verification?.reason?.replace(/^Not verified: /, '') ?? 'the code cannot run here.';
+
+	return `${notRun.length} bug${notRun.length === 1 ? ' is' : 's are'} not verified: ${reason}`;
 }
 
 /** Which changed units the brief read, for the eval report; nothing when the review had no brief. */
@@ -195,7 +214,7 @@ function finishOutOfTime(run: ReviewRun, minutes: number): AdaptiveReviewResult 
 		unconfirmed: run.hidden.map(toFinding),
 		funnel: reviewFunnel(run, confirmed.length),
 		...measuredContext(run, confirmed),
-		summary: `${summary} The review ran out of time after ${minutes} minutes; only findings verified by then are shown.`,
+		summary: `${summary} The review ran out of time after ${minutes} minutes; findings still being verified then are hidden.`,
 		outcome: 'complete',
 		recommendedChecks: [...run.recommended],
 		coverage: run.coverage.summary(),
@@ -267,8 +286,9 @@ function buildSummary(
 	const subagents = incomplete.filter((record) => record.role === 'subagent').length;
 
 	const bits = [
-		`Review complete. ${confirmed.length} confirmed finding${confirmed.length === 1 ? '' : 's'}.`,
+		`Review complete. ${confirmed.length} finding${confirmed.length === 1 ? '' : 's'}.`,
 		verifiedSummary(confirmed),
+		notRunSentence(run.candidates),
 		hiddenSentence(run.hidden.length),
 		briefSentence(run.intent),
 		units ? `${units} review unit${units === 1 ? '' : 's'} did not finish.` : '',

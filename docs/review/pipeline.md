@@ -142,12 +142,16 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
 - Only the correctness lens may request subagents. Answers to reviewer questions are recorded with `recordReply`.
 - `runSubagents` plans subagents with `planSubagents` and `planBriefSubagents`. It is in `apps/server/src/review/pipeline/harness/subagent-stage.ts`. Requests over the cap, or for the same concern on overlapping code, are merged or dropped.
 - Lens reviewers see past dismissals through `dismissalsBlock`. Subagents do not.
+- Second looks (flags `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`) are subagents the harness sends itself, planned by `planSecondLook` in `apps/server/src/review/pipeline/second-look/stage.ts` after the reviewer and brief subagents, outside the cap. A residual pass (`residual-N`) rereads one unit for what its lenses missed. A contract check (`contract-N`) takes one readability report of a comment, name or doc that disagrees with the code and decides which side is wrong. They set `ReviewUnit.purpose`, run on the specialist model, read only (no commands, since verification runs every candidate), and record tokens under the `second-look` stage. Their clock is `secondLookFinalTurnAfterMs` (7 min) and `secondLookMaxMs` (14 min); when a residual pass starts, `makeRoomForSecondLooks` moves the review deadline out so that clock fits; contract checks are short and use the time left. Each adds `maxSubagentTurns` plus `schemaRepairAttempts` model calls to the budget, and each of its calls gets `secondLookCallDeadlineMs` (180 s) in place of `perCallDeadlineMs` (90 s), since a CLI model prints its reply only at the end.
 - Drops: candidates from this stage drop in stage 9.
 - Tests:
   - `apps/server/tests/review/pipeline/subagents.test.ts`
   - `apps/server/tests/review/pipeline/harness-subagents.test.ts`
   - `apps/server/tests/review/pipeline/question-ledger.test.ts`
   - `apps/server/tests/review/pipeline/reviewer-normalize.test.ts`
+  - `apps/server/tests/review/pipeline/second-look/stage.test.ts`
+  - `apps/server/tests/review/pipeline/second-look/plan.test.ts`
+  - `apps/server/tests/review/pipeline/second-look/co-change.test.ts`
 
 ## 7. Obligations
 
@@ -155,7 +159,7 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 
 - `deriveObligationsStage` derives obligations from the diff without a model call. It is in `apps/server/src/review/pipeline/obligations/stage.ts`.
 - `deriveObligations` reads TypeScript, JavaScript and Svelte files only. `selectUnderCap` keeps at most `RECODER_OBLIGATION_CAP` (default 8), round-robin across triggers.
-- The triggers are the `ObligationTrigger` values in `packages/shared/src/obligations.ts`: truthy-default, boundary, removed-guard, normalization, resource-release, count-validation, error-contract, weaker-assertion. Each has a fixed question in `QUESTIONS`.
+- The triggers are the `ObligationTrigger` values in `packages/shared/src/obligations.ts`: truthy-default, boundary, removed-guard, normalization, resource-release, count-validation, error-contract, weaker-assertion. Each has a fixed question in `QUESTIONS`. Truthy-default, boundary and normalization fire on replaced code only, and also on brand-new code when `RECODER_OBLIGATIONS_NEW_CODE` is on.
 - `runUnitsWithObligations`, in the same stage file, runs investigations first in the same pool as units. Each gets `RECODER_OBLIGATION_TURNS` turns (default 8, clamped to 3 through 12).
 - Each investigation ends in an `ObligationResult`: confirmed, disproved, not-applicable or unresolved. An unlaunched one is unresolved with "Not launched: budget or time reserved for consolidation".
 - A confirmed answer becomes a candidate through `addCandidates` with role obligation. It then goes through stages 9 and 10 like any reviewer candidate.
@@ -186,7 +190,7 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 ## 9. Candidates, validation and repair
 
 - `validateCandidate` turns a reviewer finding into a `CandidateFinding`, defined in `apps/server/src/review/pipeline/consolidate.ts`. It sets `valid`, `dropStage` and `dropReason`.
-- A valid low-severity candidate gets `belowBar` unless `reportLowSeverity` is on. `effectiveReportLowSeverity` decides it, default false. It is in `apps/server/src/review/session/review-settings.ts`.
+- A valid low-severity candidate gets `belowBar` unless `reportLowSeverity` is on. `effectiveReportLowSeverity` decides it, default true (low severity is shown). It is in `apps/server/src/review/session/review-settings.ts`. The harness itself reads `input.reportLowSeverity ?? false`, but its only caller, `commands/pipeline.ts`, always passes the setting; the `false` there is for tests that leave it out.
 - Repair is on unless `RECODER_CANDIDATE_REPAIR=0`. `candidateRepairOn` and `repairCandidate` are in `apps/server/src/review/pipeline/harness/repair.ts`. At most `RECODER_REPAIR_CAP` (default 8) repairs run per review.
 - The verify queue sends an invalid candidate to repair first. `isRepairable` accepts only a candidate stopped at `location` or `category`, not repaired before, with a claim and usable evidence.
 - `planRepair`, `applyRepair` and the `CandidateRepair` type are in `apps/server/src/review/pipeline/candidate-repair.ts`. One model call proposes changes (`changesFromAnswer`); kinds are anchor, related, category, citation and rule.
@@ -205,11 +209,12 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 - `startVerification` and `finishVerification` are in `apps/server/src/review/pipeline/harness/verification.ts`.
 - `startVerification` opens a `VerifyQueue`, defined in `apps/server/src/review/pipeline/harness/verify-queue.ts`. Verifiers run while reviewers still run.
 - The queue ranks publishable candidates before below-bar ones, bugs before quality, then by severity. It verifies at most `maxVerifications` per review, two attempts each.
+- Bugs are verified only where the repository's code runs. `whyCodeCannotRun` decides it once per review, after the baseline checks finish: with no workspace, with no baseline check to run, or with no baseline check that exited 0, no bug verifier runs. Each bug then gets `outcome: 'not-run'` (status `unverified`) and is published, marked unverified, not hidden (`isPublishable` in `apps/server/src/review/pipeline/consolidate.ts`). Quality findings are still verified by reading. A bug verifier always has a shell; there is no read-only bug verifier.
 - A convention finding whose examples are missing stops with "The examples it cites are not in the repository." (`examplesOnDisk`).
 - Quality findings settle through `settleQualityVerdict`. Bugs settle through `settleVerdict` in `apps/server/src/review/pipeline/verify/settle.ts`.
 - The verifier answers confirmed, refuted or unverified. A refutation counts only with the verifier's own passing run. For a mutation finding (`isMutationFinding`) it needs a failing run. Otherwise it is inconclusive.
 - `coveredByIntent` also refutes when the verifier names a non-goal id the intent holds, or a stacked pull request number. That sets `covered`.
-- A confirmed verdict with a run is reproduced; one with cited reads is traced. `withOutcome` sets `VerificationOutcome`: reproduced, traced, inconclusive or refuted.
+- A confirmed verdict with a run is reproduced; one with cited reads is traced. `withOutcome` sets `VerificationOutcome`: reproduced, traced, inconclusive, refuted or not-run.
 - `FindingVerification.method` is run, trace, detector, rule or convention. These types are in `packages/shared/src/findings.ts`.
 
 Base comparison. `recordBaseline` reruns the proving command on the merge-base tree. It is in `apps/server/src/review/pipeline/harness/verify-baseline.ts`. It never changes the verdict. `compareToBase` classifies the result as one `BaseComparisonResult`:
@@ -225,7 +230,7 @@ Base comparison. `recordBaseline` reruns the proving command on the merge-base t
 
 A `pre-existing` result adds `SAME_ON_BASE` text to the reason. It also stops a below-bar candidate from being published as reproduced. Mutation findings skip the base run.
 
-- `finishVerification` drains the queue, checks suggested patches (`checkPatches`), then calls `hideUnproven`. Valid, not held back, unverified candidates go to `run.hidden`.
+- `finishVerification` drains the queue, checks suggested patches (`checkPatches`), then calls `hideUnproven`. Valid, not held back, unverified candidates go to `run.hidden`, except not-run bugs, which are published. The funnel counts them as `notRun`, so raised = dropped + unproven + verified + notRun.
 - Tests:
   - `apps/server/tests/review/pipeline/verify.test.ts`
   - `apps/server/tests/review/pipeline/harness-verification.test.ts`

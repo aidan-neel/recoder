@@ -10,7 +10,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Candidate.** A claim a reviewer, subagent or detector reported, before validation and verification. Type `CandidateFinding` (a `Finding` plus `candidateId`, `valid`, `dropReason`, `dropStage`, `belowBar`, `publishedBy`, `refuted`, `repair`) in `apps/server/src/review/pipeline/consolidate.ts`. Candidates that survive and merge become findings (`toFinding`).
 
-**Unit.** A slice of the change cut from the inventory without a model call. Type `ReviewUnit` in `apps/server/src/review/pipeline/units.ts`. Ids are `unit-1`, `unit-2/security` (a lens assignment) and `subagent-1`.
+**Unit.** A slice of the change cut from the inventory without a model call. Type `ReviewUnit` in `apps/server/src/review/pipeline/units.ts`. Ids are `unit-1`, `unit-2/security` (a lens assignment), `subagent-1`, and the second looks `residual-1` and `contract-1`.
 
 **Inventory.** The changed files and their hunks, built from the diff. Type `ReviewInventory` in `apps/server/src/review/pipeline/inventory.ts`.
 
@@ -19,6 +19,8 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 **Assignment.** One reviewer's job: one unit under one lens, or one subagent. Type `ReviewAssignment` in `packages/shared/src/progress.ts`.
 
 **Subagent.** An extra reviewer a lens reviewer asks for to settle one question. State in `SubagentState` in `apps/server/src/review/pipeline/subagents.ts`. The cap is `SubagentCap` (`0`, `2`, `4`) in `packages/shared/src/models.ts`.
+
+**Second look.** A subagent the harness sends itself, not one a reviewer asked for: a residual pass per unit or a contract check per readability report of a comment that disagrees with the code. Set by `ReviewUnit.purpose` (`SecondLookPurpose`) in `apps/server/src/review/pipeline/units.ts`. Runs outside the subagent cap, only when `RECODER_RESIDUAL` or `RECODER_CONTRACT_CHECKS` is on.
 
 **Detector.** A deterministic check that raises candidates without a model. Code in `apps/server/src/review/pipeline/detectors/`. Its candidates carry `lens` like `detector:duplication`.
 
@@ -44,7 +46,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 - `status`: `verified` or `unverified`.
 - `method`: `run`, `trace`, `detector`, `rule`, `convention`.
-- `outcome` (`VerificationOutcome`): `reproduced`, `traced`, `inconclusive`, `refuted`.
+- `outcome` (`VerificationOutcome`): `reproduced`, `traced`, `inconclusive`, `refuted`, `not-run`.
 
 **Proof.** The evidence behind a `verified` status. Type `VerificationEvidence`: the `command`, `exitCode`, `expected`, an `observed` excerpt taken by the harness, and the `evidenceId` of the recorded run. The store is `apps/server/src/evidence/store.ts`.
 
@@ -58,7 +60,9 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Unproven.** No verifier settled the candidate. It is kept out of `findings` and held in `Review.unconfirmed`.
 
-**Below the bar.** A low-severity candidate held back while Settings keeps reviews to medium and above (`belowBar`). `publishedBy` (`PublishedBy`: `reproduced`, `rule`) says why one is published anyway. Defined in `apps/server/src/review/pipeline/published-by.ts`.
+**Not run.** A bug in a review where no baseline check passed (or none could run), so no verifier tried it. It is published, marked unverified (`outcome: 'not-run'`), and counted as `ReviewFunnel.notRun`. Decided by `whyCodeCannotRun` in `apps/server/src/review/pipeline/harness/verification.ts`.
+
+**Below the bar.** A low-severity candidate held back when Settings keeps reviews to medium and above (`belowBar`). Low severity is shown by default. `publishedBy` (`PublishedBy`: `reproduced`, `rule`) says why one is published anyway. Defined in `apps/server/src/review/pipeline/published-by.ts`.
 
 ## Where a candidate stopped
 
