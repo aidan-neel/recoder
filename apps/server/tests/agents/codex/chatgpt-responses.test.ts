@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from 'bun:test';
-import { LlmError } from '../../../src/models/llm';
+import { ChatConversation, LlmError } from '../../../src/models/llm';
 import { configForSubagent } from '../../../src/models/models';
 import { setReviewOverrides } from '../../../src/review/session/review-settings';
 import {
@@ -52,6 +52,17 @@ test('direct Responses requests preserve roles and effort without unsupported AP
 	expect(body.input.map((item) => item.role)).toEqual(['user', 'assistant', 'user']);
 	expect(body.input[1]!.content).toEqual([{ type: 'output_text', text: 'Earlier answer' }]);
 	for (const key of ['max_output_tokens', 'max_tokens', 'temperature', 'seed']) expect(call.body[key]).toBeUndefined();
+});
+
+test('calls of one conversation share a prompt cache key that another conversation does not', async () => {
+	const f = fixture();
+	const [first, second] = [new ChatConversation(), new ChatConversation()];
+
+	for (const conversation of [first, first, second]) await f.provider.complete({ ...input, conversation });
+
+	const keys = f.calls.filter((call) => call.url.endsWith('/responses')).map((call) => call.body.prompt_cache_key);
+
+	expect(keys).toEqual([first.id, first.id, second.id]);
 });
 
 test.each(['low', 'medium', 'high'] as const)(
