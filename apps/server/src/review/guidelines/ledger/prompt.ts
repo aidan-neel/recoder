@@ -14,6 +14,7 @@ For each rule:
   {"kind":"max-file-lines","max":500,"glob":"**/*.ts"} - matching files stay at or under max lines.
   {"kind":"forbid-pattern","pattern":"^\\\\s*//(?!/)","glob":"**/*.ts"} - a JavaScript regex (at most 200 characters, no flags) tested against each added line on its own. Use it only when every match is a violation.
   {"kind":"path-pattern","files":"**/*.test.ts","mustMatch":"**/tests/**"} - added files matching "files" must also match "mustMatch".
+  {"kind":"require-braces","glob":"**/*.ts"} - every if, else, for, while and do body in matching files is a { } block, even when it is one line. Use it for a rule that requires braces or block statements around control-flow bodies. It never covers arrow functions or other expressions.
 
 Never invent a rule the text does not state. List rules in the order they appear.`;
 

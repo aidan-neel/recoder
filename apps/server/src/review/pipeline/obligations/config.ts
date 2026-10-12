@@ -3,6 +3,14 @@ export function obligationsOn(): boolean {
 	return process.env.RECODER_OBLIGATIONS === '1';
 }
 
+/**
+ * Truthiness tests, bounds and normalizers in brand-new code oblige an
+ * investigation only when `RECODER_OBLIGATIONS_NEW_CODE=1`; off, only replaced code does.
+ */
+export function obligationsNewCodeOn(): boolean {
+	return process.env.RECODER_OBLIGATIONS_NEW_CODE === '1';
+}
+
 const DEFAULT_CAP = 8;
 const DEFAULT_TURNS = 8;
 const MIN_TURNS = 3;

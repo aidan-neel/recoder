@@ -370,6 +370,19 @@ function newSideAnchored(inventory: ReviewInventory, path: string, line: number)
 	return false;
 }
 
+/** Whether the candidate is a bug no verifier tried, because none of the repository's checks could run in this review. */
+export function isNotRun(candidate: CandidateFinding): boolean {
+	return candidate.verification?.outcome === 'not-run';
+}
+
+/**
+ * Whether the candidate can become a finding: a verifier proved it, or it is
+ * a bug in a review where no code could run, shown marked unverified.
+ */
+export function isPublishable(candidate: CandidateFinding): boolean {
+	return candidate.valid && (candidate.verification?.status === 'verified' || isNotRun(candidate));
+}
+
 /** Whether the candidate is verified like the rest but held back from the findings for being below the reporting bar. */
 export function isHeldBack(candidate: CandidateFinding): boolean {
 	return candidate.valid && candidate.belowBar === true && candidate.publishedBy === undefined;

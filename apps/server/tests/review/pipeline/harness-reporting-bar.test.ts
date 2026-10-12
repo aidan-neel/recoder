@@ -13,14 +13,14 @@ beforeEach(() => {
 
 const DIFF = addedFile('src/a.ts', 5);
 
-test('a low-severity candidate is verified, then held back and counted under severity in the funnel', async () => {
+test('a low-severity bug where code cannot run is held back unverified and counted under severity in the funnel', async () => {
 	let verifiers = 0;
 
 	stubFindings([{ ...finding('quiet problem', 'low'), line: 1 }], () => verifiers++);
 
 	const result = await runAdaptiveReview({ diff: DIFF, sandboxPath: null });
 
-	expect(verifiers).toBeGreaterThan(0);
+	expect(verifiers).toBe(0);
 	expect(result.findings).toEqual([]);
 	expect(result.unconfirmed).toEqual([]);
 	expect(result.funnel).toMatchObject({ raised: 1, unproven: 0, verified: 0, shown: 0 });

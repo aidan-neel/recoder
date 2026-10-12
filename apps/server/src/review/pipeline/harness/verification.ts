@@ -5,7 +5,13 @@ import type { RuleLedger } from '../../guidelines/ledger/types.js';
 import { configForSubagent } from '../../../models/models.js';
 import { REVIEW_POLICY, verifierTurns } from '../../session/review-policy.js';
 import { ModelBlockedError, ReviewAbortedError, newAgentId, runJsonAgent, type ModelBudget } from '../agent-loop.js';
-import { candidateFromDetector, isHeldBack, publishHeldBack, type CandidateFinding } from '../consolidate.js';
+import {
+	candidateFromDetector,
+	isHeldBack,
+	isPublishable,
+	publishHeldBack,
+	type CandidateFinding
+} from '../consolidate.js';
 import type { DetectorResult } from '../detectors/types.js';
 import type { ChangeIntent } from '../intent/types.js';
 import { intentBlock } from '../intent/format.js';
@@ -51,8 +57,8 @@ interface VerifyContext {
 	ledger: RuleLedger | null;
 	/** The PR checkout, where convention examples are looked up; null without one. */
 	checkout: string | null;
-	/** Why code cannot run in this review; null when it can. */
-	unavailable: string | null;
+	/** Why bugs in this review are not run, once the baseline checks have finished; null when one of them passed. */
+	cannotRun: () => Promise<string | null>;
 	/** The review's sandbox, where a run-proved bug is run again on the merge-base tree; null when code cannot run. */
 	workspace: ExecWorkspace | null;
 	mergeBaseSha: string | null;
@@ -67,9 +73,9 @@ const VERIFIER_EXAMPLE =
  * Opens the review's verifier queue before the reviewers start, so each
  * candidate is verified as soon as its reviewer reports it, or once its one
  * repair makes a rejected candidate valid. Candidates a resumed review hasn't
- * verified join at once.
+ * verified join at once. `checks` resolves when the baseline checks finish.
  */
-export function startVerification(run: ReviewRun): void {
+export function startVerification(run: ReviewRun, checks: () => Promise<void>): void {
 	const ctx: VerifyContext = {
 		evidence: run.evidence,
 		budget: run.budget,
@@ -81,7 +87,7 @@ export function startVerification(run: ReviewRun): void {
 		intent: run.intent,
 		ledger: run.ledger,
 		checkout: run.input.revision?.checkoutPath ?? null,
-		unavailable: run.workspace ? null : run.execReason,
+		cannotRun: whyCodeCannotRun(run, checks),
 		workspace: run.workspace,
 		mergeBaseSha: run.input.revision?.mergeBaseSha ?? null,
 		changes: () => diffChanges(run.inventory, run.changeModel)
@@ -93,6 +99,28 @@ export function startVerification(run: ReviewRun): void {
 	run.verifying = queue;
 
 	for (const candidate of run.candidates) queue.add(candidate);
+}
+
+/**
+ * A verifier can only prove a bug where the repository's own code runs, so a
+ * review runs bugs only when one baseline check (type check, lint or tests)
+ * passed. Asked once, after the checks finish; the answer is kept.
+ */
+function whyCodeCannotRun(run: ReviewRun, checks: () => Promise<void>): () => Promise<string | null> {
+	let answer: Promise<string | null> | undefined;
+
+	const decide = async (): Promise<string | null> => {
+		if (!run.workspace) return `code cannot run in this review (${run.execReason ?? 'no sandbox'})`;
+
+		await checks();
+
+		if (!run.baseline.length) return 'no type check, lint or test command was found to run here';
+		if (run.baseline.some((check) => check.exitCode === 0)) return null;
+
+		return `none of this repository's checks passed here (${run.baseline.map((check) => check.command).join(', ')})`;
+	};
+
+	return () => (answer ??= decide());
 }
 
 /**
@@ -151,7 +179,8 @@ export async function finishVerification(run: ReviewRun): Promise<void> {
  * Every verification gets its outcome, however it was settled. Unproven
  * candidates are never shown; they are kept so the summary and evals can count
  * them. A candidate held back for being below the reporting bar is not unproven
- * but out of scope, so it is not among them.
+ * but out of scope, so it is not among them, and neither is a bug no verifier
+ * could run.
  */
 export function hideUnproven(run: ReviewRun): void {
 	for (const candidate of run.candidates) {
@@ -159,7 +188,7 @@ export function hideUnproven(run: ReviewRun): void {
 	}
 
 	run.hidden = run.candidates.filter(
-		(candidate) => candidate.valid && !isHeldBack(candidate) && candidate.verification?.status !== 'verified'
+		(candidate) => candidate.valid && !isHeldBack(candidate) && !isPublishable(candidate)
 	);
 }
 
@@ -174,7 +203,7 @@ interface VerifierSpec {
 	turns: number;
 }
 
-/** Bugs are reproduced by running code when it can run; quality findings are checked by reading and searching. */
+/** Bugs are reproduced by running code; quality findings are checked by reading and searching. */
 function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext): VerifierSpec {
 	if (findingKind(candidate.category) === 'quality') {
 		const rule = ctx.ledger?.rules.find((entry) => entry.id === candidate.ruleId);
@@ -188,13 +217,13 @@ function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext): Verifier
 		};
 	}
 
-	const mutation = isMutationFinding(candidate, !ctx.unavailable);
+	const mutation = isMutationFinding(candidate, true);
 	const turns = verifierTurns(mutation);
 
 	return {
-		system: verifierSystemPrompt(ctx.unavailable, mutation),
+		system: verifierSystemPrompt(mutation),
 		user: verifierUserPrompt(candidate, ctx.evidence, ctx.notes(), turns),
-		exec: !ctx.unavailable,
+		exec: true,
 		mutation,
 		turns
 	};
@@ -209,11 +238,6 @@ function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext): Verifier
 async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attempt: number): Promise<boolean> {
 	const taskId = `verify:${candidate.candidateId}`;
 	const label = `Verify: ${candidate.title ?? candidate.file}`;
-	const spec = verifierSpec(candidate, ctx);
-
-	delete candidate.publishedBy;
-
-	const doing = !spec.exec ? 'Tracing the finding through the code' : 'Reproducing the finding';
 
 	const meta = {
 		kind: 'verification' as const,
@@ -222,6 +246,21 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 		assignmentId: candidate.assignmentId,
 		files: [candidate.file]
 	};
+
+	const notRun = findingKind(candidate.category) === 'quality' ? null : await ctx.cannotRun();
+
+	if (notRun) {
+		candidate.verification = { status: 'unverified', outcome: 'not-run', reason: `Not verified: ${notRun}.` };
+		ctx.task(taskId, label, 'done', 'Not run: the code cannot run here', meta);
+
+		return true;
+	}
+
+	const spec = verifierSpec(candidate, ctx);
+
+	delete candidate.publishedBy;
+
+	const doing = !spec.exec ? 'Tracing the finding through the code' : 'Reproducing the finding';
 
 	if (candidate.category === 'convention' && !(await examplesOnDisk(ctx.checkout, candidate.examples))) {
 		candidate.verification = { status: 'unverified', reason: 'The examples it cites are not in the repository.' };
@@ -318,7 +357,7 @@ function verdictFor(
 	if (findingKind(candidate.category) === 'quality') return settleQualityVerdict(candidate, value, ctx.evidence);
 	if (coveredByIntent(value, ctx.intent)) return 'refuted' as const;
 
-	return settleVerdict(value, ctx.evidence, agentId, isMutationFinding(candidate, !ctx.unavailable));
+	return settleVerdict(value, ctx.evidence, agentId, isMutationFinding(candidate, true));
 }
 
 /**
@@ -354,9 +393,7 @@ async function settle(
 		return;
 	}
 
-	const baseline = isMutationFinding(candidate, !ctx.unavailable)
-		? settled
-		: await recordBaseline(settled, ctx, agentId);
+	const baseline = isMutationFinding(candidate, true) ? settled : await recordBaseline(settled, ctx, agentId);
 
 	candidate.verification = baseline;
 	publishHeldBack(candidate, ctx.ledger);

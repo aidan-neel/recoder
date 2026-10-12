@@ -13,14 +13,15 @@ function announceNothingFound(run: ReviewRun): void {
 	orchestratorSays(run.events, 'message_nothing_found', 'I finished without finding anything worth flagging.');
 }
 
-/** The verified candidates, merged by place without a model, so the same candidates always give the same findings. */
+/** The publishable candidates, merged by place without a model, so the same candidates always give the same findings. */
 export function confirmedFindings(run: ReviewRun): Finding[] {
 	return consolidateFindings(run.candidates, run.inventory);
 }
 
 /**
- * The consolidation stage: verified candidates merge deterministically into
- * findings. Unverified ones were hidden by the verify stage and never show.
+ * The consolidation stage: verified candidates, and bugs no verifier could
+ * run, merge deterministically into findings. Unproven ones were hidden by the
+ * verify stage and never show.
  */
 export function consolidate(run: ReviewRun): Consolidated {
 	const { task } = run;
@@ -35,9 +36,7 @@ export function consolidate(run: ReviewRun): Consolidated {
 		'consolidation',
 		'Consolidating findings',
 		'done',
-		confirmed.length
-			? `Confirmed ${confirmed.length} finding${confirmed.length === 1 ? '' : 's'}`
-			: 'No verified findings',
+		confirmed.length ? `${confirmed.length} finding${confirmed.length === 1 ? '' : 's'}` : 'No findings',
 		{ kind: 'consolidation' }
 	);
 

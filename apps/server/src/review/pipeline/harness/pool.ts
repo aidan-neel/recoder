@@ -23,7 +23,7 @@ import type { CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
 import type { ReviewInventory } from '../inventory.js';
 import { isQualityLens, lensById } from '../lenses/lenses.js';
-import type { LensId } from '../lenses/types.js';
+import type { Lens, LensId } from '../lenses/types.js';
 import {
 	announcedFinal,
 	parseReviewerOutput,
@@ -41,6 +41,7 @@ import {
 	type ReviewerPromptContext
 } from '../reviewer-prompts.js';
 import { followedUpBy } from '../question-ledger.js';
+import { secondLookSystemPrompt } from '../second-look/prompts.js';
 import type { UnitRequest } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
 import { workerDelegate } from '../workers/worker.js';
@@ -278,19 +279,14 @@ function askReviewer(
 
 	const delegate = subagent ? undefined : delegateFor(item, records, ctx);
 
-	const system = subagent
-		? subagentSystemPrompt(ctx.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0)
-		: reviewerSystemPrompt(lens, ctx.exec, ctx.directive, {
-				subagents: lens.id === 'correctness' && ctx.subagentCap > 0,
-				unsettled: !isQualityLens(lens.id) && ctx.subagentCap > 0,
-				delegate: Boolean(delegate)
-			});
+	/** A second look only reads: verification runs every candidate it reports, so its turns go to finding them. */
+	const exec = Boolean(ctx.exec) && !item.purpose;
 
 	return runJsonAgent({
-		stage: subagent ? 'subagent' : 'reviewer',
+		stage: item.purpose ? 'second-look' : subagent ? 'subagent' : 'reviewer',
 		label: item.title,
-		system: withGuidelines(system, ctx.inventory.guidelines),
-		exec: Boolean(ctx.exec),
+		system: withGuidelines(systemPrompt(item, subagent, lens, ctx, Boolean(delegate)), ctx.inventory.guidelines),
+		exec,
 		delegate,
 		user: unitPrompt(
 			item,
@@ -309,15 +305,31 @@ function askReviewer(
 		parse: (raw) => parseReviewerOutput(raw, defaultCategory),
 		validationError: (raw) => reviewerValidationError(raw, defaultCategory),
 		salvage: (raw) => salvageReviewerOutput(raw, defaultCategory),
-		checkFinal: finalCheck(subagent, lens.id, Boolean(ctx.exec)),
+		checkFinal: finalCheck(subagent, lens.id, exec),
 		responseSchema: (finalTurn) =>
-			reviewerResponseSchema(ctx.exec, finalTurn, subagent ? [] : lens.categories, Boolean(delegate)),
-		timeLimit: {
-			finalTurnAfterMs: REVIEW_POLICY.reviewerFinalTurnAfterMs,
-			maxWallMs: REVIEW_POLICY.reviewerMaxMs
-		},
+			reviewerResponseSchema(exec, finalTurn, subagent ? [] : lens.categories, Boolean(delegate)),
+		timeLimit: item.purpose
+			? { finalTurnAfterMs: REVIEW_POLICY.secondLookFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.secondLookMaxMs }
+			: { finalTurnAfterMs: REVIEW_POLICY.reviewerFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.reviewerMaxMs },
+		...(item.purpose && { callDeadlineMs: REVIEW_POLICY.secondLookCallDeadlineMs }),
 		finalExample: REVIEWER_EXAMPLE,
 		...agentEvents(item, records, ctx, cfg.model)
+	});
+}
+
+/**
+ * A unit agent's system prompt: the role a second look was sent for, a
+ * subagent's, or the lens procedure with the parts this reviewer is offered.
+ */
+function systemPrompt(item: ReviewUnit, subagent: boolean, lens: Lens, ctx: PoolContext, delegate: boolean): string {
+	if (item.purpose) return secondLookSystemPrompt(item.purpose, ctx.directive);
+
+	if (subagent) return subagentSystemPrompt(ctx.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0);
+
+	return reviewerSystemPrompt(lens, ctx.exec, ctx.directive, {
+		subagents: lens.id === 'correctness' && ctx.subagentCap > 0,
+		unsettled: !isQualityLens(lens.id) && ctx.subagentCap > 0,
+		delegate
 	});
 }
 

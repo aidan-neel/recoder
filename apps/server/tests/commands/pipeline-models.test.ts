@@ -83,8 +83,7 @@ test('a review keeps the models it started on for every call when the pick chang
 		'brief',
 		'correctness',
 		'lens',
-		'subagent',
-		'verifier'
+		'subagent'
 	]);
 
 	expect(calls).toHaveLength(requests.length);

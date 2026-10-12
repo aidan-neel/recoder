@@ -32,7 +32,8 @@ const checkSchema = z.discriminatedUnion('kind', [
 		glob: z.string().nullish()
 	}),
 	z.object({ kind: z.literal('forbid-pattern'), pattern: z.string().min(1), glob: z.string().nullish() }),
-	z.object({ kind: z.literal('path-pattern'), files: z.string(), mustMatch: z.string() })
+	z.object({ kind: z.literal('path-pattern'), files: z.string(), mustMatch: z.string() }),
+	z.object({ kind: z.literal('require-braces'), glob: z.string().nullish() })
 ]);
 
 /**
@@ -63,6 +64,8 @@ function validCheck(raw: unknown): MechanicalCheck | undefined {
 		return usablePattern(check.pattern)
 			? { kind: check.kind, pattern: check.pattern, glob: cleanGlob(check.glob) }
 			: undefined;
+
+	if (check.kind === 'require-braces') return { kind: check.kind, glob: cleanGlob(check.glob) };
 
 	const files = cleanGlob(check.files);
 	const mustMatch = cleanGlob(check.mustMatch);

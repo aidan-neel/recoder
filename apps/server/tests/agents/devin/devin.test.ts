@@ -80,6 +80,7 @@ describe('DevinAgent.complete', () => {
 	test.each([
 		['signedout', 401, /signed out/],
 		['crash', 0, /boom/],
+		['limited', 429, /free model rate limit.*00:01 UTC/],
 		['empty', 0, /without a reply/]
 	] as const)('a %s call fails as an LlmError with status %d', async (mode, status, message) => {
 		const error = await new DevinAgent(await fakeDevin({ FAKE_DEVIN_MODE: mode }))

@@ -2,7 +2,7 @@ import { findingKind } from '@recoder/shared';
 import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY, verifierTurns } from '../../session/review-policy.js';
 import { canLaunchInvestigation } from '../agent-loop.js';
-import type { CandidateFinding } from '../consolidate.js';
+import { isNotRun, type CandidateFinding } from '../consolidate.js';
 import { isMutationFinding } from '../verify/runs.js';
 import { publishBudget, saveCheckpoint, syncWorkspaceDeadline, type ReviewRun } from './context.js';
 
@@ -61,6 +61,9 @@ export class VerifyQueue {
 	/** Repairs still running; a candidate one makes valid joins the line when it finishes. */
 	private repairing = 0;
 
+	/** The model calls each candidate added to the budget when it joined. */
+	private readonly room = new Map<CandidateFinding, number>();
+
 	/** The error that stopped the queue: a blocked model or an aborted review. */
 	private failure: { error: unknown } | null = null;
 
@@ -101,7 +104,7 @@ export class VerifyQueue {
 		}
 
 		this.waiting.push({ candidate, attempt: 1 });
-		this.makeRoom(verifierTurns(isMutationFinding(candidate, this.run.workspace !== null)));
+		this.room.set(candidate, this.makeRoom(verifierTurns(isMutationFinding(candidate, this.run.workspace !== null))));
 		this.launch();
 	}
 
@@ -143,12 +146,13 @@ export class VerifyQueue {
 
 	/**
 	 * Grows the budget by one verifier's `turns` and moves the deadline to fit
-	 * everything in line. A review already out of time stays out of time.
+	 * everything in line, and returns the calls it added. A review already out
+	 * of time stays out of time.
 	 */
-	private makeRoom(turns: number): void {
+	private makeRoom(turns: number): number {
 		const { run } = this;
 
-		if (reviewNow() >= run.deadlineAt) return;
+		if (reviewNow() >= run.deadlineAt) return 0;
 
 		const waves = Math.ceil((this.waiting.length + this.running) / REVIEW_POLICY.maxConcurrentVerifications);
 
@@ -161,6 +165,20 @@ export class VerifyQueue {
 
 		syncWorkspaceDeadline(run);
 		publishBudget(run);
+
+		return turns;
+	}
+
+	/**
+	 * A bug no verifier tried, because no code could run, frees its slot and
+	 * takes back the model calls it added, so the budget grows only for
+	 * verifiers that run. The deadline keeps its room.
+	 */
+	private handBack(candidate: CandidateFinding): void {
+		this.accepted--;
+		this.run.budget.limit -= this.room.get(candidate) ?? 0;
+		this.room.delete(candidate);
+		publishBudget(this.run);
 	}
 
 	/** Starts waiting attempts while there is a free verifier. */
@@ -188,6 +206,7 @@ export class VerifyQueue {
 
 		const settled = await this.verify(candidate, attempt);
 
+		if (isNotRun(candidate)) this.handBack(candidate);
 		if (!settled && attempt < VERIFIER_ATTEMPTS) this.waiting.push({ candidate, attempt: attempt + 1 });
 
 		saveCheckpoint(run);

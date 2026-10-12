@@ -268,7 +268,7 @@ function funnelLines(prs: PrResult[]): string[] {
 	return [
 		'',
 		`Funnel (${funnels.length} runs)`,
-		`  raised ${sum((funnel) => funnel.raised)} · verified ${sum((funnel) => funnel.verified)} · unproven ${sum((funnel) => funnel.unproven)} · shown after merging ${sum((funnel) => funnel.shown)}`,
+		`  raised ${sum((funnel) => funnel.raised)} · verified ${sum((funnel) => funnel.verified)} · unproven ${sum((funnel) => funnel.unproven)} · not run ${sum((funnel) => funnel.notRun ?? 0)} · shown after merging ${sum((funnel) => funnel.shown)}`,
 		`  dropped: ${dropped}`
 	];
 }

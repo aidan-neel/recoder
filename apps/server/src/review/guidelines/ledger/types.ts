@@ -8,7 +8,13 @@ export type MechanicalCheck =
 	/** Added lines in files matching `glob` must not match `pattern` (a plain JS regex, at most 200 characters). */
 	| { kind: 'forbid-pattern'; pattern: string; glob?: string }
 	/** Added files matching `files` must also match `mustMatch` (e.g. tests live under `tests/`). */
-	| { kind: 'path-pattern'; files: string; mustMatch: string };
+	| { kind: 'path-pattern'; files: string; mustMatch: string }
+	/**
+	 * In files matching `glob` (all files when unset), every added `if`, `else`,
+	 * `for`, `while` and `do` body is a `{ }` block. Read from the syntax tree,
+	 * so arrow functions and other expressions never match.
+	 */
+	| { kind: 'require-braces'; glob?: string };
 
 /** One atomic rule from the repo's guidelines, with a stable id lenses and findings cite. */
 export interface RepoRule {

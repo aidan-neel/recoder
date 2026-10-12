@@ -15,19 +15,22 @@ function candidate(candidateId: string, belowBar = false): CandidateFinding {
 	} as never;
 }
 
-/** A queue whose verifiers each wait for `release`, recording the order they start in. */
-function gatedQueue() {
-	const started: string[] = [];
-	const gates: (() => void)[] = [];
-
-	const run = {
+/** A review with an hour left and a budget of 10,000 model calls. */
+function testRun(): ReviewRun {
+	return {
 		workspace: null,
 		deadlineAt: Date.now() + 60 * 60_000,
 		budget: new ModelBudget(10_000, 0),
 		controller: new AbortController()
 	} as unknown as ReviewRun;
+}
 
-	const queue = new VerifyQueue(run, (next) => {
+/** A queue whose verifiers each wait for `release`, recording the order they start in. */
+function gatedQueue() {
+	const started: string[] = [];
+	const gates: (() => void)[] = [];
+
+	const queue = new VerifyQueue(testRun(), (next) => {
 		started.push(next.candidateId);
 
 		return new Promise<boolean>((resolve) => gates.push(() => resolve(true)));
@@ -77,4 +80,22 @@ test('a held-back candidate does not bump another once the verification cap is s
 
 	expect(held.some((entry) => entry.verification)).toBe(false);
 	expect(late.verification?.reason).toContain('already verified');
+});
+
+test('a bug no verifier could run hands back the model calls it added to the budget', async () => {
+	const run = testRun();
+
+	const queue = new VerifyQueue(run, async (next) => {
+		next.verification = { status: 'unverified', outcome: 'not-run', reason: 'Not verified: no check passed.' };
+
+		return true;
+	});
+
+	queue.add(candidate('bug'));
+
+	expect(run.budget.limit).toBeGreaterThan(10_000);
+
+	await queue.drain();
+
+	expect(run.budget.limit).toBe(10_000);
 });

@@ -1,6 +1,6 @@
 import type { DropStage } from '@recoder/shared';
 import type { CandidateRepair } from './candidate-repair.js';
-import { isHeldBack, type CandidateFinding } from './consolidate.js';
+import { isHeldBack, isPublishable, type CandidateFinding } from './consolidate.js';
 import type { PublishedBy } from './published-by.js';
 
 /** Where a candidate stopped: a drop stage, or `unproven` when no verifier settled it. */
@@ -45,7 +45,8 @@ export function candidateOutcome(candidate: CandidateFinding): CandidateOutcome 
 	}
 
 	if (isHeldBack(candidate)) return { stage: 'severity', reason: HELD_REASON, verified, ...repairOf(candidate) };
-	if (verified) return { stage: null, reason: null, verified, ...publishedBy(candidate), ...repairOf(candidate) };
+	if (isPublishable(candidate))
+		return { stage: null, reason: null, verified, ...publishedBy(candidate), ...repairOf(candidate) };
 
 	return {
 		stage: 'unproven',

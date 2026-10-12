@@ -44,6 +44,8 @@ export interface JsonAgentOptions<T> {
 	 * running into `maxWallMs`, where it stops without an answer.
 	 */
 	timeLimit?: { finalTurnAfterMs: number; maxWallMs: number };
+	/** One model call's limit; `REVIEW_POLICY.perCallDeadlineMs` when absent. */
+	callDeadlineMs?: number;
 	/** A minimal valid final answer, quoted back when the model gets the shape wrong. */
 	finalExample?: string;
 	/** The agent may run commands and write scratch files in the sandbox, not only read. */

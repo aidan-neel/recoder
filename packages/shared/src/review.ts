@@ -35,6 +35,8 @@ export interface ReviewFunnel {
 	unproven: number;
 	/** Candidates verified, before reports of one bug merge. */
 	verified: number;
+	/** Bugs shown unverified because no code could run in the review, before merging; absent when none were. */
+	notRun?: number;
 	/** Findings shown after merging. */
 	shown: number;
 	/** Every changed unit the brief read or left out; absent without a brief and on reviews older than recording it. */

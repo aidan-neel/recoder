@@ -25,7 +25,7 @@ const MAX_SOURCE_CHARS = 24_000;
 const MAX_TOTAL_CHARS = 80_000;
 
 /** Bumped when the prompt or validation changes, so cached ledgers from the old rules are not reused. */
-const LEDGER_VERSION = 'ledger-v1';
+const LEDGER_VERSION = 'ledger-v2';
 
 /**
  * Root instruction files first, in the loader's order, then nested ones by

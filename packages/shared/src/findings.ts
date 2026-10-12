@@ -118,9 +118,11 @@ export interface FindingPatch {
  * How a finding's verification ended, for evals. `reproduced`: a command's
  * output showed the problem. `traced`: it was shown by reading code, a
  * deterministic check or a repo rule. `inconclusive`: nothing proved it.
- * `refuted`: the verifier showed the finding wrong.
+ * `refuted`: the verifier showed the finding wrong. `not-run`: a bug in a
+ * review where none of the repository's checks could run, so no verifier
+ * tried it; it is shown, marked unverified.
  */
-export type VerificationOutcome = 'reproduced' | 'traced' | 'inconclusive' | 'refuted';
+export type VerificationOutcome = 'reproduced' | 'traced' | 'inconclusive' | 'refuted' | 'not-run';
 
 /**
  * How the proving command on the merge-base tree compares with the head run,

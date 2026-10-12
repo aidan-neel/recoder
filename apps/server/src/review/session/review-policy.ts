@@ -31,6 +31,12 @@ export const REVIEW_POLICY = {
 	maxModelCalls: 320,
 	analysisDeadlineMs: 30 * 60 * 1000,
 	perCallDeadlineMs: 90_000,
+	/**
+	 * One second-look call. It rereads a whole unit, and a CLI model that prints
+	 * its reply only at the end often needs longer than 90s to answer that; a
+	 * timed-out call is sent again in full and times out again.
+	 */
+	secondLookCallDeadlineMs: 180_000,
 	maxRetrievalsPerTurn: 4,
 	maxReadLines: 200,
 	maxSearchMatches: 30,
@@ -83,6 +89,13 @@ export const REVIEW_POLICY = {
 	/** The same for one reviewer or subagent. */
 	reviewerFinalTurnAfterMs: 12 * 60 * 1000,
 	reviewerMaxMs: 15 * 60 * 1000,
+	/**
+	 * A second look's own clock. Each of its calls may take `secondLookCallDeadlineMs`,
+	 * so its final turn starts early enough for a call still in flight and the
+	 * final call itself to finish before it is stopped.
+	 */
+	secondLookFinalTurnAfterMs: 7 * 60 * 1000,
+	secondLookMaxMs: 14 * 60 * 1000,
 	/** Tasks one lens reviewer may hand to workers on the specialist model. */
 	maxDelegationsPerAgent: 3,
 	/** A worker answers one narrow question, so it gets few turns. */

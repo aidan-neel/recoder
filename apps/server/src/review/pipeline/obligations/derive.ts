@@ -8,6 +8,7 @@ import { isTestPath } from '../change-model/test-files.js';
 import type { ChangedSymbol, ChangeModel } from '../change-model/types.js';
 import type { InventoryFile, ReviewInventory } from '../inventory.js';
 import { partitionUnits } from '../units.js';
+import { obligationsNewCodeOn } from './config.js';
 import { collectMarks, type Mark } from './marks.js';
 import { squash } from './syntax.js';
 import { QUESTIONS, TRIGGERS, triggerHits, type TriggerHit } from './triggers.js';
@@ -114,6 +115,7 @@ async function fileDrafts(
 
 	const headText = squash(headSource ?? '');
 	const baseText = squash(baseSource ?? '');
+	const newCode = obligationsNewCodeOn();
 
 	return hunks.flatMap((hunk) => {
 		const added = new Set(hunk.added);
@@ -124,7 +126,8 @@ async function fileDrafts(
 			head: head.filter((mark) => added.has(mark.line)),
 			headText,
 			baseText,
-			deletes: hunk.deleted.length > 0
+			deletes: hunk.deleted.length > 0,
+			newCode: newCode && !hunk.deleted.length
 		});
 
 		return hits

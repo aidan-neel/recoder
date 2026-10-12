@@ -1,6 +1,6 @@
 import type { BriefQuestion, BriefQuestionAnswer, BriefQuestionResult, ObligationResult } from '@recoder/shared';
 import type { EvidenceStore } from '../../evidence/store.js';
-import type { CandidateFinding } from './consolidate.js';
+import { isNotRun, type CandidateFinding } from './consolidate.js';
 import type { CodeClaim } from './intent/types.js';
 import type { ReplyAnswer } from './reviewer-questions.js';
 
@@ -215,7 +215,9 @@ export function questionStatus(
 
 	const standing = new Set(
 		candidates
-			.filter((candidate) => candidate.valid && candidate.verification?.status !== 'unverified')
+			.filter(
+				(candidate) => candidate.valid && (candidate.verification?.status !== 'unverified' || isNotRun(candidate))
+			)
 			.map((candidate) => candidate.candidateId)
 			.filter((id) => !fallen.has(id))
 	);

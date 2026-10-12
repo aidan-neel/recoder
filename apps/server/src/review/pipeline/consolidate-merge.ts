@@ -1,5 +1,5 @@
 import { findingKind, type Finding, type FindingLocation, type FindingVerification } from '@recoder/shared';
-import { isHeldBack, toFinding, type CandidateFinding } from './consolidate.js';
+import { isHeldBack, isPublishable, toFinding, type CandidateFinding } from './consolidate.js';
 import { claimTerms, lineAnchor, refineFingerprint, sameClaim, type ClaimTerms } from './harness/findings.js';
 import type { ReviewInventory } from './inventory.js';
 
@@ -178,7 +178,7 @@ function settleFingerprints(findings: Finding[]): void {
 }
 
 /**
- * Deterministic consolidation of verified candidates, without a model.
+ * Deterministic consolidation of publishable candidates, without a model.
  * Candidates sharing a merge key, or a bug title in one file, are compared by
  * what they claim, with the text of their line from `inventory` left out, and
  * reports of one defect become one finding. Candidates are sorted first, so
@@ -194,7 +194,7 @@ export function consolidateFindings(candidates: CandidateFinding[], inventory: R
 	const byTitle = new Map<string, string>();
 
 	for (const candidate of [...candidates].sort(byId)) {
-		if (!candidate.valid || candidate.verification?.status !== 'verified') continue;
+		if (!isPublishable(candidate)) continue;
 
 		const key = groupKey(candidate, byTitle);
 

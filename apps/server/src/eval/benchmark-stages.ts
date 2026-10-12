@@ -155,8 +155,10 @@ function lossReason(lost: LostClaim): string {
 }
 
 /**
- * A defect a shown finding reports reached every stage. The found and
- * verified stages credit the candidate that carries the shown claim, a
+ * A defect a shown finding reports was found and published. It was verified
+ * unless every candidate that carries the shown claim is unverified, as a bug
+ * is in a review where no code could run; with no such candidate saved, it
+ * counts as verified. The found and verified stages credit that candidate, a
  * verified one first, or the shown claim itself when no candidate does.
  */
 function publishedStage(match: StageMatch, pool: readonly PoolCandidate[], refs: readonly ClaimRef[]): DefectStage {
@@ -166,7 +168,7 @@ function publishedStage(match: StageMatch, pool: readonly PoolCandidate[], refs:
 
 	return {
 		found: true,
-		verified: true,
+		verified: !twins.length || verifiedTwin !== undefined,
 		published: true,
 		matches: {
 			found: reused(match, twin),

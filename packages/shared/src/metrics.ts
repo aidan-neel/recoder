@@ -6,6 +6,7 @@ export type TokenScope = 'pipeline' | 'discussion' | 'fix';
 export const TOKEN_STAGES = [
 	'reviewer',
 	'subagent',
+	'second-look',
 	'investigator',
 	'worker',
 	'verifier',
