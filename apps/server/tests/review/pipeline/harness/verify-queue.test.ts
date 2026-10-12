@@ -99,3 +99,78 @@ test('a bug no verifier could run hands back the model calls it added to the bud
 
 	expect(run.budget.limit).toBe(10_000);
 });
+
+/** A bug at one place that consolidation would merge with any other report of it. */
+function bug(candidateId: string): CandidateFinding {
+	return {
+		...candidate(candidateId),
+		kind: 'bug',
+		file: 'src/parse.ts',
+		line: 10,
+		fingerprint: 'parse-null',
+		title: 'Empty input dereferences null in parse',
+		message: 'parse dereferences a null token when the input is empty.'
+	} as never;
+}
+
+/** A queue that shares proofs, whose verifiers settle as `verdict` says once released. */
+function sharingQueue(verdict: (next: CandidateFinding) => void) {
+	const started: string[] = [];
+	const gates: (() => void)[] = [];
+	const run = { ...testRun(), inventory: { diffs: [] } } as unknown as ReviewRun;
+
+	const queue = new VerifyQueue(
+		run,
+		(next) => {
+			started.push(next.candidateId);
+
+			return new Promise<boolean>((resolve) =>
+				gates.push(() => {
+					verdict(next);
+					resolve(true);
+				})
+			);
+		},
+		undefined,
+		(follower, leader) => (follower.verification = { ...leader.verification! })
+	);
+
+	return { queue, started, release: () => gates.shift()?.() };
+}
+
+test('a report of an issue a waiting verifier proves takes that proof without a verifier of its own', async () => {
+	const { queue, started, release } = sharingQueue((next) => {
+		next.verification = { status: 'verified', method: 'run', reason: 'The repro fails.' };
+	});
+
+	const [leader, follower, late] = [bug('a'), bug('b'), bug('c')];
+
+	queue.add(leader);
+	queue.add(follower);
+	release();
+	await queue.drain();
+	queue.add(late);
+
+	expect(started).toEqual(['a']);
+	expect(follower.verification?.status).toBe('verified');
+	expect(late.verification?.status).toBe('verified');
+});
+
+test('a report whose leader was not proved gets a verifier of its own', async () => {
+	const { queue, started, release } = sharingQueue((next) => {
+		if (next.candidateId === 'a') next.valid = false;
+		else next.verification = { status: 'verified', method: 'run', reason: 'The repro fails.' };
+	});
+
+	const follower = bug('b');
+
+	queue.add(bug('a'));
+	queue.add(follower);
+	release();
+	await Bun.sleep(0);
+	release();
+	await queue.drain();
+
+	expect(started).toEqual(['a', 'b']);
+	expect(follower.verification?.status).toBe('verified');
+});

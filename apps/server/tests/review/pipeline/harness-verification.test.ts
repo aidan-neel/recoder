@@ -36,7 +36,8 @@ function verifierReply(user: string, last: string, realCommand: string): unknown
 }
 
 interface FakeModel {
-	findings: string[];
+	/** Reviewer findings: a body for the standard finding on line 1, or a whole finding. */
+	findings: (string | ReturnType<typeof finding>)[];
 	/** The command the verifier runs to prove the real bug. */
 	realCommand?: string;
 	/** Files the head commit adds or changes. */
@@ -55,7 +56,10 @@ async function reviewWithFakeModel(root: string, base: Record<string, string>, m
 		let reply: unknown = NOTHING;
 
 		if (unitOf(init) === 'unit-1/correctness') {
-			reply = { ...NOTHING, findings: model.findings.map((message) => finding(message)) };
+			reply = {
+				...NOTHING,
+				findings: model.findings.map((entry) => (typeof entry === 'string' ? finding(entry) : entry))
+			};
 		} else if (isVerifier(init)) {
 			const intercepted = model.interceptVerifier?.(messages);
 
@@ -81,7 +85,22 @@ test.skipIf((await execUnavailableReason()) !== null)(
 		const root = await mkdtemp(join(tmpdir(), 'recoder-verify-review-'));
 
 		try {
-			const result = await reviewWithFakeModel(root, RUNNABLE, { findings: ['Real bug.', 'Imagined bug.'] });
+			const imagined = finding('Imagined bug.');
+
+			const result = await reviewWithFakeModel(root, RUNNABLE, {
+				findings: [
+					'Real bug.',
+					{
+						...imagined,
+						claim: {
+							...imagined.claim,
+							trigger: 'A retry after a timeout',
+							consequence: 'The request is sent twice',
+							violatedContract: 'Each request is sent once'
+						}
+					}
+				]
+			});
 
 			expect(result.findings).toHaveLength(1);
 			expect(result.findings[0].message).toContain('Real bug.');
@@ -293,6 +312,37 @@ test.skipIf((await execUnavailableReason()) !== null)(
 			expect(result.findings.map((item) => item.title)).toEqual(['possible miss']);
 		} finally {
 			await checkout.remove();
+		}
+	}
+);
+
+test.skipIf((await execUnavailableReason()) !== null)(
+	'two low reports of one bug share a reproduction and are both published and counted as verified',
+	async () => {
+		useTestModel(4);
+
+		const root = await mkdtemp(join(tmpdir(), 'recoder-verify-share-'));
+		let verifiers = 0;
+
+		try {
+			const result = await reviewWithFakeModel(root, RUNNABLE, {
+				findings: [finding('Real bug.', 'low'), { ...finding('Real bug.', 'low'), body: 'Real bug. Seen again.' }],
+				realCommand: 'grep -c old src/a.ts',
+				interceptVerifier: (messages) => {
+					if (messages.length === 2) verifiers++;
+
+					return null;
+				}
+			});
+
+			expect(verifiers).toBe(1);
+			expect(result.findings).toHaveLength(1);
+			expect(result.findings[0].memberIds).toHaveLength(2);
+			expect(result.findings[0].verification).toMatchObject({ status: 'verified', outcome: 'reproduced' });
+			expect(result.funnel).toMatchObject({ raised: 2, verified: 2, shown: 1 });
+			expect(result.funnel?.dropped.severity).toBe(0);
+		} finally {
+			await rm(root, { recursive: true, force: true });
 		}
 	}
 );

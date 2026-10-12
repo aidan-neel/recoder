@@ -6,6 +6,9 @@ import type { ChatMessage } from './types';
  * turn) ties it to this handle and frees it when the conversation closes.
  */
 export class ChatConversation {
+	/** Names the conversation to a provider that routes its prompt cache by a key, so its calls share one cache. */
+	readonly id = crypto.randomUUID();
+
 	private readonly closers: (() => Promise<void>)[] = [];
 
 	/** Register cleanup to run when the conversation closes. */

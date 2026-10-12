@@ -47,7 +47,9 @@ type ResponseEvent = {
  * The Responses request body. Roles are preserved instead of embedding the
  * conversation in one JSON user message. The ChatGPT endpoint does not accept
  * max_output_tokens, temperature or seed; Recoder keeps its own deadlines and
- * bounded evidence/tool loop instead.
+ * bounded evidence/tool loop instead. Nothing is stored, so each call resends
+ * the transcript; the conversation's id as `prompt_cache_key` routes its calls
+ * to one prompt cache, as the Codex CLI does, so later turns read the earlier ones from it.
  */
 export function chatGptRequest(opts: ChatOptions): Record<string, unknown> {
 	const instructions = opts.messages.filter((message) => message.role === 'system').map((message) => message.content);
@@ -70,7 +72,8 @@ export function chatGptRequest(opts: ChatOptions): Record<string, unknown> {
 		tools: [],
 		tool_choice: 'none',
 		parallel_tool_calls: false,
-		include: []
+		include: [],
+		...(opts.conversation ? { prompt_cache_key: opts.conversation.id } : {})
 	};
 }
 

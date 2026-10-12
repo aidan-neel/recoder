@@ -94,7 +94,13 @@ export function startVerification(run: ReviewRun, checks: () => Promise<void>): 
 	};
 
 	const repair = candidateRepairOn() ? (candidate: CandidateFinding) => repairCandidate(run, candidate) : undefined;
-	const queue = new VerifyQueue(run, (candidate, attempt) => verifyOne(candidate, ctx, attempt), repair);
+
+	const queue = new VerifyQueue(
+		run,
+		(candidate, attempt) => verifyOne(candidate, ctx, attempt),
+		repair,
+		(follower, leader) => shareVerdict(follower, leader, ctx)
+	);
 
 	run.verifying = queue;
 
@@ -229,6 +235,37 @@ function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext): Verifier
 	};
 }
 
+/** The task row a candidate's verification shows under. */
+function verifierTask(candidate: CandidateFinding): VerifierTask {
+	return {
+		taskId: `verify:${candidate.candidateId}`,
+		label: `Verify: ${candidate.title ?? candidate.file}`,
+		meta: {
+			kind: 'verification',
+			agent: candidate.agent ?? 'reviewer',
+			model: configForSubagent().model,
+			assignmentId: candidate.assignmentId,
+			files: [candidate.file]
+		}
+	};
+}
+
+/**
+ * A report of an issue a verifier already proved takes that proof instead of
+ * a verifier of its own; consolidation merges the two into one finding. The
+ * leader's runs lead its evidence, as a verifier's own proof would.
+ */
+function shareVerdict(follower: CandidateFinding, leader: CandidateFinding, ctx: VerifyContext): void {
+	const { taskId, label, meta } = verifierTask(follower);
+	const proof = (leader.evidenceIds ?? []).filter((id) => ctx.evidence.get(id)?.kind === 'run');
+
+	delete follower.publishedBy;
+	follower.verification = { ...leader.verification! };
+	follower.evidenceIds = [...new Set([...proof, ...(follower.evidenceIds ?? [])])];
+	publishHeldBack(follower, ctx.ledger);
+	ctx.task(taskId, label, 'done', `Verified with "${leader.title ?? leader.file}"`, meta);
+}
+
 /**
  * One attempt at settling a candidate. Returns false when the verifier gave no
  * verdict, leaving the candidate unverified with the reason. Its thinking, tools
@@ -236,16 +273,7 @@ function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext): Verifier
  * rather than in the thread that raised the finding.
  */
 async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attempt: number): Promise<boolean> {
-	const taskId = `verify:${candidate.candidateId}`;
-	const label = `Verify: ${candidate.title ?? candidate.file}`;
-
-	const meta = {
-		kind: 'verification' as const,
-		agent: candidate.agent ?? 'reviewer',
-		model: configForSubagent().model,
-		assignmentId: candidate.assignmentId,
-		files: [candidate.file]
-	};
+	const { taskId, label, meta } = verifierTask(candidate);
 
 	const notRun = findingKind(candidate.category) === 'quality' ? null : await ctx.cannotRun();
 

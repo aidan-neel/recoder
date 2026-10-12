@@ -8,6 +8,7 @@ import { isAuthFailure, isUsageLimit, modelFailure } from '../../models/model-fa
 import { CHAT_STYLE, EXEC_EXAMPLES, RETRIEVAL_EXAMPLES } from './prompts.js';
 import { reviewNow, reviewPausePoint } from '../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
+import { compactTranscript } from './agent-loop/compaction.js';
 import { DELEGATE_SHAPE, commandsRun, executeTurn } from './agent-loop/delegation.js';
 import { agentDeadlines, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
 import { runOpenCodeAgent } from './agent-loop/opencode-engine.js';
@@ -19,7 +20,7 @@ export { newAgentId } from './agent-loop/limits.js';
 export { isLooping } from './agent-loop/stream-turn.js';
 
 const REPLY_RULES =
-	'\nIn every JSON response, put "message" first: a concise, reader-facing Markdown explanation of your current investigation or conclusion. Then include EITHER "actions" (when you still want to read or run something) OR the final result fields (only once you are done). Never send final result fields while you still intend to look at more code: that ends your work. Describe actual evidence and decisions; do not narrate JSON formatting or budget compliance. This text is shown live to the developer. ';
+	'\nIn every JSON response, put "message" first: reader-facing Markdown, shown live to the developer. With "actions", it is one short sentence (under 15 words) on what you are checking; with the final result, it is your concise conclusion. Then include EITHER "actions" (when you still want to read or run something) OR the final result fields (only once you are done). Never send final result fields while you still intend to look at more code: that ends your work. Describe actual evidence and decisions; do not narrate JSON formatting or budget compliance. ';
 
 /**
  * Heads the developer's discussion since the review started. It is added to
@@ -149,6 +150,9 @@ async function runTurns<T>(
 		{ role: 'user', content: opts.user }
 	];
 
+	/** The tool results sent so far, oldest first: what compaction may stub. */
+	const toolResults: ChatMessage[] = [];
+
 	let repaired = 0;
 	let retrievals = 0;
 	let runs = 0;
@@ -195,6 +199,10 @@ async function runTurns<T>(
 
 		opts.budget.spend();
 		opts.onLog?.(`${opts.label} model turn ${turn}/${opts.maxTurns} (${opts.config.model})`);
+
+		const stubbed = compactTranscript(messages, toolResults, REVIEW_POLICY.maxTranscriptChars);
+
+		if (stubbed) opts.onLog?.(`${opts.label} compacted ${stubbed} earlier tool results`);
 
 		const started = Date.now();
 		const result = await streamTurn(opts, messages, conversation, turn, lastTurn, deadlineAt);
@@ -270,14 +278,17 @@ async function runTurns<T>(
 			failedRound = round;
 			messages.push({ role: 'assistant', content: output });
 
-			messages.push({
+			const sent: ChatMessage = {
 				role: 'user',
 				content:
 					formatToolResults(results) +
 					(stuck || turn + 1 > lastToolTurn
 						? '\n\nThis is your final turn. Finish with the required JSON result. Do not request more retrieval.'
 						: '\n\nContinue. Finish with the required JSON when you have enough evidence.')
-			});
+			};
+
+			messages.push(sent);
+			toolResults.push(sent);
 
 			turn++;
 			continue;

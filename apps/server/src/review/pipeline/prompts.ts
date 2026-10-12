@@ -142,7 +142,7 @@ export function forNativeTools(prompt: string): string {
 
 /** How an agent with function tools narrates and finishes. */
 export const NATIVE_REPLY_RULES =
-	'\nWork with your tools: read the code you need and, when you have a shell, run it. Before a tool call, write one short reader-facing sentence on what you are checking; it is shown live to the developer. When a tool tells you this is your final turn, stop calling tools and give your final result with the evidence you have. Your final result is the JSON object described above, with its "message" a concise Markdown conclusion. ';
+	'\nWork with your tools: read the code you need and, when you have a shell, run it. Before a step of tool calls, write at most one short reader-facing sentence (under 15 words) on what you are checking; it is shown live to the developer. Never restate tool output you already have. When a tool tells you this is your final turn, stop calling tools and give your final result with the evidence you have. Your final result is the JSON object described above, with its "message" a concise Markdown conclusion. ';
 
 /** How anything shown to the developer in the review chat should read. */
 export const CHAT_STYLE = `Writing style: be minimal. Use as few words as the point needs, usually one to three short sentences in total, and never more than 60 words unless the developer asks for detail. Put each separate subject in its own short paragraph, with a blank line between paragraphs; never run different subjects together in one paragraph. No preamble, no restating the question, no closing summary, no offers of more help. Use a list only for three or more parallel items.
