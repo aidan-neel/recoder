@@ -9,6 +9,7 @@ Reader: an AI agent that has to understand, operate, change or evaluate Recoder'
 | [pipeline.md](pipeline.md)           | follow one review stage by stage: entry function, types, drops, tests           |
 | [models.md](models.md)               | see how model calls are resolved, locked, limited and recorded                  |
 | [configuration.md](configuration.md) | find every environment variable the server reads and which are experiment flags |
+| [benchmark-overview.md](benchmark-overview.md) | get the idea of the benchmark and the current results                |
 | [evaluation.md](evaluation.md)       | measure a review with the benchmark and compare reports validly                 |
 | [operating.md](operating.md)         | run one review locally, end to end, through the API                             |
 | [glossary.md](glossary.md)           | look up a term and the file that defines it                                     |
