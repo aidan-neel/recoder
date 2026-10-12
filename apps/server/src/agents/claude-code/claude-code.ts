@@ -28,7 +28,9 @@ const STATUS_TIMEOUT_MS = 10_000;
 
 /**
  * Print mode with everything but the model call turned off: no tools, a permission mode that refuses any tool,
- * and `--safe-mode` so the user's CLAUDE.md, hooks, plugins, skills and MCP servers never load. A model can still
+ * and `--safe-mode` so the user's CLAUDE.md, hooks, plugins, skills and MCP servers never load. Safe mode still
+ * applies the `env` of a settings file, where `DISABLE_PROMPT_CACHING` or a thinking budget would change every
+ * call, so no settings file is read; the subscription sign-in does not live in one. A model can still
  * write a tool call; the CLI answers that no such tool exists, which takes a second turn, and the model then
  * replies in text, so three turns leave room for that without letting a call run on. `stream-json` needs
  * `--verbose` in print mode, and carries the error code of a failed call.
@@ -36,6 +38,8 @@ const STATUS_TIMEOUT_MS = 10_000;
 const BASE_ARGS = [
 	'-p',
 	'--safe-mode',
+	'--setting-sources',
+	'',
 	'--strict-mcp-config',
 	'--disable-slash-commands',
 	'--tools',

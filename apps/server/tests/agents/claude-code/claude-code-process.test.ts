@@ -32,6 +32,25 @@ test('the CLI environment drops keys, tokens and secrets in any case, and keeps 
 	).toEqual({ PATH: '/bin', HOME: '/home/reviewer', http_proxy: 'http://proxy.test', CLAUDE_CONFIG_DIR: '/c' });
 });
 
+test('a parent Claude Code session and switches that turn off prompt caching or change thinking never reach the CLI', () => {
+	expect(
+		claudeCodeEnv({
+			PATH: '/bin',
+			CLAUDE_CONFIG_DIR: '/c',
+			CLAUDE_SECURESTORAGE_CONFIG_DIR: '/s',
+			CLAUDE_EFFORT: 'xhigh',
+			CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: '80',
+			CLAUDE_SESSION_INGRESS_TOKEN_FILE: '/run/token',
+			MAX_THINKING_TOKENS: '31999',
+			DISABLE_PROMPT_CACHING: '1',
+			DISABLE_PROMPT_CACHING_OPUS: '1',
+			ENABLE_PROMPT_CACHING_1H: '1',
+			DISABLE_INTERLEAVED_THINKING: '1',
+			DISABLE_AUTO_COMPACT: '1'
+		})
+	).toEqual({ PATH: '/bin', CLAUDE_CONFIG_DIR: '/c', CLAUDE_SECURESTORAGE_CONFIG_DIR: '/s' });
+});
+
 describe('shutdown', () => {
 	test.each([
 		['SIGTERM', 143],

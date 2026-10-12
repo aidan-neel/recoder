@@ -75,9 +75,16 @@ OpenCode (`apps/server/src/agents/opencode/`):
 
 Claude Code (`apps/server/src/agents/claude-code/`):
 
-- `claudeCode.complete()` spawns one `claude -p` process per call. The flags turn off tools, sessions, slash commands and MCP servers, and allow one turn (`BASE_ARGS` in `apps/server/src/agents/claude-code/claude-code.ts`).
-- The model list is static (`claudeCodeModels` in `apps/server/src/agents/claude-code/claude-code-models.ts`), with a 200K context window.
-- The child process does not inherit `RECODER_*`, `ANTHROPIC_*`, `CLAUDE_CODE_*`, `OPENAI_*` or any token, key, secret or password variable (`claudeCodeEnv`).
+- `claudeCode.complete()` spawns one `claude -p` process per call. The flags turn off tools, slash commands, MCP servers, the user's customizations (`--safe-mode`) and settings files (`--setting-sources ""`), and allow three turns (`BASE_ARGS` in `apps/server/src/agents/claude-code/claude-code.ts`).
+- A call that belongs to a `ChatConversation` resumes the conversation's last session as a fork and sends only the turns added since (`sessionCall` in `apps/server/src/agents/claude-code/claude-code-session.ts`). Any other call saves no session.
+- The model list is static (`claudeCodeModels` in `apps/server/src/agents/claude-code/claude-code-models.ts`). Context windows are 1M, except 200K for Haiku 4.5.
+- The child process does not inherit `RECODER_*`, `ANTHROPIC_*`, `OPENAI_*`, `CLAUDE_*` other than `CLAUDE_CONFIG_DIR` and `CLAUDE_SECURESTORAGE_CONFIG_DIR`, the prompt-caching, thinking and compaction switches, or any token, key, secret or password variable (`claudeCodeEnv`).
+
+Prompt caching on Claude Code, measured with CLI 2.1.295 on a subscription (1-hour cache):
+
+- A resumed fork reads the whole earlier transcript from cache.
+- A separate session reads another session's cache only up to the end of an identical system prompt. A shared start of the user message is not reused, because the CLI sets its cache breakpoints at the end of the system prompt and of the last message.
+- `DISABLE_PROMPT_CACHING`, set in the environment or in a settings file's `env`, turns caching off for every call. That is why both are kept from the CLI.
 
 ## Transports
 

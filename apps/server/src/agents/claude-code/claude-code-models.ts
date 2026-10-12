@@ -6,14 +6,16 @@ export const CLAUDE_CODE_MODEL_PREFIX = 'claude-code:';
 /** The levels `claude --effort` takes. Recoder's `minimal` has no CLI level, so it is not offered. */
 const CLI_EFFORTS: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
-/** Claude Code uses a 200K window unless a `[1m]` model is picked, which Recoder does not offer. */
-const CONTEXT_WINDOW = 200_000;
+/** The window Claude Code gives current models, as the CLI's `modelUsage.contextWindow` reports it. */
+const CONTEXT_WINDOW = 1_000_000;
 
 interface ClaudeCodeModel {
 	model: string;
 	label: string;
 	/** Unset for models that take no effort level (Haiku 4.5 rejects one). */
 	efforts?: ReasoningEffort[];
+	/** Unset for models with the {@link CONTEXT_WINDOW} default. */
+	contextWindow?: number;
 }
 
 /** The full ids, then the aliases `claude --help` documents, which follow the latest model of each family. */
@@ -21,7 +23,7 @@ const MODELS: ClaudeCodeModel[] = [
 	{ model: 'claude-opus-5-5', label: 'Claude Opus 5.5', efforts: CLI_EFFORTS },
 	{ model: 'claude-sonnet-5-5', label: 'Claude Sonnet 5.5', efforts: CLI_EFFORTS },
 	{ model: 'claude-haiku-5-5', label: 'Claude Haiku 5.5', efforts: CLI_EFFORTS },
-	{ model: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+	{ model: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', contextWindow: 200_000 },
 	{ model: 'opus', label: 'Opus (latest)', efforts: CLI_EFFORTS },
 	{ model: 'sonnet', label: 'Sonnet (latest)', efforts: CLI_EFFORTS },
 	{ model: 'haiku', label: 'Haiku (latest)', efforts: CLI_EFFORTS },
@@ -40,14 +42,14 @@ export function claudeCodeEfforts(model: string): Pick<ModelEntry, 'efforts' | '
 
 /** The static list the Model select shows under Claude Code; the CLI has no command that lists models. */
 export function claudeCodeModels(): ModelEntry[] {
-	return MODELS.map(({ model, label }) => ({
+	return MODELS.map(({ model, label, contextWindow }) => ({
 		id: `${CLAUDE_CODE_MODEL_PREFIX}${model}`,
 		provider: 'claude-code',
 		label,
 		model,
 		baseUrl: null,
 		apiKeyPreview: null,
-		contextWindow: CONTEXT_WINDOW,
+		contextWindow: contextWindow ?? CONTEXT_WINDOW,
 		...claudeCodeEfforts(model)
 	}));
 }
