@@ -3,6 +3,8 @@
 ## Commands
 
 - Web (SvelteKit): `bun run --filter @recoder/web check` · `test` · `build`
+- Review surface (SvelteKit, the new app): `bun run --filter @recoder/app check` ·
+  `test` · `build`; `bun run dev:app` serves it on port 5180, `/sample` needs no server.
 - Server: `bun run --filter @recoder/server check` · `test`
 - Shared: `bun run --filter @recoder/shared check` · `test`
 - Site: `bun run --filter @recoder/site check` · `build`
@@ -212,5 +214,8 @@ component specs, layout and behavior rules.
   `app.css` raises the root font size at 1920px and 2400px widths. Write CSS in
   px as usual; multiply JS pixel constants by the root font scale. Never use
   CSS `zoom` (it breaks Floating UI menu positioning).
+
+Before touching UI in `apps/app`, read `apps/app/DESIGN.md`; it builds on the
+system above and records where the new app departs from it.
 
 Before changing or evaluating the review pipeline, read [docs/review](docs/review/README.md).

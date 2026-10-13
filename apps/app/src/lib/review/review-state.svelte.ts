@@ -128,12 +128,9 @@ export class ReviewState {
 		const was = this.decisions.stateOf(id);
 
 		this.decisions.set(id, state);
+		this.syncDismissal(id, was, state);
 
-		const now = this.decisions.stateOf(id);
-
-		this.syncDismissal(id, was, now);
-
-		if (now !== 'open' && this.selection.kind === 'decision' && this.selection.id === id) {
+		if (this.selection.kind === 'decision' && this.selection.id === id) {
 			this.selection = this.nextOpen(id);
 		}
 	}

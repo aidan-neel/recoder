@@ -1,5 +1,5 @@
 import type { FileClass } from './files';
-import type { Proof, Tone } from './surface';
+import type { Decision, DecisionState, Proof, Tone } from './surface';
 
 export const TONE_LABEL: Record<Tone, string> = {
 	high: 'High',
@@ -41,4 +41,18 @@ export const CLASS_LABEL: Record<FileClass, string> = {
 	checked: 'Checked',
 	tests: 'Tests',
 	skim: 'Skim'
+};
+
+/** The glyph for a decision: its tone while open, then what was decided. */
+export function decisionGlyph(decision: Decision, state: DecisionState): Tone | 'ok' | 'sent' | 'dismissed' {
+	if (state === 'open') return decision.tone;
+
+	return state === 'accepted' ? 'ok' : state;
+}
+
+export const STATE_LABEL: Record<DecisionState, string> = {
+	open: 'Open',
+	accepted: 'Accepted',
+	sent: 'Sent back',
+	dismissed: 'Not an issue'
 };

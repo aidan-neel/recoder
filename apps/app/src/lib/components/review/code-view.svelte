@@ -12,10 +12,12 @@
 		below?: number;
 		/** Right side of the header: a range, an action. */
 		aside?: Snippet;
+		/** Extra rows after a line, such as the decisions that end on it. */
+		annotate?: Snippet<[ExcerptLine]>;
 		class?: string;
 	}
 
-	let { path, lines, above = 0, below = 0, aside, class: className = '' }: Props = $props();
+	let { path, lines, above = 0, below = 0, aside, annotate, class: className = '' }: Props = $props();
 
 	const TYPE = { add: 'add', del: 'remove', context: 'context' } as const;
 	const slash = $derived(path.lastIndexOf('/') + 1);
@@ -39,14 +41,15 @@
 	</FileDiff.TopBar>
 	<FileDiff.Content class="code-body thin-scroll">
 		{#if above > 0}{@render gap(above)}{/if}
-		{#each lines as { line, flagged }, index (index)}
+		{#each lines as item, index (index)}
 			<FileDiff.Row
-				type={TYPE[line.type]}
-				oldLine={line.oldNo}
-				newLine={line.newNo}
-				code={line.text}
-				data-flagged={flagged || undefined}
+				type={TYPE[item.line.type]}
+				oldLine={item.line.oldNo}
+				newLine={item.line.newNo}
+				code={item.line.text}
+				data-flagged={item.flagged || undefined}
 			/>
+			{@render annotate?.(item)}
 		{/each}
 		{#if below > 0}{@render gap(below)}{/if}
 	</FileDiff.Content>

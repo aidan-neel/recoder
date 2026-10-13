@@ -16,6 +16,13 @@ function name(event: KeyboardEvent): string {
 	return event.metaKey || event.ctrlKey ? `mod+${key}` : event.shiftKey && key === '?' ? '?' : key;
 }
 
+/** Enter and Space on a focused button or link belong to that control, not to the page. */
+function activates(event: KeyboardEvent): boolean {
+	const target = event.target as Element | null;
+
+	return (event.key === 'Enter' || event.key === ' ') && !!target?.closest?.('button, a[href], [role="button"]');
+}
+
 /** True while any dialog or menu is open, so page shortcuts stand down. */
 function overlayOpen(): boolean {
 	return !!document.querySelector(
@@ -52,7 +59,7 @@ export function listenKeys(map: () => KeyMap): () => void {
 			return;
 		}
 
-		if (!modified && (typing(event.target) || overlayOpen())) return;
+		if (!modified && (typing(event.target) || overlayOpen() || activates(event))) return;
 
 		const handler = map()[key];
 

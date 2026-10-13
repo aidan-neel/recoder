@@ -27,18 +27,12 @@ export class Decisions {
 		return this.records[id]?.note ?? '';
 	}
 
-	/** Decide `id`; deciding it the same way again reopens it. */
-	set(id: string, state: DecisionState, note = this.noteOf(id)): void {
+	/** Decide `id`. Deciding it the same way again changes nothing; Undo is how an item reopens. */
+	set(id: string, state: DecisionRecord['state']): void {
+		if (this.records[id]?.state === state) return;
+
 		this.history.push({ id, before: this.records[id] });
-
-		if (state === 'open' || this.records[id]?.state === state) {
-			const { [id]: _dropped, ...rest } = this.records;
-
-			this.records = rest;
-		} else {
-			this.records = { ...this.records, [id]: { state, note, at: Date.now() } };
-		}
-
+		this.records = { ...this.records, [id]: { state, note: this.noteOf(id), at: Date.now() } };
 		this.save();
 	}
 

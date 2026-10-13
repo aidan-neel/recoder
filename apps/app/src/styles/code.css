@@ -115,3 +115,50 @@
 	overflow-wrap: anywhere;
 	white-space: pre-wrap;
 }
+
+/* A decision under the line it ends on, in the full-file view. */
+.code-view [data-ui='file-diff-row'].code-note-row {
+	background: transparent;
+}
+.code-note {
+	display: flex;
+	width: min(100%, 560px);
+	align-items: center;
+	gap: 9px;
+	margin: 4px 0 8px;
+	padding: 7px 10px;
+	border-radius: 9px;
+	background: var(--bg-menu);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+	color: var(--text-primary);
+	font-family: var(--font-ui);
+	font-size: 13px;
+	line-height: 1.3;
+	text-align: left;
+	white-space: normal;
+	transition:
+		background-color var(--dur-hover) ease-out,
+		box-shadow var(--dur-hover) ease-out;
+}
+.code-note:hover {
+	background: var(--bg-hover);
+	box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+.code-note:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.code-note-title {
+	min-width: 0;
+	flex: 1;
+}
+.code-note:not([data-state='open']) .code-note-title {
+	color: var(--text-subtle);
+}
+.code-note-state {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-size: 12px;
+}
+.code-view[data-new] [data-ui='file-diff-line-number'] {
+	color: var(--text-faint);
+}

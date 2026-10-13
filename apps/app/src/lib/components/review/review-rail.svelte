@@ -2,11 +2,10 @@
 	import LayoutList from '@lucide/svelte/icons/layout-list';
 	import Check from '@lucide/svelte/icons/check';
 	import ChangeMap from './change-map.svelte';
-	import StatusGlyph, { type GlyphKind } from '../ui/status-glyph.svelte';
+	import StatusGlyph from '../ui/status-glyph.svelte';
 	import { hoverHighlight } from '$web/shell/hover-highlight';
-	import { plain, where } from '$lib/review/labels';
+	import { decisionGlyph, plain, where } from '$lib/review/labels';
 	import type { ReviewState, Selection } from '$lib/review/review-state.svelte';
-	import type { Decision } from '$lib/review/surface';
 
 	interface Props {
 		view: ReviewState;
@@ -15,12 +14,6 @@
 	let { view }: Props = $props();
 
 	const surface = $derived(view.surface!);
-
-	function glyph(decision: Decision): GlyphKind {
-		const current = view.decisions.stateOf(decision.id);
-
-		return current === 'open' ? decision.tone : current === 'accepted' ? 'ok' : current;
-	}
 
 	let rail = $state<HTMLElement>();
 
@@ -52,7 +45,7 @@
 			<span class="rail-count tabular">{view.open.length ? `${view.open.length} open` : 'all decided'}</span>
 		</h2>
 		{#each surface.decisions as decision (decision.id)}
-			{@const kind = glyph(decision)}
+			{@const kind = decisionGlyph(decision, view.decisions.stateOf(decision.id))}
 			<button
 				class="rail-row"
 				type="button"

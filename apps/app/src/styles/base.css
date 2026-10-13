@@ -60,11 +60,21 @@ kbd.keycap[data-pressed] {
 	translate: 0 1px;
 	transition-duration: 0ms;
 }
+/* The button holding a pressed keycap presses with it. */
+[data-ui='button']:has(kbd.keycap[data-pressed]) {
+	scale: 0.97;
+	transition-duration: 0ms;
+}
 [data-variant='primary'] kbd.keycap {
 	background: rgb(0 0 0 / 0.1);
 	color: color-mix(in srgb, var(--on-primary) 60%, transparent);
 }
-:root:not(.dark) [data-variant='primary'] kbd.keycap {
+:root:not(.dark) /* The button holding a pressed keycap presses with it. */
+[data-ui='button']:has(kbd.keycap[data-pressed]) {
+	scale: 0.97;
+	transition-duration: 0ms;
+}
+[data-variant='primary'] kbd.keycap {
 	background: rgb(255 255 255 / 0.14);
 }
 

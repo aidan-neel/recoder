@@ -298,11 +298,6 @@
 .decide-actions [data-ui='button'] {
 	gap: 8px;
 }
-.decide-actions [data-ui='button']:has(kbd[data-pressed]),
-.decide-done [data-ui='button']:has(kbd[data-pressed]) {
-	scale: 0.97;
-	transition-duration: 0ms;
-}
 .decide-done {
 	gap: 10px;
 	padding-left: 2px;
