@@ -39,7 +39,14 @@
 		</span>
 	</button>
 
-	{#if surface.decisions.length}
+	{#if view.running && surface.decisions.length === 0}
+		<h2 class="rail-heading">Needs you <span class="rail-count shimmer-text">reviewing</span></h2>
+		{#each [78, 62, 70] as width, index (index)}
+			<div class="rail-row-skeleton" aria-hidden="true">
+				<span class="skeleton" style:width="{width}%" style:height="11px"></span>
+			</div>
+		{/each}
+	{:else if surface.decisions.length}
 		<h2 class="rail-heading">
 			Needs you
 			<span class="rail-count tabular">{view.open.length ? `${view.open.length} open` : 'all decided'}</span>
@@ -73,15 +80,17 @@
 		{/each}
 	{/if}
 
-	<h2 class="rail-heading">Files <span class="rail-count tabular">{surface.files.length}</span></h2>
-	{#each surface.files as file (file.path)}
-		{@const slash = file.path.lastIndexOf('/') + 1}
-		<button class="rail-row rail-file" type="button" {...rowProps({ kind: 'file', path: file.path })}>
-			<span class="rail-swatch" data-cls={file.cls} aria-hidden="true"></span>
-			<span class="rail-file-path mono"
-				><span class="rail-file-dir">{file.path.slice(0, slash)}</span>{file.path.slice(slash)}</span
-			>
-			<span class="rail-file-stat mono tabular">{file.cls === 'read' ? file.readLines : ''}</span>
-		</button>
-	{/each}
+	{#if surface.files.length}
+		<h2 class="rail-heading">Files <span class="rail-count tabular">{surface.files.length}</span></h2>
+		{#each surface.files as file (file.path)}
+			{@const slash = file.path.lastIndexOf('/') + 1}
+			<button class="rail-row rail-file" type="button" {...rowProps({ kind: 'file', path: file.path })}>
+				<span class="rail-swatch" data-cls={file.cls} aria-hidden="true"></span>
+				<span class="rail-file-path mono"
+					><span class="rail-file-dir">{file.path.slice(0, slash)}</span>{file.path.slice(slash)}</span
+				>
+				<span class="rail-file-stat mono tabular">{file.cls === 'read' ? file.readLines : ''}</span>
+			</button>
+		{/each}
+	{/if}
 </nav>

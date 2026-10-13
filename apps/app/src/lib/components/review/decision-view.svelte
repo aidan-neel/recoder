@@ -35,7 +35,9 @@
 			<span class="pill" data-tone={decision.tone}>{TONE_LABEL[decision.tone]}</span>
 			{#if decision.category}<span class="detail-kicker-text">{categoryLabel(decision.category)}</span>{/if}
 			<span class="detail-proof" data-proof={decision.proof}
-				><ProofIcon size={13} aria-hidden="true" />{PROOF_LABEL[decision.proof]}</span
+				><ProofIcon size={13} aria-hidden="true" />{decision.kind === 'question'
+					? 'Unanswered'
+					: PROOF_LABEL[decision.proof]}</span
 			>
 		</div>
 		<h2 class="detail-title" id="detail-title">{decision.title}</h2>

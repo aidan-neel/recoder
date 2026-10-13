@@ -82,6 +82,7 @@ export class ReviewState {
 			const files = await api.files(id).catch(() => []);
 
 			this.accept(review, files);
+			if (this.running) void this.readProgress();
 			void this.findPull(review);
 
 			void api.checks(id).then(
@@ -170,18 +171,23 @@ export class ReviewState {
 
 		this.timer = setTimeout(async () => {
 			try {
-				const [review, files, progress] = await Promise.all([
+				const [review, files] = await Promise.all([
 					api.review(this.id),
 					this.files.length ? Promise.resolve(this.files) : api.files(this.id).catch(() => []),
-					api.progress().catch(() => ({}) as Record<string, never>)
+					this.readProgress()
 				]);
 
-				this.progress = progress[this.id] ?? null;
 				this.accept(review, files);
 			} catch {
 				this.poll();
 			}
 		}, POLL_MS);
+	}
+
+	private async readProgress(): Promise<void> {
+		const progress = await api.progress().catch(() => null);
+
+		if (progress) this.progress = progress[this.id] ?? null;
 	}
 
 	private async findPull(review: Review): Promise<void> {
