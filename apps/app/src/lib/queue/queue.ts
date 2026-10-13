@@ -2,6 +2,7 @@ import type { PullRequest, Review } from '@recoder/shared';
 import type { DecisionRecord } from '../review/saved-decisions';
 import { decisionStates } from '../review/saved-decisions';
 import { buildSurface, type Tone } from '../review/surface';
+import { plural } from '../shell/format';
 
 /**
  * Where a pull request stands for the person reviewing it.
@@ -86,4 +87,27 @@ export function queueSections(entries: QueueEntry[]): QueueSection[] {
 	];
 
 	return sections.filter((section) => section.entries.length > 0);
+}
+
+/** The row's status chip: what is left to decide, or where the pull request stands. */
+export function entryStatus(entry: QueueEntry): { tone: string; label: string } | null {
+	switch (entry.state) {
+		case 'needs-you':
+			return {
+				tone: entry.tone === 'high' || entry.tone === 'medium' ? entry.tone : 'neutral',
+				label: plural(entry.open, 'decision')
+			};
+		case 'with-agent':
+			return { tone: 'sent', label: `${entry.sent} sent back` };
+		case 'ready':
+			return { tone: 'success', label: 'Ready to merge' };
+		case 'outdated':
+			return { tone: 'neutral', label: 'New commits' };
+		case 'failed':
+			return { tone: 'danger', label: 'Failed' };
+		case 'unreviewed':
+			return { tone: 'neutral', label: 'Not reviewed' };
+		default:
+			return null;
+	}
 }

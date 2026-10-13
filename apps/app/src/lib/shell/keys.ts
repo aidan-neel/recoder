@@ -25,9 +25,7 @@ function activates(event: KeyboardEvent): boolean {
 
 /** True while any dialog or menu is open, so page shortcuts stand down. */
 function overlayOpen(): boolean {
-	return !!document.querySelector(
-		'[data-ui="modal-panel"], [data-ui="dropdown-menu-content"], [data-ui="sheet-content"]'
-	);
+	return !!document.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]');
 }
 
 /**

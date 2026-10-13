@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import CircleDot from '@lucide/svelte/icons/circle-dot';
 	import CircleCheck from '@lucide/svelte/icons/circle-check';
 	import FileCode from '@lucide/svelte/icons/file-code';
@@ -13,6 +13,7 @@
 	import ReviewHeader from './review-header.svelte';
 	import ReviewRail from './review-rail.svelte';
 	import ReviewRunning from './review-running.svelte';
+	import Skeleton from '$web/components/ui/skeleton.svelte';
 	import { plain, where } from '$lib/review/labels';
 	import { ReviewState } from '$lib/review/review-state.svelte';
 	import { listenKeys, type KeyMap } from '$lib/shell/keys';
@@ -47,10 +48,6 @@
 	});
 
 	$effect(() => {
-		const review = view.review;
-
-		shell.crumb = review ? { label: view.repoName ?? 'Review', detail: `#${review.prNumber}` } : null;
-
 		shell.pageItems = [
 			...(view.surface?.decisions ?? []).map((item) => ({
 				id: `d:${item.id}`,
@@ -78,6 +75,24 @@
 				run: () => view.select({ kind: 'file', path: item.path })
 			}))
 		];
+	});
+
+	/** The review stays open as a tab beside Queue, its badge counting what is still open. */
+	$effect(() => {
+		const review = view.review;
+
+		if (!review) return;
+
+		const tab = {
+			id: review.id,
+			repo: view.repoName ?? 'review',
+			pr: review.prNumber,
+			title: review.prTitle ?? `#${review.prNumber}`,
+			open: view.running ? null : view.open.length,
+			high: view.open.some((decision) => decision.tone === 'high')
+		};
+
+		untrack(() => shell.openTab(tab));
 	});
 
 	function decide(kind: 'accepted' | 'sent' | 'dismissed'): void {
@@ -110,7 +125,6 @@
 		return () => {
 			stop();
 			view.dispose();
-			shell.crumb = null;
 			shell.pageItems = [];
 		};
 	});
@@ -118,16 +132,14 @@
 
 {#if view.status === 'loading'}
 	<div class="review-page" aria-busy="true">
-		<div class="review-head">
-			<div class="review-head-main gap-2">
-				<span class="skeleton" style:width="320px" style:height="15px"></span>
-				<span class="skeleton" style:width="220px" style:height="11px"></span>
-			</div>
+		<div class="session-header" data-bordered>
+			<Skeleton class="h-[15px]" w={44} />
+			<Skeleton class="h-[13px]" w={320} />
 		</div>
 		<div class="review-body">
 			<div class="rail">
 				{#each [70, 82, 64, 76, 58] as width, index (index)}
-					<div class="rail-row-skeleton"><span class="skeleton" style:width="{width}%" style:height="11px"></span></div>
+					<div class="rail-row-skeleton"><Skeleton class="h-[11px]" w={width} unit="%" /></div>
 				{/each}
 			</div>
 			<div class="review-main"></div>

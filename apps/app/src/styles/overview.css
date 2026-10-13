@@ -172,7 +172,7 @@
 	border-radius: 12px;
 	background: var(--bg-raised);
 	box-shadow: inset 0 0 0 1px var(--line-card);
-	animation: verdict-in 260ms var(--ease-out);
+	animation: verdict-in var(--dur-disclose) var(--ease-out);
 }
 @keyframes verdict-in {
 	from {
@@ -217,9 +217,6 @@
 }
 
 /* ───────── Handoff ───────── */
-[data-ui='modal-panel']:has(.handoff) {
-	max-width: 680px;
-}
 .handoff-body {
 	max-height: min(70vh, 640px);
 	overflow-y: auto;

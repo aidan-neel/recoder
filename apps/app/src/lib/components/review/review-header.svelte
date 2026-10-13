@@ -20,31 +20,27 @@
 	const url = $derived(review.prUrl ?? view.pull?.url ?? null);
 </script>
 
-<header class="review-head">
-	<div class="review-head-main">
-		<h1 class="review-title truncate">{review.prTitle ?? view.pull?.title ?? `Pull request #${review.prNumber}`}</h1>
-		<div class="review-meta">
-			<span class="mono">#{review.prNumber}</span>
-			{#if who}
-				<span class="review-sep" aria-hidden="true">·</span>
-				<span class="review-author" class:agent={who.agent}
-					>{#if who.agent}<Bot size={12} aria-label="Agent" />{/if}{who.name}</span
-				>
-			{/if}
-			{#if view.pull}
-				<span class="review-sep" aria-hidden="true">·</span>
-				<span class="review-branch mono"
-					><GitBranch size={12} aria-hidden="true" />{view.pull.headRef}<span class="review-arrow">→</span>{view.pull
-						.base}</span
-				>
-				<span class="review-sep" aria-hidden="true">·</span>
-				<span class="mono tabular"
-					><span class="text-ok">+{view.pull.additions}</span>
-					<span class="text-sev-high">−{view.pull.deletions}</span></span
-				>
-			{/if}
-		</div>
-	</div>
+<header class="session-header review-head" data-bordered>
+	<span class="session-pr">#{review.prNumber}</span>
+	<h1 class="review-title truncate">{review.prTitle ?? view.pull?.title ?? `Pull request #${review.prNumber}`}</h1>
+	{#if view.pull}
+		<span class="review-meta">
+			<span class="review-author" class:agent={who?.agent}
+				>{#if who?.agent}<Bot size={12} aria-label="Agent" />{/if}{who?.name}</span
+			>
+			<span class="review-sep" aria-hidden="true">·</span>
+			<span class="review-branch mono"
+				><GitBranch size={12} aria-hidden="true" />{view.pull.headRef}<span class="review-arrow">→</span>{view.pull
+					.base}</span
+			>
+			<span class="review-sep" aria-hidden="true">·</span>
+			<span class="mono tabular"
+				><span class="text-ok">+{view.pull.additions}</span>
+				<span class="text-danger">−{view.pull.deletions}</span></span
+			>
+		</span>
+	{/if}
+	<span class="flex-1"></span>
 	<div class="review-head-side">
 		{#if view.running}
 			<span class="review-running shimmer-text"

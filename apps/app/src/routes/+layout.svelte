@@ -4,6 +4,7 @@
 	import favicon from '$web/assets/favicon.svg';
 	import CommandPalette from '$lib/components/shell/command-palette.svelte';
 	import ShortcutsModal from '$lib/components/shell/shortcuts-modal.svelte';
+	import AppCanvas from '$web/components/shell/app-canvas.svelte';
 	import TopBar from '$lib/components/shell/top-bar.svelte';
 	import { listenKeys } from '$lib/shell/keys';
 	import { shell } from '$lib/shell/shell.svelte';
@@ -39,13 +40,11 @@
 	<title>Recoder</title>
 </svelte:head>
 
-<div class="app-shell">
+<div class="flex h-dvh flex-col overflow-hidden bg-chrome text-fg">
 	<TopBar />
-	<main class="app-main">
-		<div class="app-canvas">
-			{@render children()}
-		</div>
-	</main>
+	<AppCanvas>
+		{@render children()}
+	</AppCanvas>
 	<CommandPalette />
 	<ShortcutsModal />
 	<Toaster />

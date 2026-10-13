@@ -2,6 +2,7 @@ import { latestReviews, type Repo } from '@recoder/shared';
 import { api, type ProgressSummaries } from '../api/client';
 import { readDecisions } from '../review/saved-decisions';
 import { SAMPLE_PROGRESS, sampleQueue } from '../sample/sample-queue';
+import { SAMPLE_REVIEW } from '../sample/sample-review';
 import { queueEntry, queueSections, type QueueEntry } from './queue';
 
 /** `offline`: the review server did not answer. `empty`: it answered with no tracked repositories. */
@@ -80,7 +81,11 @@ export class QueueState {
 	/** Queue a review for an entry and show it as reviewing straight away. */
 	async start(entry: QueueEntry): Promise<void> {
 		if (this.sample) {
-			this.entries = this.entries.map((item) => (item.key === entry.key ? { ...item, state: 'reviewing' } : item));
+			const review = { ...SAMPLE_REVIEW, id: `sample-${entry.pull.number}`, status: 'running' as const };
+
+			this.entries = this.entries.map((item) =>
+				item.key === entry.key ? { ...item, review, state: 'reviewing' } : item
+			);
 
 			return;
 		}

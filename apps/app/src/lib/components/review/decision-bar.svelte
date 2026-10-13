@@ -36,6 +36,7 @@
 	}
 </script>
 
+<div class="decide-fade" aria-hidden="true"></div>
 <div class="decide-bar" data-state={current}>
 	<div class="decide-swap swap">
 		<div class="decide-actions" data-on={current === 'open'} inert={current !== 'open'}>

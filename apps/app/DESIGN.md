@@ -1,9 +1,12 @@
 # Recoder review surface (apps/app)
 
-The new web app. It keeps apps/web's look (warm near-black, Cal Sans, Lora
-for the AI's voice, Geist Mono for code, one cream primary per region) and
-reorganises everything around one question: **what does a person still have
-to decide before this agent-written pull request can merge?**
+The new web app. It runs on apps/web's design system verbatim: `src/app.css`
+imports `apps/web/src/app.css`, so tokens, the Sivir mapping, menus, modals,
+the ⌘K palette, keycaps, rows and motion are the old app's own. The one
+deliberate difference is the UI face, **Inter** (`--font-ui` in
+`src/styles/app-tokens.css`); code stays Geist Mono and the AI voice Lora.
+What is new is how a review is organised, around one question: **what does a
+person still have to decide before this agent-written pull request can merge?**
 
 ## The model
 
@@ -34,53 +37,45 @@ reviewed, With the agent (every decision made, some sent back), Ready to merge.
 
 ## Layout
 
-- Top bar 46px: wordmark, Queue (with the count that needs you), a crumb
-  (`repo #N`) on a review, then Search ⌘K, shortcuts and theme on the right.
-- One canvas card, radius 14, 8px from the edges, like apps/web.
-- Review page: 58px header (title, author, branch, tally, open on GitHub),
+- The old shell, unchanged: a 46px top bar with segmented tabs (Queue, then
+  one tab per open review, badge = open decisions; middle-click or the context
+  menu closes one), the quiet "Search or ask Recoder ⌘K" field, and one canvas
+  card. Review tabs persist in localStorage, six at most.
+- Queue is apps/web's Home list: the serif brief, `group-head` sections, and
+  `pr-row` rows with the snapping hover layer, status chips and the Review
+  button revealed on hover. j/k marks a row with the inset bar the old rows use.
+- Review page: the old 52px session header (`#214`, title, author, branch),
   then a 304px rail (Overview, Needs you, Checked for you, Files) and the main
-  pane. Main content is centred at 720–760px; the file view widens to 1080px.
-- The decide bar floats 20px above the bottom of the main pane over a fade to
-  the canvas. It is the only floating panel besides menus and modals.
+  pane, centred at 720–760px; the file view widens to 1080px.
+- The decide bar floats over the bottom of the main pane like the old composer
+  (radius 14, `--shadow-composer` ring, no drop shadow), over a fade to the
+  canvas.
 
-## Colour additions
+## App-only tokens
 
-Tokens live in `src/styles/tokens.css`, mapped onto Sivir and Tailwind.
-
-- Attention classes: `--att-read` (amber), `--att-checked` (green),
-  `--att-tests` (blue), `--att-skim` (neutral).
-- `--sent` / `--sent-tint`: violet for "sent back to the agent", distinct from
-  every severity.
-- `--diff-focus`: the amber wash and 2px bar on lines an open decision names.
-- New files render without the green add tint: every line is an addition, so
-  the tint carries no information.
+`src/styles/app-tokens.css` defines what apps/web has no token for, in terms
+of its tokens: the change map's classes (`--att-read`, `--att-checked`,
+`--att-tests`, `--att-skim`), `--sent` (violet, "sent back to the agent") and
+`--diff-focus` (the amber wash on lines an open decision names). New files
+render without the green add tint, since every line is an addition.
 
 ## Interaction rules
 
-- **Keyboard first, and keyboard moves are instant.** j/k and arrows move,
-  Enter starts with the riskiest, a/s/x decide, u undoes, h hands off, f opens
-  the file, o or Esc returns to the overview, ? lists shortcuts, ⌘K searches.
+- **Keyboard first, keyboard moves are instant.** j/k and arrows move, Enter
+  starts with the riskiest, a/s/x decide, u undoes, h hands off, f opens the
+  file, o or Esc returns to the overview, ? lists shortcuts, ⌘K searches.
   Content swaps with no animation and scrolls to the top.
-- **Deciding advances at once** to the next open decision. The confirmation is
-  the rail glyph morphing (180ms fade, blur and scale) and the header tally
-  filling a pip. The bar never flashes a "done" state on the way past.
-- **Keycaps press.** A shortcut presses every keycap that names it for 140ms,
-  and the button holding it scales to 0.97, so the keyboard visibly presses the
-  button it names.
-- **Same decision twice changes nothing.** Only Undo reopens an item.
-- **Enter and Space on a focused control belong to that control**, never to a
-  page shortcut.
-- **The palette opens with no animation.** It is keyboard-triggered many times
-  a day. Modals and menus keep Sivir's short fade, 0.96 scale and 2px blur.
+- **Deciding advances at once** to the next open decision; the rail glyph
+  crossfades and the header tally fills a pip. Same decision twice changes
+  nothing; Undo reopens.
+- **Keycaps press.** A shortcut lights every keycap that names it for 140ms.
+  Buttons never scale, as in apps/web.
+- **Enter and Space on a focused control belong to that control.** Page keys
+  stand down while typing or while a dialog or menu (`role="dialog"`/`menu`)
+  is open.
 - **The likely call is the filled button.** High, medium and open questions
-  fill Send back; low and quality findings fill Accept. Button positions never
-  change.
-- **Hover equals selection in the queue** (pointer movement only, so scrolling
-  under a still cursor never moves it). The rail uses the snapping hover layer
-  from `$web/shell/hover-highlight`.
-- Skeletons wait 200ms before showing; content replaces them with no entrance.
-- The tally is one pip per decision up to 12, then a bar split by outcome. A
-  ring was tried and rejected: at partial fill it reads as a loading spinner.
+  fill Send back; low and quality findings fill Accept. Positions never change.
+- Skeletons are apps/web's (`$web/components/ui/skeleton.svelte`).
 
 ## Code
 

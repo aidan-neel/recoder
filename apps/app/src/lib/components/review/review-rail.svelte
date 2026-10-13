@@ -3,6 +3,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import ChangeMap from './change-map.svelte';
 	import StatusGlyph from '../ui/status-glyph.svelte';
+	import Skeleton from '$web/components/ui/skeleton.svelte';
 	import { hoverHighlight } from '$web/shell/hover-highlight';
 	import { decisionGlyph, plain, where } from '$lib/review/labels';
 	import type { ReviewState, Selection } from '$lib/review/review-state.svelte';
@@ -43,7 +44,7 @@
 		<h2 class="rail-heading">Needs you <span class="rail-count shimmer-text">reviewing</span></h2>
 		{#each [78, 62, 70] as width, index (index)}
 			<div class="rail-row-skeleton" aria-hidden="true">
-				<span class="skeleton" style:width="{width}%" style:height="11px"></span>
+				<Skeleton class="h-[11px]" w={width} unit="%" />
 			</div>
 		{/each}
 	{:else if surface.decisions.length}

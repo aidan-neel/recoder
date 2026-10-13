@@ -4,7 +4,9 @@
 
 - Web (SvelteKit): `bun run --filter @recoder/web check` · `test` · `build`
 - Review surface (SvelteKit, the new app): `bun run --filter @recoder/app check` ·
-  `test` · `build`; `bun run dev:app` serves it on port 5180, `/sample` needs no server.
+  `test` · `build`. `bun run dev` starts the server and this app (port 5180,
+  `/sample` needs no server); `bun run dev:web` starts the server and apps/web;
+  `bun run dev:all` starts every package.
 - Server: `bun run --filter @recoder/server check` · `test`
 - Shared: `bun run --filter @recoder/shared check` · `test`
 - Site: `bun run --filter @recoder/site check` · `build`
@@ -114,7 +116,8 @@ browser before you report it done.
 
 1. Use the running web dev server at the URL it printed (Vite defaults to
    `http://localhost:5173` and moves to the next free port when that one is
-   taken). If none is running, start `bun run dev` from the repo root.
+   taken). If none is running, start `bun run dev:web` (apps/web) or
+   `bun run dev` (apps/app, port 5180) from the repo root.
 2. Open every screen the change touches. Screenshot each one in dark and light
    mode at 1280 and 1440 wide. Also check 1920 when the change touches sizing,
    because the root font scales up there.

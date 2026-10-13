@@ -1,0 +1,41 @@
+/*
+ * Tokens only this app uses, named for what they mean here and defined in
+ * terms of apps/web's tokens so both themes follow them.
+ */
+:root {
+	/* Inter is the UI face; code stays Geist Mono, the AI voice stays Lora. */
+	--font-ui: 'Inter', 'Geist Sans', system-ui, sans-serif;
+
+	--bg-rail: var(--bg-panel);
+	--bg-code: var(--bg-raised-2);
+
+	--ok: var(--success);
+	--ok-tint: var(--success-tint);
+	--ok-solid: var(--success);
+	--sev-high-solid: var(--sev-high-icon);
+	--sev-medium-solid: var(--sev-medium);
+	--sev-low-solid: var(--sev-low);
+	--sent: #c8a6f2;
+	--sent-tint: rgba(200, 166, 242, 0.13);
+
+	/* The change map's four classes of changed line. */
+	--att-read: var(--sev-medium);
+	--att-checked: var(--success);
+	--att-tests: var(--sev-low);
+	--att-skim: var(--line-strong);
+
+	--diff-add-gutter: rgba(103, 218, 126, 0.12);
+	--diff-del-gutter: rgba(251, 104, 98, 0.12);
+	--diff-focus: rgba(247, 192, 101, 0.07);
+	--syn-string: var(--syn-plain);
+
+	--dur-swap: var(--dur-toggle);
+	--dur-meter: var(--dur-disclose);
+}
+:root:not(.dark) {
+	--sent: #6b3fb0;
+	--sent-tint: rgba(107, 63, 176, 0.1);
+	--diff-add-gutter: rgba(26, 127, 55, 0.13);
+	--diff-del-gutter: rgba(214, 53, 44, 0.12);
+	--diff-focus: rgba(214, 140, 0, 0.08);
+}

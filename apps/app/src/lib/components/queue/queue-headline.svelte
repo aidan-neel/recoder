@@ -11,27 +11,31 @@
 
 	const count = (id: QueueSection['id']) => sections.find((section) => section.id === id)?.entries.length ?? 0;
 	const needs = $derived(count('needs-you'));
+	const reviewing = $derived(count('reviewing'));
+	const ready = $derived(count('ready'));
+
+	const word = (n: number) => WORDS[n] ?? String(n);
 
 	const lead = $derived(
 		needs === 0
-			? 'Nothing needs you.'
-			: `${WORDS[needs] ?? needs} pull request${needs === 1 ? '' : 's'} need${needs === 1 ? 's' : ''} you.`
+			? 'Nothing needs you right now.'
+			: `${word(needs)} pull request${needs === 1 ? '' : 's'} need${needs === 1 ? 's' : ''} a decision.`
 	);
 
-	const rest = $derived(
-		[
-			[count('reviewing'), 'reviewing'],
-			[count('not-reviewed'), 'not reviewed'],
-			[count('with-agent'), 'with the agent'],
-			[count('ready'), 'ready to merge']
-		]
-			.filter(([n]) => n)
-			.map(([n, label]) => `${n} ${label}`)
-			.join(', ')
-	);
+	const rest = $derived.by(() => {
+		const parts = [
+			reviewing
+				? `${reviewing === 1 ? 'one more is' : `${word(reviewing).toLowerCase()} more are`} being reviewed`
+				: '',
+			ready ? `${word(ready).toLowerCase()} ${ready === 1 ? 'is' : 'are'} ready to merge` : ''
+		].filter(Boolean);
+
+		if (parts.length === 0) return '';
+
+		const sentence = parts.join(' and ');
+
+		return `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)}.`;
+	});
 </script>
 
-<h1 class="queue-headline">
-	{lead}
-	{#if rest}<span class="queue-headline-rest">{rest[0].toUpperCase()}{rest.slice(1)}.</span>{/if}
-</h1>
+<p class="home-brief ai-voice queue-brief"><span class="text-fg">{lead}</span> {rest}</p>

@@ -1,157 +1,14 @@
-/* ───────── Page ───────── */
-html,
-body {
-	background: var(--bg-chrome);
-}
-body {
-	color: var(--text-primary);
-	font-family: var(--font-ui);
-	font-size: 13.5px;
-	-webkit-font-smoothing: antialiased;
-	-moz-osx-font-smoothing: grayscale;
-	text-rendering: optimizeLegibility;
-	font-feature-settings: 'ss01';
-}
-::selection {
-	background: rgba(127, 166, 245, 0.28);
-}
-:focus-visible {
-	outline: none;
-}
 .tabular {
 	font-variant-numeric: tabular-nums;
 }
 .mono {
 	font-family: var(--font-code);
-	font-feature-settings: normal;
 }
 
-/* The AI's voice: serif, used for what Recoder concluded. */
-.ai-voice {
-	font-family: var(--font-ai);
-	color: var(--text-ai);
-	text-wrap: pretty;
-	font-feature-settings: normal;
-}
-
-/* ───────── Keycap ───────── */
-/* Flashes when its shortcut fires, so a key press reads as pressing the button it names. */
-kbd.keycap {
-	display: inline-grid;
-	min-width: 18px;
-	height: 18px;
-	place-items: center;
-	padding: 0 4px;
-	border-radius: 4px;
-	background: var(--bg-keycap);
-	box-shadow: inset 0 -1px 0 rgb(var(--wash-rgb) / 0.04);
-	color: var(--text-subtle);
-	font-family: var(--font-code);
-	font-size: 10.5px;
-	line-height: 1;
-	transition:
-		background-color 60ms ease-out,
-		color 60ms ease-out,
-		translate 60ms ease-out;
-}
+/* A shortcut briefly presses every keycap that names it. */
 kbd.keycap[data-pressed] {
-	background: var(--bg-selected);
+	background-color: var(--bg-selected);
 	color: var(--text-primary);
-	translate: 0 1px;
-	transition-duration: 0ms;
-}
-/* The button holding a pressed keycap presses with it. */
-[data-ui='button']:has(kbd.keycap[data-pressed]) {
-	scale: 0.97;
-	transition-duration: 0ms;
-}
-[data-variant='primary'] kbd.keycap {
-	background: rgb(0 0 0 / 0.1);
-	color: color-mix(in srgb, var(--on-primary) 60%, transparent);
-}
-:root:not(.dark) /* The button holding a pressed keycap presses with it. */
-[data-ui='button']:has(kbd.keycap[data-pressed]) {
-	scale: 0.97;
-	transition-duration: 0ms;
-}
-[data-variant='primary'] kbd.keycap {
-	background: rgb(255 255 255 / 0.14);
-}
-
-/* ───────── Hover layer ($web/shell/hover-highlight) ───────── */
-.hover-highlight {
-	pointer-events: none;
-	position: absolute;
-	top: 0;
-	left: 0;
-	z-index: 0;
-	border-radius: 8px;
-	background-color: var(--bg-hover);
-	opacity: 0;
-	transition: opacity var(--dur-highlight) ease-out;
-}
-.hover-highlight[data-on='true'] {
-	opacity: 1;
-}
-@media (hover: none) {
-	.hover-highlight {
-		display: none;
-	}
-}
-
-/* ───────── Skeleton ───────── */
-/* Hidden for the first 200ms so data that lands sooner never flashes one. */
-.skeleton {
-	display: block;
-	border-radius: 6px;
-	background: linear-gradient(
-		90deg,
-		rgb(var(--wash-rgb) / 0.04) 0%,
-		rgb(var(--wash-rgb) / 0.08) 50%,
-		rgb(var(--wash-rgb) / 0.04) 100%
-	);
-	background-size: 200% 100%;
-	animation:
-		skeleton-in 1ms linear var(--skeleton-delay) both,
-		skeleton-shimmer var(--dur-skeleton) linear infinite;
-}
-@keyframes skeleton-in {
-	from {
-		opacity: 0;
-	}
-}
-@keyframes skeleton-shimmer {
-	from {
-		background-position: 100% 0;
-	}
-	to {
-		background-position: -100% 0;
-	}
-}
-
-/* Shimmering status text ("Reviewing…"). */
-.shimmer-text {
-	background: linear-gradient(
-			90deg,
-			var(--text-subtle) 0%,
-			var(--text-subtle) 40%,
-			var(--text-primary) 50%,
-			var(--text-subtle) 60%,
-			var(--text-subtle) 100%
-		)
-		0 0 / 250% 100%;
-	-webkit-background-clip: text;
-	background-clip: text;
-	color: transparent;
-	animation: text-shimmer var(--dur-shimmer) linear infinite;
-}
-@keyframes text-shimmer {
-	from {
-		background-position: 100% 0;
-	}
-	to {
-		background-position: -150% 0;
-	}
 }
 
 /* ───────── Swap: a label that changes crossfades through a 2px blur ───────── */
@@ -176,21 +33,6 @@ kbd.keycap[data-pressed] {
 .thin-scroll {
 	scrollbar-width: thin;
 	scrollbar-color: var(--line-strong) transparent;
-}
-
-/* Lucide icons default to stroke 1.75 */
-.lucide {
-	stroke-width: 1.75;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.skeleton,
-	.shimmer-text {
-		animation: none;
-	}
-	.shimmer-text {
-		color: var(--text-subtle);
-	}
 }
 
 /* ───────── Status glyph ───────── */
@@ -287,16 +129,16 @@ kbd.keycap[data-pressed] {
 /* ───────── Tone pill ───────── */
 .pill {
 	display: inline-flex;
-	height: 20px;
 	flex-shrink: 0;
 	align-items: center;
-	gap: 5px;
-	padding: 0 7px;
-	border-radius: 6px;
-	background: var(--bg-selected);
-	color: var(--text-muted);
-	font-size: 11.5px;
+	gap: 4px;
+	padding: 1px 6px;
+	border-radius: 5px;
+	background: var(--sev-info-tint);
+	color: var(--sev-info);
+	font-size: 11px;
 	font-weight: 500;
+	line-height: 16px;
 	white-space: nowrap;
 }
 .pill[data-tone='high'] {
