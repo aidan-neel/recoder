@@ -1,0 +1,310 @@
+/* ───────── Page ───────── */
+html,
+body {
+	background: var(--bg-chrome);
+}
+body {
+	color: var(--text-primary);
+	font-family: var(--font-ui);
+	font-size: 13.5px;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	text-rendering: optimizeLegibility;
+	font-feature-settings: 'ss01';
+}
+::selection {
+	background: rgba(127, 166, 245, 0.28);
+}
+:focus-visible {
+	outline: none;
+}
+.tabular {
+	font-variant-numeric: tabular-nums;
+}
+.mono {
+	font-family: var(--font-code);
+	font-feature-settings: normal;
+}
+
+/* The AI's voice: serif, used for what Recoder concluded. */
+.ai-voice {
+	font-family: var(--font-ai);
+	color: var(--text-ai);
+	text-wrap: pretty;
+	font-feature-settings: normal;
+}
+
+/* ───────── Keycap ───────── */
+/* Flashes when its shortcut fires, so a key press reads as pressing the button it names. */
+kbd.keycap {
+	display: inline-grid;
+	min-width: 18px;
+	height: 18px;
+	place-items: center;
+	padding: 0 4px;
+	border-radius: 4px;
+	background: var(--bg-keycap);
+	box-shadow: inset 0 -1px 0 rgb(var(--wash-rgb) / 0.04);
+	color: var(--text-subtle);
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	line-height: 1;
+	transition:
+		background-color 60ms ease-out,
+		color 60ms ease-out,
+		translate 60ms ease-out;
+}
+kbd.keycap[data-pressed] {
+	background: var(--bg-selected);
+	color: var(--text-primary);
+	translate: 0 1px;
+	transition-duration: 0ms;
+}
+[data-variant='primary'] kbd.keycap {
+	background: rgb(0 0 0 / 0.1);
+	color: color-mix(in srgb, var(--on-primary) 60%, transparent);
+}
+:root:not(.dark) [data-variant='primary'] kbd.keycap {
+	background: rgb(255 255 255 / 0.14);
+}
+
+/* ───────── Hover layer ($web/shell/hover-highlight) ───────── */
+.hover-highlight {
+	pointer-events: none;
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: 0;
+	border-radius: 8px;
+	background-color: var(--bg-hover);
+	opacity: 0;
+	transition: opacity var(--dur-highlight) ease-out;
+}
+.hover-highlight[data-on='true'] {
+	opacity: 1;
+}
+@media (hover: none) {
+	.hover-highlight {
+		display: none;
+	}
+}
+
+/* ───────── Skeleton ───────── */
+/* Hidden for the first 200ms so data that lands sooner never flashes one. */
+.skeleton {
+	border-radius: 6px;
+	background: linear-gradient(
+		90deg,
+		rgb(var(--wash-rgb) / 0.04) 0%,
+		rgb(var(--wash-rgb) / 0.08) 50%,
+		rgb(var(--wash-rgb) / 0.04) 100%
+	);
+	background-size: 200% 100%;
+	animation:
+		skeleton-in 1ms linear var(--skeleton-delay) both,
+		skeleton-shimmer var(--dur-skeleton) linear infinite;
+}
+@keyframes skeleton-in {
+	from {
+		opacity: 0;
+	}
+}
+@keyframes skeleton-shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -100% 0;
+	}
+}
+
+/* Shimmering status text ("Reviewing…"). */
+.shimmer-text {
+	background: linear-gradient(
+			90deg,
+			var(--text-subtle) 0%,
+			var(--text-subtle) 40%,
+			var(--text-primary) 50%,
+			var(--text-subtle) 60%,
+			var(--text-subtle) 100%
+		)
+		0 0 / 250% 100%;
+	-webkit-background-clip: text;
+	background-clip: text;
+	color: transparent;
+	animation: text-shimmer var(--dur-shimmer) linear infinite;
+}
+@keyframes text-shimmer {
+	from {
+		background-position: 100% 0;
+	}
+	to {
+		background-position: -150% 0;
+	}
+}
+
+/* ───────── Swap: a label that changes crossfades through a 2px blur ───────── */
+.swap {
+	display: inline-grid;
+}
+.swap > * {
+	grid-area: 1 / 1;
+	transition:
+		opacity var(--dur-swap) var(--ease-out),
+		filter var(--dur-swap) var(--ease-out),
+		translate var(--dur-swap) var(--ease-out);
+}
+.swap > [data-on='false'] {
+	opacity: 0;
+	filter: blur(2px);
+	translate: 0 2px;
+	pointer-events: none;
+}
+
+/* ───────── Scrollbars ───────── */
+.thin-scroll {
+	scrollbar-width: thin;
+	scrollbar-color: var(--line-strong) transparent;
+}
+
+/* Lucide icons default to stroke 1.75 */
+.lucide {
+	stroke-width: 1.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.skeleton,
+	.shimmer-text {
+		animation: none;
+	}
+	.shimmer-text {
+		color: var(--text-subtle);
+	}
+}
+
+/* ───────── Status glyph ───────── */
+.glyph {
+	position: relative;
+	display: inline-grid;
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	place-items: center;
+	border-radius: 999px;
+	color: var(--glyph, var(--text-faint));
+}
+.glyph-face {
+	display: grid;
+	grid-area: 1 / 1;
+	width: 16px;
+	height: 16px;
+	place-items: center;
+	border-radius: 999px;
+	animation: glyph-in var(--dur-swap) var(--ease-out);
+}
+@keyframes glyph-in {
+	from {
+		opacity: 0;
+		filter: blur(2px);
+		scale: 0.7;
+	}
+}
+.glyph-dot {
+	width: 8px;
+	height: 8px;
+	border-radius: 999px;
+	background: currentColor;
+	box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+}
+.glyph[data-kind='high'] {
+	--glyph: var(--sev-high-solid);
+}
+.glyph[data-kind='medium'] {
+	--glyph: var(--sev-medium-solid);
+}
+.glyph[data-kind='low'] {
+	--glyph: var(--sev-low-solid);
+}
+.glyph[data-kind='idle'] .glyph-dot {
+	width: 10px;
+	height: 10px;
+	background: transparent;
+	box-shadow: inset 0 0 0 1.5px var(--line-strong);
+}
+.glyph[data-kind='question'] .glyph-face {
+	background: var(--bg-selected);
+	color: var(--text-muted);
+}
+.glyph-q {
+	font-family: var(--font-code);
+	font-size: 10.5px;
+	font-weight: 500;
+	line-height: 1;
+}
+.glyph[data-kind='ok'] .glyph-face {
+	background: var(--ok-tint);
+	color: var(--ok);
+}
+.glyph[data-kind='sent'] .glyph-face {
+	background: var(--sent-tint);
+	color: var(--sent);
+}
+.glyph[data-kind='dismissed'] .glyph-face {
+	background: var(--bg-selected);
+	color: var(--text-faint);
+}
+.glyph[data-kind='failed'] {
+	--glyph: var(--sev-high);
+}
+.glyph[data-kind='outdated'] {
+	--glyph: var(--text-subtle);
+}
+.glyph[data-kind='spinner'] {
+	--glyph: var(--text-muted);
+}
+.glyph-spinner {
+	width: 15px;
+	height: 15px;
+	animation: spin var(--dur-spinner) linear infinite;
+}
+@keyframes spin {
+	to {
+		rotate: 360deg;
+	}
+}
+
+/* ───────── Tone pill ───────── */
+.pill {
+	display: inline-flex;
+	height: 20px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 5px;
+	padding: 0 7px;
+	border-radius: 6px;
+	background: var(--bg-selected);
+	color: var(--text-muted);
+	font-size: 11.5px;
+	font-weight: 500;
+	white-space: nowrap;
+}
+.pill[data-tone='high'] {
+	background: var(--sev-high-tint);
+	color: var(--sev-high);
+}
+.pill[data-tone='medium'] {
+	background: var(--sev-medium-tint);
+	color: var(--sev-medium);
+}
+.pill[data-tone='low'] {
+	background: var(--sev-low-tint);
+	color: var(--sev-low);
+}
+.pill[data-tone='ok'] {
+	background: var(--ok-tint);
+	color: var(--ok);
+}
+.pill[data-tone='sent'] {
+	background: var(--sent-tint);
+	color: var(--sent);
+}

@@ -1,0 +1,113 @@
+/* ───────── Sivir restyled through its hooks ───────── */
+
+/* Command palette: keyboard-opened many times a day, so it appears with no animation. */
+[data-ui='command-content'].palette,
+[data-ui='modal-panel']:has(> [data-ui='command-content']) {
+	--motion-duration-modal-in: 0ms;
+	--motion-duration-modal-out: 0ms;
+	--motion-duration-overlay: 0ms;
+}
+[data-ui='command-content'].palette {
+	max-width: 600px;
+	border-radius: 14px;
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-modal);
+}
+.palette [data-ui='command-search'] {
+	height: 50px;
+	border-bottom: 1px solid var(--line-divider);
+	font-size: 14.5px;
+}
+.palette [data-ui='command-group'] {
+	padding: 6px;
+}
+.palette [data-ui='command-group'] > :first-child {
+	padding: 6px 8px 4px;
+	color: var(--text-faint);
+	font-size: 11.5px;
+	font-weight: 500;
+}
+.palette [data-ui='command-results'] button,
+.palette [data-ui='command-results'] a {
+	height: 36px;
+	gap: 10px;
+	border-radius: 8px;
+	font-size: 13.5px;
+	font-weight: 400;
+}
+.palette-icon {
+	display: grid;
+	width: 18px;
+	flex-shrink: 0;
+	place-items: center;
+	color: var(--text-subtle);
+}
+.palette-detail {
+	max-width: 45%;
+	flex-shrink: 0;
+	overflow: hidden;
+	color: var(--text-faint);
+	font-size: 11.5px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.palette-footer {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	padding: 9px 14px;
+	border-top: 1px solid var(--line-divider);
+	color: var(--text-faint);
+	font-size: 11.5px;
+}
+.palette-footer span {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+}
+
+/* Tooltips: small, quick, never in the way. */
+.sivir-tooltip {
+	padding: 4px 8px;
+	border-radius: 7px;
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-menu);
+	color: var(--text-secondary);
+	font-size: 12px;
+}
+
+/* Toasts: raised card with the menu shadow. */
+[data-ui='toast'] {
+	border-radius: 12px;
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-menu);
+	font-size: 13px;
+}
+
+/* Menus */
+[data-ui='dropdown-menu-content'] {
+	border-radius: 12px;
+	background: var(--bg-menu);
+	box-shadow: var(--shadow-menu);
+}
+
+/* Modals and sheets */
+[data-ui='modal-surface'] {
+	background: var(--bg-raised);
+}
+
+/* Buttons: outline is the design's secondary; ghost stays quiet until hovered. */
+[data-ui='button'][data-variant='outline'] {
+	background: transparent;
+}
+[data-ui='button'][data-variant='outline']:hover {
+	background: var(--bg-hover);
+	box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+[data-ui='button'][data-variant='ghost'] {
+	color: var(--text-subtle);
+}
+[data-ui='button'][data-variant='ghost']:hover {
+	background: var(--bg-hover);
+	color: var(--text-primary);
+}

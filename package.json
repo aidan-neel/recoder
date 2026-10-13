@@ -12,6 +12,7 @@
 		"dev": "turbo dev",
 		"dev:web": "bun --filter @recoder/web dev",
 		"dev:server": "bun --filter @recoder/server dev",
+		"dev:app": "bun --filter @recoder/app dev",
 		"build": "turbo build",
 		"check": "turbo check",
 		"test": "turbo test",

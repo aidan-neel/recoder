@@ -38,6 +38,21 @@
 			"dependsOn": ["^build"],
 			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/**", "$TURBO_ROOT$/apps/server/src/**"]
 		},
+		"@recoder/app#build": {
+			"dependsOn": ["^build"],
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"$TURBO_ROOT$/apps/web/src/lib/**",
+				"$TURBO_ROOT$/apps/web/static/**",
+				"$TURBO_ROOT$/apps/web/embed-web*",
+				"$TURBO_ROOT$/apps/web/px-to-rem.ts"
+			],
+			"outputs": ["build/**"]
+		},
+		"@recoder/app#check": {
+			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/lib/**"]
+		},
 		"lint": {
 			"inputs": [
 				"$TURBO_DEFAULT$",
