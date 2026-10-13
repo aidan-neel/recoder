@@ -2,6 +2,7 @@
 	import Check from '@lucide/svelte/icons/check';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import ChangeMap from './change-map.svelte';
+	import CiChecks from './ci-checks.svelte';
 	import Verdict from './verdict.svelte';
 	import Keycap from '../ui/keycap.svelte';
 	import RichText from '../ui/rich-text.svelte';
@@ -56,12 +57,13 @@
 		</div>
 	{/if}
 
-	{#if surface.receipts.length}
+	{#if surface.receipts.length || view.checks?.length}
 		<section class="overview-block" aria-labelledby="overview-checked">
 			<h2 class="overview-section-title" id="overview-checked">
 				Checked for you<span class="tabular">{surface.receipts.length}</span>
 				{#if ran}<span class="overview-section-note">{ran} by running code</span>{/if}
 			</h2>
+			{#if view.checks?.length}<CiChecks checks={view.checks} />{/if}
 			<ul class="receipt-list">
 				{#each surface.receipts as receipt (receipt.id)}
 					<li>

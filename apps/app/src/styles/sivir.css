@@ -111,3 +111,32 @@
 	background: var(--bg-hover);
 	color: var(--text-primary);
 }
+
+/* Shortcuts sheet */
+.shortcuts-body {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+}
+.shortcuts-title {
+	margin-bottom: 6px;
+	color: var(--text-subtle);
+	font-size: 12px;
+	font-weight: 500;
+}
+.shortcuts-row {
+	display: flex;
+	height: 30px;
+	align-items: center;
+	justify-content: space-between;
+	border-bottom: 1px solid var(--line-divider);
+	color: var(--text-secondary);
+	font-size: 13px;
+}
+.shortcuts-row:last-child {
+	border-bottom: 0;
+}
+.shortcuts-row dd {
+	display: flex;
+	gap: 4px;
+}

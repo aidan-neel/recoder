@@ -28,6 +28,7 @@
 				class="change-seg"
 				data-cls={segment.cls}
 				data-dim={focus !== null && focus !== segment.cls}
+				data-empty={attention[segment.cls] === 0}
 				style:flex-grow={attention[segment.cls]}
 			></span>
 		{/each}

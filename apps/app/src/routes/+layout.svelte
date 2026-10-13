@@ -3,6 +3,7 @@
 	import { Toaster } from '@sivir-ui/svelte/components/toast';
 	import favicon from '$web/assets/favicon.svg';
 	import CommandPalette from '$lib/components/shell/command-palette.svelte';
+	import ShortcutsModal from '$lib/components/shell/shortcuts-modal.svelte';
 	import TopBar from '$lib/components/shell/top-bar.svelte';
 	import { listenKeys } from '$lib/shell/keys';
 	import { shell } from '$lib/shell/shell.svelte';
@@ -14,7 +15,10 @@
 	onMount(() => {
 		theme.init();
 
-		return listenKeys(() => ({ 'mod+k': () => (shell.paletteOpen = !shell.paletteOpen) }));
+		return listenKeys(() => ({
+			'mod+k': () => (shell.paletteOpen = !shell.paletteOpen),
+			'?': () => (shell.shortcutsOpen = true)
+		}));
 	});
 
 	/**
@@ -43,5 +47,6 @@
 		</div>
 	</main>
 	<CommandPalette />
+	<ShortcutsModal />
 	<Toaster />
 </div>

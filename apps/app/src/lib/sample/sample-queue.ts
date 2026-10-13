@@ -1,5 +1,6 @@
 import type { Finding, PullRequest, Review } from '@recoder/shared';
 import { queueEntry, type QueueEntry } from '../queue/queue';
+import { readDecisions } from '../review/saved-decisions';
 import { SAMPLE_PULL, SAMPLE_REVIEW } from './sample-review';
 
 const API = { id: 'sample-repo', name: 'acme/api' };
@@ -52,7 +53,7 @@ function review(
 /** A believable morning queue around the sample review, one entry per state. */
 export function sampleQueue(): QueueEntry[] {
 	return [
-		queueEntry(API, SAMPLE_PULL, SAMPLE_REVIEW, {}),
+		queueEntry(API, SAMPLE_PULL, SAMPLE_REVIEW, readDecisions(SAMPLE_REVIEW.id, SAMPLE_REVIEW.headSha)),
 		queueEntry(
 			API,
 			pull(211, 'Move session storage from Redis to Postgres', 'codex[bot]', 1, [418, 233, 14]),

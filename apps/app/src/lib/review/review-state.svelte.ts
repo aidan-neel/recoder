@@ -1,8 +1,8 @@
-import type { FileDiff, PullRequest, Review } from '@recoder/shared';
+import type { FileDiff, PrCheck, PullRequest, Review } from '@recoder/shared';
 import { toast } from '@sivir-ui/svelte/components/toast';
 import { api, ApiError } from '../api/client';
 import { SAMPLE_DIFFS } from '../sample/sample-diff';
-import { SAMPLE_PULL, SAMPLE_REVIEW } from '../sample/sample-review';
+import { SAMPLE_CHECKS, SAMPLE_PULL, SAMPLE_REVIEW } from '../sample/sample-review';
 import { Decisions } from './decisions.svelte';
 import { buildSurface, type DecisionState } from './surface';
 
@@ -18,9 +18,6 @@ export type LoadStatus = 'loading' | 'ready' | 'missing' | 'offline';
 /** A running review is re-read at this interval until it settles. */
 const POLL_MS = 3000;
 
-/** After a decision, the next one opens this much later, so the change registers first. */
-const ADVANCE_MS = 160;
-
 function key(selection: Selection): string {
 	return selection.kind === 'overview'
 		? 'overview'
@@ -35,6 +32,8 @@ export class ReviewState {
 	review = $state<Review | null>(null);
 	pull = $state<PullRequest | null>(null);
 	repoName = $state<string | null>(null);
+	/** CI on the head commit; null until known or when the forge has none. */
+	checks = $state<PrCheck[] | null>(null);
 	files = $state<FileDiff[]>([]);
 	progress = $state<{ tasksDone: number; tasksTotal: number } | null>(null);
 	sample = $state(false);
@@ -63,7 +62,6 @@ export class ReviewState {
 	});
 
 	private timer: ReturnType<typeof setTimeout> | null = null;
-	private advanceTimer: ReturnType<typeof setTimeout> | null = null;
 	private id = '';
 
 	async load(id: string): Promise<void> {
@@ -74,6 +72,7 @@ export class ReviewState {
 			this.accept(SAMPLE_REVIEW, SAMPLE_DIFFS);
 			this.pull = SAMPLE_PULL;
 			this.repoName = 'acme/api';
+			this.checks = SAMPLE_CHECKS;
 
 			return;
 		}
@@ -84,6 +83,11 @@ export class ReviewState {
 
 			this.accept(review, files);
 			void this.findPull(review);
+
+			void api.checks(id).then(
+				({ checks }) => (this.checks = checks),
+				() => {}
+			);
 		} catch (error) {
 			this.status = error instanceof ApiError && error.status === 404 ? 'missing' : 'offline';
 		}
@@ -94,7 +98,6 @@ export class ReviewState {
 	}
 
 	select(selection: Selection): void {
-		if (this.advanceTimer) clearTimeout(this.advanceTimer);
 		this.selection = selection;
 	}
 
@@ -117,7 +120,8 @@ export class ReviewState {
 	}
 
 	/**
-	 * Decide `id`, then open the next open decision a beat later. Dismissing a
+	 * Decide `id` and, when it is the one on screen, open the next open decision
+	 * at once: the rail's glyph and the header tally confirm it. Dismissing a
 	 * finding also tells the server, so later reviews of the repo stop raising it.
 	 */
 	decide(id: string, state: Exclude<DecisionState, 'open'>): void {
@@ -129,12 +133,9 @@ export class ReviewState {
 
 		this.syncDismissal(id, was, now);
 
-		if (now === 'open') return;
-		if (this.advanceTimer) clearTimeout(this.advanceTimer);
-
-		this.advanceTimer = setTimeout(() => {
-			if (this.selection.kind === 'decision' && this.selection.id === id) this.selection = this.nextOpen(id);
-		}, ADVANCE_MS);
+		if (now !== 'open' && this.selection.kind === 'decision' && this.selection.id === id) {
+			this.selection = this.nextOpen(id);
+		}
 	}
 
 	/** Undo the last decision and show it again. */
@@ -154,7 +155,6 @@ export class ReviewState {
 
 	dispose(): void {
 		if (this.timer) clearTimeout(this.timer);
-		if (this.advanceTimer) clearTimeout(this.advanceTimer);
 	}
 
 	private accept(review: Review, files: FileDiff[]): void {

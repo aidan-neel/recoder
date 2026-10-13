@@ -92,6 +92,7 @@ kbd.keycap[data-pressed] {
 /* ───────── Skeleton ───────── */
 /* Hidden for the first 200ms so data that lands sooner never flashes one. */
 .skeleton {
+	display: block;
 	border-radius: 6px;
 	background: linear-gradient(
 		90deg,

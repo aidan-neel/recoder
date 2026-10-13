@@ -1,6 +1,8 @@
 <script lang="ts">
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import Keyboard from '@lucide/svelte/icons/keyboard';
 	import Search from '@lucide/svelte/icons/search';
+	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
 	import { page } from '$app/state';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import Keycap from '../ui/keycap.svelte';
@@ -36,6 +38,19 @@
 			<span>Search</span>
 			<Keycap key="mod+k" />
 		</Button>
+		<Tooltip.Root placement="bottom">
+			<Tooltip.Trigger>
+				<Button
+					variant="ghost"
+					size="icon"
+					aria-label="Keyboard shortcuts"
+					onclick={() => (shell.shortcutsOpen = true)}
+				>
+					<Keyboard size={16} />
+				</Button>
+			</Tooltip.Trigger>
+			<Tooltip.Content>Keyboard shortcuts</Tooltip.Content>
+		</Tooltip.Root>
 		<ThemeToggle />
 	</div>
 </header>

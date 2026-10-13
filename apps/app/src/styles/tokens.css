@@ -100,7 +100,6 @@
 	--dur-highlight: 100ms;
 	--dur-swap: 180ms;
 	--dur-toggle: 180ms;
-	--dur-advance: 140ms;
 	--dur-pill: 240ms;
 	--dur-meter: 420ms;
 	--dur-disclose: 220ms;
@@ -343,6 +342,5 @@
 		--dur-pill: 1ms;
 		--dur-meter: 1ms;
 		--dur-disclose: 1ms;
-		--dur-advance: 1ms;
 	}
 }

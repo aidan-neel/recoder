@@ -4,7 +4,7 @@
 	import GitBranch from '@lucide/svelte/icons/git-branch';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
-	import ProgressRing from '../ui/progress-ring.svelte';
+	import DecisionTally from './decision-tally.svelte';
 	import type { ReviewState } from '$lib/review/review-state.svelte';
 	import { author } from '$lib/shell/format';
 
@@ -52,7 +52,7 @@
 			>
 		{:else if total > 0}
 			<span class="review-tally">
-				<ProgressRing value={view.decided} max={total} />
+				<DecisionTally {view} />
 				<span class="tabular">{view.decided} of {total} decided</span>
 			</span>
 		{/if}

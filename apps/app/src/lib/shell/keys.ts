@@ -36,8 +36,8 @@ function flashKey(key: string): void {
 
 /**
  * Listen for page shortcuts on the window. Plain keys are ignored while the
- * person types or a dialog is open; `mod+` keys always fire. Returns the
- * cleanup.
+ * person types or a dialog is open; `mod+` keys always fire, and Esc leaves a
+ * text field so the keyboard flow can carry on. Returns the cleanup.
  */
 export function listenKeys(map: () => KeyMap): () => void {
 	function onKey(event: KeyboardEvent): void {
@@ -45,6 +45,12 @@ export function listenKeys(map: () => KeyMap): () => void {
 
 		const key = name(event);
 		const modified = key.startsWith('mod+');
+
+		if (event.key === 'Escape' && typing(event.target)) {
+			(event.target as HTMLElement).blur();
+
+			return;
+		}
 
 		if (!modified && (typing(event.target) || overlayOpen())) return;
 

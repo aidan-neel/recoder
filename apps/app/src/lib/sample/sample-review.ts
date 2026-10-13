@@ -3,6 +3,7 @@ import type {
 	BriefQuestionReport,
 	BriefQuestionResult,
 	Finding,
+	PrCheck,
 	PullRequest,
 	Review
 } from '@recoder/shared';
@@ -281,3 +282,11 @@ export const SAMPLE_PULL: PullRequest = {
 	changedFiles: 9,
 	createdAt: '2026-10-13T08:51:00.000Z'
 };
+
+/** CI on the sample's head commit: green, with end-to-end tests still running. */
+export const SAMPLE_CHECKS: PrCheck[] = [
+	{ name: 'typecheck', state: 'passed', url: null },
+	{ name: 'lint', state: 'passed', url: null },
+	{ name: 'unit tests', state: 'passed', url: null },
+	{ name: 'e2e', state: 'running', url: null }
+];

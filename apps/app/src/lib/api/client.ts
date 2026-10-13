@@ -1,5 +1,5 @@
 import { env } from '$env/dynamic/public';
-import type { FileDiff, ProviderAuth, PullRequest, Repo, Review } from '@recoder/shared';
+import type { FileDiff, PrCheck, PullRequest, Repo, Review } from '@recoder/shared';
 
 const base = (env.PUBLIC_API_URL ?? 'http://localhost:3001').replace(/\/$/, '');
 
@@ -44,7 +44,7 @@ export const api = {
 	progress: () => request<ProgressSummaries>('/api/reviews/progress-summaries'),
 	review: (id: string) => request<Review>(`/api/reviews/${id}`),
 	files: (id: string) => request<FileDiff[]>(`/api/reviews/${id}/files`),
-	auth: () => request<{ github: ProviderAuth; gitlab: ProviderAuth }>('/api/auth/status'),
+	checks: (id: string) => request<{ ref: string; checks: PrCheck[] }>(`/api/reviews/${id}/checks`),
 	startReview: (repoId: string, pull: PullRequest) =>
 		post<Review>('/api/reviews', { repoId, prNumber: pull.number, headSha: pull.headSha, prTitle: pull.title }),
 	retryReview: (id: string) => post<Review>(`/api/reviews/${id}/continue`),

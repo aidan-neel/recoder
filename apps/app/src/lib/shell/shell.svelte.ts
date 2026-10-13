@@ -24,6 +24,7 @@ interface Crumb {
 /** App-wide UI state: the palette and what the open page puts in it. */
 class Shell {
 	paletteOpen = $state(false);
+	shortcutsOpen = $state(false);
 	pageItems = $state<PaletteItem[]>([]);
 	crumb = $state<Crumb | null>(null);
 	/** Pull requests waiting on a decision, for the Queue count in the top bar. */
