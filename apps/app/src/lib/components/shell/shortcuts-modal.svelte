@@ -25,10 +25,12 @@
 				[['r'], 'Review the selected pull request']
 			]
 		},
+
 		{
 			title: 'Anywhere',
 			keys: [
 				[['mod+k'], 'Search'],
+				[['mod+,'], 'Settings'],
 				[['?'], 'These shortcuts']
 			]
 		}

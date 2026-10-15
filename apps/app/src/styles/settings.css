@@ -1,0 +1,74 @@
+/* ───────── Settings modal: apps/web's settings, laid out wider ─────────
+   Builds on apps/web's .settings-* rules: a searchable nav with icons on the
+   left, the section's title and rows on the right, no footer (edits save as
+   they are made). */
+[data-ui='modal-panel'].settings-modal.app-settings {
+	width: min(980px, calc(100vw - 32px));
+	max-width: 980px;
+	height: min(720px, calc(100dvh - 128px));
+}
+
+.app-settings .settings-nav {
+	width: 236px;
+	padding: 14px 10px;
+}
+.app-settings .settings-nav [data-ui='input-control'] {
+	flex-shrink: 0;
+	margin-bottom: 18px;
+}
+.app-settings .settings-nav-label {
+	padding: 0 10px 6px;
+}
+.app-settings .settings-nav-list [role='tab'] {
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	gap: 10px;
+	height: 34px;
+	min-height: 34px;
+	font-size: 13.5px;
+}
+.app-settings .settings-nav-list [role='tab'] svg {
+	flex-shrink: 0;
+	color: var(--text-subtle);
+	transition: color var(--dur-hover) ease-out;
+}
+.app-settings .settings-nav-list [role='tab']:hover svg,
+.app-settings .settings-nav-list [role='tab'][data-state='active'] svg {
+	color: var(--text-primary);
+}
+.app-settings .settings-nav-list [role='tab'][data-state='active'] {
+	background-color: var(--bg-selected);
+}
+.settings-nav-empty {
+	padding: 6px 10px;
+	color: var(--text-faint);
+	font-size: 12.5px;
+}
+
+.app-settings .settings-head {
+	gap: 12px;
+	height: 64px;
+	padding: 6px 14px 0 32px;
+	border-bottom: 0;
+}
+.app-settings .settings-title {
+	font-size: 17px;
+	font-weight: 500;
+}
+.settings-status {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+	color: var(--text-faint);
+	font-size: 12.5px;
+	white-space: nowrap;
+}
+.app-settings .settings-body {
+	padding: 6px 32px 32px;
+}
+.app-settings .settings-body [data-ui='tabs-content'] {
+	gap: 28px;
+}

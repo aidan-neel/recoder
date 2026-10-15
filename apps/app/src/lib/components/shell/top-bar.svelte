@@ -3,13 +3,16 @@
 	import Inbox from '@lucide/svelte/icons/inbox';
 	import LoaderCircle from '@lucide/svelte/icons/loader';
 	import Search from '@lucide/svelte/icons/search';
+	import SlidersHorizontal from '@lucide/svelte/icons/sliders-horizontal';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as ContextMenu from '@sivir-ui/svelte/components/context-menu';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
+	import * as Tooltip from '@sivir-ui/svelte/components/tooltip';
 	import Keycap from '../ui/keycap.svelte';
 	import { shell, type ReviewTab } from '$lib/shell/shell.svelte';
+	import { modelSettingsUi } from '$web/settings/model-settings.svelte';
 	import { keepPillAligned } from '$web/shell/tab-pill';
 
 	const QUEUE = 'queue';
@@ -118,4 +121,18 @@
 		<span class="min-w-0 flex-1 truncate text-left">Search or ask Recoder</span>
 		<Keycap key="mod+k" />
 	</Button>
+	<Tooltip.Root placement="bottom">
+		<Tooltip.Trigger>
+			<Button
+				variant="ghost"
+				size="icon"
+				aria-label="Settings"
+				aria-haspopup="dialog"
+				onclick={() => modelSettingsUi.show(modelSettingsUi.section)}
+			>
+				<SlidersHorizontal size={15} aria-hidden="true" />
+			</Button>
+		</Tooltip.Trigger>
+		<Tooltip.Content>Settings <Keycap key="mod+," /></Tooltip.Content>
+	</Tooltip.Root>
 </header>

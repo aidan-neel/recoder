@@ -1,8 +1,6 @@
 <script lang="ts">
 	import X from '@lucide/svelte/icons/x';
-	import * as Alert from '@sivir-ui/svelte/components/alert';
 	import { Button } from '@sivir-ui/svelte/components/button';
-	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import { ScrollArea } from '@sivir-ui/svelte/components/scroll-area';
 	import * as Tabs from '@sivir-ui/svelte/components/tabs';
@@ -12,22 +10,15 @@
 	import SettingsConnections from './settings-connections.svelte';
 	import SettingsGuidelines from './settings-guidelines.svelte';
 	import SettingsHarness from './settings-harness.svelte';
-	import Skeleton from '../ui/skeleton.svelte';
-	import { modelSettingsUi, type SettingsSection } from '$lib/settings/model-settings.svelte';
+	import SettingsLoadError from './settings-load-error.svelte';
+	import SettingsSkeleton from './settings-skeleton.svelte';
+	import { modelSettingsUi, SETTINGS_SECTIONS, type SettingsSection } from '$lib/settings/model-settings.svelte';
 	import { settingsDraft } from '$lib/settings/settings-draft.svelte';
 	import { guidelinesStore } from '$lib/settings/guidelines.svelte';
 	import { agent } from '$lib/settings/agent.svelte';
 
-	const SECTIONS: { id: SettingsSection; label: string }[] = [
-		{ id: 'models', label: 'Agent' },
-		{ id: 'connections', label: 'Connections' },
-		{ id: 'harness', label: 'Review harness' },
-		{ id: 'guidelines', label: 'Guidelines' },
-		{ id: 'appearance', label: 'Appearance' }
-	];
-
 	const config = $derived(modelSettingsUi.config);
-	const title = $derived(SECTIONS.find((s) => s.id === modelSettingsUi.section)?.label ?? 'Settings');
+	const title = $derived(SETTINGS_SECTIONS.find((s) => s.id === modelSettingsUi.section)?.label ?? 'Settings');
 	let saveError = $state<string | null>(null);
 
 	$effect(() => {
@@ -102,7 +93,7 @@
 			<nav class="settings-nav" aria-label="Settings sections">
 				<Typography.Metadata class="settings-nav-label">Settings</Typography.Metadata>
 				<Tabs.List class="settings-nav-list">
-					{#each SECTIONS as section (section.id)}
+					{#each SETTINGS_SECTIONS as section (section.id)}
 						<Tabs.Trigger value={section.id}>{section.label}</Tabs.Trigger>
 					{/each}
 				</Tabs.List>
@@ -128,62 +119,9 @@
 				<ScrollArea class="settings-scroll" showCues={false} aria-label="{title} settings">
 					<div class="settings-body">
 						{#if modelSettingsUi.error && !config}
-							<Alert.Root variant="error">
-								<Alert.Title>Could not load settings</Alert.Title>
-								<Alert.Description>{modelSettingsUi.error}</Alert.Description>
-								<Button variant="outline" class="mt-2 w-fit" onclick={() => void modelSettingsUi.load()}>Retry</Button>
-							</Alert.Root>
+							<SettingsLoadError />
 						{:else if !config || !settingsDraft.seeded || agentPending}
-							<div class="flex flex-col gap-6" role="status" aria-label="Loading settings">
-								{#if modelSettingsUi.section === 'models'}
-									<section class="settings-section" aria-hidden="true">
-										<Typography.H3 class="settings-label">CLI</Typography.H3>
-										<Card.Root class="settings-list">
-											<div class="settings-row">
-												<div class="flex min-w-0 flex-1 flex-col gap-1.5">
-													<Skeleton class="h-3" w={16} unit="%" /><Skeleton class="h-2.5" w={46} unit="%" />
-												</div>
-												<Skeleton class="h-[22px] w-12" />
-											</div>
-										</Card.Root>
-									</section>
-									<section class="settings-section" aria-hidden="true">
-										<Typography.H3 class="settings-label">Providers</Typography.H3>
-										<Card.Root class="settings-list">
-											{#each [0, 1, 2] as i (i)}
-												<div class="settings-row">
-													<div class="flex min-w-0 flex-1 flex-col gap-1.5">
-														<Skeleton class="h-3" w={[18, 22, 16][i]} unit="%" /><Skeleton
-															class="h-2.5"
-															w={[26, 30, 24][i]}
-															unit="%"
-														/>
-													</div>
-													<Skeleton class="h-[26px] w-20" />
-												</div>
-											{/each}
-										</Card.Root>
-									</section>
-								{/if}
-								<section class="settings-section" aria-hidden="true">
-									{#if modelSettingsUi.section === 'models'}<Typography.H3 class="settings-label">Models</Typography.H3
-										>{:else}<div class="flex h-[17.5px] items-center"><Skeleton class="h-3 w-24" /></div>{/if}
-									<Card.Root class="settings-list">
-										{#each modelSettingsUi.section === 'models' ? [0, 1] : [0, 1, 2, 3, 4] as i (i)}
-											<div class="settings-row">
-												<div class="flex min-w-0 flex-1 flex-col gap-1.5">
-													<Skeleton class="h-3" w={[28, 36, 24, 32, 26][i]} unit="%" /><Skeleton
-														class="h-2.5"
-														w={[44, 38, 30, 34, 40][i]}
-														unit="%"
-													/>
-												</div>
-												<Skeleton class="h-3 w-24" />
-											</div>
-										{/each}
-									</Card.Root>
-								</section>
-							</div>
+							<SettingsSkeleton section={modelSettingsUi.section} />
 						{:else}
 							<Tabs.Content value="models"><SettingsAgent /></Tabs.Content>
 							<Tabs.Content value="connections"><SettingsConnections /></Tabs.Content>

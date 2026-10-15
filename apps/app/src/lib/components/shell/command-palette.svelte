@@ -9,6 +9,8 @@
 	import Keycap from '../ui/keycap.svelte';
 	import { shell, type PaletteItem } from '$lib/shell/shell.svelte';
 	import { theme } from '$web/settings/theme.svelte';
+	import { modelSettingsUi } from '$web/settings/model-settings.svelte';
+	import { SECTIONS } from '$lib/settings/sections';
 
 	const APP: PaletteItem[] = [
 		{ id: 'go-queue', group: 'Actions', label: 'Go to the queue', icon: Inbox, run: () => void goto('/') },
@@ -38,13 +40,23 @@
 		}
 	];
 
+	/** One row per settings section, so ⌘K reaches any of them by name. */
+	const SETTINGS: PaletteItem[] = SECTIONS.map((section) => ({
+		id: `settings-${section.id}`,
+		group: 'Settings',
+		label: section.label,
+		keywords: `settings preferences ${section.keywords}`,
+		icon: section.icon,
+		run: () => modelSettingsUi.show(section.id)
+	}));
+
 	const FOOTER: [string[], string][] = [
 		[['ArrowUp', 'ArrowDown'], 'navigate'],
 		[['Enter'], 'open'],
 		[['Escape'], 'close']
 	];
 
-	const items = $derived([...shell.pageItems, ...APP]);
+	const items = $derived([...shell.pageItems, ...APP, ...SETTINGS]);
 	const headings = $derived([...new Set(items.map((item) => item.group))]);
 	const review = $derived(shell.tabs.find((tab) => tab.id === page.params.id));
 

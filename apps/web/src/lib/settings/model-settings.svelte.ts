@@ -160,6 +160,15 @@ export function resolveEffort(
 
 export type SettingsSection = 'models' | 'connections' | 'harness' | 'guidelines' | 'appearance';
 
+/** The settings sections in nav order, with the names people see. */
+export const SETTINGS_SECTIONS: { id: SettingsSection; label: string }[] = [
+	{ id: 'models', label: 'Agent' },
+	{ id: 'connections', label: 'Connections' },
+	{ id: 'harness', label: 'Review harness' },
+	{ id: 'guidelines', label: 'Guidelines' },
+	{ id: 'appearance', label: 'Appearance' }
+];
+
 /** A dialog to open inside the section as soon as Settings shows it. */
 type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-repos' } | { kind: 'add-provider' };
 

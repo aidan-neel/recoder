@@ -3,6 +3,15 @@ import { modelSettingsUi, type ModelChoice } from './model-settings.svelte';
 
 type Limits = ModelSettings['limits'];
 
+/** The draft's values at one moment: what was seeded, or what a save sent. */
+interface DraftSnapshot {
+	orchestrator: ModelChoice | null;
+	specialist: ModelChoice | null;
+	limits: Limits;
+	subagentCap: SubagentCap;
+	reportLowSeverity: boolean;
+}
+
 const sameChoice = (a: ModelChoice | null | undefined, b: ModelChoice | null | undefined) =>
 	(a?.modelId ?? null) === (b?.modelId ?? null) && (a?.effort ?? null) === (b?.effort ?? null);
 
@@ -20,13 +29,8 @@ class SettingsDraft {
 	/** Whether reviews report low-severity findings. */
 	reportLowSeverity = $state(true);
 	seeded = $state(false);
-	private initial: {
-		orchestrator: ModelChoice | null;
-		specialist: ModelChoice | null;
-		limits: Limits;
-		subagentCap: SubagentCap;
-		reportLowSeverity: boolean;
-	} | null = null;
+	/** Reactive, so `patch()` re-reads when a save moves the baseline. */
+	private initial = $state<DraftSnapshot | null>(null);
 
 	seed(config: ModelSettings): void {
 		this.orchestrator = modelSettingsUi.orchestrator;
@@ -35,15 +39,23 @@ class SettingsDraft {
 		this.subagentCap = config.subagentCap ?? DEFAULT_SUBAGENT_CAP;
 		this.reportLowSeverity = config.reportLowSeverity ?? true;
 
-		this.initial = {
+		this.initial = this.snapshot();
+		this.seeded = true;
+	}
+
+	snapshot(): DraftSnapshot {
+		return {
 			orchestrator: this.orchestrator,
 			specialist: this.specialist,
 			limits: { ...this.limits },
 			subagentCap: this.subagentCap,
 			reportLowSeverity: this.reportLowSeverity
 		};
+	}
 
-		this.seeded = true;
+	/** A save of `sent` landed: it is the new baseline, and edits made while it was in flight stay pending. */
+	saved(sent: DraftSnapshot): void {
+		this.initial = sent;
 	}
 
 	reset(): void {

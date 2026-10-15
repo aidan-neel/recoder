@@ -51,6 +51,22 @@ reviewed, With the agent (every decision made, some sent back), Ready to merge.
   (radius 14, `--shadow-composer` ring, no drop shadow), over a fade to the
   canvas.
 
+## Settings
+
+A modal, as in apps/web, opened by the sliders button at the right of the
+top bar, ⌘, or a section's row in ⌘K (the palette's Settings group). It
+reuses apps/web's section components and stores (`modelSettingsUi`,
+`settingsDraft`), so apps/web's own "Open settings" calls open it too. Unlike
+apps/web's modal:
+
+- The nav has a search field (Enter opens the first match) and an icon per
+  section; the config path sits at its foot.
+- There is no footer. Edits save as they are made, 400ms after the last one,
+  through `src/lib/settings/autosave.svelte.ts`; the header shows Saving,
+  Saved, or Not saved with Retry. Closing saves anything still waiting.
+- Only Agent and Review harness wait for the saved config; the other
+  sections render at once.
+
 ## App-only tokens
 
 `src/styles/app-tokens.css` defines what apps/web has no token for, in terms
