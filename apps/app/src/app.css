@@ -1,0 +1,18 @@
+/*
+ * The review surface runs on apps/web's design system, verbatim: tokens, the
+ * Sivir theme mapping, menus, modals, the palette and every shared component
+ * style. Only what is new to this app is defined here.
+ */
+@import '../../web/src/app.css';
+@source '../../web/src/lib/components';
+@source './';
+
+@import './styles/app-tokens.css';
+@import './styles/base.css';
+@import './styles/shell.css';
+@import './styles/queue.css';
+@import './styles/review.css';
+@import './styles/overview.css';
+@import './styles/decision.css';
+@import './styles/code.css';
+@import './styles/settings.css';

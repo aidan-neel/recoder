@@ -9,9 +9,11 @@
 		"packages/*"
 	],
 	"scripts": {
-		"dev": "turbo dev",
-		"dev:web": "bun --filter @recoder/web dev",
+		"dev": "turbo dev --filter=@recoder/server --filter=@recoder/app",
+		"dev:all": "turbo dev",
+		"dev:web": "turbo dev --filter=@recoder/server --filter=@recoder/web",
 		"dev:server": "bun --filter @recoder/server dev",
+		"dev:app": "bun --filter @recoder/app dev",
 		"build": "turbo build",
 		"check": "turbo check",
 		"test": "turbo test",

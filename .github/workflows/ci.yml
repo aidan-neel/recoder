@@ -26,6 +26,10 @@ jobs:
           - { package: web, task: test }
           - { package: web, task: build }
           - { package: web, task: lint }
+          - { package: app, task: check }
+          - { package: app, task: test }
+          - { package: app, task: build }
+          - { package: app, task: lint }
           - { package: site, task: check }
           - { package: site, task: build }
           - { package: site, task: lint }

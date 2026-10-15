@@ -22,6 +22,8 @@
 		starting?: boolean;
 		highlighted?: boolean;
 		disabled?: boolean;
+		/** The status chip, when the host app words it differently from `prStatus`; null hides it. */
+		status?: { tone: string; label: string } | null;
 		onOpen: () => void;
 		onReview: () => void;
 	}
@@ -33,13 +35,14 @@
 		starting = false,
 		highlighted = false,
 		disabled = false,
+		status: statusOverride,
 		onOpen,
 		onReview
 	}: Props = $props();
 
 	const running = $derived(!starting && isRunning(review));
 	const state = $derived(starting ? 'starting' : running ? 'running' : 'idle');
-	const status = $derived(prStatus(review));
+	const status = $derived(statusOverride === undefined ? prStatus(review) : statusOverride);
 	const title = $derived(pr.title === '' ? `PR #${pr.number}` : pr.title);
 	const assignees = $derived(pr.assignees ?? []);
 	const assigneeNames = $derived(assignees.map((person) => person.name ?? person.login).join(', '));

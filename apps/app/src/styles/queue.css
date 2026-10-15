@@ -1,0 +1,19 @@
+/* ───────── Queue: apps/web's Home list, sorted by what needs a decision ───────── */
+.queue-brief {
+	margin: 12px 0 44px;
+}
+.queue-section + .queue-section {
+	margin-top: 36px;
+}
+.queue-empty-actions {
+	display: flex;
+	gap: 8px;
+}
+[data-ui='badge'].status-chip[data-tone='medium'] {
+	color: var(--sev-medium);
+	background-color: var(--sev-medium-tint);
+}
+[data-ui='badge'].status-chip[data-tone='sent'] {
+	color: var(--sent);
+	background-color: var(--sent-tint);
+}

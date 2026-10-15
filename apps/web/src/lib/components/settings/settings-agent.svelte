@@ -76,6 +76,44 @@
 	}
 </script>
 
+{#if agent.anyReady && !agent.error}
+	<section class="settings-section" aria-labelledby="agent-roles">
+		<Typography.H3 id="agent-roles" class="settings-label">Models</Typography.H3>
+		<Card.Root class="settings-list">
+			<div class="settings-row role-row">
+				<div class="min-w-0 flex-1">
+					<p class="settings-row-name">Review</p>
+					<p class="settings-row-desc">Runs the reviewers, writes the summary and answers in chat</p>
+				</div>
+				<ModelPicker
+					value={settingsDraft.orchestrator}
+					onSelect={(choice) => {
+						settingsDraft.orchestrator = choice;
+					}}
+					role="Review"
+				/>
+			</div>
+			<div class="settings-row role-row">
+				<div class="min-w-0 flex-1">
+					<p class="settings-row-name">Subagents and verifiers</p>
+					<p class="settings-row-desc">Answers the questions reviewers hand off and checks each finding</p>
+				</div>
+				<ModelPicker
+					value={settingsDraft.specialist}
+					onSelect={(choice) => {
+						settingsDraft.specialist = choice;
+					}}
+					placeholder="Same as Review"
+					onFollow={() => {
+						settingsDraft.specialist = null;
+					}}
+					role="Subagent"
+				/>
+			</div>
+		</Card.Root>
+	</section>
+{/if}
+
 <section class="settings-section" aria-labelledby="agent-cli">
 	<Typography.H3 id="agent-cli" class="settings-label">CLI</Typography.H3>
 	<Card.Root class="settings-list">
@@ -164,44 +202,6 @@
 				{/each}
 			</Card.Root>
 		{/if}
-	</section>
-{/if}
-
-{#if agent.anyReady && !agent.error}
-	<section class="settings-section" aria-labelledby="agent-roles">
-		<Typography.H3 id="agent-roles" class="settings-label">Models</Typography.H3>
-		<Card.Root class="settings-list">
-			<div class="settings-row role-row">
-				<div class="min-w-0 flex-1">
-					<p class="settings-row-name">Review</p>
-					<p class="settings-row-desc">Runs the reviewers, writes the summary and answers in chat</p>
-				</div>
-				<ModelPicker
-					value={settingsDraft.orchestrator}
-					onSelect={(choice) => {
-						settingsDraft.orchestrator = choice;
-					}}
-					role="Review"
-				/>
-			</div>
-			<div class="settings-row role-row">
-				<div class="min-w-0 flex-1">
-					<p class="settings-row-name">Subagents and verifiers</p>
-					<p class="settings-row-desc">Answers the questions reviewers hand off and checks each finding</p>
-				</div>
-				<ModelPicker
-					value={settingsDraft.specialist}
-					onSelect={(choice) => {
-						settingsDraft.specialist = choice;
-					}}
-					placeholder="Same as Review"
-					onFollow={() => {
-						settingsDraft.specialist = null;
-					}}
-					role="Subagent"
-				/>
-			</div>
-		</Card.Root>
 	</section>
 {/if}
 

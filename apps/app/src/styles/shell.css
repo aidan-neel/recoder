@@ -1,0 +1,27 @@
+/* Shortcuts sheet: one row per key, apps/web's settings-row rhythm. */
+.shortcuts-body {
+	display: flex;
+	flex-direction: column;
+	gap: 18px;
+}
+.shortcuts-title {
+	margin-bottom: 4px;
+	color: var(--text-faint);
+	font-size: 11.5px;
+}
+.shortcuts-row {
+	display: flex;
+	height: 32px;
+	align-items: center;
+	justify-content: space-between;
+	border-bottom: 1px solid var(--line-divider);
+	color: var(--text-secondary);
+	font-size: 13px;
+}
+.shortcuts-row:last-child {
+	border-bottom: 0;
+}
+.shortcuts-row dd {
+	display: flex;
+	gap: 4px;
+}
