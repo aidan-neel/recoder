@@ -1,0 +1,99 @@
+/* ───────── Page ───────── */
+/* One canvas card on the chrome, like the app. The page scrolls without a visible bar. */
+.site-shell {
+	display: flex;
+	min-height: 100dvh;
+	padding: 8px;
+}
+[data-ui='card'].site-card {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: row;
+	border-radius: 14px;
+	background-color: var(--bg-canvas);
+	box-shadow: inset 0 0 0 1px var(--line-canvas);
+}
+/* Clipped sideways so the hero's drifting glow never widens the page. */
+.site-main {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	overflow-x: clip;
+}
+
+/* ───────── Nav ───────── */
+/* A slim column down the card's left edge; the links stay fixed in it, centered on the screen. */
+.site-nav {
+	width: 176px;
+	flex: none;
+}
+.site-nav-scroll {
+	position: fixed;
+	top: 8px;
+	left: 8px;
+	display: flex;
+	width: 176px;
+	height: calc(100dvh - 16px);
+	align-items: center;
+	padding: 0 8px 0 12px;
+}
+.site-nav-list {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 2px;
+}
+[data-ui='button'].site-nav-item {
+	height: 30px;
+	justify-content: flex-start;
+	padding: 0 12px;
+	border-radius: 999px;
+	font-size: 14.5px;
+	font-weight: 400;
+	color: var(--text-muted);
+}
+/* The list's hover layer and the active pill are the fills; the link itself only brightens. */
+[data-ui='button'].site-nav-item:hover {
+	background-color: transparent;
+}
+[data-ui='button'].site-nav-item:hover,
+[data-ui='button'].site-nav-item[aria-current='page'] {
+	color: var(--text-primary);
+}
+.site-nav-item svg {
+	width: 14px;
+	height: 14px;
+}
+/* Narrow screens: the nav becomes a row across the top of the card that scrolls sideways. */
+@media (max-width: 900px) {
+	[data-ui='card'].site-card {
+		flex-direction: column;
+	}
+	.site-nav {
+		width: 100%;
+		padding: 10px 10px 0;
+	}
+	.site-nav-scroll {
+		position: static;
+		display: block;
+		width: 100%;
+		height: auto;
+		padding: 0;
+		overflow-x: auto;
+		overscroll-behavior-x: contain;
+		scrollbar-width: none;
+	}
+	.site-nav-scroll::-webkit-scrollbar {
+		display: none;
+	}
+	.site-nav-list {
+		width: max-content;
+		flex-direction: row;
+		align-items: center;
+	}
+	[data-ui='button'].site-nav-item {
+		white-space: nowrap;
+	}
+}

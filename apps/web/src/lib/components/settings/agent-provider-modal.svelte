@@ -17,7 +17,7 @@
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import { cubicOut } from 'svelte/easing';
 	import type { TransitionConfig } from 'svelte/transition';
-	import type { AgentAuthMethod, AgentAuthPrompt, AgentOAuthAttempt, AgentProvider } from '@recoder/shared';
+	import { promptShown, type AgentAuthMethod, type AgentOAuthAttempt, type AgentProvider } from '@recoder/shared';
 	import { agent } from '$lib/settings/agent.svelte';
 	import { serverApi } from '$lib/api/server-api';
 
@@ -85,18 +85,10 @@
 	const methods = $derived(provider ? (provider.methods.length ? provider.methods : [KEY_ONLY]) : []);
 	const method = $derived(methods.find((m) => String(m.index) === methodIndex) ?? methods[0]);
 	/** Prompts whose condition holds for the answers so far. */
-	const prompts = $derived((method?.prompts ?? []).filter((p) => visible(p, inputs)));
+	const prompts = $derived((method?.prompts ?? []).filter((p) => promptShown(p, inputs)));
 	const missing = $derived(
 		prompts.some((p) => p.type === 'text' && !p.message.includes('optional') && !inputs[p.key]?.trim())
 	);
-
-	function visible(prompt: AgentAuthPrompt, answers: Record<string, string>): boolean {
-		if (!prompt.when) return true;
-
-		const value = answers[prompt.when.key] ?? '';
-
-		return prompt.when.op === 'eq' ? value === prompt.when.value : value !== prompt.when.value;
-	}
 
 	let fromList = $state(false);
 	function choose(next: AgentProvider, viaList = true): void {

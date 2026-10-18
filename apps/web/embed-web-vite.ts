@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import type { Plugin, PluginOption, UserConfig } from 'vite';
-import { pxToRem } from './px-to-rem';
+import { pxToRem } from '../../packages/ui/px-to-rem.ts';
 
 const webSrc = fileURLToPath(new URL('./src/', import.meta.url));
 const webLib = fileURLToPath(new URL('./src/lib', import.meta.url));

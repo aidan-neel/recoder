@@ -1,0 +1,64 @@
+/* ───────── Docs ───────── */
+/* Docs paint fully formed: no entrance motion. */
+.docs-column {
+	width: 100%;
+	max-width: 760px;
+	margin: 0 auto;
+	padding: 88px 40px 64px;
+}
+.docs-title {
+	margin: 0 0 20px;
+	font-size: 30px;
+	font-weight: 500;
+	line-height: 1.2;
+	letter-spacing: -0.015em;
+	color: var(--text-primary);
+}
+[data-ui='markdown'].docs-prose {
+	font-size: 15px;
+	line-height: 1.7;
+	color: var(--text-secondary);
+}
+.docs-prose :is(h2, h3) {
+	margin: 40px 0 12px;
+	font-size: 18px;
+	font-weight: 500;
+	letter-spacing: -0.005em;
+	color: var(--text-primary);
+}
+.docs-prose strong {
+	font-weight: 500;
+	color: var(--text-primary);
+}
+.docs-prose a {
+	text-underline-offset: 3px;
+}
+/* Tables fit the prose column; variable names stay on one line where there is room. */
+.docs-prose table {
+	font-size: 13.5px;
+}
+.docs-prose td code {
+	white-space: nowrap;
+}
+.docs-pager {
+	display: flex;
+	gap: 8px;
+	margin-top: 56px;
+	padding-top: 20px;
+	border-top: 1px solid var(--line-card);
+}
+.docs-pager svg {
+	width: 14px;
+	height: 14px;
+}
+
+@media (max-width: 640px) {
+	.docs-column {
+		padding: 64px 16px 32px;
+	}
+	/* Phones: long names wrap, so every column keeps room to read. */
+	.docs-prose td code {
+		white-space: normal;
+		overflow-wrap: anywhere;
+	}
+}

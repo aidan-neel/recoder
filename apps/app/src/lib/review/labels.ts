@@ -15,9 +15,14 @@ export const PROOF_LABEL: Record<Proof, string> = {
 	unproven: 'Not proven'
 };
 
+/** Model prose split on its code marks: even parts are text, odd parts were inside backticks. */
+export function codeParts(text: string): string[] {
+	return text.split(/`([^`\n]+)`/);
+}
+
 /** Model prose without its code marks, for single-line places (the rail, the palette). */
 export function plain(text: string): string {
-	return text.replace(/`([^`\n]+)`/g, '$1');
+	return codeParts(text).join('');
 }
 
 /** `error-handling` → `Error handling`. */

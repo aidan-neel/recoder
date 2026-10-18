@@ -1,0 +1,66 @@
+/* kit: overlay. Modal, confirm dialog, popover and tooltip contracts that classes alone cannot express. */
+
+/* ───────── Modal panel ───────── */
+/* Centered with `translate`, which composes under the entrance transform. */
+[data-ui='modal-panel'] {
+	translate: -50% -50%;
+}
+/* On wider screens the panel sits 3rem above center (Sivir), never closer than 1rem to the top. */
+@media (min-width: 768px) {
+	[data-ui='modal-panel'] {
+		translate: -50% calc(-50% - min(3rem, max(0px, (100dvh - 2rem - 100%) / 2)));
+	}
+}
+/*
+ * An inline modal (a picture of the app) lays out inside its stage instead:
+ * centered in the padding, raised 3rem by a bottom margin that `safe` drops
+ * when the panel runs out of room, so it never rises past the top padding.
+ */
+[data-ui='modal-stage'] {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: safe center;
+	padding: 16px;
+}
+[data-ui='modal-stage'] > [data-ui='modal-overlay'] {
+	position: absolute;
+}
+[data-ui='modal-stage'] > [data-ui='modal-panel'] {
+	position: relative;
+	top: auto;
+	left: auto;
+	width: 100%;
+	max-height: 100%;
+	translate: none;
+}
+@media (min-width: 768px) {
+	[data-ui='modal-stage'] > [data-ui='modal-panel'] {
+		margin-bottom: 96px;
+	}
+}
+/* The title clears the X. */
+[data-ui='modal-panel'][data-close] [data-ui='modal-title'] {
+	padding-right: 28px;
+}
+/* A description reads with its title: 6px apart instead of the panel's 16px gap. */
+[data-ui='modal-title'] + [data-ui='modal-description'] {
+	margin-top: -10px;
+}
+
+/* ───────── Tooltip ───────── */
+/* The shortcut cap sits inside the 16px line, so it never grows the bubble. */
+[data-ui='tooltip'] [data-ui='keycap'] {
+	min-width: 16px;
+	height: 16px;
+	margin-right: -3px;
+	padding: 0 4px;
+	background-color: var(--bg-selected);
+	color: var(--text-muted);
+}
+/* Radix wraps the bubble in a positioned box; it must not catch the pointer on its way to a neighbor. */
+[data-radix-popper-content-wrapper]:has(> [data-ui='tooltip']) {
+	pointer-events: none;
+}

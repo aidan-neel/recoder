@@ -1,7 +1,9 @@
 import js from '@eslint/js';
+import nextPlugin from '@next/eslint-plugin-next';
 import stylistic from '@stylistic/eslint-plugin';
 import svelte from 'eslint-plugin-svelte';
 import globals from 'globals';
+import reactHooks from 'eslint-plugin-react-hooks';
 import ts from 'typescript-eslint';
 
 /**
@@ -64,6 +66,9 @@ export default ts.config(
 			'**/build/**',
 			'**/dist/**',
 			'**/.svelte-kit/**',
+			'**/.next/**',
+			'**/next-env.d.ts',
+			'**/public/**',
 			'**/.vercel/**',
 			'**/.turbo/**',
 			'**/data/**',
@@ -95,6 +100,15 @@ export default ts.config(
 			'no-empty': ['error', { allowEmptyCatch: true }],
 			'svelte/no-navigation-without-resolve': 'off',
 			'svelte/no-useless-mustaches': 'off'
+		}
+	},
+	{
+		files: ['**/*.{jsx,tsx}', 'apps/app/src/**/*.ts', 'apps/site/src/**/*.ts', 'packages/ui/src/**/*.ts'],
+		plugins: { '@next/next': nextPlugin, 'react-hooks': reactHooks },
+		rules: {
+			...reactHooks.configs.flat.recommended.rules,
+			...nextPlugin.configs['core-web-vitals'].rules,
+			'@next/next/no-html-link-for-pages': 'off'
 		}
 	},
 	{

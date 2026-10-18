@@ -25,6 +25,18 @@ export const DEFAULT_SUBAGENT_CAP: SubagentCap = 2;
 /** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode, Claude Code or Devin CLI. */
 export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode' | 'claude-code' | 'devin';
 
+/** Providers that are an app or CLI rather than an endpoint, by the name people know them by. */
+const APP_NAMES: Partial<Record<ModelProvider, string>> = {
+	codex: 'ChatGPT',
+	'claude-code': 'Claude Code',
+	devin: 'Devin'
+};
+
+/** ChatGPT, Claude Code or Devin for those providers; null for an endpoint or an OpenCode provider. */
+export function appName(provider: ModelProvider | undefined): string | null {
+	return (provider && APP_NAMES[provider]) || null;
+}
+
 /** Sampling settings a model wants; an unset field takes the built-in profile for the model, then the default. */
 export interface ModelRuntimeProfile {
 	/** `null` leaves the field out of the request, for models that reject or ignore it. */
@@ -161,4 +173,37 @@ export interface CodexModel {
 	/** Reasoning levels the provider reports for this model. */
 	efforts?: ReasoningEffort[];
 	defaultEffort?: ReasoningEffort;
+}
+
+/**
+ * The effort a model starts on: the provider's default when the model offers
+ * it, else Medium, else the first effort it offers. Null when the model has no
+ * reasoning control.
+ */
+export function defaultEffort(entry: Pick<ModelEntry, 'efforts' | 'defaultEffort'>): ReasoningEffort | null {
+	const efforts = entry.efforts;
+
+	if (!efforts?.length) return null;
+	if (entry.defaultEffort && efforts.includes(entry.defaultEffort)) return entry.defaultEffort;
+
+	return efforts.includes('medium') ? 'medium' : efforts[0];
+}
+
+/** A picker's view of a model's reasoning control. */
+export interface EffortChoices {
+	/** The efforts it offers, as names or as picker options with an `id`; null when it has no reasoning control. */
+	efforts: readonly (ReasoningEffort | { id: ReasoningEffort })[] | null;
+	defaultEffort: ReasoningEffort | null;
+}
+
+/** Keeps an effort only when the model offers it; otherwise the model's default. Null when the model has no reasoning control. */
+export function resolveEffort(
+	model: EffortChoices | undefined,
+	effort: ReasoningEffort | null | undefined
+): ReasoningEffort | null {
+	if (!model?.efforts) return null;
+
+	const offered = model.efforts.some((option) => (typeof option === 'string' ? option : option.id) === effort);
+
+	return effort && offered ? effort : model.defaultEffort;
 }

@@ -1,33 +1,4 @@
-export type ThemeChoice = 'system' | 'light' | 'dark';
-
-const KEY = 'recoder-theme';
-const CHROME = { light: '#ebe8e2', dark: '#0d0c0b' };
-
-function read(): ThemeChoice {
-	try {
-		const saved = localStorage.getItem(KEY);
-
-		if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
-	} catch {}
-
-	return 'system';
-}
-
-function resolve(choice: ThemeChoice): 'light' | 'dark' {
-	if (choice !== 'system') return choice;
-
-	return matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
-}
-
-function apply(choice: ThemeChoice): void {
-	const mode = resolve(choice);
-	const root = document.documentElement;
-
-	root.classList.toggle('dark', mode === 'dark');
-	root.style.colorScheme = mode;
-	document.querySelector('meta[name="color-scheme"]')?.setAttribute('content', mode);
-	document.querySelector('meta[name="theme-color"]')?.setAttribute('content', CHROME[mode]);
-}
+import { applyTheme as apply, readTheme as read, saveTheme, type ThemeChoice } from '@recoder/shared';
 
 class Theme {
 	choice = $state<ThemeChoice>('dark');
@@ -44,12 +15,7 @@ class Theme {
 
 	set(choice: ThemeChoice): void {
 		this.choice = choice;
-
-		try {
-			localStorage.setItem(KEY, choice);
-		} catch {}
-
-		apply(choice);
+		saveTheme(choice);
 	}
 }
 

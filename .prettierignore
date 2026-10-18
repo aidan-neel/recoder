@@ -2,6 +2,9 @@ node_modules
 build
 dist
 .svelte-kit
+.next
+next-env.d.ts
+public
 .vercel
 .turbo
 data

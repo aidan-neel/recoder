@@ -15,14 +15,24 @@
 			"cache": false,
 			"persistent": true
 		},
+		"@recoder/web#build": {
+			"dependsOn": ["^build"],
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/px-to-rem.ts"],
+			"outputs": ["build/**", "dist/**"]
+		},
 		"@recoder/site#build": {
 			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/**"],
-			"outputs": ["build/**", ".vercel/output/**"]
+			"inputs": [
+				"$TURBO_DEFAULT$",
+				"$TURBO_ROOT$/packages/ui/px-to-rem.ts",
+				"$TURBO_ROOT$/packages/ui/src/**",
+				"$TURBO_ROOT$/apps/app/src/**"
+			],
+			"outputs": ["!.next/cache/**", ".next/**"]
 		},
 		"@recoder/site#check": {
 			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/**"]
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/src/**", "$TURBO_ROOT$/apps/app/src/**"]
 		},
 		"@recoder/bench#build": {
 			"dependsOn": ["^build"],
@@ -40,18 +50,12 @@
 		},
 		"@recoder/app#build": {
 			"dependsOn": ["^build"],
-			"inputs": [
-				"$TURBO_DEFAULT$",
-				"$TURBO_ROOT$/apps/web/src/lib/**",
-				"$TURBO_ROOT$/apps/web/static/**",
-				"$TURBO_ROOT$/apps/web/embed-web*",
-				"$TURBO_ROOT$/apps/web/px-to-rem.ts"
-			],
-			"outputs": ["build/**"]
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/px-to-rem.ts", "$TURBO_ROOT$/packages/ui/src/**"],
+			"outputs": ["!.next/cache/**", ".next/**"]
 		},
 		"@recoder/app#check": {
 			"dependsOn": ["^build"],
-			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/apps/web/src/lib/**"]
+			"inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/packages/ui/src/**"]
 		},
 		"lint": {
 			"inputs": [

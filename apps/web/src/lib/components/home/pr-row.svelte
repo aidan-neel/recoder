@@ -2,7 +2,6 @@
 	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import GitPullRequest from '@lucide/svelte/icons/git-pull-request';
 	import * as Avatar from '@sivir-ui/svelte/components/avatar';
-	import { initials } from '$lib/shell/shell-state.svelte';
 	import Link2 from '@lucide/svelte/icons/link-2';
 	import LoaderCircle from '@lucide/svelte/icons/loader';
 	import Play from '@lucide/svelte/icons/play';
@@ -12,7 +11,8 @@
 	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
 	import type { PullRequest, Review } from '@recoder/shared';
-	import { isRunning, prStatus, shortAge } from '$lib/home/home';
+	import { initials, shortAge } from '@recoder/shared';
+	import { isRunning, prStatus } from '$lib/home/home';
 
 	interface Props {
 		pr: PullRequest;

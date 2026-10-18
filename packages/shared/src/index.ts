@@ -1,5 +1,5 @@
 /**
- * @recoder/shared — contract + portable utilities for apps/web and apps/server.
+ * @recoder/shared — contract + portable utilities for the web apps and apps/server.
  * Ships source (no build step); keep runtime code dependency-free (no node/bun APIs).
  */
 
@@ -7,10 +7,14 @@ export * from './diff';
 export * from './metrics';
 export * from './model-markdown';
 export * from './progress';
+export * from './progress-state';
 export * from './repo';
 export * from './findings';
 export * from './review';
 export * from './models';
+export * from './model-name';
+export * from './format';
+export * from './theme';
 export * from './providers';
 export * from './agents';
 export * from './home';

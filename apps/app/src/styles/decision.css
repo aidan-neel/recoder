@@ -1,40 +1,15 @@
-/* ───────── Detail: one decision, receipt or file ───────── */
-.detail {
+/* decision: one decision, receipt or file in the reading pane, the decision bar and the handoff. */
+
+/* ───────── Detail column ───────── */
+.decision-detail {
 	max-width: 760px;
 	margin: 0 auto;
 	padding: 40px 40px 140px;
 }
-.detail-file {
+.file-detail {
 	max-width: 1080px;
-	padding-top: 24px;
-}
-.detail-head {
-	margin-bottom: 18px;
-}
-.detail-file .detail-head {
-	margin-bottom: 14px;
-}
-.detail-kicker {
-	display: flex;
-	flex-wrap: wrap;
-	align-items: center;
-	gap: 10px;
-	margin-bottom: 14px;
-}
-.detail-kicker-text {
-	color: var(--text-subtle);
-	font-size: 12.5px;
-}
-.detail-proof {
-	display: inline-flex;
-	align-items: center;
-	gap: 5px;
-	color: var(--text-subtle);
-	font-size: 12.5px;
-}
-.detail-proof[data-proof='reproduced'],
-.detail-proof[data-proof='traced'] {
-	color: var(--ok);
+	margin: 0 auto;
+	padding: 24px 40px 140px;
 }
 .detail-title {
 	color: var(--text-primary);
@@ -44,71 +19,12 @@
 	letter-spacing: -0.012em;
 	text-wrap: balance;
 }
-.detail-where {
-	display: inline-flex;
-	align-items: baseline;
-	gap: 10px;
-	margin: 8px -6px 0;
-	padding: 2px 6px;
-	border-radius: 6px;
-	color: var(--text-faint);
-	font-size: 12px;
-	transition:
-		background-color var(--dur-hover) ease-out,
-		color var(--dur-hover) ease-out;
-}
-.detail-where:hover {
-	background: var(--bg-hover);
-	color: var(--text-secondary);
-}
-.detail-where:focus-visible {
-	box-shadow: var(--focus-ring);
-}
-.detail-symbol {
-	color: var(--text-ghost);
-}
-.detail-where:hover .detail-symbol {
-	color: var(--text-faint);
-}
 .detail-body {
 	font-size: 17.5px;
 	line-height: 1.58;
 }
-.detail-plain {
-	color: var(--text-secondary);
-	font-size: 14px;
-	line-height: 1.55;
-}
-.detail-section {
-	margin-top: 36px;
-}
-.detail-section-title {
-	margin-bottom: 12px;
-	color: var(--text-subtle);
-	font-size: 12.5px;
-	font-weight: 500;
-}
-.detail-note {
-	margin-top: 22px;
-	animation: note-in var(--dur-disclose) var(--ease-out);
-}
-@keyframes note-in {
-	from {
-		opacity: 0;
-		translate: 0 -4px;
-	}
-}
-.inline-code {
-	padding: 1px 5px;
-	border-radius: 5px;
-	background: rgb(var(--wash-rgb) / 0.07);
-	color: var(--text-primary);
-	font-family: var(--font-code);
-	font-size: 0.82em;
-	white-space: nowrap;
-}
 
-/* How it breaks: trigger, the path through the code, the consequence. */
+/* ───────── How it breaks: trigger, the path through the code, the consequence ───────── */
 .claim {
 	position: relative;
 	display: flex;
@@ -155,9 +71,6 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.claim-label.mono {
-	font-size: 11.5px;
-}
 .claim-text {
 	color: var(--text-secondary);
 }
@@ -171,16 +84,20 @@
 	font-size: 13px;
 	line-height: 1.5;
 }
+.claim-contract + .claim-contract {
+	margin-top: 4px;
+}
 .claim-contract > span:first-child {
 	margin-right: 4px;
 	color: var(--text-faint);
 }
 
-/* Evidence: what was run and what it printed. */
+/* ───────── Evidence: what was run and what it printed ───────── */
 .evidence {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
+	margin: 0;
 	padding: 14px;
 	border-radius: 10px;
 	background: var(--bg-code);
@@ -194,54 +111,37 @@
 	font-size: 13px;
 	line-height: 1.5;
 }
-.evidence-label {
-	color: var(--text-faint);
-	font-size: 12px;
-}
 .evidence-value {
 	grid-column: span 2;
 	color: var(--text-secondary);
 }
-.evidence-command {
-	overflow-x: auto;
-	color: var(--text-primary);
-	font-size: 12px;
-	white-space: nowrap;
-	scrollbar-width: none;
+/* The command reads as a line of the figure, with a "$" prompt that copying leaves out. */
+.evidence-command [data-ui='code-block-content'] {
+	padding: 0 36px 0 0;
 }
-.evidence-exit {
-	padding: 1px 6px;
-	border-radius: 5px;
-	background: var(--ok-tint);
-	color: var(--ok);
-	font-size: 11px;
+.evidence-command [data-ui='code-block-content'] > code::before {
+	color: var(--text-faint);
+	content: '$ ';
 }
-.evidence-exit[data-failed='true'] {
-	background: var(--sev-high-tint);
-	color: var(--sev-high);
+.evidence-command [data-ui='code-block-copy'] {
+	right: 0;
 }
 .evidence-output {
-	margin-top: 4px;
-	overflow-x: auto;
-	padding: 10px 12px;
-	border-radius: 8px;
-	background: var(--bg-canvas);
 	box-shadow: inset 0 0 0 1px var(--line-divider);
+}
+.evidence-output [data-ui='code-block-content'] {
+	padding: 10px 12px;
 	color: var(--text-secondary);
-	font-size: 12px;
 	line-height: 1.6;
 }
-.evidence-base {
-	color: var(--text-subtle);
-	font-size: 12.5px;
-}
 
-.contract {
+/* ───────── Receipt lists: what a check relied on, the inputs it tried ───────── */
+.receipt-list {
 	display: flex;
 	flex-direction: column;
 	gap: 6px;
 }
-.contract li {
+.receipt-list > li {
 	display: grid;
 	grid-template-columns: minmax(140px, auto) minmax(0, 1fr);
 	gap: 14px;
@@ -249,107 +149,118 @@
 	font-size: 13.5px;
 	line-height: 1.5;
 }
-.contract-where {
+
+/* ───────── Code: the gap between hunks, the class dot, decisions under their line ───────── */
+.hunk-gap {
+	display: flex;
+	height: 26px;
+	align-items: center;
+	padding-left: 106px;
+	border-block: 1px solid var(--line-divider);
+	background: rgb(var(--wash-rgb) / 0.02);
 	color: var(--text-faint);
 	font-size: 11.5px;
-	line-height: 1.75;
+	user-select: none;
+}
+.hunk-gap:last-child {
+	border-bottom: 0;
+}
+.hunk-empty {
+	padding: 12px 14px;
+	color: var(--text-faint);
+	font-size: 12.5px;
+}
+.att-dot {
+	width: 6px;
+	height: 6px;
+	border-radius: 2px;
+	background: var(--att-skim);
+}
+.att-dot[data-cls='read'] {
+	background: var(--att-read);
+}
+.att-dot[data-cls='checked'] {
+	background: var(--att-checked);
+}
+.att-dot[data-cls='tests'] {
+	background: var(--att-tests);
+}
+[data-ui='button'].file-note {
+	width: min(100%, 560px);
+	height: auto;
+	justify-content: flex-start;
+	gap: 9px;
+	margin: 0 0 4px;
+	padding: 7px 10px;
+	border-radius: 9px;
+	box-shadow: inset 0 0 0 1px var(--line-control);
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 1.3;
+	text-align: left;
+	white-space: normal;
+}
+[data-ui='button'].file-note:hover {
+	box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+[data-ui='button'].file-note:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.file-note-title {
+	min-width: 0;
+	flex: 1;
+}
+.file-note:not([data-state='open']) .file-note-title {
+	color: var(--text-subtle);
 }
 
-/* ───────── Decide bar: floats over the bottom of the pane ───────── */
-.decide-bar {
-	position: absolute;
-	right: 24px;
-	bottom: 20px;
-	left: 24px;
-	z-index: 5;
-	display: flex;
-	max-width: 712px;
-	height: 54px;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	margin: 0 auto;
-	padding: 0 8px 0 12px;
-	border-radius: 14px;
-	background: var(--bg-raised);
-	box-shadow: var(--shadow-composer);
-}
+/* ───────── Decision bar: floats over the bottom of the reading pane ───────── */
 .decide-fade {
-	pointer-events: none;
 	position: absolute;
 	right: 0;
 	bottom: 0;
 	left: 0;
 	height: 110px;
-	z-index: 4;
 	background: linear-gradient(to bottom, transparent, var(--bg-canvas) 70%);
 }
-.decide-swap {
-	min-width: 0;
-	flex: 1;
-}
-.decide-actions,
-.decide-done {
+.decide-bar {
+	pointer-events: auto;
+	position: relative;
 	display: flex;
-	min-width: 0;
+	width: calc(100% - 48px);
+	max-width: 712px;
+	height: 54px;
 	align-items: center;
-	gap: 6px;
+	justify-content: space-between;
+	gap: 12px;
+	margin: 0 auto 20px;
+	padding: 0 8px 0 12px;
+	border-radius: 14px;
+	background: var(--bg-raised);
+	box-shadow: var(--shadow-composer);
+	container-type: inline-size;
 }
-.decide-actions [data-ui='button'] {
-	gap: 8px;
+/* A narrow pane (the ask column open on a small screen) drops the keycaps before anything clips. */
+@container (max-width: 540px) {
+	.decide-bar [data-ui='keycap'] {
+		display: none;
+	}
 }
-.decide-done {
-	gap: 10px;
-	padding-left: 2px;
-}
-.decide-done-text {
-	min-width: 0;
-	overflow: hidden;
-	color: var(--text-secondary);
+
+/* ───────── Handoff ───────── */
+[data-ui='textarea'].handoff-note {
+	min-height: 34px;
+	padding-block: 7px;
 	font-size: 13px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
-.decide-done [data-ui='button'] {
-	gap: 8px;
-	margin-left: auto;
+.handoff-prompt {
+	margin-top: 22px;
+	overflow: hidden;
+	border-radius: 10px;
+	background: var(--bg-code);
+	box-shadow: inset 0 0 0 1px var(--line-card);
 }
-.decide-nav {
-	display: flex;
-	flex-shrink: 0;
-	align-items: center;
-	gap: 2px;
-}
-.decide-count {
-	margin-right: 6px;
-	color: var(--text-faint);
-	font-size: 12px;
-}
-.att-chip {
-	display: inline-flex;
-	height: 20px;
-	align-items: center;
-	gap: 6px;
-	padding: 0 8px 0 7px;
-	border-radius: 6px;
-	background: var(--bg-selected);
+.handoff-prompt [data-ui='code-block-content'] {
+	max-height: 220px;
 	color: var(--text-secondary);
-	font-size: 11.5px;
-	font-weight: 500;
-}
-.att-chip::before {
-	width: 6px;
-	height: 6px;
-	border-radius: 2px;
-	background: var(--att-skim);
-	content: '';
-}
-.att-chip[data-cls='read']::before {
-	background: var(--att-read);
-}
-.att-chip[data-cls='checked']::before {
-	background: var(--att-checked);
-}
-.att-chip[data-cls='tests']::before {
-	background: var(--att-tests);
 }

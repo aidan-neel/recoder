@@ -1,0 +1,196 @@
+/* The demo plays apps/app's own review surface, so it takes the app's styles for the parts it shows. */
+@import '../../../app/src/styles/common.css';
+@import '../../../app/src/styles/shell.css';
+@import '../../../app/src/styles/queue.css';
+@import '../../../app/src/styles/review.css';
+@import '../../../app/src/styles/review-overview.css';
+@import '../../../app/src/styles/decision.css';
+
+/* ───────── Hero tokens ───────── */
+/* The home page's entrance plays once per visit, so it runs longer than the app's everyday motion. */
+:root {
+	--dur-hero-word: 760ms;
+	--hero-word-delay: 80ms;
+	--hero-word-stagger: 36ms;
+	--dur-hero-rise: 800ms;
+	--hero-rise-delay: 520ms;
+	--hero-rise-stagger: 110ms;
+	--dur-hero-stage: 1300ms;
+	--hero-stage-delay: 760ms;
+	--dur-hero-glow: 14s;
+}
+
+/* ───────── Hero motion ───────── */
+/* The headline resolves word by word out of a blur. Only the home page moves on load. */
+.hero-word {
+	display: inline-block;
+	animation: hero-word var(--dur-hero-word) var(--ease-menu) both;
+	animation-delay: calc(var(--hero-word-delay) + var(--w, 0) * var(--hero-word-stagger));
+}
+@keyframes hero-word {
+	from {
+		opacity: 0;
+		filter: blur(8px);
+		transform: translateY(0.3em);
+	}
+	to {
+		opacity: 1;
+		filter: none;
+		transform: none;
+	}
+}
+/* The actions and the install line follow the last words. */
+.hero-rise {
+	animation: hero-rise var(--dur-hero-rise) var(--ease-menu) both;
+	animation-delay: calc(var(--hero-rise-delay) + var(--d, 0) * var(--hero-rise-stagger));
+}
+@keyframes hero-rise {
+	from {
+		opacity: 0;
+		filter: blur(4px);
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		filter: none;
+		transform: none;
+	}
+}
+/* The demo rises in after the headline. */
+.hero-stage {
+	position: relative;
+	margin-top: 56px;
+	animation: hero-stage-in var(--dur-hero-stage) var(--ease-menu) var(--hero-stage-delay) both;
+}
+@keyframes hero-stage-in {
+	from {
+		opacity: 0;
+		transform: translateY(48px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+/* A soft light behind the window that drifts slowly. */
+.hero-glow {
+	position: absolute;
+	top: -140px;
+	right: 0;
+	left: 0;
+	height: 560px;
+	background: radial-gradient(
+		55% 50% at 50% 45%,
+		color-mix(in oklab, var(--text-primary) 10%, transparent),
+		transparent 72%
+	);
+	filter: blur(40px);
+	pointer-events: none;
+	animation: hero-glow var(--dur-hero-glow) ease-in-out infinite alternate;
+}
+@keyframes hero-glow {
+	from {
+		transform: translate3d(-5%, 0, 0) scale(1);
+	}
+	to {
+		transform: translate3d(5%, 24px, 0) scale(1.08);
+	}
+}
+
+/* ───────── Demo window ───────── */
+/*
+ * Laid out at desktop size and scaled down to fit. Narrower stages lay it out
+ * at tablet, then phone size, each filling the stage, so it shrinks less and
+ * its text stays readable.
+ */
+.demo-stage {
+	position: relative;
+	z-index: 1;
+	width: 100%;
+	overflow: clip;
+	container-type: inline-size;
+}
+.demo-window {
+	position: relative;
+	display: flex;
+	width: 1200px;
+	height: 760px;
+	flex-direction: column;
+	overflow: hidden;
+	border: 1px solid var(--line-card);
+	border-radius: 18px;
+	background: var(--bg-chrome);
+	transform-origin: top left;
+	user-select: none;
+}
+@container (max-width: 900px) {
+	.demo-window {
+		width: max(720px, 100cqw);
+		height: 680px;
+	}
+	/* At tablet size the reading pane takes the whole card; the rail would leave it too narrow to read. */
+	.demo-window [data-ui='review-rail'] {
+		display: none;
+	}
+}
+/*
+ * At phone size the window drops what a 420px app cannot fit: the search
+ * field, the review header's meta, a queue row's meta past its end and the
+ * decision bar's stepper; long titles truncate sooner.
+ */
+@container (max-width: 600px) {
+	.demo-window {
+		width: max(420px, 100cqw);
+		height: 600px;
+	}
+	.demo-window [data-slot='search-trigger'],
+	.demo-window .review-meta,
+	.demo-window [data-ui='decide-bar'] > :last-child {
+		display: none;
+	}
+	.demo-window .queue-row-meta {
+		overflow: hidden;
+	}
+	.demo-window [data-ui='tab-title'] {
+		max-width: 110px;
+	}
+	.demo-window .review-title {
+		min-width: 0;
+	}
+}
+/* The handoff floats over the whole window, as a modal floats over the app. */
+.demo-layer {
+	position: absolute;
+	z-index: 10;
+	inset: 0;
+	pointer-events: none;
+}
+/*
+ * The loop fades the window out to its empty frame and back: a blank frame on
+ * top of everything fades in and out, so the window fades as one picture and
+ * nothing behind the handoff shows through it.
+ */
+.demo-cover {
+	position: absolute;
+	z-index: 20;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	pointer-events: none;
+	transition: opacity var(--dur-disclose) ease-out;
+}
+.demo-cover[data-shown='true'] {
+	opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.hero-word,
+	.hero-rise,
+	.hero-stage,
+	.hero-glow {
+		animation: none;
+	}
+	.demo-cover {
+		transition: none;
+	}
+}

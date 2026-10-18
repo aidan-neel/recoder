@@ -4,10 +4,10 @@
 	import * as Modal from '@sivir-ui/svelte/components/modal';
 	import { Progress } from '@sivir-ui/svelte/components/progress';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import type { ReviewMetrics, TokenAggregate } from '@recoder/shared';
+	import { appName, type ReviewMetrics, type TokenAggregate } from '@recoder/shared';
 	import UsageSkeleton from '../settings/usage-skeleton.svelte';
 	import { serverApi } from '$lib/api/server-api';
-	import { appName, modelLabel } from '$lib/settings/model-settings.svelte';
+	import { modelLabel } from '$lib/settings/model-settings.svelte';
 
 	let { reviewId }: { reviewId: string } = $props();
 

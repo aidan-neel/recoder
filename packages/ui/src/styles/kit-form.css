@@ -1,0 +1,172 @@
+/*
+ * kit: form fields. Inputs, textareas and the field around them, keyed on
+ * their data-ui hooks. Switches, checkboxes, radio cards and the sliding
+ * pills are in kit-form-choice.css. The rules sit in the components layer so
+ * a class passed to a component (a Tailwind utility) still wins over the
+ * kit's look.
+ */
+@layer components {
+	/* ───────── Fields: input frames and textareas share the fill, ring and focus halo ───────── */
+	[data-ui='input'],
+	[data-ui='textarea'] {
+		width: 100%;
+		background-color: var(--bg-field);
+		box-shadow: inset 0 0 0 1px var(--line-control);
+		color: var(--text-primary);
+		font-size: var(--font-size-body);
+		transition:
+			background-color var(--dur-menu) ease-out,
+			box-shadow var(--dur-menu) ease-out;
+	}
+	[data-ui='input']:hover:not(:focus-within, [data-invalid], [data-disabled]),
+	[data-ui='textarea']:hover:not(:focus, [data-invalid], :disabled) {
+		box-shadow: inset 0 0 0 1px var(--line-hover);
+	}
+	[data-ui='input']:focus-within,
+	[data-ui='textarea']:focus {
+		background-color: var(--bg-raised);
+		box-shadow:
+			inset 0 0 0 1px var(--line-focus),
+			0 0 0 3px rgb(var(--ink-rgb) / 0.06);
+	}
+	[data-ui='input'][data-invalid],
+	[data-ui='textarea'][data-invalid] {
+		box-shadow: inset 0 0 0 1px var(--danger);
+	}
+	[data-ui='input'][data-invalid]:focus-within,
+	[data-ui='textarea'][data-invalid]:focus {
+		box-shadow:
+			inset 0 0 0 1px var(--danger),
+			0 0 0 3px var(--danger-tint);
+	}
+	[data-ui='input-field']::placeholder,
+	[data-ui='textarea']::placeholder {
+		color: var(--text-faint);
+		opacity: 1;
+	}
+
+	/* ───────── Input: the ring and fill live on the frame; the native input is bare ───────── */
+	[data-ui='input'] {
+		display: flex;
+		height: var(--size-control-md);
+		align-items: center;
+		gap: 8px;
+		padding: 0 10px;
+		border-radius: 8px;
+		cursor: text;
+	}
+	[data-ui='input'][data-size='lg'] {
+		height: 40px;
+		gap: 10px;
+		padding: 0 12px 0 13px;
+		border-radius: 10px;
+		font-size: 14px;
+	}
+	[data-ui='input-field'] {
+		height: 100%;
+		min-width: 0;
+		flex: 1;
+		padding: 0;
+		border: 0;
+		background: transparent;
+		color: inherit;
+		font: inherit;
+		outline: none;
+	}
+	/* Autofill keeps the field's own colors instead of the browser's tint. */
+	[data-ui='input-field']:autofill {
+		-webkit-text-fill-color: var(--text-primary);
+		transition: background-color 600000s 0s;
+	}
+	/* Numbers and searches drop the browser's spinners and clear button. */
+	[data-ui='input-field'][type='number'] {
+		appearance: textfield;
+	}
+	[data-ui='input-field']::-webkit-inner-spin-button,
+	[data-ui='input-field']::-webkit-outer-spin-button,
+	[data-ui='input-field']::-webkit-search-cancel-button {
+		appearance: none;
+		margin: 0;
+	}
+	[data-ui='input-leading'],
+	[data-ui='input-trailing'] {
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-faint);
+	}
+	[data-ui='input-leading'] svg,
+	[data-ui='input-trailing'] svg {
+		width: 15px;
+		height: 15px;
+		stroke-width: 1.75;
+	}
+
+	/* ───────── Textarea: a line height of 20px a row ───────── */
+	[data-ui='textarea'] {
+		display: block;
+		min-height: calc(var(--textarea-min-rows, 3) * 20px + 16px);
+		padding: 8px 10px;
+		border: 0;
+		border-radius: 10px;
+		font: inherit;
+		font-size: var(--font-size-body);
+		line-height: 20px;
+		outline: none;
+		resize: vertical;
+	}
+	[data-ui='textarea'][data-autosize] {
+		field-sizing: content;
+		overflow-y: auto;
+		resize: none;
+	}
+	[data-ui='textarea'][data-max-rows] {
+		max-height: calc(var(--textarea-max-rows) * 20px + 16px);
+	}
+
+	/* ───────── Field: label above, hint or error below ───────── */
+	[data-ui='field'] {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+	}
+	[data-ui='field-label'] {
+		align-self: flex-start;
+		margin-bottom: 6px;
+		color: var(--text-secondary);
+		font-size: var(--font-size-label);
+		font-weight: 500;
+		line-height: 16px;
+	}
+	[data-ui='field-hint'],
+	[data-ui='field-error'] {
+		margin-top: 6px;
+		font-size: 12px;
+		line-height: 16px;
+		text-wrap: pretty;
+	}
+	[data-ui='field-hint'] {
+		color: var(--text-subtle);
+	}
+	[data-ui='field-error'] {
+		color: var(--danger);
+	}
+
+	/* ───────── Disabled: the field fades and the pointer says no ───────── */
+	[data-ui='input'][data-disabled],
+	[data-ui='input-field']:disabled,
+	[data-ui='textarea']:disabled {
+		cursor: not-allowed;
+	}
+	[data-ui='input'][data-disabled],
+	[data-ui='textarea']:disabled {
+		opacity: 0.4;
+	}
+}
+
+/* Keycaps inside a field sit on the hover fill so they read against the field. Unlayered, like the keycap rule. */
+[data-ui='input-trailing'] [data-ui='keycap'],
+[data-ui='input-leading'] [data-ui='keycap'] {
+	background-color: var(--bg-hover);
+}

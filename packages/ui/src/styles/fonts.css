@@ -1,0 +1,9 @@
+/* Self-hosted faces: Inter for the UI, Geist Mono for code and metadata, Lora for the AI voice. */
+@import '@fontsource/inter/latin-400.css';
+@import '@fontsource/inter/latin-500.css';
+@import '@fontsource/inter/latin-600.css';
+@import '@fontsource/geist-mono/latin-400.css';
+@import '@fontsource/geist-mono/latin-500.css';
+@import '@fontsource/lora/latin-400.css';
+@import '@fontsource/lora/latin-500.css';
+@import '@fontsource/lora/latin-400-italic.css';

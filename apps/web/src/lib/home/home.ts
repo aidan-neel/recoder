@@ -30,27 +30,6 @@ export function prStatus(review: Review | undefined): { tone: StatusTone; label:
 	return { tone: 'neutral', label: `${n} finding${n === 1 ? '' : 's'}` };
 }
 
-/** Compact age for the meta line: 5h, 1d, 3w. */
-export function shortAge(iso: string): string {
-	const t = Date.parse(iso);
-
-	if (Number.isNaN(t)) return '';
-
-	const minutes = Math.max(0, (Date.now() - t) / 60_000);
-
-	if (minutes < 60) return `${Math.max(1, Math.round(minutes))}m`;
-
-	const hours = minutes / 60;
-
-	if (hours < 24) return `${Math.round(hours)}h`;
-
-	const days = hours / 24;
-
-	if (days < 14) return `${Math.round(days)}d`;
-
-	return `${Math.round(days / 7)}w`;
-}
-
 export function dayPart(date = new Date()): HomeBriefRequest['dayPart'] {
 	const h = date.getHours();
 

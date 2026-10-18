@@ -73,6 +73,18 @@ export function writeGlobalGuidelines(content: string): GlobalGuidelines {
 	return readGlobalGuidelines();
 }
 
+/** Delete the saved global layer, so it reads as never saved and the defaults apply. */
+export function clearGlobalGuidelines(): GlobalGuidelines {
+	try {
+		unlinkSync(globalFile());
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code !== 'ENOENT')
+			throw new Error('Could not reset the global review guidelines', { cause: err });
+	}
+
+	return readGlobalGuidelines();
+}
+
 export function normalize(content: string): string {
 	const text = content.replace(/\r\n/g, '\n').trim();
 

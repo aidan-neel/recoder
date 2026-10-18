@@ -92,7 +92,10 @@ function streamFailure(event: ResponseEvent): LlmError {
 	const code = event.response?.error?.code ?? event.code;
 
 	if (code === 'usage_limit_reached' || code === 'rate_limit_exceeded')
-		return new LlmError(429, 'ChatGPT usage limit reached. See Settings → Models for reset times.');
+		return new LlmError(
+			429,
+			'ChatGPT usage limit reached. Wait for it to reset, or pick another model in Settings → Agent.'
+		);
 	if (code === 'context_length_exceeded')
 		return new LlmError(400, 'The review exceeds this ChatGPT model’s context window. Reduce the review scope.');
 	if (event.type === 'response.incomplete')

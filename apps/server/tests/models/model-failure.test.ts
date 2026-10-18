@@ -37,7 +37,7 @@ test('a raw endpoint error body never becomes the reason', () => {
 
 test('a ChatGPT 429 is an out-of-usage failure, not a retry', () => {
 	const failure = modelFailure(
-		new LlmError(429, 'ChatGPT usage limit reached. See Settings → Models for reset times.'),
+		new LlmError(429, 'ChatGPT usage limit reached. Wait for it to reset, or pick another model in Settings → Agent.'),
 		{ provider: 'codex' },
 		'fallback'
 	);

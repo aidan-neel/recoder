@@ -1,0 +1,20 @@
+/* Pieces several features share. */
+
+/* The AI-voice brief: the queue headline and page notices. */
+.brief {
+	font-size: 27px;
+	line-height: 1.38;
+	letter-spacing: -0.005em;
+	color: var(--text-brief-body);
+	text-wrap: pretty;
+}
+
+.page-notice {
+	display: flex;
+	flex-direction: column;
+	gap: 24px;
+	width: 100%;
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 96px 32px;
+}

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { FileDiff, Finding, Review } from '@recoder/shared';
 import { buildSurface } from '../../src/lib/review/surface';
+import { addedHunk } from '../fixtures';
 
 function added(path: string, count: number): FileDiff {
 	return {
@@ -27,16 +28,7 @@ function added(path: string, count: number): FileDiff {
 
 /** A file whose changes sit in two hunks: lines 10-14 and 80-89. */
 function twoHunks(path: string): FileDiff {
-	const hunk = (start: number, count: number) => ({
-		header: `@@ -${start},0 +${start},${count} @@`,
-		oldStart: start,
-		oldCount: 0,
-		newStart: start,
-		newCount: count,
-		lines: Array.from({ length: count }, (_, i) => ({ type: 'add' as const, oldNo: null, newNo: start + i, text: '' }))
-	});
-
-	return { path, additions: 15, deletions: 0, hunks: [hunk(10, 5), hunk(80, 10)] };
+	return { path, additions: 15, deletions: 0, hunks: [addedHunk(10, 5), addedHunk(80, 10)] };
 }
 
 function finding(
@@ -139,6 +131,13 @@ describe('buildSurface', () => {
 		]);
 
 		expect(surface.attention.read).toBe(6);
+	});
+
+	test('marks no file checked while a review without a context record is still running', () => {
+		const surface = buildSurface(review([], { status: 'running' }), [added('src/a.ts', 4)]);
+
+		expect(surface.files.map((file) => [file.cls, file.examined])).toEqual([['read', false]]);
+		expect(surface.attention.checked).toBe(0);
 	});
 
 	test('turns unresolved questions into decisions and disproved ones into receipts', () => {

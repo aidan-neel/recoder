@@ -174,7 +174,10 @@ export class ChatGptProvider {
 		if (response.ok) return;
 		await response.body?.cancel();
 		if (response.status === 429)
-			throw new LlmError(429, 'ChatGPT usage limit reached. See Settings → Models for reset times.');
+			throw new LlmError(
+				429,
+				'ChatGPT usage limit reached. Wait for it to reset, or pick another model in Settings → Agent.'
+			);
 		if (response.status === 403)
 			throw new LlmError(403, 'ChatGPT denied access. Check model access and workspace permissions.');
 		throw new LlmError(

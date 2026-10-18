@@ -1,17 +1,9 @@
-import { EFFORT_TEXT } from '@recoder/shared';
-import type {
-	ModelEntry,
-	ModelProvider,
-	Provider,
-	ModelSettings,
-	ModelSettingsPatch,
-	ReasoningEffort
-} from '@recoder/shared';
+import { appName, defaultEffort, EFFORT_TEXT, looksLikeModelId, prettyModelName, resolveEffort } from '@recoder/shared';
+import type { ModelEntry, Provider, ModelSettings, ModelSettingsPatch, ReasoningEffort } from '@recoder/shared';
 import { errorToast } from '../shell/notify';
 import { readCache, writeCache } from '../shell/persisted-cache';
 import { cacheableModelSettings } from './model-cache';
 import { serverApi } from '../api/server-api';
-import { looksLikeModelId, prettyModelName } from './model-name';
 
 interface EffortOption {
 	id: ReasoningEffort;
@@ -31,13 +23,6 @@ export interface ModelOption {
 	defaultEffort: ReasoningEffort | null;
 	/** Tokens per request, when the endpoint reported it. */
 	contextWindow: number | null;
-}
-
-/** 131072 → "128K", 1048576 → "1M". */
-export function formatContextWindow(tokens: number): string {
-	if (tokens >= 1024 * 1024) return `${Math.round((tokens / (1024 * 1024)) * 10) / 10}M`;
-
-	return `${Math.round(tokens / 1024)}K`;
 }
 
 export interface ModelChoice {
@@ -60,18 +45,6 @@ const HOSTED_NAMES: Record<string, string> = {
 	opencode: 'OpenCode Zen',
 	openrouter: 'OpenRouter'
 };
-
-/** Providers that are an app or CLI rather than an endpoint, by the name people know them by. */
-const APP_NAMES: Partial<Record<ModelProvider, string>> = {
-	codex: 'ChatGPT',
-	'claude-code': 'Claude Code',
-	devin: 'Devin'
-};
-
-/** ChatGPT or Claude Code for those providers; null for an endpoint or an OpenCode provider. */
-export function appName(provider: ModelProvider | undefined): string | null {
-	return (provider && APP_NAMES[provider]) || null;
-}
 
 export function providerName(entry: ModelEntry): string {
 	const app = appName(entry.provider);
@@ -98,14 +71,6 @@ export function providerName(entry: ModelEntry): string {
 export function toModelOption(entry: ModelEntry): ModelOption {
 	const efforts = entry.efforts?.length ? entry.efforts : null;
 
-	const defaultEffort = efforts
-		? entry.defaultEffort && efforts.includes(entry.defaultEffort)
-			? entry.defaultEffort
-			: efforts.includes('medium')
-				? 'medium'
-				: efforts[0]
-		: null;
-
 	return {
 		id: entry.id,
 		displayName: displayName(entry),
@@ -117,7 +82,7 @@ export function toModelOption(entry: ModelEntry): ModelOption {
 				label: EFFORT_TEXT[id].label,
 				description: EFFORT_TEXT[id].description
 			})) ?? null,
-		defaultEffort,
+		defaultEffort: defaultEffort(entry),
 		contextWindow: entry.contextWindow ?? null
 	};
 }
@@ -146,16 +111,6 @@ export function modelLabel(modelId: string | null | undefined): string {
 	if (entry) return toModelOption(entry).displayName;
 
 	return prettyModelName(modelId);
-}
-
-/** Keep an effort only when the model offers it; otherwise use the model default. */
-export function resolveEffort(
-	model: ModelOption | undefined,
-	effort: ReasoningEffort | null | undefined
-): ReasoningEffort | null {
-	if (!model?.efforts) return null;
-
-	return effort && model.efforts.some((option) => option.id === effort) ? effort : model.defaultEffort;
 }
 
 export type SettingsSection = 'models' | 'connections' | 'harness' | 'guidelines' | 'appearance';

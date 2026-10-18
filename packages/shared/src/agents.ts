@@ -73,3 +73,12 @@ export interface AgentOAuthAttempt {
 }
 
 export type AgentOAuthStatus = { status: 'pending' } | { status: 'complete' } | { status: 'failed'; message: string };
+
+/** True when the prompt's `when` condition holds for the answers given so far. */
+export function promptShown(prompt: AgentAuthPrompt, answers: Record<string, string>): boolean {
+	if (!prompt.when) return true;
+
+	const value = answers[prompt.when.key] ?? '';
+
+	return prompt.when.op === 'eq' ? value === prompt.when.value : value !== prompt.when.value;
+}

@@ -3,7 +3,8 @@
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import * as HoverCard from '@sivir-ui/svelte/components/hover-card';
 	import ProviderMark from '$lib/components/settings/provider-mark.svelte';
-	import { prStatus, shortAge, type BriefPick } from '$lib/home/home';
+	import { shortAge } from '@recoder/shared';
+	import { prStatus, type BriefPick } from '$lib/home/home';
 	import { hostedUrl } from '$lib/shell/links';
 
 	interface Props {

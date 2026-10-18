@@ -16,6 +16,9 @@ export type Tone = 'high' | 'medium' | 'low' | 'question';
 /** What a person decided about one item; `open` until they act. */
 export type DecisionState = 'open' | 'accepted' | 'sent' | 'dismissed';
 
+/** How a decision ends: accepted, sent back to the agent, or not an issue. */
+export type Outcome = Exclude<DecisionState, 'open'>;
+
 /** A command the reviewer ran and what it printed. */
 export interface Evidence {
 	command: string | null;
@@ -70,7 +73,7 @@ export interface Receipt {
 	partitions: { label: string; input: string; expected: string }[];
 }
 
-export interface SurfaceFile {
+interface SurfaceFile {
 	path: string;
 	additions: number;
 	deletions: number;
@@ -282,11 +285,15 @@ function byAttention(a: Decision, b: Decision): number {
 	);
 }
 
-/** Paths any reviewer was given or read; null when the review kept no context record. */
+/**
+ * Paths any reviewer was given or read. A finished review that kept no context
+ * record returns null (every file counts as examined); an unfinished one has
+ * examined nothing yet, so its files are not shown as checked.
+ */
 function examinedPaths(review: Review): Set<string> | null {
 	const context = review.context;
 
-	if (!context) return null;
+	if (!context) return review.status === 'passed' ? null : new Set();
 
 	const paths = new Set<string>();
 

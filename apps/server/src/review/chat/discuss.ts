@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { DiscussMessage } from '@recoder/shared';
+import { MAX_CHAT_MESSAGE_CHARS, MAX_QUESTION_CHARS, type DiscussMessage } from '@recoder/shared';
 import { readExcerpt } from '../pipeline/harness.js';
 import {
 	asLlmError,
@@ -106,12 +106,12 @@ export function streamDiscussFinding(input: DiscussInput, onToken: (text: string
 
 const discussHistorySchema = z.object({
 	role: z.enum(['user', 'assistant']),
-	body: z.string().min(1).max(8000)
+	body: z.string().min(1).max(MAX_CHAT_MESSAGE_CHARS)
 });
 
 export const discussRequestSchema = z.object({
 	agent: z.string().min(1).max(50),
 	finding: findingRequestSchema,
 	history: z.array(discussHistorySchema).max(50).default([]),
-	question: z.string().min(1).max(4000)
+	question: z.string().min(1).max(MAX_QUESTION_CHARS)
 });

@@ -7,6 +7,7 @@ const API = { id: 'sample-repo', name: 'acme/api' };
 const WEB = { id: 'sample-web', name: 'acme/web' };
 
 function pull(
+	repo: { name: string },
 	number: number,
 	title: string,
 	author: string,
@@ -16,7 +17,7 @@ function pull(
 	return {
 		number,
 		title,
-		url: `https://github.com/acme/api/pull/${number}`,
+		url: `https://github.com/${repo.name}/pull/${number}`,
 		author,
 		base: 'main',
 		headRef: `agent/pr-${number}`,
@@ -56,26 +57,26 @@ export function sampleQueue(): QueueEntry[] {
 		queueEntry(API, SAMPLE_PULL, SAMPLE_REVIEW, readDecisions(SAMPLE_REVIEW.id, SAMPLE_REVIEW.headSha)),
 		queueEntry(
 			API,
-			pull(211, 'Move session storage from Redis to Postgres', 'codex[bot]', 1, [418, 233, 14]),
+			pull(API, 211, 'Move session storage from Redis to Postgres', 'codex[bot]', 1, [418, 233, 14]),
 			review(211, 'running', []),
 			{}
 		),
 		queueEntry(
 			WEB,
-			pull(207, 'Retry failed webhook deliveries with backoff', 'claude[bot]', 3, [96, 12, 4]),
+			pull(WEB, 207, 'Retry failed webhook deliveries with backoff', 'claude[bot]', 3, [96, 12, 4]),
 			review(207, 'passed', ['warning']),
 			{}
 		),
-		queueEntry(WEB, pull(205, 'Add CSV export to the billing page', 'claude[bot]', 5, [143, 8, 6]), null, {}),
+		queueEntry(WEB, pull(WEB, 205, 'Add CSV export to the billing page', 'claude[bot]', 5, [143, 8, 6]), null, {}),
 		queueEntry(
 			API,
-			pull(198, 'Cache project lists per organization', 'devin[bot]', 26, [61, 19, 3]),
+			pull(API, 198, 'Cache project lists per organization', 'devin[bot]', 26, [61, 19, 3]),
 			review(198, 'passed', ['error'], 'old'),
 			{}
 		),
 		queueEntry(
 			WEB,
-			pull(202, 'Debounce search requests in the command bar', 'claude[bot]', 7, [38, 11, 2]),
+			pull(WEB, 202, 'Debounce search requests in the command bar', 'claude[bot]', 7, [38, 11, 2]),
 			review(202, 'passed', ['warning', 'info']),
 			{
 				'202-0': { state: 'sent', note: '', at: 0 },
@@ -84,7 +85,7 @@ export function sampleQueue(): QueueEntry[] {
 		),
 		queueEntry(
 			API,
-			pull(209, 'Bump eslint to v10 and fix new lint errors', 'renovate[bot]', 9, [57, 49, 11]),
+			pull(API, 209, 'Bump eslint to v10 and fix new lint errors', 'renovate[bot]', 9, [57, 49, 11]),
 			review(209, 'passed', []),
 			{}
 		)
@@ -92,4 +93,4 @@ export function sampleQueue(): QueueEntry[] {
 }
 
 /** Live task counts for the sample's running review. */
-export const SAMPLE_PROGRESS = { 'sample-211': { tasksDone: 4, tasksTotal: 7 } };
+export const SAMPLE_PROGRESS = { 'sample-211': { tasksDone: 4, tasksTotal: 7, agents: 3 } };

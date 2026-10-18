@@ -65,7 +65,7 @@ function reviewConfig(): { baseUrl: string; apiKey: string; model: string } {
 	});
 
 	if (!parsed.success) {
-		throw new ModelConfigError('No model is set up. Add one in Settings → Models.');
+		throw new ModelConfigError('No model is set up. Pick one in Settings → Agent.');
 	}
 
 	return parsed.data;
@@ -216,7 +216,7 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 		if (hosted) {
 			const apiKey = stored.connections?.[hosted.id]?.apiKey;
 
-			if (!apiKey) throw new ModelConfigError(`${hosted.name} isn't connected. Connect it in Settings → Models.`);
+			if (!apiKey) throw new ModelConfigError(`${hosted.name} isn't connected. Connect it in Settings → Agent.`);
 
 			return { source: hosted.id, baseUrl: hosted.baseUrl, apiKey, model: entry.model, reasoningEffort, runtime };
 		}
@@ -224,7 +224,7 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 		const baseUrl = entry.baseUrl || eff.baseUrl;
 		const apiKey = entry.apiKey || eff.apiKey;
 
-		if (!baseUrl) throw new ModelConfigError(`${entry.label} has no endpoint. Set a base URL in Settings → Models.`);
+		if (!baseUrl) throw new ModelConfigError(`${entry.label} has no endpoint. Pick another model in Settings → Agent.`);
 
 		return { baseUrl, apiKey, model: entry.model, reasoningEffort, runtime };
 	}

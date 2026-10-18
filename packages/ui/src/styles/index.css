@@ -1,0 +1,16 @@
+/*
+ * The kit's stylesheet. An app imports Tailwind first, then this file, then
+ * adds `@source` for packages/ui/src so the kit's classes are generated.
+ */
+@import './fonts.css';
+@import './tokens.css';
+@import './base.css';
+@import './components.css';
+@import './kit-overlay.css';
+@import './kit-menu.css';
+@import './kit-form.css';
+@import './kit-form-choice.css';
+@import './kit-display.css';
+@import './kit-content.css';
+
+@custom-variant dark (&:where(.dark, .dark *));

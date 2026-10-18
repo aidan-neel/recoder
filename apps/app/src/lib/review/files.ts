@@ -65,3 +65,8 @@ export function readingLines(
 
 	return keys;
 }
+
+/** True for a file the change creates: every hunk starts from nothing on the old side. */
+export function isNewFile(file: FileDiff): boolean {
+	return file.hunks.length > 0 && file.hunks.every((hunk) => hunk.oldStart === 0 && hunk.oldCount === 0);
+}

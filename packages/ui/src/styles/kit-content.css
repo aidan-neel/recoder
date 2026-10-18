@@ -1,0 +1,381 @@
+/* kit: content. Code excerpts, code blocks, syntax colors and Markdown, keyed on data-ui hooks. */
+
+/* ───────── Code excerpt (CodeLines) ───────── */
+[data-ui='code-lines'] {
+	--code-columns: 44px 44px 18px minmax(max-content, 1fr);
+	--code-gutter: 106px;
+}
+[data-ui='code-lines'][data-numbers='new'] {
+	--code-columns: 44px 18px minmax(max-content, 1fr);
+	--code-gutter: 62px;
+}
+/* The body is as wide as its longest line, so every row's tint spans the scroll width. */
+[data-ui='code-lines-body'] {
+	width: max-content;
+	min-width: 100%;
+	padding: 6px 0;
+}
+
+/* A row's hover wash sits over its add/del tint and fades like the kit's other list highlights. */
+@property --code-line-wash {
+	syntax: '<color>';
+	inherits: false;
+	initial-value: transparent;
+}
+[data-ui='code-line'] {
+	display: grid;
+	min-height: 22px;
+	grid-template-columns: var(--code-columns);
+	background-image: linear-gradient(var(--code-line-wash), var(--code-line-wash));
+	transition: --code-line-wash var(--dur-hover) ease-out;
+}
+[data-ui='code-line'][data-clickable]:hover {
+	--code-line-wash: rgb(var(--wash-rgb) / 0.05);
+}
+[data-ui='code-line-number'] {
+	padding-right: 12px;
+	color: var(--text-ghost);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	user-select: none;
+}
+[data-ui='code-line-sign'] {
+	color: var(--text-ghost);
+	text-align: center;
+	user-select: none;
+}
+[data-ui='code-line-text'] {
+	display: block;
+	min-width: 0;
+	padding-right: 16px;
+	white-space: pre;
+}
+
+[data-ui='code-line'][data-type='add'] {
+	background-color: var(--diff-add);
+}
+[data-ui='code-line'][data-type='del'] {
+	background-color: var(--diff-del);
+}
+[data-ui='code-line'][data-type='add'] > [data-ui='code-line-number'] {
+	background-color: var(--diff-add-gutter);
+}
+[data-ui='code-line'][data-type='del'] > [data-ui='code-line-number'] {
+	background-color: var(--diff-del-gutter);
+}
+[data-ui='code-line'][data-type='add'] > [data-ui='code-line-sign'] {
+	color: var(--success);
+}
+[data-ui='code-line'][data-type='del'] > [data-ui='code-line-sign'] {
+	color: var(--danger);
+}
+/* Lines a decision points at: an amber wash and a 2px bar. */
+[data-ui='code-line'][data-flagged] {
+	background-color: var(--diff-focus);
+	box-shadow: inset 2px 0 0 var(--sev-medium-solid);
+}
+
+/* A new file is all additions: the green says nothing, so it steps back. */
+[data-ui='code-lines'][data-fresh] [data-ui='code-line'][data-type='add']:not([data-flagged]),
+[data-ui='code-lines'][data-fresh] [data-ui='code-line'][data-type='add'] > [data-ui='code-line-number'] {
+	background-color: transparent;
+}
+[data-ui='code-lines'][data-fresh] [data-ui='code-line-number'] {
+	color: var(--text-faint);
+}
+[data-ui='code-lines'][data-fresh] [data-ui='code-line'][data-type='add'] > [data-ui='code-line-sign'] {
+	color: var(--text-ghost);
+}
+
+/* "N lines above": the label lines up with the code. */
+[data-ui='code-lines-gap'] {
+	display: flex;
+	height: 22px;
+	align-items: center;
+	padding-left: var(--code-gutter);
+	color: var(--text-faint);
+	font-family: var(--font-ui);
+	font-size: 11.5px;
+	user-select: none;
+}
+/* Content under a line, aligned with the code. Zero width keeps it out of the body's width. */
+[data-ui='code-line-note'] {
+	width: 0;
+	min-width: 100%;
+	padding: 4px 16px 8px var(--code-gutter);
+	font-family: var(--font-ui);
+	white-space: normal;
+}
+
+/* ───────── Code block ───────── */
+[data-ui='code-block-content'] {
+	max-height: min(32rem, 70vh);
+	margin: 0;
+	padding: 12px;
+	overflow: auto;
+	white-space: pre;
+}
+/*
+ * Variants match the block's state inside :where(), so they weigh no more than
+ * the part they restyle and one class from the page (`.install-command …`) wins.
+ */
+:where([data-ui='code-block'][data-wrap]) [data-ui='code-block-content'] {
+	overflow-x: hidden;
+	overflow-wrap: anywhere;
+	white-space: pre-wrap;
+}
+:where([data-ui='code-block'][data-copy][data-layout='single-line']) [data-ui='code-block-content'] {
+	padding-right: 44px;
+}
+/* Copy sits at the top right, centred on a one-line block; it shows on hover or focus, and while it confirms. */
+[data-ui='code-block-copy'] {
+	position: absolute;
+	top: 7px;
+	right: 7px;
+	opacity: 0;
+	transition: opacity var(--dur-hover) ease-out;
+}
+:where([data-ui='code-block'][data-layout='single-line']) [data-ui='code-block-copy'] {
+	top: 50%;
+	translate: 0 -50%;
+}
+:where([data-ui='code-block']:hover) [data-ui='code-block-copy'],
+[data-ui='code-block-copy']:focus-within,
+[data-ui='code-block-copy']:has([data-status='success'], [data-status='error']) {
+	opacity: 1;
+}
+@media (hover: none) {
+	[data-ui='code-block-copy'] {
+		opacity: 1;
+	}
+}
+
+/* Code inside the kit's blocks never takes the inline-code chip (`.ai-voice code`). */
+[data-ui='code-block'] code,
+[data-ui='code-lines'] code {
+	padding: 0;
+	border-radius: 0;
+	background: none;
+	font-family: inherit;
+	font-size: inherit;
+}
+[data-ui='code-line-text']::selection,
+[data-ui='code-line-text'] ::selection,
+[data-ui='code-block-content'] ::selection {
+	background-color: color-mix(in oklab, var(--selection-bar) 34%, transparent);
+	color: inherit;
+}
+
+/* ───────── Syntax colors (highlight.js classes on the --syn-* tokens) ───────── */
+:is([data-ui='code-lines'], [data-ui='code-block'])
+	:is(
+		.hljs-keyword,
+		.hljs-selector-tag,
+		.hljs-literal,
+		.hljs-section,
+		.hljs-link,
+		.hljs-doctag,
+		.hljs-number,
+		.hljs-symbol,
+		.hljs-bullet
+	) {
+	color: var(--syn-keyword);
+}
+:is([data-ui='code-lines'], [data-ui='code-block']) .hljs-title {
+	color: var(--syn-function);
+}
+:is([data-ui='code-lines'], [data-ui='code-block'])
+	:is(
+		.hljs-type,
+		.hljs-built_in,
+		.hljs-attr,
+		.hljs-attribute,
+		.hljs-name,
+		.hljs-selector-pseudo,
+		.hljs-title.class_,
+		.hljs-class .hljs-title
+	) {
+	color: var(--syn-type);
+}
+:is([data-ui='code-lines'], [data-ui='code-block']) :is(.hljs-string, .hljs-regexp, .hljs-template-tag) {
+	color: var(--syn-string);
+}
+:is([data-ui='code-lines'], [data-ui='code-block']) :is(.hljs-comment, .hljs-quote) {
+	color: var(--syn-comment);
+}
+:is([data-ui='code-lines'], [data-ui='code-block']) :is(.hljs-meta, .hljs-meta .hljs-keyword) {
+	color: var(--text-subtle);
+}
+:is([data-ui='code-lines'], [data-ui='code-block']) .hljs-addition {
+	color: var(--success);
+}
+:is([data-ui='code-lines'], [data-ui='code-block']) .hljs-deletion {
+	color: var(--danger);
+}
+:is([data-ui='code-lines'], [data-ui='code-block']) .hljs-emphasis {
+	font-style: italic;
+}
+:is([data-ui='code-lines'], [data-ui='code-block']) .hljs-strong {
+	font-weight: 500;
+}
+
+/* ───────── Markdown ───────── */
+[data-ui='markdown'] > :first-child {
+	margin-top: 0;
+}
+[data-ui='markdown'] > :last-child {
+	margin-bottom: 0;
+}
+[data-ui='markdown'] :where(p) {
+	margin: 0.6em 0;
+	text-wrap: pretty;
+}
+[data-ui='markdown'] :where(h1, h2, h3, h4, h5, h6) {
+	margin: 1.1em 0 0.45em;
+	font-weight: 600;
+	letter-spacing: -0.005em;
+	line-height: 1.3;
+	text-wrap: balance;
+}
+[data-ui='markdown'] :where(h1) {
+	font-size: 1.3em;
+}
+[data-ui='markdown'] :where(h2) {
+	font-size: 1.15em;
+}
+[data-ui='markdown'] :where(h3) {
+	font-size: 1.05em;
+}
+[data-ui='markdown'] :where(h4, h5, h6) {
+	font-size: 1em;
+}
+[data-ui='markdown'] :where(h6) {
+	color: var(--text-muted);
+}
+[data-ui='markdown'] :where(strong, b) {
+	font-weight: 600;
+}
+/* Lora ships 400 and 500: heavier weights would be faked. */
+[data-ui='markdown'][data-variant='ai'] :where(h1, h2, h3, h4, h5, h6, strong, b) {
+	font-weight: 500;
+}
+[data-ui='markdown'] :where(em, i) {
+	font-style: italic;
+}
+[data-ui='markdown'] :where(del) {
+	text-decoration: line-through;
+	text-decoration-color: var(--text-faint);
+}
+
+[data-ui='markdown'] :where(ul, ol) {
+	margin: 0.6em 0;
+	padding-left: 1.2em;
+}
+[data-ui='markdown'] :where(ul) {
+	list-style: disc;
+}
+[data-ui='markdown'] :where(ol) {
+	list-style: decimal;
+}
+[data-ui='markdown'] :where(li) {
+	margin: 0.2em 0;
+	padding-left: 0.15em;
+}
+[data-ui='markdown'] :where(li)::marker {
+	color: var(--text-faint);
+}
+[data-ui='markdown'] :where(li > p, li > ul, li > ol) {
+	margin: 0.2em 0;
+}
+[data-ui='markdown'] :where(.contains-task-list) {
+	padding-left: 0.2em;
+	list-style: none;
+}
+[data-ui='markdown'] :where(.task-list-item > input) {
+	margin: 0 0.5em 0 0;
+	accent-color: var(--primary);
+	vertical-align: -0.1em;
+}
+
+[data-ui='markdown'] :where(a) {
+	border-radius: 3px;
+	color: var(--text-primary);
+	text-decoration: underline;
+	text-decoration-color: var(--line-hover);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+	transition: text-decoration-color var(--dur-hover) ease-out;
+}
+[data-ui='markdown'] :where(a):hover {
+	text-decoration-color: currentColor;
+}
+[data-ui='markdown'] :where(a):focus-visible {
+	outline: none;
+	box-shadow: var(--focus-ring);
+}
+[data-ui='markdown'] .inline-code {
+	font-size: 0.88em;
+}
+[data-ui='markdown'][data-variant='ai'] .inline-code {
+	font-size: 0.8em;
+}
+
+[data-ui='markdown'] :where(blockquote) {
+	margin: 0.6em 0;
+	padding-left: 12px;
+	border-left: 2px solid var(--line-strong);
+	color: var(--text-muted);
+}
+[data-ui='markdown'] :where(hr) {
+	margin: 1.1em 0;
+	border: 0;
+	border-top: 1px solid var(--line-card);
+}
+[data-ui='markdown'] :where([data-ui='code-block']) {
+	margin: 0.75em 0;
+}
+
+[data-ui='markdown'] :where([data-ui='markdown-table']) {
+	margin: 0.75em 0;
+	overflow-x: auto;
+}
+[data-ui='markdown'] :where(table) {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.925em;
+}
+[data-ui='markdown'] :where(th, td) {
+	padding: 6px 10px;
+	border: 1px solid var(--line-card);
+	text-align: left;
+	vertical-align: top;
+}
+[data-ui='markdown'] :where(th) {
+	background: rgb(var(--wash-rgb) / 0.03);
+	font-weight: 500;
+}
+
+/* The streaming caret: 2px, blinking once a second; it holds still under reduced motion. */
+[data-ui='markdown-caret'] {
+	display: inline-block;
+	width: 2px;
+	height: 1em;
+	margin-left: 2px;
+	background: currentColor;
+	vertical-align: -0.12em;
+	animation: ui-caret-blink var(--dur-caret) steps(1) infinite;
+}
+@keyframes ui-caret-blink {
+	50% {
+		opacity: 0;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	[data-ui='markdown-caret'] {
+		animation: none;
+	}
+	[data-ui='code-line'] {
+		transition: none;
+	}
+}

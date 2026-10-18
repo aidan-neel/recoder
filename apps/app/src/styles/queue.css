@@ -1,19 +1,269 @@
-/* ───────── Queue: apps/web's Home list, sorted by what needs a decision ───────── */
+/* ───────── Queue: a centred reading column of open pull requests ───────── */
+.queue-column {
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 920px;
+	margin: 0 auto;
+	padding: 56px 40px 40px;
+}
+@media (max-width: 640px) {
+	.queue-column {
+		padding: 32px 16px;
+	}
+}
+
 .queue-brief {
+	position: relative;
 	margin: 12px 0 44px;
 }
-.queue-section + .queue-section {
-	margin-top: 36px;
+
+/* A refresh failed after a good load: one quiet line in the top padding, so nothing below moves. */
+.queue-stale {
+	position: absolute;
+	top: 14px;
+	right: 40px;
+	left: 40px;
+	display: flex;
+	height: 28px;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-subtle);
+	font-size: 12.5px;
 }
-.queue-empty-actions {
+@media (max-width: 640px) {
+	.queue-stale {
+		top: 2px;
+		right: 16px;
+		left: 16px;
+	}
+}
+
+/* ───────── Section heads: the list's top border sits under each one ───────── */
+.queue-head {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-top: 36px;
+	padding: 0 4px 10px;
+	border-bottom: 1px solid var(--line-subtle);
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	font-weight: 400;
+	line-height: 1.4;
+	transition: border-color var(--dur-highlight) ease-out;
+}
+.queue-head[data-first] {
+	margin-top: 0;
+}
+
+/* ───────── Rows ───────── */
+.queue-list {
+	display: flex;
+	flex-direction: column;
+}
+.queue-list > [data-ui='hover-list-highlight'].queue-hover {
+	background-color: var(--bg-raised);
+	box-shadow: none;
+}
+/* The highlight cannot follow a spring, so it steps out while rows move and comes back on the row under the pointer. */
+.queue-list:has(.queue-row[data-shifting]) > [data-ui='hover-list-highlight'].queue-hover {
+	opacity: 0;
+	transition: none;
+}
+/* The skeleton's dividers wait out the same 200ms as its bars, on the kit's own hold. */
+.queue-skeleton {
+	animation: ui-skeleton-hold 1ms linear var(--skeleton-delay) backwards;
+}
+.queue-skeleton-list {
+	display: flex;
+	flex-direction: column;
+	border-top: 1px solid var(--line-subtle);
+}
+.queue-row {
+	--row-button-radius: 10px;
+
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 14px 12px;
+	border-bottom: 1px solid var(--line-subtle);
+	outline: none;
+	scroll-margin-block: 24px;
+	transition:
+		border-color var(--dur-highlight) ease-out,
+		background-color var(--dur-highlight) ease-out;
+}
+
+/* A row sliding to a new place paints over the row fading in where it was; one springing to another section also over the heads it passes. */
+.queue-row[data-shifting] {
+	background-color: var(--bg-canvas);
+	transition: none;
+}
+.queue-row[data-crossing] {
+	z-index: 2;
+}
+
+/* The selected row (j, k) takes the raised fill with a hairline ring; the dividers beside it and a hovered row step aside. */
+.queue-row[data-selected] {
+	border-radius: 10px;
+	background-color: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-subtle-2);
+}
+.queue-row:is(:hover, [data-selected]),
+.queue-list > :has(+ .queue-row:is(:hover, [data-selected])) {
+	border-bottom-color: transparent;
+}
+.queue-row-glyph {
+	align-self: flex-start;
+	margin-top: 3px;
+}
+
+/* The title (a kit RowButton in cover mode) covers the whole row; it keeps its own width, so the number follows it. */
+[data-ui='row-button'].queue-row-title {
+	width: auto;
+	color: var(--text-primary);
+	font-size: 14.5px;
+	line-height: 22px;
+	cursor: pointer;
+}
+
+.queue-row-meta {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 8px;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	line-height: 17px;
+	white-space: nowrap;
+}
+.queue-row-author {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+}
+
+/* ───────── Running rows: a note and a 64px meter ───────── */
+.queue-row-progress {
+	display: flex;
+	height: 15px;
+	align-items: center;
+	gap: 10px;
+	color: var(--text-faint);
+	font-size: 12px;
+}
+[data-ui='meter'].queue-row-meter {
+	--meter-fill: var(--text-secondary);
+
+	width: 64px;
+	flex-shrink: 0;
+	background-color: var(--line-tab);
+}
+
+/* ───────── The right edge: the pill at rest, the action on hover, focus or selection ───────── */
+.queue-row-side {
+	position: relative;
+	z-index: 1;
+	display: grid;
+	flex-shrink: 0;
+	align-items: center;
+	justify-items: end;
+}
+.queue-row-side > * {
+	grid-area: 1 / 1;
+}
+.queue-row-rest {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	pointer-events: none;
+	transition: opacity var(--dur-hover) ease-out;
+}
+.queue-pill-slot {
+	position: relative;
+	display: flex;
+}
+[data-ui='pill'].queue-pill {
+	padding: 3px 8px;
+	border-radius: 6px;
+	font-size: 12px;
+	font-weight: 400;
+	line-height: 1.35;
+}
+[data-ui='pill'].queue-pill[data-tone='neutral'] {
+	--pill-fg: var(--text-muted);
+	--pill-bg: rgb(var(--wash-rgb) / 0.06);
+}
+.queue-row-actions {
 	display: flex;
 	gap: 8px;
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		opacity var(--dur-hover) ease-out,
+		translate var(--dur-toggle) var(--ease-menu);
+	translate: 6px 0;
 }
-[data-ui='badge'].status-chip[data-tone='medium'] {
-	color: var(--sev-medium);
-	background-color: var(--sev-medium-tint);
+.queue-row:is(:hover, :focus-within, [data-selected], [data-phase='starting']) .queue-row-actions {
+	opacity: 1;
+	pointer-events: auto;
+	translate: 0 0;
 }
-[data-ui='badge'].status-chip[data-tone='sent'] {
-	color: var(--sent);
-	background-color: var(--sent-tint);
+.queue-row[data-selected] .queue-row-actions {
+	transition-duration: var(--dur-hover);
+}
+.queue-row:is(:hover, :focus-within, [data-selected], [data-phase='starting']) .queue-row-rest {
+	opacity: 0;
+}
+[data-ui='button'].queue-row-btn {
+	height: 30px;
+	min-width: 84px;
+	padding: 0 8px 0 12px;
+	border-radius: 8px;
+	font-size: 13px;
+	font-weight: 500;
+}
+[data-ui='button'][data-variant='outline'].queue-row-btn {
+	color: var(--text-muted);
+}
+
+/* ───────── Assignees: a tiny overlapping stack on the title line ───────── */
+.queue-people {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	align-self: center;
+}
+.queue-avatar {
+	display: inline-grid;
+	width: 16px;
+	height: 16px;
+	overflow: hidden;
+	place-items: center;
+	border-radius: 999px;
+	background-color: var(--bg-hover);
+	box-shadow: 0 0 0 1.5px var(--bg-canvas);
+	color: var(--text-secondary);
+	font-size: 7.5px;
+	font-weight: 600;
+	line-height: 1;
+}
+.queue-avatar + .queue-avatar {
+	margin-left: -5px;
+}
+.queue-avatar img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+.queue-people-more {
+	margin-left: 3px;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 10px;
 }

@@ -4,6 +4,9 @@ import type { Provider } from './repo';
 export const GUIDELINES_PATH = '.recoder/REVIEW.md';
 export const MAX_GUIDELINES_CHARS = 8000;
 
+/** The longest instruction the server takes for a guidelines draft. */
+export const MAX_GUIDELINES_PROMPT_CHARS = 4000;
+
 export interface GlobalGuidelines {
 	content: string;
 	updatedAt: string | null;

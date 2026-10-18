@@ -1,0 +1,235 @@
+/* settings */
+
+/* ───────── Page: the section nav beside the open section ───────── */
+.settings-page {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+}
+.settings-nav {
+	display: flex;
+	width: 224px;
+	flex-shrink: 0;
+	flex-direction: column;
+	border-right: 1px solid var(--line-divider);
+	background: var(--bg-rail);
+}
+.settings-nav-title {
+	color: var(--text-subtle);
+	font-size: 12.5px;
+}
+.settings-nav-list {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	padding: 8px;
+}
+.settings-nav-link {
+	position: relative;
+	display: flex;
+	height: 32px;
+	align-items: center;
+	padding: 0 10px;
+	border-radius: 8px;
+	color: var(--text-muted);
+	font-size: 13px;
+	outline: none;
+	transition: color var(--dur-hover) ease-out;
+}
+.settings-nav-link:hover,
+.settings-nav-link[aria-current='page'] {
+	color: var(--text-primary);
+}
+.settings-nav-link:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.settings-main {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+}
+.settings-title {
+	color: var(--text-primary);
+	font-size: 14px;
+	font-weight: 500;
+}
+.settings-column {
+	width: 100%;
+	max-width: 688px;
+	margin: 0 auto;
+	padding: 28px 32px 64px;
+}
+.settings-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 28px;
+}
+
+/* ───────── Groups and rows ───────── */
+.settings-group {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+/* As tall as the button some heads hold, so every title sits at the same height. */
+.settings-group-head {
+	display: flex;
+	min-height: calc(var(--size-control-md) - 2px);
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 0 4px;
+}
+.settings-group-title {
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	font-weight: 500;
+}
+.settings-list {
+	overflow: hidden;
+}
+.settings-row {
+	display: flex;
+	min-height: 58px;
+	align-items: center;
+	gap: 16px;
+	padding: 10px 14px 10px 16px;
+}
+.settings-row + .settings-row {
+	border-top: 1px solid var(--line-subtle-2);
+}
+.settings-row-name {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: 13px;
+	line-height: 18px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.settings-row-desc {
+	min-height: 16px;
+	margin-top: 2px;
+	color: var(--text-subtle);
+	font-size: 12px;
+	line-height: 16px;
+	text-wrap: pretty;
+}
+.settings-row-control {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+}
+/* Breaks between folders first; a name longer than the line breaks inside. */
+.settings-path {
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	overflow-wrap: anywhere;
+}
+
+/* ───────── Save status: a 16px slot beside a control that saves on change ───────── */
+.save-status {
+	display: inline-flex;
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	color: var(--text-muted);
+}
+
+/* ───────── Review limits: a Field laid out as a row, the number at the right ───────── */
+.settings-limit [data-ui='field'] {
+	display: grid;
+	flex: 1;
+	grid-template-columns: minmax(0, 1fr) 16px 112px;
+	align-items: center;
+	column-gap: 8px;
+}
+.settings-limit [data-ui='field-label'] {
+	grid-area: 1 / 1;
+	margin: 0;
+	color: var(--text-primary);
+	font-size: 13px;
+	font-weight: 400;
+	line-height: 18px;
+}
+.settings-limit [data-ui='field-message'] {
+	grid-area: 2 / 1;
+}
+.settings-limit [data-ui='field-hint'],
+.settings-limit [data-ui='field-error'] {
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 16px;
+}
+.settings-limit .save-status {
+	grid-area: 1 / 2 / 3 / 3;
+}
+.settings-limit [data-ui='input'] {
+	grid-area: 1 / 3 / 3 / 4;
+}
+.settings-number [data-ui='input-field'] {
+	font-family: var(--font-code);
+	font-size: 12.5px;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+}
+
+/* ───────── Model picker: a quiet model trigger, the effort beside it ───────── */
+.model-picker {
+	display: flex;
+	min-width: 0;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 2px;
+}
+.model-picker > .save-status {
+	margin-right: 4px;
+}
+[data-ui='button'].model-trigger,
+[data-ui='select-trigger'].effort-trigger {
+	padding: 0 9px;
+	font-size: 12.5px;
+	font-weight: 400;
+}
+[data-ui='button'].model-trigger {
+	max-width: 280px;
+}
+.model-trigger-label {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+}
+/* No chevron: the effort word sits flush like the model name. */
+[data-ui='select-trigger'].effort-trigger {
+	gap: 0;
+}
+[data-ui='select-trigger'].effort-trigger > svg {
+	display: none;
+}
+/* The effort list opens under the trigger's right edge, since the picker ends its row. */
+.effort-menu {
+	width: 248px;
+	transform-origin: top right;
+	translate: calc(var(--radix-select-trigger-width) - 100%) 0;
+}
+
+/* ───────── Model dialog: denser rows for long catalogs ───────── */
+[data-ui='command-item'].model-row {
+	height: 34px;
+	gap: 10px;
+	font-size: 13.5px;
+}
+.model-heading {
+	height: 29px;
+	padding: 8px 10px 5px;
+	color: var(--text-faint);
+	font-size: 11.5px;
+	line-height: 16px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	user-select: none;
+}

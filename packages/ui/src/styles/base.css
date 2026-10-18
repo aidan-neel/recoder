@@ -1,0 +1,85 @@
+/* ───────── Page ───────── */
+html {
+	background: var(--bg-chrome);
+	-webkit-text-size-adjust: 100%;
+}
+body {
+	background: var(--bg-chrome);
+	color: var(--text-primary);
+	font-family: var(--font-ui);
+	font-size: var(--font-size-body);
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+/* Large screens scale the whole UI: px compiles to rem, so the root size carries every length. */
+@media (min-width: 1920px) {
+	html {
+		font-size: 112.5%;
+	}
+}
+@media (min-width: 2400px) {
+	html {
+		font-size: 125%;
+	}
+}
+
+::selection {
+	background: var(--selection);
+}
+:focus-visible {
+	outline-color: var(--focus-color);
+}
+button,
+[role='button'] {
+	cursor: default;
+}
+
+/* ───────── Helpers ───────── */
+.tabular {
+	font-variant-numeric: tabular-nums;
+}
+.mono {
+	font-family: var(--font-code);
+}
+.ai-voice {
+	font-family: var(--font-ai);
+	color: var(--text-ai);
+	text-wrap: pretty;
+}
+.ai-voice code,
+.inline-code {
+	padding: 1px 5px;
+	border-radius: 4px;
+	background: var(--bg-bubble);
+	font-family: var(--font-code);
+	font-size: 0.8em;
+}
+
+/* Native scrollbars stay quiet; scroll areas never show edge cues. */
+.thin-scroll {
+	scrollbar-width: thin;
+	scrollbar-color: var(--line-strong) transparent;
+}
+.no-scrollbar {
+	scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+	display: none;
+}
+
+/* ───────── Reduced motion: transitions snap, spinners keep turning ───────── */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		transition-duration: 1ms !important;
+		animation-duration: 1ms !important;
+		animation-iteration-count: 1 !important;
+	}
+	[data-ui='spinner'],
+	[data-ui='spinner'] * {
+		animation-duration: var(--dur-spinner) !important;
+		animation-iteration-count: infinite !important;
+	}
+}

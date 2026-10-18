@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import type { Review } from '@recoder/shared';
+import { applyProgressMessage, emptyReviewProgress, taskSummary, type Review } from '@recoder/shared';
 import { app } from '../../../src/app';
 import { db, reviewProgress } from '../../../src/store';
 import {
@@ -12,11 +12,6 @@ import {
 	trackReviewTask
 } from '../../../src/review/session/events';
 import { chatCompletion, resetLlmLimiter } from '../../../src/models/llm';
-import {
-	applyProgressMessage,
-	emptyReviewProgress,
-	taskSummary
-} from '../../../../web/src/lib/review/review-progress-state';
 import { testReview } from '../../helpers/review';
 
 /** Bun's fetch keeps the socket open after `reader.cancel()`, so aborting is what actually disconnects. */

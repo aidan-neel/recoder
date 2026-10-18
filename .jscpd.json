@@ -3,6 +3,9 @@
 	"ignore": [
 		"**/node_modules/**",
 		"**/.svelte-kit/**",
+		"**/.next/**",
+		"**/next-env.d.ts",
+		"**/public/**",
 		"**/build/**",
 		"**/dist/**",
 		"**/static/**",
