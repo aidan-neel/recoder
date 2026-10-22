@@ -8,6 +8,8 @@ node_modules/
 dist/
 build/
 .svelte-kit/
+.next/
+next-env.d.ts
 .vercel/
 *.tsbuildinfo
 

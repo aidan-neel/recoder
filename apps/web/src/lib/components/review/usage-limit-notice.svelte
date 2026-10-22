@@ -7,8 +7,8 @@
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import type { ModelEntry, UsageLimit } from '@recoder/shared';
-	import { modelSettingsUi, providerName, resolveEffort, toModelOption } from '$lib/settings/model-settings.svelte';
+	import { resolveEffort, type ModelEntry, type UsageLimit } from '@recoder/shared';
+	import { modelSettingsUi, providerName, toModelOption } from '$lib/settings/model-settings.svelte';
 	import { errorToast } from '$lib/shell/notify';
 	import { serverApi } from '$lib/api/server-api';
 	import { shellState } from '$lib/shell/shell-state.svelte';

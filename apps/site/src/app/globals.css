@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+@import '@recoder/ui/styles.css';
+@source '../../../../packages/ui/src';
+@source '../../../app/src';
+
+@import '../styles/site.css';

@@ -1,0 +1,173 @@
+/* ask: the ask-the-reviewer panel and the conversation with Orchestrator */
+
+/* ───────── Panel: the column's header, then one conversation filling the rest ───────── */
+[data-ui='ask-panel'] {
+	display: flex;
+	height: 100%;
+	min-height: 0;
+	flex-direction: column;
+	background: var(--bg-panel);
+}
+/* Escape steps out of the field onto the panel; the panel itself draws no ring. */
+[data-ui='ask-panel']:focus {
+	outline: none;
+}
+
+[data-ui='review-conversation'] {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+}
+
+/* The composer stays at the bottom while the transcript above it scrolls. */
+.ask-composer {
+	flex: none;
+	padding: 0 12px 12px;
+}
+
+/* The transcript fills the panel, so an empty thread can sit its suggestions by the composer. */
+.chat-scroll [data-ui='scroll-area-content'] {
+	display: flex !important;
+	min-height: 100%;
+	flex-direction: column;
+}
+
+/* ───────── Context chip ───────── */
+[data-ui='ask-context'] {
+	position: relative;
+	display: flex;
+	padding: 10px 12px;
+	border-radius: 10px;
+	background: var(--bg-raised-2);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+}
+
+/* ───────── Messages ───────── */
+[data-ui='chat-bubble'] {
+	max-width: min(88%, 520px);
+	padding: 7px 12px 8px;
+	border-radius: 14px 14px 4px 14px;
+	background: var(--bg-bubble);
+	transition: opacity var(--dur-toggle) ease-out;
+}
+[data-ui='chat-bubble'][data-pending] {
+	opacity: 0.6;
+}
+[data-ui='chat-bubble'] .inline-code {
+	background: var(--bg-selected);
+}
+
+/* "Sending" only shows when the server is slow to answer, so a quick send never flashes it. */
+.chat-sending {
+	color: var(--text-faint);
+	font-size: 11.5px;
+	line-height: 16px;
+	animation: chat-late var(--dur-swap) ease-out var(--late-delay) backwards;
+}
+@keyframes chat-late {
+	from {
+		opacity: 0;
+	}
+}
+
+/* ───────── Suggestions ───────── */
+[data-ui='button'].chat-suggestion {
+	height: auto;
+	min-height: var(--size-control-md);
+	max-width: 100%;
+	padding: 6px 12px;
+	border-radius: 999px;
+	color: var(--text-muted);
+	font-weight: 400;
+	line-height: 18px;
+	text-align: right;
+	white-space: normal;
+}
+[data-ui='button'].chat-suggestion:hover {
+	color: var(--text-primary);
+}
+
+/* ───────── Failure notice ───────── */
+[data-ui='chat-notice'] {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 11px 12px 12px;
+	border-radius: 12px;
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+}
+.chat-notice-icon {
+	flex: none;
+	margin-top: 3px;
+	color: var(--danger);
+}
+.chat-notice-title {
+	color: var(--text-primary);
+	font-size: 13px;
+	font-weight: 500;
+	line-height: 20px;
+	overflow-wrap: anywhere;
+}
+.chat-notice-body {
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	line-height: 18px;
+	overflow-wrap: anywhere;
+	text-wrap: pretty;
+}
+
+/* ───────── Composer ───────── */
+[data-ui='chat-composer'] {
+	display: flex;
+	align-items: flex-end;
+	gap: 4px;
+	padding: 5px;
+	border-radius: 12px;
+	background: var(--bg-raised);
+	box-shadow: var(--shadow-composer);
+	cursor: text;
+	transition: box-shadow var(--dur-menu) ease-out;
+}
+[data-ui='chat-composer']:focus-within {
+	box-shadow:
+		0 0 0 1px var(--line-focus),
+		0 0 0 3px rgb(var(--ink-rgb) / 0.06);
+}
+[data-ui='chat-composer'][data-disabled] {
+	cursor: default;
+}
+[data-ui='chat-composer'] [data-ui='textarea'],
+[data-ui='chat-composer'] [data-ui='textarea']:focus,
+[data-ui='chat-composer'] [data-ui='textarea']:hover {
+	min-height: 30px;
+	padding: 5px 7px;
+	background: transparent;
+	box-shadow: none;
+	font-size: 13.5px;
+	line-height: 20px;
+}
+[data-ui='chat-composer'] [data-ui='textarea'][data-max-rows] {
+	max-height: calc(var(--textarea-max-rows) * 20px + 10px);
+}
+[data-ui='chat-composer'] [data-ui='textarea']:disabled {
+	cursor: default;
+}
+.chat-composer-action {
+	display: inline-flex;
+	flex: none;
+}
+
+/* The stop square: 9px, the reply's ink. */
+.chat-stop-glyph {
+	width: 9px;
+	height: 9px;
+	border-radius: 2px;
+	background: currentColor;
+}
+
+/* The jump-to-latest button floats over the transcript, so it alone gets the menu shadow. */
+[data-ui='button'].chat-jump {
+	box-shadow: var(--shadow-menu);
+}

@@ -56,6 +56,14 @@ describe('normalizeProviders', () => {
 		expect(by.xai).toMatchObject({ connected: false, via: null, modelCount: 9 });
 		expect(JSON.stringify(list)).not.toContain('sk-or-secret');
 	});
+
+	test('leaves out the MCP servers the agent lists among its providers', () => {
+		const catalog = [...CATALOG, { id: 'mcp_04246129e0cb0b0c', name: 'stripe', modelCount: 0 }];
+		const config = { providers: [...CONFIG_PROVIDERS.providers, { id: 'mcp_9f1c', name: 'sentry', models: {} }] };
+		const ids = normalizeProviders(catalog, config, AUTH).map((p) => p.id);
+
+		expect(ids.some((id) => id.startsWith('mcp_'))).toBe(false);
+	});
 });
 
 describe('normalizeModels', () => {

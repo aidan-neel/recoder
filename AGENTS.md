@@ -3,9 +3,14 @@
 ## Commands
 
 - Web (SvelteKit): `bun run --filter @recoder/web check` · `test` · `build`
+- Review surface (Next.js, the new app): `bun run --filter @recoder/app check` ·
+  `test` · `build`. `bun run dev` starts the server and this app (port 5180,
+  `/sample` needs no server); `bun run dev:web` starts the server and apps/web;
+  `bun run dev:all` starts every package.
+- UI kit (`packages/ui`, React): `bun run --filter @recoder/ui check` · `lint`.
 - Server: `bun run --filter @recoder/server check` · `test`
 - Shared: `bun run --filter @recoder/shared check` · `test`
-- Site: `bun run --filter @recoder/site check` · `build`
+- Site: `bun run --filter @recoder/site check` · `test` · `build`
 - Lint (any package): `bun run --filter @recoder/<package> lint` runs ESLint
   and `prettier --check`.
 - Dead and duplicated code (repo): `bun run deadcode` runs knip and jscpd.
@@ -50,6 +55,19 @@ this. Treat a lint error as a bug, not a suggestion.
     `lib/components/<feature>/` and Sivir wrappers in `lib/components/ui/`.
   - Web styles: `apps/web/src/app.css` imports the parts in
     `apps/web/src/styles/`.
+  - App `apps/app/src/`: routes in `app/`, components in
+    `components/<feature>/` (`shell`, `queue`, `review`, `decision`, `ask`,
+    `live`, `settings`, `connections`, `setup`, `guidelines`, `common`), logic in
+    `lib/<feature>/` with server calls in `lib/api/`, and one CSS file per
+    feature in `styles/`, imported by `styles/app.css`.
+  - UI kit `packages/ui/src/`: `components/<area>/` (`overlay`, `menu`,
+    `form`, `display`, `content`) with `styles/kit-<area>.css`, motion presets
+    in `motion/`, tokens in `styles/tokens.css`.
+  - Site `apps/site/src/`: routes in `app/`, components in
+    `components/<feature>/` (`home`, `shell`, `hero-demo`), content and
+    helpers in `lib/`, one CSS file per feature in `styles/`. The site's own
+    imports use `~/`; `@/` points at `apps/app/src`, because the hero demo
+    renders the app's real components and CSS, so app changes reach the site.
   - Shared: `packages/shared/src/` by topic, re-exported from `index.ts`.
 - **No duplicated code.** Before writing a helper, search for one. When two
   places need the same logic, move it to one module both import. Code used by
@@ -91,18 +109,22 @@ change makes a test obsolete, delete the test.
 
 ## UI requirement (mandatory — no exceptions)
 
-- **ALL UI must be built with Sivir UI components** from `@sivir-ui/svelte`.
-  This is a hard requirement. Never hand-roll a control or surface when a Sivir
-  component exists (buttons, triggers, modal/sheet/popover/dialog, menus,
-  selects, inputs, cards, collapsibles/disclosures, alerts, badges, tabs,
-  tooltips, scroll areas, skeletons, progress, typography, etc.).
-- **Before making ANY UI change**, first find the Sivir component(s) that cover
+- **One kit per framework.** apps/web (Svelte) builds ALL UI with Sivir
+  (`@sivir-ui/svelte`). apps/app and apps/site (React) build ALL UI with
+  `@recoder/ui` (`packages/ui`: Radix primitives and `motion`, styled with the
+  same tokens). This is a hard requirement. Never hand-roll a control or
+  surface when the kit has one (buttons, triggers, modal/popover/dialog,
+  menus, selects, command palette, inputs, switches, segmented controls,
+  tabs, cards, collapsibles, pills, tooltips, scroll areas, skeletons, meters,
+  copy buttons, code blocks, markdown, etc.).
+- **Before making ANY UI change**, first find the kit component(s) that cover
   it, then build with them. Do not ship raw `<div>`/`<details>`/`<dl>`/native
-  form controls or bespoke overlays as a substitute for Sivir primitives.
-- **Verify it actually works before finishing.** At minimum run
-  `bun run --filter @recoder/web check` and `bun run --filter @recoder/web build`,
-  then follow **Visual verification** below. Do not claim a UI change works
-  without both.
+  form controls or bespoke overlays as a substitute. When the React kit lacks
+  something two places need, add it to `packages/ui` rather than to one app.
+- **Verify it actually works before finishing.** At minimum run the touched
+  package's `check` and `build` (`@recoder/web`, `@recoder/app`,
+  `@recoder/site`; `check` and `lint` for `@recoder/ui`), then follow
+  **Visual verification** below. Do not claim a UI change works without both.
 
 ## Visual verification (mandatory for UI work)
 
@@ -112,7 +134,8 @@ browser before you report it done.
 
 1. Use the running web dev server at the URL it printed (Vite defaults to
    `http://localhost:5173` and moves to the next free port when that one is
-   taken). If none is running, start `bun run dev` from the repo root.
+   taken). If none is running, start `bun run dev:web` (apps/web) or
+   `bun run dev` (apps/app, port 5180) from the repo root.
 2. Open every screen the change touches. Screenshot each one in dark and light
    mode at 1280 and 1440 wide. Also check 1920 when the change touches sizing,
    because the root font scales up there.
@@ -148,15 +171,16 @@ A browser is always available on this machine. Never conclude otherwise:
 
 ## UI conventions
 
-- **Default control size is `size="md"`.** Sivir `Button`, `Select.Trigger`,
-  `Modal.Trigger`, `Modal.Close`, and other button-based triggers already
-  default to `md`, so omit the `size` prop rather than passing it.
+- **Default control size is `size="md"`.** Buttons and button-based triggers
+  in both kits (Sivir `Button`, `Select.Trigger`, `Modal.Trigger`; the React
+  kit's `Button` and `Select`) already default to `md`, so omit the `size` prop
+  rather than passing it.
 - Do **not** pass `size="sm"` unless a compact control is explicitly required
   (e.g. a dense toolbar row). Prefer `md` everywhere else.
 - For square icon-only controls use `size="icon"` (30px via `--size-icon-md`);
   don't shrink icon buttons below 28px.
 - Sivir `ScrollArea` must always be used with `showCues={false}`. We never use
-  the blur/edge-fade scroll cues.
+  the blur/edge-fade scroll cues (the React kit's `ScrollArea` has none).
 - We do not use subtitles in our headings only titles.
 
 ## Recoder design system (dark redesign)
@@ -212,5 +236,8 @@ component specs, layout and behavior rules.
   `app.css` raises the root font size at 1920px and 2400px widths. Write CSS in
   px as usual; multiply JS pixel constants by the root font scale. Never use
   CSS `zoom` (it breaks Floating UI menu positioning).
+
+Before touching UI in `apps/app`, read `apps/app/DESIGN.md`; it builds on the
+system above and records where the new app departs from it.
 
 Before changing or evaluating the review pipeline, read [docs/review](docs/review/README.md).

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { Finding, Review } from '@recoder/shared';
+import { MAX_CHAT_MESSAGE_CHARS, type Finding, type Review } from '@recoder/shared';
 import { withReviewMetrics } from '../../models/metrics';
 import { LlmError } from '../../models/llm';
 import { ModelConfigError } from '../../models/models';
@@ -23,7 +23,7 @@ import { reviewWithDiff } from './shared';
 
 const chatSchema = z.object({
 	assignmentId: z.string().min(1).max(100),
-	text: z.string().trim().min(1).max(8000),
+	text: z.string().trim().min(1).max(MAX_CHAT_MESSAGE_CHARS),
 	codeContext: reviewCodeContextSchema.optional()
 });
 
@@ -73,7 +73,12 @@ app.post('/:id/chat', async (c) => {
 	const parsed = chatSchema.safeParse(await c.req.json().catch(() => null));
 
 	if (!parsed.success)
-		return c.json({ error: 'Enter a message of at most 8,000 characters and a valid code selection.' }, 400);
+		return c.json(
+			{
+				error: `Enter a message of at most ${MAX_CHAT_MESSAGE_CHARS.toLocaleString('en-US')} characters and a valid code selection.`
+			},
+			400
+		);
 
 	try {
 		return c.json(
@@ -83,7 +88,7 @@ app.post('/:id/chat', async (c) => {
 	} catch (error) {
 		if (error instanceof ReviewChatError) return c.json({ error: error.message }, error.status);
 
-		return c.json({ error: 'Add a reviewer model in Settings → Models before sending a message.' }, 409);
+		return c.json({ error: 'Pick a review model in Settings → Agent before sending a message.' }, 409);
 	}
 });
 

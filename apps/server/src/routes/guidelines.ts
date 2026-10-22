@@ -3,12 +3,14 @@ import { z } from 'zod';
 import {
 	GUIDELINES_PATH,
 	MAX_GUIDELINES_CHARS,
+	MAX_GUIDELINES_PROMPT_CHARS,
 	type GuidelinesOverview,
 	type GuidelinesProposal,
 	type RepoGuidelines
 } from '@recoder/shared';
 import { GhError } from '../forge/gh';
 import {
+	clearGlobalGuidelines,
 	GUIDELINES_TEMPLATE,
 	normalize,
 	readGlobalGuidelines,
@@ -28,7 +30,7 @@ const contentSchema = z.object({ content: z.string().max(MAX_GUIDELINES_CHARS * 
 const draftSchema = z.object({
 	scope: z.enum(['global', 'repo']),
 	repoId: z.string().max(200).optional(),
-	prompt: z.string().max(4000),
+	prompt: z.string().max(MAX_GUIDELINES_PROMPT_CHARS),
 	current: z
 		.string()
 		.max(MAX_GUIDELINES_CHARS * 2)
@@ -82,6 +84,15 @@ app.put('/global', async (c) => {
 		return c.json(writeGlobalGuidelines(parsed.data.content));
 	} catch (err) {
 		return c.json({ error: err instanceof Error ? err.message : 'Could not save the guidelines.' }, 500);
+	}
+});
+
+/** Delete the saved global layer, so it reads as never saved and the defaults apply. Answers with that layer. */
+app.delete('/global', (c) => {
+	try {
+		return c.json(clearGlobalGuidelines());
+	} catch (err) {
+		return c.json({ error: err instanceof Error ? err.message : 'Could not reset the guidelines.' }, 500);
 	}
 });
 
@@ -172,7 +183,7 @@ app.post('/draft', async (c) => {
 	const parsed = draftSchema.safeParse(await c.req.json().catch(() => null));
 
 	if (!parsed.success) return c.json({ error: 'invalid body' }, 400);
-	if (!isReviewConfigured()) return c.json({ error: 'Add a reviewer model in Settings → Models first.' }, 409);
+	if (!isReviewConfigured()) return c.json({ error: 'Pick a review model in Settings → Agent first.' }, 409);
 
 	const repo = parsed.data.scope === 'repo' && parsed.data.repoId ? (db.repos.get(parsed.data.repoId) ?? null) : null;
 

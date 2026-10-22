@@ -1,0 +1,245 @@
+/*
+ * kit: form choices. Switch, checkbox, radio cards, segmented control and the
+ * nav pill, keyed on their data-ui hooks. Layered like the fields, so a class
+ * passed to a component still wins.
+ */
+@layer components {
+	/* ───────── Switch: px on purpose, the thumb's travel is set in px from JS ───────── */
+	[data-ui='switch'] {
+		--switch-thumb-off: var(--text-primary);
+		position: relative;
+		display: inline-flex;
+		width: 32px;
+		height: 20px;
+		flex-shrink: 0;
+		border-radius: 999px;
+		background-color: var(--line-strong);
+		outline: none;
+		touch-action: pan-y;
+		user-select: none;
+		transition:
+			background-color var(--dur-toggle) ease-out,
+			box-shadow var(--dur-hover) ease-out;
+	}
+	:root:not(.dark) [data-ui='switch'] {
+		--switch-thumb-off: var(--bg-raised);
+	}
+	[data-ui='switch']:hover:not(:disabled) {
+		background-color: var(--line-hover);
+	}
+	[data-ui='switch'][data-state='checked'] {
+		background-color: var(--primary);
+	}
+	[data-ui='switch'][data-state='checked']:hover:not(:disabled) {
+		background-color: var(--primary-hover);
+	}
+	[data-ui='switch'] > [data-ui='switch-thumb'] {
+		position: absolute;
+		top: 3px;
+		left: 3px;
+		width: 14px;
+		height: 14px;
+		border-radius: 999px;
+		background-color: var(--switch-thumb-off);
+		box-shadow: 0 1px 2px rgb(var(--shade-rgb) / 0.18);
+		pointer-events: none;
+		/* The thumb swaps color once the track is past halfway, so the two never meet at one grey. */
+		transition: background-color 0s var(--dur-press);
+	}
+	[data-ui='switch'][data-state='checked'] > [data-ui='switch-thumb'] {
+		background-color: var(--on-primary);
+	}
+
+	/* ───────── Checkbox: the box fills, the check draws in ───────── */
+	[data-ui='checkbox'] {
+		display: inline-grid;
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+		place-items: center;
+		border-radius: 5px;
+		background-color: var(--bg-field);
+		box-shadow: inset 0 0 0 1px var(--line-strong);
+		color: var(--on-primary);
+		outline: none;
+		transition:
+			background-color var(--dur-toggle) ease-out,
+			box-shadow var(--dur-hover) ease-out;
+	}
+	[data-ui='checkbox'][data-state='unchecked']:hover:not(:disabled) {
+		box-shadow: inset 0 0 0 1px var(--line-hover);
+	}
+	[data-ui='checkbox'][data-state='checked'] {
+		background-color: var(--primary);
+		box-shadow: inset 0 0 0 1px var(--primary);
+	}
+	[data-ui='checkbox']:focus-visible {
+		box-shadow:
+			inset 0 0 0 1px var(--line-focus),
+			var(--focus-ring);
+	}
+	[data-ui='checkbox'][data-state='checked']:focus-visible {
+		box-shadow:
+			inset 0 0 0 1px var(--primary),
+			var(--focus-ring);
+	}
+	[data-ui='checkbox-check'] {
+		width: 12px;
+		height: 12px;
+		stroke: currentColor;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		stroke-width: 3;
+	}
+
+	/* ───────── Radio cards: the chosen card's ring lifts and its dot fills ───────── */
+	[data-ui='radio-group'] {
+		display: grid;
+		gap: 8px;
+	}
+	[data-ui='radio-card'] {
+		display: flex;
+		width: 100%;
+		align-items: flex-start;
+		gap: 10px;
+		padding: 10px 12px;
+		border-radius: 10px;
+		background-color: transparent;
+		box-shadow: inset 0 0 0 1px var(--line-card);
+		text-align: left;
+		outline: none;
+		transition:
+			background-color var(--dur-hover) ease-out,
+			box-shadow var(--dur-hover) ease-out;
+	}
+	[data-ui='radio-card']:hover:not(:disabled, [data-state='checked']) {
+		box-shadow: inset 0 0 0 1px var(--line-strong);
+	}
+	[data-ui='radio-card'][data-state='checked'] {
+		background-color: var(--bg-raised);
+		box-shadow: inset 0 0 0 1px var(--line-focus);
+	}
+	[data-ui='radio-card']:focus-visible {
+		box-shadow:
+			inset 0 0 0 1px var(--line-focus),
+			var(--focus-ring);
+	}
+	[data-ui='radio-dot'] {
+		display: grid;
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+		place-items: center;
+		margin-top: 1px;
+		border-radius: 999px;
+		background-color: var(--bg-field);
+		box-shadow: inset 0 0 0 1px var(--line-strong);
+		transition:
+			background-color var(--dur-toggle) ease-out,
+			box-shadow var(--dur-toggle) ease-out;
+	}
+	[data-ui='radio-card'][data-state='checked'] [data-ui='radio-dot'] {
+		background-color: var(--primary);
+		box-shadow: inset 0 0 0 1px var(--primary);
+	}
+	[data-ui='radio-dot-fill'] {
+		width: 6px;
+		height: 6px;
+		border-radius: 999px;
+		background-color: var(--on-primary);
+	}
+	[data-ui='radio-text'] {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 2px;
+	}
+	[data-ui='radio-label'] {
+		color: var(--text-primary);
+		font-size: 13px;
+		font-weight: 500;
+		line-height: 18px;
+	}
+	[data-ui='radio-description'] {
+		color: var(--text-subtle);
+		font-size: var(--font-size-label);
+		line-height: 17px;
+		text-wrap: pretty;
+	}
+
+	/* ───────── Segmented control: a raised pill slides inside a sunken track ───────── */
+	[data-ui='segmented'] {
+		display: inline-flex;
+		align-items: center;
+		padding: 2px;
+		border-radius: 9px;
+		background-color: var(--bg-search);
+		box-shadow: inset 0 0 0 1px var(--line-card);
+	}
+	[data-ui='segmented-item'] {
+		position: relative;
+		display: inline-flex;
+		height: 26px;
+		align-items: center;
+		justify-content: center;
+		padding: 0 10px;
+		border-radius: 7px;
+		color: var(--text-subtle);
+		font-size: var(--font-size-label);
+		white-space: nowrap;
+		outline: none;
+		transition:
+			color var(--dur-hover) ease-out,
+			box-shadow var(--dur-hover) ease-out;
+	}
+	[data-ui='segmented'][data-size='sm'] [data-ui='segmented-item'] {
+		height: 22px;
+		padding: 0 8px;
+		font-size: 12px;
+	}
+	[data-ui='segmented-item']:hover:not(:disabled),
+	[data-ui='segmented-item'][data-state='checked'] {
+		color: var(--text-primary);
+	}
+	[data-ui='segmented-pill'] {
+		position: absolute;
+		z-index: 0;
+		inset: 0;
+		background-color: var(--bg-raised);
+		box-shadow: inset 0 0 0 1px var(--line-control);
+	}
+	[data-ui='segmented-label'] {
+		position: relative;
+		z-index: 1;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+	[data-ui='segmented-label'] svg {
+		width: 14px;
+		height: 14px;
+		stroke-width: 1.75;
+	}
+
+	/* ───────── Nav pill: under every label it slides past, so the items need no z-index of their own ───────── */
+	[data-ui='nav-pill'] {
+		position: absolute;
+		z-index: -1;
+		inset: 0;
+		background-color: var(--bg-selected);
+		pointer-events: none;
+	}
+
+	/* ───────── Shared states: disabled controls fade; quiet controls take the focus halo ───────── */
+	[data-ui='switch']:disabled,
+	[data-ui='checkbox']:disabled,
+	[data-ui='radio-card']:disabled,
+	[data-ui='segmented-item']:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
+	}
+	[data-ui='switch']:focus-visible,
+	[data-ui='segmented-item']:focus-visible {
+		box-shadow: var(--focus-ring);
+	}
+}

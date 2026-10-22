@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MAX_GUIDELINES_CHARS } from '@recoder/shared';
 import {
+	clearGlobalGuidelines,
 	composeGuidelines,
 	GUIDELINES_TEMPLATE,
 	hasRules,
@@ -26,6 +27,17 @@ test('global guidelines round-trip and clear', () => {
 	expect(saved.updatedAt).not.toBeNull();
 	expect(writeGlobalGuidelines('   ').content).toBe('');
 	expect(readGlobalGuidelines().content).toBe('');
+});
+
+test('clearing the global layer brings the defaults back, whether or not it was saved', () => {
+	const defaults = { content: DEFAULT_GLOBAL_GUIDELINES, updatedAt: null };
+
+	expect(clearGlobalGuidelines()).toEqual(defaults);
+
+	writeGlobalGuidelines('## Focus\n- Flag float money math');
+
+	expect(clearGlobalGuidelines()).toEqual(defaults);
+	expect(readGlobalGuidelines()).toEqual(defaults);
 });
 
 test('default guidelines fit the cap and count as rules', () => {

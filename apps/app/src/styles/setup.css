@@ -1,0 +1,110 @@
+/* setup */
+
+/* ───────── First run: a centred column, the serif headline over the checklist ───────── */
+.setup {
+	display: flex;
+	flex-direction: column;
+	width: 100%;
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 96px 32px 64px;
+}
+@media (max-width: 640px) {
+	.setup {
+		padding: 40px 16px 32px;
+	}
+}
+
+/* The count words swap inline in the sentence: the old word leaves, then the new one lands and the sentence moves once. */
+.setup-count {
+	display: inline-grid;
+	white-space: nowrap;
+}
+
+.setup-card {
+	margin-top: 32px;
+	overflow: hidden;
+	border-radius: 14px;
+}
+.setup-steps {
+	display: flex;
+	flex-direction: column;
+}
+
+/* ───────── Steps: glyph, title, one line, then the actions that fold away when done ───────── */
+.setup-step {
+	display: flex;
+	gap: 14px;
+	padding: 16px 18px;
+	transition: background-color var(--dur-toggle) ease-out;
+}
+.setup-step + .setup-step {
+	border-top: 1px solid var(--line-subtle-2);
+}
+/* A soft tint: full divider strength reads as a selection on the light card. */
+.setup-step[data-state='current'] {
+	background-color: color-mix(in oklab, var(--line-divider) 60%, transparent);
+}
+.setup-glyph {
+	margin-top: 3px;
+}
+.setup-step-main {
+	min-width: 0;
+	flex: 1;
+}
+.setup-step-title {
+	color: var(--text-primary);
+	font-size: 14px;
+	font-weight: 450;
+	line-height: 22px;
+	transition: color var(--dur-toggle) ease-out;
+}
+.setup-step[data-state='done'] .setup-step-title {
+	color: var(--text-muted);
+}
+.setup-step-desc {
+	min-height: 18px;
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	line-height: 18px;
+	text-wrap: pretty;
+}
+.setup-step-body {
+	padding-top: 14px;
+}
+.setup-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.setup-blocked {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+/* The install command lines up with the step's text, not with a settings row's indent. */
+.setup-blocked .provider-command {
+	padding: 0;
+}
+
+/* The model picker sits on a labelled line; its quiet trigger gets a ring here so it reads as a control. */
+.setup-model {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.setup-model-label {
+	color: var(--text-subtle);
+	font-size: 12.5px;
+}
+.setup-model [data-ui='button'].model-trigger {
+	box-shadow: inset 0 0 0 1px var(--line-menu);
+}
+.setup-model [data-ui='button'].model-trigger:hover {
+	box-shadow: inset 0 0 0 1px var(--line-hover);
+}
+
+.setup-sample {
+	align-self: flex-start;
+	margin: 16px 0 0 -12px;
+}

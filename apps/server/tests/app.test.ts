@@ -65,7 +65,7 @@ test('a fix request with no model set up says so instead of a 500', async () => 
 	});
 
 	expect(res.status).toBe(409);
-	expect(await res.json()).toMatchObject({ error: expect.stringContaining('Settings → Models'), action: 'settings' });
+	expect(await res.json()).toMatchObject({ error: expect.stringContaining('Settings → Agent'), action: 'settings' });
 });
 
 /** Queueing requires a reviewer model — stub it for tests that need reviews. */

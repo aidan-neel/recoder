@@ -1,0 +1,242 @@
+/* Live progress of a running review. */
+
+/* ───────── Frame: the lead over the progress, one centred column ───────── */
+.live {
+	display: flex;
+	max-width: 720px;
+	flex-direction: column;
+	gap: 40px;
+	margin: 0 auto;
+	padding: 48px 40px 96px;
+}
+.live-header {
+	min-width: 0;
+}
+/* Start review and Continue hand focus to the header; it draws no ring of its own. */
+.live-header:focus {
+	outline: none;
+}
+.live-progress {
+	container: live-progress / inline-size;
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 32px;
+}
+
+/* ───────── Header: the lead, the meter, the steps and the controls ───────── */
+/* The shown lead and the unseen running one share a cell, so the box keeps the taller one's height. */
+.live-lead {
+	display: grid;
+}
+.live-lead > * {
+	grid-area: 1 / 1;
+}
+.live-lead-sizer {
+	visibility: hidden;
+}
+.live-meter {
+	margin-top: 24px;
+}
+.live-actions {
+	display: flex;
+	min-height: 30px;
+	align-items: center;
+	gap: 14px;
+	margin-top: 12px;
+}
+.live[data-phase='draft'] .live-actions {
+	margin-top: 24px;
+}
+.live-note {
+	color: var(--text-faint);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.live-toggle {
+	min-width: 92px;
+}
+
+/* The running lead shimmers from the tertiary text, so the serif lead stays readable between passes. */
+.live-header .shimmer-text {
+	--shimmer-base: var(--text-tertiary);
+}
+
+/* The stream's state while it is not connected. A fresh connection that opens fast never shows. */
+.live-connection {
+	display: inline-flex;
+	min-width: 0;
+	align-items: center;
+	gap: 7px;
+	overflow: hidden;
+	color: var(--text-subtle);
+	font-size: 12px;
+	white-space: nowrap;
+}
+.live-connection-dot {
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	border-radius: 3px;
+	background: var(--text-faint);
+}
+.live-connection[data-state='reconnecting'] .live-connection-dot {
+	background: var(--sev-medium-solid);
+}
+.live-connection[data-state='connecting'] {
+	animation: live-reveal 0s linear calc(var(--skeleton-delay) * 5) both;
+}
+@keyframes live-reveal {
+	from {
+		visibility: hidden;
+	}
+	to {
+		visibility: visible;
+	}
+}
+
+/* ───────── Stages: a glyph per stage on a thin rail ───────── */
+.live-stages {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.live-stage {
+	overflow: hidden;
+}
+.live-stage-row {
+	position: relative;
+	display: flex;
+	align-items: flex-start;
+	gap: 12px;
+	padding: 6px 0;
+}
+.live-stage-row > [data-ui='status-glyph'] {
+	margin-top: 1px;
+}
+/* The rail: a segment under each glyph and one over the next, darker where both stages are done. */
+.live-stage:not(:last-child) > .live-stage-row::after,
+.live-stage:not(:first-child) > .live-stage-row::before {
+	position: absolute;
+	left: 7.5px;
+	width: 1px;
+	background: var(--line-control);
+	content: '';
+	transition: background-color var(--dur-toggle) ease-out;
+}
+.live-stage:not(:last-child) > .live-stage-row::after {
+	top: 26px;
+	bottom: 0;
+}
+.live-stage:not(:first-child) > .live-stage-row::before {
+	top: 0;
+	height: 4px;
+}
+.live-stage[data-state='done']:not(:last-child) > .live-stage-row::after,
+.live-stage[data-state='done'] + .live-stage > .live-stage-row::before {
+	background: var(--line-strong);
+}
+.live-stage-label {
+	display: block;
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-subtle);
+	font-size: 13px;
+	line-height: 18px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	transition: color var(--dur-toggle) ease-out;
+}
+.live-stage[data-state='done'] .live-stage-label {
+	color: var(--text-muted);
+}
+.live-stage[data-state='active'] .live-stage-label,
+.live-stage[data-state='paused'] .live-stage-label {
+	color: var(--text-primary);
+}
+.live-stage-detail {
+	color: var(--text-subtle);
+	font-size: 12px;
+	line-height: 18px;
+}
+/* A held stage: its idle ring turns amber, matching the paused meter. */
+.live-stage[data-state='paused'] [data-ui='status-glyph-face'][data-kind='idle'] [data-ui='status-glyph-dot'] {
+	box-shadow: inset 0 0 0 1.5px var(--sev-medium-solid);
+}
+.live-stage-skeleton {
+	align-items: center;
+	height: 30px;
+}
+
+/* ───────── Reviewers: one line each ───────── */
+.live-title {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin-bottom: 6px;
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	font-weight: 500;
+}
+.live-title-count {
+	display: inline-flex;
+	gap: 0.3em;
+	color: var(--text-faint);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 400;
+}
+.live-empty {
+	padding: 6px 0;
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	line-height: 18px;
+}
+.live-reviewers {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+.live-reviewer {
+	display: grid;
+	grid-template-columns: 16px minmax(0, 1fr) minmax(0, 40%);
+	align-items: center;
+	column-gap: 10px;
+	height: 30px;
+}
+.live-reviewer-name {
+	overflow: hidden;
+	color: var(--text-secondary);
+	font-size: 13px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.live-reviewer-step {
+	color: var(--text-faint);
+	font-size: 12px;
+	line-height: 18px;
+	text-align: right;
+}
+/* A narrow column (the ask column open on a small screen) puts what a reviewer is doing under its name. */
+@container live-progress (max-width: 480px) {
+	.live-reviewer {
+		grid-template-columns: 16px minmax(0, 1fr);
+		grid-template-rows: 18px 18px;
+		height: auto;
+		padding: 5px 0;
+	}
+	.live-reviewer-step {
+		grid-column: 2;
+		text-align: left;
+	}
+}
+.live-more {
+	margin: 2px 0 0 -10px;
+}
+.live-more-icon {
+	transition: rotate var(--dur-toggle) ease-out;
+}
+.live-more-icon[data-open='true'] {
+	rotate: 180deg;
+}

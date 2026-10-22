@@ -2,7 +2,7 @@ import adapter from '@sveltejs/adapter-node';
 import { sveltekit } from '@sveltejs/kit/vite';
 import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'vite';
-import { pxToRem } from './px-to-rem';
+import { pxToRem } from '../../packages/ui/px-to-rem.ts';
 
 export default defineConfig({
 	css: { postcss: { plugins: [pxToRem] } },

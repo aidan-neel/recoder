@@ -2,7 +2,8 @@
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import SegmentedControl from '$lib/components/ui/segmented-control.svelte';
-	import { theme, type ThemeChoice } from '$lib/settings/theme.svelte';
+	import type { ThemeChoice } from '@recoder/shared';
+	import { theme } from '$lib/settings/theme.svelte';
 
 	const ITEMS = [
 		{ value: 'system', label: 'System' },

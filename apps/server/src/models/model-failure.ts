@@ -95,8 +95,8 @@ export function modelFailure(err: unknown, config: ModelRef, fallback: string): 
 
 		return {
 			reason: hosted
-				? `${hosted.name} rejected the API key. Reconnect it in Settings → Models.`
-				: 'The model endpoint rejected the API key. Update it in Settings → Models.'
+				? `${hosted.name} rejected the API key. Reconnect it in Settings → Agent.`
+				: 'The model endpoint rejected the API key. Pick another model in Settings → Agent.'
 		};
 	}
 

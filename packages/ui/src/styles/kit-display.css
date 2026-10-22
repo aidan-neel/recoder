@@ -1,0 +1,294 @@
+/* kit: display */
+
+/*
+ * These rules sit in the components layer, so a Tailwind class passed through
+ * `className` (utilities layer) and an app's own unlayered CSS both win.
+ */
+@layer components {
+	/* ───────── Pill: text on a tint; a tone change crossfades ───────── */
+	[data-ui='pill'] {
+		--pill-fg: var(--sev-info);
+		--pill-bg: var(--sev-info-tint);
+
+		display: inline-flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 4px;
+		padding: 1px 6px;
+		border-radius: 5px;
+		background-color: var(--pill-bg);
+		color: var(--pill-fg);
+		font-size: var(--font-size-badge);
+		font-weight: 500;
+		line-height: 16px;
+		white-space: nowrap;
+		transition:
+			color var(--dur-toggle) ease-out,
+			background-color var(--dur-toggle) ease-out;
+	}
+	[data-ui='pill'] svg:not([class*='size-']) {
+		width: 12px;
+		height: 12px;
+		flex-shrink: 0;
+	}
+	[data-ui='pill'][data-tone='high'] {
+		--pill-fg: var(--sev-high);
+		--pill-bg: var(--sev-high-tint);
+	}
+	[data-ui='pill'][data-tone='medium'] {
+		--pill-fg: var(--sev-medium);
+		--pill-bg: var(--sev-medium-tint);
+	}
+	[data-ui='pill'][data-tone='low'] {
+		--pill-fg: var(--sev-low);
+		--pill-bg: var(--sev-low-tint);
+	}
+	[data-ui='pill'][data-tone='ok'] {
+		--pill-fg: var(--ok);
+		--pill-bg: var(--ok-tint);
+	}
+	[data-ui='pill'][data-tone='sent'] {
+		--pill-fg: var(--sent);
+		--pill-bg: var(--sent-tint);
+	}
+	[data-ui='pill'][data-tone='danger'] {
+		--pill-fg: var(--danger);
+		--pill-bg: var(--danger-tint);
+	}
+	[data-ui='pill'][data-tone='question'] {
+		--pill-fg: var(--text-muted);
+		--pill-bg: var(--bg-selected);
+	}
+
+	/* ───────── Status glyph: one 16px face per state ───────── */
+	[data-ui='status-glyph'] {
+		position: relative;
+		display: inline-grid;
+		width: 16px;
+		height: 16px;
+		flex-shrink: 0;
+		place-items: center;
+		border-radius: 999px;
+	}
+	[data-ui='status-glyph-face'] {
+		--glyph: var(--text-faint);
+
+		display: grid;
+		grid-area: 1 / 1;
+		width: 16px;
+		height: 16px;
+		place-items: center;
+		border-radius: 999px;
+		color: var(--glyph);
+	}
+	[data-ui='status-glyph-dot'] {
+		width: 8px;
+		height: 8px;
+		border-radius: 999px;
+		background: currentColor;
+		box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 18%, transparent);
+	}
+	[data-ui='status-glyph-q'] {
+		font-family: var(--font-code);
+		font-size: 10.5px;
+		font-weight: 500;
+		line-height: 1;
+	}
+	[data-ui='status-glyph-face'][data-kind='high'] {
+		--glyph: var(--sev-high-solid);
+	}
+	[data-ui='status-glyph-face'][data-kind='medium'] {
+		--glyph: var(--sev-medium-solid);
+	}
+	[data-ui='status-glyph-face'][data-kind='low'] {
+		--glyph: var(--sev-low-solid);
+	}
+	[data-ui='status-glyph-face'][data-kind='idle'] [data-ui='status-glyph-dot'] {
+		width: 10px;
+		height: 10px;
+		background: transparent;
+		box-shadow: inset 0 0 0 1.5px var(--line-strong);
+	}
+	/* A wash, not --bg-selected: it matches that fill on a plain row and still shows on a selected one. */
+	[data-ui='status-glyph-face'][data-kind='question'] {
+		background: rgb(var(--wash-rgb) / 0.1);
+		color: var(--text-muted);
+	}
+	[data-ui='status-glyph-face'][data-kind='ok'] {
+		background: var(--ok-tint);
+		color: var(--ok);
+	}
+	[data-ui='status-glyph-face'][data-kind='sent'] {
+		background: var(--sent-tint);
+		color: var(--sent);
+	}
+	[data-ui='status-glyph-face'][data-kind='dismissed'] {
+		background: rgb(var(--wash-rgb) / 0.1);
+		color: var(--text-faint);
+	}
+	[data-ui='status-glyph-face'][data-kind='failed'] {
+		--glyph: var(--sev-high);
+	}
+	[data-ui='status-glyph-face'][data-kind='outdated'] {
+		--glyph: var(--text-subtle);
+	}
+	[data-ui='status-glyph-face'][data-kind='spinner'] {
+		--glyph: var(--text-muted);
+	}
+
+	/* ───────── Scroll area: a thin bar that fades in on hover or scroll, never cues ───────── */
+	[data-ui='scroll-area-scrollbar'] {
+		display: flex;
+		padding: 2px;
+		opacity: 0;
+		touch-action: none;
+		user-select: none;
+		transition: opacity var(--dur-toggle) ease-out;
+	}
+	[data-ui='scroll-area-scrollbar'][data-orientation='vertical'] {
+		width: 10px;
+	}
+	[data-ui='scroll-area-scrollbar'][data-orientation='horizontal'] {
+		height: 10px;
+		flex-direction: column;
+	}
+	[data-ui='scroll-area-scrollbar']:not(:has([data-ui='scroll-area-thumb'])) {
+		visibility: hidden;
+		pointer-events: none;
+	}
+	[data-ui='scroll-area']:hover > [data-ui='scroll-area-scrollbar'],
+	[data-ui='scroll-area'][data-scrolling] > [data-ui='scroll-area-scrollbar'],
+	[data-ui='scroll-area-scrollbar']:active {
+		opacity: 1;
+	}
+	[data-ui='scroll-area-thumb'] {
+		position: relative;
+		flex: 1;
+		border-radius: 99px;
+		background-color: var(--line-strong);
+		transition: background-color var(--dur-hover) ease-out;
+	}
+	/* A 16px hit area around the 6px thumb. */
+	[data-ui='scroll-area-thumb']::before {
+		position: absolute;
+		top: 50%;
+		left: 50%;
+		width: 100%;
+		min-width: 16px;
+		height: 100%;
+		min-height: 16px;
+		content: '';
+		translate: -50% -50%;
+	}
+	[data-ui='scroll-area-scrollbar']:hover [data-ui='scroll-area-thumb'],
+	[data-ui='scroll-area-scrollbar']:active [data-ui='scroll-area-thumb'] {
+		background-color: var(--line-hover);
+	}
+
+	/* ───────── Meter: a 3px track; the fill springs, or a short bar slides while unknown ───────── */
+	[data-ui='meter'] {
+		--meter-fill: var(--text-muted);
+	}
+	[data-ui='meter'][data-tone='ok'] {
+		--meter-fill: var(--ok);
+	}
+	[data-ui='meter'][data-tone='medium'] {
+		--meter-fill: var(--sev-medium-solid);
+	}
+	[data-ui='meter'][data-tone='high'] {
+		--meter-fill: var(--sev-high-solid);
+	}
+	[data-ui='meter-fill'] {
+		background-color: var(--meter-fill);
+		transition: background-color var(--dur-toggle) ease-out;
+	}
+	[data-ui='meter'][data-state='indeterminate'] > [data-ui='meter-fill'] {
+		animation: ui-meter-slide var(--dur-skeleton) cubic-bezier(0.65, 0, 0.35, 1) infinite;
+	}
+
+	/* ───────── Hover list: one layer that snaps to the hovered row and fades ───────── */
+	[data-ui='hover-list-highlight'] {
+		position: absolute;
+		top: 0;
+		left: 0;
+		z-index: -1;
+		display: block;
+		border-radius: 10px;
+		background-color: rgb(var(--wash-rgb) / 0.05);
+		list-style: none;
+		opacity: 0;
+		pointer-events: none;
+		transition: opacity var(--dur-highlight) ease-out;
+	}
+	[data-ui='hover-list-highlight'][data-state='on'] {
+		opacity: 1;
+	}
+
+	/* ───────── Row button: a list row that is one click target; the hover list paints its hover ───────── */
+	[data-ui='row-button'] {
+		position: relative;
+		display: flex;
+		width: 100%;
+		min-width: 0;
+		align-items: flex-start;
+		gap: 10px;
+		padding: 7px 10px;
+		border: 0;
+		border-radius: var(--row-button-radius, 8px);
+		background: none;
+		color: var(--text-secondary);
+		font: inherit;
+		text-align: left;
+		text-decoration: none;
+		outline: none;
+		transition:
+			color var(--dur-hover) ease-out,
+			box-shadow var(--dur-hover) ease-out;
+	}
+	[data-ui='row-button']:focus-visible {
+		box-shadow: var(--focus-ring);
+	}
+	/*
+	 * Cover: the button holds the title, and its ::after stretches over the row and wears the ring inside it.
+	 * The title box keeps square corners so they never clip its text; the row sets --row-button-radius.
+	 */
+	[data-ui='row-button'][data-cover] {
+		position: static;
+		display: block;
+		overflow: hidden;
+		padding: 0;
+		border-radius: 0;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	[data-ui='row-button'][data-cover]::after {
+		position: absolute;
+		z-index: 0;
+		inset: 0;
+		border-radius: var(--row-button-radius, 8px);
+		content: '';
+	}
+	[data-ui='row-button'][data-cover]:focus-visible {
+		box-shadow: none;
+	}
+	[data-ui='row-button'][data-cover]:focus-visible::after {
+		box-shadow: inset 0 0 0 2px var(--focus-color);
+	}
+}
+
+@keyframes ui-meter-slide {
+	from {
+		translate: -100% 0;
+	}
+	to {
+		translate: 320% 0;
+	}
+}
+
+/* Reduced motion: the unknown-progress bar rests in the middle of the track instead of sliding. */
+@media (prefers-reduced-motion: reduce) {
+	[data-ui='meter'][data-state='indeterminate'] > [data-ui='meter-fill'] {
+		left: 34%;
+		animation: none !important;
+	}
+}

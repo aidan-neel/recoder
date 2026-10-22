@@ -1,0 +1,195 @@
+/* Settings → Agent: agent CLIs, providers and the provider modal. */
+
+/* ───────── Settings rows: CLIs and providers, split by hairlines ───────── */
+/* The hairline sits inside the row, as between plain settings rows, so every row is the same height. */
+.provider-item + .provider-item > .settings-row:first-child {
+	border-top: 1px solid var(--line-subtle-2);
+}
+.settings-row.provider-row {
+	gap: 12px;
+}
+.provider-glyph {
+	flex-shrink: 0;
+	align-self: flex-start;
+	margin-top: 1px;
+}
+/* A CLI that isn't installed: its cross reads at muted ink, not faint, so the row still shows a state. */
+.provider-glyph [data-ui='status-glyph-face'][data-kind='dismissed'] {
+	color: var(--text-muted);
+}
+.provider-version {
+	margin-left: 8px;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
+}
+
+/* ───────── A command to run by hand, under its CLI ───────── */
+.provider-command {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 0 14px 12px 44px;
+}
+.provider-notice .provider-command {
+	align-self: stretch;
+	padding: 0;
+}
+.provider-command-hint {
+	color: var(--text-subtle);
+	font-size: 12px;
+	line-height: 16px;
+}
+/* One line: tighter than a multi-line block, still clear of its copy button. */
+.provider-command [data-ui='code-block-content'] {
+	padding-top: 8px;
+	padding-bottom: 8px;
+}
+
+/* ───────── Modal: steps cross in one box that springs to each step's height ───────── */
+/* Anchored at the top like the command palette, so a step that changes the height moves only the bottom edge. */
+[data-ui='modal-panel'].provider-modal {
+	top: 14vh;
+	max-height: calc(100dvh - 14vh - 16px);
+	translate: -50% 0;
+}
+.provider-steps {
+	overflow: clip;
+	overflow-clip-margin: 6px;
+}
+.provider-steps-track {
+	position: relative;
+}
+.provider-step {
+	min-width: 0;
+}
+
+/* ───────── Step one: the searchable provider list ───────── */
+.provider-pick {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.provider-pick-scroll {
+	height: min(52dvh, 440px);
+	margin: 0 -6px;
+}
+.provider-pick-list {
+	display: flex;
+	flex-direction: column;
+	padding: 0 6px 4px;
+}
+.provider-pick-heading {
+	display: flex;
+	height: 30px;
+	align-items: flex-end;
+	padding: 0 10px 6px;
+	color: var(--text-faint);
+	font-size: 11.5px;
+	line-height: 14px;
+}
+.provider-pick-list > :first-child .provider-pick-heading,
+.provider-pick-list > .provider-pick-heading:first-child {
+	height: 22px;
+}
+/* A provider row (the kit RowButton) and its skeleton: one 36px line. */
+.provider-pick-row {
+	height: 36px;
+	flex-shrink: 0;
+	align-items: center;
+	padding: 0 10px;
+	color: var(--text-primary);
+	font-size: 13px;
+	cursor: default;
+}
+.provider-pick-row:focus-visible {
+	background-color: rgb(var(--wash-rgb) / 0.05);
+}
+/* No color of its own: the row picks faint ink for a count, the ok tone for Connected. */
+.provider-pick-meta {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	font-variant-numeric: tabular-nums;
+}
+/* Matches the kit's command empty state, so both searches read alike. */
+.provider-pick-empty {
+	padding: 24px 10px;
+	color: var(--text-faint);
+	font-size: 13px;
+	text-align: center;
+}
+.provider-pick-list [data-ui='hover-list-highlight'] {
+	border-radius: 8px;
+}
+
+/* ───────── A message in place of the list ───────── */
+.provider-notice {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 14px;
+	padding: 2px 0 4px;
+}
+.provider-notice-text {
+	color: var(--text-subtle);
+	font-size: 13px;
+	line-height: 20px;
+	text-wrap: pretty;
+}
+
+/* ───────── Step two: methods, prompts, the key or the browser sign-in ───────── */
+.provider-form {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	padding-bottom: 2px;
+}
+.provider-notes {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.provider-note {
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	line-height: 18px;
+	text-wrap: pretty;
+}
+.provider-error {
+	color: var(--danger);
+	font-size: 12.5px;
+	line-height: 18px;
+	text-wrap: pretty;
+}
+.provider-device {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.provider-device-code {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 6px 6px 6px 14px;
+	border-radius: 10px;
+	background-color: rgb(var(--wash-rgb) / 0.05);
+	color: var(--text-primary);
+	font-family: var(--font-code);
+	font-size: 18px;
+	letter-spacing: 0.08em;
+	line-height: 28px;
+}
+.provider-waiting {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--text-muted);
+	font-size: 12.5px;
+	line-height: 18px;
+}

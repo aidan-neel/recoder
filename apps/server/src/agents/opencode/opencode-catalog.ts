@@ -179,10 +179,16 @@ function connectionKind(live: ConnectedProvider | undefined, methods: AgentAuthM
 	return methods.some((m) => m.type === 'oauth') ? 'oauth' : 'builtin';
 }
 
+/** True for an MCP server the agent signs in to (ids `mcp_…`): it lists among the providers but serves no models. */
+function isMcpServer(id: string): boolean {
+	return id.startsWith('mcp_');
+}
+
 /**
  * The catalog, what's connected and how, and each provider's sign-in methods →
  * the list Recoder shows. Providers from the agent's own config may be missing
- * from the catalog, so they are added with no model count.
+ * from the catalog, so they are added with no model count. MCP servers are
+ * left out.
  */
 export function normalizeProviders(
 	catalog: CatalogProvider[],
@@ -198,6 +204,7 @@ export function normalizeProviders(
 		if (!known.has(p.id)) known.set(p.id, { id: p.id, name: p.name || p.id, modelCount: 0 });
 
 	return [...known.values()]
+		.filter((entry) => !isMcpServer(entry.id))
 		.map((entry): AgentProvider => {
 			const live = connected.get(entry.id);
 			const methods = parseMethods(methodsById[entry.id] ?? []);

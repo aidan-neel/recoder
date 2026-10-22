@@ -1,0 +1,190 @@
+/* Component contracts that classes alone cannot express. Selectors use the kit's data-ui hooks. */
+
+/* Layered, so a class passed through `className` (and an app's own CSS) wins over these defaults. */
+@layer components {
+	/* ───────── Keycap ───────── */
+	[data-ui='keycap'] {
+		display: inline-flex;
+		min-width: 18px;
+		height: 18px;
+		flex-shrink: 0;
+		align-items: center;
+		justify-content: center;
+		padding: 0 5px;
+		border-radius: 4px;
+		background-color: var(--line-subtle);
+		color: var(--text-subtle);
+		font-family: var(--font-code);
+		font-size: 10.5px;
+		font-weight: 400;
+		line-height: 1;
+		white-space: nowrap;
+		transition:
+			background-color var(--dur-press) ease-out,
+			color var(--dur-press) ease-out;
+	}
+	/* On menu rows the resting cap needs more weight than the menu surface gives it. */
+	[data-ui='menu-item'] [data-ui='keycap'],
+	[data-ui='command-item'] [data-ui='keycap'] {
+		background-color: var(--bg-hover);
+	}
+	[data-variant='primary'] [data-ui='keycap'] {
+		background-color: rgb(var(--shade-rgb) / 0.12);
+		color: var(--on-primary);
+	}
+	/* A handled shortcut briefly presses every cap that names it. */
+	[data-ui='keycap'][data-pressed] {
+		background-color: var(--bg-selected);
+		color: var(--text-primary);
+	}
+
+	/* ───────── Skeleton: invisible for its first 200ms, then a slow shimmer ───────── */
+	[data-ui='skeleton'] {
+		background: linear-gradient(90deg, var(--bg-menu) 0%, var(--line-tab) 50%, var(--bg-menu) 100%);
+		background-size: 200% 100%;
+		animation:
+			ui-skeleton-hold 1ms linear var(--skeleton-delay) backwards,
+			ui-shimmer var(--dur-skeleton) linear infinite;
+	}
+	@keyframes ui-skeleton-hold {
+		from {
+			opacity: 0;
+		}
+	}
+	@keyframes ui-shimmer {
+		from {
+			background-position: 200% 0;
+		}
+		to {
+			background-position: -200% 0;
+		}
+	}
+
+	/*
+	 * Shimmer text: a soft light passes over a running label. Set --shimmer-base
+	 * and --shimmer-light on the same element to change the colors.
+	 */
+	.shimmer-text {
+		--shimmer-base: var(--text-faint);
+		--shimmer-light: var(--text-primary);
+
+		background: linear-gradient(
+			90deg,
+			var(--shimmer-base) 0%,
+			var(--shimmer-base) 40%,
+			var(--shimmer-light) 50%,
+			var(--shimmer-base) 60%,
+			var(--shimmer-base) 100%
+		);
+		background-size: 250% 100%;
+		-webkit-background-clip: text;
+		background-clip: text;
+		color: transparent;
+		animation: ui-shimmer-text var(--dur-shimmer) linear infinite;
+	}
+	@keyframes ui-shimmer-text {
+		from {
+			background-position: 100% 0;
+		}
+		to {
+			background-position: 0 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.shimmer-text {
+			background: none;
+			color: var(--shimmer-base);
+			animation: none;
+		}
+	}
+
+	/* ───────── Button faces: idle, pending, success and error share one cell and crossfade ───────── */
+	[data-ui='button-faces'] {
+		display: inline-grid;
+		place-items: center;
+	}
+	[data-ui='button-faces'] > * {
+		display: inline-flex;
+		grid-area: 1 / 1;
+		align-items: center;
+		gap: 6px;
+		transition:
+			opacity var(--dur-toggle) ease-out,
+			filter var(--dur-toggle) ease-out,
+			translate var(--dur-toggle) ease-out;
+	}
+	[data-ui='button-faces'] > [data-on='false'] {
+		opacity: 0;
+		filter: blur(3px);
+		translate: 0 3px;
+		pointer-events: none;
+	}
+	[data-ui='button-faces'] > [data-face='success'] {
+		color: var(--success);
+	}
+	[data-ui='button-faces'] > [data-face='error'] {
+		color: var(--danger);
+	}
+	/* Green or red on the filled primary falls under 3:1; there the faces keep the label color and the icon carries the state. */
+	[data-variant='primary'] [data-ui='button-faces'] > [data-face] {
+		color: inherit;
+	}
+
+	/* Icons inside controls draw at 1.75, a touch lighter than lucide's default. */
+	[data-ui='button'] svg:not([data-ui='spinner']) {
+		stroke-width: 1.75;
+	}
+
+	/* ───────── Toast ───────── */
+	.ui-toast {
+		display: flex;
+		width: var(--width, 356px);
+		align-items: flex-start;
+		gap: 10px;
+		padding: 11px 12px;
+		border-radius: 12px;
+		background: var(--bg-menu);
+		box-shadow: var(--shadow-menu);
+		color: var(--text-primary);
+		font-family: var(--font-ui);
+		font-size: 13px;
+		pointer-events: auto;
+	}
+	.ui-toast-title {
+		font-weight: 500;
+		line-height: 18px;
+	}
+	.ui-toast-description {
+		margin-top: 2px;
+		color: var(--text-subtle);
+		font-size: 12.5px;
+		line-height: 17px;
+	}
+	.ui-toast-icon {
+		display: grid;
+		width: 16px;
+		height: 18px;
+		flex-shrink: 0;
+		place-items: center;
+	}
+	.ui-toast[data-type='success'] .ui-toast-icon {
+		color: var(--success);
+	}
+	.ui-toast[data-type='error'] .ui-toast-icon {
+		color: var(--danger);
+	}
+	.ui-toast-action {
+		height: 26px;
+		margin-left: auto;
+		flex-shrink: 0;
+		padding: 0 10px;
+		border-radius: 7px;
+		color: var(--text-primary);
+		font-size: 12.5px;
+		font-weight: 500;
+		transition: background-color var(--dur-hover) ease-out;
+	}
+	.ui-toast-action:hover {
+		background: var(--bg-hover);
+	}
+}

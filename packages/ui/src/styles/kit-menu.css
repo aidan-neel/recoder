@@ -1,0 +1,86 @@
+/* kit: menu (dropdown, context menu, select, command palette) */
+
+/* ───────── Traveling highlight: one layer per list slides to the highlighted item ───────── */
+/* The list holding a highlight positions it and keeps it under every row, label and separator. */
+:has(> [data-ui='menu-highlight']) {
+	position: relative;
+	isolation: isolate;
+}
+[data-ui='menu-highlight'] {
+	position: absolute;
+	top: 0;
+	left: 0;
+	z-index: -1;
+	border-radius: 7px;
+	background-color: var(--bg-selected);
+	opacity: 0;
+	pointer-events: none;
+	transition:
+		transform var(--motion-hover) var(--ease-menu),
+		width var(--motion-hover) var(--ease-menu),
+		height var(--motion-hover) var(--ease-menu),
+		opacity var(--dur-hover) ease-out;
+}
+[data-ui='menu-highlight'][data-state='visible'] {
+	opacity: 1;
+}
+/* The first placement after a hidden spell lands in place and only fades in. */
+[data-ui='menu-highlight'][data-snap] {
+	transition-property: opacity;
+}
+
+/* ───────── Menu rows ───────── */
+[data-ui='menu-item-icon'],
+[data-ui='command-item-icon'] {
+	display: flex;
+	flex-shrink: 0;
+}
+[data-ui='menu-item-icon'] {
+	color: var(--text-subtle);
+}
+[data-ui='menu-item'][data-tone='danger'] [data-ui='menu-item-icon'] {
+	color: inherit;
+}
+[data-ui='menu-item-icon'] svg,
+[data-ui='command-item-icon'] svg {
+	width: 15px;
+	height: 15px;
+	stroke-width: 1.75;
+}
+[data-ui='menu-item-check'] {
+	display: flex;
+	flex-shrink: 0;
+	color: var(--text-primary);
+}
+[data-ui='menu-item-check'] svg {
+	width: 14px;
+	height: 14px;
+	stroke-width: 2;
+}
+[data-ui='select-trigger'] svg {
+	stroke-width: 1.75;
+}
+
+/* ───────── Command palette ───────── */
+[data-ui='command-input'] svg {
+	stroke-width: 1.75;
+}
+[data-ui='command-list'] > [cmdk-list-sizer] {
+	padding: 8px 8px 6px;
+}
+[data-ui='command-list'] [data-ui='menu-highlight'] {
+	border-radius: 9px;
+}
+[data-ui='command-group'] + [data-ui='command-group'] {
+	margin-top: 2px;
+}
+[data-ui='command-group'] [cmdk-group-heading] {
+	padding: 8px 10px 5px;
+	font-size: 11.5px;
+	line-height: 16px;
+	color: var(--text-faint);
+	user-select: none;
+}
+[data-ui='command-item-icon'] {
+	color: var(--text-muted);
+}

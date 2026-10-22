@@ -1,14 +1,13 @@
 <script lang="ts">
-	import { page } from '$app/state';
 	import appleTouchIcon from '$lib/assets/apple-touch-icon.png';
 	import favicon from '$lib/assets/favicon.svg';
-	import * as Card from '@sivir-ui/svelte/components/card';
 	import { Toaster } from '@sivir-ui/svelte/components/toast';
 	import CommandPalette from '$lib/components/shell/command-palette.svelte';
 	import GuidelinesEditor from '$lib/components/settings/guidelines-editor.svelte';
 	import ModelSettingsModal from '$lib/components/settings/model-settings-modal.svelte';
 	import UsageModal from '$lib/components/settings/usage-modal.svelte';
 	import DeleteSessionDialog from '$lib/components/session/delete-session-dialog.svelte';
+	import AppCanvas from '$lib/components/shell/app-canvas.svelte';
 	import TopBar from '$lib/components/shell/top-bar.svelte';
 	import { theme } from '$lib/settings/theme.svelte';
 	import { onMount } from 'svelte';
@@ -43,13 +42,9 @@
 
 <div class="flex h-dvh flex-col overflow-hidden bg-chrome text-fg">
 	<TopBar />
-	<main id="app-canvas" class="flex min-h-0 flex-1 px-2 pb-2" data-route={page.route.id}>
-		<Card.Root
-			class="app-canvas min-h-0 min-w-0 flex-1 gap-0 overflow-hidden rounded-[14px] border border-line-canvas bg-canvas p-0 shadow-none"
-		>
-			{@render children()}
-		</Card.Root>
-	</main>
+	<AppCanvas>
+		{@render children()}
+	</AppCanvas>
 	<ModelSettingsModal />
 	<GuidelinesEditor />
 	<UsageModal />

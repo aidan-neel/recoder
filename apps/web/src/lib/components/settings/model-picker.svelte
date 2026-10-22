@@ -3,15 +3,9 @@
 	import Check from '@lucide/svelte/icons/check';
 	import * as Command from '@sivir-ui/svelte/components/command';
 	import * as Select from '@sivir-ui/svelte/components/select';
-	import { effortLabel, type ReasoningEffort } from '@recoder/shared';
+	import { effortLabel, formatContextWindow, resolveEffort, type ReasoningEffort } from '@recoder/shared';
 	import Skeleton from '$lib/components/ui/skeleton.svelte';
-	import {
-		formatContextWindow,
-		modelSettingsUi,
-		resolveEffort,
-		type ModelChoice,
-		type ModelOption
-	} from '$lib/settings/model-settings.svelte';
+	import { modelSettingsUi, type ModelChoice, type ModelOption } from '$lib/settings/model-settings.svelte';
 
 	interface Props {
 		/** Current selection; null while settings load or when nothing is configured. */
