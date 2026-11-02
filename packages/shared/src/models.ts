@@ -17,10 +17,19 @@ export function effortLabel(effort: ReasoningEffort): string {
 	return EFFORT_TEXT[effort].label;
 }
 
-/** How many subagents one review may run in all, chosen in Settings → Review harness; 0 turns them off. */
-export const SUBAGENT_CAPS = [0, 2, 4] as const;
+/**
+ * How many subagents one review may run in all, chosen in Settings → Review harness; 0 turns them off.
+ * `uncapped` runs one for every question that warrants it, as far as the review's model calls and time allow.
+ * A string rather than `Infinity`, so it survives JSON.
+ */
+export const SUBAGENT_CAPS = [0, 2, 4, 'uncapped'] as const;
 export type SubagentCap = (typeof SUBAGENT_CAPS)[number];
 export const DEFAULT_SUBAGENT_CAP: SubagentCap = 2;
+
+/** The cap a picker's string value stands for, so `'uncapped'` stays a string and the counts become numbers again. */
+export function subagentCapFrom(value: string): SubagentCap {
+	return SUBAGENT_CAPS.find((cap) => String(cap) === value) ?? DEFAULT_SUBAGENT_CAP;
+}
 
 /** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode, Claude Code or Devin CLI. */
 export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode' | 'claude-code' | 'devin';
@@ -64,6 +73,8 @@ export interface ModelEntry {
 	defaultEffort?: ReasoningEffort;
 	/** Max tokens per request (prompt + output), when the endpoint reports it. */
 	contextWindow?: number;
+	/** The server no longer lists this model; a review still set to it stops with a message until another is picked. */
+	unavailable?: boolean;
 	/** Sampling overrides for this model, set in the settings file or API. */
 	runtime?: ModelRuntimeProfile;
 }

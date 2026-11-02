@@ -3,14 +3,17 @@
 import { Toaster, TooltipProvider } from '@recoder/ui';
 import { MotionConfig } from 'motion/react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { Suspense, useEffect, type ReactNode } from 'react';
 
 import { useQueue } from '@/lib/queue/queue-store';
 import { useReview } from '@/lib/review/review-store';
-import { inSample, paletteScope, SETTINGS_HREF } from '@/lib/shell/routes';
+import { openSettings } from '@/lib/settings/settings-url';
+import { inSample, paletteScope } from '@/lib/shell/routes';
 import { useShell } from '@/lib/shell/shell-store';
 import { followSystemTheme } from '@/lib/shell/theme';
 import { useKeys } from '@/lib/shell/use-keys';
+
+import { SettingsModal } from '@/components/settings/settings-modal';
 
 import { CommandPalette } from './command-palette';
 import { ShellFrame } from './shell-frame';
@@ -71,7 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 			useShell.getState().setPaletteOpen(false);
 			useShell.getState().setShortcutsOpen(false);
-			router.push(SETTINGS_HREF);
+			openSettings();
 		}
 	});
 
@@ -82,6 +85,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 					<ShellFrame bar={<TopBar />}>{children}</ShellFrame>
 					<CommandPalette />
 					<ShortcutsModal />
+					<Suspense fallback={null}>
+						<SettingsModal />
+					</Suspense>
 					<Toaster offset={decisionBar ? OVER_DECISION_BAR : undefined} />
 				</div>
 			</TooltipProvider>

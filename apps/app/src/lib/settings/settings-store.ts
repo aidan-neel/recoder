@@ -23,6 +23,8 @@ interface SettingsStore {
 	saveModels: (patch: ModelSettingsPatch) => Promise<void>;
 	/** Takes the provider list a connect or disconnect call returned, less MCP servers, and reloads the models it changed. */
 	setProviders: (providers: AgentProvider[]) => void;
+	/** Reads the model list again, after something outside Settings changed it (a vLLM sync). A failure keeps the last list. */
+	reloadModels: () => Promise<void>;
 }
 
 /** Installed and running, and signed in when the CLI has its own account. */
@@ -139,9 +141,15 @@ export const useSettings = create<SettingsStore>((set, get) => {
 		setProviders(providers) {
 			set({ providers });
 
-			void queued(settingsApi.models)
-				.then((models) => set({ models }))
-				.catch(() => undefined);
+			void get().reloadModels();
+		},
+
+		async reloadModels() {
+			try {
+				set({ models: await queued(settingsApi.models) });
+			} catch {
+				return;
+			}
 		}
 	};
 });

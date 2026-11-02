@@ -18,7 +18,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Assignment.** One reviewer's job: one unit under one lens, or one subagent. Type `ReviewAssignment` in `packages/shared/src/progress.ts`.
 
-**Subagent.** An extra reviewer a lens reviewer asks for to settle one question. State in `SubagentState` in `apps/server/src/review/pipeline/subagents.ts`. The cap is `SubagentCap` (`0`, `2`, `4`) in `packages/shared/src/models.ts`.
+**Subagent.** An extra reviewer a lens reviewer asks for to settle one question. State in `SubagentState` in `apps/server/src/review/pipeline/subagents.ts`. The cap is `SubagentCap` (`0`, `2`, `4`, `'uncapped'`) in `packages/shared/src/models.ts`; `'uncapped'` is a string so it survives JSON.
 
 **Second look.** A subagent the harness sends itself, not one a reviewer asked for: a residual pass per unit or a contract check per readability report of a comment that disagrees with the code. Set by `ReviewUnit.purpose` (`SecondLookPurpose`) in `apps/server/src/review/pipeline/units.ts`. Runs outside the subagent cap, only when `RECODER_RESIDUAL` or `RECODER_CONTRACT_CHECKS` is on.
 

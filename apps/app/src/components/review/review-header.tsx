@@ -9,6 +9,7 @@ import { connectionNote } from '@/lib/live/live-progress';
 import { useReview } from '@/lib/review/review-store';
 import { author } from '@/lib/shell/format';
 
+import { PullCommentAction } from './pull-comment-action';
 import { ReviewMenu } from './review-menu';
 import { forgeName, pullTitle, useCounts, useLiveView, useShownReview } from './review-view';
 
@@ -179,6 +180,7 @@ export function ReviewHeader() {
 			<span className="flex-1" />
 			<div className="review-head-side">
 				<ConnectionNote />
+				<PullCommentAction />
 				<HandOff />
 				<AskToggle />
 				{url ? <OpenPull url={url} /> : null}

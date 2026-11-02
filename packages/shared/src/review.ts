@@ -1,3 +1,4 @@
+import type { AutoReviewReason } from './auto-review';
 import type { ReviewContext } from './context';
 import type { Finding } from './findings';
 import type { ObligationReport } from './obligations';
@@ -43,6 +44,24 @@ export interface ReviewFunnel {
 	brief?: { complete: boolean; units: ReviewBriefUnit[] };
 }
 
+/** Recoder's one summary comment on the pull request, which it edits as the review runs and finishes. */
+export interface ReviewPullComment {
+	/** `posting` while a write is in flight or the review still runs; `failed` holds the forge's reason in `error`. */
+	state: 'posting' | 'posted' | 'failed';
+	/** The forge's comment (GitHub) or note (GitLab) id, once one exists. */
+	id?: string;
+	url?: string;
+	error?: string;
+	updatedAt: string;
+}
+
+/** A finding posted to the pull request: on its diff line when the forge took it there, else as a plain comment. */
+export interface ReviewFindingComment {
+	id: string;
+	url: string;
+	inline: boolean;
+}
+
 export interface Review {
 	id: string;
 	repoId: string;
@@ -67,10 +86,23 @@ export interface Review {
 	source: Provider | 'stub';
 	prTitle: string | null;
 	prUrl: string | null;
-	/** Set when a forge webhook queued the review: nobody is watching it. */
-	trigger?: 'webhook';
+	/** Set when a forge webhook or the auto-review watcher queued the review: nobody is watching it. */
+	trigger?: 'webhook' | 'auto';
+	/** Why the watcher or a webhook started it, and where on the pull request to answer. */
+	autoTrigger?: {
+		reason: AutoReviewReason;
+		/** Who mentioned Recoder. */
+		by?: string;
+		/** The mentioning comment, so the reply lands in its thread. */
+		noteId?: string;
+		discussionId?: string;
+	};
 	/** False runs every baseline check again instead of reusing an earlier review's result; for a suspected flaky suite. */
 	baselineCache?: false;
+	/** Present once someone asked Recoder to comment on the pull request. */
+	pullComment?: ReviewPullComment;
+	/** Findings posted to the pull request, by finding id, so posting again edits them. */
+	findingComments?: Record<string, ReviewFindingComment>;
 	/** When analysis began; draft sessions may exist before a review is requested. */
 	startedAt?: string;
 	createdAt: string;
@@ -87,6 +119,8 @@ export interface CreateReviewInput {
 	baselineCache?: false;
 	/** Display metadata from the selected open PR. Refetched before analysis. */
 	prTitle?: string;
+	/** True posts a summary comment on the pull request and keeps it current as the review runs. */
+	postComment?: boolean;
 }
 
 export interface CommandRun {

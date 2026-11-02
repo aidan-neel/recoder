@@ -7,8 +7,9 @@ import type { OpenCodeServer } from './opencode-server';
 export interface SessionHandlers {
 	onText?: (delta: string, partId: string) => void;
 	onReasoning?: (delta: string, partId: string) => void;
-	onStepStart?: () => void;
-	onStepFinish?: (usage: TokenUsage) => void;
+	/** `step` is the model message the step produces, when the server names it; it pairs a finish with its start. */
+	onStepStart?: (step?: string) => void;
+	onStepFinish?: (usage: TokenUsage, step?: string) => void;
 	/** Any event of this session: proof the run is still moving. */
 	onActivity?: () => void;
 }

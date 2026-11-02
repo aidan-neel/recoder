@@ -57,7 +57,7 @@ function FailedRow({ repo, error }: { repo: TrackedRepo; error: string }) {
 }
 
 /**
- * One tracked repository and its `.recoder/REVIEW.md`: the first rule, the
+ * One tracked repository and its `RECODER.md`: the first rule, the
  * file's state (active on the default branch, pending in a pull request),
  * and Write or Edit. Saving opens a pull request; the file applies once it
  * merges.

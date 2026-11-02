@@ -1,6 +1,6 @@
 'use client';
 
-import { DEFAULT_SUBAGENT_CAP, SUBAGENT_CAPS, type SubagentCap } from '@recoder/shared';
+import { DEFAULT_SUBAGENT_CAP, SUBAGENT_CAPS, subagentCapFrom, type SubagentCap } from '@recoder/shared';
 import { CopyButton, SegmentedControl, Switch } from '@recoder/ui';
 
 import { LIMIT_FIELDS } from '@/lib/settings/limits';
@@ -11,13 +11,17 @@ import { LimitField } from './limit-field';
 import { SaveStatus } from './save-status';
 import { SettingsGroup, SettingsRow } from './settings-group';
 
-const SUBAGENT_OPTIONS = SUBAGENT_CAPS.map((cap) => ({ value: String(cap), label: cap ? `Up to ${cap}` : 'Off' }));
+const SUBAGENT_OPTIONS = SUBAGENT_CAPS.map((cap) => ({
+	value: String(cap),
+	label: cap === 'uncapped' ? 'Uncapped' : cap ? `Up to ${cap}` : 'Off'
+}));
 
 /** What each cap allows; shown under the name for the current pick. */
 const SUBAGENT_TEXT: Record<SubagentCap, string> = {
 	0: 'Reviewers work alone, using the fewest tokens',
 	2: 'Reviewers can run up to 2 subagents per review',
-	4: 'Reviewers can run up to 4 subagents, using the most tokens'
+	4: 'Reviewers can run up to 4 subagents per review',
+	uncapped: 'One per open question. Far more tokens and time'
 };
 
 const FAILED = 'Settings weren’t saved';
@@ -52,7 +56,7 @@ export function HarnessSection() {
 					<SegmentedControl
 						aria-label="Subagents"
 						value={String(capValue)}
-						onValueChange={(value) => cap.change(Number(value) as SubagentCap)}
+						onValueChange={(value) => cap.change(subagentCapFrom(value))}
 						options={SUBAGENT_OPTIONS}
 					/>
 				</SettingsRow>

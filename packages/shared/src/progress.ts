@@ -229,7 +229,7 @@ export interface ReviewChatMessage {
 /** One layer of owner review guidelines a review ran with. */
 export interface ReviewGuidelinesLayer {
 	source: 'global' | 'repo';
-	/** Repo file path (`.recoder/REVIEW.md`) for the repo layer. */
+	/** Repo file path (`RECODER.md`, or the older `.recoder/REVIEW.md`) for the repo layer. */
 	path?: string;
 	/** Branch the repo layer was read from (the PR's base). */
 	ref?: string;

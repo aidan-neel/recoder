@@ -1,4 +1,4 @@
-import type { BriefQuestion, ReviewAssignment } from '@recoder/shared';
+import type { BriefQuestion, ReviewAssignment, SubagentCap } from '@recoder/shared';
 import { formatToolResults, type EvidenceStore } from '../../../evidence/evidence.js';
 import {
 	configForOrchestrator,
@@ -68,7 +68,7 @@ export interface PoolContext extends ReviewerPromptContext {
 	/** Dependency setup and baseline check results as they stand when a reviewer starts; the checks finish mid-review. */
 	setupNotes: () => string;
 	/** Subagents the review may run in all; correctness lenses aren't offered any at 0. */
-	subagentCap: number;
+	subagentCap: SubagentCap | number;
 	reportLowSeverity: boolean;
 	/** Findings people dismissed in this repository, newest first; a candidate matching one is dropped and a lens reviewer is told of those on its files. */
 	dismissals: Dismissal[];
@@ -327,8 +327,8 @@ function systemPrompt(item: ReviewUnit, subagent: boolean, lens: Lens, ctx: Pool
 	if (subagent) return subagentSystemPrompt(ctx.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0);
 
 	return reviewerSystemPrompt(lens, ctx.exec, ctx.directive, {
-		subagents: lens.id === 'correctness' && ctx.subagentCap > 0,
-		unsettled: !isQualityLens(lens.id) && ctx.subagentCap > 0,
+		subagents: lens.id === 'correctness' && ctx.subagentCap !== 0,
+		unsettled: !isQualityLens(lens.id) && ctx.subagentCap !== 0,
 		delegate
 	});
 }

@@ -33,6 +33,16 @@ Execution order inside the harness, with overlaps:
 6. `retryFailedUnits`, then `runSubagents`. Then the harness waits for detectors, drains verification and waits for checks (`checksInTime`).
 7. `finishVerification`, `consolidate`, `completeReview`.
 
+## Repo guidelines: `RECODER.md`
+
+A repository tells Recoder what to look for in a `RECODER.md` at its root. It is the repo layer of the owner review guidelines; the global layer is edited in Settings.
+
+- `loadRepoGuidelines` in `apps/server/src/review/pipeline/harness/understand.ts` reads it at the PR's base commit (`target`), so a pull request that edits the file is not reviewed by its own edit.
+- The paths are `GUIDELINES_PATHS` in `packages/shared/src/guidelines.ts`. The first that exists is the layer: `RECODER.md`, else the older `.recoder/REVIEW.md`. The other is ignored.
+- `composeGuidelines` in `apps/server/src/review/guidelines/guidelines.ts` puts it in the trusted guidelines block. It ranks below Recoder's safety rules, above `AGENTS.md`, `CLAUDE.md` and PR text (which stay untrusted), and wins over the global layer where they conflict.
+- It is not in `INSTRUCTION_PATHS`, so its text reaches the prompts once. The rule ledger (`apps/server/src/review/guidelines/ledger/sources.ts`) reads it after the instruction files.
+- Settings → Guidelines edits it through a pull or merge request (`apps/server/src/routes/guidelines.ts`). A repository on `.recoder/REVIEW.md` keeps that path; a new file is `RECODER.md`.
+
 ## Where candidates are lost
 
 `DropStage` is defined in `packages/shared/src/review.ts`. `StopStage` adds `unproven` and is defined in `apps/server/src/review/pipeline/candidate-outcome.ts`. Every stopped candidate stays on `run.candidates` with `valid: false` or no verified status, so summaries and evals can count it.
@@ -140,7 +150,7 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
 - `parseReviewerOutput` and `salvageReviewerOutput` read the reviewer's answer as `ReviewerOutput`. They are in `apps/server/src/review/pipeline/reviewer.ts`.
 - `applyUnitResult` and `addCandidates` handle the answer. They are in `apps/server/src/review/pipeline/harness/unit-result.ts`. `addCandidates` runs `validateCandidate` on each finding and sends it to verification.
 - Only the correctness lens may request subagents. Answers to reviewer questions are recorded with `recordReply`.
-- `runSubagents` plans subagents with `planSubagents` and `planBriefSubagents`. It is in `apps/server/src/review/pipeline/harness/subagent-stage.ts`. Requests over the cap, or for the same concern on overlapping code, are merged or dropped.
+- `runSubagents` plans subagents with `planSubagents` and `planBriefSubagents`. It is in `apps/server/src/review/pipeline/harness/subagent-stage.ts`. Requests over the cap, or for the same concern on overlapping code, are merged or dropped. With the cap at `'uncapped'`, `subagentLimit` plans as many as the model calls left can pay for in full (`maxSubagentTurns` plus `schemaRepairAttempts` each), after holding back the consolidation reserve and the calls verifiers still waiting or running were given (`VerifyQueue.heldCalls`); the rest are dropped and named in the summary. None launches past the investigation deadline, which keeps `reserveMsForVerification`.
 - Lens reviewers see past dismissals through `dismissalsBlock`. Subagents do not.
 - Second looks (flags `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`) are subagents the harness sends itself, planned by `planSecondLook` in `apps/server/src/review/pipeline/second-look/stage.ts` after the reviewer and brief subagents, outside the cap. A residual pass (`residual-N`) rereads one unit for what its lenses missed. A contract check (`contract-N`) takes one readability report of a comment, name or doc that disagrees with the code and decides which side is wrong. They set `ReviewUnit.purpose`, run on the specialist model, read only (no commands, since verification runs every candidate), and record tokens under the `second-look` stage. Their clock is `secondLookFinalTurnAfterMs` (7 min) and `secondLookMaxMs` (14 min); when a residual pass starts, `makeRoomForSecondLooks` moves the review deadline out so that clock fits; contract checks are short and use the time left. Each adds `maxSubagentTurns` plus `schemaRepairAttempts` model calls to the budget, and each of its calls gets `secondLookCallDeadlineMs` (180 s) in place of `perCallDeadlineMs` (90 s), since a CLI model prints its reply only at the end.
 - Drops: candidates from this stage drop in stage 9.

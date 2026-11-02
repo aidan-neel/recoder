@@ -1,7 +1,15 @@
 import type { Provider } from './repo';
 
-/** Owner review guidelines: a global layer in Recoder, a per-repo layer in `.recoder/REVIEW.md`. */
-export const GUIDELINES_PATH = '.recoder/REVIEW.md';
+/**
+ * Where a repository keeps its layer of the owner review guidelines, in
+ * precedence order: the first file that exists is the layer, and the others
+ * are ignored. `.recoder/REVIEW.md` is the older location, still read for
+ * repositories that have it.
+ */
+export const GUIDELINES_PATHS = ['RECODER.md', '.recoder/REVIEW.md'] as const;
+
+/** Where a new repository layer is written: `RECODER.md` at the repository root. */
+export const GUIDELINES_PATH = GUIDELINES_PATHS[0];
 export const MAX_GUIDELINES_CHARS = 8000;
 
 /** The longest instruction the server takes for a guidelines draft. */
@@ -17,6 +25,7 @@ export interface GuidelinesOverview {
 	/** Starter text for an empty editor. */
 	template: string;
 	maxChars: number;
+	/** Where a repository without a guidelines file gets one (`RECODER.md`). */
 	path: string;
 	repos: { id: string; name: string; provider: Provider }[];
 }
@@ -32,6 +41,7 @@ export interface PendingGuidelinesChange {
 
 export interface RepoGuidelines {
 	repoId: string;
+	/** The file the repository's layer lives in: the one found, else where a new one is written. */
 	path: string;
 	/** Default branch the active file is read from. */
 	ref: string;

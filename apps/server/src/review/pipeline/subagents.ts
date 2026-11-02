@@ -73,8 +73,8 @@ function overlaps(a: UnitScope, b: UnitScope): boolean {
  * Picks the subagents to run from every reviewer's requests, without a model:
  * requests go in unit order, one with the same concern as an earlier request
  * over overlapping hunks is merged into it, and the rest run up to `cap`. The
- * requests past the cap are returned as dropped; at cap 0 there are none to
- * report, since reviewers aren't offered subagents.
+ * requests past the cap are returned as dropped. The caller doesn't plan at
+ * all with subagents off, since reviewers aren't offered them then.
  */
 export function planSubagents(
 	requests: UnitRequest[],
@@ -82,8 +82,6 @@ export function planSubagents(
 	inventory: ReviewInventory,
 	cap: number
 ): { units: ReviewUnit[]; dropped: UnitRequest[] } {
-	if (cap <= 0) return { units: [], dropped: [] };
-
 	const order = (unitId: string) => units.findIndex((unit) => unit.id === unitId);
 	const ordered = requests.map((entry, index) => ({ entry, index }));
 

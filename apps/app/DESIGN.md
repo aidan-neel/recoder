@@ -67,11 +67,39 @@ reviewed, With the agent (every decision made, some sent back), Ready to merge.
   reading pane, centred; the file view widens. The selection lives in the URL
   (`?item=`). The ask column opens on the right: on a decision or receipt it
   asks that item's reviewer; on the overview or a file it is the conversation
-  with Orchestrator, for the review's whole life. While a review runs, live
-  progress (stages, reviewers, pause, cancel, continue) takes the reading
-  pane.
-- **Settings**: a nav column (Agent, Connections, Review harness, Guidelines,
-  Appearance) and one centred column of grouped rows.
+  with Orchestrator, for the review's whole life. While a review runs, the
+  overview is the live view (below); a decision, receipt or file keeps a slim
+  live strip on top instead.
+- **Live view** (the calm timeline): the serif lead ("Reviewing this pull
+  request.", "Paused.", "Waiting for a free slot."), a 4px meter (steps
+  finished of steps known; amber while paused), "Step 4 of 6", then Ask
+  Orchestrator, Cancel review and Pause/Resume. Below, the stages on one rail:
+  Checkout, Understand, Checks, Review, Subagents (only when a reviewer asked
+  for one), Verify, Finish. Each has a glyph (dashed ring, spinner, check;
+  amber ring while paused), a line on what it did, does or will do, and a
+  time read from the stage's own task and reviewer timestamps: how long a
+  finished stage took, and a clock on the running one. There is no time-left
+  estimate and no estimate for stages not reached, since nothing in the
+  progress supports one. Only the current stage stands open, listing its
+  reviewers in a ringed list: what each covers, what it is doing right now
+  (the command it runs, in mono), and how many possible issues it raised. A
+  finished Review folds its reviewers away; its name opens them again. When
+  anything is already open (a continued review keeps what it found), a card
+  under the timeline says it is ready to read, with the region's one filled
+  button, Read the riskiest (Enter); it steps back to an outline while Resume
+  is the filled one. Loading shows placeholder stages.
+- **Settings** is a large modal over whatever page is open (the gear, ⌘, the
+  palette and error toasts open it). Its section is in the address,
+  `?settings=<section>`, beside the page's own params, so Back closes it and a
+  link opens it; the old `/settings/<section>` routes redirect there. Inside:
+  a nav column (Agent, Connections, Auto-review, Review harness, Guidelines,
+  Appearance) and one centred column of grouped rows under a 44px header with
+  the close button. Page keys stand down while it is open.
+- **Auto-review** (a settings section) turns on the watcher that starts
+  reviews by itself: when a comment mentions the handle (`@recoder`), when a
+  pull request opens, or when a reviewed one gets new commits. It also holds
+  the poll interval, posting results back, which tracked repositories are
+  watched, the reviews it started, and the webhook addresses.
 
 ## App-only tokens
 

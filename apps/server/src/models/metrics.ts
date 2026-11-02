@@ -199,14 +199,21 @@ function field(raw: unknown, key: string): unknown {
 	return raw && typeof raw === 'object' ? (raw as Record<string, unknown>)[key] : undefined;
 }
 
-/** Accept numbers, never coerce null, strings, negative values, or invalid counts to zero. */
+/**
+ * Accept numbers, never coerce null, strings, negative values, or invalid counts to zero. Some
+ * OpenAI-compatible gateways name the two main counts `input_tokens` and `output_tokens`, so those are read
+ * when the chat-completions names are absent.
+ */
 export function normalizeTokenUsage(raw: unknown, provider: TokenCall['provider']): TokenUsage {
 	const count = (n: unknown): number | null => (typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null);
 	const codex = provider === 'codex';
-	const read = (codexKey: string, openAiKey: string) => count(field(raw, codex ? codexKey : openAiKey));
+
+	const read = (codexKey: string, openAiKey: string, alias?: string) =>
+		count(field(raw, codex ? codexKey : openAiKey)) ?? (codex || !alias ? null : count(field(raw, alias)));
+
 	const promptDetails = field(raw, 'prompt_tokens_details');
-	const inputTokens = read('inputTokens', 'prompt_tokens');
-	const outputTokens = read('outputTokens', 'completion_tokens');
+	const inputTokens = read('inputTokens', 'prompt_tokens', 'input_tokens');
+	const outputTokens = read('outputTokens', 'completion_tokens', 'output_tokens');
 
 	return {
 		inputTokens,

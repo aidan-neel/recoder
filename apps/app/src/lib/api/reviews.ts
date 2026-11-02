@@ -48,5 +48,12 @@ export const reviewsApi = {
 	dismiss: (id: string, findingId: string, reason: string) =>
 		post<{ dismissed: boolean }>(`/api/reviews/${seg(id)}/dismissals`, { findingId, reason }),
 	restore: (id: string, findingId: string) =>
-		del<{ restored: boolean }>(`/api/reviews/${seg(id)}/dismissals/${seg(findingId)}`)
+		del<{ restored: boolean }>(`/api/reviews/${seg(id)}/dismissals/${seg(findingId)}`),
+
+	/** Post the review's summary comment on the pull request, or bring it up to date. */
+	commentOnPull: (id: string) => post<Review>(`/api/reviews/${seg(id)}/pull-comment`),
+
+	/** Post one finding on its diff line, or update the comment it already has. */
+	commentFinding: (id: string, findingId: string) =>
+		post<Review>(`/api/reviews/${seg(id)}/findings/${seg(findingId)}/pull-comment`)
 };

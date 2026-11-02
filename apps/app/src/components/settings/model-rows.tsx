@@ -86,6 +86,7 @@ export function ModelRows({ layout, list, onList, selected, current, onPick }: M
 
 		const id = row.kind === 'follow' ? FOLLOW_ID : row.option.id;
 		const tokens = row.kind === 'model' ? row.option.contextWindow : null;
+		const unavailable = row.kind === 'model' && row.option.unavailable;
 
 		return (
 			<CommandItem
@@ -93,7 +94,8 @@ export function ModelRows({ layout, list, onList, selected, current, onPick }: M
 				value={id}
 				onSelect={() => onPick(id)}
 				icon={id === current ? Check : NoMark}
-				detail={tokens ? formatContextWindow(tokens) : undefined}
+				detail={unavailable ? 'Not served' : tokens ? formatContextWindow(tokens) : undefined}
+				disabled={unavailable}
 				className="model-row"
 			>
 				{row.kind === 'follow' ? FOLLOW_LABEL : row.option.name}

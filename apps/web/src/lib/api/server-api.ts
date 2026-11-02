@@ -219,7 +219,7 @@ export const serverApi = {
 
 		return result;
 	},
-	/** Owner review guidelines: the global layer and per-repo `.recoder/REVIEW.md`. */
+	/** Owner review guidelines: the global layer and per-repo `RECODER.md`. */
 	getGuidelines: () => req<GuidelinesOverview>('/api/guidelines'),
 	saveGlobalGuidelines: (content: string) =>
 		req<GlobalGuidelines>('/api/guidelines/global', { method: 'PUT', body: JSON.stringify({ content }) }),

@@ -72,16 +72,16 @@ function errorLine(text: string): string | undefined {
 	return (lines.find((line) => /^error\b/i.test(line)) ?? lines.at(-1))?.slice(0, 300);
 }
 
-/** `prompt_tokens` already counts the cached ones, as the export's own totals show. */
+/** `prompt_tokens` already counts the cached ones, as the export's own totals show. A count the export lacks is unknown, not 0. */
 function tokenUsage(metrics: NonNullable<Export['final_metrics']>): TokenUsage {
-	const inputTokens = metrics.total_prompt_tokens ?? 0;
-	const outputTokens = metrics.total_completion_tokens ?? 0;
+	const inputTokens = metrics.total_prompt_tokens ?? null;
+	const outputTokens = metrics.total_completion_tokens ?? null;
 
 	return {
 		inputTokens,
 		outputTokens,
-		totalTokens: inputTokens + outputTokens,
-		cachedInputTokens: metrics.total_cached_tokens ?? 0,
+		totalTokens: inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null,
+		cachedInputTokens: metrics.total_cached_tokens ?? null,
 		cacheWriteInputTokens: null,
 		reasoningOutputTokens: null
 	};

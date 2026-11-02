@@ -100,6 +100,19 @@ test('a bug no verifier could run hands back the model calls it added to the bud
 	expect(run.budget.limit).toBe(10_000);
 });
 
+test('the calls a verifier was given stay held until it finishes, so a later stage cannot plan to spend them', async () => {
+	const { queue, release } = gatedQueue();
+
+	queue.add(candidate('waiting'));
+
+	expect(queue.heldCalls).toBe(REVIEW_POLICY.maxVerifierTurns);
+
+	await release();
+	await queue.drain();
+
+	expect(queue.heldCalls).toBe(0);
+});
+
 /** A bug at one place that consolidation would merge with any other report of it. */
 function bug(candidateId: string): CandidateFinding {
 	return {

@@ -60,14 +60,9 @@ const GROUPS: Group[] = [
 	}
 ];
 
-/**
- * The groups for the page on screen: its own keys, then the ones that work
- * anywhere. Settings has no keys of its own, so it lists every group.
- */
+/** The groups for the page on screen: its own keys, then the ones that work anywhere. */
 function groupsFor(page: string): Group[] {
-	const shown = GROUPS.filter((group) => group.page === page || group.page === 'anywhere');
-
-	return shown.length > 1 ? shown : GROUPS;
+	return GROUPS.filter((group) => group.page === page || group.page === 'anywhere');
 }
 
 /** One press: a key's cap, or a chord's caps side by side. */

@@ -1,7 +1,9 @@
 'use client';
 
-import { usePathname, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
+
+import { dropSettingsParam } from '@/lib/settings/settings-url';
 
 import { ProviderModal } from '../provider-modal';
 
@@ -18,13 +20,13 @@ interface ProviderModalHostProps {
 }
 
 /**
- * The provider modal on the Agent page. Besides the page's own buttons, a
- * link to `/settings/agent?add=provider` (from an error toast or a notice)
- * opens it once the providers are loaded; closing it drops the query.
+ * The provider modal in the Agent section. Besides the section's own buttons,
+ * an address with `?settings=agent&add=provider` (from an error toast or a
+ * notice) opens it once the providers are loaded; closing it drops `add` and
+ * leaves settings open.
  */
 export function ProviderModalHost({ request, onClose, ready }: ProviderModalHostProps) {
 	const params = useSearchParams();
-	const pathname = usePathname();
 	const asked = params.get('add') === 'provider';
 	const [handled, setHandled] = useState(false);
 
@@ -37,7 +39,7 @@ export function ProviderModalHost({ request, onClose, ready }: ProviderModalHost
 
 		if (fromLink) {
 			setHandled(true);
-			window.history.replaceState(null, '', pathname);
+			dropSettingsParam('add');
 		}
 
 		onClose();

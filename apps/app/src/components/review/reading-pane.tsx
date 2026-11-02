@@ -13,9 +13,9 @@ import { selectionKey, useReview, type Selection } from '@/lib/review/review-sto
 
 import { LiveStrip } from './live-strip';
 import { OverviewView } from './overview-view';
-import { isWorking, useCounts, usePhase } from './review-view';
+import { isWorking, useCounts, useLiveView, usePhase } from './review-view';
 
-/** What the pane shows for a selection. While reviewers work and nothing is found yet, the overview is the live view. */
+/** What the pane shows for a selection. While reviewers work, the overview is the live view. */
 function PaneContent({ selection, live }: { selection: Selection; live: boolean }) {
 	if (selection.kind === 'decision') return <DecisionView id={selection.id} />;
 	if (selection.kind === 'receipt') return <ReceiptView id={selection.id} />;
@@ -34,7 +34,8 @@ const VIEWPORT = { tabIndex: 0, role: 'region', 'aria-label': 'Reading pane', 'd
 /**
  * The reading pane. Each selection opens at its top with no scroll animation
  * and swaps in with at most a short opacity fade, so keyboard moves stay
- * instant. A running review with decisions keeps a live strip on top; the
+ * instant. A running review with decisions keeps a live strip over its other
+ * items (the live view on the overview says it all itself); the
  * decision bar floats over the bottom while a decision is selected. When a
  * control inside the pane opens another item (a receipt, the file, the
  * riskiest decision), the control goes away with the old view, so focus
@@ -48,7 +49,8 @@ export function ReadingPane() {
 	const activated = useRef(false);
 	const key = selectionKey(selection);
 	const [firstKey] = useState(key);
-	const working = isWorking(phase);
+	const live = useLiveView();
+	const strip = isWorking(phase) && phase !== 'draft' && total > 0 && !live;
 
 	/** Remembers, until the event finishes, that a control inside the pane was pressed. */
 	function onClickCapture(): void {
@@ -68,7 +70,7 @@ export function ReadingPane() {
 
 	return (
 		<div data-ui="reading-pane" className="review-main">
-			{working && phase !== 'draft' && total > 0 ? <LiveStrip /> : null}
+			{strip ? <LiveStrip /> : null}
 			<ScrollArea className="flex-1" viewportRef={viewport} viewportProps={VIEWPORT} viewportClassName="review-scroll">
 				<motion.div
 					key={key}
@@ -77,7 +79,7 @@ export function ReadingPane() {
 					transition={{ duration: DURATION.menuOut, ease: EASE_OUT }}
 					onClickCapture={onClickCapture}
 				>
-					<PaneContent selection={selection} live={working && total === 0} />
+					<PaneContent selection={selection} live={live} />
 				</motion.div>
 			</ScrollArea>
 			<DecisionBar />

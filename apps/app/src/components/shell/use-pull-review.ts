@@ -7,10 +7,11 @@ import { useState } from 'react';
 import { ApiError, failureText, OFFLINE_TEXT } from '@/lib/api/http';
 import { reviewsApi } from '@/lib/api/reviews';
 import { useConnections } from '@/lib/connections/connections-store';
+import { openSettings } from '@/lib/settings/settings-url';
 import { pullRef } from '@/lib/shell/format';
 import { errorToast } from '@/lib/shell/notify';
 import { parsePullRef, reposFor, type PullRef } from '@/lib/shell/pull-ref';
-import { useShell, type PaletteItem } from '@/lib/shell/shell-store';
+import type { PaletteItem } from '@/lib/shell/shell-store';
 
 import { RunningIcon } from './palette-items';
 
@@ -41,7 +42,7 @@ function trackItem(ref: PullRef | null, repos: Repo[]): PaletteItem[] {
 			detail: named ? `${named} isn’t tracked` : undefined,
 			keywords: 'settings connections',
 			icon: Plug,
-			run: () => useShell.getState().navigate('/settings/connections')
+			run: () => openSettings('connections')
 		}
 	];
 }

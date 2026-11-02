@@ -80,13 +80,6 @@ test('a scope outside the review falls back to the requesting unit, and a file n
 	expect(plan.units.find((unit) => unit.title === 'Whole file')!.scope).toEqual([{ path: 'src/a.ts', hunkIds: whole }]);
 });
 
-test('with subagents off nothing runs and nothing is reported dropped', () => {
-	expect(planSubagents([ask('unit-1', 'Callers of parse', 'src/a.ts')], units, inventory, 0)).toEqual({
-		units: [],
-		dropped: []
-	});
-});
-
 /** `src/a.ts` with one change near line 2 and another near line 52, so it has two hunks. */
 const TWO_HUNK_DIFF = `diff --git a/src/a.ts b/src/a.ts
 --- a/src/a.ts

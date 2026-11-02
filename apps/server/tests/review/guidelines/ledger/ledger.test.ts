@@ -3,6 +3,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildRuleLedger, ledgerBlock } from '../../../../src/review/guidelines/ledger/ledger';
+import { readLedgerSources } from '../../../../src/review/guidelines/ledger/sources';
 import { toLedger } from '../../../../src/review/guidelines/ledger/validate';
 import { createRun } from '../../../../src/review/pipeline/harness/context';
 import { DIFF, modelReply, restoreAfterEach, twoCommitRepo, useTestModel } from '../../pipeline/harness-fixtures';
@@ -116,5 +117,20 @@ describe('buildRuleLedger', () => {
 		expect(await buildRuleLedger(createRun(input))).toEqual(first);
 		expect(ledgerBlock(first, ['apps/web/src/x.svelte'])).toBe('R2: Use Sivir. (apps/web/AGENTS.md:1)');
 		expect(ledgerBlock(first, ['apps/server/src/x.ts'])).toBe('');
+	});
+});
+
+describe('readLedgerSources', () => {
+	test('reads RECODER.md as the repo guidelines, not .recoder/REVIEW.md as well, after the instruction files', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'recoder-ledger-'));
+
+		const { targetSha, headSha } = await twoCommitRepo(root, {
+			base: { 'RECODER.md': '- New rule.\n', '.recoder/REVIEW.md': '- Old rule.\n', 'AGENTS.md': '- Agents rule.\n' }
+		});
+
+		const revision = { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' };
+		const sources = await readLedgerSources(revision, new AbortController().signal);
+
+		expect(sources.map((source) => source.path)).toEqual(['AGENTS.md', 'RECODER.md']);
 	});
 });

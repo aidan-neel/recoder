@@ -2,6 +2,7 @@ import {
 	appName,
 	defaultEffort,
 	looksLikeModelId,
+	parseVllmModelId,
 	prettyModelName,
 	resolveEffort,
 	type ModelEntry,
@@ -20,6 +21,8 @@ export interface ModelOption {
 	defaultEffort: ReasoningEffort | null;
 	/** Tokens per request, when the agent reported it. */
 	contextWindow: number | null;
+	/** The server stopped serving it: it is listed so a pick shows as missing, but cannot be chosen. */
+	unavailable: boolean;
 	/** Lowercased name, group and id, for the search. */
 	haystack: string;
 }
@@ -59,8 +62,7 @@ function providerName(entry: ModelEntry): string {
 function toModelOption(entry: ModelEntry, multiAgent: boolean): ModelOption {
 	const efforts = entry.efforts?.length ? entry.efforts : null;
 	const provider = providerName(entry);
-	const agent = entry.agent ?? 'Custom';
-	const group = multiAgent && agent !== provider ? `${agent} · ${provider}` : provider;
+	const group = multiAgent && entry.agent && entry.agent !== provider ? `${entry.agent} · ${provider}` : provider;
 	const name = displayName(entry);
 
 	return {
@@ -70,6 +72,7 @@ function toModelOption(entry: ModelEntry, multiAgent: boolean): ModelOption {
 		efforts,
 		defaultEffort: defaultEffort(entry),
 		contextWindow: entry.contextWindow ?? null,
+		unavailable: entry.unavailable ?? false,
 		haystack: `${name} ${group} ${entry.id}`.toLowerCase()
 	};
 }
@@ -130,6 +133,18 @@ export function rolePick(settings: ModelSettings, role: ModelRole): RolePick {
 	const saved = role === 'orchestrator' ? settings.orchestratorEffort : settings.specialistEffort;
 
 	return { id, option, effort: resolveEffort(option, saved), follows: role === 'specialist' && !id };
+}
+
+/**
+ * Why a pick can't run, in plain words, or null when it can: its vLLM server
+ * stopped serving the model, or was disconnected. Other picks are never missing here.
+ */
+export function missingNote(pick: RolePick): string | null {
+	if (pick.option?.unavailable) return `${pick.option.name} is no longer served. Pick another model or reviews stop.`;
+
+	const parsed = pick.id && !pick.option ? parseVllmModelId(pick.id) : null;
+
+	return parsed ? 'Its vLLM server is disconnected. Pick another model or connect it again.' : null;
 }
 
 /** True when every word of the query appears somewhere in the model's name, group or id, in any order. */

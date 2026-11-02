@@ -90,15 +90,22 @@ function UsageRow({ name, aggregate, share }: { name: string; aggregate: TokenAg
 	);
 }
 
-/** The counts: the total, then each model with its share, then each kind of agent. */
+/**
+ * The counts: the total, then each model with its share, then each kind of agent. A review with no requests
+ * says so, and one whose provider counted none says the counts were not reported, never `— tokens`.
+ */
 function Usage({ metrics }: { metrics: ReviewMetrics }) {
 	const total = totalOf(metrics.total);
 	const models = [...metrics.models].sort((a, b) => (totalOf(b) ?? 0) - (totalOf(a) ?? 0));
 
+	if (metrics.total.calls === 0) return <p className="text-[13px] text-fg-muted">No model requests recorded yet.</p>;
+
 	return (
 		<div className="flex flex-col gap-6">
 			<div className="flex flex-col gap-1">
-				<p className="text-[15px] text-fg">{tokens(total)} tokens</p>
+				<p className="text-[15px] text-fg">
+					{total === null ? 'Token counts not reported' : `${tokens(total)} tokens`}
+				</p>
 				<p className="text-[12px] text-fg-subtle">{breakdown(metrics.total)}</p>
 			</div>
 			<section className="flex flex-col gap-4" aria-label="By model">

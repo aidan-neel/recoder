@@ -3,6 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../src/review/pipeline/harness';
+import { REVIEW_POLICY } from '../../../src/review/session/review-policy';
 import {
 	NOTHING,
 	TWO_UNIT_DIFF,
@@ -385,4 +386,52 @@ test('a restart preserves the answer evidence and remaining work, and the follow
 
 	expect(resumed.questions?.counts).toMatchObject({ asked: 1, confirmed: 1, followUpsRun: 1, followUpsNotRun: 0 });
 	expect(resumed.summary).toContain('Of 1 brief question, 1 was settled (1 confirmed, 0 disproved).');
+});
+
+/** Each correctness lens asks for its two subagents, on top of the question the brief leaves open. */
+const correctnessAsks = (assignment: string) => ({ subagents: REQUESTS[assignment] ?? [] });
+
+test('uncapped, every request and open question gets a subagent, past the largest cap', async () => {
+	useTwoModels();
+
+	const seen = stubBrief(['unit-1/correctness'], correctnessAsks);
+	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 'uncapped' });
+
+	expect(seen.subagentPrompts.size).toBe(5);
+	expect(result.summary).not.toContain('over the limit');
+});
+
+test('uncapped, subagents stop at what the model calls left can pay for, and the requests past it are named', async () => {
+	const policy = REVIEW_POLICY as Record<string, number>;
+	const saved = { maxModelCalls: policy.maxModelCalls, callsPerAssignment: policy.callsPerAssignment };
+	const subagentCalls = REVIEW_POLICY.maxSubagentTurns + REVIEW_POLICY.schemaRepairAttempts;
+	const calibration = { usedBeforePlan: 0, planned: false };
+
+	useTwoModels();
+	stubBrief(['unit-1/correctness'], correctnessAsks);
+
+	await runAdaptiveReview(
+		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 'uncapped' },
+		{
+			onBudget: (budget) => {
+				if (!calibration.planned) calibration.usedBeforePlan = budget.used;
+			},
+			onLog: (message) => {
+				if (message.startsWith('Planned')) calibration.planned = true;
+			}
+		}
+	);
+
+	policy.callsPerAssignment = 0;
+	policy.maxModelCalls = calibration.usedBeforePlan + REVIEW_POLICY.reserveCallsForConsolidation + 2 * subagentCalls;
+
+	try {
+		const seen = stubBrief(['unit-1/correctness'], correctnessAsks);
+		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 'uncapped' });
+
+		expect([...seen.subagentPrompts.keys()].sort()).toEqual(['subagent-1', 'subagent-2']);
+		expect(result.summary).toContain('2 subagent requests went over the limit');
+	} finally {
+		Object.assign(policy, saved);
+	}
 });

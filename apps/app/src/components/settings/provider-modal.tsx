@@ -1,8 +1,6 @@
 'use client';
 
-import { Modal, ModalContent } from '@recoder/ui';
-import { useState } from 'react';
-
+import { HoldModal } from './hold-modal';
 import { ProviderFlowView } from './providers/provider-flow';
 
 interface ProviderModalProps {
@@ -20,18 +18,11 @@ interface ProviderModalProps {
  * that would look live but do nothing; Cancel closes it.
  */
 export function ProviderModal({ open, onOpenChange, providerId = null }: ProviderModalProps) {
-	const [sending, setSending] = useState(false);
-
 	return (
-		<Modal
-			open={open}
-			onOpenChange={(next) => {
-				if (next || !sending) onOpenChange(next);
-			}}
-		>
-			<ModalContent size="md" showClose={false} className="provider-modal">
-				<ProviderFlowView providerId={providerId} close={() => onOpenChange(false)} onSending={setSending} />
-			</ModalContent>
-		</Modal>
+		<HoldModal open={open} onOpenChange={onOpenChange}>
+			{(onSending) => (
+				<ProviderFlowView providerId={providerId} close={() => onOpenChange(false)} onSending={onSending} />
+			)}
+		</HoldModal>
 	);
 }

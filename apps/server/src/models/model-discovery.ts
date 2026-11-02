@@ -1,6 +1,18 @@
 import type { DiscoveredModel } from '@recoder/shared';
 
 /**
+ * What a person pastes for an endpoint, as a base URL: `http://` when no
+ * scheme is given, and no trailing slash or `/models`, so `host:8000`,
+ * `http://host:8000/v1/` and `http://host:8000/v1/models` all name one server.
+ */
+export function normalizeEndpoint(raw: string): string {
+	const trimmed = raw.trim();
+	const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+
+	return withScheme.replace(/\/+$/, '').replace(/\/models$/, '');
+}
+
+/**
  * `GET {baseUrl}/models` on an OpenAI-compatible endpoint. vLLM reports the
  * context window as `max_model_len`; OpenRouter and others use
  * `context_length` / `context_window`. A base URL missing its `/v1` is
@@ -10,7 +22,7 @@ export async function discoverModels(
 	baseUrl: string,
 	apiKey?: string
 ): Promise<{ baseUrl: string; models: DiscoveredModel[] }> {
-	const base = baseUrl.trim().replace(/\/+$/, '');
+	const base = normalizeEndpoint(baseUrl);
 	const candidates = /\/v\d+$/.test(base) ? [base] : [base, `${base}/v1`];
 	let lastError = '';
 

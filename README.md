@@ -24,4 +24,6 @@ The app opens at http://localhost:3000 and the server listens on port 3001. The 
 
 Configuration lives in [`.env.example`](.env.example).
 
+Recoder can review pull requests on its own when someone comments `@recoder` on them: see [docs/auto-review.md](docs/auto-review.md).
+
 The review pipeline is documented stage by stage for agents in [docs/review](docs/review/README.md).

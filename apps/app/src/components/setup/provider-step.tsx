@@ -5,6 +5,7 @@ import { Button } from '@recoder/ui';
 import { Plus } from 'lucide-react';
 
 import { CheckAgain } from '@/components/settings/providers/check-again';
+import { ConnectVllmButton } from '@/components/settings/vllm/connect-vllm-button';
 import { CommandBlock } from '@/components/settings/providers/command-block';
 import { joinNames } from '@/lib/queue/format';
 import { agentReady, useSettings } from '@/lib/settings/settings-store';
@@ -50,7 +51,8 @@ function blockedLine(manager: AgentStatus | undefined, agentError: string | null
 
 /**
  * Step one: a model provider. Providers are added in OpenCode, so while it is
- * missing the step shows the install command and a way to check again.
+ * missing the step shows the install command and a way to check again. A vLLM
+ * server needs no OpenCode, so it can be connected either way.
  */
 export function ProviderStep({ done, current, onAdd }: StepProps & { onAdd: () => void }) {
 	const providers = useSettings((state) => state.providers);
@@ -63,7 +65,7 @@ export function ProviderStep({ done, current, onAdd }: StepProps & { onAdd: () =
 	const description = done
 		? connectedLine(providers, models)
 		: ready
-			? 'No providers yet. Add one to pick models for reviews.'
+			? 'No providers yet. Add one, or connect a vLLM server, to pick models for reviews.'
 			: blockedLine(manager, agentError);
 
 	return (
@@ -74,6 +76,7 @@ export function ProviderStep({ done, current, onAdd }: StepProps & { onAdd: () =
 						<Plus aria-hidden />
 						Add a provider
 					</Button>
+					<ConnectVllmButton />
 				</div>
 			) : (
 				<div className="setup-blocked">
@@ -82,6 +85,7 @@ export function ProviderStep({ done, current, onAdd }: StepProps & { onAdd: () =
 					) : null}
 					<div className="setup-actions">
 						<CheckAgain variant={current ? 'primary' : 'outline'} />
+						<ConnectVllmButton />
 					</div>
 				</div>
 			)}

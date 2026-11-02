@@ -1,10 +1,16 @@
-import { expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { EvidenceStore } from '../../../../src/evidence/evidence';
+import { getReviewMetrics, withReviewMetrics } from '../../../../src/models/metrics';
 import { ModelBudget } from '../../../../src/review/pipeline/agent-loop/budget';
 import { runOpenCodeAgent } from '../../../../src/review/pipeline/agent-loop/opencode-engine';
 import type { JsonAgentOptions } from '../../../../src/review/pipeline/agent-loop/options';
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
+import { closeStore, db, reviewMetrics } from '../../../../src/store';
 import { useFakeOpenCode } from '../../../helpers/fake-opencode';
+import { testReview } from '../../../helpers/review';
 
 interface Answer {
 	done: boolean;
@@ -27,6 +33,19 @@ const diff = `diff --git a/file0.ts b/file0.ts
 `;
 
 const startAgent = useFakeOpenCode();
+
+const originalDataDir = process.env.RECODER_DATA_DIR;
+
+beforeAll(() => {
+	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-engine-'));
+	closeStore();
+});
+
+afterAll(() => {
+	closeStore();
+	if (originalDataDir === undefined) delete process.env.RECODER_DATA_DIR;
+	else process.env.RECODER_DATA_DIR = originalDataDir;
+});
 
 const readDiff = { tool: 'read_diff', args: { path: 'file0.ts' } };
 
@@ -153,4 +172,24 @@ test('aborting the review stops the run and deletes its OpenCode session', async
 	const calls = (await target.request('/test/calls')) as Call[];
 
 	expect(calls.some((call) => call.method === 'DELETE' && call.path === '/session/ses_1')).toBe(true);
+});
+
+test('an OpenCode 1.x server that names the session on the part alone still has every step counted with its tokens', async () => {
+	const review = db.reviews.set(testReview({ repoId: 'missing-repo' }));
+
+	try {
+		const result = await withReviewMetrics(review.id, 'pipeline', async () =>
+			runOpenCodeAgent(agentOptions({ user: script([[readDiff]], { sdkEvents: true }) }), await startAgent())
+		);
+
+		expect(result.value?.done).toBe(true);
+
+		expect(getReviewMetrics(review.id)?.total).toMatchObject({
+			calls: 2,
+			usage: { inputTokens: 22, outputTokens: 12, totalTokens: 34 }
+		});
+	} finally {
+		db.reviews.delete(review.id);
+		reviewMetrics.delete(review.id);
+	}
 });

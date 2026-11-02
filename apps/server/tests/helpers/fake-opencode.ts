@@ -14,7 +14,8 @@ import { fakeBin } from './fake-bin';
  * Like OpenCode, a schema request with `StructuredOutput` off fails.
  * A prompt that is JSON with `steps` runs an agent: each step calls the listed tools over the
  * MCP servers added through `/mcp` (only tools the request switched on), with step events around
- * it (with `lateStart`, the start event only after the step's tool calls, as real OpenCode can),
+ * it (with `lateStart`, the start event only after the step's tool calls, as real OpenCode can; with
+ * `sdkEvents`, the session only on the part, as OpenCode 1.x's published event types have it),
  * and the answer carries each tool result. An abort between steps ends the run with
  * `MessageAbortedError`; later prompts in that session answer at once.
  * Any other prompt streams "Hello" and " world" before replying. Each chat adds a user and a
@@ -36,6 +37,7 @@ const scripts = {};
 const aborted = new Set();
 const statuses = {};
 let parts = 0;
+let steps = 0;
 
 const send = (event) => {
 	for (const stream of streams) stream.enqueue(encoder.encode('data: ' + JSON.stringify(event) + '\\n\\n'));
@@ -52,7 +54,8 @@ const replies = {
 const abortedReply = { info: { error: { name: 'MessageAbortedError', data: { message: 'Aborted' } } }, parts: [] };
 
 const stepPart = (session, type) => {
-	send({ type: 'message.part.updated', properties: { sessionID: session, part: { id: 'p' + ++parts, type, sessionID: session, ...(type === 'step-finish' ? { tokens } : {}) } } });
+	const part = { id: 'p' + ++parts, type, sessionID: session, messageID: 'm' + (type === 'step-start' ? ++steps : steps), ...(type === 'step-finish' ? { tokens } : {}) };
+	send({ type: 'message.part.updated', properties: scripts[session]?.sdkEvents ? { part } : { sessionID: session, part } });
 	return Bun.sleep(15);
 };
 

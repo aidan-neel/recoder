@@ -3,22 +3,25 @@
 import { reviewStage } from '@recoder/shared';
 import { Meter, StatusGlyph, SwapText } from '@recoder/ui';
 
-import { stepProgress } from '@/lib/live/live-progress';
+import { livePhase, progressShare } from '@/lib/live/live-progress';
+import { stageRows, stageStep } from '@/lib/live/stages';
 import { useReview } from '@/lib/review/review-store';
 
 import { usePhase, useShownReview } from './review-view';
 
 /**
  * A slim strip over the reading pane while a review that already has
- * decisions keeps running: the stage, a meter and the step count, so the
+ * decisions keeps running: the stage, a meter and the step, so the
  * reader knows more may come. A paused review leads with "Paused" and still
- * names the stage it holds at. Steps count the same way as the live header.
+ * names the stage it holds at. The meter and the step read the same as the
+ * live view's.
  */
 export function LiveStrip() {
 	const review = useShownReview();
 	const progress = useReview((state) => state.progress);
 	const phase = usePhase();
-	const steps = stepProgress(progress, phase);
+	const live = livePhase(review.status, progress);
+	const step = progress && live ? stageStep(stageRows(progress, live, review.status)) : null;
 	const stage = progress ? reviewStage({ ...progress, paused: false }, review.status).label : null;
 	const lead = phase === 'paused' ? 'Paused' : 'Still running';
 	const label = phase === 'queued' ? 'Waiting for a free slot' : stage;
@@ -38,14 +41,14 @@ export function LiveStrip() {
 				) : null}
 			</span>
 			<Meter
-				value={steps.share}
+				value={progressShare(progress, phase)}
 				tone={phase === 'paused' ? 'medium' : 'neutral'}
 				aria-label="Review progress"
 				className="live-strip-meter"
 			/>
-			{steps.counted ? (
+			{step ? (
 				<span className="live-strip-count tabular">
-					{steps.done} of {steps.total} steps
+					Step {step.step} of {step.total}
 				</span>
 			) : null}
 		</div>

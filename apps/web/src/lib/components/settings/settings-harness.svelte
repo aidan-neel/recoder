@@ -3,7 +3,7 @@
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import { Switch } from '@sivir-ui/svelte/components/switch';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import { SUBAGENT_CAPS, type SubagentCap } from '@recoder/shared';
+	import { SUBAGENT_CAPS, subagentCapFrom, type SubagentCap } from '@recoder/shared';
 	import SegmentedControl from '$lib/components/ui/segmented-control.svelte';
 	import { settingsDraft } from '$lib/settings/settings-draft.svelte';
 
@@ -13,13 +13,17 @@
 		{ key: 'maxFileChars', name: 'Characters per file', desc: 'Longer files are truncated', max: 200_000 }
 	] as const;
 
-	const SUBAGENT_ITEMS = SUBAGENT_CAPS.map((cap) => ({ value: String(cap), label: cap ? `Up to ${cap}` : 'Off' }));
+	const SUBAGENT_ITEMS = SUBAGENT_CAPS.map((cap) => ({
+		value: String(cap),
+		label: cap === 'uncapped' ? 'Uncapped' : cap ? `Up to ${cap}` : 'Off'
+	}));
 
 	/** What each cap allows; shown under the control for the current pick. */
 	const SUBAGENT_DESC: Record<SubagentCap, string> = {
 		0: 'Each reviewer works alone. Fewest tokens',
 		2: 'Reviewers can hand up to 2 deep questions to subagents',
-		4: 'Up to 4 subagents per review. Most tokens'
+		4: 'Up to 4 subagents per review',
+		uncapped: 'One per open question. Far more tokens and time'
 	};
 
 	function setLimit(key: (typeof FIELDS)[number]['key'], max: number, raw: string): void {
@@ -41,7 +45,7 @@
 				label="Subagents"
 				items={SUBAGENT_ITEMS}
 				value={String(settingsDraft.subagentCap)}
-				onValueChange={(value) => (settingsDraft.subagentCap = Number(value) as SubagentCap)}
+				onValueChange={(value) => (settingsDraft.subagentCap = subagentCapFrom(value))}
 			/>
 		</div>
 		<div class="settings-row">

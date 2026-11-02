@@ -173,7 +173,7 @@ class OpenCodeRun<T> {
 				timeoutMs: Math.max(1, this.limits.deadlineAt - reviewNow())
 			});
 
-			this.relay.settle(!reply.error);
+			await this.relay.finishPrompt(reply.tokens, !reply.error);
 
 			return { reply, why: this.interrupt, final: final || this.finalTurn() };
 		} finally {

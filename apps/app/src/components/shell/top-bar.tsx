@@ -1,9 +1,10 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useEffect } from 'react';
 
-import { activeTab, onSettings, SETTINGS_HREF } from '@/lib/shell/routes';
+import { openSection, openSettings } from '@/lib/settings/settings-url';
+import { activeTab } from '@/lib/shell/routes';
 import { useShell } from '@/lib/shell/shell-store';
 
 import { SearchButton } from './search-button';
@@ -18,11 +19,11 @@ function openPalette(): void {
 
 /**
  * What the top bar holds: Queue, then one tab per open review, then search
- * and the settings gear, lit while a settings page shows (not on the 404 of
- * an unknown section). No logo. `ShellFrame` draws the bar around it.
+ * and the settings gear, lit while settings is open. No logo. `ShellFrame` draws the bar around it.
  */
 export function TopBar() {
 	const pathname = usePathname();
+	const settingsOpen = openSection(useSearchParams()) !== null;
 	const heading = useShell((state) => state.heading);
 	const active = heading ?? activeTab(pathname);
 	const { rowRef, rulerRef, fit } = useTabFit(active);
@@ -35,7 +36,7 @@ export function TopBar() {
 				<TabStrip active={active} fit={fit} rulerRef={rulerRef} />
 				<SearchButton compact={fit?.compact} onClick={openPalette} />
 			</div>
-			<SettingsButton href={SETTINGS_HREF} active={onSettings(pathname)} />
+			<SettingsButton onOpen={() => openSettings()} active={settingsOpen} />
 		</>
 	);
 }

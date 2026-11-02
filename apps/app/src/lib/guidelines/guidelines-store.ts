@@ -8,7 +8,7 @@ import { useGuidelinesEditor } from './editor-store';
 /** `offline`: the review server never answered. `failed`: it answered the first load with an error. */
 type OverviewStatus = 'loading' | 'ready' | 'offline' | 'failed';
 
-/** One repository's `.recoder/REVIEW.md`, read through its forge. */
+/** One repository's `RECODER.md`, read through its forge. */
 type RepoState = { status: 'loading' } | { status: 'ready'; data: RepoGuidelines } | { status: 'error'; error: string };
 
 interface GuidelinesStore {

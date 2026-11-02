@@ -109,6 +109,20 @@ describe('review settings', () => {
 		expect(effectiveSubagentCap()).toBe(0);
 	});
 
+	test('uncapped subagents save, read back and survive a restart', async () => {
+		const patch = await app.request('/api/settings/models', {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ subagentCap: 'uncapped' })
+		});
+
+		expect(patch.status).toBe(200);
+		expect((await patch.json()).subagentCap).toBe('uncapped');
+		setReviewOverrides({});
+		initReviewSettings();
+		expect((await (await app.request('/api/settings/models')).json()).subagentCap).toBe('uncapped');
+	});
+
 	test('invalid effort values are rejected without changing settings', async () => {
 		setReviewOverrides({ specialistEffort: 'high' });
 

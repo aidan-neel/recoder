@@ -15,7 +15,6 @@ import {
 	runWithReviewControl,
 	type ReviewControl
 } from '../review/session/review-control';
-import { supersedeWebhookReviews } from '../review/session/supersede';
 import { resumableCheckpoint } from '../review/session/review-checkpoint';
 import { effectiveReportLowSeverity, effectiveSubagentCap } from '../review/session/review-settings';
 import {
@@ -29,6 +28,7 @@ import {
 } from '../store';
 import { emitReviewEvent, reportReviewTask, settleReviewTasks, trackReviewTask } from '../review/session/events';
 import { fetchPull, PULL_VIEW_COMMANDS } from '../forge/pull-preview';
+import { settlePullComment, trackPullComment } from '../forge/publish/pull-comment';
 import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
 import type { GatheredContext } from '../review/pipeline/intent/types';
 import { runAdaptiveReview } from '../review/pipeline/harness';
@@ -58,20 +58,18 @@ export function touch(reviewId: string, patch: Partial<Review>): Review {
 
 /**
  * Validate + queue a review, kicking the pipeline in the background.
- * Shared by the REST route and the GitHub webhook. Throws on bad input.
+ * Throws on bad input.
  * A reviewer model is required — stub reviews that finish in seconds with
  * no real findings are worse than refusing outright.
  */
-export function queueReview(input: QueueReviewInput, trigger?: Review['trigger']): Review {
+export function queueReview(input: QueueReviewInput): Review {
 	if (!isReviewConfigured()) {
 		throw new Error(
 			'reviewer not configured: add a reviewer model in settings (or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL)'
 		);
 	}
 
-	if (trigger === 'webhook') supersedeWebhookReviews(input.repoId, input.prNumber);
-
-	const review = createReviewSession(input, trigger);
+	const review = createReviewSession(input);
 
 	return startReviewSession(review.id);
 }
@@ -102,6 +100,7 @@ export function createReviewSession(input: CreateReviewInput, trigger?: Review['
 		prUrl: null,
 		...(trigger ? { trigger } : {}),
 		...(input.baselineCache === false ? { baselineCache: false as const } : {}),
+		...(input.postComment ? { pullComment: { state: 'posting' as const, updatedAt: now } } : {}),
 		createdAt: now,
 		updatedAt: now
 	};
@@ -152,6 +151,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	let prContext: Promise<GatheredContext | null> = Promise.resolve(null);
 	const control = openReviewControl(reviewId);
 	const analysis = control.abort;
+
+	trackPullComment(reviewId);
 
 	try {
 		if (!repo) throw new Error('repo not found');
@@ -370,6 +371,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	} finally {
 		closeReviewControl(reviewId, control);
 		settleRun(reviewId);
+		settlePullComment(reviewId);
 	}
 }
 
