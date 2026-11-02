@@ -20,6 +20,8 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Subagent.** An extra reviewer a lens reviewer asks for to settle one question. State in `SubagentState` in `apps/server/src/review/pipeline/subagents.ts`. The cap is `SubagentCap` (`0`, `2`, `4`, `'uncapped'`) in `packages/shared/src/models.ts`; `'uncapped'` is a string so it survives JSON.
 
+**Token budget.** The Low, Medium or High pick that sets how many tokens a review may spend: the subagent cap, both reasoning efforts, turns per lens and subagent, the model-call ceiling and which lenses run. Type `TokenBudget` in `packages/shared/src/models.ts`; settings in `packages/shared/src/token-budget.ts`; limits `ReviewLimits` in `apps/server/src/review/session/review-policy.ts`. Medium is the behaviour before budgets. Custom is what the apps show when the cap or an effort no longer matches the saved budget; it is never saved. See [pipeline.md](pipeline.md#token-budget).
+
 **Second look.** A subagent the harness sends itself, not one a reviewer asked for: a residual pass per unit or a contract check per readability report of a comment that disagrees with the code. Set by `ReviewUnit.purpose` (`SecondLookPurpose`) in `apps/server/src/review/pipeline/units.ts`. Runs outside the subagent cap, only when `RECODER_RESIDUAL` or `RECODER_CONTRACT_CHECKS` is on.
 
 **Detector.** A deterministic check that raises candidates without a model. Code in `apps/server/src/review/pipeline/detectors/`. Its candidates carry `lens` like `detector:duplication`.

@@ -45,6 +45,7 @@ See [Auto-review](/docs/auto-review) and [Webhooks](/docs/webhooks).
 
 | Setting | Default | What it does |
 | --- | --- | --- |
+| Token budget | Medium | How many tokens a review may spend: **Low**, **Medium** or **High**. A pick sets Subagents, both reasoning efforts and how long reviewers run, all at once. **Custom** appears by itself when you change Subagents or an effort afterwards; the review keeps the limits of the budget you picked. See [How reviews work](/docs/how-reviews-work). |
 | Subagents | Up to 2 | How many subagents a review may run: **Off**, **Up to 2**, **Up to 4** or **Uncapped**. Uncapped runs one for every open question that warrants it, as far as the review’s model calls and time allow, and uses many more tokens. |
 | Low severity findings | On | Off, reviews report medium and above. |
 | Characters per file | 12,000 | Most characters one file read returns to a model. Longer files are cut. |

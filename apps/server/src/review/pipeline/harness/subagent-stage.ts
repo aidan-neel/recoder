@@ -17,7 +17,9 @@ import {
 import { runUnitPool } from './pool.js';
 
 /** Model calls one subagent or second look can make: each turn, plus the repair calls a failed or malformed turn takes. */
-const SUBAGENT_CALLS = REVIEW_POLICY.maxSubagentTurns + REVIEW_POLICY.schemaRepairAttempts;
+function subagentCalls(run: ReviewRun): number {
+	return run.limits.subagentTurns + REVIEW_POLICY.schemaRepairAttempts;
+}
 
 /**
  * Runs the subagents, once every reviewer (and retry) has answered, so the cap
@@ -97,7 +99,7 @@ function subagentLimit(run: ReviewRun, cap: SubagentCap | number): number {
 
 	const free = run.budget.remaining() - run.budget.reserve - (run.verifying?.heldCalls ?? 0);
 
-	return Math.max(0, Math.floor(free / SUBAGENT_CALLS));
+	return Math.max(0, Math.floor(free / subagentCalls(run)));
 }
 
 /** The cap as the orchestrator words it: the setting, or with it uncapped, how many the budget had room for. */
@@ -112,7 +114,7 @@ function capText(cap: SubagentCap | number, limit: number): string {
  * clock; a contract check is short and fits in the time left.
  */
 function makeRoomForSecondLooks(run: ReviewRun, pending: ReviewUnit[]): void {
-	run.budget.limit += pending.filter((unit) => unit.purpose).length * SUBAGENT_CALLS;
+	run.budget.limit += pending.filter((unit) => unit.purpose).length * subagentCalls(run);
 
 	if (!pending.some((unit) => unit.purpose === 'residual')) return;
 

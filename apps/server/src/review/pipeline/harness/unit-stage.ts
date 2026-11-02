@@ -17,7 +17,7 @@ export function cutUnits(run: ReviewRun): void {
 
 	if (resume) restoreUnits(run);
 	else {
-		run.units = lensAssignments(partitionUnits(run.inventory));
+		run.units = lensAssignments(partitionUnits(run.inventory), run.limits.lenses);
 
 		for (const unit of run.units) {
 			assignCoverage(run.coverage, unit);

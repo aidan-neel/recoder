@@ -9,7 +9,7 @@ import {
 import { withGuidelines } from '../../guidelines/guidelines.js';
 import { dismissalsBlock } from '../../guidelines/learned/prompt.js';
 import type { Dismissal } from '../../guidelines/learned/dismissals.js';
-import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { REVIEW_POLICY, type ReviewLimits } from '../../session/review-policy.js';
 import {
 	ModelBlockedError,
 	ReviewAbortedError,
@@ -69,6 +69,8 @@ export interface PoolContext extends ReviewerPromptContext {
 	setupNotes: () => string;
 	/** Subagents the review may run in all; correctness lenses aren't offered any at 0. */
 	subagentCap: SubagentCap | number;
+	/** The review's token budget limits; reviewers and subagents get their turns from here. */
+	limits: ReviewLimits;
 	reportLowSeverity: boolean;
 	/** Findings people dismissed in this repository, newest first; a candidate matching one is dropped and a lens reviewer is told of those on its files. */
 	dismissals: Dismissal[];
@@ -274,7 +276,7 @@ function askReviewer(
 	const subagent = recordFor(records, item.id).role === 'subagent';
 
 	const lens = lensById(item.lens ?? 'correctness');
-	const maxTurns = subagent ? REVIEW_POLICY.maxSubagentTurns : REVIEW_POLICY.maxLensTurns;
+	const maxTurns = subagent ? ctx.limits.subagentTurns : ctx.limits.lensTurns;
 	const defaultCategory = lens.categories[0];
 
 	const delegate = subagent ? undefined : delegateFor(item, records, ctx);

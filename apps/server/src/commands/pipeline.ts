@@ -16,7 +16,11 @@ import {
 	type ReviewControl
 } from '../review/session/review-control';
 import { resumableCheckpoint } from '../review/session/review-checkpoint';
-import { effectiveReportLowSeverity, effectiveSubagentCap } from '../review/session/review-settings';
+import {
+	effectiveReportLowSeverity,
+	effectiveSubagentCap,
+	effectiveTokenBudget
+} from '../review/session/review-settings';
 import {
 	db,
 	keepForReplay,
@@ -41,7 +45,7 @@ import { harnessCallbacks } from './pipeline-callbacks';
 import { detectProvider, locateRepo, refspecFor } from '../forge/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../sandbox/sandbox';
 import { tokenEnv } from '../forge/tokens';
-import { withReviewMetrics } from '../models/metrics';
+import { recordTokenBudget, withReviewMetrics } from '../models/metrics';
 
 export type QueueReviewInput = CreateReviewInput;
 
@@ -274,6 +278,10 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			emitReviewEvent(reviewId, { type: 'log', step: 'review', message: discarded });
 		}
 
+		const tokenBudget = effectiveTokenBudget();
+
+		recordTokenBudget(tokenBudget);
+
 		const result = await runWithReviewControl(control, async () =>
 			runAdaptiveReview(
 				{
@@ -288,6 +296,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 					instructions: reviewInstructions(reviewId, initial.startedAt),
 					signal: analysis.signal,
 					subagentCap: effectiveSubagentCap(),
+					tokenBudget,
 					reportLowSeverity: effectiveReportLowSeverity(),
 					baselineCache: review.baselineCache,
 					resume

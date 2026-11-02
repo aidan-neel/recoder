@@ -21,9 +21,9 @@ For JavaScript, it then runs the type check (\`typecheck\` or \`check\`), \`lint
 
 ## Review
 
-The change is cut into review units: related files, packed by folder up to a size limit. The same diff always gives the same units. Each unit gets one reviewer per kind of problem: correctness, security, concurrency, API contracts, performance, repository rules, conventions and readability. A unit that only changes docs gets the rules and readability reviewers.
+The change is cut into review units: related files, packed by folder up to a size limit. The same diff always gives the same units. Each unit gets one reviewer per kind of problem: correctness, security, concurrency, API contracts, performance, repository rules, conventions and readability. A unit that only changes docs gets the rules and readability reviewers. On a **Low** token budget (see below), performance, conventions and readability reviewers are left out.
 
-The correctness reviewer can hand a deep question to a subagent. Subagents run after the reviewers, up to the limit in Settings → Review harness: **Off**, **Up to 2** (the default), **Up to 4** or **Uncapped**. Past the limit, requests are merged or dropped. **Uncapped** runs as many as the review’s remaining model calls and time can pay for.
+The correctness reviewer can hand a deep question to a subagent. Subagents run after the reviewers, up to the limit in Settings → Review harness: **Off**, **Up to 2** (the default), **Up to 4** or **Uncapped**. The token budget (see below) sets this limit too. Past the limit, requests are merged or dropped. **Uncapped** runs as many as the review’s remaining model calls and time can pay for.
 
 Static checks run beside the reviewers. They look for dead code, complex functions, duplicated code, weakened tests and breaks of your repository’s rules.
 
@@ -44,9 +44,24 @@ Recoder also runs the proving command on the base branch, to tell a bug the chan
 
 Findings at the same place in the code are merged into one. Low-severity findings are shown unless you turn **Low severity findings** off in Settings → Review harness.
 
+## Token budget
+
+Settings → Review harness has a **Token budget**: **Low**, **Medium** (the default) or **High**. One pick trades cost for thoroughness by setting several things together.
+
+| | Low | Medium | High |
+| --- | --- | --- | --- |
+| Subagents | Off | Up to 2 | Up to 4 |
+| Reasoning effort | Low | Each model’s default | High |
+| Turns for each reviewer | 4 | 6 | 8 |
+| Turns for each subagent | 5 | 8 | 10 |
+| Model calls | 200 plus 6 per reviewer | 320 plus 8 per reviewer | 480 plus 12 per reviewer |
+| Reviewers per unit | Correctness, security, concurrency, API contracts and rules | All eight | All eight |
+
+Medium is how reviews ran before budgets existed. Verification is the same at every budget: each finding is still tried by a fresh agent. Low and High pick the closest effort a model offers, and a model with no reasoning levels is sent none. If you change Subagents or an effort after picking, the budget reads **Custom**, and the review uses the limits of the budget you picked. A review’s Token usage names the budget it ran on, so you can compare spend.
+
 ## Limits
 
-A review gets a budget of model calls and time that grows with its size: 320 calls plus 8 per reviewer, up to 2,000, and 30 minutes plus 30 seconds per reviewer, up to 2 hours. Install time is added back, up to 14 minutes. A review that runs out of time still finishes: it shows what was verified by then and says time ran out.
+A review gets a budget of model calls and time that grows with its size. On Medium that is 320 calls plus 8 per reviewer, up to 2,000, and 30 minutes plus 30 seconds per reviewer, up to 2 hours. Install time is added back, up to 14 minutes. A review that runs out of time still finishes: it shows what was verified by then and says time ran out.
 
 A newer automatic review of the same pull request cancels an older one that is still running.
 

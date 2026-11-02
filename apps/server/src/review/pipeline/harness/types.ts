@@ -15,7 +15,8 @@ import type {
 	ReviewReasoningEntry,
 	ReviewStage,
 	ReviewTask,
-	SubagentCap
+	SubagentCap,
+	TokenBudget
 } from '@recoder/shared';
 import type { ReviewRevision, ToolCallReport } from '../../../evidence/evidence.js';
 import type { GatheredContext, PrRef } from '../intent/types.js';
@@ -70,6 +71,8 @@ export interface AdaptiveReviewInput {
 	instructions?: string | null;
 	/** Subagents the review may run in all, from Settings (any count in tests); the shared default when unset. */
 	subagentCap?: SubagentCap | number;
+	/** How many tokens the review may spend, from Settings; Medium when unset. Sets turns, the model-call ceiling and which lenses run. */
+	tokenBudget?: TokenBudget;
 	/** Whether low-severity findings are kept, from Settings; dropped when unset. */
 	reportLowSeverity?: boolean;
 	/** False runs every baseline check again instead of reusing an earlier review's result. */

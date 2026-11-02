@@ -254,6 +254,7 @@ export async function captureIdentity(input: IdentityInput): Promise<RunIdentity
 		limits: {
 			settings: {
 				subagentCap: settings.subagentCap,
+				tokenBudget: settings.tokenBudget,
 				reportLowSeverity: settings.reportLowSeverity,
 				...settings.limits
 			},

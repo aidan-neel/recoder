@@ -1,3 +1,5 @@
+import type { TokenBudget } from '@recoder/shared';
+
 /**
  * Balanced default ceilings for one adaptive review.
  * These are limits, not targets: a small PR is normally one review unit.
@@ -116,14 +118,53 @@ export const REVIEW_POLICY = {
 } as const;
 
 /**
+ * What a token budget changes in one review. Medium is {@link REVIEW_POLICY} as it stands, so a review without a
+ * budget runs as it always did. Verification is the same at every budget: every valid candidate is re-proven, with
+ * the same turns and reserves. Deadlines are the same too, since time limits stop a review rather than save tokens.
+ */
+export interface ReviewLimits {
+	/** Turns one lens reviewer gets. Each turn sends the whole transcript again, so the last turns cost the most. */
+	lensTurns: number;
+	/** Turns one subagent or second look gets. */
+	subagentTurns: number;
+	/** The review's model-call ceiling before any assignment is added, and what each lens assignment adds. */
+	maxModelCalls: number;
+	callsPerAssignment: number;
+	/** `core` leaves out the lenses that report performance and maintainability, and keeps every one that hunts a defect. */
+	lenses: 'all' | 'core';
+}
+
+/** What differs from Medium at each budget. */
+const BUDGET_CHANGES: Record<TokenBudget, Partial<ReviewLimits>> = {
+	low: { lensTurns: 4, subagentTurns: 5, maxModelCalls: 200, callsPerAssignment: 6, lenses: 'core' },
+	medium: {},
+	high: { lensTurns: 8, subagentTurns: 10, maxModelCalls: 480, callsPerAssignment: 12 }
+};
+
+/** The limits a review runs with under `budget`; Medium reads {@link REVIEW_POLICY} each time. */
+export function budgetLimits(budget: TokenBudget): ReviewLimits {
+	return {
+		lensTurns: REVIEW_POLICY.maxLensTurns,
+		subagentTurns: REVIEW_POLICY.maxSubagentTurns,
+		maxModelCalls: REVIEW_POLICY.maxModelCalls,
+		callsPerAssignment: REVIEW_POLICY.callsPerAssignment,
+		lenses: 'all',
+		...BUDGET_CHANGES[budget]
+	};
+}
+
+/**
  * The model-call budget and analysis deadline for a review of `assignments`
  * lens assignments: the base, plus a share per assignment, capped.
  */
-export function scaledReviewLimits(assignments: number): { modelCalls: number; deadlineMs: number } {
+export function scaledReviewLimits(
+	assignments: number,
+	limits: ReviewLimits
+): { modelCalls: number; deadlineMs: number } {
 	const policy = REVIEW_POLICY;
 
 	return {
-		modelCalls: Math.min(policy.maxScaledModelCalls, policy.maxModelCalls + assignments * policy.callsPerAssignment),
+		modelCalls: Math.min(policy.maxScaledModelCalls, limits.maxModelCalls + assignments * limits.callsPerAssignment),
 		deadlineMs: Math.min(policy.maxScaledDeadlineMs, policy.analysisDeadlineMs + assignments * policy.msPerAssignment)
 	};
 }

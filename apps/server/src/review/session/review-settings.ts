@@ -2,11 +2,14 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import {
 	DEFAULT_SUBAGENT_CAP,
+	DEFAULT_TOKEN_BUDGET,
 	REASONING_EFFORTS,
 	SUBAGENT_CAPS,
+	TOKEN_BUDGETS,
 	type ModelEntryPatch,
 	type ModelSettingsPatch,
-	type SubagentCap
+	type SubagentCap,
+	type TokenBudget
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
 
@@ -41,6 +44,7 @@ export const reviewSettingsSchema = z.object({
 	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	subagentCap: z.literal(SUBAGENT_CAPS).optional(),
+	tokenBudget: z.enum(TOKEN_BUDGETS).optional(),
 	reportLowSeverity: z.boolean().optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
 	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
@@ -269,6 +273,7 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
 	if (patch.specialistEffort !== undefined) clean.specialistEffort = patch.specialistEffort;
 	if (patch.subagentCap !== undefined) clean.subagentCap = patch.subagentCap;
+	if (patch.tokenBudget !== undefined) clean.tokenBudget = patch.tokenBudget;
 	if (patch.reportLowSeverity !== undefined) clean.reportLowSeverity = patch.reportLowSeverity;
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
@@ -318,6 +323,11 @@ export function effectiveReviewEnv(): {
 /** How many subagents one review may run: the saved pick, else the default. */
 export function effectiveSubagentCap(): SubagentCap {
 	return overrides.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+}
+
+/** The token budget last picked, else Medium, which is what reviews did before budgets existed. */
+export function effectiveTokenBudget(): TokenBudget {
+	return overrides.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
 }
 
 /** Whether reviews report low-severity findings: the saved pick, else on. */

@@ -3,6 +3,7 @@ import {
 	effectiveReviewEnv,
 	effectiveReportLowSeverity,
 	effectiveSubagentCap,
+	effectiveTokenBudget,
 	getStoredSettings,
 	maskKey,
 	settingsFileDisplay,
@@ -47,6 +48,7 @@ async function settingsPayload() {
 		orchestratorEffort: stored.orchestratorEffort ?? null,
 		specialistEffort: stored.specialistEffort ?? null,
 		subagentCap: effectiveSubagentCap(),
+		tokenBudget: effectiveTokenBudget(),
 		reportLowSeverity: effectiveReportLowSeverity(),
 		configPath: settingsFileDisplay(),
 		limits: {

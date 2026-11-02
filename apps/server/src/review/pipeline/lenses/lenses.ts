@@ -1,4 +1,5 @@
 import { READABILITY_SMELLS } from '@recoder/shared';
+import type { ReviewLimits } from '../../session/review-policy.js';
 import type { ReviewUnit } from '../units.js';
 import type { Lens, LensId } from './types.js';
 
@@ -137,6 +138,9 @@ const QUALITY_LENSES: ReadonlySet<LensId> = new Set(['rules', 'conventions', 're
 /** Lenses a docs-only unit runs: no code to break, but rules and clarity still apply. */
 const DOCS_LENSES: ReadonlySet<LensId> = new Set(['rules', 'readability']);
 
+/** Lenses a low token budget keeps: every one that hunts a defect, and the repository's own rules. */
+const CORE_LENSES: ReadonlySet<LensId> = new Set(['correctness', 'security', 'concurrency', 'api-contract', 'rules']);
+
 const DOCS_FILE = /\.(?:md|mdx|markdown|rst|txt|adoc)$/i;
 
 /** The lens with this id; every `LensId` has one. */
@@ -149,17 +153,22 @@ export function isQualityLens(id: LensId): boolean {
 	return QUALITY_LENSES.has(id);
 }
 
-/** The lenses that apply to a unit, in `LENSES` order: all of them, or rules and readability for docs only. */
-function lensesFor(unit: ReviewUnit): Lens[] {
+/**
+ * The lenses that apply to a unit, in `LENSES` order: all of them, or rules and readability for docs only. With
+ * `core`, only those that are also core lenses.
+ */
+function lensesFor(unit: ReviewUnit, scope: ReviewLimits['lenses']): Lens[] {
 	const docsOnly = unit.scope.length > 0 && unit.scope.every((entry) => DOCS_FILE.test(entry.path));
 
-	return docsOnly ? LENSES.filter((lens) => DOCS_LENSES.has(lens.id)) : [...LENSES];
+	return LENSES.filter(
+		(lens) => (!docsOnly || DOCS_LENSES.has(lens.id)) && (scope === 'all' || CORE_LENSES.has(lens.id))
+	);
 }
 
 /** One assignment per unit and applicable lens, unit by unit, each lens in order. */
-export function lensAssignments(units: ReviewUnit[]): ReviewUnit[] {
+export function lensAssignments(units: ReviewUnit[], scope: ReviewLimits['lenses']): ReviewUnit[] {
 	return units.flatMap((unit) =>
-		lensesFor(unit).map((lens) => ({
+		lensesFor(unit, scope).map((lens) => ({
 			...unit,
 			id: `${unit.id}/${lens.id}`,
 			title: `${unit.title} · ${lens.title}`,

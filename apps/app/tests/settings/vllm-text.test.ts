@@ -45,6 +45,7 @@ function settings(models: ModelEntry[], pick: string): ModelSettings {
 		orchestratorModelId: vllmModelId('v1', pick),
 		models,
 		subagentCap: 2,
+		tokenBudget: 'medium',
 		reportLowSeverity: true,
 		limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 }
 	};

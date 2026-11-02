@@ -3,7 +3,15 @@
 	import { Input } from '@sivir-ui/svelte/components/input';
 	import { Switch } from '@sivir-ui/svelte/components/switch';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import { SUBAGENT_CAPS, subagentCapFrom, type SubagentCap } from '@recoder/shared';
+	import {
+		SUBAGENT_CAPS,
+		TOKEN_BUDGETS,
+		TOKEN_BUDGET_PLANS,
+		budgetDescription,
+		subagentCapFrom,
+		tokenBudgetFrom,
+		type SubagentCap
+	} from '@recoder/shared';
 	import SegmentedControl from '$lib/components/ui/segmented-control.svelte';
 	import { settingsDraft } from '$lib/settings/settings-draft.svelte';
 
@@ -17,6 +25,12 @@
 		value: String(cap),
 		label: cap === 'uncapped' ? 'Uncapped' : cap ? `Up to ${cap}` : 'Off'
 	}));
+
+	const BUDGET_ITEMS = TOKEN_BUDGETS.map((budget) => ({ value: budget, label: TOKEN_BUDGET_PLANS[budget].label }));
+
+	/** Custom is shown while the cap or an effort is changed by hand; picking a budget takes it away. */
+	const shownBudget = $derived(settingsDraft.shownBudget);
+	const budgetItems = $derived(shownBudget ? BUDGET_ITEMS : [...BUDGET_ITEMS, { value: 'custom', label: 'Custom' }]);
 
 	/** What each cap allows; shown under the control for the current pick. */
 	const SUBAGENT_DESC: Record<SubagentCap, string> = {
@@ -36,6 +50,22 @@
 <section class="settings-section" aria-labelledby="harness-reviewers">
 	<Typography.H3 id="harness-reviewers" class="settings-label">Reviewers</Typography.H3>
 	<Card.Root class="settings-list">
+		<div class="settings-row">
+			<div class="min-w-0 flex-1">
+				<p class="settings-row-name">Token budget</p>
+				<p class="settings-row-desc">{budgetDescription(settingsDraft.tokenBudget, shownBudget === null)}</p>
+			</div>
+			<SegmentedControl
+				label="Token budget"
+				items={budgetItems}
+				value={shownBudget ?? 'custom'}
+				onValueChange={(value) => {
+					const budget = tokenBudgetFrom(value);
+
+					if (budget) settingsDraft.pickBudget(budget);
+				}}
+			/>
+		</div>
 		<div class="settings-row">
 			<div class="min-w-0 flex-1">
 				<p class="settings-row-name">Subagents</p>

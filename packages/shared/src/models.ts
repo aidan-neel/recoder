@@ -26,6 +26,15 @@ export const SUBAGENT_CAPS = [0, 2, 4, 'uncapped'] as const;
 export type SubagentCap = (typeof SUBAGENT_CAPS)[number];
 export const DEFAULT_SUBAGENT_CAP: SubagentCap = 2;
 
+/**
+ * How many tokens a review may spend, chosen in Settings → Review harness. One pick sets the subagent cap and both
+ * reasoning efforts, and decides how long reviewers may run (`budgetLimits` on the server). Medium is what a review
+ * did before budgets existed.
+ */
+export const TOKEN_BUDGETS = ['low', 'medium', 'high'] as const;
+export type TokenBudget = (typeof TOKEN_BUDGETS)[number];
+export const DEFAULT_TOKEN_BUDGET: TokenBudget = 'medium';
+
 /** The cap a picker's string value stands for, so `'uncapped'` stays a string and the counts become numbers again. */
 export function subagentCapFrom(value: string): SubagentCap {
 	return SUBAGENT_CAPS.find((cap) => String(cap) === value) ?? DEFAULT_SUBAGENT_CAP;
@@ -145,6 +154,8 @@ export interface ModelSettings {
 	specialistEffort?: ReasoningEffort | null;
 	/** How many subagents one review may run in all. */
 	subagentCap: SubagentCap;
+	/** The token budget last picked, whose limits reviews run with; the cap and efforts may since have been changed by hand. */
+	tokenBudget: TokenBudget;
 	/** Whether reviews report low-severity findings; off keeps them to medium and above. */
 	reportLowSeverity: boolean;
 	/** Where overrides are saved, e.g. `~/.recoder/data/review-config.json`. */
@@ -162,6 +173,7 @@ export interface ModelSettingsPatch {
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
 	subagentCap?: SubagentCap;
+	tokenBudget?: TokenBudget;
 	reportLowSeverity?: boolean;
 	maxFiles?: number;
 	maxDiffChars?: number;

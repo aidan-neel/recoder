@@ -9,6 +9,7 @@ import { chatCompletion, resetLlmLimiter, streamChatCompletion } from '../../src
 import {
 	getReviewMetrics,
 	normalizeTokenUsage,
+	recordTokenBudget,
 	trackTokenCall,
 	withReviewMetrics,
 	withTokenStage
@@ -159,6 +160,17 @@ test('concurrent requests remain isolated by review, model and scope and survive
 	expect(getReviewMetrics(b.id)).toMatchObject({ pipelineTracked: false, total: { calls: 1 } });
 	expect(JSON.stringify(reviewMetrics.get(a.id))).not.toContain('private prompt');
 	expect(JSON.stringify(reviewMetrics.get(a.id))).not.toContain(opts.apiKey);
+});
+
+test('a review’s metrics name the token budget of its latest pipeline run, and a run outside the pipeline records none', async () => {
+	const a = review();
+
+	await withReviewMetrics(a.id, 'pipeline', () => recordTokenBudget('low'));
+	expect(getReviewMetrics(a.id)?.tokenBudget).toBe('low');
+	await withReviewMetrics(a.id, 'pipeline', () => recordTokenBudget('high'));
+	expect(getReviewMetrics(a.id)?.tokenBudget).toBe('high');
+	await withReviewMetrics(a.id, 'discussion', () => recordTokenBudget('low'));
+	expect(getReviewMetrics(a.id)?.tokenBudget).toBe('high');
 });
 
 test('concurrent calls keep their own stage, an inner stage wins, and a call outside any stage counts as other', async () => {

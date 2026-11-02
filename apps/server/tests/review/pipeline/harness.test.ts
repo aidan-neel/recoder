@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../src/review/pipeline/harness';
 import { ReviewControl, runWithReviewControl } from '../../../src/review/session/review-control';
-import { scaledReviewLimits } from '../../../src/review/session/review-policy';
+import { budgetLimits, scaledReviewLimits } from '../../../src/review/session/review-policy';
 import {
 	DIFF,
 	NOTHING,
@@ -113,7 +113,7 @@ test('a review that runs out of time keeps the findings its lenses reported inst
 
 	/** Never answers; once this call is in flight, the review's deadline has passed. */
 	const stallPastDeadline = (init?: RequestInit) => {
-		control.skew = scaledReviewLimits(2 * LENS_COUNT).deadlineMs + 5_000;
+		control.skew = scaledReviewLimits(2 * LENS_COUNT, budgetLimits('medium')).deadlineMs + 5_000;
 
 		return new Promise<Response>((_, reject) =>
 			init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true })

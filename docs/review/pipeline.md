@@ -33,6 +33,38 @@ Execution order inside the harness, with overlaps:
 6. `retryFailedUnits`, then `runSubagents`. Then the harness waits for detectors, drains verification and waits for checks (`checksInTime`).
 7. `finishVerification`, `consolidate`, `completeReview`.
 
+## Token budget
+
+A review's spend is set by one pick, `tokenBudget` (`TokenBudget` in `packages/shared/src/models.ts`: `low`, `medium`, `high`). It is saved in review settings (`effectiveTokenBudget` in `apps/server/src/review/session/review-settings.ts`, default `medium`, so a file saved before budgets reads as Medium) and returned by `GET /api/settings/models`.
+
+A budget has two halves:
+
+- **Settings it writes.** `TOKEN_BUDGET_PLANS` and `budgetPatch` in `packages/shared/src/token-budget.ts` set `subagentCap`, `orchestratorEffort` and `specialistEffort` together. The client applies them, because only it knows which efforts each model offers: Low and High save the effort the model offers that is nearest to `low` or `high`, Medium saves none (each model keeps its own default), and a model with no reasoning control is never sent one. `budgetApplies` says whether the saved cap and efforts still match the saved budget; when they do not, the apps show Custom. Custom is derived and never saved, and the review keeps running with the saved budget's limits.
+- **Limits it applies to a review.** `budgetLimits` in `apps/server/src/review/session/review-policy.ts` returns a `ReviewLimits`. `runReviewPipeline` reads the budget once and passes it as `AdaptiveReviewInput.tokenBudget`. `createRun` resolves it into `ReviewRun.limits` and `PoolContext.limits`. Nothing writes to `REVIEW_POLICY`, so two reviews with different budgets can run at once. An input with no budget is Medium.
+
+| Limit                         | Low                                                                | Medium (today)         | High               | Read by                                                           |
+| ----------------------------- | ------------------------------------------------------------------ | ---------------------- | ------------------ | ----------------------------------------------------------------- |
+| Subagent cap                  | 0                                                                  | 2                      | 4                  | `runSubagents`, `reviewerSystemPrompt`                            |
+| Reasoning effort (both picks) | `low`                                                              | the model's default    | `high`             | `configForOrchestrator`, `configForSubagent`                      |
+| `lensTurns`                   | 4                                                                  | 6 (`maxLensTurns`)     | 8                  | `askReviewer` in `pool.ts`                                        |
+| `subagentTurns`               | 5                                                                  | 8 (`maxSubagentTurns`) | 10                 | `askReviewer`; `subagentCalls` in `subagent-stage.ts`             |
+| `maxModelCalls`               | 200                                                                | 320                    | 480                | `scaledReviewLimits`                                              |
+| `callsPerAssignment`          | 6                                                                  | 8                      | 12                 | `scaledReviewLimits`                                              |
+| `lenses`                      | `core`: correctness, security, concurrency, API contract and rules | `all` eight lenses     | `all` eight lenses | `lensAssignments` in `lenses.ts`, from `createRun` and `cutUnits` |
+
+`budgetLimits('medium')` reads `REVIEW_POLICY` each time, so Medium is the policy constants and cannot drift from them. `tests/review/pipeline/harness-budget.test.ts` runs a review with no budget, Low, Medium and High and counts what each lens and subagent was given.
+
+What the budget leaves alone, on purpose:
+
+- **Verification.** `maxVerifications`, `maxVerifierTurns`, `maxMutationVerifierTurns`, the verifier reserves and the consolidation reserve are the same at every budget. Every valid candidate is still re-proven, and the model-call ceiling still grows by a verifier's turns when one is queued (`VerifyQueue.makeRoom`), so a low ceiling never takes a verifier's share. Verifiers do run at the budget's second-model effort.
+- **Deadlines.** `analysisDeadlineMs`, `msPerAssignment` and the per-agent clocks are time limits that stop a review. They do not save tokens, and a shorter one would end reviews early rather than make them cheaper.
+- **Workers.** `maxDelegationsPerAgent` and `maxWorkerTurns` only matter with a separate second model, and move work to that cheaper model rather than change how much is spent. The delegation count is also written into a prompt constant (`DELEGATE_OFFER`).
+- **`maxTranscriptChars`.** About 60k tokens, above what a call reaches today, so it never fires. Lowering it would stub tool output a reviewer still needs.
+- **`reportLowSeverity`.** It marks a low-severity candidate `belowBar`, which is still verified (queued after publishable ones), so it changes what is shown, not what is spent.
+- **`maxFiles` and `maxDiffChars`.** Settings → Review harness saves them and `reviewLimits` returns them, but no stage reads them: `maxFileChars` is the only one that reaches the harness (`EvidenceStore` in `createRun`). They are not part of a budget.
+
+`recordTokenBudget` in `apps/server/src/models/metrics.ts` writes the budget onto the pipeline run segment (`PipelineRun.tokenBudget`) when the harness starts. `ReviewMetrics.tokenBudget` is the latest run's, and Token usage in the app shows it. A Custom setup is recorded under the budget it started from. Benchmark identities carry `tokenBudget` in `limits.settings`, so reports run on different budgets do not compare as equal.
+
 ## Repo guidelines: `RECODER.md`
 
 A repository tells Recoder what to look for in a `RECODER.md` at its root. It is the repo layer of the owner review guidelines; the global layer is edited in Settings.
@@ -145,14 +177,14 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
 ## 6. Lens reviewers and subagents
 
 - `runUnitPool` runs one reviewer per unit and lens. It is in `apps/server/src/review/pipeline/harness/pool.ts`.
-- Lens reviewers use the orchestrator model config; subagents use `configForSubagent`. See [models.md](models.md).
+- Lens reviewers use the orchestrator model config; subagents use `configForSubagent`. See [models.md](models.md). A lens gets `ReviewLimits.lensTurns` turns and a subagent `subagentTurns`, from the review's [token budget](#token-budget). Which lenses a unit runs depends on the budget too (`lensAssignments`).
 - A unit not started when budget or time runs low is skipped with "Not launched: budget or time reserved for consolidation".
 - `parseReviewerOutput` and `salvageReviewerOutput` read the reviewer's answer as `ReviewerOutput`. They are in `apps/server/src/review/pipeline/reviewer.ts`.
 - `applyUnitResult` and `addCandidates` handle the answer. They are in `apps/server/src/review/pipeline/harness/unit-result.ts`. `addCandidates` runs `validateCandidate` on each finding and sends it to verification.
 - Only the correctness lens may request subagents. Answers to reviewer questions are recorded with `recordReply`.
-- `runSubagents` plans subagents with `planSubagents` and `planBriefSubagents`. It is in `apps/server/src/review/pipeline/harness/subagent-stage.ts`. Requests over the cap, or for the same concern on overlapping code, are merged or dropped. With the cap at `'uncapped'`, `subagentLimit` plans as many as the model calls left can pay for in full (`maxSubagentTurns` plus `schemaRepairAttempts` each), after holding back the consolidation reserve and the calls verifiers still waiting or running were given (`VerifyQueue.heldCalls`); the rest are dropped and named in the summary. None launches past the investigation deadline, which keeps `reserveMsForVerification`.
+- `runSubagents` plans subagents with `planSubagents` and `planBriefSubagents`. It is in `apps/server/src/review/pipeline/harness/subagent-stage.ts`. Requests over the cap, or for the same concern on overlapping code, are merged or dropped. With the cap at `'uncapped'`, `subagentLimit` plans as many as the model calls left can pay for in full (`ReviewLimits.subagentTurns` plus `schemaRepairAttempts` each), after holding back the consolidation reserve and the calls verifiers still waiting or running were given (`VerifyQueue.heldCalls`); the rest are dropped and named in the summary. None launches past the investigation deadline, which keeps `reserveMsForVerification`.
 - Lens reviewers see past dismissals through `dismissalsBlock`. Subagents do not.
-- Second looks (flags `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`) are subagents the harness sends itself, planned by `planSecondLook` in `apps/server/src/review/pipeline/second-look/stage.ts` after the reviewer and brief subagents, outside the cap. A residual pass (`residual-N`) rereads one unit for what its lenses missed. A contract check (`contract-N`) takes one readability report of a comment, name or doc that disagrees with the code and decides which side is wrong. They set `ReviewUnit.purpose`, run on the specialist model, read only (no commands, since verification runs every candidate), and record tokens under the `second-look` stage. Their clock is `secondLookFinalTurnAfterMs` (7 min) and `secondLookMaxMs` (14 min); when a residual pass starts, `makeRoomForSecondLooks` moves the review deadline out so that clock fits; contract checks are short and use the time left. Each adds `maxSubagentTurns` plus `schemaRepairAttempts` model calls to the budget, and each of its calls gets `secondLookCallDeadlineMs` (180 s) in place of `perCallDeadlineMs` (90 s), since a CLI model prints its reply only at the end.
+- Second looks (flags `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`) are subagents the harness sends itself, planned by `planSecondLook` in `apps/server/src/review/pipeline/second-look/stage.ts` after the reviewer and brief subagents, outside the cap. A residual pass (`residual-N`) rereads one unit for what its lenses missed. A contract check (`contract-N`) takes one readability report of a comment, name or doc that disagrees with the code and decides which side is wrong. They set `ReviewUnit.purpose`, run on the specialist model, read only (no commands, since verification runs every candidate), and record tokens under the `second-look` stage. Their clock is `secondLookFinalTurnAfterMs` (7 min) and `secondLookMaxMs` (14 min); when a residual pass starts, `makeRoomForSecondLooks` moves the review deadline out so that clock fits; contract checks are short and use the time left. Each adds `ReviewLimits.subagentTurns` plus `schemaRepairAttempts` model calls to the budget, and each of its calls gets `secondLookCallDeadlineMs` (180 s) in place of `perCallDeadlineMs` (90 s), since a CLI model prints its reply only at the end.
 - Drops: candidates from this stage drop in stage 9.
 - Tests:
   - `apps/server/tests/review/pipeline/subagents.test.ts`

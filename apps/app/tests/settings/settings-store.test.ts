@@ -28,6 +28,7 @@ function settings(subagentCap: ModelSettings['subagentCap']): ModelSettings {
 		sharedModelId: null,
 		models: [],
 		subagentCap,
+		tokenBudget: 'medium',
 		reportLowSeverity: true,
 		limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 }
 	};

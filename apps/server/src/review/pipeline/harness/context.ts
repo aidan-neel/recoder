@@ -1,5 +1,6 @@
 import {
 	DEFAULT_SUBAGENT_CAP,
+	DEFAULT_TOKEN_BUDGET,
 	ORCHESTRATOR_ID,
 	type BriefQuestion,
 	type Finding,
@@ -13,7 +14,7 @@ import { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import { scopeOfCheckout } from '../../../sandbox/shared-install.js';
 import type { ReviewDirective } from '../../chat/directive.js';
 import { reviewNow } from '../../session/review-control.js';
-import { REVIEW_POLICY, scaledReviewLimits } from '../../session/review-policy.js';
+import { REVIEW_POLICY, budgetLimits, scaledReviewLimits, type ReviewLimits } from '../../session/review-policy.js';
 import { ModelBudget } from '../agent-loop.js';
 import type { JsonAgentOptions } from '../agent-loop/options.js';
 import { listDismissals, type Dismissal } from '../../guidelines/learned/dismissals.js';
@@ -44,6 +45,8 @@ export interface ReviewRun {
 	/** Aborted by the developer's signal, the review clock, or cleanup. */
 	controller: AbortController;
 	budget: ModelBudget;
+	/** What the review's token budget allows: turns, the model-call ceiling and which lenses run. */
+	limits: ReviewLimits;
 	inventory: ReviewInventory;
 	evidence: EvidenceStore;
 	coverage: CoverageLedger;
@@ -106,15 +109,17 @@ export interface ReviewRun {
 export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): ReviewRun {
 	const startedAt = reviewNow();
 	const inventory = buildInventory(input.diff, extraExcludes());
-	const limits = scaledReviewLimits(lensAssignments(partitionUnits(inventory)).length);
-	const deadlineAt = startedAt + limits.deadlineMs;
+	const limits = budgetLimits(input.tokenBudget ?? DEFAULT_TOKEN_BUDGET);
+	const scaled = scaledReviewLimits(lensAssignments(partitionUnits(inventory), limits.lenses).length, limits);
+	const deadlineAt = startedAt + scaled.deadlineMs;
 	const resume = input.resume;
 
 	return {
 		input,
 		events,
 		controller: new AbortController(),
-		budget: new ModelBudget(limits.modelCalls),
+		budget: new ModelBudget(scaled.modelCalls),
+		limits,
 		inventory,
 		evidence: new EvidenceStore(input.revision ?? null, inventory, reviewLimits().maxFileChars),
 		coverage: new CoverageLedger(),
@@ -320,6 +325,7 @@ export function poolContext(run: ReviewRun): PoolContext {
 		setupNotes: () => run.setupNotes,
 		directive: run.directive,
 		subagentCap: run.input.subagentCap ?? DEFAULT_SUBAGENT_CAP,
+		limits: run.limits,
 		reportLowSeverity: run.input.reportLowSeverity ?? false,
 		changeModel: run.changeModel,
 		intent: run.intent,

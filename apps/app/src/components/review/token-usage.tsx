@@ -1,6 +1,12 @@
 'use client';
 
-import { prettyModelName, type ReviewMetrics, type TokenAggregate, type TokenStage } from '@recoder/shared';
+import {
+	TOKEN_BUDGET_PLANS,
+	prettyModelName,
+	type ReviewMetrics,
+	type TokenAggregate,
+	type TokenStage
+} from '@recoder/shared';
 import {
 	Button,
 	Meter,
@@ -107,6 +113,9 @@ function Usage({ metrics }: { metrics: ReviewMetrics }) {
 					{total === null ? 'Token counts not reported' : `${tokens(total)} tokens`}
 				</p>
 				<p className="text-[12px] text-fg-subtle">{breakdown(metrics.total)}</p>
+				{metrics.tokenBudget ? (
+					<p className="text-[12px] text-fg-subtle">{TOKEN_BUDGET_PLANS[metrics.tokenBudget].label} token budget</p>
+				) : null}
 			</div>
 			<section className="flex flex-col gap-4" aria-label="By model">
 				{models.map((model) => (

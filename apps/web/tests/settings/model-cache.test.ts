@@ -18,6 +18,7 @@ const settings: ModelSettings = {
 		}
 	],
 	subagentCap: 2,
+	tokenBudget: 'medium',
 	reportLowSeverity: false,
 	limits: { maxFiles: 50, maxDiffChars: 100_000, maxFileChars: 20_000 }
 };
