@@ -33,7 +33,7 @@ const GROUPS: Group[] = [
 		page: 'queue',
 		title: 'Review bar',
 		rows: [
-			[['/'], 'Focus the review bar'],
+			[['/'], 'Open the review bar'],
 			[['ArrowDown', 'ArrowUp'], 'Next and previous suggestion'],
 			[['Enter'], 'Start or open the highlighted pull request'],
 			[['mod+Enter', ['Shift', 'Enter']], 'Its other action, like also commenting on the PR'],

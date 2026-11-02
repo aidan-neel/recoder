@@ -63,16 +63,27 @@ reviewed, With the agent (every decision made, some sent back), Ready to merge.
   are set. The sample review is always one click away.
 - **Queue**: the serif headline, the review bar, grouped rows; j/k marks a row,
   Enter opens it.
-- **Review bar** (under the headline): a 44px field whose results float under
-  it on the menu surface, over the list, so nothing below moves. It is for
-  starting and steering reviews; ⌘K stays the way to go places. It reads a
+- **Review bar** (under the headline): a 44px field that opens in place as a
+  small modal (kit `CommandBar`). At rest it is a button; `/` or a press opens
+  it. Open, the page dims under the modal scrim, a live field lands exactly on
+  the resting one and the results float under it on the menu surface (the menu
+  entrance), so nothing below moves. Focus stays inside (Tab moves between the
+  field and the footer's switch, unless it completes a reference), the page
+  takes no pointer, scroll or keys, and Escape or a click outside closes it
+  and returns focus to what had it. Each opening starts from an empty field.
+  ⌘K and ⌘, close it and open the palette or settings. It is for starting and
+  steering reviews; ⌘K stays the way to go places. It reads a
   pull request link (GitHub, GitLab, self-managed GitLab), a short reference
   (`#214`, `api#214`, `acme/api#214`, GitLab `!214`) with an optional brief
   after it (`#214 focus on the auth changes`), or words that search the open
   pull requests by number, title, repository, author and branch. Empty, it
-  lists what waits for a review, then recent reviews. Rows are two lines (the
-  queue's glyph and title, then reference, author and size) with the status
-  pill at rest and what Enter does on the highlighted row. A typed brief shows
+  lists what waits for a review, then recent reviews. Search matches whole
+  words and word starts; letters typed in order (`rtlim`) only count when
+  packed close from a word start, and only when nothing matches as typed.
+  Rows are two lines (the queue's glyph and title, then reference, author,
+  size and branch) and end alike: the status pill, then the Enter keycap on
+  the highlighted row only, so moving the highlight never shifts anything;
+  the footer names what Enter does. A typed brief shows
   as a line above the rows. A link into an untracked repository offers Track
   and review. The footer names the keys for the highlighted row and holds the
   Comment on the PR switch. A start spins on its row, then closes the bar with
@@ -144,10 +155,10 @@ Motion explains a change and never makes the person wait.
 ## Interaction rules
 
 - **Keyboard first.** On the queue j/k move, Enter opens and r starts a
-  review; `/` focuses the review bar, where arrows move, Enter runs the
+  review; `/` opens the review bar, where arrows move, Enter runs the
   highlighted row, ⌘Enter or Shift+Enter runs its other action (also comment
   on the PR, or open instead of reviewing again), Tab completes the reference
-  and Escape leaves. A brief on a reviewed pull request reviews it again; a
+  and Escape closes it, dropping the text. A brief on a reviewed pull request reviews it again; a
   brief or a comment always starts a fresh run. On a review j/k and arrows move, Enter starts with the riskiest,
   a/s/x decide, u undoes, h hands off, f opens the file, o or Esc returns to
   the overview, q opens or closes ask, and Space, Shift+Space, Page Up/Down,

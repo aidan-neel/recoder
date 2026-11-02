@@ -3,8 +3,6 @@
 import {
 	Button,
 	CommandBar,
-	CommandBarInput,
-	CommandBarPanel,
 	CommandEmpty,
 	CommandFooter,
 	CommandGroup,
@@ -19,6 +17,7 @@ import { CircleAlert, CircleCheck, GitPullRequestArrow, MessageSquareQuote } fro
 import { AnimatePresence, motion } from 'motion/react';
 import Link from 'next/link';
 
+import type { SettingsSection } from '@/lib/settings/sections';
 import { openSettings } from '@/lib/settings/settings-url';
 import { reviewHref } from '@/lib/shell/routes';
 
@@ -28,13 +27,19 @@ import { useReviewBar, type BarStatus } from './use-review-bar';
 const PLACEHOLDER = 'Review a pull request: paste a link, type #214, or search';
 
 /** The way out a failure offers: the settings section that fixes it. */
-function SettingsButton({ status }: { status: BarStatus }) {
+function SettingsButton({
+	status,
+	onFix = openSettings
+}: {
+	status: BarStatus;
+	onFix?: (section: SettingsSection) => void;
+}) {
 	if (status.phase !== 'failed' || !status.section) return null;
 
 	const section = status.section;
 
 	return (
-		<Button variant="outline" onClick={() => openSettings(section)}>
+		<Button variant="outline" onClick={() => onFix(section)}>
 			{section === 'connections' ? 'Open connections' : 'Open settings'}
 		</Button>
 	);
@@ -85,14 +90,14 @@ function StatusLine({ status, hidden }: { status: BarStatus; hidden: boolean }) 
 }
 
 /** A failure while the bar is open, above its rows, so the person can fix the text and try again. */
-function FailureNotice({ status }: { status: BarStatus }) {
+function FailureNotice({ status, onFix }: { status: BarStatus; onFix: (section: SettingsSection) => void }) {
 	if (status.phase !== 'failed') return null;
 
 	return (
 		<div className="review-bar-notice" role="alert">
 			<CircleAlert aria-hidden className="size-[15px] shrink-0 text-danger" />
 			<span className="min-w-0 flex-1">{status.text}</span>
-			<SettingsButton status={status} />
+			<SettingsButton status={status} onFix={onFix} />
 		</div>
 	);
 }
@@ -124,7 +129,8 @@ function CommentSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) 
  * The queue's review bar, under the headline: the fastest way to start or
  * steer a review. It takes a pull request link, a short reference (`#214`,
  * `api#214`, GitLab's `!214`) with an optional brief after it, or words that
- * search the open pull requests. `/` focuses it and Escape leaves it; the ⌘K
+ * search the open pull requests. `/` or a press opens it in place over a
+ * scrim, focus stays in it until Escape or a click outside closes it; the ⌘K
  * palette stays the way to go places.
  */
 export function ReviewBar({ sample }: { sample: boolean }) {
@@ -135,44 +141,34 @@ export function ReviewBar({ sample }: { sample: boolean }) {
 		<div className="review-bar">
 			<CommandBar
 				label="Review a pull request"
+				open={bar.open}
+				onOpenChange={bar.setOpen}
+				placeholder={PLACEHOLDER}
+				search={bar.text}
+				onSearchChange={bar.change}
+				leading={<GitPullRequestArrow aria-hidden className="size-4 shrink-0 text-fg-muted" />}
+				hint={<Keycap k="/" />}
 				value={bar.highlighted}
 				onValueChange={bar.setHighlighted}
 				shouldFilter={false}
 				onKeyDown={bar.onKeyDown}
-				onFocusChange={bar.onFocusChange}
 			>
-				<CommandBarInput
-					inputRef={bar.inputRef}
-					placeholder={PLACEHOLDER}
-					value={bar.text}
-					onValueChange={bar.change}
-					leading={<GitPullRequestArrow aria-hidden className="size-4 shrink-0 text-fg-muted" />}
-					trailing={bar.open ? null : <Keycap k="/" />}
+				<FailureNotice status={bar.status} onFix={bar.fix} />
+				<BriefLine brief={bar.query.brief} />
+				<CommandList className="min-h-0">
+					{bar.groups.map((group) => (
+						<CommandGroup key={group.heading} heading={group.heading}>
+							{group.items.map((item) => (
+								<ReviewBarRow key={item.id} item={item} pending={item.id === pendingId} onRun={() => bar.run(item)} />
+							))}
+						</CommandGroup>
+					))}
+					<CommandEmpty>{bar.empty}</CommandEmpty>
+				</CommandList>
+				<CommandFooter
+					hints={bar.hints}
+					aside={sample ? null : <CommentSwitch on={bar.comment} onChange={bar.setComment} />}
 				/>
-				<CommandBarPanel open={bar.open}>
-					<FailureNotice status={bar.status} />
-					<BriefLine brief={bar.query.brief} />
-					<CommandList>
-						{bar.groups.map((group) => (
-							<CommandGroup key={group.heading} heading={group.heading}>
-								{group.items.map((item) => (
-									<ReviewBarRow
-										key={item.id}
-										item={item}
-										actions={bar.actionsFor(item)}
-										pending={item.id === pendingId}
-										onRun={() => bar.run(item)}
-									/>
-								))}
-							</CommandGroup>
-						))}
-						<CommandEmpty>{bar.empty}</CommandEmpty>
-					</CommandList>
-					<CommandFooter
-						hints={bar.hints}
-						aside={sample ? null : <CommentSwitch on={bar.comment} onChange={bar.setComment} />}
-					/>
-				</CommandBarPanel>
 			</CommandBar>
 			<StatusLine status={bar.status} hidden={bar.open} />
 		</div>

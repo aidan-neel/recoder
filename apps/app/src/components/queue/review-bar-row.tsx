@@ -4,14 +4,13 @@ import { CommandItem, Keycap, Pill, StatusGlyph } from '@recoder/ui';
 import { GitPullRequest, Plug } from 'lucide-react';
 
 import { entryGlyph, entryStatus } from '@/lib/queue/queue';
-import type { RowActions, Suggestion } from '@/lib/queue/review-bar';
+import type { Suggestion } from '@/lib/queue/review-bar';
 import { pullRef, pullTitle } from '@/lib/shell/format';
 
 import { QueueAuthor } from './queue-author';
 
 interface ReviewBarRowProps {
 	item: Suggestion;
-	actions: RowActions;
 	/** True while this row's review is starting. */
 	pending: boolean;
 	onRun: () => void;
@@ -41,7 +40,11 @@ function title(item: Suggestion): string {
 	}
 }
 
-/** The pull request's reference, author and size, as the queue row's meta line reads them. */
+/**
+ * The pull request's reference, author, size and branch, as the queue row's
+ * meta line reads them. The search matches the branch too, so it shows why a
+ * row matched; it comes last and truncates first.
+ */
 function PullMeta({ item }: { item: Extract<Suggestion, { kind: 'pull' }> }) {
 	const { pull } = item.entry;
 
@@ -53,6 +56,8 @@ function PullMeta({ item }: { item: Extract<Suggestion, { kind: 'pull' }> }) {
 			<span aria-hidden>·</span>
 			<span className="text-ok">+{pull.additions}</span>
 			<span className="text-danger">−{pull.deletions}</span>
+			<span aria-hidden>·</span>
+			<span className="min-w-0 truncate">{pull.headRef}</span>
 		</span>
 	);
 }
@@ -72,42 +77,42 @@ function Description({ item }: { item: Suggestion }) {
 }
 
 /**
- * The row's right edge, stacked in one cell so it never changes width: the
- * status pill at rest, and on the highlighted row what Enter does, or
- * "Starting" while it runs.
+ * The row's right edge, the same on every row so the highlight never moves
+ * it: the status pill (or "Starting…" in its place while the row's review
+ * starts), then a slot that shows the Enter keycap on the highlighted row
+ * only. The footer names what Enter does.
  */
-function Side({ item, actions, pending }: Omit<ReviewBarRowProps, 'onRun'>) {
+function Side({ item, pending }: Pick<ReviewBarRowProps, 'item' | 'pending'>) {
 	const status = item.kind === 'pull' ? entryStatus(item.entry) : null;
 
 	return (
 		<span className="review-bar-side" data-pending={pending || undefined}>
-			<span className="review-bar-rest">
-				{status ? (
-					<Pill tone={status.tone} className="queue-pill">
-						{status.label}
-					</Pill>
-				) : null}
-			</span>
-			{actions.primary ? (
-				<span className="review-bar-action">
-					{actions.primary.label}
-					<Keycap k="Enter" />
+			<span className="review-bar-state">
+				<span className="review-bar-rest">
+					{status ? (
+						<Pill tone={status.tone} className="queue-pill">
+							{status.label}
+						</Pill>
+					) : null}
 				</span>
-			) : null}
-			<span className="review-bar-starting">Starting…</span>
+				<span className="review-bar-starting">Starting…</span>
+			</span>
+			<span className="review-bar-enter">
+				<Keycap k="Enter" />
+			</span>
 		</span>
 	);
 }
 
 /** One row of the review bar: a pull request, a number in a tracked repository, or a repository to track. */
-export function ReviewBarRow({ item, actions, pending, onRun }: ReviewBarRowProps) {
+export function ReviewBarRow({ item, pending, onRun }: ReviewBarRowProps) {
 	return (
 		<CommandItem
 			value={item.id}
 			onSelect={onRun}
 			leading={<Lead item={item} pending={pending} />}
 			description={<Description item={item} />}
-			detail={<Side item={item} actions={actions} pending={pending} />}
+			detail={<Side item={item} pending={pending} />}
 			className="review-bar-row"
 		>
 			{title(item)}

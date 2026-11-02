@@ -87,6 +87,8 @@ function withTab(tabs: ReviewTab[], tab: ReviewTab): ReviewTab[] {
 interface ShellState {
 	paletteOpen: boolean;
 	shortcutsOpen: boolean;
+	/** The queue's review bar is open. It is a dialog of its own, which the palette and settings close as they open. */
+	reviewBarOpen: boolean;
 	pageItems: PaletteItem[];
 	tabs: ReviewTab[];
 	/**
@@ -104,6 +106,7 @@ interface ShellState {
 	navigate: (href: string) => void;
 	setPaletteOpen: (open: boolean) => void;
 	setShortcutsOpen: (open: boolean) => void;
+	setReviewBarOpen: (open: boolean) => void;
 	setPageItems: (items: PaletteItem[]) => void;
 	setWaiting: (scope: QueueScope, count: number | null) => void;
 	setHeading: (id: string | null) => void;
@@ -127,6 +130,7 @@ export const useShell = create<ShellState>((set, get) => {
 	return {
 		paletteOpen: false,
 		shortcutsOpen: false,
+		reviewBarOpen: false,
 		pageItems: [],
 		tabs: typeof window === 'undefined' ? [] : readTabs(),
 		waiting: { live: null, sample: null },
@@ -135,6 +139,7 @@ export const useShell = create<ShellState>((set, get) => {
 		navigate: (href) => window.location.assign(href),
 		setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
 		setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+		setReviewBarOpen: (reviewBarOpen) => set({ reviewBarOpen }),
 		setPageItems: (pageItems) => set({ pageItems }),
 		setWaiting: (scope, count) => set({ waiting: { ...get().waiting, [scope]: count } }),
 		setHeading: (heading) => set({ heading }),

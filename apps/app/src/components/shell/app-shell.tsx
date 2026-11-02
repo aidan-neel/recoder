@@ -20,24 +20,34 @@ import { ShellFrame } from './shell-frame';
 import { ShortcutsModal } from './shortcuts-modal';
 import { TopBar } from './top-bar';
 
+/** Dialogs that give way to the palette and settings instead of keeping them shut. */
+const YIELDING = ['command-dialog', 'command-bar-dialog'];
+
 /**
- * True while a dialog other than the palette and the shortcuts sheet is open
- * (a confirm, the handoff, a settings modal): app-wide keys wait for it, so
- * nothing runs behind it.
+ * True while a dialog other than the palette, the review bar and the
+ * shortcuts sheet is open (a confirm, the handoff, a settings modal):
+ * app-wide keys wait for it, so nothing runs behind it.
  */
 function dialogOpen(): boolean {
 	return [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].some(
-		(dialog) => dialog.getAttribute('data-ui') !== 'command-dialog' && !dialog.querySelector('[data-ui="shortcuts"]')
+		(dialog) =>
+			!YIELDING.includes(dialog.getAttribute('data-ui') ?? '') && !dialog.querySelector('[data-ui="shortcuts"]')
 	);
 }
 
-/** ⌘K opens the palette, closing the shortcuts first; pressed again it closes. Another open dialog keeps it shut. */
+/** Closes the overlays the palette and settings replace: the shortcuts sheet and the review bar. */
+function closeLightOverlays(): void {
+	useShell.getState().setShortcutsOpen(false);
+	useShell.getState().setReviewBarOpen(false);
+}
+
+/** ⌘K opens the palette, closing the shortcuts and the review bar first; pressed again it closes. Another open dialog keeps it shut. */
 function togglePalette(): void {
-	const { paletteOpen, setPaletteOpen, setShortcutsOpen } = useShell.getState();
+	const { paletteOpen, setPaletteOpen } = useShell.getState();
 
 	if (dialogOpen()) return;
 
-	setShortcutsOpen(false);
+	closeLightOverlays();
 	setPaletteOpen(!paletteOpen);
 }
 
@@ -73,7 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 			if (dialogOpen()) return;
 
 			useShell.getState().setPaletteOpen(false);
-			useShell.getState().setShortcutsOpen(false);
+			closeLightOverlays();
 			openSettings();
 		}
 	});
