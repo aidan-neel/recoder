@@ -36,6 +36,7 @@ import { configForOrchestrator, configForSubagent, isReviewConfigured, withLocke
 import { ModelBlockedError } from '../review/pipeline/agent-loop';
 import { codex } from '../agents/codex/codex';
 import { reviewInstructions } from '../review/chat/review-chat';
+import { recordBrief } from '../review/chat/chat-replies';
 import { harnessCallbacks } from './pipeline-callbacks';
 import { detectProvider, locateRepo, refspecFor } from '../forge/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../sandbox/sandbox';
@@ -57,7 +58,8 @@ export function touch(reviewId: string, patch: Partial<Review>): Review {
 }
 
 /**
- * Validate + queue a review, kicking the pipeline in the background.
+ * Validate + queue a review, kicking the pipeline in the background. A brief
+ * in `instructions` is recorded first, so the review runs with it.
  * Throws on bad input.
  * A reviewer model is required — stub reviews that finish in seconds with
  * no real findings are worse than refusing outright.
@@ -70,6 +72,8 @@ export function queueReview(input: QueueReviewInput): Review {
 	}
 
 	const review = createReviewSession(input);
+
+	recordBrief(review.id, input.instructions);
 
 	return startReviewSession(review.id);
 }

@@ -8,6 +8,12 @@ export type ProgressSummaries = Record<string, { tasksDone: number; tasksTotal: 
 /** The pull request to review. Without a head commit the server reviews the current one. */
 type PullTarget = Pick<PullRequest, 'number'> & Partial<Pick<PullRequest, 'headSha' | 'title'>>;
 
+/** How a review starts: `brief` is what the person asked it to focus on; `comment` posts a summary on the pull request. */
+export interface StartOptions {
+	brief?: string;
+	comment?: boolean;
+}
+
 /** Repositories, pull requests and the review lifecycle. */
 export const reviewsApi = {
 	repos: () => request<Repo[]>('/api/repos'),
@@ -26,9 +32,20 @@ export const reviewsApi = {
 	/** Token use so far, by model and stage; null before the review has made a call. */
 	metrics: (id: string) => request<ReviewMetrics | null>(`/api/reviews/${seg(id)}/metrics`),
 
-	/** Queue a full review of the pull request's current head. */
-	start: (repoId: string, pull: PullTarget) =>
-		post<Review>('/api/reviews', { repoId, prNumber: pull.number, headSha: pull.headSha, prTitle: pull.title }),
+	/** Queue a full review of the pull request's current head, with the person's brief and a pull request comment if asked. */
+	start: (repoId: string, pull: PullTarget, options: StartOptions = {}) =>
+		post<Review>('/api/reviews', {
+			repoId,
+			prNumber: pull.number,
+			headSha: pull.headSha,
+			prTitle: pull.title,
+			...(options.brief ? { instructions: options.brief } : {}),
+			...(options.comment ? { postComment: true } : {})
+		}),
+
+	/** Fetch a pull request by number, open or not, and queue its review. */
+	startNumber: async (repoId: string, number: number, options: StartOptions = {}) =>
+		reviewsApi.start(repoId, await reviewsApi.pull(repoId, number), options),
 
 	/** Start a draft session: the diff loads and the orchestrator opens a conversation, no review runs yet. */
 	draft: (repoId: string, pull: PullRequest) =>

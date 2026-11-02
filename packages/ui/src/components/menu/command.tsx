@@ -176,6 +176,10 @@ interface CommandItemProps {
 	icon?: ComponentType<{ className?: string }>;
 	/** The icon's color (a CSS color, usually a token: `var(--sev-high)`). */
 	iconTone?: string;
+	/** Sits where the icon goes when the row leads with something richer (a status glyph). */
+	leading?: ReactNode;
+	/** A faint second line under the label; the row grows to fit it. */
+	description?: ReactNode;
 	/** Faint mono text at the row's end (a path, a PR number). */
 	detail?: ReactNode;
 	/** A key name shown as a keycap at the row's end. */
@@ -185,13 +189,29 @@ interface CommandItemProps {
 	children: ReactNode;
 }
 
-/** A 36px result row: icon, label, then detail and shortcut on the right. */
+/** The row's label, with its description under it when it has one. */
+function ItemLabel({ description, children }: { description?: ReactNode; children: ReactNode }) {
+	if (!description) return <span className="min-w-0 flex-1 truncate">{children}</span>;
+
+	return (
+		<span className="flex min-w-0 flex-1 flex-col gap-0.5">
+			<span className="truncate">{children}</span>
+			<span data-ui="command-item-description" className="truncate text-[12px] text-fg-faint">
+				{description}
+			</span>
+		</span>
+	);
+}
+
+/** A 36px result row: icon, label, then detail and shortcut on the right. A description makes it two lines. */
 export function CommandItem({
 	value,
 	keywords,
 	onSelect,
 	icon: Icon,
 	iconTone,
+	leading,
+	description,
 	detail,
 	shortcut,
 	disabled,
@@ -205,18 +225,21 @@ export function CommandItem({
 			onSelect={onSelect}
 			disabled={disabled}
 			data-ui="command-item"
+			data-lines={description ? 2 : undefined}
 			className={cn(
 				'flex h-9 cursor-default items-center gap-3 rounded-[9px] px-2.5 text-[14px] text-fg select-none',
 				'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-40',
+				description && 'h-auto min-h-9 py-2',
 				className
 			)}
 		>
-			{Icon ? (
+			{leading ? <span data-ui="command-item-leading">{leading}</span> : null}
+			{Icon && !leading ? (
 				<span data-ui="command-item-icon" style={{ color: iconTone }}>
 					<Icon />
 				</span>
 			) : null}
-			<span className="min-w-0 flex-1 truncate">{children}</span>
+			<ItemLabel description={description}>{children}</ItemLabel>
 			{detail ? <span className="shrink-0 font-mono text-[12px] text-fg-faint">{detail}</span> : null}
 			{shortcut ? <Keycap k={shortcut} /> : null}
 		</Command.Item>
@@ -247,8 +270,19 @@ export interface CommandHint {
 	label: string;
 }
 
-/** The 36px footer: keycaps and what they do (`↑↓ navigate`, `↵ open`, `esc close`). */
-export function CommandFooter({ hints, className }: { hints: CommandHint[]; className?: string }) {
+/**
+ * The 36px footer: keycaps and what they do (`↑↓ navigate`, `↵ open`, `esc close`),
+ * and anything in `aside` at the far end (a switch that changes what Enter does).
+ */
+export function CommandFooter({
+	hints,
+	aside,
+	className
+}: {
+	hints: CommandHint[];
+	aside?: ReactNode;
+	className?: string;
+}) {
 	return (
 		<div
 			data-ui="command-footer"
@@ -267,6 +301,7 @@ export function CommandFooter({ hints, className }: { hints: CommandHint[]; clas
 					{hint.label}
 				</span>
 			))}
+			{aside ? <span className="ml-auto inline-flex items-center gap-2">{aside}</span> : null}
 		</div>
 	);
 }

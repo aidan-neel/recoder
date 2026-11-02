@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { emptyTokenUsage, type ReviewContext } from '@recoder/shared';
 import { app } from '../../../src/app';
 import type { RunTokenCall, StoredMetrics } from '../../../src/models/metrics';
+import { reviewInstructions } from '../../../src/review/chat/review-chat';
 import { db, reviewMetrics } from '../../../src/store';
 import { testReview } from '../../helpers/review';
 
@@ -67,4 +68,39 @@ test('the stored metrics route serves the row with its pipeline runs and run-tag
 
 	expect(await (await app.request(path)).json()).toEqual(row);
 	expect((await app.request('/api/reviews/no-such-review/metrics/stored')).status).toBe(404);
+});
+
+test('a review started with instructions runs with them as the developer brief', async () => {
+	const env = {
+		RECODER_REVIEW_BASE_URL: 'http://localhost:9/v1',
+		RECODER_REVIEW_API_KEY: 'test',
+		RECODER_REVIEW_MODEL: 'm'
+	};
+
+	Object.assign(process.env, env);
+
+	try {
+		const repo = db.repos.set({
+			id: 'repo-brief',
+			name: 'brief',
+			url: `file://${join(tmpdir(), 'recoder-no-such-repo')}`,
+			provider: 'local',
+			defaultBranch: 'main',
+			createdAt: '',
+			updatedAt: ''
+		});
+
+		const res = await app.request('/api/reviews', {
+			method: 'POST',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ repoId: repo.id, prNumber: 3, instructions: '  only the python files ' })
+		});
+
+		const review = (await res.json()) as { id: string; startedAt: string };
+
+		expect(res.status).toBe(201);
+		expect(reviewInstructions(review.id, review.startedAt)).toBe('only the python files');
+	} finally {
+		for (const key of Object.keys(env)) delete process.env[key];
+	}
 });

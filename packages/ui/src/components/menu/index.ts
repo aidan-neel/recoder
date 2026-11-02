@@ -24,3 +24,4 @@ export {
 	type CommandHint
 } from './command';
 export { CommandList } from './command-list';
+export { CommandBar, CommandBarInput, CommandBarPanel } from './command-bar';

@@ -61,7 +61,25 @@ reviewed, With the agent (every decision made, some sent back), Ready to merge.
   persist in localStorage.
 - **First run** replaces the queue until a provider, a model and a repository
   are set. The sample review is always one click away.
-- **Queue**: the serif headline, grouped rows, j/k marks a row, Enter opens it.
+- **Queue**: the serif headline, the review bar, grouped rows; j/k marks a row,
+  Enter opens it.
+- **Review bar** (under the headline): a 44px field whose results float under
+  it on the menu surface, over the list, so nothing below moves. It is for
+  starting and steering reviews; ⌘K stays the way to go places. It reads a
+  pull request link (GitHub, GitLab, self-managed GitLab), a short reference
+  (`#214`, `api#214`, `acme/api#214`, GitLab `!214`) with an optional brief
+  after it (`#214 focus on the auth changes`), or words that search the open
+  pull requests by number, title, repository, author and branch. Empty, it
+  lists what waits for a review, then recent reviews. Rows are two lines (the
+  queue's glyph and title, then reference, author and size) with the status
+  pill at rest and what Enter does on the highlighted row. A typed brief shows
+  as a line above the rows. A link into an untracked repository offers Track
+  and review. The footer names the keys for the highlighted row and holds the
+  Comment on the PR switch. A start spins on its row, then closes the bar with
+  one line under it (Reviewing api #214 with your brief, Open review); a
+  failure stays in the open bar with its reason and the settings section that
+  fixes it. In the sample, rows come from the sample queue, starts simulate a
+  run, and links can't be tracked.
 - **Review page**: a 44px header (`#214`, title, repo, author, branch, head),
   then a 304px rail (Overview, Needs you, Checked for you, Files) and the
   reading pane, centred; the file view widens. The selection lives in the URL
@@ -126,7 +144,11 @@ Motion explains a change and never makes the person wait.
 ## Interaction rules
 
 - **Keyboard first.** On the queue j/k move, Enter opens and r starts a
-  review. On a review j/k and arrows move, Enter starts with the riskiest,
+  review; `/` focuses the review bar, where arrows move, Enter runs the
+  highlighted row, ⌘Enter or Shift+Enter runs its other action (also comment
+  on the PR, or open instead of reviewing again), Tab completes the reference
+  and Escape leaves. A brief on a reviewed pull request reviews it again; a
+  brief or a comment always starts a fresh run. On a review j/k and arrows move, Enter starts with the riskiest,
   a/s/x decide, u undoes, h hands off, f opens the file, o or Esc returns to
   the overview, q opens or closes ask, and Space, Shift+Space, Page Up/Down,
   Home and End scroll the reading pane. In the ask field, Escape closes ask

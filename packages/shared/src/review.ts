@@ -121,6 +121,8 @@ export interface CreateReviewInput {
 	prTitle?: string;
 	/** True posts a summary comment on the pull request and keeps it current as the review runs. */
 	postComment?: boolean;
+	/** The developer's brief ("focus on the auth changes"); a started review runs with it. */
+	instructions?: string;
 }
 
 export interface CommandRun {

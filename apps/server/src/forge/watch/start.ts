@@ -1,7 +1,7 @@
-import { ORCHESTRATOR_ID, type AutoReviewEvent, type Repo, type Review } from '@recoder/shared';
+import type { AutoReviewEvent, Repo, Review } from '@recoder/shared';
 import { createReviewSession, startReviewSession, touch } from '../../commands/pipeline';
 import { isReviewConfigured } from '../../models/models';
-import { recordChatMessage } from '../../review/chat/chat-replies';
+import { recordBrief } from '../../review/chat/chat-replies';
 import { supersedeAutomaticReviews } from '../../review/session/supersede';
 import { db } from '../../store';
 import { requestPullComment } from '../publish/pull-comment';
@@ -18,24 +18,6 @@ export function reviewHistory(repoId: string, pull: Pick<WatchedPull, 'number' |
 		reviewedBefore: reviews.some((review) => !!review.trigger),
 		reviewedHead: !!pull.headSha && reviews.some((review) => review.headSha === pull.headSha)
 	};
-}
-
-/**
- * The mention's instructions as the developer's message to the orchestrator,
- * timed before the review starts, so `reviewInstructions` gives them to the review.
- */
-function recordInstructions(reviewId: string, trigger: Trigger): void {
-	if (!trigger.instructions) return;
-
-	recordChatMessage(reviewId, {
-		id: crypto.randomUUID(),
-		assignmentId: ORCHESTRATOR_ID,
-		from: 'user',
-		text: trigger.instructions,
-		at: new Date().toISOString(),
-		status: 'done',
-		discussion: true
-	});
 }
 
 /** React 👀 to the summoning comment. Best effort: a token without write access still gets the review. */
@@ -86,7 +68,7 @@ export function startAutoReview(input: {
 		}
 	});
 
-	recordInstructions(draft.id, trigger);
+	recordBrief(draft.id, trigger.instructions);
 
 	const review = startReviewSession(draft.id);
 

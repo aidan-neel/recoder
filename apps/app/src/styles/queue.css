@@ -16,7 +16,7 @@
 
 .queue-brief {
 	position: relative;
-	margin: 12px 0 44px;
+	margin: 12px 0 24px;
 }
 
 /* A refresh failed after a good load: one quiet line in the top padding, so nothing below moves. */
@@ -38,6 +38,120 @@
 		right: 16px;
 		left: 16px;
 	}
+}
+
+/* ───────── Review bar: a field under the headline whose results float over the list ───────── */
+.review-bar {
+	position: relative;
+	z-index: 10;
+	margin-bottom: 52px;
+}
+
+/* The note under the closed bar sits in the gap above the list, so nothing moves when it shows. */
+.review-bar-status {
+	position: absolute;
+	top: calc(100% + 8px);
+	right: 0;
+	left: 0;
+	height: 28px;
+	pointer-events: none;
+}
+.review-bar-status > p {
+	display: flex;
+	height: 100%;
+	align-items: center;
+	gap: 8px;
+	padding-left: 14px;
+	color: var(--text-muted);
+	font-size: 13px;
+	pointer-events: auto;
+}
+.review-bar-status > p[data-phase='failed'] {
+	color: var(--text-secondary);
+}
+.review-bar-status [data-ui='button'] {
+	height: 26px;
+	padding: 0 8px;
+}
+
+/* A failure in the open bar, and the brief it read, sit above the rows. */
+.review-bar-notice,
+.review-bar-brief {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 10px 18px;
+	border-bottom: 1px solid var(--line-card);
+	font-size: 13px;
+}
+.review-bar-notice {
+	min-height: 48px;
+	color: var(--text-secondary);
+}
+.review-bar-brief {
+	height: 40px;
+	color: var(--text-muted);
+}
+
+[data-ui='command-item'].review-bar-row {
+	gap: 12px;
+	padding-inline: 10px 8px;
+}
+.review-bar-icon {
+	width: 16px;
+	height: 16px;
+	color: var(--text-muted);
+}
+.review-bar-meta {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 7px;
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	white-space: nowrap;
+}
+
+/* The row's end: the pill at rest, what Enter does on the highlighted row, "Starting…" while it runs. One cell, so its width holds. */
+.review-bar-side {
+	display: grid;
+	align-items: center;
+	justify-items: end;
+	font-family: var(--font-ui);
+}
+.review-bar-side > * {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	grid-area: 1 / 1;
+	transition: opacity var(--dur-hover) ease-out;
+}
+.review-bar-action,
+.review-bar-starting {
+	color: var(--text-secondary);
+	font-size: 12.5px;
+	opacity: 0;
+}
+[data-selected='true'] .review-bar-side > .review-bar-rest {
+	opacity: 0;
+}
+[data-selected='true'] .review-bar-side > .review-bar-action {
+	opacity: 1;
+}
+.review-bar-side[data-pending] > :not(.review-bar-starting) {
+	opacity: 0;
+}
+.review-bar-side[data-pending] > .review-bar-starting {
+	opacity: 1;
+}
+
+.review-bar-comment {
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	color: var(--text-muted);
+	cursor: pointer;
+	user-select: none;
 }
 
 /* ───────── Section heads: the list's top border sits under each one ───────── */

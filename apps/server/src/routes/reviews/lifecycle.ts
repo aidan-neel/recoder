@@ -27,7 +27,8 @@ const createReviewSchema = z.object({
 	start: z.boolean().optional(),
 	baselineCache: z.literal(false).optional(),
 	prTitle: z.string().max(500).optional(),
-	postComment: z.boolean().optional()
+	postComment: z.boolean().optional(),
+	instructions: z.string().max(4000).optional()
 });
 
 const app = new Hono();
@@ -208,7 +209,9 @@ app.post('/', async (c) => {
 
 		return c.json(review, 201);
 	} catch (err) {
-		return c.json({ error: err instanceof Error ? err.message : 'invalid input' }, 400);
+		const error = err instanceof Error ? err.message : 'invalid input';
+
+		return c.json(isReviewConfigured() ? { error } : { error, action: 'settings' }, 400);
 	}
 });
 

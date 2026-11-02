@@ -75,10 +75,7 @@ export function usePullReview(open: boolean, go: (id: string) => void) {
 		setPending(id);
 
 		try {
-			const pull = await reviewsApi.pull(repo.id, number);
-			const started = await reviewsApi.start(repo.id, pull);
-
-			go(started.id);
+			go((await reviewsApi.startNumber(repo.id, number)).id);
 		} catch (error) {
 			const action = error instanceof ApiError ? error.action : undefined;
 

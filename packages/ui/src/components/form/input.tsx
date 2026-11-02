@@ -24,7 +24,7 @@ interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'>
 const OWN_CLICKS = 'input, button, a, select, textarea, [tabindex]';
 
 /** A press on the frame or an icon focuses the input, as if the frame were the field. */
-function focusInput(event: MouseEvent<HTMLDivElement>) {
+export function focusInput(event: MouseEvent<HTMLDivElement>) {
 	const target = event.target as Element;
 
 	if (target.closest(OWN_CLICKS)) return;
