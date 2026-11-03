@@ -1,5 +1,5 @@
 import type { ReviewRun } from '../harness/context.js';
-import { partitionUnits, type ReviewUnit } from '../units.js';
+import { reviewerSlices, type ReviewUnit } from '../units.js';
 import { coChanges, type CoChange } from './co-change.js';
 import { contractCheckCap, contractChecksOn, residualCap, residualOn } from './config.js';
 import { contractCheckUnits, residualUnits } from './plan.js';
@@ -43,16 +43,20 @@ async function coChangeHints(run: ReviewRun, slices: ReviewUnit[]): Promise<Map<
 }
 
 /**
- * The second-look subagents the harness sends once the lenses have answered,
- * on the second model: a residual pass per unit (`RECODER_RESIDUAL=1`) and a
- * contract check per readability report of a comment that disagrees with the
- * code (`RECODER_CONTRACT_CHECKS=1`). Empty with both off.
+ * The second-look subagents the harness sends once the reviewers have answered,
+ * on the second model: a residual pass per reviewer slice (`RECODER_RESIDUAL=1`)
+ * and a contract check per readability report of a comment that disagrees with
+ * the code (`RECODER_CONTRACT_CHECKS=1`). Empty with both off. They share the
+ * subagent cap with the subagents reviewers asked for, so they take only the
+ * `room` those left under it.
  */
-export async function planSecondLook(run: ReviewRun): Promise<ReviewUnit[]> {
-	const slices = residualOn() ? partitionUnits(run.inventory).slice(0, residualCap()) : [];
+export async function planSecondLook(run: ReviewRun, room: number): Promise<ReviewUnit[]> {
+	const residualRoom = Math.max(0, Math.min(residualCap(), room));
+	const slices = residualOn() ? reviewerSlices(run.units).slice(0, residualRoom) : [];
 	const hints = slices.length ? await coChangeHints(run, slices) : new Map<string, CoChange[]>();
-	const residual = residualUnits(slices, run.candidates, hints, residualCap());
-	const checks = contractChecksOn() ? contractCheckUnits(run.candidates, run.inventory, contractCheckCap()) : [];
+	const residual = residualUnits(slices, run.candidates, hints, residualRoom);
+	const checkRoom = Math.max(0, Math.min(contractCheckCap(), room - residual.length));
+	const checks = contractChecksOn() ? contractCheckUnits(run.candidates, run.inventory, checkRoom) : [];
 
 	return [...residual, ...checks];
 }

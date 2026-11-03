@@ -38,7 +38,7 @@ afterEach(() => {
 	else process.env.RECODER_DATA_DIR = dataDir;
 });
 
-/** One stubbed call: the lens assignment or second look it serves, the model it ran on, and its opening message. */
+/** One stubbed call: the reviewer or second look it serves, the model it ran on, and its opening message. */
 interface Call {
 	stage: string;
 	model: string;
@@ -58,11 +58,12 @@ function wait(ms: number, signal?: AbortSignal | null): Promise<void> {
 }
 
 /**
- * Answers `TWO_UNIT_DIFF`: `unit-1/correctness` raises "possible miss",
- * verifiers confirm, a second look reports nothing after `secondLookMs`.
+ * Answers `TWO_UNIT_DIFF`: `reviewer-1` raises "possible miss",
+ * verifiers confirm, `reviewer-1` asks for `asks` subagents, a second look reports
+ * nothing after `secondLookMs`.
  * Records every call.
  */
-function stubReview(secondLookMs = 0): Call[] {
+function stubReview(secondLookMs = 0, asks = 0): Call[] {
 	const calls: Call[] = [];
 
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -81,9 +82,16 @@ function stubReview(secondLookMs = 0): Call[] {
 
 		if (secondLook && secondLookMs) await wait(secondLookMs, init?.signal);
 
-		const findings = unit === 'unit-1/correctness' ? [finding('possible miss')] : [];
+		const findings = unit === 'reviewer-1' ? [finding('possible miss')] : [];
 
-		return modelReply({ message: 'ok', ...NOTHING, findings });
+		const subagents = Array.from({ length: unit === 'reviewer-1' ? asks : 0 }, (_, index) => ({
+			concern: `Ask ${index + 1}`,
+			question: 'Is it handled?',
+			scope: [{ path: 'src/a.ts', hunkIds: [] }],
+			why: 'Needs a look across the repo.'
+		}));
+
+		return modelReply({ message: 'ok', ...NOTHING, findings, subagents });
 	}) as unknown as typeof fetch;
 
 	return calls;
@@ -119,12 +127,12 @@ test('with the flags unset no second look runs, and the model calls match a revi
 	expect(result.assignments.every((record) => record.role === 'reviewer')).toBe(true);
 });
 
-test('each unit gets one residual pass on the second model, outside the subagent cap, told what the review raised with its own unit first', async () => {
+test('each reviewer slice gets one residual pass on the second model, inside the subagent cap, told what the review raised with its own slice first', async () => {
 	useTwoModels();
 	process.env.RECODER_RESIDUAL = '1';
 
 	const calls = stubReview();
-	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 0 });
+	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 });
 
 	const residual = calls.filter(isSecondLook);
 	const first = residual.find((call) => call.stage === 'residual-1')!;
@@ -137,10 +145,10 @@ test('each unit gets one residual pass on the second model, outside the subagent
 	expect(second.task).toContain("Already raised in this review, this unit's files first (1):");
 	expect(second.task).toContain('possible miss (src/a.ts:1)');
 
-	const lastLens = Math.max(...calls.map((call, index) => (call.stage.startsWith('unit-') ? index : -1)));
+	const lastReviewer = Math.max(...calls.map((call, index) => (call.stage.startsWith('reviewer-') ? index : -1)));
 	const firstResidual = calls.findIndex(isSecondLook);
 
-	expect(firstResidual).toBeGreaterThan(lastLens);
+	expect(firstResidual).toBeGreaterThan(lastReviewer);
 
 	expect(
 		result.assignments
@@ -150,6 +158,24 @@ test('each unit gets one residual pass on the second model, outside the subagent
 		['residual-1', 'done', 'worker'],
 		['residual-2', 'done', 'worker']
 	]);
+});
+
+test('second looks take only the room reviewers’ requests left under the subagent cap, and none runs with subagents off', async () => {
+	useTwoModels();
+	process.env.RECODER_RESIDUAL = '1';
+
+	const ids = async (asks: number, subagentCap: 0 | 3) => {
+		stubReview(0, asks);
+
+		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap });
+
+		return result.assignments.filter((record) => record.role === 'subagent').map((record) => record.id);
+	};
+
+	expect(await ids(2, 3)).toEqual(['subagent-1', 'subagent-2', 'residual-1']);
+	expect(await ids(3, 3)).toEqual(['subagent-1', 'subagent-2', 'subagent-3']);
+	expect(await ids(0, 3)).toEqual(['residual-1', 'residual-2']);
+	expect(await ids(2, 0)).toEqual([]);
 });
 
 test('a second-look call slower than the per-call deadline answers within its own longer one, with no call made again', async () => {
@@ -164,10 +190,10 @@ test('a second-look call slower than the per-call deadline answers within its ow
 	try {
 		const instant = stubReview();
 
-		await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 0 });
+		await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 });
 
 		const slow = stubReview(400);
-		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 0 });
+		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 });
 
 		const secondLooks = (calls: Call[]) =>
 			calls
@@ -199,7 +225,7 @@ test('a second look that starts after the review deadline has passed still runs 
 	try {
 		stubReview(1200);
 
-		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 0 });
+		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 });
 
 		expect(residualsDone(result)).toBe(true);
 	} finally {

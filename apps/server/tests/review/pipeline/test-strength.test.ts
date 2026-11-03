@@ -178,20 +178,11 @@ describe('with RECODER_TEST_STRENGTH=1', () => {
 const INTENT_PROMPT = 'You write the brief a code change is reviewed against';
 
 /**
- * Every call the review of a one-file change made at a573205 with code
+ * Every call the review of a two-file change makes with code
  * execution off, sorted, apart from the intent brief `reviewOf` leaves out;
- * none was a verifier.
+ * none is a verifier. The flag must not add to it: one reviewer reads `src/a.ts` and the other the test file.
  */
-const MODEL_CALLS_AT_A573205 = [
-	'unit-1/api-contract',
-	'unit-1/concurrency',
-	'unit-1/conventions',
-	'unit-1/correctness',
-	'unit-1/performance',
-	'unit-1/readability',
-	'unit-1/rules',
-	'unit-1/security'
-];
+const REVIEWER_CALLS = ['reviewer-1', 'reviewer-2'];
 
 /**
  * Reviews a repo whose head commit adds or edits an AVA test file, and returns
@@ -202,7 +193,7 @@ const MODEL_CALLS_AT_A573205 = [
  * Code execution is turned off, so a bug is shown without a verifier. Whether a host can run code (`bwrap` present
  * and permitted to unshare namespaces, or Seatbelt) decides whether the
  * correctness lens is sent back once for concluding without running anything
- * (`unrunCorrectnessFinal`), a second `unit-1/correctness` call that has
+ * (`unrunCorrectnessFinal`), a second `reviewer-1` call that has
  * nothing to do with the flag, so the calls would differ between machines.
  */
 async function reviewOf(files: { base?: Record<string, string>; head: Record<string, string> }) {
@@ -244,16 +235,16 @@ const ADDED_TEST_FILE = { head: { 'test/client.test.ts': NEW_TEST } };
 const EDITED_TEST_FILE = { base: { 'test/client.test.ts': BASE_TEST }, head: { 'test/client.test.ts': HEAD_TEST } };
 
 describe('the model calls of a review', () => {
-	test('with the flag unset, an added t.assert test makes the calls a573205 made', async () => {
+	test('with the flag unset, an added t.assert test makes only its two reviewers’ calls', async () => {
 		flag(false);
 
-		expect((await reviewOf(ADDED_TEST_FILE)).calls).toEqual(MODEL_CALLS_AT_A573205);
+		expect((await reviewOf(ADDED_TEST_FILE)).calls).toEqual(REVIEWER_CALLS);
 	});
 
-	test('with the flag unset, a removed t.assert line makes the calls a573205 made', async () => {
+	test('with the flag unset, a removed t.assert line makes only its two reviewers’ calls', async () => {
 		flag(false);
 
-		expect((await reviewOf(EDITED_TEST_FILE)).calls).toEqual(MODEL_CALLS_AT_A573205);
+		expect((await reviewOf(EDITED_TEST_FILE)).calls).toEqual(REVIEWER_CALLS);
 	});
 
 	test('with the flag set, an added t.assert test shows a weak-test finding, unverified, with no new model call', async () => {
@@ -261,7 +252,7 @@ describe('the model calls of a review', () => {
 
 		const { calls, findings } = await reviewOf(ADDED_TEST_FILE);
 
-		expect(calls).toEqual(MODEL_CALLS_AT_A573205);
+		expect(calls).toEqual(REVIEWER_CALLS);
 
 		expect(outcomes(findings)).toEqual([
 			['`retries after a failure` checks `calls.length` only from below', 'not-run']
@@ -273,7 +264,7 @@ describe('the model calls of a review', () => {
 
 		const { calls, findings } = await reviewOf(EDITED_TEST_FILE);
 
-		expect(calls).toEqual(MODEL_CALLS_AT_A573205);
+		expect(calls).toEqual(REVIEWER_CALLS);
 		expect(outcomes(findings)).toEqual([['`retries after a failure` has fewer assertions', 'not-run']]);
 	});
 });

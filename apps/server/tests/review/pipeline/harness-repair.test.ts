@@ -216,9 +216,9 @@ function stubTwoUnits(failing: string | null): void {
 		if (unit === failing) return new Response('bad request', { status: 400 });
 
 		const findings =
-			unit === 'unit-1/correctness'
+			unit === 'reviewer-1'
 				? [lostAnchor('first', 'src/a.ts')]
-				: unit === 'unit-2/correctness'
+				: unit === 'reviewer-2'
 					? [lostAnchor('second', 'tests/b.ts')]
 					: [];
 
@@ -228,7 +228,7 @@ function stubTwoUnits(failing: string | null): void {
 
 test('the repair cap holds across a restart: a resumed review counts the repairs its checkpoint saved', async () => {
 	process.env.RECODER_REPAIR_CAP = '1';
-	stubTwoUnits('unit-2/correctness');
+	stubTwoUnits('reviewer-2');
 
 	const first = await review(TWO_UNIT_DIFF);
 

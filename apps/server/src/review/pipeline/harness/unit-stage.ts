@@ -1,23 +1,22 @@
 import { canLaunchInvestigation } from '../agent-loop.js';
-import { lensAssignments } from '../lenses/lenses.js';
-import { partitionUnits, unitRecord } from '../units.js';
+import { partitionReviewers } from '../reviewers.js';
+import { unitRecord } from '../units.js';
 import { FINISHED, assignCoverage } from './assignments.js';
 import { poolContext, publishUnits, type ReviewRun } from './context.js';
 import { runUnitPool } from './pool.js';
 import { failedUnits, reportRetries } from './retries.js';
 
 /**
- * Cuts the change into review units and fans each out into one assignment per
- * lens that applies to it, or restores a resumed review's assignments, and
- * records a queued assignment for each. The model-call budget and deadline
- * were already scaled to the assignment count when the run was created.
+ * Cuts the change into one slice per reviewer, or restores a resumed review's
+ * assignments, and records a queued assignment for each. The model-call budget
+ * and deadline were already scaled to the reviewer count when the run was created.
  */
 export function cutUnits(run: ReviewRun): void {
 	const resume = run.input.resume ?? null;
 
 	if (resume) restoreUnits(run);
 	else {
-		run.units = lensAssignments(partitionUnits(run.inventory), run.limits.lenses);
+		run.units = partitionReviewers(run.inventory, run.limits);
 
 		for (const unit of run.units) {
 			assignCoverage(run.coverage, unit);
@@ -29,7 +28,7 @@ export function cutUnits(run: ReviewRun): void {
 }
 
 /**
- * Picks a resumed review up from its checkpoint: finished lens assignments,
+ * Picks a resumed review up from its checkpoint: finished reviewers,
  * subagents and obligation investigations keep their records, the rest are queued again.
  */
 function restoreUnits(run: ReviewRun): void {
@@ -51,7 +50,7 @@ function restoreUnits(run: ReviewRun): void {
 }
 
 /**
- * Reruns the lens assignments that failed, once, adjusted for how each failed;
+ * Reruns the reviewers that failed, once, adjusted for how each failed;
  * the orchestrator says so in its conversation. Runs at most once per review,
  * including across a resume.
  */

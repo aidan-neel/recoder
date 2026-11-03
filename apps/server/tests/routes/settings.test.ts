@@ -86,7 +86,7 @@ describe('review settings', () => {
 	});
 
 	test('the subagent cap persists across reload and rejects other values', async () => {
-		expect((await (await app.request('/api/settings/models')).json()).subagentCap).toBe(2);
+		expect((await (await app.request('/api/settings/models')).json()).subagentCap).toBe(8);
 
 		const patch = await app.request('/api/settings/models', {
 			method: 'PATCH',
@@ -103,7 +103,7 @@ describe('review settings', () => {
 		const bad = await app.request('/api/settings/models', {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ subagentCap: 3 })
+			body: JSON.stringify({ subagentCap: 5 })
 		});
 
 		expect(bad.status).toBe(400);
@@ -117,12 +117,12 @@ describe('review settings', () => {
 		const patch = await app.request('/api/settings/models', {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ tokenBudget: 'low', subagentCap: 0, orchestratorEffort: 'low', specialistEffort: 'low' })
+			body: JSON.stringify({ tokenBudget: 'low', subagentCap: 3, orchestratorEffort: 'low', specialistEffort: 'low' })
 		});
 
 		expect(await patch.json()).toMatchObject({
 			tokenBudget: 'low',
-			subagentCap: 0,
+			subagentCap: 3,
 			orchestratorEffort: 'low',
 			specialistEffort: 'low'
 		});
@@ -130,14 +130,14 @@ describe('review settings', () => {
 		setReviewOverrides({});
 		initReviewSettings();
 		expect(effectiveTokenBudget()).toBe('low');
-		expect(effectiveSubagentCap()).toBe(0);
+		expect(effectiveSubagentCap()).toBe(3);
 		expect(configForOrchestrator().reasoningEffort).toBe('low');
 
-		writeFileSync(join(process.env.RECODER_DATA_DIR!, 'review-config.json'), JSON.stringify({ subagentCap: 4 }));
+		writeFileSync(join(process.env.RECODER_DATA_DIR!, 'review-config.json'), JSON.stringify({ subagentCap: 12 }));
 		setReviewOverrides({});
 		initReviewSettings();
 		expect(effectiveTokenBudget()).toBe('medium');
-		expect(effectiveSubagentCap()).toBe(4);
+		expect(effectiveSubagentCap()).toBe(12);
 	});
 
 	test('uncapped subagents save, read back and survive a restart', async () => {

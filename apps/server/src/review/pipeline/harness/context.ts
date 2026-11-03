@@ -2,6 +2,7 @@ import {
 	DEFAULT_SUBAGENT_CAP,
 	DEFAULT_TOKEN_BUDGET,
 	ORCHESTRATOR_ID,
+	type SubagentCap,
 	type BriefQuestion,
 	type Finding,
 	type ReviewAssignment,
@@ -14,7 +15,13 @@ import { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import { scopeOfCheckout } from '../../../sandbox/shared-install.js';
 import type { ReviewDirective } from '../../chat/directive.js';
 import { reviewNow } from '../../session/review-control.js';
-import { REVIEW_POLICY, budgetLimits, scaledReviewLimits, type ReviewLimits } from '../../session/review-policy.js';
+import {
+	REVIEW_POLICY,
+	budgetLimits,
+	scaledReviewLimits,
+	type ReviewLimits,
+	type ReviewShape
+} from '../../session/review-policy.js';
 import { ModelBudget } from '../agent-loop.js';
 import type { JsonAgentOptions } from '../agent-loop/options.js';
 import { listDismissals, type Dismissal } from '../../guidelines/learned/dismissals.js';
@@ -25,13 +32,13 @@ import type { DetectorResult } from '../detectors/types.js';
 import { CoverageLedger } from '../coverage.js';
 import type { ChangeIntent } from '../intent/types.js';
 import { buildInventory, type ReviewInventory } from '../inventory.js';
-import { lensAssignments } from '../lenses/lenses.js';
 import { obligationsOn } from '../obligations/config.js';
 import { restoreObligationState, type ObligationState } from '../obligations/state.js';
 import { restoreQuestions } from '../question-ledger.js';
 import { extraExcludes } from '../review-scope.js';
 import { restoreSubagentState, type SubagentState } from '../subagents.js';
-import { partitionUnits, type ReviewUnit } from '../units.js';
+import { partitionReviewers } from '../reviewers.js';
+import { partitionUnits, reviewerSlices, type ReviewUnit } from '../units.js';
 import { FINISHED } from './assignments.js';
 import type { PoolContext } from './pool.js';
 import { emptyReceived, receivedOf, recordingReads, reviewContext, type Received } from './received.js';
@@ -45,7 +52,7 @@ export interface ReviewRun {
 	/** Aborted by the developer's signal, the review clock, or cleanup. */
 	controller: AbortController;
 	budget: ModelBudget;
-	/** What the review's token budget allows: turns, the model-call ceiling and which lenses run. */
+	/** What the review's token budget allows: how many reviewers run and for how many turns. */
 	limits: ReviewLimits;
 	inventory: ReviewInventory;
 	evidence: EvidenceStore;
@@ -105,12 +112,27 @@ export interface ReviewRun {
 	task: TaskFn;
 }
 
+/** The subagents an uncapped review is sized for: as many as the largest cap. */
+const UNCAPPED_SUBAGENTS = 12;
+
+/** What an uncapped review's reviewers are each told they may ask for. */
+const UNCAPPED_REQUESTS = 4;
+
+/** What the review is sized for: its reviewers, its brief calls and the subagents its cap allows. */
+function reviewShape(inventory: ReviewInventory, limits: ReviewLimits, cap: SubagentCap | number): ReviewShape {
+	return {
+		reviewers: partitionReviewers(inventory, limits).length,
+		briefs: partitionUnits(inventory).length,
+		subagents: cap === 'uncapped' ? UNCAPPED_SUBAGENTS : cap
+	};
+}
+
 /** Builds the run's shared state from the input, restoring what a resumed review carries over. */
 export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): ReviewRun {
 	const startedAt = reviewNow();
 	const inventory = buildInventory(input.diff, extraExcludes());
 	const limits = budgetLimits(input.tokenBudget ?? DEFAULT_TOKEN_BUDGET);
-	const scaled = scaledReviewLimits(lensAssignments(partitionUnits(inventory), limits.lenses).length, limits);
+	const scaled = scaledReviewLimits(reviewShape(inventory, limits, input.subagentCap ?? DEFAULT_SUBAGENT_CAP), limits);
 	const deadlineAt = startedAt + scaled.deadlineMs;
 	const resume = input.resume;
 
@@ -251,7 +273,7 @@ export function publishUnits(run: ReviewRun, planVersion: number): void {
 
 	run.events?.onPlan?.({
 		planVersion,
-		summary: `Reviewing in ${units} unit${units === 1 ? '' : 's'}${subagents ? ` with ${subagents} subagent${subagents === 1 ? '' : 's'}` : ''}`,
+		summary: `Reviewing with ${units} reviewer${units === 1 ? '' : 's'}${subagents ? ` and ${subagents} subagent${subagents === 1 ? '' : 's'}` : ''}`,
 		assignments: run.assignments.map((assignment) => ({ ...assignment }))
 	});
 }
@@ -303,6 +325,14 @@ export function receivedContext(run: ReviewRun, findings: Finding[]): ReviewCont
 	);
 }
 
+/** The subagents each reviewer is asked for: its share of the cap, rounded up; none when subagents are off. */
+function requestsPerReviewer(run: ReviewRun): number {
+	const cap = run.input.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+	const reviewers = Math.max(1, reviewerSlices(run.units).length);
+
+	return cap === 'uncapped' ? UNCAPPED_REQUESTS : Math.ceil(cap / reviewers);
+}
+
 /** What a reviewer pool needs from the run. */
 export function poolContext(run: ReviewRun): PoolContext {
 	const { input, inventory } = run;
@@ -324,7 +354,7 @@ export function poolContext(run: ReviewRun): PoolContext {
 		exec: Boolean(run.workspace),
 		setupNotes: () => run.setupNotes,
 		directive: run.directive,
-		subagentCap: run.input.subagentCap ?? DEFAULT_SUBAGENT_CAP,
+		subagentRequests: requestsPerReviewer(run),
 		limits: run.limits,
 		reportLowSeverity: run.input.reportLowSeverity ?? false,
 		changeModel: run.changeModel,

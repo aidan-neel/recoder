@@ -26,8 +26,8 @@ Execution order. The entry for the whole run is `runAdaptiveReview` in `apps/ser
 | Checkout and sandbox                     | `apps/server/src/review/pipeline/harness/sandbox-setup.ts` | `ReviewRevision`, `BaselineResult`            |
 | Inventory and change model               | `apps/server/src/review/pipeline/inventory.ts`             | `ReviewInventory`, `ChangeModel`              |
 | Intent                                   | `apps/server/src/review/pipeline/harness/intent-stage.ts`  | `ChangeIntent`                                |
-| Units and briefs                         | `apps/server/src/review/pipeline/harness/unit-stage.ts`    | `ReviewUnit`, `UnitBrief`                     |
-| Lens reviewers, subagents                | `apps/server/src/review/pipeline/harness/pool.ts`          | `ReviewerOutput`, then `CandidateFinding`     |
+| Reviewer slices and briefs               | `apps/server/src/review/pipeline/harness/unit-stage.ts`    | `ReviewUnit`, `UnitBrief`                     |
+| Reviewers, subagents                     | `apps/server/src/review/pipeline/harness/pool.ts`          | `ReviewerOutput`, then `CandidateFinding`     |
 | Obligations (flag `RECODER_OBLIGATIONS`) | `apps/server/src/review/pipeline/obligations/stage.ts`     | `ObligationReport`                            |
 | Detectors                                | `apps/server/src/review/pipeline/harness/quality-stage.ts` | `DetectorResult`                              |
 | Validation and repair                    | `apps/server/src/review/pipeline/consolidate.ts`           | `CandidateFinding`, `CandidateRepair`         |

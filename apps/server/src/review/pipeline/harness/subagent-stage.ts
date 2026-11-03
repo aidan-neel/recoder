@@ -23,16 +23,18 @@ function subagentCalls(run: ReviewRun): number {
 
 /**
  * Runs the subagents, once every reviewer (and retry) has answered, so the cap
- * is applied in unit order rather than finishing order. Reviewers' requests
- * come first, then the brief's open questions they left unresolved, then
- * the other questions nothing settled, until the cap ({@link subagentLimit})
- * is reached; each open question keeps its follow-up, or why it got none. A
- * request runs whether or not the first pass raised a finding: a reviewer asks
- * because it could not settle a doubt, which is where a miss hides. With
- * subagents off, none runs and no request is reported dropped. The second
- * looks the flags turn on come after them, outside the cap, each bringing its
- * own model calls and time. Planned once and saved, so a resume reruns only
- * the subagents that didn't finish. Subagents are never retried.
+ * is applied in a fixed order rather than finishing order. Reviewers' requests
+ * come first, each reviewer's most important ones before anyone's later ones,
+ * then the brief's open questions they left unresolved, then the other
+ * questions nothing settled, then the second looks the flags turn on, until the
+ * cap ({@link subagentLimit}) is reached, so the review adds at most that many
+ * agents after its reviewers; each open question keeps its follow-up, or why it
+ * got none. A request runs whether or not the first pass raised a finding: a
+ * reviewer asks because it could not settle a doubt, which is where a miss
+ * hides. With subagents off, none runs, no request is reported dropped and no
+ * second look is sent. Each second look brings its own model calls and time.
+ * Planned once and saved, so a resume reruns only the subagents that didn't
+ * finish. Subagents are never retried.
  */
 export async function runSubagents(run: ReviewRun): Promise<void> {
 	const state = run.subagents;
@@ -51,13 +53,14 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 			questionRecord(run.questions, question).followUps.push(followUp);
 		}
 
-		const secondLook = await planSecondLook(run);
+		const room = limit - plan.units.length - fromBrief.unsettled.length - fromBrief.unaddressed.length;
+		const secondLook = cap === 0 ? [] : await planSecondLook(run, room);
 
 		state.units = [...plan.units, ...fromBrief.unsettled, ...fromBrief.unaddressed, ...secondLook];
 		state.dropped = plan.dropped;
 
 		run.events?.onLog?.(
-			`Planned ${state.units.length} subagents (cap ${capText(cap, limit)}): ${plan.units.length} from reviewer requests, ${fromBrief.unsettled.length} from unsettled brief questions, ${fromBrief.unaddressed.length} from unaddressed brief questions, ${secondLook.length} second looks outside the cap.`
+			`Planned ${state.units.length} subagents (cap ${capText(cap, limit)}): ${plan.units.length} from reviewer requests, ${fromBrief.unsettled.length} from unsettled brief questions, ${fromBrief.unaddressed.length} from unaddressed brief questions, ${secondLook.length} second looks.`
 		);
 
 		for (const unit of state.units) {

@@ -166,7 +166,7 @@ Routes in `apps/server/src/routes/settings.ts`, mounted at `/api/settings`.
 - `configured`, `baseUrl`, `model`, `apiKeyPreview`.
 - `sharedModelId`, `orchestratorModelId`, `specialistModelId`.
 - `models`: the agent CLIs' models from `agentModels()`.
-- `orchestratorEffort`, `specialistEffort`, `subagentCap`, `tokenBudget`, `reportLowSeverity`. `tokenBudget` is the last budget picked; the cap and efforts may since have been changed by hand. See [pipeline.md](pipeline.md#token-budget).
+- `orchestratorEffort`, `specialistEffort`, `subagentCap`, `tokenBudget`, `reportLowSeverity`. `tokenBudget` is the last budget picked; the cap and efforts may since have been changed by hand. `subagentCap` is one of 0, 3, 8, 12 or `'uncapped'`; a file saved with 2 or 4 (the caps before) loads as the nearest cap at least as large (`migrateSubagentCap`) and is saved again that way. See [pipeline.md](pipeline.md#token-budget).
 - `configPath`: where settings are saved, with home shortened to `~`.
 - `limits`: `maxFiles`, `maxDiffChars`, `maxFileChars`.
 

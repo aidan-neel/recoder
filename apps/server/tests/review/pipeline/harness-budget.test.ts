@@ -2,10 +2,10 @@ import { beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { TokenBudget } from '@recoder/shared';
+import { TOKEN_BUDGET_PLANS, type TokenBudget } from '@recoder/shared';
 import { runAdaptiveReview } from '../../../src/review/pipeline/harness';
 import { budgetLimits } from '../../../src/review/session/review-policy';
-import { NOTHING, messagesOf, modelReply, restoreAfterEach, systemOf, unitOf, useTestModel } from './harness-fixtures';
+import { NOTHING, addedFile, messagesOf, modelReply, restoreAfterEach, unitOf, useTestModel } from './harness-fixtures';
 
 restoreAfterEach();
 
@@ -13,57 +13,51 @@ beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-budget-'));
 });
 
-const DIFF = `diff --git a/src/a.ts b/src/a.ts
---- a/src/a.ts
-+++ b/src/a.ts
-@@ -1 +1 @@
--old
-+new
-`;
-
-const SUBAGENT_ASK = {
-	concern: 'Callers of parse',
-	question: 'Is every caller handled?',
-	scope: [{ path: 'src/a.ts', hunkIds: [] }],
-	why: 'Needs a look across the repo.'
-};
+/** Eight files in eight folders, about 14,000 patch characters each: over the larger-change threshold, in eight brief units. */
+const DIFF = Array.from({ length: 8 }, (_, index) => addedFile(`pkg${index}/index.ts`, 140)).join('');
 
 /** What a review spent, by the agent that spent it. */
 interface Spend {
-	/** Model calls each lens reviewer made. */
-	lenses: Map<string, number>;
-	subagentCalls: number;
+	/** Model calls each reviewer made. */
+	reviewers: Map<string, number>;
+	/** Model calls each subagent made. */
+	subagents: Map<string, number>;
 	/** The model-call ceiling when the first stage reported it, before verifiers add their own room. */
 	initialCeiling: number | null;
 }
 
+/** The subagent ids a prompt is for. */
+const subagentOf = (init?: RequestInit) => /^Subagent (\S+):/m.exec(messagesOf(init)[1]?.content ?? '')?.[1] ?? null;
+
 /**
- * Runs a one-unit review whose reviewers keep reading until their final turn and whose correctness lens asks for
- * a subagent, so the calls each makes show how many turns it was given.
+ * Runs a review whose reviewers keep reading until their final turn and each ask for three subagents, and whose
+ * subagents do the same, so the calls each makes show how many turns it was given and how many subagents ran.
  */
 async function spendUnder(tokenBudget: TokenBudget | undefined): Promise<Spend> {
-	const spend: Spend = { lenses: new Map(), subagentCalls: 0, initialCeiling: null };
+	const spend: Spend = { reviewers: new Map(), subagents: new Map(), initialCeiling: null };
 
 	useTestModel();
 
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		const unit = unitOf(init);
-		const subagent = systemOf(init).includes('Role: subagent');
+		const subagent = subagentOf(init);
 		const last = messagesOf(init).at(-1)?.content ?? '';
 
-		if (unit) spend.lenses.set(unit, (spend.lenses.get(unit) ?? 0) + 1);
-		if (subagent) spend.subagentCalls++;
+		if (unit) spend.reviewers.set(unit, (spend.reviewers.get(unit) ?? 0) + 1);
+		if (subagent) spend.subagents.set(subagent, (spend.subagents.get(subagent) ?? 0) + 1);
 
 		if ((unit || subagent) && !last.includes('This is your final turn'))
-			return modelReply({ message: 'Reading.', actions: [{ action: 'readDiff', path: 'src/a.ts' }] });
+			return modelReply({ message: 'Reading.', actions: [{ action: 'readDiff', path: 'pkg0/index.ts' }] });
 
-		const subagents = unit === 'unit-1/correctness' ? [SUBAGENT_ASK] : [];
+		const asks = unit ? [1, 2, 3].map((index) => ask(`${unit} question ${index}`)) : [];
 
-		return modelReply({ message: 'ok', ...NOTHING, subagents });
+		return modelReply({ message: 'ok', ...NOTHING, subagents: asks });
 	}) as unknown as typeof fetch;
 
+	const plan = TOKEN_BUDGET_PLANS[tokenBudget ?? 'medium'];
+
 	await runAdaptiveReview(
-		{ diff: DIFF, sandboxPath: null, subagentCap: 2, ...(tokenBudget && { tokenBudget }) },
+		{ diff: DIFF, sandboxPath: null, subagentCap: plan.subagentCap, ...(tokenBudget && { tokenBudget }) },
 		{
 			onBudget: (budget) => {
 				spend.initialCeiling ??= budget.limit;
@@ -74,43 +68,41 @@ async function spendUnder(tokenBudget: TokenBudget | undefined): Promise<Spend> 
 	return spend;
 }
 
-const ALL_LENSES = [
-	'correctness',
-	'security',
-	'concurrency',
-	'api-contract',
-	'performance',
-	'rules',
-	'conventions',
-	'readability'
-];
+const ask = (concern: string) => ({
+	concern,
+	question: `${concern}?`,
+	scope: [{ path: 'pkg0/index.ts', hunkIds: [] }],
+	why: 'Needs a look across the repo.'
+});
 
-test('a review with no budget spends exactly what Medium does, which is the limits before budgets existed', async () => {
+/** The calls every agent of a kind made, as one list. */
+const calls = (spent: Map<string, number>) => [...spent.values()];
+
+test('a review with no budget runs as Medium: three reviewers of twelve turns and eight subagents of eight turns', async () => {
 	const none = await spendUnder(undefined);
 	const medium = await spendUnder('medium');
 
 	expect(none).toEqual(medium);
-	expect([...medium.lenses.keys()]).toEqual(ALL_LENSES.map((lens) => `unit-1/${lens}`));
-	expect([...medium.lenses.values()]).toEqual(ALL_LENSES.map(() => 6));
-	expect(medium.subagentCalls).toBe(8);
-	expect(medium.initialCeiling).toBe(320 + 8 * ALL_LENSES.length);
+	expect([...medium.reviewers.keys()].sort()).toEqual(['reviewer-1', 'reviewer-2', 'reviewer-3']);
+	expect(calls(medium.reviewers)).toEqual([12, 12, 12]);
+	expect(calls(medium.subagents)).toEqual(Array(8).fill(8));
+	expect(medium.initialCeiling).toBe(120 + 8 + 3 * (12 + 4) + 8 * (8 + 4));
 });
 
-test('a Low budget leaves out the performance and maintainability lenses and gives each agent fewer turns and a lower ceiling', async () => {
+test('a Low budget runs one reviewer and up to three subagents, each with fewer turns and a lower ceiling', async () => {
 	const low = await spendUnder('low');
-	const lenses = ['correctness', 'security', 'concurrency', 'api-contract', 'rules'];
 
-	expect([...low.lenses.keys()]).toEqual(lenses.map((lens) => `unit-1/${lens}`));
-	expect([...low.lenses.values()]).toEqual(lenses.map(() => budgetLimits('low').lensTurns));
-	expect(low.subagentCalls).toBe(budgetLimits('low').subagentTurns);
-	expect(low.initialCeiling).toBe(200 + 6 * lenses.length);
+	expect([...low.reviewers.keys()].sort()).toEqual(['reviewer-1']);
+	expect(calls(low.reviewers)).toEqual([budgetLimits('low').reviewerTurns]);
+	expect(calls(low.subagents)).toEqual(Array(3).fill(budgetLimits('low').subagentTurns));
+	expect(low.initialCeiling).toBe(80 + 8 + (8 + 4) + 3 * (5 + 4));
 });
 
-test('a High budget gives every lens and subagent more turns and a higher ceiling', async () => {
+test('a High budget runs four reviewers and up to twelve subagents, each with more turns and a higher ceiling', async () => {
 	const high = await spendUnder('high');
 
-	expect([...high.lenses.keys()]).toEqual(ALL_LENSES.map((lens) => `unit-1/${lens}`));
-	expect([...high.lenses.values()]).toEqual(ALL_LENSES.map(() => budgetLimits('high').lensTurns));
-	expect(high.subagentCalls).toBe(budgetLimits('high').subagentTurns);
-	expect(high.initialCeiling).toBe(480 + 12 * ALL_LENSES.length);
+	expect([...high.reviewers.keys()].sort()).toEqual(['reviewer-1', 'reviewer-2', 'reviewer-3', 'reviewer-4']);
+	expect(calls(high.reviewers)).toEqual(Array(4).fill(budgetLimits('high').reviewerTurns));
+	expect(calls(high.subagents)).toEqual(Array(12).fill(budgetLimits('high').subagentTurns));
+	expect(high.initialCeiling).toBe(160 + 8 + 4 * (16 + 4) + 12 * (10 + 4));
 });

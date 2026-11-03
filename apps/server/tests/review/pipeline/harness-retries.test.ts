@@ -3,7 +3,6 @@ import { failedUnits, runAdaptiveReview, unfinishedAssignments } from '../../../
 import {
 	NOTHING,
 	TWO_UNIT_DIFF,
-	lensIdsOf,
 	messagesOf,
 	modelReply,
 	restoreAfterEach,
@@ -15,7 +14,7 @@ restoreAfterEach();
 
 /** A failed unit record whose last operation reads `currentOperation`. */
 const failedRecord = (currentOperation: string) => ({
-	id: 'unit-1/security',
+	id: 'reviewer-1',
 	role: 'reviewer',
 	title: 'c',
 	reason: 'r',
@@ -24,7 +23,7 @@ const failedRecord = (currentOperation: string) => ({
 	currentOperation
 });
 
-test('a lens assignment that failed reruns once under the same lens, told how it failed, and the orchestrator says so', async () => {
+test('a reviewer that failed reruns once, told how it failed, and the orchestrator says so', async () => {
 	useTestModel();
 
 	const prompts: string[] = [];
@@ -32,10 +31,10 @@ test('a lens assignment that failed reruns once under the same lens, told how it
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		const unit = unitOf(init);
 
-		/** The first unit-2 correctness reviewer only ever narrates, the failure seen with small models. */
-		if (unit?.endsWith('unit-2/correctness')) prompts.push(String(messagesOf(init)[1]?.content ?? ''));
+		/** The first reviewer-2 only ever narrates, the failure seen with small models. */
+		if (unit?.endsWith('reviewer-2')) prompts.push(String(messagesOf(init)[1]?.content ?? ''));
 
-		const reply = unit === 'unit-2/correctness' ? {} : NOTHING;
+		const reply = unit === 'reviewer-2' ? {} : NOTHING;
 
 		return modelReply({ message: 'Reading the queue code.', ...reply });
 	}) as unknown as typeof fetch;
@@ -53,22 +52,22 @@ test('a lens assignment that failed reruns once under the same lens, told how it
 
 	const statuses = new Map(result.assignments.map((record) => [record.id, record.status]));
 
-	expect(result.assignments).toHaveLength(2 * lensIdsOf('unit-1').length + 1);
-	expect(statuses.get('unit-2/correctness')).toBe('error');
-	expect(statuses.get('retry-unit-2/correctness')).toBe('done');
-	expect([...statuses].filter(([, status]) => status !== 'done').map(([id]) => id)).toEqual(['unit-2/correctness']);
+	expect(result.assignments).toHaveLength(3);
+	expect(statuses.get('reviewer-2')).toBe('error');
+	expect(statuses.get('retry-reviewer-2')).toBe('done');
+	expect([...statuses].filter(([, status]) => status !== 'done').map(([id]) => id)).toEqual(['reviewer-2']);
 
 	expect(prompts.at(-1)).toContain('Retry: the first attempt failed');
 	expect(notes).toHaveLength(1);
 	expect(notes[0]).toContain('with a strict reply format');
 });
 
-test('a lens assignment that ran out of room is retried under its lens as two halves of its scope, and a cancelled one is not retried', () => {
+test('a reviewer that ran out of room is retried as two halves of its scope, and a cancelled one is not retried', () => {
 	const unit = {
-		id: 'unit-1/security',
-		title: 'src · Security',
+		id: 'reviewer-1',
+		title: 'Reviewer 1 · src',
 		reason: 'r',
-		lens: 'security' as const,
+		lenses: ['correctness' as const, 'security' as const],
 		scope: [
 			{ path: 'src/a.ts', hunkIds: ['h1', 'h2'] },
 			{ path: 'src/b.ts', hunkIds: ['h3'] }
@@ -77,9 +76,9 @@ test('a lens assignment that ran out of room is retried under its lens as two ha
 
 	const retries = failedUnits([unit], [failedRecord('Model output truncated at the output-token limit')]);
 
-	expect(retries.map((retry) => [retry.unit.id, retry.unit.lens, retry.unit.scope])).toEqual([
-		['retry-unit-1/security-a', 'security', [{ path: 'src/a.ts', hunkIds: ['h1', 'h2'] }]],
-		['retry-unit-1/security-b', 'security', [{ path: 'src/b.ts', hunkIds: ['h3'] }]]
+	expect(retries.map((retry) => [retry.unit.id, retry.unit.lenses, retry.unit.scope])).toEqual([
+		['retry-reviewer-1-a', ['correctness', 'security'], [{ path: 'src/a.ts', hunkIds: ['h1', 'h2'] }]],
+		['retry-reviewer-1-b', ['correctness', 'security'], [{ path: 'src/b.ts', hunkIds: ['h3'] }]]
 	]);
 
 	expect(failedUnits([unit], [failedRecord('Review cancelled.')])).toEqual([]);

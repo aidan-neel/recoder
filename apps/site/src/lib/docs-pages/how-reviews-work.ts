@@ -21,9 +21,9 @@ For JavaScript, it then runs the type check (\`typecheck\` or \`check\`), \`lint
 
 ## Review
 
-The change is cut into review units: related files, packed by folder up to a size limit. The same diff always gives the same units. Each unit gets one reviewer per kind of problem: correctness, security, concurrency, API contracts, performance, repository rules, conventions and readability. A unit that only changes docs gets the rules and readability reviewers. On a **Low** token budget (see below), performance, conventions and readability reviewers are left out.
+A review has a few reviewers, not one per kind of problem. The change is cut into one slice per reviewer, in folder order, and the same diff always gives the same slices. Every changed hunk belongs to exactly one slice, so every changed line has one reviewer. Each reviewer applies every kind of check to its slice: correctness, security, concurrency, API contracts, performance, repository rules, conventions and readability. A slice that only changes docs gets the rules and readability checks. A small change has fewer reviewers than a larger one (see the table below), and one with a single hunk has one.
 
-The correctness reviewer can hand a deep question to a subagent. Subagents run after the reviewers, up to the limit in Settings → Review harness: **Off**, **Up to 2** (the default), **Up to 4** or **Uncapped**. The token budget (see below) sets this limit too. Past the limit, requests are merged or dropped. **Uncapped** runs as many as the review’s remaining model calls and time can pay for.
+A reviewer hands its deep dives to subagents: callers elsewhere in the repository, contracts defined outside its slice, paths through several modules, or a reproduction that needs its own run. Subagents run after the reviewers, up to the limit in Settings → Review harness: **Off**, **Up to 3**, **Up to 8** (the default), **Up to 12** or **Uncapped**. The token budget (see below) sets this limit too. Every reviewer lists its requests most important first, and the limit is filled with every reviewer’s first request, then every reviewer’s second, so one reviewer cannot use it all. Past the limit, requests are merged or dropped. Second looks that a server can turn on count inside the same limit, so the limit is the most agents a review adds after its reviewers. **Uncapped** runs as many as the review’s remaining model calls and time can pay for.
 
 Static checks run beside the reviewers. They look for dead code, complex functions, duplicated code, weakened tests and breaks of your repository’s rules.
 
@@ -50,18 +50,18 @@ Settings → Review harness has a **Token budget**: **Low**, **Medium** (the def
 
 | | Low | Medium | High |
 | --- | --- | --- | --- |
-| Subagents | Off | Up to 2 | Up to 4 |
-| Reasoning effort | Low | Each model’s default | High |
-| Turns for each reviewer | 4 | 6 | 8 |
+| Reviewers | 1 | 2, or 3 for a larger change | 4 |
+| Subagents | Up to 3 | Up to 8 | Up to 12 |
+| Reasoning effort | Low | Medium | High |
+| Turns for each reviewer | 8 | 12 | 16 |
 | Turns for each subagent | 5 | 8 | 10 |
-| Model calls | 200 plus 6 per reviewer | 320 plus 8 per reviewer | 480 plus 12 per reviewer |
-| Reviewers per unit | Correctness, security, concurrency, API contracts and rules | All eight | All eight |
+| Model calls | 80 plus 12 per reviewer, 9 per subagent | 120 plus 16 per reviewer, 12 per subagent | 160 plus 20 per reviewer, 14 per subagent |
 
-Medium is how reviews ran before budgets existed. Verification is the same at every budget: each finding is still tried by a fresh agent. Low and High pick the closest effort a model offers, and a model with no reasoning levels is sent none. If you change Subagents or an effort after picking, the budget reads **Custom**, and the review uses the limits of the budget you picked. A review’s Token usage names the budget it ran on, so you can compare spend.
+A larger change is one whose patch is over 48,000 characters, roughly 12,000 tokens. A change never gets more reviewers than it has hunks, and a change to docs only has one. Verification is the same at every budget: each finding is still tried by a fresh agent. Every budget picks the closest effort a model offers, and a model with no reasoning levels is sent none. If you change Subagents or an effort after picking, the budget reads **Custom**, and the review uses the limits of the budget you picked. A review’s Token usage names the budget it ran on, so you can compare spend.
 
 ## Limits
 
-A review gets a budget of model calls and time that grows with its size. On Medium that is 320 calls plus 8 per reviewer, up to 2,000, and 30 minutes plus 30 seconds per reviewer, up to 2 hours. Install time is added back, up to 14 minutes. A review that runs out of time still finishes: it shows what was verified by then and says time ran out.
+A review gets a budget of model calls and time that grows with its size. On Medium that is 120 calls, plus 16 for each reviewer, 12 for each subagent the limit allows and one for each part the change’s summary is read in, up to 2,000, and 30 minutes plus a minute for each reviewer and subagent, up to 2 hours. Install time is added back, up to 14 minutes. A review that runs out of time still finishes: it shows what was verified by then and says time ran out.
 
 A newer automatic review of the same pull request cancels an older one that is still running.
 

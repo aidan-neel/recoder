@@ -1,35 +1,52 @@
 import { expect, test } from 'bun:test';
-import { buildInventory } from '../../../../src/review/pipeline/inventory';
-import { LENSES, lensAssignments } from '../../../../src/review/pipeline/lenses/lenses';
-import { partitionUnits } from '../../../../src/review/pipeline/units';
-import { addedFile } from '../harness-fixtures';
+import {
+	LENSES,
+	combinedProcedure,
+	lensCategories,
+	lensOwning,
+	lensesFor
+} from '../../../../src/review/pipeline/lenses/lenses';
+import { reviewerSystemPrompt } from '../../../../src/review/pipeline/reviewer-prompts';
 
-const unitsOf = (diff: string) => partitionUnits(buildInventory(diff, []), 2_000);
+const ALL = LENSES.map((lens) => lens.id);
 
-test('a docs-only unit runs only the rules and readability lenses, and a unit with code runs all of them', () => {
-	const units = unitsOf(addedFile('docs/guide.md', 15) + addedFile('src/a.ts', 15));
-	const assignments = lensAssignments(units, 'all');
-	const docs = units.find((unit) => unit.scope.every((entry) => entry.path.endsWith('.md')))!;
-	const code = units.find((unit) => unit !== docs)!;
+test('a documentation-only slice applies only the rules and readability lenses, and a slice with code applies all of them', () => {
+	expect(lensesFor([{ path: 'docs/guide.md', hunkIds: [] }]).map((lens) => lens.id)).toEqual(['rules', 'readability']);
 
-	expect(assignments.filter((item) => item.scope === docs.scope).map((item) => item.lens)).toEqual([
-		'rules',
-		'readability'
-	]);
-
-	expect(assignments.filter((item) => item.scope === code.scope).map((item) => item.lens)).toEqual(
-		LENSES.map((lens) => lens.id)
-	);
+	expect(
+		lensesFor([
+			{ path: 'docs/guide.md', hunkIds: [] },
+			{ path: 'src/a.ts', hunkIds: [] }
+		]).map((lens) => lens.id)
+	).toEqual(ALL);
 });
 
-test('every unit fans out into one assignment per lens, with ids that keep the unit id', () => {
-	const units = unitsOf(addedFile('src/a.ts', 15) + addedFile('lib/b.ts', 15));
-	const assignments = lensAssignments(units, 'all');
+test('one combined prompt holds every lens procedure once, and the categories of every lens each once', () => {
+	const prompt = reviewerSystemPrompt(ALL, false, null, { subagents: 4, unsettled: true, delegate: false });
+	const categories = lensCategories(ALL);
 
-	expect(units).toHaveLength(2);
-	expect(assignments).toHaveLength(2 * LENSES.length);
+	expect(new Set(categories).size).toBe(categories.length);
 
-	expect(assignments.map((item) => item.id)).toEqual(
-		units.flatMap((unit) => LENSES.map((lens) => `${unit.id}/${lens.id}`))
-	);
+	for (const lens of LENSES) {
+		expect(prompt.split(lens.procedure)).toHaveLength(2);
+		expect(prompt).toContain(`${lens.title} (${lens.categories.join(', ')}):`);
+	}
+
+	expect(prompt).toContain(`report only these categories: ${categories.join(', ')}`);
+	expect(combinedProcedure(LENSES).split('intent-mismatch; cite the claim id')).toHaveLength(2);
+});
+
+test('a finding is credited to the first lens of the reviewer that owns its category', () => {
+	expect(lensOwning('security', ALL)).toBe('security');
+	expect(lensOwning('intent-mismatch', ALL)).toBe('correctness');
+	expect(lensOwning('security', ['rules', 'readability'])).toBeUndefined();
+});
+
+test('a reviewer is told how many subagents to ask for, most important first, and none when they are off', () => {
+	const on = reviewerSystemPrompt(ALL, false, null, { subagents: 4, unsettled: false, delegate: false });
+	const off = reviewerSystemPrompt(ALL, false, null, { subagents: 0, unsettled: false, delegate: false });
+
+	expect(on).toContain('at most 4, the most important first');
+	expect(off).toContain('Leave "subagents" empty.');
+	expect(off).not.toContain('hand deep dives to subagents');
 });

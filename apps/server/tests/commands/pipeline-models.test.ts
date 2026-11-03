@@ -79,12 +79,7 @@ test('a review keeps the models it started on for every call when the pick chang
 
 	expect(db.reviews.get(reviewId)?.status).toBe('passed');
 
-	expect([...new Set(requests.map((request) => request.kind))].sort()).toEqual([
-		'brief',
-		'correctness',
-		'lens',
-		'subagent'
-	]);
+	expect([...new Set(requests.map((request) => request.kind))].sort()).toEqual(['brief', 'reviewer', 'subagent']);
 
 	expect(calls).toHaveLength(requests.length);
 	expect([...new Set(requests.map((request) => request.model))].sort()).toEqual(FIRST);

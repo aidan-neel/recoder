@@ -29,8 +29,9 @@ const SUBAGENT_OPTIONS = SUBAGENT_CAPS.map((cap) => ({
 /** What each cap allows; shown under the name for the current pick. */
 const SUBAGENT_TEXT: Record<SubagentCap, string> = {
 	0: 'Reviewers work alone, using the fewest tokens',
-	2: 'Reviewers can run up to 2 subagents per review',
-	4: 'Reviewers can run up to 4 subagents per review',
+	3: 'Up to 3 deep dives per review',
+	8: 'Up to 8 deep dives per review',
+	12: 'Up to 12 deep dives per review',
 	uncapped: 'One per open question. Far more tokens and time'
 };
 

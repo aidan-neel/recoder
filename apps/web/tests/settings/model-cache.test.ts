@@ -17,7 +17,7 @@ const settings: ModelSettings = {
 			apiKeyPreview: 'sk-…c3d4'
 		}
 	],
-	subagentCap: 2,
+	subagentCap: 8,
 	tokenBudget: 'medium',
 	reportLowSeverity: false,
 	limits: { maxFiles: 50, maxDiffChars: 100_000, maxFileChars: 20_000 }

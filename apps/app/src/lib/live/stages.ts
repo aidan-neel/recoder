@@ -36,7 +36,7 @@ const STAGE_ABOUT: Record<ReviewStage, string> = {
 	checkout: 'The head commit, in a clean sandbox',
 	understand: 'Read the change and plan the reviewers',
 	checks: 'Install dependencies and run the checks',
-	reviewing: 'Reviewers read the change, each with its own lens',
+	reviewing: 'Reviewers each read a slice of the change with every lens',
 	subagents: 'Narrow follow-ups a reviewer handed off',
 	verify: 'Each possible issue is checked before it shows',
 	consolidation: 'The summary and the final list of findings'

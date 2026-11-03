@@ -10,19 +10,19 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Candidate.** A claim a reviewer, subagent or detector reported, before validation and verification. Type `CandidateFinding` (a `Finding` plus `candidateId`, `valid`, `dropReason`, `dropStage`, `belowBar`, `publishedBy`, `refuted`, `repair`) in `apps/server/src/review/pipeline/consolidate.ts`. Candidates that survive and merge become findings (`toFinding`).
 
-**Unit.** A slice of the change cut from the inventory without a model call. Type `ReviewUnit` in `apps/server/src/review/pipeline/units.ts`. Ids are `unit-1`, `unit-2/security` (a lens assignment), `subagent-1`, and the second looks `residual-1` and `contract-1`.
+**Unit.** A slice of the change cut from the inventory without a model call. Type `ReviewUnit` in `apps/server/src/review/pipeline/units.ts`. Ids are `reviewer-1` (a reviewer's slice, retried as `retry-reviewer-1`), `unit-1` (a brief unit), `subagent-1`, and the second looks `residual-1` and `contract-1`.
 
 **Inventory.** The changed files and their hunks, built from the diff. Type `ReviewInventory` in `apps/server/src/review/pipeline/inventory.ts`.
 
-**Lens.** A fixed review procedure with its own categories. Type `Lens`, ids in `LensId`, in `apps/server/src/review/pipeline/lenses/types.ts`. The lenses are `correctness`, `security`, `concurrency`, `api-contract`, `performance`, `rules`, `conventions`, `readability`. A lens drops categories it does not own.
+**Lens.** A fixed review procedure with its own categories. Type `Lens`, ids in `LensId`, in `apps/server/src/review/pipeline/lenses/types.ts`. The lenses are `correctness`, `security`, `concurrency`, `api-contract`, `performance`, `rules`, `conventions`, `readability`. A reviewer applies every lens that fits its slice in one prompt and reports the categories of those lenses; a finding in any other category is dropped.
 
-**Assignment.** One reviewer's job: one unit under one lens, or one subagent. Type `ReviewAssignment` in `packages/shared/src/progress.ts`.
+**Assignment.** One agent's job: one reviewer over its slice, or one subagent. Type `ReviewAssignment` in `packages/shared/src/progress.ts`.
 
-**Subagent.** An extra reviewer a lens reviewer asks for to settle one question. State in `SubagentState` in `apps/server/src/review/pipeline/subagents.ts`. The cap is `SubagentCap` (`0`, `2`, `4`, `'uncapped'`) in `packages/shared/src/models.ts`; `'uncapped'` is a string so it survives JSON.
+**Subagent.** An extra agent a reviewer hands a deep dive to, to settle one question. State in `SubagentState` in `apps/server/src/review/pipeline/subagents.ts`. The cap is `SubagentCap` (`0`, `3`, `8`, `12`, `'uncapped'`) in `packages/shared/src/models.ts`; `'uncapped'` is a string so it survives JSON.
 
-**Token budget.** The Low, Medium or High pick that sets how many tokens a review may spend: the subagent cap, both reasoning efforts, turns per lens and subagent, the model-call ceiling and which lenses run. Type `TokenBudget` in `packages/shared/src/models.ts`; settings in `packages/shared/src/token-budget.ts`; limits `ReviewLimits` in `apps/server/src/review/session/review-policy.ts`. Medium is the behaviour before budgets. Custom is what the apps show when the cap or an effort no longer matches the saved budget; it is never saved. See [pipeline.md](pipeline.md#token-budget).
+**Token budget.** The Low, Medium or High pick that sets how many tokens a review may spend: the number of reviewers (1 on Low, 2 or 3 on Medium, 4 on High), the subagent cap (3, 8 or 12), both reasoning efforts, turns per reviewer and subagent and the model-call ceiling. Type `TokenBudget` in `packages/shared/src/models.ts`; settings in `packages/shared/src/token-budget.ts`; limits `ReviewLimits` in `apps/server/src/review/session/review-policy.ts`. Custom is what the apps show when the cap or an effort no longer matches the saved budget; it is never saved. See [pipeline.md](pipeline.md#token-budget).
 
-**Second look.** A subagent the harness sends itself, not one a reviewer asked for: a residual pass per unit or a contract check per readability report of a comment that disagrees with the code. Set by `ReviewUnit.purpose` (`SecondLookPurpose`) in `apps/server/src/review/pipeline/units.ts`. Runs outside the subagent cap, only when `RECODER_RESIDUAL` or `RECODER_CONTRACT_CHECKS` is on.
+**Second look.** A subagent the harness sends itself, not one a reviewer asked for: a residual pass per reviewer slice or a contract check per readability report of a comment that disagrees with the code. Set by `ReviewUnit.purpose` (`SecondLookPurpose`) in `apps/server/src/review/pipeline/units.ts`. Counts inside the subagent cap, only when `RECODER_RESIDUAL` or `RECODER_CONTRACT_CHECKS` is on.
 
 **Detector.** A deterministic check that raises candidates without a model. Code in `apps/server/src/review/pipeline/detectors/`. Its candidates carry `lens` like `detector:duplication`.
 

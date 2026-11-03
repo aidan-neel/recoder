@@ -6,7 +6,7 @@ import type { LivePhase } from './live-progress';
 
 export interface ReviewerRow {
 	id: string;
-	/** What the reviewer looks at: its lens and files, or the question a subagent follows. */
+	/** What the reviewer looks at: its number and files, or the question a subagent follows. */
 	name: string;
 	/** What it is doing now, or how it ended. */
 	step: string;

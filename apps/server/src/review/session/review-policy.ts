@@ -5,31 +5,28 @@ import type { TokenBudget } from '@recoder/shared';
  * These are limits, not targets: a small PR is normally one review unit.
  */
 export const REVIEW_POLICY = {
-	/** Each lens assignment adds this many model calls to the base `maxModelCalls`… */
-	callsPerAssignment: 8,
-	/** …up to this many in all. */
-	maxScaledModelCalls: 2000,
-	/** Each lens assignment adds this much time to the base `analysisDeadlineMs`… */
-	msPerAssignment: 30_000,
+	/** Each reviewer and each subagent a review may run adds this much time to the base `analysisDeadlineMs`… */
+	msPerAssignment: 60_000,
 	/** …up to this long in all. */
 	maxScaledDeadlineMs: 2 * 60 * 60 * 1000,
+	/** …and the model calls its budget adds are capped at this many, whatever the shape of the review. */
+	maxScaledModelCalls: 2000,
 	/** Failed assignments rerun after the first pass; each is retried once, split in two when it was too big. */
 	maxRetryUnits: 24,
 	/** Reviewers running at once in one review; the model limiter (`RECODER_LLM_CONCURRENCY`) throttles across reviews. */
 	maxConcurrentAssignments: 12,
 	/**
-	 * Patch characters one review unit holds. Matches `maxToolRoundChars`, so a
-	 * reviewer starts with its whole patch in one evidence round.
+	 * Patch characters one brief unit holds (`partitionUnits`). Matches `maxToolRoundChars`, so a brief
+	 * call reads its whole patch at once.
 	 */
 	unitBudgetChars: 24_000,
 	/**
-	 * A lens starts with its unit's patch and change-model context, so it needs few turns of its own. Every turn
-	 * re-sends the whole transcript, so the last turns of a long loop cost the most.
+	 * A change whose reviewable patch is longer than this is a larger change, and gets the larger reviewer count
+	 * of its token budget. Two brief units' worth: two reviewers still each start with a patch round of their own.
 	 */
-	maxLensTurns: 6,
-	/** A subagent follows one question across the repo from scratch, so it gets a few more turns than a lens. */
-	maxSubagentTurns: 8,
+	largeChangeChars: 48_000,
 	maxConsolidationCalls: 1,
+	/** The ceiling of a `ModelBudget` made without one; a review's own comes from `scaledReviewLimits`. */
 	maxModelCalls: 320,
 	analysisDeadlineMs: 30 * 60 * 1000,
 	perCallDeadlineMs: 90_000,
@@ -118,54 +115,73 @@ export const REVIEW_POLICY = {
 } as const;
 
 /**
- * What a token budget changes in one review. Medium is {@link REVIEW_POLICY} as it stands, so a review without a
- * budget runs as it always did. Verification is the same at every budget: every valid candidate is re-proven, with
- * the same turns and reserves. Deadlines are the same too, since time limits stop a review rather than save tokens.
+ * What a token budget changes in one review: how many reviewers run and how long each may work. Verification is the
+ * same at every budget: every valid candidate is re-proven, with the same turns and reserves. Deadlines are the same
+ * too, since time limits stop a review rather than save tokens. The subagent cap and the efforts are saved Settings
+ * (`TOKEN_BUDGET_PLANS`), not limits.
  */
 export interface ReviewLimits {
-	/** Turns one lens reviewer gets. Each turn sends the whole transcript again, so the last turns cost the most. */
-	lensTurns: number;
-	/** Turns one subagent or second look gets. */
+	/** Reviewers on a small change, and on a larger one (over `REVIEW_POLICY.largeChangeChars`). Each reads one slice and applies every lens. */
+	reviewers: { small: number; large: number };
+	/**
+	 * Turns one reviewer gets. It starts with the first page of its slice and pages the rest itself, so it needs more
+	 * than a subagent's few. Every turn re-sends the whole transcript, so the last turns of a long loop cost the most.
+	 */
+	reviewerTurns: number;
+	/** Turns one subagent or second look gets: it follows one question across the repo from scratch. */
 	subagentTurns: number;
-	/** The review's model-call ceiling before any assignment is added, and what each lens assignment adds. */
+	/**
+	 * The model calls a review gets on top of what its reviewers, subagents and briefs are counted for: workers,
+	 * candidate repair and the intent summary. Verifiers add their own as they queue (`VerifyQueue.makeRoom`).
+	 */
 	maxModelCalls: number;
-	callsPerAssignment: number;
-	/** `core` leaves out the lenses that report performance and maintainability, and keeps every one that hunts a defect. */
-	lenses: 'all' | 'core';
 }
 
-/** What differs from Medium at each budget. */
-const BUDGET_CHANGES: Record<TokenBudget, Partial<ReviewLimits>> = {
-	low: { lensTurns: 4, subagentTurns: 5, maxModelCalls: 200, callsPerAssignment: 6, lenses: 'core' },
-	medium: {},
-	high: { lensTurns: 8, subagentTurns: 10, maxModelCalls: 480, callsPerAssignment: 12 }
+/** The limits of each budget. Low is one reviewer, Medium two or three, High four. */
+const BUDGET_LIMITS: Record<TokenBudget, ReviewLimits> = {
+	low: { reviewers: { small: 1, large: 1 }, reviewerTurns: 8, subagentTurns: 5, maxModelCalls: 80 },
+	medium: { reviewers: { small: 2, large: 3 }, reviewerTurns: 12, subagentTurns: 8, maxModelCalls: 120 },
+	high: { reviewers: { small: 4, large: 4 }, reviewerTurns: 16, subagentTurns: 10, maxModelCalls: 160 }
 };
 
-/** The limits a review runs with under `budget`; Medium reads {@link REVIEW_POLICY} each time. */
+/** The limits a review runs with under `budget`. */
 export function budgetLimits(budget: TokenBudget): ReviewLimits {
-	return {
-		lensTurns: REVIEW_POLICY.maxLensTurns,
-		subagentTurns: REVIEW_POLICY.maxSubagentTurns,
-		maxModelCalls: REVIEW_POLICY.maxModelCalls,
-		callsPerAssignment: REVIEW_POLICY.callsPerAssignment,
-		lenses: 'all',
-		...BUDGET_CHANGES[budget]
-	};
+	return BUDGET_LIMITS[budget];
+}
+
+/** What a review is planned to run, for sizing its model-call ceiling and deadline. */
+export interface ReviewShape {
+	reviewers: number;
+	/** Brief units (`partitionUnits`), one model call each. */
+	briefs: number;
+	/** Subagents and second looks the cap allows; an uncapped review is planned as the largest cap. */
+	subagents: number;
 }
 
 /**
- * The model-call budget and analysis deadline for a review of `assignments`
- * lens assignments: the base, plus a share per assignment, capped.
+ * The model-call budget and analysis deadline for a review of this shape: the base, plus every call its reviewers,
+ * subagents and briefs may make in full, capped. A subagent or reviewer that fails and repairs its answer takes up
+ * to `schemaRepairAttempts` more calls, so each is counted with them.
  */
 export function scaledReviewLimits(
-	assignments: number,
+	shape: ReviewShape,
 	limits: ReviewLimits
 ): { modelCalls: number; deadlineMs: number } {
 	const policy = REVIEW_POLICY;
+	const repairs = policy.schemaRepairAttempts;
+
+	const calls =
+		limits.maxModelCalls +
+		shape.briefs +
+		shape.reviewers * (limits.reviewerTurns + repairs) +
+		shape.subagents * (limits.subagentTurns + repairs);
 
 	return {
-		modelCalls: Math.min(policy.maxScaledModelCalls, limits.maxModelCalls + assignments * limits.callsPerAssignment),
-		deadlineMs: Math.min(policy.maxScaledDeadlineMs, policy.analysisDeadlineMs + assignments * policy.msPerAssignment)
+		modelCalls: Math.min(policy.maxScaledModelCalls, calls),
+		deadlineMs: Math.min(
+			policy.maxScaledDeadlineMs,
+			policy.analysisDeadlineMs + (shape.reviewers + shape.subagents) * policy.msPerAssignment
+		)
 	};
 }
 

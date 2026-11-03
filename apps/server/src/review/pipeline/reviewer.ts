@@ -25,10 +25,14 @@ const subagentRequestSchema = z.object({
 	why: z.string().trim().min(1).max(400)
 });
 
+/** Findings and examined hunks one reviewer may report: it applies every lens to a slice of the change. */
+const MAX_FINDINGS = 50;
+const MAX_EXAMINED_HUNKS = 600;
+
 const reviewerOutputSchema = z.object({
 	message: z.string().max(12000).optional(),
-	findings: z.array(reviewerFindingSchema).max(30),
-	examinedHunks: z.array(z.string()).max(200),
+	findings: z.array(reviewerFindingSchema).max(MAX_FINDINGS),
+	examinedHunks: z.array(z.string()).max(MAX_EXAMINED_HUNKS),
 	gaps: z
 		.array(z.object({ hunkId: z.string(), reason: z.string().max(400) }))
 		.max(80)
@@ -264,11 +268,13 @@ function normalizeReviewerRaw(raw: unknown, defaultCategory: FindingCategory): u
 	if (typeof out.message !== 'string' && typeof out.summary === 'string') out.message = out.summary;
 	if (out.message !== undefined) out.message = clip(out.message, 12000);
 
-	out.findings = (out.findings as unknown[]).slice(0, 30).flatMap((item) => normalizeFinding(item, defaultCategory));
+	out.findings = (out.findings as unknown[])
+		.slice(0, MAX_FINDINGS)
+		.flatMap((item) => normalizeFinding(item, defaultCategory));
 
 	out.examinedHunks = (Array.isArray(out.examinedHunks) ? (out.examinedHunks as unknown[]) : [])
 		.filter((id): id is string => typeof id === 'string')
-		.slice(0, 200);
+		.slice(0, MAX_EXAMINED_HUNKS);
 
 	out.gaps ??= out.coverageGaps;
 	delete out.coverageGaps;
@@ -452,7 +458,7 @@ export function reviewerResponseSchema(
 		type: 'object',
 		properties: {
 			message: str,
-			findings: { type: 'array', items: findingResponseSchema(categories), maxItems: 30 },
+			findings: { type: 'array', items: findingResponseSchema(categories), maxItems: MAX_FINDINGS },
 			examinedHunks: strings,
 			gaps: {
 				type: 'array',

@@ -15,27 +15,27 @@ export interface TokenBudgetPlan {
 	label: string;
 	description: string;
 	subagentCap: SubagentCap;
-	/** The reasoning effort for both models; null leaves each model on its own default. */
-	effort: ReasoningEffort | null;
+	/** The reasoning effort for both models, as the nearest one each model offers. */
+	effort: ReasoningEffort;
 }
 
 export const TOKEN_BUDGET_PLANS: Record<TokenBudget, TokenBudgetPlan> = {
 	low: {
 		label: 'Low',
-		description: 'Fewest tokens: core reviewers, no subagents, low effort',
-		subagentCap: 0,
+		description: 'Fewest tokens: 1 reviewer, up to 3 subagents, low effort',
+		subagentCap: 3,
 		effort: 'low'
 	},
 	medium: {
 		label: 'Medium',
-		description: 'Balanced depth and cost, the default',
+		description: 'Balanced: 2 or 3 reviewers, up to 8 subagents, medium effort',
 		subagentCap: DEFAULT_SUBAGENT_CAP,
-		effort: null
+		effort: 'medium'
 	},
 	high: {
 		label: 'High',
-		description: 'Most thorough: longer reviews, more subagents, high effort',
-		subagentCap: 4,
+		description: 'Most thorough: 4 reviewers, up to 12 subagents, high effort',
+		subagentCap: 12,
 		effort: 'high'
 	}
 };
@@ -67,35 +67,28 @@ function nearestEffort(target: ReasoningEffort, offered: ReasoningEffort[]): Rea
 }
 
 /**
- * The effort a model runs at under `budget`: the budget's effort or the nearest one the model offers, its own default
- * for a budget that sets none, and null for a model with no reasoning control, which is never sent one.
+ * The effort a model runs at under `budget`: the nearest one the model offers to the budget's, and null for a model
+ * with no reasoning control, which is never sent one.
  */
 function effortUnder(budget: TokenBudget, choices: EffortChoices | undefined): ReasoningEffort | null {
 	const offered = choices ? offeredEfforts(choices) : [];
-	const target = TOKEN_BUDGET_PLANS[budget].effort;
 
-	if (!choices || !offered.length) return null;
-
-	return target ? nearestEffort(target, offered) : choices.defaultEffort;
+	return offered.length ? nearestEffort(TOKEN_BUDGET_PLANS[budget].effort, offered) : null;
 }
 
 /**
- * The change that applies a budget: the budget itself, its subagent cap and each model's effort. A budget that sets
- * no effort saves none, so the model keeps following its own default; a subagent pick on the Review model keeps
- * following the Review effort.
+ * The change that applies a budget: the budget itself, its subagent cap and each model's effort. A subagent pick on
+ * the Review model keeps following the Review effort.
  */
 export function budgetPatch(
 	budget: TokenBudget,
 	models: BudgetModels
 ): Required<Pick<ModelSettingsPatch, 'tokenBudget' | 'subagentCap' | 'orchestratorEffort' | 'specialistEffort'>> {
-	const plan = TOKEN_BUDGET_PLANS[budget];
-	const saved = (choices: EffortChoices | undefined) => (plan.effort ? effortUnder(budget, choices) : null);
-
 	return {
 		tokenBudget: budget,
-		subagentCap: plan.subagentCap,
-		orchestratorEffort: saved(models.orchestrator),
-		specialistEffort: models.specialist === 'follows' ? null : saved(models.specialist)
+		subagentCap: TOKEN_BUDGET_PLANS[budget].subagentCap,
+		orchestratorEffort: effortUnder(budget, models.orchestrator),
+		specialistEffort: models.specialist === 'follows' ? null : effortUnder(budget, models.specialist)
 	};
 }
 

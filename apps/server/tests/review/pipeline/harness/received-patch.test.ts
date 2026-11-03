@@ -27,7 +27,7 @@ const DIFF = `diff --git a/src/a.ts b/src/a.ts
  v
 `;
 
-const UNIT = { id: 'unit-1/correctness', title: 'a', reason: 'r', scope: [{ path: 'src/a.ts', hunkIds: [] }] };
+const UNIT = { id: 'reviewer-1', title: 'a', reason: 'r', scope: [{ path: 'src/a.ts', hunkIds: [] }] };
 const FIRST = 'src/a.ts:2,3:2,4';
 const SECOND = 'src/a.ts:299,3:300,4';
 

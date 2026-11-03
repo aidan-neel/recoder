@@ -9,7 +9,7 @@ import {
 	DIFF,
 	HUNK,
 	NOTHING,
-	isLensReviewer,
+	isReviewer,
 	messagesOf,
 	modelReply,
 	restoreAfterEach,
@@ -34,7 +34,7 @@ test('review startup only reads guidance files that exist on the target revision
 		let reviewerPrompt = '';
 
 		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-			if (isLensReviewer(init)) reviewerPrompt = messagesOf(init)[1].content;
+			if (isReviewer(init)) reviewerPrompt = messagesOf(init)[1].content;
 
 			return modelReply({ findings: [], examinedHunks: [HUNK] });
 		}) as unknown as typeof fetch;
@@ -62,7 +62,7 @@ test('review startup only reads guidance files that exist on the target revision
 	}
 });
 
-test('owner guidelines reach every lens reviewer, and the repo layer is RECODER.md from the base revision', async () => {
+test('owner guidelines reach every reviewer, and the repo layer is RECODER.md from the base revision', async () => {
 	useTestModel(4);
 
 	const root = await mkdtemp(join(tmpdir(), 'recoder-guidelines-review-'));
@@ -84,7 +84,7 @@ test('owner guidelines reach every lens reviewer, and the repo layer is RECODER.
 		const systems: string[] = [];
 
 		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-			if (isLensReviewer(init)) systems.push(systemOf(init));
+			if (isReviewer(init)) systems.push(systemOf(init));
 
 			return modelReply(NOTHING);
 		}) as unknown as typeof fetch;
@@ -100,7 +100,7 @@ test('owner guidelines reach every lens reviewer, and the repo layer is RECODER.
 			{ onGuidelines: (guidelines) => used.push(guidelines) }
 		);
 
-		expect(new Set(systems).size).toBe(8);
+		expect(new Set(systems).size).toBe(1);
 
 		for (const system of systems) {
 			expect(system).toContain('Owner review guidelines (trusted)');

@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../../src/review/pipeline/harness';
-import { DIFF, TWO_UNIT_DIFF, lensIdsOf, restoreAfterEach, stubModel, useTestModel } from '../harness-fixtures';
+import { DIFF, TWO_REVIEWERS, TWO_UNIT_DIFF, restoreAfterEach, stubModel, useTestModel } from '../harness-fixtures';
 
 restoreAfterEach();
 
@@ -11,10 +11,10 @@ beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-context-'));
 });
 
-/** The last checkpoint of a two-unit review whose unit-2 correctness reviewer fails, so only unit-1 finished. */
-async function checkpointWithUnitOneDone(): Promise<ReviewProgressCheckpoint | null> {
+/** The last checkpoint of a two-reviewer review whose second reviewer fails, so only the first finished. */
+async function checkpointWithReviewerOneDone(): Promise<ReviewProgressCheckpoint | null> {
 	useTestModel();
-	stubModel([], 'unit-2/correctness');
+	stubModel([], 'reviewer-2');
 
 	let saved: ReviewProgressCheckpoint | null = null;
 
@@ -31,7 +31,7 @@ async function checkpointWithUnitOneDone(): Promise<ReviewProgressCheckpoint | n
 }
 
 /** Finding ids are random per run, so the repeat compares the reviewers' records and how each finding's evidence arrived. */
-test('a review records what each lens reviewer received, the same way every time', async () => {
+test('a review records what each reviewer received, the same way every time', async () => {
 	useTestModel();
 
 	const runs = [];
@@ -43,10 +43,10 @@ test('a review records what each lens reviewer received, the same way every time
 
 	const [context] = runs;
 
-	expect(context?.reviewers.map((reviewer) => reviewer.assignmentId)).toEqual(lensIdsOf('unit-1'));
+	expect(context?.reviewers.map((reviewer) => reviewer.assignmentId)).toEqual(['reviewer-1']);
 
 	expect(context?.units).toEqual({
-		'unit-1': { supplied: [{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 1 }], omitted: [] }
+		'reviewer-1': { supplied: [{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 1 }], omitted: [] }
 	});
 
 	expect(runs[1]?.reviewers).toEqual(context?.reviewers);
@@ -59,19 +59,19 @@ test('a review records what each lens reviewer received, the same way every time
 });
 
 test('a checkpoint keeps the prompts and reads of finished assignments, and a resume records the prompt it kept', async () => {
-	const saved = await checkpointWithUnitOneDone();
+	const saved = await checkpointWithReviewerOneDone();
 
 	const received = saved?.received;
 	const first = received?.byAssignment ?? {};
 
-	expect(first['unit-1/correctness']?.[0]).toMatchObject({ action: 'readDiff', path: 'src/a.ts', ok: true });
-	expect(first['unit-2/correctness']).toBeUndefined();
-	expect(received?.prompts['unit-2/correctness']).toBeUndefined();
+	expect(first['reviewer-1']?.[0]).toMatchObject({ action: 'readDiff', path: 'src/a.ts', ok: true });
+	expect(first['reviewer-2']).toBeUndefined();
+	expect(received?.prompts['reviewer-2']).toBeUndefined();
 
 	/** A marker only the kept prompts hold, so the resumed record shows it read them instead of rebuilding. */
 	const marker = { kind: 'sibling' as const, path: 'src/kept.ts', startLine: 1, endLine: 2 };
 
-	for (const id of lensIdsOf('unit-1')) received?.prompts[id]?.context.supplied.push(marker);
+	received?.prompts['reviewer-1']?.context.supplied.push(marker);
 
 	stubModel([]);
 
@@ -88,37 +88,38 @@ test('a checkpoint keeps the prompts and reads of finished assignments, and a re
 
 	const after = (resumed as ReviewProgressCheckpoint | null)?.received?.byAssignment ?? {};
 
-	expect(after['unit-1/correctness']).toEqual(first['unit-1/correctness']);
-	expect(result.context?.units['unit-1'].supplied).toContainEqual(marker);
-	expect(result.context?.units['unit-2'].supplied).not.toContainEqual(marker);
-	expect(after['unit-2/correctness']?.[0]).toMatchObject({ action: 'readDiff', path: 'tests/b.ts', ok: true });
+	expect(after['reviewer-1']).toEqual(first['reviewer-1']);
+	expect(result.context?.units['reviewer-1'].supplied).toContainEqual(marker);
+	expect(result.context?.units['reviewer-2'].supplied).not.toContainEqual(marker);
+	expect(after['reviewer-2']?.[0]).toMatchObject({ action: 'readDiff', path: 'tests/b.ts', ok: true });
 });
 
-test('a two-unit review stores each unit prompt once, and every lens reviewer points at its own', async () => {
+test('a two-reviewer review stores each reviewer’s prompt once, and each reviewer points at its own', async () => {
 	useTestModel();
 	stubModel([]);
 
 	const context = (await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null })).context;
-	const lenses = [...lensIdsOf('unit-1'), ...lensIdsOf('unit-2')];
 
-	expect(Object.keys(context?.units ?? {})).toEqual(['unit-1', 'unit-2']);
-	expect(lenses).toHaveLength(16);
+	expect(Object.keys(context?.units ?? {})).toEqual(TWO_REVIEWERS);
 
 	expect(context?.reviewers.map((reviewer) => [reviewer.assignmentId, reviewer.unit])).toEqual(
-		lenses.map((id) => [id, id.split('/')[0]])
+		TWO_REVIEWERS.map((id) => [id, id])
 	);
 
 	expect(context?.reviewers.every((reviewer) => !('supplied' in reviewer))).toBe(true);
-	expect(context?.units['unit-2'].supplied).toEqual([{ kind: 'diff', path: 'tests/b.ts', startLine: 1, endLine: 140 }]);
+
+	expect(context?.units['reviewer-2'].supplied).toEqual([
+		{ kind: 'diff', path: 'tests/b.ts', startLine: 1, endLine: 140 }
+	]);
 });
 
 test('a review whose context record throws still completes, without the record', async () => {
-	const saved = await checkpointWithUnitOneDone();
+	const saved = await checkpointWithReviewerOneDone();
 
 	const received = saved?.received;
 
 	/** A kept prompt with no record in it, so measuring the resumed review throws. */
-	for (const id of lensIdsOf('unit-1')) Object.assign(received?.prompts[id] ?? {}, { context: null });
+	Object.assign(received?.prompts['reviewer-1'] ?? {}, { context: null });
 
 	stubModel([]);
 

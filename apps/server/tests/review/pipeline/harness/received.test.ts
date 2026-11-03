@@ -27,8 +27,8 @@ const DIFF = `diff --git a/src/a.ts b/src/a.ts
 +more
 `;
 
-const UNIT = 'unit-1/correctness';
-const OTHER = 'unit-1/security';
+const UNIT = 'reviewer-1';
+const OTHER = 'reviewer-2';
 const HUNK = 'src/a.ts:1,2:1,3';
 
 /**
@@ -50,12 +50,12 @@ function store(): EvidenceStore {
 	return storeOf(DIFF, RECORDS);
 }
 
-const unit = (lens: 'correctness' | 'security' = 'correctness'): ReviewUnit => ({
-	id: `unit-1/${lens}`,
+const unit = (id = UNIT): ReviewUnit => ({
+	id,
 	title: 'a',
 	reason: 'r',
 	scope: [{ path: 'src/a.ts', hunkIds: [] }],
-	lens
+	lenses: ['correctness']
 });
 
 /** Records the prompt `unit` was built with: the whole patch, and the model's block when one is given. */
@@ -174,15 +174,14 @@ describe('the review context', () => {
 		const context = build([]);
 
 		expect(context.units).toEqual({
-			'unit-1': { supplied: [{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 3 }], omitted: [] }
+			[UNIT]: { supplied: [{ kind: 'diff', path: 'src/a.ts', startLine: 1, endLine: 3 }], omitted: [] }
 		});
 
 		expect(context.reviewers).toEqual([
 			{
 				assignmentId: UNIT,
 				role: 'reviewer',
-				lens: 'correctness',
-				unit: 'unit-1',
+				unit: UNIT,
 				read: [
 					{ kind: 'source', path: 'src/b.ts', startLine: 10, endLine: 20 },
 					{ kind: 'source', path: 'src/a.ts', startLine: 2, endLine: 2 }
@@ -231,7 +230,7 @@ describe('the review context', () => {
 
 		const context = reviewContext(sources(received, evidence, []), []);
 
-		expect(context.units['unit-1'].omitted).toEqual([]);
+		expect(context.units[UNIT].omitted).toEqual([]);
 
 		expect(context.reviewers[0].omitted).toEqual([
 			{ kind: 'diff', path: 'src/a.ts', startLine: 2, endLine: 2, reason: 'diff-cap' }
@@ -262,7 +261,7 @@ describe('the review context', () => {
 		]);
 	});
 
-	test('lenses given the same prompt share one stored copy, and a unit lists at most 50 omissions per reason', () => {
+	test('each reviewer’s prompt is stored under its own id, and a prompt lists at most 50 omissions per reason', () => {
 		const model = modelOf(
 			Array.from({ length: 120 }, (_, index) =>
 				symbol(`f${index}`, index * 3 + 1, `function f${index}(${'value: string, '.repeat(8)}last: number): void`)
@@ -270,16 +269,16 @@ describe('the review context', () => {
 		);
 
 		const received = emptyReceived();
-		const lenses = [unit(), unit('security')];
+		const reviewers = [unit(), unit(OTHER)];
 
-		for (const lens of lenses) capture(received, model, lens);
+		for (const reviewer of reviewers) capture(received, model, reviewer);
 
-		const context = reviewContext(sources(received, store(), [], lenses), []);
+		const context = reviewContext(sources(received, store(), [], reviewers), []);
 
-		expect(Object.keys(context.units)).toEqual(['unit-1']);
-		expect(context.reviewers.map((reviewer) => reviewer.unit)).toEqual(['unit-1', 'unit-1']);
+		expect(Object.keys(context.units)).toEqual([UNIT, OTHER]);
+		expect(context.reviewers.map((reviewer) => reviewer.unit)).toEqual([UNIT, OTHER]);
 
-		const prompt = context.units['unit-1'];
+		const prompt = context.units[UNIT];
 		const cut = prompt.omitted.filter((item) => item.reason === 'context-cap').length;
 		const shown = prompt.supplied.filter((item) => item.kind === 'source').length;
 
@@ -295,7 +294,7 @@ describe('the review context', () => {
 		const resumed = receivedOf(structuredClone(received), new Set([UNIT]));
 		const context = reviewContext(sources(resumed, store(), []), []);
 
-		expect(context.units['unit-1'].supplied.map((item) => `${item.kind} ${item.symbol ?? ''}`)).toEqual([
+		expect(context.units[UNIT].supplied.map((item) => `${item.kind} ${item.symbol ?? ''}`)).toEqual([
 			'diff ',
 			'source f',
 			'test f'

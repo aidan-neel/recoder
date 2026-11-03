@@ -5,6 +5,7 @@ import {
 	DEFAULT_TOKEN_BUDGET,
 	REASONING_EFFORTS,
 	SUBAGENT_CAPS,
+	migrateSubagentCap,
 	TOKEN_BUDGETS,
 	type ModelEntryPatch,
 	type ModelSettingsPatch,
@@ -58,6 +59,7 @@ export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
  * and files from before subagents carried a specialist dispatch level.
  */
 const storedFileSchema = reviewSettingsSchema.extend({
+	subagentCap: z.union([z.literal(SUBAGENT_CAPS), z.number().int().nonnegative()]).optional(),
 	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional(),
 	roles: z.record(z.string().max(40), z.string().max(200)).optional(),
 	roleEfforts: z.record(z.string().max(40), z.enum(REASONING_EFFORTS)).optional(),
@@ -70,26 +72,35 @@ type StoredFile = z.infer<typeof storedFileSchema>;
 /** The subagent cap each old dispatch level stands for. */
 const CAP_FOR_DISPATCH: Record<NonNullable<StoredFile['specialistDispatch']>, SubagentCap> = {
 	low: 0,
-	medium: 2,
-	high: 4
+	medium: 3,
+	high: 8
 };
+
+/** Whether the saved cap is one that no longer exists (2 or 4, from before the caps were 3, 8 and 12). */
+function hasRetiredCap(data: StoredFile): boolean {
+	return data.subagentCap !== undefined && migrateSubagentCap(data.subagentCap) !== data.subagentCap;
+}
 
 /** Whether a saved file still holds fields that `migrateLegacy` rewrites, so it is saved again in the new shape. */
 function hasLegacyFields(data: StoredFile): boolean {
-	return [data.roles, data.roleEfforts, data.applyToSpecialists, data.specialistDispatch].some(
-		(field) => field !== undefined
+	return (
+		hasRetiredCap(data) ||
+		[data.roles, data.roleEfforts, data.applyToSpecialists, data.specialistDispatch].some(
+			(field) => field !== undefined
+		)
 	);
 }
 
 /**
  * Old per-role picks become one second-model pick: correctness (always ran) speaks for them all.
- * An old dispatch level becomes the subagent cap it stands for.
+ * An old dispatch level becomes the subagent cap it stands for, and a cap that no longer exists the nearest one.
  */
 function migrateLegacy(data: StoredFile): ReviewSettingsInput {
-	const { roles, roleEfforts, applyToSpecialists, specialistDispatch, ...rest } = data;
+	const { roles, roleEfforts, applyToSpecialists, specialistDispatch, subagentCap, ...rest } = data;
 	const next: ReviewSettingsInput = { ...rest };
 
-	if (next.subagentCap === undefined && specialistDispatch) next.subagentCap = CAP_FOR_DISPATCH[specialistDispatch];
+	if (subagentCap !== undefined) next.subagentCap = migrateSubagentCap(subagentCap);
+	else if (specialistDispatch) next.subagentCap = CAP_FOR_DISPATCH[specialistDispatch];
 
 	if (next.orchestratorEffort === undefined && roleEfforts?.correctness)
 		next.orchestratorEffort = roleEfforts.correctness;

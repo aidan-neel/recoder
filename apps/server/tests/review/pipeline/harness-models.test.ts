@@ -4,11 +4,11 @@ import { runAdaptiveReview } from '../../../src/review/pipeline/harness';
 import { execUnavailableReason } from '../../../src/sandbox/exec-sandbox';
 import {
 	NOTHING,
+	TWO_REVIEWERS,
 	TWO_UNIT_DIFF,
 	confirmingVerifier,
 	finding,
 	isVerifier,
-	lensIdsOf,
 	messagesOf,
 	modelReply,
 	restoreAfterEach,
@@ -20,7 +20,7 @@ import {
 restoreAfterEach();
 
 test.skipIf((await execUnavailableReason()) !== null)(
-	'lens reviewers run on the Review model and verifiers on the second model',
+	'reviewers run on the Review model and verifiers on the second model',
 	async () => {
 		useTwoModels();
 
@@ -36,7 +36,7 @@ test.skipIf((await execUnavailableReason()) !== null)(
 			if (unit) contexts.push(String(messagesOf(init).at(-1)?.content));
 			if (kind === 'verifier') return modelReply(confirmingVerifier(init));
 
-			const reply = unit === 'unit-1/correctness' ? { ...NOTHING, findings: [finding('possible miss')] } : NOTHING;
+			const reply = unit === 'reviewer-1' ? { ...NOTHING, findings: [finding('possible miss')] } : NOTHING;
 
 			return modelReply({ message: 'Checking the changed behavior.', ...reply });
 		}) as unknown as typeof fetch;
@@ -55,17 +55,17 @@ test.skipIf((await execUnavailableReason()) !== null)(
 			);
 
 			expect(result.assignments.map((record) => [record.id, record.role, record.status])).toEqual(
-				[...lensIdsOf('unit-1'), ...lensIdsOf('unit-2')].map((id) => [id, 'reviewer', 'done'])
+				TWO_REVIEWERS.map((id) => [id, 'reviewer', 'done'])
 			);
 
 			expect([...models.reviewer]).toEqual(['lead']);
 			expect([...models.verifier]).toEqual(['worker']);
 			expect([...models.other].filter((model) => model !== 'lead')).toEqual([]);
-			expect(contexts.some((context) => context.includes('Question for unit-1/correctness'))).toBe(true);
+			expect(contexts.some((context) => context.includes('Question for reviewer-1'))).toBe(true);
 
-			expect(
-				messages.some((message) => message.assignmentId === 'unit-1/correctness' && message.status === 'streaming')
-			).toBe(true);
+			expect(messages.some((message) => message.assignmentId === 'reviewer-1' && message.status === 'streaming')).toBe(
+				true
+			);
 		} finally {
 			await checkout.remove();
 		}

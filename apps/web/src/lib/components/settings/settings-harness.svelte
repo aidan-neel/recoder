@@ -35,8 +35,9 @@
 	/** What each cap allows; shown under the control for the current pick. */
 	const SUBAGENT_DESC: Record<SubagentCap, string> = {
 		0: 'Each reviewer works alone. Fewest tokens',
-		2: 'Reviewers can hand up to 2 deep questions to subagents',
-		4: 'Up to 4 subagents per review',
+		3: 'Up to 3 deep dives per review',
+		8: 'Up to 8 deep dives per review',
+		12: 'Up to 12 deep dives per review',
 		uncapped: 'One per open question. Far more tokens and time'
 	};
 

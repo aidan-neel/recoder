@@ -6,16 +6,23 @@ import { briefBlock } from './intent/brief.js';
 import { intentBlock } from './intent/format.js';
 import type { ChangeIntent } from './intent/types.js';
 import { inventorySummary, type ReviewInventory } from './inventory.js';
-import { isQualityLens } from './lenses/lenses.js';
-import type { Lens } from './lenses/types.js';
+import { combinedProcedure, isQualityLens, lensById, lensCategories } from './lenses/lenses.js';
+import type { LensId } from './lenses/types.js';
 import { REVIEW_POLICY } from '../session/review-policy.js';
-import { UNTRUSTED_PREFIX, reviewerContract } from './prompts.js';
+import { UNTRUSTED_PREFIX, reviewerContract, type ReviewerFocus } from './prompts.js';
 import type { ReviewUnit } from './units.js';
 
-/** Most units need no subagent; a correctness lens may ask for this many at most. */
-export const MAX_SUBAGENT_REQUESTS = 2;
+/** Most requests one reviewer's answer may carry: the largest subagent cap, though a reviewer is asked for its share. */
+export const MAX_SUBAGENT_REQUESTS = 12;
 
-const SUBAGENTS_OFFER = `Subagents: ask for one, in "subagents" (at most ${MAX_SUBAGENT_REQUESTS}), whenever a question reaches past this unit's patch and context and you could not settle it in your own turns: callers or implementations of a changed API elsewhere in the repo, a contract or invariant defined outside your scope, a security or data path through several modules, or behavior that needs its own run to confirm. Each subagent gets your question, the patch for its scope and the same tools, and reports its own findings. A subagent that checks a doubt is worth more than a gap you leave open. When the developer's instructions ask for subagents, request at least one for this unit's most important open question. Never ask for work you already did.`;
+/**
+ * What a reviewer is told about subagents. You cover every lens over a whole slice, so deep dives are handed on
+ * rather than spent from your own turns, and a request list is ranked because the review runs only as many as its
+ * cap allows, taking each reviewer's first requests before anyone's later ones.
+ */
+function subagentsOffer(max: number): string {
+	return `Subagents: you apply every lens to a whole slice, so hand deep dives to subagents instead of spending your own turns on them. Ask for one, in "subagents" (at most ${max}, the most important first), for each question that reaches past your slice or needs its own work: callers or implementations of a changed API elsewhere in the repo, a contract or invariant defined outside your slice, a security or data path through several modules, a repro that needs its own run to confirm, or any doubt you could not settle in your own turns. Each subagent gets your question, the patch for its scope and the same tools, and reports its own findings. Review your slice yourself first; a subagent that checks a doubt is worth more than a gap you leave open. Name one question per subagent, with the hunks it starts from. When the developer's instructions ask for subagents, request at least one. Never ask for work you already did.`;
+}
 
 /** How a brief question is answered, and what each answer must carry to count. */
 const QUESTION_ANSWERS = `- If you looked and could neither confirm it as a defect nor rule it out, put its id (for example "Q3") in "unsettled". A closer look is given to those.
@@ -34,36 +41,43 @@ const FOLLOW_UP_OFFER = `Brief question: your task names the open question of th
 ${QUESTION_ANSWERS}`;
 
 /**
- * Which optional parts a lens reviewer is offered: subagent requests (the
- * correctness lens) and brief questions to settle (the defect lenses), when
- * subagents are on, and workers when the second model differs from Review.
+ * Which optional parts a reviewer is offered: how many subagents it may ask for (none when they are off), brief
+ * questions to settle (when a defect lens applies and subagents are on), and workers when the second model
+ * differs from Review.
  */
 interface ReviewerOffers {
-	subagents: boolean;
+	subagents: number;
 	unsettled: boolean;
 	delegate: boolean;
 }
 
+/** Which rules a reviewer of these lenses is held to: only the maintainability ones, only the defect ones, or both. */
+function focusOf(lenses: readonly LensId[]): ReviewerFocus {
+	const quality = lenses.filter(isQualityLens).length;
+
+	return quality === 0 ? 'defect' : quality === lenses.length ? 'quality' : 'both';
+}
+
 /**
- * A lens reviewer's prompt: one fixed procedure over every changed symbol in
- * its unit, reporting only the lens's categories. Subagent requests and
- * unsettled questions are offered only when the caller allows them.
+ * A reviewer's prompt: the procedures of every lens that fits its slice, applied one after another to every
+ * changed symbol in it, reporting only those lenses' categories. Subagent requests and unsettled
+ * questions are offered only when the caller allows them.
  */
 export function reviewerSystemPrompt(
-	lens: Lens,
+	lenses: readonly LensId[],
 	exec: boolean,
 	directive: ReviewDirective | null,
 	offers: ReviewerOffers
 ): string {
 	return withDirective(
-		`${reviewerContract(exec, isQualityLens(lens.id))}
+		`${reviewerContract(exec, focusOf(lenses))}
 
-Role: ${lens.title} lens reviewer. You apply one fixed procedure to every changed symbol in your unit and report only these categories: ${lens.categories.join(', ')}. A finding in any other category is dropped; other lenses cover it.
+Role: reviewer. You apply the procedures below, one lens after another, to every changed symbol in your slice and report only these categories: ${lensCategories(lenses).join(', ')}. A finding in any other category is dropped.
 
-Procedure (apply each step to each changed symbol, in order):
-${lens.procedure}
+Procedures (apply each step to each changed symbol, in order):
+${combinedProcedure(lenses.map(lensById))}
 
-${offers.subagents ? SUBAGENTS_OFFER : 'Leave "subagents" empty.'}${offers.unsettled ? `\n\n${UNSETTLED_OFFER}` : ''}${offers.delegate ? `\n\n${DELEGATE_OFFER}` : ''}`,
+${offers.subagents ? subagentsOffer(offers.subagents) : 'Leave "subagents" empty.'}${offers.unsettled ? `\n\n${UNSETTLED_OFFER}` : ''}${offers.delegate ? `\n\n${DELEGATE_OFFER}` : ''}`,
 		directive
 	);
 }
@@ -79,7 +93,7 @@ export function subagentSystemPrompt(exec: boolean, directive: ReviewDirective |
 		: 'Leave "subagents", "unsettled", "answered" and "gaps" empty; you cannot hand work on.';
 
 	return withDirective(
-		`${reviewerContract(exec, false)}
+		`${reviewerContract(exec, 'defect')}
 
 Role: subagent. You were handed one question that a reviewer could not finish in its own turns, or that no reviewer settled. Follow the code wherever the question leads, using your tools across the repository, and report findings on that question only, in any category from the closed list. The patch in your scope is where to start, not a limit on what you read. ${ending}`,
 		directive
@@ -88,7 +102,7 @@ Role: subagent. You were handed one question that a reviewer could not finish in
 
 /** An obligation investigator's or second-look subagent's prompt: the reviewer contract, then `role`, the procedure it follows. */
 export function investigatorSystemPrompt(exec: boolean, directive: ReviewDirective | null, role: string): string {
-	return withDirective(`${reviewerContract(exec, false)}\n\n${role}`, directive);
+	return withDirective(`${reviewerContract(exec, 'defect')}\n\n${role}`, directive);
 }
 
 function withDirective(prompt: string, directive: ReviewDirective | null): string {
@@ -154,7 +168,7 @@ function pullRequestLines(pr: PullRequestContext): string[] {
 		pr.context
 			? `${UNTRUSTED_PREFIX}PR context (people, labels, linked issues and their blockers):\n${pr.context}`
 			: '',
-		`Whole change (${inventory.files.length} files; other units review the rest):\n${inventorySummary(inventory, MAX_LISTED_FILES)}`,
+		`Whole change (${inventory.files.length} files; other reviewers read the rest):\n${inventorySummary(inventory, MAX_LISTED_FILES)}`,
 		inventory.relatedPaths.length
 			? `Related existing paths:\n${inventory.relatedPaths.map((path) => `- ${path}`).join('\n')}`
 			: '',
@@ -162,9 +176,9 @@ function pullRequestLines(pr: PullRequestContext): string[] {
 	];
 }
 
-/** The rule ledger for the quality lenses, which are the only ones that cite rules. */
+/** The rule ledger for a reviewer that applies the rules lens, which is the only one that cites rules. */
 function ledgerLines(unit: ReviewUnit, ledger: RuleLedger | null): string {
-	if (!unit.lens || !isQualityLens(unit.lens)) return '';
+	if (!unit.lenses?.includes('rules')) return '';
 
 	return ledgerBlock(
 		ledger,
@@ -172,16 +186,21 @@ function ledgerLines(unit: ReviewUnit, ledger: RuleLedger | null): string {
 	);
 }
 
+/** Whether the brief's open questions are put to this unit's agent: every one but a reviewer of maintainability lenses only. */
+export function answersQuestions(unit: ReviewUnit): boolean {
+	return !unit.lenses || unit.lenses.some((lens) => !isQualityLens(lens));
+}
+
 /** What a unit agent's opening message calls its assignment. */
 export type ReviewerHeading = 'Unit' | 'Subagent' | 'Obligation';
 
 /**
- * The user prompt for a lens assignment, or under another `heading` for a
+ * The user prompt for a reviewer, or under another `heading` for a
  * subagent or an obligation investigator: the PR, its intent, the unit's
  * changes with their change-model context (`declarations`, built once by the
  * caller so it can record what the block holds) and the brief's reading of
- * them (open questions go to the defect lenses), and the rule ledger for the
- * quality lenses.
+ * them (open questions go to every agent but a documentation-only reviewer), and
+ * the rule ledger for a reviewer that applies the rules lens.
  */
 export function reviewerUserPrompt(
 	unit: ReviewUnit,
@@ -198,7 +217,7 @@ export function reviewerUserPrompt(
 		unit.reason,
 		`${heading === 'Unit' ? 'Changes in this unit' : 'Changes to start from'}:\n${scopeLines(unit.scope)}`,
 		declarations,
-		briefBlock(ctx.intent, unit.scope, !unit.lens || !isQualityLens(unit.lens)),
+		briefBlock(ctx.intent, unit.scope, answersQuestions(unit)),
 		ledgerLines(unit, ctx.ledger),
 		...turnsLeft(remaining.turns, remaining.calls)
 	]
