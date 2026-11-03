@@ -95,7 +95,11 @@ describe('reviews + command runner', () => {
 			const res = await requestReview('demo-nomodel', 'https://github.com/example/demo', 1);
 
 			expect(res.status).toBe(400);
-			expect((await res.json()).error).toMatch(/reviewer not configured/);
+
+			expect(await res.json()).toMatchObject({
+				error: expect.stringMatching(/reviewer not configured/),
+				action: 'settings'
+			});
 		} finally {
 			process.env.RECODER_REVIEW_BASE_URL = 'http://localhost:9/v1';
 			process.env.RECODER_REVIEW_API_KEY = 'test';

@@ -121,13 +121,14 @@
 				{#if !error}<Typography.Text variant="supporting"
 						>Token usage wasn't recorded for this review, and earlier counts can't be recovered.</Typography.Text
 					>{/if}
+			{:else if metrics.total.calls === 0}
+				<Typography.Text variant="supporting">No model requests recorded yet.</Typography.Text>
 			{:else}
 				<div class="flex flex-col gap-1">
 					<Typography.Text class="usage-account">
-						<span class="text-fg">{tokens(grandTotal)} tokens</span><span
-							class="mx-1.5 text-fg-faint"
-							aria-hidden="true">·</span
-						>{plural(metrics.total.calls, 'request')}
+						<span class="text-fg"
+							>{grandTotal === null ? 'Token counts not reported' : `${tokens(grandTotal)} tokens`}</span
+						><span class="mx-1.5 text-fg-faint" aria-hidden="true">·</span>{plural(metrics.total.calls, 'request')}
 					</Typography.Text>
 					{#if metrics.total.calls > 0}<span class="text-[12px] text-fg-faint">{breakdown(metrics.total, false)}</span
 						>{/if}

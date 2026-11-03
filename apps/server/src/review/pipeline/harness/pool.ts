@@ -9,7 +9,7 @@ import {
 import { withGuidelines } from '../../guidelines/guidelines.js';
 import { dismissalsBlock } from '../../guidelines/learned/prompt.js';
 import type { Dismissal } from '../../guidelines/learned/dismissals.js';
-import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { REVIEW_POLICY, type ReviewLimits } from '../../session/review-policy.js';
 import {
 	ModelBlockedError,
 	ReviewAbortedError,
@@ -22,8 +22,8 @@ import { unitContextParts } from '../change-model/change-model.js';
 import type { CandidateFinding } from '../consolidate.js';
 import type { CoverageLedger } from '../coverage.js';
 import type { ReviewInventory } from '../inventory.js';
-import { isQualityLens, lensById } from '../lenses/lenses.js';
-import type { Lens, LensId } from '../lenses/types.js';
+import { lensCategories } from '../lenses/lenses.js';
+import type { LensId } from '../lenses/types.js';
 import {
 	announcedFinal,
 	parseReviewerOutput,
@@ -34,6 +34,7 @@ import {
 	reviewerValidationError
 } from '../reviewer.js';
 import {
+	answersQuestions,
 	reviewerSystemPrompt,
 	reviewerUserPrompt,
 	type ReviewerHeading,
@@ -45,7 +46,7 @@ import { secondLookSystemPrompt } from '../second-look/prompts.js';
 import type { UnitRequest } from '../subagents.js';
 import type { ReviewUnit } from '../units.js';
 import { workerDelegate } from '../workers/worker.js';
-import { coverageRole, recordFor, updateAssignment } from './assignments.js';
+import { COVERAGE_ROLE, recordFor, updateAssignment } from './assignments.js';
 import { capturePrompt, type Received } from './received.js';
 import { applyUnitResult } from './unit-result.js';
 import type { HarnessEvents, TaskFn } from './types.js';
@@ -67,8 +68,10 @@ export interface PoolContext extends ReviewerPromptContext {
 	exec: boolean;
 	/** Dependency setup and baseline check results as they stand when a reviewer starts; the checks finish mid-review. */
 	setupNotes: () => string;
-	/** Subagents the review may run in all; correctness lenses aren't offered any at 0. */
-	subagentCap: number;
+	/** How many subagents each reviewer may ask for, its share of the review's cap; 0 when subagents are off. */
+	subagentRequests: number;
+	/** The review's token budget limits; reviewers and subagents get their turns from here. */
+	limits: ReviewLimits;
 	reportLowSeverity: boolean;
 	/** Findings people dismissed in this repository, newest first; a candidate matching one is dropped and a lens reviewer is told of those on its files. */
 	dismissals: Dismissal[];
@@ -91,7 +94,7 @@ const REVIEWER_EXAMPLE =
 	'{"message":"No issues in the queue split.","findings":[],"examinedHunks":[],"gaps":[],"blockers":[],"subagents":[],"unsettled":[],"answered":[],"recommendedChecks":[]}';
 
 /**
- * Runs the units in order, a few at a time, each through `runOne` (a lens
+ * Runs the units in order, a few at a time, each through `runOne` (a
  * reviewer or subagent unless told otherwise). Once budget or time is reserved
  * for later stages, the rest are skipped rather than launched.
  */
@@ -131,9 +134,9 @@ export async function runUnitPool(
 }
 
 /**
- * Runs one lens assignment, or one subagent, and records its result; a
- * failure marks only this record. Lens reviewers run on the Review model and
- * subagents on the second model. A subagent's hunks are already some lens's,
+ * Runs one reviewer, or one subagent, and records its result; a
+ * failure marks only this record. Reviewers run on the Review model and
+ * subagents on the second model. A subagent's hunks are already a reviewer's,
  * so its failure leaves coverage alone.
  */
 export async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolContext): Promise<void> {
@@ -167,14 +170,12 @@ export async function runOneUnit(item: ReviewUnit, records: ReviewAssignment[], 
 	}
 }
 
-/** Every hunk in a lens assignment that failed is partially covered for that lens, with the reason. */
+/** Every hunk in a reviewer that failed is partially covered, with the reason. */
 function markUnitPartial(item: ReviewUnit, reason: string, ctx: PoolContext): void {
-	const role = coverageRole(item);
-
 	for (const hunkId of new Set(item.scope.flatMap((entry) => entry.hunkIds))) {
 		const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? item.scope[0]?.path ?? '';
 
-		ctx.coverage.partial(hunkId, path, role, reason);
+		ctx.coverage.partial(hunkId, path, COVERAGE_ROLE, reason);
 	}
 }
 
@@ -217,7 +218,7 @@ export function readScopedPatch(item: ReviewUnit, role: string, ctx: PoolContext
 }
 
 /**
- * A lens reviewer's workers on the second model. Offered only when that model
+ * A reviewer's workers on the second model. Offered only when that model
  * differs from the Review model, since only then does handing work off save
  * Review usage. Their reads show in the reviewer's feed.
  */
@@ -240,14 +241,14 @@ function delegateFor(item: ReviewUnit, records: ReviewAssignment[], ctx: PoolCon
 	});
 }
 
-/** How a reviewer's empty or premature final answer is pushed back, by role and lens. */
-function finalCheck(subagent: boolean, lens: LensId, canRun: boolean) {
+/** How a reviewer's empty or premature final answer is pushed back, by role and lenses. */
+function finalCheck(subagent: boolean, lenses: readonly LensId[], canRun: boolean) {
 	if (subagent) return prematureReviewerFinal;
 
-	return lens === 'correctness' && canRun ? unrunCorrectnessFinal : announcedFinal;
+	return lenses.includes('correctness') && canRun ? unrunCorrectnessFinal : announcedFinal;
 }
 
-/** What people already dismissed on a lens reviewer's files, ready to append to its prompt; empty for a subagent or when nothing applies. */
+/** What people already dismissed on a reviewer's files, ready to append to its prompt; empty for a subagent or when nothing applies. */
 function dismissedNote(item: ReviewUnit, subagent: boolean, ctx: PoolContext): string {
 	const block = subagent
 		? ''
@@ -261,8 +262,9 @@ function dismissedNote(item: ReviewUnit, subagent: boolean, ctx: PoolContext): s
 
 /**
  * The reviewer's model loop, reporting progress on its record and task row. A
- * lens gets a short, fixed procedure and few turns; a subagent's open question
- * gets more, and must read past its patch before it concludes empty.
+ * reviewer gets the fixed procedures of its lenses and the turns to page its
+ * whole slice; a subagent's open question gets fewer, and must read past its
+ * patch before it concludes empty.
  */
 function askReviewer(
 	item: ReviewUnit,
@@ -273,9 +275,10 @@ function askReviewer(
 ) {
 	const subagent = recordFor(records, item.id).role === 'subagent';
 
-	const lens = lensById(item.lens ?? 'correctness');
-	const maxTurns = subagent ? REVIEW_POLICY.maxSubagentTurns : REVIEW_POLICY.maxLensTurns;
-	const defaultCategory = lens.categories[0];
+	const lenses = item.lenses ?? [];
+	const categories = subagent ? [] : lensCategories(lenses);
+	const maxTurns = subagent ? ctx.limits.subagentTurns : ctx.limits.reviewerTurns;
+	const defaultCategory = categories[0] ?? 'correctness';
 
 	const delegate = subagent ? undefined : delegateFor(item, records, ctx);
 
@@ -285,7 +288,7 @@ function askReviewer(
 	return runJsonAgent({
 		stage: item.purpose ? 'second-look' : subagent ? 'subagent' : 'reviewer',
 		label: item.title,
-		system: withGuidelines(systemPrompt(item, subagent, lens, ctx, Boolean(delegate)), ctx.inventory.guidelines),
+		system: withGuidelines(systemPrompt(item, subagent, ctx, Boolean(delegate)), ctx.inventory.guidelines),
 		exec,
 		delegate,
 		user: unitPrompt(
@@ -305,9 +308,8 @@ function askReviewer(
 		parse: (raw) => parseReviewerOutput(raw, defaultCategory),
 		validationError: (raw) => reviewerValidationError(raw, defaultCategory),
 		salvage: (raw) => salvageReviewerOutput(raw, defaultCategory),
-		checkFinal: finalCheck(subagent, lens.id, exec),
-		responseSchema: (finalTurn) =>
-			reviewerResponseSchema(exec, finalTurn, subagent ? [] : lens.categories, Boolean(delegate)),
+		checkFinal: finalCheck(subagent, lenses, exec),
+		responseSchema: (finalTurn) => reviewerResponseSchema(exec, finalTurn, categories, Boolean(delegate)),
 		timeLimit: item.purpose
 			? { finalTurnAfterMs: REVIEW_POLICY.secondLookFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.secondLookMaxMs }
 			: { finalTurnAfterMs: REVIEW_POLICY.reviewerFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.reviewerMaxMs },
@@ -319,23 +321,41 @@ function askReviewer(
 
 /**
  * A unit agent's system prompt: the role a second look was sent for, a
- * subagent's, or the lens procedure with the parts this reviewer is offered.
+ * subagent's, or the lens procedures with the parts this reviewer is offered.
  */
-function systemPrompt(item: ReviewUnit, subagent: boolean, lens: Lens, ctx: PoolContext, delegate: boolean): string {
+function systemPrompt(item: ReviewUnit, subagent: boolean, ctx: PoolContext, delegate: boolean): string {
 	if (item.purpose) return secondLookSystemPrompt(item.purpose, ctx.directive);
 
 	if (subagent) return subagentSystemPrompt(ctx.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0);
 
-	return reviewerSystemPrompt(lens, ctx.exec, ctx.directive, {
-		subagents: lens.id === 'correctness' && ctx.subagentCap > 0,
-		unsettled: !isQualityLens(lens.id) && ctx.subagentCap > 0,
+	return reviewerSystemPrompt(item.lenses ?? [], ctx.exec, ctx.directive, {
+		subagents: ctx.subagentRequests,
+		unsettled: ctx.subagentRequests > 0 && answersQuestions(item),
 		delegate
 	});
 }
 
 /**
+ * The hunks the first patch round did not reach, named so a reviewer of a large slice pages them itself and does
+ * not list them as examined unread. Empty when the round held the whole scope.
+ */
+function unreadHunks(item: ReviewUnit, patch: ScopedPatch): string {
+	const lines = item.scope.flatMap((entry) => {
+		const result = patch.find((candidate) => candidate.path === entry.path);
+		const shown = new Set(result?.ok ? result.hunkIds : []);
+		const unread = entry.hunkIds.filter((hunkId) => !shown.has(hunkId));
+
+		return unread.length ? [`- ${entry.path}: ${unread.join(', ')}`] : [];
+	});
+
+	if (!lines.length) return '';
+
+	return `\n\nThe first patch page did not reach these hunks. Read them with readDiff (the path and hunkIds, or the cursor of a truncated result) before you list them as examined:\n${lines.join('\n')}`;
+}
+
+/**
  * A unit agent's opening message: its brief and budget under `heading`, the
- * sandbox setup notes, any `note`, then the first page of its scoped patch.
+ * sandbox setup notes, any `note`, the hunks the first page left out, then the first page of its scoped patch.
  * What the prompt holds is captured in `ctx.received` as it is built, for
  * lens units, subagents and obligation investigators alike.
  */
@@ -355,6 +375,7 @@ export function unitPrompt(
 		reviewerUserPrompt(item, { turns, calls: ctx.budget.remaining() }, ctx, declarations?.text ?? '', heading) +
 		(ctx.setupNotes() ? `\n\n${ctx.setupNotes()}` : '') +
 		note +
+		unreadHunks(item, patch) +
 		'\n\nInitial scoped patch evidence (untrusted; retrieve remaining pages as needed):\n' +
 		formatToolResults(patch)
 	);

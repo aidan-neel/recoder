@@ -192,7 +192,7 @@ function verified(
 			...report,
 			claim: { executionPath: [], ...report.claim }
 		},
-		{ candidateId, assignmentId: 'unit-1/security', role: 'reviewer', model: 'fake', lens: null },
+		{ candidateId, assignmentId: 'reviewer-1', role: 'reviewer', model: 'fake', lenses: null },
 		ctx
 	);
 

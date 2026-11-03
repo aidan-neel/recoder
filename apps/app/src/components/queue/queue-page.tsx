@@ -16,6 +16,7 @@ import { QueueHeadline } from './queue-headline';
 import { QueueList } from './queue-list';
 import { EmptyNotice, NoPullsActions, OfflineNotice, StaleNote } from './queue-notices';
 import { QueueSkeleton } from './queue-skeleton';
+import { ReviewBar } from './review-bar';
 import { useQueueControls } from './use-queue-controls';
 
 /**
@@ -91,7 +92,7 @@ function describe(entry: QueueEntry): string {
 	return `${pullTitle(entry.pull.title, entry.pull.number)}, ${entry.repo} #${entry.pull.number}, ${status}`;
 }
 
-/** The ready queue: the headline, then each section's rows, and the question a delete asks. */
+/** The ready queue: the headline, the review bar, then each section's rows, and the question a delete asks. */
 function QueueReady({ sections, sample }: { sections: QueueSection[]; sample: boolean }) {
 	const ordered = useMemo(() => sections.flatMap((section) => section.entries), [sections]);
 	const [deleting, setDeleting] = useState<DeleteTarget | null>(null);
@@ -105,6 +106,7 @@ function QueueReady({ sections, sample }: { sections: QueueSection[]; sample: bo
 	return (
 		<LayoutGroup>
 			<QueueHeadline sections={sections} />
+			<ReviewBar sample={sample} />
 			<p role="status" className="sr-only">
 				{controls.selected ? describe(controls.selected) : ''}
 			</p>

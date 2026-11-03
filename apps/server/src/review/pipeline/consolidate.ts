@@ -24,7 +24,7 @@ import {
 } from './harness/findings.js';
 import type { ReviewInventory } from './inventory.js';
 import type { ChangeIntent, IntentClaim } from './intent/types.js';
-import { lensById } from './lenses/lenses.js';
+import { lensCategories, lensOwning } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
 import type { PublishedBy } from './published-by.js';
 
@@ -166,13 +166,16 @@ export type CategoryIssue = 'lens' | 'rule' | 'smell' | 'examples' | 'intent';
 /** The category or lens requirement the finding breaks and why, or undefined when it breaks none. */
 export function categoryIssue(
 	raw: ReviewerFinding,
-	lens: LensId | null,
+	lenses: readonly LensId[] | null,
 	ctx: Pick<CandidateContext, 'ledger' | 'intent'>
 ): { issue: CategoryIssue; reason: string } | undefined {
 	const { ledger } = ctx;
 
-	if (lens && !lensById(lens).categories.includes(raw.category)) {
-		return { issue: 'lens', reason: `category ${raw.category} is outside the ${lens} lens` };
+	if (lenses && !lensCategories(lenses).includes(raw.category)) {
+		return {
+			issue: 'lens',
+			reason: `category ${raw.category} is outside the ${lenses.join(', ')} ${lenses.length === 1 ? 'lens' : 'lenses'}`
+		};
 	}
 
 	if (raw.category === 'repo-rule' && !(raw.ruleId && ledger?.rules.some((rule) => rule.id === raw.ruleId))) {
@@ -228,7 +231,7 @@ function claimTexts(raw: ReviewerFinding): string[] {
  */
 export function validateCandidate(
 	raw: ReviewerFinding,
-	meta: { candidateId: string; assignmentId: string; role: string; model: string; lens: LensId | null },
+	meta: { candidateId: string; assignmentId: string; role: string; model: string; lenses: readonly LensId[] | null },
 	ctx: CandidateContext,
 	link?: RepairLink
 ): CandidateFinding {
@@ -256,7 +259,7 @@ export function validateCandidate(
 	const drop = firstDrop([
 		['location', locationProblem(ctx.inventory, raw.file, line, side, link)],
 		['evidence', raw.evidenceIds.length > 0 && evidenceIds.length === 0 && 'cited evidence was not provided'],
-		['category', categoryIssue(raw, meta.lens, ctx)?.reason],
+		['category', categoryIssue(raw, meta.lenses, ctx)?.reason],
 		['dismissed', dismissed && 'a person dismissed this finding in an earlier review']
 	]);
 
@@ -280,7 +283,7 @@ export function validateCandidate(
 		smell,
 		symbol: shownSymbol,
 		claim: { ...raw.claim, existingGuard: raw.claim.existingGuard ?? undefined },
-		lens: meta.lens ?? undefined,
+		lens: meta.lenses ? lensOwning(raw.category, meta.lenses) : undefined,
 		evidenceIds,
 		relatedLocations: raw.relatedLocations,
 		side,

@@ -3,6 +3,7 @@
 import {
 	AnimatedNumber,
 	Button,
+	cn,
 	Collapsible,
 	CollapsibleContent,
 	CollapsibleTrigger,
@@ -14,29 +15,37 @@ import { ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useState } from 'react';
 
-import { reviewerTally, type ReviewerRow } from '@/lib/live/reviewers';
+import type { ReviewerRow } from '@/lib/live/reviewers';
 
 import { SwapLine } from './swap-line';
 
 /** Rows shown before the rest fold away behind "Show all". */
 const VISIBLE = 8;
 
-/** A reviewer joining after first paint rises 4px as it fades in, and its row unfolds so nothing below jumps. */
+/** A reviewer joining after first paint unfolds its row, so nothing below jumps. */
 function Reviewer({ row }: { row: ReviewerRow }) {
 	return (
 		<motion.li
 			data-ui="live-reviewer"
-			initial={{ height: 0, opacity: 0, y: 4 }}
-			animate={{ height: 'auto', opacity: 1, y: 0 }}
+			data-glyph={row.glyph}
+			initial={{ height: 0, opacity: 0 }}
+			animate={{ height: 'auto', opacity: 1 }}
 			transition={{ duration: DURATION.toggle, ease: EASE_OUT }}
-			className="overflow-hidden"
+			className="live-reviewer-item"
 		>
 			<div className="live-reviewer">
 				<StatusGlyph kind={row.glyph} label={row.state} />
 				<span className="live-reviewer-name" title={row.name}>
 					{row.name}
 				</span>
-				<SwapLine text={row.step} className="live-reviewer-step" />
+				<SwapLine text={row.step} className={cn('live-reviewer-step', row.command && 'mono')} />
+				<span className="live-reviewer-found tabular">
+					{row.found > 0 ? (
+						<>
+							<AnimatedNumber value={row.found} /> found
+						</>
+					) : null}
+				</span>
 			</div>
 		</motion.li>
 	);
@@ -80,25 +89,13 @@ function MoreRows({ rows }: { rows: ReviewerRow[] }) {
 }
 
 /**
- * The reviewers the plan assigned: what each covers, a glyph for its state
- * and what it is doing now. A long plan shows the first rows and folds the
- * rest. The list stays mounted while empty, so the plan's first reviewers
- * unfold in rather than pushing the page down at once.
+ * A stage's reviewers, one line each in a ringed list: a glyph for its state,
+ * what it covers, what it is doing right now and how many possible issues it
+ * raised. A long plan shows the first rows and folds the rest.
  */
-export function ReviewerList({ rows }: { rows: ReviewerRow[] }) {
-	const tally = reviewerTally(rows);
-
+export function ReviewerList({ rows, label }: { rows: ReviewerRow[]; label: string }) {
 	return (
-		<section data-ui="live-reviewer-list" aria-labelledby="live-reviewers-title">
-			<h2 id="live-reviewers-title" className="live-title">
-				Reviewers
-				{tally.total > 0 ? (
-					<span className="live-title-count">
-						<AnimatedNumber value={tally.ended} /> of <AnimatedNumber value={tally.total} /> finished
-					</span>
-				) : null}
-			</h2>
-			{rows.length === 0 ? <p className="live-empty">Reviewers start once the plan is ready.</p> : null}
+		<section data-ui="live-reviewer-list" aria-label={label} className="live-reviewer-list">
 			<Rows rows={rows.slice(0, VISIBLE)} />
 			{rows.length > VISIBLE ? <MoreRows rows={rows.slice(VISIBLE)} /> : null}
 		</section>

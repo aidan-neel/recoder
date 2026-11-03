@@ -7,6 +7,7 @@ import {
 	type TokenCall,
 	type TokenScope,
 	type TokenStage,
+	type TokenBudget,
 	type TokenUsage
 } from '@recoder/shared';
 import { db, reviewMetrics } from '../store';
@@ -24,6 +25,8 @@ export interface PipelineRun {
 	subagent: string | null;
 	/** Models resolved from the live settings instead of the run's locked picks. */
 	lockMisses: number;
+	/** The token budget the run's limits came from; unset on runs older than budgets and on runs that stopped before the harness. */
+	tokenBudget?: TokenBudget;
 }
 
 /** A stored call: `run` is the index of the pipeline run that made it, `lockMiss` marks one made without locked models. */
@@ -138,6 +141,16 @@ export function recordLockMiss(): void {
 	warnLockMiss(current.owner, current.run);
 }
 
+/** Records the token budget the running pipeline reviews under, so its token counts can be compared with other budgets'. */
+export function recordTokenBudget(tokenBudget: TokenBudget): void {
+	const current = currentRun();
+
+	if (!current) return;
+
+	current.run.tokenBudget = tokenBudget;
+	reviewMetrics.set(current.metrics);
+}
+
 export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 	const owner = context.getStore();
 	const tally = tallies.getStore();
@@ -199,14 +212,21 @@ function field(raw: unknown, key: string): unknown {
 	return raw && typeof raw === 'object' ? (raw as Record<string, unknown>)[key] : undefined;
 }
 
-/** Accept numbers, never coerce null, strings, negative values, or invalid counts to zero. */
+/**
+ * Accept numbers, never coerce null, strings, negative values, or invalid counts to zero. Some
+ * OpenAI-compatible gateways name the two main counts `input_tokens` and `output_tokens`, so those are read
+ * when the chat-completions names are absent.
+ */
 export function normalizeTokenUsage(raw: unknown, provider: TokenCall['provider']): TokenUsage {
 	const count = (n: unknown): number | null => (typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null);
 	const codex = provider === 'codex';
-	const read = (codexKey: string, openAiKey: string) => count(field(raw, codex ? codexKey : openAiKey));
+
+	const read = (codexKey: string, openAiKey: string, alias?: string) =>
+		count(field(raw, codex ? codexKey : openAiKey)) ?? (codex || !alias ? null : count(field(raw, alias)));
+
 	const promptDetails = field(raw, 'prompt_tokens_details');
-	const inputTokens = read('inputTokens', 'prompt_tokens');
-	const outputTokens = read('outputTokens', 'completion_tokens');
+	const inputTokens = read('inputTokens', 'prompt_tokens', 'input_tokens');
+	const outputTokens = read('outputTokens', 'completion_tokens', 'output_tokens');
 
 	return {
 		inputTokens,
@@ -233,7 +253,7 @@ function stageAggregates(calls: TokenCall[]): ReviewMetrics['stages'] {
 }
 
 export function getReviewMetrics(reviewId: string): ReviewMetrics | null {
-	const stored = reviewMetrics.get(reviewId);
+	const stored = storedMetrics(reviewId);
 
 	if (!stored) return null;
 
@@ -249,6 +269,7 @@ export function getReviewMetrics(reviewId: string): ReviewMetrics | null {
 		reviewId,
 		startedAt: stored.startedAt,
 		pipelineTracked: stored.pipelineTracked,
+		tokenBudget: stored.runs?.at(-1)?.tokenBudget,
 		total: aggregateTokenCalls(stored.calls),
 		models: [...models.values()].map((calls) => ({
 			model: calls[0]!.model,

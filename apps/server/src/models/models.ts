@@ -16,11 +16,12 @@
  */
 
 import { z } from 'zod';
-import type { ModelProvider, ModelRuntimeProfile, ReasoningEffort } from '@recoder/shared';
+import { VLLM_MODEL_PREFIX, type ModelProvider, type ModelRuntimeProfile, type ReasoningEffort } from '@recoder/shared';
 import { lockedModels, runLocked, type LockedModels } from './llm/locked-models.js';
 import { recordLockMiss } from './metrics.js';
 import { hostedProvider } from './model-providers.js';
 import { resolveRuntime } from './runtime-profiles.js';
+import { vllmTarget } from './vllm/vllm-models.js';
 import { CLAUDE_CODE_MODEL_PREFIX, claudeCodeEfforts } from '../agents/claude-code/claude-code-models.js';
 import { DEVIN_MODEL_PREFIX } from '../agents/devin/devin-models.js';
 import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode.js';
@@ -167,6 +168,7 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
 		? stored.orchestratorEffort
 		: (stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
 
+	if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, requested);
 	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(entryId, requested ?? undefined);
 	if (entryId?.startsWith(CLAUDE_CODE_MODEL_PREFIX)) return claudeCodeConfig(entryId, requested);
 	if (entryId?.startsWith(DEVIN_MODEL_PREFIX)) return devinConfig(entryId);
@@ -181,6 +183,7 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
  * back to another model.
  */
 export function configForModel(id: string, effort: ReasoningEffort | undefined): ModelConfig {
+	if (id.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(id, effort);
 	if (id.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(id, effort);
 	if (id.startsWith(CLAUDE_CODE_MODEL_PREFIX)) return claudeCodeConfig(id, effort);
 	if (id.startsWith(DEVIN_MODEL_PREFIX)) return devinConfig(id);
@@ -237,6 +240,28 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 		model: shared.model,
 		runtime: resolveRuntime(shared.model),
 		reasoningEffort: requested ?? undefined
+	};
+}
+
+/**
+ * A model captured from a vLLM server is not stored with the entries: the
+ * server's list is kept in step by the sync, so the config comes from its id
+ * (`vllm:<server>/<model>`). The call goes straight to the server's
+ * OpenAI-compatible endpoint, naming the model id the server listed.
+ */
+function vllmConfig(entryId: string, requested: ReasoningEffort | null | undefined): ModelConfig {
+	const target = vllmTarget(entryId);
+
+	if ('error' in target) throw new ModelConfigError(target.error);
+
+	const { baseUrl, apiKey, model, efforts, defaultEffort } = target;
+
+	return {
+		baseUrl,
+		apiKey,
+		model,
+		reasoningEffort: supportedEffort(requested ?? undefined, efforts, defaultEffort),
+		runtime: resolveRuntime(model)
 	};
 }
 

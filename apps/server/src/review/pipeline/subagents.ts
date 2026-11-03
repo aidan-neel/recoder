@@ -70,11 +70,14 @@ function overlaps(a: UnitScope, b: UnitScope): boolean {
 }
 
 /**
- * Picks the subagents to run from every reviewer's requests, without a model:
- * requests go in unit order, one with the same concern as an earlier request
- * over overlapping hunks is merged into it, and the rest run up to `cap`. The
- * requests past the cap are returned as dropped; at cap 0 there are none to
- * report, since reviewers aren't offered subagents.
+ * Picks the subagents to run from every reviewer's requests, without a model.
+ * A reviewer lists its requests most important first, so they go by that rank:
+ * every reviewer's first request, then every reviewer's second, each round in
+ * unit order, which fills the cap with the most valuable requests rather than
+ * with one reviewer's. One with the same concern as an earlier request over
+ * overlapping hunks is merged into it, and the rest run up to `cap`. The
+ * requests past the cap are returned as dropped. The caller doesn't plan at
+ * all with subagents off, since reviewers aren't offered them then.
  */
 export function planSubagents(
 	requests: UnitRequest[],
@@ -82,12 +85,18 @@ export function planSubagents(
 	inventory: ReviewInventory,
 	cap: number
 ): { units: ReviewUnit[]; dropped: UnitRequest[] } {
-	if (cap <= 0) return { units: [], dropped: [] };
-
 	const order = (unitId: string) => units.findIndex((unit) => unit.id === unitId);
-	const ordered = requests.map((entry, index) => ({ entry, index }));
+	const asked = new Map<string, number>();
 
-	ordered.sort((a, b) => order(a.entry.unitId) - order(b.entry.unitId) || a.index - b.index);
+	const ordered = requests.map((entry, index) => {
+		const rank = asked.get(entry.unitId) ?? 0;
+
+		asked.set(entry.unitId, rank + 1);
+
+		return { entry, index, rank };
+	});
+
+	ordered.sort((a, b) => a.rank - b.rank || order(a.entry.unitId) - order(b.entry.unitId) || a.index - b.index);
 
 	const unique: { entry: UnitRequest; scope: UnitScope }[] = [];
 

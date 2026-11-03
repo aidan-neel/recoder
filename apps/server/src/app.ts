@@ -8,6 +8,8 @@ import guidelines from './routes/guidelines';
 import home from './routes/home';
 import agent from './routes/agent';
 import settings from './routes/settings';
+import vllm from './routes/vllm';
+import autoReview from './routes/auto-review';
 import repos from './routes/repos';
 import reviews from './routes/reviews';
 import runs from './routes/runs';
@@ -19,7 +21,7 @@ import { ModelConfigError } from './models/models';
 const corsOptions = {
 	origin: '*',
 	allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-	allowHeaders: ['Content-Type', 'Authorization', 'X-Hub-Signature-256', 'If-None-Match'],
+	allowHeaders: ['Content-Type', 'Authorization', 'X-Hub-Signature-256', 'X-Gitlab-Token', 'If-None-Match'],
 	exposeHeaders: ['ETag']
 };
 
@@ -42,6 +44,8 @@ app.route('/health', health);
 app.route('/api/auth', auth);
 app.route('/api/home', home);
 app.route('/api/guidelines', guidelines);
+app.route('/api/settings/auto-review', autoReview);
+app.route('/api/settings/vllm', vllm);
 app.route('/api/settings', settings);
 app.route('/api/agent', agent);
 app.route('/api/repos', repos);

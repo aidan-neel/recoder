@@ -1,4 +1,4 @@
-import type { ModelProvider } from './models';
+import type { ModelProvider, TokenBudget } from './models';
 
 export type TokenScope = 'pipeline' | 'discussion' | 'fix';
 
@@ -61,6 +61,8 @@ export interface ReviewMetrics {
 	reviewId: string;
 	startedAt: string;
 	pipelineTracked: boolean;
+	/** The token budget the latest pipeline run reviewed under; absent on reviews older than budgets. */
+	tokenBudget?: TokenBudget;
 	total: TokenAggregate;
 	models: (TokenAggregate & { model: string; provider: TokenCall['provider'] })[];
 	scopes: (TokenAggregate & { scope: TokenScope })[];

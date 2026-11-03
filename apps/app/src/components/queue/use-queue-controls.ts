@@ -44,7 +44,7 @@ function reveal(key: string): void {
  * money, so it starts from the row's own button or r, never from Enter or a
  * click on the row. In the sample, it says which review opens.
  */
-function openEntry(entry: QueueEntry, sample: boolean): void {
+export function openEntry(entry: QueueEntry, sample: boolean): void {
 	const href = entryHref(entry, sample);
 
 	if (href) return useShell.getState().navigate(href);

@@ -60,7 +60,13 @@ const eventSchema = z.object({
 			field: z.string().optional(),
 			delta: z.string().optional(),
 			part: z
-				.object({ id: z.string(), type: z.string(), sessionID: z.string(), tokens: tokensSchema })
+				.object({
+					id: z.string(),
+					type: z.string(),
+					sessionID: z.string(),
+					messageID: z.string(),
+					tokens: tokensSchema
+				})
 				.partial()
 				.optional()
 		})
@@ -82,7 +88,8 @@ function replyError(error: NonNullable<z.infer<typeof replySchema>['info']['erro
 /**
  * Routes one session's events to its handlers. A delta names only its part,
  * so part types are learned from `message.part.updated` first; a part can be
- * updated many times, so each step boundary is reported once.
+ * updated many times, so each step boundary is reported once. OpenCode 1.x
+ * puts a part update's session on the part alone, not on its properties.
  */
 function sessionRouter(handlers: SessionHandlers): (event: unknown, session: string | null) => void {
 	const partTypes = new Map<string, string>();
@@ -93,19 +100,21 @@ function sessionRouter(handlers: SessionHandlers): (event: unknown, session: str
 
 		if (part.type === 'step-start') {
 			steps.add(part.id);
-			handlers.onStepStart?.();
+			handlers.onStepStart?.(part.messageID);
 		} else if (part.type === 'step-finish' && part.tokens) {
 			steps.add(part.id);
-			handlers.onStepFinish?.(usage(part.tokens));
+			handlers.onStepFinish?.(usage(part.tokens), part.messageID);
 		}
 	};
 
 	return (raw, session) => {
 		const parsed = eventSchema.safeParse(raw);
 
-		if (!parsed.success || parsed.data.properties.sessionID !== session) return;
+		if (!parsed.success) return;
 
 		const { type, properties } = parsed.data;
+
+		if ((properties.sessionID ?? properties.part?.sessionID) !== session) return;
 
 		handlers.onActivity?.();
 

@@ -5,6 +5,7 @@ import checks from './reviews/checks';
 import dismissals from './reviews/dismissals';
 import fixes from './reviews/fixes';
 import lifecycle from './reviews/lifecycle';
+import pullComments from './reviews/pull-comments';
 import streams from './reviews/streams';
 
 /**
@@ -20,5 +21,6 @@ app.route('/', fixes);
 app.route('/', dismissals);
 app.route('/', checks);
 app.route('/', candidates);
+app.route('/', pullComments);
 
 export default app;

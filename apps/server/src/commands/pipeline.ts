@@ -15,9 +15,12 @@ import {
 	runWithReviewControl,
 	type ReviewControl
 } from '../review/session/review-control';
-import { supersedeWebhookReviews } from '../review/session/supersede';
 import { resumableCheckpoint } from '../review/session/review-checkpoint';
-import { effectiveReportLowSeverity, effectiveSubagentCap } from '../review/session/review-settings';
+import {
+	effectiveReportLowSeverity,
+	effectiveSubagentCap,
+	effectiveTokenBudget
+} from '../review/session/review-settings';
 import {
 	db,
 	keepForReplay,
@@ -29,6 +32,7 @@ import {
 } from '../store';
 import { emitReviewEvent, reportReviewTask, settleReviewTasks, trackReviewTask } from '../review/session/events';
 import { fetchPull, PULL_VIEW_COMMANDS } from '../forge/pull-preview';
+import { settlePullComment, trackPullComment } from '../forge/publish/pull-comment';
 import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
 import type { GatheredContext } from '../review/pipeline/intent/types';
 import { runAdaptiveReview } from '../review/pipeline/harness';
@@ -36,11 +40,12 @@ import { configForOrchestrator, configForSubagent, isReviewConfigured, withLocke
 import { ModelBlockedError } from '../review/pipeline/agent-loop';
 import { codex } from '../agents/codex/codex';
 import { reviewInstructions } from '../review/chat/review-chat';
+import { recordBrief } from '../review/chat/chat-replies';
 import { harnessCallbacks } from './pipeline-callbacks';
 import { detectProvider, locateRepo, refspecFor } from '../forge/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../sandbox/sandbox';
 import { tokenEnv } from '../forge/tokens';
-import { withReviewMetrics } from '../models/metrics';
+import { recordTokenBudget, withReviewMetrics } from '../models/metrics';
 
 export type QueueReviewInput = CreateReviewInput;
 
@@ -57,21 +62,22 @@ export function touch(reviewId: string, patch: Partial<Review>): Review {
 }
 
 /**
- * Validate + queue a review, kicking the pipeline in the background.
- * Shared by the REST route and the GitHub webhook. Throws on bad input.
+ * Validate + queue a review, kicking the pipeline in the background. A brief
+ * in `instructions` is recorded first, so the review runs with it.
+ * Throws on bad input.
  * A reviewer model is required — stub reviews that finish in seconds with
  * no real findings are worse than refusing outright.
  */
-export function queueReview(input: QueueReviewInput, trigger?: Review['trigger']): Review {
+export function queueReview(input: QueueReviewInput): Review {
 	if (!isReviewConfigured()) {
 		throw new Error(
 			'reviewer not configured: add a reviewer model in settings (or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL)'
 		);
 	}
 
-	if (trigger === 'webhook') supersedeWebhookReviews(input.repoId, input.prNumber);
+	const review = createReviewSession(input);
 
-	const review = createReviewSession(input, trigger);
+	recordBrief(review.id, input.instructions);
 
 	return startReviewSession(review.id);
 }
@@ -102,6 +108,7 @@ export function createReviewSession(input: CreateReviewInput, trigger?: Review['
 		prUrl: null,
 		...(trigger ? { trigger } : {}),
 		...(input.baselineCache === false ? { baselineCache: false as const } : {}),
+		...(input.postComment ? { pullComment: { state: 'posting' as const, updatedAt: now } } : {}),
 		createdAt: now,
 		updatedAt: now
 	};
@@ -152,6 +159,8 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	let prContext: Promise<GatheredContext | null> = Promise.resolve(null);
 	const control = openReviewControl(reviewId);
 	const analysis = control.abort;
+
+	trackPullComment(reviewId);
 
 	try {
 		if (!repo) throw new Error('repo not found');
@@ -269,6 +278,10 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			emitReviewEvent(reviewId, { type: 'log', step: 'review', message: discarded });
 		}
 
+		const tokenBudget = effectiveTokenBudget();
+
+		recordTokenBudget(tokenBudget);
+
 		const result = await runWithReviewControl(control, async () =>
 			runAdaptiveReview(
 				{
@@ -283,6 +296,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 					instructions: reviewInstructions(reviewId, initial.startedAt),
 					signal: analysis.signal,
 					subagentCap: effectiveSubagentCap(),
+					tokenBudget,
 					reportLowSeverity: effectiveReportLowSeverity(),
 					baselineCache: review.baselineCache,
 					resume
@@ -370,6 +384,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	} finally {
 		closeReviewControl(reviewId, control);
 		settleRun(reviewId);
+		settlePullComment(reviewId);
 	}
 }
 

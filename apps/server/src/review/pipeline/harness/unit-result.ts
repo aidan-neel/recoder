@@ -4,16 +4,16 @@ import { isQualityLens } from '../lenses/lenses.js';
 import { followedUpBy, recordReply } from '../question-ledger.js';
 import type { ReviewerOutput } from '../reviewer.js';
 import type { ReviewUnit } from '../units.js';
-import { coverageRole, recordFor, updateAssignment } from './assignments.js';
+import { COVERAGE_ROLE, recordFor, updateAssignment } from './assignments.js';
 import type { PoolContext, ScopedPatch } from './pool.js';
 
 /**
- * Records a lens reviewer's answer: coverage for its lens, candidates,
- * recommended checks, how a defect lens answered the brief questions it was
- * shown and, from the correctness lens only, subagent requests. A reviewer
+ * Records a reviewer's answer: coverage for its slice, candidates,
+ * recommended checks, how it answered the brief questions it was
+ * shown and its subagent requests. A reviewer
  * that answered has finished; hunks it couldn't assess show up as coverage
  * gaps. A subagent's answer adds candidates, checks and its answer to the
- * brief questions it follows up: its hunks are already a lens's, and it
+ * brief questions it follows up: its hunks are already a reviewer's, and it
  * can't ask for subagents.
  */
 export function applyUnitResult(
@@ -29,8 +29,8 @@ export function applyUnitResult(
 	if (role !== 'subagent') {
 		creditCoverage(item, ctx, output, initialEvidence);
 
-		if (item.lens === 'correctness') {
-			for (const request of output.subagents) ctx.requests.push({ unitId: item.id, unitTitle: item.title, request });
+		for (const request of item.lenses ? output.subagents : []) {
+			ctx.requests.push({ unitId: item.id, unitTitle: item.title, request });
 		}
 	}
 
@@ -81,9 +81,9 @@ export function finishUnit(
 
 /**
  * Keeps what a reviewer said about the brief's questions, beside the
- * candidates its findings became. A defect lens accounts for the open
+ * candidates its findings became. A reviewer accounts for the open
  * questions on its files and a follow-up subagent for the ones it was sent
- * to settle; quality lenses aren't shown any.
+ * to settle; a reviewer of maintainability lenses only isn't shown any.
  */
 function recordQuestions(
 	item: ReviewUnit,
@@ -92,7 +92,7 @@ function recordQuestions(
 	output: ReviewerOutput,
 	added: CandidateFinding[]
 ): void {
-	if (role !== 'subagent' && (!item.lens || isQualityLens(item.lens))) return;
+	if (role !== 'subagent' && !item.lenses?.some((lens) => !isQualityLens(lens))) return;
 
 	const brief = ctx.intent?.openQuestions ?? [];
 	const paths = new Set(item.scope.map((entry) => entry.path));
@@ -118,7 +118,6 @@ function creditCoverage(
 	output: ReviewerOutput,
 	initialEvidence: ScopedPatch
 ): void {
-	const role = coverageRole(item);
 	const assignedHunks = new Set(item.scope.flatMap((entry) => entry.hunkIds));
 	const shownHunks = new Set(initialEvidence.flatMap((evidence) => evidence.hunkIds ?? []));
 	const listedHunks = new Set(output.examinedHunks);
@@ -131,7 +130,7 @@ function creditCoverage(
 	for (const hunkId of examined) {
 		const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? '';
 
-		ctx.coverage.examined(hunkId, path, role);
+		ctx.coverage.examined(hunkId, path, COVERAGE_ROLE);
 	}
 
 	for (const hunkId of assignedHunks) {
@@ -140,14 +139,14 @@ function creditCoverage(
 		const path = ctx.inventory.hunksById.get(hunkId)?.file.path ?? '';
 		const gap = output.gaps.find((itemGap) => itemGap.hunkId === hunkId);
 
-		ctx.coverage.partial(hunkId, path, role, gap?.reason ?? 'hunk was not examined');
+		ctx.coverage.partial(hunkId, path, COVERAGE_ROLE, gap?.reason ?? 'hunk was not examined');
 	}
 }
 
 /**
  * Validates each reported finding against the inventory, evidence, change
- * model and rule ledger, and hands it on to be verified. A lens's findings are held to its categories; a
- * subagent's (no lens) may be in any. Returns the candidates in the order of `output.findings`.
+ * model and rule ledger, and hands it on to be verified. A reviewer's findings are held to the categories of its
+ * lenses; a subagent's (no lenses) may be in any. Returns the candidates in the order of `output.findings`.
  */
 export function addCandidates(
 	item: ReviewUnit,
@@ -156,14 +155,14 @@ export function addCandidates(
 	model: string,
 	output: ReviewerOutput
 ): CandidateFinding[] {
-	const lens = role === 'subagent' ? null : (item.lens ?? null);
+	const lenses = role === 'subagent' ? null : (item.lenses ?? null);
 	const dismissed = new Set(ctx.dismissals.map((dismissal) => dismissal.fingerprint));
 	const added: CandidateFinding[] = [];
 
 	for (const raw of output.findings) {
 		const candidate = validateCandidate(
 			raw,
-			{ candidateId: ctx.nextCandidate(), assignmentId: item.id, role, model, lens },
+			{ candidateId: ctx.nextCandidate(), assignmentId: item.id, role, model, lenses },
 			{
 				inventory: ctx.inventory,
 				evidence: ctx.evidence,

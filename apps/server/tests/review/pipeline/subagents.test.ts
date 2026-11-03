@@ -25,7 +25,7 @@ function ask(unitId: string, concern: string, path: string): UnitRequest {
 	};
 }
 
-test('requests run in unit order up to the cap, and the rest are dropped', () => {
+test('requests run by rank across units, each round in unit order, up to the cap, and the rest are dropped', () => {
 	const plan = planSubagents(
 		[
 			ask('unit-2', 'Test isolation', 'tests/b.ts'),
@@ -35,15 +35,16 @@ test('requests run in unit order up to the cap, and the rest are dropped', () =>
 		],
 		units,
 		inventory,
-		2
+		3
 	);
 
 	expect(plan.units.map((unit) => [unit.id, unit.title])).toEqual([
 		['subagent-1', 'Callers of parse'],
-		['subagent-2', 'Error paths']
+		['subagent-2', 'Test isolation'],
+		['subagent-3', 'Error paths']
 	]);
 
-	expect(plan.dropped.map((entry) => entry.request.concern)).toEqual(['Test isolation', 'Fixture reuse']);
+	expect(plan.dropped.map((entry) => entry.request.concern)).toEqual(['Fixture reuse']);
 });
 
 test('a request with the same concern over overlapping hunks as an earlier one is merged, not counted', () => {
@@ -78,13 +79,6 @@ test('a scope outside the review falls back to the requesting unit, and a file n
 
 	expect(plan.units.find((unit) => unit.title === 'Ghost file')!.scope).toEqual(units[1].scope);
 	expect(plan.units.find((unit) => unit.title === 'Whole file')!.scope).toEqual([{ path: 'src/a.ts', hunkIds: whole }]);
-});
-
-test('with subagents off nothing runs and nothing is reported dropped', () => {
-	expect(planSubagents([ask('unit-1', 'Callers of parse', 'src/a.ts')], units, inventory, 0)).toEqual({
-		units: [],
-		dropped: []
-	});
 });
 
 /** `src/a.ts` with one change near line 2 and another near line 52, so it has two hunks. */

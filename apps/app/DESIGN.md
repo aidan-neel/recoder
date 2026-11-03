@@ -61,17 +61,74 @@ reviewed, With the agent (every decision made, some sent back), Ready to merge.
   persist in localStorage.
 - **First run** replaces the queue until a provider, a model and a repository
   are set. The sample review is always one click away.
-- **Queue**: the serif headline, grouped rows, j/k marks a row, Enter opens it.
+- **Queue**: the serif headline, the review bar, grouped rows; j/k marks a row,
+  Enter opens it.
+- **Review bar** (under the headline): a 44px field that opens in place as a
+  small modal (kit `CommandBar`). At rest it is a button; `/` or a press opens
+  it. Open, the page dims under the modal scrim, a live field lands exactly on
+  the resting one and the results float under it on the menu surface (the menu
+  entrance), so nothing below moves. Focus stays inside (Tab moves between the
+  field and the footer's switch, unless it completes a reference), the page
+  takes no pointer, scroll or keys, and Escape or a click outside closes it
+  and returns focus to what had it. Each opening starts from an empty field.
+  ⌘K and ⌘, close it and open the palette or settings. It is for starting and
+  steering reviews; ⌘K stays the way to go places. It reads a
+  pull request link (GitHub, GitLab, self-managed GitLab), a short reference
+  (`#214`, `api#214`, `acme/api#214`, GitLab `!214`) with an optional brief
+  after it (`#214 focus on the auth changes`), or words that search the open
+  pull requests by number, title, repository, author and branch. Empty, it
+  lists what waits for a review, then recent reviews. Search matches whole
+  words and word starts; letters typed in order (`rtlim`) only count when
+  packed close from a word start, and only when nothing matches as typed.
+  Rows are two lines (the queue's glyph and title, then reference, author,
+  size and branch) and end alike: the status pill, then the Enter keycap on
+  the highlighted row only, so moving the highlight never shifts anything;
+  the footer names what Enter does. A typed brief shows
+  as a line above the rows. A link into an untracked repository offers Track
+  and review. The footer names the keys for the highlighted row and holds the
+  Comment on the PR switch. A start spins on its row, then closes the bar with
+  one line under it (Reviewing api #214 with your brief, Open review); a
+  failure stays in the open bar with its reason and the settings section that
+  fixes it. In the sample, rows come from the sample queue, starts simulate a
+  run, and links can't be tracked.
 - **Review page**: a 44px header (`#214`, title, repo, author, branch, head),
   then a 304px rail (Overview, Needs you, Checked for you, Files) and the
   reading pane, centred; the file view widens. The selection lives in the URL
   (`?item=`). The ask column opens on the right: on a decision or receipt it
   asks that item's reviewer; on the overview or a file it is the conversation
-  with Orchestrator, for the review's whole life. While a review runs, live
-  progress (stages, reviewers, pause, cancel, continue) takes the reading
-  pane.
-- **Settings**: a nav column (Agent, Connections, Review harness, Guidelines,
-  Appearance) and one centred column of grouped rows.
+  with Orchestrator, for the review's whole life. While a review runs, the
+  overview is the live view (below); a decision, receipt or file keeps a slim
+  live strip on top instead.
+- **Live view** (the calm timeline): the serif lead ("Reviewing this pull
+  request.", "Paused.", "Waiting for a free slot."), a 4px meter (steps
+  finished of steps known; amber while paused), "Step 4 of 6", then Ask
+  Orchestrator, Cancel review and Pause/Resume. Below, the stages on one rail:
+  Checkout, Understand, Checks, Review, Subagents (only when a reviewer asked
+  for one), Verify, Finish. Each has a glyph (dashed ring, spinner, check;
+  amber ring while paused), a line on what it did, does or will do, and a
+  time read from the stage's own task and reviewer timestamps: how long a
+  finished stage took, and a clock on the running one. There is no time-left
+  estimate and no estimate for stages not reached, since nothing in the
+  progress supports one. Only the current stage stands open, listing its
+  reviewers in a ringed list: what each covers, what it is doing right now
+  (the command it runs, in mono), and how many possible issues it raised. A
+  finished Review folds its reviewers away; its name opens them again. When
+  anything is already open (a continued review keeps what it found), a card
+  under the timeline says it is ready to read, with the region's one filled
+  button, Read the riskiest (Enter); it steps back to an outline while Resume
+  is the filled one. Loading shows placeholder stages.
+- **Settings** is a large modal over whatever page is open (the gear, ⌘, the
+  palette and error toasts open it). Its section is in the address,
+  `?settings=<section>`, beside the page's own params, so Back closes it and a
+  link opens it; the old `/settings/<section>` routes redirect there. Inside:
+  a nav column (Agent, Connections, Auto-review, Review harness, Guidelines,
+  Appearance) and one centred column of grouped rows under a 44px header with
+  the close button. Page keys stand down while it is open.
+- **Auto-review** (a settings section) turns on the watcher that starts
+  reviews by itself: when a comment mentions the handle (`@recoder`), when a
+  pull request opens, or when a reviewed one gets new commits. It also holds
+  the poll interval, posting results back, which tracked repositories are
+  watched, the reviews it started, and the webhook addresses.
 
 ## App-only tokens
 
@@ -98,7 +155,11 @@ Motion explains a change and never makes the person wait.
 ## Interaction rules
 
 - **Keyboard first.** On the queue j/k move, Enter opens and r starts a
-  review. On a review j/k and arrows move, Enter starts with the riskiest,
+  review; `/` opens the review bar, where arrows move, Enter runs the
+  highlighted row, ⌘Enter or Shift+Enter runs its other action (also comment
+  on the PR, or open instead of reviewing again), Tab completes the reference
+  and Escape closes it, dropping the text. A brief on a reviewed pull request reviews it again; a
+  brief or a comment always starts a fresh run. On a review j/k and arrows move, Enter starts with the riskiest,
   a/s/x decide, u undoes, h hands off, f opens the file, o or Esc returns to
   the overview, q opens or closes ask, and Space, Shift+Space, Page Up/Down,
   Home and End scroll the reading pane. In the ask field, Escape closes ask

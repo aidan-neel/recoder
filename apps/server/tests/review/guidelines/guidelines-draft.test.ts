@@ -63,7 +63,6 @@ test('repo drafts include the request, global rules, untrusted instruction files
 	);
 
 	expect(prompt).toContain("Owner's request:\nStop flagging naming");
-	expect(prompt).toContain('.recoder/REVIEW.md');
 	expect(prompt).toContain('- Flag data loss');
 	expect(prompt).toContain('UNTRUSTED CONTENT');
 	expect(prompt).toContain('### AGENTS.md\nUse pnpm.');

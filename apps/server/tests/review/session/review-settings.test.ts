@@ -60,13 +60,31 @@ test('disconnecting a provider removes its models and the picks that pointed at 
 	expect(getStoredSettings().orchestratorModelId).toBeUndefined();
 });
 
+test('a subagent cap saved before the caps were 3, 8 and 12 loads as the nearest cap that is as generous and is saved that way', () => {
+	const file = join(process.env.RECODER_DATA_DIR!, 'review-config.json');
+
+	for (const [saved, cap] of [
+		[2, 3],
+		[4, 8],
+		[0, 0],
+		[12, 12],
+		['uncapped', 'uncapped']
+	] as const) {
+		writeFileSync(file, JSON.stringify({ subagentCap: saved }));
+		setReviewOverrides({});
+		initReviewSettings();
+		expect(effectiveSubagentCap()).toBe(cap);
+		expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ subagentCap: cap });
+	}
+});
+
 test('an old dispatch level loads as its subagent cap, is saved that way and survives a restart', () => {
 	const file = join(process.env.RECODER_DATA_DIR!, 'review-config.json');
 
 	for (const [specialistDispatch, cap] of [
 		['low', 0],
-		['medium', 2],
-		['high', 4]
+		['medium', 3],
+		['high', 8]
 	] as const) {
 		writeFileSync(file, JSON.stringify({ specialistDispatch }));
 		setReviewOverrides({});

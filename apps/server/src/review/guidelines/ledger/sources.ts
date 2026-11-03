@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { GUIDELINES_PATH } from '@recoder/shared';
+import { GUIDELINES_PATHS } from '@recoder/shared';
 import { git, readBlob } from '../../../evidence/git.js';
 import type { ReviewRevision } from '../../../evidence/evidence.js';
 import { INSTRUCTION_PATHS } from '../../pipeline/harness/understand.js';
@@ -29,7 +29,8 @@ const LEDGER_VERSION = 'ledger-v2';
 
 /**
  * Root instruction files first, in the loader's order, then nested ones by
- * path, then the repo's Recoder guidelines; the order rule ids follow.
+ * path, then the repo's Recoder guidelines (only the file that is the layer,
+ * `RECODER.md` over `.recoder/REVIEW.md`); the order rule ids follow.
  */
 function orderedPaths(tracked: string[]): string[] {
 	const present = new Set(tracked);
@@ -40,7 +41,9 @@ function orderedPaths(tracked: string[]): string[] {
 		.sort()
 		.slice(0, MAX_NESTED);
 
-	return [...root, ...nested, ...(present.has(GUIDELINES_PATH) ? [GUIDELINES_PATH] : [])];
+	const guidelines = GUIDELINES_PATHS.find((path) => present.has(path));
+
+	return [...root, ...nested, ...(guidelines ? [guidelines] : [])];
 }
 
 /** Every instruction file at the PR's base commit, read in full, so a PR can't rewrite the rules it is judged by. */

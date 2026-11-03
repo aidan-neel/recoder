@@ -1,8 +1,8 @@
 'use client';
 
-import { Button, DURATION, EASE_OUT, ScrollArea } from '@recoder/ui';
+import { Button, DURATION, EASE_OUT, ModalClose, ScrollArea, Tooltip } from '@recoder/ui';
+import { X } from 'lucide-react';
 import { motion } from 'motion/react';
-import { usePathname } from 'next/navigation';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 
 import { PageNotice } from '@/components/common/page-notice';
@@ -10,13 +10,14 @@ import { PanelHeader } from '@/components/common/panel-header';
 import { ConnectionsSection } from '@/components/connections/connections-section';
 import { GuidelinesSection } from '@/components/guidelines/guidelines-section';
 import { OFFLINE_TEXT } from '@/lib/api/http';
-import { SETTINGS_SECTIONS, sectionFromPath, sectionTitle, type SettingsSection } from '@/lib/settings/sections';
+import { SETTINGS_SECTIONS, sectionTitle, type SettingsSection } from '@/lib/settings/sections';
 import { useSettings } from '@/lib/settings/settings-store';
 import { useAction } from '@/lib/shell/use-action';
 
 import { AgentModels } from './agent-models';
 import { AgentSection } from './agent-section';
 import { AppearanceSection } from './appearance-section';
+import { AutoReviewSection } from './auto-review/auto-review-section';
 import { HarnessSection } from './harness-section';
 import { SettingsNav } from './settings-nav';
 import { SettingsSkeleton } from './settings-skeleton';
@@ -77,6 +78,7 @@ function SectionBody({ section }: { section: SettingsSection }) {
 	}
 
 	if (section === 'connections') return <ConnectionsSection />;
+	if (section === 'auto-review') return <AutoReviewSection />;
 	if (section === 'guidelines') return <GuidelinesSection />;
 
 	return (
@@ -87,7 +89,7 @@ function SectionBody({ section }: { section: SettingsSection }) {
 }
 
 /**
- * Whether the reader has switched sections since the page opened. The first
+ * Whether the reader has switched sections since settings opened. The first
  * section paints as it is; each later one fades in.
  */
 function useSwapped(active: SettingsSection): boolean {
@@ -100,14 +102,47 @@ function useSwapped(active: SettingsSection): boolean {
 }
 
 /**
- * Settings: the section nav on the left, the open section on the right under
- * its title. Switching sections swaps them in place, without a page load, and
+ * Names the browser tab for the open section, then gives the page its own
+ * name back when settings closes, unless the page has renamed it since (a
+ * link inside settings went to a review).
+ */
+function useSectionTitle(active: SettingsSection): void {
+	const [before] = useState(() => document.title);
+	const shown = useRef('');
+
+	useEffect(() => {
+		shown.current = `${sectionTitle(active)} · Recoder`;
+		document.title = shown.current;
+	}, [active]);
+
+	useEffect(
+		() => () => {
+			if (document.title === shown.current) document.title = before;
+		},
+		[before]
+	);
+}
+
+/** The X at the header's right end. */
+function CloseButton() {
+	return (
+		<Tooltip content="Close" shortcut="Escape">
+			<ModalClose>
+				<Button variant="quiet" size="icon" aria-label="Close settings" className="text-fg-subtle hover:text-fg">
+					<X aria-hidden />
+				</Button>
+			</ModalClose>
+		</Tooltip>
+	);
+}
+
+/**
+ * Settings, inside its modal: the section nav on the left, the open section
+ * on the right under its title. Switching sections swaps them in place and
  * starts the new one at the top. The swap is one paint: the old section and
  * title leave in the same commit the new ones arrive, then the new ones fade in.
- * The browser tab follows, since a swap in place runs no route metadata.
  */
-export function SettingsPage({ section }: { section: SettingsSection }) {
-	const active = sectionFromPath(usePathname()) ?? section;
+export function SettingsPanel({ active }: { active: SettingsSection }) {
 	const title = SETTINGS_SECTIONS.find((item) => item.id === active)?.label;
 	const viewport = useRef<HTMLDivElement>(null);
 	const enter = useSwapped(active) ? FADED : false;
@@ -120,18 +155,17 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
 		viewport.current?.scrollTo({ top: 0 });
 	}, [active]);
 
-	useEffect(() => {
-		document.title = `${sectionTitle(active)} · Recoder`;
-	}, [active]);
+	useSectionTitle(active);
 
 	return (
 		<div data-ui="settings-page" className="settings-page">
 			<SettingsNav active={active} />
 			<div className="settings-main">
-				<PanelHeader className="px-6">
-					<motion.h1 key={active} initial={enter} animate={SHOWN} transition={SWAP} className="settings-title">
+				<PanelHeader className="justify-between pr-2 pl-6">
+					<motion.h2 key={active} initial={enter} animate={SHOWN} transition={SWAP} className="settings-title">
 						{title}
-					</motion.h1>
+					</motion.h2>
+					<CloseButton />
 				</PanelHeader>
 				<ScrollArea className="min-h-0 flex-1" viewportRef={viewport}>
 					<motion.div key={active} initial={enter} animate={SHOWN} transition={SWAP} className="settings-column">

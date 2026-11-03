@@ -6,6 +6,7 @@ import { app } from '../../src/app';
 import {
 	effectiveReviewEnv,
 	effectiveSubagentCap,
+	effectiveTokenBudget,
 	getStoredSettings,
 	initReviewSettings,
 	setReviewOverrides
@@ -85,7 +86,7 @@ describe('review settings', () => {
 	});
 
 	test('the subagent cap persists across reload and rejects other values', async () => {
-		expect((await (await app.request('/api/settings/models')).json()).subagentCap).toBe(2);
+		expect((await (await app.request('/api/settings/models')).json()).subagentCap).toBe(8);
 
 		const patch = await app.request('/api/settings/models', {
 			method: 'PATCH',
@@ -102,11 +103,55 @@ describe('review settings', () => {
 		const bad = await app.request('/api/settings/models', {
 			method: 'PATCH',
 			headers: { 'content-type': 'application/json' },
-			body: JSON.stringify({ subagentCap: 3 })
+			body: JSON.stringify({ subagentCap: 5 })
 		});
 
 		expect(bad.status).toBe(400);
 		expect(effectiveSubagentCap()).toBe(0);
+	});
+
+	test('a token budget saves with the cap and efforts it sets, survives a restart, and a file from before budgets reads as Medium', async () => {
+		setReviewOverrides({ models: [{ id: 'sub', label: 'Subscription', model: 'test-model', provider: 'codex' }] });
+		expect((await (await app.request('/api/settings/models')).json()).tokenBudget).toBe('medium');
+
+		const patch = await app.request('/api/settings/models', {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ tokenBudget: 'low', subagentCap: 3, orchestratorEffort: 'low', specialistEffort: 'low' })
+		});
+
+		expect(await patch.json()).toMatchObject({
+			tokenBudget: 'low',
+			subagentCap: 3,
+			orchestratorEffort: 'low',
+			specialistEffort: 'low'
+		});
+
+		setReviewOverrides({});
+		initReviewSettings();
+		expect(effectiveTokenBudget()).toBe('low');
+		expect(effectiveSubagentCap()).toBe(3);
+		expect(configForOrchestrator().reasoningEffort).toBe('low');
+
+		writeFileSync(join(process.env.RECODER_DATA_DIR!, 'review-config.json'), JSON.stringify({ subagentCap: 12 }));
+		setReviewOverrides({});
+		initReviewSettings();
+		expect(effectiveTokenBudget()).toBe('medium');
+		expect(effectiveSubagentCap()).toBe(12);
+	});
+
+	test('uncapped subagents save, read back and survive a restart', async () => {
+		const patch = await app.request('/api/settings/models', {
+			method: 'PATCH',
+			headers: { 'content-type': 'application/json' },
+			body: JSON.stringify({ subagentCap: 'uncapped' })
+		});
+
+		expect(patch.status).toBe(200);
+		expect((await patch.json()).subagentCap).toBe('uncapped');
+		setReviewOverrides({});
+		initReviewSettings();
+		expect((await (await app.request('/api/settings/models')).json()).subagentCap).toBe('uncapped');
 	});
 
 	test('invalid effort values are rejected without changing settings', async () => {

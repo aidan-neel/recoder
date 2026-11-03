@@ -10,6 +10,7 @@ import {
 	MessageSquareText,
 	Palette,
 	Plug,
+	Radar,
 	ScrollText,
 	Sparkles,
 	SunMoon,
@@ -20,6 +21,7 @@ import {
 import { requestAskFocus } from '@/lib/ask/focus-request';
 import { useReview } from '@/lib/review/review-store';
 import { SETTINGS_SECTIONS, type SettingsSection } from '@/lib/settings/sections';
+import { openSettings } from '@/lib/settings/settings-url';
 import { pullRef } from '@/lib/shell/format';
 import { QUEUE_TAB } from '@/lib/shell/routes';
 import { useShell, type PaletteItem, type ReviewTab } from '@/lib/shell/shell-store';
@@ -31,6 +33,7 @@ import { tabName } from './tab-label';
 const SECTION_ICONS: Record<SettingsSection, LucideIcon> = {
 	agent: Bot,
 	connections: Plug,
+	'auto-review': Radar,
 	harness: Gauge,
 	guidelines: ScrollText,
 	appearance: Palette
@@ -40,6 +43,7 @@ const SECTION_ICONS: Record<SettingsSection, LucideIcon> = {
 const SECTION_WORDS: Record<SettingsSection, string> = {
 	agent: 'model provider effort reviewer',
 	connections: 'github gitlab forge token repositories',
+	'auto-review': 'watch mention webhook poll automatic gitlab merge request',
 	harness: 'limits budget concurrency verification',
 	guidelines: 'rules conventions standards',
 	appearance: 'theme dark light'
@@ -116,8 +120,6 @@ export function actionItems(
 	closeTab: (() => void) | null,
 	askable: boolean
 ): PaletteItem[] {
-	const go = (href: string) => useShell.getState().navigate(href);
-
 	const settings = SETTINGS_SECTIONS.map((section): PaletteItem => ({
 		id: `settings:${section.id}`,
 		group: 'Actions',
@@ -125,7 +127,7 @@ export function actionItems(
 		keywords: `settings preferences ${SECTION_WORDS[section.id]}`,
 		icon: SECTION_ICONS[section.id],
 		shortcut: section.id === 'agent' ? 'mod+,' : undefined,
-		run: () => go(`/settings/${section.id}`)
+		run: () => openSettings(section.id)
 	}));
 
 	return [

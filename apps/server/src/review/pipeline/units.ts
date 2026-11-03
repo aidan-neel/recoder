@@ -8,21 +8,22 @@ export type UnitScope = { path: string; hunkIds: string[] }[];
 
 /**
  * A slice of the change, cut from the inventory without a model call, so the
- * same diff always gives the same units in the same order. Each unit runs as
- * one assignment per applicable lens (`lensAssignments`).
+ * same diff always gives the same units in the same order. A brief unit
+ * (`partitionUnits`) is summarized for the intent; a reviewer unit
+ * (`partitionReviewers`) is read by one reviewer that applies every lens.
  */
 export interface ReviewUnit {
 	/**
-	 * `unit-1`, `unit-2`… for a slice; `unit-2/security` for its lens assignment, whose
-	 * retry is `retry-unit-2/security` (or `-a`/`-b` when split); `subagent-1` for a subagent.
+	 * `unit-1`, `unit-2`… for a brief unit; `reviewer-1`… for a reviewer, whose retry is
+	 * `retry-reviewer-1` (or `-a`/`-b` when split); `subagent-1` for a subagent.
 	 */
 	id: string;
 	title: string;
 	/** Why the unit runs; a retry carries how the first attempt failed. */
 	reason: string;
 	scope: UnitScope;
-	/** The lens a reviewer applies; unset on a slice before fan-out and on a subagent. */
-	lens?: LensId;
+	/** The lenses a reviewer applies to its slice; unset on a brief unit and on a subagent. */
+	lenses?: LensId[];
 	/** Set on a subagent the harness sends for a second look rather than one a reviewer asked for. */
 	purpose?: SecondLookPurpose;
 }
@@ -63,7 +64,7 @@ function byCodePoint(a: string, b: string): number {
 }
 
 /** "src/a.ts", "src/review", or "src/review and 2 more folders". */
-function unitTitle(scope: UnitScope): string {
+export function unitTitle(scope: UnitScope): string {
 	if (scope.length === 1) return scope[0].path;
 
 	const folders = [...new Set(scope.map((entry) => directoryOf(entry.path)))];
@@ -71,6 +72,13 @@ function unitTitle(scope: UnitScope): string {
 	if (folders.length === 1) return `${folders[0]} (${scope.length} files)`;
 
 	return `${folders[0]} and ${folders.length - 1} more folder${folders.length === 2 ? '' : 's'}`;
+}
+
+/** The files a review reads, in folder order: not excluded or summarized, and with a hunk to read. */
+export function reviewableFiles(inventory: ReviewInventory): InventoryFile[] {
+	return inventory.files
+		.filter((file) => !file.excludeReason && !file.summarize && file.hunks.length > 0)
+		.sort((a, b) => byCodePoint(directoryOf(a.path), directoryOf(b.path)) || byCodePoint(a.path, b.path));
 }
 
 /**
@@ -83,9 +91,7 @@ export function partitionUnits(
 	inventory: ReviewInventory,
 	budgetChars: number = REVIEW_POLICY.unitBudgetChars
 ): ReviewUnit[] {
-	const files = inventory.files
-		.filter((file) => !file.excludeReason && !file.summarize && file.hunks.length > 0)
-		.sort((a, b) => byCodePoint(directoryOf(a.path), directoryOf(b.path)) || byCodePoint(a.path, b.path));
+	const files = reviewableFiles(inventory);
 
 	const folders = new Map<string, InventoryFile[]>();
 
@@ -125,7 +131,17 @@ export function partitionUnits(
 	}));
 }
 
-/** A fresh, queued record for a lens assignment or subagent. */
+/** The reviewers' own slices of `units`: a retry of a reviewer is not another slice. */
+export function reviewerSlices(units: ReviewUnit[]): ReviewUnit[] {
+	return units.filter((unit) => !isRetry(unit));
+}
+
+/** Whether the unit is the second attempt of a reviewer that failed. */
+export function isRetry(unit: ReviewUnit): boolean {
+	return unit.id.startsWith('retry-');
+}
+
+/** A fresh, queued record for a reviewer or subagent. */
 export function unitRecord(unit: ReviewUnit, role = 'reviewer'): ReviewAssignment {
 	return {
 		id: unit.id,

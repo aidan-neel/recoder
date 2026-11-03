@@ -29,3 +29,31 @@ test('a result that says the tool call could not be parsed is an error, not a re
 
 	expect(() => reader.finish(undefined, { code: 0, stderr: '' })).toThrow('tool call could not be parsed');
 });
+
+/** A reader that has read a successful result line carrying `usage`, and the usage it reports. */
+function reportedUsage(usage: object): unknown {
+	const reader = new ReplyReader({});
+	let reported: unknown = 'none';
+
+	reader.line(JSON.stringify({ type: 'result', subtype: 'success', is_error: false, result: 'ok', usage }));
+	reader.finish((value) => (reported = value), { code: 0, stderr: '' });
+
+	return reported;
+}
+
+test('a result that counts no tokens reports them as unknown, not as zero', () => {
+	expect(reportedUsage({})).toMatchObject({
+		inputTokens: null,
+		outputTokens: null,
+		totalTokens: null,
+		cachedInputTokens: null
+	});
+
+	expect(reportedUsage({ input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 100 })).toMatchObject({
+		inputTokens: 110,
+		outputTokens: 5,
+		totalTokens: 115,
+		cachedInputTokens: 100,
+		cacheWriteInputTokens: null
+	});
+});

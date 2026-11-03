@@ -87,11 +87,11 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 
 **RECODER_CALLER_SELECTION**: `1` turns on caller selection in the change model. Callers are ranked by how much they depend on the changed behavior, and that behavior is stated next to them. It does not choose models. Read by `buildChangeModel` in `apps/server/src/review/pipeline/change-model/change-model.ts`. A caller can override it with the `callerSelection` input.
 
-**RECODER_RESIDUAL**: `1` turns on the residual pass. After the lens reviewers answer, each review unit gets one second-look subagent on the specialist model. It is told what the review already raised (its unit's files first) and the files that usually change with the unit's files but that the change leaves alone (read from the base's git history). It runs outside the subagent cap. Read by `residualOn` in `apps/server/src/review/pipeline/second-look/config.ts`.
+**RECODER_RESIDUAL**: `1` turns on the residual pass. After the reviewers answer, each reviewer's slice gets one second-look subagent on the specialist model. It is told what the review already raised (its slice's files first) and the files that usually change with the slice's files but that the change leaves alone (read from the base's git history). It counts inside the subagent cap: it takes only the room the reviewers' requests left, and none runs with subagents off. Read by `residualOn` in `apps/server/src/review/pipeline/second-look/config.ts`.
 
-**RECODER_RESIDUAL_CAP**: Most residual passes one review launches, one per unit in unit order. Default 6. A non-negative integer. Read only when the residual pass is on.
+**RECODER_RESIDUAL_CAP**: Most residual passes one review launches, one per reviewer slice, at most as many as the subagent cap leaves room for. Default 6. A non-negative integer. Read only when the residual pass is on.
 
-**RECODER_CONTRACT_CHECKS**: `1` turns on contract checks. Each valid readability candidate whose smell is `stale-comment`, `misleading-name` or `hidden-side-effect` gets one second-look subagent on the specialist model, which decides whether the comment, name or doc is wrong or the code is. It runs outside the subagent cap. Read by `contractChecksOn` in `apps/server/src/review/pipeline/second-look/config.ts`.
+**RECODER_CONTRACT_CHECKS**: `1` turns on contract checks. Each valid readability candidate whose smell is `stale-comment`, `misleading-name` or `hidden-side-effect` gets one second-look subagent on the specialist model, which decides whether the comment, name or doc is wrong or the code is. It counts inside the subagent cap. Read by `contractChecksOn` in `apps/server/src/review/pipeline/second-look/config.ts`.
 
 **RECODER_CONTRACT_CHECK_CAP**: Most contract checks one review launches, one per place. Default 4. A non-negative integer. Read only when contract checks are on.
 

@@ -46,7 +46,6 @@ interface RecordedRead {
 
 /** What a reviewer's prompt held, captured when it was built, so a replay or resume never rebuilds it. */
 interface CapturedPrompt {
-	lens?: string;
 	/** Retrievals the initial scoped patch made, the first of the reviewer's reads, and the evidence ids they returned. */
 	patchReads: number;
 	patch: string[];
@@ -183,7 +182,6 @@ export function capturePrompt(
 	}
 
 	received.prompts[unit.id] = {
-		...(unit.lens ? { lens: unit.lens } : {}),
 		patchReads: patch.length,
 		patch: patch.flatMap((result) => (result.evidenceId ? [result.evidenceId] : [])),
 		context: {
@@ -193,7 +191,7 @@ export function capturePrompt(
 	};
 }
 
-/** What the record is built from: the run's known units (for order and lens), roles, prompts, reads, evidence and candidates. */
+/** What the record is built from: the run's known units (for order), roles, prompts, reads, evidence and candidates. */
 export interface ReceivedSources {
 	units: ReviewUnit[];
 	roles: Map<string, string>;
@@ -272,8 +270,7 @@ function classifier(
 /** One reviewer's record, what its prompt held, and how it had each evidence id its candidates cited. */
 function reviewerContext(
 	sources: ReceivedSources,
-	id: string,
-	lens: string | undefined
+	id: string
 ): { record: ReviewerContext; prompt: UnitContext | undefined; classify: Classifier } {
 	const prompt = sources.received.prompts[id];
 	const reads = sources.received.byAssignment[id] ?? [];
@@ -286,12 +283,10 @@ function reviewerContext(
 	);
 
 	const dropped = sources.received.dropped[id];
-	const lensId = prompt?.lens ?? lens;
 
 	const record = {
 		assignmentId: id,
 		role: sources.roles.get(id) ?? 'reviewer',
-		...(lensId ? { lens: lensId } : {}),
 		read: own.filter((read) => read.ok).map(readItem),
 		cited,
 		omitted: readOmissions(own),
@@ -299,28 +294,6 @@ function reviewerContext(
 	};
 
 	return { record, prompt: prompt?.context, classify };
-}
-
-/**
- * Where a reviewer's prompt is stored: under its slice (`unit-2` for `unit-2/security`)
- * when that holds the same prompt, else under its own id, as a split retry's narrower scope does.
- */
-function intern(units: Record<string, UnitContext>, assignmentId: string, prompt: UnitContext): string {
-	const slice = assignmentId.split('/')[0];
-
-	for (const key of [slice, assignmentId]) {
-		const stored = units[key];
-
-		if (!stored) {
-			units[key] = prompt;
-
-			return key;
-		}
-
-		if (Bun.deepEquals(stored, prompt)) return key;
-	}
-
-	return assignmentId;
 }
 
 /** How a published finding's reporters had what they cited, counted per member and evidence id rather than the best way. */
@@ -367,15 +340,16 @@ function reviewerIds(sources: ReceivedSources): string[] {
  * without one (a checkpoint from before prompts were kept) has no `unit`.
  */
 export function reviewContext(sources: ReceivedSources, findings: Finding[]): ReviewContext {
-	const lenses = new Map(sources.units.map((unit) => [unit.id, unit.lens]));
 	const classifiers = new Map<string, Classifier>();
 	const prompts: Record<string, UnitContext> = {};
 	const reviewers: ReviewerContext[] = [];
 
 	for (const id of reviewerIds(sources)) {
-		const { record, prompt, classify } = reviewerContext(sources, id, lenses.get(id));
+		const { record, prompt, classify } = reviewerContext(sources, id);
 
-		reviewers.push(prompt ? { ...record, unit: intern(prompts, id, prompt) } : record);
+		if (prompt) prompts[id] = prompt;
+
+		reviewers.push(prompt ? { ...record, unit: id } : record);
 		classifiers.set(id, classify);
 	}
 

@@ -1,10 +1,5 @@
-import { sectionFromPath } from '../settings/sections';
-
 /** The Queue tab's id in the top bar; review tabs use their review id. */
 export const QUEUE_TAB = 'queue';
-
-/** Where the settings gear, `mod+,` and the palette's settings rows land first. */
-export const SETTINGS_HREF = '/settings/agent';
 
 /** The sample review's id; its queue is `/sample`. */
 const SAMPLE_ID = 'sample';
@@ -16,7 +11,7 @@ function reviewId(pathname: string): string | null {
 	return match ? decodeURIComponent(match[1]) : null;
 }
 
-/** The top-bar tab a path belongs to: the queue, a review's id, or none (settings). */
+/** The top-bar tab a path belongs to: the queue, a review's id, or none (a 404). */
 export function activeTab(pathname: string): string | null {
 	if (pathname === '/' || pathname === '/sample') return QUEUE_TAB;
 
@@ -33,11 +28,6 @@ export function isSampleReview(id: string): boolean {
 	return id === SAMPLE_ID;
 }
 
-/** True on a settings page that exists; an unknown section is a 404 and belongs to no tab. */
-export function onSettings(pathname: string): boolean {
-	return sectionFromPath(pathname) !== null;
-}
-
 /** The queue for where the person is: the sample keeps them in the sample. */
 export function queueHref(pathname: string): string {
 	return inSample(pathname) ? '/sample' : '/';
@@ -48,8 +38,6 @@ export function reviewHref(id: string): string {
 }
 
 /** What the palette searches on this page, for its placeholder and the scope beside it. */
-export function paletteScope(pathname: string): 'review' | 'settings' | 'queue' {
-	if (reviewId(pathname)) return 'review';
-
-	return onSettings(pathname) ? 'settings' : 'queue';
+export function paletteScope(pathname: string): 'review' | 'queue' {
+	return reviewId(pathname) ? 'review' : 'queue';
 }

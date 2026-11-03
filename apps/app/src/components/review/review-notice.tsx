@@ -7,8 +7,7 @@ import { useLayoutEffect, useRef, type ReactNode } from 'react';
 import { handFocus, takeFocus } from '@/lib/live/focus-handoff';
 import { lifecycle } from '@/lib/review/lifecycle';
 import { useReview } from '@/lib/review/review-store';
-import { SETTINGS_HREF } from '@/lib/shell/routes';
-import { useShell } from '@/lib/shell/shell-store';
+import { openSettings } from '@/lib/settings/settings-url';
 
 import { ActionButton } from './action-button';
 import { openReviewAgain, useCounts, useOutdated, usePhase, useShownReview } from './review-view';
@@ -66,7 +65,6 @@ export function ReviewNotice() {
 	const pull = useReview((state) => state.pull);
 	const failure = useReview((state) => state.progress?.failure ?? null);
 	const { total } = useCounts();
-	const navigate = useShell((state) => state.navigate);
 	const again = <ActionButton run={() => openReviewAgain(review)}>Review again</ActionButton>;
 	const resume = <ActionButton run={() => handFocus('live', () => lifecycle.continue(review))}>Continue</ActionButton>;
 
@@ -81,12 +79,12 @@ export function ReviewNotice() {
 				body={review.summary ?? 'The review server gave no reason.'}
 			>
 				{failure?.signIn ? (
-					<Button variant="outline" onClick={() => navigate('/settings/agent?add=provider')}>
+					<Button variant="outline" onClick={() => openSettings('agent', { add: 'provider' })}>
 						Add a provider
 					</Button>
 				) : null}
 				{failure?.usageLimit ? (
-					<Button variant="outline" onClick={() => navigate(SETTINGS_HREF)}>
+					<Button variant="outline" onClick={() => openSettings('agent')}>
 						Open settings
 					</Button>
 				) : null}

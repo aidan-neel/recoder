@@ -3,13 +3,15 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../src/review/pipeline/harness';
+import { REVIEW_POLICY, budgetLimits, scaledReviewLimits } from '../../../src/review/session/review-policy';
 import {
 	NOTHING,
+	TWO_HUNK_DIFF,
+	TWO_REVIEWERS,
 	TWO_UNIT_DIFF,
 	confirmingVerifier,
 	finding,
 	isVerifier,
-	lensIdsOf,
 	messagesOf,
 	modelReply,
 	restoreAfterEach,
@@ -40,19 +42,25 @@ const ask = (concern: string, path: string) => ({
 });
 
 const REQUESTS: Record<string, unknown[]> = {
-	'unit-1/correctness': [ask('Callers of parse', 'src/a.ts'), ask('Error paths', 'src/a.ts')],
-	'unit-2/correctness': [ask('Test isolation', 'tests/b.ts'), ask('Fixture reuse', 'tests/b.ts')]
+	'reviewer-1': [ask('Callers of parse', 'src/a.ts'), ask('Error paths', 'src/a.ts')],
+	'reviewer-2': [ask('Test isolation', 'tests/b.ts'), ask('Fixture reuse', 'tests/b.ts')]
 };
 
-/** Every lens assignment the review runs for `TWO_UNIT_DIFF`, all reviewers. */
-const LENS_RECORDS = [...lensIdsOf('unit-1'), ...lensIdsOf('unit-2')].map((id) => [id, 'reviewer', 'done']);
+/** The two reviewers of `TWO_UNIT_DIFF`, both done. */
+const REVIEWER_RECORDS = TWO_REVIEWERS.map((id) => [id, 'reviewer', 'done']);
+
+/** The two reviewers and the three subagents a cap of 3 runs, all done. */
+const ALL_RECORDS = [...REVIEWER_RECORDS, ...[1, 2, 3].map((index) => [`subagent-${index}`, 'subagent', 'done'])];
+
+/** Each assignment of a finished review as id, role and status. */
+const recordsOf = (result: Awaited<ReturnType<typeof runAdaptiveReview>>) =>
+	result.assignments.map((record) => [record.id, record.role, record.status]);
 
 /**
- * Both correctness lenses ask for two subagents, and every other lens asks for
- * one it isn't offered; every subagent reports a finding and asks for one more
- * subagent of its own. `unit-1/correctness` also reports a finding unless
- * `clean`. Records which subagents ran, and on which model, along with the
- * reviewer system prompts by assignment.
+ * Both reviewers ask for two subagents, most important first; every subagent
+ * reports a finding and asks for one more subagent of its own. `reviewer-1`
+ * also reports a finding unless `clean`. Records which subagents ran, and on
+ * which model, along with the reviewer system prompts by assignment.
  */
 function stubSubagents(clean = false) {
 	const seen = {
@@ -87,8 +95,8 @@ function stubSubagents(clean = false) {
 
 		const reply = {
 			...NOTHING,
-			findings: unit === 'unit-1/correctness' && !clean ? [finding('possible miss')] : [],
-			subagents: unit ? (REQUESTS[unit] ?? [ask('Off-lens ask', 'src/a.ts')]) : []
+			findings: unit === 'reviewer-1' && !clean ? [finding('possible miss')] : [],
+			subagents: unit ? (REQUESTS[unit] ?? []) : []
 		};
 
 		return modelReply({ message: 'ok', ...reply });
@@ -97,50 +105,44 @@ function stubSubagents(clean = false) {
 	return seen;
 }
 
-test('only correctness lenses get subagents, the cap holds across units, and requests past it are named in the summary', async () => {
+test('reviewers’ requests fill the cap by rank across reviewers, and requests past it are named in the summary', async () => {
 	useTwoModels();
 
 	const seen = stubSubagents();
-	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 2 });
+	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 });
 
-	expect(result.assignments.map((record) => [record.id, record.role, record.status])).toEqual([
-		...LENS_RECORDS,
-		['subagent-1', 'subagent', 'done'],
-		['subagent-2', 'subagent', 'done']
-	]);
+	expect(recordsOf(result)).toEqual(ALL_RECORDS);
 
 	expect(result.assignments.filter((record) => record.role === 'subagent').map((record) => record.title)).toEqual([
 		'Callers of parse',
+		'Test isolation',
 		'Error paths'
 	]);
 
-	expect([...seen.subagents].sort()).toEqual(['subagent-1', 'subagent-2']);
+	expect([...seen.subagents].sort()).toEqual(['subagent-1', 'subagent-2', 'subagent-3']);
 	expect([...seen.models]).toEqual(['worker']);
 	expect(result.assignments.find((record) => record.id === 'subagent-1')?.candidateCount).toBe(1);
-	expect(result.summary).toContain('2 subagent requests went over the limit');
-	expect(result.summary).toContain('Test isolation (tests/b.ts · Correctness)');
-	expect(result.summary).toContain('Fixture reuse (tests/b.ts · Correctness)');
+	expect(result.summary).toContain('One subagent request went over the limit');
+	expect(result.summary).toContain('Fixture reuse (Reviewer 2 · tests/b.ts)');
 
-	for (const [unit, system] of seen.systemsByUnit) {
-		expect([unit, system.includes('in "subagents" (at most 2)')]).toEqual([unit, unit.endsWith('/correctness')]);
-	}
+	for (const system of seen.reviewerSystems)
+		expect(system).toContain('in "subagents" (at most 2, the most important first)');
 });
 
-test('a subagent’s own subagent requests, and those from lenses other than correctness, are ignored', async () => {
+test('a subagent’s own subagent requests are ignored, and every reviewer request runs under a cap that has room', async () => {
 	useTwoModels();
 
 	const seen = stubSubagents();
 	const saved: string[][] = [];
 
 	const result = await runAdaptiveReview(
-		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 4 },
+		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 8 },
 		{ onCheckpoint: (checkpoint) => saved.push(checkpoint.subagents.requests.map((entry) => entry.request.concern)) }
 	);
 
 	expect([...seen.subagents].sort()).toEqual(['subagent-1', 'subagent-2', 'subagent-3', 'subagent-4']);
 	expect(saved.at(-1)).toHaveLength(4);
 	expect(saved.flat()).not.toContain('Even deeper');
-	expect(saved.flat()).not.toContain('Off-lens ask');
 	expect(result.assignments.filter((record) => record.role === 'subagent')).toHaveLength(4);
 	expect(result.summary).not.toContain('over the limit');
 });
@@ -149,10 +151,10 @@ test('subagents the reviewers asked for run even when no reviewer raised a findi
 	useTwoModels();
 
 	const seen = stubSubagents(true);
-	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 2 });
+	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 });
 
-	expect(seen.subagents.size).toBe(2);
-	expect(result.assignments.filter((record) => record.role === 'subagent')).toHaveLength(2);
+	expect(seen.subagents.size).toBe(3);
+	expect(result.assignments.filter((record) => record.role === 'subagent')).toHaveLength(3);
 });
 
 test('with subagents off, reviewers aren’t offered any and none run', async () => {
@@ -164,7 +166,7 @@ test('with subagents off, reviewers aren’t offered any and none run', async ()
 	expect(seen.subagents.size).toBe(0);
 	expect(result.assignments.every((record) => record.role === 'reviewer')).toBe(true);
 	expect(result.summary).not.toContain('subagent');
-	expect(seen.reviewerSystems.some((system) => system.includes('in "subagents" (at most'))).toBe(false);
+	expect(seen.reviewerSystems.some((system) => system.includes('hand deep dives to subagents'))).toBe(false);
 });
 
 test('a resumed review reruns only the subagent that failed, without planning again', async () => {
@@ -183,7 +185,7 @@ test('a resumed review reruns only the subagent that failed, without planning ag
 	}) as unknown as typeof fetch;
 
 	const failed = await runAdaptiveReview(
-		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 2 },
+		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 },
 		{ onCheckpoint: (checkpoint) => (saved = checkpoint) }
 	);
 
@@ -191,29 +193,25 @@ test('a resumed review reruns only the subagent that failed, without planning ag
 	expect(failed.summary).toContain('1 subagent did not finish.');
 
 	const again = stubSubagents();
-	const resumed = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 2, resume: saved });
+	const resumed = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3, resume: saved });
 
 	expect(again.reviewerSystems).toEqual([]);
 	expect([...again.subagents]).toEqual(['subagent-2']);
 
-	expect(resumed.assignments.map((record) => [record.id, record.role, record.status])).toEqual([
-		...LENS_RECORDS,
-		['subagent-1', 'subagent', 'done'],
-		['subagent-2', 'subagent', 'done']
-	]);
+	expect(recordsOf(resumed)).toEqual(ALL_RECORDS);
 });
 
 const QUESTION = 'Does parse() still accept an empty string?';
 
 /**
- * A brief with one open question on `src/a.ts` line 1. The lens assignments in
+ * A brief with one open question on `src/a.ts` line 1. The reviewers in
  * `marking` mark it unsettled; every reviewer is otherwise empty but for what
  * `extra` adds by assignment id, so any subagent that runs came from the
- * question. Records the user prompt of each subagent by id, and the lens
- * assignments that ran.
+ * question. Records the user prompt of each subagent by id, and the reviewers
+ * that ran.
  */
 function stubBrief(marking: string[], extra: (assignment: string) => object = () => ({})) {
-	const seen = { subagentPrompts: new Map<string, string>(), lenses: [] as string[] };
+	const seen = { subagentPrompts: new Map<string, string>(), reviewers: [] as string[] };
 
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		const system = systemOf(init);
@@ -236,7 +234,7 @@ function stubBrief(marking: string[], extra: (assignment: string) => object = ()
 
 		const unit = unitOf(init);
 
-		if (unit) seen.lenses.push(unit);
+		if (unit) seen.reviewers.push(unit);
 
 		const unsettled = unit && marking.includes(unit) ? ['Q1', 'Q99'] : [];
 
@@ -249,11 +247,11 @@ function stubBrief(marking: string[], extra: (assignment: string) => object = ()
 test('a question two reviewers left unsettled gets a subagent whose prompt carries it', async () => {
 	useTwoModels();
 
-	const seen = stubBrief(['unit-1/correctness', 'unit-1/security']);
+	const seen = stubBrief(TWO_REVIEWERS);
 	const logs: string[] = [];
 
 	const result = await runAdaptiveReview(
-		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 },
+		{ diff: TWO_HUNK_DIFF, sandboxPath: null, subagentCap: 3 },
 		{ onLog: (message) => logs.push(message) }
 	);
 
@@ -286,7 +284,7 @@ test('a question nothing addressed gets a subagent even though no reviewer marke
 test('with subagents off, an open question runs no subagent', async () => {
 	useTwoModels();
 
-	const seen = stubBrief(['unit-1/correctness']);
+	const seen = stubBrief(['reviewer-1']);
 
 	await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 0 });
 
@@ -300,7 +298,7 @@ test('a checkpoint saved before question records existed resumes and still plans
 	let beforePlanning: ReviewProgressCheckpoint | null = null;
 
 	await runAdaptiveReview(
-		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 2 },
+		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 3 },
 		{
 			onCheckpoint: (checkpoint) => {
 				if (!checkpoint.subagents.units) beforePlanning = checkpoint;
@@ -314,11 +312,12 @@ test('a checkpoint saved before question records existed resumes and still plans
 	const resumed = await runAdaptiveReview({
 		diff: TWO_UNIT_DIFF,
 		sandboxPath: null,
-		subagentCap: 2,
+		subagentCap: 3,
 		resume: old as unknown as ReviewProgressCheckpoint
 	});
 
 	expect(resumed.assignments.filter((record) => record.role === 'subagent').map((record) => record.status)).toEqual([
+		'done',
 		'done',
 		'done'
 	]);
@@ -327,9 +326,9 @@ test('a checkpoint saved before question records existed resumes and still plans
 /** A trace through the changed line of `src/a.ts`, which every reviewer of it has read. */
 const TRACED = [{ kind: 'source', location: 'src/a.ts:1', note: 'parse() returns early on an empty string.' }];
 
-/** The correctness lens disproves Q1 with a trace but no note, which settles nothing; `subagent-1` confirms it with a finding. */
+/** `reviewer-1` disproves Q1 with a trace but no note, which settles nothing; `subagent-1` confirms it with a finding. */
 function followUpAnswers(assignment: string): object {
-	if (assignment === 'unit-1/correctness') {
+	if (assignment === 'reviewer-1') {
 		return { answered: [{ questionId: 'Q1', outcome: 'disproved', note: '', contractEvidence: TRACED }] };
 	}
 
@@ -356,7 +355,7 @@ test('a restart preserves the answer evidence and remaining work, and the follow
 		}
 	);
 
-	const lensAnswer = { owner: 'unit-1/correctness', result: 'unresolved', contractEvidence: TRACED };
+	const lensAnswer = { owner: 'reviewer-1', result: 'unresolved', contractEvidence: TRACED };
 
 	expect(planned!.questions).toMatchObject([
 		{ id: 'Q1', answers: [lensAnswer], followUps: [{ unitId: 'subagent-1' }] }
@@ -371,7 +370,7 @@ test('a restart preserves the answer evidence and remaining work, and the follow
 		resume: planned!
 	});
 
-	expect(seen.lenses).toEqual([]);
+	expect(seen.reviewers).toEqual([]);
 	expect([...seen.subagentPrompts.keys()]).toEqual(['subagent-1']);
 
 	expect(resumed.questions?.questions).toMatchObject([
@@ -385,4 +384,54 @@ test('a restart preserves the answer evidence and remaining work, and the follow
 
 	expect(resumed.questions?.counts).toMatchObject({ asked: 1, confirmed: 1, followUpsRun: 1, followUpsNotRun: 0 });
 	expect(resumed.summary).toContain('Of 1 brief question, 1 was settled (1 confirmed, 0 disproved).');
+});
+
+/** Each reviewer asks for its two subagents, on top of the question the brief leaves open. */
+const reviewerAsks = (assignment: string) => ({ subagents: REQUESTS[assignment] ?? [] });
+
+test('uncapped, every request and open question gets a subagent, past the largest cap', async () => {
+	useTwoModels();
+
+	const seen = stubBrief(['reviewer-1'], reviewerAsks);
+	const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 'uncapped' });
+
+	expect(seen.subagentPrompts.size).toBe(5);
+	expect(result.summary).not.toContain('over the limit');
+});
+
+test('uncapped, subagents stop at what the model calls left can pay for, and the requests past it are named', async () => {
+	const limits = budgetLimits('medium');
+	const base = limits.maxModelCalls;
+	const subagentCalls = limits.subagentTurns + REVIEW_POLICY.schemaRepairAttempts;
+	const calibration = { usedBeforePlan: 0, planned: false };
+
+	useTwoModels();
+	stubBrief(['reviewer-1'], reviewerAsks);
+
+	await runAdaptiveReview(
+		{ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 'uncapped' },
+		{
+			onBudget: (budget) => {
+				if (!calibration.planned) calibration.usedBeforePlan = budget.used;
+			},
+			onLog: (message) => {
+				if (message.startsWith('Planned')) calibration.planned = true;
+			}
+		}
+	);
+
+	const sized = scaledReviewLimits({ reviewers: 2, briefs: 2, subagents: 12 }, limits).modelCalls - base;
+	const room = calibration.usedBeforePlan + REVIEW_POLICY.reserveCallsForConsolidation + 2 * subagentCalls;
+
+	limits.maxModelCalls = room - sized;
+
+	try {
+		const seen = stubBrief(['reviewer-1'], reviewerAsks);
+		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, subagentCap: 'uncapped' });
+
+		expect([...seen.subagentPrompts.keys()].sort()).toEqual(['subagent-1', 'subagent-2']);
+		expect(result.summary).toContain('2 subagent requests went over the limit');
+	} finally {
+		limits.maxModelCalls = base;
+	}
 });

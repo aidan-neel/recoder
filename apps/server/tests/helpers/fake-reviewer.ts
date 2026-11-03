@@ -75,7 +75,7 @@ export function pickModels(ids: string[]): void {
 		models: ids.map((id) => ({ id, label: id, model: id })),
 		orchestratorModelId: ids[0],
 		specialistModelId: ids[1],
-		subagentCap: 2
+		subagentCap: 3
 	});
 }
 
@@ -84,8 +84,7 @@ function kindOf(system: string, user: string): string {
 	if (system.includes('You write the brief a code change is reviewed against')) return 'brief';
 	if (system.includes('You verify one code review finding')) return 'verifier';
 	if (system.includes('Role: subagent.')) return 'subagent';
-	if (/^Unit \S+\/correctness:/m.test(user)) return 'correctness';
-	if (/^Unit \S+:/m.test(user)) return 'lens';
+	if (/^Unit \S+:/m.test(user)) return 'reviewer';
 
 	return 'other';
 }
@@ -98,10 +97,10 @@ function reply(body: unknown): Response {
 	});
 }
 
-/** The fake model's answer: the correctness reviewer reports one finding and asks one subagent; verifiers confirm it. */
+/** The fake model's answer: the reviewer reports one finding and asks one subagent; verifiers confirm it. */
 function answer(kind: string, messages: { content: string }[]): Response {
 	if (kind === 'brief') return reply({ summary: 'Changes a.ts.' });
-	if (kind === 'correctness') return reply({ ...NOTHING, findings: [FINDING], subagents: [SUBAGENT] });
+	if (kind === 'reviewer') return reply({ ...NOTHING, findings: [FINDING], subagents: [SUBAGENT] });
 	if (kind !== 'verifier') return reply(NOTHING);
 
 	const cited = /evidenceId=(ev_\d+)/.exec(messages.map((message) => message.content).join('\n'))?.[1];

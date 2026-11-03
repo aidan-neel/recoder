@@ -7,7 +7,7 @@ import { getToken } from './tokens.js';
 
 /**
  * Read and propose single repository files through the provider's REST API
- * with the connected token (no clone, no CLI). Used for `.recoder/REVIEW.md`.
+ * with the connected token (no clone, no CLI). Used for the repo guidelines file (`RECODER.md`).
  * Proposals always go through a branch plus pull/merge request, never a direct
  * push to the default branch.
  */

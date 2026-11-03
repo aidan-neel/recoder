@@ -1,4 +1,4 @@
-import { GUIDELINES_PATH } from '@recoder/shared';
+import { GUIDELINES_PATHS } from '@recoder/shared';
 import type { EvidenceStore } from '../../../evidence/evidence.js';
 import { configForOrchestrator } from '../../../models/models.js';
 import { applyDirective, describeDirective, interpretInstructions } from '../../chat/directive.js';
@@ -8,7 +8,11 @@ import type { ReviewInventory } from '../inventory.js';
 import { orchestratorSays, publishCoverage, type ReviewRun } from './context.js';
 import type { HarnessEvents } from './types.js';
 
-/** Instruction files read from the target revision, in this order; the rule ledger reads them in full. */
+/**
+ * Instruction files read from the target revision, in this order; the rule ledger reads them in full.
+ * `RECODER.md` is not one of them: it is the trusted repo layer of the owner guidelines, read by
+ * `loadRepoGuidelines`, and listing it here too would put its text in the prompts twice.
+ */
 export const INSTRUCTION_PATHS = [
 	'AGENTS.md',
 	'CLAUDE.md',
@@ -93,7 +97,9 @@ async function applyInstructions(run: ReviewRun): Promise<void> {
 
 /**
  * The repo layer of owner guidelines, read at the PR's base ("target") commit:
- * a pull request that edits the file does not change its own review.
+ * a pull request that edits the file does not change its own review. The first
+ * of `GUIDELINES_PATHS` that exists there is the layer (`RECODER.md`, else the
+ * older `.recoder/REVIEW.md`).
  */
 async function loadRepoGuidelines(
 	evidence: EvidenceStore,
@@ -103,7 +109,7 @@ async function loadRepoGuidelines(
 	if (!evidence.revision) return null;
 
 	try {
-		const [path] = await evidence.existingFiles('target', [GUIDELINES_PATH], signal);
+		const [path] = await evidence.existingFiles('target', GUIDELINES_PATHS, signal);
 
 		if (!path) return null;
 

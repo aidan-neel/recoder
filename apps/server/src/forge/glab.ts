@@ -8,6 +8,7 @@ import {
 	apiUser,
 	gitlabGet,
 	gitlabPeople,
+	gitlabRequest,
 	useGitlabApi
 } from './gitlab-api.js';
 import { parseSlug } from './providers.js';
@@ -38,6 +39,35 @@ export async function glabApi(path: string, env?: Record<string, string>): Promi
 	if (useGitlabApi(env)) return gitlabGet(path, env!);
 
 	return extractJson(await glab(['api', path], env));
+}
+
+/** POST string fields to a GitLab API path: REST with a token, else `glab api` with its own login. */
+export function glabPost(path: string, fields: Record<string, string>, env?: Record<string, string>): Promise<unknown> {
+	return glabWrite('POST', path, fields, env);
+}
+
+/** A JSON body as `glab api` fields: a nested object's keys become `key[sub]`. */
+function cliFields(body: Record<string, unknown>, prefix = ''): string[] {
+	return Object.entries(body).flatMap(([key, value]) => {
+		const name = prefix ? `${prefix}[${key}]` : key;
+
+		if (value === undefined || value === null) return [];
+		if (typeof value === 'object') return cliFields(value as Record<string, unknown>, name);
+
+		return ['-f', `${name}=${String(value)}`];
+	});
+}
+
+/** Send a write to a GitLab API path: REST with a token, else `glab api` with its own login. */
+export async function glabWrite(
+	method: 'POST' | 'PUT',
+	path: string,
+	body: Record<string, unknown>,
+	env?: Record<string, string>
+): Promise<unknown> {
+	if (useGitlabApi(env)) return gitlabRequest(path, env ?? {}, { method, body });
+
+	return extractJson(await glab(['api', '--method', method, path, ...cliFields(body)], env));
 }
 
 /** Run `glab`, capturing stdout. Never throws raw — always GhError. */

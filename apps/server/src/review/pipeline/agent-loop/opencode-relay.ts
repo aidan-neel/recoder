@@ -22,6 +22,17 @@ function isJsonAnswer(text: string): boolean {
 	return /^\s*(\{|```)/.test(text);
 }
 
+/** How long a prompt's last step may take to report its usage after the prompt itself has answered. */
+const USAGE_GRACE_MS = 1_000;
+
+/** One model step's record in the review's metrics, and whether its usage has arrived. */
+interface StepCall {
+	/** The model message the step produces, when the server names it. */
+	step?: string;
+	tracking: ReturnType<typeof trackTokenCall>;
+	reported: boolean;
+}
+
 /** What the run does when a step starts or ends, and when the model reasons without getting anywhere. */
 interface RelayHooks {
 	onStep: (step: number) => void;
@@ -47,7 +58,12 @@ export class StepRelay<T> {
 	lastActivityAt = Date.now();
 
 	private readonly base: string;
-	private tracking: ReturnType<typeof trackTokenCall> | null = null;
+
+	/** The step in progress, the steps of this prompt, and those that ended with no usage yet. */
+	private current: StepCall | null = null;
+	private promptCalls: StepCall[] = [];
+	private awaiting: StepCall[] = [];
+	private onReported: (() => void) | null = null;
 	private reasoning: Streaming | null = null;
 	private message: Streaming | null = null;
 	private stepMessageId: string | null = null;
@@ -61,8 +77,8 @@ export class StepRelay<T> {
 
 	readonly handlers: SessionHandlers = {
 		onActivity: () => (this.lastActivityAt = Date.now()),
-		onStepStart: () => this.stepStarted(),
-		onStepFinish: (usage) => this.stepFinished(usage),
+		onStepStart: (step) => this.stepStarted(step),
+		onStepFinish: (usage, step) => this.stepFinished(usage, step),
 		onReasoning: (delta) => this.reasoned(delta),
 		onText: (delta, partId) => this.narrated(delta, partId)
 	};
@@ -75,23 +91,42 @@ export class StepRelay<T> {
 		return this.stepMessageId ?? `message_${this.base}_final`;
 	}
 
-	private stepStarted(): void {
+	private stepStarted(step?: string): void {
 		const { opts } = this;
 
 		this.settle(true);
 		this.steps++;
 		this.stepMessageId = null;
 		opts.budget.spend();
-		this.tracking = trackTokenCall(opts.config.model, 'opencode');
+		this.current = { step, tracking: trackTokenCall(opts.config.model, 'opencode'), reported: false };
+		this.promptCalls.push(this.current);
 		opts.onLog?.(`${opts.label} model turn ${this.steps}/${opts.maxTurns} (${opts.config.model})`);
 		this.hooks.onStep(this.steps);
 	}
 
-	private stepFinished(usage: TokenUsage): void {
-		this.tracking?.usage(usage);
+	private stepFinished(usage: TokenUsage, step?: string): void {
+		this.report(this.callFor(step), usage);
 		this.settle(true);
 		this.finished++;
 		this.hooks.onStepDone();
+	}
+
+	/** The call a finished step belongs to: the one with its message id, else, when ids are not given, the latest open one. */
+	private callFor(step?: string): StepCall | undefined {
+		if (!step) return this.current ?? this.awaiting[0];
+
+		const named = [this.current, ...this.awaiting].find((call) => call?.step === step);
+
+		return named ?? (this.current?.step ? undefined : (this.current ?? undefined));
+	}
+
+	private report(call: StepCall | undefined, usage: TokenUsage): void {
+		if (!call || call.reported) return;
+
+		call.reported = true;
+		call.tracking.usage(usage);
+		this.awaiting = this.awaiting.filter((item) => item !== call);
+		this.onReported?.();
 	}
 
 	private reasoned(delta: string): void {
@@ -142,10 +177,66 @@ export class StepRelay<T> {
 		this.message = null;
 	}
 
+	/**
+	 * Ends a prompt: settles its last step, gives the step events a moment to report usage that is still on its
+	 * way, then fills in what they never did from the prompt's own total. A prompt whose events never arrived
+	 * still counts as one request.
+	 */
+	async finishPrompt(tokens: TokenUsage | undefined, ok: boolean): Promise<void> {
+		this.settle(ok);
+
+		const calls = this.promptCalls;
+
+		this.promptCalls = [];
+
+		if (calls.length === 0) {
+			if (!ok && !tokens) return;
+
+			const missed = trackTokenCall(this.opts.config.model, 'opencode');
+
+			if (tokens) missed.usage(tokens);
+
+			missed.finish(ok);
+
+			return;
+		}
+
+		await this.untilReported(calls);
+
+		const [only] = calls;
+
+		if (calls.length === 1 && !only!.reported && tokens) this.report(only, tokens);
+
+		this.awaiting = [];
+	}
+
+	/** Resolves once every call of `calls` has its usage, or after the grace period. */
+	private untilReported(calls: StepCall[]): Promise<void> {
+		if (calls.every((call) => call.reported)) return Promise.resolve();
+
+		return new Promise((resolve) => {
+			const done = () => {
+				clearTimeout(timer);
+				this.onReported = null;
+				resolve();
+			};
+
+			const timer = setTimeout(done, USAGE_GRACE_MS);
+
+			this.onReported = () => {
+				if (calls.every((call) => call.reported)) done();
+			};
+		});
+	}
+
 	/** Closes whatever the current step left open: its token record, reasoning and narration. */
 	settle(ok: boolean): void {
-		this.tracking?.finish(ok);
-		this.tracking = null;
+		if (this.current) {
+			this.current.tracking.finish(ok);
+			if (!this.current.reported) this.awaiting.push(this.current);
+		}
+
+		this.current = null;
 
 		if (this.reasoning?.text)
 			this.opts.onReasoning?.({ id: this.reasoning.id, text: this.reasoning.text, status: ok ? 'done' : 'error' });

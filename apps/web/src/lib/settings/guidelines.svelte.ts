@@ -7,7 +7,7 @@ type RepoState = { status: 'loading' } | { status: 'ready'; data: RepoGuidelines
 
 /**
  * Owner review guidelines on the client: the overview (global layer, repos),
- * each repo's `.recoder/REVIEW.md` status, and which editor is open.
+ * each repo's `RECODER.md` status, and which editor is open.
  */
 class GuidelinesStore {
 	overview = $state<GuidelinesOverview | null>(null);

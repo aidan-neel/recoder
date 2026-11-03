@@ -10,8 +10,8 @@ This page traces one review from trigger to published findings and feedback. It 
 | 2   | Checkout and sandbox       | `prepareSandbox` (two of them, see stage 2)         | `apps/server/src/review/pipeline/harness/sandbox-setup.ts` | `ReviewRevision`, `BaselineResult`            |
 | 3   | Inventory and change model | `buildInventory`, `changeModelStage`                | `apps/server/src/review/pipeline/inventory.ts`             | `ReviewInventory`, `ChangeModel`              |
 | 4   | Intent                     | `intentStage`                                       | `apps/server/src/review/pipeline/harness/intent-stage.ts`  | `ChangeIntent`                                |
-| 5   | Units and briefs           | `cutUnits`, `partitionUnits`                        | `apps/server/src/review/pipeline/harness/unit-stage.ts`    | `ReviewUnit`, `UnitBrief`                     |
-| 6   | Lens reviewers, subagents  | `runUnitPool`, `runSubagents`                       | `apps/server/src/review/pipeline/harness/pool.ts`          | `ReviewerOutput`, then `CandidateFinding`     |
+| 5   | Reviewer slices and briefs | `cutUnits`, `partitionReviewers`, `partitionUnits`  | `apps/server/src/review/pipeline/harness/unit-stage.ts`    | `ReviewUnit`, `UnitBrief`                     |
+| 6   | Reviewers, subagents       | `runUnitPool`, `runSubagents`                       | `apps/server/src/review/pipeline/harness/pool.ts`          | `ReviewerOutput`, then `CandidateFinding`     |
 | 7   | Obligations (flagged)      | `deriveObligationsStage`, `runUnitsWithObligations` | `apps/server/src/review/pipeline/obligations/stage.ts`     | `ObligationReport`                            |
 | 8   | Detectors                  | `detectorStage`, `diagnosticStage`                  | `apps/server/src/review/pipeline/harness/quality-stage.ts` | `DetectorResult`                              |
 | 9   | Validation and repair      | `validateCandidate`, `repairCandidate`              | `apps/server/src/review/pipeline/consolidate.ts`           | `CandidateFinding`, `CandidateRepair`         |
@@ -26,12 +26,57 @@ The adaptive harness is `runAdaptiveReview` in `apps/server/src/review/pipeline/
 Execution order inside the harness, with overlaps:
 
 1. `createRun` builds the inventory and loads dismissals. `understandChanges` reads developer instructions and repo guidelines.
-2. `startSetup` starts package installs. `cutUnits` cuts units and assigns lenses.
+2. `startSetup` starts package installs. `cutUnits` cuts the change into one slice per reviewer.
 3. `changeModelStage`, then `intentStage` (and `deriveObligationsStage` when obligations are on), run in parallel with `ruleLedgerStage`.
 4. The harness `prepareSandbox` waits for setup and starts baseline checks. `startVerification` opens the verify queue.
 5. `detectorStage` and the diagnostics run in the background. The unit pool runs reviewers. Verifiers start as candidates arrive.
 6. `retryFailedUnits`, then `runSubagents`. Then the harness waits for detectors, drains verification and waits for checks (`checksInTime`).
 7. `finishVerification`, `consolidate`, `completeReview`.
+
+## Token budget
+
+A review's spend is set by one pick, `tokenBudget` (`TokenBudget` in `packages/shared/src/models.ts`: `low`, `medium`, `high`). It is saved in review settings (`effectiveTokenBudget` in `apps/server/src/review/session/review-settings.ts`, default `medium`) and returned by `GET /api/settings/models`.
+
+A review runs a few reviewers and leans on subagents for depth. Each reviewer reads one slice of the change and applies every lens to it in one agent loop (see [stage 5](#5-reviewer-slices-and-briefs)); the budget sets how many reviewers there are, how many subagents they may hand work to, how long each runs and how hard the models think. Before this shape a review ran one reviewer per lens per unit, 72 for a change of nine units, and the budget only trimmed that.
+
+A budget has two halves:
+
+- **Settings it writes.** `TOKEN_BUDGET_PLANS` and `budgetPatch` in `packages/shared/src/token-budget.ts` set `subagentCap`, `orchestratorEffort` and `specialistEffort` together. The client applies them, because only it knows which efforts each model offers: every budget saves the effort the model offers that is nearest to its own (`effortUnder`; the shallower of two equally near), and a model with no reasoning control is never sent one. `budgetApplies` says whether the saved cap and efforts still match the saved budget; when they do not, the apps show Custom. Custom is derived and never saved, and the review keeps running with the saved budget's limits.
+- **Limits it applies to a review.** `budgetLimits` in `apps/server/src/review/session/review-policy.ts` returns a `ReviewLimits` from a table. `runReviewPipeline` reads the budget once and passes it as `AdaptiveReviewInput.tokenBudget`. `createRun` resolves it into `ReviewRun.limits` and `PoolContext.limits`. Nothing writes to `REVIEW_POLICY`, so two reviews with different budgets can run at once. An input with no budget is Medium.
+
+| Setting or limit              | Low                | Medium (the default)                                       | High               | Read by                                                                |
+| ----------------------------- | ------------------ | ---------------------------------------------------------- | ------------------ | ---------------------------------------------------------------------- |
+| Reviewers                     | 1                  | 2; 3 when the patch is over `largeChangeChars` (48,000)    | 4                  | `reviewerCount` in `reviewers.ts`                                      |
+| Subagent cap                  | 3                  | 8                                                          | 12                 | `runSubagents`; each reviewer is asked for its share                   |
+| Reasoning effort (both picks) | `low`              | `medium`                                                   | `high`             | `configForOrchestrator`, `configForSubagent`                           |
+| `reviewerTurns`               | 8                  | 12                                                         | 16                 | `askReviewer` in `pool.ts`                                             |
+| `subagentTurns`               | 5                  | 8                                                          | 10                 | `askReviewer`; `subagentCalls` in `subagent-stage.ts`                  |
+| `maxModelCalls` (base)        | 80                 | 120                                                        | 160                | `scaledReviewLimits`                                                   |
+
+The ceiling is the base, plus one call per brief unit, plus `reviewerTurns + schemaRepairAttempts` per reviewer, plus `subagentTurns + schemaRepairAttempts` per subagent the cap allows (an uncapped review is sized for 12), capped at `maxScaledModelCalls`. The analysis deadline is `analysisDeadlineMs` plus `msPerAssignment` (60 s) per reviewer and subagent. A Medium review of a change of nine units has 3 reviewers and at most 8 subagents, a ceiling of 120 + 9 + 3 × 16 + 8 × 12 = 273 calls and a deadline of 41 minutes. `tests/review/pipeline/harness-budget.test.ts` runs a review with no budget, Low, Medium and High and counts the calls each reviewer and subagent made and the ceiling.
+
+The subagent cap is the most agents a review adds after its reviewers, second looks included. A review of 8 subagents or fewer is therefore never more than 3 + 8 = 11 agents plus its verifiers.
+
+What the budget leaves alone, on purpose:
+
+- **Verification.** `maxVerifications`, `maxVerifierTurns`, `maxMutationVerifierTurns`, the verifier reserves and the consolidation reserve are the same at every budget. Every valid candidate is still re-proven, and the model-call ceiling still grows by a verifier's turns when one is queued (`VerifyQueue.makeRoom`), so a low ceiling never takes a verifier's share. Verifiers do run at the budget's second-model effort.
+- **Deadlines.** `analysisDeadlineMs`, `msPerAssignment` and the per-agent clocks are time limits that stop a review. They are the same at every budget, though the deadline grows with the reviewers and subagents a budget runs. They do not save tokens, and a shorter one would end reviews early rather than make them cheaper.
+- **Workers.** `maxDelegationsPerAgent` and `maxWorkerTurns` only matter with a separate second model, and move work to that cheaper model rather than change how much is spent. The delegation count is also written into a prompt constant (`DELEGATE_OFFER`).
+- **`maxTranscriptChars`.** About 60k tokens, above what a call reaches today, so it never fires. Lowering it would stub tool output a reviewer still needs.
+- **`reportLowSeverity`.** It marks a low-severity candidate `belowBar`, which is still verified (queued after publishable ones), so it changes what is shown, not what is spent.
+- **`maxFiles` and `maxDiffChars`.** Settings → Review harness saves them and `reviewLimits` returns them, but no stage reads them: `maxFileChars` is the only one that reaches the harness (`EvidenceStore` in `createRun`). They are not part of a budget.
+
+`recordTokenBudget` in `apps/server/src/models/metrics.ts` writes the budget onto the pipeline run segment (`PipelineRun.tokenBudget`) when the harness starts. `ReviewMetrics.tokenBudget` is the latest run's, and Token usage in the app shows it. A Custom setup is recorded under the budget it started from. A benchmark's quality was measured on the old shape (one reviewer per lens and unit) and has to be measured again for these budgets. Benchmark identities carry `tokenBudget` in `limits.settings`, so reports run on different budgets do not compare as equal.
+
+## Repo guidelines: `RECODER.md`
+
+A repository tells Recoder what to look for in a `RECODER.md` at its root. It is the repo layer of the owner review guidelines; the global layer is edited in Settings.
+
+- `loadRepoGuidelines` in `apps/server/src/review/pipeline/harness/understand.ts` reads it at the PR's base commit (`target`), so a pull request that edits the file is not reviewed by its own edit.
+- The paths are `GUIDELINES_PATHS` in `packages/shared/src/guidelines.ts`. The first that exists is the layer: `RECODER.md`, else the older `.recoder/REVIEW.md`. The other is ignored.
+- `composeGuidelines` in `apps/server/src/review/guidelines/guidelines.ts` puts it in the trusted guidelines block. It ranks below Recoder's safety rules, above `AGENTS.md`, `CLAUDE.md` and PR text (which stay untrusted), and wins over the global layer where they conflict.
+- It is not in `INSTRUCTION_PATHS`, so its text reaches the prompts once. The rule ledger (`apps/server/src/review/guidelines/ledger/sources.ts`) reads it after the instruction files.
+- Settings → Guidelines edits it through a pull or merge request (`apps/server/src/routes/guidelines.ts`). A repository on `.recoder/REVIEW.md` keeps that path; a new file is `RECODER.md`.
 
 ## Where candidates are lost
 
@@ -41,7 +86,7 @@ Execution order inside the harness, with overlaps:
 | ----------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `location`  | `validateCandidate` (`firstDrop`)                                  | "path is not in the change inventory"; "path is excluded (reason)"; "new-side line is not associated with this change"; "file-level finding on a non-deleted file needs a line"                                                                                                            |
 | `evidence`  | `validateCandidate`                                                | "cited evidence was not provided". Fires only when the finding cited evidence ids and none of them were provided. A finding that cites nothing passes.                                                                                                                                     |
-| `category`  | `validateCandidate` (`categoryIssue`)                              | "category X is outside the Y lens"; "repo-rule finding cites no rule from the ledger"; "readability finding names no smell"; "convention finding needs two examples"; "intent-mismatch finding cites no intent claim id"                                                                   |
+| `category`  | `validateCandidate` (`categoryIssue`)                              | "category X is outside the Y lens" (or "lenses" when the reviewer applied several); "repo-rule finding cites no rule from the ledger"; "readability finding names no smell"; "convention finding needs two examples"; "intent-mismatch finding cites no intent claim id"                                                                   |
 | `dismissed` | `validateCandidate` via `matchesDismissal`                         | "a person dismissed this finding in an earlier review"                                                                                                                                                                                                                                     |
 | `severity`  | `candidateOutcome` from `isHeldBack`; never written to `dropStage` | "low severity is below the reporting bar". The candidate stays `valid`; it is held back, not dropped.                                                                                                                                                                                      |
 | `refuted`   | `settle` in the verification stage                                 | "refuted by the verifier: (verifier reason)"                                                                                                                                                                                                                                               |
@@ -119,34 +164,37 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
   - `apps/server/tests/review/pipeline/intent/history.test.ts`
   - `apps/server/tests/review/pipeline/intent/brief.test.ts`
 
-## 5. Units and briefs
+## 5. Reviewer slices and briefs
 
-- `partitionUnits` cuts the inventory into `ReviewUnit[]` with ids like unit-1. It is in `apps/server/src/review/pipeline/units.ts`. The size budget is `unitBudgetChars`.
-- `cutUnits` assigns lenses with `lensAssignments`. It is in `apps/server/src/review/pipeline/harness/unit-stage.ts`. Docs-only units get the rules and readability lenses only.
-- `briefBlock` adds the unit's brief to the reviewer prompt. Questions are included only for non-quality lenses.
-- `UnitBrief` is defined in `apps/server/src/review/pipeline/intent/unit-brief.ts`.
-- `retryFailedUnits` runs each failed unit once more.
+- `partitionReviewers` cuts the inventory into one slice per reviewer, `reviewer-1`, `reviewer-2`… It is in `apps/server/src/review/pipeline/reviewers.ts`, called by `cutUnits` in `apps/server/src/review/pipeline/harness/unit-stage.ts`. `reviewerCount` picks the count: the budget's `reviewers.small`, or `reviewers.large` when the reviewable patch is over `largeChangeChars` (48,000 characters, two brief units' worth), at most one reviewer for a change of documentation only, and never more than the hunks there are to read.
+- Every changed hunk is in exactly one slice, so every changed line has one reviewer. The files are taken in folder order and cut where the patch read so far passes each reviewer's share of the whole (`balancedScopes`). A file that fits a share stays whole; a larger one is cut into its hunks, so only such a file is read by two reviewers.
+- Each reviewer applies every lens that fits its slice (`lensesFor` in `apps/server/src/review/pipeline/lenses/lenses.ts`): all eight, or only rules and readability for a slice of documentation. `reviewerSystemPrompt` merges their procedures into one prompt (`combinedProcedure`) and lists the union of their categories once. The defect rules and the maintainability rules both apply, each to its own categories.
+- A slice can be larger than the first evidence round (24,000 characters). The reviewer's prompt names the hunks that round did not reach (`unreadHunks` in `pool.ts`), and the reviewer pages them with `readDiff` before it lists them as examined. It has more turns than a lens had for that reason. A hunk the reviewer neither examined nor reported a gap for, and that the first round did not show, is marked partially covered.
+- `partitionUnits` still cuts brief units of at most `unitBudgetChars` (24,000), which the intent stage summarizes one call each (`distillIntent`). `briefBlock` adds the brief of a reviewer's files to its prompt, with the open questions for every reviewer except one of a documentation-only slice. `UnitBrief` is defined in `apps/server/src/review/pipeline/intent/unit-brief.ts`.
+- Coverage has one role, `reviewer` (`COVERAGE_ROLE`). `retryFailedUnits` runs each failed reviewer once more, as `retry-reviewer-1` or the halves `retry-reviewer-1-a` and `-b`.
 - Drops: none.
 - Tests:
+  - `apps/server/tests/review/pipeline/reviewers.test.ts`: reviewer count per budget and change size, and that every hunk has exactly one reviewer.
   - `apps/server/tests/review/pipeline/units.test.ts`
   - `apps/server/tests/review/pipeline/lenses/lenses.test.ts`
   - `apps/server/tests/review/pipeline/harness-retries.test.ts`
 
-## 6. Lens reviewers and subagents
+## 6. Reviewers and subagents
 
-- `runUnitPool` runs one reviewer per unit and lens. It is in `apps/server/src/review/pipeline/harness/pool.ts`.
-- Lens reviewers use the orchestrator model config; subagents use `configForSubagent`. See [models.md](models.md).
+- `runUnitPool` runs the reviewers, then the subagents. It is in `apps/server/src/review/pipeline/harness/pool.ts`.
+- Reviewers use the orchestrator model config; subagents use `configForSubagent`. See [models.md](models.md). A reviewer gets `ReviewLimits.reviewerTurns` turns and a subagent `subagentTurns`, from the review's [token budget](#token-budget).
 - A unit not started when budget or time runs low is skipped with "Not launched: budget or time reserved for consolidation".
-- `parseReviewerOutput` and `salvageReviewerOutput` read the reviewer's answer as `ReviewerOutput`. They are in `apps/server/src/review/pipeline/reviewer.ts`.
-- `applyUnitResult` and `addCandidates` handle the answer. They are in `apps/server/src/review/pipeline/harness/unit-result.ts`. `addCandidates` runs `validateCandidate` on each finding and sends it to verification.
-- Only the correctness lens may request subagents. Answers to reviewer questions are recorded with `recordReply`.
-- `runSubagents` plans subagents with `planSubagents` and `planBriefSubagents`. It is in `apps/server/src/review/pipeline/harness/subagent-stage.ts`. Requests over the cap, or for the same concern on overlapping code, are merged or dropped.
-- Lens reviewers see past dismissals through `dismissalsBlock`. Subagents do not.
-- Second looks (flags `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`) are subagents the harness sends itself, planned by `planSecondLook` in `apps/server/src/review/pipeline/second-look/stage.ts` after the reviewer and brief subagents, outside the cap. A residual pass (`residual-N`) rereads one unit for what its lenses missed. A contract check (`contract-N`) takes one readability report of a comment, name or doc that disagrees with the code and decides which side is wrong. They set `ReviewUnit.purpose`, run on the specialist model, read only (no commands, since verification runs every candidate), and record tokens under the `second-look` stage. Their clock is `secondLookFinalTurnAfterMs` (7 min) and `secondLookMaxMs` (14 min); when a residual pass starts, `makeRoomForSecondLooks` moves the review deadline out so that clock fits; contract checks are short and use the time left. Each adds `maxSubagentTurns` plus `schemaRepairAttempts` model calls to the budget, and each of its calls gets `secondLookCallDeadlineMs` (180 s) in place of `perCallDeadlineMs` (90 s), since a CLI model prints its reply only at the end.
+- `parseReviewerOutput` and `salvageReviewerOutput` read the reviewer's answer as `ReviewerOutput`. They are in `apps/server/src/review/pipeline/reviewer.ts`. A reviewer may report up to 50 findings and 600 examined hunks.
+- `applyUnitResult` and `addCandidates` handle the answer. They are in `apps/server/src/review/pipeline/harness/unit-result.ts`. `addCandidates` runs `validateCandidate` on each finding, held to the categories of the reviewer's lenses, and sends it to verification. A finding is credited (`CandidateFinding.lens`) to the first of the reviewer's lenses that owns its category.
+- Every reviewer may request subagents, and is told to hand deep dives (callers elsewhere in the repo, contracts defined outside its slice, multi-module paths, repros that need their own run) to them, most important first, rather than spend its own turns. It is asked for its share of the cap, `ceil(cap / reviewers)` (`requestsPerReviewer` in `context.ts`). Answers to reviewer questions are recorded with `recordReply`.
+- `runSubagents` plans subagents with `planSubagents` and `planBriefSubagents`. It is in `apps/server/src/review/pipeline/harness/subagent-stage.ts`. Requests go by rank: every reviewer's first request, then every reviewer's second, each round in reviewer order, so the cap is filled with the most valuable requests and not one reviewer's. Requests over the cap, or for the same concern on overlapping code, are merged or dropped. The brief's unsettled questions then fill what is left, then its unaddressed ones, then the second looks. With the cap at `'uncapped'`, `subagentLimit` plans as many as the model calls left can pay for in full (`ReviewLimits.subagentTurns` plus `schemaRepairAttempts` each), after holding back the consolidation reserve and the calls verifiers still waiting or running were given (`VerifyQueue.heldCalls`); the rest are dropped and named in the summary. None launches past the investigation deadline, which keeps `reserveMsForVerification`.
+- Reviewers see past dismissals through `dismissalsBlock`. Subagents do not.
+- Second looks (flags `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`) are subagents the harness sends itself, planned by `planSecondLook` in `apps/server/src/review/pipeline/second-look/stage.ts`. They count inside the subagent cap: they take only the room the reviewers' requests and the brief's questions left under it, so the review never adds more agents than the cap, and none is sent with subagents off. A residual pass (`residual-N`) rereads one reviewer's slice for what its lenses missed. A contract check (`contract-N`) takes one readability report of a comment, name or doc that disagrees with the code and decides which side is wrong. They set `ReviewUnit.purpose`, run on the specialist model, read only (no commands, since verification runs every candidate), and record tokens under the `second-look` stage. Their clock is `secondLookFinalTurnAfterMs` (7 min) and `secondLookMaxMs` (14 min); when a residual pass starts, `makeRoomForSecondLooks` moves the review deadline out so that clock fits; contract checks are short and use the time left. Each adds `ReviewLimits.subagentTurns` plus `schemaRepairAttempts` model calls to the budget, and each of its calls gets `secondLookCallDeadlineMs` (180 s) in place of `perCallDeadlineMs` (90 s), since a CLI model prints its reply only at the end.
 - Drops: candidates from this stage drop in stage 9.
 - Tests:
   - `apps/server/tests/review/pipeline/subagents.test.ts`
   - `apps/server/tests/review/pipeline/harness-subagents.test.ts`
+  - `apps/server/tests/review/pipeline/harness-budget.test.ts`
   - `apps/server/tests/review/pipeline/question-ledger.test.ts`
   - `apps/server/tests/review/pipeline/reviewer-normalize.test.ts`
   - `apps/server/tests/review/pipeline/second-look/stage.test.ts`
@@ -263,7 +311,7 @@ A `pre-existing` result adds `SAME_ON_BASE` text to the reason. It also stops a 
 - The fingerprint is `dismissalKey`, in `apps/server/src/review/guidelines/learned/finding-key.ts`.
 - Deleting `/api/reviews/:id/dismissals/:findingId` removes it with `removeDismissal`.
 - The store is `apps/server/src/review/guidelines/learned/dismissals.ts`. It keeps at most `MAX_DISMISSALS_PER_REPO` per repository in the server data directory. The `Dismissal` type is defined there too.
-- On the next review, `createRun` loads them with `listDismissals`. `validateCandidate` drops a match as `dismissed`, and lens prompts list them through `dismissalsBlock`.
+- On the next review, `createRun` loads them with `listDismissals`. `validateCandidate` drops a match as `dismissed`, and reviewer prompts list them through `dismissalsBlock`.
 - Tests:
   - `apps/server/tests/routes/reviews/dismissals.test.ts`
   - `apps/server/tests/review/guidelines/learned/dismissals.test.ts`

@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { emptyReviewProgress, type ReviewAssignment, type ReviewProgress, type ReviewTask } from '@recoder/shared';
 
-import { stepProgress } from '../../src/lib/live/live-progress';
+import { progressShare } from '../../src/lib/live/live-progress';
 import { reviewerRows } from '../../src/lib/live/reviewers';
-import { stageDetail, stageRows } from '../../src/lib/live/stages';
+import { stageNote, stageRows } from '../../src/lib/live/stages';
 
 function task(id: string, status: ReviewTask['status'], message = ''): ReviewTask {
 	return { id, label: id, status, message, updatedAt: '' };
@@ -52,26 +52,32 @@ describe('stages', () => {
 	});
 
 	test('the running stage shows its own step while checking out, and the latest activity after', () => {
+		const note = (snapshot: ReviewProgress) => {
+			const row = stageRows(snapshot, 'running', 'running').find((item) => item.state === 'active');
+
+			return row ? stageNote(row, snapshot, 'running') : null;
+		};
+
 		const checkout = progress({
 			tasks: { fetch: task('fetch', 'done', 'Fetched'), sandbox: task('sandbox', 'running', 'Preparing sandbox…') },
 			activity: [{ sequence: 3, message: 'git fetch origin', at: '' }]
 		});
 
-		expect(stageDetail(checkout, 'running')).toBe('Preparing sandbox…');
+		expect(note(checkout)).toBe('Preparing sandbox…');
 
-		const reviewing = progress({
-			stage: 'reviewing',
+		const understanding = progress({
+			stage: 'understand',
 			activity: [
 				{ sequence: 4, message: 'Reading 9 changed files…', at: '' },
 				{ sequence: 5, message: 'rg -n "refill" · exit 0', at: '' }
 			]
 		});
 
-		expect(stageDetail(reviewing, 'running')).toBe('rg -n "refill" · exit 0');
+		expect(note(understanding)).toBe('rg -n "refill" · exit 0');
 	});
 });
 
-describe('steps', () => {
+describe('progress', () => {
 	const tasks = {
 		fetch: task('fetch', 'done'),
 		verify: task('verify', 'partial'),
@@ -80,20 +86,15 @@ describe('steps', () => {
 	};
 
 	test('a check that could not verify counts as a finished step', () => {
-		expect(stepProgress(progress({ tasks, planVersion: 1 }), 'running')).toEqual({
-			done: 3,
-			total: 4,
-			share: 0.75,
-			counted: true
-		});
+		expect(progressShare(progress({ tasks, planVersion: 1 }), 'running')).toBe(0.75);
 	});
 
-	test('before the plan is known the meter slides and the growing count stays hidden', () => {
-		expect(stepProgress(progress({ tasks }), 'running')).toMatchObject({ share: null, counted: false });
+	test('before the plan is known the meter slides', () => {
+		expect(progressShare(progress({ tasks }), 'running')).toBeNull();
 	});
 
 	test('a queued review rests empty even with steps kept from an earlier run', () => {
-		expect(stepProgress(progress({ tasks, planVersion: 1 }), 'queued')).toMatchObject({ share: 0, counted: false });
+		expect(progressShare(progress({ tasks, planVersion: 1 }), 'queued')).toBe(0);
 	});
 });
 

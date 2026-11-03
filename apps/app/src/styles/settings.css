@@ -1,6 +1,15 @@
 /* settings */
 
-/* ───────── Page: the section nav beside the open section ───────── */
+/* ───────── Modal: the section nav beside the open section, one fixed size so a swap never resizes it ───────── */
+[data-ui='modal-panel'].settings-modal {
+	width: calc(100% - 48px);
+	max-width: 960px;
+	height: min(80dvh, 760px);
+	max-height: calc(100dvh - 32px);
+	gap: 0;
+	padding: 0;
+	overflow: hidden;
+}
 .settings-page {
 	display: flex;
 	min-height: 0;
@@ -17,6 +26,8 @@
 .settings-nav-title {
 	color: var(--text-subtle);
 	font-size: 12.5px;
+	font-weight: 400;
+	letter-spacing: 0;
 }
 .settings-nav-list {
 	display: flex;
@@ -175,6 +186,15 @@
 	font-size: 12.5px;
 	font-variant-numeric: tabular-nums;
 	text-align: right;
+}
+
+/* The mention handle: a wider field, in the code face like a username. */
+.settings-limit:has(.settings-handle) [data-ui='field'] {
+	grid-template-columns: minmax(0, 1fr) 16px 168px;
+}
+.settings-handle [data-ui='input-field'] {
+	font-family: var(--font-code);
+	font-size: 12.5px;
 }
 
 /* ───────── Model picker: a quiet model trigger, the effort beside it ───────── */

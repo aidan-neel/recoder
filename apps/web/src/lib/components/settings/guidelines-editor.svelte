@@ -23,7 +23,7 @@
 
 	/**
 	 * The one editor for owner review guidelines (global layer or a repo's
-	 * `.recoder/REVIEW.md`): one document column (Write / Preview), the
+	 * `RECODER.md`): one document column (Write / Preview), the
 	 * composer docked below it for orchestrator drafts that land as a
 	 * reviewable change, and Save (global) or Open pull request (repo) in the
 	 * header. Mounted once in the layout.

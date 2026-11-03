@@ -1,10 +1,11 @@
 'use client';
 
 import { Field, Input } from '@recoder/ui';
-import { useRef, useState, type KeyboardEvent } from 'react';
+import { useRef, useState } from 'react';
 
 import { parseLimit, type LimitKey } from '@/lib/settings/limits';
 import { useSettings } from '@/lib/settings/settings-store';
+import { draftKeys } from '@/lib/settings/draft-keys';
 import { useSaveState } from '@/lib/settings/use-save-state';
 
 import { SaveStatus } from './save-status';
@@ -89,18 +90,6 @@ export function LimitField({ field, name, hint, max, value }: LimitFieldProps) {
 		clearFailure();
 	}
 
-	function onKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
-		if (event.key === 'Enter' && draft !== null) {
-			event.preventDefault();
-			void commit({ text: draft, retry: true });
-		}
-
-		if (event.key === 'Escape' && draft !== null) {
-			event.preventDefault();
-			edit(null);
-		}
-	}
-
 	return (
 		<div data-ui="settings-row" className="settings-row settings-limit">
 			<Field label={name} hint={hint} error={error}>
@@ -114,7 +103,14 @@ export function LimitField({ field, name, hint, max, value }: LimitFieldProps) {
 					onBlur={() => {
 						if (draft !== null) void commit({ text: draft, retry: false });
 					}}
-					onKeyDown={onKeyDown}
+					onKeyDown={(event) =>
+						draftKeys(
+							event,
+							draft,
+							(text) => void commit({ text, retry: true }),
+							() => edit(null)
+						)
+					}
 					className="settings-number"
 				/>
 			</Field>

@@ -17,10 +17,41 @@ export function effortLabel(effort: ReasoningEffort): string {
 	return EFFORT_TEXT[effort].label;
 }
 
-/** How many subagents one review may run in all, chosen in Settings → Review harness; 0 turns them off. */
-export const SUBAGENT_CAPS = [0, 2, 4] as const;
+/**
+ * How many subagents one review may run in all, chosen in Settings → Review harness; 0 turns them off. Second
+ * looks the harness sends itself count inside it, so this is the most agents a review adds after its reviewers.
+ * The three counts are the Low, Medium and High token budgets'; `uncapped` runs one for every question that
+ * warrants it, as far as the review's model calls and time allow. A string rather than `Infinity`, so it
+ * survives JSON.
+ */
+export const SUBAGENT_CAPS = [0, 3, 8, 12, 'uncapped'] as const;
 export type SubagentCap = (typeof SUBAGENT_CAPS)[number];
-export const DEFAULT_SUBAGENT_CAP: SubagentCap = 2;
+export const DEFAULT_SUBAGENT_CAP: SubagentCap = 8;
+
+/**
+ * A subagent cap saved before the caps were 3, 8 and 12 (2 and 4), as the nearest cap that is at least as
+ * generous, so an old settings file keeps working. A cap that still exists is returned as it is.
+ */
+export function migrateSubagentCap(saved: number | 'uncapped'): SubagentCap {
+	if (saved === 'uncapped') return saved;
+
+	const counts = SUBAGENT_CAPS.filter((cap): cap is Exclude<SubagentCap, 'uncapped'> => cap !== 'uncapped');
+
+	return counts.find((cap) => cap >= saved) ?? counts[counts.length - 1];
+}
+
+/**
+ * How many tokens a review may spend, chosen in Settings → Review harness. One pick sets the subagent cap and both
+ * reasoning efforts, and decides how many reviewers run and for how long (`budgetLimits` on the server).
+ */
+export const TOKEN_BUDGETS = ['low', 'medium', 'high'] as const;
+export type TokenBudget = (typeof TOKEN_BUDGETS)[number];
+export const DEFAULT_TOKEN_BUDGET: TokenBudget = 'medium';
+
+/** The cap a picker's string value stands for, so `'uncapped'` stays a string and the counts become numbers again. */
+export function subagentCapFrom(value: string): SubagentCap {
+	return SUBAGENT_CAPS.find((cap) => String(cap) === value) ?? DEFAULT_SUBAGENT_CAP;
+}
 
 /** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode, Claude Code or Devin CLI. */
 export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode' | 'claude-code' | 'devin';
@@ -64,6 +95,8 @@ export interface ModelEntry {
 	defaultEffort?: ReasoningEffort;
 	/** Max tokens per request (prompt + output), when the endpoint reports it. */
 	contextWindow?: number;
+	/** The server no longer lists this model; a review still set to it stops with a message until another is picked. */
+	unavailable?: boolean;
 	/** Sampling overrides for this model, set in the settings file or API. */
 	runtime?: ModelRuntimeProfile;
 }
@@ -134,6 +167,8 @@ export interface ModelSettings {
 	specialistEffort?: ReasoningEffort | null;
 	/** How many subagents one review may run in all. */
 	subagentCap: SubagentCap;
+	/** The token budget last picked, whose limits reviews run with; the cap and efforts may since have been changed by hand. */
+	tokenBudget: TokenBudget;
 	/** Whether reviews report low-severity findings; off keeps them to medium and above. */
 	reportLowSeverity: boolean;
 	/** Where overrides are saved, e.g. `~/.recoder/data/review-config.json`. */
@@ -151,6 +186,7 @@ export interface ModelSettingsPatch {
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
 	subagentCap?: SubagentCap;
+	tokenBudget?: TokenBudget;
 	reportLowSeverity?: boolean;
 	maxFiles?: number;
 	maxDiffChars?: number;

@@ -1,7 +1,7 @@
 import type { Provider } from '@recoder/shared';
 
 /** A repository to track, read from what someone typed. */
-interface RepoTarget {
+export interface RepoTarget {
 	name: string;
 	url: string;
 	provider: Provider;

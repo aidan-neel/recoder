@@ -55,7 +55,7 @@ async function reviewWithFakeModel(root: string, base: Record<string, string>, m
 		const user = messages[1].content;
 		let reply: unknown = NOTHING;
 
-		if (unitOf(init) === 'unit-1/correctness') {
+		if (unitOf(init) === 'reviewer-1') {
 			reply = {
 				...NOTHING,
 				findings: model.findings.map((entry) => (typeof entry === 'string' ? finding(entry) : entry))
@@ -291,12 +291,12 @@ test.skipIf((await execUnavailableReason()) !== null)(
 				return modelReply(reply);
 			}
 
-			if (unit === 'unit-2/readability') {
+			if (unit === 'reviewer-2') {
 				await verdict;
 				order.push(unit);
 			}
 
-			const raises = unit === 'unit-1/correctness' && !raised;
+			const raises = unit === 'reviewer-1' && !raised;
 
 			if (raises) raised = true;
 
@@ -308,7 +308,7 @@ test.skipIf((await execUnavailableReason()) !== null)(
 		try {
 			const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, ...checkout.input });
 
-			expect(order.slice(0, 2)).toEqual(['verdict', 'unit-2/readability']);
+			expect(order.slice(0, 2)).toEqual(['verdict', 'reviewer-2']);
 			expect(result.findings.map((item) => item.title)).toEqual(['possible miss']);
 		} finally {
 			await checkout.remove();

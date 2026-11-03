@@ -148,10 +148,10 @@ function sessionRouter(handlers: SessionHandlers): (event: unknown, session: str
 		else if (type === 'session.reasoning.delta' && data.delta) handlers.onReasoning?.(data.delta, part);
 		else if (type === 'session.step.started' && !steps.has(`start:${message}`)) {
 			steps.add(`start:${message}`);
-			handlers.onStepStart?.();
+			handlers.onStepStart?.(message || undefined);
 		} else if (type === 'session.step.ended' && data.tokens && !steps.has(`end:${message}`)) {
 			steps.add(`end:${message}`);
-			handlers.onStepFinish?.(usage(data.tokens));
+			handlers.onStepFinish?.(usage(data.tokens), message || undefined);
 		}
 	};
 }
