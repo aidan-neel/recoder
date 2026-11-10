@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { EXIT } from '../../../src/cli/exit';
 import { fakeBin } from '../../helpers/fake-bin';
 import { childEnvironment } from '../child-env';
-import { HANGING_DEVIN, startedProcess } from '../run/hanging-devin';
+import { HANGING_DEVIN, startedProcess, stoppedProcess } from '../run/hanging-devin';
 
 const MAIN = new URL('../../../src/cli/main.ts', import.meta.url).pathname;
 
@@ -75,11 +75,12 @@ test('a signal while Devin lists its models stops the process, ends the listing 
 	const { env: pathEnv } = await fakeBin('devin', HANGING_DEVIN);
 	const env = { ...childEnvironment(dir), PATH: pathEnv.PATH, FAKE_DEVIN_DIR: dir };
 	const started = startedProcess(dir);
+	const stopped = stoppedProcess(dir);
 	const child = Bun.spawn([process.execPath, MAIN, 'models'], { env, stdout: 'pipe', stderr: 'ignore' });
-	const devinPid = await started;
 
+	await started;
 	child.kill('SIGTERM');
 
 	expect(await child.exited).toBe(EXIT.cancelled);
-	expect(() => process.kill(devinPid, 0)).toThrow();
+	await stopped;
 });

@@ -15,13 +15,19 @@ test('a report longer than the pipe buffer is written in full before the process
 	expect(code).toBe(EXIT.ok);
 });
 
+/**
+ * The fixture runs in a shell pipeline whose reader ends without reading, so the report can never fit in the pipe and
+ * the write must fail. The shell then writes the fixture's exit code as the last line of standard error.
+ */
 test('a reader that closes the pipe makes the write fail with the failed exit code and no stack trace', async () => {
-	const child = startFixture();
-	const reader = child.stdout.getReader();
+	const pipeline = Bun.spawn(['sh', '-c', '{ "$0" "$1"; echo "$?" >&2; } | true', process.execPath, FIXTURE], {
+		stdout: 'ignore',
+		stderr: 'pipe',
+		stdin: 'ignore'
+	});
 
-	await reader.read();
-	await reader.cancel();
+	const lines = (await new Response(pipeline.stderr).text()).trimEnd().split('\n');
 
-	expect(await child.exited).toBe(EXIT.failed);
-	expect(await new Response(child.stderr).text()).not.toContain(' at ');
+	expect(lines.at(-1)).toBe(String(EXIT.failed));
+	expect(lines.join('\n')).not.toContain(' at ');
 });
