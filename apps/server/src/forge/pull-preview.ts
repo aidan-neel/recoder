@@ -16,7 +16,11 @@ export const PULL_VIEW_COMMANDS: Record<Provider, (n: number) => string> = {
  * PR metadata plus its unified diff from the repo's forge, without a checkout.
  * `metadataOnly` skips the diff where the forge can (GitLab always sends it).
  */
-export async function fetchPull(repo: Repo, prNumber: number, opts?: { metadataOnly?: boolean }): Promise<FetchedPull> {
+export async function fetchPull(
+	repo: Pick<Repo, 'url' | 'provider'>,
+	prNumber: number,
+	opts?: { metadataOnly?: boolean }
+): Promise<FetchedPull> {
 	const provider = repo.provider ?? detectProvider(repo.url);
 
 	if (provider === 'local') return fetchLocalPull(repo.url, prNumber, opts);

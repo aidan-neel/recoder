@@ -1,6 +1,7 @@
 import { REVIEW_POLICY, type ReviewLimits } from '../session/review-policy.js';
 import type { InventoryFile, ReviewInventory } from './inventory.js';
 import { isDocsPath, lensNames, lensesFor } from './lenses/lenses.js';
+import type { Lens, LensId } from './lenses/types.js';
 import { patchChars, patchLineChars, reviewableFiles, unitTitle, type ReviewUnit, type UnitScope } from './units.js';
 
 /** One piece of the change a reviewer may take: a whole file, or one hunk of a file too large for one slice. */
@@ -90,26 +91,65 @@ function balancedScopes(inventory: ReviewInventory, count: number): UnitScope[] 
 	return scopes;
 }
 
-/**
- * The reviewers of a change, cut without a model call so the same diff always gives the same reviewers in
- * the same order. Each reads one slice of it (`reviewer-1`…), so every changed hunk has exactly one reviewer,
- * and applies every lens that fits the slice: all of them, or the rules and readability lenses for a slice of
- * documentation only.
- */
-export function partitionReviewers(inventory: ReviewInventory, limits: ReviewLimits): ReviewUnit[] {
+/** A slice of the change with the lenses that apply to it, the review's lens selection counted. */
+interface Slice {
+	scope: UnitScope;
+	lenses: Lens[];
+}
+
+/** The slices the change is cut into, one per reviewer the budget allows, each with its lenses. */
+function cutSlices(inventory: ReviewInventory, limits: ReviewLimits, selection?: readonly LensId[]): Slice[] {
 	const count = reviewerCount(inventory, limits);
 
 	if (!count) return [];
 
-	return balancedScopes(inventory, count).map((scope, index) => {
-		const lenses = lensesFor(scope);
+	return balancedScopes(inventory, count).map((scope) => ({ scope, lenses: lensesFor(scope, selection) }));
+}
 
-		return {
+/**
+ * The reviewers of a change, cut without a model call so the same diff always gives the same reviewers in
+ * the same order. Each reads one slice of it (`reviewer-1`…), so every changed hunk has exactly one reviewer,
+ * and applies every lens that fits the slice: all of them, or the rules and readability lenses for a slice of
+ * documentation only. With a lens selection it applies only the selected ones among them, and a slice none of
+ * them fits has no reviewer (see `skippedSlices`).
+ */
+export function partitionReviewers(
+	inventory: ReviewInventory,
+	limits: ReviewLimits,
+	selection?: readonly LensId[]
+): ReviewUnit[] {
+	return cutSlices(inventory, limits, selection)
+		.filter((slice) => slice.lenses.length > 0)
+		.map(({ scope, lenses }, index) => ({
 			id: `reviewer-${index + 1}`,
 			title: `Reviewer ${index + 1} · ${unitTitle(scope)}`,
 			reason: `Reads every changed line in this slice and applies every lens that fits it: ${lensNames(lenses)}.`,
 			scope,
 			lenses: lenses.map((lens) => lens.id)
-		};
-	});
+		}));
+}
+
+/** A slice of the change that no reviewer reads, and why. */
+export interface SkippedSlice {
+	scope: UnitScope;
+	reason: string;
+}
+
+/**
+ * The slices no selected lens fits, which `partitionReviewers` leaves without a reviewer. Only a lens selection
+ * can leave one, so a review of every lens has none.
+ */
+export function skippedSlices(
+	inventory: ReviewInventory,
+	limits: ReviewLimits,
+	selection?: readonly LensId[]
+): SkippedSlice[] {
+	if (!selection) return [];
+
+	return cutSlices(inventory, limits, selection)
+		.filter((slice) => slice.lenses.length === 0)
+		.map(({ scope }) => ({
+			scope,
+			reason: `Not reviewed: this slice fits only these lenses (${lensNames(lensesFor(scope))}), and this review applies only ${selection.join(', ')}.`
+		}));
 }

@@ -63,7 +63,7 @@ export function repairOptions(candidate: CandidateFinding, plan: RepairPlan, sco
 
 	return {
 		lines: issues.has('line') ? lineOptions(candidate, scope) : [],
-		categories: issues.has('lens') || issues.has('intent') ? categoryOptions(candidate) : [],
+		categories: issues.has('lens') || issues.has('intent') ? categoryOptions(candidate, scope.selection) : [],
 		claims: issues.has('intent') ? citableClaims(scope.intent) : [],
 		rules: issues.has('rule') ? rulesFor(scope.ledger, candidate.file) : []
 	};

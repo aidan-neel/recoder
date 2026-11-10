@@ -8,8 +8,8 @@ import ts from 'typescript-eslint';
 
 /**
  * Only JSDoc block comments are allowed. Tool directives (`eslint-disable`,
- * `@ts-expect-error`, triple-slash references) stay legal because they are
- * instructions to tooling, not prose.
+ * `@ts-expect-error`, triple-slash references) and a script's shebang line stay
+ * legal because they are instructions to tooling, not prose.
  */
 const jsdocOnly = {
 	meta: {
@@ -26,7 +26,7 @@ const jsdocOnly = {
 		return {
 			Program() {
 				for (const comment of context.sourceCode.getAllComments()) {
-					if (directive.test(comment.value)) continue;
+					if (comment.type === 'Shebang' || directive.test(comment.value)) continue;
 
 					if (comment.type === 'Line') {
 						context.report({ loc: comment.loc, messageId: 'line' });

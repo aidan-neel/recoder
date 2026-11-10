@@ -1,14 +1,15 @@
 import { canLaunchInvestigation } from '../agent-loop.js';
-import { partitionReviewers } from '../reviewers.js';
+import { partitionReviewers, skippedSlices } from '../reviewers.js';
 import { unitRecord } from '../units.js';
-import { FINISHED, assignCoverage } from './assignments.js';
+import { FINISHED, assignCoverage, excludeCoverage } from './assignments.js';
 import { poolContext, publishUnits, type ReviewRun } from './context.js';
 import { runUnitPool } from './pool.js';
 import { failedUnits, reportRetries } from './retries.js';
 
 /**
  * Cuts the change into one slice per reviewer, or restores a resumed review's
- * assignments, and records a queued assignment for each. The model-call budget
+ * assignments, and records a queued assignment for each. A slice no selected lens
+ * fits gets no reviewer and shows in coverage as excluded. The model-call budget
  * and deadline were already scaled to the reviewer count when the run was created.
  */
 export function cutUnits(run: ReviewRun): void {
@@ -16,11 +17,15 @@ export function cutUnits(run: ReviewRun): void {
 
 	if (resume) restoreUnits(run);
 	else {
-		run.units = partitionReviewers(run.inventory, run.limits);
+		run.units = partitionReviewers(run.inventory, run.limits, run.input.lenses);
 
 		for (const unit of run.units) {
 			assignCoverage(run.coverage, unit);
 			run.assignments.push(unitRecord(unit));
+		}
+
+		for (const slice of skippedSlices(run.inventory, run.limits, run.input.lenses)) {
+			excludeCoverage(run.coverage, slice);
 		}
 	}
 

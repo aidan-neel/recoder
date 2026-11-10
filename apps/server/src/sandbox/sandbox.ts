@@ -15,8 +15,15 @@ export interface Sandbox {
 	headSha: string;
 }
 
-export function sandboxKey(repoSlug: string, prNumber: number): string {
+function sandboxKey(repoSlug: string, prNumber: number): string {
 	return `${repoSlug.split('/').join('__')}__pr-${prNumber}`;
+}
+
+/** Where `prepareSandbox` puts a checkout: one folder per PR, or one per review when `reviewId` is given. */
+export function sandboxLocation(repoSlug: string, prNumber: number, reviewId?: string): { key: string; path: string } {
+	const key = sandboxKey(repoSlug, prNumber) + (reviewId ? '__' + reviewId : '');
+
+	return { key, path: join(env.RECODER_WORKDIR, 'repos', key) };
 }
 
 function gitEnv(overrides?: Record<string, string>, provider?: Provider): Record<string, string> {
@@ -51,14 +58,22 @@ function gitlabCredentials(host: string): Record<string, string> {
 	};
 }
 
-async function git(
-	cwd: string,
-	args: string[],
-	label: string,
-	overrides?: Record<string, string>,
-	provider?: Provider,
-	onProgress?: (message: string) => void
-): Promise<string> {
+/** How one sandbox git command runs: its credentials and forge, where progress goes, and what stops it. */
+interface GitAccess {
+	overrides?: Record<string, string>;
+	provider?: Provider;
+	onProgress?: (message: string) => void;
+	signal?: AbortSignal;
+}
+
+/**
+ * Runs git through the command runner. A stop is honoured before each command
+ * starts, so a stopped review never begins its next clone or fetch, and it
+ * ends the command that is running.
+ */
+async function git(cwd: string, args: string[], label: string, access: GitAccess = {}): Promise<string> {
+	access.signal?.throwIfAborted();
+
 	let lastReport = 0;
 
 	const run = await runCommand({
@@ -66,7 +81,8 @@ async function git(
 		command: 'git',
 		args,
 		cwd,
-		env: gitEnv(overrides, provider),
+		env: gitEnv(access.overrides, access.provider),
+		signal: access.signal,
 		onOutput: (chunk) => {
 			const matches = [
 				...chunk.matchAll(
@@ -78,10 +94,12 @@ async function git(
 
 			if (match && Date.now() - lastReport > 500) {
 				lastReport = Date.now();
-				onProgress?.(match[1] + ': ' + match[2] + '%');
+				access.onProgress?.(match[1] + ': ' + match[2] + '%');
 			}
 		}
 	});
+
+	access.signal?.throwIfAborted();
 
 	if (run.status !== 'succeeded') {
 		throw new Error(`git ${args[0]} failed: ${run.logs.slice(-2000)}`);
@@ -115,14 +133,16 @@ export async function prepareSandbox(opts: {
 	env?: Record<string, string>;
 	expectedHeadSha?: string;
 	onProgress?: (message: string) => void;
+	/** Stops the preparation before its next git command. */
+	signal?: AbortSignal;
 }): Promise<Sandbox> {
-	const { repoSlug, prNumber, repoUrl, fetchRef, branch } = opts;
-	const key = sandboxKey(repoSlug, prNumber) + (opts.reviewId ? '__' + opts.reviewId : '');
-	const path = join(env.RECODER_WORKDIR, 'repos', key);
+	const { repoSlug, prNumber, repoUrl, fetchRef, branch, signal } = opts;
+	const { key, path } = sandboxLocation(repoSlug, prNumber, opts.reviewId);
+	const remote: GitAccess = { overrides: opts.env, provider: opts.provider, signal };
 
 	await mkdir(path, { recursive: true });
 
-	const inside = await git(path, ['rev-parse', '--is-inside-work-tree'], 'sandbox check')
+	const inside = await git(path, ['rev-parse', '--is-inside-work-tree'], 'sandbox check', { signal })
 		.then(() => true)
 		.catch(() => false);
 
@@ -135,41 +155,35 @@ export async function prepareSandbox(opts: {
 			workDir: env.RECODER_WORKDIR,
 			repoSlug,
 			cloneUrl,
-			run: (cwd, args, label) => git(cwd, args, label, opts.env, opts.provider)
+			run: (cwd, args, label) => git(cwd, args, label, remote)
 		});
 
 		await git(
 			env.RECODER_WORKDIR,
 			['clone', '--progress', '--no-checkout', ...(shared ? ['--reference', shared] : []), '--', cloneUrl, path],
 			'sandbox clone',
-			opts.env,
-			opts.provider,
-			opts.onProgress
+			{ ...remote, onProgress: opts.onProgress }
 		);
 	}
 
 	opts.onProgress?.('Fetching the pull request head');
 
-	await git(
-		path,
-		['fetch', '--progress', 'origin', fetchRef.split(':')[0], '--force'],
-		'sandbox fetch',
-		opts.env,
-		opts.provider,
-		opts.onProgress
-	);
+	await git(path, ['fetch', '--progress', 'origin', fetchRef.split(':')[0], '--force'], 'sandbox fetch', {
+		...remote,
+		onProgress: opts.onProgress
+	});
 
-	const fetchedSha = await git(path, ['rev-parse', 'FETCH_HEAD'], 'sandbox fetched sha');
+	const fetchedSha = await git(path, ['rev-parse', 'FETCH_HEAD'], 'sandbox fetched sha', { signal });
 
 	if (opts.expectedHeadSha && fetchedSha !== opts.expectedHeadSha) {
 		throw new Error('PR head changed while preparing the review; retry to review the latest commit');
 	}
 
 	opts.onProgress?.('Checking out the pull request files');
-	await git(path, ['checkout', '--force', '--detach', 'FETCH_HEAD'], 'sandbox detach');
-	await git(path, ['checkout', '--force', '-B', branch, 'FETCH_HEAD'], 'sandbox checkout');
+	await git(path, ['checkout', '--force', '--detach', 'FETCH_HEAD'], 'sandbox detach', { signal });
+	await git(path, ['checkout', '--force', '-B', branch, 'FETCH_HEAD'], 'sandbox checkout', { signal });
 
-	const headSha = await git(path, ['rev-parse', 'HEAD'], 'sandbox sha');
+	const headSha = await git(path, ['rev-parse', 'HEAD'], 'sandbox sha', { signal });
 
 	return { key, path, repoSlug, prNumber, headSha };
 }
@@ -181,13 +195,33 @@ export async function sandboxRevisionDiff(
 	overrides?: Record<string, string>,
 	provider?: Provider
 ): Promise<{ revision: ReviewRevision; diff: string }> {
-	await git(path, ['check-ref-format', 'refs/heads/' + baseRef], 'sandbox validate base');
-	await git(path, ['fetch', 'origin', 'refs/heads/' + baseRef], 'sandbox fetch base', overrides, provider);
+	const revision = await sandboxRevision(path, baseRef, { overrides, provider });
 
-	const targetSha = await git(path, ['rev-parse', 'FETCH_HEAD'], 'sandbox target sha');
-	const mergeBaseSha = await git(path, ['merge-base', 'FETCH_HEAD', 'HEAD'], 'sandbox merge base');
-	const headSha = await git(path, ['rev-parse', 'HEAD'], 'sandbox head sha');
+	return { revision, diff: await revisionDiff(revision) };
+}
 
+/** Fetch the target branch and record immutable SHAs for the checkout's HEAD against it. */
+export async function sandboxRevision(path: string, baseRef: string, remote: GitAccess = {}): Promise<ReviewRevision> {
+	const local = { signal: remote.signal };
+
+	await git(path, ['check-ref-format', 'refs/heads/' + baseRef], 'sandbox validate base', local);
+	await git(path, ['fetch', 'origin', 'refs/heads/' + baseRef], 'sandbox fetch base', remote);
+
+	const targetSha = await git(path, ['rev-parse', 'FETCH_HEAD'], 'sandbox target sha', local);
+	const mergeBaseSha = await git(path, ['merge-base', 'FETCH_HEAD', 'HEAD'], 'sandbox merge base', local);
+	const headSha = await git(path, ['rev-parse', 'HEAD'], 'sandbox head sha', local);
+
+	return { checkoutPath: path, headSha, targetSha, mergeBaseSha, targetRef: baseRef };
+}
+
+/**
+ * The patch from the merge base to the head, in the one format the pipeline
+ * reads. `pathspecs` narrow it to some paths; `signal` stops git.
+ */
+export async function revisionDiff(
+	revision: Pick<ReviewRevision, 'checkoutPath' | 'mergeBaseSha' | 'headSha'>,
+	opts: { pathspecs?: string[]; signal?: AbortSignal } = {}
+): Promise<string> {
 	const proc = Bun.spawn(
 		[
 			'git',
@@ -199,14 +233,16 @@ export async function sandboxRevisionDiff(
 			'--no-color',
 			'--src-prefix=a/',
 			'--dst-prefix=b/',
-			mergeBaseSha,
-			headSha,
-			'--'
+			revision.mergeBaseSha,
+			revision.headSha,
+			'--',
+			...(opts.pathspecs ?? [])
 		],
 		{
-			cwd: path,
+			cwd: revision.checkoutPath,
 			stdout: 'pipe',
-			stderr: 'pipe'
+			stderr: 'pipe',
+			signal: opts.signal
 		}
 	);
 
@@ -214,10 +250,7 @@ export async function sandboxRevisionDiff(
 
 	if (code !== 0) throw new Error('Local PR diff failed: ' + stderr.slice(-2000));
 
-	return {
-		revision: { checkoutPath: path, headSha, targetSha, mergeBaseSha, targetRef: baseRef },
-		diff
-	};
+	return diff;
 }
 
 /** Compute the PR patch from its merge base, without API limits or log truncation. */

@@ -1,10 +1,9 @@
 import { stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Repo, Review } from '@recoder/shared';
-import { env } from '../../env.js';
 import { db, reviewSandboxes } from '../../store';
 import { locateRepo, refspecFor } from '../../forge/providers.js';
-import { prepareSandbox, sandboxKey } from '../../sandbox/sandbox.js';
+import { prepareSandbox, sandboxLocation } from '../../sandbox/sandbox.js';
 import { tokenEnv } from '../../forge/tokens.js';
 
 /** The checkout could not be found or recreated. */
@@ -19,7 +18,7 @@ export class CheckoutError extends Error {
 
 /** Where the pipeline puts a review's checkout (see `prepareSandbox`). */
 export function reviewCheckoutPath(review: Review, repo: Repo): string {
-	return join(env.RECODER_WORKDIR, 'repos', `${sandboxKey(locateRepo(repo.url).slug, review.prNumber)}__${review.id}`);
+	return sandboxLocation(locateRepo(repo.url).slug, review.prNumber, review.id).path;
 }
 
 async function isCheckout(path: string): Promise<boolean> {

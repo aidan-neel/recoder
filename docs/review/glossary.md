@@ -16,6 +16,8 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Lens.** A fixed review procedure with its own categories. Type `Lens`, ids in `LensId`, in `apps/server/src/review/pipeline/lenses/types.ts`. The lenses are `correctness`, `security`, `concurrency`, `api-contract`, `performance`, `rules`, `conventions`, `readability`. A reviewer applies every lens that fits its slice in one prompt and reports the categories of those lenses; a finding in any other category is dropped.
 
+**Lens selection.** The optional subset of lenses a run is limited to, set by `AdaptiveReviewInput.lenses` in `apps/server/src/review/pipeline/harness/types.ts`; unset means every lens. A reviewer applies only the selected lenses that fit its slice, a finding in a category no selected lens reports is dropped at the `category` stage, a slice no selected lens fits shows as excluded in coverage, and a checkpoint (`ReviewCheckpoint.selection`) saved under one selection is refused under another.
+
 **Assignment.** One agent's job: one reviewer over its slice, or one subagent. Type `ReviewAssignment` in `packages/shared/src/progress.ts`.
 
 **Subagent.** An extra agent a reviewer hands a deep dive to, to settle one question. State in `SubagentState` in `apps/server/src/review/pipeline/subagents.ts`. The cap is `SubagentCap` (`0`, `3`, `8`, `12`, `'uncapped'`) in `packages/shared/src/models.ts`; `'uncapped'` is a string so it survives JSON.

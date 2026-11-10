@@ -83,6 +83,18 @@ ${offers.subagents ? subagentsOffer(offers.subagents) : 'Leave "subagents" empty
 }
 
 /**
+ * What a subagent or second look is told when the review applies only some lenses: which they are and the
+ * categories each reports, since a finding in any other is dropped. Empty when the review applies every lens.
+ */
+export function lensSelectionNote(selection: readonly LensId[] | undefined): string {
+	if (!selection) return '';
+
+	const lines = selection.map(lensById).map((lens) => `- ${lens.title} (${lens.categories.join(', ')})`);
+
+	return `\n\nThis review applies only these lenses, so report only their categories; a finding in any other category is dropped:\n${lines.join('\n')}`;
+}
+
+/**
  * A subagent's prompt: one question a correctness lens handed on, answered in
  * depth. A subagent sent to follow up a brief question is also asked to
  * answer it.

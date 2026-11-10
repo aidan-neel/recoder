@@ -12,6 +12,7 @@ Reader: an AI agent that has to understand, operate, change or evaluate Recoder'
 | [benchmark-overview.md](benchmark-overview.md) | get the idea of the benchmark and the current results                |
 | [evaluation.md](evaluation.md)       | measure a review with the benchmark and compare reports validly                 |
 | [operating.md](operating.md)         | run one review locally, end to end, through the API                             |
+| [cli.md](cli.md)                     | run a review from the `recoder` command line, with no server, and install its agent skill |
 | [glossary.md](glossary.md)           | look up a term and the file that defines it                                     |
 
 Find a term first in the glossary, then open the file it names.

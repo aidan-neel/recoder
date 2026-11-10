@@ -153,11 +153,31 @@ export function isDocsPath(path: string): boolean {
 	return DOCS_FILE.test(path);
 }
 
-/** The lenses that apply to a slice, in `LENSES` order: all of them, or rules and readability for docs only. */
-export function lensesFor(scope: UnitScope): Lens[] {
+/**
+ * The lenses that apply to a slice, in `LENSES` order: all of them, or rules and readability for docs only,
+ * held to `selection` when the review was asked for only some lenses.
+ */
+export function lensesFor(scope: UnitScope, selection?: readonly LensId[]): Lens[] {
 	const docsOnly = scope.length > 0 && scope.every((entry) => isDocsPath(entry.path));
 
-	return LENSES.filter((lens) => !docsOnly || DOCS_LENSES.has(lens.id));
+	return LENSES.filter(
+		(lens) => (!docsOnly || DOCS_LENSES.has(lens.id)) && (!selection || selection.includes(lens.id))
+	);
+}
+
+/** Throws, naming the value, when a lens selection is empty or holds an id that is not a lens; unset is every lens. */
+export function assertLensSelection(selection: readonly string[] | undefined): void {
+	if (!selection) return;
+
+	if (!selection.length) {
+		throw new Error(`The lens selection is an empty list; name at least one of ${lensNames(LENSES)}, or leave it out.`);
+	}
+
+	const unknown = selection.find((id) => !LENSES.some((lens) => lens.id === id));
+
+	if (unknown !== undefined) {
+		throw new Error(`Unknown lens "${unknown}" in the lens selection; the lenses are ${lensNames(LENSES)}.`);
+	}
 }
 
 /** The lens ids as a list for a sentence: "correctness, security, …". */
@@ -168,6 +188,37 @@ export function lensNames(lenses: readonly Lens[]): string {
 /** The categories the lenses may report between them, each once, in lens order. */
 export function lensCategories(ids: readonly LensId[]): FindingCategory[] {
 	return [...new Set(ids.flatMap((id) => lensById(id).categories))];
+}
+
+/** A selection as words, in lens order: "correctness, security", or "every lens" when none was given. */
+function describeSelection(selection: readonly LensId[] | undefined): string {
+	return selection ? lensNames(LENSES.filter((lens) => selection.includes(lens.id))) : 'every lens';
+}
+
+/**
+ * Throws when a review saved under one lens selection is asked to continue under another (order does not matter,
+ * and neither given is the same). Its finished reviewers, candidates and coverage were made under the saved
+ * lenses, so continuing under others would report lenses that never ran.
+ */
+export function assertSameSelection(
+	saved: readonly LensId[] | undefined,
+	requested: readonly LensId[] | undefined
+): void {
+	const savedAs = describeSelection(saved);
+	const requestedAs = describeSelection(requested);
+
+	if (savedAs === requestedAs) return;
+
+	throw new Error(
+		`This review was saved with ${savedAs} and cannot continue with ${requestedAs}; continue it with the same lenses, or start a new review.`
+	);
+}
+
+/** Whether the selection, or every lens when it is unset, reports any of `categories`. */
+export function selectionReports(selection: readonly LensId[] | undefined, categories: readonly string[]): boolean {
+	if (!selection) return true;
+
+	return lensCategories(selection).some((category) => categories.includes(category));
 }
 
 /** The first of the lenses whose categories include `category`, which is the lens the finding is credited to. */

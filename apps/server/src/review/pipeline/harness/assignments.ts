@@ -1,5 +1,6 @@
 import type { AssignmentStatus, ReviewAssignment } from '@recoder/shared';
 import type { CoverageLedger } from '../coverage.js';
+import type { SkippedSlice } from '../reviewers.js';
 import type { ReviewUnit } from '../units.js';
 
 /** Assignments whose work a resumed review keeps. */
@@ -35,6 +36,13 @@ export const COVERAGE_ROLE = 'reviewer';
 export function assignCoverage(coverage: CoverageLedger, unit: ReviewUnit): void {
 	for (const scope of unit.scope) {
 		for (const hunkId of scope.hunkIds) coverage.assign(hunkId, scope.path, COVERAGE_ROLE);
+	}
+}
+
+/** Marks every hunk of a slice no reviewer reads as excluded, with why. */
+export function excludeCoverage(coverage: CoverageLedger, slice: SkippedSlice): void {
+	for (const scope of slice.scope) {
+		for (const hunkId of scope.hunkIds) coverage.exclude(hunkId, scope.path, slice.reason);
 	}
 }
 

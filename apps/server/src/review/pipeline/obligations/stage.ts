@@ -1,4 +1,4 @@
-import type { ObligationAnswer } from '@recoder/shared';
+import type { Obligation, ObligationAnswer } from '@recoder/shared';
 import { unitRecord, type ReviewUnit } from '../units.js';
 import { finishedIds, poolContext, publishUnits, saveCheckpoint, type ReviewRun } from '../harness/context.js';
 import { runOneUnit, runUnitPool } from '../harness/pool.js';
@@ -9,6 +9,16 @@ import { obligationUnit } from './prompts.js';
 
 const TASK_ID = 'obligations';
 const LABEL = 'Derive obligations';
+
+/**
+ * The obligations whose specialist lens the review applies, which are all of them when it applies every lens;
+ * another lens's question is not asked, and costs no investigation.
+ */
+function ownedObligations(run: ReviewRun, derived: Obligation[]): Obligation[] {
+	const selection: readonly string[] | undefined = run.input.lenses;
+
+	return selection ? derived.filter((obligation) => selection.includes(obligation.specialist)) : derived;
+}
 
 /**
  * Derives the change's obligations once the change model exists, before any
@@ -51,6 +61,7 @@ export async function deriveObligationsStage(run: ReviewRun): Promise<void> {
 		return;
 	}
 
+	state.derived = ownedObligations(run, state.derived);
 	state.units = selectUnderCap(state.derived, state.cap).map(obligationUnit);
 
 	for (const unit of state.units) {

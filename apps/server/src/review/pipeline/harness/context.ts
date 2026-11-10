@@ -119,9 +119,11 @@ const UNCAPPED_SUBAGENTS = 12;
 const UNCAPPED_REQUESTS = 4;
 
 /** What the review is sized for: its reviewers, its brief calls and the subagents its cap allows. */
-function reviewShape(inventory: ReviewInventory, limits: ReviewLimits, cap: SubagentCap | number): ReviewShape {
+function reviewShape(inventory: ReviewInventory, limits: ReviewLimits, input: AdaptiveReviewInput): ReviewShape {
+	const cap: SubagentCap | number = input.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+
 	return {
-		reviewers: partitionReviewers(inventory, limits).length,
+		reviewers: partitionReviewers(inventory, limits, input.lenses).length,
 		briefs: partitionUnits(inventory).length,
 		subagents: cap === 'uncapped' ? UNCAPPED_SUBAGENTS : cap
 	};
@@ -132,7 +134,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 	const startedAt = reviewNow();
 	const inventory = buildInventory(input.diff, extraExcludes());
 	const limits = budgetLimits(input.tokenBudget ?? DEFAULT_TOKEN_BUDGET);
-	const scaled = scaledReviewLimits(reviewShape(inventory, limits, input.subagentCap ?? DEFAULT_SUBAGENT_CAP), limits);
+	const scaled = scaledReviewLimits(reviewShape(inventory, limits, input), limits);
 	const deadlineAt = startedAt + scaled.deadlineMs;
 	const resume = input.resume;
 
@@ -307,7 +309,8 @@ export function saveCheckpoint(run: ReviewRun): void {
 		questions: structuredClone(run.questions),
 		...(run.repairs ? { repairs: run.repairs } : {}),
 		received: receivedOf(run.received, finished),
-		...(run.obligations ? { obligations: structuredClone(run.obligations) } : {})
+		...(run.obligations ? { obligations: structuredClone(run.obligations) } : {}),
+		...(run.input.lenses ? { selection: [...run.input.lenses] } : {})
 	});
 }
 
@@ -356,6 +359,7 @@ export function poolContext(run: ReviewRun): PoolContext {
 		directive: run.directive,
 		subagentRequests: requestsPerReviewer(run),
 		limits: run.limits,
+		selection: input.lenses,
 		reportLowSeverity: run.input.reportLowSeverity ?? false,
 		changeModel: run.changeModel,
 		intent: run.intent,

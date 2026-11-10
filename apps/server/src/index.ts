@@ -7,7 +7,7 @@ import { initVllmServers } from './models/vllm/vllm-store';
 import { startVllmSync } from './models/vllm/vllm-sync';
 import { initTokenStore } from './forge/tokens';
 import { restartWatcher } from './forge/watch/watcher';
-import { recoverStaleReviews } from './store';
+import { exitOnShutdownSignals, recoverStaleReviews } from './store';
 
 /** Start the agent now so Settings never waits on a cold start, and warm its provider catalog. */
 function warmAgent(): void {
@@ -36,6 +36,7 @@ function isLongLived(path: string): boolean {
 	return LONG_LIVED.some((pattern) => pattern.test(path));
 }
 
+exitOnShutdownSignals();
 initTokenStore();
 initReviewSettings();
 initVllmServers();

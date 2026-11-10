@@ -73,6 +73,8 @@ export interface CandidateContext {
 	intent?: ChangeIntent | null;
 	/** Dismissal fingerprints of this repository, of either form; a candidate one matches (`matchesDismissal`) is dropped. Absent when the review has no repository. */
 	dismissed?: ReadonlySet<string>;
+	/** The lenses the review applies when it was asked for only some; a finding in a category none of them reports is dropped, whoever reported it. */
+	selection?: readonly LensId[];
 }
 
 /**
@@ -167,14 +169,21 @@ export type CategoryIssue = 'lens' | 'rule' | 'smell' | 'examples' | 'intent';
 export function categoryIssue(
 	raw: ReviewerFinding,
 	lenses: readonly LensId[] | null,
-	ctx: Pick<CandidateContext, 'ledger' | 'intent'>
+	ctx: Pick<CandidateContext, 'ledger' | 'intent' | 'selection'>
 ): { issue: CategoryIssue; reason: string } | undefined {
-	const { ledger } = ctx;
+	const { ledger, selection } = ctx;
 
 	if (lenses && !lensCategories(lenses).includes(raw.category)) {
 		return {
 			issue: 'lens',
 			reason: `category ${raw.category} is outside the ${lenses.join(', ')} ${lenses.length === 1 ? 'lens' : 'lenses'}`
+		};
+	}
+
+	if (selection && !lensCategories(selection).includes(raw.category)) {
+		return {
+			issue: 'lens',
+			reason: `category ${raw.category} is outside the lenses this review applies (${selection.join(', ')})`
 		};
 	}
 

@@ -3,9 +3,13 @@
 	"private": true,
 	"version": "0.1.0",
 	"type": "module",
+	"bin": {
+		"recoder": "./src/cli/main.ts"
+	},
 	"scripts": {
 		"dev": "bun --watch src/index.ts",
 		"start": "bun src/index.ts",
+		"recoder": "bun src/cli/main.ts",
 		"check": "tsc --noEmit",
 		"test": "bun test",
 		"lint": "eslint . && prettier --check . --ignore-path ../../.prettierignore",

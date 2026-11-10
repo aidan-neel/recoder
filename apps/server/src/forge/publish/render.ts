@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import {
 	assignmentCounts,
+	FINDING_SEVERITIES,
 	REVIEW_CANCELLED,
 	reviewStage,
 	splitCategoryTag,
@@ -36,7 +37,8 @@ export interface PullCommentView extends DiffLinkTarget {
 	limit: number;
 }
 
-const SEVERITY_ORDER: FindingSeverity[] = ['error', 'warning', 'info'];
+/** Every severity, worst first: the order findings are listed in. */
+const SEVERITY_ORDER: readonly FindingSeverity[] = [...FINDING_SEVERITIES].reverse();
 
 const SEVERITY_HEADING: Record<FindingSeverity, string> = {
 	error: 'Errors',

@@ -9,6 +9,10 @@
   `bun run dev:all` starts every package.
 - UI kit (`packages/ui`, React): `bun run --filter @recoder/ui check` · `lint`.
 - Server: `bun run --filter @recoder/server check` · `test`
+- CLI (`recoder`, in `apps/server/src/cli`): `bun run recoder <command>` from the
+  root or `apps/server`, or `bun link` in `apps/server` to put `recoder` on the
+  PATH. Its tests are in `apps/server/tests/cli` (`bun test tests/cli` from
+  `apps/server`). Docs: `docs/review/cli.md`.
 - Shared: `bun run --filter @recoder/shared check` · `test`
 - Site: `bun run --filter @recoder/site check` · `test` · `build`
 - Lint (any package): `bun run --filter @recoder/<package> lint` runs ESLint
@@ -49,7 +53,8 @@ this. Treat a lint error as a bug, not a suggestion.
   flat `lib/`:
   - Server `apps/server/src/`: `agents/<cli>/`, `models/`,
     `review/{pipeline,session,chat,guidelines,fixes}/`, `evidence/`,
-    `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `eval/`, `util/`.
+    `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `eval/`, `util/`,
+    `cli/{args,doctor,mcp,output,report,review,run,runs,signals,skill,target}/`.
   - Web `apps/web/src/lib/`: `api/`, `review/`, `findings/`, `diff/`,
     `session/`, `settings/`, `home/`, `shell/`, with components under
     `lib/components/<feature>/` and Sivir wrappers in `lib/components/ui/`.

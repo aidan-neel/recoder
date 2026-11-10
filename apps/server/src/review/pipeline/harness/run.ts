@@ -1,5 +1,6 @@
 import { reviewNow } from '../../session/review-control.js';
 import { ReviewAbortedError } from '../agent-loop.js';
+import { assertLensSelection, assertSameSelection } from '../lenses/lenses.js';
 import { changeModelStage } from './change-model-stage.js';
 import { consolidate } from './consolidation.js';
 import {
@@ -42,12 +43,17 @@ import { drainVerification, finishVerification, startVerification } from './veri
  * take each candidate as it is reported. Checks still queued once everything
  * else is done are left behind after a short grace. Only proven findings are shown;
  * consolidation is deterministic, so the same change gives the same findings.
- * The deadline runs on the review clock, which stands still while paused.
+ * The deadline runs on the review clock, which stands still while paused. A lens selection that is empty or
+ * names an unknown lens throws before anything runs, and so does a resume saved under another selection.
  */
 export async function runAdaptiveReview(
 	input: AdaptiveReviewInput,
 	events?: HarnessEvents
 ): Promise<AdaptiveReviewResult> {
+	assertLensSelection(input.lenses);
+
+	if (input.resume) assertSameSelection(input.resume.selection, input.lenses);
+
 	const run = createRun(input, events);
 	const onAbort = () => run.controller.abort();
 

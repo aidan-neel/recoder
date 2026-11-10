@@ -19,7 +19,8 @@
 		"test": "turbo test",
 		"lint": "turbo lint",
 		"deadcode": "knip && jscpd",
-		"dev:site": "bun --filter @recoder/site dev"
+		"dev:site": "bun --filter @recoder/site dev",
+		"recoder": "bun apps/server/src/cli/main.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",

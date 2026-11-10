@@ -148,6 +148,13 @@ export function configForAgent(agent: string | undefined): ModelConfig {
 	return agent === 'subagent' ? configForSubagent() : configForOrchestrator();
 }
 
+/** The id of the saved Review model: the pick, else the older shared pick, else the first saved entry. */
+export function savedReviewModelId(): string | undefined {
+	const stored = getStoredSettings();
+
+	return stored.orchestratorModelId ?? stored.sharedModelId ?? stored.models?.[0]?.id;
+}
+
 /**
  * Resolve one of the two picks to its concrete model.
  *
@@ -160,7 +167,7 @@ export function configForAgent(agent: string | undefined): ModelConfig {
 function resolveConfig(orchestrator: boolean): ModelConfig {
 	const stored = getStoredSettings();
 	const entries = stored.models ?? [];
-	const reviewId = stored.orchestratorModelId ?? stored.sharedModelId ?? entries[0]?.id;
+	const reviewId = savedReviewModelId();
 	const followsReview = orchestrator || !stored.specialistModelId;
 	const entryId = followsReview ? reviewId : stored.specialistModelId;
 

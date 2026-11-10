@@ -170,7 +170,8 @@ export function addCandidates(
 				ledger: ctx.ledger,
 				intent: ctx.intent,
 				reportLowSeverity: ctx.reportLowSeverity,
-				dismissed
+				dismissed,
+				selection: ctx.selection
 			}
 		);
 

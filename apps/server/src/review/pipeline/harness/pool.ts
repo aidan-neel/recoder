@@ -35,6 +35,7 @@ import {
 } from '../reviewer.js';
 import {
 	answersQuestions,
+	lensSelectionNote,
 	reviewerSystemPrompt,
 	reviewerUserPrompt,
 	type ReviewerHeading,
@@ -72,6 +73,8 @@ export interface PoolContext extends ReviewerPromptContext {
 	subagentRequests: number;
 	/** The review's token budget limits; reviewers and subagents get their turns from here. */
 	limits: ReviewLimits;
+	/** The lenses the review was asked to apply, when only some; unset when it applies every lens. */
+	selection?: readonly LensId[];
 	reportLowSeverity: boolean;
 	/** Findings people dismissed in this repository, newest first; a candidate matching one is dropped and a lens reviewer is told of those on its files. */
 	dismissals: Dismissal[];
@@ -276,7 +279,7 @@ function askReviewer(
 	const subagent = recordFor(records, item.id).role === 'subagent';
 
 	const lenses = item.lenses ?? [];
-	const categories = subagent ? [] : lensCategories(lenses);
+	const categories = lensCategories(subagent ? (ctx.selection ?? []) : lenses);
 	const maxTurns = subagent ? ctx.limits.subagentTurns : ctx.limits.reviewerTurns;
 	const defaultCategory = categories[0] ?? 'correctness';
 
@@ -324,9 +327,13 @@ function askReviewer(
  * subagent's, or the lens procedures with the parts this reviewer is offered.
  */
 function systemPrompt(item: ReviewUnit, subagent: boolean, ctx: PoolContext, delegate: boolean): string {
-	if (item.purpose) return secondLookSystemPrompt(item.purpose, ctx.directive);
+	const selected = lensSelectionNote(ctx.selection);
 
-	if (subagent) return subagentSystemPrompt(ctx.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0);
+	if (item.purpose) return secondLookSystemPrompt(item.purpose, ctx.directive) + selected;
+
+	if (subagent) {
+		return subagentSystemPrompt(ctx.exec, ctx.directive, followedUpBy(ctx.questions, item.id).length > 0) + selected;
+	}
 
 	return reviewerSystemPrompt(item.lenses ?? [], ctx.exec, ctx.directive, {
 		subagents: ctx.subagentRequests,

@@ -68,6 +68,23 @@ export function appName(provider: ModelProvider | undefined): string | null {
 	return (provider && APP_NAMES[provider]) || null;
 }
 
+const LOCAL_HOST = /^(localhost|127\.|10\.|192\.168\.)/;
+
+/** What a picker calls an OpenAI-compatible endpoint: a well-known service, "Local endpoint" for a local address, else its host. */
+export function endpointProviderName(baseUrl: string): string {
+	if (/openrouter/i.test(baseUrl)) return 'OpenRouter';
+	if (/dashscope/i.test(baseUrl)) return 'DashScope';
+	if (/openai\.com/i.test(baseUrl)) return 'OpenAI';
+
+	try {
+		const { hostname } = new URL(baseUrl);
+
+		return LOCAL_HOST.test(hostname) ? 'Local endpoint' : hostname;
+	} catch {
+		return 'OpenAI-compatible';
+	}
+}
+
 /** Sampling settings a model wants; an unset field takes the built-in profile for the model, then the default. */
 export interface ModelRuntimeProfile {
 	/** `null` leaves the field out of the request, for models that reject or ignore it. */

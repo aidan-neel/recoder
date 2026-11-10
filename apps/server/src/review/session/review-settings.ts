@@ -148,39 +148,69 @@ function persist(): void {
 	}
 }
 
-/** Load persisted settings into memory. Call once at boot. A missing or corrupt file starts empty, and env covers it. */
-export function initReviewSettings(): void {
+/** What a saved settings file holds, converted to the current shape, and whether it was in an older one. */
+interface SavedSettings {
+	settings: StoredSettings;
+	legacy: boolean;
+}
+
+/**
+ * Reads the saved settings file and converts it to the current shape without writing anything. Null for a missing,
+ * unreadable or corrupt file, so the caller keeps what it has and env covers the rest.
+ */
+function readSavedSettings(): SavedSettings | null {
 	try {
-		const raw = readFileSync(settingsFile(), 'utf8');
-		const parsed = storedFileSchema.safeParse(JSON.parse(raw));
+		const parsed = storedFileSchema.safeParse(JSON.parse(readFileSync(settingsFile(), 'utf8')));
 
-		if (parsed.success) {
-			const { apiKey, models, ...rest } = migrateLegacy(parsed.data);
+		if (!parsed.success) return null;
 
-			const normalized: StoredSettings = {
-				...rest,
-				...(parsed.data.connections ? { connections: parsed.data.connections } : {}),
-				models: models?.map((e) => ({
-					provider: e.provider,
-					...(e.source ? { source: e.source } : {}),
-					id: e.id ?? crypto.randomUUID(),
-					label: e.label,
-					model: e.model,
-					...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
-					...(e.apiKey ? { apiKey: e.apiKey } : {}),
-					...(e.efforts?.length ? { efforts: e.efforts } : {}),
-					...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
-					...(e.contextWindow ? { contextWindow: e.contextWindow } : {}),
-					...(e.runtime && Object.keys(e.runtime).length ? { runtime: e.runtime } : {})
-				}))
-			};
+		const { apiKey, models, ...rest } = migrateLegacy(parsed.data);
 
-			overrides = apiKey ? { ...normalized, apiKey } : normalized;
-			if (hasLegacyFields(parsed.data)) persist();
-		}
+		const normalized: StoredSettings = {
+			...rest,
+			...(parsed.data.connections ? { connections: parsed.data.connections } : {}),
+			models: models?.map((e) => ({
+				provider: e.provider,
+				...(e.source ? { source: e.source } : {}),
+				id: e.id ?? crypto.randomUUID(),
+				label: e.label,
+				model: e.model,
+				...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
+				...(e.apiKey ? { apiKey: e.apiKey } : {}),
+				...(e.efforts?.length ? { efforts: e.efforts } : {}),
+				...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
+				...(e.contextWindow ? { contextWindow: e.contextWindow } : {}),
+				...(e.runtime && Object.keys(e.runtime).length ? { runtime: e.runtime } : {})
+			}))
+		};
+
+		return { settings: apiKey ? { ...normalized, apiKey } : normalized, legacy: hasLegacyFields(parsed.data) };
 	} catch {
-		return;
+		return null;
 	}
+}
+
+/**
+ * Load persisted settings into memory, and save a file that was in an older format again in the current one. Call once
+ * at boot. A missing or corrupt file starts empty, and env covers it.
+ */
+export function initReviewSettings(): void {
+	const saved = readSavedSettings();
+
+	if (!saved) return;
+
+	overrides = saved.settings;
+	if (saved.legacy) persist();
+}
+
+/**
+ * Load persisted settings into memory and write nothing, an older file included: it is read in the current shape and
+ * left as it is. For a command line that only reads the user's settings.
+ */
+export function readReviewSettings(): void {
+	const saved = readSavedSettings();
+
+	if (saved) overrides = saved.settings;
 }
 
 /** Test helper: replace the in-memory overrides. */

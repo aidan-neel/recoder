@@ -119,6 +119,8 @@ function errorMessage(json: unknown): string | null {
 export class OpenCodeServer {
 	private running: Running | null = null;
 	private starting: Promise<Running> | null = null;
+	/** The `serve` process until it has printed its address, so `stop` also ends a server that never does. */
+	private startingProcess: Bun.Subprocess | null = null;
 
 	constructor(private readonly env: Env) {}
 
@@ -189,6 +191,7 @@ export class OpenCodeServer {
 	}
 
 	stop(): void {
+		this.startingProcess?.kill();
 		this.running?.proc.kill();
 		this.running = null;
 	}
@@ -207,10 +210,14 @@ export class OpenCodeServer {
 			env: { ...childEnv(this.env), OPENCODE_SERVER_PASSWORD: password }
 		});
 
-		const url = await readListenUrl(proc, START_TIMEOUT_MS).catch((e) => {
-			proc.kill();
-			throw e;
-		});
+		this.startingProcess = proc;
+
+		const url = await readListenUrl(proc, START_TIMEOUT_MS)
+			.catch((e) => {
+				proc.kill();
+				throw e;
+			})
+			.finally(() => (this.startingProcess = null));
 
 		this.running = { url, password, proc, api: apiFor(version, this) };
 

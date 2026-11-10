@@ -74,6 +74,8 @@ export interface RepairScope {
 	ledger: RuleLedger | null;
 	/** Null when the review distilled none, or a replay has none; a held claim id can then not be cited. */
 	intent?: CandidateContext['intent'];
+	/** The lenses the review applies when it was asked for only some; a corrected category is chosen among theirs. */
+	selection?: CandidateContext['selection'];
 }
 
 const TO_REVIEWER_SEVERITY: Record<FindingSeverity, ReviewerFinding['severity']> = {
@@ -177,9 +179,15 @@ export function rulesFor(ledger: RuleLedger | null, file: string) {
 	return (ledger?.rules ?? []).filter((rule) => ruleAppliesTo(rule, file));
 }
 
-/** The categories a corrected finding may take: its lens's, or any bug category for a subagent, never the one that failed. */
-export function categoryOptions(candidate: CandidateFinding): FindingCategory[] {
-	const lenses = lensesOf(candidate);
+/**
+ * The categories a corrected finding may take: its lens's, or those of the review's selected lenses (any bug
+ * category without a selection) for a subagent, never the one that failed.
+ */
+export function categoryOptions(
+	candidate: CandidateFinding,
+	selection?: CandidateContext['selection']
+): FindingCategory[] {
+	const lenses = lensesOf(candidate) ?? selection;
 	const allowed = lenses ? lensCategories(lenses) : FINDING_CATEGORIES;
 
 	return allowed.filter((category) => category !== candidate.category && category !== 'intent-mismatch');

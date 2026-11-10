@@ -1,5 +1,6 @@
 import { buildRuleLedger } from '../../guidelines/ledger/ledger.js';
 import { runDetectors, runDiagnostics, runTypeHints } from '../detectors/detectors.js';
+import { selectionReports } from '../lenses/lenses.js';
 import { testStrengthOn } from '../test-strength.js';
 import { matrixDetail, runMatrix } from '../mutation/stage.js';
 import type { DetectorResult } from '../detectors/types.js';
@@ -20,10 +21,11 @@ function errorText(err: unknown): string {
 
 /**
  * The repo's guidelines as numbered rules, before the reviewers start, since
- * they review against them. Never throws: a failed build leaves no ledger.
+ * they review against them. Never throws: a failed build leaves no ledger. It
+ * is not built, and costs no model call, when no lens the review applies reports rules.
  */
 export async function ruleLedgerStage(run: ReviewRun): Promise<void> {
-	if (run.controller.signal.aborted) return;
+	if (run.controller.signal.aborted || !selectionReports(run.input.lenses, ['repo-rule'])) return;
 
 	run.task(TASK.id, TASK.label, 'running', "Reading the repo's guidelines", { kind: 'checks' });
 
@@ -109,7 +111,7 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean, det
 		run.events?.onLog?.(`Type hints skipped: ${errorText(err)}`);
 	}
 
-	if (!testStrengthOn()) return;
+	if (!testStrengthOn() || !selectionReports(run.input.lenses, ['tests'])) return;
 
 	if (!(await settled) || closed() || run.controller.signal.aborted) return;
 

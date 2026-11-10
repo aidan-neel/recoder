@@ -2,6 +2,7 @@ import type { BriefQuestion, ReviewAssignment } from '@recoder/shared';
 import type { CandidateFinding } from '../pipeline/consolidate.js';
 import type { CoverageEntry } from '../pipeline/coverage.js';
 import type { EvidenceSnapshot } from '../../evidence/evidence.js';
+import type { LensId } from '../pipeline/lenses/types.js';
 import type { ObligationState } from '../pipeline/obligations/state.js';
 import type { SubagentState } from '../pipeline/subagents.js';
 import type { Received } from '../pipeline/harness/received.js';
@@ -51,6 +52,8 @@ export interface ReviewCheckpoint {
 	repairs?: number;
 	/** Derived obligations and the answers so far; absent unless `RECODER_OBLIGATIONS=1`. */
 	obligations?: ObligationState;
+	/** The lens selection the review ran under, so a resume under another one is refused; absent when it applied every lens, as in every checkpoint saved before selections. */
+	selection?: readonly LensId[];
 }
 
 /** A saved checkpoint this run can resume from, or why the review starts over instead. */

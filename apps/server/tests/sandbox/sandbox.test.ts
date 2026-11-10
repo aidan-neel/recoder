@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseUnifiedDiff } from '@recoder/shared';
 import { existsSync } from 'node:fs';
 import { locateRepo, refspecFor } from '../../src/forge/providers';
-import { prepareSandbox, sandboxDiff } from '../../src/sandbox/sandbox';
+import { prepareSandbox, sandboxDiff, sandboxLocation } from '../../src/sandbox/sandbox';
 import { git } from '../helpers/git';
 import { localForgeFixture } from '../helpers/local-forge';
 
@@ -76,4 +77,33 @@ test('a local repo PR checks out from its file:// URL at the head, without the m
 	expect(provider).toBe('local');
 	expect(sandbox.headSha).toBe(pull7Head);
 	expect(existsSync(join(sandbox.path, '.git', 'recoder-forge.json'))).toBe(false);
+});
+
+test('a stopped preparation runs no further git command and fetches nothing', async () => {
+	const forge = await localForgeFixture();
+	const located = locateRepo(forge.repo.url);
+	const controller = new AbortController();
+	const reviewId = crypto.randomUUID();
+
+	const stopAtFetch = (message: string) => {
+		if (message.startsWith('Fetching')) controller.abort();
+	};
+
+	const preparing = prepareSandbox({
+		repoSlug: located.slug,
+		prNumber: 7,
+		repoUrl: forge.repo.url,
+		...refspecFor(located.provider, 7),
+		reviewId,
+		provider: located.provider,
+		onProgress: stopAtFetch,
+		signal: controller.signal
+	});
+
+	const checkout = sandboxLocation(located.slug, 7, reviewId).path;
+
+	await expect(preparing).rejects.toMatchObject({ name: 'AbortError' });
+	expect(existsSync(join(checkout, '.git', 'FETCH_HEAD'))).toBe(false);
+
+	await Promise.all([checkout, fileURLToPath(forge.repo.url)].map((dir) => rm(dir, { recursive: true, force: true })));
 });

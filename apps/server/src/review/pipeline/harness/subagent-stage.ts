@@ -1,9 +1,10 @@
-import { DEFAULT_SUBAGENT_CAP, type SubagentCap } from '@recoder/shared';
+import { BUG_CATEGORIES, DEFAULT_SUBAGENT_CAP, type SubagentCap } from '@recoder/shared';
 import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { selectionReports } from '../lenses/lenses.js';
 import { questionRecord } from '../question-ledger.js';
 import { planSecondLook } from '../second-look/stage.js';
-import { planBriefSubagents, planSubagents, type UnitRequest } from '../subagents.js';
+import { planBriefSubagents, planSubagents, type BriefPlanInput, type UnitRequest } from '../subagents.js';
 import { unitRecord, type ReviewUnit } from '../units.js';
 import {
 	extendDeadlines,
@@ -19,6 +20,14 @@ import { runUnitPool } from './pool.js';
 /** Model calls one subagent or second look can make: each turn, plus the repair calls a failed or malformed turn takes. */
 function subagentCalls(run: ReviewRun): number {
 	return run.limits.subagentTurns + REVIEW_POLICY.schemaRepairAttempts;
+}
+
+/**
+ * The brief's open questions that subagents follow up. They are about defects, which only a lens that reports
+ * bugs answers, so a review whose lenses report none follows up none.
+ */
+function briefQuestions(run: ReviewRun): BriefPlanInput['questions'] {
+	return selectionReports(run.input.lenses, BUG_CATEGORIES) ? (run.intent?.openQuestions ?? []) : [];
 }
 
 /**
@@ -46,7 +55,7 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 		const plan =
 			cap === 0 ? { units: [], dropped: [] } : planSubagents(state.requests, run.units, run.inventory, limit);
 
-		const brief = { questions: run.intent?.openQuestions ?? [], records: run.questions, candidates: run.candidates };
+		const brief = { questions: briefQuestions(run), records: run.questions, candidates: run.candidates };
 		const fromBrief = planBriefSubagents(brief, plan.units, run.units, run.inventory, limit - plan.units.length);
 
 		for (const { question, ...followUp } of fromBrief.followUps) {

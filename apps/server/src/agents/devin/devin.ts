@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry, TokenUsage } from '@recoder/shared';
 import { z } from 'zod';
-import { LlmError } from '../../models/llm/errors';
+import { LlmError, cancelledError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
 import {
 	CliAgent,
@@ -106,13 +106,16 @@ export class DevinAgent extends CliAgent {
 	readonly install = INSTALL;
 	readonly login = LOGIN;
 
-	/** The account's models, from `devin models list`; throws when the CLI is missing or the list is empty. */
-	async models(): Promise<ModelEntry[]> {
+	/**
+	 * The account's models, from `devin models list`; throws when the CLI is missing or the list is empty. When `signal`
+	 * aborts, the CLI process is killed and the call rejects.
+	 */
+	async models(signal?: AbortSignal): Promise<ModelEntry[]> {
 		const path = this.find();
 
 		if (!path) throw new LlmError(0, `Devin is not installed. Install it with: ${INSTALL}`);
 
-		const listed = parseDevinModels((await this.output(path, ['models', 'list'], MODELS_TIMEOUT_MS)).stdout);
+		const listed = parseDevinModels((await this.output(path, ['models', 'list'], MODELS_TIMEOUT_MS, signal)).stdout);
 
 		if (!listed.length) throw new LlmError(0, 'Devin listed no models.');
 
@@ -181,6 +184,11 @@ export class DevinAgent extends CliAgent {
 		removeToolFreeHome();
 	}
 
+	/** Whether the Devin binary is found, from its pin, PATH or install folder; the CLI is not run. */
+	installed(): boolean {
+		return this.find() !== null;
+	}
+
 	protected find(): string | null {
 		return findCli({ pin: 'RECODER_DEVIN_BIN', command: 'devin', installed: ['.local', 'bin', 'devin'] }, this.env);
 	}
@@ -212,13 +220,26 @@ export class DevinAgent extends CliAgent {
 		}).unref();
 	}
 
-	/** Run a short CLI command to its end, killing it after `timeoutMs`. */
-	private async output(path: string, args: string[], timeoutMs: number): Promise<{ code: number; stdout: string }> {
-		const proc = Bun.spawn([path, ...args], { stdout: 'pipe', stderr: 'ignore', env: devinEnv(this.env) });
+	/** Run a short CLI command to its end, killing it after `timeoutMs`, or when `signal` aborts. */
+	private async output(
+		path: string,
+		args: string[],
+		timeoutMs: number,
+		signal?: AbortSignal
+	): Promise<{ code: number; stdout: string }> {
+		const proc = Bun.spawn([path, ...args], {
+			stdout: 'pipe',
+			stderr: 'ignore',
+			env: devinEnv(this.env),
+			...(signal ? { signal } : {})
+		});
+
 		const timer = setTimeout(() => proc.kill(), timeoutMs);
 
 		try {
 			const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+
+			if (signal?.aborted) throw cancelledError();
 
 			return { code, stdout };
 		} finally {

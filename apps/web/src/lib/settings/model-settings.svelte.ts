@@ -1,4 +1,12 @@
-import { appName, defaultEffort, EFFORT_TEXT, looksLikeModelId, prettyModelName, resolveEffort } from '@recoder/shared';
+import {
+	appName,
+	defaultEffort,
+	EFFORT_TEXT,
+	endpointProviderName,
+	looksLikeModelId,
+	prettyModelName,
+	resolveEffort
+} from '@recoder/shared';
 import type { ModelEntry, Provider, ModelSettings, ModelSettingsPatch, ReasoningEffort } from '@recoder/shared';
 import { errorToast } from '../shell/notify';
 import { readCache, writeCache } from '../shell/persisted-cache';
@@ -52,20 +60,7 @@ export function providerName(entry: ModelEntry): string {
 	if (app) return app;
 	if (entry.source) return HOSTED_NAMES[entry.source] ?? entry.source;
 
-	const url = entry.baseUrl ?? '';
-
-	if (/openrouter/i.test(url)) return 'OpenRouter';
-	if (/dashscope/i.test(url)) return 'DashScope';
-	if (/openai\.com/i.test(url)) return 'OpenAI';
-
-	try {
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local, not reactive
-		const host = new URL(url).hostname;
-
-		return /^(localhost|127\.|10\.|192\.168\.)/.test(host) ? 'Local endpoint' : host;
-	} catch {
-		return 'OpenAI-compatible';
-	}
+	return endpointProviderName(entry.baseUrl ?? '');
 }
 
 export function toModelOption(entry: ModelEntry): ModelOption {
