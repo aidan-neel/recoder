@@ -40,7 +40,7 @@ Users install a prebuilt binary:
 curl -fsSL https://recoder.dev/install.sh | sh
 ```
 
-The script (`apps/site/public/install.sh`) picks `recoder-<linux|darwin>-<x64|arm64>` from the latest GitHub release (`RECODER_VERSION` names another tag), checks it against the release's `SHA256SUMS`, and moves it to `~/.local/bin` (`RECODER_INSTALL_DIR`). Nothing is installed when the checksum does not match.
+After that, `recoder upgrade` replaces the binary with the latest release. The script (`apps/site/public/install.sh`) picks `recoder-<linux|darwin>-<x64|arm64>` from the latest GitHub release (`RECODER_VERSION` names another tag), checks it against the release's `SHA256SUMS`, and moves it to `~/.local/bin` (`RECODER_INSTALL_DIR`). Nothing is installed when the checksum does not match.
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds the four binaries with `bun build --compile` and publishes them with `SHA256SUMS` as a release. A binary carries everything the CLI reads at run time: the tree-sitter grammars (`with { type: 'file' }` imports in `review/pipeline/change-model/parser.ts`) and the agent skill (`with { type: 'text' }` imports in `cli/skill/bundled-skill.ts`). Code that needs a file at run time must be imported the same way, never read from a path beside the source. A background review and the clean copy started under a git hook run the program again through `selfCommand()` (`cli/self-command.ts`): the binary alone, or Bun and `main.ts` from source.
 
@@ -67,6 +67,7 @@ recoder doctor
 | `recoder runs [--repo <path>] [--limit <n>]`           | list recent runs, newest first; 20 by default; `--repo` keeps one repository's    |
 | `recoder models [--provider <name>] [--search <text>]` | list the model ids `--reviewer` and `--worker` accept                             |
 | `recoder init [--project \| --global]`                 | set Recoder up for coding agents: the skill, the review model and a machine check |
+| `recoder upgrade [--to <release>] [--check]`           | replace this binary with the latest release, checked against its checksums        |
 | `recoder skill <show\|install>`                        | print or install the agent skill                                                  |
 | `recoder mcp`                                          | serve the commands as MCP tools on standard input and output                      |
 | `recoder doctor`                                       | check this machine                                                                |
@@ -191,6 +192,16 @@ Details that follow from "only read":
 - When that preparation fails, the message ends with the last lines of git's error, with credentials removed (`target/redact.ts`).
 
 Environment variables a git hook exports (`GIT_DIR` and the like) are removed for the run, so the pipeline's git commands never act on the user's repository. Bun gives a child process the environment the program started with, so the program starts itself again without them (`apps/server/src/cli/repository-env.ts`). That copy runs in its own session, because a shared process group would deliver a terminal's Ctrl-C twice and a review treats a second stop as "exit now". The cost: under a git hook the review has no controlling terminal, so nothing can prompt on `/dev/tty` and job control does not reach it. The copy stops its review when the process that started it is gone, for example after `kill -9`.
+
+## Upgrading with `recoder upgrade`
+
+`recoder upgrade` replaces the running binary with the latest release, and `--to <release>` with a named one, newer or older. `--check` only says whether a newer release exists. The code is `apps/server/src/cli/upgrade/`.
+
+The latest release is read from where `releases/latest` on GitHub redirects to, which needs no token and is not counted by the API's rate limit (`upgrade/release-source.ts`). The tag in that answer, like one from `--to`, must have the shape `v1.2.3` before it is put in a download address (`upgrade/release-tag.ts`). For a few minutes after a release is published GitHub can still answer with the one before it.
+
+The install follows the install script: download `recoder-<linux|darwin>-<x64|arm64>` for this machine and the release's `SHA256SUMS`, and refuse a binary whose checksum is missing, malformed or different (`upgrade/install-binary.ts`). The new file is written beside the executable, run once with `--version`, and renamed over it only when it prints the release's version, so a reader finds the old program or the new one and a failure leaves the old one. The executable is resolved through symbolic links first, so a link to the binary keeps pointing at it. A program run from source has no binary to replace and is refused. A signal stops a download and exits 130.
+
+With `-p` it prints `{ state, currentVersion, targetVersion, path }`: `state` is `current` when there is nothing to install, `available` when `--check` found a release, and `upgraded` when the binary at `path` was replaced. It exits 0 in all three. A newer binary carries a newer skill, so the person is told to run `recoder init` afterwards.
 
 ## Setting up with `recoder init`
 

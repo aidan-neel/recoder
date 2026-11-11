@@ -13,8 +13,9 @@
   root or `apps/server`. It prints for a person by default and JSON with `-p`,
   which is what agents and the skill pass; the JSON is the contract, the text is
   not. Users install a binary with
-  `curl -fsSL https://recoder.dev/install.sh | sh`; a `v*` tag builds the
-  binaries (`.github/workflows/release.yml`). Anything the CLI reads at run time
+  `curl -fsSL https://recoder.dev/install.sh | sh` and update it with
+  `recoder upgrade`; a `v*` tag builds the binaries
+  (`.github/workflows/release.yml`). Anything the CLI reads at run time
   must be imported (`with { type: 'file' | 'text' }`) so the binary carries it. Its tests are in `apps/server/tests/cli` (`bun test tests/cli` from
   `apps/server`). Docs: `docs/review/cli.md`.
 - Shared: `bun run --filter @recoder/shared check` · `test`
@@ -58,7 +59,7 @@ this. Treat a lint error as a bug, not a suggestion.
   - Server `apps/server/src/`: `agents/<cli>/`, `models/`,
     `review/{pipeline,session,chat,guidelines,fixes}/`, `evidence/`,
     `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `eval/`, `util/`,
-    `cli/{args,doctor,init,mcp,models,output,report,review,run,runs,signals,skill,target,terminal}/`.
+    `cli/{args,doctor,init,mcp,models,output,report,review,run,runs,signals,skill,target,terminal,upgrade}/`.
     A command's view for a person is a `*-view.ts` beside the command, built
     from `cli/terminal/` (surface, paint, glyphs, text, live region, prompts).
     Never write an escape code or a color outside `cli/terminal/`.
