@@ -1,15 +1,15 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { Subprocess } from 'bun';
-import { existsSync, mkdirSync, watch } from 'node:fs';
 import { readdir } from 'node:fs/promises';
 import { backgroundFlags } from '../../../src/cli/args/launch';
-import { EXIT } from '../../../src/cli/exit';
+import { EXIT, errorCode } from '../../../src/cli/exit';
 import { cancelRun, type CancelStatus } from '../../../src/cli/runs/cancel-run';
 import { detachReview, type DetachRequest } from '../../../src/cli/runs/detach';
 import { isRunId, type RunId } from '../../../src/cli/runs/run-id';
 import { runFiles, runsRoot } from '../../../src/cli/runs/run-files';
 import { readRunStatus, type RunStatus } from '../../../src/cli/runs/run-status';
 import { signalExitCode } from '../../../src/cli/signals/exit-on-signal';
+import { whenFileExists, whenFound } from '../../helpers/when-found';
 import { childEnvironment, testDataDir } from '../child-env';
 import { withPipe } from '../program-launch';
 import { openGate, waitingFile } from './fake-review';
@@ -72,33 +72,9 @@ function detachFixture(mode: string, start: FixtureStart = {}) {
 	return detachReview(request);
 }
 
-/** Resolves with what `find` finds, trying again each time something in `folder` changes. */
-function whenFound<T>(folder: string, find: () => Promise<T | null>): Promise<T> {
-	return new Promise((resolve, reject) => {
-		const check = (): void => {
-			find().then(
-				(found) => {
-					if (found === null) return;
-
-					watcher.close();
-					resolve(found);
-				},
-				(error: unknown) => {
-					watcher.close();
-					reject(error);
-				}
-			);
-		};
-
-		const watcher = watch(folder, check);
-
-		check();
-	});
-}
-
 /** The run's status once it has ended. */
 function untilEnded(runId: RunId): Promise<RunStatus> {
-	return whenFound(runFiles(runId).folder, async () => {
+	return whenFound(async () => {
 		const status = await readRunStatus(runId);
 
 		return status.state === 'running' ? null : status;
@@ -107,13 +83,22 @@ function untilEnded(runId: RunId): Promise<RunStatus> {
 
 /** The id of the one run a launcher process creates, once its gated background process waits to take it over. */
 async function untilBackgroundWaits(): Promise<RunId> {
-	mkdirSync(runsRoot(), { recursive: true });
+	const runId = await whenFound(async () => (await createdRuns()).find(isRunId) ?? null);
 
-	const runId = await whenFound(runsRoot(), async () => (await readdir(runsRoot())).find(isRunId) ?? null);
-
-	await whenFound(runFiles(runId).folder, async () => (existsSync(waitingFile(runId)) ? true : null));
+	await whenFileExists(waitingFile(runId));
 
 	return runId;
+}
+
+/** The entries of the runs folder, none while the launcher has not made it yet. */
+async function createdRuns(): Promise<string[]> {
+	try {
+		return await readdir(runsRoot());
+	} catch (error) {
+		if (errorCode(error) === 'ENOENT') return [];
+
+		throw error;
+	}
 }
 
 test(

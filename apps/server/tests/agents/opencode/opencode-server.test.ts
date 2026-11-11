@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
-import { existsSync, watch } from 'node:fs';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { OpenCodeServer } from '../../../src/agents/opencode/opencode-server';
+import { whenFileExists } from '../../helpers/when-found';
 
 const STARTED_MARK = 'started';
 
@@ -22,25 +22,12 @@ async function stalledOpenCode(folder: string): Promise<string> {
 	return binary;
 }
 
-/** Resolves once `serve` has started, from a change in the folder and not from a timer. */
-function serveStarted(folder: string): Promise<void> {
-	return new Promise((resolve) => {
-		const watcher = watch(folder, () => {
-			if (!existsSync(join(folder, STARTED_MARK))) return;
-
-			watcher.close();
-			resolve();
-		});
-	});
-}
-
 test('stop ends a server that is still starting', async () => {
 	const folder = await mkdtemp(join(tmpdir(), 'recoder-opencode-'));
 	const server = new OpenCodeServer({ ...process.env, RECODER_OPENCODE_BIN: await stalledOpenCode(folder) });
-	const started = serveStarted(folder);
 	const starting = server.ensure();
 
-	await started;
+	await whenFileExists(join(folder, STARTED_MARK));
 	server.stop();
 
 	await expect(starting).rejects.toThrow();

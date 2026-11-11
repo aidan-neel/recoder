@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { watch } from 'node:fs/promises';
 import { join } from 'node:path';
+import { whenFound } from '../../helpers/when-found';
 
 const PID_FILE = 'devin.pid';
 const STOPPED_FILE = 'devin.stopped';
@@ -27,18 +26,16 @@ export async function startedProcess(dir: string): Promise<number> {
 	return Number(await writtenFile(dir, PID_FILE));
 }
 
-/** Resolves once the fake has been told to stop. Call it before the stop, so the file is not written unseen. */
+/** Resolves once the fake has been told to stop. */
 export async function stoppedProcess(dir: string): Promise<void> {
 	await writtenFile(dir, STOPPED_FILE);
 }
 
-/** The text of `name` in `dir`, as soon as the file has any; `dir` is watched, not polled. */
-async function writtenFile(dir: string, name: string): Promise<string> {
-	for await (const event of watch(dir)) {
-		const text = event.filename === name ? readFileSync(join(dir, name), 'utf8').trim() : '';
+/** The text of `name` in `dir`, as soon as the file has any. */
+function writtenFile(dir: string, name: string): Promise<string> {
+	return whenFound(async () => {
+		const file = Bun.file(join(dir, name));
 
-		if (text) return text;
-	}
-
-	throw new Error('the watch ended');
+		return (await file.exists()) ? (await file.text()).trim() || null : null;
+	});
 }

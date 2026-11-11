@@ -1,4 +1,4 @@
-import { existsSync, watch, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseReviewArgs } from '../../../src/cli/args/review-args';
 import { CliError, EXIT, type ExitCode } from '../../../src/cli/exit';
@@ -8,6 +8,7 @@ import { takeOverRun } from '../../../src/cli/runs/review-command';
 import type { RunId } from '../../../src/cli/runs/run-id';
 import { runFiles } from '../../../src/cli/runs/run-files';
 import { exitOnSignal } from '../../../src/cli/signals/exit-on-signal';
+import { whenFileExists } from '../../helpers/when-found';
 import { report } from '../output/fixtures';
 
 /** Ends a fixture if a test fails to, so it never outlives the suite. */
@@ -33,7 +34,11 @@ export function waitingFile(runId: RunId): string {
 
 /** Lets a gated review take its run over. */
 export function openGate(runId: RunId): void {
-	writeFileSync(join(runFiles(runId).folder, 'gate'), '');
+	writeFileSync(gateFile(runId), '');
+}
+
+function gateFile(runId: RunId): string {
+	return join(runFiles(runId).folder, 'gate');
 }
 
 /**
@@ -74,21 +79,9 @@ const STUCK_READER: ReportDestination = {
 };
 
 function untilGateOpens(runId: RunId): Promise<void> {
-	const gate = join(runFiles(runId).folder, 'gate');
+	writeFileSync(waitingFile(runId), '');
 
-	return new Promise((resolve) => {
-		const check = (): void => {
-			if (!existsSync(gate)) return;
-
-			watcher.close();
-			resolve();
-		};
-
-		const watcher = watch(runFiles(runId).folder, check);
-
-		writeFileSync(waitingFile(runId), '');
-		check();
-	});
+	return whenFileExists(gateFile(runId));
 }
 
 async function reportAtOnce(): ReturnType<ReviewRunner> {

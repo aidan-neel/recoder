@@ -74,13 +74,11 @@ test('a signal while Devin lists its models stops the process, ends the listing 
 
 	const { env: pathEnv } = await fakeBin('devin', HANGING_DEVIN);
 	const env = { ...childEnvironment(dir), PATH: pathEnv.PATH, FAKE_DEVIN_DIR: dir };
-	const started = startedProcess(dir);
-	const stopped = stoppedProcess(dir);
 	const child = Bun.spawn([process.execPath, MAIN, 'models'], { env, stdout: 'pipe', stderr: 'ignore' });
 
-	await started;
+	await startedProcess(dir);
 	child.kill('SIGTERM');
 
 	expect(await child.exited).toBe(EXIT.cancelled);
-	await stopped;
+	await stoppedProcess(dir);
 });
