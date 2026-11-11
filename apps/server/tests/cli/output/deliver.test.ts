@@ -2,23 +2,25 @@ import { expect, test } from 'bun:test';
 import { chmodSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { deliverReport, prepareOutputFile, type ReportDestination } from '../../../src/cli/output/deliver';
-import { OUTPUT, finding, report } from './fixtures';
+import { deliverReport, prepareOutputFile } from '../../../src/cli/output/deliver';
+import { OUTPUT, destination as destinationWith, finding, report } from './fixtures';
 
 function recordDestination() {
 	const stdout: string[] = [];
+	const notes: string[] = [];
 	const files = new Map<string, string>();
 
-	const destination: ReportDestination = {
+	const destination = destinationWith({
 		writeStdout: async (text) => {
 			stdout.push(text);
 		},
 		writeFile: async (path, text) => {
 			files.set(path, text);
-		}
-	};
+		},
+		writeNote: (line) => notes.push(line)
+	});
 
-	return { stdout, files, destination };
+	return { stdout, notes, files, destination };
 }
 
 const withFindings = report({
@@ -54,15 +56,30 @@ test('with a file the report goes to the file and standard output gets one recei
 	});
 });
 
+test('for a person a report written to a file leaves standard output empty and says where it went', async () => {
+	const { stdout, notes, files, destination } = recordDestination();
+
+	await deliverReport(
+		withFindings,
+		{ ...OUTPUT, audience: 'person', format: 'text', file: '/tmp/review.txt' },
+		destination
+	);
+
+	expect(stdout).toEqual([]);
+	expect(notes).toHaveLength(1);
+	expect(notes[0]).toContain('/tmp/review.txt');
+	expect(files.get('/tmp/review.txt')).not.toContain('\u001b[');
+});
+
 test('a file that cannot be written fails the command and prints no receipt', async () => {
 	const stdout: string[] = [];
 
-	const destination: ReportDestination = {
+	const destination = destinationWith({
 		writeStdout: async (text) => {
 			stdout.push(text);
 		},
 		writeFile: () => Promise.reject(new Error('disk full'))
-	};
+	});
 
 	await expect(deliverReport(report(), { ...OUTPUT, file: '/tmp/review.json' }, destination)).rejects.toThrow(
 		'/tmp/review.json: disk full'

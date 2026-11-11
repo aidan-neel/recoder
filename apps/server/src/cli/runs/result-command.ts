@@ -1,10 +1,12 @@
 import { CliError, EXIT, usageError, type ExitCode } from '../exit.js';
-import { PROCESS_DESTINATION, deliverReport, prepareOutputFile, type ReportDestination } from '../output/deliver.js';
+import { deliverReport, prepareOutputFile, processDestination, type ReportDestination } from '../output/deliver.js';
 import { exitCodeFor } from '../output/exit-code.js';
 import { writeStderrLine } from '../output/streams.js';
 import type { OutputOptions } from '../review/options.js';
+import type { Terminal } from '../terminal/terminal.js';
 import type { RunId } from './run-id.js';
 import { runFiles } from './run-files.js';
+import { resolveRunReference, type RunReference } from './run-reference.js';
 import { readRunStatus, type RunStatus } from './run-status.js';
 import { readStoredReport } from './stored-report.js';
 
@@ -13,9 +15,13 @@ const NO_REPORT = 'the run ended without a report.';
 /** What a finished run has for its reader: its report, delivered, or the error of a run that ended without one. */
 type RunResult = { kind: 'report'; exitCode: ExitCode } | { kind: 'no-report'; error: string; exitCode: ExitCode };
 
-/** `recoder result <run-id>`. */
-export async function runResultCommand(runId: RunId, output: OutputOptions): Promise<ExitCode> {
-	return printRunResult(runId, output, PROCESS_DESTINATION);
+/** `recoder result [run]`. */
+export async function runResultCommand(
+	run: RunReference,
+	output: OutputOptions,
+	terminal: Terminal
+): Promise<ExitCode> {
+	return printRunResult(await resolveRunReference(run), output, processDestination(terminal));
 }
 
 /** Writes the report as `deliverRunResult` does, or the error of a run with none on standard error, and its exit code. */

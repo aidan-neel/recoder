@@ -4,12 +4,14 @@ import { parseFlags } from '../args/parse.js';
 import { parseRunsQuery, resultOutput } from '../args/run-args.js';
 import { CliError, EXIT } from '../exit.js';
 import type { ReportDestination } from '../output/deliver.js';
+import { writeStderrLine } from '../output/streams.js';
 import { cancelRun } from '../runs/cancel-run.js';
 import { listRecentRuns, writeWarnings } from '../runs/list-command.js';
 import { deliverRunResult } from '../runs/result-command.js';
 import { parseRunId, type RunId } from '../runs/run-id.js';
 import { readRunStatus } from '../runs/run-status.js';
 import { waitForRun } from '../runs/wait-for-run.js';
+import { PLAIN_SURFACE } from '../terminal/surface.js';
 import { describeFlag, flagArgv, flagProperties, type FlagArguments } from './flag-arguments.js';
 import {
 	defineTool,
@@ -98,7 +100,7 @@ export const runsTool = defineTool({
 /** The report as `recoder result` writes it, with the same flags checked the same way, collected instead of printed. */
 async function readResult(runId: RunId, flags: FlagArguments, context: ToolCallContext): Promise<ToolResult> {
 	const values = parseFlags(flagArgv(flags), { options: REPORT_FLAGS, strict: true, allowPositionals: false });
-	const output = resultOutput(values, context.environment.workingDirectory);
+	const output = resultOutput(values, context.environment.workingDirectory, 'program');
 
 	const written: string[] = [];
 	const result = await deliverRunResult(runId, output, collectInto(written));
@@ -114,7 +116,10 @@ function collectInto(written: string[]): ReportDestination {
 		},
 		writeFile: async (path) => {
 			throw new Error(`recoder_result writes no files; asked to write ${path}`);
-		}
+		},
+		writeNote: writeStderrLine,
+		out: PLAIN_SURFACE,
+		err: PLAIN_SURFACE
 	};
 }
 

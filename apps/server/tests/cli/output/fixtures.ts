@@ -1,7 +1,26 @@
+import type { ReportDestination } from '../../../src/cli/output/deliver';
 import type { OutputOptions } from '../../../src/cli/review/options';
 import type { ReportFinding, ReviewReport } from '../../../src/cli/report/report';
+import { PLAIN_SURFACE } from '../../../src/cli/terminal/surface';
+import type { Terminal } from '../../../src/cli/terminal/terminal';
+
+/** A program reading plain output, which is what most command tests check. */
+export const PROGRAM_TERMINAL: Terminal = { audience: 'program', out: PLAIN_SURFACE, err: PLAIN_SURFACE };
+
+/** A destination that drops everything, with the parts a test watches replaced. */
+export function destination(overrides: Partial<ReportDestination> = {}): ReportDestination {
+	return {
+		writeStdout: async () => {},
+		writeFile: async () => {},
+		writeNote: () => {},
+		out: PLAIN_SURFACE,
+		err: PLAIN_SURFACE,
+		...overrides
+	};
+}
 
 export const OUTPUT: OutputOptions = {
+	audience: 'program',
 	format: 'json',
 	file: null,
 	progress: 'none',

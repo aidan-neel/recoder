@@ -12,7 +12,7 @@ export interface ModelsQuery {
 }
 
 /** One model `--reviewer` and `--worker` accept, as `recoder models` prints it. */
-interface ListedModel {
+export interface ListedModel {
 	id: string;
 	name: string;
 	/** What the app's model picker groups the model under. */

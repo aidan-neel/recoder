@@ -12,19 +12,16 @@ import { RunJournal } from '../../../src/cli/runs/run-journal';
 import { readRunRecord } from '../../../src/cli/runs/run-record';
 import { assertNotCancelled } from '../../../src/cli/target/git';
 import { restoreAfterEach, useTestModel } from '../../review/pipeline/harness-fixtures';
-import { OUTPUT, finding, report } from '../output/fixtures';
+import { OUTPUT, destination, finding, report } from '../output/fixtures';
 import { useFreshDataDir } from './run-fixtures';
 
 useFreshDataDir();
 
 restoreAfterEach();
 
-const SILENT: ReportDestination = { writeStdout: async () => {}, writeFile: async () => {} };
+const SILENT = destination();
 
-const UNWRITABLE: ReportDestination = {
-	writeStdout: async () => {},
-	writeFile: () => Promise.reject(new Error('disk full'))
-};
+const UNWRITABLE = destination({ writeFile: () => Promise.reject(new Error('disk full')) });
 
 /** What a test changes about a run: its extra flags, where its report goes, and the stop its review runs under. */
 interface RunSetup {
@@ -36,13 +33,14 @@ interface RunSetup {
 /** Runs a review under a new run with `runner`, and returns the run's id and how the command ended. */
 async function runWith(runner: ReviewRunner, setup: RunSetup = {}) {
 	const { argv = [], destination = SILENT, signal = new AbortController().signal } = setup;
-	const { options } = parseReviewArgs(['--diff', 'change.patch', '--progress', 'none', ...argv], '/work');
+	const { options } = parseReviewArgs(['--diff', 'change.patch', '--progress', 'none', ...argv], '/work', 'program');
 	const journal = await RunJournal.create({ repoPath: options.repoPath, targetKind: options.target.kind });
 
 	const outcome = await runRecordedReview({
 		options,
 		journal,
 		signal,
+		progress: () => {},
 		loadRunner: async () => runner,
 		destination,
 		onEndRecorded: () => {}

@@ -2,7 +2,6 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseReviewArgs } from '../../../src/cli/args/review-args';
 import { CliError, EXIT, type ExitCode } from '../../../src/cli/exit';
-import type { ReportDestination } from '../../../src/cli/output/deliver';
 import { runRecordedReview, type ReviewRunner } from '../../../src/cli/runs/recorded-review';
 import { takeOverRun } from '../../../src/cli/runs/review-command';
 import type { RunId } from '../../../src/cli/runs/run-id';
@@ -10,6 +9,7 @@ import { runFiles } from '../../../src/cli/runs/run-files';
 import { exitOnSignal } from '../../../src/cli/signals/exit-on-signal';
 import { whenFileExists } from '../../helpers/when-found';
 import { report } from '../output/fixtures';
+import { destination } from '../output/fixtures';
 
 /** Ends a fixture if a test fails to, so it never outlives the suite. */
 export const LIFETIME_MS = 60_000;
@@ -46,7 +46,7 @@ function gateFile(runId: RunId): string {
  * calls a model. `flags` are the background process's flags, the run id among them.
  */
 export async function runFakeBackgroundReview(flags: string[], mode: FakeReviewMode): Promise<ExitCode> {
-	const { launch, options } = parseReviewArgs(flags, process.cwd());
+	const { launch, options } = parseReviewArgs(flags, process.cwd(), 'program');
 
 	if (launch.kind !== 'background') throw new Error('the fake review runs only as a background review');
 
@@ -59,6 +59,7 @@ export async function runFakeBackgroundReview(flags: string[], mode: FakeReviewM
 		options,
 		journal,
 		signal,
+		progress: () => {},
 		loadRunner: async () => (isStuck ? reportAtOnce : untilCancelled),
 		destination: isStuck ? STUCK_READER : SILENT,
 		onEndRecorded: exitOnSignal
@@ -70,13 +71,10 @@ export function exitCodeOf(error: unknown): ExitCode {
 	return error instanceof CliError ? error.exitCode : EXIT.failed;
 }
 
-const SILENT: ReportDestination = { writeStdout: async () => {}, writeFile: async () => {} };
+const SILENT = destination();
 
 /** A reader that never takes the report; the write keeps the process alive, as a pending pipe write does. */
-const STUCK_READER: ReportDestination = {
-	writeStdout: () => new Promise(() => setInterval(() => {}, LIFETIME_MS)),
-	writeFile: async () => {}
-};
+const STUCK_READER = destination({ writeStdout: () => new Promise(() => setInterval(() => {}, LIFETIME_MS)) });
 
 function untilGateOpens(runId: RunId): Promise<void> {
 	writeFileSync(waitingFile(runId), '');

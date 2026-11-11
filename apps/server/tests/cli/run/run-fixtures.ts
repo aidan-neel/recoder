@@ -45,6 +45,7 @@ export function reviewOptions(overrides: Partial<ReviewOptions> = {}): ReviewOpt
 			levers: []
 		},
 		output: {
+			audience: 'program',
 			format: 'json',
 			file: null,
 			progress: 'none',

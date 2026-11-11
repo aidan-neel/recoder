@@ -73,7 +73,7 @@ async function startReview(input: FlagArguments, context: ToolCallContext): Prom
 
 	await requireRegularFiles(input, workingDirectory);
 
-	const { options, launch } = parseReviewArgs([...flagArgv(input), DETACH_FLAG], workingDirectory);
+	const { options, launch } = parseReviewArgs([...flagArgv(input), DETACH_FLAG], workingDirectory, 'program');
 
 	if (launch.kind !== 'detach') throw new Error(`the review arguments started a ${launch.kind} review`);
 

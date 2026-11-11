@@ -44,7 +44,7 @@ test('review arguments reach the background review as the equivalent flags', asy
 	await server.served;
 
 	const [, ...flags] = processes.spawned[0].argv;
-	const { options, launch } = parseReviewArgs(flags, tmpdir());
+	const { options, launch } = parseReviewArgs(flags, tmpdir(), 'program');
 
 	expect(launch.kind).toBe('background');
 

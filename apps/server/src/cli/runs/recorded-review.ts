@@ -1,8 +1,7 @@
 import { CliError, EXIT, describeError, type ExitCode } from '../exit.js';
 import { deliverReport, type ReportDestination } from '../output/deliver.js';
 import { exitCodeFor } from '../output/exit-code.js';
-import { createProgressSink, teeProgress } from '../output/progress-sink.js';
-import { writeStderrLine } from '../output/streams.js';
+import { teeProgress } from '../output/progress-sink.js';
 import type { ProgressSink } from '../progress.js';
 import type { ReviewReport } from '../report/report.js';
 import type { ReviewOptions } from '../review/options.js';
@@ -21,6 +20,8 @@ export interface RecordedReview {
 	options: ReviewOptions;
 	journal: RunJournal;
 	signal: AbortSignal;
+	/** Shows progress to whoever watches the review; the run's progress file and record always get it too. */
+	progress: ProgressSink;
 	/** Loads the runner. It is loaded after the run exists, so a machine that is not ready is recorded too. */
 	loadRunner: () => Promise<ReviewRunner>;
 	destination: ReportDestination;
@@ -44,19 +45,12 @@ async function produceReport(review: RecordedReview): Promise<ReviewReport> {
 	try {
 		const runner = await review.loadRunner();
 
-		return await runner(options, progressFor(options, journal), signal);
+		return await runner(options, teeProgress([review.progress, journal.progressSink()]), signal);
 	} catch (error) {
 		await journal.finish(endOfFailure(error));
 
 		throw error;
 	}
-}
-
-/** Progress goes where the caller asked, and always to the run's progress file and record. */
-function progressFor(options: ReviewOptions, journal: RunJournal): ProgressSink {
-	const shown = createProgressSink(options.output.progress, writeStderrLine, () => new Date());
-
-	return teeProgress([shown, journal.progressSink()]);
 }
 
 /**

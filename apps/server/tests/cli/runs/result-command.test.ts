@@ -4,18 +4,17 @@ import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { EXIT } from '../../../src/cli/exit';
-import type { ReportDestination } from '../../../src/cli/output/deliver';
 import type { OutputOptions } from '../../../src/cli/review/options';
 import { printRunResult } from '../../../src/cli/runs/result-command';
 import { runFiles } from '../../../src/cli/runs/run-files';
 import type { RunRecord } from '../../../src/cli/runs/run-record';
 import { saveReport } from '../../../src/cli/runs/stored-report';
-import { OUTPUT, finding, report } from '../output/fixtures';
+import { OUTPUT, destination, finding, report } from '../output/fixtures';
 import { COMPLETE, liveIdentity, runIdAt, storeRun, useFreshDataDir } from './run-fixtures';
 
 useFreshDataDir();
 
-const SILENT: ReportDestination = { writeStdout: async () => {}, writeFile: async () => {} };
+const SILENT = destination();
 
 const ENDED_WITHOUT_REPORT: Partial<RunRecord> = { ...COMPLETE, state: 'failed', findings: null, unconfirmed: null };
 
@@ -64,7 +63,7 @@ test('a finished run whose report is missing fails instead of exiting 0 with not
 test('--output into a folder that does not exist yet creates it, as recoder review does', async () => {
 	const runId = await storeFinishedRun(WITH_WARNING);
 	const file = join(mkdtempSync(join(tmpdir(), 'recoder-result-')), 'new-folder', 'report.json');
-	const toDisk: ReportDestination = { writeStdout: async () => {}, writeFile: (path, text) => writeFile(path, text) };
+	const toDisk = destination({ writeFile: (path, text) => writeFile(path, text) });
 
 	await printRunResult(runId, { ...OUTPUT, file }, toDisk);
 

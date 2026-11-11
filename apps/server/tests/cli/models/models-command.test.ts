@@ -5,9 +5,8 @@ import { join } from 'node:path';
 import { EXIT } from '../../../src/cli/exit';
 import { fakeBin } from '../../helpers/fake-bin';
 import { childEnvironment } from '../child-env';
+import { MAIN_ENTRY, runMain } from '../run-main';
 import { HANGING_DEVIN, startedProcess, stoppedProcess } from '../run/hanging-devin';
-
-const MAIN = new URL('../../../src/cli/main.ts', import.meta.url).pathname;
 
 const dataDirs: string[] = [];
 
@@ -24,20 +23,12 @@ function machineWithoutAgents(): Record<string, string> {
 	return { ...childEnvironment(dir), RECODER_DEVIN_BIN: '' };
 }
 
-/** Runs `recoder models` with these arguments and returns what it wrote and how it ended. */
-async function runModels(env: Record<string, string>, args: string[] = []) {
-	const child = Bun.spawn([process.execPath, MAIN, 'models', ...args], { env, stdout: 'pipe', stderr: 'pipe' });
-
-	const [stdout, stderr, exitCode] = await Promise.all([
-		new Response(child.stdout).text(),
-		new Response(child.stderr).text(),
-		child.exited
-	]);
-
-	return { stdout, stderr, exitCode };
+/** Runs `recoder models -p`, as a program does, with these arguments and returns what it wrote and how it ended. */
+function runModels(env: Record<string, string>, args: string[] = []) {
+	return runMain(['models', '-p', ...args], { env });
 }
 
-test('recoder models prints one line of JSON and exits 0, with no problem for agents that are not installed', async () => {
+test('recoder models -p prints one line of JSON and exits 0, with no problem for agents that are not installed', async () => {
 	const { stdout, exitCode } = await runModels(machineWithoutAgents());
 	const lines = stdout.trimEnd().split('\n');
 
@@ -74,7 +65,7 @@ test('a signal while Devin lists its models stops the process, ends the listing 
 
 	const { env: pathEnv } = await fakeBin('devin', HANGING_DEVIN);
 	const env = { ...childEnvironment(dir), PATH: pathEnv.PATH, FAKE_DEVIN_DIR: dir };
-	const child = Bun.spawn([process.execPath, MAIN, 'models'], { env, stdout: 'pipe', stderr: 'ignore' });
+	const child = Bun.spawn([process.execPath, MAIN_ENTRY, 'models'], { env, stdout: 'pipe', stderr: 'ignore' });
 
 	await startedProcess(dir);
 	child.kill('SIGTERM');

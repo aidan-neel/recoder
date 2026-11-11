@@ -1,67 +1,61 @@
 #!/usr/bin/env bun
-import { parseInvocation, usageHint, type Invocation } from './args/command.js';
-import { CliError, EXIT, describeError, loadOrNotReady, type ExitCode } from './exit.js';
-import { writeStderrLine, writeStdout } from './output/streams.js';
+import { parseInvocation, type Invocation } from './args/command.js';
+import { splitAudience } from './audience.js';
+import { EXIT, type ExitCode } from './exit.js';
+import { reportFailure } from './failure.js';
+import { writeStdout } from './output/streams.js';
 import { runProgram } from './program.js';
-
-const JSON_INDENT = 2;
+import { processTerminal, type Terminal } from './terminal/terminal.js';
+import { VERSION } from '../version.js';
 
 await runProgram(Bun.argv.slice(2), runCli);
 
-/** Runs one command and returns the exit code. Every error ends as one line on standard error, with no stack. */
+/** Runs one command and returns the exit code. Every error is reported on standard error, with no stack. */
 async function runCli(argv: string[]): Promise<ExitCode> {
+	const { audience, argv: command } = splitAudience(argv);
+	const terminal = processTerminal(audience);
+
 	try {
-		return await execute(parseInvocation(argv, process.cwd()));
+		return await execute(parseInvocation(command, { workingDirectory: process.cwd(), audience }), terminal);
 	} catch (error) {
-		return reportFailure(error, argv);
+		return reportFailure(error, command, terminal);
 	}
 }
 
 /** Each command loads only the modules it needs, so the run commands start fast and never load the pipeline. */
-async function execute(invocation: Invocation): Promise<ExitCode> {
+async function execute(invocation: Invocation, terminal: Terminal): Promise<ExitCode> {
 	switch (invocation.command) {
-		case 'print':
-			await writeStdout(`${invocation.text}\n`);
-
-			return EXIT.ok;
+		case 'help':
+			return print((await import('./args/help.js')).renderHelp(invocation.topic, terminal.out));
+		case 'version':
+			return print(VERSION);
 		case 'doctor':
-			return runDoctorCommand();
+			return (await import('./doctor/doctor-command.js')).runDoctorCommand(terminal);
+		case 'init':
+			return (await import('./init/init-command.js')).runInitCommand(invocation.request, terminal);
 		case 'review':
-			return (await import('./runs/review-command.js')).runReviewCommand(invocation);
+			return (await import('./runs/review-command.js')).runReviewCommand(invocation, terminal);
 		case 'status':
-			return (await import('./runs/status-command.js')).runStatusCommand(invocation.runId);
+			return (await import('./runs/status-command.js')).runStatusCommand(invocation.run, terminal);
 		case 'wait':
-			return (await import('./runs/wait-command.js')).runWaitCommand(invocation.runId, invocation.timeoutMs);
+			return (await import('./runs/wait-command.js')).runWaitCommand(invocation.run, invocation.timeoutMs, terminal);
 		case 'result':
-			return (await import('./runs/result-command.js')).runResultCommand(invocation.runId, invocation.output);
+			return (await import('./runs/result-command.js')).runResultCommand(invocation.run, invocation.output, terminal);
 		case 'cancel':
-			return (await import('./runs/cancel-command.js')).runCancelCommand(invocation.runId);
+			return (await import('./runs/cancel-command.js')).runCancelCommand(invocation.run, terminal);
 		case 'runs':
-			return (await import('./runs/list-command.js')).runListCommand(invocation.query);
+			return (await import('./runs/list-command.js')).runListCommand(invocation.query, terminal);
 		case 'models':
-			return (await import('./models/models-command.js')).runModelsCommand(invocation.query);
+			return (await import('./models/models-command.js')).runModelsCommand(invocation.query, terminal);
 		case 'mcp':
 			return (await import('./mcp/mcp-command.js')).runMcpCommand();
 		case 'skill':
-			return (await import('./skill/skill-command.js')).runSkillCommand(invocation.argv, process.cwd());
+			return (await import('./skill/skill-command.js')).runSkillCommand(invocation.argv, process.cwd(), terminal);
 	}
 }
 
-async function runDoctorCommand(): Promise<ExitCode> {
-	const { runDoctor } = await loadOrNotReady(() => import('./doctor/doctor.js'));
-	const report = await runDoctor();
+async function print(text: string): Promise<ExitCode> {
+	await writeStdout(`${text}\n`);
 
-	await writeStdout(`${JSON.stringify(report, null, JSON_INDENT)}\n`);
-
-	return report.ok ? EXIT.ok : EXIT.notReady;
-}
-
-function reportFailure(error: unknown, argv: string[]): ExitCode {
-	writeStderrLine(`recoder: ${describeError(error)}`);
-
-	if (!(error instanceof CliError)) return EXIT.failed;
-
-	if (error.exitCode === EXIT.usage) writeStderrLine(usageHint(argv));
-
-	return error.exitCode;
+	return EXIT.ok;
 }

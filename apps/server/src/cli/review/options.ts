@@ -1,5 +1,6 @@
 import type { FindingSeverity, ReasoningEffort, SubagentCap, TokenBudget } from '@recoder/shared';
 import type { LensId } from '../../review/pipeline/lenses/types.js';
+import type { Audience } from '../audience.js';
 
 /** What `recoder review` reviews. Every kind but `diff` and `pull` reads the git repository at `repoPath`. */
 export type ReviewTarget =
@@ -64,12 +65,16 @@ export interface ReviewTuning {
 	levers: ReviewLever[];
 }
 
-export type ReportFormat = 'json' | 'markdown';
+/** `text` is laid out for a terminal, `markdown` is a document, and `json` is every field. */
+export type ReportFormat = 'text' | 'json' | 'markdown';
 
-export type ProgressFormat = 'none' | 'text' | 'ndjson';
+/** `live` redraws in place on a terminal and falls back to `text` lines anywhere else. */
+export type ProgressFormat = 'none' | 'text' | 'ndjson' | 'live';
 
 /** How the report is written. Filters apply when writing; the report itself always holds everything. */
 export interface OutputOptions {
+	/** Who reads the output; it decides what stands in for a report that went to a file. */
+	audience: Audience;
 	format: ReportFormat;
 	/** Where the report goes; null is standard output. */
 	file: string | null;

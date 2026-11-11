@@ -1,22 +1,27 @@
 import { expect, test } from 'bun:test';
 import { parseInvocation } from '../../../src/cli/args/command';
 import { EXIT } from '../../../src/cli/exit';
-import { VERSION } from '../../../src/version';
 
 const RUN_ID = '20261110-153045-a1b2c3';
 
 const OTHER_RUN_ID = '20261110-153045-a1b2c4';
 
-const parse = (...argv: string[]) => parseInvocation(argv, '/work');
+const parse = (...argv: string[]) => parseInvocation(argv, { workingDirectory: '/work', audience: 'program' });
 
 const usageError = expect.objectContaining({ exitCode: EXIT.usage });
 
 test('--help beside a flag that would not parse still prints help', () => {
-	expect(parse('review', '--budget', 'huge', '--help').command).toBe('print');
+	expect(parse('review', '--budget', 'huge', '--help')).toEqual({ command: 'help', topic: 'review' });
 });
 
-test('--version prints the server version', () => {
-	expect(parse('--version')).toEqual({ command: 'print', text: VERSION });
+test('help names the command it explains, and the program for anything that is not one', () => {
+	expect(parse('help', 'wait')).toEqual({ command: 'help', topic: 'wait' });
+	expect(parse('help', 'bogus')).toEqual({ command: 'help', topic: 'main' });
+	expect(parse()).toEqual({ command: 'help', topic: 'main' });
+});
+
+test('a mistyped command names the one that was probably meant', () => {
+	expect(() => parse('revew')).toThrow('recoder review');
 });
 
 test('an unknown command is a usage error', () => {
@@ -45,16 +50,32 @@ test.each(PATH_CASES)('%s refuses the run id %s as a usage error, before anythin
 	expect(() => parse(command, runId)).toThrow(usageError);
 });
 
-test('a run command with no run id is a usage error', () => {
-	expect(() => parse('status')).toThrow(usageError);
+test('a run command with no run id means the newest run', () => {
+	expect(parse('status')).toEqual({ command: 'status', run: { kind: 'newest' } });
+});
+
+test('a run command takes part of a run id, to be matched against the runs on disk', () => {
+	expect(parse('result', 'a1b2c3')).toMatchObject({ run: { kind: 'part', text: 'a1b2c3' } });
+	expect(parse('result', RUN_ID)).toMatchObject({ run: { kind: 'id', runId: RUN_ID } });
 });
 
 test('a run command given two run ids names the second', () => {
 	expect(() => parse('cancel', RUN_ID, OTHER_RUN_ID)).toThrow(OTHER_RUN_ID);
 });
 
-test('skill passes its arguments on untouched', () => {
+test('skill passes its subcommand and flags on untouched', () => {
 	expect(parse('skill', 'install', '--force')).toEqual({ command: 'skill', argv: ['install', '--force'] });
+});
+
+test('init reads its scope and a comma-separated list of agents', () => {
+	expect(parse('init', '--project', '--agent', 'claude,agents')).toMatchObject({
+		command: 'init',
+		request: { scope: 'project', agents: ['claude', 'agents'], guidelines: true, mcp: false }
+	});
+});
+
+test('init refuses both scopes at once', () => {
+	expect(() => parse('init', '--project', '--global')).toThrow(usageError);
 });
 
 test('models reads --provider as a repeatable, comma-separated list and --search as text', () => {
@@ -74,5 +95,5 @@ test('models refuses a flag it does not have, and a --provider with no name', ()
 });
 
 test('models --help prints its help beside a flag that would not parse', () => {
-	expect(parse('models', '--limit', '--help').command).toBe('print');
+	expect(parse('models', '--limit', '--help')).toEqual({ command: 'help', topic: 'models' });
 });
