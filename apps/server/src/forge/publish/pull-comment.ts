@@ -52,21 +52,20 @@ function inFlight(review: Review): boolean {
 }
 
 /** Other reviews of the same pull request, newest first. */
-function siblings(review: Review): Review[] {
-	return db.reviews
-		.list()
+async function siblings(review: Review): Promise<Review[]> {
+	return (await db.reviews.list())
 		.filter((other) => other.id !== review.id && other.repoId === review.repoId && other.prNumber === review.prNumber)
 		.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 /** A newer review of the same pull request took the comment over; this one must stop writing to it. */
-function handedOn(review: Review): boolean {
-	return siblings(review).some((other) => other.createdAt > review.createdAt && other.pullComment);
+async function handedOn(review: Review): Promise<boolean> {
+	return (await siblings(review)).some((other) => other.createdAt > review.createdAt && other.pullComment);
 }
 
 /** The comment an earlier review of the same pull request posted, which this one edits instead of posting anew. */
-function inherited(review: Review): PostedComment | null {
-	const earlier = siblings(review).find((other) => other.pullComment?.id && other.pullComment.url);
+async function inherited(review: Review): Promise<PostedComment | null> {
+	const earlier = (await siblings(review)).find((other) => other.pullComment?.id && other.pullComment.url);
 
 	return earlier ? { id: earlier.pullComment!.id!, url: earlier.pullComment!.url! } : null;
 }
@@ -78,7 +77,7 @@ function inherited(review: Review): PostedComment | null {
  */
 async function upsert(forge: PullCommentForge, review: Review, body: string): Promise<PostedComment> {
 	const own = review.pullComment?.id && review.pullComment.url ? review.pullComment : null;
-	const known = own ? { id: own.id!, url: own.url! } : inherited(review);
+	const known = own ? { id: own.id!, url: own.url! } : await inherited(review);
 
 	if (known) {
 		try {
@@ -101,13 +100,13 @@ function failureText(err: unknown): string {
 
 /** Render the review as it stands and write it to the pull request. Throws the forge's error after saving it. */
 async function write(reviewId: string): Promise<Review> {
-	const review = db.reviews.get(reviewId);
+	const review = await db.reviews.get(reviewId);
 
 	if (!review) throw new Error('review not found');
-	if (handedOn(review)) return review;
+	if (await handedOn(review)) return review;
 
 	try {
-		const { forge, provider } = reviewForge(review);
+		const { forge, provider } = await reviewForge(review);
 		const running = inFlight(review);
 
 		const body = renderPullComment({
@@ -118,7 +117,7 @@ async function write(reviewId: string): Promise<Review> {
 			status: running ? 'running' : review.status === 'passed' ? 'passed' : 'failed',
 			summary: running ? null : review.summary,
 			findings: review.findings,
-			progress: running ? reviewProgress.get(reviewId) : undefined,
+			progress: running ? await reviewProgress.get(reviewId) : undefined,
 			requestedBy: review.autoTrigger?.by,
 			limit: forge.limit
 		});
@@ -130,9 +129,12 @@ async function write(reviewId: string): Promise<Review> {
 
 		if (running) lastBodies.set(reviewId, body);
 
-		return savePullComment(reviewId, { ...posted, state: running ? 'posting' : 'posted', error: undefined }) ?? review;
+		return (
+			(await savePullComment(reviewId, { ...posted, state: running ? 'posting' : 'posted', error: undefined })) ??
+			review
+		);
 	} catch (err) {
-		savePullComment(reviewId, { state: 'failed', error: failureText(err) });
+		await savePullComment(reviewId, { state: 'failed', error: failureText(err) });
 		throw err;
 	}
 }
@@ -173,7 +175,6 @@ function untrack(reviewId: string): void {
 	const tracker = trackers.get(reviewId);
 
 	if (!tracker) return;
-
 	if (tracker.timer) clearTimeout(tracker.timer);
 	tracker.unsubscribe();
 	trackers.delete(reviewId);
@@ -181,11 +182,11 @@ function untrack(reviewId: string): void {
 }
 
 /** Mark the review as wanting a comment, and follow it if it is running. */
-function claim(reviewId: string): Review | undefined {
-	const review = db.reviews.get(reviewId);
+async function claim(reviewId: string): Promise<Review | undefined> {
+	const review = await db.reviews.get(reviewId);
 
 	if (!review) return undefined;
-	if (!review.pullComment) savePullComment(reviewId, { state: 'posting' });
+	if (!review.pullComment) await savePullComment(reviewId, { state: 'posting' });
 	if (inFlight(review)) track(reviewId);
 
 	return review;
@@ -197,40 +198,34 @@ function claim(reviewId: string): Review | undefined {
  * A draft posts once it starts. For the auto-review watcher; failures are
  * saved on the review rather than thrown.
  */
-export function requestPullComment(reviewId: string): void {
-	const review = claim(reviewId);
+export async function requestPullComment(reviewId: string): Promise<void> {
+	const review = await claim(reviewId);
 
 	if (review && review.status !== 'draft') writeLater(reviewId);
 }
-
 /**
  * Write the summary comment now and answer the review with its comment state.
  * Throws the forge's error, or a conflict for a draft or a review a newer one replaced.
  */
 export async function publishPullComment(reviewId: string): Promise<Review> {
-	const review = db.reviews.get(reviewId);
+	const review = await db.reviews.get(reviewId);
 
 	if (review?.status === 'draft')
 		throw new PublishConflictError('Start the review before commenting on the pull request.');
-
-	if (review && handedOn(review))
+	if (review && (await handedOn(review)))
 		throw new PublishConflictError('A newer review of this pull request keeps its comment up to date.');
-
-	claim(reviewId);
+	await claim(reviewId);
 
 	return serial(reviewId, () => write(reviewId));
 }
-
 /** The pipeline started a run: a review that asked for a comment posts "Reviewing…" and follows the run. */
-export function trackPullComment(reviewId: string): void {
-	if (!db.reviews.get(reviewId)?.pullComment) return;
-
+export async function trackPullComment(reviewId: string): Promise<void> {
+	if (!(await db.reviews.get(reviewId))?.pullComment) return;
 	track(reviewId);
 	writeLater(reviewId);
 }
-
 /** The pipeline's run ended, however it ended: stop following it and write the final comment. */
-export function settlePullComment(reviewId: string): void {
+export async function settlePullComment(reviewId: string): Promise<void> {
 	untrack(reviewId);
-	if (db.reviews.get(reviewId)?.pullComment) writeLater(reviewId);
+	if ((await db.reviews.get(reviewId))?.pullComment) writeLater(reviewId);
 }

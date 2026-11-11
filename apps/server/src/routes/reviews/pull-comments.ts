@@ -25,7 +25,7 @@ function publishFailure(c: Context, err: unknown): Response {
 
 /** Answer the review once `publish` wrote its comment. */
 async function answer(c: Context, publish: (review: Review) => Promise<Review>): Promise<Response> {
-	const review = requireReview(c);
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 

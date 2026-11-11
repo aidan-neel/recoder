@@ -61,7 +61,7 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 		run.status = 'rejected';
 		run.finishedAt = new Date().toISOString();
 		run.logs = `command "${opts.command}" is not allowlisted (RECODER_ALLOWED_COMMANDS=${env.RECODER_ALLOWED_COMMANDS})`;
-		db.runs.set(run);
+		await db.runs.set(run);
 		throw new Error(run.logs);
 	}
 
@@ -69,8 +69,7 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 	const timeoutMs = opts.timeoutMs ?? env.RECODER_COMMAND_TIMEOUT_MS;
 
 	await mkdir(cwd, { recursive: true });
-
-	db.runs.set(run);
+	await db.runs.set(run);
 
 	try {
 		const proc = Bun.spawn([opts.command, ...args], {
@@ -90,7 +89,6 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 		const timer = setTimeout(kill, timeoutMs);
 
 		opts.signal?.addEventListener('abort', kill, { once: true });
-
 		if (opts.signal?.aborted) kill();
 
 		const read = async (stream: ReadableStream<Uint8Array> | null): Promise<string> => {
@@ -132,14 +130,14 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 		run.exitCode = exitCode;
 		run.status = wasKilled ? 'killed' : exitCode === 0 ? 'succeeded' : 'failed';
 		run.finishedAt = new Date().toISOString();
-		db.runs.set(run);
+		await db.runs.set(run);
 
 		return run;
 	} catch (err) {
 		run.status = 'failed';
 		run.finishedAt = new Date().toISOString();
 		run.logs = truncate(err instanceof Error ? err.message : String(err));
-		db.runs.set(run);
+		await db.runs.set(run);
 		throw err;
 	}
 }

@@ -14,24 +14,23 @@ const originalFetch = globalThis.fetch;
 const originalSettings = getStoredSettings();
 const ids: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
 	globalThis.fetch = originalFetch;
 	setReviewOverrides(originalSettings);
 
 	for (const id of ids.splice(0)) {
-		db.reviews.delete(id);
-		clearReviewEvents(id);
+		await db.reviews.delete(id);
+		await clearReviewEvents(id);
 	}
 });
 
-function setup() {
+async function setup() {
 	const id = crypto.randomUUID();
 
 	ids.push(id);
+	await db.reviews.set(testReview({ id, headSha: 'abc', summary: 'Done', prTitle: 'Review' }));
 
-	db.reviews.set(testReview({ id, headSha: 'abc', summary: 'Done', prTitle: 'Review' }));
-
-	reviewProgress.set({
+	await reviewProgress.set({
 		...emptyReviewProgress(id),
 		assignments: [
 			{ id: 'subagent-1', role: 'subagent', title: 'Auth checks', status: 'done', reason: 'Auth changed', scope: [] }
@@ -69,11 +68,11 @@ function settled(id: string, assignmentId: string) {
 	});
 }
 
-test('server restart settles interrupted replies even on completed reviews', () => {
-	const id = setup();
-	const progress = reviewProgress.get(id)!;
+test('server restart settles interrupted replies even on completed reviews', async () => {
+	const id = await setup();
+	const progress = (await reviewProgress.get(id))!;
 
-	reviewProgress.set({
+	await reviewProgress.set({
 		...progress,
 		messages: [
 			{
@@ -88,14 +87,14 @@ test('server restart settles interrupted replies even on completed reviews', () 
 		]
 	});
 
-	recoverStaleReviews();
-	expect(db.reviews.get(id)?.status).toBe('passed');
-	expect(reviewProgress.get(id)?.messages?.[0]).toMatchObject({ status: 'error' });
-	expect(reviewProgress.get(id)?.messages?.[0].text).toContain('server restart');
+	await recoverStaleReviews();
+	expect((await db.reviews.get(id))?.status).toBe('passed');
+	expect((await reviewProgress.get(id))?.messages?.[0]).toMatchObject({ status: 'error' });
+	expect((await reviewProgress.get(id))?.messages?.[0].text).toContain('server restart');
 });
 
 test('subagent chat runs on the second model, streams, persists and is visible in subsequent orchestrator requests', async () => {
-	const id = setup();
+	const id = await setup();
 	const requests: Array<{ model: string; messages: { content: string }[] }> = [];
 
 	globalThis.fetch = (async (_url, init) => {
@@ -106,28 +105,28 @@ test('subagent chat runs on the second model, streams, persists and is visible i
 
 	const done = settled(id, 'subagent-1');
 
-	startReviewChat(id, 'subagent-1', 'Is the caller protected?');
+	await startReviewChat(id, 'subagent-1', 'Is the caller protected?');
 	await done;
 	expect(requests[0].model).toBe('worker');
-	expect(discussionContext(id)).toContain('Is the caller protected?');
-	expect(discussionContext(id)).toContain('The caller checks the token.');
-	expect(discussionContext(id, 'unrelated-subagent')).toBe('');
+	expect(await discussionContext(id)).toContain('Is the caller protected?');
+	expect(await discussionContext(id)).toContain('The caller checks the token.');
+	expect(await discussionContext(id, 'unrelated-subagent')).toBe('');
 
 	const leadDone = settled(id, ORCHESTRATOR_ID);
 
-	startReviewChat(id, ORCHESTRATOR_ID, 'What did security say?');
+	await startReviewChat(id, ORCHESTRATOR_ID, 'What did security say?');
 	await leadDone;
 	expect(requests[1].model).toBe('lead');
 	expect(requests[1].messages[1].content).toContain('The caller checks the token.');
 
 	let client = emptyReviewProgress(id);
 
-	for (const event of reviewEventBuffer(id)) client = applyProgressMessage(client, event);
-	expect(client.messages).toEqual(reviewProgress.get(id)?.messages);
+	for (const event of await reviewEventBuffer(id)) client = applyProgressMessage(client, event);
+	expect(client.messages).toEqual((await reviewProgress.get(id))?.messages);
 });
 
 test('unknown targets are rejected and duplicate sends are blocked until stop settles', async () => {
-	const id = setup();
+	const id = await setup();
 
 	globalThis.fetch = fetchUntilAborted;
 
@@ -141,22 +140,22 @@ test('unknown targets are rejected and duplicate sends are blocked until stop se
 
 	const done = settled(id, ORCHESTRATOR_ID);
 
-	startReviewChat(id, ORCHESTRATOR_ID, 'Explain');
-	expect(() => startReviewChat(id, ORCHESTRATOR_ID, 'Again')).toThrow('still replying');
+	await startReviewChat(id, ORCHESTRATOR_ID, 'Explain');
+	expect(async () => await startReviewChat(id, ORCHESTRATOR_ID, 'Again')).toThrow('still replying');
 	await new Promise((resolve) => setTimeout(resolve, 10));
 	stopReviewChat(id, ORCHESTRATOR_ID);
 	await done;
-	expect(reviewProgress.get(id)?.messages?.at(-1)).toMatchObject({ status: 'error', text: 'Reply stopped.' });
+	expect((await reviewProgress.get(id))?.messages?.at(-1)).toMatchObject({ status: 'error', text: 'Reply stopped.' });
 });
 
 test('a reply ending in a recoder-review block reruns the finished review and keeps only the conversation', async () => {
-	const id = setup();
-	const startedAt = new Date(Date.now() - 60_000).toISOString();
+	const id = await setup();
+	const startedAt = new Date(Date.now() - 60000).toISOString();
 
-	db.reviews.set({ ...db.reviews.get(id)!, startedAt });
+	await db.reviews.set({ ...(await db.reviews.get(id))!, startedAt });
 
-	reviewProgress.set({
-		...reviewProgress.get(id)!,
+	await reviewProgress.set({
+		...(await reviewProgress.get(id))!,
 		reasoning: [
 			{ id: 'old', assignmentId: 'unit-1', role: 'reviewer', model: 'worker', text: 'Old run.', at: startedAt }
 		]
@@ -167,26 +166,30 @@ test('a reply ending in a recoder-review block reruns the finished review and ke
 			choices: [{ message: { content: 'Starting a new review with subagents.\n\n```recoder-review\n{}\n```' } }]
 		})) as unknown as typeof fetch;
 
-	const events: Array<{ step?: string; data?: Record<string, unknown> }> = [];
+	const events: Array<{
+		step?: string;
+		data?: Record<string, unknown>;
+	}> = [];
+
 	const off = subscribeReview(id, (event) => events.push(event), false);
 	const done = settled(id, ORCHESTRATOR_ID);
 
-	startReviewChat(id, ORCHESTRATOR_ID, 'Try another review, and use subagents this time.');
+	await startReviewChat(id, ORCHESTRATOR_ID, 'Try another review, and use subagents this time.');
 	await done;
 	off();
 
-	const progress = reviewProgress.get(id)!;
+	const progress = (await reviewProgress.get(id))!;
 
 	expect(progress.messages?.at(-1)).toMatchObject({ status: 'done', text: 'Starting a new review with subagents.' });
 	expect(progress.messages?.every((message) => message.discussion)).toBe(true);
 	expect(progress.reasoning?.some((entry) => entry.id === 'old')).toBe(false);
 	expect(events.some((event) => event.step === 'queued' && event.data?.reset === true)).toBe(true);
-	expect(Date.parse(db.reviews.get(id)!.startedAt!)).toBeGreaterThan(Date.parse(startedAt));
+	expect(Date.parse((await db.reviews.get(id))!.startedAt!)).toBeGreaterThan(Date.parse(startedAt));
 });
 
-test('a review that is already running cannot be rerun', () => {
-	const id = setup();
+test('a review that is already running cannot be rerun', async () => {
+	const id = await setup();
 
-	db.reviews.set({ ...db.reviews.get(id)!, status: 'running' });
-	expect(() => rerunReviewSession(id)).toThrow('already running');
+	await db.reviews.set({ ...(await db.reviews.get(id))!, status: 'running' });
+	expect(async () => await rerunReviewSession(id)).toThrow('already running');
 });

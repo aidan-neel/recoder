@@ -62,5 +62,5 @@ export interface JsonAgentOptions<T> {
 	onReasoning?: (reasoning: Pick<ReviewReasoningEntry, 'id' | 'text' | 'status' | 'summary' | 'outputRate'>) => void;
 	onTool?: (tool: ToolCallReport) => void;
 	onMessage?: (message: Pick<ReviewChatMessage, 'id' | 'text' | 'status' | 'cutOff' | 'outputRate'>) => void;
-	getDiscussion?: () => string;
+	getDiscussion?: () => Promise<string>;
 }

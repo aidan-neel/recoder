@@ -86,7 +86,7 @@ test('harness completion and streaming use direct HTTP, count once each and pres
 
 	const id = crypto.randomUUID();
 
-	db.reviews.set(testReview({ id }));
+	await db.reviews.set(testReview({ id }));
 
 	try {
 		await withReviewMetrics(id, 'pipeline', () => chatCompletion(input));
@@ -96,24 +96,29 @@ test('harness completion and streaming use direct HTTP, count once each and pres
 		await withReviewMetrics(id, 'discussion', () => streamChatCompletion(input, (text) => chunks.push(text)));
 		expect(chunks).toEqual(['{"findings":', '[]}']);
 
-		expect(getReviewMetrics(id)?.total).toMatchObject({
+		expect((await getReviewMetrics(id))?.total).toMatchObject({
 			calls: 2,
 			failedCalls: 0,
 			usage: { inputTokens: 200, outputTokens: 60, totalTokens: 260, cachedInputTokens: 40, reasoningOutputTokens: 20 }
 		});
 
-		expect(getReviewMetrics(id)?.models).toHaveLength(1);
+		expect((await getReviewMetrics(id))?.models).toHaveLength(1);
 		limited = true;
 
 		const error = await withReviewMetrics(id, 'pipeline', () => chatCompletion(input)).catch((error) => error);
 
 		expect(error).toBeInstanceOf(LlmError);
 		expect(error.status).toBe(429);
-		expect(getReviewMetrics(id)?.total).toMatchObject({ calls: 3, failedCalls: 1, usage: { totalTokens: 260 } });
+
+		expect((await getReviewMetrics(id))?.total).toMatchObject({
+			calls: 3,
+			failedCalls: 1,
+			usage: { totalTokens: 260 }
+		});
 	} finally {
 		codex.complete = original;
-		db.reviews.delete(id);
-		reviewMetrics.delete(id);
+		await db.reviews.delete(id);
+		await reviewMetrics.delete(id);
 	}
 });
 

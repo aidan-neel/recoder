@@ -11,6 +11,7 @@ import {
 import { pullFeed, watchable, type PullFeed } from './feed';
 import { readAutoReviewSettings } from './settings';
 import { reviewHistory, startAutoReview } from './start';
+import { withWatchState } from './state-queue';
 
 /** The first round waits a little after boot or a settings change, so a burst of saves runs one round. */
 const FIRST_ROUND_MS = 3_000;
@@ -34,8 +35,8 @@ function message(err: unknown): string {
 }
 
 /** Tracked GitHub and GitLab repositories the settings don't exclude. */
-function watchedRepos(settings: AutoReviewSettings): Repo[] {
-	return db.repos.list().filter((repo) => watchable(repo) && !settings.excludedRepoIds.includes(repo.id));
+async function watchedRepos(settings: AutoReviewSettings): Promise<Repo[]> {
+	return (await db.repos.list()).filter((repo) => watchable(repo) && !settings.excludedRepoIds.includes(repo.id));
 }
 
 /** Pull requests updated since a little before the last check, each with its comments. */
@@ -49,49 +50,52 @@ async function fetchActivity(feed: PullFeed, checkedAt: string): Promise<PullAct
 	return activity;
 }
 
-/**
- * Decide, start and persist in one synchronous step, re-reading the state
- * first, so a webhook handled while the forge was being read is never
- * overwritten or handled twice. Returns why any review failed to start.
- */
-function applyActivity(
+async function applyActivity(
 	repo: Repo,
 	settings: AutoReviewSettings,
 	round: { checkedAt: string | null; startedAt: string },
 	activity: PullActivity[]
-): string[] {
-	const state = readWatchState();
-	const cursor = (state.repos[repo.id] ??= { checkedAt: round.startedAt, pulls: {} });
-	const failures: string[] = [];
+): Promise<string[]> {
+	return withWatchState(async () => {
+		const state = readWatchState();
+		const cursor = (state.repos[repo.id] ??= { checkedAt: round.startedAt, pulls: {} });
+		const failures: string[] = [];
 
-	for (const { pull, notes } of round.checkedAt ? activity : []) {
-		const decision = decidePull({
-			settings,
-			checkedAt: round.checkedAt,
-			cursor: cursor.pulls[pull.number],
-			pull,
-			notes,
-			...reviewHistory(repo.id, pull),
-			now: round.startedAt
-		});
+		for (const { pull, notes } of round.checkedAt ? activity : []) {
+			const decision = decidePull({
+				settings,
+				checkedAt: round.checkedAt,
+				cursor: cursor.pulls[pull.number],
+				pull,
+				notes,
+				...(await reviewHistory(repo.id, pull)),
+				now: round.startedAt
+			});
 
-		cursor.pulls[pull.number] = decision.cursor;
+			cursor.pulls[pull.number] = decision.cursor;
 
-		if (!decision.trigger) continue;
+			if (!decision.trigger) continue;
 
-		try {
-			state.recent.unshift(
-				startAutoReview({ repo, pull, trigger: decision.trigger, source: 'auto', postResults: settings.postResults })
-			);
-		} catch (err) {
-			failures.push(`#${pull.number}: ${message(err)}`);
+			try {
+				state.recent.unshift(
+					await startAutoReview({
+						repo,
+						pull,
+						trigger: decision.trigger,
+						source: 'auto',
+						postResults: settings.postResults
+					})
+				);
+			} catch (err) {
+				failures.push(`#${pull.number}: ${message(err)}`);
+			}
 		}
-	}
 
-	cursor.checkedAt = round.startedAt;
-	writeWatchState(state);
+		cursor.checkedAt = round.startedAt;
+		writeWatchState(state);
 
-	return failures;
+		return failures;
+	});
 }
 
 /** One repository's round. The first ever check only records the time: what is already there is history. */
@@ -103,7 +107,7 @@ async function checkRepo(repo: Repo, settings: AutoReviewSettings): Promise<void
 	const startedAt = new Date().toISOString();
 	const checkedAt = readWatchState().repos[repo.id]?.checkedAt ?? null;
 	const activity = checkedAt ? await fetchActivity(feed, checkedAt) : [];
-	const failures = applyActivity(repo, settings, { checkedAt, startedAt }, activity);
+	const failures = await applyActivity(repo, settings, { checkedAt, startedAt }, activity);
 
 	if (failures.length) throw new Error(`Couldn't start a review for ${failures.join('; ')}`);
 }
@@ -113,7 +117,7 @@ async function checkAll(): Promise<void> {
 	const settings = readAutoReviewSettings();
 	const errors: AutoReviewStatus['errors'] = [];
 
-	for (const repo of watchedRepos(settings)) {
+	for (const repo of await watchedRepos(settings)) {
 		try {
 			await checkRepo(repo, settings);
 		} catch (err) {
@@ -164,10 +168,12 @@ export async function checkNow(): Promise<void> {
 	if (readAutoReviewSettings().enabled) await runRound();
 }
 
-export function autoReviewStatus(settings: AutoReviewSettings = readAutoReviewSettings()): AutoReviewStatus {
+export async function autoReviewStatus(
+	settings: AutoReviewSettings = readAutoReviewSettings()
+): Promise<AutoReviewStatus> {
 	return {
 		running: runtime.timer !== null || runtime.round !== null,
-		watching: watchedRepos(settings).length,
+		watching: (await watchedRepos(settings)).length,
 		lastCheckAt: runtime.lastCheckAt,
 		nextCheckAt: runtime.nextCheckAt,
 		errors: runtime.errors,

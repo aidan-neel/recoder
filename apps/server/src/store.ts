@@ -1,80 +1,22 @@
-import { Database } from 'bun:sqlite';
-import { join } from 'node:path';
-import {
-	settleAssignments,
-	type CommandRun,
-	type Repo,
-	type Review,
-	type ReviewProgress,
-	type TokenCall
-} from '@recoder/shared';
-import { serverDataDir } from './util/data-dir';
+import { settleAssignments, type CommandRun, type Repo, type Review, type ReviewProgress } from '@recoder/shared';
+import { sqlite as getDb, sqliteCollection as createCollection, closeSqlite } from './storage/sqlite';
+import { progressWrites, metricWrites } from './storage/persistence-queue';
 import type { ReviewCheckpoint } from './review/session/review-checkpoint';
+import type { PipelineRun, RunTokenCall } from './models/metrics';
 import { settleTasks } from './review/session/task-state';
 
-/**
- * SQLite-backed store. Everything the UI treats as durable (repos, reviews,
- * runs, diffs) survives restarts and `--hot` reloads — previously all of
- * this lived in Maps and vanished on every server edit.
- */
-
-let handle: Database | null = null;
-
-function getDb(): Database {
-	if (!handle) {
-		handle = new Database(join(serverDataDir(), 'recoder.db'));
-		handle.run('PRAGMA journal_mode = WAL');
-		handle.run('CREATE TABLE IF NOT EXISTS repos (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
-		handle.run('CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
-		handle.run('CREATE TABLE IF NOT EXISTS runs (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
-		handle.run('CREATE TABLE IF NOT EXISTS review_progress (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
-		handle.run('CREATE TABLE IF NOT EXISTS review_metrics (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
-		handle.run('CREATE TABLE IF NOT EXISTS review_checkpoints (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
-		handle.run('CREATE TABLE IF NOT EXISTS review_replays (id TEXT PRIMARY KEY, value TEXT NOT NULL)');
-		handle.run('CREATE TABLE IF NOT EXISTS review_diffs (review_id TEXT PRIMARY KEY, diff TEXT NOT NULL)');
-	}
-
-	return handle;
+async function flushPersistence(): Promise<void> {
+	await progressWrites.drainAll();
+	await metricWrites.drainAll();
+	await flushReviewProgress();
 }
 
-/** Test helper: close + forget the handle (e.g. after switching data dirs). */
-export function closeStore(): void {
-	flushReviewProgress();
+export async function closeStore(): Promise<void> {
+	await flushPersistence();
 	progressCache.clear();
 	progressDirty.clear();
-	handle?.close();
-	handle = null;
+	await closeSqlite();
 }
-
-function createCollection<T extends { id: string }>(table: string) {
-	const database = () => getDb();
-
-	return {
-		list: (): T[] =>
-			(database().query(`SELECT value FROM ${table} ORDER BY rowid`).all() as { value: string }[]).map(
-				(row) => JSON.parse(row.value) as T
-			),
-		get: (id: string): T | undefined => {
-			const row = database().query(`SELECT value FROM ${table} WHERE id = ?`).get(id) as {
-				value: string;
-			} | null;
-
-			return row ? (JSON.parse(row.value) as T) : undefined;
-		},
-		set: (item: T): T => {
-			database()
-				.query(`INSERT INTO ${table} (id, value) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET value = excluded.value`)
-				.run(item.id, JSON.stringify(item));
-
-			return item;
-		},
-		delete: (id: string): boolean => database().query(`DELETE FROM ${table} WHERE id = ?`).run(id).changes > 0,
-		clear: (): void => {
-			database().query(`DELETE FROM ${table}`).run();
-		}
-	};
-}
-
 export const db = {
 	repos: createCollection<Repo>('repos'),
 	reviews: createCollection<Review>('reviews'),
@@ -94,7 +36,7 @@ const PROGRESS_FLUSH_MS = 750;
  * Write every pending snapshot to SQLite now. A snapshot stays pending until
  * its own write succeeds, and one failed write doesn't hold back the rest.
  */
-function flushReviewProgress(): void {
+async function flushReviewProgress(): Promise<void> {
 	if (progressTimer) {
 		clearTimeout(progressTimer);
 		progressTimer = null;
@@ -106,7 +48,7 @@ function flushReviewProgress(): void {
 		try {
 			const snapshot = progressCache.get(id);
 
-			if (snapshot) progressTable.set(snapshot);
+			if (snapshot) await progressTable.set(snapshot);
 			progressDirty.delete(id);
 		} catch (error) {
 			failure ??= error;
@@ -117,9 +59,9 @@ function flushReviewProgress(): void {
 }
 
 /** The write-behind timer. A throw here would crash the server, so log it and try again later. */
-function flushOnTimer(): void {
+async function flushOnTimer(): Promise<void> {
 	try {
-		flushReviewProgress();
+		await flushReviewProgress();
 	} catch (error) {
 		console.error('[store] failed to flush review progress', error);
 		progressTimer ??= setTimeout(flushOnTimer, PROGRESS_FLUSH_MS);
@@ -134,12 +76,15 @@ function flushOnTimer(): void {
  * latest snapshot shortly after, on a terminal event, and at exit.
  */
 export const reviewProgress = {
-	list: (): ReviewProgress[] => {
-		flushReviewProgress();
+	list: async (): Promise<ReviewProgress[]> => {
+		await progressWrites.drainAll();
+		await flushReviewProgress();
 
-		return progressTable.list().map((item) => progressCache.get(item.id) ?? item);
+		return (await progressTable.list()).map((item) => progressCache.get(item.id) ?? item);
 	},
-	get: (id: string): ReviewProgress | undefined => {
+	get: async (id: string): Promise<ReviewProgress | undefined> => {
+		await progressWrites.drain(id);
+
 		const cached = progressCache.get(id);
 
 		if (cached) {
@@ -149,35 +94,53 @@ export const reviewProgress = {
 			return cached;
 		}
 
-		const stored = progressTable.get(id);
+		const stored = await progressTable.get(id);
 
-		if (stored) remember(stored);
+		if (stored) await remember(stored);
 
 		return stored;
 	},
-	set: (item: ReviewProgress): ReviewProgress => {
-		remember(item);
+	set: async (item: ReviewProgress): Promise<ReviewProgress> => {
+		await progressWrites.drain(item.id);
+		await remember(item);
 		progressDirty.add(item.id);
 		progressTimer ??= setTimeout(flushOnTimer, PROGRESS_FLUSH_MS);
 
 		return item;
 	},
-	delete: (id: string): boolean => {
+	delete: async (id: string): Promise<boolean> => {
+		await progressWrites.drain(id);
 		progressCache.delete(id);
 		progressDirty.delete(id);
 
-		return progressTable.delete(id);
+		return await progressTable.delete(id);
 	},
-	clear: (): void => {
+	clear: async (): Promise<void> => {
+		await progressWrites.drainAll();
 		progressCache.clear();
 		progressDirty.clear();
-		progressTable.clear();
+		await progressTable.clear();
+	},
+	update: async (id: string, mutate: (current: ReviewProgress | undefined) => ReviewProgress | undefined) => {
+		const pending = progressCache.get(id);
+
+		if (progressDirty.has(id) && pending) {
+			await progressTable.set(pending);
+			progressDirty.delete(id);
+		}
+
+		const next = await progressTable.update(id, mutate);
+
+		if (next) await remember(next);
+		else progressCache.delete(id);
+
+		return next;
 	},
 	flush: flushReviewProgress
 };
 
 /** Cache a snapshot as the most recently used (the map's last entry), writing out and dropping the oldest past the cap. */
-function remember(item: ReviewProgress): void {
+async function remember(item: ReviewProgress): Promise<void> {
 	progressCache.delete(item.id);
 	progressCache.set(item.id, item);
 
@@ -185,7 +148,7 @@ function remember(item: ReviewProgress): void {
 		const oldest = progressCache.keys().next().value as string;
 
 		if (progressDirty.has(oldest)) {
-			progressTable.set(progressCache.get(oldest)!);
+			await progressTable.set(progressCache.get(oldest)!);
 			progressDirty.delete(oldest);
 		}
 
@@ -195,12 +158,12 @@ function remember(item: ReviewProgress): void {
 
 /** What the shutdown hooks keep on `globalThis`, so a `--hot` reload finds the registrations of the one before. */
 interface ShutdownHooks {
-	__recoderProgressFlush?: () => void;
+	__recoderProgressFlush?: () => Promise<void>;
 	__recoderSignalExit?: boolean;
 }
 
 /**
- * Nothing in memory may be lost on the way out: flush when the process exits. The listener is registered once per
+ * Drain queued persistence on natural process shutdown. The listener is registered once per
  * process, since `--hot` re-evaluates this module and must not stack them, and it calls whichever module instance
  * is current, so a reload's cache is the one flushed.
  */
@@ -208,11 +171,12 @@ function flushOnShutdown(): void {
 	const hooks = globalThis as ShutdownHooks;
 	const registered = hooks.__recoderProgressFlush !== undefined;
 
-	hooks.__recoderProgressFlush = flushReviewProgress;
-
+	hooks.__recoderProgressFlush = flushPersistence;
 	if (registered) return;
 
-	process.on('exit', () => hooks.__recoderProgressFlush?.());
+	process.on('beforeExit', async () => {
+		await hooks.__recoderProgressFlush?.();
+	});
 }
 
 flushOnShutdown();
@@ -226,27 +190,49 @@ export function exitOnShutdownSignals(): void {
 	const hooks = globalThis as ShutdownHooks;
 
 	if (hooks.__recoderSignalExit) return;
-
 	hooks.__recoderSignalExit = true;
 
 	for (const signal of ['SIGINT', 'SIGTERM'] as const) {
-		process.on(signal, () => {
-			hooks.__recoderProgressFlush?.();
+		process.on(signal, async () => {
+			await hooks.__recoderProgressFlush?.();
 			process.exit(signal === 'SIGINT' ? 130 : 143);
 		});
 	}
 }
 
-export const reviewMetrics = createCollection<{
+const metricsTable = createCollection<{
 	id: string;
 	startedAt: string;
 	pipelineTracked: boolean;
-	calls: TokenCall[];
+	calls: RunTokenCall[];
+	runs?: PipelineRun[];
 }>('review_metrics');
 
+export const reviewMetrics = {
+	...metricsTable,
+	get: async (id: string) => {
+		await metricWrites.drain(id);
+
+		return metricsTable.get(id);
+	},
+	list: async () => {
+		await metricWrites.drainAll();
+
+		return metricsTable.list();
+	},
+	delete: async (id: string) => {
+		await metricWrites.drain(id);
+
+		return metricsTable.delete(id);
+	},
+	clear: async () => {
+		await metricWrites.drainAll();
+
+		return metricsTable.clear();
+	}
+};
 /** Where an unfinished review stopped, so it can continue instead of starting over (see ReviewCheckpoint). */
 export const reviewCheckpoints = createCollection<ReviewCheckpoint>('review_checkpoints');
-
 /** A passed review's last checkpoint, kept so the review can be replayed from verification without its reviewers. */
 export const reviewReplays = createCollection<ReviewCheckpoint>('review_replays');
 
@@ -257,7 +243,7 @@ const REPLAY_BYTES = 512 * 1024 * 1024;
  * Drops the oldest kept checkpoints until the rest fit in `maxBytes`, and never
  * `keepId`, the one just kept. A dropped review can no longer be replayed.
  */
-export function evictReplays(maxBytes: number, keepId?: string): void {
+export async function evictReplays(maxBytes: number, keepId?: string): Promise<void> {
 	const rows = getDb().query('SELECT id, length(value) AS bytes FROM review_replays ORDER BY rowid').all() as {
 		id: string;
 		bytes: number;
@@ -268,79 +254,78 @@ export function evictReplays(maxBytes: number, keepId?: string): void {
 	for (const row of rows) {
 		if (total <= maxBytes) break;
 		if (row.id === keepId) continue;
-
-		reviewReplays.delete(row.id);
+		await reviewReplays.delete(row.id);
 		total -= row.bytes;
 	}
 }
-
 /** A passed review never resumes, so its checkpoint moves to the replays, newest last, and old ones are evicted by size. */
-export function keepForReplay(reviewId: string): void {
-	const final = reviewCheckpoints.get(reviewId);
+export async function keepForReplay(reviewId: string): Promise<void> {
+	const final = await reviewCheckpoints.get(reviewId);
 
 	if (final) {
-		reviewReplays.delete(reviewId);
-		reviewReplays.set(final);
-		evictReplays(Number(process.env.RECODER_REPLAY_BYTES) || REPLAY_BYTES, reviewId);
+		await reviewReplays.delete(reviewId);
+		await reviewReplays.set(final);
+		await evictReplays(Number(process.env.RECODER_REPLAY_BYTES) || REPLAY_BYTES, reviewId);
 	}
 
-	reviewCheckpoints.delete(reviewId);
+	await reviewCheckpoints.delete(reviewId);
 }
-
 /** Sandbox checkout paths by review id. In memory only; `lib/review-checkout.ts` finds or restores a checkout after a restart. */
 export const reviewSandboxes = new Map<string, string>();
-
 /** Raw unified diffs by review id. Populated by the pipeline's fetch step. */
 export const reviewDiffs = {
-	get: (reviewId: string): string | undefined => {
+	get: async (reviewId: string): Promise<string | undefined> => {
 		const row = getDb().query('SELECT diff FROM review_diffs WHERE review_id = ?').get(reviewId) as {
 			diff: string;
 		} | null;
 
 		return row?.diff;
 	},
-	has: (reviewId: string): boolean => reviewDiffs.get(reviewId) !== undefined,
-	set: (reviewId: string, diff: string): void => {
+	has: async (reviewId: string): Promise<boolean> => (await reviewDiffs.get(reviewId)) !== undefined,
+	set: async (reviewId: string, diff: string): Promise<void> => {
 		getDb()
 			.query(
 				'INSERT INTO review_diffs (review_id, diff) VALUES (?, ?) ON CONFLICT(review_id) DO UPDATE SET diff = excluded.diff'
 			)
 			.run(reviewId, diff);
 	},
-	delete: (reviewId: string): void => {
+	delete: async (reviewId: string): Promise<void> => {
 		getDb().query('DELETE FROM review_diffs WHERE review_id = ?').run(reviewId);
 	}
 };
-
 /**
  * When the pipeline ends, nothing it started is still writing: settle its
  * half-streamed replies and reasoning (dropping empty ones) so the page stops
  * showing "Thinking" and a Stop button. Discussion replies have their own lifecycle.
  */
-export function settlePipelineStreams(reviewId: string): ReviewProgress | null {
-	const progress = reviewProgress.get(reviewId);
+export async function settlePipelineStreams(reviewId: string): Promise<ReviewProgress | null> {
+	await progressWrites.drain(reviewId);
 
-	if (!progress) return null;
-
+	let settled: ReviewProgress | null = null;
 	const open = (status?: string) => status === 'streaming';
 
-	if (
-		!progress.messages?.some((m) => open(m.status) && !m.discussion) &&
-		!progress.reasoning?.some((r) => open(r.status))
-	)
-		return null;
+	await reviewProgress.update(reviewId, (progress) => {
+		if (!progress) return undefined;
+		if (
+			!progress.messages?.some((message) => open(message.status) && !message.discussion) &&
+			!progress.reasoning?.some((reasoning) => open(reasoning.status))
+		)
+			return progress;
 
-	const settled: ReviewProgress = {
-		...progress,
-		messages: progress.messages
-			?.filter((m) => !(open(m.status) && !m.discussion && !m.text.trim()))
-			.map((m) => (open(m.status) && !m.discussion ? { ...m, status: 'done' as const } : m)),
-		reasoning: progress.reasoning
-			?.filter((r) => !(open(r.status) && !r.text.trim()))
-			.map((r) => (open(r.status) ? { ...r, status: 'done' as const } : r))
-	};
+		settled = {
+			...progress,
+			messages: progress.messages
+				?.filter((message) => !(open(message.status) && !message.discussion && !message.text.trim()))
+				.map((message) =>
+					open(message.status) && !message.discussion ? { ...message, status: 'done' as const } : message
+				),
+			reasoning: progress.reasoning
+				?.filter((reasoning) => !(open(reasoning.status) && !reasoning.text.trim()))
+				.map((reasoning) => (open(reasoning.status) ? { ...reasoning, status: 'done' as const } : reasoning))
+		};
 
-	reviewProgress.set(settled);
+		return settled;
+	});
 
 	return settled;
 }
@@ -353,24 +338,24 @@ const RESTARTED = 'Stopped by a server restart';
  * their reviewers and tasks closed out, so the UI never spins forever on
  * orphaned work.
  */
-export function recoverStaleReviews(): number {
+export async function recoverStaleReviews(): Promise<number> {
 	let recovered = 0;
 
-	for (const review of db.reviews.list()) {
+	for (const review of await db.reviews.list()) {
 		if (review.status === 'running' || review.status === 'queued') {
-			db.reviews.set({
+			await db.reviews.set({
 				...review,
 				status: 'failed',
 				summary: 'The server restarted mid-review. Progress so far was kept.',
 				updatedAt: new Date().toISOString()
 			});
 
-			const progress = reviewProgress.get(review.id);
+			const progress = await reviewProgress.get(review.id);
 
 			if (progress) {
 				const settled = settleTasks(Object.values(progress.tasks), RESTARTED);
 
-				reviewProgress.set({
+				await reviewProgress.set({
 					...progress,
 					outcome: 'failed',
 					assignments: settleAssignments(progress.assignments ?? [], RESTARTED),
@@ -382,13 +367,13 @@ export function recoverStaleReviews(): number {
 			recovered++;
 		}
 
-		const progress = reviewProgress.get(review.id);
+		const progress = await reviewProgress.get(review.id);
 
 		if (
 			progress?.messages?.some((message) => message.status === 'streaming') ||
 			progress?.reasoning?.some((entry) => entry.status === 'streaming')
 		) {
-			reviewProgress.set({
+			await reviewProgress.set({
 				...progress,
 				messages: progress.messages?.map((message) =>
 					message.status === 'streaming'

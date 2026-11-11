@@ -8,15 +8,15 @@ const WEBHOOK_PATHS: AutoReviewPayload['webhookPaths'] = {
 	github: '/api/webhooks/github'
 };
 
-function payload(): AutoReviewPayload {
+async function payload(): Promise<AutoReviewPayload> {
 	const settings = readAutoReviewSettings();
 
-	return { settings, status: autoReviewStatus(settings), webhookPaths: WEBHOOK_PATHS };
+	return { settings, status: await autoReviewStatus(settings), webhookPaths: WEBHOOK_PATHS };
 }
 
 const app = new Hono();
 
-app.get('/', (c) => c.json(payload()));
+app.get('/', async (c) => c.json(await payload()));
 
 /** Save part of the settings and restart the watcher on them. */
 app.put('/', async (c) => {
@@ -27,14 +27,14 @@ app.put('/', async (c) => {
 	saveAutoReviewSettings(parsed.data);
 	restartWatcher();
 
-	return c.json(payload());
+	return c.json(await payload());
 });
 
 /** Run one round now and answer with what it found. */
 app.post('/check', async (c) => {
 	await checkNow();
 
-	return c.json(payload());
+	return c.json(await payload());
 });
 
 export default app;

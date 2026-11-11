@@ -7,8 +7,8 @@ import { db, reviewDiffs } from '../../store';
 import { parseBody } from '../parse-body';
 
 /** The `:id` review, or the 404 response that ends the request. */
-export function requireReview(c: Context): Review | Response {
-	return db.reviews.get(c.req.param('id') ?? '') ?? c.json({ error: 'review not found' }, 404);
+export async function requireReview(c: Context): Promise<Review | Response> {
+	return (await db.reviews.get(c.req.param('id') ?? '')) ?? c.json({ error: 'review not found' }, 404);
 }
 
 /** The `:id` review and its parsed body, or the 404/400 response that ends the request. */
@@ -16,7 +16,7 @@ async function reviewWithBody<S extends z.ZodType>(
 	c: Context,
 	schema: S
 ): Promise<{ review: Review; body: z.infer<S> } | Response> {
-	const review = requireReview(c);
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 
@@ -39,7 +39,7 @@ export async function reviewWithDiff<S extends z.ZodType>(
 
 	if (loaded instanceof Response) return loaded;
 
-	const diff = reviewDiffs.get(loaded.review.id);
+	const diff = await reviewDiffs.get(loaded.review.id);
 
 	if (!diff) return c.json({ error: 'no diff yet' }, 409);
 

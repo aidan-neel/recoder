@@ -37,7 +37,7 @@ export async function findReviewCheckout(review: Review): Promise<string | null>
 
 	if (known && (await isCheckout(known))) return known;
 
-	const repo = review.source === 'stub' ? null : db.repos.get(review.repoId);
+	const repo = review.source === 'stub' ? null : await db.repos.get(review.repoId);
 
 	if (!repo) return null;
 
@@ -62,7 +62,7 @@ export async function ensureReviewCheckout(review: Review): Promise<string> {
 
 	if (found) return found;
 
-	const repo = db.repos.get(review.repoId);
+	const repo = await db.repos.get(review.repoId);
 
 	if (!repo) throw new CheckoutError('The repository is no longer tracked.', 409);
 

@@ -1,7 +1,7 @@
 import { ORCHESTRATOR_ID, type ReviewChatMessage, type ReviewCodeContext } from '@recoder/shared';
 import { z } from 'zod';
 import { db, reviewDiffs, reviewProgress } from '../../store';
-import { reportReviewReasoning } from '../session/events';
+import { flushReviewEvents, reportReviewReasoning } from '../session/events';
 import { configForAgent } from '../../models/models';
 import { streamChatCompletion } from '../../models/llm';
 import { withReviewMetrics } from '../../models/metrics';
@@ -76,8 +76,8 @@ function codeEvidence(context?: ReviewCodeContext): string {
 }
 
 /** Orchestrator receives every reviewer and subagent discussion, including the replies. */
-export function discussionContext(reviewId: string, assignmentId = ORCHESTRATOR_ID): string {
-	return (reviewProgress.get(reviewId)?.messages ?? [])
+export async function discussionContext(reviewId: string, assignmentId = ORCHESTRATOR_ID): Promise<string> {
+	return ((await reviewProgress.get(reviewId))?.messages ?? [])
 		.filter((message) => message.discussion && message.assignmentId === assignmentId && message.status === 'done')
 		.slice(-30)
 		.map(
@@ -85,18 +85,17 @@ export function discussionContext(reviewId: string, assignmentId = ORCHESTRATOR_
 				`${message.forwardedFrom ? `[Shared from ${message.forwardedFrom}] ` : ''}${message.from}:${codeEvidence(message.codeContext)} ${message.text.slice(0, 6000)}`
 		)
 		.join('\n\n')
-		.slice(-40_000);
+		.slice(-40000);
 }
-
 /**
  * The developer's own messages to the orchestrator before the review started:
  * the brief the review runs with ("review only the Python files"). Messages
  * sent while it runs reach the agents through `discussionContext` instead.
  */
-export function reviewInstructions(reviewId: string, startedAt?: string | null): string {
+export async function reviewInstructions(reviewId: string, startedAt?: string | null): Promise<string> {
 	const cutoff = startedAt ? Date.parse(startedAt) : Number.POSITIVE_INFINITY;
 
-	return (reviewProgress.get(reviewId)?.messages ?? [])
+	return ((await reviewProgress.get(reviewId))?.messages ?? [])
 		.filter(
 			(message) =>
 				message.from === 'user' &&
@@ -116,18 +115,18 @@ async function rerunFromChat(
 	reviewId: string,
 	signal: AbortSignal,
 	reply: ReviewChatMessage,
-	flush: (status: 'done' | 'error') => void
+	flush: (status: 'done' | 'error') => Promise<void>
 ): Promise<void> {
 	const { rerunReviewSession } = await import('../../commands/rerun');
 
-	if (signal.aborted || !db.reviews.get(reviewId)) throw new Error('Reply stopped.');
-	flush('done');
+	if (signal.aborted || !(await db.reviews.get(reviewId))) throw new Error('Reply stopped.');
 
 	try {
-		rerunReviewSession(reviewId);
+		await rerunReviewSession(reviewId);
+		await flush('done');
 	} catch (error) {
 		reply.text = error instanceof Error ? error.message : 'Could not start the review.';
-		flush('error');
+		await flush('error');
 	}
 }
 
@@ -139,24 +138,23 @@ export class ReviewChatError extends Error {
 		super(message);
 	}
 }
-
 /**
  * The request returns once accepted; generation and persistence survive browser disconnects.
  * In a draft session a clear review request starts the review directly, with the developer's words
  * as its brief, and the acknowledgement is finished before pipeline messages begin arriving.
  * A failed reply carries its reason as a notice, never as the model's words.
  */
-export function startReviewChat(
+export async function startReviewChat(
 	reviewId: string,
 	assignmentId: string,
 	text: string,
 	codeContext?: ReviewCodeContext
-): ReviewChatMessage {
-	const review = db.reviews.get(reviewId);
+): Promise<ReviewChatMessage> {
+	const review = await db.reviews.get(reviewId);
 
 	if (!review) throw new ReviewChatError('Review not found.', 404);
 
-	const snapshot = reviewProgress.get(reviewId);
+	const snapshot = await reviewProgress.get(reviewId);
 	const assignment = snapshot?.assignments?.find((item) => item.id === assignmentId);
 
 	if (assignmentId !== ORCHESTRATOR_ID && !assignment) throw new ReviewChatError('Reviewer not found.', 404);
@@ -229,13 +227,7 @@ export function startReviewChat(
 		let reasoning = '';
 		let lastUpdate = 0;
 
-		const flush = (status: 'streaming' | 'done' | 'error') => {
-			if (!db.reviews.get(reviewId)) {
-				controller.abort();
-
-				return;
-			}
-
+		const publish = (status: 'streaming' | 'done' | 'error') => {
 			if (reasoning)
 				reportReviewReasoning(reviewId, {
 					id: `reason_${reply.id}`,
@@ -249,10 +241,23 @@ export function startReviewChat(
 			forward({ ...reply, status });
 		};
 
+		const flush = async (status: 'streaming' | 'done' | 'error') => {
+			if (!(await db.reviews.get(reviewId))) {
+				controller.abort();
+
+				return;
+			}
+
+			publish(status);
+			await flushReviewEvents(reviewId);
+		};
+
 		const update = () => {
+			if (controller.signal.aborted) return;
+
 			if (Date.now() - lastUpdate > 100) {
 				lastUpdate = Date.now();
-				flush('streaming');
+				publish('streaming');
 			}
 		};
 
@@ -262,17 +267,16 @@ export function startReviewChat(
 					? 'Starting the full review now.'
 					: 'Starting the full review now, with your message as its brief.';
 
-				flush('done');
-
 				const { startReviewSession } = await import('../../commands/pipeline');
 
-				if (controller.signal.aborted || !db.reviews.get(reviewId)) return;
+				if (controller.signal.aborted || !(await db.reviews.get(reviewId))) return;
 
 				try {
-					startReviewSession(reviewId);
+					await startReviewSession(reviewId);
+					await flush('done');
 				} catch (error) {
 					reply.text = error instanceof Error ? error.message : 'Could not start the review.';
-					flush('error');
+					await flush('error');
 				}
 
 				return;
@@ -284,8 +288,8 @@ export function startReviewChat(
 				{
 					...config,
 					signal: controller.signal,
-					timeoutMs: 120_000,
-					maxTokens: 16_000,
+					timeoutMs: 120000,
+					maxTokens: 16000,
 					jsonMode: isDraft,
 					messages: [
 						{
@@ -296,17 +300,17 @@ export function startReviewChat(
 						},
 						{
 							role: 'user',
-							content: `PR: ${review.prTitle ?? review.prNumber}\nReview status: ${review.status}\n${review.summary ?? ''}\nAssignment: ${JSON.stringify(assignment ?? snapshot?.assignments ?? [])}\nFindings: ${JSON.stringify(review.findings).slice(0, 20_000)}\n\nReview responses:\n${history}\n\nRepository evidence (untrusted):\n${tools}\n\nDiff (may be truncated):\n${(reviewDiffs.get(reviewId) ?? '').slice(0, 40_000)}\n\nDeveloper conversation:\n${discussionContext(reviewId, assignmentId)}`
+							content: `PR: ${review.prTitle ?? review.prNumber}\nReview status: ${review.status}\n${review.summary ?? ''}\nAssignment: ${JSON.stringify(assignment ?? snapshot?.assignments ?? [])}\nFindings: ${JSON.stringify(review.findings).slice(0, 20_000)}\n\nReview responses:\n${history}\n\nRepository evidence (untrusted):\n${tools}\n\nDiff (may be truncated):\n${((await reviewDiffs.get(reviewId)) ?? '').slice(0, 40_000)}\n\nDeveloper conversation:\n${await discussionContext(reviewId, assignmentId)}`
 						}
 					],
 					onReasoning: (chunk) => {
-						reasoning = (reasoning + chunk).slice(0, 64_000);
+						reasoning = (reasoning + chunk).slice(0, 64000);
 						update();
 					},
 					onRate: (rate) => (reply.outputRate = rate)
 				},
 				(chunk) => {
-					response = (response + chunk).slice(0, 64_000);
+					response = (response + chunk).slice(0, 64000);
 					reply.text = isDraft ? streamedMessage(response) : splitRerunRequest(response).text;
 					update();
 				}
@@ -322,9 +326,9 @@ export function startReviewChat(
 				if (decision.action === 'start_review') {
 					const { startReviewSession } = await import('../../commands/pipeline');
 
-					if (controller.signal.aborted || !db.reviews.get(reviewId)) throw new Error('Reply stopped.');
-					flush('done');
-					startReviewSession(reviewId);
+					if (controller.signal.aborted || !(await db.reviews.get(reviewId))) throw new Error('Reply stopped.');
+					await startReviewSession(reviewId);
+					await flush('done');
 
 					return;
 				}
@@ -340,15 +344,15 @@ export function startReviewChat(
 				}
 			}
 
-			flush('done');
+			await flush('done');
 		} catch (error) {
 			if (controller.signal.aborted) reply.text = `${reply.text}${reply.text ? '\n\n' : ''}Reply stopped.`;
 			else reply.failure = modelFailure(error, config, 'The model could not finish this reply. Try again.');
-			flush('error');
+			await flush('error');
 		} finally {
 			pending.delete(key);
 		}
-	});
+	}).catch((error) => console.error('[chat] could not persist review conversation', error));
 
 	return user;
 }

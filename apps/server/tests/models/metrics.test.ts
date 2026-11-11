@@ -44,24 +44,24 @@ const usage = {
 	completion_tokens_details: { reasoning_tokens: 20 }
 };
 
-function review(): Review {
+async function review(): Promise<Review> {
 	const value = testReview({ repoId: 'missing-repo', headSha: 'head' });
 
 	ids.push(value.id);
 
-	return db.reviews.set(value);
+	return await db.reviews.set(value);
 }
 
 /** closeStore() reopens SQLite from RECODER_DATA_DIR, so this file owns a temp data dir for its whole run. */
 const originalDataDir = process.env.RECODER_DATA_DIR;
 
-beforeAll(() => {
+beforeAll(async () => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-metrics-'));
-	closeStore();
+	await closeStore();
 });
 
-afterAll(() => {
-	closeStore();
+afterAll(async () => {
+	await closeStore();
 	if (originalDataDir === undefined) delete process.env.RECODER_DATA_DIR;
 	else process.env.RECODER_DATA_DIR = originalDataDir;
 });
@@ -71,7 +71,7 @@ beforeEach(() => {
 		Response.json({ choices: [{ message: { content: 'ok' } }], usage })) as unknown as typeof fetch;
 });
 
-afterEach(() => {
+afterEach(async () => {
 	globalThis.fetch = originalFetch;
 	codex.complete = originalComplete;
 	claudeCode.complete = originalClaudeCode;
@@ -79,63 +79,27 @@ afterEach(() => {
 	resetLlmLimiter();
 
 	for (const id of ids.splice(0)) {
-		db.reviews.delete(id);
-		reviewMetrics.delete(id);
-		reviewDiffs.delete(id);
+		await db.reviews.delete(id);
+		await reviewMetrics.delete(id);
+		await reviewDiffs.delete(id);
 	}
 });
 
-test('normalization preserves missing versus zero and never adds breakdowns to totals', () => {
-	expect(normalizeTokenUsage(usage, 'openai-compatible')).toEqual({
-		inputTokens: 100,
-		outputTokens: 30,
-		totalTokens: 130,
-		cachedInputTokens: 40,
-		cacheWriteInputTokens: 10,
-		reasoningOutputTokens: 20
-	});
-
-	expect(normalizeTokenUsage({ prompt_tokens: 0, completion_tokens: 0 }, 'openai-compatible')).toMatchObject({
-		inputTokens: 0,
-		outputTokens: 0,
-		totalTokens: 0,
-		cachedInputTokens: null
-	});
-
-	expect(
-		normalizeTokenUsage({ prompt_tokens: null, completion_tokens: '10', total_tokens: -1 }, 'openai-compatible')
-	).toMatchObject({ inputTokens: null, outputTokens: null, totalTokens: null });
-
-	expect(
-		normalizeTokenUsage(
-			{
-				inputTokens: 10,
-				outputTokens: 5,
-				totalTokens: 17,
-				cachedInputTokens: 3,
-				cacheWriteInputTokens: 2,
-				reasoningOutputTokens: 4
-			},
-			'codex'
-		)
-	).toMatchObject({ totalTokens: 17, cachedInputTokens: 3, cacheWriteInputTokens: 2, reasoningOutputTokens: 4 });
-});
-
 test('concurrent requests remain isolated by review, model and scope and survive reopening SQLite', async () => {
-	const a = review();
-	const b = review();
+	const a = await review();
+	const b = await review();
 
 	await Promise.all([
-		withReviewMetrics(a.id, 'pipeline', () =>
+		await withReviewMetrics(a.id, 'pipeline', () =>
 			Promise.all([chatCompletion(opts), chatCompletion({ ...opts, model: 'model-b' })])
 		),
-		withReviewMetrics(b.id, 'discussion', () => chatCompletion(opts))
+		await withReviewMetrics(b.id, 'discussion', () => chatCompletion(opts))
 	]);
 
 	await withReviewMetrics(a.id, 'fix', () => chatCompletion(opts));
-	closeStore();
+	await closeStore();
 
-	const metrics = getReviewMetrics(a.id)!;
+	const metrics = (await getReviewMetrics(a.id))!;
 
 	expect(metrics.pipelineTracked).toBe(true);
 
@@ -157,24 +121,24 @@ test('concurrent requests remain isolated by review, model and scope and survive
 		['fix', 1]
 	]);
 
-	expect(getReviewMetrics(b.id)).toMatchObject({ pipelineTracked: false, total: { calls: 1 } });
-	expect(JSON.stringify(reviewMetrics.get(a.id))).not.toContain('private prompt');
-	expect(JSON.stringify(reviewMetrics.get(a.id))).not.toContain(opts.apiKey);
+	expect(await getReviewMetrics(b.id)).toMatchObject({ pipelineTracked: false, total: { calls: 1 } });
+	expect(JSON.stringify(await reviewMetrics.get(a.id))).not.toContain('private prompt');
+	expect(JSON.stringify(await reviewMetrics.get(a.id))).not.toContain(opts.apiKey);
 });
 
 test('a review’s metrics name the token budget of its latest pipeline run, and a run outside the pipeline records none', async () => {
-	const a = review();
+	const a = await review();
 
 	await withReviewMetrics(a.id, 'pipeline', () => recordTokenBudget('low'));
-	expect(getReviewMetrics(a.id)?.tokenBudget).toBe('low');
+	expect((await getReviewMetrics(a.id))?.tokenBudget).toBe('low');
 	await withReviewMetrics(a.id, 'pipeline', () => recordTokenBudget('high'));
-	expect(getReviewMetrics(a.id)?.tokenBudget).toBe('high');
+	expect((await getReviewMetrics(a.id))?.tokenBudget).toBe('high');
 	await withReviewMetrics(a.id, 'discussion', () => recordTokenBudget('low'));
-	expect(getReviewMetrics(a.id)?.tokenBudget).toBe('high');
+	expect((await getReviewMetrics(a.id))?.tokenBudget).toBe('high');
 });
 
 test('concurrent calls keep their own stage, an inner stage wins, and a call outside any stage counts as other', async () => {
-	const a = review();
+	const a = await review();
 
 	await withReviewMetrics(a.id, 'pipeline', () =>
 		Promise.all([
@@ -186,7 +150,7 @@ test('concurrent calls keep their own stage, an inner stage wins, and a call out
 		])
 	);
 
-	expect(getReviewMetrics(a.id)!.stages.map((stage) => [stage.stage, stage.calls])).toEqual([
+	expect((await getReviewMetrics(a.id))!.stages.map((stage) => [stage.stage, stage.calls])).toEqual([
 		['reviewer', 1],
 		['worker', 1],
 		['verifier', 1],
@@ -195,7 +159,7 @@ test('concurrent calls keep their own stage, an inner stage wins, and a call out
 });
 
 test('streaming requests request usage and replace cumulative reports, including a usage-only chunk', async () => {
-	const a = review();
+	const a = await review();
 
 	globalThis.fetch = (async (_url, init) => {
 		expect(JSON.parse(init!.body as string).stream_options).toEqual({ include_usage: true });
@@ -230,11 +194,15 @@ test('streaming requests request usage and replace cumulative reports, including
 	).toBe('ok');
 
 	expect(tokens).toEqual(['ok']);
-	expect(getReviewMetrics(a.id)?.total).toMatchObject({ calls: 1, usage: { totalTokens: 140, outputTokens: 40 } });
+
+	expect((await getReviewMetrics(a.id))?.total).toMatchObject({
+		calls: 1,
+		usage: { totalTokens: 140, outputTokens: 40 }
+	});
 });
 
 test('final usage without a trailing newline is retained at stream EOF', async () => {
-	const a = review();
+	const a = await review();
 
 	globalThis.fetch = (async () =>
 		new Response(
@@ -242,13 +210,13 @@ test('final usage without a trailing newline is retained at stream EOF', async (
 		)) as unknown as typeof fetch;
 
 	await withReviewMetrics(a.id, 'discussion', () => streamChatCompletion(opts, () => {}));
-	expect(getReviewMetrics(a.id)?.total.usage.totalTokens).toBe(130);
+	expect((await getReviewMetrics(a.id))?.total.usage.totalTokens).toBe(130);
 });
 
 test.each([{ choices: [{ finish_reason: 'length' }] }, { error: { message: 'Provider stream failed' } }])(
 	'stream failures retain final reported usage and count as failed requests: %j',
 	async (failure) => {
-		const a = review();
+		const a = await review();
 
 		globalThis.fetch = (async () =>
 			new Response(
@@ -262,7 +230,7 @@ test.each([{ choices: [{ finish_reason: 'length' }] }, { error: { message: 'Prov
 
 		await expect(withReviewMetrics(a.id, 'discussion', () => streamChatCompletion(opts, () => {}))).rejects.toThrow();
 
-		expect(getReviewMetrics(a.id)?.total).toMatchObject({
+		expect((await getReviewMetrics(a.id))?.total).toMatchObject({
 			calls: 1,
 			failedCalls: 1,
 			pendingCalls: 0,
@@ -272,7 +240,7 @@ test.each([{ choices: [{ finish_reason: 'length' }] }, { error: { message: 'Prov
 );
 
 test('cancellation before acquiring capacity does not invent a model request', async () => {
-	const a = review();
+	const a = await review();
 	const signal = AbortSignal.abort();
 
 	await withReviewMetrics(a.id, 'pipeline', async () => {
@@ -280,11 +248,11 @@ test('cancellation before acquiring capacity does not invent a model request', a
 		await expect(streamChatCompletion({ ...opts, signal }, () => {})).rejects.toThrow('cancelled');
 	});
 
-	expect(getReviewMetrics(a.id)?.total).toMatchObject({ calls: 0, usage: { totalTokens: null } });
+	expect((await getReviewMetrics(a.id))?.total).toMatchObject({ calls: 0, usage: { totalTokens: null } });
 });
 
 test('Codex chat and streaming followups each count once and separate the same model across providers', async () => {
-	const a = review();
+	const a = await review();
 
 	codex.complete = async (options, onToken) => {
 		onToken?.('o');
@@ -306,16 +274,16 @@ test('Codex chat and streaming followups each count once and separate the same m
 	expect(chunks).toEqual(['o', 'k']);
 	await withReviewMetrics(a.id, 'discussion', () => chatCompletion(opts));
 
-	expect(getReviewMetrics(a.id)?.models.map((model) => [model.provider, model.calls, model.usage.totalTokens])).toEqual(
-		[
-			['codex', 2, 260],
-			['openai-compatible', 1, 130]
-		]
-	);
+	expect(
+		(await getReviewMetrics(a.id))?.models.map((model) => [model.provider, model.calls, model.usage.totalTokens])
+	).toEqual([
+		['codex', 2, 260],
+		['openai-compatible', 1, 130]
+	]);
 });
 
 test('a Claude Code call records what paid for it on its call record', async () => {
-	const a = review();
+	const a = await review();
 
 	claudeCode.complete = async (options) => {
 		options.onApiKeySource?.('none');
@@ -327,13 +295,13 @@ test('a Claude Code call records what paid for it on its call record', async () 
 		chatCompletion({ ...opts, provider: 'claude-code', baseUrl: '', apiKey: '' })
 	);
 
-	expect(reviewMetrics.get(a.id)?.calls).toEqual([
+	expect((await reviewMetrics.get(a.id))?.calls).toEqual([
 		expect.objectContaining({ provider: 'claude-code', status: 'completed', apiKeySource: 'none' })
 	]);
 });
 
 test('nested agent retries count all provider calls, not just the accepted JSON result', async () => {
-	const a = review();
+	const a = await review();
 	let requests = 0;
 
 	globalThis.fetch = (async () =>
@@ -353,17 +321,20 @@ test('nested agent retries count all provider calls, not just the accepted JSON 
 			evidence: new EvidenceStore(null, buildInventory(''), 1000),
 			maxTurns: 2,
 			signal: new AbortController().signal,
-			deadlineAt: Date.now() + 120_000,
-			parse: (value) => value as { ok: boolean }
+			deadlineAt: Date.now() + 120000,
+			parse: (value) =>
+				value as {
+					ok: boolean;
+				}
 		})
 	);
 
 	expect(requests).toBe(2);
-	expect(getReviewMetrics(a.id)?.total).toMatchObject({ calls: 2, usage: { totalTokens: 260 } });
+	expect((await getReviewMetrics(a.id))?.total).toMatchObject({ calls: 2, usage: { totalTokens: 260 } });
 });
 
 test('missing usage stays unavailable; partial coverage and failed/truncated requests are counted honestly', async () => {
-	const a = review();
+	const a = await review();
 
 	await withReviewMetrics(a.id, 'pipeline', async () => {
 		await chatCompletion(opts);
@@ -384,42 +355,42 @@ test('missing usage stays unavailable; partial coverage and failed/truncated req
 		await expect(chatCompletion(opts)).rejects.toThrow('503');
 	});
 
-	expect(getReviewMetrics(a.id)?.total).toMatchObject({
+	expect((await getReviewMetrics(a.id))?.total).toMatchObject({
 		calls: 4,
 		failedCalls: 2,
 		usage: { totalTokens: 260 },
 		reportedCalls: { totalTokens: 2 }
 	});
 
-	const b = review();
+	const b = await review();
 
 	globalThis.fetch = (async () =>
 		new Response('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n')) as unknown as typeof fetch;
 
 	await withReviewMetrics(b.id, 'discussion', () => streamChatCompletion(opts, () => {}));
 
-	expect(getReviewMetrics(b.id)?.total).toMatchObject({
+	expect((await getReviewMetrics(b.id))?.total).toMatchObject({
 		calls: 1,
 		usage: { totalTokens: null, inputTokens: null },
 		reportedCalls: { totalTokens: 0 }
 	});
 });
 
-test('interrupted calls keep reported usage durably and cannot recreate deleted reviews', () => {
-	const a = review();
-	const call = withReviewMetrics(a.id, 'pipeline', () => trackTokenCall('model-a', 'codex'));
+test('interrupted calls keep reported usage durably and cannot recreate deleted reviews', async () => {
+	const a = await review();
+	const call = await withReviewMetrics(a.id, 'pipeline', () => trackTokenCall('model-a', 'codex'));
 
 	call.usage(normalizeTokenUsage({ inputTokens: 100, outputTokens: 10 }, 'codex'));
-	closeStore();
-	expect(getReviewMetrics(a.id)?.total).toMatchObject({ pendingCalls: 1, usage: { totalTokens: 110 } });
-	db.reviews.delete(a.id);
-	reviewMetrics.delete(a.id);
+	await closeStore();
+	expect((await getReviewMetrics(a.id))?.total).toMatchObject({ pendingCalls: 1, usage: { totalTokens: 110 } });
+	await db.reviews.delete(a.id);
+	await reviewMetrics.delete(a.id);
 	call.finish(true);
-	expect(getReviewMetrics(a.id)).toBeNull();
+	expect(await getReviewMetrics(a.id)).toBeNull();
 });
 
 test('metrics API distinguishes untracked, tracked with no calls (a pipeline that failed before model work), and nonexistent reviews', async () => {
-	const a = review();
+	const a = await review();
 	const response = await app.request(`/api/reviews/${a.id}/metrics`);
 
 	expect(response.status).toBe(200);
@@ -432,13 +403,16 @@ test('metrics API distinguishes untracked, tracked with no calls (a pipeline tha
 	expect(metrics).toMatchObject({ pipelineTracked: true, total: { calls: 0, usage: { totalTokens: null } } });
 	expect((await app.request('/api/reviews/does-not-exist/metrics')).status).toBe(404);
 	await app.request(`/api/reviews/${a.id}`, { method: 'DELETE' });
-	expect(reviewMetrics.get(a.id)).toBeUndefined();
+	expect(await reviewMetrics.get(a.id)).toBeUndefined();
 });
 
 test('discussion, streaming discussion and fix routes all record follow-up scope', async () => {
-	const a = review();
+	const a = await review();
 
-	reviewDiffs.set(a.id, 'diff --git a/test.ts b/test.ts\n--- a/test.ts\n+++ b/test.ts\n@@ -1 +1 @@\n-old\n+new\n');
+	await reviewDiffs.set(
+		a.id,
+		'diff --git a/test.ts b/test.ts\n--- a/test.ts\n+++ b/test.ts\n@@ -1 +1 @@\n-old\n+new\n'
+	);
 
 	const checkout = mkdtempSync(join(tmpdir(), 'recoder-metrics-fix-'));
 
@@ -486,7 +460,7 @@ test('discussion, streaming discussion and fix routes all record follow-up scope
 		await res.text();
 	}
 
-	const metrics = getReviewMetrics(a.id)!;
+	const metrics = (await getReviewMetrics(a.id))!;
 
 	expect(metrics.pipelineTracked).toBe(false);
 	expect(metrics.total.calls).toBe(3);

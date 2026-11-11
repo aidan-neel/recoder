@@ -350,7 +350,7 @@ async function runVerifier(
 			deadlineAt: ctx.deadlineAt(),
 			parse: parseVerdict,
 			validationError: verdictValidationError,
-			getDiscussion: () => ctx.events?.getDiscussion?.(candidate.assignmentId) ?? '',
+			getDiscussion: async () => (await ctx.events?.getDiscussion?.(candidate.assignmentId)) ?? '',
 			onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: taskId, model: cfg.model }),
 			onProgress: (state, elapsedMs, detail) =>
 				ctx.task(

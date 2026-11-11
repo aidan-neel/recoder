@@ -122,7 +122,7 @@ export class ToolGate<T> {
 
 			const closing = this.turns.nextIsFinal() ? LAST_TOOLS_NOTE : '';
 
-			return { text: formatToolResults([result]) + this.discussionNote() + closing, isError: false };
+			return { text: formatToolResults([result]) + (await this.discussionNote()) + closing, isError: false };
 		} finally {
 			this.inFlight--;
 		}
@@ -147,8 +147,8 @@ export class ToolGate<T> {
 	}
 
 	/** What the developer said since it was last passed on, once. */
-	private discussionNote(): string {
-		const discussion = this.opts.getDiscussion?.() ?? '';
+	private async discussionNote(): Promise<string> {
+		const discussion = (await this.opts.getDiscussion?.()) ?? '';
 
 		if (!discussion || discussion === this.sentDiscussion) return '';
 

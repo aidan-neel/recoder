@@ -63,14 +63,14 @@ async function postInline(
 
 /** Edit the finding's earlier comment, else put it on its line, else post it plainly (editing a plain one found by marker). */
 async function post(review: Review, finding: Finding): Promise<ReviewFindingComment> {
-	const { forge, provider } = reviewForge(review);
+	const { forge, provider } = await reviewForge(review);
 	const view = { provider, prUrl: review.prUrl, finding, headSha: review.headSha, limit: forge.limit };
 	const known = review.findingComments?.[finding.id];
 	const edited = known && (await editKnown(forge, known, renderFindingComment({ ...view, inline: known.inline })));
 
 	if (edited) return edited;
 
-	const target = inlineTarget(finding, reviewDiffs.get(review.id));
+	const target = inlineTarget(finding, await reviewDiffs.get(review.id));
 	const inline = target && (await postInline(forge, target, renderFindingComment({ ...view, inline: true })));
 
 	if (inline) return inline;
@@ -87,12 +87,12 @@ async function post(review: Review, finding: Finding): Promise<ReviewFindingComm
  * comment instead of adding one. Answers the review with the comment saved.
  */
 export async function publishFindingComment(reviewId: string, findingId: string): Promise<Review> {
-	const review = db.reviews.get(reviewId);
+	const review = await db.reviews.get(reviewId);
 	const finding = review?.findings.find((item) => item.id === findingId);
 
 	if (!review || !finding) throw new FindingNotFoundError('finding not found');
 
 	const comment = await post(review, finding);
 
-	return saveFindingComment(reviewId, findingId, comment) ?? review;
+	return (await saveFindingComment(reviewId, findingId, comment)) ?? review;
 }

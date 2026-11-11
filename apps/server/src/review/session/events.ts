@@ -9,7 +9,8 @@ import {
 	type ReviewTask,
 	type ReviewToolCall
 } from '@recoder/shared';
-import { reviewProgress } from '../../store';
+import { db, reviewProgress } from '../../store';
+import { progressWrites } from '../../storage/persistence-queue';
 import { settleTasks } from './task-state';
 
 type ReviewEventType =
@@ -45,6 +46,14 @@ const listeners = new Map<string, Set<Listener>>();
 const buffers = new Map<string, ReviewEvent[]>();
 
 const MAX_BUFFER = 400;
+
+function writeQueue(reviewId: string) {
+	return progressWrites.for(reviewId);
+}
+
+export async function flushReviewEvents(reviewId: string): Promise<void> {
+	await progressWrites.drain(reviewId);
+}
 
 const SNAPSHOT_KEYS = [
 	'paused',
@@ -148,6 +157,17 @@ function applyTool(snapshot: ReviewProgress, message: ReviewEvent, tool: ReviewT
 
 /** Fold one event into the review's snapshot. Finding events carry candidate payloads that stay off the activity transcript. */
 function applyEvent(snapshot: ReviewProgress, event: Omit<ReviewEvent, 'at'>, message: ReviewEvent): void {
+	if (event.type === 'assignment' && event.data?.assignment) {
+		const assignment = event.data.assignment as ReviewAssignment;
+		const assignments = [...(snapshot.assignments ?? [])];
+		const index = assignments.findIndex((item) => item.id === assignment.id);
+
+		if (index >= 0) assignments[index] = assignment;
+		else assignments.push(assignment);
+		snapshot.assignments = assignments;
+		message.data = { ...message.data, assignments };
+	}
+
 	if (event.type === 'task' && event.data?.task) applyTask(snapshot, message, event.data.task as ReviewTask);
 	else if (event.type === 'message' && event.data?.chatMessage)
 		applyChatMessage(snapshot, message, event.data.chatMessage as ReviewChatMessage);
@@ -167,16 +187,41 @@ function applyEvent(snapshot: ReviewProgress, event: Omit<ReviewEvent, 'at'>, me
 }
 
 /** Record an event on the in-memory per-review bus behind the SSE endpoint, and in the review's progress snapshot. */
-export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): void {
-	const snapshot = reviewProgress.get(reviewId) ?? emptyReviewProgress(reviewId);
-	const message: ReviewEvent = { ...event, at: new Date().toISOString(), sequence: snapshot.sequence + 1 };
+export function enqueueReviewWrite(reviewId: string, write: () => Promise<unknown>): void {
+	writeQueue(reviewId).push(write);
+}
 
-	snapshot.sequence = message.sequence!;
-	snapshot.updatedAt = message.at;
-	applyEvent(snapshot, event, message);
-	applySnapshotPatch(snapshot, event.data);
-	snapshot.activity = snapshot.activity.slice(-100);
-	reviewProgress.set(snapshot);
+export function emitReviewChatMessage(reviewId: string, message: ReviewChatMessage): void {
+	const saved = structuredClone(message);
+
+	enqueueReviewWrite(reviewId, async () => {
+		if (await db.reviews.get(reviewId))
+			await commitReviewEvent(reviewId, { type: 'message', step: 'chat', message: '', data: { chatMessage: saved } });
+	});
+}
+
+export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): void {
+	const saved = structuredClone(event);
+
+	enqueueReviewWrite(reviewId, () => commitReviewEvent(reviewId, saved));
+}
+
+async function commitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): Promise<void> {
+	let message: ReviewEvent = { ...event, at: new Date().toISOString() };
+
+	await reviewProgress.update(reviewId, (current) => {
+		const snapshot = current ?? emptyReviewProgress(reviewId);
+
+		message = { ...message, sequence: snapshot.sequence + 1 };
+
+		snapshot.sequence = message.sequence!;
+		snapshot.updatedAt = message.at;
+		applyEvent(snapshot, event, message);
+		applySnapshotPatch(snapshot, event.data);
+		snapshot.activity = snapshot.activity.slice(-100);
+
+		return snapshot;
+	});
 
 	let buf = buffers.get(reviewId);
 
@@ -229,12 +274,16 @@ export function listenerCount(reviewId: string): number {
 	return listeners.get(reviewId)?.size ?? 0;
 }
 
-export function reviewEventBuffer(reviewId: string): ReviewEvent[] {
+export async function reviewEventBuffer(reviewId: string): Promise<ReviewEvent[]> {
+	await flushReviewEvents(reviewId);
+
 	return buffers.get(reviewId) ?? [];
 }
 
-export function clearReviewEvents(reviewId: string): void {
-	reviewProgress.delete(reviewId);
+export async function clearReviewEvents(reviewId: string): Promise<void> {
+	await flushReviewEvents(reviewId);
+	await reviewProgress.delete(reviewId);
+	progressWrites.delete(reviewId);
 	buffers.delete(reviewId);
 	listeners.delete(reviewId);
 }
@@ -248,8 +297,10 @@ export function reportReviewTask(reviewId: string, task: Omit<ReviewTask, 'updat
  * `settleTasks`): `failure` for a failed or cancelled run, null for a
  * complete one. Each goes out as a task event, so open pages see it too.
  */
-export function settleReviewTasks(reviewId: string, failure: string | null): void {
-	const snapshot = reviewProgress.get(reviewId);
+export async function settleReviewTasks(reviewId: string, failure: string | null): Promise<void> {
+	await flushReviewEvents(reviewId);
+
+	const snapshot = await reviewProgress.get(reviewId);
 
 	for (const task of settleTasks(Object.values(snapshot?.tasks ?? {}), failure)) reportReviewTask(reviewId, task);
 }
@@ -273,18 +324,11 @@ export function reportReviewPlan(
 }
 
 export function reportReviewAssignment(reviewId: string, assignment: ReviewAssignment): void {
-	const snapshot = reviewProgress.get(reviewId);
-	const assignments = [...(snapshot?.assignments ?? [])];
-	const index = assignments.findIndex((item) => item.id === assignment.id);
-
-	if (index >= 0) assignments[index] = assignment;
-	else assignments.push(assignment);
-
 	emitReviewEvent(reviewId, {
 		type: 'assignment',
 		step: `assignment:${assignment.id}`,
 		message: assignment.currentOperation ?? assignment.title,
-		data: { assignment, assignments, agent: assignment.role }
+		data: { assignment, agent: assignment.role }
 	});
 }
 

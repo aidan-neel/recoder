@@ -270,7 +270,7 @@ export async function gatherWith(adapter: ForgeAdapter, repoId: string, signal: 
 		...commitSources(commits),
 		...(parent ? [stackSource(parent, 'Parent')] : []),
 		...kids.map((row) => stackSource(row, 'Child')),
-		...pastReviewSources(repoId, pull.number, pull.headSha)
+		...(await pastReviewSources(repoId, pull.number, pull.headSha))
 	];
 
 	return {

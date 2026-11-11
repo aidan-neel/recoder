@@ -26,10 +26,10 @@ function repo(id: string, path: string): Repo {
 
 let discussions: unknown[] = [];
 
-beforeAll(() => {
+beforeAll(async () => {
 	process.env.GITLAB_TOKEN = 'glpat-test';
-	db.repos.set(repo('app', 'group/app'));
-	db.repos.set(repo('broken', 'group/broken'));
+	await db.repos.set(repo('app', 'group/app'));
+	await db.repos.set(repo('broken', 'group/broken'));
 	saveAutoReviewSettings({ enabled: true, postResults: false });
 
 	setReviewOverrides({
@@ -67,7 +67,7 @@ afterAll(() => {
 
 /** Wait for the background pipeline (it fails on the stubbed forge) so it can't outlive the stub. */
 async function settled(reviewId: string): Promise<void> {
-	for (let i = 0; i < 100 && ['queued', 'running'].includes(db.reviews.get(reviewId)?.status ?? ''); i++) {
+	for (let i = 0; i < 100 && ['queued', 'running'].includes((await db.reviews.get(reviewId))?.status ?? ''); i++) {
 		await Bun.sleep(20);
 	}
 }
@@ -84,12 +84,11 @@ test('a round starts one review for a new mention and records a failing reposito
 	};
 
 	discussions = [{ id: 'thread-1', notes: [{ id: 30, system: true, body: 'added 1 commit' }, note] }];
-
 	await checkNow();
 	await checkNow();
 
-	const status = autoReviewStatus();
-	const reviews = db.reviews.list().filter((review) => review.repoId === 'app');
+	const status = await autoReviewStatus();
+	const reviews = (await db.reviews.list()).filter((review) => review.repoId === 'app');
 
 	expect(reviews).toHaveLength(1);
 
@@ -99,9 +98,8 @@ test('a round starts one review for a new mention and records a failing reposito
 		autoTrigger: { reason: 'mention', by: 'ana', noteId: '31', discussionId: 'thread-1' }
 	});
 
-	expect(reviewInstructions(reviews[0]!.id, reviews[0]!.startedAt)).toBe('check the migration');
+	expect(await reviewInstructions(reviews[0]!.id, reviews[0]!.startedAt)).toBe('check the migration');
 	expect(status.recent.map((event) => event.reviewId)).toEqual([reviews[0]!.id]);
 	expect(status.errors.map((error) => error.repoId)).toEqual(['broken']);
-
 	await settled(reviews[0]!.id);
 });

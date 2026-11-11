@@ -3,7 +3,7 @@ import { resetLlmLimiter } from '../../src/models/llm';
 import { subscribeReview } from '../../src/review/session/events';
 import { getStoredSettings, setReviewOverrides } from '../../src/review/session/review-settings';
 import type { PipelineRun, RunTokenCall, StoredMetrics } from '../../src/models/metrics';
-import { db, reviewMetrics } from '../../src/store';
+import { reviewMetrics } from '../../src/store';
 
 /** The models a review starts on, and the models the developer switches to. */
 export const FIRST = ['lead-a', 'worker-a'];
@@ -133,10 +133,8 @@ export function reviewEnded(reviewId: string): Promise<void> {
 	return new Promise((resolve) => {
 		const off = subscribeReview(
 			reviewId,
-			() => {
-				const status = db.reviews.get(reviewId)?.status;
-
-				if (status === 'passed' || status === 'failed') {
+			(event) => {
+				if (event.type === 'done' || event.type === 'error') {
 					off();
 					resolve();
 				}
@@ -147,8 +145,10 @@ export function reviewEnded(reviewId: string): Promise<void> {
 }
 
 /** The review's stored pipeline runs and pipeline calls. */
-export function storedRuns(reviewId: string): { runs: PipelineRun[] | undefined; calls: RunTokenCall[] } {
-	const stored = reviewMetrics.get(reviewId) as StoredMetrics | undefined;
+export async function storedRuns(
+	reviewId: string
+): Promise<{ runs: PipelineRun[] | undefined; calls: RunTokenCall[] }> {
+	const stored = (await reviewMetrics.get(reviewId)) as StoredMetrics | undefined;
 
 	return { runs: stored?.runs, calls: stored?.calls.filter((call) => call.scope === 'pipeline') ?? [] };
 }

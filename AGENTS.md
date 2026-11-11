@@ -35,6 +35,11 @@ jscpd fails on any clone (`.jscpd.json`); CSS and `package.json` are excluded.
 
 ## Code style (mandatory)
 
+Durable storage operations are asynchronous. Await them and use a collection's
+transactional `update` for read/modify/write decisions. Streaming callbacks queue
+persistence; drain the queue before reporting completion. See
+[ADR 0001](docs/adr/0001-asynchronous-persistence.md).
+
 ESLint (`eslint.config.js`) and Prettier (`.prettierrc.json`) enforce most of
 this. Treat a lint error as a bug, not a suggestion.
 

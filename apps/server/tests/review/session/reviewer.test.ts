@@ -12,7 +12,7 @@ const ENV_KEYS = ['RECODER_REVIEW_BASE_URL', 'RECODER_REVIEW_API_KEY', 'RECODER_
 
 const saved = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
 
-afterEach(() => {
+afterEach(async () => {
 	for (const k of ENV_KEYS) {
 		if (saved[k] === undefined) delete process.env[k];
 		else process.env[k] = saved[k];
@@ -90,34 +90,35 @@ describe('finding stability', () => {
 });
 
 describe('events', () => {
-	afterEach(() => {
-		clearReviewEvents('r1');
-		clearReviewEvents('r2');
-		clearReviewEvents('r3');
+	afterEach(async () => {
+		await clearReviewEvents('r1');
+		await clearReviewEvents('r2');
+		await clearReviewEvents('r3');
 	});
 
-	test('listener failures do not break emit', () => {
+	test('listener failures do not break emit', async () => {
 		const off = subscribeReview('r2', () => {
 			throw new Error('boom');
 		});
 
 		expect(() => emitReviewEvent('r2', { type: 'log', message: 'x' })).not.toThrow();
 		off();
-		clearReviewEvents('r2');
+		await clearReviewEvents('r2');
 	});
 
-	test('replays buffered events to late subscribers', () => {
+	test('replays buffered events to late subscribers', async () => {
 		emitReviewEvent('r3', { type: 'log', step: 'agent:security', message: 'hello' });
 		emitReviewEvent('r3', { type: 'finding', message: 'one', data: { items: [{ id: 'f1' }] } });
-		expect(reviewEventBuffer('r3').map((e) => e.message)).toEqual(['hello', 'one']);
+		expect((await reviewEventBuffer('r3')).map((e) => e.message)).toEqual(['hello', 'one']);
 
 		const seen: string[] = [];
 		const off = subscribeReview('r3', (e) => seen.push(e.message));
 
 		expect(seen).toEqual(['hello', 'one']);
 		emitReviewEvent('r3', { type: 'log', message: 'live' });
+		await reviewEventBuffer('r3');
 		expect(seen).toEqual(['hello', 'one', 'live']);
 		off();
-		clearReviewEvents('r3');
+		await clearReviewEvents('r3');
 	});
 });

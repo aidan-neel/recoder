@@ -187,7 +187,7 @@ async function runTurns<T>(
 
 		const lastTurn = stuck || turn > lastToolTurn || !opts.budget.canSpend(2, spendOpts) || reviewNow() >= finalTurnAt;
 
-		const discussion = opts.getDiscussion?.() ?? '';
+		const discussion = (await opts.getDiscussion?.()) ?? '';
 
 		if (discussion && discussion !== sentDiscussion) {
 			messages.push({ role: 'user', content: `${DISCUSSION_NOTE}\n${discussion}` });

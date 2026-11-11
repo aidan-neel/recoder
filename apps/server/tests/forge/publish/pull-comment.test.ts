@@ -17,16 +17,18 @@ function freshPull(existing: unknown[] = []): ForgeCall[] {
 	return stubForge((call) => (call.method === 'GET' ? [200, existing] : [call.method === 'POST' ? 201 : 200, COMMENT]));
 }
 
-function review(overrides: Partial<Review> = {}): Review {
-	return db.reviews.set(testReview({ repoId, prNumber: 7, headSha: 'abcdef1234', status: 'passed', ...overrides }));
+async function review(overrides: Partial<Review> = {}): Promise<Review> {
+	return await db.reviews.set(
+		testReview({ repoId, prNumber: 7, headSha: 'abcdef1234', status: 'passed', ...overrides })
+	);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
 	const now = new Date().toISOString();
 
 	repoId = crypto.randomUUID();
 
-	db.repos.set({
+	await db.repos.set({
 		id: repoId,
 		name: 'acme/app',
 		url: 'https://github.com/acme/app',
@@ -39,15 +41,15 @@ beforeEach(() => {
 	setToken('github', 'write-token');
 });
 
-afterEach(() => {
+afterEach(async () => {
 	restoreFetch();
-	for (const row of db.reviews.list()) if (row.repoId === repoId) db.reviews.delete(row.id);
-	db.repos.delete(repoId);
+	for (const row of await db.reviews.list()) if (row.repoId === repoId) await db.reviews.delete(row.id);
+	await db.repos.delete(repoId);
 });
 
 test('posts the comment once, then edits it in place', async () => {
 	const calls = freshPull();
-	const { id } = review();
+	const { id } = await review();
 
 	const first = await publishPullComment(id);
 
@@ -57,7 +59,6 @@ test('posts the comment once, then edits it in place', async () => {
 	]);
 
 	expect(first.pullComment).toMatchObject({ id: '501', url: COMMENT.html_url, state: 'posted' });
-
 	calls.length = 0;
 	await publishPullComment(id);
 
@@ -72,7 +73,7 @@ test('finds its earlier comment by marker when the record was lost', async () =>
 		{ id: 501, body: `${pullCommentMarker(7)}\nold`, html_url: COMMENT.html_url }
 	]);
 
-	const { id } = review();
+	const { id } = await review();
 
 	await publishPullComment(id);
 
@@ -83,13 +84,12 @@ test('finds its earlier comment by marker when the record was lost', async () =>
 
 test('a newer review of the pull request edits the comment the earlier one posted', async () => {
 	const calls = freshPull();
-	const old = review({ createdAt: '2026-01-01T00:00:00.000Z' });
+	const old = await review({ createdAt: '2026-01-01T00:00:00.000Z' });
 
 	await publishPullComment(old.id);
-
 	calls.length = 0;
 
-	const next = review({ headSha: 'fedcba9876' });
+	const next = await review({ headSha: 'fedcba9876' });
 
 	await publishPullComment(next.id);
 
@@ -104,8 +104,12 @@ test('a newer review of the pull request edits the comment the earlier one poste
 test('saves a forge failure on the review for the page to show', async () => {
 	stubForge(() => [500, { message: 'boom' }]);
 
-	const { id } = review();
+	const { id } = await review();
 
 	await expect(publishPullComment(id)).rejects.toThrow('boom');
-	expect(db.reviews.get(id)?.pullComment).toMatchObject({ state: 'failed', error: expect.stringContaining('boom') });
+
+	expect((await db.reviews.get(id))?.pullComment).toMatchObject({
+		state: 'failed',
+		error: expect.stringContaining('boom')
+	});
 });
