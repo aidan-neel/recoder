@@ -3,38 +3,51 @@
 import { Toaster, TooltipProvider } from '@recoder/ui';
 import { MotionConfig } from 'motion/react';
 import { usePathname, useRouter } from 'next/navigation';
-import { useEffect, type ReactNode } from 'react';
+import { Suspense, useEffect, type ReactNode } from 'react';
 
 import { useQueue } from '@/lib/queue/queue-store';
 import { useReview } from '@/lib/review/review-store';
-import { inSample, paletteScope, SETTINGS_HREF } from '@/lib/shell/routes';
+import { openSettings } from '@/lib/settings/settings-url';
+import { inSample, paletteScope } from '@/lib/shell/routes';
 import { useShell } from '@/lib/shell/shell-store';
 import { followSystemTheme } from '@/lib/shell/theme';
 import { useKeys } from '@/lib/shell/use-keys';
+
+import { SettingsModal } from '@/components/settings/settings-modal';
 
 import { CommandPalette } from './command-palette';
 import { ShellFrame } from './shell-frame';
 import { ShortcutsModal } from './shortcuts-modal';
 import { TopBar } from './top-bar';
 
+/** Dialogs that give way to the palette and settings instead of keeping them shut. */
+const YIELDING = ['command-dialog', 'command-bar-dialog'];
+
 /**
- * True while a dialog other than the palette and the shortcuts sheet is open
- * (a confirm, the handoff, a settings modal): app-wide keys wait for it, so
- * nothing runs behind it.
+ * True while a dialog other than the palette, the review bar and the
+ * shortcuts sheet is open (a confirm, the handoff, a settings modal):
+ * app-wide keys wait for it, so nothing runs behind it.
  */
 function dialogOpen(): boolean {
 	return [...document.querySelectorAll('[role="dialog"], [role="alertdialog"]')].some(
-		(dialog) => dialog.getAttribute('data-ui') !== 'command-dialog' && !dialog.querySelector('[data-ui="shortcuts"]')
+		(dialog) =>
+			!YIELDING.includes(dialog.getAttribute('data-ui') ?? '') && !dialog.querySelector('[data-ui="shortcuts"]')
 	);
 }
 
-/** ⌘K opens the palette, closing the shortcuts first; pressed again it closes. Another open dialog keeps it shut. */
+/** Closes the overlays the palette and settings replace: the shortcuts sheet and the review bar. */
+function closeLightOverlays(): void {
+	useShell.getState().setShortcutsOpen(false);
+	useShell.getState().setReviewBarOpen(false);
+}
+
+/** ⌘K opens the palette, closing the shortcuts and the review bar first; pressed again it closes. Another open dialog keeps it shut. */
 function togglePalette(): void {
-	const { paletteOpen, setPaletteOpen, setShortcutsOpen } = useShell.getState();
+	const { paletteOpen, setPaletteOpen } = useShell.getState();
 
 	if (dialogOpen()) return;
 
-	setShortcutsOpen(false);
+	closeLightOverlays();
 	setPaletteOpen(!paletteOpen);
 }
 
@@ -70,8 +83,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 			if (dialogOpen()) return;
 
 			useShell.getState().setPaletteOpen(false);
-			useShell.getState().setShortcutsOpen(false);
-			router.push(SETTINGS_HREF);
+			closeLightOverlays();
+			openSettings();
 		}
 	});
 
@@ -82,6 +95,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 					<ShellFrame bar={<TopBar />}>{children}</ShellFrame>
 					<CommandPalette />
 					<ShortcutsModal />
+					<Suspense fallback={null}>
+						<SettingsModal />
+					</Suspense>
 					<Toaster offset={decisionBar ? OVER_DECISION_BAR : undefined} />
 				</div>
 			</TooltipProvider>

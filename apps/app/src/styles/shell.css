@@ -258,7 +258,7 @@
 	height: 15px;
 	stroke-width: 1.75;
 }
-[data-slot='settings-link'][aria-current='page'] {
+[data-slot='settings-link'][data-active] {
 	background-color: var(--bg-menu);
 	color: var(--text-primary);
 }

@@ -9,13 +9,14 @@ const ROWS = [
 	{ title: 'w-[42%]', meta: 'w-[31%]' }
 ];
 
-/** The queue while it loads: the headline and five rows. Rows and dividers stay invisible for 200ms, so a fast load never flashes them. */
+/** The queue while it loads: the headline, the review bar's place, and five rows. Rows and dividers stay invisible for 200ms, so a fast load never flashes them. */
 export function QueueSkeleton() {
 	return (
 		<div className="queue-skeleton" aria-busy="true" aria-label="Loading pull requests">
-			<div className="queue-brief">
+			<div className="queue-brief flex h-[37px] items-center">
 				<Skeleton className="h-[27px] w-[62%]" />
 			</div>
+			<Skeleton className="review-bar mt-0 h-11 rounded-[12px]" />
 			<div className="queue-skeleton-list">
 				{ROWS.map((row) => (
 					<div key={row.title} className="queue-row">

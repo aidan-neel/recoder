@@ -1,13 +1,13 @@
 /* Live progress of a running review. */
 
-/* ───────── Frame: the lead over the progress, one centred column ───────── */
+/* ───────── Frame: the lead, the timeline and the ready card in one centred column ───────── */
 .live {
+	container: live / inline-size;
 	display: flex;
 	max-width: 720px;
 	flex-direction: column;
-	gap: 40px;
 	margin: 0 auto;
-	padding: 48px 40px 96px;
+	padding: 48px 40px 64px;
 }
 .live-header {
 	min-width: 0;
@@ -16,15 +16,8 @@
 .live-header:focus {
 	outline: none;
 }
-.live-progress {
-	container: live-progress / inline-size;
-	display: flex;
-	min-width: 0;
-	flex-direction: column;
-	gap: 32px;
-}
 
-/* ───────── Header: the lead, the meter, the steps and the controls ───────── */
+/* ───────── Header: the lead, the meter, the step and the controls ───────── */
 /* The shown lead and the unseen running one share a cell, so the box keeps the taller one's height. */
 .live-lead {
 	display: grid;
@@ -35,21 +28,44 @@
 .live-lead-sizer {
 	visibility: hidden;
 }
+.live-lead-text {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+.live-lead-title {
+	font-size: 27px;
+	font-weight: 400;
+	line-height: 37px;
+	letter-spacing: -0.005em;
+}
+.live-lead-rest {
+	color: var(--text-brief-body);
+	font-size: 16.5px;
+	line-height: 24px;
+}
 .live-meter {
+	height: 4px;
 	margin-top: 24px;
+	background: var(--bg-hover);
+}
+.live-meter[data-tone='neutral'] {
+	--meter-fill: var(--primary);
 }
 .live-actions {
 	display: flex;
 	min-height: 30px;
 	align-items: center;
 	gap: 14px;
-	margin-top: 12px;
+	margin-top: 10px;
 }
 .live[data-phase='draft'] .live-actions {
 	margin-top: 24px;
 }
 .live-note {
-	color: var(--text-faint);
+	display: inline-flex;
+	gap: 0.3em;
+	color: var(--text-muted);
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
@@ -96,147 +112,245 @@
 	}
 }
 
-/* ───────── Stages: a glyph per stage on a thin rail ───────── */
+/* ───────── Timeline: a glyph per stage on one rail, the current stage open ───────── */
 .live-stages {
-	margin: 0;
+	margin: 36px 0 0;
 	padding: 0;
 	list-style: none;
 }
+/* A stage unfolds by height when it joins; the clip leaves room for a focus ring around its head. */
 .live-stage {
-	overflow: hidden;
-}
-.live-stage-row {
-	position: relative;
 	display: flex;
-	align-items: flex-start;
-	gap: 12px;
-	padding: 6px 0;
+	gap: 14px;
+	overflow: clip;
+	overflow-clip-margin: 8px;
 }
-.live-stage-row > [data-ui='status-glyph'] {
-	margin-top: 1px;
+.live-stage-rail {
+	display: flex;
+	width: 16px;
+	flex-shrink: 0;
+	flex-direction: column;
+	align-items: center;
+	padding-top: 1px;
 }
-/* The rail: a segment under each glyph and one over the next, darker where both stages are done. */
-.live-stage:not(:last-child) > .live-stage-row::after,
-.live-stage:not(:first-child) > .live-stage-row::before {
-	position: absolute;
-	left: 7.5px;
+/* The rail runs from each glyph down to the next, darker where the stage above it is done. */
+.live-stage-line {
 	width: 1px;
+	flex: 1;
 	background: var(--line-control);
-	content: '';
 	transition: background-color var(--dur-toggle) ease-out;
 }
-.live-stage:not(:last-child) > .live-stage-row::after {
-	top: 26px;
-	bottom: 0;
+.live-stage:last-child .live-stage-line {
+	visibility: hidden;
 }
-.live-stage:not(:first-child) > .live-stage-row::before {
-	top: 0;
-	height: 4px;
-}
-.live-stage[data-state='done']:not(:last-child) > .live-stage-row::after,
-.live-stage[data-state='done'] + .live-stage > .live-stage-row::before {
+.live-stage[data-state='done'] .live-stage-line {
 	background: var(--line-strong);
 }
-.live-stage-label {
-	display: block;
+.live-stage-body {
+	display: flex;
 	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 3px;
+	padding-bottom: 18px;
+}
+.live-stage:last-child .live-stage-body {
+	padding-bottom: 0;
+}
+.live-stage-head {
+	position: relative;
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 10px;
+}
+/* A head that toggles reviewers keeps its place but gives its focus ring room around the text. */
+.live-stage-head:has(.live-stage-toggle) {
+	margin: -3px -8px;
+	padding: 3px 8px;
+}
+.live-stage-label {
+	min-width: 0;
+	flex: 1;
 	overflow: hidden;
-	color: var(--text-subtle);
-	font-size: 13px;
+	color: var(--text-muted);
+	font-size: 13.5px;
 	line-height: 18px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 	transition: color var(--dur-toggle) ease-out;
 }
 .live-stage[data-state='done'] .live-stage-label {
-	color: var(--text-muted);
+	color: var(--text-secondary);
 }
 .live-stage[data-state='active'] .live-stage-label,
 .live-stage[data-state='paused'] .live-stage-label {
 	color: var(--text-primary);
-}
-.live-stage-detail {
-	color: var(--text-subtle);
-	font-size: 12px;
-	line-height: 18px;
-}
-/* A held stage: its idle ring turns amber, matching the paused meter. */
-.live-stage[data-state='paused'] [data-ui='status-glyph-face'][data-kind='idle'] [data-ui='status-glyph-dot'] {
-	box-shadow: inset 0 0 0 1.5px var(--sev-medium-solid);
-}
-.live-stage-skeleton {
-	align-items: center;
-	height: 30px;
-}
-
-/* ───────── Reviewers: one line each ───────── */
-.live-title {
-	display: flex;
-	align-items: baseline;
-	gap: 8px;
-	margin-bottom: 6px;
-	color: var(--text-subtle);
-	font-size: 12.5px;
 	font-weight: 500;
 }
-.live-title-count {
-	display: inline-flex;
-	gap: 0.3em;
-	color: var(--text-faint);
-	font-size: 12px;
-	font-variant-numeric: tabular-nums;
-	font-weight: 400;
+/* A finished stage with reviewers opens them from its name, which covers the whole head. */
+.live-stage-head:hover .live-stage-toggle {
+	color: var(--text-primary);
 }
-.live-empty {
-	padding: 6px 0;
+.live-stage-chevron {
+	display: inline-block;
+	width: 13px;
+	height: 13px;
+	margin: -2px 0 0 4px;
+	color: var(--text-faint);
+	vertical-align: middle;
+	transition: rotate var(--dur-toggle) ease-out;
+}
+.live-stage-chevron[data-open='true'] {
+	rotate: 180deg;
+}
+.live-stage-time {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-family: var(--font-code);
+	font-size: 11.5px;
+	line-height: 14px;
+}
+.live-stage[data-state='active'] .live-stage-time {
+	color: var(--text-muted);
+}
+.live-stage-note {
 	color: var(--text-subtle);
 	font-size: 12.5px;
-	line-height: 18px;
+	line-height: 16px;
+}
+.live-stage[data-state='active'] .live-stage-note,
+.live-stage[data-state='paused'] .live-stage-note {
+	color: var(--text-muted);
+}
+.live-stage-reviewers {
+	padding: 9px 0 4px;
+}
+
+/* Not started yet: a dashed ring, for stages and reviewers alike. */
+.live [data-ui='status-glyph-face'][data-kind='idle'] [data-ui='status-glyph-dot'] {
+	width: 13px;
+	height: 13px;
+	border: 1.5px dashed var(--line-hover);
+	box-shadow: none;
+}
+/* A held stage: its ring turns solid amber, matching the paused meter. */
+.live-stage[data-state='paused'] > .live-stage-rail [data-ui='status-glyph-dot'] {
+	border-style: solid;
+	border-color: var(--sev-medium-solid);
+}
+.live-stage-skeleton .live-stage-body {
+	gap: 8px;
+	padding-top: 3px;
+}
+
+/* ───────── Reviewers: one line each in a ringed list ───────── */
+.live-reviewer-list {
+	padding: 4px 0;
+	border-radius: 10px;
+	box-shadow: inset 0 0 0 1px var(--line-card);
 }
 .live-reviewers {
 	margin: 0;
 	padding: 0;
 	list-style: none;
 }
+.live-reviewer-item {
+	overflow: hidden;
+}
+.live-reviewer-item + .live-reviewer-item,
+.live-reviewer-list [data-ui='collapsible'] .live-reviewer-item:first-child {
+	border-top: 1px solid var(--line-subtle);
+}
 .live-reviewer {
 	display: grid;
-	grid-template-columns: 16px minmax(0, 1fr) minmax(0, 40%);
+	height: 36px;
 	align-items: center;
-	column-gap: 10px;
-	height: 30px;
+	padding: 0 14px;
+	column-gap: 12px;
+	grid-template-columns: 16px minmax(0, 22%) minmax(0, 1fr) 58px;
 }
 .live-reviewer-name {
 	overflow: hidden;
-	color: var(--text-secondary);
+	color: var(--text-primary);
 	font-size: 13px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.live-reviewer-step {
-	color: var(--text-faint);
-	font-size: 12px;
-	line-height: 18px;
-	text-align: right;
+.live-reviewer-item:is([data-glyph='ok'], [data-glyph='failed'], [data-glyph='dismissed']) .live-reviewer-name {
+	color: var(--text-tertiary);
 }
-/* A narrow column (the ask column open on a small screen) puts what a reviewer is doing under its name. */
-@container live-progress (max-width: 480px) {
-	.live-reviewer {
-		grid-template-columns: 16px minmax(0, 1fr);
-		grid-template-rows: 18px 18px;
-		height: auto;
-		padding: 5px 0;
-	}
-	.live-reviewer-step {
-		grid-column: 2;
-		text-align: left;
-	}
+.live-reviewer-item[data-glyph='idle'] .live-reviewer-name {
+	color: var(--text-muted);
+}
+.live-reviewer-step {
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	line-height: 16px;
+}
+.live-reviewer-item[data-glyph='spinner'] .live-reviewer-step {
+	color: var(--text-muted);
+}
+.live-reviewer-step.mono {
+	font-size: 12px;
+}
+.live-reviewer-found {
+	display: inline-flex;
+	justify-content: flex-end;
+	gap: 0.3em;
+	color: var(--text-secondary);
+	font-size: 12px;
+	white-space: nowrap;
 }
 .live-more {
-	margin: 2px 0 0 -10px;
+	margin: 2px 4px 0;
 }
 .live-more-icon {
 	transition: rotate var(--dur-toggle) ease-out;
 }
 .live-more-icon[data-open='true'] {
 	rotate: 180deg;
+}
+
+/* A narrow column (the ask column open on a small screen) puts what a reviewer is doing under its name. */
+@container live (max-width: 540px) {
+	.live-reviewer {
+		height: auto;
+		padding: 8px 14px;
+		grid-template-columns: 16px minmax(0, 1fr) auto;
+		row-gap: 2px;
+	}
+	.live-reviewer-step {
+		grid-column: 2 / 4;
+		grid-row: 2;
+	}
+}
+
+/* ───────── Ready: what can be read while the review runs ───────── */
+.live-ready {
+	display: flex;
+	align-items: center;
+	gap: 16px;
+	margin-top: 28px;
+	padding: 14px 14px 14px 18px;
+}
+.live-ready-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+}
+.live-ready-title {
+	display: inline-flex;
+	gap: 0.3em;
+	color: var(--text-primary);
+	font-size: 13.5px;
+	font-weight: 400;
+	line-height: 18px;
+}
+.live-ready-note {
+	color: var(--text-subtle);
+	font-size: 12.5px;
+	line-height: 16px;
 }

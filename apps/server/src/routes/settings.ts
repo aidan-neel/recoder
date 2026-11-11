@@ -3,6 +3,7 @@ import {
 	effectiveReviewEnv,
 	effectiveReportLowSeverity,
 	effectiveSubagentCap,
+	effectiveTokenBudget,
 	getStoredSettings,
 	maskKey,
 	settingsFileDisplay,
@@ -19,6 +20,7 @@ import {
 } from '../models/model-providers';
 import type { HostedProvider } from '@recoder/shared';
 import { agentModels } from '../agents/registry';
+import { vllmEntries } from '../models/vllm/vllm-models';
 import { isReviewConfigured } from '../models/models';
 import { z } from 'zod';
 import { discoverModels } from '../models/model-discovery';
@@ -29,7 +31,7 @@ const app = new Hono();
 
 app.route('/codex', codexRoutes);
 
-/** Effective reviewer model config. Keys are never returned in full. Models come from the agent. */
+/** Effective reviewer model config. Keys are never returned in full. Models are the captured vLLM models, then the agents'. */
 async function settingsPayload() {
 	const eff = effectiveReviewEnv();
 	const stored = getStoredSettings();
@@ -42,10 +44,11 @@ async function settingsPayload() {
 		sharedModelId: stored.sharedModelId ?? null,
 		orchestratorModelId: stored.orchestratorModelId ?? null,
 		specialistModelId: stored.specialistModelId ?? null,
-		models: await agentModels(),
+		models: [...vllmEntries(), ...(await agentModels())],
 		orchestratorEffort: stored.orchestratorEffort ?? null,
 		specialistEffort: stored.specialistEffort ?? null,
 		subagentCap: effectiveSubagentCap(),
+		tokenBudget: effectiveTokenBudget(),
 		reportLowSeverity: effectiveReportLowSeverity(),
 		configPath: settingsFileDisplay(),
 		limits: {

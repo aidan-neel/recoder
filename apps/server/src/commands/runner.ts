@@ -15,6 +15,8 @@ export interface RunOptions {
 	env?: Record<string, string>;
 	/** Each output chunk as it arrives. A throw here is ignored: reporting cannot break a command. */
 	onOutput?: (chunk: string) => void;
+	/** Stops the command when it aborts; the run then ends `killed`, as one that ran out of time does. */
+	signal?: AbortSignal;
 }
 
 const MAX_LOG_CHARS = 200_000;
@@ -78,12 +80,18 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 			env: opts.env ? withEnv(opts.env) : undefined
 		});
 
-		let timedOut = false;
+		let wasKilled = false;
 
-		const timer = setTimeout(() => {
-			timedOut = true;
+		const kill = (): void => {
+			wasKilled = true;
 			proc.kill();
-		}, timeoutMs);
+		};
+
+		const timer = setTimeout(kill, timeoutMs);
+
+		opts.signal?.addEventListener('abort', kill, { once: true });
+
+		if (opts.signal?.aborted) kill();
 
 		const read = async (stream: ReadableStream<Uint8Array> | null): Promise<string> => {
 			if (!stream) return '';
@@ -116,12 +124,13 @@ export async function runCommand(opts: RunOptions): Promise<CommandRun> {
 		const [stdout, stderr, exitCode] = await Promise.all([read(proc.stdout), read(proc.stderr), proc.exited]);
 
 		clearTimeout(timer);
+		opts.signal?.removeEventListener('abort', kill);
 
 		const combined = [stdout, stderr ? `\n[stderr]\n${stderr}` : ''].join('').trim();
 
 		run.logs = truncate(combined);
 		run.exitCode = exitCode;
-		run.status = timedOut ? 'killed' : exitCode === 0 ? 'succeeded' : 'failed';
+		run.status = wasKilled ? 'killed' : exitCode === 0 ? 'succeeded' : 'failed';
 		run.finishedAt = new Date().toISOString();
 		db.runs.set(run);
 

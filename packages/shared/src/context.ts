@@ -34,10 +34,7 @@ export interface ContextOmission extends ContextItem {
  */
 export type CitedVia = 'supplied' | 'read' | 'unknown';
 
-/**
- * What one prompt supplied and what bounds left out of it, stored once for
- * every reviewer given the same prompt (the lens assignments of one slice).
- */
+/** What one reviewer's prompt supplied and what bounds left out of it. */
 export interface UnitContext {
 	/** The scoped patch and the change model's declarations, callers, tests, siblings and contracts. */
 	supplied: ContextItem[];
@@ -46,10 +43,11 @@ export interface UnitContext {
 	omittedPast?: Partial<Record<OmissionReason, number>>;
 }
 
-/** One reviewer unit (a lens assignment or a subagent) and the context it worked with. */
+/** One reviewer unit (a reviewer or a subagent) and the context it worked with. */
 export interface ReviewerContext {
 	assignmentId: string;
 	role: string;
+	/** The lens of a reviewer in a review from before one reviewer applied every lens; unset since. */
 	lens?: string;
 	/** Its prompt's entry in `ReviewContext.units`; unset when its prompt was not captured (a checkpoint from before prompts were kept). */
 	unit?: string;

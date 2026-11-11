@@ -120,7 +120,7 @@ function cap(text: string): { text: string; truncated: boolean } {
 /**
  * Compose the owner's review guidelines into one trusted block, or null when neither layer has rules.
  * The global layer is Markdown in Recoder's data dir, edited in Settings; the repo layer is
- * `.recoder/REVIEW.md`, read at the PR's base commit so a pull request can never change the rules it
+ * `RECODER.md` (or the older `.recoder/REVIEW.md`), read at the PR's base commit so a pull request can never change the rules it
  * is reviewed by. They rank below Recoder's safety contract and above repository instruction files
  * and PR text, which stay untrusted.
  */

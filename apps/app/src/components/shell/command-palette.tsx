@@ -39,7 +39,6 @@ const PULL_HINTS: CommandHint[] = [...HINTS.slice(0, 2), { keys: ['Backspace'], 
 const PLACEHOLDER = {
 	review: 'Search this review and actions',
 	queue: 'Search pull requests and actions',
-	settings: 'Search settings and actions',
 	pull: 'Paste a pull request link, or type its number'
 } as const;
 
@@ -144,7 +143,6 @@ export function CommandPalette() {
 	const where = {
 		review: review ? `in ${pullRef(review.repo, review.pr)}` : 'this review',
 		queue: 'the queue',
-		settings: 'settings',
 		pull: null
 	}[scope];
 

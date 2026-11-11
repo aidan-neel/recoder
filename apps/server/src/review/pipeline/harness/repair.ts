@@ -21,6 +21,7 @@ import {
 	type RepairOptions
 } from '../candidate-repair-model.js';
 import type { CandidateContext, CandidateFinding } from '../consolidate.js';
+import { selectionReports } from '../lenses/lenses.js';
 import { orchestratorAgentOptions, publishCandidates, saveCheckpoint, type ReviewRun } from './context.js';
 
 const DEFAULT_REPAIR_CAP = 8;
@@ -46,7 +47,8 @@ function candidateContext(run: ReviewRun): CandidateContext {
 		ledger: run.ledger,
 		intent: run.intent,
 		reportLowSeverity: run.input.reportLowSeverity ?? false,
-		dismissed: new Set(run.dismissals.map((dismissal) => dismissal.fingerprint))
+		dismissed: new Set(run.dismissals.map((dismissal) => dismissal.fingerprint)),
+		selection: run.input.lenses
 	};
 }
 
@@ -110,7 +112,13 @@ function unchanged(candidate: CandidateFinding, result: CandidateRepair['result'
  * then validation again. No call is made when an open choice has nothing to offer.
  */
 async function attemptRepair(run: ReviewRun, candidate: CandidateFinding): Promise<CandidateRepair> {
-	const scope: RepairScope = { inventory: run.inventory, ledger: run.ledger, intent: run.intent };
+	const scope: RepairScope = {
+		inventory: run.inventory,
+		ledger: run.ledger,
+		intent: run.intent,
+		selection: run.input.lenses
+	};
+
 	const plan = planRepair(candidate, scope);
 
 	if (plan.unsupported) return unchanged(candidate, 'unsupported', plan.unsupported);
@@ -129,13 +137,21 @@ async function attemptRepair(run: ReviewRun, candidate: CandidateFinding): Promi
 }
 
 /**
+ * Whether the review's lenses report no finding of the candidate's category. That is the developer's choice of
+ * lenses, not a mistake a repair could correct, so it is never repaired.
+ */
+function isOutsideLenses(run: ReviewRun, candidate: CandidateFinding): boolean {
+	return candidate.category !== undefined && !selectionReports(run.input.lenses, [candidate.category]);
+}
+
+/**
  * Gives a candidate stopped at location or category validation its one repair,
  * within the review's cap. The cap counts attempts, is saved with the
  * checkpoint, and so holds when the review resumes. True when the repaired
  * candidate passed validation and should be verified.
  */
 export async function repairCandidate(run: ReviewRun, candidate: CandidateFinding): Promise<boolean> {
-	if (!isRepairable(candidate)) return false;
+	if (!isRepairable(candidate) || isOutsideLenses(run, candidate)) return false;
 
 	if (run.repairs >= repairCap()) {
 		candidate.repair = unchanged(candidate, 'not-run', `the review already made ${run.repairs} repairs`);

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-/** The layer an editor writes: `global`, or `repo:<id>` for a repository's `.recoder/REVIEW.md`. */
+/** The layer an editor writes: `global`, or `repo:<id>` for a repository's `RECODER.md`. */
 export type ScopeKey = 'global' | `repo:${string}`;
 
 /** One editor's text. It outlives the editor being closed, so a closing editor keeps its words while it folds away. */

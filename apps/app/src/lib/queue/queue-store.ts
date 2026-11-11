@@ -2,7 +2,7 @@ import { latestReviews, type PullRequest, type Repo, type Review } from '@recode
 import { create } from 'zustand';
 
 import { ApiError, failureText, plainly } from '../api/http';
-import { reviewsApi, type ProgressSummaries } from '../api/reviews';
+import { reviewsApi, type ProgressSummaries, type StartOptions } from '../api/reviews';
 import { useReview } from '../review/review-store';
 import { DECISIONS_PREFIX, type DecisionRecord } from '../review/saved-decisions';
 import { SAMPLE_PROGRESS, sampleQueue } from '../sample/sample-queue';
@@ -50,6 +50,14 @@ interface QueueStore {
 	refresh: () => Promise<boolean>;
 	/** Reviews the pull request: resumes a failed review, runs a draft, else queues a fresh review of the current head. */
 	start: (entry: QueueEntry) => Promise<void>;
+	/**
+	 * Reviews the pull request as `start` does, for the review bar: a brief or
+	 * a comment always queues a fresh review of the head, since a resumed run
+	 * keeps how it began. Resolves with the review (null for a sample run, or a
+	 * row already starting or running) and rejects with what went wrong
+	 * instead of toasting it, so the bar can say so in place.
+	 */
+	launch: (entry: QueueEntry, options?: StartOptions) => Promise<Review | null>;
 	/** Opens a draft session for a pull request with no review, so the person can talk it through before one runs. */
 	talk: (entry: QueueEntry) => Promise<void>;
 	/** Deletes a review and reloads the list. Rejects with what went wrong, for the dialog to show; callers close its tab. */
@@ -87,6 +95,7 @@ export const useQueue = create<QueueStore>(() => ({
 	reset: () => set({ status: 'loading', entries: [], progress: {}, stale: false, missing: [], loadedAt: null }),
 	refresh,
 	start,
+	launch,
 	talk,
 	remove
 }));
@@ -266,11 +275,13 @@ function runSample(entry: QueueEntry): void {
 }
 
 /** The request that reviews a row: resume a failed review, run a draft session, or queue a fresh review. */
-function startRequest(entry: QueueEntry): Promise<Review> {
-	if (entry.state === 'failed' && entry.review) return reviewsApi.continue(entry.review.id);
-	if (entry.review?.status === 'draft') return reviewsApi.startDraft(entry.review.id);
+function startRequest(entry: QueueEntry, options: StartOptions): Promise<Review> {
+	const fresh = !!options.brief || !!options.comment;
 
-	return reviewsApi.start(entry.repoId, entry.pull);
+	if (!fresh && entry.state === 'failed' && entry.review) return reviewsApi.continue(entry.review.id);
+	if (!fresh && entry.review?.status === 'draft') return reviewsApi.startDraft(entry.review.id);
+
+	return reviewsApi.start(entry.repoId, entry.pull, options);
 }
 
 /** Toasts a failed request with the server's reason and any way out it offered. */
@@ -280,19 +291,22 @@ function failed(title: string, error: unknown): void {
 	errorToast(title, failureText(error), action);
 }
 
-/** Runs a row's request with the row marked as starting, so its button spins until the server answers. */
-async function pending(entry: QueueEntry, failure: string, work: () => Promise<void>): Promise<void> {
+/** Runs a row's request with the row marked as starting, so its button spins until the server answers. Rejects as the work does. */
+async function marked<T>(entry: QueueEntry, work: () => Promise<T>): Promise<T> {
 	set({ starting: { ...get().starting, [entry.key]: true } });
 
 	try {
-		await work();
-	} catch (error) {
-		failed(failure, error);
+		return await work();
 	} finally {
 		const { [entry.key]: _done, ...rest } = get().starting;
 
 		set({ starting: rest });
 	}
+}
+
+/** Runs a row's request marked as starting, and toasts a failure with `failure` as its title. */
+async function pending(entry: QueueEntry, failure: string, work: () => Promise<void>): Promise<void> {
+	await marked(entry, work).catch((error: unknown) => failed(failure, error));
 }
 
 /** Puts a review the server just made on its row, ahead of any refresh already in flight. */
@@ -301,10 +315,14 @@ function land(entry: QueueEntry, review: Review): void {
 	replace(entry.key, (item) => queueEntry(entryRepo(item), item.pull, review, {}));
 }
 
-function startLive(entry: QueueEntry): Promise<void> {
-	return pending(entry, 'Couldn’t start the review', async () => {
-		land(entry, await startRequest(entry));
+function startLive(entry: QueueEntry, options: StartOptions = {}): Promise<Review> {
+	return marked(entry, async () => {
+		const review = await startRequest(entry, options);
+
+		land(entry, review);
 		schedule();
+
+		return review;
 	});
 }
 
@@ -337,13 +355,21 @@ async function remove(id: string): Promise<void> {
 }
 
 async function start(entry: QueueEntry): Promise<void> {
+	await launch(entry).catch((error: unknown) => failed('Couldn’t start the review', error));
+}
+
+async function launch(entry: QueueEntry, options: StartOptions = {}): Promise<Review | null> {
 	const current = get().entries.find((item) => item.key === entry.key) ?? entry;
 
-	if (get().starting[current.key] || current.state === 'reviewing') return;
+	if (get().starting[current.key] || current.state === 'reviewing') return null;
 
-	if (get().sample) return runSample(current);
+	if (get().sample) {
+		runSample(current);
 
-	await startLive(current);
+		return null;
+	}
+
+	return startLive(current, options);
 }
 
 /** Points the store at one queue, dropping the other queue's list; the sample's list is there at once. */

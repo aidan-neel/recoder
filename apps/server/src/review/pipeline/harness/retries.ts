@@ -1,6 +1,6 @@
 import type { ReviewAssignment } from '@recoder/shared';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
-import type { ReviewUnit, UnitScope } from '../units.js';
+import { isRetry, type ReviewUnit, type UnitScope } from '../units.js';
 import { orchestratorSays } from './context.js';
 import type { HarnessEvents } from './types.js';
 
@@ -62,7 +62,7 @@ export function failedUnits(
 		.flatMap((unit) => {
 			const record = records.find((entry) => entry.id === unit.id);
 
-			if (record?.status !== 'error' || unit.id.startsWith('retry-')) return [];
+			if (record?.status !== 'error' || isRetry(unit)) return [];
 
 			const error = (record.currentOperation || 'Reviewer failed').slice(0, 400);
 

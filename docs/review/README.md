@@ -12,6 +12,7 @@ Reader: an AI agent that has to understand, operate, change or evaluate Recoder'
 | [benchmark-overview.md](benchmark-overview.md) | get the idea of the benchmark and the current results                |
 | [evaluation.md](evaluation.md)       | measure a review with the benchmark and compare reports validly                 |
 | [operating.md](operating.md)         | run one review locally, end to end, through the API                             |
+| [cli.md](cli.md)                     | run a review from the `recoder` command line, with no server, and install its agent skill |
 | [glossary.md](glossary.md)           | look up a term and the file that defines it                                     |
 
 Find a term first in the glossary, then open the file it names.
@@ -26,8 +27,8 @@ Execution order. The entry for the whole run is `runAdaptiveReview` in `apps/ser
 | Checkout and sandbox                     | `apps/server/src/review/pipeline/harness/sandbox-setup.ts` | `ReviewRevision`, `BaselineResult`            |
 | Inventory and change model               | `apps/server/src/review/pipeline/inventory.ts`             | `ReviewInventory`, `ChangeModel`              |
 | Intent                                   | `apps/server/src/review/pipeline/harness/intent-stage.ts`  | `ChangeIntent`                                |
-| Units and briefs                         | `apps/server/src/review/pipeline/harness/unit-stage.ts`    | `ReviewUnit`, `UnitBrief`                     |
-| Lens reviewers, subagents                | `apps/server/src/review/pipeline/harness/pool.ts`          | `ReviewerOutput`, then `CandidateFinding`     |
+| Reviewer slices and briefs               | `apps/server/src/review/pipeline/harness/unit-stage.ts`    | `ReviewUnit`, `UnitBrief`                     |
+| Reviewers, subagents                     | `apps/server/src/review/pipeline/harness/pool.ts`          | `ReviewerOutput`, then `CandidateFinding`     |
 | Obligations (flag `RECODER_OBLIGATIONS`) | `apps/server/src/review/pipeline/obligations/stage.ts`     | `ObligationReport`                            |
 | Detectors                                | `apps/server/src/review/pipeline/harness/quality-stage.ts` | `DetectorResult`                              |
 | Validation and repair                    | `apps/server/src/review/pipeline/consolidate.ts`           | `CandidateFinding`, `CandidateRepair`         |

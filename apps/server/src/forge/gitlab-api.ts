@@ -19,14 +19,33 @@ function base(env: Record<string, string>): string {
 }
 
 /** Network errors keep their cause: a self-managed host often fails on DNS or TLS. */
-export async function gitlabGet(path: string, env: Record<string, string>, signal?: AbortSignal): Promise<unknown> {
+export function gitlabGet(path: string, env: Record<string, string>, signal?: AbortSignal): Promise<unknown> {
+	return gitlabRequest(path, env, { signal });
+}
+
+/**
+ * One GitLab REST call. Writes (a note, an award emoji) need a token with the
+ * `api` scope; reads are fine with `read_api`, so the 401/403 message says which.
+ */
+export async function gitlabRequest(
+	path: string,
+	env: Record<string, string>,
+	init: { method?: 'GET' | 'POST' | 'PUT'; body?: unknown; signal?: AbortSignal } = {}
+): Promise<unknown> {
 	const host = env.GITLAB_HOST || 'gitlab.com';
+	const write = !!init.method && init.method !== 'GET';
 	let response: Response;
 
 	try {
 		response = await fetch(base(env) + path, {
-			headers: { ...(env.GITLAB_TOKEN ? { 'PRIVATE-TOKEN': env.GITLAB_TOKEN } : {}), Accept: 'application/json' },
-			signal: withTimeout(20_000, signal)
+			method: init.method ?? 'GET',
+			body: init.body === undefined ? undefined : JSON.stringify(init.body),
+			headers: {
+				...(env.GITLAB_TOKEN ? { 'PRIVATE-TOKEN': env.GITLAB_TOKEN } : {}),
+				...(init.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+				Accept: 'application/json'
+			},
+			signal: withTimeout(20_000, init.signal)
 		});
 	} catch (err) {
 		const cause = err instanceof Error ? (err.cause instanceof Error ? err.cause.message : err.message) : String(err);
@@ -34,19 +53,24 @@ export async function gitlabGet(path: string, env: Record<string, string>, signa
 		throw new GhError('unavailable', `Couldn't reach ${host}: ${cause}`);
 	}
 
+	if (response.status === 204) return null;
 	if (response.ok) return response.json();
 
 	const text = await response.text().catch(() => '');
 
 	if (response.status === 401 || response.status === 403) {
-		throw new GhError('auth', `${host} rejected the token (${response.status}). It needs the read_api scope.`);
+		throw new GhError(
+			'auth',
+			`${host} rejected the token (${response.status}). It needs the ${write ? 'api' : 'read_api'} scope.`
+		);
 	}
 
 	if (response.status === 404) throw new GhError('not-found', `${host}: ${path.split('?')[0]} not found`);
 	throw new GhError('unknown', `${host} returned ${response.status}: ${text.slice(0, 500)}`);
 }
 
-function project(repoUrl: string): string {
+/** `projects/<url-encoded namespace path>`, the prefix of every project endpoint. */
+export function gitlabProject(repoUrl: string): string {
 	return `projects/${encodeURIComponent(parseSlug(repoUrl))}`;
 }
 
@@ -89,7 +113,7 @@ interface DiffEntry {
 
 /** Per-file diffs; `/diffs` needs GitLab 15.7+, older instances only have `/changes`. */
 async function mergeDiffs(repoUrl: string, iid: number, env: Record<string, string>): Promise<DiffEntry[]> {
-	const path = `${project(repoUrl)}/merge_requests/${iid}`;
+	const path = `${gitlabProject(repoUrl)}/merge_requests/${iid}`;
 
 	try {
 		const entries: DiffEntry[] = [];
@@ -194,7 +218,7 @@ export async function apiMergeRequest(
 	env: Record<string, string>
 ): Promise<{ pr: PullRequest; diff: string }> {
 	const [row, entries] = await Promise.all([
-		gitlabGet(`${project(repoUrl)}/merge_requests/${iid}`, env) as Promise<Record<string, unknown>>,
+		gitlabGet(`${gitlabProject(repoUrl)}/merge_requests/${iid}`, env) as Promise<Record<string, unknown>>,
 		mergeDiffs(repoUrl, iid, env)
 	]);
 
@@ -206,7 +230,7 @@ export async function apiMergeRequest(
 }
 
 export async function apiMergeHeadRef(repoUrl: string, iid: number, env: Record<string, string>): Promise<string> {
-	const row = (await gitlabGet(`${project(repoUrl)}/merge_requests/${iid}`, env)) as { source_branch?: unknown };
+	const row = (await gitlabGet(`${gitlabProject(repoUrl)}/merge_requests/${iid}`, env)) as { source_branch?: unknown };
 
 	if (typeof row.source_branch !== 'string' || !row.source_branch)
 		throw new GhError('unknown', 'MR has no source branch');
@@ -221,7 +245,7 @@ export async function apiMergeRequests(
 	limit = 20
 ): Promise<PullRequest[]> {
 	const rows = (await gitlabGet(
-		`${project(repoUrl)}/merge_requests?state=opened&order_by=created_at&sort=desc&per_page=${limit}`,
+		`${gitlabProject(repoUrl)}/merge_requests?state=opened&order_by=created_at&sort=desc&per_page=${limit}`,
 		env
 	)) as Record<string, unknown>[];
 

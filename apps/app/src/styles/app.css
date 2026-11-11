@@ -9,6 +9,7 @@
 @import './ask.css';
 @import './settings.css';
 @import './providers.css';
+@import './vllm.css';
 @import './connections.css';
 @import './guidelines.css';
 @import './setup.css';

@@ -9,7 +9,7 @@ import type {
 import { del, post, postStream, put, request, seg } from './http';
 import { streamReply } from './stream-reply';
 
-/** What reviewers follow: the global layer on this machine and each repository's `.recoder/REVIEW.md`. */
+/** What reviewers follow: the global layer on this machine and each repository's `RECODER.md`. */
 export const guidelinesApi = {
 	overview: () => request<GuidelinesOverview>('/api/guidelines'),
 	saveGlobal: (content: string) => put<GlobalGuidelines>('/api/guidelines/global', { content }),

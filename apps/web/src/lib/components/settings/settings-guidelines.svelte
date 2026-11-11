@@ -8,7 +8,7 @@
 	import Skeleton from '../ui/skeleton.svelte';
 	import { firstRule, guidelinesStore } from '$lib/settings/guidelines.svelte';
 
-	/** Settings → Guidelines: the global layer, then each repo's `.recoder/REVIEW.md`. */
+	/** Settings → Guidelines: the global layer, then each repo's `RECODER.md`. */
 	const overview = $derived(guidelinesStore.overview);
 
 	$effect(() => {
@@ -71,7 +71,7 @@
 						<p class="settings-row-desc guidelines-row-rule">
 							{#if !state || state.status === 'loading'}<Skeleton class="h-3 w-40" />
 							{:else if state.status === 'error'}<span class="text-danger" title={state.error}>{state.error}</span>
-							{:else}{firstRule(state.data.pending?.content ?? state.data.content) ?? `No ${overview.path} yet`}{/if}
+							{:else}{firstRule(state.data.pending?.content ?? state.data.content) ?? `No ${state.data.path} yet`}{/if}
 						</p>
 					</div>
 					{#if state?.status === 'ready'}

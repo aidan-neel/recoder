@@ -6,6 +6,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 import { failureText } from '@/lib/api/http';
 import { settingsApi } from '@/lib/api/settings';
+import { useCloseOnSuccess } from '@/lib/settings/use-close-on-success';
 import { useSettings } from '@/lib/settings/settings-store';
 import { undoToast } from '@/lib/shell/notify';
 
@@ -27,9 +28,6 @@ type View = 'pick' | 'connect' | 'sign-in';
 
 /** How often a browser sign-in is checked on while it runs. */
 const POLL_MS = 1500;
-
-/** How long the button shows "Connected" before the modal closes. */
-const CONNECTED_MS = 700;
 
 /** Everything the modal shows and does, from the list to a finished sign-in. */
 export interface ProviderFlow {
@@ -96,15 +94,7 @@ export function useProviderFlow(preset: AgentProvider | null, close: () => void)
 	/** The attempt that finished, so leaving afterwards does not cancel it. */
 	const finished = useRef<string | null>(null);
 
-	const onConnected = useEffectEvent(close);
-
-	useEffect(() => {
-		if (status !== 'success') return;
-
-		const timer = setTimeout(onConnected, CONNECTED_MS);
-
-		return () => clearTimeout(timer);
-	}, [status]);
+	useCloseOnSuccess(status, close);
 
 	const methods = provider ? methodsOf(provider) : [];
 	const method = methods.find((item) => String(item.index) === methodIndex) ?? methods[0] ?? null;

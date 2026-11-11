@@ -51,7 +51,7 @@ export async function draftUserPrompt(request: GuidelinesDraftRequest, sources: 
 
 	parts.push(
 		request.scope === 'repo' && sources.repo
-			? `You are writing the repository layer for ${sources.repo.name}. It is saved as .recoder/REVIEW.md and applies on top of the owner's global guidelines.`
+			? `You are writing the repository layer for ${sources.repo.name}. It is saved as a file in the repository and applies on top of the owner's global guidelines.`
 			: 'You are writing the global layer, which applies to every repository.'
 	);
 

@@ -55,12 +55,19 @@ function logBrief(run: ReviewRun, intent: ChangeIntent | null, startedAt: number
 /**
  * The intent stage, after the change model: the gathered PR context plus the
  * history of the modified symbols, distilled into what the change is meant to
- * do. Never throws: without intent the review still runs, just without it.
+ * do. Never throws: without intent the review still runs, just without it. A review
+ * whose lens selection left no reviewer has nobody to brief and makes no call.
  */
 export async function intentStage(run: ReviewRun): Promise<void> {
 	const { task, input } = run;
 	const signal = run.controller.signal;
 	const startedAt = Date.now();
+
+	if (input.lenses && !run.units.length) {
+		task(TASK.id, TASK.label, 'skipped', 'No reviewer reads this change', { kind: 'planning' });
+
+		return;
+	}
 
 	task(TASK.id, TASK.label, 'running', 'Gathering the PR, its issues and history', { kind: 'planning' });
 

@@ -21,13 +21,13 @@ Edits to tracked files are reverted after every command; put experiments in new 
 const SHARED_RULES = `How to review:
 - Follow your procedure step by step, over every changed symbol in the order the context lists them. Use the change-model context first: it already holds each symbol's callers, callees, tests and comparable code.
 - Report EVERY instance you find, each as its own finding, in procedure order. Repeats of one problem inside the same symbol go into one finding with related locations.
-- Use only the categories your role lists; another lens covers the rest. Set "symbol" to the enclosing symbol's qualified name from the context, or null when the line is outside every symbol.
+- Use only the categories your role lists. Set "symbol" to the enclosing symbol's qualified name from the context, or null when the line is outside every symbol.
 - Cite evidence IDs for every finding. Never invent files, lines or behavior you cannot see.
 - Zero findings is a valid answer once you have applied every step.
 - On your final allowed turn, finish with the evidence you have.
 `;
 
-/** Defect lenses and subagents: a finding is a claim a verifier can establish. */
+/** Defect categories and subagents: a finding is a claim a verifier can establish. */
 const BUG_RULES = `- Read the whole changed function, not just the hunk, and check what removed or replaced code used to guarantee.
 - Try empty, null, boundary, concurrent and failure inputs in your head. Check whether the issue is introduced or worsened by this change, and whether the behavior is intended.
 - Fill "claim" concretely: "trigger" is the exact input, state or call that sets it off; "executionPath" lists the file and line steps from the trigger to the changed line; "consequence" is what someone observes; "violatedContract" is the precondition or invariant broken; "existingGuard" names code that looks like it prevents it and why it does not, or null.
@@ -40,7 +40,7 @@ const ACTIONS_NOTE = `Repository actions are available through JSON action reque
 
 `;
 
-/** Maintainability lenses: only proven, repo-grounded findings, never taste. */
+/** Maintainability categories: only proven, repo-grounded findings, never taste. */
 const QUALITY_RULES = `- Report only what the repository itself proves: a ledger rule (its ruleId and the violating span), two or more comparable examples cited as file and line, or one named smell from the closed list. Never report taste or a preference of your own.
 - Report only on lines the change added or modified.
 - Fill "claim": "trigger" is the changed code, "executionPath" may be empty, "consequence" is the cost to the next reader or maintainer, "violatedContract" is the rule, convention or smell broken.
@@ -96,13 +96,22 @@ ${FINDING_BODY_STYLE}
 "examinedHunks" lists the hunks you read. "gaps" lists only hunks you could not read or reason about, with the reason. Missing tests or other problems in code you did read are findings (or nothing), never gaps.
 Use "high" only for issues that are certainly reachable and damaging.`;
 
+/** Which findings an agent reports, and so which rules it is held to: bugs, maintainability, or both under their own rules. */
+export type ReviewerFocus = 'defect' | 'quality' | 'both';
+
+const FOCUS_RULES: Record<ReviewerFocus, string> = {
+	defect: BUG_RULES,
+	quality: QUALITY_RULES,
+	both: `${BUG_RULES}- Maintainability findings (repo-rule, convention, duplication, dead-code, readability, complexity) follow these rules instead of the bug rules above:\n${QUALITY_RULES}`
+};
+
 /**
- * The rules, tools and answer shape every lens and subagent gets; `exec` adds
- * the sandbox, and `quality` swaps the defect rules for the maintainability ones.
+ * The rules, tools and answer shape every reviewer and subagent gets; `exec` adds
+ * the sandbox, and `focus` picks the defect rules, the maintainability ones, or both.
  */
-export function reviewerContract(exec: boolean, quality: boolean): string {
+export function reviewerContract(exec: boolean, focus: ReviewerFocus): string {
 	return `${exec ? EXEC_RULES : READ_ONLY_RULES}
-${SHARED_RULES}${quality ? QUALITY_RULES : BUG_RULES}${toolsContract(exec)}${FINAL_SHAPE}`;
+${SHARED_RULES}${FOCUS_RULES[focus]}${toolsContract(exec)}${FINAL_SHAPE}`;
 }
 
 /** Copyable request shapes: weaker models follow an example far better than a type signature. */

@@ -60,7 +60,7 @@ function modelsByRun(calls: RunTokenCall[]): Record<string, string[]> {
 
 /** A run segment as the tests compare it, without its start time. */
 function segment(index: number, models: string[]): Omit<PipelineRun, 'startedAt'> {
-	return { index, orchestrator: models[0]!, subagent: models[1]!, lockMisses: 0 };
+	return { index, orchestrator: models[0]!, subagent: models[1]!, lockMisses: 0, tokenBudget: 'medium' };
 }
 
 test('a review keeps the models it started on for every call when the pick changes mid-run', async () => {
@@ -79,12 +79,7 @@ test('a review keeps the models it started on for every call when the pick chang
 
 	expect(db.reviews.get(reviewId)?.status).toBe('passed');
 
-	expect([...new Set(requests.map((request) => request.kind))].sort()).toEqual([
-		'brief',
-		'correctness',
-		'lens',
-		'subagent'
-	]);
+	expect([...new Set(requests.map((request) => request.kind))].sort()).toEqual(['brief', 'reviewer', 'subagent']);
 
 	expect(calls).toHaveLength(requests.length);
 	expect([...new Set(requests.map((request) => request.model))].sort()).toEqual(FIRST);

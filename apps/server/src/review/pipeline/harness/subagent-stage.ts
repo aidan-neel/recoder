@@ -1,9 +1,10 @@
-import { DEFAULT_SUBAGENT_CAP } from '@recoder/shared';
+import { BUG_CATEGORIES, DEFAULT_SUBAGENT_CAP, type SubagentCap } from '@recoder/shared';
 import { reviewNow } from '../../session/review-control.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
+import { selectionReports } from '../lenses/lenses.js';
 import { questionRecord } from '../question-ledger.js';
 import { planSecondLook } from '../second-look/stage.js';
-import { planBriefSubagents, planSubagents, type UnitRequest } from '../subagents.js';
+import { planBriefSubagents, planSubagents, type BriefPlanInput, type UnitRequest } from '../subagents.js';
 import { unitRecord, type ReviewUnit } from '../units.js';
 import {
 	extendDeadlines,
@@ -16,41 +17,59 @@ import {
 } from './context.js';
 import { runUnitPool } from './pool.js';
 
-/** Model calls one second look can make: each turn, plus the repair calls a failed or malformed turn takes. */
-const SECOND_LOOK_CALLS = REVIEW_POLICY.maxSubagentTurns + REVIEW_POLICY.schemaRepairAttempts;
+/** Model calls one subagent or second look can make: each turn, plus the repair calls a failed or malformed turn takes. */
+function subagentCalls(run: ReviewRun): number {
+	return run.limits.subagentTurns + REVIEW_POLICY.schemaRepairAttempts;
+}
+
+/**
+ * The brief's open questions that subagents follow up. They are about defects, which only a lens that reports
+ * bugs answers, so a review whose lenses report none follows up none.
+ */
+function briefQuestions(run: ReviewRun): BriefPlanInput['questions'] {
+	return selectionReports(run.input.lenses, BUG_CATEGORIES) ? (run.intent?.openQuestions ?? []) : [];
+}
 
 /**
  * Runs the subagents, once every reviewer (and retry) has answered, so the cap
- * is applied in unit order rather than finishing order. Reviewers' requests
- * come first, then the brief's open questions they left unresolved, then
- * the other questions nothing settled, until the cap is reached; each open
- * question keeps its follow-up, or why it got none. A request runs whether or
- * not the first pass raised a finding: a reviewer asks because it could not
- * settle a doubt, which is where a miss hides. The second looks the flags
- * turn on come after them, outside the cap, each bringing its own model
- * calls and time. Planned once and saved, so a resume reruns only the subagents that
- * didn't finish. Subagents are never retried.
+ * is applied in a fixed order rather than finishing order. Reviewers' requests
+ * come first, each reviewer's most important ones before anyone's later ones,
+ * then the brief's open questions they left unresolved, then the other
+ * questions nothing settled, then the second looks the flags turn on, until the
+ * cap ({@link subagentLimit}) is reached, so the review adds at most that many
+ * agents after its reviewers; each open question keeps its follow-up, or why it
+ * got none. A request runs whether or not the first pass raised a finding: a
+ * reviewer asks because it could not settle a doubt, which is where a miss
+ * hides. With subagents off, none runs, no request is reported dropped and no
+ * second look is sent. Each second look brings its own model calls and time.
+ * Planned once and saved, so a resume reruns only the subagents that didn't
+ * finish. Subagents are never retried.
  */
 export async function runSubagents(run: ReviewRun): Promise<void> {
 	const state = run.subagents;
 
 	if (!state.units) {
 		const cap = run.input.subagentCap ?? DEFAULT_SUBAGENT_CAP;
-		const plan = planSubagents(state.requests, run.units, run.inventory, cap);
-		const brief = { questions: run.intent?.openQuestions ?? [], records: run.questions, candidates: run.candidates };
-		const fromBrief = planBriefSubagents(brief, plan.units, run.units, run.inventory, cap - plan.units.length);
+		const limit = subagentLimit(run, cap);
+
+		const plan =
+			cap === 0 ? { units: [], dropped: [] } : planSubagents(state.requests, run.units, run.inventory, limit);
+
+		const brief = { questions: briefQuestions(run), records: run.questions, candidates: run.candidates };
+		const fromBrief = planBriefSubagents(brief, plan.units, run.units, run.inventory, limit - plan.units.length);
 
 		for (const { question, ...followUp } of fromBrief.followUps) {
 			questionRecord(run.questions, question).followUps.push(followUp);
 		}
 
-		const secondLook = await planSecondLook(run);
+		const room = limit - plan.units.length - fromBrief.unsettled.length - fromBrief.unaddressed.length;
+		const secondLook = cap === 0 ? [] : await planSecondLook(run, room);
 
 		state.units = [...plan.units, ...fromBrief.unsettled, ...fromBrief.unaddressed, ...secondLook];
 		state.dropped = plan.dropped;
 
 		run.events?.onLog?.(
-			`Planned ${state.units.length} subagents (cap ${cap}): ${plan.units.length} from reviewer requests, ${fromBrief.unsettled.length} from unsettled brief questions, ${fromBrief.unaddressed.length} from unaddressed brief questions, ${secondLook.length} second looks outside the cap.`
+			`Planned ${state.units.length} subagents (cap ${capText(cap, limit)}): ${plan.units.length} from reviewer requests, ${fromBrief.unsettled.length} from unsettled brief questions, ${fromBrief.unaddressed.length} from unaddressed brief questions, ${secondLook.length} second looks.`
 		);
 
 		for (const unit of state.units) {
@@ -61,7 +80,7 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 		}
 
 		if (state.units.length) {
-			reportSubagents(run, plan.dropped, cap);
+			reportSubagents(run, plan.dropped, capText(cap, limit));
 			publishUnits(run, 3);
 		} else if (asksForSubagents(run.input.instructions)) {
 			orchestratorSays(run.events, 'message_subagents', noSubagentsNote(cap));
@@ -81,13 +100,33 @@ export async function runSubagents(run: ReviewRun): Promise<void> {
 }
 
 /**
+ * The most subagents this review plans: the setting, or with it uncapped, as
+ * many as the model calls left can pay for in full once the consolidation
+ * reserve and the calls verifiers still in line were given are held back, so
+ * subagents never spend a verifier's share. Time bounds them too: none
+ * launches past the investigation deadline, which keeps the verifiers' reserve.
+ */
+function subagentLimit(run: ReviewRun, cap: SubagentCap | number): number {
+	if (cap !== 'uncapped') return cap;
+
+	const free = run.budget.remaining() - run.budget.reserve - (run.verifying?.heldCalls ?? 0);
+
+	return Math.max(0, Math.floor(free / subagentCalls(run)));
+}
+
+/** The cap as the orchestrator words it: the setting, or with it uncapped, how many the budget had room for. */
+function capText(cap: SubagentCap | number, limit: number): string {
+	return cap === 'uncapped' ? `${limit}, all the review's model calls had room for` : String(cap);
+}
+
+/**
  * Each second look brings its own model calls. A residual pass rereads a
  * whole unit and starts once every lens and investigation has answered, often
  * late on the review's clock, so the deadline moves out to fit its whole
  * clock; a contract check is short and fits in the time left.
  */
 function makeRoomForSecondLooks(run: ReviewRun, pending: ReviewUnit[]): void {
-	run.budget.limit += pending.filter((unit) => unit.purpose).length * SECOND_LOOK_CALLS;
+	run.budget.limit += pending.filter((unit) => unit.purpose).length * subagentCalls(run);
 
 	if (!pending.some((unit) => unit.purpose === 'residual')) return;
 
@@ -107,14 +146,14 @@ function asksForSubagents(instructions: string | null | undefined): boolean {
 }
 
 /** Why a brief that asked for subagents got none. */
-function noSubagentsNote(cap: number): string {
+function noSubagentsNote(cap: SubagentCap | number): string {
 	return cap
 		? 'You asked for subagents, but no reviewer had an open question that needed one.'
 		: 'You asked for subagents, but the Subagents setting is off. Turn it on under Settings › Harness and run the review again.';
 }
 
 /** The orchestrator's note on the subagents it's running, and any it left out over the cap. */
-function reportSubagents(run: ReviewRun, dropped: UnitRequest[], cap: number): void {
+function reportSubagents(run: ReviewRun, dropped: UnitRequest[], cap: string): void {
 	const units = run.subagents.units ?? [];
 	const lines = units.map((unit) => `- **${unit.title}**: ${unit.reason.split('\n')[0]}`);
 

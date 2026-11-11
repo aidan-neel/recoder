@@ -31,4 +31,4 @@ data/
 
 # local tooling output
 test-results/
-output/
+/output/

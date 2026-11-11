@@ -12,7 +12,7 @@ import {
 } from './consolidate.js';
 import type { ReviewerFinding } from './finding-schema.js';
 import type { ReviewInventory } from './inventory.js';
-import { lensById } from './lenses/lenses.js';
+import { lensCategories } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
 
 /**
@@ -74,6 +74,8 @@ export interface RepairScope {
 	ledger: RuleLedger | null;
 	/** Null when the review distilled none, or a replay has none; a held claim id can then not be cited. */
 	intent?: CandidateContext['intent'];
+	/** The lenses the review applies when it was asked for only some; a corrected category is chosen among theirs. */
+	selection?: CandidateContext['selection'];
 }
 
 const TO_REVIEWER_SEVERITY: Record<FindingSeverity, ReviewerFinding['severity']> = {
@@ -167,9 +169,9 @@ function withChanges(raw: ReviewerFinding, changes: RepairChange[]): ReviewerFin
 	return next;
 }
 
-/** The lens a reviewer's candidate was held to; null for a subagent's. */
-function lensOf(candidate: CandidateFinding): LensId | null {
-	return (candidate.lens as LensId | undefined) ?? null;
+/** The lens a reviewer's candidate is credited to, whose categories it is held to again; null for a subagent's. */
+function lensesOf(candidate: CandidateFinding): LensId[] | null {
+	return candidate.lens ? [candidate.lens as LensId] : null;
 }
 
 /** The ledger rules that apply to the file. */
@@ -177,10 +179,16 @@ export function rulesFor(ledger: RuleLedger | null, file: string) {
 	return (ledger?.rules ?? []).filter((rule) => ruleAppliesTo(rule, file));
 }
 
-/** The categories a corrected finding may take: its lens's, or any bug category for a subagent, never the one that failed. */
-export function categoryOptions(candidate: CandidateFinding): FindingCategory[] {
-	const lens = lensOf(candidate);
-	const allowed = lens ? lensById(lens).categories : FINDING_CATEGORIES;
+/**
+ * The categories a corrected finding may take: its lens's, or those of the review's selected lenses (any bug
+ * category without a selection) for a subagent, never the one that failed.
+ */
+export function categoryOptions(
+	candidate: CandidateFinding,
+	selection?: CandidateContext['selection']
+): FindingCategory[] {
+	const lenses = lensesOf(candidate) ?? selection;
+	const allowed = lenses ? lensCategories(lenses) : FINDING_CATEGORIES;
 
 	return allowed.filter((category) => category !== candidate.category && category !== 'intent-mismatch');
 }
@@ -261,7 +269,7 @@ function intentRepair(candidate: CandidateFinding, raw: ReviewerFinding, scope: 
 
 /** The correction for a category or lens requirement the (possibly re-anchored) finding breaks. */
 function categoryRepair(candidate: CandidateFinding, raw: ReviewerFinding, scope: RepairScope): RepairPlan {
-	const found = categoryIssue(raw, lensOf(candidate), { ledger: scope.ledger, intent: scope.intent });
+	const found = categoryIssue(raw, lensesOf(candidate), { ledger: scope.ledger, intent: scope.intent });
 
 	if (!found) return { changes: [], open: [] };
 	if (found.issue === 'intent') return intentRepair(candidate, raw, scope);
@@ -380,7 +388,7 @@ export function applyRepair(
 		assignmentId: candidate.assignmentId ?? '',
 		role: candidate.agent ?? 'reviewer',
 		model: candidate.model ?? '',
-		lens: lensOf(candidate)
+		lenses: lensesOf(candidate)
 	};
 
 	const link = changes.find((change) => change.kind === 'related');

@@ -6,7 +6,7 @@ A review uses two model picks: the Review model (orchestrator) and a second mode
 
 `ModelProvider` in `packages/shared/src/models.ts` has four values:
 
-- **openai-compatible**: any endpoint that serves `POST {baseUrl}/chat/completions` (vLLM, OpenRouter, DashScope). This is the default when a config has no provider.
+- **openai-compatible**: any endpoint that serves `POST {baseUrl}/chat/completions` (vLLM, OpenRouter, DashScope). This is the default when a config has no provider. A connected vLLM server's models are this provider too, resolved from `vllm:` ids.
 - **codex**: ChatGPT through the user's subscription. A direct OAuth adapter in `apps/server/src/agents/codex/` calls ChatGPT. It needs no base URL or key.
 - **opencode**: a model reached through the user's OpenCode CLI. Adapter: `apps/server/src/agents/opencode/opencode.ts`.
 - **claude-code**: a Claude model reached through the user's Claude Code CLI. Adapter: `apps/server/src/agents/claude-code/claude-code.ts`.
@@ -19,9 +19,19 @@ All in `apps/server/src/models/models.ts`. Saved settings come from `getStoredSe
 
 1. The Review model id is `orchestratorModelId`, else `sharedModelId`, else the first saved entry's id.
 2. The second model id is `specialistModelId`. Unset, the second pick follows the Review model.
-3. An id starting with `opencode:` resolves through `openCodeConfig`. An id starting with `claude-code:` resolves through `claudeCodeConfig`. These ids are not saved entries; the agent CLIs list them.
+3. An id starting with `vllm:` resolves through `vllmConfig` (see below). An id starting with `opencode:` resolves through `openCodeConfig`. An id starting with `claude-code:` resolves through `claudeCodeConfig`. These ids are not saved entries; the agent CLIs list them.
 4. Any other id resolves to its saved entry. If no saved entry has that id, the first saved entry is used.
 5. With no saved entries, the model comes from the shared environment (`RECODER_REVIEW_BASE_URL`, `RECODER_REVIEW_API_KEY`, `RECODER_REVIEW_MODEL`), with saved top-level `baseUrl` and `apiKey` winning. If that fails, it throws `ModelConfigError`.
+
+## vLLM servers
+
+`apps/server/src/models/vllm/` keeps each connected vLLM server's model list in step with the server. A server (address, key, last list, last error) is saved in `vllm-servers.json` in the data dir. Its models are not saved entries: their ids are `vllm:<server id>/<model id>` (`vllmModelId` in `@recoder/shared`), and `vllmTarget` resolves one to the server's base URL, key and the model id the server listed. The request goes through the same OpenAI-compatible transport as any endpoint, so every agent loop, verifier and chat reaches it the same way.
+
+- `GET {base}/v1/models` is read by `discoverModels` (a missing `/v1` is added); `max_model_len` is the context window.
+- A sync runs on connect, at boot, every 5 minutes (`VLLM_SYNC_INTERVAL_MS`), when Settings opens (`POST /api/settings/vllm/refresh`, skipped for a server tried in the last 15 s) and on the Refresh button (`force`).
+- A sync merges with `mergeServed`: new models are added; a model no longer served is dropped unless the Review or Subagent pick names it, in which case it stays with `served: false`. A model that is not served makes `vllmTarget` fail, so `configForOrchestrator` throws a `ModelConfigError` and the review stops with that message instead of falling back to another model.
+- A failed sync (unreachable, 401, an empty list) keeps the last good list and records `error`. A server disconnected, or given a new key, while its sync was in flight is left as it is.
+- Settings lists the models from `vllmEntries()` ahead of the agents' models. A model that is not served carries `unavailable: true`.
 
 Effort requested:
 
@@ -156,7 +166,7 @@ Routes in `apps/server/src/routes/settings.ts`, mounted at `/api/settings`.
 - `configured`, `baseUrl`, `model`, `apiKeyPreview`.
 - `sharedModelId`, `orchestratorModelId`, `specialistModelId`.
 - `models`: the agent CLIs' models from `agentModels()`.
-- `orchestratorEffort`, `specialistEffort`, `subagentCap`, `reportLowSeverity`.
+- `orchestratorEffort`, `specialistEffort`, `subagentCap`, `tokenBudget`, `reportLowSeverity`. `tokenBudget` is the last budget picked; the cap and efforts may since have been changed by hand. `subagentCap` is one of 0, 3, 8, 12 or `'uncapped'`; a file saved with 2 or 4 (the caps before) loads as the nearest cap at least as large (`migrateSubagentCap`) and is saved again that way. See [pipeline.md](pipeline.md#token-budget).
 - `configPath`: where settings are saved, with home shortened to `~`.
 - `limits`: `maxFiles`, `maxDiffChars`, `maxFileChars`.
 

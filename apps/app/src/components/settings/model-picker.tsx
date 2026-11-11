@@ -10,7 +10,14 @@ import {
 import { Button, Select, Skeleton, SwapText } from '@recoder/ui';
 import { useEffect, useState } from 'react';
 
-import { modelCatalog, ROLE_NAME, rolePick, type ModelRole, type RolePick } from '@/lib/settings/model-options';
+import {
+	missingNote,
+	modelCatalog,
+	ROLE_NAME,
+	rolePick,
+	type ModelRole,
+	type RolePick
+} from '@/lib/settings/model-options';
 import { FOLLOW_ID, FOLLOW_LABEL } from '@/lib/settings/model-rows';
 import { useSettings } from '@/lib/settings/settings-store';
 import { useInstantSave } from '@/lib/settings/use-save-state';
@@ -39,6 +46,8 @@ function patchFor(role: ModelRole, draft: Draft): ModelSettingsPatch {
 
 /** What the trigger reads, and whether it reads as a placeholder. */
 function triggerLabel(pick: RolePick): { text: string; quiet: boolean } {
+	if (missingNote(pick))
+		return { text: `${pick.option?.name ?? prettyModelName(pick.id ?? '')} · missing`, quiet: true };
 	if (pick.option) return { text: pick.option.name, quiet: false };
 	if (pick.follows) return { text: FOLLOW_LABEL, quiet: true };
 	if (pick.id) return { text: prettyModelName(pick.id), quiet: false };

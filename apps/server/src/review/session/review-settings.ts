@@ -2,11 +2,15 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import {
 	DEFAULT_SUBAGENT_CAP,
+	DEFAULT_TOKEN_BUDGET,
 	REASONING_EFFORTS,
 	SUBAGENT_CAPS,
+	migrateSubagentCap,
+	TOKEN_BUDGETS,
 	type ModelEntryPatch,
 	type ModelSettingsPatch,
-	type SubagentCap
+	type SubagentCap,
+	type TokenBudget
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
 
@@ -41,6 +45,7 @@ export const reviewSettingsSchema = z.object({
 	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	subagentCap: z.literal(SUBAGENT_CAPS).optional(),
+	tokenBudget: z.enum(TOKEN_BUDGETS).optional(),
 	reportLowSeverity: z.boolean().optional(),
 	maxFiles: z.number().int().positive().max(200).optional(),
 	maxDiffChars: z.number().int().positive().max(1_000_000).optional(),
@@ -54,6 +59,7 @@ export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
  * and files from before subagents carried a specialist dispatch level.
  */
 const storedFileSchema = reviewSettingsSchema.extend({
+	subagentCap: z.union([z.literal(SUBAGENT_CAPS), z.number().int().nonnegative()]).optional(),
 	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional(),
 	roles: z.record(z.string().max(40), z.string().max(200)).optional(),
 	roleEfforts: z.record(z.string().max(40), z.enum(REASONING_EFFORTS)).optional(),
@@ -66,26 +72,35 @@ type StoredFile = z.infer<typeof storedFileSchema>;
 /** The subagent cap each old dispatch level stands for. */
 const CAP_FOR_DISPATCH: Record<NonNullable<StoredFile['specialistDispatch']>, SubagentCap> = {
 	low: 0,
-	medium: 2,
-	high: 4
+	medium: 3,
+	high: 8
 };
+
+/** Whether the saved cap is one that no longer exists (2 or 4, from before the caps were 3, 8 and 12). */
+function hasRetiredCap(data: StoredFile): boolean {
+	return data.subagentCap !== undefined && migrateSubagentCap(data.subagentCap) !== data.subagentCap;
+}
 
 /** Whether a saved file still holds fields that `migrateLegacy` rewrites, so it is saved again in the new shape. */
 function hasLegacyFields(data: StoredFile): boolean {
-	return [data.roles, data.roleEfforts, data.applyToSpecialists, data.specialistDispatch].some(
-		(field) => field !== undefined
+	return (
+		hasRetiredCap(data) ||
+		[data.roles, data.roleEfforts, data.applyToSpecialists, data.specialistDispatch].some(
+			(field) => field !== undefined
+		)
 	);
 }
 
 /**
  * Old per-role picks become one second-model pick: correctness (always ran) speaks for them all.
- * An old dispatch level becomes the subagent cap it stands for.
+ * An old dispatch level becomes the subagent cap it stands for, and a cap that no longer exists the nearest one.
  */
 function migrateLegacy(data: StoredFile): ReviewSettingsInput {
-	const { roles, roleEfforts, applyToSpecialists, specialistDispatch, ...rest } = data;
+	const { roles, roleEfforts, applyToSpecialists, specialistDispatch, subagentCap, ...rest } = data;
 	const next: ReviewSettingsInput = { ...rest };
 
-	if (next.subagentCap === undefined && specialistDispatch) next.subagentCap = CAP_FOR_DISPATCH[specialistDispatch];
+	if (subagentCap !== undefined) next.subagentCap = migrateSubagentCap(subagentCap);
+	else if (specialistDispatch) next.subagentCap = CAP_FOR_DISPATCH[specialistDispatch];
 
 	if (next.orchestratorEffort === undefined && roleEfforts?.correctness)
 		next.orchestratorEffort = roleEfforts.correctness;
@@ -133,39 +148,69 @@ function persist(): void {
 	}
 }
 
-/** Load persisted settings into memory. Call once at boot. A missing or corrupt file starts empty, and env covers it. */
-export function initReviewSettings(): void {
+/** What a saved settings file holds, converted to the current shape, and whether it was in an older one. */
+interface SavedSettings {
+	settings: StoredSettings;
+	legacy: boolean;
+}
+
+/**
+ * Reads the saved settings file and converts it to the current shape without writing anything. Null for a missing,
+ * unreadable or corrupt file, so the caller keeps what it has and env covers the rest.
+ */
+function readSavedSettings(): SavedSettings | null {
 	try {
-		const raw = readFileSync(settingsFile(), 'utf8');
-		const parsed = storedFileSchema.safeParse(JSON.parse(raw));
+		const parsed = storedFileSchema.safeParse(JSON.parse(readFileSync(settingsFile(), 'utf8')));
 
-		if (parsed.success) {
-			const { apiKey, models, ...rest } = migrateLegacy(parsed.data);
+		if (!parsed.success) return null;
 
-			const normalized: StoredSettings = {
-				...rest,
-				...(parsed.data.connections ? { connections: parsed.data.connections } : {}),
-				models: models?.map((e) => ({
-					provider: e.provider,
-					...(e.source ? { source: e.source } : {}),
-					id: e.id ?? crypto.randomUUID(),
-					label: e.label,
-					model: e.model,
-					...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
-					...(e.apiKey ? { apiKey: e.apiKey } : {}),
-					...(e.efforts?.length ? { efforts: e.efforts } : {}),
-					...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
-					...(e.contextWindow ? { contextWindow: e.contextWindow } : {}),
-					...(e.runtime && Object.keys(e.runtime).length ? { runtime: e.runtime } : {})
-				}))
-			};
+		const { apiKey, models, ...rest } = migrateLegacy(parsed.data);
 
-			overrides = apiKey ? { ...normalized, apiKey } : normalized;
-			if (hasLegacyFields(parsed.data)) persist();
-		}
+		const normalized: StoredSettings = {
+			...rest,
+			...(parsed.data.connections ? { connections: parsed.data.connections } : {}),
+			models: models?.map((e) => ({
+				provider: e.provider,
+				...(e.source ? { source: e.source } : {}),
+				id: e.id ?? crypto.randomUUID(),
+				label: e.label,
+				model: e.model,
+				...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
+				...(e.apiKey ? { apiKey: e.apiKey } : {}),
+				...(e.efforts?.length ? { efforts: e.efforts } : {}),
+				...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
+				...(e.contextWindow ? { contextWindow: e.contextWindow } : {}),
+				...(e.runtime && Object.keys(e.runtime).length ? { runtime: e.runtime } : {})
+			}))
+		};
+
+		return { settings: apiKey ? { ...normalized, apiKey } : normalized, legacy: hasLegacyFields(parsed.data) };
 	} catch {
-		return;
+		return null;
 	}
+}
+
+/**
+ * Load persisted settings into memory, and save a file that was in an older format again in the current one. Call once
+ * at boot. A missing or corrupt file starts empty, and env covers it.
+ */
+export function initReviewSettings(): void {
+	const saved = readSavedSettings();
+
+	if (!saved) return;
+
+	overrides = saved.settings;
+	if (saved.legacy) persist();
+}
+
+/**
+ * Load persisted settings into memory and write nothing, an older file included: it is read in the current shape and
+ * left as it is. For a command line that only reads the user's settings.
+ */
+export function readReviewSettings(): void {
+	const saved = readSavedSettings();
+
+	if (saved) overrides = saved.settings;
 }
 
 /** Test helper: replace the in-memory overrides. */
@@ -269,6 +314,7 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
 	if (patch.specialistEffort !== undefined) clean.specialistEffort = patch.specialistEffort;
 	if (patch.subagentCap !== undefined) clean.subagentCap = patch.subagentCap;
+	if (patch.tokenBudget !== undefined) clean.tokenBudget = patch.tokenBudget;
 	if (patch.reportLowSeverity !== undefined) clean.reportLowSeverity = patch.reportLowSeverity;
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
@@ -318,6 +364,11 @@ export function effectiveReviewEnv(): {
 /** How many subagents one review may run: the saved pick, else the default. */
 export function effectiveSubagentCap(): SubagentCap {
 	return overrides.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+}
+
+/** The token budget last picked, else Medium, which is what reviews did before budgets existed. */
+export function effectiveTokenBudget(): TokenBudget {
+	return overrides.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
 }
 
 /** Whether reviews report low-severity findings: the saved pick, else on. */

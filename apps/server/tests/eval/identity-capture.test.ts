@@ -35,7 +35,8 @@ const settings: ModelSettings = {
 	],
 	orchestratorEffort: 'high',
 	specialistEffort: null,
-	subagentCap: 2,
+	subagentCap: 8,
+	tokenBudget: 'medium',
 	reportLowSeverity: false,
 	configPath: '/home/someone/.recoder/data/review-config.json',
 	limits: { maxFiles: 200, maxDiffChars: 400_000, maxFileChars: 60_000 }

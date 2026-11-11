@@ -2,7 +2,6 @@
 
 import { shortAge } from '@recoder/shared';
 import { ContextMenu, ContextMenuTrigger, Meter, RowButton, StatusGlyph } from '@recoder/ui';
-import { Bot } from 'lucide-react';
 import { motion } from 'motion/react';
 import Link from 'next/link';
 import { memo, useRef, useState, type Ref } from 'react';
@@ -10,8 +9,9 @@ import { memo, useRef, useState, type Ref } from 'react';
 import type { ProgressSummaries } from '@/lib/api/reviews';
 import { entryGlyph, runningLabel, type QueueEntry, type QueueSection } from '@/lib/queue/queue';
 import { useQueue } from '@/lib/queue/queue-store';
-import { author, plural, pullRef, pullTitle } from '@/lib/shell/format';
+import { plural, pullRef, pullTitle } from '@/lib/shell/format';
 
+import { QueueAuthor } from './queue-author';
 import { LIST_ITEM_MOTION } from './queue-motion';
 import { QueuePeople } from './queue-people';
 import { QueueRowMenu } from './queue-row-menu';
@@ -38,15 +38,11 @@ type Progress = ProgressSummaries[string] | undefined;
 /** Where the branch goes, how big the change is, how old it is, and what was sent back. */
 function Meta({ entry }: { entry: QueueEntry }) {
 	const { pull } = entry;
-	const by = author(pull.author);
 	const age = shortAge(pull.createdAt);
 
 	return (
 		<span className="queue-row-meta">
-			<span className="queue-row-author" title={by.agent ? `${by.name}, an agent` : by.name}>
-				{by.agent ? <Bot size={12} strokeWidth={1.75} aria-hidden /> : null}
-				{by.name}
-			</span>
+			<QueueAuthor login={pull.author} />
 			<span aria-hidden>·</span>
 			<span className="min-w-0 truncate text-fg-subtle" title={pull.headRef}>
 				{pull.headRef}

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ReasoningEffort } from '@recoder/shared';
+import type { ReasoningEffort, TokenUsage } from '@recoder/shared';
 import { LlmError, cancelledError } from '../../models/llm/errors';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import { emptyDirectory } from '../cli-process';
@@ -31,6 +31,8 @@ export interface AgentReply {
 	structured?: unknown;
 	text: string;
 	error?: LlmError;
+	/** What the server counted for the prompt, for a model call whose step events never arrived. */
+	tokens?: TokenUsage;
 }
 
 interface PromptOptions {
@@ -122,12 +124,14 @@ export class AgentSession {
 
 			const answer = reply.texts.at(-1) ?? '';
 
-			if (reply.error) return { text: answer, error: reply.error };
+			const { tokens } = reply;
+
+			if (reply.error) return { text: answer, error: reply.error, tokens };
 
 			if (structured && (reply.structured === undefined || isEmptyObject(reply.structured)))
-				return { text: answer, error: new LlmError(0, 'The model returned empty structured output.') };
+				return { text: answer, error: new LlmError(0, 'The model returned empty structured output.'), tokens };
 
-			return { structured: structured ? reply.structured : undefined, text: answer };
+			return { structured: structured ? reply.structured : undefined, text: answer, tokens };
 		} catch (error) {
 			return { text: '', error: asLlmError(error, this.options.signal.aborted) };
 		}

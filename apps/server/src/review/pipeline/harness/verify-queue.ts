@@ -65,7 +65,7 @@ export class VerifyQueue {
 	/** Repairs still running; a candidate one makes valid joins the line when it finishes. */
 	private repairing = 0;
 
-	/** The model calls each candidate added to the budget when it joined. */
+	/** The model calls each candidate still waiting or running added to the budget when it joined. */
 	private readonly room = new Map<CandidateFinding, number>();
 
 	/** Bugs whose verifier is waiting or running, in the order they joined; a later report of one waits for it. */
@@ -89,6 +89,15 @@ export class VerifyQueue {
 	/** Whether any verifier or repair is running or waiting. */
 	get busy(): boolean {
 		return this.running > 0 || this.waiting.length > 0 || this.repairing > 0;
+	}
+
+	/**
+	 * The model calls verifiers still waiting or running were given, which a
+	 * later stage planning its own spending must leave to them. A running
+	 * verifier counts in full, though it may have spent some already.
+	 */
+	get heldCalls(): number {
+		return [...this.room.values()].reduce((sum, calls) => sum + calls, 0);
 	}
 
 	/**
@@ -171,6 +180,7 @@ export class VerifyQueue {
 	private release(leader: CandidateFinding): void {
 		const waiting = this.followers.get(leader) ?? [];
 
+		this.room.delete(leader);
 		this.followers.delete(leader);
 
 		for (const follower of waiting) {

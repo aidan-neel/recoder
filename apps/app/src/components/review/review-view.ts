@@ -57,13 +57,12 @@ export function isWorking(phase: ReviewPhase): boolean {
 	return WORKING.has(phase);
 }
 
-/** True while the reading pane shows live progress: the overview of a review still at work with nothing found yet. */
+/** True while the reading pane shows live progress: the overview of a review still at work. */
 export function useLiveView(): boolean {
 	const phase = usePhase();
-	const { total } = useCounts();
 	const overview = useReview((state) => state.selection.kind === 'overview');
 
-	return overview && isWorking(phase) && total === 0;
+	return overview && isWorking(phase);
 }
 
 /** Queues a fresh review of the pull request and opens it. */

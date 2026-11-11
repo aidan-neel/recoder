@@ -48,8 +48,11 @@ const NOTE_INSTRUCTIONS = `Only when the developer asks you to leave, add or mak
 function rerunInstructions(): string {
 	const cap = effectiveSubagentCap();
 
+	const allowed =
+		cap === 'uncapped' ? 'as many subagents as the review has model calls and time for' : `up to ${cap} subagents`;
+
 	const subagents = cap
-		? `The Subagents setting allows up to ${cap} subagents per review, and reviewers request them when the brief asks.`
+		? `The Subagents setting allows ${allowed} per review, and reviewers request them when the brief asks.`
 		: 'The Subagents setting is off, so a new run cannot use subagents. If the developer wants them, tell them to turn on Subagents under Settings › Harness and ask again, and do not start the run.';
 
 	return `When the developer asks you to review again, run another review, or rerun it with a different focus or with subagents, Recoder can do that: say in one short sentence that you're starting a new review, and put this block at the very end of your message:\n\`\`\`recoder-review\n{}\n\`\`\`\nThe new run starts from the beginning in this session, with this conversation as its brief, and replaces the current findings. ${subagents} Never add this block unprompted.`;

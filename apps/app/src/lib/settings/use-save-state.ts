@@ -62,13 +62,13 @@ export function useSaveState(): {
 }
 
 /**
- * A setting that saves the moment it changes. `draft` holds the new value
- * while its save runs, so it shows at once; it clears when the save settles,
- * and the saved settings (the new value, or the old one after a failure that
- * toasts `failure`) take over.
+ * A setting that saves the moment it changes, through `save`. `draft` holds
+ * the new value while its save runs, so it shows at once; it clears when the
+ * save settles, and the saved settings (the new value, or the old one after a
+ * failure that toasts `failure`) take over.
  */
-export function useInstantSave<T>(
-	patch: (value: T) => ModelSettingsPatch,
+export function useInstantChange<T>(
+	save: (value: T) => Promise<unknown>,
 	failure: string
 ): { draft: { value: T } | null; state: SaveState; change: (value: T) => void } {
 	const [draft, setDraft] = useState<{ value: T } | null>(null);
@@ -79,10 +79,18 @@ export function useInstantSave<T>(
 
 		setDraft(next);
 
-		void track(useSettings.getState().saveModels(patch(value)), failure).then(() => {
+		void track(save(value), failure).then(() => {
 			setDraft((now) => (now === next ? null : now));
 		});
 	}
 
 	return { draft, state, change };
+}
+
+/** `useInstantChange` for the review models and limits: `patch` turns the value into the change to save. */
+export function useInstantSave<T>(
+	patch: (value: T) => ModelSettingsPatch,
+	failure: string
+): { draft: { value: T } | null; state: SaveState; change: (value: T) => void } {
+	return useInstantChange((value: T) => useSettings.getState().saveModels(patch(value)), failure);
 }

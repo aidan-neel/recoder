@@ -1,5 +1,6 @@
 import type { AssignmentStatus, ReviewAssignment } from '@recoder/shared';
 import type { CoverageLedger } from '../coverage.js';
+import type { SkippedSlice } from '../reviewers.js';
 import type { ReviewUnit } from '../units.js';
 
 /** Assignments whose work a resumed review keeps. */
@@ -26,24 +27,26 @@ export function updateAssignment(records: ReviewAssignment[], id: string, patch:
 }
 
 /**
- * The coverage responsibility a lens assignment holds. Each lens is its own
- * role, so a hunk counts as reviewed only once every lens that applies to it
- * has examined it.
+ * The coverage responsibility every reviewer holds. A reviewer applies every lens to its slice, so a hunk counts
+ * as reviewed once its one reviewer has examined it, and a retry takes over the entry of the attempt it replaced.
  */
-export function coverageRole(unit: ReviewUnit): string {
-	return unit.lens ?? 'reviewer';
-}
+export const COVERAGE_ROLE = 'reviewer';
 
-/** Marks every hunk in the unit's scope as owned by its lens. */
+/** Marks every hunk in the unit's scope as owned by its reviewer. */
 export function assignCoverage(coverage: CoverageLedger, unit: ReviewUnit): void {
-	const role = coverageRole(unit);
-
 	for (const scope of unit.scope) {
-		for (const hunkId of scope.hunkIds) coverage.assign(hunkId, scope.path, role);
+		for (const hunkId of scope.hunkIds) coverage.assign(hunkId, scope.path, COVERAGE_ROLE);
 	}
 }
 
-/** Reviewers that ended in an error, one per lens assignment: a retry stands in for the attempt it replaced. */
+/** Marks every hunk of a slice no reviewer reads as excluded, with why. */
+export function excludeCoverage(coverage: CoverageLedger, slice: SkippedSlice): void {
+	for (const scope of slice.scope) {
+		for (const hunkId of scope.hunkIds) coverage.exclude(hunkId, scope.path, slice.reason);
+	}
+}
+
+/** Reviewers that ended in an error: a retry stands in for the attempt it replaced. */
 export function unfinishedAssignments(records: ReviewAssignment[]): ReviewAssignment[] {
 	const retried = (record: ReviewAssignment) =>
 		records.some((other) => other.id !== record.id && other.id.startsWith(`retry-${record.id}`));

@@ -1,5 +1,10 @@
-/** `info` is the lowest reported severity (a reviewer's "low"); informational notes are never reported. */
-export type FindingSeverity = 'info' | 'warning' | 'error';
+/**
+ * Every severity a finding can have, lowest first. `info` is a reviewer's "low";
+ * informational notes are never reported.
+ */
+export const FINDING_SEVERITIES = ['info', 'warning', 'error'] as const;
+
+export type FindingSeverity = (typeof FINDING_SEVERITIES)[number];
 
 export interface FindingLocation {
 	file: string;

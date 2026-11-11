@@ -222,7 +222,7 @@ test('the cap limits how many obligations are investigated and counts the rest a
 	expect(none.result.obligations!.counts).toMatchObject({ derived: DERIVED, launched: 0, overCap: DERIVED });
 });
 
-test("investigations run in the lens reviewers' pool, so no more agents run at once than it allows", async () => {
+test("investigations run in the reviewers' pool, so no more agents run at once than it allows", async () => {
 	useTestModel(64);
 	process.env.RECODER_OBLIGATIONS = '1';
 
@@ -249,10 +249,19 @@ test("investigations run in the lens reviewers' pool, so no more agents run at o
 		return obligationOf(init) ? investigatorReply(ANSWER) : modelReply({ message: 'ok', ...NOTHING });
 	}) as unknown as typeof fetch;
 
-	const result = await runAdaptiveReview(input);
-	const agents = result.assignments.filter((record) => record.role === 'reviewer' || record.role === 'obligation');
+	const policy = REVIEW_POLICY as { maxConcurrentAssignments: number };
+	const saved = policy.maxConcurrentAssignments;
 
-	expect(agents.length).toBeGreaterThan(REVIEW_POLICY.maxConcurrentAssignments);
-	expect(result.obligations!.counts).toMatchObject({ launched: DERIVED });
-	expect(most).toBeLessThanOrEqual(REVIEW_POLICY.maxConcurrentAssignments);
+	policy.maxConcurrentAssignments = 4;
+
+	try {
+		const result = await runAdaptiveReview(input);
+		const agents = result.assignments.filter((record) => record.role === 'reviewer' || record.role === 'obligation');
+
+		expect(agents.length).toBeGreaterThan(policy.maxConcurrentAssignments);
+		expect(result.obligations!.counts).toMatchObject({ launched: DERIVED });
+		expect(most).toBeLessThanOrEqual(policy.maxConcurrentAssignments);
+	} finally {
+		policy.maxConcurrentAssignments = saved;
+	}
 });

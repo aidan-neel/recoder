@@ -22,6 +22,8 @@ import { decisionGlyph } from '@/lib/review/labels';
 import { sameSelection, selectionOrder, surfaceOf, useReview } from '@/lib/review/review-store';
 import type { Decision, DecisionState, Outcome } from '@/lib/review/surface';
 
+import { FindingComment } from './finding-comment';
+
 /** What each outcome means, said once the item is decided. */
 const DONE: Record<Outcome, string> = {
 	accepted: 'Accepted. It ships as is.',
@@ -244,7 +246,8 @@ function Bar({ decision, state, index, total, last }: BarProps) {
 				</div>
 
 				<div className="flex shrink-0 items-center gap-0.5">
-					<span className="mr-1.5 text-[12px] text-fg-faint tabular-nums">
+					<FindingComment key={decision.id} decision={decision} />
+					<span className="mr-1.5 ml-1 text-[12px] text-fg-faint tabular-nums">
 						<AnimatedNumber value={index + 1} /> of {total}
 					</span>
 					<Tipped label="Previous" shortcut="k" disabled={false}>

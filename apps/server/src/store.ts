@@ -193,14 +193,19 @@ function remember(item: ReviewProgress): void {
 	}
 }
 
+/** What the shutdown hooks keep on `globalThis`, so a `--hot` reload finds the registrations of the one before. */
+interface ShutdownHooks {
+	__recoderProgressFlush?: () => void;
+	__recoderSignalExit?: boolean;
+}
+
 /**
- * Nothing in memory may be lost on the way out: flush on exit and on the
- * signals that end a dev server. The listeners are registered once per process,
- * since `--hot` re-evaluates this module and must not stack them, and they call
- * whichever module instance is current, so a reload's cache is the one flushed.
+ * Nothing in memory may be lost on the way out: flush when the process exits. The listener is registered once per
+ * process, since `--hot` re-evaluates this module and must not stack them, and it calls whichever module instance
+ * is current, so a reload's cache is the one flushed.
  */
 function flushOnShutdown(): void {
-	const hooks = globalThis as { __recoderProgressFlush?: () => void };
+	const hooks = globalThis as ShutdownHooks;
 	const registered = hooks.__recoderProgressFlush !== undefined;
 
 	hooks.__recoderProgressFlush = flushReviewProgress;
@@ -208,6 +213,21 @@ function flushOnShutdown(): void {
 	if (registered) return;
 
 	process.on('exit', () => hooks.__recoderProgressFlush?.());
+}
+
+flushOnShutdown();
+
+/**
+ * Ends the process with the signal's usual code (130 for SIGINT, 143 for SIGTERM) after flushing, as a dev server
+ * should. Only the server's boot calls it: a program that merely imports this module, like the command line, owns
+ * its signals. Once per process, since `--hot` re-runs the boot.
+ */
+export function exitOnShutdownSignals(): void {
+	const hooks = globalThis as ShutdownHooks;
+
+	if (hooks.__recoderSignalExit) return;
+
+	hooks.__recoderSignalExit = true;
 
 	for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 		process.on(signal, () => {
@@ -216,8 +236,6 @@ function flushOnShutdown(): void {
 		});
 	}
 }
-
-flushOnShutdown();
 
 export const reviewMetrics = createCollection<{
 	id: string;

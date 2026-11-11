@@ -9,7 +9,7 @@ function json(body: unknown, status = 200): Response {
 }
 
 function repoFile(content: string) {
-	return { repoId: 'r1', path: '.recoder/REVIEW.md', ref: 'main', sha: null, content, pending: null, canPropose: true };
+	return { repoId: 'r1', path: 'RECODER.md', ref: 'main', sha: null, content, pending: null, canPropose: true };
 }
 
 afterEach(() => {
@@ -70,7 +70,7 @@ describe('undoing a save of the global guidelines', () => {
 
 		useGuidelines.setState({
 			status: 'ready',
-			overview: { global: defaults, template: '', maxChars: 8000, path: '.recoder/REVIEW.md', repos: [] }
+			overview: { global: defaults, template: '', maxChars: 8000, path: 'RECODER.md', repos: [] }
 		});
 
 		const previous = await useGuidelines.getState().saveGlobal('- Mine\n');

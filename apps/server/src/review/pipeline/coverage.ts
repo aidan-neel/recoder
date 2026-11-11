@@ -54,6 +54,11 @@ export class CoverageLedger {
 		}
 	}
 
+	/** Marks a hunk nobody reviews because of a choice the developer made, so it shows as a gap with the reason. */
+	exclude(hunkId: string, path: string, reason: string): void {
+		this.mark(hunkId, path, 'excluded', reason);
+	}
+
 	examined(hunkId: string, path: string, role: string): void {
 		this.mark(hunkId, path, 'reviewed', `examined by ${role}`, role);
 		this.mark(hunkId, path, 'reviewed', `examined by ${role}`);

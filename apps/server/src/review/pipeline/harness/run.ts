@@ -1,5 +1,6 @@
 import { reviewNow } from '../../session/review-control.js';
 import { ReviewAbortedError } from '../agent-loop.js';
+import { assertLensSelection, assertSameSelection } from '../lenses/lenses.js';
 import { changeModelStage } from './change-model-stage.js';
 import { consolidate } from './consolidation.js';
 import {
@@ -34,21 +35,25 @@ import { drainVerification, finishVerification, startVerification } from './veri
  *   files, but only inside an isolated, offline copy of the checkout
  *   (`exec-sandbox.ts`); tracked files are restored after every command.
  *
- * Stages: understand → cut units → change model, intent (and obligations,
+ * Stages: understand → cut the reviewers' slices → change model, intent (and obligations,
  * with `RECODER_OBLIGATIONS=1`) and rule ledger, while the sandbox installs →
- * every unit through every lens (failed ones retried once), in one pool with
- * the obligation investigations, then the subagents reviewers asked for when the lenses found
- * anything → consolidate. Three things overlap the reviewers rather than
+ * every reviewer over its slice with every lens (failed ones retried once), in one pool with
+ * the obligation investigations, then the subagents the reviewers asked for → consolidate. Three things overlap the reviewers rather than
  * follow them: the baseline checks, the detectors, and the verifiers, which
  * take each candidate as it is reported. Checks still queued once everything
  * else is done are left behind after a short grace. Only proven findings are shown;
  * consolidation is deterministic, so the same change gives the same findings.
- * The deadline runs on the review clock, which stands still while paused.
+ * The deadline runs on the review clock, which stands still while paused. A lens selection that is empty or
+ * names an unknown lens throws before anything runs, and so does a resume saved under another selection.
  */
 export async function runAdaptiveReview(
 	input: AdaptiveReviewInput,
 	events?: HarnessEvents
 ): Promise<AdaptiveReviewResult> {
+	assertLensSelection(input.lenses);
+
+	if (input.resume) assertSameSelection(input.resume.selection, input.lenses);
+
 	const run = createRun(input, events);
 	const onAbort = () => run.controller.abort();
 

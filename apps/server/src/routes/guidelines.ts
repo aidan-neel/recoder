@@ -20,6 +20,7 @@ import { streamGuidelinesDraft } from '../review/guidelines/guidelines-draft';
 import { LlmError } from '../models/llm';
 import { isReviewConfigured } from '../models/models';
 import { repoFileHost } from '../forge/repo-files';
+import { proposalPath, readRepoGuidelinesFile } from '../review/guidelines/repo-layer';
 import { db } from '../store';
 
 /** Branches Recoder opens for guideline changes; one pending change per repo. */
@@ -96,7 +97,7 @@ app.delete('/global', (c) => {
 	}
 });
 
-/** The repo's active file (default branch) and any open change to it. */
+/** The repo's active file (default branch: `RECODER.md`, else `.recoder/REVIEW.md`) and any open change to it. */
 app.get('/repos/:id', async (c) => {
 	const repo = db.repos.get(c.req.param('id'));
 
@@ -108,15 +109,15 @@ app.get('/repos/:id', async (c) => {
 		const head = await host.defaultBranch();
 
 		const [file, pending] = await Promise.all([
-			host.readFile(GUIDELINES_PATH, head.branch),
+			readRepoGuidelinesFile(host, head.branch),
 			host.findPending(BRANCH_PREFIX).catch(() => null)
 		]);
 
-		const pendingFile = pending ? await host.readFile(GUIDELINES_PATH, pending.branch).catch(() => null) : null;
+		const pendingFile = pending ? await readRepoGuidelinesFile(host, pending.branch).catch(() => null) : null;
 
 		const body: RepoGuidelines = {
 			repoId: repo.id,
-			path: GUIDELINES_PATH,
+			path: file?.path ?? pendingFile?.path ?? GUIDELINES_PATH,
 			ref: head.branch,
 			sha: head.sha || null,
 			content: file?.content ?? null,
@@ -128,7 +129,7 @@ app.get('/repos/:id', async (c) => {
 	});
 });
 
-/** Open a pull/merge request with the file, or push to the pending one. */
+/** Open a pull/merge request with the file, or push to the pending one. The file keeps its path; a new one is `RECODER.md`. */
 app.post('/repos/:id/propose', async (c) => {
 	const repo = db.repos.get(c.req.param('id'));
 
@@ -154,17 +155,18 @@ app.post('/repos/:id/propose', async (c) => {
 
 	return withHost(c, async () => {
 		const pending = await host.findPending(BRANCH_PREFIX);
+		const path = await proposalPath(host, pending?.branch ?? null);
 		const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..+$/, '').replace('T', '-');
 
 		const result = await host.propose({
-			path: GUIDELINES_PATH,
+			path,
 			content,
 			branch: `${BRANCH_PREFIX}${stamp}`,
 			pending,
 			commitMessage: pending ? 'Update Recoder review guidelines' : 'Add Recoder review guidelines',
 			title: 'Update Recoder review guidelines',
 			body: [
-				`Updates \`${GUIDELINES_PATH}\`, the review guidelines Recoder follows for this repository.`,
+				`Updates \`${path}\`, the review guidelines Recoder follows for this repository.`,
 				'',
 				'Recoder reads this file from the base branch of each pull request, so these rules apply to pull requests opened after this one merges.',
 				'',

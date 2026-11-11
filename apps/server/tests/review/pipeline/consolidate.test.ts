@@ -67,7 +67,7 @@ function candidate(over: Partial<ReviewerFinding> = {}, lens: LensId | null = nu
 
 	return validateCandidate(
 		raw(over),
-		{ candidateId: `c${next}`, assignmentId: 'unit-1/correctness', role: 'reviewer', model: 'test', lens },
+		{ candidateId: `c${next}`, assignmentId: 'reviewer-1', role: 'reviewer', model: 'test', lenses: lens && [lens] },
 		ctx
 	);
 }
@@ -108,7 +108,7 @@ new file mode 100644
 
 	const inventory = buildInventory(DIFF + added);
 	const ctx = { ...context(), inventory, evidence: new EvidenceStore(null, inventory, 1000) };
-	const meta = { candidateId: 'c1', assignmentId: 'unit-1/correctness', role: 'reviewer', model: 'm', lens: null };
+	const meta = { candidateId: 'c1', assignmentId: 'reviewer-1', role: 'reviewer', model: 'm', lenses: null };
 
 	expect(inventory.files.find((file) => file.path === 'new.ts')?.status).toBe('added');
 	expect(validateCandidate(raw({ line: 30 }), meta, ctx, { file: 'a.ts', line: 2 })).toMatchObject({ valid: true });
@@ -163,6 +163,18 @@ test('validateCandidate drops findings that break their category or lens require
 	const example = { file: 'b.ts', line: 1 };
 
 	expect(candidate({ category: 'performance' }, 'correctness').dropReason).toContain('outside the correctness lens');
+
+	const every = ['correctness', 'security', 'rules'] as const;
+
+	const combined = (category: ReviewerFinding['category']) =>
+		validateCandidate(
+			raw({ category }),
+			{ candidateId: 'c1', assignmentId: 'reviewer-1', role: 'reviewer', model: 'm', lenses: [...every] },
+			context()
+		);
+
+	expect(combined('security')).toMatchObject({ valid: true, lens: 'security' });
+	expect(combined('performance').dropReason).toContain('outside the correctness, security, rules lenses');
 	expect(candidate({ category: 'repo-rule', ruleId: 'R9' }, 'rules').valid).toBe(false);
 	expect(candidate({ category: 'repo-rule', ruleId: 'R1' }, 'rules').valid).toBe(true);
 	expect(candidate({ category: 'readability' }, 'readability').valid).toBe(false);
@@ -297,7 +309,7 @@ test('an intent-mismatch may rest on a non-goal the intent holds, but not on an 
 	const citing = (id: string) =>
 		validateCandidate(
 			raw({ category: 'intent-mismatch', claim: { ...raw().claim, violatedContract: `breaks ${id}` } }),
-			{ candidateId: 'c1', assignmentId: 'unit-1/correctness', role: 'reviewer', model: 'm', lens: 'correctness' },
+			{ candidateId: 'c1', assignmentId: 'reviewer-1', role: 'reviewer', model: 'm', lenses: ['correctness'] },
 			{ ...context(), intent }
 		);
 

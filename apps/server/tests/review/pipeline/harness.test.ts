@@ -4,17 +4,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../src/review/pipeline/harness';
 import { ReviewControl, runWithReviewControl } from '../../../src/review/session/review-control';
-import { scaledReviewLimits } from '../../../src/review/session/review-policy';
+import { budgetLimits, scaledReviewLimits } from '../../../src/review/session/review-policy';
 import {
 	DIFF,
 	NOTHING,
+	TWO_REVIEWERS,
 	TWO_UNIT_DIFF,
 	addedFile,
 	confirmingVerifier,
 	finding,
-	isLensReviewer,
+	isReviewer,
 	isVerifier,
-	lensIdsOf,
 	messagesOf,
 	modelReply,
 	restoreAfterEach,
@@ -31,9 +31,6 @@ beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-harness-'));
 });
 
-/** Lens assignments one unit of code fans out into. */
-const LENS_COUNT = lensIdsOf('unit-1').length;
-
 /** What a finished review reported, by category and title. */
 const reported = (result: { findings: { category?: string; title?: string }[] }) =>
 	result.findings.map((item) => [item.category, item.title]);
@@ -47,12 +44,12 @@ class SkewedClock extends ReviewControl {
 	}
 }
 
-test('a resumed review reruns only unfinished lens assignments and keeps the finished ones’ findings', async () => {
+test('a resumed review reruns only unfinished reviewers and keeps the finished ones’ findings', async () => {
 	useTestModel();
 
 	const first: string[] = [];
 
-	stubModel(first, 'unit-2/correctness');
+	stubModel(first, 'reviewer-2');
 
 	let saved: ReviewProgressCheckpoint | null = null;
 
@@ -65,8 +62,8 @@ test('a resumed review reruns only unfinished lens assignments and keeps the fin
 		}
 	);
 
-	expect(failed.assignments.find((record) => record.id === 'unit-2/correctness')?.status).toBe('error');
-	expect(first).toContain('unit-2/correctness');
+	expect(failed.assignments.find((record) => record.id === 'reviewer-2')?.status).toBe('error');
+	expect(first).toContain('reviewer-2');
 
 	const second: string[] = [];
 
@@ -74,8 +71,8 @@ test('a resumed review reruns only unfinished lens assignments and keeps the fin
 
 	const resumed = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null, resume: saved });
 
-	expect(second.filter((kind) => kind !== 'verifier')).toEqual(['unit-2/correctness']);
-	expect(resumed.assignments.map((record) => record.id)).toEqual([...lensIdsOf('unit-1'), ...lensIdsOf('unit-2')]);
+	expect(second.filter((kind) => kind !== 'verifier')).toEqual(['reviewer-2']);
+	expect(resumed.assignments.map((record) => record.id)).toEqual(TWO_REVIEWERS);
 	expect(resumed.assignments.every((record) => record.status === 'done')).toBe(true);
 	expect(reported(resumed)).toEqual([['correctness', 'possible miss']]);
 });
@@ -95,9 +92,7 @@ test('consolidation makes no model call, so the same reviewer and verifier answe
 		expect(result.outcome).toBe('complete');
 		expect(calls.filter((kind) => kind === 'other')).toEqual([]);
 
-		expect(calls.filter((kind) => kind !== 'verifier' && kind !== 'intent').sort()).toEqual(
-			[...lensIdsOf('unit-1')].sort()
-		);
+		expect(calls.filter((kind) => kind !== 'verifier' && kind !== 'intent')).toEqual(['reviewer-1']);
 
 		runs.push(result.findings.map((item) => `${item.category}:${item.title}:${item.fingerprint}`));
 	}
@@ -106,14 +101,15 @@ test('consolidation makes no model call, so the same reviewer and verifier answe
 	expect(runs[1]).toEqual(runs[0]);
 });
 
-test('a review that runs out of time keeps the findings its lenses reported instead of failing', async () => {
+test('a review that runs out of time keeps the findings its reviewers reported instead of failing', async () => {
 	useTestModel();
 
 	const control = new SkewedClock();
 
 	/** Never answers; once this call is in flight, the review's deadline has passed. */
 	const stallPastDeadline = (init?: RequestInit) => {
-		control.skew = scaledReviewLimits(2 * LENS_COUNT).deadlineMs + 5_000;
+		control.skew =
+			scaledReviewLimits({ reviewers: 2, briefs: 2, subagents: 8 }, budgetLimits('medium')).deadlineMs + 5_000;
 
 		return new Promise<Response>((_, reject) =>
 			init?.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')), { once: true })
@@ -123,13 +119,13 @@ test('a review that runs out of time keeps the findings its lenses reported inst
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		const unit = unitOf(init);
 
-		if (unit === 'unit-2/correctness') return stallPastDeadline(init);
+		if (unit === 'reviewer-2') return stallPastDeadline(init);
 		if (isVerifier(init)) return modelReply(confirmingVerifier(init));
 
 		return modelReply({
 			message: 'ok',
 			...NOTHING,
-			findings: unit === 'unit-1/correctness' ? [finding('possible miss')] : []
+			findings: unit === 'reviewer-1' ? [finding('possible miss')] : []
 		});
 	}) as unknown as typeof fetch;
 
@@ -144,11 +140,11 @@ test('a review that runs out of time keeps the findings its lenses reported inst
 		['correctness', 'possible miss']
 	]);
 
-	expect(result.assignments.find((record) => record.id === 'unit-1/correctness')?.status).toBe('done');
-	expect(result.assignments.find((record) => record.id === 'unit-2/correctness')?.status).toBe('error');
+	expect(result.assignments.find((record) => record.id === 'reviewer-1')?.status).toBe('done');
+	expect(result.assignments.find((record) => record.id === 'reviewer-2')?.status).toBe('error');
 });
 
-test('a review told to look only at Python files cuts its units from those files and tells every lens reviewer why', async () => {
+test('a review told to look only at Python files cuts its units from those files and tells its reviewer why', async () => {
 	useTestModel();
 
 	const diff = `${DIFF}diff --git a/src/b.py b/src/b.py
@@ -164,7 +160,7 @@ test('a review told to look only at Python files cuts its units from those files
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		const system = systemOf(init);
 
-		if (isLensReviewer(init)) reviewerPrompts.push(messagesOf(init)[1].content);
+		if (isReviewer(init)) reviewerPrompts.push(messagesOf(init)[1].content);
 
 		const reply = system.includes('file filter')
 			? { includeGlobs: ['**/*.py'], excludeGlobs: [] }
@@ -182,11 +178,11 @@ test('a review told to look only at Python files cuts its units from those files
 	);
 
 	expect(result.coverageGaps.find((gap) => gap.path === 'src/a.ts')?.reason).toContain('outside your instructions');
-	expect(reviewerPrompts).toHaveLength(LENS_COUNT);
+	expect(reviewerPrompts).toHaveLength(1);
 	expect(reviewerPrompts.every((prompt) => prompt.includes('review only python files'))).toBe(true);
 });
 
-test('an unattended review of many units runs every lens of every unit and finishes without waiting on anyone', async () => {
+test('an unattended review of many units is read by three reviewers, not one per unit and lens, and finishes without waiting on anyone', async () => {
 	useTestModel(8);
 
 	const calls: string[] = [];
@@ -197,6 +193,6 @@ test('an unattended review of many units runs every lens of every unit and finis
 	const result = await runAdaptiveReview({ diff, sandboxPath: null });
 
 	expect(result.outcome).toBe('complete');
-	expect(result.assignments).toHaveLength(8 * LENS_COUNT);
+	expect(result.assignments.map((record) => record.id)).toEqual(['reviewer-1', 'reviewer-2', 'reviewer-3']);
 	expect(result.assignments.every((record) => record.status === 'done')).toBe(true);
 });

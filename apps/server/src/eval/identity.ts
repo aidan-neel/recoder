@@ -80,8 +80,8 @@ export interface RunIdentity {
 	 */
 	flags: Record<string, string> | Unknown;
 	limits: {
-		/** The reviewer settings the server reports. */
-		settings: Record<string, number | boolean>;
+		/** The reviewer settings the server reports; the subagent cap may be `uncapped`. */
+		settings: Record<string, number | boolean | string>;
 		/** The review policy's budgets and deadlines. */
 		policy: Record<string, number> | Unknown;
 	};

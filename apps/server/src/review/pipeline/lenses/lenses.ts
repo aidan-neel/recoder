@@ -1,5 +1,5 @@
-import { READABILITY_SMELLS } from '@recoder/shared';
-import type { ReviewUnit } from '../units.js';
+import { READABILITY_SMELLS, type FindingCategory } from '@recoder/shared';
+import type { UnitScope } from '../units.js';
 import type { Lens, LensId } from './types.js';
 
 /** Turns a list of steps into the numbered procedure a lens prompt shows. */
@@ -19,7 +19,7 @@ const CORRECTNESS: Lens = {
 		'A guard, validation or type check the change removed or narrowed (Array.isArray, a null or empty test, a length cap, a required-field check) is correctness unless the same check still runs earlier. Message text the change edited must still name the true cause.',
 		'Compare with the removed or replaced lines. A guarantee the old code gave that nothing gives now is correctness.',
 		'Check each caller listed in the context against the new behavior: return values, nulls, thrown errors, ordering. A caller that now breaks is correctness.',
-		'Check the acceptance criteria, stated constraints and non-goals in the change intent. One the code does not meet, or a non-goal it does anyway, is intent-mismatch; cite the claim id in violatedContract.',
+		'Check the acceptance criteria, stated constraints (such as "backwards compatible" or "no behavior change") and non-goals in the change intent. One the code does not meet, or a non-goal it does anyway, is intent-mismatch; cite the claim id in violatedContract.',
 		'Check the tests in this unit or listed for the symbol. A test that cannot fail, asserts the wrong thing, or misses the changed branch is tests.',
 		'For each test the change adds or edits, state what its title promises, then break that promise in the code under test with one small edit and run the test. If it still passes, the test is weak (tests): cite the assertion that should be stricter, such as a bound where the title implies an exact value, or a step the title needs that the test never takes (concurrent calls, a repeat request that should hit the cache).'
 	])
@@ -62,8 +62,7 @@ const API_CONTRACT: Lens = {
 		'For each exported or public symbol, compare the old and new signature, return shape, thrown errors and defaults.',
 		'Check every reference listed in the context still holds against the new contract. A caller that now breaks or silently changes behavior is api-contract.',
 		'Check wire formats the change touches: HTTP routes and bodies, JSON fields, events, CLI flags, environment and config keys. A rename, removal or retype without compatibility is api-contract.',
-		'Types, docstrings or docs the change made wrong about behavior are api-contract.',
-		'Check stated constraints in the change intent such as "backwards compatible" or "no behavior change". One the code breaks is intent-mismatch; cite the claim id.'
+		'Types, docstrings or docs the change made wrong about behavior are api-contract.'
 	])
 };
 
@@ -119,7 +118,7 @@ const READABILITY: Lens = {
 	])
 };
 
-/** Every lens, in the order a unit runs them. */
+/** Every lens, in the order a reviewer applies them. */
 export const LENSES: readonly Lens[] = [
 	CORRECTNESS,
 	SECURITY,
@@ -134,7 +133,7 @@ export const LENSES: readonly Lens[] = [
 /** Lenses that report maintainability, held to repo-grounded evidence rather than a bug's trigger and path. */
 const QUALITY_LENSES: ReadonlySet<LensId> = new Set(['rules', 'conventions', 'readability']);
 
-/** Lenses a docs-only unit runs: no code to break, but rules and clarity still apply. */
+/** Lenses a docs-only slice runs: no code to break, but rules and clarity still apply. */
 const DOCS_LENSES: ReadonlySet<LensId> = new Set(['rules', 'readability']);
 
 const DOCS_FILE = /\.(?:md|mdx|markdown|rst|txt|adoc)$/i;
@@ -149,22 +148,89 @@ export function isQualityLens(id: LensId): boolean {
 	return QUALITY_LENSES.has(id);
 }
 
-/** The lenses that apply to a unit, in `LENSES` order: all of them, or rules and readability for docs only. */
-function lensesFor(unit: ReviewUnit): Lens[] {
-	const docsOnly = unit.scope.length > 0 && unit.scope.every((entry) => DOCS_FILE.test(entry.path));
-
-	return docsOnly ? LENSES.filter((lens) => DOCS_LENSES.has(lens.id)) : [...LENSES];
+/** Whether a path is documentation, which only the rules and readability lenses read. */
+export function isDocsPath(path: string): boolean {
+	return DOCS_FILE.test(path);
 }
 
-/** One assignment per unit and applicable lens, unit by unit, each lens in order. */
-export function lensAssignments(units: ReviewUnit[]): ReviewUnit[] {
-	return units.flatMap((unit) =>
-		lensesFor(unit).map((lens) => ({
-			...unit,
-			id: `${unit.id}/${lens.id}`,
-			title: `${unit.title} · ${lens.title}`,
-			reason: `Applies the ${lens.title.toLowerCase()} procedure to every changed symbol in ${unit.title}.`,
-			lens: lens.id
-		}))
+/**
+ * The lenses that apply to a slice, in `LENSES` order: all of them, or rules and readability for docs only,
+ * held to `selection` when the review was asked for only some lenses.
+ */
+export function lensesFor(scope: UnitScope, selection?: readonly LensId[]): Lens[] {
+	const docsOnly = scope.length > 0 && scope.every((entry) => isDocsPath(entry.path));
+
+	return LENSES.filter(
+		(lens) => (!docsOnly || DOCS_LENSES.has(lens.id)) && (!selection || selection.includes(lens.id))
 	);
+}
+
+/** Throws, naming the value, when a lens selection is empty or holds an id that is not a lens; unset is every lens. */
+export function assertLensSelection(selection: readonly string[] | undefined): void {
+	if (!selection) return;
+
+	if (!selection.length) {
+		throw new Error(`The lens selection is an empty list; name at least one of ${lensNames(LENSES)}, or leave it out.`);
+	}
+
+	const unknown = selection.find((id) => !LENSES.some((lens) => lens.id === id));
+
+	if (unknown !== undefined) {
+		throw new Error(`Unknown lens "${unknown}" in the lens selection; the lenses are ${lensNames(LENSES)}.`);
+	}
+}
+
+/** The lens ids as a list for a sentence: "correctness, security, …". */
+export function lensNames(lenses: readonly Lens[]): string {
+	return lenses.map((lens) => lens.id).join(', ');
+}
+
+/** The categories the lenses may report between them, each once, in lens order. */
+export function lensCategories(ids: readonly LensId[]): FindingCategory[] {
+	return [...new Set(ids.flatMap((id) => lensById(id).categories))];
+}
+
+/** A selection as words, in lens order: "correctness, security", or "every lens" when none was given. */
+function describeSelection(selection: readonly LensId[] | undefined): string {
+	return selection ? lensNames(LENSES.filter((lens) => selection.includes(lens.id))) : 'every lens';
+}
+
+/**
+ * Throws when a review saved under one lens selection is asked to continue under another (order does not matter,
+ * and neither given is the same). Its finished reviewers, candidates and coverage were made under the saved
+ * lenses, so continuing under others would report lenses that never ran.
+ */
+export function assertSameSelection(
+	saved: readonly LensId[] | undefined,
+	requested: readonly LensId[] | undefined
+): void {
+	const savedAs = describeSelection(saved);
+	const requestedAs = describeSelection(requested);
+
+	if (savedAs === requestedAs) return;
+
+	throw new Error(
+		`This review was saved with ${savedAs} and cannot continue with ${requestedAs}; continue it with the same lenses, or start a new review.`
+	);
+}
+
+/** Whether the selection, or every lens when it is unset, reports any of `categories`. */
+export function selectionReports(selection: readonly LensId[] | undefined, categories: readonly string[]): boolean {
+	if (!selection) return true;
+
+	return lensCategories(selection).some((category) => categories.includes(category));
+}
+
+/** The first of the lenses whose categories include `category`, which is the lens the finding is credited to. */
+export function lensOwning(category: FindingCategory, lenses: readonly LensId[]): LensId | undefined {
+	return lenses.find((id) => lensById(id).categories.includes(category));
+}
+
+/**
+ * The lenses' procedures as one, each under its title with the categories it reports, so a single reviewer applies
+ * them one after another to every changed symbol. Intent claims are checked once, in the correctness
+ * procedure, which also holds the stated constraints the API contract lens once checked.
+ */
+export function combinedProcedure(lenses: readonly Lens[]): string {
+	return lenses.map((lens) => `${lens.title} (${lens.categories.join(', ')}):\n${lens.procedure}`).join('\n\n');
 }

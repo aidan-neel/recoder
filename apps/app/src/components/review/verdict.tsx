@@ -7,7 +7,7 @@ import { useReview } from '@/lib/review/review-store';
 import { plural } from '@/lib/shell/format';
 
 import { DecisionTally } from './decision-tally';
-import { forgeName, isWorking, useCounts, usePhase, useShownReview, useSurface } from './review-view';
+import { forgeName, useCounts, useShownReview, useSurface } from './review-view';
 
 /** Decisions in each final state, as the verdict counts them. */
 interface Decided {
@@ -28,11 +28,9 @@ function keptLine({ accepted, dismissed }: Decided): string {
 }
 
 /** The verdict's sentence: what happens to this pull request, given the decisions made. */
-function verdictLine(counts: Decided, working: boolean): { lead: string; rest: string } {
+function verdictLine(counts: Decided): { lead: string; rest: string } {
 	if (counts.total === 0)
 		return { lead: 'Nothing needs a decision.', rest: 'The reviewers found no problems worth your time.' };
-
-	if (working) return { lead: 'Every decision so far is made.', rest: 'More may come while the review runs.' };
 
 	if (counts.sent > 0) {
 		return {
@@ -50,8 +48,7 @@ function Verdict() {
 	const pull = useReview((state) => state.pull);
 	const setHandoffOpen = useReview((state) => state.setHandoffOpen);
 	const counts = useCounts();
-	const working = isWorking(usePhase());
-	const { lead, rest } = verdictLine(counts, working);
+	const { lead, rest } = verdictLine(counts);
 	const forge = forgeName(review);
 	const url = forge ? (review.prUrl ?? pull?.url ?? null) : null;
 	const sent = counts.sent > 0;
@@ -71,7 +68,7 @@ function Verdict() {
 					>
 						Hand off to the agent <Keycap k="h" />
 					</Button>
-				) : url && !working ? (
+				) : url ? (
 					<Button variant="primary" asChild>
 						<a href={url} target="_blank" rel="noreferrer">
 							Approve on {forge} <ArrowUpRight />

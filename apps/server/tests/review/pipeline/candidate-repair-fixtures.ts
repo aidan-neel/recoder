@@ -84,7 +84,13 @@ export function candidateOf(
 	lens: LensId | null = 'correctness',
 	ctx = repairContext()
 ): CandidateFinding {
-	const meta = { candidateId: 'c1', assignmentId: `unit-1/${lens}`, role: 'reviewer', model: 'test', lens };
+	const meta = {
+		candidateId: 'c1',
+		assignmentId: 'reviewer-1',
+		role: 'reviewer',
+		model: 'test',
+		lenses: lens && [lens]
+	};
 
 	return validateCandidate(raw, meta, ctx);
 }

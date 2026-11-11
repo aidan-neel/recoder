@@ -24,7 +24,7 @@ import {
 } from './harness/findings.js';
 import type { ReviewInventory } from './inventory.js';
 import type { ChangeIntent, IntentClaim } from './intent/types.js';
-import { lensById } from './lenses/lenses.js';
+import { lensCategories, lensOwning } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
 import type { PublishedBy } from './published-by.js';
 
@@ -73,6 +73,8 @@ export interface CandidateContext {
 	intent?: ChangeIntent | null;
 	/** Dismissal fingerprints of this repository, of either form; a candidate one matches (`matchesDismissal`) is dropped. Absent when the review has no repository. */
 	dismissed?: ReadonlySet<string>;
+	/** The lenses the review applies when it was asked for only some; a finding in a category none of them reports is dropped, whoever reported it. */
+	selection?: readonly LensId[];
 }
 
 /**
@@ -166,13 +168,23 @@ export type CategoryIssue = 'lens' | 'rule' | 'smell' | 'examples' | 'intent';
 /** The category or lens requirement the finding breaks and why, or undefined when it breaks none. */
 export function categoryIssue(
 	raw: ReviewerFinding,
-	lens: LensId | null,
-	ctx: Pick<CandidateContext, 'ledger' | 'intent'>
+	lenses: readonly LensId[] | null,
+	ctx: Pick<CandidateContext, 'ledger' | 'intent' | 'selection'>
 ): { issue: CategoryIssue; reason: string } | undefined {
-	const { ledger } = ctx;
+	const { ledger, selection } = ctx;
 
-	if (lens && !lensById(lens).categories.includes(raw.category)) {
-		return { issue: 'lens', reason: `category ${raw.category} is outside the ${lens} lens` };
+	if (lenses && !lensCategories(lenses).includes(raw.category)) {
+		return {
+			issue: 'lens',
+			reason: `category ${raw.category} is outside the ${lenses.join(', ')} ${lenses.length === 1 ? 'lens' : 'lenses'}`
+		};
+	}
+
+	if (selection && !lensCategories(selection).includes(raw.category)) {
+		return {
+			issue: 'lens',
+			reason: `category ${raw.category} is outside the lenses this review applies (${selection.join(', ')})`
+		};
 	}
 
 	if (raw.category === 'repo-rule' && !(raw.ruleId && ledger?.rules.some((rule) => rule.id === raw.ruleId))) {
@@ -228,7 +240,7 @@ function claimTexts(raw: ReviewerFinding): string[] {
  */
 export function validateCandidate(
 	raw: ReviewerFinding,
-	meta: { candidateId: string; assignmentId: string; role: string; model: string; lens: LensId | null },
+	meta: { candidateId: string; assignmentId: string; role: string; model: string; lenses: readonly LensId[] | null },
 	ctx: CandidateContext,
 	link?: RepairLink
 ): CandidateFinding {
@@ -256,7 +268,7 @@ export function validateCandidate(
 	const drop = firstDrop([
 		['location', locationProblem(ctx.inventory, raw.file, line, side, link)],
 		['evidence', raw.evidenceIds.length > 0 && evidenceIds.length === 0 && 'cited evidence was not provided'],
-		['category', categoryIssue(raw, meta.lens, ctx)?.reason],
+		['category', categoryIssue(raw, meta.lenses, ctx)?.reason],
 		['dismissed', dismissed && 'a person dismissed this finding in an earlier review']
 	]);
 
@@ -280,7 +292,7 @@ export function validateCandidate(
 		smell,
 		symbol: shownSymbol,
 		claim: { ...raw.claim, existingGuard: raw.claim.existingGuard ?? undefined },
-		lens: meta.lens ?? undefined,
+		lens: meta.lenses ? lensOwning(raw.category, meta.lenses) : undefined,
 		evidenceIds,
 		relatedLocations: raw.relatedLocations,
 		side,

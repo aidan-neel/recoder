@@ -28,6 +28,7 @@ function settings(subagentCap: ModelSettings['subagentCap']): ModelSettings {
 		sharedModelId: null,
 		models: [],
 		subagentCap,
+		tokenBudget: 'medium',
 		reportLowSeverity: true,
 		limits: { maxFiles: 20, maxDiffChars: 60_000, maxFileChars: 12_000 }
 	};
@@ -93,7 +94,7 @@ async function answer(url: URL, init?: RequestInit): Promise<Response> {
 const modelReads = () => server.calls.filter((call) => call === 'GET /api/settings/models').length;
 
 beforeEach(() => {
-	server = { settings: settings(2), agents: [openCode], agentCheck: 'ok', models: 'ok', hold: null, calls: [] };
+	server = { settings: settings(8), agents: [openCode], agentCheck: 'ok', models: 'ok', hold: null, calls: [] };
 
 	Object.assign(globalThis, {
 		fetch: (input: string | URL, init?: RequestInit) => answer(new URL(String(input)), init)
@@ -148,7 +149,7 @@ describe('settings store', () => {
 		await useSettings.getState().load(true);
 
 		expect(useSettings.getState().status).toBe('ready');
-		expect(useSettings.getState().models?.subagentCap).toBe(2);
+		expect(useSettings.getState().models?.subagentCap).toBe(8);
 	});
 
 	test('a check again that fails keeps the agents and providers on screen beside its reason', async () => {
@@ -170,22 +171,22 @@ describe('settings store', () => {
 		server.hold = new Promise((resolve) => (release = resolve));
 
 		const load = useSettings.getState().load();
-		const save = useSettings.getState().saveModels({ subagentCap: 4 });
+		const save = useSettings.getState().saveModels({ subagentCap: 12 });
 
 		release();
 		await Promise.all([load, save]);
 
-		expect(useSettings.getState().models?.subagentCap).toBe(4);
+		expect(useSettings.getState().models?.subagentCap).toBe(12);
 	});
 
 	test('a save the server refuses rejects and keeps the last saved settings', async () => {
 		await useSettings.getState().load();
 		Object.assign(globalThis, { fetch: async () => json({ error: 'Could not write review-config.json.' }, 500) });
 
-		await expect(useSettings.getState().saveModels({ subagentCap: 4 })).rejects.toThrow(
+		await expect(useSettings.getState().saveModels({ subagentCap: 12 })).rejects.toThrow(
 			'Could not write review-config.json.'
 		);
 
-		expect(useSettings.getState().models?.subagentCap).toBe(2);
+		expect(useSettings.getState().models?.subagentCap).toBe(8);
 	});
 });

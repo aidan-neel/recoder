@@ -91,15 +91,19 @@ export function claudeCodeError(text: string, code: string | null, apiStatus: nu
  * they are added back in. `output_tokens` already includes thinking.
  */
 function tokenUsage(usage: z.infer<typeof usageSchema>): TokenUsage {
-	const cachedInputTokens = usage.cache_read_input_tokens ?? 0;
-	const cacheWriteInputTokens = usage.cache_creation_input_tokens ?? 0;
-	const inputTokens = (usage.input_tokens ?? 0) + cachedInputTokens + cacheWriteInputTokens;
-	const outputTokens = usage.output_tokens ?? 0;
+	const { input_tokens, output_tokens } = usage;
+	const cachedInputTokens = usage.cache_read_input_tokens ?? null;
+	const cacheWriteInputTokens = usage.cache_creation_input_tokens ?? null;
+
+	const inputTokens =
+		input_tokens === undefined ? null : input_tokens + (cachedInputTokens ?? 0) + (cacheWriteInputTokens ?? 0);
+
+	const outputTokens = output_tokens ?? null;
 
 	return {
 		inputTokens,
 		outputTokens,
-		totalTokens: inputTokens + outputTokens,
+		totalTokens: inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null,
 		cachedInputTokens,
 		cacheWriteInputTokens,
 		reasoningOutputTokens: usage.output_tokens_details?.thinking_tokens ?? null

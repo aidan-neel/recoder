@@ -1,5 +1,6 @@
 import type { ReviewRun } from '../harness/context.js';
 import { addedLines, compareResults, enclosingSymbol, type AddedLines } from './changed-lines.js';
+import { selectionReports } from '../lenses/lenses.js';
 import { diagnosticResults } from './diagnostics.js';
 import { duplicationResults } from './duplication.js';
 import { readFilesAt, trackedFiles, type TrackedFile } from './repo-files.js';
@@ -83,6 +84,11 @@ function capResults(results: DetectorResult[]): DetectorResult[] {
 	return kept.slice(0, MAX_RESULTS).sort(compareResults);
 }
 
+/** The results a lens the review applies reports; all of them when it applies every lens, so a result no lens wants never takes a cap slot. */
+function reportedResults(run: ReviewRun, results: DetectorResult[]): DetectorResult[] {
+	return results.filter((result) => selectionReports(run.input.lenses, [result.category]));
+}
+
 /** Each result with the symbol that encloses it. */
 function withSymbols(run: ReviewRun, results: DetectorResult[]): DetectorResult[] {
 	return results.map((result) => ({
@@ -93,7 +99,7 @@ function withSymbols(run: ReviewRun, results: DetectorResult[]): DetectorResult[
 
 /** The results that survive the cap. */
 function finish(run: ReviewRun, results: DetectorResult[]): DetectorResult[] {
-	return capResults(withSymbols(run, results));
+	return capResults(withSymbols(run, reportedResults(run, results)));
 }
 
 /**
@@ -102,7 +108,7 @@ function finish(run: ReviewRun, results: DetectorResult[]): DetectorResult[] {
  * detectors, which finish long before the checks do.
  */
 export function runDiagnostics(run: ReviewRun): DetectorResult[] {
-	const results = withSymbols(run, diagnosticResults(run.baseline, addedLines(run.inventory)));
+	const results = withSymbols(run, reportedResults(run, diagnosticResults(run.baseline, addedLines(run.inventory))));
 
 	return results.sort(compareResults).slice(0, MAX_DIAGNOSTICS);
 }

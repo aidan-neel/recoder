@@ -4,7 +4,6 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { resetLlmLimiter } from '../../../src/models/llm';
 import type { AdaptiveReviewInput } from '../../../src/review/pipeline/harness/types';
-import { LENSES } from '../../../src/review/pipeline/lenses/lenses';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { git } from '../../helpers/git';
 
@@ -26,16 +25,27 @@ export function addedFile(path: string, lines: number): string {
 }
 
 /**
- * Two files in separate folders, each about 14,000 patch characters, so the
- * change is cut into two units: `unit-1` is `src/a.ts`, `unit-2` is `tests/b.ts`.
- * Neither is docs, so each runs every lens.
+ * Two files in separate folders, each about 14,000 patch characters. A Medium review of a change this small
+ * has two reviewers: `reviewer-1` reads `src/a.ts` and `reviewer-2` reads `tests/b.ts`. Neither is docs, so each
+ * applies every lens.
  */
 export const TWO_UNIT_DIFF = addedFile('src/a.ts', 140) + addedFile('tests/b.ts', 140);
 
-/** The lens assignment ids for a unit, in the order the review runs them (`unit-1/correctness`…). */
-export function lensIdsOf(unitId: string): string[] {
-	return LENSES.map((lens) => `${unitId}/${lens.id}`);
-}
+/**
+ * One file of two hunks, each about 10,000 patch characters, so a Medium review has two reviewers that both read
+ * `src/a.ts`: `reviewer-1` its first hunk and `reviewer-2` its second.
+ */
+export const TWO_HUNK_DIFF = `diff --git a/src/a.ts b/src/a.ts
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -1,0 +1,100 @@
+${Array.from({ length: 100 }, (_, index) => `+${String(index).padEnd(99, 'x')}`).join('\n')}
+@@ -500,0 +601,100 @@
+${Array.from({ length: 100 }, (_, index) => `+${String(1000 + index).padEnd(99, 'y')}`).join('\n')}
+`;
+
+/** The ids of the two reviewers of `TWO_UNIT_DIFF`, in the order the review runs them. */
+export const TWO_REVIEWERS = ['reviewer-1', 'reviewer-2'];
 
 /** An empty reviewer answer. */
 export const NOTHING = {
@@ -124,14 +134,14 @@ export function restoreAfterEach(): void {
 	});
 }
 
-/** Whether a stubbed call is a lens reviewer's. */
-export function isLensReviewer(init?: RequestInit): boolean {
-	return systemOf(init).includes(' lens reviewer.');
+/** Whether a stubbed call is a reviewer's. */
+export function isReviewer(init?: RequestInit): boolean {
+	return systemOf(init).includes('Role: reviewer.');
 }
 
-/** The lens assignment a reviewer prompt is for (`unit-1/correctness`, `retry-unit-2/security`…), or null for any other call. */
+/** The reviewer a prompt is for (`reviewer-1`, `retry-reviewer-2`…), or null for any other call. */
 export function unitOf(init?: RequestInit): string | null {
-	if (!isLensReviewer(init)) return null;
+	if (!isReviewer(init)) return null;
 
 	return /^Unit (\S+):/m.exec(String(messagesOf(init)[1]?.content ?? ''))?.[1] ?? null;
 }
@@ -148,7 +158,7 @@ export function isVerifier(init?: RequestInit): boolean {
 	return systemOf(init).includes('You verify one code review finding');
 }
 
-/** Whether a stubbed call is the intent stage's, which distills the brief before the lenses run. */
+/** Whether a stubbed call is the intent stage's, which distills the brief before the reviewers run. */
 function isIntent(init?: RequestInit): boolean {
 	return systemOf(init).includes('You write the brief a code change is reviewed against');
 }
@@ -173,7 +183,7 @@ export function confirmingVerifier(init?: RequestInit): unknown {
 		: { message: 'Reading the diff.', actions: [{ action: 'readDiff', path: 'src/a.ts' }] };
 }
 
-/** The stage a stubbed call belongs to: a lens assignment or obligation id, `verifier`, `intent`, or `other` for any stage not expected to call a model. */
+/** The stage a stubbed call belongs to: a reviewer or obligation id, `verifier`, `intent`, or `other` for any stage not expected to call a model. */
 function stageOf(init?: RequestInit): string {
 	return unitOf(init) ?? obligationOf(init) ?? (isVerifier(init) ? 'verifier' : isIntent(init) ? 'intent' : 'other');
 }
@@ -188,8 +198,8 @@ function briefReply(init?: RequestInit) {
 }
 
 /**
- * Answers `TWO_UNIT_DIFF`'s lens reviewers and verifiers, recording each
- * call by assignment id, `verifier`, `intent` or `other`. `unit-1/correctness`
+ * Answers `TWO_UNIT_DIFF`'s reviewers and verifiers, recording each
+ * call by assignment id, `verifier`, `intent` or `other`. `reviewer-1`
  * reports one finding, citing its scoped patch; every verifier confirms;
  * `failing` names an assignment whose reviewer the endpoint rejects.
  */
@@ -206,7 +216,7 @@ export function stubModel(calls: string[], failing?: string) {
 		const cited = evidenceIn(init);
 
 		const reply =
-			unit === 'unit-1/correctness'
+			unit === 'reviewer-1'
 				? { ...NOTHING, findings: [finding('possible miss', 'medium', cited ? [cited] : [])] }
 				: NOTHING;
 
@@ -215,8 +225,8 @@ export function stubModel(calls: string[], failing?: string) {
 }
 
 /**
- * Stubs a review of `addedFile('src/a.ts', 5)` whose correctness reviewers
- * report `findings` and whose verifiers confirm them; `onVerifier` hears each
+ * Stubs a review of `addedFile('src/a.ts', 5)` whose reviewer
+ * reports `findings` and whose verifiers confirm them; `onVerifier` hears each
  * verifier call.
  */
 export function stubFindings(findings: unknown[], onVerifier?: () => void): void {
@@ -229,7 +239,7 @@ export function stubFindings(findings: unknown[], onVerifier?: () => void): void
 			return modelReply(confirmingVerifier(init));
 		}
 
-		const reported = unitOf(init)?.endsWith('/correctness') === true ? findings : [];
+		const reported = unitOf(init)?.endsWith('reviewer-1') === true ? findings : [];
 
 		return modelReply({ message: 'ok', ...NOTHING, examinedHunks: ['src/a.ts:0,0:1,5'], findings: reported });
 	}) as unknown as typeof fetch;

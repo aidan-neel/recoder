@@ -1,4 +1,4 @@
-import type { ReviewChatMessage } from '@recoder/shared';
+import { ORCHESTRATOR_ID, type ReviewChatMessage } from '@recoder/shared';
 import { db } from '../../store';
 import { emitReviewEvent } from '../session/events';
 
@@ -11,6 +11,26 @@ export const keyFor = (reviewId: string, assignmentId: string) => `${reviewId}:$
 export function recordChatMessage(reviewId: string, message: ReviewChatMessage): void {
 	if (!db.reviews.get(reviewId)) return;
 	emitReviewEvent(reviewId, { type: 'message', step: 'chat', message: '', data: { chatMessage: message } });
+}
+
+/**
+ * The developer's brief as their message to the orchestrator, recorded before
+ * the review starts, so `reviewInstructions` gives it to the review.
+ */
+export function recordBrief(reviewId: string, text: string | undefined): void {
+	const brief = text?.trim();
+
+	if (!brief) return;
+
+	recordChatMessage(reviewId, {
+		id: crypto.randomUUID(),
+		assignmentId: ORCHESTRATOR_ID,
+		from: 'user',
+		text: brief,
+		at: new Date().toISOString(),
+		status: 'done',
+		discussion: true
+	});
 }
 
 export function stopReviewChat(reviewId: string, assignmentId: string): void {

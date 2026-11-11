@@ -5,9 +5,9 @@ import { AnimatedNumber, Button, Keycap, Meter, swapMotion, useMotionVariants } 
 import { AnimatePresence, motion } from 'motion/react';
 import { useLayoutEffect, useRef, type ReactNode } from 'react';
 
-import { Brief } from '@/components/common/brief';
 import { takeFocus } from '@/lib/live/focus-handoff';
-import { connectionNote, stepProgress, type LivePhase } from '@/lib/live/live-progress';
+import { connectionNote, progressShare, type LivePhase } from '@/lib/live/live-progress';
+import { stageRows, stageStep } from '@/lib/live/stages';
 import { useReview } from '@/lib/review/review-store';
 
 import { LiveControls } from './live-controls';
@@ -28,6 +28,16 @@ const LEAD: Record<LivePhase, { lead: ReactNode; rest?: string }> = {
 	paused: { lead: 'Paused.', rest: 'Model calls wait until you resume.' },
 	draft: { lead: 'Talk it through first, or start the review.' }
 };
+
+/** The lead in the AI voice, and under it the line that says what happens next. */
+function Lead({ lead, rest, as: Tag = 'p' }: { lead: ReactNode; rest?: string; as?: 'p' | 'h2' }) {
+	return (
+		<div className="live-lead-text">
+			<Tag className="ai-voice live-lead-title">{lead}</Tag>
+			{rest ? <p className="ai-voice live-lead-rest">{rest}</p> : null}
+		</div>
+	);
+}
 
 /** The live stream's state, shown only while it is not connected. */
 function ConnectionNote() {
@@ -52,7 +62,7 @@ function ProgressMeter({ phase }: { phase: LivePhase }) {
 
 	return (
 		<Meter
-			value={stepProgress(progress, phase).share}
+			value={progressShare(progress, phase)}
 			tone={phase === 'paused' ? 'medium' : 'neutral'}
 			aria-label="Review progress"
 			className="live-meter"
@@ -60,16 +70,16 @@ function ProgressMeter({ phase }: { phase: LivePhase }) {
 	);
 }
 
-/** "4 of 9 steps done", rolling as steps finish, once the plan is known. */
-function StepsNote({ phase }: { phase: LivePhase }) {
+/** "Step 3 of 6": the current stage's place on the timeline, its number rolling as the review moves on. */
+function StepNote({ review, phase }: { review: Review; phase: LivePhase }) {
 	const progress = useReview((state) => state.progress);
-	const { done, total, counted } = stepProgress(progress, phase);
+	const step = progress ? stageStep(stageRows(progress, phase, review.status)) : null;
 
-	if (!counted) return null;
+	if (!step) return null;
 
 	return (
 		<span className="live-note">
-			<AnimatedNumber value={done} /> of <AnimatedNumber value={total} /> steps done
+			Step <AnimatedNumber value={step.step} /> of <AnimatedNumber value={step.total} />
 		</span>
 	);
 }
@@ -91,7 +101,7 @@ function AskOrchestrator() {
  * The serif lead for where the review stands: the old one fades out, then
  * the new one in. Past the draft, the running lead sits unseen under it, so
  * the box keeps one height and Pause does not move under the pointer when it
- * turns to Resume. Then the meter, the steps done, the connection, the way to
+ * turns to Resume. Then the meter, the step, the connection, the way to
  * Orchestrator and the controls. A draft leads with Start review, so the
  * filled button lines up with the lead. A control that left as the review
  * moved on (Start review, the notice's Continue) hands focus here: to Pause
@@ -114,12 +124,12 @@ export function LiveHeader({ review, phase }: { review: Review; phase: LivePhase
 				<div className="live-lead">
 					{phase === 'draft' ? null : (
 						<div aria-hidden className="live-lead-sizer">
-							<Brief lead={REVIEWING} rest={WAITING} />
+							<Lead lead={REVIEWING} rest={WAITING} />
 						</div>
 					)}
 					<AnimatePresence initial={false} mode="wait">
 						<motion.div key={phase} variants={swap} initial="initial" animate="animate" exit="exit">
-							<Brief as="h2" lead={lead} rest={rest} />
+							<Lead as="h2" lead={lead} rest={rest} />
 						</motion.div>
 					</AnimatePresence>
 				</div>
@@ -128,7 +138,7 @@ export function LiveHeader({ review, phase }: { review: Review; phase: LivePhase
 			<div className="live-actions">
 				{phase === 'draft' ? null : (
 					<>
-						<StepsNote phase={phase} />
+						<StepNote review={review} phase={phase} />
 						<ConnectionNote />
 						<span className="flex-1" />
 					</>

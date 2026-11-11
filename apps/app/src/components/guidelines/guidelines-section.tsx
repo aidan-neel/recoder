@@ -105,7 +105,7 @@ function DiscardConfirm() {
 
 /**
  * Settings → Guidelines: what reviewers follow. The global layer applies to
- * every review; each tracked repository adds its own `.recoder/REVIEW.md`,
+ * every review; each tracked repository adds its own `RECODER.md`,
  * read from the pull request's base branch. Each layer edits in place.
  */
 export function GuidelinesSection() {
