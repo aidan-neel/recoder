@@ -9,7 +9,8 @@
 		"noEmit": true,
 		"skipLibCheck": true,
 		"isolatedModules": true,
-		"forceConsistentCasingInFileNames": true
+		"forceConsistentCasingInFileNames": true,
+		"types": ["bun-types"]
 	},
-	"include": ["src", "px-to-rem.ts"]
+	"include": ["src", "tests", "px-to-rem.ts"]
 }
