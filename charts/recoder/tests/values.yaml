@@ -1,0 +1,8 @@
+server:
+  image:
+    repository: example.invalid/recoder/server
+    tag: test
+app:
+  image:
+    repository: example.invalid/recoder/app
+    tag: test

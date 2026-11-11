@@ -1,0 +1,38 @@
+imagePullSecrets: []
+
+server:
+  image:
+    repository: ''
+    tag: ''
+    pullPolicy: IfNotPresent
+  frontendUrl: http://localhost:3000
+  existingSecret: ''
+  env:
+    RECODER_EXEC: 'off'
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: '2'
+      memory: 2Gi
+  workSizeLimit: 10Gi
+  tmpSizeLimit: 1Gi
+  persistence:
+    existingClaim: ''
+    storageClass: null
+    size: 10Gi
+
+app:
+  image:
+    repository: ''
+    tag: ''
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi
+  tmpSizeLimit: 256Mi

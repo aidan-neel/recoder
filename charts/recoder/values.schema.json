@@ -1,0 +1,100 @@
+{
+	"$schema": "http://json-schema.org/draft-07/schema#",
+	"type": "object",
+	"additionalProperties": false,
+	"required": ["server", "app", "imagePullSecrets"],
+	"properties": {
+		"imagePullSecrets": {
+			"type": "array",
+			"items": {
+				"type": "object",
+				"additionalProperties": false,
+				"required": ["name"],
+				"properties": { "name": { "$ref": "#/definitions/name" } }
+			}
+		},
+		"server": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": [
+				"image",
+				"frontendUrl",
+				"existingSecret",
+				"env",
+				"resources",
+				"workSizeLimit",
+				"tmpSizeLimit",
+				"persistence"
+			],
+			"properties": {
+				"image": { "$ref": "#/definitions/image" },
+				"frontendUrl": { "type": "string", "pattern": "^https?://[^/ ]+(/[^ ]*)?$" },
+				"existingSecret": { "type": "string", "maxLength": 253, "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" },
+				"env": {
+					"type": "object",
+					"propertyNames": {
+						"pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+						"not": { "enum": ["PORT", "HOST", "HOME", "FRONTEND_URL", "RECODER_DATA_DIR", "RECODER_WORKDIR"] }
+					},
+					"additionalProperties": { "type": "string" }
+				},
+				"resources": { "$ref": "#/definitions/resources" },
+				"workSizeLimit": { "$ref": "#/definitions/quantity" },
+				"tmpSizeLimit": { "$ref": "#/definitions/quantity" },
+				"persistence": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["existingClaim", "size"],
+					"properties": {
+						"existingClaim": { "type": "string", "maxLength": 253, "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" },
+						"storageClass": { "type": ["string", "null"] },
+						"size": { "$ref": "#/definitions/quantity" }
+					}
+				}
+			}
+		},
+		"app": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["image", "resources", "tmpSizeLimit"],
+			"properties": {
+				"image": { "$ref": "#/definitions/image" },
+				"resources": { "$ref": "#/definitions/resources" },
+				"tmpSizeLimit": { "$ref": "#/definitions/quantity" }
+			}
+		}
+	},
+	"definitions": {
+		"name": { "type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" },
+		"quantity": { "type": "string", "pattern": "^([1-9][0-9]*(\\.[0-9]+)?|0\\.[0-9]*[1-9][0-9]*)([EPTGMK]i?|m)?$" },
+		"image": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["repository", "tag", "pullPolicy"],
+			"properties": {
+				"repository": { "type": "string", "minLength": 1, "pattern": "^[^ @]+$" },
+				"tag": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]*$" },
+				"pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+			}
+		},
+		"resources": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["requests", "limits"],
+			"properties": {
+				"requests": { "$ref": "#/definitions/resourceList" },
+				"limits": { "$ref": "#/definitions/resourceList" }
+			}
+		},
+		"resourceList": {
+			"type": "object",
+			"additionalProperties": false,
+			"required": ["cpu", "memory"],
+			"properties": {
+				"cpu": { "$ref": "#/definitions/quantity" },
+				"memory": { "$ref": "#/definitions/quantity" },
+				"ephemeral-storage": { "$ref": "#/definitions/quantity" }
+			}
+		}
+	}
+}

@@ -1,0 +1,121 @@
+{{- range $component := list "server" "app" }}
+{{- $config := index $.Values $component }}
+{{- $port := ternary 3001 3000 (eq $component "server") }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "recoder.name" $ }}-{{ $component }}
+  labels:
+    {{- include "recoder.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $.Chart.Name }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: {{ $component }}
+  template:
+    metadata:
+      labels:
+        {{- include "recoder.labels" $ | nindent 8 }}
+        app.kubernetes.io/component: {{ $component }}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      nodeSelector:
+        kubernetes.io/os: linux
+      {{- with $.Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: {{ $component }}
+          image: {{ printf "%s:%s" $config.image.repository $config.image.tag | quote }}
+          imagePullPolicy: {{ $config.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: {{ $port }}
+          env:
+            - name: PORT
+              value: {{ $port | quote }}
+            {{- if eq $component "server" }}
+            - name: HOST
+              value: 0.0.0.0
+            - name: HOME
+              value: /tmp
+            - name: FRONTEND_URL
+              value: {{ $config.frontendUrl | quote }}
+            - name: RECODER_DATA_DIR
+              value: /app/data
+            - name: RECODER_WORKDIR
+              value: /tmp/recoder-work
+            {{- range $name, $value := $config.env }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- else }}
+            - name: HOSTNAME
+              value: 0.0.0.0
+            {{- end }}
+          {{- if and (eq $component "server") $config.existingSecret }}
+          envFrom:
+            - secretRef:
+                name: {{ $config.existingSecret }}
+          {{- end }}
+          startupProbe:
+            httpGet:
+              path: {{ ternary "/health" "/" (eq $component "server") }}
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: {{ ternary "/health" "/" (eq $component "server") }}
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: {{ ternary "/health" "/" (eq $component "server") }}
+              port: http
+            periodSeconds: 20
+          resources:
+            {{- toYaml $config.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if eq $component "server" }}
+            - name: data
+              mountPath: /app/data
+            - name: work
+              mountPath: /tmp/recoder-work
+            {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ $config.tmpSizeLimit }}
+        {{- if eq $component "server" }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ $config.persistence.existingClaim | default (printf "%s-data" (include "recoder.name" $)) }}
+        - name: work
+          emptyDir:
+            sizeLimit: {{ $config.workSizeLimit }}
+        {{- end }}
+{{- end }}

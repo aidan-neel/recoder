@@ -1,0 +1,8 @@
+apiVersion: v2
+name: recoder
+description: A single-server Recoder deployment with the review app
+type: application
+version: 0.1.0
+appVersion: '0.2.1'
+kubeVersion: '>=1.26.0-0'
+home: https://github.com/aidan-neel/recoder
