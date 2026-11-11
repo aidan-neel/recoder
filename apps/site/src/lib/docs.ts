@@ -1,15 +1,6 @@
-import { autoReview } from './docs-pages/auto-review';
-import { configuration } from './docs-pages/configuration';
+import { cli } from './docs-pages/cli';
 import { gettingStarted } from './docs-pages/getting-started';
-import { gitHosts } from './docs-pages/git-hosts';
-import { guidelines } from './docs-pages/guidelines';
-import { howReviewsWork } from './docs-pages/how-reviews-work';
-import { models } from './docs-pages/models';
-import { prComments } from './docs-pages/pr-comments';
-import { reviewing } from './docs-pages/reviewing';
-import { settings } from './docs-pages/settings';
-import { troubleshooting } from './docs-pages/troubleshooting';
-import { webhooks } from './docs-pages/webhooks';
+import { mcp } from './docs-pages/mcp';
 
 export interface DocPage {
 	slug: string;
@@ -18,20 +9,7 @@ export interface DocPage {
 }
 
 /** Docs pages in nav order, one module each under `docs-pages/`. Bodies are GFM Markdown rendered by the kit's Markdown. */
-export const docs: DocPage[] = [
-	gettingStarted,
-	gitHosts,
-	models,
-	reviewing,
-	howReviewsWork,
-	guidelines,
-	autoReview,
-	webhooks,
-	prComments,
-	settings,
-	configuration,
-	troubleshooting
-];
+export const docs: DocPage[] = [gettingStarted, cli, mcp];
 
 export function docBySlug(slug: string): DocPage | undefined {
 	return docs.find((doc) => doc.slug === slug);
