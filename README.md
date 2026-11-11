@@ -28,4 +28,4 @@ Recoder can review pull requests on its own when someone comments `@recoder` on 
 
 The review pipeline is documented stage by stage for agents in [docs/review](docs/review/README.md).
 
-Coding agents can run the same review from a terminal with the `recoder` command, or through MCP tools with `recoder mcp`. Neither needs the server: see [docs/review/cli.md](docs/review/cli.md).
+You can run the same review from a terminal with the `recoder` command: `recoder init` sets it up for your coding agents, and `recoder review` prints the report where you work. Agents pass `-p` for JSON, or use the MCP tools of `recoder mcp`. None of it needs the server: see [docs/review/cli.md](docs/review/cli.md).

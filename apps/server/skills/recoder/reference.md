@@ -2,23 +2,26 @@
 
 Every command and flag, the report and status fields, and two example sessions. `SKILL.md` has the loop to follow. When this file and `recoder <command> --help` disagree, the help is right.
 
+Every command here is written with `-p` (`--programmatic`), which makes it print JSON and plain progress lines. Without `-p` the output is laid out for a person at a terminal and its shape is not a contract. The defaults in the tables below are the defaults with `-p`.
+
 ## Commands
 
-| Command                    | What it does                                                               |
-| -------------------------- | -------------------------------------------------------------------------- |
-| `recoder review [flags]`   | Run one review and print the report. `--detach` runs it in the background. |
-| `recoder status <run-id>`  | Print a run's status as JSON.                                              |
-| `recoder wait <run-id>`    | Wait for a run to end, then print its status.                              |
-| `recoder result <run-id>`  | Print a finished run's report.                                             |
-| `recoder cancel <run-id>`  | Ask a running review to stop.                                              |
-| `recoder runs`             | List recent runs as JSON, newest first.                                    |
-| `recoder models`           | List the model ids `--reviewer` and `--worker` accept, as JSON.            |
-| `recoder skill`            | Print or install the agent skill.                                          |
-| `recoder doctor`           | Check this machine and print a JSON report. Exit 0 when ready, 4 when not. |
-| `recoder --version`        | Print the version.                                                         |
-| `recoder <command> --help` | Print the flags of a command.                                              |
+| Command                      | What it does                                                               |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `recoder review -p [flags]`  | Run one review and print the report. `--detach` runs it in the background. |
+| `recoder status -p <run-id>` | Print a run's status as JSON.                                              |
+| `recoder wait -p <run-id>`   | Wait for a run to end, then print its status.                              |
+| `recoder result -p <run-id>` | Print a finished run's report.                                             |
+| `recoder cancel -p <run-id>` | Ask a running review to stop.                                              |
+| `recoder runs -p`            | List recent runs as JSON, newest first.                                    |
+| `recoder models -p`          | List the model ids `--reviewer` and `--worker` accept, as JSON.            |
+| `recoder skill`              | Print or install the agent skill.                                          |
+| `recoder init`               | Set Recoder up for coding agents. A person runs it, not you.               |
+| `recoder doctor -p`          | Check this machine and print a JSON report. Exit 0 when ready, 4 when not. |
+| `recoder --version`          | Print the version.                                                         |
+| `recoder <command> --help`   | Print the flags of a command.                                              |
 
-Every review is recorded as a run, foreground ones too, so `recoder result <run-id>` works after any review. A run id looks like `20261110-153045-a1b2c3`. Any other text is a usage error (exit 2).
+Every review is recorded as a run, foreground ones too, so `recoder result -p <run-id>` works after any review. A run id looks like `20261110-153045-a1b2c3`. Always give the whole id: a command also takes a part of one, and with none it reads the newest run, which may not be yours. Text that could not be part of a run id is a usage error (exit 2).
 
 ## `recoder review` flags
 
@@ -26,15 +29,15 @@ Choose at most one of `--staged`, `--uncommitted`, `--pull` and `--diff`. With n
 
 Target:
 
-| Flag                   | Default               | Meaning                                                                                        |
-| ---------------------- | --------------------- | ---------------------------------------------------------------------------------------------- |
-| `--repo <path>`        | the working directory | Repository directory.                                                                          |
-| `--base <ref>`         | the default branch    | Compare against this ref.                                                                      |
-| `--head <ref>`         | `HEAD`                | Last commit to review.                                                                         |
-| `--staged`             |                       | Review what is staged.                                                                         |
-| `--uncommitted`        |                       | Review all uncommitted changes, untracked files included.                                      |
+| Flag                     | Default               | Meaning                                                                                        |
+| ------------------------ | --------------------- | ---------------------------------------------------------------------------------------------- |
+| `--repo <path>`          | the working directory | Repository directory.                                                                          |
+| `--base <ref>`           | the default branch    | Compare against this ref.                                                                      |
+| `--head <ref>`           | `HEAD`                | Last commit to review.                                                                         |
+| `--staged`               |                       | Review what is staged.                                                                         |
+| `--uncommitted`          |                       | Review all uncommitted changes, untracked files included.                                      |
 | `--pull <number or url>` |                       | Review a pull or merge request on the repository forge.                                        |
-| `--diff <file or ->`   |                       | Review a unified diff from a file, or from standard input when the value is `-`. No code runs. |
+| `--diff <file or ->`     |                       | Review a unified diff from a file, or from standard input when the value is `-`. No code runs. |
 
 Scope:
 
@@ -59,7 +62,7 @@ Tuning:
 | ------------------------------ | ------------------------ | ------------------------------------------------------------------------------ |
 | `--budget <low\|medium\|high>` | `low`                    | How much to spend.                                                             |
 | `--subagents <n\|uncapped>`    | the budget's cap         | Most subagents the review may run.                                             |
-| `--reviewer <model id>`        | the saved Review model   | Model the reviewers run on. List the ids with `recoder models`.                |
+| `--reviewer <model id>`        | the saved Review model   | Model the reviewers run on. List the ids with `recoder models -p`.             |
 | `--worker <model id>`          | the saved pick           | Model the workers (subagents and verifiers) run on.                            |
 | `--reviewer-effort <level>`    | the budget's             | Reviewer reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. |
 | `--worker-effort <level>`      | the budget's             | Worker reasoning effort, same levels.                                          |
@@ -82,7 +85,7 @@ Output:
 
 | Flag                                      | Default | Meaning                                                                         |
 | ----------------------------------------- | ------- | ------------------------------------------------------------------------------- |
-| `--format <json\|markdown>`               | `json`  | Report format.                                                                  |
+| `--format <text\|json\|markdown>`         | `json`  | Report format. `text` is laid out for a terminal.                               |
 | `--output <file>`                         |         | Write the report here. Standard output then gets one JSON line naming the file. |
 | `--min-severity <info\|warning\|error>`   | `info`  | Leave out findings below this.                                                  |
 | `--include-unconfirmed`                   |         | Also write findings the review could not confirm.                               |
@@ -90,10 +93,10 @@ Output:
 
 Running:
 
-| Flag                              | Default | Meaning                                                                                                   |
-| --------------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
-| `--progress <none\|text\|ndjson>` | `text`  | Progress on standard error.                                                                               |
-| `--detach`                        |         | Start the review in the background, print its run as one JSON line and exit at once. Not with `--diff -`. |
+| Flag                                    | Default | Meaning                                                                                                   |
+| --------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------- |
+| `--progress <live\|text\|ndjson\|none>` | `text`  | Progress on standard error. `live` redraws in place on a terminal.                                        |
+| `--detach`                              |         | Start the review in the background, print its run as one JSON line and exit at once. Not with `--diff -`. |
 
 `--output` writes the filtered report to the file and prints a receipt such as:
 
@@ -109,7 +112,7 @@ Running:
 
 ## The other commands
 
-`recoder wait <run-id> [--timeout <minutes>]` waits until the run ends or the timeout passes, then prints its status. It exits 0 either way: read `state`.
+`recoder wait -p <run-id> [--timeout <minutes>]` waits until the run ends or the timeout passes, then prints its status. It exits 0 either way: read `state`.
 
 | Flag                  | Default                 | Meaning                       |
 | --------------------- | ----------------------- | ----------------------------- |
@@ -117,27 +120,27 @@ Running:
 
 A signal stops the wait with exit 130. The run goes on.
 
-`recoder status <run-id>` prints the run's status.
+`recoder status -p <run-id>` prints the run's status.
 
-`recoder result <run-id> [flags]` prints a finished run's report, as `recoder review` would have. A run with no report prints its error. A run that is still running is a usage error (exit 2). It takes `--format`, `--output`, `--min-severity`, `--include-unconfirmed` and `--fail-on`, with the values and defaults of `review`. Its exit code is the one a foreground review would have: 3 for a failed run, 130 for a cancelled one.
+`recoder result -p <run-id> [flags]` prints a finished run's report, as `recoder review -p` would have. A run with no report prints its error. A run that is still running is a usage error (exit 2). It takes `--format`, `--output`, `--min-severity`, `--include-unconfirmed` and `--fail-on`, with the values and defaults of `review`. Its exit code is the one a foreground review would have: 3 for a failed run, 130 for a cancelled one.
 
-`recoder cancel <run-id>` asks a running review to stop and prints its status with `stopRequested`. A run that is not running is left as it is, with `stopRequested` false.
+`recoder cancel -p <run-id>` asks a running review to stop and prints its status with `stopRequested`. A run that is not running is left as it is, with `stopRequested` false.
 
-`recoder runs [--repo <path>] [--limit <n>]` prints recent runs as a JSON array of statuses, newest first.
+`recoder runs -p [--repo <path>] [--limit <n>]` prints recent runs as a JSON array of statuses, newest first.
 
-| Flag            | Default          | Meaning                                         |
-| --------------- | ---------------- | ----------------------------------------------- |
+| Flag            | Default          | Meaning                                          |
+| --------------- | ---------------- | ------------------------------------------------ |
 | `--repo <path>` | every repository | List only the runs of this repository directory. |
-| `--limit <n>`   | 20               | List at most this many runs.                    |
+| `--limit <n>`   | 20               | List at most this many runs.                     |
 
-`recoder models [--provider <name>] [--search <text>]` prints the model ids that `--reviewer` and `--worker` accept on this machine, as one line of JSON: `{ reviewer, worker, models: [{ id, name, provider, efforts, defaultEffort }], problems }`. `reviewer` and `worker` are the saved picks, or null. A model with no effort levels has `efforts: []` and `defaultEffort: null`. An agent that could not list its models adds a line to `problems`; the other models are still listed. It exits 0, also for an empty list.
+`recoder models -p [--provider <name>] [--search <text>]` prints the model ids that `--reviewer` and `--worker` accept on this machine, as one line of JSON: `{ reviewer, worker, models: [{ id, name, provider, efforts, defaultEffort }], problems }`. `reviewer` and `worker` are the saved picks, or null. A model with no effort levels has `efforts: []` and `defaultEffort: null`. An agent that could not list its models adds a line to `problems`; the other models are still listed. It exits 0, also for an empty list.
 
-| Flag                | Default        | Meaning                                                                                      |
-| ------------------- | -------------- | -------------------------------------------------------------------------------------------- |
-| `--provider <name>` | every provider | List only the models of these providers, ignoring case. Repeatable or comma-separated.       |
-| `--search <text>`   |                | List only models whose id or name contains this text, ignoring case.                         |
+| Flag                | Default        | Meaning                                                                                |
+| ------------------- | -------------- | -------------------------------------------------------------------------------------- |
+| `--provider <name>` | every provider | List only the models of these providers, ignoring case. Repeatable or comma-separated. |
+| `--search <text>`   |                | List only models whose id or name contains this text, ignoring case.                   |
 
-`recoder skill <show|path|install>` prints or installs this skill. `show` prints `SKILL.md`. `path` prints the folder of the bundled skill. `install` copies the skill to `<skills folder>/recoder` and prints one JSON line: `{"installed":"<path>","files":<n>}`.
+`recoder skill <show|install>` prints or installs this skill. `show` prints `SKILL.md`. `install -p` writes the skill to `<skills folder>/recoder` and prints one JSON line: `{"installed":"<path>","files":<n>}`.
 
 | Flag                       | Default  | Meaning                                                                                            |
 | -------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
@@ -146,7 +149,7 @@ A signal stops the wait with exit 130. The run goes on.
 | `--dir <path>`             |          | Use this skills folder instead; relative to the working directory. For any other agent.            |
 | `--force`                  |          | Replace an existing `recoder` folder. Nothing beside it is touched.                                |
 
-`recoder doctor` prints `{ ok, checks: [{ id, ok, required, detail, fix }] }`. `ok` is true when every check with `required: true` passed. Each failed check names its `fix`, or has `fix: null` when there is nothing to do. A failed check with `required: false`, such as `sandbox`, limits reviews and does not stop them.
+`recoder doctor -p` prints `{ ok, checks: [{ id, ok, required, detail, fix }] }`. `ok` is true when every check with `required: true` passed. Each failed check names its `fix`, or has `fix: null` when there is nothing to do. A failed check with `required: false`, such as `sandbox`, limits reviews and does not stop them.
 
 ## MCP tools
 
@@ -195,26 +198,26 @@ A run whose process died without finishing reads as `failed`, with the error `th
 
 ## The report
 
-`recoder result` and a foreground `recoder review` print one object. `schemaVersion` changes when a field is removed or changes meaning.
+`recoder result -p` and a foreground `recoder review -p` print one object. `schemaVersion` changes when a field is removed or changes meaning.
 
-| Field               | Type                              | Meaning                                                                                      |
-| ------------------- | --------------------------------- | -------------------------------------------------------------------------------------------- |
-| `schemaVersion`     | number                            | 1 today                                                                                      |
+| Field               | Type                              | Meaning                                                                                       |
+| ------------------- | --------------------------------- | --------------------------------------------------------------------------------------------- |
+| `schemaVersion`     | number                            | 1 today                                                                                       |
 | `outcome`           | `complete`, `failed`, `cancelled` | `failed` stopped early or read no part of the change; `cancelled` was a signal or `--timeout` |
-| `summary`           | string                            | the review's own account of what it did and found                                            |
-| `error`             | string or null                    | why a `failed` or `cancelled` review stopped                                                 |
-| `target`            | object                            | what was reviewed (below)                                                                    |
-| `settings`          | object                            | what the review ran with (below)                                                             |
-| `findings`          | finding[]                         | confirmed findings, most severe first                                                        |
-| `unconfirmed`       | finding[]                         | raised but not confirmed; empty in the output unless `--include-unconfirmed`                 |
-| `recommendedChecks` | string[]                          | commands worth running before you merge                                                      |
-| `coverage`          | object                            | `{ reviewed, pending, partial, excluded, total }`, counted in units of the change            |
-| `coverageGaps`      | gap[]                             | `{ path, hunkId?, role?, state, reason }`; `state` is `pending`, `partial` or `excluded`     |
-| `funnel`            | object or null                    | how many candidates each stage dropped                                                       |
-| `questions`         | object or null                    | the questions the review asked itself and what became of them                                |
-| `obligations`       | object or null                    | null unless `--enable obligations` was given                                                 |
-| `startedAt`         | string                            | ISO time                                                                                     |
-| `durationMs`        | number                            | wall time                                                                                    |
+| `summary`           | string                            | the review's own account of what it did and found                                             |
+| `error`             | string or null                    | why a `failed` or `cancelled` review stopped                                                  |
+| `target`            | object                            | what was reviewed (below)                                                                     |
+| `settings`          | object                            | what the review ran with (below)                                                              |
+| `findings`          | finding[]                         | confirmed findings, most severe first                                                         |
+| `unconfirmed`       | finding[]                         | raised but not confirmed; empty in the output unless `--include-unconfirmed`                  |
+| `recommendedChecks` | string[]                          | commands worth running before you merge                                                       |
+| `coverage`          | object                            | `{ reviewed, pending, partial, excluded, total }`, counted in units of the change             |
+| `coverageGaps`      | gap[]                             | `{ path, hunkId?, role?, state, reason }`; `state` is `pending`, `partial` or `excluded`      |
+| `funnel`            | object or null                    | how many candidates each stage dropped                                                        |
+| `questions`         | object or null                    | the questions the review asked itself and what became of them                                 |
+| `obligations`       | object or null                    | null unless `--enable obligations` was given                                                  |
+| `startedAt`         | string                            | ISO time                                                                                      |
+| `durationMs`        | number                            | wall time                                                                                     |
 
 `target`:
 
@@ -229,16 +232,16 @@ A run whose process died without finishing reads as `failed`, with the error `th
 
 `settings`:
 
-| Field                      | Type                    | Meaning                                                       |
-| -------------------------- | ----------------------- | ------------------------------------------------------------- |
-| `budget`                   | `low`, `medium`, `high` |                                                               |
-| `subagents`                | number or `uncapped`    | the most subagents the review could run                       |
-| `reviewerModel`, `workerModel`   | string or null    | null is the saved model                                       |
-| `reviewerEffort`, `workerEffort` | string or null    | `minimal`, `low`, `medium`, `high`, `xhigh`, `max`            |
-| `lenses`                   | string[] or null        | null means every lens that applies ran                        |
-| `reportLowSeverity`        | boolean                 | whether `info` findings were kept                             |
-| `exec`                     | boolean                 | whether code could run; false means bugs are `unverified`     |
-| `execReason`               | string or null          | why code could not run (`--no-exec`, no sandbox, a bare diff) |
+| Field                            | Type                    | Meaning                                                       |
+| -------------------------------- | ----------------------- | ------------------------------------------------------------- |
+| `budget`                         | `low`, `medium`, `high` |                                                               |
+| `subagents`                      | number or `uncapped`    | the most subagents the review could run                       |
+| `reviewerModel`, `workerModel`   | string or null          | null is the saved model                                       |
+| `reviewerEffort`, `workerEffort` | string or null          | `minimal`, `low`, `medium`, `high`, `xhigh`, `max`            |
+| `lenses`                         | string[] or null        | null means every lens that applies ran                        |
+| `reportLowSeverity`              | boolean                 | whether `info` findings were kept                             |
+| `exec`                           | boolean                 | whether code could run; false means bugs are `unverified`     |
+| `execReason`                     | string or null          | why code could not run (`--no-exec`, no sandbox, a bare diff) |
 
 A finding:
 
@@ -279,7 +282,7 @@ A finding:
 The agent checks the machine once.
 
 ```text
-$ recoder doctor
+$ recoder doctor -p
 {
   "ok": true,
   "checks": [
@@ -325,24 +328,24 @@ $ recoder doctor
 It starts the review in the background and keeps the `runId`.
 
 ```text
-$ recoder review --detach --title "Back off between retries" --body "Failed sync jobs wait longer after each failed attempt."
+$ recoder review -p --detach --title "Back off between retries" --body "Failed sync jobs wait longer after each failed attempt."
 {"schemaVersion":1,"runId":"20261110-180048-bb5dee","state":"running","stage":null,"startedAt":"2026-11-10T18:00:48.543Z","finishedAt":null,"repoPath":"/home/dev/app","targetKind":"range","exitCode":null,"error":null,"findings":null,"unconfirmed":null,"reportFile":null,"logFile":"~/.recoder/data/cli-runs/20261110-180048-bb5dee/background.log"}
 ```
 
 It waits. The first wait uses a very short timeout, so the run is still `running`. The second wait returns when the run ends.
 
 ```text
-$ recoder wait 20261110-180048-bb5dee --timeout 0.1
+$ recoder wait -p 20261110-180048-bb5dee --timeout 0.1
 {"schemaVersion":1,"runId":"20261110-180048-bb5dee","state":"running","stage":"checks", … }
 
-$ recoder wait 20261110-180048-bb5dee --timeout 5
+$ recoder wait -p 20261110-180048-bb5dee --timeout 5
 {"schemaVersion":1,"runId":"20261110-180048-bb5dee","state":"complete","stage":"consolidation","startedAt":"2026-11-10T18:00:48.543Z","finishedAt":"2026-11-10T18:01:04.847Z","repoPath":"/home/dev/app","targetKind":"range","exitCode":0,"error":null,"findings":1,"unconfirmed":0,"reportFile":"~/.recoder/data/cli-runs/20261110-180048-bb5dee/report.json","logFile":"~/.recoder/data/cli-runs/20261110-180048-bb5dee/background.log"}
 ```
 
 It reads the result.
 
 ```text
-$ recoder result 20261110-180048-bb5dee --format markdown
+$ recoder result -p 20261110-180048-bb5dee --format markdown
 # Recoder review: complete
 
 Review complete. 1 finding. 1 bug is not verified: no type check, lint or test command was found to run here. The review brief read 0 of 1 changed units in full.
@@ -363,7 +366,7 @@ Review complete. 1 finding. 1 bug is not verified: no type check, lint or test c
 Verification: unverified. Not verified: no type check, lint or test command was found to run here.
 ```
 
-The same finding in the JSON report (`recoder result 20261110-180048-bb5dee`), under `findings`:
+The same finding in the JSON report (`recoder result -p 20261110-180048-bb5dee`), under `findings`:
 
 ```json
 {
@@ -399,29 +402,29 @@ The same finding in the JSON report (`recoder result 20261110-180048-bb5dee`), u
 }
 ```
 
-The finding is `unverified`: no test command was found to run, and `verification.reason` says so. The agent reads `src/retry.ts:4`, confirms that `1 << attempt` wraps at 32 bits, and fixes it. It then runs `recoder review --detach --uncommitted --include "src/retry.ts" --title "Cap the retry backoff delay"` and the same `wait` loop on the touched file.
+The finding is `unverified`: no test command was found to run, and `verification.reason` says so. The agent reads `src/retry.ts:4`, confirms that `1 << attempt` wraps at 32 bits, and fixes it. It then runs `recoder review -p --detach --uncommitted --include "src/retry.ts" --title "Cap the retry backoff delay"` and the same `wait` loop on the touched file.
 
-`recoder result 20261110-180048-bb5dee --fail-on warning` prints the same report and exits 1, because the finding is a `warning`.
+`recoder result -p 20261110-180048-bb5dee --fail-on warning` prints the same report and exits 1, because the finding is a `warning`.
 
 ## Example: stop a run
 
 A background run can be stopped. `cancel` sends the stop and prints the status with `stopRequested`; the run is still `running` at that moment. `wait` returns when it has ended.
 
 ```text
-$ recoder review --detach --title "Retry failed sync jobs" --body "Sync jobs retry up to 5 times with backoff."
+$ recoder review -p --detach --title "Retry failed sync jobs" --body "Sync jobs retry up to 5 times with backoff."
 {"schemaVersion":1,"runId":"20261110-175854-3a42d6","state":"running","stage":null,"startedAt":"2026-11-10T17:58:54.797Z","finishedAt":null,"repoPath":"/home/dev/app","targetKind":"range","exitCode":null,"error":null,"findings":null,"unconfirmed":null,"reportFile":null,"logFile":"~/.recoder/data/cli-runs/20261110-175854-3a42d6/background.log"}
 
-$ recoder cancel 20261110-175854-3a42d6
+$ recoder cancel -p 20261110-175854-3a42d6
 {"schemaVersion":1,"runId":"20261110-175854-3a42d6","state":"running","stage":"checks","startedAt":"2026-11-10T17:58:54.797Z","finishedAt":null,"repoPath":"/home/dev/app","targetKind":"range","exitCode":null,"error":null,"findings":null,"unconfirmed":null,"reportFile":null,"logFile":"~/.recoder/data/cli-runs/20261110-175854-3a42d6/background.log","stopRequested":true}
 
-$ recoder wait 20261110-175854-3a42d6 --timeout 1
+$ recoder wait -p 20261110-175854-3a42d6 --timeout 1
 {"schemaVersion":1,"runId":"20261110-175854-3a42d6","state":"cancelled","stage":"reviewing","startedAt":"2026-11-10T17:58:54.797Z","finishedAt":"2026-11-10T17:59:16.257Z","repoPath":"/home/dev/app","targetKind":"range","exitCode":130,"error":"The review was cancelled.","findings":0,"unconfirmed":0,"reportFile":"~/.recoder/data/cli-runs/20261110-175854-3a42d6/report.json","logFile":"~/.recoder/data/cli-runs/20261110-175854-3a42d6/background.log"}
 ```
 
 A cancelled run still has a report, with the coverage it reached. `result` exits 130 for it.
 
 ```text
-$ recoder result 20261110-175854-3a42d6 --format markdown
+$ recoder result -p 20261110-175854-3a42d6 --format markdown
 # Recoder review: cancelled
 
 Review cancelled.

@@ -10,7 +10,9 @@
 - UI kit (`packages/ui`, React): `bun run --filter @recoder/ui check` · `test` · `lint`.
 - Server: `bun run --filter @recoder/server check` · `test`
 - CLI (`recoder`, in `apps/server/src/cli`): `bun run recoder <command>` from the
-  root or `apps/server`. Users install a binary with
+  root or `apps/server`. It prints for a person by default and JSON with `-p`,
+  which is what agents and the skill pass; the JSON is the contract, the text is
+  not. Users install a binary with
   `curl -fsSL https://recoder.dev/install.sh | sh`; a `v*` tag builds the
   binaries (`.github/workflows/release.yml`). Anything the CLI reads at run time
   must be imported (`with { type: 'file' | 'text' }`) so the binary carries it. Its tests are in `apps/server/tests/cli` (`bun test tests/cli` from
@@ -56,7 +58,10 @@ this. Treat a lint error as a bug, not a suggestion.
   - Server `apps/server/src/`: `agents/<cli>/`, `models/`,
     `review/{pipeline,session,chat,guidelines,fixes}/`, `evidence/`,
     `sandbox/`, `forge/`, `home/`, `routes/`, `commands/`, `eval/`, `util/`,
-    `cli/{args,doctor,mcp,output,report,review,run,runs,signals,skill,target}/`.
+    `cli/{args,doctor,init,mcp,models,output,report,review,run,runs,signals,skill,target,terminal}/`.
+    A command's view for a person is a `*-view.ts` beside the command, built
+    from `cli/terminal/` (surface, paint, glyphs, text, live region, prompts).
+    Never write an escape code or a color outside `cli/terminal/`.
   - Web `apps/web/src/lib/`: `api/`, `review/`, `findings/`, `diff/`,
     `session/`, `settings/`, `home/`, `shell/`, with components under
     `lib/components/<feature>/` and Sivir wrappers in `lib/components/ui/`.
