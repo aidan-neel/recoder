@@ -13,7 +13,15 @@ On macOS or Linux (on Windows, use WSL):
 curl -fsSL https://recoder.dev/install.sh | sh
 \`\`\`
 
-This downloads one binary for your machine from the latest release, checks it against the release’s checksums and puts it in \`~/.local/bin\`. It needs nothing else installed. Set \`RECODER_VERSION\` to install a given release tag, or \`RECODER_INSTALL_DIR\` to use another folder. Run the same command again to update.
+This downloads one binary for your machine from the latest release, checks it against the release’s checksums and puts it in \`~/.local/bin\`. It needs nothing else installed. Set \`RECODER_VERSION\` to install a given release tag, or \`RECODER_INSTALL_DIR\` to use another folder.
+
+To update later:
+
+\`\`\`bash
+recoder upgrade
+\`\`\`
+
+It downloads the latest release for your machine, checks it against the release’s checksums, and replaces the program only once the new one runs. \`recoder upgrade --check\` only says whether there is a newer release, and \`--to v0.2.0\` installs a given one. Run \`recoder init\` afterwards to refresh the agent skill.
 
 ## Set up
 
@@ -100,6 +108,7 @@ A review outlasts most agents' shell time limits, so an agent starts it with \`-
 | \`recoder init\` | Set Recoder up for your agents, in this project or on this machine. |
 | \`recoder doctor\` | Check that a review can run on this machine. |
 | \`recoder models\` | List the model ids \`--reviewer\` and \`--worker\` accept. |
+| \`recoder upgrade\` | Replace this program with the latest release. |
 | \`recoder skill install\` | Install the agent skill by itself. |
 | \`recoder mcp\` | Serve these commands as MCP tools. See [MCP](/docs/mcp). |
 

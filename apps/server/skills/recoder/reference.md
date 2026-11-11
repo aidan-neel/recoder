@@ -17,6 +17,7 @@ Every command here is written with `-p` (`--programmatic`), which makes it print
 | `recoder models -p`          | List the model ids `--reviewer` and `--worker` accept, as JSON.            |
 | `recoder skill`              | Print or install the agent skill.                                          |
 | `recoder init`               | Set Recoder up for coding agents. A person runs it, not you.               |
+| `recoder upgrade`            | Replace the program with the latest release. A person runs it, not you.    |
 | `recoder doctor -p`          | Check this machine and print a JSON report. Exit 0 when ready, 4 when not. |
 | `recoder --version`          | Print the version.                                                         |
 | `recoder <command> --help`   | Print the flags of a command.                                              |

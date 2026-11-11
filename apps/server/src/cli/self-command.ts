@@ -7,5 +7,10 @@ const COMPILED_ROOT = '/$bunfs/';
  * `sourceEntry`, the script the caller wants started.
  */
 export function selfCommand(sourceEntry: string): string[] {
-	return Bun.main.startsWith(COMPILED_ROOT) ? [process.execPath] : [process.execPath, sourceEntry];
+	return isCompiledBinary() ? [process.execPath] : [process.execPath, sourceEntry];
+}
+
+/** Whether this program is the `recoder` binary; false when Bun runs it from source. */
+export function isCompiledBinary(): boolean {
+	return Bun.main.startsWith(COMPILED_ROOT);
 }

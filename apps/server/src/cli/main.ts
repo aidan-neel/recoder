@@ -33,6 +33,8 @@ async function execute(invocation: Invocation, terminal: Terminal): Promise<Exit
 			return (await import('./doctor/doctor-command.js')).runDoctorCommand(terminal);
 		case 'init':
 			return (await import('./init/init-command.js')).runInitCommand(invocation.request, terminal);
+		case 'upgrade':
+			return (await import('./upgrade/upgrade-command.js')).runUpgradeCommand(invocation.request, terminal);
 		case 'review':
 			return (await import('./runs/review-command.js')).runReviewCommand(invocation, terminal);
 		case 'status':

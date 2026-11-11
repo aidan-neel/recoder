@@ -2,6 +2,7 @@ import type { Audience } from '../audience.js';
 import { usageError } from '../exit.js';
 import type { InitRequest } from '../init/init-request.js';
 import type { ModelsQuery } from '../models/model-list.js';
+import type { UpgradeRequest } from '../upgrade/upgrade.js';
 import type { HelpTopic } from './help.js';
 import { parseInitArgs } from './init-args.js';
 import { parseModelsQuery } from './models-args.js';
@@ -9,8 +10,9 @@ import { nearestOf } from './nearest.js';
 import { parseFlags } from './parse.js';
 import { parseReviewArgs, type ReviewRequest } from './review-args.js';
 import { isRunCommand, parseRunInvocation, RUN_COMMANDS, type RunInvocation } from './run-args.js';
+import { parseUpgradeArgs } from './upgrade-args.js';
 
-const COMMANDS = ['review', ...RUN_COMMANDS, 'init', 'models', 'skill', 'mcp', 'doctor'] as const;
+const COMMANDS = ['review', ...RUN_COMMANDS, 'init', 'upgrade', 'models', 'skill', 'mcp', 'doctor'] as const;
 
 type Command = (typeof COMMANDS)[number];
 
@@ -32,6 +34,7 @@ export type Invocation =
 	| { command: FlaglessCommand }
 	| ({ command: 'review' } & ReviewRequest)
 	| { command: 'init'; request: InitRequest }
+	| { command: 'upgrade'; request: UpgradeRequest }
 	| { command: 'models'; query: ModelsQuery }
 	| { command: 'skill'; argv: string[] }
 	| RunInvocation;
@@ -71,6 +74,8 @@ function parseCommand(command: Command, flags: string[], context: InvocationCont
 			return { command, ...parseReviewArgs(flags, context.workingDirectory, context.audience) };
 		case 'init':
 			return { command, request: parseInitArgs(flags) };
+		case 'upgrade':
+			return { command, request: parseUpgradeArgs(flags) };
 		case 'models':
 			return { command, query: parseModelsQuery(flags) };
 		case 'skill':

@@ -341,6 +341,21 @@ export const INIT_FLAGS = {
 	}
 } as const satisfies FlagTable;
 
+/** `recoder upgrade`: which release to install, and whether to install it. */
+export const UPGRADE_FLAGS = {
+	to: {
+		type: 'string',
+		group: 'flags',
+		value: 'release',
+		description: 'Install this release, such as v0.2.0, newer or older. Default: the latest release.'
+	},
+	check: {
+		type: 'boolean',
+		group: 'flags',
+		description: 'Only say whether a newer release exists. Nothing is installed.'
+	}
+} as const satisfies FlagTable;
+
 /** The internal flag that hands a background `recoder review` its run id. It has no help row. */
 export const RUN_ID_FLAG = 'run-id';
 

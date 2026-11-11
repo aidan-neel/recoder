@@ -68,7 +68,7 @@
     },
     "apps/server": {
       "name": "@recoder/server",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "dependencies": {
         "@recoder/shared": "workspace:*",
         "hono": "^4.13.5",

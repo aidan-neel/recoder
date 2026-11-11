@@ -12,6 +12,7 @@ import {
 	NON_RANGE_TARGETS,
 	REPORT_FLAGS,
 	REVIEW_FLAGS,
+	UPGRADE_FLAGS,
 	WAIT_FLAGS
 } from './flags.js';
 import type { RunCommand } from './run-args.js';
@@ -40,7 +41,7 @@ interface CommandHelp {
 }
 
 /** What `--help` can explain: the program, or one command. */
-export type HelpTopic = 'main' | 'review' | 'init' | 'models' | 'doctor' | 'mcp' | 'skill' | RunCommand;
+export type HelpTopic = 'main' | 'review' | 'init' | 'upgrade' | 'models' | 'doctor' | 'mcp' | 'skill' | RunCommand;
 
 /** The title of each group of flags, in the order a command's help lists them. */
 const GROUP_TITLES: Record<FlagGroup, string> = {
@@ -78,7 +79,8 @@ const COMMAND_SECTIONS: readonly HelpSection[] = [
 		rows: [
 			['init', 'Set Recoder up for your coding agents'],
 			['doctor', 'Check that this machine can run a review'],
-			['models', 'List the models a review can run on']
+			['models', 'List the models a review can run on'],
+			['upgrade', 'Replace this program with the latest release']
 		]
 	},
 	{
@@ -154,6 +156,16 @@ const COMMAND_HELP: Record<Exclude<HelpTopic, 'main'>, CommandHelp> = {
 			'--project writes into this folder, to commit with the repository: the skill under .claude/skills or .agents/skills, and a RECODER.md for the rules reviewers follow here.',
 			'--global writes into your home folder, for every project: the skill under ~/.claude/skills or ~/.agents/skills.',
 			'Run it again after an update to refresh the skill.'
+		]
+	},
+	upgrade: {
+		usage: 'recoder upgrade [--to <release>] [--check]',
+		about:
+			'Replaces this program with the latest release. It downloads the binary for this machine, checks it against the checksums of the release, runs it once, and only then puts it in place, so a failed download leaves the program as it was.',
+		sections: flagSections(UPGRADE_FLAGS),
+		notes: [
+			'A newer release brings a newer agent skill. Run recoder init afterwards to refresh the installed one.',
+			'With -p it prints one line of JSON: { state, currentVersion, targetVersion, path }. state is current when there is nothing to install, available when --check found a release, and upgraded when the binary at path was replaced.'
 		]
 	},
 	status: {

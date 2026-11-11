@@ -74,6 +74,17 @@ test('init reads its scope and a comma-separated list of agents', () => {
 	});
 });
 
+test('upgrade reads the release to install, with or without its v, and refuses text that is no release', () => {
+	expect(parse('upgrade')).toEqual({ command: 'upgrade', request: { to: null, checkOnly: false } });
+
+	expect(parse('upgrade', '--to', '0.2.0', '--check')).toMatchObject({
+		command: 'upgrade',
+		request: { to: 'v0.2.0', checkOnly: true }
+	});
+
+	expect(() => parse('upgrade', '--to', '../v0.2.0')).toThrow(usageError);
+});
+
 test('init refuses both scopes at once', () => {
 	expect(() => parse('init', '--project', '--global')).toThrow(usageError);
 });
