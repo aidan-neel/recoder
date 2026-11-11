@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import type { SkillFile } from '../../../src/cli/skill/bundled-skill';
 
 const folders: string[] = [];
 
@@ -26,11 +27,8 @@ export async function writeFiles(folder: string, files: Record<string, string>):
 	}
 }
 
-/** A skill folder to install from: a `SKILL.md` and a file in a nested folder. */
-export async function sampleSkill(): Promise<string> {
-	const folder = join(await temporaryFolder(), 'recoder');
-
-	await writeFiles(folder, { 'SKILL.md': 'skill\n', 'notes/reference.md': 'reference\n' });
-
-	return folder;
-}
+/** A skill to install: a `SKILL.md` and a file in a nested folder. */
+export const SAMPLE_SKILL: readonly SkillFile[] = [
+	{ path: 'SKILL.md', text: 'skill\n' },
+	{ path: 'notes/reference.md', text: 'reference\n' }
+];

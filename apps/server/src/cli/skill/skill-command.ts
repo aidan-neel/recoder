@@ -1,16 +1,15 @@
-import { readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { parseChoiceOr, parseText } from '../args/values.js';
 import { rejectMoreThanOne } from '../args/lists.js';
 import { parseFlags } from '../args/parse.js';
 import { EXIT, usageError, type ExitCode } from '../exit.js';
 import { writeStderrLine, writeStdout } from '../output/streams.js';
-import { BUNDLED_SKILL_FOLDER, findSkillFile } from './bundled-skill.js';
+import { BUNDLED_SKILL } from './bundled-skill.js';
 import { installSkill } from './install-skill.js';
 import { skillHelp } from './skill-help.js';
 import { SKILL_AGENTS, SKILL_SCOPES, resolveSkillsFolder } from './skills-folder.js';
 
-const SUBCOMMANDS = ['show', 'path', 'install'] as const;
+const SUBCOMMANDS = ['show', 'install'] as const;
 
 const INSTALL_PARSE_CONFIG = {
 	options: {
@@ -26,7 +25,7 @@ const INSTALL_PARSE_CONFIG = {
 const NO_FLAGS_PARSE_CONFIG = { options: {}, strict: true, allowPositionals: false } as const;
 
 /**
- * Runs `recoder skill`: `argv` is everything after it. Prints the bundled skill, its folder, or installs it.
+ * Runs `recoder skill`: `argv` is everything after it. Prints the bundled skill or installs it.
  * Throws a `CliError` for a wrong subcommand, flag or destination.
  */
 export async function runSkillCommand(argv: string[], workingDirectory: string): Promise<ExitCode> {
@@ -38,12 +37,7 @@ export async function runSkillCommand(argv: string[], workingDirectory: string):
 		case 'show':
 			parseFlags(flags, NO_FLAGS_PARSE_CONFIG);
 
-			return printLine(await readFile(await findSkillFile(BUNDLED_SKILL_FOLDER), 'utf8'));
-		case 'path':
-			parseFlags(flags, NO_FLAGS_PARSE_CONFIG);
-			await findSkillFile(BUNDLED_SKILL_FOLDER);
-
-			return printLine(BUNDLED_SKILL_FOLDER);
+			return printLine(BUNDLED_SKILL[0].text);
 		case 'install':
 			return runInstall(flags, workingDirectory);
 		default:
@@ -67,7 +61,7 @@ async function runInstall(flags: string[], workingDirectory: string): Promise<Ex
 	);
 
 	const { destination, files, warning } = await installSkill({
-		source: BUNDLED_SKILL_FOLDER,
+		source: BUNDLED_SKILL,
 		skillsFolder,
 		force: values.force === true
 	});

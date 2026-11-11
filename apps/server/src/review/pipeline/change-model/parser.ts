@@ -1,10 +1,29 @@
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Language, Parser, type Node } from 'web-tree-sitter';
+import runtimeWasm from 'web-tree-sitter/tree-sitter.wasm' with { type: 'file' };
+import goWasm from 'tree-sitter-wasms/out/tree-sitter-go.wasm' with { type: 'file' };
+import javaWasm from 'tree-sitter-wasms/out/tree-sitter-java.wasm' with { type: 'file' };
+import javascriptWasm from 'tree-sitter-wasms/out/tree-sitter-javascript.wasm' with { type: 'file' };
+import pythonWasm from 'tree-sitter-wasms/out/tree-sitter-python.wasm' with { type: 'file' };
+import rubyWasm from 'tree-sitter-wasms/out/tree-sitter-ruby.wasm' with { type: 'file' };
+import rustWasm from 'tree-sitter-wasms/out/tree-sitter-rust.wasm' with { type: 'file' };
+import tsxWasm from 'tree-sitter-wasms/out/tree-sitter-tsx.wasm' with { type: 'file' };
+import typescriptWasm from 'tree-sitter-wasms/out/tree-sitter-typescript.wasm' with { type: 'file' };
 import { grammarFor, languageFor } from './languages.js';
 
-/** Where `tree-sitter-wasms` keeps its prebuilt grammars, wherever the package was installed. */
-const WASM_DIR = join(dirname(fileURLToPath(import.meta.resolve('tree-sitter-wasms/package.json'))), 'out');
+/**
+ * Each grammar's `.wasm`, imported as a file so `bun build --compile` embeds it in the
+ * `recoder` binary. From source the path is the file in `node_modules`.
+ */
+const GRAMMAR_FILES: Record<string, string> = {
+	go: goWasm,
+	java: javaWasm,
+	javascript: javascriptWasm,
+	python: pythonWasm,
+	ruby: rubyWasm,
+	rust: rustWasm,
+	tsx: tsxWasm,
+	typescript: typescriptWasm
+};
 
 /** Shared by every caller, so concurrent first parses initialize the runtime once. */
 let ready: Promise<void> | null = null;
@@ -13,7 +32,7 @@ let ready: Promise<void> | null = null;
 const parsers = new Map<string, Promise<Parser>>();
 
 function init(): Promise<void> {
-	ready ??= Parser.init();
+	ready ??= Parser.init({ locateFile: () => runtimeWasm });
 
 	return ready;
 }
@@ -23,7 +42,7 @@ function parserFor(grammar: string): Promise<Parser> {
 
 	if (!parser) {
 		parser = init().then(async () => {
-			const language = await Language.load(join(WASM_DIR, `tree-sitter-${grammar}.wasm`));
+			const language = await Language.load(grammarFile(grammar));
 			const created = new Parser();
 
 			created.setLanguage(language);
@@ -35,6 +54,15 @@ function parserFor(grammar: string): Promise<Parser> {
 	}
 
 	return parser;
+}
+
+/** The `.wasm` of a grammar `languages.ts` names. */
+function grammarFile(grammar: string): string {
+	const file = GRAMMAR_FILES[grammar];
+
+	if (!file) throw new Error(`no tree-sitter grammar is bundled for "${grammar}"`);
+
+	return file;
 }
 
 /**

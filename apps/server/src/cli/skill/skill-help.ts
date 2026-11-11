@@ -2,14 +2,13 @@ import { SKILL_AGENTS, SKILL_SCOPES } from './skills-folder.js';
 
 /** The text of `recoder skill --help`. */
 export function skillHelp(): string {
-	return `Usage: recoder skill <show|path|install> [flags]
+	return `Usage: recoder skill <show|install> [flags]
 
 The agent skill that teaches a coding agent to run reviews with recoder.
 
 Commands:
   recoder skill show       Print SKILL.md.
-  recoder skill path       Print the folder of the bundled skill.
-  recoder skill install    Copy the skill to <skills folder>/recoder and print one JSON line: {"installed":"<path>","files":<n>}.
+  recoder skill install    Write the skill to <skills folder>/recoder and print one JSON line: {"installed":"<path>","files":<n>}.
 
 Install flags:
   --agent <${SKILL_AGENTS.join('|')}>   Whose skills folder to use. Default: claude.

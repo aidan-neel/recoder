@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  cli:
+    name: recoder binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: Build one binary per platform
+        run: |
+          mkdir -p dist
+          for target in linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            bun build --compile --minify --target="bun-$target" apps/server/src/cli/main.ts --outfile "dist/recoder-$target"
+          done
+          cd dist && sha256sum recoder-* > SHA256SUMS
+      - name: Smoke-test the Linux binary
+        run: |
+          dist/recoder-linux-x64 --version
+          dist/recoder-linux-x64 skill show > /dev/null
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes

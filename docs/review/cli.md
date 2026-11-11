@@ -16,16 +16,17 @@ The command line reads the saved model settings (`initReviewSettings`) and the `
 
 ## Install
 
-Run these once, after `bun install`.
+Users install a prebuilt binary:
 
-| Command                     | What it does                                                                                                           | Where to run it                       |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| `bun run recoder <command>` | runs `apps/server/src/cli/main.ts`                                                                                     | the repository root, or `apps/server` |
-| `bun link`                  | registers `@recoder/server` and puts a `recoder` link in Bun's global bin folder (`~/.bun/bin`, or `$BUN_INSTALL/bin`) | `apps/server`                         |
+```sh
+curl -fsSL https://recoder.dev/install.sh | sh
+```
 
-Both were run on this branch and print the version (`recoder --version`). `bun link` was run with `BUN_INSTALL` pointing at a scratch folder, and the `recoder` it made ran from another directory. Put Bun's bin folder on `PATH` to call `recoder` by name.
+The script (`apps/site/public/install.sh`) picks `recoder-<linux|darwin>-<x64|arm64>` from the latest GitHub release (`RECODER_VERSION` names another tag), checks it against the release's `SHA256SUMS`, and moves it to `~/.local/bin` (`RECODER_INSTALL_DIR`). Nothing is installed when the checksum does not match.
 
-`bun run recoder` starts in the folder you ran it from, so a review from the repository root reviews Recoder itself. Pass `--repo <path>` to review another repository.
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which builds the four binaries with `bun build --compile` and publishes them with `SHA256SUMS` as a release. A binary carries everything the CLI reads at run time: the tree-sitter grammars (`with { type: 'file' }` imports in `review/pipeline/change-model/parser.ts`) and the agent skill (`with { type: 'text' }` imports in `cli/skill/bundled-skill.ts`). Code that needs a file at run time must be imported the same way, never read from a path beside the source. A background review and the clean copy started under a git hook run the program again through `selfCommand()` (`cli/self-command.ts`): the binary alone, or Bun and `main.ts` from source.
+
+To run from source, use `bun run recoder <command>` in the repository root or `apps/server`. It starts in the folder you ran it from, so a review from the repository root reviews Recoder itself. Pass `--repo <path>` to review another repository.
 
 Check the machine before a first review:
 
@@ -46,7 +47,7 @@ It prints `{ ok, checks: [{ id, ok, required, detail, fix }] }` and exits 0 when
 | `recoder cancel <run-id>`                     | ask a running review to stop; prints the status with `stopRequested`      |
 | `recoder runs [--repo <path>] [--limit <n>]`  | list recent runs as JSON, newest first; 20 by default; `--repo` keeps one repository's |
 | `recoder models [--provider <name>] [--search <text>]` | list the model ids `--reviewer` and `--worker` accept, as JSON |
-| `recoder skill <show\|path\|install>`         | print or install the agent skill                                          |
+| `recoder skill <show\|install>`              | print or install the agent skill                                          |
 | `recoder mcp`                                 | serve the commands as MCP tools on standard input and output              |
 | `recoder doctor`                              | check this machine and print a JSON report                                |
 | `recoder --version`                           | print the version                                                         |
@@ -174,14 +175,13 @@ The skill in `apps/server/skills/recoder/` tells an agent when and how to use th
 | Command                                                                                           | What it does                                                                        |
 | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | `recoder skill show`                                                                              | print `SKILL.md`                                                                    |
-| `recoder skill path`                                                                              | print the absolute folder of the bundled skill                                      |
-| `recoder skill install [--agent claude\|agents] [--scope user\|project] [--dir <path>] [--force]` | copy it to `<skills folder>/recoder` and print `{"installed":"<path>","files":<n>}` |
+| `recoder skill install [--agent claude\|agents] [--scope user\|project] [--dir <path>] [--force]` | write it to `<skills folder>/recoder` and print `{"installed":"<path>","files":<n>}` |
 
 | `--agent`          | `--scope user`     | `--scope project`                    |
 | ------------------ | ------------------ | ------------------------------------ |
 | `claude` (default) | `~/.claude/skills` | `<working directory>/.claude/skills` |
 | `agents`           | `~/.agents/skills` | `<working directory>/.agents/skills` |
 
-`--dir` names the skills folder directly, relative to the working directory, for any other agent; it cannot be combined with `--agent` or `--scope`. An existing `recoder` folder is a usage error (exit 2) unless `--force`, which replaces only that folder. A `recoder` entry that is a symbolic link is always refused. The code is `apps/server/src/cli/skill/`.
+`--dir` names the skills folder directly, relative to the working directory, for any other agent; it cannot be combined with `--agent` or `--scope`. An existing `recoder` folder is a usage error (exit 2) unless `--force`, which replaces only that folder. A `recoder` entry that is a symbolic link is always refused. The skill's files are built into the program, so `install` writes them rather than copying a folder. The code is `apps/server/src/cli/skill/`.
 
 When the skill's text and a command disagree, the command wins. `reference.md` is written by hand: after a flag changes, update its tables so that every `--flag` in the `--help` texts appears there and no other does.

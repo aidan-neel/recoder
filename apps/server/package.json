@@ -3,9 +3,6 @@
 	"private": true,
 	"version": "0.1.0",
 	"type": "module",
-	"bin": {
-		"recoder": "./src/cli/main.ts"
-	},
 	"scripts": {
 		"dev": "bun --watch src/index.ts",
 		"start": "bun src/index.ts",

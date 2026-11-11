@@ -7,11 +7,13 @@
   `test` · `build`. `bun run dev` starts the server and this app (port 5180,
   `/sample` needs no server); `bun run dev:web` starts the server and apps/web;
   `bun run dev:all` starts every package.
-- UI kit (`packages/ui`, React): `bun run --filter @recoder/ui check` · `lint`.
+- UI kit (`packages/ui`, React): `bun run --filter @recoder/ui check` · `test` · `lint`.
 - Server: `bun run --filter @recoder/server check` · `test`
 - CLI (`recoder`, in `apps/server/src/cli`): `bun run recoder <command>` from the
-  root or `apps/server`, or `bun link` in `apps/server` to put `recoder` on the
-  PATH. Its tests are in `apps/server/tests/cli` (`bun test tests/cli` from
+  root or `apps/server`. Users install a binary with
+  `curl -fsSL https://recoder.dev/install.sh | sh`; a `v*` tag builds the
+  binaries (`.github/workflows/release.yml`). Anything the CLI reads at run time
+  must be imported (`with { type: 'file' | 'text' }`) so the binary carries it. Its tests are in `apps/server/tests/cli` (`bun test tests/cli` from
   `apps/server`). Docs: `docs/review/cli.md`.
 - Shared: `bun run --filter @recoder/shared check` · `test`
 - Site: `bun run --filter @recoder/site check` · `test` · `build`
