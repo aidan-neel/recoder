@@ -2,7 +2,7 @@
 
 import { TooltipProvider } from '@recoder/ui';
 import { MotionConfig, useReducedMotion } from 'motion/react';
-import { useCallback, useLayoutEffect, useState, type RefObject } from 'react';
+import { useCallback, useLayoutEffect, useState } from 'react';
 
 import { useQueue } from '@/lib/queue/queue-store';
 import { useReview } from '@/lib/review/review-store';
@@ -18,8 +18,12 @@ import { createPlayer, playWhileSeen } from './timeline';
 interface DemoSurfaceProps {
 	/** How far the stage scales the window down; motion measures layout moves through it. */
 	scale: number;
-	/** The window, which decides whether the run plays. */
-	frame: RefObject<HTMLDivElement | null>;
+	/**
+	 * The window, which decides whether the run plays. It is the element, not
+	 * a ref: on a return visit the cached chunk mounts this in the same commit
+	 * as the window, before the window's ref is set.
+	 */
+	frame: HTMLDivElement | null;
 }
 
 /**
@@ -52,11 +56,12 @@ export function DemoSurface({ scale, frame }: DemoSurfaceProps) {
 
 		demo.reset();
 
-		const element = frame.current;
-		const stop = element ? playWhileSeen(createPlayer(demo.beats, demo.length), element) : null;
+		if (!frame) return demo.dispose;
+
+		const stop = playWhileSeen(createPlayer(demo.beats, demo.length), frame);
 
 		return () => {
-			stop?.();
+			stop();
 			demo.dispose();
 		};
 	}, [reduced, frame]);

@@ -6,8 +6,16 @@ import { motion } from 'motion/react';
 import { usePathname } from 'next/navigation';
 import { useEffect, useRef } from 'react';
 
+import { useRootScale } from '@/lib/shell/root-scale';
 import { docs } from '~/lib/docs';
 import { REPO_URL } from '~/lib/site';
+
+/**
+ * Half a nav item's 30px height, so the pill is fully round. It must not be
+ * larger: while the pill slides, motion turns the radius into percentages of
+ * the pill, and a radius far past its size warps the corners into a leaf.
+ */
+const PILL_RADIUS = 15;
 
 const LINKS = [{ href: '/', title: 'Home' }, ...docs.map((doc) => ({ href: `/docs/${doc.slug}`, title: doc.title }))];
 
@@ -40,6 +48,7 @@ export function SiteNav() {
 	const pathname = usePathname();
 	const current = pathname.replace(/\/$/, '') || '/';
 	const row = useRef<HTMLDivElement>(null);
+	const scale = useRootScale();
 
 	useEffect(() => revealCurrent(row.current), [current]);
 
@@ -55,7 +64,7 @@ export function SiteNav() {
 								<li key={link.href}>
 									<Button asChild variant="ghost" className="site-nav-item">
 										<Link href={link.href} aria-current={active ? 'page' : undefined}>
-											{active ? <NavPill value={link.href} radius={999} className="bg-menu" /> : null}
+											{active ? <NavPill value={link.href} radius={PILL_RADIUS * scale} className="bg-menu" /> : null}
 											{link.title}
 										</Link>
 									</Button>
