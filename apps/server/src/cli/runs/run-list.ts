@@ -30,7 +30,7 @@ export async function listRuns(): Promise<RunListing> {
 }
 
 /** The ids of every run folder, newest first. Folders that are not runs are ignored. */
-async function listRunIds(): Promise<RunId[]> {
+export async function listRunIds(): Promise<RunId[]> {
 	const names = await readFolderNames(runsRoot());
 
 	return names.filter(isRunId).sort().reverse();

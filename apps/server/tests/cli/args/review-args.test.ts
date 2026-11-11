@@ -11,7 +11,7 @@ const CWD = '/work/project';
 
 const LENS_IDS = LENSES.map((lens) => lens.id);
 
-const parse = (...argv: string[]) => parseReviewArgs(argv, CWD).options;
+const parse = (...argv: string[]) => parseReviewArgs(argv, CWD, 'program').options;
 
 function usageMessage(...argv: string[]): string {
 	try {
@@ -62,8 +62,9 @@ describe('with no flags', () => {
 		});
 	});
 
-	test('it writes JSON to standard output with text progress and never fails on findings', () => {
+	test('for a program it writes JSON to standard output with text progress and never fails on findings', () => {
 		expect(parse().output).toEqual({
+			audience: 'program',
 			format: 'json',
 			file: null,
 			progress: 'text',
@@ -71,6 +72,10 @@ describe('with no flags', () => {
 			includeUnconfirmed: false,
 			failOn: 'never'
 		});
+	});
+
+	test('for a person it writes a report laid out for the terminal, with live progress', () => {
+		expect(parseReviewArgs([], CWD, 'person').options.output).toMatchObject({ format: 'text', progress: 'live' });
 	});
 });
 
@@ -251,13 +256,13 @@ describe('files', () => {
 	test('--body-file is read', () => {
 		const directory = folderWith('body.md', 'Adds retries.');
 
-		expect(parseReviewArgs(['--body-file', 'body.md'], directory).options.intent.body).toBe('Adds retries.');
+		expect(parseReviewArgs(['--body-file', 'body.md'], directory, 'program').options.intent.body).toBe('Adds retries.');
 	});
 
 	test('--instructions-file is read', () => {
 		const directory = folderWith('rules.md', 'Ignore generated files.');
 
-		expect(parseReviewArgs(['--instructions-file', 'rules.md'], directory).options.intent.instructions).toBe(
+		expect(parseReviewArgs(['--instructions-file', 'rules.md'], directory, 'program').options.intent.instructions).toBe(
 			'Ignore generated files.'
 		);
 	});
@@ -282,7 +287,9 @@ describe('intent text', () => {
 	])('a --%s that holds only white space leaves the %s not given', (flag, name) => {
 		const directory = folderWith('blank.md', ' \n\t\n');
 
-		expect(parseReviewArgs([`--${flag}`, 'blank.md'], directory).options.intent).toMatchObject({ [name]: null });
+		expect(parseReviewArgs([`--${flag}`, 'blank.md'], directory, 'program').options.intent).toMatchObject({
+			[name]: null
+		});
 	});
 });
 

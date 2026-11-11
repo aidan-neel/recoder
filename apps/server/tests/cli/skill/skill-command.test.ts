@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { EXIT } from '../../../src/cli/exit';
 import { runSkillCommand } from '../../../src/cli/skill/skill-command';
+import { PROGRAM_TERMINAL } from '../output/fixtures';
 import { removeTemporaryFolders, temporaryFolder, writeFiles } from './fixture';
 
 const written: string[] = [];
@@ -29,7 +30,7 @@ afterEach(async () => {
 test('install writes the bundled skill into --dir and prints one JSON line naming it', async () => {
 	const working = await temporaryFolder();
 
-	const code = await runSkillCommand(['install', '--dir', 'skills'], working);
+	const code = await runSkillCommand(['install', '--dir', 'skills'], working, PROGRAM_TERMINAL);
 
 	expect(code).toBe(EXIT.ok);
 	expect(written).toHaveLength(1);
@@ -42,7 +43,7 @@ test('install into an existing recoder folder is a usage error that names it', a
 
 	await writeFiles(working, { 'skills/recoder/SKILL.md': 'mine\n' });
 
-	const run = runSkillCommand(['install', '--dir', 'skills'], working);
+	const run = runSkillCommand(['install', '--dir', 'skills'], working, PROGRAM_TERMINAL);
 
 	await expect(run).rejects.toMatchObject({
 		exitCode: EXIT.usage,
@@ -55,6 +56,7 @@ test('install into an existing recoder folder is a usage error that names it', a
 test.each([
 	[['unknown']],
 	[['show', 'extra']],
+	[[]],
 	[['path']],
 	[['install', 'extra']],
 	[['install', '--agent', 'codex']],
@@ -62,5 +64,7 @@ test.each([
 	[['install', '--dir', 'x', '--agent', 'claude']],
 	[['install', '--dir', 'x', '--scope', 'project']]
 ])('%j is a usage error', async (argv) => {
-	await expect(runSkillCommand(argv, await temporaryFolder())).rejects.toMatchObject({ exitCode: EXIT.usage });
+	await expect(runSkillCommand(argv, await temporaryFolder(), PROGRAM_TERMINAL)).rejects.toMatchObject({
+		exitCode: EXIT.usage
+	});
 });

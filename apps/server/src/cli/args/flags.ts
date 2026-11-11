@@ -1,7 +1,9 @@
 import type { ParseArgsConfig, parseArgs } from 'node:util';
 import { REASONING_EFFORTS, TOKEN_BUDGETS } from '@recoder/shared';
+import type { Audience } from '../audience.js';
 import { EXIT } from '../exit.js';
 import { SEVERITIES } from '../output/severity.js';
+import { SKILL_AGENTS } from '../skill/skills-folder.js';
 import type { ProgressFormat, ReportFormat, ReviewTarget } from '../review/options.js';
 import type { FlagTable, WholeNumberBounds } from './flag-table.js';
 import { LENS_IDS, LEVER_IDS } from './lists.js';
@@ -9,15 +11,22 @@ import { LENS_IDS, LEVER_IDS } from './lists.js';
 /** What a flag takes when it is left out and the default is a value rather than the saved setting. */
 export const REVIEW_DEFAULTS = {
 	budget: 'low',
-	format: 'json',
-	progress: 'text',
 	minSeverity: 'info',
 	failOn: 'never'
 } as const;
 
-export const REPORT_FORMATS = ['json', 'markdown'] as const satisfies readonly ReportFormat[];
+/**
+ * How a report and progress are written when no flag says: laid out for a terminal for a person, and as JSON with
+ * plain progress lines for a program, which is what `-p` asks for.
+ */
+export const OUTPUT_DEFAULTS = {
+	person: { format: 'text', progress: 'live' },
+	program: { format: 'json', progress: 'text' }
+} as const satisfies Record<Audience, { format: ReportFormat; progress: ProgressFormat }>;
 
-export const PROGRESS_FORMATS = ['none', 'text', 'ndjson'] as const satisfies readonly ProgressFormat[];
+export const REPORT_FORMATS = ['text', 'json', 'markdown'] as const satisfies readonly ReportFormat[];
+
+export const PROGRESS_FORMATS = ['live', 'text', 'ndjson', 'none'] as const satisfies readonly ProgressFormat[];
 
 export const FAIL_ON_CHOICES: readonly ('never' | (typeof SEVERITIES)[number])[] = ['never', ...SEVERITIES];
 
@@ -42,13 +51,13 @@ export const REPORT_FLAGS = {
 		type: 'string',
 		group: 'output',
 		choices: REPORT_FORMATS,
-		description: `Report format. Default: ${REVIEW_DEFAULTS.format}.`
+		description: `Report format. Default: ${OUTPUT_DEFAULTS.person.format}, or ${OUTPUT_DEFAULTS.program.format} with -p.`
 	},
 	output: {
 		type: 'string',
 		group: 'output',
 		value: 'file',
-		description: 'Write the report here. Standard output then gets one JSON line naming the file.'
+		description: 'Write the report here. With -p, standard output then gets one JSON line naming the file.'
 	},
 	'min-severity': {
 		type: 'string',
@@ -230,13 +239,12 @@ export const REVIEW_FLAGS = {
 		type: 'string',
 		group: 'running',
 		choices: PROGRESS_FORMATS,
-		description: `Progress on standard error. Default: ${REVIEW_DEFAULTS.progress}.`
+		description: `Progress on standard error. ${OUTPUT_DEFAULTS.person.progress} redraws in place on a terminal.\nDefault: ${OUTPUT_DEFAULTS.person.progress}, or ${OUTPUT_DEFAULTS.program.progress} with -p.`
 	},
 	detach: {
 		type: 'boolean',
 		group: 'running',
-		description:
-			'Start the review in the background, print its run as one JSON line and exit at once.\nNot with --diff -.'
+		description: 'Start the review in the background, print its run and exit at once.\nNot with --diff -.'
 	}
 } as const satisfies FlagTable;
 
@@ -282,6 +290,54 @@ export const MODELS_FLAGS = {
 		group: 'flags',
 		value: 'text',
 		description: 'List only models whose id or name contains this text, ignoring case.'
+	}
+} as const satisfies FlagTable;
+
+/** `recoder init`: where to set Recoder up, and for which agents. */
+export const INIT_FLAGS = {
+	project: {
+		type: 'boolean',
+		group: 'flags',
+		description: 'Set up this folder, to commit with the repository.'
+	},
+	global: {
+		type: 'boolean',
+		group: 'flags',
+		description: 'Set up this machine, for every project.'
+	},
+	agent: {
+		type: 'string',
+		multiple: true,
+		group: 'flags',
+		choices: SKILL_AGENTS,
+		description:
+			'Whose skills folder gets the skill: claude for Claude Code, agents for Codex, OpenCode and others that read .agents/skills.\nRepeatable or comma-separated. Default: the agents found on this machine.'
+	},
+	reviewer: {
+		type: 'string',
+		group: 'flags',
+		value: 'model id',
+		description: 'Save this as the model reviews run on. List the ids with recoder models.'
+	},
+	mcp: {
+		type: 'boolean',
+		group: 'flags',
+		description: 'With --project: also add the recoder MCP server to .mcp.json, for agents that call tools.'
+	},
+	'no-guidelines': {
+		type: 'boolean',
+		group: 'flags',
+		description: 'With --project: do not create RECODER.md.'
+	},
+	force: {
+		type: 'boolean',
+		group: 'flags',
+		description: 'Replace an installed skill or MCP entry that differs from this version.'
+	},
+	yes: {
+		type: 'boolean',
+		group: 'flags',
+		description: 'Ask nothing and take the defaults. Replaces an installed skill that differs.'
 	}
 } as const satisfies FlagTable;
 

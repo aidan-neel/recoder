@@ -2,11 +2,11 @@ import type { ProgressSink } from '../progress.js';
 import type { ProgressFormat } from '../review/options.js';
 
 /**
- * Where progress goes. `none` drops every event, `text` writes a line when the stage or the candidate count
+ * Where progress goes, line by line; the live view is `openLiveProgress`. `none` drops every event, `text` writes a line when the stage or the candidate count
  * changes, and `ndjson` writes every event as a JSON object stamped with the time it arrived.
  */
 export function createProgressSink(
-	format: ProgressFormat,
+	format: Exclude<ProgressFormat, 'live'>,
 	writeLine: (line: string) => void,
 	now: () => Date
 ): ProgressSink {

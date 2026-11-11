@@ -1,8 +1,10 @@
 import { EXIT, type ExitCode } from '../exit.js';
+import { printResult } from '../output/print-result.js';
 import { writeStderrLine } from '../output/streams.js';
-import { writeJsonLine } from './json-line.js';
+import type { Terminal } from '../terminal/terminal.js';
 import { listRuns } from './run-list.js';
 import { describeRun, type RunStatus } from './run-status.js';
+import { runsView } from './run-view.js';
 
 /** Which runs to list: at most `limit`, and only those of `repoPath` when it is set. */
 export interface RunsQuery {
@@ -17,12 +19,12 @@ export interface RecentRuns {
 	warnings: string[];
 }
 
-/** `recoder runs`: the newest runs as a JSON array. A run whose record cannot be read is named on standard error. */
-export async function runListCommand(query: RunsQuery): Promise<ExitCode> {
+/** `recoder runs`: the newest runs, newest first. A run whose record cannot be read is named on standard error. */
+export async function runListCommand(query: RunsQuery, terminal: Terminal): Promise<ExitCode> {
 	const { statuses, warnings } = await listRecentRuns(query);
 
 	writeWarnings(warnings);
-	await writeJsonLine(statuses);
+	await printResult(terminal, statuses, runsView(new Date()));
 
 	return EXIT.ok;
 }

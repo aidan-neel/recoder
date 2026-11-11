@@ -2,6 +2,9 @@ import { CliError, EXIT } from '../exit.js';
 
 let stderrGuarded = false;
 
+/** What takes each line written to standard error while a view is redrawing there; null lets lines straight through. */
+let stderrClaimant: ((line: string) => void) | null = null;
+
 /**
  * Writes to standard output and resolves once the text has been handed to the reader, so the exit code is decided
  * after a large report is out. A reader that has gone away (`recoder review | head -1`) fails with `EXIT.failed`
@@ -28,8 +31,28 @@ export function writeStdout(text: string): Promise<void> {
  * there is nowhere left to say so, and it must not stop the review or change its exit code.
  */
 export function writeStderrLine(line: string): void {
+	if (stderrClaimant !== null) return stderrClaimant(line);
+
+	guardedStderr().write(`${line}\n`);
+}
+
+/** Standard error, for a view that draws on it; a closed one is ignored as `writeStderrLine` ignores it. */
+export function guardedStderr(): NodeJS.WriteStream {
 	guardStderr();
-	process.stderr.write(`${line}\n`);
+
+	return process.stderr;
+}
+
+/**
+ * Hands every line `writeStderrLine` gets to `write` until the returned function is called. A view that redraws a
+ * block on standard error claims it, so a message is printed above the block and not into it.
+ */
+export function claimStderr(write: (line: string) => void): () => void {
+	stderrClaimant = write;
+
+	return () => {
+		if (stderrClaimant === write) stderrClaimant = null;
+	};
 }
 
 function guardStderr(): void {

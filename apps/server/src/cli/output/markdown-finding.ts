@@ -1,5 +1,6 @@
 import type { FindingPatch, FindingVerification } from '@recoder/shared';
 import type { ReportFinding } from '../report/report.js';
+import { findingLocation, findingTitle } from './finding-heading.js';
 import { fenceBlock, inlineCode } from './markdown-code.js';
 
 /** A finding as a section: heading, message, how it was checked, the suggestion and the patch. */
@@ -13,20 +14,6 @@ export function renderFinding(finding: ReportFinding): string {
 	];
 
 	return sections.filter((section) => section !== null).join('\n\n');
-}
-
-/** The finding's own title, else its category, so a heading is never empty. */
-function findingTitle(finding: ReportFinding): string {
-	return finding.title?.trim() || finding.category || 'Finding';
-}
-
-/** `file`, `file:12` or `file:12-14`. */
-function findingLocation(finding: ReportFinding): string {
-	if (finding.line === undefined) return finding.file;
-
-	const end = finding.endLine !== undefined && finding.endLine > finding.line ? `-${finding.endLine}` : '';
-
-	return `${finding.file}:${finding.line}${end}`;
 }
 
 /** Whether the finding was proven and how, with the command that proved it. */

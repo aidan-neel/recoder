@@ -1,20 +1,25 @@
 import type { ReviewRequest } from '../args/review-args.js';
 import { backgroundFlags } from '../args/launch.js';
 import { CliError, EXIT, loadOrNotReady, type ExitCode } from '../exit.js';
-import { PROCESS_DESTINATION, prepareOutputFile } from '../output/deliver.js';
+import { prepareOutputFile, processDestination } from '../output/deliver.js';
+import { printResult } from '../output/print-result.js';
 import { writeStderrLine } from '../output/streams.js';
 import type { ReviewOptions } from '../review/options.js';
 import { selfCommand } from '../self-command.js';
 import { abortOnSignal } from '../signals/abort-on-signal.js';
 import { exitOnSignal } from '../signals/exit-on-signal.js';
 import { STOP_SIGNALS, outliveHangUp } from '../signals/shutdown-signals.js';
+import { withSpinner } from '../terminal/spinner.js';
+import type { Terminal } from '../terminal/terminal.js';
 import { HANDOVER_TIMEOUT_MS, detachReview, spawnDetached } from './detach.js';
-import { writeJsonLine } from './json-line.js';
 import { runRecordedReview, type ReviewRunner } from './recorded-review.js';
 import { pruneFinishedRuns } from './retention.js';
 import type { RunId } from './run-id.js';
 import { RunJournal, type NewRun } from './run-journal.js';
+import { shortRunId } from './run-reference.js';
 import type { RunStatus } from './run-status.js';
+import { detachedView } from './run-view.js';
+import { showProgress } from './shown-progress.js';
 import { isStopRequested } from './stop-request.js';
 
 /** A run this process is responsible for, and the signal that stops its review. */
@@ -24,24 +29,43 @@ interface OwnedRun {
 }
 
 /** `recoder review`: every review is a recorded run, whether it runs here, starts in the background, or is that run. */
-export async function runReviewCommand(request: ReviewRequest): Promise<ExitCode> {
+export async function runReviewCommand(request: ReviewRequest, terminal: Terminal): Promise<ExitCode> {
 	const { options, launch } = request;
 
-	if (launch.kind === 'detach') return startDetached(options, launch.flags);
+	if (launch.kind === 'detach') return startDetached(options, launch.flags, terminal);
 
 	const { journal, signal } =
 		launch.kind === 'background' ? await takeOverRun(launch.runId) : await startForeground(options);
 
-	if (options.output.progress === 'text') writeStderrLine(`run: ${journal.runId}`);
+	const shown = showProgress({ options, runId: journal.runId, stop: signal }, terminal);
 
-	return runRecordedReview({
-		options,
-		journal,
-		signal,
-		loadRunner: loadReviewRunner,
-		destination: PROCESS_DESTINATION,
-		onEndRecorded: exitOnSignal
-	});
+	try {
+		const exitCode = await runRecordedReview({
+			options,
+			journal,
+			signal,
+			progress: shown.sink,
+			loadRunner: loadReviewRunner,
+			destination: processDestination(terminal),
+			onEndRecorded: () => {
+				shown.close();
+				exitOnSignal();
+			}
+		});
+
+		if (terminal.audience === 'person' && launch.kind === 'foreground') noteRun(journal.runId, terminal);
+
+		return exitCode;
+	} finally {
+		shown.close();
+	}
+}
+
+/** Tells a person how to read the report they just got again; a program already has the run id from the first line. */
+function noteRun(runId: RunId, { err }: Terminal): void {
+	const note = `Saved as run ${runId} ${err.glyphs.separator} recoder result ${shortRunId(runId)} prints it again`;
+
+	writeStderrLine(`  ${err.paint.muted(note)}\n`);
 }
 
 /**
@@ -70,32 +94,37 @@ async function startForeground(options: ReviewOptions): Promise<OwnedRun> {
 }
 
 /**
- * The background process is this same program running `recoder review` with the caller's flags. The status line is
- * printed whatever happened, so a caller that reads it always gets the run id, the error and the log file. A run that
- * did not start exits as failed; a SIGINT or SIGTERM received while starting, as cancelled. A hang-up cancels
- * nothing: the background process runs in its own session to outlive a closing terminal, so this one finishes
- * handing the run over too.
+ * The background process is this same program running `recoder review` with the caller's flags. For a program the
+ * status line is printed whatever happened, so a caller that reads it always gets the run id, the error and the log
+ * file; a person gets the run and what to do next, or the error of a run that did not start. A run that did not
+ * start exits as failed; a SIGINT or SIGTERM received while starting, as cancelled. A hang-up cancels nothing: the
+ * background process runs in its own session to outlive a closing terminal, so this one finishes handing the run
+ * over too.
  */
-async function startDetached(options: ReviewOptions, flags: string[]): Promise<ExitCode> {
+async function startDetached(options: ReviewOptions, flags: string[], terminal: Terminal): Promise<ExitCode> {
 	outliveHangUp();
 
 	const signal = abortOnSignal(STOP_SIGNALS);
 
 	if (options.output.file !== null) await prepareOutputFile(options.output.file);
 
-	const { status, outcome } = await detachReview({
-		run: newRunOf(options),
-		command: (runId) => [...selfCommand(Bun.main), 'review', ...backgroundFlags(runId, flags)],
-		signal,
-		handoverTimeoutMs: HANDOVER_TIMEOUT_MS,
-		spawn: spawnDetached
-	});
+	const run = await withSpinner('Starting the review in the background', terminal, () =>
+		detachReview({
+			run: newRunOf(options),
+			command: (runId) => [...selfCommand(Bun.main), 'review', ...backgroundFlags(runId, flags)],
+			signal,
+			handoverTimeoutMs: HANDOVER_TIMEOUT_MS,
+			spawn: spawnDetached
+		})
+	);
 
-	await writeJsonLine(status);
+	if (terminal.audience === 'program' || run.outcome !== 'not-started') {
+		await printResult(terminal, run.status, (_, surface) => detachedView(run, surface));
+	}
 
-	if (outcome === 'not-started') throw notStarted(status);
+	if (run.outcome === 'not-started') throw notStarted(run.status);
 
-	return outcome === 'cancelled' || signal.aborted ? EXIT.cancelled : EXIT.ok;
+	return run.outcome === 'cancelled' || signal.aborted ? EXIT.cancelled : EXIT.ok;
 }
 
 function notStarted(status: RunStatus): CliError {

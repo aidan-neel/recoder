@@ -1,15 +1,50 @@
+import { VERSION } from '../../version.js';
+import { PROGRAM_FLAGS } from '../audience.js';
 import { EXIT } from '../exit.js';
+import { SKILL_AGENTS, SKILL_SCOPES } from '../skill/skills-folder.js';
+import { textWidth, type Surface } from '../terminal/surface.js';
+import { indent, padEnd, wrapText } from '../terminal/text.js';
 import { helpRows, type FlagGroup, type FlagTable, type HelpRow } from './flag-table.js';
-import { LIST_FLAGS, MODELS_FLAGS, NON_RANGE_TARGETS, REPORT_FLAGS, REVIEW_FLAGS, WAIT_FLAGS } from './flags.js';
+import {
+	INIT_FLAGS,
+	LIST_FLAGS,
+	MODELS_FLAGS,
+	NON_RANGE_TARGETS,
+	REPORT_FLAGS,
+	REVIEW_FLAGS,
+	WAIT_FLAGS
+} from './flags.js';
+import type { RunCommand } from './run-args.js';
 
-interface HelpGroup {
+const MARGIN = 2;
+
+const COLUMN_GAP = 3;
+
+/** The widest a first column may be. A longer name stands on a line of its own, with what it means under it. */
+const MAX_NAME_WIDTH = 28;
+
+const EXAMPLES_TITLE = 'Examples';
+
+/** A titled block of rows: commands, flags or exit codes, each with what it means. */
+interface HelpSection {
 	title: string;
 	rows: readonly HelpRow[];
 }
 
+/** One command's help: how it is called, what it does, its flags, and anything to know after them. */
+interface CommandHelp {
+	usage: string;
+	about: string;
+	sections?: readonly HelpSection[];
+	notes?: readonly string[];
+}
+
+/** What `--help` can explain: the program, or one command. */
+export type HelpTopic = 'main' | 'review' | 'init' | 'models' | 'doctor' | 'mcp' | 'skill' | RunCommand;
+
 /** The title of each group of flags, in the order a command's help lists them. */
 const GROUP_TITLES: Record<FlagGroup, string> = {
-	target: `Target (choose at most one of ${listFlags(NON_RANGE_TARGETS)}; none reviews a commit range)`,
+	target: 'What to review',
 	scope: 'Scope',
 	intent: 'Intent',
 	tuning: 'Tuning',
@@ -18,118 +53,282 @@ const GROUP_TITLES: Record<FlagGroup, string> = {
 	flags: 'Flags'
 };
 
-const COMMANDS = `Commands:
-  recoder review [flags]     Run one review and print the report. --detach runs it in the background.
-  recoder status <run-id>    Print a run's status as JSON.
-  recoder wait <run-id>      Wait for a run to end, then print its status.
-  recoder result <run-id>    Print a finished run's report.
-  recoder cancel <run-id>    Ask a running review to stop.
-  recoder runs               List recent runs as JSON, newest first.
-  recoder models             List the model ids --reviewer and --worker accept, as JSON.
-  recoder skill              Print or install the agent skill.
-  recoder mcp                Serve the commands as MCP tools on standard input and output.
-  recoder doctor             Check this machine and print a JSON report. Exit ${EXIT.ok} when ready, ${EXIT.notReady} when not.
-  recoder --version          Print the version.
-  recoder <command> --help`;
+const RUN_ARGUMENT =
+	'[run] is a run id or its last six characters, as recoder runs shows them. Left out, it is the newest run.';
 
-const STATUS_FIELDS = `A status is one JSON object: { schemaVersion, runId, state (running, complete, failed or cancelled), stage, startedAt, finishedAt, repoPath, targetKind, findings, unconfirmed, exitCode, error, reportFile, logFile }.`;
+const PROGRAM_FLAG_ROW: HelpRow = [
+	PROGRAM_FLAGS.join(', '),
+	'Print JSON for a program to read, not text for a person. Works with every command.'
+];
 
-const EXIT_CODES = `Exit codes:
-  ${EXIT.ok}    Done. review and result: no written finding met --fail-on.
-  ${EXIT.findings}    review and result: a written finding met --fail-on.
-  ${EXIT.usage}    Any command: a flag or argument was wrong, or no run has that id. Nothing ran.
-       result: the run is still running.
-  ${EXIT.failed}    review: it started and did not finish; with --detach, the background review did not start.
-       result: the run failed or its report is missing. Any command: an unexpected error.
-  ${EXIT.notReady}    review, doctor and skill: this machine is not ready. Commands that read a run: ps is missing.
-       Run recoder doctor.
-  ${EXIT.cancelled}  review, wait, models and mcp: stopped by a signal; review also by --timeout. result: the run was cancelled.
-  For a run that ended with no report, result exits with the code the run ended with.`;
+const COMMAND_SECTIONS: readonly HelpSection[] = [
+	{
+		title: 'Review',
+		rows: [
+			['review', 'Review a change and print what it found'],
+			['runs', 'List recent reviews'],
+			['status [run]', 'Show how a review is doing'],
+			['wait [run]', 'Watch a review until it ends'],
+			['result [run]', "Print a finished review's report"],
+			['cancel [run]', 'Stop a running review']
+		]
+	},
+	{
+		title: 'Set up',
+		rows: [
+			['init', 'Set Recoder up for your coding agents'],
+			['doctor', 'Check that this machine can run a review'],
+			['models', 'List the models a review can run on']
+		]
+	},
+	{
+		title: 'For agents',
+		rows: [
+			['skill', 'Print or install the agent skill'],
+			['mcp', 'Serve the commands as MCP tools on standard input and output']
+		]
+	},
+	{
+		title: 'Flags',
+		rows: [
+			PROGRAM_FLAG_ROW,
+			['--help', 'Explain a command, as in recoder review --help'],
+			['--version', 'Print the version']
+		]
+	}
+];
 
-const EXAMPLES = `Examples:
-  Review the current branch against the default branch:
-    recoder review
-
-  Review uncommitted work, with a title, and write JSON to a file:
-    recoder review --uncommitted --title "Add retry to the sync job" --format json --output review.json
-
-  A deeper review of two lenses:
-    recoder review --budget medium --lens correctness,security`;
-
-/** The text of `recoder --help`. */
-export function mainHelp(): string {
-	return ['Usage: recoder <command> [flags]', COMMANDS, EXIT_CODES].join('\n\n');
-}
-
-/** The text of `recoder review --help`: every flag with its values and default, the exit codes and examples. */
-export function reviewHelp(): string {
-	return [
-		'Usage: recoder review [flags]',
-		'Reviews a change and prints a report on standard output. Progress goes to standard error. Every review is recorded as a run; recoder runs lists them.',
-		formatGroups(groupsOf(REVIEW_FLAGS)),
-		EXIT_CODES,
-		EXAMPLES
-	].join('\n\n');
-}
-
-/** The help of each command that reads or stops a recorded run. */
-export const RUN_COMMAND_HELP = {
-	status: ['Usage: recoder status <run-id>', `Prints the run's status. ${STATUS_FIELDS}`].join('\n\n'),
-	wait: [
-		'Usage: recoder wait <run-id> [--timeout <minutes>]',
-		`Waits until the run ends or the timeout passes, then prints its status. Exit ${EXIT.ok} either way: read state. ${STATUS_FIELDS}`,
-		formatGroups(groupsOf(WAIT_FLAGS)),
-		`A signal stops the wait with exit ${EXIT.cancelled}; the run goes on.`
-	].join('\n\n'),
-	result: [
-		'Usage: recoder result <run-id> [flags]',
-		"Prints a finished run's report, as recoder review would have. A run with no report prints its error.",
-		formatGroups(groupsOf(REPORT_FLAGS)),
-		EXIT_CODES
-	].join('\n\n'),
-	cancel: [
-		'Usage: recoder cancel <run-id>',
-		`Asks a running review to stop and prints its status with stopRequested. A run that is not running is left as it is. ${STATUS_FIELDS}`
-	].join('\n\n'),
-	runs: [
-		'Usage: recoder runs [--repo <path>] [--limit <n>]',
-		'Prints recent runs as a JSON array of statuses, newest first.',
-		formatGroups(groupsOf(LIST_FLAGS))
-	].join('\n\n')
+const EXIT_CODES: HelpSection = {
+	title: 'Exit codes',
+	rows: [
+		[String(EXIT.ok), 'Done. No finding met --fail-on.'],
+		[String(EXIT.findings), 'The review finished and a finding met --fail-on.'],
+		[String(EXIT.usage), 'A flag or argument was wrong, or no run matched. Nothing ran.'],
+		[String(EXIT.failed), 'The review did not finish, or its report is missing.'],
+		[String(EXIT.notReady), 'This machine is not ready. Run recoder doctor.'],
+		[String(EXIT.cancelled), 'Stopped by a signal or by --timeout.']
+	]
 };
 
-/** The text of `recoder models --help`. */
-export function modelsHelp(): string {
-	return [
-		'Usage: recoder models [--provider <name>] [--search <text>]',
-		'Prints the model ids that --reviewer and --worker accept on this machine, as one line of JSON: { reviewer, worker, models: [{ id, name, provider, efforts, defaultEffort }], problems }. reviewer and worker are the saved picks, or null. A model with no effort levels has efforts [] and defaultEffort null. OpenCode and Devin list their models by running, so each may take up to 10 seconds; one that cannot list adds a line to problems, and the other models are still listed. The list can be empty. recoder doctor checks that this machine is ready.',
-		formatGroups(groupsOf(MODELS_FLAGS)),
-		`Exit ${EXIT.ok}, also for an empty list. ${EXIT.usage}: a flag was wrong, or a provider has no model here. ${EXIT.cancelled}: a signal stopped the listing.`
-	].join('\n\n');
+const START_HERE: HelpSection = {
+	title: 'Start here',
+	rows: [
+		['recoder init', 'Set up this project or this machine'],
+		['recoder review --uncommitted', 'Review your work in progress'],
+		['recoder review --pull 214', 'Review a pull request']
+	]
+};
+
+const STATUS_FIELDS =
+	'With -p a status is one JSON object: { schemaVersion, runId, state (running, complete, failed or cancelled), stage, startedAt, finishedAt, repoPath, targetKind, findings, unconfirmed, exitCode, error, reportFile, logFile }.';
+
+const COMMAND_HELP: Record<Exclude<HelpTopic, 'main'>, CommandHelp> = {
+	review: {
+		usage: 'recoder review [flags]',
+		about:
+			'Reviews a change and prints what it found. Reviewers read the diff and the code around it, then verifiers try to reproduce each bug by running code in a sandbox. Your working tree is only read. Every review is recorded as a run; recoder runs lists them.',
+		sections: [
+			...flagSections(REVIEW_FLAGS),
+			EXIT_CODES,
+			{
+				title: EXAMPLES_TITLE,
+				rows: [
+					['recoder review', 'The current branch against the default branch'],
+					['recoder review --uncommitted', 'Everything not committed yet'],
+					['recoder review --pull 214 --budget medium', 'A pull request, reviewed more deeply'],
+					['recoder review --lens correctness,security', 'Two lenses only'],
+					['recoder review --detach', 'In the background; recoder wait follows it']
+				]
+			}
+		],
+		notes: [
+			`Choose at most one of ${listFlags(NON_RANGE_TARGETS)}. With none, the commits on the current branch since it left the default branch are reviewed.`
+		]
+	},
+	init: {
+		usage: 'recoder init [--project | --global] [flags]',
+		about:
+			'Sets Recoder up for your coding agents. It installs the agent skill, which teaches an agent when and how to run a review, saves the model reviews run on when none is chosen yet, and checks that this machine is ready. On a terminal it asks for what the flags leave open.',
+		sections: flagSections(INIT_FLAGS),
+		notes: [
+			'--project writes into this folder, to commit with the repository: the skill under .claude/skills or .agents/skills, and a RECODER.md for the rules reviewers follow here.',
+			'--global writes into your home folder, for every project: the skill under ~/.claude/skills or ~/.agents/skills.',
+			'Run it again after an update to refresh the skill.'
+		]
+	},
+	status: {
+		usage: 'recoder status [run]',
+		about: "Shows a run's state, its counts once it has ended, and where its report and log are.",
+		notes: [RUN_ARGUMENT, STATUS_FIELDS]
+	},
+	wait: {
+		usage: 'recoder wait [run] [--timeout <minutes>]',
+		about: `Follows a run until it ends or the timeout passes, then shows its status. On a terminal it shows the review's progress as it happens. Exit ${EXIT.ok} either way; with -p, read state.`,
+		sections: flagSections(WAIT_FLAGS),
+		notes: [RUN_ARGUMENT, `A signal stops the wait with exit ${EXIT.cancelled}; the run goes on.`, STATUS_FIELDS]
+	},
+	result: {
+		usage: 'recoder result [run] [flags]',
+		about: "Prints a finished run's report, as recoder review would have. A run with no report prints its error.",
+		sections: [...flagSections(REPORT_FLAGS), EXIT_CODES],
+		notes: [RUN_ARGUMENT, 'For a run that ended with no report, result exits with the code the run ended with.']
+	},
+	cancel: {
+		usage: 'recoder cancel [run]',
+		about: 'Asks a running review to stop and shows its status. A run that is not running is left as it is.',
+		notes: [RUN_ARGUMENT, `${STATUS_FIELDS} cancel adds stopRequested.`]
+	},
+	runs: {
+		usage: 'recoder runs [--repo <path>] [--limit <n>]',
+		about: 'Lists recent runs, newest first. With -p, a JSON array of statuses.',
+		sections: flagSections(LIST_FLAGS)
+	},
+	models: {
+		usage: 'recoder models [--provider <name>] [--search <text>]',
+		about:
+			'Lists the models --reviewer and --worker accept on this machine, grouped by provider, with the saved picks marked. OpenCode and Devin list their models by running, so each may take up to 10 seconds.',
+		sections: flagSections(MODELS_FLAGS),
+		notes: [
+			'With -p it prints one line of JSON: { reviewer, worker, models: [{ id, name, provider, efforts, defaultEffort }], problems }. reviewer and worker are the saved picks, or null. An agent that cannot list its models adds a line to problems, and the other models are still listed.',
+			`Exit ${EXIT.ok}, also for an empty list. ${EXIT.usage}: a flag was wrong, or a provider has no model here. ${EXIT.cancelled}: a signal stopped the listing.`
+		]
+	},
+	doctor: {
+		usage: 'recoder doctor',
+		about: `Checks that a review can run here: git, the folders it writes to, the review model and its sign-in, and whether code can run in the sandbox. Each failed check names its fix. Exit ${EXIT.ok} when ready, ${EXIT.notReady} when not.`,
+		notes: ['With -p it prints a JSON report: { ok, checks: [{ id, ok, required, detail, fix }] }.']
+	},
+	mcp: {
+		usage: 'recoder mcp',
+		about:
+			'Serves doctor, models, review, wait, status, result, cancel and runs as MCP tools named recoder_<command>, on standard input and output. Set it up in an agent as an MCP server with the command recoder and the argument mcp, or let recoder init --mcp do it. A review it started goes on when the server ends; recoder_runs finds it again.'
+	},
+	skill: {
+		usage: 'recoder skill <show|install> [flags]',
+		about:
+			'The agent skill teaches a coding agent to run reviews with recoder. recoder init installs it for you; these commands are the parts.',
+		sections: [
+			{
+				title: 'Commands',
+				rows: [
+					['show', 'Print SKILL.md'],
+					['install', 'Write the skill to <skills folder>/recoder']
+				]
+			},
+			{
+				title: 'Install flags',
+				rows: [
+					[`--agent <${SKILL_AGENTS.join('|')}>`, 'Whose skills folder to use. Default: claude.'],
+					[
+						`--scope <${SKILL_SCOPES.join('|')}>`,
+						'user: ~/.claude/skills or ~/.agents/skills. project: the same under the working directory. Default: user.'
+					],
+					['--dir <path>', 'Use this skills folder instead; relative to the working directory. For any other agent.'],
+					['--force', 'Replace an existing recoder folder. Nothing beside it is touched.']
+				]
+			}
+		],
+		notes: [
+			'Install refuses an existing recoder folder without --force, and a recoder folder that is a symbolic link always. With -p it prints one JSON line: {"installed":"<path>","files":<n>}.'
+		]
+	}
+};
+
+/** The help for a topic, laid out and styled for the surface it is printed on. */
+export function renderHelp(topic: HelpTopic, surface: Surface): string {
+	const blocks = topic === 'main' ? mainHelp(surface) : commandHelp(COMMAND_HELP[topic], surface);
+	const lines = blocks.join('\n\n').split('\n');
+
+	return ['', ...indent(lines, MARGIN), ''].join('\n');
 }
 
-/** The text of `recoder doctor --help`. */
-export function doctorHelp(): string {
+function mainHelp(surface: Surface): string[] {
+	const { paint, glyphs } = surface;
+	const title = `${paint.strong('recoder')} ${paint.muted(`${VERSION} ${glyphs.separator} code review that proves what it finds`)}`;
+
 	return [
-		'Usage: recoder doctor',
-		`Checks that a review can run here and prints a JSON report: { ok, checks: [{ id, ok, required, detail, fix }] }. Exit ${EXIT.ok} when ready, ${EXIT.notReady} when not. Each failed check names its fix.`
-	].join('\n\n');
+		title,
+		usageBlock('recoder <command> [flags]', surface),
+		...sectionBlocks(COMMAND_SECTIONS, surface),
+		noteBlock(RUN_ARGUMENT, surface),
+		...sectionBlocks([START_HERE], surface)
+	];
 }
 
-/** The text of `recoder mcp --help`. */
-export function mcpHelp(): string {
+function commandHelp(help: CommandHelp, surface: Surface): string[] {
+	const flags: HelpSection[] = hasFlagSection(help) ? [] : [{ title: 'Flags', rows: [PROGRAM_FLAG_ROW] }];
+
 	return [
-		'Usage: recoder mcp',
-		'Serves doctor, models, review, wait, status, result, cancel and runs as MCP tools named recoder_<command>, on standard input and output. Set it up in an agent as an MCP server with the command recoder and the argument mcp. A review it started goes on when the server ends; recoder_runs finds it again.'
-	].join('\n\n');
+		usageBlock(help.usage, surface),
+		noteBlock(help.about, surface),
+		...sectionBlocks([...(help.sections ?? []), ...flags].filter(isReference), surface),
+		...(help.notes ?? []).map((note) => noteBlock(note, surface)),
+		...sectionBlocks(
+			(help.sections ?? []).filter((section) => !isReference(section)),
+			surface
+		)
+	];
 }
 
-/** The help groups of a command's flags that has at least one flag, in the order of `GROUP_TITLES`. */
-function groupsOf(table: FlagTable): HelpGroup[] {
-	return Object.keys(GROUP_TITLES)
+/** Examples close a command's help, in a column of their own: their first column is a whole command line. */
+function isReference(section: HelpSection): boolean {
+	return section.title !== EXAMPLES_TITLE;
+}
+
+/** A command whose sections already list flags gets `-p` added to the last of them by `flagSections`. */
+function hasFlagSection(help: CommandHelp): boolean {
+	return (help.sections ?? []).some((section) => section.rows.includes(PROGRAM_FLAG_ROW));
+}
+
+function usageBlock(usage: string, surface: Surface): string {
+	return `${surface.paint.strong('Usage')}\n${' '.repeat(MARGIN)}${usage}`;
+}
+
+/** A paragraph wrapped to the surface. */
+function noteBlock(text: string, surface: Surface): string {
+	return wrapText(text, textWidth(surface, MARGIN * 2)).join('\n');
+}
+
+/** Sections with their first columns lined up as one, so the eye runs down a single edge. */
+function sectionBlocks(sections: readonly HelpSection[], surface: Surface): string[] {
+	const longest = Math.max(0, ...sections.flatMap(({ rows }) => rows.map(([name]) => name.length)));
+	const width = Math.min(longest, MAX_NAME_WIDTH);
+
+	return sections.map((section) => sectionBlock(section, width, surface));
+}
+
+function sectionBlock(section: HelpSection, width: number, surface: Surface): string {
+	const rows = section.rows.flatMap((row) => rowLines(row, width, surface));
+
+	return [surface.paint.strong(section.title), ...indent(rows, MARGIN)].join('\n');
+}
+
+/**
+ * A name and what it means; a description that runs onto more lines lines up under its first. A name wider than the
+ * column takes a line of its own.
+ */
+function rowLines([name, description]: HelpRow, width: number, surface: Surface): string[] {
+	const room = textWidth(surface, MARGIN * 2 + width + COLUMN_GAP);
+	const lines = description.split('\n').flatMap((line) => wrapText(line, room));
+	const column = width + COLUMN_GAP;
+
+	if (name.length > width) return [surface.paint.code(name), ...indent(lines, column)];
+
+	const [first = '', ...rest] = lines;
+
+	return [`${surface.paint.code(padEnd(name, width))}${' '.repeat(COLUMN_GAP)}${first}`, ...indent(rest, column)];
+}
+
+/** The help sections of a command's flags, in the order of `GROUP_TITLES`, with `-p` closing the last. */
+function flagSections(table: FlagTable): HelpSection[] {
+	const sections = Object.keys(GROUP_TITLES)
 		.filter(isFlagGroup)
 		.map((group) => ({ title: GROUP_TITLES[group], rows: helpRows(table, group) }))
 		.filter(({ rows }) => rows.length > 0);
+
+	const last = sections.pop();
+
+	return last ? [...sections, { ...last, rows: [...last.rows, PROGRAM_FLAG_ROW] }] : [];
 }
 
 function isFlagGroup(key: string): key is FlagGroup {
@@ -141,25 +340,4 @@ function listFlags(names: readonly string[]): string {
 	const flags = names.map((name) => `--${name}`);
 
 	return `${flags.slice(0, -1).join(', ')} and ${flags[flags.length - 1]}`;
-}
-
-/** Groups of flags, their descriptions lined up in one column. */
-function formatGroups(groups: readonly HelpGroup[]): string {
-	const width = Math.max(...groups.flatMap(({ rows }) => rows.map(([flag]) => flag.length)));
-
-	return groups.map(({ title, rows }) => formatGroup(title, rows, width)).join('\n\n');
-}
-
-function formatGroup(title: string, rows: readonly HelpRow[], width: number): string {
-	const lines = rows.map(([flag, description]) => formatRow(flag, description, width));
-
-	return [`${title}:`, ...lines].join('\n');
-}
-
-/** A flag and its description; a description that runs onto more lines lines up under the first. */
-function formatRow(flag: string, description: string, width: number): string {
-	const [first, ...rest] = description.split('\n');
-	const indent = ' '.repeat(width + 4);
-
-	return [`  ${flag.padEnd(width)}  ${first}`, ...rest.map((line) => `${indent}${line}`)].join('\n');
 }

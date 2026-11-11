@@ -1,7 +1,9 @@
 import { resolve } from 'node:path';
 import { REASONING_EFFORTS, TOKEN_BUDGETS } from '@recoder/shared';
+import type { Audience } from '../audience.js';
 import type { OutputOptions, ReviewIntent, ReviewOptions, ReviewScope, ReviewTuning } from '../review/options.js';
 import {
+	OUTPUT_DEFAULTS,
 	PROGRESS_FORMATS,
 	REVIEW_DEFAULTS,
 	REVIEW_FLAGS,
@@ -33,23 +35,24 @@ export interface ReviewRequest {
 
 /**
  * Reads the argv of `recoder review` into the options one review runs with and how it starts. Every flag is checked
- * here, so a bad one is reported before anything starts, in the foreground or the background. Throws a `CliError`.
+ * here, so a bad one is reported before anything starts, in the foreground or the background. `audience` decides how
+ * the report and progress are written when no flag does. Throws a `CliError`.
  */
-export function parseReviewArgs(argv: string[], workingDirectory: string): ReviewRequest {
+export function parseReviewArgs(argv: string[], workingDirectory: string, audience: Audience): ReviewRequest {
 	const values = parseFlags(argv, REVIEW_PARSE_CONFIG);
-	const options = resolveReviewOptions(values, workingDirectory);
+	const options = resolveReviewOptions(values, workingDirectory, audience);
 
 	return { options, launch: resolveLaunch(values, options.target, argv) };
 }
 
-function resolveReviewOptions(values: ReviewFlagValues, workingDirectory: string): ReviewOptions {
+function resolveReviewOptions(values: ReviewFlagValues, workingDirectory: string, audience: Audience): ReviewOptions {
 	return {
 		repoPath: resolve(workingDirectory, parseText('--repo', values.repo) ?? '.'),
 		target: selectTarget(values),
 		scope: resolveScope(values),
 		intent: resolveIntent(values, workingDirectory),
 		tuning: resolveTuning(values),
-		output: resolveOutput(values, workingDirectory),
+		output: resolveOutput(values, workingDirectory, audience),
 		timeoutMs: parseTimeoutMs(values.timeout),
 		keepCheckout: values['keep-checkout'] === true
 	};
@@ -123,9 +126,9 @@ function parseMaxFileChars(value: string | undefined): number | null {
 	return parseWholeNumber('--max-file-chars', value, REVIEW_FLAGS['max-file-chars'].bounds);
 }
 
-function resolveOutput(values: ReviewFlagValues, workingDirectory: string): OutputOptions {
+function resolveOutput(values: ReviewFlagValues, workingDirectory: string, audience: Audience): OutputOptions {
 	return {
-		...resolveReportOutput(values, workingDirectory),
-		progress: parseChoice('--progress', values.progress ?? REVIEW_DEFAULTS.progress, PROGRESS_FORMATS)
+		...resolveReportOutput(values, workingDirectory, audience),
+		progress: parseChoice('--progress', values.progress ?? OUTPUT_DEFAULTS[audience].progress, PROGRESS_FORMATS)
 	};
 }

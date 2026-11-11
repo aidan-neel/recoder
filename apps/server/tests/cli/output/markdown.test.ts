@@ -1,10 +1,11 @@
 import { expect, test } from 'bun:test';
 import { renderReport } from '../../../src/cli/output/render';
+import { PLAIN_SURFACE } from '../../../src/cli/terminal/surface';
 import { finding, report } from './fixtures';
 
 test('a finding with no line, no title and no verification renders without undefined or null', () => {
 	const bare = finding({ line: undefined, title: undefined, category: undefined, suggestion: undefined });
-	const text = renderReport(report({ findings: [bare] }), 'markdown');
+	const text = renderReport(report({ findings: [bare] }), 'markdown', PLAIN_SURFACE);
 
 	expect(text).not.toContain('undefined');
 	expect(text).not.toContain('null');
@@ -23,7 +24,7 @@ test('a finding shows its title, location, verification command, suggestion and 
 		patch: { diff: '--- a/src/a.ts\n+++ b/src/a.ts', checks: ['bun run check'] }
 	});
 
-	const text = renderReport(report({ findings: [detailed] }), 'markdown');
+	const text = renderReport(report({ findings: [detailed] }), 'markdown', PLAIN_SURFACE);
 
 	expect(text).toContain('### error: Off by one');
 	expect(text).toContain('src/a.ts:3-5');
@@ -36,13 +37,13 @@ test('a finding shows its title, location, verification command, suggestion and 
 
 test('a patch that contains a code fence cannot close its own block early', () => {
 	const patch = { diff: '+```ts\n+const a = 1;\n+```', checks: [] };
-	const text = renderReport(report({ findings: [finding({ patch })] }), 'markdown');
+	const text = renderReport(report({ findings: [finding({ patch })] }), 'markdown', PLAIN_SURFACE);
 
 	expect(text).toContain('````diff');
 });
 
 test('unconfirmed findings, checks and gaps get their own headings only when there are any', () => {
-	const empty = renderReport(report(), 'markdown');
+	const empty = renderReport(report(), 'markdown', PLAIN_SURFACE);
 
 	const full = renderReport(
 		report({
@@ -50,7 +51,8 @@ test('unconfirmed findings, checks and gaps get their own headings only when the
 			recommendedChecks: ['bun test'],
 			coverageGaps: [{ path: 'src/b.ts', state: 'partial', reason: 'Too large.' }]
 		}),
-		'markdown'
+		'markdown',
+		PLAIN_SURFACE
 	);
 
 	expect(empty).not.toContain('## ');
@@ -62,5 +64,5 @@ test('unconfirmed findings, checks and gaps get their own headings only when the
 test('json is the report with two-space indentation', () => {
 	const value = report();
 
-	expect(renderReport(value, 'json')).toBe(JSON.stringify(value, null, 2));
+	expect(renderReport(value, 'json', PLAIN_SURFACE)).toBe(JSON.stringify(value, null, 2));
 });

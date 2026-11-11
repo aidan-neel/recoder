@@ -2,6 +2,7 @@ import { parseReviewArgs } from '../../../src/cli/args/review-args';
 import { EXIT, type ExitCode } from '../../../src/cli/exit';
 import { runProgram } from '../../../src/cli/program';
 import { runReviewCommand } from '../../../src/cli/runs/review-command';
+import { PROGRAM_TERMINAL } from '../output/fixtures';
 import { LIFETIME_MS, exitCodeOf, runFakeBackgroundReview } from './fake-review';
 
 /**
@@ -14,9 +15,9 @@ await runProgram(Bun.argv.slice(2), runRecoderReview);
 
 async function runRecoderReview(argv: string[]): Promise<ExitCode> {
 	const flags = argv.slice(1);
-	const request = parseReviewArgs(flags, process.cwd());
+	const request = parseReviewArgs(flags, process.cwd(), 'program');
 
 	if (request.launch.kind === 'background') return runFakeBackgroundReview(flags, 'gate');
 
-	return runReviewCommand(request).catch(exitCodeOf);
+	return runReviewCommand(request, PROGRAM_TERMINAL).catch(exitCodeOf);
 }
