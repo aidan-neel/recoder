@@ -19,7 +19,7 @@ Recoder is single-user. The server has no sign-in: anyone who can reach its port
 - \`git\`.
 - For GitHub, the [GitHub CLI](https://cli.github.com) (\`gh\`). Recoder lists, reads and clones pull requests through it, even when you connect a token.
 - For GitLab, nothing extra. Recoder uses the GitLab REST API with your token. The \`glab\` CLI is optional.
-- A model. Either an agent CLI on the server machine (OpenCode, Claude Code or Devin; see [Models and agents](/docs/models)), or an OpenAI-compatible endpoint set in the environment.
+- A model. Either an agent CLI on the server machine (OpenCode, Claude Code or Devin), or an OpenAI-compatible endpoint set in the environment.
 - To let reviews run code: Linux with [bubblewrap](https://github.com/containers/bubblewrap) (\`bwrap\`), or macOS, which has its own sandbox. On Windows, run the server under WSL. The repository’s own tools must be on the server’s \`PATH\` too: \`bun\`, \`pnpm\`, \`yarn\` or \`npm\` for JavaScript, \`uv\`, \`poetry\` or \`python3\` for Python, \`go\` and \`cargo\`. Without a sandbox, reviews still run, but only read the code.
 
 ## Run with Bun
@@ -62,7 +62,11 @@ Until reviews can run, the app shows three steps in place of the queue:
 2. **Pick a model.** The Review model runs the reviewers.
 3. **Track a repository.** Connect GitHub or GitLab to browse yours, or add one by URL.
 
-Then the queue lists the open pull requests of every repository you track. Select one with \`j\` and \`k\` and press \`r\`, or press its Review button. To review a pull request from somewhere else, press \`⌘K\` (\`Ctrl K\`), choose **Review a pull request…** and paste its link or type its number. [Reviewing](/docs/reviewing) covers the rest.
+Then the queue lists the open pull requests of every repository you track. Select one with \`j\` and \`k\` and press \`r\`, or press its Review button. To review a pull request from somewhere else, press \`⌘K\` (\`Ctrl K\`), choose **Review a pull request…** and paste its link or type its number.
 
-To look around first, choose **Open the sample review** on the first-run screen or in the search.`
+To look around first, choose **Open the sample review** on the first-run screen or in the search.
+
+## Review from a terminal or an agent
+
+The [CLI](/docs/cli) runs the same review without the server or the app, and [MCP](/docs/mcp) serves it as tools for a coding agent.`
 };

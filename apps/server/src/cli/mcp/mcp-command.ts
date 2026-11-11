@@ -3,13 +3,14 @@ import { fileURLToPath } from 'node:url';
 import { EXIT, type ExitCode } from '../exit.js';
 import { writeStdout } from '../output/streams.js';
 import { redirectConsoleToStderr } from '../run/quiet-console.js';
+import { selfCommand } from '../self-command.js';
 import { spawnDetached } from '../runs/detach.js';
 import { SYSTEM_CLOCK } from '../runs/wait-for-run.js';
 import { abortOnSignal } from '../signals/abort-on-signal.js';
 import { serveMcp } from './mcp-server.js';
 import type { ToolEnvironment } from './tool.js';
 
-/** The command line's entry. A background review runs it as `recoder review`, whatever started this server. */
+/** The command line's entry. From source, a background review runs it as `recoder review`, whatever started this server. */
 const CLI_ENTRY = fileURLToPath(new URL('../main.ts', import.meta.url));
 
 /**
@@ -39,7 +40,7 @@ function processEnvironment(): ToolEnvironment {
 	return {
 		workingDirectory: process.cwd(),
 		clock: SYSTEM_CLOCK,
-		reviewCommand: [process.execPath, CLI_ENTRY, 'review'],
+		reviewCommand: [...selfCommand(CLI_ENTRY), 'review'],
 		spawn: spawnDetached,
 		stopProcess: (pid) => process.kill(pid, 'SIGTERM')
 	};

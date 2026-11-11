@@ -52,16 +52,10 @@ test('install into an existing recoder folder is a usage error that names it', a
 	expect(written).toHaveLength(0);
 });
 
-test('path prints the folder that holds the bundled SKILL.md', async () => {
-	await runSkillCommand(['path'], await temporaryFolder());
-
-	expect(existsSync(join(written[0].trim(), 'SKILL.md'))).toBe(true);
-});
-
 test.each([
 	[['unknown']],
 	[['show', 'extra']],
-	[['path', '--dir', 'x']],
+	[['path']],
 	[['install', 'extra']],
 	[['install', '--agent', 'codex']],
 	[['install', '--scope', 'team']],

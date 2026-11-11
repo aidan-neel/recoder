@@ -1,14 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { Stats } from 'node:fs';
-import { cp, lstat, mkdir, readdir, rename, rm, stat } from 'node:fs/promises';
+import { lstat, mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { describeError, errorCode, usageError } from '../exit.js';
-import { SKILL_FOLDER_NAME } from './bundled-skill.js';
+import { SKILL_FOLDER_NAME, type SkillFile } from './bundled-skill.js';
 
-/** Which skill to copy and where its folder goes. */
+/** Which skill to write and where its folder goes. */
 interface SkillInstall {
-	/** The skill folder to copy. */
-	source: string;
+	/** The files to write. */
+	source: readonly SkillFile[];
 	/** The folder that holds skills; the skill lands in `<skillsFolder>/recoder`. */
 	skillsFolder: string;
 	/** Replace an existing `recoder` folder. Nothing else in the skills folder is touched. */
@@ -44,8 +44,8 @@ const FILE_SYSTEM: FolderOperations = {
 };
 
 /**
- * Copies the skill to `<skillsFolder>/recoder`. The copy is made beside the destination and renamed into place, so a
- * failed copy leaves no half-written skill. A replaced folder is moved aside, not deleted, until the new one is in
+ * Writes the skill to `<skillsFolder>/recoder`. It is written beside the destination and renamed into place, so a
+ * failed write leaves no half-written skill. A replaced folder is moved aside, not deleted, until the new one is in
  * place, and is moved back when that fails: the user ends with the old skill or the new one, never neither. An
  * existing folder is refused unless `force` is set, and a symbolic link or a file is refused always, because writing
  * through a link would leave the skills folder.
@@ -69,17 +69,15 @@ export async function installSkill(
 
 	const paths = { destination, staging: siblingOf(destination, 'install') };
 
-	await copyToStaging(install.source, paths, operations);
+	await writeToStaging(install.source, paths, operations);
 
-	if (existing === 'folder') return installed(destination, await replaceFolder(paths, operations));
+	const files = install.source.length;
+
+	if (existing === 'folder') return { destination, files, warning: await replaceFolder(paths, operations) };
 
 	await publishNew(paths, operations);
 
-	return installed(destination, null);
-}
-
-async function installed(destination: string, warning: string | null): Promise<InstalledSkill> {
-	return { destination, files: await countFiles(destination), warning };
+	return { destination, files, warning: null };
 }
 
 async function requireFolderOrNothing(skillsFolder: string): Promise<void> {
@@ -121,11 +119,25 @@ function siblingOf(path: string, purpose: 'install' | 'replaced'): string {
 	return join(dirname(path), `.${SKILL_FOLDER_NAME}-${purpose}-${randomUUID()}`);
 }
 
-async function copyToStaging(source: string, paths: InstallPaths, operations: FolderOperations): Promise<void> {
+async function writeToStaging(
+	source: readonly SkillFile[],
+	paths: InstallPaths,
+	operations: FolderOperations
+): Promise<void> {
 	await undoneOnFailure(
-		() => cp(source, paths.staging, { recursive: true }),
+		() => writeFiles(paths.staging, source),
 		() => removeAll([paths.staging], operations)
 	);
+}
+
+/** Writes each file under `folder`, creating the folders above it. */
+async function writeFiles(folder: string, files: readonly SkillFile[]): Promise<void> {
+	for (const file of files) {
+		const path = join(folder, file.path);
+
+		await mkdir(dirname(path), { recursive: true });
+		await writeFile(path, file.text);
+	}
 }
 
 async function publishNew(paths: InstallPaths, operations: FolderOperations): Promise<void> {
@@ -197,10 +209,4 @@ async function removeAll(paths: string[], operations: FolderOperations): Promise
 	}
 
 	return notes;
-}
-
-async function countFiles(folder: string): Promise<number> {
-	const entries = await readdir(folder, { recursive: true, withFileTypes: true });
-
-	return entries.filter((entry) => entry.isFile()).length;
 }

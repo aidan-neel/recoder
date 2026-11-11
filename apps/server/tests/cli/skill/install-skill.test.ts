@@ -4,7 +4,7 @@ import { mkdir, readFile, readdir, rename, rm, symlink } from 'node:fs/promises'
 import { join } from 'node:path';
 import { EXIT } from '../../../src/cli/exit';
 import { installSkill } from '../../../src/cli/skill/install-skill';
-import { removeTemporaryFolders, sampleSkill, temporaryFolder, writeFiles } from './fixture';
+import { SAMPLE_SKILL, removeTemporaryFolders, temporaryFolder, writeFiles } from './fixture';
 
 afterEach(removeTemporaryFolders);
 
@@ -24,7 +24,7 @@ async function replaceOldSkill(
 ): ReturnType<typeof installSkill> {
 	await writeFiles(skillsFolder, { 'recoder/SKILL.md': 'old\n' });
 
-	return installSkill({ source: await sampleSkill(), skillsFolder, force: true }, overrides);
+	return installSkill({ source: SAMPLE_SKILL, skillsFolder, force: true }, overrides);
 }
 
 /** The error a failing install rejects with. */
@@ -35,10 +35,10 @@ async function failureOf(install: Promise<unknown>): Promise<Error> {
 	);
 }
 
-test('install copies every file of the skill to a recoder folder and counts them', async () => {
+test('install writes every file of the skill to a recoder folder and counts them', async () => {
 	const skillsFolder = join(await temporaryFolder(), 'skills');
 
-	const installed = await installSkill({ source: await sampleSkill(), skillsFolder, force: false });
+	const installed = await installSkill({ source: SAMPLE_SKILL, skillsFolder, force: false });
 
 	expect(installed).toEqual({ destination: join(skillsFolder, 'recoder'), files: 2, warning: null });
 	expect(await readFile(join(skillsFolder, 'recoder', 'SKILL.md'), 'utf8')).toBe('skill\n');
@@ -50,7 +50,7 @@ test('an existing recoder folder is refused and left as it was without force', a
 
 	await writeFiles(skillsFolder, { 'recoder/SKILL.md': 'mine\n' });
 
-	const install = installSkill({ source: await sampleSkill(), skillsFolder, force: false });
+	const install = installSkill({ source: SAMPLE_SKILL, skillsFolder, force: false });
 
 	await expect(install).rejects.toMatchObject({ exitCode: EXIT.usage, message: expect.stringContaining('--force') });
 	expect(await readFile(join(skillsFolder, 'recoder', 'SKILL.md'), 'utf8')).toBe('mine\n');
@@ -62,7 +62,7 @@ test('force replaces the recoder folder, so files that only the old one had are 
 
 	await writeFiles(skillsFolder, { 'recoder/SKILL.md': 'old\n', 'recoder/stale.md': 'stale\n' });
 
-	await installSkill({ source: await sampleSkill(), skillsFolder, force: true });
+	await installSkill({ source: SAMPLE_SKILL, skillsFolder, force: true });
 
 	expect(await readFile(join(skillsFolder, 'recoder', 'SKILL.md'), 'utf8')).toBe('skill\n');
 	expect(existsSync(join(skillsFolder, 'recoder', 'stale.md'))).toBe(false);
@@ -78,7 +78,7 @@ test('a destination that is a symbolic link is refused, even with force, and its
 	await mkdir(skillsFolder);
 	await symlink(elsewhere, join(skillsFolder, 'recoder'));
 
-	const install = installSkill({ source: await sampleSkill(), skillsFolder, force: true });
+	const install = installSkill({ source: SAMPLE_SKILL, skillsFolder, force: true });
 
 	await expect(install).rejects.toMatchObject({ exitCode: EXIT.usage, message: expect.stringContaining('symbolic') });
 	expect(await readdir(elsewhere)).toEqual(['keep.md']);
@@ -90,7 +90,7 @@ test('a forced install leaves a file and a folder beside the recoder folder unto
 
 	await writeFiles(skillsFolder, { 'recoder/SKILL.md': 'old\n', 'other/SKILL.md': 'other\n', 'notes.md': 'notes\n' });
 
-	await installSkill({ source: await sampleSkill(), skillsFolder, force: true });
+	await installSkill({ source: SAMPLE_SKILL, skillsFolder, force: true });
 
 	expect(await readFile(join(skillsFolder, 'other', 'SKILL.md'), 'utf8')).toBe('other\n');
 	expect(await readFile(join(skillsFolder, 'notes.md'), 'utf8')).toBe('notes\n');
@@ -101,18 +101,19 @@ test('a recoder entry that is a file is not replaced, even with force', async ()
 
 	await writeFiles(skillsFolder, { recoder: 'a file\n' });
 
-	const install = installSkill({ source: await sampleSkill(), skillsFolder, force: true });
+	const install = installSkill({ source: SAMPLE_SKILL, skillsFolder, force: true });
 
 	await expect(install).rejects.toMatchObject({ exitCode: EXIT.usage });
 	expect(await readFile(join(skillsFolder, 'recoder'), 'utf8')).toBe('a file\n');
 });
 
-test('a copy that fails leaves no staging folder and keeps the folder it would have replaced', async () => {
+test('a write that fails leaves no staging folder and keeps the folder it would have replaced', async () => {
 	const skillsFolder = await temporaryFolder();
 
 	await writeFiles(skillsFolder, { 'recoder/SKILL.md': 'old\n' });
 
-	const install = installSkill({ source: join(skillsFolder, 'missing'), skillsFolder, force: true });
+	const unwritable = [...SAMPLE_SKILL, { path: 'SKILL.md/inside.md', text: 'under a file\n' }];
+	const install = installSkill({ source: unwritable, skillsFolder, force: true });
 
 	await expect(install).rejects.toThrow();
 	expect(await readdir(skillsFolder)).toEqual(['recoder']);
@@ -124,7 +125,7 @@ test('a skills folder that is a file is refused', async () => {
 
 	await writeFiles(root, { skills: 'a file\n' });
 
-	const install = installSkill({ source: await sampleSkill(), skillsFolder: join(root, 'skills'), force: false });
+	const install = installSkill({ source: SAMPLE_SKILL, skillsFolder: join(root, 'skills'), force: false });
 
 	await expect(install).rejects.toMatchObject({ exitCode: EXIT.usage });
 });

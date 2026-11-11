@@ -2,6 +2,7 @@ import type { Subprocess } from 'bun';
 import { EXIT, describeError } from './exit.js';
 import { writeStderrLine } from './output/streams.js';
 import { isProcessPresent } from './runs/process-identity.js';
+import { selfCommand } from './self-command.js';
 import { signalExitCode } from './signals/exit-on-signal.js';
 import { shutdownSignals } from './signals/shutdown-signals.js';
 import { REPOSITORY_ENV, environmentWithoutRepository } from './target/git.js';
@@ -89,7 +90,7 @@ function stopAsOnSigterm(): void {
 
 function startCleanCopy(argv: string[]): Subprocess | null {
 	try {
-		return Bun.spawn([process.execPath, Bun.main, ...argv], {
+		return Bun.spawn([...selfCommand(Bun.main), ...argv], {
 			stdio: ['inherit', 'inherit', 'inherit'],
 			env: { ...environmentWithoutRepository(), [OUTER_PID_ENV]: String(process.pid) },
 			detached: true

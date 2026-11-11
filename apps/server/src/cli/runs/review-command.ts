@@ -4,6 +4,7 @@ import { CliError, EXIT, loadOrNotReady, type ExitCode } from '../exit.js';
 import { PROCESS_DESTINATION, prepareOutputFile } from '../output/deliver.js';
 import { writeStderrLine } from '../output/streams.js';
 import type { ReviewOptions } from '../review/options.js';
+import { selfCommand } from '../self-command.js';
 import { abortOnSignal } from '../signals/abort-on-signal.js';
 import { exitOnSignal } from '../signals/exit-on-signal.js';
 import { STOP_SIGNALS, outliveHangUp } from '../signals/shutdown-signals.js';
@@ -84,7 +85,7 @@ async function startDetached(options: ReviewOptions, flags: string[]): Promise<E
 
 	const { status, outcome } = await detachReview({
 		run: newRunOf(options),
-		command: (runId) => [process.execPath, Bun.main, 'review', ...backgroundFlags(runId, flags)],
+		command: (runId) => [...selfCommand(Bun.main), 'review', ...backgroundFlags(runId, flags)],
 		signal,
 		handoverTimeoutMs: HANDOVER_TIMEOUT_MS,
 		spawn: spawnDetached
