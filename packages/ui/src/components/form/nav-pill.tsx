@@ -21,8 +21,11 @@ interface NavPillProps {
 	/** The active item's id. The pill slides when it changes, never when the page around it reflows. */
 	value: string;
 	/**
-	 * Corner radius in px, 8 by default. Pass 999 for a fully round pill. It is
-	 * set inline, never in CSS, so the corners stay true while the pill stretches.
+	 * Corner radius in px, 8 by default. For a fully round pill pass half the
+	 * item's height, never more: while the pill slides, motion turns the radius
+	 * into percentages of the pill, and a radius far past its size warps the
+	 * corners. It is set inline, never in CSS, so the corners stay true while
+	 * the pill stretches.
 	 */
 	radius?: number;
 	/** Restyles the pill (its fill: `bg-menu`). */

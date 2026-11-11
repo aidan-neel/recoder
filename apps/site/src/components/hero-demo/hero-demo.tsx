@@ -36,12 +36,11 @@ const DemoSurface = dynamic(() => import('./demo-surface').then((module) => modu
  */
 export function HeroDemo() {
 	const stageRef = useRef<HTMLDivElement>(null);
-	const windowRef = useRef<HTMLDivElement>(null);
+	const [frame, setFrame] = useState<HTMLDivElement | null>(null);
 	const [fit, setFit] = useState<Fit | null>(null);
 
 	useEffect(() => {
 		const stage = stageRef.current;
-		const frame = windowRef.current;
 
 		if (!stage || !frame) return;
 
@@ -55,14 +54,14 @@ export function HeroDemo() {
 		observer.observe(frame);
 
 		return () => observer.disconnect();
-	}, []);
+	}, [frame]);
 
 	const scale = fit ? Math.min(1, fit.stage / fit.width) : 1;
 
 	return (
 		<div ref={stageRef} className="demo-stage" style={fit ? { height: fit.height * scale } : undefined}>
-			<div ref={windowRef} className="demo-window" style={scale < 1 ? { scale } : undefined} inert>
-				<DemoSurface scale={scale} frame={windowRef} />
+			<div ref={setFrame} className="demo-window" style={scale < 1 ? { scale } : undefined} inert>
+				<DemoSurface scale={scale} frame={frame} />
 			</div>
 		</div>
 	);
