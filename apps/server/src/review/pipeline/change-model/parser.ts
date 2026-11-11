@@ -11,18 +11,27 @@ import typescriptWasm from 'tree-sitter-wasms/out/tree-sitter-typescript.wasm' w
 import { grammarFor, languageFor } from './languages.js';
 
 /**
+ * A `with { type: 'file' }` import, as the path Bun gives it. An app that also loads
+ * Vite's client types (apps/bench) sees Vite's own `*.wasm` type here, so the value is
+ * taken as unknown and read as a string.
+ */
+function pathOf(file: unknown): string {
+	return String(file);
+}
+
+/**
  * Each grammar's `.wasm`, imported as a file so `bun build --compile` embeds it in the
  * `recoder` binary. From source the path is the file in `node_modules`.
  */
 const GRAMMAR_FILES: Record<string, string> = {
-	go: goWasm,
-	java: javaWasm,
-	javascript: javascriptWasm,
-	python: pythonWasm,
-	ruby: rubyWasm,
-	rust: rustWasm,
-	tsx: tsxWasm,
-	typescript: typescriptWasm
+	go: pathOf(goWasm),
+	java: pathOf(javaWasm),
+	javascript: pathOf(javascriptWasm),
+	python: pathOf(pythonWasm),
+	ruby: pathOf(rubyWasm),
+	rust: pathOf(rustWasm),
+	tsx: pathOf(tsxWasm),
+	typescript: pathOf(typescriptWasm)
 };
 
 /** Shared by every caller, so concurrent first parses initialize the runtime once. */
@@ -32,7 +41,7 @@ let ready: Promise<void> | null = null;
 const parsers = new Map<string, Promise<Parser>>();
 
 function init(): Promise<void> {
-	ready ??= Parser.init({ locateFile: () => runtimeWasm });
+	ready ??= Parser.init({ locateFile: () => pathOf(runtimeWasm) });
 
 	return ready;
 }
