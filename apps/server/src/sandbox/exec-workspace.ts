@@ -91,8 +91,8 @@ export class ExecWorkspace {
 	private releaseShared: () => void = () => {};
 	/** Set by the harness once packages are prepared: says what an investigator's run reached. */
 	settleRun: ((run: InvestigatorRun) => Promise<SettledRun>) | null = null;
-	/** What the harness ran in the checkout before the checks; a stored check result is reused only after the same. */
-	preparedWith = '';
+	/** The generation commands that prepared the head before the checks, in order; the merge-base tree runs the same. */
+	private generation: readonly string[] = [];
 
 	constructor(
 		readonly checkout: string,
@@ -102,6 +102,16 @@ export class ExecWorkspace {
 		private readonly share?: { scope: string; baseSha: string }
 	) {
 		this.layout = layout ?? sandboxLayout(checkout);
+	}
+
+	/** What the harness ran in the checkout before the checks; a stored check result is reused only after the same. */
+	get preparedWith(): string {
+		return this.generation.length ? `package prep: ${this.generation.join('; ')}` : '';
+	}
+
+	/** Records the generation commands that prepared the head, for the check cache key and the merge-base tree. */
+	recordGeneration(commands: readonly string[]): void {
+		this.generation = [...commands];
 	}
 
 	/** Which of the common interpreters a sandboxed command can run. */
@@ -211,8 +221,9 @@ export class ExecWorkspace {
 	/**
 	 * Run a command, offline, on a copy of the merge-base commit with `owner`'s
 	 * scratch files in place, the way `run` does on the head. The copy is built
-	 * once and put back after every command. `unavailable` says why it could not
-	 * be used: changed dependencies, no time left, or a copy that would not build.
+	 * once, prepared with the head's generation commands, and put back after
+	 * every command. `unavailable` says why it could not be used: changed
+	 * dependencies, no time left, or a copy that would not build.
 	 */
 	async runOnBase(
 		command: string,
@@ -227,10 +238,7 @@ export class ExecWorkspace {
 			if (this.timeout(timeoutMs) <= 0) return { unavailable: 'the review is out of time' };
 
 			const tree = (this.baseTree ??= new BaseTree(this.layout, this.headSha, mergeBaseSha));
-
-			const unavailable = await tree.prepare(
-				AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(timeoutMs)])
-			);
+			const unavailable = await this.prepareBase(tree, timeoutMs, signal);
 
 			if (unavailable) return { unavailable };
 
@@ -361,6 +369,25 @@ export class ExecWorkspace {
 
 		this.releaseShared();
 		await removeLayers(this.layout).catch(() => undefined);
+	}
+
+	/**
+	 * Builds the merge-base tree, then runs there, as prep commands, the head's
+	 * generation commands it has not run yet, each within `timeoutMs`. Null when
+	 * the tree is ready; otherwise why it can't be used, including a tree a
+	 * generation command replaced.
+	 */
+	private async prepareBase(tree: BaseTree, timeoutMs: number, signal?: AbortSignal): Promise<string | null> {
+		const built = await tree.prepare(AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(timeoutMs)]));
+
+		if (built) return built;
+
+		const generate = (command: string) =>
+			runSandboxed(tree.sandbox, command, { timeoutMs: () => this.timeout(timeoutMs), tier: 'prep', signal });
+
+		await tree.generate(this.generation, generate, signal);
+
+		return tree.prepare();
 	}
 
 	/** Writes each scratch file under `layout`; returns the first path that could not be written. */

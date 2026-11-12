@@ -32,7 +32,8 @@ const identities = new WeakMap<ExecWorkspace, Promise<RunIdentity>>();
 /**
  * The sandbox's platform and tool versions and the digest of what its install
  * read, from the inputs a check result is cached under, without the prep
- * commands (the base tree is not prepared) or the install command. Unknown
+ * commands (the base tree reruns them from its own commit, where they may end
+ * differently) or the install command. Unknown
  * when the sandbox cannot say: no repo scope, no lockfile, or no versions.
  */
 function identityOf(workspace: ExecWorkspace): Promise<RunIdentity> {
