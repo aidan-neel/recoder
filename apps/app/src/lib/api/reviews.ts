@@ -64,16 +64,9 @@ export const reviewsApi = {
 	postFinding: (id: string, findingId: string) => post<Review>(`${findingPath(id, findingId)}/pull-comment`),
 
 	/**
-	 * Posts every open finding on the pull request, in the review's order.
-	 * TODO: switch to the server's one-review batch route once it is named.
+	 * Submits the finished review's verified findings as one forge review: a
+	 * summary, inline comments and the commit status. Answers the review as it
+	 * then stands; a second call posts nothing twice and answers the review.
 	 */
-	async postFindings(id: string): Promise<Review> {
-		let review = await reviewsApi.review(id);
-
-		for (const finding of review.findings.filter(isOpenFinding)) {
-			review = await reviewsApi.postFinding(id, finding.id);
-		}
-
-		return review;
-	}
+	postFindings: (id: string) => post<Review>(`${reviewPath(id)}/findings-review`)
 };

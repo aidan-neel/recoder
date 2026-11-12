@@ -1,7 +1,9 @@
 'use client';
 
 import type { ModelSettingsPatch } from '@recoder/shared';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useStore } from 'zustand';
+import { createStore, type StoreApi } from 'zustand/vanilla';
+import { useEffect, useState } from 'react';
 
 import { failureText } from '../api/http';
 import { errorToast } from '../shell/notify';
@@ -16,6 +18,68 @@ const SUCCESS_MS = 1400;
 /** How long the cross stays after a save fails. */
 const ERROR_MS = 2400;
 
+/** A save-face tracker that lives outside React, so a store can drive it as well as a hook. */
+export interface SaveTracker extends StoreApi<{ state: SaveState }> {
+	/**
+	 * Tracks saves that run the moment a control changes. `track` takes the save
+	 * and resolves to null when it landed, or to the reason it failed, which a
+	 * `toast` title also raises as an error toast. Only the latest save drives the
+	 * state, so a quick second change never shows the first one's outcome.
+	 */
+	track: (save: Promise<unknown>, toast?: string) => Promise<string | null>;
+	/** Drops a failure's cross at once, for a control that has gone back to the saved value or is being edited again. */
+	clearFailure: () => void;
+	/** Clears the pending face timer; call when the owner goes away. */
+	dispose: () => void;
+}
+
+/**
+ * The save-face state machine without React: `state` is the face, `track`
+ * drives it through one save, and only the latest tracked save shows its
+ * outcome. `dispose` drops a pending timer.
+ */
+export function createSaveTracker(): SaveTracker {
+	let latest = 0;
+	let timer: ReturnType<typeof setTimeout> | undefined;
+
+	const store = createStore<{ state: SaveState }>(() => ({ state: 'idle' }));
+
+	function face(state: SaveState): void {
+		store.setState({ state });
+	}
+
+	async function track(save: Promise<unknown>, toast?: string): Promise<string | null> {
+		const id = ++latest;
+
+		clearTimeout(timer);
+		face('pending');
+
+		const failure = await save.then(
+			() => null,
+			(error: unknown) => failureText(error, 'Couldn’t save.')
+		);
+
+		if (failure && toast) errorToast(toast, failure);
+
+		if (id === latest) {
+			face(failure ? 'error' : 'success');
+			timer = setTimeout(() => face('idle'), failure ? ERROR_MS : SUCCESS_MS);
+		}
+
+		return failure;
+	}
+
+	function clearFailure(): void {
+		if (store.getState().state === 'error') face('idle');
+	}
+
+	function dispose(): void {
+		clearTimeout(timer);
+	}
+
+	return Object.assign(store, { track, clearFailure, dispose });
+}
+
 /**
  * Tracks saves that run the moment a control changes. `track` takes the save
  * and resolves to null when it landed, or to the reason it failed, which a
@@ -29,36 +93,13 @@ export function useSaveState(): {
 	track: (save: Promise<unknown>, toast?: string) => Promise<string | null>;
 	clearFailure: () => void;
 } {
-	const [state, setState] = useState<SaveState>('idle');
-	const latest = useRef(0);
-	const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+	const [tracker] = useState(createSaveTracker);
 
-	useEffect(() => () => clearTimeout(timer.current), []);
+	useEffect(() => () => tracker.dispose(), [tracker]);
 
-	const track = useCallback(async (save: Promise<unknown>, toast?: string) => {
-		const id = ++latest.current;
+	const state = useStore(tracker, (current) => current.state);
 
-		clearTimeout(timer.current);
-		setState('pending');
-
-		const failure = await save.then(
-			() => null,
-			(error: unknown) => failureText(error, 'Couldn’t save.')
-		);
-
-		if (failure && toast) errorToast(toast, failure);
-
-		if (id === latest.current) {
-			setState(failure ? 'error' : 'success');
-			timer.current = setTimeout(() => setState('idle'), failure ? ERROR_MS : SUCCESS_MS);
-		}
-
-		return failure;
-	}, []);
-
-	const clearFailure = useCallback(() => setState((now) => (now === 'error' ? 'idle' : now)), []);
-
-	return { state, track, clearFailure };
+	return { state, track: tracker.track, clearFailure: tracker.clearFailure };
 }
 
 /**

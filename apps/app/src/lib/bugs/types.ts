@@ -79,6 +79,8 @@ export interface BugsView {
 	unresolved: UnresolvedItem[];
 	/** What the review checked and found sound: claims it investigated, and those it cleared. */
 	checked: { claims: number; cleared: number };
+	/** The forge review the finished findings went up as, once someone posted them; null before. */
+	findingsReview: { state: 'posting' | 'posted' | 'failed'; url: string | null; error: string | null } | null;
 	/** Facts for the line under the tabs. */
 	reviewedAt: string | null;
 	headSha: string | null;

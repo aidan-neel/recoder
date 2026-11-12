@@ -81,6 +81,20 @@ describe('the seeded review that is already running', () => {
 	});
 });
 
+describe('posting the findings as one review', () => {
+	test('postFindings leaves findingsReview posted', async () => {
+		const api = createSampleApi();
+		const review = await api.postFindings('sample-214');
+
+		expect(review.findingsReview).toMatchObject({
+			state: 'posted',
+			url: 'https://github.com/acme/api/pull/214#findings-review'
+		});
+
+		expect(Object.keys(review.findingComments ?? {}).sort()).toEqual(['sample-f1', 'sample-f2', 'sample-f3']);
+	});
+});
+
 describe('a stopped review that a person continues', () => {
 	test('it starts over without the steps and claims of the run that was stopped', async () => {
 		const api = createSampleApi();

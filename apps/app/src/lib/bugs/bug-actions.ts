@@ -1,9 +1,12 @@
 import type { DismissalReason, Finding, FindingDecision, Review } from '@recoder/shared';
 
-import { plainly } from '../api/http';
+import { ApiError, plainly } from '../api/http';
 import type { DecisionInput } from '../api/reviews';
 import type { SessionContext, Vote } from '../pull/session-state';
 import { withKey, withoutKey } from '../shell/key-set';
+
+/** How long a decision the server could not save yet waits before it is sent again. */
+const DECISION_RETRY_MS = 400;
 
 /** Saves one decision on the review with id `reviewId`; reopening saves none. */
 type SaveDecision = (reviewId: string) => Promise<FindingDecision | undefined>;
@@ -18,9 +21,36 @@ interface DecisionWrites {
 	queue: Promise<unknown>;
 }
 
+/** Waits `ms`; the session's `wait` replaces it in tests. */
+function wait(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Saves a decision, sending it once more when the server answered 409: it
+ * could not save yet and nothing was written. A second 409, or any other
+ * failure, rejects as it came.
+ */
+async function saveWithRetry(
+	reviewId: string,
+	save: SaveDecision,
+	pause: (ms: number) => Promise<void>
+): Promise<FindingDecision | undefined> {
+	try {
+		return await save(reviewId);
+	} catch (error) {
+		if (!(error instanceof ApiError) || error.status !== 409) throw error;
+	}
+
+	await pause(DECISION_RETRY_MS);
+
+	return save(reviewId);
+}
+
 /** What a person does with the findings of the followed review. Each write shows at once and rolls back when it fails. */
 export function createBugActions(context: SessionContext) {
 	const { client, state } = context;
+	const pause = context.wait ?? wait;
 
 	function currentReview(): Review {
 		const { review } = state.getState();
@@ -110,7 +140,7 @@ export function createBugActions(context: SessionContext) {
 		const write = whilePending(id, async () => {
 			await earlier;
 
-			return plainly(() => save(reviewId));
+			return plainly(() => saveWithRetry(reviewId, save, pause));
 		});
 
 		decisionWrites.set(id, { ...writes, newest: turn, queue: Promise.allSettled([write]) });
@@ -146,14 +176,18 @@ export function createBugActions(context: SessionContext) {
 		);
 	}
 
-	/** Takes the comments a post made into the review on screen, keeping every change made since the post began. */
-	function acceptComments(posted: Review): void {
+	/** Takes what a post answered into the review on screen, keeping every change made since the post began. */
+	function acceptPosted(posted: Review): void {
 		const { review } = state.getState();
 
 		if (review?.id !== posted.id) return;
 
 		state.setState({
-			review: { ...review, findingComments: { ...review.findingComments, ...posted.findingComments } }
+			review: {
+				...review,
+				findingComments: { ...review.findingComments, ...posted.findingComments },
+				findingsReview: posted.findingsReview ?? review.findingsReview
+			}
 		});
 	}
 
@@ -221,7 +255,7 @@ export function createBugActions(context: SessionContext) {
 		async post(id: string): Promise<void> {
 			const reviewId = currentReview().id;
 
-			acceptComments(await whilePending(id, () => plainly(() => client.postFinding(reviewId, id))));
+			acceptPosted(await whilePending(id, () => plainly(() => client.postFinding(reviewId, id))));
 		},
 
 		async postAll(): Promise<void> {
@@ -230,7 +264,7 @@ export function createBugActions(context: SessionContext) {
 			state.setState({ postingAll: true });
 
 			try {
-				acceptComments(await plainly(() => client.postFindings(reviewId)));
+				acceptPosted(await plainly(() => client.postFindings(reviewId)));
 			} finally {
 				state.setState({ postingAll: false });
 			}
