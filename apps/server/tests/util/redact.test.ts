@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { redactedTail } from '../../../src/cli/target/redact';
+import { redactedTail } from '../../src/util/redact';
 
 /** A made-up token holding characters a URL encodes. */
 const SECRET = 'fake-T0ken/with:odd+chars';

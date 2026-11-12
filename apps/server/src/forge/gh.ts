@@ -9,7 +9,7 @@ import {
 	isJsonObject,
 	runForgeCli
 } from './cli.js';
-import { withoutCredentials } from '../cli/target/redact.js';
+import { withoutCredentials } from '../util/redact.js';
 
 export { extractJson, GhError } from './cli.js';
 

@@ -1,5 +1,5 @@
 import type { Provider } from '@recoder/shared';
-import { withoutCredentials } from '../cli/target/redact';
+import { withoutCredentials } from '../util/redact';
 import { getGitlabHost, hostOfRepoUrl } from './gitlab-host';
 
 export interface RepoLocator {

@@ -1,4 +1,4 @@
-import { redactedTail } from '../cli/target/redact';
+import { redactedTail } from '../util/redact';
 
 /**
  * A line of a CLI's output as an error or a logged event may quote it: every credential in it (an authorization

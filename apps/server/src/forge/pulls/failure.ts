@@ -1,4 +1,4 @@
-import { redactedTail } from '../../cli/target/redact.js';
+import { redactedTail } from '../../util/redact.js';
 import { GhError, type GhErrorKind } from '../cli.js';
 import { getToken } from '../tokens.js';
 
