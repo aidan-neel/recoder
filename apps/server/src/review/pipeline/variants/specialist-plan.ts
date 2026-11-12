@@ -6,7 +6,7 @@ import { unitTitle, type ReviewUnit, type UnitScope } from '../units.js';
  * Specialists the tree keeps over every slice they fit, whatever the coordinator says, so the tree never
  * reviews correctness, security, concurrency, API contracts or repository rules less than the baseline (issue #95).
  */
-const KEPT_SPECIALISTS: ReadonlySet<LensId> = new Set([
+export const KEPT_SPECIALISTS: ReadonlySet<LensId> = new Set([
 	'correctness',
 	'security',
 	'concurrency',

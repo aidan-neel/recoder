@@ -5,27 +5,27 @@ import { orchestratorAgentOptions, type ReviewRun } from '../harness/context.js'
 import { LENSES } from '../lenses/lenses.js';
 import { patchChars, type ReviewUnit } from '../units.js';
 import { SPECIALIST_CHILDREN } from './children.js';
-import type { CoordinatorAnswer } from './specialist-plan.js';
+import { KEPT_SPECIALISTS, type CoordinatorAnswer } from './specialist-plan.js';
 
 const text = (max: number) => z.string().trim().max(max);
 
-/** The coordinator's reply; unknown specialists and slices are ignored by the plan, not rejected here. */
+/**
+ * The coordinator's reply. Both lists are required, so a reply that is not a plan (`{"findings":[]}`) takes the
+ * no-plan fallback instead of reading as one that omits every optional specialist. Unknown specialists and slices
+ * are ignored by the plan, not rejected here.
+ */
 const coordinationSchema = z.object({
 	dispatches: z
 		.array(z.object({ specialist: text(40), slices: z.array(text(80)).max(50), question: text(600).default('') }))
-		.max(40)
-		.default([]),
-	omitted: z
-		.array(z.object({ specialist: text(40), reason: text(600) }))
-		.max(16)
-		.default([])
+		.max(40),
+	omitted: z.array(z.object({ specialist: text(40), reason: text(600) })).max(16)
 });
 
 const SYSTEM = `Role: coordinator of a specialist review tree. Each specialist reviewer applies one lens to the slices of a code change you give it. Decide which specialists read which slices, and the one question each should settle first.
 
 Rules:
 - Dispatch a specialist to every slice where its lens can find a defect. Omit one only when no slice can hold what it looks for, and give the reason.
-- correctness, security, concurrency, api-contract and rules always read every slice they fit, whatever you answer; your question still steers them.
+- ${[...KEPT_SPECIALISTS].join(', ')} always read every slice they fit, whatever you answer; your question still steers them.
 - Each specialist may later send up to ${SPECIALIST_CHILDREN} child investigators, each with a distinct question and code scope.
 
 Reply with JSON only:

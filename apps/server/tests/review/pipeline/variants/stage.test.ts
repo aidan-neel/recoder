@@ -17,6 +17,7 @@ import {
 	messagesOf,
 	modelReply,
 	restoreAfterEach,
+	stubFetch,
 	stubModel,
 	systemOf,
 	unitOf,
@@ -73,7 +74,7 @@ interface TwoPasses {
 function stubTwoPasses(reporters: string[]): TwoPasses {
 	const seen: TwoPasses = { bodies: new Map(), afterFirstPass: [], firstPassReported: false };
 
-	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+	stubFetch((init) => {
 		if (isVerifier(init)) return modelReply(confirmingVerifier(init));
 
 		const unit = unitOf(init) ?? 'other';
@@ -92,7 +93,7 @@ function stubTwoPasses(reporters: string[]): TwoPasses {
 		if (unit === 'reviewer-1' && !findings.length) seen.firstPassReported = true;
 
 		return modelReply({ message: 'ok', ...NOTHING, examinedHunks: [], findings });
-	}) as unknown as typeof fetch;
+	});
 
 	return seen;
 }
@@ -153,7 +154,7 @@ describe('the independent pass', () => {
 describe('the specialist tree', () => {
 	/** Answers the coordinator with `coordination` and every other call with nothing, keeping the reviewers' unit ids. */
 	function stubTree(coordination: unknown, units: string[]): void {
-		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		stubFetch((init) => {
 			if (systemOf(init).includes('Role: coordinator')) return modelReply(coordination);
 			if (isVerifier(init)) return modelReply(confirmingVerifier(init));
 
@@ -162,7 +163,14 @@ describe('the specialist tree', () => {
 			if (unit) units.push(unit);
 
 			return modelReply({ message: 'ok', ...NOTHING, examinedHunks: [] });
-		}) as unknown as typeof fetch;
+		});
+	}
+
+	/** Reviews `TWO_UNIT_DIFF` and returns the ids of the reviewers it ran. */
+	async function reviewersOfTree(): Promise<string[]> {
+		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null });
+
+		return result.assignments.filter((record) => record.role === 'reviewer').map((record) => record.id);
 	}
 
 	beforeEach(() => {
@@ -175,14 +183,18 @@ describe('the specialist tree', () => {
 
 		stubTree({ dispatches: [], omitted: [{ specialist: 'performance', reason: 'no loops' }] }, units);
 
-		const result = await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null });
-
-		const reviewers = result.assignments.filter((record) => record.role === 'reviewer').map((record) => record.id);
+		const reviewers = await reviewersOfTree();
 
 		expect(reviewers).toContain('specialist-correctness');
 		expect(reviewers).not.toContain('specialist-performance');
 		expect(reviewers.some((id) => id.startsWith('reviewer-'))).toBe(false);
 		expect([...new Set(units)].sort()).toEqual([...reviewers].sort());
+	});
+
+	test('a coordinator reply that is not a plan keeps every specialist that fits', async () => {
+		stubTree({ message: 'No issues', findings: [] }, []);
+
+		expect(await reviewersOfTree()).toContain('specialist-performance');
 	});
 
 	test("the coordinator's decisions and the tasks it left unassigned are recorded in the conversation", async () => {
@@ -204,11 +216,14 @@ describe('the specialist tree', () => {
 	test('the coordinator sees every slice the baseline would review', async () => {
 		const seen: string[] = [];
 
-		globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-			if (systemOf(init).includes('Role: coordinator')) seen.push(String(messagesOf(init)[1]?.content ?? ''));
+		stubFetch((init) => {
+			if (!systemOf(init).includes('Role: coordinator'))
+				return modelReply({ message: 'ok', ...NOTHING, examinedHunks: [] });
 
-			return modelReply({ message: 'ok', ...NOTHING, examinedHunks: [] });
-		}) as unknown as typeof fetch;
+			seen.push(String(messagesOf(init)[1]?.content ?? ''));
+
+			return modelReply({ dispatches: [], omitted: [] });
+		});
 
 		await runAdaptiveReview({ diff: TWO_UNIT_DIFF, sandboxPath: null });
 
