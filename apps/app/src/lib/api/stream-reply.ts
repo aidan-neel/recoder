@@ -1,10 +1,13 @@
+import { StreamError } from './http';
+
 /** One frame of a streamed model reply. */
 type ReplyEvent<Done> = { type: 'token'; text: string } | ({ type: 'done' } & Done) | { type: 'error'; error: string };
 
 /**
  * Runs a token stream (`token` frames, then one `done` or `error`), hands each
- * token to `onToken`, and resolves with the `done` frame. A stream that ends
- * without one rejects, so a dropped connection never reads as an empty reply.
+ * token to `onToken`, and resolves with the `done` frame. An `error` frame, or
+ * a stream that ends without a `done`, rejects with a `StreamError`, so a
+ * dropped connection never reads as an empty reply.
  */
 export async function streamReply<Done>(
 	run: (onEvent: (event: unknown) => void) => Promise<void>,
@@ -21,8 +24,8 @@ export async function streamReply<Done>(
 		else if (event.type === 'error') failure = event.error;
 	});
 
-	if (failure !== null) throw new Error(failure);
-	if (result === null) throw new Error('The model stopped before it finished.');
+	if (failure !== null) throw new StreamError(failure);
+	if (result === null) throw new StreamError('The model stopped before it finished.');
 
 	return result;
 }

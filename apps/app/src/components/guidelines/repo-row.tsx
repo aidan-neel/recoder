@@ -3,13 +3,15 @@
 import type { GuidelinesOverview, RepoGuidelines } from '@recoder/shared';
 import { Button, cn, Skeleton } from '@recoder/ui';
 
-import { useAction } from '@/lib/shell/use-action';
+import type { FailureKind } from '@/lib/api/http';
 import { editLayer, useGuidelinesEditor, type ScopeKey } from '@/lib/guidelines/editor-store';
 import { useGuidelines } from '@/lib/guidelines/guidelines-store';
 import { firstRule, seedText } from '@/lib/guidelines/rules';
+import { useAction } from '@/lib/shell/use-action';
 
 import { GuidelinesEditor } from './guidelines-editor';
 import { GuidelinesRow } from './guidelines-row';
+import { OpenConnections } from './open-connections';
 import { RepoStatus } from './repo-status';
 
 type TrackedRepo = GuidelinesOverview['repos'][number];
@@ -33,8 +35,18 @@ function skeletonWidth(id: string): string {
 	return SKELETON_WIDTHS[sum % SKELETON_WIDTHS.length];
 }
 
-/** A read that failed (the forge said no, or the server is down): the reason, and a retry. */
-function FailedRow({ repo, error }: { repo: TrackedRepo; error: string }) {
+/** Reads the file again; rejects while the read still fails, so the button shows it. */
+async function retryRepo(repoId: string): Promise<void> {
+	await useGuidelines.getState().loadRepo(repoId);
+
+	if (useGuidelines.getState().repos[repoId]?.status === 'error') throw new Error('The read failed again.');
+}
+
+/**
+ * A read that failed: the reason, and the way out. A forge that refused its
+ * token needs a new one in Connections; anything else gets a retry.
+ */
+function FailedRow({ repo, error, kind }: { repo: TrackedRepo; error: string; kind: FailureKind }) {
 	const retry = useAction();
 
 	return (
@@ -44,13 +56,13 @@ function FailedRow({ repo, error }: { repo: TrackedRepo; error: string }) {
 			failed
 			open={false}
 			action={
-				<Button
-					variant="outline"
-					status={retry.status}
-					onClick={() => retry.run(() => useGuidelines.getState().loadRepo(repo.id))}
-				>
-					Try again
-				</Button>
+				kind === 'auth' ? (
+					<OpenConnections />
+				) : (
+					<Button variant="outline" status={retry.status} onClick={() => retry.run(() => retryRepo(repo.id))}>
+						Try again
+					</Button>
+				)
 			}
 		/>
 	);
@@ -68,7 +80,7 @@ export function RepoRow({ repo, overview }: RepoRowProps) {
 	const open = useGuidelinesEditor((store) => store.open === key);
 	const opened = useGuidelinesEditor((store) => store.sessions[key]?.opened);
 
-	if (state?.status === 'error') return <FailedRow repo={repo} error={state.error} />;
+	if (state?.status === 'error') return <FailedRow repo={repo} error={state.error} kind={state.kind} />;
 
 	if (state?.status !== 'ready') {
 		return (

@@ -1,27 +1,45 @@
-import type { FileDiff, PrCheck, PullPreview, PullRequest, Repo, Review, ReviewMetrics } from '@recoder/shared';
+import type {
+	FileDiff,
+	PrCheck,
+	ProgressSummaries,
+	PullPreview,
+	PullRequest,
+	Repo,
+	Review,
+	ReviewListItem,
+	ReviewMetrics
+} from '@recoder/shared';
 
-import { del, post, request, seg } from './http';
+import { API_BASE, del, post, put, request, seg } from './http';
 
-/** Task progress per review id, for rows that are still running. */
-export type ProgressSummaries = Record<string, { tasksDone: number; tasksTotal: number; agents: number }>;
+export type { ProgressSummaries } from '@recoder/shared';
 
 /** The pull request to review. Without a head commit the server reviews the current one. */
 type PullTarget = Pick<PullRequest, 'number'> & Partial<Pick<PullRequest, 'headSha' | 'title'>>;
 
+/** How long a pull request list waits: a forge that hangs should cost one repository's rows, not the whole queue. */
+const PULLS_TIMEOUT_MS = 8000;
+
 /** Repositories, pull requests and the review lifecycle. */
 export const reviewsApi = {
 	repos: () => request<Repo[]>('/api/repos'),
-	pulls: (repoId: string) => request<PullRequest[]>(`/api/repos/${seg(repoId)}/pulls`),
+
+	/** A repository's open pull requests. A forge that refused answers an `ApiError` whose `kind` says why (`auth` for a rejected token). */
+	pulls: (repoId: string) => request<PullRequest[]>(`/api/repos/${seg(repoId)}/pulls`, { timeoutMs: PULLS_TIMEOUT_MS }),
 
 	/** One pull request by number, open or not; the server answers with its preview and this keeps the PR. */
 	pull: (repoId: string, number: number) =>
 		request<PullPreview>(`/api/repos/${seg(repoId)}/pulls/${seg(number)}`).then((preview) => preview.pr),
 
-	reviews: () => request<Review[]>('/api/reviews'),
+	/** Every review cut to what a list needs (about a tenth of the full list): for the queue and the palette. */
+	reviewList: () => request<ReviewListItem[]>('/api/reviews?view=summary'),
 	progress: () => request<ProgressSummaries>('/api/reviews/progress-summaries'),
 	review: (id: string) => request<Review>(`/api/reviews/${seg(id)}`),
 	files: (id: string, signal?: AbortSignal) => request<FileDiff[]>(`/api/reviews/${seg(id)}/files`, { signal }),
 	checks: (id: string) => request<{ ref: string; checks: PrCheck[] }>(`/api/reviews/${seg(id)}/checks`),
+
+	/** The review's live event stream, for an `EventSource`. Its snapshots leave out the tool calls, which the app never shows. */
+	eventsUrl: (id: string) => `${API_BASE}/api/reviews/${seg(id)}/events?tools=0`,
 
 	/** Token use so far, by model and stage; null before the review has made a call. */
 	metrics: (id: string) => request<ReviewMetrics | null>(`/api/reviews/${seg(id)}/metrics`),
@@ -48,5 +66,17 @@ export const reviewsApi = {
 	dismiss: (id: string, findingId: string, reason: string) =>
 		post<{ dismissed: boolean }>(`/api/reviews/${seg(id)}/dismissals`, { findingId, reason }),
 	restore: (id: string, findingId: string) =>
-		del<{ restored: boolean }>(`/api/reviews/${seg(id)}/dismissals/${seg(findingId)}`)
+		del<{ restored: boolean }>(`/api/reviews/${seg(id)}/dismissals/${seg(findingId)}`),
+
+	/** Tell the server a person accepted or sent back a finding, which counts for its topic; `useful` is false when it has none. */
+	markUseful: (id: string, findingId: string) =>
+		put<{ useful: boolean }>(`/api/reviews/${seg(id)}/useful/${seg(findingId)}`, {}),
+
+	/** Take back a finding's useful mark; a dismissal stays. */
+	unmarkUseful: (id: string, findingId: string) =>
+		del<{ removed: boolean }>(`/api/reviews/${seg(id)}/useful/${seg(findingId)}`),
+
+	/** Turn a quieted topic back on; answers the ids of this review's findings it cleared. */
+	unquiet: (id: string, topicId: string) =>
+		del<{ unquieted: string[] }>(`/api/reviews/${seg(id)}/quieted/${seg(topicId)}`)
 };

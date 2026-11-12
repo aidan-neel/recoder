@@ -70,8 +70,8 @@ export interface ServerIdentity {
 const moduleVersion = (path: string) => fileVersion(fileURLToPath(new URL(path, import.meta.url)));
 
 /**
- * The intent, rule-ledger and baseline caches keep their format numbers
- * private, so their version is the content hash of the module that owns the
+ * The intent, rule-ledger, baseline, parsed-symbol and commit-PR caches keep
+ * their format numbers private, so their version is the content hash of the module that owns the
  * format, read as the server loads: any change to how it keys or stores
  * entries changes it.
  */
@@ -79,7 +79,9 @@ const caches = {
 	intent: moduleVersion('../review/pipeline/intent/distill.ts'),
 	'rule-ledger': moduleVersion('../review/guidelines/ledger/ledger.ts'),
 	'baseline-cache': moduleVersion('../review/pipeline/harness/baseline-cache.ts'),
-	'review-checkpoint': `v${CHECKPOINT_VERSION}`
+	'review-checkpoint': `v${CHECKPOINT_VERSION}`,
+	'parsed-symbols': moduleVersion('../review/pipeline/change-model/parsed-files.ts'),
+	'commit-prs': moduleVersion('../forge/pr-context.ts')
 } satisfies Record<ServerCache, string>;
 
 /** The `node` on the server's PATH, which the sandboxed checks run with; `unknown` only when it would not say. */

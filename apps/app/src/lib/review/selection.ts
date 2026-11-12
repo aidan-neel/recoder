@@ -13,6 +13,18 @@ export function selectionKey(selection: Selection): string {
 	return `${selection.kind}:${selection.id}`;
 }
 
+/** The selection a key names, the inverse of {@link selectionKey}. */
+export function selectionFromKey(key: string): Selection {
+	const colon = key.indexOf(':');
+	const kind = colon < 0 ? key : key.slice(0, colon);
+	const rest = key.slice(colon + 1);
+
+	if (kind === 'file') return { kind: 'file', path: rest };
+	if (kind === 'decision' || kind === 'receipt') return { kind, id: rest };
+
+	return { kind: 'overview' };
+}
+
 /** True when two selections point at the same thing. */
 export function sameSelection(a: Selection, b: Selection): boolean {
 	return selectionKey(a) === selectionKey(b);

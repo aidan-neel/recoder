@@ -66,6 +66,64 @@
 	gap: 28px;
 }
 
+/* ───────── Narrow windows: the nav stacks above the section, its links in a row that wraps ───────── */
+@media (max-width: 720px) {
+	.settings-page {
+		flex-direction: column;
+	}
+	.settings-nav {
+		width: auto;
+		border-right: 0;
+		border-bottom: 1px solid var(--line-divider);
+	}
+	/* The section's own title names the page; the links say it is settings. */
+	.settings-nav > [data-ui='panel-header'] {
+		display: none;
+	}
+	/* One row of links is as tall as a panel header; every row's text starts on the column's text line. */
+	.settings-nav-list {
+		flex-flow: row wrap;
+		gap: 2px;
+		padding: 6px 10px 5px;
+	}
+	.settings-main {
+		min-height: 0;
+	}
+	.settings-main > [data-ui='panel-header'] {
+		padding-inline: 20px;
+	}
+	.settings-column {
+		max-width: none;
+		padding: 20px 16px 48px;
+	}
+	/* A control too wide to leave the name 120px (a model picker) drops under it, at the right; so does a placeholder's. */
+	.settings-row,
+	.settings-copy-row {
+		flex-wrap: wrap;
+		row-gap: 6px;
+	}
+	.settings-row > :has(> .settings-row-name),
+	.settings-copy-row > .settings-copy-words {
+		flex-basis: 120px;
+	}
+	.settings-row-control,
+	.settings-copy-control {
+		margin-left: auto;
+	}
+}
+
+/* ───────── Phones: a forge's line may wrap, whatever it says, so each forge row and its placeholder hold two ───────── */
+@media (max-width: 460px) {
+	/* The row's padding, the name, two lines under it and the hairline. */
+	.settings-row.forge-row {
+		min-height: 73px;
+	}
+	/* The kit sets a placeholder row's height inline. */
+	.settings-group[data-group='forges'] [data-ui='skeleton-row'] {
+		height: 73px !important;
+	}
+}
+
 /* ───────── Groups and rows ───────── */
 .settings-group {
 	display: flex;
@@ -89,17 +147,20 @@
 .settings-list {
 	overflow: hidden;
 }
-.settings-row {
+.settings-row,
+.settings-copy-row {
 	display: flex;
 	min-height: 58px;
 	align-items: center;
 	gap: 16px;
 	padding: 10px 14px 10px 16px;
 }
-.settings-row + .settings-row {
+.settings-row + .settings-row,
+.settings-copy-row + .settings-copy-row {
 	border-top: 1px solid var(--line-subtle-2);
 }
-.settings-row-name {
+.settings-row-name,
+.settings-copy-name {
 	overflow: hidden;
 	color: var(--text-primary);
 	font-size: 13px;
@@ -107,7 +168,8 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.settings-row-desc {
+.settings-row-desc,
+.settings-copy-desc {
 	min-height: 16px;
 	margin-top: 2px;
 	color: var(--text-subtle);
@@ -115,11 +177,106 @@
 	line-height: 16px;
 	text-wrap: pretty;
 }
-.settings-row-control {
+.settings-row-control,
+.settings-copy-control {
 	display: flex;
 	flex-shrink: 0;
 	align-items: center;
 	gap: 8px;
+}
+/* Placeholder rows: the row's side padding, hairlines inside, each exactly as tall as the row it stands for. */
+.settings-skeleton-row {
+	padding: 0 14px 0 16px;
+}
+.settings-skeleton-row + .settings-skeleton-row {
+	border-top: 1px solid var(--line-subtle-2);
+}
+/* Beside two bars, a leading glyph sits on the name's line, where a CLI's status glyph lands. */
+.settings-skeleton-tall > [data-ui='skeleton']:first-child {
+	align-self: flex-start;
+	margin-top: 11px;
+}
+/*
+ * A placeholder group is as tall as the group was when it last loaded at this window width or near it (--settings-height,
+ * last-counts.ts). Its card fills what the head leaves, cutting off any rows taller than that, and its parts and rows
+ * share the card, none below its own height.
+ */
+.settings-group[aria-busy] {
+	height: var(--settings-height, auto);
+}
+.settings-group[aria-busy] > .settings-list {
+	display: flex;
+	min-height: 0;
+	flex: 1 1 auto;
+	flex-direction: column;
+}
+.settings-skeleton-part,
+.settings-skeleton-part > :is([data-ui='skeleton-rows'], .settings-copy-rows):not(.settings-rows-clip) {
+	display: flex;
+	flex: 1 0 auto;
+	flex-direction: column;
+}
+.settings-skeleton-part > .settings-rows-clip,
+.settings-skeleton-part :is([data-ui='skeleton-row'], .settings-copy-row) {
+	flex: 1 0 auto;
+}
+/*
+ * A placeholder row drawn to the words and control of the row it stands for (settings-skeleton.tsx), all hidden, so it
+ * wraps as that row does. Its two bars sit on the name's line and the first line under it.
+ */
+.settings-copy-words {
+	position: relative;
+	min-width: 0;
+	flex: 1 1 0%;
+}
+.settings-copy-name,
+.settings-copy-desc,
+.settings-copy-control,
+.settings-copy-number {
+	visibility: hidden;
+}
+.settings-copy-bars {
+	position: absolute;
+	top: 3px;
+	right: 0;
+	left: 0;
+}
+/* A number field's row (.settings-limit): the label wraps, and the 16px save slot and 112px number stay beside it. */
+.settings-copy-row.settings-copy-field {
+	flex-wrap: nowrap;
+}
+.settings-copy-field .settings-copy-name {
+	white-space: normal;
+}
+/* The field's grid gives the words all but 16px + 112px and two 8px gaps; the row's own 16px gap is one of those 144px. */
+.settings-copy-number {
+	width: 128px;
+	height: var(--size-control-md);
+	flex-shrink: 0;
+}
+/*
+ * A model picker before the model it names is known: a short name, an effort word and the save slot. A wider guess
+ * would wrap the line beside it on wide windows, where every loaded picker leaves it one line.
+ */
+.settings-copy-picker {
+	display: block;
+	width: 160px;
+	height: calc(var(--size-control-md) - 2px);
+}
+/* A group that failed to load: what failed over why, Try again at the right, in one row. */
+.settings-notice {
+	flex: 1;
+	gap: 16px;
+}
+.settings-notice [data-ui='status-notice-title'] {
+	font-size: 13px;
+	line-height: 18px;
+}
+.settings-notice [data-ui='status-notice-detail'] {
+	display: block;
+	margin-top: 2px;
+	font-size: 12px;
+	line-height: 16px;
 }
 /* Breaks between folders first; a name longer than the line breaks inside. */
 .settings-path {
@@ -232,4 +389,27 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	user-select: none;
+}
+
+/* ───────── A remembered list's rows before React runs: the most a list holds, cut to --rows by the counts script ───────── */
+.settings-rows-clip {
+	display: grid;
+	grid-template-rows: repeat(var(--rows), auto);
+	grid-auto-rows: 0;
+	overflow: hidden;
+}
+
+/* ───────── Under an agent CLI's placeholder row, its command: a hint bar over a one-line code block ───────── */
+.settings-skeleton-command {
+	align-items: flex-start;
+	padding: 2px 14px 12px 44px;
+}
+.settings-skeleton-command [data-ui='skeleton-row-bars'] > [data-ui='skeleton'] + [data-ui='skeleton'] {
+	height: 36px;
+	border-radius: 8px;
+}
+/* Before React runs: the most commands a list holds, cut to --rows of them. */
+.settings-commands-clip {
+	height: calc(var(--rows) * 70px);
+	overflow: hidden;
 }

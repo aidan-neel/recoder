@@ -32,13 +32,16 @@ export interface RowHandlers {
 /**
  * Everything a row offers beyond its button. A reviewed pull request can be
  * reviewed again here, since the button and `r` only start reviews that are
- * missing. A pull request with no review can open a conversation first. The
- * sample only simulates missing reviews and has nothing on the server to delete.
+ * missing. A failed review starts again only where its button does: one that
+ * would stop the same way (a rejected token, a diff over the forge's limit)
+ * offers no start. A pull request with no review can open a conversation
+ * first. The sample only simulates missing reviews and has nothing on the
+ * server to delete.
  */
 export function rowActions(entry: QueueEntry, handlers: RowHandlers): RowAction[] {
 	const { href, sample, starting } = handlers;
 	const action = entryAction(entry);
-	const startable = action.starts || (!sample && entry.state !== 'reviewing');
+	const startable = action.starts || (!sample && entry.state !== 'reviewing' && entry.state !== 'failed');
 	const actions: RowAction[] = [];
 
 	if (href) {

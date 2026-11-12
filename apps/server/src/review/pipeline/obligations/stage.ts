@@ -31,12 +31,21 @@ export async function deriveObligationsStage(run: ReviewRun): Promise<void> {
 		return;
 	}
 
+	if (!run.repo) {
+		state.derived = [];
+		state.skipped = 'the repository files could not be listed';
+		run.task(TASK_ID, LABEL, 'skipped', 'Could not list the repository files', { kind: 'inventory' });
+
+		return;
+	}
+
 	run.task(TASK_ID, LABEL, 'running', 'Scanning changed operations for risky changes', { kind: 'inventory' });
 
 	try {
 		state.derived = await deriveObligations({
 			inventory: run.inventory,
 			changeModel: run.changeModel,
+			repo: run.repo,
 			checkoutPath,
 			baseSha: run.input.revision?.mergeBaseSha || null,
 			signal: run.controller.signal

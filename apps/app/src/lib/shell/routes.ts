@@ -9,11 +9,17 @@ export const SETTINGS_HREF = '/settings/agent';
 /** The sample review's id; its queue is `/sample`. */
 const SAMPLE_ID = 'sample';
 
-/** The review id in a `/review/<id>` path, or null on any other page. */
-function reviewId(pathname: string): string | null {
+/** The review id in a `/review/<id>` path, or null on any other page and for an id whose percent escapes don't decode. */
+export function reviewId(pathname: string): string | null {
 	const match = /^\/review\/([^/]+)\/?$/.exec(pathname);
 
-	return match ? decodeURIComponent(match[1]) : null;
+	if (!match) return null;
+
+	try {
+		return decodeURIComponent(match[1]);
+	} catch {
+		return null;
+	}
 }
 
 /** The top-bar tab a path belongs to: the queue, a review's id, or none (settings). */
@@ -47,9 +53,20 @@ export function reviewHref(id: string): string {
 	return `/review/${encodeURIComponent(id)}`;
 }
 
+/** The sample review's page, which runs without the server. */
+export const SAMPLE_REVIEW_HREF = reviewHref(SAMPLE_ID);
+
 /** What the palette searches on this page, for its placeholder and the scope beside it. */
 export function paletteScope(pathname: string): 'review' | 'settings' | 'queue' {
 	if (reviewId(pathname)) return 'review';
 
 	return onSettings(pathname) ? 'settings' : 'queue';
+}
+
+/** What a click says about where it opens a link; React's mouse events and the DOM's both carry it. */
+type ClickKeys = Pick<MouseEvent, 'button' | 'metaKey' | 'ctrlKey' | 'shiftKey' | 'altKey'>;
+
+/** True for a click that follows a link in place: the main button, with no key held to open it in a new tab or window. */
+export function opensInPlace(event: ClickKeys): boolean {
+	return event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
 }

@@ -3,10 +3,13 @@
 import type { AgentStatus } from '@recoder/shared';
 import type { ReactNode } from 'react';
 
-import { OFFLINE_TEXT } from '@/lib/api/http';
+import { OFFLINE_DETAIL, OFFLINE_TEXT } from '@/lib/api/http';
+import { retryProviders } from '@/lib/settings/settings-store';
 
+import { TryAgain } from '../group-notice';
 import { CHECK_FAILED, CheckAgain } from './check-again';
 import { CommandBlock } from './command-block';
+import { PROVIDERS_FAILED } from './provider-list';
 import type { ProviderSource } from './use-provider-source';
 
 /** A short message in place of the list, with what to do about it. */
@@ -42,11 +45,11 @@ function UnreadyNotice({ manager }: { manager: AgentStatus | null }) {
 	);
 }
 
-/** Why the provider list is empty: the server is down, the check failed, or the agent isn't ready. */
+/** Why the provider list is empty: the server is down, the check or the list failed, or the agent isn't ready. */
 export function PickNotice({ source }: { source: Exclude<ProviderSource, { state: 'loading' | 'ready' }> }) {
 	if (source.state === 'offline') {
 		return (
-			<Notice lead={OFFLINE_TEXT} rest="Start it, then try again.">
+			<Notice lead={OFFLINE_TEXT} rest={OFFLINE_DETAIL}>
 				<CheckAgain variant="outline" label="Try again" />
 			</Notice>
 		);
@@ -56,6 +59,14 @@ export function PickNotice({ source }: { source: Exclude<ProviderSource, { state
 		return (
 			<Notice lead={`${CHECK_FAILED}.`} rest={source.message}>
 				<CheckAgain variant="outline" />
+			</Notice>
+		);
+	}
+
+	if (source.state === 'unlisted') {
+		return (
+			<Notice lead={PROVIDERS_FAILED} rest={source.message}>
+				<TryAgain retry={retryProviders} variant="outline" />
 			</Notice>
 		);
 	}

@@ -1,6 +1,6 @@
 /* Pieces several features share. */
 
-/* The AI-voice brief: the queue headline and page notices. */
+/* The AI-voice brief: the queue headline and the live review's lead. */
 .brief {
 	font-size: 27px;
 	line-height: 1.38;
@@ -9,12 +9,85 @@
 	text-wrap: pretty;
 }
 
-.page-notice {
+/* ───────── Boot: the frame the server paints before the app takes over ───────── */
+/* The boot bar's ⌘K keycap holds both labels; the head script marks Apple platforms. */
+html[data-platform='mac'] [data-platform-only='other'],
+html:not([data-platform='mac']) [data-platform-only='mac'] {
+	display: none;
+}
+
+/*
+ * The watchdog's notice when the app never mounted, or lost a script first: built without React,
+ * with data-boot-failed on <html>. The app removes both as it mounts; after a lost script, a route
+ * still waiting for its page keeps them until a page renders or the app's notice takes over. A
+ * border sets it off the canvas: panels carry no drop shadow.
+ */
+[data-ui='boot-notice'] {
+	position: fixed;
+	top: 50%;
+	left: 50%;
+	z-index: 200;
 	display: flex;
-	flex-direction: column;
-	gap: 24px;
-	width: 100%;
-	max-width: 640px;
-	margin: 0 auto;
-	padding: 96px 32px;
+	max-width: calc(100vw - 32px);
+	align-items: center;
+	gap: 16px;
+	padding: 10px 10px 10px 16px;
+	border: 1px solid var(--line-menu);
+	border-radius: 12px;
+	background-color: var(--bg-menu);
+	color: var(--text-secondary);
+	font-size: 13px;
+	line-height: 1.4;
+	transform: translate(-50%, -50%);
+}
+[data-ui='boot-notice'] p {
+	margin: 0;
+}
+[data-ui='boot-notice'] button {
+	height: calc(var(--size-control-md) - 2px);
+	flex-shrink: 0;
+	padding: 0 12px;
+	border-radius: 8px;
+	background-color: var(--primary);
+	color: var(--on-primary);
+	font: inherit;
+	font-size: var(--font-size-button);
+	font-weight: 500;
+}
+[data-ui='boot-notice'] button:hover {
+	filter: brightness(1.08);
+}
+[data-ui='boot-notice'] button:focus-visible {
+	box-shadow: var(--focus-ring);
+	outline: none;
+}
+/* Under the notice the page's skeleton steps aside, so nothing promises a page that is not coming. */
+html[data-boot-failed] [data-ui='page-skeleton'] {
+	display: none;
+}
+
+/* ───────── Skeleton timing (skeleton-handoff.ts, skeleton-floor.ts) ───────── */
+/*
+ * A full page load holds its skeletons twice the kit's wait: its first paint comes before the page has asked
+ * for its data. Only the holds read it, so nothing else timed from --skeleton-delay waits longer.
+ */
+html[data-boot-wait] :is([data-ui='skeleton'], [data-ui='skeleton-hold']) {
+	--skeleton-delay: 240ms;
+}
+/*
+ * Content that replaced a skeleton the person had only just seen waits unseen, out of flow in its parent's
+ * content box, until the skeleton has shown long enough to read. It stays laid out and focusable meanwhile,
+ * and keeps its own transitions off for a frame as it comes back, so it lands with no fade.
+ */
+[data-skeleton-floor-host] {
+	position: relative !important;
+}
+[data-skeleton-floor='waiting'] {
+	position: absolute !important;
+	inset: var(--skeleton-floor-inset, 0) !important;
+	opacity: 0 !important;
+	pointer-events: none !important;
+}
+[data-skeleton-floor] {
+	transition: none !important;
 }

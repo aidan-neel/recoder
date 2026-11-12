@@ -2,7 +2,7 @@ import { MAX_FINDING_MESSAGE_CHARS, type DiscussFinding } from '@recoder/shared'
 
 import { where } from '../review/labels';
 import type { Selection } from '../review/review-store';
-import type { Decision, Receipt, Surface } from '../review/surface';
+import { quietedTopicOf, type Decision, type Receipt, type Surface } from '../review/surface';
 
 /** What a question is about: a decision (a finding or an open question) or something checked. */
 export type AskItem =
@@ -41,7 +41,9 @@ export function askItemOf(surface: Surface | null, selection: Selection): AskIte
 	if (!surface) return null;
 
 	if (selection.kind === 'decision') {
-		const decision = surface.decisions.find((candidate) => candidate.id === selection.id);
+		const decision =
+			surface.decisions.find((candidate) => candidate.id === selection.id) ??
+			quietedTopicOf(surface, selection.id)?.decisions.find((candidate) => candidate.id === selection.id);
 
 		return decision ? { key: `decision:${decision.id}`, kind: 'decision', decision } : null;
 	}

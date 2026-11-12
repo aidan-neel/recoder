@@ -2,18 +2,24 @@
 
 import type { AgentProvider, AgentStatus } from '@recoder/shared';
 import { Button, ConfirmDialog } from '@recoder/ui';
-import { Plus } from 'lucide-react';
 import { AnimatePresence } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 
 import { failureText } from '@/lib/api/http';
 import { settingsApi } from '@/lib/api/settings';
 import { describeProvider } from '@/lib/settings/provider-options';
-import { useSettings } from '@/lib/settings/settings-store';
+import { retryProviders, useSettings } from '@/lib/settings/settings-store';
 import { undoToast } from '@/lib/shell/notify';
 
+import { FailedGroup, FailedRow } from '../group-notice';
 import { SettingsGroup, SettingsRow } from '../settings-group';
+import { AddProvider } from './add-provider';
 import { Reveal } from './reveal';
+
+/** How a failed read of the providers reads, in the Providers group and in the provider modal. */
+export const PROVIDERS_FAILED = 'Couldn’t load the providers.';
+
+const TITLE = 'Providers';
 
 interface ProviderListProps {
 	/** The agent that holds the keys and sign-ins (OpenCode). */
@@ -89,10 +95,13 @@ function ProviderRow({
  * and sign-ins can be disconnected, after a confirm; a provider that arrives
  * or leaves unfolds or folds in place. After a disconnect, focus moves to the
  * next row's control, or to Add provider when none is left, so the keyboard
- * keeps its place.
+ * keeps its place. A read of the providers that fails says so in place, with
+ * a Try again that reads them alone: instead of the rows when none ever
+ * loaded, or above the last good rows after a refresh.
  */
 export function ProviderList({ manager, onAdd }: ProviderListProps) {
 	const providers = useSettings((state) => state.providers);
+	const failure = useSettings((state) => state.providersError);
 	const connected = providers.filter((provider) => provider.connected);
 	const [confirmOpen, setConfirmOpen] = useState(false);
 
@@ -123,17 +132,24 @@ export function ProviderList({ manager, onAdd }: ProviderListProps) {
 		refocus.current = target;
 	}
 
-	const add = (
-		<Button variant="ghost" data-provider-control="add" onClick={() => onAdd()}>
-			<Plus aria-hidden />
-			Add provider
-		</Button>
-	);
+	if (failure && providers.length === 0) {
+		return <FailedGroup title={TITLE} what={PROVIDERS_FAILED} reason={failure} retry={retryProviders} />;
+	}
 
 	return (
 		<>
-			<SettingsGroup title="Providers" action={connected.length ? add : null}>
+			<SettingsGroup
+				title={TITLE}
+				group="providers"
+				transient={Boolean(failure)}
+				action={connected.length ? <AddProvider onAdd={() => onAdd()} /> : null}
+			>
 				<AnimatePresence initial={false}>
+					{failure ? (
+						<Reveal key="failed" className="provider-item">
+							<FailedRow what={PROVIDERS_FAILED} reason={failure} retry={retryProviders} />
+						</Reveal>
+					) : null}
 					{connected.map((provider) => (
 						<Reveal key={provider.id} className="provider-item">
 							<ProviderRow provider={provider} manager={manager} onRemove={askRemove} onAdd={onAdd} />
@@ -142,10 +158,7 @@ export function ProviderList({ manager, onAdd }: ProviderListProps) {
 					{connected.length === 0 ? (
 						<Reveal key="empty" className="provider-item">
 							<SettingsRow name="No providers yet" description="Add one to pick models for reviews">
-								<Button variant="outline" data-provider-control="add" onClick={() => onAdd()}>
-									<Plus aria-hidden />
-									Add provider
-								</Button>
+								<AddProvider variant="outline" onAdd={() => onAdd()} />
 							</SettingsRow>
 						</Reveal>
 					) : null}

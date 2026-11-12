@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { cn } from '@recoder/ui';
+import { cn } from '@recoder/ui/cn';
 
 interface BriefProps {
 	/** The sentence that matters, in full ink. */

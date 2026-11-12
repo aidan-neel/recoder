@@ -1,5 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
+import { reviewListItem } from '@recoder/shared';
 import { createReviewSession, queueReview, startReviewSession } from '../../commands/pipeline';
 import { continueReviewSession, replayReviewSession } from '../../commands/rerun';
 import { getReviewMetrics, type StoredMetrics } from '../../models/metrics';
@@ -7,7 +8,6 @@ import { isReviewConfigured } from '../../models/models';
 import { cancelReviewChats, prepareDraftSession } from '../../review/chat/review-chat';
 import { clearReviewEvents, emitReviewEvent } from '../../review/session/events';
 import { getReviewControl, type ReviewControl } from '../../review/session/review-control';
-import { isTerminalTask } from '../../review/session/task-state';
 import {
 	db,
 	reviewCheckpoints,
@@ -61,25 +61,22 @@ function sessionAction(c: Context, start: (id: string) => unknown, fallback: str
 	}
 }
 
-/** Every review without its context record, which only the single-review route serves: the list is polled and the record is large. */
-app.get('/', (c) => c.json(db.reviews.list().map(({ context: _context, ...review }) => review)));
+/**
+ * Every review without its context record, which only the single-review route
+ * serves: the list is polled and the record is large. `?view=summary` lists
+ * each as a `ReviewListItem` instead, with findings cut to their ids and
+ * severities, which is all a queue or a picker reads.
+ */
+app.get('/', (c) => {
+	const reviews = db.reviews.list();
 
-/** Compact live progress per review, for the home dashboard's recent-session list. */
-app.get('/progress-summaries', (c) => {
-	const summaries: Record<string, { tasksDone: number; tasksTotal: number; agents: number }> = {};
+	if (c.req.query('view') === 'summary') return c.json(reviews.map(reviewListItem));
 
-	for (const progress of reviewProgress.list()) {
-		const tasks = Object.values(progress.tasks ?? {});
-
-		summaries[progress.id] = {
-			tasksTotal: tasks.length,
-			tasksDone: tasks.filter(isTerminalTask).length,
-			agents: (progress.assignments ?? []).filter((assignment) => assignment.status === 'running').length
-		};
-	}
-
-	return c.json(summaries);
+	return c.json(reviews.map(({ context: _context, ...review }) => review));
 });
+
+/** Task and reviewer counts per review still queued or running, for list rows. */
+app.get('/progress-summaries', (c) => c.json(reviewProgress.summaries()));
 
 app.get('/:id/metrics', (c) => {
 	c.header('Cache-Control', 'no-store');

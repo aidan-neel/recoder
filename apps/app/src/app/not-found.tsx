@@ -1,4 +1,4 @@
-import { Button } from '@recoder/ui';
+import { Button } from '@recoder/ui/button';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 

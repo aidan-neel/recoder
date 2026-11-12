@@ -17,7 +17,7 @@ This page traces one review from trigger to published findings and feedback. It 
 | 9   | Validation and repair      | `validateCandidate`, `repairCandidate`              | `apps/server/src/review/pipeline/consolidate.ts`           | `CandidateFinding`, `CandidateRepair`         |
 | 10  | Verification               | `startVerification`, `finishVerification`           | `apps/server/src/review/pipeline/harness/verification.ts`  | `FindingVerification`, `BaseComparisonResult` |
 | 11  | Consolidation, publication | `consolidate`, `completeReview`                     | `apps/server/src/review/pipeline/harness/consolidation.ts` | `Finding`, `ReviewFunnel`                     |
-| 12  | Feedback                   | `recordDismissal`, `listDismissals`                 | `apps/server/src/review/guidelines/learned/dismissals.ts`  | `Dismissal`                                   |
+| 12  | Feedback                   | `recordDismissal`, `recordVote`, `withTopics`       | `apps/server/src/review/guidelines/learned/dismissals.ts`  | `Dismissal`, `Vote`, `FindingTopic`           |
 
 The entry file is the first function's file. Each stage section names the files of the others.
 
@@ -25,9 +25,9 @@ The adaptive harness is `runAdaptiveReview` in `apps/server/src/review/pipeline/
 
 Execution order inside the harness, with overlaps:
 
-1. `createRun` builds the inventory and loads dismissals. `understandChanges` reads developer instructions and repo guidelines.
+1. `createRun` builds the inventory and loads dismissals and topic tallies. `understandChanges` reads developer instructions and repo guidelines.
 2. `startSetup` starts package installs. `cutUnits` cuts units and assigns lenses.
-3. `changeModelStage`, then `intentStage` (and `deriveObligationsStage` when obligations are on), run in parallel with `ruleLedgerStage`.
+3. `repoInventoryStage`, then `changeModelStage`, then `intentStage` (and `deriveObligationsStage` when obligations are on), run in parallel with `ruleLedgerStage`.
 4. The harness `prepareSandbox` waits for setup and starts baseline checks. `startVerification` opens the verify queue.
 5. `detectorStage` and the diagnostics run in the background. The unit pool runs reviewers. Verifiers start as candidates arrive.
 6. `retryFailedUnits`, then `runSubagents`. Then the harness waits for detectors, drains verification and waits for checks (`checksInTime`).
@@ -96,6 +96,9 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
 
 - `buildInventory` turns the diff into a `ReviewInventory`. Both are in `apps/server/src/review/pipeline/inventory.ts`.
 - Each file gets a classification and, when excluded, an `excludeReason`. The inventory also says whether the change is executable or docs-only.
+- `repoInventoryStage` sets `run.repo` to a `RepoInventory`: every regular file at the PR head, with its blob id, size, classification and package. It is in `apps/server/src/review/pipeline/harness/repo-inventory-stage.ts`; `loadRepoInventory` is in `apps/server/src/review/pipeline/repo-inventory/repo-inventory.ts`. It reads git objects at the head sha, not the work tree. The change model, obligations and detectors read it, so the repo is listed once per review. `run.repo` stays null without a checkout or when git fails, and the change model and obligations are then skipped.
+- `repoMap` in `apps/server/src/review/pipeline/repo-inventory/repo-map.ts` turns the inventory into a short layout for reviewer prompts: packages by manifest, their size, main languages and test location, and the folders the change touches.
+- `parseRepoFiles` in `apps/server/src/review/pipeline/change-model/parsed-files.ts` parses repo files for examples and shape baselines. It keeps each file's declarations in the fact cache, keyed by parser version, blob id and path. A later review of any PR in the repo reads an unchanged file back instead of reading and parsing it again.
 - `changeModelStage` sets `run.changeModel`. It is in `apps/server/src/review/pipeline/harness/change-model-stage.ts`.
 - It calls `buildChangeModel` and gets a `ChangeModel`, defined in `apps/server/src/review/pipeline/change-model/types.ts`. The model is null without a checkout or on error.
 - Drops: none here. Excluded paths cause a later `location` drop.
@@ -107,7 +110,8 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
 ## 4. Intent
 
 - `intentStage` sets `run.intent` to a `ChangeIntent` or null. It is in `apps/server/src/review/pipeline/harness/intent-stage.ts`.
-- `gatherHistory` collects the recent commits that touched each modified symbol and the pull requests they landed in.
+- `gatherHistory` collects the recent commits that touched each modified symbol and the pull requests they landed in. `prsForCommit` in `apps/server/src/forge/pr-context.ts` keeps an answer in the fact cache when every PR in it is merged, so later reviews do not ask the host again.
+- `relatedReviewSources` in `apps/server/src/forge/context/related-reviews.ts` adds `related-review` sources: findings from Recoder's reviews of the earlier PRs that history names (`pr:#N`), on files this PR changes. Only the latest passed review of each PR from before the merge base's commit time counts, so a rerun sees the same sources. Quieted findings stay out. At most `CONTEXT_CAPS.relatedReviews`.
 - `distillIntent` turns the gathered sources into goals, constraints, non-goals, observed changes and open questions, plus a brief per unit.
 - `ChangeIntent` and `GatheredContext` are defined in `apps/server/src/review/pipeline/intent/types.ts`.
 - Each unit brief has a status of included, partial or omitted. An omitted brief records a `BriefOmission`: size, time, budget or model.
@@ -264,7 +268,16 @@ A `pre-existing` result adds `SAME_ON_BASE` text to the reason. It also stops a 
 - Deleting `/api/reviews/:id/dismissals/:findingId` removes it with `removeDismissal`.
 - The store is `apps/server/src/review/guidelines/learned/dismissals.ts`. It keeps at most `MAX_DISMISSALS_PER_REPO` per repository in the server data directory. The `Dismissal` type is defined there too.
 - On the next review, `createRun` loads them with `listDismissals`. `validateCandidate` drops a match as `dismissed`, and lens prompts list them through `dismissalsBlock`.
+- Votes count decisions toward a finding's topic (`FindingTopic` in `packages/shared/src/findings.ts`): the ledger rule it cites, keyed by a hash of the rule's text (`ruleTopicId`), else its smell, else its category. The store is `apps/server/src/review/guidelines/learned/votes.ts`, one vote per finding fingerprint, at most `MAX_VOTES_PER_REPO` per repository.
+  - A dismissal records a `dismissed` vote; restoring it removes that vote.
+  - `PUT /api/reviews/:id/useful/:findingId` records a `useful` vote when a person accepts or sends a finding; `DELETE` removes only a `useful` vote. The routes are in `apps/server/src/routes/reviews/feedback.ts`.
+  - `createRun` loads `topicTallies`. `ruleLedgerStage` orders the ledger with `rankRules`: rules people act on first, rules they keep dismissing last. `ledgerBlock` notes a rule's `standing` in the quality lens prompts. Rule ids stay the same.
+  - `confirmedFindings` sets each finding's topic with `withTopics`. A topic with at least 3 dismissals and at least 4 dismissals per useful vote (`isQuietTopic`) marks its findings `quieted`, unless a run proved the finding. Quieted findings are verified and stored like the rest. The summary, the review list (`reviewListItem`, `reviewTally`) and past-review context leave them out, and the app lists them apart.
+  - `DELETE /api/reviews/:id/quieted/:topicId` turns a topic back on: it forgets the topic's dismissed votes and clears `quieted` on the review's findings of that topic.
 - Tests:
   - `apps/server/tests/routes/reviews/dismissals.test.ts`
+  - `apps/server/tests/routes/reviews/feedback.test.ts`
+  - `apps/server/tests/review/guidelines/learned/votes.test.ts`
+  - `apps/server/tests/review/guidelines/learned/topics.test.ts`
   - `apps/server/tests/review/guidelines/learned/dismissals.test.ts`
   - `apps/server/tests/review/pipeline/harness-dismissals.test.ts`

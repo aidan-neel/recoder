@@ -1,6 +1,6 @@
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serverDataDir } from '../../../util/data-dir.js';
+import { readJsonObject, writeJsonAtomically } from '../../../util/json-file.js';
 
 /** A finding a person dismissed, remembered so a later review of the same repository does not report it again. */
 export interface Dismissal {
@@ -29,22 +29,11 @@ function tableFile(): string {
 
 /** The saved table; a missing or unreadable file reads as empty, since losing it only means findings may repeat. */
 function readTable(): Table {
-	try {
-		const parsed: unknown = JSON.parse(readFileSync(tableFile(), 'utf8'));
-
-		return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Table) : {};
-	} catch {
-		return {};
-	}
+	return readJsonObject(tableFile()) as Table;
 }
 
-/** Writes through a temp file, so a crash never leaves half a table. */
 function writeTable(table: Table): void {
-	const file = tableFile();
-	const temp = `${file}.${process.pid}.tmp`;
-
-	writeFileSync(temp, JSON.stringify(table));
-	renameSync(temp, file);
+	writeJsonAtomically(tableFile(), table);
 }
 
 /** A repository's dismissals, newest first. */

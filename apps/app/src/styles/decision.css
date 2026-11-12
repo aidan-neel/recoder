@@ -215,6 +215,40 @@
 }
 
 /* ───────── Decision bar: floats over the bottom of the reading pane ───────── */
+/*
+ * The bar stays mounted and switches on data-state: it fades in with an 8px rise (140ms, ease-out) and
+ * sinks back faster as it leaves (80ms, ease-in), then turns hidden so nothing in it takes focus or clicks.
+ * Reduced motion keeps an 80ms fade with no rise, as the kit's motion presets do.
+ */
+.decide-layer {
+	transition:
+		opacity var(--dur-swap) var(--ease-out),
+		translate var(--dur-swap) var(--ease-out);
+}
+.decide-layer[data-state='hidden'] {
+	visibility: hidden;
+	opacity: 0;
+	translate: 0 8px;
+	transition:
+		opacity var(--dur-press) cubic-bezier(0.32, 0, 0.67, 0),
+		translate var(--dur-press) cubic-bezier(0.32, 0, 0.67, 0),
+		visibility 0s var(--dur-press);
+}
+.decide-layer[data-state='hidden'] .decide-bar {
+	pointer-events: none;
+}
+/* Outranks the base reduced-motion snap (a universal selector), so the fade keeps its 80ms. */
+@media (prefers-reduced-motion: reduce) {
+	.decide-layer {
+		transition: opacity var(--dur-press) var(--ease-out) !important;
+	}
+	.decide-layer[data-state='hidden'] {
+		translate: none;
+		transition:
+			opacity var(--dur-press) cubic-bezier(0.32, 0, 0.67, 0),
+			visibility 0s var(--dur-press) !important;
+	}
+}
 .decide-fade {
 	position: absolute;
 	right: 0;
@@ -246,6 +280,39 @@
 		display: none;
 	}
 }
+/*
+ * The bar's two faces (the buttons, or what was decided) share one grid cell and swap in wait mode: the
+ * old face fades out with a 2px lift (80ms, ease-in), and the new one fades in with a 2px rise only after
+ * it (140ms, ease-out, behind a delay as long as the leave), so the two never show at once. Transitions
+ * start from where a face is, so a fast run of j or k never flashes a face back in. Reduced motion drops
+ * the delay, and the base rule makes both a snap.
+ */
+.decide-face {
+	grid-area: 1 / 1;
+	min-width: 0;
+	transition:
+		opacity var(--dur-swap) var(--ease-out) var(--dur-press),
+		translate var(--dur-swap) var(--ease-out) var(--dur-press);
+}
+@starting-style {
+	.decide-face[data-state='in'] {
+		opacity: 0;
+		translate: 0 2px;
+	}
+}
+.decide-face[data-state='out'] {
+	pointer-events: none;
+	opacity: 0;
+	translate: 0 -2px;
+	transition:
+		opacity var(--dur-press) cubic-bezier(0.32, 0, 0.67, 0),
+		translate var(--dur-press) cubic-bezier(0.32, 0, 0.67, 0);
+}
+@media (prefers-reduced-motion: reduce) {
+	.decide-face {
+		transition-delay: 0ms;
+	}
+}
 
 /* ───────── Handoff ───────── */
 [data-ui='textarea'].handoff-note {
@@ -263,4 +330,35 @@
 .handoff-prompt [data-ui='code-block-content'] {
 	max-height: 220px;
 	color: var(--text-secondary);
+}
+
+/* ───────── Unsaved: a dismissal or restore the server doesn't have yet ───────── */
+/* The kicker's Try again overhangs the 20px kicker line by 2px each way, so showing it moves nothing. */
+[data-ui='button'].unsaved-retry {
+	height: 24px;
+	margin-block: -2px;
+	padding-inline: 6px;
+	font-size: 12.5px;
+}
+/* The rail's mark sits at the end of the row's location line (the row's 7px padding up from its foot), which makes room. */
+.rail-unsaved {
+	position: absolute;
+	right: 10px;
+	bottom: 7px;
+	display: grid;
+	height: 1lh;
+	place-items: center;
+	color: var(--text-faint);
+	font-size: 11px;
+}
+.rail-unsaved svg {
+	width: 12px;
+	height: 12px;
+}
+.rail-row:has(> .rail-unsaved) .rail-meta {
+	padding-right: 18px;
+}
+/* A quieted finding's note sits under its location, before the body. */
+.quiet-note {
+	margin-top: 14px;
 }

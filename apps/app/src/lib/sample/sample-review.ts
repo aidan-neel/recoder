@@ -10,6 +10,47 @@ import type {
 
 const AT = '2026-10-13T09:12:00.000Z';
 
+/** A repository rule people on the sample's repo keep marking not an issue, so its findings are quieted. */
+const SETUP_RULE = {
+	id: 'rule:5c1e9a07',
+	label: 'Create services in the app’s setup, not when a module loads.',
+	quieted: true
+} as const;
+
+/** Findings of {@link SETUP_RULE}, listed apart under Quieted. */
+const QUIETED: Finding[] = [
+	{
+		id: 'sample-q1',
+		title: 'The limiter is built when the module loads',
+		file: 'src/rate-limit/middleware.ts',
+		line: 6,
+		endLine: 9,
+		severity: 'info',
+		category: 'repo-rule',
+		kind: 'quality',
+		topic: SETUP_RULE,
+		symbol: 'limiter',
+		message:
+			'`new Limiter(...)` runs at import time, so tests that import the middleware share one bucket map. The repo rule asks for services to be created in `createApp`.',
+		verification: { status: 'verified', method: 'rule', reason: 'docs/conventions.md:12 states the rule.' }
+	},
+	{
+		id: 'sample-q2',
+		title: 'The usage store connects to Redis on import',
+		file: 'src/rate-limit/middleware.ts',
+		line: 11,
+		endLine: 11,
+		severity: 'info',
+		category: 'repo-rule',
+		kind: 'quality',
+		topic: SETUP_RULE,
+		symbol: 'usage',
+		message:
+			'`new UsageStore(config.redisUrl)` opens a client as soon as the module is imported, before the app has read its config. The repo rule asks for services to be created in `createApp`.',
+		verification: { status: 'verified', method: 'rule', reason: 'docs/conventions.md:12 states the rule.' }
+	}
+];
+
 const FINDINGS: Finding[] = [
 	{
 		id: 'sample-f1',
@@ -20,6 +61,7 @@ const FINDINGS: Finding[] = [
 		severity: 'error',
 		category: 'security',
 		kind: 'bug',
+		topic: { id: 'category:security', label: 'Security' },
 		symbol: 'rateLimit',
 		message:
 			'Every request missing `x-tenant-id` counts against a single `anonymous` bucket. Sign-up and login are unauthenticated, so all clients share 100 requests a minute there, and one script can lock everyone out of signing in.',
@@ -62,6 +104,7 @@ const FINDINGS: Finding[] = [
 		severity: 'warning',
 		category: 'correctness',
 		kind: 'bug',
+		topic: { id: 'category:correctness', label: 'Correctness' },
 		symbol: 'Limiter.take',
 		message:
 			'Refill adds `elapsed × rate` without capping at `capacity`. A tenant idle for an hour comes back with 6,000 tokens and can burst sixty times past its limit.',
@@ -115,6 +158,7 @@ const FINDINGS: Finding[] = [
 		category: 'convention',
 		kind: 'quality',
 		smell: 'magic-value',
+		topic: { id: 'smell:magic-value', label: 'Magic value' },
 		symbol: 'limiter',
 		message:
 			'The PR adds `config.rateLimit.windowMs`, but the middleware divides by a hard-coded `60`. Changing the window in config would silently do nothing.',
@@ -249,7 +293,7 @@ const REPORT: BriefQuestionReport = {
 	questions: QUESTIONS
 };
 
-/** A finished review of an agent-written PR: three findings, one open question, five things checked. */
+/** A finished review of an agent-written PR: three findings, one open question, five things checked, two quieted findings. */
 export const SAMPLE_REVIEW: Review = {
 	id: 'sample',
 	repoId: 'sample-repo',
@@ -258,7 +302,7 @@ export const SAMPLE_REVIEW: Review = {
 	status: 'passed',
 	summary:
 		'Adds per-tenant rate limiting to the public API: a token bucket of 100 requests a minute for each tenant, a `429` with `Retry-After` when it runs out, and per-minute usage counts in Redis. Health checks stay unlimited.',
-	findings: FINDINGS,
+	findings: [...FINDINGS, ...QUIETED],
 	questions: REPORT,
 	runs: [],
 	source: 'github',

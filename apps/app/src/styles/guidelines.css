@@ -1,7 +1,8 @@
 /* guidelines */
 
 /* ───────── Rows: a layer and its editor share one card row, split from the next by a hairline ───────── */
-.guidelines-item + .guidelines-item {
+/* The hairline sits inside the row, as between plain settings rows, so every row is 58px like its placeholder. */
+.guidelines-item + .guidelines-item > .settings-row {
 	border-top: 1px solid var(--line-subtle-2);
 }
 /* The preview is one line; a rule too long for it ends in an ellipsis. */
@@ -30,14 +31,6 @@
 }
 .guidelines-pill-link:focus-visible {
 	box-shadow: var(--focus-ring);
-}
-.guidelines-empty {
-	min-width: 0;
-	flex: 1;
-	color: var(--text-muted);
-	font-size: 13px;
-	line-height: 18px;
-	text-wrap: pretty;
 }
 
 /* ───────── Editor: the text, a note, then the bar ───────── */

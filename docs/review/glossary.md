@@ -14,6 +14,10 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Inventory.** The changed files and their hunks, built from the diff. Type `ReviewInventory` in `apps/server/src/review/pipeline/inventory.ts`.
 
+**Repo inventory.** Every regular file at the PR head, with its blob id, listed once per review. Type `RepoInventory` in `apps/server/src/review/pipeline/repo-inventory/repo-inventory.ts`. Its reviewer summary is the repo map (`apps/server/src/review/pipeline/repo-inventory/repo-map.ts`).
+
+**Fact cache.** Facts that never change once known, kept across reviews and PRs in `<data dir>/cache/facts.db`: parsed declarations per blob and merged commit-to-PR answers. A fact unused for 14 days is dropped. Code in `apps/server/src/util/fact-cache.ts`.
+
 **Lens.** A fixed review procedure with its own categories. Type `Lens`, ids in `LensId`, in `apps/server/src/review/pipeline/lenses/types.ts`. The lenses are `correctness`, `security`, `concurrency`, `api-contract`, `performance`, `rules`, `conventions`, `readability`. A lens drops categories it does not own.
 
 **Assignment.** One reviewer's job: one unit under one lens, or one subagent. Type `ReviewAssignment` in `packages/shared/src/progress.ts`.

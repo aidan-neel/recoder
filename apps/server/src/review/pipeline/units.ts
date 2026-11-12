@@ -1,4 +1,4 @@
-import type { DiffLine, ReviewAssignment } from '@recoder/shared';
+import { byCodePoint, type DiffLine, type ReviewAssignment } from '@recoder/shared';
 import { REVIEW_POLICY } from '../session/review-policy.js';
 import type { InventoryFile, ReviewInventory } from './inventory.js';
 import type { LensId } from './lenses/types.js';
@@ -55,11 +55,6 @@ function directoryOf(path: string): string {
 	const slash = path.lastIndexOf('/');
 
 	return slash < 0 ? '.' : path.slice(0, slash);
-}
-
-/** Plain code-point order, so the partition doesn't depend on the machine's locale. */
-function byCodePoint(a: string, b: string): number {
-	return a < b ? -1 : a > b ? 1 : 0;
 }
 
 /** "src/a.ts", "src/review", or "src/review and 2 more folders". */

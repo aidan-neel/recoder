@@ -1,10 +1,10 @@
 'use client';
 
-import { DURATION, EASE_IN, EASE_OUT } from '@recoder/ui';
+import { DURATION, EASE_IN, EASE_OUT, useMotionVariants } from '@recoder/ui';
 import { motion, type Variants } from 'motion/react';
 import type { ReactNode, Ref } from 'react';
 
-/** A new message rises 4px and fades in; one taken back fades out fast. */
+/** A new message rises 4px and fades in; one taken back fades out fast. Reduced motion keeps the fade alone. */
 const RISE: Variants = {
 	initial: { opacity: 0, y: 4 },
 	animate: { opacity: 1, y: 0, transition: { duration: DURATION.swap, ease: EASE_OUT } },
@@ -22,8 +22,10 @@ interface ChatRowProps {
  * entries there at first paint stay still and later ones rise in.
  */
 export function ChatRow({ children, className, ref }: ChatRowProps) {
+	const rise = useMotionVariants(RISE);
+
 	return (
-		<motion.div ref={ref} variants={RISE} initial="initial" animate="animate" exit="exit" className={className}>
+		<motion.div ref={ref} variants={rise} initial="initial" animate="animate" exit="exit" className={className}>
 			{children}
 		</motion.div>
 	);

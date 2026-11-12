@@ -66,8 +66,8 @@ interface ProviderFlowViewProps {
 }
 
 /**
- * The modal's content, mounted fresh each time it opens. It loads Settings
- * itself, so it works from first run as well as from Settings.
+ * The modal's content, mounted fresh each time it opens. It loads the agents
+ * and their providers itself, so it works from first run as well as from Settings.
  */
 export function ProviderFlowView({ providerId, close, onSending }: ProviderFlowViewProps) {
 	const [preset] = useState(() =>
@@ -77,7 +77,7 @@ export function ProviderFlowView({ providerId, close, onSending }: ProviderFlowV
 	const flow = useProviderFlow(preset, close);
 
 	useEffect(() => {
-		void useSettings.getState().load();
+		void useSettings.getState().loadAgents();
 	}, []);
 
 	useEffect(() => {

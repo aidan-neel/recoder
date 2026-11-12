@@ -8,6 +8,8 @@ import type { KeyboardEvent, MouseEvent, PointerEvent, Ref } from 'react';
 import { useDrafts } from '@/lib/ask/drafts';
 import { focusComposer } from '@/lib/ask/focus-request';
 
+import { useTranscriptHeld } from './chat-scroll';
+
 interface ChatComposerProps {
 	/** The conversation whose draft the field holds (from `draftKey`), so text stays with what it was written for. */
 	draftKey: string;
@@ -45,7 +47,9 @@ function focusField(event: PointerEvent<HTMLDivElement>): void {
  * but Send turns into Stop until the reply ends; pressing Stop puts focus
  * back in the field, since the button leaves with the reply. The draft lives
  * in the drafts store and only this box reads it, so typing leaves the
- * transcript be.
+ * transcript be. In the ask column's opening frame (`TranscriptHold`) only
+ * the field renders, so focus lands in it at once, and the button joins a
+ * frame later in the space its slot keeps.
  */
 export function ChatComposer({
 	draftKey,
@@ -60,6 +64,7 @@ export function ChatComposer({
 	textareaRef
 }: ChatComposerProps) {
 	const swap = useMotionVariants(swapMotion);
+	const held = useTranscriptHeld();
 	const value = useDrafts((state) => state.drafts[draftKey] ?? '');
 	const setDraft = useDrafts((state) => state.setDraft);
 	const canSend = !disabled && !replying && value.trim().length > 0;
@@ -100,41 +105,43 @@ export function ChatComposer({
 				disabled={disabled}
 			/>
 			<span className="chat-composer-action">
-				<AnimatePresence initial={false} mode="popLayout">
-					{showStop ? (
-						<motion.span key="stop" variants={swap} initial="initial" animate="animate" exit="exit">
-							<Tooltip content="Stop">
-								<Button
-									variant="secondary"
-									size="icon"
-									className="rounded-full bg-hover hover:bg-selected"
-									aria-label="Stop the reply"
-									disabled={stopping}
-									onClick={stop}
-								>
-									{stopping ? <Spinner size={13} /> : <span className="chat-stop-glyph" aria-hidden />}
-								</Button>
-							</Tooltip>
-						</motion.span>
-					) : (
-						<motion.span key="send" variants={swap} initial="initial" animate="animate" exit="exit">
-							<Tooltip content="Send" shortcut="Enter">
-								<span className="inline-flex">
+				{held ? null : (
+					<AnimatePresence initial={false} mode="popLayout">
+						{showStop ? (
+							<motion.span key="stop" variants={swap} initial="initial" animate="animate" exit="exit">
+								<Tooltip content="Stop">
 									<Button
-										variant={canSend ? 'primary' : 'ghost'}
+										variant="secondary"
 										size="icon"
-										className="rounded-full"
-										aria-label="Send"
-										disabled={!canSend}
-										onClick={send}
+										className="rounded-full bg-hover hover:bg-selected"
+										aria-label="Stop the reply"
+										disabled={stopping}
+										onClick={stop}
 									>
-										<ArrowUp strokeWidth={2} aria-hidden />
+										{stopping ? <Spinner size={13} /> : <span className="chat-stop-glyph" aria-hidden />}
 									</Button>
-								</span>
-							</Tooltip>
-						</motion.span>
-					)}
-				</AnimatePresence>
+								</Tooltip>
+							</motion.span>
+						) : (
+							<motion.span key="send" variants={swap} initial="initial" animate="animate" exit="exit">
+								<Tooltip content="Send" shortcut="Enter">
+									<span className="inline-flex">
+										<Button
+											variant={canSend ? 'primary' : 'ghost'}
+											size="icon"
+											className="rounded-full"
+											aria-label="Send"
+											disabled={!canSend}
+											onClick={send}
+										>
+											<ArrowUp strokeWidth={2} aria-hidden />
+										</Button>
+									</span>
+								</Tooltip>
+							</motion.span>
+						)}
+					</AnimatePresence>
+				)}
 			</span>
 		</div>
 	);

@@ -1,12 +1,13 @@
 import type { DiffHunk } from '@recoder/shared';
 import type { InventoryFile, ReviewInventory } from '../inventory.js';
+import { repoPaths, type RepoInventory } from '../repo-inventory/repo-inventory.js';
 import { changedAspects, docComment } from './dependence.js';
 import { findExamples } from './examples.js';
 import { languageFor } from './languages.js';
 import { repoBaselines } from './metrics.js';
 import { hunkLines, innermost, type HunkLines } from './owners.js';
 import { findUsage } from './references.js';
-import { byCodePoint, readAt, readTracked, trackedFiles } from './repo.js';
+import { byCodePoint, readAt, readTracked } from './repo.js';
 import { symbolsOf, type ParsedSymbol } from './symbols.js';
 import type { ChangedSymbol, ChangeModel } from './types.js';
 
@@ -15,6 +16,8 @@ export { symbolAt, unitContext, unitContextParts } from './lookup.js';
 /** What the change model is built from. */
 interface ChangeModelInput {
 	inventory: ReviewInventory;
+	/** Every file at the PR head; references, tests, examples and baselines are searched among them. */
+	repo: RepoInventory;
 	/** The PR head checkout, a git work tree. */
 	checkoutPath: string;
 	signal: AbortSignal;
@@ -200,9 +203,9 @@ function bySymbolOrder(a: Owned, b: Owned): number {
  * diff always give the same model.
  */
 export async function buildChangeModel(input: ChangeModelInput): Promise<ChangeModel> {
-	const { inventory, checkoutPath, signal } = input;
+	const { inventory, repo, checkoutPath, signal } = input;
 	const selection = input.callerSelection ?? process.env.RECODER_CALLER_SELECTION === '1';
-	const tracked = await trackedFiles(checkoutPath, signal);
+	const tracked = repoPaths(repo);
 	const trackedSet = new Set(tracked);
 
 	const files = inventory.files.filter((file) => !file.excludeReason).sort((a, b) => byCodePoint(a.path, b.path));
@@ -228,14 +231,14 @@ export async function buildChangeModel(input: ChangeModelInput): Promise<ChangeM
 	throwIfAborted(signal);
 
 	const changedKeys = new Set(owned.map((symbol) => `${symbol.file}\0${symbol.qualifiedName}`));
-	const examples = await findExamples(checkoutPath, owned, changedKeys, tracked, signal);
+	const examples = await findExamples(checkoutPath, repo, owned, changedKeys, signal);
 
 	throwIfAborted(signal);
 
 	const baselines = await repoBaselines(
 		checkoutPath,
+		repo,
 		owned.map((symbol) => symbol.language),
-		tracked,
 		signal
 	);
 

@@ -8,7 +8,10 @@ export function generateStaticParams() {
 	return SETTINGS_SECTIONS.map((section) => ({ section: section.id }));
 }
 
-/** Each section names itself in the browser tab ("Connections settings · Recoder"); an unknown one is the 404, title included. */
+/**
+ * Each section names itself in the browser tab ("Connections settings ·
+ * Recoder"); an unknown one is the 404, title included.
+ */
 export async function generateMetadata({ params }: PageProps<'/settings/[section]'>): Promise<Metadata> {
 	const { section } = await params;
 

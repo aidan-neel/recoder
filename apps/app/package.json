@@ -4,7 +4,7 @@
 	"version": "0.1.0",
 	"type": "module",
 	"scripts": {
-		"dev": "next dev --port 5180",
+		"dev": "bun scripts/warm-routes.ts 5180 & next dev --port 5180",
 		"build": "next build",
 		"start": "next start --port 5180",
 		"check": "next typegen && tsc --noEmit",

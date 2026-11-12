@@ -3,6 +3,7 @@ export const sources: FakeEventSource[] = [];
 
 /** Stands in for the browser's EventSource. It stays connecting until a test opens it or gives up on it. */
 export class FakeEventSource {
+	static OPEN = 1;
 	static CLOSED = 2;
 
 	readyState = 0;
@@ -20,13 +21,19 @@ export class FakeEventSource {
 
 	/** The server accepts the stream. */
 	accept(): void {
-		this.readyState = 1;
+		this.readyState = FakeEventSource.OPEN;
 		this.onopen?.();
 	}
 
-	/** The browser gives up on the stream for good. */
+	/** The browser gives up on the stream for good, as it does when the server refuses it. */
 	giveUp(): void {
 		this.readyState = FakeEventSource.CLOSED;
+		this.onerror?.();
+	}
+
+	/** The stream drops, or never reaches the server: the browser keeps it connecting, to retry it on its own. */
+	drop(): void {
+		this.readyState = 0;
 		this.onerror?.();
 	}
 }

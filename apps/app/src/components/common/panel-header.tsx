@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { cn } from '@recoder/ui';
+import { cn } from '@recoder/ui/cn';
 
 /** A 44px header row with a hairline under it, the same height everywhere so borders line up across panels. */
 export function PanelHeader({ children, className }: { children: ReactNode; className?: string }) {

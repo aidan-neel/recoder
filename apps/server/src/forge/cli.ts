@@ -1,8 +1,15 @@
 import { runCommand } from '../commands/runner.js';
 
-export type GhErrorKind = 'unavailable' | 'auth' | 'not-found' | 'unknown';
+/**
+ * What the user can do about a forge failure: `unavailable` (the CLI or the
+ * forge can't be reached), `auth` (a token is missing or was refused, so the
+ * fix is in Connections), `rate-limit` (the forge is throttling requests; the
+ * token, if there is one, is fine, so waiting and trying again works),
+ * `not-found`, or `unknown`.
+ */
+export type GhErrorKind = 'unavailable' | 'auth' | 'rate-limit' | 'not-found' | 'unknown';
 
-/** A forge CLI or API failure, sorted by what the user can do about it. */
+/** A forge CLI or API failure, sorted by what the user can do about it (see {@link GhErrorKind}). */
 export class GhError extends Error {
 	kind: GhErrorKind;
 
@@ -10,6 +17,25 @@ export class GhError extends Error {
 		super(message);
 		this.kind = kind;
 	}
+}
+
+/**
+ * GitHub's words for its primary and secondary rate limits, in an API answer
+ * or in `gh` output, and the status `gh` prints for a 429 that has no words.
+ */
+export const GITHUB_RATE_LIMIT = /\brate limit\b|\bHTTP 429\b/i;
+
+/**
+ * GitHub's rate limit. The token is fine, so the sentence stops where the
+ * app's Try again takes over; without a token, adding one raises the limit.
+ */
+export function githubRateLimit(hasToken: boolean): GhError {
+	return new GhError(
+		'rate-limit',
+		hasToken
+			? 'GitHub’s rate limit was reached.'
+			: 'GitHub’s rate limit was reached. Add a token in Settings → Connections to raise it.'
+	);
 }
 
 /** The CLIs Recoder drives for GitHub and GitLab. */

@@ -9,10 +9,10 @@
 	import { CopyButton } from '@sivir-ui/svelte/components/copy-button';
 	import { toast } from '@sivir-ui/svelte/components/toast';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
-	import type { AgentProvider } from '@recoder/shared';
+	import { agentReady, type AgentProvider } from '@recoder/shared';
 	import AgentProviderModal from './agent-provider-modal.svelte';
 	import ModelPicker from './model-picker.svelte';
-	import { agent, isReady } from '$lib/settings/agent.svelte';
+	import { agent } from '$lib/settings/agent.svelte';
 	import { modelSettingsUi } from '$lib/settings/model-settings.svelte';
 	import { errorToast } from '$lib/shell/notify';
 	import { settingsDraft } from '$lib/settings/settings-draft.svelte';
@@ -31,7 +31,7 @@
 
 	const status = $derived(agent.status);
 	/** The provider-managing agent (OpenCode) is up, so its Providers section shows. */
-	const ready = $derived(!!status && isReady(status));
+	const ready = $derived(!!status && agentReady(status));
 
 	/** Home and failure toasts open Settings straight into Add provider. */
 	$effect(() => {
@@ -97,7 +97,7 @@
 							>{#if cli.signedIn === false}{' · Not signed in'}{/if}{/if}
 					</p>
 				</div>
-				{#if isReady(cli)}
+				{#if agentReady(cli)}
 					<Badge class="status-chip" data-tone="success">Ready</Badge>
 				{:else}
 					{@render checkAgain()}

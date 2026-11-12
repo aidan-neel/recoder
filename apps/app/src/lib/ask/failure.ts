@@ -8,19 +8,26 @@ export interface ChatFailure {
 	action?: FailureAction;
 }
 
-/** The server's terse reasons, in the reader's words. */
-const PLAIN: Record<string, string> = {
-	'no diff yet': 'The diff isn’t ready yet. Try again in a moment.'
-};
+/**
+ * The server's terse reasons a chat or discuss call can meet, in the reader's
+ * words, and the one place they are mapped. Each names no next step, since
+ * the failed reply has a Try again button. A map, so no message can match an
+ * object's own members.
+ */
+const PLAIN = new Map([['no diff yet', 'The diff isn’t ready yet.']]);
 
-/** An error from a chat or discuss call, as the transcript shows it. */
+/**
+ * An error from a chat or discuss call, as the transcript shows it: a known
+ * terse reason in the reader's words, and any other server or CLI text
+ * through the same cleaner as every other failure.
+ */
 export function chatFailure(error: unknown): ChatFailure {
-	if (error instanceof ApiError) {
-		return {
-			message: PLAIN[error.message] ?? error.message,
-			action: error.action ?? (error.usageLimit ? 'settings' : undefined)
-		};
-	}
+	const message = failureText(error, 'The reviewer didn’t respond.');
 
-	return { message: failureText(error, 'The reviewer didn’t respond.') };
+	if (!(error instanceof ApiError)) return { message };
+
+	return {
+		message: PLAIN.get(error.message) ?? message,
+		action: error.action ?? (error.usageLimit ? 'settings' : undefined)
+	};
 }

@@ -1,7 +1,7 @@
 'use client';
 
 import { initials, type PrPerson } from '@recoder/shared';
-import { useState } from 'react';
+import { memo, useState } from 'react';
 
 /** Avatars past this many collapse into a +N count. */
 const SHOWN = 4;
@@ -30,9 +30,10 @@ function Avatar({ person }: { person: PrPerson }) {
 
 /**
  * The people assigned to a pull request, as a tiny overlapping stack on the
- * row's title line. The kit has no avatar, so the queue draws its own.
+ * row's title line. The kit has no avatar, so the queue draws its own. It
+ * renders again only when the people change, not when the row is selected.
  */
-export function QueuePeople({ people }: { people: PrPerson[] }) {
+export const QueuePeople = memo(function QueuePeople({ people }: { people: PrPerson[] }) {
 	if (people.length === 0) return null;
 
 	const names = `Assigned to ${people.map((person) => person.name ?? person.login).join(', ')}`;
@@ -45,4 +46,4 @@ export function QueuePeople({ people }: { people: PrPerson[] }) {
 			{people.length > SHOWN ? <span className="queue-people-more">+{people.length - SHOWN}</span> : null}
 		</span>
 	);
-}
+});

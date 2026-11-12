@@ -1,14 +1,15 @@
-import type { Finding, ModelSettings, Repo, Review, ReviewProgress } from '@recoder/shared';
+import type {
+	Finding,
+	ModelSettings,
+	ProgressSummaries,
+	ProgressSummary,
+	Repo,
+	Review,
+	ReviewProgress
+} from '@recoder/shared';
 import type { StoredMetrics } from '../models/metrics';
 import type { CandidateOutcome } from '../review/pipeline/candidate-outcome';
 import type { ServerIdentity } from './server-identity';
-
-/** Live task and reviewer counts for one review, as the home dashboard reads them. */
-export interface ProgressSummary {
-	tasksDone: number;
-	tasksTotal: number;
-	agents: number;
-}
 
 /** Fetches a JSON route on the Recoder server; a non-2xx answer throws with the server's error message. */
 async function request<T>(base: string, path: string, init?: RequestInit): Promise<T> {
@@ -118,9 +119,9 @@ export async function cancelReview(base: string, reviewId: string): Promise<void
 	await fetch(new URL(`/api/reviews/${reviewId}/cancel`, base), { method: 'POST' }).catch(() => undefined);
 }
 
-/** Task and reviewer counts for the progress line; null when the server has none for this review. */
+/** Task and reviewer counts for the progress line; null when the server has none for this review (it is not running). */
 export async function progressSummary(base: string, reviewId: string): Promise<ProgressSummary | null> {
-	const summaries = await request<Record<string, ProgressSummary>>(base, '/api/reviews/progress-summaries');
+	const summaries = await request<ProgressSummaries>(base, '/api/reviews/progress-summaries');
 
 	return summaries[reviewId] ?? null;
 }

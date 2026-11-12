@@ -1,50 +1,31 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, jest, test } from 'bun:test';
 import type { PullRequest, Repo, Review } from '@recoder/shared';
 
+import { OFFLINE_TEXT } from '../../src/lib/api/http';
 import { useQueue } from '../../src/lib/queue/queue-store';
 import { useShell } from '../../src/lib/shell/shell-store';
+import { flush, memoryStorage } from '../fixtures';
+import { pull, repo } from './fixtures';
 
 /** What the fake review server answers; each test changes it. */
 interface Server {
 	repos: Repo[];
 	pulls: Record<string, PullRequest[]>;
 	reviews: Review[];
+	/** The review list never reaches the server, as when it is down. */
 	failReviews: boolean;
+	/** The review list is answered with this error body and a 500. */
+	reviewsError: string | null;
+	/** Repositories whose pull requests the forge refuses for a bad token. */
 	failPulls: string[];
 	/** While set, GET /api/reviews waits for it, so a test can hold a refresh in flight. */
 	hold: Promise<void> | null;
+	/** How many times the review list was asked for. */
+	reviewCalls: number;
 }
 
 let server: Server;
 let stop: () => void = () => {};
-
-function repo(id: string, name: string): Repo {
-	return {
-		id,
-		name,
-		url: `https://github.com/${name}`,
-		provider: 'github',
-		defaultBranch: 'main',
-		createdAt: '',
-		updatedAt: ''
-	};
-}
-
-function pull(number: number): PullRequest {
-	return {
-		number,
-		title: `PR ${number}`,
-		url: `https://github.com/acme/api/pull/${number}`,
-		author: 'claude[bot]',
-		base: 'main',
-		headRef: `agent/pr-${number}`,
-		headSha: `sha${number}`,
-		additions: 1,
-		deletions: 1,
-		changedFiles: 1,
-		createdAt: '2026-10-13T09:00:00Z'
-	};
-}
 
 function queued(repoId: string, number: number): Review {
 	return {
@@ -74,33 +55,59 @@ function passed(repoId: string, number: number): Review {
 	};
 }
 
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+
+/** The review list's answer, or the failure the test asked for. */
+async function reviewList(): Promise<Response> {
+	server.reviewCalls += 1;
+	await server.hold;
+
+	if (server.failReviews) throw new TypeError('Failed to fetch');
+	if (server.reviewsError) return json({ error: server.reviewsError }, 500);
+
+	return json(server.reviews);
+}
+
 /** The review server's answer to one request. */
 async function answer(path: string, method: string): Promise<Response> {
-	const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 	const pulls = path.match(/^\/api\/repos\/([^/]+)\/pulls$/);
 
 	if (path === '/api/repos') return json(server.repos);
-	if (pulls)
-		return server.failPulls.includes(pulls[1]) ? json({ error: 'gh failed' }, 502) : json(server.pulls[pulls[1]]);
-	if (path === '/api/reviews/progress-summaries') return json({});
 
-	if (path === '/api/reviews' && method === 'POST') return json(queued('r1', 1), 201);
-
-	if (path === '/api/reviews') {
-		await server.hold;
-
-		if (server.failReviews) throw new TypeError('Failed to fetch');
-
-		return json(server.reviews);
+	if (pulls) {
+		return server.failPulls.includes(pulls[1])
+			? json({ error: 'Bad credentials', kind: 'auth' }, 502)
+			: json(server.pulls[pulls[1]]);
 	}
+
+	if (path === '/api/reviews/progress-summaries') return json({});
+	if (path === '/api/reviews' && method === 'POST') return json(queued('r1', 1), 201);
+	if (path === '/api/reviews') return reviewList();
 
 	return json({ error: 'not found' }, 404);
 }
 
-/** Lets every pending fetch and state update settle. */
+/** Lets every pending fetch, state update and save settle. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
 const entry = (number: number) => useQueue.getState().entries.find((item) => item.pull.number === number);
+
+const numbers = () => useQueue.getState().entries.map((item) => item.pull.number);
+
+/** Shows or hides the browser tab, as switching to another tab does. */
+function showTab(state: 'visible' | 'hidden'): void {
+	Object.assign(document, { visibilityState: state });
+	document.dispatchEvent(new Event('visibilitychange'));
+}
+
+/** Holds the review list until the returned function is called. */
+function holdReviews(): () => void {
+	let release = () => {};
+
+	server.hold = new Promise((resolve) => (release = resolve));
+
+	return release;
+}
 
 beforeEach(() => {
 	server = {
@@ -108,48 +115,83 @@ beforeEach(() => {
 		pulls: { r1: [pull(1)], r2: [pull(2)] },
 		reviews: [],
 		failReviews: false,
+		reviewsError: null,
 		failPulls: [],
-		hold: null
+		hold: null,
+		reviewCalls: 0
 	};
 
 	Object.assign(globalThis, {
-		document: { addEventListener() {}, removeEventListener() {}, visibilityState: 'visible' },
+		document: Object.assign(new EventTarget(), { visibilityState: 'visible' }),
+		window: new EventTarget(),
+		localStorage: memoryStorage(),
 		fetch: (input: string | URL, init?: RequestInit) => answer(new URL(String(input)).pathname, init?.method ?? 'GET')
 	});
 
-	useQueue.setState({ status: 'loading', entries: [], stale: false, missing: [] });
+	useQueue.getState().reset();
 	stop = useQueue.getState().load(false);
 });
 
 afterEach(() => stop());
 
 describe('queue store', () => {
-	test('a refresh that fails after a good load keeps the list and marks it stale', async () => {
+	test('a refresh that fails after a good load keeps the list and says what failed', async () => {
 		await settle();
 		server.failReviews = true;
 
 		expect(await useQueue.getState().refresh()).toBe(false);
-		expect(useQueue.getState()).toMatchObject({ status: 'ready', stale: true });
-		expect(useQueue.getState().entries.map((item) => item.pull.number)).toEqual([1, 2]);
+		expect(useQueue.getState()).toMatchObject({ status: 'ready', error: OFFLINE_TEXT });
+		expect(numbers()).toEqual([1, 2]);
 	});
 
-	test('a repository whose pull requests fail to load keeps its last rows', async () => {
+	test('a first load the server answers with an error reads as failed with its reason, not offline', async () => {
+		stop();
+		useQueue.getState().reset();
+		server.reviewsError = 'The review database is busy.';
+		stop = useQueue.getState().load(false);
+		await settle();
+
+		expect(useQueue.getState()).toMatchObject({ status: 'failed', error: 'The review database is busy.' });
+	});
+
+	test('a first load that never reaches the server reads as offline, and the network coming back loads it', async () => {
+		stop();
+		useQueue.getState().reset();
+		server.failReviews = true;
+		stop = useQueue.getState().load(false);
+		await settle();
+
+		expect(useQueue.getState().status).toBe('offline');
+
+		server.failReviews = false;
+		window.dispatchEvent(new Event('online'));
+		await settle();
+
+		expect(useQueue.getState()).toMatchObject({ status: 'ready', error: null });
+	});
+
+	test('the network dropping shows over the list at once, without waiting for the next refresh', async () => {
+		await settle();
+		window.dispatchEvent(new Event('offline'));
+
+		expect(useQueue.getState()).toMatchObject({ status: 'ready', error: OFFLINE_TEXT });
+		expect(numbers()).toEqual([1, 2]);
+	});
+
+	test('a repository whose token the forge refuses keeps its last rows and says why', async () => {
 		await settle();
 		server.failPulls = ['r2'];
 
 		await useQueue.getState().refresh();
 
-		expect(useQueue.getState().entries.map((item) => item.pull.number)).toEqual([1, 2]);
-		expect(useQueue.getState().missing).toEqual(['acme/web']);
+		expect(numbers()).toEqual([1, 2]);
+		expect(useQueue.getState().missing).toMatchObject([{ name: 'acme/web', provider: 'github', kind: 'auth' }]);
 	});
 
 	test('a refresh that began before a review started does not put the row back', async () => {
 		await settle();
 
-		let release = () => {};
-
-		server.hold = new Promise((resolve) => (release = resolve));
-
+		const release = holdReviews();
 		const slow = useQueue.getState().refresh();
 
 		await useQueue.getState().start(entry(1)!);
@@ -190,24 +232,174 @@ describe('queue store', () => {
 		});
 	});
 
-	test('a background refresh that answers after the sample queue opened leaves the sample rows alone', async () => {
+	test('a refresh that answers after the sample queue opened leaves the sample rows alone', async () => {
 		await settle();
 
-		const unwatch = useQueue.getState().watch(false);
-		let release = () => {};
-
-		stop();
-		server.hold = new Promise((resolve) => (release = resolve));
-
+		const release = holdReviews();
 		const slow = useQueue.getState().refresh();
 
+		stop();
 		stop = useQueue.getState().load(true);
 		release();
 		await slow;
 
 		expect(useQueue.getState().sample).toBe(true);
 		expect(entry(1)).toBeUndefined();
+	});
 
-		unwatch();
+	test('a page mounted again while its first load runs joins that load instead of asking again', async () => {
+		stop();
+		useQueue.getState().reset();
+		server.reviewCalls = 0;
+
+		const release = holdReviews();
+
+		stop = useQueue.getState().load(false);
+		await settle();
+		stop();
+		stop = useQueue.getState().load(false);
+		release();
+		await settle();
+
+		expect(server.reviewCalls).toBe(1);
+		expect(numbers()).toEqual([1, 2]);
+	});
+
+	test('the list the last visit saved paints at once, and the refresh confirms it once the page is idle', async () => {
+		await settle();
+		stop();
+		useQueue.setState({ status: 'loading', entries: [] });
+		server.reviewCalls = 0;
+
+		const idle: (() => void)[] = [];
+
+		Object.assign(globalThis, { requestIdleCallback: (run: () => void) => idle.push(run), cancelIdleCallback() {} });
+		stop = useQueue.getState().load(false);
+
+		expect(useQueue.getState()).toMatchObject({ status: 'ready', restored: true });
+		expect(numbers()).toEqual([1, 2]);
+
+		await settle();
+
+		expect(server.reviewCalls).toBe(0);
+
+		idle.forEach((run) => run());
+		await settle();
+
+		expect(useQueue.getState().restored).toBe(false);
+
+		stop();
+		stop = () => {};
+		Reflect.deleteProperty(globalThis, 'requestIdleCallback');
+		Reflect.deleteProperty(globalThis, 'cancelIdleCallback');
+	});
+
+	test('a list with no rows, one of two repositories failing, still covers both after a reload', async () => {
+		await settle();
+		stop();
+		useQueue.getState().reset();
+		server.pulls = { r1: [], r2: [] };
+		server.failPulls = ['r1'];
+		stop = useQueue.getState().load(false);
+		await settle();
+
+		expect(useQueue.getState()).toMatchObject({ status: 'ready', entries: [], tracked: 2 });
+		expect(useQueue.getState().missing).toHaveLength(1);
+
+		stop();
+		useQueue.setState({ status: 'loading', entries: [], missing: [], tracked: 0 });
+		stop = useQueue.getState().load(false);
+
+		expect(useQueue.getState()).toMatchObject({ restored: true, tracked: 2 });
+		expect(useQueue.getState().missing).toHaveLength(1);
+	});
+
+	test('a saved list too old to paint still has its pull requests asked for beside the repository list', async () => {
+		await settle();
+		stop();
+
+		const saved = JSON.parse(localStorage.getItem('recoder.app.queue.v1') ?? '{}') as Record<string, unknown>;
+		const asked: string[] = [];
+		let releaseRepos = () => {};
+		const repos = new Promise<void>((resolve) => (releaseRepos = resolve));
+
+		useQueue.getState().reset();
+		localStorage.setItem('recoder.app.queue.v1', JSON.stringify({ ...saved, at: Date.now() - 25 * 60 * 60 * 1000 }));
+
+		Object.assign(globalThis, {
+			fetch: async (input: string | URL, init?: RequestInit) => {
+				const path = new URL(String(input)).pathname;
+
+				asked.push(path);
+
+				if (path === '/api/repos') await repos;
+
+				return answer(path, init?.method ?? 'GET');
+			}
+		});
+
+		stop = useQueue.getState().load(false);
+		await settle();
+
+		expect(useQueue.getState().status).toBe('loading');
+		expect(asked).toEqual(expect.arrayContaining(['/api/repos/r1/pulls', '/api/repos/r2/pulls']));
+
+		releaseRepos();
+		await settle();
+
+		expect(numbers()).toEqual([1, 2]);
+		expect(asked.filter((path) => path.endsWith('/pulls'))).toHaveLength(2);
+	});
+});
+
+describe('queue refresh timing', () => {
+	beforeEach(async () => {
+		await settle();
+		stop();
+		jest.useFakeTimers();
+		useQueue.getState().reset();
+		stop = useQueue.getState().load(false);
+		await flush();
+	});
+
+	afterEach(() => {
+		stop();
+		stop = () => {};
+		jest.useRealTimers();
+	});
+
+	test('a hidden tab asks the server nothing, and refreshes as soon as it shows again', async () => {
+		const before = server.reviewCalls;
+
+		showTab('hidden');
+		jest.advanceTimersByTime(60_000);
+		await flush();
+
+		expect(server.reviewCalls).toBe(before);
+
+		showTab('visible');
+		await flush();
+
+		expect(server.reviewCalls).toBe(before + 1);
+	});
+
+	test('a list that missed its refreshes says how old it is only once a refresh has gone two seconds unanswered', async () => {
+		jest.setSystemTime(Date.now() + 60_000);
+
+		const release = holdReviews();
+
+		void useQueue.getState().refresh();
+		jest.advanceTimersByTime(1900);
+
+		expect(useQueue.getState().stale).toBe(false);
+
+		jest.advanceTimersByTime(100);
+
+		expect(useQueue.getState().stale).toBe(true);
+
+		release();
+		await flush();
+
+		expect(useQueue.getState()).toMatchObject({ status: 'ready', stale: false });
 	});
 });

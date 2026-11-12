@@ -146,3 +146,30 @@ test('an unreachable host gives an empty context and no commit PRs', async () =>
 
 	expect(await prsForCommit(github, 'github', 'abc', signal)).toEqual([]);
 });
+
+test('a commit whose PRs are all merged is looked up once, and an open PR is asked again', async () => {
+	const github = repo('https://github.com/octo/app', 'github');
+	const merged = 'a'.repeat(40);
+	const open = 'b'.repeat(40);
+
+	const pull = (number: number, extra: Record<string, unknown>) => ({
+		number,
+		title: `PR ${number}`,
+		head: { ref: 'f' },
+		base: { ref: 'main' },
+		...extra
+	});
+
+	const seen = routes([
+		[`commits/${merged}/pulls`, [pull(4, { state: 'closed', merged_at: '2026-01-01T00:00:00Z' })]],
+		[`commits/${open}/pulls`, [pull(9, { state: 'open' })]]
+	]);
+
+	for (let round = 0; round < 2; round++) {
+		expect((await prsForCommit(github, 'github', merged, signal)).map((ref) => ref.number)).toEqual([4]);
+		expect((await prsForCommit(github, 'github', open, signal)).map((ref) => ref.number)).toEqual([9]);
+	}
+
+	expect(seen.filter((url) => url.includes(merged))).toHaveLength(1);
+	expect(seen.filter((url) => url.includes(open))).toHaveLength(2);
+});

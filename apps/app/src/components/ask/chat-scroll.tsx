@@ -18,6 +18,14 @@ interface ChatScrollProps {
 const HoldBusy = createContext<(() => () => void) | null>(null);
 
 /**
+ * True while the column that holds the transcript draws its opening frame,
+ * where its content is not yet shown. The scroll area and its entries then
+ * render a frame later, in the space the transcript's box already holds, so
+ * the commit that opens the column stays light.
+ */
+export const TranscriptHold = createContext(false);
+
+/**
  * Keeps the transcript `aria-busy` while a reply is still arriving, through
  * the end of its steady reveal, so a screen reader reads it once, whole.
  */
@@ -28,10 +36,35 @@ export function useHoldBusy(arriving: boolean): void {
 }
 
 /**
+ * True while the transcript is held back (`TranscriptHold`). Its caller
+ * passes the opposite to `useStickToBottom` as `mounted`, so the pinning
+ * attaches once the scroll area is in.
+ */
+export function useTranscriptHeld(): boolean {
+	return useContext(TranscriptHold);
+}
+
+/**
  * A transcript that scrolls, follows streaming text at its end and offers a
- * jump back down when the reader has scrolled up.
+ * jump back down when the reader has scrolled up. Under a `TranscriptHold` it
+ * keeps only its box, which takes the same space, until the hold ends.
  */
 export function ChatScroll({ stick, label, children }: ChatScrollProps) {
+	const held = useTranscriptHeld();
+
+	return (
+		<div className="relative flex min-h-0 flex-1 flex-col">
+			{held ? null : (
+				<Transcript stick={stick} label={label}>
+					{children}
+				</Transcript>
+			)}
+		</div>
+	);
+}
+
+/** The scroll area, its log and the jump to the latest message. */
+function Transcript({ stick, label, children }: ChatScrollProps) {
 	const jump = useMotionVariants(menuMotion);
 	const { attachViewport, attachContent, atBottom, toBottom } = stick;
 	const [holds, setHolds] = useState(0);
@@ -43,7 +76,7 @@ export function ChatScroll({ stick, label, children }: ChatScrollProps) {
 	}, []);
 
 	return (
-		<div className="relative flex min-h-0 flex-1 flex-col">
+		<>
 			<ScrollArea className="chat-scroll flex-1" viewportRef={attachViewport}>
 				<div
 					ref={attachContent}
@@ -79,6 +112,6 @@ export function ChatScroll({ stick, label, children }: ChatScrollProps) {
 					</motion.div>
 				)}
 			</AnimatePresence>
-		</div>
+		</>
 	);
 }

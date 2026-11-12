@@ -1,58 +1,36 @@
 'use client';
 
 import type { GuidelinesOverview } from '@recoder/shared';
-import { Button, ConfirmDialog } from '@recoder/ui';
-import Link from 'next/link';
+import { ConfirmDialog } from '@recoder/ui';
 import { useEffect, useLayoutEffect, useRef } from 'react';
 
-import { PageNotice } from '@/components/common/page-notice';
-import { SettingsGroup } from '@/components/settings/settings-group';
-import { SettingsSkeleton } from '@/components/settings/settings-skeleton';
-import { OFFLINE_TEXT } from '@/lib/api/http';
+import { SectionNotice } from '@/components/settings/group-notice';
+import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
+import { SettingsSectionSkeleton } from '@/components/settings/settings-skeleton';
 import { useGuidelinesEditor } from '@/lib/guidelines/editor-store';
-import { useGuidelines } from '@/lib/guidelines/guidelines-store';
-import { useAction } from '@/lib/shell/use-action';
+import { retryGuidelines, useGuidelines } from '@/lib/guidelines/guidelines-store';
 
 import { GlobalRow } from './global-row';
+import { OpenConnections } from './open-connections';
 import { RepoRow } from './repo-row';
 
-/** The overview never loaded: the server is down, or it answered with an error. */
-function LoadNotice() {
-	const status = useGuidelines((state) => state.status);
-	const error = useGuidelines((state) => state.error);
-	const retry = useAction();
-	const offline = status === 'offline';
-
-	return (
-		<PageNotice
-			heading="h2"
-			lead={offline ? OFFLINE_TEXT : 'Guidelines didn’t load.'}
-			rest={offline ? 'Start it, then try again.' : error}
-		>
-			<Button status={retry.status} onClick={() => retry.run(() => useGuidelines.getState().load())}>
-				Try again
-			</Button>
-		</PageNotice>
-	);
-}
-
 /** Tracked repositories, each with its own file; or the way to track one. */
-function ReposGroup({ overview }: { overview: GuidelinesOverview }) {
+function ReposGroup({ overview, editing }: { overview: GuidelinesOverview; editing: boolean }) {
 	if (overview.repos.length === 0) {
 		return (
-			<SettingsGroup title="Repositories">
-				<div className="settings-row">
-					<p className="guidelines-empty">Track a repository in Connections to give it its own guidelines.</p>
-					<Button variant="outline" asChild>
-						<Link href="/settings/connections">Open Connections</Link>
-					</Button>
-				</div>
+			<SettingsGroup title="Repositories" group="repoGuidelines">
+				<SettingsRow
+					name="No repositories tracked yet"
+					description="Track one in Connections to give it its own guidelines"
+				>
+					<OpenConnections />
+				</SettingsRow>
 			</SettingsGroup>
 		);
 	}
 
 	return (
-		<SettingsGroup title="Repositories">
+		<SettingsGroup title="Repositories" group="repoGuidelines" transient={editing}>
 			{overview.repos.map((repo) => (
 				<RepoRow key={repo.id} repo={repo} overview={overview} />
 			))}
@@ -106,28 +84,38 @@ function DiscardConfirm() {
 /**
  * Settings → Guidelines: what reviewers follow. The global layer applies to
  * every review; each tracked repository adds its own `.recoder/REVIEW.md`,
- * read from the pull request's base branch. Each layer edits in place.
+ * read from the pull request's base branch. Each layer edits in place; while
+ * an editor is open the groups' heights are not kept for the next load's
+ * skeleton, which opens with every editor closed.
  */
 export function GuidelinesSection() {
 	const status = useGuidelines((state) => state.status);
 	const overview = useGuidelines((state) => state.overview);
+	const error = useGuidelines((state) => state.error);
+	const editing = useGuidelinesEditor((state) => state.open !== null);
 
 	useEffect(() => {
 		void useGuidelines.getState().load();
 	}, []);
 
 	if (!overview) {
-		if (status === 'offline' || status === 'failed') return <LoadNotice />;
+		if (status === 'loading') return <SettingsSectionSkeleton section="guidelines" />;
 
-		return <SettingsSkeleton groups={[1, 2]} />;
+		return (
+			<SectionNotice
+				what="Guidelines didn’t load."
+				reason={status === 'failed' ? error : null}
+				retry={retryGuidelines}
+			/>
+		);
 	}
 
 	return (
 		<div className="settings-stack">
-			<SettingsGroup title="Global">
+			<SettingsGroup title="Global" group="globalGuidelines" transient={editing}>
 				<GlobalRow overview={overview} />
 			</SettingsGroup>
-			<ReposGroup overview={overview} />
+			<ReposGroup overview={overview} editing={editing} />
 			<DiscardConfirm />
 		</div>
 	);

@@ -1,6 +1,6 @@
 import type { Context } from 'hono';
 import type { z } from 'zod';
-import type { Review } from '@recoder/shared';
+import type { Finding, Review } from '@recoder/shared';
 import { modelFailure } from '../../models/model-failure';
 import type { ModelConfig } from '../../models/models';
 import { db, reviewDiffs } from '../../store';
@@ -9,6 +9,17 @@ import { parseBody } from '../parse-body';
 /** The `:id` review, or the 404 response that ends the request. */
 export function requireReview(c: Context): Review | Response {
 	return db.reviews.get(c.req.param('id') ?? '') ?? c.json({ error: 'review not found' }, 404);
+}
+
+/** The `:id` review and its finding `findingId`, or the 404 response that ends the request. */
+export function requireFinding(c: Context, findingId: string): { review: Review; finding: Finding } | Response {
+	const review = requireReview(c);
+
+	if (review instanceof Response) return review;
+
+	const finding = review.findings.find((entry) => entry.id === findingId);
+
+	return finding ? { review, finding } : c.json({ error: 'finding not found' }, 404);
 }
 
 /** The `:id` review and its parsed body, or the 404/400 response that ends the request. */

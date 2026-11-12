@@ -3,10 +3,11 @@ import { z } from 'zod';
 import { splitCategoryTag, type Finding, type Review } from '@recoder/shared';
 import { recordDismissal, removeDismissal } from '../../review/guidelines/learned/dismissals';
 import { dismissalKey } from '../../review/guidelines/learned/finding-key';
+import { recordVote, removeVote, voteKeyOf } from '../../review/guidelines/learned/votes';
 import { matchesDismissal } from '../../review/pipeline/harness/findings';
 import { reviewDiffs } from '../../store';
 import { parseBody } from '../parse-body';
-import { requireReview } from './shared';
+import { requireFinding } from './shared';
 
 const app = new Hono();
 
@@ -26,14 +27,11 @@ function dismissalTarget(
 	c: Context,
 	findingId: string
 ): { review: Review; finding: Finding; fingerprint: string } | Response {
-	const review = requireReview(c);
+	const target = requireFinding(c, findingId);
 
-	if (review instanceof Response) return review;
+	if (target instanceof Response) return target;
 
-	const finding = review.findings.find((entry) => entry.id === findingId);
-
-	if (!finding) return c.json({ error: 'finding not found' }, 404);
-
+	const { review, finding } = target;
 	const diff = reviewDiffs.get(review.id);
 
 	if (!diff) return c.json({ error: 'no diff yet' }, 409);
@@ -48,7 +46,11 @@ function titleOf(finding: Finding): string {
 	return title.slice(0, MAX_TITLE_CHARS);
 }
 
-/** Remember that a person dismissed one of the review's findings, so later reviews of the repository do not report it again. */
+/**
+ * Remember that a person dismissed one of the review's findings, so later
+ * reviews of the repository do not report it again, and count it against the
+ * finding's topic, replacing a useful vote on it.
+ */
 app.post('/:id/dismissals', async (c) => {
 	const body = await parseBody(c, dismissRequestSchema);
 
@@ -70,19 +72,31 @@ app.post('/:id/dismissals', async (c) => {
 		dismissedAt: new Date().toISOString()
 	});
 
+	if (finding.topic) {
+		recordVote(review.repoId, {
+			findingKey: voteKeyOf(finding),
+			topic: finding.topic.id,
+			choice: 'dismissed',
+			votedAt: new Date().toISOString()
+		});
+	}
+
 	return c.json({ dismissed: true });
 });
 
 /**
- * Forget the finding's dismissal, so later reviews may report it again. Every held key that matches the finding goes,
- * the old place-only form included; the dismissal of another finding split from the same line stays.
+ * Forget the finding's dismissal, so later reviews may report it again, and its dismissed vote. Every held key that
+ * matches the finding goes, the old place-only form included; the dismissal of another finding split from the same
+ * line stays.
  */
 app.delete('/:id/dismissals/:findingId', (c) => {
 	const target = dismissalTarget(c, c.req.param('findingId'));
 
 	if (target instanceof Response) return target;
 
-	const { review, fingerprint } = target;
+	const { review, finding, fingerprint } = target;
+
+	removeVote(review.repoId, voteKeyOf(finding), 'dismissed');
 
 	return c.json({ restored: removeDismissal(review.repoId, (held) => matchesDismissal(held, fingerprint)) });
 });

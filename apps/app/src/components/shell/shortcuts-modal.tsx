@@ -1,9 +1,9 @@
 'use client';
 
 import { Keycap, Modal, ModalBody, ModalContent, ModalTitle } from '@recoder/ui';
-import { usePathname } from 'next/navigation';
 
 import { paletteScope } from '@/lib/shell/routes';
+import { useSelectedFocusOnClose } from '@/lib/shell/selected-focus';
 import { useShell } from '@/lib/shell/shell-store';
 
 /** One way to press a shortcut: a key, or a chord of keys held together (`['Shift', ' ']`). */
@@ -90,11 +90,17 @@ function focusPanel(event: Event): void {
 	if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus();
 }
 
-/** The keyboard shortcuts for the page on screen, then the ones that work anywhere. Opens from `?` and the palette. */
+/**
+ * The keyboard shortcuts for the page on screen, then the ones that work
+ * anywhere. Opens from `?` and the palette; the shell loads it on first use.
+ * Closed, focus goes back to what had it, or to the page's selected row.
+ */
 export function ShortcutsModal() {
 	const open = useShell((state) => state.shortcutsOpen);
 	const setOpen = useShell((state) => state.setShortcutsOpen);
-	const page = paletteScope(usePathname());
+	const page = paletteScope(useShell((state) => state.pathname));
+
+	useSelectedFocusOnClose(open, '[data-ui="shortcuts"]');
 
 	return (
 		<Modal open={open} onOpenChange={setOpen}>

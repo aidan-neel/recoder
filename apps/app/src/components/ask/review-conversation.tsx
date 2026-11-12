@@ -14,12 +14,13 @@ import {
 import { draftKey } from '@/lib/ask/drafts';
 import { NO_OUTGOING, useReviewChat } from '@/lib/ask/review-chat';
 import { useStickToBottom } from '@/lib/ask/stick-to-bottom';
-import { isRunning, useReview } from '@/lib/review/review-store';
+import { StreamFailed } from '@/components/live/stream-failed';
+import { isRunning, progressStatus, useReview } from '@/lib/review/review-store';
 
 import { ChatComposer } from './chat-composer';
 import { ConversationSkeleton, ReplySkeleton } from './chat-message';
 import { ChatRow } from './chat-row';
-import { ChatScroll } from './chat-scroll';
+import { ChatScroll, useTranscriptHeld } from './chat-scroll';
 import { ConversationMessage, OutgoingMessage } from './conversation-message';
 
 /** What the composer invites, by where the review stands. */
@@ -43,13 +44,14 @@ function emptyFor(review: Review): string {
  * a file is selected, for the whole life of the review: draft, running and
  * finished. Messages come from the review's event stream; what the developer
  * sends shows at once, then joins the stream's copy. Until the stream's first
- * snapshot lands, outlines hold the transcript's place. The list follows
+ * snapshot lands, outlines hold the transcript's place; a snapshot that never
+ * comes says so, with Try again. The list follows
  * streaming text unless the reader scrolled up. A control that goes away when
  * pressed (Try again, Discard) moves focus to the composer first.
  */
 export function ReviewConversation({ review }: { review: Review }) {
 	const reviewId = review.id;
-	const loaded = useReview((state) => state.progress !== null);
+	const status = useReview(progressStatus);
 	const allMessages = useReview((state) => state.progress?.messages);
 	const outbox = useReviewChat((state) => state.outbox[reviewId] ?? NO_OUTGOING);
 	const stopping = useReviewChat((state) => state.stopping[reviewId]);
@@ -57,7 +59,8 @@ export function ReviewConversation({ review }: { review: Review }) {
 	const rows = useMemo(() => conversationRows(messages, outbox), [messages, outbox]);
 	const asked = lastQuestionAt(rows);
 	const reply = inFlightReply(messages);
-	const stick = useStickToBottom(reviewId);
+	const held = useTranscriptHeld();
+	const stick = useStickToBottom(reviewId, !held);
 	const { toBottom } = stick;
 	const field = useRef<HTMLTextAreaElement>(null);
 	const last = rows.at(-1);
@@ -89,7 +92,8 @@ export function ReviewConversation({ review }: { review: Review }) {
 	return (
 		<div data-ui="review-conversation">
 			<ChatScroll stick={stick} label="Conversation with Orchestrator">
-				{loaded ? (
+				{status === 'failed' ? <StreamFailed what="The conversation" /> : null}
+				{status === 'ready' ? (
 					<AnimatePresence key={reviewId} initial={false} mode="popLayout">
 						{rows.length === 0 ? (
 							<ChatRow
@@ -119,9 +123,8 @@ export function ReviewConversation({ review }: { review: Review }) {
 							</ChatRow>
 						) : null}
 					</AnimatePresence>
-				) : (
-					<ConversationSkeleton />
-				)}
+				) : null}
+				{status === 'waiting' ? <ConversationSkeleton /> : null}
 			</ChatScroll>
 			<div className="ask-composer">
 				<ChatComposer

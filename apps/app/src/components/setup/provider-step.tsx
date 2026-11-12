@@ -1,13 +1,15 @@
 'use client';
 
-import type { AgentProvider, AgentStatus, ModelSettings } from '@recoder/shared';
-import { Button } from '@recoder/ui';
+import { agentReady, type AgentProvider, type AgentStatus, type ModelSettings } from '@recoder/shared';
+import { Button, type ButtonVariant } from '@recoder/ui';
 import { Plus } from 'lucide-react';
 
+import { TryAgain } from '@/components/settings/group-notice';
 import { CheckAgain } from '@/components/settings/providers/check-again';
 import { CommandBlock } from '@/components/settings/providers/command-block';
+import { PROVIDERS_FAILED } from '@/components/settings/providers/provider-list';
 import { joinNames } from '@/lib/queue/format';
-import { agentReady, useSettings } from '@/lib/settings/settings-store';
+import { retryProviders, useSettings } from '@/lib/settings/settings-store';
 
 import { SetupStep } from './setup-step';
 
@@ -48,43 +50,82 @@ function blockedLine(manager: AgentStatus | undefined, agentError: string | null
 	return manager.error ?? 'OpenCode isn’t ready.';
 }
 
+interface StepActionsProps {
+	/** Why the provider list didn't load, when that is all that stands in the way. */
+	failure: string | null;
+	/** True when OpenCode is ready to add a provider. */
+	ready: boolean;
+	manager: AgentStatus | undefined;
+	variant: ButtonVariant;
+	onAdd: () => void;
+}
+
+/** What gets the step done: load the provider list again, add a provider, or install OpenCode and check again. */
+function StepActions({ failure, ready, manager, variant, onAdd }: StepActionsProps) {
+	if (failure) {
+		return (
+			<div className="setup-actions">
+				<TryAgain retry={retryProviders} variant={variant} />
+			</div>
+		);
+	}
+
+	if (ready) {
+		return (
+			<div className="setup-actions">
+				<Button variant={variant} onClick={onAdd}>
+					<Plus aria-hidden />
+					Add a provider
+				</Button>
+			</div>
+		);
+	}
+
+	return (
+		<div className="setup-blocked">
+			{manager && !manager.installed ? (
+				<CommandBlock hint="Install it, then check again." command={manager.install} />
+			) : null}
+			<div className="setup-actions">
+				<CheckAgain variant={variant} />
+			</div>
+		</div>
+	);
+}
+
 /**
  * Step one: a model provider. Providers are added in OpenCode, so while it is
- * missing the step shows the install command and a way to check again.
+ * missing the step shows the install command and a way to check again. A
+ * provider list that failed to load says so, with Try again, rather than
+ * reading as no providers yet.
  */
 export function ProviderStep({ done, current, onAdd }: StepProps & { onAdd: () => void }) {
 	const providers = useSettings((state) => state.providers);
 	const models = useSettings((state) => state.models);
 	const agents = useSettings((state) => state.agents);
 	const agentError = useSettings((state) => state.agentError);
+	const providersError = useSettings((state) => state.providersError);
 	const manager = agents.find((agent) => agent.providers);
 	const ready = !agentError && manager !== undefined && agentReady(manager);
+	const failure = ready && providers.length === 0 ? providersError : null;
 
 	const description = done
 		? connectedLine(providers, models)
-		: ready
-			? 'No providers yet. Add one to pick models for reviews.'
-			: blockedLine(manager, agentError);
+		: failure
+			? `${PROVIDERS_FAILED} ${failure}`
+			: ready
+				? 'No providers yet. Add one to pick models for reviews.'
+				: blockedLine(manager, agentError);
 
 	return (
 		<SetupStep done={done} current={current} title="Connect a model provider" description={description}>
-			{ready ? (
-				<div className="setup-actions">
-					<Button variant={current ? 'primary' : 'outline'} onClick={onAdd}>
-						<Plus aria-hidden />
-						Add a provider
-					</Button>
-				</div>
-			) : (
-				<div className="setup-blocked">
-					{manager && !manager.installed ? (
-						<CommandBlock hint="Install it, then check again." command={manager.install} />
-					) : null}
-					<div className="setup-actions">
-						<CheckAgain variant={current ? 'primary' : 'outline'} />
-					</div>
-				</div>
-			)}
+			<StepActions
+				failure={failure}
+				ready={ready}
+				manager={manager}
+				variant={current ? 'primary' : 'outline'}
+				onAdd={onAdd}
+			/>
 		</SetupStep>
 	);
 }

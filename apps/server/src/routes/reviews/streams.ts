@@ -1,6 +1,12 @@
 import { Hono } from 'hono';
 import { streamSSE, type SSEStreamingApi } from 'hono/streaming';
-import { emptyReviewProgress, expandFileDiff, parseUnifiedDiff, type Review } from '@recoder/shared';
+import {
+	emptyReviewProgress,
+	expandFileDiff,
+	parseUnifiedDiff,
+	type Review,
+	type ReviewProgress
+} from '@recoder/shared';
 import { readSandboxFile } from '../../review/pipeline/harness';
 import { subscribeReview } from '../../review/session/events';
 import { findReviewCheckout } from '../../review/session/review-checkout';
@@ -42,26 +48,56 @@ async function expandedFiles(diff: string, sandboxPath: string | null): Promise<
 }
 
 /**
+ * The snapshot a client gets. Without `tools` it leaves out the tool-call
+ * history, which can pass a megabyte and which a client that never shows it
+ * would download again on every connect.
+ */
+function snapshotFor(progress: ReviewProgress | undefined, tools: boolean): ReviewProgress | undefined {
+	if (tools || !progress) return progress;
+
+	const { toolCalls: _toolCalls, ...rest } = progress;
+
+	return rest;
+}
+
+/**
+ * One message onto the stream, skipped once the client has left. Hono's write
+ * already swallows the error a closed client causes, so the catch is a guard:
+ * should a write ever reject, the queue behind it keeps going instead of
+ * dropping every later event, and the error's name alone is logged.
+ */
+async function write(stream: SSEStreamingApi, reviewId: string, data: string): Promise<void> {
+	if (stream.aborted) return;
+
+	try {
+		await stream.writeSSE({ data });
+	} catch (error) {
+		console.error(
+			`[recoder] review ${reviewId}: an event write failed (${error instanceof Error ? error.name : 'unknown'})`
+		);
+	}
+}
+
+/**
  * Stream a review's events to one client: a snapshot first, then every live
  * event, then a heartbeat every few seconds until the client leaves. It
  * subscribes before the snapshot's write finishes so no update falls between
- * them, and every write goes through one queue to keep them in order.
+ * them, and every write goes through one queue to keep them in order. Without
+ * `tools`, snapshots leave out the tool calls; each tool event still arrives.
  */
-async function streamReviewEvents(stream: SSEStreamingApi, review: Review): Promise<void> {
+async function streamReviewEvents(stream: SSEStreamingApi, review: Review, tools: boolean): Promise<void> {
 	let lastStatus = review.status;
 	let writes = Promise.resolve();
 
 	const send = (data: unknown) => {
 		const encoded = JSON.stringify(data);
 
-		writes = writes.then(async () => {
-			if (!stream.aborted) await stream.writeSSE({ data: encoded });
-		});
+		writes = writes.then(() => write(stream, review.id, encoded));
 
 		return writes;
 	};
 
-	const snapshot = reviewProgress.get(review.id) ?? emptyReviewProgress(review.id);
+	const snapshot = snapshotFor(reviewProgress.get(review.id), tools) ?? emptyReviewProgress(review.id);
 	const initial = send({ type: 'snapshot', snapshot, review, status: review.status, sequence: snapshot.sequence });
 
 	const unsubscribe = subscribeReview(
@@ -79,7 +115,7 @@ async function streamReviewEvents(stream: SSEStreamingApi, review: Review): Prom
 					? {
 							...event,
 							review: current,
-							...(terminal || restarted ? { snapshot: reviewProgress.get(review.id) } : {})
+							...(terminal || restarted ? { snapshot: snapshotFor(reviewProgress.get(review.id), tools) } : {})
 						}
 					: event
 			);
@@ -151,7 +187,7 @@ app.get('/:id/files', async (c) => {
 	return c.body(body, 200, { 'content-type': 'application/json; charset=utf-8' });
 });
 
-/** Live pipeline events (fetch/sandbox/agent progress) as server-sent events. */
+/** Live pipeline events (fetch/sandbox/agent progress) as server-sent events. `?tools=0` leaves tool calls out of snapshots. */
 app.get('/:id/events', (c) => {
 	const review = requireReview(c);
 
@@ -159,9 +195,10 @@ app.get('/:id/events', (c) => {
 
 	c.header('X-Accel-Buffering', 'no');
 
-	const response = streamSSE(c, (stream) => streamReviewEvents(stream, review));
+	const tools = c.req.query('tools') !== '0';
+	const response = streamSSE(c, (stream) => streamReviewEvents(stream, review, tools));
 
-	response.headers.set('Cache-Control', 'no-cache, no-transform');
+	c.header('Cache-Control', 'no-cache, no-transform');
 
 	return response;
 });

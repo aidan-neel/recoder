@@ -1,7 +1,9 @@
-import type { FileClass } from './files';
-import type { Decision, DecisionState, Proof, Tone } from './surface';
+import type { DecisionTone } from '@recoder/shared';
 
-export const TONE_LABEL: Record<Tone, string> = {
+import type { FileClass } from './files';
+import type { Decision, DecisionState, Proof } from './surface';
+
+export const TONE_LABEL: Record<DecisionTone, string> = {
 	high: 'High',
 	medium: 'Medium',
 	low: 'Low',
@@ -25,13 +27,6 @@ export function plain(text: string): string {
 	return codeParts(text).join('');
 }
 
-/** `error-handling` → `Error handling`. */
-export function categoryLabel(category: string): string {
-	const words = category.replace(/-/g, ' ');
-
-	return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
 /** `src/a/b.ts:12` or `src/a/b.ts:12-14`, with the directory dropped when `short`. */
 export function where(file: string, line: number | null, endLine: number | null = null, short = false): string {
 	const name = short ? file.slice(file.lastIndexOf('/') + 1) : file;
@@ -49,7 +44,7 @@ export const CLASS_LABEL: Record<FileClass, string> = {
 };
 
 /** The glyph for a decision: its tone while open, then what was decided. */
-export function decisionGlyph(decision: Decision, state: DecisionState): Tone | 'ok' | 'sent' | 'dismissed' {
+export function decisionGlyph(decision: Decision, state: DecisionState): DecisionTone | 'ok' | 'sent' | 'dismissed' {
 	if (state === 'open') return decision.tone;
 
 	return state === 'accepted' ? 'ok' : state;

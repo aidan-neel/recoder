@@ -1,25 +1,28 @@
 /* connections */
 
-/* ───────── Forges: the mark beside the name ───────── */
+/* ───────── Forges: the mark beside the name, on the name's own line height so every row is 58px ───────── */
 .forge-name {
 	display: inline-flex;
 	align-items: center;
 	gap: 8px;
+	vertical-align: top;
 }
 
 /* ───────── Tracked repositories: rows that fold in and out ───────── */
 .repo-item {
 	overflow: hidden;
 }
-.repo-item + .repo-item {
-	border-top: 1px solid var(--line-subtle-2);
-}
+/* Every row is 46px, hairline included, so the placeholder rows match it (REPO_ROW_HEIGHT). */
 .repo-row {
 	display: flex;
 	min-height: 46px;
 	align-items: center;
 	gap: 10px;
 	padding: 8px 10px 8px 16px;
+}
+.repo-item + .repo-item > .repo-row {
+	padding-top: 7px;
+	border-top: 1px solid var(--line-subtle-2);
 }
 .repo-name {
 	min-width: 0;
@@ -109,36 +112,17 @@
 	height: 14px;
 	color: var(--ok);
 }
-.remote-message {
-	display: flex;
-	height: 100%;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 14px;
-	padding: 0 32px;
-	color: var(--text-subtle);
-	font-size: 13px;
-	line-height: 1.5;
-	text-align: center;
-	text-wrap: balance;
-}
-.remote-detail {
-	margin-top: 2px;
-	color: var(--text-subtle);
-	font-size: 12px;
-	overflow-wrap: anywhere;
-}
-/* A forge whose list failed while another loaded: the reason and a retry, above the rows */
+/* A forge whose list failed while another loaded: the reason under it and a way out, above the rows */
 .remote-note {
-	display: flex;
-	align-items: center;
 	gap: 12px;
 	margin: 4px 4px 0;
 	padding: 8px 6px 8px 10px;
 	border-bottom: 1px solid var(--line-subtle-2);
-	font-size: 12.5px;
-	line-height: 18px;
+}
+.remote-note [data-ui='status-notice-detail'] {
+	display: block;
+	margin-top: 2px;
+	font-size: 12px;
 }
 .add-url-row {
 	display: flex;

@@ -1,13 +1,13 @@
 'use client';
 
 import { ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@recoder/ui';
+import { memo } from 'react';
 
 import type { DeleteTarget } from '@/components/queue/delete-review-dialog';
 import { copyLink } from '@/lib/shell/copy-link';
 import { isSampleReview } from '@/lib/shell/routes';
 import { useShell } from '@/lib/shell/shell-store';
-
-import { useTabActions } from './use-tab-actions';
+import { closeReviewTabs as close, goToTab as open } from '@/lib/shell/tab-actions';
 
 interface TabMenuProps {
 	/** The review tab the menu opened over, or null for the Queue tab and the bar itself. */
@@ -23,9 +23,8 @@ interface TabMenuProps {
  * delete the review under the pointer, or close every tab from the bar. The
  * sample review has no link or server copy, so it only opens and closes.
  */
-export function TabMenu({ tabId, active, onDelete }: TabMenuProps) {
+export const TabMenu = memo(function TabMenu({ tabId, active, onDelete }: TabMenuProps) {
 	const tabs = useShell((state) => state.tabs);
-	const { close, open } = useTabActions();
 	const ids = tabs.map((tab) => tab.id);
 	const at = tabId ? ids.indexOf(tabId) : -1;
 	const tab = tabs[at];
@@ -67,4 +66,4 @@ export function TabMenu({ tabId, active, onDelete }: TabMenuProps) {
 			) : null}
 		</ContextMenuContent>
 	);
-}
+});

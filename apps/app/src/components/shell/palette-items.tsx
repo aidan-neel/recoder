@@ -22,6 +22,7 @@ import { useReview } from '@/lib/review/review-store';
 import { SETTINGS_SECTIONS, type SettingsSection } from '@/lib/settings/sections';
 import { pullRef } from '@/lib/shell/format';
 import { QUEUE_TAB } from '@/lib/shell/routes';
+import { prepareSettings } from '@/lib/shell/settings-warm';
 import { useShell, type PaletteItem, type ReviewTab } from '@/lib/shell/shell-store';
 import { useTheme } from '@/lib/shell/theme';
 
@@ -118,15 +119,20 @@ export function actionItems(
 ): PaletteItem[] {
 	const go = (href: string) => useShell.getState().navigate(href);
 
-	const settings = SETTINGS_SECTIONS.map((section): PaletteItem => ({
-		id: `settings:${section.id}`,
-		group: 'Actions',
-		label: `${section.label} settings`,
-		keywords: `settings preferences ${SECTION_WORDS[section.id]}`,
-		icon: SECTION_ICONS[section.id],
-		shortcut: section.id === 'agent' ? 'mod+,' : undefined,
-		run: () => go(`/settings/${section.id}`)
-	}));
+	const settings = SETTINGS_SECTIONS.map((section): PaletteItem => {
+		const href = `/settings/${section.id}`;
+
+		return {
+			id: `settings:${section.id}`,
+			group: 'Actions',
+			label: `${section.label} settings`,
+			keywords: `settings preferences ${SECTION_WORDS[section.id]}`,
+			icon: SECTION_ICONS[section.id],
+			shortcut: section.id === 'agent' ? 'mod+,' : undefined,
+			run: () => go(href),
+			prepare: () => void prepareSettings(href)
+		};
+	});
 
 	return [
 		...askItem(askable),

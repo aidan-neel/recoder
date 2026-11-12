@@ -90,9 +90,26 @@ function leaveChrome(key: string, target: EventTarget | null): void {
 	if (MOVES.has(key) && element instanceof HTMLElement && element.closest(CHROME)) element.blur();
 }
 
+/**
+ * The overlay check's answer for each key press. Every page listener asks
+ * about the same press, so the document is searched once per press, not
+ * once per listener. A listener that acts on a press marks it handled, and
+ * the ones after it skip it before they ask, so an overlay that press opens
+ * never needs a fresh answer.
+ */
+const overlayByEvent = new WeakMap<KeyboardEvent, boolean>();
+
 /** True while any dialog, menu or listbox is open, so page shortcuts stand down. */
-function overlayOpen(): boolean {
-	return !!document.querySelector(OVERLAYS);
+function overlayOpen(event: KeyboardEvent): boolean {
+	const known = overlayByEvent.get(event);
+
+	if (known !== undefined) return known;
+
+	const open = !!document.querySelector(OVERLAYS);
+
+	overlayByEvent.set(event, open);
+
+	return open;
 }
 
 /**
@@ -108,7 +125,7 @@ export function flashKey(key: string): void {
 
 /** True when a plain key should stand down: the person types, a dialog is open, or a focused control owns the key. */
 function standsDown(event: KeyboardEvent, key: string): boolean {
-	return typing(event.target) || overlayOpen() || activates(event) || keepsMove(key, event.target);
+	return typing(event.target) || overlayOpen(event) || activates(event) || keepsMove(key, event.target);
 }
 
 /**

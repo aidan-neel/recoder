@@ -1,17 +1,24 @@
 import { app } from './app';
 import { env } from './env';
 import { serverDataDir } from './util/data-dir';
+import { claudeCode } from './agents/claude-code/claude-code';
 import { opencode } from './agents/opencode/opencode';
 import { initReviewSettings } from './review/session/review-settings';
 import { initTokenStore } from './forge/tokens';
 import { recoverStaleReviews } from './store';
 
-/** Start the agent now so Settings never waits on a cold start, and warm its provider catalog. */
-function warmAgent(): void {
+/**
+ * Start the agents' checks now so Settings never waits on a cold start:
+ * OpenCode with its provider catalog, and Claude Code's sign-in, so the first
+ * Check again after a restart can answer from it instead of waiting on the CLI.
+ */
+function warmAgents(): void {
 	void opencode
 		.detect()
 		.then((status) => (status.error ? undefined : opencode.providers()))
 		.catch(() => {});
+
+	void claudeCode.detect().catch(() => {});
 }
 
 /**
@@ -32,10 +39,32 @@ function isLongLived(path: string): boolean {
 	return LONG_LIVED.some((pattern) => pattern.test(path));
 }
 
+/**
+ * Where a stray rejection came from: its error's name and stack frames. The
+ * message is left out, since a failed request's message can carry a token or
+ * a key.
+ */
+function rejectionTrace(reason: unknown): string {
+	if (!(reason instanceof Error)) return typeof reason;
+
+	const frames = (reason.stack ?? '').split('\n').filter((line) => line.trimStart().startsWith('at '));
+
+	return [reason.name, ...frames.slice(0, 8)].join('\n');
+}
+
+/**
+ * Bun exits on a rejection nobody handled, which would end every running
+ * review over one dropped promise. Log where it came from and keep serving.
+ */
+function logStrayRejections(): void {
+	process.on('unhandledRejection', (reason) => console.error('[recoder] unhandled rejection', rejectionTrace(reason)));
+}
+
+logStrayRejections();
 initTokenStore();
 initReviewSettings();
 recoverStaleReviews();
-warmAgent();
+warmAgents();
 
 const server = Bun.serve({
 	fetch(request, server) {

@@ -23,17 +23,29 @@ interface CodeSectionProps {
 
 /**
  * The "Code" part of a detail: the lines around what an item points at. While
- * a live review is still computing its diff, a placeholder holds the place.
+ * a live review is still computing its diff, a placeholder holds the place. A
+ * diff that failed to load says so in one quiet line: the rail's Files group
+ * holds the notice with Try again, and a second one here would repeat it. A
+ * place outside the diff has no code to show, so the section is left out.
  */
 export function CodeSection({ file, line, endLine, side, radius, openable = false }: CodeSectionProps) {
 	const diff = useReview((state) => state.files.find((item) => item.path === file) ?? null);
 	const waiting = useReview((state) => state.files.length === 0 && isRunning(state.review));
+	const failed = useReview((state) => state.files.length === 0 && state.filesError !== null);
 	const code = useMemo(() => diff && excerpt(diff, line, endLine, side, radius), [diff, line, endLine, side, radius]);
 
 	if (waiting) {
 		return (
 			<DetailSection title="Code">
 				<Skeleton className="h-[220px] rounded-[10px]" />
+			</DetailSection>
+		);
+	}
+
+	if (failed) {
+		return (
+			<DetailSection title="Code">
+				<p className="text-[13px] text-fg-muted">Couldn’t load the diff. Try again under Files.</p>
 			</DetailSection>
 		);
 	}

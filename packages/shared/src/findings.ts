@@ -70,6 +70,13 @@ export function findingKind(category: string | undefined): FindingKind {
 	return category && QUALITY_SET.has(category) ? 'quality' : 'bug';
 }
 
+/** A category or smell id in words: `error-handling` → `Error handling`. */
+export function categoryLabel(category: string): string {
+	const words = category.replace(/-/g, ' ');
+
+	return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 /**
  * A finding's message split into its `[category]` tag and the body after it.
  * Candidates and older saved reviews put the tag in front of the message; a
@@ -104,6 +111,25 @@ export interface FindingClaim {
 	violatedContract: string;
 	/** Code that might already prevent it, and why it doesn't. */
 	existingGuard?: string;
+}
+
+/**
+ * What people's feedback on a finding counts toward in its repository: the
+ * rule it cites, the smell it names, or else its category. Accepting,
+ * sending and dismissing findings of one topic decides whether later
+ * findings of it are quieted.
+ */
+export interface FindingTopic {
+	/** `rule:<hash of the rule's text>`, `smell:<smell>` or `category:<category>`, the same in every review of the repository. */
+	id: string;
+	/** The topic for people: the rule's text, the smell or the category. */
+	label: string;
+	/**
+	 * People in this repository keep dismissing findings of this topic, so the
+	 * finding is listed apart, collapsed, and left out of the review's counts
+	 * until someone turns the topic back on. A reproduced bug is never quieted.
+	 */
+	quieted?: true;
 }
 
 /** A suggested change for a quality finding, applied in the sandbox and checked before it is shown. */
@@ -235,6 +261,8 @@ export interface Finding {
 	claim?: FindingClaim;
 	/** A checked fix, on quality findings. */
 	patch?: FindingPatch;
+	/** What feedback on it counts toward, and whether that feedback quieted it. Older saved reviews omit it. */
+	topic?: FindingTopic;
 	/** Which lens or detector raised it (`correctness`, `detector:duplication`). */
 	lens?: string;
 	evidenceIds?: string[];

@@ -108,3 +108,17 @@
 	align-self: flex-start;
 	margin: 16px 0 0 -12px;
 }
+
+/* ───────── Skeleton: the same column, card and steps, with bars where the copy and the actions go ───────── */
+/* An md button is the control size less 2px (the kit's Button). */
+.setup-skeleton-action {
+	width: 136px;
+	height: calc(var(--size-control-md) - 2px);
+	border-radius: 8px;
+}
+.setup-skeleton-sample {
+	width: 150px;
+	height: calc(var(--size-control-md) - 2px);
+	margin-top: 16px;
+	border-radius: 8px;
+}

@@ -1,5 +1,5 @@
 import { REVIEW_CANCELLED, type PullRequest, type Review, type ReviewProgress } from '@recoder/shared';
-import { toast } from '@recoder/ui';
+import { toast } from '@recoder/ui/toast';
 
 import { ApiError, failureText, plainly } from '../api/http';
 import { reviewsApi } from '../api/reviews';
@@ -13,8 +13,8 @@ import { useReview } from './review-store';
  */
 export type ReviewPhase = 'draft' | 'queued' | 'running' | 'paused' | 'passed' | 'failed' | 'cancelled';
 
-/** The review's phase, from its stored status and the live progress. */
-export function phaseOf(review: Review, progress: ReviewProgress | null): ReviewPhase {
+/** The review's phase, from its stored status and the live progress. A list item works too. */
+export function phaseOf(review: Pick<Review, 'status' | 'summary'>, progress: ReviewProgress | null): ReviewPhase {
 	if (review.status === 'running' && progress?.paused) return 'paused';
 	if (review.status === 'failed' && review.summary === REVIEW_CANCELLED) return 'cancelled';
 
@@ -25,7 +25,7 @@ export function phaseOf(review: Review, progress: ReviewProgress | null): Review
  * True when commits landed after the review. A failed review of an old commit
  * is reviewed again rather than continued, so the new head gets reviewed.
  */
-export function isOutdated(review: Review, pull: PullRequest | null): boolean {
+export function isOutdated(review: Pick<Review, 'headSha'>, pull: PullRequest | null): boolean {
 	return !!pull?.headSha && review.headSha !== 'unknown' && review.headSha !== pull.headSha;
 }
 

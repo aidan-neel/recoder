@@ -3,6 +3,8 @@ import { join } from 'node:path';
 import {
 	settleAssignments,
 	type CommandRun,
+	type ProgressSummaries,
+	type ProgressSummary,
 	type Repo,
 	type Review,
 	type ReviewProgress,
@@ -10,7 +12,7 @@ import {
 } from '@recoder/shared';
 import { serverDataDir } from './util/data-dir';
 import type { ReviewCheckpoint } from './review/session/review-checkpoint';
-import { settleTasks } from './review/session/task-state';
+import { isTerminalTask, settleTasks } from './review/session/task-state';
 
 /**
  * SQLite-backed store. Everything the UI treats as durable (repos, reviews,
@@ -42,6 +44,7 @@ export function closeStore(): void {
 	flushReviewProgress();
 	progressCache.clear();
 	progressDirty.clear();
+	progressSummaries.clear();
 	handle?.close();
 	handle = null;
 }
@@ -91,6 +94,24 @@ const PROGRESS_CACHE_SIZE = 24;
 const PROGRESS_FLUSH_MS = 750;
 
 /**
+ * Counts per review whose progress changed since the server started, kept as
+ * each snapshot is set, so listing them never reads the progress table. A
+ * restart fails every review left running, so none is missing at startup.
+ */
+const progressSummaries = new Map<string, ProgressSummary>();
+
+/** A snapshot in counts: tasks done of all, and reviewers at work. */
+function summarize(progress: ReviewProgress): ProgressSummary {
+	const tasks = Object.values(progress.tasks ?? {});
+
+	return {
+		tasksTotal: tasks.length,
+		tasksDone: tasks.filter(isTerminalTask).length,
+		agents: (progress.assignments ?? []).filter((assignment) => assignment.status === 'running').length
+	};
+}
+
+/**
  * Write every pending snapshot to SQLite now. A snapshot stays pending until
  * its own write succeeds, and one failed write doesn't hold back the rest.
  */
@@ -134,10 +155,21 @@ function flushOnTimer(): void {
  * latest snapshot shortly after, on a terminal event, and at exit.
  */
 export const reviewProgress = {
-	list: (): ReviewProgress[] => {
-		flushReviewProgress();
+	/**
+	 * The summary of every review still queued or running, from memory. A
+	 * review found stopped is dropped until its progress changes again.
+	 */
+	summaries: (): ProgressSummaries => {
+		const running: ProgressSummaries = {};
 
-		return progressTable.list().map((item) => progressCache.get(item.id) ?? item);
+		for (const [id, summary] of progressSummaries) {
+			const status = db.reviews.get(id)?.status;
+
+			if (status === 'queued' || status === 'running') running[id] = summary;
+			else progressSummaries.delete(id);
+		}
+
+		return running;
 	},
 	get: (id: string): ReviewProgress | undefined => {
 		const cached = progressCache.get(id);
@@ -157,6 +189,7 @@ export const reviewProgress = {
 	},
 	set: (item: ReviewProgress): ReviewProgress => {
 		remember(item);
+		progressSummaries.set(item.id, summarize(item));
 		progressDirty.add(item.id);
 		progressTimer ??= setTimeout(flushOnTimer, PROGRESS_FLUSH_MS);
 
@@ -165,12 +198,14 @@ export const reviewProgress = {
 	delete: (id: string): boolean => {
 		progressCache.delete(id);
 		progressDirty.delete(id);
+		progressSummaries.delete(id);
 
 		return progressTable.delete(id);
 	},
 	clear: (): void => {
 		progressCache.clear();
 		progressDirty.clear();
+		progressSummaries.clear();
 		progressTable.clear();
 	},
 	flush: flushReviewProgress

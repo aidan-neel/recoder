@@ -1,5 +1,17 @@
 /* kit: overlay. Modal, confirm dialog, popover and tooltip contracts that classes alone cannot express. */
 
+/* ───────── Scroll lock ───────── */
+/*
+ * Modal overlays (dialogs, selects, the palette) lock the page's scroll and
+ * set this variable on <body>. Inherited, it restyled every element on each
+ * open and close (about 30ms at 4x CPU on the queue). Nothing reads it, so
+ * it stays on <body>.
+ */
+@property --removed-body-scroll-bar-size {
+	syntax: '*';
+	inherits: false;
+}
+
 /* ───────── Modal panel ───────── */
 /* Centered with `translate`, which composes under the entrance transform. */
 [data-ui='modal-panel'] {

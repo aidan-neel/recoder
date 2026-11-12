@@ -1,15 +1,15 @@
 'use client';
 
-import { parseUnifiedDiff } from '@recoder/shared';
+import { categoryLabel, parseUnifiedDiff } from '@recoder/shared';
 import { Markdown, Pill } from '@recoder/ui';
+import { StatusNotice } from '@recoder/ui/status-notice';
 import { CircleDashed, FlaskConical, Route, ShieldCheck } from 'lucide-react';
 import { useMemo } from 'react';
 
-import { stateOf } from '@/lib/review/decisions';
 import { fileHunks } from '@/lib/review/excerpt';
-import { categoryLabel, plain, PROOF_LABEL, TONE_LABEL } from '@/lib/review/labels';
+import { plain, PROOF_LABEL, TONE_LABEL } from '@/lib/review/labels';
 import { surfaceOf, useReview } from '@/lib/review/review-store';
-import type { Decision, Proof } from '@/lib/review/surface';
+import { quietedTopicOf, type Decision, type Proof, type QuietedTopic } from '@/lib/review/surface';
 
 import { ClaimSteps } from './claim-steps';
 import { HunkCode } from './code-frame';
@@ -17,7 +17,9 @@ import { CodeSection } from './code-section';
 import { SentNote, StateLine } from './decision-state';
 import { DetailArticle, DetailSection, Kicker, KickerText, WhereButton } from './detail-parts';
 import { EvidenceBlock } from './evidence-block';
+import { MissingItem } from './missing-item';
 import { InlineText } from '@/components/common/inline-text';
+import { TurnBackOn } from '@/components/review/turn-back-on';
 
 const PROOF_ICON: Record<Proof, typeof FlaskConical> = {
 	reproduced: FlaskConical,
@@ -81,10 +83,26 @@ function FixSection({ decision }: { decision: Decision }) {
 	);
 }
 
-/** One decision, mounted per item so moving between decisions swaps content with no animation. */
-function DecisionDetail({ decision }: { decision: Decision }) {
-	const state = useReview((store) => stateOf(store.records, decision.id));
+/** Why a quieted finding sits apart, with the way to bring its topic back. Deciding it waits until then. */
+function QuietedNote({ topic }: { topic: QuietedTopic }) {
+	return (
+		<StatusNotice
+			variant="inline"
+			title="Quieted."
+			detail="Findings like this are often marked not an issue in this repository."
+			actions={<TurnBackOn topicId={topic.id} />}
+			className="quiet-note"
+		/>
+	);
+}
 
+/**
+ * One decision, mounted per item so moving between decisions swaps content
+ * with no animation. Only its state line and note follow the decision's
+ * state, so deciding never renders the body, the evidence or the code again.
+ * A quieted finding reads the same, under a note that says why it sits apart.
+ */
+function DecisionDetail({ decision, quieted }: { decision: Decision; quieted: QuietedTopic | null }) {
 	return (
 		<DetailArticle label={plain(decision.title)}>
 			<header className="mb-[18px]">
@@ -92,19 +110,20 @@ function DecisionDetail({ decision }: { decision: Decision }) {
 					<Pill tone={decision.tone}>{TONE_LABEL[decision.tone]}</Pill>
 					{decision.category ? <KickerText>{categoryLabel(decision.category)}</KickerText> : null}
 					<ProofLabel decision={decision} />
-					<StateLine decision={decision} state={state} />
+					<StateLine decision={decision} />
 				</Kicker>
 				<h2 className="detail-title">
 					<InlineText text={decision.title} />
 				</h2>
 				<WhereButton file={decision.file} line={decision.line} endLine={decision.endLine} symbol={decision.symbol} />
+				{quieted ? <QuietedNote topic={quieted} /> : null}
 			</header>
 
 			<Markdown variant="ai" className="detail-body">
 				{decision.body}
 			</Markdown>
 
-			<SentNote id={decision.id} sent={state === 'sent'} />
+			<SentNote id={decision.id} />
 
 			{decision.claim ? (
 				<DetailSection title="How it breaks">
@@ -135,11 +154,19 @@ function DecisionDetail({ decision }: { decision: Decision }) {
 	);
 }
 
-/** One decision: what is wrong, how it breaks, the proof and the code. */
+/**
+ * One decision: what is wrong, how it breaks, the proof and the code. A
+ * quieted finding opens to read; the decision bar leaves it alone until its
+ * topic is back on.
+ */
 export function DecisionView({ id }: { id: string }) {
-	const decision = useReview((state) => surfaceOf(state)?.decisions.find((item) => item.id === id) ?? null);
+	const active = useReview((state) => surfaceOf(state)?.decisions.find((item) => item.id === id) ?? null);
+	const quieted = useReview((state) => quietedTopicOf(surfaceOf(state), id));
+	const decision = active ?? quieted?.decisions.find((item) => item.id === id) ?? null;
 
-	if (!decision) return null;
+	if (!decision) {
+		return <MissingItem title="This decision isn’t in the review anymore." detail="A newer run may have dropped it." />;
+	}
 
-	return <DecisionDetail key={decision.id} decision={decision} />;
+	return <DecisionDetail key={decision.id} decision={decision} quieted={active ? null : quieted} />;
 }

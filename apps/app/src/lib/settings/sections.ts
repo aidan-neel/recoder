@@ -9,14 +9,21 @@ export const SETTINGS_SECTIONS = [
 
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number]['id'];
 
+/** The section `/settings` itself shows, on its own address, so opening Settings needs no redirect. */
+export const DEFAULT_SECTION: SettingsSection = 'agent';
+
 /** True for a known section id. */
 export function isSettingsSection(value: string): value is SettingsSection {
 	return SETTINGS_SECTIONS.some((section) => section.id === value);
 }
 
-/** The section a `/settings/<id>` path shows, or null for any other path. */
+/** The section a `/settings/<id>` path shows, {@link DEFAULT_SECTION} for `/settings`, or null for any other path. */
 export function sectionFromPath(pathname: string): SettingsSection | null {
-	const id = /^\/settings\/([^/?#]+)/.exec(pathname)?.[1] ?? '';
+	const match = /^\/settings(?:\/([^/?#]*))?(?:[/?#]|$)/.exec(pathname);
+
+	if (!match) return null;
+
+	const id = match[1] || DEFAULT_SECTION;
 
 	return isSettingsSection(id) ? id : null;
 }

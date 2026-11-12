@@ -58,9 +58,9 @@
 	min-width: 92px;
 }
 
-/* The running lead shimmers from the tertiary text, so the serif lead stays readable between passes. */
+/* The running lead dims only to about the tertiary text between swells, so the serif lead stays readable. */
 .live-header .shimmer-text {
-	--shimmer-base: var(--text-tertiary);
+	--shimmer-dim: 0.8;
 }
 
 /* The stream's state while it is not connected. A fresh connection that opens fast never shows. */
@@ -165,8 +165,12 @@
 	box-shadow: inset 0 0 0 1.5px var(--sev-medium-solid);
 }
 .live-stage-skeleton {
-	align-items: center;
-	height: 30px;
+	gap: 12px;
+	padding: 0;
+}
+/* Progress that did not load says so in the stage list's place: six 30px rows. */
+.live-notice {
+	min-height: 180px;
 }
 
 /* ───────── Reviewers: one line each ───────── */

@@ -135,8 +135,8 @@
 }
 /*
  * At phone size the window drops what a 420px app cannot fit: the search
- * field, the review header's meta, a queue row's meta past its end and the
- * decision bar's stepper; long titles truncate sooner.
+ * field, the review header's meta and the decision bar's stepper; long
+ * titles truncate sooner.
  */
 @container (max-width: 600px) {
 	.demo-window {
@@ -147,9 +147,6 @@
 	.demo-window .review-meta,
 	.demo-window [data-ui='decide-bar'] > :last-child {
 		display: none;
-	}
-	.demo-window .queue-row-meta {
-		overflow: hidden;
 	}
 	.demo-window [data-ui='tab-title'] {
 		max-width: 110px;

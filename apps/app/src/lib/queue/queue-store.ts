@@ -1,52 +1,57 @@
-import { latestReviews, type PullRequest, type Repo, type Review } from '@recoder/shared';
+import { latestReviews } from '@recoder/shared';
+import { whenIdle } from '@recoder/ui';
+import { useLayoutEffect } from 'react';
 import { create } from 'zustand';
 
-import { ApiError, failureText, plainly } from '../api/http';
-import { reviewsApi, type ProgressSummaries } from '../api/reviews';
-import { useReview } from '../review/review-store';
-import { DECISIONS_PREFIX, type DecisionRecord } from '../review/saved-decisions';
+import { failureKind, failureText, NetworkError } from '../api/http';
+import type { ProgressSummaries } from '../api/reviews';
 import { SAMPLE_PROGRESS, sampleQueue } from '../sample/sample-queue';
-import { SAMPLE_REVIEW } from '../sample/sample-review';
-import { errorToast, undoToast } from '../shell/notify';
-import { reviewHref } from '../shell/routes';
-import { useShell } from '../shell/shell-store';
-import { queueEntry, type QueueEntry } from './queue';
-import { entryRepo, rowsOf, sameList, withReview, withSavedDecisions } from './queue-rows';
+import { useShell, type QueueScope } from '../shell/shell-store';
+import type { QueueEntry } from './queue';
+import { queueActions } from './queue-actions';
+import { fetchQueue, forgetPulls, retryDelay, type MissingRepo, type QueueData } from './queue-fetch';
+import { rowsOf, sameList, withSavedDecisions } from './queue-rows';
+import { clearSnapshot, readSnapshot, savedRepos } from './queue-snapshot';
+import { syncQueue } from './queue-sync';
 import { syncTabs } from './queue-tabs';
 
 /**
- * `offline`: the review server did not answer the first load. `empty`: it
+ * `offline`: the first load never reached the review server. `failed`: the
+ * server answered it with an error, or did not answer in time. `empty`: it
  * answered with no tracked repositories.
  */
-type QueueStatus = 'loading' | 'ready' | 'offline' | 'empty';
+type QueueStatus = 'loading' | 'ready' | 'offline' | 'failed' | 'empty';
 
 interface QueueStore {
 	status: QueueStatus;
 	entries: QueueEntry[];
 	progress: ProgressSummaries;
 	sample: boolean;
-	/** True when a refresh failed after a good load; the last list stays on screen. */
-	stale: boolean;
-	/** Repositories whose pull requests failed to load on the last refresh; their last rows stay on screen. */
-	missing: string[];
-	/** When the list last loaded, for the note a stale list shows. */
+	/**
+	 * What the last refresh's failure says, in plain words; null once one
+	 * succeeds. With a list on screen, that list stays, from `loadedAt`.
+	 */
+	error: string | null;
+	/** Repositories whose pull requests failed to load on the last refresh, and why; their last rows stay on screen. */
+	missing: MissingRepo[];
+	/** How many repositories the list on screen covers, so a page with no rows can tell whether every list failed. */
+	tracked: number;
+	/** When the list on screen loaded. */
 	loadedAt: number | null;
+	/** True when the list on screen has missed a few refreshes in a row, though none failed outright, so it never passes for live. */
+	stale: boolean;
+	/** True while the list on screen is the one an earlier visit saved and no refresh has answered yet. */
+	restored: boolean;
 	/** Rows whose start request is in flight, by entry key. */
 	starting: Record<string, boolean>;
 	/** The row j and k selected; it stays while the person visits a review and comes back. */
 	selected: string | null;
 	select: (key: string | null) => void;
-	/** Loads the queue and keeps it fresh. Returns the cleanup; call it on unmount. */
+	/** Loads the queue and keeps it fresh while the page shows. Returns the cleanup; call it on unmount. */
 	load: (sample: boolean) => () => void;
-	/**
-	 * Keeps the Queue tab's count right on pages without the queue: the live
-	 * list loads and refreshes in the background, and the sample's comes from
-	 * the sample queue. The shell calls it per scope; returns the cleanup.
-	 */
-	watch: (sample: boolean) => () => void;
-	/** Drops the list, so the next queue page loads it from scratch (after the page failed to render it). */
+	/** Drops the list, saved copy included, so the next queue page loads it from scratch (after the page failed to render it). */
 	reset: () => void;
-	/** Reloads repositories, pull requests, reviews and progress. Resolves true when the list loaded. */
+	/** Reloads repositories, reviews and progress, and asks every forge again. Resolves true when the list loaded. */
 	refresh: () => Promise<boolean>;
 	/** Reviews the pull request: resumes a failed review, runs a draft, else queues a fresh review of the current head. */
 	start: (entry: QueueEntry) => Promise<void>;
@@ -56,54 +61,68 @@ interface QueueStore {
 	remove: (id: string) => Promise<void>;
 }
 
-/** Refresh this often while a row is being reviewed... */
+/** Refresh the review list and progress this often while a row is being reviewed... */
 const LIVE_MS = 4000;
 
-/** ...this often otherwise, so new pull requests show up... */
-const IDLE_MS = 60_000;
+/**
+ * ...and everything this often otherwise, so new pull requests show up and a
+ * server that stopped shows within seconds. The forge is still asked at most
+ * once a minute (see `PULLS_MS`). A failed load retries sooner (see `retryDelay`).
+ */
+const IDLE_MS = 15_000;
 
-/** ...and this often while the server is down, so the page recovers once it is back. */
-const OFFLINE_MS = 15_000;
+/** A list older than this has missed a few planned refreshes... */
+const STALE_MS = 3 * IDLE_MS;
 
-/** A started sample review finishes one step per tick. */
-const SAMPLE_TICK_MS = 900;
+/**
+ * ...and says how old it is once a refresh has run this long without an
+ * answer. A refresh that lands sooner, say right after the computer wakes,
+ * shows no note at all instead of one that folds open and shut.
+ */
+const STALE_GRACE_MS = 2000;
 
-/** Steps a started sample review takes. */
-const SAMPLE_STEPS = 7;
+/** The longest a list the last visit saved waits for its first refresh while the page draws it. */
+const FIRST_REFRESH_WAIT_MS = 1000;
 
-export const useQueue = create<QueueStore>(() => ({
-	status: 'loading',
+const EMPTY: Pick<
+	QueueStore,
+	'entries' | 'progress' | 'error' | 'missing' | 'tracked' | 'loadedAt' | 'stale' | 'restored'
+> = {
 	entries: [],
 	progress: {},
-	sample: false,
-	stale: false,
+	error: null,
 	missing: [],
+	tracked: 0,
 	loadedAt: null,
+	stale: false,
+	restored: false
+};
+
+export const useQueue = create<QueueStore>(() => ({
+	...EMPTY,
+	status: 'loading',
+	sample: false,
 	starting: {},
 	selected: null,
 	select: (selected) => set({ selected }),
 	load,
-	watch,
-	reset: () => set({ status: 'loading', entries: [], progress: {}, stale: false, missing: [], loadedAt: null }),
-	refresh,
-	start,
-	talk,
-	remove
+	reset,
+	refresh: () => refreshWith(true),
+	start: (entry) => actions.start(entry),
+	talk: (entry) => actions.talk(entry),
+	remove: (id) => actions.remove(id)
 }));
 
 const get = useQueue.getState;
 const set = useQueue.setState;
 
-/** The repositories the last good refresh returned; their pull requests are fetched alongside the next one. */
-let repos: Repo[] = [];
+/** The repositories the last load found; their pull requests are asked for alongside the next one's list. */
+let repos: QueueData['repos'] = [];
 
 let timer: ReturnType<typeof setTimeout> | null = null;
 
-/** True while a queue page is mounted. */
+/** True while a queue page is mounted: only then does the list refresh. */
 let active = false;
-
-/** True while the shell watches the live queue from a page without it, for the Queue tab's count. */
-let watching = false;
 
 /** Bumps on every load and unmount, so a sample run from an earlier visit stops ticking. */
 let generation = 0;
@@ -116,43 +135,72 @@ let generation = 0;
  */
 let seq = 0;
 
+/** The refresh in flight; another asked for before anything newer happened joins it instead of asking again. */
+let inflight: { seq: number; done: Promise<boolean> } | null = null;
+
+/** Failed loads in a row, for the retry's backoff. */
+let failures = 0;
+
+/** True while a saved list goes back on screen, so saving does not write the same list straight back. */
+let restoring = false;
+
 function hasRunning(entries: QueueEntry[]): boolean {
 	return entries.some((entry) => entry.state === 'reviewing');
 }
 
-/** True while the live list should stay fresh: its queue page shows, or the shell watches it from another page. */
+/** True while the live list should stay fresh: its queue page shows. */
 function polling(): boolean {
-	return (active || watching) && !get().sample;
+	return active && !get().sample;
 }
 
-/** Plans the next refresh: soon while something runs, slowly otherwise. */
+/** True while the browser tab is in the background, where nothing reads the list. */
+function hidden(): boolean {
+	return typeof document !== 'undefined' && document.visibilityState === 'hidden';
+}
+
+/**
+ * Marks the list on screen as old when it has missed a few planned refreshes,
+ * so a silent failure cannot pass for live. A list the last visit saved is
+ * left alone while its first refresh runs: it paints as part of the page, and
+ * a note folding in over it at boot would shift the page for no failure.
+ */
+function markStale(): void {
+	const { loadedAt, stale, restored } = get();
+
+	if (!stale && !restored && loadedAt !== null && Date.now() - loadedAt > STALE_MS) set({ stale: true });
+}
+
+/**
+ * Plans the next refresh: soon after a failure (1, 2, 4, 8, then every 15
+ * seconds), every few seconds while something runs, every 15 seconds
+ * otherwise. A tab in the background plans none; it refreshes when it shows.
+ */
 function schedule(): void {
 	if (timer) clearTimeout(timer);
 
 	timer = null;
 
-	if (!polling()) return;
+	if (!polling() || hidden()) return;
 
-	const { status, entries } = get();
-	const wait = status === 'offline' ? OFFLINE_MS : hasRunning(entries) ? LIVE_MS : IDLE_MS;
+	const { error, entries } = get();
+	const wait = error !== null ? retryDelay(failures) : hasRunning(entries) ? LIVE_MS : IDLE_MS;
 
-	timer = setTimeout(() => void refresh(), wait);
+	timer = setTimeout(() => void refreshWith(false), wait);
 }
 
-function replace(key: string, change: (entry: QueueEntry) => QueueEntry): void {
-	set({ entries: get().entries.map((entry) => (entry.key === key ? change(entry) : entry)) });
+/** The new value, or the old one when it holds the same, so nothing that reads it renders again. */
+function same<T>(before: T, next: T): T {
+	return JSON.stringify(before) === JSON.stringify(next) ? before : next;
 }
 
-/** One repository's open pull requests, or null when the forge did not answer. */
-function pullsOf(repoId: string): Promise<PullRequest[] | null> {
-	return reviewsApi.pulls(repoId).catch(() => null);
-}
-
-function apply(list: Repo[], pulls: (PullRequest[] | null)[], reviews: Review[], progress: ProgressSummaries): void {
+/** Puts a whole refresh on screen at once: every row, the progress and what failed. */
+function apply({ repos: list, pulls, missing, reviews, progress }: QueueData): void {
 	repos = list;
 
+	const settled = { error: null, tracked: list.length, loadedAt: Date.now(), stale: false, restored: false };
+
 	if (list.length === 0) {
-		set({ status: 'empty', entries: [], stale: false, missing: [], loadedAt: Date.now() });
+		set({ ...settled, status: 'empty', entries: [], missing: [] });
 		syncTabs(reviews, []);
 
 		return;
@@ -168,221 +216,195 @@ function apply(list: Repo[], pulls: (PullRequest[] | null)[], reviews: Review[],
 	);
 
 	set({
+		...settled,
 		status: 'ready',
 		entries,
-		progress: JSON.stringify(progress) === JSON.stringify(get().progress) ? get().progress : progress,
-		stale: false,
-		missing: list.filter((_, index) => pulls[index] === null).map((repo) => repo.name),
-		loadedAt: Date.now()
+		progress: same(get().progress, progress ?? get().progress),
+		missing: same(get().missing, missing)
 	});
 
 	syncTabs(reviews, entries);
 }
 
-async function refresh(): Promise<boolean> {
-	if (!polling()) return false;
+/**
+ * A refresh that failed. A list on screen stays, marked with what went
+ * wrong; without one the page says it. Only a server that never answered
+ * reads as offline: an error it sent, or a slow answer, reads as failed.
+ */
+function fail(error: unknown): void {
+	const text = failureText(error);
+	const { status } = get();
 
-	const mine = ++seq;
-	const early = new Map(repos.map((repo) => [repo.id, pullsOf(repo.id)]));
+	if (status === 'ready' || status === 'empty') return set({ error: text });
+
+	set({ status: failureKind(error) === 'offline' ? 'offline' : 'failed', error: text });
+}
+
+/** Loads the queue for refresh `mine`; an old list says how old it is if the answer is slow (see {@link STALE_GRACE_MS}). */
+async function run(mine: number, force: boolean): Promise<boolean> {
+	const slow = setTimeout(markStale, STALE_GRACE_MS);
 
 	try {
-		const [list, reviews, progress] = await Promise.all([
-			reviewsApi.repos(),
-			reviewsApi.reviews(),
-			reviewsApi.progress().catch(() => get().progress)
-		]);
-
-		const pulls = await Promise.all(list.map((repo) => early.get(repo.id) ?? pullsOf(repo.id)));
+		const data = await fetchQueue(repos, force);
 
 		if (mine !== seq) return false;
 
-		apply(list, pulls, reviews, progress);
+		failures = 0;
+		apply(data);
 
 		return true;
-	} catch {
+	} catch (error) {
 		if (mine !== seq) return false;
 
-		const { status } = get();
-
-		set(status === 'loading' || status === 'offline' ? { status: 'offline' } : { stale: true });
+		failures += 1;
+		fail(error);
 
 		return false;
 	} finally {
+		clearTimeout(slow);
+
 		if (mine === seq) schedule();
 	}
 }
 
 /**
- * Re-reads saved decisions for every reviewed row when another tab saves
- * some, so decisions made there move rows at once. Other saves (tabs, notes
- * being typed) change nothing, and a row whose decisions did not change keeps
- * its entry. In the sample only the sample review keeps its decisions in storage.
+ * Reloads the queue. One already in flight is joined unless something newer
+ * happened since it began, so a page mounted twice (StrictMode) asks once.
+ * `force` asks every forge for its pull requests again and never joins.
  */
-function rederive(event: StorageEvent): void {
-	const { entries, sample } = get();
+function refreshWith(force: boolean): Promise<boolean> {
+	if (!polling()) return Promise.resolve(false);
+	if (!force && inflight?.seq === seq) return inflight.done;
 
-	if (entries.length === 0 || (event.key !== null && !event.key.startsWith(DECISIONS_PREFIX))) return;
+	const mine = ++seq;
 
-	set({ entries: withSavedDecisions(entries, sample) });
-}
-
-/** Follows the review open in this tab, so its row (and the Queue badge) keeps up while the person decides. */
-function follow(review: Review, records: Record<string, DecisionRecord>): void {
-	const { entries } = get();
-
-	if (entries.some((entry) => entry.review?.id === review.id)) set({ entries: withReview(entries, review, records) });
-}
-
-/** A sample review that walks through its steps and lands as ready to merge. */
-function runSample(entry: QueueEntry): void {
-	const id = `sample-${entry.pull.number}`;
-	const gen = generation;
-	let done = 0;
-
-	const running: Review = {
-		...SAMPLE_REVIEW,
-		id,
-		prNumber: entry.pull.number,
-		headSha: entry.pull.headSha,
-		status: 'running',
-		findings: [],
-		questions: undefined
-	};
-
-	replace(entry.key, (item) => queueEntry(entryRepo(item), item.pull, running, {}));
-
-	const tick = () => {
-		if (generation !== gen) return;
-
-		done += 1;
-		set({ progress: { ...get().progress, [id]: { tasksDone: done, tasksTotal: SAMPLE_STEPS, agents: 1 } } });
-
-		if (done < SAMPLE_STEPS) return void setTimeout(tick, SAMPLE_TICK_MS);
-
-		replace(entry.key, (item) => queueEntry(entryRepo(item), item.pull, { ...running, status: 'passed' }, {}));
-	};
-
-	setTimeout(tick, SAMPLE_TICK_MS);
-}
-
-/** The request that reviews a row: resume a failed review, run a draft session, or queue a fresh review. */
-function startRequest(entry: QueueEntry): Promise<Review> {
-	if (entry.state === 'failed' && entry.review) return reviewsApi.continue(entry.review.id);
-	if (entry.review?.status === 'draft') return reviewsApi.startDraft(entry.review.id);
-
-	return reviewsApi.start(entry.repoId, entry.pull);
-}
-
-/** Toasts a failed request with the server's reason and any way out it offered. */
-function failed(title: string, error: unknown): void {
-	const action = error instanceof ApiError ? error.action : undefined;
-
-	errorToast(title, failureText(error), action);
-}
-
-/** Runs a row's request with the row marked as starting, so its button spins until the server answers. */
-async function pending(entry: QueueEntry, failure: string, work: () => Promise<void>): Promise<void> {
-	set({ starting: { ...get().starting, [entry.key]: true } });
-
-	try {
-		await work();
-	} catch (error) {
-		failed(failure, error);
-	} finally {
-		const { [entry.key]: _done, ...rest } = get().starting;
-
-		set({ starting: rest });
-	}
-}
-
-/** Puts a review the server just made on its row, ahead of any refresh already in flight. */
-function land(entry: QueueEntry, review: Review): void {
-	seq++;
-	replace(entry.key, (item) => queueEntry(entryRepo(item), item.pull, review, {}));
-}
-
-function startLive(entry: QueueEntry): Promise<void> {
-	return pending(entry, 'Couldn’t start the review', async () => {
-		land(entry, await startRequest(entry));
-		schedule();
+	const done = run(mine, force).finally(() => {
+		if (inflight?.seq === mine) inflight = null;
 	});
+
+	inflight = { seq: mine, done };
+
+	return done;
 }
 
-async function talk(entry: QueueEntry): Promise<void> {
-	const current = get().entries.find((item) => item.key === entry.key) ?? entry;
-
-	if (get().sample || get().starting[current.key] || current.review) return;
-
-	await pending(current, 'Couldn’t start the conversation', async () => {
-		const review = await reviewsApi.draft(current.repoId, current.pull);
-
-		land(current, review);
-		useShell.getState().navigate(reviewHref(review.id));
-	});
+/** True while a refresh of the list is in flight. */
+export function queueRefreshing(): boolean {
+	return inflight !== null;
 }
 
-async function remove(id: string): Promise<void> {
-	await plainly(() => reviewsApi.remove(id));
-
+/** Marks a change made here, so a refresh already in flight does not undo it. */
+function touch(): void {
 	seq++;
+}
+
+const actions = queueActions({
+	get,
+	set,
+	touch,
+	schedule,
+	refresh: () => refreshWith(false),
+	generation: () => generation
+});
+
+/** Puts the list the last visit saved back on screen, not yet confirmed; one too old to paint still lends its repositories. */
+function restore(): void {
+	const snapshot = readSnapshot();
+
+	repos = snapshot?.repos ?? savedRepos();
+
+	if (!snapshot) return;
+
+	restoring = true;
 
 	set({
-		entries: get().entries.map((entry) =>
-			entry.review?.id === id ? queueEntry(entryRepo(entry), entry.pull, null, {}) : entry
-		)
+		status: 'ready',
+		entries: withSavedDecisions(snapshot.entries, false),
+		progress: snapshot.progress,
+		missing: snapshot.missing,
+		tracked: snapshot.repos.length,
+		loadedAt: snapshot.at,
+		stale: false,
+		restored: true,
+		error: null
 	});
 
-	undoToast('Review deleted');
-	void refresh();
+	restoring = false;
 }
 
-async function start(entry: QueueEntry): Promise<void> {
-	const current = get().entries.find((item) => item.key === entry.key) ?? entry;
-
-	if (get().starting[current.key] || current.state === 'reviewing') return;
-
-	if (get().sample) return runSample(current);
-
-	await startLive(current);
-}
-
-/** Points the store at one queue, dropping the other queue's list; the sample's list is there at once. */
+/**
+ * Points the store at one queue, dropping the other queue's list. The
+ * sample's list is there at once; the live one comes back from the last
+ * visit's saved copy while it loads.
+ */
 function point(sample: boolean): void {
 	if (get().sample !== sample) {
 		seq++;
-		set({ entries: [], progress: {}, status: 'loading', loadedAt: null, selected: null });
+		failures = 0;
+		set({ ...EMPTY, status: 'loading', selected: null });
 	}
 
-	set({ sample, stale: false, missing: [], starting: {} });
+	set({ sample, starting: {} });
 
 	if (sample) set({ entries: sampleQueue(), progress: SAMPLE_PROGRESS, status: 'ready' });
+	else if (get().status === 'loading') restore();
 }
 
-/** Refreshes at once when no list is loaded yet, else on the timer; the timer stops when nothing should poll. */
-function resume(): void {
-	if (polling() && get().status === 'loading') void refresh();
-	else schedule();
+function reset(): void {
+	seq++;
+	failures = 0;
+	repos = [];
+	clearSnapshot();
+	forgetPulls();
+	set({ ...EMPTY, status: 'loading' });
 }
 
+/** The network dropped: the list says so at once instead of at its next refresh, and retries on the failure's backoff. */
+function wentOffline(): void {
+	if (!polling()) return;
+
+	failures += 1;
+	fail(new NetworkError('The browser went offline.'));
+	schedule();
+}
+
+/**
+ * Shows the queue and keeps it fresh while the page is mounted: it refreshes
+ * on the timer, when the tab shows again, and at once when the network or the
+ * window comes back after a failed load. The network dropping shows at once.
+ * A list the last visit saved is already on screen, so its first refresh
+ * waits until the page is idle: the page draws the rows below the first
+ * screen in batches after it paints, and an answer that changes the list
+ * meanwhile would make it draw them again.
+ */
 function load(sample: boolean): () => void {
 	const gen = ++generation;
 
 	active = true;
 	point(sample);
 
-	if (!sample) void refresh();
+	const cancelFirst = !sample && get().restored ? whenIdle(() => void refreshWith(false), FIRST_REFRESH_WAIT_MS) : null;
 
-	const onVisible = () => document.visibilityState === 'visible' && void refresh();
+	if (!sample && !cancelFirst) void refreshWith(false);
+
+	const onVisible = () => (hidden() ? schedule() : void refreshWith(false));
+	const onBack = () => get().error !== null && void refreshWith(false);
 
 	document.addEventListener('visibilitychange', onVisible);
+	window.addEventListener('online', onBack);
+	window.addEventListener('offline', wentOffline);
+	window.addEventListener('focus', onBack);
 
 	return () => {
+		cancelFirst?.();
+
 		document.removeEventListener('visibilitychange', onVisible);
+		window.removeEventListener('online', onBack);
+		window.removeEventListener('offline', wentOffline);
+		window.removeEventListener('focus', onBack);
 
 		if (generation !== gen) return;
 
 		generation++;
-		seq++;
 		active = false;
 
 		if (timer) clearTimeout(timer);
@@ -391,44 +413,23 @@ function load(sample: boolean): () => void {
 
 		const { status } = get();
 
-		set({ stale: false, missing: [], ...(status === 'offline' || status === 'empty' ? { status: 'loading' } : {}) });
-		resume();
-	};
-}
-
-function watch(sample: boolean): () => void {
-	watching = !sample;
-
-	if (!active) {
-		if (get().sample !== sample) point(sample);
-
-		resume();
-	}
-
-	return () => {
-		watching = false;
-
-		if (!active) schedule();
+		if (status === 'offline' || status === 'failed' || status === 'empty') set({ status: 'loading', error: null });
 	};
 }
 
 /**
- * The Queue tab's badge: pull requests that need a decision, per queue, so the
- * badge counts the queue its tab leads to. A reload keeps the last count.
+ * The Queue tab's badge for one queue: the pull requests that need a
+ * decision, or null before that queue has loaded. Off the queue page it
+ * points the store at that queue without asking the server: the live queue
+ * comes back from the last visit's saved copy, the sample from its fixed
+ * rows. Decisions on the review page then keep the count right (`follow`).
  */
-useQueue.subscribe((state) => {
-	if (state.status === 'loading') return;
+export function useQueueWaiting(scope: QueueScope): number | null {
+	useLayoutEffect(() => {
+		if (!active) point(scope === 'sample');
+	}, [scope]);
 
-	const scope = state.sample ? 'sample' : 'live';
-	const waiting = state.status === 'ready' ? state.entries.filter((entry) => entry.state === 'needs-you').length : null;
+	return useShell((state) => state.waiting[scope]);
+}
 
-	if (useShell.getState().waiting[scope] !== waiting) useShell.getState().setWaiting(scope, waiting);
-});
-
-useReview.subscribe((state, previous) => {
-	if (state.review && (state.records !== previous.records || state.review !== previous.review)) {
-		follow(state.review, state.records);
-	}
-});
-
-if (typeof window !== 'undefined') window.addEventListener('storage', rederive);
+syncQueue({ store: useQueue, repos: () => repos, restoring: () => restoring });

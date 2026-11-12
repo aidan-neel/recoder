@@ -4,6 +4,7 @@ import { surfaceOf, type ReviewData } from './review-state';
 import { syncTab } from './review-tab';
 import { decisionsKey, readDecisions, writeDecisions, type DecisionRecord } from './saved-decisions';
 import type { Selection } from './selection';
+import { sendUsefulVote } from './useful-sync';
 
 /** Undo reaches back this many changes. */
 const HISTORY_LIMIT = 100;
@@ -49,12 +50,19 @@ function stillValid(
 
 /** Accept, send back, dismiss, undo and notes, saved per review and head commit. */
 export function decisionActions({ get, set, persists }: StoreAccess): DecisionActions {
-	/** Tells the server when a finding becomes "not an issue" or stops being one. The sample has no server. */
-	function syncDismissal(id: string, was: DecisionRecord['state'], now: DecisionRecord['state']): void {
+	/**
+	 * Tells the server when a finding becomes "not an issue" or stops being
+	 * one, and when a person finds it useful or no longer does. Questions
+	 * carry no finding, so they send nothing. The sample has no server.
+	 */
+	function syncDecision(id: string, was: DecisionRecord['state'], now: DecisionRecord['state']): void {
 		const { sample, review } = get();
 		const finding = surfaceOf(get())?.decisions.find((decision) => decision.id === id)?.finding;
 
-		if (!sample && review && finding) sendDismissal(review.id, finding.id, was, now);
+		if (sample || !review || !finding) return;
+
+		sendDismissal(review.id, finding.id, was, now);
+		sendUsefulVote(review.id, finding.id, was, now);
 	}
 
 	/** Saves the records of the items in `ids`, keeping what other tabs saved for the rest, and records the undo steps. */
@@ -84,7 +92,7 @@ export function decisionActions({ get, set, persists }: StoreAccess): DecisionAc
 			if (!result) return;
 
 			commit(result.records, [id], [...history, result.change]);
-			syncDismissal(id, was, state);
+			syncDecision(id, was, state);
 
 			if (selection.kind === 'decision' && selection.id === id) get().select(get().nextOpen(id));
 
@@ -102,7 +110,7 @@ export function decisionActions({ get, set, persists }: StoreAccess): DecisionAc
 
 			commit(next, [change.id], history.slice(0, -1));
 			get().select({ kind: 'decision', id: change.id });
-			syncDismissal(change.id, was, stateOf(next, change.id));
+			syncDecision(change.id, was, stateOf(next, change.id));
 			syncTab(get());
 
 			return change.id;
@@ -115,7 +123,7 @@ export function decisionActions({ get, set, persists }: StoreAccess): DecisionAc
 			if (!result) return;
 
 			commit(result.records, [id], [...history, result.change]);
-			syncDismissal(id, stateOf(records, id), 'open');
+			syncDecision(id, stateOf(records, id), 'open');
 			syncTab(get());
 		},
 

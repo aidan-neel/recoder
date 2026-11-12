@@ -1,6 +1,5 @@
 /* ───────── Queue: a centred reading column of open pull requests ───────── */
 .queue-column {
-	position: relative;
 	display: flex;
 	flex-direction: column;
 	width: 100%;
@@ -19,67 +18,118 @@
 	margin: 12px 0 44px;
 }
 
-/* A refresh failed after a good load: one quiet line in the top padding, so nothing below moves. */
-.queue-stale {
-	position: absolute;
-	top: 14px;
-	right: 40px;
-	left: 40px;
-	display: flex;
-	height: 28px;
-	align-items: center;
-	gap: 6px;
-	color: var(--text-subtle);
-	font-size: 12.5px;
+/* Notes under the headline (a failed refresh, repositories that didn't load): they take part of the brief's gap, so the list moves only by their own lines. */
+.queue-notes {
+	margin: -28px 0 28px;
 }
-@media (max-width: 640px) {
-	.queue-stale {
-		top: 2px;
-		right: 16px;
-		left: 16px;
-	}
+.queue-notes-list {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
 }
 
-/* ───────── Section heads: the list's top border sits under each one ───────── */
+/* ───────── Section heads: the first row's top line runs under each one ───────── */
 .queue-head {
 	display: flex;
 	align-items: center;
 	gap: 8px;
 	margin-top: 36px;
 	padding: 0 4px 10px;
-	border-bottom: 1px solid var(--line-subtle);
 	color: var(--text-subtle);
 	font-size: 12.5px;
 	font-weight: 400;
 	line-height: 1.4;
-	transition: border-color var(--dur-highlight) ease-out;
 }
 .queue-head[data-first] {
 	margin-top: 0;
 }
 
 /* ───────── Rows ───────── */
+/* A row's whole height, its lines included, which the space kept for rows not drawn yet and the skeleton's cut both count in. */
+.queue-list,
+.queue-skeleton {
+	--queue-row-block: 73px;
+}
 .queue-list {
+	--queue-head-block: 63.5px;
+
 	display: flex;
 	flex-direction: column;
+}
+/* Rows the first commit leaves for later keep their place, a row (73px) or a head (its 36px gap, line and padding) at a time. */
+.queue-rest {
+	height: calc(var(--rest-rows) * var(--queue-row-block) + var(--rest-heads) * var(--queue-head-block));
 }
 .queue-list > [data-ui='hover-list-highlight'].queue-hover {
 	background-color: var(--bg-raised);
 	box-shadow: none;
 }
-/* The highlight cannot follow a spring, so it steps out while rows move and comes back on the row under the pointer. */
-.queue-list:has(.queue-row[data-shifting]) > [data-ui='hover-list-highlight'].queue-hover {
+/* The highlight cannot follow a spring, so it steps out while rows move (the rows mark the list) and comes back on the row under the pointer. */
+.queue-list[data-shifting] > [data-ui='hover-list-highlight'].queue-hover {
 	opacity: 0;
 	transition: none;
 }
-/* The skeleton's dividers wait out the same 200ms as its bars, on the kit's own hold. */
-.queue-skeleton {
-	animation: ui-skeleton-hold 1ms linear var(--skeleton-delay) backwards;
+/* The skeleton fades in as one piece (the root runs the kit's hold, which the hand-off follows); nested fades would multiply. */
+[data-ui='skeleton-hold'] {
+	animation: ui-skeleton-hold var(--dur-swap) ease-in var(--skeleton-delay) backwards;
 }
-.queue-skeleton-list {
+[data-ui='skeleton-hold'] [data-ui='skeleton'] {
+	animation: none;
+}
+/* Each bar sits where its line's text will: the glyph at the row's top, the title and meta bars centred on their lines. */
+.queue-skeleton [data-ui='skeleton-row'] > [data-ui='skeleton'] {
+	align-self: flex-start;
+	margin-top: 3px;
+}
+.queue-skeleton [data-ui='skeleton-row-bars'] {
+	gap: 13.5px;
+}
+/* The line under the last row, drawn by the rows' box, so it sits where the list's last line will, wherever the cut falls. */
+.queue-skeleton [data-ui='skeleton-rows'] {
+	box-shadow: inset 0 -1px var(--line-subtle);
+}
+/* A note line is as tall as its md ghost button (the control size less 2px); below 450px it takes the two lines a note wraps to. */
+.queue-skeleton {
+	--queue-note-line: calc(var(--size-control-md) - 2px);
+}
+@media (max-width: 449.98px) {
+	.queue-skeleton {
+		--queue-note-line: 36px;
+	}
+}
+.queue-skeleton-note {
 	display: flex;
-	flex-direction: column;
-	border-top: 1px solid var(--line-subtle);
+	min-height: var(--queue-note-line);
+	align-items: center;
+}
+/*
+ * Before React runs, the skeleton draws the most rows and note lines a list leaves, and the shape
+ * script's variables cut them to the last list's: five rows and one note line when nothing is
+ * stored. Note lines sit 2px apart, unless the last list measured its notes on this side of 450px.
+ */
+.queue-skeleton-rows {
+	height: calc(var(--queue-skeleton-rows, 5) * var(--queue-row-block));
+	overflow: hidden;
+}
+.queue-skeleton-notes {
+	display: var(--queue-skeleton-if-notes, block);
+}
+.queue-skeleton-notes > .queue-notes-list {
+	height: var(
+		--queue-skeleton-notes-height,
+		calc(var(--queue-skeleton-notes, 1) * (var(--queue-note-line) + 2px) - 2px)
+	);
+	overflow: hidden;
+}
+/* The headline's bars, cut to the lines the last headline took at this width, else one (two below 451px, where it wraps). */
+.queue-skeleton-brief {
+	height: calc(var(--queue-skeleton-brief, 1) * 27px * 1.38);
+	overflow: hidden;
+}
+@media (max-width: 450px) {
+	.queue-skeleton-brief {
+		height: calc(var(--queue-skeleton-brief, 2) * 27px * 1.38);
+	}
 }
 .queue-row {
 	--row-button-radius: 10px;
@@ -89,12 +139,24 @@
 	align-items: center;
 	gap: 14px;
 	padding: 14px 12px;
-	border-bottom: 1px solid var(--line-subtle);
+	border-top: 1px solid var(--line-subtle);
 	outline: none;
 	scroll-margin-block: 24px;
 	transition:
 		border-color var(--dur-highlight) ease-out,
 		background-color var(--dur-highlight) ease-out;
+}
+
+/* Each row draws the line above it, and a section's last row the one under it too, inside its 73px: sibling rules, not `:has()`, hide them. */
+.queue-row[data-end] {
+	padding-bottom: 13px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+
+/* Rows out of view skip style, layout and paint until near it; they keep their content box (73px less padding and lines). */
+.queue-row[data-queue-row] {
+	content-visibility: auto;
+	contain-intrinsic-size: auto 44px;
 }
 
 /* A row sliding to a new place paints over the row fading in where it was; one springing to another section also over the heads it passes. */
@@ -106,15 +168,17 @@
 	z-index: 2;
 }
 
-/* The selected row (j, k) takes the raised fill with a hairline ring; the dividers beside it and a hovered row step aside. */
+/* The selected row (j, k) takes the raised fill with a hairline ring; the lines above and below it and a hovered row step aside. */
 .queue-row[data-selected] {
 	border-radius: 10px;
 	background-color: var(--bg-raised);
 	box-shadow: inset 0 0 0 1px var(--line-subtle-2);
 }
-.queue-row:is(:hover, [data-selected]),
-.queue-list > :has(+ .queue-row:is(:hover, [data-selected])) {
-	border-bottom-color: transparent;
+.queue-row:is(:hover, [data-selected]) {
+	border-color: transparent;
+}
+.queue-row:is(:hover, [data-selected]) + .queue-row {
+	border-top-color: transparent;
 }
 .queue-row-glyph {
 	align-self: flex-start;
@@ -130,11 +194,15 @@
 	cursor: pointer;
 }
 
+/*
+ * The line under the title: author · head branch → base · size and age. Its grid gives the author its
+ * room first and the rest what is left, so the author truncates only when nothing else fits.
+ */
 .queue-row-meta {
-	display: flex;
+	display: grid;
 	min-width: 0;
+	grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
 	align-items: center;
-	gap: 8px;
 	color: var(--text-faint);
 	font-family: var(--font-code);
 	font-size: 11.5px;
@@ -143,19 +211,111 @@
 }
 .queue-row-author {
 	display: inline-flex;
-	flex-shrink: 0;
+	min-width: 0;
 	align-items: center;
 	gap: 4px;
 }
+/*
+ * The rest of the line gives way in whole steps, so no part draws over another and none is cut
+ * mid-word: the head branch truncates down to three letters, then wraps away with its dot ("renovate
+ * → main · 11 files"); then the base wraps away with its arrow; then the size drops its age and
+ * sent-back count. Wrapped parts land on a second line, which the height hides, and the parts after
+ * them close up. They sit in reverse, so the line places the size first, then the base, then the head
+ * branch, while they still read head branch, base, size.
+ */
+.queue-row-tail {
+	display: flex;
+	height: 1lh;
+	min-width: 0;
+	flex-flow: row-reverse wrap;
+	justify-content: flex-end;
+	overflow: hidden;
+}
+.queue-row-head {
+	flex: 1 1 calc(5ch + 16px);
+	min-width: 0;
+	max-width: max-content;
+	overflow: hidden;
+	color: var(--text-subtle);
+	text-overflow: ellipsis;
+}
+.queue-row-base {
+	flex: none;
+	order: -1;
+}
+/* The dot before the head branch and the arrow before the base, each between two 8px gaps. */
+.queue-row-head::before,
+.queue-row-base::before {
+	padding-inline: 8px;
+	color: var(--text-faint);
+}
+.queue-row-head::before {
+	content: '·' / '';
+}
+.queue-row-base::before {
+	content: '→' / '';
+}
+/*
+ * A dotted part draws its dot in the gap before it, as wide as a dot between two 8px gaps; the size
+ * draws its own in its padding. First on its line, it shrinks to its diff counts when the line is
+ * short, and its later parts wrap away on its own hidden second line. A part that starts a line, on
+ * a narrow row, puts its dot left of the group, where the clip hides it.
+ */
+.queue-row-size {
+	--meta-dot: calc(1ch + 16px);
 
-/* ───────── Running rows: a note and a 64px meter ───────── */
+	position: relative;
+	display: flex;
+	height: 1lh;
+	min-width: min-content;
+	flex: 0 1 auto;
+	flex-wrap: wrap;
+	order: -2;
+	align-items: center;
+	padding-left: var(--meta-dot);
+	column-gap: var(--meta-dot);
+	overflow: hidden;
+}
+.queue-row-size::before {
+	position: absolute;
+	left: 0;
+	width: var(--meta-dot);
+	content: '·' / '';
+	text-align: center;
+}
+.queue-row-dotted::before {
+	display: inline-block;
+	width: var(--meta-dot);
+	margin-left: calc(-1 * var(--meta-dot));
+	color: var(--text-faint);
+	content: '·' / '';
+	text-align: center;
+}
+/* The diff counts sit 8px apart. */
+.queue-row-diff {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+/* ───────── Running rows: a note and a 64px meter, on a line as tall as the meta line, so every row is 73px ───────── */
 .queue-row-progress {
 	display: flex;
-	height: 15px;
+	height: 17px;
 	align-items: center;
 	gap: 10px;
 	color: var(--text-faint);
 	font-size: 12px;
+}
+/*
+ * On the sample page a running row never moves on, so its spinner turns twice and its label swells once,
+ * and an idle page is still (under reduced motion too). The site's demo, outside this page, keeps them moving.
+ */
+.queue-page .queue-row[data-sample] [data-ui='spinner'] {
+	animation-iteration-count: 2 !important;
+}
+.queue-page .queue-row[data-sample] .shimmer-text {
+	animation-iteration-count: 1;
 }
 [data-ui='meter'].queue-row-meter {
 	--meter-fill: var(--text-secondary);
@@ -230,6 +390,76 @@
 }
 [data-ui='button'][data-variant='outline'].queue-row-btn {
 	color: var(--text-muted);
+}
+
+/*
+ * ───────── Narrow rows: the column is the container, so a row takes the layout its own width calls for, in
+ * the app and in the site's demo. At 600px and below the pill or action drops under the meta line: 111px.
+ */
+.queue-column {
+	container: queue / inline-size;
+}
+@container queue (max-width: 600px) {
+	.queue-row {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr);
+		align-items: start;
+		gap: 8px 14px;
+	}
+	.queue-list,
+	.queue-skeleton {
+		--queue-row-block: 111px;
+	}
+	/* Rows out of view keep the content box (the block less padding and lines), so the scroll position holds. */
+	.queue-row[data-queue-row] {
+		contain-intrinsic-size: auto 82px;
+	}
+	/* A skeleton row is as tall as the row that replaces it; the kit sets the desktop height inline. */
+	.queue-skeleton [data-ui='skeleton-row'] {
+		height: var(--queue-row-block) !important;
+	}
+	.queue-row-side {
+		grid-column: 2;
+		justify-items: start;
+	}
+	.queue-row-rest > svg {
+		display: none;
+	}
+}
+/* At 430px and below the meta line breaks in two (author and branches, then the size, wrapping its parts): 130px, or 111px running. */
+@container queue (max-width: 430px) {
+	.queue-list,
+	.queue-skeleton {
+		--queue-row-block: 130px;
+	}
+	.queue-row[data-queue-row] {
+		contain-intrinsic-size: auto 101px;
+	}
+	.queue-row[data-queue-row]:has(.queue-row-progress) {
+		contain-intrinsic-size: auto 82px;
+	}
+	.queue-row-meta {
+		display: flex;
+		flex-wrap: wrap;
+		row-gap: 2px;
+	}
+	.queue-row-tail {
+		display: contents;
+	}
+	.queue-row-size::before {
+		display: none;
+	}
+	.queue-row-base {
+		order: 0;
+	}
+	.queue-row-size {
+		height: auto;
+		flex: 1 0 100%;
+		order: 0;
+		padding-left: 0;
+		overflow: clip visible;
+		row-gap: 2px;
+	}
 }
 
 /* ───────── Assignees: a tiny overlapping stack on the title line ───────── */

@@ -13,7 +13,7 @@ import { useReview } from '@/lib/review/review-store';
 import { AskContext } from './ask-context';
 import { AskThreadView } from './ask-thread';
 import { ChatComposer } from './chat-composer';
-import { ChatScroll } from './chat-scroll';
+import { ChatScroll, useTranscriptHeld } from './chat-scroll';
 
 /** What the composer invites: a first question, a follow-up, or picking something to ask about. */
 function placeholderFor(item: AskItem | null, thread: AskThread): string {
@@ -34,7 +34,8 @@ export function ItemConversation({ reviewId, item }: { reviewId: string; item: A
 	const thread = stored ?? EMPTY_THREAD;
 	const replying = isReplying(thread);
 	const field = useRef<HTMLTextAreaElement>(null);
-	const stick = useStickToBottom(item?.key ?? 'none');
+	const held = useTranscriptHeld();
+	const stick = useStickToBottom(item?.key ?? 'none', !held);
 
 	function ask(question: string): void {
 		if (!item) return;
@@ -58,7 +59,7 @@ export function ItemConversation({ reviewId, item }: { reviewId: string; item: A
 
 	return (
 		<>
-			{item ? (
+			{item && !held ? (
 				<AskContext item={item} state={item.kind === 'decision' ? stateOf(records, item.decision.id) : 'open'} />
 			) : null}
 			<ChatScroll stick={stick} label="Conversation with the reviewer">

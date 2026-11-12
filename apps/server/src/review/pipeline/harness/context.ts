@@ -17,6 +17,7 @@ import { REVIEW_POLICY, scaledReviewLimits } from '../../session/review-policy.j
 import { ModelBudget } from '../agent-loop.js';
 import type { JsonAgentOptions } from '../agent-loop/options.js';
 import { listDismissals, type Dismissal } from '../../guidelines/learned/dismissals.js';
+import { topicTallies, type TopicTally } from '../../guidelines/learned/votes.js';
 import type { RuleLedger } from '../../guidelines/ledger/types.js';
 import type { ChangeModel } from '../change-model/types.js';
 import { isReportable, type CandidateFinding } from '../consolidate.js';
@@ -24,6 +25,7 @@ import type { DetectorResult } from '../detectors/types.js';
 import { CoverageLedger } from '../coverage.js';
 import type { ChangeIntent } from '../intent/types.js';
 import { buildInventory, type ReviewInventory } from '../inventory.js';
+import type { RepoInventory } from '../repo-inventory/repo-inventory.js';
 import { lensAssignments } from '../lenses/lenses.js';
 import { obligationsOn } from '../obligations/config.js';
 import { restoreObligationState, type ObligationState } from '../obligations/state.js';
@@ -66,6 +68,8 @@ export interface ReviewRun {
 	candidates: CandidateFinding[];
 	/** The verifiers, open from before the first reviewer until the last verdict; null until then. */
 	verifying: VerifyQueue | null;
+	/** Every file at the PR head; null until listed, or without a checkout. */
+	repo: RepoInventory | null;
 	/** Every changed symbol with its callers, callees, tests and comparable code; null until built or when nothing parses. */
 	changeModel: ChangeModel | null;
 	/** What the change is meant to do; null when there was no context to distill. */
@@ -74,6 +78,8 @@ export interface ReviewRun {
 	ledger: RuleLedger | null;
 	/** Findings people dismissed in this repository, newest first; empty without a repository. */
 	dismissals: Dismissal[];
+	/** How people in this repository decided each topic's findings, by topic id; empty without a repository. */
+	topicTallies: ReadonlyMap<string, TopicTally>;
 	/** The type check, lint and test runs on the PR head; empty without a sandbox. */
 	baseline: BaselineResult[];
 	/** Deterministic quality results on changed lines; the verifier turns them into proven candidates. */
@@ -128,10 +134,12 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		assignments: [],
 		candidates: (resume?.candidates ?? []).map((candidate) => ({ ...candidate })),
 		verifying: null,
+		repo: null,
 		changeModel: null,
 		intent: null,
 		ledger: null,
 		dismissals: input.repoId ? listDismissals(input.repoId) : [],
+		topicTallies: input.repoId ? topicTallies(input.repoId) : new Map(),
 		baseline: [],
 		detections: [],
 		hidden: [],
@@ -304,7 +312,13 @@ export function poolContext(run: ReviewRun): PoolContext {
 
 	return {
 		inventory,
-		pr: { title: input.prTitle ?? '', body: input.prBody ?? '', context: input.context?.people ?? '', inventory },
+		pr: {
+			title: input.prTitle ?? '',
+			body: input.prBody ?? '',
+			context: input.context?.people ?? '',
+			inventory,
+			repo: run.repo
+		},
 		evidence: run.evidence,
 		coverage: run.coverage,
 		budget: run.budget,

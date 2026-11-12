@@ -27,6 +27,12 @@ export interface RepoRule {
 	appliesTo?: string;
 	/** Set when the rule is mechanical; such rules run as a detector instead of in the rules lens. */
 	check?: MechanicalCheck;
+	/**
+	 * How the repository's people treat findings of this rule, set for the run
+	 * from their votes (`rankRules`) and never cached; absent while their votes
+	 * say nothing either way.
+	 */
+	standing?: 'acted-on' | 'often-dismissed';
 }
 
 /**

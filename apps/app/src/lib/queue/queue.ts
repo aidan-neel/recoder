@@ -1,10 +1,17 @@
-import { REVIEW_CANCELLED, type PullRequest, type Review } from '@recoder/shared';
+import {
+	REVIEW_CANCELLED,
+	reviewTally,
+	type DecisionTone,
+	type PullRequest,
+	type ReviewListItem,
+	type ReviewTally
+} from '@recoder/shared';
 import type { GlyphKind, PillTone } from '@recoder/ui';
 
+import { failureReason } from '../review/failure-reason';
 import { isOutdated } from '../review/lifecycle';
 import type { DecisionRecord } from '../review/saved-decisions';
 import { decisionStates } from '../review/saved-decisions';
-import { buildSurface, type Tone } from '../review/surface';
 import { SAMPLE_REVIEW } from '../sample/sample-review';
 import { plural } from '../shell/format';
 
@@ -21,11 +28,12 @@ export interface QueueEntry {
 	repoId: string;
 	repo: string;
 	pull: PullRequest;
-	review: Review | null;
+	/** The latest review, as the review list carries it (a full review from the review page fits too). */
+	review: ReviewListItem | null;
 	state: QueueState;
 	/** Decisions still open, and the strongest tone among them. */
 	open: number;
-	tone: Tone | null;
+	tone: DecisionTone | null;
 	sent: number;
 	receipts: number;
 }
@@ -37,12 +45,12 @@ export interface QueueSection {
 }
 
 /** What a row's button does: start a review, or open the one it has. */
-export interface EntryAction {
+interface EntryAction {
 	label: 'Review' | 'Review again' | 'Continue' | 'Open';
 	starts: boolean;
 }
 
-const TONE_RANK: Record<Tone, number> = { high: 0, medium: 1, question: 2, low: 3 };
+const TONE_RANK: Record<DecisionTone, number> = { high: 0, medium: 1, question: 2, low: 3 };
 
 /** True for a failed review that the person stopped, which reads as cancelled rather than broken. */
 function isCancelled(entry: QueueEntry): boolean {
@@ -57,7 +65,7 @@ function isCancelled(entry: QueueEntry): boolean {
 export function queueEntry(
 	repo: { id: string; name: string },
 	pull: PullRequest,
-	review: Review | null,
+	review: ReviewListItem | null,
 	records: Record<string, DecisionRecord>
 ): QueueEntry {
 	const entry = {
@@ -84,21 +92,12 @@ export function queueEntry(
 }
 
 /** What a finished review leaves to decide, given the saved decisions: the open count and strongest tone, what was sent back, and the receipts. */
-export function decisionTally(
-	review: Review,
-	records: Record<string, DecisionRecord>
-): Pick<QueueEntry, 'open' | 'tone' | 'sent' | 'receipts'> {
-	const states = decisionStates(records);
-	const surface = buildSurface(review, [], states);
-	const open = surface.decisions.filter((decision) => !states[decision.id]);
-	const sent = surface.decisions.filter((decision) => states[decision.id] === 'sent').length;
-	const tone = open.map((decision) => decision.tone).sort((a, b) => TONE_RANK[a] - TONE_RANK[b])[0] ?? null;
-
-	return { open: open.length, tone, sent, receipts: surface.receipts.length };
+export function decisionTally(review: ReviewListItem, records: Record<string, DecisionRecord>): ReviewTally {
+	return reviewTally(review, decisionStates(records));
 }
 
 /** True when a review answer says nothing new about the one the row already holds. */
-function sameReview(a: Review | null, b: Review | null): boolean {
+function sameReview(a: ReviewListItem | null, b: ReviewListItem | null): boolean {
 	if (!a || !b) return a === b;
 
 	return a.id === b.id && a.status === b.status && a.updatedAt === b.updatedAt && a.headSha === b.headSha;
@@ -195,7 +194,10 @@ export function entryGlyph(entry: QueueEntry): GlyphKind {
 /**
  * The row's button. Only a pull request without a current review starts one
  * from the row (or `r`); a reviewed one opens, so a stray key never queues a
- * second review of the same commit.
+ * second review of the same commit. A failed review continues, unless
+ * continuing would stop the same way (a rejected forge token, a diff over
+ * the forge's limit): that one opens, and its page says why and offers the
+ * way out.
  */
 export function entryAction(entry: QueueEntry): EntryAction {
 	switch (entry.state) {
@@ -204,7 +206,9 @@ export function entryAction(entry: QueueEntry): EntryAction {
 		case 'outdated':
 			return { label: 'Review again', starts: true };
 		case 'failed':
-			return { label: 'Continue', starts: true };
+			return failureReason(entry.review?.summary ?? null).next === 'continue'
+				? { label: 'Continue', starts: true }
+				: { label: 'Open', starts: false };
 		default:
 			return { label: 'Open', starts: false };
 	}

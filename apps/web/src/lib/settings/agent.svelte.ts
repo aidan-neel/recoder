@@ -1,11 +1,7 @@
+import { agentReady } from '@recoder/shared';
 import type { AgentProvider, AgentStatus } from '@recoder/shared';
 import { modelSettingsUi } from './model-settings.svelte';
 import { serverApi } from '../api/server-api';
-
-/** Installed and running, and signed in when the CLI has its own account. */
-export function isReady(status: AgentStatus): boolean {
-	return status.installed && !status.error && status.signedIn !== false;
-}
 
 /** The agent CLIs behind reviews, and the model providers OpenCode is signed in to. */
 class AgentState {
@@ -22,7 +18,7 @@ class AgentState {
 
 	/** At least one agent can run models, so the model pickers have something to offer. */
 	get anyReady(): boolean {
-		return (this.statuses ?? []).some(isReady);
+		return (this.statuses ?? []).some(agentReady);
 	}
 
 	/** Providers the agent can reach. */
@@ -39,7 +35,7 @@ class AgentState {
 
 			this.statuses = agents;
 			this.error = null;
-			if (this.status && isReady(this.status)) this.providers = (await serverApi.agentProviders()).providers;
+			if (this.status && agentReady(this.status)) this.providers = (await serverApi.agentProviders()).providers;
 			else this.providers = [];
 		} catch (e) {
 			this.error = e instanceof Error ? e.message : 'Could not reach the agent.';

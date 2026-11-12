@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import {
 	effectiveReviewEnv,
 	effectiveReportLowSeverity,
@@ -17,11 +17,13 @@ import {
 	providerCatalog,
 	verifyKey
 } from '../models/model-providers';
-import type { HostedProvider } from '@recoder/shared';
-import { agentModels } from '../agents/registry';
+import { within, type HostedProvider, type SetupStatus } from '@recoder/shared';
+import { opencode } from '../agents/opencode/opencode';
+import { agentModels, pickedModels } from '../agents/registry';
 import { isReviewConfigured } from '../models/models';
 import { z } from 'zod';
 import { discoverModels } from '../models/model-discovery';
+import { db } from '../store';
 import codexRoutes from './codex';
 import { parseBody } from './parse-body';
 
@@ -29,8 +31,34 @@ const app = new Hono();
 
 app.route('/codex', codexRoutes);
 
-/** Effective reviewer model config. Keys are never returned in full. Models come from the agent. */
-async function settingsPayload() {
+/**
+ * How long a write waits on an agent's fresh model listing (after the lists
+ * were cleared) before it answers with the models that agent listed last.
+ * The listing goes on and fills the cache for the next read; a write never
+ * waits out a slow CLI.
+ */
+const WRITE_WAIT_MS = 2_500;
+
+/**
+ * The models the settings offer: every model the agents run, or with
+ * `catalog` off only the picked ones. `waitMs` bounds the wait on a fresh
+ * listing.
+ */
+function offeredModels(catalog: boolean, waitMs?: number) {
+	if (catalog) return agentModels(waitMs);
+
+	const { sharedModelId, orchestratorModelId, specialistModelId } = getStoredSettings();
+
+	return pickedModels([sharedModelId, orchestratorModelId, specialistModelId], waitMs);
+}
+
+/**
+ * Effective reviewer model config. Keys are never returned in full. Models
+ * come from the agent: the whole catalog, or with `catalog` off only the
+ * picked models' entries, for a page that shows the picks, limits and
+ * toggles but no picker yet.
+ */
+async function settingsPayload(catalog = true, waitMs?: number) {
 	const eff = effectiveReviewEnv();
 	const stored = getStoredSettings();
 
@@ -42,7 +70,7 @@ async function settingsPayload() {
 		sharedModelId: stored.sharedModelId ?? null,
 		orchestratorModelId: stored.orchestratorModelId ?? null,
 		specialistModelId: stored.specialistModelId ?? null,
-		models: await agentModels(),
+		models: await offeredModels(catalog, waitMs),
 		orchestratorEffort: stored.orchestratorEffort ?? null,
 		specialistEffort: stored.specialistEffort ?? null,
 		subagentCap: effectiveSubagentCap(),
@@ -56,9 +84,64 @@ async function settingsPayload() {
 	};
 }
 
-app.get('/models', async (c) => c.json(await settingsPayload()));
+/** `?catalog=0` leaves the catalog out (the picks keep their entries); without it the answer is unchanged, for apps/web. */
+function wantsCatalog(c: Context): boolean {
+	return c.req.query('catalog') !== '0';
+}
 
-/** Merge a validated patch over the stored model settings. Empty key keeps the existing one. */
+app.get('/models', async (c) => c.json(await settingsPayload(wantsCatalog(c))));
+
+/** True when OpenCode has a model provider connected; false when it has none, or is missing or down (its last check says which). */
+async function openCodeConnected(): Promise<boolean> {
+	const status = await opencode.detect();
+
+	if (!status.installed || status.error) return false;
+
+	return opencode.providers().then(
+		(providers) => providers.some((provider) => provider.connected),
+		() => false
+	);
+}
+
+/**
+ * How long the setup status waits on a slow agent. An agent still listing
+ * counts the models it listed last, and OpenCode still starting counts as no
+ * provider yet; the work goes on and fills the caches for the next read. It
+ * sits under the app's 3 s wait on the check, so the gate decides on this
+ * answer, and far under Bun's 10 s idle timeout, which would cut the request
+ * off (a cold Devin listing can take 20 s).
+ */
+const STATUS_WAIT_MS = 2_000;
+
+/**
+ * What first run needs, without the model catalog. OpenCode's providers are
+ * asked only when no model is configured, which is first run's own case, and
+ * alongside the model count, so the answer waits {@link STATUS_WAIT_MS} at
+ * most.
+ */
+app.get('/status', async (c) => {
+	const configured = isReviewConfigured();
+
+	const [models, openCode] = await Promise.all([
+		agentModels(STATUS_WAIT_MS),
+		configured || within(openCodeConnected(), STATUS_WAIT_MS, false)
+	]);
+
+	const status: SetupStatus = {
+		configured,
+		modelCount: models.length,
+		providerConnected: configured || models.length > 0 || openCode,
+		repoCount: db.repos.list().length
+	};
+
+	return c.json(status);
+});
+
+/**
+ * Merge a validated patch over the stored model settings. Empty key keeps the
+ * existing one. Nothing here changes what the agents offer, so the answer
+ * comes from the model lists already cached.
+ */
 app.on(['PUT', 'PATCH'], '/models', async (c) => {
 	const body = await parseBody(c, reviewSettingsSchema);
 
@@ -66,7 +149,7 @@ app.on(['PUT', 'PATCH'], '/models', async (c) => {
 
 	saveReviewSettings(body);
 
-	return c.json(await settingsPayload());
+	return c.json(await settingsPayload(wantsCatalog(c), WRITE_WAIT_MS));
 });
 
 const discoverSchema = z.object({ baseUrl: z.string().max(500).optional(), apiKey: z.string().max(500).optional() });
@@ -141,7 +224,7 @@ app.post('/providers/:id/connect', async (c) => {
 
 	setConnection(provider.id, parsed.data.apiKey);
 
-	return c.json({ providers: providersPayload(), settings: await settingsPayload() });
+	return c.json({ providers: providersPayload(), settings: await settingsPayload(true, WRITE_WAIT_MS) });
 });
 
 /** Forget the key and every model added from this provider. */
@@ -152,7 +235,7 @@ app.delete('/providers/:id', async (c) => {
 	disconnects.set(provider.id, (disconnects.get(provider.id) ?? 0) + 1);
 	setConnection(provider.id, null);
 
-	return c.json({ providers: providersPayload(), settings: await settingsPayload() });
+	return c.json({ providers: providersPayload(), settings: await settingsPayload(true, WRITE_WAIT_MS) });
 });
 
 /** Every model the provider serves, marked by whether Recoder can call it. */

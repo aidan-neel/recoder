@@ -46,14 +46,22 @@ function triggerLabel(pick: RolePick): { text: string; quiet: boolean } {
 	return { text: 'Choose a model', quiet: true };
 }
 
+/** Starts the catalog read the dialog lists; a press on the trigger starts it before the click lands. */
+function loadCatalog(): void {
+	void useSettings.getState().loadCatalog();
+}
+
 /**
  * A quiet model trigger opening a searchable dialog grouped by provider, with
- * the effort select beside it. A pick saves at once: it shows straight away, a
- * spinner runs while the server saves it, and a failure puts the old pick back
- * with a toast saying why.
+ * the effort select beside it. The trigger and the effort paint from the
+ * review settings, which carry the picked models; the catalog of every model
+ * loads only when the dialog opens. A pick saves at once: it shows straight
+ * away, a spinner runs while the server saves it, and a failure puts the old
+ * pick back with a toast saying why.
  */
 export function ModelPicker({ role }: ModelPickerProps) {
-	const settings = useSettings((state) => state.models);
+	const settings = useSettings((state) => state.settings);
+	const models = useSettings((state) => state.models);
 	const offline = useSettings((state) => state.status === 'offline');
 	const [open, setOpen] = useState(false);
 	const instant = useInstantSave((next: Draft) => patchFor(role, next), FAILED);
@@ -61,7 +69,7 @@ export function ModelPicker({ role }: ModelPickerProps) {
 	const save = instant.change;
 
 	useEffect(() => {
-		void useSettings.getState().load();
+		void useSettings.getState().loadSettings();
 	}, []);
 
 	if (!settings) {
@@ -75,13 +83,14 @@ export function ModelPicker({ role }: ModelPickerProps) {
 		);
 	}
 
-	const catalog = modelCatalog(settings.models);
+	const catalog = models ? modelCatalog(models.models) : null;
+	const known = catalog ?? modelCatalog(settings.models);
 	const saved = rolePick(settings, role);
 
 	const pick: RolePick = draft
 		? {
 				id: draft.id,
-				option: draft.id ? catalog.byId.get(draft.id) : undefined,
+				option: draft.id ? known.byId.get(draft.id) : undefined,
 				effort: draft.effort,
 				follows: role === 'specialist' && !draft.id
 			}
@@ -90,7 +99,7 @@ export function ModelPicker({ role }: ModelPickerProps) {
 	const label = triggerLabel(pick);
 
 	function pickModel(id: string): void {
-		const option = id === FOLLOW_ID ? undefined : catalog.byId.get(id);
+		const option = id === FOLLOW_ID ? undefined : catalog?.byId.get(id);
 		const next = option ? { id: option.id, effort: resolveEffort(option, pick.effort) } : { id: null, effort: null };
 
 		setOpen(false);
@@ -106,11 +115,15 @@ export function ModelPicker({ role }: ModelPickerProps) {
 			<Button
 				variant="quiet"
 				className="model-trigger"
-				disabled={catalog.count === 0}
+				disabled={catalog?.count === 0}
 				aria-haspopup="dialog"
 				aria-expanded={open}
 				aria-label={`${ROLE_NAME[role]}: ${label.text}`}
-				onClick={() => setOpen(true)}
+				onPointerDown={loadCatalog}
+				onClick={() => {
+					loadCatalog();
+					setOpen(true);
+				}}
 			>
 				<SwapText
 					id={pick.id ?? 'none'}

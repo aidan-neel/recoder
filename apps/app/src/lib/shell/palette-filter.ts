@@ -1,4 +1,5 @@
 import { queryTerms } from '../settings/model-options';
+import type { PaletteItem } from './shell-store';
 
 /** A character that starts a new word in a row's text. */
 const BOUNDARY = /[\s#/(:.-]/;
@@ -36,4 +37,14 @@ export function paletteScore(value: string, search: string, keywords: string[] =
 	}
 
 	return total / (terms.length * 3);
+}
+
+/** What the palette searches for a row and keys it by: its label and its detail. */
+export function itemText(item: PaletteItem): string {
+	return `${item.label} ${item.detail ?? ''}`.trim();
+}
+
+/** How well a palette row matches the query, scored the way the palette's list scores it. */
+export function itemScore(item: PaletteItem, search: string): number {
+	return paletteScore(itemText(item), search, item.keywords?.split(/\s+/));
 }

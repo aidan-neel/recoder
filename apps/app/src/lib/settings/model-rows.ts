@@ -1,7 +1,7 @@
 import { matchesQuery, ROLE_NAME, type ModelGroup, type ModelOption } from './model-options';
 
 /** A model row, and the "Same as Review model" row, are 34px. */
-const ROW_HEIGHT = 34;
+export const ROW_HEIGHT = 34;
 
 /** A provider heading: 16px of text with 8px above and 5px below. */
 const HEADING_HEIGHT = 29;

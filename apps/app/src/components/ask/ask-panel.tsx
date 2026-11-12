@@ -9,6 +9,7 @@ import { useAskFocusRequests } from '@/lib/ask/focus-request';
 import { askItemOf } from '@/lib/ask/item';
 import { surfaceOf, useReview } from '@/lib/review/review-store';
 
+import { useTranscriptHeld } from './chat-scroll';
 import { ItemConversation } from './item-conversation';
 import { ReviewConversation } from './review-conversation';
 
@@ -38,7 +39,8 @@ function onKeyDown(event: KeyboardEvent<HTMLElement>): void {
  * conversation with Orchestrator. The sample has no Orchestrator, so there
  * it asks for a decision instead. The column moves focus in and out; a
  * focus request (the palette's Ask Orchestrator) puts it in the composer
- * while the column is already open.
+ * while the column is already open. The close button, like the rest of what
+ * the opening frame does not show, joins a frame later (`TranscriptHold`).
  */
 export function AskPanel() {
 	const review = useReview((state) => state.review);
@@ -48,6 +50,7 @@ export function AskPanel() {
 	const item = useMemo(() => askItemOf(surface, selection), [surface, selection]);
 	const title = item || sample ? 'Ask the reviewer' : 'Ask Orchestrator';
 	const panel = useRef<HTMLElement>(null);
+	const held = useTranscriptHeld();
 
 	useAskFocusRequests(panel);
 
@@ -57,11 +60,13 @@ export function AskPanel() {
 		<section ref={panel} tabIndex={-1} aria-label={title} data-ask-panel data-ui="ask-panel" onKeyDown={onKeyDown}>
 			<PanelHeader className="pr-2">
 				<h2 className="text-[13.5px] leading-5 font-medium text-fg">{title}</h2>
-				<Tooltip content="Close" shortcut="Escape">
-					<Button variant="ghost" size="icon" className="ml-auto" aria-label="Close" onClick={close}>
-						<X aria-hidden />
-					</Button>
-				</Tooltip>
+				{held ? null : (
+					<Tooltip content="Close" shortcut="Escape">
+						<Button variant="ghost" size="icon" className="ml-auto" aria-label="Close" onClick={close}>
+							<X aria-hidden />
+						</Button>
+					</Tooltip>
+				)}
 			</PanelHeader>
 			{item || sample ? <ItemConversation reviewId={review.id} item={item} /> : <ReviewConversation review={review} />}
 		</section>

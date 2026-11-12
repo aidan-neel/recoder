@@ -7,14 +7,18 @@ import { useState } from 'react';
 import { failureText } from '@/lib/api/http';
 import { useGuidelinesEditor } from '@/lib/guidelines/editor-store';
 import { useGuidelines } from '@/lib/guidelines/guidelines-store';
-import { errorToast, undoToast } from '@/lib/shell/notify';
+import { retryToast, undoToast } from '@/lib/shell/notify';
 
-/** Puts the global layer back as it was, after Undo on the saved toast. */
+/** Puts the global layer back as it was, after Undo on the saved toast. A failure offers to try the restore again. */
 function restoreGlobal(previous: GlobalGuidelines): void {
 	void useGuidelines
 		.getState()
 		.restoreGlobal(previous)
-		.catch((error: unknown) => errorToast('Couldn’t restore the guidelines', failureText(error, 'Try again.')));
+		.catch((error: unknown) =>
+			retryToast('Couldn’t restore the guidelines', failureText(error, 'The server didn’t save it.'), () =>
+				restoreGlobal(previous)
+			)
+		);
 }
 
 /** The pull request is the result: name it and link to it. */

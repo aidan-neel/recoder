@@ -1,6 +1,7 @@
 import type { FileDiff, PrCheck, PullRequest, Review, ReviewProgress } from '@recoder/shared';
 
 import { stateOf, type DecisionChange } from './decisions';
+import type { ReadFailure } from './review-read';
 import type { Connection } from './review-stream';
 import { decisionStates, type DecisionRecord } from './saved-decisions';
 import type { Selection } from './selection';
@@ -13,19 +14,45 @@ export interface ReviewData {
 	id: string;
 	sample: boolean;
 	status: LoadStatus;
-	/** The server's message when the load failed. */
-	loadError: string | null;
+	/**
+	 * Why the load failed, once it reached the server or broke in the page:
+	 * the kind picks the notice (`timeout`, `server`, or `other` for a review
+	 * the page could not show), and the text is the server's words.
+	 */
+	loadError: ReadFailure | null;
+	/**
+	 * When the copy on screen was last known to match the server, in ms, set
+	 * while a refresh could not reach it; 0 when that time is unknown (a copy
+	 * an older page kept), and null while the copy is current.
+	 */
+	staleSince: number | null;
 	review: Review | null;
 	files: FileDiff[];
+	/** Why the diff did not load, in plain words; null when it loaded or is still on its way. */
+	filesError: ReadFailure | null;
 	pull: PullRequest | null;
+	/** Why the pull request lookup failed, in plain words; null when it answered or the review has no forge. */
+	pullError: ReadFailure | null;
+	/** True once the pull request lookup answered: with the pull request, a failure, or nothing to read. */
+	pullAnswered: boolean;
 	repoName: string | null;
-	/** True once the pull request and repository lookups have answered, found or not. */
-	pullLoaded: boolean;
 	/** CI checks on the pull request; null until known, or when the forge has none. */
 	checks: PrCheck[] | null;
+	/** Why the CI checks did not load, in plain words, while none have loaded. */
+	checksError: ReadFailure | null;
+	/**
+	 * The CI checks on screen while a later read of them failed: when they
+	 * were read, in ms (0 when unknown), and why the read failed; null while
+	 * they are current.
+	 */
+	checksStale: { since: number; failure: ReadFailure } | null;
 	/** The live progress snapshot: stage, tasks, reviewers and the conversation. */
 	progress: ReviewProgress | null;
+	/** True when the stream sent no snapshot in time, so the live views say so instead of waiting. */
+	progressFailed: boolean;
 	connection: Connection;
+	/** Failed attempts in a row to open the live stream; 0 once one opens or the person reconnects. */
+	streamFailures: number;
 	records: Record<string, DecisionRecord>;
 	history: DecisionChange[];
 	selection: Selection;
@@ -44,14 +71,21 @@ export const INITIAL: ReviewData = {
 	sample: false,
 	status: 'loading',
 	loadError: null,
+	staleSince: null,
 	review: null,
 	files: [],
+	filesError: null,
 	pull: null,
+	pullError: null,
+	pullAnswered: false,
 	repoName: null,
-	pullLoaded: false,
 	checks: null,
+	checksError: null,
+	checksStale: null,
 	progress: null,
+	progressFailed: false,
 	connection: 'closed',
+	streamFailures: 0,
 	records: {},
 	history: [],
 	selection: { kind: 'overview' },
@@ -60,8 +94,18 @@ export const INITIAL: ReviewData = {
 	askOpen: false
 };
 
-/** True while the server is still working on the review. */
-export function isRunning(review: Review | null): boolean {
+/** Where the live progress stands: on its way, in, or not sent in time. */
+type ProgressStatus = 'waiting' | 'ready' | 'failed';
+
+/** Whether the live progress arrived, for the views that wait on it. */
+export function progressStatus(state: Pick<ReviewData, 'progress' | 'progressFailed'>): ProgressStatus {
+	if (state.progress) return 'ready';
+
+	return state.progressFailed ? 'failed' : 'waiting';
+}
+
+/** True while the server is still working on the review. A list item works too. */
+export function isRunning(review: Pick<Review, 'status'> | null): boolean {
 	return review?.status === 'queued' || review?.status === 'running';
 }
 
@@ -119,6 +163,18 @@ export function selectionOrder(state: Pick<ReviewData, 'review' | 'files' | 'rec
 		...surface.receipts.map((receipt) => ({ kind: 'receipt' as const, id: receipt.id })),
 		...surface.files.map((file) => ({ kind: 'file' as const, path: file.path }))
 	];
+}
+
+/**
+ * Every item the reading pane can show: the order j and k walk, then the
+ * quieted findings, which j and k skip and a person opens from the rail.
+ */
+export function paneOrder(state: Pick<ReviewData, 'review' | 'files' | 'records'>): Selection[] {
+	const quieted = (surfaceOf(state)?.quieted ?? []).flatMap((topic) =>
+		topic.decisions.map((decision) => ({ kind: 'decision' as const, id: decision.id }))
+	);
+
+	return [...selectionOrder(state), ...quieted];
 }
 
 /** Decisions in each state, plus the total. Select it with `useShallow`, since it returns a new object. */

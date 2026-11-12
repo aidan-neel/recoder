@@ -2,7 +2,7 @@
 
 import { Check, X } from 'lucide-react';
 import { Slot } from 'radix-ui';
-import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
+import { useState, type ButtonHTMLAttributes, type ReactNode, type Ref, type TransitionEvent } from 'react';
 
 import { cn } from '../lib/cn';
 import { pressOnce } from './press-once';
@@ -15,22 +15,27 @@ export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 /** Where an async action stands. Pending keeps the button's width; success and error crossfade in. */
 export type ButtonStatus = 'idle' | 'pending' | 'success' | 'error';
 
-const BASE = cn(
+/**
+ * The look every button shares. These class lists hold no two classes that
+ * conflict, so they are plain strings: merging them as the module loads would
+ * set up tailwind-merge on every route that imports the kit.
+ */
+const BASE = [
 	'relative inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap select-none',
-	'rounded-[8px] leading-none font-medium text-[length:var(--font-size-button)] outline-none',
+	'rounded-[8px] font-medium text-[length:var(--font-size-button)] outline-none',
 	'transition-[background-color,color,box-shadow,filter] duration-(--dur-hover) ease-out',
 	'focus-visible:shadow-(--focus-ring) disabled:pointer-events-none disabled:opacity-40',
 	'aria-disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg:not([class*=size-])]:size-4'
-);
+].join(' ');
 
 const VARIANTS: Record<ButtonVariant, string> = {
 	primary: 'bg-(--primary) text-(--on-primary) hover:brightness-108 data-[state=open]:brightness-108',
 	secondary: 'bg-menu text-fg hover:bg-hover data-[state=open]:bg-hover',
-	outline: cn(
+	outline: [
 		'bg-transparent text-fg shadow-[inset_0_0_0_1px_var(--line-menu)]',
 		'hover:bg-line-subtle hover:shadow-[inset_0_0_0_1px_var(--line-hover)]',
 		'data-[state=open]:bg-line-subtle focus-visible:shadow-[var(--focus-ring),inset_0_0_0_1px_var(--line-hover)]'
-	),
+	].join(' '),
 	ghost:
 		'bg-transparent text-fg-subtle hover:bg-menu hover:text-fg data-[state=open]:bg-menu data-[state=open]:text-fg',
 	quiet: 'bg-transparent text-fg hover:bg-hover data-[state=open]:bg-selected',
@@ -61,12 +66,46 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 	ref?: Ref<HTMLButtonElement>;
 }
 
-/** The label each non-idle face shows beside its icon. */
-type FaceLabels = Record<Exclude<ButtonStatus, 'idle'>, ReactNode>;
+/** A face that stands for a status, with an icon before its label. */
+type StatusFace = Exclude<ButtonStatus, 'idle'>;
+
+/** The label each status face shows beside its icon. */
+type FaceLabels = Record<StatusFace, ReactNode>;
 
 /** Whether a face label renders anything a screen reader can speak. */
 function hasLabel(label: ReactNode): boolean {
 	return label !== null && label !== undefined && label !== false && label !== '';
+}
+
+/**
+ * The status faces whose icons are mounted: the one on show, and any still
+ * fading out, so a page of idle buttons builds no spinners and no icons.
+ * Returns the faces' transition-end handler, which drops a face once its
+ * fade out ends.
+ */
+function useDrawnFaces(status: ButtonStatus): [readonly StatusFace[], (event: TransitionEvent) => void] {
+	const [drawn, setDrawn] = useState<readonly StatusFace[]>(status === 'idle' ? [] : [status]);
+
+	if (status !== 'idle' && !drawn.includes(status)) setDrawn([...drawn, status]);
+
+	const faded = (event: TransitionEvent) => {
+		const face = event.target instanceof HTMLElement ? event.target.dataset.face : undefined;
+
+		if (event.propertyName !== 'opacity' || face === status) return;
+
+		setDrawn((current) => (current.some((kind) => kind === face) ? current.filter((kind) => kind !== face) : current));
+	};
+
+	return [drawn, faded];
+}
+
+/**
+ * A face's icon while it is drawn; else an empty svg, which the button's icon
+ * sizing gives the icon's size (`size` where that sizing does not reach), so
+ * the face keeps its width.
+ */
+function faceIcon(drawn: boolean, icon: ReactNode, size: number): ReactNode {
+	return drawn ? icon : <svg aria-hidden className="shrink-0" width={size} height={size} />;
 }
 
 /**
@@ -77,22 +116,23 @@ function hasLabel(label: ReactNode): boolean {
  */
 function Faces({ status, labels, children }: { status: ButtonStatus; labels: FaceLabels; children: ReactNode }) {
 	const spoken = status !== 'idle' && hasLabel(labels[status]) ? status : 'idle';
+	const [drawn, faded] = useDrawnFaces(status);
 
 	return (
-		<span data-ui="button-faces">
+		<span data-ui="button-faces" onTransitionEnd={drawn.length > 0 ? faded : undefined}>
 			<span data-face="idle" data-on={status === 'idle'} aria-hidden={spoken !== 'idle'}>
 				{children}
 			</span>
 			<span data-face="pending" data-on={status === 'pending'} aria-hidden={spoken !== 'pending'}>
-				<Spinner size={13} />
+				{faceIcon(drawn.includes('pending'), <Spinner size={13} />, 13)}
 				{labels.pending}
 			</span>
 			<span data-face="success" data-on={status === 'success'} aria-hidden={spoken !== 'success'}>
-				<Check />
+				{faceIcon(drawn.includes('success'), <Check />, 24)}
 				{labels.success}
 			</span>
 			<span data-face="error" data-on={status === 'error'} aria-hidden={spoken !== 'error'}>
-				<X />
+				{faceIcon(drawn.includes('error'), <X />, 24)}
 				{labels.error}
 			</span>
 		</span>

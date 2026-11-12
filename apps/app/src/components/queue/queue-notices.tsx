@@ -1,18 +1,27 @@
 'use client';
 
-import { Button, swapMotion, useMotionVariants } from '@recoder/ui';
-import { AnimatePresence, motion } from 'motion/react';
+import { Button, Collapsible, CollapsibleContent, StatusNotice } from '@recoder/ui';
 import Link from 'next/link';
+import { useMemo, type ComponentProps } from 'react';
 
 import { PageNotice } from '@/components/common/page-notice';
-import { OFFLINE_TEXT } from '@/lib/api/http';
-import { clockTime, joinNames } from '@/lib/queue/format';
+import { OFFLINE_DETAIL, OFFLINE_TEXT } from '@/lib/api/http';
+import { queueNotes, type QueueNote } from '@/lib/queue/queue-notes';
 import { useQueue } from '@/lib/queue/queue-store';
+import { checkSetupAgain, useSetupNote } from '@/lib/setup/setup-gate';
 import { useAction } from '@/lib/shell/use-action';
+import { useLastShown } from '@/lib/shell/use-last-shown';
 
-/** Loads the queue again. A load the server still does not answer rejects, so the button shows its failure face. */
+/** Loads the queue again. A load that still fails rejects with what failed, so the button shows its failure face. */
 async function reload(): Promise<void> {
-	if (!(await useQueue.getState().refresh())) throw new Error(OFFLINE_TEXT);
+	if (!(await useQueue.getState().refresh())) throw new Error(useQueue.getState().error ?? OFFLINE_TEXT);
+}
+
+/** Loads the queue again from a note; it also counts as failed while some repository's pull requests still fail. */
+async function retryNote(): Promise<void> {
+	await reload();
+
+	if (useQueue.getState().missing.length > 0) throw new Error('Some pull requests still didn’t load.');
 }
 
 function SampleButton() {
@@ -23,18 +32,27 @@ function SampleButton() {
 	);
 }
 
+interface DownNoticeProps {
+	/** `offline`: the server never answered. `failed`: it answered with an error, or too late. */
+	status: 'offline' | 'failed';
+	/** The server answered and the setup check runs again, so Try again keeps spinning until first run or the queue takes the page. */
+	reconnecting: boolean;
+}
+
 /**
- * The whole page when the review server does not answer the first load.
- * `reconnecting`: the server answered and the settings load again, so Try
- * again keeps spinning until first run or the queue takes the page.
+ * The whole page when the first load failed and no earlier list is saved to
+ * show instead. Its sentences say what failed, as the review page's do, and
+ * leave trying again to the button beside them.
  */
-export function OfflineNotice({ reconnecting }: { reconnecting: boolean }) {
+export function DownNotice({ status, reconnecting }: DownNoticeProps) {
 	const retry = useAction();
+	const error = useQueue((state) => state.error);
+	const offline = status === 'offline';
 
 	return (
 		<PageNotice
-			lead={OFFLINE_TEXT}
-			rest="Start it with bun run dev, then try again. The sample review works without it."
+			lead={offline ? OFFLINE_TEXT : 'Couldn’t load the queue.'}
+			rest={offline ? `${OFFLINE_DETAIL} The sample review works without it.` : error}
 		>
 			<Button status={reconnecting ? 'pending' : retry.status} onClick={() => retry.run(reload)}>
 				Try again
@@ -44,57 +62,107 @@ export function OfflineNotice({ reconnecting }: { reconnecting: boolean }) {
 	);
 }
 
+/**
+ * A link to Settings > Connections, passing on what a kit `asChild` button
+ * gives it. It leaves prefetching to the shell, as the tabs do: Next's
+ * viewport prefetch fetched the settings page and its code, the command
+ * palette's included, while the queue was still painting.
+ */
+function ConnectionsLink(props: Omit<ComponentProps<typeof Link>, 'href' | 'prefetch'>) {
+	return <Link {...props} href="/settings/connections" prefetch={false} />;
+}
+
 /** The whole page when the server answers with no tracked repositories. */
 export function EmptyNotice() {
 	return (
 		<PageNotice lead="No repositories tracked yet." rest="Track one in Settings and its open pull requests land here.">
 			<Button asChild variant="primary">
-				<Link href="/settings/connections">Open settings</Link>
+				<ConnectionsLink>Open settings</ConnectionsLink>
 			</Button>
 			<SampleButton />
 		</PageNotice>
 	);
 }
 
-/** What the stale note says: the server is down, or some repositories' pull requests did not load. */
-function staleText(stale: boolean, missing: string[], loadedAt: number | null): string | null {
-	if (stale) return `${OFFLINE_TEXT}${loadedAt ? ` This list is from ${clockTime(loadedAt)}.` : ''}`;
-	if (missing.length > 0) return `Couldn’t load pull requests from ${joinNames(missing)}.`;
+/**
+ * A note's way out. Only the first note of each action in the region gets a
+ * button (Try again or Open Connections), so the notes never stack the same one.
+ */
+function NoteAction({ note, first }: { note: QueueNote; first: boolean }) {
+	const retry = useAction();
 
-	return null;
+	if (!first) return null;
+
+	if (note.action === 'connections') {
+		return (
+			<Button asChild variant="ghost">
+				<ConnectionsLink>Open Connections</ConnectionsLink>
+			</Button>
+		);
+	}
+
+	return (
+		<Button variant="ghost" status={retry.status} onClick={() => retry.run(retryNote)}>
+			Try again
+		</Button>
+	);
+}
+
+/** The setup check's note: still running after the queue stopped waiting, or failed with a way to check again. */
+function SetupNote({ title, detail, retry }: { title: string; detail: string | null; retry: boolean }) {
+	const check = useAction();
+
+	return (
+		<StatusNotice
+			variant="inline"
+			title={title}
+			detail={detail}
+			actions={
+				retry ? (
+					<Button variant="ghost" status={check.status} onClick={() => check.run(checkSetupAgain)}>
+						Check again
+					</Button>
+				) : null
+			}
+		/>
+	);
 }
 
 /**
- * A quiet line over the list when a refresh failed after a good load. It sits
- * in the column's top padding, so the list never moves or flickers for it.
+ * Quiet lines under the headline when the list is not all fresh: a refresh
+ * that failed (with when the list is from), repositories whose pull requests
+ * did not load and why, and a setup check that is slow or failed. They are
+ * part of the first paint when known then; ones that come later fold open
+ * and push the list down once, and fold away when fixed.
  */
-export function StaleNote() {
-	const swap = useMotionVariants(swapMotion);
-	const stale = useQueue((state) => state.stale);
-	const missing = useQueue((state) => state.missing);
+export function QueueNotes() {
+	const error = useQueue((state) => state.error);
 	const loadedAt = useQueue((state) => state.loadedAt);
-	const retry = useAction();
-	const text = staleText(stale, missing, loadedAt);
+	const missing = useQueue((state) => state.missing);
+	const stale = useQueue((state) => state.stale);
+	const setup = useSetupNote();
+	const notes = useMemo(() => queueNotes(error, loadedAt, missing, stale), [error, loadedAt, missing, stale]);
+	const last = useLastShown(notes.length > 0 ? notes : null) ?? notes;
+	const open = notes.length > 0 || setup !== null;
+	const shown = open ? notes : last;
+	const firstRetry = shown.find((note) => note.action === 'retry');
+	const firstConnections = shown.find((note) => note.action === 'connections');
 
 	return (
-		<AnimatePresence initial={false}>
-			{text ? (
-				<motion.div
-					key="stale"
-					role="status"
-					className="queue-stale"
-					variants={swap}
-					initial="initial"
-					animate="animate"
-					exit="exit"
-				>
-					<span className="min-w-0 truncate">{text}</span>
-					<Button variant="ghost" status={retry.status} onClick={() => retry.run(reload)}>
-						Try again
-					</Button>
-				</motion.div>
-			) : null}
-		</AnimatePresence>
+		<Collapsible open={open} className="queue-notes">
+			<CollapsibleContent className="queue-notes-list">
+				{shown.map((note) => (
+					<StatusNotice
+						key={note.key}
+						variant="inline"
+						title={note.title}
+						detail={note.detail}
+						actions={<NoteAction note={note} first={note === firstRetry || note === firstConnections} />}
+					/>
+				))}
+				{setup ? <SetupNote {...setup} /> : null}
+			</CollapsibleContent>
+		</Collapsible>
 	);
 }
 
@@ -103,7 +171,7 @@ export function NoPullsActions() {
 	return (
 		<div className="flex gap-2">
 			<Button asChild variant="outline">
-				<Link href="/settings/connections">Track another repository</Link>
+				<ConnectionsLink>Track another repository</ConnectionsLink>
 			</Button>
 		</div>
 	);

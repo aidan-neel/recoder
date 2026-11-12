@@ -15,6 +15,7 @@ import type { Decision } from '@/lib/review/surface';
 import { HunkCode } from './code-frame';
 import { KickerText } from './detail-parts';
 import { FileNote } from './file-note';
+import { MissingItem } from './missing-item';
 
 /** A diff longer than this folds, so a lockfile or a generated file never renders in full on the way through. */
 const FOLD_OVER = 600;
@@ -134,7 +135,9 @@ export function FileView({ path }: { path: string }) {
 		);
 	}
 
-	if (!file || !diff) return null;
+	if (!file || !diff) {
+		return <MissingItem title="This file isn’t in the diff." detail="A newer run may have changed what it covers." />;
+	}
 
 	return (
 		<article aria-label={path} className="file-detail">

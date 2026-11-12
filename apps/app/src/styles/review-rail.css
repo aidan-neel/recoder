@@ -1,0 +1,275 @@
+/* ───────── Rail, then the review skeleton's rows: the rail's and the summary's ───────── */
+/* The rail scrolls natively: a row the keyboard selects keeps itself in view by setting the rail's scroll (rail-row.tsx). */
+.rail {
+	position: relative;
+	display: flex;
+	width: 304px;
+	min-height: 0;
+	flex-shrink: 0;
+	flex-direction: column;
+	overflow-y: auto;
+	padding: 8px 8px 24px;
+	border-right: 1px solid var(--line-divider);
+	background: var(--bg-rail);
+}
+.rail-list {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+/* Rows are kit RowButtons, which bring the reset, the layout and the focus ring. */
+.rail-row {
+	flex-shrink: 0;
+	scroll-margin-block: 24px;
+}
+.rail-row[data-selected='true'] {
+	color: var(--text-primary);
+}
+/*
+ * The selection layer (HoverList's, styled as the kit's travelling highlight) slides to a clicked row in 100ms on the
+ * pill curve. A key move snaps it in the same frame (data-snap), and it lands without a fade, so the first paint
+ * already shows it.
+ */
+.rail-list > [data-ui='menu-highlight'] {
+	border-radius: 8px;
+	transition-property: transform, height;
+	transition-duration: var(--dur-hover);
+	transition-timing-function: cubic-bezier(0.3, 0.7, 0.2, 1);
+}
+.rail-list > [data-ui='menu-highlight'][data-snap] {
+	transition-property: none;
+}
+.rail-row :is(.rail-glyph, .rail-icon, .rail-check) {
+	margin-top: 1px;
+}
+.rail-icon {
+	flex-shrink: 0;
+	color: var(--text-subtle);
+}
+.rail-main {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+}
+.rail-title {
+	display: -webkit-box;
+	overflow: hidden;
+	font-size: 13px;
+	line-height: 1.38;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	transition: color var(--dur-toggle) ease-out;
+}
+.rail-meta {
+	overflow: hidden;
+	color: var(--text-faint);
+	font-size: 11px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.rail-row[data-decided='true'] .rail-title {
+	color: var(--text-subtle);
+}
+/* The selected row reads at full strength, decided or not, as a selected receipt does. */
+.rail-row[data-selected='true'][data-decided='true'] .rail-title {
+	color: var(--text-primary);
+}
+.rail-overview {
+	align-items: center;
+	padding-block: 9px;
+}
+.rail-overview .rail-main {
+	flex-direction: row;
+	align-items: center;
+	gap: 12px;
+}
+.rail-map {
+	flex: 1;
+}
+.rail-heading {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	margin: 18px 10px 5px;
+	color: var(--text-subtle);
+	font-size: 12px;
+	font-weight: 500;
+	line-height: 18px;
+}
+.rail-count {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 0.3em;
+	color: var(--text-faint);
+	font-size: 11.5px;
+	font-weight: 400;
+}
+.rail-check {
+	display: grid;
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	place-items: center;
+	color: var(--ok);
+}
+.rail-receipt .rail-title {
+	color: var(--text-muted);
+}
+.rail-receipt[data-selected='true'] .rail-title {
+	color: var(--text-primary);
+}
+.rail-file {
+	align-items: center;
+	padding-block: 5px;
+}
+.rail-swatch {
+	width: 6px;
+	height: 6px;
+	margin: 0 5px;
+	flex-shrink: 0;
+	border-radius: 2px;
+	background: var(--att-skim);
+}
+.rail-swatch[data-cls='read'] {
+	background: var(--att-read);
+}
+.rail-swatch[data-cls='checked'] {
+	background: var(--att-checked);
+}
+.rail-swatch[data-cls='tests'] {
+	background: var(--att-tests);
+}
+/* Long paths lose their start, not their file name. */
+.rail-file-path {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	direction: rtl;
+	font-size: 11.5px;
+	text-align: left;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.rail-file-dir {
+	color: var(--text-faint);
+}
+.rail-file-stat {
+	color: var(--sev-medium);
+	font-size: 11px;
+}
+/* Skeleton rows take the real rows' height, padding and gap, so the rail swaps in on the same lines. */
+.rail-skeleton-overview {
+	display: flex;
+	height: 36px;
+	align-items: center;
+	gap: 10px;
+	padding: 0 10px;
+}
+.rail-skeleton-row {
+	gap: 10px;
+	padding: 0 10px;
+}
+/* A file row's placeholder: one path bar, starting where the path does, past the swatch. */
+.rail-skeleton-file {
+	padding: 0 10px 0 36px;
+}
+.rail-skeleton-file [data-ui='skeleton'] {
+	height: 10px;
+}
+/*
+ * A part of the review skeleton is as tall as its count of rows (--rows), whatever bars it draws
+ * (review-skeleton.tsx). Before React runs it draws the most bars and is cut to the review's
+ * remembered count (from the shape script on <html>), so the first paint already has the rows the
+ * page lands on; a count past the most bars holds the rest empty. A part with a heading (--head)
+ * keeps it only while it has rows, and a part cut to none gives back the gap before it.
+ */
+.review-skeleton-clip {
+	height: max(
+		0px,
+		calc(min(var(--rows), 1) * var(--head, 0px) + var(--rows) * (var(--row) + var(--row-gap)) - var(--row-gap))
+	);
+	margin-top: calc((min(var(--rows), 1) - 1) * var(--gap-before, 0px));
+	overflow: hidden;
+}
+.rail-skeleton-decisions {
+	--row: 68.4px;
+	--row-gap: 1px;
+	--gap-before: 1px;
+}
+/* Files: the heading (its 41px with margins, and the 1px gap under it), then the rows. */
+.rail-skeleton-files {
+	--row: 27.25px;
+	--row-gap: 1px;
+	--gap-before: 1px;
+	--head: 42px;
+
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+/* A group with nothing in it, or a diff that did not load, says so in one quiet line under its heading. */
+.rail-empty {
+	padding: 0 10px;
+}
+/* Quieted: a heading that opens the group, its words where the other headings' are, quiet whether open or closed. */
+.rail-heading .rail-quiet-trigger {
+	height: 24px;
+	margin: -3px 0 -3px -8px;
+	padding-inline: 8px 6px;
+	gap: 4px;
+	color: inherit;
+	font: inherit;
+}
+.rail-heading .rail-quiet-trigger[data-state='open']:not(:hover) {
+	background: transparent;
+}
+.rail-quiet-icon {
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) ease-out;
+}
+.rail-quiet-icon[data-open='true'] {
+	rotate: 180deg;
+}
+.rail-quiet-body {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.rail-quiet-reason {
+	margin: 0 10px 4px;
+	color: var(--text-faint);
+	font-size: 12px;
+	line-height: 1.4;
+}
+/* A topic: its label and count, then Turn back on at the end, over the topic's own rows. */
+.rail-topic {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-height: 32px;
+	padding: 4px 2px 0 10px;
+}
+.rail-topic-label {
+	display: -webkit-box;
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	color: var(--text-muted);
+	font-size: 12.5px;
+	line-height: 1.4;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+}
+.rail-topic [data-ui='button'] {
+	height: 26px;
+	padding-inline: 8px;
+	font-size: 12.5px;
+}
+.rail-quiet-body .rail-title {
+	color: var(--text-muted);
+}
+.rail-quiet-body .rail-row[data-selected='true'] .rail-title {
+	color: var(--text-primary);
+}

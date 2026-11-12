@@ -17,3 +17,26 @@ export function whileVisible(ms: number, tick: () => void): () => void {
 		document.removeEventListener('visibilitychange', onVisible);
 	};
 }
+
+/**
+ * Runs `run` once after `ms`; a page hidden by then runs it when it shows
+ * again, so a background tab sends no polls. Returns the cancel.
+ */
+export function afterVisible(ms: number, run: () => void): () => void {
+	function onVisible(): void {
+		if (document.visibilityState !== 'visible') return;
+
+		document.removeEventListener('visibilitychange', onVisible);
+		run();
+	}
+
+	const timer = setTimeout(() => {
+		document.addEventListener('visibilitychange', onVisible);
+		onVisible();
+	}, ms);
+
+	return () => {
+		clearTimeout(timer);
+		document.removeEventListener('visibilitychange', onVisible);
+	};
+}

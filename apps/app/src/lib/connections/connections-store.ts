@@ -2,18 +2,24 @@ import type { CreateRepoInput, ProviderAuth, RemoteRepo, Repo } from '@recoder/s
 import { create } from 'zustand';
 
 import { connectionsApi, type Forge } from '../api/connections';
-import { failureText, isOffline } from '../api/http';
+import { failureKind, failureText, isOffline, type FailureKind } from '../api/http';
 import { reviewsApi } from '../api/reviews';
+import { rememberCount } from '../settings/last-counts';
 import { repoKey } from './repo-input';
 
 /** `offline`: the review server did not answer. `error`: it answered with one. */
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error' | 'offline';
 
-/** The repositories one forge's token can see, for the repo browser. `retrying` keeps the last error on screen while a retry runs. */
+/**
+ * The repositories one forge's token can see, for the repo browser.
+ * `retrying` keeps the last error on screen while a retry runs; `kind` says
+ * what failed, so a rejected token points to a new one instead of a retry.
+ */
 export interface RemoteList {
 	status: 'loading' | 'ready' | 'error' | 'retrying';
 	repos: RemoteRepo[];
 	error: string | null;
+	kind: FailureKind | null;
 }
 
 type AuthMap = Record<Forge, ProviderAuth>;
@@ -137,10 +143,13 @@ function loadAuth(): Promise<void> {
 	return done;
 }
 
-/** Puts the tracked list on screen, leaving out the repositories waiting on an Undo. */
+/** Puts the tracked list on screen, leaving out the repositories waiting on an Undo, and keeps its length for the next load. */
 function showRepos(list: Repo[]): void {
+	const repos = list.filter((repo) => !hidden.has(repo.id));
+
 	tracked = list;
-	set({ repos: list.filter((repo) => !hidden.has(repo.id)), reposStatus: 'ready', reposError: null });
+	set({ repos, reposStatus: 'ready', reposError: null });
+	rememberCount('repos', repos.length);
 }
 
 async function loadRepos(): Promise<void> {
@@ -170,12 +179,20 @@ async function loadRemote(forge: Forge): Promise<void> {
 
 	if (current?.status === 'loading' || current?.status === 'retrying' || current?.status === 'ready') return;
 
-	setRemote(forge, current ? { ...current, status: 'retrying' } : { status: 'loading', repos: [], error: null });
+	setRemote(
+		forge,
+		current ? { ...current, status: 'retrying' } : { status: 'loading', repos: [], error: null, kind: null }
+	);
 
 	try {
-		setRemote(forge, { status: 'ready', repos: await connectionsApi.remoteRepos(forge), error: null });
+		setRemote(forge, { status: 'ready', repos: await connectionsApi.remoteRepos(forge), error: null, kind: null });
 	} catch (error) {
-		setRemote(forge, { status: 'error', repos: [], error: failureText(error, 'The forge didn’t answer.') });
+		setRemote(forge, {
+			status: 'error',
+			repos: [],
+			error: failureText(error, 'The forge didn’t answer.'),
+			kind: failureKind(error)
+		});
 	}
 }
 
@@ -252,6 +269,20 @@ async function removeRepo(repo: Repo): Promise<void> {
 		hidden.delete(repo.id);
 		showRepos(tracked);
 	}
+}
+
+/** Checks the forges again for a Try again button; rejects while the check still fails. */
+export async function retryAuth(): Promise<void> {
+	await loadAuth();
+
+	if (!get().auth) throw new Error(get().authError ?? 'The forge check failed.');
+}
+
+/** Loads the tracked repositories again for a Try again button; rejects while they still fail. */
+export async function retryRepos(): Promise<void> {
+	await loadRepos();
+
+	if (!get().repos) throw new Error(get().reposError ?? 'The repositories didn’t load.');
 }
 
 /** The tracked repositories by `repoKey`, to mark rows of the browser that are already tracked. */

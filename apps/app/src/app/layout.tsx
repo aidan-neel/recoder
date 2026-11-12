@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
-import { ClientRoot } from '@/components/shell/client-root';
+import { AppShell } from '@/components/shell/app-shell';
+import { BOOT_SCRIPT } from '@/lib/shell/boot-script';
 import { THEME_SCRIPT } from '@/lib/shell/theme-script';
 
 import './globals.css';
@@ -20,14 +21,21 @@ export const viewport: Viewport = {
 	colorScheme: 'dark light'
 };
 
+/**
+ * The document. The head scripts run before first paint: the theme, the
+ * platform for the boot frame's keycap, and the watchdog that offers a reload
+ * when the app never mounts. The shell's server render is the boot frame, so
+ * the first paint already shows the top bar, the canvas and the page's skeleton.
+ */
 export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
 		<html lang="en" className="dark" suppressHydrationWarning>
 			<head>
 				<script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+				<script dangerouslySetInnerHTML={{ __html: BOOT_SCRIPT }} />
 			</head>
 			<body>
-				<ClientRoot>{children}</ClientRoot>
+				<AppShell>{children}</AppShell>
 			</body>
 		</html>
 	);

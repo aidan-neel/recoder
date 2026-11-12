@@ -1,24 +1,30 @@
 'use client';
 
-import { swapMotion, useMotionVariants } from '@recoder/ui';
-import { AnimatePresence, motion } from 'motion/react';
+import { SwapText } from '@recoder/ui';
 
 import { Brief } from '@/components/common/brief';
-import { queueHeadline } from '@/lib/queue/headline';
+import { queueHeadline, type Unloaded } from '@/lib/queue/headline';
 import type { QueueSection } from '@/lib/queue/queue';
 
-/** The serif headline over the queue. When the sentence changes it crossfades in place. */
-export function QueueHeadline({ sections }: { sections: QueueSection[] }) {
-	const swap = useMotionVariants(swapMotion);
-	const { lead, rest } = queueHeadline(sections);
+interface QueueHeadlineProps {
+	sections: QueueSection[];
+	/** Which repositories' pull requests did not load, so an empty list is not said to be empty. */
+	unloaded?: Unloaded;
+}
+
+/**
+ * The serif headline over the queue. When the sentence changes, the old one
+ * fades out before the new one fades in, so two sentences never overlap in
+ * one place, whichever of them wraps.
+ */
+export function QueueHeadline({ sections, unloaded = null }: QueueHeadlineProps) {
+	const { lead, rest } = queueHeadline(sections, unloaded);
 
 	return (
 		<div className="queue-brief">
-			<AnimatePresence initial={false} mode="popLayout">
-				<motion.div key={`${lead} ${rest}`} variants={swap} initial="initial" animate="animate" exit="exit">
-					<Brief as="h1" lead={lead} rest={rest || undefined} />
-				</motion.div>
-			</AnimatePresence>
+			<SwapText id={`${lead} ${rest}`} mode="wait">
+				<Brief as="h1" lead={lead} rest={rest || undefined} />
+			</SwapText>
 		</div>
 	);
 }

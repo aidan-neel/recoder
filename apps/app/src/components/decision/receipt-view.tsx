@@ -9,6 +9,7 @@ import type { Receipt } from '@/lib/review/surface';
 import { CodeSection } from './code-section';
 import { DetailArticle, DetailSection, Kicker, KickerText, WhereButton } from './detail-parts';
 import { EvidenceBlock } from './evidence-block';
+import { MissingItem } from './missing-item';
 import { InlineText } from '@/components/common/inline-text';
 
 /** The sources a reviewer leaned on: where each is, and what it says. */
@@ -92,7 +93,9 @@ function ReceiptDetail({ receipt }: { receipt: Receipt }) {
 export function ReceiptView({ id }: { id: string }) {
 	const receipt = useReview((state) => surfaceOf(state)?.receipts.find((item) => item.id === id) ?? null);
 
-	if (!receipt) return null;
+	if (!receipt) {
+		return <MissingItem title="This check isn’t in the review anymore." detail="A newer run may have dropped it." />;
+	}
 
 	return <ReceiptDetail key={receipt.id} receipt={receipt} />;
 }

@@ -10,6 +10,7 @@ import { useReview } from '@/lib/review/review-store';
 import { LiveHeader } from './live-header';
 import { ReviewerList } from './reviewer-list';
 import { StageList, StageListSkeleton } from './stage-list';
+import { StreamFailed } from './stream-failed';
 
 interface ProgressProps {
 	review: Review;
@@ -17,12 +18,17 @@ interface ProgressProps {
 	phase: LivePhase;
 }
 
-/** The stages and the reviewers. Until the stream's first snapshot lands, placeholder rows hold their place. */
+/**
+ * The stages and the reviewers. Until the stream's first snapshot lands,
+ * placeholder rows hold their place; a snapshot that never comes says so.
+ */
 function LiveProgress({ review, progress, phase }: ProgressProps) {
+	const failed = useReview((state) => state.progressFailed);
+
 	if (!progress) {
 		return (
-			<div data-ui="live-progress" className="live-progress" aria-busy>
-				<StageListSkeleton />
+			<div data-ui="live-progress" className="live-progress" aria-busy={!failed}>
+				{failed ? <StreamFailed what="Live progress" className="live-notice" /> : <StageListSkeleton />}
 			</div>
 		);
 	}

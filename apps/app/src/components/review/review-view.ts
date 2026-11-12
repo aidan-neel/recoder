@@ -7,7 +7,6 @@ import { forgeLabel } from '@/lib/connections/forges';
 import { plain } from '@/lib/review/labels';
 import { isOutdated, lifecycle, phaseOf, type ReviewPhase } from '@/lib/review/lifecycle';
 import { decisionCounts, surfaceOf, useReview } from '@/lib/review/review-store';
-import { pullTitle as titleOf } from '@/lib/shell/format';
 import { useShell } from '@/lib/shell/shell-store';
 
 /** The review's decisions, receipts and files; null until the review loads. */
@@ -34,9 +33,15 @@ export function usePhase(): ReviewPhase {
 	return useReview((state) => (state.review ? phaseOf(state.review, state.progress) : 'queued'));
 }
 
-/** The pull request's title as one line: the review's copy, else the forge's, else its number. */
+/**
+ * The pull request's title as one line: the review's copy, else the forge's,
+ * else "Pull request". Every caller shows the number just before it, so the
+ * fallback leaves the number out rather than say it twice.
+ */
 export function pullTitle(review: Review, pull: PullRequest | null): string {
-	return plain(titleOf(review.prTitle ?? pull?.title, review.prNumber));
+	const title = review.prTitle || pull?.title;
+
+	return title ? plain(title) : 'Pull request';
 }
 
 /** The forge the pull request lives on ("GitHub", "GitLab"); null for a local or offline review. */
@@ -55,6 +60,21 @@ const WORKING: ReadonlySet<ReviewPhase> = new Set(['draft', 'queued', 'running',
 /** True while the review is a draft or still running: more decisions may come. */
 export function isWorking(phase: ReviewPhase): boolean {
 	return WORKING.has(phase);
+}
+
+/**
+ * True when a passed review's diff came back empty. The server stores the
+ * diff before any reviewer starts, so a passed review always has one, and an
+ * empty list means no files changed. A review that stopped may have stopped
+ * before its diff was stored, and the page reads that answer (a 404) as an
+ * empty list too, so it says nothing there; neither does a review still at
+ * work, nor a diff that failed to load, which says so in the rail.
+ */
+export function useNoFiles(): boolean {
+	const passed = usePhase() === 'passed';
+	const empty = useReview((state) => state.files.length === 0 && state.filesError === null);
+
+	return passed && empty;
 }
 
 /** True while the reading pane shows live progress: the overview of a review still at work with nothing found yet. */

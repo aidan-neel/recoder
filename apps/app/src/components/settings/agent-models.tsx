@@ -1,26 +1,43 @@
 'use client';
 
 import { ROLE_NAME } from '@/lib/settings/model-options';
-import { agentReady, useSettings } from '@/lib/settings/settings-store';
+import { modelsOffered, retrySettings, useSettings } from '@/lib/settings/settings-store';
 
+import { FailedGroup } from './group-notice';
 import { ModelPicker } from './model-picker';
+import { MODEL_TEXT } from './row-copy';
 import { SettingsGroup, SettingsRow } from './settings-group';
 
-/** Settings → Agent, bottom half: the Review model and the Subagent model, which also runs the verifiers. */
-export function AgentModels() {
-	const offered = useSettings((state) => state.agents.some(agentReady) || Boolean(state.models?.models.length));
+const TITLE = 'Models';
 
-	if (!offered) return null;
+/**
+ * Settings → Agent, bottom half: the Review model and the Subagent model,
+ * which also runs the verifiers. With no model to offer it says so in place
+ * of the pickers.
+ */
+export function AgentModels() {
+	const status = useSettings((state) => state.status);
+	const error = useSettings((state) => state.error);
+	const offered = useSettings(modelsOffered);
+
+	if (status === 'offline') {
+		return <FailedGroup title={TITLE} what="Couldn’t load the models." reason={error} retry={retrySettings} />;
+	}
+
+	if (!offered) {
+		return (
+			<SettingsGroup title={TITLE} group="models">
+				<SettingsRow name="No models yet" description="Get an agent CLI ready to pick the review models" />
+			</SettingsGroup>
+		);
+	}
 
 	return (
-		<SettingsGroup title="Models">
-			<SettingsRow name={ROLE_NAME.orchestrator} description="Runs the reviewers, the summary and Orchestrator in chat">
+		<SettingsGroup title={TITLE} group="models">
+			<SettingsRow name={ROLE_NAME.orchestrator} description={MODEL_TEXT.orchestrator}>
 				<ModelPicker role="orchestrator" />
 			</SettingsRow>
-			<SettingsRow
-				name={ROLE_NAME.specialist}
-				description="Answers the questions reviewers hand off and checks each finding"
-			>
+			<SettingsRow name={ROLE_NAME.specialist} description={MODEL_TEXT.specialist}>
 				<ModelPicker role="specialist" />
 			</SettingsRow>
 		</SettingsGroup>

@@ -1,5 +1,46 @@
 /* ask: the ask-the-reviewer panel and the conversation with Orchestrator */
 
+/* ───────── Ask column: grows beside the reading pane, or over it in a narrow window ───────── */
+/* The column takes focus only when its panel has nothing to show, so it shows no ring. */
+.ask-column {
+	min-height: 0;
+	flex-shrink: 0;
+	overflow: hidden;
+	border-left: 1px solid var(--line-divider);
+	background: var(--bg-panel);
+	outline: none;
+}
+/* The stand-in the panel boundary shows when the column breaks: open width, the notice centred in it. */
+.ask-column-failed {
+	width: 380px;
+}
+.ask-column-inner {
+	display: flex;
+	width: 380px;
+	height: 100%;
+	flex-direction: column;
+}
+.ask-column-inner > * {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+}
+@container review-page (max-width: 960px) {
+	.ask-column {
+		position: absolute;
+		z-index: 6;
+		top: 0;
+		right: 0;
+		bottom: 0;
+		max-width: 100%;
+	}
+	/* A window narrower than the column fits it to the page, so both edges keep their padding. */
+	.ask-column-inner {
+		width: min(380px, 100cqi);
+	}
+}
+
 /* ───────── Panel: the column's header, then one conversation filling the rest ───────── */
 [data-ui='ask-panel'] {
 	display: flex;
@@ -154,8 +195,11 @@
 [data-ui='chat-composer'] [data-ui='textarea']:disabled {
 	cursor: default;
 }
+/* The button's slot keeps its size while the column's opening frame leaves the button out. */
 .chat-composer-action {
 	display: inline-flex;
+	min-width: var(--size-icon-md);
+	min-height: var(--size-icon-md);
 	flex: none;
 }
 

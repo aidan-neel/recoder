@@ -1,5 +1,6 @@
 import { useShell } from '../shell/shell-store';
 import { stateOf } from './decisions';
+import { knownRepoName } from './repo-names';
 import { isRunning, surfaceOf, type ReviewData } from './review-state';
 
 /**
@@ -27,5 +28,28 @@ export function syncTab(state: ReviewData, seen = false): void {
 			high: open.some((decision) => decision.tone === 'high')
 		},
 		seen
+	);
+}
+
+/**
+ * Keeps the review's top-bar tab when the page could not show it: a tab
+ * already open stays as it is, and a review that came in opens one from its
+ * number and title, since its decisions cannot be counted.
+ */
+export function keepTab({ review, repoName }: ReviewData): void {
+	const shell = useShell.getState();
+
+	if (!review || shell.tabs.some((tab) => tab.id === review.id)) return;
+
+	shell.openTab(
+		{
+			id: review.id,
+			repo: repoName ?? knownRepoName(review.repoId) ?? 'review',
+			pr: review.prNumber,
+			title: review.prTitle ?? `#${review.prNumber}`,
+			open: 0,
+			high: false
+		},
+		true
 	);
 }

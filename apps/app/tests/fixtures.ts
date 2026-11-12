@@ -16,6 +16,14 @@ export function memoryStorage(): Storage {
 	};
 }
 
+/**
+ * Lets every pending promise callback run: fetches the tests stub and the
+ * state updates after them. It waits on promises only, so it works under fake timers.
+ */
+export async function flush(): Promise<void> {
+	for (let turn = 0; turn < 50; turn++) await Promise.resolve();
+}
+
 /** A hunk of `count` added lines on the new side, starting at line `start`. */
 export function addedHunk(start: number, count: number): DiffHunk {
 	return {

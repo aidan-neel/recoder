@@ -50,7 +50,7 @@ function useReturnFocus(row: RefObject<HTMLDivElement | null>, open: boolean) {
 
 /**
  * One layer of guidelines: its name and first rule, its status and its
- * button, with the editor folding open underneath (height 240ms). Only one
+ * button, with the editor folding open underneath (height 200ms). Only one
  * row's editor is open at a time.
  */
 export function GuidelinesRow({ name, summary, failed, status, action, open, children }: GuidelinesRowProps) {

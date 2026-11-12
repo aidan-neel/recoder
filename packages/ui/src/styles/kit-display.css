@@ -135,6 +135,86 @@
 	[data-ui='status-glyph-face'][data-kind='spinner'] {
 		--glyph: var(--text-muted);
 	}
+	/*
+	 * A new face scales up from 0.7 out of a 2px blur; the old one shrinks and fades as it leaves, and
+	 * rests hidden if its animation never runs. The base reduced-motion rule makes both a snap.
+	 */
+	[data-ui='status-glyph-face'][data-state='in'] {
+		animation: ui-glyph-in var(--dur-toggle) var(--ease-out);
+	}
+	[data-ui='status-glyph-face'][data-state='out'] {
+		opacity: 0;
+		pointer-events: none;
+		animation: ui-glyph-out var(--dur-swap) cubic-bezier(0.32, 0, 0.67, 0);
+	}
+	@keyframes ui-glyph-in {
+		from {
+			opacity: 0;
+			scale: 0.7;
+			filter: blur(2px);
+		}
+	}
+	@keyframes ui-glyph-out {
+		from {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+			scale: 0.7;
+			filter: blur(2px);
+		}
+	}
+
+	/* ───────── Swap text: the new text fades in with a 2px rise as the old one leaves 2px up ───────── */
+	/*
+	 * No blur, since swaps run on every decision. The leave takes 80ms (--dur-press); a leaving copy
+	 * rests hidden if it never runs, and goes out of the flow so a shorter label never cuts it. In a
+	 * `wait` swap (data-wait) it keeps its place, and the new copy sits over it, unseen behind a delay
+	 * as long as the leave, then takes the flow, keeping the delay until it settles so the fade never
+	 * jumps. The base reduced-motion rule makes both a snap, with nothing to wait for.
+	 */
+	[data-ui='swap-layer'][data-state='in'] {
+		animation: ui-swap-in var(--dur-swap) var(--ease-out);
+	}
+	[data-ui='swap-layer'][data-state='out'] {
+		opacity: 0;
+		pointer-events: none;
+		animation: ui-swap-out var(--dur-press) cubic-bezier(0.32, 0, 0.67, 0);
+	}
+	[data-ui='swap-layer'][data-state='out']:not(:only-child),
+	[data-ui='swap-layer'][data-state='out'] + [data-ui='swap-layer'][data-state='in'][data-wait] {
+		position: absolute;
+		top: 0;
+		left: 0;
+		min-width: 100%;
+	}
+	[data-ui='swap-layer'][data-state='out'][data-wait] {
+		position: relative;
+	}
+	[data-ui='swap-layer'][data-state='in'][data-wait] {
+		animation-delay: var(--dur-press);
+		animation-fill-mode: backwards;
+	}
+	@media (prefers-reduced-motion: reduce) {
+		[data-ui='swap-layer'][data-state='in'][data-wait] {
+			animation-delay: 0ms;
+		}
+	}
+	@keyframes ui-swap-in {
+		from {
+			opacity: 0;
+			translate: 0 2px;
+		}
+	}
+	@keyframes ui-swap-out {
+		from {
+			opacity: 1;
+		}
+		to {
+			opacity: 0;
+			translate: 0 -2px;
+		}
+	}
 
 	/* ───────── Scroll area: a thin bar that fades in on hover or scroll, never cues ───────── */
 	[data-ui='scroll-area-scrollbar'] {
@@ -222,6 +302,128 @@
 	}
 	[data-ui='hover-list-highlight'][data-state='on'] {
 		opacity: 1;
+	}
+
+	/* ───────── Skeleton text and rows: placeholders cut to the geometry of what replaces them ───────── */
+	[data-ui='skeleton-text'],
+	[data-ui='skeleton-rows'] {
+		display: flex;
+		flex-direction: column;
+	}
+	[data-ui='skeleton-line'] {
+		display: flex;
+		align-items: center;
+	}
+	[data-ui='skeleton-row'] {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 0 12px;
+	}
+	[data-ui='skeleton-row-bars'] {
+		display: flex;
+		min-width: 0;
+		flex: 1;
+		flex-direction: column;
+		gap: 8px;
+	}
+	[data-ui='skeleton-row-bars'] > [data-ui='skeleton'] + [data-ui='skeleton'] {
+		height: 10px;
+	}
+
+	/* ───────── Status notice: what a page, a section or a line says in place of its content ───────── */
+	[data-ui='status-notice'] {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 12px;
+	}
+	[data-ui='status-notice-text'] {
+		margin: 0;
+		font-weight: 400;
+	}
+	[data-ui='status-notice-title'] {
+		color: var(--text-primary);
+	}
+	[data-ui='status-notice-detail'] {
+		color: var(--text-subtle);
+		overflow-wrap: anywhere;
+	}
+	[data-ui='status-notice'][data-tone='danger']:not([data-variant='page']) [data-ui='status-notice-title'] {
+		color: var(--danger);
+	}
+	[data-ui='status-notice-actions'] {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+
+	/* Page: the serif voice in a centred column, the title in ink and the rest in the brief's body color. */
+	[data-ui='status-notice'][data-variant='page'] {
+		width: 100%;
+		max-width: 640px;
+		margin: 0 auto;
+		padding: 96px 32px;
+		gap: 24px;
+	}
+	[data-variant='page'] > [data-ui='status-notice-text'] {
+		color: var(--text-brief-body);
+		font-family: var(--font-ai);
+		font-size: 27px;
+		letter-spacing: -0.005em;
+		line-height: 1.38;
+		text-wrap: pretty;
+	}
+	[data-variant='page'] > [data-ui='status-notice-text'] > [data-ui='status-notice-detail'] {
+		color: inherit;
+	}
+	@media (max-width: 640px) {
+		[data-ui='status-notice'][data-variant='page'] {
+			padding: 48px 16px;
+		}
+	}
+
+	/* Section: centred in the space the panel or list would fill, the reason on its own line. */
+	[data-ui='status-notice'][data-variant='section'] {
+		height: 100%;
+		align-items: center;
+		justify-content: center;
+		padding: 32px;
+		font-size: 13px;
+		line-height: 1.5;
+		text-align: center;
+	}
+	[data-variant='section'] [data-ui='status-notice-title'] {
+		color: var(--text-secondary);
+	}
+	[data-variant='section'] [data-ui='status-notice-detail'] {
+		display: block;
+		margin-top: 2px;
+		font-size: 12px;
+	}
+	[data-variant='section'] > [data-ui='status-notice-actions'] {
+		justify-content: center;
+	}
+
+	/* Inline: one quiet line in the flow, at least a control tall so an action never resizes it. */
+	[data-ui='status-notice'][data-variant='inline'] {
+		min-height: var(--size-control-sm);
+		flex-direction: row;
+		align-items: center;
+		gap: 8px;
+		font-size: 12.5px;
+		line-height: 18px;
+	}
+	[data-variant='inline'] > [data-ui='status-notice-text'] {
+		min-width: 0;
+		flex: 1;
+	}
+	[data-variant='inline'] [data-ui='status-notice-title'] {
+		color: var(--text-muted);
+	}
+	[data-variant='inline'] > [data-ui='status-notice-actions'] {
+		flex-shrink: 0;
+		flex-wrap: nowrap;
 	}
 
 	/* ───────── Row button: a list row that is one click target; the hover list paints its hover ───────── */

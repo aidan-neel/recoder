@@ -1,98 +1,89 @@
 'use client';
 
-import { Button } from '@recoder/ui';
 import { useEffect, useState } from 'react';
 
-import { PageNotice } from '@/components/common/page-notice';
-import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
-import { SettingsSkeleton } from '@/components/settings/settings-skeleton';
-import { OFFLINE_TEXT } from '@/lib/api/http';
-import { useConnections, type LoadStatus } from '@/lib/connections/connections-store';
-import { useAction } from '@/lib/shell/use-action';
+import { FailedGroup, SectionNotice } from '@/components/settings/group-notice';
+import { SettingsSectionSkeleton } from '@/components/settings/settings-skeleton';
+import { retryAuth, retryRepos, useConnections } from '@/lib/connections/connections-store';
+import { pending } from '@/lib/settings/settings-store';
 
 import { ForgeGroup } from './forge-group';
 import { RepoBrowser } from './repo-browser';
-import { RepoGroup } from './repo-group';
-import { useTokenDialog } from './use-token-dialog';
+import { AddRepository, RepoGroup } from './repo-group';
+import { useTokenDialog, type Connect } from './use-token-dialog';
 
-/** Two rows a group, the shape the section paints while it loads. */
-const SKELETON_GROUPS = [2, 2];
+/** Loads the forges and the repositories again; rejects while either still fails. */
+async function retryBoth(): Promise<void> {
+	const results = await Promise.allSettled([retryAuth(), retryRepos()]);
 
-/** True once a load has answered, well or not. */
-function settled(status: LoadStatus): boolean {
-	return status !== 'idle' && status !== 'loading';
+	if (results.some((result) => result.status === 'rejected')) throw new Error('Connections didn’t load.');
 }
 
-/** Loads the forges and the repositories. On a retry, a failure stays on screen until the answer lands, so the notice holds still. */
-function reload(): Promise<unknown> {
-	const { loadAuth, loadRepos } = useConnections.getState();
+/** GitHub and GitLab: who each is signed in as, once the section has loaded. */
+function Forges({ onConnect }: { onConnect: Connect }) {
+	const auth = useConnections((state) => state.auth);
+	const error = useConnections((state) => state.authError);
 
-	return Promise.all([loadAuth(), loadRepos()]);
+	if (auth) return <ForgeGroup auth={auth} onConnect={onConnect} />;
+
+	return <FailedGroup title="Forges" what="Couldn’t check the forges." reason={error} retry={retryAuth} />;
 }
 
-/** A group whose load failed: what went wrong, and a way to try again. */
-function FailedGroup({ title, name, reason }: { title: string; name: string; reason: string | null }) {
-	const retry = useAction();
+/** The tracked repositories, once the section has loaded. */
+function Repositories({ onAdd }: { onAdd: () => void }) {
+	const repos = useConnections((state) => state.repos);
+	const error = useConnections((state) => state.reposError);
 
-	return (
-		<SettingsGroup title={title}>
-			<SettingsRow name={name} description={reason ?? OFFLINE_TEXT}>
-				<Button variant="outline" status={retry.status} onClick={() => retry.run(reload)}>
-					Try again
-				</Button>
-			</SettingsRow>
-		</SettingsGroup>
-	);
-}
+	if (repos) return <RepoGroup repos={repos} onAdd={onAdd} />;
 
-/** The whole section when the review server does not answer. */
-function ServerDown() {
-	const retry = useAction();
-
-	return (
-		<PageNotice heading="h2" lead={OFFLINE_TEXT} rest="Start it, then try again.">
-			<Button status={retry.status} onClick={() => retry.run(reload)}>
-				Try again
-			</Button>
-		</PageNotice>
-	);
+	return <FailedGroup title="Repositories" what="Couldn’t load the repositories." reason={error} retry={retryRepos} />;
 }
 
 /**
  * Settings → Connections: the forges Recoder reads pull requests from, and
- * the repositories it tracks. The section paints once both have loaded.
+ * the repositories it tracks. The section paints once both have answered, in
+ * one swap from its skeleton, so neither group lands while the other is
+ * still a placeholder; Add repository works in the skeleton already. When
+ * the server answers neither, one notice stands for both. The dialogs stay
+ * mounted across the swap, so one opened from the skeleton stays open.
  */
 export function ConnectionsSection() {
-	const auth = useConnections((state) => state.auth);
-	const authStatus = useConnections((state) => state.authStatus);
-	const authError = useConnections((state) => state.authError);
-	const repos = useConnections((state) => state.repos);
-	const reposStatus = useConnections((state) => state.reposStatus);
-	const reposError = useConnections((state) => state.reposError);
+	const down = useConnections(
+		(state) => !state.auth && state.authStatus === 'offline' && !state.repos && state.reposStatus === 'offline'
+	);
+
+	const loading = useConnections(
+		(state) =>
+			(state.auth === null && pending(state.authStatus)) || (state.repos === null && pending(state.reposStatus))
+	);
+
 	const [browsing, setBrowsing] = useState(false);
 	const token = useTokenDialog();
 
 	useEffect(() => {
-		void reload();
+		const { loadAuth, loadRepos } = useConnections.getState();
+
+		void loadAuth();
+		void loadRepos();
 	}, []);
 
-	if (!repos && reposStatus === 'offline') return <ServerDown />;
-	if (!settled(authStatus) || !settled(reposStatus)) return <SettingsSkeleton groups={SKELETON_GROUPS} />;
+	if (down) return <SectionNotice what="Connections didn’t load." reason={null} retry={retryBoth} />;
 
 	return (
-		<div className="settings-stack">
-			{auth ? (
-				<ForgeGroup auth={auth} onConnect={token.connect} />
+		<>
+			{loading ? (
+				<SettingsSectionSkeleton
+					section="connections"
+					actions={{ repos: <AddRepository onAdd={() => setBrowsing(true)} /> }}
+				/>
 			) : (
-				<FailedGroup title="Forges" name="Couldn’t check the forges" reason={authError} />
-			)}
-			{repos ? (
-				<RepoGroup repos={repos} onAdd={() => setBrowsing(true)} />
-			) : (
-				<FailedGroup title="Repositories" name="Couldn’t load the repositories" reason={reposError} />
+				<div className="settings-stack">
+					<Forges onConnect={token.connect} />
+					<Repositories onAdd={() => setBrowsing(true)} />
+				</div>
 			)}
 			{token.dialog}
 			<RepoBrowser open={browsing} onOpenChange={setBrowsing} />
-		</div>
+		</>
 	);
 }

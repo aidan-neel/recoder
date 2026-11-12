@@ -1,12 +1,13 @@
 'use client';
 
-import { cn, SPRING } from '@recoder/ui';
-import { motion, useReducedMotionConfig } from 'motion/react';
-import { useState } from 'react';
+import { cn } from '@recoder/ui';
+import { useRef, useState } from 'react';
 
 import type { FileClass } from '@/lib/review/files';
 import { CLASS_LABEL } from '@/lib/review/labels';
 import type { Attention } from '@/lib/review/surface';
+
+import { useSegmentMove } from './segment-move';
 
 const SEGMENTS: { cls: FileClass; note: string }[] = [
 	{ cls: 'read', note: 'Hunks with an open decision, or no reviewer' },
@@ -25,29 +26,30 @@ interface ChangeMapProps {
 /**
  * Every changed line in one bar, split into Read, Checked, Tests and Skim.
  * Deciding an item moves its lines from Read to Checked, so the segments
- * spring to their new widths. Hovering a legend key dims the other segments.
+ * ease to their new widths. Hovering a legend key dims the other segments.
  */
 export function ChangeMap({ attention, legend = true, className }: ChangeMapProps) {
-	const reduced = useReducedMotionConfig();
 	const [focus, setFocus] = useState<FileClass | null>(null);
+	const bar = useRef<HTMLDivElement>(null);
+
+	useSegmentMove(bar, SEGMENTS.map(({ cls }) => attention[cls]).join(','));
 
 	return (
 		<div data-ui="change-map" className={cn('change-map', className)}>
 			<div
+				ref={bar}
 				className="change-bar"
 				role="img"
 				aria-label={`${attention.read} of ${attention.total} changed lines need reading`}
 			>
 				{SEGMENTS.map(({ cls }) => (
-					<motion.span
+					<span
 						key={cls}
 						className="change-seg"
 						data-cls={cls}
 						data-dim={focus !== null && focus !== cls}
 						data-empty={attention[cls] === 0}
-						initial={false}
-						animate={{ flexGrow: attention[cls] }}
-						transition={reduced ? { duration: 0 } : SPRING}
+						style={{ flexGrow: attention[cls] }}
 					/>
 				))}
 			</div>

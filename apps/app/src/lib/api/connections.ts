@@ -1,6 +1,6 @@
 import type { CreateRepoInput, Provider, ProviderAuth, RemoteRepo, Repo } from '@recoder/shared';
 
-import { del, post, request, seg } from './http';
+import { del, post, request, seg, SLOW_MS } from './http';
 
 /** The forges Recoder reads pull requests from. */
 export type Forge = Exclude<Provider, 'local'>;
@@ -11,15 +11,16 @@ export const connectionsApi = {
 
 	/** Checks the token with the forge, then saves it to `tokens.json` in the server's data folder. `host` is for a self-hosted GitLab. */
 	saveToken: (provider: Forge, token: string, host?: string) =>
-		post<{ provider: Forge; user: string | null }>('/api/auth/token', {
-			provider,
-			token,
-			...(host ? { host } : {})
-		}),
+		post<{ provider: Forge; user: string | null }>(
+			'/api/auth/token',
+			{ provider, token, ...(host ? { host } : {}) },
+			{ timeoutMs: SLOW_MS }
+		),
 	clearToken: (provider: Forge) => del<{ cleared: boolean }>(`/api/auth/token/${seg(provider)}`),
 
 	/** Repositories the token can see, to pick from. */
-	remoteRepos: (provider: Forge) => request<RemoteRepo[]>(`/api/auth/repos?provider=${seg(provider)}`),
+	remoteRepos: (provider: Forge) =>
+		request<RemoteRepo[]>(`/api/auth/repos?provider=${seg(provider)}`, { timeoutMs: SLOW_MS }),
 	addRepo: (input: CreateRepoInput) => post<Repo>('/api/repos', input),
 
 	/** Kept alive, so a removal sent as the page closes (its Undo still on offer) still lands. */

@@ -27,6 +27,8 @@ const STORED = 'Saved to tokens.json in the server’s data folder.';
 
 interface TokenModalProps {
 	forge: Forge;
+	/** True when the forge rejected the token it has, so the dialog reads as updating it. */
+	replacing: boolean;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }
@@ -45,6 +47,7 @@ function rejection(error: unknown): Rejection {
 
 interface TokenFormProps {
 	forge: ForgeInfo;
+	replacing: boolean;
 	status: ButtonStatus;
 	onStatus: (status: ButtonStatus) => void;
 }
@@ -54,7 +57,7 @@ interface TokenFormProps {
  * a rejection lands under the field it is about. While the check runs the
  * fields are read-only and Cancel waits.
  */
-function TokenForm({ forge, status, onStatus }: TokenFormProps) {
+function TokenForm({ forge, replacing, status, onStatus }: TokenFormProps) {
 	const formId = useId();
 	const savedHost = useConnections((state) => state.auth?.gitlab.host ?? '');
 	const [token, setToken] = useState('');
@@ -82,7 +85,7 @@ function TokenForm({ forge, status, onStatus }: TokenFormProps) {
 
 	return (
 		<>
-			<ModalTitle>Connect {forge.label}</ModalTitle>
+			<ModalTitle>{replacing ? `Update ${forge.label} token` : `Connect ${forge.label}`}</ModalTitle>
 			<ModalBody>
 				<form id={formId} className="token-form" onSubmit={(event) => void submit(event)}>
 					{gitlab ? (
@@ -138,7 +141,7 @@ function TokenForm({ forge, status, onStatus }: TokenFormProps) {
 					status={status}
 					disabled={!token.trim() && status === 'idle'}
 				>
-					Connect
+					{replacing ? 'Update' : 'Connect'}
 				</Button>
 			</ModalFooter>
 		</>
@@ -152,7 +155,7 @@ function TokenForm({ forge, status, onStatus }: TokenFormProps) {
  * closes a beat after the check face. Mount one per opening, so no timer from
  * an earlier opening can close it.
  */
-export function TokenModal({ forge, open, onOpenChange }: TokenModalProps) {
+export function TokenModal({ forge, replacing, open, onOpenChange }: TokenModalProps) {
 	const info = FORGES.find((item) => item.id === forge) ?? FORGES[0];
 	const [status, setStatus] = useState<ButtonStatus>('idle');
 	const close = useEffectEvent(() => onOpenChange(false));
@@ -173,7 +176,7 @@ export function TokenModal({ forge, open, onOpenChange }: TokenModalProps) {
 			}}
 		>
 			<ModalContent size="sm" showClose={false}>
-				<TokenForm forge={info} status={status} onStatus={setStatus} />
+				<TokenForm forge={info} replacing={replacing} status={status} onStatus={setStatus} />
 			</ModalContent>
 		</Modal>
 	);

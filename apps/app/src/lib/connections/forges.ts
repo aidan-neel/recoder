@@ -1,4 +1,4 @@
-import type { ProviderAuth } from '@recoder/shared';
+import type { ProviderAuth, Repo } from '@recoder/shared';
 
 import type { Forge } from '../api/connections';
 
@@ -34,4 +34,16 @@ export function signedInForges(auth: Record<Forge, ProviderAuth> | null): Forge[
 	if (!auth) return [];
 
 	return FORGES.map((forge) => forge.id).filter((id) => auth[id].authenticated);
+}
+
+/**
+ * The forges that refuse Recoder while it tracks repositories there, GitHub
+ * first: the CLI runs but can't sign in, so every pull request read fails and
+ * the queue says the token was rejected. The Forges group and the repository
+ * browser say the same and offer Update token instead of Connect.
+ */
+export function rejectedForges(auth: Record<Forge, ProviderAuth>, repos: Repo[] | null): Forge[] {
+	return FORGES.map((forge) => forge.id).filter(
+		(id) => auth[id].available && !auth[id].authenticated && Boolean(repos?.some((repo) => repo.provider === id))
+	);
 }

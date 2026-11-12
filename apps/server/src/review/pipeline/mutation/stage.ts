@@ -1,7 +1,7 @@
 import type { ReviewRun } from '../harness/context.js';
 import { isTestPath } from '../change-model/test-files.js';
 import { addedLines } from '../detectors/changed-lines.js';
-import { readFilesAt } from '../detectors/repo-files.js';
+import { readFilesAt } from '../repo-inventory/blobs.js';
 import { readTestFiles } from '../detectors/test-files.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { MATRIX_BUDGET_MS, emptyCounts, testMatrix, type MatrixCounts, type SkipReason } from './matrix.js';

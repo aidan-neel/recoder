@@ -13,7 +13,8 @@ export const CONTEXT_CAPS = {
 	threads: 20,
 	commits: 30,
 	children: 5,
-	pastReviews: 3
+	pastReviews: 3,
+	relatedReviews: 3
 } as const;
 
 /**
@@ -28,6 +29,7 @@ const KIND_ORDER: IntentSourceKind[] = [
 	'comment',
 	'commit',
 	'past-review',
+	'related-review',
 	'pr-history'
 ];
 
@@ -39,7 +41,8 @@ const KIND_CAPS: Partial<Record<IntentSourceKind, number>> = {
 	comment: CONTEXT_CAPS.comments,
 	'review-thread': CONTEXT_CAPS.threads,
 	commit: CONTEXT_CAPS.commits,
-	'past-review': CONTEXT_CAPS.pastReviews
+	'past-review': CONTEXT_CAPS.pastReviews,
+	'related-review': CONTEXT_CAPS.relatedReviews
 };
 
 /** Trimmed text cut to `max` characters, marked when cut. */

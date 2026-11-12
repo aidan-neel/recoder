@@ -1,6 +1,7 @@
 'use client';
 
-import { cn, DURATION, EASE_OUT, Skeleton, StatusGlyph } from '@recoder/ui';
+import { DURATION, EASE_OUT, StatusGlyph } from '@recoder/ui';
+import { SkeletonRows } from '@recoder/ui/skeleton';
 import { AnimatePresence, motion, type Transition } from 'motion/react';
 
 import type { StageRow, StageState } from '@/lib/live/stages';
@@ -16,9 +17,6 @@ const STATE_LABEL: Record<StageState, string> = {
 	paused: 'Paused',
 	done: 'Done'
 };
-
-/** Widths of the placeholder rows, so they read as labels of different lengths. */
-const SKELETON_WIDTHS = ['w-[34%]', 'w-[52%]', 'w-[44%]', 'w-[30%]', 'w-[48%]', 'w-[40%]'];
 
 /** The running stage's latest activity, unfolding under its label. */
 function StageDetail({ text }: { text: string }) {
@@ -79,16 +77,36 @@ export function StageList({ rows, detail }: { rows: StageRow[]; detail: string |
 	);
 }
 
-/** Placeholder rows while the first snapshot is on its way; invisible for 200ms, then swapped in place. */
+/** A stage row's height: its 18px label and the row's 6px padding above and below. */
+const STAGE_ROW = 30;
+
+/** The pipeline runs six stages, seven with the plan step; six rows fill the place without running past it. */
+const STAGE_ROWS = 6;
+
+/** Label widths for the placeholder rows, so they read as stage names of different lengths. */
+const SKELETON_WIDTHS = [
+	['34%', '0'],
+	['52%', '0'],
+	['44%', '0'],
+	['30%', '0'],
+	['48%', '0'],
+	['40%', '0']
+] as const;
+
+/**
+ * Placeholder rows while the first snapshot is on its way, at the stage
+ * rows' height: invisible for the first 120ms, then swapped in place.
+ */
 export function StageListSkeleton() {
 	return (
-		<div aria-hidden className="live-stages">
-			{SKELETON_WIDTHS.map((width) => (
-				<div key={width} className="live-stage-row live-stage-skeleton">
-					<Skeleton className="size-4 rounded-full" />
-					<Skeleton className={cn('h-[11px]', width)} />
-				</div>
-			))}
-		</div>
+		<SkeletonRows
+			count={STAGE_ROWS}
+			height={STAGE_ROW}
+			glyph
+			lines={1}
+			widths={SKELETON_WIDTHS}
+			rowClassName="live-stage-skeleton"
+			className="live-stages"
+		/>
 	);
 }

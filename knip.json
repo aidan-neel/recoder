@@ -65,8 +65,12 @@
 			]
 		},
 		"packages/ui": {
+			"entry": [
+				"tests/**/*.test.{ts,tsx}"
+			],
 			"project": [
-				"src/**/*.{ts,tsx}"
+				"src/**/*.{ts,tsx}",
+				"tests/**/*.{ts,tsx}"
 			],
 			"ignoreDependencies": [
 				"@fontsource/geist-mono",

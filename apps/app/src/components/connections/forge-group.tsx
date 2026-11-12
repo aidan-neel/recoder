@@ -8,15 +8,19 @@ import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group
 import type { Forge } from '@/lib/api/connections';
 import { failureText } from '@/lib/api/http';
 import { useConnections } from '@/lib/connections/connections-store';
-import { FORGES, type ForgeInfo } from '@/lib/connections/forges';
+import { FORGES, rejectedForges, type ForgeInfo } from '@/lib/connections/forges';
+
+import type { Connect } from './use-token-dialog';
 
 /** The line under a forge's name: who it is signed in as, or why it is not. */
-function forgeLine(auth: ProviderAuth): string {
+function forgeLine(auth: ProviderAuth, forge: ForgeInfo, rejected: boolean): string {
 	if (auth.authenticated) {
 		const who = auth.user ? `Signed in as ${auth.user}` : 'Signed in';
 
 		return auth.host ? `${who} on ${auth.host}` : who;
 	}
+
+	if (rejected) return `${forge.label} rejected the token`;
 
 	return auth.available ? 'Not connected' : 'CLI not installed. Connect with a token instead.';
 }
@@ -69,36 +73,45 @@ function useDisconnect(): { ask: (forge: ForgeInfo) => void; dialog: ReactNode }
 
 interface ForgeGroupProps {
 	auth: Record<Forge, ProviderAuth>;
-	onConnect: (forge: Forge) => void;
+	/** Opens the token dialog; `replacing` when the forge rejected the token it has. */
+	onConnect: Connect;
 }
 
-/** Settings → Connections → Forges: GitHub and GitLab, who each is signed in as, and Connect or Disconnect. */
+/**
+ * Settings → Connections → Forges: GitHub and GitLab, who each is signed in
+ * as, and Connect or Disconnect; Update token when the forge rejects the one
+ * it has.
+ */
 export function ForgeGroup({ auth, onConnect }: ForgeGroupProps) {
+	const repos = useConnections((store) => store.repos);
 	const removal = useDisconnect();
+	const refused = rejectedForges(auth, repos);
 
 	return (
-		<SettingsGroup title="Forges">
+		<SettingsGroup title="Forges" group="forges">
 			{FORGES.map((forge) => {
 				const state = auth[forge.id];
+				const rejected = refused.includes(forge.id);
 
 				return (
 					<SettingsRow
 						key={forge.id}
+						className="forge-row"
 						name={
 							<span className="forge-name">
 								<ForgeMark provider={forge.id} className="text-fg-muted" />
 								{forge.label}
 							</span>
 						}
-						description={forgeLine(state)}
+						description={forgeLine(state, forge, rejected)}
 					>
 						{state.authenticated ? (
 							<Button variant="ghost" onClick={() => removal.ask(forge)}>
 								Disconnect
 							</Button>
 						) : (
-							<Button variant="outline" onClick={() => onConnect(forge.id)}>
-								Connect
+							<Button variant="outline" onClick={() => onConnect(forge.id, rejected)}>
+								{rejected ? 'Update token' : 'Connect'}
 							</Button>
 						)}
 					</SettingsRow>

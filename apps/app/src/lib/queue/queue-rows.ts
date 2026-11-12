@@ -1,4 +1,4 @@
-import type { PullRequest, Repo, Review } from '@recoder/shared';
+import type { PullRequest, Repo, Review, ReviewListItem } from '@recoder/shared';
 
 import { readDecisions, type DecisionRecord } from '../review/saved-decisions';
 import { SAMPLE_REVIEW } from '../sample/sample-review';
@@ -27,7 +27,7 @@ function keep(before: QueueEntry | undefined, next: QueueEntry): QueueEntry {
 export function rowsOf(
 	repo: Repo,
 	pulls: PullRequest[] | null,
-	latest: Map<string, Review>,
+	latest: Map<string, ReviewListItem>,
 	previous: Map<string, QueueEntry>
 ): QueueEntry[] {
 	const list = pulls ?? [...previous.values()].filter((entry) => entry.repoId === repo.id).map((entry) => entry.pull);

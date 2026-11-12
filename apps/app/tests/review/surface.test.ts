@@ -76,6 +76,27 @@ describe('buildSurface', () => {
 		expect(surface.decisions.map((decision) => decision.id)).toEqual(['high', 'proven', 'unproven', 'quality', 'low']);
 	});
 
+	test('orders decisions of the same weight by path as localeCompare does, then by line', () => {
+		const surface = buildSurface(
+			review([
+				finding('lower', 'apps/x.ts', 1, 'error'),
+				finding('under', 'src/a_b.ts', 1, 'error'),
+				finding('dash-late', 'src/a-b.ts', 7, 'error'),
+				finding('upper', 'Makefile', 9, 'error'),
+				finding('dash-early', 'src/a-b.ts', 2, 'error')
+			]),
+			[]
+		);
+
+		expect(surface.decisions.map((decision) => decision.id)).toEqual([
+			'lower',
+			'upper',
+			'under',
+			'dash-early',
+			'dash-late'
+		]);
+	});
+
 	test('strips the category tag from the body and titles untitled findings from their first sentence', () => {
 		const [decision] = buildSurface(review([finding('f', 'a.ts', 1, 'error')]), []).decisions;
 
@@ -170,5 +191,22 @@ describe('buildSurface', () => {
 		expect(surface.receipts.map((receipt) => [receipt.id, receipt.reason])).toEqual([
 			['question:Q2', 'It is synchronous.']
 		]);
+	});
+
+	test('lists quieted findings by topic and leaves them out of the decisions and the lines to read', () => {
+		const quiet = (id: string, line: number) =>
+			finding(id, 'a.ts', line, 'warning', { topic: { id: 'smell:magic-value', label: 'Magic value', quieted: true } });
+
+		const surface = buildSurface(review([quiet('q1', 80), finding('f', 'a.ts', 10, 'error'), quiet('q2', 85)]), [
+			twoHunks('a.ts')
+		]);
+
+		expect(surface.decisions.map((decision) => decision.id)).toEqual(['f']);
+
+		expect(surface.quieted.map((topic) => [topic.id, topic.decisions.map((decision) => decision.id)])).toEqual([
+			['smell:magic-value', ['q1', 'q2']]
+		]);
+
+		expect(surface.files[0].readLines).toBe(5);
 	});
 });

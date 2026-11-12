@@ -1,23 +1,47 @@
 'use client';
 
-import type { RemoteRepo } from '@recoder/shared';
-import { Button, ForgeMark, HoverList, Pill, ScrollArea, Skeleton, swapMotion, useMotionVariants } from '@recoder/ui';
+import type { ProviderAuth, RemoteRepo } from '@recoder/shared';
+import {
+	Button,
+	ForgeMark,
+	HoverList,
+	Pill,
+	ScrollArea,
+	SkeletonRows,
+	StatusNotice,
+	swapMotion,
+	useMotionVariants
+} from '@recoder/ui';
 import { Check, Plus } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect } from 'react';
 
 import type { Forge } from '@/lib/api/connections';
 import { OFFLINE_TEXT } from '@/lib/api/http';
-import { trackedKeys, useConnections, type RemoteList as Remote } from '@/lib/connections/connections-store';
-import { FORGES, forgeLabel, signedInForges } from '@/lib/connections/forges';
+import { retryAuth, trackedKeys, useConnections, type RemoteList as Remote } from '@/lib/connections/connections-store';
+import { FORGES, forgeLabel, rejectedForges, signedInForges } from '@/lib/connections/forges';
 import { repoKey } from '@/lib/connections/repo-input';
 import { queryTerms } from '@/lib/settings/model-options';
-import { errorToast } from '@/lib/shell/notify';
+import { retryToast } from '@/lib/shell/notify';
 import { useAction } from '@/lib/shell/use-action';
 
 import { useAddRepo } from './use-add-repo';
+import type { Connect } from './use-token-dialog';
 
-const SKELETON_WIDTHS = ['w-[44%]', 'w-[30%]', 'w-[52%]', 'w-[36%]', 'w-[40%]', 'w-[28%]', 'w-[48%]'];
+/** Name widths for the placeholder rows, so they don't read as copies; the second width goes unused on one-line rows. */
+const SKELETON_WIDTHS = [
+	['44%', ''],
+	['30%', ''],
+	['52%', ''],
+	['36%', ''],
+	['40%', ''],
+	['28%', ''],
+	['48%', ''],
+	['34%', '']
+] as const;
+
+/** A row of the list (`.remote-row`), for its placeholder rows. */
+const ROW_HEIGHT = 38;
 
 /** A row's right end: Add, which turns into "Tracked" once the server has it. */
 function RowAction({ repo, tracked }: { repo: RemoteRepo; tracked: boolean }) {
@@ -27,7 +51,7 @@ function RowAction({ repo, tracked }: { repo: RemoteRepo; tracked: boolean }) {
 	async function track(): Promise<void> {
 		const result = await add({ name: repo.name, url: repo.url, provider: repo.provider });
 
-		if ('error' in result) errorToast(`Couldn’t add ${repo.name}`, result.error);
+		if ('error' in result) retryToast(`Couldn’t add ${repo.name}`, result.error, () => void track());
 	}
 
 	return (
@@ -77,39 +101,19 @@ function RemoteRow({ repo, tracked }: { repo: RemoteRepo; tracked: boolean }) {
 	);
 }
 
-/** Rows of shimmer where the list will land; invisible for the first 200ms. */
+/** Rows of shimmer where the list will land, invisible for the kit's skeleton delay. */
 function RemoteSkeleton() {
 	return (
-		<ul className="remote-list" aria-label="Listing repositories" aria-busy>
-			{SKELETON_WIDTHS.map((width) => (
-				<li key={width} className="remote-row">
-					<Skeleton className="size-3.5 shrink-0 rounded-full" />
-					<span className="flex-1">
-						<Skeleton className={`h-2.5 ${width}`} />
-					</span>
-					<Skeleton className="h-7 w-[83px] rounded-[8px]" />
-				</li>
-			))}
-		</ul>
-	);
-}
-
-interface ListMessageProps {
-	children: ReactNode;
-	/** The server's reason, on a quieter line under the sentence. */
-	detail?: string | null;
-	action?: ReactNode;
-}
-
-/** A sentence where the list would be, with an optional reason and way out under it. */
-function ListMessage({ children, detail, action }: ListMessageProps) {
-	return (
-		<div className="remote-message" role="status">
-			<div>
-				<p className="text-fg-muted">{children}</p>
-				{detail ? <p className="remote-detail">{detail}</p> : null}
-			</div>
-			{action}
+		<div role="status" aria-label="Listing repositories" aria-busy>
+			<SkeletonRows
+				count={SKELETON_WIDTHS.length}
+				height={ROW_HEIGHT}
+				glyph
+				lines={1}
+				widths={SKELETON_WIDTHS}
+				rowClassName="remote-row"
+				className="remote-list"
+			/>
 		</div>
 	);
 }
@@ -126,8 +130,10 @@ function failedList(list: Remote | undefined): boolean {
 	return list?.status === 'error' || list?.status === 'retrying';
 }
 
+type Lists = Partial<Record<Forge, Remote>>;
+
 /** Try again for failed lists: pending while any of them lists again, then gone or back to idle with the new reason. */
-function RetryButton({ forges, lists }: { forges: Forge[]; lists: Partial<Record<Forge, Remote>> }) {
+function RetryButton({ forges, lists }: { forges: Forge[]; lists: Lists }) {
 	const retrying = forges.some((forge) => lists[forge]?.status === 'retrying');
 
 	return (
@@ -141,21 +147,70 @@ function RetryButton({ forges, lists }: { forges: Forge[]; lists: Partial<Record
 	);
 }
 
-/** Above the rows that did load: which forge's list failed, why, and a way to list it again. */
-function FailedNote({ forge, lists }: { forge: Forge; lists: Partial<Record<Forge, Remote>> }) {
+/** The forges in `failed` that refused their token: a new token fixes those, where a retry would not. */
+function refused(failed: Forge[], lists: Lists): Forge[] {
+	return failed.filter((forge) => lists[forge]?.kind === 'auth');
+}
+
+/** "GitHub rejected the token.", or every forge named when each rejected its own. */
+function rejectedTitle(forges: Forge[]): string {
+	if (forges.length === 1) return `${forgeLabel(forges[0])} rejected the token.`;
+
+	return `${forges.map(forgeLabel).join(' and ')} rejected their tokens.`;
+}
+
+/** Opens the token dialog to replace the token a forge refused. */
+function UpdateToken({ forge, onConnect }: { forge: Forge; onConnect: Connect }) {
 	return (
-		<div className="remote-note" role="status">
-			<div className="min-w-0 flex-1">
-				<p className="text-fg-muted">Couldn’t list {forgeLabel(forge)} repositories.</p>
-				{lists[forge]?.error ? <p className="remote-detail">{lists[forge].error}</p> : null}
-			</div>
-			<RetryButton forges={[forge]} lists={lists} />
-		</div>
+		<Button variant="outline" onClick={() => onConnect(forge, true)}>
+			<ForgeMark provider={forge} />
+			Update {forgeLabel(forge)} token
+		</Button>
 	);
 }
 
+/** The ways out of failed lists: a new token for each forge that refused its token, and Try again for the rest. */
+function FailedActions({ failed, lists, onConnect }: { failed: Forge[]; lists: Lists; onConnect: Connect }) {
+	const rejected = refused(failed, lists);
+	const others = failed.filter((forge) => !rejected.includes(forge));
+
+	return (
+		<>
+			{rejected.map((forge) => (
+				<UpdateToken key={forge} forge={forge} onConnect={onConnect} />
+			))}
+			{others.length ? <RetryButton forges={others} lists={lists} /> : null}
+		</>
+	);
+}
+
+/**
+ * What failed lists say. A forge that refused its token says only that,
+ * since its button gets the new token; lists that failed otherwise say which
+ * over the reason, beside Try again. When both happen the refusal leads, and
+ * the other forge is named under it, beside its Try again.
+ */
+function failedCopy(failed: Forge[], lists: Lists): { title: string; detail?: string | null } {
+	const rejected = refused(failed, lists);
+	const others = failed.filter((forge) => !rejected.includes(forge));
+
+	const othersTitle =
+		others.length === 1 ? `Couldn’t list ${forgeLabel(others[0])} repositories.` : 'Couldn’t list repositories.';
+
+	if (rejected.length === 0) return { title: othersTitle, detail: lists[others[0]]?.error };
+	if (others.length === 0) return { title: rejectedTitle(rejected) };
+
+	return { title: rejectedTitle(rejected), detail: othersTitle };
+}
+
+interface ForgeReposProps {
+	forges: Forge[];
+	query: string;
+	onConnect: Connect;
+}
+
 /** The signed-in forges' repositories, once each list has loaded. */
-function ForgeRepos({ forges, query }: { forges: Forge[]; query: string }) {
+function ForgeRepos({ forges, query, onConnect }: ForgeReposProps) {
 	const lists = useConnections((state) => state.remote);
 	const repos = useConnections((state) => state.repos);
 	const tracked = trackedKeys(repos);
@@ -177,24 +232,33 @@ function ForgeRepos({ forges, query }: { forges: Forge[]; query: string }) {
 
 	if (failed.length === forges.length) {
 		return (
-			<ListMessage detail={lists[failed[0]]?.error} action={<RetryButton forges={failed} lists={lists} />}>
-				Couldn’t list repositories.
-			</ListMessage>
+			<StatusNotice
+				tone="danger"
+				{...failedCopy(failed, lists)}
+				actions={<FailedActions failed={failed} lists={lists} onConnect={onConnect} />}
+			/>
 		);
 	}
 
 	if (rows.length === 0) {
 		return (
-			<ListMessage>
-				{query.trim() ? `No repositories match “${query.trim()}”.` : 'No repositories on this account.'}
-			</ListMessage>
+			<StatusNotice
+				title={query.trim() ? `No repositories match “${query.trim()}”.` : 'No repositories on this account.'}
+			/>
 		);
 	}
 
 	return (
 		<ScrollArea className="remote-scroll">
 			{failed.map((forge) => (
-				<FailedNote key={forge} forge={forge} lists={lists} />
+				<StatusNotice
+					key={forge}
+					variant="inline"
+					tone="danger"
+					{...failedCopy([forge], lists)}
+					actions={<FailedActions failed={[forge]} lists={lists} onConnect={onConnect} />}
+					className="remote-note"
+				/>
 			))}
 			<HoverList as="ul" itemSelector="[data-row]" className="remote-list" highlightClassName="remote-hover">
 				{rows.map((repo) => (
@@ -205,10 +269,33 @@ function ForgeRepos({ forges, query }: { forges: Forge[]; query: string }) {
 	);
 }
 
+/** No forge signed in: connect one, or update the token a forge rejected, each from its own button. */
+function SignedOut({ auth, onConnect }: { auth: Record<Forge, ProviderAuth>; onConnect: Connect }) {
+	const repos = useConnections((state) => state.repos);
+	const rejected = rejectedForges(auth, repos);
+
+	return (
+		<StatusNotice
+			tone={rejected.length ? 'danger' : 'neutral'}
+			title={rejected.length ? rejectedTitle(rejected) : 'Connect GitHub or GitLab to browse your repositories.'}
+			actions={FORGES.map((forge) =>
+				rejected.includes(forge.id) ? (
+					<UpdateToken key={forge.id} forge={forge.id} onConnect={onConnect} />
+				) : (
+					<Button key={forge.id} variant="outline" onClick={() => onConnect(forge.id)}>
+						<ForgeMark provider={forge.id} />
+						Connect {forge.label}
+					</Button>
+				)
+			)}
+		/>
+	);
+}
+
 interface RemoteListProps {
 	query: string;
-	/** Opens the token dialog, for the message shown while no forge is signed in. */
-	onConnect: (forge: Forge) => void;
+	/** Opens the token dialog: to connect a forge, or to replace the token it refused. */
+	onConnect: Connect;
 }
 
 /**
@@ -225,43 +312,22 @@ export function RemoteList({ query, onConnect }: RemoteListProps) {
 
 	if (!auth && (authStatus === 'error' || authStatus === 'offline')) {
 		return (
-			<ListMessage
+			<StatusNotice
+				tone="danger"
+				title={authError ? 'Couldn’t check the forges.' : OFFLINE_TEXT}
 				detail={authError}
-				action={
-					<Button
-						variant="outline"
-						status={recheck.status}
-						onClick={() => recheck.run(() => useConnections.getState().loadAuth())}
-					>
+				actions={
+					<Button variant="outline" status={recheck.status} onClick={() => recheck.run(retryAuth)}>
 						Try again
 					</Button>
 				}
-			>
-				{authError ? 'Couldn’t check the forges.' : OFFLINE_TEXT}
-			</ListMessage>
+			/>
 		);
 	}
 
 	if (!auth) return <RemoteSkeleton />;
 
-	if (forges.length === 0) {
-		return (
-			<ListMessage
-				action={
-					<div className="flex gap-2">
-						{FORGES.map((forge) => (
-							<Button key={forge.id} variant="outline" onClick={() => onConnect(forge.id)}>
-								<ForgeMark provider={forge.id} />
-								Connect {forge.label}
-							</Button>
-						))}
-					</div>
-				}
-			>
-				Connect GitHub or GitLab to browse your repositories.
-			</ListMessage>
-		);
-	}
+	if (forges.length === 0) return <SignedOut auth={auth} onConnect={onConnect} />;
 
-	return <ForgeRepos forges={forges} query={query} />;
+	return <ForgeRepos forges={forges} query={query} onConnect={onConnect} />;
 }

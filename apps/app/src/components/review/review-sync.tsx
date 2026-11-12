@@ -9,8 +9,12 @@ import { reviewHref } from '@/lib/shell/routes';
 import { pullTitle } from './review-view';
 import { usePageItems } from './use-page-items';
 
-/** A held j moves the selection many times a second; the address follows once it rests. */
-const ADDRESS_DELAY_MS = 200;
+/**
+ * Address writes stay this far apart. A held j moves the selection many
+ * times a second, and browsers refuse a page that rewrites its address too
+ * often (Safari allows 100 in 30 seconds).
+ */
+const ADDRESS_GAP_MS = 300;
 
 /** Writes the selected item into the address (`?item=`), replacing the entry, so Back still leaves the review. */
 function writeItem(item: string | null): void {
@@ -22,28 +26,55 @@ function writeItem(item: string | null): void {
 	if (url.href !== window.location.href) window.history.replaceState(null, '', url);
 }
 
+/** Writes the current selection, once the page is ready and no link waits to open. */
+function writeSelection(): void {
+	const { status, link, selection } = useReview.getState();
+
+	if (status === 'ready' && link === null) writeItem(itemOf(selection));
+}
+
 /**
  * Keeps the selection in the address, so a reload or a shared link opens the
- * same item. A link that named nothing in the review leaves the address as
- * soon as the page knows (on mount, or when the diff it waited for arrives),
- * so a reload never carries it again.
+ * same item. A move reaches the address right after the frame that shows it
+ * paints, so the write (and the router update it sets off) never delays the
+ * swap; during a burst of moves it writes at most every
+ * {@link ADDRESS_GAP_MS}, and the last move always lands. A link that named
+ * nothing in the review leaves the address as soon as the page knows (on
+ * mount, or when the diff it waited for arrives), so a reload never carries
+ * it again.
  */
 function useSelectionAddress(): void {
 	useEffect(() => {
+		let frame = 0;
 		let timer: ReturnType<typeof setTimeout> | undefined;
-		const { status, link, selection } = useReview.getState();
+		let wroteAt = -Infinity;
 
-		if (status === 'ready' && link === null) writeItem(itemOf(selection));
+		function write(): void {
+			timer = undefined;
+			wroteAt = performance.now();
+			writeSelection();
+		}
+
+		function schedule(): void {
+			if (frame || timer) return;
+
+			frame = requestAnimationFrame(() => {
+				frame = 0;
+				timer = setTimeout(write, Math.max(0, wroteAt + ADDRESS_GAP_MS - performance.now()));
+			});
+		}
+
+		writeSelection();
 
 		const stop = useReview.subscribe((state, before) => {
 			if (state.status !== 'ready' || state.link !== null) return;
 			if (state.selection === before.selection && before.link === null) return;
 
-			clearTimeout(timer);
-			timer = setTimeout(() => writeItem(itemOf(state.selection)), ADDRESS_DELAY_MS);
+			schedule();
 		});
 
 		return () => {
+			cancelAnimationFrame(frame);
 			clearTimeout(timer);
 			stop();
 		};

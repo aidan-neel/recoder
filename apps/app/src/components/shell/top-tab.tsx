@@ -5,7 +5,8 @@ import { X } from 'lucide-react';
 import Link from 'next/link';
 import type { MouseEvent, ReactNode } from 'react';
 
-import { useShell } from '@/lib/shell/shell-store';
+import { opensInPlace } from '@/lib/shell/routes';
+import { goToTab } from '@/lib/shell/tab-actions';
 
 interface TopTabProps {
 	/** The queue's id or a review's id. */
@@ -25,28 +26,30 @@ interface TopTabProps {
 	children: ReactNode;
 }
 
-/** True for a click that opens the link in place: no key held to open it in a new browser tab or window. */
-function plain(event: MouseEvent): boolean {
-	return !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
-}
-
 /**
  * One tab in the top bar: a link that sits on the bar's sliding pill (a kit
  * `NavPill`, inside the strip's `NavPillGroup`) while its page shows. Review
  * tabs close from an X that replaces their mark on hover or keyboard focus
- * (Tab reaches it after the link), a middle click, or the context menu.
+ * (Tab reaches it after the link), a middle click, or the context menu. The
+ * link does not prefetch on its own: the shell prefetches every page the bar
+ * leads to, whole, once the page is idle (`RouteBridge`).
  */
 export function TopTab({ id, href, active, current = false, title, closeLabel, onClose, children }: TopTabProps) {
 	/**
-	 * The link lets go of focus once used, so the page's own Enter works
-	 * after a click; a key press on the tab of the page on screen keeps it.
-	 * A plain click on that tab does nothing, so it never drops the page's
-	 * address (a review's `?item=`).
+	 * A plain click goes through `goToTab`, like every other way of opening a
+	 * tab, so a switch between reviews swaps in place; a click with a key held
+	 * opens the link in a new browser tab or window. A plain click on the tab
+	 * of the page on screen does nothing, so it never drops the page's address
+	 * (a review's `?item=`). The link lets go of focus once used, so the
+	 * page's own Enter works after a click; a key press on the tab of the page
+	 * on screen keeps it.
 	 */
 	function onClick(event: MouseEvent<HTMLAnchorElement>): void {
-		const stays = current && plain(event);
+		const click = opensInPlace(event);
+		const stays = current && click;
 
-		if (stays) event.preventDefault();
+		if (click) event.preventDefault();
+		if (click && !current) goToTab(id);
 		if (!stays || event.detail > 0) event.currentTarget.blur();
 	}
 
@@ -69,13 +72,13 @@ export function TopTab({ id, href, active, current = false, title, closeLabel, o
 			{href ? (
 				<Link
 					href={href}
+					prefetch={false}
 					data-ui="top-tab-link"
 					data-tab-id={id}
 					aria-current={active ? 'page' : undefined}
 					title={title}
 					draggable={false}
 					onClick={onClick}
-					onNavigate={() => useShell.getState().setHeading(id)}
 					onAuxClick={onAuxClick}
 					onMouseDown={onMouseDown}
 				>

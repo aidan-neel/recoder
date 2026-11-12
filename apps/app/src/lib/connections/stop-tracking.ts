@@ -5,7 +5,7 @@ import { toast } from '@recoder/ui';
 
 import { failureText } from '@/lib/api/http';
 import { useConnections } from '@/lib/connections/connections-store';
-import { errorToast } from '@/lib/shell/notify';
+import { retryToast } from '@/lib/shell/notify';
 
 /** How long Undo stays on offer, as on the app's other Undo toasts. */
 const UNDO_MS = 5000;
@@ -23,8 +23,8 @@ function flush(): void {
  * once, but the server forgets the repository only when the toast goes: it
  * times out, is dismissed, or the page closes. Undo, or adding the same
  * repository again before then, puts the row back in its place with the same
- * id, so its reviews and dismissals still attach. A removal the server
- * refuses brings the row back with the reason.
+ * id, so its reviews and dismissals still attach. A removal that fails
+ * brings the row back, with the reason and a Try again.
  */
 export function stopTracking(repo: Repo): void {
 	const store = useConnections.getState();
@@ -46,7 +46,9 @@ export function stopTracking(repo: Repo): void {
 		if (!settle()) return;
 
 		store.removeRepo(repo).catch((error: unknown) => {
-			errorToast(`Couldn’t stop tracking ${repo.name}`, failureText(error, 'The server didn’t remove it.'));
+			retryToast(`Couldn’t stop tracking ${repo.name}`, failureText(error, 'The server didn’t remove it.'), () =>
+				stopTracking(repo)
+			);
 		});
 	}
 

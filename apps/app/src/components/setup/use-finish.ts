@@ -43,7 +43,7 @@ function useElapsed(on: boolean, ms: number): boolean {
  * and lets the gate go. Returns true while the checklist fades.
  */
 export function useFinish(complete: boolean): boolean {
-	const queueLoaded = useQueue((state) => !state.sample && state.status !== 'loading');
+	const queueLoaded = useQueue((state) => !state.sample && !state.restored && state.status !== 'loading');
 	const beat = useElapsed(complete, BEAT_MS);
 	const waited = useElapsed(complete, QUEUE_WAIT_MS);
 	const leaving = complete && beat && (queueLoaded || waited);

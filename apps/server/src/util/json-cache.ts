@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serverDataDir } from './data-dir.js';
+import { writeJsonAtomically } from './json-file.js';
 
 /**
  * Results that must come out the same on every run of the same input, such as
@@ -28,9 +29,5 @@ export function readCache<T>(namespace: string, key: string): T | null {
 
 /** Writes through a temp file, so a crash never leaves half a cache entry. */
 export function writeCache(namespace: string, key: string, value: unknown): void {
-	const path = cachePath(namespace, key);
-	const temp = `${path}.${process.pid}.tmp`;
-
-	writeFileSync(temp, JSON.stringify(value));
-	renameSync(temp, path);
+	writeJsonAtomically(cachePath(namespace, key), value);
 }

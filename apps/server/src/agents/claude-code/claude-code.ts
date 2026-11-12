@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentStatus, ModelEntry } from '@recoder/shared';
+import { within, type AgentStatus, type ModelEntry } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
 import {
@@ -25,6 +25,14 @@ const INSTALL = 'curl -fsSL https://claude.ai/install.sh | bash';
 const LOGIN = 'claude auth login';
 
 const STATUS_TIMEOUT_MS = 10_000;
+
+/**
+ * How long a check waits on `claude auth status` (which can take five seconds) once a check has found the CLI
+ * signed in. Past this it answers with that, and the status call goes on to correct the status if it changed.
+ */
+const SIGN_IN_WAIT_MS = 1_500;
+
+type SignIn = Pick<AgentStatus, 'signedIn' | 'authMethod'>;
 
 /**
  * Print mode with everything but the model call turned off: no tools, a permission mode that refuses any tool,
@@ -96,6 +104,16 @@ export class ClaudeCodeAgent extends CliAgent {
 	readonly name = 'Claude Code';
 	readonly install = INSTALL;
 	readonly login = LOGIN;
+
+	/** The latest `claude auth status` call while it runs, which a check that may take an older answer joins. */
+	private signInCall: Promise<SignIn> | null = null;
+
+	/** What the newest status call that answered clearly found; null until one has. */
+	private signedInAs: SignIn | null = null;
+
+	/** Numbers the status calls in the order they start, so an answer never replaces one from a newer call. */
+	private callsStarted = 0;
+	private keptCall = 0;
 
 	async models(): Promise<ModelEntry[]> {
 		return claudeCodeModels();
@@ -232,12 +250,54 @@ export class ClaudeCodeAgent extends CliAgent {
 		}
 	}
 
-	/** `claude auth status --json` exits 1 when signed out; only its `loggedIn` and `authMethod` fields are read. */
 	protected childEnv(): Record<string, string> {
 		return claudeCodeEnv(this.env);
 	}
 
-	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn' | 'authMethod'>> {
+	/**
+	 * The sign-in state. Once the CLI was found signed in, a check joins the status call already running, if any,
+	 * and answers with that state when the call takes past {@link SIGN_IN_WAIT_MS}. The first check joins a running
+	 * call too, and waits for it. While the last answer was signed out, a check starts a call of its own and waits:
+	 * the person may have just signed in, after the running call asked.
+	 */
+	protected signIn(path: string): Promise<SignIn> {
+		const known = this.signedInAs;
+
+		if (known?.signedIn) return within(this.signInCall ?? this.startSignIn(path), SIGN_IN_WAIT_MS, known);
+
+		return known ? this.startSignIn(path) : (this.signInCall ?? this.startSignIn(path));
+	}
+
+	/** Starts a status call, which checks that may take an older answer join until it ends. */
+	private startSignIn(path: string): Promise<SignIn> {
+		const call: Promise<SignIn> = this.checkSignIn(path, ++this.callsStarted).finally(() => {
+			if (this.signInCall === call) this.signInCall = null;
+		});
+
+		this.signInCall = call;
+
+		return call;
+	}
+
+	/**
+	 * One status call. An answer it understood is kept and put on the status, for a check that stopped waiting.
+	 * A call that ends after a newer one answered gives that newer answer, so a stale one never lands.
+	 */
+	private async checkSignIn(path: string, id: number): Promise<SignIn> {
+		const found = await this.readSignIn(path);
+
+		if (found.signedIn === null) return found;
+		if (id < this.keptCall && this.signedInAs) return this.signedInAs;
+
+		this.keptCall = id;
+		this.signedInAs = found;
+		if (this.status?.installed && !this.status.error) Object.assign(this.status, found);
+
+		return found;
+	}
+
+	/** `claude auth status --json` exits 1 when signed out; only its `loggedIn` and `authMethod` fields are read. */
+	private async readSignIn(path: string): Promise<SignIn> {
 		const proc = Bun.spawn([path, 'auth', 'status', '--json'], {
 			stdout: 'pipe',
 			stderr: 'ignore',

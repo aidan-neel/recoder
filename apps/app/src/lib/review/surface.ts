@@ -1,7 +1,9 @@
 import {
 	findingKind,
+	findingTone,
 	splitCategoryTag,
 	type BriefQuestionReport,
+	type DecisionTone,
 	type FileDiff,
 	type Finding,
 	type FindingClaim,
@@ -10,8 +12,6 @@ import {
 	type VerificationBaseline
 } from '@recoder/shared';
 import { changedLines, readingLines, pathClass, type FileClass } from './files';
-
-export type Tone = 'high' | 'medium' | 'low' | 'question';
 
 /** What a person decided about one item; `open` until they act. */
 export type DecisionState = 'open' | 'accepted' | 'sent' | 'dismissed';
@@ -39,7 +39,7 @@ export type Proof = 'reproduced' | 'traced' | 'checked' | 'unproven';
 export interface Decision {
 	id: string;
 	kind: 'finding' | 'question';
-	tone: Tone;
+	tone: DecisionTone;
 	title: string;
 	body: string;
 	category: string | null;
@@ -93,27 +93,35 @@ export interface Attention {
 	total: number;
 }
 
+/**
+ * Findings of one topic that people in the repository keep marking not an
+ * issue. They are listed apart, closed by default, and count toward nothing
+ * until someone turns the topic back on.
+ */
+export interface QuietedTopic {
+	id: string;
+	label: string;
+	/** Riskiest first. */
+	decisions: Decision[];
+}
+
 export interface Surface {
 	intent: string | null;
+	/** What a person decides, riskiest first; quieted findings are left out. */
 	decisions: Decision[];
 	receipts: Receipt[];
+	/** Quieted findings by topic, the topic with the riskiest finding first. */
+	quieted: QuietedTopic[];
 	files: SurfaceFile[];
 	attention: Attention;
 	/** Estimated minutes of human reading left. */
 	minutes: number;
 }
 
-const TONE_RANK: Record<Tone, number> = { high: 0, medium: 1, question: 2, low: 3 };
+const TONE_RANK: Record<DecisionTone, number> = { high: 0, medium: 1, question: 2, low: 3 };
 
 /** Lines a reviewer reads in a minute, for the time estimate. */
 const LINES_PER_MINUTE = 40;
-
-function tone(finding: Finding): Tone {
-	if (finding.severity === 'error') return 'high';
-	if (finding.severity === 'warning') return 'medium';
-
-	return 'low';
-}
 
 function baseline(base: VerificationBaseline | undefined): Pick<Evidence, 'baseExitCode' | 'baseResult'> {
 	if (!base || 'unavailable' in base) return { baseExitCode: null, baseResult: null };
@@ -162,7 +170,7 @@ function findingDecision(finding: Finding): Decision {
 	return {
 		id: finding.id,
 		kind: 'finding',
-		tone: tone(finding),
+		tone: findingTone(finding.severity),
 		title: finding.title ?? firstSentence(body),
 		body,
 		category: finding.category ?? null,
@@ -275,12 +283,37 @@ function obligationReceipts(report: ObligationReport | undefined): Receipt[] {
 	});
 }
 
+let pathCollator: Intl.Collator | null = null;
+
+/**
+ * The collator decisions of the same weight are ordered by path with, which
+ * orders them as `localeCompare` does. Made once, on first use: the page's
+ * first collator loads the locale's data, about 12 ms at a quarter of the
+ * CPU's speed.
+ */
+function collator(): Intl.Collator {
+	pathCollator ??= new Intl.Collator();
+
+	return pathCollator;
+}
+
+/**
+ * In the browser, makes the collator the first time the page is idle, so a
+ * review opened after another page has settled sorts without waiting on it.
+ * A review loaded cold sorts before the page is ever idle and makes it then.
+ */
+function warmCollator(): void {
+	if (typeof requestIdleCallback === 'function') requestIdleCallback(collator);
+}
+
+warmCollator();
+
 function byAttention(a: Decision, b: Decision): number {
 	return (
 		TONE_RANK[a.tone] - TONE_RANK[b.tone] ||
 		Number(a.quality) - Number(b.quality) ||
 		Number(a.proof === 'unproven') - Number(b.proof === 'unproven') ||
-		a.file.localeCompare(b.file) ||
+		collator().compare(a.file, b.file) ||
 		(a.line ?? 0) - (b.line ?? 0)
 	);
 }
@@ -330,14 +363,61 @@ function classify(
 	return { cls: 'checked', readLines: 0, decisionIds, examined: true };
 }
 
+/** True when people's dismissals quieted the finding's topic. */
+function isQuieted(finding: Finding): boolean {
+	return finding.topic?.quieted === true;
+}
+
+/** Quieted findings as decisions, grouped by topic (see {@link QuietedTopic}). */
+function quietedTopics(findings: Finding[]): QuietedTopic[] {
+	const topics = new Map<string, QuietedTopic>();
+
+	for (const finding of findings) {
+		if (!finding.topic) continue;
+
+		const topic = topics.get(finding.topic.id) ?? { id: finding.topic.id, label: finding.topic.label, decisions: [] };
+
+		topic.decisions.push(findingDecision(finding));
+		topics.set(topic.id, topic);
+	}
+
+	for (const topic of topics.values()) topic.decisions.sort(byAttention);
+
+	return [...topics.values()].sort((a, b) => byAttention(a.decisions[0], b.decisions[0]));
+}
+
+type SurfaceItems = Pick<Surface, 'decisions' | 'receipts' | 'quieted'>;
+
+/** Decisions and receipts by review: they depend on the review alone, so deciding keeps every item the same object. */
+const items = new WeakMap<Review, SurfaceItems>();
+
+/** A review's decisions, riskiest first, its receipts and its quieted findings; built once per copy of the review. */
+function itemsOf(review: Review): SurfaceItems {
+	let built = items.get(review);
+
+	if (!built) {
+		const active = review.findings.filter((finding) => !isQuieted(finding));
+
+		built = {
+			decisions: [...active.map(findingDecision), ...questionDecisions(review.questions)].sort(byAttention),
+			receipts: [...questionReceipts(review.questions), ...obligationReceipts(review.obligations)],
+			quieted: quietedTopics(review.findings.filter(isQuieted))
+		};
+
+		items.set(review, built);
+	}
+
+	return built;
+}
+
 /**
  * The review as a person works it: what needs them, what was checked for
  * them, and how many changed lines are left to read. Decided items stop
- * counting toward reading time; their lines move to `checked`.
+ * counting toward reading time; their lines move to `checked`. Quieted
+ * findings count toward none of it.
  */
 export function buildSurface(review: Review, diffs: FileDiff[], states: Record<string, DecisionState> = {}): Surface {
-	const decisions = [...review.findings.map(findingDecision), ...questionDecisions(review.questions)].sort(byAttention);
-	const receipts = [...questionReceipts(review.questions), ...obligationReceipts(review.obligations)];
+	const { decisions, receipts, quieted } = itemsOf(review);
 	const examined = examinedPaths(review);
 	const isOpen = (decision: Decision) => (states[decision.id] ?? 'open') === 'open';
 	const attention: Attention = { read: 0, checked: 0, tests: 0, skim: 0, total: 0 };
@@ -365,6 +445,7 @@ export function buildSurface(review: Review, diffs: FileDiff[], states: Record<s
 		intent: review.summary,
 		decisions,
 		receipts,
+		quieted,
 		files,
 		attention,
 		minutes:
@@ -372,4 +453,9 @@ export function buildSurface(review: Review, diffs: FileDiff[], states: Record<s
 				? 0
 				: Math.max(1, Math.round(attention.read / LINES_PER_MINUTE + openCount * 0.75))
 	};
+}
+
+/** The quieted topic that holds the finding `id`; null when no quieted finding has it. */
+export function quietedTopicOf(surface: Surface | null, id: string): QuietedTopic | null {
+	return surface?.quieted.find((topic) => topic.decisions.some((decision) => decision.id === id)) ?? null;
 }

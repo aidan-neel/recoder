@@ -276,6 +276,16 @@ export function emptyReviewProgress(id: string): ReviewProgress {
 	return { id, sequence: 0, tasks: {}, activity: [], updatedAt: '' };
 }
 
+/** A running review's progress in counts, for a list row: tasks done of all, and reviewers at work. */
+export interface ProgressSummary {
+	tasksDone: number;
+	tasksTotal: number;
+	agents: number;
+}
+
+/** `GET /api/reviews/progress-summaries`: a summary per review id, for reviews still queued or running. */
+export type ProgressSummaries = Record<string, ProgressSummary>;
+
 export function assignmentCounts(assignments: ReviewAssignment[] | undefined): {
 	queued: number;
 	waiting: number;

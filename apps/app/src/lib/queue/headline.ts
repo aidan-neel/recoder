@@ -7,12 +7,30 @@ function word(n: number): string {
 	return WORDS[n] ?? String(n);
 }
 
-/** The queue's serif headline from the section counts: what needs a decision, then what is moving and what is done. */
-export function queueHeadline(sections: QueueSection[]): { lead: string; rest: string } {
+/**
+ * Which repositories' pull request lists did not load: `all` of them, or
+ * `some`; null when every list loaded.
+ */
+export type Unloaded = 'all' | 'some' | null;
+
+/**
+ * The queue's serif headline from the section counts: what needs a decision,
+ * then what is moving and what is done. With no rows, it says the list is
+ * empty only when every repository's pull requests loaded. When some or all
+ * did not (`unloaded`), it says so, never that there are none, and the notes
+ * under it say which failed and why.
+ */
+export function queueHeadline(sections: QueueSection[], unloaded: Unloaded = null): { lead: string; rest: string } {
 	const count = (id: QueueSection['id']) => sections.find((section) => section.id === id)?.entries.length ?? 0;
 	const needs = count('needs-you');
 	const reviewing = count('reviewing');
 	const ready = count('ready');
+
+	if (sections.length === 0 && unloaded === 'all') return { lead: 'Pull requests didn’t load.', rest: '' };
+
+	if (sections.length === 0 && unloaded === 'some') {
+		return { lead: 'Some pull requests didn’t load.', rest: 'Your other repositories have none open.' };
+	}
 
 	if (sections.length === 0) {
 		return { lead: 'No open pull requests.', rest: 'New ones in your tracked repositories land here.' };

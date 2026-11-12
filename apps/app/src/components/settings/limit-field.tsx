@@ -59,7 +59,7 @@ export function LimitField({ field, name, hint, max, value }: LimitFieldProps) {
 
 		if ('error' in parsed) return setError(parsed.error);
 
-		if (parsed.value === useSettings.getState().models?.limits[field]) {
+		if (parsed.value === useSettings.getState().settings?.limits[field]) {
 			setDraft((now) => (now === text ? null : now));
 
 			return setError(null);

@@ -6,8 +6,9 @@
 - Review surface (Next.js, the new app): `bun run --filter @recoder/app check` ·
   `test` · `build`. `bun run dev` starts the server and this app (port 5180,
   `/sample` needs no server); `bun run dev:web` starts the server and apps/web;
-  `bun run dev:all` starts every package.
-- UI kit (`packages/ui`, React): `bun run --filter @recoder/ui check` · `lint`.
+  `bun run dev:all` starts every package. React strict mode is off in the
+  app's dev server for speed; `RECODER_STRICT=1 bun run dev` turns it on.
+- UI kit (`packages/ui`, React): `bun run --filter @recoder/ui check` · `test` · `lint`.
 - Server: `bun run --filter @recoder/server check` · `test`
 - Shared: `bun run --filter @recoder/shared check` · `test`
 - Site: `bun run --filter @recoder/site check` · `test` · `build`

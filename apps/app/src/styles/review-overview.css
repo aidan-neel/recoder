@@ -38,10 +38,11 @@
 	overflow: hidden;
 	border-radius: 999px;
 }
+/* Like the change map, the bar's segments move by transform (segment-move.ts), from their left edge. */
 .tally-seg {
 	flex-basis: 0;
 	background: var(--bg-selected);
-	transition: flex-grow var(--dur-pill) var(--ease-out);
+	transform-origin: 0 50%;
 }
 
 /* ───────── Overview ───────── */
@@ -128,6 +129,73 @@
 	color: var(--ok);
 }
 
+/* ───────── Overview skeleton: the page's lines at the column's width (review-skeleton.tsx) ───────── */
+/* Its pane is a container, so each part wraps where the overview's text does in a column that wide. */
+.review-skeleton-main {
+	container: review-skeleton-main / inline-size;
+}
+/*
+ * The summary's lines, and the gap under them, which the overview keeps only when there is a summary. A review
+ * with no kept shape draws the lines a short summary takes: one, or two in a narrow column.
+ */
+.overview-skeleton-summary {
+	--row: 30px;
+	--row-gap: 0px;
+	--overview-skeleton-lines: 1;
+
+	margin-bottom: min(40px, calc(var(--rows) * 40px));
+}
+/* The lead and the legend draw two lines and keep the first until their text would wrap. */
+.overview-skeleton-lead {
+	--overview-skeleton-lead: 58%;
+
+	height: 21.75px;
+	overflow: hidden;
+}
+.overview-skeleton-legend {
+	--overview-skeleton-legend: 44%;
+
+	height: 18.75px;
+	margin-top: 12px;
+	overflow: hidden;
+}
+:is(.overview-skeleton-lead, .overview-skeleton-legend) > [data-ui='skeleton-line'] {
+	flex-shrink: 0;
+}
+@container review-skeleton-main (max-width: 467px) {
+	.overview-skeleton-lead {
+		--overview-skeleton-lead: 96%;
+
+		height: auto;
+	}
+}
+@container review-skeleton-main (max-width: 447px) {
+	.overview-skeleton-summary {
+		--overview-skeleton-lines: 2;
+	}
+}
+@container review-skeleton-main (max-width: 427px) {
+	.overview-skeleton-legend {
+		--overview-skeleton-legend: 82%;
+
+		height: auto;
+	}
+	.overview-skeleton-legend [data-ui='skeleton-line'] + [data-ui='skeleton-line'] {
+		margin-top: 6px;
+	}
+}
+/* The note beside Start wraps to two lines, then three. */
+@container review-skeleton-main (max-width: 363px) {
+	.overview-skeleton-start {
+		min-height: 37.5px;
+	}
+}
+@container review-skeleton-main (max-width: 335px) {
+	.overview-skeleton-start {
+		min-height: 56.25px;
+	}
+}
+
 /* ───────── Notice: failed, cancelled or outdated ───────── */
 .review-notice {
 	display: flex;
@@ -135,6 +203,10 @@
 	gap: 12px;
 	margin-bottom: 36px;
 	padding: 12px 12px 12px 14px;
+}
+/* A late notice placed last has nothing under it to keep apart from. */
+.overview > .overview-block:last-child > .review-notice {
+	margin-bottom: 0;
 }
 .review-notice-icon {
 	display: grid;
@@ -172,6 +244,32 @@
 	align-self: center;
 	gap: 8px;
 }
+/* Details: a tool's own output behind the plain reason, folded under it. */
+.review-notice-details {
+	margin-top: 6px;
+}
+.review-notice-toggle {
+	margin-left: -12px;
+	gap: 4px;
+	color: var(--text-subtle);
+}
+.review-notice-chevron {
+	width: 14px;
+	height: 14px;
+	transition: rotate var(--dur-toggle) ease-out;
+}
+.review-notice-chevron[data-open='true'] {
+	rotate: 180deg;
+}
+.review-notice-raw {
+	margin-top: 6px;
+	font-size: 11.5px;
+}
+@media (prefers-reduced-motion: reduce) {
+	.review-notice-chevron {
+		transition: none;
+	}
+}
 
 /* ───────── Verdict ───────── */
 .verdict {
@@ -202,12 +300,16 @@
 	margin-bottom: 0;
 }
 
-/* ───────── CI checks ───────── */
+/* ───────── CI checks: last in Checked for you, so their late arrival moves nothing above ───────── */
 .ci {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 6px;
 	margin: 4px 0 12px;
+}
+.overview-receipts + .ci,
+.overview-receipts + .ci-failed {
+	margin-top: 12px;
 }
 .ci-check {
 	display: inline-flex;

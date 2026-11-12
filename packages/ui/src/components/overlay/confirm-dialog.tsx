@@ -21,9 +21,11 @@ interface ConfirmDialogProps {
 	size?: 'sm' | 'md';
 	/** The action. A returned promise holds the button in pending; a rejection keeps the dialog open on its error face. */
 	onConfirm: () => void | Promise<void>;
+	/** Runs when the dialog closes, before focus returns to what had it; prevent it to place focus yourself. */
+	onCloseAutoFocus?: (event: Event) => void;
 }
 
-type PanelProps = Omit<ConfirmDialogProps, 'open'> & ReturnFocus<HTMLDivElement>;
+type PanelProps = Omit<ConfirmDialogProps, 'open' | 'onCloseAutoFocus'> & ReturnFocus<HTMLDivElement>;
 
 /**
  * Asks before an action runs. Focus starts on Cancel. The confirm button
@@ -31,10 +33,11 @@ type PanelProps = Omit<ConfirmDialogProps, 'open'> & ReturnFocus<HTMLDivElement>
  * resolves, and turns to "Try again" when it rejects, with the error's
  * message under the description. A click outside never closes it, and
  * neither Escape nor Cancel does while the action runs. On close, focus
- * returns to what had it when the dialog opened.
+ * returns to what had it when the dialog opened, unless `onCloseAutoFocus`
+ * prevents that to send it elsewhere.
  */
-export function ConfirmDialog({ open, ...panel }: ConfirmDialogProps) {
-	const { panelRef, restoreFocus } = useReturnFocus<HTMLDivElement>(open);
+export function ConfirmDialog({ open, onCloseAutoFocus, ...panel }: ConfirmDialogProps) {
+	const { panelRef, restoreFocus } = useReturnFocus<HTMLDivElement>(open, onCloseAutoFocus);
 
 	return (
 		<AlertDialog.Root open={open} onOpenChange={panel.onOpenChange}>

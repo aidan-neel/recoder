@@ -250,6 +250,15 @@ const METHOD_WORDS: Record<NonNullable<FindingVerification['method']>, string> =
 	convention: "checked against the repo's conventions"
 };
 
+/** "Review complete. 3 findings. 2 more quieted by your feedback." — quieted findings are not counted as findings. */
+function findingsSentence(confirmed: Finding[]): string {
+	const quieted = confirmed.filter((finding) => finding.topic?.quieted).length;
+	const shown = confirmed.length - quieted;
+	const count = `Review complete. ${shown} finding${shown === 1 ? '' : 's'}.`;
+
+	return quieted ? `${count} ${quieted} more quieted by your feedback.` : count;
+}
+
 /** "2 verified by running code, 1 traced through the code." — empty when nothing was checked. */
 function verifiedSummary(findings: Finding[]): string {
 	const parts = Object.entries(METHOD_WORDS).flatMap(([method, words]) => {
@@ -286,7 +295,7 @@ function buildSummary(
 	const subagents = incomplete.filter((record) => record.role === 'subagent').length;
 
 	const bits = [
-		`Review complete. ${confirmed.length} finding${confirmed.length === 1 ? '' : 's'}.`,
+		findingsSentence(confirmed),
 		verifiedSummary(confirmed),
 		notRunSentence(run.candidates),
 		hiddenSentence(run.hidden.length),

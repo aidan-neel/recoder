@@ -25,6 +25,11 @@ interface GrowProps {
 	 * pill lands on a tab already in place.
 	 */
 	lead?: boolean;
+	/**
+	 * Arrives at full size with no grow, for a piece whose value just became
+	 * known or that lands with its page; it still collapses when it leaves.
+	 */
+	still?: boolean;
 	children: ReactNode;
 }
 
@@ -42,7 +47,7 @@ interface GrowProps {
  * tab while the bar reflows. Grow inherits no labels, so a piece inside a
  * leaving tab (its count) is left alone.
  */
-export function Grow({ lead, children }: GrowProps) {
+export function Grow({ lead, still, children }: GrowProps) {
 	const ref = useRef<HTMLSpanElement>(null);
 	const present = useIsPresent();
 	const swapping = usePresenceData() === true;
@@ -53,7 +58,7 @@ export function Grow({ lead, children }: GrowProps) {
 			ref={ref}
 			data-ui="grow"
 			data-gone={gone || undefined}
-			initial={lead ? false : { width: 0, '--grow-fade': 0 }}
+			initial={lead || still ? false : { width: 0, '--grow-fade': 0 }}
 			animate={{ width: 'auto', '--grow-fade': 1 }}
 			inherit={false}
 			exit={gone ? GONE : COLLAPSE}

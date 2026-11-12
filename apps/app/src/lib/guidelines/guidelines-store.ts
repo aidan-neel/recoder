@@ -2,14 +2,18 @@ import type { GlobalGuidelines, GuidelinesOverview, GuidelinesProposal, RepoGuid
 import { create } from 'zustand';
 
 import { guidelinesApi } from '../api/guidelines';
-import { failureText, isOffline } from '../api/http';
+import { failureKind, failureText, isOffline, type FailureKind } from '../api/http';
+import { rememberCount } from '../settings/last-counts';
 import { useGuidelinesEditor } from './editor-store';
 
 /** `offline`: the review server never answered. `failed`: it answered the first load with an error. */
 type OverviewStatus = 'loading' | 'ready' | 'offline' | 'failed';
 
-/** One repository's `.recoder/REVIEW.md`, read through its forge. */
-type RepoState = { status: 'loading' } | { status: 'ready'; data: RepoGuidelines } | { status: 'error'; error: string };
+/** One repository's `.recoder/REVIEW.md`, read through its forge. A failure's `kind` is `auth` when the forge refused the token. */
+type RepoState =
+	| { status: 'loading' }
+	| { status: 'ready'; data: RepoGuidelines }
+	| { status: 'error'; error: string; kind: FailureKind };
 
 interface GuidelinesStore {
 	status: OverviewStatus;
@@ -61,6 +65,7 @@ export const useGuidelines = create<GuidelinesStore>((set, get) => {
 			const overview = await guidelinesApi.overview();
 
 			set({ status: 'ready', overview, error: null });
+			rememberCount('repos', overview.repos.length);
 			closeUntracked(overview);
 
 			await Promise.all(overview.repos.map((repo) => get().loadRepo(repo.id)));
@@ -97,7 +102,11 @@ export const useGuidelines = create<GuidelinesStore>((set, get) => {
 			try {
 				next = { status: 'ready', data: await guidelinesApi.repo(repoId) };
 			} catch (error) {
-				next = { status: 'error', error: failureText(error, 'Couldn’t read the repository.') };
+				next = {
+					status: 'error',
+					error: failureText(error, 'Couldn’t read the repository.'),
+					kind: failureKind(error)
+				};
 			}
 
 			if (latest.get(repoId) === ticket) set({ repos: { ...get().repos, [repoId]: next } });
@@ -128,3 +137,10 @@ export const useGuidelines = create<GuidelinesStore>((set, get) => {
 		}
 	};
 });
+
+/** Loads the overview again for a Try again button; rejects while it still fails, so the button shows it. */
+export async function retryGuidelines(): Promise<void> {
+	await useGuidelines.getState().load();
+
+	if (!useGuidelines.getState().overview) throw new Error(useGuidelines.getState().error ?? 'Guidelines didn’t load.');
+}

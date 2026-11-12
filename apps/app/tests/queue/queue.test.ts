@@ -80,6 +80,26 @@ describe('queue', () => {
 		]);
 	});
 
+	test('a failed review offers Continue only when continuing would not stop the same way', () => {
+		const action = (summary: string) =>
+			entryAction(queueEntry(REPO, pull(7, 1), { ...review(7, 'failed'), summary }, {}));
+
+		expect(action('could not find pull request diff: PullRequest.diff too_large')).toEqual({
+			label: 'Open',
+			starts: false
+		});
+
+		expect(action('gh not authenticated: HTTP 401: Bad credentials (https://api.github.com/graphql)')).toEqual({
+			label: 'Open',
+			starts: false
+		});
+
+		expect(action('The server restarted mid-review. Progress so far was kept.')).toEqual({
+			label: 'Continue',
+			starts: true
+		});
+	});
+
 	test('a reviewed row opens instead of starting, so a stray key never queues a second review of the same commit', () => {
 		const ready = queueEntry(REPO, pull(1, 1), review(1, 'passed', []), {});
 		const open = queueEntry(REPO, pull(2, 1), review(2, 'passed', ['error']), {});

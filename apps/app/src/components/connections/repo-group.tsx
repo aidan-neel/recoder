@@ -4,13 +4,16 @@ import type { Repo } from '@recoder/shared';
 import { Button, DURATION, EASE_OUT, ForgeMark, Tooltip } from '@recoder/ui';
 import { Plus, X } from 'lucide-react';
 import { AnimatePresence, motion, type Transition, type Variants } from 'motion/react';
-import { useRef, type ReactNode } from 'react';
+import { useRef, type ReactNode, type Ref } from 'react';
 
 import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
 
 import { stopTracking } from '@/lib/connections/stop-tracking';
 
 const FOLD: Transition = { duration: DURATION.disclose, ease: EASE_OUT };
+
+/** A tracked repository's row, hairline included (`.repo-row`), for the placeholder rows while the list loads. */
+export const REPO_ROW_HEIGHT = 46;
 
 /** A row unfolds to its height as it joins the list and folds away as it leaves; the rows under it follow. */
 const ROW: Variants = {
@@ -89,6 +92,16 @@ function useFocusHandoff(repos: Repo[]) {
 	return { add, leaving, settle };
 }
 
+/** Opens the repo browser. It works before the list loads, since the browser loads what it needs. */
+export function AddRepository({ onAdd, ref }: { onAdd: () => void; ref?: Ref<HTMLButtonElement> }) {
+	return (
+		<Button ref={ref} variant="ghost" onClick={onAdd}>
+			<Plus aria-hidden />
+			Add repository
+		</Button>
+	);
+}
+
 /**
  * Settings → Connections → Repositories: the tracked repositories, each with
  * a way to stop tracking it (Undo in the toast brings it back), and Add
@@ -104,15 +117,7 @@ export function RepoGroup({ repos, onAdd }: { repos: Repo[]; onAdd: () => void }
 	}
 
 	return (
-		<SettingsGroup
-			title="Repositories"
-			action={
-				<Button ref={add} variant="ghost" onClick={onAdd}>
-					<Plus aria-hidden />
-					Add repository
-				</Button>
-			}
-		>
+		<SettingsGroup title="Repositories" group="repos" action={<AddRepository ref={add} onAdd={onAdd} />}>
 			<AnimatePresence initial={false} onExitComplete={settle}>
 				{repos.length === 0 ? (
 					<Fold key="empty">

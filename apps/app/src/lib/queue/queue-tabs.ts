@@ -1,4 +1,4 @@
-import type { Review } from '@recoder/shared';
+import type { ReviewListItem } from '@recoder/shared';
 
 import { isRunning } from '../review/review-store';
 import { readDecisions } from '../review/saved-decisions';
@@ -6,7 +6,7 @@ import { useShell, type TabPatch } from '../shell/shell-store';
 import { decisionTally, type QueueEntry } from './queue';
 
 /** A tab's state for one review: a spinner while it runs, else its open decisions and whether any is high. */
-function tabState(review: Review): Pick<TabPatch, 'open' | 'high'> {
+function tabState(review: ReviewListItem): Pick<TabPatch, 'open' | 'high'> {
 	if (isRunning(review)) return { open: null, high: false };
 
 	const tally = decisionTally(review, readDecisions(review.id, review.headSha));
@@ -20,7 +20,7 @@ function tabState(review: Review): Pick<TabPatch, 'open' | 'high'> {
  * count. Only tabs already open change. The pull request's address is kept for
  * the tab menu.
  */
-export function syncTabs(reviews: Review[], entries: QueueEntry[]): void {
+export function syncTabs(reviews: ReviewListItem[], entries: QueueEntry[]): void {
 	const { tabs, patchTabs } = useShell.getState();
 	const byId = new Map(reviews.map((review) => [review.id, review]));
 	const urls = new Map<string, string>();

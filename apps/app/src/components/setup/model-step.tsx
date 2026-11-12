@@ -10,15 +10,15 @@ import { SetupStep } from './setup-step';
 
 /** The model reviews run on, by name; null when none resolves. */
 function useReviewModel(): string | null {
-	const models = useSettings((state) => state.models);
+	const settings = useSettings((state) => state.settings);
 
-	if (!models) return null;
+	if (!settings) return null;
 
-	const pick = rolePick(models, 'orchestrator');
+	const pick = rolePick(settings, 'orchestrator');
 
 	if (pick.option) return pick.option.name;
 
-	const id = pick.id ?? models.model;
+	const id = pick.id ?? settings.model;
 
 	return id ? prettyModelName(id) : null;
 }

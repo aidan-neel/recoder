@@ -38,13 +38,38 @@
 		color: var(--text-primary);
 	}
 
-	/* ───────── Skeleton: invisible for its first 200ms, then a slow shimmer ───────── */
+	/* ───────── Skeleton: hidden for --skeleton-delay, a short fade in, then a light passes over it for about 10s ───────── */
+	/*
+	 * The fade starts slow, so a skeleton the content replaces a few frames in stays faint
+	 * instead of flashing. It animates opacity only, so the compositor runs it.
+	 */
 	[data-ui='skeleton'] {
-		background: linear-gradient(90deg, var(--bg-menu) 0%, var(--line-tab) 50%, var(--bg-menu) 100%);
-		background-size: 200% 100%;
+		position: relative;
+		height: 12px;
+		overflow: hidden;
+		border-radius: 5px;
+		background-color: color-mix(in oklab, var(--bg-menu), var(--line-tab));
+		animation: ui-skeleton-hold var(--dur-swap) ease-in var(--skeleton-delay) backwards;
+	}
+	/*
+	 * The light is a layer five bars wide, a band every two bar widths, that the compositor
+	 * slides by transform, so the shimmer never repaints. Each pass moves it two bands, so
+	 * the loop is seamless. It runs --skeleton-passes times, then fades out, and the bar rests
+	 * flat on the light's middle tone so it stays visible on raised cards.
+	 */
+	[data-ui='skeleton']::after {
+		position: absolute;
+		top: 0;
+		bottom: 0;
+		left: -400%;
+		width: 500%;
+		background: repeating-linear-gradient(90deg, var(--bg-menu) 0%, var(--line-tab) 20%, var(--bg-menu) 40%);
+		content: '';
+		pointer-events: none;
 		animation:
-			ui-skeleton-hold 1ms linear var(--skeleton-delay) backwards,
-			ui-shimmer var(--dur-skeleton) linear infinite;
+			ui-shimmer var(--dur-skeleton) linear var(--skeleton-passes),
+			ui-shimmer-rest var(--dur-toggle) ease-out calc(var(--dur-skeleton) * var(--skeleton-passes) - var(--dur-toggle))
+				forwards;
 	}
 	@keyframes ui-skeleton-hold {
 		from {
@@ -53,52 +78,56 @@
 	}
 	@keyframes ui-shimmer {
 		from {
-			background-position: 200% 0;
+			transform: translateX(0);
 		}
 		to {
-			background-position: -200% 0;
+			transform: translateX(80%);
+		}
+	}
+	@keyframes ui-shimmer-rest {
+		to {
+			opacity: 0;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		[data-ui='skeleton']::after {
+			display: none;
 		}
 	}
 
 	/*
-	 * Shimmer text: a soft light passes over a running label. Set --shimmer-base
-	 * and --shimmer-light on the same element to change the colors.
+	 * Shimmer text: a running label rests dim and swells to --shimmer-light once a pass,
+	 * about as long as a light sweeping across it once lit each letter. Only its opacity
+	 * moves, which the compositor runs, so a page of running rows never repaints.
+	 * --shimmer-dim is the opacity between swells; the default lands on --text-faint in
+	 * each theme. Set either on the same element. Under reduced motion it rests dim.
 	 */
 	.shimmer-text {
-		--shimmer-base: var(--text-faint);
 		--shimmer-light: var(--text-primary);
+		--shimmer-dim: 0.42;
 
-		background: linear-gradient(
-			90deg,
-			var(--shimmer-base) 0%,
-			var(--shimmer-base) 40%,
-			var(--shimmer-light) 50%,
-			var(--shimmer-base) 60%,
-			var(--shimmer-base) 100%
-		);
-		background-size: 250% 100%;
-		-webkit-background-clip: text;
-		background-clip: text;
-		color: transparent;
-		animation: ui-shimmer-text var(--dur-shimmer) linear infinite;
+		color: var(--shimmer-light);
+		opacity: var(--shimmer-dim);
+		animation: ui-shimmer-text var(--dur-shimmer) ease-in-out infinite;
+	}
+	:where(:root:not(.dark)) .shimmer-text {
+		--shimmer-dim: 0.53;
 	}
 	@keyframes ui-shimmer-text {
-		from {
-			background-position: 100% 0;
+		45% {
+			opacity: var(--shimmer-dim);
 		}
-		to {
-			background-position: 0 0;
+		72% {
+			opacity: 1;
 		}
 	}
 	@media (prefers-reduced-motion: reduce) {
 		.shimmer-text {
-			background: none;
-			color: var(--shimmer-base);
 			animation: none;
 		}
 	}
 
-	/* ───────── Button faces: idle, pending, success and error share one cell and crossfade ───────── */
+	/* ───────── Button faces: idle, pending, success and error share one cell and crossfade with a 3px rise ───────── */
 	[data-ui='button-faces'] {
 		display: inline-grid;
 		place-items: center;
@@ -110,12 +139,10 @@
 		gap: 6px;
 		transition:
 			opacity var(--dur-toggle) ease-out,
-			filter var(--dur-toggle) ease-out,
 			translate var(--dur-toggle) ease-out;
 	}
 	[data-ui='button-faces'] > [data-on='false'] {
 		opacity: 0;
-		filter: blur(3px);
 		translate: 0 3px;
 		pointer-events: none;
 	}
@@ -131,7 +158,7 @@
 	}
 
 	/* Icons inside controls draw at 1.75, a touch lighter than lucide's default. */
-	[data-ui='button'] svg:not([data-ui='spinner']) {
+	[data-ui='button'] svg:not([data-ui='spinner'] > svg) {
 		stroke-width: 1.75;
 	}
 
@@ -187,4 +214,46 @@
 	.ui-toast-action:hover {
 		background: var(--bg-hover);
 	}
+}
+
+/*
+ * A pending face fading out holds its spinner still; idle buttons mount no spinner at all.
+ * Outside the layer, since the spinner's `animate-spin` utility would otherwise set it running.
+ */
+[data-ui='button-faces'] > [data-on='false'] [data-ui='spinner'] {
+	animation-play-state: paused;
+}
+
+/*
+ * ───────── Toast motion ─────────
+ * Sonner's stock motion runs 400ms. These rules sit outside the layer, since sonner injects
+ * its own unlayered sheet, and set only durations, curves and offsets: sonner keeps choosing
+ * which properties move, so a swipe still tracks the pointer with no transition.
+ */
+.ui-toaster[data-sonner-toaster],
+.ui-toaster [data-sonner-toast],
+.ui-toaster [data-sonner-toast] > * {
+	transition-duration: var(--dur-toggle);
+	transition-timing-function: var(--ease-menu);
+}
+/* Sonner's child fade would otherwise override the action's own hover fill. */
+.ui-toaster .ui-toast-action {
+	transition:
+		background-color var(--dur-hover) ease-out,
+		opacity var(--dur-toggle) var(--ease-menu);
+}
+/* A new toast rises 10px into place as fast as a menu opens; the stack moves with it. */
+.ui-toaster [data-sonner-toast][data-mounted='false'] {
+	--y: translateY(10px);
+}
+.ui-toaster [data-sonner-toast][data-mounted='true'][data-removed='false'] {
+	transition-duration: var(--dur-menu);
+}
+/* A dismissed toast drops the same 10px as it fades, well inside the 200ms sonner waits before removing it. */
+.ui-toaster [data-sonner-toast][data-removed='true'][data-front='true'][data-swipe-out='false'] {
+	--y: translateY(10px);
+}
+.ui-toaster
+	[data-sonner-toast][data-removed='true'][data-front='false'][data-swipe-out='false'][data-expanded='false'] {
+	transition-duration: var(--dur-toggle);
 }

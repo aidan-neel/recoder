@@ -1,6 +1,7 @@
 'use client';
 
-import { Markdown, Skeleton, cn } from '@recoder/ui';
+import { Markdown, cn } from '@recoder/ui';
+import { Skeleton, SkeletonText } from '@recoder/ui/skeleton';
 import { memo, type ReactNode } from 'react';
 
 import { chatText, typedText } from '@/lib/ask/chat-text';
@@ -25,26 +26,24 @@ export function UserBubble({ text, pending, children }: { text: string; pending?
 	);
 }
 
-/** Three shimmering lines while a reply has not said anything yet; invisible for the first 200ms. */
+/** A reply's line height: the UI sans at 13.5px on 1.6, rounded. */
+const REPLY_LINE = 22;
+
+/** Three shimmering lines while a reply has not said anything yet; invisible for the first 120ms. */
 export function ReplySkeleton() {
 	return (
-		<div role="status" aria-label="Waiting for a reply" className="flex flex-col gap-[9px] py-1">
-			<Skeleton className="h-[13px] w-[88%] rounded-[5px]" />
-			<Skeleton className="h-[13px] w-[72%] rounded-[5px]" />
-			<Skeleton className="h-[13px] w-[44%] rounded-[5px]" />
+		<div role="status" aria-label="Waiting for a reply">
+			<SkeletonText widths={['88%', '72%', '44%']} lineHeight={REPLY_LINE} barHeight={13} />
 		</div>
 	);
 }
 
-/** A question and the start of a reply in outline while the conversation loads; invisible for the first 200ms. */
+/** A question and the start of a reply in outline while the conversation loads; invisible for the first 120ms. */
 export function ConversationSkeleton() {
 	return (
 		<div role="status" aria-label="Loading the conversation" className="flex flex-col gap-5">
 			<Skeleton className="ml-auto h-[35px] w-[58%] rounded-[14px]" />
-			<div className="flex flex-col gap-[9px] py-1">
-				<Skeleton className="h-[13px] w-[86%] rounded-[5px]" />
-				<Skeleton className="h-[13px] w-[64%] rounded-[5px]" />
-			</div>
+			<SkeletonText widths={['86%', '64%']} lineHeight={REPLY_LINE} barHeight={13} />
 		</div>
 	);
 }
