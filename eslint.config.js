@@ -59,6 +59,23 @@ const spacing = [
 	{ blankLine: 'any', prev: 'export', next: 'export' }
 ];
 
+/**
+ * A test file under `src/` is an error: tests live in the package's `tests/`
+ * folder, which mirrors `src/`, so a test never sits next to the code.
+ */
+const testsOutsideSrc = {
+	files: ['**/src/**/*.{test,spec}.{ts,tsx,js,jsx}'],
+	rules: {
+		'no-restricted-syntax': [
+			'error',
+			{
+				selector: 'Program',
+				message: "Move this test to the package's tests/ folder, at the path that mirrors src/."
+			}
+		]
+	}
+};
+
 export default ts.config(
 	{
 		ignores: [
@@ -116,5 +133,6 @@ export default ts.config(
 		languageOptions: {
 			parserOptions: { parser: ts.parser, extraFileExtensions: ['.svelte'] }
 		}
-	}
+	},
+	testsOutsideSrc
 );
