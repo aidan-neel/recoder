@@ -1,6 +1,7 @@
 import { afterEach, expect, setSystemTime, spyOn, test } from 'bun:test';
 import { AGENT_CLIS, type AgentStatus, type ModelEntry } from '@recoder/shared';
 import { claudeCode } from '../../src/agents/claude-code/claude-code';
+import { copilot } from '../../src/agents/copilot/copilot';
 import { devin } from '../../src/agents/devin/devin';
 import { opencode } from '../../src/agents/opencode/opencode';
 import {
@@ -30,14 +31,16 @@ function ready(id: string): AgentStatus {
 	};
 }
 
-/** OpenCode and Claude Code look ready and list nothing, so only Devin, with `status`, is under test. */
+/** OpenCode, Claude Code and Copilot look ready and list nothing, so only Devin, with `status`, is under test. */
 function quietAgents(status = ready('devin')) {
 	return [
 		spyOn(opencode, 'detect').mockResolvedValue(ready('opencode')),
 		spyOn(claudeCode, 'detect').mockResolvedValue(ready('claude-code')),
+		spyOn(copilot, 'detect').mockResolvedValue(ready('copilot')),
 		spyOn(devin, 'detect').mockResolvedValue(status),
 		spyOn(opencode, 'models').mockResolvedValue([]),
-		spyOn(claudeCode, 'models').mockResolvedValue([])
+		spyOn(claudeCode, 'models').mockResolvedValue([]),
+		spyOn(copilot, 'models').mockResolvedValue([])
 	];
 }
 

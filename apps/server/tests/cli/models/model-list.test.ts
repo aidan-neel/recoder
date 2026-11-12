@@ -53,7 +53,14 @@ test('each model is grouped under the provider the app picker names, A to Z, wit
 	const list = await listModels(EVERYTHING, LOOKUP);
 	const providers = [...new Set(list.models.map((model) => model.provider))];
 
-	expect(providers).toEqual(['ChatGPT', 'Claude Code', 'models.internal', 'OpenAI', 'vLLM · 127.0.0.1:8000']);
+	expect(providers).toEqual([
+		'ChatGPT',
+		'Claude Code',
+		'GitHub Copilot',
+		'models.internal',
+		'OpenAI',
+		'vLLM · 127.0.0.1:8000'
+	]);
 
 	expect(list.models.find((model) => model.id === 'saved-a')).toMatchObject({
 		name: 'Saved A',
@@ -131,7 +138,11 @@ test('--search keeps the models whose id or name contains the text, ignoring cas
 	const byName = await listModels({ providers: null, search: 'haiku 4.5' }, LOOKUP);
 
 	expect(byId.models.map((model) => model.id)).toEqual([VLLM_ID]);
-	expect(byName.models.map((model) => model.id)).toEqual(['claude-code:claude-haiku-4-5-20251001']);
+
+	expect(byName.models.map((model) => model.id)).toEqual([
+		'claude-code:claude-haiku-4-5-20251001',
+		'copilot:claude-haiku-4.5'
+	]);
 });
 
 test('a provider no model has is a usage error that names the providers and the agent that could not list', async () => {
@@ -151,7 +162,7 @@ test('a machine with nothing set up still lists the Claude Code models', async (
 	const list = await listModels(EVERYTHING, LOOKUP);
 
 	expect(list).toMatchObject({ reviewer: null, worker: null });
-	expect(new Set(list.models.map((model) => model.provider))).toEqual(new Set(['Claude Code']));
+	expect(new Set(list.models.map((model) => model.provider))).toEqual(new Set(['Claude Code', 'GitHub Copilot']));
 });
 
 test('a model of a configured custom command is accepted by --reviewer once the command lists it', async () => {
