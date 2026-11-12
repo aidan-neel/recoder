@@ -147,8 +147,6 @@
 	border-bottom-right-radius: 0;
 }
 .merge-split > [data-ui='button']:last-child {
-	width: 28px;
-	min-width: 28px;
 	margin-left: 1px;
 	border-top-left-radius: 0;
 	border-bottom-left-radius: 0;

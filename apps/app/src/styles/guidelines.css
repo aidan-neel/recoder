@@ -158,23 +158,16 @@ a.guidelines-pill:focus-visible {
 }
 /* The bar's quiet buttons: muted until the pointer is on them, so Save leads. */
 .guidelines-quiet {
-	gap: 6px;
-	padding: 0 10px 0 8px;
 	color: var(--text-muted);
-	font-weight: 400;
 }
 .guidelines-quiet:hover,
 .guidelines-quiet[data-state='open'] {
 	color: var(--text-primary);
 }
-.guidelines-quiet svg {
-	width: 14px;
-	height: 14px;
-	stroke-width: 1.75;
-}
-/* The draft button's label sits 8px inside it; pull it back so the label lines up with the field. */
+/* The draft face leads with an icon the kit cannot see inside SwapText: give it the icon side's 8px and pull it back so the icon lines up with the field. */
 .guidelines-draft {
 	margin-left: -8px;
+	padding-left: 8px;
 }
 .guidelines-draft-face {
 	display: flex;

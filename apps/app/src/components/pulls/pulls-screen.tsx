@@ -77,7 +77,7 @@ function OpenRow({ label, onOpen, status }: OpenRowProps) {
 		<div className="pulls-open">
 			<CornerDownLeft aria-hidden className="size-4 text-fg-faint" />
 			<span className="pulls-open-text">{label}</span>
-			<Button variant="primary" size="sm" status={status} onClick={onOpen}>
+			<Button variant="primary" status={status} onClick={onOpen}>
 				Open
 			</Button>
 		</div>
