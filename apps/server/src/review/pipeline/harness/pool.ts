@@ -316,7 +316,6 @@ function askReviewer(
 		timeLimit: item.purpose
 			? { finalTurnAfterMs: REVIEW_POLICY.secondLookFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.secondLookMaxMs }
 			: { finalTurnAfterMs: REVIEW_POLICY.reviewerFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.reviewerMaxMs },
-		...(item.purpose && { callDeadlineMs: REVIEW_POLICY.secondLookCallDeadlineMs }),
 		finalExample: REVIEWER_EXAMPLE,
 		...agentEvents(item, records, ctx, cfg.model)
 	});

@@ -99,7 +99,20 @@ export function cancelledError(): LlmError {
 	return new LlmError(0, 'Model request cancelled');
 }
 
+/** A call that used up its whole time budget. */
+export class TimedOutError extends LlmError {}
+
 /** The error for a call that used up its whole `timeoutMs` budget. */
-export function timedOutError(timeoutMs: number): LlmError {
-	return new LlmError(0, `Model request timed out after ${Math.round(timeoutMs / 1000)}s`);
+export function timedOutError(timeoutMs: number): TimedOutError {
+	return new TimedOutError(0, `Model request timed out after ${Math.round(timeoutMs / 1000)}s`);
+}
+
+/**
+ * A call bounded only by its caller's clock (`ChatOptions.settleBy`, such as a review agent's) reached it. The caller
+ * ran out of time; the model did not fail, so this is never retried and never worded as a timeout of the model.
+ */
+export class OutOfTimeError extends LlmError {
+	constructor() {
+		super(0, 'Model request stopped: its caller ran out of time');
+	}
 }

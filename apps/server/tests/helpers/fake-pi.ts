@@ -15,9 +15,8 @@ import { fakeBin, loggedCalls } from './fake-bin';
  * quota error, exit 1); `garbage` (a session line and output that are not Pi's, carrying a fake credential); `flood`
  * (stdout without end); `unreadable-flood` (the same, after it saved the session header and made the file
  * unreadable); `crash` (stderr, exit 1); `spawn` (starts a `sleep` grandchild, writes `<own pid> <grandchild pid>`
- * to `<log>.pids` and waits for it); `slow` (a model call of `FAKE_PI_DELAY_MS`, during which,
- * like Pi, it saves and prints nothing, then the answer); or `unreadable` (on a new session, makes the session file
- * unreadable for `FAKE_PI_DELAY_MS` after saving the prompt, then the answer).
+ * to `<log>.pids` and waits for it); or `unreadable` (on a new session, makes the session file unreadable for
+ * `FAKE_PI_DELAY_MS` after saving the prompt, then the answer).
  */
 const SCRIPT = `#!/usr/bin/env bun
 import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -93,8 +92,6 @@ if (mode === 'spawn') {
 }
 
 const delayMs = Number(process.env.FAKE_PI_DELAY_MS ?? 0);
-
-if (mode === 'slow') await Bun.sleep(delayMs);
 
 mkdirSync(dirname(sessionFile), { recursive: true });
 

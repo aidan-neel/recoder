@@ -33,7 +33,10 @@ export interface ChatOptions {
 	/** Fixed seed for deterministic output. Only sent when set (some servers reject unknown fields). */
 	seed?: number;
 	maxTokens?: number;
-	/** The call's own budget, counted from when it gets a concurrency slot. */
+	/**
+	 * The call's own budget, counted from when it gets a concurrency slot. Unset, it is
+	 * {@link DEFAULT_TIMEOUT_MS}, or none when `settleBy` is set.
+	 */
 	timeoutMs?: number;
 	/**
 	 * Wall-clock time (epoch ms) the call must settle by, slot wait included.
@@ -55,5 +58,5 @@ export interface ChatOptions {
 	thinking?: boolean;
 }
 
-/** Whole-call budget when the caller sets no `timeoutMs`. */
+/** Whole-call budget when the caller sets neither `timeoutMs` nor `settleBy`. */
 export const DEFAULT_TIMEOUT_MS = 120_000;

@@ -1,6 +1,6 @@
 import type { TokenUsage } from '@recoder/shared';
 import { trackTokenCall } from '../metrics';
-import { isRateLimitError } from './errors';
+import { isRateLimitError, OutOfTimeError, TimedOutError } from './errors';
 import { acquireLlmSlot, llmEndpoint, recordLlmRateLimit, recordLlmSuccess, releaseLlmSlot } from './limiter';
 import { outputRateMeter } from './output-rate';
 import { requestScope, withHardDeadline, withRetries, type RequestScope } from './retry';
@@ -88,9 +88,11 @@ function scopedOptions(
  * a retry would repeat it, so a streaming call only retries before the first token.
  * The budget starts once a slot is held, so a call queued behind others still
  * gets its full `timeoutMs`; `settleBy` caps the wait and the call together.
+ * A call that names only `settleBy` runs until then, and reaching it fails the
+ * call with an {@link OutOfTimeError}.
  */
 export async function runChat(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
-	const budget = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+	const budget = opts.timeoutMs ?? (opts.settleBy === undefined ? DEFAULT_TIMEOUT_MS : Infinity);
 	const settleBy = opts.settleBy ?? Infinity;
 	const progress = progressReporter(opts.onProgress);
 	const endpoint = llmEndpoint(opts);
@@ -137,12 +139,19 @@ export async function runChat(opts: ChatOptions, onToken?: (text: string) => voi
 	} catch (err) {
 		if (acquired && isRateLimitError(err)) recordLlmRateLimit(endpoint);
 
-		tracking?.fail(err, [opts.apiKey]);
+		const failure = reachedSettleBy(opts, err) ? new OutOfTimeError() : err;
 
-		throw err;
+		tracking?.fail(failure, [opts.apiKey]);
+
+		throw failure;
 	} finally {
 		scope.end();
 		progress.stop();
 		if (acquired) releaseLlmSlot(endpoint);
 	}
+}
+
+/** A call bounded only by its caller's clock timed out: that clock, not a budget of its own, ran out. */
+function reachedSettleBy(opts: ChatOptions, err: unknown): boolean {
+	return err instanceof TimedOutError && opts.timeoutMs === undefined && opts.settleBy !== undefined;
 }

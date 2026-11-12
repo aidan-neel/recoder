@@ -146,7 +146,7 @@ Pi (`apps/server/src/agents/pi/`):
 - Pi signs in itself (`pi`, then `/login`); Recoder never reads its agent dir. `PI_CODING_AGENT_DIR` stays in the environment because it holds the sign-in.
 - Models are listed with `pi --list-models` under the same isolation flags.
 - `RECODER_PI_BIN` pins the binary, and `RECODER_PI_CONCURRENCY` (default 4) caps its processes.
-- Known gaps: the user's `settings.json`, `models.json` and `auth.json` (its sign-in and provider keys) still load from the agent dir. A hung Pi is stopped by the prompt deadline only: its session tail reports activity while it polls, so a run's stall check never fires.
+- Known gaps: the user's `settings.json`, `models.json` and `auth.json` (its sign-in and provider keys) still load from the agent dir.
 
 Grok Build (`apps/server/src/agents/grok/`):
 

@@ -29,19 +29,12 @@ export const REVIEW_POLICY = {
 	/** The ceiling of a `ModelBudget` made without one; a review's own comes from `scaledReviewLimits`. */
 	maxModelCalls: 320,
 	analysisDeadlineMs: 30 * 60 * 1000,
-	perCallDeadlineMs: 90_000,
 	/**
 	 * About 60k tokens. Past it, an agent that Recoder runs turn by turn has its
 	 * oldest tool output stubbed before the next call. Reviews stay under about
 	 * 53k tokens per call today, so this is a safety net; OpenCode compacts its own sessions.
 	 */
 	maxTranscriptChars: 240_000,
-	/**
-	 * One second-look call. It rereads a whole unit, and a CLI model that prints
-	 * its reply only at the end often needs longer than 90s to answer that; a
-	 * timed-out call is sent again in full and times out again.
-	 */
-	secondLookCallDeadlineMs: 180_000,
 	maxRetrievalsPerTurn: 4,
 	maxReadLines: 200,
 	maxSearchMatches: 30,
@@ -95,9 +88,9 @@ export const REVIEW_POLICY = {
 	reviewerFinalTurnAfterMs: 12 * 60 * 1000,
 	reviewerMaxMs: 15 * 60 * 1000,
 	/**
-	 * A second look's own clock. Each of its calls may take `secondLookCallDeadlineMs`,
-	 * so its final turn starts early enough for a call still in flight and the
-	 * final call itself to finish before it is stopped.
+	 * A second look's own clock. It rereads a whole unit, and a CLI model prints its
+	 * reply only at the end, so its final turn starts early enough for the final
+	 * call to finish before it is stopped.
 	 */
 	secondLookFinalTurnAfterMs: 7 * 60 * 1000,
 	secondLookMaxMs: 14 * 60 * 1000,

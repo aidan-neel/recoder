@@ -10,7 +10,7 @@ import { reviewNow, reviewPausePoint } from '../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
 import { compactTranscript } from './agent-loop/compaction.js';
 import { DELEGATE_SHAPE, commandsRun, executeTurn } from './agent-loop/delegation.js';
-import { agentDeadlines, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
+import { agentDeadlines, deadlineError, newAgentId, toolTurns, type AgentLimits } from './agent-loop/limits.js';
 import { runNativeAgent } from './agent-loop/native-engine.js';
 import { agentById } from '../../agents/registry.js';
 import type { JsonAgentOptions } from './agent-loop/options.js';
@@ -42,6 +42,17 @@ function cutOffNote(overthought: boolean, dropped: boolean, truncated: boolean):
 	return undefined;
 }
 
+/** The note on a reply cut off at the agent's final-turn time, while the final turn runs. */
+const OUT_OF_TIME_NOTE = 'Out of time. Asking for an answer now.';
+
+/**
+ * When a turn's call must settle on the review clock. The final turn may run to the agent's deadline; every other
+ * turn ends by its final-turn time, so an agent with work always has its final turn left to answer in.
+ */
+function callSettleAt(limits: AgentLimits, lastTurn: boolean): number {
+	return lastTurn ? limits.deadlineAt : Math.min(limits.deadlineAt, limits.finalTurnAt);
+}
+
 /**
  * Decides what follows a failed model call: a repair prompt to retry with,
  * or the error to stop on. Throws when the whole review must stop, because
@@ -55,7 +66,7 @@ function afterFailedCall<T>(
 ): { retry?: string; error: string } {
 	const { err, overthought } = failure;
 	const retrying = !opts.signal.aborted && canRepair;
-	const dropped = !overthought && err instanceof LlmError && /timed out|stalled|socket|connection/i.test(err.message);
+	const dropped = !overthought && err instanceof LlmError && /stalled|socket|connection/i.test(err.message);
 	const truncated = err instanceof Error && /output truncated/i.test(err.message);
 
 	failure.settle(retrying ? cutOffNote(overthought, dropped, truncated) : undefined);
@@ -208,10 +219,17 @@ async function runTurns<T>(
 		if (stubbed) opts.onLog?.(`${opts.label} compacted ${stubbed} earlier tool results`);
 
 		const started = Date.now();
-		const result = await streamTurn(opts, messages, conversation, turn, lastTurn, deadlineAt);
+		const result = await streamTurn(opts, messages, conversation, turn, lastTurn, callSettleAt(limits, lastTurn));
 
 		if (result.kind === 'paused') {
 			opts.budget.used = Math.max(0, opts.budget.used - 1);
+			call--;
+			continue;
+		}
+
+		/** The next round finds the agent past its final-turn time, so it asks for the answer, or past its deadline. */
+		if (result.kind === 'out-of-time') {
+			result.settle(lastTurn ? undefined : OUT_OF_TIME_NOTE);
 			call--;
 			continue;
 		}

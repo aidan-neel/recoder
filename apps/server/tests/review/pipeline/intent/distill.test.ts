@@ -1,8 +1,9 @@
-import { beforeEach, expect, test } from 'bun:test';
+import { beforeEach, expect, jest, test } from 'bun:test';
 import { mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { ModelBlockedError, ReviewAbortedError } from '../../../../src/review/pipeline/agent-loop';
+import { acquireLlmSlot, llmEndpoint, releaseLlmSlot } from '../../../../src/models/llm/limiter';
 import { createRun } from '../../../../src/review/pipeline/harness/context';
 import { briefBlock } from '../../../../src/review/pipeline/intent/brief';
 import { distillIntent } from '../../../../src/review/pipeline/intent/distill';
@@ -21,6 +22,7 @@ import {
 	restoreAfterEach,
 	useTestModel
 } from '../harness-fixtures';
+import { settleOnClock } from '../../../helpers/fake-clock';
 
 restoreAfterEach();
 
@@ -337,6 +339,12 @@ function slowStub(ms: number): { peak: () => number } {
 	return { peak: () => peak };
 }
 
+/**
+ * How long the slot test holds the only model slot, with a third of it left after: longer than the quarter of the
+ * review's time a brief call may wait and run in, and well within the quarter left for its second try.
+ */
+const SLOT_HELD_MS = 11 * 60_000;
+
 const manyUnits = (count: number) => Array.from({ length: count }, (_, i) => addedFile(`d${i}/f.ts`, 200)).join('');
 
 test('unit calls run at most as many at once as reviewers do', async () => {
@@ -348,21 +356,28 @@ test('unit calls run at most as many at once as reviewers do', async () => {
 	expect(peak()).toBe(REVIEW_POLICY.maxConcurrentAssignments);
 });
 
-test('a unit call that found no model slot in time is made again and briefed', async () => {
-	const policy = REVIEW_POLICY as { perCallDeadlineMs: number };
-	const saved = policy.perCallDeadlineMs;
+test('a unit call that found no model slot within its share of the review’s time is made again and briefed', async () => {
+	jest.useFakeTimers();
+	useTestModel(1);
+	stub(perFile);
 
-	policy.perCallDeadlineMs = 500;
-	useTestModel(2);
-	slowStub(200);
+	const endpoint = llmEndpoint({ baseUrl: 'http://model.test/v1' });
 
 	try {
-		const intent = await distill(manyUnits(8));
+		const logs: string[] = [];
+		const run = createRun({ diff: TWO_UNIT_DIFF, sandboxPath: null }, { onLog: (message) => logs.push(message) });
 
-		expect(intent?.units?.map((unit) => unit.status)).toEqual(Array(8).fill('included'));
-		expect(calls.filter((call) => call !== 'context')).toHaveLength(8);
+		run.deadlineAt = reviewNow() + 3 * SLOT_HELD_MS;
+		await acquireLlmSlot(endpoint);
+		setTimeout(() => releaseLlmSlot(endpoint), SLOT_HELD_MS);
+
+		const intent = await settleOnClock(distillIntent(run, sources, stack), 1_000, run.deadlineAt - reviewNow());
+
+		expect(intent?.units?.map((unit) => unit.status)).toEqual(['included', 'included']);
+		expect(calls.filter((call) => call !== 'context')).toHaveLength(2);
+		expect(logs.filter((log) => log.includes('found no model slot in time'))).toHaveLength(2);
 	} finally {
-		policy.perCallDeadlineMs = saved;
+		jest.useRealTimers();
 	}
 });
 

@@ -23,7 +23,7 @@ import type { JsonAgentOptions } from './options.js';
 type AgentResult<T> = { value: T | null; error?: string };
 
 /** Why Recoder stopped a run that the CLI was still driving. */
-type Interrupt = 'paused' | 'deadline' | 'budget' | 'final' | 'runaway' | 'overthought' | 'stalled';
+type Interrupt = 'paused' | 'deadline' | 'budget' | 'final' | 'runaway' | 'overthought';
 
 const BUDGET_EXHAUSTED = 'model-call budget exhausted';
 
@@ -34,8 +34,11 @@ const OVERTHOUGHT =
 
 const DISCUSSION_NOTE = 'Developer conversations since the review started (consider these with the review evidence):';
 
-/** How often a run is checked for its deadline and for a model that went quiet. */
-const WATCH_MS = 5_000;
+/**
+ * How long past the agent's deadline a prompt may run before its adapter stops it as timed out. Recoder stops the
+ * run at the deadline itself; this only ends a prompt whose adapter did not settle when it was stopped.
+ */
+const PROMPT_BACKSTOP_MS = 5_000;
 
 /** Steps a model may take to answer once its tools are off: the answer, and one retry of it. */
 const ANSWER_STEPS = 2;
@@ -133,15 +136,6 @@ class NativeRun<T> {
 		recordLlmSuccess(this.endpoint);
 	}
 
-	/** Checks the deadline and whether the model has gone quiet; a sandbox run in progress is not quiet. */
-	private watch(): void {
-		if (reviewNow() >= this.limits.deadlineAt) return this.stop('deadline');
-
-		const quietMs = Date.now() - this.relay.lastActivityAt;
-
-		if (this.gate.inFlight === 0 && quietMs > REVIEW_POLICY.perCallDeadlineMs) this.stop('stalled');
-	}
-
 	private async open(): Promise<AgentRun> {
 		const { opts } = this;
 
@@ -156,31 +150,34 @@ class NativeRun<T> {
 		});
 	}
 
-	/** One prompt to the session, watched for the deadline, a stall and a pause while the CLI runs it. */
+	/**
+	 * One prompt to the session. It has no time limit of its own: it runs while the CLI does, and Recoder stops it
+	 * at the agent's deadline or on a pause. A CLI whose process ends settles the prompt with it.
+	 */
 	private async ask(text: string): Promise<{ reply: AgentReply; why: Interrupt | null; final: boolean }> {
 		const final = this.finalTurn();
 		const pauseSignal = currentReviewControl()?.pauseSignal;
 		const onPause = () => this.stop('paused');
-		const watcher = setInterval(() => this.watch(), WATCH_MS);
+		const untilDeadline = Math.max(1, this.limits.deadlineAt - reviewNow());
+		const clock = setTimeout(() => this.stop('deadline'), untilDeadline);
 
 		this.interrupt = null;
 		this.stepsBefore = this.relay.steps;
 		this.promptTools = !final;
-		this.relay.lastActivityAt = Date.now();
 		pauseSignal?.addEventListener('abort', onPause, { once: true });
 
 		try {
 			const reply = await this.session!.prompt(final && this.toolsOn ? `${text}\n\n${FINAL_TURN_NOTE}` : text, {
 				tools: !final,
 				schema: this.opts.responseSchema?.(true).schema,
-				timeoutMs: Math.max(1, this.limits.deadlineAt - reviewNow())
+				timeoutMs: untilDeadline + PROMPT_BACKSTOP_MS
 			});
 
 			await this.relay.finishPrompt(reply.tokens, reply.error);
 
 			return { reply, why: this.interrupt, final: final || this.finalTurn() };
 		} finally {
-			clearInterval(watcher);
+			clearTimeout(clock);
 			pauseSignal?.removeEventListener('abort', onPause);
 		}
 	}
@@ -211,13 +208,9 @@ class NativeRun<T> {
 			return { next: FINAL_TURN_NOTE };
 		}
 
-		if (!this.canRepair())
-			return {
-				value: null,
-				error: why === 'stalled' ? 'the model stopped responding' : 'reasoning ran too long without an answer'
-			};
+		if (!this.canRepair()) return { value: null, error: 'reasoning ran too long without an answer' };
 
-		return { next: why === 'stalled' ? RESUME : OVERTHOUGHT };
+		return { next: OVERTHOUGHT };
 	}
 
 	/**
