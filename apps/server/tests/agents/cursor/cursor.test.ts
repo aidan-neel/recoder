@@ -4,9 +4,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { TokenUsage } from '@recoder/shared';
 import { CursorAgent } from '../../../src/agents/cursor/cursor';
+import { signInState } from '../../../src/agents/cursor/cursor-output';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
-import { cursorCall, fakeCursor } from '../../helpers/fake-cursor';
+import { cursorCall, cursorStatusCalls, fakeCursor } from '../../helpers/fake-cursor';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	return {
@@ -146,6 +147,36 @@ describe('CursorAgent.complete', () => {
 		expect((error as LlmError).message).not.toContain('fake-cursor-token-123');
 	});
 
+	test('a failed result quotes its text, so a credential in it never reaches the error', async () => {
+		const error = await new CursorAgent(
+			await fakeCursor({
+				FAKE_CURSOR_MODE: 'result-error',
+				FAKE_CURSOR_ERROR_TEXT: 'MCP server recoder1 unreachable: Authorization: Bearer fake-result-token-456'
+			})
+		)
+			.complete(call())
+			.catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(LlmError);
+		expect((error as LlmError).message).not.toContain('fake-result-token-456');
+		expect((error as LlmError).message).toContain('[redacted]');
+	});
+
+	test('a failed result about permissions is a plain error, not a usage limit', async () => {
+		const error = await new CursorAgent(
+			await fakeCursor({
+				FAKE_CURSOR_MODE: 'result-error',
+				FAKE_CURSOR_ERROR_TEXT: 'Error: insufficient permissions to read the file'
+			})
+		)
+			.complete(call())
+			.catch((e: unknown) => e);
+
+		expect(error).toBeInstanceOf(LlmError);
+		expect(error).not.toBeInstanceOf(UsageLimitError);
+		expect((error as LlmError).status).toBe(0);
+	});
+
 	test('a crashed CLI fails with what it printed on stderr', async () => {
 		const error = await new CursorAgent(await fakeCursor({ FAKE_CURSOR_MODE: 'crash' }))
 			.complete(call())
@@ -161,4 +192,36 @@ test('detect reports the version and whether the CLI is signed in', async () => 
 
 	expect(signedOut).toMatchObject({ installed: true, version: '2026.11.11-b912975', signedIn: false });
 	expect(signedIn.signedIn).toBe(true);
+});
+
+test('a CLI whose status is plain signed-out text still reads as signed out', async () => {
+	const env = await fakeCursor({ FAKE_CURSOR_STATUS_TEXT: 'Not logged in' });
+	const status = await new CursorAgent(env).detect();
+
+	expect(status.signedIn).toBe(false);
+});
+
+test('the sign-in check runs under the same isolated dirs a call gets', async () => {
+	const env = await fakeCursor({ FAKE_CURSOR_SIGNED_IN: '1' });
+	const log = env.FAKE_CURSOR_LOG ?? '';
+
+	await new CursorAgent(env).detect();
+
+	const calls = await cursorStatusCalls(log);
+
+	expect(calls.length).toBeGreaterThan(0);
+
+	for (const call of calls) {
+		expect(call.configDir).toContain('recoder-cursor-status-');
+		expect(call.dataDir).toContain('recoder-cursor-status-');
+		expect(call.cwd).toContain('recoder-cursor-status-');
+		expect(call.configDir).not.toContain(env.HOME ?? '\u0000');
+	}
+});
+
+test('signInState reads signed-out phrases before the signed-in words they contain', () => {
+	expect(signInState(1, 'Not logged in')).toBe(false);
+	expect(signInState(1, 'You are not authenticated')).toBe(false);
+	expect(signInState(1, 'Unauthenticated')).toBe(false);
+	expect(signInState(0, 'Logged in as dev@example.com')).toBe(true);
 });

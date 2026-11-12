@@ -5,16 +5,18 @@ import { z } from 'zod';
 import { fakeBin } from './fake-bin';
 
 /**
- * A fake `cursor-agent` CLI, as a Bun script. `--version`, `status --format json` (`FAKE_CURSOR_SIGNED_IN=1`
- * signs it in) and `models` answer at once. Print mode reads the prompt from stdin, saves a chat under
+ * A fake `cursor-agent` CLI, as a Bun script. `--version`, `status` (`FAKE_CURSOR_SIGNED_IN=1` signs it in,
+ * `FAKE_CURSOR_STATUS_TEXT` makes it print that text and exit 1 instead of JSON; either way the call is logged
+ * to `<log>.status`) and `models` answer at once. Print mode reads the prompt from stdin, saves a chat under
  * `CURSOR_DATA_DIR/chats/<md5(cwd)>/<session>/` as the CLI does (resuming `--resume <id>`), logs argv, cwd,
  * prompt, the config and data dirs, `cli-config.json`, `mcp.json` (read from the data dir), any `auth.json`
  * in them and the working directory's listing to `FAKE_CURSOR_LOG` (plus its environment to `<log>.env`), then
  * prints `stream-json` for `FAKE_CURSOR_MODE`: an answer (default; `tool` first calls `read_diff` on the MCP
  * server of `mcp.json` and narrates before it), `auth` (stderr, exit 1), `limit` (a failed `result`, exit 1),
- * `garbage` (unparsable output carrying `Authorization: Bearer fake-cursor-token-123`, exit 0), `flood` (more
- * output than the cap), `crash` (stderr, exit 1), `hang` (never answers) or `spawn` (starts a `sleep`
- * grandchild, writes `<own pid> <grandchild pid>` to `<log>.pids` and waits for it).
+ * `result-error` (a failed `result` carrying `FAKE_CURSOR_ERROR_TEXT`, exit 1), `garbage` (unparsable output
+ * carrying `Authorization: Bearer fake-cursor-token-123`, exit 0), `flood` (more output than the cap), `crash`
+ * (stderr, exit 1), `hang` (never answers) or `spawn` (starts a `sleep` grandchild, writes `<own pid>
+ * <grandchild pid>` to `<log>.pids` and waits for it).
  */
 const SCRIPT = `#!/usr/bin/env bun
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
@@ -29,6 +31,25 @@ if (args.includes('--version')) {
 }
 
 if (args[0] === 'status' || args[0] === 'whoami') {
+	const log = process.env.FAKE_CURSOR_LOG;
+
+	if (log) {
+		appendFileSync(
+			log + '.status',
+			JSON.stringify({
+				args,
+				cwd: process.cwd(),
+				configDir: process.env.CURSOR_CONFIG_DIR ?? '',
+				dataDir: process.env.CURSOR_DATA_DIR ?? ''
+			}) + '\\n'
+		);
+	}
+
+	if (process.env.FAKE_CURSOR_STATUS_TEXT) {
+		console.log(process.env.FAKE_CURSOR_STATUS_TEXT);
+		process.exit(1);
+	}
+
 	if (process.env.FAKE_CURSOR_SIGNED_IN === '1') {
 		console.log('{"authenticated":true,"email":"dev@example.com","plan":"pro"}');
 		process.exit(0);
@@ -174,6 +195,17 @@ if (mode === 'limit') {
 	process.exit(1);
 }
 
+if (mode === 'result-error') {
+	say({
+		type: 'result',
+		subtype: 'error',
+		is_error: true,
+		result: process.env.FAKE_CURSOR_ERROR_TEXT ?? 'it failed',
+		session_id: session
+	});
+	process.exit(1);
+}
+
 const results = [];
 const first = mode === 'tool' ? 'Reading the diff.' : '';
 const assistant = (text, extra) =>
@@ -297,4 +329,25 @@ export async function cursorCall(log: string): Promise<CursorCall> {
 	if (calls.length !== 1) throw new Error(`expected one logged call, found ${calls.length}`);
 
 	return calls[0];
+}
+
+const statusCallSchema = z.object({
+	args: z.array(z.string()),
+	cwd: z.string(),
+	configDir: z.string(),
+	dataDir: z.string()
+});
+
+/** One `status`/`whoami` call the fake logged to `<log>.status`. */
+export type CursorStatusCall = z.infer<typeof statusCallSchema>;
+
+/** The status calls the fake logged to `<log>.status`, one JSON object per line, in order. */
+export async function cursorStatusCalls(log: string): Promise<CursorStatusCall[]> {
+	const text = await Bun.file(`${log}.status`).text();
+
+	return text
+		.trim()
+		.split('\n')
+		.filter(Boolean)
+		.map((line) => statusCallSchema.parse(JSON.parse(line)));
 }

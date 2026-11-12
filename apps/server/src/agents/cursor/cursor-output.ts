@@ -9,7 +9,7 @@ export const CURSOR_LOGIN = 'cursor-agent login';
 const SIGNED_OUT = /not (?:logged|signed) in|authentication required|unauthorized|please (?:log|sign) ?in/i;
 
 const LIMIT =
-	/usage limit|plan (?:usage |rate )?limit|monthly limit|quota|out of (?:usage|credits)|insufficient|billing|spending limit/i;
+	/usage limit|plan (?:usage |rate )?limit|monthly limit|quota exceeded|out of (?:usage|credits)|insufficient (?:credits?|funds|balance)|spending limit/i;
 
 const THROTTLE = /rate.?limit|too many requests/i;
 
@@ -183,13 +183,21 @@ function tokenUsage(fields: {
 	};
 }
 
-/** The failure a `cursor-agent` call maps to: signed out is a 401, a spent plan a usage cap, a throttle a 429. */
+/**
+ * The failure a `cursor-agent` call maps to: signed out is a 401, a spent plan a usage cap, a throttle a 429.
+ * The patterns match the CLI's raw text, but only {@link quotedLine}'s redacted, capped form of it reaches a
+ * message.
+ */
 function cursorError(text: string): LlmError {
-	if (SIGNED_OUT.test(text)) return new LlmError(401, `Cursor is signed out. Run: ${CURSOR_LOGIN}`);
-	if (LIMIT.test(text)) return new UsageLimitError(429, text);
-	if (THROTTLE.test(text)) return new LlmError(429, text);
+	if (SIGNED_OUT.test(text))
+		return new LlmError(401, `Cursor is signed out. Run: ${CURSOR_LOGIN}, or set CURSOR_API_KEY.`);
 
-	return new LlmError(0, text);
+	const quoted = quotedLine(text, QUOTED_CHARS);
+
+	if (LIMIT.test(text)) return new UsageLimitError(429, quoted);
+	if (THROTTLE.test(text)) return new LlmError(429, quoted);
+
+	return new LlmError(0, quoted);
 }
 
 /** Whether the terminal result reports a failed turn. */
@@ -379,17 +387,15 @@ export class CursorReader {
 		const stderr = lastLine(exit.stderr);
 
 		if (exit.code === 0) {
-			const quoted = stdout ?? stderr;
+			const line = stdout ?? stderr;
 
 			return new LlmError(
 				0,
-				`Cursor output could not be parsed: ${quoted ? `the last line was "${quoted}"` : 'it printed nothing'}.`
+				`Cursor output could not be parsed: ${line ? `the last line was "${quotedLine(line, QUOTED_CHARS)}"` : 'it printed nothing'}.`
 			);
 		}
 
-		const line = stderr ?? stdout;
-
-		return cursorError(line ?? `Cursor exited with code ${exit.code}.`);
+		return cursorError(stderr ?? stdout ?? `Cursor exited with code ${exit.code}.`);
 	}
 
 	/** The usage the `result` event reported, merged from its nested `usage` and its top-level fields. */
@@ -433,12 +439,12 @@ export class CursorReader {
 	}
 }
 
-/** The last line of `text`, trimmed and redacted for quoting. */
+/** The last line of `text`, trimmed; quoting is the caller's job. */
 function lastLine(text: string): string | undefined {
 	const trimmed = text.trim();
 	const line = trimmed.slice(trimmed.lastIndexOf('\n') + 1).trim();
 
-	return line ? quotedLine(line, QUOTED_CHARS) : undefined;
+	return line || undefined;
 }
 
 /** The message an error event carries, from its `error`, `detail` or `message` field, string or object. */
@@ -458,7 +464,10 @@ function errorText(event: z.infer<typeof protocolErrorSchema>): string | null {
 	return null;
 }
 
-/** The sign-in state `cursor-agent status --format json` reports; text output is the fallback. */
+/**
+ * The sign-in state `cursor-agent status --format json` reports; text output is the fallback. Signed-out
+ * phrases hold signed-in words ("not logged in", "unauthenticated"), so they are tested first.
+ */
 export function signInState(code: number, stdout: string): boolean | null {
 	const status = statusSchema.safeParse(parseJson(stdout));
 
@@ -470,8 +479,9 @@ export function signInState(code: number, stdout: string): boolean | null {
 		if (status.data.email !== undefined || status.data.account !== undefined) return true;
 	}
 
+	if (/not (?:logged|signed) in|signed out|unauthenticated|not authenticated|authentication required/i.test(stdout))
+		return false;
 	if (/logged in|authenticated|signed in/i.test(stdout)) return true;
-	if (/not logged|signed out|unauthenticated|not authenticated/i.test(stdout)) return false;
 
 	return code === 0 ? null : false;
 }
