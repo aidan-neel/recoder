@@ -208,7 +208,7 @@ A browser is always available on this machine. Never conclude otherwise:
   rather than passing it.
 - Do **not** pass `size="sm"` unless a compact control is explicitly required
   (e.g. a dense toolbar row). Prefer `md` everywhere else.
-- For square icon-only controls use `size="icon"` (30px via `--size-icon-md`);
+- For square icon-only controls use `size="icon"` (`--size-icon-md`: 30px in apps/web, 28px in the React kit);
   don't shrink icon buttons below 28px.
 - Sivir `ScrollArea` must always be used with `showCues={false}`. We never use
   the blur/edge-fade scroll cues (the React kit's `ScrollArea` has none).
