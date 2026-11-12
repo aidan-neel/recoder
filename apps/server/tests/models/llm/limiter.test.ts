@@ -249,7 +249,7 @@ describe('per-endpoint limiter', () => {
 	});
 
 	test('a call without a base url is keyed by its provider', () => {
-		expect(llmEndpoint({ baseUrl: '', provider: 'codex' })).toBe('codex');
+		expect(llmEndpoint({ baseUrl: '', provider: 'devin' })).toBe('devin');
 	});
 });
 
@@ -339,15 +339,14 @@ describe('fair turns between reviews', () => {
 
 describe('rate limit classification', () => {
 	test('429, 529 and overloaded errors are rate limits', () => {
-		expect(isRateLimitError(new LlmError(429, 'slow down'), 'openai-compatible')).toBe(true);
-		expect(isRateLimitError(new LlmError(529, 'x'), 'opencode')).toBe(true);
-		expect(isRateLimitError(new LlmError(0, 'Provider is overloaded'), 'opencode')).toBe(true);
+		expect(isRateLimitError(new LlmError(429, 'slow down'))).toBe(true);
+		expect(isRateLimitError(new LlmError(529, 'x'))).toBe(true);
+		expect(isRateLimitError(new LlmError(0, 'Provider is overloaded'))).toBe(true);
 	});
 
-	test("ChatGPT's and OpenCode's final 429s and other failures are not rate limits", () => {
-		expect(isRateLimitError(new LlmError(429, 'usage cap'), 'codex')).toBe(false);
-		expect(isRateLimitError(providerError(429, 'plan spent'), 'opencode')).toBe(false);
-		expect(isRateLimitError(new LlmError(500, 'boom'), 'openai-compatible')).toBe(false);
-		expect(isRateLimitError(new Error('429'), 'openai-compatible')).toBe(false);
+	test("OpenCode's final 429s and other failures are not rate limits", () => {
+		expect(isRateLimitError(providerError(429, 'plan spent'))).toBe(false);
+		expect(isRateLimitError(new LlmError(500, 'boom'))).toBe(false);
+		expect(isRateLimitError(new Error('429'))).toBe(false);
 	});
 });

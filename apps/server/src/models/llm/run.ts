@@ -135,7 +135,7 @@ export async function runChat(opts: ChatOptions, onToken?: (text: string) => voi
 
 		return result;
 	} catch (err) {
-		if (acquired && isRateLimitError(err, opts.provider)) recordLlmRateLimit(endpoint);
+		if (acquired && isRateLimitError(err)) recordLlmRateLimit(endpoint);
 
 		tracking?.fail(err, [opts.apiKey]);
 

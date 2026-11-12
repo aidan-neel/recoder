@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import type { AgentAdapter, AgentRun } from '../../src/agents/contract';
+import type { AgentAdapter, AgentEvent, AgentRun, AgentRunOptions } from '../../src/agents/contract';
 import { EvidenceStore } from '../../src/evidence/evidence';
 import { ModelBudget } from '../../src/review/pipeline/agent-loop/budget';
 import { runNativeAgent } from '../../src/review/pipeline/agent-loop/native-engine';
@@ -54,6 +54,23 @@ export async function fixtureReview(
 	const { value, error } = await runNativeAgent(nativeAgentOptions(agent.id, model), agent);
 
 	return { error, read: value?.results?.[0] };
+}
+
+/** A run of `agent` whose tools all answer `ok`, with the events it sends collected in order. */
+export async function openCollectingRun(
+	agent: AgentAdapter,
+	options: Pick<AgentRunOptions, 'model' | 'reasoningEffort' | 'system' | 'tools'>
+): Promise<{ run: AgentRun; events: AgentEvent[] }> {
+	const events: AgentEvent[] = [];
+
+	const run = await agent.openRun({
+		...options,
+		runTool: async () => ({ text: 'ok', isError: false }),
+		onEvent: (event) => events.push(event),
+		signal: new AbortController().signal
+	});
+
+	return { run, events };
 }
 
 /**

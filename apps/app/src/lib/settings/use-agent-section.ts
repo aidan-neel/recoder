@@ -4,7 +4,15 @@ import type { AgentStatus } from '@recoder/shared';
 import { useState } from 'react';
 
 import { agentReady, useSettings } from './settings-store';
-import { useProviderHost, type ProviderHost } from './providers/use-provider-host';
+
+/** Everything the provider modal host needs: whether it is open, on which provider, and how it closes. */
+export interface ProviderHost {
+	open: boolean;
+	/** The provider to open straight on its sign-in, or null for the list. */
+	providerId: string | null;
+	/** The modal's onOpenChange; closing clears the request. */
+	onOpenChange: (open: boolean) => void;
+}
 
 /** Everything the Models section's top half needs: the provider manager, whether its list shows, and the modal host. */
 export interface AgentSectionView {
@@ -29,7 +37,14 @@ export function useAgentSection(): AgentSectionView {
 	const listed = useSettings((state) => !state.agentError || state.providers.length > 0);
 	const [request, setRequest] = useState<{ providerId: string | null } | null>(null);
 	const ready = Boolean(manager && agentReady(manager) && listed);
-	const host = useProviderHost({ request, ready, onClose: () => setRequest(null) });
+
+	const host: ProviderHost = {
+		open: request !== null,
+		providerId: request?.providerId ?? null,
+		onOpenChange: (open) => {
+			if (!open) setRequest(null);
+		}
+	};
 
 	return {
 		manager,

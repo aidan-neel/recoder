@@ -26,7 +26,7 @@ test('recoder_models returns the same list as recoder models, with the agent tha
 test('recoder_models takes provider and search as the command takes its flags', async () => {
 	setUpModels();
 
-	const { text } = await callTool('recoder_models', { provider: ['openai,chatgpt'], search: 'sol' }, processes);
+	const { text } = await callTool('recoder_models', { provider: ['openai,gpt.example'], search: 'sol' }, processes);
 
 	expect(JSON.parse(text).models.map((model: { id: string }) => model.id)).toEqual([OPENCODE_MODEL]);
 });

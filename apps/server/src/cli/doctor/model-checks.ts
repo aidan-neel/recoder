@@ -1,16 +1,8 @@
 import type { AgentStatus, ModelProvider } from '@recoder/shared';
-import { codex } from '../../agents/codex/codex.js';
 import { agentById } from '../../agents/registry.js';
-import {
-	configForOrchestrator,
-	configForSubagent,
-	configForVerifier,
-	isReviewConfigured,
-	type ModelConfig
-} from '../../models/models.js';
+import { isReviewConfigured, stageConfigs, type ModelConfig } from '../../models/models.js';
 import { MODEL_LOOKUP_LIMIT_MS, listLiveModels, listingProblem, type ModelLookup } from '../run/model-choices.js';
 import { openRunSignal } from '../run/run-signal.js';
-import { CHATGPT_SIGN_IN } from '../run/chatgpt-signin.js';
 import { failedCheck, passedCheck } from './check-result.js';
 import type { DoctorCheck } from './doctor.js';
 
@@ -27,7 +19,8 @@ const NOT_CONFIGURED_FIX =
 export async function checkReviewModel(): Promise<DoctorCheck> {
 	if (!isReviewConfigured()) return failedCheck('review-model', 'No review model is configured.', NOT_CONFIGURED_FIX);
 
-	const configs = [configForOrchestrator(), configForSubagent(), configForVerifier()];
+	const configs = stageConfigs();
+	const [review, worker, verifier] = configs;
 
 	const lookup: ModelLookup = {
 		stop: openRunSignal(new AbortController().signal, null),
@@ -38,9 +31,9 @@ export async function checkReviewModel(): Promise<DoctorCheck> {
 
 	if (unlisted) return unlisted;
 
-	const verifier = configs[2].model === configs[0].model ? '' : `; verifier model ${configs[2].model}`;
+	const verifierNote = verifier.model === review.model ? '' : `; verifier model ${verifier.model}`;
 
-	return passedCheck('review-model', `Review model ${configs[0].model}; worker model ${configs[1].model}${verifier}.`);
+	return passedCheck('review-model', `Review model ${review.model}; worker model ${worker.model}${verifierNote}.`);
 }
 
 /** A failed check when the model's agent does not list it; null when it does, and for a model no agent lists. */
@@ -68,28 +61,21 @@ async function unlistedModel(config: ModelConfig, lookup: ModelLookup): Promise<
 }
 
 /**
- * The sign-in of the agent behind each configured model, from the CLI's own status command or saved credentials. Makes
+ * The sign-in of the agent behind each configured model, from the CLI's own status command. Makes
  * no model call and starts nothing that outlives the check (`quickStatus`), so OpenCode is checked only for being
  * installed; whether it offers the saved model is `checkReviewModel`'s check.
  */
 export async function checkAgentSignIns(): Promise<DoctorCheck[]> {
 	if (!isReviewConfigured()) return [];
 
-	const providers = new Set([
-		configForOrchestrator().provider,
-		configForSubagent().provider,
-		configForVerifier().provider
-	]);
+	const providers = new Set(stageConfigs().map((config) => config.provider));
 
 	const checks = [...providers].map((provider) => agentCheck(provider));
 
 	return (await Promise.all(checks)).filter((check): check is DoctorCheck => check !== null);
 }
 
-/** ChatGPT is not an agent CLI: its sign-in is Recoder's own saved credentials. */
 async function agentCheck(provider: ModelProvider | undefined): Promise<DoctorCheck | null> {
-	if (provider === 'codex') return chatGptCheck();
-
 	const agent = agentById(provider);
 
 	return agent ? cliCheck(await agent.quickStatus()) : null;
@@ -105,10 +91,4 @@ function cliCheck(status: AgentStatus): DoctorCheck {
 		return passedCheck(id, `${status.name} is installed; its sign-in could not be checked.`);
 
 	return passedCheck(id, `${[status.name, status.version].filter(Boolean).join(' ')} is signed in.`);
-}
-
-async function chatGptCheck(): Promise<DoctorCheck> {
-	if (await codex.signedIn()) return passedCheck('agent:chatgpt', 'ChatGPT is signed in.');
-
-	return failedCheck('agent:chatgpt', 'ChatGPT is not signed in.', CHATGPT_SIGN_IN);
 }

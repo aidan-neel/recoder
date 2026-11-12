@@ -4,7 +4,7 @@ import { Button, Modal, ModalBody, ModalClose, ModalContent, ModalFooter, ModalT
 import { ArrowLeft } from 'lucide-react';
 
 import type { ProviderFlow } from '@/lib/settings/providers/use-provider-flow';
-import type { ProviderHost } from '@/lib/settings/providers/use-provider-host';
+import type { ProviderHost } from '@/lib/settings/use-agent-section';
 import { useProviderFlowView } from '@/lib/settings/providers/use-provider-modal';
 import { useHoldModal } from '@/lib/settings/use-hold-modal';
 

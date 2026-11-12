@@ -2,6 +2,7 @@ import { app } from './app';
 import { env } from './env';
 import { serverDataDir } from './util/data-dir';
 import { opencode } from './agents/opencode/opencode';
+import { deleteChatGptTokens } from './review/session/chatgpt-migration';
 import { registeredAgents } from './agents/registry';
 import { initReviewSettings } from './review/session/review-settings';
 import { initVllmServers } from './models/vllm/vllm-store';
@@ -74,6 +75,7 @@ function logStrayRejections(): void {
 logStrayRejections();
 
 await initializeStorage();
+await deleteChatGptTokens(serverDataDir());
 
 let stopWorkers: (() => Promise<void>) | undefined;
 const stopMaintenance = postgres ? startSharedMaintenance(postgres) : undefined;

@@ -60,16 +60,9 @@ export async function reviewWithDiff<S extends z.ZodType>(
 	return { ...loaded, diff };
 }
 
-/** A model error from writing a fix, as a 502 that says whether to sign in or wait out a usage limit. */
+/** A model error from writing a fix, as a 502 that says whether to wait out a usage limit. */
 export function fixModelFailure(c: Context, err: unknown, config: ModelConfig): Response {
 	const failure = modelFailure(err, config, 'The model could not write a fix. Try again.');
 
-	return c.json(
-		{
-			error: failure.reason,
-			...(failure.signIn ? { action: 'sign-in' } : {}),
-			...(failure.usageLimit ? { usageLimit: failure.usageLimit } : {})
-		},
-		502
-	);
+	return c.json({ error: failure.reason, ...(failure.usageLimit ? { usageLimit: failure.usageLimit } : {}) }, 502);
 }

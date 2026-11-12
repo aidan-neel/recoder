@@ -1,5 +1,3 @@
-import type { ChatOptions } from './types';
-
 export class LlmError extends Error {
 	status: number;
 
@@ -20,9 +18,6 @@ const TRANSIENT_STATUS = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 const TRANSIENT_NETWORK =
 	/stalled|socket|ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|EAI_AGAIN|fetch failed|network|connection (?:was )?(?:closed|reset|refused|lost)|other side closed|Unable to connect|terminated/i;
-
-/** ChatGPT's own wording for a dropped or cut-short response stream. */
-const CODEX_TRANSIENT = /response failed|incomplete response|could not complete/i;
 
 /** A provider's wording for a request throttle that lifts within a minute. */
 const THROTTLE = /rate limit|too many requests/i;
@@ -68,25 +63,23 @@ export function isProviderThrottle(err: LlmError): boolean {
 
 /**
  * Dropped sockets and overloaded servers (vLLM restarts, proxies) are worth another try; bad requests are not.
- * A spent plan never retries: ChatGPT's 429 is its usage cap, and an agent CLI raises {@link UsageLimitError}.
+ * A spent plan never retries: an agent CLI raises {@link UsageLimitError} for it.
  */
-export function isTransientLlmError(err: unknown, provider?: ChatOptions['provider']): boolean {
+export function isTransientLlmError(err: unknown): boolean {
 	if (!(err instanceof LlmError) || err instanceof UsageLimitError) return false;
-	if (provider === 'codex' && err.status === 429) return false;
 	if (TRANSIENT_STATUS.has(err.status)) return true;
 	if (err.status !== 0 || /cancelled|timed out|truncated/i.test(err.message)) return false;
 
-	return TRANSIENT_NETWORK.test(err.message) || (provider === 'codex' && CODEX_TRANSIENT.test(err.message));
+	return TRANSIENT_NETWORK.test(err.message);
 }
 
 /**
  * The provider is shedding load (HTTP 429, 529 or "overloaded"), so the limiter should send fewer calls at once.
- * A spent plan is not that signal (ChatGPT's 429, or an agent CLI's {@link UsageLimitError}): it lasts hours, and
- * easing off would only slow every other model's calls.
+ * A spent plan is not that signal (an agent CLI's {@link UsageLimitError}): it lasts hours, and easing off would
+ * only slow every other model's calls.
  */
-export function isRateLimitError(err: unknown, provider?: ChatOptions['provider']): boolean {
+export function isRateLimitError(err: unknown): boolean {
 	if (!(err instanceof LlmError) || err instanceof UsageLimitError) return false;
-	if (provider === 'codex' && err.status === 429) return false;
 
 	return err.status === 429 || err.status === 529 || /overloaded/i.test(err.message);
 }

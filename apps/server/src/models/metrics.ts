@@ -298,30 +298,21 @@ function field(raw: unknown, key: string): unknown {
  * OpenAI-compatible gateways name the two main counts `input_tokens` and `output_tokens`, so those are read
  * when the chat-completions names are absent.
  */
-export function normalizeTokenUsage(raw: unknown, provider: TokenCall['provider']): TokenUsage {
+export function normalizeTokenUsage(raw: unknown): TokenUsage {
 	const count = (n: unknown): number | null => (typeof n === 'number' && Number.isSafeInteger(n) && n >= 0 ? n : null);
-	const codex = provider === 'codex';
-
-	const read = (codexKey: string, openAiKey: string, alias?: string) =>
-		count(field(raw, codex ? codexKey : openAiKey)) ?? (codex || !alias ? null : count(field(raw, alias)));
-
+	const read = (key: string, alias?: string) => count(field(raw, key)) ?? (alias ? count(field(raw, alias)) : null);
 	const promptDetails = field(raw, 'prompt_tokens_details');
-	const inputTokens = read('inputTokens', 'prompt_tokens', 'input_tokens');
-	const outputTokens = read('outputTokens', 'completion_tokens', 'output_tokens');
+	const inputTokens = read('prompt_tokens', 'input_tokens');
+	const outputTokens = read('completion_tokens', 'output_tokens');
 
 	return {
 		inputTokens,
 		outputTokens,
 		totalTokens:
-			read('totalTokens', 'total_tokens') ??
-			(inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null),
-		cachedInputTokens: count(codex ? field(raw, 'cachedInputTokens') : field(promptDetails, 'cached_tokens')),
-		cacheWriteInputTokens: count(
-			codex ? field(raw, 'cacheWriteInputTokens') : field(promptDetails, 'cache_write_tokens')
-		),
-		reasoningOutputTokens: count(
-			codex ? field(raw, 'reasoningOutputTokens') : field(field(raw, 'completion_tokens_details'), 'reasoning_tokens')
-		)
+			read('total_tokens') ?? (inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null),
+		cachedInputTokens: count(field(promptDetails, 'cached_tokens')),
+		cacheWriteInputTokens: count(field(promptDetails, 'cache_write_tokens')),
+		reasoningOutputTokens: count(field(field(raw, 'completion_tokens_details'), 'reasoning_tokens'))
 	};
 }
 

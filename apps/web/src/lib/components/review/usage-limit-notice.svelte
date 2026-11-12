@@ -10,8 +10,6 @@
 	import { resolveEffort, type ModelEntry, type UsageLimit } from '@recoder/shared';
 	import { modelSettingsUi, providerName, toModelOption } from '$lib/settings/model-settings.svelte';
 	import { errorToast } from '$lib/shell/notify';
-	import { serverApi } from '$lib/api/server-api';
-	import { shellState } from '$lib/shell/shell-state.svelte';
 
 	/**
 	 * A model plan ran out. Says when it resets, and offers the way to keep
@@ -26,7 +24,7 @@
 	}
 	let { limit, onRetry = null, retrying = false, class: className = '' }: Props = $props();
 
-	/** `codex`, `claude-code`, `devin`, a hosted provider id, or `custom`: the same keys a UsageLimit uses. */
+	/** An agent CLI's id, a hosted provider id, or `custom`: the same keys a UsageLimit uses. */
 	function providerKey(entry: ModelEntry): string {
 		return entry.provider === 'codex' || entry.provider === 'claude-code' || entry.provider === 'devin'
 			? entry.provider
@@ -49,32 +47,9 @@
 		return [...groups.entries()];
 	});
 
-	/** When usage resets, in epoch seconds. ChatGPT reports its windows; the spent one that resets last decides. */
-	let resetsAt = $state<number | null>(null);
+	/** When usage resets, in epoch seconds, when the provider said. */
+	const resetsAt = $derived(limit.resetsAt ?? null);
 	let now = $state(Date.now());
-
-	$effect(() => {
-		resetsAt = limit.resetsAt ?? null;
-		if (limit.provider !== 'codex' || resetsAt) return;
-
-		let cancelled = false;
-
-		void serverApi
-			.getCodexStatus()
-			.then((status) => {
-				if (cancelled) return;
-
-				const spent = (status.limits ?? []).filter((item) => item.usedPercent >= 100 && item.resetsAt);
-				const next = spent.length ? Math.max(...spent.map((item) => item.resetsAt!)) : null;
-
-				resetsAt = next;
-			})
-			.catch(() => {});
-
-		return () => {
-			cancelled = true;
-		};
-	});
 
 	$effect(() => {
 		if (!resetsAt) return;
@@ -162,9 +137,7 @@
 			{:else}
 				<Button variant="outline" onclick={() => modelSettingsUi.show('models')}>Add a provider</Button>
 			{/if}
-			{#if limit.provider === 'codex'}
-				<Button variant="ghost" onclick={() => (shellState.usageOpen = true)}>View usage</Button>
-			{:else if limit.usageUrl}
+			{#if limit.usageUrl}
 				<Button variant="ghost" href={limit.usageUrl} target="_blank" rel="noopener noreferrer" class="gap-1.5">
 					Check usage <ArrowUpRight size={13} aria-hidden="true" />
 				</Button>

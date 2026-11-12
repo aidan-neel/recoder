@@ -19,10 +19,7 @@ function activityOf(progress: ReviewProgress | null): string | null {
 }
 
 function failureAction(failure: ModelFailure | undefined): FailureAction | null {
-	if (failure?.signIn) return 'sign-in';
-	if (failure?.usageLimit) return 'settings';
-
-	return null;
+	return failure?.usageLimit ? 'settings' : null;
 }
 
 /** Why a failed review stopped, and the way out; null unless it failed. */

@@ -56,18 +56,11 @@ test('classifies which errors are worth retrying', () => {
 	expect(isTransientLlmError(new LlmError(400, 'LLM 400: bad request'))).toBe(false);
 	expect(isTransientLlmError(new LlmError(0, 'Model request cancelled'))).toBe(false);
 	expect(isTransientLlmError(new LlmError(0, 'Model output truncated at the output-token limit'))).toBe(false);
-
-	expect(
-		isTransientLlmError(new LlmError(0, 'ChatGPT response failed. Check the connection and retry.'), 'codex')
-	).toBe(true);
-
-	expect(isTransientLlmError(new LlmError(429, 'ChatGPT usage limit reached.'), 'codex')).toBe(false);
-	expect(isTransientLlmError(new LlmError(0, 'ChatGPT request timed out.'), 'codex')).toBe(false);
 });
 
 test('an OpenCode throttle retries and an OpenCode spent quota does not', () => {
-	expect(isTransientLlmError(providerError(429, 'Rate limit reached for requests'), 'opencode')).toBe(true);
-	expect(isTransientLlmError(providerError(429, 'Usage limit reached for 5 hour'), 'opencode')).toBe(false);
+	expect(isTransientLlmError(providerError(429, 'Rate limit reached for requests'))).toBe(true);
+	expect(isTransientLlmError(providerError(429, 'Usage limit reached for 5 hour'))).toBe(false);
 });
 
 /** One chunk of reasoning, then nothing: the socket stays open. */

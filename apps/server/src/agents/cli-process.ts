@@ -60,6 +60,38 @@ export async function probeVersion(path: string, env: Env): Promise<string | nul
 	return parseVersion(out);
 }
 
+/** How to run a short CLI command: its environment, the directory it runs in, and when to give up on it. */
+interface CliCommand {
+	env: Record<string, string>;
+	cwd?: string;
+	timeoutMs: number;
+	signal?: AbortSignal;
+}
+
+/** Runs a short CLI command to its end, killing it after `timeoutMs`, or when `signal` aborts. Its stderr is dropped. */
+export async function cliOutput(argv: string[], command: CliCommand): Promise<{ code: number; stdout: string }> {
+	const proc = Bun.spawn(argv, {
+		...(command.cwd ? { cwd: command.cwd } : {}),
+		stdin: 'ignore',
+		stdout: 'pipe',
+		stderr: 'ignore',
+		env: command.env,
+		...(command.signal ? { signal: command.signal } : {})
+	});
+
+	const timer = setTimeout(() => proc.kill(), command.timeoutMs);
+
+	try {
+		const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
+
+		if (command.signal?.aborted) throw cancelledError();
+
+		return { code, stdout };
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 /**
  * A directory with nothing in it under the data dir, so an agent CLI never
  * sees the user's files or the PR checkout. Agents scope a session's project

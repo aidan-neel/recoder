@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { DevinAgent } from '../../../src/agents/devin/devin';
 import { fakeDevin } from '../../helpers/fake-devin';
-import { fixtureReview, testPromptStops } from '../../helpers/native-agent';
+import { fixtureReview, openCollectingRun, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
@@ -24,15 +24,11 @@ async function openRun(
 	userConfig?: Record<string, unknown>
 ): Promise<{ run: AgentRun; events: AgentEvent[]; log: string }> {
 	const env = await fakeDevin({ FAKE_DEVIN_MODE: mode }, userConfig);
-	const events: AgentEvent[] = [];
 
-	const run = await new DevinAgent(env).openRun({
+	const { run, events } = await openCollectingRun(new DevinAgent(env), {
 		model: 'swe-2-high',
 		system: 'Review the diff.',
-		tools: ['read_diff'],
-		runTool: async () => ({ text: 'ok', isError: false }),
-		onEvent: (event) => events.push(event),
-		signal: new AbortController().signal
+		tools: ['read_diff']
 	});
 
 	return { run, events, log: env.FAKE_DEVIN_LOG ?? '' };

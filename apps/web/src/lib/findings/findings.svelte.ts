@@ -20,7 +20,7 @@ export interface FixSuggestion {
 	/** Whether the patch applies cleanly to the review sandbox (null when unknown). */
 	applies?: boolean | null;
 	error?: string;
-	/** What fixes a failed suggestion: signing in to ChatGPT, or setting up a model. */
+	/** What fixes a failed suggestion: signing in, or setting up a model. */
 	action?: import('@recoder/shared').FailureAction;
 	/** The model's plan ran out while writing the fix. */
 	usageLimit?: import('@recoder/shared').UsageLimit;

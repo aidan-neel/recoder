@@ -18,15 +18,9 @@ import { settlePullComment, trackPullComment, stopPullCommentTracking } from '..
 import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
 import type { GatheredContext } from '../review/pipeline/intent/types';
 import { runAdaptiveReview } from '../review/pipeline/harness';
-import {
-	configForOrchestrator,
-	configForSubagent,
-	configForVerifier,
-	isReviewConfigured,
-	withLockedModels
-} from '../models/models';
+import { configForOrchestrator, isReviewConfigured, stageConfigs, withLockedModels } from '../models/models';
 import { ModelBlockedError } from '../review/pipeline/agent-loop';
-import { codex } from '../agents/codex/codex';
+import { signedOutAgent, signedOutReason } from '../models/agent-sign-in';
 import { reviewInstructions } from '../review/chat/review-chat';
 import { harnessCallbacks } from './pipeline-callbacks';
 import { detectProvider, locateRepo, refspecFor } from '../forge/providers';
@@ -84,7 +78,7 @@ async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal):
 		await trackPullComment(reviewId);
 		if (signal?.aborted) throw signal.reason;
 		if (!repo) throw new Error('repo not found');
-		await assertChatGptSignedIn();
+		await assertAgentsSignedIn();
 
 		emitReviewEvent(reviewId, {
 			type: 'step',
@@ -263,15 +257,11 @@ function cancelReason(signal: AbortSignal): string {
 	return signal.reason instanceof Error ? signal.reason.message : REVIEW_CANCELLED;
 }
 
-/** Every configured stage pick that uses ChatGPT must be signed in now, not after a long checkout or reviewer pass. */
-async function assertChatGptSignedIn(): Promise<void> {
-	const usesCodex = [configForOrchestrator(), configForSubagent(), configForVerifier()].some(
-		(config) => config.provider === 'codex'
-	);
+/** Every stage always runs, so an agent CLI that is signed out fails now, not after a long checkout. */
+async function assertAgentsSignedIn(): Promise<void> {
+	const signedOut = await signedOutAgent(stageConfigs());
 
-	if (usesCodex && !(await codex.signedIn())) {
-		throw new ModelBlockedError({ reason: 'Sign in to ChatGPT to run this review.', signIn: true });
-	}
+	if (signedOut) throw new ModelBlockedError({ reason: signedOutReason(signedOut) });
 }
 
 /**

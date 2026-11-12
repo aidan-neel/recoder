@@ -53,7 +53,7 @@ test('each model is grouped under the provider the app picker names, A to Z, wit
 	const list = await listModels(EVERYTHING, LOOKUP);
 	const providers = [...new Set(list.models.map((model) => model.provider))];
 
-	expect(providers).toEqual(['ChatGPT', 'Claude Code', 'models.internal', 'OpenAI', 'vLLM · 127.0.0.1:8000']);
+	expect(providers).toEqual(['Claude Code', 'gpt.example', 'models.internal', 'OpenAI', 'vLLM · 127.0.0.1:8000']);
 
 	expect(list.models.find((model) => model.id === 'saved-a')).toMatchObject({
 		name: 'Saved A',
