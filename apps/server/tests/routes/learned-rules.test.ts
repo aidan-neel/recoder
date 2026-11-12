@@ -2,7 +2,6 @@ import { beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { LearnedRuleProposal } from '@recoder/shared';
 import { proposeQuieting } from '../../src/review/guidelines/learned/proposals';
 import { topicTallies } from '../../src/review/guidelines/learned/votes';
 import { db } from '../../src/store';
@@ -36,7 +35,7 @@ test('a proposed rule is listed for its repository and applies only once a perso
 	expect(await (await send(rulesPath(), 'GET')).json()).toMatchObject([{ topic: { id: TOPIC }, state: 'proposed' }]);
 	expect(topicTallies(REPO).get(TOPIC)?.quietApproved).toBeUndefined();
 
-	const approved = (await (await send(rulesPath(TOPIC), 'PUT', { state: 'approved' })).json()) as LearnedRuleProposal;
+	const approved = await (await send(rulesPath(TOPIC), 'PUT', { state: 'approved' })).json();
 
 	expect(approved).toMatchObject({ state: 'approved', votes: { dismissed: 3 } });
 	expect(topicTallies(REPO).get(TOPIC)?.quietApproved).toBe(true);
