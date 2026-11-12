@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import type { TokenUsage } from '@recoder/shared';
 import { CodexAgent } from '../../../src/agents/codex/codex';
@@ -20,8 +21,10 @@ function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	};
 }
 
-/** The one call the fake logged: its argv, prompt and system prompt. */
-async function loggedCall(log: string | undefined): Promise<{ args: string[]; prompt: string; system: string }> {
+/** The one call the fake logged: its argv, prompt, system prompt and the sub-agent version its model was offered. */
+async function loggedCall(
+	log: string | undefined
+): Promise<{ args: string[]; prompt: string; system: string; subagents: string | null }> {
 	return JSON.parse((await readFile(log ?? '', 'utf8')).trim());
 }
 
@@ -92,6 +95,23 @@ describe('CodexAgent.complete', () => {
 		expect(childEnv).not.toContain('RECODER_SECRET_KEY');
 		expect(childEnv).not.toContain('OPENAI_API_KEY');
 		expect(childEnv).not.toContain('CODEX_API_KEY');
+	});
+
+	test('offers the model no sub-agents, though the CLI’s catalog gives it a version', async () => {
+		const env = await fakeCodex();
+
+		await new CodexAgent(env).complete(call({ model: 'gpt-6-luna' }));
+
+		expect((await loggedCall(env.FAKE_CODEX_LOG)).subagents).toBeNull();
+	});
+
+	test('runs no call when the CLI prints no catalog to turn sub-agents off in', async () => {
+		const env = await fakeCodex({ FAKE_CODEX_CATALOG: 'not a catalog' });
+
+		const error = await new CodexAgent(env).complete(call()).catch((e: unknown) => e);
+
+		expect(error).toMatchObject({ message: expect.stringContaining('sub-agents could not be turned off') });
+		expect(existsSync(env.FAKE_CODEX_LOG ?? '')).toBe(false);
 	});
 
 	test.each([

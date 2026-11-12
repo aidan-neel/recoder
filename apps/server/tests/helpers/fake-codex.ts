@@ -11,7 +11,7 @@ export const FAKE_CODEX_CREDENTIAL = 'sk-fake-codex-credential-0123456789';
 
 /**
  * Part of the catalog `codex debug models` printed on 2026-11-12 (codex-cli 0.167.0): two listed models, a hidden
- * one, and a field Recoder does not read. Levels and context windows are the real ones.
+ * one, and a field Recoder does not read. Levels, context windows and sub-agent versions are the real ones.
  */
 const CATALOG = {
 	models: [
@@ -25,6 +25,7 @@ const CATALOG = {
 				description: `${effort} effort`
 			})),
 			context_window: 272000,
+			multi_agent_version: 'v2',
 			base_instructions: 'You are Codex.'
 		},
 		{
@@ -33,7 +34,8 @@ const CATALOG = {
 			visibility: 'list',
 			default_reasoning_level: 'medium',
 			supported_reasoning_levels: ['low', 'medium', 'high', 'xhigh', 'max'].map((effort) => ({ effort })),
-			context_window: 272000
+			context_window: 272000,
+			multi_agent_version: 'v1'
 		},
 		{ slug: 'codex-auto-review', display_name: 'Codex Auto Review', visibility: 'hide', context_window: 272000 }
 	]
@@ -64,9 +66,11 @@ const LIMIT_LINES = [
 /**
  * A fake `codex`, as a Bun script. `--version`, `login status` (`FAKE_CODEX_SIGNED_IN=1` signs it in; the status
  * goes to stderr, as the CLI's does) and `debug models` answer at once; `delete --force <id>` appends the id to
- * `<log>.rm`. `exec` (and `exec resume … <id> -`) appends `{args, cwd, files, prompt, system, userConfig}` to
+ * `<log>.rm`. `exec` (and `exec resume … <id> -`) appends `{args, cwd, files, prompt, system, userConfig, subagents}` to
  * `FAKE_CODEX_LOG` (one JSON line per call; `userConfig` is the user's `config.toml`, read only when
- * `--ignore-user-config` is missing, as the CLI would), writes its environment to `<log>.env`, then acts on
+ * `--ignore-user-config` is missing, as the CLI would; `subagents` is the sub-agent version the model's entry names
+ * in the catalog the call reads, its `model_catalog_json` or else the CLI's own, which is what offers the model
+ * sub-agent tools whatever `--disable` says), writes its environment to `<log>.env`, then acts on
  * `FAKE_CODEX_MODE`: a reply (default: a reasoning summary and an answer, with the session's running usage);
  * `tool` (calls `read_diff` on the MCP server of its `mcp_servers.*.url` override and answers with what it
  * returned); `auth` (a turn that fails with a 401); `limit` (the CLI's usage-cap lines); `garbage` (lines that are
@@ -117,8 +121,12 @@ const system = readFileSync(override(/^model_instructions_file$/), 'utf8');
 const userConfig = args.includes('--ignore-user-config') ? null : readFileSync(process.env.CODEX_HOME + '/config.toml', 'utf8');
 
 const files = readdirSync(process.cwd());
+const catalogFile = override(/^model_catalog_json$/);
+const catalog = JSON.parse(catalogFile === undefined ? process.env.FAKE_CODEX_CATALOG : readFileSync(catalogFile, 'utf8'));
+const model = args[args.indexOf('-m') + 1];
+const subagents = catalog.models.find((entry) => entry.slug === model)?.multi_agent_version ?? null;
 
-appendFileSync(log, JSON.stringify({ args, cwd: process.cwd(), files, prompt, system, userConfig }) + '\\n');
+appendFileSync(log, JSON.stringify({ args, cwd: process.cwd(), files, prompt, system, userConfig, subagents }) + '\\n');
 writeFileSync(log + '.env', Object.keys(process.env).join('\\n'));
 
 const session = resumed ? args.at(-2) : '${FAKE_CODEX_SESSION}';

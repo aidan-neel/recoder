@@ -24,6 +24,16 @@ const modelSchema = z.object({
 
 const catalogSchema = z.object({ models: z.array(z.unknown()) });
 
+/** The whole catalog, every field of it and of each model kept, for the copy the calls name. */
+const fullCatalogSchema = z.looseObject({ models: z.array(z.record(z.string(), z.unknown())) });
+
+/**
+ * The catalog field that gives a model the CLI's sub-agent tools: `v1` a deferred `multi_agent_v1` namespace, `v2`
+ * the `collaboration` namespace (`spawn_agent`, `send_message`, `wait_agent` …). `--disable multi_agent` does not
+ * take them away; a model with no such field has none (codex-cli 0.167.0, `codex debug prompt-input`).
+ */
+const SUBAGENT_VERSION_FIELD = 'multi_agent_version';
+
 function isEffort(value: unknown): value is ReasoningEffort {
 	return REASONING_EFFORTS.some((effort) => effort === value);
 }
@@ -45,6 +55,22 @@ export function parseCodexModels(output: string): ModelEntry[] {
 
 		return [modelEntry(parsed.data)];
 	});
+}
+
+/**
+ * The JSON `codex debug models` printed, with no model naming a sub-agent version, for the calls to name as their
+ * catalog (`model_catalog_json`), so no model is offered sub-agents. Null when the output is not a catalog.
+ */
+export function catalogWithoutSubagents(output: string): string | null {
+	const catalog = fullCatalogSchema.safeParse(parseJson(output));
+
+	if (!catalog.success) return null;
+
+	const models = catalog.data.models.map((model) =>
+		Object.fromEntries(Object.entries(model).filter(([field]) => field !== SUBAGENT_VERSION_FIELD))
+	);
+
+	return JSON.stringify({ ...catalog.data, models });
 }
 
 function modelEntry(model: z.infer<typeof modelSchema>): ModelEntry {

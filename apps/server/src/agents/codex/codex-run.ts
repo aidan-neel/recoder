@@ -7,10 +7,14 @@ import { SessionRun, type SessionHost } from '../session-run';
 import { CodexReader, type SessionUsage } from './codex-output';
 import { callArgs, codexEnv } from './codex-process';
 
-/** A run's files, under its scratch dir: the system prompt the CLI takes in place of its own, and the empty working directory. */
+/**
+ * A run's files: under its scratch dir, the system prompt the CLI takes in place of its own and the empty working
+ * directory; and the adapter's model catalog, which offers no sub-agents.
+ */
 interface RunFiles {
 	system: string;
 	cwd: string;
+	catalog: string;
 }
 
 /**
@@ -21,9 +25,9 @@ interface RunFiles {
 export class CodexRun extends SessionRun<RunFiles> {
 	private sessionTotal: SessionUsage | null = null;
 
-	static async open(host: SessionHost, options: AgentRunOptions): Promise<CodexRun> {
+	static async open(host: SessionHost, catalog: string, options: AgentRunOptions): Promise<CodexRun> {
 		const root = await SessionRun.scratchDirectory('codex');
-		const files = { system: join(root, 'system.md'), cwd: join(root, 'work') };
+		const files = { system: join(root, 'system.md'), cwd: join(root, 'work'), catalog };
 
 		return SessionRun.ready(new CodexRun(host, options, root, files), async () => {
 			await writeFile(files.system, options.system, { mode: 0o600 });
@@ -71,6 +75,7 @@ export class CodexRun extends SessionRun<RunFiles> {
 			model: this.options.model,
 			reasoningEffort: this.options.reasoningEffort,
 			systemFile: this.files.system,
+			catalogFile: this.files.catalog,
 			lease: this.lease
 		});
 

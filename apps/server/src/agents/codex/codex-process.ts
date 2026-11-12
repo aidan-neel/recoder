@@ -27,9 +27,9 @@ export function codexEnv(env: Env): Record<string, string> {
 }
 
 /**
- * Print mode with JSONL events, outside a git repository, and with nothing of the user's loaded: no
- * `$CODEX_HOME/config.toml` (so none of its MCP servers, hooks, profiles or model settings) and no `.rules` files.
- * `--strict-config` makes a config field this CLI version does not know fail the call instead of being ignored.
+ * Print mode with JSONL events, outside a git repository, with no `$CODEX_HOME/config.toml` (so none of its MCP
+ * servers, hooks, profiles or model settings) and no `.rules` files. `--strict-config` makes a config field this CLI
+ * version does not know fail the call instead of being ignored.
  */
 const PRINT_FLAGS = ['--json', '--skip-git-repo-check', '--ignore-user-config', '--ignore-rules', '--strict-config'];
 
@@ -37,7 +37,8 @@ const PRINT_FLAGS = ['--json', '--skip-git-repo-check', '--ignore-user-config', 
  * Feature flags that give the model a tool of the CLI's own or load something of the user's: the shell and exec
  * tools, image viewing and generation, subagents, apps, plugins, hooks, memories, the browser and computer tools,
  * goals, tool and skill discovery, sleep, the login-shell snapshot, and dependency installs. Each name is one
- * `codex features list` prints.
+ * `codex features list` prints. `multi_agent` alone leaves the sub-agent tools on: the catalog each call names
+ * ({@link CodexCall.catalogFile}) takes them away.
  */
 const DISABLED_FEATURES = [
 	'shell_tool',
@@ -64,9 +65,9 @@ const DISABLED_FEATURES = [
 
 /**
  * Config set for every call. Commands the model proposes run nowhere (read-only sandbox, never asked for
- * approval), web search is off, no project `AGENTS.md` is read, nothing is written to the prompt history, the
- * instruction blocks about the environment, permissions, apps, collaboration modes and skills are left out, and no
- * update check runs.
+ * approval), web search is off, no project `AGENTS.md` is read, nothing
+ * is written to the prompt history, the instruction blocks about the environment, permissions, apps, collaboration
+ * modes and skills are left out, and no update check runs.
  */
 const CALL_CONFIG: Record<string, string | number | boolean> = {
 	sandbox_mode: 'read-only',
@@ -85,11 +86,16 @@ const CALL_CONFIG: Record<string, string | number | boolean> = {
 /** The longest one Recoder tool call may take before the CLI gives up on it: a sandboxed `run` can take minutes. */
 const TOOL_TIMEOUT_SEC = 900;
 
-/** What one `codex exec` call runs with: the model, its effort, the system prompt file, and Recoder's MCP server. */
+/**
+ * What one `codex exec` call runs with: the model, its effort, the system prompt file, the model catalog, and
+ * Recoder's MCP server.
+ */
 export interface CodexCall {
 	model: string;
 	reasoningEffort: ReasoningEffort | undefined;
 	systemFile: string;
+	/** The CLI's own catalog with no model offered sub-agents (`catalogWithoutSubagents`), in place of the one it reads. */
+	catalogFile: string;
 	lease: ToolLease | null;
 }
 
@@ -125,6 +131,7 @@ export function callArgs(call: CodexCall): string[] {
 		...features,
 		...config,
 		...override('model_instructions_file', call.systemFile),
+		...override('model_catalog_json', call.catalogFile),
 		...serverArgs(call.lease),
 		'-m',
 		call.model,

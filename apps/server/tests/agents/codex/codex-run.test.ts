@@ -18,7 +18,8 @@ const callSchema = z.object({
 	files: z.array(z.string()),
 	prompt: z.string(),
 	system: z.string(),
-	userConfig: z.string().nullable()
+	userConfig: z.string().nullable(),
+	subagents: z.string().nullable()
 });
 
 type Call = z.infer<typeof callSchema>;
@@ -113,6 +114,19 @@ describe('CodexAgent.openRun', () => {
 		expect(disabled(call)).toEqual(expect.arrayContaining(['hooks', 'plugins', 'apps', 'memories']));
 		expect(overrides(call)).toMatchObject({ project_doc_max_bytes: '0', 'history.persistence': '"none"' });
 		expect(call.system).toBe('Review the diff.');
+	});
+
+	test('no prompt, first or resumed, offers the model sub-agents, though the CLI’s catalog gives it a version', async () => {
+		const { run, log } = await openRun();
+
+		await run.prompt('Review it.', PROMPT);
+		await run.prompt('Continue.', PROMPT);
+
+		const logged = await calls(log);
+
+		await run.close();
+
+		expect(logged.map((call) => call.subagents)).toEqual([null, null]);
 	});
 
 	test('a prompt is one step: reasoning and the answer stream, and the turn ends it with its usage', async () => {

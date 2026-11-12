@@ -9,7 +9,7 @@ import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import { SessionCliAgent } from '../session-run';
 import type { AgentEvent, AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
-import { codexEffort, parseCodexModels } from './codex-models';
+import { catalogWithoutSubagents, codexEffort, parseCodexModels } from './codex-models';
 import { CODEX_LOGIN, CodexReader } from './codex-output';
 import { callArgs, codexEnv } from './codex-process';
 import { CodexRun } from './codex-run';
@@ -26,8 +26,8 @@ const FORGET_TIMEOUT_MS = 10_000;
  * Codex, run as one `codex exec` process per model call.
  *
  * The CLI signs in itself and keeps its sign-in under `CODEX_HOME`. Recoder never reads it; it runs the CLI
- * without the server's keys in its environment, without the user's config, rules, hooks, plugins or own tools, and
- * reads the JSONL events the CLI prints.
+ * without the server's keys in its environment, without the user's config, rules, hooks, plugins, sub-agents or own
+ * tools, and reads the JSONL events the CLI prints.
  */
 export class CodexAgent extends SessionCliAgent {
 	readonly id = 'codex';
@@ -40,6 +40,9 @@ export class CodexAgent extends SessionCliAgent {
 
 	/** The models the last listing found, for the effort levels {@link modelSettings} answers with. */
 	private listed = new Map<string, ModelEntry>();
+
+	/** The model catalog file every call names, once written; see {@link subagentFreeCatalog}. */
+	private catalog: Promise<string> | null = null;
 
 	/**
 	 * The account's models, from the catalog `codex debug models` prints; throws when the CLI is missing or lists
@@ -66,7 +69,7 @@ export class CodexAgent extends SessionCliAgent {
 	async openRun(options: AgentRunOptions): Promise<AgentRun> {
 		const path = this.requirePath();
 
-		return CodexRun.open(this.sessionHost(path), options);
+		return CodexRun.open(this.sessionHost(path), await this.subagentFreeCatalog(path), options);
 	}
 
 	/**
@@ -76,6 +79,7 @@ export class CodexAgent extends SessionCliAgent {
 	 */
 	async complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
 		const path = this.requirePath();
+		const catalogFile = await this.subagentFreeCatalog(path);
 		const deadline = callDeadline(opts);
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-codex-'));
 		const systemFile = join(scratch, 'system.md');
@@ -86,7 +90,7 @@ export class CodexAgent extends SessionCliAgent {
 			await writeFile(systemFile, systemText(opts), { mode: 0o600 });
 
 			const effort = opts.thinking === false ? 'low' : opts.reasoningEffort;
-			const flags = callArgs({ model: opts.model, reasoningEffort: effort, systemFile, lease: null });
+			const flags = callArgs({ model: opts.model, reasoningEffort: effort, systemFile, catalogFile, lease: null });
 			const reader = new CodexReader(callEvents(opts, onToken), 'codex');
 			const lines = new LineSplitter(reader.line);
 
@@ -118,6 +122,12 @@ export class CodexAgent extends SessionCliAgent {
 		}
 	}
 
+	/** Also forgets the catalog file, which `stop` deletes with the other scratch dirs. */
+	override stop(): void {
+		super.stop();
+		this.catalog = null;
+	}
+
 	protected find(): string | null {
 		return findCli({ pin: 'RECODER_CODEX_BIN', command: 'codex', installed: ['.local', 'bin', 'codex'] }, this.env);
 	}
@@ -129,6 +139,34 @@ export class CodexAgent extends SessionCliAgent {
 	/** `codex login status` exits 0 when signed in. */
 	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn'>> {
 		return { signedIn: (await this.output(path, ['login', 'status'], STATUS_TIMEOUT_MS)).code === 0 };
+	}
+
+	/**
+	 * The path of the catalog file every call names in place of the CLI's own: that catalog with no model offered
+	 * sub-agents ({@link catalogWithoutSubagents}). It is read once and kept while the adapter lives; a read that fails
+	 * is not kept, so the next call tries again, and no call runs without it.
+	 */
+	private subagentFreeCatalog(path: string): Promise<string> {
+		this.catalog ??= this.writeCatalog(path).catch((error: unknown) => {
+			this.catalog = null;
+			throw error;
+		});
+
+		return this.catalog;
+	}
+
+	private async writeCatalog(path: string): Promise<string> {
+		const catalog = catalogWithoutSubagents((await this.output(path, ['debug', 'models'], MODELS_TIMEOUT_MS)).stdout);
+
+		if (!catalog) throw new LlmError(0, 'Codex did not list its models, so its sub-agents could not be turned off.');
+
+		const dir = await mkdtemp(join(tmpdir(), 'recoder-codex-catalog-'));
+		const file = join(dir, 'catalog.json');
+
+		this.scratch.add(dir);
+		await writeFile(file, catalog, { mode: 0o600 });
+
+		return file;
 	}
 
 	private requirePath(): string {
