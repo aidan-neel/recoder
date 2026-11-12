@@ -7,14 +7,14 @@ import { fakeBin } from './fake-bin';
 /**
  * A fake `cursor-agent` CLI, as a Bun script. `--version`, `status --format json` (`FAKE_CURSOR_SIGNED_IN=1`
  * signs it in) and `models` answer at once. Print mode reads the prompt from stdin, saves a chat under
- * `CURSOR_CONFIG_DIR/chats/<md5(cwd)>/<session>/` as the CLI does (resuming `--resume <id>`), logs argv, cwd,
- * prompt, the config dir, `cli-config.json`, `mcp.json`, the `auth.json` link and the working directory's
- * listing to `FAKE_CURSOR_LOG` (plus its environment to `<log>.env`), then prints `stream-json` for
- * `FAKE_CURSOR_MODE`: an answer (default; `tool` first calls `read_diff` on the MCP server of `mcp.json` and
- * narrates before it), `auth` (stderr, exit 1), `limit` (a failed `result`, exit 1), `garbage` (unparsable
- * output carrying `Authorization: Bearer fake-cursor-token-123`, exit 0), `flood` (more output than the cap),
- * `crash` (stderr, exit 1), `hang` (never answers) or `spawn` (starts a `sleep` grandchild, writes
- * `<own pid> <grandchild pid>` to `<log>.pids` and waits for it).
+ * `CURSOR_DATA_DIR/chats/<md5(cwd)>/<session>/` as the CLI does (resuming `--resume <id>`), logs argv, cwd,
+ * prompt, the config and data dirs, `cli-config.json`, `mcp.json` (read from the data dir), any `auth.json`
+ * in them and the working directory's listing to `FAKE_CURSOR_LOG` (plus its environment to `<log>.env`), then
+ * prints `stream-json` for `FAKE_CURSOR_MODE`: an answer (default; `tool` first calls `read_diff` on the MCP
+ * server of `mcp.json` and narrates before it), `auth` (stderr, exit 1), `limit` (a failed `result`, exit 1),
+ * `garbage` (unparsable output carrying `Authorization: Bearer fake-cursor-token-123`, exit 0), `flood` (more
+ * output than the cap), `crash` (stderr, exit 1), `hang` (never answers) or `spawn` (starts a `sleep`
+ * grandchild, writes `<own pid> <grandchild pid>` to `<log>.pids` and waits for it).
  */
 const SCRIPT = `#!/usr/bin/env bun
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from 'node:fs';
@@ -58,14 +58,15 @@ const say = (value) => console.log(JSON.stringify(value));
 const log = process.env.FAKE_CURSOR_LOG;
 const prompt = await Bun.stdin.text();
 const configDir = process.env.CURSOR_CONFIG_DIR ?? '';
+const dataDir = process.env.CURSOR_DATA_DIR ?? '';
 const cwd = process.cwd();
 const resume = flag('--resume');
 const session = resume ?? 'sess-' + createHash('md5').update(configDir).digest('hex').slice(0, 8);
 const model = flag('--model') ?? 'auto';
 
-if (configDir) {
+if (dataDir) {
 	const workspace = createHash('md5').update(cwd).digest('hex');
-	const chat = join(configDir, 'chats', workspace, session);
+	const chat = join(dataDir, 'chats', workspace, session);
 
 	mkdirSync(chat, { recursive: true });
 	writeFileSync(join(chat, 'store.db'), 'fake store');
@@ -73,18 +74,26 @@ if (configDir) {
 }
 
 if (log) {
-	const read = (name) => {
+	const read = (dir, name) => {
 		try {
-			return readFileSync(join(configDir, name), 'utf8');
+			return readFileSync(join(dir, name), 'utf8');
 		} catch {
 			return null;
 		}
 	};
 	let auth = 'none';
 
-	try {
-		auth = readlinkSync(join(configDir, 'auth.json'));
-	} catch {}
+	for (const dir of [configDir, dataDir]) {
+		try {
+			auth = readlinkSync(join(dir, 'auth.json'));
+			break;
+		} catch {
+			if (existsSync(join(dir, 'auth.json'))) {
+				auth = 'present';
+				break;
+			}
+		}
+	}
 
 	appendFileSync(
 		log,
@@ -93,8 +102,9 @@ if (log) {
 			cwd,
 			prompt,
 			configDir,
-			cliConfig: read('cli-config.json'),
-			mcp: read('mcp.json'),
+			dataDir,
+			cliConfig: read(configDir, 'cli-config.json'),
+			mcp: read(dataDir, 'mcp.json'),
 			auth,
 			cwdFiles: readdirSync(cwd)
 		}) + '\\n'
@@ -181,8 +191,8 @@ if (first) {
 	finish(resume ? { in: 500, out: 30, cached: 300 } : { in: 900, out: 15, cached: 500 });
 }
 
-if (mode === 'tool' && configDir && existsSync(join(configDir, 'mcp.json'))) {
-	const config = JSON.parse(readFileSync(join(configDir, 'mcp.json'), 'utf8'));
+if (mode === 'tool' && dataDir && existsSync(join(dataDir, 'mcp.json'))) {
+	const config = JSON.parse(readFileSync(join(dataDir, 'mcp.json'), 'utf8'));
 	const [server] = Object.values(config.mcpServers);
 	const call = { name: 'read_diff', arguments: { path: 'file0.ts' } };
 
@@ -259,6 +269,7 @@ const callSchema = z.object({
 	cwd: z.string(),
 	prompt: z.string(),
 	configDir: z.string(),
+	dataDir: z.string(),
 	cliConfig: z.string().nullable(),
 	mcp: z.string().nullable(),
 	auth: z.string(),

@@ -13,10 +13,11 @@ const PROMPT = { tools: true, timeoutMs: 10_000 };
 /** The `cli-config.json` the CLI ran under, as the fake logged it. */
 const cliConfigSchema = z.object({
 	approvalMode: z.string().optional(),
+	sandbox: z.object({ readBoundary: z.string() }),
 	permissions: z.object({ allow: z.array(z.string()), deny: z.array(z.string()) })
 });
 
-/** The `mcp.json` of the run's config dir, as the fake logged it. */
+/** The `mcp.json` of the run's data dir, as the fake logged it. */
 const mcpSchema = z.object({ mcpServers: z.record(z.string(), z.object({ url: z.string() })) });
 
 type FakeEnv = Record<string, string | undefined>;
@@ -83,6 +84,7 @@ describe('CursorAgent.openRun', () => {
 		expect(call.args).not.toContain('--force');
 		expect(call.args).not.toContain('--yolo');
 		expect(config.approvalMode).toBe('allowlist');
+		expect(config.sandbox.readBoundary).toBe('workspace');
 		expect(config.permissions.allow).toEqual([`Mcp(${name}:*)`]);
 
 		expect(config.permissions.deny).toEqual(
@@ -92,8 +94,10 @@ describe('CursorAgent.openRun', () => {
 		expect(servers.mcpServers[name].url).toMatch(/^http:\/\/127\.0\.0\.1:/);
 		expect(call.configDir).toContain('recoder-cursor-run-');
 		expect(call.configDir).not.toContain(opened.env.HOME ?? '\u0000');
+		expect(call.dataDir).toContain('recoder-cursor-run-');
+		expect(call.dataDir).not.toContain(opened.env.HOME ?? '\u0000');
 		expect(call.cwdFiles).toEqual([]);
-		expect(call.auth).toContain('.config/cursor/auth.json');
+		expect(call.auth).toBe('none');
 		expect(call.prompt).toContain('Review the diff.');
 	});
 

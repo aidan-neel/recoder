@@ -4,13 +4,14 @@ import { join } from 'node:path';
 import type { AgentStatus, ModelEntry, TokenUsage } from '@recoder/shared';
 import { LlmError, cancelledError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { CliAgent, callDeadline, findCli, stopOnShutdown } from '../cli-process';
+import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
-import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli, type CliExit } from '../cli-stream';
+import type { CliExit } from '../cli-stream';
 import { quotedLine } from '../quoted-line';
 import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
 import { parseCursorModels } from './cursor-models';
 import { CURSOR_LOGIN, CursorReader, signInState } from './cursor-output';
+import { PRINT_ARGS, streamPrintCall } from './cursor-print';
 import { cursorEnv, writeCursorConfig } from './cursor-process';
 import { CursorRun } from './cursor-run';
 
@@ -20,19 +21,15 @@ const STATUS_TIMEOUT_MS = 10_000;
 
 const MODELS_TIMEOUT_MS = 20_000;
 
-/** How long a call's process group is given to exit on its own once the `result` event arrives. */
-const RESULT_SETTLE_MS = 250;
-
-/** Print mode with structured output and real-time text deltas; the prompt goes in on stdin. */
-const PRINT_ARGS = ['-p', '--output-format', 'stream-json', '--stream-partial-output'];
-
 /**
  * Cursor, run as one `cursor-agent -p` process per model call.
  *
- * The CLI signs in itself. Recoder never reads its credential file; it runs the CLI under an isolated
- * `CURSOR_CONFIG_DIR` that denies every built-in tool and loads no user config, hooks, rules, plugins or MCP
- * servers, and reads what the CLI prints. A link to the CLI's own sign-in file keeps its login working without
- * Recoder ever opening it.
+ * The CLI signs in itself. Recoder never reads, copies or links its credential file; it runs the CLI under
+ * isolated `CURSOR_CONFIG_DIR` and `CURSOR_DATA_DIR` dirs that deny its shell, file-edit and web tools, bound
+ * its file reads and searches to an empty working directory, and load no user config, hooks, rules, plugins or
+ * MCP servers, and reads what the CLI prints. The sign-in lives outside those dirs — the login keychain on
+ * macOS, an `auth.json` under the XDG or app-data path on Linux and Windows — so it keeps working untouched,
+ * and `CURSOR_API_KEY` remains the documented headless sign-in.
  */
 export class CursorAgent extends CliAgent {
 	readonly id = 'cursor';
@@ -73,7 +70,7 @@ export class CursorAgent extends CliAgent {
 	/**
 	 * One model call with every tool off. The system prompt and the turns go in on stdin ahead of the prompt,
 	 * since the CLI has no system-prompt flag; text streams to `onToken` and usage comes from the `result` event.
-	 * The chat the call saves lives in the call's scratch config dir and is deleted with it.
+	 * The chat the call saves lives in the call's scratch data dir and is deleted with it.
 	 */
 	async complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
 		const path = this.requireCli();
@@ -90,7 +87,7 @@ export class CursorAgent extends CliAgent {
 		this.scratch.add(scratch);
 
 		try {
-			await writeCursorConfig(place, this.env, null);
+			await writeCursorConfig(place, null);
 
 			const turns = opts.messages.filter((m) => m.role !== 'system');
 			const stdin = `${systemText(opts)}\n\n${promptText(turns)}`;
@@ -133,17 +130,41 @@ export class CursorAgent extends CliAgent {
 
 	/**
 	 * `cursor-agent status` reports the account's sign-in state; `--format json` is tried first since not every
-	 * version documents it, and a CLI that rejects the flag is asked again plainly.
+	 * version documents it, and a CLI that rejects the flag is asked again plainly. The check runs under the same
+	 * isolated config and data dirs a call gets, in an empty working directory, so it reports the sign-in a run
+	 * will find — never one only the user's own config could give.
 	 */
 	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn'>> {
-		const json = await this.output(path, ['status', '--format', 'json'], STATUS_TIMEOUT_MS);
-		const state = signInState(json.code, json.stdout);
+		const scratch = await mkdtemp(join(tmpdir(), 'recoder-cursor-status-'));
 
-		if (state !== null && json.stdout.trimStart().startsWith('{')) return { signedIn: state };
+		this.scratch.add(scratch);
 
-		const plain = await this.output(path, ['status'], STATUS_TIMEOUT_MS);
+		const place = {
+			config: join(scratch, 'config'),
+			data: join(scratch, 'data'),
+			cwd: join(scratch, 'work')
+		};
 
-		return { signedIn: signInState(plain.code, plain.stdout) };
+		try {
+			await writeCursorConfig(place, null);
+
+			const where = {
+				cwd: place.cwd,
+				env: { ...cursorEnv(this.env), CURSOR_CONFIG_DIR: place.config, CURSOR_DATA_DIR: place.data }
+			};
+
+			const json = await this.output(path, ['status', '--format', 'json'], STATUS_TIMEOUT_MS, undefined, where);
+			const state = signInState(json.code, json.stdout);
+
+			if (state !== null && json.stdout.trimStart().startsWith('{')) return { signedIn: state };
+
+			const plain = await this.output(path, ['status'], STATUS_TIMEOUT_MS, undefined, where);
+
+			return { signedIn: signInState(plain.code, plain.stdout) };
+		} finally {
+			this.scratch.delete(scratch);
+			await rm(scratch, { recursive: true, force: true });
+		}
 	}
 
 	/** The CLI's path, or the install hint every entry point throws when it is missing. */
@@ -156,7 +177,7 @@ export class CursorAgent extends CliAgent {
 	}
 
 	/**
-	 * One print-mode call in the isolated config dir: streams `stream-json` events through a {@link CursorReader},
+	 * One print-mode call in the isolated dirs: streams `stream-json` events through a {@link CursorReader},
 	 * stops the process group shortly after the `result` event, and returns the answer. Throws the call's
 	 * {@link LlmError} on failure.
 	 */
@@ -173,50 +194,24 @@ export class CursorAgent extends CliAgent {
 			onApiKeySource?: (source: string) => void;
 		}
 	): Promise<string> {
-		const finished = new AbortController();
-		let settleTimer: ReturnType<typeof setTimeout> | null = null;
-
-		const reader = new CursorReader({
-			text: (delta) => handlers.onToken?.(delta),
-			reasoning: (delta) => handlers.onReasoning?.(delta),
-			result: () => {
-				settleTimer = setTimeout(() => finished.abort(), RESULT_SETTLE_MS);
-				settleTimer.unref();
-			},
-			apiKeySource: handlers.onApiKeySource
+		const outcome = await streamPrintCall({
+			argv: [path, ...PRINT_ARGS, '--trust', '--workspace', place.cwd, '--model', model],
+			cwd: place.cwd,
+			env: { ...cursorEnv(this.env), CURSOR_CONFIG_DIR: place.config, CURSOR_DATA_DIR: place.data },
+			stdin,
+			signal,
+			running: this.running,
+			name: this.name,
+			handlers: {
+				text: (delta) => handlers.onToken?.(delta),
+				reasoning: (delta) => handlers.onReasoning?.(delta),
+				apiKeySource: handlers.onApiKeySource
+			}
 		});
 
-		const lines = new LineSplitter(reader.line);
+		if (!outcome.ok) throw outcome.error;
 
-		try {
-			const exit = await streamCli({
-				argv: [path, ...PRINT_ARGS, '--trust', '--workspace', place.cwd, '--model', model],
-				cwd: place.cwd,
-				env: {
-					...cursorEnv(this.env),
-					CURSOR_CONFIG_DIR: place.config,
-					CURSOR_DATA_DIR: place.data
-				},
-				stdin,
-				signal: AbortSignal.any([signal, finished.signal]),
-				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
-				onOutput: lines.push,
-				running: this.running,
-				name: this.name
-			});
-
-			lines.end();
-
-			return this.reply(reader, exit, handlers.onUsage);
-		} catch (error) {
-			lines.end();
-
-			if (!reader.finished) throw error;
-
-			return this.reply(reader, { code: 0, stderr: '' }, handlers.onUsage);
-		} finally {
-			if (settleTimer) clearTimeout(settleTimer);
-		}
+		return this.reply(outcome.reader, outcome.exit, handlers.onUsage);
 	}
 
 	/** The call's answer, its usage reported, or the failure thrown. */
@@ -232,17 +227,22 @@ export class CursorAgent extends CliAgent {
 		return reader.answer();
 	}
 
-	/** Run a short CLI command to its end, killing it after `timeoutMs`, or when `signal` aborts. */
+	/**
+	 * Run a short CLI command to its end in an empty directory — `where` overrides both when a caller needs the
+	 * isolated dirs — killing it after `timeoutMs`, or when `signal` aborts.
+	 */
 	private async output(
 		path: string,
 		args: string[],
 		timeoutMs: number,
-		signal?: AbortSignal
+		signal?: AbortSignal,
+		where?: { cwd: string; env: Record<string, string> }
 	): Promise<{ code: number; stdout: string; stderr: string }> {
 		const proc = Bun.spawn([path, ...args], {
 			stdout: 'pipe',
 			stderr: 'pipe',
-			env: cursorEnv(this.env),
+			cwd: where?.cwd ?? (await emptyDirectory('cursor-empty')),
+			env: where?.env ?? cursorEnv(this.env),
 			...(signal ? { signal } : {})
 		});
 

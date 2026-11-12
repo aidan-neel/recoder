@@ -67,6 +67,7 @@ describe('CursorAgent.complete', () => {
 
 		const config = JSON.parse(seen.cliConfig ?? '{}') as {
 			approvalMode?: string;
+			sandbox?: { readBoundary?: string };
 			permissions?: { allow?: string[]; deny?: string[] };
 		};
 
@@ -82,6 +83,7 @@ describe('CursorAgent.complete', () => {
 		});
 
 		expect(config.approvalMode).toBe('allowlist');
+		expect(config.sandbox?.readBoundary).toBe('workspace');
 		expect(config.permissions?.allow).toEqual([]);
 
 		expect(config.permissions?.deny).toEqual(
@@ -89,8 +91,9 @@ describe('CursorAgent.complete', () => {
 		);
 
 		expect(seen.mcp).toBeNull();
-		expect(seen.auth).toContain(join(env.HOME ?? '', '.config', 'cursor', 'auth.json'));
+		expect(seen.auth).toBe('none');
 		expect(seen.configDir).toContain('recoder-cursor-');
+		expect(seen.dataDir).toContain('recoder-cursor-');
 		expect(seen.cwdFiles).toEqual([]);
 		expect(seen.prompt).toContain('Review the diff.');
 		expect(seen.prompt).toContain('diff --git a/x b/x');

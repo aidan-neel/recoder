@@ -3,19 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { TokenUsage } from '@recoder/shared';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
-import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli, type CliExit } from '../cli-stream';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
+import type { CliExit } from '../cli-stream';
 import { ProcessRun } from '../process-run';
 import { CursorReader } from './cursor-output';
+import { PRINT_ARGS, streamPrintCall } from './cursor-print';
 import { cursorEnv, writeCursorConfig } from './cursor-process';
 
 type Env = Record<string, string | undefined>;
-
-/**
- * How long a prompt's process group is given to exit on its own once the `result` event arrives: current CLI
- * versions can print the terminal result and keep a worker alive, so the group is killed after this grace.
- */
-const RESULT_SETTLE_MS = 250;
 
 /** What a run needs of the adapter: the binary, the server's environment, and the sets its `stop` empties. */
 export interface CursorHost {
@@ -81,12 +76,12 @@ function promptUsage(total: TokenUsage, before: TokenUsage | null): TokenUsage {
  * Cursor as the agent: one `cursor-agent -p` process per prompt, in print mode with `stream-json` output. The
  * first prompt carries the system prompt, since the CLI has no flag for one; each later prompt resumes the chat
  * the first saved with `--resume`. Recoder's tools reach it over MCP as the only allowed server; the CLI's own
- * shell, file, edit, search and web tools are denied in the isolated config it runs under.
+ * shell, file, edit and web tools are denied in the isolated config it runs under, and its file reads and
+ * searches are bounded to the empty working directory.
  */
 export class CursorRun extends ProcessRun {
 	private chatId: string | null = null;
 	private used: TokenUsage | null = null;
-	private settle: ReturnType<typeof setTimeout> | null = null;
 
 	private constructor(
 		private readonly host: CursorHost,
@@ -116,7 +111,7 @@ export class CursorRun extends ProcessRun {
 		const run = new CursorRun(host, options, place);
 
 		try {
-			await writeCursorConfig(place, host.env, run.lease);
+			await writeCursorConfig(place, run.lease);
 
 			return run;
 		} catch (error) {
@@ -131,52 +126,32 @@ export class CursorRun extends ProcessRun {
 	 */
 	async prompt(text: string, options: AgentPromptOptions): Promise<AgentReply> {
 		const deadline = this.begin(options.timeoutMs);
-		const finished = new AbortController();
-
-		const reader = new CursorReader({
-			text: (delta, partId) => this.options.onEvent({ type: 'text', delta, partId }),
-			reasoning: (delta, partId) => this.options.onEvent({ type: 'reasoning', delta, partId }),
-			activity: () => this.options.onEvent({ type: 'activity' }),
-			problem: (message) => this.options.onEvent({ type: 'error', message }),
-			result: () => {
-				this.settle = setTimeout(() => finished.abort(), RESULT_SETTLE_MS);
-				this.settle.unref();
-			}
-		});
-
-		const lines = new LineSplitter(reader.line);
 		const asked = options.schema ? `${text}\n\n${JSON_MODE_INSTRUCTION}` : text;
 		const stdin = this.chatId ? asked : `${this.options.system}\n\n${asked}`;
 
 		this.options.onEvent({ type: 'step-start' });
 
-		try {
-			const exit = await streamCli({
-				argv: [this.host.path, ...this.args()],
-				cwd: this.place.cwd,
-				env: this.place.env,
-				stdin,
-				signal: AbortSignal.any([deadline.signal, finished.signal]),
-				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
-				onOutput: lines.push,
-				running: this.host.running,
-				name: 'Cursor'
-			});
+		const outcome = await streamPrintCall({
+			argv: [this.host.path, ...this.args()],
+			cwd: this.place.cwd,
+			env: this.place.env,
+			stdin,
+			signal: deadline.signal,
+			running: this.host.running,
+			name: 'Cursor',
+			handlers: {
+				text: (delta, partId) => this.options.onEvent({ type: 'text', delta, partId }),
+				reasoning: (delta, partId) => this.options.onEvent({ type: 'reasoning', delta, partId }),
+				activity: () => this.options.onEvent({ type: 'activity' }),
+				problem: (message) => this.options.onEvent({ type: 'error', message })
+			}
+		});
 
-			lines.end();
+		this.chatId = outcome.reader.sessionId ?? this.chatId;
 
-			return this.finish(reader, exit);
-		} catch (error) {
-			lines.end();
+		if (!outcome.ok) return { text: '', error: deadline.failure(outcome.error, 'Cursor run failed.') };
 
-			if (reader.finished) return this.finish(reader, { code: 0, stderr: '' });
-
-			return { text: '', error: deadline.failure(error, 'Cursor run failed.') };
-		} finally {
-			if (this.settle) clearTimeout(this.settle);
-			this.settle = null;
-			this.chatId = reader.sessionId ?? this.chatId;
-		}
+		return this.finish(outcome.reader, outcome.exit);
 	}
 
 	/** Deletes the run's scratch dir, which holds the isolated config, its chats and the data dir. */
@@ -187,10 +162,7 @@ export class CursorRun extends ProcessRun {
 
 	private args(): string[] {
 		return [
-			'-p',
-			'--output-format',
-			'stream-json',
-			'--stream-partial-output',
+			...PRINT_ARGS,
 			'--trust',
 			'--approve-mcps',
 			'--workspace',
