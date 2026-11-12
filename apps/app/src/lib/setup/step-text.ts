@@ -41,7 +41,7 @@ export function providerReady(manager: AgentStatus | undefined, agentError: stri
 	return !agentError && manager !== undefined && agentReady(manager);
 }
 
-/** The provider step's one line: what is connected once done, else what to do or why it waits. */
+/** The provider step's one line: what is connected once done, else why it waits; null when it is ready to add one. */
 export function providerDescription({
 	done,
 	providers,
@@ -54,10 +54,10 @@ export function providerDescription({
 	models: ModelSettings | null;
 	manager: AgentStatus | undefined;
 	agentError: string | null;
-}): string {
+}): string | null {
 	if (done) return connectedLine(providers, models);
 
-	return providerReady(manager, agentError) ? 'Supplies the models reviews run on.' : blockedLine(manager, agentError);
+	return providerReady(manager, agentError) ? null : blockedLine(manager, agentError);
 }
 
 /** "Tracking acme/api", or how many once there are several. */
@@ -65,9 +65,9 @@ export function trackingLine(names: string[]): string {
 	return names.length === 1 ? `Tracking ${names[0]}` : `Tracking ${names.length} repositories`;
 }
 
-/** The repository step's one line: what is tracked once done, else what tracking one brings. */
-export function repoDescription({ done, names }: { done: boolean; names: string[] }): string {
-	return done ? trackingLine(names) : 'Its open pull requests show in the list.';
+/** The repository step's one line once done: what is tracked. Null before. */
+export function repoDescription({ done, names }: { done: boolean; names: string[] }): string | null {
+	return done ? trackingLine(names) : null;
 }
 
 /** The model reviews run on, by name; null when none resolves. */

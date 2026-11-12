@@ -21,10 +21,14 @@
 .setup-step .settings-row + .settings-row {
 	box-shadow: none;
 }
-/* The mark sits on the name's line, however far the line under it wraps. */
+/* The mark sits on the name's line, however far the line under it wraps; a step with no line under its name centres it. */
 .setup-step [data-ui='status-glyph'] {
 	align-self: flex-start;
 	margin-top: 1px;
+}
+.setup-step .settings-row:not(:has(.settings-row-detail)) [data-ui='status-glyph'] {
+	align-self: center;
+	margin-top: 0;
 }
 /* A step's line is a sentence, so it wraps where a settings row would cut it short. */
 .setup-step .settings-row[data-led] .settings-row-detail {

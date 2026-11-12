@@ -45,7 +45,7 @@ export function ProviderNotice({ source }: { source: NoListSource }) {
 
 	return (
 		<div role="status" className="provider-notice">
-			<SettingsRow name={notice.lead} detail={notice.rest ?? notice.commandHint}>
+			<SettingsRow name={notice.lead} detail={notice.rest}>
 				{notice.retryLabel ? <CheckAgain label={notice.retryLabel} /> : null}
 			</SettingsRow>
 			{notice.command ? <Command command={notice.command} /> : null}
@@ -66,7 +66,7 @@ export function PickNotice({ source }: { source: NoListSource }) {
 			variant="section"
 			className="provider-pick-notice"
 			title={notice.lead}
-			detail={notice.rest ?? notice.commandHint}
+			detail={notice.rest}
 			actions={
 				hasWayOut ? (
 					<>

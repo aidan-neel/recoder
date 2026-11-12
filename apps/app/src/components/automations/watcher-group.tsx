@@ -59,11 +59,7 @@ export function WatcherGroup({ repos }: { repos: Repo[] }) {
 					}
 					toggle={watcher.enabled}
 				/>
-				<SettingsRow
-					name="Check every"
-					detail="How often Recoder reads each watched repository"
-					state={watcher.interval.state}
-				>
+				<SettingsRow name="Check every" state={watcher.interval.state}>
 					<Select
 						className="automations-interval"
 						contentClassName="automations-menu"

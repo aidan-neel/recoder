@@ -12,8 +12,6 @@ export interface PickNoticeView {
 	rest: string | null;
 	/** The install command to show, when the agent is missing. */
 	command: string | null;
-	/** What to do with the command: "Install it, then check again." */
-	commandHint: string | null;
 	/** The retry action's label; null when there is nothing to retry (no provider agent at all). */
 	retryLabel: string | null;
 }
@@ -25,7 +23,6 @@ function unreadyNotice(manager: AgentStatus | null): PickNoticeView {
 			lead: 'No agent connects providers.',
 			rest: 'Check the review server.',
 			command: null,
-			commandHint: null,
 			retryLabel: null
 		};
 	}
@@ -35,7 +32,6 @@ function unreadyNotice(manager: AgentStatus | null): PickNoticeView {
 			lead: `${manager.name} isn’t installed.`,
 			rest: null,
 			command: manager.install,
-			commandHint: 'Install it, then check again.',
 			retryLabel: 'Check again'
 		};
 	}
@@ -44,7 +40,6 @@ function unreadyNotice(manager: AgentStatus | null): PickNoticeView {
 		lead: `${manager.name} can’t run.`,
 		rest: manager.error,
 		command: null,
-		commandHint: null,
 		retryLabel: 'Check again'
 	};
 }
@@ -60,7 +55,6 @@ export function pickNotice(source: Exclude<ProviderSource, { state: 'loading' | 
 			lead: OFFLINE_TEXT,
 			rest: 'Start it, then try again.',
 			command: null,
-			commandHint: null,
 			retryLabel: 'Try again'
 		};
 	}
@@ -70,7 +64,6 @@ export function pickNotice(source: Exclude<ProviderSource, { state: 'loading' | 
 			lead: `${CHECK_FAILED}.`,
 			rest: source.message,
 			command: null,
-			commandHint: null,
 			retryLabel: 'Check again'
 		};
 	}

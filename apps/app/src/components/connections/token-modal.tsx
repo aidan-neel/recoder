@@ -10,11 +10,7 @@ import { useTokenModal, type TokenModalView } from '@/lib/connections/use-token-
 /** The GitLab URL field, for a self-managed GitLab. It starts from the saved host. */
 function HostField({ view }: { view: TokenModalView }) {
 	return (
-		<Field
-			label="GitLab URL"
-			hint="Leave blank for gitlab.com."
-			error={view.error?.field === 'host' ? view.error.text : undefined}
-		>
+		<Field label="GitLab URL" error={view.error?.field === 'host' ? view.error.text : undefined}>
 			<Input
 				value={view.host}
 				placeholder="gitlab.com"

@@ -7,8 +7,8 @@ import { SettingsRow } from '@/components/settings/settings-group';
 
 interface SetupStepProps {
 	name: string;
-	/** The step's one line: what to do, why it waits, or what is in place once it is done. */
-	detail: string;
+	/** The step's one line: why it waits, or what is in place once it is done. Null when the row says enough. */
+	detail: string | null;
 	done: boolean;
 	/** The first step not done yet: its action is the page's next one. */
 	current: boolean;
@@ -27,7 +27,7 @@ export function SetupStep({ name, detail, done, current, state, below, children 
 			<SettingsRow
 				leading={<StatusGlyph kind={done ? 'ok' : 'idle'} label={done ? 'Done' : 'To do'} />}
 				name={name}
-				detail={<SwapText mode="wait">{detail}</SwapText>}
+				detail={detail ? <SwapText mode="wait">{detail}</SwapText> : null}
 				state={state}
 			>
 				{children}

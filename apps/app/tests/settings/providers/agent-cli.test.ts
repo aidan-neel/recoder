@@ -31,15 +31,8 @@ describe('an agent CLI’s state', () => {
 	});
 
 	test('the fix is the install command while missing, the login command while signed out', () => {
-		expect(cliFix(agent({ installed: false }))).toEqual({
-			hint: 'Install it, then check again.',
-			command: 'npm i -g @anthropic-ai/claude-code'
-		});
-
-		expect(cliFix(agent({ signedIn: false }))).toEqual({
-			hint: 'Sign in from a terminal, then check again.',
-			command: 'claude login'
-		});
+		expect(cliFix(agent({ installed: false }))).toBe('npm i -g @anthropic-ai/claude-code');
+		expect(cliFix(agent({ signedIn: false }))).toBe('claude login');
 
 		expect(cliFix(agent({}))).toBeNull();
 		expect(cliFix(agent({ error: 'x' }))).toBeNull();

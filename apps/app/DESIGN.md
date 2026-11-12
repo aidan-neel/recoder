@@ -98,7 +98,8 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     admin rights.
 - **Automations**, **Guidelines** and **Settings** are single columns of
   titled cards (`SettingsGroup`), one setting a row (`SettingsRow`): the name
-  and one line about it on the left, the control on the right. A row saves on
+  on the left, with a detail line under it only when the line passes the
+  subtext rule (see Copy), and the control on the right. A row saves on
   change and shows where the save stands beside the control.
 
 ## Type
@@ -208,9 +209,16 @@ on gets 2px less padding than a side with text.
 
 ## Copy
 
-Short and plain. A heading is a title with no subtitle. A row's detail line
-says what the setting does at its current value. An error says what failed
-and, when the server gave one, the reason. No taglines.
+Short and plain. A heading is a title with no subtitle. An error says what
+failed and, when the server gave one, the reason. No taglines.
+
+**Subtext.** A line under a label, field or control stays only when it
+carries an error, a state, a limit or unit, a consequence (above all one that
+deletes or writes to a forge), where a secret is kept, or a fact needed to
+fill the field. A line that restates the label, the placeholder or the
+control, explains an ordinary control, or describes the feature in general
+goes. A needed fact moves to where it is used rather than being shortened. A
+line that comes and goes keeps its space, so nothing jumps.
 
 ## Code
 

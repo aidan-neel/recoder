@@ -7,9 +7,9 @@ import { ModelPicker } from '@/components/settings/model-picker';
 
 import { SetupStep } from './setup-step';
 
-/** The step's line: the model reviews run on once one is picked, else what its absence means. */
-function modelLine(done: boolean, name: string | null): string {
-	if (!done) return 'Reviews won’t start without one.';
+/** The step's line once a model is picked: the model reviews run on. Null before. */
+function modelLine(done: boolean, name: string | null): string | null {
+	if (!done) return null;
 
 	return name ? `Reviews run on ${name}` : 'Reviews are set up';
 }
