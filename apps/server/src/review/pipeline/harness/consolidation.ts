@@ -1,5 +1,6 @@
 import type { Finding } from '@recoder/shared';
 import { withTopics } from '../../guidelines/learned/topics.js';
+import { findLedgerRule, toFindingRule, type RuleLedger } from '../../guidelines/ledger/types.js';
 import { consolidateFindings } from '../consolidate-merge.js';
 import { orchestratorSays, publishCandidates, type ReviewRun } from './context.js';
 
@@ -14,13 +15,29 @@ function announceNothingFound(run: ReviewRun): void {
 	orchestratorSays(run.events, 'message_nothing_found', 'I finished without finding anything worth flagging.');
 }
 
+function withLedgerRules(findings: Finding[], ledger: RuleLedger | null): Finding[] {
+	if (!ledger) return findings;
+
+	return findings.map((finding) => {
+		if (finding.rule || !finding.ruleId) return finding;
+
+		const rule = findLedgerRule(ledger, finding.ruleId);
+
+		return rule ? { ...finding, rule: toFindingRule(rule) } : finding;
+	});
+}
+
 /**
  * The publishable candidates, merged by place without a model, so the same
- * candidates always give the same findings, each with its feedback topic and
- * quieted where people in the repository keep dismissing that topic.
+ * candidates always give the same findings, each with its quoted rule (when
+ * citing one), its feedback topic, and quieted where people keep dismissing it.
  */
 export function confirmedFindings(run: ReviewRun): Finding[] {
-	return withTopics(consolidateFindings(run.candidates, run.inventory), run.ledger, run.topicTallies);
+	return withTopics(
+		withLedgerRules(consolidateFindings(run.candidates, run.inventory), run.ledger),
+		run.ledger,
+		run.topicTallies
+	);
 }
 
 /**

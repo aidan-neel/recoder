@@ -73,6 +73,30 @@ test('a rule finding counts toward the rule text, so renumbering the ledger keep
 	expect(cited.topic?.id).toBe(ruleTopicId(ledger.rules[1]));
 });
 
+test('a rule with no verified quote gets its topic from its restatement, so two such rules stay apart', () => {
+	const source = { path: 'AGENTS.md', line: 1 };
+
+	const restated: RuleLedger = {
+		...ledger,
+		rules: [
+			{ id: 'R1', text: '', verbatim: false, restatement: 'Keep each file short.', level: 'mandatory', source },
+			{ id: 'R2', text: '', verbatim: false, restatement: 'Use docstrings.', level: 'mandatory', source }
+		]
+	};
+
+	const [first, second] = withTopics(
+		[
+			finding({ category: 'repo-rule', smell: undefined, ruleId: 'R1' }),
+			finding({ category: 'repo-rule', smell: undefined, ruleId: 'R2' })
+		],
+		restated,
+		new Map()
+	);
+
+	expect(first.topic?.label).toBe('Keep each file short.');
+	expect(second.topic?.id).not.toBe(first.topic?.id);
+});
+
 test('rules people act on rank first and rules they keep dismissing rank last', () => {
 	const ranked = rankRules(
 		ledger,

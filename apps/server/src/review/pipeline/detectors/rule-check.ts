@@ -1,7 +1,13 @@
 import { matchesGlob } from '../../chat/directive.js';
 import { ruleAppliesTo } from '../../guidelines/ledger/glob.js';
 import { ruleCitation } from '../../guidelines/ledger/ledger.js';
-import type { MechanicalCheck, RepoRule, RuleLedger } from '../../guidelines/ledger/types.js';
+import {
+	ruleSummary,
+	ruleWording,
+	type MechanicalCheck,
+	type RepoRule,
+	type RuleLedger
+} from '../../guidelines/ledger/types.js';
 import type { ReviewInventory } from '../inventory.js';
 import { braceLessLines, bracesApply } from './braces.js';
 import { clip, type AddedLines } from './changed-lines.js';
@@ -29,7 +35,7 @@ function ruleResult(rule: RepoRule, file: string, line: number, body: string, ev
 	return {
 		detector: 'rule-check',
 		category: 'repo-rule',
-		title: `Breaks ${rule.id}: ${clip(rule.text, 70)}`,
+		title: `Breaks ${rule.id}: ${clip(ruleSummary(rule), 70)}`,
 		body,
 		file,
 		line,
@@ -87,7 +93,7 @@ function perFile(rule: RepoRule, file: string, lines: number[], evidence: string
 			rule,
 			file,
 			line!,
-			`This added line breaks ${rule.id} (${ruleCitation(rule)}): ${rule.text}${more}`,
+			`This added line breaks ${rule.id} (${ruleCitation(rule)}): ${ruleWording(rule)}${more}`,
 			evidence
 		),
 		...(rest.length ? { relatedLocations: rest.slice(0, MAX_RELATED).map((other) => ({ file, line: other })) } : {})
@@ -174,7 +180,7 @@ function misplaced(
 				rule,
 				file.path,
 				1,
-				`This new file breaks ${rule.id} (${ruleCitation(rule)}): ${rule.text}`,
+				`This new file breaks ${rule.id} (${ruleCitation(rule)}): ${ruleWording(rule)}`,
 				`${file.path} matches ${check.files} but not ${check.mustMatch}.`
 			)
 		);

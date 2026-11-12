@@ -91,15 +91,20 @@ function traced(finding: Finding): string[] {
 	return [`Source path:\n\n${lines.join('\n')}`];
 }
 
-/** The rule quoted word for word with where it is written; its ledger id alone on reviews older than quoting it. */
+/**
+ * The rule quoted word for word with where it is written. A rule whose words were not found in its file shows its
+ * restatement as plain prose, never as a quote. Reviews older than quoting show the ledger id alone.
+ */
 function ruleSupport(finding: Finding): string[] {
 	const rule = finding.rule;
 
 	if (!rule) return finding.ruleId ? [`Rule ${inlineCode(finding.ruleId)}`] : [];
 
-	const source = locationText(rule.source.path, rule.source);
+	const cited = `Rule ${inlineCode(rule.id)} from ${inlineCode(locationText(rule.source.path, rule.source))}`;
 
-	return [quoteBlock(rule.text), `Rule ${inlineCode(rule.id)} from ${inlineCode(source)}`];
+	if (rule.text) return [quoteBlock(rule.text), cited];
+
+	return rule.restatement ? [inertProse(rule.restatement), cited] : [cited];
 }
 
 function reasonLine(verification: FindingVerification): string[] {
