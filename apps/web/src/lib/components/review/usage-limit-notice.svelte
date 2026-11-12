@@ -7,7 +7,7 @@
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import * as DropdownMenu from '@sivir-ui/svelte/components/dropdown-menu';
 	import { Spinner } from '@sivir-ui/svelte/components/spinner';
-	import { resolveEffort, type ModelEntry, type UsageLimit } from '@recoder/shared';
+	import { agentCli, resolveEffort, type ModelEntry, type UsageLimit } from '@recoder/shared';
 	import { modelSettingsUi, providerName, toModelOption } from '$lib/settings/model-settings.svelte';
 	import { errorToast } from '$lib/shell/notify';
 
@@ -24,11 +24,14 @@
 	}
 	let { limit, onRetry = null, retrying = false, class: className = '' }: Props = $props();
 
-	/** An agent CLI's id, a hosted provider id, or `custom`: the same keys a UsageLimit uses. */
+	/**
+	 * An agent CLI's id, a hosted provider id, or `custom`: the same keys a UsageLimit uses. An agent CLI's limit
+	 * names the CLI, except OpenCode's, whose names the hosted provider its model routes to (`entry.source`).
+	 */
 	function providerKey(entry: ModelEntry): string {
-		return entry.provider === 'codex' || entry.provider === 'claude-code' || entry.provider === 'devin'
-			? entry.provider
-			: (entry.source ?? 'custom');
+		const cli = agentCli(entry.provider);
+
+		return cli && !entry.source ? cli.id : (entry.source ?? 'custom');
 	}
 
 	/** Models on other providers, grouped by provider. */
