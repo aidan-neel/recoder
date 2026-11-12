@@ -4,8 +4,14 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { cliEnv } from '../cli-process';
 import type { ToolLease } from '../tools/mcp-host';
+import { deleteConversationSummaryRecords } from './antigravity-summaries';
 
 export type Env = Record<string, string | undefined>;
+
+export interface TrackedConversation {
+	env: Env;
+	id: string;
+}
 
 export const ANTIGRAVITY_LOGIN = 'agy acp --login';
 
@@ -66,6 +72,10 @@ export function antigravityEnv(env: Env): Record<string, string> {
 /** Encodes one user turn for `--input-format stream-json` on stdin. */
 export function stdinPrompt(text: string): string {
 	return `${JSON.stringify({ event: 'user', message: { content: text } })}\n`;
+}
+
+export function isConversationUuid(value: string): boolean {
+	return CONVERSATION_UUID.test(value);
 }
 
 /**
@@ -158,33 +168,108 @@ export async function writeWorkspaceFiles(
 	return { cwd, settingsFile };
 }
 
-export function isConversationUuid(value: string): boolean {
-	return CONVERSATION_UUID.test(value);
+interface ConversationArtifacts {
+	paths: string[];
+	summariesDb: string;
+	summariesProto: string;
 }
 
-/** Paths under `~/.gemini/antigravity-cli` where `agy` persists one conversation's SQLite store, metadata and brain dir. */
-function conversationPaths(env: Env, id: string): string[] {
-	if (!isConversationUuid(id)) return [];
+/**
+ * Per-conversation files and shared summary stores under `~/.gemini/antigravity-cli`. `agy` 1.5.6 offers neither a flag
+ * to skip session persistence nor a subcommand to delete one conversation, so Recoder removes the SQLite store,
+ * annotation, presence lock, brain directory, `conversation_summaries.db` rows and `jetbox_summaries_proto.pb` entry
+ * directly; note that an external `agy` session running concurrently does not take Recoder's SQLite lock when rewriting
+ * `jetbox_summaries_proto.pb`.
+ */
+function conversationArtifacts(env: Env, id: string): ConversationArtifacts | null {
+	if (!isConversationUuid(id)) return null;
 
 	const base = join(env.HOME || homedir(), '.gemini', 'antigravity-cli');
 
-	return [
-		join(base, 'conversations', `${id}.db`),
-		join(base, 'conversations', `${id}.db-wal`),
-		join(base, 'conversations', `${id}.db-shm`),
-		join(base, 'annotations', `${id}.pbtxt`),
-		join(base, 'brain', id)
-	];
+	return {
+		paths: [
+			join(base, 'conversations', `${id}.db`),
+			join(base, 'conversations', `${id}.db-wal`),
+			join(base, 'conversations', `${id}.db-shm`),
+			join(base, 'annotations', `${id}.pbtxt`),
+			join(base, 'presence', `${id}.lock`),
+			join(base, 'brain', id)
+		],
+		summariesDb: join(base, 'conversation_summaries.db'),
+		summariesProto: join(base, 'jetbox_summaries_proto.pb')
+	};
 }
 
-/** Deletes the SQLite database, annotation file and brain directory `agy` wrote for conversation `id`. */
-export async function removeConversation(env: Env, id: string): Promise<void> {
-	await Promise.all(conversationPaths(env, id).map((target) => rm(target, { recursive: true, force: true })));
+async function removeConversation(env: Env, id: string): Promise<void> {
+	const artifacts = conversationArtifacts(env, id);
+
+	if (!artifacts) return;
+
+	await Promise.all([
+		...artifacts.paths.map((target) => rm(target, { recursive: true, force: true })),
+		Promise.resolve().then(() => deleteConversationSummaryRecords(artifacts.summariesDb, artifacts.summariesProto, id))
+	]);
 }
 
-/** Synchronously deletes tracked in-flight conversations when the server exits. */
-export function sweepConversations(entries: Iterable<{ env: Env; id: string }>): void {
-	for (const { env, id } of entries) {
-		for (const target of conversationPaths(env, id)) rmSync(target, { recursive: true, force: true });
+/**
+ * Tracks conversations started by one completion or agent run, registering each ID in the adapter's shutdown sweep set
+ * as soon as `init` announces it and removing it only after {@link removeAll} has deleted its files and summary rows.
+ */
+export class ConversationTracker {
+	latestId: string | null = null;
+
+	private readonly local = new Map<string, TrackedConversation>();
+
+	constructor(
+		private readonly env: Env,
+		private readonly active: Set<TrackedConversation>
+	) {}
+
+	readonly add = (id: string): void => {
+		this.latestId = id;
+
+		if (this.local.has(id)) return;
+
+		const entry: TrackedConversation = { env: this.env, id };
+
+		this.local.set(id, entry);
+		this.active.add(entry);
+	};
+
+	async removeAll(): Promise<void> {
+		const entries = [...this.local.values()];
+
+		await Promise.all(
+			entries.map((entry) =>
+				removeConversation(entry.env, entry.id).then(() => {
+					this.local.delete(entry.id);
+					this.active.delete(entry);
+				})
+			)
+		);
 	}
+}
+
+/** Synchronously deletes every tracked in-flight conversation's files and summary rows when the server exits. */
+export function sweepConversations(entries: Set<TrackedConversation>): void {
+	let firstFailure: unknown = null;
+
+	for (const entry of [...entries]) {
+		const artifacts = conversationArtifacts(entry.env, entry.id);
+
+		if (!artifacts) {
+			entries.delete(entry);
+			continue;
+		}
+
+		try {
+			for (const target of artifacts.paths) rmSync(target, { recursive: true, force: true });
+			deleteConversationSummaryRecords(artifacts.summariesDb, artifacts.summariesProto, entry.id);
+			entries.delete(entry);
+		} catch (sweepError) {
+			firstFailure ??= sweepError;
+		}
+	}
+
+	if (firstFailure !== null) throw firstFailure;
 }

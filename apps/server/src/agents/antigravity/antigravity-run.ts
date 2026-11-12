@@ -9,11 +9,12 @@ import { ProcessRun } from '../process-run';
 import { effortArgs } from './antigravity-models';
 import {
 	ANTIGRAVITY_STREAM_ARGS,
+	ConversationTracker,
 	antigravityEnv,
-	removeConversation,
 	stdinPrompt,
 	writeWorkspaceFiles,
-	type Env
+	type Env,
+	type TrackedConversation
 } from './antigravity-process';
 import { RunReader } from './antigravity-run-reader';
 
@@ -24,7 +25,7 @@ interface AntigravityHost {
 	known: ReadonlyMap<string, ModelEntry>;
 	running: Set<Bun.Subprocess>;
 	scratch: Set<string>;
-	conversations: Set<{ env: Env; id: string }>;
+	conversations: Set<TrackedConversation>;
 }
 
 /**
@@ -33,10 +34,9 @@ interface AntigravityHost {
  * reaches the repository exclusively through Recoder's MCP host.
  */
 export class AntigravityRun extends ProcessRun {
-	private conversationId: string | null = null;
 	private cwd = '';
 	private settingsFile = '';
-	private readonly savedConversations = new Map<string, { env: Env; id: string }>();
+	private readonly conversations: ConversationTracker;
 
 	private constructor(
 		private readonly host: AntigravityHost,
@@ -44,6 +44,7 @@ export class AntigravityRun extends ProcessRun {
 		private readonly root: string
 	) {
 		super(options);
+		this.conversations = new ConversationTracker(host.env, host.conversations);
 	}
 
 	static async open(host: AntigravityHost, options: AgentRunOptions): Promise<AntigravityRun> {
@@ -73,16 +74,11 @@ export class AntigravityRun extends ProcessRun {
 
 	/** Removes the run's temporary workspace/settings and awaits deletion of every conversation `agy` saved for it. */
 	protected override async cleanUp(): Promise<void> {
-		this.host.scratch.delete(this.root);
-
-		const entries = [...this.savedConversations.values()];
-
-		this.savedConversations.clear();
-		for (const entry of entries) this.host.conversations.delete(entry);
-
 		await Promise.all([
-			rm(this.root, { recursive: true, force: true }),
-			...entries.map((entry) => removeConversation(entry.env, entry.id))
+			rm(this.root, { recursive: true, force: true }).then(() => {
+				this.host.scratch.delete(this.root);
+			}),
+			this.conversations.removeAll()
 		]);
 	}
 
@@ -99,9 +95,9 @@ export class AntigravityRun extends ProcessRun {
 
 	private async executeTurn(content: string, timeoutMs: number): Promise<AgentReply> {
 		const deadline = this.begin(timeoutMs);
-		const reader = new RunReader(this.options.onEvent);
+		const reader = new RunReader(this.options.onEvent, this.conversations.add);
 		const splitter = new LineSplitter(reader.line);
-		const wasResumed = this.conversationId !== null;
+		const wasResumed = this.conversations.latestId !== null;
 
 		try {
 			const exit = await streamCli({
@@ -120,24 +116,15 @@ export class AntigravityRun extends ProcessRun {
 
 			return wasResumed ? reader.finishResumedTurn(exit) : reader.finishInitialTurn(exit);
 		} catch (turnError) {
+			splitter.end();
+
 			return { text: '', error: deadline.failure(turnError, 'Antigravity run failed.') };
-		} finally {
-			if (reader.conversationId) this.trackConversation(reader.conversationId);
 		}
 	}
 
-	private trackConversation(id: string): void {
-		this.conversationId = id;
-
-		if (this.savedConversations.has(id)) return;
-
-		const entry = { env: this.host.env, id };
-
-		this.savedConversations.set(id, entry);
-		this.host.conversations.add(entry);
-	}
-
 	private args(): string[] {
+		const resumedId = this.conversations.latestId;
+
 		return [
 			...ANTIGRAVITY_STREAM_ARGS,
 			'--settings',
@@ -145,7 +132,7 @@ export class AntigravityRun extends ProcessRun {
 			'--model',
 			this.options.model,
 			...effortArgs(this.options.model, this.options.reasoningEffort, this.host.known),
-			...(this.conversationId ? ['--conversation', this.conversationId] : [])
+			...(resumedId ? ['--conversation', resumedId] : [])
 		];
 	}
 }

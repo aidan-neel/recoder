@@ -296,8 +296,6 @@ function flushUnstreamedTail(responseText: string, streamed: string, onText?: (d
  * conversation IDs as soon as they appear, and verifies the final `result` envelope.
  */
 export class ReplyReader {
-	conversationId: string | null = null;
-
 	private invalidConversationId: string | null = null;
 	private readonly seenConversations = new Set<string>();
 	private streamed = '';
@@ -385,8 +383,6 @@ export class ReplyReader {
 
 			return;
 		}
-
-		this.conversationId = candidate;
 
 		if (this.seenConversations.has(candidate)) return;
 

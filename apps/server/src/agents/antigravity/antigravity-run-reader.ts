@@ -43,10 +43,6 @@ export class RunReader {
 		this.reply = new ReplyReader({ onConversation });
 	}
 
-	get conversationId(): string | null {
-		return this.reply.conversationId;
-	}
-
 	readonly line = (raw: string): void => {
 		const classified = this.reply.readLine(raw);
 

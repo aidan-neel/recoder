@@ -6,7 +6,14 @@ import { AntigravityAgent } from '../../../src/agents/antigravity/antigravity';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import { JSON_MODE_INSTRUCTION } from '../../../src/models/llm/request-fields';
 import type { ChatOptions } from '../../../src/models/llm/types';
-import { fakeAntigravity, fakeAntigravityCalls, savedConversationPaths } from '../../helpers/fake-antigravity';
+import {
+	fakeAntigravity,
+	fakeAntigravityCalls,
+	hasProtoSummary,
+	savedConversationPaths,
+	seedConversationSummary,
+	summaryRowCount
+} from '../../helpers/fake-antigravity';
 import { allGone, spawnedPids } from '../../helpers/fake-claude';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
@@ -125,8 +132,13 @@ describe('AntigravityAgent.models and modelSettings', () => {
 });
 
 describe('AntigravityAgent.complete', () => {
-	test('streams reasoning and text, reports token usage, and removes scratch and conversation files', async () => {
+	test('streams reasoning and text, reports token usage, and removes scratch, lock and summary rows', async () => {
 		const env = await fakeAntigravity();
+		const home = env.HOME ?? '';
+		const otherConversationId = crypto.randomUUID();
+
+		seedConversationSummary(home, otherConversationId, 'Keep my personal chat');
+
 		const tokens: string[] = [];
 		const reasoning: string[] = [];
 		let usage: TokenUsage | undefined;
@@ -158,8 +170,12 @@ describe('AntigravityAgent.complete', () => {
 
 		if (logged) {
 			expect(existsSync(dirname(logged.cwd))).toBe(false);
+			expect(summaryRowCount(home, logged.conversationId)).toBe(0);
+			expect(summaryRowCount(home, otherConversationId)).toBe(3);
+			expect(hasProtoSummary(home, logged.conversationId)).toBe(false);
+			expect(hasProtoSummary(home, otherConversationId)).toBe(true);
 
-			for (const target of savedConversationPaths(env.HOME ?? '', logged.conversationId)) {
+			for (const target of savedConversationPaths(home, logged.conversationId)) {
 				expect(existsSync(target)).toBe(false);
 			}
 		}
@@ -289,5 +305,43 @@ describe('AntigravityAgent.complete', () => {
 		);
 
 		expect(timedOut.message).toBe('Model request timed out after 0s');
+	});
+
+	test('stopping the agent after init sweeps an in-flight call’s files, lock and summary rows', async () => {
+		const env = await fakeAntigravity({ FAKE_ANTIGRAVITY_MODE: 'spawn' });
+		const home = env.HOME ?? '';
+		const log = env.FAKE_ANTIGRAVITY_LOG ?? '';
+		const otherConversationId = crypto.randomUUID();
+
+		seedConversationSummary(home, otherConversationId, 'Keep my personal chat');
+
+		let markInitRead = () => {};
+
+		const initRead = new Promise<void>((resolve) => {
+			markInitRead = resolve;
+		});
+
+		const agent = new AntigravityAgent(env);
+		const pending = failure(agent, call({ onReasoning: () => markInitRead() }));
+		const [, pids] = await Promise.all([initRead, spawnedPids(log)]);
+		const [logged] = await fakeAntigravityCalls(log);
+
+		expect(logged).toBeDefined();
+		if (!logged) return;
+
+		expect(summaryRowCount(home, logged.conversationId)).toBe(3);
+
+		agent.stop();
+
+		expect(existsSync(dirname(logged.cwd))).toBe(false);
+		expect(summaryRowCount(home, logged.conversationId)).toBe(0);
+		expect(summaryRowCount(home, otherConversationId)).toBe(3);
+
+		for (const target of savedConversationPaths(home, logged.conversationId)) {
+			expect(existsSync(target)).toBe(false);
+		}
+
+		await pending;
+		expect(await allGone(pids)).toBe(true);
 	});
 });

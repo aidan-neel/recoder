@@ -1,15 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync } from 'node:fs';
-import { dirname } from 'node:path';
 import { z } from 'zod';
 import { AntigravityAgent } from '../../../src/agents/antigravity/antigravity';
-import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
+import type { AgentEvent } from '../../../src/agents/contract';
 import { UsageLimitError } from '../../../src/models/llm/errors';
 import { JSON_MODE_INSTRUCTION } from '../../../src/models/llm/request-fields';
-import { fakeAntigravity, fakeAntigravityCalls, savedConversationPaths } from '../../helpers/fake-antigravity';
+import { fakeAntigravity, fakeAntigravityCalls } from '../../helpers/fake-antigravity';
 import { fixtureReview, testPromptStops } from '../../helpers/native-agent';
-
-const PROMPT = { tools: true, timeoutMs: 10_000 };
+import { PROMPT, openRun, type OpenRunOptions } from './antigravity-fixture';
 
 const settingsSchema = z.object({
 	toolPermission: z.string(),
@@ -22,46 +19,6 @@ const settingsSchema = z.object({
 		deny: z.array(z.string())
 	})
 });
-
-interface OpenRunOptions {
-	tools?: string[];
-	home?: string;
-	env?: Record<string, string>;
-	user?: {
-		settings?: Record<string, unknown>;
-		hooks?: Record<string, unknown>;
-		mcpServers?: Record<string, unknown>;
-	};
-}
-
-/** Opens an `AntigravityRun` on the fake CLI in `mode`, collecting emitted events and the call log path. */
-async function openRun(
-	mode = 'answer',
-	options: OpenRunOptions = {}
-): Promise<{ run: AgentRun; events: AgentEvent[]; log: string; home: string }> {
-	const env = await fakeAntigravity(
-		{
-			FAKE_ANTIGRAVITY_MODE: mode,
-			...(options.home ? { HOME: options.home } : {}),
-			...options.env
-		},
-		options.user
-	);
-
-	const events: AgentEvent[] = [];
-
-	const run = await new AntigravityAgent(env).openRun({
-		model: 'gemini-3.8-flash',
-		reasoningEffort: 'low',
-		system: 'Review the diff.',
-		tools: options.tools ?? ['read_diff'],
-		runTool: async (name) => ({ text: `read ${name}`, isError: false }),
-		onEvent: (event) => events.push(event),
-		signal: new AbortController().signal
-	});
-
-	return { run, events, log: env.FAKE_ANTIGRAVITY_LOG ?? '', home: env.HOME ?? '' };
-}
 
 function after(args: string[], flag: string): string | undefined {
 	return args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined;
@@ -330,66 +287,6 @@ describe('AntigravityAgent.openRun', () => {
 	});
 
 	testPromptStops(() => openRun('spawn'));
-
-	test('closing a run deletes its temporary config and saved conversation on both succeeded and failed prompts', async () => {
-		const succeeded = await openRun('answer');
-		const failed = await openRun('crash');
-
-		await succeeded.run.prompt('Review it.', PROMPT);
-
-		const failedReply = await failed.run.prompt('Review it.', PROMPT);
-
-		expect(failedReply.error?.message).toContain('boom');
-
-		const [okCall] = await fakeAntigravityCalls(succeeded.log);
-		const [badCall] = await fakeAntigravityCalls(failed.log);
-
-		expect(okCall).toBeDefined();
-		expect(badCall).toBeDefined();
-		if (!okCall || !badCall) return;
-
-		for (const target of savedConversationPaths(succeeded.home, okCall.conversationId)) {
-			expect(existsSync(target)).toBe(true);
-		}
-
-		for (const target of savedConversationPaths(failed.home, badCall.conversationId)) {
-			expect(existsSync(target)).toBe(true);
-		}
-
-		await Promise.all([succeeded.run.close(), failed.run.close()]);
-
-		expect(existsSync(dirname(okCall.cwd))).toBe(false);
-		expect(existsSync(dirname(badCall.cwd))).toBe(false);
-
-		for (const target of savedConversationPaths(succeeded.home, okCall.conversationId)) {
-			expect(existsSync(target)).toBe(false);
-		}
-
-		for (const target of savedConversationPaths(failed.home, badCall.conversationId)) {
-			expect(existsSync(target)).toBe(false);
-		}
-	});
-
-	test('closing one run keeps another concurrent run’s saved conversation in the same home directory', async () => {
-		const first = await openRun('answer');
-		const second = await openRun('answer', { home: first.home });
-
-		await Promise.all([first.run.prompt('First.', PROMPT), second.run.prompt('Second.', PROMPT)]);
-		await first.run.close();
-
-		const [secondCall] = await fakeAntigravityCalls(second.log);
-
-		expect(secondCall).toBeDefined();
-		if (!secondCall) return;
-
-		const keptWhileOpen = savedConversationPaths(second.home, secondCall.conversationId).every((target) =>
-			existsSync(target)
-		);
-
-		await second.run.close();
-
-		expect(keptWhileOpen).toBe(true);
-	});
 });
 
 test('a review agent on an Antigravity model completes through the shared engine, reading evidence through the gate', async () => {

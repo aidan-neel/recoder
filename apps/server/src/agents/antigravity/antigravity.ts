@@ -13,12 +13,12 @@ import { ReplyReader, antigravityError, isSignedOutOutput } from './antigravity-
 import {
 	ANTIGRAVITY_LOGIN,
 	ANTIGRAVITY_STREAM_ARGS,
+	ConversationTracker,
 	antigravityEnv,
-	removeConversation,
 	stdinPrompt,
 	sweepConversations,
 	writeWorkspaceFiles,
-	type Env
+	type TrackedConversation
 } from './antigravity-process';
 import { AntigravityRun } from './antigravity-run';
 
@@ -47,7 +47,7 @@ export class AntigravityAgent extends CliAgent {
 	readonly signInFix = `Sign in with \`${ANTIGRAVITY_LOGIN}\`, or pick another model in Recoder settings.`;
 
 	private readonly known = new Map<string, ModelEntry>();
-	private readonly conversations = new Set<{ env: Env; id: string }>();
+	private readonly conversations = new Set<TrackedConversation>();
 
 	/** Lists the account's models via `agy --output-format json models`, aborting the child immediately on `signal`. */
 	async models(signal?: AbortSignal): Promise<ModelEntry[]> {
@@ -98,9 +98,15 @@ export class AntigravityAgent extends CliAgent {
 		const binary = this.requireBinary();
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-antigravity-'));
 		const deadline = callDeadline(opts);
-		const reader = new ReplyReader({ onText: onToken, onThinking: opts.onReasoning });
+		const conversations = new ConversationTracker(this.env, this.conversations);
+
+		const reader = new ReplyReader({
+			onText: onToken,
+			onThinking: opts.onReasoning,
+			onConversation: conversations.add
+		});
+
 		const splitter = new LineSplitter(reader.line);
-		let tracked: { env: Env; id: string } | null = null;
 
 		this.scratch.add(scratch);
 
@@ -136,26 +142,16 @@ export class AntigravityAgent extends CliAgent {
 
 			splitter.end();
 
-			if (reader.conversationId) {
-				tracked = { env: this.env, id: reader.conversationId };
-				this.conversations.add(tracked);
-			}
-
 			return reader.finish(opts.onUsage, exit);
 		} catch (error) {
-			if (reader.conversationId && !tracked) {
-				tracked = { env: this.env, id: reader.conversationId };
-				this.conversations.add(tracked);
-			}
-
+			splitter.end();
 			throw deadline.failure(error, 'Antigravity request failed.');
 		} finally {
-			this.scratch.delete(scratch);
-			if (tracked) this.conversations.delete(tracked);
-
 			await Promise.all([
-				rm(scratch, { recursive: true, force: true }),
-				...(reader.conversationId ? [removeConversation(this.env, reader.conversationId)] : [])
+				rm(scratch, { recursive: true, force: true }).then(() => {
+					this.scratch.delete(scratch);
+				}),
+				conversations.removeAll()
 			]);
 		}
 	}
@@ -164,7 +160,6 @@ export class AntigravityAgent extends CliAgent {
 	override stop(): void {
 		super.stop();
 		sweepConversations(this.conversations);
-		this.conversations.clear();
 	}
 
 	protected find(): string | null {
