@@ -29,7 +29,8 @@ export function codexEnv(env: Env): Record<string, string> {
 /**
  * Print mode with JSONL events, outside a git repository, with no `$CODEX_HOME/config.toml` (so none of its MCP
  * servers, hooks, profiles or model settings) and no `.rules` files. `--strict-config` makes a config field this CLI
- * version does not know fail the call instead of being ignored.
+ * version does not know fail the call instead of being ignored. The user's global `$CODEX_HOME/AGENTS.md` is still
+ * sent to the model on every call: codex-cli 0.167.0 has no flag or config key that leaves it out.
  */
 const PRINT_FLAGS = ['--json', '--skip-git-repo-check', '--ignore-user-config', '--ignore-rules', '--strict-config'];
 
@@ -65,9 +66,9 @@ const DISABLED_FEATURES = [
 
 /**
  * Config set for every call. Commands the model proposes run nowhere (read-only sandbox, never asked for
- * approval), web search is off, no project `AGENTS.md` is read, nothing
- * is written to the prompt history, the instruction blocks about the environment, permissions, apps, collaboration
- * modes and skills are left out, and no update check runs.
+ * approval), web search is off, no project `AGENTS.md` is read (the global one in `$CODEX_HOME` still is), nothing is
+ * written to the prompt history, the instruction blocks about the environment, permissions, apps, collaboration modes
+ * and skills are left out, and no update check runs.
  */
 const CALL_CONFIG: Record<string, string | number | boolean> = {
 	sandbox_mode: 'read-only',

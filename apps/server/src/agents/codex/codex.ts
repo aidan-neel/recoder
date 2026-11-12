@@ -27,7 +27,8 @@ const FORGET_TIMEOUT_MS = 10_000;
  *
  * The CLI signs in itself and keeps its sign-in under `CODEX_HOME`. Recoder never reads it; it runs the CLI
  * without the server's keys in its environment, without the user's config, rules, hooks, plugins, sub-agents or own
- * tools, and reads the JSONL events the CLI prints.
+ * tools, and reads the JSONL events the CLI prints. The user's global `$CODEX_HOME/AGENTS.md` still reaches the
+ * model: the CLI has no way to leave it out.
  */
 export class CodexAgent extends SessionCliAgent {
 	readonly id = 'codex';
