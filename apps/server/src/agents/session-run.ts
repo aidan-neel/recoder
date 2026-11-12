@@ -76,15 +76,16 @@ export abstract class SessionCliAgent extends CliAgent {
 	}
 
 	/**
-	 * A short CLI command under this adapter's environment, killed after `timeoutMs` or when `signal` aborts.
-	 * See {@link cliOutput}.
+	 * A short CLI command under this adapter's environment, killed after `timeoutMs` or when `signal` aborts, in
+	 * `cwd` when one is given. See {@link cliOutput}.
 	 */
 	protected output(
 		path: string,
 		args: string[],
 		timeoutMs: number,
-		signal?: AbortSignal
+		signal?: AbortSignal,
+		cwd?: string
 	): Promise<{ code: number; stdout: string; stderr: string }> {
-		return cliOutput([path, ...args], { env: this.childEnv(), timeoutMs, signal });
+		return cliOutput([path, ...args], { env: this.childEnv(), cwd, timeoutMs, signal });
 	}
 }

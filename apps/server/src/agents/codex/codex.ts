@@ -3,15 +3,7 @@ import { join } from 'node:path';
 import type { AgentStatus, ModelEntry, ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import {
-	callDeadline,
-	cliOutput,
-	emptyDirectory,
-	findCli,
-	removeScratchDir,
-	scratchDir,
-	stopOnShutdown
-} from '../cli-process';
+import { callDeadline, emptyDirectory, findCli, removeScratchDir, scratchDir, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import { SessionCliAgent } from '../session-run';
@@ -59,7 +51,15 @@ export class CodexAgent extends SessionCliAgent {
 	 */
 	async models(signal?: AbortSignal): Promise<ModelEntry[]> {
 		const path = this.requirePath();
-		const { stdout } = await this.command(path, ['debug', 'models'], MODELS_TIMEOUT_MS, signal);
+
+		const { stdout } = await this.output(
+			path,
+			['debug', 'models'],
+			MODELS_TIMEOUT_MS,
+			signal,
+			await emptyDirectory('codex-empty')
+		);
+
 		const models = parseCodexModels(stdout);
 
 		if (!models.length) throw new LlmError(0, 'Codex listed no models.');
@@ -144,7 +144,18 @@ export class CodexAgent extends SessionCliAgent {
 
 	/** `codex login status` exits 0 when signed in. */
 	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn'>> {
-		return { signedIn: (await this.command(path, ['login', 'status'], STATUS_TIMEOUT_MS)).code === 0 };
+		return {
+			signedIn:
+				(
+					await this.output(
+						path,
+						['login', 'status'],
+						STATUS_TIMEOUT_MS,
+						undefined,
+						await emptyDirectory('codex-empty')
+					)
+				).code === 0
+		};
 	}
 
 	/**
@@ -162,7 +173,10 @@ export class CodexAgent extends SessionCliAgent {
 	}
 
 	private async writeCatalog(path: string): Promise<string> {
-		const catalog = catalogWithoutSubagents((await this.command(path, ['debug', 'models'], MODELS_TIMEOUT_MS)).stdout);
+		const catalog = catalogWithoutSubagents(
+			(await this.output(path, ['debug', 'models'], MODELS_TIMEOUT_MS, undefined, await emptyDirectory('codex-empty')))
+				.stdout
+		);
 
 		if (!catalog) throw new LlmError(0, 'Codex did not list its models, so its sub-agents could not be turned off.');
 
@@ -187,19 +201,13 @@ export class CodexAgent extends SessionCliAgent {
 	 * has exited. Its exit code is not read: a session the CLI never saved has nothing to delete.
 	 */
 	protected async forget(path: string, session: string): Promise<void> {
-		await this.command(path, ['delete', '--force', session], FORGET_TIMEOUT_MS);
-	}
-
-	/** Run a short CLI command in an empty directory, so it never sees the user's files. See {@link cliOutput}. */
-	private async command(
-		path: string,
-		args: string[],
-		timeoutMs: number,
-		signal?: AbortSignal
-	): Promise<{ code: number; stdout: string }> {
-		const cwd = await emptyDirectory('codex-empty');
-
-		return cliOutput([path, ...args], { env: codexEnv(this.env), cwd, timeoutMs, signal });
+		await this.output(
+			path,
+			['delete', '--force', session],
+			FORGET_TIMEOUT_MS,
+			undefined,
+			await emptyDirectory('codex-empty')
+		);
 	}
 }
 
