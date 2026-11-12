@@ -40,18 +40,18 @@ import { captureIdentity } from './identity-capture';
 import { writeEvalFile } from './report';
 import { readReviewer, runReview, stopOnInterrupt } from './run-review';
 import { mixedReviewer, reportedModels } from './run-reviewer';
-import { readLabels, readTaskSet, selectTasks, subsetLines, type PrLabel } from './task-set';
+import { HOLDOUT_SET, readLabels, readTaskSet, selectTasks, subsetLines, type PrLabel, type TaskSet } from './task-set';
 import { runAgreement } from './benchmark-merge';
 import { benchmarkSummary } from './benchmark-score';
 import { parseShard, shardTasks, type ShardSpec } from './shard';
 
 const USAGE =
-	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--set <name> | --only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--mode auto --since <report.json>] [--allow-diff field,field] [--shard i/n] [--runs 1] [--repeat 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
+	'Usage: bun run --filter @recoder/server eval:benchmark -- --dataset <dir> [--set <name|holdout> | --only id,id] [--judge review|second|<model id>] [--judge-effort medium] [--resume <report.json>] [--replay|--reverify <report.json>] [--mode auto --since <report.json>] [--allow-diff field,field] [--shard i/n] [--runs 1] [--repeat 1] [--concurrency 3] [--base http://localhost:3001] [--timeout 45] [--no-baseline-cache]';
 
 interface Options extends RunOptions {
 	dataset: string;
 	only: string[] | null;
-	/** `--set`: the name of a task set in the dataset's `sets/` folder. */
+	/** `--set`: a task set's name in the dataset's `sets/` folder, or `holdout` for the labels marked holdout. */
 	set: string | null;
 	/**
 	 * Which model judges: the review model, the second model, or one named by
@@ -142,6 +142,11 @@ function parseOptions(): Options {
 		repeat: values.repeat ? positiveInt(values.repeat, 'repeat') : 1,
 		...run
 	};
+}
+
+/** The tasks `--set` names: `holdout` is the labels marked holdout, any other name a file in `sets/`. */
+function resolveSet(dataset: string, name: string): TaskSet | typeof HOLDOUT_SET {
+	return name === HOLDOUT_SET ? HOLDOUT_SET : readTaskSet(dataset, name);
 }
 
 /** Each forge repo once, since several PRs share one. */
@@ -287,7 +292,7 @@ async function main(): Promise<void> {
 
 	const chosen = selectTasks(readLabels(options.dataset), {
 		only: options.only,
-		set: options.set ? readTaskSet(options.dataset, options.set) : null
+		set: options.set ? resolveSet(options.dataset, options.set) : null
 	});
 
 	const assigned = options.shard ? shardTasks(chosen.labels, options.shard) : chosen.labels;
