@@ -1,6 +1,3 @@
-/* The demo plays apps/app's own review surface, so it takes the app's styles for the parts it shows. */
-@import '../../../app/src/styles/app.css';
-
 /* ───────── Hero tokens ───────── */
 /* The home page's entrance plays once per visit, so it runs longer than the app's everyday motion. */
 :root {
@@ -54,7 +51,7 @@
 /* The demo rises in after the headline. */
 .hero-stage {
 	position: relative;
-	margin-top: 56px;
+	margin-top: 72px;
 	animation: hero-stage-in var(--dur-hero-stage) var(--ease-menu) var(--hero-stage-delay) both;
 }
 @keyframes hero-stage-in {
@@ -67,18 +64,14 @@
 		transform: none;
 	}
 }
-/* A soft light behind the window that drifts slowly. */
+/* A faint neutral light behind the window's top edge that drifts slowly. */
 .hero-glow {
 	position: absolute;
-	top: -140px;
+	top: -120px;
 	right: 0;
 	left: 0;
-	height: 560px;
-	background: radial-gradient(
-		55% 50% at 50% 45%,
-		color-mix(in oklab, var(--text-primary) 10%, transparent),
-		transparent 72%
-	);
+	height: 480px;
+	background: radial-gradient(50% 45% at 50% 40%, rgb(var(--wash-rgb) / 0.07), transparent 72%);
 	filter: blur(40px);
 	pointer-events: none;
 	animation: hero-glow var(--dur-hero-glow) ease-in-out infinite alternate;
@@ -110,25 +103,17 @@
 	width: 1200px;
 	height: 760px;
 	overflow: hidden;
-	border: 1px solid var(--line-card);
-	border-radius: 18px;
+	border: 1px solid var(--line-canvas);
+	border-radius: 12px;
 	transform-origin: top left;
 	user-select: none;
 }
-/*
- * The app in its own skin. The skin's tokens come with the class; the text
- * settings the app puts on its page are said again here, because the site's
- * page has its own.
- */
+/* The app inside the window, on the page's skin and text settings. */
 .demo-app {
 	position: relative;
 	height: 100%;
 	background: var(--bg-canvas);
 	color: var(--text-primary);
-	font-family: var(--font-ui);
-	font-size: var(--font-size-body);
-	font-feature-settings: 'ss01', 'cv11';
-	line-height: 20px;
 }
 /* The app fills its browser window; here it fills this one, on one row as tall as the window, so a long page scrolls inside it. */
 .demo-app .app-frame {

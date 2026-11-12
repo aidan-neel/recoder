@@ -13,10 +13,13 @@ export const metadata: Metadata = {
 	title: 'Recoder'
 };
 
-/** Dark only: one canvas card on the chrome, the nav inside it and the page beside it. No visible page scrollbar. */
+/**
+ * Dark only, in the app's skin (`app-skin`): one canvas card on the chrome,
+ * the nav inside it and the page beside it. No visible page scrollbar.
+ */
 export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
-		<html lang="en" className="dark no-scrollbar">
+		<html lang="en" className="dark app-skin no-scrollbar">
 			<body>
 				<MotionRoot>
 					<div className="site-shell">

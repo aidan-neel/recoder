@@ -8,13 +8,14 @@ interface DemoFrameProps {
 }
 
 /**
- * The app in the window's skin, under an empty frame that hides it until
- * `shown`. The server paints the empty frame; the app fills in beneath it
- * after mount. Both are pictures of the app, so the site keeps its own landmarks.
+ * The app in the window, under an empty frame that hides it until `shown`.
+ * It takes its skin from the page, which wears the app's. The server paints
+ * the empty frame; the app fills in beneath it after mount. Both are pictures
+ * of the app, so the site keeps its own landmarks.
  */
 export function DemoFrame({ children, shown = false }: DemoFrameProps) {
 	return (
-		<div className="app-skin demo-app">
+		<div className="demo-app">
 			{children}
 			<div data-shown={shown} className="demo-cover" aria-hidden>
 				<div className="app-frame">

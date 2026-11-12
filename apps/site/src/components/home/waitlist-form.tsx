@@ -160,7 +160,7 @@ export function WaitlistForm() {
 					<Check aria-hidden />
 					You’re on the list. We’ll email {done} when hosting opens.
 				</p>
-				<Button variant="ghost" className="brief-action" onClick={changeAddress}>
+				<Button variant="ghost" size="lg" onClick={changeAddress}>
 					Use a different address
 				</Button>
 			</div>
@@ -196,7 +196,7 @@ export function WaitlistForm() {
 					<Button
 						type="submit"
 						variant="outline"
-						className="brief-action"
+						size="lg"
 						status={pending ? 'pending' : 'idle'}
 						pendingLabel="Joining"
 					>
@@ -212,7 +212,7 @@ export function WaitlistForm() {
 		);
 	} else {
 		view = (
-			<Button ref={focusOn('trigger')} variant="outline" className="brief-action" onClick={() => setOpen(true)}>
+			<Button ref={focusOn('trigger')} variant="outline" size="lg" onClick={() => setOpen(true)}>
 				Join the hosted waitlist
 			</Button>
 		);
