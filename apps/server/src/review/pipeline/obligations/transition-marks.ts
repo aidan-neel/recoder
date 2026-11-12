@@ -125,27 +125,23 @@ function compared(node: Node): StateWrite | null {
 	const left = field(node, 'left');
 	const right = field(node, 'right');
 	const [subject, value] = left && isState(left) ? [right, left] : [left, right];
-	const name = lastName(subject);
 
-	if (!subject || !value || !name || !STATE_FIELD.test(name) || !isState(value)) return null;
-
-	return {
-		field: name,
-		subject: squash(subject.text),
-		value: squash(value.text),
-		literal: true,
-		verb: 'tests'
-	};
+	return testedState(subject, value);
 }
 
 /** `case 'running':` in a `switch (job.status)`. */
 function switchedOn(node: Node): StateWrite | null {
-	const value = field(node, 'value');
 	const statement = node.parent?.parent;
 	const subject = statement?.type === 'switch_statement' ? unwrap(field(statement, 'value') ?? statement) : null;
+
+	return testedState(subject, field(node, 'value'));
+}
+
+/** A state field tested against a literal state, or null when either side is something else. */
+function testedState(subject: Node | null, value: Node | null): StateWrite | null {
 	const name = lastName(subject);
 
-	if (!value || !subject || !name || !STATE_FIELD.test(name) || !isState(value)) return null;
+	if (!subject || !value || !name || !STATE_FIELD.test(name) || !isState(value)) return null;
 
 	return { field: name, subject: squash(subject.text), value: squash(value.text), literal: true, verb: 'tests' };
 }
