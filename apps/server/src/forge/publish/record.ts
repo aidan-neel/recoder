@@ -6,20 +6,16 @@ import { db } from '../../store';
  * survive a restart and the page can link to it. Leaves the review's own
  * `updatedAt` alone: a comment write is not a change to the review.
  */
-function save(reviewId: string, patch: (review: Review) => Partial<Review>): Review | undefined {
-	const current = db.reviews.get(reviewId);
-
-	if (!current) return undefined;
-
-	return db.reviews.set({ ...current, ...patch(current) });
+async function save(reviewId: string, patch: (review: Review) => Partial<Review>): Promise<Review | undefined> {
+	return db.reviews.update(reviewId, (current) => (current ? { ...current, ...patch(current) } : undefined));
 }
 
 /** Merge `patch` into the review's summary comment record; an `error` key set to undefined clears it. */
-export function savePullComment(
+export async function savePullComment(
 	reviewId: string,
 	patch: Partial<Omit<ReviewPullComment, 'updatedAt'>>
-): Review | undefined {
-	return save(reviewId, (review) => {
+): Promise<Review | undefined> {
+	return await save(reviewId, (review) => {
 		const next: ReviewPullComment = {
 			state: 'posting',
 			...review.pullComment,
@@ -33,10 +29,10 @@ export function savePullComment(
 	});
 }
 
-export function saveFindingComment(
+export async function saveFindingComment(
 	reviewId: string,
 	findingId: string,
 	comment: ReviewFindingComment
-): Review | undefined {
-	return save(reviewId, (review) => ({ findingComments: { ...review.findingComments, [findingId]: comment } }));
+): Promise<Review | undefined> {
+	return await save(reviewId, (review) => ({ findingComments: { ...review.findingComments, [findingId]: comment } }));
 }

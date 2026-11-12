@@ -12,12 +12,12 @@ const app = new Hono();
  * one a passed review kept for replay. Candidates of unfinished units and
  * detector results are not in a checkpoint.
  */
-app.get('/:id/candidates', (c) => {
-	const review = requireReview(c);
+app.get('/:id/candidates', async (c) => {
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 
-	const kept = reviewCheckpoints.get(review.id) ?? reviewReplays.get(review.id);
+	const kept = (await reviewCheckpoints.get(review.id)) ?? (await reviewReplays.get(review.id));
 
 	if (!kept) return c.json({ error: 'this review kept no candidates' }, 404);
 

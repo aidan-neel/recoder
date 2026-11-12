@@ -69,7 +69,8 @@ class OpenCodeRun<T> {
 	constructor(
 		private readonly opts: JsonAgentOptions<T>,
 		private readonly agent: OpenCodeAgent,
-		limits: AgentLimits
+		limits: AgentLimits,
+		initialDiscussion: string
 	) {
 		this.limits = limits;
 		this.endpoint = llmEndpoint(opts.config);
@@ -86,7 +87,7 @@ class OpenCodeRun<T> {
 			opts,
 			opts.agentId ?? newAgentId(),
 			{ isFinal: () => this.finalTurn(), nextIsFinal: () => this.relay.finished + 1 >= toolTurns(opts) },
-			opts.getDiscussion?.() ?? ''
+			initialDiscussion
 		);
 	}
 
@@ -310,7 +311,7 @@ class OpenCodeRun<T> {
 
 	async toAnswer(): Promise<AgentResult<T>> {
 		const { opts } = this;
-		const discussion = opts.getDiscussion?.() ?? '';
+		const discussion = (await opts.getDiscussion?.()) ?? '';
 		let text = discussion ? `${opts.user}\n\n${DISCUSSION_NOTE}\n${discussion}` : opts.user;
 
 		this.session = await this.open();
@@ -363,7 +364,7 @@ export async function runOpenCodeAgent<T>(
 		return { value: null, error: err instanceof Error ? err.message : 'no model slot' };
 	}
 
-	const run = new OpenCodeRun(opts, agent, limits);
+	const run = new OpenCodeRun(opts, agent, limits, (await opts.getDiscussion?.()) ?? '');
 
 	try {
 		return await run.toAnswer();

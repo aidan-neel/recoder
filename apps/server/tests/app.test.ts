@@ -45,7 +45,7 @@ describe('repos', () => {
 });
 
 test('a fix request with no model set up says so instead of a 500', async () => {
-	const repo = db.repos.set({
+	const repo = await db.repos.set({
 		id: 'repo-nomodel-fix',
 		name: 'demo',
 		url: 'https://github.com/example/demo',
@@ -55,9 +55,9 @@ test('a fix request with no model set up says so instead of a 500', async () => 
 		updatedAt: ''
 	});
 
-	const review = createReviewSession({ repoId: repo.id, prNumber: 1 });
+	const review = await createReviewSession({ repoId: repo.id, prNumber: 1 });
 
-	reviewDiffs.set(review.id, 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b\n');
+	await reviewDiffs.set(review.id, 'diff --git a/x.ts b/x.ts\n--- a/x.ts\n+++ b/x.ts\n@@ -1 +1 @@\n-a\n+b\n');
 
 	const res = await postJson(`/api/reviews/${review.id}/fixes/suggest`, {
 		agent: 'correctness',
@@ -133,18 +133,16 @@ describe('reviews + command runner', () => {
 
 	test('DELETE /api/reviews/:id removes the review and its diff', async () => {
 		const createdReview = await requestReview('demo-delete', 'https://github.com/example/demo-delete', 9);
-
 		const review = await createdReview.json();
 
-		reviewDiffs.set(review.id, 'diff --git a/a.ts b/a.ts');
+		await reviewDiffs.set(review.id, 'diff --git a/a.ts b/a.ts');
 
 		const deleted = await app.request(`/api/reviews/${review.id}`, { method: 'DELETE' });
 
 		expect(deleted.status).toBe(200);
 		expect((await deleted.json()).deleted).toBe(true);
-
 		expect((await app.request(`/api/reviews/${review.id}`)).status).toBe(404);
-		expect(reviewDiffs.get(review.id)).toBeUndefined();
+		expect(await reviewDiffs.get(review.id)).toBeUndefined();
 		expect((await app.request(`/api/reviews/${review.id}`, { method: 'DELETE' })).status).toBe(404);
 	});
 
@@ -178,10 +176,9 @@ describe('reviews + command runner', () => {
 		/** A review with a diff and a real checkout of the PR head, so fixes are built against the file. */
 		async function seedReviewWithDiff(): Promise<string> {
 			const createdReview = await requestReview('demo-discuss', 'https://github.com/example/demo', 7);
-
 			const review = await createdReview.json();
 
-			reviewDiffs.set(
+			await reviewDiffs.set(
 				review.id,
 				'diff --git a/a.ts b/a.ts\n--- a/a.ts\n+++ b/a.ts\n@@ -1,3 +1,4 @@\n ctx\n-old\n+new\n tail'
 			);
@@ -197,9 +194,7 @@ describe('reviews + command runner', () => {
 
 		test('409 without a fetched diff, or a model answer if the diff lands first', async () => {
 			const createdReview = await requestReview('demo-nodiff', 'https://github.com/example/demo', 8);
-
 			const review = await createdReview.json();
-
 			const res = await postJson(`/api/reviews/${review.id}/discuss`, body());
 
 			expect([409, 200, 502]).toContain(res.status);
@@ -213,7 +208,6 @@ describe('reviews + command runner', () => {
 
 			try {
 				const id = await seedReviewWithDiff();
-
 				const res = await postJson(`/api/reviews/${id}/discuss`, body());
 
 				expect(res.status).toBe(200);
@@ -250,7 +244,6 @@ describe('reviews + command runner', () => {
 
 			try {
 				const id = await seedReviewWithDiff();
-
 				const res = await postJson(`/api/reviews/${id}/discuss/stream`, body());
 
 				expect(res.status).toBe(200);
@@ -289,7 +282,6 @@ describe('reviews + command runner', () => {
 
 			try {
 				const id = await seedReviewWithDiff();
-
 				const res = await postJson(`/api/reviews/${id}/fixes/suggest`, body());
 
 				expect(res.status).toBe(200);
@@ -319,7 +311,6 @@ describe('reviews + command runner', () => {
 
 			try {
 				const id = await seedReviewWithDiff();
-
 				const res = await postJson(`/api/reviews/${id}/fixes/suggest`, body());
 
 				expect(res.status).toBe(502);

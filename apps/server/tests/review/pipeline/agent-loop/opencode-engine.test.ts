@@ -36,13 +36,13 @@ const startAgent = useFakeOpenCode();
 
 const originalDataDir = process.env.RECODER_DATA_DIR;
 
-beforeAll(() => {
+beforeAll(async () => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-engine-'));
-	closeStore();
+	await closeStore();
 });
 
-afterAll(() => {
-	closeStore();
+afterAll(async () => {
+	await closeStore();
 	if (originalDataDir === undefined) delete process.env.RECODER_DATA_DIR;
 	else process.env.RECODER_DATA_DIR = originalDataDir;
 });
@@ -175,7 +175,7 @@ test('aborting the review stops the run and deletes its OpenCode session', async
 });
 
 test('an OpenCode 1.x server that names the session on the part alone still has every step counted with its tokens', async () => {
-	const review = db.reviews.set(testReview({ repoId: 'missing-repo' }));
+	const review = await db.reviews.set(testReview({ repoId: 'missing-repo' }));
 
 	try {
 		const result = await withReviewMetrics(review.id, 'pipeline', async () =>
@@ -184,12 +184,12 @@ test('an OpenCode 1.x server that names the session on the part alone still has 
 
 		expect(result.value?.done).toBe(true);
 
-		expect(getReviewMetrics(review.id)?.total).toMatchObject({
+		expect((await getReviewMetrics(review.id))?.total).toMatchObject({
 			calls: 2,
 			usage: { inputTokens: 22, outputTokens: 12, totalTokens: 34 }
 		});
 	} finally {
-		db.reviews.delete(review.id);
-		reviewMetrics.delete(review.id);
+		await db.reviews.delete(review.id);
+		await reviewMetrics.delete(review.id);
 	}
 });

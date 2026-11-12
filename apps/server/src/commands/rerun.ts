@@ -1,23 +1,54 @@
 import { emptyReviewProgress, type Review, type ReviewProgress } from '@recoder/shared';
 import { isReviewConfigured } from '../models/models';
-import { emitReviewEvent } from '../review/session/events';
+import { flushReviewEvents, emitReviewEvent } from '../review/session/events';
 import type { ReviewCheckpoint } from '../review/session/review-checkpoint';
 import { db, reviewCheckpoints, reviewProgress, reviewReplays } from '../store';
-import { runReviewPipeline, touch } from './pipeline';
+import { runReviewPipeline } from './pipeline';
 
-/** The review if it exists and has a reviewer model to run with; `action` finishes the error message. */
-function requireRunnable(reviewId: string, action: string): Review {
-	const current = db.reviews.get(reviewId);
+type Restart = 'continue' | 'rerun' | 'replay';
 
+function requireRestartable(current: Review | undefined, action: Restart): Review {
 	if (!current) throw new Error('review not found');
-	if (!isReviewConfigured()) throw new Error(`Add a reviewer model in settings before ${action}.`);
+
+	if (!isReviewConfigured()) {
+		const phrase =
+			action === 'continue'
+				? 'continuing the review'
+				: action === 'rerun'
+					? 'running the review again'
+					: 'replaying the review';
+
+		throw new Error(`Add a reviewer model in settings before ${phrase}.`);
+	}
+
+	if (action === 'continue' && current.status !== 'failed') throw new Error('Only a failed review can be continued.');
+	if (action === 'rerun' && current.status !== 'passed' && current.status !== 'failed')
+		throw new Error('This review is already running.');
+	if (action === 'replay' && current.status !== 'passed') throw new Error('Only a passed review can be replayed.');
 
 	return current;
 }
 
-/** Queues the review again with `patch` applied and runs the pipeline; `reset` clears what the client shows of the last run. */
-function requeue(reviewId: string, patch: Partial<Review>, reset: boolean): Review {
-	const review = touch(reviewId, { ...patch, status: 'queued' });
+async function claimRestart(reviewId: string, action: Restart): Promise<Review> {
+	const next = await db.reviews.update(reviewId, (stored) => {
+		const current = requireRestartable(stored, action);
+		const now = new Date().toISOString();
+
+		return {
+			...current,
+			status: 'queued',
+			updatedAt: now,
+			...(action === 'continue' ? {} : { startedAt: now, summary: null, findings: [], unconfirmed: [] })
+		};
+	});
+
+	if (!next) throw new Error('review not found');
+
+	return next;
+}
+
+function requeue(review: Review, reset: boolean): Review {
+	const reviewId = review.id;
 
 	emitReviewEvent(reviewId, {
 		type: 'step',
@@ -32,13 +63,15 @@ function requeue(reviewId: string, patch: Partial<Review>, reset: boolean): Revi
 }
 
 /** A fresh run of a finished review keeps only the conversation, and shows no findings until it finishes. */
-function startOver(reviewId: string, checkpoint: ReviewCheckpoint | null): Review {
-	if (checkpoint) reviewCheckpoints.set(checkpoint);
-	else reviewCheckpoints.delete(reviewId);
+async function startOver(review: Review, checkpoint: ReviewCheckpoint | null): Promise<Review> {
+	const reviewId = review.id;
 
-	reviewProgress.set(conversationOnly(reviewProgress.get(reviewId) ?? emptyReviewProgress(reviewId)));
+	if (checkpoint) await reviewCheckpoints.set(checkpoint);
+	else await reviewCheckpoints.delete(reviewId);
+	await flushReviewEvents(reviewId);
+	await reviewProgress.update(reviewId, (current) => conversationOnly(current ?? emptyReviewProgress(reviewId)));
 
-	return requeue(reviewId, { startedAt: new Date().toISOString(), summary: null, findings: [], unconfirmed: [] }, true);
+	return requeue(review, true);
 }
 
 /**
@@ -46,27 +79,21 @@ function startOver(reviewId: string, checkpoint: ReviewCheckpoint | null): Revie
  * are kept from the last checkpoint; without one (or when the PR moved on)
  * the review runs again from the start in the same session.
  */
-export function continueReviewSession(reviewId: string): Review {
-	const current = requireRunnable(reviewId, 'continuing the review');
+export async function continueReviewSession(reviewId: string): Promise<Review> {
+	const review = await claimRestart(reviewId, 'continue');
 
-	if (current.status !== 'failed') throw new Error('Only a failed review can be continued.');
-
-	return requeue(reviewId, {}, false);
+	return requeue(review, false);
 }
-
 /**
  * Review a finished session again from the start, in place, because the
  * developer asked for it in the chat. The conversation stays and is the new
  * run's brief. The last run's findings, units and checkpoint are dropped.
  */
-export function rerunReviewSession(reviewId: string): Review {
-	const current = requireRunnable(reviewId, 'running the review again');
+export async function rerunReviewSession(reviewId: string): Promise<Review> {
+	const review = await claimRestart(reviewId, 'rerun');
 
-	if (current.status !== 'passed' && current.status !== 'failed') throw new Error('This review is already running.');
-
-	return startOver(reviewId, null);
+	return startOver(review, null);
 }
-
 /**
  * Replay a passed review from the checkpoint it kept. The reviewers'
  * candidates and verdicts stay, and the detectors, any verification still
@@ -74,16 +101,16 @@ export function rerunReviewSession(reviewId: string): Review {
  * without paying for the reviewers. `reverify` verifies every candidate again,
  * the disproved ones included.
  */
-export function replayReviewSession(reviewId: string, reverify: boolean): Review {
-	const current = requireRunnable(reviewId, 'replaying the review');
+export async function replayReviewSession(reviewId: string, reverify: boolean): Promise<Review> {
+	requireRestartable(await db.reviews.get(reviewId), 'replay');
 
-	if (current.status !== 'passed') throw new Error('Only a passed review can be replayed.');
-
-	const kept = reviewReplays.get(reviewId);
+	const kept = await reviewReplays.get(reviewId);
 
 	if (!kept) throw new Error('This review kept nothing to replay.');
 
-	return startOver(reviewId, reverify ? withVerdictsCleared(kept) : kept);
+	const review = await claimRestart(reviewId, 'replay');
+
+	return startOver(review, reverify ? withVerdictsCleared(kept) : kept);
 }
 
 /** The checkpoint with every verifier's verdict, and what it made publishable, undone, so each candidate is verified again. */

@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { env } from './env';
+import { flushReviewEvents } from './review/session/events';
 import auth from './routes/auth';
 import health from './routes/health';
 import guidelines from './routes/guidelines';
@@ -36,6 +37,14 @@ function handleError(err: Error, c: Context): Response {
 export const app = new Hono();
 
 app.use('*', logger());
+
+app.use('/api/reviews/:id/*', async (c, next) => {
+	const id = c.req.param('id');
+
+	await flushReviewEvents(id);
+	await next();
+	await flushReviewEvents(id);
+});
 
 app.use('*', cors(corsOptions));
 

@@ -16,23 +16,23 @@ import { keyFor, pending, recordChatMessage } from './chat-replies';
  * and can be stopped like any reply.
  */
 export async function prepareDraftSession(reviewId: string, opener: boolean): Promise<void> {
-	const review = db.reviews.get(reviewId);
-	const repo = review && db.repos.get(review.repoId);
+	const review = await db.reviews.get(reviewId);
+	const repo = review && (await db.repos.get(review.repoId));
 
 	if (!review || !repo) return;
 
 	const fetched = await fetchPull(repo, review.prNumber).catch(() => null);
 
-	if (fetched?.diff && db.reviews.get(reviewId)?.status === 'draft' && !reviewDiffs.get(reviewId))
-		reviewDiffs.set(reviewId, fetched.diff);
-	if (opener) startDraftOpener(reviewId, fetched);
+	if (fetched?.diff && (await db.reviews.get(reviewId))?.status === 'draft' && !(await reviewDiffs.get(reviewId)))
+		await reviewDiffs.set(reviewId, fetched.diff);
+	if (opener) await startDraftOpener(reviewId, fetched);
 }
 
 /**
  * Stream the orchestrator's first pass. A failed opener never blocks the session: it falls back to a
  * plain prompt, and keeps the failure only when signing in to ChatGPT or a usage limit explains it.
  */
-function startDraftOpener(
+async function startDraftOpener(
 	reviewId: string,
 	fetched: {
 		pr: {
@@ -47,9 +47,9 @@ function startDraftOpener(
 		};
 		diff: string;
 	} | null
-): void {
-	const review = db.reviews.get(reviewId);
-	const repo = review && db.repos.get(review.repoId);
+): Promise<void> {
+	const review = await db.reviews.get(reviewId);
+	const repo = review && (await db.repos.get(review.repoId));
 
 	if (!review || !repo || review.status !== 'draft') return;
 
@@ -78,8 +78,8 @@ function startDraftOpener(
 	void withReviewMetrics(reviewId, 'discussion', async () => {
 		let lastUpdate = 0;
 
-		const flush = (status: 'streaming' | 'done' | 'error') => {
-			if (!db.reviews.get(reviewId)) {
+		const flush = async (status: 'streaming' | 'done' | 'error') => {
+			if (!(await db.reviews.get(reviewId))) {
 				controller.abort();
 
 				return;
@@ -101,7 +101,7 @@ function startDraftOpener(
 				{
 					...config,
 					signal: controller.signal,
-					timeoutMs: 60_000,
+					timeoutMs: 60000,
 					maxTokens: 4000,
 					thinking: false,
 					onRate: (rate) => (reply.outputRate = rate),
@@ -117,18 +117,18 @@ function startDraftOpener(
 					]
 				},
 				(chunk) => {
-					reply.text = (reply.text + chunk).slice(0, 16_000);
+					reply.text = (reply.text + chunk).slice(0, 16000);
 
 					if (Date.now() - lastUpdate > 100) {
 						lastUpdate = Date.now();
-						flush('streaming');
+						if (!controller.signal.aborted) recordChatMessage(reviewId, { ...reply, status: 'streaming' });
 					}
 				}
 			);
 
 			if (controller.signal.aborted) throw new Error('Reply stopped.');
 			reply.text = reply.text.trim();
-			flush('done');
+			await flush('done');
 		} catch (error) {
 			const partial = reply.text.trim();
 
@@ -138,9 +138,9 @@ function startDraftOpener(
 			const failure = controller.signal.aborted ? null : modelFailure(error, config, '');
 
 			if (failure?.signIn || failure?.usageLimit) reply.failure = failure;
-			flush(partial && !controller.signal.aborted ? 'error' : 'done');
+			await flush(partial && !controller.signal.aborted ? 'error' : 'done');
 		} finally {
 			pending.delete(key);
 		}
-	});
+	}).catch((error) => console.error('[chat] could not persist review opener', error));
 }

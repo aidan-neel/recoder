@@ -22,11 +22,11 @@ const MAX_TITLE_CHARS = 200;
  * it by, or the 404/409 that ends the request. The server's own copy of the
  * finding decides what is remembered, never the client's.
  */
-function dismissalTarget(
+async function dismissalTarget(
 	c: Context,
 	findingId: string
-): { review: Review; finding: Finding; fingerprint: string } | Response {
-	const review = requireReview(c);
+): Promise<{ review: Review; finding: Finding; fingerprint: string } | Response> {
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 
@@ -34,7 +34,7 @@ function dismissalTarget(
 
 	if (!finding) return c.json({ error: 'finding not found' }, 404);
 
-	const diff = reviewDiffs.get(review.id);
+	const diff = await reviewDiffs.get(review.id);
 
 	if (!diff) return c.json({ error: 'no diff yet' }, 409);
 
@@ -54,7 +54,7 @@ app.post('/:id/dismissals', async (c) => {
 
 	if (body instanceof Response) return body;
 
-	const target = dismissalTarget(c, body.findingId);
+	const target = await dismissalTarget(c, body.findingId);
 
 	if (target instanceof Response) return target;
 
@@ -77,8 +77,8 @@ app.post('/:id/dismissals', async (c) => {
  * Forget the finding's dismissal, so later reviews may report it again. Every held key that matches the finding goes,
  * the old place-only form included; the dismissal of another finding split from the same line stays.
  */
-app.delete('/:id/dismissals/:findingId', (c) => {
-	const target = dismissalTarget(c, c.req.param('findingId'));
+app.delete('/:id/dismissals/:findingId', async (c) => {
+	const target = await dismissalTarget(c, c.req.param('findingId'));
 
 	if (target instanceof Response) return target;
 

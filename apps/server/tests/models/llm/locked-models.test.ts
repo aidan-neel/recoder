@@ -13,14 +13,14 @@ const realFetch = globalThis.fetch;
 const cleanups = resetAfterEach();
 
 /** A stored review the metrics count toward, removed after the test. */
-function storedReview(): string {
+async function storedReview(): Promise<string> {
 	const review = testReview({ repoId: 'missing-repo', headSha: 'head' });
 
-	db.reviews.set(review);
+	await db.reviews.set(review);
 
-	cleanups.push(() => {
-		db.reviews.delete(review.id);
-		reviewMetrics.delete(review.id);
+	cleanups.push(async () => {
+		await db.reviews.delete(review.id);
+		await reviewMetrics.delete(review.id);
 	});
 
 	return review.id;
@@ -73,7 +73,7 @@ test('a Bun.serve handler runs in the context that created the server, not the r
 });
 
 test('a pipeline that runs without locked models records each miss and warns once', async () => {
-	const reviewId = storedReview();
+	const reviewId = await storedReview();
 	const warn = spyOn(console, 'warn').mockImplementation(() => {});
 
 	pickModels([...FIRST, ...SECOND]);
@@ -88,7 +88,7 @@ test('a pipeline that runs without locked models records each miss and warns onc
 			)
 		);
 
-		const { runs, calls } = storedRuns(reviewId);
+		const { runs, calls } = await storedRuns(reviewId);
 
 		expect(runs?.map(({ startedAt: _, ...run }) => run)).toEqual([
 			{ index: 0, orchestrator: null, subagent: null, lockMisses: 2 }
@@ -102,13 +102,13 @@ test('a pipeline that runs without locked models records each miss and warns onc
 });
 
 test('outside a pipeline the live pick is used, with no run and no miss recorded', async () => {
-	const reviewId = storedReview();
+	const reviewId = await storedReview();
 	const warn = spyOn(console, 'warn').mockImplementation(() => {});
 
 	pickModels([...FIRST, ...SECOND]);
 
 	try {
-		const before = withReviewMetrics(reviewId, 'discussion', () => configForOrchestrator().model);
+		const before = await withReviewMetrics(reviewId, 'discussion', () => configForOrchestrator().model);
 
 		saveReviewSettings({ orchestratorModelId: SECOND[0], specialistModelId: SECOND[1] });
 
@@ -119,7 +119,7 @@ test('outside a pipeline the live pick is used, with no run and no miss recorded
 		});
 
 		expect([before, ...after, configForOrchestrator().model]).toEqual([FIRST[0], ...SECOND, SECOND[0]]);
-		expect(storedRuns(reviewId).runs).toBeUndefined();
+		expect((await storedRuns(reviewId)).runs).toBeUndefined();
 		expect(warn).not.toHaveBeenCalled();
 	} finally {
 		warn.mockRestore();

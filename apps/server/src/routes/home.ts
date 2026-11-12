@@ -37,7 +37,7 @@ app.post('/brief', async (c) => {
 	if (!isReviewConfigured()) return c.json({ error: 'No orchestrator model configured.' }, 503);
 
 	try {
-		return c.json(await homeBrief(body, db.reviews.list()));
+		return c.json(await homeBrief(body, await db.reviews.list()));
 	} catch (err) {
 		if (err instanceof LlmError) return c.json({ error: err.message }, 502);
 		throw err;

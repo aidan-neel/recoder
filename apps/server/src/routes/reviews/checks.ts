@@ -43,11 +43,11 @@ async function reviewChecks(review: Review, repo: Repo) {
 
 /** CI checks for the PR head. */
 app.get('/:id/checks', async (c) => {
-	const review = requireReview(c);
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 
-	const repo = db.repos.get(review.repoId);
+	const repo = await db.repos.get(review.repoId);
 
 	if (!repo || review.source === 'stub') return c.json({ error: 'checks are unavailable for this review' }, 409);
 

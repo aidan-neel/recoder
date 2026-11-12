@@ -16,11 +16,10 @@ function findingLine(finding: Review['findings'][number]): string {
  * a different head commit count: a rerun of the same head must see the same
  * sources as the first run, or its intent would differ.
  */
-export function pastReviewSources(repoId: string, prNumber: number, headSha: string): IntentSource[] {
+export async function pastReviewSources(repoId: string, prNumber: number, headSha: string): Promise<IntentSource[]> {
 	const latestPerHead = new Map<string, Review>();
 
-	const finished = db.reviews
-		.list()
+	const finished = (await db.reviews.list())
 		.filter(
 			(review) =>
 				review.repoId === repoId &&

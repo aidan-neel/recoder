@@ -11,6 +11,7 @@ import {
 	type TokenUsage
 } from '@recoder/shared';
 import { db, reviewMetrics } from '../store';
+import { metricWrites } from '../storage/persistence-queue';
 import { lockedModels } from './llm/locked-models';
 
 /**
@@ -33,10 +34,7 @@ export interface PipelineRun {
 export type RunTokenCall = TokenCall & { run?: number; lockMiss?: true };
 
 /** A review's stored metrics with its pipeline runs; rows older than recording runs have none. */
-export type StoredMetrics = Omit<NonNullable<ReturnType<typeof reviewMetrics.get>>, 'calls'> & {
-	runs?: PipelineRun[];
-	calls: RunTokenCall[];
-};
+export type StoredMetrics = NonNullable<Awaited<ReturnType<typeof reviewMetrics.get>>>;
 
 /** Who the running code spends tokens for; `run` is set for pipeline work only. */
 interface MetricsOwner {
@@ -48,8 +46,12 @@ interface MetricsOwner {
 /** Async context covers nested agent loops and retries without threading review IDs through model config. */
 const context = new AsyncLocalStorage<MetricsOwner>();
 
-function storedMetrics(reviewId: string): StoredMetrics | undefined {
-	return reviewMetrics.get(reviewId) as StoredMetrics | undefined;
+function queueFor(reviewId: string) {
+	return metricWrites.for(reviewId);
+}
+
+async function flushReviewMetrics(reviewId: string): Promise<void> {
+	await metricWrites.drain(reviewId);
 }
 
 /** Opens a run segment on the review's metrics with the models locked for it, and returns its index. */
@@ -66,30 +68,37 @@ function openRun(metrics: StoredMetrics): number {
 		lockMisses: 0
 	};
 
-	const next: StoredMetrics = { ...metrics, runs: [...runs, run] };
-
-	reviewMetrics.set(next);
+	metrics.runs = [...runs, run];
 
 	return index;
 }
 
 /** Counts calls under `run` toward `reviewId`; a pipeline run also opens its own run segment. */
-export function withReviewMetrics<T>(reviewId: string, scope: TokenScope, run: () => T): T {
-	if (!db.reviews.get(reviewId)) return context.run({ reviewId, scope }, run);
+export async function withReviewMetrics<T>(reviewId: string, scope: TokenScope, run: () => T): Promise<Awaited<T>> {
+	const owner: MetricsOwner = { reviewId, scope };
 
-	const stored = storedMetrics(reviewId);
+	if (await db.reviews.get(reviewId)) {
+		await flushReviewMetrics(reviewId);
 
-	const metrics = stored ?? {
-		id: reviewId,
-		startedAt: new Date().toISOString(),
-		pipelineTracked: scope === 'pipeline',
-		calls: []
-	};
+		await reviewMetrics.update(reviewId, (stored) => {
+			const metrics: StoredMetrics = stored ?? {
+				id: reviewId,
+				startedAt: new Date().toISOString(),
+				pipelineTracked: scope === 'pipeline',
+				calls: []
+			};
 
-	if (scope === 'pipeline') return context.run({ reviewId, scope, run: openRun(metrics) }, run);
-	if (!stored) reviewMetrics.set(metrics);
+			if (scope === 'pipeline') owner.run = openRun(metrics);
 
-	return context.run({ reviewId, scope }, run);
+			return metrics;
+		});
+	}
+
+	try {
+		return await context.run(owner, run);
+	} finally {
+		await flushReviewMetrics(reviewId);
+	}
 }
 
 const stages = new AsyncLocalStorage<TokenStage>();
@@ -113,42 +122,37 @@ export function withModelTally<T>(tally: ModelTally, run: () => T): T {
 }
 
 /** The pipeline run the running code belongs to, with its review's stored metrics. */
-function currentRun(): { owner: MetricsOwner; metrics: StoredMetrics; run: PipelineRun } | null {
+function updateCurrentRun(mutate: (run: PipelineRun, owner: MetricsOwner) => void): void {
 	const owner = context.getStore();
 
-	if (owner?.run === undefined) return null;
+	if (owner?.run === undefined) return;
 
-	const metrics = storedMetrics(owner.reviewId);
-	const run = metrics?.runs?.[owner.run];
+	const index = owner.run;
 
-	return metrics && run ? { owner, metrics, run } : null;
+	queueFor(owner.reviewId).push(async () => {
+		await reviewMetrics.update(owner.reviewId, (stored) => {
+			const metrics = stored;
+			const run = metrics?.runs?.[index];
+
+			if (run) mutate(run, owner);
+
+			return metrics;
+		});
+	});
 }
 
-/** Warns the first time a pipeline run goes without locked models, so a run that mixes models says so in the log. */
-function warnLockMiss(owner: MetricsOwner, run: PipelineRun): void {
-	if (run.lockMisses === 1)
-		console.warn(`[metrics] review ${owner.reviewId} run ${run.index} used a model it did not lock`);
-}
-
-/** Records that code running inside a pipeline resolved a model from the live settings. Outside a pipeline it does nothing. */
 export function recordLockMiss(): void {
-	const current = currentRun();
-
-	if (!current) return;
-
-	current.run.lockMisses++;
-	reviewMetrics.set(current.metrics);
-	warnLockMiss(current.owner, current.run);
+	updateCurrentRun((run, owner) => {
+		run.lockMisses++;
+		if (run.lockMisses === 1)
+			console.warn(`[metrics] review ${owner.reviewId} run ${run.index} used a model it did not lock`);
+	});
 }
 
-/** Records the token budget the running pipeline reviews under, so its token counts can be compared with other budgets'. */
 export function recordTokenBudget(tokenBudget: TokenBudget): void {
-	const current = currentRun();
-
-	if (!current) return;
-
-	current.run.tokenBudget = tokenBudget;
-	reviewMetrics.set(current.metrics);
+	updateCurrentRun((run) => {
+		run.tokenBudget = tokenBudget;
+	});
 }
 
 export function trackTokenCall(model: string, provider: TokenCall['provider']) {
@@ -172,17 +176,22 @@ export function trackTokenCall(model: string, provider: TokenCall['provider']) {
 	};
 
 	const save = () => {
-		if (!owner || !db.reviews.get(owner.reviewId)) return;
+		if (!owner) return;
 
-		const metrics = reviewMetrics.get(owner.reviewId);
+		const saved = structuredClone(call);
 
-		if (!metrics) return;
+		queueFor(owner.reviewId).push(async () => {
+			await reviewMetrics.update(owner.reviewId, (metrics) => {
+				if (!metrics) return metrics;
 
-		const index = metrics.calls.findIndex((item) => item.id === call.id);
+				const index = metrics.calls.findIndex((item) => item.id === saved.id);
 
-		if (index < 0) metrics.calls.push(call);
-		else metrics.calls[index] = call;
-		reviewMetrics.set(metrics);
+				if (index < 0) metrics.calls.push(saved);
+				else metrics.calls[index] = saved;
+
+				return metrics;
+			});
+		});
 	};
 
 	save();
@@ -252,8 +261,10 @@ function stageAggregates(calls: TokenCall[]): ReviewMetrics['stages'] {
 	})).filter((aggregate) => aggregate.calls > 0);
 }
 
-export function getReviewMetrics(reviewId: string): ReviewMetrics | null {
-	const stored = storedMetrics(reviewId);
+export async function getReviewMetrics(reviewId: string): Promise<ReviewMetrics | null> {
+	await flushReviewMetrics(reviewId);
+
+	const stored = await reviewMetrics.get(reviewId);
 
 	if (!stored) return null;
 

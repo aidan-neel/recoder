@@ -21,7 +21,14 @@ function sameSecret(secret: string, header: string | undefined): boolean {
 	return header !== undefined && timingSafeEqual(digest(secret), digest(header));
 }
 
-function parseJson(raw: string): { ok: true; value: unknown } | { ok: false } {
+function parseJson(raw: string):
+	| {
+			ok: true;
+			value: unknown;
+	  }
+	| {
+			ok: false;
+	  } {
 	try {
 		return { ok: true, value: JSON.parse(raw) };
 	} catch {
@@ -30,8 +37,8 @@ function parseJson(raw: string): { ok: true; value: unknown } | { ok: false } {
 }
 
 /** Hand a recognised event to the watcher's rules; anything else is acknowledged and ignored. */
-function answer(c: Context, hook: PullHook | null): Response {
-	const outcome: HookOutcome = hook ? handlePullHook(hook) : { received: true, reviewCreated: false };
+async function answer(c: Context, hook: PullHook | null): Promise<Response> {
+	const outcome: HookOutcome = hook ? await handlePullHook(hook) : { received: true, reviewCreated: false };
 
 	return c.json(outcome, outcome.reviewCreated ? 201 : 200);
 }
@@ -61,7 +68,7 @@ app.post('/github', async (c) => {
 
 	if (event === 'ping') return c.json({ received: true, message: 'pong' });
 
-	return answer(c, githubHook(event, payload.value));
+	return await answer(c, githubHook(event, payload.value));
 });
 
 /**
@@ -78,7 +85,7 @@ app.post('/gitlab', async (c) => {
 
 	if (!payload.ok) return c.json({ error: 'invalid json' }, 400);
 
-	return answer(c, gitlabHook(payload.value));
+	return await answer(c, gitlabHook(payload.value));
 });
 
 export default app;

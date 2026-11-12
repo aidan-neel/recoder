@@ -21,21 +21,21 @@ async function disconnect(controller: AbortController): Promise<void> {
 }
 
 /** Stores a running GitHub review titled `prTitle` and returns it. */
-function storeRunningReview(prTitle: string): Review {
+async function storeRunningReview(prTitle: string): Promise<Review> {
 	const review = testReview({ headSha: 'abc', status: 'running', prTitle });
 
-	db.reviews.set(review);
+	await db.reviews.set(review);
 
 	return review;
 }
 
-test('streamed traces match persisted reconnect snapshots and keep assignment ownership', () => {
+test('streamed traces match persisted reconnect snapshots and keep assignment ownership', async () => {
 	const id = crypto.randomUUID();
 	const first = { id: 'turn-a', assignmentId: 'correctness-a', role: 'correctness', text: 'First' };
 
 	reportReviewReasoning(id, first);
 
-	const startedAt = reviewProgress.get(id)!.reasoning![0].at;
+	const startedAt = (await reviewProgress.get(id))!.reasoning![0].at;
 
 	reportReviewReasoning(id, { ...first, text: 'First update' });
 	reportReviewReasoning(id, { ...first, id: 'turn-b', assignmentId: 'correctness-b', text: 'Different assignment' });
@@ -63,9 +63,9 @@ test('streamed traces match persisted reconnect snapshots and keep assignment ow
 
 	let client = emptyReviewProgress(id);
 
-	for (const event of reviewEventBuffer(id)) client = applyProgressMessage(client, event);
+	for (const event of await reviewEventBuffer(id)) client = applyProgressMessage(client, event);
 
-	const stored = reviewProgress.get(id)!;
+	const stored = (await reviewProgress.get(id))!;
 
 	expect(client).toEqual(stored);
 	expect(client.reasoning).toHaveLength(2);
@@ -76,25 +76,25 @@ test('streamed traces match persisted reconnect snapshots and keep assignment ow
 	expect(applyProgressMessage(emptyReviewProgress(id), { type: 'snapshot', snapshot: stored })).toEqual(client);
 });
 
-test('a thought keeps the time it stopped, so a later update does not stretch it', () => {
+test('a thought keeps the time it stopped, so a later update does not stretch it', async () => {
 	const id = crypto.randomUUID();
 	const turn = { id: 'turn-a', assignmentId: 'correctness-a', text: 'Planning' };
 
 	reportReviewReasoning(id, { ...turn, status: 'streaming' });
-	expect(reviewProgress.get(id)!.reasoning![0].endedAt).toBeUndefined();
+	expect((await reviewProgress.get(id))!.reasoning![0].endedAt).toBeUndefined();
 
 	reportReviewReasoning(id, { ...turn, status: 'done' });
 
-	const { endedAt } = reviewProgress.get(id)!.reasoning![0];
+	const { endedAt } = (await reviewProgress.get(id))!.reasoning![0];
 
 	expect(endedAt).toBeString();
 
 	reportReviewReasoning(id, { ...turn, text: 'Planning, again', status: 'error' });
-	expect(reviewProgress.get(id)!.reasoning![0].endedAt).toBe(endedAt);
+	expect((await reviewProgress.get(id))!.reasoning![0].endedAt).toBe(endedAt);
 });
 
 test('terminal SSE delivers final findings and stays connected for subsequent conversation', async () => {
-	const review = storeRunningReview('Test');
+	const review = await storeRunningReview('Test');
 	const { id } = review;
 
 	const response = await app.request(`/api/reviews/${id}/events`);
@@ -109,7 +109,7 @@ test('terminal SSE delivers final findings and stays connected for subsequent co
 		findings: [{ id: 'finding-1', file: 'a.ts', line: 1, severity: 'warning' as const, message: 'Check caller' }]
 	};
 
-	db.reviews.set(final);
+	await db.reviews.set(final);
 	emitReviewEvent(id, { type: 'done', message: 'Review complete', data: { outcome: 'complete' } });
 
 	const event = JSON.parse(
@@ -152,18 +152,18 @@ test('terminal SSE delivers final findings and stays connected for subsequent co
 	expect(listenerCount(id)).toBe(0);
 });
 
-test('task snapshots retain early completions after event history overflows', () => {
+test('task snapshots retain early completions after event history overflows', async () => {
 	const id = crypto.randomUUID();
 
 	reportReviewTask(id, { id: 'early', agent: 'security', label: 'Scout 1', status: 'done', message: 'Completed' });
 	for (let i = 0; i < 410; i++) emitReviewEvent(id, { type: 'log', message: 'Activity ' + i });
-	expect(reviewEventBuffer(id)).toHaveLength(400);
-	expect(reviewProgress.get(id)?.tasks.early.status).toBe('done');
-	expect(reviewProgress.get(id)?.activity.length).toBeLessThanOrEqual(100);
+	expect(await reviewEventBuffer(id)).toHaveLength(400);
+	expect((await reviewProgress.get(id))?.tasks.early.status).toBe('done');
+	expect((await reviewProgress.get(id))?.activity.length).toBeLessThanOrEqual(100);
 });
 
 test('reconnecting starts with a complete snapshot and cancelling unsubscribes', async () => {
-	const { id } = storeRunningReview('Test');
+	const { id } = await storeRunningReview('Test');
 
 	reportReviewTask(id, { id: 'fetch', label: 'Metadata', status: 'done', message: 'Fetched' });
 
@@ -177,7 +177,7 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 	expect(listenerCount(id)).toBe(1);
 	await reader.cancel();
 	expect(listenerCount(id)).toBe(0);
-	db.reviews.set({ ...db.reviews.get(id)!, status: 'failed', summary: 'Server restarted' });
+	await db.reviews.set({ ...(await db.reviews.get(id))!, status: 'failed', summary: 'Server restarted' });
 
 	const completed = await app.request('/api/reviews/' + id + '/events');
 	const completedReader = completed.body!.getReader();
@@ -196,16 +196,15 @@ test('reconnecting starts with a complete snapshot and cancelling unsubscribes',
 });
 
 test('a real HTTP subscription survives idle periods and still delivers review and chat updates', async () => {
-	const review = storeRunningReview('SSE liveness');
+	const review = await storeRunningReview('SSE liveness');
 	const { id } = review;
-
 	const server = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: app.fetch });
 	const controller = new AbortController();
 	let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
 
 	try {
 		const response = await fetch(new URL(`/api/reviews/${id}/events`, server.url), {
-			signal: AbortSignal.any([controller.signal, AbortSignal.timeout(18_000)])
+			signal: AbortSignal.any([controller.signal, AbortSignal.timeout(18000)])
 		});
 
 		reader = response.body!.getReader();
@@ -222,7 +221,7 @@ test('a real HTTP subscription survives idle periods and still delivers review a
 		expect(await read()).toMatchObject({ type: 'heartbeat', status: 'running' });
 		expect(await read()).toMatchObject({ type: 'heartbeat', status: 'running' });
 		expect(listenerCount(id)).toBe(1);
-		db.reviews.set({ ...review, status: 'passed' });
+		await db.reviews.set({ ...review, status: 'passed' });
 		emitReviewEvent(id, { type: 'done', message: 'Complete' });
 		expect((await read()).review.status).toBe('passed');
 
@@ -249,9 +248,9 @@ test('a real HTTP subscription survives idle periods and still delivers review a
 		controller.abort();
 		await reader?.cancel().catch(() => {});
 		server.stop(true);
-		db.reviews.delete(id);
+		await db.reviews.delete(id);
 	}
-}, 20_000);
+}, 20000);
 
 test('plan and assignment snapshots stay readable for older clients', () => {
 	const assignment = {
@@ -308,7 +307,7 @@ test('opaque operation failures leave an explicit failed task', async () => {
 		})
 	).rejects.toThrow('Clone failed');
 
-	expect(reviewProgress.get(id)?.tasks.sandbox).toMatchObject({ status: 'error', message: 'Clone failed' });
+	expect((await reviewProgress.get(id))?.tasks.sandbox).toMatchObject({ status: 'error', message: 'Clone failed' });
 });
 
 test('model progress distinguishes concurrency queue from an active request', async () => {

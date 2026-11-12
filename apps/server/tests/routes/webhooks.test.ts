@@ -36,7 +36,7 @@ test('a GitLab webhook needs the configured secret token', async () => {
 test('a GitLab mention matches the tracked repository whatever URL form it uses', async () => {
 	const at = new Date().toISOString();
 
-	db.repos.set({
+	await db.repos.set({
 		id: 'acme-app',
 		name: 'group/app',
 		url: 'https://gitlab.acme.test/group/app',
@@ -51,6 +51,5 @@ test('a GitLab mention matches the tracked repository whatever URL form it uses'
 	const body = (await (await send()).json()) as { reason?: string };
 
 	expect(body.reason).toContain('reviewer model');
-
-	db.repos.delete('acme-app');
+	await db.repos.delete('acme-app');
 });

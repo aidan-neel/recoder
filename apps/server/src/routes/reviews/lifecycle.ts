@@ -37,8 +37,8 @@ const app = new Hono();
  * The running review's control, or the 404/409 response that ends the request.
  * A review that is not running has nothing to cancel, pause or resume.
  */
-function runningControl(c: Context): { reviewId: string; control: ReviewControl } | Response {
-	const review = requireReview(c);
+async function runningControl(c: Context): Promise<{ reviewId: string; control: ReviewControl } | Response> {
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 
@@ -53,9 +53,9 @@ function runningControl(c: Context): { reviewId: string; control: ReviewControl 
  * Run `start` on a review session, answering 202 with its result. A missing
  * review is a 404; any other refusal (already running, nothing to continue) a 409.
  */
-function sessionAction(c: Context, start: (id: string) => unknown, fallback: string): Response {
+async function sessionAction(c: Context, start: (id: string) => Promise<unknown>, fallback: string): Promise<Response> {
 	try {
-		return c.json(start(c.req.param('id') ?? ''), 202);
+		return c.json(await start(c.req.param('id') ?? ''), 202);
 	} catch (err) {
 		const message = err instanceof Error ? err.message : fallback;
 
@@ -64,13 +64,13 @@ function sessionAction(c: Context, start: (id: string) => unknown, fallback: str
 }
 
 /** Every review without its context record, which only the single-review route serves: the list is polled and the record is large. */
-app.get('/', (c) => c.json(db.reviews.list().map(({ context: _context, ...review }) => review)));
+app.get('/', async (c) => c.json((await db.reviews.list()).map(({ context: _context, ...review }) => review)));
 
 /** Compact live progress per review, for the home dashboard's recent-session list. */
-app.get('/progress-summaries', (c) => {
+app.get('/progress-summaries', async (c) => {
 	const summaries: Record<string, { tasksDone: number; tasksTotal: number; agents: number }> = {};
 
-	for (const progress of reviewProgress.list()) {
+	for (const progress of await reviewProgress.list()) {
 		const tasks = Object.values(progress.tasks ?? {});
 
 		summaries[progress.id] = {
@@ -83,59 +83,59 @@ app.get('/progress-summaries', (c) => {
 	return c.json(summaries);
 });
 
-app.get('/:id/metrics', (c) => {
+app.get('/:id/metrics', async (c) => {
 	c.header('Cache-Control', 'no-store');
 
-	const review = requireReview(c);
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 
-	return c.json(getReviewMetrics(review.id));
+	return c.json(await getReviewMetrics(review.id));
 });
 
 /**
  * The review's metrics row as stored, null when it has none: every call with the pipeline run that made it, and
  * each run's locked models, so a benchmark can record which models its review ran on.
  */
-app.get('/:id/metrics/stored', (c) => {
+app.get('/:id/metrics/stored', async (c) => {
 	c.header('Cache-Control', 'no-store');
 
-	const review = requireReview(c);
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 
-	return c.json((reviewMetrics.get(review.id) as StoredMetrics | undefined) ?? null);
+	return c.json(((await reviewMetrics.get(review.id)) as StoredMetrics | undefined) ?? null);
 });
 
-app.get('/:id', (c) => {
-	const review = requireReview(c);
+app.get('/:id', async (c) => {
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 
 	return c.json(review);
 });
 
-app.delete('/:id', (c) => {
-	const review = requireReview(c);
+app.delete('/:id', async (c) => {
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 
 	getReviewControl(review.id)?.cancel();
-	db.reviews.delete(review.id);
+	await db.reviews.delete(review.id);
 	cancelReviewChats(review.id);
-	reviewDiffs.delete(review.id);
-	reviewMetrics.delete(review.id);
-	reviewCheckpoints.delete(review.id);
-	reviewReplays.delete(review.id);
+	await reviewDiffs.delete(review.id);
+	await reviewMetrics.delete(review.id);
+	await reviewCheckpoints.delete(review.id);
+	await reviewReplays.delete(review.id);
 	reviewSandboxes.delete(review.id);
-	clearReviewEvents(review.id);
+	await clearReviewEvents(review.id);
 
 	return c.json({ deleted: true });
 });
 
 /** Stop a running review. Findings so far are kept; it can be restarted. */
-app.post('/:id/cancel', (c) => {
-	const running = runningControl(c);
+app.post('/:id/cancel', async (c) => {
+	const running = await runningControl(c);
 
 	if (running instanceof Response) return running;
 
@@ -146,8 +146,8 @@ app.post('/:id/cancel', (c) => {
 });
 
 /** Hold a running review: in-flight model calls stop and re-run on resume. */
-app.post('/:id/pause', (c) => {
-	const running = runningControl(c);
+app.post('/:id/pause', async (c) => {
+	const running = await runningControl(c);
 
 	if (running instanceof Response) return running;
 
@@ -162,8 +162,8 @@ app.post('/:id/pause', (c) => {
 	return c.json({ paused: true });
 });
 
-app.post('/:id/resume', (c) => {
-	const running = runningControl(c);
+app.post('/:id/resume', async (c) => {
+	const running = await runningControl(c);
 
 	if (running instanceof Response) return running;
 
@@ -192,7 +192,11 @@ app.post('/:id/replay', async (c) => {
 
 	if (body instanceof Response) return body;
 
-	return sessionAction(c, (id) => replayReviewSession(id, body.reverify ?? false), 'Could not replay the review.');
+	return sessionAction(
+		c,
+		async (id) => await replayReviewSession(id, body.reverify ?? false),
+		'Could not replay the review.'
+	);
 });
 
 app.post('/', async (c) => {
@@ -201,9 +205,9 @@ app.post('/', async (c) => {
 	if (body instanceof Response) return body;
 
 	try {
-		if (body.start !== false) return c.json(queueReview(body), 201);
+		if (body.start !== false) return c.json(await queueReview(body), 201);
 
-		const review = createReviewSession(body);
+		const review = await createReviewSession(body);
 
 		void prepareDraftSession(review.id, isReviewConfigured());
 

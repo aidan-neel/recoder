@@ -398,7 +398,7 @@ export function agentEvents(
 	const meta = { assignmentId: item.id, role: recordFor(records, item.id).role };
 
 	return {
-		getDiscussion: () => ctx.events?.getDiscussion?.(item.id) ?? '',
+		getDiscussion: async () => (await ctx.events?.getDiscussion?.(item.id)) ?? '',
 		onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: item.id, model }),
 		onProgress: progressReporter(item, records, ctx, model),
 		onLog: (message) => ctx.events?.onLog?.(message, meta),

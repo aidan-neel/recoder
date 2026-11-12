@@ -30,7 +30,7 @@ const createRepoSchema = z
 
 const app = new Hono();
 
-app.get('/', (c) => c.json(db.repos.list()));
+app.get('/', async (c) => c.json(await db.repos.list()));
 
 app.post('/', async (c) => {
 	const body = await parseBody(c, createRepoSchema);
@@ -44,21 +44,21 @@ app.post('/', async (c) => {
 	const now = new Date().toISOString();
 	const repo: Repo = { id: crypto.randomUUID(), ...body, createdAt: now, updatedAt: now };
 
-	return c.json(db.repos.set(repo), 201);
+	return c.json(await db.repos.set(repo), 201);
 });
 
-app.get('/:id', (c) => {
-	const repo = db.repos.get(c.req.param('id'));
+app.get('/:id', async (c) => {
+	const repo = await db.repos.get(c.req.param('id'));
 
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
 
 	return c.json(repo);
 });
 
-app.delete('/:id', (c) => {
+app.delete('/:id', async (c) => {
 	const id = c.req.param('id');
 
-	if (!db.repos.delete(id)) return c.json({ error: 'repo not found' }, 404);
+	if (!(await db.repos.delete(id))) return c.json({ error: 'repo not found' }, 404);
 	pullsCache.delete(id);
 	previewCache.delete(`${id}#`);
 
@@ -70,7 +70,7 @@ app.delete('/:id', (c) => {
  * Cheap metadata only — no sandbox checkout.
  */
 app.get('/:id/pulls', async (c) => {
-	const repo = db.repos.get(c.req.param('id'));
+	const repo = await db.repos.get(c.req.param('id'));
 
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
 
@@ -97,7 +97,7 @@ app.get('/:id/pulls', async (c) => {
  * No sandbox checkout — cheap enough to call from the create-session form.
  */
 app.get('/:id/pulls/:pr', async (c) => {
-	const repo = db.repos.get(c.req.param('id'));
+	const repo = await db.repos.get(c.req.param('id'));
 
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
 

@@ -13,10 +13,10 @@ import { testReview } from '../../helpers/review';
 
 const cleanup: (() => Promise<void> | void)[] = [];
 
-function fixture(source: Review['source'] = 'github'): { review: Review; repo: Repo } {
+async function fixture(source: Review['source'] = 'github'): Promise<{ review: Review; repo: Repo }> {
 	const now = new Date().toISOString();
 
-	const repo = db.repos.set({
+	const repo = await db.repos.set({
 		id: crypto.randomUUID(),
 		name: 'acme/app',
 		url: 'https://github.com/acme/app',
@@ -26,11 +26,11 @@ function fixture(source: Review['source'] = 'github'): { review: Review; repo: R
 		updatedAt: now
 	});
 
-	const review = db.reviews.set(testReview({ repoId: repo.id, prNumber: 7, headSha: 'head', source }));
+	const review = await db.reviews.set(testReview({ repoId: repo.id, prNumber: 7, headSha: 'head', source }));
 
-	cleanup.push(() => {
-		db.reviews.delete(review.id);
-		db.repos.delete(repo.id);
+	cleanup.push(async () => {
+		await db.reviews.delete(review.id);
+		await db.repos.delete(repo.id);
 		reviewSandboxes.delete(review.id);
 	});
 
@@ -42,13 +42,12 @@ afterEach(async () => {
 });
 
 test('finds the checkout the pipeline left on disk after the in-memory registry is lost', async () => {
-	const { review, repo } = fixture();
+	const { review, repo } = await fixture();
 	const path = reviewCheckoutPath(review, repo);
 
 	expect(path).toContain(`acme__app__pr-7__${review.id}`);
 	await mkdir(join(path, '.git'), { recursive: true });
 	cleanup.push(() => rm(path, { recursive: true, force: true }));
-
 	reviewSandboxes.delete(review.id);
 	expect(await findReviewCheckout(review)).toBe(path);
 	expect(reviewSandboxes.get(review.id)).toBe(path);
@@ -56,14 +55,14 @@ test('finds the checkout the pipeline left on disk after the in-memory registry 
 });
 
 test('a registered path whose directory is gone is not returned', async () => {
-	const { review, repo } = fixture();
+	const { review, repo } = await fixture();
 
 	reviewSandboxes.set(review.id, join(reviewCheckoutPath(review, repo), 'missing'));
 	expect(await findReviewCheckout(review)).toBeNull();
 });
 
 test('stub reviews have no checkout', async () => {
-	const { review } = fixture('stub');
+	const { review } = await fixture('stub');
 
 	expect(await findReviewCheckout(review)).toBeNull();
 	await expect(ensureReviewCheckout(review)).rejects.toBeInstanceOf(CheckoutError);
