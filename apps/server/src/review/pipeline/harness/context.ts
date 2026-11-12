@@ -42,6 +42,7 @@ import { restoreSubagentState, type SubagentState } from '../subagents.js';
 import { partitionReviewers } from '../reviewers.js';
 import { partitionUnits, reviewerSlices, type ReviewUnit } from '../units.js';
 import { FINISHED } from './assignments.js';
+import { applyDiffLimits } from './diff-limits.js';
 import type { PoolContext } from './pool.js';
 import { emptyReceived, receivedOf, recordingReads, reviewContext, type Received } from './received.js';
 import type { AdaptiveReviewInput, BaselineResult, HarnessEvents, TaskFn } from './types.js';
@@ -139,10 +140,22 @@ function reviewShape(inventory: ReviewInventory, limits: ReviewLimits, input: Ad
 export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): ReviewRun {
 	const startedAt = reviewNow();
 	const inventory = buildInventory(input.diff, extraExcludes());
+	const coverage = new CoverageLedger();
+	const limitsCfg = reviewLimits();
+	const diffOmitted = applyDiffLimits(inventory, coverage, limitsCfg);
 	const limits = budgetLimits(input.tokenBudget ?? DEFAULT_TOKEN_BUDGET);
 	const scaled = scaledReviewLimits(reviewShape(inventory, limits, input), limits);
 	const deadlineAt = startedAt + scaled.deadlineMs;
 	const resume = input.resume;
+	const received = resume?.received ? structuredClone(resume.received) : emptyReceived();
+
+	if (diffOmitted.length) {
+		received.omitted ??= diffOmitted;
+
+		events?.onLog?.(
+			`Reviewing within diff limits (maxFiles=${limitsCfg.maxFiles}, maxDiffChars=${limitsCfg.maxDiffChars}): ${diffOmitted.length} diff hunk${diffOmitted.length === 1 ? '' : 's'} omitted.`
+		);
+	}
 
 	return {
 		input,
@@ -151,8 +164,8 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		budget: new ModelBudget(scaled.modelCalls),
 		limits,
 		inventory,
-		evidence: new EvidenceStore(input.revision ?? null, inventory, reviewLimits().maxFileChars),
-		coverage: new CoverageLedger(),
+		evidence: new EvidenceStore(input.revision ?? null, inventory, limitsCfg.maxFileChars),
+		coverage,
 		workspace: null,
 		execReason: null,
 		startedAt,
@@ -178,7 +191,7 @@ export function createRun(input: AdaptiveReviewInput, events?: HarnessEvents): R
 		questions: restoreQuestions(resume?.questions),
 		obligations: obligationsOn() ? restoreObligationState(resume?.obligations) : null,
 		nextCandidate: 1 + Math.max(0, ...(resume?.candidates ?? []).map((c) => Number(c.candidateId.slice(1)) || 0)),
-		received: resume?.received ? structuredClone(resume.received) : emptyReceived(),
+		received,
 		repairs: resume?.repairs ?? 0,
 		setupNotes: '',
 		task: (id, label, status, message, extra) =>

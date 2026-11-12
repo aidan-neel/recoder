@@ -33,6 +33,7 @@ function refutedCandidates(run: ReviewRun): CandidateFinding[] {
 		.map((candidate) => ({
 			...candidate,
 			verification: {
+				...candidate.verification,
 				status: 'unverified',
 				outcome: 'refuted',
 				reason: candidate.dropReason ?? 'refuted by the verifier'
@@ -277,6 +278,15 @@ function hiddenSentence(hidden: number): string {
 	return `${hidden} unproven candidate${hidden === 1 ? ' was' : 's were'} hidden.`;
 }
 
+/** Says when `maxFiles` or `maxDiffChars` omitted part of the diff before reviewing started. */
+function diffLimitSentence(received: ReviewRun['received']): string {
+	const omitted = received.omitted?.length ?? 0;
+
+	return omitted
+		? `Reviewed within the configured diff limits (${omitted} hunk${omitted === 1 ? '' : 's'} omitted).`
+		: '';
+}
+
 /**
  * The review's one-paragraph summary: unfinished units and subagents, subagent
  * requests past the limit, obligation counts when obligations ran, how the brief's
@@ -299,6 +309,7 @@ function buildSummary(
 		verifiedSummary(confirmed),
 		notRunSentence(run.candidates),
 		hiddenSentence(run.hidden.length),
+		diffLimitSentence(run.received),
 		briefSentence(run.intent),
 		units ? `${units} review unit${units === 1 ? '' : 's'} did not finish.` : '',
 		subagents ? `${subagents} subagent${subagents === 1 ? '' : 's'} did not finish.` : '',

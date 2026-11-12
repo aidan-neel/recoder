@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { TOKEN_BUDGET_PLANS, type TokenBudget } from '@recoder/shared';
 import { runAdaptiveReview } from '../../../src/review/pipeline/harness';
 import { budgetLimits } from '../../../src/review/session/review-policy';
+import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { NOTHING, addedFile, messagesOf, modelReply, restoreAfterEach, unitOf, useTestModel } from './harness-fixtures';
 
 restoreAfterEach();
@@ -37,6 +38,7 @@ async function spendUnder(tokenBudget: TokenBudget | undefined): Promise<Spend> 
 	const spend: Spend = { reviewers: new Map(), subagents: new Map(), initialCeiling: null };
 
 	useTestModel();
+	setReviewOverrides({ ...getStoredSettings(), maxDiffChars: 200_000 });
 
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
 		const unit = unitOf(init);
