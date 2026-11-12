@@ -3,4 +3,6 @@
 @source '../../../../packages/ui/src';
 @source '../../../app/src';
 
+/* The app's skin and the styles of the parts the demo shows. The whole site wears the skin. */
+@import '../../../app/src/styles/app.css';
 @import '../styles/site.css';
