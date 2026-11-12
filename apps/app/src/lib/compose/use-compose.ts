@@ -104,7 +104,6 @@ export function useCompose(): ComposeView {
 			text,
 			setText,
 			target: read.target,
-			brief: read.brief,
 			linkFacts,
 			repos: repoOptions,
 			repoId,

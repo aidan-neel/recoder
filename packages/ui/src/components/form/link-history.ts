@@ -9,11 +9,18 @@ export interface Snapshot {
 /** What an edit did, for grouping: a run of typing or of deleting undoes as one step. */
 export type EditKind = 'type' | 'delete' | 'other';
 
+/** One edit as the history remembers it: its kind, when it happened, and the caret it left. */
+interface RecordedEdit {
+	kind: EditKind;
+	at: number;
+	caret: number;
+}
+
 /** A field's undo and redo stacks, and what the last edit was, to group the next one with it. */
 export interface History {
 	readonly past: readonly Snapshot[];
 	readonly future: readonly Snapshot[];
-	readonly last: { kind: EditKind; at: number; caret: number } | null;
+	readonly last: RecordedEdit | null;
 }
 
 /** Edits further apart than this start a new undo step, as in a native field. */
@@ -25,24 +32,24 @@ const LIMIT = 200;
 export const EMPTY_HISTORY: History = { past: [], future: [], last: null };
 
 /**
- * Records an edit. `before` is the state the edit started from and `after`
- * the caret it left. Typing (or deleting) that goes on from where the last
- * edit of its kind left the caret, within a second, joins that step.
+ * Records an edit. `before` is the state the edit started from. Typing (or
+ * deleting) that goes on from where the last edit of its kind left the
+ * caret, within a second, joins that step.
  */
-export function record(history: History, before: Snapshot, kind: EditKind, caretAfter: number, now: number): History {
+export function record(history: History, before: Snapshot, edit: RecordedEdit): History {
 	const last = history.last;
 
 	const joins =
-		kind !== 'other' &&
+		edit.kind !== 'other' &&
 		last !== null &&
-		last.kind === kind &&
+		last.kind === edit.kind &&
 		last.caret === before.caret &&
-		now - last.at < GROUP_MS &&
+		edit.at - last.at < GROUP_MS &&
 		history.past.length > 0;
 
 	const past = joins ? history.past : [...history.past, before].slice(-LIMIT);
 
-	return { past, future: [], last: { kind, at: now, caret: caretAfter } };
+	return { past, future: [], last: edit };
 }
 
 /** Steps back: the state to show, and the history with `current` saved for redo. Null when there is nothing to undo. */

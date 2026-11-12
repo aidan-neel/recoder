@@ -52,6 +52,11 @@ export function embedOf(node: Node | null): HTMLElement | null {
 	return element?.closest<HTMLElement>('[data-ui="link-embed"]') ?? null;
 }
 
+/** The URL an embed node carries, or null for any other node. */
+export function urlOf(node: Node): string | null {
+	return node instanceof HTMLElement && node.dataset.ui === 'link-embed' ? node.getAttribute(URL_ATTRIBUTE) : null;
+}
+
 /** The selection as text offsets, or null when it is not in the field. */
 export function readSelection(root: HTMLElement): TextSelection | null {
 	const selection = root.ownerDocument.getSelection();
@@ -107,12 +112,8 @@ export function readDoc(root: HTMLElement): LinkDoc {
 
 /** The embed element that shows the link at `range`, if the field shows one there. */
 export function embedAt(root: HTMLElement, range: TextRange): HTMLElement | null {
-	let at = 0;
-
-	for (const child of root.childNodes) {
-		if (at === range.start && child instanceof HTMLElement && urlOf(child) !== null) return child;
-
-		at += nodeLength(child);
+	for (const { child, start } of childSpans(root)) {
+		if (start === range.start && child instanceof HTMLElement && urlOf(child) !== null) return child;
 	}
 
 	return null;
@@ -120,18 +121,12 @@ export function embedAt(root: HTMLElement, range: TextRange): HTMLElement | null
 
 /** Marks the embeds a selection holds whole, so a selected embed looks selected. */
 export function markSelected(root: HTMLElement, range: TextRange | null): void {
-	let at = 0;
+	for (const { child, start, end } of childSpans(root)) {
+		if (!(child instanceof HTMLElement) || urlOf(child) === null) continue;
 
-	for (const child of root.childNodes) {
-		const length = nodeLength(child);
+		const held = range !== null && range.start < range.end && range.start <= start && end <= range.end;
 
-		if (child instanceof HTMLElement && urlOf(child) !== null) {
-			const held = range !== null && range.start < range.end && range.start <= at && at + length <= range.end;
-
-			child.toggleAttribute('data-selected', held);
-		}
-
-		at += length;
+		child.toggleAttribute('data-selected', held);
 	}
 }
 
@@ -154,14 +149,8 @@ function pointAt(page: CaretLookup, x: number, y: number): { node: Node; offset:
 
 /** The text range an embed element shows, read from the DOM. */
 export function embedRange(root: HTMLElement, embed: HTMLElement): TextRange | null {
-	let at = 0;
-
-	for (const child of root.childNodes) {
-		const length = nodeLength(child);
-
-		if (child === embed) return { start: at, end: at + length };
-
-		at += length;
+	for (const { child, start, end } of childSpans(root)) {
+		if (child === embed) return { start, end };
 	}
 
 	return null;
@@ -336,11 +325,6 @@ function buildDot(tone: string): HTMLElement {
 	return dot;
 }
 
-/** The URL an embed node carries, or null for any other node. */
-function urlOf(node: Node): string | null {
-	return node instanceof HTMLElement && node.dataset.ui === 'link-embed' ? node.getAttribute(URL_ATTRIBUTE) : null;
-}
-
 /** The text a non-embed child stands for: a text node's data (a holder's without its own character), nothing for the closing `<br>`. */
 function lengthText(node: Node): string {
 	if (node instanceof Text) return holders.has(node) ? node.data.replaceAll(HOLDER_CHARACTER, '') : node.data;
@@ -352,6 +336,24 @@ function lengthText(node: Node): string {
 /** How many text characters a child of the field stands for. */
 function nodeLength(node: Node): number {
 	return (urlOf(node) ?? lengthText(node)).length;
+}
+
+/** A child of the field and the range of the text it stands for. */
+interface ChildSpan extends TextRange {
+	child: ChildNode;
+}
+
+/** The field's children in order, each with its text range. */
+function* childSpans(root: HTMLElement): Generator<ChildSpan> {
+	let start = 0;
+
+	for (const child of root.childNodes) {
+		const end = start + nodeLength(child);
+
+		yield { child, start, end };
+
+		start = end;
+	}
 }
 
 /** The index of the field's child that holds a node, or -1 when the node is not in the field. */
@@ -377,15 +379,9 @@ function offsetOf(root: HTMLElement, node: Node, offset: number): number {
 
 /** The DOM point for a text offset: inside a text node (or a caret holder) when one holds it, else between the field's children. */
 function pointOf(root: HTMLElement, offset: number): { node: Node; offset: number } {
-	let at = 0;
-
-	for (const [index, child] of [...root.childNodes].entries()) {
-		const length = nodeLength(child);
-
-		if (child instanceof Text && offset <= at + length) return { node: child, offset: offset - at };
-		if (!(child instanceof Text) && offset <= at) return { node: root, offset: index };
-
-		at += length;
+	for (const [index, { child, start, end }] of [...childSpans(root)].entries()) {
+		if (child instanceof Text && offset <= end) return { node: child, offset: offset - start };
+		if (!(child instanceof Text) && offset <= start) return { node: root, offset: index };
 	}
 
 	const tail = root.lastChild instanceof HTMLBRElement ? root.childNodes.length - 1 : root.childNodes.length;

@@ -1,8 +1,8 @@
 /** What a link points at, read from its URL alone. */
-export type LinkKind = 'pull' | 'issue' | 'commit' | 'file' | 'repo' | 'link';
+type LinkKind = 'pull' | 'issue' | 'commit' | 'file' | 'repo' | 'link';
 
 /** The forge a link lives on, when its URL says so; null for any other site. */
-export type LinkForge = 'github' | 'gitlab' | null;
+type LinkForge = 'github' | 'gitlab' | null;
 
 /** A link as an embed shows it. Nothing here comes from the network: every field is read from the URL. */
 export interface LinkDescription {
@@ -194,7 +194,7 @@ function capSegment(segment: string): string {
 }
 
 /** The colour of a fact's dot: open or ready, needs attention, failed, or a plain state. */
-export type LinkFactTone = 'ok' | 'warning' | 'danger' | 'neutral';
+type LinkFactTone = 'ok' | 'warning' | 'danger' | 'neutral';
 
 /**
  * What the host already knows about a link, for its embed: the title of a

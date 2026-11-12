@@ -2,15 +2,7 @@
 export { Checkbox } from './checkbox';
 export { Field } from './field';
 export { Input } from './input';
-export {
-	describeLink,
-	type LinkDescription,
-	type LinkFact,
-	type LinkFactTone,
-	type LinkFacts,
-	type LinkForge,
-	type LinkKind
-} from './link-describe';
+export { describeLink, type LinkDescription, type LinkFact, type LinkFacts } from './link-describe';
 export { LinkText } from './link-text';
 export { LinkField } from './link-field';
 export { NavPill, NavPillGroup } from './nav-pill';

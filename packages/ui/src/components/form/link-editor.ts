@@ -118,7 +118,7 @@ export class LinkEditor {
 
 		if (text === this.doc.text || this.composing) return;
 
-		this.history = record(this.history, this.snapshot(), 'other', text.length, Date.now());
+		this.history = record(this.history, this.snapshot(), { kind: 'other', caret: text.length, at: Date.now() });
 		this.typing = false;
 		this.conversion = null;
 		this.doc = docFromText(text);
@@ -375,7 +375,7 @@ export class LinkEditor {
 	private edit(next: LinkDoc, caret: number, kind: EditKind): void {
 		const changed = next.text !== this.doc.text;
 
-		this.history = record(this.history, this.snapshot(), kind, caret, Date.now());
+		this.history = record(this.history, this.snapshot(), { kind, caret, at: Date.now() });
 		this.typing = false;
 		this.conversion = null;
 		this.show({ doc: next, caret });
@@ -416,7 +416,7 @@ export class LinkEditor {
 
 		const caret = selection?.focus ?? read.text.length;
 
-		this.history = record(this.history, this.snapshot(), 'type', caret, Date.now());
+		this.history = record(this.history, this.snapshot(), { kind: 'type', caret, at: Date.now() });
 		this.typing = true;
 		this.show({ doc: embedLinks(read, wordAround(read.text, caret)), caret });
 		this.host.onChange(read.text);

@@ -19,7 +19,7 @@ import { cn } from '../../lib/cn';
 import { useFieldControl } from './field-context';
 import { LinkCard, openLink, type CardTarget } from './link-card';
 import { describeLink, type LinkDescription, type LinkFacts } from './link-describe';
-import { embedOf, type EmbedLook } from './link-dom';
+import { embedOf, urlOf, type EmbedLook } from './link-dom';
 import { LinkEditor, type EditorHost } from './link-editor';
 
 interface LinkFieldProps extends Omit<
@@ -213,7 +213,7 @@ export function LinkField({
 
 		event.preventDefault();
 
-		if (event.ctrlKey || event.metaKey) openLink(embed.getAttribute('data-url') ?? '');
+		if (event.ctrlKey || event.metaKey) openLink(urlOf(embed) ?? '');
 		else if (event.detail === 2) editor.selectEmbed(embed);
 		else editor.placeBeside(embed, event.clientX);
 	}
@@ -222,7 +222,7 @@ export function LinkField({
 		onPointerOver?.(event);
 
 		const embed = embedOf(event.target instanceof Node ? event.target : null);
-		const url = embed?.getAttribute('data-url');
+		const url = embed ? urlOf(embed) : null;
 
 		if (embed && url && event.pointerType !== 'touch')
 			schedule({ element: embed, look: look(url), via: 'pointer' }, HOVER_OPEN_MS);
@@ -288,7 +288,7 @@ function caretCard(
 	if (!beside) return open?.via === 'pointer' ? open : null;
 	if (open?.element === beside.element) return open;
 
-	const url = beside.element.getAttribute('data-url') ?? '';
+	const url = urlOf(beside.element) ?? '';
 
 	return { element: beside.element, look: look(url), via: 'caret' };
 }

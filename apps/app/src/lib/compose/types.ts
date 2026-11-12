@@ -13,8 +13,6 @@ export interface ComposeView {
 	setText: (text: string) => void;
 	/** What the text points at, resolved as the person types. A number or a branch is looked up in `repoId`. */
 	target: PullTarget;
-	/** The part of the text after the target; null when there is none. */
-	brief: string | null;
 	/** What the field's embeds show: the target link's state, and what the list knows about other links. */
 	linkFacts: LinkFacts;
 	repos: RepoOption[];

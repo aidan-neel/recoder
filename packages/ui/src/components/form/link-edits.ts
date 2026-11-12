@@ -20,13 +20,13 @@ export interface TextSelection {
 }
 
 /** An edit's result: the new content and where the caret lands. */
-export interface EditResult {
+interface EditResult {
 	doc: LinkDoc;
 	caret: number;
 }
 
 /** Which way a deletion goes: one character or embed back or forward, or a range the browser worked out (a word, a line). */
-export type DeleteKind = 'backward' | 'forward' | 'range';
+type DeleteKind = 'backward' | 'forward' | 'range';
 
 /** The kind of deletion an input event asks for. */
 export function deleteKind(inputType: string): DeleteKind {
