@@ -22,7 +22,8 @@ export const AGENT_CLIS: readonly AgentCli[] = [
 	{ id: 'claude-code', name: 'Claude Code', groupsModelsUnderName: true },
 	{ id: 'devin', name: 'Devin', groupsModelsUnderName: true },
 	{ id: 'custom-command', name: 'Custom command', groupsModelsUnderName: false },
-	{ id: 'codex', name: 'Codex', groupsModelsUnderName: true }
+	{ id: 'codex', name: 'Codex', groupsModelsUnderName: true },
+	{ id: 'pi', name: 'Pi', groupsModelsUnderName: true }
 ];
 
 /** The agent CLI whose id is `id` (a model provider), or null for a provider that is not one. */
