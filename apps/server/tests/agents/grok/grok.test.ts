@@ -5,6 +5,7 @@ import { GrokAgent } from '../../../src/agents/grok/grok';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { fakeGrok, fakeGrokCalls, fakeGrokEnv } from '../../helpers/fake-grok';
+import { testCallFailures } from '../../helpers/native-agent';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	return {
@@ -125,29 +126,15 @@ describe('GrokAgent.complete', () => {
 		expect(sources).toEqual(['oauth']);
 	});
 
-	test('a failed call maps the CLI failure to the right LlmError status and message', async () => {
-		for (const [mode, status, message] of [
-			['auth', 401, /grok login/],
-			['limit', 429, /usage limit/],
-			['crash', 0, /boom/],
-			['empty', 0, /could not be parsed/]
-		] as const) {
-			const error = await new GrokAgent(await fakeGrok({ FAKE_GROK_MODE: mode }))
-				.complete(call())
-				.catch((e: unknown) => e);
-
-			expect(error).toBeInstanceOf(LlmError);
-			expect(error).toMatchObject({ status, message: expect.stringMatching(message) });
-		}
-	});
-
-	test('a usage cap fails as a UsageLimitError', async () => {
-		const error = await new GrokAgent(await fakeGrok({ FAKE_GROK_MODE: 'limit' }))
-			.complete(call())
-			.catch((e: unknown) => e);
-
-		expect(error).toBeInstanceOf(UsageLimitError);
-	});
+	testCallFailures(
+		async (mode) => new GrokAgent(await fakeGrok({ FAKE_GROK_MODE: mode })).complete(call()),
+		[
+			{ mode: 'auth', status: 401, message: /grok login/ },
+			{ mode: 'limit', status: 429, message: /usage limit/, usageLimit: true },
+			{ mode: 'crash', status: 0, message: /boom/ },
+			{ mode: 'empty', status: 0, message: /could not be parsed/ }
+		]
+	);
 
 	test('a throttle fails as a retryable 429 that is not a usage limit', async () => {
 		const error = await completeError('throttle');

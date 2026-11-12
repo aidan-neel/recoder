@@ -3,9 +3,10 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import type { TokenUsage } from '@recoder/shared';
 import { CodexAgent } from '../../../src/agents/codex/codex';
-import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
+import { UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { fakeCodex } from '../../helpers/fake-codex';
+import { testCallFailures } from '../../helpers/native-agent';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	return {
@@ -114,17 +115,13 @@ describe('CodexAgent.complete', () => {
 		expect(existsSync(env.FAKE_CODEX_LOG ?? '')).toBe(false);
 	});
 
-	test.each([
-		['auth', 401, /signed out\. Run: codex login/],
-		['crash', 0, /boom/]
-	] as const)('a %s call fails as an LlmError with status %d', async (mode, status, message) => {
-		const error = await new CodexAgent(await fakeCodex({ FAKE_CODEX_MODE: mode }))
-			.complete(call())
-			.catch((e: unknown) => e);
-
-		expect(error).toBeInstanceOf(LlmError);
-		expect(error).toMatchObject({ status, message: expect.stringMatching(message) });
-	});
+	testCallFailures(
+		async (mode) => new CodexAgent(await fakeCodex({ FAKE_CODEX_MODE: mode })).complete(call()),
+		[
+			{ mode: 'auth', status: 401, message: /signed out\. Run: codex login/ },
+			{ mode: 'crash', status: 0, message: /boom/ }
+		]
+	);
 
 	test('a usage cap fails as a UsageLimitError that Recoder words as out of usage, with the reset time', async () => {
 		const agent = new CodexAgent(await fakeCodex({ FAKE_CODEX_MODE: 'limit' }));

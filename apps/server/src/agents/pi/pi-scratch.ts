@@ -1,6 +1,6 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { removeScratchDir, scratchDir } from '../cli-process';
 
 /** The files of one call or run, under a scratch dir of its own: the system prompt, and the session Pi saves. */
 export interface PiScratch {
@@ -14,23 +14,15 @@ export interface PiScratch {
  * adapter's `stop` deletes at exit. Pi saves the session under it, so deleting the dir deletes the session.
  */
 export async function makeScratch(owned: Set<string>, prefix: string, system: string): Promise<PiScratch> {
-	const root = await mkdtemp(join(tmpdir(), prefix));
+	const root = await scratchDir(owned, prefix);
 	const files = { root, system: join(root, 'system.md'), session: join(root, 'sessions', 'session.jsonl') };
-
-	owned.add(root);
 
 	try {
 		await writeFile(files.system, system, { mode: 0o600 });
 	} catch (error) {
-		await removeScratch(owned, files);
+		await removeScratchDir(owned, root);
 		throw error;
 	}
 
 	return files;
-}
-
-/** Deletes the scratch dir, with the session Pi saved in it, and takes it out of `owned`. */
-export async function removeScratch(owned: Set<string>, files: PiScratch): Promise<void> {
-	owned.delete(files.root);
-	await rm(files.root, { recursive: true, force: true });
 }

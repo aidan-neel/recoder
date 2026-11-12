@@ -1,9 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
-import { emptyDirectory } from '../cli-process';
+import { emptyDirectory, removeScratchDir, scratchDir } from '../cli-process';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
 import { ProcessRun } from '../process-run';
@@ -86,9 +85,8 @@ export class ClaudeCodeRun extends ProcessRun {
 	}
 
 	static async open(host: ClaudeCodeHost, options: AgentRunOptions): Promise<ClaudeCodeRun> {
-		const scratch = await mkdtemp(join(tmpdir(), 'recoder-claude-code-run-'));
+		const scratch = await scratchDir(host.scratch, 'recoder-claude-code-run-');
 
-		host.scratch.add(scratch);
 		await writeFile(join(scratch, 'system.md'), options.system, { mode: 0o600 });
 
 		const cwd = await emptyDirectory(CLAUDE_CODE_EMPTY_DIR);
@@ -131,8 +129,7 @@ export class ClaudeCodeRun extends ProcessRun {
 
 	/** Deletes the system prompt file and the session the CLI saved for this run, and no other. */
 	protected override async cleanUp(): Promise<void> {
-		this.host.scratch.delete(this.place.scratch);
-		await rm(this.place.scratch, { recursive: true, force: true });
+		await removeScratchDir(this.host.scratch, this.place.scratch);
 		this.place.sessions.remove(this.session);
 	}
 

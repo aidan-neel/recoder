@@ -1,10 +1,17 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry, ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { callDeadline, cliOutput, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import {
+	callDeadline,
+	cliOutput,
+	emptyDirectory,
+	findCli,
+	removeScratchDir,
+	scratchDir,
+	stopOnShutdown
+} from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import { SessionCliAgent } from '../session-run';
@@ -52,7 +59,7 @@ export class CodexAgent extends SessionCliAgent {
 	 */
 	async models(signal?: AbortSignal): Promise<ModelEntry[]> {
 		const path = this.requirePath();
-		const { stdout } = await this.output(path, ['debug', 'models'], MODELS_TIMEOUT_MS, signal);
+		const { stdout } = await this.command(path, ['debug', 'models'], MODELS_TIMEOUT_MS, signal);
 		const models = parseCodexModels(stdout);
 
 		if (!models.length) throw new LlmError(0, 'Codex listed no models.');
@@ -83,10 +90,8 @@ export class CodexAgent extends SessionCliAgent {
 		const path = this.requirePath();
 		const catalogFile = await this.subagentFreeCatalog(path);
 		const deadline = callDeadline(opts);
-		const scratch = await mkdtemp(join(tmpdir(), 'recoder-codex-'));
+		const scratch = await scratchDir(this.scratch, 'recoder-codex-');
 		const systemFile = join(scratch, 'system.md');
-
-		this.scratch.add(scratch);
 
 		try {
 			await writeFile(systemFile, systemText(opts), { mode: 0o600 });
@@ -119,8 +124,7 @@ export class CodexAgent extends SessionCliAgent {
 		} catch (error) {
 			throw deadline.failure(error, 'Codex request failed.');
 		} finally {
-			this.scratch.delete(scratch);
-			await rm(scratch, { recursive: true, force: true });
+			await removeScratchDir(this.scratch, scratch);
 		}
 	}
 
@@ -140,7 +144,7 @@ export class CodexAgent extends SessionCliAgent {
 
 	/** `codex login status` exits 0 when signed in. */
 	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn'>> {
-		return { signedIn: (await this.output(path, ['login', 'status'], STATUS_TIMEOUT_MS)).code === 0 };
+		return { signedIn: (await this.command(path, ['login', 'status'], STATUS_TIMEOUT_MS)).code === 0 };
 	}
 
 	/**
@@ -158,14 +162,13 @@ export class CodexAgent extends SessionCliAgent {
 	}
 
 	private async writeCatalog(path: string): Promise<string> {
-		const catalog = catalogWithoutSubagents((await this.output(path, ['debug', 'models'], MODELS_TIMEOUT_MS)).stdout);
+		const catalog = catalogWithoutSubagents((await this.command(path, ['debug', 'models'], MODELS_TIMEOUT_MS)).stdout);
 
 		if (!catalog) throw new LlmError(0, 'Codex did not list its models, so its sub-agents could not be turned off.');
 
-		const dir = await mkdtemp(join(tmpdir(), 'recoder-codex-catalog-'));
+		const dir = await scratchDir(this.scratch, 'recoder-codex-catalog-');
 		const file = join(dir, 'catalog.json');
 
-		this.scratch.add(dir);
 		await writeFile(file, catalog, { mode: 0o600 });
 
 		return file;
@@ -184,11 +187,11 @@ export class CodexAgent extends SessionCliAgent {
 	 * has exited. Its exit code is not read: a session the CLI never saved has nothing to delete.
 	 */
 	protected async forget(path: string, session: string): Promise<void> {
-		await this.output(path, ['delete', '--force', session], FORGET_TIMEOUT_MS);
+		await this.command(path, ['delete', '--force', session], FORGET_TIMEOUT_MS);
 	}
 
 	/** Run a short CLI command in an empty directory, so it never sees the user's files. See {@link cliOutput}. */
-	private async output(
+	private async command(
 		path: string,
 		args: string[],
 		timeoutMs: number,

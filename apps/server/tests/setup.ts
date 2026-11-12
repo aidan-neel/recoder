@@ -1,6 +1,7 @@
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { AGENT_BIN_PINS } from './helpers/agent-bins';
 
 /** Point storage at temp dirs before any module opens the database or reads credentials. */
 function isolateStorage(): void {
@@ -18,15 +19,8 @@ function isolateStorage(): void {
  * tests bring a fake one.
  */
 function keepRealAgentsOut(): void {
-	process.env.RECODER_OPENCODE_BIN = '';
-	process.env.RECODER_CLAUDE_BIN = '';
-	process.env.RECODER_DEVIN_BIN = '';
-	process.env.RECODER_GROK_BIN = '';
-	process.env.RECODER_CURSOR_BIN = '';
+	for (const pin of AGENT_BIN_PINS) process.env[pin] = '';
 	delete process.env.RECODER_CUSTOM_AGENT;
-	process.env.RECODER_CODEX_BIN = '';
-	process.env.RECODER_PI_BIN = '';
-	process.env.RECODER_ANTIGRAVITY_BIN = '';
 }
 
 /** Tests simulate provider failures and expect them to surface at once; llm-retry.test.ts opts back in. */

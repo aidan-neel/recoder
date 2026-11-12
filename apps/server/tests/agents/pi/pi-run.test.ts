@@ -4,10 +4,9 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { PiAgent } from '../../../src/agents/pi/pi';
-import { UsageLimitError } from '../../../src/models/llm/errors';
 import { REVIEW_POLICY } from '../../../src/review/session/review-policy';
 import { fakePi, fakePiCalls, type FakePiCall } from '../../helpers/fake-pi';
-import { fixtureReview, testPromptStops } from '../../helpers/native-agent';
+import { fixtureReview, testOutputCapPrompt, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
@@ -145,27 +144,10 @@ describe('PiRun', () => {
 		expect(steps).toEqual(['e2', 'e5']);
 	});
 
-	test('signed out is a 401 that says how to sign in', async () => {
-		const { run } = await openRun('auth');
-
-		const reply = await run.prompt('Review it.', PROMPT);
-
-		await run.close();
-
-		expect(reply.error?.status).toBe(401);
-		expect(reply.error?.message).toContain('/login');
-	});
-
-	test('a spent quota is a usage cap that quotes Pi', async () => {
-		const { run } = await openRun('limit');
-
-		const reply = await run.prompt('Review it.', PROMPT);
-
-		await run.close();
-
-		expect(reply.error).toBeInstanceOf(UsageLimitError);
-		expect(reply.error?.message).toContain('exceeded your current quota');
-	});
+	testPromptFailures(openRun, [
+		{ mode: 'auth', status: 401, message: /\/login/ },
+		{ mode: 'limit', status: 429, message: /exceeded your current quota/, usageLimit: true }
+	]);
 
 	test('output that is not Pi’s fails the prompt without quoting the credential in it', async () => {
 		const { run, events } = await openRun('garbage');
@@ -193,15 +175,7 @@ describe('PiRun', () => {
 		expect(second).toEqual({ text: '{"done":true,"results":[]}', error: undefined });
 	});
 
-	test('output past the cap stops Pi', async () => {
-		const { run } = await openRun('flood');
-
-		const reply = await run.prompt('Review it.', PROMPT);
-
-		await run.close();
-
-		expect(reply.error?.message).toMatch(/printed more than/);
-	});
+	testOutputCapPrompt(openRun);
 
 	test('output past the cap is the failure reported when the session file cannot be read either', async () => {
 		const { run } = await openRun('unreadable-flood');

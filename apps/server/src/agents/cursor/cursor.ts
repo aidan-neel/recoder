@@ -1,10 +1,16 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { AgentStatus, ModelEntry, TokenUsage } from '@recoder/shared';
-import { LlmError, cancelledError } from '../../models/llm/errors';
+import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import {
+	CliAgent,
+	callDeadline,
+	cliOutput,
+	emptyDirectory,
+	findCli,
+	removeScratchDir,
+	scratchDir,
+	stopOnShutdown
+} from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import type { CliExit } from '../cli-stream';
 import { quotedLine } from '../quoted-line';
@@ -76,10 +82,8 @@ export class CursorAgent extends CliAgent {
 		const path = this.requireCli();
 
 		const deadline = callDeadline(opts);
-		const scratch = await mkdtemp(join(tmpdir(), 'recoder-cursor-'));
+		const scratch = await scratchDir(this.scratch, 'recoder-cursor-');
 		const place = cursorPlace(scratch, this.env);
-
-		this.scratch.add(scratch);
 
 		try {
 			await writeCursorConfig(place, null);
@@ -100,8 +104,7 @@ export class CursorAgent extends CliAgent {
 		} catch (error) {
 			throw deadline.failure(error, 'Cursor request failed.');
 		} finally {
-			this.scratch.delete(scratch);
-			await rm(scratch, { recursive: true, force: true });
+			await removeScratchDir(this.scratch, scratch);
 		}
 	}
 
@@ -130,10 +133,8 @@ export class CursorAgent extends CliAgent {
 	 * will find — never one only the user's own config could give.
 	 */
 	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn'>> {
-		const scratch = await mkdtemp(join(tmpdir(), 'recoder-cursor-status-'));
+		const scratch = await scratchDir(this.scratch, 'recoder-cursor-status-');
 		const place = cursorPlace(scratch, this.env);
-
-		this.scratch.add(scratch);
 
 		try {
 			await writeCursorConfig(place, null);
@@ -149,8 +150,7 @@ export class CursorAgent extends CliAgent {
 
 			return { signedIn: signInState(plain.code, plain.stdout) };
 		} finally {
-			this.scratch.delete(scratch);
-			await rm(scratch, { recursive: true, force: true });
+			await removeScratchDir(this.scratch, scratch);
 		}
 	}
 
@@ -216,7 +216,7 @@ export class CursorAgent extends CliAgent {
 
 	/**
 	 * Run a short CLI command to its end in an empty directory — `where` overrides both when a caller needs the
-	 * isolated dirs — killing it after `timeoutMs`, or when `signal` aborts.
+	 * isolated dirs — killing it after `timeoutMs`, or when `signal` aborts. See {@link cliOutput}.
 	 */
 	private async output(
 		path: string,
@@ -225,29 +225,12 @@ export class CursorAgent extends CliAgent {
 		signal?: AbortSignal,
 		where?: { cwd: string; env: Record<string, string> }
 	): Promise<{ code: number; stdout: string; stderr: string }> {
-		const proc = Bun.spawn([path, ...args], {
-			stdout: 'pipe',
-			stderr: 'pipe',
-			cwd: where?.cwd ?? (await emptyDirectory('cursor-empty')),
+		return cliOutput([path, ...args], {
 			env: where?.env ?? cursorEnv(this.env),
-			...(signal ? { signal } : {})
+			cwd: where?.cwd ?? (await emptyDirectory('cursor-empty')),
+			timeoutMs,
+			signal
 		});
-
-		const timer = setTimeout(() => proc.kill(), timeoutMs);
-
-		try {
-			const [stdout, stderr, code] = await Promise.all([
-				new Response(proc.stdout).text(),
-				new Response(proc.stderr).text(),
-				proc.exited
-			]);
-
-			if (signal?.aborted) throw cancelledError();
-
-			return { code, stdout, stderr };
-		} finally {
-			clearTimeout(timer);
-		}
 	}
 }
 

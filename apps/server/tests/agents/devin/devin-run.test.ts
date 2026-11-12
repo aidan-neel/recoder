@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { DevinAgent } from '../../../src/agents/devin/devin';
 import { fakeDevin } from '../../helpers/fake-devin';
-import { fixtureReview, openCollectingRun, testPromptStops } from '../../helpers/native-agent';
+import { fixtureReview, openCollectingRun, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
@@ -141,20 +141,11 @@ describe('DevinAgent.openRun', () => {
 		expect(usage).toEqual([1000, 500]);
 	});
 
-	test.each([
-		['signedout', 401, /signed out/],
-		['limited', 429, /free model rate limit/],
-		['crash', 0, /boom/]
-	] as const)('a %s prompt fails with status %d', async (mode, status, message) => {
-		const { run } = await openRun(mode);
-
-		const reply = await run.prompt('Review it.', PROMPT);
-
-		await run.close();
-
-		expect(reply.error?.status).toBe(status);
-		expect(reply.error?.message).toMatch(message);
-	});
+	testPromptFailures(openRun, [
+		{ mode: 'signedout', status: 401, message: /signed out/ },
+		{ mode: 'limited', status: 429, message: /free model rate limit/, usageLimit: true },
+		{ mode: 'crash', status: 0, message: /boom/ }
+	]);
 
 	testPromptStops(() => openRun('spawn'));
 

@@ -1,7 +1,15 @@
 import { supportedEffort, type AgentStatus, type ModelEntry, type ReasoningEffort } from '@recoder/shared';
-import { LlmError, cancelledError } from '../../models/llm/errors';
+import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import {
+	CliAgent,
+	callDeadline,
+	cliOutput,
+	emptyDirectory,
+	findCli,
+	removeScratchDir,
+	stopOnShutdown
+} from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
 import { runPiCall } from './pi-call';
@@ -9,7 +17,7 @@ import { parsePiModels } from './pi-models';
 import { PI_LOGIN, tokenUsage, totalUsage } from './pi-output';
 import { PI_DEFAULT_EFFORT, PI_EFFORTS, PI_ISOLATION_ARGS, piEnv, printArgs } from './pi-process';
 import { PiRun } from './pi-run';
-import { makeScratch, removeScratch } from './pi-scratch';
+import { makeScratch } from './pi-scratch';
 import { SessionTail } from './pi-session';
 import { NO_TOOLS_ARGS } from './pi-tool-bridge';
 
@@ -101,7 +109,7 @@ export class PiAgent extends CliAgent {
 		} catch (error) {
 			throw deadline.failure(error, 'Pi request failed.');
 		} finally {
-			await removeScratch(this.scratch, files);
+			await removeScratchDir(this.scratch, files.root);
 		}
 	}
 
@@ -163,30 +171,16 @@ export class PiAgent extends CliAgent {
 	 * Pi prints a listing or its version on stderr when its stdin is not a terminal, so both streams are read.
 	 */
 	private async output(path: string, args: readonly string[], signal?: AbortSignal): Promise<string> {
-		const proc = Bun.spawn([path, ...args], {
-			cwd: await emptyDirectory('pi-empty'),
-			stdout: 'pipe',
-			stderr: 'pipe',
+		const { code, stdout, stderr } = await cliOutput([path, ...args], {
 			env: piEnv(this.env),
-			...(signal ? { signal } : {})
+			cwd: await emptyDirectory('pi-empty'),
+			timeoutMs: COMMAND_TIMEOUT_MS,
+			signal
 		});
 
-		const timer = setTimeout(() => proc.kill(), COMMAND_TIMEOUT_MS);
+		if (code !== 0) throw new LlmError(0, `Pi exited with code ${code} on \`pi ${args[0]}\`.`);
 
-		try {
-			const [stdout, stderr, code] = await Promise.all([
-				new Response(proc.stdout).text(),
-				new Response(proc.stderr).text(),
-				proc.exited
-			]);
-
-			if (signal?.aborted) throw cancelledError();
-			if (code !== 0) throw new LlmError(0, `Pi exited with code ${code} on \`pi ${args[0]}\`.`);
-
-			return `${stdout}\n${stderr}`;
-		} finally {
-			clearTimeout(timer);
-		}
+		return `${stdout}\n${stderr}`;
 	}
 }
 

@@ -5,9 +5,14 @@ import { dirname } from 'node:path';
 import { z } from 'zod';
 import { CodexAgent } from '../../../src/agents/codex/codex';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
-import { UsageLimitError } from '../../../src/models/llm/errors';
 import { FAKE_CODEX_CREDENTIAL, FAKE_CODEX_SESSION, fakeCodex } from '../../helpers/fake-codex';
-import { fixtureReview, openCollectingRun, testPromptStops } from '../../helpers/native-agent';
+import {
+	fixtureReview,
+	openCollectingRun,
+	testOutputCapPrompt,
+	testPromptFailures,
+	testPromptStops
+} from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
@@ -175,27 +180,10 @@ describe('CodexAgent.openRun', () => {
 		expect(usage).toEqual([1000, 500]);
 	});
 
-	test('a signed-out prompt fails with a 401 naming the sign-in command', async () => {
-		const { run } = await openRun('auth');
-
-		const reply = await run.prompt('Review it.', PROMPT);
-
-		await run.close();
-
-		expect(reply.error?.status).toBe(401);
-		expect(reply.error?.message).toBe('Codex is signed out. Run: codex login');
-	});
-
-	test('a usage cap is a UsageLimitError that keeps the CLI’s reset time', async () => {
-		const { run } = await openRun('limit');
-
-		const reply = await run.prompt('Review it.', PROMPT);
-
-		await run.close();
-
-		expect(reply.error).toBeInstanceOf(UsageLimitError);
-		expect(reply.error?.message).toContain('try again at 5:28 AM');
-	});
+	testPromptFailures(openRun, [
+		{ mode: 'auth', status: 401, message: /^Codex is signed out\. Run: codex login$/ },
+		{ mode: 'limit', status: 429, message: /try again at 5:28 AM/, usageLimit: true }
+	]);
 
 	test.each([
 		['garbage', /request failed/],
@@ -211,15 +199,7 @@ describe('CodexAgent.openRun', () => {
 		expect(JSON.stringify([reply, events])).not.toContain(FAKE_CODEX_CREDENTIAL);
 	});
 
-	test('a CLI that prints past the output cap is stopped', async () => {
-		const { run } = await openRun('flood');
-
-		const reply = await run.prompt('Review it.', PROMPT);
-
-		await run.close();
-
-		expect(reply.error?.message).toMatch(/printed more than/);
-	});
+	testOutputCapPrompt(openRun);
 
 	testPromptStops(() => openRun('spawn'));
 
