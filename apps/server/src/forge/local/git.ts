@@ -1,6 +1,16 @@
 import { GhError } from '../cli.js';
 import { processOutput, type ProcessOutput } from '../../util/process.js';
 
+/** A local git command that exited non-zero; `code` lets callers read exit 1 as an answer (missing ref, not an ancestor). */
+export class LocalGitError extends GhError {
+	readonly code: number;
+
+	constructor(code: number, cwd: string, args: string[], stderr: string) {
+		super('unknown', `git ${args[0]} failed in ${cwd}: ${stderr.trim().slice(-500)}`);
+		this.code = code;
+	}
+}
+
 /**
  * Runs git in the local repo directly rather than through the command runner,
  * which allowlists commands, records runs and truncates logs: these are reads
@@ -24,11 +34,11 @@ async function spawnGit(cwd: string, args: string[], signal?: AbortSignal): Prom
 	return processOutput(proc);
 }
 
-/** Stdout of a git command in `cwd`, as printed; a failure is an unknown GhError carrying git's message. */
+/** Stdout of a git command in `cwd`, as printed; a failure is a LocalGitError carrying git's exit code and message. */
 export async function localGitOutput(cwd: string, args: string[], signal?: AbortSignal): Promise<string> {
 	const { stdout, stderr, code } = await spawnGit(cwd, args, signal);
 
-	if (code !== 0) throw new GhError('unknown', `git ${args[0]} failed in ${cwd}: ${stderr.trim().slice(-500)}`);
+	if (code !== 0) throw new LocalGitError(code, cwd, args, stderr);
 
 	return stdout;
 }
@@ -36,9 +46,4 @@ export async function localGitOutput(cwd: string, args: string[], signal?: Abort
 /** Trimmed stdout of a git command in `cwd`. */
 export async function localGit(cwd: string, args: string[], signal?: AbortSignal): Promise<string> {
 	return (await localGitOutput(cwd, args, signal)).trim();
-}
-
-/** Whether a git command exits 0, for yes/no questions like `merge-base --is-ancestor`. */
-export async function localGitSucceeds(cwd: string, args: string[], signal?: AbortSignal): Promise<boolean> {
-	return (await spawnGit(cwd, args, signal)).code === 0;
 }

@@ -1,8 +1,12 @@
 import { expect, test } from 'bun:test';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { PullPreview, PullRequest, Repo } from '@recoder/shared';
 import { app } from '../../../src/app';
 import { GhError } from '../../../src/forge/gh';
+import { localHeadSha } from '../../../src/forge/local/pulls';
 import { fetchPullPreview } from '../../../src/forge/pull-preview';
 import { git } from '../../helpers/git';
 import { localForgeFixture } from '../../helpers/local-forge';
@@ -29,6 +33,29 @@ test('a pull missing from the metadata file is a not-found GhError', async () =>
 
 	expect(error).toBeInstanceOf(GhError);
 	expect((error as GhError).kind).toBe('not-found');
+});
+
+test('a pull whose head ref is absent is a not-found GhError', async () => {
+	const { repo } = await localForgeFixture();
+	const error = await localHeadSha(fileURLToPath(repo.url), 99).catch((err: unknown) => err);
+
+	expect(error).toBeInstanceOf(GhError);
+
+	if (!(error instanceof GhError)) throw error;
+
+	expect(error.kind).toBe('not-found');
+});
+
+test('a git failure that is not a missing ref surfaces as an error, not a missing pull', async () => {
+	const dir = await mkdtemp(join(tmpdir(), 'recoder-not-a-repo-'));
+	const error = await localHeadSha(dir, 7).catch((err: unknown) => err);
+
+	expect(error).toBeInstanceOf(GhError);
+
+	if (!(error instanceof GhError)) throw error;
+
+	expect(error.kind).toBe('unknown');
+	expect(error.message).toContain('git rev-parse failed');
 });
 
 test('a registered local repo lists only its open pulls', async () => {

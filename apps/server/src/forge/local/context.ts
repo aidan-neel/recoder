@@ -1,7 +1,7 @@
 import type { PrRef } from '../../review/pipeline/intent/types.js';
 import type { CommentRow, ForgeAdapter, PullRows, StackRow } from '../context/gather.js';
 import { MESSAGE_FIELDS, namedPull, parseMessage, toPrRef, type IssueKey } from '../context/sources.js';
-import { localGit, localGitOutput, localGitSucceeds } from './git.js';
+import { localGit, localGitOutput, LocalGitError } from './git.js';
 import { localHeadSha, localPullUrl } from './pulls.js';
 import {
 	findLocalPull,
@@ -159,9 +159,21 @@ async function pullsContaining(repoPath: string, sha: string, signal: AbortSigna
 	});
 }
 
-/** Whether `ancestor` is reachable from `commit` (or is it). */
-function isAncestor(repoPath: string, ancestor: string, commit: string, signal: AbortSignal): Promise<boolean> {
-	return localGitSucceeds(repoPath, ['merge-base', '--is-ancestor', ancestor, commit], signal);
+/**
+ * Whether `ancestor` is reachable from `commit` (or is it). Exit 1 is "not an
+ * ancestor"; any other git failure — a revision git cannot resolve, say —
+ * throws rather than posing as an answer.
+ */
+async function isAncestor(repoPath: string, ancestor: string, commit: string, signal: AbortSignal): Promise<boolean> {
+	try {
+		await localGit(repoPath, ['merge-base', '--is-ancestor', ancestor, commit], signal);
+
+		return true;
+	} catch (err) {
+		if (err instanceof LocalGitError && err.code === 1) return false;
+
+		throw err;
+	}
 }
 
 /**

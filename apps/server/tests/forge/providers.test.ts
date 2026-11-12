@@ -13,6 +13,13 @@ describe('parseSlug', () => {
 		expect(() => parseSlug('not a url')).toThrow();
 		expect(() => parseSlug('https://github.com/onlyone')).toThrow();
 	});
+
+	test('keeps spaces in a local file path but not in a hosted slug', () => {
+		expect(parseSlug('file:///tmp/my repo')).toBe('tmp/my repo');
+		expect(() => parseSlug('https://github.com/o/r x')).toThrow();
+		expect(() => parseSlug('https://gitlab.com/a b/c')).toThrow();
+		expect(() => parseSlug('file://')).toThrow();
+	});
 });
 
 describe('locateRepo', () => {
@@ -23,5 +30,9 @@ describe('locateRepo', () => {
 
 	test('rejects non owner/repo github slugs', () => {
 		expect(() => locateRepo('https://github.com/a/b/c')).toThrow();
+	});
+
+	test('locates a local repo whose file path has a space', () => {
+		expect(locateRepo('file:///tmp/my repo')).toEqual({ provider: 'local', slug: 'tmp/my repo' });
 	});
 });
