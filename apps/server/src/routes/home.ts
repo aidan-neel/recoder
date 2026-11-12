@@ -15,6 +15,7 @@ const briefSchema = z.object({
 				repoId: z.string().min(1).max(200),
 				repo: z.string().min(1).max(200),
 				number: z.number().int().positive(),
+				headSha: z.string().max(200),
 				title: z.string().max(500),
 				additions: z.number().int().nonnegative(),
 				deletions: z.number().int().nonnegative(),
@@ -36,8 +37,10 @@ app.post('/brief', async (c) => {
 
 	if (!isReviewConfigured()) return c.json({ error: 'No orchestrator model configured.' }, 503);
 
+	const [reviews, repos] = await Promise.all([db.reviews.list(), db.repos.list()]);
+
 	try {
-		return c.json(await homeBrief(body, await db.reviews.list()));
+		return c.json(await homeBrief(body, reviews, repos));
 	} catch (err) {
 		if (err instanceof LlmError) return c.json({ error: err.message }, 502);
 		throw err;

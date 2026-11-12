@@ -1,10 +1,10 @@
 <script lang="ts">
-	import type { Repo, Review } from '@recoder/shared';
+	import { repoLabels, shortAge, type Repo, type Review } from '@recoder/shared';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import * as HoverCard from '@sivir-ui/svelte/components/hover-card';
 	import ProviderMark from '$lib/components/settings/provider-mark.svelte';
-	import { shortAge } from '@recoder/shared';
 	import { prStatus, type BriefPick } from '$lib/home/home';
+	import { openPrs } from '$lib/home/open-prs.svelte';
 	import { hostedUrl } from '$lib/shell/links';
 
 	interface Props {
@@ -17,6 +17,9 @@
 	let { item, text, onOpen }: Props = $props();
 
 	const status = $derived(prStatus(item.review));
+	const repoLabel = $derived(
+		repoLabels(openPrs.repos.length > 0 ? openPrs.repos : [item.repo]).get(item.repo.id) ?? item.repo.name
+	);
 
 	/** Where an unreviewed PR opens: its host, or nowhere for a local repo. */
 	const hosted = $derived(hostedUrl(item.pr.url));
@@ -51,7 +54,7 @@
 	>
 		<div class="flex items-center gap-2 font-mono text-[11.5px] text-fg-faint">
 			<ProviderMark provider={item.repo.provider} size={12} />
-			<span class="truncate">{item.repo.name}</span>
+			<span class="truncate">{repoLabel}</span>
 			<span>#{item.pr.number}</span>
 		</div>
 		<HoverCard.Title class="pr-card-title">{item.pr.title || `PR #${item.pr.number}`}</HoverCard.Title>

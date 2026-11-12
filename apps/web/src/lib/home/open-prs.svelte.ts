@@ -1,15 +1,15 @@
-import type { HomeBriefResponse, PullRequest, Repo } from '@recoder/shared';
-import { readCache, writeCache } from '$lib/shell/persisted-cache';
+import { isHomeBriefResponse, type HomeBriefResponse, type PullRequest, type Repo } from '@recoder/shared';
 import { serverApi } from '$lib/api/server-api';
+import { readCache, writeCache } from '$lib/shell/persisted-cache';
 
 const BRIEF_KEY = 'recoder.homeBrief';
 
 function readBrief(): HomeBriefResponse | null {
 	try {
 		const raw = typeof localStorage === 'undefined' ? null : localStorage.getItem(BRIEF_KEY);
-		const value = raw ? (JSON.parse(raw) as HomeBriefResponse) : null;
+		const value: unknown = raw ? JSON.parse(raw) : null;
 
-		return value && typeof value.text === 'string' ? value : null;
+		return isHomeBriefResponse(value) ? value : null;
 	} catch {
 		return null;
 	}
@@ -28,13 +28,14 @@ class OpenPrsState {
 	loading = $state(true);
 	refreshing = $state(false);
 	apiDown = $state(false);
-	/** Last brief shown, kept across reloads so Home paints it immediately. */
+	/** Last brief shown, kept across reloads when its PR snapshot still matches. */
 	brief = $state<HomeBriefResponse | null>(readBrief());
-	/** The server rewrites the brief at most every 12 hours; ask once per app session. */
-	briefRequested = false;
+	/** Snapshot key of the last brief requested this session; re-requests when the PR set changes. */
+	briefRequestedSnapshot: string | null = null;
 
 	/** Shows a brief and keeps it for the next visit when storage allows. */
 	setBrief(brief: HomeBriefResponse | null): void {
+		if (this.brief === brief) return;
 		this.brief = brief;
 
 		try {

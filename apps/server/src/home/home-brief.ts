@@ -1,18 +1,30 @@
-import { latestReviews, type HomeBriefRequest, type HomeBriefResponse, type Review } from '@recoder/shared';
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+	briefSnapshotKey,
+	isHomeBriefResponse,
+	latestReviews,
+	repoLabels,
+	type HomeBriefPr,
+	type HomeBriefRef,
+	type HomeBriefRequest,
+	type HomeBriefResponse,
+	type Repo,
+	type Review
+} from '@recoder/shared';
+import { rmSync } from 'node:fs';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { serverDataDir } from '../util/data-dir';
 import { chatCompletion, LlmError } from '../models/llm.js';
 import { configForOrchestrator } from '../models/models.js';
+import { serverDataDir } from '../util/data-dir';
 
 const SYSTEM_PROMPT = `You write the one-line brief at the top of a code-review app's home screen.
 Say only the single most useful thing: the one pull request that most needs attention and why (open high-severity findings, a failed review, or the biggest one nobody has reviewed). Mention a second only if it is just as urgent. Do not list, count, or summarize the rest; leave everything unremarkable out.
 Tone: a sharp colleague in passing. Plain and specific, no filler, no exclamation marks, no emoji. Do not greet; the page adds the greeting.
-Refer to PRs only as #number. Mark at most one key phrase with **double asterisks**. Never mark a PR number.
+Refer to each PR by its bracketed tag from the facts, like [repoId#number]. Mark at most one key phrase with **double asterisks**. Never mark a PR tag.
 Use only the facts provided. One or two short sentences, at most 25 words. Plain text only.`;
 
-/** Bump when the prompt changes so a saved brief written by the old one is replaced. */
-const BRIEF_VERSION = 3;
+/** Bump when the prompt or stored response shape changes so an older cached brief is replaced. */
+const BRIEF_VERSION = 4;
 
 /** Output budget: reasoning models spend output tokens thinking before the brief itself. */
 const BRIEF_MAX_TOKENS = 4000;
@@ -21,9 +33,8 @@ const BRIEF_MAX_TOKENS = 4000;
 const BRIEF_TIMEOUT_MS = 90_000;
 
 /**
- * One brief, kept on disk and rewritten at most every 12 hours
- * (RECODER_BRIEF_TTL_MS). PRs opening or reviews finishing don't trigger a
- * rewrite: Home shows live state everywhere else, and the brief is a digest.
+ * Maximum age (RECODER_BRIEF_TTL_MS, default 12 hours) for a cached brief when
+ * the open pull request snapshot (`repoId#number@headSha`) has not changed.
  */
 function briefTtlMs(): number {
 	const raw = Number(process.env.RECODER_BRIEF_TTL_MS);
@@ -35,20 +46,47 @@ function briefFile(): string {
 	return join(serverDataDir(), 'home-brief.json');
 }
 
-function readStoredBrief(): HomeBriefResponse | null {
+function isErrnoCode(err: unknown, code: string): boolean {
+	return typeof err === 'object' && err !== null && 'code' in err && err.code === code;
+}
+
+async function readStoredBrief(): Promise<HomeBriefResponse | null> {
+	let raw: string;
+
 	try {
-		const value = JSON.parse(readFileSync(briefFile(), 'utf8')) as HomeBriefResponse & { version?: number };
+		raw = await readFile(briefFile(), 'utf8');
+	} catch (err) {
+		if (isErrnoCode(err, 'ENOENT')) return null;
+		throw err;
+	}
 
-		if (value?.version !== BRIEF_VERSION) return null;
+	let parsed: unknown;
 
-		return typeof value.text === 'string' && typeof value.generatedAt === 'string' ? value : null;
-	} catch {
+	try {
+		parsed = JSON.parse(raw);
+	} catch (err) {
+		if (err instanceof SyntaxError) return null;
+		throw err;
+	}
+
+	if (typeof parsed !== 'object' || parsed === null || !('version' in parsed) || parsed.version !== BRIEF_VERSION) {
 		return null;
 	}
+
+	if (!isHomeBriefResponse(parsed)) return null;
+
+	return {
+		text: parsed.text,
+		refs: parsed.refs,
+		snapshot: parsed.snapshot,
+		generatedAt: parsed.generatedAt,
+		model: parsed.model
+	};
 }
 
 let stored: HomeBriefResponse | null | undefined;
-let inflight: Promise<HomeBriefResponse> | null = null;
+const inflight = new Map<string, Promise<HomeBriefResponse>>();
+let latestGeneration = 0;
 
 function ageText(iso: string, now: number): string {
 	const t = Date.parse(iso);
@@ -84,20 +122,60 @@ function reviewText(review: Review | undefined, now: number): string {
 	return `${when}, ${parts.join(', ')} finding${review.findings.length === 1 ? '' : 's'}`;
 }
 
-function briefFacts(input: HomeBriefRequest, reviews: Review[], now = Date.now()): string {
+function labelsForInput(input: HomeBriefRequest, repos: ReadonlyArray<Repo>): Map<string, string> {
+	const knownIds = new Set(repos.map((repo) => repo.id));
+	const combined: Pick<Repo, 'id' | 'name' | 'url' | 'provider'>[] = [...repos];
+
+	for (const pr of input.prs) {
+		if (knownIds.has(pr.repoId)) continue;
+		knownIds.add(pr.repoId);
+		combined.push({ id: pr.repoId, name: pr.repo, url: '', provider: 'github' });
+	}
+
+	return repoLabels(combined);
+}
+
+function emptyRepoNames(
+	input: HomeBriefRequest,
+	repos: ReadonlyArray<Repo>,
+	labels: ReadonlyMap<string, string>
+): string[] {
+	if (!input.emptyRepos?.length) return [];
+
+	const openIds = new Set(input.prs.map((pr) => pr.repoId));
+	const emptyTracked = repos.filter((repo) => !openIds.has(repo.id));
+
+	if (emptyTracked.length === input.emptyRepos.length) {
+		return emptyTracked.map((repo) => labels.get(repo.id) ?? repo.name);
+	}
+
+	return input.emptyRepos;
+}
+
+function briefFacts(
+	input: HomeBriefRequest,
+	reviews: Review[],
+	repos: ReadonlyArray<Repo>,
+	labels: ReadonlyMap<string, string>,
+	now = Date.now()
+): string {
 	const latest = latestReviews(reviews);
-	const repos = new Set(input.prs.map((pr) => pr.repo));
-	const lines = [`Open PRs: ${input.prs.length} across ${repos.size} repo${repos.size === 1 ? '' : 's'}.`];
+	const repoIds = new Set(input.prs.map((pr) => pr.repoId));
+	const lines = [`Open PRs: ${input.prs.length} across ${repoIds.size} repo${repoIds.size === 1 ? '' : 's'}.`];
 
 	for (const pr of input.prs) {
 		const review = latest.get(`${pr.repoId}#${pr.number}`);
+		const label = labels.get(pr.repoId) ?? pr.repo;
+		const safeTitle = pr.title.replace(/\s+/g, ' ').trim();
 
 		lines.push(
-			`- ${pr.repo} #${pr.number} "${pr.title}": +${pr.additions} −${pr.deletions} in ${pr.changedFiles} files, ${ageText(pr.createdAt, now)}; ${reviewText(review, now)}.`
+			`- [${pr.repoId}#${pr.number}] ${label} #${pr.number} "${safeTitle}": +${pr.additions} −${pr.deletions} in ${pr.changedFiles} files, ${ageText(pr.createdAt, now)}; ${reviewText(review, now)}.`
 		);
 	}
 
-	if (input.emptyRepos?.length) lines.push(`Repos with no open PRs: ${input.emptyRepos.join(', ')}.`);
+	const empty = emptyRepoNames(input, repos, labels);
+
+	if (empty.length) lines.push(`Repos with no open PRs: ${empty.join(', ')}.`);
 
 	return lines.join('\n');
 }
@@ -116,64 +194,175 @@ export function cleanBrief(raw: string): string {
 		.slice(0, 600);
 }
 
+function resolveBareNumber(
+	num: number,
+	candidates: ReadonlyArray<HomeBriefPr>,
+	preceding: string,
+	labels: ReadonlyMap<string, string>
+): HomeBriefRef | null {
+	if (candidates.length === 1) return { repoId: candidates[0].repoId, number: num };
+	if (candidates.length === 0) return null;
+
+	const lower = preceding.toLowerCase();
+
+	const ranked = candidates
+		.map((candidate) => ({
+			candidate,
+			at: lower.lastIndexOf((labels.get(candidate.repoId) ?? candidate.repo).toLowerCase())
+		}))
+		.filter((entry) => entry.at >= 0)
+		.sort((a, b) => b.at - a.at);
+
+	if (ranked.length > 0 && (ranked.length === 1 || ranked[0].at > ranked[1].at)) {
+		return { repoId: ranked[0].candidate.repoId, number: num };
+	}
+
+	return null;
+}
+
+function parseBriefRefs(
+	raw: string,
+	prs: ReadonlyArray<HomeBriefPr>,
+	labels: ReadonlyMap<string, string>
+): { text: string; refs: HomeBriefRef[] } {
+	const cleaned = cleanBrief(raw);
+	const byNumber = new Map<number, HomeBriefPr[]>();
+
+	for (const pr of prs) {
+		const list = byNumber.get(pr.number) ?? [];
+
+		list.push(pr);
+		byNumber.set(pr.number, list);
+	}
+
+	const refs: HomeBriefRef[] = [];
+	const pattern = /\[([^\][\s#]+)#(\d+)\]|#(\d+)\b/g;
+	let out = '';
+	let lastIndex = 0;
+
+	for (const match of cleaned.matchAll(pattern)) {
+		const index = match.index ?? 0;
+
+		out += cleaned.slice(lastIndex, index);
+		lastIndex = index + match[0].length;
+
+		const [, tagRepoId, tagNumber, bareNumber] = match;
+
+		if (tagRepoId !== undefined && tagNumber !== undefined) {
+			const num = Number(tagNumber);
+			const candidates = byNumber.get(num) ?? [];
+			const exact = prs.find((pr) => pr.repoId === tagRepoId && pr.number === num);
+			const target = exact ?? (candidates.length === 1 ? candidates[0] : undefined);
+
+			if (target) {
+				refs.push({ repoId: target.repoId, number: target.number });
+
+				const label = labels.get(target.repoId) ?? target.repo;
+				const alreadyNamed = out.trimEnd().toLowerCase().endsWith(label.toLowerCase());
+
+				out += candidates.length > 1 && !alreadyNamed ? `${label} #${num}` : `#${num}`;
+			} else {
+				out += `#${num}`;
+			}
+		} else if (bareNumber !== undefined) {
+			const num = Number(bareNumber);
+			const resolved = resolveBareNumber(num, byNumber.get(num) ?? [], out, labels);
+
+			if (resolved) refs.push(resolved);
+			out += `#${num}`;
+		}
+	}
+
+	out += cleaned.slice(lastIndex);
+
+	return { text: cleanBrief(out), refs };
+}
+
 /**
  * The Home brief: a short, conversational read of the open PRs, written by the
- * orchestrator's model. Facts come from the client's PR list joined with the
- * stored reviews, so the model never guesses at review state.
+ * orchestrator's model. Cached on disk per open-PR snapshot (`repoId#number@headSha`),
+ * carrying structured PR references so the UI links and actions match the prose.
  */
-export async function homeBrief(input: HomeBriefRequest, reviews: Review[]): Promise<HomeBriefResponse> {
-	const facts = briefFacts(input, reviews);
+export async function homeBrief(
+	input: HomeBriefRequest,
+	reviews: Review[],
+	repos: Repo[] = []
+): Promise<HomeBriefResponse> {
+	const snapshot = briefSnapshotKey(input.prs);
 	const cfg = configForOrchestrator();
 
-	if (stored === undefined) stored = readStoredBrief();
-	if (stored && stored.model === cfg.model && Date.now() - Date.parse(stored.generatedAt) < briefTtlMs()) return stored;
-	if (inflight) return inflight;
+	if (stored === undefined) stored = await readStoredBrief();
+
+	if (
+		stored &&
+		stored.model === cfg.model &&
+		stored.snapshot === snapshot &&
+		Date.now() - Date.parse(stored.generatedAt) < briefTtlMs()
+	) {
+		return stored;
+	}
+
+	const cacheKey = `${cfg.model}\0${snapshot}`;
+	const running = inflight.get(cacheKey);
+
+	if (running) return running;
+
+	const generation = ++latestGeneration;
+	const labels = labelsForInput(input, repos);
+	const facts = briefFacts(input, reviews, repos, labels);
 
 	const run = (async () => {
-		try {
-			const raw = await chatCompletion({
-				...cfg,
-				messages: [
-					{ role: 'system', content: SYSTEM_PROMPT },
-					{ role: 'user', content: facts }
-				],
-				maxTokens: BRIEF_MAX_TOKENS,
-				thinking: false,
-				timeoutMs: 60_000
-			});
+		const raw = await chatCompletion({
+			...cfg,
+			messages: [
+				{ role: 'system', content: SYSTEM_PROMPT },
+				{ role: 'user', content: facts }
+			],
+			maxTokens: BRIEF_MAX_TOKENS,
+			thinking: false,
+			timeoutMs: 60_000
+		});
 
-			const text = cleanBrief(raw);
+		const { text, refs } = parseBriefRefs(raw, input.prs, labels);
 
-			if (!text) throw new LlmError(0, 'model returned an empty brief');
+		if (!text) throw new LlmError(0, 'model returned an empty brief');
 
-			const value: HomeBriefResponse = { text, generatedAt: new Date().toISOString(), model: cfg.model };
+		const value: HomeBriefResponse = {
+			text,
+			refs,
+			snapshot,
+			generatedAt: new Date().toISOString(),
+			model: cfg.model
+		};
 
+		if (generation === latestGeneration) {
 			stored = value;
-
-			try {
-				writeFileSync(briefFile(), JSON.stringify({ ...value, version: BRIEF_VERSION }));
-			} catch {}
-
-			return value;
-		} finally {
-			inflight = null;
+			await writeFile(briefFile(), JSON.stringify({ ...value, version: BRIEF_VERSION }));
 		}
+
+		return value;
 	})();
 
-	inflight = Promise.race([
+	let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+	const raced = Promise.race([
 		run,
-		new Promise<never>((_, reject) => setTimeout(() => reject(new LlmError(0, 'brief timed out')), BRIEF_TIMEOUT_MS))
+		new Promise<never>((_, reject) => {
+			timeoutId = setTimeout(() => reject(new LlmError(0, 'brief timed out')), BRIEF_TIMEOUT_MS);
+		})
 	]).finally(() => {
-		inflight = null;
+		if (timeoutId !== undefined) clearTimeout(timeoutId);
+		inflight.delete(cacheKey);
 	});
 
-	return inflight;
+	inflight.set(cacheKey, raced);
+
+	return raced;
 }
 
 export function clearHomeBriefCache(): void {
-	stored = null;
-
-	try {
-		rmSync(briefFile(), { force: true });
-	} catch {}
+	stored = undefined;
+	inflight.clear();
+	latestGeneration++;
+	rmSync(briefFile(), { force: true });
 }

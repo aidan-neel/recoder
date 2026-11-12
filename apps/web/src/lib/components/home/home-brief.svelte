@@ -1,20 +1,21 @@
 <script lang="ts">
 	import Play from '@lucide/svelte/icons/play';
-	import type { PullRequest, Repo, Review } from '@recoder/shared';
+	import { briefSnapshotKey, repoLabels, type PullRequest, type Repo, type Review } from '@recoder/shared';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import { Button } from '@sivir-ui/svelte/components/button';
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import { serverApi } from '$lib/api/server-api';
 	import Skeleton from '$lib/components/ui/skeleton.svelte';
 	import {
+		actionPrLabel,
+		briefActions,
 		briefSegments,
 		dayPart,
 		fallbackBrief,
 		firstName,
 		highCount,
-		pickToOpen,
-		pickToReview,
 		prKey,
+		toBriefPrs,
 		type BriefPick
 	} from '$lib/home/home';
 	import { openPrs } from '$lib/home/open-prs.svelte';
@@ -35,27 +36,37 @@
 
 	let { items, needsModel, starting, onStart, onOpen }: Props = $props();
 
-	let briefLoading = $state(false);
 	let briefFailed = $state(false);
 
 	const name = $derived(firstName(shellState.account?.user));
 	const part = $derived(dayPart());
-	const reviewPick = $derived(pickToReview(items));
-	const openPick = $derived(pickToOpen(items));
+	const labels = $derived(repoLabels(openPrs.repos.length > 0 ? openPrs.repos : items.map((item) => item.repo)));
+	const briefPrs = $derived(toBriefPrs(items, labels));
+	const currentSnapshot = $derived(briefSnapshotKey(briefPrs));
 	const briefReady = $derived(openPrs.count !== null && !recentSessions.loading);
 
 	/**
-	 * Requests the AI brief once per app session; the server keeps it for 12 hours, so reviews finishing or
-	 * PRs opening don't rewrite it. Returns the cleanup that aborts a request still in flight.
+	 * Requests the AI brief whenever the open pull request snapshot (`repoId#number@headSha`)
+	 * changes; aborts an older in-flight call if the snapshot moves on before it returns.
 	 */
 	function requestBrief(): (() => void) | undefined {
-		if (!briefReady || openPrs.apiDown || needsModel || openPrs.briefRequested) return;
-		if (items.length === 0) return;
-		openPrs.briefRequested = true;
+		if (!briefReady || openPrs.apiDown || needsModel) return;
+
+		if (items.length === 0) {
+			openPrs.briefRequestedSnapshot = null;
+			openPrs.setBrief(null);
+
+			return;
+		}
+
+		const snapshot = currentSnapshot;
+
+		if (openPrs.briefRequestedSnapshot === snapshot) return;
+		openPrs.briefRequestedSnapshot = snapshot;
 
 		const controller = new AbortController();
+		let pending = true;
 
-		briefLoading = true;
 		briefFailed = false;
 
 		serverApi
@@ -63,39 +74,41 @@
 				{
 					name,
 					dayPart: part,
-					prs: items.map(({ pr, repo }) => ({
-						repoId: repo.id,
-						repo: repo.name,
-						number: pr.number,
-						title: pr.title,
-						additions: pr.additions,
-						deletions: pr.deletions,
-						changedFiles: pr.changedFiles,
-						createdAt: pr.createdAt
-					})),
+					prs: briefPrs,
 					emptyRepos: openPrs.repos
 						.filter((repo) => (openPrs.prsByRepo[repo.id] ?? []).length === 0)
-						.map((repo) => repo.name)
+						.map((repo) => labels.get(repo.id) ?? repo.name)
 				},
 				controller.signal
 			)
 			.then((brief) => {
-				openPrs.setBrief(brief);
+				if (!controller.signal.aborted && brief.snapshot === snapshot) {
+					openPrs.setBrief(brief);
+				}
 			})
 			.catch(() => {
 				if (!controller.signal.aborted) briefFailed = true;
 			})
 			.finally(() => {
-				if (!controller.signal.aborted) briefLoading = false;
+				pending = false;
 			});
 
 		return () => {
-			if (briefLoading) openPrs.briefRequested = false;
+			if (pending && openPrs.briefRequestedSnapshot === snapshot) {
+				openPrs.briefRequestedSnapshot = null;
+			}
+
 			controller.abort();
 		};
 	}
 
 	$effect(() => requestBrief());
+
+	const activeBrief = $derived(
+		openPrs.brief && items.length > 0 && openPrs.brief.snapshot === currentSnapshot ? openPrs.brief : null
+	);
+
+	const fallback = $derived(briefReady ? fallbackBrief(items, name, part, labels) : null);
 
 	/** The greeting is ours, for the current time of day; the brief body can be hours old. */
 	const greeting = $derived(
@@ -103,31 +116,36 @@
 	);
 
 	const briefText = $derived(
-		openPrs.brief && items.length > 0
-			? `${greeting} ${openPrs.brief.text.replace(/^\**\s*(good\s+)?(morning|afternoon|evening|night)\b[^.!*]*[.!]\s*\**\s*/i, '')}`
-			: briefReady
-				? fallbackBrief(items, name, part)
-				: null
+		activeBrief
+			? `${greeting} ${activeBrief.text.replace(/^\**\s*(good\s+)?(morning|afternoon|evening|night)\b[^.!*]*[.!]\s*\**\s*/i, '')}`
+			: (fallback?.text ?? null)
 	);
+
+	const activeRefs = $derived(activeBrief ? activeBrief.refs : (fallback?.refs ?? []));
+	const actions = $derived(briefActions(items, activeRefs));
+	const reviewPick = $derived(actions.reviewPick);
+	const openPick = $derived(actions.openPick);
+	const reviewLabel = $derived(reviewPick ? actionPrLabel(reviewPick, items, labels) : '');
+	const openLabel = $derived(openPick ? actionPrLabel(openPick, items, labels) : '');
 
 	/**
 	 * A skeleton only until the PR list is in: after that the built-in summary shows at once, and the AI
 	 * brief replaces it in place whenever (if ever) it arrives. It sits on the brief's 27px / 1.38 line box,
 	 * so the page doesn't shift when the text lands.
 	 */
-	const showBriefSkeleton = $derived(!openPrs.brief && !briefReady);
+	const showBriefSkeleton = $derived(!activeBrief && !briefReady);
 
 	/**
 	 * The brief split into text, emphasis and PR refs. The markup renders them on tight lines, since
 	 * whitespace between those tags shows as stray spaces.
 	 */
-	const segments = $derived(briefText ? briefSegments(briefText) : []);
+	const segments = $derived(briefText ? briefSegments(briefText, activeRefs, items) : []);
 
 	const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 
 	const updatedAt = $derived(
-		openPrs.brief && !briefFailed
-			? new Date(openPrs.brief.generatedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+		activeBrief && !briefFailed
+			? new Date(activeBrief.generatedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 			: null
 	);
 </script>
@@ -153,9 +171,8 @@
 				<div class="home-brief-layer">
 					<Typography.Text class="home-brief ai-voice">
 						{#each segments as segment, i (i)}{#if segment.kind === 'strong'}<span class="text-fg">{segment.text}</span
-								>{:else if segment.kind === 'pr' && items.some((item) => item.pr.number === segment.number)}{@const item =
-									items.find((candidate) => candidate.pr.number === segment.number)!}<span class="brief-ref-wrap"
-									><BriefPrRef {item} text={segment.text} {onOpen} /></span
+								>{:else if segment.kind === 'pr' && segment.item}{@const item = segment.item}<span
+									class="brief-ref-wrap"><BriefPrRef {item} text={segment.text} {onOpen} /></span
 								>{:else}{segment.text}{/if}{/each}
 					</Typography.Text>
 				</div>
@@ -172,13 +189,13 @@
 					onclick={() => onStart(pick.pr, pick.repo)}
 				>
 					<Play size={12} fill="currentColor" aria-hidden="true" />
-					Review #{pick.pr.number}
+					Review {reviewLabel}
 				</Button>
 			{/if}
 			{#if openPick?.review}
 				{@const pick = openPick}
 				<Button variant="outline" class="brief-action" onclick={() => pick.review && onOpen(pick.review, pick.repo)}>
-					Open #{pick.pr.number}
+					Open {openLabel}
 					<Badge variant="secondary" data-sev="high" class="severity-pill font-mono"
 						>{highCount(pick.review)} high</Badge
 					>
