@@ -189,7 +189,7 @@ Details that follow from "only read":
 - A repository with a split index keeps its `sharedindex.*` files as they are, their time stamps included: the private copy of the index is made whole first.
 - `--diff` refuses an empty file or input, and a hunk with no `---` and `+++` file header, as usage errors before the review starts.
 - A stop during the preparation of a `--pull` target ends the git command that is running, removes the half-made checkout and exits 130.
-- When that preparation fails, the message ends with the last lines of git's error, with credentials removed (`target/redact.ts`).
+- When that preparation fails, the message ends with the last lines of git's error, with credentials removed (`util/redact.ts`).
 
 Environment variables a git hook exports (`GIT_DIR` and the like) are removed for the run, so the pipeline's git commands never act on the user's repository. Bun gives a child process the environment the program started with, so the program starts itself again without them (`apps/server/src/cli/repository-env.ts`). That copy runs in its own session, because a shared process group would deliver a terminal's Ctrl-C twice and a review treats a second stop as "exit now". The cost: under a git hook the review has no controlling terminal, so nothing can prompt on `/dev/tty` and job control does not reach it. The copy stops its review when the process that started it is gone, for example after `kill -9`.
 

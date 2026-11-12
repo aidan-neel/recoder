@@ -1,7 +1,8 @@
 import { setTimeout as delay } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { CapacityError } from '../models/llm/errors';
-import { acquireLlmSlot, releaseLlmSlot, resetLlmLimiter, withLlmLane } from '../models/llm/limiter';
+import { withLlmLane } from '../models/llm/lane';
+import { acquireLlmSlot, releaseLlmSlot, resetLlmLimiter } from '../models/llm/limiter';
 
 const USAGE =
 	'Usage: bun run --filter @recoder/server eval:load -- [--reviews 12] [--requests 8] [--levels 1,2,4,8,16,32] ' +

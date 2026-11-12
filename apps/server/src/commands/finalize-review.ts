@@ -4,6 +4,7 @@ import { db, reviewProgress, keepForReplay, settlePipelineStreams } from '../sto
 import { storageTransaction } from '../storage/backend';
 import { metricWrites } from '../storage/persistence-queue';
 import { emitReviewEvent, flushReviewEvents, reportReviewTask, settleReviewTasks } from '../review/session/events';
+import { withFindingHistory } from '../review/history/history';
 import { touch } from './review-session';
 
 /** Roles that are not a reviewer of the change: subagents and obligation investigators work on what reviewers raised. */
@@ -49,10 +50,13 @@ export async function finalizeReview(reviewId: string, finished: AdaptiveReviewR
 
 		const status = result.outcome === 'complete' ? 'passed' : 'failed';
 
+		const settled =
+			status === 'passed' ? await withFindingHistory(reviewId, findings, result.unconfirmed) : { findings };
+
 		await touch(reviewId, {
 			status,
 			summary: result.summary,
-			findings,
+			...settled,
 			unconfirmed: result.outcome === 'complete' ? result.unconfirmed : [],
 			funnel: result.funnel,
 			context: result.context,

@@ -1,37 +1,12 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
+import { agentById } from '../../agents/registry';
 import { CapacityError, cancelledError } from './errors';
-
-/**
- * Who a model request waits for a slot on behalf of, usually one review. When
- * an endpoint is full the limiter takes turns between lanes, so one busy review
- * cannot hold back another.
- */
-export interface LlmLane {
-	id: string;
-	/** Told how long each request in the lane waited for its slot, 0 when one was free. Runs while the slot is held, so it must not throw. */
-	recordWait: (waitedMs: number) => void;
-}
+import { currentLlmLane } from './lane';
 
 const DEFAULT_CEILING = 64;
-
-/**
- * Endpoints whose every call starts a local process get a small ceiling of their own, read from an env var:
- * Claude Code (default 8) and Devin (default 4) run one CLI per call, so `RECODER_CLAUDE_CODE_CONCURRENCY` and
- * `RECODER_DEVIN_CONCURRENCY` cap them, never above the shared ceiling.
- */
-const PROCESS_CEILINGS: Record<string, { env: string; fallback: number }> = {
-	'claude-code': { env: 'RECODER_CLAUDE_CODE_CONCURRENCY', fallback: 8 },
-	devin: { env: 'RECODER_DEVIN_CONCURRENCY', fallback: 4 }
-};
 
 const BACKOFF_FLOOR = 4;
 
 const BACKOFF_COOLDOWN_MS = 10_000;
-
-/** The lane of requests made outside any review: home brief, settings checks. */
-const SHARED_LANE: LlmLane = { id: '', recordWait: () => undefined };
-
-const lanes = new AsyncLocalStorage<LlmLane>();
 
 interface EndpointState {
 	endpoint: string;
@@ -48,8 +23,9 @@ interface EndpointState {
  * Concurrency cap kept per model endpoint, shared by review assignments and
  * interactive discussions, so no endpoint is overwhelmed and one provider's
  * trouble never slows another. RECODER_LLM_CONCURRENCY sets each endpoint's
- * ceiling (default 64, so a score of reviews can run at once); Claude Code's
- * endpoint is capped lower, see {@link PROCESS_CEILINGS}. Below the ceiling
+ * ceiling (default 64, so a score of reviews can run at once); an agent CLI
+ * that starts a process per call is capped lower by its own `processCeiling`
+ * (an agent's endpoint is its id, since it has no base URL). Below the ceiling
  * sits an effective limit that backs off when that endpoint pushes back: a rate
  * limit halves it down to a floor of 4, at most once per cooldown so a burst of
  * rejected calls counts as one signal, and after the cooldown every success on
@@ -108,18 +84,13 @@ function envCount(name: string, fallback: number): number {
 
 function llmCeiling(endpoint: string): number {
 	const shared = envCount('RECODER_LLM_CONCURRENCY', DEFAULT_CEILING);
-	const own = PROCESS_CEILINGS[endpoint];
+	const own = agentById(endpoint)?.processCeiling;
 
 	return own ? Math.min(shared, envCount(own.env, own.fallback)) : shared;
 }
 
 function llmLimit(state: EndpointState): number {
 	return Math.min(state.backedOffLimit, llmCeiling(state.endpoint));
-}
-
-/** Model requests `run` makes, however nested, wait for slots in `lane`'s turn. */
-export function withLlmLane<T>(lane: LlmLane, run: () => T): T {
-	return lanes.run(lane, run);
 }
 
 /** Takes the next lane's oldest waiter off the queue; the lane goes to the back of the turns while it has more. */
@@ -212,7 +183,7 @@ export async function acquireLlmSlot(endpoint: string, signal?: AbortSignal, tim
 	if (signal?.aborted) throw cancelledError();
 
 	const state = stateOf(endpoint);
-	const lane = lanes.getStore() ?? SHARED_LANE;
+	const lane = currentLlmLane();
 
 	if (!state.turns.length && state.active < llmLimit(state)) {
 		state.active++;

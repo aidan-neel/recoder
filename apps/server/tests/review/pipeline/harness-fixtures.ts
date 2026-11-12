@@ -80,6 +80,14 @@ export function modelReply(body: unknown): Response {
 	return Response.json({ choices: [{ message: { content: JSON.stringify(body) } }] });
 }
 
+/**
+ * Replaces `fetch` with `answer`, which gets each request's init. The cast is safe: the pipeline only calls
+ * `fetch(url, init)`, never Bun's `fetch.preconnect`, the one member a plain function lacks.
+ */
+export function stubFetch(answer: (init?: RequestInit) => Response | Promise<Response>): void {
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => answer(init)) as typeof fetch;
+}
+
 /** The request's messages, read from a stubbed `fetch` call. */
 export function messagesOf(init?: RequestInit): { content: string }[] {
 	return JSON.parse(String(init?.body)).messages;

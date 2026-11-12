@@ -1,10 +1,6 @@
 import type { AgentStatus, ModelProvider } from '@recoder/shared';
-import { claudeCode } from '../../agents/claude-code/claude-code.js';
 import { codex } from '../../agents/codex/codex.js';
-import { DEVIN_MODEL_PREFIX } from '../../agents/devin/devin-models.js';
-import { devin } from '../../agents/devin/devin.js';
-import { findOpenCode } from '../../agents/opencode/opencode-server.js';
-import { OPENCODE_MODEL_PREFIX } from '../../agents/opencode/opencode.js';
+import { agentById } from '../../agents/registry.js';
 import { configForOrchestrator, configForSubagent, isReviewConfigured, type ModelConfig } from '../../models/models.js';
 import { MODEL_LOOKUP_LIMIT_MS, listLiveModels, listingProblem, type ModelLookup } from '../run/model-choices.js';
 import { openRunSignal } from '../run/run-signal.js';
@@ -15,23 +11,12 @@ import type { DoctorCheck } from './doctor.js';
 const NOT_CONFIGURED_FIX =
 	'Configure a model in Recoder settings, or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL.';
 
-/** The agents whose models are listed by running them: the id prefix their models carry, and the fix for an unlisted one. */
-const LISTING_AGENTS: Partial<Record<ModelProvider, { prefix: string; fix: string }>> = {
-	opencode: {
-		prefix: OPENCODE_MODEL_PREFIX,
-		fix: 'Sign in to the model\u2019s provider with `opencode auth login`, or pick another model in Recoder settings.'
-	},
-	devin: {
-		prefix: DEVIN_MODEL_PREFIX,
-		fix: 'Sign in with `devin auth login`, or pick another model in Recoder settings.'
-	}
-};
-
 /**
- * Whether a review model resolves, and which models the review and its subagents would use. A model run by OpenCode or
- * Devin must also be one its agent lists: that is how a missing sign-in shows, since OpenCode lists only the providers
- * it is signed in to. Listing runs no model, and is bounded by the same limit a review gives it. Claude Code's models
- * have no such check: its list is fixed and the CLI also takes aliases and newer ids that list lacks.
+ * Whether a review model resolves, and which models the review and its subagents would use. A model run by an agent
+ * CLI that lists its models by running must also be one the agent lists: that is how a missing sign-in shows, since
+ * OpenCode, for one, lists only the providers it is signed in to. Listing runs no model, and is bounded by the same
+ * limit a review gives it. An agent with a fixed list (Claude Code) has no such check: its CLI also takes aliases
+ * and newer ids that list lacks.
  */
 export async function checkReviewModel(): Promise<DoctorCheck> {
 	if (!isReviewConfigured()) return failedCheck('review-model', 'No review model is configured.', NOT_CONFIGURED_FIX);
@@ -52,28 +37,32 @@ export async function checkReviewModel(): Promise<DoctorCheck> {
 
 /** A failed check when the model's agent does not list it; null when it does, and for a model no agent lists. */
 async function unlistedModel(config: ModelConfig, lookup: ModelLookup): Promise<DoctorCheck | null> {
-	const agent = config.provider ? LISTING_AGENTS[config.provider] : undefined;
+	const agent = agentById(config.provider);
 
-	if (!agent) return null;
+	if (!agent || agent.fixedModels()) return null;
 
-	const id = `${agent.prefix}${config.model}`;
+	const id = `${agent.id}:${config.model}`;
 	const listed = await listLiveModels(id, lookup);
 
 	if (!listed) return null;
 
 	if (listed.listing.kind !== 'listed') {
-		return failedCheck('review-model', `${listed.agentName} ${listingProblem(listed.listing, lookup)}.`, agent.fix);
+		return failedCheck(
+			'review-model',
+			`${listed.agentName} ${listingProblem(listed.listing, lookup)}.`,
+			agent.signInFix
+		);
 	}
 
 	if (listed.listing.models.some((entry) => entry.id === id)) return null;
 
-	return failedCheck('review-model', `${listed.agentName} does not offer the model "${id}".`, agent.fix);
+	return failedCheck('review-model', `${listed.agentName} does not offer the model "${id}".`, agent.signInFix);
 }
 
 /**
  * The sign-in of the agent behind each configured model, from the CLI's own status command or saved credentials. Makes
- * no model call, and does not start OpenCode's server, so OpenCode is checked only for being installed; whether it
- * offers the saved model is `checkReviewModel`'s check.
+ * no model call and starts nothing that outlives the check (`quickStatus`), so OpenCode is checked only for being
+ * installed; whether it offers the saved model is `checkReviewModel`'s check.
  */
 export async function checkAgentSignIns(): Promise<DoctorCheck[]> {
 	if (!isReviewConfigured()) return [];
@@ -84,13 +73,13 @@ export async function checkAgentSignIns(): Promise<DoctorCheck[]> {
 	return (await Promise.all(checks)).filter((check): check is DoctorCheck => check !== null);
 }
 
+/** ChatGPT is not an agent CLI: its sign-in is Recoder's own saved credentials. */
 async function agentCheck(provider: ModelProvider | undefined): Promise<DoctorCheck | null> {
-	if (provider === 'claude-code') return cliCheck(await claudeCode.detect());
-	if (provider === 'devin') return cliCheck(await devin.detect());
-	if (provider === 'opencode') return openCodeCheck();
 	if (provider === 'codex') return chatGptCheck();
 
-	return null;
+	const agent = agentById(provider);
+
+	return agent ? cliCheck(await agent.quickStatus()) : null;
 }
 
 function cliCheck(status: AgentStatus): DoctorCheck {
@@ -103,14 +92,6 @@ function cliCheck(status: AgentStatus): DoctorCheck {
 		return passedCheck(id, `${status.name} is installed; its sign-in could not be checked.`);
 
 	return passedCheck(id, `${[status.name, status.version].filter(Boolean).join(' ')} is signed in.`);
-}
-
-function openCodeCheck(): DoctorCheck {
-	if (!findOpenCode()) {
-		return failedCheck('agent:opencode', 'OpenCode is not installed.', 'Install OpenCode from https://opencode.ai.');
-	}
-
-	return passedCheck('agent:opencode', 'OpenCode is installed.');
 }
 
 async function chatGptCheck(): Promise<DoctorCheck> {

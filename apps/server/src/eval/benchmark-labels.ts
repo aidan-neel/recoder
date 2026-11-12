@@ -101,11 +101,19 @@ export function matchAdjudication(adjudications: Adjudications, key: string): Ma
 	return entry && 'reports' in entry ? entry : undefined;
 }
 
-/** The finding label filed under `key`; unresolved when there is none. */
-function findingLabel(adjudications: Adjudications, key: string): Adjudication['label'] {
+/**
+ * The finding's label: the one a human filed under `key`, else `false` when
+ * a person dismissed the finding in Recoder as `wrong`, else unresolved. Only
+ * `wrong` says a finding is false; a finding dismissed as not worth fixing,
+ * already handled, a style preference or a duplicate may still be right, so
+ * no other reason labels it.
+ */
+function findingLabel(adjudications: Adjudications, key: string, finding: EvalFinding): Adjudication['label'] {
 	const entry = adjudications[key];
 
-	return entry && 'label' in entry ? entry.label : 'unresolved';
+	if (entry && 'label' in entry) return entry.label;
+
+	return finding.decision?.reason === 'wrong' ? 'false' : 'unresolved';
 }
 
 /** One run's findings with their class, evidence group and key, in the order the judge scored them. */
@@ -186,11 +194,11 @@ function classify(
 	const duplicates = new Set(score.duplicates);
 	const keys = findings.map((finding) => findingKey(pr, finding));
 
-	const classes = findings.map((_, index): FindingClass => {
+	const classes = findings.map((finding, index): FindingClass => {
 		if (planted.has(index)) return 'planted';
 		if (duplicates.has(index)) return 'duplicate';
 
-		return findingLabel(adjudications, keys[index]!);
+		return findingLabel(adjudications, keys[index]!, finding);
 	});
 
 	return { keys, classes, evidence: findings.map(evidenceGroup) };

@@ -1,6 +1,14 @@
+import type { FindingDecisionInput } from '@recoder/shared';
 import { serverApi } from '../api/server-api';
 import { errorToast } from '../shell/notify';
 import { threadsStore } from './threads.svelte';
+
+/**
+ * This app's Dismiss button asks no reason, so it sends the one that keeps what a dismissal always taught
+ * (the finding is not raised again and counts against its topic) without calling the finding false, which
+ * only a person choosing `wrong` may do.
+ */
+const WEB_DISMISSAL: FindingDecisionInput = { state: 'dismissed', reason: 'not-worth-fixing' };
 
 /** The last request of the chain, so a quick Dismiss then Undo reaches the server in that order. */
 let pending: Promise<void> = Promise.resolve();
@@ -17,8 +25,8 @@ export function syncDismissal(findingId: string, dismissed: boolean): void {
 
 	pending = pending.then(async () => {
 		try {
-			if (dismissed) await serverApi.dismissFinding(reviewId, findingId);
-			else await serverApi.restoreFinding(reviewId, findingId);
+			if (dismissed) await serverApi.decideFinding(reviewId, findingId, WEB_DISMISSAL);
+			else await serverApi.reopenFinding(reviewId, findingId);
 		} catch (error) {
 			errorToast(
 				dismissed ? 'Could not save the dismissal' : 'Could not restore the finding',

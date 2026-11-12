@@ -39,7 +39,7 @@ export interface SessionRequest {
  * Recoder runs the CLI in that directory, so every file in the folder is Recoder's. The files hold the review's
  * prompts, and a fork copies its parent's whole transcript, so each is deleted once no call will resume it.
  */
-class SessionFiles {
+export class SessionFiles {
 	readonly folder: string;
 	private readonly config: string;
 
@@ -67,7 +67,12 @@ class SessionFiles {
 /** The session folders this process has used, each swept once before its first session. */
 const opened = new Map<string, SessionFiles>();
 
-function sessionFiles(env: Env, cwd: string): SessionFiles {
+/**
+ * The folder the CLI saves the sessions of the working directory `cwd` in. The first use in this process sweeps
+ * what a crash left there, so every caller opens it before it starts a session: a sweep after a session started
+ * would delete a transcript another run still resumes.
+ */
+export function openSessionFolder(env: Env, cwd: string): SessionFiles {
 	const files = new SessionFiles(env, cwd);
 	const known = opened.get(files.folder);
 
@@ -97,7 +102,7 @@ export function sessionCall(request: SessionRequest, env: Env, cwd: string): Ses
 	if (!conversation)
 		return { args: ['--no-session-persistence'], prompt: promptText(null, request.turns), commit() {}, fail() {} };
 
-	const files = sessionFiles(env, cwd);
+	const files = openSessionFolder(env, cwd);
 	const held = kept.get(conversation);
 	const added = held ? addedTurns(held, request) : null;
 	const id = crypto.randomUUID();

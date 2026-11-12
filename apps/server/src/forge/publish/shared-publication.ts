@@ -6,13 +6,21 @@ import {
 	type PublicationSession
 } from '../../storage/postgres-publication';
 import { GhError } from '../cli';
-import { InlinePreparationError, PublishConflictError } from './forge';
+import { keyedQueue } from '../../util/keyed-queue';
+import { InlinePreparationError, PublishConflictError, rejectedPosition } from './forge';
 
 const publications = postgres ? new PostgresPublications(postgres, assertOwnership) : undefined;
 
+/** Without PostgreSQL this process is the only publisher, so publications of one pull request queue here instead. */
+const localPublications = keyedQueue();
+
+/**
+ * Run `work` while no other publication to the same pull request (`key`)
+ * runs: across processes through PostgreSQL, else within this process.
+ */
 export async function publicationLock<T>(key: string, work: (session?: PublicationSession) => Promise<T>): Promise<T> {
 	try {
-		return publications ? await publications.run(key, work) : await work();
+		return publications ? await publications.run(key, work) : await localPublications(key, () => work());
 	} catch (error) {
 		if (error instanceof PublicationUncertainError) throw new PublishConflictError(error.message);
 		throw error;
@@ -25,16 +33,6 @@ export function publicationOperation<T>(work: () => Promise<T>): Promise<T> {
 
 export function missingComment(error: unknown): boolean {
 	return error instanceof GhError && error.kind === 'not-found';
-}
-
-export function rejectedPosition(error: unknown): boolean {
-	return (
-		error instanceof GhError &&
-		error.kind === 'unknown' &&
-		(/^GitHub API (400|422):/.test(error.message) ||
-			/^[^\n]+ returned (400|422):/.test(error.message) ||
-			/^GitLab has not computed this merge request/.test(error.message))
-	);
 }
 
 export function rejectedCreate(error: unknown): boolean {

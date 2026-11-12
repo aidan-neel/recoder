@@ -1,4 +1,5 @@
 import type { Provider } from '@recoder/shared';
+import { withoutCredentials } from '../util/redact';
 import { getGitlabHost, hostOfRepoUrl } from './gitlab-host';
 
 export interface RepoLocator {
@@ -42,7 +43,7 @@ export function parseSlug(repoUrl: string): string {
 	s = s.replace(/^\/+|\/+$/g, '');
 
 	if (!s || (!local && (s.includes(' ') || !s.includes('/')))) {
-		throw new Error(`cannot parse repo slug from ${repoUrl}`);
+		throw new Error(`cannot parse repo slug from ${withoutCredentials(repoUrl)}`);
 	}
 
 	return s;

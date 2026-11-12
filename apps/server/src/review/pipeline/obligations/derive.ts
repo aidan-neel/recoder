@@ -9,9 +9,10 @@ import type { ChangedSymbol, ChangeModel } from '../change-model/types.js';
 import type { InventoryFile, ReviewInventory } from '../inventory.js';
 import { repoPaths, type RepoInventory } from '../repo-inventory/repo-inventory.js';
 import { partitionUnits } from '../units.js';
-import { obligationsNewCodeOn } from './config.js';
+import { obligationsNewCodeOn, obligationsTransitionsOn } from './config.js';
 import { collectMarks, type Mark } from './marks.js';
 import { squash } from './syntax.js';
+import { collectTransitionMarks } from './transition-marks.js';
 import { QUESTIONS, TRIGGERS, triggerHits, type TriggerHit } from './triggers.js';
 
 /** Grammars the trigger rules are written for; other changed files derive nothing. */
@@ -21,14 +22,21 @@ const LANGUAGES = new Set(['typescript', 'tsx', 'javascript', 'svelte']);
 const SPECIALISTS: Partial<Record<ObligationTrigger, string>> = {
 	'removed-guard': 'security',
 	'error-contract': 'api-contract',
-	'resource-release': 'concurrency'
+	'resource-release': 'concurrency',
+	'state-transition': 'concurrency'
 };
 
 /**
  * Triggers about the code under test, which a test's own conditions, timers,
- * scratch directories and stub errors would only trip; test files derive none.
+ * scratch directories, stub errors and fixture states would only trip; test files derive none.
  */
-const SOURCE_ONLY = new Set<ObligationTrigger>(['truthy-default', 'boundary', 'resource-release', 'error-contract']);
+const SOURCE_ONLY = new Set<ObligationTrigger>([
+	'truthy-default',
+	'boundary',
+	'resource-release',
+	'error-contract',
+	'state-transition'
+]);
 
 /** Tests and callers listed per obligation, at most. */
 const MAX_HINTS = 3;
@@ -139,10 +147,19 @@ async function fileDrafts(
 	});
 }
 
+/** The marks on `lines`, with the state transitions among them when `RECODER_OBLIGATIONS_TRANSITIONS` is on. */
 async function marksOf(path: string, source: string | null, lines: number[], test: boolean): Promise<Mark[]> {
 	if (source === null || !lines.length) return [];
 
-	return (await withTree(path, source, (root) => collectMarks(root, new Set(lines), test))) ?? [];
+	const wanted = new Set(lines);
+	const transitions = obligationsTransitionsOn();
+
+	const marks = await withTree(path, source, (root) => [
+		...collectMarks(root, wanted, test),
+		...(transitions ? collectTransitionMarks(root, wanted) : [])
+	]);
+
+	return marks ?? [];
 }
 
 /**

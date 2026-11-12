@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { githubComments } from '../../../src/forge/publish/github-comments';
-import { gitlabComments } from '../../../src/forge/publish/gitlab-comments';
+import { gitlabComments, gitlabMergeRequest } from '../../../src/forge/publish/gitlab-comments';
 import { PublishConflictError } from '../../../src/forge/publish/forge';
 import { restoreFetch, stubForge } from '../../helpers/forge-fetch';
 
@@ -20,12 +20,14 @@ test('GitHub finds an earlier inline comment through pull request review comment
 });
 
 test('GitLab finds an earlier inline diff note inside its discussion', async () => {
-	const calls = stubForge(() => [200, [{ notes: [{ id: 27, type: 'DiffNote', body: '<!-- marker -->' }] }]]);
+	const calls = stubForge(() => [200, [{ id: 'd27', notes: [{ id: 27, type: 'DiffNote', body: '<!-- marker -->' }] }]]);
 
-	const comment = await gitlabComments('acme/app', 7, 'https://git.acme/app/-/merge_requests/7', {
-		GITLAB_TOKEN: 'test-token',
-		GITLAB_HOST: 'git.acme'
-	}).findInline('<!-- marker -->');
+	const comment = await gitlabComments(
+		gitlabMergeRequest('acme/app', 7, 'https://git.acme/app/-/merge_requests/7', {
+			GITLAB_TOKEN: 'test-token',
+			GITLAB_HOST: 'git.acme'
+		})
+	).findInline('<!-- marker -->');
 
 	expect(calls[0].url).toBe(
 		'https://git.acme/api/v4/projects/acme%2Fapp/merge_requests/7/discussions?per_page=100&page=1'

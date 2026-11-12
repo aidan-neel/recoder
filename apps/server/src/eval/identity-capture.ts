@@ -1,8 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, join } from 'node:path';
-import type { ModelEntry, ModelSettings, ReasoningEffort } from '@recoder/shared';
-import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode-catalog';
+import { agentCliOfModel, type ModelEntry, type ModelSettings, type ReasoningEffort } from '@recoder/shared';
 import { localGit } from '../forge/local/git';
 import { localRepoPath, readLocalForge, type LocalForge } from '../forge/local/schema';
 import { JUDGE_VERSION } from './benchmark-judge';
@@ -152,9 +151,9 @@ async function taskIdentities(tasks: readonly TaskLabel[], forge: ForgeReader): 
 }
 
 /**
- * One stage's model by its pick. An OpenCode pick names its model and provider
- * even while OpenCode cannot list it; any other pick the settings do not list
- * leaves its provider and context size `unknown`.
+ * One stage's model by its pick. An agent CLI's pick names its model and
+ * provider even while the agent cannot list it; any other pick the settings do
+ * not list leaves its provider and context size `unknown`.
  */
 function stageModel(
 	settings: ModelSettings,
@@ -162,11 +161,12 @@ function stageModel(
 	effort: ReasoningEffort | null | undefined
 ): StageModel {
 	const entry: ModelEntry | undefined = settings.models.find((candidate) => candidate.id === id);
-	const opencode = !entry && id?.startsWith(OPENCODE_MODEL_PREFIX);
+	const cli = !entry && id ? agentCliOfModel(id) : null;
+	const agentModel = cli && id ? id.slice(cli.id.length + 1) : null;
 
 	return {
-		model: entry?.model ?? (opencode ? id!.slice(OPENCODE_MODEL_PREFIX.length) : id || settings.model || UNKNOWN),
-		provider: entry ? (entry.provider ?? 'openai-compatible') : opencode ? 'opencode' : UNKNOWN,
+		model: entry?.model ?? agentModel ?? (id || settings.model || UNKNOWN),
+		provider: entry ? (entry.provider ?? 'openai-compatible') : (cli?.id ?? UNKNOWN),
 		effort: effort ?? 'default',
 		sampling: entry?.runtime ?? 'default',
 		contextSize: entry ? (entry.contextWindow ?? 'default') : UNKNOWN

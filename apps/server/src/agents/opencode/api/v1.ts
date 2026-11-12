@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { LlmError, cancelledError, isSpentPlan } from '../../../models/llm/errors';
 import { sleep } from '../../../models/llm/retry';
 import type { SessionHandlers } from '../opencode-events';
-import { OpenCodeError } from '../opencode-error';
+import { OpenCodeError, providerError } from '../opencode-error';
 import type { OpenCodeServer } from '../opencode-server';
 import {
 	MCP_TIMEOUT_MS,
@@ -82,7 +82,7 @@ function replyError(error: NonNullable<z.infer<typeof replySchema>['info']['erro
 	if (error.name === 'MessageAbortedError') return cancelledError();
 	if (error.name === 'ProviderAuthError') return new LlmError(401, message);
 
-	return new LlmError(error.data?.statusCode ?? 0, message);
+	return providerError(error.data?.statusCode ?? 0, message);
 }
 
 /**
@@ -259,7 +259,7 @@ export class V1Api implements OpenCodeApi {
 			const status = sessionStatusSchema.safeParse(raw).data?.[session];
 
 			if (status?.type === 'retry' && status.message && isSpentPlan(status.message))
-				return new LlmError(429, status.message);
+				return providerError(429, status.message);
 		}
 	}
 

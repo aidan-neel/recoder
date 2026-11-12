@@ -15,6 +15,8 @@ import type {
 	DiscussRequest,
 	DiscussResponse,
 	FileDiff,
+	FindingDecision,
+	FindingDecisionInput,
 	GlobalGuidelines,
 	GuidelinesDraftRequest,
 	GuidelinesOverview,
@@ -269,15 +271,15 @@ export const serverApi = {
 			method: 'POST',
 			body: JSON.stringify(input)
 		}),
-	/** Remember a dismissed finding, so later reviews of the repository do not report it again. */
-	dismissFinding: (reviewId: string, findingId: string, reason?: string) =>
-		req<{ dismissed: boolean }>(`/api/reviews/${reviewId}/dismissals`, {
-			method: 'POST',
-			body: JSON.stringify({ findingId, ...(reason ? { reason } : {}) })
+	/** Accept or dismiss a finding; the server saves the decision on the review and later reviews learn from it. */
+	decideFinding: (reviewId: string, findingId: string, decision: FindingDecisionInput) =>
+		req<FindingDecision>(`/api/reviews/${reviewId}/findings/${encodeURIComponent(findingId)}/decision`, {
+			method: 'PUT',
+			body: JSON.stringify(decision)
 		}),
-	/** Forget a dismissal. */
-	restoreFinding: (reviewId: string, findingId: string) =>
-		req<{ restored: boolean }>(`/api/reviews/${reviewId}/dismissals/${encodeURIComponent(findingId)}`, {
+	/** Reopen a decided finding and forget what its decision taught. */
+	reopenFinding: (reviewId: string, findingId: string) =>
+		req<{ reopened: true }>(`/api/reviews/${reviewId}/findings/${encodeURIComponent(findingId)}/decision`, {
 			method: 'DELETE'
 		}),
 	queueReview: (input: CreateReviewInput) =>

@@ -16,7 +16,7 @@ import { db, reviewMetrics } from '../store';
 import { metricWrites } from '../storage/persistence-queue';
 import { providerErrorText } from './error-text';
 import { lockedModels } from './llm/locked-models';
-import { withLlmLane } from './llm/limiter';
+import { withLlmLane } from './llm/lane';
 import { currentLease } from '../review/runtime/ownership';
 
 /**

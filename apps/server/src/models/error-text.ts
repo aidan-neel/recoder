@@ -1,5 +1,5 @@
 import { homedir } from 'node:os';
-import { redactedTail } from '../cli/target/redact.js';
+import { redactedTail } from '../util/redact.js';
 
 /** A home directory in a path, so the record never names the person who ran the review. */
 const HOME_PATHS = /(?:\/home\/|\/Users\/|[A-Za-z]:\\Users\\)[^/\\\s'"]+/g;

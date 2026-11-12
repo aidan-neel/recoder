@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DISMISSAL_REASONS, type DismissalReason } from '@recoder/shared';
 import { learnedTable } from './learned-table.js';
 
 /** A finding a person dismissed, remembered so a later review of the same repository does not report it again. */
@@ -12,31 +13,47 @@ export interface Dismissal {
 	file: string;
 	category: string;
 	title: string;
-	/** Why the person dismissed it, when they said. */
-	reason?: string;
+	/** Why the person dismissed it; dismissals saved before reasons were chosen have none. */
+	reason?: DismissalReason;
+	/** What the person added in their own words. */
+	note?: string;
 	dismissedAt: string;
 }
 
 /** The newest dismissals kept for each repository. */
 export const MAX_DISMISSALS_PER_REPO = 200;
 
+const REASONS: ReadonlySet<string> = new Set(DISMISSAL_REASONS);
+
+const dismissalSchema = z.object({
+	repoId: z.string(),
+	fingerprint: z.string(),
+	file: z.string(),
+	category: z.string(),
+	title: z.string(),
+	reason: z.enum(DISMISSAL_REASONS).optional(),
+	note: z.string().optional(),
+	dismissedAt: z.string()
+});
+
+/**
+ * A dismissal saved before reasons were chosen held the person's free text
+ * in `reason`; it is read as the note, with no reason.
+ */
+function withChosenReason(saved: unknown): unknown {
+	if (!saved || typeof saved !== 'object' || !('reason' in saved)) return saved;
+
+	const { reason, ...rest } = saved;
+
+	if (typeof reason !== 'string' || REASONS.has(reason)) return saved;
+
+	return { ...rest, note: reason };
+}
+
 const table = learnedTable<Dismissal>({
 	setting: 'dismissals',
 	file: 'dismissed-findings.json',
-	schema: z.record(
-		z.string(),
-		z.array(
-			z.object({
-				repoId: z.string(),
-				fingerprint: z.string(),
-				file: z.string(),
-				category: z.string(),
-				title: z.string(),
-				reason: z.string().optional(),
-				dismissedAt: z.string()
-			})
-		)
-	)
+	schema: z.record(z.string(), z.array(z.preprocess(withChosenReason, dismissalSchema)))
 });
 
 /** A repository's dismissals, newest first. */

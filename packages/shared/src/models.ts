@@ -1,3 +1,5 @@
+import { agentCli } from './agent-clis';
+
 /** Reasoning levels in ascending depth; providers offer a subset. */
 export const REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type ReasoningEffort = (typeof REASONING_EFFORTS)[number];
@@ -15,6 +17,22 @@ export const EFFORT_TEXT: Record<ReasoningEffort, { label: string; description: 
 /** Effort words are always spelled out in full ("Medium", never "Med"). */
 export function effortLabel(effort: ReasoningEffort): string {
 	return EFFORT_TEXT[effort].label;
+}
+
+/**
+ * A saved effort the model no longer offers (e.g. after switching models) falls
+ * back to the model default: medium when offered, else the first listed level.
+ */
+export function supportedEffort(
+	requested: ReasoningEffort | null | undefined,
+	offered: readonly ReasoningEffort[] | undefined,
+	fallback: ReasoningEffort | undefined
+): ReasoningEffort | undefined {
+	if (!requested) return undefined;
+	if (!offered?.length || offered.includes(requested)) return requested;
+	if (fallback && offered.includes(fallback)) return fallback;
+
+	return offered.includes('medium') ? 'medium' : offered[0];
 }
 
 /**
@@ -53,19 +71,22 @@ export function subagentCapFrom(value: string): SubagentCap {
 	return SUBAGENT_CAPS.find((cap) => String(cap) === value) ?? DEFAULT_SUBAGENT_CAP;
 }
 
-/** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode, Claude Code or Devin CLI. */
-export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode' | 'claude-code' | 'devin';
+/** An agent CLI by the id of its server adapter: one of {@link AGENT_CLIS}. */
+export type AgentCliId = string;
 
-/** Providers that are an app or CLI rather than an endpoint, by the name people know them by. */
-const APP_NAMES: Partial<Record<ModelProvider, string>> = {
-	codex: 'ChatGPT',
-	'claude-code': 'Claude Code',
-	devin: 'Devin'
-};
+/** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or an agent CLI. */
+export type ModelProvider = 'openai-compatible' | 'codex' | AgentCliId;
 
-/** ChatGPT, Claude Code or Devin for those providers; null for an endpoint or an OpenCode provider. */
+/**
+ * The name people know a provider's app or CLI by: ChatGPT, or an agent CLI whose models pickers group under its
+ * name (Claude Code, Devin). Null for an endpoint, and for an agent CLI whose models go under another name.
+ */
 export function appName(provider: ModelProvider | undefined): string | null {
-	return (provider && APP_NAMES[provider]) || null;
+	if (provider === 'codex') return 'ChatGPT';
+
+	const cli = agentCli(provider);
+
+	return cli?.groupsModelsUnderName ? cli.name : null;
 }
 
 const LOCAL_HOST = /^(localhost|127\.|10\.|192\.168\.)/;

@@ -111,6 +111,16 @@ export async function localPullPreview(repoUrl: string, n: number): Promise<{ pr
 	return describePull(repoUrl, findLocalPull(await readLocalForge(repoUrl), n));
 }
 
+/** One pull request in any state, with that state. Throws a not-found GhError for an unknown number. */
+export async function viewLocalPull(
+	repoUrl: string,
+	n: number
+): Promise<{ pr: PullRequest; state: LocalPull['state'] }> {
+	const pull = findLocalPull(await readLocalForge(repoUrl), n);
+
+	return { pr: (await describePull(repoUrl, pull)).pr, state: pull.state };
+}
+
 /** PR metadata plus the unified diff from `baseSha` to the head ref, unless `metadataOnly`. */
 export async function fetchLocalPull(
 	repoUrl: string,

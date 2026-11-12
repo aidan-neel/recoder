@@ -5,7 +5,7 @@ import { emptyDirectory } from '../cli-process';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import type { ChatMessage, ChatOptions } from '../../models/llm/types';
 import { splitModel, type Reply } from './api/types';
-import { OpenCodeError } from './opencode-error';
+import { OpenCodeError, providerError } from './opencode-error';
 import { followSession } from './opencode-events';
 import type { OpenCodeServer } from './opencode-server';
 import { openTurn, type SessionTurn } from './opencode-session';
@@ -177,7 +177,7 @@ export async function openCodeChat(
 		if (opts.signal?.aborted) throw cancelledError();
 		if (timeout.aborted) throw timedOutError(timeoutMs);
 		if (error instanceof LlmError) throw error;
-		if (error instanceof OpenCodeError) throw new LlmError(error.status, error.message);
+		if (error instanceof OpenCodeError) throw providerError(error.status, error.message);
 		if (error instanceof z.ZodError) throw new LlmError(0, 'OpenCode sent a reply Recoder could not read.');
 		throw new LlmError(0, error instanceof Error ? error.message : 'OpenCode request failed.');
 	} finally {

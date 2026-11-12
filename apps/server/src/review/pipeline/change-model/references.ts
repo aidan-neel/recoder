@@ -4,7 +4,8 @@ import { dependence } from './dependence.js';
 import { importsModule, isScriptLanguage } from './imports.js';
 import { languageFor } from './languages.js';
 import { fileReferences, inTestFile, lineKind, type FileReferences } from './reference-kinds.js';
-import { byCodePoint, mapLimit, readTracked } from './repo.js';
+import { mapLimit } from '../../../util/map-limit.js';
+import { byCodePoint, readTracked } from './repo.js';
 import { isTestPath, testStem } from './test-files.js';
 import type { BehaviorAspect, ReferenceKind, SymbolRange, SymbolReference } from './types.js';
 

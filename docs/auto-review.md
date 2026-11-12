@@ -18,11 +18,53 @@ until you turn it on.
 | When opened | off | Review every pull request when it opens. |
 | On new commits | off | Review again when a pull request Recoder reviewed automatically gets new commits. |
 | Skip drafts | on | Drafts wait for a mention. |
-| Post results | on | React 👀 to the mention and keep one Recoder comment on the pull request up to date. |
+| Post results | on | React 👀 to the mention, keep one Recoder comment on the pull request up to date, and submit the verified findings as a review when it finishes. |
 | Excluded repositories | none | Tracked repositories the watcher leaves alone. |
+| Ignored paths (`ignoredPaths`) | none | Globs such as `docs/**` or `**/*.md`. Findings in these files are never posted and never fail the check. |
+| Inline comments (`maxInlineComments`) | 25 | The most findings posted on their lines in one review, worst first (0 to 100). The rest are listed in the review's summary. |
+| Check (`checkThreshold`) | `error` | Verified findings at or above this severity (`info`, `warning`, `error`) fail the `recoder` commit status. `off` sets no status. |
 
 The same settings are `GET` and `PUT /api/settings/auto-review`, and
 `POST /api/settings/auto-review/check` runs one check now.
+
+## Posting findings
+
+When an automatic review with **Post results** on finishes, Recoder submits
+its verified findings to the pull request. A review started from the app
+posts them when someone calls `POST /api/reviews/<id>/findings-review`.
+
+- **One review.** On GitHub, the summary and every inline comment go up in
+  one "create review" request. On GitLab, each finding becomes a diff
+  discussion with a position, and the summary note follows.
+- **Anchoring.** A finding sits on its line when the pull request's diff
+  shows that line. A finding without a shown line, one the forge refuses to
+  place, or one past the inline limit is listed in the summary instead.
+- **Suggestions.** A finding's checked patch becomes a one-click suggestion
+  only when it is small (20 changed lines at most), replaces one run of lines
+  in the finding's own file that the diff shows, and covers the finding's
+  lines. Any other patch is left out of the comment.
+- **Evidence.** Each finding names its evidence in the words the app uses:
+  *Reproduced* (the command, its output and how the base commit compares),
+  *Traced in code* (the source path, or the deterministic check), or
+  *Repository rule* (the quoted rule and where it is written). Unverified,
+  dismissed and quieted findings are not posted and do not count toward the
+  check.
+- **Check.** The `recoder` commit status on the head commit (GitHub status,
+  GitLab commit status) fails when a verified finding is at or above the
+  check threshold.
+- **New commits.** A finding already commented on the pull request is not
+  posted again, nor is one carried from an earlier review that submitted its
+  findings. When a later review shows an earlier finding fixed, Recoder
+  resolves that finding's thread and lists it as fixed.
+- **No duplicates.** The summary carries a hidden marker for the pull
+  request and head commit, and each comment one for its finding. A repeated
+  webhook delivery, a retry or a second review of the same commit finds
+  them and posts nothing twice. With several replicas, posting runs under
+  the shared publication lock.
+
+Recoder only writes comments, thread resolutions and commit statuses. It
+never pushes to the pull request's branch; applying a suggestion is the
+author's choice.
 
 ## Mentions
 
@@ -79,4 +121,5 @@ Connect tokens in Settings → Connections, or set `GITLAB_TOKEN` / `GH_TOKEN`.
 - GitHub: read access to watch public repositories (private ones need a
   token). Posting results and reactions need pull request (and issue) write
   access: a fine-grained token with **Pull requests: Read and write**, or a
-  classic token with `repo`.
+  classic token with `repo`. The check also needs **Commit statuses: Read
+  and write** (classic: `repo:status`, included in `repo`).

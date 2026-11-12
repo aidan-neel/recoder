@@ -55,6 +55,9 @@ export interface PullListItem {
 	review: ReviewListItem | null;
 }
 
+/** The most open pull requests `GET /api/pulls` reads from one repository: the newest opened. */
+export const PULL_LIST_REPO_MAX = 100;
+
 /**
  * `GET /api/pulls`: the open pull requests of every tracked repository, newest
  * activity first. A repository whose forge call failed is named in `failures`
@@ -63,6 +66,12 @@ export interface PullListItem {
 export interface PullList {
 	items: PullListItem[];
 	failures: { repoId: string; error: string }[];
+	/**
+	 * Repositories with more than {@link PULL_LIST_REPO_MAX} open pull
+	 * requests: `items` holds their newest opened, and the older ones are left
+	 * out. Absent when no list was cut.
+	 */
+	truncatedRepoIds?: string[];
 	fetchedAt: string;
 }
 

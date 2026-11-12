@@ -3,14 +3,17 @@ import { extractJson, forgeCliAvailable, forgeCliUser, GhError, runForgeCli } fr
 import {
 	apiMergeHeadRef,
 	apiMergeRequest,
-	apiMergeRequests,
+	apiMergeRows,
 	apiProjects,
 	apiUser,
+	firstRows,
 	gitlabGet,
 	gitlabPeople,
 	gitlabRequest,
+	MERGE_STATS_PARALLEL,
 	useGitlabApi
 } from './gitlab-api.js';
+import { mapLimit } from '../util/map-limit.js';
 import { parseSlug } from './providers.js';
 
 /** A failed `glab` run's logs as an auth, not-found or unknown GhError. */
@@ -91,6 +94,8 @@ export interface FetchedMerge {
 	pr: PullRequest;
 	/** Raw unified diff (`glab mr diff --raw`). */
 	diff: string;
+	/** The merge request as GitLab sent it, for the fields `PullRequest` leaves out. */
+	row: Record<string, unknown>;
 }
 
 /** Is the glab binary usable at all? */
@@ -193,34 +198,48 @@ export async function fetchMergeRequest(
 			createdAt: typeof view.created_at === 'string' ? view.created_at : '',
 			body: typeof view.description === 'string' ? view.description : ''
 		},
-		diff
+		diff,
+		row: view
 	};
 }
 
-/**
- * Open MRs for a repo, newest first. Stats come from per-MR views (the list
- * endpoint omits diff stats); an MR whose view fails keeps zeroed stats
- * rather than failing the whole list. Throws GhError.
- */
+/** A merge request with the JSON row GitLab sent for it, so a caller can read the fields `PullRequest` leaves out. */
+export interface MergeRow {
+	pr: PullRequest;
+	row: Record<string, unknown>;
+}
+
+/** Open MRs for a repo, newest first, with diff stats. Throws GhError. */
 export async function listMergeRequests(
 	repoUrl: string,
 	opts?: { env?: Record<string, string>; limit?: number }
 ): Promise<PullRequest[]> {
-	if (useGitlabApi(opts?.env)) return apiMergeRequests(repoUrl, opts!.env!, opts?.limit);
+	return (await listMergeRows(repoUrl, opts)).map((row) => row.pr);
+}
+
+/**
+ * Open MRs for a repo, newest first, each with its list row. Stats come from
+ * per-MR views (the list endpoint omits diff stats); an MR whose view fails
+ * keeps zeroed stats rather than failing the whole list. Throws GhError.
+ */
+export async function listMergeRows(
+	repoUrl: string,
+	opts?: { env?: Record<string, string>; limit?: number }
+): Promise<MergeRow[]> {
+	if (useGitlabApi(opts?.env)) return apiMergeRows(repoUrl, opts!.env!, opts?.limit);
 
 	const slug = parseSlug(repoUrl);
 
-	const rows = extractJson(
-		await glab(['mr', 'list', '-R', slug, '-F', 'json', '--per-page', String(opts?.limit ?? 20)], opts?.env)
+	const rows = await firstRows(opts?.limit ?? 20, async (perPage, page) =>
+		extractJson(
+			await glab(
+				['mr', 'list', '-R', slug, '-F', 'json', '--per-page', String(perPage), '--page', String(page)],
+				opts?.env
+			)
+		)
 	);
 
-	if (!Array.isArray(rows)) throw new GhError('unknown', 'glab mr list returned non-array JSON');
-
-	const prs = rows.flatMap((row) => {
-		if (typeof row !== 'object' || row === null) return [];
-
-		const item = row as Record<string, unknown>;
-
+	const merges = rows.flatMap((item) => {
 		const author = mergeAuthor(item);
 
 		const pr: PullRequest = {
@@ -238,21 +257,19 @@ export async function listMergeRequests(
 			assignees: gitlabPeople(item.assignees)
 		};
 
-		return pr.number > 0 ? [pr] : [];
+		return pr.number > 0 ? [{ pr, row: item }] : [];
 	});
 
-	await Promise.all(
-		prs.map(async (pr) => {
-			try {
-				const view = await viewMerge(slug, pr.number, opts?.env);
+	await mapLimit(merges, MERGE_STATS_PARALLEL, async ({ pr }) => {
+		try {
+			const view = await viewMerge(slug, pr.number, opts?.env);
 
-				pr.additions = Number(view.additions ?? 0);
-				pr.deletions = Number(view.deletions ?? 0);
-				pr.changedFiles = Number(view.changes_count ?? 0);
-				if (typeof view.sha === 'string') pr.headSha = view.sha;
-			} catch {}
-		})
-	);
+			pr.additions = Number(view.additions ?? 0);
+			pr.deletions = Number(view.deletions ?? 0);
+			pr.changedFiles = Number(view.changes_count ?? 0);
+			if (typeof view.sha === 'string') pr.headSha = view.sha;
+		} catch {}
+	});
 
-	return prs;
+	return merges;
 }

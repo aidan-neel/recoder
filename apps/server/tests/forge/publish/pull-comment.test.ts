@@ -2,9 +2,9 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import type { Review } from '@recoder/shared';
 import { publishPullComment } from '../../../src/forge/publish/pull-comment';
 import { pullCommentMarker } from '../../../src/forge/publish/render';
-import { setToken } from '../../../src/forge/tokens';
 import { db } from '../../../src/store';
 import { restoreFetch, stubForge, type ForgeCall } from '../../helpers/forge-fetch';
+import { forgetRepo, trackGithubRepo } from '../../helpers/forge-repo';
 import { testReview } from '../../helpers/review';
 
 const ISSUE_COMMENTS = 'https://api.github.com/repos/acme/app/issues/7/comments';
@@ -24,27 +24,12 @@ async function review(overrides: Partial<Review> = {}): Promise<Review> {
 }
 
 beforeEach(async () => {
-	const now = new Date().toISOString();
-
-	repoId = crypto.randomUUID();
-
-	await db.repos.set({
-		id: repoId,
-		name: 'acme/app',
-		url: 'https://github.com/acme/app',
-		provider: 'github',
-		defaultBranch: 'main',
-		createdAt: now,
-		updatedAt: now
-	});
-
-	setToken('github', 'write-token');
+	repoId = await trackGithubRepo();
 });
 
 afterEach(async () => {
 	restoreFetch();
-	for (const row of await db.reviews.list()) if (row.repoId === repoId) await db.reviews.delete(row.id);
-	await db.repos.delete(repoId);
+	await forgetRepo(repoId);
 });
 
 test('posts the comment once, then edits it in place', async () => {

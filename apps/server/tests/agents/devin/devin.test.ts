@@ -59,7 +59,6 @@ describe('DevinAgent.complete', () => {
 
 		await new DevinAgent(env).complete(call());
 
-		await Bun.sleep(300);
 		expect(await readFile(`${env.FAKE_DEVIN_LOG}.rm`, 'utf8')).toBe('quiet-owl\n');
 	});
 

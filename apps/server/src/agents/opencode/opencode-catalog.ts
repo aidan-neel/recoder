@@ -10,7 +10,7 @@ import {
 import { OpenCodeError } from './opencode-error';
 
 /** Prefix for registry ids of OpenCode models: `opencode:<provider>/<model>`. */
-export const OPENCODE_MODEL_PREFIX = 'opencode:';
+const OPENCODE_MODEL_PREFIX = 'opencode:';
 
 /** One entry per provider OpenCode knows, for the Add provider list. */
 export interface CatalogProvider {
