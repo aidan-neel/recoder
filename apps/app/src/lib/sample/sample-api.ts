@@ -6,7 +6,8 @@ import {
 	type MergePullResult,
 	type PullComment,
 	type Repo,
-	type Review
+	type Review,
+	type ReviewFindingComment
 } from '@recoder/shared';
 
 import type { ApiClient } from '../api/client';
@@ -125,13 +126,15 @@ function createSampleFindings(world: SampleWorld) {
 		}));
 	}
 
+	/** The comment record one posted finding gets, the same whether it was posted alone or with the review. */
+	function commentOf(review: Review, findingId: string): ReviewFindingComment {
+		return { id: `comment-${findingId}`, url: `${review.prUrl ?? ''}#comment-${findingId}`, inline: true };
+	}
+
 	async function postFinding(reviewId: string, findingId: string): Promise<Review> {
 		return world.updateReview(reviewId, (review) => ({
 			...review,
-			findingComments: {
-				...review.findingComments,
-				[findingId]: { id: `comment-${findingId}`, url: `${review.prUrl ?? ''}#comment-${findingId}`, inline: true }
-			}
+			findingComments: { ...review.findingComments, [findingId]: commentOf(review, findingId) }
 		}));
 	}
 
@@ -160,11 +163,21 @@ function createSampleFindings(world: SampleWorld) {
 		},
 
 		async postFindings(reviewId: string): Promise<Review> {
-			let review = world.findReview(reviewId);
-
-			for (const finding of review.findings.filter(isOpenFinding)) review = await postFinding(reviewId, finding.id);
-
-			return review;
+			return world.updateReview(reviewId, (review) => ({
+				...review,
+				findingComments: {
+					...review.findingComments,
+					...Object.fromEntries(
+						review.findings.filter(isOpenFinding).map((finding) => [finding.id, commentOf(review, finding.id)])
+					)
+				},
+				findingsReview: {
+					state: 'posted',
+					id: 'sample-findings-review',
+					url: `${review.prUrl ?? ''}#findings-review`,
+					updatedAt: new Date().toISOString()
+				}
+			}));
 		}
 	};
 }

@@ -16,9 +16,18 @@ const BUG = 'sample-f1';
 const OTHER_BUG = 'sample-f2';
 
 /** Bug actions on the sample review through `client`, with the session state they write to. */
-function actionsOn(client: ApiClient) {
+function actionsOn(client: ApiClient, wait?: (ms: number) => Promise<void>) {
 	const state = createStore<SessionData>(() => ({ ...initialSession({}), review: structuredClone(SAMPLE_REVIEW) }));
-	const actions = createBugActions({ client, list: createListStore(client), state, repoId: 'sample-api', number: 214 });
+
+	const actions = createBugActions({
+		client,
+		list: createListStore(client),
+		state,
+		repoId: 'sample-api',
+		number: 214,
+		wait
+	});
+
 	const decisionOf = (id: string) => state.getState().review?.findings.find((finding) => finding.id === id)?.decision;
 
 	return { actions, state, decisionOf };
@@ -90,5 +99,93 @@ describe('posting a finding', () => {
 
 		expect(decisionOf(OTHER_BUG)).toMatchObject({ state: 'accepted' });
 		expect(state.getState().review?.findingComments?.[BUG]).toBeDefined();
+	});
+});
+
+/** A client whose first decision is refused with a 409 and whose later ones save at once. */
+function decideConflictsOnce() {
+	let calls = 0;
+
+	const client: ApiClient = {
+		...createSampleApi(),
+		decide: async (_reviewId: string, _findingId: string, input: DecisionInput) => {
+			calls += 1;
+
+			if (calls === 1) throw new ApiError('no diff yet', 409);
+
+			return { ...input, decidedAt: '2026-10-13T10:00:00.000Z' };
+		}
+	};
+
+	return { client, calls: () => calls };
+}
+
+describe('a decision the server could not save yet', () => {
+	/** Lets every queued microtask run, without waiting on a clock. */
+	const tick = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+	test('a 409 then a success saves the decision and the finding ends decided', async () => {
+		const { client, calls } = decideConflictsOnce();
+		const { actions, decisionOf } = actionsOn(client, () => Promise.resolve());
+
+		await actions.accept(BUG);
+
+		expect(calls()).toBe(2);
+		expect(decisionOf(BUG)).toMatchObject({ state: 'accepted' });
+	});
+
+	test('two 409s roll the finding back and show the reason', async () => {
+		let calls = 0;
+
+		const client: ApiClient = {
+			...createSampleApi(),
+			decide: async () => {
+				calls += 1;
+				throw new ApiError('no diff yet', 409);
+			}
+		};
+
+		const { actions, decisionOf } = actionsOn(client, () => Promise.resolve());
+
+		await expect(actions.accept(BUG)).rejects.toThrow('No diff yet.');
+
+		expect(calls).toBe(2);
+		expect(decisionOf(BUG)).toBeUndefined();
+	});
+
+	test('a failure that is not a 409 is not sent again', async () => {
+		let calls = 0;
+
+		const client: ApiClient = {
+			...createSampleApi(),
+			decide: async () => {
+				calls += 1;
+				throw new ApiError('The server is busy.', 503);
+			}
+		};
+
+		const { actions } = actionsOn(client, () => Promise.resolve());
+
+		await expect(actions.accept(BUG)).rejects.toThrow('The server is busy.');
+
+		expect(calls).toBe(1);
+	});
+
+	test('the finding stays pending during the retry wait', async () => {
+		const gate = Promise.withResolvers<void>();
+		const { client, calls } = decideConflictsOnce();
+		const { actions, state } = actionsOn(client, () => gate.promise);
+		const accepted = actions.accept(BUG);
+
+		await tick();
+
+		expect(calls()).toBe(1);
+		expect(state.getState().pendingBugs.has(BUG)).toBe(true);
+
+		gate.resolve();
+		await accepted;
+
+		expect(calls()).toBe(2);
+		expect(state.getState().pendingBugs.has(BUG)).toBe(false);
 	});
 });

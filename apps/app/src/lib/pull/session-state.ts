@@ -67,6 +67,8 @@ export interface SessionContext {
 	state: StoreApi<SessionData>;
 	repoId: string;
 	number: number;
+	/** Waits before a decision write the server refused with 409 is sent again; tests inject an instant one. */
+	wait?: (ms: number) => Promise<void>;
 }
 
 const IDLE: Load<never> = { phase: 'idle' };

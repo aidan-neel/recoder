@@ -66,6 +66,8 @@ export interface PullListView {
 	setQuery: (query: string) => void;
 	/** Repositories whose forge did not answer; the others still load. */
 	failures: { repoName: string; error: string }[];
+	/** Repositories with more open pull requests than the list sends; empty when no list was cut. */
+	truncated: { repoId: string; repoName: string }[];
 	/** Why the whole list failed, when `phase` is `failed`. */
 	error: string | null;
 	/** True when the review server did not answer at all. */

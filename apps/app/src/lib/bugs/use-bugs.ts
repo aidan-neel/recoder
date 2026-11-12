@@ -61,6 +61,13 @@ export function useBugsView(): BugsView {
 			phase,
 			error: phase === 'failed' ? error : null,
 			...lists,
+			findingsReview: review?.findingsReview
+				? {
+						state: review.findingsReview.state,
+						url: review.findingsReview.url ?? null,
+						error: review.findingsReview.error ?? null
+					}
+				: null,
 			modelLabel: modelLabel(model),
 			canPost,
 			pending,
@@ -74,7 +81,7 @@ export function useBugsView(): BugsView {
 			vote: actions.vote,
 			fixPrompt: promptFor
 		}),
-		[phase, error, lists, model, canPost, pending, actions, postingAll, promptFor]
+		[phase, error, lists, review, model, canPost, pending, actions, postingAll, promptFor]
 	);
 }
 

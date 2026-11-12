@@ -77,6 +77,14 @@ export function usePullList(): PullListView {
 		[pullList, repos]
 	);
 
+	const truncated = useMemo(
+		() =>
+			(pullList?.truncatedRepoIds ?? [])
+				.filter((repoId) => repos?.some((repo) => repo.id === repoId))
+				.map((repoId) => ({ repoId, repoName: shortRepoName(repos, repoId) })),
+		[pullList, repos]
+	);
+
 	const setFilter = useCallback((next: PullFilter) => list.state.setState({ filter: next }), [list]);
 	const setRepoId = useCallback((next: string | null) => list.state.setState({ repoId: next }), [list]);
 	const setQuery = useCallback((next: string) => list.state.setState({ query: next }), [list]);
@@ -101,6 +109,7 @@ export function usePullList(): PullListView {
 			query,
 			setQuery,
 			failures,
+			truncated,
 			error: data.error,
 			offline: data.offline,
 			noRepos: repos !== null && repos.length === 0,
@@ -126,6 +135,7 @@ export function usePullList(): PullListView {
 			query,
 			setQuery,
 			failures,
+			truncated,
 			repos,
 			pullList,
 			list.refresh,
