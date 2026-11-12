@@ -1,5 +1,4 @@
-import { QueuePage } from '@/components/queue/queue-page';
-
-export default function Page() {
-	return <QueuePage sample={false} />;
+/** The pull request list; the markup lands with the new shell. */
+export default function PullsPage() {
+	return null;
 }

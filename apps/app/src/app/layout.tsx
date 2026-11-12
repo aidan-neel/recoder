@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import type { ReactNode } from 'react';
 
-import { ClientRoot } from '@/components/shell/client-root';
 import { THEME_SCRIPT } from '@/lib/shell/theme-script';
 
 import './globals.css';
@@ -26,9 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 			<head>
 				<script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
 			</head>
-			<body>
-				<ClientRoot>{children}</ClientRoot>
-			</body>
+			<body>{children}</body>
 		</html>
 	);
 }
