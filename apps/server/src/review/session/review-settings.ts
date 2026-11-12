@@ -5,6 +5,7 @@ import {
 	DEFAULT_TOKEN_BUDGET,
 	REASONING_EFFORTS,
 	SUBAGENT_CAPS,
+	VLLM_MODEL_PREFIX,
 	migrateSubagentCap,
 	TOKEN_BUDGETS,
 	type ModelEntryPatch,
@@ -12,8 +13,24 @@ import {
 	type SubagentCap,
 	type TokenBudget
 } from '@recoder/shared';
+import { CLAUDE_CODE_MODEL_PREFIX } from '../../agents/claude-code/claude-code-models.js';
+import { DEVIN_MODEL_PREFIX } from '../../agents/devin/devin-models.js';
+import { OPENCODE_MODEL_PREFIX } from '../../agents/opencode/opencode-catalog.js';
 import { serverDataDir } from '../../util/data-dir.js';
 import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
+
+/** Prefixes of model ids resolved through agent CLIs or synced vLLM servers rather than stored `models` entries. */
+const ROUTED_MODEL_PREFIXES = [
+	VLLM_MODEL_PREFIX,
+	OPENCODE_MODEL_PREFIX,
+	CLAUDE_CODE_MODEL_PREFIX,
+	DEVIN_MODEL_PREFIX
+] as const;
+
+/** Whether `id` resolves outside the stored `models` list, so replacing `models` must never clear it. */
+function isRoutedModelId(id: string): boolean {
+	return ROUTED_MODEL_PREFIXES.some((prefix) => id.startsWith(prefix));
+}
 
 const runtimeSchema = z.object({
 	temperature: z.number().min(0).max(2).nullable().optional(),
@@ -43,8 +60,10 @@ export const reviewSettingsSchema = z.object({
 	sharedModelId: z.string().max(100).nullable().optional(),
 	orchestratorModelId: z.string().max(100).nullable().optional(),
 	specialistModelId: z.string().max(100).nullable().optional(),
+	verifierModelId: z.string().max(100).nullable().optional(),
 	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
+	verifierEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	subagentCap: z.literal(SUBAGENT_CAPS).optional(),
 	tokenBudget: z.enum(TOKEN_BUDGETS).optional(),
 	reportLowSeverity: z.boolean().optional(),
@@ -316,13 +335,15 @@ function mergeModelEntry(
 	return next;
 }
 
-/** Drop routing pointers to model entries that no longer exist. */
+/** Drop routing pointers to stored model entries that no longer exist, keeping agent and vLLM routed ids. */
 function dropDeletedRoutes(settings: StoredSettings, models: StoredModelEntry[]): void {
 	const ids = new Set(models.map((e) => e.id));
+	const keep = (id: string | null | undefined) => !id || ids.has(id) || isRoutedModelId(id);
 
-	if (settings.sharedModelId && !ids.has(settings.sharedModelId)) delete settings.sharedModelId;
-	if (settings.orchestratorModelId && !ids.has(settings.orchestratorModelId)) delete settings.orchestratorModelId;
-	if (settings.specialistModelId && !ids.has(settings.specialistModelId)) delete settings.specialistModelId;
+	if (!keep(settings.sharedModelId)) delete settings.sharedModelId;
+	if (!keep(settings.orchestratorModelId)) delete settings.orchestratorModelId;
+	if (!keep(settings.specialistModelId)) delete settings.specialistModelId;
+	if (!keep(settings.verifierModelId)) delete settings.verifierModelId;
 }
 
 /** Merge a validated patch over the stored settings and persist. */
@@ -345,8 +366,10 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 
 	if (patch.orchestratorModelId !== undefined) clean.orchestratorModelId = patch.orchestratorModelId || null;
 	if (patch.specialistModelId !== undefined) clean.specialistModelId = patch.specialistModelId || null;
+	if (patch.verifierModelId !== undefined) clean.verifierModelId = patch.verifierModelId || null;
 	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
 	if (patch.specialistEffort !== undefined) clean.specialistEffort = patch.specialistEffort;
+	if (patch.verifierEffort !== undefined) clean.verifierEffort = patch.verifierEffort;
 	if (patch.subagentCap !== undefined) clean.subagentCap = patch.subagentCap;
 	if (patch.tokenBudget !== undefined) clean.tokenBudget = patch.tokenBudget;
 	if (patch.reportLowSeverity !== undefined) clean.reportLowSeverity = patch.reportLowSeverity;

@@ -40,6 +40,7 @@ export interface RunReviewer {
 	/** The picks the review's last pipeline run locked; `not recorded` when the row predates runs or the run went unlocked. */
 	orchestrator: LockedPick | typeof NOT_RECORDED;
 	specialist: LockedPick | typeof NOT_RECORDED;
+	verifier?: LockedPick | typeof NOT_RECORDED;
 	pipelineRuns: number;
 	lockMisses: number;
 	unlockedCalls: number;
@@ -59,15 +60,30 @@ export interface RunReviewer {
 export function reportedModels(report: Pick<BenchmarkReport, 'identity' | 'reviewer'>): string[] | null {
 	const identity = report.identity?.models;
 
-	if (identity) return [identity.orchestrator.model, identity.specialist.model];
-	if (report.reviewer) return [report.reviewer.model, report.reviewer.specialistModel ?? report.reviewer.model];
+	if (identity) {
+		return [
+			identity.orchestrator.model,
+			identity.specialist.model,
+			...(identity.verifier ? [identity.verifier.model] : [])
+		];
+	}
+
+	if (report.reviewer) {
+		return [
+			report.reviewer.model,
+			report.reviewer.specialistModel ?? report.reviewer.model,
+			...(report.reviewer.verifierModel !== undefined ? [report.reviewer.verifierModel ?? report.reviewer.model] : [])
+		];
+	}
 
 	return null;
 }
 
 /** A run's locked picks, null when it ran unlocked or the row predates runs. */
 function picksOf(run: PipelineRun | undefined): string[] | null {
-	return run?.orchestrator && run.subagent ? [run.orchestrator, run.subagent] : null;
+	if (!run?.orchestrator || !run.subagent) return null;
+
+	return run.verifier ? [run.orchestrator, run.subagent, run.verifier] : [run.orchestrator, run.subagent];
 }
 
 /** The review's pipeline calls by the run that made them, oldest run first. */
@@ -141,10 +157,18 @@ function lockedPick(model: string | undefined): LockedPick | typeof NOT_RECORDED
 }
 
 /** "locked a/b, the report declares c/d" when a locked pick is another model than `declared` names for its stage. */
-function picksReason(reviewer: Pick<RunReviewer, 'orchestrator' | 'specialist'>, declared: string[] | null): string[] {
-	const picks = [reviewer.orchestrator, reviewer.specialist];
+function picksReason(
+	reviewer: Pick<RunReviewer, 'orchestrator' | 'specialist' | 'verifier'>,
+	declared: string[] | null
+): string[] {
+	const picks = [reviewer.orchestrator, reviewer.specialist, ...(reviewer.verifier ? [reviewer.verifier] : [])];
 
-	if (!declared || picks.every((pick, stage) => pick === NOT_RECORDED || pick.model === declared[stage])) return [];
+	if (
+		!declared ||
+		picks.every((pick, stage) => pick === NOT_RECORDED || !declared[stage] || pick.model === declared[stage])
+	) {
+		return [];
+	}
 
 	const named = picks.map((pick) => (pick === NOT_RECORDED ? NOT_RECORDED : pick.model));
 
@@ -153,13 +177,19 @@ function picksReason(reviewer: Pick<RunReviewer, 'orchestrator' | 'specialist'>,
 
 /**
  * A run's reviewer from its review's stored metrics, null when the store has no row, against the models the
- * report `declared` (orchestrator, then specialist).
+ * report `declared` (orchestrator, specialist, and verifier when recorded).
  */
 export function runReviewer(stored: StoredMetrics | null, declared: string[] | null): RunReviewer {
 	const verdict = classifyReview(stored, declared);
 	const last = stored?.runs?.at(-1);
 	const picks = picksOf(last);
-	const locked = { orchestrator: lockedPick(picks?.[0]), specialist: lockedPick(picks?.[1]) };
+
+	const locked = {
+		orchestrator: lockedPick(picks?.[0]),
+		specialist: lockedPick(picks?.[1]),
+		...(picks?.[2] ? { verifier: lockedPick(picks[2]) } : {})
+	};
+
 	const differs = picksReason(locked, declared);
 
 	return {

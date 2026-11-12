@@ -2,7 +2,7 @@ import { findingKind, type FindingVerification } from '@recoder/shared';
 import type { EvidenceStore } from '../../../evidence/evidence.js';
 import type { ExecWorkspace } from '../../../sandbox/exec-workspace.js';
 import type { RuleLedger } from '../../guidelines/ledger/types.js';
-import { configForSubagent } from '../../../models/models.js';
+import { configForVerifier, type ModelConfig } from '../../../models/models.js';
 import { REVIEW_POLICY, verifierTurns } from '../../session/review-policy.js';
 import { ModelBlockedError, ReviewAbortedError, newAgentId, runJsonAgent, type ModelBudget } from '../agent-loop.js';
 import {
@@ -236,17 +236,26 @@ function verifierSpec(candidate: CandidateFinding, ctx: VerifyContext): Verifier
 }
 
 /** The task row a candidate's verification shows under. */
-function verifierTask(candidate: CandidateFinding): VerifierTask {
+function verifierTask(candidate: CandidateFinding, model = configForVerifier().model): VerifierTask {
 	return {
 		taskId: `verify:${candidate.candidateId}`,
 		label: `Verify: ${candidate.title ?? candidate.file}`,
 		meta: {
 			kind: 'verification',
 			agent: candidate.agent ?? 'reviewer',
-			model: configForSubagent().model,
+			model,
 			assignmentId: candidate.assignmentId,
 			files: [candidate.file]
 		}
+	};
+}
+
+/** Stamps the verifier's model and reasoning effort onto a settled verification. */
+function stampedVerification(verification: FindingVerification, cfg: ModelConfig): FindingVerification {
+	return {
+		...verification,
+		model: cfg.model,
+		...(cfg.reasoningEffort ? { effort: cfg.reasoningEffort } : {})
 	};
 }
 
@@ -256,7 +265,7 @@ function verifierTask(candidate: CandidateFinding): VerifierTask {
  * leader's runs lead its evidence, as a verifier's own proof would.
  */
 function shareVerdict(follower: CandidateFinding, leader: CandidateFinding, ctx: VerifyContext): void {
-	const { taskId, label, meta } = verifierTask(follower);
+	const { taskId, label, meta } = verifierTask(follower, leader.verification?.model);
 	const proof = (leader.evidenceIds ?? []).filter((id) => ctx.evidence.get(id)?.kind === 'run');
 
 	delete follower.publishedBy;
@@ -273,7 +282,8 @@ function shareVerdict(follower: CandidateFinding, leader: CandidateFinding, ctx:
  * rather than in the thread that raised the finding.
  */
 async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attempt: number): Promise<boolean> {
-	const { taskId, label, meta } = verifierTask(candidate);
+	const cfg = configForVerifier();
+	const { taskId, label, meta } = verifierTask(candidate, cfg.model);
 
 	const notRun = findingKind(candidate.category) === 'quality' ? null : await ctx.cannotRun();
 
@@ -299,15 +309,15 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 
 	ctx.task(taskId, label, 'running', attempt > 1 ? `${doing}, second attempt` : doing, meta);
 
-	const outcome = await runVerifier(candidate, spec, ctx, { taskId, label, meta });
+	const outcome = await runVerifier(candidate, spec, ctx, cfg, { taskId, label, meta });
 
 	if (typeof outcome !== 'string') {
-		await settle(candidate, outcome, ctx, { taskId, label, meta });
+		await settle(candidate, outcome, ctx, cfg, { taskId, label, meta });
 
 		return true;
 	}
 
-	candidate.verification = { status: 'unverified', reason: `Not verified: ${outcome}.` };
+	candidate.verification = stampedVerification({ status: 'unverified', reason: `Not verified: ${outcome}.` }, cfg);
 	ctx.task(taskId, label, 'partial', 'Could not verify', meta);
 
 	return false;
@@ -324,9 +334,9 @@ async function runVerifier(
 	candidate: CandidateFinding,
 	{ system, user, exec, mutation, turns }: VerifierSpec,
 	ctx: VerifyContext,
+	cfg: ModelConfig,
 	{ taskId, label, meta }: VerifierTask
 ): Promise<{ value: VerdictOutput; agentId: string } | string> {
-	const cfg = configForSubagent();
 	const owner = { assignmentId: taskId, role: 'verifier' };
 	const agentId = newAgentId();
 
@@ -396,6 +406,7 @@ async function settle(
 	candidate: CandidateFinding,
 	outcome: { value: VerdictOutput; agentId: string },
 	ctx: VerifyContext,
+	cfg: ModelConfig,
 	{ taskId, label, meta }: VerifierTask
 ): Promise<void> {
 	const { value, agentId } = outcome;
@@ -410,6 +421,11 @@ async function settle(
 			? `covered by ${value.coveredBy}: ${value.reason}`
 			: `refuted by the verifier: ${value.reason}`;
 
+		candidate.verification = stampedVerification(
+			{ status: 'unverified', outcome: 'refuted', reason: candidate.dropReason },
+			cfg
+		);
+
 		ctx.task(
 			taskId,
 			label,
@@ -423,7 +439,7 @@ async function settle(
 
 	const baseline = isMutationFinding(candidate, true) ? settled : await recordBaseline(settled, ctx, agentId);
 
-	candidate.verification = baseline;
+	candidate.verification = stampedVerification(baseline, cfg);
 	publishHeldBack(candidate, ctx.ledger);
 	if (settled.status === 'verified') leadWithProof(candidate, value.evidenceIds, ctx.evidence, agentId);
 

@@ -175,13 +175,17 @@ export interface ModelSettings {
 	apiKeyPreview: string | null;
 	sharedModelId: string | null;
 	orchestratorModelId?: string | null;
-	/** Subagents and verifiers run on this second model; null follows the Review model. */
+	/** Subagents and workers run on this second model; null follows the Review model. */
 	specialistModelId?: string | null;
+	/** Verifiers run on this model; null follows the Review model. */
+	verifierModelId?: string | null;
 	models: ModelEntry[];
 	/** Review (orchestrator) reasoning effort; null follows the model default. */
 	orchestratorEffort?: ReasoningEffort | null;
 	/** The second model's reasoning effort; null follows the Review effort when the model does too. */
 	specialistEffort?: ReasoningEffort | null;
+	/** The verifier model's reasoning effort; null follows the Review effort when the model does too. */
+	verifierEffort?: ReasoningEffort | null;
 	/** How many subagents one review may run in all. */
 	subagentCap: SubagentCap;
 	/** The token budget last picked, whose limits reviews run with; the cap and efforts may since have been changed by hand. */
@@ -215,8 +219,10 @@ export interface ModelSettingsPatch {
 	sharedModelId?: string | null;
 	orchestratorModelId?: string | null;
 	specialistModelId?: string | null;
+	verifierModelId?: string | null;
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
+	verifierEffort?: ReasoningEffort | null;
 	subagentCap?: SubagentCap;
 	tokenBudget?: TokenBudget;
 	reportLowSeverity?: boolean;

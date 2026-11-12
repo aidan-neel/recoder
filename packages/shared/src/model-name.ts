@@ -23,8 +23,8 @@ const SIZE = /^\d+(\.\d+)?[bkm]$/i;
 /** `k2`, `v3.1`, `a3b`, `r1`: a letter-led version, upper-cased. */
 const LETTER_VERSION = /^[a-z]\d+(\.\d+)?[a-z]?$/i;
 
-/** Recoder's agent prefixes on model ids (`opencode:openrouter/…`, `claude-code:…`, `devin:…`). */
-const AGENT_PREFIX = /^(opencode|claude-code|devin):/;
+/** Recoder's routed prefixes on model ids (`opencode:openrouter/…`, `claude-code:…`, `devin:…`, `vllm:…`). */
+const AGENT_PREFIX = /^(opencode|claude-code|devin|vllm):/;
 
 /** One part of a name, spelled the way people write it. */
 function spell(part: string): string {

@@ -77,9 +77,12 @@ export interface JudgeModel {
 export interface ReviewerManifest {
 	model: string;
 	effort: string | null;
-	/** The second model, for subagents and verifiers; null when it follows the review model. */
+	/** The second model, for subagents and workers; null when it follows the review model. */
 	specialistModel: string | null;
 	specialistEffort: string | null;
+	/** The verifier model; null when it follows the review model. */
+	verifierModel?: string | null;
+	verifierEffort?: string | null;
 	subagentCap: SubagentCap;
 	reportLowSeverity: boolean;
 }
@@ -93,6 +96,8 @@ export function reviewerManifest(settings: ModelSettings): ReviewerManifest {
 		effort: settings.orchestratorEffort ?? null,
 		specialistModel: named(settings.specialistModelId),
 		specialistEffort: settings.specialistEffort ?? null,
+		verifierModel: named(settings.verifierModelId),
+		verifierEffort: settings.verifierEffort ?? null,
 		subagentCap: settings.subagentCap,
 		reportLowSeverity: settings.reportLowSeverity
 	};

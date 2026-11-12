@@ -78,8 +78,8 @@ export interface RunIdentity {
 		/** The server's checkout, which ran the reviewers. */
 		server: string;
 	};
-	/** Verifiers run on the specialist model; there is no separate verifier setting. Reviewer calls send no seed. */
-	models: { orchestrator: StageModel; specialist: StageModel };
+	/** Each review stage's model and settings. Reviewer calls send no seed. */
+	models: { orchestrator: StageModel; specialist: StageModel; verifier: StageModel };
 	judge: { model: string; provider: string; effort: string; version: number; seed: number };
 	/**
 	 * Every `RECODER_*` variable the server runs with, but for keys, endpoints,

@@ -72,9 +72,13 @@ function reviewConfig(): { baseUrl: string; apiKey: string; model: string } {
 	return parsed.data;
 }
 
-/** True when both models resolve (registry or legacy env trio). */
+/** Which stage pick is being resolved. */
+type StageRole = 'orchestrator' | 'subagent' | 'verifier';
+
+/** True when every configured pick resolves (registry or legacy env trio). */
 export function isReviewConfigured(): boolean {
 	try {
+		configForVerifier();
 		configForSubagent();
 		configForOrchestrator();
 
@@ -96,7 +100,11 @@ export function withLockedModels<T>(run: () => T): T {
 	let picks: LockedModels;
 
 	try {
-		picks = { orchestrator: resolveConfig(true), subagent: resolveConfig(false) };
+		picks = {
+			orchestrator: resolveConfig('orchestrator'),
+			subagent: resolveConfig('subagent'),
+			verifier: resolveConfig('verifier')
+		};
 	} catch {
 		return run();
 	}
@@ -105,24 +113,29 @@ export function withLockedModels<T>(run: () => T): T {
 }
 
 /** The locked pick, or the live one; inside a pipeline the live one is a lock miss and is recorded as one. */
-function pickFor(orchestrator: boolean): ModelConfig {
+function pickFor(role: StageRole): ModelConfig {
 	const picks = lockedModels();
 
-	if (picks) return orchestrator ? picks.orchestrator : picks.subagent;
+	if (picks) return picks[role];
 
 	recordLockMiss();
 
-	return resolveConfig(orchestrator);
+	return resolveConfig(role);
 }
 
 /** The Review model: reviewers, consolidation and chat. */
 export function configForOrchestrator(): ModelConfig {
-	return pickFor(true);
+	return pickFor('orchestrator');
 }
 
-/** The second model: subagents and verifiers. Unset, it follows the Review model. */
+/** The second model: subagents and workers. Unset, it follows the Review model. */
 export function configForSubagent(): ModelConfig {
-	return pickFor(false);
+	return pickFor('subagent');
+}
+
+/** The verifier model: verification stage. Unset, it follows the Review model. */
+export function configForVerifier(): ModelConfig {
+	return pickFor('verifier');
 }
 
 /**
@@ -141,10 +154,12 @@ export function hasSeparateSpecialist(): boolean {
 
 /**
  * The model behind an agent's messages, so a follow-up (chat, discussion or
- * fix) runs where the finding came from: a subagent's on the second model,
- * everything else on the Review model.
+ * fix) runs where the finding came from: a subagent's on the second model, a
+ * verifier's on the verifier model, everything else on the Review model.
  */
 export function configForAgent(agent: string | undefined): ModelConfig {
+	if (agent === 'verifier') return configForVerifier();
+
 	return agent === 'subagent' ? configForSubagent() : configForOrchestrator();
 }
 
@@ -156,24 +171,34 @@ export function savedReviewModelId(): string | undefined {
 }
 
 /**
- * Resolve one of the two picks to its concrete model.
+ * Resolve one of the three stage picks to its concrete model.
  *
- * There are two picks: the Review model and the second model for subagents
- * and verifiers. An unset second pick follows the Review model and its effort.
- * A pick whose entry was deleted out-of-band falls back to the first entry,
- * each entry falling back to the global base URL/key. The legacy env trio
- * still works when no entries exist.
+ * There are three picks: the Review model, the second model for subagents and
+ * workers, and the verifier model. An unset second or verifier pick follows
+ * the Review model and its effort. A pick whose entry was deleted out-of-band
+ * falls back to the first entry, each entry falling back to the global base
+ * URL/key. The legacy env trio still works when no entries exist.
  */
-function resolveConfig(orchestrator: boolean): ModelConfig {
+function resolveConfig(role: StageRole): ModelConfig {
 	const stored = getStoredSettings();
 	const entries = stored.models ?? [];
 	const reviewId = savedReviewModelId();
-	const followsReview = orchestrator || !stored.specialistModelId;
-	const entryId = followsReview ? reviewId : stored.specialistModelId;
 
-	const requested = orchestrator
-		? stored.orchestratorEffort
-		: (stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
+	const pickedId =
+		role === 'orchestrator' ? reviewId : role === 'subagent' ? stored.specialistModelId : stored.verifierModelId;
+
+	const followsReview = role === 'orchestrator' || !pickedId;
+	const entryId = followsReview ? reviewId : pickedId;
+
+	const ownEffort =
+		role === 'orchestrator'
+			? stored.orchestratorEffort
+			: role === 'subagent'
+				? stored.specialistEffort
+				: stored.verifierEffort;
+
+	const requested =
+		role === 'orchestrator' ? ownEffort : (ownEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
 
 	if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, requested);
 	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(entryId, requested ?? undefined);

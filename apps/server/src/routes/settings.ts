@@ -49,8 +49,8 @@ const WRITE_WAIT_MS = 2_500;
 async function offeredModels(catalog: boolean, waitMs?: number): Promise<ModelEntry[]> {
 	if (catalog) return [...vllmEntries(), ...(await agentModels(waitMs))];
 
-	const { sharedModelId, orchestratorModelId, specialistModelId } = getStoredSettings();
-	const picked = [sharedModelId, orchestratorModelId, specialistModelId];
+	const { sharedModelId, orchestratorModelId, specialistModelId, verifierModelId } = getStoredSettings();
+	const picked = [sharedModelId, orchestratorModelId, specialistModelId, verifierModelId];
 
 	return [...vllmEntries().filter((entry) => picked.includes(entry.id)), ...(await pickedModels(picked, waitMs))];
 }
@@ -73,9 +73,11 @@ async function settingsPayload(catalog = true, waitMs?: number) {
 		sharedModelId: stored.sharedModelId ?? null,
 		orchestratorModelId: stored.orchestratorModelId ?? null,
 		specialistModelId: stored.specialistModelId ?? null,
+		verifierModelId: stored.verifierModelId ?? null,
 		models: await offeredModels(catalog, waitMs),
 		orchestratorEffort: stored.orchestratorEffort ?? null,
 		specialistEffort: stored.specialistEffort ?? null,
+		verifierEffort: stored.verifierEffort ?? null,
 		subagentCap: effectiveSubagentCap(),
 		tokenBudget: effectiveTokenBudget(),
 		reportLowSeverity: effectiveReportLowSeverity(),
