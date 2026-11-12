@@ -1,6 +1,7 @@
 import { describe, expect, jest, spyOn, test } from 'bun:test';
 import type { ModelEntry, ModelSettings, SetupStatus } from '@recoder/shared';
 import { claudeCode } from '../../src/agents/claude-code/claude-code';
+import { copilot } from '../../src/agents/copilot/copilot';
 import { devin } from '../../src/agents/devin/devin';
 import { opencode } from '../../src/agents/opencode/opencode';
 import { forgetAgentModels } from '../../src/agents/registry';
@@ -16,9 +17,10 @@ describe('setup status', () => {
 	const model: ModelEntry = { id: 'sonnet', label: 'Sonnet', model: 'sonnet', baseUrl: null, apiKeyPreview: null };
 	let offered: ModelEntry[] = [];
 
-	/** Every agent lists exactly `offered`, OpenCode reads as missing, and no CLI runs. */
+	/** Claude Code lists exactly `offered`, the other agents nothing; OpenCode reads as missing, and no CLI runs. */
 	const spies = () => [
 		spyOn(claudeCode, 'models').mockImplementation(async () => offered),
+		spyOn(copilot, 'models').mockResolvedValue([]),
 		spyOn(opencode, 'models').mockResolvedValue([]),
 		spyOn(opencode, 'detect').mockResolvedValue({
 			id: 'opencode',

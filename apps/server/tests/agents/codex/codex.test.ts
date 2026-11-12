@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import type { TokenUsage } from '@recoder/shared';
 import { CodexAgent } from '../../../src/agents/codex/codex';
-import { UsageLimitError } from '../../../src/models/llm/errors';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { fakeCodex } from '../../helpers/fake-codex';
 import { testCallFailures } from '../../helpers/native-agent';
@@ -118,8 +118,8 @@ describe('CodexAgent.complete', () => {
 	testCallFailures(
 		async (mode) => new CodexAgent(await fakeCodex({ FAKE_CODEX_MODE: mode })).complete(call()),
 		[
-			{ mode: 'auth', status: 401, message: /signed out\. Run: codex login/ },
-			{ mode: 'crash', status: 0, message: /boom/ }
+			{ mode: 'auth', status: 401, message: /signed out\. Run: codex login/, error: LlmError },
+			{ mode: 'crash', status: 0, message: /boom/, error: LlmError }
 		]
 	);
 

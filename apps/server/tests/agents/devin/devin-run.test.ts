@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { DevinAgent } from '../../../src/agents/devin/devin';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import { fakeDevin } from '../../helpers/fake-devin';
 import { fixtureReview, openCollectingRun, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
@@ -142,9 +143,9 @@ describe('DevinAgent.openRun', () => {
 	});
 
 	testPromptFailures(openRun, [
-		{ mode: 'signedout', status: 401, message: /signed out/ },
-		{ mode: 'limited', status: 429, message: /free model rate limit/, usageLimit: true },
-		{ mode: 'crash', status: 0, message: /boom/ }
+		{ mode: 'signedout', status: 401, message: /signed out/, error: LlmError },
+		{ mode: 'limited', status: 429, message: /free model rate limit/, error: UsageLimitError },
+		{ mode: 'crash', status: 0, message: /boom/, error: LlmError }
 	]);
 
 	testPromptStops(() => openRun('spawn'));

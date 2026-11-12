@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { PiAgent } from '../../../src/agents/pi/pi';
+import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import { REVIEW_POLICY } from '../../../src/review/session/review-policy';
 import { fakePi, fakePiCalls, type FakePiCall } from '../../helpers/fake-pi';
 import { fixtureReview, testOutputCapPrompt, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
@@ -145,8 +146,8 @@ describe('PiRun', () => {
 	});
 
 	testPromptFailures(openRun, [
-		{ mode: 'auth', status: 401, message: /\/login/ },
-		{ mode: 'limit', status: 429, message: /exceeded your current quota/, usageLimit: true }
+		{ mode: 'auth', status: 401, message: /\/login/, error: LlmError },
+		{ mode: 'limit', status: 429, message: /exceeded your current quota/, error: UsageLimitError }
 	]);
 
 	test('output that is not Pi’s fails the prompt without quoting the credential in it', async () => {

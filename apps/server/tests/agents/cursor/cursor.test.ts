@@ -124,8 +124,8 @@ describe('CursorAgent.complete', () => {
 	testCallFailures(
 		async (mode) => new CursorAgent(await fakeCursor({ FAKE_CURSOR_MODE: mode })).complete(call()),
 		[
-			{ mode: 'auth', status: 401, message: /cursor-agent login/ },
-			{ mode: 'limit', status: 429, message: /usage limit/, usageLimit: true }
+			{ mode: 'auth', status: 401, message: /cursor-agent login/, error: LlmError },
+			{ mode: 'limit', status: 429, message: /usage limit/, error: UsageLimitError }
 		]
 	);
 

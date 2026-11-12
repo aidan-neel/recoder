@@ -4,6 +4,7 @@ import { antigravity } from './antigravity/antigravity';
 import { claudeCode } from './claude-code/claude-code';
 import { codex } from './codex/codex';
 import type { AgentAdapter } from './contract';
+import { copilot } from './copilot/copilot';
 import { cursor } from './cursor/cursor';
 import { customCommand } from './custom/custom-command';
 import { devin } from './devin/devin';
@@ -25,7 +26,8 @@ const AGENTS: readonly AgentAdapter[] = [
 	pi,
 	grok,
 	cursor,
-	antigravity
+	antigravity,
+	copilot
 ];
 
 /** Every agent CLI Recoder runs, in the order Settings lists them. */

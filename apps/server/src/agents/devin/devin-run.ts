@@ -6,6 +6,7 @@ import { CLI_OUTPUT_CAP_BYTES, streamCli } from '../cli-stream';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
 import { SessionRun, type SessionHost } from '../session-run';
 import type { ToolLease } from '../tools/mcp-host';
+import { usageDelta } from '../usage-delta';
 import { exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
 import { devinEnv, runConfig } from './devin-process';
 
@@ -48,24 +49,6 @@ async function writeRunFiles(files: RunFiles, env: Env, lease: ToolLease | null)
 	const servers = { mcpServers: { [lease.name]: { url: lease.url, transport: 'http' } } };
 
 	await Bun.write(join(files.cwd, '.devin', 'mcp_config.local.json'), JSON.stringify(servers));
-}
-
-/** Usage of the latest prompt: a resumed session's export counts the whole session, so the earlier total is taken off. */
-function promptUsage(total: TokenUsage, before: TokenUsage | null): TokenUsage {
-	if (!before) return total;
-
-	const less = (now: number | null, then: number | null) => (now === null ? null : now - (then ?? 0));
-	const inputTokens = less(total.inputTokens, before.inputTokens);
-	const outputTokens = less(total.outputTokens, before.outputTokens);
-
-	return {
-		inputTokens,
-		outputTokens,
-		totalTokens: inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null,
-		cachedInputTokens: less(total.cachedInputTokens, before.cachedInputTokens),
-		cacheWriteInputTokens: null,
-		reasoningOutputTokens: null
-	};
 }
 
 /**
@@ -148,7 +131,7 @@ export class DevinRun extends SessionRun<RunFiles> {
 		if (!exported?.final_metrics) return undefined;
 
 		const total = tokenUsage(exported.final_metrics);
-		const usage = promptUsage(total, this.used);
+		const usage = usageDelta(total, this.used);
 
 		this.used = total;
 		this.options.onEvent({ type: 'usage', usage });

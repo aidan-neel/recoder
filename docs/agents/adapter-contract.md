@@ -1,7 +1,8 @@
 # Agent CLI adapter contract
 
-Reader: an agent that adds or changes an agent CLI adapter (OpenCode, Claude Code, Devin, a custom command, and
-the next ones: Codex, Grok, Copilot, Cursor, Antigravity, Pi). Paths are repository-relative. The source of
+Reader: an agent that adds or changes an agent CLI adapter. The registered ones are OpenCode, Claude Code, Devin,
+the custom command, Codex, Pi, Grok Build, Cursor, Antigravity and GitHub Copilot (`AGENTS` in
+`apps/server/src/agents/registry.ts` is the list). Paths are repository-relative. The source of
 truth is `apps/server/src/agents/contract.ts`; this page explains it.
 
 ## What an adapter is
@@ -251,9 +252,10 @@ for example `codex-cli`); `<Cli>` is the class prefix (`CodexCli`). Copy the sha
     - the event parser: steps, usage, text, reasoning;
     - a later prompt resumes the session;
     - the failure modes: `testPromptFailures(openRun, cases)` from
-      `apps/server/tests/helpers/native-agent.ts` runs one `{ mode, status, message, usageLimit? }` row per fake
-      mode — signed out is a 401 naming the sign-in command, a usage cap is a `UsageLimitError`, and the rest map
-      to their status. `testCallFailures(complete, cases)` does the same for `complete()` calls in `<cli>.test.ts`;
+      `apps/server/tests/helpers/native-agent.ts` runs one `{ mode, status, message, error }` row per fake
+      mode — `error` is the class the failure must be an instance of (`UsageLimitError` for a usage cap,
+      `LlmError` otherwise); signed out is a 401 naming the sign-in command, and the rest map to their status.
+      `testCallFailures(complete, cases)` does the same for `complete()` calls in `<cli>.test.ts`;
     - malformed output fails the prompt, and the error does not contain the fake credential;
     - the output cap: `testOutputCapPrompt(openRun)` (`native-agent.ts`) checks `flood` stops the CLI with
       "printed more than";

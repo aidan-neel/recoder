@@ -36,7 +36,7 @@ Read by `effectiveReviewEnv`. A saved value wins. A value that is not a positive
 
 **RECODER_LLM_CONCURRENCY**: Ceiling on concurrent calls per model endpoint. Each endpoint gets its own ceiling of this size. Default 64. Read by `envCount` in `apps/server/src/models/llm/limiter.ts`. Must be a positive number.
 
-**RECODER_CLAUDE_CODE_CONCURRENCY**: Ceiling for the `claude-code` endpoint, which starts one CLI process per call. Default 8. The effective ceiling is the smaller of this and `RECODER_LLM_CONCURRENCY`. Read by `envCount` through `PROCESS_CEILINGS` in `apps/server/src/models/llm/limiter.ts`.
+**RECODER_CLAUDE_CODE_CONCURRENCY**: Ceiling for the `claude-code` endpoint, which starts one CLI process per call. Default 8. The effective ceiling is the smaller of this and `RECODER_LLM_CONCURRENCY`. Read through the adapter's `processCeiling` — an `{ env, fallback }` pair each agent declares (`apps/server/src/agents/claude-code/claude-code.ts`) — which `llmCeiling` in `apps/server/src/models/llm/limiter.ts` looks up by the endpoint's provider id. The same shape caps the other process-per-call CLIs: `RECODER_CODEX_CONCURRENCY`, `RECODER_DEVIN_CONCURRENCY`, `RECODER_PI_CONCURRENCY`, `RECODER_GROK_CONCURRENCY`, `RECODER_CURSOR_CONCURRENCY`, `RECODER_ANTIGRAVITY_CONCURRENCY` and `RECODER_COPILOT_CONCURRENCY`, each default 4. `opencode` and `custom-command` declare none and share the endpoint ceiling.
 
 **RECODER_LLM_RETRIES**: Retries after a transient failure. Default 5. Read in `apps/server/src/models/llm/retry.ts`. Non-negative; fractions are floored. A retry also needs time left before the call's deadline.
 
@@ -154,5 +154,21 @@ Resolved by `findCli` in `apps/server/src/agents/cli-process.ts`. When the varia
 **RECODER_CLAUDE_CODE_DEBUG_DIR**: When set, a failed `claude-code` call writes its raw `stream-json` lines (text and thinking deltas left out) to a file in this directory. Unset by default, which keeps nothing. Read in `apps/server/src/agents/claude-code/claude-code-debug.ts`.
 
 **RECODER_CLAUDE_BIN**: Claude Code binary. Fallback `~/.local/bin/claude`. Read in `apps/server/src/agents/claude-code/claude-code.ts`.
+
+**RECODER_CODEX_BIN**: Codex binary. Fallback `~/.local/bin/codex`. Read in `apps/server/src/agents/codex/codex.ts`.
+
+**RECODER_COPILOT_BIN**: GitHub Copilot binary. Fallback `~/.local/bin/copilot`. Read in `apps/server/src/agents/copilot/copilot.ts`.
+
+**RECODER_CURSOR_BIN**: Cursor `cursor-agent` binary. Fallback `~/.local/bin/cursor-agent`. Read in `apps/server/src/agents/cursor/cursor.ts`.
+
+**RECODER_DEVIN_BIN**: Devin binary. Fallback `~/.local/bin/devin`. Read in `apps/server/src/agents/devin/devin.ts`.
+
+**RECODER_GROK_BIN**: Grok Build binary. Fallback `~/.grok/bin/grok`. Read in `apps/server/src/agents/grok/grok.ts`.
+
+**RECODER_PI_BIN**: Pi binary. Fallback `~/.local/bin/pi`. Read in `apps/server/src/agents/pi/pi.ts`.
+
+**RECODER_ANTIGRAVITY_BIN**: Antigravity `agy` binary. Fallback `~/.local/bin/agy`. Read in `apps/server/src/agents/antigravity/antigravity.ts`.
+
+**RECODER_CUSTOM_AGENT**: A JSON `{"argv": [...], "name"?, "maxOutputBytes"?}` naming the command the custom-command adapter runs, never through a shell. Unset, the adapter is not configured. Read by `readCustomCommand` in `apps/server/src/agents/custom/custom-config.ts`.
 
 The Claude Code CLI does not inherit `RECODER_*`, `ANTHROPIC_*`, `OPENAI_*`, `CLAUDE_*` other than `CLAUDE_CONFIG_DIR` and `CLAUDE_SECURESTORAGE_CONFIG_DIR`, `DISABLE_PROMPT_CACHING*`, `ENABLE_PROMPT_CACHING*`, `MAX_THINKING_TOKENS`, `DISABLE_INTERLEAVED_THINKING`, `DISABLE_COMPACT`, `DISABLE_AUTO_COMPACT`, or any token, key, secret or password variable (`claudeCodeEnv` in `apps/server/src/agents/claude-code/claude-code-process.ts`). It reads no settings file, so a settings `env` block cannot set them either.

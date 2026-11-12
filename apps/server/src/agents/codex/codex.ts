@@ -3,15 +3,7 @@ import { join } from 'node:path';
 import type { AgentStatus, ModelEntry, ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import {
-	callDeadline,
-	cliOutput,
-	emptyDirectory,
-	findCli,
-	removeScratchDir,
-	scratchDir,
-	stopOnShutdown
-} from '../cli-process';
+import { callDeadline, emptyDirectory, findCli, removeScratchDir, scratchDir, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import { SessionCliAgent } from '../session-run';
@@ -59,6 +51,7 @@ export class CodexAgent extends SessionCliAgent {
 	 */
 	async models(signal?: AbortSignal): Promise<ModelEntry[]> {
 		const path = this.requirePath();
+
 		const { stdout } = await this.command(path, ['debug', 'models'], MODELS_TIMEOUT_MS, signal);
 		const models = parseCodexModels(stdout);
 
@@ -190,16 +183,14 @@ export class CodexAgent extends SessionCliAgent {
 		await this.command(path, ['delete', '--force', session], FORGET_TIMEOUT_MS);
 	}
 
-	/** Run a short CLI command in an empty directory, so it never sees the user's files. See {@link cliOutput}. */
+	/** A short CLI command run in an empty directory, so it never sees the user's files. */
 	private async command(
 		path: string,
 		args: string[],
 		timeoutMs: number,
 		signal?: AbortSignal
 	): Promise<{ code: number; stdout: string }> {
-		const cwd = await emptyDirectory('codex-empty');
-
-		return cliOutput([path, ...args], { env: codexEnv(this.env), cwd, timeoutMs, signal });
+		return this.output(path, args, timeoutMs, signal, await emptyDirectory('codex-empty'));
 	}
 }
 

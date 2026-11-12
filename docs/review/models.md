@@ -16,6 +16,7 @@ A review uses three stage model picks: the Review model (orchestrator), a second
 - **grok**: a model reached through the user's Grok Build CLI. Adapter: `apps/server/src/agents/grok/grok.ts`.
 - **cursor**: a model reached through the user's Cursor CLI (`cursor-agent`). Adapter: `apps/server/src/agents/cursor/cursor.ts`.
 - **antigravity**: a model reached through the user's Antigravity CLI (`agy`). Adapter: `apps/server/src/agents/antigravity/antigravity.ts`.
+- **copilot**: a model reached through the user's GitHub Copilot CLI (`copilot`). Adapter: `apps/server/src/agents/copilot/copilot.ts`. Its ids are `copilot:<model>`.
 
 ## Resolving a pick
 
@@ -56,6 +57,7 @@ Effort checked (`supportedEffort`):
 - Pi: checked against Pi's levels (minimal through xhigh), defaulting to `medium`; Pi lowers a level the model lacks.
 - Antigravity: checked against the levels the model's catalog entry lists; a model with one level takes none.
 - Grok Build, Cursor and Devin have no effort setting of their own: Grok's `grok models` names no levels, Cursor names effort inside the model slug, and Devin names it in the model id. A custom command's levels come from its `describe`.
+- Copilot: the requested effort is checked against the levels every model but `auto` offers (`minimal` through `max`, default `medium`); `auto` takes no `--reasoning-effort`, and with none picked the model keeps its own default.
 - The shared-environment model (no saved entries): the requested effort is passed through unchecked.
 
 Other entry points:
@@ -179,6 +181,20 @@ Antigravity (`apps/server/src/agents/antigravity/`):
   - `manage_task` and `invoke_subagent` stay listed, and the global `~/.gemini/config/hooks.json` and the user's memory cannot be turned off.
   - The signed-out stderr wording and the 429 shapes were not confirmed live.
 
+GitHub Copilot (`apps/server/src/agents/copilot/`), checked against copilot-cli 1.0.109:
+
+- `copilot.complete()` spawns one `copilot` process per call in an empty directory under its own scratch `COPILOT_HOME`. The system prompt and turns go in on stdin, since a review's diff can pass the kernel's per-argument limit. Text and reasoning stream from `assistant.message_delta` and `assistant.reasoning_delta`; the authoritative `assistant.message` and `assistant.reasoning` events add only what has not streamed, and the reply is the last message part's text — a tool turn's earlier messages are narration (`copilot-output.ts`).
+- A run (`CopilotRun`) starts one `copilot` process per prompt; every prompt carries the same `--session-id`, so later prompts continue the same conversation. A prompt with tools off gets `--available-tools recoder-no-tools`, a name nothing has, so the model sees no tool at all; with tools on it gets Recoder's leased MCP server through `--additional-mcp-config`, `--available-tools <lease>` and `--allow-tool <lease>` (`toolArgs` in `copilot-run.ts`).
+- `PROMPT_ARGS` close what prompt mode cannot need: `--no-ask-user`, `--disallow-temp-dir`, `--disable-builtin-mcps`, `--no-custom-instructions`, `--sync-session=off`, the built-in tools named in `--excluded-tools` with their kinds denied by `--deny-tool` (a deny rule wins over every allow), and `--secret-env-vars` naming only `COPILOT_GITHUB_TOKEN`.
+- The empty scratch `COPILOT_HOME` keeps the user's settings, hooks, plugins, skills, custom instructions, MCP servers and sessions out of every call and run; the working directory is an empty one nothing trusts, which skips workspace MCP servers, repository hooks and project extensions. A call's scratch dir is deleted when it ends; a run's on `close`, and `stop` deletes whatever a run never closed (`scratchDir` and `removeScratchDir` in `cli-process.ts`).
+- The environment drops `RECODER_*`, `COPILOT_*`, `GITHUB_COPILOT_*`, other providers' keys and any token, key, secret or password variable; it keeps PATH, HOME, locale, temp and XDG dirs and proxies. `GH_TOKEN` and `GITHUB_TOKEN` are the server's forge credentials and never cross; `COPILOT_GITHUB_TOKEN` is the one forwarded (`copilotEnv` in `copilot-process.ts`).
+- Sign-in: under the empty home and no token the CLI falls back to `gh auth token`, so `gh auth login` is the sign-in a run sees and `COPILOT_GITHUB_TOKEN` the headless one. `copilot login` saves the account under `COPILOT_HOME`, which every run replaces with an empty scratch dir, so that sign-in is invisible to the next call. The CLI has no status command, so `detect` leaves sign-in unknown and a signed-out call surfaces as the 401 naming `gh auth login`. Recoder never reads the CLI's credential files.
+- Models are a fixed list (`copilotModels` in `copilot-models.ts`): the ids `copilot help config` documents plus `auto`, which lets the CLI pick. The CLI has no command that lists models, so a plan-gated id fails loudly at call time. Every model but `auto` is offered the levels `--reasoning-effort` takes (`minimal` through `max`, the picker's default `medium`); which levels a given model honors is per-model and not confirmed.
+- Usage: `--usage-output-file` writes the session's cumulative totals per model when it ends; a run differences them against what earlier prompts counted (`usageDelta` in `apps/server/src/agents/usage-delta.ts`, shared with Devin), and a call reads the file once.
+- Failures map in `copilotFailure`: signed-out wording is a 401 naming `gh auth login` or `COPILOT_GITHUB_TOKEN`, Copilot's premium-request and quota wording a `UsageLimitError`, a bare throttle or 429 a retryable `LlmError`, and anything else the message the CLI gave, quoted through `quotedLine` first.
+- `RECODER_COPILOT_BIN` pins the binary (a `copilot` that is VS Code's launcher shim is not the CLI and is skipped), and `RECODER_COPILOT_CONCURRENCY` (default 4) caps its processes.
+- Known gaps: the usage-cap wording is not confirmed against a real account; which model ids a plan offers is not confirmed; which effort levels each model honors is not confirmed.
+
 Before a review starts, `assertAgentsSignedIn` in `apps/server/src/commands/pipeline.ts` checks that every agent CLI the three stage picks use is signed in: `signedOutAgent` in `apps/server/src/models/agent-sign-in.ts` over `stageConfigs()` in `apps/server/src/models/models.ts`.
 
 Settings saved before the Codex CLI adapter held `provider: 'codex'` entries for Recoder's own ChatGPT sign-in. Reading the settings drops those entries and moves every pick that named one to `codex:<model>` (`movedPicks` in `apps/server/src/review/session/chatgpt-migration.ts`); the server's start saves the file again and deletes the old tokens (`chatgpt-auth.json`, `codex/auth.json`) from the data dir.
@@ -281,7 +297,7 @@ Hosted provider keys live in `connections`, by provider id. They are not in the 
 
 `apps/server/src/models/llm/limiter.ts` keeps one limiter per endpoint. `llmEndpoint` builds the endpoint key: the base URL without trailing slashes and with a lowercase host, or the provider name when there is no base URL. Every agent CLI's config has an empty base URL, so its endpoint is its provider id.
 
-- Ceiling: `RECODER_LLM_CONCURRENCY` (default 64) for each endpoint. An agent CLI that starts a process per call has a lower one: the smaller of the two, from the adapter's `processCeiling`. That is `RECODER_CLAUDE_CODE_CONCURRENCY` (default 8) for `claude-code`, and `RECODER_CODEX_CONCURRENCY`, `RECODER_DEVIN_CONCURRENCY`, `RECODER_PI_CONCURRENCY`, `RECODER_GROK_CONCURRENCY`, `RECODER_CURSOR_CONCURRENCY` or `RECODER_ANTIGRAVITY_CONCURRENCY` (each default 4). `opencode` and `custom-command` start no process per call and share the endpoint ceiling. `envCount` reads them all.
+- Ceiling: `RECODER_LLM_CONCURRENCY` (default 64) for each endpoint. An agent CLI that starts a process per call has a lower one: the smaller of the two, from the adapter's `processCeiling`. That is `RECODER_CLAUDE_CODE_CONCURRENCY` (default 8) for `claude-code`, and `RECODER_CODEX_CONCURRENCY`, `RECODER_DEVIN_CONCURRENCY`, `RECODER_PI_CONCURRENCY`, `RECODER_GROK_CONCURRENCY`, `RECODER_CURSOR_CONCURRENCY`, `RECODER_ANTIGRAVITY_CONCURRENCY` or `RECODER_COPILOT_CONCURRENCY` (each default 4). `opencode` and `custom-command` start no process per call and share the endpoint ceiling. `envCount` reads them all.
 - Backoff: below the ceiling sits an effective limit. A rate-limit error halves it, never below 4 (or the ceiling, if lower). It is cut at most once per 10-second cooldown.
 - Recovery: after the cooldown, each successful call raises the limit by one until it reaches the ceiling.
 - Rate-limit errors are HTTP 429, 529 or an "overloaded" message (`isRateLimitError` in `apps/server/src/models/llm/errors.ts`). A `UsageLimitError` does not count: it means a usage cap or a spent plan.

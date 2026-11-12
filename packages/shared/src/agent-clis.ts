@@ -26,7 +26,8 @@ export const AGENT_CLIS: readonly AgentCli[] = [
 	{ id: 'pi', name: 'Pi', groupsModelsUnderName: true },
 	{ id: 'grok', name: 'Grok Build', groupsModelsUnderName: true },
 	{ id: 'cursor', name: 'Cursor', groupsModelsUnderName: true },
-	{ id: 'antigravity', name: 'Antigravity', groupsModelsUnderName: true }
+	{ id: 'antigravity', name: 'Antigravity', groupsModelsUnderName: true },
+	{ id: 'copilot', name: 'GitHub Copilot', groupsModelsUnderName: true }
 ];
 
 /** The agent CLI whose id is `id` (a model provider), or null for a provider that is not one. */
