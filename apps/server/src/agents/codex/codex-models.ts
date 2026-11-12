@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { parseJson } from './codex-output';
 
 /** Prefix of a Codex model's id in the Model select, so routing knows the CLI runs it. */
-const CODEX_MODEL_PREFIX = 'codex:';
+export const CODEX_MODEL_PREFIX = 'codex:';
 
 /** The levels every model of the catalog took when it was read (2026-11-12), for a model not listed yet. */
 const COMMON_EFFORTS: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];

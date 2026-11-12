@@ -1,14 +1,15 @@
 import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { CODEX_MODEL_PREFIX } from '../../agents/codex/codex-models.js';
 
 /**
- * The provider a saved model entry had when it ran through Recoder's own ChatGPT sign-in. The Codex CLI adapter
- * now runs those models under the same id, as `codex:<model>`, and signs in itself.
+ * The provider a saved model entry had when it ran through Recoder's own, now retired, ChatGPT sign-in. It is the
+ * id the Codex CLI adapter has now, but no saved entry may name that adapter: its models are `codex:<model>` picks.
  */
-const CHATGPT_PROVIDER = 'codex';
+const CHATGPT_SIGN_IN_PROVIDER = 'codex';
 
 /** The providers a saved entry may name: the one entries have now, and the retired ChatGPT sign-in. */
-export const SAVED_ENTRY_PROVIDERS = ['openai-compatible', CHATGPT_PROVIDER] as const;
+export const SAVED_ENTRY_PROVIDERS = ['openai-compatible', CHATGPT_SIGN_IN_PROVIDER] as const;
 
 /** Every settings field that names a picked model. A field that names a ChatGPT entry is moved to the CLI's id. */
 const MODEL_PICK_KEYS = ['sharedModelId', 'orchestratorModelId', 'specialistModelId', 'verifierModelId'] as const;
@@ -25,9 +26,9 @@ interface SavedEntry {
 /** A saved entry once the migration ran: no longer able to name the ChatGPT sign-in. */
 type MovedEntry<E extends SavedEntry> = Omit<E, 'provider'> & { provider?: 'openai-compatible' };
 
-/** True for a saved entry that ran through the ChatGPT sign-in. */
-export function isChatGptEntry(entry: SavedEntry): boolean {
-	return entry.provider === CHATGPT_PROVIDER;
+/** True for a saved entry that ran through the retired ChatGPT sign-in. */
+export function isChatGptSignInEntry(entry: SavedEntry): boolean {
+	return entry.provider === CHATGPT_SIGN_IN_PROVIDER;
 }
 
 /**
@@ -45,7 +46,7 @@ export function moveChatGptModels<E extends SavedEntry>(
 function movedPicks(settings: ModelPicks, models: SavedEntry[]): ModelPicks {
 	const moved = new Map(
 		models.flatMap((entry) =>
-			isChatGptEntry(entry) && entry.id ? [[entry.id, `${CHATGPT_PROVIDER}:${entry.model}`] as const] : []
+			isChatGptSignInEntry(entry) && entry.id ? [[entry.id, `${CODEX_MODEL_PREFIX}${entry.model}`] as const] : []
 		)
 	);
 
@@ -61,7 +62,9 @@ function movedPicks(settings: ModelPicks, models: SavedEntry[]): ModelPicks {
 }
 
 function withoutChatGpt<E extends SavedEntry>(models: E[]): MovedEntry<E>[] {
-	return models.flatMap(({ provider, ...entry }) => (provider === CHATGPT_PROVIDER ? [] : [{ ...entry, provider }]));
+	return models.flatMap(({ provider, ...entry }) =>
+		provider === CHATGPT_SIGN_IN_PROVIDER ? [] : [{ ...entry, provider }]
+	);
 }
 
 /**

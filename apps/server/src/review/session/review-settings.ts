@@ -15,7 +15,7 @@ import {
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
 import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
-import { isChatGptEntry, moveChatGptModels, SAVED_ENTRY_PROVIDERS } from './chatgpt-migration.js';
+import { isChatGptSignInEntry, moveChatGptModels, SAVED_ENTRY_PROVIDERS } from './chatgpt-migration.js';
 
 const runtimeSchema = z.object({
 	temperature: z.number().min(0).max(2).nullable().optional(),
@@ -94,7 +94,7 @@ function hasRetiredCap(data: StoredFile): boolean {
 function hasLegacyFields(data: StoredFile): boolean {
 	return (
 		hasRetiredCap(data) ||
-		!!data.models?.some(isChatGptEntry) ||
+		!!data.models?.some(isChatGptSignInEntry) ||
 		[data.roles, data.roleEfforts, data.applyToSpecialists, data.specialistDispatch].some(
 			(field) => field !== undefined
 		)
