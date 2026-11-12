@@ -6,6 +6,9 @@ import { createSampleApi } from '../../src/lib/sample/sample-api';
 /** Time enough for a started review to leave the queue. */
 const QUEUE_MS = 1_000;
 
+/** Time enough for a review that left the queue to reach the step that checks its claims. */
+const TO_VERIFY_MS = 10_000;
+
 beforeEach(() => {
 	jest.useFakeTimers();
 });
@@ -75,5 +78,30 @@ describe('the seeded review that is already running', () => {
 		await api.cancelReview('sample-216');
 
 		expect(await api.review('sample-216')).toMatchObject({ status: 'failed', summary: REVIEW_CANCELLED });
+	});
+});
+
+describe('a stopped review that a person continues', () => {
+	test('it starts over without the steps and claims of the run that was stopped', async () => {
+		const api = createSampleApi();
+		const review = await api.createReview({ repoId: 'sample-api', prNumber: 205 });
+		const messages: ProgressMessage[] = [];
+
+		api.follow(review.id, {
+			onMessage: (message) => messages.push(message),
+			onConnection: () => {},
+			onStale: () => {}
+		});
+
+		jest.advanceTimersByTime(QUEUE_MS + TO_VERIFY_MS);
+		await api.cancelReview(review.id);
+		await api.continueReview(review.id);
+		jest.advanceTimersByTime(QUEUE_MS);
+
+		const shown = shownProgress(review.id, messages);
+
+		expect(shown.stage).toBe('checkout');
+		expect(Object.keys(shown.tasks)).toEqual(['fetch']);
+		expect(shown.candidateCount).toBeUndefined();
 	});
 });

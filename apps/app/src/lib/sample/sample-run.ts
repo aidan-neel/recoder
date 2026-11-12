@@ -1,4 +1,5 @@
 import {
+	emptyReviewProgress,
 	REVIEW_CANCELLED,
 	type Finding,
 	type Review,
@@ -212,14 +213,23 @@ const WORK_STEPS: Step[] = [
 /**
  * Plays a scripted review of `review`, which starts queued: it reads the
  * change, plans parts over the script's paths, raises and checks claims, and
- * passes with its ending. Each step goes to `store`.
+ * passes with its ending. Each step goes to `store`. A review that ran before
+ * and was stopped starts over: the steps and claims of that run are dropped.
  */
 export function playSampleRun(review: Review, script: RunScript, store: RunStore): SampleRun {
 	const run = createRun(review.id, [START_STEP, ...WORK_STEPS], script, store);
 
+	store.publish(store.findReview(review.id), progressAtStart(store.progressOf(review.id)));
 	run.resume();
 
 	return run;
+}
+
+/** The progress a run starts from: nothing of an earlier run but the conversation. */
+function progressAtStart(earlier: ReviewProgress): ReviewProgress {
+	const fresh = emptyReviewProgress(earlier.id);
+
+	return earlier.messages ? { ...fresh, messages: earlier.messages } : fresh;
 }
 
 /**
