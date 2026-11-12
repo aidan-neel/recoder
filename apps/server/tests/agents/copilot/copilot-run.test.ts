@@ -185,16 +185,34 @@ describe('CopilotAgent.openRun', () => {
 		expect(usage).toEqual([1000, 500]);
 	});
 
-	test('each model call is a step, and the prompt still reports one usage', async () => {
+	test('each model call is a step that ends before the next starts, and the last ends with the prompt’s usage', async () => {
 		const { run, events } = await openRun('tool');
 
 		const reply = await run.prompt('Review it.', PROMPT);
 
 		await run.close();
 
+		const steps = events.flatMap((event): (string | number | null)[] => {
+			if (event.type === 'step-start') return ['start'];
+			if (event.type === 'usage') return [event.usage.inputTokens];
+
+			return [];
+		});
+
 		expect(reply.error).toBeUndefined();
-		expect(events.filter((event) => event.type === 'step-start')).toHaveLength(2);
-		expect(events.filter((event) => event.type === 'usage')).toHaveLength(1);
+		expect(steps).toEqual(['start', null, 'start', 1000]);
+	});
+
+	test('a prompt that fails ends no step, and carries what it used on the reply', async () => {
+		const { run, events } = await openRun('limit');
+
+		const reply = await run.prompt('Review it.', PROMPT);
+
+		await run.close();
+
+		expect(events.filter((event) => event.type === 'step-start')).toHaveLength(1);
+		expect(events.filter((event) => event.type === 'usage')).toEqual([]);
+		expect(reply.tokens?.inputTokens).toBe(1000);
 	});
 
 	testPromptFailures(openRun, COPILOT_FAILURES);
@@ -249,6 +267,16 @@ describe('CopilotAgent.openRun', () => {
 test('a review agent on a Copilot model completes through the shared engine, reading evidence through the gate', async () => {
 	const { error, read } = await fixtureReview(
 		new CopilotAgent(await fakeCopilot({ FAKE_COPILOT_MODE: 'tool' })),
+		'gpt-5.6-sol'
+	);
+
+	expect(error).toBeUndefined();
+	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+new') });
+});
+
+test('a prompt may make more tool calls than one step allows, one model call at a time', async () => {
+	const { error, read } = await fixtureReview(
+		new CopilotAgent(await fakeCopilot({ FAKE_COPILOT_MODE: 'tools' })),
 		'gpt-5.6-sol'
 	);
 

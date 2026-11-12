@@ -1,5 +1,5 @@
 import { readFile } from 'node:fs/promises';
-import type { TokenUsage } from '@recoder/shared';
+import { emptyTokenUsage, type TokenUsage } from '@recoder/shared';
 import { z } from 'zod';
 import { isSpentPlan, LlmError, UsageLimitError } from '../../models/llm/errors';
 import type { CliExit } from '../cli-stream';
@@ -57,13 +57,20 @@ const failureData = z.object({
 	statusCode: z.number().optional()
 });
 
-/** The event one line carries: a streamed piece, an authoritative message, reasoning, a model call starting, a failure, life, or garbage. */
+/** `model.call_finished` says how a model call ended; any outcome but `success` is a failed call. */
+const callData = z.object({ outcome: z.string().optional() });
+
+/**
+ * The event one line carries: a streamed piece, an authoritative message, reasoning, a model call starting or
+ * ending, a failure, life, or garbage.
+ */
 export type ParsedLine =
 	| { type: 'delta'; messageId: string; content: string }
 	| { type: 'message'; messageId: string; content: string }
 	| { type: 'reasoning-delta'; partId: string; content: string }
 	| { type: 'reasoning-message'; partId: string; content: string }
 	| { type: 'step-start' }
+	| { type: 'step-end'; succeeded: boolean }
 	| { type: 'failure'; message: string; statusCode: number | null; errorType: string | null }
 	| { type: 'activity' }
 	| { type: 'invalid' };
@@ -113,6 +120,12 @@ export function parseEvent(line: string): ParsedLine {
 
 	if (type === 'model.call_start') return { type: 'step-start' };
 
+	if (type === 'model.call_finished') {
+		const parsed = callData.safeParse(data);
+
+		return { type: 'step-end', succeeded: parsed.success && parsed.data.outcome === 'success' };
+	}
+
 	if (type === 'session.error') {
 		const parsed = failureData.safeParse(data);
 
@@ -149,10 +162,14 @@ interface ReportedFailure {
 	errorType: string | null;
 }
 
+/** Where the prompt's latest model call stands: none started yet, one running, or one that ended well or badly. */
+type StepState = 'none' | 'running' | 'succeeded' | 'failed';
+
 /**
  * Reads the JSONL output of one prompt: text and reasoning deltas stream as events, each `assistant.message`
  * and `assistant.reasoning` is authoritative for its part so a reply is complete even when the CLI did not
- * stream it, and a `session.error` names the failure. Every other event type is `activity`, keeping the stall
+ * stream it, and a `session.error` names the failure. Each `model.call_start` starts a step; see
+ * {@link EventReader.startStep} for where a step ends. Every other event type is `activity`, keeping the stall
  * watchdog quiet.
  */
 export class EventReader {
@@ -165,6 +182,8 @@ export class EventReader {
 	private failure: ReportedFailure | null = null;
 
 	private last: string | null = null;
+
+	private step: StepState = 'none';
 
 	constructor(private readonly onEvent: TextSink) {}
 
@@ -189,7 +208,15 @@ export class EventReader {
 		}
 
 		if (event.type === 'step-start') {
-			this.onEvent({ type: 'step-start' });
+			this.startStep();
+
+			return;
+		}
+
+		if (event.type === 'step-end') {
+			if (this.step === 'running') this.step = event.succeeded ? 'succeeded' : 'failed';
+
+			this.onEvent({ type: 'activity' });
 
 			return;
 		}
@@ -260,10 +287,25 @@ export class EventReader {
 	private emit(kind: 'text' | 'reasoning', id: string, piece: string): void {
 		if (!piece) return;
 
+		if (this.step === 'none') this.startStep();
+
 		const part = kind === 'text' ? this.part(id) : this.thought(id);
 
 		part.sent += piece.length;
 		this.onEvent({ type: kind, delta: piece, partId: id });
+	}
+
+	/**
+	 * Starts a step for a model call. The step before it ends here, its usage unknown: its tool calls are done
+	 * before the CLI calls the model again, and the CLI reports usage only for the whole prompt, which the run
+	 * gives the prompt's last step. A call that failed gets no end, so it never counts as one the provider
+	 * answered. Output that no `model.call_start` announced starts a step too, so a prompt is never free.
+	 */
+	private startStep(): void {
+		if (this.step === 'succeeded') this.onEvent({ type: 'usage', usage: emptyTokenUsage() });
+
+		this.step = 'running';
+		this.onEvent({ type: 'step-start' });
 	}
 
 	private part(id: string): { content: string; sent: number } {

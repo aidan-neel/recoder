@@ -3,6 +3,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { EventReader, parseEvent, readUsage } from '../../../src/agents/copilot/copilot-output';
+import { emptyTokenUsage } from '@recoder/shared';
 import type { AgentEvent } from '../../../src/agents/contract';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { CliExit } from '../../../src/agents/cli-stream';
@@ -107,17 +108,45 @@ describe('EventReader', () => {
 		]);
 	});
 
-	test('each model call is a step of its own', () => {
+	test('a model call that succeeded ends its step, usage unknown, when the next call starts', () => {
 		const { events } = feed([
 			jsonl({ type: 'model.call_start', data: { turnId: '0', model: 'm' } }),
-			jsonl({ type: 'assistant.message', data: { messageId: 'm1', content: 'one' } }),
+			jsonl({ type: 'model.call_finished', data: { turnId: '0', outcome: 'success' } }),
 			jsonl({ type: 'model.call_start', data: { turnId: '1', model: 'm' } }),
+			jsonl({ type: 'model.call_finished', data: { turnId: '1', outcome: 'success' } }),
 			jsonl({ type: 'assistant.message', data: { messageId: 'm2', content: 'two' } })
 		]);
 
-		expect(events.filter((event) => event.type === 'step-start')).toEqual([
+		expect(events.filter((event) => event.type === 'step-start' || event.type === 'usage')).toEqual([
+			{ type: 'step-start' },
+			{ type: 'usage', usage: emptyTokenUsage() },
+			{ type: 'step-start' }
+		]);
+	});
+
+	test('a model call that failed gets no end before the call that follows it', () => {
+		const { events } = feed([
+			jsonl({ type: 'model.call_start', data: { turnId: '0', model: 'm' } }),
+			jsonl({ type: 'model.call_finished', data: { turnId: '0', outcome: 'error' } }),
+			jsonl({ type: 'model.call_start', data: { turnId: '0', model: 'm' } })
+		]);
+
+		expect(events.filter((event) => event.type === 'step-start' || event.type === 'usage')).toEqual([
 			{ type: 'step-start' },
 			{ type: 'step-start' }
+		]);
+	});
+
+	test('output that no model call announced starts the prompt’s one step', () => {
+		const { events } = feed([
+			jsonl({ type: 'assistant.message', data: { messageId: 'm1', content: 'one' } }),
+			jsonl({ type: 'assistant.message', data: { messageId: 'm2', content: 'two' } })
+		]);
+
+		expect(events).toEqual([
+			{ type: 'step-start' },
+			{ type: 'text', delta: 'one', partId: 'm1' },
+			{ type: 'text', delta: 'two', partId: 'm2' }
 		]);
 	});
 

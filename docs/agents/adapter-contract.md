@@ -125,9 +125,13 @@ type AgentEvent =
 ```
 
 Each `step-start` spends one model call of the review's budget, and each `usage` records that call's tokens, so
-emit one pair per model call when the CLI reports them. `step` pairs the two when steps overlap. A CLI that only
-reports a total (Devin) emits one `step-start` at the start of the prompt and one `usage` at the end. `partId`
-groups the deltas of one message; a new id starts a new message on the dashboard.
+emit one pair per model call when the CLI reports them. `step` pairs the two when steps overlap. A `usage` also
+ends its step: the tool allowance of a step starts over and the step counts toward the agent's turns, so a step
+that ended well must get one even when its tokens are not known. A CLI that only reports a total (Devin) emits
+one `step-start` at the start of the prompt and one `usage` at the end. A CLI that reports each model call but
+only the prompt's total (Copilot) ends every earlier step with unknown usage (`emptyTokenUsage()`) and the last
+with the total. A step that failed gets no `usage`; the prompt's `error` fails it. `partId` groups the deltas of
+one message; a new id starts a new message on the dashboard.
 
 ## The tool boundary
 

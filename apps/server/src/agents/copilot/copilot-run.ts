@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { TokenUsage } from '@recoder/shared';
+import { emptyTokenUsage, type TokenUsage } from '@recoder/shared';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import { removeScratchDir, scratchDir } from '../cli-process';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
@@ -127,8 +127,11 @@ export class CopilotRun extends ProcessRun {
 	/**
 	 * Runs the agent on `text` until it answers. The CLI takes no separate system prompt, so the first prompt
 	 * carries it. A prompt with `tools` off is given no MCP server at all, so the model cannot even see a tool to
-	 * call; the session's earlier tool calls stay in its history. The usage file the CLI writes at its end is the
-	 * step's usage, differenced against what earlier prompts of the session already counted.
+	 * call; the session's earlier tool calls stay in its history. The usage file the CLI writes at its end counts
+	 * the whole prompt, differenced against what earlier prompts of the session already counted. A prompt that
+	 * answered ends its last step with that usage, as the event that pairs with the step's start. A prompt that
+	 * failed reports no end for the step it failed in, so the caller fails that step, and carries the usage on
+	 * the reply.
 	 */
 	async prompt(text: string, options: AgentPromptOptions): Promise<AgentReply> {
 		const reader = new EventReader(this.options.onEvent);
@@ -154,9 +157,14 @@ export class CopilotRun extends ProcessRun {
 
 			lines.end();
 
-			const tokens = await this.taken();
+			const reply = reader.finish(exit);
+			const used = await this.taken();
 
-			return { ...reader.finish(exit), tokens };
+			if (reply.error) return { ...reply, tokens: used };
+
+			this.options.onEvent({ type: 'usage', usage: used ?? emptyTokenUsage() });
+
+			return reply;
 		} catch (error) {
 			const tokens = await this.taken();
 
@@ -184,8 +192,8 @@ export class CopilotRun extends ProcessRun {
 	}
 
 	/**
-	 * The usage the prompt's process added to the session's file, reported as the end of its step and kept as the
-	 * new baseline; the file is removed once read so the next prompt's totals start clean.
+	 * The usage the prompt's process added to the session's file, kept as the new baseline; the file is removed
+	 * once read so the next prompt's totals start clean.
 	 */
 	private async taken(): Promise<TokenUsage | undefined> {
 		const total = await readUsage(this.place.usage);
@@ -197,7 +205,6 @@ export class CopilotRun extends ProcessRun {
 		const usage = usageDelta(total, this.seen);
 
 		this.seen = total;
-		this.options.onEvent({ type: 'usage', usage });
 
 		return usage;
 	}

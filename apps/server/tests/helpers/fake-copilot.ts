@@ -6,22 +6,27 @@ import { fakeBin } from './fake-bin';
 import type { CallFailure } from './native-agent';
 
 /**
- * What the `tool` mode runs inside the fake: one MCP `tools/call` to the server Recoder put in
- * `--additional-mcp-config`, answered as the final assistant message. The events around it are printed by the
- * script itself, in the shapes the real CLI's `--output-format json` emits.
+ * What the `tool` and `tools` modes run inside the fake for one tool turn: one MCP `tools/call` to the server
+ * Recoder put in `--additional-mcp-config`, resolving with what it answered. The events around it are printed by
+ * the script itself, in the shapes the real CLI's `--output-format json` emits.
  */
-const TOOL_CALL = `
+const CALL_TOOL = `
+const callTool = async (turn) => {
 	const raw = flag('--additional-mcp-config');
 	const [server] = Object.values(JSON.parse(raw).mcpServers);
 	const params = { name: 'read_diff', arguments: { path: 'file0.ts' } };
 	const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params });
 	const { result } = await (await fetch(server.url, { method: 'POST', body })).json();
 	const text = result.content[0].text;
-	say({ type: 'tool.execution_complete', data: {
-		toolCallId: 'call_1', model, interactionId, turnId: '0', rte: false, success: true,
+
+	say('tool.execution_complete', {
+		toolCallId: 'call_1', model, interactionId, turnId: String(turn), rte: false, success: true,
 		result: { content: text, detailedContent: text, contents: [{ type: 'text', text }] },
 		toolTelemetry: { metrics: { mcp_result_content_bytes: text.length } }
-	}});
+	});
+
+	return { isError: result.isError === true, text };
+};
 `;
 
 /**
@@ -36,7 +41,8 @@ const TOOL_CALL = `
  * `session-state/<id>/events.jsonl` for `--session-id` under that `COPILOT_HOME`, and writes the
  * `--usage-output-file` JSON in the real cumulative `modelMetrics` shape (its totals grow with each prompt of
  * the session). `FAKE_COPILOT_MODE`: a reply (default), `tool` (calls `read_diff` on the MCP server of
- * `--additional-mcp-config`, then answers), `auth` (the real signed-out stderr and exit 1), `limit` (a
+ * `--additional-mcp-config`, then answers), `tools` (the same in five model calls, one tool call each, then
+ * answers with one result: the first call the server refused, else the last), `auth` (the real signed-out stderr and exit 1), `limit` (a
  * `session.error` usage cap and exit 1), `crash` (stderr, exit 1), `garbage` (two lines that are not JSONL,
  * one carrying a fake credential, exit 0), `flood` (more output than the cap) or `spawn` (starts a `sleep`
  * grandchild, writes `<own pid> <grandchild pid>` to `<log>.pids`, waits).
@@ -407,13 +413,21 @@ const answerTurn = (turn, messageId, answer, thought) => {
 	say('assistant.turn_end', { turnId: String(turn) });
 };
 
-if (mode === 'tool') {
-	callTurn(0, 'm1', [{ name: mcpServers[0] + '-read_diff', arguments: { path: 'file0.ts' } }]);
-	${TOOL_CALL}
-	say('assistant.turn_end', { turnId: '0' });
-	say('assistant.turn_start', { turnId: '1', interactionId, agentMode: 'interactive' });
-	const answer = JSON.stringify({ done: true, results: [{ isError: false, text }] });
-	answerTurn(1, 'm2', answer);
+${CALL_TOOL}
+if (mode === 'tool' || mode === 'tools') {
+	const toolTurns = mode === 'tools' ? 5 : 1;
+	const results = [];
+
+	for (let turn = 0; turn < toolTurns; turn++) {
+		callTurn(turn, 'm' + turn, [{ name: mcpServers[0] + '-read_diff', arguments: { path: 'file0.ts' } }]);
+		results.push(await callTool(turn));
+		say('assistant.turn_end', { turnId: String(turn) });
+		say('assistant.turn_start', { turnId: String(turn + 1), interactionId, agentMode: 'interactive' });
+	}
+
+	const shown = results.find((result) => result.isError) ?? results.at(-1);
+
+	answerTurn(toolTurns, 'answer', JSON.stringify({ done: true, results: [shown] }));
 	finish(0);
 } else {
 	answerTurn(0, 'm1', 'the reply', { id: 'r1', delta: 'Hmm.' });
