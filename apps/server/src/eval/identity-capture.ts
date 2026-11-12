@@ -198,17 +198,14 @@ function stageModel(
 /** Each review stage's model as the server resolves it: an unset specialist or verifier follows the review model and its effort. */
 function stageModels(settings: ModelSettings): RunIdentity['models'] {
 	const review = settings.orchestratorModelId ?? settings.sharedModelId;
-	const second = settings.specialistModelId;
-	const verifier = settings.verifierModelId;
+
+	const follower = (id: string | null | undefined, effort: ReasoningEffort | null | undefined): StageModel =>
+		id ? stageModel(settings, id, effort) : stageModel(settings, review, effort ?? settings.orchestratorEffort);
 
 	return {
 		orchestrator: stageModel(settings, review, settings.orchestratorEffort),
-		specialist: second
-			? stageModel(settings, second, settings.specialistEffort)
-			: stageModel(settings, review, settings.specialistEffort ?? settings.orchestratorEffort),
-		verifier: verifier
-			? stageModel(settings, verifier, settings.verifierEffort)
-			: stageModel(settings, review, settings.verifierEffort ?? settings.orchestratorEffort)
+		specialist: follower(settings.specialistModelId, settings.specialistEffort),
+		verifier: follower(settings.verifierModelId, settings.verifierEffort)
 	};
 }
 

@@ -301,16 +301,22 @@ function obligationLines(prs: PrResult[]): string[] {
 	];
 }
 
-/** "Reviewer gpt (high) · second model x (low) · subagent cap 8 · medium and above". */
+/** "Reviewer gpt (high) · second model x (low) · verifier y (medium) · subagent cap 8 · medium and above". */
 function reviewerLine(reviewer: ReviewerManifest | undefined): string[] {
 	if (!reviewer) return [];
 
+	const withEffort = (model: string, effort: string | null | undefined) => (effort ? `${model} (${effort})` : model);
+
 	const second = reviewer.specialistModel
-		? `${reviewer.specialistModel}${reviewer.specialistEffort ? ` (${reviewer.specialistEffort})` : ''}`
+		? withEffort(reviewer.specialistModel, reviewer.specialistEffort)
 		: 'same model';
 
+	const verifier = reviewer.verifierModel
+		? ` · verifier ${withEffort(reviewer.verifierModel, reviewer.verifierEffort)}`
+		: '';
+
 	return [
-		`Reviewer ${reviewer.model}${reviewer.effort ? ` (${reviewer.effort})` : ''} · second model ${second} · subagent cap ${reviewer.subagentCap} · ${reviewer.reportLowSeverity ? 'all severities' : 'medium and above'}`
+		`Reviewer ${withEffort(reviewer.model, reviewer.effort)} · second model ${second}${verifier} · subagent cap ${reviewer.subagentCap} · ${reviewer.reportLowSeverity ? 'all severities' : 'medium and above'}`
 	];
 }
 

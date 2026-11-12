@@ -48,8 +48,10 @@ export interface ReviewTuning {
 	subagents: SubagentCap | number | null;
 	/** Model id for reviewers; null is the saved Review model. */
 	reviewerModel: string | null;
-	/** Model id for workers (subagents and verifiers); null is the saved pick, which may follow the Review model. */
+	/** Model id for subagents only; verifiers follow the Review model unless `verifierModel` is given. Null is the saved pick. */
 	workerModel: string | null;
+	/** Model id for verifiers; null is the saved pick, which follows the Review model when unset. */
+	verifierModel: string | null;
 	reviewerEffort: ReasoningEffort | null;
 	workerEffort: ReasoningEffort | null;
 	/** Lenses to run; null runs every lens that applies. */

@@ -184,21 +184,17 @@ function resolveConfig(role: StageRole): ModelConfig {
 	const entries = stored.models ?? [];
 	const reviewId = savedReviewModelId();
 
-	const pickedId =
-		role === 'orchestrator' ? reviewId : role === 'subagent' ? stored.specialistModelId : stored.verifierModelId;
+	const rolePicks: Record<StageRole, { id: string | null | undefined; effort: ReasoningEffort | null | undefined }> = {
+		orchestrator: { id: reviewId, effort: stored.orchestratorEffort },
+		subagent: { id: stored.specialistModelId, effort: stored.specialistEffort },
+		verifier: { id: stored.verifierModelId, effort: stored.verifierEffort }
+	};
 
+	const { id: pickedId, effort: ownEffort } = rolePicks[role];
 	const followsReview = role === 'orchestrator' || !pickedId;
 	const entryId = followsReview ? reviewId : pickedId;
-
-	const ownEffort =
-		role === 'orchestrator'
-			? stored.orchestratorEffort
-			: role === 'subagent'
-				? stored.specialistEffort
-				: stored.verifierEffort;
-
-	const requested =
-		role === 'orchestrator' ? ownEffort : (ownEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
+	const inheritedEffort = followsReview ? stored.orchestratorEffort : undefined;
+	const requested = role === 'orchestrator' ? ownEffort : (ownEffort ?? inheritedEffort);
 
 	if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, requested);
 	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(entryId, requested ?? undefined);

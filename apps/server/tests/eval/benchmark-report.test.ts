@@ -41,3 +41,33 @@ test('a subset report says in its header that it is no full-set score; a full on
 		log.mockRestore();
 	}
 });
+
+test('the reviewer header prints the verifier model and effort when verifierModel is set', () => {
+	const report = readReport(writeReport(dir, 'verifier.json'));
+	const log = spyOn(console, 'log').mockImplementation(() => {});
+
+	try {
+		printBenchmark({
+			...report,
+			summary: summarize([]),
+			reviewer: {
+				model: 'gpt-lead',
+				effort: 'high',
+				specialistModel: 'gpt-worker',
+				specialistEffort: 'low',
+				verifierModel: 'gpt-judge',
+				verifierEffort: 'medium',
+				subagentCap: 8,
+				reportLowSeverity: false
+			}
+		});
+
+		const printed = String(log.mock.calls.at(-1)?.[0]);
+
+		expect(printed).toContain(
+			'Reviewer gpt-lead (high) · second model gpt-worker (low) · verifier gpt-judge (medium) · subagent cap 8 · medium and above'
+		);
+	} finally {
+		log.mockRestore();
+	}
+});
