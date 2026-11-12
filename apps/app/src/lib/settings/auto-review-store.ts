@@ -27,7 +27,7 @@ interface AutoReviewStore {
 	check: () => Promise<void>;
 }
 
-/** Settings → Auto-review. Reads and writes run one at a time, so answers land in the order they were asked. */
+/** Automations. Reads and writes run one at a time, so answers land in the order they were asked. */
 export const useAutoReview = create<AutoReviewStore>((set, get) => {
 	let queue: Promise<unknown> = Promise.resolve();
 
@@ -55,7 +55,7 @@ export const useAutoReview = create<AutoReviewStore>((set, get) => {
 				set(
 					isOffline(error)
 						? { status: 'offline', error: null }
-						: { status: 'error', error: failureText(error, 'Auto-review settings didn’t load.') }
+						: { status: 'error', error: failureText(error, 'Automations didn’t load.') }
 				);
 			}
 		},

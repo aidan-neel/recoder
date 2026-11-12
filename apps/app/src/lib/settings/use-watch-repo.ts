@@ -18,7 +18,7 @@ export interface WatchRepoView {
 }
 
 /**
- * Settings → Auto-review → Repositories: whether the watcher checks this
+ * Automations → Repositories: whether the watcher checks this
  * repository. A local clone has no comments or pull requests to watch, so
  * its switch is held off.
  */

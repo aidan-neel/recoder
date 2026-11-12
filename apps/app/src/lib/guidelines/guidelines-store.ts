@@ -9,8 +9,7 @@ import { useGuidelinesEditor } from './editor-store';
 export type OverviewStatus = 'loading' | 'ready' | 'offline' | 'failed';
 
 /** One repository's `RECODER.md`, read through its forge. */
-export type RepoState =
-	{ status: 'loading' } | { status: 'ready'; data: RepoGuidelines } | { status: 'error'; error: string };
+type RepoState = { status: 'loading' } | { status: 'ready'; data: RepoGuidelines } | { status: 'error'; error: string };
 
 interface GuidelinesStore {
 	status: OverviewStatus;

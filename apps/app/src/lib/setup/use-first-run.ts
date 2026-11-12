@@ -33,6 +33,15 @@ export interface FirstRunView {
 	leaving: boolean;
 }
 
+/** The first step not done yet; null once all are. */
+function currentStep(steps: SetupSteps): SetupCurrent | null {
+	if (!steps.provider) return 'provider';
+	if (!steps.model) return 'model';
+	if (!steps.repo) return 'repo';
+
+	return null;
+}
+
 /**
  * First run's checklist: a model provider, a review model and a repository.
  * Each step checks off in place as it is done; a beat after the last one,
@@ -45,16 +54,7 @@ export function useFirstRun(): FirstRunView {
 	const token = useTokenDialog();
 	const left = steps ? stepsLeft(steps) : 3;
 	const leaving = useFinish(left === 0 && dialog === null && !token.open);
-
-	const current: SetupCurrent | null = steps
-		? !steps.provider
-			? 'provider'
-			: !steps.model
-				? 'model'
-				: !steps.repo
-					? 'repo'
-					: null
-		: null;
+	const current = steps ? currentStep(steps) : null;
 
 	function dialogOpenChange(open: boolean): void {
 		if (open) return;

@@ -11,10 +11,10 @@ export const DRAFT_SOURCES = [
 ] as const;
 
 /** A draft source's key. */
-export type DraftSourceKey = (typeof DRAFT_SOURCES)[number]['key'];
+type DraftSourceKey = (typeof DRAFT_SOURCES)[number]['key'];
 
 /** The sources a repository draft reads, by key. */
-export type DraftSources = Record<DraftSourceKey, boolean>;
+type DraftSources = Record<DraftSourceKey, boolean>;
 
 /** Everything the "Draft with Orchestrator" popover shows and does. */
 export interface DraftPopoverView {

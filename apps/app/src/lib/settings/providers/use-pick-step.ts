@@ -22,7 +22,8 @@ function rowsIn(host: HTMLElement | null): HTMLElement[] {
  */
 function moveFocus(host: HTMLElement | null, key: string, search: HTMLInputElement | null): boolean {
 	const rows = rowsIn(host);
-	const at = rows.indexOf(document.activeElement as HTMLElement);
+	const active = document.activeElement;
+	const at = active instanceof HTMLElement ? rows.indexOf(active) : -1;
 
 	if (key === 'ArrowDown') {
 		rows[Math.min(at + 1, rows.length - 1)]?.focus();

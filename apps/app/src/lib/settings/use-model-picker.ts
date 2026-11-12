@@ -13,7 +13,6 @@ import { missingNote, modelCatalog, rolePick, type ModelCatalog, type ModelRole,
 import { FOLLOW_ID, FOLLOW_LABEL } from './model-rows';
 import { useSettings } from './settings-store';
 import { useInstantSave, type SaveState } from './use-save-state';
-import { useModelDialog, type ModelDialogView } from './use-model-dialog';
 
 /** A pick on screen before the server confirms it. A null id unsets the subagent pick. */
 interface Draft {
@@ -40,6 +39,21 @@ function triggerLabel(pick: RolePick): { text: string; quiet: boolean } {
 	if (pick.id) return { text: prettyModelName(pick.id), quiet: false };
 
 	return { text: 'Choose a model', quiet: true };
+}
+
+/** The pick a draft shows: its model's catalog entry when it names one, and whether it follows the Review model. */
+function draftPick(draft: Draft, catalog: ModelCatalog, role: ModelRole): RolePick {
+	return {
+		id: draft.id,
+		option: draft.id ? catalog.byId.get(draft.id) : undefined,
+		effort: draft.effort,
+		follows: role === 'specialist' && !draft.id
+	};
+}
+
+/** The dialog's row key for a pick: its model id, or the follow row for an unset subagent pick. */
+function pickKey(pick: RolePick): string | null {
+	return pick.id ?? (pick.follows ? FOLLOW_ID : null);
 }
 
 /** Everything a role's model picker shows and does: the trigger, the effort select and the search dialog. */
@@ -70,8 +84,6 @@ export interface ModelPickerView {
 	pickModel: (id: string) => void;
 	/** Saves a new effort for the picked model, when its model accepts it. */
 	chooseEffort: (effort: ReasoningEffort) => void;
-	/** The search dialog's state: query, layout, selection and keys. */
-	dialog: ModelDialogView;
 }
 
 /**
@@ -95,19 +107,11 @@ export function useModelPicker(role: ModelRole): ModelPickerView {
 	const catalog = settings ? modelCatalog(settings.models) : EMPTY_CATALOG;
 	const saved = settings ? rolePick(settings, role) : null;
 
-	const pick: RolePick | null = saved
-		? draft
-			? {
-					id: draft.id,
-					option: draft.id ? catalog.byId.get(draft.id) : undefined,
-					effort: draft.effort,
-					follows: role === 'specialist' && !draft.id
-				}
-			: saved
-		: null;
+	let pick: RolePick | null = null;
 
-	const current = pick ? (pick.id ?? (pick.follows ? FOLLOW_ID : null)) : null;
-	const dialog = useModelDialog({ role, catalog, current });
+	if (saved) pick = draft ? draftPick(draft, catalog, role) : saved;
+
+	const current = pick ? pickKey(pick) : null;
 
 	function pickModel(id: string): void {
 		if (!pick) return;
@@ -149,7 +153,6 @@ export function useModelPicker(role: ModelRole): ModelPickerView {
 		current,
 		catalog,
 		pickModel,
-		chooseEffort,
-		dialog
+		chooseEffort
 	};
 }

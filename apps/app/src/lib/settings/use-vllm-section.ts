@@ -47,7 +47,7 @@ export interface VllmSection {
 }
 
 /**
- * Settings → Agent → vLLM servers. Each one's models are captured from the
+ * Settings → Models → vLLM servers. Each one's models are captured from the
  * server itself, when it is connected, when Settings opens, every few
  * minutes in the background, and on Refresh, so nobody types a model by
  * hand. Disconnecting asks first.

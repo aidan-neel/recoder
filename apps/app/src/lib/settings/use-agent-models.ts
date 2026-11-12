@@ -30,7 +30,7 @@ export interface AgentModelsView {
 }
 
 /**
- * Settings → Agent, bottom half: the Review model and the Subagent model,
+ * Settings → Models, bottom half: the Review model and the Subagent model,
  * which also runs the verifiers. Each row's picker is `useModelPicker(role)`.
  */
 export function useAgentModels(): AgentModelsView {

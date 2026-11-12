@@ -6,12 +6,12 @@ import { AUTO_REVIEW_FAILED } from './auto-review-failed';
 import { useAutoReview } from './auto-review-store';
 import { useInstantChange, type SaveState } from './use-save-state';
 
-/** The auto-review settings that are on or off. */
+/** The automation settings that are on or off. */
 export type AutoReviewSwitch = {
 	[K in keyof AutoReviewSettings]: AutoReviewSettings[K] extends boolean ? K : never;
 }[keyof AutoReviewSettings];
 
-/** Everything an on/off auto-review setting shows and does. */
+/** Everything an on/off automation setting shows and does. */
 export interface AutoReviewSwitchView {
 	/** The switch's position: the draft while its save runs, else the saved value. */
 	on: boolean;

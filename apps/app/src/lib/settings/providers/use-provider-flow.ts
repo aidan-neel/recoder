@@ -4,9 +4,9 @@ import type { AgentAuthMethod, AgentAuthPrompt, AgentOAuthAttempt, AgentProvider
 import type { ButtonStatus } from '@recoder/ui';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
-import { failureText } from '../../api/http';
+import { failureText, isOffline } from '../../api/http';
 import { settingsApi } from '../../api/settings';
-import { undoToast } from '../../shell/notify';
+import { errorToast, undoToast } from '../../shell/notify';
 import {
 	answersFor,
 	deviceCode,
@@ -77,6 +77,35 @@ function submitLabelFor(method: AgentAuthMethod | null, attempt: AgentOAuthAttem
 	if (attempt?.mode === 'code') return 'Finish sign-in';
 
 	return method?.type === 'oauth' ? 'Sign in' : 'Connect';
+}
+
+/** What the body shows for a step and sign-in state. */
+function flowView(step: Step, attempt: AgentOAuthAttempt | null): View {
+	if (step === 'pick') return 'pick';
+	if (attempt) return 'sign-in';
+
+	return 'connect';
+}
+
+/** The id of the form the footer's submit button submits; null on the provider list, which has none. */
+function submitFormId(view: View): string | null {
+	if (view === 'pick') return null;
+	if (view === 'sign-in') return SIGN_IN_FORM;
+
+	return METHOD_FORM;
+}
+
+/**
+ * The cancel a sign-in sends when its modal closes early. A server that never
+ * answers loses the cancel, but the attempt expires on its own; any other
+ * failure is reported.
+ */
+function cancelSignIn(id: string): void {
+	void settingsApi.cancelOAuth(id).catch((failure: unknown) => {
+		if (isOffline(failure)) return;
+
+		errorToast('Couldn’t cancel the sign-in', failureText(failure));
+	});
 }
 
 /**
@@ -179,7 +208,7 @@ export function useProviderFlow(preset: AgentProvider | null, close: () => void)
 			live = false;
 			clearTimeout(timer);
 
-			if (finished.current !== id) void settingsApi.cancelOAuth(id).catch(() => undefined);
+			if (finished.current !== id) cancelSignIn(id);
 		};
 	}, [attempt]);
 
@@ -251,11 +280,11 @@ export function useProviderFlow(preset: AgentProvider | null, close: () => void)
 		}
 	}
 
-	const canSubmit = attempt
-		? attempt.mode === 'code' && Boolean(code.trim())
-		: method?.type === 'api'
-			? Boolean(key.trim()) && !missing
-			: !missing;
+	let canSubmit: boolean;
+
+	if (attempt) canSubmit = attempt.mode === 'code' && Boolean(code.trim());
+	else if (method?.type === 'api') canSubmit = Boolean(key.trim()) && !missing;
+	else canSubmit = !missing;
 
 	function submit(): void {
 		if (!provider || !method || status === 'pending' || status === 'success' || !canSubmit) return;
@@ -263,7 +292,7 @@ export function useProviderFlow(preset: AgentProvider | null, close: () => void)
 		void (attempt ? sendCode(attempt) : start(provider, method));
 	}
 
-	const view: View = step === 'pick' ? 'pick' : attempt ? 'sign-in' : 'connect';
+	const view = flowView(step, attempt);
 
 	return {
 		view,
@@ -285,7 +314,7 @@ export function useProviderFlow(preset: AgentProvider | null, close: () => void)
 		title: step === 'connect' && provider ? `Connect ${provider.name}` : 'Add provider',
 		submitLabel: submitLabelFor(method, attempt),
 		canSubmit,
-		formId: view === 'pick' ? null : view === 'sign-in' ? SIGN_IN_FORM : METHOD_FORM,
+		formId: submitFormId(view),
 		setQuery,
 		choose,
 		back,

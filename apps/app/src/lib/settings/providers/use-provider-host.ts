@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { dropPageParam } from '../settings-url';
 
-/** Where the provider modal was asked to open from the Agent section itself; null while it is closed. */
+/** Where the provider modal was asked to open from the Models section itself; null while it is closed. */
 interface AddRequest {
 	providerId: string | null;
 }
@@ -20,7 +20,7 @@ export interface ProviderHost {
 }
 
 /**
- * The provider modal in the Agent section. Besides the section's own buttons,
+ * The provider modal in the Models section. Besides the section's own buttons,
  * an address with `?add=provider` (from an error toast or a notice) opens it
  * once the providers are loaded; closing it drops `add` and leaves the page.
  */

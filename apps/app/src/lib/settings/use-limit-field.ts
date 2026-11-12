@@ -8,12 +8,6 @@ import { parseLimit, type LimitKey } from './limits';
 import { useSettings } from './settings-store';
 import { useSaveState, type SaveState } from './use-save-state';
 
-/** A commit asked for: the text, and whether to send it again though the server refused it (Enter does, a blur does not). */
-interface Commit {
-	text: string;
-	retry: boolean;
-}
-
 /** Everything a review-limit field shows and does. */
 export interface LimitFieldView {
 	/** The text on screen: the draft while editing, else the saved value formatted. */
@@ -47,20 +41,13 @@ export function useLimitField(field: LimitKey, max: number): LimitFieldView {
 	const saving = useRef(false);
 
 	/** The latest commit asked for while a save ran. */
-	const waiting = useRef<Commit | null>(null);
+	const waiting = useRef<(() => void) | null>(null);
 
 	/** The text the server refused last; cleared by any edit. */
 	const refused = useRef<string | null>(null);
 
-	async function commit({ text, retry }: Commit): Promise<void> {
-		if (saving.current) {
-			waiting.current = { text, retry };
-
-			return;
-		}
-
-		if (!retry && text === refused.current) return;
-
+	/** Parses and saves `text` when it changed, settles the draft and error, then runs the commit that waited on this save. */
+	async function saveText(text: string): Promise<void> {
 		const parsed = parseLimit(text, max);
 
 		if ('error' in parsed) return setError(parsed.error);
@@ -85,7 +72,31 @@ export function useLimitField(field: LimitKey, max: number): LimitFieldView {
 
 		waiting.current = null;
 
-		if (next) void commit(next);
+		next?.();
+	}
+
+	/** Commits `text` on blur: queues while a save runs, and never resends a refused value. */
+	async function commitOnBlur(text: string): Promise<void> {
+		if (saving.current) {
+			waiting.current = () => void commitOnBlur(text);
+
+			return;
+		}
+
+		if (text === refused.current) return;
+
+		await saveText(text);
+	}
+
+	/** Commits `text` on Enter: queues while a save runs, and resends even a refused value. */
+	async function commitOnEnter(text: string): Promise<void> {
+		if (saving.current) {
+			waiting.current = () => void commitOnEnter(text);
+
+			return;
+		}
+
+		await saveText(text);
 	}
 
 	function edit(text: string | null): void {
@@ -96,14 +107,14 @@ export function useLimitField(field: LimitKey, max: number): LimitFieldView {
 	}
 
 	function blur(): void {
-		if (draft !== null) void commit({ text: draft, retry: false });
+		if (draft !== null) void commitOnBlur(draft);
 	}
 
 	function onKeyDown(event: KeyboardEvent<HTMLInputElement>): void {
 		draftKeys(
 			event,
 			draft,
-			(text) => void commit({ text, retry: true }),
+			(text) => void commitOnEnter(text),
 			() => edit(null)
 		);
 	}

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { AgentStatus } from '@recoder/shared';
 
-import { cliDetail, cliFix, cliGlyph, cliState } from '../../src/lib/settings/providers/agent-cli';
+import { cliDetail, cliFix, cliGlyph, cliState } from '../../../src/lib/settings/providers/agent-cli';
 
 function agent(patch: Partial<AgentStatus>): AgentStatus {
 	return {

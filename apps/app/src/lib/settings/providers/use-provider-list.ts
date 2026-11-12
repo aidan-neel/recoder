@@ -68,7 +68,7 @@ export interface ProviderListView {
 }
 
 /**
- * Settings → Agent → Providers: the providers the agent is connected to.
+ * Settings → Models → Providers: the providers the agent is connected to.
  * Disconnect asks first, forgets the key or sign-in, and hands focus to the
  * next row's control (or Add provider) so the keyboard keeps its place.
  */

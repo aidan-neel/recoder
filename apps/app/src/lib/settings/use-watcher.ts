@@ -1,6 +1,6 @@
 'use client';
 
-import { AUTO_REVIEW_INTERVALS, type AutoReviewInterval, type Repo } from '@recoder/shared';
+import { AUTO_REVIEW_INTERVALS, type AutoReviewInterval, type AutoReviewPayload, type Repo } from '@recoder/shared';
 import type { ButtonStatus } from '@recoder/ui';
 
 import { failureText } from '../api/http';
@@ -51,6 +51,23 @@ export interface WatcherError {
 	message: string;
 }
 
+/** The last round's row: its text, what it watches, and Check now. */
+function watcherStatus(
+	status: NonNullable<AutoReviewPayload['status']>,
+	on: boolean,
+	now: number,
+	checkStatus: ButtonStatus,
+	run: () => void
+): WatcherStatus {
+	return {
+		text: checkText(status.lastCheckAt, on ? status.nextCheckAt : null, now),
+		description: on ? `Watching ${plural(status.watching, 'repository', 'repositories')}` : 'Turn on watching to check',
+		enabled: on,
+		status: checkStatus,
+		run
+	};
+}
+
 /** Everything the Watcher group shows and does. */
 export interface WatcherView {
 	/** The on/off switch. */
@@ -70,7 +87,7 @@ export interface WatcherView {
 }
 
 /**
- * Settings → Auto-review → Watcher: on or off, how often, and how the last
+ * Automations → Watcher: on or off, how often, and how the last
  * round went. The clock ticks every 5s so "checked 2 minutes ago" and "next
  * in 30 seconds" keep up.
  */
@@ -103,17 +120,7 @@ export function useWatcher(repos: Repo[]): WatcherView {
 				if (next) interval.change(next);
 			}
 		},
-		status: status
-			? {
-					text: checkText(status.lastCheckAt, enabled.on ? status.nextCheckAt : null, now),
-					description: enabled.on
-						? `Watching ${plural(status.watching, 'repository', 'repositories')}`
-						: 'Turn on watching to check',
-					enabled: enabled.on,
-					status: check.status,
-					run: () => check.run(checkNow)
-				}
-			: null,
+		status: status ? watcherStatus(status, enabled.on, now, check.status, () => check.run(checkNow)) : null,
 		errors: errors.map((error) => ({ repoId: error.repoId, name: nameOf(error.repoId), message: error.message }))
 	};
 }
