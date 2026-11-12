@@ -1,13 +1,8 @@
 import { homedir } from 'node:os';
 import { redactedTail } from '../cli/target/redact.js';
 
-/** API keys as model providers shape them (`sk-…`, `sk-ant-…`, `sk-or-v1-…`) and bearer tokens quoted inside a body. */
-const KEY_SHAPES = /\b(?:sk-[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._~+/=-]{8,})/g;
-
 /** A home directory in a path, so the record never names the person who ran the review. */
 const HOME_PATHS = /(?:\/home\/|\/Users\/|[A-Za-z]:\\Users\\)[^/\\\s'"]+/g;
-
-const REDACTED = '[redacted]';
 
 /**
  * A failed call's provider error as a record may keep it: the last lines of
@@ -18,7 +13,7 @@ export function providerErrorText(err: unknown, secrets: readonly (string | unde
 	const message = err instanceof Error ? err.message : String(err);
 	const known = secrets.filter((secret): secret is string => Boolean(secret));
 
-	return redactedTail(withoutHome(message), known).replace(KEY_SHAPES, REDACTED);
+	return redactedTail(withoutHome(message), known);
 }
 
 /** The running user's home, and any other home directory a path names, as `~`. */

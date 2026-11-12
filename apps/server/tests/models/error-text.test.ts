@@ -21,3 +21,19 @@ test('a provider error with nothing secret in it is kept as it is', () => {
 		'AI_APICallError: Go usage limit exceeded'
 	);
 });
+
+test('a bearer token the length cut would strand without its prefix is still removed', () => {
+	const token = '0123456789abcdef0123456789abcdef';
+	const message = `Bearer ${token} ${'x'.repeat(599 - token.length)}`;
+
+	expect(providerErrorText(new Error(message), [])).not.toContain(token);
+});
+
+test('an authorization header quoted as JSON is removed with its value', () => {
+	const text = providerErrorText(
+		new Error('request failed: {"headers":{"Authorization":"Basic dXNlcjpwYXNzd29yZA=="}}'),
+		[]
+	);
+
+	expect(text).toBe('request failed: {"headers":{"Authorization":"[redacted]"}}');
+});
