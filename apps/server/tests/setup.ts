@@ -21,6 +21,7 @@ function keepRealAgentsOut(): void {
 	process.env.RECODER_OPENCODE_BIN = '';
 	process.env.RECODER_CLAUDE_BIN = '';
 	process.env.RECODER_DEVIN_BIN = '';
+	process.env.RECODER_GROK_BIN = '';
 	delete process.env.RECODER_CUSTOM_AGENT;
 }
 
