@@ -30,8 +30,10 @@ interface RuleSource {
 export interface RepoRule {
 	/** `R1`, `R2`… in source order. */
 	id: string;
-	/** The rule's text word for word, as written in the source file. */
+	/** The rule's text word for word as written in the source file, or empty when `verbatim` is `false`. */
 	text: string;
+	/** False when the model's quote was not verified in the source file; `restatement` holds the wording instead. */
+	verbatim?: boolean;
 	/** Short one-sentence imperative restatement of the rule. */
 	restatement?: string;
 	source: RuleSource;
@@ -66,7 +68,7 @@ export interface RuleLedger {
 
 /** One-line summary of a rule: its short restatement when present, else its verbatim text on one line. */
 export function ruleSummary(rule: Pick<RepoRule, 'text' | 'restatement'>): string {
-	return (rule.restatement ?? rule.text).replace(/\s+/g, ' ').trim();
+	return (rule.restatement || rule.text).replace(/\s+/g, ' ').trim();
 }
 
 /** Where a rule is stated (`AGENTS.md:41` or `AGENTS.md:41-44`), or just the path when no line is cited. */
@@ -88,9 +90,12 @@ export function findLedgerRule(
 
 /** Projects a ledger rule onto the shared `FindingRule` record carried by findings that cite `ruleId`. */
 export function toFindingRule(rule: RepoRule): FindingRule {
+	const hasVerbatimQuote = rule.verbatim !== false && Boolean(rule.text);
+
 	return {
 		id: rule.id,
-		text: rule.text,
+		text: hasVerbatimQuote ? rule.text : '',
+		...(!hasVerbatimQuote ? { verbatim: false } : {}),
 		...(rule.restatement ? { restatement: rule.restatement } : {}),
 		...(rule.level ? { level: rule.level } : {}),
 		...(rule.appliesTo ? { appliesTo: rule.appliesTo } : {}),

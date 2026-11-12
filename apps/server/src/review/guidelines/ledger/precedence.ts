@@ -191,7 +191,30 @@ function stemToken(token: string): string {
 	return token;
 }
 
-function subjectTokens(text: string): string[] {
+const LIMIT_STOPWORDS = new Set(
+	[
+		...DIRECTIVE_STOPWORDS,
+		'at',
+		'exceed',
+		'exceeds',
+		'least',
+		'max',
+		'maximum',
+		'min',
+		'minimum',
+		'most',
+		'per',
+		'remain',
+		'remains',
+		'stay',
+		'stays',
+		'take',
+		'takes',
+		'up'
+	].filter((word) => word !== 'file' && word !== 'files')
+);
+
+function tokenize(text: string, stopwords: ReadonlySet<string>): string[] {
 	const raw = text
 		.toLowerCase()
 		.replace(/\/\/+/g, ' line comment ')
@@ -199,10 +222,18 @@ function subjectTokens(text: string): string[] {
 		.replace(/[^a-z0-9]+/g, ' ')
 		.trim()
 		.split(/\s+/)
-		.filter((word) => word.length >= 2 && !/^\d+$/.test(word) && !DIRECTIVE_STOPWORDS.has(word))
+		.filter((word) => word.length >= 2 && !/^\d+$/.test(word) && !stopwords.has(word))
 		.map(stemToken);
 
 	return [...new Set(raw)];
+}
+
+function subjectTokens(text: string): string[] {
+	return tokenize(text, DIRECTIVE_STOPWORDS);
+}
+
+function sameTokens(tokensA: string[], tokensB: string[]): boolean {
+	return tokensA.length > 0 && tokensA.length === tokensB.length && tokensA.every((token) => tokensB.includes(token));
 }
 
 function polarityOf(text: string): 'forbid' | 'allow' | 'require' {
@@ -226,13 +257,41 @@ function checksConflict(a: MechanicalCheck | undefined, b: MechanicalCheck | und
 	return false;
 }
 
-function limitsConflict(textA: string, textB: string): boolean {
-	const limitA = LIMIT_RE.exec(textA);
-	const limitB = LIMIT_RE.exec(textB);
+interface ParsedLimit {
+	value: string;
+	unit: string;
+	subjects: string[];
+}
 
-	if (!limitA || !limitB) return false;
+function findLimit(rule: Pick<RepoRule, 'text' | 'restatement'>): ParsedLimit | null {
+	const summary = ruleSummary(rule);
+	const source = LIMIT_RE.test(summary) ? summary : rule.text;
+	const clauses = source.split(/[,;()\n]|\b(?:except|unless)\b/i);
+	const clause = clauses.find((part) => LIMIT_RE.test(part)) ?? source;
+	const match = LIMIT_RE.exec(clause);
 
-	return normalizeUnit(limitA[2]) === normalizeUnit(limitB[2]) && limitA[1] !== limitB[1];
+	if (!match) return null;
+
+	const remainder = `${clause.slice(0, match.index)} ${clause.slice(match.index + match[0].length)}`;
+
+	return {
+		value: match[1],
+		unit: normalizeUnit(match[2]),
+		subjects: tokenize(remainder, LIMIT_STOPWORDS)
+	};
+}
+
+function limitsConflict(
+	a: Pick<RepoRule, 'text' | 'restatement' | 'check'>,
+	b: Pick<RepoRule, 'text' | 'restatement' | 'check'>,
+	limitA: ParsedLimit,
+	limitB: ParsedLimit
+): boolean {
+	if (limitA.unit !== limitB.unit || limitA.value === limitB.value) return false;
+
+	const sameCheckKind = Boolean(a.check && b.check && a.check.kind === b.check.kind);
+
+	return sameCheckKind || sameTokens(limitA.subjects, limitB.subjects);
 }
 
 function opposingChoices(tokensA: string[], tokensB: string[]): boolean {
@@ -251,38 +310,30 @@ function opposingChoices(tokensA: string[], tokensB: string[]): boolean {
 /** Whether two rules state incompatible requirements over overlapping code. */
 function rulesConflict(
 	a: Pick<RepoRule, 'text' | 'restatement' | 'check'>,
-	b: Pick<RepoRule, 'text' | 'restatement' | 'check'>,
-	topicA?: string,
-	topicB?: string
+	b: Pick<RepoRule, 'text' | 'restatement' | 'check'>
 ): boolean {
-	if (checksConflict(a.check, b.check)) return true;
-
-	const summaryA = `${ruleSummary(a)} ${a.text}`;
-	const summaryB = `${ruleSummary(b)} ${b.text}`;
-
-	if (limitsConflict(summaryA, summaryB)) return true;
-
-	const polarityA = polarityOf(summaryA);
-	const polarityB = polarityOf(summaryB);
-
-	if (topicA && topicA === topicB && polarityA !== polarityB) return true;
+	if (a.check && b.check && a.check.kind === b.check.kind) return checksConflict(a.check, b.check);
 
 	const tokensA = subjectTokens(ruleSummary(a));
 	const tokensB = subjectTokens(ruleSummary(b));
+	const limitA = findLimit(a);
+	const limitB = findLimit(b);
+
+	if (limitA && limitB) {
+		return limitsConflict(a, b, limitA, limitB) || opposingChoices(tokensA, tokensB);
+	}
 
 	if (!tokensA.length || !tokensB.length) return false;
 	if (opposingChoices(tokensA, tokensB)) return true;
 
-	if ((polarityA === 'forbid') === (polarityB === 'forbid')) {
-		const exclusive = /\bonly\b/i.test(summaryA) || /\bonly\b/i.test(summaryB);
+	const summaryA = `${ruleSummary(a)} ${a.text}`;
+	const summaryB = `${ruleSummary(b)} ${b.text}`;
+	const polarityA = polarityOf(summaryA);
+	const polarityB = polarityOf(summaryB);
 
-		if (!(topicA && topicA === topicB && exclusive)) return false;
-	}
+	if ((polarityA === 'forbid') === (polarityB === 'forbid')) return false;
 
-	const shared = tokensA.filter((token) => tokensB.includes(token));
-	const minSize = Math.min(tokensA.length, tokensB.length);
-
-	return shared.length === minSize;
+	return sameTokens(tokensA, tokensB);
 }
 
 /**
@@ -290,7 +341,7 @@ function rulesConflict(
  * disagrees with a lower-precedence rule on overlapping paths, the lower rule
  * records `excludedScopes` and `overriddenBy` so it stops applying there.
  */
-export function resolveRulePrecedence(rules: RepoRule[], topics?: ReadonlyMap<string, string>): RepoRule[] {
+export function resolveRulePrecedence(rules: RepoRule[]): RepoRule[] {
 	const resolved = rules.map((rule) => ({
 		...rule,
 		...(rule.excludedScopes ? { excludedScopes: [...rule.excludedScopes] } : {})
@@ -309,7 +360,7 @@ export function resolveRulePrecedence(rules: RepoRule[], topics?: ReadonlyMap<st
 			const loserScope = effectiveRuleScope(loser);
 
 			if (!scopesOverlap(winnerScope, loserScope)) continue;
-			if (!rulesConflict(winner, loser, topics?.get(winner.id), topics?.get(loser.id))) continue;
+			if (!rulesConflict(winner, loser)) continue;
 
 			const carvedOut = winnerScope ?? '**';
 			const existing = loser.excludedScopes ?? [];

@@ -173,7 +173,10 @@ export type RuleLevel = (typeof RULE_LEVELS)[number];
 export interface FindingRule {
 	/** The rule's id in the ledger (`R12`). */
 	id: string;
+	/** Verbatim quote from the source file, or empty when `verbatim` is `false`. */
 	text: string;
+	/** False when the rule's wording was not found verbatim in its source file and only `restatement` is held. */
+	verbatim?: boolean;
 	/** One-sentence restatement of the rule, kept beside the verbatim quote. */
 	restatement?: string;
 	/** Whether the rule is stated as a hard requirement or an advisory preference. */

@@ -126,15 +126,38 @@ function validLine(line: number | null | undefined, totalLines: number): number 
 
 interface ExtractedText {
 	text: string;
+	verbatim?: false;
 	restatement: string;
 	line?: number;
 	endLine?: number;
 }
 
+function collapseWhitespace(text: string): string {
+	return text.replace(/\s+/g, ' ').trim();
+}
+
+function verifiedSpanText(quote: string, rawSpan: string, stripped: string): string | null {
+	if (!quote) return null;
+	if (quote === stripped || quote === rawSpan) return quote;
+
+	const collapsedQuote = collapseWhitespace(quote);
+
+	if (collapsedQuote === collapseWhitespace(stripped)) return stripped;
+	if (collapsedQuote === collapseWhitespace(rawSpan)) return rawSpan;
+	if (quote.length < MIN_SUBCLAUSE_CHARS) return null;
+	if (rawSpan.includes(quote) || collapseWhitespace(rawSpan).includes(collapsedQuote)) return quote;
+
+	return null;
+}
+
 function extractRuleText(raw: RawRule, source: LedgerSource, lines: string[]): ExtractedText | null {
 	const quote = raw.text.replace(/\r\n/g, '\n').trim();
-	const explicitRestatement = raw.restatement?.replace(/\s+/g, ' ').trim();
-	let line = validLine(raw.line, lines.length);
+	const explicitRestatement = raw.restatement ? collapseWhitespace(raw.restatement) : '';
+	const restatement = (explicitRestatement || collapseWhitespace(quote)).slice(0, MAX_RULE_CHARS);
+
+	if (!restatement) return null;
+
+	const line = validLine(raw.line, lines.length);
 	let endLine = line !== undefined ? (validLine(raw.endLine, lines.length) ?? line) : undefined;
 
 	if (line !== undefined && endLine !== undefined && endLine < line) endLine = line;
@@ -143,9 +166,15 @@ function extractRuleText(raw: RawRule, source: LedgerSource, lines: string[]): E
 		const located = locateQuote(quote, source.text);
 
 		if (located) {
-			line = located.line;
-			endLine = located.endLine;
+			return {
+				text: quote.slice(0, MAX_VERBATIM_CHARS),
+				restatement,
+				line: located.line,
+				endLine: located.endLine
+			};
 		}
+
+		return { text: '', verbatim: false, restatement };
 	}
 
 	if (line !== undefined && endLine !== undefined) {
@@ -167,55 +196,41 @@ function extractRuleText(raw: RawRule, source: LedgerSource, lines: string[]): E
 			.join('\n')
 			.trim();
 
-		const stripped = stripBullet(rawSpan);
+		const matched = verifiedSpanText(quote, rawSpan, stripBullet(rawSpan));
 
-		if (
-			quote &&
-			(quote === stripped || quote === rawSpan || (quote.length >= MIN_SUBCLAUSE_CHARS && rawSpan.includes(quote)))
-		) {
-			const text = quote.slice(0, MAX_VERBATIM_CHARS);
-			const restatement = (explicitRestatement || quote.replace(/\s+/g, ' ').trim()).slice(0, MAX_RULE_CHARS);
+		if (matched) {
+			const text = matched.slice(0, MAX_VERBATIM_CHARS);
 
 			return text ? { text, restatement, line, endLine } : null;
 		}
 
-		const relocated = locateQuote(quote, source.text);
+		const relocated = quote ? locateQuote(quote, source.text) : undefined;
 
 		if (relocated) {
-			const text = quote.slice(0, MAX_VERBATIM_CHARS);
-			const restatement = (explicitRestatement || quote.replace(/\s+/g, ' ').trim()).slice(0, MAX_RULE_CHARS);
-
-			return { text, restatement, line: relocated.line, endLine: relocated.endLine };
+			return {
+				text: quote.slice(0, MAX_VERBATIM_CHARS),
+				restatement,
+				line: relocated.line,
+				endLine: relocated.endLine
+			};
 		}
 
-		if (stripped) {
-			const text = stripped.slice(0, MAX_VERBATIM_CHARS);
-
-			const fallbackRestatement =
-				explicitRestatement || quote.replace(/\s+/g, ' ').trim() || stripped.replace(/\s+/g, ' ').trim();
-
-			return { text, restatement: fallbackRestatement.slice(0, MAX_RULE_CHARS), line, endLine };
-		}
+		return { text: '', verbatim: false, restatement, line, endLine };
 	}
 
-	if (!quote) return null;
-
-	const text = quote.slice(0, MAX_VERBATIM_CHARS);
-	const restatement = (explicitRestatement || quote.replace(/\s+/g, ' ').trim()).slice(0, MAX_RULE_CHARS);
-
-	return { text, restatement };
+	return { text: '', verbatim: false, restatement };
 }
 
 function extractExceptions(
 	rawExceptions: string[] | null | undefined,
-	verbatimText: string,
+	ruleText: string,
 	lines: string[],
 	endLine: number | undefined
 ): string[] | undefined {
 	const collected: string[] = [];
 
 	const add = (item: string) => {
-		const cleaned = item.replace(/\s+/g, ' ').trim().slice(0, MAX_EXCEPTION_CHARS);
+		const cleaned = collapseWhitespace(item).slice(0, MAX_EXCEPTION_CHARS);
 
 		if (!cleaned || collected.length >= MAX_EXCEPTIONS) return;
 
@@ -227,7 +242,7 @@ function extractExceptions(
 	for (const item of rawExceptions ?? []) add(item);
 
 	if (!collected.length) {
-		for (const match of verbatimText.matchAll(INLINE_EXCEPTION_RE)) {
+		for (const match of ruleText.matchAll(INLINE_EXCEPTION_RE)) {
 			if (match[1]) add(match[1]);
 		}
 	}
@@ -263,7 +278,6 @@ interface PlacedRule {
 	rule: Omit<RepoRule, 'id'>;
 	sourceIndex: number;
 	order: number;
-	topic?: string;
 }
 
 function placeRule(raw: RawRule, order: number, sources: LedgerSource[]): PlacedRule | null {
@@ -277,15 +291,23 @@ function placeRule(raw: RawRule, order: number, sources: LedgerSource[]): Placed
 
 	if (!extracted) return null;
 
-	const exceptions = extractExceptions(raw.exceptions, extracted.text, lines, extracted.endLine);
+	const isVerbatim = extracted.verbatim !== false;
+
+	const exceptions = extractExceptions(
+		raw.exceptions,
+		isVerbatim ? extracted.text : extracted.restatement,
+		lines,
+		isVerbatim ? extracted.endLine : undefined
+	);
+
 	const level = classifyRuleLevel(raw.level, extracted.text, extracted.restatement);
 	const appliesTo = cleanGlob(raw.appliesTo);
 	const check = level === 'mandatory' && !exceptions ? validCheck(raw.check) : undefined;
-	const topic = raw.topic?.trim().toLowerCase().slice(0, 80) || undefined;
 
 	return {
 		rule: {
 			text: extracted.text,
+			...(!isVerbatim ? { verbatim: false } : {}),
 			restatement: extracted.restatement,
 			level,
 			source: {
@@ -298,17 +320,23 @@ function placeRule(raw: RawRule, order: number, sources: LedgerSource[]): Placed
 			...(check ? { check } : {})
 		},
 		sourceIndex,
-		order,
-		...(topic ? { topic } : {})
+		order
 	};
+}
+
+function dedupeKey(entry: PlacedRule): string {
+	const scope = effectiveRuleScope(entry.rule) ?? '*';
+	const span = `${entry.rule.source.line ?? ''}:${entry.rule.source.endLine ?? ''}`;
+	const wording = collapseWhitespace(entry.rule.text || entry.rule.restatement || '').toLowerCase();
+
+	return `${scope}\0${span}\0${wording}`;
 }
 
 function dedupeRules(entries: PlacedRule[]): PlacedRule[] {
 	const byKey = new Map<string, PlacedRule>();
 
 	for (const entry of entries) {
-		const scope = effectiveRuleScope(entry.rule) ?? '*';
-		const key = `${scope}\0${entry.rule.text.replace(/\s+/g, ' ').trim().toLowerCase()}`;
+		const key = dedupeKey(entry);
 		const held = byKey.get(key);
 
 		if (!held || compareSourcePrecedence(entry.rule.source.path, held.rule.source.path) < 0) {
@@ -339,16 +367,10 @@ export function toLedger(reply: LedgerReply, sources: LedgerSource[], sourcesHas
 			a.order - b.order
 	);
 
-	const selected = placed.slice(0, MAX_RULES);
-	const topics = new Map<string, string>();
+	const numbered: RepoRule[] = placed.slice(0, MAX_RULES).map((entry, index) => ({
+		id: `R${index + 1}`,
+		...entry.rule
+	}));
 
-	const numbered: RepoRule[] = selected.map((entry, index) => {
-		const id = `R${index + 1}`;
-
-		if (entry.topic) topics.set(id, entry.topic);
-
-		return { id, ...entry.rule };
-	});
-
-	return { rules: resolveRulePrecedence(numbered, topics), sourcesHash };
+	return { rules: resolveRulePrecedence(numbered), sourcesHash };
 }

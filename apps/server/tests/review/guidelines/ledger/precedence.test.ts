@@ -3,7 +3,13 @@ import { ruleAppliesTo } from '../../../../src/review/guidelines/ledger/glob';
 import { ledgerBlock } from '../../../../src/review/guidelines/ledger/ledger';
 import { compareSourcePrecedence } from '../../../../src/review/guidelines/ledger/precedence';
 import { GLOBAL_SOURCE } from '../../../../src/review/guidelines/ledger/sources';
+import { toFindingRule } from '../../../../src/review/guidelines/ledger/types';
 import { toLedger } from '../../../../src/review/guidelines/ledger/validate';
+import type { CandidateFinding } from '../../../../src/review/pipeline/consolidate';
+import { addedLines } from '../../../../src/review/pipeline/detectors/changed-lines';
+import { ruleCheckResults } from '../../../../src/review/pipeline/detectors/rule-check';
+import { buildInventory } from '../../../../src/review/pipeline/inventory';
+import { precheckRuleCandidate } from '../../../../src/review/pipeline/quality-verify';
 
 describe('compareSourcePrecedence', () => {
 	test('ranks repo Recoder guidelines above global settings, nested folders, and root instruction files', () => {
@@ -107,5 +113,123 @@ describe('conflicting rule files', () => {
 		expect(ruleAppliesTo(rootRule, 'apps/web/page.tsx')).toBe(false);
 		expect(ruleAppliesTo(webRule, 'apps/web/page.tsx')).toBe(true);
 		expect(ruleAppliesTo(webRule, 'apps/server/index.ts')).toBe(false);
+	});
+
+	test('keeps a mandatory file-line detector active when higher-precedence guidelines set a function-line limit', async () => {
+		const ledger = toLedger(
+			{
+				rules: [
+					{
+						text: 'Files stay under 500 lines, tests included.',
+						source: 'AGENTS.md',
+						line: 1,
+						topic: 'line-limits',
+						check: { kind: 'max-file-lines', max: 500 }
+					},
+					{
+						text: 'Keep functions under 40 lines.',
+						source: GLOBAL_SOURCE,
+						line: 1,
+						topic: 'line-limits'
+					}
+				]
+			},
+			[
+				{ path: 'AGENTS.md', text: '- Files stay under 500 lines, tests included.\n', revision: 'sha1' },
+				{ path: GLOBAL_SOURCE, text: '- Keep functions under 40 lines.\n' }
+			],
+			'hash'
+		);
+
+		const [fileRule, functionRule] = ledger.rules;
+
+		expect(fileRule.excludedScopes).toBeUndefined();
+		expect(fileRule.overriddenBy).toBeUndefined();
+		expect(ruleAppliesTo(fileRule, 'src/a.ts')).toBe(true);
+		expect(ruleAppliesTo(functionRule, 'src/a.ts')).toBe(true);
+
+		const diff = [
+			'diff --git a/src/a.ts b/src/a.ts',
+			'--- a/src/a.ts',
+			'+++ b/src/a.ts',
+			'@@ -1,1 +1,2 @@',
+			' export const x = 1;',
+			'+export const y = 2;',
+			''
+		].join('\n');
+
+		const inventory = buildInventory(diff, []);
+		const longHead = `${Array.from({ length: 501 }, (_, idx) => `export const v${idx} = ${idx};`).join('\n')}\n`;
+
+		const hits = await ruleCheckResults(ledger, {
+			inventory,
+			added: addedLines(inventory),
+			heads: new Map([['src/a.ts', longHead]])
+		});
+
+		expect(hits.map((hit) => hit.ruleId)).toEqual(['R1']);
+	});
+
+	test('keeps compatible rules on the same topic active when one requires JSDoc and the other forbids line comments', () => {
+		const ledger = toLedger(
+			{
+				rules: [
+					{
+						text: 'Never write // comments.',
+						source: 'AGENTS.md',
+						line: 1,
+						topic: 'comments'
+					},
+					{
+						text: 'Comments are JSDoc docstrings only.',
+						source: 'RECODER.md',
+						line: 1,
+						topic: 'comments'
+					}
+				]
+			},
+			[
+				{ path: 'AGENTS.md', text: '- Never write // comments.\n', revision: 'sha1' },
+				{ path: 'RECODER.md', text: '- Comments are JSDoc docstrings only.\n', revision: 'sha1' }
+			],
+			'hash'
+		);
+
+		const [forbidLineComments, requireJsdoc] = ledger.rules;
+
+		expect(forbidLineComments.excludedScopes).toBeUndefined();
+		expect(forbidLineComments.overriddenBy).toBeUndefined();
+		expect(requireJsdoc.excludedScopes).toBeUndefined();
+		expect(ruleAppliesTo(forbidLineComments, 'src/a.ts')).toBe(true);
+		expect(ruleAppliesTo(requireJsdoc, 'src/a.ts')).toBe(true);
+
+		const diff = [
+			'diff --git a/src/a.ts b/src/a.ts',
+			'--- a/src/a.ts',
+			'+++ b/src/a.ts',
+			'@@ -1,1 +1,2 @@',
+			' export const x = 1;',
+			'+// comment',
+			''
+		].join('\n');
+
+		const inventory = buildInventory(diff, []);
+
+		const candidate: CandidateFinding = {
+			id: 'f1',
+			candidateId: 'c1',
+			valid: true,
+			file: 'src/a.ts',
+			line: 2,
+			endLine: 2,
+			severity: 'warning',
+			category: 'repo-rule',
+			kind: 'quality',
+			ruleId: forbidLineComments.id,
+			rule: toFindingRule(forbidLineComments),
+			message: '[repo-rule] Uses // comment.'
+		};
+
+		expect(precheckRuleCandidate(candidate, ledger, inventory)).toBeNull();
 	});
 });

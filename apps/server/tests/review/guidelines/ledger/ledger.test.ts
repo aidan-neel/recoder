@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildRuleLedger, ledgerBlock } from '../../../../src/review/guidelines/ledger/ledger';
 import { LEDGER_VERSION, readLedgerSources } from '../../../../src/review/guidelines/ledger/sources';
+import { toFindingRule } from '../../../../src/review/guidelines/ledger/types';
 import { toLedger } from '../../../../src/review/guidelines/ledger/validate';
 import { createRun } from '../../../../src/review/pipeline/harness/context';
 import { writeCache } from '../../../../src/util/json-cache';
@@ -82,7 +83,8 @@ describe('toLedger', () => {
 			{
 				rules: [
 					{
-						text: 'Rethrow caught errors with context.',
+						text: 'Never swallow an error: catch only what you can handle, and add context when you rethrow.',
+						restatement: 'Rethrow caught errors with context.',
 						source: 'AGENTS.md',
 						line: 2,
 						endLine: 3
@@ -102,6 +104,133 @@ describe('toLedger', () => {
 				source: { path: 'AGENTS.md', line: 2, endLine: 3, revision: 'deadbeef01' }
 			}
 		]);
+	});
+
+	test('keeps an unverified quote only as the restatement instead of copying the cited heading line into text', () => {
+		const source = {
+			path: 'AGENTS.md',
+			revision: 'rev1',
+			text: '# Style\n- Files remain concise.\n'
+		};
+
+		const ledger = toLedger(
+			{
+				rules: [{ text: 'Keep each file short.', source: 'AGENTS.md', line: 1 }]
+			},
+			[source],
+			'hash'
+		);
+
+		expect(ledger.rules).toEqual([
+			{
+				id: 'R1',
+				text: '',
+				verbatim: false,
+				restatement: 'Keep each file short.',
+				level: 'mandatory',
+				source: { path: 'AGENTS.md', line: 1, endLine: 1, revision: 'rev1' }
+			}
+		]);
+
+		expect(toFindingRule(ledger.rules[0])).toMatchObject({
+			id: 'R1',
+			text: '',
+			verbatim: false,
+			restatement: 'Keep each file short.'
+		});
+	});
+
+	test('keeps distinct rules citing the same line and repeated rules on different line spans instead of merging them', () => {
+		const source = {
+			path: 'AGENTS.md',
+			revision: 'rev1',
+			text: ['# Style', '- Validate input payloads.', '# API', '- Validate input payloads.', ''].join('\n')
+		};
+
+		const ledger = toLedger(
+			{
+				rules: [
+					{ text: 'Keep each file short.', source: 'AGENTS.md', line: 1 },
+					{ text: 'Use docstrings for comments.', source: 'AGENTS.md', line: 1 },
+					{ text: 'Validate input payloads.', source: 'AGENTS.md', line: 2 },
+					{ text: 'Validate input payloads.', source: 'AGENTS.md', line: 4 }
+				]
+			},
+			[source],
+			'hash'
+		);
+
+		expect(ledger.rules.map((rule) => [rule.id, rule.text, rule.restatement, rule.source.line])).toEqual([
+			['R1', '', 'Keep each file short.', 1],
+			['R2', '', 'Use docstrings for comments.', 1],
+			['R3', 'Validate input payloads.', 'Validate input payloads.', 2],
+			['R4', 'Validate input payloads.', 'Validate input payloads.', 4]
+		]);
+	});
+
+	test('marks a rule with a nonexistent quote and an out-of-range line as non-verbatim with no quoted FindingRule text', () => {
+		const source = {
+			path: 'AGENTS.md',
+			revision: 'rev1',
+			text: '# Style\n- Use strict types.\n'
+		};
+
+		const ledger = toLedger(
+			{
+				rules: [{ text: 'Never use any.', source: 'AGENTS.md', line: 99 }]
+			},
+			[source],
+			'hash'
+		);
+
+		expect(ledger.rules).toEqual([
+			{
+				id: 'R1',
+				text: '',
+				verbatim: false,
+				restatement: 'Never use any.',
+				level: 'mandatory',
+				source: { path: 'AGENTS.md', revision: 'rev1' }
+			}
+		]);
+
+		expect(toFindingRule(ledger.rules[0])).toEqual({
+			id: 'R1',
+			text: '',
+			verbatim: false,
+			restatement: 'Never use any.',
+			level: 'mandatory',
+			source: { path: 'AGENTS.md', revision: 'rev1' }
+		});
+	});
+
+	test('formats reviewer ledger lines with the concise restatement while keeping the full verbatim quote on the rule', () => {
+		const verbatim =
+			'Never swallow an error in an asynchronous handler: catch only what you can recover from locally, and attach the failing input identifier when rethrowing.';
+
+		const source = {
+			path: 'AGENTS.md',
+			revision: 'rev1',
+			text: `- ${verbatim}\n`
+		};
+
+		const ledger = toLedger(
+			{
+				rules: [
+					{
+						text: verbatim,
+						restatement: 'Rethrow unhandled async errors with context.',
+						source: 'AGENTS.md',
+						line: 1
+					}
+				]
+			},
+			[source],
+			'hash'
+		);
+
+		expect(ledgerBlock(ledger, ['src/a.ts'])).toBe('R1: Rethrow unhandled async errors with context. (AGENTS.md:1)');
+		expect(toFindingRule(ledger.rules[0]).text).toBe(verbatim);
 	});
 
 	test('keeps exceptions stated inline or next to a rule and omits mechanical checks when exceptions or advisory cues apply', () => {

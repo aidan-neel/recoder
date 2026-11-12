@@ -5,7 +5,7 @@ import { orchestratorAgentOptions, type ReviewRun } from '../../pipeline/harness
 import { ruleAppliesTo } from './glob.js';
 import { LEDGER_FINAL_EXAMPLE, LEDGER_SYSTEM_PROMPT, ledgerUserPrompt } from './prompt.js';
 import { hashSources, readLedgerSources, type LedgerSource } from './sources.js';
-import { ruleCitation, type RepoRule, type RuleLedger } from './types.js';
+import { ruleCitation, ruleSummary, type RepoRule, type RuleLedger } from './types.js';
 import { ledgerReplySchema, toLedger, type LedgerReply } from './validate.js';
 
 export { ruleCitation } from './types.js';
@@ -101,11 +101,10 @@ const STANDING_NOTE: Record<NonNullable<RepoRule['standing']>, string> = {
 
 function formatLedgerLine(rule: RepoRule): string {
 	const levelNote = rule.level === 'advisory' ? ' [advisory]' : '';
-	const inlineText = rule.text.replace(/\s+/g, ' ').trim();
 	const exceptions = rule.exceptions?.length ? ` Exceptions: ${rule.exceptions.join('; ')}.` : '';
 	const standing = rule.standing ? STANDING_NOTE[rule.standing] : '';
 
-	return `${rule.id}${levelNote}: ${inlineText} (${ruleCitation(rule)})${exceptions}${standing}`;
+	return `${rule.id}${levelNote}: ${ruleSummary(rule)} (${ruleCitation(rule)})${exceptions}${standing}`;
 }
 
 /**
