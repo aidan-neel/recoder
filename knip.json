@@ -5,6 +5,11 @@
 		".agents/**"
 	],
 	"workspaces": {
+		".": {
+			"entry": [
+				"charts/*/tests/**/*.test.ts"
+			]
+		},
 		"apps/server": {
 			"entry": [
 				"tests/**/*.test.ts"
