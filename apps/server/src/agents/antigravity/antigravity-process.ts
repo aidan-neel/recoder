@@ -158,9 +158,13 @@ export async function writeWorkspaceFiles(
 	return { cwd, settingsFile };
 }
 
+export function isConversationUuid(value: string): boolean {
+	return CONVERSATION_UUID.test(value);
+}
+
 /** Paths under `~/.gemini/antigravity-cli` where `agy` persists one conversation's SQLite store, metadata and brain dir. */
 function conversationPaths(env: Env, id: string): string[] {
-	if (!CONVERSATION_UUID.test(id)) return [];
+	if (!isConversationUuid(id)) return [];
 
 	const base = join(env.HOME || homedir(), '.gemini', 'antigravity-cli');
 

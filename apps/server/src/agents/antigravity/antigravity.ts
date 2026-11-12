@@ -2,17 +2,9 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { supportedEffort, type AgentStatus, type ModelEntry, type ReasoningEffort } from '@recoder/shared';
-import { LlmError, timedOutError } from '../../models/llm/errors';
+import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import {
-	CliAgent,
-	callDeadline,
-	emptyDirectory,
-	findCli,
-	killGroup,
-	killOnAbort,
-	stopOnShutdown
-} from '../cli-process';
+import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
@@ -222,43 +214,34 @@ export class AntigravityAgent extends CliAgent {
 		for (const entry of entries) this.known.set(entry.model, entry);
 	}
 
-	/** Spawns `agy --output-format json models` in an empty directory, killing its process group on timeout or abort. */
+	/** Runs `agy --output-format json models` in an empty directory, killing its process group on timeout or abort. */
 	private async probeModels(
 		path: string,
 		timeoutMs: number,
 		signal?: AbortSignal
 	): Promise<{ code: number; stdout: string; stderr: string }> {
 		const cwd = await emptyDirectory(ANTIGRAVITY_PROBE_DIR);
-		const timeout = AbortSignal.timeout(timeoutMs);
-		const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
-
-		const proc = Bun.spawn([path, '--output-format', 'json', 'models'], {
-			cwd,
-			stdin: 'ignore',
-			stdout: 'pipe',
-			stderr: 'pipe',
-			env: antigravityEnv(this.env),
-			detached: true
-		});
-
-		this.running.add(proc);
-
-		const abortWatch = killOnAbort(proc, combined);
+		const deadline = callDeadline({ timeoutMs, signal });
+		let stdout = '';
 
 		try {
-			const [stdout, stderr, code] = await Promise.race([
-				Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]),
-				abortWatch.stopped
-			]);
+			const { code, stderr } = await streamCli({
+				argv: [path, '--output-format', 'json', 'models'],
+				cwd,
+				env: antigravityEnv(this.env),
+				stdin: null,
+				signal: deadline.signal,
+				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
+				onOutput: (chunk) => {
+					stdout += chunk;
+				},
+				running: this.running,
+				name: this.name
+			});
 
 			return { code, stdout, stderr };
 		} catch (error) {
-			killGroup(proc);
-			if (timeout.aborted && !signal?.aborted) throw timedOutError(timeoutMs);
-			throw error;
-		} finally {
-			abortWatch.release();
-			this.running.delete(proc);
+			throw deadline.failure(error, 'Antigravity models check failed.');
 		}
 	}
 }

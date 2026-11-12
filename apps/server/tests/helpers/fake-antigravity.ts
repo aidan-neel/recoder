@@ -85,10 +85,12 @@ const settings = settingsPath && existsSync(settingsPath) ? JSON.parse(readFileS
 const agentPath = join(process.cwd(), '.agents', 'agents', 'recoder.md');
 const agentMd = existsSync(agentPath) ? readFileSync(agentPath, 'utf8') : '';
 const resumed = flag('--conversation');
-const conversationId = resumed ?? crypto.randomUUID();
+const forcedId = process.env.FAKE_ANTIGRAVITY_CONVERSATION_ID;
+const conversationId = resumed ?? forcedId ?? crypto.randomUUID();
+const validUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId);
 const home = process.env.HOME ?? '';
 
-if (home) {
+if (home && validUuid) {
 	const cliDir = join(home, '.gemini', 'antigravity-cli');
 
 	mkdirSync(join(cliDir, 'conversations'), { recursive: true });
@@ -175,7 +177,21 @@ if (mode === 'crash') {
 	process.exit(1);
 }
 
-if (mode === 'empty') {
+if (mode === 'empty' || mode === 'streamed-only') {
+	if (mode === 'streamed-only') {
+		say({
+			event: 'step_update',
+			step_update: {
+				conversation_id: conversationId,
+				step_index: 1,
+				state: 'DONE',
+				step_type: 'agent_response',
+				text_delta: 'Streamed reply',
+				usage: { input_tokens: 10, output_tokens: 3, thinking_tokens: 0, cache_read_tokens: 0, total_tokens: 13 }
+			}
+		});
+	}
+
 	say({
 		event: 'result',
 		result: {

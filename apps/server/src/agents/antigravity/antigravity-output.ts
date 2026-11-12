@@ -2,13 +2,12 @@ import type { TokenUsage } from '@recoder/shared';
 import { z } from 'zod';
 import { LlmError, UsageLimitError } from '../../models/llm/errors';
 import type { CliExit } from '../cli-stream';
-import type { AgentEvent, AgentReply } from '../contract';
 import { quotedLine } from '../quoted-line';
-import { ANTIGRAVITY_LOGIN } from './antigravity-process';
+import { ANTIGRAVITY_LOGIN, isConversationUuid } from './antigravity-process';
 
 const QUOTED_CHARS = 300;
 
-const EVENT_QUOTED_CHARS = 120;
+export const EVENT_QUOTED_CHARS = 120;
 
 const SIGNED_OUT =
 	/please sign in|not (?:signed|logged) in|launch the cli without arguments to sign in|authentication required|failed to authenticate|unauthenticated|auth_revoked|invalid api key|oauth (?:token|session)/i;
@@ -77,7 +76,17 @@ const agyStderrSchema = z.object({
 	retryable: z.boolean().optional()
 });
 
+export type StepUpdate = z.infer<typeof stepUpdateSchema>['step_update'];
+
 type ResultBody = z.infer<typeof resultBodySchema>;
+
+/** Discriminated classification of one stdout line from `agy --output-format stream-json`. */
+export type ClassifiedLine =
+	| { kind: 'non-json' }
+	| { kind: 'unknown' }
+	| { kind: 'init'; conversationId: string }
+	| { kind: 'step'; step: StepUpdate }
+	| { kind: 'result'; result: ResultBody };
 
 interface StderrDetails {
 	message?: string;
@@ -95,7 +104,7 @@ export function isSignedOutOutput(text: string): boolean {
  * `input_tokens` and prompt-cache hits separately in `cache_read_tokens`, while `output_tokens` already includes
  * `thinking_tokens`.
  */
-function tokenUsage(usage: AgyUsage): TokenUsage {
+export function tokenUsage(usage: AgyUsage): TokenUsage {
 	const cachedInputTokens = usage.cache_read_tokens ?? null;
 	const inputTokens = usage.input_tokens === undefined ? null : usage.input_tokens + (cachedInputTokens ?? 0);
 	const outputTokens = usage.output_tokens ?? null;
@@ -110,31 +119,36 @@ function tokenUsage(usage: AgyUsage): TokenUsage {
 	};
 }
 
-function addTokenUsage(total: TokenUsage | undefined, next: TokenUsage): TokenUsage {
-	if (!total) return next;
-
-	const sum = (left: number | null, right: number | null) =>
-		left === null && right === null ? null : (left ?? 0) + (right ?? 0);
-
-	const inputTokens = sum(total.inputTokens, next.inputTokens);
-	const outputTokens = sum(total.outputTokens, next.outputTokens);
-
-	return {
-		inputTokens,
-		outputTokens,
-		totalTokens: inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null,
-		cachedInputTokens: sum(total.cachedInputTokens, next.cachedInputTokens),
-		cacheWriteInputTokens: null,
-		reasoningOutputTokens: sum(total.reasoningOutputTokens, next.reasoningOutputTokens)
-	};
-}
-
 function parseJsonObject(line: string): unknown {
 	try {
 		return JSON.parse(line);
 	} catch {
 		return null;
 	}
+}
+
+function classifyStreamLine(raw: string): ClassifiedLine {
+	const parsed = parseJsonObject(raw);
+
+	if (parsed === null) return { kind: 'non-json' };
+
+	const init = initEventSchema.safeParse(parsed);
+
+	if (init.success) return { kind: 'init', conversationId: init.data.conversation_id };
+
+	const step = stepUpdateSchema.safeParse(parsed);
+
+	if (step.success) return { kind: 'step', step: step.data.step_update };
+
+	const wrapped = resultEventSchema.safeParse(parsed);
+
+	if (wrapped.success) return { kind: 'result', result: wrapped.data.result };
+
+	const direct = resultBodySchema.safeParse(parsed);
+
+	if (direct.success) return { kind: 'result', result: direct.data };
+
+	return { kind: 'unknown' };
 }
 
 /** Extracts structured `AGY_ERROR: {...}` metadata or the primary error line from `stderr`, always redacted. */
@@ -262,23 +276,30 @@ function failedResult(result: ResultBody, stepError: string | null, exit: CliExi
 interface SingleCallHandlers {
 	onText?: (delta: string) => void;
 	onThinking?: (delta: string) => void;
+	onConversation?: (id: string) => void;
 }
 
-function flushUnstreamedTail(full: string, streamed: string, onText?: (delta: string) => void): string {
-	const suffix = full.startsWith(streamed) ? full.slice(streamed.length) : '';
+function flushUnstreamedTail(responseText: string, streamed: string, onText?: (delta: string) => void): string {
+	const finalText = responseText.trim() ? responseText : streamed;
+
+	if (!finalText.trim()) throw new LlmError(0, 'Antigravity ended without a reply.');
+
+	const suffix = finalText.startsWith(streamed) ? finalText.slice(streamed.length) : '';
 
 	if (suffix) onText?.(suffix);
 
-	return full || streamed;
+	return finalText;
 }
 
 /**
- * Reads `stream-json` lines for a stateless `complete()` call: streams text and thinking deltas, records the
- * conversation ID for cleanup, and verifies the final `result` envelope.
+ * Reads `stream-json` lines for an Antigravity turn: streams text and thinking deltas, validates and reports UUID
+ * conversation IDs as soon as they appear, and verifies the final `result` envelope.
  */
 export class ReplyReader {
 	conversationId: string | null = null;
 
+	private invalidConversationId: string | null = null;
+	private readonly seenConversations = new Set<string>();
 	private streamed = '';
 	private result: ResultBody | null = null;
 	private stepError: string | null = null;
@@ -287,26 +308,24 @@ export class ReplyReader {
 	constructor(private readonly handlers: SingleCallHandlers) {}
 
 	readonly line = (raw: string): void => {
+		this.readLine(raw);
+	};
+
+	readLine(raw: string): ClassifiedLine {
 		this.lastLine = raw;
 
-		const parsed = parseJsonObject(raw);
+		const classified = classifyStreamLine(raw);
 
-		if (parsed === null) return;
+		if (classified.kind === 'init') {
+			this.recordInitConversationId(classified.conversationId);
 
-		const init = initEventSchema.safeParse(parsed);
-
-		if (init.success) {
-			this.conversationId = init.data.conversation_id || this.conversationId;
-
-			return;
+			return classified;
 		}
 
-		const step = stepUpdateSchema.safeParse(parsed);
+		if (classified.kind === 'step') {
+			const body = classified.step;
 
-		if (step.success) {
-			const body = step.data.step_update;
-
-			this.conversationId = body.conversation_id || this.conversationId;
+			this.recordOptionalConversationId(body.conversation_id);
 			if (body.error_message) this.stepError = body.error_message;
 
 			if (body.step_type === 'agent_response') {
@@ -318,164 +337,60 @@ export class ReplyReader {
 				}
 			}
 
-			return;
+			return classified;
 		}
 
-		const wrapped = resultEventSchema.safeParse(parsed);
-
-		if (wrapped.success) {
-			this.result = wrapped.data.result;
-			this.conversationId = wrapped.data.result.conversation_id || this.conversationId;
-
-			return;
+		if (classified.kind === 'result') {
+			this.result = classified.result;
+			this.recordOptionalConversationId(classified.result.conversation_id);
 		}
 
-		const direct = resultBodySchema.safeParse(parsed);
+		return classified;
+	}
 
-		if (direct.success) {
-			this.result = direct.data;
-			this.conversationId = direct.data.conversation_id || this.conversationId;
-		}
-	};
+	resultUsage(): TokenUsage | undefined {
+		return this.result?.usage ? tokenUsage(this.result.usage) : undefined;
+	}
 
 	finish(onUsage: ((usage: TokenUsage) => void) | undefined, exit: CliExit): string {
+		if (this.invalidConversationId !== null) {
+			throw new LlmError(
+				0,
+				`Antigravity reported an invalid conversation ID: "${quotedLine(this.invalidConversationId, EVENT_QUOTED_CHARS)}".`
+			);
+		}
+
 		if (!this.result) throw missingResultError(this.lastLine, exit);
 
 		const turnFailure = failedResult(this.result, this.stepError, exit);
 
 		if (turnFailure) throw turnFailure;
 
-		const finalText = this.result.response ?? '';
+		const text = flushUnstreamedTail(this.result.response ?? '', this.streamed, this.handlers.onText);
 
-		if (!finalText.trim() && !this.streamed.trim()) throw new LlmError(0, 'Antigravity ended without a reply.');
 		if (this.result.usage) onUsage?.(tokenUsage(this.result.usage));
 
-		return flushUnstreamedTail(finalText, this.streamed, this.handlers.onText);
-	}
-}
-
-/**
- * Reads `stream-json` lines for one prompt of an {@link AntigravityRun}: pairs each `agent_response` step's start and
- * `DONE` usage, streams reasoning and text deltas, flags non-protocol stdout lines as `error` events, and sums only
- * the current prompt's step usages so resumed `--conversation` turns never double-count prior turns.
- */
-export class RunReader {
-	conversationId: string | null = null;
-
-	private readonly startedSteps = new Set<number>();
-	private readonly finishedSteps = new Set<number>();
-	private promptTokens: TokenUsage | undefined;
-	private streamed = '';
-	private result: ResultBody | null = null;
-	private stepError: string | null = null;
-	private lastLine = '';
-
-	constructor(private readonly onEvent: (event: AgentEvent) => void) {}
-
-	readonly line = (raw: string): void => {
-		this.lastLine = raw;
-
-		const parsed = parseJsonObject(raw);
-
-		if (parsed === null) {
-			this.onEvent({
-				type: 'error',
-				message: `Antigravity printed a line that is not JSON: "${quotedLine(raw, EVENT_QUOTED_CHARS)}"`
-			});
-
-			return;
-		}
-
-		const init = initEventSchema.safeParse(parsed);
-
-		if (init.success) {
-			this.conversationId = init.data.conversation_id || this.conversationId;
-			this.onEvent({ type: 'activity' });
-
-			return;
-		}
-
-		const step = stepUpdateSchema.safeParse(parsed);
-
-		if (step.success) {
-			this.handleStep(step.data.step_update);
-
-			return;
-		}
-
-		const wrapped = resultEventSchema.safeParse(parsed);
-
-		if (wrapped.success) {
-			this.result = wrapped.data.result;
-			this.conversationId = wrapped.data.result.conversation_id || this.conversationId;
-			this.onEvent({ type: 'activity' });
-
-			return;
-		}
-
-		const direct = resultBodySchema.safeParse(parsed);
-
-		if (direct.success) {
-			this.result = direct.data;
-			this.conversationId = direct.data.conversation_id || this.conversationId;
-			this.onEvent({ type: 'activity' });
-
-			return;
-		}
-
-		this.onEvent({
-			type: 'error',
-			message: `Antigravity printed an unrecognized event: "${quotedLine(raw, EVENT_QUOTED_CHARS)}"`
-		});
-	};
-
-	finish(exit: CliExit, isResumed: boolean): AgentReply {
-		if (!this.result) {
-			return { text: '', error: missingResultError(this.lastLine, exit), tokens: this.promptTokens };
-		}
-
-		const error = failedResult(this.result, this.stepError, exit);
-		const fallbackTokens = !isResumed && this.result.usage ? tokenUsage(this.result.usage) : undefined;
-		const tokens = this.promptTokens ?? fallbackTokens;
-
-		if (error) return { text: '', error, tokens };
-
-		const text = this.result.response ?? this.streamed;
-
-		return { text, tokens };
+		return text;
 	}
 
-	private handleStep(body: z.infer<typeof stepUpdateSchema>['step_update']): void {
-		this.conversationId = body.conversation_id || this.conversationId;
-		if (body.error_message) this.stepError = body.error_message;
+	private recordOptionalConversationId(candidate: string | undefined): void {
+		if (!candidate) return;
 
-		if (body.step_type !== 'agent_response') {
-			this.onEvent({ type: 'activity' });
+		this.recordInitConversationId(candidate);
+	}
+
+	private recordInitConversationId(candidate: string): void {
+		if (!isConversationUuid(candidate)) {
+			this.invalidConversationId ??= candidate;
 
 			return;
 		}
 
-		const stepId = `step_${body.step_index}`;
-		const partId = `part_${body.step_index}`;
+		this.conversationId = candidate;
 
-		if (!this.startedSteps.has(body.step_index)) {
-			this.startedSteps.add(body.step_index);
-			this.onEvent({ type: 'step-start', step: stepId });
-		}
+		if (this.seenConversations.has(candidate)) return;
 
-		if (body.thinking_delta) this.onEvent({ type: 'reasoning', delta: body.thinking_delta, partId });
-
-		if (body.text_delta) {
-			this.streamed += body.text_delta;
-			this.onEvent({ type: 'text', delta: body.text_delta, partId });
-		}
-
-		if (body.state === 'DONE' && body.usage && !this.finishedSteps.has(body.step_index)) {
-			const stepTokens = tokenUsage(body.usage);
-
-			this.finishedSteps.add(body.step_index);
-			this.promptTokens = addTokenUsage(this.promptTokens, stepTokens);
-			this.onEvent({ type: 'usage', usage: stepTokens, step: stepId });
-		}
+		this.seenConversations.add(candidate);
+		this.handlers.onConversation?.(candidate);
 	}
 }

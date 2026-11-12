@@ -26,6 +26,7 @@ const settingsSchema = z.object({
 interface OpenRunOptions {
 	tools?: string[];
 	home?: string;
+	env?: Record<string, string>;
 	user?: {
 		settings?: Record<string, unknown>;
 		hooks?: Record<string, unknown>;
@@ -41,7 +42,8 @@ async function openRun(
 	const env = await fakeAntigravity(
 		{
 			FAKE_ANTIGRAVITY_MODE: mode,
-			...(options.home ? { HOME: options.home } : {})
+			...(options.home ? { HOME: options.home } : {}),
+			...options.env
 		},
 		options.user
 	);
@@ -285,6 +287,46 @@ describe('AntigravityAgent.openRun', () => {
 		await run.close();
 
 		expect(reply.error?.message).toContain('printed more than');
+	});
+
+	test('falls back to streamed text when the final response is blank and fails when both are blank', async () => {
+		const streamedOnly = await openRun('streamed-only');
+		const blankBoth = await openRun('empty');
+
+		const [streamedReply, emptyReply] = await Promise.all([
+			streamedOnly.run.prompt('Review it.', PROMPT),
+			blankBoth.run.prompt('Review it.', PROMPT)
+		]);
+
+		await Promise.all([streamedOnly.run.close(), blankBoth.run.close()]);
+
+		expect(streamedReply.error).toBeUndefined();
+		expect(streamedReply.text).toBe('Streamed reply');
+		expect(emptyReply.text).toBe('');
+		expect(emptyReply.error?.message).toBe('Antigravity ended without a reply.');
+	});
+
+	test('fails the prompt when CLI output reports a non-UUID conversation id instead of resuming it', async () => {
+		const { run, log } = await openRun('answer', {
+			env: { FAKE_ANTIGRAVITY_CONVERSATION_ID: '../bad-id Authorization: Bearer sk-antigravity-secret-9999' }
+		});
+
+		const firstReply = await run.prompt('First.', PROMPT);
+		const secondReply = await run.prompt('Second.', PROMPT);
+
+		await run.close();
+
+		const [firstCall, secondCall] = await fakeAntigravityCalls(log);
+
+		expect(firstReply.error?.message).toContain('invalid conversation ID');
+		expect(firstReply.error?.message).not.toContain('sk-antigravity-secret-9999');
+		expect(secondReply.error?.message).toContain('invalid conversation ID');
+		expect(firstCall).toBeDefined();
+		expect(secondCall).toBeDefined();
+
+		if (secondCall) {
+			expect(after(secondCall.args, '--conversation')).toBeUndefined();
+		}
 	});
 
 	testPromptStops(() => openRun('spawn'));

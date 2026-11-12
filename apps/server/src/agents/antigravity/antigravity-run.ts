@@ -7,7 +7,6 @@ import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
 import { ProcessRun } from '../process-run';
 import { effortArgs } from './antigravity-models';
-import { RunReader } from './antigravity-output';
 import {
 	ANTIGRAVITY_STREAM_ARGS,
 	antigravityEnv,
@@ -16,6 +15,7 @@ import {
 	writeWorkspaceFiles,
 	type Env
 } from './antigravity-process';
+import { RunReader } from './antigravity-run-reader';
 
 /** Adapter resources shared with each open {@link AntigravityRun}. */
 interface AntigravityHost {
@@ -118,7 +118,7 @@ export class AntigravityRun extends ProcessRun {
 
 			splitter.end();
 
-			return reader.finish(exit, wasResumed);
+			return wasResumed ? reader.finishResumedTurn(exit) : reader.finishInitialTurn(exit);
 		} catch (turnError) {
 			return { text: '', error: deadline.failure(turnError, 'Antigravity run failed.') };
 		} finally {
