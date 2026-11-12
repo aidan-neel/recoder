@@ -5,13 +5,12 @@
 	import * as Card from '@sivir-ui/svelte/components/card';
 	import type { UsageLimit } from '@recoder/shared';
 	import UsageLimitNotice from './usage-limit-notice.svelte';
-	import { chatGptStatus } from '$lib/settings/chatgpt-status.svelte';
 	import { modelSettingsUi } from '$lib/settings/model-settings.svelte';
 
 	interface Props {
 		title: string;
 		reason: string;
-		/** Signing in to ChatGPT fixes this. */
+		/** Signing in fixes this. */
 		signIn?: boolean;
 		/** The model's plan ran out: shows when it resets and offers another model. */
 		usageLimit?: UsageLimit | null;
@@ -28,24 +27,18 @@
 		retrying = false,
 		class: className = ''
 	}: Props = $props();
-
-	$effect(() => {
-		if (signIn && chatGptStatus.signedIn === null) void chatGptStatus.check();
-	});
-	/** Once ChatGPT is signed in the way forward is to try again, and a sign-in prompt with nothing to retry is done. */
-	const needsSignIn = $derived(signIn && chatGptStatus.signedIn !== true);
 </script>
 
 {#if usageLimit}
 	<UsageLimitNotice limit={usageLimit} {onRetry} {retrying} class={className} />
-{:else if needsSignIn || !signIn || onRetry}
+{:else}
 	<Card.Root class="review-notice {className}" {...{ role: 'alert' }}>
 		<CircleAlert size={15} class="review-notice-icon" aria-hidden="true" />
 		<div class="min-w-0 flex-1">
 			<p class="review-notice-title">{title}</p>
-			<p class="review-notice-body">{needsSignIn || !signIn ? reason : 'Signed in to ChatGPT. Retry to continue.'}</p>
+			<p class="review-notice-body">{reason}</p>
 		</div>
-		{#if needsSignIn}
+		{#if signIn}
 			<Button
 				variant="outline"
 				class="shrink-0"
