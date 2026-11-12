@@ -78,3 +78,14 @@ test('persisted brief validation rejects payloads missing structured references 
 		false
 	);
 });
+
+test('snapshot keys do not collide when a head identifier contains delimiters', () => {
+	const injected = briefSnapshotKey([{ repoId: 'r1', number: 1, headSha: 'sha1\nr2#2@sha2' }]);
+
+	const twoPrs = briefSnapshotKey([
+		{ repoId: 'r1', number: 1, headSha: 'sha1' },
+		{ repoId: 'r2', number: 2, headSha: 'sha2' }
+	]);
+
+	expect(injected).not.toBe(twoPrs);
+});

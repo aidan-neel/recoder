@@ -15,7 +15,11 @@ const briefSchema = z.object({
 				repoId: z.string().min(1).max(200),
 				repo: z.string().min(1).max(200),
 				number: z.number().int().positive(),
-				headSha: z.string().max(200),
+				headSha: z
+					.string()
+					.min(1)
+					.max(100)
+					.regex(/^[A-Za-z0-9._-]+$/),
 				title: z.string().max(500),
 				additions: z.number().int().nonnegative(),
 				deletions: z.number().int().nonnegative(),

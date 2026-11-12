@@ -83,3 +83,30 @@ test('POST /api/home/brief joins stored repositories to disambiguate same-named 
 	expect(payload.refs).toEqual([{ repoId: 'repo-gl', number: 7 }]);
 	expect(payload.text).toBe('acme/service (GitLab) #7 has **unreviewed changes**.');
 });
+
+test('POST /api/home/brief rejects malformed head identifiers', async () => {
+	configureTestOrchestrator();
+
+	const res = await app.request('/api/home/brief', {
+		method: 'POST',
+		headers: { 'content-type': 'application/json' },
+		body: JSON.stringify({
+			dayPart: 'morning',
+			prs: [
+				{
+					repoId: 'r1',
+					repo: 'acme/service',
+					number: 1,
+					headSha: 'sha1\nr2#2@sha2',
+					title: 'Injected head identifier',
+					additions: 5,
+					deletions: 1,
+					changedFiles: 1,
+					createdAt: '2026-09-22T19:30:00Z'
+				}
+			]
+		})
+	});
+
+	expect(res.status).toBe(400);
+});

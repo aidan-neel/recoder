@@ -76,12 +76,36 @@ export function isHomeBriefResponse(value: unknown): value is HomeBriefResponse 
 	);
 }
 
+function compareSnapshotTuple(a: readonly [string, number, string], b: readonly [string, number, string]): number {
+	if (a[0] !== b[0]) return a[0] < b[0] ? -1 : 1;
+	if (a[1] !== b[1]) return a[1] - b[1];
+	if (a[2] !== b[2]) return a[2] < b[2] ? -1 : 1;
+
+	return 0;
+}
+
 /** Canonical key for an open pull request snapshot; changes when PRs open, close, or advance heads. */
 export function briefSnapshotKey(prs: ReadonlyArray<Pick<HomeBriefPr, 'repoId' | 'number' | 'headSha'>>): string {
-	return prs
-		.map((pr) => `${pr.repoId}#${pr.number}@${pr.headSha}`)
-		.sort()
-		.join('\n');
+	const tuples = prs.map((pr): readonly [string, number, string] => [pr.repoId, pr.number, pr.headSha]);
+
+	tuples.sort(compareSnapshotTuple);
+
+	return JSON.stringify(tuples);
+}
+
+/** True when `preceding` ends with `label` as a complete repository token rather than a suffix of a longer slug. */
+export function endsWithRepoLabel(preceding: string, label: string): boolean {
+	const trimmed = preceding.replace(/[\s*]+$/, '');
+	const target = label.trim();
+
+	if (!target || trimmed.length < target.length) return false;
+
+	const start = trimmed.length - target.length;
+
+	if (trimmed.slice(start).toLowerCase() !== target.toLowerCase()) return false;
+	if (start === 0) return true;
+
+	return !/[a-z0-9_./-]/i.test(trimmed[start - 1]);
 }
 
 function parseRemoteRepoUrl(rawUrl: string, provider: Provider): { host: string; owner: string } | null {
