@@ -37,6 +37,9 @@ export type SecondLookPurpose = 'residual' | 'contract-check';
 
 const UNIT_REASON = 'Every changed line is read by every lens that applies to it.';
 
+/** The id prefix of a reviewer's second attempt: `retry-reviewer-1`. */
+const RETRY_PREFIX = 'retry-';
+
 /** Patch characters in one diff line: its text, its sign and its line break. */
 export function patchLineChars(line: DiffLine): number {
 	return line.text.length + 2;
@@ -133,7 +136,14 @@ export function reviewerSlices(units: ReviewUnit[]): ReviewUnit[] {
 
 /** Whether the unit is the second attempt of a reviewer that failed. */
 export function isRetry(unit: ReviewUnit): boolean {
-	return unit.id.startsWith('retry-');
+	return unit.id.startsWith(RETRY_PREFIX);
+}
+
+/** The id of the unit a retry stands in for: `reviewer-1` for `retry-reviewer-1` and its halves `-a` and `-b`. */
+export function originalUnitId(unitId: string): string {
+	if (!unitId.startsWith(RETRY_PREFIX)) return unitId;
+
+	return unitId.slice(RETRY_PREFIX.length).replace(/-[ab]$/, '');
 }
 
 /** A fresh, queued record for a reviewer or subagent. */

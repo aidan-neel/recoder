@@ -35,3 +35,20 @@ test("a baseline reviewer's requests are all planned up to the cap", () => {
 	expect(plan.units).toHaveLength(4);
 	expect(plan.dropped).toEqual([]);
 });
+
+test('a specialist split in two by its retry sends no more than its own three children', () => {
+	const halves = ['retry-specialist-security-a', 'retry-specialist-security-b'];
+
+	const plan = planRequestedSubagents(
+		[...requests(halves[0], 3), ...requests(halves[1], 3)].map((entry, index) => ({
+			...entry,
+			request: { ...entry.request, concern: `Concern ${index + 1}` }
+		})),
+		['specialist-security', ...halves].map(unit),
+		INVENTORY,
+		12
+	);
+
+	expect(plan.units).toHaveLength(3);
+	expect(plan.dropped).toHaveLength(3);
+});
