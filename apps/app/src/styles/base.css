@@ -68,6 +68,77 @@
 	max-width: 768px;
 }
 
+/* A page's head under the bar: its title, then a row of tabs with the open tab's own tools at the right. */
+.page-head {
+	flex-shrink: 0;
+	padding: 20px 24px 0;
+}
+.page-title {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 10px;
+	font-size: 20px;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	line-height: 28px;
+}
+.page-title-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.page-tabs-row {
+	display: flex;
+	height: 48px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-top: 8px;
+	padding: 0 16px 0 18px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.page-tabs {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	isolation: isolate;
+}
+.page-tab {
+	position: relative;
+	display: inline-flex;
+	height: 30px;
+	align-items: center;
+	gap: 7px;
+	padding: 0 10px;
+	border-radius: 8px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	outline: none;
+	transition: color var(--dur-hover) ease-out;
+}
+.page-tab:hover,
+.page-tab[aria-current] {
+	color: var(--text-primary);
+}
+.page-tab[aria-current] {
+	font-weight: 500;
+}
+.page-tab:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.page-tab-count {
+	color: var(--text-faint);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 400;
+}
+.page-tab-count[data-tone='bugs'] {
+	color: var(--sev-high);
+}
+
 /* Breadcrumb in the bar: quiet links, the last part in full ink. */
 .crumbs {
 	display: flex;

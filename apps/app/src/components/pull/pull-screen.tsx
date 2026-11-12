@@ -126,7 +126,7 @@ function PullFrame({ repoId, number }: PullScreenProps) {
 			{page ? (
 				<>
 					<PullHeader page={page} />
-					<div className="pull-tabs-row">
+					<div className="page-tabs-row">
 						<PullTabs repoId={repoId} number={number} tab={tab} counts={view.counts} />
 						<div className="pull-tools">{tools[tab]}</div>
 					</div>

@@ -1,23 +1,4 @@
 /* ───────── Pull request page: the header, the tabs, one tab's body, the merge bar ───────── */
-.pull-head {
-	flex-shrink: 0;
-	padding: 20px 24px 0;
-}
-.pull-title {
-	display: flex;
-	min-width: 0;
-	align-items: baseline;
-	gap: 10px;
-	font-size: 20px;
-	font-weight: 600;
-	letter-spacing: -0.02em;
-	line-height: 28px;
-}
-.pull-title-text {
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
 .pull-title-number {
 	flex-shrink: 0;
 	color: var(--text-faint);
@@ -39,57 +20,6 @@
 	font-weight: 500;
 }
 
-/* Tabs: pill links on the left, the open tab's own tools on the right. */
-.pull-tabs-row {
-	display: flex;
-	height: 48px;
-	flex-shrink: 0;
-	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
-	margin-top: 8px;
-	padding: 0 16px 0 18px;
-	border-bottom: 1px solid var(--line-subtle);
-}
-.pull-tabs {
-	position: relative;
-	display: flex;
-	align-items: center;
-	gap: 2px;
-	isolation: isolate;
-}
-.pull-tab {
-	position: relative;
-	display: inline-flex;
-	height: 30px;
-	align-items: center;
-	gap: 7px;
-	padding: 0 10px;
-	border-radius: 8px;
-	color: var(--text-muted);
-	font-size: var(--font-size-label);
-	outline: none;
-	transition: color var(--dur-hover) ease-out;
-}
-.pull-tab:hover,
-.pull-tab[aria-current] {
-	color: var(--text-primary);
-}
-.pull-tab[aria-current] {
-	font-weight: 500;
-}
-.pull-tab:focus-visible {
-	box-shadow: var(--focus-ring);
-}
-.pull-tab-count {
-	color: var(--text-faint);
-	font-size: 12px;
-	font-variant-numeric: tabular-nums;
-	font-weight: 400;
-}
-.pull-tab-count[data-tone='bugs'] {
-	color: var(--sev-high);
-}
 .pull-tools {
 	display: flex;
 	min-width: 0;

@@ -36,9 +36,9 @@ export function PullHeader({ page }: { page: PullPage }) {
 	const by = author(page.pull.author);
 
 	return (
-		<header className="pull-head">
-			<h1 className="pull-title">
-				<span className="pull-title-text">{page.pull.title}</span>
+		<header className="page-head">
+			<h1 className="page-title">
+				<span className="page-title-text">{page.pull.title}</span>
 				<span className="pull-title-number">#{page.pull.number}</span>
 			</h1>
 			<div className="pull-facts">
