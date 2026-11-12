@@ -284,8 +284,6 @@ function slowStub(ms: number): { peak: () => number } {
 const manyUnits = (count: number) => Array.from({ length: count }, (_, i) => addedFile(`d${i}/f.ts`, 200)).join('');
 
 test('unit calls run at most as many at once as reviewers do', async () => {
-	setReviewOverrides({ ...getStoredSettings(), maxDiffChars: 500_000 });
-
 	const { peak } = slowStub(20);
 	const intent = await distill(manyUnits(20));
 
@@ -300,7 +298,6 @@ test('a unit call that found no model slot in time is made again and briefed', a
 
 	policy.perCallDeadlineMs = 500;
 	useTestModel(2);
-	setReviewOverrides({ ...getStoredSettings(), maxDiffChars: 500_000 });
 	slowStub(200);
 
 	try {

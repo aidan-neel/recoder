@@ -2,7 +2,12 @@ import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { CoverageLedger } from '../../../../src/review/pipeline/coverage';
 import { runAdaptiveReview, type ReviewProgressCheckpoint } from '../../../../src/review/pipeline/harness';
+import { createRun } from '../../../../src/review/pipeline/harness/context';
+import { applyDiffLimits } from '../../../../src/review/pipeline/harness/diff-limits';
+import { buildInventory } from '../../../../src/review/pipeline/inventory';
+import { patchChars } from '../../../../src/review/pipeline/units';
 import { initReviewSettings, setReviewOverrides } from '../../../../src/review/session/review-settings';
 import { addedFile, restoreAfterEach, stubModel, useTestModel } from '../harness-fixtures';
 
@@ -13,6 +18,8 @@ const savedMaxDiffChars = process.env.RECODER_REVIEW_MAX_DIFF_CHARS;
 
 beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-diff-limits-'));
+	delete process.env.RECODER_REVIEW_MAX_FILES;
+	delete process.env.RECODER_REVIEW_MAX_DIFF_CHARS;
 });
 
 afterEach(() => {
@@ -234,4 +241,36 @@ test('a resumed checkpoint preserves the diff-limit omissions recorded at the st
 	const resumed = await runAdaptiveReview({ diff, sandboxPath: null, resume: saved });
 
 	expect(resumed.context?.omitted).toEqual(saved?.received?.omitted);
+});
+
+test('with nothing set, a context built from 25 reviewable files and 100,000 patch characters omits nothing', () => {
+	initReviewSettings();
+	useTestModel();
+
+	const diff = Array.from({ length: 25 }, (_, index) =>
+		addedFile(`src/file-${String(index + 1).padStart(2, '0')}.ts`, 40)
+	).join('');
+
+	const run = createRun({ diff, sandboxPath: null });
+	const totalChars = run.inventory.files.reduce((sum, file) => sum + patchChars(run.inventory, file), 0);
+
+	expect(run.inventory.files).toHaveLength(25);
+	expect(totalChars).toBeGreaterThanOrEqual(100_000);
+	expect(run.received.omitted).toBeUndefined();
+	expect(run.inventory.files.every((file) => !file.excludeReason)).toBe(true);
+	expect(run.coverage.summary().excluded).toBe(0);
+});
+
+test('capping files refreshes inventory flags from the remaining reviewable files', () => {
+	const codeInventory = buildInventory(addedFile('src/app.ts', 4));
+
+	expect(codeInventory.executable).toBe(true);
+	applyDiffLimits(codeInventory, new CoverageLedger(), { maxFiles: 0, maxDiffChars: 600_000 });
+	expect(codeInventory.executable).toBe(false);
+
+	const docsInventory = buildInventory(addedFile('docs/guide.md', 4));
+
+	expect(docsInventory.docsOnly).toBe(true);
+	applyDiffLimits(docsInventory, new CoverageLedger(), { maxFiles: 0, maxDiffChars: 600_000 });
+	expect(docsInventory.docsOnly).toBe(false);
 });

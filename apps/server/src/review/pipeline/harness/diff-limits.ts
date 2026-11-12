@@ -1,7 +1,7 @@
-import { byCodePoint, type ContextOmission, type DiffHunk, type DiffLine } from '@recoder/shared';
+import { byCodePoint, type ContextOmission, type DiffHunk } from '@recoder/shared';
 import type { CoverageLedger } from '../coverage.js';
-import type { InventoryFile, ReviewInventory } from '../inventory.js';
-import { patchLineChars } from '../units.js';
+import { inventoryFlags, type InventoryFile, type ReviewInventory } from '../inventory.js';
+import { linesWithin, patchLineChars } from '../units.js';
 
 /** Priority order when `maxFiles` or `maxDiffChars` trims the change: source code first, docs last. */
 const CLASS_RANK: Record<InventoryFile['classification'], number> = {
@@ -17,16 +17,25 @@ const CLASS_RANK: Record<InventoryFile['classification'], number> = {
 
 type InventoryHunk = InventoryFile['hunks'][number];
 
+type LineRange = { startLine?: number; endLine?: number };
+
 /** Line range of a hunk on the new side, or on the old side for a deletion. */
-function hunkRange(hunk: Pick<InventoryHunk, 'oldStart' | 'oldCount' | 'newStart' | 'newCount'>): {
-	startLine?: number;
-	endLine?: number;
-} {
+function hunkRange(hunk: Pick<InventoryHunk, 'oldStart' | 'oldCount' | 'newStart' | 'newCount'>): LineRange {
 	const newSide = hunk.newCount > 0 || hunk.newStart > 0;
 	const start = newSide ? hunk.newStart : hunk.oldStart;
 	const count = newSide ? hunk.newCount : hunk.oldCount;
 
 	return start > 0 ? { startLine: start, endLine: start + Math.max(count - 1, 0) } : {};
+}
+
+/** Line range of the tail removed when `clipFirstHunk` keeps only the leading lines of a hunk. */
+function clippedRange(origRange: LineRange, keptRange: LineRange): LineRange {
+	if (origRange.startLine === undefined || origRange.endLine === undefined) return {};
+
+	const startLine =
+		keptRange.endLine !== undefined ? Math.min(keptRange.endLine + 1, origRange.endLine) : origRange.startLine;
+
+	return { startLine, endLine: origRange.endLine };
 }
 
 /** Patch characters in one hunk of the diff. */
@@ -56,30 +65,23 @@ function omitWholeFile(
 	}
 }
 
+interface FirstHunkClip {
+	inventory: ReviewInventory;
+	file: InventoryFile;
+	invHunk: InventoryHunk;
+	diffHunk: DiffHunk;
+	maxChars: number;
+	why: string;
+	coverage: CoverageLedger;
+	omitted: ContextOmission[];
+}
+
 /** Clips an oversized first hunk to `maxChars` so a single-hunk diff over the cap still gets reviewed within the cap. */
-function clipFirstHunk(
-	inventory: ReviewInventory,
-	file: InventoryFile,
-	invHunk: InventoryHunk,
-	diffHunk: DiffHunk,
-	maxChars: number,
-	why: string,
-	coverage: CoverageLedger,
-	omitted: ContextOmission[]
-): void {
+function clipFirstHunk(clip: FirstHunkClip): void {
+	const { inventory, file, invHunk, diffHunk, maxChars, why, coverage, omitted } = clip;
 	const oldId = invHunk.id;
 	const origRange = hunkRange(invHunk);
-	const kept: DiffLine[] = [];
-	let used = 0;
-
-	for (const line of diffHunk.lines) {
-		const chars = patchLineChars(line);
-
-		if (used + chars <= maxChars) {
-			kept.push(line);
-			used += chars;
-		} else break;
-	}
+	const kept = linesWithin(diffHunk.lines, maxChars);
 
 	if (kept.length === 0 && diffHunk.lines.length > 0) {
 		const first = diffHunk.lines[0];
@@ -101,16 +103,7 @@ function clipFirstHunk(
 	inventory.hunksById.delete(oldId);
 	inventory.hunksById.set(invHunk.id, { file, hunk: invHunk });
 
-	const keptRange = hunkRange(invHunk);
-
-	const range =
-		origRange.startLine !== undefined && origRange.endLine !== undefined
-			? {
-					startLine:
-						keptRange.endLine !== undefined ? Math.min(keptRange.endLine + 1, origRange.endLine) : origRange.startLine,
-					endLine: origRange.endLine
-				}
-			: {};
+	const range = clippedRange(origRange, hunkRange(invHunk));
 
 	coverage.exclude(`${oldId}#diff-cap`, file.path, why);
 	omitted.push({ kind: 'diff', path: file.path, ...range, reason: 'diff-cap', why });
@@ -140,16 +133,6 @@ function syncKeptHunks(
 		diff.additions = file.additions;
 		diff.deletions = file.deletions;
 	}
-}
-
-const EXECUTABLE_CLASSES = new Set<InventoryFile['classification']>(['source', 'test', 'config']);
-
-/** Recomputes `executable` and `docsOnly` on the inventory after limits exclude files. */
-function refreshInventoryFlags(inventory: ReviewInventory): void {
-	const active = inventory.files.filter((entry) => !entry.excludeReason);
-
-	inventory.executable = active.some((entry) => EXECUTABLE_CLASSES.has(entry.classification));
-	inventory.docsOnly = active.length > 0 && active.every((entry) => entry.classification === 'docs');
 }
 
 /**
@@ -199,7 +182,17 @@ export function applyDiffLimits(
 				keptDiff.push(diffHunk);
 				usedChars += chars;
 			} else if (usedChars === 0 && keptInv.length === 0 && limits.maxDiffChars > 0) {
-				clipFirstHunk(inventory, file, invHunk, diffHunk, limits.maxDiffChars, diffReason, coverage, omitted);
+				clipFirstHunk({
+					inventory,
+					file,
+					invHunk,
+					diffHunk,
+					maxChars: limits.maxDiffChars,
+					why: diffReason,
+					coverage,
+					omitted
+				});
+
 				keptInv.push(invHunk);
 				keptDiff.push(diffHunk);
 				usedChars = limits.maxDiffChars;
@@ -219,7 +212,7 @@ export function applyDiffLimits(
 		}
 	}
 
-	if (omitted.length) refreshInventoryFlags(inventory);
+	if (omitted.length) Object.assign(inventory, inventoryFlags(inventory.files));
 
 	return omitted;
 }

@@ -42,6 +42,16 @@ export function patchLineChars(line: DiffLine): number {
 	return line.text.length + 2;
 }
 
+/** The first lines of a hunk that fit in `chars`. */
+export function linesWithin(lines: DiffLine[], chars: number): DiffLine[] {
+	let left = chars;
+	let count = 0;
+
+	while (count < lines.length && patchLineChars(lines[count]) <= left) left -= patchLineChars(lines[count++]);
+
+	return lines.slice(0, count);
+}
+
 /** Patch characters in one file of the diff, counted the way the evidence store pages them. */
 export function patchChars(inventory: ReviewInventory, file: Pick<InventoryFile, 'path'>): number {
 	const diff = inventory.diffs.find((entry) => entry.path === file.path);
