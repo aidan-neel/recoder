@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { AutoReviewPayload } from '@recoder/shared';
 import { autoReviewPatchSchema, readAutoReviewSettings, saveAutoReviewSettings } from '../forge/watch/settings';
 import { autoReviewStatus, checkNow, restartWatcher } from '../forge/watch/watcher';
+import { settingsOperation } from '../storage/backend';
 
 const WEBHOOK_PATHS: AutoReviewPayload['webhookPaths'] = {
 	gitlab: '/api/webhooks/gitlab',
@@ -34,7 +35,7 @@ app.put('/', async (c) => {
 app.post('/check', async (c) => {
 	await checkNow();
 
-	return c.json(await payload());
+	return c.json(await settingsOperation(payload));
 });
 
 export default app;

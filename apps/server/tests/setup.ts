@@ -9,6 +9,8 @@ function isolateStorage(): void {
 	writeFileSync(join(process.env.RECODER_DATA_DIR, 'tokens.json'), '{}', { mode: 0o600 });
 	delete process.env.GH_TOKEN;
 	delete process.env.GITLAB_TOKEN;
+	delete process.env.RECODER_DATABASE_URL;
+	delete process.env.RECODER_INSTANCE_ID;
 }
 
 /** Never start the developer's real OpenCode or Claude Code (or touch their logins); agent tests bring a fake one. */

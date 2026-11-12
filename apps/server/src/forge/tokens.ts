@@ -1,10 +1,17 @@
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Provider } from '@recoder/shared';
+import { z } from 'zod';
+import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../config/shared-settings';
 import { serverDataDir } from '../util/data-dir';
 import { getGitlabHost, hostOfRepoUrl } from './gitlab-host';
 
 type Tokens = Partial<Record<Provider, string>>;
+
+const tokensSchema = z.object({ github: z.string().optional(), gitlab: z.string().optional() }).transform((tokens) => ({
+	...(tokens.github ? { github: tokens.github } : {}),
+	...(tokens.gitlab ? { gitlab: tokens.gitlab } : {})
+}));
 
 function tokenFile(): string {
 	return join(serverDataDir(), 'tokens.json');
@@ -39,6 +46,12 @@ function readFileTokens(file: string): Tokens | undefined {
 
 /** Replace atomically: failed saves leave the previous credentials intact. */
 function persist(tokens: Tokens): void {
+	if (sharedSettingsActive()) {
+		writeSharedSetting('tokens', tokens);
+
+		return;
+	}
+
 	const file = tokenFile();
 	const temporary = file + '.' + crypto.randomUUID() + '.tmp';
 
@@ -67,6 +80,8 @@ function persist(tokens: Tokens): void {
  * one. An empty primary is intentional (disconnect), so legacy tokens never come back.
  */
 function readStored(): Tokens {
+	if (sharedSettingsActive()) return tokensSchema.parse(readSharedSetting('tokens') ?? {});
+
 	const primary = readFileTokens(tokenFile());
 
 	if (primary !== undefined) return primary;

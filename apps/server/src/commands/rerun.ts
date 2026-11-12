@@ -4,11 +4,13 @@ import { flushReviewEvents, emitReviewEvent } from '../review/session/events';
 import type { ReviewCheckpoint } from '../review/session/review-checkpoint';
 import { db, reviewCheckpoints, reviewProgress, reviewReplays } from '../store';
 import { runReviewPipeline } from './pipeline';
+import { coordinator, storageTransaction } from '../storage/backend';
+import { enqueueCommand } from '../review/runtime/inbox';
 
 type Restart = 'continue' | 'rerun' | 'replay';
 
-function requireRestartable(current: Review | undefined, action: Restart): Review {
-	if (!current) throw new Error('review not found');
+async function claimRestart(reviewId: string, action: Restart): Promise<Review> {
+	if (!(await db.reviews.get(reviewId))) throw new Error('review not found');
 
 	if (!isReviewConfigured()) {
 		const phrase =
@@ -21,17 +23,13 @@ function requireRestartable(current: Review | undefined, action: Restart): Revie
 		throw new Error(`Add a reviewer model in settings before ${phrase}.`);
 	}
 
-	if (action === 'continue' && current.status !== 'failed') throw new Error('Only a failed review can be continued.');
-	if (action === 'rerun' && current.status !== 'passed' && current.status !== 'failed')
-		throw new Error('This review is already running.');
-	if (action === 'replay' && current.status !== 'passed') throw new Error('Only a passed review can be replayed.');
+	const next = await db.reviews.update(reviewId, (current) => {
+		if (!current) throw new Error('review not found');
+		if (action === 'continue' && current.status !== 'failed') throw new Error('Only a failed review can be continued.');
+		if (action === 'rerun' && current.status !== 'passed' && current.status !== 'failed')
+			throw new Error('This review is already running.');
+		if (action === 'replay' && current.status !== 'passed') throw new Error('Only a passed review can be replayed.');
 
-	return current;
-}
-
-async function claimRestart(reviewId: string, action: Restart): Promise<Review> {
-	const next = await db.reviews.update(reviewId, (stored) => {
-		const current = requireRestartable(stored, action);
 		const now = new Date().toISOString();
 
 		return {
@@ -47,7 +45,7 @@ async function claimRestart(reviewId: string, action: Restart): Promise<Review> 
 	return next;
 }
 
-function requeue(review: Review, reset: boolean): Review {
+async function requeue(review: Review, reset: boolean): Promise<Review> {
 	const reviewId = review.id;
 
 	emitReviewEvent(reviewId, {
@@ -57,7 +55,8 @@ function requeue(review: Review, reset: boolean): Review {
 		data: reset ? { stage: 'checkout', reset: true } : { stage: 'checkout', outcome: null, failure: null }
 	});
 
-	void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
+	await flushReviewEvents(reviewId);
+	if (!coordinator) void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
 
 	return review;
 }
@@ -80,9 +79,13 @@ async function startOver(review: Review, checkpoint: ReviewCheckpoint | null): P
  * the review runs again from the start in the same session.
  */
 export async function continueReviewSession(reviewId: string): Promise<Review> {
-	const review = await claimRestart(reviewId, 'continue');
+	return storageTransaction(async (transaction) => {
+		if (transaction) await enqueueCommand(transaction, reviewId, { id: crypto.randomUUID(), kind: 'continue' });
 
-	return requeue(review, false);
+		const review = await claimRestart(reviewId, 'continue');
+
+		return requeue(review, false);
+	});
 }
 /**
  * Review a finished session again from the start, in place, because the
@@ -90,9 +93,13 @@ export async function continueReviewSession(reviewId: string): Promise<Review> {
  * run's brief. The last run's findings, units and checkpoint are dropped.
  */
 export async function rerunReviewSession(reviewId: string): Promise<Review> {
-	const review = await claimRestart(reviewId, 'rerun');
+	return storageTransaction(async (transaction) => {
+		if (transaction) await enqueueCommand(transaction, reviewId, { id: crypto.randomUUID(), kind: 'rerun' });
 
-	return startOver(review, null);
+		const review = await claimRestart(reviewId, 'rerun');
+
+		return startOver(review, null);
+	});
 }
 /**
  * Replay a passed review from the checkpoint it kept. The reviewers'
@@ -102,15 +109,19 @@ export async function rerunReviewSession(reviewId: string): Promise<Review> {
  * the disproved ones included.
  */
 export async function replayReviewSession(reviewId: string, reverify: boolean): Promise<Review> {
-	requireRestartable(await db.reviews.get(reviewId), 'replay');
+	if (!(await db.reviews.get(reviewId))) throw new Error('review not found');
 
-	const kept = await reviewReplays.get(reviewId);
+	return storageTransaction(async (transaction) => {
+		if (transaction) await enqueueCommand(transaction, reviewId, { id: crypto.randomUUID(), kind: 'replay' });
 
-	if (!kept) throw new Error('This review kept nothing to replay.');
+		const kept = await reviewReplays.get(reviewId);
 
-	const review = await claimRestart(reviewId, 'replay');
+		if (!kept) throw new Error('This review kept nothing to replay.');
 
-	return startOver(review, reverify ? withVerdictsCleared(kept) : kept);
+		const review = await claimRestart(reviewId, 'replay');
+
+		return startOver(review, reverify ? withVerdictsCleared(kept) : kept);
+	});
 }
 
 /** The checkpoint with every verifier's verdict, and what it made publishable, undone, so each candidate is verified again. */

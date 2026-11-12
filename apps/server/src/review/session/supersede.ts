@@ -1,5 +1,7 @@
 import { db } from '../../store';
 import { getReviewControl } from './review-control';
+import { coordinator, storageTransaction } from '../../storage/backend';
+import { enqueueCommand } from '../runtime/inbox';
 
 /**
  * A newer push or mention makes an automatic review (webhook or watcher) of
@@ -12,7 +14,14 @@ export async function supersedeAutomaticReviews(repoId: string, prNumber: number
 		const inFlight = review.status === 'queued' || review.status === 'running';
 
 		if (review.trigger && samePr && inFlight) {
-			getReviewControl(review.id)?.cancel('Superseded by a newer automatic review.');
+			const reason = 'Superseded by a newer automatic review.';
+
+			if (coordinator) {
+				await storageTransaction(async (transaction) => {
+					if (!transaction) throw new Error('Shared review coordination is not configured.');
+					await enqueueCommand(transaction, review.id, { id: crypto.randomUUID(), kind: 'cancel', reason });
+				});
+			} else getReviewControl(review.id)?.cancel(reason);
 		}
 	}
 }

@@ -17,6 +17,8 @@ import runs from './routes/runs';
 import webhooks from './routes/webhooks';
 import { VERSION } from './version';
 import { ModelConfigError } from './models/models';
+import { postgres, settingsOperation } from './storage/backend';
+import { SharedSettingsConflictError } from './config/shared-settings';
 
 /** CORS for the web app, which revalidates the review diff by ETag. */
 const corsOptions = {
@@ -29,7 +31,9 @@ const corsOptions = {
 /** Any route that needs a model says what to set up instead of a bare 500. */
 function handleError(err: Error, c: Context): Response {
 	if (err instanceof ModelConfigError) return c.json({ error: err.message, action: 'settings' }, 409);
-	console.error('[recoder] unhandled error', err);
+	if (err instanceof SharedSettingsConflictError) return c.json({ error: err.message }, 409);
+	if (postgres) console.error('[recoder] shared API operation failed', err.name);
+	else console.error('[recoder] unhandled error', err);
 
 	return c.json({ error: 'internal server error' }, 500);
 }
@@ -37,6 +41,8 @@ function handleError(err: Error, c: Context): Response {
 export const app = new Hono();
 
 app.use('*', logger());
+
+app.use('/api/*', async (_c, next) => settingsOperation(next));
 
 app.use('/api/reviews/:id/*', async (c, next) => {
 	const id = c.req.param('id');

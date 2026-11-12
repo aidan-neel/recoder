@@ -2,6 +2,7 @@ import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { AUTO_REVIEW_INTERVALS, DEFAULT_AUTO_REVIEW_SETTINGS, type AutoReviewSettings } from '@recoder/shared';
+import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
 import { serverDataDir } from '../../util/data-dir.js';
 
 /** A handle is one `@word`: no spaces, so it can be matched as a whole word in a comment. */
@@ -30,6 +31,10 @@ function settingsFile(): string {
 
 /** The saved settings over the defaults. A missing or unreadable file is the defaults: the watcher stays off. */
 export function readAutoReviewSettings(): AutoReviewSettings {
+	if (sharedSettingsActive()) {
+		return { ...DEFAULT_AUTO_REVIEW_SETTINGS, ...autoReviewPatchSchema.parse(readSharedSetting('auto-review') ?? {}) };
+	}
+
 	try {
 		const parsed = autoReviewPatchSchema.safeParse(JSON.parse(readFileSync(settingsFile(), 'utf8')));
 
@@ -42,6 +47,13 @@ export function readAutoReviewSettings(): AutoReviewSettings {
 /** Merge a validated patch over the saved settings and write them through a temp file. */
 export function saveAutoReviewSettings(patch: z.infer<typeof autoReviewPatchSchema>): AutoReviewSettings {
 	const next = { ...readAutoReviewSettings(), ...patch };
+
+	if (sharedSettingsActive()) {
+		writeSharedSetting('auto-review', next);
+
+		return next;
+	}
+
 	const file = settingsFile();
 	const temporary = `${file}.${process.pid}.tmp`;
 

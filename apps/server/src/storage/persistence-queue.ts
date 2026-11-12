@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { persistenceScope } from './persistence-scope';
 
 export class PersistenceQueue {
 	private pending: Promise<unknown> = Promise.resolve();
@@ -34,18 +35,19 @@ class PersistenceQueues {
 	private readonly queues = new Map<string, PersistenceQueue>();
 
 	for(id: string): PersistenceQueue {
-		let queue = this.queues.get(id);
+		const key = JSON.stringify([persistenceScope(), id]);
+		let queue = this.queues.get(key);
 
 		if (!queue) {
 			queue = new PersistenceQueue();
-			this.queues.set(id, queue);
+			this.queues.set(key, queue);
 		}
 
 		return queue;
 	}
 
 	async drain(id: string): Promise<void> {
-		await this.queues.get(id)?.drain();
+		await this.queues.get(JSON.stringify([persistenceScope(), id]))?.drain();
 	}
 
 	async drainAll(): Promise<void> {
@@ -53,7 +55,7 @@ class PersistenceQueues {
 	}
 
 	delete(id: string): void {
-		this.queues.delete(id);
+		this.queues.delete(JSON.stringify([persistenceScope(), id]));
 	}
 }
 

@@ -15,7 +15,8 @@ const NOT_FLAGS = new Set([
 	'RECODER_WORKDIR',
 	'RECODER_OPENCODE_BIN',
 	'RECODER_REVIEW_API_KEY',
-	'RECODER_REVIEW_BASE_URL'
+	'RECODER_REVIEW_BASE_URL',
+	'RECODER_INSTANCE_ID'
 ]);
 
 /** A name that holds a key, an endpoint or a host path, by its suffix; never recorded. */
@@ -23,6 +24,9 @@ const HIDDEN = /_(KEY|TOKEN|SECRET|PASSWORD|URL|BIN|DIR|PATH)$/;
 
 /** The sandbox's sizing follows the host's capacity, so it is recorded with the host and never compared. */
 const HOST_FLAGS = new Set([
+	'RECODER_JOB_LEASE_MS',
+	'RECODER_JOB_POLL_MS',
+	'RECODER_JOB_CONCURRENCY',
 	'RECODER_SANDBOX_PREP',
 	'RECODER_SANDBOX_RUNS',
 	'RECODER_SANDBOX_CPUS',

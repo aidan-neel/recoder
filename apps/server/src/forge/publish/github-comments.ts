@@ -1,11 +1,13 @@
 import { GhError } from '../cli';
 import { githubRest, githubToken } from '../github-rest';
 import type { PostedComment, PullCommentForge } from './forge';
+import { PublishConflictError } from './forge';
+import { z } from 'zod';
 
 /** GitHub's limit on a comment body, in characters. */
 const GITHUB_LIMIT = 65_536;
 
-/** Pages of issue comments searched for Recoder's marker; a pull request with more than 1,000 comments gets a new one. */
+/** The maximum pages searched before refusing an incomplete marker lookup. */
 const MAX_PAGES = 10;
 
 interface GithubComment {
@@ -36,23 +38,28 @@ function requireToken(): void {
 export function githubComments(slug: string, prNumber: number, headSha: string): PullCommentForge {
 	const repo = `repos/${slug}`;
 
+	const rowsSchema = z.array(
+		z.object({ id: z.number(), html_url: z.string(), body: z.string().nullable().optional() })
+	);
+
+	async function find(path: string, marker: string): Promise<PostedComment | null> {
+		for (let page = 1; page <= MAX_PAGES; page++) {
+			const rows = rowsSchema.parse(await githubRest(`${path}?per_page=100&page=${page}`));
+			const match = rows.find((row) => row.body?.includes(marker));
+
+			if (match) return posted(match);
+			if (rows.length < 100) return null;
+		}
+
+		throw new PublishConflictError(
+			'The pull request has too many comments to establish whether Recoder already posted. Check its comments before retrying.'
+		);
+	}
+
 	return {
 		limit: GITHUB_LIMIT,
-
-		async find(marker) {
-			for (let page = 1; page <= MAX_PAGES; page++) {
-				const rows = (await githubRest(
-					`${repo}/issues/${prNumber}/comments?per_page=100&page=${page}`
-				)) as GithubComment[];
-
-				const match = rows.find((row) => typeof row.body === 'string' && row.body.includes(marker));
-
-				if (match) return posted(match);
-				if (rows.length < 100) break;
-			}
-
-			return null;
-		},
+		find: (marker) => find(`${repo}/issues/${prNumber}/comments`, marker),
+		findInline: (marker) => find(`${repo}/pulls/${prNumber}/comments`, marker),
 
 		async create(body) {
 			requireToken();

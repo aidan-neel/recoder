@@ -6,6 +6,9 @@ import { withReviewMetrics } from '../../models/metrics';
 import { fetchPull } from '../../forge/pull-preview';
 import { modelFailure } from '../../models/model-failure';
 import { keyFor, pending, recordChatMessage } from './chat-replies';
+import { coordinator } from '../../storage/backend';
+import { currentLease } from '../runtime/ownership';
+import { isRecoverableExit } from '../runtime/execution';
 
 /**
  * Interactive sessions open on the diff: fetch the PR's diff without a
@@ -16,6 +19,12 @@ import { keyFor, pending, recordChatMessage } from './chat-replies';
  * and can be stopped like any reply.
  */
 export async function prepareDraftSession(reviewId: string, opener: boolean): Promise<void> {
+	if (coordinator && !currentLease()) {
+		await coordinator.send(reviewId, { id: crypto.randomUUID(), kind: 'prepare-draft', opener });
+
+		return;
+	}
+
 	const review = await db.reviews.get(reviewId);
 	const repo = review && (await db.repos.get(review.repoId));
 
@@ -75,7 +84,7 @@ async function startDraftOpener(
 
 	recordChatMessage(reviewId, reply);
 
-	void withReviewMetrics(reviewId, 'discussion', async () => {
+	await withReviewMetrics(reviewId, 'discussion', async () => {
 		let lastUpdate = 0;
 
 		const flush = async (status: 'streaming' | 'done' | 'error') => {
@@ -130,6 +139,8 @@ async function startDraftOpener(
 			reply.text = reply.text.trim();
 			await flush('done');
 		} catch (error) {
+			if (isRecoverableExit(error) || isRecoverableExit(controller.signal.reason)) throw error;
+
 			const partial = reply.text.trim();
 
 			reply.text =
@@ -142,5 +153,8 @@ async function startDraftOpener(
 		} finally {
 			pending.delete(key);
 		}
-	}).catch((error) => console.error('[chat] could not persist review opener', error));
+	}).catch((error) => {
+		if (currentLease()) throw error;
+		console.error('[chat] could not persist review opener', error);
+	});
 }

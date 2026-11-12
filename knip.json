@@ -7,7 +7,8 @@
 	"workspaces": {
 		"apps/server": {
 			"entry": [
-				"tests/**/*.test.ts"
+				"tests/**/*.test.ts",
+				"tests/integration/publication-lifetime.ts"
 			],
 			"project": [
 				"src/**/*.ts",

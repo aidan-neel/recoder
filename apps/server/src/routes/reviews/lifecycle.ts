@@ -19,6 +19,10 @@ import {
 } from '../../store';
 import { parseBody } from '../parse-body';
 import { requireReview } from './shared';
+import { coordinator, storageTransaction } from '../../storage/backend';
+import { enqueueCommand } from '../../review/runtime/inbox';
+import { requestReviewControl } from '../../review/runtime/requests';
+import { ReviewChatError } from '../../review/chat/chat-input';
 
 const createReviewSchema = z.object({
 	repoId: z.string().min(1),
@@ -120,21 +124,37 @@ app.delete('/:id', async (c) => {
 
 	if (review instanceof Response) return review;
 
-	getReviewControl(review.id)?.cancel();
-	await db.reviews.delete(review.id);
-	cancelReviewChats(review.id);
-	await reviewDiffs.delete(review.id);
-	await reviewMetrics.delete(review.id);
-	await reviewCheckpoints.delete(review.id);
-	await reviewReplays.delete(review.id);
-	reviewSandboxes.delete(review.id);
-	await clearReviewEvents(review.id);
+	return storageTransaction(async (transaction) => {
+		if (transaction) await enqueueCommand(transaction, review.id, { id: crypto.randomUUID(), kind: 'cancel' });
+		getReviewControl(review.id)?.cancel();
+		await db.reviews.delete(review.id);
+		cancelReviewChats(review.id);
+		await reviewDiffs.delete(review.id);
+		await reviewMetrics.delete(review.id);
+		await reviewCheckpoints.delete(review.id);
+		await reviewReplays.delete(review.id);
+		reviewSandboxes.delete(review.id);
+		await clearReviewEvents(review.id);
 
-	return c.json({ deleted: true });
+		return c.json({ deleted: true });
+	});
 });
+
+async function sharedControl(c: Context, kind: 'cancel' | 'pause' | 'resume'): Promise<Response> {
+	try {
+		await requestReviewControl(c.req.param('id') ?? '', kind);
+
+		return c.json(kind === 'cancel' ? { cancelled: true } : { paused: kind === 'pause' });
+	} catch (error) {
+		if (error instanceof ReviewChatError) return c.json({ error: error.message }, error.status);
+		throw error;
+	}
+}
 
 /** Stop a running review. Findings so far are kept; it can be restarted. */
 app.post('/:id/cancel', async (c) => {
+	if (coordinator) return sharedControl(c, 'cancel');
+
 	const running = await runningControl(c);
 
 	if (running instanceof Response) return running;
@@ -147,6 +167,8 @@ app.post('/:id/cancel', async (c) => {
 
 /** Hold a running review: in-flight model calls stop and re-run on resume. */
 app.post('/:id/pause', async (c) => {
+	if (coordinator) return sharedControl(c, 'pause');
+
 	const running = await runningControl(c);
 
 	if (running instanceof Response) return running;
@@ -163,6 +185,8 @@ app.post('/:id/pause', async (c) => {
 });
 
 app.post('/:id/resume', async (c) => {
+	if (coordinator) return sharedControl(c, 'resume');
+
 	const running = await runningControl(c);
 
 	if (running instanceof Response) return running;
@@ -209,7 +233,8 @@ app.post('/', async (c) => {
 
 		const review = await createReviewSession(body);
 
-		void prepareDraftSession(review.id, isReviewConfigured());
+		if (coordinator) await prepareDraftSession(review.id, isReviewConfigured());
+		else void prepareDraftSession(review.id, isReviewConfigured());
 
 		return c.json(review, 201);
 	} catch (err) {
