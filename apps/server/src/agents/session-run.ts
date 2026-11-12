@@ -1,7 +1,7 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CliAgent } from './cli-process';
+import { CliAgent, cliOutput, removeScratchDir } from './cli-process';
 import type { AgentRunOptions } from './contract';
 import { ProcessRun } from './process-run';
 
@@ -54,8 +54,7 @@ export abstract class SessionRun<Files> extends ProcessRun {
 
 	/** Deletes the run's files and the session the CLI saved for it, and no other. */
 	protected override async cleanUp(): Promise<void> {
-		this.host.scratch.delete(this.root);
-		await rm(this.root, { recursive: true, force: true });
+		await removeScratchDir(this.host.scratch, this.root);
 		if (this.session) await this.host.forget(this.session);
 	}
 }
@@ -74,5 +73,18 @@ export abstract class SessionCliAgent extends CliAgent {
 			scratch: this.scratch,
 			forget: (session) => this.forget(path, session)
 		};
+	}
+
+	/**
+	 * A short CLI command under this adapter's environment, killed after `timeoutMs` or when `signal` aborts.
+	 * See {@link cliOutput}.
+	 */
+	protected output(
+		path: string,
+		args: string[],
+		timeoutMs: number,
+		signal?: AbortSignal
+	): Promise<{ code: number; stdout: string; stderr: string }> {
+		return cliOutput([path, ...args], { env: this.childEnv(), timeoutMs, signal });
 	}
 }

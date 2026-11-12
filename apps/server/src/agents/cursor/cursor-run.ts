@@ -1,8 +1,6 @@
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { TokenUsage } from '@recoder/shared';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
+import { removeScratchDir, scratchDir } from '../cli-process';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
 import type { CliExit } from '../cli-stream';
 import { ProcessRun } from '../process-run';
@@ -83,9 +81,7 @@ export class CursorRun extends ProcessRun {
 	}
 
 	static async open(host: CursorHost, options: AgentRunOptions): Promise<CursorRun> {
-		const root = await mkdtemp(join(tmpdir(), 'recoder-cursor-run-'));
-
-		host.scratch.add(root);
+		const root = await scratchDir(host.scratch, 'recoder-cursor-run-');
 
 		const run = new CursorRun(host, options, cursorPlace(root, host.env));
 
@@ -135,8 +131,7 @@ export class CursorRun extends ProcessRun {
 
 	/** Deletes the run's scratch dir, which holds the isolated config, its chats and the data dir. */
 	protected override async cleanUp(): Promise<void> {
-		this.host.scratch.delete(this.place.root);
-		await rm(this.place.root, { recursive: true, force: true });
+		await removeScratchDir(this.host.scratch, this.place.root);
 	}
 
 	private args(): string[] {

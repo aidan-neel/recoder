@@ -1,11 +1,12 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
+import { removeScratchDir } from '../cli-process';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
 import { ProcessRun } from '../process-run';
 import { runPiCall, type PiHost } from './pi-call';
 import { PI_DEFAULT_EFFORT, printArgs } from './pi-process';
-import { makeScratch, removeScratch, type PiScratch } from './pi-scratch';
+import { makeScratch, type PiScratch } from './pi-scratch';
 import { SessionTail } from './pi-session';
 import { NO_TOOLS_ARGS, writeToolBridge } from './pi-tool-bridge';
 
@@ -81,7 +82,7 @@ export class PiRun extends ProcessRun {
 
 	/** Deletes the run's scratch dir, which holds the only session Pi saved for it. */
 	protected override async cleanUp(): Promise<void> {
-		await removeScratch(this.host.scratch, this.files);
+		await removeScratchDir(this.host.scratch, this.files.root);
 	}
 
 	/** Makes the empty working directory and, when the run has tools, writes the tool bridge. */

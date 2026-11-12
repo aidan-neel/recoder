@@ -1,12 +1,20 @@
 import { randomUUID } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import {
+	CliAgent,
+	callDeadline,
+	emptyDirectory,
+	findCli,
+	removeScratchDir,
+	scratchDir,
+	stopOnShutdown
+} from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import { quotedLine } from '../quoted-line';
@@ -86,13 +94,11 @@ export class GrokAgent extends CliAgent {
 	 */
 	async complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
 		const deadline = callDeadline(opts);
-		const scratch = await mkdtemp(join(tmpdir(), 'recoder-grok-'));
+		const scratch = await scratchDir(this.scratch, 'recoder-grok-');
 		const home = join(scratch, 'home');
 		const cwd = join(scratch, 'work');
 		const promptFile = join(scratch, 'prompt.md');
 		const authPath = realAuthPath(this.env);
-
-		this.scratch.add(scratch);
 
 		try {
 			prepareHome(home, authPath);
@@ -117,8 +123,7 @@ export class GrokAgent extends CliAgent {
 		} catch (error) {
 			throw deadline.failure(error, 'Grok Build request failed.');
 		} finally {
-			this.scratch.delete(scratch);
-			await rm(scratch, { recursive: true, force: true });
+			await removeScratchDir(this.scratch, scratch);
 		}
 	}
 

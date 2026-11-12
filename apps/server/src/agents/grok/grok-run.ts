@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
+import { removeScratchDir, scratchDir } from '../cli-process';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
 import { ProcessRun } from '../process-run';
@@ -68,9 +68,8 @@ export class GrokRun extends ProcessRun {
 	}
 
 	static async open(host: GrokHost, options: AgentRunOptions): Promise<GrokRun> {
-		const root = await mkdtemp(join(tmpdir(), 'recoder-grok-run-'));
+		const root = await scratchDir(host.scratch, 'recoder-grok-run-');
 
-		host.scratch.add(root);
 		prepareHome(join(root, 'home'), realAuthPath(host.env));
 		await mkdir(join(root, 'work'), { recursive: true });
 
@@ -136,8 +135,7 @@ export class GrokRun extends ProcessRun {
 
 	/** Deletes the run's whole scratch dir: home (and the sessions it saved), working directory and prompt file. */
 	protected override async cleanUp(): Promise<void> {
-		this.host.scratch.delete(this.place.root);
-		await rm(this.place.root, { recursive: true, force: true });
+		await removeScratchDir(this.host.scratch, this.place.root);
 	}
 
 	private args(): string[] {

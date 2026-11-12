@@ -1,10 +1,9 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { callDeadline, cliOutput, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import { callDeadline, emptyDirectory, findCli, removeScratchDir, scratchDir, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, streamCli } from '../cli-stream';
 import { SessionCliAgent } from '../session-run';
@@ -86,13 +85,11 @@ export class DevinAgent extends SessionCliAgent {
 		if (!path) throw new LlmError(0, `Devin is not installed. Install it with: ${INSTALL}`);
 
 		const deadline = callDeadline(opts);
-		const scratch = await mkdtemp(join(tmpdir(), 'recoder-devin-'));
+		const scratch = await scratchDir(this.scratch, 'recoder-devin-');
 		const promptFile = join(scratch, 'prompt.md');
 		const exportFile = join(scratch, 'export.json');
 		const cwd = await emptyDirectory('devin-empty');
 		let session: string | undefined;
-
-		this.scratch.add(scratch);
 
 		try {
 			const system = systemText(opts);
@@ -125,8 +122,7 @@ export class DevinAgent extends SessionCliAgent {
 			session ??= (await readExport(exportFile))?.session_id;
 			throw deadline.failure(error, 'Devin request failed.');
 		} finally {
-			this.scratch.delete(scratch);
-			await rm(scratch, { recursive: true, force: true });
+			await removeScratchDir(this.scratch, scratch);
 			if (session) await this.forget(path, session);
 		}
 	}
@@ -157,16 +153,6 @@ export class DevinAgent extends SessionCliAgent {
 	 */
 	protected async forget(path: string, session: string): Promise<void> {
 		await this.output(path, ['rm', session, '--force'], STATUS_TIMEOUT_MS);
-	}
-
-	/** Run a short CLI command. See {@link cliOutput}. */
-	private async output(
-		path: string,
-		args: string[],
-		timeoutMs: number,
-		signal?: AbortSignal
-	): Promise<{ code: number; stdout: string }> {
-		return cliOutput([path, ...args], { env: devinEnv(this.env), timeoutMs, signal });
 	}
 
 	/** Run the CLI in an empty directory and read its reply. See {@link streamCli} for how an abort stops it. */
