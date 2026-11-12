@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { claudeCodeError } from '../../src/agents/claude-code/claude-code-reply';
 import { LlmError, isTransientLlmError } from '../../src/models/llm';
-import { modelFailure } from '../../src/models/model-failure';
+import { isUsageLimit, modelFailure } from '../../src/models/model-failure';
 
 test('a signed-out ChatGPT call asks the developer to sign in', () => {
 	expect(
@@ -99,6 +99,15 @@ test('an OpenCode 429 about a spent quota is out of usage for that provider', ()
 	);
 
 	expect(failure.usageLimit).toMatchObject({ provider: 'openai', usageUrl: null });
+});
+
+test("OpenCode Go's quota error, which carries no status, stops the review as out of usage", () => {
+	const error = new LlmError(0, 'AI_APICallError: Go usage limit exceeded');
+
+	expect(isUsageLimit(error, { provider: 'opencode', source: 'opencode-go' })).toBe(true);
+	expect(isUsageLimit(error, { provider: 'openai-compatible', source: 'opencode-go' })).toBe(true);
+	expect(isUsageLimit(error, { provider: 'openai-compatible' })).toBe(false);
+	expect(isUsageLimit(new LlmError(0, 'socket hang up'), { provider: 'opencode', source: 'opencode-go' })).toBe(false);
 });
 
 test('an OpenCode 429 that only throttles requests is not reported as out of usage', () => {

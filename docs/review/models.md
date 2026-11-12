@@ -131,15 +131,16 @@ Stored in the SQLite table `review_metrics` (`reviewMetrics` in `apps/server/src
 - `calls`: every tracked call.
 - `runs`: one `PipelineRun` per pipeline run. Rows written before runs were recorded have none.
 
-`PipelineRun` fields: `index`, `startedAt`, `orchestrator` and `subagent` (the locked model ids, null when the run went unlocked), `lockMisses`.
+`PipelineRun` fields: `index`, `startedAt`, `orchestrator` and `subagent` (the locked model ids, null when the run went unlocked), `lockMisses`, `tokenBudget`, and `history`: which repository history the run received (`RunHistory`: `sources`, the brief's history sources without their text; `dismissals`, the fingerprints of dismissed findings; `topics`, the votes per topic). A part the run never read is absent; one it read and found empty is empty.
 
-`trackTokenCall` in `apps/server/src/models/metrics.ts` opens a call record. `runChat` and the OpenCode agent engine (`apps/server/src/review/pipeline/agent-loop/opencode-relay.ts`) call it. A call is saved only when it runs under `withReviewMetrics` for an existing review.
+`trackTokenCall` in `apps/server/src/models/metrics.ts` opens a call record. `runChat` and the OpenCode agent engine (`apps/server/src/review/pipeline/agent-loop/opencode-relay.ts`) call it. A call is saved only when it runs under `withReviewMetrics` for an existing review. Its `complete()` or `fail(err, secrets)` closes it. An OpenCode prompt that fails before its first step starts (a spent plan, a rejected key) is still saved as one failed call.
 
 A call record (`TokenCall` in `packages/shared/src/metrics.ts`, extended by `RunTokenCall`):
 
 - `id` (UUID), `model`, `provider`.
 - `scope`: `pipeline`, `discussion` or `fix`. Chat counts as `discussion`.
 - `status`: `pending`, `completed` or `failed`.
+- `error`: a failed call's provider error, its last lines with the call's key, key and token shapes, authorization headers and home paths removed (`providerErrorText` in `apps/server/src/models/error-text.ts`).
 - `usage`: `inputTokens`, `outputTokens`, `totalTokens`, `cachedInputTokens`, `cacheWriteInputTokens`, `reasoningOutputTokens`.
 - `apiKeySource`: optional. What paid for a Claude Code call, as the CLI reports it.
 - `run`: index of the pipeline run that made the call. Pipeline calls only.
@@ -193,5 +194,8 @@ Hosted provider keys live in `connections`, by provider id. They are not in the 
 - Backoff: below the ceiling sits an effective limit. A rate-limit error halves it, never below 4 (or the ceiling, if lower). It is cut at most once per 10-second cooldown.
 - Recovery: after the cooldown, each successful call raises the limit by one until it reaches the ceiling.
 - Rate-limit errors are HTTP 429, 529 or an "overloaded" message (`isRateLimitError` in `apps/server/src/models/llm/errors.ts`). A 429 from codex, claude-code or opencode does not count: it means a usage cap or a spent plan.
-- Lowering the limit never revokes a held slot. New callers wait until the active count is under it. A freed slot goes to the oldest waiter.
-- `acquireLlmSlot()` is called only when a call is ready to run. It waits up to the timeout its caller passes. `runChat` passes the call's own budget, capped by its settle time. A wait that times out throws `CapacityError`.
+- Lowering the limit never revokes a held slot. New callers wait until the active count is under it.
+- Fair turns: each review's calls wait in their own lane (`withLlmLane`, opened by `withReviewMetrics`). A freed slot goes to the next lane in round-robin order and to that lane's oldest waiter, so one large review cannot hold back another. Calls made outside a review share one lane.
+- `acquireLlmSlot()` is called only when a call is ready to run. It waits up to the timeout its caller passes. `runChat` passes the call's own budget, capped by its settle time. A wait that times out throws `CapacityError` (`apps/server/src/models/llm/errors.ts`), a failure kind of its own: the model never saw the call.
+- Queue delay: each pipeline run records how long its calls waited for a slot (`queueDelay` on the run and on `GET /api/reviews/:id/metrics`: requests, total and longest wait in milliseconds).
+- Load sweep: `bun run --filter @recoder/server eval:load` runs fake reviews against a fake model server through this limiter at several concurrency levels. It prints throughput, queue delay, review duration and capacity failures per level, and the range where more concurrency still helps. It uses no model, forge or storage. Flags: `--reviews`, `--requests` (per review, sent at once), `--levels` (comma-separated), `--model-parallel`, `--latency` (ms) and `--queue-timeout` (seconds).

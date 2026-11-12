@@ -184,6 +184,19 @@ test('unsafe shared-data combinations fail before an API can scale', () => {
 	expect(manifests().some((doc) => doc.kind === 'PodDisruptionBudget')).toBe(false);
 });
 
+test('API pods run between 1 and 32 reviews at once, never 0, since every pod shares the value', () => {
+	const result = render('--set-string', 'server.env.RECODER_JOB_CONCURRENCY=0');
+
+	expect(result.exitCode).not.toBe(0);
+	expect(result.stderr.toString()).toContain('schema');
+
+	const server = manifests('--set-string', 'server.env.RECODER_JOB_CONCURRENCY=4').find(
+		(doc) => doc.kind === 'Deployment' && doc.metadata.labels['app.kubernetes.io/component'] === 'server'
+	);
+
+	expect(server.spec.template.spec.containers[0].env).toContainEqual({ name: 'RECODER_JOB_CONCURRENCY', value: '4' });
+});
+
 test('frontend replicas can scale while SQLite keeps one API writer', () => {
 	const docs = manifests('--set', 'app.replicaCount=2');
 

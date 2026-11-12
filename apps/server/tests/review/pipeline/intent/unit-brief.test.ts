@@ -35,7 +35,10 @@ async function brief(diff = A, headSha?: string) {
 
 	if (headSha) run.input.revision = { headSha, mergeBaseSha: 'BASE' } as typeof run.input.revision;
 
-	return briefUnit(run, configForOrchestrator(), partitionUnits(run.inventory)[0], 1);
+	return briefUnit(run, configForOrchestrator(), partitionUnits(run.inventory)[0], {
+		version: 1,
+		signal: run.controller.signal
+	});
 }
 
 const cached = () => readdirSync(join(process.env.RECODER_DATA_DIR!, 'cache', 'intent'));

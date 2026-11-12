@@ -18,12 +18,18 @@ const NO_SLOT = new CapacityError().message;
 const RETRY_NOTE =
 	'\n\nA previous reply to this was a placeholder: a "..." summary, nothing in any list, or only items about files or lines the input does not show. Answer from the input above.';
 
-/** One call that writes part of the brief. */
-export interface BriefCall<T> {
-	/** `unit-2` or `context`, for the log. */
-	label: string;
+/** What every call of one brief shares. */
+export interface BriefStage {
 	/** The brief's prompt version, so an answer cached for an older prompt or reply schema is never read. */
 	version: number;
+	/** Stops the call: the review's signal, or the stage's own, which one failed call aborts for its siblings. */
+	signal: AbortSignal;
+}
+
+/** One call that writes part of the brief. */
+export interface BriefCall<T> extends BriefStage {
+	/** `unit-2` or `context`, for the log. */
+	label: string;
 	system: string;
 	user: string;
 	schema: z.ZodType<T>;
@@ -92,6 +98,7 @@ async function callOnce<T>(
 			stage: 'intent',
 			label: `intent ${call.label}`,
 			...orchestratorAgentOptions(run, cfg),
+			signal: call.signal,
 			system: call.system,
 			user,
 			maxTurns: 1,

@@ -43,6 +43,8 @@ export interface TokenCall {
 	/** Unset on calls made outside an agent run and on rows stored before stages were recorded. */
 	stage?: TokenStage;
 	status: 'pending' | 'completed' | 'failed';
+	/** A failed call's provider error, with keys, tokens, auth headers and home paths removed; absent on other calls. */
+	error?: string;
 	usage: TokenUsage;
 	/** What paid for a Claude Code call, as the CLI reports it: `none` is the signed-in subscription, not a key. */
 	apiKeySource?: string;
@@ -57,6 +59,13 @@ export interface TokenAggregate {
 	reportedCalls: Record<keyof TokenUsage, number>;
 }
 
+/** How long a pipeline run's model requests waited for a concurrency slot before they reached the model. */
+export interface QueueDelay {
+	requests: number;
+	totalMs: number;
+	maxMs: number;
+}
+
 export interface ReviewMetrics {
 	reviewId: string;
 	startedAt: string;
@@ -68,6 +77,10 @@ export interface ReviewMetrics {
 	scopes: (TokenAggregate & { scope: TokenScope })[];
 	/** Pipeline calls by the kind of agent that made them; stages with no calls are left out. */
 	stages: (TokenAggregate & { stage: TokenStage })[];
+	/** The latest pipeline run's wait for model slots; absent on runs older than this measure. */
+	queueDelay?: QueueDelay;
+	/** The review worker (`RECODER_INSTANCE_ID`) that ran the latest pipeline run; absent without shared storage. */
+	worker?: string;
 }
 
 export function emptyTokenUsage(): TokenUsage {

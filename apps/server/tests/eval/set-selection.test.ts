@@ -46,11 +46,15 @@ function run(found: string[], lost: string[] = [], shown = found.length) {
 	};
 }
 
-function report(finishedAt: string, runs: Record<string, ReturnType<typeof run>>): BenchmarkReport {
+function report(
+	finishedAt: string,
+	runs: Record<string, ReturnType<typeof run>>,
+	prs: typeof labels = labels
+): BenchmarkReport {
 	return {
 		dataset: 'synth',
 		finishedAt,
-		prs: labels.map((label) => ({
+		prs: prs.map((label) => ({
 			id: label.id,
 			codebase: label.codebase,
 			defects: label.defects,
@@ -84,6 +88,31 @@ const sources = [
 	{ path: '/reports/second.json', report: second }
 ];
 
+/**
+ * A codebase whose every label is marked holdout. Its best PR disagrees on
+ * three defects and loses one more, outranking every development PR, so it
+ * would be picked first if holdout labels could be candidates.
+ */
+const heldOut = [
+	{ id: 'h-1', codebase: 'h', defects: [bug('d1'), bug('d2'), bug('d3')], holdout: true },
+	{ id: 'h-1-control', codebase: 'h', defects: [], holdout: true }
+];
+
+const heldSources = [
+	{
+		path: '/reports/held-first.json',
+		report: report(
+			'2026-10-07T10:00:00.000Z',
+			{ 'h-1': run(['d1', 'd2', 'd3']), 'h-1-control': run([], [], 3) },
+			heldOut
+		)
+	},
+	{
+		path: '/reports/held-second.json',
+		report: report('2026-10-08T10:00:00.000Z', { 'h-1': run([], ['d1']), 'h-1-control': run([], [], 1) }, heldOut)
+	}
+];
+
 test('the set holds every codebase, a weak test, a boundary and a control before filling by rank', () => {
 	const { set, picks } = selectSet('synth', labels, sources, { size: 6, name: 'quick' });
 
@@ -97,6 +126,21 @@ test('the set holds every codebase, a weak test, a boundary and a control before
 	expect(picks.find((pick) => pick.id === 'b-2')?.reasons).toContain('1 lost after the candidate stage');
 	expect(() => selectSet('synth', labels, sources, { size: 4, name: 'quick' })).toThrow('it needs 5');
 	expect(() => selectSet('other', labels, sources, { size: 6, name: 'quick' })).toThrow('Not from dataset other');
+});
+
+test('a holdout codebase is never a candidate for a development set', () => {
+	const { set } = selectSet('synth', [...labels, ...heldOut], [...sources, ...heldSources], {
+		size: 6,
+		name: 'quick'
+	});
+
+	expect(set.tasks).toEqual(['a-1', 'a-2', 'a-3', 'b-1', 'b-1-control', 'b-2']);
+});
+
+test('selection refuses when every label is holdout', () => {
+	expect(() => selectSet('synth', heldOut, sources, { size: 6, name: 'quick' })).toThrow(
+		'No labeled PRs outside the holdout set'
+	);
 });
 
 test('a subset is scored over its own planted defects, next to the full report', () => {

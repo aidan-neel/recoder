@@ -7,6 +7,13 @@ import { opencode } from '../agents/opencode/opencode.js';
 
 type ModelRef = Pick<ModelConfig, 'provider' | 'source'> | undefined;
 
+/**
+ * A provider's words for a plan that is spent, whatever status it came with:
+ * OpenCode Go's `Go usage limit exceeded` arrives with none.
+ */
+const PLAN_SPENT =
+	/\busage limit (?:exceeded|reached)\b|\bquota (?:exceeded|exhausted)\b|\binsufficient (?:balance|credits?)\b/i;
+
 /** The provider rejected the key or token, so retrying cannot help. */
 export function isAuthFailure(err: unknown): boolean {
 	const status =
@@ -25,7 +32,8 @@ export function isAuthFailure(err: unknown): boolean {
  * is spent. Your own server has no plan: its 429 is an overload, reported as a
  * plain failure. Short rate limits are retried in `llm.ts` before this is reached.
  * OpenCode retries rate limits itself, so its 402 or 429 is a spent plan too,
- * unless the 429 says it is a throttle that outlasted Recoder's retries.
+ * unless the 429 says it is a throttle that outlasted Recoder's retries, and so
+ * is any error of OpenCode or a hosted plan that says the plan is spent.
  * Claude Code's 429 is its subscription limit and its 402 a spent credit balance.
  */
 export function isUsageLimit(err: unknown, config: ModelRef): boolean {
@@ -33,9 +41,11 @@ export function isUsageLimit(err: unknown, config: ModelRef): boolean {
 	if (config?.provider === 'codex') return err.status === 429;
 	if (config?.provider === 'claude-code' || config?.provider === 'devin')
 		return err.status === 429 || err.status === 402;
-	if (config?.provider === 'opencode') return err.status === 402 || (err.status === 429 && !isOpenCodeThrottle(err));
+	if (config?.provider === 'opencode')
+		return err.status === 402 || (err.status === 429 && !isOpenCodeThrottle(err)) || PLAN_SPENT.test(err.message);
+	if (!hostedProvider(config?.source)) return false;
 
-	return !!hostedProvider(config?.source) && (err.status === 402 || err.status === 429);
+	return err.status === 402 || err.status === 429 || PLAN_SPENT.test(err.message);
 }
 
 function usageLimitFor(config: ModelRef): UsageLimit {
