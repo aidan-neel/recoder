@@ -4,9 +4,9 @@ import type { TokenUsage } from '@recoder/shared';
 type CountField = Exclude<keyof TokenUsage, 'totalTokens'>;
 
 /**
- * The usage `now` added to the cumulative total `before`: each counted field differenced, a count either side
- * does not report staying unknown, never zero. `before` null means `now` already is the call's own total, so it
- * is returned as is.
+ * The usage `now` added to the cumulative total `before`: each counted field differenced. A count `now` does not
+ * report stays unknown, never zero, and one only `before` lacks counts from zero. `before` null means `now`
+ * already is the call's own total, so it is returned as is.
  */
 export function usageDelta(now: TokenUsage, before: TokenUsage | null): TokenUsage {
 	if (!before) return now;

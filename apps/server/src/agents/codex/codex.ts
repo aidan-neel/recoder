@@ -52,14 +52,7 @@ export class CodexAgent extends SessionCliAgent {
 	async models(signal?: AbortSignal): Promise<ModelEntry[]> {
 		const path = this.requirePath();
 
-		const { stdout } = await this.output(
-			path,
-			['debug', 'models'],
-			MODELS_TIMEOUT_MS,
-			signal,
-			await emptyDirectory('codex-empty')
-		);
-
+		const { stdout } = await this.command(path, ['debug', 'models'], MODELS_TIMEOUT_MS, signal);
 		const models = parseCodexModels(stdout);
 
 		if (!models.length) throw new LlmError(0, 'Codex listed no models.');
@@ -144,18 +137,7 @@ export class CodexAgent extends SessionCliAgent {
 
 	/** `codex login status` exits 0 when signed in. */
 	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn'>> {
-		return {
-			signedIn:
-				(
-					await this.output(
-						path,
-						['login', 'status'],
-						STATUS_TIMEOUT_MS,
-						undefined,
-						await emptyDirectory('codex-empty')
-					)
-				).code === 0
-		};
+		return { signedIn: (await this.command(path, ['login', 'status'], STATUS_TIMEOUT_MS)).code === 0 };
 	}
 
 	/**
@@ -173,10 +155,7 @@ export class CodexAgent extends SessionCliAgent {
 	}
 
 	private async writeCatalog(path: string): Promise<string> {
-		const catalog = catalogWithoutSubagents(
-			(await this.output(path, ['debug', 'models'], MODELS_TIMEOUT_MS, undefined, await emptyDirectory('codex-empty')))
-				.stdout
-		);
+		const catalog = catalogWithoutSubagents((await this.command(path, ['debug', 'models'], MODELS_TIMEOUT_MS)).stdout);
 
 		if (!catalog) throw new LlmError(0, 'Codex did not list its models, so its sub-agents could not be turned off.');
 
@@ -201,13 +180,17 @@ export class CodexAgent extends SessionCliAgent {
 	 * has exited. Its exit code is not read: a session the CLI never saved has nothing to delete.
 	 */
 	protected async forget(path: string, session: string): Promise<void> {
-		await this.output(
-			path,
-			['delete', '--force', session],
-			FORGET_TIMEOUT_MS,
-			undefined,
-			await emptyDirectory('codex-empty')
-		);
+		await this.command(path, ['delete', '--force', session], FORGET_TIMEOUT_MS);
+	}
+
+	/** A short CLI command run in an empty directory, so it never sees the user's files. */
+	private async command(
+		path: string,
+		args: string[],
+		timeoutMs: number,
+		signal?: AbortSignal
+	): Promise<{ code: number; stdout: string }> {
+		return this.output(path, args, timeoutMs, signal, await emptyDirectory('codex-empty'));
 	}
 }
 

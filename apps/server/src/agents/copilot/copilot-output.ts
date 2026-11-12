@@ -142,6 +142,13 @@ function wholeReasoning(data: z.infer<typeof reasoningData>): string | undefined
 /** Where the reader sends streamed text as it arrives. */
 type TextSink = (event: AgentEvent) => void;
 
+/** What a `session.error` event said of the failure that ended a prompt. */
+interface ReportedFailure {
+	message: string;
+	statusCode: number | null;
+	errorType: string | null;
+}
+
 /**
  * Reads the JSONL output of one prompt: text and reasoning deltas stream as events, each `assistant.message`
  * and `assistant.reasoning` is authoritative for its part so a reply is complete even when the CLI did not
@@ -155,7 +162,7 @@ export class EventReader {
 	/** Each reasoning part the same way: deltas accumulate and `assistant.reasoning` is authoritative. */
 	private readonly reasoning = new Map<string, { content: string; sent: number }>();
 
-	private failure: { message: string; statusCode: number | null; errorType: string | null } | null = null;
+	private failure: ReportedFailure | null = null;
 
 	private last: string | null = null;
 
@@ -198,7 +205,7 @@ export class EventReader {
 			const part = this.thought(event.partId);
 
 			part.content += event.content;
-			this.emit(this.reasoning, event.partId, event.content, 'reasoning');
+			this.emit('reasoning', event.partId, event.content);
 
 			return;
 		}
@@ -208,12 +215,7 @@ export class EventReader {
 
 			part.content = event.content;
 
-			this.emit(
-				this.reasoning,
-				event.partId,
-				event.content.length > part.sent ? event.content.slice(part.sent) : '',
-				'reasoning'
-			);
+			this.emit('reasoning', event.partId, event.content.slice(part.sent));
 
 			return;
 		}
@@ -223,18 +225,13 @@ export class EventReader {
 		if (event.type === 'message') {
 			part.content = event.content;
 
-			this.emit(
-				this.parts,
-				event.messageId,
-				event.content.length > part.sent ? event.content.slice(part.sent) : '',
-				'text'
-			);
+			this.emit('text', event.messageId, event.content.slice(part.sent));
 
 			return;
 		}
 
 		part.content += event.content;
-		this.emit(this.parts, event.messageId, event.content, 'text');
+		this.emit('text', event.messageId, event.content);
 	};
 
 	/**
@@ -249,13 +246,7 @@ export class EventReader {
 		if (!text.trim()) {
 			return {
 				text,
-				error: this.failure
-					? copilotFailure(
-							quotedLine(this.failure.message, QUOTED_CHARS),
-							this.failure.statusCode,
-							this.failure.errorType
-						)
-					: new LlmError(0, 'GitHub Copilot ended without a reply.')
+				error: this.failure ? reportedFailure(this.failure) : new LlmError(0, 'GitHub Copilot ended without a reply.')
 			};
 		}
 
@@ -266,20 +257,13 @@ export class EventReader {
 	 * Emits the piece of a streamed part not sent yet, as text or reasoning, so the events add up to the part's
 	 * content and never repeat it.
 	 */
-	private emit(
-		parts: Map<string, { content: string; sent: number }>,
-		id: string,
-		piece: string,
-		type: 'text' | 'reasoning'
-	): void {
+	private emit(kind: 'text' | 'reasoning', id: string, piece: string): void {
 		if (!piece) return;
 
-		const part = this.slot(parts, id);
+		const part = kind === 'text' ? this.part(id) : this.thought(id);
 
 		part.sent += piece.length;
-
-		if (type === 'text') this.onEvent({ type: 'text', delta: piece, partId: id });
-		else this.onEvent({ type: 'reasoning', delta: piece, partId: id });
+		this.onEvent({ type: kind, delta: piece, partId: id });
 	}
 
 	private part(id: string): { content: string; sent: number } {
@@ -321,6 +305,11 @@ function copilotFailure(text: string, statusCode: number | null, errorType: stri
 	return new LlmError(statusCode ?? 0, text);
 }
 
+/** The failure a `session.error` reported, as an `LlmError` that quotes its message redacted and cut. */
+function reportedFailure(failure: ReportedFailure): LlmError {
+	return copilotFailure(quotedLine(failure.message, QUOTED_CHARS), failure.statusCode, failure.errorType);
+}
+
 /** The last non-empty line of raw output, redacted and cut, as an error may quote it. */
 function errorLine(line: string | null): string | undefined {
 	const trimmed = line?.trim();
@@ -332,11 +321,9 @@ function errorLine(line: string | null): string | undefined {
 function exitError(
 	exit: { code: number; stderr: string },
 	lastStdout: string | null,
-	reported: { message: string; statusCode: number | null; errorType: string | null } | null
+	reported: ReportedFailure | null
 ): LlmError {
-	if (reported) {
-		return copilotFailure(quotedLine(reported.message, QUOTED_CHARS), reported.statusCode, reported.errorType);
-	}
+	if (reported) return reportedFailure(reported);
 
 	const quoted = errorLine(exit.stderr) ?? errorLine(lastStdout);
 
