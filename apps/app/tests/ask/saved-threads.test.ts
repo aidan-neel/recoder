@@ -22,7 +22,7 @@ describe('saved threads', () => {
 			}
 		});
 
-		const threads = readThreads().r1;
+		const threads = readThreads('r1');
 
 		expect(threads['decision:a'].messages.at(-1)).toMatchObject({ text: 'Because the', state: 'stopped' });
 
@@ -33,11 +33,10 @@ describe('saved threads', () => {
 		});
 	});
 
-	test('a corrupt entry is skipped instead of breaking every review', () => {
+	test('a corrupt entry reads as no threads instead of breaking the page', () => {
 		globalThis.sessionStorage = memoryStorage();
 		sessionStorage.setItem('recoder-ask:bad', '{not json');
-		writeThreads('good', { 'decision:a': { messages: [] } });
 
-		expect(Object.keys(readThreads())).toEqual(['good']);
+		expect(readThreads('bad')).toEqual({});
 	});
 });

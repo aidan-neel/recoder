@@ -90,7 +90,7 @@ function questionOf(row: ConversationRow): string | null {
  * The row where the developer last asked Orchestrator something, or -1. A
  * failed reply before it was already asked past, so it shows quietly.
  */
-export function lastQuestionAt(rows: ConversationRow[]): number {
+function lastQuestionAt(rows: ConversationRow[]): number {
 	return rows.findLastIndex((row) => questionOf(row) !== null);
 }
 
