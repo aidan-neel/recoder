@@ -20,7 +20,7 @@ export function identityFields(): Omit<RunIdentity, 'version' | 'hash'> {
 			forges: { hono: { head: 'forge-head', metadata: 'forge-metadata' } }
 		},
 		code: { harness: 'harness-1', server: 'server-1' },
-		models: { orchestrator: stage, specialist: { ...stage } },
+		models: { orchestrator: stage, specialist: { ...stage }, verifier: { ...stage } },
 		judge: { model: 'judge-x', provider: 'opencode', effort: 'medium', version: 1, seed: 7 },
 		flags: { RECODER_LLM_RETRIES: '2' },
 		limits: { settings: { subagentCap: 2, reportLowSeverity: false }, policy: { analysisDeadlineMs: 1_800_000 } },

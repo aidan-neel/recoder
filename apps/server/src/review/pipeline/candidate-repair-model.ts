@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { FindingCategory } from '@recoder/shared';
 import type { EvidenceStore } from '../../evidence/evidence.js';
-import type { RepoRule } from '../guidelines/ledger/types.js';
+import { ruleSummary, type RepoRule } from '../guidelines/ledger/types.js';
 import { changedLines, type ChangedLine } from './candidate-repair-anchor.js';
 import { categoryOptions, rulesFor, type RepairChange, type RepairPlan, type RepairScope } from './candidate-repair.js';
 import { citableClaims, type CandidateFinding } from './consolidate.js';
@@ -121,7 +121,9 @@ export function repairPrompt(
 		options.claims.length
 			? `Claim options:\n${options.claims.map((claim) => `${claim.id}: ${claim.text}`).join('\n')}`
 			: '',
-		options.rules.length ? `Rule options:\n${options.rules.map((rule) => `${rule.id}: ${rule.text}`).join('\n')}` : ''
+		options.rules.length
+			? `Rule options:\n${options.rules.map((rule) => `${rule.id}: ${ruleSummary(rule)}`).join('\n')}`
+			: ''
 	]
 		.filter(Boolean)
 		.join('\n\n');

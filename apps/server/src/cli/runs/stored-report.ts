@@ -57,6 +57,7 @@ const reportShape = z.looseObject({
 		subagents: z.union([z.number(), text]),
 		reviewerModel: nullableText,
 		workerModel: nullableText,
+		verifierModel: nullableText.optional(),
 		reviewerEffort: nullableText,
 		workerEffort: nullableText,
 		lenses: z.array(text).nullable(),

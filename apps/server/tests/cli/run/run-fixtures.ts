@@ -35,6 +35,7 @@ export function reviewOptions(overrides: Partial<ReviewOptions> = {}): ReviewOpt
 			subagents: null,
 			reviewerModel: null,
 			workerModel: null,
+			verifierModel: null,
 			reviewerEffort: null,
 			workerEffort: null,
 			lenses: null,

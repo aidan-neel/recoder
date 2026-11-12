@@ -60,6 +60,8 @@ export interface Received {
 	prompts: Record<string, CapturedPrompt>;
 	byAssignment: Record<string, RecordedRead[]>;
 	dropped: Record<string, number>;
+	/** Diff files or hunks omitted before units were cut (`maxFiles`, `maxDiffChars`). */
+	omitted?: ContextOmission[];
 }
 
 export function emptyReceived(): Received {
@@ -123,7 +125,8 @@ export function receivedOf(received: Received, ids: Set<string>): Received {
 	return structuredClone({
 		prompts: keep(received.prompts),
 		byAssignment: keep(received.byAssignment),
-		dropped: keep(received.dropped)
+		dropped: keep(received.dropped),
+		...(received.omitted?.length ? { omitted: received.omitted } : {})
 	});
 }
 
@@ -356,6 +359,7 @@ export function reviewContext(sources: ReceivedSources, findings: Finding[]): Re
 	return {
 		units: prompts,
 		reviewers,
-		findings: findings.map((finding) => findingCitation(finding, sources, classifiers))
+		findings: findings.map((finding) => findingCitation(finding, sources, classifiers)),
+		...(sources.received.omitted?.length ? listed(sources.received.omitted) : {})
 	};
 }

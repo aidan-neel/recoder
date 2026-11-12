@@ -77,9 +77,12 @@ export interface JudgeModel {
 export interface ReviewerManifest {
 	model: string;
 	effort: string | null;
-	/** The second model, for subagents and verifiers; null when it follows the review model. */
+	/** The second model, for subagents and workers; null when it follows the review model. */
 	specialistModel: string | null;
 	specialistEffort: string | null;
+	/** The verifier model; null when it follows the review model. */
+	verifierModel?: string | null;
+	verifierEffort?: string | null;
 	subagentCap: SubagentCap;
 	reportLowSeverity: boolean;
 }
@@ -93,6 +96,8 @@ export function reviewerManifest(settings: ModelSettings): ReviewerManifest {
 		effort: settings.orchestratorEffort ?? null,
 		specialistModel: named(settings.specialistModelId),
 		specialistEffort: settings.specialistEffort ?? null,
+		verifierModel: named(settings.verifierModelId),
+		verifierEffort: settings.verifierEffort ?? null,
 		subagentCap: settings.subagentCap,
 		reportLowSeverity: settings.reportLowSeverity
 	};
@@ -317,16 +322,22 @@ function obligationLines(prs: PrResult[]): string[] {
 	];
 }
 
-/** "Reviewer gpt (high) · second model x (low) · subagent cap 8 · medium and above". */
+/** "Reviewer gpt (high) · second model x (low) · verifier y (medium) · subagent cap 8 · medium and above". */
 function reviewerLine(reviewer: ReviewerManifest | undefined): string[] {
 	if (!reviewer) return [];
 
+	const withEffort = (model: string, effort: string | null | undefined) => (effort ? `${model} (${effort})` : model);
+
 	const second = reviewer.specialistModel
-		? `${reviewer.specialistModel}${reviewer.specialistEffort ? ` (${reviewer.specialistEffort})` : ''}`
+		? withEffort(reviewer.specialistModel, reviewer.specialistEffort)
 		: 'same model';
 
+	const verifier = reviewer.verifierModel
+		? ` · verifier ${withEffort(reviewer.verifierModel, reviewer.verifierEffort)}`
+		: '';
+
 	return [
-		`Reviewer ${reviewer.model}${reviewer.effort ? ` (${reviewer.effort})` : ''} · second model ${second} · subagent cap ${reviewer.subagentCap} · ${reviewer.reportLowSeverity ? 'all severities' : 'medium and above'}`
+		`Reviewer ${withEffort(reviewer.model, reviewer.effort)} · second model ${second}${verifier} · subagent cap ${reviewer.subagentCap} · ${reviewer.reportLowSeverity ? 'all severities' : 'medium and above'}`
 	];
 }
 

@@ -106,11 +106,12 @@ test.each(CONFLICTS)('%j is a usage error naming %s', (argv, named) => {
 	expect(usageMessage(...argv)).toContain(named);
 });
 
-test('--reviewer, --worker and their efforts set the model picks of the review', () => {
+test('--reviewer, --worker, --verifier and the efforts set the model picks of the review', () => {
 	const { tuning } = parse(
 		'--reviewer',
 		'claude-code:opus',
 		'--worker=devin:swe',
+		'--verifier=opencode:openai/gpt-6',
 		'--reviewer-effort',
 		'high',
 		'--worker-effort=low'
@@ -119,6 +120,7 @@ test('--reviewer, --worker and their efforts set the model picks of the review',
 	expect(tuning).toMatchObject({
 		reviewerModel: 'claude-code:opus',
 		workerModel: 'devin:swe',
+		verifierModel: 'opencode:openai/gpt-6',
 		reviewerEffort: 'high',
 		workerEffort: 'low'
 	});

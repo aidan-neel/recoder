@@ -94,7 +94,7 @@ The benchmark adds every unlabeled finding to the file as `unresolved` (`queueUn
 
 - `dataset`: `name`; `labels`, a hash of every file in `labels/`; `adjudications`, a hash of the human decisions, `unresolved` entries left out; `forges`, each codebase's forge `head` and a `metadata` hash.
 - `code`: `harness` and `server`. Each is `source:<hash>` of `apps/server/src/`, `packages/shared/src/`, the two package manifests and `bun.lock`, by content (`sourceVersion`).
-- `models`: `orchestrator` and `specialist`, each `model`, `provider`, `effort`, `sampling`, `contextSize`.
+- `models`: `orchestrator`, `specialist` and `verifier`, each `model`, `provider`, `effort`, `sampling`, `contextSize`.
 - `judge`: `model`, `provider`, `effort`, `version` (`JUDGE_VERSION`), `seed` (`JUDGE_SEED`).
 - `flags`: every set `RECODER_*` variable except keys, endpoints, paths and sandbox sizing (`capturedEnv`).
 - `limits`: `settings` (reviewer settings, with `tokenBudget`) and `policy` (review policy budgets). A review is now a few reviewers that each apply every lens (or the selected ones, when the command line passes a lens selection), with subagents for depth (see [pipeline.md](pipeline.md#token-budget)), so a report measured on the older shape, one reviewer per lens per unit, does not compare with one measured now. Measure the benchmark again at each budget before relying on a number.

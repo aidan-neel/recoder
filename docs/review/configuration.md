@@ -26,9 +26,9 @@ Read by `effectiveReviewEnv`. A saved value wins. A value that is not a positive
 
 **RECODER_REVIEW_MAX_FILE_CHARS**: Default 12000. Caps the characters one file read returns to a model. Passed to `EvidenceStore` in `apps/server/src/review/pipeline/harness/context.ts`.
 
-**RECODER_REVIEW_MAX_FILES**: Default 20. Returned in `limits` by `GET /api/settings/models`. No pipeline code reads it.
+**RECODER_REVIEW_MAX_FILES**: Default 200. Caps how many reviewable files one review covers (`applyDiffLimits` in `apps/server/src/review/pipeline/harness/diff-limits.ts`, called from `createRun` in `context.ts`). Files past the limit are excluded with `exceeds maxFiles limit (N)` and recorded in `ReviewContext.omitted` (`reason: 'file-cap'`) and `CoverageLedger`.
 
-**RECODER_REVIEW_MAX_DIFF_CHARS**: Default 60000. Returned in `limits` by `GET /api/settings/models`. No pipeline code reads it.
+**RECODER_REVIEW_MAX_DIFF_CHARS**: Default 600000. Caps total patch characters across the reviewable files (`applyDiffLimits` in `diff-limits.ts`). Files, hunks or trailing lines past the cap are excluded with `exceeds maxDiffChars limit (N)` and recorded in `ReviewContext.omitted` (`reason: 'diff-cap'`) and `CoverageLedger`.
 
 **RECODER_REVIEW_EXCLUDE**: Comma-separated substrings, matched case-insensitively. A changed path containing one is excluded from the review with the reason `matches RECODER_REVIEW_EXCLUDE`. Read by `extraExcludes` in `apps/server/src/review/pipeline/review-scope.ts`. Default empty.
 

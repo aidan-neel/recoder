@@ -1,10 +1,11 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ModelConfig } from '../models';
 
-/** Both picks as a review saw them when it started. */
+/** All three stage picks as a review saw them when it started. */
 export interface LockedModels {
 	orchestrator: ModelConfig;
 	subagent: ModelConfig;
+	verifier: ModelConfig;
 }
 
 /**

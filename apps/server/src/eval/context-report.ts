@@ -128,6 +128,8 @@ export function addContext(totals: ContextTotals, context: ReviewContext | undef
 
 	totals.recorded++;
 
+	for (const item of context.omitted ?? []) totals.omitted[item.reason]++;
+	for (const reason of OMISSION_REASONS) totals.omitted[reason] += context.omittedPast?.[reason] ?? 0;
 	for (const reviewer of context.reviewers) addReviewer(totals, context, reviewer);
 
 	for (const finding of context.findings) {

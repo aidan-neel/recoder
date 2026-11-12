@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import type { DetectorResult } from '../../../../src/review/pipeline/detectors/types';
 import type { ReviewRun } from '../../../../src/review/pipeline/harness/context';
-import { addDetections } from '../../../../src/review/pipeline/harness/verification';
+import { addDetections } from '../../../../src/review/pipeline/harness/detections';
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import { addedFile } from '../harness-fixtures';
 

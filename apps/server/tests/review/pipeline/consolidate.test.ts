@@ -411,3 +411,65 @@ test('consolidation lists bugs first and caps quality findings at medium', () =>
 	expect(findings.map((finding) => finding.category)).toEqual(['correctness', 'readability']);
 	expect(findings[1].severity).toBe('warning');
 });
+
+test('a finding that cites a ledger rule carries the quoted rule and source through consolidation', () => {
+	const ledger: CandidateContext['ledger'] = {
+		rules: [
+			{
+				id: 'R1',
+				text: 'Never call eval() in server handlers.',
+				restatement: 'Avoid eval() in server handlers.',
+				level: 'mandatory',
+				exceptions: ['Allowed in sandboxed fixture runners.'],
+				source: { path: 'RECODER.md', line: 10, endLine: 12, revision: 'abc1234' }
+			}
+		],
+		sourcesHash: 'h2'
+	};
+
+	const ctx = { ...context(), ledger };
+	const fromReviewer = candidate({ category: 'repo-rule', ruleId: 'R1', line: 2 }, 'rules', ctx);
+
+	const fromRuleDetector = candidateFromDetector(
+		detector({ detector: 'rule-check', ruleId: 'R1', line: 3 }),
+		{ candidateId: 'd4' },
+		ctx
+	);
+
+	const fromLintRuleId = candidateFromDetector(detector({ ruleId: 'no-eval', line: 4 }), { candidateId: 'd5' }, ctx);
+
+	const checked: CandidateFinding = {
+		...fromReviewer,
+		ruleCheck: {
+			applicability: { outcome: 'applies', reason: 'covers file', evidenceIds: ['E9'] },
+			violation: {
+				outcome: 'violated',
+				reason: 'calls eval',
+				exceptionsChecked: ['Allowed in sandboxed fixture runners.'],
+				evidenceIds: ['E9']
+			}
+		},
+		verification: { status: 'verified', method: 'rule', reason: 'checked' }
+	};
+
+	const [merged] = consolidateFindings(
+		[checked, { ...fromReviewer, rule: undefined, verification: checked.verification }],
+		INVENTORY
+	);
+
+	expect(fromReviewer.rule).toEqual({
+		id: 'R1',
+		text: 'Never call eval() in server handlers.',
+		restatement: 'Avoid eval() in server handlers.',
+		level: 'mandatory',
+		exceptions: ['Allowed in sandboxed fixture runners.'],
+		source: { path: 'RECODER.md', line: 10, endLine: 12, revision: 'abc1234' }
+	});
+
+	expect(fromRuleDetector.rule?.id).toBe('R1');
+	expect(fromRuleDetector.ruleCheck?.applicability.outcome).toBe('applies');
+	expect(fromRuleDetector.ruleCheck?.violation.outcome).toBe('violated');
+	expect(fromLintRuleId.rule).toBeUndefined();
+	expect(merged.rule?.source).toEqual({ path: 'RECODER.md', line: 10, endLine: 12, revision: 'abc1234' });
+	expect(merged.verification?.ruleCheck).toEqual(checked.ruleCheck);
+});

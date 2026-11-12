@@ -67,6 +67,7 @@ function segment(index: number, models: string[]): Omit<PipelineRun, 'startedAt'
 		index,
 		orchestrator: models[0]!,
 		subagent: models[1]!,
+		verifier: models[2] ?? models[0]!,
 		lockMisses: 0,
 		tokenBudget: 'medium',
 		history: { dismissals: [], topics: {}, sources: [] }

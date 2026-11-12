@@ -218,15 +218,16 @@ function settleWith(
 		outcome: ExecutionOutcome | undefined,
 		repaired = false
 	) => {
-		if (outcome && run.owner) options.onOutcome?.(outcome, repaired);
+		if (outcome && run.owner && run.tally !== false) options.onOutcome?.(outcome, repaired);
 
 		return outcome ? { ...result, outcome } : result;
 	};
 
 	return async (run) => {
-		const dir = commandPackage(run.command, dirs);
+		const classified = run.classifyAs ?? run.command;
+		const dir = commandPackage(classified, dirs);
 		const profile = dir === null ? null : await profileOf(dir);
-		const outcome = classifyRun(run.command, run.result, profile, options.diffPaths);
+		const outcome = classifyRun(classified, run.result, profile, options.diffPaths);
 		const unprepared = profile && !profiles.includes(profile) && profile.generation.length;
 
 		if (outcome !== 'setup-failed' || !unprepared || run.signal?.aborted) return settled(run, run.result, outcome);
@@ -241,7 +242,7 @@ function settleWith(
 		return settled(
 			run,
 			{ ...again, output: `${note}\n${again.output}` },
-			classifyRun(run.command, again, profile, options.diffPaths),
+			classifyRun(classified, again, profile, options.diffPaths),
 			true
 		);
 	};

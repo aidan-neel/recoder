@@ -140,12 +140,12 @@ test('releasing a slot twice does not hand out an extra one', async () => {
 
 test('the memory gate waits while memory is low and goes once it recovers', async () => {
 	let free = 200;
-	const started = Date.now();
+	const started = performance.now();
 
 	setTimeout(() => (free = 4_000), 60);
 
 	expect(await waitForMemory(gate(() => free))).toBe(true);
-	expect(Date.now() - started).toBeGreaterThanOrEqual(50);
+	expect(performance.now() - started).toBeGreaterThanOrEqual(50);
 });
 
 test('the memory gate lets the command go after the maximum wait even when memory stays low', async () => {

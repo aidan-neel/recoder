@@ -19,6 +19,30 @@ export function isRunning(review: Review | undefined): boolean {
 	return review?.status === 'running' || review?.status === 'queued';
 }
 
+/** A repository's last path segment: `app` for `acme/app`. */
+function shortName(repo: Pick<Repo, 'name'>): string {
+	return repo.name.split('/').pop() || repo.name;
+}
+
+/**
+ * What each repository's filter chip reads, by repository id: its short name,
+ * or its full distinct label when another tracked repository has the same
+ * short name, so two chips never read the same.
+ */
+export function chipLabels(repos: readonly Repo[], labels: ReadonlyMap<string, string>): Map<string, string> {
+	const shared = new Map<string, number>();
+
+	for (const repo of repos) shared.set(shortName(repo), (shared.get(shortName(repo)) ?? 0) + 1);
+
+	return new Map(
+		repos.map((repo) => {
+			const short = shortName(repo);
+
+			return [repo.id, (shared.get(short) ?? 0) > 1 ? (labels.get(repo.id) ?? repo.name) : short];
+		})
+	);
+}
+
 export type StatusTone = 'neutral' | 'success' | 'high' | 'danger';
 
 /** The row's resting status chip. Running reviews render progress instead. */

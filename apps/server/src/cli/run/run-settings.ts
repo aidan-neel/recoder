@@ -47,19 +47,32 @@ export async function applyRunSettings(tuning: ReviewTuning, lookup: ModelLookup
 		savedEffort: saved.specialistEffort
 	});
 
+	const verifier = await pickOf(lookup, {
+		named: tuning.verifierModel,
+		savedId: saved.verifierModelId,
+		savedEffort: saved.verifierEffort
+	});
+
 	const budget = budgetPatch(tuning.budget, {
 		orchestrator: orchestrator.choices,
 		specialist: specialist.id ? specialist.choices : 'follows'
+	});
+
+	const verifierBudget = budgetPatch(tuning.budget, {
+		orchestrator: orchestrator.choices,
+		specialist: verifier.id ? verifier.choices : 'follows'
 	});
 
 	setReviewOverrides({
 		...saved,
 		...(tuning.reviewerModel ? { orchestratorModelId: tuning.reviewerModel } : {}),
 		...(tuning.workerModel ? { specialistModelId: tuning.workerModel } : {}),
+		...(tuning.verifierModel ? { verifierModelId: tuning.verifierModel } : {}),
 		orchestratorEffort: effortOf(orchestrator, tuning.reviewerEffort, budget.orchestratorEffort),
 		specialistEffort: specialist.id
 			? effortOf(specialist, tuning.workerEffort, budget.specialistEffort)
 			: (tuning.workerEffort ?? null),
+		verifierEffort: verifier.id ? effortOf(verifier, null, verifierBudget.specialistEffort) : null,
 		...(tuning.maxFileChars === null ? {} : { maxFileChars: tuning.maxFileChars })
 	});
 

@@ -66,6 +66,9 @@ function describeSettings(settings: ReportSettings): string {
 		`subagents ${settings.subagents}`,
 		settings.reviewerModel ? `reviewer ${settings.reviewerModel}` : null,
 		settings.workerModel ? `worker ${settings.workerModel}` : null,
+		settings.verifierModel && settings.verifierModel !== settings.reviewerModel
+			? `verifier ${settings.verifierModel}`
+			: null,
 		settings.reviewerEffort ? `reviewer effort ${settings.reviewerEffort}` : null,
 		settings.workerEffort ? `worker effort ${settings.workerEffort}` : null,
 		settings.lenses ? `lenses ${settings.lenses.join(', ')}` : 'all lenses',

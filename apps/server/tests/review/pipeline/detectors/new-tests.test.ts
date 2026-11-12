@@ -1,13 +1,8 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { addedSubclasses, weakInNewTests } from '../../../../src/review/pipeline/detectors/new-tests';
+import { envFlag } from '../../../helpers/env-flag';
 
-beforeAll(() => {
-	process.env.RECODER_TEST_STRENGTH = '1';
-});
-
-afterAll(() => {
-	delete process.env.RECODER_TEST_STRENGTH;
-});
+envFlag('RECODER_TEST_STRENGTH', '1');
 
 /** Head lines the base lacks count as added. */
 function detect(base: string[], head: string[], source: string[] = []) {
@@ -25,7 +20,7 @@ function detect(base: string[], head: string[], source: string[] = []) {
 	return weakInNewTests(
 		{ path: 'test/client.test.ts', base: base.join('\n'), head: head.join('\n'), added, visible: added },
 		subclasses
-	).map(({ title, line, suspected }) => ({ title, line, suspected }));
+	).map(({ title, line, suspected, shape }) => ({ title, line, suspected, shape }));
 }
 
 describe('weakInNewTests', () => {
@@ -38,7 +33,12 @@ describe('weakInNewTests', () => {
 		];
 
 		expect(detect([], head)).toEqual([
-			{ title: '`reports up to date installs` checks only that something was printed', line: 3, suspected: true }
+			{
+				title: '`reports up to date installs` checks only that something was printed',
+				line: 3,
+				suspected: true,
+				shape: 'output'
+			}
 		]);
 	});
 
@@ -53,7 +53,8 @@ describe('weakInNewTests', () => {
 			{
 				title: '`the cap keeps the most severe findings` checks how many items remain, not which one',
 				line: 2,
-				suspected: true
+				suspected: true,
+				shape: 'selection'
 			}
 		]);
 	});
@@ -78,7 +79,12 @@ describe('weakInNewTests', () => {
 		];
 
 		expect(detect([], head)).toEqual([
-			{ title: '`retries until the budget runs out` checks `requestCount` only from below', line: 3, suspected: true }
+			{
+				title: '`retries until the budget runs out` checks `requestCount` only from below',
+				line: 3,
+				suspected: true,
+				shape: 'lowerBound'
+			}
 		]);
 	});
 
@@ -90,7 +96,7 @@ describe('weakInNewTests', () => {
 		];
 
 		expect(detect([], head)).toEqual([
-			{ title: '`pauses every timer` checks only some items', line: 2, suspected: true }
+			{ title: '`pauses every timer` checks only some items', line: 2, suspected: true, shape: 'someForEvery' }
 		]);
 	});
 
@@ -103,7 +109,12 @@ describe('weakInNewTests', () => {
 		];
 
 		expect(detect([], head)).toEqual([
-			{ title: '`abort rejects the caller` never checks which error is thrown', line: 3, suspected: true }
+			{
+				title: '`abort rejects the caller` never checks which error is thrown',
+				line: 3,
+				suspected: true,
+				shape: 'presence'
+			}
 		]);
 	});
 
@@ -112,7 +123,7 @@ describe('weakInNewTests', () => {
 		const source = ['export class TimeoutException extends HTTPException {}'];
 
 		expect(detect([], head, source)).toEqual([
-			{ title: '`times out` accepts any `HTTPException`', line: 2, suspected: true }
+			{ title: '`times out` accepts any `HTTPException`', line: 2, suspected: true, shape: 'broadError' }
 		]);
 	});
 

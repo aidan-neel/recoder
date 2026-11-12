@@ -4,7 +4,7 @@ import { runSandboxed, sandboxLayout, type RunResult, type SandboxLayout } from 
 import { sanitizeRepoPath } from '../evidence/evidence.js';
 import type { ExecutionOutcome } from '../evidence/types.js';
 import { BaseTree } from './base-tree.js';
-import { installKey } from './install-inputs.js';
+import { installKey, packageManifests } from './install-inputs.js';
 import {
 	JS_LOCKFILES,
 	removeLayers,
@@ -63,18 +63,10 @@ export interface InvestigatorRun {
 	/** Runs the same command again, the same way. */
 	rerun: () => Promise<RunResult>;
 	signal?: AbortSignal;
-}
-
-/** The `package.json` files worth reading, skipping vendored and build dirs: at most 30, at most four levels deep. */
-export function packageManifests(paths: Iterable<string>): string[] {
-	return [...paths]
-		.filter(
-			(path) =>
-				/(^|\/)package\.json$/.test(path) &&
-				!/(^|\/)(node_modules|vendor|dist|build|fixtures?)\//.test(path) &&
-				path.split('/').length <= 4
-		)
-		.slice(0, 30);
+	/** The command the outcome is classified as when `command` wraps the real run, as the matrix's file writes do; defaults to `command`. */
+	classifyAs?: string;
+	/** False keeps the outcome out of the review's Test outcomes tally; the mutation matrix reports its own row. */
+	tally?: boolean;
 }
 
 export class ExecWorkspace {
@@ -209,13 +201,31 @@ export class ExecWorkspace {
 		return this.exclusive(work, { signal, instead: () => notRun(ABORTED, false) });
 	}
 
-	/** Run an investigator's command the way `run` does; once packages are prepared, the result says what it reached. */
-	async runInvestigation(command: string, timeoutMs: number, signal?: AbortSignal, owner = ''): Promise<SettledRun> {
+	/**
+	 * Run an investigator's command the way `run` does; once packages are
+	 * prepared, the result says what it reached. `settle.classifyAs` names the
+	 * command the outcome is classified as when `command` only wraps it, and
+	 * `settle.tally: false` keeps the outcome out of the Test outcomes tally.
+	 */
+	async runInvestigation(
+		command: string,
+		timeoutMs: number,
+		signal?: AbortSignal,
+		owner = '',
+		settle?: { classifyAs?: string; tally?: boolean }
+	): Promise<SettledRun> {
 		const result = await this.run(command, timeoutMs, signal, owner);
 
 		if (!this.settleRun) return result;
 
-		return this.settleRun({ command, result, owner, rerun: () => this.run(command, timeoutMs, signal, owner), signal });
+		return this.settleRun({
+			command,
+			result,
+			owner,
+			rerun: () => this.run(command, timeoutMs, signal, owner),
+			signal,
+			...settle
+		});
 	}
 
 	/**
@@ -473,7 +483,7 @@ export class ExecWorkspace {
 const ABORTED = 'Not run: the review was aborted.';
 
 /** A run that never started, shaped like one that did. */
-function notRun(output: string, timedOut: boolean): RunResult {
+export function notRun(output: string, timedOut: boolean): RunResult {
 	return { exitCode: null, output, truncated: false, timedOut, elapsedMs: 0 };
 }
 

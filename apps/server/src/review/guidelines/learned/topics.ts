@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { categoryLabel, type Finding, type FindingTopic } from '@recoder/shared';
-import type { RepoRule, RuleLedger } from '../ledger/types.js';
+import { ruleSummary, ruleWording, type RepoRule, type RuleLedger } from '../ledger/types.js';
 import type { TopicTally } from './votes.js';
 
 /** Dismissals a topic needs before it is quiet, so a couple of unlucky findings never quiet a whole topic. */
@@ -13,12 +13,13 @@ const DISMISSALS_PER_USEFUL_TO_QUIET = 4;
 const MIN_USEFUL_TO_ENDORSE = 2;
 
 /**
- * A rule's topic id, from its text with case and spacing collapsed. Ledger ids
- * (`R3`) are positions that move whenever the guidelines change; the text is
- * what the feedback was about.
+ * A rule's topic id, from its words with case and spacing collapsed: its
+ * quote, or its restatement when no quote was found. Ledger ids (`R3`) are
+ * positions that move whenever the guidelines change; the words are what the
+ * feedback was about.
  */
 export function ruleTopicId(rule: RepoRule): string {
-	const text = rule.text.toLowerCase().replace(/\s+/g, ' ').trim();
+	const text = ruleWording(rule).toLowerCase().replace(/\s+/g, ' ').trim();
 
 	return `rule:${createHash('sha256').update(text).digest('hex').slice(0, 16)}`;
 }
@@ -31,7 +32,7 @@ export function ruleTopicId(rule: RepoRule): string {
 function topicOf(finding: Finding, ledger: RuleLedger | null): FindingTopic | undefined {
 	const rule = finding.ruleId ? ledger?.rules.find((entry) => entry.id === finding.ruleId) : undefined;
 
-	if (rule) return { id: ruleTopicId(rule), label: rule.text };
+	if (rule) return { id: ruleTopicId(rule), label: ruleSummary(rule) };
 	if (finding.smell) return { id: `smell:${finding.smell}`, label: categoryLabel(finding.smell) };
 	if (finding.category) return { id: `category:${finding.category}`, label: categoryLabel(finding.category) };
 

@@ -83,6 +83,22 @@ test('a rule finding quotes the rule and its source, and falls back to the rule 
 	expect(bare).toContain('Rule `R4`');
 });
 
+test('a rule whose words were not found in its file shows its restatement as prose, never as a quote', () => {
+	const rule = {
+		id: 'R9',
+		text: '',
+		verbatim: false,
+		restatement: 'Keep each file short.',
+		source: { path: 'AGENTS.md', line: 1 }
+	};
+
+	const body = renderEvidence(verified({ reason: 'breaks it', method: 'rule' }, { rule }));
+
+	expect(body).toContain('Keep each file short.');
+	expect(body).toContain('Rule `R9` from `AGENTS.md:1`');
+	expect(body).not.toContain('>');
+});
+
 test('an unverified finding says so with the reason', () => {
 	const body = renderEvidence({
 		id: 'f',

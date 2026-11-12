@@ -1,5 +1,5 @@
 import { effectiveReportLowSeverity } from '../../review/session/review-settings.js';
-import { configForOrchestrator, configForSubagent } from '../../models/models.js';
+import { configForOrchestrator, configForSubagent, configForVerifier } from '../../models/models.js';
 import { execUnavailableReason } from '../../sandbox/exec-sandbox.js';
 import type { ReviewRevision } from '../../evidence/evidence.js';
 import type { ReportSettings } from '../report/report.js';
@@ -17,6 +17,7 @@ const NO_CHECKOUT = 'There is no checkout to run code in: a bare diff has no rep
 export async function describeSettings(tuning: ReviewTuning, revision: ReviewRevision | null): Promise<ReportSettings> {
 	const review = configForOrchestrator();
 	const worker = configForSubagent();
+	const verifier = configForVerifier();
 	const execReason = await execReasonOf(tuning, revision);
 
 	return {
@@ -24,6 +25,7 @@ export async function describeSettings(tuning: ReviewTuning, revision: ReviewRev
 		subagents: subagentCapOf(tuning),
 		reviewerModel: review.model,
 		workerModel: worker.model,
+		verifierModel: verifier.model === review.model ? null : verifier.model,
 		reviewerEffort: review.reasoningEffort ?? null,
 		workerEffort: worker.reasoningEffort ?? null,
 		lenses: tuning.lenses,

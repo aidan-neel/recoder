@@ -14,7 +14,7 @@ Every command here is written with `-p` (`--programmatic`), which makes it print
 | `recoder result -p <run-id>` | Print a finished run's report.                                             |
 | `recoder cancel -p <run-id>` | Ask a running review to stop.                                              |
 | `recoder runs -p`            | List recent runs as JSON, newest first.                                    |
-| `recoder models -p`          | List the model ids `--reviewer` and `--worker` accept, as JSON.            |
+| `recoder models -p`          | List the model ids `--reviewer`, `--worker` and `--verifier` accept, as JSON.            |
 | `recoder skill`              | Print or install the agent skill.                                          |
 | `recoder init`               | Set Recoder up for coding agents. A person runs it, not you.               |
 | `recoder upgrade`            | Replace the program with the latest release. A person runs it, not you.    |
@@ -64,7 +64,8 @@ Tuning:
 | `--budget <low\|medium\|high>` | `low`                    | How much to spend.                                                             |
 | `--subagents <n\|uncapped>`    | the budget's cap         | Most subagents the review may run.                                             |
 | `--reviewer <model id>`        | the saved Review model   | Model the reviewers run on. List the ids with `recoder models -p`.             |
-| `--worker <model id>`          | the saved pick           | Model the workers (subagents and verifiers) run on.                            |
+| `--worker <model id>`          | the saved pick           | Model the subagents run on.                                                    |
+| `--verifier <model id>`        | the saved pick           | Model the verifiers run on. Without one they follow the reviewers' model.      |
 | `--reviewer-effort <level>`    | the budget's             | Reviewer reasoning effort: `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. |
 | `--worker-effort <level>`      | the budget's             | Worker reasoning effort, same levels.                                          |
 | `--lens <id>`                  | all                      | Run only these lenses. Repeatable or comma-separated.                          |
@@ -134,7 +135,7 @@ A signal stops the wait with exit 130. The run goes on.
 | `--repo <path>` | every repository | List only the runs of this repository directory. |
 | `--limit <n>`   | 20               | List at most this many runs.                     |
 
-`recoder models -p [--provider <name>] [--search <text>]` prints the model ids that `--reviewer` and `--worker` accept on this machine, as one line of JSON: `{ reviewer, worker, models: [{ id, name, provider, efforts, defaultEffort }], problems }`. `reviewer` and `worker` are the saved picks, or null. A model with no effort levels has `efforts: []` and `defaultEffort: null`. An agent that could not list its models adds a line to `problems`; the other models are still listed. It exits 0, also for an empty list.
+`recoder models -p [--provider <name>] [--search <text>]` prints the model ids that `--reviewer`, `--worker` and `--verifier` accept on this machine, as one line of JSON: `{ reviewer, worker, models: [{ id, name, provider, efforts, defaultEffort }], problems }`. `reviewer` and `worker` are the saved picks, or null. A model with no effort levels has `efforts: []` and `defaultEffort: null`. An agent that could not list its models adds a line to `problems`; the other models are still listed. It exits 0, also for an empty list.
 
 | Flag                | Default        | Meaning                                                                                |
 | ------------------- | -------------- | -------------------------------------------------------------------------------------- |
