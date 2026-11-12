@@ -45,14 +45,12 @@ describe('conflicting rule files', () => {
 					{
 						text: 'Never use default exports.',
 						source: 'AGENTS.md',
-						line: 1,
-						topic: 'exports'
+						line: 1
 					},
 					{
 						text: 'Default exports are allowed.',
 						source: 'RECODER.md',
-						line: 1,
-						topic: 'exports'
+						line: 1
 					}
 				]
 			},
@@ -123,14 +121,12 @@ describe('conflicting rule files', () => {
 						text: 'Files stay under 500 lines, tests included.',
 						source: 'AGENTS.md',
 						line: 1,
-						topic: 'line-limits',
 						check: { kind: 'max-file-lines', max: 500 }
 					},
 					{
 						text: 'Keep functions under 40 lines.',
 						source: GLOBAL_SOURCE,
-						line: 1,
-						topic: 'line-limits'
+						line: 1
 					}
 				]
 			},
@@ -177,14 +173,12 @@ describe('conflicting rule files', () => {
 					{
 						text: 'Never write // comments.',
 						source: 'AGENTS.md',
-						line: 1,
-						topic: 'comments'
+						line: 1
 					},
 					{
 						text: 'Comments are JSDoc docstrings only.',
 						source: 'RECODER.md',
-						line: 1,
-						topic: 'comments'
+						line: 1
 					}
 				]
 			},

@@ -44,11 +44,16 @@ describe('toLedger', () => {
 		const ledger = toLedger(
 			{
 				rules: [
-					{ text: 'A', source: 'AGENTS.md', line: 1, check: { kind: 'forbid-pattern', pattern: '(unclosed' } },
-					{ text: 'B', source: 'AGENTS.md', line: 2, check: { kind: 'forbid-pattern', pattern: 'x'.repeat(201) } },
-					{ text: 'C', source: 'AGENTS.md', line: 3, check: { kind: 'forbid-pattern', pattern: '.*' } },
+					{ text: 'line 1', source: 'AGENTS.md', line: 1, check: { kind: 'forbid-pattern', pattern: '(unclosed' } },
 					{
-						text: 'D',
+						text: 'Write JSDoc only.',
+						source: 'AGENTS.md',
+						line: 2,
+						check: { kind: 'forbid-pattern', pattern: 'x'.repeat(201) }
+					},
+					{ text: 'line 3', source: 'AGENTS.md', line: 3, check: { kind: 'forbid-pattern', pattern: '.*' } },
+					{
+						text: 'Keep files short.',
 						source: 'AGENTS.md',
 						line: 4,
 						check: { kind: 'forbid-pattern', pattern: '^\\s*//', glob: '*.ts' }
@@ -59,11 +64,11 @@ describe('toLedger', () => {
 			'hash'
 		);
 
-		expect(ledger.rules.map((rule) => rule.check)).toEqual([
-			undefined,
-			undefined,
-			undefined,
-			{ kind: 'forbid-pattern', pattern: '^\\s*//', glob: '**/*.ts' }
+		expect(ledger.rules.map((rule) => [rule.verbatim !== false, rule.check])).toEqual([
+			[true, undefined],
+			[true, undefined],
+			[true, undefined],
+			[true, { kind: 'forbid-pattern', pattern: '^\\s*//', glob: '**/*.ts' }]
 		]);
 	});
 
@@ -140,7 +145,7 @@ describe('toLedger', () => {
 		});
 	});
 
-	test('keeps distinct rules citing the same line and repeated rules on different line spans instead of merging them', () => {
+	test('keeps distinct restated rules that cite the same line and merges a quoted rule the file repeats', () => {
 		const source = {
 			path: 'AGENTS.md',
 			revision: 'rev1',
@@ -163,8 +168,59 @@ describe('toLedger', () => {
 		expect(ledger.rules.map((rule) => [rule.id, rule.text, rule.restatement, rule.source.line])).toEqual([
 			['R1', '', 'Keep each file short.', 1],
 			['R2', '', 'Use docstrings for comments.', 1],
-			['R3', 'Validate input payloads.', 'Validate input payloads.', 2],
-			['R4', 'Validate input payloads.', 'Validate input payloads.', 4]
+			['R3', 'Validate input payloads.', 'Validate input payloads.', 2]
+		]);
+	});
+
+	test('merges a rule that two files quote word for word and keeps the copy from the file with precedence', () => {
+		const sources = [
+			{ path: 'AGENTS.md', revision: 'rev1', text: '# Rules\n- Files stay under 500 lines.\n' },
+			{ path: 'CLAUDE.md', revision: 'rev1', text: '# Notes\n\n- Files stay under 500 lines.\n' }
+		];
+
+		const ledger = toLedger(
+			{
+				rules: [
+					{ text: 'Files stay under 500 lines.', source: 'CLAUDE.md', line: 3 },
+					{ text: 'Files stay under 500 lines.', source: 'AGENTS.md', line: 2 }
+				]
+			},
+			sources,
+			'hash'
+		);
+
+		expect(ledger.rules.map((rule) => [rule.id, rule.text, rule.source.path, rule.source.line])).toEqual([
+			['R1', 'Files stay under 500 lines.', 'AGENTS.md', 2]
+		]);
+	});
+
+	test('gives no mechanical check to a rule whose quote is in no source file', () => {
+		const source = { path: 'AGENTS.md', revision: 'rev1', text: '# Style\n- Use strict types.\n' };
+
+		const ledger = toLedger(
+			{
+				rules: [
+					{
+						text: 'Files stay under 300 lines.',
+						source: 'AGENTS.md',
+						line: 1,
+						check: { kind: 'max-file-lines', max: 300 }
+					},
+					{
+						text: 'Use strict types.',
+						source: 'AGENTS.md',
+						line: 2,
+						check: { kind: 'forbid-pattern', pattern: ': any\\b', glob: '**/*.ts' }
+					}
+				]
+			},
+			[source],
+			'hash'
+		);
+
+		expect(ledger.rules.map((rule) => [rule.verbatim !== false, rule.check?.kind])).toEqual([
+			[false, undefined],
+			[true, 'forbid-pattern']
 		]);
 	});
 

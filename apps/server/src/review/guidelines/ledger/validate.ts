@@ -33,7 +33,6 @@ export const ledgerReplySchema = z.object({
 			level: z.enum(RULE_LEVELS).nullish(),
 			appliesTo: z.string().nullish(),
 			exceptions: z.array(z.string()).nullish(),
-			topic: z.string().nullish(),
 			check: z.unknown().optional()
 		})
 	)
@@ -302,7 +301,7 @@ function placeRule(raw: RawRule, order: number, sources: LedgerSource[]): Placed
 
 	const level = classifyRuleLevel(raw.level, extracted.text, extracted.restatement);
 	const appliesTo = cleanGlob(raw.appliesTo);
-	const check = level === 'mandatory' && !exceptions ? validCheck(raw.check) : undefined;
+	const check = isVerbatim && level === 'mandatory' && !exceptions ? validCheck(raw.check) : undefined;
 
 	return {
 		rule: {
@@ -324,12 +323,20 @@ function placeRule(raw: RawRule, order: number, sources: LedgerSource[]): Placed
 	};
 }
 
+/**
+ * What makes two entries the same rule. A verbatim rule is its scope and its quoted words wherever they are written,
+ * so a rule repeated in two files merges into one. A rule with no verified quote is only the model's restatement, so
+ * the place it cites is part of the key and two restated rules never merge by chance.
+ */
 function dedupeKey(entry: PlacedRule): string {
 	const scope = effectiveRuleScope(entry.rule) ?? '*';
-	const span = `${entry.rule.source.line ?? ''}:${entry.rule.source.endLine ?? ''}`;
-	const wording = collapseWhitespace(entry.rule.text || entry.rule.restatement || '').toLowerCase();
 
-	return `${scope}\0${span}\0${wording}`;
+	if (entry.rule.verbatim !== false) return `${scope}\0${collapseWhitespace(entry.rule.text).toLowerCase()}`;
+
+	const { path, line, endLine } = entry.rule.source;
+	const wording = collapseWhitespace(entry.rule.restatement ?? '').toLowerCase();
+
+	return `${scope}\0${path}:${line ?? ''}:${endLine ?? ''}\0${wording}`;
 }
 
 function dedupeRules(entries: PlacedRule[]): PlacedRule[] {

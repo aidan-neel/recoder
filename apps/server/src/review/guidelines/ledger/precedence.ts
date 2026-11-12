@@ -281,17 +281,10 @@ function findLimit(rule: Pick<RepoRule, 'text' | 'restatement'>): ParsedLimit | 
 	};
 }
 
-function limitsConflict(
-	a: Pick<RepoRule, 'text' | 'restatement' | 'check'>,
-	b: Pick<RepoRule, 'text' | 'restatement' | 'check'>,
-	limitA: ParsedLimit,
-	limitB: ParsedLimit
-): boolean {
+function limitsConflict(limitA: ParsedLimit, limitB: ParsedLimit): boolean {
 	if (limitA.unit !== limitB.unit || limitA.value === limitB.value) return false;
 
-	const sameCheckKind = Boolean(a.check && b.check && a.check.kind === b.check.kind);
-
-	return sameCheckKind || sameTokens(limitA.subjects, limitB.subjects);
+	return sameTokens(limitA.subjects, limitB.subjects);
 }
 
 function opposingChoices(tokensA: string[], tokensB: string[]): boolean {
@@ -320,7 +313,7 @@ function rulesConflict(
 	const limitB = findLimit(b);
 
 	if (limitA && limitB) {
-		return limitsConflict(a, b, limitA, limitB) || opposingChoices(tokensA, tokensB);
+		return limitsConflict(limitA, limitB) || opposingChoices(tokensA, tokensB);
 	}
 
 	if (!tokensA.length || !tokensB.length) return false;

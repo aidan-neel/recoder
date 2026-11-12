@@ -17,7 +17,6 @@ For each rule:
 - "level": "mandatory" when stated as a hard requirement ("must", "never", "always", unqualified imperatives) or "advisory" when stated as a preference with room for judgment ("prefer", "consider", "when practical").
 - "exceptions": array of exceptions written inside or right next to the rule (for example ["migration scripts", "generated snapshots"]), omitted when none are stated.
 - "appliesTo": a glob, only when the rule concerns some files. A rule in a nested file such as apps/web/AGENTS.md applies to "apps/web/**"; a rule under a heading or sentence that names a folder or file type applies to that folder or type. Omit it when the rule covers every file.
-- "topic": optional short hyphenated subject slug (such as "file-length", "comments", "ui-components") naming what the rule governs.
 - "check": only when the rule is "mandatory", has no exceptions, and is fully decided by one of these, otherwise omit it:
   {"kind":"max-file-lines","max":500,"glob":"**/*.ts"} - matching files stay at or under max lines.
   {"kind":"forbid-pattern","pattern":"^\\\\s*//(?!/)","glob":"**/*.ts"} - a JavaScript regex (at most 200 characters, no flags) tested against each added line on its own. Use it only when every match is a violation.
@@ -26,7 +25,7 @@ For each rule:
 
 Never invent a rule the text does not state. List rules in the order they appear.`;
 
-export const LEDGER_FINAL_EXAMPLE = `{"message":"Read AGENTS.md.","rules":[{"text":"Files stay under 500 lines, tests included.","restatement":"Keep every file under 500 lines.","source":"AGENTS.md","line":12,"endLine":12,"level":"mandatory","topic":"file-length","check":{"kind":"max-file-lines","max":500}},{"text":"Prefer shared UI components unless building a one-off chart.","restatement":"Prefer shared UI components.","source":"AGENTS.md","line":30,"endLine":31,"level":"advisory","exceptions":["building a one-off chart"],"appliesTo":"apps/web/**","topic":"ui-components"}]}`;
+export const LEDGER_FINAL_EXAMPLE = `{"message":"Read AGENTS.md.","rules":[{"text":"Files stay under 500 lines, tests included.","restatement":"Keep every file under 500 lines.","source":"AGENTS.md","line":12,"endLine":12,"level":"mandatory","check":{"kind":"max-file-lines","max":500}},{"text":"Prefer shared UI components unless building a one-off chart.","restatement":"Prefer shared UI components.","source":"AGENTS.md","line":30,"endLine":31,"level":"advisory","exceptions":["building a one-off chart"],"appliesTo":"apps/web/**"}]}`;
 
 /** Each source under its path as untrusted data, every line numbered so rules can cite its exact span. */
 export function ledgerUserPrompt(sources: LedgerSource[]): string {
