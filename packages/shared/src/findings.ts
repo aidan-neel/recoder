@@ -194,6 +194,11 @@ export interface FindingRule {
 	source: { path: string; line?: number; endLine?: number; revision?: string };
 }
 
+/** A cited rule's own words: its quote, or its restatement when no quote was found in the source file. */
+export function citedRuleWords(rule: Pick<FindingRule, 'text' | 'restatement'>): string {
+	return rule.text || rule.restatement || '';
+}
+
 /** How a finding relates to the review before it on the same pull request. */
 export interface FindingHistory {
 	/** The head commit of the first review that reported it. */

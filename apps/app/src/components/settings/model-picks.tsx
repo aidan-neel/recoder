@@ -17,7 +17,7 @@ function ModelPickRow({ row }: { row: ModelRowView }) {
 	);
 }
 
-/** The Review model and the Subagent model. Hidden until an agent is ready or a model is listed. */
+/** The Review, Subagent and Verifier models. Hidden until an agent is ready or a model is listed. */
 export function ModelPicks() {
 	const view = useAgentModels();
 

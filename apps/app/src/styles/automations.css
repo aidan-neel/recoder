@@ -6,21 +6,45 @@
 	gap: 8px;
 }
 
-/* The handle is typed into a comment as it stands, so it is set like code. */
-.automations-handle {
+/* A handle or a glob is matched as it is typed, so it is set like code. */
+.automations-code-field {
 	width: 168px;
 }
-.automations-handle input {
+.automations-code-field input {
 	font-family: var(--font-code);
 	font-size: 12px;
 }
 
-/* The interval's menu is as wide as its trigger, so it opens inside the card. */
+/* A select's menu is as wide as its trigger, so it opens inside the card. */
 .automations-interval {
 	width: 132px;
 }
-.automations-interval-menu {
+.automations-threshold {
+	width: 168px;
+}
+.automations-menu {
 	min-width: var(--radix-select-trigger-width);
+}
+
+/* The ignored globs under their row: each a chip that holds its own remove button. */
+.automations-globs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	padding: 0 16px 14px;
+}
+.automations-glob {
+	display: inline-flex;
+	height: 30px;
+	align-items: center;
+	gap: 2px;
+	padding-left: 10px;
+	border-radius: 8px;
+	background: var(--bg-hover);
+	color: var(--text-secondary);
+}
+.automations-glob .mono {
+	font-size: 12px;
 }
 
 /* What the last round could not read, one line a repository. */

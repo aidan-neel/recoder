@@ -1,7 +1,7 @@
 'use client';
 
 import { Button, SkeletonRows } from '@recoder/ui';
-import { CornerDownLeft, TriangleAlert } from 'lucide-react';
+import { CornerDownLeft, Info, TriangleAlert } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 import type { PullListView, PullRow, PullTarget } from '@/lib/pulls/types';
@@ -34,9 +34,13 @@ function openLabel(target: PullTarget): string | null {
 	return null;
 }
 
-/** Repositories whose forge did not answer: the rest of the list still shows. */
-function Failures({ failures }: Pick<PullListView, 'failures'>) {
-	if (failures.length === 0) return null;
+/**
+ * What the list does not show in full: repositories whose forge did not
+ * answer, and ones with more open pull requests than the list holds. The rest
+ * of the list still shows.
+ */
+function Strips({ failures, truncated }: Pick<PullListView, 'failures' | 'truncated'>) {
+	if (failures.length === 0 && truncated.length === 0) return null;
 
 	return (
 		<div className="pulls-strips">
@@ -45,6 +49,15 @@ function Failures({ failures }: Pick<PullListView, 'failures'>) {
 					<TriangleAlert aria-hidden />
 					<span className="strip-text">
 						<strong>{failure.repoName}</strong> did not load. {failure.error}
+					</span>
+				</div>
+			))}
+			{truncated.map((repo) => (
+				<div key={repo.repoId} className="strip" data-tone="neutral" role="status">
+					<Info aria-hidden />
+					<span className="strip-text">
+						<strong>{repo.repoName}</strong> has more open pull requests than fit here. Paste a link to open an older
+						one.
 					</span>
 				</div>
 			))}
@@ -120,7 +133,7 @@ export function PullsScreen() {
 		>
 			<div className="page-scroll">
 				<div className="page-column">
-					<Failures failures={view.failures} />
+					<Strips failures={view.failures} truncated={view.truncated} />
 					<div className="pulls-head">
 						<h1 className="contents">
 							<PullFilterMenu filter={view.filter} counts={view.counts} onChange={view.setFilter} />

@@ -30,8 +30,8 @@ a.guidelines-pill:focus-visible {
 }
 
 /*
- * The row's button steps aside while its editor is open. After pills, its column closes too, so they end at the
- * card's edge. Coming back, the column opens before the button fades in.
+ * The row's button steps aside while its editor is open. After pills or the learned rules, its column closes too,
+ * so they end at the card's edge. Coming back, the column opens before the button fades in.
  */
 .guidelines-action {
 	display: grid;
@@ -49,7 +49,7 @@ a.guidelines-pill:focus-visible {
 		margin-left var(--dur-toggle) var(--ease-menu) var(--dur-press),
 		opacity var(--dur-press) ease-out;
 }
-.guidelines-status + .guidelines-action[inert] {
+.guidelines-action[inert]:not(:first-child) {
 	grid-template-columns: 0fr;
 	margin-left: -10px;
 }
@@ -225,4 +225,71 @@ a.guidelines-pill:focus-visible {
 	color: var(--text-subtle);
 	font-size: var(--font-size-meta);
 	line-height: 16px;
+}
+
+/* ───────── Learned rules: kinds of finding a repository dismissed often, and what to do with each ───────── */
+.learned-dot {
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	background: var(--accent);
+}
+.learned-panel {
+	display: flex;
+	width: 400px;
+	flex-direction: column;
+	gap: 4px;
+	padding: 12px 12px 6px;
+}
+.learned-note {
+	color: var(--text-subtle);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+	text-wrap: pretty;
+}
+.learned-list {
+	display: flex;
+	flex-direction: column;
+	margin-top: 6px;
+}
+.learned-rule {
+	display: flex;
+	min-height: 48px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 0;
+}
+.learned-rule + .learned-rule {
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+}
+.learned-text {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	gap: 1px;
+}
+.learned-name {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.learned-detail {
+	color: var(--text-subtle);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.learned-detail[data-tone='danger'] {
+	color: var(--danger);
+}
+.learned-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+	margin-right: -4px;
 }

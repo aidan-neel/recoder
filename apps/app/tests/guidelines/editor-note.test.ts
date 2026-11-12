@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import type { RepoGuidelines } from '@recoder/shared';
+import { editorNote, type EditedRepo } from '../../src/lib/guidelines/editor-note';
 
-import { editorNote } from '../../src/lib/guidelines/editor-note';
-
-const repo: RepoGuidelines = {
+const repo: EditedRepo = {
 	repoId: 'r1',
+	provider: 'github',
 	path: '.recoder/guidelines.md',
 	ref: 'main',
 	sha: null,
@@ -28,6 +27,12 @@ describe('the note under the guidelines editor', () => {
 
 	test('a repository that cannot propose says saving is blocked', () => {
 		expect(editorNote({ error: null, length: 10, max: 4_000, repo })?.kind).toBe('blocked');
+	});
+
+	test('a local repository says to edit its file, not to connect a token', () => {
+		const note = editorNote({ error: null, length: 10, max: 4_000, repo: { ...repo, provider: 'local' } });
+
+		expect(note?.kind).toBe('local');
 	});
 
 	test('a pending pull request says the save updates it', () => {

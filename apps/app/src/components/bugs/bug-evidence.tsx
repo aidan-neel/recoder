@@ -1,6 +1,6 @@
 'use client';
 
-import { parseUnifiedDiff } from '@recoder/shared';
+import { citedRuleWords, parseUnifiedDiff } from '@recoder/shared';
 import { CodeLines, langForPath, Markdown } from '@recoder/ui';
 import { Check } from 'lucide-react';
 import { useMemo } from 'react';
@@ -52,20 +52,31 @@ function TraceBlock({ trace }: Pick<BugView, 'trace'>) {
 	);
 }
 
-/** The repository rule the bug breaks, word for word, with where it is written. */
+/**
+ * The repository rule the bug breaks, with where it is written: its own words
+ * as a quote, or Recoder's restatement as plain text when the file has no line
+ * that says it word for word. A rule the file states as a preference says so.
+ */
 function RuleBlock({ rule }: { rule: NonNullable<BugView['rule']> }) {
 	const line = rule.source.line ? `:${rule.source.line}` : '';
+	const words = citedRuleWords(rule);
 
 	return (
 		<section className="proof" aria-label="The rule it breaks">
 			<div className="proof-head" data-plain>
-				<span className="flex-1">Rule {rule.id}</span>
+				<span className="flex-1">
+					{rule.level === 'advisory' ? 'Advisory rule' : 'Rule'} {rule.id}
+				</span>
 				<span className="mono text-fg-faint">
 					{rule.source.path}
 					{line}
 				</span>
 			</div>
-			<blockquote className="rule-quote">{rule.text}</blockquote>
+			{rule.verbatim === false ? (
+				<p className="rule-restated">{words}</p>
+			) : (
+				<blockquote className="rule-quote">{words}</blockquote>
+			)}
 		</section>
 	);
 }

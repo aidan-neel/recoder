@@ -3,10 +3,12 @@
 import type { GuidelinesOverview } from '@recoder/shared';
 import { Button, Skeleton, SkeletonText } from '@recoder/ui';
 
+import { useLearnedRules } from '@/lib/guidelines/use-learned-rules';
 import { useRepoRow, type RepoRowError } from '@/lib/guidelines/use-repo-row';
 
 import { GuidelinesRow } from './guidelines-row';
 import { LayerRow } from './layer-row';
+import { LearnedRules } from './learned-rules';
 import { RepoStatus } from './repo-status';
 
 interface RepoRowProps {
@@ -56,15 +58,27 @@ function FailedRow({ view }: { view: RepoRowError }) {
 }
 
 /**
- * One tracked repository and its guidelines file: its first rule, where the
- * file stands, and Edit or Write. Saving opens a pull request; the file
- * applies once it merges.
+ * One tracked repository and its guidelines file: its first rule, what
+ * Recoder learned there, where the file stands, and Edit or Write. Saving
+ * opens a pull request; the file applies once it merges.
  */
 export function RepoRow({ repo, overview }: RepoRowProps) {
 	const view = useRepoRow(repo, overview);
+	const learned = useLearnedRules(repo.id);
 
 	if (view.kind === 'error') return <FailedRow view={view} />;
 	if (view.kind === 'loading') return <LoadingRow id={repo.id} name={view.name} />;
 
-	return <LayerRow name={view.name} status={<RepoStatus data={view.data} />} view={view} />;
+	return (
+		<LayerRow
+			name={view.name}
+			status={
+				<>
+					<LearnedRules view={learned} repoName={view.name} />
+					<RepoStatus data={view.data} />
+				</>
+			}
+			view={view}
+		/>
+	);
 }

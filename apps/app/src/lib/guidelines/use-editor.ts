@@ -1,10 +1,10 @@
 'use client';
 
-import type { GuidelinesDraftRequest, RepoGuidelines } from '@recoder/shared';
+import type { GuidelinesDraftRequest } from '@recoder/shared';
 import type { ButtonStatus } from '@recoder/ui';
 import { useState, type KeyboardEvent, type RefObject } from 'react';
 
-import { editorNote, type EditorNote } from './editor-note';
+import { editorNote, type EditedRepo, type EditorNote } from './editor-note';
 import { useGuidelinesEditor, type ScopeKey } from './editor-store';
 import { firstRule, saveLabel, successLabel, trimEmptyBullets } from './rules';
 import { useDraft } from './use-draft';
@@ -15,7 +15,7 @@ import { useUnloadGuard } from './use-unload-guard';
 export interface GuidelinesEditorSpec {
 	scope: ScopeKey;
 	open: boolean;
-	repo: RepoGuidelines | null;
+	repo: EditedRepo | null;
 	maxChars: number;
 	/** Names the text field for its aria-label, e.g. "Global guidelines" or "acme/api guidelines". */
 	label: string;

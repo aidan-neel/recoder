@@ -9,12 +9,20 @@ import {
 } from '@recoder/shared';
 import { useEffect, useState } from 'react';
 
-import { missingNote, modelCatalog, rolePick, type ModelCatalog, type ModelRole, type RolePick } from './model-options';
+import {
+	followsWhenUnset,
+	missingNote,
+	modelCatalog,
+	rolePick,
+	type ModelCatalog,
+	type ModelRole,
+	type RolePick
+} from './model-options';
 import { FOLLOW_ID, FOLLOW_LABEL } from './model-rows';
 import { useSettings } from './settings-store';
 import { useInstantSave, type SaveState } from './use-save-state';
 
-/** A pick on screen before the server confirms it. A null id unsets the subagent pick. */
+/** A pick on screen before the server confirms it. A null id unsets the pick, so it follows the Review model. */
 interface Draft {
 	id: string | null;
 	effort: ReasoningEffort | null;
@@ -24,11 +32,12 @@ const FAILED = 'Model settings weren’t saved';
 
 const EMPTY_CATALOG: ModelCatalog = { groups: [], byId: new Map(), count: 0 };
 
-function patchFor(role: ModelRole, draft: Draft): ModelSettingsPatch {
-	return role === 'orchestrator'
-		? { orchestratorModelId: draft.id, orchestratorEffort: draft.effort }
-		: { specialistModelId: draft.id, specialistEffort: draft.effort };
-}
+/** The settings fields each role's pick saves to. */
+const ROLE_PATCH: Record<ModelRole, (draft: Draft) => ModelSettingsPatch> = {
+	orchestrator: ({ id, effort }) => ({ orchestratorModelId: id, orchestratorEffort: effort }),
+	specialist: ({ id, effort }) => ({ specialistModelId: id, specialistEffort: effort }),
+	verifier: ({ id, effort }) => ({ verifierModelId: id, verifierEffort: effort })
+};
 
 /** What the trigger reads, and whether it reads as a placeholder. */
 function triggerLabel(pick: RolePick): { text: string; quiet: boolean } {
@@ -47,11 +56,11 @@ function draftPick(draft: Draft, catalog: ModelCatalog, role: ModelRole): RolePi
 		id: draft.id,
 		option: draft.id ? catalog.byId.get(draft.id) : undefined,
 		effort: draft.effort,
-		follows: role === 'specialist' && !draft.id
+		follows: followsWhenUnset(role) && !draft.id
 	};
 }
 
-/** The dialog's row key for a pick: its model id, or the follow row for an unset subagent pick. */
+/** The dialog's row key for a pick: its model id, or the follow row for an unset pick. */
 function pickKey(pick: RolePick): string | null {
 	return pick.id ?? (pick.follows ? FOLLOW_ID : null);
 }
@@ -76,7 +85,7 @@ export interface ModelPickerView {
 	state: SaveState;
 	open: boolean;
 	setOpen: (open: boolean) => void;
-	/** The dialog's current row key: the pick's id, or the follow row for an unset subagent pick. */
+	/** The dialog's current row key: the pick's id, or the follow row for an unset pick. */
 	current: string | null;
 	/** The grouped catalog the dialog lays out. */
 	catalog: ModelCatalog;
@@ -96,7 +105,7 @@ export function useModelPicker(role: ModelRole): ModelPickerView {
 	const settings = useSettings((state) => state.models);
 	const offline = useSettings((state) => state.status === 'offline');
 	const [open, setOpen] = useState(false);
-	const instant = useInstantSave((next: Draft) => patchFor(role, next), FAILED);
+	const instant = useInstantSave(ROLE_PATCH[role], FAILED);
 	const draft = instant.draft?.value;
 	const save = instant.change;
 

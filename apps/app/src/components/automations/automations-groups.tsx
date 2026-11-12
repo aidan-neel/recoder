@@ -5,14 +5,15 @@ import { useAutoReviewSection } from '@/lib/settings/use-auto-review-section';
 import { SectionNotice } from '@/components/settings/section-notice';
 import { SettingsSkeleton } from '@/components/settings/settings-skeleton';
 
+import { PublishingGroup } from './publishing-group';
 import { RecentGroup } from './recent-group';
 import { RepositoriesGroup } from './repositories-group';
 import { TriggersGroup } from './triggers-group';
 import { WatcherGroup } from './watcher-group';
 import { WebhooksGroup } from './webhooks-group';
 
-/** The groups' row counts while they load: Triggers, Watcher, Repositories, Recent, Webhooks. */
-const SKELETON_GROUPS = [6, 3, 2, 1, 2];
+/** The groups' row counts while they load: Triggers, Publishing, Watcher, Repositories, Recent, Webhooks. */
+const SKELETON_GROUPS = [5, 4, 3, 2, 1, 2];
 
 /**
  * The page's groups once the settings and the tracked repositories load, so
@@ -31,6 +32,7 @@ export function AutomationsGroups() {
 	return (
 		<div className="settings">
 			<TriggersGroup />
+			<PublishingGroup />
 			<WatcherGroup repos={section.repos} />
 			<RepositoriesGroup
 				repos={section.repos}

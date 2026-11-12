@@ -66,7 +66,7 @@ export function WatcherGroup({ repos }: { repos: Repo[] }) {
 				>
 					<Select
 						className="automations-interval"
-						contentClassName="automations-interval-menu"
+						contentClassName="automations-menu"
 						aria-label="Check every"
 						value={String(watcher.interval.value)}
 						onValueChange={watcher.interval.change}

@@ -198,14 +198,17 @@
 	font-size: var(--font-size-label);
 	line-height: 19px;
 }
-.rule-quote {
+.rule-quote,
+.rule-restated {
 	margin: 0;
 	padding: 10px 12px;
-	border-left: 2px solid var(--sent);
 	color: var(--text-secondary);
 	font-family: var(--font-ui);
 	font-size: var(--font-size-label);
 	line-height: 20px;
+}
+.rule-quote {
+	border-left: 2px solid var(--sent);
 }
 .fix-checks {
 	display: flex;

@@ -63,7 +63,7 @@ function EffortSelect({ name, effort, options, onChoose }: EffortSelectProps) {
 }
 
 interface ModelPickerProps {
-	/** `orchestrator` runs the reviewers; `specialist` runs subagents and verifiers. */
+	/** The pick this picker sets. */
 	role: ModelRole;
 	/** The role's picker state, from `useModelPicker(role)`. */
 	picker: ModelPickerView;

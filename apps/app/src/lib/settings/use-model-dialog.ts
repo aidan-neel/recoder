@@ -4,7 +4,7 @@ import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 
-import { queryTerms, ROLE_NAME, type ModelCatalog, type ModelRole } from './model-options';
+import { followsWhenUnset, queryTerms, ROLE_NAME, type ModelCatalog, type ModelRole } from './model-options';
 import { layoutRows, scrollToCenter, scrollToReveal, stepChoice, type RowLayout } from './model-rows';
 import { useRootScale } from '../shell/root-scale';
 
@@ -77,7 +77,7 @@ export function useModelDialog({
 	const scale = useRootScale();
 
 	const layout = useMemo(
-		() => layoutRows(catalog.groups, terms, role === 'specialist', scale),
+		() => layoutRows(catalog.groups, terms, followsWhenUnset(role), scale),
 		[catalog, terms, role, scale]
 	);
 

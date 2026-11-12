@@ -9,8 +9,8 @@ import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group
 
 import { SwitchRow, type SwitchView } from './switch-row';
 
-/** The switches of this group. The watcher's own switch sits with the watcher. */
-type Trigger = Exclude<AutoReviewSwitch, 'enabled'>;
+/** The switches of this group. The watcher's own switch sits with the watcher, and posting with Publishing. */
+type Trigger = Exclude<AutoReviewSwitch, 'enabled' | 'postResults'>;
 
 interface TriggerText {
 	name: string;
@@ -39,11 +39,6 @@ const TRIGGERS: Record<Trigger, TriggerText> = {
 		name: 'Skip drafts',
 		on: 'Drafts wait until they are ready, unless someone mentions Recoder',
 		off: 'Drafts are reviewed like the rest'
-	},
-	postResults: {
-		name: 'Post results',
-		on: 'Findings go on the pull request as one comment; a GitLab token needs the api scope',
-		off: 'Results stay in Recoder'
 	}
 };
 
@@ -73,7 +68,7 @@ function MentionHandleRow({ disabled }: { disabled: boolean }) {
 			state={handle.state}
 		>
 			<Input
-				className="automations-handle"
+				className="automations-code-field"
 				aria-label="Mention handle"
 				autoComplete="off"
 				spellCheck={false}
@@ -100,7 +95,7 @@ function MentionRows() {
 	);
 }
 
-/** Automations → Triggers: what starts a review, what it skips, and where the results go. */
+/** Automations → Triggers: what starts a review, and what it skips. */
 export function TriggersGroup() {
 	return (
 		<SettingsGroup title="Triggers">
@@ -108,7 +103,6 @@ export function TriggersGroup() {
 			<TriggerRow field="onOpened" />
 			<TriggerRow field="onPushed" />
 			<TriggerRow field="skipDrafts" />
-			<TriggerRow field="postResults" />
 		</SettingsGroup>
 	);
 }

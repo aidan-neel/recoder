@@ -82,7 +82,7 @@ export function useRepoRow(repo: TrackedRepo, overview: GuidelinesOverview): Rep
 		editor: {
 			scope: key,
 			open,
-			repo: data,
+			repo: { ...data, provider: repo.provider },
 			maxChars: overview.maxChars,
 			label: `${repo.name} guidelines`
 		}
