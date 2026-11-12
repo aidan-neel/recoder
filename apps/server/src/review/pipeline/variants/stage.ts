@@ -5,7 +5,7 @@ import { extendDeadlines, orchestratorSays, publishUnits, saveCheckpoint, type R
 import { partitionReviewers } from '../reviewers.js';
 import { reviewerSlices, unitRecord, type ReviewUnit } from '../units.js';
 import { askCoordinator } from './coordinator.js';
-import { INDEPENDENT_PREFIX, independentPassUnits } from './independent-pass.js';
+import { independentPassUnits, isIndependentReviewer } from './independent-pass.js';
 import { isSpecialistTree, planSpecialists, type SpecialistPlan } from './specialist-plan.js';
 
 const TASK_ID = 'specialist-plan';
@@ -34,7 +34,7 @@ export async function variantStage(run: ReviewRun): Promise<void> {
 
 /** Queues one independent reviewer per slice, unless a resumed review already has them. */
 function addIndependentPass(run: ReviewRun): void {
-	if (run.units.some((unit) => unit.id.startsWith(INDEPENDENT_PREFIX))) return;
+	if (run.units.some((unit) => isIndependentReviewer(unit.id))) return;
 
 	for (const unit of independentPassUnits(reviewerSlices(run.units))) queueUnit(run, unit);
 }
@@ -85,27 +85,31 @@ function queueUnit(run: ReviewRun, unit: ReviewUnit): void {
 function recordPlan(run: ReviewRun, plan: SpecialistPlan): void {
 	const decisions = plan.decisions.map(
 		(decision) =>
-			`- ${decision.specialist}: ${decision.outcome}${decision.slices.length ? ` over ${decision.slices.join(', ')}` : ''}. ${decision.reason}`
+			`${decision.specialist}: ${decision.outcome}${decision.slices.length ? ` over ${decision.slices.join(', ')}` : ''}. ${decision.reason}`
 	);
 
-	const unassigned = plan.unassigned.map((task) => `- ${task.specialist} does not read ${task.slice}. ${task.reason}`);
-	const lines = [...decisions, ...unassigned];
+	const unassigned = plan.unassigned.map((task) => `${task.specialist} does not read ${task.slice}. ${task.reason}`);
 
-	for (const line of lines) run.events?.onLog?.(`Specialist plan ${line.slice(2)}`);
+	for (const line of [...decisions, ...unassigned]) run.events?.onLog?.(`Specialist plan ${line}`);
 
 	orchestratorSays(
 		run.events,
 		'message_specialist_plan',
 		[
 			`I planned ${plan.units.length} specialist${plan.units.length === 1 ? '' : 's'}:`,
-			...decisions,
-			...(unassigned.length ? ['', 'Left unassigned:', ...unassigned] : [])
+			...decisions.map(bullet),
+			...(unassigned.length ? ['', 'Left unassigned:', ...unassigned.map(bullet)] : [])
 		].join('\n')
 	);
 
 	const summary = `${plan.units.length} specialists, ${plan.unassigned.length} tasks left unassigned`;
 
 	run.task(TASK_ID, LABEL, 'done', summary, { kind: 'planning' });
+}
+
+/** A line as a markdown list item in the orchestrator's note. */
+function bullet(line: string): string {
+	return `- ${line}`;
 }
 
 /**
