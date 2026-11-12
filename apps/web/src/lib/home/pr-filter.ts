@@ -1,4 +1,4 @@
-import type { PullRequest, Repo } from '@recoder/shared';
+import { repoOwner, type PullRequest, type Repo } from '@recoder/shared';
 
 /** What the Home filter box holds, parsed once per keystroke. */
 interface PrFilter {
@@ -39,15 +39,20 @@ export function repoForPaste(text: string, repos: Repo[], chosen: Repo | undefin
 	return chosen ?? repos[0];
 }
 
-/** True when the pull request matches the filter by repo, number, title, branch or author. */
+/** True when the pull request matches the filter by repo, owner, number, title, branch or author. */
 export function matchesPr(pr: PullRequest, repo: Repo, filter: PrFilter): boolean {
 	const { query } = filter;
 
 	if (query === '') return true;
 	if (filter.isUrl) return pr.number === filter.pastedNumber && filter.pastedRepo?.id === repo.id;
 
+	const owner = repoOwner(repo);
+	const leaf = repo.name.split('/').pop() || repo.name;
+	const qualifiedName = owner ? `${owner}/${leaf}` : repo.name;
+
 	return (
 		repo.name.toLowerCase().includes(query) ||
+		qualifiedName.toLowerCase().includes(query) ||
 		`#${pr.number}`.includes(query) ||
 		String(pr.number).includes(query) ||
 		pr.title.toLowerCase().includes(query) ||
