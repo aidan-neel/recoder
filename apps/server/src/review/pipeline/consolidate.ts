@@ -317,7 +317,7 @@ function detectorRuleCheck(
 	endLine: number,
 	ctx: CandidateContext
 ): RuleCheckDecisions | undefined {
-	if (result.detector !== 'rule-check' || result.suspected) return undefined;
+	if (result.detector !== 'rule-check') return undefined;
 
 	const ledgerRule = findLedgerRule(ctx.ledger, result.ruleId);
 

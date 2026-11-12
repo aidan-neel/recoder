@@ -81,6 +81,41 @@ function validEvidenceIds(ids: string[] | undefined, evidence: EvidenceStore): s
 	return (ids ?? []).filter((id) => evidence.get(id) !== undefined);
 }
 
+const NOT_CHECKED_REASON = 'Rule does not apply to this change, so violation was not checked.';
+
+interface RuleSettlement {
+	applicability?: RuleApplicabilityDecision;
+	verdict: 'refuted' | 'unverified' | 'verified';
+	outcome: RuleCheckDecisions['violation']['outcome'];
+	reason: string;
+	violationReason?: string;
+	evidenceIds?: string[];
+	exceptionsChecked?: string[];
+}
+
+function settleRuleDecision(
+	candidate: CandidateFinding,
+	baseApplicability: RuleApplicabilityDecision,
+	input: RuleSettlement
+): FindingVerification | 'refuted' {
+	const ruleCheck: RuleCheckDecisions = {
+		applicability: input.applicability ?? baseApplicability,
+		violation: {
+			outcome: input.outcome,
+			reason: input.violationReason ?? input.reason,
+			...(input.exceptionsChecked?.length ? { exceptionsChecked: input.exceptionsChecked } : {}),
+			evidenceIds: input.evidenceIds ?? []
+		}
+	};
+
+	candidate.ruleCheck = ruleCheck;
+
+	if (input.verdict === 'refuted') return 'refuted';
+	if (input.verdict === 'verified') return { status: 'verified', method: 'rule', reason: input.reason, ruleCheck };
+
+	return { status: 'unverified', reason: input.reason, ruleCheck };
+}
+
 /**
  * Deterministic scope and precedence check run before launching a verifier for
  * a `repo-rule` candidate. Returns the two recorded decisions when the rule
@@ -98,14 +133,7 @@ export function precheckRuleCandidate(
 
 	if (applicability.outcome === 'applies') return null;
 
-	return {
-		applicability,
-		violation: {
-			outcome: 'not-checked',
-			reason: 'Rule does not apply to this change, so violation was not checked.',
-			evidenceIds: []
-		}
-	};
+	return { applicability, violation: { outcome: 'not-checked', reason: NOT_CHECKED_REASON, evidenceIds: [] } };
 }
 
 /** Settles a `repo-rule` candidate refuted by deterministic applicability pre-check, preserving both decisions. */
@@ -159,26 +187,29 @@ export function qualityVerifierPushBack(
 	return null;
 }
 
+function applicabilityEvidenceIds(
+	candidate: CandidateFinding,
+	appFallbackIds: string[],
+	spanIds: string[],
+	evidence: EvidenceStore
+): string[] {
+	if (appFallbackIds.length) return appFallbackIds;
+	if (spanIds.length) return spanIds;
+
+	return validEvidenceIds(candidate.evidenceIds, evidence);
+}
+
 function resolveRuleApplicability(
 	candidate: CandidateFinding,
 	ctx: QualitySettleContext,
-	fallbackEvidenceIds: string[]
+	evidenceIds: string[]
 ): { rule: RepoRule | undefined; applicability: RuleApplicabilityDecision } {
-	if (ctx.ledger !== undefined) {
-		const rule = findLedgerRule(ctx.ledger, candidate.ruleId);
+	const rule = ctx.ledger !== undefined ? findLedgerRule(ctx.ledger, candidate.ruleId) : candidate.rule;
 
+	if (ctx.ledger !== undefined || rule) {
 		return {
 			rule,
-			applicability: evaluateRuleApplicability(rule, candidate, ctx.ledger, ctx.inventory, fallbackEvidenceIds)
-		};
-	}
-
-	if (candidate.rule) {
-		const rule: RepoRule = { ...candidate.rule };
-
-		return {
-			rule,
-			applicability: evaluateRuleApplicability(rule, candidate, null, ctx.inventory, fallbackEvidenceIds)
+			applicability: evaluateRuleApplicability(rule, candidate, ctx.ledger ?? null, ctx.inventory, evidenceIds)
 		};
 	}
 
@@ -187,7 +218,7 @@ function resolveRuleApplicability(
 		applicability: {
 			outcome: 'applies',
 			reason: `Rule ${candidate.ruleId ?? '(rule)'} applies to ${candidate.file}.`,
-			evidenceIds: fallbackEvidenceIds
+			evidenceIds
 		}
 	};
 }
@@ -202,30 +233,12 @@ function settleRuleVerdict(
 	const citedIds = cited.map((record) => record.id);
 	const spanIds = cited.filter((record) => coversSpan(record, candidate)).map((record) => record.id);
 	const appFallbackIds = validEvidenceIds(output.ruleCheck?.applicability?.evidenceIds, evidence);
-
-	const { rule, applicability } = resolveRuleApplicability(
-		candidate,
-		ctx,
-		appFallbackIds.length
-			? appFallbackIds
-			: spanIds.length
-				? spanIds
-				: validEvidenceIds(candidate.evidenceIds, evidence)
-	);
+	const appIds = applicabilityEvidenceIds(candidate, appFallbackIds, spanIds, evidence);
+	const { rule, applicability } = resolveRuleApplicability(candidate, ctx, appIds);
+	const settle = (input: RuleSettlement) => settleRuleDecision(candidate, applicability, input);
 
 	if (applicability.outcome !== 'applies') {
-		const ruleCheck: RuleCheckDecisions = {
-			applicability,
-			violation: {
-				outcome: 'not-checked',
-				reason: 'Rule does not apply to this change, so violation was not checked.',
-				evidenceIds: []
-			}
-		};
-
-		candidate.ruleCheck = ruleCheck;
-
-		return 'refuted';
+		return settle({ verdict: 'refuted', outcome: 'not-checked', reason: NOT_CHECKED_REASON });
 	}
 
 	if (
@@ -233,69 +246,45 @@ function settleRuleVerdict(
 		citedIds.length > 0 &&
 		(ctx.retrievals === undefined || ctx.retrievals > 0)
 	) {
-		const ruleCheck: RuleCheckDecisions = {
-			applicability: {
-				outcome: 'not-applicable',
-				reason: output.ruleCheck.applicability.reason ?? output.reason,
-				evidenceIds: appFallbackIds.length ? appFallbackIds : citedIds
-			},
-			violation: {
-				outcome: 'not-checked',
-				reason: 'Rule does not apply to this change, so violation was not checked.',
-				evidenceIds: []
-			}
+		const reportedApp: RuleApplicabilityDecision = {
+			outcome: 'not-applicable',
+			reason: output.ruleCheck.applicability.reason ?? output.reason,
+			evidenceIds: appFallbackIds.length ? appFallbackIds : citedIds
 		};
 
-		candidate.ruleCheck = ruleCheck;
-
-		return 'refuted';
+		return settle({
+			applicability: reportedApp,
+			verdict: 'refuted',
+			outcome: 'not-checked',
+			reason: NOT_CHECKED_REASON
+		});
 	}
 
 	const checkedExceptions = output.ruleCheck?.violation?.exceptionsChecked?.filter(Boolean);
 	const violationEvidenceIds = validEvidenceIds(output.ruleCheck?.violation?.evidenceIds, evidence);
-	const effectiveViolationIds = violationEvidenceIds.length ? violationEvidenceIds : citedIds;
+	const evidenceIds = violationEvidenceIds.length ? violationEvidenceIds : citedIds;
+	const violationReason = output.ruleCheck?.violation?.reason ?? output.reason;
 
 	if (ctx.retrievals !== undefined && ctx.retrievals === 0) {
 		const reason = `Reviewer assertion alone cannot confirm or refute a rule finding without verifier retrieval: ${output.reason}`;
 
-		const ruleCheck: RuleCheckDecisions = {
-			applicability,
-			violation: { outcome: 'unknown', reason, evidenceIds: [] }
-		};
-
-		candidate.ruleCheck = ruleCheck;
-
-		return { status: 'unverified', reason, ruleCheck };
+		return settle({ verdict: 'unverified', outcome: 'unknown', reason });
 	}
 
 	if (output.verdict === 'unverified') {
-		const ruleCheck: RuleCheckDecisions = {
-			applicability,
-			violation: {
-				outcome: 'unknown',
-				reason: output.ruleCheck?.violation?.reason ?? output.reason,
-				...(checkedExceptions?.length ? { exceptionsChecked: checkedExceptions } : {}),
-				evidenceIds: effectiveViolationIds
-			}
-		};
-
-		candidate.ruleCheck = ruleCheck;
-
-		return { status: 'unverified', reason: output.reason, ruleCheck };
+		return settle({
+			verdict: 'unverified',
+			outcome: 'unknown',
+			reason: output.reason,
+			violationReason,
+			exceptionsChecked: checkedExceptions,
+			evidenceIds
+		});
 	}
 
 	if (output.verdict === 'refuted') {
 		if (!citedIds.length) {
-			const reason = `The verifier disagrees: ${output.reason}`;
-
-			const ruleCheck: RuleCheckDecisions = {
-				applicability,
-				violation: { outcome: 'unknown', reason, evidenceIds: [] }
-			};
-
-			candidate.ruleCheck = ruleCheck;
-
-			return { status: 'unverified', reason, ruleCheck };
+			return settle({ verdict: 'unverified', outcome: 'unknown', reason: `The verifier disagrees: ${output.reason}` });
 		}
 
 		const reportedOutcome = output.ruleCheck?.violation?.outcome;
@@ -305,63 +294,38 @@ function settleRuleVerdict(
 				? 'exception'
 				: 'not-violated';
 
-		const ruleCheck: RuleCheckDecisions = {
-			applicability,
-			violation: {
-				outcome,
-				reason: output.ruleCheck?.violation?.reason ?? output.reason,
-				...(checkedExceptions?.length ? { exceptionsChecked: checkedExceptions } : {}),
-				evidenceIds: effectiveViolationIds
-			}
-		};
-
-		candidate.ruleCheck = ruleCheck;
-
-		return 'refuted';
+		return settle({
+			verdict: 'refuted',
+			outcome,
+			reason: violationReason,
+			exceptionsChecked: checkedExceptions,
+			evidenceIds
+		});
 	}
 
 	if (!spanIds.length) {
 		const reason = `The verifier agreed without citing a read of the flagged lines: ${output.reason}`;
 
-		const ruleCheck: RuleCheckDecisions = {
-			applicability,
-			violation: { outcome: 'unknown', reason, evidenceIds: effectiveViolationIds }
-		};
-
-		candidate.ruleCheck = ruleCheck;
-
-		return { status: 'unverified', reason, ruleCheck };
+		return settle({ verdict: 'unverified', outcome: 'unknown', reason, evidenceIds });
 	}
 
 	if (rule?.exceptions?.length && !checkedExceptions?.length) {
 		const reason = `The verifier agreed without checking the rule's stated exceptions (${rule.exceptions.join('; ')}): ${output.reason}`;
 
-		const ruleCheck: RuleCheckDecisions = {
-			applicability,
-			violation: { outcome: 'unknown', reason, evidenceIds: effectiveViolationIds }
-		};
-
-		candidate.ruleCheck = ruleCheck;
-
-		return { status: 'unverified', reason, ruleCheck };
+		return settle({ verdict: 'unverified', outcome: 'unknown', reason, evidenceIds });
 	}
 
-	const ruleCheck: RuleCheckDecisions = {
-		applicability: {
-			...applicability,
-			evidenceIds: applicability.evidenceIds.length ? applicability.evidenceIds : spanIds
-		},
-		violation: {
-			outcome: 'violated',
-			reason: output.ruleCheck?.violation?.reason ?? output.reason,
-			...(checkedExceptions?.length ? { exceptionsChecked: checkedExceptions } : {}),
-			evidenceIds: effectiveViolationIds
-		}
-	};
+	const finalApp = applicability.evidenceIds.length ? applicability : { ...applicability, evidenceIds: spanIds };
 
-	candidate.ruleCheck = ruleCheck;
-
-	return { status: 'verified', method: 'rule', reason: output.reason, ruleCheck };
+	return settle({
+		applicability: finalApp,
+		verdict: 'verified',
+		outcome: 'violated',
+		reason: output.reason,
+		violationReason,
+		exceptionsChecked: checkedExceptions,
+		evidenceIds
+	});
 }
 
 /**
@@ -419,10 +383,16 @@ function ruleHeading(candidate: CandidateFinding, rule: RepoRule | undefined): s
 	const where = rule ? ruleCitation(rule) : 'the guidelines';
 	const level = rule?.level ? `; level: ${rule.level}` : '';
 	const files = rule?.appliesTo ? `; applies to ${rule.appliesTo}` : '';
-	const restatement = rule?.restatement && rule.restatement !== rule.text ? `\nRestatement: ${rule.restatement}` : '';
 	const exceptions = rule?.exceptions?.length ? `\nStated exceptions: ${rule.exceptions.join('; ')}` : '';
+	const id = rule?.id ?? candidate.ruleId;
 
-	return `${UNTRUSTED_PREFIX}Repo rule ${rule?.id ?? candidate.ruleId} (quoted from ${where}${level}${files}):\n"${rule?.text ?? '(missing)'}"${restatement}${exceptions}`;
+	if (rule?.verbatim === false || (rule && !rule.text)) {
+		return `${UNTRUSTED_PREFIX}Repo rule ${id} (${where}${level}${files}; restatement, no verbatim quote):\n${rule.restatement ?? '(missing)'}${exceptions}`;
+	}
+
+	const restatement = rule?.restatement && rule.restatement !== rule.text ? `\nRestatement: ${rule.restatement}` : '';
+
+	return `${UNTRUSTED_PREFIX}Repo rule ${id} (quoted from ${where}${level}${files}):\n"${rule?.text ?? '(missing)'}"${restatement}${exceptions}`;
 }
 
 /** The standard a quality verifier holds the finding to, for its category. */

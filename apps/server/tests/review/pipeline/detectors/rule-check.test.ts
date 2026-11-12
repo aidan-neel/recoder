@@ -152,31 +152,28 @@ describe('ruleCheckResults', () => {
 		expect(await braceLines(['if (ready) start();', 'export const x = 1;'], [2])).toEqual([]);
 	});
 
-	test('marks matches of advisory rules or rules with exceptions as suspected so verification checks them', async () => {
+	test('uses the rule restatement in the detector title and falls back to it in the body when text is empty', async () => {
 		const results = await ruleCheckResults(
 			ledger([
 				{
 					id: 'R5',
-					text: 'Write no line comments unless documenting a fixture.',
+					text: '',
+					verbatim: false,
 					restatement: 'Avoid line comments.',
-					exceptions: ['Allowed in fixtures.'],
-					source: { path: 'AGENTS.md', line: 8, endLine: 9 },
+					source: { path: 'AGENTS.md', line: 8 },
 					check: { kind: 'forbid-pattern', pattern: '^\\s*//', glob: 'src/a.ts' }
-				},
-				{
-					id: 'R6',
-					text: 'Prefer https URLs over http.',
-					level: 'advisory',
-					source: { path: 'AGENTS.md', line: 12 },
-					check: { kind: 'forbid-pattern', pattern: 'http://', glob: 'src/a.ts' }
 				}
 			]),
 			{ inventory, added, heads: new Map() }
 		);
 
-		expect(results.map(({ ruleId, suspected, title }) => ({ ruleId, suspected, title }))).toEqual([
-			{ ruleId: 'R5', suspected: true, title: 'Breaks R5: Avoid line comments.' },
-			{ ruleId: 'R6', suspected: true, title: 'Breaks R6: Prefer https URLs over http.' }
+		expect(results.map(({ ruleId, suspected, title, body }) => ({ ruleId, suspected, title, body }))).toEqual([
+			{
+				ruleId: 'R5',
+				suspected: undefined,
+				title: 'Breaks R5: Avoid line comments.',
+				body: 'This added line breaks R5 (AGENTS.md:8): Avoid line comments.'
+			}
 		]);
 	});
 

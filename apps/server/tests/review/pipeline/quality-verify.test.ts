@@ -254,4 +254,27 @@ describe('repo-rule verification decisions', () => {
 			}
 		});
 	});
+
+	test('falls back to candidate evidence ids for applicability when neither explicit applicability ids nor span reads were cited', () => {
+		const { ledger, candidate, store } = ruleFixture(STRICT_RULE);
+
+		const settled = settleQualityVerdict(
+			candidate,
+			{
+				verdict: 'confirmed',
+				reason: 'Read AGENTS.md:1 only.',
+				evidenceIds: ['ev_guide']
+			},
+			store,
+			{ ledger, inventory: RULE_INVENTORY, retrievals: 1 }
+		);
+
+		expect(settled).toMatchObject({
+			status: 'unverified',
+			ruleCheck: {
+				applicability: { outcome: 'applies', evidenceIds: ['ev_span'] },
+				violation: { outcome: 'unknown', evidenceIds: ['ev_guide'] }
+			}
+		});
+	});
 });

@@ -26,8 +26,6 @@ function inScope(rule: RepoRule, glob: string | undefined, path: string): boolea
 }
 
 function ruleResult(rule: RepoRule, file: string, line: number, body: string, evidence: string): DetectorResult {
-	const needsVerifier = Boolean(rule.exceptions?.length) || rule.level === 'advisory';
-
 	return {
 		detector: 'rule-check',
 		category: 'repo-rule',
@@ -36,8 +34,7 @@ function ruleResult(rule: RepoRule, file: string, line: number, body: string, ev
 		file,
 		line,
 		ruleId: rule.id,
-		evidence,
-		...(needsVerifier ? { suspected: true } : {})
+		evidence
 	};
 }
 
@@ -90,7 +87,7 @@ function perFile(rule: RepoRule, file: string, lines: number[], evidence: string
 			rule,
 			file,
 			line!,
-			`This added line breaks ${rule.id} (${ruleCitation(rule)}): ${rule.text}${more}`,
+			`This added line breaks ${rule.id} (${ruleCitation(rule)}): ${rule.text || ruleSummary(rule)}${more}`,
 			evidence
 		),
 		...(rest.length ? { relatedLocations: rest.slice(0, MAX_RELATED).map((other) => ({ file, line: other })) } : {})
@@ -177,7 +174,7 @@ function misplaced(
 				rule,
 				file.path,
 				1,
-				`This new file breaks ${rule.id} (${ruleCitation(rule)}): ${rule.text}`,
+				`This new file breaks ${rule.id} (${ruleCitation(rule)}): ${rule.text || ruleSummary(rule)}`,
 				`${file.path} matches ${check.files} but not ${check.mustMatch}.`
 			)
 		);
