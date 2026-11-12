@@ -13,6 +13,7 @@ export type TargetFlags = {
 	staged?: boolean;
 	uncommitted?: boolean;
 	pull?: string;
+	since?: string;
 	diff?: string;
 };
 
@@ -20,12 +21,15 @@ export type TargetFlags = {
 export function selectTarget(flags: TargetFlags): ReviewTarget {
 	rejectMoreThanOne(flags, NON_RANGE_TARGETS);
 	rejectRangeWithOtherTarget(flags);
+	rejectSinceWithoutPull(flags);
 
 	if (flags.staged !== undefined) return { kind: 'staged' };
 
 	if (flags.uncommitted !== undefined) return { kind: 'uncommitted' };
 
-	if (flags.pull !== undefined) return { kind: 'pull', pull: requireText('--pull', flags.pull) };
+	if (flags.pull !== undefined) {
+		return { kind: 'pull', pull: requireText('--pull', flags.pull), since: parseText('--since', flags.since) };
+	}
 
 	if (flags.diff !== undefined) return { kind: 'diff', source: requireText('--diff', flags.diff) };
 
@@ -43,4 +47,9 @@ function rejectRangeWithOtherTarget(flags: TargetFlags): void {
 	if (named === undefined || (flags.base === undefined && flags.head === undefined)) return;
 
 	throw usageError(`--base and --head choose a commit range and cannot be used with --${named}.`);
+}
+
+/** `--since` starts a pull request's diff at one of its commits, so it means nothing without `--pull`. */
+function rejectSinceWithoutPull(flags: TargetFlags): void {
+	if (flags.since !== undefined && flags.pull === undefined) throw usageError('--since needs --pull.');
 }

@@ -10,8 +10,8 @@ export type ReviewTarget =
 	| { kind: 'staged' }
 	/** Everything not yet committed, staged or not, untracked files included, against `HEAD`. */
 	| { kind: 'uncommitted' }
-	/** A pull or merge request on the repository's forge, by number or URL. */
-	| { kind: 'pull'; pull: string }
+	/** A pull or merge request on the repository's forge, by number or URL; `since` starts its diff at that commit. */
+	| { kind: 'pull'; pull: string; since: string | null }
 	/** A unified diff from a file, or from standard input for `-`. No checkout, so no code runs. */
 	| { kind: 'diff'; source: string };
 
