@@ -16,7 +16,7 @@ export interface LearnedRuleEntry {
 /** One repository's learned rules and where their load stands. */
 export interface RepoLearnedRules {
 	status: 'loading' | 'ready' | 'failed';
-	/** Why the load failed, as the server put it. */
+	/** Why the load failed, as the server put it. It stays while a retry runs, so the retry shows as one. */
 	error: string | null;
 	rules: LearnedRuleEntry[];
 }
@@ -26,8 +26,9 @@ interface LearnedRulesStore {
 	repos: Record<string, RepoLearnedRules>;
 	/**
 	 * Reads a repository's proposals. Rules already on screen stay until the
-	 * new answer lands, and stay when a refresh fails; an older answer that
-	 * lands late is dropped.
+	 * new answer lands, and stay when a refresh fails; a decision in flight
+	 * stays pending across a refresh. A load after a failed one shows as
+	 * loading again. An older answer that lands late is dropped.
 	 */
 	load: (repoId: string) => Promise<void>;
 	/**
@@ -36,6 +37,17 @@ interface LearnedRulesStore {
 	 * while one is pending does nothing.
 	 */
 	decide: (repoId: string, topicId: string, state: LearnedRuleDecision['state']) => Promise<void>;
+}
+
+/** A fresh answer as entries, each keeping the decision its rule has in flight and its last refusal. */
+function entriesOf(proposals: LearnedRuleProposal[], shown: LearnedRuleEntry[]): LearnedRuleEntry[] {
+	const byTopic = new Map(shown.map((entry) => [entry.proposal.topic.id, entry]));
+
+	return proposals.map((proposal) => {
+		const current = byTopic.get(proposal.topic.id);
+
+		return { proposal, pending: current?.pending ?? null, error: current?.error ?? null };
+	});
 }
 
 /** The learned rules of every repository a screen has asked for. */
@@ -66,7 +78,9 @@ export const useLearnedRulesStore = create<LearnedRulesStore>((set, get) => {
 
 			latest.set(repoId, ticket);
 
-			if (!get().repos[repoId]) setRepo(repoId, { status: 'loading', error: null, rules: [] });
+			const shown = get().repos[repoId];
+
+			if (shown?.status !== 'ready') setRepo(repoId, { status: 'loading', error: shown?.error ?? null, rules: [] });
 
 			try {
 				const proposals = await guidelinesApi.learnedRules(repoId);
@@ -76,7 +90,7 @@ export const useLearnedRulesStore = create<LearnedRulesStore>((set, get) => {
 				setRepo(repoId, {
 					status: 'ready',
 					error: null,
-					rules: proposals.map((proposal) => ({ proposal, pending: null, error: null }))
+					rules: entriesOf(proposals, get().repos[repoId]?.rules ?? [])
 				});
 			} catch (error) {
 				if (latest.get(repoId) !== ticket || get().repos[repoId]?.status === 'ready') return;

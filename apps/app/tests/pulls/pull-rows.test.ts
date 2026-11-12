@@ -154,4 +154,10 @@ describe('the repository name a row shows', () => {
 
 		expect([shortRepoName(repos, 'r1'), shortRepoName(repos, 'r2')]).toEqual(['acme/api', 'globex/api']);
 	});
+
+	test('short names that differ only in case count as one name', () => {
+		const repos = [tracked('r1', 'acme/API'), tracked('r2', 'globex/api')];
+
+		expect([shortRepoName(repos, 'r1'), shortRepoName(repos, 'r2')]).toEqual(['acme/API', 'globex/api']);
+	});
 });

@@ -83,13 +83,18 @@ export function needsReview({ item, review }: ListedPull): boolean {
  * the label that tells it apart when another tracked repository has the same
  * short name. Its id until that list is known.
  */
+/** Two repository names are one name whatever their case, as the forge and `repoLabels` read them. */
+function sameName(left: string, right: string): boolean {
+	return left.toLowerCase() === right.toLowerCase();
+}
+
 export function shortRepoName(repos: Repo[] | null, repoId: string): string {
 	const repo = repos?.find((candidate) => candidate.id === repoId);
 
 	if (!repos || !repo) return repoId;
 
 	const short = repoName(repo.name);
-	const isShared = repos.some((other) => other.id !== repo.id && repoName(other.name) === short);
+	const isShared = repos.some((other) => other.id !== repo.id && sameName(repoName(other.name), short));
 
 	return isShared ? (repoLabels(repos).get(repo.id) ?? repo.name) : short;
 }

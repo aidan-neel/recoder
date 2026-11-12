@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Popover, PopoverContent, PopoverTrigger } from '@recoder/ui';
+import { Button, Popover, PopoverContent, PopoverTrigger, Tooltip } from '@recoder/ui';
 
 import type { LearnedRuleRow, LearnedRulesView } from '@/lib/guidelines/use-learned-rules';
 import { plural } from '@/lib/shell/format';
@@ -87,6 +87,17 @@ interface LearnedRulesProps {
 	repoName: string;
 }
 
+/** The way back from rules that did not load: one quiet button, with the reason on hover. */
+function RetryRules({ view }: { view: LearnedRulesView }) {
+	return (
+		<Tooltip content={view.error}>
+			<Button variant="ghost" status={view.status === 'loading' ? 'pending' : 'idle'} onClick={view.retry}>
+				Retry learned rules
+			</Button>
+		</Tooltip>
+	);
+}
+
 /**
  * What Recoder learned from dismissals in one repository, beside its row:
  * nothing while there is nothing, else a quiet trigger that opens the rules.
@@ -94,6 +105,7 @@ interface LearnedRulesProps {
  * out; a decided one can be changed back.
  */
 export function LearnedRules({ view, repoName }: LearnedRulesProps) {
+	if (view.error) return <RetryRules view={view} />;
 	if (view.status !== 'ready' || view.rules.length === 0) return null;
 
 	return (

@@ -25,7 +25,7 @@ export interface LearnedRuleRow {
 /** Everything the learned-rules list shows and does for one repository. */
 export interface LearnedRulesView {
 	status: 'loading' | 'ready' | 'failed';
-	/** Why the load failed, or null. */
+	/** Why the load failed, or null. It stays while a retry runs. */
 	error: string | null;
 	/** Proposed rules first, then decided ones; newest first inside each group. */
 	rules: LearnedRuleRow[];

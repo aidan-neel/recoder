@@ -29,7 +29,7 @@ function proposal(overrides: Partial<LearnedRuleProposal> = {}): LearnedRuleProp
  * Puts `answer` in place of `fetch`. The cast is safe: the store calls fetch
  * with an address and an init only, and those are all `answer` reads.
  */
-function stubFetch(answer: (input: string | URL, init?: RequestInit) => Response): void {
+function stubFetch(answer: (input: string | URL, init?: RequestInit) => Response | Promise<Response>): void {
 	globalThis.fetch = mock((input: string | URL, init?: RequestInit) =>
 		Promise.resolve(answer(input, init))
 	) as unknown as typeof fetch;
@@ -87,6 +87,42 @@ describe('loading learned rules', () => {
 		await Promise.all([useLearnedRulesStore.getState().load('a'), useLearnedRulesStore.getState().load('b')]);
 
 		expect([firstRule('a')?.proposal.repoId, firstRule('b')?.proposal.repoId]).toEqual(['a', 'b']);
+	});
+
+	test('a load after a failed one shows as loading, with the reason still there', async () => {
+		stubFetch(() => json({ error: 'down' }, 500));
+		await useLearnedRulesStore.getState().load('r1');
+
+		const held = Promise.withResolvers<Response>();
+
+		stubFetch(() => held.promise);
+
+		const retry = useLearnedRulesStore.getState().load('r1');
+
+		expect(useLearnedRulesStore.getState().repos.r1).toMatchObject({ status: 'loading', error: 'Down.' });
+
+		held.resolve(json([proposal()]));
+		await retry;
+
+		expect(useLearnedRulesStore.getState().repos.r1).toMatchObject({ status: 'ready', error: null });
+	});
+
+	test('a refresh that lands while a decision is in flight keeps the rule pending', async () => {
+		const held = Promise.withResolvers<Response>();
+
+		stubFetch((_input, init) => (init?.method === 'PUT' ? held.promise : json([proposal()])));
+		await useLearnedRulesStore.getState().load('r1');
+
+		const decision = useLearnedRulesStore.getState().decide('r1', 't1', 'approved');
+
+		await useLearnedRulesStore.getState().load('r1');
+
+		expect(firstRule('r1')?.pending).toBe('approved');
+
+		held.resolve(json(proposal({ state: 'approved', decidedAt: '2026-10-14T09:00:00.000Z' })));
+		await decision;
+
+		expect(firstRule('r1')).toMatchObject({ proposal: { state: 'approved' }, pending: null });
 	});
 
 	test('a refresh that fails keeps the rules already on screen', async () => {
