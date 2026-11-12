@@ -3,18 +3,17 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ModelEntry } from '@recoder/shared';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
-import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
+import { CLI_OUTPUT_CAP_BYTES, LineSplitter } from '../cli-stream';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
 import { ProcessRun } from '../process-run';
+import { ConversationTracker, type ConversationLedger } from './antigravity-conversations';
 import { effortArgs } from './antigravity-models';
 import {
 	ANTIGRAVITY_STREAM_ARGS,
-	ConversationTracker,
 	antigravityEnv,
 	stdinPrompt,
 	writeWorkspaceFiles,
-	type Env,
-	type TrackedConversation
+	type Env
 } from './antigravity-process';
 import { RunReader } from './antigravity-run-reader';
 
@@ -23,9 +22,8 @@ interface AntigravityHost {
 	path: string;
 	env: Env;
 	known: ReadonlyMap<string, ModelEntry>;
-	running: Set<Bun.Subprocess>;
 	scratch: Set<string>;
-	conversations: Set<TrackedConversation>;
+	conversations: ConversationLedger;
 }
 
 /**
@@ -44,7 +42,7 @@ export class AntigravityRun extends ProcessRun {
 		private readonly root: string
 	) {
 		super(options);
-		this.conversations = new ConversationTracker(host.env, host.conversations);
+		this.conversations = new ConversationTracker(host.conversations);
 	}
 
 	static async open(host: AntigravityHost, options: AgentRunOptions): Promise<AntigravityRun> {
@@ -100,7 +98,7 @@ export class AntigravityRun extends ProcessRun {
 		const wasResumed = this.conversations.latestId !== null;
 
 		try {
-			const exit = await streamCli({
+			const exit = await this.host.conversations.stream({
 				argv: [this.host.path, ...this.args()],
 				cwd: this.cwd,
 				env: antigravityEnv(this.host.env),
@@ -108,7 +106,6 @@ export class AntigravityRun extends ProcessRun {
 				signal: deadline.signal,
 				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
 				onOutput: splitter.push,
-				running: this.host.running,
 				name: 'Antigravity'
 			});
 

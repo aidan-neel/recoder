@@ -6,19 +6,17 @@ import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
 import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
-import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
+import { CLI_OUTPUT_CAP_BYTES, LineSplitter } from '../cli-stream';
 import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import { ConversationLedger, ConversationTracker } from './antigravity-conversations';
 import { antigravityEfforts, effortArgs, parseAntigravityModels } from './antigravity-models';
 import { ReplyReader, antigravityError, isSignedOutOutput } from './antigravity-output';
 import {
 	ANTIGRAVITY_LOGIN,
 	ANTIGRAVITY_STREAM_ARGS,
-	ConversationTracker,
 	antigravityEnv,
 	stdinPrompt,
-	sweepConversations,
-	writeWorkspaceFiles,
-	type TrackedConversation
+	writeWorkspaceFiles
 } from './antigravity-process';
 import { AntigravityRun } from './antigravity-run';
 
@@ -47,7 +45,7 @@ export class AntigravityAgent extends CliAgent {
 	readonly signInFix = `Sign in with \`${ANTIGRAVITY_LOGIN}\`, or pick another model in Recoder settings.`;
 
 	private readonly known = new Map<string, ModelEntry>();
-	private readonly conversations = new Set<TrackedConversation>();
+	private readonly conversations = new ConversationLedger(this.env, this.running);
 
 	/** Lists the account's models via `agy --output-format json models`, aborting the child immediately on `signal`. */
 	async models(signal?: AbortSignal): Promise<ModelEntry[]> {
@@ -85,7 +83,6 @@ export class AntigravityAgent extends CliAgent {
 				path: this.requireBinary(),
 				env: this.env,
 				known: this.known,
-				running: this.running,
 				scratch: this.scratch,
 				conversations: this.conversations
 			},
@@ -98,7 +95,7 @@ export class AntigravityAgent extends CliAgent {
 		const binary = this.requireBinary();
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-antigravity-'));
 		const deadline = callDeadline(opts);
-		const conversations = new ConversationTracker(this.env, this.conversations);
+		const conversations = new ConversationTracker(this.conversations);
 
 		const reader = new ReplyReader({
 			onText: onToken,
@@ -128,7 +125,7 @@ export class AntigravityAgent extends CliAgent {
 				...effortArgs(opts.model, opts.reasoningEffort, this.known)
 			];
 
-			const exit = await streamCli({
+			const exit = await this.conversations.stream({
 				argv: [binary, ...args],
 				cwd,
 				env: antigravityEnv(this.env),
@@ -136,7 +133,6 @@ export class AntigravityAgent extends CliAgent {
 				signal: deadline.signal,
 				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
 				onOutput: splitter.push,
-				running: this.running,
 				name: this.name
 			});
 
@@ -159,7 +155,7 @@ export class AntigravityAgent extends CliAgent {
 	/** Kills in-flight process groups and synchronously sweeps temporary workspaces and conversations on exit. */
 	override stop(): void {
 		super.stop();
-		sweepConversations(this.conversations);
+		this.conversations.sweep();
 	}
 
 	protected find(): string | null {
@@ -220,7 +216,7 @@ export class AntigravityAgent extends CliAgent {
 		let stdout = '';
 
 		try {
-			const { code, stderr } = await streamCli({
+			const { code, stderr } = await this.conversations.stream({
 				argv: [path, '--output-format', 'json', 'models'],
 				cwd,
 				env: antigravityEnv(this.env),
@@ -230,7 +226,6 @@ export class AntigravityAgent extends CliAgent {
 				onOutput: (chunk) => {
 					stdout += chunk;
 				},
-				running: this.running,
 				name: this.name
 			});
 

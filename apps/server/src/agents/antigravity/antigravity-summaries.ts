@@ -115,10 +115,11 @@ function readMapEntryKey(payload: Uint8Array): string | null {
 }
 
 /**
- * Removes every map entry keyed by `id` from `jetbox_summaries_proto.pb`, which `agy` 1.5.6 loads on startup and
- * mirrors back into `conversation_summaries.db`. Other entries are preserved byte-for-byte via atomic temp-file rename.
+ * Removes every map entry keyed by one of `ids` from `jetbox_summaries_proto.pb`, which `agy` 1.5.6 loads on startup
+ * and mirrors back into `conversation_summaries.db`. Other entries are preserved byte-for-byte via atomic temp-file
+ * rename.
  */
-function pruneSummariesProto(protoPath: string, id: string): void {
+function pruneSummariesProto(protoPath: string, ids: ReadonlySet<string>): void {
 	if (!existsSync(protoPath)) return;
 
 	let raw: Buffer;
@@ -140,7 +141,7 @@ function pruneSummariesProto(protoPath: string, id: string): void {
 		if (
 			record.fieldNumber === 1 &&
 			record.wireType === 2 &&
-			readMapEntryKey(raw.subarray(record.payloadStart, record.payloadEnd)) === id
+			ids.has(readMapEntryKey(raw.subarray(record.payloadStart, record.payloadEnd)) ?? '')
 		) {
 			removed = true;
 		} else {
@@ -175,21 +176,36 @@ function writeDurably(path: string, bytes: Uint8Array): void {
 	}
 }
 
-/**
- * Deletes `id` from `conversation_summaries.db` (`conversation_summaries`, `conversations_fts`, `conversation_parents`)
- * and `jetbox_summaries_proto.pb` inside one `IMMEDIATE` SQLite transaction when the database exists, serializing
- * concurrent Recoder cleanups in the same `$HOME`.
- */
-export function deleteConversationSummaryRecords(summariesDb: string, summariesProto: string, id: string): void {
-	if (!existsSync(summariesDb)) {
-		try {
-			pruneSummariesProto(summariesProto, id);
-		} catch (protoError) {
-			const detail = protoError instanceof Error ? protoError.message : String(protoError);
+/** The two stores of conversation summaries `agy` keeps for all conversations. */
+export interface SummaryStores {
+	/** `conversation_summaries.db`: what the CLI's conversation list and its search read. */
+	database: string;
+	/** `jetbox_summaries_proto.pb`: the snapshot `agy` loads at its start and copies back into the database. */
+	snapshot: string;
+}
 
-			throw new Error(`Failed to delete Antigravity conversation ${id} from summaries snapshot: ${detail}`, {
-				cause: protoError
-			});
+/** The reason a store refused, as the text of a new error that keeps the first one as its cause. */
+function storeFailure(what: string, cause: unknown): Error {
+	const detail = cause instanceof Error ? cause.message : String(cause);
+
+	return new Error(`${what}: ${detail}`, { cause });
+}
+
+/**
+ * Deletes `ids` from the database (`conversation_summaries`, `conversations_fts`, `conversation_parents`) and from
+ * the snapshot inside one `IMMEDIATE` SQLite transaction when the database exists, serializing concurrent Recoder
+ * cleanups in the same `$HOME`.
+ */
+export function deleteSummaryRecords(stores: SummaryStores, ids: readonly string[]): void {
+	if (ids.length === 0) return;
+
+	const wanted = new Set(ids);
+
+	if (!existsSync(stores.database)) {
+		try {
+			pruneSummariesProto(stores.snapshot, wanted);
+		} catch (protoError) {
+			throw storeFailure('The Antigravity summaries snapshot could not be rewritten', protoError);
 		}
 
 		return;
@@ -198,15 +214,11 @@ export function deleteConversationSummaryRecords(summariesDb: string, summariesP
 	let database: Database;
 
 	try {
-		database = new Database(summariesDb, { readwrite: true, create: false });
+		database = new Database(stores.database, { readwrite: true, create: false });
 	} catch (openError) {
-		if (!existsSync(summariesDb)) return;
+		if (!existsSync(stores.database)) return;
 
-		const detail = openError instanceof Error ? openError.message : String(openError);
-
-		throw new Error(`Failed to open Antigravity summaries database for conversation ${id}: ${detail}`, {
-			cause: openError
-		});
+		throw storeFailure('The Antigravity summaries database could not be opened', openError);
 	}
 
 	try {
@@ -219,21 +231,19 @@ export function deleteConversationSummaryRecords(summariesDb: string, summariesP
 				.map((row) => row.name)
 		);
 
-		const removeRows = database.transaction((conversationId: string) => {
-			for (const statement of SUMMARY_DELETE_STATEMENTS) {
-				if (tables.has(statement.table)) database.query(statement.sql).run(conversationId);
+		const statements = SUMMARY_DELETE_STATEMENTS.filter((statement) => tables.has(statement.table));
+
+		const removeRows = database.transaction(() => {
+			for (const statement of statements) {
+				for (const id of wanted) database.query(statement.sql).run(id);
 			}
 
-			pruneSummariesProto(summariesProto, conversationId);
+			pruneSummariesProto(stores.snapshot, wanted);
 		});
 
-		removeRows.immediate(id);
+		removeRows.immediate();
 	} catch (deleteError) {
-		const detail = deleteError instanceof Error ? deleteError.message : String(deleteError);
-
-		throw new Error(`Failed to delete Antigravity conversation ${id} from summaries database: ${detail}`, {
-			cause: deleteError
-		});
+		throw storeFailure('The Antigravity summaries could not be deleted', deleteError);
 	} finally {
 		database.close();
 	}
