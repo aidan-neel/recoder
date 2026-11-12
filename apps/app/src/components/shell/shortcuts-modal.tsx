@@ -35,7 +35,7 @@ const GROUPS: Group[] = [
 	{
 		title: 'Pull request',
 		rows: [
-			[['1', '2', '3', '4'], 'Changes, Summary, Bugs, Commits'],
+			[['1', '2', '3', '4'], 'Switch tab'],
 			[['j', 'k'], 'Next and previous file or bug'],
 			[['v'], 'Mark the file as viewed'],
 			[['r'], 'Review, or review again'],
