@@ -23,7 +23,8 @@ export function childEnvironment(dataDir: string): Record<string, string> {
 		RECODER_DATA_DIR: dataDir,
 		RECODER_WORKDIR: work,
 		RECODER_OPENCODE_BIN: '',
-		RECODER_CLAUDE_BIN: ''
+		RECODER_CLAUDE_BIN: '',
+		RECODER_ANTIGRAVITY_BIN: ''
 	};
 }
 
