@@ -8,6 +8,17 @@ import { initializeCoordinator } from './schema';
 const identifier = z.string().min(1).max(200);
 const duration = z.number().int().min(100).max(300_000);
 
+/** The most waiting reviews one backlog read returns, so a flood of requests cannot make it unbounded. */
+const BACKLOG_LIMIT = 500;
+
+const workerBacklogSchema = z.object({
+	waiting: z.array(z.object({ reviewId: identifier, requestedAt: z.coerce.date(), overdue: z.boolean() })),
+	running: z.number().int().min(0)
+});
+
+/** Reviews that wait for a free worker, next first, and how many reviews the workers hold now. */
+export type WorkerBacklog = z.infer<typeof workerBacklogSchema>;
+
 export class PostgresCoordinator {
 	private readonly leaseMs: number;
 
@@ -49,6 +60,25 @@ export class PostgresCoordinator {
 		`;
 
 		return rows.length ? reviewLeaseSchema.parse(rows[0]) : null;
+	}
+
+	/** The reviews a worker would claim next, in claim order; `overdue` marks those that waited at least `graceMs`. */
+	async backlog(graceMs: number): Promise<WorkerBacklog> {
+		const waiting = await this.sql<unknown[]>`
+			SELECT review_id AS "reviewId", requested_at AS "requestedAt",
+			       requested_at <= clock_timestamp() - ${duration.parse(graceMs)} * interval '1 millisecond' AS overdue
+			FROM review_actor_leases
+			WHERE (owner_id IS NULL AND pending) OR expires_at <= clock_timestamp()
+			ORDER BY requested_at, review_id
+			LIMIT ${BACKLOG_LIMIT}
+		`;
+
+		const [held] = await this.sql<unknown[]>`
+			SELECT count(*)::int AS running FROM review_actor_leases
+			WHERE owner_id IS NOT NULL AND expires_at > clock_timestamp()
+		`;
+
+		return workerBacklogSchema.parse({ waiting, running: z.object({ running: z.number() }).parse(held).running });
 	}
 
 	async renew(lease: ReviewLease): Promise<boolean> {

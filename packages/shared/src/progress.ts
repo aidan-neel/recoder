@@ -246,6 +246,16 @@ export interface ReviewGuidelinesUsed {
 	hash: string;
 }
 
+/** A queued review no review worker has taken yet, because every worker is busy or none runs reviews. */
+export interface ReviewWorkerWait {
+	/** When the review joined the queue. */
+	since: string;
+	/** Its place in line: 1 is the next review a free worker takes. */
+	position: number;
+	/** Reviews the workers hold now. */
+	running: number;
+}
+
 export interface ReviewProgress {
 	id: string;
 	sequence: number;
@@ -270,6 +280,8 @@ export interface ReviewProgress {
 	guidelines?: ReviewGuidelinesUsed;
 	/** Held by the developer; model calls wait until resumed. */
 	paused?: boolean;
+	/** Set while the review waits for a free review worker (shared storage only); null once a worker takes it. */
+	workerWait?: ReviewWorkerWait | null;
 }
 
 export function emptyReviewProgress(id: string): ReviewProgress {

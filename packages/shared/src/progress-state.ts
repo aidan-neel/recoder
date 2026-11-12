@@ -47,7 +47,8 @@ const SNAPSHOT_KEYS = [
 	'recommendedChecks',
 	'stage',
 	'orchestratorModel',
-	'guidelines'
+	'guidelines',
+	'workerWait'
 ] as const;
 
 /** Applies one stream message; stale or out-of-order messages leave the snapshot as it was. */

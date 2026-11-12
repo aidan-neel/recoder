@@ -17,7 +17,7 @@ const envSchema = z.object({
 	),
 	RECODER_JOB_LEASE_MS: z.coerce.number().int().min(1000).max(300_000).default(30_000),
 	RECODER_JOB_POLL_MS: z.coerce.number().int().min(50).max(5000).default(250),
-	RECODER_JOB_CONCURRENCY: z.coerce.number().int().min(1).max(32).default(2),
+	RECODER_JOB_CONCURRENCY: z.coerce.number().int().min(0).max(32).default(2),
 	RECODER_INSTANCE_ID: z.string().min(1).max(200).optional(),
 	RECODER_WORKDIR: z.string().default('/tmp/recoder-work'),
 	RECODER_ALLOWED_COMMANDS: z.string().default('echo,git,gh,glab,bun'),

@@ -70,7 +70,8 @@ const SNAPSHOT_KEYS = [
 	'recommendedChecks',
 	'stage',
 	'orchestratorModel',
-	'guidelines'
+	'guidelines',
+	'workerWait'
 ] as const;
 
 /** Hand an event to one listener. A listener's failure must never break the pipeline or a replay. */
