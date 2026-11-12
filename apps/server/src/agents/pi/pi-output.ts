@@ -16,10 +16,17 @@ const QUOTED_CHARS = 300;
 const SIGNED_OUT =
 	/no api key found|^401\b|invalid (?:x-)?api.?key|incorrect api key|authentication_error|unauthorized/i;
 
+/**
+ * A throttle in its own words, which clears within a minute. It is tested before {@link SPENT}: Gemini's per-minute
+ * `429 RESOURCE_EXHAUSTED` also says "exceeded your current quota" and "billing details".
+ */
+const THROTTLED = /rate.?limit|too many requests|resource_exhausted|per.?minute/i;
+
 /** A spent plan or credit balance, which lasts hours: OpenAI's `insufficient_quota`, a 402, or a usage limit. */
 const SPENT = /^402\b|quota|usage limit|billing|credit balance|out of credits/i;
 
-const THROTTLED = /^429\b|rate.?limit|too many requests/i;
+/** A 429 that names neither a throttle nor a spent plan, which is retried as a throttle. */
+const TOO_MANY = /^429\b/;
 
 const OVERLOADED = /^529\b|overloaded/i;
 
@@ -66,8 +73,9 @@ export function piError(message: string): LlmError {
 	const line = quotedLine(message.trim(), QUOTED_CHARS);
 
 	if (SIGNED_OUT.test(line)) return new LlmError(401, `Pi is not signed in to this model's provider. Run: ${PI_LOGIN}`);
-	if (SPENT.test(line)) return new UsageLimitError(/^402\b|credit/i.test(line) ? 402 : 429, line);
 	if (THROTTLED.test(line)) return new LlmError(429, line);
+	if (SPENT.test(line)) return new UsageLimitError(/^402\b|credit/i.test(line) ? 402 : 429, line);
+	if (TOO_MANY.test(line)) return new LlmError(429, line);
 
 	return new LlmError(OVERLOADED.test(line) ? 529 : 0, line);
 }
