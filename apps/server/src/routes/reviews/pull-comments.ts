@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import type { Review } from '@recoder/shared';
 import { GhError } from '../../forge/cli';
 import { FindingNotFoundError, publishFindingComment } from '../../forge/publish/finding-comment';
+import { publishFindingsReview } from '../../forge/publish/findings-review';
 import { PublishConflictError } from '../../forge/publish/forge';
 import { publishPullComment } from '../../forge/publish/pull-comment';
 import { requireReview } from './shared';
@@ -43,5 +44,12 @@ app.post('/:id/pull-comment', (c) => answer(c, (review) => publishPullComment(re
 app.post('/:id/findings/:findingId/pull-comment', (c) =>
 	answer(c, (review) => publishFindingComment(review.id, c.req.param('findingId')))
 );
+
+/**
+ * Submit the finished review's verified findings as one forge review: a
+ * summary, inline comments with suggestions, fixed threads resolved, and the
+ * commit status. Answers the review as it is when its findings already went up.
+ */
+app.post('/:id/findings-review', (c) => answer(c, (review) => publishFindingsReview(review.id)));
 
 export default app;

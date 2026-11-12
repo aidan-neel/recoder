@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import type { Finding, FindingTopic } from '@recoder/shared';
+import { forgetProposal } from '../../review/guidelines/learned/proposals';
 import { forgetDismissedVotes, recordVote, removeVote, voteKeyOf } from '../../review/guidelines/learned/votes';
 import { db } from '../../store';
 import { requireFinding, requireReview } from './shared';
@@ -55,8 +56,9 @@ function unquiet(finding: TopicFinding): Finding {
 
 /**
  * Turn a quieted topic back on: forget the repository's dismissed votes on
- * it, so later reviews show its findings until people dismiss it again, and
- * show this review's quieted findings of it. Exact dismissals of single
+ * it and the learned rule that quieted it, so later reviews show its findings
+ * until people dismiss it often again and a person approves quieting it anew,
+ * and show this review's quieted findings of it. Exact dismissals of single
  * findings stay. Answers the ids of the findings it showed.
  */
 app.delete('/:id/quieted/:topicId', async (c) => {
@@ -72,6 +74,7 @@ app.delete('/:id/quieted/:topicId', async (c) => {
 		finding.topic?.id === topicId && finding.topic.quieted === true;
 
 	forgetDismissedVotes(review.repoId, topicId);
+	forgetProposal(review.repoId, topicId);
 
 	let unquieted: string[] = [];
 

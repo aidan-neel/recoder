@@ -7,14 +7,14 @@ import type {
 	AgentStatus,
 	CatalogModel,
 	HostedProvider,
-	CodexConnection,
-	CodexModel,
 	CreateRepoInput,
 	FailureAction,
 	CreateReviewInput,
 	DiscussRequest,
 	DiscussResponse,
 	FileDiff,
+	FindingDecision,
+	FindingDecisionInput,
 	GlobalGuidelines,
 	GuidelinesDraftRequest,
 	GuidelinesOverview,
@@ -74,7 +74,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 		throw new ApiError(
 			body?.error ?? `API ${res.status}`,
-			body?.action === 'sign-in' || body?.action === 'settings' ? body.action : undefined,
+			body?.action === 'settings' ? body.action : undefined,
 			body?.usageLimit && typeof body.usageLimit.name === 'string' ? body.usageLimit : undefined
 		);
 	}
@@ -152,10 +152,6 @@ async function readSse(res: Response, onEvent: (data: unknown) => void): Promise
 }
 
 export const serverApi = {
-	getCodexStatus: () => req<CodexConnection>('/api/settings/codex/status'),
-	connectCodex: () => req<CodexConnection>('/api/settings/codex/connect', { method: 'POST' }),
-	disconnectCodex: () => req<{ ok: boolean }>('/api/settings/codex/disconnect', { method: 'POST' }),
-	getCodexModels: () => req<CodexModel[]>('/api/settings/codex/models'),
 	listRepos: () => req<Repo[]>('/api/repos'),
 	createRepo: (input: CreateRepoInput) => req<Repo>('/api/repos', { method: 'POST', body: JSON.stringify(input) }),
 	previewPr: (repoId: string, n: number) => req<PullPreview>(`/api/repos/${repoId}/pulls/${n}`),
@@ -269,15 +265,15 @@ export const serverApi = {
 			method: 'POST',
 			body: JSON.stringify(input)
 		}),
-	/** Remember a dismissed finding, so later reviews of the repository do not report it again. */
-	dismissFinding: (reviewId: string, findingId: string, reason?: string) =>
-		req<{ dismissed: boolean }>(`/api/reviews/${reviewId}/dismissals`, {
-			method: 'POST',
-			body: JSON.stringify({ findingId, ...(reason ? { reason } : {}) })
+	/** Accept or dismiss a finding; the server saves the decision on the review and later reviews learn from it. */
+	decideFinding: (reviewId: string, findingId: string, decision: FindingDecisionInput) =>
+		req<FindingDecision>(`/api/reviews/${reviewId}/findings/${encodeURIComponent(findingId)}/decision`, {
+			method: 'PUT',
+			body: JSON.stringify(decision)
 		}),
-	/** Forget a dismissal. */
-	restoreFinding: (reviewId: string, findingId: string) =>
-		req<{ restored: boolean }>(`/api/reviews/${reviewId}/dismissals/${encodeURIComponent(findingId)}`, {
+	/** Reopen a decided finding and forget what its decision taught. */
+	reopenFinding: (reviewId: string, findingId: string) =>
+		req<{ reopened: true }>(`/api/reviews/${reviewId}/findings/${encodeURIComponent(findingId)}/decision`, {
 			method: 'DELETE'
 		}),
 	queueReview: (input: CreateReviewInput) =>

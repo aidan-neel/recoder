@@ -4,11 +4,12 @@ import {
 	type DropStage,
 	type FixEdit,
 	type Finding,
-	type FindingSeverity
+	type FindingSeverity,
+	type RuleCheckDecisions
 } from '@recoder/shared';
 import type { EvidenceStore } from '../../evidence/evidence.js';
-import { ruleAppliesTo } from '../guidelines/ledger/glob.js';
-import type { RuleLedger } from '../guidelines/ledger/types.js';
+import { evaluateRuleApplicability } from '../guidelines/ledger/applicability.js';
+import { findLedgerRule, toFindingRule, type RuleLedger } from '../guidelines/ledger/types.js';
 import { symbolAt } from './change-model/change-model.js';
 import type { ChangeModel } from './change-model/types.js';
 import type { CandidateRepair } from './candidate-repair.js';
@@ -27,6 +28,8 @@ import type { ChangeIntent, IntentClaim } from './intent/types.js';
 import { lensCategories, lensOwning } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
 import type { PublishedBy } from './published-by.js';
+
+export { isHeldBack, isReportable, publishHeldBack } from './published-by.js';
 
 const toBackendSeverity: Record<string, FindingSeverity> = {
 	high: 'error',
@@ -59,6 +62,8 @@ export interface CandidateFinding extends Finding {
 	examples?: ClaimStep[];
 	/** The one repair attempt made after it failed location or category validation; absent when none was made. */
 	repair?: CandidateRepair;
+	/** Separate applicability and violation decisions recorded for a `repo-rule` check, kept even when refuted. */
+	ruleCheck?: RuleCheckDecisions;
 }
 
 /** What validation and fingerprinting read from the run. */
@@ -273,6 +278,7 @@ export function validateCandidate(
 	]);
 
 	const belowBar = !drop.dropReason && raw.severity === 'low' && !ctx.reportLowSeverity;
+	const ledgerRule = findLedgerRule(ctx.ledger, ruleId);
 
 	return {
 		id: crypto.randomUUID(),
@@ -289,6 +295,7 @@ export function validateCandidate(
 		category: raw.category,
 		kind: findingKind(raw.category),
 		ruleId,
+		...(ledgerRule ? { rule: toFindingRule(ledgerRule) } : {}),
 		smell,
 		symbol: shownSymbol,
 		claim: { ...raw.claim, existingGuard: raw.claim.existingGuard ?? undefined },
@@ -302,6 +309,33 @@ export function validateCandidate(
 		...(belowBar ? { belowBar } : {}),
 		valid: !drop.dropReason,
 		...drop
+	};
+}
+
+function detectorRuleCheck(
+	result: DetectorResult,
+	endLine: number,
+	ctx: CandidateContext
+): RuleCheckDecisions | undefined {
+	if (result.detector !== 'rule-check') return undefined;
+
+	const ledgerRule = findLedgerRule(ctx.ledger, result.ruleId);
+
+	const applicability = evaluateRuleApplicability(
+		ledgerRule,
+		{ file: result.file, line: result.line, endLine, side: 'new', ruleId: result.ruleId },
+		ctx.ledger,
+		ctx.inventory
+	);
+
+	return {
+		applicability,
+		violation: {
+			outcome: applicability.outcome === 'applies' ? 'violated' : 'not-checked',
+			reason:
+				applicability.outcome === 'applies' ? result.evidence.slice(0, 600) : 'Rule does not apply to this change.',
+			evidenceIds: []
+		}
 	};
 }
 
@@ -320,6 +354,8 @@ export function candidateFromDetector(
 	const symbol = resolveSymbol(ctx, result.file, result.line, 'new');
 	const lens = `detector:${result.detector}`;
 	const drop = firstDrop([['location', locationProblem(ctx.inventory, result.file, result.line, 'new')]]);
+	const ledgerRule = findLedgerRule(ctx.ledger, result.ruleId);
+	const ruleCheck = detectorRuleCheck(result, endLine, ctx);
 
 	return {
 		id: crypto.randomUUID(),
@@ -334,6 +370,7 @@ export function candidateFromDetector(
 		category: result.category,
 		kind: findingKind(result.category),
 		ruleId: result.ruleId,
+		...(ledgerRule ? { rule: toFindingRule(ledgerRule) } : {}),
 		symbol: symbol ?? result.symbol,
 		lens,
 		evidenceIds: [],
@@ -345,13 +382,15 @@ export function candidateFromDetector(
 			result.line,
 			'new'
 		),
+		...(ruleCheck ? { ruleCheck } : {}),
 		...(result.suspected
 			? {}
 			: {
 					verification: {
 						status: 'verified' as const,
 						method: result.detector === 'rule-check' ? ('rule' as const) : ('detector' as const),
-						reason: result.evidence.slice(0, 600)
+						reason: result.evidence.slice(0, 600),
+						...(ruleCheck ? { ruleCheck } : {})
 					}
 				}),
 		valid: !drop.dropReason,
@@ -395,61 +434,6 @@ export function isPublishable(candidate: CandidateFinding): boolean {
 	return candidate.valid && (candidate.verification?.status === 'verified' || isNotRun(candidate));
 }
 
-/** Whether the candidate is verified like the rest but held back from the findings for being below the reporting bar. */
-export function isHeldBack(candidate: CandidateFinding): boolean {
-	return candidate.valid && candidate.belowBar === true && candidate.publishedBy === undefined;
-}
-
-/**
- * Whether a verifier ran code that shows the problem and the same run did not
- * end the same way before the change. One read from the code does not count.
- */
-function isReproduced(candidate: CandidateFinding): boolean {
-	const { verification } = candidate;
-	const baseline = verification?.evidence?.baseline;
-	const sameOnBase = baseline !== undefined && 'differs' in baseline && !baseline.differs;
-
-	return verification?.status === 'verified' && verification.method === 'run' && !sameOnBase;
-}
-
-/**
- * Whether the candidate is a violation of a rule in the ledger that applies to
- * its file, checked by the quality verifier against the rule and the flagged
- * lines. A rule id alone, or a detector's result, does not count.
- */
-function isRuleViolation(candidate: CandidateFinding, ledger: RuleLedger | null): boolean {
-	const rule = ledger?.rules.find((entry) => entry.id === candidate.ruleId);
-	const { verification } = candidate;
-
-	return (
-		candidate.category === 'repo-rule' &&
-		rule !== undefined &&
-		ruleAppliesTo(rule, candidate.file) &&
-		verification?.status === 'verified' &&
-		verification.method === 'rule'
-	);
-}
-
-/**
- * Settles whether a held-back candidate is published anyway, once its verdict
- * is recorded, and records why. Reproduction and a verified rule violation
- * establish that the finding is real, not how much it matters, so it keeps the
- * severity the reviewer gave it.
- */
-export function publishHeldBack(candidate: CandidateFinding, ledger: RuleLedger | null): void {
-	delete candidate.publishedBy;
-
-	if (!candidate.belowBar) return;
-
-	if (isReproduced(candidate)) candidate.publishedBy = 'reproduced';
-	else if (isRuleViolation(candidate, ledger)) candidate.publishedBy = 'rule';
-}
-
-/** A candidate the review can report: valid, and not held back for being below the reporting bar. */
-export function isReportable(candidate: CandidateFinding): boolean {
-	return candidate.valid && !isHeldBack(candidate);
-}
-
 /** A candidate as the developer sees it, without the fields only the pipeline reads. */
 export function toFinding(candidate: CandidateFinding): Finding {
 	const {
@@ -463,8 +447,13 @@ export function toFinding(candidate: CandidateFinding): Finding {
 		fix: _fix,
 		examples: _examples,
 		repair: _repair,
+		ruleCheck,
 		...finding
 	} = candidate;
+
+	if (ruleCheck && finding.verification && !finding.verification.ruleCheck) {
+		return { ...finding, verification: { ...finding.verification, ruleCheck } };
+	}
 
 	return finding;
 }

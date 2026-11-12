@@ -83,7 +83,7 @@ function mergeThoughts(first: Extract<Trace, { kind: 'thought' }>, next: Extract
 	return {
 		kind: 'thought',
 		key: first.key,
-		entry: { ...next.entry, at: first.entry.at, text, summary: first.entry.summary || next.entry.summary },
+		entry: { ...next.entry, at: first.entry.at, text },
 		until: next.until
 	};
 }

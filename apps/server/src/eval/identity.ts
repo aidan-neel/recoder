@@ -78,8 +78,8 @@ export interface RunIdentity {
 		/** The server's checkout, which ran the reviewers. */
 		server: string;
 	};
-	/** Verifiers run on the specialist model; there is no separate verifier setting. Reviewer calls send no seed. */
-	models: { orchestrator: StageModel; specialist: StageModel };
+	/** Each review stage's model and settings. Reviewer calls send no seed. */
+	models: { orchestrator: StageModel; specialist: StageModel; verifier: StageModel };
 	judge: { model: string; provider: string; effort: string; version: number; seed: number };
 	/**
 	 * Every `RECODER_*` variable the server runs with, but for keys, endpoints,
@@ -96,7 +96,7 @@ export interface RunIdentity {
 	caches: Record<string, string>;
 	tools: { bun: string; node: string; opencode: string };
 	tasks: TaskIdentity[];
-	/** The task set `tasks` came from: `full`, `only` for `--only`, or a `--set` name; absent from identities older than recording it. */
+	/** The task set `tasks` came from: `full`, `only` for `--only`, or a `--set` name (`holdout` for the labels marked holdout); absent from identities older than recording it. */
 	taskSet?: string;
 	/** `--shard`: this host's part of the task set, `tasks` its task ids and `all` every task id the set resolved to; absent unsharded. */
 	shard?: { index: number; count: number; tasks: string[]; all: string[] };

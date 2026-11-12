@@ -1,255 +1,170 @@
-/* settings */
-
-/* ───────── Modal: the section nav beside the open section, one fixed size so a swap never resizes it ───────── */
-[data-ui='modal-panel'].settings-modal {
-	width: calc(100% - 48px);
-	max-width: 960px;
-	height: min(80dvh, 760px);
-	max-height: calc(100dvh - 32px);
-	gap: 0;
-	padding: 0;
-	overflow: hidden;
-}
-.settings-page {
+/* ───────── Settings, and the pages built like it: one reading column of titled groups ───────── */
+/* The tabs stay at the top of the column while its groups scroll under them. */
+.column-tabs {
+	position: sticky;
+	z-index: 2;
+	top: 0;
 	display: flex;
-	min-height: 0;
-	flex: 1;
-}
-.settings-nav {
-	display: flex;
-	width: 224px;
-	flex-shrink: 0;
-	flex-direction: column;
-	border-right: 1px solid var(--line-divider);
-	background: var(--bg-rail);
-}
-.settings-nav-title {
-	color: var(--text-subtle);
-	font-size: 12.5px;
-	font-weight: 400;
-	letter-spacing: 0;
-}
-.settings-nav-list {
-	display: flex;
-	flex-direction: column;
-	gap: 1px;
-	padding: 8px;
-}
-.settings-nav-link {
-	position: relative;
-	display: flex;
-	height: 32px;
+	height: 48px;
 	align-items: center;
-	padding: 0 10px;
-	border-radius: 8px;
-	color: var(--text-muted);
-	font-size: 13px;
-	outline: none;
-	transition: color var(--dur-hover) ease-out;
+	margin: -12px -1px 24px;
+	padding: 0 1px;
+	border-bottom: 1px solid var(--line-subtle);
+	background: var(--bg-canvas);
 }
-.settings-nav-link:hover,
-.settings-nav-link[aria-current='page'] {
-	color: var(--text-primary);
+/* A pill's label sits 10px inside it; pull the row back so the first label lines up with the title. */
+.column-tabs .page-tabs {
+	margin-left: -10px;
 }
-.settings-nav-link:focus-visible {
-	box-shadow: var(--focus-ring);
-}
-.settings-main {
-	display: flex;
-	min-width: 0;
-	flex: 1;
-	flex-direction: column;
-}
-.settings-title {
-	color: var(--text-primary);
-	font-size: 14px;
-	font-weight: 500;
-}
-.settings-column {
-	width: 100%;
-	max-width: 688px;
-	margin: 0 auto;
-	padding: 28px 32px 64px;
-}
-.settings-stack {
+
+.settings {
 	display: flex;
 	flex-direction: column;
 	gap: 28px;
 }
-
-/* ───────── Groups and rows ───────── */
 .settings-group {
 	display: flex;
 	flex-direction: column;
-	gap: 10px;
+	gap: 8px;
 }
-/* As tall as the button some heads hold, so every title sits at the same height. */
 .settings-group-head {
 	display: flex;
-	min-height: calc(var(--size-control-md) - 2px);
+	min-height: 30px;
 	align-items: center;
 	justify-content: space-between;
 	gap: 12px;
-	padding: 0 4px;
+	padding: 0 2px;
 }
 .settings-group-title {
-	color: var(--text-subtle);
-	font-size: 12.5px;
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
 	font-weight: 500;
+	line-height: 18px;
 }
-.settings-list {
-	overflow: hidden;
+.settings-group-note {
+	padding: 2px 2px 0;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 18px;
 }
+.settings-group-note code {
+	color: var(--text-muted);
+	font-family: var(--font-code);
+	font-size: 12px;
+}
+
+/*
+ * One setting: what it is on the left, its control on the right. Two lines
+ * of text make exactly 60px, and the divider is drawn inside the row, so the
+ * skeleton and the rows that replace it sit on the same lines.
+ */
 .settings-row {
 	display: flex;
-	min-height: 58px;
+	min-height: 60px;
 	align-items: center;
-	gap: 16px;
-	padding: 10px 14px 10px 16px;
+	gap: 12px 24px;
+	padding: 11px 16px;
 }
 .settings-row + .settings-row {
-	border-top: 1px solid var(--line-subtle-2);
+	box-shadow: inset 0 1px 0 var(--line-subtle);
 }
-.settings-row-name {
+/* A row led by a mark names a thing, not a sentence: its lines cut short and never wrap. */
+.settings-row[data-led] {
+	column-gap: 12px;
+}
+.settings-row[data-led] .settings-row-name,
+.settings-row[data-led] .settings-row-detail {
 	overflow: hidden;
-	color: var(--text-primary);
-	font-size: 13px;
-	line-height: 18px;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.settings-row-desc {
-	min-height: 16px;
-	margin-top: 2px;
-	color: var(--text-subtle);
-	font-size: 12px;
-	line-height: 16px;
-	text-wrap: pretty;
+.settings-row[data-led] .settings-row-end {
+	margin-left: 12px;
 }
-.settings-row-control {
+.settings-row-detail .mono {
+	font-size: 12px;
+}
+/* A forge's mark on a quiet tile, leading its row. */
+.forge-tile {
+	display: grid;
+	width: 28px;
+	height: 28px;
+	flex-shrink: 0;
+	place-items: center;
+	border-radius: 8px;
+	background: var(--bg-hover);
+	color: var(--text-secondary);
+}
+.settings-row[data-stacked] {
+	flex-wrap: wrap;
+}
+.settings-row-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+	gap: 2px;
+}
+.settings-row-name {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 18px;
+}
+.settings-row-detail {
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+.settings-row-detail[data-tone='danger'] {
+	color: var(--danger);
+}
+.settings-row-end {
 	display: flex;
 	flex-shrink: 0;
 	align-items: center;
-	gap: 8px;
+	gap: 10px;
 }
-/* Breaks between folders first; a name longer than the line breaks inside. */
-.settings-path {
-	font-family: var(--font-code);
-	font-size: 11.5px;
-	overflow-wrap: anywhere;
+.settings-number {
+	width: 124px;
 }
-
-/* ───────── Save status: a 16px slot beside a control that saves on change ───────── */
-.save-status {
-	display: inline-flex;
-	width: 16px;
-	height: 16px;
-	flex-shrink: 0;
-	align-items: center;
-	justify-content: center;
-	color: var(--text-muted);
-}
-
-/* ───────── Review limits: a Field laid out as a row, the number at the right ───────── */
-.settings-limit [data-ui='field'] {
-	display: grid;
-	flex: 1;
-	grid-template-columns: minmax(0, 1fr) 16px 112px;
-	align-items: center;
-	column-gap: 8px;
-}
-.settings-limit [data-ui='field-label'] {
-	grid-area: 1 / 1;
-	margin: 0;
-	color: var(--text-primary);
-	font-size: 13px;
-	font-weight: 400;
-	line-height: 18px;
-}
-.settings-limit [data-ui='field-message'] {
-	grid-area: 2 / 1;
-}
-.settings-limit [data-ui='field-hint'],
-.settings-limit [data-ui='field-error'] {
-	margin-top: 2px;
-	font-size: 12px;
-	line-height: 16px;
-}
-.settings-limit .save-status {
-	grid-area: 1 / 2 / 3 / 3;
-}
-.settings-limit [data-ui='input'] {
-	grid-area: 1 / 3 / 3 / 4;
-}
-.settings-number [data-ui='input-field'] {
-	font-family: var(--font-code);
-	font-size: 12.5px;
+.settings-number input {
 	font-variant-numeric: tabular-nums;
 	text-align: right;
 }
 
-/* The mention handle: a wider field, in the code face like a username. */
-.settings-limit:has(.settings-handle) [data-ui='field'] {
-	grid-template-columns: minmax(0, 1fr) 16px 168px;
-}
-.settings-handle [data-ui='input-field'] {
-	font-family: var(--font-code);
-	font-size: 12.5px;
-}
-
-/* ───────── Model picker: a quiet model trigger, the effort beside it ───────── */
-.model-picker {
-	display: flex;
-	min-width: 0;
+/* Where a save stands, in a slot that is always there so the control never moves. */
+.save-status {
+	position: relative;
+	display: inline-grid;
+	width: 16px;
+	height: 16px;
 	flex-shrink: 0;
-	align-items: center;
-	gap: 2px;
+	place-items: center;
 }
-.model-picker > .save-status {
-	margin-right: 4px;
+.save-status > * {
+	position: absolute;
+	opacity: 0;
+	scale: 0.25;
+	filter: blur(4px);
+	transition:
+		opacity var(--dur-toggle) var(--ease-menu),
+		scale var(--dur-toggle) var(--ease-menu),
+		filter var(--dur-toggle) var(--ease-menu);
 }
-[data-ui='button'].model-trigger,
-[data-ui='select-trigger'].effort-trigger {
-	padding: 0 9px;
-	font-size: 12.5px;
-	font-weight: 400;
+.save-status > [data-on='true'] {
+	opacity: 1;
+	scale: 1;
+	filter: none;
 }
-[data-ui='button'].model-trigger {
-	max-width: 280px;
+.save-status svg {
+	width: 14px;
+	height: 14px;
+	stroke-width: 2.25;
 }
-.model-trigger-label {
-	display: block;
-	min-width: 0;
-	overflow: hidden;
+.save-status [data-face='success'] {
+	color: var(--success);
 }
-/* No chevron: the effort word sits flush like the model name. */
-[data-ui='select-trigger'].effort-trigger {
-	gap: 0;
-}
-[data-ui='select-trigger'].effort-trigger > svg {
-	display: none;
-}
-/* The effort list opens under the trigger's right edge, since the picker ends its row. */
-.effort-menu {
-	width: 248px;
-	transform-origin: top right;
-	translate: calc(var(--radix-select-trigger-width) - 100%) 0;
-}
-
-/* ───────── Model dialog: denser rows for long catalogs ───────── */
-[data-ui='command-item'].model-row {
-	height: 34px;
-	gap: 10px;
-	font-size: 13.5px;
-}
-.model-heading {
-	height: 29px;
-	padding: 8px 10px 5px;
-	color: var(--text-faint);
-	font-size: 11.5px;
-	line-height: 16px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	user-select: none;
+.save-status [data-face='error'] {
+	color: var(--danger);
 }

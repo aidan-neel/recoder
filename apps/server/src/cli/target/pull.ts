@@ -8,7 +8,7 @@ import { prepareSandbox, sandboxLocation, sandboxRevision } from '../../sandbox/
 import { CliError, describeError, notReadyError, usageError } from '../exit.js';
 import { checkedOutTarget, removedOnFailure } from './checked-out.js';
 import { assertNotCancelled, gitOutput } from './git.js';
-import { redactedTail, withoutCredentials } from './redact.js';
+import { redactedTail, withoutCredentials } from '../../util/redact.js';
 import type { ResolvedTarget, TargetRequest } from './resolve-target.js';
 
 /**

@@ -1,8 +1,9 @@
 import { app } from './app';
 import { env } from './env';
 import { serverDataDir } from './util/data-dir';
-import { claudeCode } from './agents/claude-code/claude-code';
 import { opencode } from './agents/opencode/opencode';
+import { deleteChatGptTokens } from './review/session/chatgpt-migration';
+import { registeredAgents } from './agents/registry';
 import { initReviewSettings } from './review/session/review-settings';
 import { initVllmServers } from './models/vllm/vllm-store';
 import { startVllmSync } from './models/vllm/vllm-sync';
@@ -16,8 +17,9 @@ import { startSharedMaintenance } from './review/runtime/maintenance';
 
 /**
  * Start the agents' checks now so Settings never waits on a cold start:
- * OpenCode with its provider catalog, and Claude Code's sign-in, so the first
- * Check again after a restart can answer from it instead of waiting on the CLI.
+ * OpenCode with its provider catalog, and every other agent CLI's install and
+ * sign-in check, so the first Check again after a restart can answer from it
+ * instead of waiting on the CLI.
  */
 function warmAgents(): void {
 	void opencode
@@ -25,7 +27,9 @@ function warmAgents(): void {
 		.then((status) => (status.error ? undefined : opencode.providers()))
 		.catch(() => {});
 
-	void claudeCode.detect().catch(() => {});
+	for (const agent of registeredAgents()) {
+		if (agent !== opencode) void agent.detect().catch(() => {});
+	}
 }
 
 /**
@@ -71,6 +75,7 @@ function logStrayRejections(): void {
 logStrayRejections();
 
 await initializeStorage();
+await deleteChatGptTokens(serverDataDir());
 
 let stopWorkers: (() => Promise<void>) | undefined;
 const stopMaintenance = postgres ? startSharedMaintenance(postgres) : undefined;

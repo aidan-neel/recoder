@@ -1,12 +1,12 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
-import { LlmError, cancelledError } from '../../models/llm/errors';
+import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import { callDeadline, emptyDirectory, findCli, removeScratchDir, scratchDir, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, streamCli } from '../cli-stream';
+import { SessionCliAgent } from '../session-run';
 import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
 import { parseDevinModels } from './devin-models';
 import { DEVIN_LOGIN, exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
@@ -35,7 +35,7 @@ const TOOL_RETRIES = 2;
  * The CLI signs in itself. Recoder never reads its credential file; it runs the CLI without the server's keys
  * in its environment and under a config that denies every tool, and reads what the CLI prints and exports.
  */
-export class DevinAgent extends CliAgent {
+export class DevinAgent extends SessionCliAgent {
 	readonly id = 'devin';
 	readonly name = 'Devin';
 	readonly install = INSTALL;
@@ -71,15 +71,7 @@ export class DevinAgent extends CliAgent {
 
 		if (!path) throw new LlmError(0, `Devin is not installed. Install it with: ${INSTALL}`);
 
-		const host = {
-			path,
-			env: this.env,
-			running: this.running,
-			scratch: this.scratch,
-			forget: (session: string) => this.forget(path, session)
-		};
-
-		return DevinRun.open(host, options);
+		return DevinRun.open(this.sessionHost(path), options);
 	}
 
 	/**
@@ -93,13 +85,11 @@ export class DevinAgent extends CliAgent {
 		if (!path) throw new LlmError(0, `Devin is not installed. Install it with: ${INSTALL}`);
 
 		const deadline = callDeadline(opts);
-		const scratch = await mkdtemp(join(tmpdir(), 'recoder-devin-'));
+		const scratch = await scratchDir(this.scratch, 'recoder-devin-');
 		const promptFile = join(scratch, 'prompt.md');
 		const exportFile = join(scratch, 'export.json');
 		const cwd = await emptyDirectory('devin-empty');
 		let session: string | undefined;
-
-		this.scratch.add(scratch);
 
 		try {
 			const system = systemText(opts);
@@ -132,8 +122,7 @@ export class DevinAgent extends CliAgent {
 			session ??= (await readExport(exportFile))?.session_id;
 			throw deadline.failure(error, 'Devin request failed.');
 		} finally {
-			this.scratch.delete(scratch);
-			await rm(scratch, { recursive: true, force: true });
+			await removeScratchDir(this.scratch, scratch);
 			if (session) await this.forget(path, session);
 		}
 	}
@@ -159,44 +148,11 @@ export class DevinAgent extends CliAgent {
 
 	/**
 	 * Deletes the session the CLI saved for a call, which holds the review's prompt, and resolves once `devin rm`
-	 * has exited. Its exit code is not read: a session the CLI never saved has nothing to delete.
+	 * has exited or run out of time, so a stalled `rm` never holds a review. Its exit code is not read: a session
+	 * the CLI never saved has nothing to delete.
 	 */
-	private async forget(path: string, session: string): Promise<void> {
-		const proc = Bun.spawn([path, 'rm', session, '--force'], {
-			env: devinEnv(this.env),
-			stdin: 'ignore',
-			stdout: 'ignore',
-			stderr: 'ignore'
-		});
-
-		await proc.exited;
-	}
-
-	/** Run a short CLI command to its end, killing it after `timeoutMs`, or when `signal` aborts. */
-	private async output(
-		path: string,
-		args: string[],
-		timeoutMs: number,
-		signal?: AbortSignal
-	): Promise<{ code: number; stdout: string }> {
-		const proc = Bun.spawn([path, ...args], {
-			stdout: 'pipe',
-			stderr: 'ignore',
-			env: devinEnv(this.env),
-			...(signal ? { signal } : {})
-		});
-
-		const timer = setTimeout(() => proc.kill(), timeoutMs);
-
-		try {
-			const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-
-			if (signal?.aborted) throw cancelledError();
-
-			return { code, stdout };
-		} finally {
-			clearTimeout(timer);
-		}
+	protected async forget(path: string, session: string): Promise<void> {
+		await this.output(path, ['rm', session, '--force'], STATUS_TIMEOUT_MS);
 	}
 
 	/** Run the CLI in an empty directory and read its reply. See {@link streamCli} for how an abort stops it. */

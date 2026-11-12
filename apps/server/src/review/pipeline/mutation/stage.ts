@@ -4,8 +4,9 @@ import { addedLines } from '../detectors/changed-lines.js';
 import { readFilesAt } from '../repo-inventory/blobs.js';
 import { readTestFiles } from '../detectors/test-files.js';
 import type { DetectorResult } from '../detectors/types.js';
+import { notRun } from '../../../sandbox/exec-workspace.js';
 import { MATRIX_BUDGET_MS, emptyCounts, testMatrix, type MatrixCounts, type SkipReason } from './matrix.js';
-import { singleFileCommands } from './test-run.js';
+import { oldCopyPath, PLAIN_PATH, singleFileCommands } from './test-run.js';
 
 const SCRIPT_SOURCE = /\.[cm]?[jt]sx?$/;
 
@@ -48,11 +49,12 @@ export function matrixDetail(report: MatrixReport): string {
 
 /**
  * The matrix findings for the edited tests and the tests a detector
- * suspects, once the install and baseline checks are done. Every run goes
- * through the workspace, which puts the checkout back after each one; a final
- * `git status` shows nothing was left behind.
+ * suspects, once the install and baseline checks are done. Payloads go
+ * through the workspace's scratch files, placed for one run and removed
+ * after it, so a killed run leaves nothing; a final `git status` shows no
+ * tracked change or `.recoder-` file was left behind.
  */
-export async function runMatrix(run: ReviewRun): Promise<MatrixReport> {
+export async function runMatrix(run: ReviewRun, closed: () => boolean): Promise<MatrixReport> {
 	const revision = run.input.revision;
 	const workspace = run.workspace;
 	const skip = (reason: SkipReason): MatrixReport => ({ results: [], counts: emptyCounts(), skipped: reason });
@@ -75,23 +77,55 @@ export async function runMatrix(run: ReviewRun): Promise<MatrixReport> {
 
 	const sources = await readFilesAt(revision.checkoutPath, revision.headSha, candidates, signal);
 	const scriptLines = await workspace.scripts();
+	const oldCopies = relevant.map((file) => oldCopyPath(file.path)).filter((path) => PLAIN_PATH.test(path));
+
+	await workspace.run(`rm -f -- .recoder-mutant.* ${oldCopies.join(' ')}`, 15_000, signal, 'mutation');
+
+	let planIndex = 0;
 
 	const outcome = await testMatrix({
 		tests: relevant,
 		suspicions,
 		sources,
 		added,
+		closed,
 		commandFor: singleFileCommands(
 			scriptLines,
 			run.baseline.map((check) => check.command)
 		),
-		run: (command, timeoutMs) => workspace.run(command, timeoutMs, signal, 'mutation'),
+		run: async (plan, timeoutMs) => {
+			if (closed()) return notRun('Not run: the review closed.', false);
+
+			const owner = `mutation-${planIndex++}`;
+
+			for (const file of plan.files) {
+				const written = await workspace.writeFile(file.path, file.text, signal, owner);
+
+				if (!written.ok) {
+					run.events?.onLog?.(`Test matrix could not write ${file.path}: ${written.error}`);
+
+					return notRun(`Not run: could not write ${file.path}: ${written.error}`, false);
+				}
+			}
+
+			return workspace.runInvestigation(plan.command, timeoutMs, signal, owner, {
+				classifyAs: plan.testCommand,
+				tally: false
+			});
+		},
 		deadline: Date.now() + MATRIX_BUDGET_MS
 	});
 
-	const left = await workspace.run('git status --porcelain --untracked-files=no', 15_000, signal, 'mutation');
+	if (!closed()) {
+		const left = await workspace.run('git status --porcelain', 15_000);
 
-	if (left.output.trim()) run.events?.onLog?.(`Test matrix left changes in the checkout: ${left.output.slice(0, 200)}`);
+		const residue = left.output
+			.split('\n')
+			.filter((line) => line.trim() && (!line.startsWith('??') || line.includes('.recoder-')));
+
+		if (residue.length)
+			run.events?.onLog?.(`Test matrix left changes in the checkout: ${residue.join(' ').slice(0, 200)}`);
+	}
 
 	if (outcome.counts.sanityOutput) run.events?.onLog?.(`Test matrix sanity run failed: ${outcome.counts.sanityOutput}`);
 

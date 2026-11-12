@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { ModelConfig } from '../../../models/models.js';
 import type { ReviewRun } from '../harness/context.js';
 import type { ReviewUnit } from '../units.js';
-import { askBrief } from './ask.js';
+import { askBrief, type BriefStage } from './ask.js';
 import { isFiller, unitClaims, unitInput, type ClaimSource, type PinnedClaim } from './brief.js';
 import type { BriefUnit } from './types.js';
 
@@ -53,14 +53,14 @@ export interface UnitBrief {
 
 /**
  * Summarizes one unit from its own declarations and diff in one call, cached
- * under the brief's prompt `version`. A unit the call could not answer is recorded as omitted with the reason;
- * one whose diff was clipped to fit is recorded as partial.
+ * under the brief's prompt version and stopped by the `stage` signal. A unit the call could not answer is
+ * recorded as omitted with the reason; one whose diff was clipped to fit is recorded as partial.
  */
 export async function briefUnit(
 	run: ReviewRun,
 	cfg: ModelConfig,
 	unit: ReviewUnit,
-	version: number
+	stage: BriefStage
 ): Promise<UnitBrief> {
 	const paths = unit.scope.map((entry) => entry.path);
 	const input = unitInput(run.inventory, run.changeModel, unit.scope);
@@ -76,8 +76,8 @@ export async function briefUnit(
 	};
 
 	const answer = await askBrief(run, cfg, {
+		...stage,
 		label: unit.id,
-		version,
 		system: SYSTEM,
 		user: `Files: ${paths.join(', ')}\n\n${input.text}`,
 		schema: unitSchema,

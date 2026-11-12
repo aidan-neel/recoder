@@ -29,8 +29,9 @@ async function storedReview(): Promise<string> {
 /** A model config named `model`, for picks set by hand. */
 function picks(models: string[]): LockedModels {
 	const config = (model: string) => ({ baseUrl: 'http://locked-models.test/v1', apiKey: '', model });
+	const [orchestrator = 'lead', subagent = orchestrator, verifier = orchestrator] = models;
 
-	return { orchestrator: config(models[0]!), subagent: config(models[1]!) };
+	return { orchestrator: config(orchestrator), subagent: config(subagent), verifier: config(verifier) };
 }
 
 test('the lock holds across the limiter queue, timers and awaits, whoever frees the slot', async () => {
@@ -66,7 +67,7 @@ test('a Bun.serve handler runs in the context that created the server, not the r
 	try {
 		const seen = await runLocked(picks(SECOND), () => realFetch(server.url).then((response) => response.text()));
 
-		expect(seen).toBe(FIRST[0]!);
+		expect(seen).toBe(FIRST[0] ?? '');
 	} finally {
 		await server.stop(true);
 	}
@@ -91,7 +92,14 @@ test('a pipeline that runs without locked models records each miss and warns onc
 		const { runs, calls } = await storedRuns(reviewId);
 
 		expect(runs?.map(({ startedAt: _, ...run }) => run)).toEqual([
-			{ index: 0, orchestrator: null, subagent: null, lockMisses: 2 }
+			{
+				index: 0,
+				orchestrator: null,
+				subagent: null,
+				verifier: null,
+				lockMisses: 2,
+				queueDelay: { requests: 1, totalMs: 0, maxMs: 0 }
+			}
 		]);
 
 		expect(calls.map((call) => [call.model, call.run, call.lockMiss])).toEqual([[FIRST[0], 0, true]]);

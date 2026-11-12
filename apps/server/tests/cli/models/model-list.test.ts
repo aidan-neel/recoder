@@ -54,9 +54,9 @@ test('each model is grouped under the provider the app picker names, A to Z, wit
 	const providers = [...new Set(list.models.map((model) => model.provider))];
 
 	expect(providers).toEqual([
-		'ChatGPT',
 		'Claude Code',
 		'GitHub Copilot',
+		'gpt.example',
 		'models.internal',
 		'OpenAI',
 		'vLLM · 127.0.0.1:8000'

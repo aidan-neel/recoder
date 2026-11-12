@@ -67,6 +67,11 @@ export function extractJson(logs: string): unknown {
 	}
 }
 
+/** Whether forge JSON is an object, as opposed to an array, a primitive or null. */
+export function isJsonObject(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
  * Run a forge CLI, capturing stdout. Never throws raw: a missing binary is an
  * `unavailable` GhError and a failed run is whatever `classify` makes of its logs.

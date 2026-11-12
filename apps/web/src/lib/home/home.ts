@@ -1,4 +1,13 @@
-import type { HomeBriefRequest, PullRequest, Repo, Review } from '@recoder/shared';
+import {
+	endsWithRepoLabel,
+	repoLabels,
+	type HomeBriefPr,
+	type HomeBriefRef,
+	type HomeBriefRequest,
+	type PullRequest,
+	type Repo,
+	type Review
+} from '@recoder/shared';
 
 export const prKey = (repoId: string, n: number): string => `${repoId}#${n}`;
 
@@ -8,6 +17,30 @@ export function highCount(review: Review | undefined): number {
 
 export function isRunning(review: Review | undefined): boolean {
 	return review?.status === 'running' || review?.status === 'queued';
+}
+
+/** A repository's last path segment: `app` for `acme/app`. */
+function shortName(repo: Pick<Repo, 'name'>): string {
+	return repo.name.split('/').pop() || repo.name;
+}
+
+/**
+ * What each repository's filter chip reads, by repository id: its short name,
+ * or its full distinct label when another tracked repository has the same
+ * short name, so two chips never read the same.
+ */
+export function chipLabels(repos: readonly Repo[], labels: ReadonlyMap<string, string>): Map<string, string> {
+	const shared = new Map<string, number>();
+
+	for (const repo of repos) shared.set(shortName(repo), (shared.get(shortName(repo)) ?? 0) + 1);
+
+	return new Map(
+		repos.map((repo) => {
+			const short = shortName(repo);
+
+			return [repo.id, (shared.get(short) ?? 0) > 1 ? (labels.get(repo.id) ?? repo.name) : short];
+		})
+	);
 }
 
 export type StatusTone = 'neutral' | 'success' | 'high' | 'danger';
@@ -58,8 +91,76 @@ export interface BriefPick {
 	review?: Review;
 }
 
-/** The biggest open PR nobody has reviewed. */
-export function pickToReview(items: BriefPick[]): BriefPick | null {
+/** Maps open PR items into the request payload sent to `/api/home/brief`. */
+export function toBriefPrs(items: ReadonlyArray<BriefPick>, labels: ReadonlyMap<string, string>): HomeBriefPr[] {
+	return items.map(({ pr, repo }) => ({
+		repoId: repo.id,
+		repo: labels.get(repo.id) ?? repo.name,
+		number: pr.number,
+		headSha: pr.headSha,
+		title: pr.title,
+		additions: pr.additions,
+		deletions: pr.deletions,
+		changedFiles: pr.changedFiles,
+		createdAt: pr.createdAt
+	}));
+}
+
+/** Formats `#123` for a brief mention or button, prefixing the repo label when two open PRs share `#123`. */
+export function actionPrLabel(
+	pick: BriefPick,
+	items: ReadonlyArray<BriefPick>,
+	labels: ReadonlyMap<string, string>
+): string {
+	const sharedNumber = items.some((item) => item.pr.number === pick.pr.number && item.repo.id !== pick.repo.id);
+
+	if (!sharedNumber) return `#${pick.pr.number}`;
+
+	return `${labels.get(pick.repo.id) ?? pick.repo.name} #${pick.pr.number}`;
+}
+
+/**
+ * Resolves the Review and Open action button targets strictly from the structured
+ * PR references carried by the active brief, so buttons never name another PR.
+ */
+export function briefActions(
+	items: ReadonlyArray<BriefPick>,
+	refs: ReadonlyArray<HomeBriefRef>
+): { reviewPick: BriefPick | null; openPick: BriefPick | null } {
+	const byKey = new Map(items.map((item) => [prKey(item.repo.id, item.pr.number), item] as const));
+	const seen = new Set<string>();
+	const referenced: BriefPick[] = [];
+
+	for (const ref of refs) {
+		const key = prKey(ref.repoId, ref.number);
+
+		if (seen.has(key)) continue;
+
+		const item = byKey.get(key);
+
+		if (!item) continue;
+		seen.add(key);
+		referenced.push(item);
+	}
+
+	const reviewPick =
+		referenced.find((item) => !item.review || item.review.status === 'draft' || item.review.status === 'failed') ??
+		null;
+
+	const openPick =
+		referenced.find(
+			(item) =>
+				!!item.review &&
+				!isRunning(item.review) &&
+				item.review.status !== 'draft' &&
+				item.review.status !== 'failed' &&
+				highCount(item.review) > 0
+		) ?? null;
+
+	return { reviewPick, openPick };
+}
+
+function pickToReview(items: BriefPick[]): BriefPick | null {
 	return (
 		items
 			.filter((item) => !item.review || item.review.status === 'draft')
@@ -67,24 +168,32 @@ export function pickToReview(items: BriefPick[]): BriefPick | null {
 	);
 }
 
-/** The reviewed PR with the most open high findings. */
-export function pickToOpen(items: BriefPick[]): BriefPick | null {
+function pickToOpen(items: BriefPick[]): BriefPick | null {
 	return (
 		items.filter((item) => highCount(item.review) > 0).sort((a, b) => highCount(b.review) - highCount(a.review))[0] ??
 		null
 	);
 }
 
-/** Written locally when the model can't be reached, in the same markup as the AI brief. */
-export function fallbackBrief(items: BriefPick[], name: string | null, part: HomeBriefRequest['dayPart']): string {
+/**
+ * Written locally when the model hasn't answered yet or can't be reached,
+ * returning both prose and structured PR references from the same snapshot.
+ */
+export function fallbackBrief(
+	items: BriefPick[],
+	name: string | null,
+	part: HomeBriefRequest['dayPart'],
+	labels: ReadonlyMap<string, string> = repoLabels(items.map((item) => item.repo))
+): { text: string; refs: HomeBriefRef[] } {
 	const greeting = { morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening', night: 'Evening' }[part];
 	const repos = new Set(items.map((item) => item.repo.id)).size;
 	const parts = [`**${greeting}${name ? `, ${name}` : ''}.**`];
+	const refs: HomeBriefRef[] = [];
 
 	if (items.length === 0) {
 		parts.push('No pull requests are open right now.');
 
-		return parts.join(' ');
+		return { text: parts.join(' '), refs };
 	}
 
 	parts.push(
@@ -96,7 +205,8 @@ export function fallbackBrief(items: BriefPick[], name: string | null, part: Hom
 	if (review) {
 		const lines = review.pr.additions + review.pr.deletions;
 
-		parts.push(`#${review.pr.number} is the biggest one nobody has reviewed yet, ${lines} lines.`);
+		refs.push({ repoId: review.repo.id, number: review.pr.number });
+		parts.push(`${actionPrLabel(review, items, labels)} is the biggest one nobody has reviewed yet, ${lines} lines.`);
 	}
 
 	const open = pickToOpen(items);
@@ -104,23 +214,169 @@ export function fallbackBrief(items: BriefPick[], name: string | null, part: Hom
 	if (open) {
 		const high = highCount(open.review);
 
-		parts.push(`#${open.pr.number} still has ${count(high).toLowerCase()} high finding${high === 1 ? '' : 's'} open.`);
+		refs.push({ repoId: open.repo.id, number: open.pr.number });
+
+		parts.push(
+			`${actionPrLabel(open, items, labels)} still has ${count(high).toLowerCase()} high finding${high === 1 ? '' : 's'} open.`
+		);
 	}
 
-	return parts.join(' ');
+	return { text: parts.join(' '), refs };
 }
 
-export type BriefSegment = { kind: 'text' | 'strong'; text: string } | { kind: 'pr'; text: string; number: number };
+export type BriefSegment =
+	| { kind: 'text' | 'strong'; text: string }
+	| { kind: 'pr'; text: string; number: number; ref?: HomeBriefRef; item?: BriefPick };
 
-/** Split `**key phrase**` and `#123` out of the brief for styling. */
-export function briefSegments(text: string): BriefSegment[] {
-	const segments: BriefSegment[] = [];
+interface SegmentRefContext {
+	num: number;
+	tokenTotal: number;
+	list: ReadonlyArray<HomeBriefRef>;
+	cursor: number;
+	preceding: string;
+	items: ReadonlyArray<BriefPick>;
+	labels: ReadonlyMap<string, string>;
+}
+
+function resolveSegmentRef(ctx: SegmentRefContext): { ref: HomeBriefRef | undefined; nextCursor: number } {
+	const { num, tokenTotal, list, cursor, preceding, items, labels } = ctx;
+
+	if (list.length === 0) return { ref: undefined, nextCursor: cursor };
+
+	if (tokenTotal <= list.length) {
+		return { ref: list[cursor], nextCursor: cursor + 1 };
+	}
+
+	const distinctRepos = new Set(list.map((entry) => entry.repoId));
+	const openMatches = items.filter((item) => item.pr.number === num);
+
+	if (distinctRepos.size === 1 && openMatches.length <= 1) {
+		return { ref: list[0], nextCursor: cursor + 1 };
+	}
+
+	const candidate = list[cursor];
+
+	if (!candidate) return { ref: undefined, nextCursor: cursor };
+
+	const label = labels.get(candidate.repoId);
+
+	if (label && endsWithRepoLabel(preceding, label)) {
+		return { ref: candidate, nextCursor: cursor + 1 };
+	}
+
+	return { ref: undefined, nextCursor: cursor };
+}
+
+type RawBriefToken =
+	{ kind: 'text' | 'strong'; text: string } | { kind: 'pr'; text: string; number: number; emphasized: boolean };
+
+function tokenizeBrief(text: string): RawBriefToken[] {
+	const tokens: RawBriefToken[] = [];
 
 	for (const part of text.split(/(\*\*[^*]+\*\*|#\d+\b)/g)) {
 		if (!part) continue;
-		if (part.startsWith('**') && part.endsWith('**')) segments.push({ kind: 'strong', text: part.slice(2, -2) });
-		else if (/^#\d+$/.test(part)) segments.push({ kind: 'pr', text: part, number: Number(part.slice(1)) });
-		else segments.push({ kind: 'text', text: part });
+
+		if (part.startsWith('**') && part.endsWith('**')) {
+			for (const sub of part.slice(2, -2).split(/(#\d+\b)/g)) {
+				if (!sub) continue;
+
+				if (/^#\d+$/.test(sub)) {
+					tokens.push({ kind: 'pr', text: sub, number: Number(sub.slice(1)), emphasized: true });
+				} else {
+					tokens.push({ kind: 'strong', text: sub });
+				}
+			}
+		} else if (/^#\d+$/.test(part)) {
+			tokens.push({ kind: 'pr', text: part, number: Number(part.slice(1)), emphasized: false });
+		} else {
+			tokens.push({ kind: 'text', text: part });
+		}
+	}
+
+	return tokens;
+}
+
+function appendSegment(segments: BriefSegment[], next: BriefSegment): void {
+	const last = segments[segments.length - 1];
+
+	if (last && (last.kind === 'text' || last.kind === 'strong') && last.kind === next.kind) {
+		last.text += next.text;
+
+		return;
+	}
+
+	segments.push(next);
+}
+
+/**
+ * Splits `**key phrase**` and `#123` out of the brief, binding each `#123` to its
+ * repository-scoped reference and open PR item rather than matching `#123` globally.
+ */
+export function briefSegments(
+	text: string,
+	refs: ReadonlyArray<HomeBriefRef> = [],
+	items: ReadonlyArray<BriefPick> = [],
+	labels: ReadonlyMap<string, string> = repoLabels(items.map((item) => item.repo))
+): BriefSegment[] {
+	const tokens = tokenizeBrief(text);
+	const tokenCounts = new Map<number, number>();
+
+	for (const token of tokens) {
+		if (token.kind === 'pr') {
+			tokenCounts.set(token.number, (tokenCounts.get(token.number) ?? 0) + 1);
+		}
+	}
+
+	const refsByNumber = new Map<number, HomeBriefRef[]>();
+
+	for (const ref of refs) {
+		const list = refsByNumber.get(ref.number) ?? [];
+
+		list.push(ref);
+		refsByNumber.set(ref.number, list);
+	}
+
+	const byKey = new Map(items.map((item) => [prKey(item.repo.id, item.pr.number), item] as const));
+	const cursors = new Map<number, number>();
+	const segments: BriefSegment[] = [];
+	let plainSoFar = '';
+
+	for (const token of tokens) {
+		if (token.kind !== 'pr') {
+			appendSegment(segments, token);
+			plainSoFar += token.text;
+			continue;
+		}
+
+		const cursor = cursors.get(token.number) ?? 0;
+
+		const { ref, nextCursor } = resolveSegmentRef({
+			num: token.number,
+			tokenTotal: tokenCounts.get(token.number) ?? 0,
+			list: refsByNumber.get(token.number) ?? [],
+			cursor,
+			preceding: plainSoFar,
+			items,
+			labels
+		});
+
+		cursors.set(token.number, nextCursor);
+
+		const item = ref ? byKey.get(prKey(ref.repoId, ref.number)) : undefined;
+
+		if (token.emphasized && !ref && !item) {
+			appendSegment(segments, { kind: 'strong', text: token.text });
+		} else {
+			appendSegment(segments, {
+				kind: 'pr',
+				text: token.text,
+				number: token.number,
+				...(ref ? { ref } : {}),
+				...(item ? { item } : {})
+			});
+		}
+
+		plainSoFar += token.text;
 	}
 
 	return segments;

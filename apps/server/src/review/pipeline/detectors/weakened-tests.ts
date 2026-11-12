@@ -245,7 +245,7 @@ function compareTest(file: TestFileVersions, before: TestBlock, after: TestBlock
 
 	if (results.length) return results;
 
-	const added = testStrengthOn() ? suspicionIn(file, after, new Map()) : [];
+	const added = testStrengthOn() ? suspicionIn(file, after, new Map(), 'weakened-tests') : [];
 
 	if (added.length) return added;
 

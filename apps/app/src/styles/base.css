@@ -1,0 +1,370 @@
+/* ───────── Page: one frame, the sidebar beside one column that scrolls on its own ───────── */
+.app-skin body {
+	overflow: hidden;
+	background: var(--bg-canvas);
+	font-size: var(--font-size-body);
+	line-height: 20px;
+	font-feature-settings: 'ss01', 'cv11';
+	text-rendering: optimizeLegibility;
+}
+
+.app-frame {
+	display: grid;
+	height: 100dvh;
+	grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+	background: var(--bg-canvas);
+	color: var(--text-primary);
+	transition: grid-template-columns var(--dur-disclose) var(--ease-menu);
+}
+.app-frame[data-sidebar='closed'] {
+	grid-template-columns: 0 minmax(0, 1fr);
+}
+
+/* A page: a 44px bar, then a column that scrolls. */
+.page {
+	display: flex;
+	min-width: 0;
+	height: 100dvh;
+	flex-direction: column;
+	background: var(--bg-canvas);
+}
+.page-bar {
+	display: flex;
+	height: var(--bar-height);
+	flex-shrink: 0;
+	align-items: center;
+	gap: 8px;
+	padding: 0 16px 0 20px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.app-frame[data-sidebar='closed'] .page-bar {
+	padding-left: 10px;
+}
+.page-bar-side {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+}
+.page-bar-side[data-side='end'] {
+	margin-left: auto;
+	flex-shrink: 0;
+}
+.page-scroll {
+	min-height: 0;
+	flex: 1;
+	overflow-y: auto;
+	scrollbar-width: thin;
+	scrollbar-color: var(--line-strong) transparent;
+	scrollbar-gutter: stable;
+}
+.page-column {
+	width: 100%;
+	max-width: 1180px;
+	margin: 0 auto;
+	padding: 20px 24px 48px;
+}
+.page-column[data-width='reading'] {
+	max-width: 768px;
+}
+
+/* A page's head under the bar: its title, then a row of tabs with the open tab's own tools at the right. */
+.page-head {
+	flex-shrink: 0;
+	padding: 20px 24px 0;
+}
+.page-title {
+	display: flex;
+	min-width: 0;
+	align-items: baseline;
+	gap: 10px;
+	font-size: 20px;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	line-height: 28px;
+}
+.page-title-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.page-tabs-row {
+	display: flex;
+	height: 48px;
+	flex-shrink: 0;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	margin-top: 8px;
+	padding: 0 16px 0 18px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+.page-tabs {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	isolation: isolate;
+}
+.page-tab {
+	position: relative;
+	display: inline-flex;
+	height: 30px;
+	align-items: center;
+	gap: 7px;
+	padding: 0 10px;
+	border-radius: 8px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	outline: none;
+	transition: color var(--dur-hover) ease-out;
+}
+.page-tab:hover,
+.page-tab[aria-current] {
+	color: var(--text-primary);
+}
+.page-tab[aria-current] {
+	font-weight: 500;
+}
+.page-tab:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.page-tab-count {
+	color: var(--text-faint);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	font-weight: 400;
+}
+.page-tab-count[data-tone='bugs'] {
+	color: var(--sev-high);
+}
+
+/* A page with no parent names itself in the bar. */
+.page-bar-title {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* Breadcrumb in the bar: quiet links, the last part in full ink. */
+.crumbs {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+}
+.crumbs a {
+	border-radius: 4px;
+	color: inherit;
+	outline: none;
+	transition: color var(--dur-hover) ease-out;
+}
+.crumbs a:hover {
+	color: var(--text-primary);
+}
+.crumbs a:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.crumbs svg {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-ghost);
+}
+.crumbs [aria-current] {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-weight: 500;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* ───────── Small pieces every screen shares ───────── */
+.section-label {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	font-weight: 500;
+	line-height: 16px;
+}
+.meta {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+.meta-sep::before {
+	margin: 0 5px;
+	color: var(--text-ghost);
+	content: '·';
+}
+.mono {
+	font-family: var(--font-code);
+	font-feature-settings: normal;
+}
+
+/* Lines added and removed: mono, the sign carries the meaning with the hue. */
+.diff-stat {
+	display: inline-flex;
+	flex-shrink: 0;
+	gap: 8px;
+	font-family: var(--font-code);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	line-height: 16px;
+}
+.diff-stat [data-sign='add'] {
+	color: var(--success);
+}
+.diff-stat [data-sign='del'] {
+	color: var(--danger);
+}
+
+/* A branch or commit name set in mono on a quiet chip. */
+.ref-chip {
+	display: inline-flex;
+	max-width: 280px;
+	align-items: center;
+	overflow: hidden;
+	padding: 1px 6px;
+	border-radius: 5px;
+	background: var(--bg-bubble);
+	color: var(--text-secondary);
+	font-family: var(--font-code);
+	font-size: 12px;
+	line-height: 18px;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The pull request mark, tinted by state. */
+.pull-mark {
+	width: 16px;
+	height: 16px;
+	flex-shrink: 0;
+	color: var(--success);
+	stroke-width: 1.75;
+}
+.pull-mark[data-state='draft'] {
+	color: var(--text-faint);
+}
+.pull-mark[data-state='merged'] {
+	color: var(--sent);
+}
+.pull-mark[data-state='closed'] {
+	color: var(--danger);
+}
+
+/* A person: initial on a tint until the picture loads over it. */
+.avatar {
+	position: relative;
+	display: inline-grid;
+	width: 24px;
+	height: 24px;
+	flex-shrink: 0;
+	overflow: hidden;
+	place-items: center;
+	border-radius: 999px;
+	background: var(--bg-selected);
+	color: var(--text-secondary);
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1;
+	text-transform: uppercase;
+}
+.avatar[data-shape='square'] {
+	width: 20px;
+	height: 20px;
+	border-radius: 6px;
+}
+.avatar img {
+	position: absolute;
+	width: 100%;
+	height: 100%;
+	inset: 0;
+	object-fit: cover;
+}
+
+/* Links inside running text. */
+.text-link {
+	border-radius: 3px;
+	color: var(--accent-text);
+	outline: none;
+	text-decoration: underline;
+	text-decoration-color: transparent;
+	text-underline-offset: 3px;
+	transition: text-decoration-color var(--dur-hover) ease-out;
+}
+.text-link:hover {
+	text-decoration-color: currentColor;
+}
+.text-link:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+
+/* A page-level notice sits in the middle of the room it has. */
+.page-notice {
+	display: grid;
+	min-height: 320px;
+	flex: 1;
+	place-items: center;
+	padding: 48px 24px;
+}
+
+/* A quiet strip above content: something is stale or partly failed, and the page still works. */
+.strip {
+	display: flex;
+	min-height: 36px;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 10px 6px 12px;
+	border-radius: 8px;
+	background: var(--sev-medium-tint);
+	color: var(--sev-medium);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+.strip[data-tone='danger'] {
+	background: var(--danger-tint);
+	color: var(--danger);
+}
+.strip[data-tone='neutral'] {
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+	color: var(--text-muted);
+}
+.strip svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+.strip-text {
+	min-width: 0;
+	flex: 1;
+}
+.strip-text strong {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+
+/* The kit's controls, tuned to this skin. */
+.app-skin [data-ui='pill'] {
+	gap: 5px;
+	padding: 2px 7px;
+	border-radius: 6px;
+}
+.app-skin [data-ui='hover-list-highlight'] {
+	border-radius: 8px;
+	background-color: var(--bg-hover);
+}
+.app-skin [data-ui='nav-pill'] {
+	background-color: var(--bg-selected);
+}
+.app-skin [data-ui='keycap'] {
+	height: 18px;
+	border-radius: 5px;
+	font-size: 11px;
+}

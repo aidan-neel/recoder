@@ -1,44 +1,40 @@
 'use client';
 
-import { prettyModelName } from '@recoder/shared';
+import { useModelPicker } from '@/lib/settings/use-model-picker';
+import { useReviewModel } from '@/lib/setup/use-review-model';
 
 import { ModelPicker } from '@/components/settings/model-picker';
-import { rolePick } from '@/lib/settings/model-options';
-import { useSettings } from '@/lib/settings/settings-store';
 
 import { SetupStep } from './setup-step';
 
-/** The model reviews run on, by name; null when none resolves. */
-function useReviewModel(): string | null {
-	const models = useSettings((state) => state.models);
+/** The step's line: the model reviews run on once one is picked, else what its absence means. */
+function modelLine(done: boolean, name: string | null): string {
+	if (!done) return 'Reviews won’t start without one.';
 
-	if (!models) return null;
-
-	const pick = rolePick(models, 'orchestrator');
-
-	if (pick.option) return pick.option.name;
-
-	const id = pick.id ?? models.model;
-
-	return id ? prettyModelName(id) : null;
+	return name ? `Reviews run on ${name}` : 'Reviews are set up';
 }
 
-/** Step two: the model that runs the reviewers, picked right here with the same picker Settings uses. */
-export function ModelStep({ done, current }: { done: boolean; current: boolean }) {
-	const name = useReviewModel();
+interface ModelStepProps {
+	done: boolean;
+	current: boolean;
+	/** A provider is in place, so there are models to pick from. */
+	offered: boolean;
+}
 
-	const description = done
-		? name
-			? `Reviews run on ${name}`
-			: 'Reviews are set up'
-		: 'Reviews won’t start without one.';
+/** Step two: the model that runs the reviews, picked in place with the picker Settings uses. */
+export function ModelStep({ done, current, offered }: ModelStepProps) {
+	const model = useReviewModel();
+	const picker = useModelPicker('orchestrator');
 
 	return (
-		<SetupStep done={done} current={current} title="Pick a model" description={description}>
-			<div className="setup-model">
-				<span className="setup-model-label">Review model</span>
-				<ModelPicker role="orchestrator" />
-			</div>
+		<SetupStep
+			name="Review model"
+			detail={modelLine(done, model.name)}
+			done={done}
+			current={current}
+			state={picker.state}
+		>
+			{offered ? <ModelPicker role="orchestrator" picker={picker} /> : null}
 		</SetupStep>
 	);
 }

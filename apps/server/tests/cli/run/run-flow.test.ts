@@ -237,11 +237,15 @@ test('the timeout also covers OpenCode listing its models, and the error says so
 	expect(failure).toMatchObject({ exitCode: EXIT.cancelled, message: expect.stringContaining('timeout') });
 });
 
-/** Reviews with a ChatGPT model saved, the sign-in as `signedIn` says, and a resolver that counts its calls. */
-async function reviewWithChatGptModel(signedIn: boolean): Promise<{ failure: unknown; resolved: number }> {
-	setReviewOverrides({ models: [{ id: 'gpt', provider: 'codex', label: 'GPT', model: 'gpt-x' }] });
+/** Reviews with the given model overrides, the Codex CLI's sign-in as `signedIn` says, and a resolver that counts its calls. */
+async function reviewWithCodexModel(
+	signedIn: boolean,
+	overrides: Parameters<typeof setReviewOverrides>[0] = { orchestratorModelId: 'codex:gpt-6-sol' }
+): Promise<{ failure: unknown; resolved: number }> {
+	setReviewOverrides(overrides);
 
-	const sign = spyOn(codex, 'signedIn').mockResolvedValue(signedIn);
+	const status = { ...(await codex.detect()), installed: true, signedIn };
+	const sign = spyOn(codex, 'quickStatus').mockResolvedValue(status);
 	let resolved = 0;
 
 	const resolve: TargetResolver = async () => {
@@ -259,14 +263,29 @@ async function reviewWithChatGptModel(signedIn: boolean): Promise<{ failure: unk
 	}
 }
 
-test('a ChatGPT model with no sign-in stops the run as not ready before the target is prepared', async () => {
-	const { failure, resolved } = await reviewWithChatGptModel(false);
+test('an agent CLI that says it is signed out stops the run as not ready before the target is prepared', async () => {
+	const { failure, resolved } = await reviewWithCodexModel(false);
 
 	expect(failure).toMatchObject({ exitCode: EXIT.notReady });
-	expect(describeError(failure)).toContain('Sign in to ChatGPT');
+	expect(describeError(failure)).toContain('Codex is not signed in. Sign in with `codex login`');
 	expect(resolved).toBe(0);
 });
 
-test('a ChatGPT model that is signed in goes on to prepare the target', async () => {
-	expect((await reviewWithChatGptModel(true)).resolved).toBe(1);
+test('a Codex verifier pick alone, signed out, stops the run before the target is prepared', async () => {
+	const { failure, resolved } = await reviewWithCodexModel(false, {
+		baseUrl: 'http://model.test/v1',
+		apiKey: 'test',
+		models: [{ id: 'http', label: 'HTTP', model: 'http-x' }],
+		orchestratorModelId: 'http',
+		specialistModelId: 'http',
+		verifierModelId: 'codex:gpt-6-sol'
+	});
+
+	expect(failure).toMatchObject({ exitCode: EXIT.notReady });
+	expect(describeError(failure)).toContain('Codex is not signed in');
+	expect(resolved).toBe(0);
+});
+
+test('an agent CLI that is signed in goes on to prepare the target', async () => {
+	expect((await reviewWithCodexModel(true)).resolved).toBe(1);
 });

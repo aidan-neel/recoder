@@ -1,14 +1,14 @@
 'use client';
 
 import { useEffect, useMemo } from 'react';
-import { create } from 'zustand';
+import { create, useStore } from 'zustand';
 
+import { useListStore } from '../api/client';
 import { useConnections } from '../connections/connections-store';
-import { useQueue } from '../queue/queue-store';
 import { useSettings } from '../settings/settings-store';
 import { gateOf, setupSteps, stepsLeft, type SetupSteps } from './setup-steps';
 
-/** Whether the queue can show yet: `needed` while a provider, model or repository is missing. */
+/** Whether the pull request list can show yet: `needed` while a provider, model or repository is missing. */
 export type SetupGate = 'checking' | 'needed' | 'done';
 
 interface GateState {
@@ -62,8 +62,8 @@ export function useSetupSteps(): SetupSteps | null {
  * Reads what first run still needs. It loads the settings and the tracked
  * repositories on mount, and checks the forges only when first run will show.
  * While first run is up, it checks again whenever the window regains focus.
- * When the server was down on load and the queue then reaches it, the
- * settings and repositories load again, so first run can still appear.
+ * When the server was down on load and the pull request list then reaches
+ * it, the settings and repositories load again, so first run can still appear.
  */
 export function useSetupGate(): SetupGate {
 	const steps = useSetupSteps();
@@ -72,7 +72,7 @@ export function useSetupGate(): SetupGate {
 	const auth = useConnections((state) => state.authStatus);
 	const holding = useGate((state) => state.holding);
 	const retry = useGate((state) => state.retry);
-	const answered = useQueue((state) => !state.sample && (state.status === 'ready' || state.status === 'empty'));
+	const answered = useStore(useListStore().state, (state) => state.phase === 'ready');
 	const down = settings === 'offline' || repos === 'offline' || repos === 'error';
 	const recovering = down && answered && retry !== 'spent';
 	const gate = gateOf({ settings, repos, auth, steps, holding, recovering });

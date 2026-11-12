@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { categoryLabel, type Finding, type FindingTopic } from '@recoder/shared';
-import type { RepoRule, RuleLedger } from '../ledger/types.js';
+import { ruleSummary, ruleWording, type RepoRule, type RuleLedger } from '../ledger/types.js';
 import type { TopicTally } from './votes.js';
 
 /** Dismissals a topic needs before it is quiet, so a couple of unlucky findings never quiet a whole topic. */
@@ -13,12 +13,13 @@ const DISMISSALS_PER_USEFUL_TO_QUIET = 4;
 const MIN_USEFUL_TO_ENDORSE = 2;
 
 /**
- * A rule's topic id, from its text with case and spacing collapsed. Ledger ids
- * (`R3`) are positions that move whenever the guidelines change; the text is
- * what the feedback was about.
+ * A rule's topic id, from its words with case and spacing collapsed: its
+ * quote, or its restatement when no quote was found. Ledger ids (`R3`) are
+ * positions that move whenever the guidelines change; the words are what the
+ * feedback was about.
  */
 export function ruleTopicId(rule: RepoRule): string {
-	const text = rule.text.toLowerCase().replace(/\s+/g, ' ').trim();
+	const text = ruleWording(rule).toLowerCase().replace(/\s+/g, ' ').trim();
 
 	return `rule:${createHash('sha256').update(text).digest('hex').slice(0, 16)}`;
 }
@@ -31,15 +32,19 @@ export function ruleTopicId(rule: RepoRule): string {
 function topicOf(finding: Finding, ledger: RuleLedger | null): FindingTopic | undefined {
 	const rule = finding.ruleId ? ledger?.rules.find((entry) => entry.id === finding.ruleId) : undefined;
 
-	if (rule) return { id: ruleTopicId(rule), label: rule.text };
+	if (rule) return { id: ruleTopicId(rule), label: ruleSummary(rule) };
 	if (finding.smell) return { id: `smell:${finding.smell}`, label: categoryLabel(finding.smell) };
 	if (finding.category) return { id: `category:${finding.category}`, label: categoryLabel(finding.category) };
 
 	return undefined;
 }
 
-/** Whether people in the repository dismiss this topic's findings far more often than they act on them. */
-function isQuietTopic(tally: TopicTally | undefined): boolean {
+/**
+ * Whether people in the repository dismiss this topic's findings far more
+ * often than they act on them. It proposes quieting the topic and ranks its
+ * rule last, but never quiets it: only a person's approval does that.
+ */
+export function isDismissedOften(tally: TopicTally | undefined): boolean {
 	if (!tally) return false;
 
 	return tally.dismissed >= MIN_DISMISSALS_TO_QUIET && tally.dismissed >= DISMISSALS_PER_USEFUL_TO_QUIET * tally.useful;
@@ -51,8 +56,8 @@ function isRunProven(finding: Finding): boolean {
 }
 
 /**
- * The findings with their topics, and quieted where the repository's people
- * keep dismissing the topic. A finding a run proved is never quieted.
+ * The findings with their topics, and quieted where a person approved
+ * quieting the topic in the repository. A finding a run proved is never quieted.
  */
 export function withTopics(
 	findings: Finding[],
@@ -64,15 +69,33 @@ export function withTopics(
 
 		if (!topic) return finding;
 
-		const quieted = isQuietTopic(tallies.get(topic.id)) && !isRunProven(finding);
-
-		return { ...finding, topic: quieted ? { ...topic, quieted } : topic };
+		return { ...finding, topic: quietedAsApproved(finding, topic, tallies.get(topic.id)?.quietApproved === true) };
 	});
+}
+
+/**
+ * The finding quieted as the repository's approvals say now, whatever it held
+ * before: quieted when its topic is one of `approvedTopics` and no run proved
+ * it, shown otherwise. A finding carried from an earlier review is read again
+ * this way, so a rule that was rejected since, or a finding quieted before
+ * approvals existed, does not stay quiet.
+ */
+export function requieted(finding: Finding, approvedTopics: ReadonlySet<string>): Finding {
+	if (!finding.topic) return finding;
+
+	return { ...finding, topic: quietedAsApproved(finding, finding.topic, approvedTopics.has(finding.topic.id)) };
+}
+
+/** The finding's topic, quieted when a person approved quieting it and no run proved the finding. */
+function quietedAsApproved(finding: Finding, topic: FindingTopic, isApproved: boolean): FindingTopic {
+	const { quieted: _held, ...shown } = topic;
+
+	return isApproved && !isRunProven(finding) ? { ...shown, quieted: true } : shown;
 }
 
 /** How a rule stands with the repository's people, or undefined while their votes say nothing either way. */
 function standingOf(tally: TopicTally | undefined): RepoRule['standing'] {
-	if (isQuietTopic(tally)) return 'often-dismissed';
+	if (isDismissedOften(tally)) return 'often-dismissed';
 	if (tally && tally.useful >= MIN_USEFUL_TO_ENDORSE && tally.useful > tally.dismissed) return 'acted-on';
 
 	return undefined;

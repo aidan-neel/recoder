@@ -4,9 +4,8 @@
  * API-key models use OpenAI-compatible chat completions, so one client covers
  * vLLM (`http://host:8000/v1`), OpenRouter
  * (`https://openrouter.ai/api/v1`), and DashScope
- * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). Subscription
- * entries explicitly select the direct ChatGPT OAuth adapter instead; they never
- * inherit an API endpoint or key from the shared environment.
+ * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). A model an agent
+ * CLI runs has an id `<agent id>:<model>` and goes through that agent's adapter.
  *
  * With no models saved, the shared environment names one:
  *
@@ -76,9 +75,13 @@ function reviewConfig(): { baseUrl: string; apiKey: string; model: string } {
 	return parsed.data;
 }
 
-/** True when both models resolve (registry or legacy env trio). */
+/** Which stage pick is being resolved. */
+type StageRole = 'orchestrator' | 'subagent' | 'verifier';
+
+/** True when every configured pick resolves (registry or legacy env trio). */
 export function isReviewConfigured(): boolean {
 	try {
+		configForVerifier();
 		configForSubagent();
 		configForOrchestrator();
 
@@ -100,7 +103,11 @@ export function withLockedModels<T>(run: () => T): T {
 	let picks: LockedModels;
 
 	try {
-		picks = { orchestrator: resolveConfig(true), subagent: resolveConfig(false) };
+		picks = {
+			orchestrator: resolveConfig('orchestrator'),
+			subagent: resolveConfig('subagent'),
+			verifier: resolveConfig('verifier')
+		};
 	} catch {
 		return run();
 	}
@@ -109,24 +116,37 @@ export function withLockedModels<T>(run: () => T): T {
 }
 
 /** The locked pick, or the live one; inside a pipeline the live one is a lock miss and is recorded as one. */
-function pickFor(orchestrator: boolean): ModelConfig {
+function pickFor(role: StageRole): ModelConfig {
 	const picks = lockedModels();
 
-	if (picks) return orchestrator ? picks.orchestrator : picks.subagent;
+	if (picks) return picks[role];
 
 	recordLockMiss();
 
-	return resolveConfig(orchestrator);
+	return resolveConfig(role);
 }
 
 /** The Review model: reviewers, consolidation and chat. */
 export function configForOrchestrator(): ModelConfig {
-	return pickFor(true);
+	return pickFor('orchestrator');
 }
 
-/** The second model: subagents and verifiers. Unset, it follows the Review model. */
+/** The second model: subagents and workers. Unset, it follows the Review model. */
 export function configForSubagent(): ModelConfig {
-	return pickFor(false);
+	return pickFor('subagent');
+}
+
+/** The verifier model: verification stage. Unset, it follows the Review model. */
+export function configForVerifier(): ModelConfig {
+	return pickFor('verifier');
+}
+
+/**
+ * Every stage's model, in stage order: Review, worker, verifier. Code that must cover each model a review can call
+ * (sign-in checks, doctor) reads this list, so a new stage cannot be missed in one copy.
+ */
+export function stageConfigs(): readonly [review: ModelConfig, worker: ModelConfig, verifier: ModelConfig] {
+	return [configForOrchestrator(), configForSubagent(), configForVerifier()];
 }
 
 /**
@@ -145,10 +165,12 @@ export function hasSeparateSpecialist(): boolean {
 
 /**
  * The model behind an agent's messages, so a follow-up (chat, discussion or
- * fix) runs where the finding came from: a subagent's on the second model,
- * everything else on the Review model.
+ * fix) runs where the finding came from: a subagent's on the second model, a
+ * verifier's on the verifier model, everything else on the Review model.
  */
 export function configForAgent(agent: string | undefined): ModelConfig {
+	if (agent === 'verifier') return configForVerifier();
+
 	return agent === 'subagent' ? configForSubagent() : configForOrchestrator();
 }
 
@@ -160,24 +182,30 @@ export function savedReviewModelId(): string | undefined {
 }
 
 /**
- * Resolve one of the two picks to its concrete model.
+ * Resolve one of the three stage picks to its concrete model.
  *
- * There are two picks: the Review model and the second model for subagents
- * and verifiers. An unset second pick follows the Review model and its effort.
- * A pick whose entry was deleted out-of-band falls back to the first entry,
- * each entry falling back to the global base URL/key. The legacy env trio
- * still works when no entries exist.
+ * There are three picks: the Review model, the second model for subagents and
+ * workers, and the verifier model. An unset second or verifier pick follows
+ * the Review model and its effort. A pick whose entry was deleted out-of-band
+ * falls back to the first entry, each entry falling back to the global base
+ * URL/key. The legacy env trio still works when no entries exist.
  */
-function resolveConfig(orchestrator: boolean): ModelConfig {
+function resolveConfig(role: StageRole): ModelConfig {
 	const stored = getStoredSettings();
 	const entries = stored.models ?? [];
 	const reviewId = savedReviewModelId();
-	const followsReview = orchestrator || !stored.specialistModelId;
-	const entryId = followsReview ? reviewId : stored.specialistModelId;
 
-	const requested = orchestrator
-		? stored.orchestratorEffort
-		: (stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
+	const rolePicks: Record<StageRole, { id: string | null | undefined; effort: ReasoningEffort | null | undefined }> = {
+		orchestrator: { id: reviewId, effort: stored.orchestratorEffort },
+		subagent: { id: stored.specialistModelId, effort: stored.specialistEffort },
+		verifier: { id: stored.verifierModelId, effort: stored.verifierEffort }
+	};
+
+	const { id: pickedId, effort: ownEffort } = rolePicks[role];
+	const followsReview = role === 'orchestrator' || !pickedId;
+	const entryId = followsReview ? reviewId : pickedId;
+	const inheritedEffort = followsReview ? stored.orchestratorEffort : undefined;
+	const requested = role === 'orchestrator' ? ownEffort : (ownEffort ?? inheritedEffort);
 
 	if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, requested);
 
@@ -215,16 +243,6 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 
 	if (entry) {
 		const reasoningEffort = supportedEffort(requested ?? undefined, entry.efforts, entry.defaultEffort);
-
-		if (entry.provider === 'codex') {
-			return {
-				provider: 'codex',
-				model: entry.model,
-				baseUrl: '',
-				apiKey: '',
-				reasoningEffort: reasoningEffort ?? entry.defaultEffort ?? 'medium'
-			};
-		}
 
 		const runtime = resolveRuntime(entry.model, entry.runtime);
 		const hosted = hostedProvider(entry.source);

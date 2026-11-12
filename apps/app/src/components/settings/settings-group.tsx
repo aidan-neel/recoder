@@ -1,58 +1,71 @@
-'use client';
-
-import { Card, cn, SwapText } from '@recoder/ui';
+import { Card } from '@recoder/ui';
 import { useId, type ReactNode } from 'react';
+
+import type { SaveState } from '@/lib/settings/use-save-state';
+
+import { SaveStatus } from './save-status';
 
 interface SettingsGroupProps {
 	title: string;
-	/** Sits at the right of the title (an "Add provider" button). */
+	/** At the right of the title: the group's own action, such as Add. */
 	action?: ReactNode;
+	/** A quiet line under the card: where the settings are saved, what a limit means. */
+	note?: ReactNode;
 	children: ReactNode;
 }
 
-/** A titled card of settings rows, split by hairlines. */
-export function SettingsGroup({ title, action, children }: SettingsGroupProps) {
-	const id = useId();
+/** A titled card of settings rows. */
+export function SettingsGroup({ title, action, note, children }: SettingsGroupProps) {
+	const titleId = useId();
 
 	return (
-		<section data-ui="settings-group" aria-labelledby={id} className="settings-group">
+		<section className="settings-group" aria-labelledby={titleId}>
 			<div className="settings-group-head">
-				<h2 id={id} className="settings-group-title">
+				<h2 id={titleId} className="settings-group-title">
 					{title}
 				</h2>
 				{action}
 			</div>
-			<Card className="settings-list">{children}</Card>
+			<Card>{children}</Card>
+			{note ? <p className="settings-group-note">{note}</p> : null}
 		</section>
 	);
 }
 
 interface SettingsRowProps {
-	/** One line; a name too long for it ends in an ellipsis. */
-	name: ReactNode;
-	/** One quiet line under the name. A new line replaces the old one after it fades out, so the two never overlap. */
-	description?: ReactNode;
-	/** Before the name: a CLI's state glyph. */
+	/** Before the text: the mark of what the row is about, such as a forge. */
 	leading?: ReactNode;
-	className?: string;
-	/** The control, at the row's right end. */
+	name: ReactNode;
+	/** The line under the name: what the setting does, or what it is set to. */
+	detail?: ReactNode;
+	/** Replaces the detail while set: why the last change was refused. */
+	error?: ReactNode;
+	/** Shown beside the control when the row saves on change. */
+	state?: SaveState;
+	/** Lets a wide control drop under the text on a narrow column. */
+	stacked?: boolean;
+	/** The control. */
 	children?: ReactNode;
 }
 
-/** One setting: its name and a line on what it does, with its control at the right. */
-export function SettingsRow({ name, description, leading, className, children }: SettingsRowProps) {
+/** One setting: its name and a line about it on the left, its control on the right. */
+export function SettingsRow({ leading, name, detail, error, state, stacked, children }: SettingsRowProps) {
 	return (
-		<div data-ui="settings-row" className={cn('settings-row', className)}>
+		<div className="settings-row" data-stacked={stacked || undefined} data-led={leading ? true : undefined}>
 			{leading}
-			<div className="min-w-0 flex-1">
-				<p className="settings-row-name">{name}</p>
-				{description ? (
-					<SwapText mode="wait" className="settings-row-desc">
-						{description}
-					</SwapText>
+			<div className="settings-row-text">
+				<span className="settings-row-name">{name}</span>
+				{error ? (
+					<span className="settings-row-detail" data-tone="danger" role="alert">
+						{error}
+					</span>
 				) : null}
+				{!error && detail ? <span className="settings-row-detail">{detail}</span> : null}
 			</div>
-			{children ? <div className="settings-row-control">{children}</div> : null}
+			<div className="settings-row-end">
+				{state ? <SaveStatus state={state} /> : null}
+				{children}
+			</div>
 		</div>
 	);
 }

@@ -46,7 +46,7 @@ interface GateInput {
 
 /**
  * The gate. A server that is down, or that fails the repository list, lets
- * the queue through so it can show its own notice; once the server answers
+ * the pull request list through so it can show its own notice; once the server answers
  * again, the gate checks until the settings and repositories have reloaded.
  * First run waits for the forge check too, so it paints with the right
  * actions in place.

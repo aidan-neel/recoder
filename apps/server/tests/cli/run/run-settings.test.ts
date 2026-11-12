@@ -3,7 +3,9 @@ import type { ModelEntry } from '@recoder/shared';
 import { opencode } from '../../../src/agents/opencode/opencode';
 import { EXIT, describeError } from '../../../src/cli/exit';
 import { MODEL_LOOKUP_LIMIT_MS } from '../../../src/cli/run/model-choices';
+import { describeSettings } from '../../../src/cli/run/report-settings';
 import { applyRunSettings, subagentCapOf } from '../../../src/cli/run/run-settings';
+import { configForVerifier } from '../../../src/models/models';
 import { getStoredSettings, setReviewOverrides } from '../../../src/review/session/review-settings';
 import { isolateRun, reviewOptions, unstoppedLookup } from './run-fixtures';
 
@@ -197,4 +199,33 @@ test('an environment model named like an agent id is not accepted as the environ
 	);
 
 	expect(failure).toMatchObject({ exitCode: EXIT.usage });
+});
+
+test('--verifier sets verifierModelId for the run and describeSettings reports it only when it differs from the Review model', async () => {
+	setReviewOverrides({
+		baseUrl: 'http://model.test/v1',
+		apiKey: 'test',
+		models: [
+			{ id: 'lead', label: 'Lead', model: 'lead-model', efforts: ['low', 'medium', 'high'] },
+			{ id: 'judge', label: 'Judge', model: 'judge-model', efforts: ['low', 'medium', 'high'] }
+		],
+		orchestratorModelId: 'lead'
+	});
+
+	const defaultTuning = { ...reviewOptions().tuning, budget: 'low' as const };
+	const restoreDefault = await applyRunSettings(defaultTuning, LOOKUP);
+	const sameSettings = await describeSettings(defaultTuning, null);
+
+	restoreDefault();
+	expect(sameSettings.verifierModel).toBeNull();
+
+	const verifierTuning = { ...defaultTuning, verifierModel: 'judge' };
+	const restoreVerifier = await applyRunSettings(verifierTuning, LOOKUP);
+	const resolvedVerifier = configForVerifier();
+	const differentSettings = await describeSettings(verifierTuning, null);
+
+	restoreVerifier();
+	expect(resolvedVerifier).toMatchObject({ model: 'judge-model', reasoningEffort: 'low' });
+	expect(differentSettings.verifierModel).toBe('judge-model');
+	expect(getStoredSettings().verifierModelId).toBeUndefined();
 });

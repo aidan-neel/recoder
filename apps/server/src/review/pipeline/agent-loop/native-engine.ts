@@ -43,6 +43,9 @@ const ANSWER_STEPS = 2;
 /** How long to wait before resuming after a provider's transient failure, per attempt so far. */
 const RESUME_BACKOFF_MS = 5_000;
 
+/** Why a step still open when the run closes has failed: the session ended before the step did. */
+const SESSION_CLOSED = new Error('the OpenCode session closed before the model step finished');
+
 /**
  * One agent run with an agent CLI as the agent. The CLI drives the model step
  * after step and calls Recoder's tools itself; Recoder keeps what it must
@@ -173,7 +176,7 @@ class NativeRun<T> {
 				timeoutMs: Math.max(1, this.limits.deadlineAt - reviewNow())
 			});
 
-			await this.relay.finishPrompt(reply.tokens, !reply.error);
+			await this.relay.finishPrompt(reply.tokens, reply.error);
 
 			return { reply, why: this.interrupt, final: final || this.finalTurn() };
 		} finally {
@@ -228,9 +231,9 @@ class NativeRun<T> {
 		if (isAuthFailure(err) || isUsageLimit(err, opts.config))
 			throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));
 
-		if (isRateLimitError(err, opts.config.provider)) recordLlmRateLimit(this.endpoint);
+		if (isRateLimitError(err)) recordLlmRateLimit(this.endpoint);
 
-		if (isTransientLlmError(err, opts.config.provider) && this.canRepair()) {
+		if (isTransientLlmError(err) && this.canRepair()) {
 			opts.onLog?.(`${opts.label} hit a provider error; resuming: ${err.message}`);
 			await sleep(RESUME_BACKOFF_MS * this.repaired, opts.signal).catch(() => {});
 			throwIfAborted(opts.signal);
@@ -337,7 +340,7 @@ class NativeRun<T> {
 	}
 
 	async close(): Promise<void> {
-		this.relay.settle(false);
+		this.relay.settle(SESSION_CLOSED);
 		await this.session?.close();
 	}
 }

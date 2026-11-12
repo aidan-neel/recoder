@@ -1,11 +1,10 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { TokenUsage } from '@recoder/shared';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import { CLI_OUTPUT_CAP_BYTES, streamCli } from '../cli-stream';
 import type { AgentPromptOptions, AgentReply, AgentRunOptions } from '../contract';
-import { ProcessRun } from '../process-run';
+import { SessionRun, type SessionHost } from '../session-run';
 import type { ToolLease } from '../tools/mcp-host';
 import { exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
 import { devinEnv, runConfig } from './devin-process';
@@ -18,19 +17,8 @@ type Env = Record<string, string | undefined>;
  */
 export const DEVIN_PRINT_ARGS = ['-p', '--permission-mode', 'auto', '--respect-workspace-trust', 'false'];
 
-/** What a run needs of the adapter: the binary, the server's environment, the sets its `stop` empties, and session cleanup. */
-export interface DevinHost {
-	path: string;
-	env: Env;
-	running: Set<Bun.Subprocess>;
-	scratch: Set<string>;
-	/** Deletes a session the CLI saved, which holds the review's prompts; resolves once it is gone. */
-	forget(session: string): Promise<void>;
-}
-
-/** A run's files, all under one scratch dir: the prompt and export files, the config home, and the working directory. */
+/** A run's files, under its scratch dir: the prompt and export files, the config home, and the working directory. */
 interface RunFiles {
-	root: string;
 	prompt: string;
 	export: string;
 	configHome: string;
@@ -39,7 +27,6 @@ interface RunFiles {
 
 function runFiles(root: string): RunFiles {
 	return {
-		root,
 		prompt: join(root, 'prompt.md'),
 		export: join(root, 'export.json'),
 		configHome: join(root, 'config'),
@@ -86,34 +73,14 @@ function promptUsage(total: TokenUsage, before: TokenUsage | null): TokenUsage {
  * CLI prints only its answer and reports usage in its export, so each prompt is one step whose text streams as it
  * is printed. Recoder's tools reach it over MCP; the review gate behind them decides what each call may do.
  */
-export class DevinRun extends ProcessRun {
-	private session: string | undefined;
+export class DevinRun extends SessionRun<RunFiles> {
 	private used: TokenUsage | null = null;
-	private prompts = 0;
 
-	private constructor(
-		private readonly host: DevinHost,
-		options: AgentRunOptions,
-		private readonly files: RunFiles
-	) {
-		super(options);
-	}
+	static async open(host: SessionHost, options: AgentRunOptions): Promise<DevinRun> {
+		const root = await SessionRun.scratchDirectory('devin');
+		const run = new DevinRun(host, options, root, runFiles(root));
 
-	static async open(host: DevinHost, options: AgentRunOptions): Promise<DevinRun> {
-		const files = runFiles(await mkdtemp(join(tmpdir(), 'recoder-devin-run-')));
-
-		host.scratch.add(files.root);
-
-		const run = new DevinRun(host, options, files);
-
-		try {
-			await writeRunFiles(files, host.env, run.lease);
-		} catch (error) {
-			await run.close();
-			throw error;
-		}
-
-		return run;
+		return SessionRun.ready(run, () => writeRunFiles(run.files, host.env, run.lease));
 	}
 
 	/** Runs the agent on `text` until it answers. Devin takes no system prompt, so the first prompt carries it. */
@@ -152,13 +119,6 @@ export class DevinRun extends ProcessRun {
 
 			return { text: answer, error: deadline.failure(error, 'Devin run failed.') };
 		}
-	}
-
-	/** Deletes the run's files and the session the CLI saved. */
-	protected override async cleanUp(): Promise<void> {
-		this.host.scratch.delete(this.files.root);
-		await rm(this.files.root, { recursive: true, force: true });
-		if (this.session) await this.host.forget(this.session);
 	}
 
 	private args(): string[] {

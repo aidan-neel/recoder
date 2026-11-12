@@ -25,26 +25,8 @@ const openAiCompatible: Transport = (opts, onToken) =>
 	);
 
 /**
- * ChatGPT through the user's subscription. The adapter is loaded lazily because
- * it imports the `models/llm` entry. A non-streaming call hides non-LLM
- * failures behind a generic message.
- */
-const chatgpt: Transport = async (opts, onToken) => {
-	const { codex } = await import('../../agents/codex/codex');
-
-	if (onToken) return codex.complete(opts, onToken);
-
-	try {
-		return await codex.complete(opts);
-	} catch (error) {
-		if (error instanceof LlmError) throw error;
-		throw new LlmError(0, 'ChatGPT request failed');
-	}
-};
-
-/**
  * A model an agent CLI runs (OpenCode, Claude Code, Devin, a custom command…), through its adapter in the agent
- * registry. Loaded lazily for the same reason as ChatGPT.
+ * registry. The registry is loaded lazily because its adapters import the `models/llm` entry.
  */
 const agentCli: Transport = async (opts, onToken) => {
 	const { agentById } = await import('../../agents/registry');
@@ -57,8 +39,7 @@ const agentCli: Transport = async (opts, onToken) => {
 
 /** The transports of the providers that are not agent CLIs; every other provider is one. */
 const TRANSPORTS: Partial<Record<ModelProvider, Transport>> = {
-	'openai-compatible': openAiCompatible,
-	codex: chatgpt
+	'openai-compatible': openAiCompatible
 };
 
 export function transportFor(provider: ChatOptions['provider']): Transport {

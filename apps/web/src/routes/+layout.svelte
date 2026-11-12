@@ -5,7 +5,6 @@
 	import CommandPalette from '$lib/components/shell/command-palette.svelte';
 	import GuidelinesEditor from '$lib/components/settings/guidelines-editor.svelte';
 	import ModelSettingsModal from '$lib/components/settings/model-settings-modal.svelte';
-	import UsageModal from '$lib/components/settings/usage-modal.svelte';
 	import DeleteSessionDialog from '$lib/components/session/delete-session-dialog.svelte';
 	import AppCanvas from '$lib/components/shell/app-canvas.svelte';
 	import TopBar from '$lib/components/shell/top-bar.svelte';
@@ -47,7 +46,6 @@
 	</AppCanvas>
 	<ModelSettingsModal />
 	<GuidelinesEditor />
-	<UsageModal />
 	<DeleteSessionDialog />
 	<CommandPalette />
 	<Toaster />

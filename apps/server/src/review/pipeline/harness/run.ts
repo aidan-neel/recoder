@@ -15,6 +15,7 @@ import {
 	type ReviewRun
 } from './context.js';
 import { deriveObligationsStage, runUnitsWithObligations } from '../obligations/stage.js';
+import { recordLearnedHistory } from './history-record.js';
 import { intentStage } from './intent-stage.js';
 import { repoInventoryStage } from './repo-inventory-stage.js';
 import { runUnitPool } from './pool.js';
@@ -24,6 +25,7 @@ import { runSubagents } from './subagent-stage.js';
 import { completeReview, stoppedReview } from './summary.js';
 import type { AdaptiveReviewInput, AdaptiveReviewResult, HarnessEvents } from './types.js';
 import { understandChanges } from './understand.js';
+import { variantStage } from '../variants/stage.js';
 import { cutUnits, retryFailedUnits } from './unit-stage.js';
 import { drainVerification, finishVerification, startVerification } from './verification.js';
 
@@ -37,7 +39,8 @@ import { drainVerification, finishVerification, startVerification } from './veri
  *   (`exec-sandbox.ts`); tracked files are restored after every command.
  *
  * Stages: understand → cut the reviewers' slices → repo inventory, change model, intent (and obligations,
- * with `RECODER_OBLIGATIONS=1`) and rule ledger, while the sandbox installs →
+ * with `RECODER_OBLIGATIONS=1`) and rule ledger, while the sandbox installs → the experiment variant's
+ * reviewers, with `RECODER_REVIEW_VARIANT` set →
  * every reviewer over its slice with every lens (failed ones retried once), in one pool with
  * the obligation investigations, then the subagents the reviewers asked for → consolidate. Three things overlap the reviewers rather than
  * follow them: the baseline checks, the detectors, and the verifiers, which
@@ -56,6 +59,9 @@ export async function runAdaptiveReview(
 	if (input.resume) assertSameSelection(input.resume.selection, input.lenses);
 
 	const run = createRun(input, events);
+
+	recordLearnedHistory(run);
+
 	const onAbort = () => run.controller.abort();
 
 	input.signal?.addEventListener('abort', onAbort, { once: true });
@@ -100,6 +106,7 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	const checks = await prepareSandbox(run, setup);
 
 	await context;
+	await variantStage(run);
 
 	run.events?.onStage?.('reviewing');
 	if (run.controller.signal.aborted) throw new ReviewAbortedError('review aborted');

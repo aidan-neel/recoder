@@ -37,3 +37,24 @@ Runs that did not produce a result: GPT 6.1 Sol (usage limit), GLM 5.3 (rate lim
 - Sonnet 5.5 is above the Muse range by less than the run-to-run spread, and it is self-judged. It is not a proven gain.
 - Precision is not summarized here. Check the control PRs and the unresolved findings in a report before you quote recall.
 - Recoder has to work with locally hosted open models of about 400B. A result on a hosted model does not show that.
+
+## The accuracy plan of issue #63 is closed
+
+Issue #63 set a target of 110 published defects out of 134 and listed the work to get there. This section records how it ended.
+
+Later results, on the dataset `synth-v2` (the same 134 planted bugs plus 72 labels that reviews found, 206 in total):
+
+| Date | Tree and reviewer | PRs | Runs | Found | Judge |
+| --- | --- | --- | --- | --- | --- |
+| 2026-10-08 | `main`, GPT 6.1 Sol high with SWE-2 as the second model | 25 | 1 | 165 of 206; 115 of the 134 planted | Luna |
+| 2026-10-08 | Recall levers off (obligations, contract checks, test strength) | 8 (`quick`) | 3 | 49, 52, 49 of 65 | Luna |
+| 2026-10-08 | Recall levers on | 8 (`quick`) | 3 | 55, 56, 57 of 65 | Luna |
+
+- One full run found 115 of the 134 planted bugs. That is above 110, but it is one run, and the rule above asks for three. The three-run comparison exists only on the `quick` set, which is no full-set score.
+- With the levers on, the second model read 55% more input and a review took about 10 minutes longer. Labeled precision fell a little (duplicates and unresolved findings went up; no false finding came from a lever).
+- On 2026-10-09 the owner parked accuracy tuning to work on review quality and the interface first. The target of 110 is not pursued as a number any more.
+
+What the plan's open items became:
+
+- Finding history and decisions (#72), the rule ledger with verified quotes and levels (#71), evidence classes and rule citations on findings (#74), the bounded mutation matrix (#94), history sources on the run record (#98) and state-transition obligations (#99) are in the tree. The specialist tree and the independent second pass (#95) are experiment arms behind `RECODER_REVIEW_VARIANT`; no run has measured them yet.
+- When accuracy work starts again, the first two levers are known from the 2026-10-09 comparison with other tools: leave quality findings out of posted comments, and add a "worth a comment" gate for minor bugs. Measure each with three full-set runs.

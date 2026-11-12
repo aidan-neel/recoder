@@ -6,9 +6,17 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Review.** One run of the pipeline over one pull request at one head. Type `Review`, with `ReviewStatus` (`draft`, `queued`, `running`, `passed`, `failed`) in `packages/shared/src/review.ts`.
 
-**Finding.** A problem a developer sees. Type `Finding` in `packages/shared/src/findings.ts`. `severity` is `FindingSeverity` (`info`, `warning`, `error`). `kind` is `FindingKind` (`bug`, `quality`), derived from `category` by `findingKind`.
+**Finding.** A problem a developer sees. Type `Finding` in `packages/shared/src/findings.ts`. `severity` is `FindingSeverity` (`info`, `warning`, `error`). `kind` is `FindingKind` (`bug`, `quality`), derived from `category` by `findingKind`. When `ruleId` names a rule in the rule ledger, `rule` (`FindingRule`) carries the verbatim `text`, `source` (`path`, `line`, `endLine`, `revision`) and optional `restatement`, `level`, `appliesTo` and `exceptions`.
 
-**Candidate.** A claim a reviewer, subagent or detector reported, before validation and verification. Type `CandidateFinding` (a `Finding` plus `candidateId`, `valid`, `dropReason`, `dropStage`, `belowBar`, `publishedBy`, `refuted`, `repair`) in `apps/server/src/review/pipeline/consolidate.ts`. Candidates that survive and merge become findings (`toFinding`).
+**Finding decision.** A person's acceptance or dismissal of a finding, with a `DismissalReason` (`wrong`, `not-worth-fixing`, `already-handled`, `style-preference`, `duplicate`) when dismissed. Type `FindingDecision` in `packages/shared/src/findings.ts`; what each reason teaches is in `apps/server/src/review/guidelines/learned/decision-learning.ts`.
+
+**Finding history.** How a finding relates to the review before it on the same pull request: `new`, `carried` or `rechecked`, with the head it was first seen at. Type `FindingHistory` in `packages/shared/src/findings.ts`, set by `carryHistory` in `apps/server/src/review/history/carry.ts`. Findings shown fixed go to `Review.resolved` (`ResolvedFinding`).
+
+**Learned rule.** A proposal to quiet a topic people keep dismissing in a repository. It applies only once a person approves it. Type `LearnedRuleProposal` in `packages/shared/src/guidelines.ts`, stored by `apps/server/src/review/guidelines/learned/proposals.ts`.
+
+**Candidate.** A claim a reviewer, subagent or detector reported, before validation and verification. Type `CandidateFinding` (a `Finding` plus `candidateId`, `valid`, `dropReason`, `dropStage`, `belowBar`, `publishedBy`, `refuted`, `ruleCheck`, `repair`) in `apps/server/src/review/pipeline/consolidate.ts`. Candidates that survive and merge become findings (`toFinding`).
+
+**Rule ledger.** The repository rules extracted from `RECODER.md`, global Settings guidelines, nested `AGENTS.md` / `CLAUDE.md` files and root instruction files, quoted as untrusted text and never followed as instructions. Types `RuleLedger` and `RepoRule` in `apps/server/src/review/guidelines/ledger/types.ts`; extraction and cache (`LEDGER_VERSION`) in `ledger.ts`, `sources.ts` and `validate.ts`; deterministic source precedence in `precedence.ts`; diff-and-path scope checks in `applicability.ts`.
 
 **Unit.** A slice of the change cut from the inventory without a model call. Type `ReviewUnit` in `apps/server/src/review/pipeline/units.ts`. Ids are `reviewer-1` (a reviewer's slice, retried as `retry-reviewer-1`), `unit-1` (a brief unit), `subagent-1`, and the second looks `residual-1` and `contract-1`.
 
@@ -40,7 +48,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Brief question.** An open question the brief pins to a changed line, ids `Q1`, `Q2`. Type `BriefQuestion` in `packages/shared/src/questions.ts`. Result is `BriefQuestionResult`: `confirmed`, `disproved`, `unresolved`. The ledger is `apps/server/src/review/pipeline/question-ledger.ts`.
 
-**Obligation.** A question about changed behavior derived mechanically from the change model, never a finding. Type `Obligation` in `packages/shared/src/obligations.ts`. Triggers are `ObligationTrigger` (eight kinds). Result is `ObligationResult`: `confirmed`, `disproved`, `not-applicable`, `unresolved`. Runs only when `RECODER_OBLIGATIONS` is on.
+**Obligation.** A question about changed behavior derived mechanically from the change model, never a finding. Type `Obligation` in `packages/shared/src/obligations.ts`. Triggers are `ObligationTrigger`: eight kinds, and state-transition with `RECODER_OBLIGATIONS_TRANSITIONS`. Result is `ObligationResult`: `confirmed`, `disproved`, `not-applicable`, `unresolved`. Runs only when `RECODER_OBLIGATIONS` is on.
 
 **Checkpoint.** A review's saved progress, so it can continue or replay. Type `ReviewCheckpoint` in `apps/server/src/review/session/review-checkpoint.ts`.
 
@@ -55,10 +63,11 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 - `status`: `verified` or `unverified`.
 - `method`: `run`, `trace`, `detector`, `rule`, `convention`.
 - `outcome` (`VerificationOutcome`): `reproduced`, `traced`, `inconclusive`, `refuted`, `not-run`.
+- `ruleCheck` (`RuleCheckDecisions`): for `repo-rule` findings, the separate `applicability` (`RuleApplicabilityDecision`: `applies`, `not-applicable`, `unknown`) and `violation` (`RuleViolationDecision`: `violated`, `not-violated`, `exception`, `not-checked`, `unknown`) decisions with their `reason` and `evidenceIds`.
 
 **Proof.** The evidence behind a `verified` status. Type `VerificationEvidence`: the `command`, `exitCode`, `expected`, an `observed` excerpt taken by the harness, and the `evidenceId` of the recorded run. The store is `apps/server/src/evidence/store.ts`.
 
-**Baseline.** The same proving command run on the merge-base tree, to tell a regression from a failure that predates the change. Type `VerificationBaseline` in `packages/shared/src/findings.ts`. Code in `apps/server/src/review/pipeline/harness/verify-baseline.ts`.
+**Baseline.** The same proving command run on the merge-base tree, prepared with the head's generation commands, to tell a regression from a failure that predates the change. Type `VerificationBaseline` in `packages/shared/src/findings.ts`. Code in `apps/server/src/review/pipeline/harness/verify-baseline.ts`.
 
 **Baseline check.** A repo-wide command run on the PR head and cached across reviews by commit and install inputs. Code in `apps/server/src/review/pipeline/harness/baseline-checks.ts`. Cache in `apps/server/src/review/pipeline/harness/baseline-cache.ts`.
 
@@ -70,7 +79,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Not run.** A bug in a review where no baseline check passed (or none could run), so no verifier tried it. It is published, marked unverified (`outcome: 'not-run'`), and counted as `ReviewFunnel.notRun`. Decided by `whyCodeCannotRun` in `apps/server/src/review/pipeline/harness/verification.ts`.
 
-**Below the bar.** A low-severity candidate held back when Settings keeps reviews to medium and above (`belowBar`). Low severity is shown by default. `publishedBy` (`PublishedBy`: `reproduced`, `rule`) says why one is published anyway. Defined in `apps/server/src/review/pipeline/published-by.ts`.
+**Below the bar.** A low-severity candidate held back when Settings keeps reviews to medium and above (`belowBar`). Low severity is shown by default. `publishedBy` (`PublishedBy`: `reproduced`, `rule`) says why one is published anyway (`rule` requires a verified violation of a `mandatory` ledger rule whose `ruleCheck` confirms both `applies` and `violated`; `advisory` rules stay held back). Defined in `apps/server/src/review/pipeline/published-by.ts`.
 
 ## Where a candidate stopped
 
@@ -95,3 +104,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 **Identity.** Everything that decides a result, hashed so two reports can be told apart. Type `RunIdentity` in `apps/server/src/eval/identity.ts`.
 
 **Defect stage.** How far one planted defect got in one run: `found`, `verified`, `published`. Type `DefectStage` in `apps/server/src/eval/benchmark-stages.ts`.
+
+**Independent pass.** The `independent-pass` arm of `RECODER_REVIEW_VARIANT`: a second reviewer per slice (`independent-reviewer-N`) that never sees the first pass's findings. Built by `independentPassUnits` in `apps/server/src/review/pipeline/variants/independent-pass.ts`.
+
+**Specialist tree.** The `specialist-tree` arm of `RECODER_REVIEW_VARIANT`: a coordinator assigns slices to one-lens specialists (`specialist-<lens>`), each with at most 3 subagents. Planned by `planSpecialists` in `apps/server/src/review/pipeline/variants/specialist-plan.ts`; its record is `SpecialistPlan`.

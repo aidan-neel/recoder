@@ -1,50 +1,34 @@
 'use client';
 
-import type { GuidelinesDraftRequest, RepoGuidelines } from '@recoder/shared';
-import { Button, Keycap, Textarea, Tooltip } from '@recoder/ui';
+import { Button, DURATION, Keycap, Textarea } from '@recoder/ui';
 import { Undo2 } from 'lucide-react';
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, type RefObject } from 'react';
 
-import { useGuidelinesEditor, type ScopeKey } from '@/lib/guidelines/editor-store';
-import { caretAt, firstRule, trimEmptyBullets } from '@/lib/guidelines/rules';
+import { caretAt, firstRule } from '@/lib/guidelines/rules';
+import { useGuidelinesEdit, type GuidelinesEditorSpec } from '@/lib/guidelines/use-editor';
 
 import { DraftPopover } from './draft-popover';
 import { EditorNote } from './editor-note';
 import { StreamView } from './stream-view';
-import { useDraft } from './use-draft';
-import { useSave } from './use-save';
 
-interface GuidelinesEditorProps {
-	scope: ScopeKey;
-	open: boolean;
-	/** The repository file being edited, or null for the global layer. */
-	repo: RepoGuidelines | null;
-	maxChars: number;
-	/** Names the text field: "Global guidelines", "acme/api guidelines". */
-	label: string;
-}
+/** The rows the text field opens with, and the rows it grows to before it scrolls. */
+const MIN_ROWS = 12;
+const MAX_ROWS = 24;
 
-/** The global layer saves in place; a repository's file goes through a pull request. */
-function saveLabel(repo: RepoGuidelines | null): string {
-	if (!repo) return 'Save';
+/** The unfold, then a moment for the layout to settle, before the layer is brought into view. */
+const REVEAL_AFTER_MS = DURATION.disclose * 1000 + 60;
 
-	return repo.pending ? 'Update pull request' : 'Open pull request';
-}
-
-/** The check face after the save landed, in the same words. */
-function successLabel(repo: RepoGuidelines | null): string {
-	if (!repo) return 'Saved';
-
-	return repo.pending ? 'Updated' : 'Opened';
+/** How the page scrolls to the opened editor: at once for a reader who asked for less motion. */
+function revealBehavior(): ScrollBehavior {
+	return window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
 }
 
 /**
  * Focuses the text field when the editor opens, with the caret where typing
- * belongs (see `caretAt`) and in view: a caret at the end scrolls a long file
- * to its last lines. Then it brings the whole editor into view once it has
- * unfolded.
+ * belongs (see `caretAt`): a caret at the end scrolls a long file to its last
+ * lines. Once the editor has unfolded, the whole layer is brought into view.
  */
-function useFocusOnOpen(open: boolean) {
+function useFocusOnOpen(open: boolean): RefObject<HTMLTextAreaElement | null> {
 	const field = useRef<HTMLTextAreaElement>(null);
 
 	useEffect(() => {
@@ -59,9 +43,8 @@ function useFocusOnOpen(open: boolean) {
 		node.scrollTop = caret === node.value.length ? node.scrollHeight : 0;
 
 		const timer = setTimeout(
-			() =>
-				field.current?.closest('[data-ui="guidelines-row"]')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }),
-			260
+			() => node.closest('.guidelines-item')?.scrollIntoView({ block: 'nearest', behavior: revealBehavior() }),
+			REVEAL_AFTER_MS
 		);
 
 		return () => clearTimeout(timer);
@@ -70,142 +53,67 @@ function useFocusOnOpen(open: boolean) {
 	return field;
 }
 
-/** Asks before the page unloads while the editor holds unsaved text. */
-function useUnloadGuard(dirty: boolean) {
-	useEffect(() => {
-		if (!dirty) return;
-
-		function hold(event: BeforeUnloadEvent): void {
-			event.preventDefault();
-		}
-
-		window.addEventListener('beforeunload', hold);
-
-		return () => window.removeEventListener('beforeunload', hold);
-	}, [dirty]);
-}
-
 /**
- * The editor for one layer of guidelines, folded open under its row: the
- * Markdown in a mono field, then a bar with "Draft with Orchestrator" on
- * the left and Cancel and Save (or Open pull request) on the right. ⌘↵
- * saves; Esc cancels. Leaving with unsaved text asks first.
+ * The editor for one layer of guidelines, unfolded under its row: the
+ * Markdown in a mono field, a note and the character count, then a bar with
+ * Draft with AI on the left and Cancel and Save (or Open pull request) on the
+ * right. ⌘↵ saves and Esc cancels.
  */
-export function GuidelinesEditor({ scope, open, repo, maxChars, label }: GuidelinesEditorProps) {
-	const session = useGuidelinesEditor((state) => state.sessions[scope]);
-	const text = session?.text ?? '';
-	const dirty = open && !!session && session.text !== session.original;
-	const draft = useDraft(scope, open);
-	const saving = useSave(repo ? repo.repoId : null);
-	const field = useFocusOnOpen(open);
-	const [streamHeight, setStreamHeight] = useState<number | undefined>(undefined);
-	const length = text.trim().length;
-	const over = length > maxChars;
-	const blocked = !!repo && !repo.canPropose;
-	const canSave = dirty && !over && !blocked && !draft.streaming;
-
-	useUnloadGuard(dirty);
-
-	function edit(next: string): void {
-		useGuidelinesEditor.getState().edit(scope, next);
-		saving.reset();
-		draft.clearError();
-	}
-
-	function save(): void {
-		if (canSave) void saving.save(trimEmptyBullets(text));
-	}
-
-	function cancel(): void {
-		draft.stop();
-
-		const editor = useGuidelinesEditor.getState();
-
-		editor.guard(editor.close);
-	}
-
-	function startDraft(request: Omit<GuidelinesDraftRequest, 'current' | 'scope'>): Promise<boolean> {
-		saving.reset();
-		setStreamHeight(field.current?.offsetHeight);
-
-		const current = firstRule(text) ? text : undefined;
-
-		return draft.run({ ...request, scope: repo ? 'repo' : 'global', current });
-	}
-
-	/** ⌘↵ saves and Esc cancels, for keys pressed inside the editor (not in its popover, which portals out). */
-	function onKey(event: KeyboardEvent<HTMLDivElement>): void {
-		if (!event.currentTarget.contains(event.target as Node) || event.nativeEvent.isComposing) return;
-
-		if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-			event.preventDefault();
-			save();
-		} else if (event.key === 'Escape' && saving.status !== 'pending') {
-			event.preventDefault();
-			cancel();
-		}
-	}
+export function GuidelinesEditor(spec: GuidelinesEditorSpec) {
+	const field = useFocusOnOpen(spec.open);
+	const edit = useGuidelinesEdit({ ...spec, field });
 
 	return (
-		<div data-ui="guidelines-editor" className="guidelines-editor" onKeyDown={onKey}>
-			{draft.streaming ? (
-				<StreamView text={draft.streamed} minHeight={streamHeight} />
+		<div className="guidelines-editor" onKeyDown={edit.onKeyDown}>
+			{edit.streaming ? (
+				<StreamView text={edit.streamed} minHeight={edit.streamMinHeight} />
 			) : (
 				<Textarea
 					ref={field}
 					autosize
-					minRows={12}
-					maxRows={24}
-					value={text}
-					readOnly={saving.status === 'pending'}
-					invalid={over}
+					minRows={MIN_ROWS}
+					maxRows={MAX_ROWS}
+					value={edit.text}
+					readOnly={edit.pending}
+					invalid={edit.over}
 					spellCheck
-					aria-label={`${label} (Markdown)`}
+					aria-label={`${spec.label} (Markdown)`}
 					className="guidelines-field thin-scroll"
-					onChange={(event) => edit(event.target.value)}
+					onChange={(event) => edit.edit(event.target.value)}
 				/>
 			)}
-			<EditorNote
-				error={saving.error ?? draft.error}
-				length={draft.streaming ? draft.streamed.trim().length : length}
-				max={maxChars}
-				repo={repo}
-			/>
+			<EditorNote note={edit.note} length={edit.shownLength} max={spec.maxChars} />
 			<div className="guidelines-bar">
 				<DraftPopover
-					repoId={repo ? repo.repoId : null}
-					revising={!!firstRule(text)}
-					streaming={draft.streaming}
-					disabled={saving.status === 'pending'}
-					onDraft={startDraft}
-					onStop={draft.stop}
+					repoId={spec.repo ? spec.repo.repoId : null}
+					revising={firstRule(edit.text) !== null}
+					streaming={edit.streaming}
+					disabled={edit.pending}
+					onDraft={edit.startDraft}
+					onStop={edit.stopDraft}
 				/>
-				{session?.beforeDraft != null && !draft.streaming ? (
-					<Tooltip content="Undo draft">
-						<Button
-							variant="quiet"
-							size="icon"
-							aria-label="Undo draft"
-							className="text-fg-subtle"
-							onClick={() => useGuidelinesEditor.getState().undoDraft(scope)}
-						>
-							<Undo2 />
-						</Button>
-					</Tooltip>
+				{edit.canUndoDraft ? (
+					<Button variant="quiet" className="guidelines-quiet" onClick={edit.undoDraft}>
+						<Undo2 aria-hidden />
+						Undo draft
+					</Button>
 				) : null}
-				<Button variant="ghost" className="ml-auto" disabled={saving.status === 'pending'} onClick={cancel}>
-					Cancel
-				</Button>
-				<Button
-					variant="primary"
-					status={saving.status}
-					successLabel={successLabel(repo)}
-					disabled={!canSave && saving.status === 'idle'}
-					onClick={save}
-				>
-					{saveLabel(repo)}
-					<Keycap k="mod+Enter" />
-				</Button>
+				<div className="guidelines-bar-end">
+					<Button variant="ghost" disabled={edit.pending} onClick={edit.cancel}>
+						Cancel
+					</Button>
+					<Button
+						variant="primary"
+						status={edit.status}
+						successLabel={edit.successLabel}
+						disabled={!edit.canSave && edit.status === 'idle'}
+						aria-keyshortcuts="Meta+Enter Control+Enter"
+						onClick={edit.save}
+					>
+						{edit.saveLabel}
+						<Keycap k="mod+Enter" />
+					</Button>
+				</div>
 			</div>
 		</div>
 	);

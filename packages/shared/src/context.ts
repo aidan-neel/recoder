@@ -17,7 +17,7 @@ export interface ContextItem {
 /**
  * Which bound kept context out: callers not shown because the contract did
  * not change, the per-symbol caller, reference or test cap, the prompt block's
- * size, a file read's size, or a patch page.
+ * size, a file read's size or `maxFiles` cap, or a patch page or `maxDiffChars` cap.
  */
 export type OmissionReason =
 	'contract-unchanged' | 'caller-cap' | 'reference-cap' | 'test-cap' | 'context-cap' | 'file-cap' | 'diff-cap';
@@ -78,4 +78,7 @@ export interface ReviewContext {
 	units: Record<string, UnitContext>;
 	reviewers: ReviewerContext[];
 	findings: FindingCitation[];
+	/** Diff files or hunks left out before units were cut (`maxFiles`, `maxDiffChars`); the first 50 per reason. */
+	omitted?: ContextOmission[];
+	omittedPast?: Partial<Record<OmissionReason, number>>;
 }

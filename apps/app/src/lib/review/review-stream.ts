@@ -5,7 +5,7 @@ import { API_BASE, seg } from '../api/http';
 /** How the live connection stands, for the small status line beside the progress. */
 export type Connection = 'connecting' | 'live' | 'reconnecting' | 'closed';
 
-interface StreamHandlers {
+export interface StreamHandlers {
 	onMessage: (message: ProgressMessage) => void;
 	onConnection: (connection: Connection) => void;
 	/**

@@ -117,8 +117,6 @@ export interface ReviewReasoningEntry {
 	endedAt?: string;
 	text: string;
 	status?: 'streaming' | 'done' | 'error';
-	/** The provider only returns a summary of its reasoning (ChatGPT), so the text is dropped and only the timing is kept. */
-	summary?: boolean;
 	/** The speed of the model call this thought came from. */
 	outputRate?: OutputRate;
 }
@@ -182,22 +180,23 @@ export interface ReviewCodeContext {
 	diffContext?: string;
 }
 
-/** What the developer can do about a failed request: sign in to ChatGPT, or set up a model. */
-export type FailureAction = 'sign-in' | 'settings';
+/**
+ * What the developer can do about a failed request: set up a model in Settings. A signed-out agent CLI needs no
+ * action here, since its message names its own sign-in command.
+ */
+export type FailureAction = 'settings';
 
 /** Why a model call failed, in words for the developer. */
 export interface ModelFailure {
 	reason: string;
-	/** ChatGPT is signed out or its sign-in expired; signing in fixes it. */
-	signIn?: boolean;
 	/** The model's plan ran out of usage; another model or waiting fixes it. */
 	usageLimit?: UsageLimit;
 }
 
 export interface UsageLimit {
-	/** `codex` for ChatGPT, else the hosted provider id (`opencode-go`…); `custom` for your own endpoint. */
+	/** The agent CLI's id (`claude-code`…), else the hosted provider id (`opencode-go`…); `custom` for your own endpoint. */
 	provider: string;
-	/** "ChatGPT", "OpenCode Go"… */
+	/** "Claude Code", "OpenCode Go"… */
 	name: string;
 	/** Unix seconds when usage resets, when the provider says. */
 	resetsAt?: number | null;
@@ -246,6 +245,16 @@ export interface ReviewGuidelinesUsed {
 	hash: string;
 }
 
+/** A queued review no review worker has taken yet, because every worker is busy or none runs reviews. */
+export interface ReviewWorkerWait {
+	/** When the review joined the queue. */
+	since: string;
+	/** Its place in line: 1 is the next review a free worker takes. */
+	position: number;
+	/** Reviews the workers hold now. */
+	running: number;
+}
+
 export interface ReviewProgress {
 	id: string;
 	sequence: number;
@@ -270,6 +279,8 @@ export interface ReviewProgress {
 	guidelines?: ReviewGuidelinesUsed;
 	/** Held by the developer; model calls wait until resumed. */
 	paused?: boolean;
+	/** Set while the review waits for a free review worker (shared storage only); null once a worker takes it. */
+	workerWait?: ReviewWorkerWait | null;
 }
 
 export function emptyReviewProgress(id: string): ReviewProgress {

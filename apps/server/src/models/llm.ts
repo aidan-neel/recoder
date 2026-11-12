@@ -1,7 +1,7 @@
 /**
  * Model calls for every role. One entry point per call shape; the transport
- * (OpenAI-compatible chat completions or the ChatGPT subscription) is picked
- * from `ChatOptions.provider` in `llm/transports.ts`.
+ * (OpenAI-compatible chat completions or an agent CLI) is picked from
+ * `ChatOptions.provider` in `llm/transports.ts`.
  */
 
 import { runChat } from './llm/run';

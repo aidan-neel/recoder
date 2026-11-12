@@ -100,6 +100,7 @@ function resolveTuning(values: ReviewFlagValues): ReviewTuning {
 		subagents: parseSubagents(values.subagents, REVIEW_FLAGS.subagents.bounds),
 		reviewerModel: parseText('--reviewer', values.reviewer),
 		workerModel: parseText('--worker', values.worker),
+		verifierModel: parseText('--verifier', values.verifier),
 		reviewerEffort: parseChoiceOr('--reviewer-effort', values['reviewer-effort'], REASONING_EFFORTS, null),
 		workerEffort: parseChoiceOr('--worker-effort', values['worker-effort'], REASONING_EFFORTS, null),
 		lenses: parseLenses(values),

@@ -58,9 +58,20 @@ function modelsByRun(calls: RunTokenCall[]): Record<string, string[]> {
 	return byRun;
 }
 
-/** A run segment as the tests compare it, without its start time. */
-function segment(index: number, models: string[]): Omit<PipelineRun, 'startedAt'> {
-	return { index, orchestrator: models[0]!, subagent: models[1]!, lockMisses: 0, tokenBudget: 'medium' };
+/**
+ * A run segment on `models`, without its measured timings, which vary from run to run. It received no history: the
+ * fixture repository has no dismissals, votes or earlier PRs.
+ */
+function segment(index: number, models: string[]): Omit<PipelineRun, 'startedAt' | 'queueDelay'> {
+	return {
+		index,
+		orchestrator: models[0]!,
+		subagent: models[1]!,
+		verifier: models[2] ?? models[0]!,
+		lockMisses: 0,
+		tokenBudget: 'medium',
+		history: { dismissals: [], topics: {}, sources: [] }
+	};
 }
 
 test('a review keeps the models it started on for every call when the pick changes mid-run', async () => {
@@ -82,7 +93,7 @@ test('a review keeps the models it started on for every call when the pick chang
 	expect(calls).toHaveLength(requests.length);
 	expect([...new Set(requests.map((request) => request.model))].sort()).toEqual(FIRST);
 	expect(modelsByRun(calls)).toEqual({ 'run 0': FIRST });
-	expect(runs?.map(({ startedAt: _, ...run }) => run)).toEqual([segment(0, FIRST)]);
+	expect(runs?.map(({ startedAt: _, queueDelay: __, ...run }) => run)).toEqual([segment(0, FIRST)]);
 	expect(calls.filter((call) => call.lockMiss)).toEqual([]);
 }, 60000);
 
@@ -110,5 +121,5 @@ test('a replay under a new pick runs as its own run on the new models, apart fro
 	expect((await db.reviews.get(reviewId))?.status).toBe('passed');
 	expect(replayModels.every((model) => SECOND.includes(model))).toBe(true);
 	expect(modelsByRun(calls)).toEqual({ 'run 0': FIRST, 'run 1': replayModels });
-	expect(runs?.map(({ startedAt: _, ...run }) => run)).toEqual([segment(0, FIRST), segment(1, SECOND)]);
+	expect(runs?.map(({ startedAt: _, queueDelay: __, ...run }) => run)).toEqual([segment(0, FIRST), segment(1, SECOND)]);
 }, 60000);

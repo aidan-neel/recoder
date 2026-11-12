@@ -1,158 +1,111 @@
 'use client';
 
-import {
-	EFFORT_TEXT,
-	prettyModelName,
-	resolveEffort,
-	type ModelSettingsPatch,
-	type ReasoningEffort
-} from '@recoder/shared';
+import type { ReasoningEffort } from '@recoder/shared';
 import { Button, Select, Skeleton, SwapText } from '@recoder/ui';
-import { useEffect, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 
-import {
-	missingNote,
-	modelCatalog,
-	ROLE_NAME,
-	rolePick,
-	type ModelRole,
-	type RolePick
-} from '@/lib/settings/model-options';
-import { FOLLOW_ID, FOLLOW_LABEL } from '@/lib/settings/model-rows';
-import { useSettings } from '@/lib/settings/settings-store';
-import { useInstantSave } from '@/lib/settings/use-save-state';
+import { ROLE_NAME, type ModelRole } from '@/lib/settings/model-options';
+import type { ModelPickerView } from '@/lib/settings/use-model-picker';
 
 import { ModelDialog } from './model-dialog';
-import { SaveStatus } from './save-status';
 
-interface ModelPickerProps {
-	/** `orchestrator` runs the reviewers; `specialist` runs subagents and verifiers. */
-	role: ModelRole;
-}
+/** The trigger's words while no pick can be read. */
+const NO_PICK = 'Choose a model';
 
-/** A pick on screen before the server confirms it. A null id unsets the subagent pick. */
-interface Draft {
-	id: string | null;
-	effort: ReasoningEffort | null;
-}
-
-const FAILED = 'Model settings weren’t saved';
-
-function patchFor(role: ModelRole, draft: Draft): ModelSettingsPatch {
-	return role === 'orchestrator'
-		? { orchestratorModelId: draft.id, orchestratorEffort: draft.effort }
-		: { specialistModelId: draft.id, specialistEffort: draft.effort };
-}
-
-/** What the trigger reads, and whether it reads as a placeholder. */
-function triggerLabel(pick: RolePick): { text: string; quiet: boolean } {
-	if (missingNote(pick))
-		return { text: `${pick.option?.name ?? prettyModelName(pick.id ?? '')} · missing`, quiet: true };
-	if (pick.option) return { text: pick.option.name, quiet: false };
-	if (pick.follows) return { text: FOLLOW_LABEL, quiet: true };
-	if (pick.id) return { text: prettyModelName(pick.id), quiet: false };
-
-	return { text: 'Choose a model', quiet: true };
-}
-
-/**
- * A quiet model trigger opening a searchable dialog grouped by provider, with
- * the effort select beside it. A pick saves at once: it shows straight away, a
- * spinner runs while the server saves it, and a failure puts the old pick back
- * with a toast saying why.
- */
-export function ModelPicker({ role }: ModelPickerProps) {
-	const settings = useSettings((state) => state.models);
-	const offline = useSettings((state) => state.status === 'offline');
-	const [open, setOpen] = useState(false);
-	const instant = useInstantSave((next: Draft) => patchFor(role, next), FAILED);
-	const draft = instant.draft?.value;
-	const save = instant.change;
-
-	useEffect(() => {
-		void useSettings.getState().load();
-	}, []);
-
-	if (!settings) {
+/** What the trigger reads: the pick, a placeholder when the server is down, or a bar while settings load. */
+function TriggerLabel({ picker }: { picker: ModelPickerView }) {
+	if (picker.label) {
 		return (
-			<div data-ui="model-picker" className="model-picker">
-				<SaveStatus state="idle" />
-				<Button variant="quiet" disabled className="model-trigger" aria-label={ROLE_NAME[role]}>
-					{offline ? <span className="text-fg-subtle">Choose a model</span> : <Skeleton className="w-[88px]" />}
-				</Button>
-			</div>
+			<SwapText
+				id={picker.current ?? 'none'}
+				titled
+				className="model-trigger-label"
+				textClassName={picker.label.quiet ? 'model-trigger-quiet' : undefined}
+			>
+				{picker.label.text}
+			</SwapText>
 		);
 	}
 
-	const catalog = modelCatalog(settings.models);
-	const saved = rolePick(settings, role);
+	if (picker.offline) return <span className="model-trigger-quiet">{NO_PICK}</span>;
 
-	const pick: RolePick = draft
-		? {
-				id: draft.id,
-				option: draft.id ? catalog.byId.get(draft.id) : undefined,
-				effort: draft.effort,
-				follows: role === 'specialist' && !draft.id
-			}
-		: saved;
+	return <Skeleton style={{ width: 88 }} />;
+}
 
-	const label = triggerLabel(pick);
+interface EffortSelectProps {
+	/** The role's name, for the select's accessible name. */
+	name: string;
+	effort: ReasoningEffort;
+	/** The efforts the picked model accepts. */
+	options: NonNullable<ModelPickerView['effortOptions']>;
+	onChoose: (effort: ReasoningEffort) => void;
+}
 
-	function pickModel(id: string): void {
-		const option = id === FOLLOW_ID ? undefined : catalog.byId.get(id);
-		const next = option ? { id: option.id, effort: resolveEffort(option, pick.effort) } : { id: null, effort: null };
+/** The effort the picked model runs at. The options are the model's own, so a value outside them never saves. */
+function EffortSelect({ name, effort, options, onChoose }: EffortSelectProps) {
+	function choose(value: string): void {
+		const option = options.find((candidate) => candidate.value === value);
 
-		setOpen(false);
-
-		if (next.id !== pick.id) save(next);
+		if (option) onChoose(option.value);
 	}
 
-	const efforts = pick.option?.efforts;
+	return (
+		<Select
+			variant="quiet"
+			value={effort}
+			onValueChange={choose}
+			options={options}
+			aria-label={`${name} reasoning effort`}
+			className="effort-trigger"
+			contentClassName="effort-menu"
+		/>
+	);
+}
+
+interface ModelPickerProps {
+	/** The pick this picker sets. */
+	role: ModelRole;
+	/** The role's picker state, from `useModelPicker(role)`. */
+	picker: ModelPickerView;
+}
+
+/**
+ * The model picker: a quiet trigger that opens the searchable model dialog,
+ * with a quiet effort select beside it when the picked model has a reasoning
+ * control. A pick saves at once; the row shows where that save stands.
+ */
+export function ModelPicker({ role, picker }: ModelPickerProps) {
+	const name = ROLE_NAME[role];
 
 	return (
-		<div data-ui="model-picker" className="model-picker">
-			<SaveStatus state={instant.state} />
+		<div className="model-picker">
 			<Button
 				variant="quiet"
 				className="model-trigger"
-				disabled={catalog.count === 0}
+				disabled={!picker.canOpen}
 				aria-haspopup="dialog"
-				aria-expanded={open}
-				aria-label={`${ROLE_NAME[role]}: ${label.text}`}
-				onClick={() => setOpen(true)}
+				aria-expanded={picker.open}
+				aria-label={picker.label ? `${name}: ${picker.label.text}` : name}
+				onClick={() => picker.setOpen(true)}
 			>
-				<SwapText
-					id={pick.id ?? 'none'}
-					className="model-trigger-label"
-					textClassName={label.quiet ? 'text-fg-subtle' : undefined}
-				>
-					{label.text}
-				</SwapText>
+				<TriggerLabel picker={picker} />
+				<ChevronDown aria-hidden className="model-trigger-chevron" />
 			</Button>
-			{efforts && pick.effort && pick.option ? (
-				<Select
-					variant="quiet"
-					value={pick.effort}
-					onValueChange={(effort) => {
-						if (pick.option && effort !== pick.effort) save({ id: pick.option.id, effort: effort as ReasoningEffort });
-					}}
-					options={efforts.map((effort) => ({
-						value: effort,
-						label: EFFORT_TEXT[effort].label,
-						description: EFFORT_TEXT[effort].description
-					}))}
-					aria-label={`${ROLE_NAME[role]} reasoning effort`}
-					className="effort-trigger"
-					contentClassName="effort-menu"
+			{picker.effort && picker.effortOptions ? (
+				<EffortSelect
+					name={name}
+					effort={picker.effort}
+					options={picker.effortOptions}
+					onChoose={picker.chooseEffort}
 				/>
 			) : null}
 			<ModelDialog
-				open={open}
-				onOpenChange={setOpen}
+				open={picker.open}
+				onOpenChange={picker.setOpen}
 				role={role}
-				catalog={catalog}
-				current={pick.id ?? (pick.follows ? FOLLOW_ID : null)}
-				onPick={pickModel}
+				catalog={picker.catalog}
+				current={picker.current}
+				onPick={picker.pickModel}
 			/>
 		</div>
 	);

@@ -15,6 +15,7 @@ import type { ReviewCommand } from './commands';
 import { recoverCompletion } from '../../commands/recover-completion';
 import { progressWrites, metricWrites } from '../../storage/persistence-queue';
 import { publishPullComment } from '../../forge/publish/pull-comment';
+import { clearWorkerWait } from './worker-wait';
 import { PublishConflictError } from '../../forge/publish/forge';
 
 export async function executeReviewActor(lease: ReviewLease, signal: AbortSignal): Promise<void> {
@@ -24,6 +25,7 @@ export async function executeReviewActor(lease: ReviewLease, signal: AbortSignal
 
 	progressWrites.delete(lease.reviewId);
 	metricWrites.delete(lease.reviewId);
+	await clearWorkerWait(lease.reviewId);
 
 	const conversations = new Map<string, Promise<void>>();
 	let pipeline: Promise<void> | undefined;

@@ -25,8 +25,11 @@ export interface RecordedReview {
 	/** Loads the runner. It is loaded after the run exists, so a machine that is not ready is recorded too. */
 	loadRunner: () => Promise<ReviewRunner>;
 	destination: ReportDestination;
-	/** Called once the run's end is recorded; the command line makes one stop end the process from then on. */
-	onEndRecorded: () => void;
+	/**
+	 * Runs the write of the run's end. The command line holds a stop that arrives during it, and makes one stop end
+	 * the process from then on.
+	 */
+	recordEnd: (write: () => Promise<void>) => Promise<void>;
 }
 
 /**
@@ -56,15 +59,16 @@ async function produceReport(review: RecordedReview): Promise<ReviewReport> {
 /**
  * The report is saved and the run's end recorded before the report is written out, so a closed terminal or an
  * unwritable `--output` cannot lose it. From then on nothing is left to cancel, so one stop ends the process at once,
- * even while a slow reader holds the report up. A report that cannot be written out records that failure instead.
+ * even while a slow reader holds the report up. A watcher sees the recorded end before this process returns from
+ * writing it, so a stop sent on seeing it is honoured too (`recordEnd`). A report that cannot be written out records
+ * that failure instead.
  */
 async function deliverRecordedReport(review: RecordedReview, report: ReviewReport): Promise<ExitCode> {
 	const { options, journal } = review;
 	const isSaved = await journal.saveReport(report);
 	const exitCode = exitCodeFor(report, options.output);
 
-	await journal.finish(endOfReport(report, { exitCode, error: report.error }));
-	review.onEndRecorded();
+	await review.recordEnd(() => journal.finish(endOfReport(report, { exitCode, error: report.error })));
 
 	try {
 		await deliverReport(report, options.output, review.destination);

@@ -271,7 +271,7 @@ async function prepareChanged(
 
 	const generated = report?.steps.filter((step) => step.kind === 'generate' && step.exitCode === 0) ?? [];
 
-	workspace.preparedWith = generated.length ? `package prep: ${generated.map((step) => step.command).join('; ')}` : '';
+	workspace.recordGeneration(generated.map((step) => step.command));
 
 	task('prepare', 'Prepare packages', prepStatus(report), prepMessage(report), {
 		kind: 'setup',

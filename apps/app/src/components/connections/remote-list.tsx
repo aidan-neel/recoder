@@ -1,267 +1,224 @@
 'use client';
 
 import type { RemoteRepo } from '@recoder/shared';
-import { Button, ForgeMark, HoverList, Pill, ScrollArea, Skeleton, swapMotion, useMotionVariants } from '@recoder/ui';
-import { Check, Plus } from 'lucide-react';
+import {
+	Button,
+	ForgeMark,
+	Pill,
+	ScrollArea,
+	SkeletonRows,
+	StatusNotice,
+	swapMotion,
+	useMotionVariants
+} from '@recoder/ui';
+import { Check, TriangleAlert } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, type ReactNode } from 'react';
 
 import type { Forge } from '@/lib/api/connections';
 import { OFFLINE_TEXT } from '@/lib/api/http';
-import { trackedKeys, useConnections, type RemoteList as Remote } from '@/lib/connections/connections-store';
-import { FORGES, forgeLabel, signedInForges } from '@/lib/connections/forges';
-import { repoKey } from '@/lib/connections/repo-input';
-import { queryTerms } from '@/lib/settings/model-options';
-import { errorToast } from '@/lib/shell/notify';
-import { useAction } from '@/lib/shell/use-action';
+import { FORGES, forgeLabel } from '@/lib/connections/forges';
+import {
+	useTrackRepo,
+	type RemoteListView,
+	type RemoteNoteView,
+	type RemoteRowView
+} from '@/lib/connections/use-remote-list';
 
-import { useAddRepo } from './use-add-repo';
+/** How many rows the list's frame holds, so its skeleton fills the frame. */
+const FRAME_ROWS = 7;
 
-const SKELETON_WIDTHS = ['w-[44%]', 'w-[30%]', 'w-[52%]', 'w-[36%]', 'w-[40%]', 'w-[28%]', 'w-[48%]'];
+/** A row's height in px, the same in `connections.css`. */
+const ROW_HEIGHT = 40;
 
-/** A row's right end: Add, which turns into "Tracked" once the server has it. */
-function RowAction({ repo, tracked }: { repo: RemoteRepo; tracked: boolean }) {
-	const swap = useMotionVariants(swapMotion);
-	const [status, add] = useAddRepo();
+/** The name bar's width for each skeleton row, cycled; the second width is unused on a one-line row. */
+const SKELETON_WIDTHS = [
+	['44%', '0'],
+	['30%', '0'],
+	['52%', '0'],
+	['36%', '0']
+] as const;
 
-	async function track(): Promise<void> {
-		const result = await add({ name: repo.name, url: repo.url, provider: repo.provider });
-
-		if ('error' in result) errorToast(`Couldn’t add ${repo.name}`, result.error);
-	}
-
-	return (
-		<AnimatePresence initial={false} mode="popLayout">
-			{tracked ? (
-				<motion.span
-					key="tracked"
-					className="remote-tracked"
-					variants={swap}
-					initial="initial"
-					animate="animate"
-					exit="exit"
-				>
-					<Check aria-hidden />
-					Tracked
-				</motion.span>
-			) : (
-				<motion.span key="add" variants={swap} initial="initial" animate="animate" exit="exit">
-					<Button
-						variant="ghost"
-						status={status}
-						errorLabel="Failed"
-						aria-label={`Add ${repo.name}`}
-						onClick={() => void track()}
-					>
-						<Plus aria-hidden />
-						Add
-					</Button>
-				</motion.span>
-			)}
-		</AnimatePresence>
-	);
-}
-
-function RemoteRow({ repo, tracked }: { repo: RemoteRepo; tracked: boolean }) {
-	return (
-		<li data-row className="remote-row">
-			<ForgeMark provider={repo.provider} className="text-fg-subtle" />
-			<span className="remote-name" title={repo.name}>
-				{repo.name}
-			</span>
-			{repo.isPrivate ? <Pill className="shrink-0">private</Pill> : null}
-			<span className="remote-action">
-				<RowAction repo={repo} tracked={tracked} />
-			</span>
-		</li>
-	);
-}
-
-/** Rows of shimmer where the list will land; invisible for the first 200ms. */
+/** Rows of shimmer where the list will land. */
 function RemoteSkeleton() {
 	return (
-		<ul className="remote-list" aria-label="Listing repositories" aria-busy>
-			{SKELETON_WIDTHS.map((width) => (
-				<li key={width} className="remote-row">
-					<Skeleton className="size-3.5 shrink-0 rounded-full" />
-					<span className="flex-1">
-						<Skeleton className={`h-2.5 ${width}`} />
-					</span>
-					<Skeleton className="h-7 w-[83px] rounded-[8px]" />
-				</li>
-			))}
-		</ul>
+		<SkeletonRows
+			count={FRAME_ROWS}
+			height={ROW_HEIGHT}
+			glyph
+			lines={1}
+			widths={SKELETON_WIDTHS}
+			rowClassName="remote-row"
+		/>
 	);
 }
 
-interface ListMessageProps {
-	children: ReactNode;
-	/** The server's reason, on a quieter line under the sentence. */
-	detail?: string | null;
-	action?: ReactNode;
-}
-
-/** A sentence where the list would be, with an optional reason and way out under it. */
-function ListMessage({ children, detail, action }: ListMessageProps) {
-	return (
-		<div className="remote-message" role="status">
-			<div>
-				<p className="text-fg-muted">{children}</p>
-				{detail ? <p className="remote-detail">{detail}</p> : null}
-			</div>
-			{action}
-		</div>
-	);
-}
-
-/** Keeps the rows whose name holds every word of the query. */
-function matching(repos: RemoteRepo[], query: string): RemoteRepo[] {
-	const terms = queryTerms(query);
-
-	return repos.filter((repo) => terms.every((term) => repo.name.toLowerCase().includes(term)));
-}
-
-/** True when a forge's list failed, including while a retry of it runs. */
-function failedList(list: Remote | undefined): boolean {
-	return list?.status === 'error' || list?.status === 'retrying';
-}
-
-/** Try again for failed lists: pending while any of them lists again, then gone or back to idle with the new reason. */
-function RetryButton({ forges, lists }: { forges: Forge[]; lists: Partial<Record<Forge, Remote>> }) {
-	const retrying = forges.some((forge) => lists[forge]?.status === 'retrying');
+/** Track, which gives way to "Tracked" once the server has the repository. A refusal raises a toast. */
+function TrackButton({ repo }: { repo: RemoteRepo }) {
+	const { status, track } = useTrackRepo();
 
 	return (
 		<Button
 			variant="outline"
-			status={retrying ? 'pending' : 'idle'}
-			onClick={() => forges.forEach((forge) => void useConnections.getState().loadRemote(forge))}
+			status={status}
+			successLabel={null}
+			errorLabel={null}
+			aria-label={`Track ${repo.name}`}
+			onClick={() => void track(repo)}
 		>
-			Try again
+			Track
 		</Button>
 	);
 }
 
-/** Above the rows that did load: which forge's list failed, why, and a way to list it again. */
-function FailedNote({ forge, lists }: { forge: Forge; lists: Partial<Record<Forge, Remote>> }) {
+/** A row's right end: Track, or "Tracked" in its place. The two swap with the kit's crossfade. */
+function RowEnd({ repo, tracked }: RemoteRowView) {
+	const swap = useMotionVariants(swapMotion);
+
 	return (
-		<div className="remote-note" role="status">
-			<div className="min-w-0 flex-1">
-				<p className="text-fg-muted">Couldn’t list {forgeLabel(forge)} repositories.</p>
-				{lists[forge]?.error ? <p className="remote-detail">{lists[forge].error}</p> : null}
-			</div>
-			<RetryButton forges={[forge]} lists={lists} />
+		<span className="remote-end">
+			<AnimatePresence initial={false} mode="popLayout">
+				{tracked ? (
+					<motion.span
+						key="tracked"
+						className="remote-tracked"
+						variants={swap}
+						initial="initial"
+						animate="animate"
+						exit="exit"
+					>
+						<Check aria-hidden />
+						Tracked
+					</motion.span>
+				) : (
+					<motion.span key="track" variants={swap} initial="initial" animate="animate" exit="exit">
+						<TrackButton repo={repo} />
+					</motion.span>
+				)}
+			</AnimatePresence>
+		</span>
+	);
+}
+
+/** One repository the forge can see. */
+function RemoteRow({ repo, tracked }: RemoteRowView) {
+	return (
+		<li className="remote-row">
+			<ForgeMark provider={repo.provider} />
+			<span className="remote-name" title={repo.name}>
+				{repo.name}
+			</span>
+			{repo.isPrivate ? <Pill>Private</Pill> : null}
+			<RowEnd repo={repo} tracked={tracked} />
+		</li>
+	);
+}
+
+/** Above the rows that did load: the forge whose list failed, why, and a way to list it again. */
+function FailedNote({ note }: { note: RemoteNoteView }) {
+	return (
+		<div className="strip remote-note" role="status">
+			<TriangleAlert aria-hidden />
+			<span className="strip-text">
+				<strong>{forgeLabel(note.forge)}</strong> repositories did not load. {note.error}
+			</span>
+			<Button variant="quiet" status={note.retrying ? 'pending' : 'idle'} onClick={note.retry}>
+				Try again
+			</Button>
 		</div>
 	);
 }
 
-/** The signed-in forges' repositories, once each list has loaded. */
-function ForgeRepos({ forges, query }: { forges: Forge[]; query: string }) {
-	const lists = useConnections((state) => state.remote);
-	const repos = useConnections((state) => state.repos);
-	const tracked = trackedKeys(repos);
-	const loaded = forges.map((forge) => lists[forge]);
-	const failed = forges.filter((forge) => failedList(lists[forge]));
+interface RemoteRowsProps {
+	rows: RemoteRowView[];
+	notes: RemoteNoteView[];
+}
 
-	const rows = matching(
-		loaded.flatMap((list) => (list?.status === 'ready' ? list.repos : [])),
-		query
-	);
-
-	const key = forges.join(' ');
-
-	useEffect(() => {
-		for (const forge of key.split(' ')) void useConnections.getState().loadRemote(forge as Forge);
-	}, [key]);
-
-	if (loaded.some((list) => !list || list.status === 'loading')) return <RemoteSkeleton />;
-
-	if (failed.length === forges.length) {
-		return (
-			<ListMessage detail={lists[failed[0]]?.error} action={<RetryButton forges={failed} lists={lists} />}>
-				Couldn’t list repositories.
-			</ListMessage>
-		);
-	}
-
-	if (rows.length === 0) {
-		return (
-			<ListMessage>
-				{query.trim() ? `No repositories match “${query.trim()}”.` : 'No repositories on this account.'}
-			</ListMessage>
-		);
-	}
-
+/** The repositories that loaded, under a note for each forge whose list did not. */
+function RemoteRows({ rows, notes }: RemoteRowsProps) {
 	return (
 		<ScrollArea className="remote-scroll">
-			{failed.map((forge) => (
-				<FailedNote key={forge} forge={forge} lists={lists} />
+			{notes.map((note) => (
+				<FailedNote key={note.forge} note={note} />
 			))}
-			<HoverList as="ul" itemSelector="[data-row]" className="remote-list" highlightClassName="remote-hover">
-				{rows.map((repo) => (
-					<RemoteRow key={repo.url} repo={repo} tracked={tracked.has(repoKey(repo.url))} />
+			<ul className="remote-list" aria-label="Repositories">
+				{rows.map((row) => (
+					<RemoteRow key={row.repo.url} repo={row.repo} tracked={row.tracked} />
 				))}
-			</HoverList>
+			</ul>
 		</ScrollArea>
 	);
 }
 
+/** No forge is signed in: a Connect button for each, which opens the token dialog. */
+function NoForge({ onConnect }: { onConnect: (forge: Forge) => void }) {
+	return (
+		<StatusNotice
+			title="No forge is connected"
+			detail="Connect one to list its repositories, or add a repository by URL."
+			actions={FORGES.map((forge) => (
+				<Button key={forge.id} variant="outline" onClick={() => onConnect(forge.id)}>
+					<ForgeMark provider={forge.id} />
+					Connect {forge.label}
+				</Button>
+			))}
+		/>
+	);
+}
+
+/** What the list says when no repository is left to show. */
+function NoMatch({ query }: { query: string }) {
+	if (query) {
+		return <StatusNotice title={`No repository matches “${query}”`} detail="Check the name, or add it by URL." />;
+	}
+
+	return <StatusNotice title="This account has no repositories" detail="Add one by URL." />;
+}
+
 interface RemoteListProps {
-	query: string;
-	/** Opens the token dialog, for the message shown while no forge is signed in. */
+	view: RemoteListView;
+	/** Opens the token dialog, for the notice shown while no forge is signed in. */
 	onConnect: (forge: Forge) => void;
 }
 
 /**
- * What the repo browser lists: the repositories the signed-in forges can
- * see, filtered by the search, tracked ones marked. It holds a fixed height,
- * so loading and searching never resize the dialog.
+ * What the repository browser lists: the repositories the signed-in forges
+ * can see, tracked ones marked. Its frame keeps one height, so loading and
+ * searching never resize the dialog.
  */
-export function RemoteList({ query, onConnect }: RemoteListProps) {
-	const auth = useConnections((state) => state.auth);
-	const authStatus = useConnections((state) => state.authStatus);
-	const authError = useConnections((state) => state.authError);
-	const forges = signedInForges(auth);
-	const recheck = useAction();
-
-	if (!auth && (authStatus === 'error' || authStatus === 'offline')) {
-		return (
-			<ListMessage
-				detail={authError}
-				action={
-					<Button
-						variant="outline"
-						status={recheck.status}
-						onClick={() => recheck.run(() => useConnections.getState().loadAuth())}
-					>
-						Try again
-					</Button>
-				}
-			>
-				{authError ? 'Couldn’t check the forges.' : OFFLINE_TEXT}
-			</ListMessage>
-		);
+export function RemoteList({ view, onConnect }: RemoteListProps) {
+	switch (view.kind) {
+		case 'checking':
+		case 'loading':
+			return <RemoteSkeleton />;
+		case 'no-forge':
+			return <NoForge onConnect={onConnect} />;
+		case 'empty':
+			return <NoMatch query={view.query} />;
+		case 'ready':
+			return <RemoteRows rows={view.rows} notes={view.notes} />;
+		case 'auth-error':
+			return (
+				<StatusNotice
+					title={view.error ? 'Forges did not load' : OFFLINE_TEXT}
+					detail={view.error ?? 'Start it, then try again.'}
+					actions={
+						<Button variant="outline" status={view.retry.status} onClick={view.retry.run}>
+							Try again
+						</Button>
+					}
+				/>
+			);
+		case 'failed':
+			return (
+				<StatusNotice
+					title="Repositories did not load"
+					detail={view.error}
+					actions={
+						<Button variant="outline" status={view.retrying ? 'pending' : 'idle'} onClick={view.retry}>
+							Try again
+						</Button>
+					}
+				/>
+			);
 	}
-
-	if (!auth) return <RemoteSkeleton />;
-
-	if (forges.length === 0) {
-		return (
-			<ListMessage
-				action={
-					<div className="flex gap-2">
-						{FORGES.map((forge) => (
-							<Button key={forge.id} variant="outline" onClick={() => onConnect(forge.id)}>
-								<ForgeMark provider={forge.id} />
-								Connect {forge.label}
-							</Button>
-						))}
-					</div>
-				}
-			>
-				Connect GitHub or GitLab to browse your repositories.
-			</ListMessage>
-		);
-	}
-
-	return <ForgeRepos forges={forges} query={query} />;
 }

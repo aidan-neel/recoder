@@ -4,6 +4,7 @@ import { OwnershipLostError, withLease, type ReviewLease } from './ownership';
 
 interface WorkerOptions {
 	ownerId: string;
+	/** Reviews this replica runs at once; 0 makes it an API-only replica that never claims a review. */
 	concurrency: number;
 	leaseMs: number;
 	pollMs: number;
@@ -30,8 +31,11 @@ async function wait(milliseconds: number, signal: AbortSignal): Promise<void> {
 	}
 }
 
+/** What a worker needs from the coordinator: claim a review, keep its lease, and hand it back. */
+type ReviewClaims = Pick<PostgresCoordinator, 'claim' | 'renew' | 'release' | 'enqueue'>;
+
 export function startReviewWorkers(
-	coordinator: PostgresCoordinator,
+	coordinator: ReviewClaims,
 	options: WorkerOptions,
 	execute: (lease: ReviewLease, signal: AbortSignal) => Promise<void>
 ): () => Promise<void> {
@@ -154,7 +158,7 @@ export function startReviewWorkers(
 		}
 	}
 
-	const polling = poll();
+	const polling = options.concurrency > 0 ? poll() : Promise.resolve();
 
 	return () => {
 		stopping ??= (async () => {

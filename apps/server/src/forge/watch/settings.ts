@@ -1,7 +1,13 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { z } from 'zod';
-import { AUTO_REVIEW_INTERVALS, DEFAULT_AUTO_REVIEW_SETTINGS, type AutoReviewSettings } from '@recoder/shared';
+import {
+	AUTO_REVIEW_INTERVALS,
+	DEFAULT_AUTO_REVIEW_SETTINGS,
+	FINDING_SEVERITIES,
+	MAX_INLINE_COMMENTS,
+	type AutoReviewSettings
+} from '@recoder/shared';
 import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
 import { serverDataDir } from '../../util/data-dir.js';
 
@@ -10,6 +16,14 @@ const handleSchema = z
 	.string()
 	.trim()
 	.regex(/^@[\w.-]{1,60}$/, 'The handle is one word starting with @, like @recoder.');
+
+/** A repository path glob Bun can parse, matched against repo-relative paths. */
+const pathGlobSchema = z
+	.string()
+	.trim()
+	.min(1)
+	.max(200)
+	.refine(isParsableGlob, 'Each ignored path is a glob like docs/** or **/*.md.');
 
 export const autoReviewPatchSchema = z
 	.object({
@@ -21,9 +35,22 @@ export const autoReviewPatchSchema = z
 		onPushed: z.boolean(),
 		skipDrafts: z.boolean(),
 		postResults: z.boolean(),
-		excludedRepoIds: z.array(z.string().max(200)).max(500)
+		excludedRepoIds: z.array(z.string().max(200)).max(500),
+		ignoredPaths: z.array(pathGlobSchema).max(100),
+		maxInlineComments: z.number().int().min(0).max(MAX_INLINE_COMMENTS),
+		checkThreshold: z.enum([...FINDING_SEVERITIES, 'off'])
 	})
 	.partial();
+
+function isParsableGlob(glob: string): boolean {
+	try {
+		new Bun.Glob(glob).match('');
+
+		return true;
+	} catch {
+		return false;
+	}
+}
 
 function settingsFile(): string {
 	return join(serverDataDir(), 'auto-review.json');

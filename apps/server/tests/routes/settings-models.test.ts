@@ -188,4 +188,26 @@ describe('settings without the catalog', () => {
 		for (const mock of mocks) mock.mockRestore();
 		forgetAgentModels();
 	});
+
+	test('verifierModelId and verifierEffort save through the settings route and ?catalog=0 includes the picked verifier model', async () => {
+		const mocks = spies();
+
+		offered = [sonnet, opus];
+		forgetAgentModels();
+
+		const saved = (await (
+			await patch({
+				orchestratorModelId: sonnet.id,
+				verifierModelId: opus.id,
+				verifierEffort: 'high'
+			})
+		).json()) as ModelSettings;
+
+		expect(saved.verifierModelId).toBe(opus.id);
+		expect(saved.verifierEffort).toBe('high');
+		expect(saved.models.map((entry) => entry.id)).toEqual([sonnet.id, opus.id]);
+
+		for (const mock of mocks) mock.mockRestore();
+		forgetAgentModels();
+	});
 });

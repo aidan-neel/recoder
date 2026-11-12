@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { z } from 'zod';
-import type { AgentAdapter, AgentRun } from '../../src/agents/contract';
+import type { AgentAdapter, AgentEvent, AgentRun, AgentRunOptions } from '../../src/agents/contract';
+import { LlmError, UsageLimitError } from '../../src/models/llm/errors';
 import { EvidenceStore } from '../../src/evidence/evidence';
 import { ModelBudget } from '../../src/review/pipeline/agent-loop/budget';
 import { runNativeAgent } from '../../src/review/pipeline/agent-loop/native-engine';
@@ -56,6 +57,23 @@ export async function fixtureReview(
 	return { error, read: value?.results?.[0] };
 }
 
+/** A run of `agent` whose tools all answer `ok`, with the events it sends collected in order. */
+export async function openCollectingRun(
+	agent: AgentAdapter,
+	options: Pick<AgentRunOptions, 'model' | 'reasoningEffort' | 'system' | 'tools'>
+): Promise<{ run: AgentRun; events: AgentEvent[] }> {
+	const events: AgentEvent[] = [];
+
+	const run = await agent.openRun({
+		...options,
+		runTool: async () => ({ text: 'ok', isError: false }),
+		onEvent: (event) => events.push(event),
+		signal: new AbortController().signal
+	});
+
+	return { run, events };
+}
+
 /**
  * Registers the tests every process-per-prompt run shares: an aborted prompt settles as cancelled and ends every
  * process the CLI started, and a prompt past its time settles as timed out. `open` starts a run on a fake in its
@@ -86,4 +104,81 @@ export function testPromptStops(open: () => Promise<{ run: AgentRun; log: string
 
 		expect(reply.error?.message).toMatch(/timed out/i);
 	});
+}
+
+/** The prompt every run contract test sends: tools on and a generous timeout. */
+const PROMPT = { tools: true, timeoutMs: 10_000 };
+
+/**
+ * Registers the contract test every run keeps: a CLI that prints past the output cap is stopped and the prompt
+ * fails. `open` starts a run on the fake's `flood` mode.
+ */
+export function testOutputCapPrompt(open: (mode: string) => Promise<{ run: AgentRun }>): void {
+	test('output past the cap stops the CLI and fails the prompt', async () => {
+		const { run } = await open('flood');
+
+		const reply = await run.prompt('Review it.', PROMPT);
+
+		await run.close();
+
+		expect(reply.error?.message).toMatch(/printed more than/);
+	});
+}
+
+/**
+ * One failure a fake mode produces, for a prompt or a `complete()` call: the mode, the error status, what its
+ * message matches, and whether the error is a usage cap.
+ */
+export interface CallFailure {
+	mode: string;
+	status: number;
+	message: RegExp;
+	usageLimit?: boolean;
+}
+
+/**
+ * Registers the contract tests every run keeps: a prompt in each fake mode fails the run's reply as an
+ * {@link LlmError} with the mapped status and message — a {@link UsageLimitError} too when `usageLimit` is set.
+ * `open` starts a run on the fake in `mode`.
+ */
+export function testPromptFailures(
+	open: (mode: string) => Promise<{ run: AgentRun }>,
+	cases: readonly CallFailure[]
+): void {
+	test.each([...cases])(
+		'a prompt in $mode mode fails with status $status',
+		async ({ mode, status, message, usageLimit }: CallFailure) => {
+			const { run } = await open(mode);
+
+			const reply = await run.prompt('Review it.', PROMPT);
+
+			await run.close();
+
+			expect(reply.error).toBeInstanceOf(LlmError);
+
+			if (usageLimit) expect(reply.error).toBeInstanceOf(UsageLimitError);
+
+			expect(reply.error).toMatchObject({ status, message: expect.stringMatching(message) });
+		}
+	);
+}
+
+/**
+ * Registers the contract tests every `complete()` keeps: each fake mode's call fails as an {@link LlmError} with
+ * the mapped status and message — a {@link UsageLimitError} too when `usageLimit` is set. `complete` makes the
+ * call on the fake in `mode` and resolves with whatever it threw.
+ */
+export function testCallFailures(complete: (mode: string) => Promise<unknown>, cases: readonly CallFailure[]): void {
+	test.each([...cases])(
+		'a $mode call fails with status $status',
+		async ({ mode, status, message, usageLimit }: CallFailure) => {
+			const error = await complete(mode).catch((e: unknown) => e);
+
+			expect(error).toBeInstanceOf(LlmError);
+
+			if (usageLimit) expect(error).toBeInstanceOf(UsageLimitError);
+
+			expect(error).toMatchObject({ status, message: expect.stringMatching(message) });
+		}
+	);
 }

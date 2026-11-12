@@ -10,7 +10,7 @@ const usage = {
 };
 
 test('normalization preserves missing versus zero and never adds breakdowns to totals', () => {
-	expect(normalizeTokenUsage(usage, 'openai-compatible')).toEqual({
+	expect(normalizeTokenUsage(usage)).toEqual({
 		inputTokens: 100,
 		outputTokens: 30,
 		totalTokens: 130,
@@ -19,28 +19,16 @@ test('normalization preserves missing versus zero and never adds breakdowns to t
 		reasoningOutputTokens: 20
 	});
 
-	expect(normalizeTokenUsage({ prompt_tokens: 0, completion_tokens: 0 }, 'openai-compatible')).toMatchObject({
+	expect(normalizeTokenUsage({ prompt_tokens: 0, completion_tokens: 0 })).toMatchObject({
 		inputTokens: 0,
 		outputTokens: 0,
 		totalTokens: 0,
 		cachedInputTokens: null
 	});
 
-	expect(
-		normalizeTokenUsage({ prompt_tokens: null, completion_tokens: '10', total_tokens: -1 }, 'openai-compatible')
-	).toMatchObject({ inputTokens: null, outputTokens: null, totalTokens: null });
-
-	expect(
-		normalizeTokenUsage(
-			{
-				inputTokens: 10,
-				outputTokens: 5,
-				totalTokens: 17,
-				cachedInputTokens: 3,
-				cacheWriteInputTokens: 2,
-				reasoningOutputTokens: 4
-			},
-			'codex'
-		)
-	).toMatchObject({ totalTokens: 17, cachedInputTokens: 3, cacheWriteInputTokens: 2, reasoningOutputTokens: 4 });
+	expect(normalizeTokenUsage({ prompt_tokens: null, completion_tokens: '10', total_tokens: -1 })).toMatchObject({
+		inputTokens: null,
+		outputTokens: null,
+		totalTokens: null
+	});
 });

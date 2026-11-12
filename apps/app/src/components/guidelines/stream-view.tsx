@@ -1,27 +1,61 @@
 'use client';
 
-import { cn, ScrollArea } from '@recoder/ui';
+import { ScrollArea } from '@recoder/ui';
+import { useLayoutEffect, useRef, type RefObject, type UIEvent } from 'react';
 
-import { useStickToBottom } from '@/lib/ask/stick-to-bottom';
+interface StreamViewProps {
+	/** The draft so far. */
+	text: string;
+	/** The text field's height when the draft began, so the editor keeps its size as the two swap. */
+	minHeight: number | undefined;
+}
+
+/** How near the end, in px, the reader must be for the view to keep following the draft. */
+const FOLLOW_WITHIN = 32;
+
+/**
+ * Keeps the end of a growing text in view until the reader scrolls up, and
+ * follows again once they come back to the end.
+ */
+function useFollowEnd(text: string): {
+	viewport: RefObject<HTMLDivElement | null>;
+	onScroll: (event: UIEvent<HTMLDivElement>) => void;
+} {
+	const viewport = useRef<HTMLDivElement>(null);
+	const following = useRef(true);
+
+	useLayoutEffect(() => {
+		const node = viewport.current;
+
+		if (node && following.current) node.scrollTop = node.scrollHeight;
+	}, [text]);
+
+	function onScroll(event: UIEvent<HTMLDivElement>): void {
+		const node = event.currentTarget;
+
+		following.current = node.scrollHeight - node.scrollTop - node.clientHeight <= FOLLOW_WITHIN;
+	}
+
+	return { viewport, onScroll };
+}
 
 /**
  * The editor while a draft streams in: the same box and type as the text
- * field, read-only, with a blinking caret where the next words land. It
- * starts at the field's height (`minHeight`), so nothing below it jumps, and
- * follows the end of the text unless the reader scrolls up.
+ * field, read-only, with a caret where the next words land. It starts at the
+ * field's height, so nothing under it moves, and follows the end of the text
+ * unless the reader scrolls up.
  */
-export function StreamView({ text, minHeight }: { text: string; minHeight?: number }) {
-	const { attachViewport, attachContent } = useStickToBottom('draft');
+export function StreamView({ text, minHeight }: StreamViewProps) {
+	const { viewport, onScroll } = useFollowEnd(text);
 
 	return (
-		<ScrollArea className="guidelines-stream" viewportRef={attachViewport}>
+		<ScrollArea className="guidelines-stream" viewportRef={viewport} viewportProps={{ tabIndex: 0, onScroll }}>
 			<div
-				ref={attachContent}
 				role="status"
 				aria-label="Draft in progress"
 				aria-busy
-				data-ui="guidelines-stream"
-				className={cn('guidelines-field guidelines-stream-text', !text && 'text-fg-faint')}
+				className="guidelines-field guidelines-stream-text"
+				data-empty={text ? undefined : ''}
 				style={{ minHeight }}
 			>
 				{text ? null : <span data-ui="markdown-caret" aria-hidden className="guidelines-caret-lead" />}

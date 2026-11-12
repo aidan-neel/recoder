@@ -1,10 +1,17 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { supportedEffort, within, type AgentStatus, type ModelEntry, type ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import {
+	CliAgent,
+	callDeadline,
+	emptyDirectory,
+	findCli,
+	removeScratchDir,
+	scratchDir,
+	stopOnShutdown
+} from '../cli-process';
 import { systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
 import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
@@ -120,7 +127,7 @@ export class ClaudeCodeAgent extends CliAgent {
 		if (!path) throw new LlmError(0, `Claude Code is not installed. Install it with: ${INSTALL}`);
 
 		const deadline = callDeadline(opts);
-		const scratch = await mkdtemp(join(tmpdir(), 'recoder-claude-code-'));
+		const scratch = await scratchDir(this.scratch, 'recoder-claude-code-');
 		const systemFile = join(scratch, 'system.md');
 
 		const cwd = await emptyDirectory(CLAUDE_CODE_EMPTY_DIR);
@@ -138,8 +145,6 @@ export class ClaudeCodeAgent extends CliAgent {
 			this.env,
 			cwd
 		);
-
-		this.scratch.add(scratch);
 
 		try {
 			await writeFile(systemFile, system, { mode: 0o600 });
@@ -163,8 +168,7 @@ export class ClaudeCodeAgent extends CliAgent {
 			session.fail();
 			throw deadline.failure(error, 'Claude Code request failed.');
 		} finally {
-			this.scratch.delete(scratch);
-			await rm(scratch, { recursive: true, force: true });
+			await removeScratchDir(this.scratch, scratch);
 		}
 	}
 

@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 
 /** The root font size over 16px: 1 at most widths, more at 1920px and 2400px, where every CSS px (compiled to rem) grows. */
-export function rootScale(): number {
+function rootScale(): number {
 	return Number.parseFloat(getComputedStyle(document.documentElement).fontSize) / 16 || 1;
 }
 

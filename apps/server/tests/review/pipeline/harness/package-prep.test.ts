@@ -1,107 +1,30 @@
 import { afterEach, expect, test } from 'bun:test';
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { EvidenceStore } from '../../../../src/evidence/evidence';
-import { preparePackages, type PrepOptions } from '../../../../src/review/pipeline/harness/package-prep';
+import { preparePackages } from '../../../../src/review/pipeline/harness/package-prep';
 import { prepareSandbox } from '../../../../src/review/pipeline/harness/sandbox-setup';
 import type { ReviewRun } from '../../../../src/review/pipeline/harness/context';
 import { recordBaseline } from '../../../../src/review/pipeline/harness/verify-baseline';
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import { settleVerdict } from '../../../../src/review/pipeline/verify/settle';
-import { execUnavailableReason, sandboxLayout } from '../../../../src/sandbox/exec-sandbox';
-import { ExecWorkspace } from '../../../../src/sandbox/exec-workspace';
-import { git } from '../../../helpers/git';
-
-const available = (await execUnavailableReason()) === null;
-const bases: string[] = [];
+import type { ExecWorkspace } from '../../../../src/sandbox/exec-workspace';
+import {
+	available,
+	checkout,
+	cleanupBases,
+	GENERATED,
+	options,
+	prepRuns,
+	RUNES,
+	SIMPLE,
+	UNPREPARED_SIBLING
+} from './package-prep-fixtures';
 
 afterEach(async () => {
 	delete process.env.RECODER_PACKAGE_PREP;
-	for (const base of bases.splice(0)) await rm(base, { recursive: true, force: true });
+	await cleanupBases();
 });
-
-/** A package whose test imports `generated/value.js`, which only its `prepare` script writes; each run of it adds a line to `prep.log`. */
-const GENERATED = {
-	'.gitignore': 'generated/\nprep.log\nnode_modules/\n',
-	'package.json': JSON.stringify({
-		name: 'generated',
-		packageManager: 'bun@1.3.0',
-		scripts: {
-			prepare: "echo ran >> prep.log && mkdir -p generated && echo 'export const value = 42;' > generated/value.js",
-			test: 'bun test'
-		}
-	}),
-	'value.test.ts':
-		"import { expect, test } from 'bun:test';\nimport { value } from './generated/value.js';\n\ntest('value', () => expect(value).toBe(42));\n"
-};
-
-/** A workspace whose changed package `a` needs no prep, beside the generated-file package as `b`, which prep never touches. */
-const UNPREPARED_SIBLING = {
-	'package.json': JSON.stringify({ packageManager: 'bun@1.3.0', workspaces: ['packages/*'] }),
-	'packages/a/package.json': JSON.stringify({ scripts: { test: 'bun test' } }),
-	'packages/a/a.test.ts': "import { test } from 'bun:test';\n\ntest('a', () => {});\n",
-	...Object.fromEntries(Object.entries(GENERATED).map(([path, content]) => [`packages/b/${path}`, content]))
-};
-
-/** Svelte runes code with a test of it; the package's runner decides whether anything compiles the runes. */
-const RUNES = {
-	'src/counter.svelte.ts':
-		'export function counter() {\n\tlet count = $state(1);\n\n\treturn { get count() { return count; } };\n}\n',
-	'src/counter.test.ts':
-		"import { expect, test } from 'bun:test';\nimport { counter } from './counter.svelte.ts';\n\ntest('starts at 1', () => expect(counter().count).toBe(1));\n"
-};
-
-/**
- * A committed repo under a temp work dir, with `untracked` written after the
- * commit (installed tools), `head` committed on top of it as the change under
- * review, and the review's workspace on the last commit.
- */
-async function checkout(
-	files: Record<string, string>,
-	untracked: Record<string, string> = {},
-	head: Record<string, string> = {}
-): Promise<{ ws: ExecWorkspace; dir: string; baseSha: string }> {
-	const base = await mkdtemp(join(import.meta.dir, '.prep-test-'));
-
-	bases.push(base);
-
-	const dir = join(base, 'work/repos/pr-1');
-
-	for (const [path, content] of Object.entries({ ...files, ...untracked })) {
-		await mkdir(dirname(join(dir, path)), { recursive: true });
-		await writeFile(join(dir, path), content);
-	}
-
-	git(dir, ['init', '-q', '-b', 'main']);
-	git(dir, ['add', ...Object.keys(files)]);
-	git(dir, ['commit', '-q', '-m', 'base']);
-
-	for (const path of Object.keys(untracked)) await chmod(join(dir, path), 0o755);
-
-	const baseSha = git(dir, ['rev-parse', 'HEAD']);
-
-	if (Object.keys(head).length) {
-		for (const [path, content] of Object.entries(head)) await writeFile(join(dir, path), content);
-
-		git(dir, ['commit', '-q', '-am', 'head']);
-	}
-
-	const layout = sandboxLayout(dir, {
-		home: join(base, 'home'),
-		dataDir: join(base, 'data'),
-		workDir: join(base, 'work')
-	});
-
-	return { ws: new ExecWorkspace(dir, git(dir, ['rev-parse', 'HEAD']), layout), dir, baseSha };
-}
-
-function options(changed: string[], extra: Partial<PrepOptions> = {}): PrepOptions {
-	return { changed, manager: 'bun', diffPaths: [], signal: new AbortController().signal, ...extra };
-}
-
-async function prepRuns(dir: string): Promise<number> {
-	return (await readFile(join(dir, 'prep.log'), 'utf8').catch(() => '')).split('\n').filter(Boolean).length;
-}
 
 test.skipIf(!available)(
 	'a test that imports a generated file runs after the prepare script that writes it',
@@ -340,6 +263,87 @@ test.skipIf(!available)('a run that stops in setup in an unprepared package is r
 	expect(run.output).toStartWith('[Setup repaired: ran `cd packages/b && bun run prepare`, then reran the command]');
 	expect(repaired).toEqual([true]);
 	expect(await prepRuns(join(dir, 'packages/b'))).toBe(1);
+});
+
+test.skipIf(!available)(
+	'a run settled as another command is classified by it and can stay out of the outcome tally',
+	async () => {
+		const { ws } = await checkout(SIMPLE);
+		const tallied: string[] = [];
+
+		await preparePackages(ws, options(['a.test.ts'], { onOutcome: (outcome) => tallied.push(outcome) }));
+
+		const settle = ws.settleRun;
+
+		if (!settle) throw new Error('packages were not prepared');
+
+		const result = {
+			exitCode: 1,
+			output: 'error: Cannot find module "lodash"',
+			truncated: false,
+			timedOut: false,
+			elapsedMs: 1
+		};
+
+		const matrix = await settle({
+			command: '( bun test a.test.ts ); rc=$?; exit $rc',
+			classifyAs: 'bun test a.test.ts',
+			result,
+			owner: 'mutation-0',
+			tally: false,
+			rerun: async () => result
+		});
+
+		expect(matrix.outcome).toBe('setup-failed');
+		expect(tallied).toEqual([]);
+
+		const investigator = await settle({
+			command: 'bun test a.test.ts',
+			result: { ...result, output: 'AssertionError: expected 1 to be 2' },
+			owner: 'investigator-1',
+			rerun: async () => result
+		});
+
+		expect(investigator.outcome).toBe('assertion-failed');
+		expect(tallied).toEqual(['assertion-failed']);
+	}
+);
+
+test.skipIf(!available)('a matrix run in a package settles against that package and repairs it once', async () => {
+	const { ws, dir } = await checkout(UNPREPARED_SIBLING);
+	const tallied: string[] = [];
+
+	await preparePackages(ws, options(['packages/a/a.test.ts'], { onOutcome: (outcome) => tallied.push(outcome) }));
+
+	const settle = ws.settleRun;
+
+	if (!settle) throw new Error('packages were not prepared');
+
+	let reruns = 0;
+
+	const settled = await settle({
+		command: '( cd packages/b && bun test value.test.ts ); rc=$?; exit $rc',
+		classifyAs: 'cd packages/b && bun test value.test.ts',
+		result: {
+			exitCode: 1,
+			output: 'error: Cannot find module "./generated/value.js"',
+			truncated: false,
+			timedOut: false,
+			elapsedMs: 1
+		},
+		owner: 'mutation-0',
+		tally: false,
+		rerun: async () => {
+			reruns++;
+
+			return { exitCode: 0, output: '1 pass', truncated: false, timedOut: false, elapsedMs: 1 };
+		}
+	});
+
+	expect(settled.outcome).toBe('assertion-passed');
+	expect(reruns).toBe(1);
+	expect(await prepRuns(join(dir, 'packages/b'))).toBe(1);
+	expect(tallied).toEqual([]);
 });
 
 test.skipIf(!available)('a setup repair takes its time from the prep budget: with none left, none runs', async () => {

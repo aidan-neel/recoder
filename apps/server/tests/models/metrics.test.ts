@@ -256,9 +256,9 @@ test('Codex chat and streaming followups each count once and separate the same m
 
 	codex.complete = async (options, onToken) => {
 		onToken?.('o');
-		options.onUsage?.(normalizeTokenUsage({ inputTokens: 50, outputTokens: 10 }, 'codex'));
+		options.onUsage?.(normalizeTokenUsage({ prompt_tokens: 50, completion_tokens: 10 }));
 		onToken?.('k');
-		options.onUsage?.(normalizeTokenUsage({ inputTokens: 100, outputTokens: 30 }, 'codex'));
+		options.onUsage?.(normalizeTokenUsage({ prompt_tokens: 100, completion_tokens: 30 }));
 
 		return 'ok';
 	};
@@ -376,16 +376,30 @@ test('missing usage stays unavailable; partial coverage and failed/truncated req
 	});
 });
 
+test('a call the provider rejects is stored as failed with its error text, without the key it was sent', async () => {
+	const a = await review();
+
+	globalThis.fetch = (async () =>
+		new Response(`{"error":"key ${opts.apiKey} is over its quota"}`, { status: 400 })) as unknown as typeof fetch;
+
+	await withReviewMetrics(a.id, 'pipeline', () => expect(chatCompletion(opts)).rejects.toThrow());
+
+	const [call] = (await reviewMetrics.get(a.id))?.calls ?? [];
+
+	expect(call?.status).toBe('failed');
+	expect(call?.error).toBe('LLM 400: {"error":"key [redacted] is over its quota"}');
+});
+
 test('interrupted calls keep reported usage durably and cannot recreate deleted reviews', async () => {
 	const a = await review();
 	const call = await withReviewMetrics(a.id, 'pipeline', () => trackTokenCall('model-a', 'codex'));
 
-	call.usage(normalizeTokenUsage({ inputTokens: 100, outputTokens: 10 }, 'codex'));
+	call.usage(normalizeTokenUsage({ prompt_tokens: 100, completion_tokens: 10 }));
 	await closeStore();
 	expect((await getReviewMetrics(a.id))?.total).toMatchObject({ pendingCalls: 1, usage: { totalTokens: 110 } });
 	await db.reviews.delete(a.id);
 	await reviewMetrics.delete(a.id);
-	call.finish(true);
+	call.complete();
 	expect(await getReviewMetrics(a.id)).toBeNull();
 });
 

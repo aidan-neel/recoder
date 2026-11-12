@@ -101,7 +101,7 @@ export class StepRelay<T> {
 	private stepStarted(step?: string): void {
 		const { opts } = this;
 
-		this.settle(true);
+		this.settle();
 		this.steps++;
 		this.stepMessageId = null;
 		opts.budget.spend();
@@ -113,7 +113,7 @@ export class StepRelay<T> {
 
 	private stepFinished(usage: TokenUsage, step?: string): void {
 		this.report(this.callFor(step), usage);
-		this.settle(true);
+		this.settle();
 		this.finished++;
 		this.hooks.onStepDone();
 	}
@@ -185,25 +185,25 @@ export class StepRelay<T> {
 	}
 
 	/**
-	 * Ends a prompt: settles its last step, gives the step events a moment to report usage that is still on its
-	 * way, then fills in what they never did from the prompt's own total. A prompt whose events never arrived
-	 * still counts as one request.
+	 * Ends a prompt, failed when it has an `error`: settles its last step, gives the step events a moment to
+	 * report usage that is still on its way, then fills in what they never did from the prompt's own total. A
+	 * prompt whose events never arrived still counts as one request, and one that failed before its first step
+	 * started (a spent plan, a rejected key) as one failed request with the provider's error.
 	 */
-	async finishPrompt(tokens: TokenUsage | undefined, ok: boolean): Promise<void> {
-		this.settle(ok);
+	async finishPrompt(tokens: TokenUsage | undefined, error?: unknown): Promise<void> {
+		this.settle(error);
 
 		const calls = this.promptCalls;
 
 		this.promptCalls = [];
 
 		if (calls.length === 0) {
-			if (!ok && !tokens) return;
-
 			const missed = trackTokenCall(this.opts.config.model, this.provider);
 
 			if (tokens) missed.usage(tokens);
 
-			missed.finish(ok);
+			if (error) missed.fail(error);
+			else missed.complete();
 
 			return;
 		}
@@ -236,19 +236,21 @@ export class StepRelay<T> {
 		});
 	}
 
-	/** Closes whatever the current step left open: its token record, reasoning and narration. */
-	settle(ok: boolean): void {
+	/** Closes whatever the current step left open, failed with `error` when it has one: its token record, reasoning and narration. */
+	settle(error?: unknown): void {
+		const status = error ? 'error' : 'done';
+
 		if (this.current) {
-			this.current.tracking.finish(ok);
+			if (error) this.current.tracking.fail(error);
+			else this.current.tracking.complete();
 			if (!this.current.reported) this.awaiting.push(this.current);
 		}
 
 		this.current = null;
 
-		if (this.reasoning?.text)
-			this.opts.onReasoning?.({ id: this.reasoning.id, text: this.reasoning.text, status: ok ? 'done' : 'error' });
+		if (this.reasoning?.text) this.opts.onReasoning?.({ id: this.reasoning.id, text: this.reasoning.text, status });
 
 		this.reasoning = null;
-		this.closeMessage(ok ? 'done' : 'error');
+		this.closeMessage(status);
 	}
 }

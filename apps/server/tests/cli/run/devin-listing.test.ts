@@ -10,7 +10,11 @@ import { HANGING_DEVIN, startedProcess } from './hanging-devin';
 test('aborting a Devin model listing kills its process and rejects the listing', async () => {
 	const dir = mkdtempSync(join(tmpdir(), 'recoder-devin-listing-'));
 	const { env } = await fakeBin('devin', HANGING_DEVIN);
-	const agent = new DevinAgent({ ...childEnvironment(dir), PATH: env.PATH, FAKE_DEVIN_DIR: dir });
+	const agentEnv: Record<string, string> = { ...childEnvironment(dir), PATH: env.PATH, FAKE_DEVIN_DIR: dir };
+
+	delete agentEnv.RECODER_DEVIN_BIN;
+
+	const agent = new DevinAgent(agentEnv);
 	const controller = new AbortController();
 	const started = startedProcess(dir);
 	const listing = agent.models(controller.signal).catch((error: unknown) => error);

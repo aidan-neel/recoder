@@ -61,8 +61,7 @@
 
 	/** Models that hide their reasoning leave nothing to open. */
 	const hasBody = (item: Trace) =>
-		item.kind === 'tasks' ||
-		(!item.entry.summary && !summarizesReasoning(item.entry.model) && !!item.entry.text.trim());
+		item.kind === 'tasks' || (!summarizesReasoning(item.entry.model) && !!item.entry.text.trim());
 
 	const live = $derived(pending || traces.some(isLive));
 

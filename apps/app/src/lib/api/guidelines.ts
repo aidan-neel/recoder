@@ -3,6 +3,8 @@ import type {
 	GuidelinesDraftRequest,
 	GuidelinesOverview,
 	GuidelinesProposal,
+	LearnedRuleDecision,
+	LearnedRuleProposal,
 	RepoGuidelines
 } from '@recoder/shared';
 
@@ -21,6 +23,13 @@ export const guidelinesApi = {
 	/** Opens a pull request with the file, or pushes to the one already pending. */
 	propose: (repoId: string, content: string) =>
 		post<GuidelinesProposal>(`/api/guidelines/repos/${seg(repoId)}/propose`, { content }),
+
+	/** A repository's learned-rule proposals, newest first, in every state. */
+	learnedRules: (repoId: string) => request<LearnedRuleProposal[]>(`/api/repos/${seg(repoId)}/learned-rules`),
+
+	/** Approves or rejects one proposal; answers the saved proposal, 404 when there is none. */
+	decideLearnedRule: (repoId: string, topicId: string, state: LearnedRuleDecision['state']) =>
+		put<LearnedRuleProposal>(`/api/repos/${seg(repoId)}/learned-rules/${seg(topicId)}`, { state }),
 
 	/** Streams a draft from the orchestrator. Resolves with the cleaned full text. */
 	async draft(input: GuidelinesDraftRequest, onToken: (text: string) => void, signal?: AbortSignal): Promise<string> {

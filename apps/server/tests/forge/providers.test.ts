@@ -14,6 +14,12 @@ describe('parseSlug', () => {
 		expect(() => parseSlug('https://github.com/onlyone')).toThrow();
 	});
 
+	test('a URL it cannot parse is named without the credentials in it', () => {
+		expect(() => parseSlug('https://oauth2:glpat-secret@gitlab.com/owner')).toThrow(
+			'cannot parse repo slug from https://gitlab.com/owner'
+		);
+	});
+
 	test('keeps spaces in a local file path but not in a hosted slug', () => {
 		expect(parseSlug('file:///tmp/my repo')).toBe('tmp/my repo');
 		expect(() => parseSlug('https://github.com/o/r x')).toThrow();

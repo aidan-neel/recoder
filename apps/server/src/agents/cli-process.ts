@@ -1,6 +1,6 @@
 import { existsSync, rmSync } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
-import { homedir } from 'node:os';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry, ModelFailure, ReasoningEffort } from '@recoder/shared';
 import { LlmError, cancelledError, timedOutError } from '../models/llm/errors';
@@ -60,6 +60,48 @@ export async function probeVersion(path: string, env: Env): Promise<string | nul
 	return parseVersion(out);
 }
 
+/** How to run a short CLI command: its environment, the directory it runs in, and when to give up on it. */
+interface CliCommand {
+	env: Record<string, string>;
+	cwd?: string;
+	timeoutMs: number;
+	signal?: AbortSignal;
+}
+
+/**
+ * Runs a short CLI command to its end, killing it after `timeoutMs`, or when `signal` aborts. Both streams are
+ * read to their end so a chatty command never stalls on a full pipe; what a non-zero exit means is the caller's.
+ */
+export async function cliOutput(
+	argv: string[],
+	command: CliCommand
+): Promise<{ code: number; stdout: string; stderr: string }> {
+	const proc = Bun.spawn(argv, {
+		...(command.cwd ? { cwd: command.cwd } : {}),
+		stdin: 'ignore',
+		stdout: 'pipe',
+		stderr: 'pipe',
+		env: command.env,
+		...(command.signal ? { signal: command.signal } : {})
+	});
+
+	const timer = setTimeout(() => proc.kill(), command.timeoutMs);
+
+	try {
+		const [stdout, stderr, code] = await Promise.all([
+			new Response(proc.stdout).text(),
+			new Response(proc.stderr).text(),
+			proc.exited
+		]);
+
+		if (command.signal?.aborted) throw cancelledError();
+
+		return { code, stdout, stderr };
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
 /**
  * A directory with nothing in it under the data dir, so an agent CLI never
  * sees the user's files or the PR checkout. Agents scope a session's project
@@ -71,6 +113,24 @@ export async function emptyDirectory(name: string): Promise<string> {
 	await mkdir(dir, { recursive: true });
 
 	return dir;
+}
+
+/**
+ * A fresh temp dir recorded in `scratch`, so the agent's `stop` removes it even when the run that made it dies
+ * before its own cleanup runs. A run that finishes removes it with {@link removeScratchDir}.
+ */
+export async function scratchDir(scratch: Set<string>, prefix: string): Promise<string> {
+	const dir = await mkdtemp(join(tmpdir(), prefix));
+
+	scratch.add(dir);
+
+	return dir;
+}
+
+/** Forgets `dir` in `scratch` and deletes it, ignoring a dir that is already gone. */
+export async function removeScratchDir(scratch: Set<string>, dir: string): Promise<void> {
+	scratch.delete(dir);
+	await rm(dir, { recursive: true, force: true });
 }
 
 /** The server's environment minus every variable whose upper-cased name matches `stripped`, and every unset entry. */

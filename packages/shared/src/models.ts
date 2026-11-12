@@ -74,16 +74,14 @@ export function subagentCapFrom(value: string): SubagentCap {
 /** An agent CLI by the id of its server adapter: one of {@link AGENT_CLIS}. */
 export type AgentCliId = string;
 
-/** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or an agent CLI. */
-export type ModelProvider = 'openai-compatible' | 'codex' | AgentCliId;
+/** How Recoder reaches a model: an OpenAI-compatible endpoint, or an agent CLI. */
+export type ModelProvider = 'openai-compatible' | AgentCliId;
 
 /**
- * The name people know a provider's app or CLI by: ChatGPT, or an agent CLI whose models pickers group under its
- * name (Claude Code, Devin). Null for an endpoint, and for an agent CLI whose models go under another name.
+ * The name people know an agent CLI by, when pickers group its models under it (Claude Code, Devin). Null for an
+ * endpoint, and for an agent CLI whose models go under another name.
  */
 export function appName(provider: ModelProvider | undefined): string | null {
-	if (provider === 'codex') return 'ChatGPT';
-
 	const cli = agentCli(provider);
 
 	return cli?.groupsModelsUnderName ? cli.name : null;
@@ -118,7 +116,7 @@ export interface ModelRuntimeProfile {
 /** A named model entry in the registry (keys never leave the server). */
 export interface ModelEntry {
 	provider?: ModelProvider;
-	/** Hosted provider this model came from (`opencode-go`, `openrouter`…); unset for ChatGPT and the custom endpoint. */
+	/** Hosted provider this model came from (`opencode-go`, `openrouter`…); unset for the custom endpoint. */
 	source?: string;
 	/** The agent CLI that runs this model, by name (`OpenCode`); unset for direct endpoints. */
 	agent?: string;
@@ -147,7 +145,7 @@ export interface DiscoveredModel {
 }
 
 export interface ModelEntryPatch {
-	provider?: 'openai-compatible' | 'codex';
+	provider?: 'openai-compatible';
 	source?: string;
 	id?: string;
 	label: string;
@@ -196,13 +194,17 @@ export interface ModelSettings {
 	apiKeyPreview: string | null;
 	sharedModelId: string | null;
 	orchestratorModelId?: string | null;
-	/** Subagents and verifiers run on this second model; null follows the Review model. */
+	/** Subagents and workers run on this second model; null follows the Review model. */
 	specialistModelId?: string | null;
+	/** Verifiers run on this model; null follows the Review model. */
+	verifierModelId?: string | null;
 	models: ModelEntry[];
 	/** Review (orchestrator) reasoning effort; null follows the model default. */
 	orchestratorEffort?: ReasoningEffort | null;
 	/** The second model's reasoning effort; null follows the Review effort when the model does too. */
 	specialistEffort?: ReasoningEffort | null;
+	/** The verifier model's reasoning effort; null follows the Review effort when the model does too. */
+	verifierEffort?: ReasoningEffort | null;
 	/** How many subagents one review may run in all. */
 	subagentCap: SubagentCap;
 	/** The token budget last picked, whose limits reviews run with; the cap and efforts may since have been changed by hand. */
@@ -236,32 +238,16 @@ export interface ModelSettingsPatch {
 	sharedModelId?: string | null;
 	orchestratorModelId?: string | null;
 	specialistModelId?: string | null;
+	verifierModelId?: string | null;
 	orchestratorEffort?: ReasoningEffort | null;
 	specialistEffort?: ReasoningEffort | null;
+	verifierEffort?: ReasoningEffort | null;
 	subagentCap?: SubagentCap;
 	tokenBudget?: TokenBudget;
 	reportLowSeverity?: boolean;
 	maxFiles?: number;
 	maxDiffChars?: number;
 	maxFileChars?: number;
-}
-
-export interface CodexConnection {
-	available: boolean;
-	authenticated: boolean;
-	email?: string | null;
-	planType?: string | null;
-	error?: string;
-	login?: { verificationUrl: string; userCode: string; expiresAt: number };
-	limits?: Array<{ name: string; usedPercent: number; resetsAt: number | null }>;
-}
-
-export interface CodexModel {
-	id: string;
-	label: string;
-	/** Reasoning levels the provider reports for this model. */
-	efforts?: ReasoningEffort[];
-	defaultEffort?: ReasoningEffort;
 }
 
 /**

@@ -1,18 +1,34 @@
 import { agentReady, within, type AgentStatus, type ModelEntry } from '@recoder/shared';
 import { TtlCache } from '../util/ttl-cache';
+import { antigravity } from './antigravity/antigravity';
 import { claudeCode } from './claude-code/claude-code';
+import { codex } from './codex/codex';
 import type { AgentAdapter } from './contract';
 import { copilot } from './copilot/copilot';
+import { cursor } from './cursor/cursor';
 import { customCommand } from './custom/custom-command';
 import { devin } from './devin/devin';
+import { grok } from './grok/grok';
 import { opencode } from './opencode/opencode';
+import { pi } from './pi/pi';
 
 /**
  * Every agent CLI Recoder runs. Adding a CLI is one adapter (see `contract.ts` and
  * `docs/agents/adapter-contract.md`) plus its line here; the routes, Settings, the model routing and the review
  * pipeline read only this list.
  */
-const AGENTS: readonly AgentAdapter[] = [opencode, claudeCode, devin, customCommand, copilot];
+const AGENTS: readonly AgentAdapter[] = [
+	opencode,
+	claudeCode,
+	devin,
+	customCommand,
+	codex,
+	pi,
+	grok,
+	cursor,
+	antigravity,
+	copilot
+];
 
 /** Every agent CLI Recoder runs, in the order Settings lists them. */
 export function registeredAgents(): readonly AgentAdapter[] {

@@ -1,5 +1,6 @@
 import { git } from '../../../evidence/git.js';
-import { byCodePoint, mapLimit } from '../change-model/repo.js';
+import { mapLimit } from '../../../util/map-limit.js';
+import { byCodePoint } from '../change-model/repo.js';
 
 /** A file that changed alongside one of a unit's paths in most of the commits that touched it. */
 export interface CoChange {

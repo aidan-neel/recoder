@@ -10,16 +10,16 @@ export const LIMIT_FIELDS: readonly { key: LimitKey; name: string; hint: string;
 ];
 
 /**
- * A typed limit as a whole number from 1 to `max`, or the reason it isn't one.
+ * A typed limit as a whole number from `min` to `max`, or the reason it isn't one.
  * Thousands separators and spaces are fine ("60,000").
  */
-export function parseLimit(text: string, max: number): { value: number } | { error: string } {
+export function parseLimit(text: string, max: number, min = 1): { value: number } | { error: string } {
 	const digits = text.replace(/[\s,_]/g, '');
-	const range = `Enter a whole number from 1 to ${max.toLocaleString('en-US')}.`;
+	const range = `Enter a whole number from ${min.toLocaleString('en-US')} to ${max.toLocaleString('en-US')}.`;
 
 	if (!/^\d+$/.test(digits)) return { error: range };
 
 	const value = Number(digits);
 
-	return value >= 1 && value <= max ? { value } : { error: range };
+	return value >= min && value <= max ? { value } : { error: range };
 }

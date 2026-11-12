@@ -10,21 +10,13 @@ export function undoToast(title: string, undo?: () => void): void {
 	});
 }
 
-/** Errors that settings can fix carry a button there; `sign-in` also opens Add provider. */
+/** Errors that settings can fix carry a button there. */
 export function errorToast(title: string, description?: string, action?: FailureAction): void {
 	toast.error(title, {
 		description,
 		duration: action ? 10_000 : 6000,
 		actions: action
-			? [
-					action === 'sign-in'
-						? {
-								label: 'Add a provider',
-								variant: 'ghost',
-								callback: () => modelSettingsUi.show('models', { kind: 'add-provider' })
-							}
-						: { label: 'Open settings', variant: 'ghost', callback: () => modelSettingsUi.show('models') }
-				]
+			? [{ label: 'Open settings', variant: 'ghost', callback: () => modelSettingsUi.show('models') }]
 			: undefined
 	});
 }

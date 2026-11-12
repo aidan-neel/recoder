@@ -1,5 +1,6 @@
 import {
 	emptyReviewProgress,
+	PROGRESS_SNAPSHOT_KEYS,
 	type CoverageGap,
 	type CoverageSummary,
 	type ReviewAssignment,
@@ -56,22 +57,6 @@ function writeQueue(reviewId: string) {
 export async function flushReviewEvents(reviewId: string): Promise<void> {
 	await progressWrites.drain(reviewId);
 }
-
-const SNAPSHOT_KEYS = [
-	'paused',
-	'planVersion',
-	'assignments',
-	'budget',
-	'candidateCount',
-	'coverage',
-	'coverageGaps',
-	'outcome',
-	'failure',
-	'recommendedChecks',
-	'stage',
-	'orchestratorModel',
-	'guidelines'
-] as const;
 
 /** Hand an event to one listener. A listener's failure must never break the pipeline or a replay. */
 function deliver(fn: Listener, event: ReviewEvent): void {
@@ -219,21 +204,54 @@ function reduceSnapshot(snapshot: ReviewProgress, message: StoredReviewEvent): R
 }
 
 async function commitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): Promise<void> {
-	let message: StoredReviewEvent;
+	announceReviewEvent(reviewId, await storeReviewEvent(reviewId, event));
+}
 
-	if (sharedEvents) message = await sharedEvents.append(reviewId, event, reduceSnapshot);
-	else {
-		message = { ...event, at: new Date().toISOString(), sequence: 0 };
+/**
+ * Stores the event only through `gate`, which runs the store inside a transaction of its own and skips it once its
+ * condition no longer holds there, then tells this process's listeners. Queued behind the review's other writes; says
+ * whether the event was stored.
+ */
+export async function commitGatedReviewEvent(
+	reviewId: string,
+	event: Omit<ReviewEvent, 'at'>,
+	gate: (store: () => Promise<StoredReviewEvent>) => Promise<StoredReviewEvent | undefined>
+): Promise<boolean> {
+	const saved = structuredClone(event);
+	const outcome = { stored: false };
 
-		await reviewProgress.update(reviewId, (current) => {
-			const snapshot = current ?? emptyReviewProgress(reviewId);
+	enqueueReviewWrite(reviewId, async () => {
+		const message = await gate(() => storeReviewEvent(reviewId, saved));
 
-			message.sequence = snapshot.sequence + 1;
+		if (!message) return;
 
-			return reduceSnapshot(snapshot, message);
-		});
-	}
+		outcome.stored = true;
+		announceReviewEvent(reviewId, message);
+	});
 
+	await flushReviewEvents(reviewId);
+
+	return outcome.stored;
+}
+
+async function storeReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): Promise<StoredReviewEvent> {
+	if (sharedEvents) return sharedEvents.append(reviewId, event, reduceSnapshot);
+
+	const message: StoredReviewEvent = { ...event, at: new Date().toISOString(), sequence: 0 };
+
+	await reviewProgress.update(reviewId, (current) => {
+		const snapshot = current ?? emptyReviewProgress(reviewId);
+
+		message.sequence = snapshot.sequence + 1;
+
+		return reduceSnapshot(snapshot, message);
+	});
+
+	return message;
+}
+
+/** Hands a stored event to this process's replay buffer and live listeners. */
+function announceReviewEvent(reviewId: string, message: StoredReviewEvent): void {
 	let buf = buffers.get(reviewId);
 
 	if (!buf) {
@@ -258,7 +276,7 @@ function applySnapshotPatch(snapshot: ReviewProgress, data?: Record<string, unkn
 		snapshot.reasoning = settled.reasoning;
 	}
 
-	for (const key of SNAPSHOT_KEYS) {
+	for (const key of PROGRESS_SNAPSHOT_KEYS) {
 		if (key in data) (snapshot as unknown as Record<string, unknown>)[key] = data[key];
 	}
 }
