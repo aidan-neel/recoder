@@ -3,7 +3,7 @@ import { extractJson, forgeCliAvailable, forgeCliUser, GhError, runForgeCli } fr
 import {
 	apiMergeHeadRef,
 	apiMergeRequest,
-	apiMergeRequests,
+	apiMergeRows,
 	apiProjects,
 	apiUser,
 	gitlabGet,
@@ -197,16 +197,30 @@ export async function fetchMergeRequest(
 	};
 }
 
-/**
- * Open MRs for a repo, newest first. Stats come from per-MR views (the list
- * endpoint omits diff stats); an MR whose view fails keeps zeroed stats
- * rather than failing the whole list. Throws GhError.
- */
+/** A merge request with the JSON row GitLab sent for it, so a caller can read the fields `PullRequest` leaves out. */
+export interface MergeRow {
+	pr: PullRequest;
+	row: Record<string, unknown>;
+}
+
+/** Open MRs for a repo, newest first, with diff stats. Throws GhError. */
 export async function listMergeRequests(
 	repoUrl: string,
 	opts?: { env?: Record<string, string>; limit?: number }
 ): Promise<PullRequest[]> {
-	if (useGitlabApi(opts?.env)) return apiMergeRequests(repoUrl, opts!.env!, opts?.limit);
+	return (await listMergeRows(repoUrl, opts)).map((row) => row.pr);
+}
+
+/**
+ * Open MRs for a repo, newest first, each with its list row. Stats come from
+ * per-MR views (the list endpoint omits diff stats); an MR whose view fails
+ * keeps zeroed stats rather than failing the whole list. Throws GhError.
+ */
+export async function listMergeRows(
+	repoUrl: string,
+	opts?: { env?: Record<string, string>; limit?: number }
+): Promise<MergeRow[]> {
+	if (useGitlabApi(opts?.env)) return apiMergeRows(repoUrl, opts!.env!, opts?.limit);
 
 	const slug = parseSlug(repoUrl);
 
@@ -216,7 +230,7 @@ export async function listMergeRequests(
 
 	if (!Array.isArray(rows)) throw new GhError('unknown', 'glab mr list returned non-array JSON');
 
-	const prs = rows.flatMap((row) => {
+	const merges = rows.flatMap((row) => {
 		if (typeof row !== 'object' || row === null) return [];
 
 		const item = row as Record<string, unknown>;
@@ -238,11 +252,11 @@ export async function listMergeRequests(
 			assignees: gitlabPeople(item.assignees)
 		};
 
-		return pr.number > 0 ? [pr] : [];
+		return pr.number > 0 ? [{ pr, row: item }] : [];
 	});
 
 	await Promise.all(
-		prs.map(async (pr) => {
+		merges.map(async ({ pr }) => {
 			try {
 				const view = await viewMerge(slug, pr.number, opts?.env);
 
@@ -254,5 +268,5 @@ export async function listMergeRequests(
 		})
 	);
 
-	return prs;
+	return merges;
 }

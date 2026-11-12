@@ -238,21 +238,21 @@ export async function apiMergeHeadRef(repoUrl: string, iid: number, env: Record<
 	return row.source_branch;
 }
 
-/** Open MRs, newest first; +/− come from each MR's diffs (zeroed if that fetch fails). */
-export async function apiMergeRequests(
+/** Open MRs, newest first, each with its list row; +/− come from each MR's diffs (zeroed if that fetch fails). */
+export async function apiMergeRows(
 	repoUrl: string,
 	env: Record<string, string>,
 	limit = 20
-): Promise<PullRequest[]> {
+): Promise<{ pr: PullRequest; row: Record<string, unknown> }[]> {
 	const rows = (await gitlabGet(
 		`${gitlabProject(repoUrl)}/merge_requests?state=opened&order_by=created_at&sort=desc&per_page=${limit}`,
 		env
 	)) as Record<string, unknown>[];
 
-	const prs = rows.map(toPull).filter((pr) => pr.number > 0);
+	const merges = rows.map((row) => ({ pr: toPull(row), row })).filter(({ pr }) => pr.number > 0);
 
 	await Promise.all(
-		prs.map(async (pr) => {
+		merges.map(async ({ pr }) => {
 			try {
 				const entries = await mergeDiffs(repoUrl, pr.number, env);
 
@@ -262,5 +262,5 @@ export async function apiMergeRequests(
 		})
 	);
 
-	return prs;
+	return merges;
 }
