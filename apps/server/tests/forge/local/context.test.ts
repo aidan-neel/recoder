@@ -24,6 +24,13 @@ afterEach(() => {
 const numbers = async (repo: Repo, sha: string) =>
 	(await prsForCommit(repo, 'local', sha, signal)).map((ref) => ref.number);
 
+/** The fixture repo's `recoder-forge.json`, inside its git dir where the forge keeps it. */
+function forgeFilePath(repo: Repo): string {
+	const dir = fileURLToPath(repo.url);
+
+	return join(git(dir, ['rev-parse', '--absolute-git-dir']), 'recoder-forge.json');
+}
+
 /** Commits `file` on the current branch with `message`, returning the commit. */
 async function commitFile(dir: string, file: string, message: string): Promise<string> {
 	await writeFile(join(dir, file), `${file}\n`);
@@ -68,10 +75,29 @@ test('a commit maps to the pull whose baseSha..head holds it, and a squash names
 	expect(await numbers(repo, root)).toEqual([]);
 });
 
+test('a local repo whose file URL contains a space still maps commits to its pulls', async () => {
+	const { repo, pull7Commit } = await localForgeFixture('recoder forge-');
+
+	repo.url = `file://${fileURLToPath(repo.url)}`;
+
+	expect(await numbers(repo, pull7Commit)).toEqual([7]);
+});
+
+test('a base revision git cannot resolve fails the lookup instead of matching a pull the commit is not in', async () => {
+	const { repo, squash } = await localForgeFixture();
+	const file = forgeFilePath(repo);
+	const forge = JSON.parse(await readFile(file, 'utf8'));
+
+	forge.pulls[1].baseSha = 'not-a-real-revision';
+	await writeFile(file, JSON.stringify(forge));
+
+	expect(await numbers(repo, squash)).toEqual([]);
+});
+
 test('a merge commit names its saved pull when the pull has no mergeSha, and a number with no saved pull maps to none', async () => {
 	const { repo, root } = await localForgeFixture();
 	const dir = fileURLToPath(repo.url);
-	const file = join(git(dir, ['rev-parse', '--absolute-git-dir']), 'recoder-forge.json');
+	const file = forgeFilePath(repo);
 	const forge = JSON.parse(await readFile(file, 'utf8'));
 
 	forge.pulls.push({ ...forge.pulls[0], number: 9, title: 'Write b', headRef: 'b.ts', baseSha: root });

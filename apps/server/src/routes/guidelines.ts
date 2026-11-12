@@ -20,6 +20,7 @@ import { streamGuidelinesDraft } from '../review/guidelines/guidelines-draft';
 import { LlmError } from '../models/llm';
 import { isReviewConfigured } from '../models/models';
 import { repoFileHost } from '../forge/repo-files';
+import { detectProvider } from '../forge/providers';
 import { proposalPath, readRepoGuidelinesFile } from '../review/guidelines/repo-layer';
 import { db } from '../store';
 import { settingsOperation } from '../storage/backend';
@@ -143,11 +144,15 @@ app.post('/repos/:id/propose', async (c) => {
 	if (content.length > MAX_GUIDELINES_CHARS) return tooLong(c);
 
 	const host = repoFileHost(repo);
+	const provider = repo.provider ?? detectProvider(repo.url);
 
 	if (!host.canWrite())
 		return c.json(
 			{
-				error: `Connect a ${repo.provider === 'gitlab' ? 'GitLab' : 'GitHub'} token with write access in Settings → Connections to open a pull request.`
+				error:
+					provider === 'local'
+						? 'Local repositories are read-only; edit the guidelines file in the repository instead.'
+						: `Connect a ${provider === 'gitlab' ? 'GitLab' : 'GitHub'} token with write access in Settings → Connections to open a pull request.`
 			},
 			401
 		);

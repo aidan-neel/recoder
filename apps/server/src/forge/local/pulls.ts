@@ -1,7 +1,7 @@
 import type { PullFile, PullRequest } from '@recoder/shared';
 import { GhError } from '../cli.js';
 import type { FetchedPull } from '../gh.js';
-import { localGit, localGitOutput } from './git.js';
+import { localGit, localGitOutput, LocalGitError } from './git.js';
 import { findLocalPull, localRepoPath, readLocalForge, type LocalPull } from './schema.js';
 
 /** Where a local pull request's head lives, as on GitHub, so the GitHub fetch refspec works against it. */
@@ -20,12 +20,19 @@ export function localPullUrl(repoUrl: string, n: number): string {
 
 /**
  * The head commit, always from `refs/pull/N/head` and never the metadata file,
- * so it matches what the sandbox fetches. A missing ref reads as a missing PR.
+ * so it matches what the sandbox fetches. A missing ref (exit 1) reads as a
+ * missing PR; any other git failure surfaces with git's own error.
  */
 export async function localHeadSha(repoPath: string, n: number, signal?: AbortSignal): Promise<string> {
-	return localGit(repoPath, ['rev-parse', '--verify', '--quiet', `${pullHeadRef(n)}^{commit}`], signal).catch(() => {
-		throw new GhError('not-found', `Pull request #${n} has no ${pullHeadRef(n)} in the repository`);
-	});
+	try {
+		return await localGit(repoPath, ['rev-parse', '--verify', '--quiet', `${pullHeadRef(n)}^{commit}`], signal);
+	} catch (err) {
+		if (err instanceof LocalGitError && err.code === 1) {
+			throw new GhError('not-found', `Pull request #${n} has no ${pullHeadRef(n)} in the repository`);
+		}
+
+		throw err;
+	}
 }
 
 /** A numstat count; binary files print `-`. */
