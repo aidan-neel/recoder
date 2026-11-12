@@ -23,6 +23,6 @@ export function useRepoStep(done: boolean): RepoStepView {
 
 	return {
 		signedIn,
-		description: repoDescription({ done, names: (repos ?? []).map((repo) => repo.name), signedIn })
+		description: repoDescription({ done, names: (repos ?? []).map((repo) => repo.name) })
 	};
 }

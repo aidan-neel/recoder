@@ -6,7 +6,6 @@ import Link from 'next/link';
 
 import { ForgeTile } from '@/components/common/forge-tile';
 import { OFFLINE_TEXT } from '@/lib/api/http';
-import { useConnections } from '@/lib/connections/connections-store';
 import type { AutoReviewSection } from '@/lib/settings/use-auto-review-section';
 import { useWatchRepo, type WatchRepoView } from '@/lib/settings/use-watch-repo';
 import { settingsHref } from '@/lib/shell/routes';
@@ -62,17 +61,11 @@ function LoadFailed({ error, retry }: { error: string | null; retry: Retry }) {
 	);
 }
 
-interface RepositoriesGroupProps {
-	repos: Repo[];
-	retry: Retry;
-}
+type RepositoriesGroupProps = Pick<AutoReviewSection, 'repos' | 'reposState' | 'reposError' | 'retry'>;
 
 /** The group's rows: one per repository, or why there are none. */
-function RepositoryRows({ repos, retry }: RepositoriesGroupProps) {
-	const status = useConnections((state) => state.reposStatus);
-	const error = useConnections((state) => state.reposError);
-
-	if (status === 'error' || status === 'offline') return <LoadFailed error={error} retry={retry} />;
+function RepositoryRows({ repos, reposState, reposError, retry }: RepositoriesGroupProps) {
+	if (reposState === 'failed') return <LoadFailed error={reposError} retry={retry} />;
 
 	if (repos.length === 0) return <NoRepositories />;
 
@@ -80,10 +73,10 @@ function RepositoryRows({ repos, retry }: RepositoriesGroupProps) {
 }
 
 /** Automations → Repositories: every tracked repository, each watched unless switched off. */
-export function RepositoriesGroup({ repos, retry }: RepositoriesGroupProps) {
+export function RepositoriesGroup(props: RepositoriesGroupProps) {
 	return (
 		<SettingsGroup title="Repositories">
-			<RepositoryRows repos={repos} retry={retry} />
+			<RepositoryRows {...props} />
 		</SettingsGroup>
 	);
 }

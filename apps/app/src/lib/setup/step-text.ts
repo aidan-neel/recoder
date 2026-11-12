@@ -57,9 +57,7 @@ export function providerDescription({
 }): string {
 	if (done) return connectedLine(providers, models);
 
-	return providerReady(manager, agentError)
-		? 'No providers yet. Add one, or connect a vLLM server, to pick models for reviews.'
-		: blockedLine(manager, agentError);
+	return providerReady(manager, agentError) ? 'Supplies the models reviews run on.' : blockedLine(manager, agentError);
 }
 
 /** "Tracking acme/api", or how many once there are several. */
@@ -67,21 +65,9 @@ export function trackingLine(names: string[]): string {
 	return names.length === 1 ? `Tracking ${names[0]}` : `Tracking ${names.length} repositories`;
 }
 
-/** The repository step's one line: what is tracked once done, else what to do. */
-export function repoDescription({
-	done,
-	names,
-	signedIn
-}: {
-	done: boolean;
-	names: string[];
-	signedIn: boolean;
-}): string {
-	if (done) return trackingLine(names);
-
-	return signedIn
-		? 'Its open pull requests show up in the list.'
-		: 'Connect GitHub or GitLab to list your repositories, or add one by URL.';
+/** The repository step's one line: what is tracked once done, else what tracking one brings. */
+export function repoDescription({ done, names }: { done: boolean; names: string[] }): string {
+	return done ? trackingLine(names) : 'Its open pull requests show in the list.';
 }
 
 /** The model reviews run on, by name; null when none resolves. */

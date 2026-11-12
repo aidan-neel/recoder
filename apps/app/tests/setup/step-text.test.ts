@@ -8,7 +8,6 @@ import {
 	connectedLine,
 	providerDescription,
 	providerReady,
-	repoDescription,
 	reviewModelName,
 	shortList,
 	trackingLine
@@ -92,8 +91,8 @@ describe('the provider step’s description', () => {
 			'Set by the RECODER_REVIEW_* variables'
 		);
 
-		expect(providerDescription({ done: false, providers: [], models: null, manager, agentError: null })).toContain(
-			'No providers yet'
+		expect(providerDescription({ done: false, providers: [], models: null, manager, agentError: null })).toBe(
+			'Supplies the models reviews run on.'
 		);
 
 		expect(
@@ -107,16 +106,6 @@ describe('the repository step’s lines', () => {
 		expect(trackingLine(['web'])).toBe('Tracking web');
 		expect(trackingLine(['web', 'api'])).toBe('Tracking 2 repositories');
 		expect(trackingLine([])).toBe('Tracking 0 repositories');
-	});
-
-	test('signed in promises the list; otherwise it points at connecting a forge or a URL', () => {
-		expect(repoDescription({ done: true, names: ['web'], signedIn: true })).toBe('Tracking web');
-
-		expect(repoDescription({ done: false, names: [], signedIn: true })).toBe(
-			'Its open pull requests show up in the list.'
-		);
-
-		expect(repoDescription({ done: false, names: [], signedIn: false })).toContain('Connect GitHub or GitLab');
 	});
 });
 
