@@ -228,8 +228,9 @@ for example `codex-cli`); `<Cli>` is the class prefix (`CodexCli`). Copy the sha
 
    `groupsModelsUnderName` is `true` unless the pickers should group its models under another name.
 
-9. `apps/server/tests/setup.ts`: blank the pin in `keepRealAgentsOut` (`process.env.RECODER_<ID>_BIN = '';`), so no
-   test runs the real CLI.
+9. `apps/server/tests/helpers/agent-bins.ts`: add `RECODER_<ID>_BIN` to `AGENT_BIN_PINS`, the one list of binary
+   pins. `apps/server/tests/setup.ts` and `apps/server/tests/cli/child-env.ts` blank every pin on it, so no test —
+   or process a test starts — runs the real CLI.
 
 ### 4. Write the fake and the tests
 
@@ -249,9 +250,13 @@ for example `codex-cli`); `<Cli>` is the class prefix (`CodexCli`). Copy the sha
       neither, and turns imports off;
     - the event parser: steps, usage, text, reasoning;
     - a later prompt resumes the session;
-    - signed out is a 401 naming the sign-in command, and a usage cap is a `UsageLimitError`;
+    - the failure modes: `testPromptFailures(openRun, cases)` from
+      `apps/server/tests/helpers/native-agent.ts` runs one `[mode, status, message, usageLimit?]` row per fake
+      mode — signed out is a 401 naming the sign-in command, a usage cap is a `UsageLimitError`, and the rest map
+      to their status. `testCallFailures(complete, cases)` does the same for `complete()` calls in `<cli>.test.ts`;
     - malformed output fails the prompt, and the error does not contain the fake credential;
-    - the output cap: `flood` stops the CLI with "printed more than";
+    - the output cap: `testOutputCapPrompt(openRun)` (`native-agent.ts`) checks `flood` stops the CLI with
+      "printed more than";
     - abort and timeout: call `testPromptStops(() => openRun('spawn'))` from
       `apps/server/tests/helpers/native-agent.ts`; it checks that aborting kills the whole process group
       (`spawnedPids`, `allGone` in `apps/server/tests/helpers/fake-claude.ts`) and that a timeout says "timed out";

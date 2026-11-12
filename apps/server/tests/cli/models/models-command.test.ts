@@ -65,6 +65,9 @@ test('a signal while Devin lists its models stops the process, ends the listing 
 
 	const { env: pathEnv } = await fakeBin('devin', HANGING_DEVIN);
 	const env = { ...childEnvironment(dir), PATH: pathEnv.PATH, FAKE_DEVIN_DIR: dir };
+
+	delete env.RECODER_DEVIN_BIN;
+
 	const child = Bun.spawn([process.execPath, MAIN_ENTRY, 'models'], { env, stdout: 'pipe', stderr: 'ignore' });
 
 	await startedProcess(dir);

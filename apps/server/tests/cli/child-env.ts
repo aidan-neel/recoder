@@ -1,6 +1,7 @@
 import { mkdirSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { AGENT_BIN_PINS } from '../helpers/agent-bins';
 
 /**
  * The only variables a process a test starts gets: what it needs to run, a home, a work folder and a data folder of
@@ -22,8 +23,7 @@ export function childEnvironment(dataDir: string): Record<string, string> {
 		TMPDIR: tmpdir(),
 		RECODER_DATA_DIR: dataDir,
 		RECODER_WORKDIR: work,
-		RECODER_OPENCODE_BIN: '',
-		RECODER_CLAUDE_BIN: ''
+		...Object.fromEntries(AGENT_BIN_PINS.map((pin) => [pin, '']))
 	};
 }
 
