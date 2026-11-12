@@ -82,7 +82,7 @@ export function toModelOption(entry: ModelEntry): ModelOption {
 	};
 }
 
-/** ChatGPT models only return summaries of their reasoning, never the reasoning itself. */
+/** Codex models only return summaries of their reasoning, never the reasoning itself. */
 export function summarizesReasoning(modelId: string | null | undefined): boolean {
 	if (!modelId) return false;
 

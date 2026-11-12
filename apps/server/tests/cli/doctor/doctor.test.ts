@@ -167,25 +167,23 @@ test('an unlisted OpenCode verifier model fails the model check when reviewer an
 	await expectUnlistedOpenCodeFails();
 });
 
-test('a signed-out ChatGPT verifier model fails the agent sign-in check when reviewer and worker use HTTP', async () => {
+test('a signed-out Codex verifier model fails the agent sign-in check when reviewer and worker use HTTP', async () => {
 	setReviewOverrides({
 		baseUrl: 'http://model.test/v1',
 		apiKey: 'sk-secret-value',
-		models: [
-			{ id: 'test', label: 'Test', model: 'test-model' },
-			{ id: 'gpt', provider: 'codex', label: 'GPT', model: 'gpt-x' }
-		],
+		models: [{ id: 'test', label: 'Test', model: 'test-model' }],
 		orchestratorModelId: 'test',
 		specialistModelId: 'test',
-		verifierModelId: 'gpt'
+		verifierModelId: 'codex:gpt-6-sol'
 	});
 
-	const sign = spyOn(codex, 'signedIn').mockResolvedValue(false);
+	const status = { ...(await codex.detect()), installed: true, signedIn: false };
+	const sign = spyOn(codex, 'quickStatus').mockResolvedValue(status);
 
 	try {
 		const checks = await checkAgentSignIns();
 
-		expect(checks).toContainEqual(expect.objectContaining({ id: 'agent:chatgpt', ok: false, required: true }));
+		expect(checks).toContainEqual(expect.objectContaining({ id: 'agent:codex', ok: false, required: true }));
 	} finally {
 		sign.mockRestore();
 	}

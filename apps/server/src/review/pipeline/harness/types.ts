@@ -98,7 +98,7 @@ export interface AdaptiveReviewResult {
 	coverageGaps: CoverageGap[];
 	assignments: ReviewAssignment[];
 	error?: string;
-	/** Set when a model call stopped the review, e.g. ChatGPT is signed out. */
+	/** Set when a model call stopped the review, e.g. the agent CLI is signed out. */
 	failure?: ModelFailure;
 	/** Obligation counts and answers; absent unless `RECODER_OBLIGATIONS=1`. */
 	obligations?: ObligationReport;

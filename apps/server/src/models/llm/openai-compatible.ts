@@ -107,7 +107,7 @@ export async function readChatResponse(res: Response, opts: ChatOptions): Promis
 	const body = (await res.json()) as ChatResponse;
 	const choice = body.choices?.[0];
 
-	opts.onUsage?.(normalizeTokenUsage(body.usage, 'openai-compatible'));
+	opts.onUsage?.(normalizeTokenUsage(body.usage));
 
 	const reasoning = choice?.message?.reasoning_content ?? choice?.message?.reasoning;
 

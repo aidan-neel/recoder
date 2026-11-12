@@ -4,9 +4,8 @@
  * API-key models use OpenAI-compatible chat completions, so one client covers
  * vLLM (`http://host:8000/v1`), OpenRouter
  * (`https://openrouter.ai/api/v1`), and DashScope
- * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). Subscription
- * entries explicitly select the direct ChatGPT OAuth adapter instead; they never
- * inherit an API endpoint or key from the shared environment.
+ * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). A model an agent
+ * CLI runs has an id `<agent id>:<model>` and goes through that agent's adapter.
  *
  * With no models saved, the shared environment names one:
  *
@@ -143,6 +142,14 @@ export function configForVerifier(): ModelConfig {
 }
 
 /**
+ * Every stage's model, in stage order: Review, worker, verifier. Code that must cover each model a review can call
+ * (sign-in checks, doctor) reads this list, so a new stage cannot be missed in one copy.
+ */
+export function stageConfigs(): readonly [review: ModelConfig, worker: ModelConfig, verifier: ModelConfig] {
+	return [configForOrchestrator(), configForSubagent(), configForVerifier()];
+}
+
+/**
  * Whether the second model is a different model or effort from the Review
  * model. Only then does handing a reviewer's task to a worker save Review
  * usage; on the same model it only adds a conversation.
@@ -236,16 +243,6 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 
 	if (entry) {
 		const reasoningEffort = supportedEffort(requested ?? undefined, entry.efforts, entry.defaultEffort);
-
-		if (entry.provider === 'codex') {
-			return {
-				provider: 'codex',
-				model: entry.model,
-				baseUrl: '',
-				apiKey: '',
-				reasoningEffort: reasoningEffort ?? entry.defaultEffort ?? 'medium'
-			};
-		}
 
 		const runtime = resolveRuntime(entry.model, entry.runtime);
 		const hosted = hostedProvider(entry.source);

@@ -7,8 +7,6 @@ import type {
 	AgentStatus,
 	CatalogModel,
 	HostedProvider,
-	CodexConnection,
-	CodexModel,
 	CreateRepoInput,
 	FailureAction,
 	CreateReviewInput,
@@ -154,10 +152,6 @@ async function readSse(res: Response, onEvent: (data: unknown) => void): Promise
 }
 
 export const serverApi = {
-	getCodexStatus: () => req<CodexConnection>('/api/settings/codex/status'),
-	connectCodex: () => req<CodexConnection>('/api/settings/codex/connect', { method: 'POST' }),
-	disconnectCodex: () => req<{ ok: boolean }>('/api/settings/codex/disconnect', { method: 'POST' }),
-	getCodexModels: () => req<CodexModel[]>('/api/settings/codex/models'),
 	listRepos: () => req<Repo[]>('/api/repos'),
 	createRepo: (input: CreateRepoInput) => req<Repo>('/api/repos', { method: 'POST', body: JSON.stringify(input) }),
 	previewPr: (repoId: string, n: number) => req<PullPreview>(`/api/repos/${repoId}/pulls/${n}`),

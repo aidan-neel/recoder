@@ -231,9 +231,9 @@ class NativeRun<T> {
 		if (isAuthFailure(err) || isUsageLimit(err, opts.config))
 			throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));
 
-		if (isRateLimitError(err, opts.config.provider)) recordLlmRateLimit(this.endpoint);
+		if (isRateLimitError(err)) recordLlmRateLimit(this.endpoint);
 
-		if (isTransientLlmError(err, opts.config.provider) && this.canRepair()) {
+		if (isTransientLlmError(err) && this.canRepair()) {
 			opts.onLog?.(`${opts.label} hit a provider error; resuming: ${err.message}`);
 			await sleep(RESUME_BACKOFF_MS * this.repaired, opts.signal).catch(() => {});
 			throwIfAborted(opts.signal);

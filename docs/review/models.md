@@ -7,7 +7,7 @@ A review uses three stage model picks: the Review model (orchestrator), a second
 `ModelProvider` in `packages/shared/src/models.ts` has five values:
 
 - **openai-compatible**: any endpoint that serves `POST {baseUrl}/chat/completions` (vLLM, OpenRouter, DashScope). This is the default when a config has no provider. A connected vLLM server's models are this provider too, resolved from `vllm:` ids.
-- **codex**: ChatGPT through the user's subscription. A direct OAuth adapter in `apps/server/src/agents/codex/` calls ChatGPT. It needs no base URL or key.
+- **codex**: a model reached through the user's Codex CLI, signed in with its own `codex login`. Adapter: `apps/server/src/agents/codex/codex.ts`. Its ids are `codex:<model>`.
 - **opencode**: a model reached through the user's OpenCode CLI. Adapter: `apps/server/src/agents/opencode/opencode.ts`.
 - **claude-code**: a Claude model reached through the user's Claude Code CLI. Adapter: `apps/server/src/agents/claude-code/claude-code.ts`.
 - **devin**: a model reached through the user's Devin CLI. Adapter: `apps/server/src/agents/devin/devin.ts`.
@@ -44,7 +44,8 @@ Effort requested:
 Effort checked (`supportedEffort`):
 
 - Saved entries and Claude Code models that list levels: a requested effort the model does not offer becomes its default effort, else `medium` if offered, else the first offered level.
-- Saved entries with no requested effort send none. A ChatGPT entry then uses its default effort, else `medium`.
+- Saved entries with no requested effort send none.
+- Codex: a requested effort the model does not list becomes its default effort, else `medium`. Before the model list is read, the effort is checked against Low to Max. The CLI's `ultra` level is not offered.
 - Claude Code with no requested effort uses the model's default (`high`). Models with no levels (Haiku 4.5) send none.
 - OpenCode: the effort is passed through. The transport checks it against the model's variants.
 - The shared-environment model (no saved entries): the requested effort is passed through unchecked.
@@ -62,7 +63,7 @@ Other entry points:
 
 `modelEntrySchema` in `apps/server/src/review/session/review-settings.ts` validates an entry. `StoredModelEntry` is an entry with its `id` set. Fields:
 
-- `provider`: `openai-compatible` or `codex` only.
+- `provider`: `openai-compatible` only, or left out.
 - `source`: a hosted provider id (`HOSTED_PROVIDERS` in `apps/server/src/models/model-providers.ts`: `opencode-go`, `opencode`, `openrouter`).
 - `id`, `label`, `model`.
 - `baseUrl`, `apiKey`.
@@ -71,7 +72,6 @@ Other entry points:
 
 How `entryConfig` turns an entry into a config:
 
-- A `codex` entry keeps no source, base URL or key.
 - An entry with `source` uses that provider's base URL and the key saved in `connections` for it. With no key saved, it throws `ModelConfigError`.
 - Any other entry uses its own `baseUrl` and `apiKey`, else the shared ones. With no base URL, it throws `ModelConfigError`.
 
@@ -79,7 +79,7 @@ Id formats: `opencode:<provider>/<model>`, `claude-code:<model>`, `devin:<model>
 
 ## Agent CLI adapters
 
-Both adapters are listed in `AGENTS` in `apps/server/src/agents/registry.ts`. `agentModels()` returns their models; an adapter that is missing or down adds none.
+The adapters are listed in `AGENTS` in `apps/server/src/agents/registry.ts`. `agentModels()` returns their models; an adapter that is missing or down adds none.
 
 OpenCode (`apps/server/src/agents/opencode/`):
 
@@ -94,6 +94,25 @@ Claude Code (`apps/server/src/agents/claude-code/`):
 - The model list is static (`claudeCodeModels` in `apps/server/src/agents/claude-code/claude-code-models.ts`). Context windows are 1M, except 200K for Haiku 4.5.
 - The child process does not inherit `RECODER_*`, `ANTHROPIC_*`, `OPENAI_*`, `CLAUDE_*` other than `CLAUDE_CONFIG_DIR` and `CLAUDE_SECURESTORAGE_CONFIG_DIR`, the prompt-caching, thinking and compaction switches, or any token, key, secret or password variable (`claudeCodeEnv`).
 
+Codex (`apps/server/src/agents/codex/`), checked against codex-cli 0.167.0:
+
+- `codex.complete()` spawns one `codex exec --ephemeral --json` per call, in an empty directory, with the system prompt in a scratch file (`model_instructions_file`) and the turns on standard input. It saves no session.
+- A pipeline agent's run (`CodexRun` in `codex-run.ts`) starts one session with `codex exec` and resumes it with `codex exec resume <id>` for each later prompt. Closing the run deletes the session with `codex delete --force` and removes its scratch directory.
+- `callArgs` in `codex-process.ts` builds the flags: `--ignore-user-config`, `--ignore-rules` and `--strict-config`; `--disable` for the shell, exec, image, subagent, apps, plugins, hooks, memories, browser and computer-use features; and `-c` overrides for the read-only sandbox, `approval_policy="never"`, web search off, no project docs, no saved history, and a model catalog with no sub-agents (below). Recoder's MCP server is the only server it gets.
+- Sub-agents: a model's `multi_agent_version` in the CLI's catalog gives it the sub-agent tools (`v1` a deferred `multi_agent_v1` namespace, `v2` the `collaboration` namespace with `spawn_agent`), and `--disable multi_agent` leaves them on. So the adapter reads the catalog once with `codex debug models`, writes it to a scratch file without that field (`catalogWithoutSubagents` in `codex-models.ts`), and every call names the file with `-c model_catalog_json`. A request recorded from `codex exec` under these flags offers `exec`, `wait` and `request_user_input` and no sub-agent tool. When the catalog cannot be read, no call runs.
+- Known gaps, which no flag or `-c` key of codex-cli 0.167.0 turns off:
+  - The user's global instructions, `$CODEX_HOME/AGENTS.md` (or `AGENTS.override.md`), go to the model as a user message on every call, under `--ignore-user-config` and `project_doc_max_bytes=0`. Recoder cannot point `CODEX_HOME` elsewhere, since the sign-in lives there, so the user's own instructions can shape a review or a reply.
+  - The CLI's own `exec` (code mode), `wait` and `request_user_input` tools, which stay in the request under every `--disable` flag above. Through `exec` the model also reaches `apply_patch`. The read-only sandbox and the empty directory contain what these tools can do.
+- Events are JSON lines (`thread.started`, `turn.*`, `item.*`, `error`), parsed with zod in `codex-output.ts`. An answer and a reasoning summary arrive whole, when the item completes, not as deltas. `turn.completed` reports the session's running usage, so each prompt's usage is the difference from the one before.
+- Models are listed with `codex debug models`: the `list` entries, with their context windows and the efforts Recoder names.
+- A usage cap becomes `UsageLimitError` with the CLI's reset time in the message. A 401 asks the user to run `codex login`. Recoder never reads or moves the CLI's sign-in.
+- The child process does not inherit `RECODER_*`, `OPENAI_*`, `ANTHROPIC_*`, `CODEX_*` other than `CODEX_HOME`, or any token, key, secret or password variable (`codexEnv`).
+- `RECODER_CODEX_BIN` pins the binary, and `RECODER_CODEX_CONCURRENCY` (default 4) caps its processes.
+
+Before a review starts, `assertAgentsSignedIn` checks that every agent CLI the three stage picks use is signed in (`signedOutAgent` over `stageConfigs()` in `apps/server/src/models/models.ts`).
+
+Settings saved before the Codex CLI adapter held `provider: 'codex'` entries for Recoder's own ChatGPT sign-in. Reading the settings drops those entries and moves every pick that named one to `codex:<model>` (`movedPicks` in `apps/server/src/review/session/chatgpt-migration.ts`); the server's start saves the file again and deletes the old tokens (`chatgpt-auth.json`, `codex/auth.json`) from the data dir.
+
 Prompt caching on Claude Code, measured with CLI 2.1.295 on a subscription (1-hour cache):
 
 - A resumed fork reads the whole earlier transcript from cache.
@@ -105,7 +124,7 @@ Prompt caching on Claude Code, measured with CLI 2.1.295 on a subscription (1-ho
 `transportFor` in `apps/server/src/models/llm/transports.ts` maps a provider to one attempt at a call:
 
 - openai-compatible: `streamChat` or `requestChat`. A non-streaming call that wants reasoning text still streams.
-- codex: `codex.complete()` from `apps/server/src/agents/codex/codex.ts`. A call that belongs to a `ChatConversation` sends its id as `prompt_cache_key`, so the turns of one agent share a prompt cache.
+- codex: `codex.complete()` from `apps/server/src/agents/codex/codex.ts`.
 - opencode: `opencode.complete()`.
 - claude-code: `claudeCode.complete()`.
 
@@ -154,7 +173,7 @@ Usage rules:
 
 - Every count is provider-reported or null. Null is never coerced to zero.
 - Cached and reasoning counts are breakdowns. They are not added to the total.
-- `normalizeTokenUsage` maps the raw usage. With provider `codex` it reads camelCase keys, which the ChatGPT adapter builds from the Responses usage (`apps/server/src/agents/codex/chatgpt-responses.ts`). Otherwise it reads `prompt_tokens`, `completion_tokens`, `total_tokens`, `prompt_tokens_details` and `completion_tokens_details`. A missing total becomes input plus output when both exist.
+- `normalizeTokenUsage` maps the raw usage. It reads `prompt_tokens`, `completion_tokens`, `total_tokens`, `prompt_tokens_details` and `completion_tokens_details`. A missing total becomes input plus output when both exist.
 - `aggregateTokenCalls` sums each field over calls and counts in `reportedCalls` how many calls reported it.
 
 Routes, in `apps/server/src/routes/reviews/lifecycle.ts`:
@@ -197,7 +216,7 @@ Hosted provider keys live in `connections`, by provider id. They are not in the 
 - Ceiling: `RECODER_LLM_CONCURRENCY` (default 64) for each endpoint. For `claude-code` it is the smaller of that and `RECODER_CLAUDE_CODE_CONCURRENCY` (default 8). Both are read by `envCount`.
 - Backoff: below the ceiling sits an effective limit. A rate-limit error halves it, never below 4 (or the ceiling, if lower). It is cut at most once per 10-second cooldown.
 - Recovery: after the cooldown, each successful call raises the limit by one until it reaches the ceiling.
-- Rate-limit errors are HTTP 429, 529 or an "overloaded" message (`isRateLimitError` in `apps/server/src/models/llm/errors.ts`). A 429 from codex, claude-code or opencode does not count: it means a usage cap or a spent plan.
+- Rate-limit errors are HTTP 429, 529 or an "overloaded" message (`isRateLimitError` in `apps/server/src/models/llm/errors.ts`). A `UsageLimitError` does not count: it means a usage cap or a spent plan.
 - Lowering the limit never revokes a held slot. New callers wait until the active count is under it.
 - Fair turns: each review's calls wait in their own lane (`withLlmLane`, opened by `withReviewMetrics`). A freed slot goes to the next lane in round-robin order and to that lane's oldest waiter, so one large review cannot hold back another. Calls made outside a review share one lane.
 - `acquireLlmSlot()` is called only when a call is ready to run. It waits up to the timeout its caller passes. `runChat` passes the call's own budget, capped by its settle time. A wait that times out throws `CapacityError` (`apps/server/src/models/llm/errors.ts`), a failure kind of its own: the model never saw the call.

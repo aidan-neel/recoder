@@ -1,11 +1,11 @@
-import { isReviewConfigured } from '../../models/models.js';
+import { signedOutAgent, signedOutReason } from '../../models/agent-sign-in.js';
+import { isReviewConfigured, stageConfigs } from '../../models/models.js';
 import { CliError, EXIT, notReadyError } from '../exit.js';
 import type { ProgressSink } from '../progress.js';
 import type { ReviewReport } from '../report/report.js';
 import type { ReviewOptions } from '../review/options.js';
 import type { ResolvedTarget, TargetRequest } from '../target/resolve-target.js';
 import { bootHeadless } from './boot.js';
-import { assertChatGptSignedIn } from './chatgpt-signin.js';
 import { MODEL_LOOKUP_LIMIT_MS } from './model-choices.js';
 import { reviewResolvedTarget } from './run-harness.js';
 import { openRunSignal, type RunSignal } from './run-signal.js';
@@ -36,7 +36,7 @@ export async function runReviewFlow(
 
 	return withRunScope(options.tuning, { stop, limitMs: MODEL_LOOKUP_LIMIT_MS }, async () => {
 		assertReviewConfigured();
-		await assertChatGptSignedIn();
+		await assertAgentsSignedIn();
 		progress({ type: 'stage', stage: 'checkout' });
 
 		const target = await resolveWithin(resolve, options, stop);
@@ -82,4 +82,14 @@ function explainCancellation(error: unknown, stop: RunSignal): unknown {
 
 function assertReviewConfigured(): void {
 	if (!isReviewConfigured()) throw notReadyError(REVIEW_NOT_CONFIGURED);
+}
+
+/**
+ * Stops the run before it fetches or checks out anything when the agent CLI of a model it uses says it is signed
+ * out, as the server's review does. The CLI's status command is asked; no model call is made.
+ */
+async function assertAgentsSignedIn(): Promise<void> {
+	const signedOut = await signedOutAgent(stageConfigs());
+
+	if (signedOut) throw notReadyError(signedOutReason(signedOut));
 }
