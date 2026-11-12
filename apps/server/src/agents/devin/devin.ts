@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { CliAgent, callDeadline, cliOutput, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import { callDeadline, cliOutput, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, streamCli } from '../cli-stream';
+import { SessionCliAgent } from '../session-run';
 import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
 import { parseDevinModels } from './devin-models';
 import { DEVIN_LOGIN, exitError, readExport, tokenUsage, type DevinExport } from './devin-output';
@@ -35,7 +36,7 @@ const TOOL_RETRIES = 2;
  * The CLI signs in itself. Recoder never reads its credential file; it runs the CLI without the server's keys
  * in its environment and under a config that denies every tool, and reads what the CLI prints and exports.
  */
-export class DevinAgent extends CliAgent {
+export class DevinAgent extends SessionCliAgent {
 	readonly id = 'devin';
 	readonly name = 'Devin';
 	readonly install = INSTALL;
@@ -71,15 +72,7 @@ export class DevinAgent extends CliAgent {
 
 		if (!path) throw new LlmError(0, `Devin is not installed. Install it with: ${INSTALL}`);
 
-		const host = {
-			path,
-			env: this.env,
-			running: this.running,
-			scratch: this.scratch,
-			forget: (session: string) => this.forget(path, session)
-		};
-
-		return DevinRun.open(host, options);
+		return DevinRun.open(this.sessionHost(path), options);
 	}
 
 	/**
@@ -162,7 +155,7 @@ export class DevinAgent extends CliAgent {
 	 * has exited or run out of time, so a stalled `rm` never holds a review. Its exit code is not read: a session
 	 * the CLI never saved has nothing to delete.
 	 */
-	private async forget(path: string, session: string): Promise<void> {
+	protected async forget(path: string, session: string): Promise<void> {
 		await this.output(path, ['rm', session, '--force'], STATUS_TIMEOUT_MS);
 	}
 

@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { CliAgent } from './cli-process';
 import type { AgentRunOptions } from './contract';
 import { ProcessRun } from './process-run';
 
@@ -56,5 +57,22 @@ export abstract class SessionRun<Files> extends ProcessRun {
 		this.host.scratch.delete(this.root);
 		await rm(this.root, { recursive: true, force: true });
 		if (this.session) await this.host.forget(this.session);
+	}
+}
+
+/** A CLI adapter whose runs each save a session, which it deletes with {@link forget}. */
+export abstract class SessionCliAgent extends CliAgent {
+	/** Deletes the session the CLI at `path` saved; resolves once it is gone. */
+	protected abstract forget(path: string, session: string): Promise<void>;
+
+	/** What a run of the CLI at `path` needs of this adapter. */
+	protected sessionHost(path: string): SessionHost {
+		return {
+			path,
+			env: this.env,
+			running: this.running,
+			scratch: this.scratch,
+			forget: (session) => this.forget(path, session)
+		};
 	}
 }

@@ -4,9 +4,10 @@ import { join } from 'node:path';
 import type { AgentStatus, ModelEntry, ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { CliAgent, callDeadline, cliOutput, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import { callDeadline, cliOutput, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
+import { SessionCliAgent } from '../session-run';
 import type { AgentEvent, AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
 import { codexEffort, parseCodexModels } from './codex-models';
 import { CODEX_LOGIN, CodexReader } from './codex-output';
@@ -28,7 +29,7 @@ const FORGET_TIMEOUT_MS = 10_000;
  * without the server's keys in its environment, without the user's config, rules, hooks, plugins or own tools, and
  * reads the JSONL events the CLI prints.
  */
-export class CodexAgent extends CliAgent {
+export class CodexAgent extends SessionCliAgent {
 	readonly id = 'codex';
 	readonly name = 'Codex';
 	readonly install = INSTALL;
@@ -65,15 +66,7 @@ export class CodexAgent extends CliAgent {
 	async openRun(options: AgentRunOptions): Promise<AgentRun> {
 		const path = this.requirePath();
 
-		const host = {
-			path,
-			env: this.env,
-			running: this.running,
-			scratch: this.scratch,
-			forget: (session: string) => this.forget(path, session)
-		};
-
-		return CodexRun.open(host, options);
+		return CodexRun.open(this.sessionHost(path), options);
 	}
 
 	/**
@@ -150,7 +143,7 @@ export class CodexAgent extends CliAgent {
 	 * Deletes the session the CLI saved for a run, which holds the review's prompts, and resolves once `codex delete`
 	 * has exited. Its exit code is not read: a session the CLI never saved has nothing to delete.
 	 */
-	private async forget(path: string, session: string): Promise<void> {
+	protected async forget(path: string, session: string): Promise<void> {
 		await this.output(path, ['delete', '--force', session], FORGET_TIMEOUT_MS);
 	}
 
