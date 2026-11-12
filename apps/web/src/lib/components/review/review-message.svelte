@@ -19,16 +19,13 @@
 	 */
 	let {
 		message,
-		quietSignIn,
 		quietUsage,
 		onRetry,
 		startingReview,
 		onStartReview
 	}: {
 		message: ReviewChatMessage;
-		/** A later message already carries the sign-in notice; this one only notes it went unanswered. */
-		quietSignIn: boolean;
-		/** A later message already carries the usage-limit notice. */
+		/** A later message already carries the usage-limit notice; this one only notes it went unanswered. */
 		quietUsage: boolean;
 		/** Re-asks the question that led to this reply. */
 		onRetry: (() => void) | null;
@@ -91,20 +88,15 @@
 			{@render response()}
 		</Message.Content>
 	{/if}
-	{#if message.failure?.signIn && quietSignIn}
-		{#if message.status === 'error'}<Typography.Metadata class="text-fg-faint"
-				>Not answered: signed out of ChatGPT</Typography.Metadata
-			>{/if}
-	{:else if message.failure?.usageLimit && quietUsage}
+	{#if message.failure?.usageLimit && quietUsage}
 		{#if message.status === 'error'}<Typography.Metadata class="text-fg-faint"
 				>Not answered: {message.failure.usageLimit.name} was out of usage</Typography.Metadata
 			>{/if}
 	{:else if message.failure}
 		<FailureNotice
 			class="message-failure"
-			title={message.failure.signIn ? 'Signed out of ChatGPT' : 'Reply failed'}
+			title="Reply failed"
 			reason={message.failure.reason}
-			signIn={message.failure.signIn}
 			usageLimit={message.failure.usageLimit}
 			{onRetry}
 		/>

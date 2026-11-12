@@ -74,7 +74,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 		throw new ApiError(
 			body?.error ?? `API ${res.status}`,
-			body?.action === 'sign-in' || body?.action === 'settings' ? body.action : undefined,
+			body?.action === 'settings' ? body.action : undefined,
 			body?.usageLimit && typeof body.usageLimit.name === 'string' ? body.usageLimit : undefined
 		);
 	}

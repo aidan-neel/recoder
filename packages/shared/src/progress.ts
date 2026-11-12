@@ -181,16 +181,14 @@ export interface ReviewCodeContext {
 }
 
 /**
- * What the developer can do about a failed request: sign in, or set up a model. The server no longer sends
- * `sign-in` (an agent CLI's signed-out message names its own sign-in command); `apps/app` still reads it.
+ * What the developer can do about a failed request: set up a model in Settings. A signed-out agent CLI needs no
+ * action here, since its message names its own sign-in command.
  */
-export type FailureAction = 'sign-in' | 'settings';
+export type FailureAction = 'settings';
 
 /** Why a model call failed, in words for the developer. */
 export interface ModelFailure {
 	reason: string;
-	/** Signing in fixes it. No server path sets it any more; `apps/app` still reads it. */
-	signIn?: boolean;
 	/** The model's plan ran out of usage; another model or waiting fixes it. */
 	usageLimit?: UsageLimit;
 }
