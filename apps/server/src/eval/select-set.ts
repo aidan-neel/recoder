@@ -45,7 +45,9 @@ function main(): number {
 		.split(',')
 		.map((report) => ({ path: resolve(report.trim()), report: readReport(resolve(report.trim())) }));
 
-	const { set, picks } = selectSet(basename(dataset), readLabels(dataset), reports, { size, name: values.out });
+	const labels = readLabels(dataset);
+	const { set, picks } = selectSet(basename(dataset), labels, reports, { size, name: values.out });
+	const heldOut = labels.filter((label) => label.holdout).length;
 
 	mkdirSync(dirname(path), { recursive: true });
 	writeFileSync(path, `${JSON.stringify(set, null, '\t')}\n`);
@@ -54,6 +56,7 @@ function main(): number {
 		[
 			`Task set ${set.name}: ${set.tasks.length} PRs → ${path}`,
 			...picks.map((pick) => `  ${pick.id.padEnd(20)} ${pick.reasons.join(' · ')}`),
+			...(heldOut ? ['', `${heldOut} holdout labels were not candidates.`] : []),
 			'',
 			'Found/planted on the set next to the full report (in-sample: the set was picked from these reports)',
 			...reports.map(({ path: source, report }) => {

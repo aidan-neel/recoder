@@ -14,7 +14,7 @@ Flags come from `parseOptions` in `apps/server/src/eval/benchmark.ts` and `parse
 
 - `--dataset <dir>`: required. The dataset directory (see Dataset Layout).
 - `--only <id,id>`: review only these label ids. Task set name `only`.
-- `--set <name>`: review only the ids in `<dataset>/sets/<name>.json`. Cannot combine with `--only`.
+- `--set <name>`: review only the ids in `<dataset>/sets/<name>.json`. `--set holdout` reviews only the labels marked holdout instead of reading a file. Cannot combine with `--only`.
 - `--judge review|second|<model id>`: default `review`. `review` uses the orchestrator model's config. `second` uses the specialist (subagent) model's config. Anything else is a model id: a settings model entry id, or an `opencode:` or `claude-code:` id.
 - `--judge-effort <effort>`: one of `REASONING_EFFORTS` in `packages/shared/src/models.ts` (`minimal`, `low`, `medium`, `high`, `xhigh`, `max`). Applies only to a model id judge.
 - `--runs <n>`: runs per PR. Default 1.
@@ -54,11 +54,12 @@ It is rewritten after every run.
 
 A dataset is a directory:
 
-- `labels/`: one JSON file per labeled PR. Each is a `PrLabel` (`apps/server/src/eval/task-set.ts`): `id`, `codebase`, `repo`, `pull`, `headSha`, `verified`, `defects`.
+- `labels/`: one JSON file per labeled PR. Each is a `PrLabel` (`apps/server/src/eval/task-set.ts`): `id`, `codebase`, `repo`, `pull`, `headSha`, `verified`, `defects`, `holdout`.
 - `repo` is the local forge repo's `file://` URL. Several labels can share one repo.
 - Each defect is a `LabeledDefect` (`apps/server/src/eval/benchmark-score.ts`): `id`, `kind` (`bug` or `quality`), `category`, `file`, `line`, `endLine`, `title`, `description`, `fix`.
 - A label with no defects is a control PR. It only measures what a review publishes wrongly.
-- `sets/`: named task sets, `<name>.json`. Schema `TaskSet`: `name`, `tasks`, `sources`, `selectedAt`, `rule`. The name is lowercase letters, digits and dashes, and not `full` or `only`. `eval:select-set` writes them.
+- `holdout: true` marks a label's codebase as held out: every label of a holdout codebase carries it, and label files older than the mark have no field, which means not holdout. The `full` set and `eval:select-set` leave holdout labels out, so development iterations never see them; `--set holdout`, `--only` or a hand-written set reviews them on purpose.
+- `sets/`: named task sets, `<name>.json`. Schema `TaskSet`: `name`, `tasks`, `sources`, `selectedAt`, `rule`. The name is lowercase letters, digits and dashes, and not `full`, `only` or `holdout`. `eval:select-set` writes them.
 - adjudications.json: human decisions (`adjudicationPath` in `apps/server/src/eval/benchmark-labels.ts`). See Adjudications.
 
 A set or `--only` id with no label file refuses the run.
@@ -103,7 +104,7 @@ The benchmark adds every unlabeled finding to the file as `unresolved` (`queueUn
 Checked but outside the hash:
 
 - `tasks`: each `taskId` (`<id>@<headSha>`) with its `base` commit.
-- `taskSet`: `full`, `only`, or a set name.
+- `taskSet`: `full`, `only`, `holdout`, or a set name.
 - `shard`: `index`, `count`, `tasks` (this shard's task ids), `all` (every task id of the set).
 
 Recorded and shown, never checked (informational):
