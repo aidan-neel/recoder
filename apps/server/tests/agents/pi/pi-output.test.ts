@@ -11,3 +11,14 @@ test('a per-minute throttle that mentions quota and billing is a retried 429, no
 	expect(error).not.toBeInstanceOf(UsageLimitError);
 	expect(error.status).toBe(429);
 });
+
+test('a daily cap worded like a throttle is a usage cap, not a retried 429', () => {
+	const error = piError(
+		'429 RESOURCE_EXHAUSTED: You exceeded your current quota, please check your plan and billing details. ' +
+			'Quota exceeded for metric: generate_content_free_tier_requests, limit: 250, ' +
+			'quotaId: GenerateRequestsPerDayPerProjectPerModel-FreeTier. Please retry in 14h32m5s.'
+	);
+
+	expect(error).toBeInstanceOf(UsageLimitError);
+	expect(error.status).toBe(429);
+});

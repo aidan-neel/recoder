@@ -22,6 +22,13 @@ const SIGNED_OUT =
  */
 const THROTTLED = /rate.?limit|too many requests|resource_exhausted|per.?minute/i;
 
+/**
+ * A limit over a long window, which lasts hours whatever else the message says. Gemini words its daily free-tier cap
+ * like its per-minute throttle (`429 RESOURCE_EXHAUSTED`, "exceeded your current quota"); only the quota it names
+ * (`...PerDay...`) and the wait (`retry in 14h32m`) differ. It is tested before {@link THROTTLED}.
+ */
+const LONG_WINDOW = /per.?day|per (?:week|month)|retry in \d+h/i;
+
 /** A spent plan or credit balance, which lasts hours: OpenAI's `insufficient_quota`, a 402, or a usage limit. */
 const SPENT = /^402\b|quota|usage limit|billing|credit balance|out of credits/i;
 
@@ -67,12 +74,14 @@ export function totalUsage(usages: readonly PiUsage[]): PiUsage {
 
 /**
  * A failed call's error from Pi's message, quoted through {@link quotedLine}: signed out is a 401 naming the sign-in,
- * a spent plan or credit a usage cap, a throttle a 429 that is retried, an overload a 529, anything else a 0.
+ * a spent plan or credit, or a limit over a day or longer, a usage cap, a throttle a 429 that is retried, an overload
+ * a 529, anything else a 0.
  */
 export function piError(message: string): LlmError {
 	const line = quotedLine(message.trim(), QUOTED_CHARS);
 
 	if (SIGNED_OUT.test(line)) return new LlmError(401, `Pi is not signed in to this model's provider. Run: ${PI_LOGIN}`);
+	if (LONG_WINDOW.test(line)) return new UsageLimitError(429, line);
 	if (THROTTLED.test(line)) return new LlmError(429, line);
 	if (SPENT.test(line)) return new UsageLimitError(/^402\b|credit/i.test(line) ? 402 : 429, line);
 	if (TOO_MANY.test(line)) return new LlmError(429, line);

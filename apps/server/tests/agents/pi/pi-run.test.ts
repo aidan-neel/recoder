@@ -203,6 +203,16 @@ describe('PiRun', () => {
 		expect(reply.error?.message).toMatch(/printed more than/);
 	});
 
+	test('output past the cap is the failure reported when the session file cannot be read either', async () => {
+		const { run } = await openRun('unreadable-flood');
+
+		const reply = await run.prompt('Review it.', PROMPT);
+
+		await run.close();
+
+		expect(reply.error?.message).toMatch(/printed more than/);
+	});
+
 	testPromptStops(() => openRun('spawn'));
 
 	test.each(['answer', 'limit'])(

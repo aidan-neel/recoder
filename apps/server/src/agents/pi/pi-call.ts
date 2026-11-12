@@ -51,7 +51,8 @@ export async function runPiCall(host: PiHost, call: PiCall): Promise<PiOutcome> 
 		running: host.running,
 		name: 'Pi'
 	}).catch(async (error: unknown) => {
-		await call.session.finish();
+		await endTailAfterFailure(call.session);
+
 		throw error;
 	});
 
@@ -62,6 +63,14 @@ export async function runPiCall(host: PiHost, call: PiCall): Promise<PiOutcome> 
 	if (!reply) return { text: '', error: new LlmError(0, 'Pi ended without saving a reply.'), usages };
 
 	return { text: reply.text, usages };
+}
+
+/**
+ * Ends the session tail of a process that could not run to its end. That failure (an abort, the deadline, runaway
+ * output) is the one the caller reports, so a session read that failed too must not take its place.
+ */
+async function endTailAfterFailure(session: SessionTail): Promise<void> {
+	await Promise.allSettled([session.finish()]);
 }
 
 /** The error a saved reply ended with: Pi's own message, or its cut at the output limit; none for an answer. */

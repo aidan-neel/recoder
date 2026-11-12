@@ -13,8 +13,9 @@ import { fakeBin, loggedCalls } from './fake-bin';
  * Recoder wrote with a stub of Pi's API, calls its `read_diff`, and answers with what it returned, in two model
  * calls); `auth` (Pi's `No API key found` on stderr, exit 1, nothing saved); `limit` (a model call that ended in a
  * quota error, exit 1); `garbage` (a session line and output that are not Pi's, carrying a fake credential); `flood`
- * (stdout without end); `crash` (stderr, exit 1); `spawn` (starts a `sleep` grandchild, writes `<own pid>
- * <grandchild pid>` to `<log>.pids` and waits for it); `slow` (a model call of `FAKE_PI_DELAY_MS`, during which,
+ * (stdout without end); `unreadable-flood` (the same, after it saved the session header and made the file
+ * unreadable); `crash` (stderr, exit 1); `spawn` (starts a `sleep` grandchild, writes `<own pid> <grandchild pid>`
+ * to `<log>.pids` and waits for it); `slow` (a model call of `FAKE_PI_DELAY_MS`, during which,
  * like Pi, it saves and prints nothing, then the answer); or `unreadable` (on a new session, makes the session file
  * unreadable for `FAKE_PI_DELAY_MS` after saving the prompt, then the answer).
  */
@@ -72,7 +73,13 @@ if (mode === 'crash') {
 	process.exit(1);
 }
 
-if (mode === 'flood') {
+if (mode === 'unreadable-flood') {
+	mkdirSync(dirname(sessionFile), { recursive: true });
+	writeFileSync(sessionFile, JSON.stringify({ type: 'session', version: 3, id: 'sess-1', timestamp: '2026-11-12T09:53:34.527Z', cwd: process.cwd() }) + '\\n');
+	chmodSync(sessionFile, 0o000);
+}
+
+if (mode === 'flood' || mode === 'unreadable-flood') {
 	const chunk = 'x'.repeat(1024 * 1024) + '\\n';
 
 	for (;;) await Bun.write(Bun.stdout, chunk);
