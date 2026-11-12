@@ -68,10 +68,28 @@ export function withTopics(
 
 		if (!topic) return finding;
 
-		const quieted = tallies.get(topic.id)?.quietApproved === true && !isRunProven(finding);
-
-		return { ...finding, topic: quieted ? { ...topic, quieted } : topic };
+		return { ...finding, topic: quietedAsApproved(finding, topic, tallies.get(topic.id)?.quietApproved === true) };
 	});
+}
+
+/**
+ * The finding quieted as the repository's approvals say now, whatever it held
+ * before: quieted when its topic is one of `approvedTopics` and no run proved
+ * it, shown otherwise. A finding carried from an earlier review is read again
+ * this way, so a rule that was rejected since, or a finding quieted before
+ * approvals existed, does not stay quiet.
+ */
+export function requieted(finding: Finding, approvedTopics: ReadonlySet<string>): Finding {
+	if (!finding.topic) return finding;
+
+	return { ...finding, topic: quietedAsApproved(finding, finding.topic, approvedTopics.has(finding.topic.id)) };
+}
+
+/** The finding's topic, quieted when a person approved quieting it and no run proved the finding. */
+function quietedAsApproved(finding: Finding, topic: FindingTopic, isApproved: boolean): FindingTopic {
+	const { quieted: _held, ...shown } = topic;
+
+	return isApproved && !isRunProven(finding) ? { ...shown, quieted: true } : shown;
 }
 
 /** How a rule stands with the repository's people, or undefined while their votes say nothing either way. */

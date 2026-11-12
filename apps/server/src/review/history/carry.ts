@@ -1,4 +1,5 @@
 import type { Finding, FindingHistory, ResolvedFinding } from '@recoder/shared';
+import { requieted } from '../guidelines/learned/topics.js';
 import { codeChange, shifted, type CodeChange, type DiffFiles } from './code-change.js';
 import { defectIdentity, sameDefect, type DefectIdentity } from './identity.js';
 
@@ -9,9 +10,14 @@ export interface ReviewedRevision {
 	diff: DiffFiles;
 }
 
-/** The new review: its revision, and the candidates it hid, whose refuted ones may show an old finding fixed. */
+/**
+ * The new review: its revision, the candidates it hid, whose refuted ones may
+ * show an old finding fixed, and the topics a person approved quieting in the
+ * repository now, which quiet a carried finding in place of what it held.
+ */
 export interface NewReview extends ReviewedRevision {
 	unconfirmed: Finding[];
+	quietedTopics: ReadonlySet<string>;
 }
 
 /** The new review's findings with their history, and the earlier findings its evidence shows fixed. */
@@ -36,7 +42,8 @@ interface Earlier {
  *   `rechecked` when the commits since touched its code, else `carried` with
  *   the earlier decision.
  * - Not raised, code untouched: the earlier finding is `carried` as it was,
- *   moved with its code, decision and all.
+ *   moved with its code, decision and all, but quieted only as the topics
+ *   approved now say (`requieted`).
  * - Not raised, code touched: it is resolved only on new evidence, either a
  *   verifier refuting the same defect in this review or the pull request no
  *   longer changing its file. Otherwise it is `carried` where it was.
@@ -69,7 +76,7 @@ export function carryHistory(previous: ReviewedRevision, next: NewReview): Carri
 		const reason = fixEvidence(entry, refuted, next.diff);
 
 		if (reason) resolved.push({ finding: entry.finding, reason, resolvedAtSha: next.headSha });
-		else findings.push(carried(entry, sinceOf(entry)));
+		else findings.push(requieted(carried(entry, sinceOf(entry)), next.quietedTopics));
 	}
 
 	return { findings, resolved };

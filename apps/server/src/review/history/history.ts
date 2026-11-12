@@ -1,5 +1,6 @@
 import type { Finding, Review } from '@recoder/shared';
 import { db, reviewDiffs } from '../../store';
+import { approvedTopics } from '../guidelines/learned/proposals.js';
 import { carryHistory } from './carry.js';
 import { diffFiles } from './code-change.js';
 
@@ -46,6 +47,12 @@ export async function withFindingHistory(
 
 	return carryHistory(
 		{ headSha: previous.headSha, findings: previous.findings, diff: diffFiles(before ?? '') },
-		{ headSha: review.headSha, findings, unconfirmed, diff: diffFiles(after ?? '') }
+		{
+			headSha: review.headSha,
+			findings,
+			unconfirmed,
+			diff: diffFiles(after ?? ''),
+			quietedTopics: approvedTopics(review.repoId)
+		}
 	);
 }
