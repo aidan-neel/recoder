@@ -1,15 +1,24 @@
 import { splitCategoryTag, type DismissalReason, type Finding, type FindingDecision } from '@recoder/shared';
 import { matchesDismissal } from '../../pipeline/harness/findings.js';
 import { recordDismissal, removeDismissal } from './dismissals.js';
+import type { LearningKeys } from './finding-key.js';
 import { proposeQuieting } from './proposals.js';
 import { isDismissedOften } from './topics.js';
-import { recordVote, removeVote, topicTallies, voteKeyOf } from './votes.js';
+import { recordVote, removeVote, topicTallies } from './votes.js';
 
-/** A finding a person decided, with the repository it belongs to and the key later reviews match it by (`dismissalKey`). */
+/** A finding a person decided, with the repository it belongs to and the keys its decision is learned under. */
 export interface DecidedFinding {
 	repoId: string;
 	finding: Finding;
-	dismissalKey: string;
+	/** What this decision is learned under (`learningKeys` of the finding as its review stores it). */
+	keys: LearningKeys;
+	/**
+	 * What a decision on the same finding in an earlier review of the pull
+	 * request was learned under. History keeps a finding's id across pushes
+	 * while its fingerprint, category and line text may change, so these keys
+	 * can differ from `keys`.
+	 */
+	earlierKeys: LearningKeys[];
 }
 
 /**
@@ -60,14 +69,20 @@ export function learnFromDecision(decided: DecidedFinding, decision: FindingDeci
 }
 
 /**
- * Forgets what a decision on the finding taught: its remembered dismissal,
- * in either key form `matchesDismissal` reads, and its vote either way. The
- * dismissal of another finding split from the same line stays.
+ * Forgets what a decision on the finding taught, in this review or an earlier
+ * one of the pull request: its remembered dismissal, in either key form
+ * `matchesDismissal` reads, and its vote either way. The dismissal of another
+ * finding split from the same line stays.
  */
-export function forgetDecision({ repoId, finding, dismissalKey }: DecidedFinding): void {
-	removeDismissal(repoId, (held) => matchesDismissal(held, dismissalKey));
-	removeVote(repoId, voteKeyOf(finding), 'useful');
-	removeVote(repoId, voteKeyOf(finding), 'dismissed');
+export function forgetDecision({ repoId, keys, earlierKeys }: DecidedFinding): void {
+	const learned = [keys, ...earlierKeys];
+
+	removeDismissal(repoId, (held) => learned.some((key) => matchesDismissal(held, key.dismissal)));
+
+	for (const vote of new Set(learned.map((key) => key.vote))) {
+		removeVote(repoId, vote, 'useful');
+		removeVote(repoId, vote, 'dismissed');
+	}
 }
 
 /** The title a person saw on the finding: its own, else the first line of its message. */
@@ -78,10 +93,10 @@ function titleOf(finding: Finding): string {
 }
 
 /** Remembers the dismissed finding, so later reviews of the repository drop it. */
-function rememberDismissal({ repoId, finding, dismissalKey }: DecidedFinding, decision: FindingDecision): void {
+function rememberDismissal({ repoId, finding, keys }: DecidedFinding, decision: FindingDecision): void {
 	recordDismissal({
 		repoId,
-		fingerprint: dismissalKey,
+		fingerprint: keys.dismissal,
 		file: finding.file,
 		category: finding.category ?? '',
 		title: titleOf(finding),
@@ -92,10 +107,10 @@ function rememberDismissal({ repoId, finding, dismissalKey }: DecidedFinding, de
 }
 
 /** Counts the decision toward the finding's topic; a finding without a topic counts toward none. */
-function vote({ repoId, finding }: DecidedFinding, choice: 'useful' | 'dismissed', votedAt: string): void {
+function vote({ repoId, finding, keys }: DecidedFinding, choice: 'useful' | 'dismissed', votedAt: string): void {
 	if (!finding.topic) return;
 
-	recordVote(repoId, { findingKey: voteKeyOf(finding), topic: finding.topic.id, choice, votedAt });
+	recordVote(repoId, { findingKey: keys.vote, topic: finding.topic.id, choice, votedAt });
 }
 
 /** Votes against the finding's topic, and proposes quieting the topic once people dismiss it often. */

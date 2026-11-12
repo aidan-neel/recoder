@@ -6,7 +6,8 @@ import {
 	learnFromDecision,
 	type DecidedFinding
 } from '../../review/guidelines/learned/decision-learning';
-import { dismissalKey } from '../../review/guidelines/learned/finding-key';
+import { learningKeys } from '../../review/guidelines/learned/finding-key';
+import { earlierCopies } from '../../review/history/history';
 import { db, reviewDiffs } from '../../store';
 import { parseBody } from '../parse-body';
 import { requireFinding } from './shared';
@@ -23,9 +24,10 @@ const decisionSchema: z.ZodType<FindingDecisionInput> = z.discriminatedUnion('st
 ]);
 
 /**
- * The `:id` review's finding `:findingId`, keyed as later reviews match it, or
- * the 404/409 that ends the request. The server's own copy of the finding
- * decides what is remembered, never the client's.
+ * The `:id` review's finding `:findingId`, keyed as later reviews match it and
+ * as earlier reviews of the pull request learned it, or the 404/409 that ends
+ * the request. The server's own copy of the finding decides what is
+ * remembered, never the client's.
  */
 async function decisionTarget(c: Context): Promise<(DecidedFinding & { reviewId: string }) | Response> {
 	const target = await requireFinding(c, c.req.param('findingId') ?? '');
@@ -37,7 +39,15 @@ async function decisionTarget(c: Context): Promise<(DecidedFinding & { reviewId:
 
 	if (!diff) return c.json({ error: 'no diff yet' }, 409);
 
-	return { reviewId: review.id, repoId: review.repoId, finding, dismissalKey: dismissalKey(finding, diff) };
+	const earlier = await earlierCopies(review, finding.id);
+
+	return {
+		reviewId: review.id,
+		repoId: review.repoId,
+		finding,
+		keys: learningKeys(finding, diff),
+		earlierKeys: earlier.map((copy) => learningKeys(copy.finding, copy.diff))
+	};
 }
 
 /** The decision as saved: what the person chose, without an empty note, stamped now. */

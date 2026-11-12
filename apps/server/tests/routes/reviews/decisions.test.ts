@@ -187,3 +187,46 @@ test('a decision and its reason are still there after the server restarts', asyn
 
 	expect(listDismissals('repo-1')).toMatchObject([{ reason: 'already-handled', note: 'fixed in #12' }]);
 });
+
+/**
+ * One finding across two pushes of a pull request: history kept its id, but
+ * the later review filed it under another category, so it has another
+ * fingerprint and topic. It was dismissed in the earlier review.
+ */
+async function refiledAfterDismissal() {
+	const before = { ...finding, id: 'moved', category: 'complexity', fingerprint: 'print-before' };
+	const earlier = await savedReview([{ ...before, topic: { id: 'category:complexity', label: 'Complexity' } }]);
+
+	await dismiss(earlier.id, 'moved', 'wrong');
+
+	const decision = (await db.reviews.get(earlier.id))?.findings[0]?.decision;
+
+	const later = {
+		...before,
+		category: 'readability',
+		message: '[readability] The old value is lost',
+		fingerprint: 'print-after',
+		topic: { id: 'category:readability', label: 'Readability' },
+		decision
+	};
+
+	return savedReview([later], { createdAt: new Date(Date.now() + 1000).toISOString() });
+}
+
+test('reopening a finding history carried under a new fingerprint forgets what its earlier decision taught', async () => {
+	const review = await refiledAfterDismissal();
+
+	await send(decisionPath(review.id, 'moved'), 'DELETE');
+
+	expect(listDismissals('repo-1')).toEqual([]);
+	expect(topicTallies('repo-1').size).toBe(0);
+});
+
+test('deciding again on a finding history carried under a new fingerprint counts the defect once', async () => {
+	const review = await refiledAfterDismissal();
+
+	await send(decisionPath(review.id, 'moved'), 'PUT', { state: 'accepted' });
+
+	expect(listDismissals('repo-1')).toEqual([]);
+	expect([...topicTallies('repo-1')]).toEqual([['category:readability', { useful: 1, dismissed: 0 }]]);
+});

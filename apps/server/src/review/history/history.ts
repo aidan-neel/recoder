@@ -23,6 +23,28 @@ export async function earlierReviews(review: Review): Promise<Review[]> {
 		.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
+/** A finding as an earlier review of the pull request stored it, with that review's diff. */
+export interface EarlierCopy {
+	finding: Finding;
+	diff: string;
+}
+
+/**
+ * The finding `findingId` as the earlier reviews of the pull request stored
+ * it, newest first. History keeps a finding's id across pushes, so these are
+ * the same defect, perhaps under another fingerprint or category. A review
+ * whose diff is gone gives an empty one.
+ */
+export async function earlierCopies(review: Review, findingId: string): Promise<EarlierCopy[]> {
+	const copies = (await earlierReviews(review)).flatMap((earlier) =>
+		earlier.findings.filter((finding) => finding.id === findingId).map((finding) => ({ reviewId: earlier.id, finding }))
+	);
+
+	return Promise.all(
+		copies.map(async ({ reviewId, finding }) => ({ finding, diff: (await reviewDiffs.get(reviewId)) ?? '' }))
+	);
+}
+
 /**
  * A finished review's findings with their history across pushes
  * (`carryHistory`), and the earlier findings its evidence shows fixed. The
