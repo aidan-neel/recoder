@@ -17,6 +17,16 @@ export function inertProse(text: string): string {
 	return quiet(text).replace(/`{3,}|~{3,}/g, (run) => [...run].join('\u200B'));
 }
 
+/**
+ * A finding's words as the model wrote them, with their code blocks kept:
+ * mentions broken as `quiet` does, and a fenced `suggestion` block turned into
+ * a plain code block. A forge offers a `suggestion` block as a change the
+ * reader can apply with one click; only a checked patch may make one.
+ */
+export function findingProse(text: string): string {
+	return quiet(text).replace(/^([ \t]*(?:`{3,}|~{3,})[ \t]*)suggestion\b[^\n]*/gim, '$1text');
+}
+
 /** Text as a markdown quote, every line marked, so a quoted line cannot end the quote and start markup of its own. */
 export function quoteBlock(text: string): string {
 	return text

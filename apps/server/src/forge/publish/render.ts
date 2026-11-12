@@ -13,7 +13,7 @@ import {
 } from '@recoder/shared';
 import { RECODER_MARKER } from '../watch/mention';
 import { renderEvidence } from './evidence';
-import { quiet } from './markdown';
+import { findingProse, quiet } from './markdown';
 
 /**
  * Markdown for Recoder's comments on a pull request. Pure: everything comes
@@ -115,9 +115,9 @@ function findingTitle(finding: Finding): string {
 /** The message and suggestion under a finding's heading. */
 export function findingDetail(finding: Finding): string[] {
 	const body = splitCategoryTag(finding.message).body.trim();
-	const parts = body && body !== finding.title ? [quiet(body)] : [];
+	const parts = body && body !== finding.title ? [findingProse(body)] : [];
 
-	if (finding.suggestion?.trim()) parts.push(`**Suggestion:** ${quiet(finding.suggestion.trim())}`);
+	if (finding.suggestion?.trim()) parts.push(`**Suggestion:** ${findingProse(finding.suggestion.trim())}`);
 
 	return parts;
 }
