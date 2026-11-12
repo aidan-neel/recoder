@@ -1,6 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { GhError } from '../../../src/forge/cli';
-import { gitlabComments } from '../../../src/forge/publish/gitlab-comments';
+import { gitlabComments, gitlabMergeRequest } from '../../../src/forge/publish/gitlab-comments';
 import { restoreFetch, stubForge } from '../../helpers/forge-fetch';
 
 const ENV = { GITLAB_TOKEN: 'glpat', GITLAB_HOST: 'git.acme.dev' };
@@ -16,7 +16,7 @@ test('pins an inline note to the merge request’s diff refs on a self-managed h
 			: [201, { id: 'd1', notes: [{ id: 77 }] }]
 	);
 
-	const forge = gitlabComments('team/app', 9, null, ENV);
+	const forge = gitlabComments(gitlabMergeRequest('team/app', 9, null, ENV));
 
 	const posted = await forge.createInline('body', {
 		path: 'src/a.ts',
@@ -47,7 +47,9 @@ test('pins an inline note to the merge request’s diff refs on a self-managed h
 test('replies in the mention’s discussion when one is given', async () => {
 	const calls = stubForge(() => [201, { id: 5 }]);
 
-	await gitlabComments('team/app', 9, 'https://git.acme.dev/team/app/-/merge_requests/9', ENV).create('hi', 'abc');
+	await gitlabComments(
+		gitlabMergeRequest('team/app', 9, 'https://git.acme.dev/team/app/-/merge_requests/9', ENV)
+	).create('hi', 'abc');
 
 	expect(calls[0].url).toBe(`${MR}/discussions/abc/notes`);
 });
@@ -55,7 +57,7 @@ test('replies in the mention’s discussion when one is given', async () => {
 test('a refused write says the token needs the api scope', async () => {
 	stubForge(() => [403, { message: '403 Forbidden' }]);
 
-	const error = await gitlabComments('team/app', 9, 'https://x', ENV)
+	const error = await gitlabComments(gitlabMergeRequest('team/app', 9, 'https://x', ENV))
 		.edit('5', 'body')
 		.catch((err: unknown) => err);
 

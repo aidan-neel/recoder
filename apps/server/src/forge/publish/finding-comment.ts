@@ -1,17 +1,11 @@
 import { parseUnifiedDiff, type Finding, type Review, type ReviewFindingComment } from '@recoder/shared';
 import { db, reviewDiffs } from '../../store';
 import { GhError } from '../cli';
-import { reviewForge, type InlineTarget, type PullCommentForge } from './forge';
+import { rejectedPosition, reviewForge, type InlineTarget, type PullCommentForge } from './forge';
 import { saveFindingComment } from './record';
 import { findingMarker, renderFindingComment } from './render';
 import type { PublicationSession, PublishedComment } from '../../storage/postgres-publication';
-import {
-	missingComment,
-	publicationLock,
-	publicationOperation,
-	rejectedCreate,
-	rejectedPosition
-} from './shared-publication';
+import { missingComment, publicationLock, publicationOperation, rejectedCreate } from './shared-publication';
 
 /** A finding the review no longer holds. */
 export class FindingNotFoundError extends Error {}
