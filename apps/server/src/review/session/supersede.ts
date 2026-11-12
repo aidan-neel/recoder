@@ -6,8 +6,8 @@ import { getReviewControl } from './review-control';
  * the same PR stale, so it is cancelled instead of running beside the new
  * one. Reviews a developer started are left alone.
  */
-export function supersedeAutomaticReviews(repoId: string, prNumber: number): void {
-	for (const review of db.reviews.list()) {
+export async function supersedeAutomaticReviews(repoId: string, prNumber: number): Promise<void> {
+	for (const review of await db.reviews.list()) {
 		const samePr = review.repoId === repoId && review.prNumber === prNumber;
 		const inFlight = review.status === 'queued' || review.status === 'running';
 

@@ -30,7 +30,13 @@ import {
 	reviewProgress,
 	settlePipelineStreams
 } from '../store';
-import { emitReviewEvent, reportReviewTask, settleReviewTasks, trackReviewTask } from '../review/session/events';
+import {
+	flushReviewEvents,
+	emitReviewEvent,
+	reportReviewTask,
+	settleReviewTasks,
+	trackReviewTask
+} from '../review/session/events';
 import { fetchPull, PULL_VIEW_COMMANDS } from '../forge/pull-preview';
 import { settlePullComment, trackPullComment } from '../forge/publish/pull-comment';
 import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
@@ -49,18 +55,17 @@ import { recordTokenBudget, withReviewMetrics } from '../models/metrics';
 
 export type QueueReviewInput = CreateReviewInput;
 
-export function touch(reviewId: string, patch: Partial<Review>): Review {
-	const current = db.reviews.get(reviewId);
+export async function touch(reviewId: string, patch: Partial<Review>): Promise<Review> {
+	const next = await db.reviews.update(reviewId, (current) => {
+		if (!current) throw new Error(`review ${reviewId} not found`);
 
-	if (!current) throw new Error(`review ${reviewId} not found`);
+		return { ...current, ...patch, updatedAt: new Date().toISOString() };
+	});
 
-	const next: Review = { ...current, ...patch, updatedAt: new Date().toISOString() };
-
-	db.reviews.set(next);
+	if (!next) throw new Error(`review ${reviewId} not found`);
 
 	return next;
 }
-
 /**
  * Validate + queue a review, kicking the pipeline in the background. A brief
  * in `instructions` is recorded first, so the review runs with it.
@@ -68,23 +73,22 @@ export function touch(reviewId: string, patch: Partial<Review>): Review {
  * A reviewer model is required — stub reviews that finish in seconds with
  * no real findings are worse than refusing outright.
  */
-export function queueReview(input: QueueReviewInput): Review {
+export async function queueReview(input: QueueReviewInput): Promise<Review> {
 	if (!isReviewConfigured()) {
 		throw new Error(
 			'reviewer not configured: add a reviewer model in settings (or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL)'
 		);
 	}
 
-	const review = createReviewSession(input);
+	const review = await createReviewSession(input);
 
-	recordBrief(review.id, input.instructions);
+	await recordBrief(review.id, input.instructions);
 
-	return startReviewSession(review.id);
+	return await startReviewSession(review.id);
 }
-
 /** Opening a PR creates durable chat state without running models or the pipeline. */
-export function createReviewSession(input: CreateReviewInput, trigger?: Review['trigger']): Review {
-	const repo = db.repos.get(input.repoId);
+export async function createReviewSession(input: CreateReviewInput, trigger?: Review['trigger']): Promise<Review> {
+	const repo = await db.repos.get(input.repoId);
 
 	if (!repo) throw new Error('repo not found');
 
@@ -113,28 +117,28 @@ export function createReviewSession(input: CreateReviewInput, trigger?: Review['
 		updatedAt: now
 	};
 
-	db.reviews.set(review);
-	reviewProgress.set(emptyReviewProgress(review.id));
+	await db.reviews.set(review);
+	await reviewProgress.set(emptyReviewProgress(review.id));
 
 	return review;
 }
+/** Claim the draft atomically so concurrent prompts cannot launch two pipelines. */
+export async function startReviewSession(reviewId: string): Promise<Review> {
+	const review = await db.reviews.update(reviewId, (current) => {
+		if (!current) throw new Error('review not found');
+		if (current.status !== 'draft') throw new Error('This review has already started.');
+		if (!isReviewConfigured()) throw new Error('Add a reviewer model in settings before starting the review.');
 
-/** Claim the draft synchronously so concurrent prompts cannot launch two pipelines. */
-export function startReviewSession(reviewId: string): Review {
-	const current = db.reviews.get(reviewId);
+		return { ...current, status: 'queued', startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
+	});
 
-	if (!current) throw new Error('review not found');
-	if (current.status !== 'draft') throw new Error('This review has already started.');
-	if (!isReviewConfigured()) throw new Error('Add a reviewer model in settings before starting the review.');
-
-	const review = touch(reviewId, { status: 'queued', startedAt: new Date().toISOString() });
+	if (!review) throw new Error('review not found');
 
 	emitReviewEvent(reviewId, { type: 'step', step: 'queued', message: '', data: { stage: 'checkout' } });
 	void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
 
 	return review;
 }
-
 /**
  * Drive a queued review: fetch PR metadata → prepare the sandbox →
  * run the adaptive harness → persist coverage and findings.
@@ -143,16 +147,18 @@ export function startReviewSession(reviewId: string): Review {
  * frontend demo routes, not as a silent fallback for live reviews.
  */
 export async function runReviewPipeline(reviewId: string): Promise<void> {
-	return withLockedModels(() => withReviewMetrics(reviewId, 'pipeline', () => runTrackedReviewPipeline(reviewId)));
+	return withLockedModels(
+		async () => await withReviewMetrics(reviewId, 'pipeline', () => runTrackedReviewPipeline(reviewId))
+	);
 }
 
 async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
-	const initial = db.reviews.get(reviewId);
+	const initial = await db.reviews.get(reviewId);
 
 	if (!initial) return;
 
-	const repo = db.repos.get(initial.repoId);
-	let review = touch(reviewId, { status: 'running' });
+	const repo = await db.repos.get(initial.repoId);
+	let review = await touch(reviewId, { status: 'running' });
 	let sandboxPath: string | null = null;
 	let baseRef: string | undefined;
 	let prBody = '';
@@ -160,11 +166,10 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	const control = openReviewControl(reviewId);
 	const analysis = control.abort;
 
-	trackPullComment(reviewId);
+	await trackPullComment(reviewId);
 
 	try {
 		if (!repo) throw new Error('repo not found');
-
 		await assertChatGptSignedIn();
 
 		emitReviewEvent(reviewId, {
@@ -190,12 +195,10 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 
 		baseRef = pr.base;
 		prBody = pr.body ?? '';
-
 		prContext = contextWithin(repo, review.prNumber, provider, analysis.signal);
+		await reviewDiffs.set(reviewId, diff);
 
-		reviewDiffs.set(reviewId, diff);
-
-		review = touch(reviewId, {
+		review = await touch(reviewId, {
 			headSha: pr.headSha,
 			prTitle: pr.title,
 			prUrl: pr.url,
@@ -242,7 +245,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			sandboxRevisionDiff(sandbox.path, baseRef!, tokenEnv(source, repo.url), source)
 		);
 
-		reviewDiffs.set(reviewId, inspected.diff);
+		await reviewDiffs.set(reviewId, inspected.diff);
 
 		emitReviewEvent(reviewId, {
 			type: 'log',
@@ -268,13 +271,13 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 
 		const { headSha, mergeBaseSha } = inspected.revision;
 
-		const { checkpoint: resume, discarded } = resumableCheckpoint(reviewCheckpoints.get(reviewId), {
+		const { checkpoint: resume, discarded } = resumableCheckpoint(await reviewCheckpoints.get(reviewId), {
 			headSha,
 			mergeBaseSha
 		});
 
 		if (discarded) {
-			reviewCheckpoints.delete(reviewId);
+			await reviewCheckpoints.delete(reviewId);
 			emitReviewEvent(reviewId, { type: 'log', step: 'review', message: discarded });
 		}
 
@@ -293,7 +296,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 					prBody,
 					context: await prContext,
 					prsForCommit: (sha, signal) => prsForCommit(repo, provider, sha, signal),
-					instructions: reviewInstructions(reviewId, initial.startedAt),
+					instructions: await reviewInstructions(reviewId, initial.startedAt),
 					signal: analysis.signal,
 					subagentCap: effectiveSubagentCap(),
 					tokenBudget,
@@ -307,20 +310,22 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 
 		throwIfCancelled(control);
 
-		const snapshot = reviewProgress.get(reviewId);
+		await flushReviewEvents(reviewId);
 
-		if (snapshot) {
-			reviewProgress.set({
-				...snapshot,
-				assignments: result.assignments,
-				coverage: result.coverage,
-				coverageGaps: result.coverageGaps,
-				outcome: result.outcome,
-				failure: result.failure,
-				recommendedChecks: result.recommendedChecks,
-				candidateCount: result.funnel?.raised ?? result.findings.length
-			});
-		}
+		await reviewProgress.update(reviewId, (snapshot) =>
+			snapshot
+				? {
+						...snapshot,
+						assignments: result.assignments,
+						coverage: result.coverage,
+						coverageGaps: result.coverageGaps,
+						outcome: result.outcome,
+						failure: result.failure,
+						recommendedChecks: result.recommendedChecks,
+						candidateCount: result.funnel?.raised ?? result.findings.length
+					}
+				: undefined
+		);
 
 		reportReviewTask(reviewId, {
 			id: 'finalize',
@@ -335,7 +340,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 
 		const status = result.outcome === 'complete' ? 'passed' : 'failed';
 
-		touch(reviewId, {
+		await touch(reviewId, {
 			status,
 			summary: result.summary,
 			findings,
@@ -346,7 +351,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			...(result.questions ? { questions: result.questions } : {})
 		});
 
-		if (status === 'passed') keepForReplay(reviewId);
+		if (status === 'passed') await keepForReplay(reviewId);
 
 		reportReviewTask(reviewId, {
 			id: 'finalize',
@@ -356,7 +361,7 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 			kind: 'other'
 		});
 
-		settleReviewTasks(reviewId, result.outcome === 'complete' ? null : result.summary);
+		await settleReviewTasks(reviewId, result.outcome === 'complete' ? null : result.summary);
 
 		emitReviewEvent(reviewId, {
 			type: result.outcome === 'complete' ? 'done' : 'error',
@@ -378,13 +383,12 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		const message = cancelled ? cancelReason(analysis.signal) : err instanceof Error ? err.message : 'pipeline failed';
 		const failure = !cancelled && err instanceof ModelBlockedError ? err.failure : undefined;
 
-		markFailed(reviewId, message, failure);
-
+		await markFailed(reviewId, message, failure);
 		emitReviewEvent(reviewId, { type: 'error', message, data: { paused: false, ...(failure ? { failure } : {}) } });
 	} finally {
 		closeReviewControl(reviewId, control);
-		settleRun(reviewId);
-		settlePullComment(reviewId);
+		await settleRun(reviewId);
+		await settlePullComment(reviewId);
 	}
 }
 
@@ -414,24 +418,31 @@ function contextWithin(
 	provider: Provider,
 	signal: AbortSignal
 ): Promise<GatheredContext> {
-	return gatherChangeContext(repo, prNumber, provider, AbortSignal.any([signal, AbortSignal.timeout(30_000)]));
+	return gatherChangeContext(repo, prNumber, provider, AbortSignal.any([signal, AbortSignal.timeout(30000)]));
 }
 
 /** Record a failed run and close its open work. A review deleted mid-run (its session closed) has nothing left to update. */
-function markFailed(reviewId: string, message: string, failure: ModelBlockedError['failure'] | undefined): void {
-	try {
-		const snapshot = reviewProgress.get(reviewId);
+async function markFailed(
+	reviewId: string,
+	message: string,
+	failure: ModelBlockedError['failure'] | undefined
+): Promise<void> {
+	if (!(await db.reviews.get(reviewId))) return;
+	await flushReviewEvents(reviewId);
 
-		if (snapshot)
-			reviewProgress.set({
-				...snapshot,
-				outcome: 'failed',
-				assignments: settleAssignments(snapshot.assignments ?? [], message),
-				...(failure ? { failure } : {})
-			});
-		settleReviewTasks(reviewId, message);
-		touch(reviewId, { status: 'failed', summary: message });
-	} catch {}
+	await reviewProgress.update(reviewId, (snapshot) =>
+		snapshot
+			? {
+					...snapshot,
+					outcome: 'failed',
+					assignments: settleAssignments(snapshot.assignments ?? [], message),
+					...(failure ? { failure } : {})
+				}
+			: undefined
+	);
+
+	await settleReviewTasks(reviewId, message);
+	await touch(reviewId, { status: 'failed', summary: message });
 }
 
 /**
@@ -439,20 +450,21 @@ function markFailed(reviewId: string, message: string, failure: ModelBlockedErro
  * reasoning (skipped when the review was deleted mid-run), then write the
  * final state to SQLite now rather than on the write-behind timer.
  */
-function settleRun(reviewId: string): void {
-	try {
-		const settled = settlePipelineStreams(reviewId);
+async function settleRun(reviewId: string): Promise<void> {
+	if (!(await db.reviews.get(reviewId))) return;
 
-		if (settled)
-			emitReviewEvent(reviewId, {
-				type: 'log',
-				step: 'review',
-				message: '',
-				data: { settled: { messages: settled.messages, reasoning: settled.reasoning } }
-			});
-	} catch {}
+	const settled = await settlePipelineStreams(reviewId);
 
-	reviewProgress.flush();
+	if (settled)
+		emitReviewEvent(reviewId, {
+			type: 'log',
+			step: 'review',
+			message: '',
+			data: { settled: { messages: settled.messages, reasoning: settled.reasoning } }
+		});
+
+	await flushReviewEvents(reviewId);
+	await reviewProgress.flush();
 }
 
 function throwIfCancelled(control: ReviewControl): void {

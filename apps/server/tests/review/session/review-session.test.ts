@@ -19,26 +19,26 @@ const originalSettings = getStoredSettings();
 const reviewIds: string[] = [];
 const repoIds: string[] = [];
 
-afterEach(() => {
+afterEach(async () => {
 	globalThis.fetch = originalFetch;
 	setReviewOverrides(originalSettings);
 
 	for (const id of reviewIds.splice(0)) {
-		db.reviews.delete(id);
+		await db.reviews.delete(id);
 		clearReviewEvents(id);
 	}
 
-	for (const id of repoIds.splice(0)) db.repos.delete(id);
+	for (const id of repoIds.splice(0)) await db.repos.delete(id);
 });
 
-function setup() {
+async function setup() {
 	const id = crypto.randomUUID();
 
 	repoIds.push(id);
 
 	const at = new Date().toISOString();
 
-	db.repos.set({
+	await db.repos.set({
 		id,
 		name: 'demo',
 		url: 'https://github.com/example/demo',
@@ -59,8 +59,10 @@ function setup() {
 	return id;
 }
 
-function draft(repoId = setup()) {
-	const review = createReviewSession({ repoId, prNumber: 42, prTitle: 'Review the feature branch' });
+async function draft(repoId?: string) {
+	repoId ??= await setup();
+
+	const review = await createReviewSession({ repoId, prNumber: 42, prTitle: 'Review the feature branch' });
 
 	reviewIds.push(review.id);
 
@@ -101,7 +103,7 @@ function terminalError(reviewId: string): Promise<void> {
 }
 
 test('opening the same PR creates distinct persisted drafts with empty chats and no model calls', async () => {
-	const repoId = setup();
+	const repoId = await setup();
 	let requests = 0;
 
 	globalThis.fetch = (async () => {
@@ -130,18 +132,18 @@ test('opening the same PR creates distinct persisted drafts with empty chats and
 
 	for (const review of [a, b]) {
 		expect(review).toMatchObject({ repoId, prNumber: 42, prTitle: 'Feature branch', status: 'draft' });
-		expect(reviewProgress.get(review.id)?.messages ?? []).toEqual([]);
-		expect(reviewProgress.get(review.id)?.tasks).toEqual({});
-		expect(db.reviews.get(review.id)?.status).toBe('draft');
+		expect((await reviewProgress.get(review.id))?.messages ?? []).toEqual([]);
+		expect((await reviewProgress.get(review.id))?.tasks).toEqual({});
+		expect((await db.reviews.get(review.id))?.status).toBe('draft');
 	}
 
 	expect(requests).toBe(0);
-	recoverStaleReviews();
-	expect(db.reviews.get(a.id)?.status).toBe('draft');
+	await recoverStaleReviews();
+	expect((await db.reviews.get(a.id))?.status).toBe('draft');
 });
 
 test('a pre-review question gets a reply without starting analysis', async () => {
-	const review = draft();
+	const review = await draft();
 
 	globalThis.fetch = (async () =>
 		Response.json({
@@ -159,22 +161,22 @@ test('a pre-review question gets a reply without starting analysis', async () =>
 
 	const done = settled(review.id);
 
-	startReviewChat(review.id, ORCHESTRATOR_ID, 'What should I tell you before starting?');
+	await startReviewChat(review.id, ORCHESTRATOR_ID, 'What should I tell you before starting?');
 	await done;
-	expect(db.reviews.get(review.id)?.status).toBe('draft');
+	expect((await db.reviews.get(review.id))?.status).toBe('draft');
 
-	expect(reviewProgress.get(review.id)?.messages?.at(-1)?.text).toBe(
+	expect((await reviewProgress.get(review.id))?.messages?.at(-1)?.text).toBe(
 		'Tell me which areas to focus on, then ask me to start.'
 	);
 
-	expect(reviewProgress.get(review.id)?.assignments ?? []).toEqual([]);
-	expect(reviewProgress.get(review.id)?.tasks).toEqual({});
+	expect((await reviewProgress.get(review.id))?.assignments ?? []).toEqual([]);
+	expect((await reviewProgress.get(review.id))?.tasks).toEqual({});
 });
 
 test('SSE announces the transition from an empty draft to a queued review', async () => {
-	const review = draft();
+	const review = await draft();
 
-	db.repos.delete(review.repoId);
+	await db.repos.delete(review.repoId);
 
 	const response = await app.request(`/api/reviews/${review.id}/events`);
 	const reader = response.body!.getReader();
@@ -194,7 +196,7 @@ test('SSE announces the transition from an empty draft to a queued review', asyn
 
 		const terminal = terminalError(review.id);
 
-		startReviewSession(review.id);
+		await startReviewSession(review.id);
 
 		const queued = decode((await reader.read()).value!);
 
@@ -207,9 +209,9 @@ test('SSE announces the transition from an empty draft to a queued review', asyn
 });
 
 test('an orchestrator start decision launches once in the same session and retains developer direction', async () => {
-	const review = draft();
+	const review = await draft();
 
-	db.repos.delete(review.repoId);
+	await db.repos.delete(review.repoId);
 
 	globalThis.fetch = (async () =>
 		Response.json({
@@ -227,27 +229,27 @@ test('an orchestrator start decision launches once in the same session and retai
 
 	const terminal = terminalError(review.id);
 
-	startReviewChat(review.id, ORCHESTRATOR_ID, 'Missing tests worry me. Ready when you are.');
+	await startReviewChat(review.id, ORCHESTRATOR_ID, 'Missing tests worry me. Ready when you are.');
 	await terminal;
 
-	const stored = db.reviews.get(review.id)!;
+	const stored = (await db.reviews.get(review.id))!;
 
 	expect(stored.status).toBe('failed');
 	expect(stored.summary).toBe('repo not found');
 	expect(stored.startedAt).toBeTruthy();
-	expect(discussionContext(review.id)).toContain('Missing tests worry me. Ready when you are.');
+	expect(await discussionContext(review.id)).toContain('Missing tests worry me. Ready when you are.');
 
-	expect(reviewProgress.get(review.id)?.messages?.at(-1)?.text).toBe(
+	expect((await reviewProgress.get(review.id))?.messages?.at(-1)?.text).toBe(
 		'I’ll begin the review, focusing on missing tests.'
 	);
 
-	expect(() => startReviewSession(review.id)).toThrow('already started');
+	expect(async () => await startReviewSession(review.id)).toThrow('already started');
 });
 
 test('a plain request to review starts the review without asking the model, and its words become the brief', async () => {
-	const review = draft();
+	const review = await draft();
 
-	db.repos.delete(review.repoId);
+	await db.repos.delete(review.repoId);
 
 	let calls = 0;
 
@@ -263,17 +265,17 @@ test('a plain request to review starts the review without asking the model, and 
 
 	const terminal = terminalError(review.id);
 
-	startReviewChat(review.id, ORCHESTRATOR_ID, 'review only the python files please');
+	await startReviewChat(review.id, ORCHESTRATOR_ID, 'review only the python files please');
 	await terminal;
 	expect(calls).toBe(0);
 
-	const stored = db.reviews.get(review.id)!;
+	const stored = (await db.reviews.get(review.id))!;
 
 	expect(stored.status).toBe('failed');
 	expect(stored.startedAt).toBeTruthy();
-	expect(reviewInstructions(review.id, stored.startedAt)).toBe('review only the python files please');
+	expect(await reviewInstructions(review.id, stored.startedAt)).toBe('review only the python files please');
 
-	expect(reviewProgress.get(review.id)?.messages?.at(-1)).toMatchObject({
+	expect((await reviewProgress.get(review.id))?.messages?.at(-1)).toMatchObject({
 		from: 'assistant',
 		status: 'done',
 		text: 'Starting the full review now, with your message as its brief.'
@@ -316,39 +318,43 @@ test('review requests are recognised from their wording, and questions are left 
 });
 
 test('invalid draft decisions do not launch analysis or expose raw JSON in chat', async () => {
-	const review = draft();
+	const review = await draft();
 
 	globalThis.fetch = (async () =>
 		Response.json({ choices: [{ message: { content: '{"action":"invented_action"}' } }] })) as unknown as typeof fetch;
 
 	const done = settled(review.id);
 
-	startReviewChat(review.id, ORCHESTRATOR_ID, 'Start reviewing');
+	await startReviewChat(review.id, ORCHESTRATOR_ID, 'Start reviewing');
 	await done;
-	expect(db.reviews.get(review.id)?.status).toBe('draft');
-	expect(reviewProgress.get(review.id)?.messages?.at(-1)).toMatchObject({ status: 'error' });
-	expect(reviewProgress.get(review.id)?.messages?.at(-1)?.text).not.toContain('invented_action');
+	expect((await db.reviews.get(review.id))?.status).toBe('draft');
+	expect((await reviewProgress.get(review.id))?.messages?.at(-1)).toMatchObject({ status: 'error' });
+	expect((await reviewProgress.get(review.id))?.messages?.at(-1)?.text).not.toContain('invented_action');
 });
 
 test('stopping an initial prompt leaves the session unstarted and retryable', async () => {
-	const review = draft();
+	const review = await draft();
 
 	globalThis.fetch = fetchUntilAborted;
 
 	const done = settled(review.id);
 
-	startReviewChat(review.id, ORCHESTRATOR_ID, 'What do you make of this diff?');
+	await startReviewChat(review.id, ORCHESTRATOR_ID, 'What do you make of this diff?');
 	await new Promise((resolve) => setTimeout(resolve, 10));
 	stopReviewChat(review.id, ORCHESTRATOR_ID);
 	await done;
-	expect(db.reviews.get(review.id)?.status).toBe('draft');
-	expect(reviewProgress.get(review.id)?.messages?.at(-1)).toMatchObject({ status: 'error', text: 'Reply stopped.' });
+	expect((await db.reviews.get(review.id))?.status).toBe('draft');
+
+	expect((await reviewProgress.get(review.id))?.messages?.at(-1)).toMatchObject({
+		status: 'error',
+		text: 'Reply stopped.'
+	});
 });
 
 test('code questions during review persist their selection and feed subsequent review turns', async () => {
-	const review = draft();
+	const review = await draft();
 
-	db.reviews.set({ ...review, status: 'running' });
+	await db.reviews.set({ ...review, status: 'running' });
 
 	const context = {
 		file: 'src/late-in-diff.ts',
@@ -378,20 +384,20 @@ test('code questions during review persist their selection and feed subsequent r
 	expect(response.status).toBe(202);
 	expect(await response.json()).toMatchObject({ text: 'Why did this change?', codeContext: context });
 	await done;
-	expect(db.reviews.get(review.id)?.status).toBe('running');
+	expect((await db.reviews.get(review.id))?.status).toBe('running');
 
-	expect(reviewProgress.get(review.id)?.messages?.find((message) => message.from === 'user')?.codeContext).toEqual(
-		context
-	);
+	expect(
+		(await reviewProgress.get(review.id))?.messages?.find((message) => message.from === 'user')?.codeContext
+	).toEqual(context);
 
 	expect(prompt).toContain('src/late-in-diff.ts:120-122 (old side)');
 	expect(prompt).toContain('return cache.get(tenant)');
-	expect(discussionContext(review.id)).toContain('Why did this change?');
-	expect(discussionContext(review.id)).toContain('The deleted code used the tenant');
+	expect(await discussionContext(review.id)).toContain('Why did this change?');
+	expect(await discussionContext(review.id)).toContain('The deleted code used the tenant');
 });
 
 test('code selection validation rejects reversed ranges and oversized excerpts without starting a reply', async () => {
-	const review = draft();
+	const review = await draft();
 	const base = { file: 'src/code.ts', startLine: 10, endLine: 12, side: 'new', quote: 'code' };
 
 	for (const codeContext of [
@@ -408,5 +414,5 @@ test('code selection validation rejects reversed ranges and oversized excerpts w
 		expect(response.status).toBe(400);
 	}
 
-	expect(reviewProgress.get(review.id)?.messages ?? []).toEqual([]);
+	expect((await reviewProgress.get(review.id))?.messages ?? []).toEqual([]);
 });

@@ -40,7 +40,7 @@ exitOnShutdownSignals();
 initTokenStore();
 initReviewSettings();
 initVllmServers();
-recoverStaleReviews();
+await recoverStaleReviews();
 warmAgent();
 startVllmSync();
 restartWatcher();
@@ -56,5 +56,4 @@ const server = Bun.serve({
 });
 
 console.log(`recoder server listening on http://${server.hostname}:${server.port}`);
-
 console.log(`recoder data dir: ${serverDataDir()}`);

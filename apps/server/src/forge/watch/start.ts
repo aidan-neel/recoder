@@ -9,10 +9,10 @@ import type { Trigger, WatchedPull } from './cursor';
 import { pullFeed } from './feed';
 
 /** What Recoder has already done on one pull request, for `decidePull`. */
-export function reviewHistory(repoId: string, pull: Pick<WatchedPull, 'number' | 'headSha'>) {
-	const reviews = db.reviews
-		.list()
-		.filter((review) => review.repoId === repoId && review.prNumber === pull.number && review.status !== 'draft');
+export async function reviewHistory(repoId: string, pull: Pick<WatchedPull, 'number' | 'headSha'>) {
+	const reviews = (await db.reviews.list()).filter(
+		(review) => review.repoId === repoId && review.prNumber === pull.number && review.status !== 'draft'
+	);
 
 	return {
 		reviewedBefore: reviews.some((review) => !!review.trigger),
@@ -41,25 +41,24 @@ function acknowledge(repo: Repo, prNumber: number, trigger: Trigger): void {
  * the pull request comment when results are posted. Throws when no reviewer
  * is configured or the review can't start.
  */
-export function startAutoReview(input: {
+export async function startAutoReview(input: {
 	repo: Repo;
 	pull: Pick<WatchedPull, 'number' | 'headSha'>;
 	trigger: Trigger;
 	source: NonNullable<Review['trigger']>;
 	postResults: boolean;
-}): AutoReviewEvent {
+}): Promise<AutoReviewEvent> {
 	const { repo, pull, trigger } = input;
 
 	if (!isReviewConfigured()) throw new Error('Add a reviewer model in Settings so Recoder can review automatically.');
+	await supersedeAutomaticReviews(repo.id, pull.number);
 
-	supersedeAutomaticReviews(repo.id, pull.number);
-
-	const draft = createReviewSession(
+	const draft = await createReviewSession(
 		{ repoId: repo.id, prNumber: pull.number, ...(pull.headSha ? { headSha: pull.headSha } : {}) },
 		input.source
 	);
 
-	touch(draft.id, {
+	await touch(draft.id, {
 		autoTrigger: {
 			reason: trigger.reason,
 			...(trigger.by ? { by: trigger.by } : {}),
@@ -68,13 +67,13 @@ export function startAutoReview(input: {
 		}
 	});
 
-	recordBrief(draft.id, trigger.instructions);
+	await recordBrief(draft.id, trigger.instructions);
 
-	const review = startReviewSession(draft.id);
+	const review = await startReviewSession(draft.id);
 
 	if (input.postResults) {
 		acknowledge(repo, pull.number, trigger);
-		requestPullComment(review.id);
+		await requestPullComment(review.id);
 	}
 
 	return {

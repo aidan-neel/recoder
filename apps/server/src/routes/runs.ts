@@ -3,10 +3,10 @@ import { db } from '../store';
 
 const app = new Hono();
 
-app.get('/', (c) => c.json(db.runs.list()));
+app.get('/', async (c) => c.json(await db.runs.list()));
 
-app.get('/:id', (c) => {
-	const run = db.runs.get(c.req.param('id'));
+app.get('/:id', async (c) => {
+	const run = await db.runs.get(c.req.param('id'));
 
 	if (!run) return c.json({ error: 'run not found' }, 404);
 

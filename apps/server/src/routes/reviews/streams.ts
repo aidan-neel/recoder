@@ -50,44 +50,54 @@ async function expandedFiles(diff: string, sandboxPath: string | null): Promise<
 async function streamReviewEvents(stream: SSEStreamingApi, review: Review): Promise<void> {
 	let lastStatus = review.status;
 	let writes = Promise.resolve();
+	let failure: { error: unknown } | undefined;
+	let wake: (() => void) | undefined;
+	let unsubscribe: () => void = () => undefined;
 
-	const send = (data: unknown) => {
-		const encoded = JSON.stringify(data);
-
+	const send = (payload: () => Promise<unknown>) => {
 		writes = writes.then(async () => {
-			if (!stream.aborted) await stream.writeSSE({ data: encoded });
+			const data = await payload();
+
+			if (!stream.aborted) await stream.writeSSE({ data: JSON.stringify(data) });
+		});
+
+		writes.catch((error) => {
+			if (!stream.aborted) failure ??= { error };
+			unsubscribe();
+			wake?.();
 		});
 
 		return writes;
 	};
 
-	const snapshot = reviewProgress.get(review.id) ?? emptyReviewProgress(review.id);
-	const initial = send({ type: 'snapshot', snapshot, review, status: review.status, sequence: snapshot.sequence });
+	const initial = send(async () => {
+		const snapshot = (await reviewProgress.get(review.id)) ?? emptyReviewProgress(review.id);
 
-	const unsubscribe = subscribeReview(
+		return { type: 'snapshot', snapshot, review, status: review.status, sequence: snapshot.sequence };
+	});
+
+	unsubscribe = subscribeReview(
 		review.id,
 		(event) => {
-			const terminal = !event.step && (event.type === 'done' || event.type === 'error');
-			const restarted = event.data?.reset === true;
-			const current = db.reviews.get(review.id);
-			const statusChanged = current?.status !== lastStatus;
+			send(async () => {
+				const terminal = !event.step && (event.type === 'done' || event.type === 'error');
+				const restarted = event.data?.reset === true;
+				const current = await db.reviews.get(review.id);
+				const statusChanged = current?.status !== lastStatus;
 
-			if (current) lastStatus = current.status;
+				if (current) lastStatus = current.status;
 
-			void send(
-				terminal || restarted || statusChanged
+				return terminal || restarted || statusChanged
 					? {
 							...event,
 							review: current,
-							...(terminal || restarted ? { snapshot: reviewProgress.get(review.id) } : {})
+							...(terminal || restarted ? { snapshot: await reviewProgress.get(review.id) } : {})
 						}
-					: event
-			);
+					: event;
+			});
 		},
 		false
 	);
-
-	let wake: (() => void) | undefined;
 
 	stream.onAbort(() => {
 		unsubscribe();
@@ -97,7 +107,7 @@ async function streamReviewEvents(stream: SSEStreamingApi, review: Review): Prom
 	try {
 		await initial;
 
-		while (!stream.aborted) {
+		while (!stream.aborted && !failure) {
 			await new Promise<void>((resolve) => {
 				const timer = setTimeout(resolve, HEARTBEAT_MS);
 
@@ -107,8 +117,10 @@ async function streamReviewEvents(stream: SSEStreamingApi, review: Review): Prom
 				};
 			});
 
-			if (!stream.aborted) await send(heartbeat(review.id, lastStatus));
+			if (!stream.aborted && !failure) await send(() => heartbeat(review.id, lastStatus));
 		}
+
+		if (failure) throw failure.error;
 	} finally {
 		unsubscribe();
 		wake?.();
@@ -119,21 +131,21 @@ async function streamReviewEvents(stream: SSEStreamingApi, review: Review): Prom
  * A heartbeat with the stored status, read fresh because restart recovery can
  * fail a review without emitting an event.
  */
-function heartbeat(reviewId: string, lastStatus: Review['status']) {
+async function heartbeat(reviewId: string, lastStatus: Review['status']) {
 	return {
 		type: 'heartbeat',
 		at: new Date().toISOString(),
-		status: db.reviews.get(reviewId)?.status ?? lastStatus
+		status: (await db.reviews.get(reviewId))?.status ?? lastStatus
 	};
 }
 
 /** Parsed unified diff for a review (404 until the fetch step stores one), with an ETag so polls get 304. */
 app.get('/:id/files', async (c) => {
-	const review = requireReview(c);
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 
-	const diff = reviewDiffs.get(review.id);
+	const diff = await reviewDiffs.get(review.id);
 
 	if (!diff) return c.json({ error: 'no diff yet' }, 404);
 
@@ -152,11 +164,10 @@ app.get('/:id/files', async (c) => {
 });
 
 /** Live pipeline events (fetch/sandbox/agent progress) as server-sent events. */
-app.get('/:id/events', (c) => {
-	const review = requireReview(c);
+app.get('/:id/events', async (c) => {
+	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
-
 	c.header('X-Accel-Buffering', 'no');
 
 	const response = streamSSE(c, (stream) => streamReviewEvents(stream, review));

@@ -22,7 +22,7 @@ const CONTEXT: ReviewContext = {
 };
 
 test('the review list leaves out each context record, which the single review still serves', async () => {
-	const review = db.reviews.set(testReview({ context: CONTEXT }));
+	const review = await db.reviews.set(testReview({ context: CONTEXT }));
 
 	const listed = (await (await app.request('/api/reviews')).json()) as Record<string, unknown>[];
 
@@ -33,7 +33,7 @@ test('the review list leaves out each context record, which the single review st
 });
 
 test('the stored metrics route serves the row with its pipeline runs and run-tagged calls, null without one', async () => {
-	const review = db.reviews.set(testReview());
+	const review = await db.reviews.set(testReview());
 	const path = `/api/reviews/${review.id}/metrics/stored`;
 
 	expect(await (await app.request(path)).json()).toBeNull();
@@ -64,8 +64,7 @@ test('the stored metrics route serves the row with its pipeline runs and run-tag
 		calls: [call]
 	};
 
-	reviewMetrics.set(row);
-
+	await reviewMetrics.set(row);
 	expect(await (await app.request(path)).json()).toEqual(row);
 	expect((await app.request('/api/reviews/no-such-review/metrics/stored')).status).toBe(404);
 });
@@ -80,7 +79,7 @@ test('a review started with instructions runs with them as the developer brief',
 	Object.assign(process.env, env);
 
 	try {
-		const repo = db.repos.set({
+		const repo = await db.repos.set({
 			id: 'repo-brief',
 			name: 'brief',
 			url: `file://${join(tmpdir(), 'recoder-no-such-repo')}`,
@@ -99,7 +98,7 @@ test('a review started with instructions runs with them as the developer brief',
 		const review = (await res.json()) as { id: string; startedAt: string };
 
 		expect(res.status).toBe(201);
-		expect(reviewInstructions(review.id, review.startedAt)).toBe('only the python files');
+		expect(await reviewInstructions(review.id, review.startedAt)).toBe('only the python files');
 	} finally {
 		for (const key of Object.keys(env)) delete process.env[key];
 	}

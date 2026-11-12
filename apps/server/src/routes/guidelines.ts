@@ -59,14 +59,13 @@ function tooLong(c: Context): Response {
 	return c.json({ error: `Guidelines are limited to ${MAX_GUIDELINES_CHARS.toLocaleString()} characters.` }, 400);
 }
 
-app.get('/', (c) => {
+app.get('/', async (c) => {
 	const overview: GuidelinesOverview = {
 		global: readGlobalGuidelines(),
 		template: GUIDELINES_TEMPLATE,
 		maxChars: MAX_GUIDELINES_CHARS,
 		path: GUIDELINES_PATH,
-		repos: db.repos
-			.list()
+		repos: (await db.repos.list())
 			.map((repo) => ({ id: repo.id, name: repo.name, provider: repo.provider }))
 			.sort((a, b) => a.name.localeCompare(b.name))
 	};
@@ -78,7 +77,6 @@ app.put('/global', async (c) => {
 	const parsed = contentSchema.safeParse(await c.req.json().catch(() => null));
 
 	if (!parsed.success) return c.json({ error: 'invalid body' }, 400);
-
 	if (normalize(parsed.data.content).length > MAX_GUIDELINES_CHARS) return tooLong(c);
 
 	try {
@@ -99,7 +97,7 @@ app.delete('/global', (c) => {
 
 /** The repo's active file (default branch: `RECODER.md`, else `.recoder/REVIEW.md`) and any open change to it. */
 app.get('/repos/:id', async (c) => {
-	const repo = db.repos.get(c.req.param('id'));
+	const repo = await db.repos.get(c.req.param('id'));
 
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
 
@@ -131,7 +129,7 @@ app.get('/repos/:id', async (c) => {
 
 /** Open a pull/merge request with the file, or push to the pending one. The file keeps its path; a new one is `RECODER.md`. */
 app.post('/repos/:id/propose', async (c) => {
-	const repo = db.repos.get(c.req.param('id'));
+	const repo = await db.repos.get(c.req.param('id'));
 
 	if (!repo) return c.json({ error: 'repo not found' }, 404);
 
@@ -187,11 +185,12 @@ app.post('/draft', async (c) => {
 	if (!parsed.success) return c.json({ error: 'invalid body' }, 400);
 	if (!isReviewConfigured()) return c.json({ error: 'Pick a review model in Settings → Agent first.' }, 409);
 
-	const repo = parsed.data.scope === 'repo' && parsed.data.repoId ? (db.repos.get(parsed.data.repoId) ?? null) : null;
+	const repo =
+		parsed.data.scope === 'repo' && parsed.data.repoId ? ((await db.repos.get(parsed.data.repoId)) ?? null) : null;
 
 	if (parsed.data.scope === 'repo' && !repo) return c.json({ error: 'repo not found' }, 404);
 
-	const reviews = db.reviews.list().filter((review) => !repo || review.repoId === repo.id);
+	const reviews = (await db.reviews.list()).filter((review) => !repo || review.repoId === repo.id);
 	const signal = c.req.raw.signal;
 
 	const stream = new ReadableStream({

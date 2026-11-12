@@ -49,22 +49,21 @@ async function discussInput(
  * Keep only the re-review findings the review does not have yet and store
  * them, so a refresh keeps them. Returns what was new.
  */
-function mergeNewFindings(reviewId: string, findings: Finding[]): Finding[] {
-	const current = db.reviews.get(reviewId);
+async function mergeNewFindings(reviewId: string, findings: Finding[]): Promise<Finding[]> {
+	const key = (finding: Finding) => `${finding.file}:${finding.line ?? ''}:${finding.message}`;
+	let fresh = findings;
 
-	if (!current) return findings;
+	await db.reviews.update(reviewId, (current) => {
+		if (!current) return undefined;
 
-	const key = (f: Finding) => `${f.file}:${f.line ?? ''}:${f.message}`;
-	const seen = new Set(current.findings.map(key));
-	const fresh = findings.filter((f) => !seen.has(key(f)));
+		const seen = new Set(current.findings.map(key));
 
-	if (fresh.length > 0) {
-		db.reviews.set({
-			...current,
-			findings: [...current.findings, ...fresh],
-			updatedAt: new Date().toISOString()
-		});
-	}
+		fresh = findings.filter((finding) => !seen.has(key(finding)));
+
+		return fresh.length
+			? { ...current, findings: [...current.findings, ...fresh], updatedAt: new Date().toISOString() }
+			: current;
+	});
 
 	return fresh;
 }
@@ -82,7 +81,7 @@ app.post('/:id/chat', async (c) => {
 
 	try {
 		return c.json(
-			startReviewChat(c.req.param('id'), parsed.data.assignmentId, parsed.data.text, parsed.data.codeContext),
+			await startReviewChat(c.req.param('id'), parsed.data.assignmentId, parsed.data.text, parsed.data.codeContext),
 			202
 		);
 	} catch (error) {
@@ -93,7 +92,7 @@ app.post('/:id/chat', async (c) => {
 });
 
 app.post('/:id/chat/stop', async (c) => {
-	if (!db.reviews.get(c.req.param('id'))) return c.json({ error: 'review not found' }, 404);
+	if (!(await db.reviews.get(c.req.param('id')))) return c.json({ error: 'review not found' }, 404);
 
 	const parsed = chatSchema.pick({ assignmentId: true }).safeParse(await c.req.json().catch(() => null));
 
@@ -182,7 +181,7 @@ app.post('/:id/rereview', async (c) => {
 			})
 		);
 
-		if (result.findings.length > 0) result.findings = mergeNewFindings(review.id, result.findings);
+		if (result.findings.length > 0) result.findings = await mergeNewFindings(review.id, result.findings);
 
 		return c.json(result);
 	} catch (err) {

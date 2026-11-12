@@ -35,7 +35,7 @@ export interface HarnessEvents {
 	onStage?: (stage: ReviewStage) => void;
 	onReasoning?: (reasoning: Omit<ReviewReasoningEntry, 'at'>) => void;
 	onMessage?: (message: Omit<ReviewChatMessage, 'at' | 'from'>) => void;
-	getDiscussion?: (assignmentId?: string) => string;
+	getDiscussion?: (assignmentId?: string) => Promise<string>;
 	onTool?: (tool: ToolCallReport & { assignmentId?: string; role?: string }) => void;
 	/** Which owner guidelines this review runs with (reported once, after inventory). */
 	onGuidelines?: (used: ReviewGuidelinesUsed) => void;

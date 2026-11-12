@@ -33,7 +33,7 @@ afterEach(() => {
 async function draftOnFakeModel(): Promise<{ reviewId: string; repoId: string }> {
 	const { repo } = await localForgeFixture();
 
-	db.repos.set(repo);
+	await db.repos.set(repo);
 
 	setReviewOverrides({
 		baseUrl: 'http://lifecycle-model.test/v1',
@@ -48,7 +48,7 @@ async function draftOnFakeModel(): Promise<{ reviewId: string; repoId: string }>
 			? Response.json({ choices: [{ message: { content: '{}' } }] })
 			: fetchUntilAborted(url, init)) as typeof fetch;
 
-	return { reviewId: createReviewSession({ repoId: repo.id, prNumber: 7 }).id, repoId: repo.id };
+	return { reviewId: (await createReviewSession({ repoId: repo.id, prNumber: 7 })).id, repoId: repo.id };
 }
 
 /** Resolves on the first event `matches` accepts. */
@@ -67,7 +67,7 @@ function nextEvent(reviewId: string, matches: (event: ReviewEvent) => boolean): 
 	});
 }
 
-const tasksOf = (reviewId: string) => Object.values(reviewProgress.get(reviewId)?.tasks ?? {});
+const tasksOf = async (reviewId: string) => Object.values((await reviewProgress.get(reviewId))?.tasks ?? {});
 
 test('a review cancelled while its reviewers run leaves every task failed as cancelled, and a restart keeps that', async () => {
 	const { reviewId, repoId } = await draftOnFakeModel();
@@ -75,30 +75,30 @@ test('a review cancelled while its reviewers run leaves every task failed as can
 	const ended = nextEvent(reviewId, (event) => event.type === 'error' && !event.step);
 
 	try {
-		startReviewSession(reviewId);
+		await startReviewSession(reviewId);
 		await Promise.race([reviewing, ended]);
-		expect(db.reviews.get(reviewId)).toMatchObject({ status: 'running' });
+		expect(await db.reviews.get(reviewId)).toMatchObject({ status: 'running' });
 		getReviewControl(reviewId)!.cancel();
 		await ended;
 
-		const assignments = tasksOf(reviewId).filter((task) => task.id.startsWith('assignment:'));
+		const assignments = (await tasksOf(reviewId)).filter((task) => task.id.startsWith('assignment:'));
 
-		expect(db.reviews.get(reviewId)).toMatchObject({ status: 'failed', summary: REVIEW_CANCELLED });
+		expect(await db.reviews.get(reviewId)).toMatchObject({ status: 'failed', summary: REVIEW_CANCELLED });
 		expect(assignments.length).toBeGreaterThan(0);
 
 		expect(assignments.map((task) => [task.status, task.message])).toEqual(
 			assignments.map(() => ['error', REVIEW_CANCELLED])
 		);
 
-		expect(unsettledTasks(tasksOf(reviewId))).toEqual([]);
+		expect(unsettledTasks(await tasksOf(reviewId))).toEqual([]);
 
-		const before = tasksOf(reviewId);
+		const before = await tasksOf(reviewId);
 
-		closeStore();
-		expect(tasksOf(reviewId)).toEqual(before);
+		await closeStore();
+		expect(await tasksOf(reviewId)).toEqual(before);
 	} finally {
-		db.reviews.delete(reviewId);
+		await db.reviews.delete(reviewId);
 		clearReviewEvents(reviewId);
-		db.repos.delete(repoId);
+		await db.repos.delete(repoId);
 	}
 }, 30_000);

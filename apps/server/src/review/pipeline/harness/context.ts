@@ -204,7 +204,7 @@ export function orchestratorAgentOptions(
 	const { events } = run;
 
 	return {
-		getDiscussion: () => events?.getDiscussion?.() ?? '',
+		getDiscussion: async () => (await events?.getDiscussion?.()) ?? '',
 		onMessage: (message) => events?.onMessage?.({ ...message, assignmentId: '__pipeline', model: config.model }),
 		config,
 		budget: run.budget,

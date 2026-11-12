@@ -50,7 +50,7 @@ test.skipIf((await execUnavailableReason()) !== null)(
 				{ diff: TWO_UNIT_DIFF, ...checkout.input },
 				{
 					onMessage: (message) => messages.push(message),
-					getDiscussion: (assignmentId) => (assignmentId ? `Question for ${assignmentId}` : 'Shared conversation')
+					getDiscussion: async (assignmentId) => (assignmentId ? `Question for ${assignmentId}` : 'Shared conversation')
 				}
 			);
 

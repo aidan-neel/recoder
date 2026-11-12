@@ -51,10 +51,10 @@ const split = [
 	}
 ];
 
-function savedReview(findings = [finding]) {
-	const review = db.reviews.set(testReview({ repoId: 'repo-1', findings }));
+async function savedReview(findings = [finding]) {
+	const review = await db.reviews.set(testReview({ repoId: 'repo-1', findings }));
 
-	reviewDiffs.set(review.id, DIFF);
+	await reviewDiffs.set(review.id, DIFF);
 
 	return review;
 }
@@ -67,7 +67,7 @@ const send = (path: string, method: string, body?: unknown) =>
 	});
 
 test('dismissing a finding remembers it under the review stored copy, and restoring forgets it', async () => {
-	const review = savedReview();
+	const review = await savedReview();
 
 	const dismissed = await send(`/api/reviews/${review.id}/dismissals`, 'POST', {
 		findingId: 'finding-1',
@@ -90,7 +90,7 @@ test('dismissing a finding remembers it under the review stored copy, and restor
 });
 
 test('an unknown review or finding is a 404 and remembers nothing', async () => {
-	const review = savedReview();
+	const review = await savedReview();
 
 	expect((await send(`/api/reviews/${review.id}/dismissals`, 'POST', { findingId: 'nope' })).status).toBe(404);
 	expect((await send(`/api/reviews/${review.id}/dismissals/nope`, 'DELETE')).status).toBe(404);
@@ -99,7 +99,7 @@ test('an unknown review or finding is a 404 and remembers nothing', async () => 
 });
 
 test('two findings split from one line are dismissed and restored independently', async () => {
-	const review = savedReview(split);
+	const review = await savedReview(split);
 
 	for (const entry of split) {
 		expect((await send(`/api/reviews/${review.id}/dismissals`, 'POST', { findingId: entry.id })).status).toBe(200);
@@ -120,7 +120,7 @@ test('two findings split from one line are dismissed and restored independently'
 });
 
 test('restoring a finding forgets a dismissal stored in the old place-only form', async () => {
-	const review = savedReview(split);
+	const review = await savedReview(split);
 	const legacy = dismissalKey(split[0], DIFF).split(':')[0];
 
 	recordDismissal({

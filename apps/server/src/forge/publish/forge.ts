@@ -41,8 +41,8 @@ export interface PullCommentForge {
 export class PublishConflictError extends Error {}
 
 /** The review's pull request on the forge it lives on, with the credentials saved for it. */
-export function reviewForge(review: Review): { forge: PullCommentForge; provider: 'github' | 'gitlab' } {
-	const repo = db.repos.get(review.repoId);
+export async function reviewForge(review: Review): Promise<{ forge: PullCommentForge; provider: 'github' | 'gitlab' }> {
+	const repo = await db.repos.get(review.repoId);
 
 	if (!repo) throw new PublishConflictError('The review’s repository is no longer tracked.');
 

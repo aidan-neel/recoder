@@ -13,21 +13,21 @@ import { testReview } from '../../../helpers/review';
 const originalDataDir = process.env.RECODER_DATA_DIR;
 const ids: string[] = [];
 
-beforeAll(() => {
+beforeAll(async () => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-relay-'));
-	closeStore();
+	await closeStore();
 });
 
-afterAll(() => {
-	closeStore();
+afterAll(async () => {
+	await closeStore();
 	if (originalDataDir === undefined) delete process.env.RECODER_DATA_DIR;
 	else process.env.RECODER_DATA_DIR = originalDataDir;
 });
 
-afterEach(() => {
+afterEach(async () => {
 	for (const id of ids.splice(0)) {
-		db.reviews.delete(id);
-		reviewMetrics.delete(id);
+		await db.reviews.delete(id);
+		await reviewMetrics.delete(id);
 	}
 });
 
@@ -43,8 +43,8 @@ function usage(input: number, output: number): TokenUsage {
 }
 
 /** A relay for a review's agent, run inside that review's pipeline so its calls are recorded. */
-function relay(): { reviewId: string; run: <T>(work: (relay: StepRelay<unknown>) => T) => T } {
-	const review = db.reviews.set(testReview({ repoId: 'missing-repo' }));
+async function relay(): Promise<{ reviewId: string; run: <T>(work: (relay: StepRelay<unknown>) => T) => Promise<T> }> {
+	const review = await db.reviews.set(testReview({ repoId: 'missing-repo' }));
 	const opts = { label: 'reviewer', config: { model: 'vllm/qwen' }, budget: new ModelBudget(), maxTurns: 8 };
 
 	ids.push(review.id);
@@ -55,15 +55,18 @@ function relay(): { reviewId: string; run: <T>(work: (relay: StepRelay<unknown>)
 		onOverthought: () => {}
 	});
 
-	return { reviewId: review.id, run: (work) => withReviewMetrics(review.id, 'pipeline', () => work(target)) };
+	return {
+		reviewId: review.id,
+		run: async (work) => await withReviewMetrics(review.id, 'pipeline', () => work(target))
+	};
 }
 
-function calls(reviewId: string): TokenUsage['totalTokens'][] {
-	return reviewMetrics.get(reviewId)!.calls.map((call) => call.usage.totalTokens);
+async function calls(reviewId: string): Promise<TokenUsage['totalTokens'][]> {
+	return (await reviewMetrics.get(reviewId))!.calls.map((call) => call.usage.totalTokens);
 }
 
 test('a step that ends after the next one has started still gets its own usage', async () => {
-	const { reviewId, run } = relay();
+	const { reviewId, run } = await relay();
 
 	await run(async (target) => {
 		target.handlers.onStepStart?.('msg_1');
@@ -73,11 +76,11 @@ test('a step that ends after the next one has started still gets its own usage',
 		await target.finishPrompt(undefined, true);
 	});
 
-	expect(calls(reviewId)).toEqual([110, 220]);
+	expect(await calls(reviewId)).toEqual([110, 220]);
 });
 
 test('usage that arrives just after the prompt answered is recorded on the step it belongs to', async () => {
-	const { reviewId, run } = relay();
+	const { reviewId, run } = await relay();
 
 	await run(async (target) => {
 		target.handlers.onStepStart?.('msg_1');
@@ -85,36 +88,36 @@ test('usage that arrives just after the prompt answered is recorded on the step 
 		await target.finishPrompt(undefined, true);
 	});
 
-	expect(calls(reviewId)).toEqual([110]);
+	expect(await calls(reviewId)).toEqual([110]);
 });
 
 test('a prompt whose step events never arrived still counts as a request with the prompt’s own tokens', async () => {
-	const { reviewId, run } = relay();
+	const { reviewId, run } = await relay();
 
 	await run((target) => target.finishPrompt(usage(120, 15), true));
 
-	expect(getReviewMetrics(reviewId)?.total).toMatchObject({ calls: 1, usage: { totalTokens: 135 } });
+	expect((await getReviewMetrics(reviewId))?.total).toMatchObject({ calls: 1, usage: { totalTokens: 135 } });
 });
 
 test('a prompt that failed before any step reported nothing counts no request', async () => {
-	const { reviewId, run } = relay();
+	const { reviewId, run } = await relay();
 
 	await run((target) => target.finishPrompt(undefined, false));
 
-	expect(reviewMetrics.get(reviewId)?.calls ?? []).toEqual([]);
+	expect((await reviewMetrics.get(reviewId))?.calls ?? []).toEqual([]);
 });
 
 test('a single step without a usage event takes the prompt’s tokens, but several are not guessed at', async () => {
-	const one = relay();
+	const one = await relay();
 
 	await one.run(async (target) => {
 		target.handlers.onStepStart?.('msg_1');
 		await target.finishPrompt(usage(120, 15), true);
 	});
 
-	expect(calls(one.reviewId)).toEqual([135]);
+	expect(await calls(one.reviewId)).toEqual([135]);
 
-	const two = relay();
+	const two = await relay();
 
 	await two.run(async (target) => {
 		target.handlers.onStepStart?.('msg_1');
@@ -123,5 +126,5 @@ test('a single step without a usage event takes the prompt’s tokens, but sever
 		await target.finishPrompt(usage(300, 30), true);
 	});
 
-	expect(calls(two.reviewId)).toEqual([110, null]);
+	expect(await calls(two.reviewId)).toEqual([110, null]);
 });
