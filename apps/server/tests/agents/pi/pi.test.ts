@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { TokenUsage } from '@recoder/shared';
 import { PiAgent } from '../../../src/agents/pi/pi';
-import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
+import { LlmError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { fakePi, fakePiCalls } from '../../helpers/fake-pi';
+import { testCallFailures } from '../../helpers/native-agent';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	return {
@@ -77,15 +78,12 @@ describe('PiAgent.complete', () => {
 		expect(logged.args[logged.args.indexOf('--thinking') + 1]).toBe('off');
 	});
 
-	test.each([
-		['auth', 401, LlmError, /pi, then type \/login/],
-		['limit', 429, UsageLimitError, /exceeded your current quota/],
-		['crash', 0, LlmError, /boom/]
-	] as const)('a %s call fails with status %d', async (mode, status, type, message) => {
-		const error = await new PiAgent(await fakePi({ FAKE_PI_MODE: mode })).complete(call()).catch((e: unknown) => e);
-
-		expect(error).toBeInstanceOf(type);
-		expect((error as LlmError).status).toBe(status);
-		expect((error as LlmError).message).toMatch(message);
-	});
+	testCallFailures(
+		async (mode) => new PiAgent(await fakePi({ FAKE_PI_MODE: mode })).complete(call()),
+		[
+			{ mode: 'auth', status: 401, message: /pi, then type \/login/ },
+			{ mode: 'limit', status: 429, message: /exceeded your current quota/, usageLimit: true },
+			{ mode: 'crash', status: 0, message: /boom/ }
+		]
+	);
 });

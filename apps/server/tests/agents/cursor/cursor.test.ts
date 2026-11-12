@@ -8,6 +8,7 @@ import { signInState } from '../../../src/agents/cursor/cursor-output';
 import { LlmError, UsageLimitError } from '../../../src/models/llm/errors';
 import type { ChatOptions } from '../../../src/models/llm/types';
 import { cursorCall, cursorStatusCalls, fakeCursor } from '../../helpers/fake-cursor';
+import { testCallFailures } from '../../helpers/native-agent';
 
 function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	return {
@@ -120,22 +121,13 @@ describe('CursorAgent.complete', () => {
 		expect(childEnv).toContain('CURSOR_API_KEY=cursor-key');
 	});
 
-	test('a signed-out CLI fails as a sign-in error and a spent plan as a usage limit', async () => {
-		const signedOut = await new CursorAgent(await fakeCursor({ FAKE_CURSOR_MODE: 'auth' }))
-			.complete(call())
-			.catch((e: unknown) => e);
-
-		const limited = await new CursorAgent(await fakeCursor({ FAKE_CURSOR_MODE: 'limit' }))
-			.complete(call())
-			.catch((e: unknown) => e);
-
-		expect(signedOut).toBeInstanceOf(LlmError);
-		expect((signedOut as LlmError).status).toBe(401);
-		expect((signedOut as LlmError).message).toContain('cursor-agent login');
-		expect(limited).toBeInstanceOf(UsageLimitError);
-		expect((limited as LlmError).status).toBe(429);
-		expect((limited as LlmError).message).toMatch(/usage limit/);
-	});
+	testCallFailures(
+		async (mode) => new CursorAgent(await fakeCursor({ FAKE_CURSOR_MODE: mode })).complete(call()),
+		[
+			{ mode: 'auth', status: 401, message: /cursor-agent login/ },
+			{ mode: 'limit', status: 429, message: /usage limit/, usageLimit: true }
+		]
+	);
 
 	test('output that is not stream-json fails with the last line quoted and its credential redacted', async () => {
 		const error = await new CursorAgent(await fakeCursor({ FAKE_CURSOR_MODE: 'garbage' }))

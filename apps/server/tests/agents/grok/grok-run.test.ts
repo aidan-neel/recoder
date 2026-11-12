@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import type { AgentEvent, AgentRun, AgentRunOptions } from '../../../src/agents/contract';
 import { GrokAgent } from '../../../src/agents/grok/grok';
 import { fakeGrok, fakeGrokCalls, fakeGrokEnv } from '../../helpers/fake-grok';
-import { fixtureReview, testPromptStops } from '../../helpers/native-agent';
+import { fixtureReview, testOutputCapPrompt, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
@@ -187,21 +187,11 @@ describe('GrokAgent.openRun', () => {
 		expect(second.system).toBe('Review the diff.');
 	});
 
-	test('a failed prompt maps the CLI failure to the right error status and message', async () => {
-		for (const [mode, status, message] of [
-			['auth', 401, /grok login/],
-			['limit', 429, /usage limit/],
-			['crash', 0, /boom/]
-		] as const) {
-			const { run } = await openRun(mode);
-
-			const reply = await run.prompt('Review it.', PROMPT);
-
-			await run.close();
-
-			expect(reply.error).toMatchObject({ status, message: expect.stringMatching(message) });
-		}
-	});
+	testPromptFailures(openRun, [
+		{ mode: 'auth', status: 401, message: /grok login/ },
+		{ mode: 'limit', status: 429, message: /usage limit/, usageLimit: true },
+		{ mode: 'crash', status: 0, message: /boom/ }
+	]);
 
 	test('a prompt that fails before its result line never quotes a credential from stderr', async () => {
 		const { run } = await openRun('stderr-token');
@@ -236,15 +226,7 @@ describe('GrokAgent.openRun', () => {
 		expect(events.some((event) => event.type === 'error' && event.message.includes('not JSON'))).toBe(true);
 	});
 
-	test('output past the cap kills the run', async () => {
-		const { run } = await openRun('flood');
-
-		const reply = await run.prompt('Review it.', PROMPT);
-
-		await run.close();
-
-		expect(reply.error?.message).toMatch(/printed more than/);
-	});
+	testOutputCapPrompt(openRun);
 
 	testPromptStops(() => openRun('spawn'));
 

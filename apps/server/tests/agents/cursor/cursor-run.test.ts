@@ -4,9 +4,8 @@ import { dirname } from 'node:path';
 import { z } from 'zod';
 import { CursorAgent } from '../../../src/agents/cursor/cursor';
 import type { AgentEvent, AgentPromptOptions, AgentReply, AgentRun } from '../../../src/agents/contract';
-import { UsageLimitError } from '../../../src/models/llm/errors';
 import { cursorCalls, fakeCursor, type CursorCall } from '../../helpers/fake-cursor';
-import { fixtureReview, testPromptStops } from '../../helpers/native-agent';
+import { fixtureReview, testOutputCapPrompt, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
@@ -176,24 +175,10 @@ describe('CursorAgent.openRun', () => {
 		expect(call.prompt).toContain('Return a single valid JSON object');
 	});
 
-	test('a signed-out CLI fails the prompt as a sign-in error and a spent plan as a usage limit', async () => {
-		const signedOut = await openRun('auth');
-		const limited = await openRun('limit');
-
-		const [auth, limit] = await Promise.all([
-			signedOut.run.prompt('Review it.', PROMPT),
-			limited.run.prompt('Review it.', PROMPT)
-		]);
-
-		await signedOut.run.close();
-		await limited.run.close();
-
-		expect(auth.error?.status).toBe(401);
-		expect(auth.error?.message).toContain('cursor-agent login');
-		expect(limit.error).toBeInstanceOf(UsageLimitError);
-		expect(limit.error?.status).toBe(429);
-		expect(limit.error?.message).toMatch(/usage limit/);
-	});
+	testPromptFailures(openRun, [
+		{ mode: 'auth', status: 401, message: /cursor-agent login/ },
+		{ mode: 'limit', status: 429, message: /usage limit/, usageLimit: true }
+	]);
 
 	test('output that is not stream-json is reported and fails the prompt with the line quoted', async () => {
 		const opened = await openRun('garbage');
@@ -204,12 +189,7 @@ describe('CursorAgent.openRun', () => {
 		expect(reply.error?.message).not.toContain('fake-cursor-token-123');
 	});
 
-	test('output past the cap stops the CLI and fails the prompt', async () => {
-		const opened = await openRun('flood');
-		const { reply } = await exchange(opened);
-
-		expect(reply.error?.message).toContain('printed more than');
-	});
+	testOutputCapPrompt(openRun);
 
 	testPromptStops(() => openRun('spawn'));
 

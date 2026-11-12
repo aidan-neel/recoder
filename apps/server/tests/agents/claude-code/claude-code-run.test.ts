@@ -8,7 +8,7 @@ import { ClaudeCodeAgent } from '../../../src/agents/claude-code/claude-code';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { fakeClaudeAgent, fakeClaudeCalls } from '../../helpers/fake-claude-agent';
 import { fakeClaudeLog } from '../../helpers/fake-claude';
-import { fixtureReview, testPromptStops } from '../../helpers/native-agent';
+import { fixtureReview, testPromptFailures, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
@@ -143,20 +143,10 @@ describe('ClaudeCodeAgent.openRun', () => {
 		expect(prompt.length).toBeGreaterThan('Review it.\n\n'.length);
 	});
 
-	test('a signed-out CLI fails the prompt as a sign-in error and a spent plan as a usage limit', async () => {
-		const signedOut = await openRun('auth');
-		const limited = await openRun('limit');
-
-		const auth = await signedOut.run.prompt('Review it.', PROMPT);
-		const limit = await limited.run.prompt('Review it.', PROMPT);
-
-		await Promise.all([signedOut.run.close(), limited.run.close()]);
-
-		expect(auth.error?.status).toBe(401);
-		expect(auth.error?.message).toContain('claude auth login');
-		expect(limit.error?.status).toBe(429);
-		expect(limit.error?.message).toContain('resets 3pm');
-	});
+	testPromptFailures(openRun, [
+		{ mode: 'auth', status: 401, message: /claude auth login/ },
+		{ mode: 'limit', status: 429, message: /resets 3pm/, usageLimit: true }
+	]);
 
 	test('output that is not stream-json is reported and fails the prompt with the line quoted', async () => {
 		const { run, events } = await openRun('garbage');
