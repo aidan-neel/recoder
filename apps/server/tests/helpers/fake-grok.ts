@@ -6,7 +6,7 @@ import { fakeBin, loggedCalls } from './fake-bin';
 
 /**
  * A fake `grok` for agent runs, as a Bun script. It appends `{args, cwd, prompt, system, projectConfig,
- * homeConfig, authLink, grok}` for each call to `FAKE_GROK_LOG` (one JSON line per call) and the full environment
+ * homeConfig, homeAuth, grok}` for each call to `FAKE_GROK_LOG` (one JSON line per call) and the full environment
  * to `<log>.env`. `grok --version` and `grok models` answer like the real CLI (`FAKE_GROK_SIGNED_IN=0` makes
  * `models` fail as signed out, `error` as an unreachable account). A run prints `streaming-messages-json`:
  * `answer` (default) streams two model messages — thinking, then the text — after calling `read_diff` on the
@@ -16,7 +16,7 @@ import { fakeBin, loggedCalls } from './fake-bin';
  * `<log>.pids` and waits; `crash`, `empty` and `flood` cover the remaining exits.
  */
 const SCRIPT = `#!/usr/bin/env bun
-import { appendFileSync, existsSync, readlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, lstatSync, writeFileSync } from 'node:fs';
 
 const args = process.argv.slice(2);
 
@@ -56,11 +56,7 @@ const projectConfig = existsSync('.grok/config.toml') ? await Bun.file('.grok/co
 const home = process.env.HOME ?? '';
 const homeConfig = existsSync(home + '/.grok/config.toml') ? await Bun.file(home + '/.grok/config.toml').text() : '';
 
-let authLink = null;
-
-try {
-	authLink = readlinkSync(home + '/.grok/auth.json');
-} catch {}
+const homeAuth = lstatSync(home + '/.grok/auth.json', { throwIfNoEntry: false }) !== undefined;
 
 const grok = {
 	HOME: process.env.HOME,
@@ -89,7 +85,7 @@ if (log) {
 			system: flag('--system-prompt-override') ?? null,
 			projectConfig,
 			homeConfig,
-			authLink,
+			homeAuth,
 			grok
 		}) + '\\n'
 	);
@@ -265,7 +261,7 @@ const callSchema = z.object({
 	system: z.string().nullable(),
 	projectConfig: z.string(),
 	homeConfig: z.string(),
-	authLink: z.string().nullable(),
+	homeAuth: z.boolean(),
 	grok: z.record(z.string(), z.string().optional())
 });
 

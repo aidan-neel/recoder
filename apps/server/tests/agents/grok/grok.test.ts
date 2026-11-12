@@ -91,7 +91,8 @@ describe('GrokAgent.complete', () => {
 		expect(run.prompt).not.toContain('Review the diff.');
 		expect(run.homeConfig).toContain('official_marketplace_auto_installed = false');
 		expect(run.homeConfig).not.toContain('evil');
-		expect(run.authLink).toBe(`${env.HOME}/.grok/auth.json`);
+		expect(run.homeAuth).toBe(false);
+		expect(run.grok.GROK_AUTH_PATH).toBe(`${env.HOME}/.grok/auth.json`);
 		expect(run.grok.HOME).not.toBe(env.HOME);
 		expect(run.grok.GROK_HOME).toBe(`${run.grok.HOME}/.grok`);
 		expect(run.grok.GROK_MEMORY).toBe('0');

@@ -71,7 +71,7 @@ export class GrokRun extends ProcessRun {
 		const root = await mkdtemp(join(tmpdir(), 'recoder-grok-run-'));
 
 		host.scratch.add(root);
-		prepareHome(join(root, 'home'), realAuthPath(host.env));
+		prepareHome(join(root, 'home'));
 		await mkdir(join(root, 'work'), { recursive: true });
 
 		const place: RunPlace = {

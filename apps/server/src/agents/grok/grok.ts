@@ -34,8 +34,8 @@ const COMPLETE_MAX_TURNS = '4';
  * Grok Build, run as one `grok` process per model call or prompt.
  *
  * The CLI signs in itself (browser OAuth into `~/.grok/auth.json`, or `XAI_API_KEY`). Recoder never reads,
- * copies or moves that file: each call gets an empty home whose `auth.json` is a symlink to the user's own, so
- * the CLI refreshes the real credentials through the link. Its environment loses the server's keys and every
+ * copies, links or moves that file: each call gets an empty home, and `GROK_AUTH_PATH` names the user's own
+ * file, so the CLI reads and refreshes the real credentials in place. Its environment loses the server's keys and every
  * `GROK_*`/`RECODER_*` override, its user config, plugins, hooks, rules, memory and compat surfaces (Claude and
  * Cursor dirs) stay out through the fake home and the `GROK_*_ENABLED=false` switches, and its own tools are
  * off by flag — Recoder's reach it only over the MCP server a run's project config names.
@@ -95,7 +95,7 @@ export class GrokAgent extends CliAgent {
 		this.scratch.add(scratch);
 
 		try {
-			prepareHome(home, authPath);
+			prepareHome(home);
 			await mkdir(cwd, { recursive: true });
 			await writeFile(promptFile, promptText(opts.messages.filter((m) => m.role !== 'system')), { mode: 0o600 });
 
@@ -206,7 +206,7 @@ export class GrokAgent extends CliAgent {
 		if (!this.homeDir) {
 			this.homeDir = mkdtempSync(join(tmpdir(), 'recoder-grok-status-'));
 			this.scratch.add(this.homeDir);
-			prepareHome(this.homeDir, realAuthPath(this.env));
+			prepareHome(this.homeDir);
 		}
 
 		return this.homeDir;

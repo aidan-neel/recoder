@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -62,8 +62,8 @@ export function realAuthPath(env: Env): string | null {
 
 /**
  * The environment a Grok call runs with: the server's minus the stripped variables, `HOME` and `GROK_HOME` pointed
- * at the call's own empty home, memory and every compat surface off, and the user's auth file linked in through
- * `GROK_AUTH_PATH` when there is one.
+ * at the call's own empty home, memory and every compat surface off, and `GROK_AUTH_PATH` naming the user's own
+ * sign-in file when there is one, so the CLI reads and refreshes that file in place.
  */
 export function grokEnv(env: Env, home: string, authPath: string | null): Record<string, string> {
 	const out = cliEnv(env, STRIPPED);
@@ -101,17 +101,15 @@ function homeConfig(root: string): string {
 }
 
 /**
- * Prepares `root` as a Grok home: `.grok/config.toml` with the seed above, and `auth.json` symlinked to the user's
- * own sign-in file when there is one, so the CLI reads and refreshes the real file through the link. Synchronous:
- * the status checks need the home before their first spawn.
+ * Prepares `root` as a Grok home: `.grok/config.toml` with the seed above and nothing else. The sign-in file is
+ * never copied or linked in; `grokEnv` names the user's own. Synchronous: the status checks need the home before
+ * their first spawn.
  */
-export function prepareHome(root: string, authPath: string | null): void {
+export function prepareHome(root: string): void {
 	const grokDir = join(root, '.grok');
 
 	mkdirSync(grokDir, { recursive: true });
 	writeFileSync(join(grokDir, 'config.toml'), homeConfig(root));
-
-	if (authPath) symlinkSync(authPath, join(grokDir, 'auth.json'));
 }
 
 /**
