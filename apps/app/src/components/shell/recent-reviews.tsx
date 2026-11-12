@@ -4,6 +4,7 @@ import { HoverList, RowButton, SkeletonRows, StatusGlyph, type GlyphKind } from 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { OFFLINE_TEXT } from '@/lib/api/http';
 import type { RecentReview } from '@/lib/shell/types';
 
 /** The glyph for each state of a recent review. */
@@ -44,7 +45,7 @@ function RecentRow({ review, active }: { review: RecentReview; active: boolean }
 
 /** What stands in the list's place when it has no rows. */
 function emptyLine(offline: boolean): string {
-	return offline ? 'The review server is not answering.' : 'Reviews you start show here.';
+	return offline ? OFFLINE_TEXT : 'Reviews you start show here.';
 }
 
 /** The newest review of each pull request, so the last few stay one click away. */

@@ -3,6 +3,7 @@
 import { Button, StatusNotice } from '@recoder/ui';
 import Link from 'next/link';
 
+import { OfflineNotice } from '@/components/common/offline-notice';
 import { useApi } from '@/lib/api/client';
 import type { PullListView } from '@/lib/pulls/types';
 import { newReviewHref, settingsHref } from '@/lib/shell/routes';
@@ -30,16 +31,7 @@ function clearNarrowing(view: PullListView): void {
 export function PullsNotice({ view }: { view: PullListView }) {
 	const { base } = useApi();
 
-	if (view.offline) {
-		return (
-			<StatusNotice
-				tone="danger"
-				title="The review server is not answering."
-				detail="Start it with `bun run dev`, then try again."
-				actions={<Button onClick={view.refresh}>Try again</Button>}
-			/>
-		);
-	}
+	if (view.offline) return <OfflineNotice onRetry={view.refresh} />;
 
 	if (view.phase === 'failed') {
 		return (

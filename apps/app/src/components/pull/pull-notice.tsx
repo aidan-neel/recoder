@@ -3,6 +3,7 @@
 import { Button, StatusNotice } from '@recoder/ui';
 import Link from 'next/link';
 
+import { OfflineNotice } from '@/components/common/offline-notice';
 import { useApi } from '@/lib/api/client';
 import type { PullPageView } from '@/lib/pull/types';
 import { pullsHref } from '@/lib/shell/routes';
@@ -17,16 +18,7 @@ export function PullNotice({ view }: { view: PullPageView }) {
 		</Button>
 	);
 
-	if (view.offline) {
-		return (
-			<StatusNotice
-				tone="danger"
-				title="The review server is not answering."
-				detail="Start it with `bun run dev`, then try again."
-				actions={<Button onClick={view.refresh}>Try again</Button>}
-			/>
-		);
-	}
+	if (view.offline) return <OfflineNotice onRetry={view.refresh} />;
 
 	if (view.phase === 'not-found') {
 		return (
