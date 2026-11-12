@@ -1,1 +1,63 @@
-/* ───────── First run: the three steps before the first review ───────── */
+/* ───────── First run: three steps on the pull request page, then the list takes it ───────── */
+.setup {
+	padding-top: 56px;
+	transition: opacity var(--dur-swap) ease-out;
+}
+.setup[data-leaving] {
+	opacity: 0;
+}
+.setup-title {
+	margin: 0 2px 16px;
+	font-size: 20px;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+	line-height: 28px;
+}
+
+/* A step is a settings row led by its mark. The divider is drawn inside the step, so a command under a row stays with it. */
+.setup-step + .setup-step {
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+}
+.setup-step .settings-row + .settings-row {
+	box-shadow: none;
+}
+/* The mark sits on the name's line, however far the line under it wraps. */
+.setup-step [data-ui='status-glyph'] {
+	align-self: flex-start;
+	margin-top: 1px;
+}
+/* A step's line is a sentence, so it wraps where a settings row would cut it short. */
+.setup-step .settings-row[data-led] .settings-row-detail {
+	overflow: visible;
+	text-wrap: pretty;
+	white-space: normal;
+}
+.setup-step .settings-row-end {
+	gap: 8px;
+}
+/* The model step's turn: its trigger takes an outline, so the page's next action is never a quiet one. */
+.setup-step[data-current] .model-trigger:not(:focus-visible) {
+	box-shadow: inset 0 0 0 1px var(--line-menu);
+}
+.setup-step[data-current] .model-trigger-quiet {
+	color: var(--text-primary);
+}
+/* The command lines up with the step's text, past the mark. */
+.setup-command {
+	padding: 0 16px 14px 44px;
+}
+
+.setup-foot {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px 24px;
+	margin-top: 10px;
+	padding: 0 2px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 18px;
+}
+.setup-foot a {
+	flex-shrink: 0;
+}

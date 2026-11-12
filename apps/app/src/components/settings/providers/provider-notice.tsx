@@ -17,7 +17,7 @@ type NoListSource = Exclude<ProviderSource, { state: 'loading' | 'ready' }>;
  * "Checked" for a moment (the notice may look the same as before), or "Try
  * again" when the agent still cannot be reached.
  */
-function CheckAgain({ label }: { label: string }) {
+export function CheckAgain({ label }: { label: string }) {
 	const check = useCheckAgain();
 
 	return (
@@ -29,7 +29,7 @@ function CheckAgain({ label }: { label: string }) {
 }
 
 /** A shell command to run by hand, in the kit's code block with its copy button. */
-function Command({ command }: { command: string }) {
+export function Command({ command }: { command: string }) {
 	return <CodeBlock code={command} lang="bash" copy className="provider-command" />;
 }
 

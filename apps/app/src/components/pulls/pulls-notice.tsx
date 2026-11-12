@@ -6,10 +6,7 @@ import Link from 'next/link';
 import { OfflineNotice } from '@/components/common/offline-notice';
 import { useApi } from '@/lib/api/client';
 import type { PullListView } from '@/lib/pulls/types';
-import { newReviewHref, settingsHref } from '@/lib/shell/routes';
-
-/** The sample's address, for a first run with nothing connected. */
-const SAMPLE_HREF = '/sample';
+import { newReviewHref, SAMPLE_HREF, settingsHref } from '@/lib/shell/routes';
 
 /** True when a filter, a repository or search text narrows the list. */
 function narrowed(view: PullListView): boolean {
