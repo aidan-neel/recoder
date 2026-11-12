@@ -5,10 +5,17 @@ import { dirname, join } from 'node:path';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { PiAgent } from '../../../src/agents/pi/pi';
 import { UsageLimitError } from '../../../src/models/llm/errors';
+import { REVIEW_POLICY } from '../../../src/review/session/review-policy';
 import { fakePi, fakePiCalls, type FakePiCall } from '../../helpers/fake-pi';
 import { fixtureReview, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
+
+/** A stall watchdog shorter than a slow model call, which the engine checks every 5 s. */
+const WATCHDOG_MS = 2_000;
+
+/** A model call long enough for the engine to check for a stall while it runs. */
+const SLOW_CALL_MS = 6_000;
 
 /** A run on the fake CLI in `mode`, with its events collected, the fake's environment and the path of its log. */
 async function openRun(
@@ -174,6 +181,18 @@ describe('PiRun', () => {
 		expect([reply.error?.message, ...logged].join('\n')).not.toContain('fake-credential-123');
 	});
 
+	test('a failed read of the session file fails only the prompt it happened in', async () => {
+		const { run } = await openRun('unreadable', { tools: [], extra: { FAKE_PI_DELAY_MS: '1200' } });
+
+		const first = await run.prompt('Review it.', PROMPT);
+		const second = await run.prompt('Continue.', PROMPT);
+
+		await run.close();
+
+		expect(first.error?.message).toBe("Recoder could not read Pi's session file.");
+		expect(second).toEqual({ text: '{"done":true,"results":[]}', error: undefined });
+	});
+
 	test('output past the cap stops Pi', async () => {
 		const { run } = await openRun('flood');
 
@@ -218,6 +237,38 @@ test('a review agent on a Pi model completes through the shared engine, reading 
 	expect(error).toBeUndefined();
 	expect(read).toMatchObject({ isError: false, text: expect.stringContaining('+new') });
 });
+
+test(
+	'a Pi model call slower than the stall watchdog is not stopped as stalled',
+	async () => {
+		const env = await fakePi({ FAKE_PI_MODE: 'slow', FAKE_PI_DELAY_MS: String(SLOW_CALL_MS) });
+
+		const { error } = await withStallWatchdog(WATCHDOG_MS, () =>
+			fixtureReview(new PiAgent(env), 'anthropic/claude-sonnet-4-5')
+		);
+
+		expect(error).toBeUndefined();
+		expect(await fakePiCalls(env)).toHaveLength(1);
+	},
+	SLOW_CALL_MS * 3
+);
+
+/**
+ * Runs `body` with the engine's stall watchdog at `ms`, then restores it. `REVIEW_POLICY` is `as const`; the cast
+ * only lifts its readonly for the length of `body`.
+ */
+async function withStallWatchdog<T>(ms: number, body: () => Promise<T>): Promise<T> {
+	const policy = REVIEW_POLICY as { perCallDeadlineMs: number };
+	const saved = policy.perCallDeadlineMs;
+
+	policy.perCallDeadlineMs = ms;
+
+	try {
+		return await body();
+	} finally {
+		policy.perCallDeadlineMs = saved;
+	}
+}
 
 /** A user agent dir with an extension, a settings file naming a package and an extension, and prompt files. */
 async function userAgentDir(): Promise<string> {

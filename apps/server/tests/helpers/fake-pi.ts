@@ -13,11 +13,13 @@ import { fakeBin, loggedCalls } from './fake-bin';
  * Recoder wrote with a stub of Pi's API, calls its `read_diff`, and answers with what it returned, in two model
  * calls); `auth` (Pi's `No API key found` on stderr, exit 1, nothing saved); `limit` (a model call that ended in a
  * quota error, exit 1); `garbage` (a session line and output that are not Pi's, carrying a fake credential); `flood`
- * (stdout without end); `crash` (stderr, exit 1); or `spawn` (starts a `sleep` grandchild, writes `<own pid>
- * <grandchild pid>` to `<log>.pids` and waits for it).
+ * (stdout without end); `crash` (stderr, exit 1); `spawn` (starts a `sleep` grandchild, writes `<own pid>
+ * <grandchild pid>` to `<log>.pids` and waits for it); `slow` (a model call of `FAKE_PI_DELAY_MS`, during which,
+ * like Pi, it saves and prints nothing, then the answer); or `unreadable` (on a new session, makes the session file
+ * unreadable for `FAKE_PI_DELAY_MS` after saving the prompt, then the answer).
  */
 const SCRIPT = `#!/usr/bin/env bun
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -83,6 +85,10 @@ if (mode === 'spawn') {
 	await child.exited;
 }
 
+const delayMs = Number(process.env.FAKE_PI_DELAY_MS ?? 0);
+
+if (mode === 'slow') await Bun.sleep(delayMs);
+
 mkdirSync(dirname(sessionFile), { recursive: true });
 
 if (mode === 'garbage') {
@@ -105,6 +111,12 @@ const reply = (content, stopReason, extra = {}) =>
 if (!resumed) appendFileSync(sessionFile, JSON.stringify({ type: 'session', version: 3, id: 'sess-1', timestamp: '2026-11-12T09:53:34.527Z', cwd: process.cwd() }) + '\\n');
 
 save({ type: 'message', message: { role: 'user', content: [{ type: 'text', text: stdin }], timestamp: 1 } });
+
+if (mode === 'unreadable' && !resumed) {
+	chmodSync(sessionFile, 0o000);
+	await Bun.sleep(delayMs);
+	chmodSync(sessionFile, 0o644);
+}
 
 if (mode === 'limit') {
 	const message = '429 You exceeded your current quota, please check your plan and billing details.';

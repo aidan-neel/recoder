@@ -49,7 +49,10 @@ export interface PiTurn {
 export class SessionTail {
 	private offset = 0;
 	private readonly seen = new Set<string>();
+	/** The reads in order; it never rejects, so one failed read does not fail the reads after it. */
 	private reading: Promise<void> = Promise.resolve();
+	/** The first read that failed since {@link follow}, raised once by {@link finish}. */
+	private readFailure: unknown = null;
 	private timer: ReturnType<typeof setInterval> | null = null;
 	private turn: PiTurn = { reply: null, usages: [] };
 
@@ -58,30 +61,49 @@ export class SessionTail {
 		private readonly onEvent: (event: AgentEvent) => void
 	) {}
 
-	/**
-	 * Starts following the file for one call. A read that fails between polls is not lost: the chain keeps its
-	 * rejection, and {@link finish} raises it.
-	 */
+	/** Starts following the file for one call. */
 	follow(): void {
 		this.turn = { reply: null, usages: [] };
-
-		this.timer = setInterval(() => {
-			this.read().catch(() => {});
-		}, POLL_MS);
+		this.readFailure = null;
+		this.timer = setInterval(() => this.poll(), POLL_MS);
 	}
 
-	/** Stops following, reads what the call left, and returns what it wrote. */
+	/**
+	 * Stops following, reads what the call left, and returns what it wrote. Throws when a read of the file failed
+	 * during the call, since a model call may then be missing from the steps.
+	 */
 	async finish(): Promise<PiTurn> {
 		if (this.timer) clearInterval(this.timer);
 
 		this.timer = null;
 		await this.read();
 
+		const failure = this.readFailure;
+
+		this.readFailure = null;
+
+		if (failure) throw new Error("Recoder could not read Pi's session file.", { cause: failure });
+
 		return this.turn;
 	}
 
+	/**
+	 * One tick while Pi runs: a sign of life, then a read. Pi saves an entry only when a message ends and, in text
+	 * mode, prints only the final answer, so a long model call is otherwise silent and the engine would stop it as
+	 * stalled. A Pi that hangs is still stopped, by the prompt's deadline.
+	 */
+	private poll(): void {
+		this.onEvent({ type: 'activity' });
+		void this.read();
+	}
+
+	/** Queues a read after the ones before it; a failed read is held for {@link finish}. */
 	private read(): Promise<void> {
-		this.reading = this.reading.then(() => this.readNew());
+		this.reading = this.reading
+			.then(() => this.readNew())
+			.catch((error: unknown) => {
+				this.readFailure ??= error;
+			});
 
 		return this.reading;
 	}
