@@ -17,7 +17,7 @@ This page traces one review from trigger to published findings and feedback. It 
 | 9   | Validation and repair      | `validateCandidate`, `repairCandidate`              | `apps/server/src/review/pipeline/consolidate.ts`           | `CandidateFinding`, `CandidateRepair`         |
 | 10  | Verification               | `startVerification`, `finishVerification`           | `apps/server/src/review/pipeline/harness/verification.ts`  | `FindingVerification`, `BaseComparisonResult` |
 | 11  | Consolidation, publication | `consolidate`, `completeReview`                     | `apps/server/src/review/pipeline/harness/consolidation.ts` | `Finding`, `ReviewFunnel`                     |
-| 12  | Feedback                   | `recordDismissal`, `recordVote`, `withTopics`       | `apps/server/src/review/guidelines/learned/dismissals.ts`  | `Dismissal`, `Vote`, `FindingTopic`           |
+| 12  | Feedback and history       | `learnFromDecision`, `withTopics`, `carryHistory`   | `apps/server/src/review/guidelines/learned/decision-learning.ts` | `FindingDecision`, `LearnedRuleProposal`, `FindingHistory` |
 
 The entry file is the first function's file. Each stage section names the files of the others.
 
@@ -321,21 +321,62 @@ A `pre-existing` result adds `SAME_ON_BASE` text to the reason. It also stops a 
 
 ## 12. Feedback
 
-- `POST /api/reviews/:id/dismissals` records a dismissal with `recordDismissal`. The route is in `apps/server/src/routes/reviews/dismissals.ts`.
-- The fingerprint is `dismissalKey`, in `apps/server/src/review/guidelines/learned/finding-key.ts`.
-- Deleting `/api/reviews/:id/dismissals/:findingId` removes it with `removeDismissal`.
-- The store is `apps/server/src/review/guidelines/learned/dismissals.ts`. It keeps at most `MAX_DISMISSALS_PER_REPO` per repository in the server data directory. The `Dismissal` type is defined there too.
+### Decisions
+
+- A person's decision on a finding is a `FindingDecision` (`packages/shared/src/findings.ts`), saved on the finding inside the review record, so every device and the review list (`reviewListItem` keeps each finding's `kind` and `decision`) agree.
+- `PUT /api/reviews/:id/findings/:findingId/decision` takes `{ "state": "accepted", "note"?: string }` or `{ "state": "dismissed", "reason": DismissalReason, "note"?: string }` (`FindingDecisionInput`) and answers the saved `FindingDecision`. `DELETE` on the same path reopens the finding and answers `{ "reopened": true }`. The routes are in `apps/server/src/routes/reviews/decisions.ts`; the decision is written with the review collection's transactional `update`.
+- What a decision teaches later reviews is `learnFromDecision` in `apps/server/src/review/guidelines/learned/decision-learning.ts`. It first forgets what an earlier decision on the same finding taught (`forgetDecision`), so changing a decision never counts twice; reopening calls `forgetDecision` alone.
+  - Accepted: a `useful` vote on the finding's topic.
+  - Dismissed: by `DismissalReason` (`DISMISSAL_REASONS`):
+
+| Reason             | Stops the same finding (`recordDismissal`) | Counts toward its topic (`dismissed` vote) | Evaluation label |
+| ------------------ | ------------------------------------------ | ------------------------------------------ | ---------------- |
+| `wrong`            | yes                                        | yes                                        | `false`          |
+| `not-worth-fixing` | yes                                        | yes                                        | none             |
+| `already-handled`  | yes                                        | no                                         | none             |
+| `style-preference` | yes                                        | yes                                        | none             |
+| `duplicate`        | no                                         | no                                         | none             |
+
+  - Suppression stays narrow: a remembered dismissal matches only in its repository, at its place and for its behaviour (`matchesDismissal`: the same `dismissalPlace` and a claim `sameClaim` takes for the same defect). Only reasons that judge the kind of finding count toward its topic; `already-handled` and `duplicate` judge one finding only. A `duplicate` stops nothing, because the finding it duplicates carries the decision.
+  - apps/web's Dismiss button asks no reason and sends `not-worth-fixing`, which keeps what a dismissal always taught without calling the finding false.
+- The dismissal key is `dismissalKey`, in `apps/server/src/review/guidelines/learned/finding-key.ts`. The store is `apps/server/src/review/guidelines/learned/dismissals.ts`, at most `MAX_DISMISSALS_PER_REPO` per repository; each `Dismissal` keeps its `reason` and `note`. A dismissal saved before reasons existed held free text in `reason`; it reads as the `note`.
 - On the next review, `createRun` loads them with `listDismissals`. `validateCandidate` drops a match as `dismissed`, and reviewer prompts list them through `dismissalsBlock`.
-- Votes count decisions toward a finding's topic (`FindingTopic` in `packages/shared/src/findings.ts`): the ledger rule it cites, keyed by a hash of the rule's text (`ruleTopicId`), else its smell, else its category. The store is `apps/server/src/review/guidelines/learned/votes.ts`, one vote per finding fingerprint, at most `MAX_VOTES_PER_REPO` per repository. Both stores live in `learned-table.ts`: a local file in the server data directory, or a shared setting (`dismissals`, `finding-votes`) under PostgreSQL, so every replica learns from the same decisions.
-  - A dismissal records a `dismissed` vote; restoring it removes that vote.
-  - `PUT /api/reviews/:id/useful/:findingId` records a `useful` vote when a person accepts or sends a finding; `DELETE` removes only a `useful` vote. The routes are in `apps/server/src/routes/reviews/feedback.ts`.
-  - `createRun` loads `topicTallies`. `ruleLedgerStage` orders the ledger with `rankRules`: rules people act on first, rules they keep dismissing last. `ledgerBlock` notes a rule's `standing` in the prompts of reviewers that apply the rules lens. Rule ids stay the same.
-  - `confirmedFindings` sets each finding's topic with `withTopics`. A topic with at least 3 dismissals and at least 4 dismissals per useful vote (`isQuietTopic`) marks its findings `quieted`, unless a run proved the finding. Quieted findings are verified and stored like the rest. The summary, the review list (`reviewListItem`, `reviewTally`) and past-review context leave them out, and the app lists them apart.
-  - `DELETE /api/reviews/:id/quieted/:topicId` turns a topic back on: it forgets the topic's dismissed votes and clears `quieted` on the review's findings of that topic.
+
+### Votes and learned rules
+
+- Votes count decisions toward a finding's topic (`FindingTopic` in `packages/shared/src/findings.ts`): the ledger rule it cites, keyed by a hash of the rule's text (`ruleTopicId`), else its smell, else its category. The store is `apps/server/src/review/guidelines/learned/votes.ts`, one vote per finding fingerprint, at most `MAX_VOTES_PER_REPO` per repository. The learned stores live in `learned-table.ts`: a local file in the server data directory, or a shared setting (`dismissals`, `finding-votes`, `learned-rules`) under PostgreSQL, so every replica learns from the same decisions. Both are read through the table's schema.
+  - `PUT /api/reviews/:id/useful/:findingId` records a `useful` vote when a person sends a finding on; `DELETE` removes only a `useful` vote. The routes are in `apps/server/src/routes/reviews/feedback.ts`.
+  - `createRun` loads `topicTallies`. `ruleLedgerStage` orders the ledger with `rankRules`: rules people act on first, rules they keep dismissing (`isDismissedOften`) last. `ledgerBlock` notes a rule's `standing` in the prompts of reviewers that apply the rules lens. Rule ids stay the same.
+- A topic with at least 3 dismissals and at least 4 dismissals per useful vote (`isDismissedOften`) is only proposed for quieting: the dismissal that crosses the bar calls `proposeQuieting` (`apps/server/src/review/guidelines/learned/proposals.ts`), which stores a `LearnedRuleProposal` (`packages/shared/src/guidelines.ts`) in state `proposed`. A rule applies only once a person approves it.
+  - `GET /api/repos/:repoId/learned-rules` lists the repository's proposals in every state. `PUT /api/repos/:repoId/learned-rules/:topicId` with `{ "state": "approved" | "rejected" }` decides one and answers it. The routes are in `apps/server/src/routes/learned-rules.ts`. A decided proposal is never proposed again by later dismissals; a person can still change it.
+  - `topicTallies` marks approved topics `quietApproved`. `confirmedFindings` sets each finding's topic with `withTopics`, which marks it `quieted` only when its topic is approved, unless a run proved the finding. Quieted findings are verified and stored like the rest. The summary, the review list (`reviewListItem`, `reviewTally`) and past-review context leave them out, and the app lists them apart.
+  - `DELETE /api/reviews/:id/quieted/:topicId` turns a topic back on: it forgets the topic's dismissed votes and its proposal, and clears `quieted` on the review's findings of that topic.
+
+### History across pushes
+
+- `finalizeReview` (`apps/server/src/commands/finalize-review.ts`) passes a passed review's findings through `withFindingHistory` (`apps/server/src/review/history/history.ts`). It sets them against the newest earlier passed review of the same pull request (`earlierReviews`); the first review of a pull request keeps no history.
+- A defect's identity is `defectIdentity` in `apps/server/src/review/history/identity.ts`: its file, its enclosing symbol and its claim terms (`claimTerms`: trigger, consequence, violated contract, rule or smell, title, body). Line and category are left out, so a moved line or a re-filed category keeps the defect, and two different claims in one symbol stay apart (`sameDefect`). `Finding.fingerprint` is unchanged and still keys votes, saved reviews and evaluations.
+- What the commits since did to a finding's code is `codeChange` in `apps/server/src/review/history/code-change.ts`, read from the two pull request diffs: `untouched` when the hunk around it reads the same (perhaps moved), `touched` otherwise, `gone` when the pull request no longer changes its file.
+- `carryHistory` (`apps/server/src/review/history/carry.ts`) sets `FindingHistory`:
+  - raised again: it keeps the earlier finding's id; `rechecked` when its code was touched (and open again), else `carried` with the earlier decision;
+  - not raised, untouched: the earlier finding is `carried` as it was, moved with its code;
+  - not raised, touched: it goes to `Review.resolved` (`ResolvedFinding`) only on new evidence, a verifier refuting the same defect in this review or the pull request no longer changing its file; otherwise it is `carried` where it was;
+  - every other finding is `new` at this head.
+- Because a carried finding keeps its id, `findingForgeStanding` (`apps/server/src/review/history/forge-standing.ts`) answers the forge publisher: the comment already posted for the finding by this or an earlier review of the pull request, and its `ResolvedFinding` when this review closed it. An unrelated commit does not post it again.
+
+### Evaluation labels
+
+- `findingLabel` in `apps/server/src/eval/benchmark-labels.ts` labels a finding `false` when no human adjudication exists and the finding's saved decision is a `wrong` dismissal. No other reason is a false-positive label.
+
 - Tests:
-  - `apps/server/tests/routes/reviews/dismissals.test.ts`
+  - `apps/server/tests/routes/reviews/decisions.test.ts`
   - `apps/server/tests/routes/reviews/feedback.test.ts`
+  - `apps/server/tests/routes/learned-rules.test.ts`
   - `apps/server/tests/review/guidelines/learned/votes.test.ts`
   - `apps/server/tests/review/guidelines/learned/topics.test.ts`
   - `apps/server/tests/review/guidelines/learned/dismissals.test.ts`
+  - `apps/server/tests/review/history/identity.test.ts`
+  - `apps/server/tests/review/history/carry.test.ts`
+  - `apps/server/tests/review/history/history.test.ts`
   - `apps/server/tests/review/pipeline/harness-dismissals.test.ts`
+  - `apps/server/tests/eval/benchmark-labels.test.ts`

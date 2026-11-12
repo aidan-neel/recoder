@@ -34,7 +34,7 @@ Execution order. The entry for the whole run is `runAdaptiveReview` in `apps/ser
 | Validation and repair                    | `apps/server/src/review/pipeline/consolidate.ts`           | `CandidateFinding`, `CandidateRepair`         |
 | Verification                             | `apps/server/src/review/pipeline/harness/verification.ts`  | `FindingVerification`, `BaseComparisonResult` |
 | Consolidation, publication               | `apps/server/src/review/pipeline/harness/consolidation.ts` | `Finding`, `ReviewFunnel`                     |
-| Feedback                                 | `apps/server/src/review/guidelines/learned/dismissals.ts`  | `Dismissal`, `Vote`, `FindingTopic`           |
+| Feedback and history                     | `apps/server/src/review/guidelines/learned/decision-learning.ts` | `FindingDecision`, `LearnedRuleProposal`, `FindingHistory` |
 
 Reviewers, detectors and verifiers overlap in time. Verifiers take each candidate as it is reported.
 
