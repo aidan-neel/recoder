@@ -247,6 +247,36 @@ describe('testMatrix on a suspected new test', () => {
 		expect(outcome.counts.skips['probe-broke']).toBe(1);
 	});
 
+	test('gives no finding when the mutant sits in a concise body no module-level probe can reach', async () => {
+		const arrow = 'export const isAdult = (a: number) => a >= 18;';
+
+		const file = {
+			path: 'src/c.test.ts',
+			base: '',
+			head: "it('accepts adults', () => {\n\texpect(isAdult(20)).toBe(true);\n});",
+			added: new Set([1, 2, 3]),
+			visible: new Set([1, 2, 3])
+		};
+
+		const arrowSuspicion: DetectorResult = { ...suspicion, file: 'src/c.test.ts' };
+
+		const outcome = await testMatrix({
+			tests: [file],
+			suspicions: [arrowSuspicion],
+			sources: new Map([['src/c.ts', arrow]]),
+			added: new Map([['src/c.ts', new Map([[1, '']])]]),
+			commandFor: singleFileCommands(['.: test → bun test'], []),
+			closed: () => false,
+			deadline: Date.now() + 60_000,
+			run: async (plan) =>
+				payloadOf(plan).includes('recoder-probe') ? { ...done(1), output: 'Error: recoder-probe' } : done(0)
+		});
+
+		expect(outcome.results).toEqual([]);
+		expect(outcome.counts.skips['probe-broke']).toBe(1);
+		expect(outcome.counts.survivorRows[0]).toContain('deferred');
+	});
+
 	test('does not count a run the profile says never reached an assertion as a kill', async () => {
 		const outcome = await testMatrix({
 			...detected,

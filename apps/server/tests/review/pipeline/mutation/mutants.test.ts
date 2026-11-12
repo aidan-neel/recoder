@@ -6,7 +6,7 @@ function added(lines: number[]): Map<string, Map<number, string>> {
 }
 
 /** The whole file a probe mutant carries, failing the test when the probe is not one. */
-function probeText(probe: Mutant | 'type' | null): string {
+function probeText(probe: Mutant | 'type' | 'deferred' | null): string {
 	if (!probe || typeof probe === 'string') throw new Error(`expected a probe mutant, got ${probe}`);
 
 	return probe.text;
@@ -60,6 +60,31 @@ describe('probeOf', () => {
 
 		expect(probe).toMatchObject({ line: 6 });
 		expect(probeText(probe).split('\n')[5]).toBe("throw new Error('recoder-probe'); export const x = 1;");
+	});
+
+	test('is deferred for a concise arrow body at module level, which a probe cannot reach', async () => {
+		const arrow = 'export const isAdult = (a: number) => a >= 18;';
+
+		expect(await probeOf('src/a.ts', arrow, { line: 1, column: arrow.indexOf('>=') })).toBe('deferred');
+	});
+
+	test('is deferred for a class field initializer, which runs at instantiation', async () => {
+		const field = 'export class A {\n\tx = 1 >= 0 ? 1 : 0;\n}';
+		const column = field.split('\n')[1]!.indexOf('>=');
+
+		expect(await probeOf('src/a.ts', field, { line: 2, column })).toBe('deferred');
+	});
+
+	test('still probes a concise arrow nested in a function body, where the throw lands inside it', async () => {
+		const nested = 'export function outer() {\n\tconst f = (a: number) => a >= 18;\n\treturn f;\n}';
+		const column = nested.split('\n')[1]!.indexOf('>=');
+		const probe = await probeOf('src/a.ts', nested, { line: 2, column });
+
+		expect(probe).toMatchObject({ line: 2 });
+
+		expect(probeText(probe).split('\n')[1]).toBe(
+			"\tthrow new Error('recoder-probe'); const f = (a: number) => a >= 18;"
+		);
 	});
 
 	test('does not probe types', async () => {

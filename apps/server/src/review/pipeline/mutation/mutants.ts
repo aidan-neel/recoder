@@ -205,6 +205,22 @@ export function mutantsAt(file: string, head: string, lines: readonly number[], 
 /** Nodes that end a walk up from an expression: the statements of a function or block body. */
 const BODY_PARENTS = new Set(['statement_block', 'switch_case', 'switch_default']);
 
+/**
+ * Nodes whose contents run only when called or instantiated: a concise arrow
+ * body, a function's parameters, a class field. A probe placed before their
+ * top-level statement throws on import and proves nothing about the line.
+ */
+const DEFERRED_BODIES = new Set([
+	'arrow_function',
+	'function_declaration',
+	'function_expression',
+	'function_signature',
+	'generator_function',
+	'generator_function_declaration',
+	'method_definition',
+	'public_field_definition'
+]);
+
 /** Nodes that only exist for the type checker; no test can reach them. */
 const TYPE_NODES = new Set([
 	'interface_declaration',
@@ -220,22 +236,31 @@ const TYPE_NODES = new Set([
  * the mutated token's column, so a condition inside an `else if` probes its
  * own branch, not the one before it. A line at module level probes the
  * statement that holds it, since the module evaluates on import; a line in a
- * type is not code at all. Null when the file does not parse.
+ * type is not code at all, and one inside a deferred body (a concise arrow,
+ * a function's parameters, a class field) has no module-level spot a probe
+ * can reach, so it comes back `deferred`. Null when the file does not parse.
  */
 export async function probeOf(
 	file: string,
 	head: string,
 	mutant: { line: number; column: number }
-): Promise<Mutant | 'type' | null> {
+): Promise<Mutant | 'type' | 'deferred' | null> {
 	const rows = head.split('\n');
 
 	const spot = await withTree(file, head, (root) => {
 		let node: Node | null = root.descendantForPosition({ row: mutant.line - 1, column: mutant.column });
+		let deferred = false;
 
 		while (node && node.parent) {
 			if (TYPE_NODES.has(node.type)) return 'type' as const;
-			if (BODY_PARENTS.has(node.parent.type) || node.parent.type === 'program')
+			if (DEFERRED_BODIES.has(node.type)) deferred = true;
+			if (BODY_PARENTS.has(node.parent.type)) return { row: node.startPosition.row, column: node.startPosition.column };
+
+			if (node.parent.type === 'program') {
+				if (deferred) return 'deferred' as const;
+
 				return { row: node.startPosition.row, column: node.startPosition.column };
+			}
 
 			node = node.parent;
 		}

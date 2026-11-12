@@ -6,6 +6,7 @@ import {
 	WRITE_FAILED_EXIT,
 	type CommandPlan
 } from '../../../../src/review/pipeline/mutation/test-run';
+import { classifyRun, commandPackage } from '../../../../src/review/pipeline/harness/run-outcome';
 
 const SOURCE = 'export function ok(n: number) {\n\treturn n >= 3;\n}';
 
@@ -76,6 +77,7 @@ describe('mutantCommand', () => {
 	test('lands the mutant through scratch chunks, never on the command line', () => {
 		expect(planFor(SOURCE)).toEqual({
 			command: `cat -- .recoder-mutant.0 > src/a.ts || exit ${WRITE_FAILED_EXIT}; ( bun test a.test.ts ); rc=$?; exit $rc`,
+			testCommand: 'bun test a.test.ts',
 			files: [{ path: '.recoder-mutant.0', text: SOURCE }]
 		});
 	});
@@ -111,6 +113,7 @@ describe('mutantCommand', () => {
 
 		expect(plan).toEqual({
 			command: `( bun test a.test.ts ); rc=$?; exit $rc`,
+			testCommand: 'bun test a.test.ts',
 			files: [{ path, text: 'old test' }]
 		});
 	});
@@ -139,5 +142,47 @@ describe('mutantCommand', () => {
 		];
 
 		for (const plan of plans) expect(mutantCommand(plan)).toBe('too-large');
+	});
+});
+
+describe('mutantCommand classification', () => {
+	const failed = (output: string) => ({ exitCode: 1, output, timedOut: false });
+
+	/** A plan for a root-package run and one for a `cd` package run, as `singleFileCommands` builds them. */
+	function plans() {
+		const root = planFor(SOURCE);
+
+		const nested = mutantCommand({
+			source: { path: 'apps/x/src/a.ts', text: SOURCE },
+			oldTest: null,
+			run: 'cd apps/x && bunx vitest run src/a.test.ts'
+		});
+
+		if (typeof nested === 'string') throw new Error(`expected a plan, got ${nested}`);
+
+		return { root, nested };
+	}
+
+	test('a missing module on the test command is setup-failed, not a kill', () => {
+		const { root, nested } = plans();
+		const missing = failed('error: Cannot find module "lodash"');
+
+		expect(classifyRun(root.testCommand, missing, null)).toBe('setup-failed');
+		expect(classifyRun(nested.testCommand, missing, null)).toBe('setup-failed');
+	});
+
+	test('a failed assertion on the test command is assertion-failed', () => {
+		const { root, nested } = plans();
+		const output = 'AssertionError: expected 1 to be 2';
+
+		expect(classifyRun(root.testCommand, failed(output), null)).toBe('assertion-failed');
+		expect(classifyRun(nested.testCommand, failed(output), null)).toBe('assertion-failed');
+	});
+
+	test('the test command names the package it runs in', () => {
+		const { root, nested } = plans();
+
+		expect(commandPackage(root.testCommand, ['.', 'apps/x'])).toBe('.');
+		expect(commandPackage(nested.testCommand, ['.', 'apps/x'])).toBe('apps/x');
 	});
 });

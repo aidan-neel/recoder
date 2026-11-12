@@ -292,6 +292,18 @@ function survivorRow(session: Session, suspicion: DetectorResult, mutant: Mutant
 	);
 }
 
+/** A surviving mutant whose reach stayed unproven: counted under `skip`, with `reason` on the survivor row. */
+function unproven(
+	session: Session,
+	suspicion: DetectorResult,
+	mutant: Mutant,
+	skip: SkipReason,
+	reason: string = skip
+): void {
+	session.skip(skip);
+	survivorRow(session, suspicion, mutant, reason);
+}
+
 /**
  * A detector's suspicion proved by the runs: an aimed mutant the whole test
  * file passes, on a line a probe shows the test reaches. A mutant another
@@ -343,9 +355,8 @@ async function suspicionRow(input: {
 			continue;
 		}
 
-		if (probe === null) {
-			session.skip('probe-broke');
-			survivorRow(session, suspicion, mutant, 'probe-broke');
+		if (probe === null || probe === 'deferred') {
+			unproven(session, suspicion, mutant, 'probe-broke', probe ?? 'probe-broke');
 
 			continue;
 		}
@@ -368,15 +379,13 @@ async function suspicionRow(input: {
 		}
 
 		if (probed.verdict === 'pass') {
-			session.skip('unreached');
-			survivorRow(session, suspicion, mutant, 'unreached');
+			unproven(session, suspicion, mutant, 'unreached');
 
 			continue;
 		}
 
 		if (!probed.output.includes('recoder-probe')) {
-			session.skip('probe-broke');
-			survivorRow(session, suspicion, mutant, 'probe-broke');
+			unproven(session, suspicion, mutant, 'probe-broke');
 
 			continue;
 		}

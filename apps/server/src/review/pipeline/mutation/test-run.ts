@@ -16,6 +16,8 @@ interface MatrixFile {
 /** One sandbox run: the shell command plus the files placed for it. */
 export interface CommandPlan {
 	command: string;
+	/** The test run `command` wraps in file writes; the execution profile classifies this, not the wrapper. */
+	testCommand: string;
 	files: MatrixFile[];
 }
 
@@ -192,5 +194,5 @@ export function mutantCommand(input: {
 		files.push({ path: oldTest.path, text: oldTest.text });
 	}
 
-	return { command: `${write}( ${run} ); rc=$?; exit $rc`, files };
+	return { command: `${write}( ${run} ); rc=$?; exit $rc`, testCommand: run, files };
 }

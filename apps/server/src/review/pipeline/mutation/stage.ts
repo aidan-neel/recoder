@@ -4,7 +4,7 @@ import { addedLines } from '../detectors/changed-lines.js';
 import { readFilesAt } from '../repo-inventory/blobs.js';
 import { readTestFiles } from '../detectors/test-files.js';
 import type { DetectorResult } from '../detectors/types.js';
-import type { SettledRun } from '../../../sandbox/exec-workspace.js';
+import { notRun } from '../../../sandbox/exec-workspace.js';
 import { MATRIX_BUDGET_MS, emptyCounts, testMatrix, type MatrixCounts, type SkipReason } from './matrix.js';
 import { oldCopyPath, PLAIN_PATH, singleFileCommands } from './test-run.js';
 
@@ -45,11 +45,6 @@ export function matrixDetail(report: MatrixReport): string {
 		...failed,
 		...counts.survivorRows.map((row) => `survivor: ${row}`)
 	].join(' · ');
-}
-
-/** A run that never started, shaped like one that did. */
-function notRun(output: string): SettledRun {
-	return { exitCode: null, output, truncated: false, timedOut: false, elapsedMs: 0 };
 }
 
 /**
@@ -99,7 +94,7 @@ export async function runMatrix(run: ReviewRun, closed: () => boolean): Promise<
 			run.baseline.map((check) => check.command)
 		),
 		run: async (plan, timeoutMs) => {
-			if (closed()) return notRun('Not run: the review closed.');
+			if (closed()) return notRun('Not run: the review closed.', false);
 
 			const owner = `mutation-${planIndex++}`;
 
@@ -109,11 +104,14 @@ export async function runMatrix(run: ReviewRun, closed: () => boolean): Promise<
 				if (!written.ok) {
 					run.events?.onLog?.(`Test matrix could not write ${file.path}: ${written.error}`);
 
-					return notRun(`Not run: could not write ${file.path}: ${written.error}`);
+					return notRun(`Not run: could not write ${file.path}: ${written.error}`, false);
 				}
 			}
 
-			return workspace.runInvestigation(plan.command, timeoutMs, signal, owner);
+			return workspace.runInvestigation(plan.command, timeoutMs, signal, owner, {
+				classifyAs: plan.testCommand,
+				tally: false
+			});
 		},
 		deadline: Date.now() + MATRIX_BUDGET_MS
 	});
