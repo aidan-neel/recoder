@@ -34,7 +34,7 @@ const NOT_STARTED: AdaptiveReviewResult = {
 /** Runs the review harness on a resolved target, on the models the run locked, and turns what it returns into the report. */
 export async function reviewResolvedTarget(run: ResolvedRun): Promise<ReviewReport> {
 	const { options, target, stop } = run;
-	const settings = await describeSettings(options.tuning, target.revision);
+	const settings = await describeSettings(options.tuning, options.scope, target.revision);
 	const input = harnessInput({ options, target, settings, signal: stop.signal });
 
 	const result = stop.signal.aborted

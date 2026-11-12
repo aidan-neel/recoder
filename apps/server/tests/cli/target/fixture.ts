@@ -93,6 +93,18 @@ export function targetRequest(
 	return { repoPath, target, scope: WHOLE_CHANGE, signal: new AbortController().signal, ...options };
 }
 
+/** The error `resolving` rejects with; fails the test when it resolves instead. */
+export async function rejection(resolving: Promise<unknown>): Promise<Error> {
+	const outcome = await resolving.then(
+		() => null,
+		(err: unknown) => err
+	);
+
+	if (!(outcome instanceof Error)) throw new Error('expected the target to be refused');
+
+	return outcome;
+}
+
 /**
  * Everything a review must not change, read without refreshing the index:
  * status, index entries and bytes, HEAD, every ref and the stash.

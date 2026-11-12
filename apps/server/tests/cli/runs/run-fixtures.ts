@@ -2,10 +2,14 @@ import { afterEach, beforeEach } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { EXIT } from '../../../src/cli/exit';
+import type { ReportSettings, ReportTarget, ReviewReport } from '../../../src/cli/report/report';
 import { currentProcessIdentity, type ProcessIdentity } from '../../../src/cli/runs/process-identity';
 import { parseRunId, type RunId } from '../../../src/cli/runs/run-id';
-import { createRunFolder } from '../../../src/cli/runs/run-files';
+import { createRunFolder, runFiles } from '../../../src/cli/runs/run-files';
 import { newRecord, writeRunRecord, type RunRecord } from '../../../src/cli/runs/run-record';
+import { saveReport } from '../../../src/cli/runs/stored-report';
+import { report } from '../output/fixtures';
 import { childEnvironment, testDataDir } from '../child-env';
 
 const FIRST_SECOND = 100_000;
@@ -60,6 +64,33 @@ export const COMPLETE: Partial<RunRecord> = {
 	findings: 0,
 	unconfirmed: 0
 };
+
+/** What a stored review's report holds differently from the plain fixture: its target, its settings, its outcome. */
+export interface StoredReview {
+	target?: Partial<ReportTarget>;
+	settings?: Partial<ReportSettings>;
+	outcome?: ReviewReport['outcome'];
+}
+
+const EXIT_OF = { complete: EXIT.ok, failed: EXIT.failed, cancelled: EXIT.cancelled } as const;
+
+/**
+ * A finished run's record and report on disk, as a review would have left them.
+ * `outcome` settles the record's state and exit code as well as the report's.
+ */
+export async function storeReview(runId: RunId, review: StoredReview = {}): Promise<void> {
+	const { target = {}, settings = {}, outcome = 'complete' } = review;
+	const base = report();
+
+	await storeRun(runId, { ...COMPLETE, state: outcome, exitCode: EXIT_OF[outcome] });
+
+	await saveReport(runFiles(runId), {
+		...base,
+		outcome,
+		target: { ...base.target, ...target },
+		settings: { ...base.settings, ...settings }
+	});
+}
 
 /** This test process, which is alive for as long as the test runs. */
 export function liveIdentity(): Promise<ProcessIdentity> {

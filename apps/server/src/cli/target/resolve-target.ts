@@ -43,7 +43,7 @@ export async function resolveTarget(request: TargetRequest): Promise<ResolvedTar
 		case 'diff':
 			return resolveDiffFile(target.source, request);
 		case 'pull':
-			return resolvePull(request, target.pull, target.since);
+			return resolvePull(request, target.pull, target.start);
 		default:
 			return resolveLocalChange(request, target);
 	}

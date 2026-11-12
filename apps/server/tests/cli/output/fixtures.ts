@@ -47,6 +47,8 @@ export function report(overrides: Partial<ReviewReport> = {}): ReviewReport {
 			baseSha: null,
 			mergeBaseSha: null,
 			headSha: '1234567890abcdef',
+			since: null,
+			sinceRunId: null,
 			url: null,
 			changedFiles: 2
 		},
@@ -58,6 +60,8 @@ export function report(overrides: Partial<ReviewReport> = {}): ReviewReport {
 			reviewerEffort: null,
 			workerEffort: null,
 			lenses: null,
+			include: [],
+			exclude: [],
 			reportLowSeverity: true,
 			exec: true,
 			execReason: null

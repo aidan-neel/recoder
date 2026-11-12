@@ -10,6 +10,8 @@ const SETTINGS = {
 	reviewerEffort: null,
 	workerEffort: null,
 	lenses: null,
+	include: [],
+	exclude: [],
 	reportLowSeverity: false,
 	exec: true,
 	execReason: null

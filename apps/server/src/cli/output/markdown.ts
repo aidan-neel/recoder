@@ -3,6 +3,7 @@ import type { ReportFinding, ReportSettings, ReportTarget, ReviewReport } from '
 import { inlineCode } from './markdown-code.js';
 import { renderFinding } from './markdown-finding.js';
 import { SEVERITIES } from './severity.js';
+import { sinceLabel } from './target-since.js';
 
 const SHORT_SHA_LENGTH = 7;
 
@@ -51,6 +52,7 @@ function describeTarget(target: ReportTarget): string {
 	const parts = [
 		`${target.kind}${refs}`,
 		target.headSha ? `head ${target.headSha.slice(0, SHORT_SHA_LENGTH)}` : null,
+		sinceLabel(target),
 		target.url,
 		target.repoPath,
 		`${target.changedFiles} changed files`

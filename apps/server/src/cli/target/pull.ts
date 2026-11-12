@@ -6,8 +6,9 @@ import { fetchPull } from '../../forge/pull-preview.js';
 import { tokenEnv } from '../../forge/tokens.js';
 import { prepareSandbox, sandboxLocation, sandboxRevision } from '../../sandbox/sandbox.js';
 import { CliError, describeError, notReadyError, usageError } from '../exit.js';
+import type { PullStart } from '../review/options.js';
 import { checkedOutTarget, removedOnFailure } from './checked-out.js';
-import { startingAt } from './pull-since.js';
+import { startPullRevision } from './start-point.js';
 import { assertNotCancelled, gitOutput } from './git.js';
 import { redactedTail, withoutCredentials } from '../../util/redact.js';
 import type { ResolvedTarget, TargetRequest } from './resolve-target.js';
@@ -60,17 +61,18 @@ interface PullCheckout {
 /**
  * A pull or merge request checked out the way the server checks one out:
  * metadata from the forge, the head fetched into a fresh checkout, and the
- * base branch fetched to find the merge base. A number means a pull request on
- * the forge the repository's `origin` remote points at. A `since` commit starts
- * the diff there in place of the merge base.
+ * base branch fetched to find the merge base. `start` says where the review
+ * begins: the whole change, after a commit the caller named, or after the
+ * head of the last review that counts.
  */
-export async function resolvePull(request: TargetRequest, pull: string, since: string | null): Promise<ResolvedTarget> {
+export async function resolvePull(request: TargetRequest, pull: string, start: PullStart): Promise<ResolvedTarget> {
 	const address = await pullAddress(request, pull);
 	const repo = forgeRepo(address.repoUrl);
 	const pr = await pullMetadata(repo, address.number);
 	const { slug } = locateRepo(repo.url);
 	const reviewId = randomUUID();
 	const { path } = sandboxLocation(slug, address.number, reviewId);
+	const headName = pr.headRef || `#${address.number}`;
 
 	assertNotCancelled(request.signal);
 
@@ -99,13 +101,14 @@ export async function resolvePull(request: TargetRequest, pull: string, since: s
 			sandboxRevision(path, pr.base, remote)
 		);
 
-		const revision = since === null ? branchRevision : await startingAt(branchRevision, since, request.signal);
+		const applied = await startPullRevision({ revision: branchRevision, start, signal: request.signal, headName });
 
 		return checkedOutTarget({
 			request,
-			revision,
-			headName: pr.headRef || `#${address.number}`,
-			pull: { title: pr.title, body: pr.body ?? null, url: pr.url }
+			revision: applied.revision,
+			headName,
+			pull: { title: pr.title, body: pr.body ?? null, url: pr.url },
+			start: applied.start
 		});
 	});
 }

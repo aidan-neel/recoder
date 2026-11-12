@@ -45,10 +45,12 @@ If the `recoder_*` tools are available, use them and not the shell. The loop is 
 
 The target flags are mutually exclusive. With none, Recoder reviews the commits on the current branch since it left the default branch.
 
+A review of commits, with no flag or `--pull`, continues after the last complete review of them: it covers only the commits added since. `--full` reviews the whole change instead.
+
 - no flag: the branch against the default branch. Use it for committed work. Add `--base <ref>` if the default branch is wrong.
 - `--uncommitted`: everything not committed, untracked files included. Use it when you have not committed yet.
 - `--staged`: only what is staged. Use it before a commit.
-- `--pull <number or url>`: a pull or merge request on GitHub or GitLab. Needs the forge CLI (`gh` or `glab`) signed in. Add `--since <commit>` to review only the commits pushed after that one, such as the head you reviewed last. After a rebase or force-push that commit is gone from the pull request, so `--since` is a usage error: review the whole pull request.
+- `--pull <number or url>`: a pull or merge request on GitHub or GitLab. Needs the forge CLI (`gh` or `glab`) signed in. `--since <commit>` names the start by hand; after a rebase or force-push that commit is gone from the pull request, so it is a usage error: review the whole pull request.
 - `--diff <file or ->`: a unified diff, from a file or standard input. Use it when there is no repository. No code runs, so bugs are `unverified`. `--detach` needs a file, not `-`.
 
 Recoder reviews a throwaway copy. It never changes your working tree, index or branches.
@@ -82,6 +84,8 @@ Start with the default: `--budget low` runs one reviewer, up to 3 subagents and 
 - `recommendedChecks`: commands worth running before you merge. Run them.
 - `settings.exec` and `settings.execReason`: whether code could run.
 
+A continued review reports findings only in the new commits. The findings of the earlier run still stand until fixed; `recoder result -p <earlier run id>` prints them again. The report's `target.sinceRunId` names that run.
+
 Each finding has `severity` (`error`, `warning`, `info`), `file`, `line`, `title`, `message`, and sometimes `suggestion` and `patch`. `verification.status` is `verified` when something proved the finding: a command that reproduced it, a trace through the code, a detector, a repo rule or a convention (`verification.method` says which). It is `unverified` when nothing did, for example because no test command was found; `verification.reason` says why.
 
 ## Acting on findings
@@ -90,7 +94,7 @@ Each finding has `severity` (`error`, `warning`, `info`), `file`, `line`, `title
 2. Treat an `unverified` finding as a claim to check, not a fact.
 3. Fix `error` and `warning` first. Fix `info` only when it is cheap.
 4. When a finding has a `patch`, apply it if it still fits the code. It was applied and checked in the sandbox against the code as reviewed. It is a unified diff rooted at the repository, so `git apply` takes it.
-5. After fixing, run a narrower review of the files you touched: `recoder review -p --detach --uncommitted --include "<path>" --title "<what you fixed>"`, then the loop again.
+5. After fixing, commit the fixes and run the same review again: `recoder review -p --detach --title "<what you fixed>"`. It covers only the new commits. To check fixes that are not committed, run `recoder review -p --detach --uncommitted --include "<path>" --title "<what you fixed>"` instead, then the loop again.
 6. Tell the user which findings you fixed, which you rejected and why, and which you did not get to.
 
 ## Exit codes
@@ -105,6 +109,8 @@ Each finding has `severity` (`error`, `warning`, `info`), `file`, `line`, `title
 | 130  | A signal or `--timeout` stopped the review.                              |
 
 `recoder result -p` exits 3 for a `failed` run and 130 for a `cancelled` one.
+
+Exit 2 whose message starts `Nothing to review: run` means the last review already covered the head: nothing changed since. `recoder result -p <run id>` prints that run's findings again, or pass `--full` to review the whole change.
 
 ## Do not
 

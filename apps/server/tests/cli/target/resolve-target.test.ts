@@ -39,7 +39,7 @@ async function featureRepository(): Promise<string> {
 	return dir;
 }
 
-const FEATURE = { kind: 'range', base: 'main', head: 'feature' } as const;
+const FEATURE = { kind: 'range', base: 'main', head: 'feature', start: { kind: 'continue' } } as const;
 
 test('include and exclude narrow the diff to the matching paths', async () => {
 	const dir = await featureRepository();
@@ -110,7 +110,7 @@ test('two repositories with the same folder name never share dependency installs
 	const resolvedFirst = await resolveTarget(targetRequest(first, FEATURE));
 
 	const resolvedSecond = await resolveTarget(
-		targetRequest(second, { kind: 'range', base: 'origin/main', head: 'origin/feature' })
+		targetRequest(second, { kind: 'range', base: 'origin/main', head: 'origin/feature', start: { kind: 'continue' } })
 	);
 
 	const scopes = [resolvedFirst, resolvedSecond].map((resolved) => scopeOfCheckout(resolved.sandboxPath ?? ''));
