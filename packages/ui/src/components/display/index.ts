@@ -1,6 +1,7 @@
 /** The kit's display components, and the clipboard helper the copy controls share. */
 export { AnimatedNumber } from './animated-number';
 export { Card } from './card';
+export { ClampedText } from './clamped-text';
 export { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
 export { CopyButton } from './copy-button';
 export { ForgeMark } from './forge-mark';

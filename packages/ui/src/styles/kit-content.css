@@ -378,3 +378,16 @@
 		transition: none;
 	}
 }
+
+/* ───────── Clamped text: the first lines, the rest one click away ───────── */
+[data-ui='clamped-text-clip'] {
+	overflow: hidden;
+	transition: max-height var(--dur-disclose) var(--ease-menu);
+}
+[data-ui='clamped-text'][data-state='closed'][data-overflows] [data-ui='clamped-text-clip'] {
+	mask-image: linear-gradient(to bottom, black calc(100% - 1.25em), transparent);
+}
+[data-ui='clamped-text-foot'] {
+	display: flex;
+	margin: 2px 0 0 -8px;
+}

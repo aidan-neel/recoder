@@ -33,21 +33,30 @@ function Group({ title, meta, children }: GroupProps) {
 
 interface BugLineProps {
 	bug: BugView;
-	/** The quiet line under the title. */
-	detail: string;
+	/** What stands under the title: a quiet sentence, or badges. */
+	detail: ReactNode;
 	children?: ReactNode;
 }
 
-/** A bug as one line in a group: its title over a quiet detail, then what can be done with it. */
+/** A bug as one line in a group: its title over its detail, then what can be done with it. */
 function BugLine({ bug, detail, children }: BugLineProps) {
 	return (
 		<div className="bug-line">
 			<div className="bug-line-text">
 				<span className="bug-line-title">{bug.title}</span>
-				<span className="meta">{detail}</span>
+				{detail}
 			</div>
 			{children}
 		</div>
+	);
+}
+
+/** Where a bug is, as a badge; the full path on hover. */
+function WherePill({ bug }: { bug: BugView }) {
+	return (
+		<Pill face="code" title={bug.file}>
+			{bug.where}
+		</Pill>
 	);
 }
 
@@ -56,11 +65,16 @@ function refused(error: unknown): void {
 	errorToast(error instanceof Error && error.message ? error.message : 'That did not go through.');
 }
 
-/** What a person decided about a bug, in words. */
-function decisionText(bug: BugView): string {
-	if (bug.decision?.state === 'accepted') return `${bug.where} · Accepted`;
+/** Where the bug is and what a person decided about it, as badges. */
+function DecisionFacts({ bug }: { bug: BugView }) {
+	const accepted = bug.decision?.state === 'accepted';
 
-	return `${bug.where} · Dismissed`;
+	return (
+		<span className="bug-line-facts">
+			<WherePill bug={bug} />
+			<Pill tone={accepted ? 'ok' : 'neutral'}>{accepted ? 'Accepted' : 'Dismissed'}</Pill>
+		</span>
+	);
 }
 
 const UNRESOLVED_LABELS: Record<UnresolvedItem['kind'], string> = {
@@ -94,7 +108,7 @@ export function BugGroups({ view }: { view: BugsView }) {
 			{view.decided.length > 0 ? (
 				<Group title="Decided" meta={plural(view.decided.length, 'bug')}>
 					{view.decided.map((bug) => (
-						<BugLine key={bug.id} bug={bug} detail={decisionText(bug)}>
+						<BugLine key={bug.id} bug={bug} detail={<DecisionFacts bug={bug} />}>
 							<Button
 								variant="ghost"
 								size="sm"
@@ -110,7 +124,7 @@ export function BugGroups({ view }: { view: BugsView }) {
 			{view.resolved.length > 0 ? (
 				<Group title="Fixed since the last review" meta={plural(view.resolved.length, 'bug')}>
 					{view.resolved.map(({ bug, reason }) => (
-						<BugLine key={bug.id} bug={bug} detail={reason}>
+						<BugLine key={bug.id} bug={bug} detail={<span className="meta">{reason}</span>}>
 							<StatusGlyph kind="ok" label="Fixed" />
 						</BugLine>
 					))}
@@ -119,7 +133,16 @@ export function BugGroups({ view }: { view: BugsView }) {
 			{view.quieted.length > 0 ? (
 				<Group title="Quieted" meta={plural(view.quieted.length, 'bug')}>
 					{view.quieted.map((bug) => (
-						<BugLine key={bug.id} bug={bug} detail={`${bug.where} · ${bug.category} is often dismissed here`}>
+						<BugLine
+							key={bug.id}
+							bug={bug}
+							detail={
+								<span className="bug-line-facts" title={`${bug.category} is often dismissed here`}>
+									<WherePill bug={bug} />
+									<Pill>{bug.category}</Pill>
+								</span>
+							}
+						>
 							<Button
 								variant="ghost"
 								size="sm"

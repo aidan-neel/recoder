@@ -29,7 +29,7 @@ function bugInAddress(): string | null {
 
 /** The heads of the bug cards on the page, top to bottom. */
 function bugHeads(): HTMLElement[] {
-	return [...document.querySelectorAll<HTMLElement>('.bug-card > .bug-head')];
+	return [...document.querySelectorAll<HTMLElement>('.bug-item > .bug-head')];
 }
 
 /** Moves focus `by` cards from the focused one; with none focused, to the first or the last. */

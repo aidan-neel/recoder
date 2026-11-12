@@ -1,14 +1,14 @@
 /* ───────── Summary: what changed, the order to read it in, the conversation ───────── */
 .summary-analysis [data-ui='markdown'] {
 	color: var(--text-primary);
-	font-size: 15px;
-	line-height: 24px;
+	font-size: 14px;
+	line-height: 22px;
 }
 .summary-block {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	margin-top: 18px;
+	margin-top: 28px;
 }
 .summary-block:first-child {
 	margin-top: 0;
@@ -19,35 +19,26 @@
 	justify-content: space-between;
 	min-height: 20px;
 }
-.summary-description {
-	padding: 14px 16px;
-	border-radius: 10px;
-	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card);
-}
 .summary-description [data-ui='markdown'] {
 	color: var(--text-secondary);
+	line-height: 22px;
 }
 
-/* The parts of the guide as a short ordered list. */
+/* The parts of the guide as a short ordered list, split by hairlines. */
 .guide-list {
-	overflow: hidden;
 	margin: 0;
 	padding: 0;
-	border-radius: 10px;
-	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card);
 	list-style: none;
 }
 .guide-list li + li {
-	border-top: 1px solid var(--line-card);
+	border-top: 1px solid var(--line-subtle);
 }
 .guide-list-row {
 	display: flex;
-	min-height: 44px;
+	min-height: 40px;
 	align-items: center;
-	gap: 12px;
-	padding: 8px 16px;
+	gap: 8px;
+	padding: 6px 0;
 	font-size: var(--font-size-body);
 }
 .guide-list-title {

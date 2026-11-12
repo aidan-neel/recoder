@@ -20,75 +20,127 @@
 	max-width: 768px;
 }
 
-.bug-card {
-	border-radius: 12px;
-	background: var(--bg-raised);
-	box-shadow: 0 0 0 1px var(--line-card);
+.bug-item {
+	border-bottom: 1px solid var(--line-subtle);
 	scroll-margin-top: 20px;
 }
 .bug-head {
 	display: grid;
 	width: 100%;
 	align-items: center;
-	grid-template-columns: 16px minmax(0, 1fr) auto;
-	gap: 2px 12px;
-	padding: 14px 16px;
-	border-radius: 12px;
+	grid-template-columns: minmax(0, 1fr) auto;
+	gap: 8px 12px;
+	padding: 14px 12px;
+	border-radius: 10px;
 	outline: none;
 	text-align: left;
+	transition: background-color var(--dur-hover) ease-out;
+}
+.bug-head:hover {
+	background: var(--bg-hover);
 }
 .bug-head:focus-visible {
 	box-shadow: inset 0 0 0 2px var(--focus-color);
 }
 .bug-title {
 	color: var(--text-primary);
-	font-size: 15px;
+	font-size: 14px;
 	font-weight: 500;
-	letter-spacing: -0.005em;
-	line-height: 22px;
+	line-height: 20px;
 	text-wrap: pretty;
 }
-.bug-card:not([data-open]) .bug-title {
+.bug-item:not([data-open]) .bug-title {
 	overflow: hidden;
-	font-size: var(--font-size-body);
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-.bug-head-end {
-	display: flex;
-	align-items: center;
-	gap: 10px;
-}
-.bug-head-end > svg {
+.bug-head > svg {
 	width: 14px;
 	height: 14px;
 	color: var(--text-faint);
 	transition: rotate var(--dur-toggle) var(--ease-menu);
 }
-.bug-card[data-open] .bug-head-end > svg {
+.bug-item[data-open] .bug-head > svg {
 	rotate: 180deg;
 }
-.bug-where {
-	grid-column: 2 / -1;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
+
+/* The facts of a bug (and of a fix or a rule): one row of badges that wraps cleanly. */
+.bug-facts,
+.bug-line-facts,
+.bug-section-head {
+	display: flex;
+	min-width: 0;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
 }
-.bug-where .mono {
-	color: var(--text-muted);
-	font-size: 12px;
+.bug-facts {
+	grid-column: 1 / -1;
 }
 .bug-body {
 	display: flex;
 	flex-direction: column;
-	gap: 14px;
-	padding: 0 16px 14px 44px;
+	gap: 16px;
+	padding: 2px 12px 18px;
 }
 .bug-body [data-ui='markdown'] {
 	max-width: 72ch;
 	color: var(--text-secondary);
 	font-size: var(--font-size-body);
-	line-height: 23px;
+	line-height: 22px;
+}
+.bug-section {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.bug-section-head .section-label {
+	margin-right: 2px;
+}
+.bug-note {
+	max-width: 72ch;
+	margin: 0;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+
+/* The suggested fix opens from one quiet line. */
+.fix-head {
+	display: flex;
+	min-height: 28px;
+	align-items: center;
+	gap: 8px;
+	margin-left: -4px;
+	padding: 0 4px;
+	border-radius: 6px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	outline: none;
+	text-align: left;
+	transition: color var(--dur-hover) ease-out;
+}
+.fix-head:hover {
+	color: var(--text-primary);
+}
+.fix-head:focus-visible {
+	box-shadow: var(--focus-ring);
+}
+.fix-head > svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+	transition: rotate var(--dur-toggle) var(--ease-menu);
+}
+.fix-head[data-state='open'] > svg {
+	rotate: 90deg;
+}
+.fix-body {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding-top: 8px;
 }
 
 /* A block of evidence: a quiet header line over mono content. */
@@ -109,11 +161,6 @@
 	padding: 7px 12px;
 	border-bottom: 1px solid var(--line-card);
 	color: var(--text-primary);
-}
-.proof-head[data-plain] {
-	color: var(--text-muted);
-	font-family: var(--font-ui);
-	font-size: var(--font-size-label);
 }
 .proof-command {
 	min-width: 0;
@@ -143,41 +190,24 @@
 	scrollbar-width: thin;
 	white-space: pre;
 }
-.proof-foot {
-	padding: 8px 12px;
-	border-top: 1px solid var(--line-card);
-	color: var(--text-muted);
-	font-family: var(--font-ui);
-	font-size: var(--font-size-label);
-}
 .proof [data-ui='code-lines'] {
 	border-radius: 0;
 	background: transparent;
 	box-shadow: none;
-}
-.proof-text {
-	padding: 10px 12px;
-	font-family: var(--font-ui);
-	font-size: var(--font-size-label);
-}
-.proof-text [data-ui='markdown'] {
-	font-size: var(--font-size-label);
-	line-height: 20px;
 }
 
 /* How execution reaches the problem: numbered steps, the place in mono over the note. */
 .trace {
 	display: flex;
 	flex-direction: column;
+	gap: 8px;
 	margin: 0;
-	padding: 4px 0;
-	font-family: var(--font-ui);
+	padding: 0;
 	list-style: none;
 }
 .trace li {
 	display: grid;
-	grid-template-columns: 28px minmax(0, 1fr);
-	padding: 6px 12px 6px 4px;
+	grid-template-columns: 20px minmax(0, 1fr);
 	counter-increment: trace;
 }
 .trace li::before {
@@ -185,7 +215,7 @@
 	content: counter(trace);
 	font-family: var(--font-code);
 	font-size: 12px;
-	text-align: center;
+	font-variant-numeric: tabular-nums;
 }
 .trace-where {
 	color: var(--text-primary);
@@ -200,35 +230,15 @@
 }
 .rule-quote,
 .rule-restated {
+	max-width: 72ch;
 	margin: 0;
-	padding: 10px 12px;
 	color: var(--text-secondary);
-	font-family: var(--font-ui);
-	font-size: var(--font-size-label);
-	line-height: 20px;
+	font-size: var(--font-size-body);
+	line-height: 22px;
 }
 .rule-quote {
-	border-left: 2px solid var(--sent);
-}
-.fix-checks {
-	display: flex;
-	flex-wrap: wrap;
-	gap: 6px 14px;
-	padding: 8px 12px;
-	border-top: 1px solid var(--line-card);
-	color: var(--text-muted);
-	font-family: var(--font-ui);
-	font-size: var(--font-size-meta);
-}
-.fix-checks span {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-}
-.fix-checks svg {
-	width: 12px;
-	height: 12px;
-	color: var(--success);
+	padding-left: 12px;
+	border-left: 2px solid var(--line-strong);
 }
 
 .bug-actions {
@@ -313,6 +323,9 @@
 	min-width: 0;
 	flex: 1;
 	flex-direction: column;
+}
+.bug-line-facts {
+	margin-top: 4px;
 }
 .bug-line-title {
 	overflow: hidden;

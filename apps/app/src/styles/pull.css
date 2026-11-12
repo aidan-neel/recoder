@@ -7,17 +7,11 @@
 }
 .pull-facts {
 	display: flex;
-	min-height: 24px;
+	min-width: 0;
 	flex-wrap: wrap;
 	align-items: center;
-	gap: 4px 8px;
-	margin-top: 6px;
-	color: var(--text-muted);
-	font-size: var(--font-size-label);
-}
-.pull-facts strong {
-	color: var(--text-primary);
-	font-weight: 500;
+	gap: 6px;
+	margin-top: 8px;
 }
 
 .pull-tools {
@@ -30,6 +24,14 @@
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
+}
+/* The facts of the review a tab shows: badges that give way before the buttons beside them do. */
+.review-facts {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 6px;
+	overflow: hidden;
 }
 
 .pull-body {
