@@ -64,22 +64,22 @@ async function investigateTransition(answer: unknown): Promise<ObligationAnswer>
 	await repoInventoryStage(run);
 	await deriveObligationsStage(run);
 
-	const state = run.obligations!;
-	const obligation = state.derived!.find((entry) => entry.trigger === 'state-transition')!;
+	const state = run.obligations;
+	const obligation = state?.derived?.find((entry) => entry.trigger === 'state-transition');
+	const unit = state?.units.find((entry) => entry.id === obligation?.id);
 
-	await investigate(
-		state.units.find((unit) => unit.id === obligation.id)!,
-		run.assignments,
-		{
-			...poolContext(run),
-			maxTurns: state.maxTurns,
-			obligationOf: () => obligation,
-			workspace: null,
-			mergeBaseSha: targetSha,
-			changes: () => ({ added: [], removed: [], symbols: [] }),
-			onAnswer: (entry) => answers.push(entry)
-		}
-	);
+	if (!state || !obligation || !unit)
+		throw new Error('The job change derived no state-transition obligation to investigate');
+
+	await investigate(unit, run.assignments, {
+		...poolContext(run),
+		maxTurns: state.maxTurns,
+		obligationOf: () => obligation,
+		workspace: null,
+		mergeBaseSha: targetSha,
+		changes: () => ({ added: [], removed: [], symbols: [] }),
+		onAnswer: (entry) => answers.push(entry)
+	});
 
 	return answers[0];
 }

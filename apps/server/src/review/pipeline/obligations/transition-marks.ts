@@ -1,6 +1,18 @@
 import type { Node } from 'web-tree-sitter';
 import { mark, type Mark } from './marks.js';
-import { calleeName, clip, field, lastName, lineOf, operatorOf, squash, unwrap } from './syntax.js';
+import {
+	calleeName,
+	clip,
+	endLineOf,
+	field,
+	firstLineIn,
+	functionsIn,
+	lastName,
+	lineOf,
+	operatorOf,
+	squash,
+	unwrap
+} from './syntax.js';
 
 /** A field whose value is an entity's state: `status`, `state`, `phase`, `lifecycle`, or `jobStatus`, `reviewState`. */
 const STATE_FIELD = /^(status|state|phase|lifecycle)$|[a-z0-9](Status|State|Phase)$/;
@@ -40,21 +52,42 @@ const EQUALITY = new Set(['===', '!==', '==', '!=']);
 const TYPES = ['assignment_expression', 'pair', 'binary_expression', 'switch_case', 'call_expression'];
 
 /**
- * Every operation on the given lines that moves an entity between states or
+ * Every operation over the given lines that moves an entity between states or
  * decides whether it may: a state field set or compared, a lease or lifecycle
- * flag written, and an entry put into or taken out of a cache or queue. A state
- * field set to a literal counts only when the file gives it two states or more,
- * so a single `status: 'ok'` is not taken for a lifecycle.
+ * flag written, and an entry put into or taken out of a cache or queue. An
+ * operation split over lines counts when any of its lines changed, and its mark
+ * sits on the first changed one. A state field set to a literal counts only
+ * when the file gives it two states or more, so a single `status: 'ok'` is not
+ * taken for a lifecycle.
  */
 export function collectTransitionMarks(root: Node, lines: Set<number>): Mark[] {
+	const sorted = [...lines].sort((a, b) => a - b);
 	const source = root.text.split('\n');
 	const states = fieldStates(root);
 
 	return root
 		.descendantsOfType(TYPES)
-		.filter((node): node is Node => node !== null && lines.has(lineOf(node)))
-		.flatMap((node) => transitionMarks(node, states))
+		.filter((node): node is Node => node !== null && firstLineIn(node, sorted) !== null)
+		.flatMap((node) => anchoredMarks(node, transitionMarks(node, states), sorted))
 		.map((entry) => ({ ...entry, code: clip(source[entry.line - 1] ?? '') }));
+}
+
+/** The node's marks on the first changed line the operation itself spans, or none when it spans no changed line. */
+function anchoredMarks(node: Node, marks: Mark[], sorted: number[]): Mark[] {
+	const line = marks.length ? changedLineOf(node, sorted) : null;
+
+	return line === null ? [] : marks.map((entry) => ({ ...entry, line }));
+}
+
+/**
+ * The first changed line an operation itself spans: the inner lines of a function inside it, such as a queued
+ * task's body, belong to the operations in that function.
+ */
+function changedLineOf(node: Node, sorted: number[]): number | null {
+	const bodies = functionsIn(node);
+	const insideBody = (line: number) => bodies.some((body) => lineOf(body) < line && line < endLineOf(body));
+
+	return sorted.find((line) => line >= lineOf(node) && line <= endLineOf(node) && !insideBody(line)) ?? null;
 }
 
 /** The literal states each state field takes anywhere in the file, by field name. */

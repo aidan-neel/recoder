@@ -80,6 +80,44 @@ describe('state fields', () => {
 	});
 });
 
+describe('operations split over lines', () => {
+	/** `JOB` with the state set on line 8 written over two lines, its value `state` on line 9. */
+	function splitStart(state: string): string[] {
+		return [...JOB.slice(0, 7), '\tjob.status =', `\t\t'${state}';`, ...JOB.slice(8)];
+	}
+
+	/** A worker that queues its jobs with `jobQueue.push(` on line 2 and what it queues on the lines after. */
+	function queued(body: string[]): string[] {
+		return [
+			'export function submit(jobQueue: unknown[], job: string, next: string) {',
+			'\tjobQueue.push(',
+			...body,
+			'\t);',
+			'}'
+		];
+	}
+
+	test('a state changed on the second line of its assignment derives the obligation on that line', async () => {
+		const found = await hits(file('src/job.ts', splitStart('running'), splitStart('started')));
+
+		expect(found).toContain('state-transition new:9');
+	});
+
+	test('a changed argument of a queue call split over lines derives it on that line', async () => {
+		const found = await hits(file('src/submit.ts', queued(['\t\tjob']), queued(['\t\tnext'])));
+
+		expect(found).toContain('state-transition new:3');
+	});
+
+	test('a change inside a task the queue holds derives nothing for the queue', async () => {
+		const task = (call: string) => ['\t\tasync () => {', `\t\t\tawait ${call};`, '\t\t}'];
+
+		const found = await hits(file('src/submit.ts', queued(task('run(job)')), queued(task('run(next)'))));
+
+		expect(triggers(found)).not.toContain('state-transition');
+	});
+});
+
 describe('leases, flags, caches and queues', () => {
 	const save = [
 		'export function save(cache: Map<string, string>, key: string, value: string) {',
