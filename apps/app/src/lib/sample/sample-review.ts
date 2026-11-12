@@ -49,7 +49,7 @@ const FINDINGS: Finding[] = [
 				observed:
 					'✗ a second client is not limited by the first\n  expected: 200\n  received: 429\n    at tests/rate-limit/anonymous.repro.test.ts:14:27',
 				evidenceId: 'ev-1',
-				baseline: { unavailable: 'The middleware is new, so the base branch has nothing to run.' }
+				baseline: { exitCode: 0, differs: true, result: 'regression' }
 			}
 		}
 	},
@@ -76,34 +76,11 @@ const FINDINGS: Finding[] = [
 		},
 		verification: {
 			status: 'verified',
-			method: 'run',
-			outcome: 'reproduced',
-			reason: 'After a simulated hour idle the bucket held 6,000 tokens.',
-			command: 'bun test tests/rate-limit/limiter.test.ts -t "idle"',
-			exitCode: 1,
-			evidence: {
-				command: 'bun test tests/rate-limit/limiter.test.ts -t "idle"',
-				exitCode: 1,
-				expected: 'At most 100 requests pass after an idle hour.',
-				observed: '✗ caps tokens at capacity after idle\n  expected: 100\n  received: 6000',
-				evidenceId: 'ev-2',
-				baseline: { unavailable: 'The limiter is new, so the base branch has nothing to run.' }
-			}
+			method: 'trace',
+			outcome: 'traced',
+			reason: 'Nothing between the elapsed time and the write caps the bucket at capacity.'
 		},
-		patch: {
-			diff: `--- a/src/rate-limit/limiter.ts
-+++ b/src/rate-limit/limiter.ts
-@@ -22,5 +22,8 @@
- 		const elapsed = (now - bucket.at) / 1000;
-
--		bucket.tokens = bucket.tokens + elapsed * this.options.refillPerSecond;
-+		bucket.tokens = Math.min(
-+			this.options.capacity,
-+			bucket.tokens + elapsed * this.options.refillPerSecond
-+		);
- 		bucket.at = now;`,
-			checks: ['bun run check', 'bun test tests/rate-limit']
-		}
+		suggestion: 'Cap the refill: `Math.min(capacity, tokens + elapsed * refillPerSecond)`.'
 	},
 	{
 		id: 'sample-f3',
@@ -112,16 +89,21 @@ const FINDINGS: Finding[] = [
 		line: 8,
 		endLine: 8,
 		severity: 'info',
-		category: 'convention',
+		category: 'repo-rule',
 		kind: 'quality',
-		smell: 'magic-value',
+		ruleId: 'R4',
+		rule: {
+			id: 'R4',
+			text: 'Read every limit from `config` where it is used; never hard-code a window or a rate.',
+			source: { path: 'RECODER.md', line: 12 }
+		},
 		symbol: 'limiter',
 		message:
 			'The PR adds `config.rateLimit.windowMs`, but the middleware divides by a hard-coded `60`. Changing the window in config would silently do nothing.',
 		verification: {
 			status: 'verified',
-			method: 'convention',
-			reason: 'Every other limit in config.ts is read where it is used.'
+			method: 'rule',
+			reason: 'RECODER.md asks for limits to be read from config where they are used.'
 		},
 		patch: {
 			diff: `--- a/src/rate-limit/middleware.ts
@@ -249,10 +231,10 @@ const REPORT: BriefQuestionReport = {
 	questions: QUESTIONS
 };
 
-/** A finished review of an agent-written PR: three findings, one open question, five things checked. */
+/** A finished review of an agent-written PR: three findings (reproduced, traced, rule), one open question, five things checked. */
 export const SAMPLE_REVIEW: Review = {
-	id: 'sample',
-	repoId: 'sample-repo',
+	id: 'sample-214',
+	repoId: 'sample-api',
 	prNumber: 214,
 	headSha: 'a41c9e2f6d0b',
 	status: 'passed',
@@ -280,7 +262,8 @@ export const SAMPLE_PULL: PullRequest = {
 	additions: 172,
 	deletions: 1,
 	changedFiles: 9,
-	createdAt: '2026-10-13T08:51:00.000Z'
+	createdAt: '2026-10-13T08:51:00.000Z',
+	body: 'Adds a token bucket per tenant in front of `/api/*`: 100 requests a minute, a `429` with `Retry-After` when a tenant runs out, and per-minute usage counts in Redis for billing.\n\nHealth checks stay unlimited.'
 };
 
 /** CI on the sample's head commit: green, with end-to-end tests still running. */
