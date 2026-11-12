@@ -5,10 +5,10 @@ import type { Review } from './review';
 
 /**
  * A finding as the review list carries it: enough to count what is left to
- * decide and how urgent it is. A list item leaves quieted findings out; a full
+ * decide, of which kind, and how urgent it is. A list item leaves quieted findings out; a full
  * review read as a list item still holds them, so `topic` says which they are.
  */
-export type ReviewListFinding = Pick<Finding, 'id' | 'severity' | 'topic'>;
+export type ReviewListFinding = Pick<Finding, 'id' | 'severity' | 'topic' | 'kind' | 'decision'>;
 
 /**
  * A review as `GET /api/reviews?view=summary` lists it: the fields the queue,
@@ -71,7 +71,12 @@ export function reviewListItem(review: ReviewListItem): ReviewListItem {
 		updatedAt,
 		findings: review.findings
 			.filter((finding) => !finding.topic?.quieted)
-			.map((finding) => ({ id: finding.id, severity: finding.severity })),
+			.map((finding) => ({
+				id: finding.id,
+				severity: finding.severity,
+				...(finding.kind && { kind: finding.kind }),
+				...(finding.decision && { decision: finding.decision })
+			})),
 		...(review.questions && {
 			questions: {
 				questions: review.questions.questions.map((question) => ({ id: question.id, result: question.result }))

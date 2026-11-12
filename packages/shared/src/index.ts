@@ -18,6 +18,7 @@ export * from './model-name';
 export * from './format';
 export * from './theme';
 export * from './providers';
+export * from './pulls';
 export * from './agents';
 export * from './home';
 export * from './discuss';

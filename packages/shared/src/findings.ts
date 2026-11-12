@@ -137,6 +137,53 @@ export interface FindingTopic {
 	quieted?: true;
 }
 
+/**
+ * Why a person set a finding aside. Only `wrong` says the finding was false,
+ * so only it becomes a false-positive label for an evaluation.
+ */
+export const DISMISSAL_REASONS = [
+	'wrong',
+	'not-worth-fixing',
+	'already-handled',
+	'style-preference',
+	'duplicate'
+] as const;
+
+export type DismissalReason = (typeof DISMISSAL_REASONS)[number];
+
+/**
+ * What a person decided about a finding, saved with the review so every
+ * device and the pull request list agree. Absent while the finding is open.
+ */
+export interface FindingDecision {
+	state: 'accepted' | 'dismissed';
+	/** Set when `state` is `dismissed`. */
+	reason?: DismissalReason;
+	/** What the person added in their own words. */
+	note?: string;
+	decidedAt: string;
+}
+
+/** The repository rule a finding cites, quoted word for word with where it is written. */
+export interface FindingRule {
+	/** The rule's id in the ledger (`R12`). */
+	id: string;
+	text: string;
+	source: { path: string; line?: number; endLine?: number; revision?: string };
+}
+
+/** How a finding relates to the review before it on the same pull request. */
+export interface FindingHistory {
+	/** The head commit of the first review that reported it. */
+	firstSeenSha: string;
+	/**
+	 * `new`: this review reported it first. `carried`: reported before, and the
+	 * commits since did not touch it. `rechecked`: reported before, the commits
+	 * since touched it, and a verifier confirmed it still holds.
+	 */
+	state: 'new' | 'carried' | 'rechecked';
+}
+
 /** A suggested change for a quality finding, applied in the sandbox and checked before it is shown. */
 export interface FindingPatch {
 	/** Unified diff, repo-rooted with `a/` and `b/` prefixes. */
@@ -259,6 +306,8 @@ export interface Finding {
 	kind?: FindingKind;
 	/** The repo rule a `repo-rule` finding breaks, from the rule ledger (`R12`). */
 	ruleId?: string;
+	/** That rule's text and source, so a reader can check the citation. Older saved reviews omit it. */
+	rule?: FindingRule;
 	/** The smell a `readability` finding names. */
 	smell?: ReadabilitySmell;
 	/** The enclosing function, method or class, as the change model names it (`ReviewRun.createRun`). */
@@ -268,6 +317,9 @@ export interface Finding {
 	patch?: FindingPatch;
 	/** What feedback on it counts toward, and whether that feedback quieted it. Older saved reviews omit it. */
 	topic?: FindingTopic;
+	decision?: FindingDecision;
+	/** Absent on the first review of a pull request and on older saved reviews. */
+	history?: FindingHistory;
 	/** Which lens or detector raised it (`correctness`, `detector:duplication`). */
 	lens?: string;
 	evidenceIds?: string[];

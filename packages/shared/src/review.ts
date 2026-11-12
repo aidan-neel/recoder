@@ -62,6 +62,15 @@ export interface ReviewFindingComment {
 	inline: boolean;
 }
 
+/** A finding an earlier review of the pull request reported, closed because new evidence shows it fixed. */
+export interface ResolvedFinding {
+	finding: Finding;
+	/** What showed the fix: the command that now passes, or the trace that no longer reaches it. */
+	reason: string;
+	/** The head commit of the review that confirmed the fix. */
+	resolvedAtSha: string;
+}
+
 export interface Review {
 	id: string;
 	repoId: string;
@@ -72,6 +81,8 @@ export interface Review {
 	findings: Finding[];
 	/** Candidates a passed review could not prove, kept out of `findings` so the benchmark can score what it hid. */
 	unconfirmed?: Finding[];
+	/** Findings of the review before this one that this review's evidence shows fixed. */
+	resolved?: ResolvedFinding[];
 	/** Where a finished review's candidates went; absent on reviews older than counting them. */
 	funnel?: ReviewFunnel;
 	/** What each reviewer received, read and cited, and what bounds left out; absent on reviews older than recording it. */
