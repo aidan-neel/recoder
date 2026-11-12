@@ -18,11 +18,26 @@ async function review(status: ReviewStatus): Promise<string> {
 	return value.id;
 }
 
-/** A coordinator whose backlog is whatever the test last put in `backlog.current`. */
-function backlogOf(initial: WorkerBacklog) {
+/**
+ * A coordinator whose backlog is whatever the test last put in `backlog.current`. A review in `claimedAfterRead` is
+ * taken by a worker right after each backlog read, the moment between that read and the wait write.
+ */
+function backlogOf(initial: WorkerBacklog, claimedAfterRead: string[] = []) {
 	const backlog = { current: initial };
+	const claimed = new Set<string>();
 
-	return { backlog, coordinator: { backlog: async () => backlog.current } };
+	const coordinator = {
+		backlog: async () => {
+			const read = backlog.current;
+
+			for (const reviewId of claimedAfterRead) claimed.add(reviewId);
+
+			return read;
+		},
+		whileClaimable: async <T>(reviewId: string, work: () => Promise<T>) => (claimed.has(reviewId) ? undefined : work())
+	};
+
+	return { backlog, coordinator };
 }
 
 function waiting(reviewId: string, overdue = true) {
@@ -78,4 +93,13 @@ test('a review a worker took no longer says it waits for one', async () => {
 	await report();
 
 	expect((await reviewProgress.get(taken))?.workerWait).toBeNull();
+});
+
+test('a review a worker claims between the backlog read and the wait write is not marked as waiting', async () => {
+	const claimed = await review('queued');
+	const { coordinator } = backlogOf({ waiting: [waiting(claimed)], running: 1 }, [claimed]);
+
+	await createWorkerWaitReporter(coordinator)();
+
+	expect((await reviewProgress.get(claimed))?.workerWait).toBeUndefined();
 });

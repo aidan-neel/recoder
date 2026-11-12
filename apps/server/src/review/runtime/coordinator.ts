@@ -4,6 +4,7 @@ import { queuedCommandSchema, type QueuedCommand, type ReviewCommand } from './c
 import { enqueueActor, enqueueCommand } from './inbox';
 import { assertOwnership, reviewLeaseSchema, type ReviewLease } from './ownership';
 import { initializeCoordinator } from './schema';
+import { withPostgresTransaction } from '../../storage/postgres-transactions';
 
 const identifier = z.string().min(1).max(200);
 const duration = z.number().int().min(100).max(300_000);
@@ -79,6 +80,24 @@ export class PostgresCoordinator {
 		`;
 
 		return workerBacklogSchema.parse({ waiting, running: z.object({ running: z.number() }).parse(held).running });
+	}
+
+	/**
+	 * Runs `work` in one transaction that holds the review's lease row, if a worker can still claim the review, and
+	 * returns its result; returns undefined without running it once a worker holds the review. A claim skips the held
+	 * row until the transaction ends, so a write made in `work` cannot land after a worker took the review.
+	 */
+	async whileClaimable<T>(reviewId: string, work: () => Promise<T>): Promise<T | undefined> {
+		return withPostgresTransaction(this.sql, async (transaction) => {
+			const rows = await transaction<unknown[]>`
+				SELECT review_id FROM review_actor_leases
+				WHERE review_id = ${identifier.parse(reviewId)}
+				  AND ((owner_id IS NULL AND pending) OR expires_at <= clock_timestamp())
+				FOR SHARE
+			`;
+
+			return rows.length ? work() : undefined;
+		});
 	}
 
 	async renew(lease: ReviewLease): Promise<boolean> {
