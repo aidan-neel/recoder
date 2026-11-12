@@ -30,7 +30,7 @@ export function createPullChat(context: SessionContext, drafts: DraftOpener) {
 
 	/** Sends one message; a failure marks it, and a retry counts its copy from the conversation as it stands then. */
 	async function deliver(reviewId: string, key: string, text: string): Promise<void> {
-		patch(key, { state: 'pending', failure: undefined, after: conversationLength() });
+		patch(key, { reviewId, state: 'pending', failure: undefined, after: conversationLength() });
 
 		try {
 			const sent = await client.sendChat(reviewId, text);
@@ -55,7 +55,10 @@ export function createPullChat(context: SessionContext, drafts: DraftOpener) {
 			const key = localId('out');
 
 			state.setState((current) => ({
-				outbox: [...current.outbox, { key, text: trimmed, state: 'pending', after: conversationLength() }]
+				outbox: [
+					...current.outbox,
+					{ key, text: trimmed, reviewId: current.review?.id ?? null, state: 'pending', after: conversationLength() }
+				]
 			}));
 
 			try {
@@ -65,12 +68,19 @@ export function createPullChat(context: SessionContext, drafts: DraftOpener) {
 			}
 		},
 
-		/** Sends a message the server refused again. */
+		/** Sends a message the server refused again, to the review it was first sent to. */
 		async resend(key: string): Promise<void> {
 			const outgoing = state.getState().outbox.find((candidate) => candidate.key === key);
-			const reviewId = state.getState().review?.id;
+			const reviewId = outgoing?.reviewId ?? state.getState().review?.id;
 
 			if (outgoing && reviewId) await deliver(reviewId, key, outgoing.text);
+		},
+
+		/** Keeps only what was sent to the review now followed, or before any review had opened. */
+		reviewFollowed(reviewId: string): void {
+			state.setState((current) => ({
+				outbox: current.outbox.filter((outgoing) => (outgoing.reviewId ?? reviewId) === reviewId)
+			}));
 		},
 
 		/** Stops the reply being written; rejects with a plain sentence. */

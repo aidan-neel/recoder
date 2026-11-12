@@ -7,6 +7,8 @@ export interface Outgoing {
 	/** The row's key, kept after the server's copy arrives so the row never re-enters. */
 	key: string;
 	text: string;
+	/** The review it goes to; null until a pull request with no review opened its session. */
+	reviewId: string | null;
 	state: 'pending' | 'sent' | 'failed';
 	/** How many messages the conversation had when this one was sent; its copy can only come after them. */
 	after: number;

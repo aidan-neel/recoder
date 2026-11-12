@@ -20,15 +20,20 @@ interface ReviewEvents {
 	reviewSettled: () => void;
 }
 
+/** The review a session follows: what tells it apart from an older one. */
+type Followed = Pick<ReviewListItem, 'id' | 'createdAt'>;
+
 /** The newest review of the pull request: reading it, following its live events, and starting and stopping it. */
 export function createReviewFollow(context: SessionContext, events: ReviewEvents) {
 	const { client, list, state, repoId, number } = context;
-	let followed: string | null = null;
+	let followed: Followed | null = null;
 	let stopStream: (() => void) | null = null;
+	/** True from `close` until the session opens again: a closed session starts no stream. */
+	let closed = true;
 
 	/** Takes the server's copy of the followed review; a run that just ended tells the page. */
 	function accept(review: Review): void {
-		if (review.id !== followed) return;
+		if (review.id !== followed?.id) return;
 
 		const before = state.getState().review;
 
@@ -40,13 +45,28 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 		}
 	}
 
+	/**
+	 * Takes the review a request answers with, unless a newer copy reached the
+	 * screen while it was asked: the live events, or a decision made meanwhile.
+	 */
+	async function acceptAnswer(request: () => Promise<Review>): Promise<void> {
+		const shown = state.getState().review;
+		const review = await request();
+
+		if (state.getState().review === shown) accept(review);
+	}
+
 	async function load(id: string): Promise<void> {
-		if (state.getState().review?.id !== id) state.setState({ reviewLoad: 'loading', reviewError: null });
+		const shown = state.getState().review;
+
+		if (shown?.id !== id) state.setState({ reviewLoad: 'loading', reviewError: null });
 
 		try {
-			accept(await client.review(id));
+			await acceptAnswer(() => client.review(id));
 		} catch (error) {
-			if (followed === id) state.setState({ reviewLoad: 'failed', reviewError: failureText(error) });
+			if (followed?.id === id && state.getState().review === shown) {
+				state.setState({ reviewLoad: 'failed', reviewError: failureText(error) });
+			}
 		}
 	}
 
@@ -63,10 +83,14 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 		state.setState({ connection: connection === 'reconnecting' ? 'reconnecting' : 'live' });
 	}
 
-	/** Follows another review: its record (read now unless given) and its live events. */
-	function follow(id: string, review?: Review): void {
+	/** Follows another review: its record (read now unless given) and its live events. A closed session follows none. */
+	function follow(target: Followed, review?: Review): void {
+		if (closed) return;
+
+		const { id } = target;
+
 		stopStream?.();
-		followed = id;
+		followed = target;
 		state.setState({ progress: null, connection: 'live' });
 		events.reviewFollowed(id);
 
@@ -94,7 +118,7 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 
 	/** Runs a lifecycle call on the followed review; rejects with a plain sentence. */
 	async function onFollowed<T>(call: (id: string) => Promise<T>): Promise<T> {
-		const id = followed;
+		const id = followed?.id;
 
 		if (!id) throw new Error('This pull request has no review yet.');
 
@@ -118,12 +142,22 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 	}
 
 	return {
-		/** Follows the page's newest review; the one already followed is left as it is. */
+		/** Follows the page's newest review; the one already followed, or one older than it, is left as it is. */
 		sync(item: ReviewListItem | null): void {
-			if (item && item.id !== followed) follow(item.id);
+			if (!item || item.id === followed?.id) return;
+			if (followed && Date.parse(item.createdAt) < Date.parse(followed.createdAt)) return;
+
+			follow(item);
 		},
 
+		/** Lets the session follow reviews, until it closes. */
+		open(): void {
+			closed = false;
+		},
+
+		/** Stops following; answers that arrive after it start nothing. */
 		close(): void {
+			closed = true;
 			stopStream?.();
 			stopStream = null;
 			followed = null;
@@ -135,7 +169,7 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 			try {
 				const review = await plainly(() => startReview(brief));
 
-				follow(review.id, review);
+				follow(review, review);
 				list.reload();
 			} finally {
 				state.setState({ starting: false });
@@ -146,7 +180,7 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 		async openDraft(): Promise<string> {
 			const review = await plainly(() => client.createReview(reviewInput({ start: false })));
 
-			follow(review.id, review);
+			follow(review, review);
 
 			return review.id;
 		},
@@ -172,7 +206,7 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 		},
 
 		async retry(): Promise<void> {
-			accept(await onFollowed(client.continueReview));
+			await acceptAnswer(() => onFollowed(client.continueReview));
 		}
 	};
 }

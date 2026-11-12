@@ -22,9 +22,14 @@ export function createSession(client: ApiClient, list: ListStore, repoId: string
 	});
 
 	const review = createReviewFollow(context, {
-		reviewFollowed: (id) => bugChat.load(id),
+		reviewFollowed: (id) => {
+			bugChat.load(id);
+			pullChat.reviewFollowed(id);
+		},
 		reviewSettled: () => void pages.loadPage()
 	});
+
+	const pullChat = createPullChat(context, review);
 
 	return {
 		state,
@@ -34,11 +39,12 @@ export function createSession(client: ApiClient, list: ListStore, repoId: string
 		review,
 		bugs: createBugActions(context),
 		bugChat,
-		pullChat: createPullChat(context, review),
+		pullChat,
 		merge: createMerge(context, pages.loadPage),
 
 		/** Loads the page and the diff at once and follows the review; returns the close. */
 		open(): () => void {
+			review.open();
 			void pages.loadPage();
 			void pages.loadDiff();
 
