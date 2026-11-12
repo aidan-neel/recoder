@@ -2,7 +2,16 @@
 
 import { Check, X } from 'lucide-react';
 import { Slot } from 'radix-ui';
-import { useState, type ButtonHTMLAttributes, type ReactNode, type Ref, type TransitionEvent } from 'react';
+import {
+	Children,
+	isValidElement,
+	useState,
+	type ButtonHTMLAttributes,
+	type ReactElement,
+	type ReactNode,
+	type Ref,
+	type TransitionEvent
+} from 'react';
 
 import { cn } from '../lib/cn';
 import { pressOnce } from './press-once';
@@ -12,41 +21,82 @@ export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'qui
 
 export type ButtonSize = 'sm' | 'md' | 'lg' | 'icon';
 
-/** Where an async action stands. Pending keeps the button's width; success and error crossfade in. */
+/**
+ * Where an async action stands. The faces crossfade in the idle label's
+ * place: pending shows a spinner, success a check and error a cross, each
+ * with a label only when one is passed, so the button keeps its idle width.
+ */
 export type ButtonStatus = 'idle' | 'pending' | 'success' | 'error';
 
 /**
- * The look every button shares. These class lists hold no two classes that
- * conflict, so they are plain strings: merging them as the module loads would
- * set up tailwind-merge on every route that imports the kit.
+ * The look every button shares. Depth is a hairline and a soft lift set per
+ * variant in `--button-shadow`, so the focus ring can sit over it. Hover and
+ * press on the see-through variants lay a wash over whatever is behind them,
+ * so they still show inside a hovered row. A press shrinks the button a touch
+ * and shades it; under reduced motion it only shades. A failed action tints
+ * the button red while its cross shows. These class lists hold no two classes
+ * that conflict, so they are plain strings: merging them as the module loads
+ * would set up tailwind-merge on every route that imports the kit.
  */
 const BASE = [
-	'relative inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap select-none',
-	'rounded-[8px] font-medium text-[length:var(--font-size-button)] outline-none',
-	'transition-[background-color,color,box-shadow,filter] duration-(--dur-hover) ease-out',
-	'focus-visible:shadow-(--focus-ring) disabled:pointer-events-none disabled:opacity-40',
-	'aria-disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg:not([class*=size-])]:size-4'
+	'relative inline-flex shrink-0 items-center justify-center whitespace-nowrap select-none outline-none',
+	'font-normal text-[length:var(--font-size-button)] leading-none',
+	'shadow-(--button-shadow) focus-visible:shadow-[var(--focus-ring),var(--button-shadow)]',
+	'transition-[background-color,color,box-shadow,scale] duration-(--dur-hover) ease-out',
+	'active:scale-(--press-scale) aria-busy:active:scale-none motion-reduce:active:scale-none',
+	'disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none [&_svg]:pointer-events-none',
+	'data-[status=error]:bg-danger-tint data-[status=error]:bg-none data-[status=error]:text-danger',
+	'data-[status=error]:[--button-shadow:inset_0_0_0_1px_color-mix(in_oklab,var(--danger)_30%,transparent)]'
 ].join(' ');
 
+/** The wash a see-through button takes on hover and when open, and the deeper one while pressed. */
+const WASH = 'hover:bg-[rgb(var(--wash-rgb)/6%)] active:bg-[rgb(var(--wash-rgb)/10%)]';
+
 const VARIANTS: Record<ButtonVariant, string> = {
-	primary: 'bg-(--primary) text-(--on-primary) hover:brightness-108 data-[state=open]:brightness-108',
-	secondary: 'bg-menu text-fg hover:bg-hover data-[state=open]:bg-hover',
-	outline: [
-		'bg-transparent text-fg shadow-[inset_0_0_0_1px_var(--line-menu)]',
-		'hover:bg-line-subtle hover:shadow-[inset_0_0_0_1px_var(--line-hover)]',
-		'data-[state=open]:bg-line-subtle focus-visible:shadow-[var(--focus-ring),inset_0_0_0_1px_var(--line-hover)]'
+	primary: [
+		'bg-(--primary) bg-(image:--button-primary-sheen) font-medium text-(--on-primary)',
+		'[--button-shadow:var(--button-primary-lift),inset_0_0_0_1px_color-mix(in_oklab,var(--primary),black_14%)]',
+		'hover:bg-(--primary-hover) active:bg-(--primary) data-[state=open]:bg-(--primary-hover)'
 	].join(' '),
-	ghost:
-		'bg-transparent text-fg-subtle hover:bg-menu hover:text-fg data-[state=open]:bg-menu data-[state=open]:text-fg',
-	quiet: 'bg-transparent text-fg hover:bg-hover data-[state=open]:bg-selected',
-	destructive: 'bg-danger-tint text-danger hover:brightness-115'
+	secondary: [
+		'bg-raised bg-(image:--button-sheen) text-fg [--button-shadow:var(--button-lift),inset_0_0_0_1px_var(--line-menu)]',
+		'hover:bg-hover hover:[--button-shadow:var(--button-lift),inset_0_0_0_1px_var(--line-hover)]',
+		'active:bg-selected data-[state=open]:bg-hover'
+	].join(' '),
+	outline: [
+		'bg-transparent text-fg [--button-shadow:inset_0_0_0_1px_var(--line-menu)]',
+		`hover:[--button-shadow:inset_0_0_0_1px_var(--line-hover)] ${WASH} data-[state=open]:bg-[rgb(var(--wash-rgb)/6%)]`
+	].join(' '),
+	ghost: [
+		'bg-transparent text-fg-subtle [--button-shadow:0_0_transparent] hover:text-fg data-[state=open]:text-fg',
+		`${WASH} data-[state=open]:bg-[rgb(var(--wash-rgb)/6%)]`
+	].join(' '),
+	quiet: `bg-transparent text-fg [--button-shadow:0_0_transparent] ${WASH} data-[state=open]:bg-[rgb(var(--wash-rgb)/10%)]`,
+	destructive: [
+		'bg-danger-tint text-danger [--button-shadow:inset_0_0_0_1px_color-mix(in_oklab,var(--danger)_22%,transparent)]',
+		'hover:brightness-115 active:brightness-100'
+	].join(' ')
 };
 
+/**
+ * Height, radius, padding and icon size per size. The side an icon sits on
+ * gets 2px less padding than a side with text (`data-icon-start`,
+ * `data-icon-end`), so the label reads centred.
+ */
 const SIZES: Record<ButtonSize, string> = {
-	sm: 'h-[calc(var(--size-control-sm)-2px)] px-3',
-	md: 'h-[calc(var(--size-control-md)-2px)] px-3',
-	lg: 'h-[calc(var(--size-control-lg)-2px)] rounded-[9px] px-3.5 text-[13.5px]',
-	icon: 'size-(--size-icon-md) min-w-(--size-icon-md) p-0'
+	sm: [
+		'h-(--size-control-sm) gap-1 rounded-[6px] px-2 text-[12.5px] [&_svg:not([class*=size-])]:size-[13px]',
+		'data-[icon-start]:pl-1.5 data-[icon-end]:pr-1.5'
+	].join(' '),
+	md: [
+		'h-(--size-control-md) gap-1.5 rounded-[8px] px-2.5 [&_svg:not([class*=size-])]:size-3.5',
+		'data-[icon-start]:pl-2 data-[icon-end]:pr-2'
+	].join(' '),
+	lg: [
+		'h-(--size-control-lg) gap-2 rounded-[9px] px-3 text-[13.5px] [&_svg:not([class*=size-])]:size-4',
+		'data-[icon-start]:pl-2.5 data-[icon-end]:pr-2.5'
+	].join(' '),
+	icon: 'size-(--size-icon-md) min-w-(--size-icon-md) rounded-[8px] p-0 [&_svg:not([class*=size-])]:size-4'
 };
 
 /** The class list for a button look, for elements that must not be a `Button` (a Radix trigger rendered as a link). */
@@ -60,8 +110,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 	/** Render the child element (an anchor or a Next `Link`) with the button's look. */
 	asChild?: boolean;
 	status?: ButtonStatus;
+	/** Shown beside the spinner. Leave it out to keep the button its idle width. */
 	pendingLabel?: ReactNode;
+	/** Shown beside the check. Leave it out to keep the button its idle width; "Done" is still announced. */
 	successLabel?: ReactNode;
+	/** Shown beside the cross. Leave it out to keep the button its idle width; "Failed" is still announced. */
 	errorLabel?: ReactNode;
 	ref?: Ref<HTMLButtonElement>;
 }
@@ -72,9 +125,41 @@ type StatusFace = Exclude<ButtonStatus, 'idle'>;
 /** The label each status face shows beside its icon. */
 type FaceLabels = Record<StatusFace, ReactNode>;
 
+/** What a screen reader hears when a face shows no label of its own. */
+const ANNOUNCED: FaceLabels = { pending: null, success: 'Done', error: 'Failed' };
+
 /** Whether a face label renders anything a screen reader can speak. */
 function hasLabel(label: ReactNode): boolean {
 	return label !== null && label !== undefined && label !== false && label !== '';
+}
+
+/** Which ends of a button's content are an icon rather than text. */
+interface IconEdges {
+	start: boolean;
+	end: boolean;
+}
+
+/**
+ * Finds whether the content starts or ends with an icon, so that side can
+ * take less padding. An icon is an element with no children of its own (a
+ * lucide icon, a keycap, a dot); an element that wraps a label is text. With
+ * `asChild` the content is the child link's own children.
+ */
+function iconEdges(children: ReactNode, asChild: boolean): IconEdges {
+	const content = isWrapper(children) && asChild ? children.props.children : children;
+	const nodes = Children.toArray(content).filter((node) => typeof node !== 'string' || node.trim() !== '');
+
+	return { start: isIcon(nodes.at(0)), end: isIcon(nodes.at(-1)) };
+}
+
+/** An element that may hold children, such as the link an `asChild` button renders. */
+function isWrapper(node: ReactNode): node is ReactElement<{ children?: ReactNode }> {
+	return isValidElement<{ children?: ReactNode }>(node);
+}
+
+/** An element with no children: an icon, a keycap or a dot. */
+function isIcon(node: ReactNode): boolean {
+	return isWrapper(node) && node.props.children === undefined;
 }
 
 /**
@@ -139,6 +224,13 @@ function Faces({ status, labels, children }: { status: ButtonStatus; labels: Fac
 	);
 }
 
+/** What the status announcer says: the face's own label, else a plain word for it. */
+function announcement(status: ButtonStatus, labels: FaceLabels): ReactNode {
+	if (status === 'idle') return null;
+
+	return hasLabel(labels[status]) ? labels[status] : ANNOUNCED[status];
+}
+
 /**
  * Speaks the pending, success or error label when the button reaches that
  * state. It sits beside the button, not inside it: a button's content is
@@ -164,8 +256,8 @@ export function Button({
 	asChild = false,
 	status,
 	pendingLabel,
-	successLabel = 'Done',
-	errorLabel = 'Try again',
+	successLabel,
+	errorLabel,
 	className,
 	children,
 	onClick,
@@ -175,21 +267,21 @@ export function Button({
 	...props
 }: ButtonProps) {
 	const busy = status === 'pending';
-	const classes = buttonClass(variant, size, className);
 	const labels: FaceLabels = { pending: pendingLabel, success: successLabel, error: errorLabel };
+	const edges = iconEdges(children, asChild);
+
+	const look = {
+		'data-ui': 'button',
+		'data-variant': variant,
+		'data-size': size,
+		'data-icon-start': edges.start || undefined,
+		'data-icon-end': edges.end || undefined,
+		className: buttonClass(variant, size, className)
+	};
 
 	if (asChild) {
 		return (
-			<Slot.Root
-				ref={ref}
-				data-ui="button"
-				data-variant={variant}
-				data-size={size}
-				className={classes}
-				onClick={onClick}
-				onKeyDown={pressOnce(onKeyDown)}
-				{...props}
-			>
+			<Slot.Root ref={ref} {...look} onClick={onClick} onKeyDown={pressOnce(onKeyDown)} {...props}>
 				{children}
 			</Slot.Root>
 		);
@@ -199,12 +291,9 @@ export function Button({
 		<button
 			ref={ref}
 			type={type}
-			data-ui="button"
-			data-variant={variant}
-			data-size={size}
+			{...look}
 			data-status={status}
 			aria-busy={busy || undefined}
-			className={classes}
 			onClick={(event) => {
 				if (busy) return event.preventDefault();
 
@@ -228,7 +317,7 @@ export function Button({
 	return (
 		<>
 			{button}
-			<StatusAnnouncer>{status === 'idle' ? null : labels[status]}</StatusAnnouncer>
+			<StatusAnnouncer>{announcement(status, labels)}</StatusAnnouncer>
 		</>
 	);
 }

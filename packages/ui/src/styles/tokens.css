@@ -260,11 +260,23 @@
 	/* Comments read as text, so they keep 4.5:1. */
 	--syn-comment: var(--text-subtle);
 
-	/* Controls: 30px (md), 28px (sm), 34px (lg); square icon buttons match md. */
-	--size-control-sm: 28px;
-	--size-control-md: 30px;
-	--size-control-lg: 34px;
-	--size-icon-md: 30px;
+	/* Controls: 28px (md) sits in a 44px bar with 8px either side; 24px (sm) for dense rows; 32px (lg). Square icon buttons match md. */
+	--size-control-sm: 24px;
+	--size-control-md: 28px;
+	--size-control-lg: 32px;
+	--size-icon-md: 28px;
+
+	/*
+	 * Button depth: a soft lift under the hairline edge and a faint top-down sheen, never a heavy
+	 * border. The edge colour comes from the line tokens at the button, so a skin's palette follows.
+	 */
+	--button-lift: inset 0 1px 0 rgb(255 255 255 / 0.04), 0 1px 2px rgb(0 0 0 / 0.4);
+	--button-sheen: linear-gradient(rgb(255 255 255 / 0.03), rgb(255 255 255 / 0));
+	--button-primary-lift:
+		inset 0 1px 0 rgb(255 255 255 / 0.55), inset 0 -1px 0 rgb(0 0 0 / 0.08), 0 1px 2px rgb(0 0 0 / 0.5);
+	--button-primary-sheen: linear-gradient(rgb(255 255 255 / 0.3), rgb(255 255 255 / 0));
+	/* A press shrinks a button this much, over --dur-hover. */
+	--press-scale: 0.97;
 
 	--font-size-title: 15px;
 	--font-size-body: 13.5px;
@@ -283,6 +295,10 @@
 }
 :root:not(.dark) {
 	--focus-color: rgb(var(--ink-rgb) / 0.52);
+	--button-lift: 0 1px 2px rgb(0 0 0 / 0.06);
+	--button-sheen: linear-gradient(rgb(0 0 0 / 0), rgb(0 0 0 / 0.025));
+	--button-primary-lift: inset 0 1px 0 rgb(255 255 255 / 0.14), 0 1px 2px rgb(0 0 0 / 0.2);
+	--button-primary-sheen: linear-gradient(rgb(255 255 255 / 0.1), rgb(255 255 255 / 0));
 	--sent: #6b3fb0;
 	--sent-tint: rgba(107, 63, 176, 0.1);
 	--diff-add-gutter: rgba(26, 127, 55, 0.13);

@@ -407,7 +407,7 @@
 
 	/* Inline: one quiet line in the flow, at least a control tall so an action never resizes it. */
 	[data-ui='status-notice'][data-variant='inline'] {
-		min-height: var(--size-control-sm);
+		min-height: var(--size-control-md);
 		flex-direction: row;
 		align-items: center;
 		gap: 8px;
