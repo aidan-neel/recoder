@@ -186,8 +186,8 @@
 			</div>
 			<div class="settings-row role-row">
 				<div class="min-w-0 flex-1">
-					<p class="settings-row-name">Subagents and verifiers</p>
-					<p class="settings-row-desc">Answers the questions reviewers hand off and checks each finding</p>
+					<p class="settings-row-name">Subagents</p>
+					<p class="settings-row-desc">Answers the questions reviewers hand off</p>
 				</div>
 				<ModelPicker
 					value={settingsDraft.specialist}
