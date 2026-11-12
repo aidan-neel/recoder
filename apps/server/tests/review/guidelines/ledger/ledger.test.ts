@@ -1,18 +1,20 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'bun:test';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildRuleLedger, ledgerBlock } from '../../../../src/review/guidelines/ledger/ledger';
-import { readLedgerSources } from '../../../../src/review/guidelines/ledger/sources';
+import { LEDGER_VERSION, readLedgerSources } from '../../../../src/review/guidelines/ledger/sources';
 import { toLedger } from '../../../../src/review/guidelines/ledger/validate';
 import { createRun } from '../../../../src/review/pipeline/harness/context';
+import { writeCache } from '../../../../src/util/json-cache';
 import { DIFF, modelReply, restoreAfterEach, twoCommitRepo, useTestModel } from '../../pipeline/harness-fixtures';
 
 restoreAfterEach();
 
 const SOURCES = [
-	{ path: 'AGENTS.md', text: 'line 1\nline 2\nline 3\nline 4\n' },
-	{ path: 'apps/web/AGENTS.md', text: 'one\ntwo\n' }
+	{ path: 'AGENTS.md', text: 'line 1\n- Write JSDoc only.\nline 3\n- Keep files short.\n', revision: 'abc1234' },
+	{ path: 'apps/web/AGENTS.md', text: 'one\n- Use Sivir components.\n', revision: 'abc1234' }
 ];
 
 describe('toLedger', () => {
@@ -63,6 +65,95 @@ describe('toLedger', () => {
 			{ kind: 'forbid-pattern', pattern: '^\\s*//', glob: '**/*.ts' }
 		]);
 	});
+
+	test('keeps the exact multi-line source wording, line range and revision while storing the short restatement separately', () => {
+		const source = {
+			path: 'AGENTS.md',
+			revision: 'deadbeef01',
+			text: [
+				'# Guidelines',
+				'- Never swallow an error: catch only what you can handle,',
+				'  and add context when you rethrow.',
+				''
+			].join('\n')
+		};
+
+		const ledger = toLedger(
+			{
+				rules: [
+					{
+						text: 'Rethrow caught errors with context.',
+						source: 'AGENTS.md',
+						line: 2,
+						endLine: 3
+					}
+				]
+			},
+			[source],
+			'hash'
+		);
+
+		expect(ledger.rules).toEqual([
+			{
+				id: 'R1',
+				text: 'Never swallow an error: catch only what you can handle,\n  and add context when you rethrow.',
+				restatement: 'Rethrow caught errors with context.',
+				level: 'mandatory',
+				source: { path: 'AGENTS.md', line: 2, endLine: 3, revision: 'deadbeef01' }
+			}
+		]);
+	});
+
+	test('keeps exceptions stated inline or next to a rule and omits mechanical checks when exceptions or advisory cues apply', () => {
+		const source = {
+			path: 'AGENTS.md',
+			revision: 'rev1',
+			text: [
+				'- Keep every file under 500 lines.',
+				'  - Exception: generated parser tables under src/gen/.',
+				'- Prefer early returns when practical unless matching a switch.',
+				''
+			].join('\n')
+		};
+
+		const ledger = toLedger(
+			{
+				rules: [
+					{
+						text: 'Keep every file under 500 lines.',
+						restatement: 'Keep files under 500 lines.',
+						source: 'AGENTS.md',
+						line: 1,
+						check: { kind: 'max-file-lines', max: 500 }
+					},
+					{
+						text: 'Prefer early returns when practical unless matching a switch.',
+						restatement: 'Prefer early returns.',
+						source: 'AGENTS.md',
+						line: 3
+					}
+				]
+			},
+			[source],
+			'hash'
+		);
+
+		expect(ledger.rules[0]).toMatchObject({
+			id: 'R1',
+			level: 'mandatory',
+			exceptions: ['generated parser tables under src/gen/.'],
+			source: { path: 'AGENTS.md', line: 1, endLine: 1, revision: 'rev1' }
+		});
+
+		expect(ledger.rules[0]?.check).toBeUndefined();
+
+		expect(ledger.rules[1]).toMatchObject({
+			id: 'R2',
+			level: 'advisory',
+			restatement: 'Prefer early returns.',
+			exceptions: ['matching a switch']
+		});
+	});
 });
 
 describe('buildRuleLedger', () => {
@@ -107,9 +198,11 @@ describe('buildRuleLedger', () => {
 		expect(prompts[0]).toContain('Keep files under 500 lines.');
 		expect(prompts[0]).not.toContain('Anything goes');
 
-		expect(first?.rules.map((rule) => [rule.id, rule.source.path, rule.appliesTo])).toEqual([
-			['R1', 'AGENTS.md', undefined],
-			['R2', 'apps/web/AGENTS.md', 'apps/web/**']
+		expect(
+			first?.rules.map((rule) => [rule.id, rule.source.path, rule.appliesTo, rule.source.revision, rule.source.endLine])
+		).toEqual([
+			['R1', 'AGENTS.md', undefined, targetSha, 3],
+			['R2', 'apps/web/AGENTS.md', 'apps/web/**', targetSha, 1]
 		]);
 
 		globalThis.fetch = (async () => new Response('unavailable', { status: 500 })) as unknown as typeof fetch;
@@ -117,6 +210,63 @@ describe('buildRuleLedger', () => {
 		expect(await buildRuleLedger(createRun(input))).toEqual(first);
 		expect(ledgerBlock(first, ['apps/web/src/x.svelte'])).toBe('R2: Use Sivir. (apps/web/AGENTS.md:1)');
 		expect(ledgerBlock(first, ['apps/server/src/x.ts'])).toBe('');
+	});
+
+	test('rebuilds a ledger cached under an older LEDGER_VERSION instead of reusing stale rule shapes', async () => {
+		const root = await mkdtemp(join(tmpdir(), 'recoder-ledger-v-'));
+		const fileText = '- Never use console.log in server handlers.\n';
+
+		const { targetSha, headSha } = await twoCommitRepo(root, {
+			base: { 'AGENTS.md': fileText }
+		});
+
+		const staleKey = createHash('sha256').update('ledger-v2').update(`\0AGENTS.md\0${fileText}`).digest('hex');
+
+		writeCache('rule-ledger', staleKey, {
+			sourcesHash: staleKey,
+			rules: [{ id: 'R1', text: 'stale', source: { path: 'AGENTS.md' } }]
+		});
+
+		useTestModel();
+
+		let modelCalls = 0;
+
+		globalThis.fetch = (async () => {
+			modelCalls++;
+
+			return modelReply({
+				message: 'Distilled.',
+				rules: [
+					{
+						text: 'Never use console.log in server handlers.',
+						restatement: 'Avoid console.log in server handlers.',
+						source: 'AGENTS.md',
+						line: 1,
+						endLine: 1,
+						level: 'mandatory'
+					}
+				]
+			});
+		}) as unknown as typeof fetch;
+
+		const built = await buildRuleLedger(
+			createRun({
+				diff: DIFF,
+				sandboxPath: null,
+				revision: { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' }
+			})
+		);
+
+		expect(LEDGER_VERSION).toBe('ledger-v3');
+		expect(modelCalls).toBe(1);
+
+		expect(built?.rules[0]).toMatchObject({
+			id: 'R1',
+			text: 'Never use console.log in server handlers.',
+			restatement: 'Avoid console.log in server handlers.',
+			level: 'mandatory',
+			source: { path: 'AGENTS.md', line: 1, endLine: 1, revision: targetSha }
+		});
 	});
 });
 
@@ -131,6 +281,9 @@ describe('readLedgerSources', () => {
 		const revision = { checkoutPath: root, headSha, targetSha, mergeBaseSha: targetSha, targetRef: 'main' };
 		const sources = await readLedgerSources(revision, new AbortController().signal);
 
-		expect(sources.map((source) => source.path)).toEqual(['AGENTS.md', 'RECODER.md']);
+		expect(sources.map((source) => [source.path, source.revision])).toEqual([
+			['AGENTS.md', targetSha],
+			['RECODER.md', targetSha]
+		]);
 	});
 });

@@ -1,11 +1,24 @@
+import { RULE_LEVELS, type RuleLevel } from '@recoder/shared';
 import { z } from 'zod';
-import { cleanGlob } from './glob.js';
+import { cleanGlob, effectiveRuleScope } from './glob.js';
+import { compareSourcePrecedence, resolveRulePrecedence } from './precedence.js';
 import type { LedgerSource } from './sources.js';
 import type { MechanicalCheck, RepoRule, RuleLedger } from './types.js';
 
 const MAX_RULES = 80;
 const MAX_RULE_CHARS = 300;
+const MAX_VERBATIM_CHARS = 1200;
 const MAX_PATTERN_CHARS = 200;
+const MAX_EXCEPTIONS = 8;
+const MAX_EXCEPTION_CHARS = 240;
+const MIN_SUBCLAUSE_CHARS = 6;
+
+const ADVISORY_CUE =
+	/\b(?:prefer\b|consider\b|try\s+to\b|aim\s+to\b|ideally\b|when(?:ever)?\s+(?:practical|possible|reasonable)|where\s+(?:practical|possible)|rule\s+of\s+thumb|optional(?:ly)?|encouraged|recommended|nice\s+to\s+have|generally\b|usually\b)/i;
+
+const MANDATORY_CUE = /\b(?:must\b|never\b|always\b|forbidden\b|prohibited\b|required\b|do\s+not\b|don't\b|shall\b)\b/i;
+const INLINE_EXCEPTION_RE = /\b(?:except(?:\s+(?:when|for|in|where|if))?|unless)\s+([^.;\n)]+)/gi;
+const ADJACENT_EXCEPTION_RE = /^\s+(?:[-*+]\s*)?(?:exceptions?|except|unless)\b[:\s-]*(.+)$/i;
 
 /** The model's reply; checks stay loose here so one bad check drops only itself, never the rule or the reply. */
 export const ledgerReplySchema = z.object({
@@ -13,9 +26,14 @@ export const ledgerReplySchema = z.object({
 	rules: z.array(
 		z.object({
 			text: z.string(),
+			restatement: z.string().nullish(),
 			source: z.string(),
 			line: z.number().nullish(),
+			endLine: z.number().nullish(),
+			level: z.enum(RULE_LEVELS).nullish(),
 			appliesTo: z.string().nullish(),
+			exceptions: z.array(z.string()).nullish(),
+			topic: z.string().nullish(),
 			check: z.unknown().optional()
 		})
 	)
@@ -73,63 +91,246 @@ function validCheck(raw: unknown): MechanicalCheck | undefined {
 	return files && mustMatch ? { kind: check.kind, files, mustMatch } : undefined;
 }
 
-/** The line a rule cites, when it is a real line of its source. */
-function citedLine(line: number | null | undefined, source: LedgerSource): number | undefined {
-	if (!line || !Number.isInteger(line)) return undefined;
+function sourceLines(source: LedgerSource): string[] {
+	const normalized = source.text.replace(/\r\n/g, '\n');
+	const lines = normalized.split('\n');
 
-	return line <= source.text.split('\n').length ? line : undefined;
+	if (normalized.endsWith('\n')) lines.pop();
+
+	return lines;
 }
 
-/** A rule with an index into `sources`, before ids are assigned. */
+function stripBullet(text: string): string {
+	return text.replace(/^(?:[-*+]|\d+\.)\s+/, '');
+}
+
+function locateQuote(quote: string, sourceText: string): { line: number; endLine: number } | undefined {
+	if (quote.length < MIN_SUBCLAUSE_CHARS) return undefined;
+
+	const normalized = sourceText.replace(/\r\n/g, '\n');
+	const offset = normalized.indexOf(quote);
+
+	if (offset < 0) return undefined;
+
+	const line = normalized.slice(0, offset).split('\n').length;
+	const endLine = line + quote.split('\n').length - 1;
+
+	return { line, endLine };
+}
+
+function validLine(line: number | null | undefined, totalLines: number): number | undefined {
+	if (!line || !Number.isInteger(line) || line < 1 || line > totalLines) return undefined;
+
+	return line;
+}
+
+interface ExtractedText {
+	text: string;
+	restatement: string;
+	line?: number;
+	endLine?: number;
+}
+
+function extractRuleText(raw: RawRule, source: LedgerSource, lines: string[]): ExtractedText | null {
+	const quote = raw.text.replace(/\r\n/g, '\n').trim();
+	const explicitRestatement = raw.restatement?.replace(/\s+/g, ' ').trim();
+	let line = validLine(raw.line, lines.length);
+	let endLine = line !== undefined ? (validLine(raw.endLine, lines.length) ?? line) : undefined;
+
+	if (line !== undefined && endLine !== undefined && endLine < line) endLine = line;
+
+	if (line === undefined && quote) {
+		const located = locateQuote(quote, source.text);
+
+		if (located) {
+			line = located.line;
+			endLine = located.endLine;
+		}
+	}
+
+	if (line !== undefined && endLine !== undefined) {
+		const quoteSpan = quote.split('\n').length;
+
+		if (raw.endLine === undefined || raw.endLine === null) {
+			const candidateEnd = Math.min(lines.length, line + quoteSpan - 1);
+
+			const candidateRaw = lines
+				.slice(line - 1, candidateEnd)
+				.join('\n')
+				.trim();
+
+			if (quoteSpan > 1 && candidateRaw.includes(quote)) endLine = candidateEnd;
+		}
+
+		const rawSpan = lines
+			.slice(line - 1, endLine)
+			.join('\n')
+			.trim();
+
+		const stripped = stripBullet(rawSpan);
+
+		if (
+			quote &&
+			(quote === stripped || quote === rawSpan || (quote.length >= MIN_SUBCLAUSE_CHARS && rawSpan.includes(quote)))
+		) {
+			const text = quote.slice(0, MAX_VERBATIM_CHARS);
+			const restatement = (explicitRestatement || quote.replace(/\s+/g, ' ').trim()).slice(0, MAX_RULE_CHARS);
+
+			return text ? { text, restatement, line, endLine } : null;
+		}
+
+		const relocated = locateQuote(quote, source.text);
+
+		if (relocated) {
+			const text = quote.slice(0, MAX_VERBATIM_CHARS);
+			const restatement = (explicitRestatement || quote.replace(/\s+/g, ' ').trim()).slice(0, MAX_RULE_CHARS);
+
+			return { text, restatement, line: relocated.line, endLine: relocated.endLine };
+		}
+
+		if (stripped) {
+			const text = stripped.slice(0, MAX_VERBATIM_CHARS);
+
+			const fallbackRestatement =
+				explicitRestatement || quote.replace(/\s+/g, ' ').trim() || stripped.replace(/\s+/g, ' ').trim();
+
+			return { text, restatement: fallbackRestatement.slice(0, MAX_RULE_CHARS), line, endLine };
+		}
+	}
+
+	if (!quote) return null;
+
+	const text = quote.slice(0, MAX_VERBATIM_CHARS);
+	const restatement = (explicitRestatement || quote.replace(/\s+/g, ' ').trim()).slice(0, MAX_RULE_CHARS);
+
+	return { text, restatement };
+}
+
+function extractExceptions(
+	rawExceptions: string[] | null | undefined,
+	verbatimText: string,
+	lines: string[],
+	endLine: number | undefined
+): string[] | undefined {
+	const collected: string[] = [];
+
+	const add = (item: string) => {
+		const cleaned = item.replace(/\s+/g, ' ').trim().slice(0, MAX_EXCEPTION_CHARS);
+
+		if (!cleaned || collected.length >= MAX_EXCEPTIONS) return;
+
+		if (!collected.some((existing) => existing.toLowerCase() === cleaned.toLowerCase())) {
+			collected.push(cleaned);
+		}
+	};
+
+	for (const item of rawExceptions ?? []) add(item);
+
+	if (!collected.length) {
+		for (const match of verbatimText.matchAll(INLINE_EXCEPTION_RE)) {
+			if (match[1]) add(match[1]);
+		}
+	}
+
+	if (endLine !== undefined) {
+		for (let idx = endLine; idx < lines.length; idx++) {
+			const nextLine = lines[idx];
+			const match = ADJACENT_EXCEPTION_RE.exec(nextLine);
+
+			if (!match?.[1]) break;
+			add(match[1]);
+		}
+	}
+
+	return collected.length ? collected : undefined;
+}
+
+function classifyRuleLevel(
+	explicit: RuleLevel | null | undefined,
+	verbatimText: string,
+	restatement: string
+): RuleLevel {
+	if (explicit === 'mandatory' || explicit === 'advisory') return explicit;
+
+	const combined = `${verbatimText} ${restatement}`;
+
+	if (ADVISORY_CUE.test(combined) && !MANDATORY_CUE.test(combined)) return 'advisory';
+
+	return 'mandatory';
+}
+
 interface PlacedRule {
 	rule: Omit<RepoRule, 'id'>;
 	sourceIndex: number;
 	order: number;
+	topic?: string;
 }
 
 function placeRule(raw: RawRule, order: number, sources: LedgerSource[]): PlacedRule | null {
 	const sourceIndex = sources.findIndex((source) => source.path === raw.source.trim());
-	const text = raw.text.replace(/\s+/g, ' ').trim().slice(0, MAX_RULE_CHARS);
 
-	if (sourceIndex < 0 || !text) return null;
+	if (sourceIndex < 0) return null;
 
-	const line = citedLine(raw.line, sources[sourceIndex]);
+	const source = sources[sourceIndex];
+	const lines = sourceLines(source);
+	const extracted = extractRuleText(raw, source, lines);
+
+	if (!extracted) return null;
+
+	const exceptions = extractExceptions(raw.exceptions, extracted.text, lines, extracted.endLine);
+	const level = classifyRuleLevel(raw.level, extracted.text, extracted.restatement);
 	const appliesTo = cleanGlob(raw.appliesTo);
-	const check = validCheck(raw.check);
+	const check = level === 'mandatory' && !exceptions ? validCheck(raw.check) : undefined;
+	const topic = raw.topic?.trim().toLowerCase().slice(0, 80) || undefined;
 
 	return {
 		rule: {
-			text,
-			source: { path: sources[sourceIndex].path, ...(line ? { line } : {}) },
+			text: extracted.text,
+			restatement: extracted.restatement,
+			level,
+			source: {
+				path: source.path,
+				...(extracted.line !== undefined ? { line: extracted.line, endLine: extracted.endLine ?? extracted.line } : {}),
+				...(source.revision ? { revision: source.revision } : {})
+			},
 			...(appliesTo ? { appliesTo } : {}),
+			...(exceptions ? { exceptions } : {}),
 			...(check ? { check } : {})
 		},
 		sourceIndex,
-		order
+		order,
+		...(topic ? { topic } : {})
 	};
+}
+
+function dedupeRules(entries: PlacedRule[]): PlacedRule[] {
+	const byKey = new Map<string, PlacedRule>();
+
+	for (const entry of entries) {
+		const scope = effectiveRuleScope(entry.rule) ?? '*';
+		const key = `${scope}\0${entry.rule.text.replace(/\s+/g, ' ').trim().toLowerCase()}`;
+		const held = byKey.get(key);
+
+		if (!held || compareSourcePrecedence(entry.rule.source.path, held.rule.source.path) < 0) {
+			byKey.set(key, entry);
+		}
+	}
+
+	return [...byKey.values()];
 }
 
 /**
  * The model's rules as a ledger: rules citing an unknown source or with no
- * text are dropped, repeats are merged, and ids `R1..Rn` follow source order
- * (file, then cited line), never the model's order.
+ * text are dropped, verbatim source wording and line ranges are anchored to
+ * the source file, repeats are merged keeping the higher-precedence source,
+ * ids `R1..Rn` follow source order, and conflicting rule files are resolved by precedence.
  */
 export function toLedger(reply: LedgerReply, sources: LedgerSource[], sourcesHash: string): RuleLedger {
-	const seen = new Set<string>();
-
-	const placed = reply.rules
-		.map((raw, order) => placeRule(raw, order, sources))
-		.filter((entry): entry is PlacedRule => {
-			if (!entry) return false;
-
-			const key = entry.rule.text.toLowerCase();
-
-			if (seen.has(key)) return false;
-
-			seen.add(key);
-
-			return true;
-		});
+	const placed = dedupeRules(
+		reply.rules
+			.map((raw, order) => placeRule(raw, order, sources))
+			.filter((entry): entry is PlacedRule => entry !== null)
+	);
 
 	placed.sort(
 		(a, b) =>
@@ -138,7 +339,16 @@ export function toLedger(reply: LedgerReply, sources: LedgerSource[], sourcesHas
 			a.order - b.order
 	);
 
-	const rules = placed.slice(0, MAX_RULES).map((entry, index) => ({ id: `R${index + 1}`, ...entry.rule }));
+	const selected = placed.slice(0, MAX_RULES);
+	const topics = new Map<string, string>();
 
-	return { rules, sourcesHash };
+	const numbered: RepoRule[] = selected.map((entry, index) => {
+		const id = `R${index + 1}`;
+
+		if (entry.topic) topics.set(id, entry.topic);
+
+		return { id, ...entry.rule };
+	});
+
+	return { rules: resolveRulePrecedence(numbered, topics), sourcesHash };
 }
