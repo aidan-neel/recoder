@@ -195,7 +195,7 @@ Environment variables a git hook exports (`GIT_DIR` and the like) are removed fo
 
 ## Reviews after the first
 
-A review of commits — the default range target, or `--pull` — does not always start at the merge base. By default it starts after the head of the last review that still covers the change, so a second `recoder review` reads only the commits added since. `--full` reviews the whole change; `--since <commit>` still names the start by hand for `--pull`, and contradicts `--full`. `--staged`, `--uncommitted` and `--diff` always review everything they hold: they never continue an earlier review, and no later review continues them.
+A review of commits (the default range target, or `--pull`) does not always start at the merge base. By default it starts after the head of the last review that still covers the change, so a second `recoder review` reads only the commits added since. `--full` reviews the whole change; `--since <commit>` still names the start by hand for `--pull`, and contradicts `--full`. `--staged`, `--uncommitted` and `--diff` always review everything they hold: they never continue an earlier review, and no later review continues them.
 
 The last review is found in `<data dir>/cli-runs/`. `cli/runs/last-review.ts` reads the run files and knows nothing about git; it returns the runs that could be the last review, newest first. The git checks are in `cli/target/start-point.ts` (`continuedStart`, `countedHead`), which also holds `startingAt`, the `--since` checks whose error texts did not change. Going through the candidates newest first, skipping a run whose files cannot be read, a run counts when all of these hold:
 
@@ -211,7 +211,7 @@ Commits identify the target. No key is built from the repository path, the branc
 
 - A run counts and its head is older than the new head: the review covers only the commits after it, as if `--since` named that commit. `target.mergeBaseSha` is that commit.
 - A run counts and its head is the new head: a usage error (exit 2), `Nothing to review: run <run id> already reviewed <head> up to <7-character sha>. Pass --full to review the whole change again.`
-- No run counts — a first review, a rebase or force-push, a merge of the base into the branch, another base, pruned runs: the whole change is reviewed. This is not an error.
+- No run counts (a first review, a rebase or force-push, a merge of the base into the branch, another base, pruned runs): the whole change is reviewed. This is not an error.
 
 A narrowed review is itself a continuing review: it also starts after the last run that counts; only what it leaves behind differs (rule 3). A report written before these fields existed never counts, because rule 3 cannot be proven for it, and it reads without error: `target.since`, `target.sinceRunId`, `settings.include` and `settings.exclude` are optional in `cli/runs/stored-report.ts`.
 

@@ -1,6 +1,5 @@
 import type { ReportTarget } from '../report/report.js';
-
-const SHORT_SHA_LENGTH = 7;
+import { shortSha } from '../short-sha.js';
 
 /**
  * The commit a review started after, as the target line names it: `since
@@ -13,7 +12,7 @@ export function sinceLabel(target: ReportTarget): string | null {
 
 	const run = target.sinceRunId ? ` (run ${target.sinceRunId})` : '';
 
-	return `since ${target.since.slice(0, SHORT_SHA_LENGTH)}${run}`;
+	return `since ${shortSha(target.since)}${run}`;
 }
 
 /**
@@ -23,5 +22,5 @@ export function sinceLabel(target: ReportTarget): string | null {
 export function continuedReviewMessage(target: ReportTarget): string | null {
 	if (!target.since || !target.sinceRunId) return null;
 
-	return `Reviewing the commits after ${target.since.slice(0, SHORT_SHA_LENGTH)}, the head of run ${target.sinceRunId}. --full reviews the whole change.`;
+	return `Reviewing the commits after ${shortSha(target.since)}, the head of run ${target.sinceRunId}. --full reviews the whole change.`;
 }

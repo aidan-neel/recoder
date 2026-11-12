@@ -2,6 +2,7 @@ import type { ReviewRevision } from '../../evidence/evidence.js';
 import { CliError, usageError } from '../exit.js';
 import type { PullStart, ReviewStart } from '../review/options.js';
 import { lastReviewCandidates, type ReviewCandidate } from '../runs/last-review.js';
+import { shortSha } from '../short-sha.js';
 import { gitProbe } from './git.js';
 
 /** A commit SHA, whole or abbreviated. Anything else could name a ref or read as an option. */
@@ -9,9 +10,6 @@ const COMMIT_SHA = /^[0-9a-f]{4,64}$/i;
 
 /** Where a reader who asked for too much is sent. */
 const WHOLE_PULL = 'Review the whole pull request without --since.';
-
-/** The characters of a SHA the "nothing to review" messages use. */
-const SHORT_SHA = 7;
 
 /** The commits a start is checked against, and the checkout git reads them in. */
 export interface CommitPlace {
@@ -170,7 +168,7 @@ async function commitSha(place: CommitPlace, sha: string): Promise<string | null
 /** The last review already covered the head: there is nothing new to review. */
 function alreadyReviewed(candidate: ReviewCandidate, headName: string, headSha: string): CliError {
 	return usageError(
-		`Nothing to review: run ${candidate.runId} already reviewed ${headName} up to ${headSha.slice(0, SHORT_SHA)}. Pass --full to review the whole change again.`
+		`Nothing to review: run ${candidate.runId} already reviewed ${headName} up to ${shortSha(headSha)}. Pass --full to review the whole change again.`
 	);
 }
 

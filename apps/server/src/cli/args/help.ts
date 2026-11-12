@@ -145,7 +145,7 @@ const COMMAND_HELP: Record<Exclude<HelpTopic, 'main'>, CommandHelp> = {
 			}
 		],
 		notes: [
-			`Choose at most one of ${listFlags(NON_RANGE_TARGETS)}. With none, the commits on the current branch since it left the default branch are reviewed, and a later review covers only the commits added since, unless --full.`
+			`Choose at most one of ${listFlags(NON_RANGE_TARGETS)}. With none, the commits on the current branch since it left the default branch are reviewed. A later review covers only the commits added since the last one; --full reviews the whole change.`
 		]
 	},
 	init: {
