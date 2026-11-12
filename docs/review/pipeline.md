@@ -235,6 +235,9 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 - `runDetectors` runs dead-code, complexity, rule-check, weakened-tests, weak-new-tests and duplication.
 - `diagnosticStage` runs `runDiagnostics` on the baseline lint and type check results, then `runTypeHints`.
 - It runs `runMatrix` (mutation testing) only when `testStrengthOn` is true. That reads `RECODER_TEST_STRENGTH`, which must be exactly `1`. `MatrixReport` is in `apps/server/src/review/pipeline/mutation/stage.ts`.
+- `runMatrix` removes leftover `.recoder-mutant.*` scratch files and `*.recoder-old.*` copies first, then `testMatrix` in `apps/server/src/review/pipeline/mutation/matrix.ts` tries two proofs per test file: for an edited test, a mutant of the added source the old file fails and the edited one passes; for a detector suspicion, an aimed mutant (`aim.ts`, picked by the suspicion's typed `shape`) that survives while a tree-sitter probe (`probeOf` in `mutants.ts`) placed before the mutated token's enclosing statement shows the test reaches the line.
+- Mutant and old-test payloads never travel on the command line. `mutantCommand` in `test-run.ts` returns a `CommandPlan`: `files` are placed through the workspace's scratch channel and removed after the run, and `command` only `cat`s the source chunks onto the tracked path. A path outside `PLAIN_PATH` or a payload past the chunk cap is skipped (`unsafe-path`, `too-large`), never run.
+- Every run goes through `runInvestigation`, so the package's execution profile classifies it. Only an asserted pass or fail is evidence: a timeout, a killed process, a missing exit code, a failed payload write (exit 97), `setup-failed` and `unsupported-execution` count as skips, never as kills or survivors. `closed` is checked before every run and inside the mutant and probe loops, and `diagnosticStage` publishes no matrix results after the review closes.
 - Output: `DetectorResult` and `DetectorId`, defined in `apps/server/src/review/pipeline/detectors/types.ts`.
 - `addDetections` turns each result into a candidate with `candidateFromDetector`. A detector candidate is verified by construction, with method `rule` for rule-check and `detector` otherwise.
 - A `suspected` result is not verified by construction. It goes to a verifier and can be refuted.
@@ -245,6 +248,9 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
   - `apps/server/tests/review/pipeline/harness/quality-stage.test.ts`
   - `apps/server/tests/review/pipeline/test-strength.test.ts`
   - `apps/server/tests/review/pipeline/mutation/matrix.test.ts`
+  - `apps/server/tests/review/pipeline/mutation/test-run.test.ts`
+  - `apps/server/tests/review/pipeline/mutation/mutants.test.ts`
+  - `apps/server/tests/review/pipeline/mutation/aim.test.ts`
   - `apps/server/tests/review/pipeline/harness/verification.test.ts`
   - The files under `apps/server/tests/review/pipeline/detectors/`.
 

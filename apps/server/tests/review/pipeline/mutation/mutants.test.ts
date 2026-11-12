@@ -1,8 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_MUTANTS, mutantsOf, probeOf } from '../../../../src/review/pipeline/mutation/mutants';
+import { MAX_MUTANTS, mutantsOf, probeOf, type Mutant } from '../../../../src/review/pipeline/mutation/mutants';
 
 function added(lines: number[]): Map<string, Map<number, string>> {
 	return new Map([['src/a.ts', new Map(lines.map((line) => [line, '']))]]);
+}
+
+/** The whole file a probe mutant carries, failing the test when the probe is not one. */
+function probeText(probe: Mutant | 'type' | null): string {
+	if (!probe || typeof probe === 'string') throw new Error(`expected a probe mutant, got ${probe}`);
+
+	return probe.text;
 }
 
 describe('mutantsOf', () => {
@@ -42,14 +49,47 @@ describe('probeOf', () => {
 	);
 
 	test('puts the throw before the statement that holds the line, not inside the expression', async () => {
-		const probe = await probeOf('src/a.ts', head, 3);
+		const probe = await probeOf('src/a.ts', head, { line: 3, column: 2 });
 
 		expect(probe).toMatchObject({ line: 2 });
-		expect((probe as { text: string }).text.split('\n')[1]).toBe("\tthrow new Error('recoder-probe'); return g(");
+		expect(probeText(probe).split('\n')[1]).toBe("\tthrow new Error('recoder-probe'); return g(");
 	});
 
-	test('does not probe module level code or types', async () => {
-		expect(await probeOf('src/a.ts', head, 6)).toBe('module');
-		expect(await probeOf('src/a.ts', 'interface A {\n\tb: number;\n}', 2)).toBe('type');
+	test('probes module level code like any other statement', async () => {
+		const probe = await probeOf('src/a.ts', head, { line: 6, column: 0 });
+
+		expect(probe).toMatchObject({ line: 6 });
+		expect(probeText(probe).split('\n')[5]).toBe("throw new Error('recoder-probe'); export const x = 1;");
+	});
+
+	test('does not probe types', async () => {
+		expect(await probeOf('src/a.ts', 'interface A {\n\tb: number;\n}', { line: 2, column: 1 })).toBe('type');
+	});
+
+	test('returns null for a path no grammar covers', async () => {
+		expect(await probeOf('src/a.xyz', head, { line: 3, column: 2 })).toBeNull();
+	});
+
+	test('starts the walk at the mutated token, not the start of the line', async () => {
+		const oneLine = 'export const pick = (n: number) => { if (n > 0) return 1; return 0; };';
+		const probe = await probeOf('src/a.ts', oneLine, { line: 1, column: 43 });
+
+		expect(probe).toMatchObject({ line: 1 });
+		expect(probeText(probe)).toContain("=> { throw new Error('recoder-probe'); if (n > 0)");
+	});
+
+	test('probes before the whole conditional chain for a mutant in an else-if branch', async () => {
+		const chain = [
+			'export function grade(score: number) {',
+			'\tif (score >= 90) return "A";',
+			'\telse if (score >= 80) return "B";',
+			'\treturn "F";',
+			'}'
+		].join('\n');
+
+		const probe = await probeOf('src/a.ts', chain, { line: 3, column: 16 });
+
+		expect(probe).toMatchObject({ line: 2 });
+		expect(probeText(probe).split('\n')[1]).toBe('\tthrow new Error(\'recoder-probe\'); if (score >= 90) return "A";');
 	});
 });

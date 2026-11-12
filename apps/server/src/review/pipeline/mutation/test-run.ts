@@ -1,7 +1,26 @@
 import { posix } from 'node:path';
+import { REVIEW_POLICY } from '../../session/review-policy.js';
 
 /** Paths safe to put in a shell command unquoted. */
-const PLAIN_PATH = /^[\w@][\w./@-]*$/;
+export const PLAIN_PATH = /^[\w@][\w./@-]*$/;
+
+/** The exit code a matrix command uses when the mutated file could not be written, so the run is no evidence. */
+export const WRITE_FAILED_EXIT = 97;
+
+/** A file the matrix has the workspace place for one run: written through the scratch channel and removed after it. */
+interface MatrixFile {
+	path: string;
+	text: string;
+}
+
+/** One sandbox run: the shell command plus the files placed for it. */
+export interface CommandPlan {
+	command: string;
+	files: MatrixFile[];
+}
+
+/** Why a mutant's files cannot become one sandbox run. */
+export type CommandSkip = 'unsafe-path' | 'too-large';
 
 /** The test file with `.recoder-old` before its `.test` or `.spec` marker, beside the file so its imports still resolve. */
 export function oldCopyPath(path: string): string {
@@ -109,23 +128,69 @@ export function singleFileCommands(scriptLines: readonly string[], baselineComma
 	};
 }
 
-/** A shell step that writes `text` to a repo path, so the file needs no tracked-path scratch write. */
-function writeStep(path: string, text: string): string {
-	return `mkdir -p -- ${posix.dirname(path)} && printf %s '${Buffer.from(text).toString('base64')}' | base64 -d > ${path}`;
+/** Scratch prefix for a mutated file's chunks: placed for the run, removed after, and never matched by a test glob. */
+const MUTANT_SCRATCH = '.recoder-mutant';
+
+/** Characters per scratch file, under the workspace's per-file write limit with room to spare. */
+const CHUNK_CHARS = 60_000;
+
+/** Chunks a payload may take; a bigger file is too large for the matrix. */
+const MAX_CHUNKS = 8;
+
+/** The scratch files a payload is split into, or null past the chunk cap. A chunk never ends inside a surrogate pair, so the pieces concatenate back to the text. */
+function payloadChunks(text: string): MatrixFile[] | null {
+	const chunks: MatrixFile[] = [];
+	let rest = text;
+
+	while (rest.length) {
+		let size = Math.min(CHUNK_CHARS, rest.length);
+		const last = rest.charCodeAt(size - 1);
+
+		if (size < rest.length && last >= 0xd800 && last <= 0xdbff) size--;
+
+		chunks.push({ path: `${MUTANT_SCRATCH}.${chunks.length}`, text: rest.slice(0, size) });
+		rest = rest.slice(size);
+	}
+
+	if (!chunks.length) chunks.push({ path: `${MUTANT_SCRATCH}.0`, text: '' });
+
+	return chunks.length > MAX_CHUNKS ? null : chunks;
 }
 
 /**
- * One command: write the mutated source (and the old test, when given), run
- * the tests in a subshell, delete the old copy and keep the tests' exit code.
+ * One run: the mutated source lands through scratch chunks `cat`ed onto the
+ * tracked path, the old test through a scratch file at its `.recoder-old`
+ * path, then the tests run and their exit code stands. The workspace places
+ * every file for the run and removes it after, so a killed or timed-out run
+ * leaves nothing behind, and the payload never reaches the command line.
+ * `unsafe-path` for a path that is not plain, `too-large` past the caps.
  */
 export function mutantCommand(input: {
 	source: { path: string; text: string } | null;
 	oldTest: { path: string; text: string } | null;
 	run: string;
-}): string {
+}): CommandPlan | CommandSkip {
 	const { source, oldTest, run } = input;
-	const steps = [source, oldTest].flatMap((file) => (file ? [writeStep(file.path, file.text)] : []));
-	const cleanup = oldTest ? `rm -f -- ${oldTest.path}; ` : '';
+	const files: MatrixFile[] = [];
+	let write = '';
 
-	return `${steps.join(' && ')}${steps.length ? '; ' : ''}( ${run} ); rc=$?; ${cleanup}exit $rc`;
+	if (source) {
+		if (!PLAIN_PATH.test(source.path)) return 'unsafe-path';
+
+		const chunks = payloadChunks(source.text);
+
+		if (!chunks) return 'too-large';
+
+		files.push(...chunks);
+		write = `cat -- ${chunks.map((chunk) => chunk.path).join(' ')} > ${source.path} || exit ${WRITE_FAILED_EXIT}; `;
+	}
+
+	if (oldTest) {
+		if (!PLAIN_PATH.test(oldTest.path)) return 'unsafe-path';
+		if (oldTest.text.length > REVIEW_POLICY.maxWriteFileChars) return 'too-large';
+
+		files.push({ path: oldTest.path, text: oldTest.text });
+	}
+
+	return { command: `${write}( ${run} ); rc=$?; exit $rc`, files };
 }

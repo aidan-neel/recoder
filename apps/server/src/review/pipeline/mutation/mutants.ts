@@ -6,17 +6,24 @@ import { withTree } from '../change-model/parser.js';
 export interface Mutant {
 	file: string;
 	line: number;
+	/** Byte offset into the line where the change begins, for tree-sitter lookups on the unedited text. */
+	column: number;
 	/** What the mutant does, in a few words, for the finding's text. */
 	description: string;
 	/** The whole file with the change applied. */
 	text: string;
 }
 
-/** Mutants kept per review: a handful, since every one costs a test run. */
+/** Mutants kept per source file: a handful, since every one costs a test run. */
 export const MAX_MUTANTS = 6;
 
-/** A source file's line with one edit applied, or null when it has none to apply. */
-export type Edit = (line: string) => { line: string; description: string } | null;
+/** A source file's line with one edit applied, or null when it has none to apply. `column` is the byte offset into the original line where the change begins. */
+export type Edit = (line: string) => { line: string; column: number; description: string } | null;
+
+/** The byte offset of `index` (a character offset) into `line`, the column unit tree-sitter reports. */
+function byteColumn(line: string, index: number): number {
+	return Buffer.byteLength(line.slice(0, index));
+}
 
 const COMPARISONS: [RegExp, string][] = [
 	[/ >= /, ' > '],
@@ -44,20 +51,37 @@ function closing(text: string, open: number): number {
 
 const flipComparison: Edit = (line) => {
 	for (const [pattern, replacement] of COMPARISONS) {
-		if (pattern.test(line))
-			return { line: line.replace(pattern, replacement), description: `flip ${pattern.source.trim()}` };
+		const match = pattern.exec(line);
+
+		if (match)
+			return {
+				line: line.replace(pattern, replacement),
+				column: byteColumn(line, match.index + match[0].search(/\S/)),
+				description: `flip ${pattern.source.trim()}`
+			};
 	}
 
 	return null;
 };
 
-const dropAwait: Edit = (line) =>
-	/\bawait\s/.test(line) ? { line: line.replace(/\bawait\s+/, ''), description: 'drop an await' } : null;
+const dropAwait: Edit = (line) => {
+	const match = /\bawait\s+/.exec(line);
+
+	return match
+		? { line: line.replace(/\bawait\s+/, ''), column: byteColumn(line, match.index), description: 'drop an await' }
+		: null;
+};
 
 const dropNormalizer: Edit = (line) => {
 	const match = NORMALIZERS.exec(line);
 
-	return match ? { line: line.replace(NORMALIZERS, ''), description: `remove .${match[1]}()` } : null;
+	return match
+		? {
+				line: line.replace(NORMALIZERS, ''),
+				column: byteColumn(line, match.index),
+				description: `remove .${match[1]}()`
+			}
+		: null;
 };
 
 /** The condition of a single-line `if (…)` forced to false, so the guarded branch never runs. */
@@ -71,7 +95,11 @@ const removeGuard: Edit = (line) => {
 
 	if (end < 0) return null;
 
-	return { line: `${line.slice(0, open)}(false)${line.slice(end)}`, description: 'force a guard to false' };
+	return {
+		line: `${line.slice(0, open)}(false)${line.slice(end)}`,
+		column: byteColumn(line, open + 1),
+		description: 'force a guard to false'
+	};
 };
 
 const nudgeLiteral: Edit = (line) => {
@@ -83,6 +111,7 @@ const nudgeLiteral: Edit = (line) => {
 
 	return {
 		line: `${line.slice(0, match.index)}${next}${line.slice(match.index + match[1]!.length)}`,
+		column: byteColumn(line, match.index),
 		description: `change ${match[1]} to ${next}`
 	};
 };
@@ -95,14 +124,23 @@ const breakString: Edit = (line) => {
 
 	const text = `${match[1]}${match[2]}${match[3] === 'x' ? 'y' : 'x'}${match[1]}`;
 
-	return { line: line.replace(match[0], text), description: 'change a message' };
+	return {
+		line: line.replace(match[0], text),
+		column: byteColumn(line, match.index),
+		description: 'change a message'
+	};
 };
 
 /** A sort or comparison turned around, so the code picks the opposite item. */
 const reverseOrder: Edit = (line) => {
 	const sub = /\b(\w+(?:\.\w+)*) - (\w+(?:\.\w+)*)\b/.exec(line);
 
-	if (sub) return { line: line.replace(sub[0], `${sub[2]} - ${sub[1]}`), description: 'reverse a comparator' };
+	if (sub)
+		return {
+			line: line.replace(sub[0], `${sub[2]} - ${sub[1]}`),
+			column: byteColumn(line, sub.index),
+			description: 'reverse a comparator'
+		};
 
 	return flipComparison(line);
 };
@@ -119,7 +157,11 @@ export function swapErrorClass(broad: string): Edit {
 
 		if (!match || match[1] === broad) return null;
 
-		return { line: line.replace(match[0], `new ${broad}(`), description: `throw ${broad} instead of ${match[1]}` };
+		return {
+			line: line.replace(match[0], `new ${broad}(`),
+			column: byteColumn(line, match.index),
+			description: `throw ${broad} instead of ${match[1]}`
+		};
 	};
 }
 
@@ -145,7 +187,13 @@ export function mutantsAt(file: string, head: string, lines: readonly number[], 
 
 			copy[number - 1] = made.line;
 
-			found.push({ file, line: number, description: `${made.description} on line ${number}`, text: copy.join('\n') });
+			found.push({
+				file,
+				line: number,
+				column: made.column,
+				description: `${made.description} on line ${number}`,
+				text: copy.join('\n')
+			});
 
 			break;
 		}
@@ -168,25 +216,31 @@ const TYPE_NODES = new Set([
 
 /**
  * The mutant of a line with a `throw` put before its enclosing statement: a
- * test that reaches the statement fails with the marker. A line at module
- * level runs on import, so it has no probe and counts as reached; a line in a
- * type is not code at all.
+ * test that reaches the statement fails with the marker. The walk starts at
+ * the mutated token's column, so a condition inside an `else if` probes its
+ * own branch, not the one before it. A line at module level probes the
+ * statement that holds it, since the module evaluates on import; a line in a
+ * type is not code at all. Null when the file does not parse.
  */
-export async function probeOf(file: string, head: string, line: number): Promise<Mutant | 'module' | 'type' | null> {
+export async function probeOf(
+	file: string,
+	head: string,
+	mutant: { line: number; column: number }
+): Promise<Mutant | 'type' | null> {
 	const rows = head.split('\n');
-	const column = rows[line - 1]!.length - rows[line - 1]!.trimStart().length;
 
 	const spot = await withTree(file, head, (root) => {
-		let node: Node | null = root.descendantForPosition({ row: line - 1, column });
+		let node: Node | null = root.descendantForPosition({ row: mutant.line - 1, column: mutant.column });
 
 		while (node && node.parent) {
 			if (TYPE_NODES.has(node.type)) return 'type' as const;
-			if (BODY_PARENTS.has(node.parent.type)) return { row: node.startPosition.row, column: node.startPosition.column };
+			if (BODY_PARENTS.has(node.parent.type) || node.parent.type === 'program')
+				return { row: node.startPosition.row, column: node.startPosition.column };
 
 			node = node.parent;
 		}
 
-		return 'module' as const;
+		return null;
 	});
 
 	if (!spot || typeof spot === 'string') return spot;
@@ -195,7 +249,13 @@ export async function probeOf(file: string, head: string, line: number): Promise
 
 	rows[spot.row] = `${target.slice(0, spot.column)}throw new Error('recoder-probe'); ${target.slice(spot.column)}`;
 
-	return { file, line: spot.row + 1, description: `probe before line ${spot.row + 1}`, text: rows.join('\n') };
+	return {
+		file,
+		line: spot.row + 1,
+		column: spot.column,
+		description: `probe before line ${spot.row + 1}`,
+		text: rows.join('\n')
+	};
 }
 
 /**
