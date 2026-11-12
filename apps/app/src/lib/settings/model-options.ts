@@ -172,8 +172,3 @@ export function missingNote(pick: RolePick): string | null {
 export function matchesQuery(option: ModelOption, terms: readonly string[]): boolean {
 	return terms.every((term) => option.haystack.includes(term));
 }
-
-/** A search box's text as lowercase words. */
-export function queryTerms(query: string): string[] {
-	return query.toLowerCase().split(/\s+/).filter(Boolean);
-}

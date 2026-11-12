@@ -5,7 +5,7 @@ import { useStore } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 
 import { useListStore } from '../api/client';
-import { queryTerms } from '../settings/model-options';
+import { queryTerms } from '../shell/search';
 import { inFilter, matchesQuery, shortRepoName } from './pull-rows';
 import type { PullFilter, PullListView, PullRow, RepoOption } from './types';
 import { useRowEntries, useWatchList, type RowEntry } from './use-rows';

@@ -5,6 +5,7 @@ import { Field, Input, RadioGroup, Select, StatusNotice } from '@recoder/ui';
 import { useEffect, useRef, type FormEvent, type ReactNode } from 'react';
 
 import { METHOD_FORM, type ProviderFlow } from '@/lib/settings/providers/use-provider-flow';
+import { useProviderManager } from '@/lib/settings/use-agent-section';
 
 /** "server" → "Server": the agent's prompt text, read as a label. */
 function asLabel(text: string): string {
@@ -84,8 +85,10 @@ function focusFirst(form: HTMLFormElement | null): void {
 
 /** The key the agent saves. The field only takes a key in; a saved one never comes back to the page. */
 function KeyField({ flow }: { flow: ProviderFlow }) {
+	const manager = useProviderManager();
+
 	return (
-		<Field label="API key" hint="Saved by OpenCode on this machine." error={flow.error}>
+		<Field label="API key" hint={`Saved by ${manager?.name ?? 'the agent'} on this machine.`} error={flow.error}>
 			<Input
 				type="password"
 				autoComplete="off"

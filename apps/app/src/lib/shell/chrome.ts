@@ -1,22 +1,18 @@
 import { create } from 'zustand';
 
+import { readStored, writeStored } from './browser-storage';
+
 /** Where the sidebar's open state is kept in this browser. */
 const SIDEBAR_KEY = 'recoder.sidebar.v1';
 
 /** The saved sidebar state; open when nothing is saved or storage is blocked. */
 function readSidebar(): boolean {
-	try {
-		return localStorage.getItem(SIDEBAR_KEY) !== 'closed';
-	} catch {
-		return true;
-	}
+	return readStored(SIDEBAR_KEY) !== 'closed';
 }
 
-/** Saves the sidebar state. A blocked or full storage is fine: the choice then holds for this visit only. */
+/** Saves the sidebar state; with storage blocked or full the choice holds for this visit only. */
 function saveSidebar(open: boolean): void {
-	try {
-		localStorage.setItem(SIDEBAR_KEY, open ? 'open' : 'closed');
-	} catch {}
+	writeStored(SIDEBAR_KEY, open ? 'open' : 'closed');
 }
 
 interface ChromeState {

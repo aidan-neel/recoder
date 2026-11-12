@@ -26,6 +26,11 @@ export interface AgentSectionView {
 	addProvider: (providerId?: string) => void;
 }
 
+/** The agent that connects model providers itself, or null when none is listed. */
+export function useProviderManager(): AgentStatus | null {
+	return useSettings((state) => state.agents.find((agent) => agent.providers) ?? null);
+}
+
 /**
  * Settings → Models, top half: the agent CLIs, the model providers connected
  * in OpenCode, and the vLLM servers. Providers show once the agent that
@@ -33,7 +38,7 @@ export interface AgentSectionView {
  * loaded.
  */
 export function useAgentSection(): AgentSectionView {
-	const manager = useSettings((state) => state.agents.find((agent) => agent.providers) ?? null);
+	const manager = useProviderManager();
 	const listed = useSettings((state) => !state.agentError || state.providers.length > 0);
 	const [request, setRequest] = useState<{ providerId: string | null } | null>(null);
 	const ready = Boolean(manager && agentReady(manager) && listed);

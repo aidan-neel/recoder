@@ -10,7 +10,7 @@ import { useAction } from '../shell/use-action';
 import { trackedKeys, useConnections, type RemoteList as Remote } from './connections-store';
 import { signedInForges } from './forges';
 import { repoKey } from './repo-input';
-import { queryTerms } from '../settings/model-options';
+import { queryTerms } from '../shell/search';
 import { useAddRepo } from './use-add-repo';
 
 /** A pending/success/failure face a hook exposes for one async action. */

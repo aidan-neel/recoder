@@ -4,7 +4,8 @@ import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 
-import { followsWhenUnset, queryTerms, ROLE_NAME, type ModelCatalog, type ModelRole } from './model-options';
+import { queryTerms } from '../shell/search';
+import { followsWhenUnset, ROLE_NAME, type ModelCatalog, type ModelRole } from './model-options';
 import { layoutRows, scrollToCenter, scrollToReveal, stepChoice, type RowLayout } from './model-rows';
 import { useRootScale } from '../shell/root-scale';
 
