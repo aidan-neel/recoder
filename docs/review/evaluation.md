@@ -15,7 +15,7 @@ Flags come from `parseOptions` in `apps/server/src/eval/benchmark.ts` and `parse
 - `--dataset <dir>`: required. The dataset directory (see Dataset Layout).
 - `--only <id,id>`: review only these label ids. Task set name `only`.
 - `--set <name>`: review only the ids in `<dataset>/sets/<name>.json`. `--set holdout` reviews only the labels marked holdout instead of reading a file. Cannot combine with `--only`.
-- `--judge review|second|<model id>`: default `review`. `review` uses the orchestrator model's config. `second` uses the specialist (subagent) model's config. Anything else is a model id: a settings model entry id, or an `opencode:` or `claude-code:` id.
+- `--judge review|second|<model id>`: default `review`. `review` uses the orchestrator model's config. `second` uses the specialist (subagent) model's config. Anything else is a model id: a settings model entry id, or an agent CLI's `<agent id>:<model>` id (`agentForModel` in `apps/server/src/agents/registry.ts`).
 - `--judge-effort <effort>`: one of `REASONING_EFFORTS` in `packages/shared/src/models.ts` (`minimal`, `low`, `medium`, `high`, `xhigh`, `max`). Applies only to a model id judge.
 - `--runs <n>`: runs per PR. Default 1.
 - `--repeat <k>`: this is repeat `k`. Run indices start after `(k - 1) * runs` (`runOffset`). Default 1.
