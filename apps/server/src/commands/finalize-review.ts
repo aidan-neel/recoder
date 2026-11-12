@@ -4,6 +4,7 @@ import { db, reviewProgress, keepForReplay, settlePipelineStreams } from '../sto
 import { storageTransaction } from '../storage/backend';
 import { metricWrites } from '../storage/persistence-queue';
 import { emitReviewEvent, flushReviewEvents, reportReviewTask, settleReviewTasks } from '../review/session/events';
+import { withFindingHistory } from '../review/history/history';
 import { touch } from './review-session';
 
 export async function finalizeReview(reviewId: string, result: AdaptiveReviewResult): Promise<void> {
@@ -40,10 +41,13 @@ export async function finalizeReview(reviewId: string, result: AdaptiveReviewRes
 
 		const status = result.outcome === 'complete' ? 'passed' : 'failed';
 
+		const settled =
+			status === 'passed' ? await withFindingHistory(reviewId, findings, result.unconfirmed) : { findings };
+
 		await touch(reviewId, {
 			status,
 			summary: result.summary,
-			findings,
+			...settled,
 			unconfirmed: result.outcome === 'complete' ? result.unconfirmed : [],
 			funnel: result.funnel,
 			context: result.context,
