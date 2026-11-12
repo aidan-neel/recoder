@@ -165,16 +165,11 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
-/* The command that fixes a CLI, under what to do with it, in line with the CLI's name. */
+/* The command that fixes a CLI, in line with the CLI's name. */
 .cli-fix {
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
 	margin-top: -4px;
 	padding: 0 16px 14px 40px;
-}
-.cli-fix-hint {
-	color: var(--text-muted);
-	font-size: var(--font-size-label);
-	line-height: 18px;
 }

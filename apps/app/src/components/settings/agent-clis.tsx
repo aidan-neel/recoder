@@ -65,8 +65,7 @@ function CliItem({ agent }: { agent: AgentStatus }) {
 			/>
 			{fix ? (
 				<div className="cli-fix">
-					<p className="cli-fix-hint">{fix.hint}</p>
-					<Command command={fix.command} />
+					<Command command={fix} />
 				</div>
 			) : null}
 		</div>

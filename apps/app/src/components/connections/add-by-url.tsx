@@ -27,7 +27,7 @@ export function AddByUrl({ url, inputRef }: AddByUrlProps) {
 		<form className="add-url" noValidate onSubmit={submit}>
 			<Field
 				label="Add by URL"
-				hint={url.added ? `Now tracking ${url.added}.` : 'A GitHub or GitLab repository.'}
+				hint={url.added ? `Now tracking ${url.added}.` : undefined}
 				error={url.error ?? undefined}
 			>
 				<div className="add-url-row">

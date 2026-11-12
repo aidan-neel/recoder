@@ -235,12 +235,6 @@ a.guidelines-pill:focus-visible {
 	gap: 4px;
 	padding: 12px 12px 6px;
 }
-.learned-note {
-	color: var(--text-subtle);
-	font-size: var(--font-size-meta);
-	line-height: 16px;
-	text-wrap: pretty;
-}
 .learned-list {
 	display: flex;
 	flex-direction: column;

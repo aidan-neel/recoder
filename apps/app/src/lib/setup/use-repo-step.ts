@@ -9,7 +9,7 @@ export interface RepoStepView {
 	/** At least one forge is signed in; the step then opens the repo browser, else it offers to connect one. */
 	signedIn: boolean;
 	/** The step's one line under its title. */
-	description: string;
+	description: string | null;
 }
 
 /**

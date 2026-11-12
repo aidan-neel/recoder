@@ -37,7 +37,7 @@ export function ProviderStep({ done, current, onAdd }: ProviderStepProps) {
 			below={
 				fix ? (
 					<div className="setup-command">
-						<Command command={fix.command} />
+						<Command command={fix} />
 					</div>
 				) : null
 			}

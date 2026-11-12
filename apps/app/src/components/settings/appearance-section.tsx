@@ -34,7 +34,7 @@ export function AppearanceSection() {
 
 	return (
 		<div className="settings">
-			<SettingsGroup title="Theme" note="Saved in this browser.">
+			<SettingsGroup title="Theme">
 				<SettingsRow name="Color mode" detail={DETAIL[choice]}>
 					<SegmentedControl aria-label="Theme" value={choice} onValueChange={pick} options={CHOICES} />
 				</SettingsRow>

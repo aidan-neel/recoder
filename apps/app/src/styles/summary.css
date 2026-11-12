@@ -142,7 +142,7 @@
 .composer:focus-within {
 	box-shadow: 0 0 0 1px var(--line-focus);
 }
-.composer [data-ui='textarea'] {
+.composer [data-ui='link-field'] {
 	display: block;
 	width: 100%;
 	padding: 14px 16px 6px;
@@ -154,9 +154,6 @@
 	line-height: 22px;
 	outline: none;
 	resize: none;
-}
-.composer [data-ui='textarea']::placeholder {
-	color: var(--text-faint);
 }
 .composer-foot {
 	display: flex;

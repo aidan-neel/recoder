@@ -13,10 +13,7 @@ export function WebhooksGroup() {
 	if (!rows) return null;
 
 	return (
-		<SettingsGroup
-			title="Webhooks"
-			note="A webhook reports a mention or a new pull request at once, so the review starts before the next check. Send pull request and comment events."
-		>
+		<SettingsGroup title="Webhooks" note="Send pull request and comment events.">
 			{rows.map((row) => (
 				<SettingsRow
 					key={row.forge}

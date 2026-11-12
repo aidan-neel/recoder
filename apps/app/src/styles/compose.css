@@ -22,7 +22,7 @@
 	line-height: 32px;
 	text-align: center;
 }
-.compose .composer [data-ui='textarea'] {
+.compose .composer [data-ui='link-field'] {
 	padding-top: 16px;
 	font-size: 15px;
 }

@@ -8,7 +8,8 @@
 @layer components {
 	/* ───────── Fields: input frames and textareas share the fill, ring and focus halo ───────── */
 	[data-ui='input'],
-	[data-ui='textarea'] {
+	[data-ui='textarea'],
+	[data-ui='link-field'] {
 		width: 100%;
 		background-color: var(--bg-field);
 		box-shadow: inset 0 0 0 1px var(--line-control);
@@ -19,22 +20,26 @@
 			box-shadow var(--dur-menu) ease-out;
 	}
 	[data-ui='input']:hover:not(:focus-within, [data-invalid], [data-disabled]),
-	[data-ui='textarea']:hover:not(:focus, [data-invalid], :disabled) {
+	[data-ui='textarea']:hover:not(:focus, [data-invalid], :disabled),
+	[data-ui='link-field']:hover:not(:focus, [data-invalid], [data-disabled]) {
 		box-shadow: inset 0 0 0 1px var(--line-hover);
 	}
 	[data-ui='input']:focus-within,
-	[data-ui='textarea']:focus {
+	[data-ui='textarea']:focus,
+	[data-ui='link-field']:focus {
 		background-color: var(--bg-raised);
 		box-shadow:
 			inset 0 0 0 1px var(--line-focus),
 			0 0 0 3px rgb(var(--ink-rgb) / 0.06);
 	}
 	[data-ui='input'][data-invalid],
-	[data-ui='textarea'][data-invalid] {
+	[data-ui='textarea'][data-invalid],
+	[data-ui='link-field'][data-invalid] {
 		box-shadow: inset 0 0 0 1px var(--danger);
 	}
 	[data-ui='input'][data-invalid]:focus-within,
-	[data-ui='textarea'][data-invalid]:focus {
+	[data-ui='textarea'][data-invalid]:focus,
+	[data-ui='link-field'][data-invalid]:focus {
 		box-shadow:
 			inset 0 0 0 1px var(--danger),
 			0 0 0 3px var(--danger-tint);
@@ -103,8 +108,9 @@
 		stroke-width: 1.75;
 	}
 
-	/* ───────── Textarea: a line height of 20px a row ───────── */
-	[data-ui='textarea'] {
+	/* ───────── Textarea and link field: a line height of 20px a row ───────── */
+	[data-ui='textarea'],
+	[data-ui='link-field'] {
 		display: block;
 		min-height: calc(var(--textarea-min-rows, 3) * 20px + 16px);
 		padding: 8px 10px;
@@ -121,7 +127,8 @@
 		overflow-y: auto;
 		resize: none;
 	}
-	[data-ui='textarea'][data-max-rows] {
+	[data-ui='textarea'][data-max-rows],
+	[data-ui='link-field'][data-max-rows] {
 		max-height: calc(var(--textarea-max-rows) * 20px + 16px);
 	}
 

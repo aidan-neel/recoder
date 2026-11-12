@@ -1,7 +1,7 @@
 'use client';
 
 import type { GuidelinesDraftRequest } from '@recoder/shared';
-import { Button, Checkbox, Keycap, Popover, PopoverContent, PopoverTrigger, SwapText, Textarea } from '@recoder/ui';
+import { Button, Checkbox, Keycap, LinkField, Popover, PopoverContent, PopoverTrigger, SwapText } from '@recoder/ui';
 import { Sparkles, Square } from 'lucide-react';
 import { useId } from 'react';
 
@@ -65,7 +65,7 @@ export function DraftPopover({ repoId, revising, streaming, disabled, onDraft, o
 				</Button>
 			</PopoverTrigger>
 			<PopoverContent side="top" align="start" className="guidelines-draft-panel">
-				<Textarea
+				<LinkField
 					autosize
 					minRows={3}
 					maxRows={8}
@@ -74,7 +74,7 @@ export function DraftPopover({ repoId, revising, streaming, disabled, onDraft, o
 					aria-label="What the draft should cover"
 					aria-describedby={hintId}
 					maxLength={view.maxLength}
-					onChange={(event) => view.setPrompt(event.target.value)}
+					onValueChange={view.setPrompt}
 					onKeyDown={view.onPromptKeyDown}
 				/>
 				{repoId ? <Sources view={view} /> : null}

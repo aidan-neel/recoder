@@ -91,9 +91,7 @@ describe('the provider step’s description', () => {
 			'Set by the RECODER_REVIEW_* variables'
 		);
 
-		expect(providerDescription({ done: false, providers: [], models: null, manager, agentError: null })).toBe(
-			'Supplies the models reviews run on.'
-		);
+		expect(providerDescription({ done: false, providers: [], models: null, manager, agentError: null })).toBeNull();
 
 		expect(
 			providerDescription({ done: false, providers: [], models: null, manager: undefined, agentError: null })

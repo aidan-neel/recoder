@@ -61,12 +61,7 @@ function MentionHandleRow({ disabled }: { disabled: boolean }) {
 	const handle = useMentionHandle(disabled);
 
 	return (
-		<SettingsRow
-			name="Mention handle"
-			detail="The word that calls Recoder in a comment"
-			error={handle.error}
-			state={handle.state}
-		>
+		<SettingsRow name="Mention handle" error={handle.error} state={handle.state}>
 			<Input
 				className="automations-code-field"
 				aria-label="Mention handle"

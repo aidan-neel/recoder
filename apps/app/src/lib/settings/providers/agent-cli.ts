@@ -25,15 +25,12 @@ export function cliGlyph(agent: AgentStatus): { kind: GlyphKind; label: string }
 	return GLYPH[cliState(agent)];
 }
 
-/** The command that fixes the state, with what to do with it; none when the CLI is ready or broken. */
-export function cliFix(agent: AgentStatus): { hint: string; command: string } | null {
+/** The command that fixes the state: the install command while missing, the login command while signed out. */
+export function cliFix(agent: AgentStatus): string | null {
 	const state = cliState(agent);
 
-	if (state === 'missing') return { hint: 'Install it, then check again.', command: agent.install };
-
-	if (state === 'signed-out' && agent.login) {
-		return { hint: 'Sign in from a terminal, then check again.', command: agent.login };
-	}
+	if (state === 'missing') return agent.install;
+	if (state === 'signed-out') return agent.login;
 
 	return null;
 }

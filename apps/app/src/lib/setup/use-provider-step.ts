@@ -14,7 +14,7 @@ export interface ProviderStepView {
 	/** Why the agent check failed, when it did. */
 	agentError: string | null;
 	/** The step's one line under its title. */
-	description: string;
+	description: string | null;
 }
 
 /**

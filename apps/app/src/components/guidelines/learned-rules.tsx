@@ -118,9 +118,6 @@ export function LearnedRules({ view, repoName }: LearnedRulesProps) {
 			</PopoverTrigger>
 			<PopoverContent align="end" className="learned-panel">
 				<h3 className="section-label">Learned in {repoName}</h3>
-				<p className="learned-note">
-					Kinds of finding dismissed often here. Leave one out and later reviews stop raising it.
-				</p>
 				<ul className="learned-list">
 					{view.rules.map((rule) => (
 						<li key={rule.topicId} className="learned-rule">

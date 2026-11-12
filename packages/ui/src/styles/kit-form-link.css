@@ -1,0 +1,166 @@
+/*
+ * kit: the link field and its embeds. The field wears the textarea's fill,
+ * ring and rows (kit-form.css lists it beside the textarea); this file holds
+ * what only it needs: plain-text wrapping, the placeholder, the inline embed
+ * and the card. Layered like the rest of the kit.
+ */
+@layer components {
+	/* ───────── Field: an editable block that wraps like a textarea ───────── */
+	[data-ui='link-field'] {
+		position: relative;
+		overflow-y: auto;
+		overflow-wrap: anywhere;
+		white-space: pre-wrap;
+		cursor: text;
+		resize: none;
+	}
+	[data-ui='link-field']:not([data-autosize]) {
+		height: calc(var(--textarea-min-rows, 3) * 20px + 16px);
+	}
+	/* The placeholder sits out of the flow, so the caret starts where the text will. */
+	[data-ui='link-field'][data-empty]::before {
+		position: absolute;
+		color: var(--text-faint);
+		content: attr(data-placeholder);
+		pointer-events: none;
+	}
+	[data-ui='link-field'][data-disabled] {
+		cursor: not-allowed;
+		opacity: 0.4;
+	}
+
+	/* ───────── Embed: a chip on the text's baseline, never taller than the line ───────── */
+	[data-ui='link-embed'] {
+		display: inline-flex;
+		max-width: min(260px, 100%);
+		height: 18px;
+		box-sizing: border-box;
+		align-items: baseline;
+		gap: 4px;
+		margin: 0 1px;
+		padding: 0 5px;
+		border-radius: 5px;
+		background-color: var(--sev-info-tint);
+		color: var(--text-secondary);
+		font-size: var(--font-size-label);
+		font-weight: 500;
+		line-height: 18px;
+		text-decoration: none;
+		vertical-align: baseline;
+		white-space: nowrap;
+		cursor: default;
+		user-select: none;
+		transition:
+			background-color var(--dur-hover) ease-out,
+			color var(--dur-hover) ease-out;
+	}
+	a[data-ui='link-embed'] {
+		cursor: pointer;
+	}
+	[data-ui='link-embed']:hover,
+	[data-ui='link-embed'][data-selected] {
+		background-color: var(--bg-selected);
+		color: var(--text-primary);
+	}
+	[data-ui='link-embed'] svg {
+		width: 12px;
+		height: 12px;
+		flex-shrink: 0;
+		align-self: center;
+		color: var(--text-muted);
+	}
+	[data-ui='link-embed-mark'] {
+		fill: currentColor;
+	}
+	[data-ui='link-embed-mark'][data-glyph='link'] {
+		fill: none;
+		stroke: currentColor;
+		stroke-linecap: round;
+		stroke-linejoin: round;
+		stroke-width: 2;
+	}
+	[data-ui='link-embed-label'] {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	/* A link that just became an embed settles in place: a short fade from the text's own colour. */
+	[data-ui='link-field'] [data-ui='link-embed'] {
+		animation: ui-embed-settle var(--dur-swap) var(--ease-menu);
+	}
+	@keyframes ui-embed-settle {
+		from {
+			background-color: transparent;
+			color: var(--text-primary);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		[data-ui='link-field'] [data-ui='link-embed'] {
+			animation: none;
+		}
+	}
+
+	/* ───────── Fact dot: colour only when the host knows a state ───────── */
+	[data-ui='link-embed-dot'] {
+		width: 6px;
+		height: 6px;
+		flex-shrink: 0;
+		align-self: center;
+		border-radius: 50%;
+		background-color: var(--text-faint);
+	}
+	[data-ui='link-embed-dot'][data-tone='ok'] {
+		background-color: var(--success);
+	}
+	[data-ui='link-embed-dot'][data-tone='warning'] {
+		background-color: var(--sev-medium);
+	}
+	[data-ui='link-embed-dot'][data-tone='danger'] {
+		background-color: var(--danger);
+	}
+
+	/* ───────── Card: the full URL, the host's facts, Open and Copy ───────── */
+	.link-card {
+		width: max-content;
+		max-width: min(360px, calc(100vw - 32px));
+		padding: 10px 10px 6px 12px;
+	}
+	[data-ui='link-card-title'] {
+		color: var(--text-primary);
+		font-size: var(--font-size-body);
+		font-weight: 500;
+		line-height: 20px;
+		text-wrap: pretty;
+	}
+	[data-ui='link-card-status'] {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-muted);
+		font-size: var(--font-size-label);
+		line-height: 18px;
+	}
+	[data-ui='link-card-url'],
+	[data-ui='link-embed-url'] {
+		color: var(--text-subtle);
+		font-family: var(--font-code);
+		font-size: 11.5px;
+		line-height: 16px;
+		overflow-wrap: anywhere;
+	}
+	[data-ui='link-card-title'] + [data-ui='link-card-url'],
+	[data-ui='link-card-status'] + [data-ui='link-card-url'] {
+		margin-top: 4px;
+	}
+	[data-ui='link-card-actions'] {
+		display: flex;
+		align-items: center;
+		gap: 2px;
+		margin: 6px 0 0 -8px;
+	}
+	[data-ui='link-card-keys'] {
+		display: inline-flex;
+		gap: 2px;
+		margin-left: 2px;
+	}
+}

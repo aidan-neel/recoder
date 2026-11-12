@@ -1,3 +1,5 @@
+import type { LinkFacts } from '@recoder/ui/form';
+
 import type { PullRow, PullTarget, RepoOption } from '../pulls/types';
 
 /** The New review screen: name a pull request, then start its review. */
@@ -13,6 +15,8 @@ export interface ComposeView {
 	target: PullTarget;
 	/** The part of the text after the target; null when there is none. */
 	brief: string | null;
+	/** What the field's embeds show: the target link's state, and what the list knows about other links. */
+	linkFacts: LinkFacts;
 	repos: RepoOption[];
 	/** The repository a number or a branch is looked up in; the last one used, else the first tracked. */
 	repoId: string | null;
