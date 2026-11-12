@@ -4,20 +4,27 @@ import { useFakeOpenCode } from './fake-opencode';
  * A fake `opencode` 2.x. Like the real one it answers only under `/api` (the old root routes give the
  * app's HTML page on GET and 405 on POST), wraps replies in `{ data }`, queues a prompt and ends the turn with an
  * `idle` message that `wait` and the message list report. The reply depends on the prompt: `denied`
- * (a provider's 403), `auth`, `slow` (runs until interrupted) and `no-wait` (the wait route answers 503).
- * Every turn announces its step twice, as a retried provider call does. `/test/calls` lists every request.
+ * (a provider's 403), `auth`, `slow` (runs until interrupted), `no-wait` (the wait route answers 503) and `crash`
+ * (the server exits mid-turn). Like the real one it keeps its sessions on disk, under `HOME`, so a server started
+ * after a crash still lists the unfinished turn. Every turn announces its step twice, as a retried provider call
+ * does. `/test/calls` lists every request.
  */
 const SCRIPT = `#!/usr/bin/env bun
 const [cmd] = process.argv.slice(2);
 if (cmd === '--version') { console.log('opencode v2.0.6'); process.exit(0); }
+const { existsSync, readFileSync, writeFileSync } = require('node:fs');
+const STORE = process.env.HOME + '/fake-opencode-sessions.json';
+const saved = existsSync(STORE) ? JSON.parse(readFileSync(STORE, 'utf8')) : { sessions: {}, count: 0, made: 0 };
 const calls = [];
 const streams = new Set();
 const encoder = new TextEncoder();
-const sessions = {};
+const sessions = Object.fromEntries(Object.entries(saved.sessions).map(([id, messages]) => [id, { messages, waiters: [], running: false }]));
 const attempts = { att_1: 0 };
 const mcp = {};
-let count = 0;
-let made = 0;
+let count = saved.count;
+let made = saved.made;
+
+const save = () => writeFileSync(STORE, JSON.stringify({ sessions: Object.fromEntries(Object.entries(sessions).map(([id, session]) => [id, session.messages])), count, made }));
 
 const emit = (type, data) => {
 	for (const stream of streams) stream.enqueue(encoder.encode('data: ' + JSON.stringify({ id: 'evt_' + ++count, type, created: 0, data }) + '\\n\\n'));
@@ -33,6 +40,7 @@ function finish(session, assistant, outcome, message) {
 	session.messages.push({ id: assistant, type: 'assistant', content: message.content ?? [], tokens: message.error ? undefined : tokens, ...message });
 	session.messages.push({ id: 'msg_' + ++count, type: 'idle', outcome });
 	session.running = false;
+	save();
 	for (const release of session.waiters.splice(0)) release();
 }
 
@@ -40,6 +48,7 @@ async function run(id, session, text) {
 	const assistant = 'msg_' + ++count;
 	emit('session.step.started', { sessionID: id, assistantMessageID: assistant });
 	emit('session.step.started', { sessionID: id, assistantMessageID: assistant });
+	if (text === 'crash') return setTimeout(() => process.exit(1), 50);
 	if (text === 'slow') {
 		await new Promise((resolve) => (session.interrupt = resolve));
 		emit('session.execution.interrupted', { sessionID: id });
@@ -83,6 +92,7 @@ const server = Bun.serve({ port: 0, hostname: '127.0.0.1', idleTimeout: 0, async
 	if (path === '/api/session' && req.method === 'POST') {
 		const id = 'ses_' + ++made;
 		sessions[id] = { messages: [], waiters: [], running: false };
+		save();
 		return data({ id });
 	}
 	if (path.endsWith('/instructions/entries/recoder')) return none();
@@ -94,6 +104,7 @@ const server = Bun.serve({ port: 0, hostname: '127.0.0.1', idleTimeout: 0, async
 		session.messages.push({ id, type: 'user', text: body.text });
 		session.running = true;
 		session.noWait = body.text === 'no-wait';
+		save();
 		void run(match[1], session, body.text);
 		return data({ id, sessionID: match[1] });
 	}
@@ -104,7 +115,7 @@ const server = Bun.serve({ port: 0, hostname: '127.0.0.1', idleTimeout: 0, async
 	}
 	if (match[2] === '/message') return data(session.messages.slice().reverse());
 	if (match[2] === '/interrupt') { session.interrupt?.(); return Response.json({ interrupted: true }); }
-	if (req.method === 'DELETE') { delete sessions[match[1]]; return none(); }
+	if (req.method === 'DELETE') { delete sessions[match[1]]; save(); return none(); }
 	return data({});
 } });
 console.log('opencode server listening on http://127.0.0.1:' + server.port);

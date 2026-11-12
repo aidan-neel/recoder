@@ -360,12 +360,14 @@ export class V2Api implements OpenCodeApi {
 	/**
 	 * Queues the prompt and waits for the session to go idle. The wait route
 	 * blocks until then; polling the messages covers a server that answers it
-	 * early or not at all.
+	 * early or not at all. A server that stops ends the prompt at once: the
+	 * run it held stopped with it, and a new server would never finish it.
 	 */
 	async prompt(request: Prompt): Promise<Reply> {
 		const { session, signal, timeoutMs } = request;
 		const path = `/api/session/${encodeURIComponent(session)}`;
 		const deadline = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
+		const serving = await this.server.liveness();
 
 		await this.allowTools(session, request.tools);
 
@@ -382,10 +384,12 @@ export class V2Api implements OpenCodeApi {
 				signal
 			})
 			.catch((error: unknown) => {
-				if (signal.aborted || (error instanceof OpenCodeError && error.status === 504)) throw error;
+				if (signal.aborted || !serving() || (error instanceof OpenCodeError && error.status === 504)) throw error;
 			});
 
 		for (;;) {
+			if (!serving()) throw new OpenCodeError('OpenCode stopped before it answered.');
+
 			const reply = settled(await this.newest(session), sent.id);
 
 			if (reply) return reply;
