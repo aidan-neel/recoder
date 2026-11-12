@@ -68,6 +68,8 @@ curl -s -X POST localhost:3201/api/repos -H 'content-type: application/json' \
 - A `file://` URL needs `provider: "local"`, and `provider: "local"` needs a `file://` URL. Anything else is a 400.
 - The answer holds the repo `id`. A path that is not a git repo is a 400.
 - `GET /api/repos/:id/pulls` lists its pull requests.
+- `GET /api/pulls` lists the open pull requests of every tracked repo with their status and newest review (`?repoId=` for one repo, `?fresh=1` to skip the 10-second cache). Repos whose forge fails are named in `failures` (`apps/server/src/routes/pulls.ts`).
+- The pull request page reads `GET /api/repos/:id/pulls/:pr/page`, `/diff` (ETag is the head commit), `/commits`, `/checks` and `/comments`, with no review needed. `POST .../comments` and `POST .../merge` write to the forge; a merge is refused (409) when the head moved, or the pull request is closed or a draft. Local repos answer 400 to the comment and merge routes (`apps/server/src/routes/pulls/`).
 
 ## 5. Pick a model
 
