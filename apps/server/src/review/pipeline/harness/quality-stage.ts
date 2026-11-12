@@ -122,7 +122,7 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean, det
 	});
 
 	try {
-		const matrix = await runMatrix(run);
+		const matrix = await runMatrix(run, closed);
 
 		if (!closed() && !run.controller.signal.aborted) {
 			run.detections.push(...matrix.results);

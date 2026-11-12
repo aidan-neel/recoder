@@ -1,11 +1,12 @@
-import type { RunResult } from '../../../sandbox/exec-sandbox.js';
+import type { SettledRun } from '../../../sandbox/exec-workspace.js';
 import { isTestPath, testStem } from '../change-model/test-files.js';
+import { escapeRegExp } from '../change-model/reference-kinds.js';
 import type { AddedLines } from '../detectors/changed-lines.js';
 import type { TestFileVersions } from '../detectors/test-files.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { aimedMutants } from './aim.js';
 import { mutantsOf, probeOf, type Mutant } from './mutants.js';
-import { mutantCommand, oldCopyPath } from './test-run.js';
+import { mutantCommand, oldCopyPath, WRITE_FAILED_EXIT, type CommandPlan, type CommandSkip } from './test-run.js';
 
 /** Time one test run may take in the matrix. */
 const RUN_TIMEOUT_MS = 45_000;
@@ -16,6 +17,9 @@ export const MATRIX_BUDGET_MS = 2 * 60_000;
 /** Mutants tried per edited test file against its old version, at most. */
 const MAX_OLD_NEW_MUTANTS = 6;
 
+/** Exit codes above this are how a shell reports a process killed by a signal, which says nothing about the tests. */
+const SIGNAL_EXIT = 128;
+
 /** Why the matrix did not run or prove something, fixed so an eval can count them. */
 export type SkipReason =
 	| 'no-suspicion'
@@ -25,7 +29,11 @@ export type SkipReason =
 	| 'no-aimed-mutant'
 	| 'unreached'
 	| 'probe-broke'
-	| 'budget';
+	| 'budget'
+	| 'unsafe-path'
+	| 'too-large'
+	| 'setup-failed'
+	| 'unsupported-execution';
 
 /** What one review's matrix did, for its task row and the benchmark report. */
 export interface MatrixCounts {
@@ -52,8 +60,8 @@ export interface MatrixOutcome {
 	counts: MatrixCounts;
 }
 
-/** Runs one shell command in the sandbox on the PR head. */
-export type Runner = (command: string, timeoutMs: number) => Promise<RunResult>;
+/** Runs one matrix command in the sandbox on the PR head; the plan's files are placed for that run only. */
+export type Runner = (plan: CommandPlan, timeoutMs: number) => Promise<SettledRun>;
 
 type Source = { path: string; head: string };
 
@@ -74,21 +82,47 @@ export function emptyCounts(): MatrixCounts {
 	};
 }
 
-/** A run that finished, passed or failed; a timeout or a kill says nothing about the tests. */
-function verdict(result: RunResult): 'pass' | 'fail' | null {
-	if (result.timedOut || result.exitCode === null) return null;
+/**
+ * A run that finished and reached an assertion, passed or failed. A timeout,
+ * a kill, an unfinished run, a failed payload write or one the profile says
+ * never reached an assertion says nothing about the tests.
+ */
+function verdict(result: SettledRun): 'pass' | 'fail' | null {
+	if (
+		result.timedOut ||
+		result.exitCode === null ||
+		result.exitCode === WRITE_FAILED_EXIT ||
+		result.exitCode > SIGNAL_EXIT
+	)
+		return null;
+
+	if (result.outcome !== undefined) {
+		if (result.outcome === 'assertion-passed') return 'pass';
+		if (result.outcome === 'assertion-failed') return 'fail';
+
+		return null;
+	}
 
 	return result.exitCode === 0 ? 'pass' : 'fail';
 }
 
-/** The runs of one review, counted and bounded by the matrix budget. */
+/** What one matrix run came to: a verdict, or why there is none. */
+interface MatrixRun {
+	verdict: 'pass' | 'fail' | null;
+	output: string;
+	/** The skip the session counted for this run, when it counted one. */
+	skip?: SkipReason;
+}
+
+/** The runs of one review, counted and bounded by the matrix budget and the review's closed state. */
 class Session {
 	readonly counts = emptyCounts();
 	private readonly started = Date.now();
 
 	constructor(
 		private readonly runner: Runner,
-		private readonly deadline: number
+		private readonly deadline: number,
+		readonly closed: () => boolean
 	) {}
 
 	remaining(): number {
@@ -99,22 +133,44 @@ class Session {
 		this.counts.skips[reason] = (this.counts.skips[reason] ?? 0) + 1;
 	}
 
-	/** One run; null, and a `budget` skip, when the budget is gone or the run did not finish. */
-	async run(command: string): Promise<{ verdict: 'pass' | 'fail'; output: string } | null> {
+	/**
+	 * One run. A null verdict means no evidence: the plan could not run, the
+	 * review closed, the budget is gone, the run did not finish or it never
+	 * reached an assertion; `skip` names the reason when the session counted
+	 * one, so a caller does not count it twice.
+	 */
+	async run(plan: CommandPlan | CommandSkip): Promise<MatrixRun> {
+		if (typeof plan === 'string') {
+			this.skip(plan);
+
+			return { verdict: null, output: '', skip: plan };
+		}
+
+		if (this.closed()) return { verdict: null, output: 'Not run: the review closed.' };
+
 		if (this.remaining() <= 0) {
 			this.skip('budget');
 
-			return null;
+			return { verdict: null, output: '', skip: 'budget' };
 		}
 
 		this.counts.runs++;
 
-		const result = await this.runner(command, Math.min(RUN_TIMEOUT_MS, this.remaining()));
+		const result = await this.runner(plan, Math.min(RUN_TIMEOUT_MS, this.remaining()));
 		const done = verdict(result);
 
 		this.counts.ms = Date.now() - this.started;
 
-		return done ? { verdict: done, output: result.output } : null;
+		const skip =
+			done === null && (result.outcome === 'setup-failed' || result.outcome === 'unsupported-execution')
+				? result.outcome
+				: undefined;
+
+		if (skip) this.skip(skip);
+
+		return done
+			? { verdict: done, output: result.output }
+			: { verdict: null, output: result.output, ...(skip ? { skip } : {}) };
 	}
 }
 
@@ -128,7 +184,7 @@ function sourcesFor(file: TestFileVersions, changedSources: Map<string, string>)
 	const rank = (path: string): number => {
 		const name = path.slice(path.lastIndexOf('/') + 1).replace(/\.[^.]+$/, '');
 
-		if (new RegExp(`from\\s+['"][^'"]*/${name}(?:\\.[cm]?[jt]sx?)?['"]`).test(file.head)) return 0;
+		if (new RegExp(`from\\s+['"][^'"]*/${escapeRegExp(name)}(?:\\.[cm]?[jt]sx?)?['"]`).test(file.head)) return 0;
 
 		return testStem(path) === stem ? 1 : 2;
 	};
@@ -178,7 +234,8 @@ function provenResult(suspicion: DetectorResult, mutant: Mutant, evidence: strin
 /**
  * The old/new matrix for one edited test file: the old file passes on the
  * PR's code, then for each mutant of the source the change adds, the old
- * file fails and the edited one passes.
+ * file fails and the edited one passes. A run that does not finish counts
+ * as nothing: it is neither a kill nor a survivor.
  */
 async function oldNewRow(input: {
 	session: Session;
@@ -191,24 +248,32 @@ async function oldNewRow(input: {
 	const oldTest = { path: oldCopyPath(file.path), text: file.base };
 	const oldSanity = await session.run(mutantCommand({ source: null, oldTest, run: commands.old }));
 
-	if (oldSanity?.verdict !== 'pass') return null;
+	if (oldSanity.verdict !== 'pass') return null;
 
 	const mutants = sources.flatMap((source) => mutantsOf(source.path, source.head, added)).slice(0, MAX_OLD_NEW_MUTANTS);
 
 	for (const mutant of mutants) {
+		if (session.closed()) break;
+
 		const source = { path: mutant.file, text: mutant.text };
 
 		session.counts.mutants++;
 
-		if ((await session.run(mutantCommand({ source, oldTest: null, run: commands.head })))?.verdict !== 'pass') {
+		const head = await session.run(mutantCommand({ source, oldTest: null, run: commands.head }));
+
+		if (head.verdict === 'fail') {
 			session.counts.killed++;
 
 			continue;
 		}
 
+		if (head.verdict === null) continue;
+
 		session.counts.survivors++;
 
-		if ((await session.run(mutantCommand({ source, oldTest, run: commands.old })))?.verdict === 'fail') {
+		const old = await session.run(mutantCommand({ source, oldTest, run: commands.old }));
+
+		if (old.verdict === 'fail') {
 			return editedResult(
 				file,
 				mutant,
@@ -218,6 +283,25 @@ async function oldNewRow(input: {
 	}
 
 	return null;
+}
+
+/** A surviving mutant recorded with why its reach stayed unproven. */
+function survivorRow(session: Session, suspicion: DetectorResult, mutant: Mutant, reason: string): void {
+	session.counts.survivorRows.push(
+		`${mutant.file}:${mutant.line} ${mutant.description} for "${suspicion.title}": ${reason}`
+	);
+}
+
+/** A surviving mutant whose reach stayed unproven: counted under `skip`, with `reason` on the survivor row. */
+function unproven(
+	session: Session,
+	suspicion: DetectorResult,
+	mutant: Mutant,
+	skip: SkipReason,
+	reason: string = skip
+): void {
+	session.skip(skip);
+	survivorRow(session, suspicion, mutant, reason);
 }
 
 /**
@@ -242,22 +326,27 @@ async function suspicionRow(input: {
 	}
 
 	for (const mutant of mutants) {
+		if (session.closed()) break;
+
 		session.counts.mutants++;
 
 		const outcome = await session.run(
 			mutantCommand({ source: { path: mutant.file, text: mutant.text }, oldTest: null, run: command })
 		);
 
-		if (outcome?.verdict !== 'pass') {
-			if (outcome) session.counts.killed++;
+		if (outcome.verdict !== 'pass') {
+			if (outcome.verdict === 'fail') session.counts.killed++;
 
 			continue;
 		}
 
 		session.counts.survivors++;
 
-		const source = sources.find((candidate) => candidate.path === mutant.file)!;
-		const probe = await probeOf(mutant.file, source.head, mutant.line);
+		const source = sources.find((candidate) => candidate.path === mutant.file);
+
+		if (!source) continue;
+
+		const probe = await probeOf(mutant.file, source.head, mutant);
 
 		if (probe === 'type') {
 			session.counts.survivors--;
@@ -266,12 +355,10 @@ async function suspicionRow(input: {
 			continue;
 		}
 
-		if (probe === 'module' || probe === null) {
-			return provenResult(
-				suspicion,
-				mutant,
-				`mutant "${mutant.description}" in ${mutant.file}: ${file.path} passed; the line runs when the module loads (${command})`
-			);
+		if (probe === null || probe === 'deferred') {
+			unproven(session, suspicion, mutant, 'probe-broke', probe ?? 'probe-broke');
+
+			continue;
 		}
 
 		session.counts.probes++;
@@ -280,32 +367,43 @@ async function suspicionRow(input: {
 			mutantCommand({ source: { path: probe.file, text: probe.text }, oldTest: null, run: command })
 		);
 
-		const reason =
-			probed?.verdict === 'pass' ? 'unreached' : probed?.output.includes('recoder-probe') ? null : 'probe-broke';
+		if (probed.verdict === null) {
+			if (session.closed()) break;
 
-		if (probed && reason === null) {
-			return provenResult(
-				suspicion,
-				mutant,
-				`mutant "${mutant.description}" in ${mutant.file}: ${file.path} passed; probe on line ${probe.line} failed (${command})`
-			);
+			const reason = probed.skip ?? 'probe-broke';
+
+			if (!probed.skip) session.skip(reason);
+			survivorRow(session, suspicion, mutant, reason);
+
+			continue;
 		}
 
-		if (probed && reason) {
-			session.skip(reason);
+		if (probed.verdict === 'pass') {
+			unproven(session, suspicion, mutant, 'unreached');
 
-			session.counts.survivorRows.push(
-				`${mutant.file}:${mutant.line} ${mutant.description} for "${suspicion.title}": ${reason}`
-			);
+			continue;
 		}
+
+		if (!probed.output.includes('recoder-probe')) {
+			unproven(session, suspicion, mutant, 'probe-broke');
+
+			continue;
+		}
+
+		return provenResult(
+			suspicion,
+			mutant,
+			`mutant "${mutant.description}" in ${mutant.file}: ${file.path} passed; probe on line ${probe.line} failed (${command})`
+		);
 	}
 
 	return null;
 }
 
 /**
- * Runs the test matrix, within the budget, on the edited test files and on
- * the files the detectors suspect. One finding per test file at most.
+ * Runs the test matrix, within the budget and while the review stays open,
+ * on the edited test files and on the files the detectors suspect. One
+ * finding per test file at most.
  */
 export async function testMatrix(input: {
 	tests: TestFileVersions[];
@@ -314,15 +412,18 @@ export async function testMatrix(input: {
 	added: AddedLines;
 	commandFor: (path: string) => string | null;
 	run: Runner;
+	closed: () => boolean;
 	deadline: number;
 }): Promise<MatrixOutcome> {
-	const { tests, suspicions, sources, added, commandFor, run, deadline } = input;
-	const session = new Session(run, deadline);
+	const { tests, suspicions, sources, added, commandFor, run, closed, deadline } = input;
+	const session = new Session(run, deadline, closed);
 	const results: DetectorResult[] = [];
 
 	session.counts.suspicions = suspicions.length;
 
 	for (const file of tests) {
+		if (session.closed()) break;
+
 		const mine = suspicions.filter((suspicion) => suspicion.file === file.path);
 		const edited = Boolean(file.base) && file.base !== file.head;
 
@@ -342,8 +443,8 @@ export async function testMatrix(input: {
 
 		const sanity = await session.run(mutantCommand({ source: null, oldTest: null, run: command }));
 
-		if (sanity?.verdict !== 'pass') {
-			if (sanity) {
+		if (sanity.verdict !== 'pass') {
+			if (sanity.verdict === 'fail') {
 				session.skip('sanity-failed');
 				session.counts.sanityOutput ??= sanity.output.split('\n').slice(0, 10).join('\n').slice(0, 800);
 			}
@@ -376,6 +477,8 @@ async function firstProven(
 	command: string
 ): Promise<DetectorResult | null> {
 	for (const suspicion of suspicions) {
+		if (session.closed()) return null;
+
 		const found = await suspicionRow({ session, file, suspicion, sources, command });
 
 		if (found) return found;
