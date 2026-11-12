@@ -6,9 +6,9 @@ import {
 	recordLlmRateLimit,
 	recordLlmSuccess,
 	releaseLlmSlot,
-	resetLlmLimiter,
-	withLlmLane
+	resetLlmLimiter
 } from '../../../src/models/llm/limiter';
+import { withLlmLane } from '../../../src/models/llm/lane';
 import { providerError } from '../../../src/agents/opencode/opencode-error';
 
 const savedConcurrency = process.env.RECODER_LLM_CONCURRENCY;

@@ -1,28 +1,12 @@
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { agentById } from '../../agents/registry';
 import { CapacityError, cancelledError } from './errors';
-
-/**
- * Who a model request waits for a slot on behalf of, usually one review. When
- * an endpoint is full the limiter takes turns between lanes, so one busy review
- * cannot hold back another.
- */
-export interface LlmLane {
-	id: string;
-	/** Told how long each request in the lane waited for its slot, 0 when one was free. Runs while the slot is held, so it must not throw. */
-	recordWait: (waitedMs: number) => void;
-}
+import { currentLlmLane } from './lane';
 
 const DEFAULT_CEILING = 64;
 
 const BACKOFF_FLOOR = 4;
 
 const BACKOFF_COOLDOWN_MS = 10_000;
-
-/** The lane of requests made outside any review: home brief, settings checks. */
-const SHARED_LANE: LlmLane = { id: '', recordWait: () => undefined };
-
-const lanes = new AsyncLocalStorage<LlmLane>();
 
 interface EndpointState {
 	endpoint: string;
@@ -107,11 +91,6 @@ function llmCeiling(endpoint: string): number {
 
 function llmLimit(state: EndpointState): number {
 	return Math.min(state.backedOffLimit, llmCeiling(state.endpoint));
-}
-
-/** Model requests `run` makes, however nested, wait for slots in `lane`'s turn. */
-export function withLlmLane<T>(lane: LlmLane, run: () => T): T {
-	return lanes.run(lane, run);
 }
 
 /** Takes the next lane's oldest waiter off the queue; the lane goes to the back of the turns while it has more. */
@@ -204,7 +183,7 @@ export async function acquireLlmSlot(endpoint: string, signal?: AbortSignal, tim
 	if (signal?.aborted) throw cancelledError();
 
 	const state = stateOf(endpoint);
-	const lane = lanes.getStore() ?? SHARED_LANE;
+	const lane = currentLlmLane();
 
 	if (!state.turns.length && state.active < llmLimit(state)) {
 		state.active++;
