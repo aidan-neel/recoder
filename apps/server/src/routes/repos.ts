@@ -12,7 +12,14 @@ import { TtlCache } from '../util/ttl-cache';
 import { db } from '../store';
 import { parseBody } from './parse-body';
 
-const pullsCache = new TtlCache<unknown>(30_000);
+/**
+ * Open pull requests per repo. A forge that refuses (a rejected token, a
+ * rate limit, a missing CLI) keeps refusing, so its error is kept for a
+ * minute too: the queue polls every repo, and asking again on each poll only
+ * adds a slow failure. Saving a token clears every cache, so a fix shows at
+ * once.
+ */
+const pullsCache = new TtlCache<unknown>(30_000, 200, 60_000);
 const previewCache = new TtlCache<unknown>(60_000);
 
 /** A local repo is a `file://` URL, and only a local repo may be one. */

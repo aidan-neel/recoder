@@ -1,8 +1,17 @@
 'use client';
 
-import { useEffect, useRef, type HTMLAttributes, type PointerEvent, type ReactNode } from 'react';
+import {
+	useEffect,
+	useLayoutEffect,
+	useRef,
+	type HTMLAttributes,
+	type PointerEvent,
+	type ReactNode,
+	type RefObject
+} from 'react';
 
 import { cn } from '../../lib/cn';
+import { trackHighlight } from '../menu/highlight-track';
 import { placeLayer, type HoverTrack } from './hover-layer';
 
 interface HoverListProps extends HTMLAttributes<HTMLElement> {
@@ -12,21 +21,55 @@ interface HoverListProps extends HTMLAttributes<HTMLElement> {
 	className?: string;
 	/** Restyles the highlight layer (radius, color, a ring). */
 	highlightClassName?: string;
+	/** Matches the selected row, when the list has one: a second layer follows it as the selection moves. */
+	selectedSelector?: string;
 	children: ReactNode;
+}
+
+/**
+ * Keeps the selection layer on the row `selector` matches as the selection
+ * moves (the kit's menu highlight, which it is styled as): it slides to a row
+ * the pointer chose and snaps, in the same frame, to one a key chose. It
+ * starts in the next animation frame, still before the paint, so its first
+ * placement reads the layout that paint needs rather than forcing one in the
+ * commit.
+ */
+function useSelectionLayer(
+	container: RefObject<HTMLElement | null>,
+	layer: RefObject<HTMLElement | null>,
+	selector: string | undefined
+): void {
+	useLayoutEffect(() => {
+		const host = container.current;
+		const highlight = layer.current;
+
+		if (!host || !highlight || !selector) return;
+
+		let stop: (() => void) | null = null;
+		const frame = requestAnimationFrame(() => (stop = trackHighlight(highlight, host, selector)));
+
+		return () => {
+			cancelAnimationFrame(frame);
+			stop?.();
+		};
+	}, [container, layer, selector]);
 }
 
 /**
  * Our own lists' hover highlight: one layer behind the rows that snaps to the
  * row under the pointer (no travel) and fades in over `--dur-highlight`. It
  * hides when the pointer leaves and follows its row through scrolls and
- * resizes. Touch never shows it. In a `ul` or `ol` the layer is an
- * `aria-hidden` first `li`.
+ * resizes. Touch never shows it. A list with a selection (`selectedSelector`)
+ * gets a second layer over the hover's that follows the selected row: a click
+ * slides it there, a key snaps it. In a `ul` or `ol` the layers are
+ * `aria-hidden` `li`s ahead of the rows.
  */
 export function HoverList({
 	as: Tag = 'div',
 	itemSelector,
 	className,
 	highlightClassName,
+	selectedSelector,
 	children,
 	onPointerOver,
 	onPointerMove,
@@ -35,6 +78,7 @@ export function HoverList({
 }: HoverListProps) {
 	const container = useRef<HTMLElement | null>(null);
 	const layer = useRef<HTMLElement | null>(null);
+	const selection = useRef<HTMLElement | null>(null);
 	const track = useRef<HoverTrack>({ row: null, x: 0, y: 0 });
 
 	/** Highlights the row holding `target`, or hides the layer when there is none. */
@@ -81,6 +125,8 @@ export function HoverList({
 		};
 	}, [itemSelector]);
 
+	useSelectionLayer(container, selection, selectedSelector);
+
 	const Layer = Tag === 'div' ? 'span' : 'li';
 
 	return (
@@ -115,6 +161,16 @@ export function HoverList({
 				data-state="off"
 				className={cn(highlightClassName)}
 			/>
+			{selectedSelector ? (
+				<Layer
+					ref={(node: HTMLElement | null) => {
+						selection.current = node;
+					}}
+					aria-hidden
+					role={Layer === 'li' ? 'none' : undefined}
+					data-ui="menu-highlight"
+				/>
+			) : null}
 			{children}
 		</Tag>
 	);

@@ -1,4 +1,10 @@
-import { REVIEW_CANCELLED, type Finding, type Review, type ReviewProgress } from '@recoder/shared';
+import {
+	REVIEW_CANCELLED,
+	type Finding,
+	type ProgressSummary,
+	type Review,
+	type ReviewProgress
+} from '@recoder/shared';
 import {
 	cancelReview,
 	getReview,
@@ -6,8 +12,7 @@ import {
 	hiddenFromSummary,
 	progressSummary,
 	readProgress,
-	startReview,
-	type ProgressSummary
+	startReview
 } from './client';
 import { unsettledTasks } from '../review/session/task-state';
 import type { EvalFinding } from './metrics';

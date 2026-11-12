@@ -1,4 +1,5 @@
 import { buildRuleLedger } from '../../guidelines/ledger/ledger.js';
+import { rankRules } from '../../guidelines/learned/topics.js';
 import { runDetectors, runDiagnostics, runTypeHints } from '../detectors/detectors.js';
 import { selectionReports } from '../lenses/lenses.js';
 import { testStrengthOn } from '../test-strength.js';
@@ -21,8 +22,9 @@ function errorText(err: unknown): string {
 
 /**
  * The repo's guidelines as numbered rules, before the reviewers start, since
- * they review against them. Never throws: a failed build leaves no ledger. It
- * is not built, and costs no model call, when no lens the review applies reports rules.
+ * they review against them, ranked by how people here treated their findings.
+ * Never throws: a failed build leaves no ledger. It is not built, and costs no
+ * model call, when no lens the review applies reports rules.
  */
 export async function ruleLedgerStage(run: ReviewRun): Promise<void> {
 	if (run.controller.signal.aborted || !selectionReports(run.input.lenses, ['repo-rule'])) return;
@@ -30,7 +32,7 @@ export async function ruleLedgerStage(run: ReviewRun): Promise<void> {
 	run.task(TASK.id, TASK.label, 'running', "Reading the repo's guidelines", { kind: 'checks' });
 
 	try {
-		run.ledger = await buildRuleLedger(run);
+		run.ledger = rankRules(await buildRuleLedger(run), run.topicTallies);
 	} catch (err) {
 		run.ledger = null;
 		run.events?.onLog?.(`Rule ledger skipped: ${errorText(err)}`);

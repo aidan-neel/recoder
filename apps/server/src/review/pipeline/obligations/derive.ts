@@ -3,10 +3,11 @@ import { fileHunks } from '../change-model/change-model.js';
 import { languageFor } from '../change-model/languages.js';
 import { innermost } from '../change-model/owners.js';
 import { withTree } from '../change-model/parser.js';
-import { byCodePoint, readAt, readTracked, trackedFiles } from '../change-model/repo.js';
+import { byCodePoint, readAt, readTracked } from '../change-model/repo.js';
 import { isTestPath } from '../change-model/test-files.js';
 import type { ChangedSymbol, ChangeModel } from '../change-model/types.js';
 import type { InventoryFile, ReviewInventory } from '../inventory.js';
+import { repoPaths, type RepoInventory } from '../repo-inventory/repo-inventory.js';
 import { partitionUnits } from '../units.js';
 import { obligationsNewCodeOn } from './config.js';
 import { collectMarks, type Mark } from './marks.js';
@@ -36,6 +37,8 @@ const MAX_HINTS = 3;
 export interface DeriveInput {
 	inventory: ReviewInventory;
 	changeModel: ChangeModel | null;
+	/** Every file at the PR head; only tracked files are read. */
+	repo: RepoInventory;
 	checkoutPath: string;
 	/** Without the merge base only head-side triggers can fire. */
 	baseSha: string | null;
@@ -49,8 +52,8 @@ type Draft = Omit<Obligation, 'id'>;
  * model calls: the same checkout and diff always give the same obligations.
  */
 export async function deriveObligations(input: DeriveInput): Promise<Obligation[]> {
-	const { inventory, checkoutPath, signal } = input;
-	const tracked = new Set(await trackedFiles(checkoutPath, signal));
+	const { inventory, signal } = input;
+	const tracked = new Set(repoPaths(input.repo));
 	const units = partitionUnits(inventory);
 	const drafts: Draft[] = [];
 

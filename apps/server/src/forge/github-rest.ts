@@ -1,4 +1,4 @@
-import { GhError } from './gh.js';
+import { GhError, GITHUB_RATE_LIMIT, githubRateLimit } from './cli.js';
 import { getToken } from './tokens.js';
 
 const API = 'https://api.github.com/';
@@ -11,6 +11,55 @@ export function githubToken(): string | undefined {
 /** The request's own time limit, ended early when the caller's signal aborts. */
 export function withTimeout(ms: number, signal?: AbortSignal): AbortSignal {
 	return signal ? AbortSignal.any([signal, AbortSignal.timeout(ms)]) : AbortSignal.timeout(ms);
+}
+
+/**
+ * A request or body read that failed before GitHub's answer arrived whole,
+ * in plain words: past the time limit, or else `otherwise` (offline, or the
+ * connection dropped). The runtime's own text never reaches the page, and
+ * no sentence says "didn’t" or "couldn’t", which the app's notice titles
+ * already say ("The checks didn’t load.").
+ */
+function unreachable(err: unknown, otherwise: string): GhError {
+	const timedOut = (err as { name?: unknown } | null)?.name === 'TimeoutError';
+
+	return new GhError('unavailable', timedOut ? 'GitHub took too long to answer.' : otherwise);
+}
+
+/**
+ * A 2xx answer's JSON. A body cut off on the way fails like the request
+ * would, and one that is empty or not JSON is an `unknown` GhError, never a
+ * raw parse error, so a route still answers with its reason.
+ */
+async function okBody(response: Response): Promise<unknown> {
+	let text: string;
+
+	try {
+		text = await response.text();
+	} catch (err) {
+		throw unreachable(err, 'GitHub’s answer was cut off.');
+	}
+
+	try {
+		return JSON.parse(text);
+	} catch {
+		throw new GhError('unknown', 'GitHub’s answer wasn’t readable.');
+	}
+}
+
+/**
+ * GitHub's primary and secondary rate limits: a 429, or a 403 with no
+ * requests left, a wait to observe, or GitHub's own words for it.
+ */
+function rateLimited(response: Response, message: string): boolean {
+	if (response.status === 429) return true;
+
+	return (
+		response.status === 403 &&
+		(response.headers.get('x-ratelimit-remaining') === '0' ||
+			response.headers.has('retry-after') ||
+			GITHUB_RATE_LIMIT.test(message))
+	);
 }
 
 /** Call a GitHub REST endpoint as JSON with the configured token, no `gh` CLI. Throws GhError. */
@@ -35,11 +84,11 @@ export async function githubRest(
 			signal: withTimeout(15_000, init?.signal)
 		});
 	} catch (err) {
-		throw new GhError('unavailable', `GitHub API unreachable: ${err instanceof Error ? err.message : String(err)}`);
+		throw unreachable(err, 'No connection to GitHub.');
 	}
 
 	if (response.status === 204) return null;
-	if (response.ok) return response.json();
+	if (response.ok) return okBody(response);
 
 	const body = await response.text().catch(() => '');
 
@@ -59,14 +108,7 @@ export async function githubRest(
 				: 'Add a GitHub API token in Settings → Connections.'
 		);
 
-	if (response.status === 403 && response.headers.get('x-ratelimit-remaining') === '0') {
-		throw new GhError(
-			'auth',
-			token
-				? 'GitHub API rate limit reached. Try again shortly.'
-				: 'GitHub API rate limit reached. Add a GitHub API token in Settings → Connections.'
-		);
-	}
+	if (rateLimited(response, message)) throw githubRateLimit(!!token);
 
 	if (response.status === 403 && init?.method && init.method !== 'GET') {
 		throw new GhError(
@@ -87,11 +129,14 @@ export async function githubRest(
 
 /** A pull request's head branch and commit. */
 export async function fetchPullHead(slug: string, prNumber: number): Promise<{ ref: string; sha: string }> {
-	const pull = (await githubRest(`repos/${slug}/pulls/${prNumber}`)) as { head?: { ref?: string; sha?: string } };
-	const ref = pull.head?.ref ?? '';
-	const sha = pull.head?.sha ?? '';
+	const pull = (await githubRest(`repos/${slug}/pulls/${prNumber}`)) as {
+		head?: { ref?: string; sha?: string };
+	} | null;
 
-	if (!sha) throw new GhError('unknown', 'PR has no head commit');
+	const ref = pull?.head?.ref ?? '';
+	const sha = pull?.head?.sha ?? '';
+
+	if (!sha) throw new GhError('unknown', 'GitHub named no head commit for the pull request.');
 
 	return { ref: ref || sha, sha };
 }

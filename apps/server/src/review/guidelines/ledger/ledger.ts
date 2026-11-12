@@ -82,9 +82,16 @@ export function ruleCitation(rule: RepoRule): string {
 	return rule.source.line ? `${rule.source.path}:${rule.source.line}` : rule.source.path;
 }
 
+/** What reviewers are told about a rule's standing with the repository's people. */
+const STANDING_NOTE: Record<NonNullable<RepoRule['standing']>, string> = {
+	'acted-on': ' People here usually act on findings of this rule.',
+	'often-dismissed': ' People here usually dismiss findings of this rule; report only a clear break.'
+};
+
 /**
  * The rules a reviewer of `paths` checks by reading, one `R3: text (AGENTS.md:41)`
- * line each. Mechanical rules are left out: the rule-check detector runs them.
+ * line each, in the ledger's order, with a note on a rule's standing when it
+ * has one. Mechanical rules are left out: the rule-check detector runs them.
  * Empty when none apply.
  */
 export function ledgerBlock(ledger: RuleLedger | null, paths: string[]): string {
@@ -92,6 +99,8 @@ export function ledgerBlock(ledger: RuleLedger | null, paths: string[]): string 
 
 	return ledger.rules
 		.filter((rule) => !rule.check && appliesToAny(rule, paths))
-		.map((rule) => `${rule.id}: ${rule.text} (${ruleCitation(rule)})`)
+		.map(
+			(rule) => `${rule.id}: ${rule.text} (${ruleCitation(rule)})${rule.standing ? STANDING_NOTE[rule.standing] : ''}`
+		)
 		.join('\n');
 }

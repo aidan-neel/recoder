@@ -1,35 +1,13 @@
 import { lstat, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { git, readBlob } from '../../../evidence/git.js';
+import { byCodePoint } from '@recoder/shared';
+import { readBlob } from '../../../evidence/git.js';
 
 /** Files larger than this are generated or vendored more often than not; the model skips them. */
-const MAX_FILE_BYTES = 400_000;
+export const MAX_FILE_BYTES = 400_000;
 
-/** Plain code-point order, so nothing depends on the machine's locale. */
-export function byCodePoint(a: string, b: string): number {
-	return a < b ? -1 : a > b ? 1 : 0;
-}
-
-/** Tracked regular files at the checkout's index, sorted; symlinks and submodules are left out. */
-export async function trackedFiles(root: string, signal: AbortSignal): Promise<string[]> {
-	const listed = await git(root, ['-c', 'core.quotePath=false', 'ls-files', '-s', '-z'], signal);
-
-	if (listed.code !== 0) throw new Error(`git ls-files failed: ${listed.stderr.slice(0, 300)}`);
-
-	const paths: string[] = [];
-
-	for (const record of listed.stdout.split('\0')) {
-		const tab = record.indexOf('\t');
-
-		if (tab < 0) continue;
-
-		const mode = record.slice(0, record.indexOf(' '));
-
-		if (mode === '100644' || mode === '100755') paths.push(record.slice(tab + 1));
-	}
-
-	return [...new Set(paths)].sort(byCodePoint);
-}
+/** The shared code-point order, kept here for the change model's readers. */
+export { byCodePoint };
 
 /** A tracked file's text from the checkout, or null for a symlink, a large or binary file, or a read error. */
 export async function readTracked(root: string, path: string, tracked: Set<string>): Promise<string | null> {

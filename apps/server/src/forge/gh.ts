@@ -1,5 +1,13 @@
 import type { PrPerson, PullFile, PullRequest, RemoteRepo } from '@recoder/shared';
-import { extractJson, forgeCliAvailable, forgeCliUser, GhError, runForgeCli } from './cli.js';
+import {
+	extractJson,
+	forgeCliAvailable,
+	forgeCliUser,
+	GhError,
+	GITHUB_RATE_LIMIT,
+	githubRateLimit,
+	runForgeCli
+} from './cli.js';
 
 export { extractJson, GhError } from './cli.js';
 
@@ -13,7 +21,11 @@ export function parseRepoSlug(url: string): string {
 	throw new GhError('unknown', `cannot parse repo slug from ${url}`);
 }
 
-/** A failed `gh` run's logs as an auth, not-found or unknown GhError. */
+/**
+ * A failed `gh` run's logs as an auth, rate-limit, not-found or unknown
+ * GhError. `gh` only calls GitHub signed in, so a rate limit it meets is the
+ * signed-in limit, which a token in Connections would not raise.
+ */
 function classifyFailure(logs: string): GhError {
 	const text = logs.toLowerCase();
 
@@ -28,6 +40,8 @@ function classifyFailure(logs: string): GhError {
 	) {
 		return new GhError('auth', `gh not authenticated: ${logs.slice(-500)}`);
 	}
+
+	if (GITHUB_RATE_LIMIT.test(logs)) return githubRateLimit(true);
 
 	if (text.includes('not found') || text.includes('no pull requests') || text.includes('could not resolve')) {
 		return new GhError('not-found', logs.slice(-500));

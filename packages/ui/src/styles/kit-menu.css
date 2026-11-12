@@ -6,9 +6,11 @@
 	position: relative;
 	isolation: isolate;
 }
+/* It spans the rows' width (insets set from the row), so a move animates only its offset and height. */
 [data-ui='menu-highlight'] {
 	position: absolute;
 	top: 0;
+	right: 0;
 	left: 0;
 	z-index: -1;
 	border-radius: 7px;
@@ -17,7 +19,6 @@
 	pointer-events: none;
 	transition:
 		transform var(--motion-hover) var(--ease-menu),
-		width var(--motion-hover) var(--ease-menu),
 		height var(--motion-hover) var(--ease-menu),
 		opacity var(--dur-hover) ease-out;
 }

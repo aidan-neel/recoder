@@ -36,6 +36,7 @@ const FORGE_FAILURES: Record<GhError['kind'], string> = {
 	unavailable: 'the forge CLI (gh or glab) could not be run',
 	auth: 'the forge CLI (gh or glab) is not signed in',
 	'not-found': 'the forge has no such pull request',
+	'rate-limit': 'the forge rate limit was reached',
 	unknown: 'the forge could not be read'
 };
 

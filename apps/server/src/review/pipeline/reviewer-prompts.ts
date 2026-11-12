@@ -8,6 +8,8 @@ import type { ChangeIntent } from './intent/types.js';
 import { inventorySummary, type ReviewInventory } from './inventory.js';
 import { combinedProcedure, isQualityLens, lensById, lensCategories } from './lenses/lenses.js';
 import type { LensId } from './lenses/types.js';
+import type { RepoInventory } from './repo-inventory/repo-inventory.js';
+import { repoMap } from './repo-inventory/repo-map.js';
 import { REVIEW_POLICY } from '../session/review-policy.js';
 import { UNTRUSTED_PREFIX, reviewerContract, type ReviewerFocus } from './prompts.js';
 import type { ReviewUnit } from './units.js';
@@ -151,6 +153,8 @@ interface PullRequestContext {
 	/** Reviewers, assignees, labels, linked issues. */
 	context: string;
 	inventory: ReviewInventory;
+	/** Every file at the PR head, for the repo map; null without a checkout. */
+	repo: RepoInventory | null;
 }
 
 /** What a lens or subagent prompt reads from the run, beyond its own unit. */
@@ -166,9 +170,10 @@ export interface ReviewerPromptContext {
 /** Changed files listed for orientation; a reviewer reads only its own unit's patch up front. */
 const MAX_LISTED_FILES = 80;
 
-/** The PR's description, the whole change's file list, and the repository's instructions and related paths. */
+/** The PR's description, the whole change's file list, the repository's layout, instructions and related paths. */
 function pullRequestLines(pr: PullRequestContext): string[] {
-	const { inventory } = pr;
+	const { inventory, repo } = pr;
+	const changedPaths = inventory.files.filter((file) => !file.excludeReason).map((file) => file.path);
 
 	const instructions = inventory.instructionFiles
 		.map((file) => `${UNTRUSTED_PREFIX}--- ${file.path} ---\n${file.excerpt}`)
@@ -181,6 +186,7 @@ function pullRequestLines(pr: PullRequestContext): string[] {
 			? `${UNTRUSTED_PREFIX}PR context (people, labels, linked issues and their blockers):\n${pr.context}`
 			: '',
 		`Whole change (${inventory.files.length} files; other reviewers read the rest):\n${inventorySummary(inventory, MAX_LISTED_FILES)}`,
+		repo ? `Repository layout at the PR head:\n${repoMap(repo, changedPaths)}` : '',
 		inventory.relatedPaths.length
 			? `Related existing paths:\n${inventory.relatedPaths.map((path) => `- ${path}`).join('\n')}`
 			: '',

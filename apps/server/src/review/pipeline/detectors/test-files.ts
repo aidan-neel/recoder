@@ -4,7 +4,7 @@ import { isTestPath } from '../change-model/test-files.js';
 import type { ReviewInventory } from '../inventory.js';
 import type { AddedLines } from './changed-lines.js';
 import { testStrengthOn } from '../test-strength.js';
-import { MAX_FILE_BYTES, readFilesAt } from './repo-files.js';
+import { MAX_FILE_BYTES, readFilesAt } from '../repo-inventory/blobs.js';
 
 /** One test file at the merge base and the PR head, plus the diff's new-side lines. */
 export interface TestFileVersions {

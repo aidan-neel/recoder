@@ -1,3 +1,4 @@
+import { byCodePoint } from '@recoder/shared';
 import type { ChangeModel } from '../change-model/types.js';
 import type { ReviewInventory } from '../inventory.js';
 import type { DetectorResult } from './types.js';
@@ -42,14 +43,12 @@ export function enclosingSymbol(model: ChangeModel | null, file: string, line: n
 	return around[0]?.qualifiedName;
 }
 
-/** Plain code-point order, the same on every machine and locale. */
-export function compareText(a: string, b: string): number {
-	return a < b ? -1 : a > b ? 1 : 0;
-}
+/** The shared code-point order, kept here under the detectors' name. */
+export { byCodePoint as compareText };
 
 /** File, then line, then detector: the order results are reported in. */
 export function compareResults(a: DetectorResult, b: DetectorResult): number {
-	return compareText(a.file, b.file) || a.line - b.line || compareText(a.detector, b.detector);
+	return byCodePoint(a.file, b.file) || a.line - b.line || byCodePoint(a.detector, b.detector);
 }
 
 /** Text clipped to `max` characters, with an ellipsis when cut. */

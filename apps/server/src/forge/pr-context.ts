@@ -1,5 +1,6 @@
 import type { Provider, Repo } from '@recoder/shared';
 import type { GatheredContext, PrRef } from '../review/pipeline/intent/types.js';
+import { readFact, writeFact } from '../util/fact-cache.js';
 import { emptyContext, gatherWith } from './context/gather.js';
 import { githubAdapter, githubPrsForCommit } from './context/github.js';
 import { gitlabAdapter, gitlabPrsForCommit } from './context/gitlab.js';
@@ -38,8 +39,33 @@ export async function gatherChangeContext(
 	}
 }
 
-/** The pull requests a commit landed in, so history can cite why older code is shaped as it is. Empty on failure. */
+/** Where the commit-to-PR answers are kept across reviews. */
+const COMMIT_PRS = 'commit-prs';
+
+/** A full object id; `HEAD` or a short sha can point somewhere else tomorrow, so its answer is never kept. */
+const FULL_SHA = /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/;
+
+/**
+ * The pull requests a commit landed in, so history can cite why older code is
+ * shaped as it is. Empty on failure. An answer whose every PR is merged is
+ * kept: which PR brought a commit in never changes after the merge, so later
+ * reviews of any PR in the repository read it back instead of asking the host.
+ */
 export async function prsForCommit(repo: Repo, provider: Provider, sha: string, signal: AbortSignal): Promise<PrRef[]> {
+	const key = `${repo.id}\0${sha}`;
+	const keepable = FULL_SHA.test(sha);
+	const known = keepable ? readFact<PrRef[]>(COMMIT_PRS, key) : null;
+
+	if (known) return known;
+
+	const found = await askHostForPrs(repo, provider, sha, signal);
+
+	if (keepable && found.length && found.every((ref) => ref.state === 'merged')) writeFact(COMMIT_PRS, key, found);
+
+	return found;
+}
+
+async function askHostForPrs(repo: Repo, provider: Provider, sha: string, signal: AbortSignal): Promise<PrRef[]> {
 	try {
 		const slug = parseSlug(repo.url);
 

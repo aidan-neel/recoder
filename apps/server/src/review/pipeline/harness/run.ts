@@ -16,6 +16,7 @@ import {
 } from './context.js';
 import { deriveObligationsStage, runUnitsWithObligations } from '../obligations/stage.js';
 import { intentStage } from './intent-stage.js';
+import { repoInventoryStage } from './repo-inventory-stage.js';
 import { runUnitPool } from './pool.js';
 import { detectorStage, diagnosticStage, ruleLedgerStage } from './quality-stage.js';
 import { checksInTime, prepareSandbox, startSetup, waitForBackground } from './sandbox-setup.js';
@@ -35,7 +36,7 @@ import { drainVerification, finishVerification, startVerification } from './veri
  *   files, but only inside an isolated, offline copy of the checkout
  *   (`exec-sandbox.ts`); tracked files are restored after every command.
  *
- * Stages: understand → cut the reviewers' slices → change model, intent (and obligations,
+ * Stages: understand → cut the reviewers' slices → repo inventory, change model, intent (and obligations,
  * with `RECODER_OBLIGATIONS=1`) and rule ledger, while the sandbox installs →
  * every reviewer over its slice with every lens (failed ones retried once), in one pool with
  * the obligation investigations, then the subagents the reviewers asked for → consolidate. Three things overlap the reviewers rather than
@@ -88,9 +89,11 @@ async function runStages(run: ReviewRun): Promise<AdaptiveReviewResult> {
 	saveCheckpoint(run);
 
 	const context = Promise.all([
-		changeModelStage(run).then((): Promise<unknown> =>
-			run.obligations ? Promise.all([intentStage(run), deriveObligationsStage(run)]) : intentStage(run)
-		),
+		repoInventoryStage(run)
+			.then(() => changeModelStage(run))
+			.then((): Promise<unknown> =>
+				run.obligations ? Promise.all([intentStage(run), deriveObligationsStage(run)]) : intentStage(run)
+			),
 		ruleLedgerStage(run)
 	]);
 

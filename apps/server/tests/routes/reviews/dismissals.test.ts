@@ -2,12 +2,10 @@ import { beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { app } from '../../../src/app';
 import { listDismissals, recordDismissal } from '../../../src/review/guidelines/learned/dismissals';
 import { dismissalKey } from '../../../src/review/guidelines/learned/finding-key';
-import { db, reviewDiffs } from '../../../src/store';
 import { DIFF } from '../../review/pipeline/harness-fixtures';
-import { testReview } from '../../helpers/review';
+import { savedReview, send } from './finding-requests';
 
 beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-dismiss-route-'));
@@ -51,23 +49,8 @@ const split = [
 	}
 ];
 
-async function savedReview(findings = [finding]) {
-	const review = await db.reviews.set(testReview({ repoId: 'repo-1', findings }));
-
-	await reviewDiffs.set(review.id, DIFF);
-
-	return review;
-}
-
-const send = (path: string, method: string, body?: unknown) =>
-	app.request(path, {
-		method,
-		headers: { 'content-type': 'application/json' },
-		body: body === undefined ? undefined : JSON.stringify(body)
-	});
-
 test('dismissing a finding remembers it under the review stored copy, and restoring forgets it', async () => {
-	const review = await savedReview();
+	const review = await savedReview([finding]);
 
 	const dismissed = await send(`/api/reviews/${review.id}/dismissals`, 'POST', {
 		findingId: 'finding-1',
@@ -90,7 +73,7 @@ test('dismissing a finding remembers it under the review stored copy, and restor
 });
 
 test('an unknown review or finding is a 404 and remembers nothing', async () => {
-	const review = await savedReview();
+	const review = await savedReview([finding]);
 
 	expect((await send(`/api/reviews/${review.id}/dismissals`, 'POST', { findingId: 'nope' })).status).toBe(404);
 	expect((await send(`/api/reviews/${review.id}/dismissals/nope`, 'DELETE')).status).toBe(404);

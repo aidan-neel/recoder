@@ -8,6 +8,7 @@ import { buildChangeModel } from '../../../../src/review/pipeline/change-model/c
 import type { AdaptiveReviewInput } from '../../../../src/review/pipeline/harness/types';
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import { deriveObligations } from '../../../../src/review/pipeline/obligations/derive';
+import { loadRepoInventory } from '../../../../src/review/pipeline/repo-inventory/repo-inventory';
 import { git } from '../../../helpers/git';
 import {
 	NOTHING,
@@ -30,9 +31,10 @@ export async function deriveFrom(base: Record<string, string>, head: Record<stri
 		const { targetSha } = await twoCommitRepo(root, { base, head });
 		const inventory = buildInventory(git(root, ['diff', targetSha, 'HEAD']) + '\n', []);
 		const signal = new AbortController().signal;
-		const changeModel = await buildChangeModel({ inventory, checkoutPath: root, signal, baseSha: targetSha });
+		const repo = await loadRepoInventory(root, 'HEAD', signal, []);
+		const changeModel = await buildChangeModel({ inventory, repo, checkoutPath: root, signal, baseSha: targetSha });
 
-		return await deriveObligations({ inventory, changeModel, checkoutPath: root, baseSha: targetSha, signal });
+		return await deriveObligations({ inventory, changeModel, repo, checkoutPath: root, baseSha: targetSha, signal });
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

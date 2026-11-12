@@ -45,7 +45,14 @@ const settings: ModelSettings = {
 const server: ServerIdentity = {
 	flags: { RECODER_LLM_RETRIES: '2' },
 	policy: { analysisDeadlineMs: 1_800_000 },
-	caches: { intent: 'source:1', 'rule-ledger': 'source:2', 'baseline-cache': 'source:3', 'review-checkpoint': 'v2' },
+	caches: {
+		intent: 'source:1',
+		'rule-ledger': 'source:2',
+		'baseline-cache': 'source:3',
+		'review-checkpoint': 'v2',
+		'parsed-symbols': 'source:4',
+		'commit-prs': 'source:5'
+	},
 	tools: { bun: '1.4.2', node: 'v24.0.0', opencode: 'not installed' },
 	host: {
 		os: 'linux 6',
@@ -192,6 +199,8 @@ test('a changed server flag changes the hash; a server without the route records
 		'rule-ledger': 'unknown',
 		'baseline-cache': 'unknown',
 		'review-checkpoint': 'unknown',
+		'parsed-symbols': 'unknown',
+		'commit-prs': 'unknown',
 		'benchmark-judge': `v${JUDGE_VERSION}`
 	});
 });

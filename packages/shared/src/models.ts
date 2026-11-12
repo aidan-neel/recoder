@@ -193,6 +193,21 @@ export interface ModelSettings {
 	limits: { maxFiles: number; maxDiffChars: number; maxFileChars: number };
 }
 
+/**
+ * `GET /api/settings/status`: what first run needs to decide whether to show,
+ * without the model catalog the pickers load.
+ */
+export interface SetupStatus {
+	/** A review model is set, in Settings or through the `RECODER_REVIEW_*` variables. */
+	configured: boolean;
+	/** Models the agents can run now. */
+	modelCount: number;
+	/** A model provider is connected: OpenCode has one, an agent offers models, or a model is configured. */
+	providerConnected: boolean;
+	/** Repositories Recoder tracks. */
+	repoCount: number;
+}
+
 export interface ModelSettingsPatch {
 	baseUrl?: string;
 	apiKey?: string;

@@ -18,6 +18,15 @@ function respond(status: number, body: unknown, headers: Record<string, string> 
 	}) as typeof fetch;
 }
 
+/** The kind of GhError a read of `repos/o/r` fails with. */
+async function failedKind(): Promise<string> {
+	const error = await githubRest('repos/o/r').catch((err: unknown) => err);
+
+	expect(error).toBeInstanceOf(GhError);
+
+	return (error as GhError).kind;
+}
+
 beforeEach(() => {
 	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-gh-rest-'));
 	delete process.env.GH_TOKEN;
@@ -53,11 +62,27 @@ test('falls back to GITHUB_TOKEN and works without any token', async () => {
 test('maps a rejected token to an auth error', async () => {
 	setToken('github', 'bad');
 	respond(401, { message: 'Bad credentials' });
+	expect(await failedKind()).toBe('auth');
+});
 
-	const error = await githubRest('repos/o/r').catch((err) => err);
+test('maps a rate limit to its own kind, never to a rejected token', async () => {
+	setToken('github', 'fine');
 
-	expect(error).toBeInstanceOf(GhError);
-	expect((error as GhError).kind).toBe('auth');
+	const limits: [number, unknown, Record<string, string>][] = [
+		[403, { message: 'API rate limit exceeded for user ID 1.' }, { 'x-ratelimit-remaining': '0' }],
+		[403, { message: 'You have exceeded a secondary rate limit.' }, {}],
+		[429, { message: 'Too many requests' }, { 'retry-after': '60' }]
+	];
+
+	for (const [status, body, headers] of limits) {
+		respond(status, body, headers);
+		expect(await failedKind()).toBe('rate-limit');
+	}
+});
+
+test('fails as a GhError when a 2xx body is not JSON', async () => {
+	globalThis.fetch = (async () => new Response('<html>busy</html>', { status: 200 })) as unknown as typeof fetch;
+	expect(await failedKind()).toBe('unknown');
 });
 
 test('reads the pull request head branch and commit', async () => {

@@ -1,7 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import type { AgentOAuthStatus } from '@recoder/shared';
 import { OpenCodeError, opencode } from '../agents/opencode/opencode';
-import { agentStatuses } from '../agents/registry';
+import { agentStatuses, forgetAgentModels } from '../agents/registry';
 import { trustedOrigin } from './trusted-origin';
 
 /** The agent CLIs: every one's status, then OpenCode's providers and sign-in. */
@@ -15,7 +16,7 @@ function fail(e: unknown, fallback: string) {
 	return { body: { error: e instanceof Error ? e.message : fallback }, status: status as 400 | 404 | 502 | 504 };
 }
 
-/** Every known agent: installed, version, sign-in state. `?refresh=1` checks again. */
+/** Every known agent: installed, version, sign-in state. `?refresh=1` checks again and lists the models afresh. */
 app.get('/', async (c) => c.json({ agents: await agentStatuses(c.req.query('refresh') === '1') }));
 
 app.get('/providers', async (c) => {
@@ -38,6 +39,7 @@ app.put('/providers/:id/key', async (c) => {
 
 	try {
 		await opencode.setKey(c.req.param('id'), parsed.data.key, parsed.data.inputs);
+		forgetAgentModels();
 
 		return c.json({ providers: await opencode.providers() });
 	} catch (e) {
@@ -50,6 +52,7 @@ app.put('/providers/:id/key', async (c) => {
 app.delete('/providers/:id', async (c) => {
 	try {
 		await opencode.remove(c.req.param('id'));
+		forgetAgentModels();
 
 		return c.json({ providers: await opencode.providers() });
 	} catch (e) {
@@ -75,10 +78,17 @@ app.post('/providers/:id/oauth', async (c) => {
 	}
 });
 
+/** A finished sign-in connected a provider, so the model list is listed again. */
+function signedIn(state: AgentOAuthStatus): AgentOAuthStatus {
+	if (state.status === 'complete') forgetAgentModels();
+
+	return state;
+}
+
 app.get('/oauth/:attempt', (c) => {
 	const state = opencode.attempt(c.req.param('attempt'));
 
-	return state ? c.json(state) : c.json({ error: 'That sign-in expired. Start again.' }, 404);
+	return state ? c.json(signedIn(state)) : c.json({ error: 'That sign-in expired. Start again.' }, 404);
 });
 
 app.post('/oauth/:attempt/code', async (c) => {
@@ -87,7 +97,7 @@ app.post('/oauth/:attempt/code', async (c) => {
 	if (!parsed.success) return c.json({ error: 'Paste the code.' }, 400);
 
 	try {
-		return c.json(await opencode.submitCode(c.req.param('attempt'), parsed.data.code));
+		return c.json(signedIn(await opencode.submitCode(c.req.param('attempt'), parsed.data.code)));
 	} catch (e) {
 		const { body, status } = fail(e, 'Sign-in failed.');
 

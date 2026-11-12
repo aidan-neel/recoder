@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { ModelRuntimeProfile } from '@recoder/shared';
+import { byCodePoint, type ModelRuntimeProfile } from '@recoder/shared';
 
 /** The value of every identity field that could not be learned. */
 export const UNKNOWN = 'unknown';
@@ -10,7 +10,14 @@ type Unknown = typeof UNKNOWN;
 export const NOT_RECORDED = 'not recorded';
 
 /** The caches the server keeps across reviews, each recorded with the version of its format. */
-export const SERVER_CACHES = ['intent', 'rule-ledger', 'baseline-cache', 'review-checkpoint'] as const;
+export const SERVER_CACHES = [
+	'intent',
+	'rule-ledger',
+	'baseline-cache',
+	'review-checkpoint',
+	'parsed-symbols',
+	'commit-prs'
+] as const;
 
 export type ServerCache = (typeof SERVER_CACHES)[number];
 
@@ -231,7 +238,7 @@ function canonical(value: unknown): string {
 		const entries = Object.entries(value).filter(([, child]) => child !== undefined);
 
 		return `{${entries
-			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+			.sort(([a], [b]) => byCodePoint(a, b))
 			.map(([key, child]) => `${JSON.stringify(key)}:${canonical(child)}`)
 			.join(',')}}`;
 	}

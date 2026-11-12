@@ -50,6 +50,7 @@ It imports `recoder.db`, its committed WAL contents, and these settings files wh
 - `auto-review.json`
 - `auto-review-state.json`
 - `dismissed-findings.json`
+- `finding-votes.json`
 
 Missing settings remain unset. An explicitly saved empty guidelines file remains empty.
 Legacy model settings pass through the same migration as local server startup.

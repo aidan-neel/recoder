@@ -1,6 +1,6 @@
+import { repoPaths, type RepoInventory } from '../repo-inventory/repo-inventory.js';
 import { languageFor } from './languages.js';
-import { mapLimit, readTracked } from './repo.js';
-import { symbolsOf } from './symbols.js';
+import { parseRepoFiles } from './parsed-files.js';
 import { isTestPath } from './test-files.js';
 import type { RepoMetricsBaseline, SymbolMetrics } from './types.js';
 
@@ -33,26 +33,20 @@ function evenSample<T>(items: T[], count: number): T[] {
 
 async function baselineFor(
 	root: string,
+	repo: RepoInventory,
 	language: string,
-	tracked: string[],
-	trackedSet: Set<string>,
 	signal: AbortSignal
 ): Promise<RepoMetricsBaseline | null> {
 	const files = evenSample(
-		tracked.filter((path) => languageFor(path) === language && !isTestPath(path)),
+		repoPaths(repo).filter((path) => languageFor(path) === language && !isTestPath(path)),
 		SAMPLE_FILES
 	);
 
-	const perFile = await mapLimit(files, 8, async (path) => {
-		if (signal.aborted) return [];
+	const parsed = await parseRepoFiles(root, repo, files, signal);
 
-		const source = await readTracked(root, path, trackedSet);
-		const symbols = source === null ? null : await symbolsOf(path, source);
-
-		return (symbols ?? []).filter(isMeasured).map((symbol) => symbol.metrics);
-	});
-
-	const metrics: SymbolMetrics[] = perFile.flat();
+	const metrics: SymbolMetrics[] = files.flatMap((path) =>
+		(parsed.get(path) ?? []).filter(isMeasured).map((symbol) => symbol.metrics)
+	);
 
 	if (!metrics.length) return null;
 
@@ -70,17 +64,16 @@ async function baselineFor(
 /** Each language's p95 symbol shape over a deterministic sample of the repo's non-test files. */
 export async function repoBaselines(
 	root: string,
+	repo: RepoInventory,
 	languages: string[],
-	tracked: string[],
 	signal: AbortSignal
 ): Promise<RepoMetricsBaseline[]> {
-	const trackedSet = new Set(tracked);
 	const baselines: RepoMetricsBaseline[] = [];
 
 	for (const language of [...new Set(languages)].sort()) {
 		if (signal.aborted) break;
 
-		const baseline = await baselineFor(root, language, tracked, trackedSet, signal);
+		const baseline = await baselineFor(root, repo, language, signal);
 
 		if (baseline) baselines.push(baseline);
 	}

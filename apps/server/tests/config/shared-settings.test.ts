@@ -22,6 +22,7 @@ import {
 	writeGlobalGuidelines
 } from '../../src/review/guidelines/guidelines';
 import { listDismissals, recordDismissal } from '../../src/review/guidelines/learned/dismissals';
+import { recordVote, topicTallies } from '../../src/review/guidelines/learned/votes';
 import { getStoredSettings, saveReviewSettings, setReviewOverrides } from '../../src/review/session/review-settings';
 
 const databaseUrl = process.env.TEST_DATABASE_URL;
@@ -88,6 +89,8 @@ if (!databaseUrl) {
 				title: 'Expected',
 				dismissedAt: 'now'
 			});
+
+			recordVote('repo', { findingKey: 'finding', topic: 'category:correctness', choice: 'dismissed', votedAt: 'now' });
 		});
 
 		await withSharedSettings(second, () => {
@@ -100,6 +103,7 @@ if (!databaseUrl) {
 			expect(readAutoReviewSettings().enabled).toBe(true);
 			expect(readWatchState().repos.repo.checkedAt).toBe('now');
 			expect(listDismissals('repo')[0]?.fingerprint).toBe('finding');
+			expect(topicTallies('repo').get('category:correctness')).toEqual({ useful: 0, dismissed: 1 });
 			clearToken('github');
 		});
 

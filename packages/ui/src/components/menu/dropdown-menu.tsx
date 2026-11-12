@@ -6,6 +6,7 @@ import { useContext, useState, type ComponentProps, type ReactNode } from 'react
 
 import { cn } from '../../lib/cn';
 import { MENU_SEPARATOR, MenuItemBody, MenuOpen, MenuPanel, menuItemRoot, type MenuItemProps } from './menu-parts';
+import { useOpened } from './use-opened';
 
 interface DropdownMenuProps {
 	open?: boolean;
@@ -68,7 +69,10 @@ interface DropdownMenuContentProps {
 	children: ReactNode;
 }
 
-/** The menu panel: at least 180px or the trigger's width, fading and scaling in from the trigger. */
+/**
+ * The menu panel: at least 180px or the trigger's width, fading and scaling
+ * in from the trigger. It renders nothing until the menu first opens.
+ */
 export function DropdownMenuContent({
 	align = 'start',
 	side = 'bottom',
@@ -77,6 +81,9 @@ export function DropdownMenuContent({
 	children
 }: DropdownMenuContentProps) {
 	const open = useContext(MenuOpen);
+	const opened = useOpened(open);
+
+	if (!opened) return null;
 
 	return (
 		<AnimatePresence>

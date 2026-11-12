@@ -5,10 +5,7 @@ import { Collapsible as CollapsiblePrimitive } from 'radix-ui';
 import { createContext, use, useId, useState, type ComponentProps, type ReactNode } from 'react';
 
 import { cn } from '../../lib/cn';
-import { DURATION } from '../../motion/presets';
-
-/** The disclosure curve: a standard ease that unfolds the body without overshoot. */
-const EASE_DISCLOSE = [0.4, 0, 0.2, 1] as const;
+import { DURATION, EASE_OUT } from '../../motion/presets';
 
 interface CollapsibleState {
 	open: boolean;
@@ -77,9 +74,10 @@ interface CollapsibleContentProps {
 }
 
 /**
- * The body. Its height unfolds from 0 to auto (240ms) while it fades in
- * (180ms). It mounts on first open and then stays mounted, so streamed text
- * grows in place and a closed body keeps its state. Reduced motion snaps.
+ * The body. Its height unfolds from 0 to auto (200ms, the kit's ease-out)
+ * while it fades in (180ms). It mounts on first open and then stays mounted,
+ * so streamed text grows in place and a closed body keeps its state. Reduced
+ * motion snaps.
  */
 export function CollapsibleContent({ children, className }: CollapsibleContentProps) {
 	const { open, contentId } = useCollapsible();
@@ -97,8 +95,8 @@ export function CollapsibleContent({ children, className }: CollapsibleContentPr
 			initial={false}
 			animate={{ height: open ? 'auto' : 0, opacity: open ? 1 : 0 }}
 			transition={{
-				height: { duration: reduced ? 0 : DURATION.disclose, ease: EASE_DISCLOSE },
-				opacity: { duration: reduced ? 0 : DURATION.toggle, ease: 'easeOut' }
+				height: { duration: reduced ? 0 : DURATION.disclose, ease: EASE_OUT },
+				opacity: { duration: reduced ? 0 : DURATION.toggle, ease: EASE_OUT }
 			}}
 			className="overflow-hidden"
 		>

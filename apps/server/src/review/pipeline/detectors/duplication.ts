@@ -3,7 +3,8 @@ import { isTestPath } from '../change-model/test-files.js';
 import { normalizedTokens } from '../change-model/tokens.js';
 import { classifyPath } from '../review-scope.js';
 import { compareText, type AddedLines } from './changed-lines.js';
-import { MAX_FILE_BYTES, readFilesAt, type TrackedFile } from './repo-files.js';
+import { MAX_FILE_BYTES, readFilesAt } from '../repo-inventory/blobs.js';
+import type { RepoFile } from '../repo-inventory/repo-inventory.js';
 import { windowHashes } from './window-hash.js';
 import type { DetectorResult } from './types.js';
 
@@ -43,7 +44,7 @@ export interface DuplicationInput {
 	added: AddedLines;
 	/** Changed files' text at the PR head. */
 	heads: Map<string, string>;
-	tracked: TrackedFile[];
+	tracked: Pick<RepoFile, 'path' | 'size'>[];
 }
 
 interface Tokenized {
@@ -76,7 +77,7 @@ function dirOf(path: string): string {
  * Repo files in the change's languages, same-folder files first, the rest in
  * hash order: a capped sample that is the same on every run of the same commit.
  */
-function sampleFiles(tracked: TrackedFile[], changed: string[]): string[] {
+function sampleFiles(tracked: DuplicationInput['tracked'], changed: string[]): string[] {
 	const families = new Set(changed.map(family));
 	const dirs = new Set(changed.map(dirOf));
 	const skip = new Set(changed);

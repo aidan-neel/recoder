@@ -1,15 +1,13 @@
 import type { SSEStreamingApi } from 'hono/streaming';
-import type { Review } from '@recoder/shared';
 import type { PostgresEvents } from '../../storage/postgres-events';
-import { EVENT_HEARTBEAT_MS, ReviewEventPayloads } from './event-payload';
+import { EVENT_HEARTBEAT_MS, type ReviewEventPayloads } from './event-payload';
 
 export async function streamSharedReviewEvents(
 	stream: SSEStreamingApi,
-	review: Review,
+	payloads: ReviewEventPayloads,
 	events: PostgresEvents
 ): Promise<void> {
 	let cursor = 0;
-	const payloads = new ReviewEventPayloads(review);
 	let lastHeartbeat = Date.now();
 	let wake: (() => void) | undefined;
 
@@ -30,7 +28,7 @@ export async function streamSharedReviewEvents(
 		await snapshot();
 
 		while (!stream.aborted) {
-			const pending = await events.after(review.id, cursor);
+			const pending = await events.after(payloads.reviewId, cursor);
 
 			if (pending[0] && pending[0].sequence > cursor + 1) await snapshot();
 			else {

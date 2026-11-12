@@ -151,22 +151,29 @@ When a model's plan runs out (ChatGPT's cap, a hosted provider's 429 or 402 afte
 Recoder is an everyday tool: menus and modals open thousands of times a day,
 so motion confirms an action and gets out of the way. Feedback is quick but smooth;
 menus and modals settle in from a slight scale and blur, and only movement that
-explains a change (the tab pill, a panel unfolding) gets a short ease. The tokens
-live in `app.css` (`--dur-*`, and Sivir's `--motion-*`).
+explains a change (the tab pill, a panel unfolding) gets a short ease. apps/web
+keeps the tokens in `app.css` (`--dur-*`, and Sivir's `--motion-*`); the React
+kit keeps them in `packages/ui/src/styles/tokens.css` and `motion/presets.ts`.
 
-| Token | Value |
-|---|---|
-| `hover` | color/background 100ms ease-out |
-| `press` | none: controls never scale when pressed |
-| `highlight` | Sivir menus: travels between items over 160ms; our own lists snap, 100ms opacity fade |
-| `toggle` | 180ms: chevrons, switches, label swaps, row actions |
-| `tab-pill` | 240ms cubic-bezier(.3,.7,.2,1); segmented thumbs too |
-| `disclose` | 240ms height for panels and drawers that unfold |
-| `menu` | 130ms fade + 3px rise in from 0.95 scale and 2px blur, 80ms out |
-| `modal` | 150ms fade + 3px rise in from 0.95 scale and 2px blur, 70ms out |
-| `enter` | None. Content replaces its skeleton in place with no fade, rise or stagger |
-| `toast` | 220ms rise, 5s dwell |
-| `shimmer` | 1.6s linear (text), 1.4s (skeleton) |
-| `skeleton` | Hidden for the first 200ms, so data that lands sooner never flashes one |
-| `spinner` | 0.9s linear |
-| `reduced-motion` | transitions snap to 1ms; spinners stay |
+| Token | React kit (`packages/ui`) | apps/web |
+|---|---|---|
+| `hover` | color/background 100ms ease-out | Same |
+| `press` | none: controls never scale when pressed | Same |
+| `highlight` | Menus: travels between items over 120ms. Our own lists snap, 100ms opacity fade | Sivir menus travel over 160ms. Our own lists snap, 100ms opacity fade |
+| `toggle` | 180ms: chevrons, switches, label swaps, row actions | Same |
+| `tab-pill` | A spring with no overshoot: a 100px move lands in about 230ms. Segmented thumbs too. A pill sits still through its control's first paint and travels from the frame after | 240ms cubic-bezier(.3,.7,.2,1). Segmented thumbs too |
+| `disclose` | 200ms height for panels and drawers that unfold | 240ms height |
+| `menu` | 130ms fade in from 0.95 scale and 2px blur, with no rise; 80ms out | The same, plus a 3px rise (`--motion-menu-y`) |
+| `modal` | 150ms fade in from 0.95 scale and 2px blur, with no rise; 70ms out | The same, plus a 3px rise (`--motion-modal-y`) |
+| `tooltip` | 100ms fade in from 0.95 scale, with no blur and no rise; 80ms out | Sivir's own |
+| `enter` | None. Content replaces its skeleton in place with no fade, rise or stagger | Same |
+| `toast` | Rises 10px over 150ms, and drops 10px as it leaves | Rises from below over 320ms, and leaves over 240ms |
+| `shimmer` | Text: a 1.6s opacity swell; the label rests dim and lights to full once a pass. Skeleton: a light sweeps across every 1.4s for 7 passes (about 10s), then the bar rests | Text: a 1.6s linear sweep of light. Skeleton: a light sweeps across every 1.4s and never rests |
+| `skeleton` | Each bar is hidden for its first 120ms (`--skeleton-delay`), then fades in over 140ms, so data that lands sooner never flashes one. In apps/app a full page load waits 240ms from the first paint, and a skeleton once seen stays about 250ms before content replaces it | Each bar is hidden for its first 200ms, then shows with no fade |
+| `spinner` | 0.9s linear | Same |
+| `reduced-motion` | CSS transitions snap to 1ms; the motion presets keep only their fade, 80ms at most; spinners stay | Transitions snap to 1ms; spinners stay |
+
+apps/app and apps/web keep a toast up for 5s, an error for 6s, or 10s when
+it has a button. apps/app also times its skeletons per loading episode, waits
+longer on a full page load, and keeps a skeleton it has shown on screen long
+enough to read; its `DESIGN.md` has the rules.

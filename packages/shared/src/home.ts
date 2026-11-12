@@ -30,10 +30,12 @@ export interface HomeBriefResponse {
 	model: string;
 }
 
-/** Latest review per `repoId#pr`; a real review outranks a newer empty draft. */
-export function latestReviews(reviews: Review[]): Map<string, Review> {
-	const latest = new Map<string, Review>();
-	const rank = (review: Review) => (review.status === 'draft' ? 0 : 1);
+/** Latest review per `repoId#pr`; a real review outranks a newer empty draft. Takes full reviews or list items. */
+export function latestReviews<T extends Pick<Review, 'repoId' | 'prNumber' | 'status' | 'updatedAt'>>(
+	reviews: T[]
+): Map<string, T> {
+	const latest = new Map<string, T>();
+	const rank = (review: T) => (review.status === 'draft' ? 0 : 1);
 
 	for (const review of reviews) {
 		const key = `${review.repoId}#${review.prNumber}`;

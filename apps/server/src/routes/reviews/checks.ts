@@ -41,7 +41,11 @@ async function reviewChecks(review: Review, repo: Repo) {
 	return { ref: head.ref, provider, checks: await fetchChecks(repo, head.sha) };
 }
 
-/** CI checks for the PR head. */
+/**
+ * CI checks for the PR head. A forge that refused says why in `kind` (`auth`
+ * for a rejected token, `rate-limit` while GitHub throttles requests), as the
+ * pulls route does.
+ */
 app.get('/:id/checks', async (c) => {
 	const review = await requireReview(c);
 
@@ -54,7 +58,7 @@ app.get('/:id/checks', async (c) => {
 	try {
 		return c.json(await checksCache.get(review.id, () => reviewChecks(review, repo)));
 	} catch (err) {
-		if (err instanceof GhError) return c.json({ error: err.message }, 502);
+		if (err instanceof GhError) return c.json({ error: err.message, kind: err.kind }, 502);
 		throw err;
 	}
 });

@@ -96,12 +96,15 @@
 	--dur-highlight: 100ms;
 	--dur-toggle: 180ms;
 	--dur-pill: 240ms;
-	--dur-disclose: 240ms;
+	--dur-disclose: 200ms;
 	--dur-menu: 150ms;
 	--dur-swap: 140ms;
 	--dur-shimmer: 1.6s;
 	--dur-skeleton: 1.4s;
-	--skeleton-delay: 200ms;
+	/* The skeleton light passes this many times (about 10s), then rests, so a hung load stops moving. */
+	--skeleton-passes: 7;
+	/* A skeleton stays invisible this long, so a fast load never flashes one. */
+	--skeleton-delay: 120ms;
 	/* A quiet "still working" note waits this long, so a fast answer never shows it. */
 	--late-delay: 400ms;
 	--dur-spinner: 0.9s;

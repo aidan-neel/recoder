@@ -43,9 +43,12 @@ function trackInput(): () => void {
 	};
 }
 
-/** A short fade with a 0.96 scale: lighter than a menu, since tooltips come and go as the pointer travels. */
+/**
+ * A fade with the menus' 0.95 scale and no blur: a small hint that comes and
+ * goes as the pointer travels needs no blur, and no rise.
+ */
 const tooltipMotion: Variants = {
-	closed: { opacity: 0, scale: 0.96, transition: { duration: DURATION.menuOut, ease: EASE_IN } },
+	closed: { opacity: 0, scale: 0.95, transition: { duration: DURATION.menuOut, ease: EASE_IN } },
 	open: { opacity: 1, scale: 1, transition: { duration: DURATION.hover, ease: EASE_OUT } }
 };
 

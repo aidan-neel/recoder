@@ -15,18 +15,25 @@ import { MenuHighlight } from './menu-highlight';
  */
 export const MenuOpen = createContext(false);
 
-/** The floating surface menus, selects and their lists share: radius 12, menu background, menu shadow. */
-const PANEL = cn(
+/**
+ * The floating surface menus, selects and their lists share: radius 12, menu
+ * background, menu shadow. Its classes never conflict, so it is a plain
+ * string and loading the module merges nothing.
+ */
+const PANEL = [
 	'relative z-[130] flex min-w-[180px] flex-col gap-px rounded-[12px] bg-menu p-1 text-fg outline-none',
 	'thin-scroll overflow-y-auto overscroll-contain shadow-(--shadow-menu)'
-);
+].join(' ');
 
-/** A 30px menu row. Items carry no background of their own; the traveling highlight sits under them. */
-export const MENU_ITEM = cn(
+/**
+ * A 30px menu row. Items carry no background of their own; the traveling
+ * highlight sits under them. A plain string, like `PANEL`.
+ */
+export const MENU_ITEM = [
 	'flex h-[30px] shrink-0 cursor-default items-center gap-3 rounded-[7px] px-2.5',
 	'text-[13px] leading-[18px] text-fg outline-none select-none',
 	'data-disabled:pointer-events-none data-disabled:opacity-40 data-[tone=danger]:text-danger'
-);
+].join(' ');
 
 /** A hairline between groups of items. */
 export const MENU_SEPARATOR = 'mx-1 my-[3px] h-px shrink-0 bg-line-control';

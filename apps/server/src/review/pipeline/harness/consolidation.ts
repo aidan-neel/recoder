@@ -1,4 +1,5 @@
 import type { Finding } from '@recoder/shared';
+import { withTopics } from '../../guidelines/learned/topics.js';
 import { consolidateFindings } from '../consolidate-merge.js';
 import { orchestratorSays, publishCandidates, type ReviewRun } from './context.js';
 
@@ -13,9 +14,13 @@ function announceNothingFound(run: ReviewRun): void {
 	orchestratorSays(run.events, 'message_nothing_found', 'I finished without finding anything worth flagging.');
 }
 
-/** The publishable candidates, merged by place without a model, so the same candidates always give the same findings. */
+/**
+ * The publishable candidates, merged by place without a model, so the same
+ * candidates always give the same findings, each with its feedback topic and
+ * quieted where people in the repository keep dismissing that topic.
+ */
 export function confirmedFindings(run: ReviewRun): Finding[] {
-	return consolidateFindings(run.candidates, run.inventory);
+	return withTopics(consolidateFindings(run.candidates, run.inventory), run.ledger, run.topicTallies);
 }
 
 /**

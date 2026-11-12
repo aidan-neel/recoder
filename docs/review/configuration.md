@@ -99,6 +99,8 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 
 **RECODER_DATA_DIR**: Directory for the SQLite database, saved settings, forge tokens and caches. Default `~/.recoder/data`. Read by `serverDataDir` in `apps/server/src/util/data-dir.ts`. Do not read the settings or token files in it: they hold keys.
 
+The fact cache is `cache/facts.db` in the data directory. It holds parsed declarations per file blob and merged commit-to-PR answers, for every repository. You can delete it at any time; reviews fill it again. See the glossary.
+
 **RECODER_WORKDIR**: Root for repo checkouts (`<workdir>/repos/...`) and the command runner's default working directory. Default `/tmp/recoder-work`. Parsed in `apps/server/src/env.ts`. Used in `apps/server/src/sandbox/sandbox.ts` and `apps/server/src/review/session/review-checkout.ts`.
 
 **RECODER_REPLAY_BYTES**: Total size of kept replay checkpoints. A passed review keeps its last checkpoint for replay. Past this size the oldest are dropped first. Default 512 MiB. `0` or a non-number gives the default. Read by `keepForReplay` in `apps/server/src/store.ts`.

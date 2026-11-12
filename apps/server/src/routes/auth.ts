@@ -41,17 +41,21 @@ async function gitlabStatus(): Promise<ProviderAuth> {
 
 const statusCache = new TtlCache<{ github: ProviderAuth; gitlab: ProviderAuth }>(30_000);
 
+/** Both forges' sign-in state, checked side by side. */
+async function forgeStatus(): Promise<{ github: ProviderAuth; gitlab: ProviderAuth }> {
+	const [github, gitlab] = await Promise.all([githubStatus(), gitlabStatus()]);
+
+	return { github, gitlab };
+}
+
 const app = new Hono();
 
-app.get('/status', async (c) =>
-	c.json(
-		await statusCache.get('status', async () => {
-			const [github, gitlab] = await Promise.all([githubStatus(), gitlabStatus()]);
-
-			return { github, gitlab };
-		})
-	)
-);
+/**
+ * Each forge's sign-in state. The CLI checks take a while, so once the last
+ * answer is old it is still served at once while a fresh check runs behind
+ * it. Saving or clearing a token clears the cache, so that change is never served stale.
+ */
+app.get('/status', async (c) => c.json(await statusCache.stale('status', forgeStatus)));
 
 app.post('/token', async (c) => {
 	const body = await parseBody(c, tokenSchema);

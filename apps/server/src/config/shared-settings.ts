@@ -11,7 +11,8 @@ const settingNameSchema = z.enum([
 	'global-guidelines',
 	'auto-review',
 	'watch-state',
-	'dismissals'
+	'dismissals',
+	'finding-votes'
 ]);
 
 export type SharedSettingName = z.infer<typeof settingNameSchema>;

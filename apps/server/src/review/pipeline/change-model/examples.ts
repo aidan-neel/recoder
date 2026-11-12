@@ -1,6 +1,8 @@
+import { repoPaths, type RepoInventory } from '../repo-inventory/repo-inventory.js';
 import { languageFor } from './languages.js';
-import { byCodePoint, mapLimit, readTracked } from './repo.js';
-import { symbolsOf, type ParsedSymbol } from './symbols.js';
+import { parseRepoFiles } from './parsed-files.js';
+import { byCodePoint, mapLimit } from './repo.js';
+import type { ParsedSymbol } from './symbols.js';
 import { isTestPath } from './test-files.js';
 import type { SymbolRange } from './types.js';
 
@@ -28,29 +30,23 @@ function roleOf(path: string): string {
 /** The same-language files in each folder, parsed once each; keyed by folder, filled in sorted order. */
 async function folderSymbols(
 	root: string,
+	repo: RepoInventory,
 	targets: Target[],
-	tracked: string[],
-	trackedSet: Set<string>,
 	signal: AbortSignal
 ): Promise<Map<string, ParsedSymbol[]>> {
 	const keys = [...new Set(targets.map((target) => `${target.language}\0${folderOf(target.file)}`))].sort(byCodePoint);
+	const paths = repoPaths(repo);
 
 	const parsed = await mapLimit(keys, 4, async (key) => {
 		const [language, folder] = key.split('\0');
 
-		const files = tracked
+		const files = paths
 			.filter((path) => folderOf(path) === folder && languageFor(path) === language)
 			.slice(0, FILES_PER_FOLDER);
 
-		const perFile = await mapLimit(files, 4, async (path) => {
-			if (signal.aborted) return [];
+		const symbols = await parseRepoFiles(root, repo, files, signal);
 
-			const source = await readTracked(root, path, trackedSet);
-
-			return source === null ? [] : ((await symbolsOf(path, source)) ?? []);
-		});
-
-		return perFile.flat();
+		return files.flatMap((path) => symbols.get(path) ?? []);
 	});
 
 	return new Map(keys.map((key, index) => [key, parsed[index]]));
@@ -75,12 +71,12 @@ function rank(target: Target, candidate: ParsedSymbol): number[] {
  */
 export async function findExamples(
 	root: string,
+	repo: RepoInventory,
 	targets: Target[],
 	changed: Set<string>,
-	tracked: string[],
 	signal: AbortSignal
 ): Promise<SymbolRange[][]> {
-	const byFolder = await folderSymbols(root, targets, tracked, new Set(tracked), signal);
+	const byFolder = await folderSymbols(root, repo, targets, signal);
 
 	return targets.map((target) => {
 		const pool = byFolder.get(`${target.language}\0${folderOf(target.file)}`) ?? [];

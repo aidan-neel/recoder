@@ -116,6 +116,13 @@ type SettingsIntent = { kind: 'connect'; provider: Provider } | { kind: 'browse-
 /** Last-seen settings, so pickers paint model names before the server answers. */
 const CACHE_KEY = 'model-settings';
 
+/** The answer's models, plus the loaded ones of each agent the answer has none of. */
+function keepUnlisted(answer: ModelEntry[], loaded: ModelEntry[]): ModelEntry[] {
+	const listed = new Set(answer.map((entry) => entry.agent));
+
+	return [...answer, ...loaded.filter((entry) => !listed.has(entry.agent))];
+}
+
 /** Global open state + cached config for the model settings modal. */
 class ModelSettingsUi {
 	open = $state(false);
@@ -237,12 +244,20 @@ class ModelSettingsUi {
 		writeCache(CACHE_KEY, cacheableModelSettings(config));
 	}
 
+	/**
+	 * Saves a patch and takes the server's answer. The answer can lack an agent
+	 * whose listing was still slow when it was sent, so once a load has brought
+	 * that agent's models they stay.
+	 */
 	async save(patch: ModelSettingsPatch): Promise<boolean> {
 		this.saving = true;
 		this.error = null;
 
 		try {
-			this.apply(await serverApi.saveModelSettings(patch));
+			const next = await serverApi.saveModelSettings(patch);
+			const loaded = this.fresh ? this.config?.models : undefined;
+
+			this.apply(loaded ? { ...next, models: keepUnlisted(next.models, loaded) } : next);
 
 			return true;
 		} catch (e) {

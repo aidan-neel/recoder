@@ -3,7 +3,8 @@ import { addedLines, compareResults, enclosingSymbol, type AddedLines } from './
 import { selectionReports } from '../lenses/lenses.js';
 import { diagnosticResults } from './diagnostics.js';
 import { duplicationResults } from './duplication.js';
-import { readFilesAt, trackedFiles, type TrackedFile } from './repo-files.js';
+import { readFilesAt } from '../repo-inventory/blobs.js';
+import type { RepoFile } from '../repo-inventory/repo-inventory.js';
 import { ruleCheckResults } from './rule-check.js';
 import { complexityResults, deadCodeResults } from './symbols.js';
 import type { DetectorId, DetectorResult } from './types.js';
@@ -33,22 +34,23 @@ const PRIORITY: DetectorId[] = [
 	'complexity'
 ];
 
-/** The PR head's tracked files and the changed files' text there; empty without a checkout or when git fails. */
+/** The PR head's files and the changed files' text there; empty without a checkout, a repo listing, or when git fails. */
 async function readHead(
 	run: ReviewRun,
 	added: AddedLines
-): Promise<{ tracked: TrackedFile[]; heads: Map<string, string> }> {
+): Promise<{ tracked: RepoFile[]; heads: Map<string, string> }> {
+	const { repo } = run;
 	const revision = run.input.revision;
 
-	if (!revision) return { tracked: [], heads: new Map() };
+	if (!revision || !repo) return { tracked: [], heads: new Map() };
 
-	const signal = run.controller.signal;
+	const changed = repo.files.filter((file) => added.has(file.path)).map((file) => file.path);
 
 	try {
-		const tracked = await trackedFiles(revision.checkoutPath, revision.headSha, signal);
-		const changed = tracked.filter((file) => added.has(file.path)).map((file) => file.path);
-
-		return { tracked, heads: await readFilesAt(revision.checkoutPath, revision.headSha, changed, signal) };
+		return {
+			tracked: repo.files,
+			heads: await readFilesAt(revision.checkoutPath, revision.headSha, changed, run.controller.signal)
+		};
 	} catch {
 		return { tracked: [], heads: new Map() };
 	}

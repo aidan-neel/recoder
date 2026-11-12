@@ -1,6 +1,6 @@
 'use client';
 
-import { TooltipProvider } from '@recoder/ui';
+import { preloadHighlighter, TooltipProvider } from '@recoder/ui';
 import { MotionConfig, useReducedMotion } from 'motion/react';
 import { useCallback, useLayoutEffect, useState } from 'react';
 
@@ -31,7 +31,10 @@ interface DemoSurfaceProps {
  * and handoff on the app's own stores, run by the demo script while the
  * window is on screen. Reduced motion shows one still frame, the overview
  * with the verdict. The stores only answer in the browser, so the server
- * paints the empty frame and this fills it after mount, fading in once.
+ * paints the empty frame and this fills it after mount, fading in once. The
+ * code highlighter and the TypeScript grammar the sample's code is in start
+ * loading on mount, so the review's code paints in color from its first
+ * frame instead of plain and then colored.
  */
 export function DemoSurface({ scale, frame }: DemoSurfaceProps) {
 	const reduced = useReducedMotion() ?? false;
@@ -46,6 +49,8 @@ export function DemoSurface({ scale, frame }: DemoSurfaceProps) {
 	);
 
 	useLayoutEffect(() => {
+		preloadHighlighter(['typescript']);
+
 		const demo = createDemo((patch) => setView((current) => ({ ...current, ...patch })));
 
 		if (reduced) {

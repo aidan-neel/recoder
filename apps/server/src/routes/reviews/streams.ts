@@ -45,12 +45,14 @@ async function expandedFiles(diff: string, sandboxPath: string | null): Promise<
  * Stream a review's events to one client: a snapshot first, then every live
  * event, then a heartbeat every few seconds until the client leaves. It
  * subscribes before the snapshot's write finishes so no update falls between
- * them, and every write goes through one queue to keep them in order.
+ * them, and every write goes through one queue to keep them in order. Without
+ * `tools`, snapshots leave out the tool calls; each tool event still arrives.
  */
-async function streamReviewEvents(stream: SSEStreamingApi, review: Review): Promise<void> {
-	if (sharedEvents) return streamSharedReviewEvents(stream, review, sharedEvents);
+async function streamReviewEvents(stream: SSEStreamingApi, review: Review, tools: boolean): Promise<void> {
+	const payloads = new ReviewEventPayloads(review, tools);
 
-	const payloads = new ReviewEventPayloads(review);
+	if (sharedEvents) return streamSharedReviewEvents(stream, payloads, sharedEvents);
+
 	let writes = Promise.resolve();
 	let failure: { error: unknown } | undefined;
 	let wake: (() => void) | undefined;
@@ -134,14 +136,15 @@ app.get('/:id/files', async (c) => {
 	return c.body(body, 200, { 'content-type': 'application/json; charset=utf-8' });
 });
 
-/** Live pipeline events (fetch/sandbox/agent progress) as server-sent events. */
+/** Live pipeline events (fetch/sandbox/agent progress) as server-sent events. `?tools=0` leaves tool calls out of snapshots. */
 app.get('/:id/events', async (c) => {
 	const review = await requireReview(c);
 
 	if (review instanceof Response) return review;
 	c.header('X-Accel-Buffering', 'no');
 
-	const response = streamSSE(c, (stream) => streamReviewEvents(stream, review));
+	const tools = c.req.query('tools') !== '0';
+	const response = streamSSE(c, (stream) => streamReviewEvents(stream, review, tools));
 
 	response.headers.set('Cache-Control', 'no-cache, no-transform');
 

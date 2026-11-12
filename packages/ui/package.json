@@ -8,6 +8,18 @@
 	],
 	"exports": {
 		".": "./src/index.ts",
+		"./button": "./src/components/button.tsx",
+		"./cn": "./src/lib/cn.ts",
+		"./motion": "./src/motion/presets.ts",
+		"./skeleton": "./src/components/display/skeleton.tsx",
+		"./spinner": "./src/components/spinner.tsx",
+		"./status-notice": "./src/components/display/status-notice.tsx",
+		"./toast": "./src/components/toast.tsx",
+		"./overlay": "./src/components/overlay/index.ts",
+		"./menu": "./src/components/menu/index.ts",
+		"./form": "./src/components/form/index.ts",
+		"./display": "./src/components/display/index.ts",
+		"./content": "./src/components/content/index.ts",
 		"./styles.css": "./src/styles/index.css",
 		"./px-to-rem": "./px-to-rem.ts"
 	},

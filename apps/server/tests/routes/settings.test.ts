@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, expect, test } from 'bun:test';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { app } from '../../src/app';
 import {
@@ -12,24 +11,9 @@ import {
 	setReviewOverrides
 } from '../../src/review/session/review-settings';
 import { configForOrchestrator, configForSubagent, isReviewConfigured } from '../../src/models/models';
+import { isolateDataDir, isolateSettings } from '../helpers/settings-env';
 
-const ENV_KEYS = ['RECODER_REVIEW_BASE_URL', 'RECODER_REVIEW_API_KEY', 'RECODER_REVIEW_MODEL', 'RECODER_DATA_DIR'];
-const savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]));
-
-afterEach(() => {
-	for (const k of ENV_KEYS) {
-		if (savedEnv[k] === undefined) delete process.env[k];
-		else process.env[k] = savedEnv[k];
-	}
-
-	setReviewOverrides({});
-});
-
-function isolateDataDir(): void {
-	process.env.RECODER_DATA_DIR = mkdtempSync(join(tmpdir(), 'recoder-settings-'));
-}
-
-beforeEach(isolateDataDir);
+isolateSettings();
 
 describe('review settings', () => {
 	test('orchestrator and specialist models route independently and survive reload', async () => {

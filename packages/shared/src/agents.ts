@@ -22,6 +22,11 @@ export interface AgentStatus {
 	apiKeySource?: string | null;
 }
 
+/** Installed and running, and signed in when the CLI has its own account. */
+export function agentReady(status: AgentStatus): boolean {
+	return status.installed && !status.error && status.signedIn !== false;
+}
+
 /** One way to sign in to a provider, as the agent describes it. */
 export interface AgentAuthMethod {
 	/** Index the agent expects back. */
