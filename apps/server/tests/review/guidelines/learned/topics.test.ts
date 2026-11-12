@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import type { Finding } from '@recoder/shared';
-import { rankRules, ruleTopicId, withTopics } from '../../../../src/review/guidelines/learned/topics';
+import { isDismissedOften, rankRules, ruleTopicId, withTopics } from '../../../../src/review/guidelines/learned/topics';
 import type { RuleLedger } from '../../../../src/review/guidelines/ledger/types';
 import type { TopicTally } from '../../../../src/review/guidelines/learned/votes';
 
@@ -26,18 +26,23 @@ const finding = (overrides: Partial<Finding>): Finding => ({
 
 const tallies = (entries: Record<string, TopicTally>) => new Map(Object.entries(entries));
 
-test('a topic people keep dismissing is quieted, and one they also act on is not', () => {
+test('a topic is quieted once a person approves it, and votes alone never quiet one', () => {
 	const [quiet, kept] = withTopics(
 		[finding({}), finding({ id: 'f2', category: 'dead-code', smell: undefined })],
 		ledger,
 		tallies({
-			'smell:magic-value': { useful: 0, dismissed: 3 },
-			'category:dead-code': { useful: 1, dismissed: 3 }
+			'smell:magic-value': { useful: 0, dismissed: 1, quietApproved: true },
+			'category:dead-code': { useful: 0, dismissed: 10 }
 		})
 	);
 
 	expect(quiet.topic).toEqual({ id: 'smell:magic-value', label: 'Magic value', quieted: true });
 	expect(kept.topic).toEqual({ id: 'category:dead-code', label: 'Dead code' });
+});
+
+test('a topic people keep dismissing is dismissed often, and one they also act on is not', () => {
+	expect(isDismissedOften({ useful: 0, dismissed: 3 })).toBe(true);
+	expect(isDismissedOften({ useful: 1, dismissed: 3 })).toBe(false);
 });
 
 test('a finding a run proved is never quieted', () => {
@@ -50,7 +55,7 @@ test('a finding a run proved is never quieted', () => {
 			})
 		],
 		ledger,
-		tallies({ 'category:correctness': { useful: 0, dismissed: 10 } })
+		tallies({ 'category:correctness': { useful: 0, dismissed: 10, quietApproved: true } })
 	);
 
 	expect(proven.topic?.quieted).toBeUndefined();
