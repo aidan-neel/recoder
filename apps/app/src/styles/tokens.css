@@ -1,8 +1,7 @@
 /*
  * The app's palette. The kit's tokens keep their names and get neutral values:
  * near-black surfaces, hairlines of white, one cream primary and one azure
- * accent. Scoped to `.app-skin` (on <html> here, on the demo's wrapper in
- * apps/site), so the site around a demo keeps the kit's own values.
+ * accent. Scoped to `.app-skin`, on <html> here and in apps/site.
  */
 .app-skin {
 	color-scheme: dark;

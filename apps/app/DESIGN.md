@@ -28,7 +28,7 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   tab strip, card or scroll area. When the kit lacks a piece that two places
   need, add it to `packages/ui`, not to the app.
 - The kit's tokens keep their names. `src/styles/tokens.css` gives them the
-  app's values under `.app-skin` (on `<html>` here, on the demo's wrapper in
+  app's values under `.app-skin` (on `<html>` here and in
   apps/site), in dark and in light. Components use tokens, never raw hex or
   raw durations.
 - The kit's control CSS sits in `@layer components`, so a `className` utility

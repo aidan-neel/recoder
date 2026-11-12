@@ -144,6 +144,11 @@ interface IconEdges {
  * take less padding. An icon is an element with no children of its own (a
  * lucide icon, a keycap, a dot); an element that wraps a label is text. With
  * `asChild` the content is the child link's own children.
+ *
+ * The children are read as React elements, so a button with an icon must be
+ * rendered from a client component: across the server component boundary an
+ * icon arrives as a reference that the server and the browser read
+ * differently, and hydration fails.
  */
 function iconEdges(children: ReactNode, asChild: boolean): IconEdges {
 	const content = isWrapper(children) && asChild ? children.props.children : children;
