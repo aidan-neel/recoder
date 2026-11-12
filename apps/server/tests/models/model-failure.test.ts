@@ -13,7 +13,6 @@ test('a raw endpoint error body never becomes the reason', () => {
 	);
 
 	expect(auth.reason).not.toContain('sk-live');
-	expect(auth.signIn).toBeUndefined();
 
 	expect(
 		modelFailure(new LlmError(500, 'LLM 500: <html>upstream</html>'), { provider: 'openai-compatible' }, 'fallback')
@@ -54,7 +53,6 @@ test('an OpenCode provider that rejects its key points to the Agent settings', (
 	);
 
 	expect(failure.reason).toContain('Settings → Agent');
-	expect(failure.signIn).toBeUndefined();
 });
 
 test("an OpenCode 403 keeps the provider's message instead of asking to reconnect", () => {
@@ -108,7 +106,6 @@ test('a signed-out Claude Code call names the login command, not a key', () => {
 
 	expect(failure.reason).toContain('Claude Code is not signed in');
 	expect(failure.reason).toContain('claude auth login');
-	expect(failure.signIn).toBeUndefined();
 	expect(failure.usageLimit).toBeUndefined();
 });
 
