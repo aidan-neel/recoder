@@ -1,6 +1,6 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import { DISMISSAL_REASONS, type FindingDecision, type FindingDecisionInput } from '@recoder/shared';
+import { DISMISSAL_REASONS, type Finding, type FindingDecision, type FindingDecisionInput } from '@recoder/shared';
 import {
 	forgetDecision,
 	learnFromDecision,
@@ -8,6 +8,7 @@ import {
 } from '../../review/guidelines/learned/decision-learning';
 import { learningKeys } from '../../review/guidelines/learned/finding-key';
 import { earlierCopies } from '../../review/history/history';
+import { settingsTransaction, storageTransaction } from '../../storage/backend';
 import { db, reviewDiffs } from '../../store';
 import { parseBody } from '../parse-body';
 import { requireFinding } from './shared';
@@ -60,8 +61,18 @@ function decisionOf(input: FindingDecisionInput): FindingDecision {
 	};
 }
 
-/** Saves `decision` on the review's finding, or clears it when undefined, in one read-modify-write. */
-async function saveDecision(reviewId: string, findingId: string, decision: FindingDecision | undefined): Promise<void> {
+/** Saves `decision` on the review's finding, replacing any earlier one. */
+async function saveDecision(reviewId: string, findingId: string, decision: FindingDecision): Promise<void> {
+	await updateFinding(reviewId, findingId, (open) => ({ ...open, decision }));
+}
+
+/** Removes the decision from the review's finding, so it is open again. */
+async function clearDecision(reviewId: string, findingId: string): Promise<void> {
+	await updateFinding(reviewId, findingId, (open) => open);
+}
+
+/** Replaces the review's finding with `change` of it without its decision, in one read-modify-write. */
+async function updateFinding(reviewId: string, findingId: string, change: (open: Finding) => Finding): Promise<void> {
 	await db.reviews.update(reviewId, (current) => {
 		if (!current) return undefined;
 
@@ -70,10 +81,24 @@ async function saveDecision(reviewId: string, findingId: string, decision: Findi
 
 			const { decision: _previous, ...open } = finding;
 
-			return decision ? { ...open, decision } : open;
+			return change(open);
 		});
 
 		return { ...current, findings, updatedAt: new Date().toISOString() };
+	});
+}
+
+/**
+ * Changes the review, then learns, in one transaction, so a decision is saved
+ * with what it taught or, when another replica changed the shared tables
+ * first, not at all. The review is changed first: its record lock orders
+ * concurrent decisions on one review, so each reads the shared tables after
+ * the one before it committed.
+ */
+async function decideInOneCommit(changeReview: () => Promise<void>, learn: () => void): Promise<void> {
+	await storageTransaction(async () => {
+		await changeReview();
+		await settingsTransaction(learn);
 	});
 }
 
@@ -94,8 +119,10 @@ app.put('/:id/findings/:findingId/decision', async (c) => {
 
 	const decision = decisionOf(body);
 
-	await saveDecision(target.reviewId, target.finding.id, decision);
-	learnFromDecision(target, decision);
+	await decideInOneCommit(
+		() => saveDecision(target.reviewId, target.finding.id, decision),
+		() => learnFromDecision(target, decision)
+	);
 
 	return c.json(decision);
 });
@@ -106,8 +133,10 @@ app.delete('/:id/findings/:findingId/decision', async (c) => {
 
 	if (target instanceof Response) return target;
 
-	await saveDecision(target.reviewId, target.finding.id, undefined);
-	forgetDecision(target);
+	await decideInOneCommit(
+		() => clearDecision(target.reviewId, target.finding.id),
+		() => forgetDecision(target)
+	);
 
 	return c.json({ reopened: true });
 });

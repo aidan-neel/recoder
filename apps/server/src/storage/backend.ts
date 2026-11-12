@@ -1,6 +1,10 @@
 import { SQL, type TransactionSQL } from 'bun';
 import { env } from '../env';
-import { initializeSharedSettings, withFreshSharedSettings } from '../config/shared-settings';
+import {
+	initializeSharedSettings,
+	withFreshSharedSettings,
+	withSharedSettingsTransaction
+} from '../config/shared-settings';
 import { PostgresCoordinator } from '../review/runtime/coordinator';
 import { assertOwnership, currentLease, OwnershipLostError } from '../review/runtime/ownership';
 import type { Collection, Table } from './collection';
@@ -68,6 +72,18 @@ export async function storageTransaction<T>(work: (transaction?: TransactionSQL)
 
 export async function settingsOperation<T>(work: () => T | Promise<T>): Promise<T> {
 	return postgres ? withFreshSharedSettings(postgres, work) : work();
+}
+
+/**
+ * Runs `work` on shared settings read and committed inside the storage
+ * transaction, joining the caller's when there is one, so its settings
+ * changes commit with that transaction's record writes or roll back with
+ * them. Without PostgreSQL there is no transaction and it runs as is.
+ */
+export async function settingsTransaction<T>(work: () => T | Promise<T>): Promise<T> {
+	return storageTransaction(async (transaction) =>
+		transaction ? withSharedSettingsTransaction(transaction, work) : work()
+	);
 }
 
 export const sharedDiffs = sharedStore?.collection<{ id: string; diff: string }>('review_diffs');
