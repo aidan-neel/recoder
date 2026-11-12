@@ -2,7 +2,7 @@ import type { PrPerson, PullComment, PullCommit, PullRequest } from '@recoder/sh
 import { isRecoderComment, str } from '../context/sources.js';
 import { gitlabProject } from '../gitlab-api.js';
 import { glabApi } from '../glab.js';
-import { gitlabComments } from '../publish/gitlab-comments.js';
+import { gitlabComments, gitlabMergeRequest } from '../publish/gitlab-comments.js';
 import { parseSlug } from '../providers.js';
 import { allPages, chronological, record, records, splitMessage } from './status.js';
 
@@ -52,7 +52,8 @@ export async function gitlabPostComment(
 	body: string,
 	env: Record<string, string>
 ): Promise<PullComment> {
-	const posted = await gitlabComments(parseSlug(repoUrl), pull.number, pull.url || null, env).create(body);
+	const mergeRequest = gitlabMergeRequest(parseSlug(repoUrl), pull.number, pull.url || null, env);
+	const posted = await gitlabComments(mergeRequest).create(body);
 	const path = `${gitlabProject(repoUrl)}/merge_requests/${pull.number}/notes/${posted.id}`;
 
 	return gitlabNote(record(await glabApi(path, env)), pull.url);
