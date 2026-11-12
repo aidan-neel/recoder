@@ -2,6 +2,7 @@ import { readFile } from 'node:fs/promises';
 import type { TokenUsage } from '@recoder/shared';
 import { z } from 'zod';
 import { LlmError } from '../../models/llm/errors';
+import { quotedLine } from '../quoted-line';
 
 export const DEVIN_LOGIN = 'devin auth login';
 
@@ -35,8 +36,8 @@ export async function readExport(file: string): Promise<DevinExport | null> {
 }
 
 /**
- * The line to quote in an error, trimmed and cut: the CLI's `Error:` line when it printed one, since a JSON body
- * can follow it (a rate limit ends in `}`), else the last non-empty line.
+ * The line to quote in an error, trimmed, redacted and cut: the CLI's `Error:` line when it printed one, since a
+ * JSON body can follow it (a rate limit ends in `}`), else the last non-empty line.
  */
 function errorLine(text: string): string | undefined {
 	const lines = text
@@ -44,7 +45,9 @@ function errorLine(text: string): string | undefined {
 		.map((line) => line.trim())
 		.filter(Boolean);
 
-	return (lines.find((line) => /^error\b/i.test(line)) ?? lines.at(-1))?.slice(0, QUOTED_CHARS);
+	const line = lines.find((item) => /^error\b/i.test(item)) ?? lines.at(-1);
+
+	return line ? quotedLine(line, QUOTED_CHARS) : undefined;
 }
 
 /** `prompt_tokens` already counts the cached ones, as the export's own totals show. A count the export lacks is unknown, not 0. */

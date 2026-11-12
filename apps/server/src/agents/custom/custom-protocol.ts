@@ -1,6 +1,7 @@
 import { REASONING_EFFORTS } from '@recoder/shared';
 import { z } from 'zod';
 import { LlmError } from '../../models/llm/errors';
+import { quotedLine } from '../quoted-line';
 
 /**
  * The custom-command protocol, version 1. Recoder writes one request as JSON to the command's stdin and closes
@@ -106,11 +107,11 @@ const QUOTED_CHARS = 200;
 const versionSchema = z.object({ protocol: z.literal(PROTOCOL), version: z.number() });
 
 /**
- * One line of the command's output as an event. Throws an `LlmError` that quotes the line when it is not JSON,
- * speaks another protocol version, or does not match the event schema.
+ * One line of the command's output as an event. Throws an `LlmError` that quotes the line, credentials redacted,
+ * when it is not JSON, speaks another protocol version, or does not match the event schema.
  */
 export function parseEvent(line: string, name: string): CommandEvent {
-	const quoted = `"${line.slice(0, QUOTED_CHARS)}"`;
+	const quoted = `"${quotedLine(line, QUOTED_CHARS)}"`;
 	let value: unknown;
 
 	try {

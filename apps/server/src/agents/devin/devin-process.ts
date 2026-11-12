@@ -2,6 +2,7 @@ import { rmSync } from 'node:fs';
 import { mkdtemp, readFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { z } from 'zod';
 import { cliEnv } from '../cli-process';
 
 type Env = Record<string, string | undefined>;
@@ -34,40 +35,63 @@ export function devinEnv(env: Env): Record<string, string> {
 }
 
 /**
- * The user's own config, or just a version when there is none. The CLI reads its org and model from this file;
- * Recoder never writes it, and only ever runs the CLI under a copy in another `XDG_CONFIG_HOME`, which also
- * leaves out the user's MCP servers, rules and skills. Sign-in is not in it.
+ * The parts of the user's config a call needs: the config version, and the org the CLI bills, which it reads from
+ * this file. Sign-in is not in it.
  */
-async function userConfig(env: Env): Promise<Record<string, unknown>> {
+const userConfigSchema = z.object({
+	version: z.number().optional(),
+	devin: z.object({ org_id: z.string().optional() }).optional()
+});
+
+/**
+ * Where the CLI reads config from besides its own file: other tools' settings (`~/.claude`, `.cursor`…) and the
+ * org's cloud settings, which can bring hooks, rules, plugins and MCP servers. A call turns every source off.
+ */
+const IMPORT_SOURCES = ['cursor', 'windsurf', 'claude', 'opencode', 'zed', 'copilot', 'agents_standard', 'cloud'];
+
+/**
+ * The config a call runs under, built from the fields it needs and nothing else. Recoder never writes the user's
+ * own file and only runs the CLI under this one, in another `XDG_CONFIG_HOME`, so the user's hooks, MCP servers,
+ * rules and skills never load, and no other tool's config is imported.
+ */
+async function callConfig(env: Env, permissions: { allow?: string[]; deny: string[] }): Promise<string> {
+	const user = await userConfig(env);
+	const orgId = user.devin?.org_id;
+
+	return JSON.stringify({
+		version: user.version ?? 1,
+		...(orgId ? { devin: { org_id: orgId } } : {}),
+		read_config_from: Object.fromEntries(IMPORT_SOURCES.map((source) => [source, false])),
+		permissions
+	});
+}
+
+/** The fields {@link callConfig} takes from the user's own config; none when it is missing or not JSON. */
+async function userConfig(env: Env): Promise<z.infer<typeof userConfigSchema>> {
 	const base = env.XDG_CONFIG_HOME || join(env.HOME || homedir(), '.config');
 
 	try {
 		const parsed: unknown = JSON.parse(await readFile(join(base, 'devin', 'config.json'), 'utf8'));
 
-		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { ...parsed };
+		return userConfigSchema.safeParse(parsed).data ?? {};
 	} catch {
-		return { version: 1 };
+		return {};
 	}
-
-	return { version: 1 };
 }
 
-/** The user's config with every tool denied, so a call sees only the prompt Recoder sends. */
-async function toolFreeConfig(env: Env): Promise<string> {
-	return JSON.stringify({ ...(await userConfig(env)), permissions: { deny: DENIED_TOOLS } });
+/** A config with every tool denied, so a call sees only the prompt Recoder sends. */
+function toolFreeConfig(env: Env): Promise<string> {
+	return callConfig(env, { deny: DENIED_TOOLS });
 }
 
 /**
- * The user's config for an agent run: the CLI's own tools denied, and the tools of Recoder's MCP server `server`
+ * The config for an agent run: the CLI's own tools denied, and the tools of Recoder's MCP server `server`
  * allowed, so the model reaches the repository only through them.
  */
-export async function runConfig(env: Env, server: string | null): Promise<string> {
+export function runConfig(env: Env, server: string | null): Promise<string> {
 	const allow = server ? [`mcp__${server}__*`] : [];
 
-	return JSON.stringify({
-		...(await userConfig(env)),
-		permissions: { allow, deny: server ? BUILT_IN_TOOLS : DENIED_TOOLS }
-	});
+	return callConfig(env, { allow, deny: server ? BUILT_IN_TOOLS : DENIED_TOOLS });
 }
 
 let home: Promise<string> | null = null;

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { z } from 'zod';
 import { ClaudeCodeAgent } from '../../../src/agents/claude-code/claude-code';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { fakeClaudeAgent, fakeClaudeCalls } from '../../helpers/fake-claude-agent';
@@ -11,13 +12,16 @@ import { fixtureReview, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
+/** The `--mcp-config` a call was given. */
+const mcpConfigSchema = z.object({ mcpServers: z.record(z.string(), z.object({ url: z.string() })) });
+
 /** A run on the fake CLI in `mode`, logging to a fresh file, with its events collected. */
 async function openRun(
 	mode = 'answer',
-	settings: { tools?: string[]; signal?: AbortSignal } = {}
+	settings: { tools?: string[]; signal?: AbortSignal; config?: string } = {}
 ): Promise<{ run: AgentRun; events: AgentEvent[]; log: string; config: string }> {
 	const log = await fakeClaudeLog();
-	const config = await mkdtemp(join(tmpdir(), 'fake-claude-config-'));
+	const config = settings.config ?? (await mkdtemp(join(tmpdir(), 'fake-claude-config-')));
 	const env = await fakeClaudeAgent({ FAKE_CLAUDE_MODE: mode, FAKE_CLAUDE_LOG: log, CLAUDE_CONFIG_DIR: config });
 	const events: AgentEvent[] = [];
 
@@ -39,6 +43,13 @@ function after(args: string[], flag: string): string | undefined {
 	return args.includes(flag) ? args[args.indexOf(flag) + 1] : undefined;
 }
 
+/** The transcript file the fake saved for the first call logged in `log`, under the config dir `config`. */
+async function savedSession(log: string, config: string): Promise<string> {
+	const [{ args, cwd }] = await fakeClaudeCalls(log);
+
+	return join(config, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'), `${after(args, '--session-id')}.jsonl`);
+}
+
 describe('ClaudeCodeAgent.openRun', () => {
 	test('gives the CLI only Recoder’s MCP server, with its own tools, settings and hooks off', async () => {
 		const { run, log } = await openRun();
@@ -47,7 +58,7 @@ describe('ClaudeCodeAgent.openRun', () => {
 		await run.close();
 
 		const [{ args }] = await fakeClaudeCalls(log);
-		const config = JSON.parse(after(args, '--mcp-config') ?? '{}') as { mcpServers: Record<string, { url: string }> };
+		const config = mcpConfigSchema.parse(JSON.parse(after(args, '--mcp-config') ?? '{}'));
 		const [server] = Object.keys(config.mcpServers);
 
 		expect(after(args, '--tools')).toBe('');
@@ -165,14 +176,27 @@ describe('ClaudeCodeAgent.openRun', () => {
 
 		await run.prompt('Review it.', PROMPT);
 
-		const [{ args, cwd }] = await fakeClaudeCalls(log);
-		const saved = join(config, 'projects', cwd.replace(/[^a-zA-Z0-9]/g, '-'), `${after(args, '--session-id')}.jsonl`);
+		const saved = await savedSession(log, config);
 		const before = existsSync(saved);
 
 		await run.close();
 
 		expect(before).toBe(true);
 		expect(existsSync(saved)).toBe(false);
+	});
+
+	test('closing one of two runs that share a session folder keeps the other run’s session', async () => {
+		const first = await openRun();
+		const second = await openRun('answer', { config: first.config });
+
+		await Promise.all([first.run.prompt('Review it.', PROMPT), second.run.prompt('Review it.', PROMPT)]);
+		await first.run.close();
+
+		const kept = existsSync(await savedSession(second.log, second.config));
+
+		await second.run.close();
+
+		expect(kept).toBe(true);
 	});
 });
 

@@ -4,6 +4,7 @@ import { LlmError } from '../../models/llm/errors';
 import type { CliExit } from '../cli-stream';
 import type { AgentEvent, AgentReply } from '../contract';
 import { ReplyReader, parseLine, tokenUsage, usageSchema } from './claude-code-reply';
+import { quotedLine } from '../quoted-line';
 
 type Usage = z.infer<typeof usageSchema>;
 
@@ -60,7 +61,7 @@ export class RunReader {
 		if (value === null) {
 			this.onEvent({
 				type: 'error',
-				message: `Claude Code printed a line that is not JSON: "${line.slice(0, QUOTED_CHARS)}"`
+				message: `Claude Code printed a line that is not JSON: "${quotedLine(line, QUOTED_CHARS)}"`
 			});
 
 			return;

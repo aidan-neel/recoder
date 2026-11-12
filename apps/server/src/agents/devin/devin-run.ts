@@ -24,8 +24,8 @@ export interface DevinHost {
 	env: Env;
 	running: Set<Bun.Subprocess>;
 	scratch: Set<string>;
-	/** Best effort: deletes a session the CLI saved, which holds the review's prompts. */
-	forget(session: string): void;
+	/** Deletes a session the CLI saved, which holds the review's prompts; resolves once it is gone. */
+	forget(session: string): Promise<void>;
 }
 
 /** A run's files, all under one scratch dir: the prompt and export files, the config home, and the working directory. */
@@ -158,7 +158,7 @@ export class DevinRun extends ProcessRun {
 	protected override async cleanUp(): Promise<void> {
 		this.host.scratch.delete(this.files.root);
 		await rm(this.files.root, { recursive: true, force: true });
-		if (this.session) this.host.forget(this.session);
+		if (this.session) await this.host.forget(this.session);
 	}
 
 	private args(): string[] {

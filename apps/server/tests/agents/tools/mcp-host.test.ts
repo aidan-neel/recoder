@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { z } from 'zod';
 import type { AgentEvent, ToolRunner } from '../../../src/agents/contract';
 import { McpToolHost } from '../../../src/agents/tools/mcp-host';
 
@@ -21,8 +22,16 @@ const runner =
 
 const ignore = () => {};
 
+/** A `tools/call` answer: the text the model reads and whether it is a refusal or a failure. */
+const callSchema = z.object({
+	result: z.object({ content: z.array(z.object({ text: z.string() })), isError: z.boolean() })
+});
+
+/** A `tools/list` answer. */
+const listSchema = z.object({ result: z.object({ tools: z.array(z.object({ name: z.string() })) }) });
+
 async function text(response: Response): Promise<string> {
-	return ((await response.json()) as { result: { content: { text: string }[] } }).result.content[0].text;
+	return callSchema.parse(await response.json()).result.content[0].text;
 }
 
 test('a tool call reaches the run that holds the slot it arrives on', async () => {
@@ -34,17 +43,25 @@ test('a tool call reaches the run that holds the slot it arrives on', async () =
 	expect(await text(await call(second.url, 'search'))).toBe('second:search');
 });
 
-test('a released slot refuses calls until the next run leases it', async () => {
+test('a released slot refuses calls', async () => {
 	const lease = host.lease(['search'], runner('first'), ignore);
 
 	lease.release();
 
 	expect(await text(await call(lease.url, 'search'))).toContain('finished');
+});
+
+test('the next run on a released slot gets a new URL, and the released one stays refused', async () => {
+	const lease = host.lease(['search'], runner('first'), ignore);
+
+	lease.release();
 
 	const next = host.lease(['search'], runner('next'), ignore);
+	const stale = await call(lease.url, 'search');
 
-	expect(next.url).toBe(lease.url);
-	expect(await text(await call(lease.url, 'search'))).toBe('next:search');
+	expect(next.name).toBe(lease.name);
+	expect(stale.status).toBe(404);
+	expect(await text(await call(next.url, 'search'))).toBe('next:search');
 });
 
 test('a path without a slot token is not served', async () => {
@@ -60,8 +77,8 @@ test('a slot lists only the tools its run may use and refuses any other before t
 
 	const lease = host.lease(['read_file'], async (name) => ({ text: String(asked.push(name)), isError: false }), ignore);
 
-	const listed = (await (await rpc(lease.url, 'tools/list')).json()) as { result: { tools: { name: string }[] } };
-	const refused = (await (await call(lease.url, 'run')).json()) as { result: { isError: boolean } };
+	const listed = listSchema.parse(await (await rpc(lease.url, 'tools/list')).json());
+	const refused = callSchema.parse(await (await call(lease.url, 'run')).json());
 
 	expect(listed.result.tools.map((tool) => tool.name)).toEqual(['read_file']);
 	expect(refused.result.isError).toBe(true);

@@ -131,7 +131,7 @@ export class DevinAgent extends CliAgent {
 		} finally {
 			this.scratch.delete(scratch);
 			await rm(scratch, { recursive: true, force: true });
-			if (session) this.forget(path, session);
+			if (session) await this.forget(path, session);
 		}
 	}
 
@@ -159,14 +159,19 @@ export class DevinAgent extends CliAgent {
 		return { signedIn: (await this.output(path, ['auth', 'status'], STATUS_TIMEOUT_MS)).code === 0 };
 	}
 
-	/** Best effort: delete the session the CLI saved for a call, which holds the review's prompt. */
-	private forget(path: string, session: string): void {
-		Bun.spawn([path, 'rm', session, '--force'], {
+	/**
+	 * Deletes the session the CLI saved for a call, which holds the review's prompt, and resolves once `devin rm`
+	 * has exited. Its exit code is not read: a session the CLI never saved has nothing to delete.
+	 */
+	private async forget(path: string, session: string): Promise<void> {
+		const proc = Bun.spawn([path, 'rm', session, '--force'], {
 			env: devinEnv(this.env),
 			stdin: 'ignore',
 			stdout: 'ignore',
 			stderr: 'ignore'
-		}).unref();
+		});
+
+		await proc.exited;
 	}
 
 	/** Run a short CLI command to its end, killing it after `timeoutMs`, or when `signal` aborts. */

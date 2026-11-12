@@ -12,6 +12,7 @@ import {
 	type DescribeRequest,
 	type TurnRequest
 } from './custom-protocol';
+import { quotedLine } from '../quoted-line';
 
 /** Where and how a command runs: its configuration, environment and working directory, and the processes in flight. */
 export interface CommandHost {
@@ -104,7 +105,9 @@ function tokenUsage(event: Extract<CommandEvent, { type: 'usage' }>): TokenUsage
 
 /** The last non-empty line of the command's stderr, cut short, for an error message. */
 function stderrLine(stderr: string): string | undefined {
-	return stderr.trim().split('\n').at(-1)?.trim().slice(0, QUOTED_CHARS) || undefined;
+	const line = stderr.trim().split('\n').at(-1)?.trim();
+
+	return line ? quotedLine(line, QUOTED_CHARS) : undefined;
 }
 
 /** Reads a command's events in order: progress until the one event that ends the request. */

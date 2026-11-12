@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
+import { z } from 'zod';
 import type { AgentEvent, AgentRun } from '../../../src/agents/contract';
 import { DevinAgent } from '../../../src/agents/devin/devin';
 import { fakeDevin } from '../../helpers/fake-devin';
@@ -7,9 +8,22 @@ import { fixtureReview, testPromptStops } from '../../helpers/native-agent';
 
 const PROMPT = { tools: true, timeoutMs: 10_000 };
 
+/** The config file the CLI ran under, as the fake logged it. */
+const configSchema = z.object({
+	permissions: z.object({ allow: z.array(z.string()), deny: z.array(z.string()) })
+});
+
+/** The local MCP config of the CLI's working directory, as the fake logged it. */
+const serversSchema = z.object({
+	mcpServers: z.record(z.string(), z.object({ url: z.string(), transport: z.string() }))
+});
+
 /** A run on the fake CLI in `mode`, with its events collected and the path of the fake's log. */
-async function openRun(mode = 'reply'): Promise<{ run: AgentRun; events: AgentEvent[]; log: string }> {
-	const env = await fakeDevin({ FAKE_DEVIN_MODE: mode });
+async function openRun(
+	mode = 'reply',
+	userConfig?: Record<string, unknown>
+): Promise<{ run: AgentRun; events: AgentEvent[]; log: string }> {
+	const env = await fakeDevin({ FAKE_DEVIN_MODE: mode }, userConfig);
 	const events: AgentEvent[] = [];
 
 	const run = await new DevinAgent(env).openRun({
@@ -39,12 +53,8 @@ describe('DevinAgent.openRun', () => {
 
 		await run.close();
 
-		const config = JSON.parse(logged(text, 'config')) as { permissions: { allow: string[]; deny: string[] } };
-
-		const servers = JSON.parse(logged(text, 'mcp')) as {
-			mcpServers: Record<string, { url: string; transport: string }>;
-		};
-
+		const config = configSchema.parse(JSON.parse(logged(text, 'config')));
+		const servers = serversSchema.parse(JSON.parse(logged(text, 'mcp')));
 		const [name] = Object.keys(servers.mcpServers);
 
 		expect(config.permissions).toEqual({ allow: [`mcp__${name}__*`], deny: ['read', 'edit', 'grep', 'glob', 'exec'] });
@@ -56,6 +66,40 @@ describe('DevinAgent.openRun', () => {
 
 		expect(text).toContain('[-p] [--permission-mode] [auto]');
 		expect(text).toContain('[--model] [swe-2-high]');
+	});
+
+	test('runs under a config of only the org, with the user’s hooks and MCP servers left out and imports off', async () => {
+		const { run, log } = await openRun('reply', {
+			version: 1,
+			devin: { org_id: 'org-1' },
+			hooks: { SessionStart: [{ hooks: [{ type: 'command', command: 'touch /tmp/pwned' }] }] },
+			mcpServers: { mine: { command: 'my-server' } },
+			read_config_from: { claude: true }
+		});
+
+		await run.prompt('Review it.', PROMPT);
+
+		const text = await readFile(log, 'utf8');
+
+		await run.close();
+
+		const config: unknown = JSON.parse(logged(text, 'config'));
+
+		expect(config).toEqual({
+			version: 1,
+			devin: { org_id: 'org-1' },
+			read_config_from: {
+				cursor: false,
+				windsurf: false,
+				claude: false,
+				opencode: false,
+				zed: false,
+				copilot: false,
+				agents_standard: false,
+				cloud: false
+			},
+			permissions: expect.any(Object)
+		});
 	});
 
 	test('the answer streams as text within one step, which ends with the prompt’s usage', async () => {
@@ -123,7 +167,6 @@ describe('DevinAgent.openRun', () => {
 
 		await run.prompt('Review it.', PROMPT);
 		await run.close();
-		await Bun.sleep(300);
 
 		expect(await readFile(`${log}.rm`, 'utf8')).toBe('quiet-owl\n');
 	});

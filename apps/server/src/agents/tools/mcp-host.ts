@@ -19,7 +19,8 @@ interface Tenant {
 
 /**
  * One MCP server path. A tool call carries no session, so the slot it arrives on is what names the run: each
- * running agent holds a slot of its own, and a finished run's slot serves the next one.
+ * running agent holds a slot of its own, and a finished run's slot serves the next one under a new token, so a
+ * process of the finished run that still holds the old URL never reaches the next run's tools.
  */
 interface Slot {
 	name: string;
@@ -63,14 +64,7 @@ export class McpToolHost {
 	 */
 	lease(tools: readonly string[], runner: ToolRunner, onEvent: (event: AgentEvent) => void): ToolLease {
 		const { port } = this.listen();
-		let slot = this.slots.find((item) => !item.tenant);
-
-		if (!slot) {
-			slot = { name: `recoder${this.slots.length + 1}`, token: randomBytes(24).toString('base64url'), tenant: null };
-			this.slots.push(slot);
-		}
-
-		const leased = slot;
+		const leased = this.freeSlot();
 		const inRunContext = AsyncLocalStorage.snapshot();
 
 		const tenant: Tenant = {
@@ -80,6 +74,7 @@ export class McpToolHost {
 		};
 
 		leased.tenant = tenant;
+		leased.token = newToken();
 
 		return {
 			name: leased.name,
@@ -93,6 +88,19 @@ export class McpToolHost {
 	stop(): void {
 		void this.server?.stop(true);
 		this.server = null;
+	}
+
+	/** A slot no run holds, or a new one when every slot is held. */
+	private freeSlot(): Slot {
+		const free = this.slots.find((item) => !item.tenant);
+
+		if (free) return free;
+
+		const slot = { name: `recoder${this.slots.length + 1}`, token: newToken(), tenant: null };
+
+		this.slots.push(slot);
+
+		return slot;
 	}
 
 	private listen(): ReturnType<typeof Bun.serve> {
@@ -121,6 +129,11 @@ export class McpToolHost {
 
 		return answer(slot, message);
 	}
+}
+
+/** A random path token, so only the process given a slot's URL can reach it. */
+function newToken(): string {
+	return randomBytes(24).toString('base64url');
 }
 
 /** The JSON-RPC message of a request, or null when it is too large or not a JSON object. */

@@ -155,6 +155,13 @@ describe('CustomCommandAgent.openRun', () => {
 		expect((await failure(mode))?.message).toMatch(message);
 	});
 
+	test('a credential in a malformed line is redacted from the error', async () => {
+		const message = (await failure('leak'))?.message;
+
+		expect(message).toContain('not JSON');
+		expect(message).not.toContain('sk-fake-credential-1234');
+	});
+
 	test('an auth error asks to sign in and a spent plan is a usage limit', async () => {
 		const auth = await failure('auth');
 		const limit = await failure('limit');

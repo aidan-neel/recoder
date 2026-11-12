@@ -7,7 +7,7 @@ import { fakeBin, loggedCalls } from './fake-bin';
  * `{argv, request}` for each call to `FAKE_AGENT_LOG` (one JSON line per call) and its environment to
  * `<log>.env`. `describe` lists two models. A turn acts on `FAKE_AGENT_MODE`: an answer (default) in one step
  * after calling `read_diff` over the request's MCP server when it has one; `auth` or `limit` (an `error` event);
- * `notjson`, `version2` or `invalid` (a bad line); `after` (an event after the result); `noresult` (exit 0
+ * `notjson`, `version2` or `invalid` (a bad line); `leak` (an authorization header in place of an event); `after` (an event after the result); `noresult` (exit 0
  * without one); `crash` (stderr, exit 3); `flood` (a megabyte of text); or `spawn` (starts a `sleep`
  * grandchild, writes `<own pid> <grandchild pid>` to `<log>.pids` and waits for it).
  */
@@ -48,6 +48,7 @@ if (mode === 'spawn') {
 if (mode === 'auth') say({ type: 'error', kind: 'auth', message: 'run my-agent login' });
 if (mode === 'limit') say({ type: 'error', kind: 'usage_limit', message: 'plan spent until 3pm' });
 if (mode === 'notjson') console.log('hello there');
+if (mode === 'leak') console.log('Authorization: Bearer sk-fake-credential-1234');
 if (mode === 'version2') console.log(JSON.stringify({ ...header, version: 2, type: 'text', text: 'hi' }));
 if (mode === 'invalid') say({ type: 'text' });
 if (mode === 'flood') for (let i = 0; i < 1024; i++) say({ type: 'text', text: 'x'.repeat(1024) });

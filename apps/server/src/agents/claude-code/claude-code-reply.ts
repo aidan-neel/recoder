@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { TokenUsage } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
+import { quotedLine } from '../quoted-line';
 
 export const usageSchema = z.object({
 	input_tokens: z.number().optional(),
@@ -110,9 +111,11 @@ export function tokenUsage(usage: z.infer<typeof usageSchema>): TokenUsage {
 	};
 }
 
-/** The last non-empty line of `text`, cut to `QUOTED_CHARS`. */
+/** The last non-empty line of `text`, redacted and cut to `QUOTED_CHARS`. */
 function lastLine(text: string): string | undefined {
-	return text.trim().split('\n').at(-1)?.trim().slice(0, QUOTED_CHARS) || undefined;
+	const line = text.trim().split('\n').at(-1)?.trim();
+
+	return line ? quotedLine(line, QUOTED_CHARS) : undefined;
 }
 
 export function parseLine(line: string): unknown {

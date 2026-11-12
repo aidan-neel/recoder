@@ -3,16 +3,6 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fakeBin } from './fake-bin';
 
-/**
- * A fake `devin` CLI. `--version`, `auth status` (`FAKE_DEVIN_SIGNED_IN=1` signs it in) and `models list` answer at
- * once. `rm <id> --force` appends the id to `<log>.rm`. Print mode writes its arguments, prompt file, working
- * directory, local MCP config, config file and environment to `FAKE_DEVIN_LOG`, writes the export file (whose totals
- * grow on a resumed call), then acts on `FAKE_DEVIN_MODE`: a reply (default), `signedout`, `empty` (exit 0, no
- * text), `refused` (no text until the call resumes a session with `--resume`), `crash` (stderr, exit 1), `limited`
- * (the CLI's rate-limit error, a line and a JSON body, exit 1), `tool` (calls `read_diff` on the MCP server of the
- * local MCP config and answers with what it returned) or `spawn` (starts a `sleep` grandchild, writes `<own pid>
- * <grandchild pid>` to `<log>.pids` and waits for it).
- */
 /** What the `tool` mode runs with Bun: one MCP call to the server Recoder put in the local MCP config. */
 const TOOL_CALL = [
 	"const config = JSON.parse(await Bun.file('.devin/mcp_config.local.json').text());",
@@ -23,6 +13,16 @@ const TOOL_CALL = [
 	'console.log(JSON.stringify({ done: true, results: [{ isError: result.isError, text: result.content[0].text }] }));'
 ].join(' ');
 
+/**
+ * A fake `devin` CLI. `--version`, `auth status` (`FAKE_DEVIN_SIGNED_IN=1` signs it in) and `models list` answer at
+ * once. `rm <id> --force` appends the id to `<log>.rm`. Print mode writes its arguments, prompt file, working
+ * directory, local MCP config, config file and environment to `FAKE_DEVIN_LOG`, writes the export file (whose totals
+ * grow on a resumed call), then acts on `FAKE_DEVIN_MODE`: a reply (default), `signedout`, `empty` (exit 0, no
+ * text), `refused` (no text until the call resumes a session with `--resume`), `crash` (stderr, exit 1), `limited`
+ * (the CLI's rate-limit error, a line and a JSON body, exit 1), `tool` (calls `read_diff` on the MCP server of the
+ * local MCP config and answers with what it returned) or `spawn` (starts a `sleep` grandchild, writes `<own pid>
+ * <grandchild pid>` to `<log>.pids` and waits for it).
+ */
 const SCRIPT = `#!/bin/sh
 if [ "$1" = "--version" ]; then echo "devin 3000.11.3 (abc123)"; exit 0; fi
 
@@ -84,13 +84,19 @@ limited) printf '%s\n' 'Error: Agent error: Reached free model rate limit. Your 
 esac
 `;
 
-/** A fake `devin` on PATH, with its log files and a user config home holding an org and a model. */
-export async function fakeDevin(extra: Record<string, string> = {}): Promise<Record<string, string | undefined>> {
+/** The user's own Devin config the fake gets unless a test passes another: a version and an org. */
+const USER_CONFIG = { version: 1, devin: { org_id: 'org-1' } };
+
+/** A fake `devin` on PATH, with its log files and a user config home holding `userConfig`. */
+export async function fakeDevin(
+	extra: Record<string, string> = {},
+	userConfig: Record<string, unknown> = USER_CONFIG
+): Promise<Record<string, string | undefined>> {
 	const { env } = await fakeBin('devin', SCRIPT);
 	const dir = await mkdtemp(join(tmpdir(), 'fake-devin-'));
 	const config = join(dir, 'config');
 
-	await Bun.write(join(config, 'devin', 'config.json'), JSON.stringify({ version: 1, devin: { org_id: 'org-1' } }));
+	await Bun.write(join(config, 'devin', 'config.json'), JSON.stringify(userConfig));
 
 	return { ...env, HOME: dir, XDG_CONFIG_HOME: config, FAKE_DEVIN_LOG: join(dir, 'log'), TOOL_CALL, ...extra };
 }

@@ -11,7 +11,7 @@ import type { ToolLease } from '../tools/mcp-host';
 import { effortArgs } from './claude-code-models';
 import { claudeCodeEnv } from './claude-code-process';
 import { RunReader } from './claude-code-run-reader';
-import { forgetSession } from './claude-code-session';
+import { openSessionFolder, type SessionFiles } from './claude-code-session';
 
 type Env = Record<string, string | undefined>;
 
@@ -53,10 +53,11 @@ export interface ClaudeCodeHost {
 	scratch: Set<string>;
 }
 
-/** Where a run lives: its scratch dir (the system prompt file) and the working directory. */
+/** Where a run lives: its scratch dir (the system prompt file), the working directory, and its session folder. */
 interface RunPlace {
 	scratch: string;
 	cwd: string;
+	sessions: SessionFiles;
 }
 
 /** The `--mcp-config` and `--allowedTools` flags that give the CLI Recoder's tools, and nothing else. */
@@ -90,7 +91,9 @@ export class ClaudeCodeRun extends ProcessRun {
 		host.scratch.add(scratch);
 		await writeFile(join(scratch, 'system.md'), options.system, { mode: 0o600 });
 
-		return new ClaudeCodeRun(host, options, { scratch, cwd: await emptyDirectory(CLAUDE_CODE_EMPTY_DIR) });
+		const cwd = await emptyDirectory(CLAUDE_CODE_EMPTY_DIR);
+
+		return new ClaudeCodeRun(host, options, { scratch, cwd, sessions: openSessionFolder(host.env, cwd) });
 	}
 
 	/**
@@ -126,11 +129,11 @@ export class ClaudeCodeRun extends ProcessRun {
 		}
 	}
 
-	/** Deletes the system prompt file and the session the CLI saved. */
+	/** Deletes the system prompt file and the session the CLI saved for this run, and no other. */
 	protected override async cleanUp(): Promise<void> {
 		this.host.scratch.delete(this.place.scratch);
 		await rm(this.place.scratch, { recursive: true, force: true });
-		forgetSession(this.host.env, this.place.cwd, this.session);
+		this.place.sessions.remove(this.session);
 	}
 
 	private args(): string[] {
