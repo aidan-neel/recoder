@@ -9,7 +9,7 @@ export const CURSOR_LOGIN = 'cursor-agent login';
 const SIGNED_OUT = /not (?:logged|signed) in|authentication required|unauthorized|please (?:log|sign) ?in/i;
 
 const LIMIT =
-	/usage limit|plan (?:usage |rate )?limit|monthly limit|quota exceeded|out of (?:usage|credits)|insufficient (?:credits?|funds|balance)|spending limit/i;
+	/usage limit|plan (?:usage |rate )?limit|monthly limit|quota (?:exceeded|reached)|exceeded (?:your |the )?quota|out of (?:usage|credits)|insufficient (?:credits?|funds|balance)|spending limit/i;
 
 const THROTTLE = /rate.?limit|too many requests/i;
 
@@ -184,13 +184,19 @@ function tokenUsage(fields: {
 }
 
 /**
+ * What a signed-out call tells the user. Recoder runs the CLI under its own config folder, and where the CLI keeps
+ * a `cursor-agent login` sign-in is not confirmed: if it is that folder, signing in again changes nothing. So the
+ * message names `CURSOR_API_KEY` first, the sign-in that reaches every run, and says why the other may not.
+ */
+export const SIGNED_OUT_FIX = `Set CURSOR_API_KEY. Recoder runs Cursor in its own config folder, so a sign-in made with \`${CURSOR_LOGIN}\` may not reach it.`;
+
+/**
  * The failure a `cursor-agent` call maps to: signed out is a 401, a spent plan a usage cap, a throttle a 429.
  * The patterns match the CLI's raw text, but only {@link quotedLine}'s redacted, capped form of it reaches a
  * message.
  */
 function cursorError(text: string): LlmError {
-	if (SIGNED_OUT.test(text))
-		return new LlmError(401, `Cursor is signed out. Run: ${CURSOR_LOGIN}, or set CURSOR_API_KEY.`);
+	if (SIGNED_OUT.test(text)) return new LlmError(401, `Cursor is signed out. ${SIGNED_OUT_FIX}`);
 
 	const quoted = quotedLine(text, QUOTED_CHARS);
 

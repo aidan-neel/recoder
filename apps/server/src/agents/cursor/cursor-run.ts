@@ -8,7 +8,7 @@ import type { CliExit } from '../cli-stream';
 import { ProcessRun } from '../process-run';
 import { CursorReader } from './cursor-output';
 import { PRINT_ARGS, streamPrintCall } from './cursor-print';
-import { cursorEnv, writeCursorConfig } from './cursor-process';
+import { cursorPlace, writeCursorConfig, type CursorPlace } from './cursor-process';
 
 type Env = Record<string, string | undefined>;
 
@@ -18,15 +18,6 @@ export interface CursorHost {
 	env: Env;
 	running: Set<Bun.Subprocess>;
 	scratch: Set<string>;
-}
-
-/** A run's dirs under one scratch dir: the isolated config root, the data dir, the working directory, its env. */
-interface RunPlace {
-	root: string;
-	config: string;
-	data: string;
-	cwd: string;
-	env: Record<string, string>;
 }
 
 /** The counted fields a cumulative usage total carries, differenced one by one. */
@@ -76,8 +67,8 @@ function promptUsage(total: TokenUsage, before: TokenUsage | null): TokenUsage {
  * Cursor as the agent: one `cursor-agent -p` process per prompt, in print mode with `stream-json` output. The
  * first prompt carries the system prompt, since the CLI has no flag for one; each later prompt resumes the chat
  * the first saved with `--resume`. Recoder's tools reach it over MCP as the only allowed server; the CLI's own
- * shell, file, edit and web tools are denied in the isolated config it runs under, and its file reads and
- * searches are bounded to the empty working directory.
+ * shell, file, edit and web tools are denied in the isolated config it runs under, and on CLIs with read access
+ * (Cursor 3.23+) its file reads and searches are bounded to the empty working directory.
  */
 export class CursorRun extends ProcessRun {
 	private chatId: string | null = null;
@@ -86,7 +77,7 @@ export class CursorRun extends ProcessRun {
 	private constructor(
 		private readonly host: CursorHost,
 		options: AgentRunOptions,
-		private readonly place: RunPlace
+		private readonly place: CursorPlace
 	) {
 		super(options);
 	}
@@ -96,22 +87,10 @@ export class CursorRun extends ProcessRun {
 
 		host.scratch.add(root);
 
-		const place: RunPlace = {
-			root,
-			config: join(root, 'config'),
-			data: join(root, 'data'),
-			cwd: join(root, 'work'),
-			env: {
-				...cursorEnv(host.env),
-				CURSOR_CONFIG_DIR: join(root, 'config'),
-				CURSOR_DATA_DIR: join(root, 'data')
-			}
-		};
-
-		const run = new CursorRun(host, options, place);
+		const run = new CursorRun(host, options, cursorPlace(root, host.env));
 
 		try {
-			await writeCursorConfig(place, run.lease);
+			await writeCursorConfig(run.place, run.lease);
 
 			return run;
 		} catch (error) {

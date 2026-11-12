@@ -51,12 +51,37 @@ export function cursorEnv(env: Env): Record<string, string> {
 	return cliEnv(env, STRIPPED);
 }
 
+/** The folders one call or run is isolated in, under one scratch root, and the environment that points the CLI at them. */
+export interface CursorPlace {
+	root: string;
+	config: string;
+	data: string;
+	cwd: string;
+	env: Record<string, string>;
+}
+
+/** The isolated place under `root`. It names the folders only; {@link writeCursorConfig} makes them. */
+export function cursorPlace(root: string, env: Env): CursorPlace {
+	const config = join(root, 'config');
+	const data = join(root, 'data');
+
+	return {
+		root,
+		config,
+		data,
+		cwd: join(root, 'work'),
+		env: { ...cursorEnv(env), CURSOR_CONFIG_DIR: config, CURSOR_DATA_DIR: data }
+	};
+}
+
 /**
  * The `cli-config.json` a call runs under, in the fresh `CURSOR_CONFIG_DIR` Recoder points the CLI at. The user's
  * own config never loads here. Permissions run in `allowlist` mode: only what `allow` names runs without
- * approval, the CLI's own shell, file-edit and web tools are denied outright, and `sandbox.readBoundary` keeps
- * its file reads and searches inside the empty working directory it runs in — outside it they would need an
- * approval the run cannot give. With a lease, only Recoder's MCP server is allowed.
+ * approval, the CLI's own shell, file-edit and web tools are denied outright, and on CLIs with read access
+ * (Cursor 3.23+) `sandbox.readBoundary` keeps its file reads and searches inside the empty working directory it
+ * runs in — outside it they would need an approval the run cannot give. Two gaps are not confirmed: Cursor's docs
+ * say a `sandbox.json` overrides this key, and whether a user's own one still loads under the moved data dir is
+ * unknown; an older CLI ignores the key. With a lease, only Recoder's MCP server is allowed.
  */
 function cliConfig(lease: ToolLease | null): string {
 	return JSON.stringify({
@@ -85,14 +110,11 @@ function mcpConfig(lease: ToolLease | null): string | null {
 /**
  * Writes what a call's isolated dirs need: the deny-everything `cli-config.json` in `CURSOR_CONFIG_DIR`, the
  * `mcp.json` naming Recoder's server in `CURSOR_DATA_DIR` when the run leased one, and the working directory.
- * The CLI's sign-in is never touched: Recoder does not read, copy or link its credential file, and the CLI
- * keeps it outside both moved dirs — the login keychain on macOS, an `auth.json` under the XDG or app-data path
- * on Linux and Windows — so a call finds the user's sign-in exactly as the user's own CLI does.
+ * The CLI's sign-in is never touched: Recoder does not read, copy or link its credential file. Where the CLI
+ * keeps a `cursor-agent login` sign-in is not confirmed; if it is the config folder moved here, a call does not
+ * see it, and `CURSOR_API_KEY` is the sign-in that reaches every call.
  */
-export async function writeCursorConfig(
-	place: { config: string; data: string; cwd: string },
-	lease: ToolLease | null
-): Promise<void> {
+export async function writeCursorConfig(place: CursorPlace, lease: ToolLease | null): Promise<void> {
 	await mkdir(place.config, { recursive: true });
 	await mkdir(place.data, { recursive: true });
 	await mkdir(place.cwd, { recursive: true });

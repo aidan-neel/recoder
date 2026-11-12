@@ -10,9 +10,9 @@ import type { CliExit } from '../cli-stream';
 import { quotedLine } from '../quoted-line';
 import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
 import { parseCursorModels } from './cursor-models';
-import { CURSOR_LOGIN, CursorReader, signInState } from './cursor-output';
+import { CURSOR_LOGIN, CursorReader, SIGNED_OUT_FIX, signInState } from './cursor-output';
 import { PRINT_ARGS, streamPrintCall } from './cursor-print';
-import { cursorEnv, writeCursorConfig } from './cursor-process';
+import { cursorEnv, cursorPlace, writeCursorConfig, type CursorPlace } from './cursor-process';
 import { CursorRun } from './cursor-run';
 
 const INSTALL = 'curl -fsSL https://cursor.com/install | bash';
@@ -26,10 +26,10 @@ const MODELS_TIMEOUT_MS = 20_000;
  *
  * The CLI signs in itself. Recoder never reads, copies or links its credential file; it runs the CLI under
  * isolated `CURSOR_CONFIG_DIR` and `CURSOR_DATA_DIR` dirs that deny its shell, file-edit and web tools, bound
- * its file reads and searches to an empty working directory, and load no user config, hooks, rules, plugins or
- * MCP servers, and reads what the CLI prints. The sign-in lives outside those dirs — the login keychain on
- * macOS, an `auth.json` under the XDG or app-data path on Linux and Windows — so it keeps working untouched,
- * and `CURSOR_API_KEY` remains the documented headless sign-in.
+ * its file reads and searches to an empty working directory on CLIs with read access (Cursor 3.23+), and load no
+ * user config, hooks, rules, plugins or MCP servers, and reads what the CLI prints. `CURSOR_API_KEY` is the
+ * documented headless sign-in and reaches every call. Where the CLI keeps a `cursor-agent login` sign-in is not
+ * confirmed: if it is the moved config folder, that sign-in is not seen, and the signed-out message says so.
  */
 export class CursorAgent extends CliAgent {
 	readonly id = 'cursor';
@@ -38,7 +38,7 @@ export class CursorAgent extends CliAgent {
 	readonly login = CURSOR_LOGIN;
 	/** Each call runs one CLI process, so four run at once unless `RECODER_CURSOR_CONCURRENCY` says otherwise. */
 	readonly processCeiling = { env: 'RECODER_CURSOR_CONCURRENCY', fallback: 4 };
-	readonly signInFix = `Sign in with \`${CURSOR_LOGIN}\`, or pick another model in Recoder settings.`;
+	readonly signInFix = `${SIGNED_OUT_FIX} Or pick another model in Recoder settings.`;
 
 	/**
 	 * The account's models, from `cursor-agent models`; throws when the CLI is missing or the list is empty. When
@@ -77,12 +77,7 @@ export class CursorAgent extends CliAgent {
 
 		const deadline = callDeadline(opts);
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-cursor-'));
-
-		const place = {
-			config: join(scratch, 'config'),
-			data: join(scratch, 'data'),
-			cwd: join(scratch, 'work')
-		};
+		const place = cursorPlace(scratch, this.env);
 
 		this.scratch.add(scratch);
 
@@ -136,22 +131,14 @@ export class CursorAgent extends CliAgent {
 	 */
 	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn'>> {
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-cursor-status-'));
+		const place = cursorPlace(scratch, this.env);
 
 		this.scratch.add(scratch);
-
-		const place = {
-			config: join(scratch, 'config'),
-			data: join(scratch, 'data'),
-			cwd: join(scratch, 'work')
-		};
 
 		try {
 			await writeCursorConfig(place, null);
 
-			const where = {
-				cwd: place.cwd,
-				env: { ...cursorEnv(this.env), CURSOR_CONFIG_DIR: place.config, CURSOR_DATA_DIR: place.data }
-			};
+			const where = { cwd: place.cwd, env: place.env };
 
 			const json = await this.output(path, ['status', '--format', 'json'], STATUS_TIMEOUT_MS, undefined, where);
 			const state = signInState(json.code, json.stdout);
@@ -183,7 +170,7 @@ export class CursorAgent extends CliAgent {
 	 */
 	private async call(
 		path: string,
-		place: { config: string; data: string; cwd: string },
+		place: CursorPlace,
 		stdin: string,
 		model: string,
 		signal: AbortSignal,
@@ -197,7 +184,7 @@ export class CursorAgent extends CliAgent {
 		const outcome = await streamPrintCall({
 			argv: [path, ...PRINT_ARGS, '--trust', '--workspace', place.cwd, '--model', model],
 			cwd: place.cwd,
-			env: { ...cursorEnv(this.env), CURSOR_CONFIG_DIR: place.config, CURSOR_DATA_DIR: place.data },
+			env: place.env,
 			stdin,
 			signal,
 			running: this.running,
