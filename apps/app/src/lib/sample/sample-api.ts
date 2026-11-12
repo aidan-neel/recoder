@@ -11,15 +11,19 @@ import {
 
 import type { ApiClient } from '../api/client';
 import { isOpenFinding, type DecisionInput } from '../api/reviews';
+import { isReviewing } from '../pulls/pull-rows';
 import { createSampleChat } from './sample-chat';
 import { sampleCommits } from './sample-pulls';
 import { SAMPLE_REVIEW } from './sample-review';
-import { playSampleRun, type SampleRun } from './sample-run';
+import { adoptSampleRun, playSampleRun, type RunScript, type SampleRun } from './sample-run';
 import { createSampleWorld, type SampleWorld } from './sample-world';
 
-/** What a scripted review finds: the sample review's findings and summary. */
-function sampleEnding() {
-	return { findings: structuredClone(SAMPLE_REVIEW.findings), summary: SAMPLE_REVIEW.summary ?? '' };
+/** What a scripted review of `review` reads, and what it finds: the sample review's findings and summary. */
+function sampleScript(world: SampleWorld, review: Review): RunScript {
+	return {
+		paths: world.diff(review.repoId, review.prNumber).map((file) => file.path),
+		ending: { findings: structuredClone(SAMPLE_REVIEW.findings), summary: SAMPLE_REVIEW.summary ?? '' }
+	};
 }
 
 /** Why the sample refuses a merge, or null when it merges. */
@@ -40,17 +44,24 @@ function createSampleReviews(world: SampleWorld) {
 	let created = 0;
 
 	function play(review: Review): void {
-		const paths = world.diff(review.repoId, review.prNumber).map((file) => file.path);
+		runs.set(review.id, playSampleRun(review, sampleScript(world, review), world));
+	}
 
-		runs.set(review.id, playSampleRun(review, paths, sampleEnding(), world.publish));
+	/** A review that was already running when the sample began gets its run when a person first pauses or stops it. */
+	function adopt(id: string): SampleRun {
+		const review = world.findReview(id);
+
+		if (!isReviewing(review)) throw new Error('That review isn’t running.');
+
+		const run = adoptSampleRun(review, sampleScript(world, review), world);
+
+		runs.set(id, run);
+
+		return run;
 	}
 
 	function runOf(id: string): SampleRun {
-		const run = runs.get(id);
-
-		if (!run) throw new Error('That review isn’t running.');
-
-		return run;
+		return runs.get(id) ?? adopt(id);
 	}
 
 	return {

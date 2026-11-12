@@ -1,5 +1,4 @@
 import {
-	emptyReviewProgress,
 	REVIEW_CANCELLED,
 	type Finding,
 	type Review,
@@ -8,8 +7,16 @@ import {
 	type ReviewTask
 } from '@recoder/shared';
 
-/** Where a scripted run sends each step: the review and its progress as they now stand. */
-export type RunPublish = (review: Review, progress: ReviewProgress) => void;
+/**
+ * Where a scripted run reads the review and its progress as they now stand,
+ * and sends each step. The run keeps no copy of its own, so what the
+ * conversation adds in between stays.
+ */
+interface RunStore {
+	findReview: (id: string) => Review;
+	progressOf: (id: string) => ReviewProgress;
+	publish: (review: Review, progress: ReviewProgress) => void;
+}
 
 /** A scripted review: queued, then the four steps, then findings, in about twenty seconds. */
 export interface SampleRun {
@@ -19,9 +26,16 @@ export interface SampleRun {
 }
 
 /** What the run ends with. */
-export interface RunEnding {
+interface RunEnding {
 	findings: Finding[];
 	summary: string;
+}
+
+/** What a scripted run reads and how it ends. */
+export interface RunScript {
+	/** The changed files the reviewers' plan splits into parts. */
+	paths: string[];
+	ending: RunEnding;
 }
 
 interface Step {
@@ -30,11 +44,9 @@ interface Step {
 	apply: (run: RunState) => void;
 }
 
-interface RunState {
+interface RunState extends RunScript {
 	review: Review;
 	progress: ReviewProgress;
-	paths: string[];
-	ending: RunEnding;
 }
 
 /** How many claims the scripted reviewers raise and the verifiers then check. */
@@ -84,23 +96,26 @@ const VERIFY_STEPS: Step[] = Array.from({ length: CLAIMS }, (_, index) => ({
 	}
 }));
 
-const STEPS: Step[] = [
-	{
-		wait: 900,
-		apply: (run) => {
-			run.review = { ...run.review, status: 'running', startedAt: now() };
-			run.progress.stage = 'checkout';
-			run.progress.orchestratorModel = 'claude-opus-5-5';
+/** The step that takes a queued review to running. */
+const START_STEP: Step = {
+	wait: 900,
+	apply: (run) => {
+		run.review = { ...run.review, status: 'running', startedAt: now() };
+		run.progress.stage = 'checkout';
+		run.progress.orchestratorModel = 'claude-opus-5-5';
 
-			setTask(run, {
-				id: 'fetch',
-				label: 'Fetch',
-				status: 'running',
-				message: 'Fetching the pull request',
-				kind: 'checkout'
-			});
-		}
-	},
+		setTask(run, {
+			id: 'fetch',
+			label: 'Fetch',
+			status: 'running',
+			message: 'Fetching the pull request',
+			kind: 'checkout'
+		});
+	}
+};
+
+/** The steps of a running review, up to its findings. */
+const WORK_STEPS: Step[] = [
 	{
 		wait: 1500,
 		apply: (run) => {
@@ -196,30 +211,50 @@ const STEPS: Step[] = [
 
 /**
  * Plays a scripted review of `review`, which starts queued: it reads the
- * change, plans parts over `paths`, raises and checks claims, and passes with
- * `ending`. Each step goes to `publish`. Nothing runs until it is called.
+ * change, plans parts over the script's paths, raises and checks claims, and
+ * passes with its ending. Each step goes to `store`.
  */
-export function playSampleRun(review: Review, paths: string[], ending: RunEnding, publish: RunPublish): SampleRun {
-	const run: RunState = { review, progress: emptyReviewProgress(review.id), paths, ending };
+export function playSampleRun(review: Review, script: RunScript, store: RunStore): SampleRun {
+	const run = createRun(review.id, [START_STEP, ...WORK_STEPS], script, store);
+
+	run.resume();
+
+	return run;
+}
+
+/**
+ * Takes over a review that was already queued or running when the sample
+ * began. Its script waits where the review stands until a person resumes it.
+ */
+export function adoptSampleRun(review: Review, script: RunScript, store: RunStore): SampleRun {
+	const steps = review.status === 'queued' ? [START_STEP, ...WORK_STEPS] : WORK_STEPS;
+
+	return createRun(review.id, steps, script, store);
+}
+
+/** A run of `steps` on the review with id `id`; nothing runs until it resumes. */
+function createRun(id: string, steps: Step[], script: RunScript, store: RunStore): SampleRun {
 	let next = 0;
 	let timer: ReturnType<typeof setTimeout> | null = null;
 
-	/** Publishes a copy, since the next step writes to the run's own progress. */
-	function send(): void {
-		run.progress = { ...run.progress, sequence: run.progress.sequence + 1, updatedAt: now() };
-		run.review = { ...run.review, updatedAt: now() };
-		publish(run.review, { ...run.progress });
+	/** Changes the review and progress as the store holds them now, and sends the result on. */
+	function change(apply: (run: RunState) => void): void {
+		const run: RunState = { review: store.findReview(id), progress: { ...store.progressOf(id) }, ...script };
+
+		apply(run);
+		store.publish({ ...run.review, updatedAt: now() }, { ...run.progress, updatedAt: now() });
 	}
 
+	/** Waits for the next step; a run that already waits for one keeps that wait. */
 	function schedule(): void {
-		const step = STEPS[next];
+		const step = steps[next];
 
-		if (!step) return;
+		if (timer || !step) return;
 
 		timer = setTimeout(() => {
-			step.apply(run);
+			timer = null;
+			change(step.apply);
 			next += 1;
-			send();
 			schedule();
 		}, step.wait);
 	}
@@ -230,25 +265,31 @@ export function playSampleRun(review: Review, paths: string[], ending: RunEnding
 		timer = null;
 	}
 
-	schedule();
-
 	return {
 		pause() {
 			hold();
-			run.progress.paused = true;
-			send();
+
+			change((run) => {
+				run.progress.paused = true;
+			});
 		},
 
 		resume() {
-			run.progress.paused = false;
-			send();
+			if (store.progressOf(id).paused) {
+				change((run) => {
+					run.progress.paused = false;
+				});
+			}
+
 			schedule();
 		},
 
 		cancel() {
 			hold();
-			run.review = { ...run.review, status: 'failed', summary: REVIEW_CANCELLED };
-			send();
+
+			change((run) => {
+				run.review = { ...run.review, status: 'failed', summary: REVIEW_CANCELLED };
+			});
 		}
 	};
 }

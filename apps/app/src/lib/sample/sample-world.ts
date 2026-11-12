@@ -62,18 +62,30 @@ export function createSampleWorld() {
 		return progress.get(id) ?? emptyReviewProgress(id);
 	}
 
-	/** Saves the review and its progress and sends both to everyone following it. */
+	/** Puts the review in the list in place of its old copy, or adds it. */
+	function saveReview(review: Review): void {
+		const reviews = [...data().reviews];
+		const index = reviews.findIndex((item) => item.id === review.id);
+
+		if (index === -1) reviews.push(review);
+		else reviews[index] = review;
+
+		data().reviews = reviews;
+	}
+
+	/**
+	 * Saves the review and its progress and sends both to everyone following
+	 * it. Every publish takes the review's next sequence, whoever sends it, so
+	 * the newest snapshot is never taken for a stale one.
+	 */
 	function publish(review: Review, next: ReviewProgress): void {
-		const reviews = data().reviews;
+		const numbered = { ...next, sequence: progressOf(review.id).sequence + 1 };
 
-		data().reviews = reviews.some((item) => item.id === review.id)
-			? reviews.map((item) => (item.id === review.id ? review : item))
-			: [...reviews, review];
-
-		progress.set(review.id, next);
+		saveReview(review);
+		progress.set(review.id, numbered);
 
 		for (const handlers of followers.get(review.id) ?? []) {
-			handlers.onMessage({ type: 'snapshot', sequence: next.sequence, snapshot: next, review });
+			handlers.onMessage({ type: 'snapshot', sequence: numbered.sequence, snapshot: numbered, review });
 		}
 	}
 

@@ -19,11 +19,7 @@ export function createSampleChat(world: SampleWorld) {
 		const progress = world.progressOf(reviewId);
 		const others = (progress.messages ?? []).filter((item) => item.id !== message.id);
 
-		world.publish(world.findReview(reviewId), {
-			...progress,
-			sequence: progress.sequence + 1,
-			messages: [...others, message]
-		});
+		world.publish(world.findReview(reviewId), { ...progress, messages: [...others, message] });
 	}
 
 	/** Streams the reply into the conversation a few words at a time. */
