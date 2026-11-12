@@ -1,4 +1,4 @@
-import { beforeEach, expect, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -24,6 +24,11 @@ beforeEach(async () => {
 		createdAt: now,
 		updatedAt: now
 	});
+});
+
+/** The watcher checks every stored repository, so one left behind would show up in its tests. */
+afterEach(async () => {
+	await db.repos.delete(REPO);
 });
 
 const rulesPath = (topicId?: string) =>

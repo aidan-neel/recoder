@@ -20,7 +20,9 @@ export interface DefectIdentity {
 	 * The terms of the trigger (the title, when a detector stated none) that
 	 * the pull request's code in the file also holds: the arguments, fields
 	 * or calls the defect is about, such as the `limit` a missing check lets
-	 * through.
+	 * through. The enclosing symbol's own name is left out: it says where the
+	 * defect lives, and two triggers that both name the function still differ
+	 * by the argument each is about.
 	 */
 	operands: ReadonlySet<string>;
 }
@@ -39,13 +41,14 @@ export function defectIdentity(finding: Finding, files: DiffFiles): DefectIdenti
 		)
 	);
 
+	const place = new Set(termsOf(finding.symbol ?? ''));
 	const trigger = termsOf(finding.claim?.trigger ?? finding.title ?? '');
 
 	return {
 		file: finding.file,
 		...(finding.symbol ? { symbol: finding.symbol } : {}),
 		claim: claimTerms(finding, lineText(files, finding)),
-		operands: new Set(trigger.filter((term) => code.has(term)))
+		operands: new Set(trigger.filter((term) => code.has(term) && !place.has(term)))
 	};
 }
 
@@ -64,14 +67,23 @@ export function sameDefect(a: DefectIdentity, b: DefectIdentity): boolean {
 }
 
 /**
- * Whether each trigger names code the other claim never mentions: one
- * failure on two operands, such as a missing check on `limit` and the same
- * missing check on `offset`. Their words are otherwise alike, so `sameClaim`
- * alone takes them for one defect. Both sides must name such code, so a
- * report that adds a detail to the same trigger stays the same defect.
+ * Whether the two triggers are about different code: one failure on two
+ * operands, such as a missing check on `limit` and the same missing check on
+ * `offset`. Their words are otherwise alike, so `sameClaim` alone takes them
+ * for one defect. The triggers must share no operand, and each must name one
+ * the other claim never mentions. A later review that words the same trigger
+ * with other words of the same line still shares an operand with the earlier
+ * one, so it stays the same defect, as does a report that adds a detail.
  */
 function namesOtherOperands(a: DefectIdentity, b: DefectIdentity): boolean {
+	if (sharesOperand(a, b)) return false;
+
 	return namesOperandOutside(a, b) && namesOperandOutside(b, a);
+}
+
+/** Whether both triggers name at least one same piece of code. */
+function sharesOperand(a: DefectIdentity, b: DefectIdentity): boolean {
+	return [...a.operands].some((term) => b.operands.has(term));
 }
 
 /** Whether `a`'s trigger names code that `b`'s claim does not mention. */
