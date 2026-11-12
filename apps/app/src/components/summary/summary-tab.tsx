@@ -4,6 +4,7 @@ import { Button, ClampedText, Markdown, Pill, SegmentedControl, SkeletonText } f
 import { useState } from 'react';
 
 import { useAskView } from '@/lib/ask/use-ask';
+import { useFollowEnd } from '@/lib/ask/use-follow-end';
 import { useBugsView, useSummaryView } from '@/lib/bugs/use-bugs';
 import type { GuidePart } from '@/lib/changes/types';
 import { useGuide } from '@/lib/changes/use-changes';
@@ -52,7 +53,9 @@ function GuideList({ parts }: { parts: GuidePart[] }) {
  * The Summary tab: what the change does in the review's words, the order to
  * read the files in, the author's own description, then the conversation.
  * Long prose shows its first lines and opens on Show more. One composer
- * writes either to Recoder or to the pull request.
+ * writes either to Recoder or to the pull request. It stays docked at the
+ * bottom of the tab while the rest scrolls, and a sent message and its reply
+ * stay in view above it.
  */
 export function SummaryTab({ repoId, number, onOpenGuide }: SummaryTabProps) {
 	const summary = useSummaryView();
@@ -64,10 +67,11 @@ export function SummaryTab({ repoId, number, onOpenGuide }: SummaryTabProps) {
 	const [writeTo, setWriteTo] = useState<WriteTo>('ask');
 	const canComment = conversation.phase !== 'off';
 	const commenting = canComment && writeTo === 'comment';
+	const scroller = useFollowEnd(ask.replying || conversation.posting);
 
 	return (
-		<div className="reading">
-			<div className="reading-column" data-width="narrow">
+		<div ref={scroller} className="reading summary-reading">
+			<div className="reading-column summary-column" data-width="narrow">
 				{summary.analysis === null && !summary.writing ? (
 					<RunBanner
 						run={run}
@@ -111,6 +115,8 @@ export function SummaryTab({ repoId, number, onOpenGuide }: SummaryTabProps) {
 					<h2 className="section-label">Conversation</h2>
 					<Conversation view={conversation} />
 					<AskThread ask={ask} />
+				</section>
+				<div className="summary-dock">
 					{commenting ? null : <AskSuggestions ask={ask} />}
 					<Composer
 						key={commenting ? 'comment' : 'ask'}
@@ -133,7 +139,7 @@ export function SummaryTab({ repoId, number, onOpenGuide }: SummaryTabProps) {
 							) : null
 						}
 					/>
-				</section>
+				</div>
 			</div>
 		</div>
 	);

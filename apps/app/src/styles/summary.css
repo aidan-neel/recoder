@@ -1,4 +1,42 @@
 /* ───────── Summary: what changed, the order to read it in, the conversation ───────── */
+/* The reading scrolls; the composer stays docked at the bottom of the tab, also when the text is short. */
+.summary-reading {
+	display: flex;
+	flex-direction: column;
+	scroll-padding-bottom: 200px;
+}
+.summary-column {
+	flex: 1 0 auto;
+	padding-bottom: 0;
+}
+.summary-dock {
+	position: sticky;
+	z-index: 1;
+	bottom: 0;
+	margin-top: auto;
+	padding: 16px 0 20px;
+	background: var(--bg-canvas);
+}
+.summary-dock .ask-suggestions {
+	margin: 0 0 10px;
+}
+
+/* A hairline marks the dock's edge only while text is scrolled under it; at the end of the text it is gone. */
+@supports (animation-timeline: scroll()) {
+	.summary-dock {
+		animation: summary-dock-edge linear both;
+		animation-timeline: scroll(nearest block);
+		animation-range: calc(100% - 24px) 100%;
+	}
+}
+@keyframes summary-dock-edge {
+	from {
+		box-shadow: 0 -1px 0 var(--line-subtle);
+	}
+	to {
+		box-shadow: 0 -1px 0 transparent;
+	}
+}
 .summary-analysis [data-ui='markdown'] {
 	color: var(--text-primary);
 	font-size: 14px;

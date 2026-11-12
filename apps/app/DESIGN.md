@@ -81,7 +81,10 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
     files in.
   - **Summary**: what the change does (clamped), the order to read the
     files in, the description (clamped), and the conversation with the
-    reviewer. No boxes: labels, space and hairlines group it.
+    reviewer. No boxes: labels, space and hairlines group it. The composer
+    is docked at the bottom of the tab, always: the text scrolls above it,
+    and a hairline marks its edge only while text is under it. A sent
+    message and its reply stay in view until the reader scrolls up.
   - **Bugs**: one row a bug, the worst first, split by hairlines. Shut, a row
     is the title over its badges: severity (or Suggestion), category, evidence
     class, file and line, and whether an earlier review reported it. Open, it
