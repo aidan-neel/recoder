@@ -61,6 +61,20 @@ test('unconfirmed findings, checks and gaps get their own headings only when the
 	expect(full).toContain('src/b.ts (partial): Too large.');
 });
 
+test('the target line names the commit a review started after and the run it continued', () => {
+	const continued = report({
+		target: { ...report().target, since: '0123456789abcdef', sinceRunId: '20261110-100001-abcdef' }
+	});
+
+	const named = report({ target: { ...report().target, since: '0123456789abcdef', sinceRunId: null } });
+	const whole = report();
+
+	expect(renderReport(continued, 'markdown', PLAIN_SURFACE)).toContain('since 0123456 (run 20261110-100001-abcdef)');
+	expect(renderReport(named, 'markdown', PLAIN_SURFACE)).toContain('since 0123456');
+	expect(renderReport(named, 'markdown', PLAIN_SURFACE)).not.toContain('(run');
+	expect(renderReport(whole, 'markdown', PLAIN_SURFACE)).not.toContain('since');
+});
+
 test('json is the report with two-space indentation', () => {
 	const value = report();
 

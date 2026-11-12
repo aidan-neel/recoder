@@ -112,6 +112,11 @@ export const REVIEW_FLAGS = {
 		description:
 			'With --pull: review only the commits after this one, such as the head of an earlier review. It must be in the history of the pull request.'
 	},
+	full: {
+		type: 'boolean',
+		group: 'target',
+		description: 'Review the whole change, also when an earlier review covered part of it.'
+	},
 	diff: {
 		type: 'string',
 		group: 'target',

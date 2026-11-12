@@ -12,6 +12,8 @@ const SETTINGS: ReportSource['settings'] = {
 	reviewerEffort: null,
 	workerEffort: null,
 	lenses: null,
+	include: [],
+	exclude: [],
 	reportLowSeverity: true,
 	exec: false,
 	execReason: 'no checkout'

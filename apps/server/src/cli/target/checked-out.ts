@@ -7,6 +7,7 @@ import { revisionDiff } from '../../sandbox/sandbox.js';
 import { sandboxLayout } from '../../sandbox/sandbox-layout.js';
 import { removeLayers } from '../../sandbox/workspace-setup.js';
 import { notReadyError, usageError } from '../exit.js';
+import type { ReviewStart } from '../review/options.js';
 import { assertNotCancelled } from './git.js';
 import type { ResolvedTarget, TargetRequest } from './resolve-target.js';
 import { isScoped, scopePathspecs } from './scope.js';
@@ -25,6 +26,8 @@ export interface CheckedOutChange {
 	/** The head as the caller named it, or what it stands for (`staged changes`). */
 	headName: string;
 	pull: PullDetails | null;
+	/** Where the review of the commits begins, resolved. */
+	start: ReviewStart;
 }
 
 /** The diff of the change within the request's scope, with the checkout and its cleanup; an empty diff is refused. */
@@ -48,6 +51,8 @@ export async function checkedOutTarget(change: CheckedOutChange): Promise<Resolv
 			baseSha: revision.targetSha,
 			mergeBaseSha: revision.mergeBaseSha,
 			headSha: revision.headSha,
+			since: change.start.since,
+			sinceRunId: change.start.sinceRunId,
 			url: change.pull?.url ?? null,
 			changedFiles: parseUnifiedDiff(diff).length
 		},

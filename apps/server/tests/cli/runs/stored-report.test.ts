@@ -29,3 +29,19 @@ test('a report whose field a renderer reads has the wrong type is unreadable rat
 
 	await expect(readStoredReport(runIdAt(1), files)).rejects.toMatchObject({ exitCode: EXIT.failed });
 });
+
+test('a report from before the start and scope fields reads without error', async () => {
+	const files = await createRunFolder(runIdAt(1));
+	const saved = JSON.parse(JSON.stringify(report()));
+
+	delete saved.target.since;
+	delete saved.target.sinceRunId;
+	delete saved.settings.include;
+	delete saved.settings.exclude;
+	writeFileSync(files.report, JSON.stringify(saved));
+
+	const read = await readStoredReport(runIdAt(1), files);
+
+	expect(read?.outcome).toBe('complete');
+	expect(read?.target.headSha).toBe(saved.target.headSha);
+});

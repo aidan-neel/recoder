@@ -53,6 +53,20 @@ test('the error of a review that stopped is shown under its outcome', () => {
 	expect(rendered).toContain('the model stopped answering');
 });
 
+test('the target line names the commit a review started after and the run it continued', () => {
+	const continued = text({
+		target: { ...report().target, since: '0123456789abcdef', sinceRunId: '20261110-100001-abcdef' }
+	});
+
+	const named = text({ target: { ...report().target, since: '0123456789abcdef', sinceRunId: null } });
+	const whole = text({});
+
+	expect(continued).toContain('since 0123456 (run 20261110-100001-abcdef)');
+	expect(named).toContain('since 0123456');
+	expect(named).not.toContain('(run');
+	expect(whole).not.toContain('since');
+});
+
 test('the settings header prints the verifier model only when it differs from the reviewer model', () => {
 	const base = report().settings;
 	const same = text({ settings: { ...base, reviewerModel: 'lead', verifierModel: 'lead' } });

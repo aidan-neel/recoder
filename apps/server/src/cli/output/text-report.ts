@@ -6,6 +6,7 @@ import { sectionRule } from '../terminal/layout.js';
 import { textWidth, type Surface } from '../terminal/surface.js';
 import { indent, plural, wrapText } from '../terminal/text.js';
 import { SEVERITIES } from './severity.js';
+import { sinceLabel } from './target-since.js';
 import { findingLines, severityPaint } from './text-finding.js';
 import { prose } from './text-prose.js';
 
@@ -98,6 +99,7 @@ function describeTarget(report: ReviewReport, { glyphs }: Surface): string {
 	const parts = [
 		targetName(target, glyphs.arrow),
 		target.headSha ? target.headSha.slice(0, SHORT_SHA_LENGTH) : null,
+		sinceLabel(target),
 		target.repoPath ? tildePath(target.repoPath) : null,
 		`${coverage.reviewed} of ${plural(coverage.total, 'file')} reviewed`
 	];

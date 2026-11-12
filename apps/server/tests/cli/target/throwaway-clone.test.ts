@@ -17,7 +17,10 @@ test('a checkout of a repository that borrows objects reads its head, base and m
 	await writeFiles(dir, { 'a.ts': 'one\ntwo\n' });
 	commitAll(dir, 'Change a');
 
-	const resolved = await resolveTarget(targetRequest(dir, { kind: 'range', base: null, head: 'feature' }));
+	const resolved = await resolveTarget(
+		targetRequest(dir, { kind: 'range', base: null, head: 'feature', start: { kind: 'continue' } })
+	);
+
 	const checkout = resolved.sandboxPath ?? '';
 
 	await rm(upstream, { recursive: true, force: true });

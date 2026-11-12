@@ -9,6 +9,7 @@ import {
 	fixtureFolder,
 	localForge,
 	pathWithFake,
+	rejection,
 	removeFixtureFolders,
 	targetRequest,
 	userRepository
@@ -22,7 +23,7 @@ test('a pull number is found through the origin remote and carries the forge tit
 
 	git(dir, ['remote', 'add', 'origin', forge.repo.url]);
 
-	const resolved = await resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', since: null }));
+	const resolved = await resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', start: { kind: 'continue' } }));
 
 	expect(resolved.title).toBe('Change a');
 	expect(resolved.body).toBe('Makes two loud. Closes #5.');
@@ -42,7 +43,7 @@ test('a pull URL needs no repository and no origin remote', async () => {
 	const elsewhere = await fixtureFolder('recoder-no-repo-');
 
 	const resolved = await resolveTarget(
-		targetRequest(elsewhere, { kind: 'pull', pull: `${forge.repo.url}#pull/7`, since: null })
+		targetRequest(elsewhere, { kind: 'pull', pull: `${forge.repo.url}#pull/7`, start: { kind: 'continue' } })
 	);
 
 	expect(resolved.revision?.headSha).toBe(forge.pull7Head);
@@ -55,7 +56,9 @@ test('--since starts the diff at that commit, so only the commits after it are r
 	const elsewhere = await fixtureFolder('recoder-since-');
 	const pull = `${forge.repo.url}#pull/7`;
 
-	const resolved = await resolveTarget(targetRequest(elsewhere, { kind: 'pull', pull, since: forge.pull7Commit }));
+	const resolved = await resolveTarget(
+		targetRequest(elsewhere, { kind: 'pull', pull, start: { kind: 'named', commit: forge.pull7Commit } })
+	);
 
 	expect(resolved.revision?.mergeBaseSha).toBe(forge.pull7Commit);
 	expect(resolved.report.mergeBaseSha).toBe(forge.pull7Commit);
@@ -78,7 +81,13 @@ test.each(OUTSIDE_THE_PULL)('--since at %s is a usage error', async (_, pick, me
 	const since = pick(forge);
 
 	const error = await rejection(
-		resolveTarget(targetRequest(elsewhere, { kind: 'pull', pull: `${forge.repo.url}#pull/7`, since }))
+		resolveTarget(
+			targetRequest(elsewhere, {
+				kind: 'pull',
+				pull: `${forge.repo.url}#pull/7`,
+				start: { kind: 'named', commit: since }
+			})
+		)
 	);
 
 	expect(error).toMatchObject({ exitCode: EXIT.usage, message: expect.stringContaining(message) });
@@ -87,7 +96,7 @@ test.each(OUTSIDE_THE_PULL)('--since at %s is a usage error', async (_, pick, me
 test('a pull number in a repository without an origin remote asks for the URL', async () => {
 	const dir = await userRepository();
 
-	const resolving = resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', since: null }));
+	const resolving = resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', start: { kind: 'continue' } }));
 
 	await expect(resolving).rejects.toMatchObject({ exitCode: EXIT.notReady, message: expect.stringContaining('URL') });
 });
@@ -103,7 +112,9 @@ test('a rejected pull address is never quoted back, wherever it hides a secret',
 	};
 
 	for (const [pull, secrets] of Object.entries(hostile)) {
-		const error = await rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull, since: null })));
+		const error = await rejection(
+			resolveTarget(targetRequest(dir, { kind: 'pull', pull, start: { kind: 'continue' } }))
+		);
 
 		expect(error).toMatchObject({ exitCode: EXIT.usage });
 		expect(error.message).toContain('pull request URL');
@@ -116,7 +127,9 @@ test('an origin remote that is not on a forge is shown without its query string'
 
 	git(dir, ['remote', 'add', 'origin', 'https://github.com/o/r/extra?private_token=SECRET']);
 
-	const error = await rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', since: null })));
+	const error = await rejection(
+		resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', start: { kind: 'continue' } }))
+	);
 
 	expect(error).toMatchObject({ exitCode: EXIT.notReady });
 	expect(error.message).toContain('https://github.com/o/r/extra ');
@@ -179,7 +192,9 @@ async function pullWithFailingClone(dir: string): Promise<Error> {
 		`#!/bin/sh\nif [ "$1" = clone ]; then\n${lines}\nexit 128\nfi\nexec '${realGit}' "$@"\n`
 	);
 
-	return withPath(path, () => rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', since: null }))));
+	return withPath(path, () =>
+		rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', start: { kind: 'continue' } })))
+	);
 }
 
 /** What a fake `gh` prints when it fails, standing in for forge output that can quote the remote URL. */
@@ -191,7 +206,7 @@ async function pullWithFailingGh(dir: string): Promise<{ error: Error; ghArgs: s
 	const path = await pathWithFake('gh', `#!/bin/sh\necho "$*" > '${argsFile}'\necho '${GH_ERROR_TEXT}' >&2\nexit 1\n`);
 
 	const error = await withPath(path, () =>
-		rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', since: null })))
+		rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', start: { kind: 'continue' } })))
 	);
 
 	return { error, ghArgs: await readFile(argsFile, 'utf8') };
@@ -212,16 +227,4 @@ async function withPath<T>(path: string | undefined, run: () => Promise<T>): Pro
 	} finally {
 		process.env.PATH = original;
 	}
-}
-
-/** The error `resolving` rejects with; fails the test when it resolves instead. */
-async function rejection(resolving: Promise<unknown>): Promise<Error> {
-	const outcome = await resolving.then(
-		() => null,
-		(err: unknown) => err
-	);
-
-	if (!(outcome instanceof Error)) throw new Error('expected the target to be refused');
-
-	return outcome;
 }

@@ -139,12 +139,13 @@ const COMMAND_HELP: Record<Exclude<HelpTopic, 'main'>, CommandHelp> = {
 					['recoder review --uncommitted', 'Everything not committed yet'],
 					['recoder review --pull 214 --budget medium', 'A pull request, reviewed more deeply'],
 					['recoder review --lens correctness,security', 'Two lenses only'],
+					['recoder review --full', 'The whole change again, after an earlier review'],
 					['recoder review --detach', 'In the background; recoder wait follows it']
 				]
 			}
 		],
 		notes: [
-			`Choose at most one of ${listFlags(NON_RANGE_TARGETS)}. With none, the commits on the current branch since it left the default branch are reviewed.`
+			`Choose at most one of ${listFlags(NON_RANGE_TARGETS)}. With none, the commits on the current branch since it left the default branch are reviewed, and a later review covers only the commits added since, unless --full.`
 		]
 	},
 	init: {

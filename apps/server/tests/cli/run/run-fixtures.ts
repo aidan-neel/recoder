@@ -19,6 +19,8 @@ const REPORT_TARGET: ReportTarget = {
 	baseSha: null,
 	mergeBaseSha: null,
 	headSha: null,
+	since: null,
+	sinceRunId: null,
 	url: null,
 	changedFiles: 1
 };

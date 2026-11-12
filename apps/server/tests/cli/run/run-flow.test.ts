@@ -72,6 +72,35 @@ test('a finished review reports its findings without bookkeeping and says why no
 	expect(disposed()).toBe(1);
 });
 
+test('a review that continues an earlier one logs the boundary once its target is resolved', async () => {
+	stubFindings([]);
+
+	const { target } = fakeTarget();
+
+	target.report = {
+		...target.report,
+		since: '0123456789abcdef0123456789abcdef01234567',
+		sinceRunId: '20261110-100001-abcdef'
+	};
+
+	const events: ProgressEvent[] = [];
+
+	await runReviewFlow(
+		async () => target,
+		reviewOptions(),
+		(event) => events.push(event),
+		never
+	);
+
+	const message =
+		'Reviewing the commits after 0123456, the head of run 20261110-100001-abcdef. --full reviews the whole change.';
+
+	const checkout = events.findIndex((event) => event.type === 'stage' && event.stage === 'checkout');
+	const logged = events.findIndex((event) => event.type === 'log' && event.message === message);
+
+	expect(logged).toBeGreaterThan(checkout);
+});
+
 test('the caller can keep the checkout', async () => {
 	stubFindings([]);
 

@@ -50,6 +50,10 @@ export interface ReportTarget {
 	baseSha: string | null;
 	mergeBaseSha: string | null;
 	headSha: string | null;
+	/** The commit the review started after; null when it covered the whole change. */
+	since: string | null;
+	/** The run whose head `since` is; null for `--since` and a whole review. */
+	sinceRunId: string | null;
 	/** The pull request's address, for a `pull` target. */
 	url: string | null;
 	changedFiles: number;
@@ -67,6 +71,10 @@ export interface ReportSettings {
 	workerEffort: ReasoningEffort | null;
 	/** Null when every lens that applies ran. */
 	lenses: LensId[] | null;
+	/** The `--include` path globs the review was narrowed to; empty when it saw every path. */
+	include: string[];
+	/** The `--exclude` path globs; empty when none were given. */
+	exclude: string[];
 	reportLowSeverity: boolean;
 	/** Whether code could run. False when asked for, or when the machine has no sandbox; `execReason` says which. */
 	exec: boolean;

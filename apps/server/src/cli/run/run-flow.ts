@@ -2,6 +2,7 @@ import { signedOutAgent, signedOutReason } from '../../models/agent-sign-in.js';
 import { isReviewConfigured, stageConfigs } from '../../models/models.js';
 import { CliError, EXIT, notReadyError } from '../exit.js';
 import type { ProgressSink } from '../progress.js';
+import { continuedReviewMessage } from '../output/target-since.js';
 import type { ReviewReport } from '../report/report.js';
 import type { ReviewOptions } from '../review/options.js';
 import type { ResolvedTarget, TargetRequest } from '../target/resolve-target.js';
@@ -40,6 +41,9 @@ export async function runReviewFlow(
 		progress({ type: 'stage', stage: 'checkout' });
 
 		const target = await resolveWithin(resolve, options, stop);
+		const continued = continuedReviewMessage(target.report);
+
+		if (continued !== null) progress({ type: 'log', message: continued });
 
 		try {
 			return await reviewResolvedTarget({ options, target, progress, stop, startedAtMs });

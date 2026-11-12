@@ -214,7 +214,7 @@ test('--verifier sets verifierModelId for the run and describeSettings reports i
 
 	const defaultTuning = { ...reviewOptions().tuning, budget: 'low' as const };
 	const restoreDefault = await applyRunSettings(defaultTuning, LOOKUP);
-	const sameSettings = await describeSettings(defaultTuning, null);
+	const sameSettings = await describeSettings(defaultTuning, { include: [], exclude: [] }, null);
 
 	restoreDefault();
 	expect(sameSettings.verifierModel).toBeNull();
@@ -222,7 +222,7 @@ test('--verifier sets verifierModelId for the run and describeSettings reports i
 	const verifierTuning = { ...defaultTuning, verifierModel: 'judge' };
 	const restoreVerifier = await applyRunSettings(verifierTuning, LOOKUP);
 	const resolvedVerifier = configForVerifier();
-	const differentSettings = await describeSettings(verifierTuning, null);
+	const differentSettings = await describeSettings(verifierTuning, { include: [], exclude: [] }, null);
 
 	restoreVerifier();
 	expect(resolvedVerifier).toMatchObject({ model: 'judge-model', reasoningEffort: 'low' });

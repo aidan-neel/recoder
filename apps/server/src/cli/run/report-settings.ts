@@ -3,7 +3,7 @@ import { configForOrchestrator, configForSubagent, configForVerifier } from '../
 import { execUnavailableReason } from '../../sandbox/exec-sandbox.js';
 import type { ReviewRevision } from '../../evidence/evidence.js';
 import type { ReportSettings } from '../report/report.js';
-import type { ReviewTuning } from '../review/options.js';
+import type { ReviewScope, ReviewTuning } from '../review/options.js';
 import { subagentCapOf } from './run-settings.js';
 
 const EXEC_TURNED_OFF = 'Code execution was turned off for this review.';
@@ -14,7 +14,11 @@ const NO_CHECKOUT = 'There is no checkout to run code in: a bare diff has no rep
  * What the review runs with, after flags, the budget and the saved settings are combined. The models and efforts are
  * read back from the settings the run applied, so they are what the reviewers really get.
  */
-export async function describeSettings(tuning: ReviewTuning, revision: ReviewRevision | null): Promise<ReportSettings> {
+export async function describeSettings(
+	tuning: ReviewTuning,
+	scope: ReviewScope,
+	revision: ReviewRevision | null
+): Promise<ReportSettings> {
 	const review = configForOrchestrator();
 	const worker = configForSubagent();
 	const verifier = configForVerifier();
@@ -29,6 +33,8 @@ export async function describeSettings(tuning: ReviewTuning, revision: ReviewRev
 		reviewerEffort: review.reasoningEffort ?? null,
 		workerEffort: worker.reasoningEffort ?? null,
 		lenses: tuning.lenses,
+		include: scope.include,
+		exclude: scope.exclude,
 		reportLowSeverity: tuning.reportLowSeverity ?? effectiveReportLowSeverity(),
 		exec: execReason === null,
 		execReason
