@@ -1,1 +1,85 @@
 /* ───────── Automations: what starts a review without a click ───────── */
+/* A group and the lines under its card that belong to it. */
+.automations-block {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+/* The handle is typed into a comment as it stands, so it is set like code. */
+.automations-handle {
+	width: 168px;
+}
+.automations-handle input {
+	font-family: var(--font-code);
+	font-size: 12px;
+}
+
+/* The interval's menu is as wide as its trigger, so it opens inside the card. */
+.automations-interval {
+	width: 132px;
+}
+.automations-interval-menu {
+	min-width: var(--radix-select-trigger-width);
+}
+
+/* What the last round could not read, one line a repository. */
+.automations-errors {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+/* A long reason wraps under itself, with the mark on its first line. */
+.automations-errors .strip {
+	align-items: flex-start;
+	padding-top: 9px;
+	padding-bottom: 9px;
+}
+.automations-errors .strip svg {
+	margin-top: 2px;
+}
+
+/* Recent: each row is one link, and the hover band runs edge to edge inside the card. */
+.automations-links {
+	overflow: hidden;
+	border-radius: 12px;
+}
+.automations-links [data-ui='hover-list-highlight'] {
+	border-radius: 0;
+}
+.automations-link-row {
+	position: relative;
+	--row-button-radius: 0;
+}
+.automations-link-row + .automations-link-row {
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+}
+/* The focus ring follows the card's corners on the first and the last row. */
+.automations-link-row:nth-child(1 of .automations-link-row) {
+	--row-button-radius: 12px 12px 0 0;
+}
+.automations-link-row:last-child {
+	--row-button-radius: 0 0 12px 12px;
+}
+.automations-link-row:nth-child(1 of .automations-link-row):last-child {
+	--row-button-radius: 12px;
+}
+.automations-link-row [data-ui='row-button'] {
+	color: var(--text-primary);
+}
+.automations-link-row .settings-row-end svg {
+	width: 16px;
+	height: 16px;
+	color: var(--text-ghost);
+	transition: color var(--dur-hover) ease-out;
+}
+.automations-link-row:hover .settings-row-end svg,
+.automations-link-row:focus-within .settings-row-end svg {
+	color: var(--text-muted);
+}
+
+/* A webhook's address, whole, however long the host is. */
+.automations-address {
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}

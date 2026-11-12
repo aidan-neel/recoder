@@ -1,5 +1,7 @@
 'use client';
 
+import { useShallow } from 'zustand/react/shallow';
+
 import { agentReady, useSettings } from './settings-store';
 import { missingNote, ROLE_NAME, rolePick, type ModelRole } from './model-options';
 
@@ -34,13 +36,15 @@ export interface AgentModelsView {
 export function useAgentModels(): AgentModelsView {
 	const offered = useSettings((state) => state.agents.some(agentReady) || Boolean(state.models?.models.length));
 
-	const notes = useSettings((state) =>
-		state.models
-			? {
-					orchestrator: missingNote(rolePick(state.models, 'orchestrator')),
-					specialist: missingNote(rolePick(state.models, 'specialist'))
-				}
-			: null
+	const notes = useSettings(
+		useShallow((state) =>
+			state.models
+				? {
+						orchestrator: missingNote(rolePick(state.models, 'orchestrator')),
+						specialist: missingNote(rolePick(state.models, 'specialist'))
+					}
+				: null
+		)
 	);
 
 	const rows: ModelRowView[] = (['orchestrator', 'specialist'] as const).map((role) => {

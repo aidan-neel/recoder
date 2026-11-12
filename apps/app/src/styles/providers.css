@@ -1,1 +1,205 @@
 /* ───────── Settings → Models → Providers: the connected list and the dialog that connects one ───────── */
+/* In the card a notice is a settings row; the command that fixes it sits under the row's text. */
+.provider-notice .provider-command {
+	margin: 0 16px 16px;
+}
+
+/* ───────── The dialog's steps ───────── */
+/*
+ * The steps cross in one cell of a set height, so the dialog and its footer
+ * stay put from the list to a sign-in. A form that needs more room grows it.
+ */
+.provider-steps {
+	--provider-steps-height: 308px;
+	display: grid;
+	min-height: var(--provider-steps-height);
+}
+.provider-step {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+	grid-area: 1 / 1;
+}
+.provider-back {
+	margin-right: auto;
+}
+
+/* ───────── Step one: search, then the providers under their headings ───────── */
+.provider-pick {
+	display: flex;
+	height: var(--provider-steps-height);
+	flex-direction: column;
+	gap: 8px;
+}
+/* The rows reach 10px into the dialog's padding, so their names line up with the title and the search field. */
+.provider-pick-scroll {
+	flex: 1;
+	margin: 0 -10px;
+}
+.provider-pick-list {
+	display: flex;
+	flex-direction: column;
+	padding-bottom: 4px;
+}
+.provider-pick-heading {
+	display: flex;
+	height: 30px;
+	align-items: flex-end;
+	padding: 0 10px 6px;
+}
+.provider-pick-heading [data-ui='skeleton'] {
+	width: 52px;
+	height: 10px;
+	margin-bottom: 3px;
+}
+.provider-pick-row {
+	display: flex;
+	height: 32px;
+	align-items: center;
+	gap: 10px;
+	padding: 0 6px 0 10px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+}
+.provider-pick-row:hover,
+.provider-pick-row:focus-visible {
+	color: var(--text-primary);
+}
+/* The rows fill the scroll area, which would clip a ring drawn outside them. */
+.provider-pick-row:focus-visible {
+	box-shadow: inset 0 0 0 2px var(--focus-color);
+}
+.provider-pick-name {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.provider-pick-meta {
+	display: inline-flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 5px;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	font-variant-numeric: tabular-nums;
+	line-height: 16px;
+}
+.provider-pick-meta svg {
+	width: 13px;
+	height: 13px;
+	color: var(--success);
+	stroke-width: 2.25;
+}
+/* The row's last slot: a chevron into the sign-in, or the key that picks the first match. */
+.provider-pick-end {
+	display: grid;
+	width: 22px;
+	flex-shrink: 0;
+	place-items: center;
+	color: var(--text-ghost);
+	transition: color var(--dur-hover) ease-out;
+}
+.provider-pick-end svg {
+	width: 14px;
+	height: 14px;
+}
+.provider-pick-row:hover .provider-pick-end,
+.provider-pick-row:focus-visible .provider-pick-end {
+	color: var(--text-muted);
+}
+.provider-pick-empty {
+	padding: 56px 16px 0;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	overflow-wrap: anywhere;
+	text-align: center;
+}
+
+/* With no list to show, the reason sits in the middle of the room the list would take. */
+.provider-pick-notice {
+	flex: 1;
+	padding: 24px 8px;
+}
+.provider-pick-notice [data-ui='status-notice-title'] {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+/* One column: the command at the dialog's width, then the way out under it. */
+.provider-pick-notice [data-ui='status-notice-actions'] {
+	width: 100%;
+	flex-flow: column nowrap;
+	align-items: center;
+	gap: 12px;
+}
+.provider-pick-notice .provider-command {
+	align-self: stretch;
+	text-align: left;
+}
+
+/* ───────── Step two: how to connect, then the sign-in under way ───────── */
+.provider-form {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+/* A label over option cards or a select, set like the kit's field label. */
+.provider-choice {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+}
+.provider-choice-label {
+	margin-bottom: 6px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	line-height: 16px;
+}
+.provider-select {
+	width: 100%;
+}
+.provider-notes,
+.provider-device {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.provider-note,
+.provider-waiting {
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+	line-height: 18px;
+	text-wrap: pretty;
+}
+/* A device code reads as a field that only gives: mono, set large, with its copy button at the end. */
+.provider-device-code {
+	display: flex;
+	height: 52px;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 0 10px 0 16px;
+	border-radius: 10px;
+	background: var(--bg-field);
+	box-shadow: inset 0 0 0 1px var(--line-control);
+}
+.provider-device-text {
+	min-width: 0;
+	overflow: hidden;
+	color: var(--text-primary);
+	font-family: var(--font-code);
+	font-size: 20px;
+	font-weight: 500;
+	letter-spacing: 0.08em;
+	line-height: 28px;
+	text-overflow: ellipsis;
+	user-select: all;
+	white-space: nowrap;
+}
+.provider-sign-in-link {
+	align-self: flex-start;
+}

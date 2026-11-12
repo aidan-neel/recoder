@@ -33,6 +33,8 @@ export function SettingsGroup({ title, action, note, children }: SettingsGroupPr
 }
 
 interface SettingsRowProps {
+	/** Before the text: the mark of what the row is about, such as a forge. */
+	leading?: ReactNode;
 	name: ReactNode;
 	/** The line under the name: what the setting does, or what it is set to. */
 	detail?: ReactNode;
@@ -47,9 +49,10 @@ interface SettingsRowProps {
 }
 
 /** One setting: its name and a line about it on the left, its control on the right. */
-export function SettingsRow({ name, detail, error, state, stacked, children }: SettingsRowProps) {
+export function SettingsRow({ leading, name, detail, error, state, stacked, children }: SettingsRowProps) {
 	return (
-		<div className="settings-row" data-stacked={stacked || undefined}>
+		<div className="settings-row" data-stacked={stacked || undefined} data-led={leading ? true : undefined}>
+			{leading}
 			<div className="settings-row-text">
 				<span className="settings-row-name">{name}</span>
 				{error ? (

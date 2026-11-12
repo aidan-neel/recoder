@@ -7,7 +7,8 @@
 	display: flex;
 	height: 48px;
 	align-items: center;
-	margin: -12px 0 24px;
+	margin: -12px -1px 24px;
+	padding: 0 1px;
 	border-bottom: 1px solid var(--line-subtle);
 	background: var(--bg-canvas);
 }
@@ -52,16 +53,47 @@
 	font-size: 12px;
 }
 
-/* One setting: what it is on the left, its control on the right. */
+/*
+ * One setting: what it is on the left, its control on the right. Two lines
+ * of text make exactly 60px, and the divider is drawn inside the row, so the
+ * skeleton and the rows that replace it sit on the same lines.
+ */
 .settings-row {
 	display: flex;
 	min-height: 60px;
 	align-items: center;
 	gap: 12px 24px;
-	padding: 12px 16px;
+	padding: 11px 16px;
 }
 .settings-row + .settings-row {
-	border-top: 1px solid var(--line-subtle);
+	box-shadow: inset 0 1px 0 var(--line-subtle);
+}
+/* A row led by a mark names a thing, not a sentence: its lines cut short and never wrap. */
+.settings-row[data-led] {
+	column-gap: 12px;
+}
+.settings-row[data-led] .settings-row-name,
+.settings-row[data-led] .settings-row-detail {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.settings-row[data-led] .settings-row-end {
+	margin-left: 12px;
+}
+.settings-row-detail .mono {
+	font-size: 12px;
+}
+/* A forge's mark on a quiet tile, leading its row. */
+.forge-tile {
+	display: grid;
+	width: 28px;
+	height: 28px;
+	flex-shrink: 0;
+	place-items: center;
+	border-radius: 8px;
+	background: var(--bg-hover);
+	color: var(--text-secondary);
 }
 .settings-row[data-stacked] {
 	flex-wrap: wrap;
