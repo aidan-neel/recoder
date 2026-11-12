@@ -1,7 +1,13 @@
-.guidelines-error {
+.guidelines-error,
+.guidelines-blocked {
 	padding-left: 4px;
 	font-size: 12.5px;
+}
+.guidelines-error {
 	color: var(--danger);
+}
+.guidelines-blocked {
+	color: var(--text-muted);
 }
 [data-ui='button'].guidelines-sources {
 	margin-left: -6px;

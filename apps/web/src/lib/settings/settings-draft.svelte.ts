@@ -34,6 +34,8 @@ class SettingsDraft {
 	orchestrator = $state<ModelChoice | null>(null);
 	/** Null follows the Review model. */
 	specialist = $state<ModelChoice | null>(null);
+	/** Null follows the Review model. */
+	verifier = $state<ModelChoice | null>(null);
 	limits = $state<Limits>({ maxFiles: 0, maxDiffChars: 0, maxFileChars: 0 });
 	/** How many subagents one review may run. */
 	subagentCap = $state<SubagentCap>(DEFAULT_SUBAGENT_CAP);
@@ -45,6 +47,7 @@ class SettingsDraft {
 	private initial: {
 		orchestrator: ModelChoice | null;
 		specialist: ModelChoice | null;
+		verifier: ModelChoice | null;
 		limits: Limits;
 		subagentCap: SubagentCap;
 		tokenBudget: TokenBudget;
@@ -54,6 +57,7 @@ class SettingsDraft {
 	seed(config: ModelSettings): void {
 		this.orchestrator = modelSettingsUi.orchestrator;
 		this.specialist = config.specialistModelId ? modelSettingsUi.specialist : null;
+		this.verifier = modelSettingsUi.verifier;
 		this.limits = { ...config.limits };
 		this.subagentCap = config.subagentCap ?? DEFAULT_SUBAGENT_CAP;
 		this.tokenBudget = config.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
@@ -62,6 +66,7 @@ class SettingsDraft {
 		this.initial = {
 			orchestrator: this.orchestrator,
 			specialist: this.specialist,
+			verifier: this.verifier,
 			limits: { ...this.limits },
 			subagentCap: this.subagentCap,
 			tokenBudget: this.tokenBudget,
@@ -122,6 +127,11 @@ class SettingsDraft {
 		if (!sameChoice(this.specialist, initial.specialist)) {
 			patch.specialistModelId = this.specialist?.modelId ?? null;
 			patch.specialistEffort = this.specialist?.effort ?? null;
+		}
+
+		if (!sameChoice(this.verifier, initial.verifier)) {
+			patch.verifierModelId = this.verifier?.modelId ?? null;
+			patch.verifierEffort = this.verifier?.effort ?? null;
 		}
 
 		if (this.limits.maxFiles !== initial.limits.maxFiles) patch.maxFiles = this.limits.maxFiles;

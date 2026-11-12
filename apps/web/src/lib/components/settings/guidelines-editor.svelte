@@ -415,8 +415,10 @@
 						{/each}
 					</div>
 				{/if}
-				{#if draftError || saveError || blockedReason}
-					<p class="guidelines-error" role="alert">{draftError ?? saveError ?? blockedReason}</p>
+				{#if draftError || saveError}
+					<p class="guidelines-error" role="alert">{draftError ?? saveError}</p>
+				{:else if blockedReason}
+					<p class="guidelines-blocked">{blockedReason}</p>
 				{/if}
 				<ReviewComposer
 					bind:value={prompt}

@@ -179,6 +179,14 @@ class ModelSettingsUi {
 		return { modelId: model.id, effort: resolveEffort(model, config.specialistEffort) };
 	}
 
+	/** The model verifiers run on, or null when they follow the Review model. */
+	get verifier(): ModelChoice | null {
+		const config = this.config;
+		const model = config?.verifierModelId ? this.models.find((item) => item.id === config.verifierModelId) : undefined;
+
+		return model ? { modelId: model.id, effort: resolveEffort(model, config?.verifierEffort) } : null;
+	}
+
 	/** Optimistically apply a patch, then persist; reverts and reports on failure. */
 	async update(
 		patch: Pick<
