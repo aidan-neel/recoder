@@ -6,9 +6,11 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Review.** One run of the pipeline over one pull request at one head. Type `Review`, with `ReviewStatus` (`draft`, `queued`, `running`, `passed`, `failed`) in `packages/shared/src/review.ts`.
 
-**Finding.** A problem a developer sees. Type `Finding` in `packages/shared/src/findings.ts`. `severity` is `FindingSeverity` (`info`, `warning`, `error`). `kind` is `FindingKind` (`bug`, `quality`), derived from `category` by `findingKind`.
+**Finding.** A problem a developer sees. Type `Finding` in `packages/shared/src/findings.ts`. `severity` is `FindingSeverity` (`info`, `warning`, `error`). `kind` is `FindingKind` (`bug`, `quality`), derived from `category` by `findingKind`. When `ruleId` names a rule in the rule ledger, `rule` (`FindingRule`) carries the verbatim `text`, `source` (`path`, `line`, `endLine`, `revision`) and optional `restatement`, `level`, `appliesTo` and `exceptions`.
 
-**Candidate.** A claim a reviewer, subagent or detector reported, before validation and verification. Type `CandidateFinding` (a `Finding` plus `candidateId`, `valid`, `dropReason`, `dropStage`, `belowBar`, `publishedBy`, `refuted`, `repair`) in `apps/server/src/review/pipeline/consolidate.ts`. Candidates that survive and merge become findings (`toFinding`).
+**Candidate.** A claim a reviewer, subagent or detector reported, before validation and verification. Type `CandidateFinding` (a `Finding` plus `candidateId`, `valid`, `dropReason`, `dropStage`, `belowBar`, `publishedBy`, `refuted`, `ruleCheck`, `repair`) in `apps/server/src/review/pipeline/consolidate.ts`. Candidates that survive and merge become findings (`toFinding`).
+
+**Rule ledger.** The repository rules extracted from `RECODER.md`, global Settings guidelines, nested `AGENTS.md` / `CLAUDE.md` files and root instruction files, quoted as untrusted text and never followed as instructions. Types `RuleLedger` and `RepoRule` in `apps/server/src/review/guidelines/ledger/types.ts`; extraction and cache (`LEDGER_VERSION`) in `ledger.ts`, `sources.ts` and `validate.ts`; deterministic source precedence in `precedence.ts`; diff-and-path scope checks in `applicability.ts`.
 
 **Unit.** A slice of the change cut from the inventory without a model call. Type `ReviewUnit` in `apps/server/src/review/pipeline/units.ts`. Ids are `reviewer-1` (a reviewer's slice, retried as `retry-reviewer-1`), `unit-1` (a brief unit), `subagent-1`, and the second looks `residual-1` and `contract-1`.
 
@@ -55,6 +57,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 - `status`: `verified` or `unverified`.
 - `method`: `run`, `trace`, `detector`, `rule`, `convention`.
 - `outcome` (`VerificationOutcome`): `reproduced`, `traced`, `inconclusive`, `refuted`, `not-run`.
+- `ruleCheck` (`RuleCheckDecisions`): for `repo-rule` findings, the separate `applicability` (`RuleApplicabilityDecision`: `applies`, `not-applicable`, `unknown`) and `violation` (`RuleViolationDecision`: `violated`, `not-violated`, `exception`, `not-checked`, `unknown`) decisions with their `reason` and `evidenceIds`.
 
 **Proof.** The evidence behind a `verified` status. Type `VerificationEvidence`: the `command`, `exitCode`, `expected`, an `observed` excerpt taken by the harness, and the `evidenceId` of the recorded run. The store is `apps/server/src/evidence/store.ts`.
 
@@ -70,7 +73,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Not run.** A bug in a review where no baseline check passed (or none could run), so no verifier tried it. It is published, marked unverified (`outcome: 'not-run'`), and counted as `ReviewFunnel.notRun`. Decided by `whyCodeCannotRun` in `apps/server/src/review/pipeline/harness/verification.ts`.
 
-**Below the bar.** A low-severity candidate held back when Settings keeps reviews to medium and above (`belowBar`). Low severity is shown by default. `publishedBy` (`PublishedBy`: `reproduced`, `rule`) says why one is published anyway. Defined in `apps/server/src/review/pipeline/published-by.ts`.
+**Below the bar.** A low-severity candidate held back when Settings keeps reviews to medium and above (`belowBar`). Low severity is shown by default. `publishedBy` (`PublishedBy`: `reproduced`, `rule`) says why one is published anyway (`rule` requires a verified violation of a `mandatory` ledger rule whose `ruleCheck` confirms both `applies` and `violated`; `advisory` rules stay held back). Defined in `apps/server/src/review/pipeline/published-by.ts`.
 
 ## Where a candidate stopped
 

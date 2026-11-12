@@ -70,15 +70,17 @@ What the budget leaves alone, on purpose:
 
 `recordTokenBudget` in `apps/server/src/models/metrics.ts` writes the budget onto the pipeline run segment (`PipelineRun.tokenBudget`) when the harness starts. `ReviewMetrics.tokenBudget` is the latest run's, and Token usage in the app shows it. A Custom setup is recorded under the budget it started from. A benchmark's quality was measured on the old shape (one reviewer per lens and unit) and has to be measured again for these budgets. Benchmark identities carry `tokenBudget` in `limits.settings`, so reports run on different budgets do not compare as equal.
 
-## Repo guidelines: `RECODER.md`
+## Repo guidelines and the rule ledger
 
 A repository tells Recoder what to look for in a `RECODER.md` at its root. It is the repo layer of the owner review guidelines; the global layer is edited in Settings.
 
 - `loadRepoGuidelines` in `apps/server/src/review/pipeline/harness/understand.ts` reads it at the PR's base commit (`target`), so a pull request that edits the file is not reviewed by its own edit.
 - The paths are `GUIDELINES_PATHS` in `packages/shared/src/guidelines.ts`. The first that exists is the layer: `RECODER.md`, else the older `.recoder/REVIEW.md`. The other is ignored.
 - `composeGuidelines` in `apps/server/src/review/guidelines/guidelines.ts` puts it in the trusted guidelines block. It ranks below Recoder's safety rules, above `AGENTS.md`, `CLAUDE.md` and PR text (which stay untrusted), and wins over the global layer where they conflict.
-- It is not in `INSTRUCTION_PATHS`, so its text reaches the prompts once. The rule ledger (`apps/server/src/review/guidelines/ledger/sources.ts`) reads it after the instruction files.
+- It is not in `INSTRUCTION_PATHS`, so its text reaches the prompts once.
 - Settings → Guidelines edits it through a pull or merge request (`apps/server/src/routes/guidelines.ts`). A repository on `.recoder/REVIEW.md` keeps that path; a new file is `RECODER.md`.
+
+`ruleLedgerStage` builds the `RuleLedger` (`buildRuleLedger` in `apps/server/src/review/guidelines/ledger/ledger.ts`, cached by source hash and `LEDGER_VERSION` in `sources.ts`). Every guideline source is framed as untrusted repository text, quoted and never followed as instructions (`prompt.ts`). `validateRules` (`validate.ts`) anchors each `RepoRule` to its source file (`source.path`, `source.line`, `source.endLine`, `source.revision`), keeps the exact source wording in `rule.text` alongside an optional one-sentence `restatement`, keeps stated `exceptions`, and classifies `level` as `mandatory` or `advisory` (`RuleLevel` in `packages/shared/src/findings.ts`). Rules that are `advisory` or carry `exceptions` omit mechanical `check` detectors so a verifier evaluates exceptions first. When sources disagree on the same concern, `resolveRulePrecedence` (`precedence.ts`) resolves overrides deterministically (`overriddenBy`, `excludedScopes`): `RECODER.md` (else `.recoder/REVIEW.md`) > global Settings guidelines > nested `AGENTS.md` / `CLAUDE.md` (deeper folder wins inside its subtree, `AGENTS.md` over `CLAUDE.md` in the same folder) > root instruction files (`INSTRUCTION_PATHS`, then `EXTRA_ROOT_PATHS`). Ledger tests live under `apps/server/tests/review/guidelines/ledger/`.
 
 ## Where candidates are lost
 
@@ -236,8 +238,8 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 - `diagnosticStage` runs `runDiagnostics` on the baseline lint and type check results, then `runTypeHints`.
 - It runs `runMatrix` (mutation testing) only when `testStrengthOn` is true. That reads `RECODER_TEST_STRENGTH`, which must be exactly `1`. `MatrixReport` is in `apps/server/src/review/pipeline/mutation/stage.ts`.
 - Output: `DetectorResult` and `DetectorId`, defined in `apps/server/src/review/pipeline/detectors/types.ts`.
-- `addDetections` turns each result into a candidate with `candidateFromDetector`. A detector candidate is verified by construction, with method `rule` for rule-check and `detector` otherwise.
-- A `suspected` result is not verified by construction. It goes to a verifier and can be refuted.
+- `addDetections` turns each result into a candidate with `candidateFromDetector`. A detector candidate is verified by construction, with method `rule` for rule-check and `detector` otherwise. When `ruleId` matches the rule ledger, `candidateFromDetector` attaches `Finding.rule`, and verified `rule-check` candidates record `ruleCheck` (`applicability.outcome: 'applies'`, `violation.outcome: 'violated'`).
+- A `suspected` result is not verified by construction. It goes to a verifier and can be refuted. `ruleCheckResults` marks matches of `advisory` rules or rules with `exceptions` as `suspected` and skips files covered by `excludedScopes`.
 - With a lens selection, a result whose category no selected lens reports is filtered out before the caps, so it never takes a slot from one that is wanted; the mutation matrix is skipped unless a selected lens reports `tests`, and the rule ledger is not built (no model call) unless one reports `repo-rule`.
 - Drops: a detector candidate can drop only at `location`.
 - Tests:
@@ -250,7 +252,7 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 
 ## 9. Candidates, validation and repair
 
-- `validateCandidate` turns a reviewer finding into a `CandidateFinding`, defined in `apps/server/src/review/pipeline/consolidate.ts`. It sets `valid`, `dropStage` and `dropReason`.
+- `validateCandidate` turns a reviewer finding into a `CandidateFinding`, defined in `apps/server/src/review/pipeline/consolidate.ts`. It sets `valid`, `dropStage` and `dropReason`, and populates `Finding.rule` (`toFindingRule`) whenever `ruleId` names a rule in `run.ledger`.
 - A valid low-severity candidate gets `belowBar` unless `reportLowSeverity` is on. `effectiveReportLowSeverity` decides it, default true (low severity is shown). It is in `apps/server/src/review/session/review-settings.ts`. The harness itself reads `input.reportLowSeverity ?? false`, but its only caller, `commands/pipeline.ts`, always passes the setting; the `false` there is for tests that leave it out.
 - Repair is on unless `RECODER_CANDIDATE_REPAIR=0`. `candidateRepairOn` and `repairCandidate` are in `apps/server/src/review/pipeline/harness/repair.ts`. At most `RECODER_REPAIR_CAP` (default 8) repairs run per review.
 - A candidate whose category no selected lens reports (`AdaptiveReviewInput.lenses`) is never repaired, since the choice of lenses is not a mistake to correct, and a repair that picks a category picks among the selected lenses'.
@@ -274,8 +276,9 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 - A bug that `sameIssue` (`apps/server/src/review/pipeline/consolidate-merge.ts`) says consolidation would merge with a bug already in the queue gets no verifier of its own. It waits for that verifier. When it proves the bug, the waiting one takes the same verification (`shareVerdict`) and its runs lead the evidence. When it does not, the waiting one joins the queue for its own verifier. Only bugs share. Weak-test findings never do, and a below-bar bug shares only with another below-bar bug.
 - Bugs are verified only where the repository's code runs. `whyCodeCannotRun` decides it once per review, after the baseline checks finish: with no workspace, with no baseline check to run, or with no baseline check that exited 0, no bug verifier runs. Each bug then gets `outcome: 'not-run'` (status `unverified`) and is published, marked unverified, not hidden (`isPublishable` in `apps/server/src/review/pipeline/consolidate.ts`). Quality findings are still verified by reading. A bug verifier always has a shell; there is no read-only bug verifier.
 - A convention finding whose examples are missing stops with "The examples it cites are not in the repository." (`examplesOnDisk`).
-- Quality findings settle through `settleQualityVerdict`. Bugs settle through `settleVerdict` in `apps/server/src/review/pipeline/verify/settle.ts`.
-- The verifier answers confirmed, refuted or unverified. A refutation counts only with the verifier's own passing run. For a mutation finding (`isMutationFinding`) it needs a failing run. Otherwise it is inconclusive.
+- Before calling a model on a `repo-rule` candidate, `precheckRuleCandidate` (`apps/server/src/review/pipeline/quality-verify.ts`) runs `evaluateRuleApplicability` (`apps/server/src/review/guidelines/ledger/applicability.ts`) against the ledger, precedence overrides, nested folder boundary, `appliesTo` glob and modified diff lines, refuting out-of-scope rules deterministically (`refuteByRuleScope`).
+- Quality findings settle through `settleQualityVerdict` (`quality-verify.ts`). For `repo-rule` candidates, `settleRuleVerdict` records two separate decisions on `FindingVerification.ruleCheck` (`RuleCheckDecisions`: `applicability` and `violation`, with `evidenceIds`), requires retrieval evidence (`qualityVerifierPushBack`) rather than reviewer assertion alone, and checks stated exceptions before confirming. Bugs settle through `settleVerdict` in `apps/server/src/review/pipeline/verify/settle.ts`.
+- The verifier answers confirmed, refuted or unverified. A bug refutation counts only with the verifier's own passing run. For a mutation finding (`isMutationFinding`) it needs a failing run. Otherwise it is inconclusive.
 - `coveredByIntent` also refutes when the verifier names a non-goal id the intent holds, or a stacked pull request number. That sets `covered`.
 - A confirmed verdict with a run is reproduced; one with cited reads is traced. `withOutcome` sets `VerificationOutcome`: reproduced, traced, inconclusive, refuted or not-run.
 - `FindingVerification.method` is run, trace, detector, rule or convention. These types are in `packages/shared/src/findings.ts`.
@@ -296,6 +299,7 @@ A `pre-existing` result adds `SAME_ON_BASE` text to the reason. It also stops a 
 - `finishVerification` drains the queue, checks suggested patches (`checkPatches`), then calls `hideUnproven`. Valid, not held back, unverified candidates go to `run.hidden`, except not-run bugs, which are published. The funnel counts them as `notRun`, so raised = dropped + unproven + verified + notRun.
 - Tests:
   - `apps/server/tests/review/pipeline/verify.test.ts`
+  - `apps/server/tests/review/pipeline/quality-verify.test.ts`
   - `apps/server/tests/review/pipeline/harness-verification.test.ts`
   - `apps/server/tests/review/pipeline/harness/verify-baseline.test.ts`
   - `apps/server/tests/review/pipeline/verify/baseline.test.ts`
@@ -305,15 +309,16 @@ A `pre-existing` result adds `SAME_ON_BASE` text to the reason. It also stops a 
 ## 11. Consolidation and publication
 
 - `consolidate` returns `Consolidated`. It is in `apps/server/src/review/pipeline/harness/consolidation.ts`. It makes no model call.
-- `confirmedFindings` calls `consolidateFindings` in `apps/server/src/review/pipeline/consolidate-merge.ts`. Only valid, verified candidates enter.
-- `consolidateFindings` groups candidates at the same place (a merge key, or the file and title of a model-raised bug), and merges each group into one `Finding`. It drops a group whose members are all held back. `Finding` is defined in `packages/shared/src/findings.ts`. Quality findings are capped at medium severity.
-- A below-bar candidate is published only through `publishHeldBack`, with `PublishedBy` reproduced or rule. `PUBLISHED_BY` is in `apps/server/src/review/pipeline/published-by.ts`.
-- Reproduced means a verifier run that did not end the same way on base. Rule means a verified violation of a ledger rule for that file.
-- `isHeldBack`, `isReportable` and `toFinding` are in the consolidate module. `toFinding` strips pipeline-only fields.
+- `confirmedFindings` calls `consolidateFindings` in `apps/server/src/review/pipeline/consolidate-merge.ts` and attaches any missing `Finding.rule` from `run.ledger`. Only valid, verified candidates enter.
+- `consolidateFindings` groups candidates at the same place (a merge key, or the file and title of a model-raised bug), and merges each group into one `Finding` (preserving `Finding.rule`). It drops a group whose members are all held back. `Finding` is defined in `packages/shared/src/findings.ts`. Quality findings are capped at medium severity.
+- A below-bar candidate is published only through `publishHeldBack`, with `PublishedBy` reproduced or rule. `PUBLISHED_BY`, `isHeldBack`, `isReportable` and `publishHeldBack` are in `apps/server/src/review/pipeline/published-by.ts` (re-exported by `consolidate.ts`).
+- Reproduced means a verifier run that did not end the same way on base. Rule means a verified violation of a `mandatory` ledger rule for that file and changed lines (`ruleCheck` confirms both `applies` and `violated`); low-severity `advisory` rule findings stay held back.
+- `toFinding` is in `consolidate.ts`. It strips pipeline-only fields and copies settled `ruleCheck` onto `finding.verification`.
 - `completeReview` builds the result and the funnel with `reviewFunnel`. Both are in `apps/server/src/review/pipeline/harness/summary.ts`. `stoppedReview` handles errors and cancellation.
 - `ReviewFunnel` is defined in `packages/shared/src/review.ts`. Held-back candidates count under the severity drop. Unconfirmed is hidden plus refuted.
 - Tests:
   - `apps/server/tests/review/pipeline/consolidate-merge.test.ts`
+  - `apps/server/tests/review/pipeline/published-by.test.ts`
   - `apps/server/tests/review/pipeline/harness-reporting-bar.test.ts`
   - `apps/server/tests/review/pipeline/harness/summary.test.ts`
   - `apps/server/tests/eval/benchmark-stages.test.ts`

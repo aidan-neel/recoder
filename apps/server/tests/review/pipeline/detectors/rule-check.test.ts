@@ -129,7 +129,7 @@ describe('ruleCheckResults', () => {
 			{ inventory, added, heads: new Map() }
 		);
 
-		expect(results.map(({ file, line }) => ({ file, line }))).toEqual([{ file: 'src/new.test.ts', line: 1 }]);
+		expect(results.map((hit) => `${hit.file}:${hit.line}`)).toEqual(['src/new.test.ts:1']);
 	});
 
 	test('flags an added if whose body has no braces', async () => {
@@ -150,5 +150,47 @@ describe('ruleCheckResults', () => {
 
 	test('leaves a brace-less if on a line the diff does not add', async () => {
 		expect(await braceLines(['if (ready) start();', 'export const x = 1;'], [2])).toEqual([]);
+	});
+
+	test('marks matches of advisory rules or rules with exceptions as suspected so verification checks them', async () => {
+		const results = await ruleCheckResults(
+			ledger([
+				{
+					id: 'R5',
+					text: 'Write no line comments unless documenting a fixture.',
+					restatement: 'Avoid line comments.',
+					exceptions: ['Allowed in fixtures.'],
+					source: { path: 'AGENTS.md', line: 8, endLine: 9 },
+					check: { kind: 'forbid-pattern', pattern: '^\\s*//', glob: 'src/a.ts' }
+				},
+				{
+					id: 'R6',
+					text: 'Prefer https URLs over http.',
+					level: 'advisory',
+					source: { path: 'AGENTS.md', line: 12 },
+					check: { kind: 'forbid-pattern', pattern: 'http://', glob: 'src/a.ts' }
+				}
+			]),
+			{ inventory, added, heads: new Map() }
+		);
+
+		expect(results.map(({ ruleId, suspected, title }) => ({ ruleId, suspected, title }))).toEqual([
+			{ ruleId: 'R5', suspected: true, title: 'Breaks R5: Avoid line comments.' },
+			{ ruleId: 'R6', suspected: true, title: 'Breaks R6: Prefer https URLs over http.' }
+		]);
+	});
+
+	test('skips files excluded by a higher-precedence rule override while still checking other files', async () => {
+		const excludedRule = {
+			id: 'R7',
+			text: 'Write no line comments.',
+			source: { path: 'AGENTS.md', line: 2 },
+			excludedScopes: ['src/a.ts'],
+			check: { kind: 'forbid-pattern' as const, pattern: '^\\s*//', glob: '**/*.ts' }
+		};
+
+		const hits = await ruleCheckResults(ledger([excludedRule]), { inventory, added, heads: new Map() });
+
+		expect(hits.map((hit) => hit.file)).toEqual(['src/new.test.ts']);
 	});
 });

@@ -1,7 +1,7 @@
 import { matchesGlob } from '../../chat/directive.js';
 import { ruleAppliesTo } from '../../guidelines/ledger/glob.js';
 import { ruleCitation } from '../../guidelines/ledger/ledger.js';
-import type { MechanicalCheck, RepoRule, RuleLedger } from '../../guidelines/ledger/types.js';
+import { ruleSummary, type MechanicalCheck, type RepoRule, type RuleLedger } from '../../guidelines/ledger/types.js';
 import type { ReviewInventory } from '../inventory.js';
 import { braceLessLines, bracesApply } from './braces.js';
 import { clip, type AddedLines } from './changed-lines.js';
@@ -26,15 +26,18 @@ function inScope(rule: RepoRule, glob: string | undefined, path: string): boolea
 }
 
 function ruleResult(rule: RepoRule, file: string, line: number, body: string, evidence: string): DetectorResult {
+	const needsVerifier = Boolean(rule.exceptions?.length) || rule.level === 'advisory';
+
 	return {
 		detector: 'rule-check',
 		category: 'repo-rule',
-		title: `Breaks ${rule.id}: ${clip(rule.text, 70)}`,
+		title: `Breaks ${rule.id}: ${clip(ruleSummary(rule), 70)}`,
 		body,
 		file,
 		line,
 		ruleId: rule.id,
-		evidence
+		evidence,
+		...(needsVerifier ? { suspected: true } : {})
 	};
 }
 

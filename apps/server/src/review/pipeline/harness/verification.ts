@@ -15,10 +15,14 @@ import {
 import type { DetectorResult } from '../detectors/types.js';
 import type { ChangeIntent } from '../intent/types.js';
 import { intentBlock } from '../intent/format.js';
+import type { ReviewInventory } from '../inventory.js';
 import {
 	examplesOnDisk,
+	precheckRuleCandidate,
+	qualityVerifierPushBack,
 	qualityVerifierSystemPrompt,
 	qualityVerifierUserPrompt,
+	refuteByRuleScope,
 	settleQualityVerdict
 } from '../quality-verify.js';
 import {
@@ -55,6 +59,7 @@ interface VerifyContext {
 	notes: () => VerifierNotes;
 	intent: ChangeIntent | null;
 	ledger: RuleLedger | null;
+	inventory: ReviewInventory;
 	/** The PR checkout, where convention examples are looked up; null without one. */
 	checkout: string | null;
 	/** Why bugs in this review are not run, once the baseline checks have finished; null when one of them passed. */
@@ -86,6 +91,7 @@ export function startVerification(run: ReviewRun, checks: () => Promise<void>): 
 		notes: () => ({ setupNotes: run.setupNotes, intent: intentBlock(run.intent) }),
 		intent: run.intent,
 		ledger: run.ledger,
+		inventory: run.inventory,
 		checkout: run.input.revision?.checkoutPath ?? null,
 		cannotRun: whyCodeCannotRun(run, checks),
 		workspace: run.workspace,
@@ -261,6 +267,7 @@ function shareVerdict(follower: CandidateFinding, leader: CandidateFinding, ctx:
 
 	delete follower.publishedBy;
 	follower.verification = { ...leader.verification! };
+	if (leader.ruleCheck) follower.ruleCheck = leader.ruleCheck;
 	follower.evidenceIds = [...new Set([...proof, ...(follower.evidenceIds ?? [])])];
 	publishHeldBack(follower, ctx.ledger);
 	ctx.task(taskId, label, 'done', `Verified with "${leader.title ?? leader.file}"`, meta);
@@ -287,6 +294,15 @@ async function verifyOne(candidate: CandidateFinding, ctx: VerifyContext, attemp
 	const spec = verifierSpec(candidate, ctx);
 
 	delete candidate.publishedBy;
+
+	const rulePrecheck = precheckRuleCandidate(candidate, ctx.ledger, ctx.inventory);
+
+	if (rulePrecheck) {
+		refuteByRuleScope(candidate, rulePrecheck);
+		ctx.task(taskId, label, 'done', 'Rule does not apply; dropped', meta);
+
+		return true;
+	}
 
 	const doing = !spec.exec ? 'Tracing the finding through the code' : 'Reproducing the finding';
 
@@ -319,16 +335,23 @@ interface VerifierTask {
 	meta: Parameters<TaskFn>[4];
 }
 
+interface VerifierRunOutcome {
+	value: VerdictOutput;
+	agentId: string;
+	retrievals: number;
+}
+
 /** One verifier run: its verdict and the agent that gave it, or why it gave none. */
 async function runVerifier(
 	candidate: CandidateFinding,
 	{ system, user, exec, mutation, turns }: VerifierSpec,
 	ctx: VerifyContext,
 	{ taskId, label, meta }: VerifierTask
-): Promise<{ value: VerdictOutput; agentId: string } | string> {
+): Promise<VerifierRunOutcome | string> {
 	const cfg = configForSubagent();
 	const owner = { assignmentId: taskId, role: 'verifier' };
 	const agentId = newAgentId();
+	let retrievals = 0;
 
 	try {
 		const result = await runJsonAgent({
@@ -338,7 +361,9 @@ async function runVerifier(
 			system,
 			user,
 			exec,
-			checkFinal: exec ? (value, state) => verifierPushBack(value, state, ctx.evidence, agentId, mutation) : undefined,
+			checkFinal: exec
+				? (value, state) => verifierPushBack(value, state, ctx.evidence, agentId, mutation)
+				: (value, state) => qualityVerifierPushBack(candidate, value, state, ctx.evidence, ctx.ledger),
 			timeLimit: { finalTurnAfterMs: REVIEW_POLICY.verifierFinalTurnAfterMs, maxWallMs: REVIEW_POLICY.verifierMaxMs },
 			responseSchema: (finalTurn) => verifierResponseSchema(exec, finalTurn),
 			finalExample: VERIFIER_EXAMPLE,
@@ -352,20 +377,25 @@ async function runVerifier(
 			validationError: verdictValidationError,
 			getDiscussion: async () => (await ctx.events?.getDiscussion?.(candidate.assignmentId)) ?? '',
 			onMessage: (message) => ctx.events?.onMessage?.({ ...message, assignmentId: taskId, model: cfg.model }),
-			onProgress: (state, elapsedMs, detail) =>
+			onProgress: (state, elapsedMs, detail) => {
+				if (state === 'retrieval') retrievals++;
+
 				ctx.task(
 					taskId,
 					label,
 					state === 'queued' ? 'waiting' : 'running',
 					state === 'retrieval' ? (exec ? 'Running code' : 'Reading code') : state === 'queued' ? detail : 'Thinking',
 					{ ...meta, elapsedMs }
-				),
+				);
+			},
 			onLog: (message) => ctx.events?.onLog?.(message, owner),
 			onReasoning: (reasoning) => ctx.events?.onReasoning?.({ ...reasoning, ...owner, model: cfg.model }),
 			onTool: (tool) => ctx.events?.onTool?.({ ...tool, ...owner })
 		});
 
-		return result.value ? { value: result.value, agentId } : (result.error ?? 'the verifier did not finish');
+		return result.value
+			? { value: result.value, agentId, retrievals }
+			: (result.error ?? 'the verifier did not finish');
 	} catch (err) {
 		if (err instanceof ModelBlockedError || err instanceof ReviewAbortedError) throw err;
 
@@ -379,10 +409,17 @@ async function runVerifier(
  */
 function verdictFor(
 	candidate: CandidateFinding,
-	{ value, agentId }: { value: VerdictOutput; agentId: string },
+	{ value, agentId, retrievals }: VerifierRunOutcome,
 	ctx: VerifyContext
 ) {
-	if (findingKind(candidate.category) === 'quality') return settleQualityVerdict(candidate, value, ctx.evidence);
+	if (findingKind(candidate.category) === 'quality') {
+		return settleQualityVerdict(candidate, value, ctx.evidence, {
+			ledger: ctx.ledger,
+			inventory: ctx.inventory,
+			retrievals
+		});
+	}
+
 	if (coveredByIntent(value, ctx.intent)) return 'refuted' as const;
 
 	return settleVerdict(value, ctx.evidence, agentId, isMutationFinding(candidate, true));
@@ -394,7 +431,7 @@ function verdictFor(
  */
 async function settle(
 	candidate: CandidateFinding,
-	outcome: { value: VerdictOutput; agentId: string },
+	outcome: VerifierRunOutcome,
 	ctx: VerifyContext,
 	{ taskId, label, meta }: VerifierTask
 ): Promise<void> {
