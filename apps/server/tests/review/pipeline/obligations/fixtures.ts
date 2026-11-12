@@ -1,4 +1,4 @@
-import type { Obligation } from '@recoder/shared';
+import type { Obligation, ObligationTrigger } from '@recoder/shared';
 import { afterEach, beforeEach } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -43,6 +43,20 @@ export async function deriveFrom(base: Record<string, string>, head: Record<stri
 /** One file's two versions, as lines. */
 export function file(path: string, base: string[], head: string[]) {
 	return { base: { [path]: base.join('\n') + '\n' }, head: { [path]: head.join('\n') + '\n' } };
+}
+
+/** The triggers a change sets off on `path`, with the side and line of each: `boundary new:2`. */
+export async function hits(change: ReturnType<typeof file>, path?: string): Promise<string[]> {
+	const obligations = await deriveFrom(change.base, change.head);
+
+	return obligations
+		.filter((entry) => !path || entry.location.file === path)
+		.map((entry) => `${entry.trigger} ${entry.location.side}:${entry.location.line}`);
+}
+
+/** The trigger of each of `hits`' entries; the cast is safe because `hits` starts every entry with one. */
+export function triggers(found: string[]): ObligationTrigger[] {
+	return found.map((entry) => entry.split(' ')[0] as ObligationTrigger);
 }
 
 /** `pageSize` before the change: an undefined check and a strict upper bound. */
@@ -145,6 +159,7 @@ export function isolateEachTest(): void {
 	restoreEnvAfterEach([
 		'RECODER_OBLIGATIONS',
 		'RECODER_OBLIGATIONS_NEW_CODE',
+		'RECODER_OBLIGATIONS_TRANSITIONS',
 		'RECODER_OBLIGATION_CAP',
 		'RECODER_OBLIGATION_TURNS',
 		'RECODER_EXEC',

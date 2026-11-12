@@ -40,7 +40,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Brief question.** An open question the brief pins to a changed line, ids `Q1`, `Q2`. Type `BriefQuestion` in `packages/shared/src/questions.ts`. Result is `BriefQuestionResult`: `confirmed`, `disproved`, `unresolved`. The ledger is `apps/server/src/review/pipeline/question-ledger.ts`.
 
-**Obligation.** A question about changed behavior derived mechanically from the change model, never a finding. Type `Obligation` in `packages/shared/src/obligations.ts`. Triggers are `ObligationTrigger` (eight kinds). Result is `ObligationResult`: `confirmed`, `disproved`, `not-applicable`, `unresolved`. Runs only when `RECODER_OBLIGATIONS` is on.
+**Obligation.** A question about changed behavior derived mechanically from the change model, never a finding. Type `Obligation` in `packages/shared/src/obligations.ts`. Triggers are `ObligationTrigger`: eight kinds, and state-transition with `RECODER_OBLIGATIONS_TRANSITIONS`. Result is `ObligationResult`: `confirmed`, `disproved`, `not-applicable`, `unresolved`. Runs only when `RECODER_OBLIGATIONS` is on.
 
 **Checkpoint.** A review's saved progress, so it can continue or replay. Type `ReviewCheckpoint` in `apps/server/src/review/session/review-checkpoint.ts`.
 

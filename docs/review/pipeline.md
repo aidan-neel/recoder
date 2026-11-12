@@ -218,6 +218,8 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 - `deriveObligationsStage` derives obligations from the diff without a model call. It is in `apps/server/src/review/pipeline/obligations/stage.ts`.
 - `deriveObligations` reads TypeScript, JavaScript and Svelte files only. `selectUnderCap` keeps at most `RECODER_OBLIGATION_CAP` (default 8), round-robin across triggers.
 - The triggers are the `ObligationTrigger` values in `packages/shared/src/obligations.ts`: truthy-default, boundary, removed-guard, normalization, resource-release, count-validation, error-contract, weaker-assertion. Each has a fixed question in `QUESTIONS`. Truthy-default, boundary and normalization fire on replaced code only, and also on brand-new code when `RECODER_OBLIGATIONS_NEW_CODE` is on.
+- The ninth trigger, state-transition, fires only when `RECODER_OBLIGATIONS_TRANSITIONS` is on. `collectTransitionMarks` in `apps/server/src/review/pipeline/obligations/transition-marks.ts` marks state fields set or compared, lease and lifecycle flags written, and cache and queue moves; `transitionHits` in `transitions.ts` gives one obligation per entity a hunk moves, on the new side for an added or changed move and on the old side for a removed one. The first hint names the states the file gives the field. Its specialist is concurrency, and test files derive none.
+- A state-transition investigator partitions transitions, not inputs: each `inputPartition` entry is an initial state, an operation sequence (success, failure midway, retry, restart, cancellation, supersession; insertion, replacement, expiry, bypass and invalidation for a cache) and the expected final state. A missing contract is answered unresolved. `withTransitionEvidence` in `investigate.ts` turns a disproved answer unresolved when it names no transition or cites only tests and ran nothing, so a passing test never closes a transition it does not run.
 - `runUnitsWithObligations`, in the same stage file, runs investigations first in the same pool as units. Each gets `RECODER_OBLIGATION_TURNS` turns (default 8, clamped to 3 through 12).
 - Each investigation ends in an `ObligationResult`: confirmed, disproved, not-applicable or unresolved. An unlaunched one is unresolved with "Not launched: budget or time reserved for consolidation".
 - A confirmed answer becomes a candidate through `addCandidates` with role obligation. It then goes through stages 9 and 10 like any reviewer candidate.
@@ -228,6 +230,8 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
   - `apps/server/tests/review/pipeline/obligations/lenses.test.ts`
   - `apps/server/tests/review/pipeline/obligations/derive.test.ts`
   - `apps/server/tests/review/pipeline/obligations/triggers.test.ts`
+  - `apps/server/tests/review/pipeline/obligations/transitions.test.ts`
+  - `apps/server/tests/review/pipeline/obligations/transition-closure.test.ts`
 
 ## 8. Detectors
 

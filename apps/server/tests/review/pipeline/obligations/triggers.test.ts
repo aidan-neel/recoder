@@ -1,21 +1,8 @@
 import type { ObligationTrigger } from '@recoder/shared';
 import { describe, expect, test } from 'bun:test';
-import { deriveFrom, file, restoreEnvAfterEach } from './fixtures';
+import { file, hits, restoreEnvAfterEach, triggers } from './fixtures';
 
 restoreEnvAfterEach(['RECODER_OBLIGATIONS_NEW_CODE']);
-
-/** The triggers a change sets off on `path`, with the side and line of each. */
-async function hits(change: ReturnType<typeof file>, path?: string): Promise<string[]> {
-	const obligations = await deriveFrom(change.base, change.head);
-
-	return obligations
-		.filter((entry) => !path || entry.location.file === path)
-		.map((entry) => `${entry.trigger} ${entry.location.side}:${entry.location.line}`);
-}
-
-function triggers(found: string[]): ObligationTrigger[] {
-	return found.map((entry) => entry.split(' ')[0] as ObligationTrigger);
-}
 
 describe('truthy check or changed default', () => {
 	const before = [

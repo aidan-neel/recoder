@@ -11,6 +11,14 @@ export function obligationsNewCodeOn(): boolean {
 	return process.env.RECODER_OBLIGATIONS_NEW_CODE === '1';
 }
 
+/**
+ * Code that moves an entity between states (status fields, lifecycle flags, leases, caches and queues)
+ * obliges an investigation only when `RECODER_OBLIGATIONS_TRANSITIONS=1`; off, no state-transition obligation is derived.
+ */
+export function obligationsTransitionsOn(): boolean {
+	return process.env.RECODER_OBLIGATIONS_TRANSITIONS === '1';
+}
+
 const DEFAULT_CAP = 8;
 const DEFAULT_TURNS = 8;
 const MIN_TURNS = 3;

@@ -6,7 +6,7 @@ The server reads the environment variables below. All are optional. An unset var
 
 ## Experiment flags, kill switches and tuning knobs
 
-- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are six: `RECODER_OBLIGATIONS`, `RECODER_OBLIGATIONS_NEW_CODE`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`, `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`. No other variable is an opt-in flag.
+- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are seven: `RECODER_OBLIGATIONS`, `RECODER_OBLIGATIONS_NEW_CODE`, `RECODER_OBLIGATIONS_TRANSITIONS`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`, `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`. No other variable is an opt-in flag.
 - **Kill switches.** On by default. Setting one turns a stage off: `RECODER_EXEC=off`, `RECODER_OVERLAY=off`, `RECODER_BASELINE_CACHE=off`, `RECODER_PACKAGE_PREP=0`, `RECODER_CANDIDATE_REPAIR=0`. Any other value leaves the stage on.
 - **Tuning knobs.** Every other variable. They size, place or credential work and do not add or remove a stage.
 
@@ -77,6 +77,8 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 **RECODER_OBLIGATION_TURNS**: Model turns per investigation. Default 8. An integer is clamped to 3 through 12; anything else gives the default. Read only when obligations are on.
 
 **RECODER_OBLIGATIONS_NEW_CODE**: `1` lets a hunk that only adds lines oblige an investigation. Its truthiness tests, bounds and normalizers fire the truthy-default, boundary and normalization triggers with nothing on the base side to compare. Off, only replaced code fires them. Read by `obligationsNewCodeOn` in `apps/server/src/review/pipeline/obligations/config.ts`. It has no effect unless obligations are on.
+
+**RECODER_OBLIGATIONS_TRANSITIONS**: `1` adds the state-transition trigger (issue #99). A changed line that moves an entity between states derives an obligation: a state field (`status`, `state`, `phase`, `lifecycle`, `jobStatus`…) set or compared, a lease or lifecycle flag written on an object (`leaseUntil`, `lockedBy`, `closed`, `isCancelled`…), and an entry put into or taken out of a cache or queue (`cache.delete`, `jobQueue.push`, `invalidate`, `ack`…). A state field set to a literal counts only when the file gives the field two states or more, and a number is never a state. Read by `obligationsTransitionsOn` in `apps/server/src/review/pipeline/obligations/config.ts`. It has no effect unless obligations are on.
 
 **RECODER_TEST_STRENGTH**: `1` turns on test-strength work. Read by `testStrengthOn` in `apps/server/src/review/pipeline/test-strength.ts`. It adds:
 
