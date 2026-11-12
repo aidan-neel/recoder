@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Markdown, Spinner } from '@recoder/ui';
+import { Button, LinkText, Markdown, Spinner } from '@recoder/ui';
 
 import type { AskMessageView, AskView } from '@/lib/ask/types';
 
@@ -30,7 +30,11 @@ function AskMessage({ message, onRetry }: AskMessageProps) {
 			<div className="entry-body">
 				{waiting ? <Spinner size={13} label="Recoder is thinking" /> : null}
 				{recoder && !waiting ? <Markdown streaming={message.state === 'writing'}>{message.text}</Markdown> : null}
-				{!recoder ? <p className="entry-plain">{message.text}</p> : null}
+				{!recoder ? (
+					<p className="entry-plain">
+						<LinkText text={message.text} />
+					</p>
+				) : null}
 				{message.state === 'failed' ? (
 					<p className="entry-failed" role="alert">
 						{message.error ?? 'The reply did not arrive.'}

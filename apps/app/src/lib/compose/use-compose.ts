@@ -9,7 +9,9 @@ import { needsReview } from '../pulls/pull-rows';
 import type { PullRow } from '../pulls/types';
 import { readTarget } from '../pulls/pull-target';
 import { trackedPull } from '../pulls/use-open-pull';
+import { useLinkFacts } from '../pulls/use-link-facts';
 import { useRowEntries, useWatchList } from '../pulls/use-rows';
+import { targetFacts } from './target-facts';
 import type { ComposeView } from './types';
 
 /** How many pull requests the New review screen suggests. */
@@ -43,6 +45,9 @@ export function useCompose(): ComposeView {
 		() => readTarget(text, { repos: repos ?? [], pulls: pulls?.items ?? [], base: client.base, repoId }),
 		[text, repos, pulls, client, repoId]
 	);
+
+	const known = useLinkFacts();
+	const linkFacts = useMemo(() => targetFacts(read, known), [read, known]);
 
 	const suggestions = useMemo(
 		() =>
@@ -100,6 +105,7 @@ export function useCompose(): ComposeView {
 			setText,
 			target: read.target,
 			brief: read.brief,
+			linkFacts,
 			repos: repoOptions,
 			repoId,
 			setRepoId: list.setComposeRepo,
@@ -109,6 +115,19 @@ export function useCompose(): ComposeView {
 			submitRow,
 			submitting: data.submitting
 		}),
-		[text, setText, read, repoOptions, repoId, list, suggestions, data.phase, submit, submitRow, data.submitting]
+		[
+			text,
+			setText,
+			read,
+			linkFacts,
+			repoOptions,
+			repoId,
+			list,
+			suggestions,
+			data.phase,
+			submit,
+			submitRow,
+			data.submitting
+		]
 	);
 }

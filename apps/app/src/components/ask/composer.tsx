@@ -1,8 +1,10 @@
 'use client';
 
-import { Button, Textarea, Tooltip } from '@recoder/ui';
+import { Button, LinkField, Tooltip } from '@recoder/ui';
 import { ArrowUp, Square } from 'lucide-react';
 import { useState, type KeyboardEvent, type ReactNode } from 'react';
+
+import { useLinkFacts } from '@/lib/pulls/use-link-facts';
 
 interface ComposerProps {
 	placeholder: string;
@@ -40,6 +42,7 @@ export function Composer({
 	const [text, setText] = useState(initial);
 	const [sending, setSending] = useState(false);
 	const [error, setError] = useState<string | null>(null);
+	const linkFacts = useLinkFacts();
 	const over = limit !== undefined && text.length > limit;
 	const ready = text.trim() !== '' && !over && !sending && !busy;
 
@@ -59,7 +62,7 @@ export function Composer({
 	}
 
 	/** Enter sends, unless Shift is held or the text is still being composed. */
-	function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+	function onKeyDown(event: KeyboardEvent<HTMLElement>): void {
 		if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
 
 		event.preventDefault();
@@ -68,7 +71,7 @@ export function Composer({
 
 	return (
 		<div className="composer">
-			<Textarea
+			<LinkField
 				autosize
 				minRows={rows}
 				maxRows={10}
@@ -76,7 +79,8 @@ export function Composer({
 				placeholder={placeholder}
 				value={text}
 				invalid={over}
-				onChange={(event) => setText(event.target.value)}
+				linkFacts={linkFacts}
+				onValueChange={setText}
 				onKeyDown={onKeyDown}
 			/>
 			<div className="composer-foot">

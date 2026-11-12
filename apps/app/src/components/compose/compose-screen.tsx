@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, HoverList, RowButton, Select, SkeletonRows, Textarea } from '@recoder/ui';
+import { Button, HoverList, LinkField, RowButton, Select, SkeletonRows } from '@recoder/ui';
 import { ArrowUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, type KeyboardEvent } from 'react';
@@ -13,29 +13,22 @@ import { Crumbs } from '@/components/common/crumbs';
 import { Page } from '@/components/common/page';
 import { PullMark } from '@/components/common/pull-mark';
 
-interface Hint {
-	tone: 'ready' | 'danger' | 'quiet';
+interface Note {
+	tone: 'ready' | 'danger';
 	text: string;
 }
 
-/** What the line under the field says about the text: what it will review, or why it cannot. */
-function hintFor({ target, brief }: Pick<ComposeView, 'target' | 'brief'>): Hint {
-	const focus = brief ? ` It will look at: ${brief}` : '';
-
-	if (target.kind === 'pull') {
-		return { tone: 'ready', text: `Enter reviews ${target.repoName} #${target.number}.${focus}` };
-	}
-
-	if (target.kind === 'untracked') {
-		return {
-			tone: 'ready',
-			text: `${target.repoName} is not connected yet. Enter connects it and reviews #${target.number}.${focus}`
-		};
-	}
-
+/**
+ * The line under the field, only when the field does not say it already: why
+ * the review cannot start, or that starting it first connects the
+ * repository. The embed names the target, so a ready target needs no line.
+ */
+function noteFor(target: ComposeView['target'], error: string | null): Note | null {
+	if (error) return { tone: 'danger', text: error };
 	if (target.kind === 'invalid') return { tone: 'danger', text: target.reason };
+	if (target.kind === 'untracked') return { tone: 'ready', text: `Enter connects ${target.repoName} first.` };
 
-	return { tone: 'quiet', text: 'After the link, you can say what the review should look at.' };
+	return null;
 }
 
 interface SuggestionsProps {
@@ -80,7 +73,7 @@ export function ComposeScreen() {
 	const router = useRouter();
 	const compose = useCompose();
 	const [error, setError] = useState<string | null>(null);
-	const hint: Hint = error ? { tone: 'danger', text: error } : hintFor(compose);
+	const note = noteFor(compose.target, error);
 	const ready = compose.target.kind === 'pull' || compose.target.kind === 'untracked';
 
 	/** Starts a review and opens its pull request; a refusal stays under the field. */
@@ -94,7 +87,7 @@ export function ComposeScreen() {
 	}
 
 	/** Enter starts the review, unless Shift is held or the text is still being composed. */
-	function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+	function onKeyDown(event: KeyboardEvent<HTMLElement>): void {
 		if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
 
 		event.preventDefault();
@@ -107,7 +100,7 @@ export function ComposeScreen() {
 				<div className="compose-column">
 					<h1 className="compose-title">What should Recoder review?</h1>
 					<div className="composer">
-						<Textarea
+						<LinkField
 							autosize
 							autoFocus
 							minRows={2}
@@ -117,9 +110,10 @@ export function ComposeScreen() {
 							spellCheck={false}
 							value={compose.text}
 							invalid={compose.target.kind === 'invalid'}
-							onChange={(event) => {
+							linkFacts={compose.linkFacts}
+							onValueChange={(text) => {
 								setError(null);
-								compose.setText(event.target.value);
+								compose.setText(text);
 							}}
 							onKeyDown={onKeyDown}
 						/>
@@ -150,8 +144,8 @@ export function ComposeScreen() {
 							</div>
 						</div>
 					</div>
-					<p className="compose-hint" data-tone={hint.tone} role={hint.tone === 'danger' ? 'alert' : 'status'}>
-						{hint.text}
+					<p className="compose-hint" data-tone={note?.tone} role={note?.tone === 'danger' ? 'alert' : 'status'}>
+						{note?.text}
 					</p>
 					<Suggestions
 						rows={compose.suggestions}

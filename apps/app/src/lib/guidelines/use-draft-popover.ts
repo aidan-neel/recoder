@@ -34,7 +34,7 @@ export interface DraftPopoverView {
 	/** Sends the request and closes the popover; a landed draft clears the prompt. */
 	submit: () => void;
 	/** Enter submits, Shift+Enter breaks the line, and an IME composition never submits. */
-	onPromptKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+	onPromptKeyDown: (event: KeyboardEvent<HTMLElement>) => void;
 	/** The trigger's click while a draft streams: it stops the draft instead of opening the popover. */
 	onTriggerClick: (event: { preventDefault(): void }) => void;
 }
@@ -86,7 +86,7 @@ export function useDraftPopover({
 		});
 	}
 
-	function onPromptKeyDown(event: KeyboardEvent<HTMLTextAreaElement>): void {
+	function onPromptKeyDown(event: KeyboardEvent<HTMLElement>): void {
 		if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
 
 		event.preventDefault();

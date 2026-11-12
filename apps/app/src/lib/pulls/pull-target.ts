@@ -20,16 +20,20 @@ export interface TargetContext {
 export interface ReadTarget {
 	target: PullTarget;
 	brief: string | null;
+	/** The word the target was read from (a link, `#12`, a branch); null for empty text. */
+	reference: string | null;
 }
 
 /** Punctuation between the reference and what the person asks: `#12: look at…`, `fix/lease — only…`. */
 const BRIEF_LEAD = /^[\s:,;—–-]+/;
 
-function invalid(reason: string): ReadTarget {
+type Read = Omit<ReadTarget, 'reference'>;
+
+function invalid(reason: string): Read {
 	return { target: { kind: 'invalid', reason }, brief: null };
 }
 
-function pullIn(repo: Repo, number: number, context: TargetContext, brief: string): ReadTarget {
+function pullIn(repo: Repo, number: number, context: TargetContext, brief: string): Read {
 	return {
 		target: {
 			kind: 'pull',
@@ -50,7 +54,7 @@ function homeRepo(context: TargetContext): Repo | null {
 }
 
 /** A link to a pull request: in a tracked repository it opens; otherwise its repository can be tracked first. */
-function fromLink(link: string, ref: PullRef, context: TargetContext, brief: string): ReadTarget {
+function fromLink(link: string, ref: PullRef, context: TargetContext, brief: string): Read {
 	const tracked = context.repos.find((repo) => repoKey(repo.url) === ref.address);
 
 	if (tracked) return pullIn(tracked, ref.number, context, brief);
@@ -66,7 +70,7 @@ function fromLink(link: string, ref: PullRef, context: TargetContext, brief: str
 }
 
 /** `12`, `#12` or `api#12`: the number in the repository it names, or in the home repository. */
-function fromShortRef(ref: PullRef, context: TargetContext, brief: string): ReadTarget {
+function fromShortRef(ref: PullRef, context: TargetContext, brief: string): Read {
 	if (context.repos.length === 0) return invalid('Track a repository first.');
 
 	if (ref.name) {
@@ -86,7 +90,7 @@ function fromShortRef(ref: PullRef, context: TargetContext, brief: string): Read
 }
 
 /** The open pull request from a branch of the home repository. */
-function fromBranch(branch: string, context: TargetContext, brief: string): ReadTarget {
+function fromBranch(branch: string, context: TargetContext, brief: string): Read {
 	const home = homeRepo(context);
 	const open = context.pulls.find((item) => item.repoId === home?.id && item.pull.headRef === branch);
 
@@ -102,13 +106,18 @@ function fromBranch(branch: string, context: TargetContext, brief: string): Read
 export function readTarget(text: string, context: TargetContext): ReadTarget {
 	const trimmed = text.trim();
 
-	if (!trimmed) return { target: { kind: 'empty' }, brief: null };
+	if (!trimmed) return { target: { kind: 'empty' }, brief: null, reference: null };
 
 	const first = trimmed.split(/\s/, 1)[0];
 	const brief = trimmed.slice(first.length).replace(BRIEF_LEAD, '');
 	const word = first.replace(/[:,;]$/, '');
 	const ref = parsePullRef(word);
 
+	return { ...readReference(word, ref, context, brief), reference: word };
+}
+
+/** What one reference names: a link, a short form, or a branch. */
+function readReference(word: string, ref: PullRef | null, context: TargetContext, brief: string): Read {
 	if (!ref) return fromBranch(word, context, brief);
 	if (ref.address !== null) return fromLink(word, ref, context, brief);
 

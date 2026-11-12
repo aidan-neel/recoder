@@ -70,8 +70,11 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   all, needs review, has bugs, ready, and one repository when more than one
   is tracked. A repository that failed to load, or whose list was cut, says
   so in a strip above the rows.
-- **New review**: one field that takes a pull request link or a search, and a
-  few open pull requests to pick from.
+- **New review**: one field that takes a pull request link, a number or a
+  branch, then what the review should look at, and a few open pull requests
+  to pick from. One line under the field, always in the layout, holds what
+  stops Enter (the target's error) or what Enter will do first (connect an
+  untracked repository); it is empty otherwise.
 - **Pull request page**: the header (the title over a row of badges: state,
   author, base and head branch, change size, last activity), a banner for the
   newest review (running, failed, stopped, or done) with the one next step,
@@ -126,7 +129,7 @@ The pull request screens show facts, not sentences about facts.
   or fail, and a reproduced bug are tinted. Category, traced, rule, file and
   time stay neutral; an icon tells them apart.
 - **Not every word is a badge.** Titles, the model's prose and the person's
-  comments stay text.
+  comments stay text; only a link in a person's words shows as an embed.
 - **Long prose is clamped.** Model-written text (what changed, the
   description, a bug's explanation) shows its first lines through the kit's
   `ClampedText`; the last line fades and Show more opens the rest over
@@ -136,13 +139,59 @@ The pull request screens show facts, not sentences about facts.
 - **One box level.** A box holds only code or terminal output. Everything
   else groups by space, a section label and hairlines.
 
+## Link embeds
+
+The app's text boxes for a person's words (New review, the Composer, the
+guidelines draft request) are the kit's `LinkField`, a swap for `Textarea`
+with the same props and the same plain-string value, URLs in full. Each
+`http:` or `https:` link in it shows as an embed: the forge's mark and a short
+label (`api #214`, `proj !12` for a GitLab merge request, `api #9`,
+`api@0123456`, `retry.ts:40`, `acme/api`), or a link glyph with the host and
+a short path for any other site.
+
+- **Technique.** A `contenteditable="plaintext-only"` element whose content
+  is a model (the text and which ranges are embeds); the DOM is only its view.
+  Every `beforeinput` is cancelled and applied to the model, so typing,
+  deleting, pasting, cutting, dropping, undo and redo all run through one
+  path. An IME composition is the one edit the browser makes, and the field
+  reads it back when it ends. A textarea under a painted overlay was ruled
+  out: the caret, selection and line breaks would sit in one layer and the
+  embeds in another, so an embed could never be one unit or narrower than its
+  URL.
+- **When a link becomes an embed**: on paste, on a value from outside, and
+  when the link being typed ends (a space, Enter, or the caret leaving its
+  word). Never while it is typed, never during a composition. Trailing
+  punctuation stays text; balanced parentheses stay in. A Markdown link's URL
+  becomes an embed and its brackets stay text.
+- **One unit.** The caret never goes inside an embed. Arrows step over it,
+  Shift+arrows and the mouse select it whole, Backspace and Delete remove it
+  whole. The first Backspace straight after a typed link became an embed turns
+  it back into text, so a link that was not meant as one costs one key.
+  Copy and cut give the full URL.
+- **Facts.** A host passes `linkFacts`: only what the app already holds (an
+  open pull request's title and state, that a repository is not connected,
+  why a target cannot be reviewed). The embed shows the fact as a dot; the
+  card shows it in words. The field never fetches anything for a link.
+- **The card.** Resting the pointer on an embed, or the caret beside one,
+  opens a card with the title, the state, the full URL, Open and Copy. It
+  never takes focus. A link opens only from Open, Alt+Enter beside it, or
+  Ctrl/Cmd+click, in a new tab with `noopener noreferrer`.
+- **Layout.** An embed is inline, 18px tall on the 20px line, so a line with
+  one is as tall as a line without. Its label ends in an ellipsis at 260px.
+- **Sent words.** A person's sent message shows its links the same way,
+  read-only (`LinkText`). Model-written Markdown keeps its own links.
+- Fields for tokens, URLs, numbers and names stay plain `Input`s, and the
+  guidelines editor stays a `Textarea`: its text is Markdown.
+
 ## Motion
 
 Motion explains a change and never makes the person wait.
 
 - Things that move: the sidebar slides, the active tab's pill and the nav
-  highlight travel, collapsibles and the provider dialog change height, menus
-  and dialogs enter with a short fade, a 0.95 scale and a 2px blur.
+  highlight travel, collapsibles and the provider dialog change height, menus,
+  dialogs and the link card enter with a short fade, a 0.95 scale and a 2px
+  blur. A link that becomes an embed settles in place: its tint fades in over
+  `--dur-swap`, with no change of size.
 - Things that do not move: keyboard moves (j/k, tabs 1 to 4) swap content at
   once. Lists load with skeletons shaped like the content and swap in place
   with no entrance animation. A page paints once, fully formed: no half

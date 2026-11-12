@@ -46,7 +46,8 @@ describe('readTarget', () => {
 	test('a link to a tracked repository opens its pull request, with the brief after it', () => {
 		expect(readTarget('https://github.com/acme/web/pull/12 — check retries', context())).toEqual({
 			target: { kind: 'pull', repoId: 'r2', repoName: 'web', number: 12, href: '/sample/pulls/r2/12' },
-			brief: 'check retries'
+			brief: 'check retries',
+			reference: 'https://github.com/acme/web/pull/12'
 		});
 	});
 
@@ -85,6 +86,6 @@ describe('readTarget', () => {
 	});
 
 	test('empty text points at nothing yet', () => {
-		expect(readTarget('   ', context())).toEqual({ target: { kind: 'empty' }, brief: null });
+		expect(readTarget('   ', context())).toEqual({ target: { kind: 'empty' }, brief: null, reference: null });
 	});
 });
