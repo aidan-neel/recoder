@@ -2,11 +2,11 @@ import { existsSync, rmSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentStatus } from '@recoder/shared';
+import type { AgentStatus, ReasoningEffort } from '@recoder/shared';
 import { LlmError, cancelledError, timedOutError } from '../models/llm/errors';
 import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../models/llm/types';
 import { serverDataDir } from '../util/data-dir';
-import type { AgentAdapter } from './registry';
+import type { AgentAdapter, AgentModelSettings, AgentRun, AgentRunOptions } from './contract';
 
 type Env = Record<string, string | undefined>;
 
@@ -148,7 +148,7 @@ export interface CallDeadline {
 	failure(error: unknown, fallback: string): LlmError;
 }
 
-export function callDeadline(opts: ChatOptions): CallDeadline {
+export function callDeadline(opts: Pick<ChatOptions, 'timeoutMs' | 'signal'>): CallDeadline {
 	const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 	const timeout = AbortSignal.timeout(timeoutMs);
 
@@ -202,6 +202,12 @@ export abstract class CliAgent implements AgentAdapter {
 	constructor(protected readonly env: Env = process.env) {}
 
 	abstract models(): ReturnType<AgentAdapter['models']>;
+
+	abstract modelSettings(model: string, requested: ReasoningEffort | undefined): AgentModelSettings;
+
+	abstract complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string>;
+
+	abstract openRun(options: AgentRunOptions): Promise<AgentRun>;
 
 	protected abstract find(): string | null;
 

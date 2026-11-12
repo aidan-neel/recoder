@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { AgentEvent } from '../../../../src/agents/contract';
 import type { OpenCodeAgent } from '../../../../src/agents/opencode/opencode';
 import { ChatConversation } from '../../../../src/models/llm/conversation';
 import type { ChatOptions } from '../../../../src/models/llm/types';
@@ -125,20 +126,20 @@ describe('OpenCode 2 chat', () => {
 });
 
 describe('OpenCode 2 agent', () => {
-	async function open(target: OpenCodeAgent, handlers: Parameters<OpenCodeAgent['openAgent']>[0]['handlers']) {
-		return target.openAgent({
+	async function open(target: OpenCodeAgent, onEvent: (event: AgentEvent) => void = () => {}) {
+		return target.openRun({
 			model: 'openai/m',
 			system: 'Review.',
 			tools: ['search'],
 			runTool: async () => ({ text: 'ok', isError: false }),
-			handlers,
+			onEvent,
 			signal: new AbortController().signal
 		});
 	}
 
 	test('registers its tools natively, not as code mode, and allows only the ones named on each prompt', async () => {
 		const target = await start();
-		const session = await open(target, {});
+		const session = await open(target);
 
 		await session.prompt('hi', { tools: true, timeoutMs: 5_000 });
 		await session.prompt('hi', { tools: false, timeoutMs: 5_000 });
@@ -164,9 +165,9 @@ describe('OpenCode 2 agent', () => {
 		const target = await start();
 		const events: string[] = [];
 
-		const session = await open(target, {
-			onStepStart: () => events.push('start'),
-			onStepFinish: (usage) => events.push(`finish ${usage.totalTokens}`)
+		const session = await open(target, (event) => {
+			if (event.type === 'step-start') events.push('start');
+			if (event.type === 'usage') events.push(`finish ${event.usage.totalTokens}`);
 		});
 
 		const reply = await session.prompt('hi', { tools: true, timeoutMs: 5_000 });

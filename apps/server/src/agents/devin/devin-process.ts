@@ -23,31 +23,51 @@ const STRIPPED = [
 	/PASSWORD/
 ];
 
-/** Every tool the CLI has, by the names its permission rules take. A denied tool is refused before it runs. */
-const DENIED_TOOLS = ['read', 'edit', 'grep', 'glob', 'exec', 'mcp__*'];
+/** The CLI's own tools, by the names its permission rules take. A denied tool is refused before it runs. */
+const BUILT_IN_TOOLS = ['read', 'edit', 'grep', 'glob', 'exec'];
+
+/** Every tool the CLI has, MCP tools included: what a single model call may use. */
+const DENIED_TOOLS = [...BUILT_IN_TOOLS, 'mcp__*'];
 
 export function devinEnv(env: Env): Record<string, string> {
 	return cliEnv(env, STRIPPED);
 }
 
 /**
- * The user's own config with every tool denied, or just that when there is none. The CLI reads its org and
- * model from this file, and a config under another `XDG_CONFIG_HOME` also leaves out the user's MCP servers,
- * rules and skills, so a call sees only the prompt Recoder sends. Sign-in is not in it.
+ * The user's own config, or just a version when there is none. The CLI reads its org and model from this file;
+ * Recoder never writes it, and only ever runs the CLI under a copy in another `XDG_CONFIG_HOME`, which also
+ * leaves out the user's MCP servers, rules and skills. Sign-in is not in it.
  */
-async function toolFreeConfig(env: Env): Promise<string> {
+async function userConfig(env: Env): Promise<Record<string, unknown>> {
 	const base = env.XDG_CONFIG_HOME || join(env.HOME || homedir(), '.config');
-	let config: Record<string, unknown> = { version: 1 };
 
 	try {
 		const parsed: unknown = JSON.parse(await readFile(join(base, 'devin', 'config.json'), 'utf8'));
 
-		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) config = parsed as Record<string, unknown>;
+		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { ...parsed };
 	} catch {
-		config = { version: 1 };
+		return { version: 1 };
 	}
 
-	return JSON.stringify({ ...config, permissions: { deny: DENIED_TOOLS } });
+	return { version: 1 };
+}
+
+/** The user's config with every tool denied, so a call sees only the prompt Recoder sends. */
+async function toolFreeConfig(env: Env): Promise<string> {
+	return JSON.stringify({ ...(await userConfig(env)), permissions: { deny: DENIED_TOOLS } });
+}
+
+/**
+ * The user's config for an agent run: the CLI's own tools denied, and the tools of Recoder's MCP server `server`
+ * allowed, so the model reaches the repository only through them.
+ */
+export async function runConfig(env: Env, server: string | null): Promise<string> {
+	const allow = server ? [`mcp__${server}__*`] : [];
+
+	return JSON.stringify({
+		...(await userConfig(env)),
+		permissions: { allow, deny: server ? BUILT_IN_TOOLS : DENIED_TOOLS }
+	});
 }
 
 let home: Promise<string> | null = null;

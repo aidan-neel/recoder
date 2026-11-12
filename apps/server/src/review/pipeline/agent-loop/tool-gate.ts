@@ -1,4 +1,4 @@
-import type { ToolRunner } from '../../../agents/opencode/opencode-mcp.js';
+import type { ToolRunner } from '../../../agents/contract.js';
 import { formatToolResults } from '../../../evidence/evidence.js';
 import { toolAction } from '../../../evidence/native-tools.js';
 import type { RetrievalAction, ToolResult } from '../../../evidence/types.js';
@@ -20,7 +20,7 @@ function refusal(text: string): { text: string; isError: boolean } {
 }
 
 /**
- * Stands between the model's tool calls and the review's evidence. OpenCode
+ * Stands between the model's tool calls and the review's evidence. The CLI
  * decides when the model calls a tool; this decides whether the call still
  * fits the agent's turns, runs it through the evidence store (so it is
  * sandboxed, recorded and shown on the dashboard), and counts what the agent did.

@@ -1,5 +1,5 @@
-import type { TokenUsage } from '@recoder/shared';
-import type { SessionHandlers } from '../../../agents/opencode/opencode-events.js';
+import type { ModelProvider, TokenUsage } from '@recoder/shared';
+import type { AgentEvent } from '../../../agents/contract.js';
 import { trackTokenCall } from '../../../models/metrics.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
 import type { JsonAgentOptions } from './options.js';
@@ -41,7 +41,7 @@ interface RelayHooks {
 }
 
 /**
- * Turns an OpenCode session's events into what a review shows and counts:
+ * Turns an agent run's events into what a review shows and counts:
  * each model step spends one call of the budget and records its own token
  * usage, and its reasoning and narration stream to the developer.
  */
@@ -50,7 +50,7 @@ export class StepRelay<T> {
 	steps = 0;
 
 	/**
-	 * Steps that ran to their end. OpenCode can report a step's start after the
+	 * Steps that ran to their end. A CLI can report a step's start after the
 	 * step's tool calls have already reached Recoder, but a step always ends
 	 * before the next one calls anything, so tool limits count from this.
 	 */
@@ -58,6 +58,9 @@ export class StepRelay<T> {
 	lastActivityAt = Date.now();
 
 	private readonly base: string;
+
+	/** The provider the steps are counted under: the agent CLI that runs them. */
+	private readonly provider: ModelProvider;
 
 	/** The step in progress, the steps of this prompt, and those that ended with no usage yet. */
 	private current: StepCall | null = null;
@@ -73,14 +76,18 @@ export class StepRelay<T> {
 		private readonly hooks: RelayHooks
 	) {
 		this.base = `${opts.label.slice(0, 24)}_${Math.random().toString(36).slice(2, 8)}`;
+		this.provider = opts.config.provider ?? 'openai-compatible';
 	}
 
-	readonly handlers: SessionHandlers = {
-		onActivity: () => (this.lastActivityAt = Date.now()),
-		onStepStart: (step) => this.stepStarted(step),
-		onStepFinish: (usage, step) => this.stepFinished(usage, step),
-		onReasoning: (delta) => this.reasoned(delta),
-		onText: (delta, partId) => this.narrated(delta, partId)
+	/** Every event is a sign of life; the ones that carry a step, usage, reasoning or text are acted on. */
+	readonly onEvent = (event: AgentEvent): void => {
+		this.lastActivityAt = Date.now();
+
+		if (event.type === 'step-start') this.stepStarted(event.step);
+		else if (event.type === 'usage') this.stepFinished(event.usage, event.step);
+		else if (event.type === 'reasoning') this.reasoned(event.delta);
+		else if (event.type === 'text') this.narrated(event.delta, event.partId);
+		else if (event.type === 'error') this.opts.onLog?.(`${this.opts.label}: ${event.message}`);
 	};
 
 	/**
@@ -98,7 +105,7 @@ export class StepRelay<T> {
 		this.steps++;
 		this.stepMessageId = null;
 		opts.budget.spend();
-		this.current = { step, tracking: trackTokenCall(opts.config.model, 'opencode'), reported: false };
+		this.current = { step, tracking: trackTokenCall(opts.config.model, this.provider), reported: false };
 		this.promptCalls.push(this.current);
 		opts.onLog?.(`${opts.label} model turn ${this.steps}/${opts.maxTurns} (${opts.config.model})`);
 		this.hooks.onStep(this.steps);
@@ -192,7 +199,7 @@ export class StepRelay<T> {
 		if (calls.length === 0) {
 			if (!ok && !tokens) return;
 
-			const missed = trackTokenCall(this.opts.config.model, 'opencode');
+			const missed = trackTokenCall(this.opts.config.model, this.provider);
 
 			if (tokens) missed.usage(tokens);
 

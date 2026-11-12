@@ -79,6 +79,11 @@ function sessionFiles(env: Env, cwd: string): SessionFiles {
 	return files;
 }
 
+/** Best effort: delete the transcript of session `id`, which the CLI saved under the working directory `cwd`. */
+export function forgetSession(env: Env, cwd: string, id: string): void {
+	sessionFiles(env, cwd).remove(id);
+}
+
 /** Delete every session this process's folders still hold; synchronous, for exit. */
 export function sweepSessions(): void {
 	for (const files of opened.values()) files.sweep();

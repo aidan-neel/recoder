@@ -10,13 +10,12 @@ import type {
 } from '@recoder/shared';
 import { withFieldFallback } from '../../models/llm/request-fields';
 import type { ChatOptions } from '../../models/llm/types';
-import type { AgentAdapter } from '../registry';
+import type { AgentAdapter, AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
 import { OAUTH_TIMEOUT_MS } from './api/types';
-import { AgentSession, refusesStructuredOutput, type AgentSessionOptions } from './opencode-agent-session';
+import { OpenCodeAgentRun, refusesStructuredOutput } from './opencode-agent-session';
 import { openCodeChat } from './opencode-chat';
 import { normalizeCatalog, normalizeModels, normalizeProviders, type CatalogProvider } from './opencode-catalog';
 import { OpenCodeError } from './opencode-error';
-import { toolHost } from './opencode-mcp';
 import { OpenCodeServer, findOpenCode, probeVersion, type ServerRequest } from './opencode-server';
 
 export { OPENCODE_MODEL_PREFIX, normalizeModels, normalizeProviders } from './opencode-catalog';
@@ -151,9 +150,17 @@ export class OpenCodeAgent implements AgentAdapter {
 		return withFieldFallback(opts, opts.model, this.noStructuredOutput, refusesStructuredOutput, run);
 	}
 
-	/** A session in which OpenCode runs a whole agent with Recoder's tools. See {@link AgentSession}. */
-	openAgent(options: AgentSessionOptions): Promise<AgentSession> {
-		return AgentSession.open(
+	/**
+	 * A model id names its hosted provider (`openai/gpt-5`). The effort goes through as picked: the model's
+	 * variants are known only once it is listed, and a call checks it against them then.
+	 */
+	modelSettings(model: string, requested: ReasoningEffort | undefined): AgentModelSettings {
+		return { source: model.split('/')[0], reasoningEffort: requested };
+	}
+
+	/** A session in which OpenCode runs a whole agent with Recoder's tools. See {@link OpenCodeAgentRun}. */
+	openRun(options: AgentRunOptions): Promise<AgentRun> {
+		return OpenCodeAgentRun.open(
 			{
 				server: this.server,
 				efforts: (model: string) => this.efforts(model),
@@ -257,7 +264,6 @@ export class OpenCodeAgent implements AgentAdapter {
 	}
 
 	stop(): void {
-		toolHost.stop();
 		this.server.stop();
 	}
 }

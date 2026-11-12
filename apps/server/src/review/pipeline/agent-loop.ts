@@ -11,7 +11,8 @@ import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-l
 import { compactTranscript } from './agent-loop/compaction.js';
 import { DELEGATE_SHAPE, commandsRun, executeTurn } from './agent-loop/delegation.js';
 import { agentDeadlines, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
-import { runOpenCodeAgent } from './agent-loop/opencode-engine.js';
+import { runNativeAgent } from './agent-loop/native-engine.js';
+import { agentById } from '../../agents/registry.js';
 import type { JsonAgentOptions } from './agent-loop/options.js';
 import { streamTurn, type TurnResult } from './agent-loop/stream-turn.js';
 
@@ -115,15 +116,17 @@ function invalidReplyPrompt(parsed: unknown, problems: string, lastTurn: boolean
 }
 
 /**
- * Run an agent to its answer. OpenCode runs the agent itself, calling
- * Recoder's tools as it goes. Every other provider is only a model: Recoder
- * runs the loop, asking for JSON action requests turn by turn. Those calls
- * share one conversation, so a transport that keeps a session reuses the
- * provider's prompt cache.
+ * Run an agent to its answer. An agent CLI (see `agents/registry.ts`) runs
+ * the agent itself, calling Recoder's tools as it goes. Every other provider
+ * is only a model: Recoder runs the loop, asking for JSON action requests
+ * turn by turn. Those calls share one conversation, so a transport that keeps
+ * a session reuses the provider's prompt cache.
  */
 export function runJsonAgent<T>(opts: JsonAgentOptions<T>): Promise<{ value: T | null; error?: string }> {
 	return withTokenStage(opts.stage, async () => {
-		if (opts.config.provider === 'opencode') return runOpenCodeAgent(opts);
+		const agent = agentById(opts.config.provider);
+
+		if (agent) return runNativeAgent(opts, agent);
 
 		const conversation = new ChatConversation();
 

@@ -18,6 +18,22 @@ export function effortLabel(effort: ReasoningEffort): string {
 }
 
 /**
+ * A saved effort the model no longer offers (e.g. after switching models) falls
+ * back to the model default: medium when offered, else the first listed level.
+ */
+export function supportedEffort(
+	requested: ReasoningEffort | null | undefined,
+	offered: readonly ReasoningEffort[] | undefined,
+	fallback: ReasoningEffort | undefined
+): ReasoningEffort | undefined {
+	if (!requested) return undefined;
+	if (!offered?.length || offered.includes(requested)) return requested;
+	if (fallback && offered.includes(fallback)) return fallback;
+
+	return offered.includes('medium') ? 'medium' : offered[0];
+}
+
+/**
  * How many subagents one review may run in all, chosen in Settings → Review harness; 0 turns them off. Second
  * looks the harness sends itself count inside it, so this is the most agents a review adds after its reviewers.
  * The three counts are the Low, Medium and High token budgets'; `uncapped` runs one for every question that
@@ -53,8 +69,14 @@ export function subagentCapFrom(value: string): SubagentCap {
 	return SUBAGENT_CAPS.find((cap) => String(cap) === value) ?? DEFAULT_SUBAGENT_CAP;
 }
 
-/** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or the OpenCode, Claude Code or Devin CLI. */
-export type ModelProvider = 'openai-compatible' | 'codex' | 'opencode' | 'claude-code' | 'devin';
+/**
+ * An agent CLI by the id of its server adapter (`opencode`, `claude-code`, `devin`, `custom-command`…). The
+ * server's agent registry is the list; a new adapter adds its id there, not here.
+ */
+export type AgentCliId = string;
+
+/** How Recoder reaches a model: an OpenAI-compatible endpoint, ChatGPT, or an agent CLI. */
+export type ModelProvider = 'openai-compatible' | 'codex' | AgentCliId;
 
 /** Providers that are an app or CLI rather than an endpoint, by the name people know them by. */
 const APP_NAMES: Partial<Record<ModelProvider, string>> = {

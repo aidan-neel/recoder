@@ -13,10 +13,15 @@ function isolateStorage(): void {
 	delete process.env.RECODER_INSTANCE_ID;
 }
 
-/** Never start the developer's real OpenCode or Claude Code (or touch their logins); agent tests bring a fake one. */
+/**
+ * Never start the developer's real OpenCode, Claude Code, Devin or custom command (or touch their logins); agent
+ * tests bring a fake one.
+ */
 function keepRealAgentsOut(): void {
 	process.env.RECODER_OPENCODE_BIN = '';
 	process.env.RECODER_CLAUDE_BIN = '';
+	process.env.RECODER_DEVIN_BIN = '';
+	delete process.env.RECODER_CUSTOM_AGENT;
 }
 
 /** Tests simulate provider failures and expect them to surface at once; llm-retry.test.ts opts back in. */

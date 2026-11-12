@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { TokenUsage } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 
-const usageSchema = z.object({
+export const usageSchema = z.object({
 	input_tokens: z.number().optional(),
 	output_tokens: z.number().optional(),
 	cache_creation_input_tokens: z.number().optional(),
@@ -90,7 +90,7 @@ export function claudeCodeError(text: string, code: string | null, apiStatus: nu
  * The CLI counts cache reads and writes apart from `input_tokens`; Recoder's usage holds them as breakdowns, so
  * they are added back in. `output_tokens` already includes thinking.
  */
-function tokenUsage(usage: z.infer<typeof usageSchema>): TokenUsage {
+export function tokenUsage(usage: z.infer<typeof usageSchema>): TokenUsage {
 	const { input_tokens, output_tokens } = usage;
 	const cachedInputTokens = usage.cache_read_input_tokens ?? null;
 	const cacheWriteInputTokens = usage.cache_creation_input_tokens ?? null;
@@ -115,7 +115,7 @@ function lastLine(text: string): string | undefined {
 	return text.trim().split('\n').at(-1)?.trim().slice(0, QUOTED_CHARS) || undefined;
 }
 
-function parseLine(line: string): unknown {
+export function parseLine(line: string): unknown {
 	try {
 		return JSON.parse(line);
 	} catch {

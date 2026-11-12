@@ -1,23 +1,18 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { within, type AgentStatus, type ModelEntry } from '@recoder/shared';
+import { supportedEffort, within, type AgentStatus, type ModelEntry, type ReasoningEffort } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import {
-	CliAgent,
-	callDeadline,
-	emptyDirectory,
-	findCli,
-	killGroup,
-	killOnAbort,
-	stopOnShutdown
-} from '../cli-process';
+import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
 import { systemText } from '../cli-prompt';
-import { claudeCodeEfforts, claudeCodeModels } from './claude-code-models';
+import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
+import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import { claudeCodeEfforts, claudeCodeModels, effortArgs } from './claude-code-models';
 import { FailedCallDump } from './claude-code-debug';
 import { claudeCodeEnv } from './claude-code-process';
 import { ReplyReader } from './claude-code-reply';
+import { ClaudeCodeRun, CLAUDE_CODE_EMPTY_DIR } from './claude-code-run';
 import { sessionCall, sweepSessions, type SessionCall } from './claude-code-session';
 
 const INSTALL = 'curl -fsSL https://claude.ai/install.sh | bash';
@@ -63,35 +58,6 @@ const BASE_ARGS = [
 ];
 
 /**
- * The effort flags for a model that takes levels. `thinking: false` turns thinking off; the CLI has no
- * temperature, top-p, seed or output cap, so those are not sent.
- */
-function effortArgs({ model, reasoningEffort, thinking }: ChatOptions): string[] {
-	if (thinking === false) return ['--thinking', 'disabled'];
-
-	const offered = claudeCodeEfforts(model).efforts;
-
-	return reasoningEffort && offered?.includes(reasoningEffort) ? ['--effort', reasoningEffort] : [];
-}
-
-/** Hand each complete line of a stream to `onLine`, the last one included. */
-async function readLines(stream: ReadableStream<Uint8Array>, onLine: (line: string) => void): Promise<void> {
-	const decoder = new TextDecoder();
-	let buffer = '';
-
-	for await (const chunk of stream) {
-		buffer += decoder.decode(chunk, { stream: true });
-
-		const lines = buffer.split('\n');
-
-		buffer = lines.pop() ?? '';
-		for (const line of lines) if (line.trim()) onLine(line);
-	}
-
-	if (buffer.trim()) onLine(buffer);
-}
-
-/**
  * Claude Code, run as one `claude -p` process per model call.
  *
  * The CLI signs in with the user's own subscription. Recoder never reads its
@@ -119,6 +85,22 @@ export class ClaudeCodeAgent extends CliAgent {
 		return claudeCodeModels();
 	}
 
+	/** A model that takes effort levels gets the picked one when it offers it, else its default; others get none. */
+	modelSettings(model: string, requested: ReasoningEffort | undefined): AgentModelSettings {
+		const { efforts, defaultEffort } = claudeCodeEfforts(model);
+
+		return efforts ? { reasoningEffort: supportedEffort(requested ?? defaultEffort, efforts, defaultEffort) } : {};
+	}
+
+	/** A run in which Claude Code is the agent, with Recoder's tools over MCP. See {@link ClaudeCodeRun}. */
+	async openRun(options: AgentRunOptions): Promise<AgentRun> {
+		const path = this.find();
+
+		if (!path) throw new LlmError(0, `Claude Code is not installed. Install it with: ${INSTALL}`);
+
+		return ClaudeCodeRun.open({ path, env: this.env, running: this.running, scratch: this.scratch }, options);
+	}
+
 	/**
 	 * One model call. The prompt goes in on stdin and the system prompt in a file, since a review's diff can
 	 * pass the kernel's per-argument limit. Text streams to `onToken`; usage comes from the final result line.
@@ -133,7 +115,7 @@ export class ClaudeCodeAgent extends CliAgent {
 		const scratch = await mkdtemp(join(tmpdir(), 'recoder-claude-code-'));
 		const systemFile = join(scratch, 'system.md');
 
-		const cwd = await emptyDirectory('claude-code-empty');
+		const cwd = await emptyDirectory(CLAUDE_CODE_EMPTY_DIR);
 		const system = systemText(opts);
 		const effort = effortArgs(opts);
 
@@ -189,9 +171,8 @@ export class ClaudeCodeAgent extends CliAgent {
 	}
 
 	/**
-	 * Spawn the CLI in an empty directory, in its own process group, feed it the prompt and read its reply. When
-	 * `signal` aborts the group is killed and the call rejects at once, without waiting for its pipes to close;
-	 * whatever the CLI started is killed with it once the call ends either way.
+	 * Run the CLI in an empty directory, feed it the prompt and read its reply. See {@link streamCli} for how an
+	 * abort or a runaway output stops it.
 	 */
 	private async run(
 		path: string,
@@ -201,15 +182,6 @@ export class ClaudeCodeAgent extends CliAgent {
 		signal: AbortSignal,
 		onToken: ((text: string) => void) | undefined
 	): Promise<string> {
-		const proc = Bun.spawn([path, ...args], {
-			cwd: where.cwd,
-			env: claudeCodeEnv(this.env),
-			detached: true,
-			stdin: new Blob([where.session.prompt]),
-			stdout: 'pipe',
-			stderr: 'pipe'
-		});
-
 		const reader = new ReplyReader({
 			onText: onToken,
 			onThinking: opts.onReasoning,
@@ -222,31 +194,30 @@ export class ClaudeCodeAgent extends CliAgent {
 
 		const dump = new FailedCallDump(this.env);
 
-		this.running.add(proc);
-
-		const { stopped, release } = killOnAbort(proc, signal);
+		const lines = new LineSplitter((line) => {
+			dump.add(line);
+			reader.line(line);
+		});
 
 		try {
-			const [, stderr, code] = await Promise.race([
-				Promise.all([
-					readLines(proc.stdout, (line) => {
-						dump.add(line);
-						reader.line(line);
-					}),
-					new Response(proc.stderr).text(),
-					proc.exited
-				]),
-				stopped
-			]);
+			const exit = await streamCli({
+				argv: [path, ...args],
+				cwd: where.cwd,
+				env: claudeCodeEnv(this.env),
+				stdin: where.session.prompt,
+				signal,
+				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
+				onOutput: lines.push,
+				running: this.running,
+				name: this.name
+			});
 
-			return reader.finish(opts.onUsage, { code, stderr });
+			lines.end();
+
+			return reader.finish(opts.onUsage, exit);
 		} catch (error) {
 			dump.write(opts.model, error);
 			throw error;
-		} finally {
-			release();
-			this.running.delete(proc);
-			killGroup(proc);
 		}
 	}
 
