@@ -72,5 +72,3 @@ export function createMerge(context: SessionContext, refreshPage: () => Promise<
 		}
 	};
 }
-
-export type Merge = ReturnType<typeof createMerge>;

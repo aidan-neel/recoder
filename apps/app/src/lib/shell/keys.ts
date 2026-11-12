@@ -5,7 +5,7 @@
 export type KeyMap = Record<string, (event: KeyboardEvent) => unknown>;
 
 /** Keycaps stay pressed this long after their key fires, so the press reads at 60fps. */
-export const FLASH_MS = 140;
+const FLASH_MS = 140;
 
 /** Keys that move or scroll, which may repeat while held. Every other key fires once per press. */
 const REPEATS = new Set(['j', 'k', 'ArrowDown', 'ArrowUp', ' ', 'PageDown', 'PageUp']);
@@ -93,7 +93,7 @@ function overlayOpen(): boolean {
  * Press every keycap labelled for `key` (`<kbd data-ui="keycap" data-key="a">`),
  * so a shortcut visibly presses the button it names.
  */
-export function flashKey(key: string): void {
+function flashKey(key: string): void {
 	for (const cap of document.querySelectorAll<HTMLElement>(`[data-ui="keycap"][data-key="${CSS.escape(key)}"]`)) {
 		cap.dataset.pressed = '';
 		setTimeout(() => delete cap.dataset.pressed, FLASH_MS);

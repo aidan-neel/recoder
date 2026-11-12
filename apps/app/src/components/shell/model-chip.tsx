@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { settingsHref } from '@/lib/shell/routes';
 
 /** Whether reviews can run: a model is ready, one is set but does not answer, or none is set up. */
-export type ModelState = 'ready' | 'off' | 'missing';
+type ModelState = 'ready' | 'off' | 'missing';
 
 const STATE_LABELS: Record<ModelState, string> = {
 	ready: 'Ready',

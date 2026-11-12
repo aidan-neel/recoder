@@ -286,5 +286,3 @@ export function createBugActions(context: SessionContext) {
 		}
 	};
 }
-
-export type BugActions = ReturnType<typeof createBugActions>;

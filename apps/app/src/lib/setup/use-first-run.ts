@@ -8,10 +8,10 @@ import { stepsLeft, type SetupSteps } from './setup-steps';
 import { useFinish } from './use-finish';
 
 /** The dialogs first run opens over the checklist. */
-export type SetupDialog = 'provider' | 'browse';
+type SetupDialog = 'provider' | 'browse';
 
 /** The step taking the tint: the first one not done yet. */
-export type SetupCurrent = 'provider' | 'model' | 'repo';
+type SetupCurrent = 'provider' | 'model' | 'repo';
 
 /** Everything the first-run checklist shows and does. */
 export interface FirstRunView {

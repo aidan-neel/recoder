@@ -131,5 +131,3 @@ export function createPageLoads(context: SessionContext, events: PageEvents) {
 		}
 	};
 }
-
-export type PageLoads = ReturnType<typeof createPageLoads>;

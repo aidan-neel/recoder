@@ -210,5 +210,3 @@ export function createReviewFollow(context: SessionContext, events: ReviewEvents
 		}
 	};
 }
-
-export type ReviewFollow = ReturnType<typeof createReviewFollow>;

@@ -91,5 +91,3 @@ export function createPullChat(context: SessionContext, drafts: DraftOpener) {
 		}
 	};
 }
-
-export type PullChat = ReturnType<typeof createPullChat>;

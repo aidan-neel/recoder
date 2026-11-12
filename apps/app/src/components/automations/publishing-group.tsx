@@ -9,6 +9,7 @@ import { useCheckThreshold } from '@/lib/settings/use-check-threshold';
 import { useIgnoredPaths, type IgnoredPathsView } from '@/lib/settings/use-ignored-paths';
 import { useInlineCommentLimit } from '@/lib/settings/use-inline-comment-limit';
 
+import { NumberRow } from '@/components/settings/number-row';
 import { SettingsGroup, SettingsRow } from '@/components/settings/settings-group';
 
 import { SwitchRow } from './switch-row';
@@ -65,28 +66,16 @@ function CheckThresholdRow() {
 	);
 }
 
-/** How many findings one review may put on their lines: it saves on blur or Enter, and Escape puts the saved number back. */
+/** How many findings one review may put on their lines. */
 function InlineCommentsRow() {
 	const view = useInlineCommentLimit();
 
 	return (
-		<SettingsRow
+		<NumberRow
 			name="Comments on lines"
 			detail="The most findings one review posts on their lines; the rest go in its summary"
-			error={view.error}
-			state={view.state}
-		>
-			<Input
-				className="settings-number"
-				inputMode="numeric"
-				aria-label="Comments on lines"
-				invalid={view.error !== null}
-				value={view.text}
-				onChange={(event) => view.edit(event.target.value)}
-				onBlur={view.blur}
-				onKeyDown={view.onKeyDown}
-			/>
-		</SettingsRow>
+			view={view}
+		/>
 	);
 }
 

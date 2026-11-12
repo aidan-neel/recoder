@@ -1,11 +1,12 @@
 'use client';
 
-import { Input, SegmentedControl, Switch } from '@recoder/ui';
+import { SegmentedControl, Switch } from '@recoder/ui';
 
 import type { LimitKey } from '@/lib/settings/limits';
 import { SUBAGENT_OPTIONS, useHarness, type HarnessReady } from '@/lib/settings/use-harness';
 import { useLimitField } from '@/lib/settings/use-limit-field';
 
+import { NumberRow } from './number-row';
 import { SettingsGroup, SettingsRow } from './settings-group';
 import { SettingsSkeleton } from './settings-skeleton';
 
@@ -16,24 +17,11 @@ interface LimitRowProps {
 	max: number;
 }
 
-/** One review limit as a number field: it saves on blur or Enter, and Escape puts the saved value back. */
+/** One review limit as a number row. */
 function LimitRow({ field, name, hint, max }: LimitRowProps) {
 	const view = useLimitField(field, max);
 
-	return (
-		<SettingsRow name={name} detail={hint} error={view.error} state={view.state}>
-			<Input
-				className="settings-number"
-				inputMode="numeric"
-				aria-label={name}
-				invalid={view.error !== null}
-				value={view.text}
-				onChange={(event) => view.edit(event.target.value)}
-				onBlur={view.blur}
-				onKeyDown={view.onKeyDown}
-			/>
-		</SettingsRow>
-	);
+	return <NumberRow name={name} detail={hint} view={view} />;
 }
 
 /** How much a review may spend: the token budget and how many subagents go deeper. */
