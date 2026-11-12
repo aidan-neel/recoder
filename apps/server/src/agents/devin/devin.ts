@@ -2,9 +2,9 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AgentStatus, ModelEntry } from '@recoder/shared';
-import { LlmError, cancelledError } from '../../models/llm/errors';
+import { LlmError } from '../../models/llm/errors';
 import type { ChatOptions } from '../../models/llm/types';
-import { CliAgent, callDeadline, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import { CliAgent, callDeadline, cliOutput, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
 import { promptText, systemText } from '../cli-prompt';
 import { CLI_OUTPUT_CAP_BYTES, streamCli } from '../cli-stream';
 import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
@@ -172,31 +172,14 @@ export class DevinAgent extends CliAgent {
 		await proc.exited;
 	}
 
-	/** Run a short CLI command to its end, killing it after `timeoutMs`, or when `signal` aborts. */
+	/** Run a short CLI command. See {@link cliOutput}. */
 	private async output(
 		path: string,
 		args: string[],
 		timeoutMs: number,
 		signal?: AbortSignal
 	): Promise<{ code: number; stdout: string }> {
-		const proc = Bun.spawn([path, ...args], {
-			stdout: 'pipe',
-			stderr: 'ignore',
-			env: devinEnv(this.env),
-			...(signal ? { signal } : {})
-		});
-
-		const timer = setTimeout(() => proc.kill(), timeoutMs);
-
-		try {
-			const [stdout, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited]);
-
-			if (signal?.aborted) throw cancelledError();
-
-			return { code, stdout };
-		} finally {
-			clearTimeout(timer);
-		}
+		return cliOutput([path, ...args], { env: devinEnv(this.env), timeoutMs, signal });
 	}
 
 	/** Run the CLI in an empty directory and read its reply. See {@link streamCli} for how an abort stops it. */
