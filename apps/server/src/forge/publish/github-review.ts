@@ -1,7 +1,7 @@
 import { GhError } from '../cli';
 import { githubRest } from '../github-rest';
 import { CHECK_NAME, rejectedPosition, type PostedComment, type PullReviewForge, type ReviewDraft } from './forge';
-import { listRows, posted, requireToken } from './github-comments';
+import { githubPosition, listRows, posted, requireToken } from './github-comments';
 import { z } from 'zod';
 
 /** Review threads read per GraphQL page, and the most pages read when looking for one. */
@@ -156,8 +156,7 @@ export function githubReviews(slug: string, prNumber: number, headSha: string): 
 
 /** One inline comment of the review: a line, or a range ending at the line when the draft spans lines. */
 function reviewComment(draft: ReviewDraft): Record<string, unknown> {
-	const side = draft.target.side === 'old' ? 'LEFT' : 'RIGHT';
-	const line = draft.target.side === 'old' ? draft.target.oldLine : draft.target.newLine;
+	const { line, side } = githubPosition(draft.target);
 	const range = draft.span > 0 && line !== null ? { start_line: line - draft.span, start_side: side } : {};
 
 	return { path: draft.target.path, body: draft.body, line, side, ...range };

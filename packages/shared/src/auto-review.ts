@@ -38,7 +38,11 @@ export interface AutoReviewSettings {
 	onPushed: boolean;
 	/** Leave draft (WIP) pull requests alone unless someone mentions Recoder. */
 	skipDrafts: boolean;
-	/** Post a comment on the pull request when the review finishes, and react to the mention when it starts. */
+	/**
+	 * React to the mention when the review starts; when it finishes, post a
+	 * comment on the pull request and submit the verified findings as a forge
+	 * review with inline comments and a commit status.
+	 */
 	postResults: boolean;
 	/** Tracked repositories the watcher leaves alone. New repositories are watched. */
 	excludedRepoIds: string[];
