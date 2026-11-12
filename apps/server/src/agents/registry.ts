@@ -5,6 +5,7 @@ import { codex } from './codex/codex';
 import type { AgentAdapter } from './contract';
 import { customCommand } from './custom/custom-command';
 import { devin } from './devin/devin';
+import { grok } from './grok/grok';
 import { opencode } from './opencode/opencode';
 import { pi } from './pi/pi';
 
@@ -13,7 +14,7 @@ import { pi } from './pi/pi';
  * `docs/agents/adapter-contract.md`) plus its line here; the routes, Settings, the model routing and the review
  * pipeline read only this list.
  */
-const AGENTS: readonly AgentAdapter[] = [opencode, claudeCode, devin, customCommand, codex, pi];
+const AGENTS: readonly AgentAdapter[] = [opencode, claudeCode, devin, customCommand, codex, pi, grok];
 
 /** Every agent CLI Recoder runs, in the order Settings lists them. */
 export function registeredAgents(): readonly AgentAdapter[] {
