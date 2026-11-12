@@ -38,7 +38,7 @@ jscpd fails on any clone (`.jscpd.json`); CSS and `package.json` are excluded.
 Durable storage operations are asynchronous. Await them and use a collection's
 transactional `update` for read/modify/write decisions. Streaming callbacks queue
 persistence; drain the queue before reporting completion. See
-[ADR 0001](docs/adr/0001-asynchronous-persistence.md).
+[the HA design](docs/ha-design.md).
 
 Multiple API replicas require PostgreSQL and fenced review ownership. Keep settings
 inside a request/job snapshot, enqueue shared controls durably, and commit terminal
