@@ -58,7 +58,6 @@ function modelsByRun(calls: RunTokenCall[]): Record<string, string[]> {
 	return byRun;
 }
 
-/** A run segment as the tests compare it, without its start time. */
 /** A run segment on `models`, which received no history: the fixture repository has no dismissals, votes or earlier PRs. */
 function segment(index: number, models: string[]): Omit<PipelineRun, 'startedAt'> {
 	return {

@@ -202,7 +202,7 @@ function callOutcomes(stored: StoredMetrics): Pick<RunReviewer, 'completedCalls'
  * model: its findings are the detectors' alone. It counts as failed, with
  * why, instead of being scored as a clean review that found nothing.
  */
-export function withoutModelCalls(record: RunRecord, reviewer: RunReviewer | undefined): RunRecord {
+export function failedWhenNoCallCompleted(record: RunRecord, reviewer: RunReviewer | undefined): RunRecord {
 	if (record.outcome !== 'passed' || reviewer?.completedCalls !== 0) return record;
 
 	const why = reviewer.lastError ? `; the last failed with: ${reviewer.lastError}` : '';

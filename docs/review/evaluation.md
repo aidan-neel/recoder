@@ -238,7 +238,7 @@ Shards run with `execution.mode` `partial`. When they cover the `full` task set 
 - `stages`: per defect a `DefectStage`: `found`, `verified`, `published`, `stoppedAt`, `reason`, `matches`, `lost`.
 - `lows`, `labeled` (classes from the adjudications), `judgeError`.
 
-Only `passed` runs are judged. A failed run, or one the judge failed on, has `score: null`. A run whose review passed but completed no pipeline model call (`reviewer.completedCalls` is 0) is recorded as `failed` before judging (`withoutModelCalls` in `apps/server/src/eval/run-reviewer.ts`), with the last failed call's error in its summary.
+Only `passed` runs are judged. A failed run, or one the judge failed on, has `score: null`. A run whose review passed but completed no pipeline model call (`reviewer.completedCalls` is 0) is recorded as `failed` before judging (`failedWhenNoCallCompleted` in `apps/server/src/eval/run-reviewer.ts`), with the last failed call's error in its summary.
 
 ## Reviewer Audit
 
