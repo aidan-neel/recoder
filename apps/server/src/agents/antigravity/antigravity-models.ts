@@ -40,7 +40,7 @@ interface SplitVariant {
 }
 
 function isEffort(value: string): value is ReasoningEffort {
-	return (EFFORT_ORDER as readonly string[]).includes(value);
+	return EFFORT_ORDER.some((effort) => effort === value);
 }
 
 /** Splits an effort-suffixed model (`gemini-4-carbon-high` / `Gemini 4 Carbon (High)`) into its family and level. */
