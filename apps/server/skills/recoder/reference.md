@@ -26,7 +26,7 @@ Every review is recorded as a run, foreground ones too, so `recoder result -p <r
 
 ## `recoder review` flags
 
-Choose at most one of `--staged`, `--uncommitted`, `--pull` and `--diff`. With none, `review` reviews the commits on `--head` since it left `--base`.
+Choose at most one of `--staged`, `--uncommitted`, `--pull` and `--diff`. With none, `review` reviews the commits on `--head` since it left `--base`. A review of commits continues after the last complete review of them, covering only the commits added since; `--full` reviews the whole change.
 
 Target:
 
@@ -38,7 +38,8 @@ Target:
 | `--staged`               |                       | Review what is staged.                                                                         |
 | `--uncommitted`          |                       | Review all uncommitted changes, untracked files included.                                      |
 | `--pull <number or url>` |                       | Review a pull or merge request on the repository forge.                                        |
-| `--since <commit>`       |                       | With `--pull`: review only the commits after this one. It must be in the pull request's history. |
+| `--since <commit>`       |                       | With `--pull`: review only the commits after this one, such as the head of an earlier review. It must be in the pull request's history. |
+| `--full`                 |                       | Review the whole change, also when an earlier review covered part of it.                              |
 | `--diff <file or ->`     |                       | Review a unified diff from a file, or from standard input when the value is `-`. No code runs. |
 
 Scope:
@@ -230,6 +231,8 @@ A run whose process died without finishing reads as `failed`, with the error `th
 | `repoPath`                           | string or null                                   | absolute path of the repository; null for a bare diff |
 | `base`, `head`                       | string or null                                   | refs, as named or detected                            |
 | `baseSha`, `mergeBaseSha`, `headSha` | string or null                                   | commits; the change starts at `mergeBaseSha`          |
+| `since`                              | string or null                                   | the commit the review started after; null for a whole change |
+| `sinceRunId`                         | string or null                                   | the run whose head `since` is; null for `--since` and a whole review |
 | `url`                                | string or null                                   | the pull request's address                            |
 | `changedFiles`                       | number                                           | files in the reviewed diff                            |
 
@@ -242,6 +245,7 @@ A run whose process died without finishing reads as `failed`, with the error `th
 | `reviewerModel`, `workerModel`   | string or null          | null is the saved model                                       |
 | `reviewerEffort`, `workerEffort` | string or null          | `minimal`, `low`, `medium`, `high`, `xhigh`, `max`            |
 | `lenses`                         | string[] or null        | null means every lens that applies ran                        |
+| `include`, `exclude`             | string[]                | the `--include` and `--exclude` path globs; empty when the review saw every path |
 | `reportLowSeverity`              | boolean                 | whether `info` findings were kept                             |
 | `exec`                           | boolean                 | whether code could run; false means bugs are `unverified`     |
 | `execReason`                     | string or null          | why code could not run (`--no-exec`, no sandbox, a bare diff) |

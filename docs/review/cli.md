@@ -175,10 +175,10 @@ The user's repository is only read. Its working tree, index, `HEAD`, refs and st
 
 | Flag                     | Becomes                                                                                                                                                                                                                                                                          | Code                  |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
-| none, `--base`, `--head` | the commits on `--head` (default `HEAD`) since it left `--base` (default: `origin/HEAD`, else `main`, else `master`). The diff starts at their merge base. Refs are read; nothing is fetched                                                                                     | `target/range.ts`     |
+| none, `--base`, `--head` | the commits on `--head` (default `HEAD`) since it left `--base` (default: `origin/HEAD`, else `main`, else `master`). The diff starts at their merge base. Refs are read; nothing is fetched. A later review continues after the last review that counts; `--full` reviews the whole change | `target/range.ts`     |
 | `--staged`               | a commit on top of `HEAD` holding what is staged, built in a copy of the index in a temp folder                                                                                                                                                                                  | `target/snapshot.ts`  |
 | `--uncommitted`          | the same, with the working tree: untracked files in, ignored files out                                                                                                                                                                                                           | `target/snapshot.ts`  |
-| `--pull <number or url>` | the pull or merge request's head fetched into a fresh checkout, and its base branch fetched to find the merge base. A number means the forge `origin` points at. Needs `gh` or `glab` signed in; the forge's title and body are the intent unless `--title` or `--body` is given. `--since <commit>` starts the diff at that commit instead of the merge base | `target/pull.ts`      |
+| `--pull <number or url>` | the pull or merge request's head fetched into a fresh checkout, and its base branch fetched to find the merge base. A number means the forge `origin` points at. Needs `gh` or `glab` signed in; the forge's title and body are the intent unless `--title` or `--body` is given. `--since <commit>` starts the diff at that commit instead of the merge base; by default a later review continues after the last review that counts, and `--full` reviews the whole change | `target/pull.ts`      |
 | `--diff <file or ->`     | the diff as given, from a file or standard input. No checkout, so no code runs. `--include` and `--exclude` are refused                                                                                                                                                          | `target/diff-file.ts` |
 
 Every target but `--diff` ends in a checkout of the head. For a local change it is `git clone --local` of the repository into `RECODER_WORKDIR` (default `/tmp/recoder-work`, under `repos/`), checked out detached with hooks switched off (`target/throwaway-clone.ts`). The sandbox runs code in that checkout and never in the user's tree. The checkout is removed when the review ends, and when resolving fails; `--keep-checkout` leaves it for inspection. An empty change, once `--include` and `--exclude` are applied, is refused with an error.
@@ -192,6 +192,30 @@ Details that follow from "only read":
 - When that preparation fails, the message ends with the last lines of git's error, with credentials removed (`util/redact.ts`).
 
 Environment variables a git hook exports (`GIT_DIR` and the like) are removed for the run, so the pipeline's git commands never act on the user's repository. Bun gives a child process the environment the program started with, so the program starts itself again without them (`apps/server/src/cli/repository-env.ts`). That copy runs in its own session, because a shared process group would deliver a terminal's Ctrl-C twice and a review treats a second stop as "exit now". The cost: under a git hook the review has no controlling terminal, so nothing can prompt on `/dev/tty` and job control does not reach it. The copy stops its review when the process that started it is gone, for example after `kill -9`.
+
+## Reviews after the first
+
+A review of commits — the default range target, or `--pull` — does not always start at the merge base. By default it starts after the head of the last review that still covers the change, so a second `recoder review` reads only the commits added since. `--full` reviews the whole change; `--since <commit>` still names the start by hand for `--pull`, and contradicts `--full`. `--staged`, `--uncommitted` and `--diff` always review everything they hold: they never continue an earlier review, and no later review continues them.
+
+The last review is found in `<data dir>/cli-runs/`. `cli/runs/last-review.ts` reads the run files and knows nothing about git; it returns the runs that could be the last review, newest first. The git checks are in `cli/target/start-point.ts` (`continuedStart`, `countedHead`), which also holds `startingAt`, the `--since` checks whose error texts did not change. Going through the candidates newest first, skipping a run whose files cannot be read, a run counts when all of these hold:
+
+1. Its report exists and `outcome` is `complete`.
+2. Its target kind is `range` or `pull`.
+3. It was not narrowed: `settings.include` and `settings.exclude` are empty and `settings.lenses` is null, so every lens ran. A narrowed review looked at part of the change only.
+4. It did not start at a commit the caller named: `target.since` is null, or `target.sinceRunId` names the run it continued. A run started with `--since` does not count; a run that itself continued an earlier run does.
+5. Its `headSha` names a commit in the checkout, and that commit is an ancestor of the new head.
+6. The new merge base is an ancestor of, or the same as, its `headSha`: the start must be at or above where the change left its base.
+7. Its `baseSha` is an ancestor of, or the same as, the base tip now. A base that only moved forward is the same base; with another base the earlier run covered other commits.
+
+Commits identify the target. No key is built from the repository path, the branch name or the pull request URL, so a `range` review counts for a later `--pull` review of the same commits, and the other way round. A run that fails a rule is skipped and the next older run is tried.
+
+- A run counts and its head is older than the new head: the review covers only the commits after it, as if `--since` named that commit. `target.mergeBaseSha` is that commit.
+- A run counts and its head is the new head: a usage error (exit 2), `Nothing to review: run <run id> already reviewed <head> up to <7-character sha>. Pass --full to review the whole change again.`
+- No run counts — a first review, a rebase or force-push, a merge of the base into the branch, another base, pruned runs: the whole change is reviewed. This is not an error.
+
+A narrowed review is itself a continuing review: it also starts after the last run that counts; only what it leaves behind differs (rule 3). A report written before these fields existed never counts, because rule 3 cannot be proven for it, and it reads without error: `target.since`, `target.sinceRunId`, `settings.include` and `settings.exclude` are optional in `cli/runs/stored-report.ts`.
+
+The report records the boundary. `target.since` is the full SHA of the commit the review started after, null for a whole review; `target.sinceRunId` is the run whose head it is, null for `--since` and a whole review; `settings.include` and `settings.exclude` are the path globs. Both renderers name it on the target line as `since <7-character sha>` or `since <sha> (run <id>)` (`cli/output/target-since.ts`), and a continued review logs `Reviewing the commits after <sha>, the head of run <id>. --full reviews the whole change.` once its target is resolved (`cli/run/run-flow.ts`).
 
 ## Upgrading with `recoder upgrade`
 
