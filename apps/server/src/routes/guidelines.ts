@@ -22,6 +22,7 @@ import { isReviewConfigured } from '../models/models';
 import { repoFileHost } from '../forge/repo-files';
 import { proposalPath, readRepoGuidelinesFile } from '../review/guidelines/repo-layer';
 import { db } from '../store';
+import { settingsOperation } from '../storage/backend';
 
 /** Branches Recoder opens for guideline changes; one pending change per repo. */
 const BRANCH_PREFIX = 'recoder/review-guidelines-';
@@ -198,11 +199,13 @@ app.post('/draft', async (c) => {
 			const send = (data: unknown) => controller.enqueue(`data: ${JSON.stringify(data)}\n\n`);
 
 			try {
-				const text = await streamGuidelinesDraft(
-					parsed.data,
-					{ repo, host: repo ? repoFileHost(repo) : null, reviews },
-					(token) => send({ type: 'token', text: token }),
-					signal
+				const text = await settingsOperation(() =>
+					streamGuidelinesDraft(
+						parsed.data,
+						{ repo, host: repo ? repoFileHost(repo) : null, reviews },
+						(token) => send({ type: 'token', text: token }),
+						signal
+					)
 				);
 
 				send({ type: 'done', text });

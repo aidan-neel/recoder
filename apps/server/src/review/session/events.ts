@@ -11,6 +11,8 @@ import {
 } from '@recoder/shared';
 import { db, reviewProgress } from '../../store';
 import { progressWrites } from '../../storage/persistence-queue';
+import { sharedEvents } from '../../storage/backend';
+import type { StoredReviewEvent } from '../../storage/postgres-events';
 import { settleTasks } from './task-state';
 
 type ReviewEventType =
@@ -206,22 +208,31 @@ export function emitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>
 	enqueueReviewWrite(reviewId, () => commitReviewEvent(reviewId, saved));
 }
 
+function reduceSnapshot(snapshot: ReviewProgress, message: StoredReviewEvent): ReviewProgress {
+	snapshot.sequence = message.sequence;
+	snapshot.updatedAt = message.at;
+	applyEvent(snapshot, message, message);
+	applySnapshotPatch(snapshot, message.data);
+	snapshot.activity = snapshot.activity.slice(-100);
+
+	return snapshot;
+}
+
 async function commitReviewEvent(reviewId: string, event: Omit<ReviewEvent, 'at'>): Promise<void> {
-	let message: ReviewEvent = { ...event, at: new Date().toISOString() };
+	let message: StoredReviewEvent;
 
-	await reviewProgress.update(reviewId, (current) => {
-		const snapshot = current ?? emptyReviewProgress(reviewId);
+	if (sharedEvents) message = await sharedEvents.append(reviewId, event, reduceSnapshot);
+	else {
+		message = { ...event, at: new Date().toISOString(), sequence: 0 };
 
-		message = { ...message, sequence: snapshot.sequence + 1 };
+		await reviewProgress.update(reviewId, (current) => {
+			const snapshot = current ?? emptyReviewProgress(reviewId);
 
-		snapshot.sequence = message.sequence!;
-		snapshot.updatedAt = message.at;
-		applyEvent(snapshot, event, message);
-		applySnapshotPatch(snapshot, event.data);
-		snapshot.activity = snapshot.activity.slice(-100);
+			message.sequence = snapshot.sequence + 1;
 
-		return snapshot;
-	});
+			return reduceSnapshot(snapshot, message);
+		});
+	}
 
 	let buf = buffers.get(reviewId);
 
@@ -276,13 +287,15 @@ export function listenerCount(reviewId: string): number {
 
 export async function reviewEventBuffer(reviewId: string): Promise<ReviewEvent[]> {
 	await flushReviewEvents(reviewId);
+	if (sharedEvents) return sharedEvents.after(reviewId, 0);
 
 	return buffers.get(reviewId) ?? [];
 }
 
 export async function clearReviewEvents(reviewId: string): Promise<void> {
 	await flushReviewEvents(reviewId);
-	await reviewProgress.delete(reviewId);
+	if (sharedEvents) await sharedEvents.clear(reviewId);
+	else await reviewProgress.delete(reviewId);
 	progressWrites.delete(reviewId);
 	buffers.delete(reviewId);
 	listeners.delete(reviewId);

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { VllmServer } from '@recoder/shared';
 import { maskKey } from '../../review/session/review-settings.js';
 import { serverDataDir } from '../../util/data-dir.js';
+import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
 
 const storedServerSchema = z.object({
 	id: z.string().min(1).max(40),
@@ -29,7 +30,15 @@ function storeFile(): string {
 	return `${serverDataDir()}/vllm-servers.json`;
 }
 
-function persist(): void {
+function persist(next: StoredVllmServer[]): void {
+	if (sharedSettingsActive()) {
+		writeSharedSetting('vllm-servers', next);
+
+		return;
+	}
+
+	servers = next;
+
 	try {
 		writeFileSync(storeFile(), JSON.stringify(servers, null, 2), { mode: 0o600 });
 	} catch (err) {
@@ -39,6 +48,12 @@ function persist(): void {
 
 /** Load the saved servers into memory. Call once at boot. A missing or corrupt file starts empty. */
 export function initVllmServers(): void {
+	if (sharedSettingsActive()) {
+		listVllmServers();
+
+		return;
+	}
+
 	try {
 		const parsed = z.array(storedServerSchema).safeParse(JSON.parse(readFileSync(storeFile(), 'utf8')));
 
@@ -49,27 +64,28 @@ export function initVllmServers(): void {
 }
 
 export function listVllmServers(): StoredVllmServer[] {
+	if (sharedSettingsActive()) return z.array(storedServerSchema).parse(readSharedSetting('vllm-servers') ?? []);
+
 	return servers;
 }
 
 export function getVllmServer(id: string): StoredVllmServer | undefined {
-	return servers.find((server) => server.id === id);
+	return listVllmServers().find((server) => server.id === id);
 }
 
 /** Adds the server, or replaces the one with its id in place, and saves. */
 export function putVllmServer(server: StoredVllmServer): void {
+	const servers = listVllmServers();
 	const at = servers.findIndex((existing) => existing.id === server.id);
 
-	servers = at < 0 ? [...servers, server] : servers.map((existing, index) => (index === at ? server : existing));
-	persist();
+	persist(at < 0 ? [...servers, server] : servers.map((existing, index) => (index === at ? server : existing)));
 }
 
 /** Forgets the server and its key. False when there was none. */
 export function removeVllmServer(id: string): boolean {
 	if (!getVllmServer(id)) return false;
 
-	servers = servers.filter((server) => server.id !== id);
-	persist();
+	persist(listVllmServers().filter((server) => server.id !== id));
 
 	return true;
 }

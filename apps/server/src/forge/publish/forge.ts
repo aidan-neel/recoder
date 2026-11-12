@@ -4,6 +4,8 @@ import { detectProvider, parseSlug } from '../providers';
 import { tokenEnv } from '../tokens';
 import { githubComments } from './github-comments';
 import { gitlabComments } from './gitlab-comments';
+import { hostOfRepoUrl } from '../gitlab-host';
+import { GhError } from '../cli';
 
 /** A comment Recoder posted, as the forge names and links it. */
 export interface PostedComment {
@@ -29,6 +31,7 @@ export interface PullCommentForge {
 	limit: number;
 	/** Recoder's earliest comment whose body holds `marker`, or null. */
 	find(marker: string): Promise<PostedComment | null>;
+	findInline(marker: string): Promise<PostedComment | null>;
 	/** A new comment; on GitLab a reply in `discussionId` when one is given. */
 	create(body: string, discussionId?: string): Promise<PostedComment>;
 	edit(id: string, body: string): Promise<PostedComment>;
@@ -40,8 +43,22 @@ export interface PullCommentForge {
 /** A comment that cannot be written in this state: a local repository, a draft, or a review a newer one replaced. */
 export class PublishConflictError extends Error {}
 
+export class InlinePreparationError extends GhError {
+	constructor(error: unknown) {
+		super(
+			error instanceof GhError ? error.kind : 'unknown',
+			error instanceof Error ? error.message : 'Could not prepare an inline comment.'
+		);
+
+		this.name = 'InlinePreparationError';
+		this.cause = error;
+	}
+}
+
 /** The review's pull request on the forge it lives on, with the credentials saved for it. */
-export async function reviewForge(review: Review): Promise<{ forge: PullCommentForge; provider: 'github' | 'gitlab' }> {
+export async function reviewForge(
+	review: Review
+): Promise<{ forge: PullCommentForge; provider: 'github' | 'gitlab'; key: string }> {
 	const repo = await db.repos.get(review.repoId);
 
 	if (!repo) throw new PublishConflictError('The review’s repository is no longer tracked.');
@@ -52,8 +69,9 @@ export async function reviewForge(review: Review): Promise<{ forge: PullCommentF
 		throw new PublishConflictError('Local repositories have no pull request to comment on. Use GitHub or GitLab.');
 
 	const slug = parseSlug(repo.url);
+	const key = JSON.stringify([provider, hostOfRepoUrl(repo.url), slug.toLowerCase(), review.prNumber]);
 
-	if (provider === 'github') return { provider, forge: githubComments(slug, review.prNumber, review.headSha) };
+	if (provider === 'github') return { provider, key, forge: githubComments(slug, review.prNumber, review.headSha) };
 
-	return { provider, forge: gitlabComments(slug, review.prNumber, review.prUrl, tokenEnv('gitlab', repo.url)) };
+	return { provider, key, forge: gitlabComments(slug, review.prNumber, review.prUrl, tokenEnv('gitlab', repo.url)) };
 }

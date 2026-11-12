@@ -13,6 +13,7 @@ import {
 	type TokenBudget
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
+import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
 
 const runtimeSchema = z.object({
 	temperature: z.number().min(0).max(2).nullable().optional(),
@@ -126,7 +127,21 @@ interface StoredSettings extends Omit<ModelSettingsPatch, 'models'> {
 }
 
 /** Reviewer model settings saved from the UI. They win over process env; unset fields fall back to env. */
-let overrides: StoredSettings = {};
+let localOverrides: StoredSettings = {};
+
+const sharedStoredSchema = reviewSettingsSchema.extend({
+	models: z.array(modelEntrySchema.extend({ id: z.string().min(1).max(100) })).optional(),
+	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional()
+});
+
+function currentOverrides(): StoredSettings {
+	return sharedSettingsActive() ? sharedStoredSchema.parse(readSharedSetting('review-settings') ?? {}) : localOverrides;
+}
+
+function replaceOverrides(settings: StoredSettings): void {
+	if (sharedSettingsActive()) writeSharedSetting('review-settings', settings);
+	else localOverrides = settings;
+}
 
 function settingsFile(): string {
 	return `${serverDataDir()}/review-config.json`;
@@ -134,6 +149,8 @@ function settingsFile(): string {
 
 /** Where overrides are saved, with the home directory shortened to `~`. */
 export function settingsFileDisplay(): string {
+	if (sharedSettingsActive()) return 'shared database';
+
 	const home = process.env.HOME ?? process.env.USERPROFILE;
 	const file = settingsFile();
 
@@ -141,8 +158,14 @@ export function settingsFileDisplay(): string {
 }
 
 function persist(): void {
+	if (sharedSettingsActive()) {
+		writeSharedSetting('review-settings', currentOverrides());
+
+		return;
+	}
+
 	try {
-		writeFileSync(settingsFile(), JSON.stringify(overrides, null, 2), { mode: 0o600 });
+		writeFileSync(settingsFile(), JSON.stringify(currentOverrides(), null, 2), { mode: 0o600 });
 	} catch (err) {
 		console.warn('[settings] could not persist review config', err instanceof Error ? err.message : err);
 	}
@@ -154,37 +177,35 @@ interface SavedSettings {
 	legacy: boolean;
 }
 
-/**
- * Reads the saved settings file and converts it to the current shape without writing anything. Null for a missing,
- * unreadable or corrupt file, so the caller keeps what it has and env covers the rest.
- */
+/** Parse a saved settings document and migrate its model identifiers and retired configuration fields. */
+export function parseSavedReviewSettings(raw: unknown): SavedSettings {
+	const parsed = storedFileSchema.parse(raw);
+	const { apiKey, models, ...rest } = migrateLegacy(parsed);
+
+	const normalized: StoredSettings = {
+		...rest,
+		...(parsed.connections ? { connections: parsed.connections } : {}),
+		models: models?.map((e) => ({
+			provider: e.provider,
+			...(e.source ? { source: e.source } : {}),
+			id: e.id ?? crypto.randomUUID(),
+			label: e.label,
+			model: e.model,
+			...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
+			...(e.apiKey ? { apiKey: e.apiKey } : {}),
+			...(e.efforts?.length ? { efforts: e.efforts } : {}),
+			...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
+			...(e.contextWindow ? { contextWindow: e.contextWindow } : {}),
+			...(e.runtime && Object.keys(e.runtime).length ? { runtime: e.runtime } : {})
+		}))
+	};
+
+	return { settings: apiKey ? { ...normalized, apiKey } : normalized, legacy: hasLegacyFields(parsed) };
+}
+
 function readSavedSettings(): SavedSettings | null {
 	try {
-		const parsed = storedFileSchema.safeParse(JSON.parse(readFileSync(settingsFile(), 'utf8')));
-
-		if (!parsed.success) return null;
-
-		const { apiKey, models, ...rest } = migrateLegacy(parsed.data);
-
-		const normalized: StoredSettings = {
-			...rest,
-			...(parsed.data.connections ? { connections: parsed.data.connections } : {}),
-			models: models?.map((e) => ({
-				provider: e.provider,
-				...(e.source ? { source: e.source } : {}),
-				id: e.id ?? crypto.randomUUID(),
-				label: e.label,
-				model: e.model,
-				...(e.baseUrl ? { baseUrl: e.baseUrl } : {}),
-				...(e.apiKey ? { apiKey: e.apiKey } : {}),
-				...(e.efforts?.length ? { efforts: e.efforts } : {}),
-				...(e.defaultEffort ? { defaultEffort: e.defaultEffort } : {}),
-				...(e.contextWindow ? { contextWindow: e.contextWindow } : {}),
-				...(e.runtime && Object.keys(e.runtime).length ? { runtime: e.runtime } : {})
-			}))
-		};
-
-		return { settings: apiKey ? { ...normalized, apiKey } : normalized, legacy: hasLegacyFields(parsed.data) };
+		return parseSavedReviewSettings(JSON.parse(readFileSync(settingsFile(), 'utf8')));
 	} catch {
 		return null;
 	}
@@ -195,11 +216,17 @@ function readSavedSettings(): SavedSettings | null {
  * at boot. A missing or corrupt file starts empty, and env covers it.
  */
 export function initReviewSettings(): void {
+	if (sharedSettingsActive()) {
+		currentOverrides();
+
+		return;
+	}
+
 	const saved = readSavedSettings();
 
 	if (!saved) return;
 
-	overrides = saved.settings;
+	replaceOverrides(saved.settings);
 	if (saved.legacy) persist();
 }
 
@@ -208,36 +235,43 @@ export function initReviewSettings(): void {
  * left as it is. For a command line that only reads the user's settings.
  */
 export function readReviewSettings(): void {
+	if (sharedSettingsActive()) {
+		currentOverrides();
+
+		return;
+	}
+
 	const saved = readSavedSettings();
 
-	if (saved) overrides = saved.settings;
+	if (saved) replaceOverrides(saved.settings);
 }
 
 /** Test helper: replace the in-memory overrides. */
 export function setReviewOverrides(next: StoredSettings): void {
-	overrides = next;
+	replaceOverrides(next);
 }
 
 /** Read-only access to the stored settings (server-side only). */
 export function getStoredSettings(): StoredSettings {
-	return overrides;
+	return currentOverrides();
 }
 
 /** Save or drop a hosted provider's key. Dropping it also removes that provider's models. */
 export function setConnection(providerId: string, apiKey: string | null): StoredSettings {
-	const connections = { ...overrides.connections };
+	const current = currentOverrides();
+	const connections = { ...current.connections };
 
 	if (apiKey) connections[providerId] = { apiKey };
 	else delete connections[providerId];
-	overrides = { ...overrides, connections };
+	replaceOverrides({ ...current, connections });
 
-	if (!apiKey && overrides.models?.some((entry) => entry.source === providerId)) {
-		return saveReviewSettings({ models: overrides.models.filter((entry) => entry.source !== providerId) });
+	if (!apiKey && current.models?.some((entry) => entry.source === providerId)) {
+		return saveReviewSettings({ models: current.models.filter((entry) => entry.source !== providerId) });
 	}
 
 	persist();
 
-	return overrides;
+	return currentOverrides();
 }
 
 /**
@@ -293,7 +327,7 @@ function dropDeletedRoutes(settings: StoredSettings, models: StoredModelEntry[])
 
 /** Merge a validated patch over the stored settings and persist. */
 export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
-	const clean: StoredSettings = { ...overrides };
+	const clean: StoredSettings = { ...currentOverrides() };
 
 	if (patch.baseUrl !== undefined) clean.baseUrl = patch.baseUrl.replace(/\/$/, '') || undefined;
 	if (patch.apiKey !== undefined && patch.apiKey !== '') clean.apiKey = patch.apiKey;
@@ -319,7 +353,7 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 	if (patch.maxFiles !== undefined) clean.maxFiles = patch.maxFiles;
 	if (patch.maxDiffChars !== undefined) clean.maxDiffChars = patch.maxDiffChars;
 	if (patch.maxFileChars !== undefined) clean.maxFileChars = patch.maxFileChars;
-	overrides = clean;
+	replaceOverrides(clean);
 	persist();
 
 	return clean;
@@ -348,6 +382,7 @@ export function effectiveReviewEnv(): {
 	maxDiffChars: number;
 	maxFileChars: number;
 } {
+	const overrides = currentOverrides();
 	const entries = overrides.models ?? [];
 	const shared = entries.find((e) => e.id === overrides.sharedModelId) ?? entries[0];
 
@@ -363,17 +398,17 @@ export function effectiveReviewEnv(): {
 
 /** How many subagents one review may run: the saved pick, else the default. */
 export function effectiveSubagentCap(): SubagentCap {
-	return overrides.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+	return currentOverrides().subagentCap ?? DEFAULT_SUBAGENT_CAP;
 }
 
 /** The token budget last picked, else Medium, which is what reviews did before budgets existed. */
 export function effectiveTokenBudget(): TokenBudget {
-	return overrides.tokenBudget ?? DEFAULT_TOKEN_BUDGET;
+	return currentOverrides().tokenBudget ?? DEFAULT_TOKEN_BUDGET;
 }
 
 /** Whether reviews report low-severity findings: the saved pick, else on. */
 export function effectiveReportLowSeverity(): boolean {
-	return overrides.reportLowSeverity ?? true;
+	return currentOverrides().reportLowSeverity ?? true;
 }
 
 /** API keys are never returned in full; the UI gets this masked preview (`••••1234` or null). */

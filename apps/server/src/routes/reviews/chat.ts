@@ -20,6 +20,7 @@ import { findReviewCheckout } from '../../review/session/review-checkout';
 import { rereviewRequestSchema, runRereview } from '../../review/session/rereview';
 import { db } from '../../store';
 import { reviewWithDiff } from './shared';
+import { coordinator, settingsOperation } from '../../storage/backend';
 
 const chatSchema = z.object({
 	assignmentId: z.string().min(1).max(100),
@@ -97,7 +98,13 @@ app.post('/:id/chat/stop', async (c) => {
 	const parsed = chatSchema.pick({ assignmentId: true }).safeParse(await c.req.json().catch(() => null));
 
 	if (!parsed.success) return c.json({ error: 'Invalid conversation.' }, 400);
-	stopReviewChat(c.req.param('id'), parsed.data.assignmentId);
+	if (coordinator)
+		await coordinator.send(c.req.param('id'), {
+			id: crypto.randomUUID(),
+			kind: 'stop-chat',
+			assignmentId: parsed.data.assignmentId
+		});
+	else stopReviewChat(c.req.param('id'), parsed.data.assignmentId);
 
 	return c.json({ stopped: true });
 });
@@ -133,8 +140,10 @@ app.post('/:id/discuss/stream', async (c) => {
 			};
 
 			try {
-				const result = await withReviewMetrics(loaded.review.id, 'discussion', () =>
-					streamDiscussFinding(input, (text) => send({ type: 'token', text }))
+				const result = await settingsOperation(() =>
+					withReviewMetrics(loaded.review.id, 'discussion', () =>
+						streamDiscussFinding(input, (text) => send({ type: 'token', text }))
+					)
 				);
 
 				send({ type: 'done', ...result });

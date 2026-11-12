@@ -1,3 +1,7 @@
+import { ReviewChatError, reviewCodeRangeSchema } from './chat-input';
+
+export { reviewCodeContextSchema, ReviewChatError } from './chat-input';
+
 import { ORCHESTRATOR_ID, type ReviewChatMessage, type ReviewCodeContext } from '@recoder/shared';
 import { z } from 'zod';
 import { db, reviewDiffs, reviewProgress } from '../../store';
@@ -9,7 +13,12 @@ import { extractJsonValue } from '../../models/json-extract';
 import { streamedMessage } from '../../models/response-text';
 import { CHAT_STYLE } from '../pipeline/prompts';
 import { modelFailure } from '../../models/model-failure';
-import { keyFor, pending, recordChatMessage } from './chat-replies';
+import { keyFor, pending, recordChatMessage, trackChatGeneration } from './chat-replies';
+import { coordinator } from '../../storage/backend';
+import { currentLease } from '../runtime/ownership';
+import { currentChatCommand } from '../runtime/chat-context';
+import { requestChat } from '../runtime/requests';
+import { isRecoverableExit } from '../runtime/execution';
 import { effectiveSubagentCap } from '../session/review-settings';
 import { BARE_CONFIRMATION, looksLikeReviewRequest, splitRerunRequest } from './review-request';
 
@@ -17,10 +26,7 @@ export { cancelReviewChats, recordChatMessage, stopReviewChat } from './chat-rep
 export { prepareDraftSession } from './draft-session';
 export { looksLikeReviewRequest } from './review-request';
 
-const noteSchema = z.object({
-	file: z.string().trim().min(1).max(500),
-	startLine: z.number().int().positive(),
-	endLine: z.number().int().positive(),
+const noteSchema = reviewCodeRangeSchema.extend({
 	side: z.enum(['old', 'new']).default('new'),
 	body: z.string().trim().min(1).max(4000)
 });
@@ -57,17 +63,6 @@ function rerunInstructions(): string {
 
 	return `When the developer asks you to review again, run another review, or rerun it with a different focus or with subagents, Recoder can do that: say in one short sentence that you're starting a new review, and put this block at the very end of your message:\n\`\`\`recoder-review\n{}\n\`\`\`\nThe new run starts from the beginning in this session, with this conversation as its brief, and replaces the current findings. ${subagents} Never add this block unprompted.`;
 }
-
-export const reviewCodeContextSchema = z
-	.object({
-		file: z.string().trim().min(1).max(500),
-		startLine: z.number().int().positive(),
-		endLine: z.number().int().positive(),
-		side: z.enum(['old', 'new']),
-		quote: z.string().max(4000),
-		diffContext: z.string().max(4000).optional()
-	})
-	.refine((context) => context.endLine >= context.startLine, { message: 'Invalid code range.' });
 
 function codeEvidence(context?: ReviewCodeContext): string {
 	return context
@@ -130,14 +125,6 @@ async function rerunFromChat(
 	}
 }
 
-export class ReviewChatError extends Error {
-	constructor(
-		message: string,
-		readonly status: 404 | 409 | 400
-	) {
-		super(message);
-	}
-}
 /**
  * The request returns once accepted; generation and persistence survive browser disconnects.
  * In a draft session a clear review request starts the review directly, with the developer's words
@@ -150,11 +137,23 @@ export async function startReviewChat(
 	text: string,
 	codeContext?: ReviewCodeContext
 ): Promise<ReviewChatMessage> {
+	if (coordinator && !currentLease()) return requestChat(reviewId, assignmentId, text, codeContext);
+
+	const command = currentChatCommand();
 	const review = await db.reviews.get(reviewId);
 
 	if (!review) throw new ReviewChatError('Review not found.', 404);
 
 	const snapshot = await reviewProgress.get(reviewId);
+
+	const previousUser = snapshot?.messages?.find(
+		(message) => message.id === command?.messageId && message.from === 'user'
+	);
+
+	const previousReply = snapshot?.messages?.find((message) => message.id === `reply_${command?.messageId}`);
+
+	if (previousUser && previousReply?.status === 'done') return previousUser;
+
 	const assignment = snapshot?.assignments?.find((item) => item.id === assignmentId);
 
 	if (assignmentId !== ORCHESTRATOR_ID && !assignment) throw new ReviewChatError('Reviewer not found.', 404);
@@ -175,11 +174,11 @@ export async function startReviewChat(
 	pending.set(key, controller);
 
 	const user: ReviewChatMessage = {
-		id: crypto.randomUUID(),
+		id: command?.messageId ?? crypto.randomUUID(),
 		assignmentId,
 		from: 'user',
 		text,
-		at: new Date().toISOString(),
+		at: previousUser?.at ?? command?.at ?? new Date().toISOString(),
 		status: 'done',
 		discussion: true,
 		...(codeContext ? { codeContext } : {})
@@ -199,7 +198,7 @@ export async function startReviewChat(
 	forward(user);
 
 	const reply: ReviewChatMessage = {
-		id: crypto.randomUUID(),
+		id: command ? `reply_${command.messageId}` : crypto.randomUUID(),
 		assignmentId,
 		from: 'assistant',
 		text: '',
@@ -223,7 +222,7 @@ export async function startReviewChat(
 		.map((tool) => `${tool.command}\n${tool.result?.content?.slice(0, 4000) ?? tool.summary ?? ''}`)
 		.join('\n\n');
 
-	void withReviewMetrics(reviewId, 'discussion', async () => {
+	const generation = withReviewMetrics(reviewId, 'discussion', async () => {
 		let reasoning = '';
 		let lastUpdate = 0;
 
@@ -346,13 +345,19 @@ export async function startReviewChat(
 
 			await flush('done');
 		} catch (error) {
+			if (isRecoverableExit(error) || isRecoverableExit(controller.signal.reason)) throw error;
 			if (controller.signal.aborted) reply.text = `${reply.text}${reply.text ? '\n\n' : ''}Reply stopped.`;
 			else reply.failure = modelFailure(error, config, 'The model could not finish this reply. Try again.');
 			await flush('error');
 		} finally {
 			pending.delete(key);
 		}
-	}).catch((error) => console.error('[chat] could not persist review conversation', error));
+	}).catch((error) => {
+		if (currentLease()) throw error;
+		console.error('[chat] could not persist review conversation', error);
+	});
+
+	trackChatGeneration(key, generation);
 
 	return user;
 }

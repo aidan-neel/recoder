@@ -1,14 +1,4 @@
-import {
-	emptyReviewProgress,
-	settleAssignments,
-	parseUnifiedDiff,
-	REVIEW_CANCELLED,
-	type CreateReviewInput,
-	type Finding,
-	type Provider,
-	type Repo,
-	type Review
-} from '@recoder/shared';
+import { settleAssignments, parseUnifiedDiff, REVIEW_CANCELLED, type Provider, type Repo } from '@recoder/shared';
 import {
 	closeReviewControl,
 	openReviewControl,
@@ -21,24 +11,10 @@ import {
 	effectiveSubagentCap,
 	effectiveTokenBudget
 } from '../review/session/review-settings';
-import {
-	db,
-	keepForReplay,
-	reviewCheckpoints,
-	reviewDiffs,
-	reviewSandboxes,
-	reviewProgress,
-	settlePipelineStreams
-} from '../store';
-import {
-	flushReviewEvents,
-	emitReviewEvent,
-	reportReviewTask,
-	settleReviewTasks,
-	trackReviewTask
-} from '../review/session/events';
+import { db, reviewCheckpoints, reviewDiffs, reviewSandboxes, reviewProgress } from '../store';
+import { flushReviewEvents, emitReviewEvent, settleReviewTasks, trackReviewTask } from '../review/session/events';
 import { fetchPull, PULL_VIEW_COMMANDS } from '../forge/pull-preview';
-import { settlePullComment, trackPullComment } from '../forge/publish/pull-comment';
+import { settlePullComment, trackPullComment, stopPullCommentTracking } from '../forge/publish/pull-comment';
 import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
 import type { GatheredContext } from '../review/pipeline/intent/types';
 import { runAdaptiveReview } from '../review/pipeline/harness';
@@ -46,99 +22,20 @@ import { configForOrchestrator, configForSubagent, isReviewConfigured, withLocke
 import { ModelBlockedError } from '../review/pipeline/agent-loop';
 import { codex } from '../agents/codex/codex';
 import { reviewInstructions } from '../review/chat/review-chat';
-import { recordBrief } from '../review/chat/chat-replies';
 import { harnessCallbacks } from './pipeline-callbacks';
 import { detectProvider, locateRepo, refspecFor } from '../forge/providers';
 import { prepareSandbox, sandboxRevisionDiff } from '../sandbox/sandbox';
 import { tokenEnv } from '../forge/tokens';
 import { recordTokenBudget, withReviewMetrics } from '../models/metrics';
+import { isRecoverableExit } from '../review/runtime/execution';
+import { storageTransaction } from '../storage/backend';
+import { finalizeReview, settleRun } from './finalize-review';
+import { coordinator } from '../storage/backend';
 
-export type QueueReviewInput = CreateReviewInput;
+export { queueReview, createReviewSession, startReviewSession, touch } from './review-session';
 
-export async function touch(reviewId: string, patch: Partial<Review>): Promise<Review> {
-	const next = await db.reviews.update(reviewId, (current) => {
-		if (!current) throw new Error(`review ${reviewId} not found`);
+import { touch } from './review-session';
 
-		return { ...current, ...patch, updatedAt: new Date().toISOString() };
-	});
-
-	if (!next) throw new Error(`review ${reviewId} not found`);
-
-	return next;
-}
-/**
- * Validate + queue a review, kicking the pipeline in the background. A brief
- * in `instructions` is recorded first, so the review runs with it.
- * Throws on bad input.
- * A reviewer model is required — stub reviews that finish in seconds with
- * no real findings are worse than refusing outright.
- */
-export async function queueReview(input: QueueReviewInput): Promise<Review> {
-	if (!isReviewConfigured()) {
-		throw new Error(
-			'reviewer not configured: add a reviewer model in settings (or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL)'
-		);
-	}
-
-	const review = await createReviewSession(input);
-
-	await recordBrief(review.id, input.instructions);
-
-	return await startReviewSession(review.id);
-}
-/** Opening a PR creates durable chat state without running models or the pipeline. */
-export async function createReviewSession(input: CreateReviewInput, trigger?: Review['trigger']): Promise<Review> {
-	const repo = await db.repos.get(input.repoId);
-
-	if (!repo) throw new Error('repo not found');
-
-	if (!Number.isInteger(input.prNumber) || input.prNumber <= 0) {
-		throw new Error('invalid prNumber');
-	}
-
-	const now = new Date().toISOString();
-
-	const review: Review = {
-		id: crypto.randomUUID(),
-		repoId: input.repoId,
-		prNumber: input.prNumber,
-		headSha: input.headSha ?? 'unknown',
-		status: 'draft',
-		summary: null,
-		findings: [],
-		runs: [],
-		source: repo.provider ?? detectProvider(repo.url),
-		prTitle: input.prTitle ?? null,
-		prUrl: null,
-		...(trigger ? { trigger } : {}),
-		...(input.baselineCache === false ? { baselineCache: false as const } : {}),
-		...(input.postComment ? { pullComment: { state: 'posting' as const, updatedAt: now } } : {}),
-		createdAt: now,
-		updatedAt: now
-	};
-
-	await db.reviews.set(review);
-	await reviewProgress.set(emptyReviewProgress(review.id));
-
-	return review;
-}
-/** Claim the draft atomically so concurrent prompts cannot launch two pipelines. */
-export async function startReviewSession(reviewId: string): Promise<Review> {
-	const review = await db.reviews.update(reviewId, (current) => {
-		if (!current) throw new Error('review not found');
-		if (current.status !== 'draft') throw new Error('This review has already started.');
-		if (!isReviewConfigured()) throw new Error('Add a reviewer model in settings before starting the review.');
-
-		return { ...current, status: 'queued', startedAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-	});
-
-	if (!review) throw new Error('review not found');
-
-	emitReviewEvent(reviewId, { type: 'step', step: 'queued', message: '', data: { stage: 'checkout' } });
-	void runReviewPipeline(reviewId).catch((err) => console.error('[pipeline] failed', err));
-
-	return review;
-}
 /**
  * Drive a queued review: fetch PR metadata → prepare the sandbox →
  * run the adaptive harness → persist coverage and findings.
@@ -146,13 +43,13 @@ export async function startReviewSession(reviewId: string): Promise<Review> {
  * Provider fetch failures fail the review. Demo UI lives on explicit
  * frontend demo routes, not as a silent fallback for live reviews.
  */
-export async function runReviewPipeline(reviewId: string): Promise<void> {
+export async function runReviewPipeline(reviewId: string, signal?: AbortSignal): Promise<void> {
 	return withLockedModels(
-		async () => await withReviewMetrics(reviewId, 'pipeline', () => runTrackedReviewPipeline(reviewId))
+		async () => await withReviewMetrics(reviewId, 'pipeline', () => runTrackedReviewPipeline(reviewId, signal))
 	);
 }
 
-async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
+async function runTrackedReviewPipeline(reviewId: string, signal?: AbortSignal): Promise<void> {
 	const initial = await db.reviews.get(reviewId);
 
 	if (!initial) return;
@@ -165,10 +62,21 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 	let prContext: Promise<GatheredContext | null> = Promise.resolve(null);
 	const control = openReviewControl(reviewId);
 	const analysis = control.abort;
+	const interrupted = () => control.abort.abort(signal?.reason);
+	let abandoned = false;
 
-	await trackPullComment(reviewId);
+	if (signal?.aborted) interrupted();
+	else signal?.addEventListener('abort', interrupted, { once: true });
 
 	try {
+		if (coordinator) {
+			const lease = (await import('../review/runtime/ownership')).currentLease();
+
+			if (lease && (await coordinator.state(lease)) === 'paused') control.pause();
+		}
+
+		await trackPullComment(reviewId);
+		if (signal?.aborted) throw signal.reason;
 		if (!repo) throw new Error('repo not found');
 		await assertChatGptSignedIn();
 
@@ -310,72 +218,13 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 
 		throwIfCancelled(control);
 
-		await flushReviewEvents(reviewId);
-
-		await reviewProgress.update(reviewId, (snapshot) =>
-			snapshot
-				? {
-						...snapshot,
-						assignments: result.assignments,
-						coverage: result.coverage,
-						coverageGaps: result.coverageGaps,
-						outcome: result.outcome,
-						failure: result.failure,
-						recommendedChecks: result.recommendedChecks,
-						candidateCount: result.funnel?.raised ?? result.findings.length
-					}
-				: undefined
-		);
-
-		reportReviewTask(reviewId, {
-			id: 'finalize',
-			label: 'Saving results',
-			message: 'Saving review results',
-			status: 'running',
-			kind: 'other'
-		});
-
-		const findings: Finding[] =
-			result.outcome === 'complete' ? result.findings : [...result.findings, ...result.unconfirmed];
-
-		const status = result.outcome === 'complete' ? 'passed' : 'failed';
-
-		await touch(reviewId, {
-			status,
-			summary: result.summary,
-			findings,
-			unconfirmed: result.outcome === 'complete' ? result.unconfirmed : [],
-			funnel: result.funnel,
-			context: result.context,
-			...(result.obligations ? { obligations: result.obligations } : {}),
-			...(result.questions ? { questions: result.questions } : {})
-		});
-
-		if (status === 'passed') await keepForReplay(reviewId);
-
-		reportReviewTask(reviewId, {
-			id: 'finalize',
-			label: 'Saving results',
-			message: result.outcome === 'complete' ? 'Review complete' : 'Review failed',
-			status: result.outcome === 'complete' ? 'done' : 'error',
-			kind: 'other'
-		});
-
-		await settleReviewTasks(reviewId, result.outcome === 'complete' ? null : result.summary);
-
-		emitReviewEvent(reviewId, {
-			type: result.outcome === 'complete' ? 'done' : 'error',
-			message: result.summary,
-			data: {
-				outcome: result.outcome,
-				...(result.failure ? { failure: result.failure } : {}),
-				coverage: result.coverage,
-				coverageGaps: result.coverageGaps,
-				recommendedChecks: result.recommendedChecks,
-				candidateCount: result.findings.length
-			}
-		});
+		await finalizeReview(reviewId, result);
 	} catch (err) {
+		if (isRecoverableExit(err) || isRecoverableExit(signal?.reason)) {
+			abandoned = true;
+			throw err;
+		}
+
 		const cancelled = analysis.signal.aborted;
 
 		analysis.abort();
@@ -383,12 +232,23 @@ async function runTrackedReviewPipeline(reviewId: string): Promise<void> {
 		const message = cancelled ? cancelReason(analysis.signal) : err instanceof Error ? err.message : 'pipeline failed';
 		const failure = !cancelled && err instanceof ModelBlockedError ? err.failure : undefined;
 
-		await markFailed(reviewId, message, failure);
-		emitReviewEvent(reviewId, { type: 'error', message, data: { paused: false, ...(failure ? { failure } : {}) } });
+		await flushReviewEvents(reviewId);
+
+		await storageTransaction(async () => {
+			await markFailed(reviewId, message, failure);
+			emitReviewEvent(reviewId, { type: 'error', message, data: { paused: false, ...(failure ? { failure } : {}) } });
+			await settleRun(reviewId);
+			await flushReviewEvents(reviewId);
+		});
 	} finally {
+		if (abandoned || isRecoverableExit(signal?.reason)) stopPullCommentTracking(reviewId);
+		signal?.removeEventListener('abort', interrupted);
 		closeReviewControl(reviewId, control);
-		await settleRun(reviewId);
-		await settlePullComment(reviewId);
+
+		if (!abandoned && !isRecoverableExit(signal?.reason)) {
+			await settleRun(reviewId);
+			await settlePullComment(reviewId);
+		}
 	}
 }
 
@@ -443,28 +303,6 @@ async function markFailed(
 
 	await settleReviewTasks(reviewId, message);
 	await touch(reviewId, { status: 'failed', summary: message });
-}
-
-/**
- * Close out a run, however it ended: settle the streamed messages and
- * reasoning (skipped when the review was deleted mid-run), then write the
- * final state to SQLite now rather than on the write-behind timer.
- */
-async function settleRun(reviewId: string): Promise<void> {
-	if (!(await db.reviews.get(reviewId))) return;
-
-	const settled = await settlePipelineStreams(reviewId);
-
-	if (settled)
-		emitReviewEvent(reviewId, {
-			type: 'log',
-			step: 'review',
-			message: '',
-			data: { settled: { messages: settled.messages, reasoning: settled.reasoning } }
-		});
-
-	await flushReviewEvents(reviewId);
-	await reviewProgress.flush();
 }
 
 function throwIfCancelled(control: ReviewControl): void {

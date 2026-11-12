@@ -1,8 +1,10 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AutoReviewEvent, AutoReviewReason, AutoReviewSettings } from '@recoder/shared';
+import { z } from 'zod';
+import type { AutoReviewEvent, AutoReviewReason, AutoReviewSettings, AutoReviewStatus } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
 import { findMention } from './mention.js';
+import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
 
 /** An open pull request as the watcher sees it. */
 export interface WatchedPull {
@@ -53,7 +55,36 @@ interface RepoCursor {
 export interface WatchState {
 	repos: Record<string, RepoCursor>;
 	recent: AutoReviewEvent[];
+	status?: Pick<AutoReviewStatus, 'lastCheckAt' | 'nextCheckAt' | 'errors'>;
 }
+
+const pullCursorSchema = z.object({
+	notesAfter: z.string(),
+	noteIds: z.object({ comment: z.number().optional(), review: z.number().optional() }),
+	headSha: z.string(),
+	seenAt: z.string()
+});
+
+const watchStateSchema = z.object({
+	status: z
+		.object({
+			lastCheckAt: z.string().nullable(),
+			nextCheckAt: z.string().nullable(),
+			errors: z.array(z.object({ repoId: z.string(), message: z.string() }))
+		})
+		.optional(),
+	repos: z.record(z.string(), z.object({ checkedAt: z.string(), pulls: z.record(z.string(), pullCursorSchema) })),
+	recent: z.array(
+		z.object({
+			repoId: z.string(),
+			prNumber: z.number(),
+			reviewId: z.string(),
+			reason: z.enum(['mention', 'opened', 'pushed']),
+			by: z.string().optional(),
+			at: z.string()
+		})
+	)
+});
 
 /** A review the watcher should start. */
 export interface Trigger {
@@ -84,6 +115,9 @@ function stateFile(): string {
 }
 
 export function readWatchState(): WatchState {
+	if (sharedSettingsActive())
+		return watchStateSchema.parse(readSharedSetting('watch-state') ?? { repos: {}, recent: [] });
+
 	try {
 		const parsed = JSON.parse(readFileSync(stateFile(), 'utf8')) as Partial<WatchState>;
 
@@ -102,6 +136,12 @@ export function writeWatchState(state: WatchState, now = Date.now()): void {
 	}
 
 	state.recent = state.recent.slice(0, RECENT_LIMIT);
+
+	if (sharedSettingsActive()) {
+		writeSharedSetting('watch-state', state);
+
+		return;
+	}
 
 	const file = stateFile();
 	const temporary = `${file}.${process.pid}.tmp`;

@@ -4,7 +4,7 @@ import { discoverModels, normalizeEndpoint } from '../model-discovery.js';
 import { getVllmServer, listVllmServers, putVllmServer, vllmServerId, type StoredVllmServer } from './vllm-store.js';
 
 /** How often the model lists are checked again while the server runs. */
-const VLLM_SYNC_INTERVAL_MS = 5 * 60_000;
+export const VLLM_SYNC_INTERVAL_MS = 5 * 60_000;
 
 /** A refresh that is not forced skips a server that was tried this recently, so opening Settings twice asks once. */
 const THROTTLE_MS = 15_000;

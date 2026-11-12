@@ -4,6 +4,14 @@ import { GhError } from '../cli';
 import { reviewForge, type InlineTarget, type PullCommentForge } from './forge';
 import { saveFindingComment } from './record';
 import { findingMarker, renderFindingComment } from './render';
+import type { PublicationSession, PublishedComment } from '../../storage/postgres-publication';
+import {
+	missingComment,
+	publicationLock,
+	publicationOperation,
+	rejectedCreate,
+	rejectedPosition
+} from './shared-publication';
 
 /** A finding the review no longer holds. */
 export class FindingNotFoundError extends Error {}
@@ -62,10 +70,52 @@ async function postInline(
 }
 
 /** Edit the finding's earlier comment, else put it on its line, else post it plainly (editing a plain one found by marker). */
-async function post(review: Review, finding: Finding): Promise<ReviewFindingComment> {
+async function post(review: Review, finding: Finding, session?: PublicationSession): Promise<ReviewFindingComment> {
 	const { forge, provider } = await reviewForge(review);
 	const view = { provider, prUrl: review.prUrl, finding, headSha: review.headSha, limit: forge.limit };
 	const known = review.findingComments?.[finding.id];
+
+	if (session) {
+		const target = inlineTarget(finding, await reviewDiffs.get(review.id));
+		const marker = findingMarker(finding);
+
+		const publish = (inline: boolean) =>
+			session.publish({
+				marker,
+				...(known ? { known } : {}),
+				find: async (): Promise<PublishedComment | null> => {
+					const located = await forge.findInline(marker);
+
+					if (located) return { ...located, inline: true };
+
+					const plain = await forge.find(marker);
+
+					return plain ? { ...plain, inline: false } : null;
+				},
+				edit: async (comment) => ({
+					...(comment.inline
+						? await forge.editInline(comment.id, renderFindingComment({ ...view, inline: true }))
+						: await forge.edit(comment.id, renderFindingComment({ ...view, inline: false }))),
+					inline: comment.inline
+				}),
+				create: async () => ({
+					...(inline && target
+						? await forge.createInline(renderFindingComment({ ...view, inline: true }), target)
+						: await forge.create(renderFindingComment({ ...view, inline: false }))),
+					inline
+				}),
+				isMissing: missingComment,
+				isRejected: rejectedCreate
+			});
+
+		try {
+			return await publish(target !== null);
+		} catch (error) {
+			if (target && rejectedPosition(error)) return publish(false);
+			throw error;
+		}
+	}
+
 	const edited = known && (await editKnown(forge, known, renderFindingComment({ ...view, inline: known.inline })));
 
 	if (edited) return edited;
@@ -87,12 +137,23 @@ async function post(review: Review, finding: Finding): Promise<ReviewFindingComm
  * comment instead of adding one. Answers the review with the comment saved.
  */
 export async function publishFindingComment(reviewId: string, findingId: string): Promise<Review> {
-	const review = await db.reviews.get(reviewId);
-	const finding = review?.findings.find((item) => item.id === findingId);
+	return publicationOperation(async () => {
+		const initial = await db.reviews.get(reviewId);
 
-	if (!review || !finding) throw new FindingNotFoundError('finding not found');
+		if (!initial?.findings.some((finding) => finding.id === findingId))
+			throw new FindingNotFoundError('finding not found');
 
-	const comment = await post(review, finding);
+		const { key } = await reviewForge(initial);
 
-	return (await saveFindingComment(reviewId, findingId, comment)) ?? review;
+		return publicationLock(key, async (session) => {
+			const review = await db.reviews.get(reviewId);
+			const finding = review?.findings.find((item) => item.id === findingId);
+
+			if (!review || !finding) throw new FindingNotFoundError('finding not found');
+
+			const comment = await post(review, finding, session);
+
+			return (await saveFindingComment(reviewId, findingId, comment)) ?? review;
+		});
+	});
 }
