@@ -1,5 +1,6 @@
 import { agentReady, within, type AgentStatus, type ModelEntry } from '@recoder/shared';
 import { TtlCache } from '../util/ttl-cache';
+import { antigravity } from './antigravity/antigravity';
 import { claudeCode } from './claude-code/claude-code';
 import { codex } from './codex/codex';
 import type { AgentAdapter } from './contract';
@@ -15,7 +16,17 @@ import { pi } from './pi/pi';
  * `docs/agents/adapter-contract.md`) plus its line here; the routes, Settings, the model routing and the review
  * pipeline read only this list.
  */
-const AGENTS: readonly AgentAdapter[] = [opencode, claudeCode, devin, customCommand, codex, pi, grok, cursor];
+const AGENTS: readonly AgentAdapter[] = [
+	opencode,
+	claudeCode,
+	devin,
+	customCommand,
+	codex,
+	pi,
+	grok,
+	cursor,
+	antigravity
+];
 
 /** Every agent CLI Recoder runs, in the order Settings lists them. */
 export function registeredAgents(): readonly AgentAdapter[] {
