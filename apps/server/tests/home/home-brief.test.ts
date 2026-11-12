@@ -85,28 +85,24 @@ test('the cache does not serve a brief when a pull request opens, closes, or adv
 	expect(afterNewHead.snapshot).not.toBe(afterClose.snapshot);
 });
 
+function storedRepo(id: string, name: string, url: string, provider: Repo['provider'] = 'github'): Repo {
+	return {
+		id,
+		name,
+		url,
+		provider,
+		defaultBranch: 'main',
+		createdAt: hoursAgo(100),
+		updatedAt: hoursAgo(100)
+	};
+}
+
 test('repositories sharing a name and pull request number are disambiguated from stored repository URLs and providers', async () => {
 	configureTestOrchestrator();
 
 	const repos: Repo[] = [
-		{
-			id: 'r-acme',
-			name: 'api',
-			url: 'https://github.com/acme/api',
-			provider: 'github',
-			defaultBranch: 'main',
-			createdAt: hoursAgo(100),
-			updatedAt: hoursAgo(100)
-		},
-		{
-			id: 'r-beta',
-			name: 'api',
-			url: 'https://github.com/beta/api',
-			provider: 'github',
-			defaultBranch: 'main',
-			createdAt: hoursAgo(100),
-			updatedAt: hoursAgo(100)
-		}
+		storedRepo('r-acme', 'api', 'https://github.com/acme/api'),
+		storedRepo('r-beta', 'api', 'https://github.com/beta/api')
 	];
 
 	const colliding: HomeBriefRequest = {
@@ -168,4 +164,91 @@ test('a persisted brief written with an older cache version is ignored', async (
 
 	expect(bodies).toHaveLength(1);
 	expect(fresh.text).toBe('#158 needs **fresh attention**.');
+});
+
+const singleOpenInput: HomeBriefRequest = {
+	dayPart: 'morning',
+	prs: [
+		{
+			repoId: 'r-acme',
+			repo: 'acme/api',
+			number: 42,
+			headSha: 'sha-42',
+			title: 'Rate limiter',
+			additions: 40,
+			deletions: 10,
+			changedFiles: 2,
+			createdAt: hoursAgo(3)
+		}
+	]
+};
+
+const remoteAndLocalInput: HomeBriefRequest = {
+	dayPart: 'morning',
+	prs: [
+		{
+			repoId: 'r-acme',
+			repo: 'acme/api',
+			number: 42,
+			headSha: 'sha-acme',
+			title: 'Remote change',
+			additions: 120,
+			deletions: 30,
+			changedFiles: 4,
+			createdAt: hoursAgo(2)
+		},
+		{
+			repoId: 'r-local',
+			repo: 'api',
+			number: 42,
+			headSha: 'sha-local',
+			title: 'Local change',
+			additions: 20,
+			deletions: 5,
+			changedFiles: 1,
+			createdAt: hoursAgo(1)
+		}
+	]
+};
+
+test('an unknown bracketed tag stays unresolved instead of matching another repository with the same pull request number', async () => {
+	configureTestOrchestrator();
+	stubOrchestratorReplies(['[other-repo#42] needs **immediate review**.']);
+
+	const result = await homeBrief(singleOpenInput, []);
+
+	expect(result.refs).toEqual([]);
+});
+
+test('a malformed bracketed tag stays unresolved instead of falling back to bare number matching', async () => {
+	configureTestOrchestrator();
+	stubOrchestratorReplies(['[other repo#42] and [#42] need **attention**.']);
+
+	const result = await homeBrief(singleOpenInput, []);
+
+	expect(result.refs).toEqual([]);
+});
+
+test('a bare pull request number preceded by owner/name resolves to that repository rather than a local repository sharing the short name', async () => {
+	configureTestOrchestrator();
+
+	const repos: Repo[] = [
+		storedRepo('r-acme', 'api', 'https://github.com/acme/api'),
+		storedRepo('r-local', 'api', 'file:///work/api', 'local')
+	];
+
+	stubOrchestratorReplies(['acme/api #42 needs **review**.']);
+
+	const result = await homeBrief(remoteAndLocalInput, [], repos);
+
+	expect(result.refs).toEqual([{ repoId: 'r-acme', number: 42 }]);
+});
+
+test('a bare pull request number without a complete adjacent repository label stays unresolved when multiple repositories share that number', async () => {
+	configureTestOrchestrator();
+	stubOrchestratorReplies(['acme/api is quiet, while #42 needs **review**.']);
+
+	const result = await homeBrief(remoteAndLocalInput, []);
+
+	expect(result.refs).toEqual([]);
 });

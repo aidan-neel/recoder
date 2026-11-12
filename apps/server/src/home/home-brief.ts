@@ -1,5 +1,6 @@
 import {
 	briefSnapshotKey,
+	endsWithRepoLabel,
 	isHomeBriefResponse,
 	latestReviews,
 	repoLabels,
@@ -24,7 +25,7 @@ Refer to each PR by its bracketed tag from the facts, like [repoId#number]. Mark
 Use only the facts provided. One or two short sentences, at most 25 words. Plain text only.`;
 
 /** Bump when the prompt or stored response shape changes so an older cached brief is replaced. */
-const BRIEF_VERSION = 4;
+const BRIEF_VERSION = 5;
 
 /** Output budget: reasoning models spend output tokens thinking before the brief itself. */
 const BRIEF_MAX_TOKENS = 4000;
@@ -203,22 +204,27 @@ function resolveBareNumber(
 	if (candidates.length === 1) return { repoId: candidates[0].repoId, number: num };
 	if (candidates.length === 0) return null;
 
-	const lower = preceding.toLowerCase();
-
-	const ranked = candidates
+	const matched = candidates
 		.map((candidate) => ({
 			candidate,
-			at: lower.lastIndexOf((labels.get(candidate.repoId) ?? candidate.repo).toLowerCase())
+			label: (labels.get(candidate.repoId) ?? candidate.repo).trim()
 		}))
-		.filter((entry) => entry.at >= 0)
-		.sort((a, b) => b.at - a.at);
+		.filter((entry) => endsWithRepoLabel(preceding, entry.label))
+		.sort((a, b) => b.label.length - a.label.length);
 
-	if (ranked.length > 0 && (ranked.length === 1 || ranked[0].at > ranked[1].at)) {
-		return { repoId: ranked[0].candidate.repoId, number: num };
-	}
+	if (matched.length === 0) return null;
 
-	return null;
+	const longest = matched[0].label.length;
+	const top = matched.filter((entry) => entry.label.length === longest);
+	const repoIds = new Set(top.map((entry) => entry.candidate.repoId));
+
+	if (repoIds.size !== 1) return null;
+
+	return { repoId: top[0].candidate.repoId, number: num };
 }
+
+const BRIEF_TOKEN_RE = /\[([^\][]*)\]|\[[^\][\s]*|(?<![a-z0-9_./[\]-])#(\d+)\b(?!\])/gi;
+const EXACT_TAG_RE = /^([^\s#]+)#(\d+)$/;
 
 function parseBriefRefs(
 	raw: string,
@@ -236,31 +242,36 @@ function parseBriefRefs(
 	}
 
 	const refs: HomeBriefRef[] = [];
-	const pattern = /\[([^\][\s#]+)#(\d+)\]|#(\d+)\b/g;
 	let out = '';
 	let lastIndex = 0;
 
-	for (const match of cleaned.matchAll(pattern)) {
+	for (const match of cleaned.matchAll(BRIEF_TOKEN_RE)) {
 		const index = match.index ?? 0;
 
 		out += cleaned.slice(lastIndex, index);
 		lastIndex = index + match[0].length;
 
-		const [, tagRepoId, tagNumber, bareNumber] = match;
+		const [, bracketed, bareNumber] = match;
 
-		if (tagRepoId !== undefined && tagNumber !== undefined) {
+		if (bracketed !== undefined) {
+			const tag = EXACT_TAG_RE.exec(bracketed);
+
+			if (!tag) {
+				out += match[0];
+				continue;
+			}
+
+			const [, tagRepoId, tagNumber] = tag;
 			const num = Number(tagNumber);
 			const candidates = byNumber.get(num) ?? [];
-			const exact = prs.find((pr) => pr.repoId === tagRepoId && pr.number === num);
-			const target = exact ?? (candidates.length === 1 ? candidates[0] : undefined);
+			const target = num > 0 ? prs.find((pr) => pr.repoId === tagRepoId && pr.number === num) : undefined;
 
 			if (target) {
 				refs.push({ repoId: target.repoId, number: target.number });
 
 				const label = labels.get(target.repoId) ?? target.repo;
-				const alreadyNamed = out.trimEnd().toLowerCase().endsWith(label.toLowerCase());
 
-				out += candidates.length > 1 && !alreadyNamed ? `${label} #${num}` : `#${num}`;
+				out += candidates.length > 1 && !endsWithRepoLabel(out, label) ? `${label} #${num}` : `#${num}`;
 			} else {
 				out += `#${num}`;
 			}
@@ -270,6 +281,8 @@ function parseBriefRefs(
 
 			if (resolved) refs.push(resolved);
 			out += `#${num}`;
+		} else {
+			out += match[0];
 		}
 	}
 
