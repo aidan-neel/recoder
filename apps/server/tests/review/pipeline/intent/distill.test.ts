@@ -2,6 +2,7 @@ import { beforeEach, expect, test } from 'bun:test';
 import { mkdtempSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { ModelBlockedError, ReviewAbortedError } from '../../../../src/review/pipeline/agent-loop';
 import { createRun } from '../../../../src/review/pipeline/harness/context';
 import { briefBlock } from '../../../../src/review/pipeline/intent/brief';
 import { distillIntent } from '../../../../src/review/pipeline/intent/distill';
@@ -259,6 +260,61 @@ test('a unit whose model call fails is recorded as omitted with the reason, and 
 
 	expect(briefBlock(intent, [{ path: 'src/a.ts', hunkIds: [] }], true)).not.toContain('did not read');
 	expect(intentBlock(intent)).toContain('Brief incomplete (1 of 2 units read in full)');
+});
+
+/** A unit call that never answers: it records when its request is aborted, then rejects. */
+function hangUntilAborted(init: RequestInit | undefined, aborted: string[], files: string[]): Promise<Response> {
+	return new Promise((_resolve, reject) => {
+		const stop = () => {
+			aborted.push(files.join(','));
+			reject(new Error('cancelled'));
+		};
+
+		if (init?.signal?.aborted) stop();
+		else init?.signal?.addEventListener('abort', stop, { once: true });
+	});
+}
+
+test('a unit call blocked by the model stops its sibling calls before the stage throws', async () => {
+	const aborted: string[] = [];
+	let siblingStarted: () => void = () => {};
+	const started = new Promise<void>((resolve) => (siblingStarted = resolve));
+
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		const files = unitFiles(init) ?? [];
+
+		if (files.includes('src/a.ts')) {
+			await started;
+
+			return new Response('{"error":"invalid api key"}', { status: 401 });
+		}
+
+		siblingStarted();
+
+		return hangUntilAborted(init, aborted, files);
+	}) as unknown as typeof fetch;
+
+	const thrown = await distill(TWO_UNIT_DIFF).catch((err: unknown) => ({ err, aborted: [...aborted] }));
+
+	expect(thrown).toMatchObject({ aborted: ['tests/b.ts'] });
+	expect(thrown && 'err' in thrown && thrown.err).toBeInstanceOf(ModelBlockedError);
+});
+
+test('a review cancelled while unit calls run ends the stage only after every call was stopped', async () => {
+	const aborted: string[] = [];
+	const run = createRun({ diff: TWO_UNIT_DIFF, sandboxPath: null });
+	let inFlight = 0;
+
+	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
+		if (++inFlight === 2) run.controller.abort();
+
+		return hangUntilAborted(init, aborted, unitFiles(init) ?? []);
+	}) as unknown as typeof fetch;
+
+	const thrown = await distillIntent(run, sources, stack).catch((err: unknown) => ({ err, aborted: [...aborted] }));
+
+	expect(thrown).toMatchObject({ aborted: ['src/a.ts', 'tests/b.ts'] });
+	expect(thrown && 'err' in thrown && thrown.err).toBeInstanceOf(ReviewAbortedError);
 });
 
 /** Answers like `perFile` after `ms`, counting the calls in flight at once. */
