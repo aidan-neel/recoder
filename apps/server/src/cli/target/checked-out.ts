@@ -8,6 +8,7 @@ import { sandboxLayout } from '../../sandbox/sandbox-layout.js';
 import { removeLayers } from '../../sandbox/workspace-setup.js';
 import { notReadyError, usageError } from '../exit.js';
 import type { ReviewStart } from '../review/options.js';
+import { shortSha } from '../short-sha.js';
 import { assertNotCancelled } from './git.js';
 import type { ResolvedTarget, TargetRequest } from './resolve-target.js';
 import { isScoped, scopePathspecs } from './scope.js';
@@ -81,11 +82,19 @@ async function scopedDiff(change: CheckedOutChange): Promise<string> {
 	}
 }
 
+/**
+ * The refusal of an empty diff. It names where the diff really started: the base, or the commit the review started
+ * after. After an earlier review it also says which run that was, and that `--full` reviews the whole change.
+ */
 function emptyChange(change: CheckedOutChange): Error {
-	const ends = `${change.revision.targetRef} and ${change.headName}`;
+	const { since, sinceRunId } = change.start;
+	const from = since === null ? change.revision.targetRef : shortSha(since);
 	const within = isScoped(change.request.scope) ? ' within --include and --exclude' : '';
 
-	return usageError(`Nothing to review: no difference between ${ends}${within}.`);
+	const earlier =
+		sinceRunId === null ? '' : ` Run ${sinceRunId} reviewed up to ${from}. Pass --full to review the whole change.`;
+
+	return usageError(`Nothing to review: no difference between ${from} and ${change.headName}${within}.${earlier}`);
 }
 
 /** A cleanup that runs once, however often it is called. */

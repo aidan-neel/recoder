@@ -132,25 +132,139 @@ test('after a rebase the earlier head is no longer an ancestor and the whole cha
 	await resolved.dispose();
 });
 
-test('an earlier review against another base does not count', async () => {
+/** Adds a commit to `main` that the feature branch does not have, and goes back to `feature`. Returns the commit. */
+async function mainMovesOn(dir: string): Promise<string> {
+	git(dir, ['checkout', 'main']);
+	await writeFiles(dir, { 'main-only.ts': 'later\n' });
+
+	const sha = commitAll(dir, 'main moves on');
+
+	git(dir, ['checkout', 'feature']);
+
+	return sha;
+}
+
+test('an earlier review still counts after the base moved forward', async () => {
+	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
+
+	await earlierReview(heads[0], mainSha);
+	await mainMovesOn(dir);
+
+	const resolved = await resolveTarget(targetRequest(dir, CONTINUE));
+
+	expect(resolved.report.since).toBe(heads[0]);
+	expect(resolved.diff).toContain('b.ts');
+	expect(resolved.diff).not.toContain('+two');
+
+	await resolved.dispose();
+});
+
+test('after the base is merged into the branch the whole change is reviewed', async () => {
 	const { dir, mainSha, heads } = await featureRepo([FIRST]);
 
-	git(dir, ['checkout', 'main']);
+	await earlierReview(heads[0], mainSha);
+
+	const newMain = await mainMovesOn(dir);
+
+	git(dir, ['merge', '--no-edit', 'main']);
+
+	const resolved = await wholeReview(dir, newMain);
+
+	expect(resolved.diff).toContain('+two');
+
+	await resolved.dispose();
+});
+
+test('an earlier review against a base the branch began after does not count', async () => {
+	const dir = await userRepository();
+	const mainSha = git(dir, ['rev-parse', 'main']);
+
 	git(dir, ['checkout', '-b', 'develop']);
 	await writeFiles(dir, { 'dev.ts': 'develop only\n' });
 
 	const developSha = commitAll(dir, 'develop work');
 
-	git(dir, ['checkout', 'feature']);
-
-	await earlierReview(heads[0], developSha, { target: { mergeBaseSha: mainSha } });
+	git(dir, ['checkout', '-b', 'feature']);
+	await writeFiles(dir, FIRST.files);
+	await earlierReview(commitAll(dir, FIRST.message), developSha);
 
 	const resolved = await wholeReview(dir, mainSha);
 
 	expect(resolved.diff).toContain('+two');
-	expect(resolved.diff).not.toContain('dev.ts');
+	expect(resolved.diff).toContain('dev.ts');
 
 	await resolved.dispose();
+});
+
+test('an earlier review whose base was behind where the branch began does not count', async () => {
+	const dir = await userRepository();
+	const staleSha = git(dir, ['rev-parse', 'main']);
+
+	await writeFiles(dir, { 'auth.ts': 'allow = true\n' });
+
+	const mainSha = commitAll(dir, 'main moves on');
+
+	git(dir, ['checkout', '-b', 'feature']);
+	await writeFiles(dir, { 'auth.ts': 'allow = false\n' });
+	await earlierReview(commitAll(dir, 'undo the change on main'), staleSha);
+
+	const resolved = await wholeReview(dir, mainSha);
+
+	expect(resolved.diff).toContain('auth.ts');
+
+	await resolved.dispose();
+});
+
+test('a newer run that names a commit from elsewhere is skipped, and the review before it is continued', async () => {
+	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
+
+	await earlierReview(heads[0], mainSha);
+	await storeReview(runIdAt(2), { target: { headSha: 'f'.repeat(40), baseSha: mainSha, mergeBaseSha: mainSha } });
+
+	const resolved = await resolveTarget(targetRequest(dir, CONTINUE));
+
+	expect(resolved.report.since).toBe(heads[0]);
+	expect(resolved.report.sinceRunId).toBe(runIdAt(1));
+
+	await resolved.dispose();
+});
+
+test('a stored head that is not a whole commit SHA does not count', async () => {
+	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
+
+	await earlierReview(heads[0].slice(0, 12), mainSha);
+
+	const resolved = await wholeReview(dir, mainSha);
+
+	await resolved.dispose();
+});
+
+test('a review narrowed to some paths also continues after the last review', async () => {
+	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
+
+	await earlierReview(heads[0], mainSha);
+
+	const narrowed = targetRequest(dir, CONTINUE, { scope: { include: ['b.ts'], exclude: [] } });
+	const resolved = await resolveTarget(narrowed);
+
+	expect(resolved.report.since).toBe(heads[0]);
+	expect(resolved.diff).toContain('b.ts');
+
+	await resolved.dispose();
+});
+
+test('new commits that change nothing in scope are refused with the commit the review started after, its run and --full', async () => {
+	const { dir, mainSha, heads } = await featureRepo([FIRST, SECOND]);
+
+	await earlierReview(heads[0], mainSha);
+
+	const narrowed = targetRequest(dir, CONTINUE, { scope: { include: ['a.ts'], exclude: [] } });
+	const error = await rejection(resolveTarget(narrowed));
+
+	expect(error).toMatchObject({ exitCode: EXIT.usage });
+	expect(error.message).toContain(`between ${heads[0].slice(0, 7)} and feature`);
+	expect(error.message).toContain(runIdAt(1));
+	expect(error.message).toContain('--full');
 });
 
 /** Earlier reviews that must not count as the last review, each narrowed or started at a named commit. */

@@ -60,8 +60,7 @@ async function startOf(call: GitCall, target: LocalTarget, change: LocalChange):
 		cwd: call.cwd,
 		signal: call.signal,
 		headSha: change.headSha,
-		mergeBaseSha: change.mergeBaseSha,
-		baseSha: change.baseSha
+		mergeBaseSha: change.mergeBaseSha
 	};
 
 	const continued = await continuedStart(place, await lastReviewCandidates(), change.headName);

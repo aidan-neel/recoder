@@ -110,7 +110,7 @@ Each finding has `severity` (`error`, `warning`, `info`), `file`, `line`, `title
 
 `recoder result -p` exits 3 for a `failed` run and 130 for a `cancelled` one.
 
-Exit 2 whose message starts `Nothing to review: run` means the last review already covered the head: nothing changed since. `recoder result -p <run id>` prints that run's findings again, or pass `--full` to review the whole change.
+Exit 2 with a `Nothing to review` message that names a run means the last review already covered the change: no commit was added since, or the new commits change nothing in the paths you asked for. `recoder result -p <run id>` prints that run's findings again, or pass `--full` to review the whole change.
 
 ## Do not
 

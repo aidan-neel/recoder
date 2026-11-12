@@ -8,6 +8,9 @@ import { gitProbe } from './git.js';
 /** A commit SHA, whole or abbreviated. Anything else could name a ref or read as an option. */
 const COMMIT_SHA = /^[0-9a-f]{4,64}$/i;
 
+/** A whole commit SHA, as git prints it and a report stores it. */
+const FULL_SHA = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
 /** Where a reader who asked for too much is sent. */
 const WHOLE_PULL = 'Review the whole pull request without --since.';
 
@@ -19,8 +22,6 @@ export interface CommitPlace {
 	headSha: string;
 	/** Where the whole change starts: its merge base with the base. */
 	mergeBaseSha: string;
-	/** The tip of the base branch now. */
-	baseSha: string;
 }
 
 /** A pull revision with its start applied, and what the report records of it. */
@@ -87,8 +88,7 @@ export async function startPullRevision(request: PullStartRequest): Promise<Star
 		cwd: revision.checkoutPath,
 		signal,
 		headSha: revision.headSha,
-		mergeBaseSha: revision.mergeBaseSha,
-		baseSha: revision.targetSha
+		mergeBaseSha: revision.mergeBaseSha
 	};
 
 	const continued = await continuedStart(place, await lastReviewCandidates(), headName);
@@ -115,54 +115,43 @@ export async function continuedStart(
 	headName: string
 ): Promise<ReviewStart | null> {
 	for (const candidate of candidates) {
-		const headSha = await countedHead(place, candidate);
+		if (!(await stillCovers(place, candidate))) continue;
 
-		if (headSha === null) continue;
+		if (candidate.headSha === place.headSha) throw alreadyReviewed(candidate, headName, place.headSha);
 
-		if (headSha === place.headSha) throw alreadyReviewed(candidate, headName, place.headSha);
-
-		return { mergeBaseSha: headSha, since: headSha, sinceRunId: candidate.runId };
+		return { mergeBaseSha: candidate.headSha, since: candidate.headSha, sinceRunId: candidate.runId };
 	}
 
 	return null;
 }
 
 /**
- * The commit an earlier run's head resolves to when its review still covers
- * this change, else null. The head must be a commit in the change's history,
- * at or above where the change left its base, and the run's base must be the
- * same base only moved forward; a rebase or another base breaks that.
+ * Whether an earlier run's review still covers the start of this change. Its
+ * head must be a commit in the change's history, and the change must have
+ * begun at the same commit then as now: the merge base of the run's base and
+ * head is the change's merge base. A base that only moved forward keeps that.
+ * A rebase, a merge of the base into the branch, or a base that named other
+ * commits changes it, and the run reviewed another diff.
  */
-async function countedHead(place: CommitPlace, candidate: ReviewCandidate): Promise<string | null> {
-	if (!COMMIT_SHA.test(candidate.headSha) || !COMMIT_SHA.test(candidate.baseSha)) return null;
+async function stillCovers(place: CommitPlace, candidate: ReviewCandidate): Promise<boolean> {
+	const { headSha, baseSha } = candidate;
 
-	const headSha = await commitSha(place, candidate.headSha);
+	if (!(await isCommitHere(place, headSha)) || !(await isCommitHere(place, baseSha))) return false;
+	if (!(await isAncestor(place, headSha, place.headSha))) return false;
 
-	if (headSha === null) return null;
-
-	const baseSha = await commitSha(place, candidate.baseSha);
-
-	if (baseSha === null) return null;
-	if (!(await isAncestor(place, headSha, place.headSha))) return null;
-	if (!(await isAncestor(place, place.mergeBaseSha, headSha))) return null;
-	if (!(await isAncestor(place, baseSha, place.baseSha))) return null;
-
-	return headSha;
+	return (await gitProbe(place, ['merge-base', baseSha, headSha])) === place.mergeBaseSha;
 }
 
 /**
- * A stored SHA as the commit it names in this checkout, or null when it is
- * not a commit here. A report is outside input: a SHA that names no commit
- * rules its run out instead of failing the review.
+ * Whether a SHA from a stored report is the whole SHA of a commit in this
+ * checkout. A report is outside input: an abbreviation, a ref name or a tag's
+ * SHA could resolve to another commit, so only a SHA that resolves to itself
+ * counts. One that names no commit here rules its run out.
  */
-async function commitSha(place: CommitPlace, sha: string): Promise<string | null> {
-	try {
-		return await gitProbe(place, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`]);
-	} catch (error) {
-		if (place.signal.aborted || !(error instanceof CliError)) throw error;
+async function isCommitHere(place: CommitPlace, sha: string): Promise<boolean> {
+	if (!FULL_SHA.test(sha)) return false;
 
-		return null;
-	}
+	return (await gitProbe(place, ['rev-parse', '--verify', '--quiet', `${sha}^{commit}`])) === sha;
 }
 
 /** The last review already covered the head: there is nothing new to review. */

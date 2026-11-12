@@ -56,7 +56,7 @@ function candidateOf(runId: RunId, report: ReviewReport): ReviewCandidate | null
 	const { target, settings } = report;
 
 	if (target.kind !== 'range' && target.kind !== 'pull') return null;
-	if (!sawWholeChange(settings) || startedAtNamedCommit(target)) return null;
+	if (!sawWholeChange(settings) || !startedWholeOrContinued(target)) return null;
 	if (typeof target.headSha !== 'string' || typeof target.baseSha !== 'string') return null;
 
 	return { runId, headSha: target.headSha, baseSha: target.baseSha };
@@ -71,7 +71,12 @@ function sawWholeChange(settings: ReportSettings): boolean {
 	return settings.include?.length === 0 && settings.exclude?.length === 0 && settings.lenses === null;
 }
 
-/** Whether the review started at a commit the caller named, which records no earlier review to continue from. */
-function startedAtNamedCommit(target: ReportTarget): boolean {
-	return typeof target.since === 'string' && target.sinceRunId === null;
+/**
+ * Whether the report says the review covered the whole change, or continued a run that did. A review that started at
+ * a commit the caller named records no earlier review, and a report that leaves either field out proves neither.
+ */
+function startedWholeOrContinued(target: ReportTarget): boolean {
+	if (target.since === null) return target.sinceRunId === null;
+
+	return typeof target.since === 'string' && typeof target.sinceRunId === 'string';
 }

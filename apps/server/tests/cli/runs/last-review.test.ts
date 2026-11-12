@@ -75,6 +75,14 @@ test('a review that started at a commit the caller named is not a candidate', as
 	expect(await lastReviewCandidates()).toEqual([]);
 });
 
+test('a report that names a start commit but no run is not a candidate', async () => {
+	await storeReview(runIdAt(1), {
+		target: { headSha: HEAD_A, baseSha: BASE_A, since: HEAD_B, sinceRunId: undefined }
+	});
+
+	expect(await lastReviewCandidates()).toEqual([]);
+});
+
 test('a review that continued an earlier review is a candidate', async () => {
 	await storeReview(runIdAt(1), {
 		target: { headSha: HEAD_A, baseSha: BASE_A, since: BASE_A, sinceRunId: runIdAt(0) }
