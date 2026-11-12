@@ -4,6 +4,13 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { OpenCodeAgent, normalizeModels, normalizeProviders } from '../../../src/agents/opencode/opencode';
 import { fakeOpenCode } from '../../helpers/fake-opencode';
+import { whenFound } from '../../helpers/when-found';
+
+/** A bound that outlasts what a loaded machine needs to move the fake server past its sign-in. */
+const FINISH_WAIT = { afterMs: 30_000, waitingFor: 'the browser sign-in to finish' };
+
+/** Spawning the fake server and waiting on it take seconds under load, past the runner's 5s default and the wait above. */
+const SERVER_TIMEOUT_MS = 60_000;
 
 const CONFIG_PROVIDERS = {
 	providers: [
@@ -96,21 +103,33 @@ describe('OpenCodeAgent', () => {
 		expect(await agent.detect()).toMatchObject({ installed: false, version: null, error: null });
 	});
 
-	test('starts the server behind a password and reads its version', async () => {
-		agent = new OpenCodeAgent(await fakeOpenCode());
-		expect(await agent.detect()).toMatchObject({ installed: true, version: '1.2.3', error: null });
-		expect((await agent.providers()).map((p) => p.id)).toEqual(['openai']);
-	});
+	test(
+		'starts the server behind a password and reads its version',
+		async () => {
+			agent = new OpenCodeAgent(await fakeOpenCode());
+			expect(await agent.detect()).toMatchObject({ installed: true, version: '1.2.3', error: null });
+			expect((await agent.providers()).map((p) => p.id)).toEqual(['openai']);
+		},
+		SERVER_TIMEOUT_MS
+	);
 
-	test('a browser sign-in stays pending until OpenCode finishes it', async () => {
-		agent = new OpenCodeAgent(await fakeOpenCode());
+	test(
+		'a browser sign-in stays pending until OpenCode finishes it',
+		async () => {
+			agent = new OpenCodeAgent(await fakeOpenCode());
 
-		const attempt = await agent.startOAuth('openai', 0);
+			const attempt = await agent.startOAuth('openai', 0);
 
-		expect(attempt).toMatchObject({ mode: 'auto', instructions: 'Enter code: ABCD' });
-		expect(agent.attempt(attempt.attemptId)).toEqual({ status: 'pending' });
-		await agent.request('/test/finish-browser');
-		for (let i = 0; i < 50 && agent.attempt(attempt.attemptId)?.status === 'pending'; i++) await Bun.sleep(10);
-		expect(agent.attempt(attempt.attemptId)).toEqual({ status: 'complete' });
-	});
+			expect(attempt).toMatchObject({ mode: 'auto', instructions: 'Enter code: ABCD' });
+			expect(agent.attempt(attempt.attemptId)).toEqual({ status: 'pending' });
+			await agent.request('/test/finish-browser');
+
+			const state = () => agent?.attempt(attempt.attemptId) ?? null;
+
+			expect(await whenFound(() => (state()?.status === 'pending' ? null : state()), FINISH_WAIT)).toEqual({
+				status: 'complete'
+			});
+		},
+		SERVER_TIMEOUT_MS
+	);
 });
