@@ -2,7 +2,7 @@ import type { ModelEntry, ReasoningEffort } from '@recoder/shared';
 import type { ChatOptions } from '../../models/llm/types';
 
 /** Prefix of a Claude Code model's id in the Model select, so routing knows the CLI runs it. */
-export const CLAUDE_CODE_MODEL_PREFIX = 'claude-code:';
+const CLAUDE_CODE_MODEL_PREFIX = 'claude-code:';
 
 /** The levels `claude --effort` takes. Recoder's `minimal` has no CLI level, so it is not offered. */
 const CLI_EFFORTS: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];

@@ -2,10 +2,12 @@ import {
 	supportedEffort,
 	type AgentStatus,
 	type ModelEntry,
+	type ModelFailure,
 	type ReasoningEffort,
 	type TokenUsage
 } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
+import { cliFailure } from '../cli-failure';
 import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../../models/llm/types';
 import { callDeadline, cliEnv, emptyDirectory, killGroup, stopOnShutdown } from '../cli-process';
 import { systemText } from '../cli-prompt';
@@ -54,6 +56,11 @@ function addUsage(total: TokenUsage | null, step: TokenUsage): TokenUsage {
  */
 export class CustomCommandAgent implements AgentAdapter {
 	readonly id = ID;
+	/** A command may be a thin client of a server that takes many calls at once, so it shares the endpoint ceiling. */
+	readonly processCeiling = null;
+	readonly signInFix =
+		'Check that the custom command is signed in and lists the model, or pick another model in Recoder settings.';
+
 	private readonly running = new Set<Bun.Subprocess>();
 	private status: AgentStatus | null = null;
 
@@ -100,8 +107,21 @@ export class CustomCommandAgent implements AgentAdapter {
 		return (this.status = status);
 	}
 
-	async models(): Promise<ModelEntry[]> {
-		const described = await runDescribe(await this.host(this.command()), AbortSignal.timeout(DESCRIBE_TIMEOUT_MS));
+	/** Its `describe` takes no model call and starts nothing that outlives it. */
+	quickStatus(): Promise<AgentStatus> {
+		return this.detect();
+	}
+
+	/** Whether a command is configured; a configured one that cannot run says so when it is asked. */
+	installed(): boolean {
+		return readCustomCommand(this.env).kind !== 'unset';
+	}
+
+	/** What `describe` lists. When `signal` aborts, the command is killed and the listing rejects. */
+	async models(signal?: AbortSignal): Promise<ModelEntry[]> {
+		const timeout = AbortSignal.timeout(DESCRIBE_TIMEOUT_MS);
+		const stop = signal ? AbortSignal.any([timeout, signal]) : timeout;
+		const described = await runDescribe(await this.host(this.command()), stop);
 
 		const entries = described.models.map((model): ModelEntry => ({
 			id: `${ID}:${model.id}`,
@@ -150,8 +170,17 @@ export class CustomCommandAgent implements AgentAdapter {
 		}
 	}
 
+	/** Only a command's `describe` lists its models. */
+	fixedModels(): null {
+		return null;
+	}
+
 	async openRun(options: AgentRunOptions): Promise<AgentRun> {
 		return new CustomRun(await this.host(this.command()), options);
+	}
+
+	describeFailure(err: LlmError, fallback: string): ModelFailure {
+		return cliFailure(this, err, fallback);
 	}
 
 	stop(): void {

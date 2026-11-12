@@ -21,6 +21,7 @@ export * from './theme';
 export * from './providers';
 export * from './pulls';
 export * from './agents';
+export * from './agent-clis';
 export * from './home';
 export * from './discuss';
 export * from './fixes';

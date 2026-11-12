@@ -6,7 +6,7 @@ import type { AgentPromptOptions, AgentReply, AgentRun, AgentRunOptions } from '
 import type { ToolLease } from '../tools/mcp-host';
 import { OPENCODE_EMPTY_DIR, isEmptyObject, variantFor, type OpenCodeChatHost } from './opencode-chat';
 import type { OpenCodeApi } from './api/types';
-import { OpenCodeError } from './opencode-error';
+import { OpenCodeError, providerError } from './opencode-error';
 import { eventHandlers, followSession } from './opencode-events';
 import { leaseOpenCodeTools } from './opencode-mcp';
 import { abortSession, createSession, deleteSession, type SessionScope } from './opencode-session';
@@ -26,7 +26,7 @@ export function refusesStructuredOutput(err: LlmError): boolean {
 function asLlmError(error: unknown, aborted: boolean): LlmError {
 	if (aborted) return cancelledError();
 	if (error instanceof LlmError) return error;
-	if (error instanceof OpenCodeError) return new LlmError(error.status, error.message);
+	if (error instanceof OpenCodeError) return providerError(error.status, error.message);
 	if (error instanceof z.ZodError) return new LlmError(0, 'OpenCode sent a reply Recoder could not read.');
 
 	return new LlmError(0, error instanceof Error ? error.message : 'OpenCode request failed.');

@@ -1,9 +1,15 @@
 import { afterEach, expect, setSystemTime, spyOn, test } from 'bun:test';
-import type { AgentStatus, ModelEntry } from '@recoder/shared';
+import { AGENT_CLIS, type AgentStatus, type ModelEntry } from '@recoder/shared';
 import { claudeCode } from '../../src/agents/claude-code/claude-code';
 import { devin } from '../../src/agents/devin/devin';
 import { opencode } from '../../src/agents/opencode/opencode';
-import { agentModels, agentStatuses, forgetAgentModels, pickedModels } from '../../src/agents/registry';
+import {
+	agentModels,
+	agentStatuses,
+	forgetAgentModels,
+	pickedModels,
+	registeredAgents
+} from '../../src/agents/registry';
 import { clearAllCaches } from '../../src/util/ttl-cache';
 
 const entry: ModelEntry = { id: 'devin:swe', label: 'SWE', model: 'swe', baseUrl: null, apiKeyPreview: null };
@@ -189,4 +195,18 @@ test('a bounded read after the caches were cleared answers with the models the a
 	expect(listing).toHaveBeenCalledTimes(2);
 
 	finish([entry]);
+});
+
+test('every registered adapter has its entry in the shared agent table, under the same name, and no entry lacks one', () => {
+	const registered = registeredAgents().map(({ id, name }) => ({ id, name }));
+
+	expect(registered).toEqual(AGENT_CLIS.map(({ id, name }) => ({ id, name })));
+});
+
+test('the agent list Settings shows has every agent CLI of the shared table', async () => {
+	restore = quietAgents();
+
+	const listed = (await agentStatuses()).map((status) => status.id);
+
+	expect(listed).toEqual(AGENT_CLIS.map((cli) => cli.id));
 });

@@ -40,6 +40,9 @@ export class DevinAgent extends CliAgent {
 	readonly name = 'Devin';
 	readonly install = INSTALL;
 	readonly login = DEVIN_LOGIN;
+	/** Each call runs one CLI process, so four run at once unless `RECODER_DEVIN_CONCURRENCY` says otherwise. */
+	readonly processCeiling = { env: 'RECODER_DEVIN_CONCURRENCY', fallback: 4 };
+	readonly signInFix = `Sign in with \`${DEVIN_LOGIN}\`, or pick another model in Recoder settings.`;
 
 	/**
 	 * The account's models, from `devin models list`; throws when the CLI is missing or the list is empty. When `signal`
@@ -139,11 +142,6 @@ export class DevinAgent extends CliAgent {
 	override stop(): void {
 		super.stop();
 		removeToolFreeHome();
-	}
-
-	/** Whether the Devin binary is found, from its pin, PATH or install folder; the CLI is not run. */
-	installed(): boolean {
-		return this.find() !== null;
 	}
 
 	protected find(): string | null {

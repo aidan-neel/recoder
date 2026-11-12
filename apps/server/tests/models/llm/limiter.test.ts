@@ -8,6 +8,7 @@ import {
 	releaseLlmSlot,
 	resetLlmLimiter
 } from '../../../src/models/llm/limiter';
+import { providerError } from '../../../src/agents/opencode/opencode-error';
 
 const savedConcurrency = process.env.RECODER_LLM_CONCURRENCY;
 
@@ -259,7 +260,7 @@ describe('rate limit classification', () => {
 
 	test("ChatGPT's and OpenCode's final 429s and other failures are not rate limits", () => {
 		expect(isRateLimitError(new LlmError(429, 'usage cap'), 'codex')).toBe(false);
-		expect(isRateLimitError(new LlmError(429, 'plan spent'), 'opencode')).toBe(false);
+		expect(isRateLimitError(providerError(429, 'plan spent'), 'opencode')).toBe(false);
 		expect(isRateLimitError(new LlmError(500, 'boom'), 'openai-compatible')).toBe(false);
 		expect(isRateLimitError(new Error('429'), 'openai-compatible')).toBe(false);
 	});

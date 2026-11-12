@@ -1,6 +1,6 @@
 import { REASONING_EFFORTS } from '@recoder/shared';
 import { z } from 'zod';
-import { LlmError } from '../../models/llm/errors';
+import { LlmError, UsageLimitError } from '../../models/llm/errors';
 import { quotedLine } from '../quoted-line';
 
 /**
@@ -155,9 +155,10 @@ const FAILURE_STATUS: Record<FailureKind, number> = {
 	other: 0
 };
 
-/** The error a command's `error` event stands for. */
+/** The error a command's `error` event stands for. A spent plan is a usage limit; a rate limit is retried. */
 export function failureError(kind: FailureKind, message: string, name: string): LlmError {
 	if (kind === 'auth') return new LlmError(401, `${name} is not signed in: ${message}`);
+	if (kind === 'usage_limit') return new UsageLimitError(FAILURE_STATUS[kind], `${name}: ${message}`);
 
 	return new LlmError(FAILURE_STATUS[kind], `${name}: ${message}`);
 }

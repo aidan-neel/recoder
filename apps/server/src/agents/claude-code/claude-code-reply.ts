@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { TokenUsage } from '@recoder/shared';
-import { LlmError } from '../../models/llm/errors';
+import { LlmError, UsageLimitError } from '../../models/llm/errors';
 import { quotedLine } from '../quoted-line';
 
 export const usageSchema = z.object({
@@ -84,7 +84,14 @@ export function claudeCodeError(text: string, code: string | null, apiStatus: nu
 
 	if (code === 'max_output_tokens') return new LlmError(0, 'Claude Code reply was truncated at its output limit.');
 
-	return new LlmError(status ?? 0, text || 'Claude Code request failed.');
+	const message = text || 'Claude Code request failed.';
+
+	return isUsageCap(status) ? new UsageLimitError(status, message) : new LlmError(status ?? 0, message);
+}
+
+/** Claude Code's 429 is its subscription limit, which lasts hours, and its 402 a spent credit balance. */
+function isUsageCap(status: number | null): status is number {
+	return status === 429 || status === 402;
 }
 
 /**

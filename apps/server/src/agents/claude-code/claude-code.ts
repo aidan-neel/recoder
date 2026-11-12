@@ -70,6 +70,9 @@ export class ClaudeCodeAgent extends CliAgent {
 	readonly name = 'Claude Code';
 	readonly install = INSTALL;
 	readonly login = LOGIN;
+	/** Each call runs one CLI process, so eight run at once unless `RECODER_CLAUDE_CODE_CONCURRENCY` says otherwise. */
+	readonly processCeiling = { env: 'RECODER_CLAUDE_CODE_CONCURRENCY', fallback: 8 };
+	readonly signInFix = `Sign in with \`${LOGIN}\`, or pick another model in Recoder settings.`;
 
 	/** The latest `claude auth status` call while it runs, which a check that may take an older answer joins. */
 	private signInCall: Promise<SignIn> | null = null;
@@ -82,6 +85,11 @@ export class ClaudeCodeAgent extends CliAgent {
 	private keptCall = 0;
 
 	async models(): Promise<ModelEntry[]> {
+		return claudeCodeModels();
+	}
+
+	/** The CLI has no command that lists models, so its list is fixed and offered whether or not it is installed. */
+	override fixedModels(): ModelEntry[] {
 		return claudeCodeModels();
 	}
 

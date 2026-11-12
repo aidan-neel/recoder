@@ -13,6 +13,11 @@ import { opencode } from './opencode/opencode';
  */
 const AGENTS: readonly AgentAdapter[] = [opencode, claudeCode, devin, customCommand];
 
+/** Every agent CLI Recoder runs, in the order Settings lists them. */
+export function registeredAgents(): readonly AgentAdapter[] {
+	return AGENTS;
+}
+
 /** The agent whose id is `id` (a model provider), or null for a provider that is not an agent CLI. */
 export function agentById(id: string | undefined): AgentAdapter | null {
 	return AGENTS.find((agent) => agent.id === id) ?? null;

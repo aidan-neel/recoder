@@ -1,4 +1,4 @@
-import type { AgentStatus, ModelEntry, ReasoningEffort, TokenUsage } from '@recoder/shared';
+import type { AgentStatus, ModelEntry, ModelFailure, ReasoningEffort, TokenUsage } from '@recoder/shared';
 import type { LlmError } from '../models/llm/errors';
 import type { ChatOptions } from '../models/llm/types';
 
@@ -14,18 +14,48 @@ export interface AgentAdapter {
 	/** The adapter id: also the model provider, and the prefix of its model ids (`claude-code:opus`). */
 	readonly id: string;
 	readonly name: string;
+	/**
+	 * How many of its calls may run at once when each starts a process, never above the shared ceiling. Null for an
+	 * agent whose calls share one long-lived process (OpenCode's server); those share the endpoint ceiling.
+	 */
+	readonly processCeiling: ProcessCeiling | null;
+	/** What `recoder doctor` tells someone whose model the agent does not list, which is how a missing sign-in shows. */
+	readonly signInFix: string;
 	/** Installed, version, sign-in state. Cached until `refresh`. */
 	detect(refresh?: boolean): Promise<AgentStatus>;
-	/** Models it can run now, with ids `<id>:<model>`; throws when the agent is missing or down. */
-	models(): Promise<ModelEntry[]>;
+	/** The status `recoder doctor` reports, found without starting anything that outlives the check. */
+	quickStatus(): Promise<AgentStatus>;
+	/** Whether the CLI is found (or, for a custom command, configured), answered without running it. */
+	installed(): boolean;
+	/**
+	 * Models it can run now, with ids `<id>:<model>`; throws when the agent is missing or down. When `signal` aborts,
+	 * a listing that runs the CLI kills it and rejects.
+	 */
+	models(signal?: AbortSignal): Promise<ModelEntry[]>;
+	/**
+	 * The models the adapter knows without running the CLI, offered whether or not it is installed (Claude Code's:
+	 * the CLI has no command that lists them); null when only running the CLI lists them.
+	 */
+	fixedModels(): ModelEntry[] | null;
 	/** The settings `model` (an id without the `<id>:` prefix) runs with when `requested` is the picked effort. */
 	modelSettings(model: string, requested: ReasoningEffort | undefined): AgentModelSettings;
 	/** One model call without tools: chat replies, summaries, judges. Text streams to `onToken`. */
 	complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string>;
 	/** Opens a run in which the CLI is the agent, calling Recoder's tools as it goes. */
 	openRun(options: AgentRunOptions): Promise<AgentRun>;
+	/**
+	 * Words for the developer when a call of one of its models failed with `err`; `source` is the hosted provider
+	 * the model routes to, when it has one. A usage cap is a `UsageLimitError` the adapter raised.
+	 */
+	describeFailure(err: LlmError, fallback: string, source: string | undefined): ModelFailure;
 	/** Kills every process the adapter started and deletes its scratch files; synchronous, for exit. */
 	stop(): void;
+}
+
+/** A concurrency cap of its own: the env var that sets it, and the cap when that is unset. */
+export interface ProcessCeiling {
+	env: string;
+	fallback: number;
 }
 
 /** What a model id of an agent resolves to, beyond the model: its effort and, for a router, its hosted provider. */

@@ -1,7 +1,9 @@
 import { expect, test } from 'bun:test';
 import { claudeCodeError } from '../../src/agents/claude-code/claude-code-reply';
+import { failureError } from '../../src/agents/custom/custom-protocol';
 import { LlmError, isTransientLlmError } from '../../src/models/llm';
 import { modelFailure } from '../../src/models/model-failure';
+import { providerError } from '../../src/agents/opencode/opencode-error';
 
 test('a signed-out ChatGPT call asks the developer to sign in', () => {
 	expect(
@@ -93,7 +95,7 @@ test("an OpenCode 403 keeps the provider's message instead of asking to reconnec
 
 test('an OpenCode 429 about a spent quota is out of usage for that provider', () => {
 	const failure = modelFailure(
-		new LlmError(429, 'Rate limit reached: usage limit for 5 hours, resets at 09:00'),
+		providerError(429, 'Rate limit reached: usage limit for 5 hours, resets at 09:00'),
 		{ provider: 'opencode', source: 'openai' },
 		'fallback'
 	);
@@ -103,7 +105,7 @@ test('an OpenCode 429 about a spent quota is out of usage for that provider', ()
 
 test('an OpenCode 429 that only throttles requests is not reported as out of usage', () => {
 	const failure = modelFailure(
-		new LlmError(429, 'Rate limit reached for requests'),
+		providerError(429, 'Rate limit reached for requests'),
 		{ provider: 'opencode', source: 'zai-coding-plan' },
 		'fallback'
 	);
@@ -134,4 +136,23 @@ test('a Claude Code usage limit stops as out of usage with its reset time, and i
 	expect(failure.reason).toContain('Claude Code is out of usage');
 	expect(failure.reason).toContain('resets 3pm (UTC)');
 	expect(isTransientLlmError(error, 'claude-code')).toBe(false);
+});
+
+test('a custom command’s spent plan stops as out of usage under its name, and is never retried', () => {
+	const error = failureError('usage_limit', 'plan spent until 3pm', 'My agent');
+	const failure = modelFailure(error, { provider: 'custom-command' }, 'fallback');
+
+	expect(failure.usageLimit).toEqual({ provider: 'custom-command', name: 'Custom command', usageUrl: null });
+	expect(failure.reason).toContain('plan spent until 3pm');
+	expect(isTransientLlmError(error, 'custom-command')).toBe(false);
+});
+
+test('a signed-out custom command keeps its own message instead of asking for an API key', () => {
+	const failure = modelFailure(
+		failureError('auth', 'run my-agent login', 'My agent'),
+		{ provider: 'custom-command' },
+		''
+	);
+
+	expect(failure).toEqual({ reason: 'My agent is not signed in: run my-agent login' });
 });

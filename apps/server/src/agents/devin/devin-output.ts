@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import type { TokenUsage } from '@recoder/shared';
 import { z } from 'zod';
-import { LlmError } from '../../models/llm/errors';
+import { LlmError, UsageLimitError } from '../../models/llm/errors';
 import { quotedLine } from '../quoted-line';
 
 export const DEVIN_LOGIN = 'devin auth login';
@@ -65,11 +65,14 @@ export function tokenUsage(metrics: NonNullable<DevinExport['final_metrics']>): 
 	};
 }
 
-/** A failed call's error: signed out is a 401 and a spent plan a 429, so the app can say so. */
+/**
+ * A failed call's error: signed out is a 401, and any limit a usage cap (429), since Devin's limits reset in hours,
+ * so the app can say so.
+ */
 function devinError(text: string): LlmError {
 	if (SIGNED_OUT.test(text)) return new LlmError(401, `Devin is signed out. Run: ${DEVIN_LOGIN}`);
 
-	return new LlmError(LIMIT.test(text) ? 429 : 0, text);
+	return LIMIT.test(text) ? new UsageLimitError(429, text) : new LlmError(0, text);
 }
 
 /** The error of a run that exited non-zero, from its stderr, else its stdout, else its exit code. */

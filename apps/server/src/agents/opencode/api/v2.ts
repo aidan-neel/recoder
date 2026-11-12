@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { LlmError, cancelledError } from '../../../models/llm/errors';
 import type { SessionHandlers } from '../opencode-events';
-import { OpenCodeError } from '../opencode-error';
+import { OpenCodeError, providerError } from '../opencode-error';
 import type { OpenCodeServer, ServerRequest } from '../opencode-server';
 import { tokensSchema, usage } from './tokens';
 import {
@@ -83,7 +83,7 @@ function failure(error: z.infer<typeof failureSchema>): LlmError {
 
 	const message = error.message || 'OpenCode could not get a reply from the model.';
 
-	return new LlmError(error.status ?? (error.type === 'provider.auth' ? 401 : 0), message);
+	return providerError(error.status ?? (error.type === 'provider.auth' ? 401 : 0), message);
 }
 
 /** The usage of every model call in a run, added up. */

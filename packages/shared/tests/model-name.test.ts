@@ -35,6 +35,10 @@ test("Recoder's agent prefix drops before the provider path and the variant suff
 	expect(prettyModelName('devin:claude-opus-4-1')).toBe('Claude Opus 4.1');
 });
 
+test('a custom command’s model id reads as its model, without the agent prefix', () => {
+	expect(prettyModelName('custom-command:deep-think')).toBe('Deep Think');
+});
+
 test('a bare id with a variant suffix keeps its name', () => {
 	expect(prettyModelName('deepseek-chat:free')).toBe('DeepSeek Chat');
 });
