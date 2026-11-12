@@ -139,6 +139,16 @@
 	color: var(--sev-high);
 }
 
+/* A page with no parent names itself in the bar. */
+.page-bar-title {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 /* Breadcrumb in the bar: quiet links, the last part in full ink. */
 .crumbs {
 	display: flex;

@@ -22,7 +22,7 @@ interface ModelChipProps {
 export function ModelChip({ label, state }: ModelChipProps) {
 	return (
 		<Tooltip content="Change the review model">
-			<Link href={settingsHref('agent')} className="model-chip">
+			<Link href={settingsHref('models')} className="model-chip">
 				<span className="model-dot" data-state={state} role="img" aria-label={STATE_LABELS[state]} />
 				<span className="model-chip-name">{label}</span>
 			</Link>

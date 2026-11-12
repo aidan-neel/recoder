@@ -29,7 +29,13 @@ export function newReviewHref(base: string): string {
 	return `${base}/new`;
 }
 
-/** Settings, on one section when given. */
-export function settingsHref(section?: SettingsSection): string {
-	return section ? `/settings/${section}` : '/settings';
+/**
+ * Settings, on one section when given, plus any params that page owns
+ * (`add=provider` asks the Models page to open its provider dialog). Live only.
+ */
+export function settingsHref(section?: SettingsSection, extra: Record<string, string> = {}): string {
+	const query = new URLSearchParams(extra).toString();
+	const path = section ? `/settings/${section}` : '/settings';
+
+	return query ? `${path}?${query}` : path;
 }

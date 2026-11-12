@@ -96,7 +96,7 @@ function FailureLink({ action }: { action: NonNullable<RunView['failure']>['acti
 
 	return (
 		<Button asChild variant="outline">
-			<Link href={settingsHref('agent')}>{action === 'sign-in' ? 'Add a provider' : 'Open settings'}</Link>
+			<Link href={settingsHref('models')}>{action === 'sign-in' ? 'Add a provider' : 'Open settings'}</Link>
 		</Button>
 	);
 }

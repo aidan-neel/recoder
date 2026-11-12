@@ -10,6 +10,7 @@ import { useChrome } from '@/lib/shell/chrome';
 import { newReviewHref, settingsHref } from '@/lib/shell/routes';
 import { followSystemTheme } from '@/lib/shell/theme';
 import { useKeys } from '@/lib/shell/use-keys';
+import { useNavigator } from '@/lib/shell/navigation';
 
 import { CommandPalette } from './command-palette';
 import { ShortcutsModal } from './shortcuts-modal';
@@ -30,6 +31,7 @@ export function AppShell({ model, children }: AppShellProps) {
 	const { base } = useApi();
 	const sidebarOpen = useChrome((state) => state.sidebarOpen);
 
+	useNavigator();
 	useEffect(() => followSystemTheme(), []);
 
 	useKeys({

@@ -1,10 +1,8 @@
-/** The sections of Settings, in nav order. Each is a page: `/settings/<id>`. */
+/** The sections of Settings, in tab order. Each is a page: `/settings/<id>`. */
 export const SETTINGS_SECTIONS = [
-	{ id: 'agent', label: 'Agent' },
+	{ id: 'models', label: 'Models' },
 	{ id: 'connections', label: 'Connections' },
-	{ id: 'auto-review', label: 'Auto-review' },
-	{ id: 'harness', label: 'Review harness' },
-	{ id: 'guidelines', label: 'Guidelines' },
+	{ id: 'limits', label: 'Review limits' },
 	{ id: 'appearance', label: 'Appearance' }
 ] as const;
 
