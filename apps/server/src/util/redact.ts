@@ -12,8 +12,11 @@ const URL_CREDENTIALS = /\b([a-z][a-z0-9+.-]*:\/\/)[^/\s]*@/gi;
  */
 const QUOTED_URL_CREDENTIALS = /\b([a-z][a-z0-9+.-]*(?::|%3A)(?:\/|%2F){2})[^/\s]*(@|%40)/gi;
 
-/** An HTTP authorization header as git prints it with tracing on, its colon literal or encoded, to the end of its line. */
-const AUTHORIZATION_HEADER = /\b((?:proxy-)?authorization)(?:\s|%20)*(?::|%3A).*$/gim;
+/**
+ * An HTTP header that carries a credential (`Authorization`, `Proxy-Authorization`, `X-Api-Key`, `Api-Key`) as git
+ * or a CLI prints it, its colon literal or encoded, to the end of its line.
+ */
+const AUTHORIZATION_HEADER = /\b((?:proxy-)?authorization|(?:x-)?api-key)(?:\s|%20)*(?::|%3A).*$/gim;
 
 /**
  * An authorization field quoted as JSON (`"Authorization":"Basic …"`): the
@@ -22,8 +25,14 @@ const AUTHORIZATION_HEADER = /\b((?:proxy-)?authorization)(?:\s|%20)*(?::|%3A).*
  */
 const QUOTED_AUTHORIZATION = /\b((?:proxy-)?authorization)"\s*:\s*"[^"\n]*"/gi;
 
-/** A query or form parameter that carries a secret (`private_token=`, `access_token%3D`, `password=`). */
-const SECRET_PARAMETER = /\b([a-z_-]*(?:token|password|secret)[a-z_-]*)(?:=|%3D)[^&\s'"#]+/gi;
+/** A query or form parameter that carries a secret (`private_token=`, `access_token%3D`, `password=`, `api_key=`). */
+const SECRET_PARAMETER = /\b([a-z_-]*(?:token|password|secret|api[_-]?key)[a-z_-]*)(?:=|%3D)[^&\s'"#]+/gi;
+
+/**
+ * A secret quoted as a JSON field with a text value (`"apiKey":"…"`, `"password":"…"`, `"access_token":"…"`), taken
+ * to its closing quote. A number, such as a token count, is not a text value and stays.
+ */
+const QUOTED_SECRET_FIELD = /"([a-z_-]*(?:token|password|secret|api[_-]?key)[a-z_-]*)"\s*:\s*"[^"\n]*"/gi;
 
 /** The shapes GitHub and GitLab give their tokens, wherever one appears. */
 const TOKEN_SHAPES = /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,})/g;
@@ -55,18 +64,19 @@ export function withoutCredentials(url: string): string {
  * the cut would split is never left half shown.
  */
 export function redactedTail(text: string, secrets: string[]): string {
-	const lines = redactCredentials(text, secrets).trim().split('\n');
+	const lines = redacted(text, secrets).trim().split('\n');
 
 	return lines.slice(-TAIL_LINES).join('\n').slice(-TAIL_CHARS);
 }
 
 /**
- * Text from git or a forge with every credential it may quote replaced: the
- * `secrets` the run was given, in any percent-encoding, user info in URLs,
- * authorization headers, secret parameters and anything shaped like a forge
- * token. The known secrets go first, before a pattern can split one.
+ * Text from git, a forge or a CLI with every credential it may quote
+ * replaced: the `secrets` the run was given, in any percent-encoding, user
+ * info in URLs, credential headers, secret parameters and JSON fields, and
+ * anything shaped like a forge token or a provider key. The known secrets go
+ * first, before a pattern can split one.
  */
-function redactCredentials(text: string, secrets: string[]): string {
+export function redacted(text: string, secrets: string[]): string {
 	const withoutKnown = secrets
 		.filter(Boolean)
 		.reduce((redacted, secret) => redacted.replace(quotedSecretPattern(secret), REDACTED), text);
@@ -76,6 +86,7 @@ function redactCredentials(text: string, secrets: string[]): string {
 		.replace(AUTHORIZATION_HEADER, `$1: ${REDACTED}`)
 		.replace(QUOTED_AUTHORIZATION, `$1":"${REDACTED}"`)
 		.replace(SECRET_PARAMETER, `$1=${REDACTED}`)
+		.replace(QUOTED_SECRET_FIELD, `"$1":"${REDACTED}"`)
 		.replace(TOKEN_SHAPES, REDACTED)
 		.replace(KEY_SHAPES, REDACTED);
 }
