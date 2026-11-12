@@ -26,6 +26,7 @@ function keepRealAgentsOut(): void {
 	delete process.env.RECODER_CUSTOM_AGENT;
 	process.env.RECODER_CODEX_BIN = '';
 	process.env.RECODER_PI_BIN = '';
+	process.env.RECODER_ANTIGRAVITY_BIN = '';
 }
 
 /** Tests simulate provider failures and expect them to surface at once; llm-retry.test.ts opts back in. */
