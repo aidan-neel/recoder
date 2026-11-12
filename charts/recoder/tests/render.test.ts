@@ -121,6 +121,84 @@ test('fractional CPU resources reach the container without conversion', () => {
 	expect(server.spec.template.spec.containers[0].resources.requests.cpu).toBe('0.5');
 });
 
+test('shared PostgreSQL runs multiple API replicas with rolling updates and no retained volume', () => {
+	const docs = manifests(
+		'--set',
+		'server.replicaCount=3',
+		'--set',
+		'app.replicaCount=2',
+		'--set',
+		'server.database.existingSecret=database',
+		'--set',
+		'server.database.secretKey=url'
+	);
+
+	const deployments = docs.filter((doc) => doc.kind === 'Deployment');
+	const server = deployments.find((doc) => doc.metadata.labels['app.kubernetes.io/component'] === 'server');
+	const app = deployments.find((doc) => doc.metadata.labels['app.kubernetes.io/component'] === 'app');
+	const pod = server.spec.template.spec;
+	const container = pod.containers[0];
+
+	expect(server.spec.replicas).toBe(3);
+	expect(app.spec.replicas).toBe(2);
+	expect(server.spec.strategy).toEqual({ type: 'RollingUpdate', rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } });
+	expect(app.spec.strategy.type).toBe('RollingUpdate');
+	expect(docs.some((doc) => doc.kind === 'PersistentVolumeClaim')).toBe(false);
+	expect(pod.volumes).toContainEqual({ name: 'data', emptyDir: { sizeLimit: '1Gi' } });
+
+	expect(container.env).toContainEqual({
+		name: 'RECODER_DATABASE_URL',
+		valueFrom: { secretKeyRef: { name: 'database', key: 'url' } }
+	});
+
+	expect(container.startupProbe.httpGet.path).toBe('/health/ready');
+	expect(container.readinessProbe.httpGet.path).toBe('/health/ready');
+	expect(container.livenessProbe.httpGet.path).toBe('/health');
+
+	const budgets = docs.filter((doc) => doc.kind === 'PodDisruptionBudget');
+
+	expect(budgets).toHaveLength(2);
+	expect(budgets.every((doc) => doc.spec.minAvailable === 1)).toBe(true);
+
+	for (const deployment of deployments) {
+		const spread = deployment.spec.template.spec.topologySpreadConstraints;
+
+		expect(spread[0].topologyKey).toBe('kubernetes.io/hostname');
+		expect(spread[0].labelSelector.matchLabels).toEqual(deployment.spec.selector.matchLabels);
+	}
+});
+
+test('unsafe shared-data combinations fail before an API can scale', () => {
+	for (const args of [
+		['--set', 'server.replicaCount=2'],
+		['--set', 'server.database.existingSecret=database', '--set', 'server.persistence.existingClaim=sqlite-data'],
+		['--set', 'server.env.RECODER_DATABASE_URL=postgres://example.invalid/recoder'],
+		['--set', 'app.replicaCount=0']
+	]) {
+		const result = render(...args);
+
+		expect(result.exitCode).not.toBe(0);
+		expect(result.stderr.toString()).toContain('schema');
+	}
+
+	expect(manifests().some((doc) => doc.kind === 'PodDisruptionBudget')).toBe(false);
+});
+
+test('frontend replicas can scale while SQLite keeps one API writer', () => {
+	const docs = manifests('--set', 'app.replicaCount=2');
+
+	const server = docs.find(
+		(doc) => doc.kind === 'Deployment' && doc.metadata.labels['app.kubernetes.io/component'] === 'server'
+	);
+
+	const budgets = docs.filter((doc) => doc.kind === 'PodDisruptionBudget');
+
+	expect(server.spec.replicas).toBe(1);
+	expect(server.spec.strategy.type).toBe('Recreate');
+	expect(docs.filter((doc) => doc.kind === 'PersistentVolumeClaim')).toHaveLength(1);
+	expect(budgets.map((doc) => doc.metadata.labels['app.kubernetes.io/component'])).toEqual(['app']);
+});
+
 test('invalid image tags, replica overrides and reserved environment overrides fail before installation', () => {
 	for (const setting of [
 		'server.image.tag=',

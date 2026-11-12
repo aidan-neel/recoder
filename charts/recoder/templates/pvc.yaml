@@ -1,4 +1,4 @@
-{{- if not .Values.server.persistence.existingClaim }}
+{{- if and (not .Values.server.database.existingSecret) (not .Values.server.persistence.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

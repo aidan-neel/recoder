@@ -1,0 +1,19 @@
+{{- range $component := list "server" "app" }}
+{{- if gt (int (index $.Values $component).replicaCount) 1 }}
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "recoder.name" $ }}-{{ $component }}
+  labels:
+    {{- include "recoder.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ $.Chart.Name }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+      app.kubernetes.io/component: {{ $component }}
+{{- end }}
+{{- end }}

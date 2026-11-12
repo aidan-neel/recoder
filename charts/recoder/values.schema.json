@@ -24,7 +24,10 @@
 				"resources",
 				"workSizeLimit",
 				"tmpSizeLimit",
-				"persistence"
+				"persistence",
+				"replicaCount",
+				"database",
+				"dataSizeLimit"
 			],
 			"properties": {
 				"image": { "$ref": "#/definitions/image" },
@@ -34,7 +37,17 @@
 					"type": "object",
 					"propertyNames": {
 						"pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
-						"not": { "enum": ["PORT", "HOST", "HOME", "FRONTEND_URL", "RECODER_DATA_DIR", "RECODER_WORKDIR"] }
+						"not": {
+							"enum": [
+								"PORT",
+								"HOST",
+								"HOME",
+								"FRONTEND_URL",
+								"RECODER_DATA_DIR",
+								"RECODER_WORKDIR",
+								"RECODER_DATABASE_URL"
+							]
+						}
 					},
 					"additionalProperties": { "type": "string" }
 				},
@@ -50,17 +63,39 @@
 						"storageClass": { "type": ["string", "null"] },
 						"size": { "$ref": "#/definitions/quantity" }
 					}
+				},
+				"replicaCount": { "type": "integer", "minimum": 1, "maximum": 32 },
+				"database": {
+					"type": "object",
+					"additionalProperties": false,
+					"required": ["existingSecret", "secretKey"],
+					"properties": {
+						"existingSecret": { "type": "string", "maxLength": 253, "pattern": "^$|^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$" },
+						"secretKey": { "type": "string", "minLength": 1, "maxLength": 253, "pattern": "^[A-Za-z0-9._-]+$" }
+					}
+				},
+				"dataSizeLimit": { "$ref": "#/definitions/quantity" }
+			},
+			"allOf": [
+				{
+					"if": { "properties": { "replicaCount": { "minimum": 2 } } },
+					"then": { "properties": { "database": { "properties": { "existingSecret": { "minLength": 1 } } } } }
+				},
+				{
+					"if": { "properties": { "database": { "properties": { "existingSecret": { "minLength": 1 } } } } },
+					"then": { "properties": { "persistence": { "properties": { "existingClaim": { "const": "" } } } } }
 				}
-			}
+			]
 		},
 		"app": {
 			"type": "object",
 			"additionalProperties": false,
-			"required": ["image", "resources", "tmpSizeLimit"],
+			"required": ["image", "resources", "tmpSizeLimit", "replicaCount"],
 			"properties": {
 				"image": { "$ref": "#/definitions/image" },
 				"resources": { "$ref": "#/definitions/resources" },
-				"tmpSizeLimit": { "$ref": "#/definitions/quantity" }
+				"tmpSizeLimit": { "$ref": "#/definitions/quantity" },
+				"replicaCount": { "type": "integer", "minimum": 1, "maximum": 32 }
 			}
 		}
 	},

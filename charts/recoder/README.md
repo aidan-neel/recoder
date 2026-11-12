@@ -1,12 +1,15 @@
 # Deploy Recoder on Kubernetes
 
-This chart runs one API server and one Next.js review app on Linux nodes with Kubernetes 1.26 or newer.
-It requires Helm 3 or newer and a storage provisioner for a `ReadWriteOnce` volume, or an existing writable claim.
+This chart deploys the Recoder API and Next.js review app on Linux nodes with Kubernetes 1.26 or newer and Helm 3 or newer.
+The default uses one API replica with SQLite and requires a `ReadWriteOnce` storage provisioner or existing writable claim.
+For multiple API replicas, configure an external PostgreSQL service as described below.
 
 ## Build the images
 
 Build both images from the same Recoder revision and push them to your registry. The chart does not assume a published image exists.
 Use immutable tags for upgrades.
+HA images must include the shared PostgreSQL runtime and its asynchronous storage prerequisite, [PR #157](https://github.com/aidan-neel/recoder/pull/157).
+The HA chart depends on those runtime changes. An older API image lacks `/health/ready` and cannot pass the PostgreSQL readiness probe.
 
 ```sh
 docker build -f apps/server/Dockerfile -t registry.example.org/recoder/server:REVISION .
@@ -52,6 +55,45 @@ TLS, authentication, and routes for the browser-facing app and API URLs. Preserv
 The chart creates no ingress, namespace, model server, worker, or database service.
 Restrict access to trusted users. The API's CORS configuration is not access control.
 
+## Configure HA
+
+Add this configuration to the image and model values above.
+
+```yaml
+server:
+  replicaCount: 2
+  database:
+    existingSecret: recoder-database
+    secretKey: RECODER_DATABASE_URL
+app:
+  replicaCount: 2
+```
+
+Provision `recoder-database` in the release namespace through your secret manager.
+The selected key must hold the PostgreSQL connection URL, including the database, credentials, and required TLS configuration.
+Use `server.database` for this reference rather than placing the URL in values or `server.env`.
+The chart's explicit database variable takes precedence over a key with the same name in `server.existingSecret`.
+Existing pods keep their environment. Restart the API deployment after rotating its database Secret.
+
+The database stores reviews, checkpoints, settings, credentials, review commands, and ordered events.
+API replicas coordinate review ownership there. A surviving replica can restore the checkpoint after the executor exits.
+Requests and event streams can reach different replicas without sticky sessions.
+Model requests can repeat after a crash; review recovery does not guarantee exactly-once remote effects.
+
+PostgreSQL availability, replication, backups, authentication, and TLS belong to your infrastructure.
+Two API replicas do not make a single unreplicated database highly available.
+Use multiple schedulable nodes and sufficient capacity for one extra pod during updates.
+Replica groups use hostname spread constraints with `ScheduleAnyway`; Kubernetes can co-locate them when capacity is limited.
+Each group with at least two replicas gets a disruption budget that keeps one available during voluntary evictions.
+The budget does not prevent node failures or replace database HA.
+
+The PostgreSQL mode mounts `/app/data` as bounded disposable storage and creates no API data claim.
+Do not set `server.persistence.existingClaim` in this mode. Changing the database Secret does not import data from a SQLite claim.
+Retain the original claim and backup until the data migration has been verified.
+For an existing installation, stop the SQLite API and use the [HA operating guide](../../docs/ha-operating.md) to import its data into an empty database.
+The import command is `bun apps/server/src/storage/import-local.ts --source <stopped-server-data-directory>` with `RECODER_DATABASE_URL` supplied through the environment.
+Switch the Helm release to PostgreSQL only after the import succeeds and its saved data has been checked.
+
 ## Install and access the app
 
 ```sh
@@ -68,28 +110,44 @@ kubectl --namespace recoder port-forward service/recoder-recoder-server 3001:300
 kubectl --namespace recoder port-forward service/recoder-recoder-app 3000:3000
 ```
 
-Open `http://localhost:3000`. `http://localhost:3001/health` reports API health.
-Health probes check HTTP service availability, not model connectivity or review completion.
+Open `http://localhost:3000`. `http://localhost:3001/health` reports API process health.
+In PostgreSQL mode, `/health/ready` also checks shared storage before the API pod receives traffic.
+Neither probe verifies model connectivity or review completion.
 
 ## Storage and upgrade behavior
 
-The API mounts its SQLite database, review progress, connected tokens, and settings at `/app/data`.
+In the default SQLite mode, the API mounts its database, review progress, connected tokens, and settings at `/app/data`.
 The default claim is `<release>-recoder-data`, with 10 GiB and the cluster's default storage class.
-Both deployments use a single replica and `Recreate` updates. An upgrade causes downtime and never starts a second API writer.
+The API uses `Recreate` updates and one replica. An upgrade causes downtime and never starts a second SQLite writer.
+The frontend can scale independently and uses rolling updates.
 
 The API handles `SIGTERM` by flushing review progress and exiting. The pod has a 30-second termination grace period.
 This does not drain active reviews. Wait for reviews to finish before an upgrade or backup.
 Worktrees under `/tmp/recoder-work` and temporary files are size-limited `emptyDir` volumes and disappear when a pod is replaced.
-Saved review data survives; interrupted reviews do not resume automatically.
+In SQLite mode, saved review data survives but interrupted reviews do not resume automatically.
+
+In PostgreSQL mode, API updates use `RollingUpdate`, `maxUnavailable: 0`, and `maxSurge: 1`.
+The 30-second termination grace period lets the executor stop local work before another replica restores its checkpoint.
+Shared review data remains in PostgreSQL when a pod is replaced. Temporary checkouts are recreated as needed.
+An update can interrupt model calls and event connections; clients must reconnect and work may repeat.
+Keep API images on a mutually compatible database schema throughout a rollout.
 
 Back up the data before an upgrade, then update both image tags and run the install command again.
 Keep the release name, namespace, and storage settings stable across upgrades. Existing volume sizes and storage classes
 follow the storage provider's expansion and immutability rules.
 
-To use a restored or pre-provisioned claim, set `server.persistence.existingClaim`. The chart then creates no claim.
+For SQLite, use a restored or pre-provisioned claim by setting `server.persistence.existingClaim`. The chart then creates no claim.
 The volume must permit UID/GID 1000 to write. `fsGroup: 1000` handles supported volume drivers.
 
 ## Back up and restore data
+
+For PostgreSQL, use your database provider's consistent backup and restore procedure.
+Back up the complete Recoder database, including settings, ownership, commands, checkpoints, and event records.
+Before restoring a backup, stop all API replicas so an old executor cannot write to the restored state.
+Restore to a separate database, update the database Secret reference, and verify saved reviews and provider settings before admitting traffic.
+Protect backups as secrets because they contain connected credentials and repository data.
+
+For SQLite, back up the retained claim with this procedure.
 
 1. Wait for active reviews to finish.
 2. Stop the API writer.
@@ -113,6 +171,10 @@ To restore, stop the API and restore the complete backup into a separate writabl
 Set `server.persistence.existingClaim` to that claim and run `helm upgrade` with your values.
 Check saved reviews and provider settings before starting another review. Do not attach one claim to two API releases.
 
+To roll back an image, first confirm that it supports the database schema already in use.
+Do not roll a PostgreSQL release back to an image that only supports SQLite, or remove its database Secret reference.
+Switching between storage modes does not transfer data. Keep the old database or claim and its backup until the replacement is verified.
+
 ## Remove the release
 
 ```sh
@@ -122,6 +184,7 @@ helm uninstall recoder --namespace recoder
 The chart-created data claim has `helm.sh/resource-policy: keep` and remains after uninstall.
 Existing claims are also left untouched. To reinstall with retained data, set `server.persistence.existingClaim`
 to the retained claim name. Delete the claim separately only when you intend to erase its data.
+Uninstalling a PostgreSQL release leaves the external database and its Secret untouched.
 
 ## Runtime limits
 
@@ -133,8 +196,8 @@ macOS Seatbelt and native Windows sandbox modes cannot run in these Linux contai
 Agent CLIs such as OpenCode are not installed in the supplied image. Configure an external model endpoint instead.
 
 The containers run as UID/GID 1000 with read-only root filesystems, dropped capabilities, and no Kubernetes API token.
-The API has a writable temporary home under `/tmp`; credentials persisted through the Recoder UI remain under `/app/data`.
-Apply cluster network policies that permit the API to reach only the required forge and model endpoints.
+The API has a writable temporary home under `/tmp`. UI-connected credentials remain in the SQLite data claim or shared PostgreSQL database.
+Apply cluster network policies that permit the API to reach only the required database, forge, and model endpoints.
 
 ## Values
 
@@ -144,6 +207,9 @@ Apply cluster network policies that permit the API to reach only the required fo
 | `app.image.repository`, `app.image.tag` | Required | Review app image built from `apps/app/Dockerfile`. |
 | `server.image.pullPolicy`, `app.image.pullPolicy` | `IfNotPresent` | Image pull policy. |
 | `imagePullSecrets` | `[]` | Existing registry secrets as a list of `{name: secret-name}` objects. |
+| `server.replicaCount`, `app.replicaCount` | `1`, `1` | API and frontend replicas. Multiple API replicas require `server.database.existingSecret`. |
+| `server.database.existingSecret` | Empty | Existing Secret that enables shared PostgreSQL storage. |
+| `server.database.secretKey` | `RECODER_DATABASE_URL` | Secret key holding the database connection URL. |
 | `server.frontendUrl` | `http://localhost:3000` | Browser origin for trusted-origin checks and links. |
 | `server.existingSecret` | Empty | Existing Secret whose keys become API environment variables. |
 | `server.env` | `RECODER_EXEC: 'off'` | Additional non-secret server settings. Fixed ports and storage paths cannot be overridden. |
@@ -152,6 +218,7 @@ Apply cluster network policies that permit the API to reach only the required fo
 | `server.persistence.size` | `10Gi` | Requested capacity of a chart-created claim. |
 | `server.workSizeLimit` | `10Gi` | Disposable checkout capacity. |
 | `server.tmpSizeLimit`, `app.tmpSizeLimit` | `1Gi`, `256Mi` | Disposable temporary storage capacity. |
+| `server.dataSizeLimit` | `1Gi` | Disposable `/app/data` capacity in PostgreSQL mode. |
 | `server.resources` | 250m/512Mi requests, 2 CPU/2Gi limits | API compute budget. |
 | `app.resources` | 100m/256Mi requests, 1 CPU/1Gi limits | App compute budget. |
 
@@ -164,6 +231,6 @@ helm lint --strict charts/recoder -f charts/recoder/tests/values.yaml
 bun test charts/recoder/tests/render.test.ts
 ```
 
-These checks cover manifests, storage selection, secret references, and rejected values.
+These checks cover manifests, storage selection, secret references, replica safety, update strategies, and disruption budgets.
 They do not prove that a model endpoint can complete a review. Before production use, complete a review with your
 model configuration, restart the API, upgrade the release, and confirm that the saved review remains available.
