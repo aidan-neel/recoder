@@ -75,32 +75,55 @@ function hostOf(url: URL): string {
 	return url.host.toLowerCase().replace(/^www\./, '');
 }
 
-/** True for github.com and hosts named like a GitHub Enterprise server. */
-function isGithubHost(host: string): boolean {
-	return host === 'github.com' || /(^|\.)github\./.test(host);
+/**
+ * True for a forge's own host (`github.com`) and for a host named like a
+ * self-managed one (`github.acme.dev`). The forge's other sites are not the
+ * forge: `docs.github.com` and `acme.github.io` hold pages, not repositories.
+ */
+function isForgeHost(host: string, forge: 'github' | 'gitlab'): boolean {
+	const labels = host.replace(/:\d+$/, '').split('.');
+	const site = labels.slice(-2).join('.');
+
+	if (site === `${forge}.com`) return labels.length === 2;
+	if (site === `${forge}.io`) return false;
+
+	return labels.slice(0, -1).includes(forge);
 }
 
-/** True for gitlab.com and hosts named like a self-managed GitLab. */
-function isGitlabHost(host: string): boolean {
-	return host === 'gitlab.com' || /(^|\.)gitlab\./.test(host);
-}
+/** The pages GitLab serves after `/-/` that an embed names. On a host not named for GitLab, only these make `/-/` GitLab's. */
+const DASH_PAGES = new Set(['merge_requests', 'issues', 'commit', 'blob', 'tree']);
 
-/** Splits a path into the repository and the page: at GitLab's `/-/`, else at a numbered page on any host. */
+/** Splits a path into the repository and the page: after the owner and name on GitHub, at GitLab's `/-/`, else at a numbered page on any host. */
 function forgePath(url: URL): ForgePath | null {
 	const host = hostOf(url);
 	const segments = url.pathname.split('/').filter(Boolean).map(decodeSegment);
+
+	if (isForgeHost(host, 'github')) {
+		return { forge: 'github', host, repo: segments.slice(0, 2), page: segments.slice(2) };
+	}
+
+	const gitlab = isForgeHost(host, 'gitlab');
 	const dash = segments.indexOf('-');
 
-	if (dash > 0) return { forge: 'gitlab', host, repo: segments.slice(0, dash), page: segments.slice(dash + 1) };
+	if (dash > 0 && (gitlab || DASH_PAGES.has(segments[dash + 1]))) {
+		return { forge: 'gitlab', host, repo: segments.slice(0, dash), page: segments.slice(dash + 1) };
+	}
 
-	if (isGithubHost(host)) return { forge: 'github', host, repo: segments.slice(0, 2), page: segments.slice(2) };
-
-	const numbered = segments.findIndex((part, index) => part in NUMBERED && /^\d+$/.test(segments[index + 1] ?? ''));
-	const forge = isGitlabHost(host) ? 'gitlab' : null;
+	const numbered = segments.findIndex((part, index) => part in NUMBERED && itemNumber(segments[index + 1]) !== null);
+	const forge = gitlab ? 'gitlab' : null;
 
 	if (numbered > 0) return { forge, host, repo: segments.slice(0, numbered), page: segments.slice(numbered) };
 
 	return forge ? { forge, host, repo: segments, page: [] } : null;
+}
+
+/** A path segment as the number of a pull request or an issue: digits only, so `0x10`, `1e2` and `12.` are no number. */
+function itemNumber(segment: string | undefined): number | null {
+	if (segment === undefined || !/^\d+$/.test(segment)) return null;
+
+	const number = Number(segment);
+
+	return Number.isSafeInteger(number) && number > 0 ? number : null;
 }
 
 /** A path segment as text; a malformed escape stays as written. */
@@ -132,9 +155,9 @@ function forgeLink(url: string, path: ForgePath, hash: string): LinkDescription 
 	if (page.length === 0) return { ...base, kind: 'repo', label: full, name: `${full} repository` };
 
 	const numbered = NUMBERED[page[0]];
-	const number = Number(page[1]);
+	const number = itemNumber(page[1]);
 
-	if (numbered && Number.isSafeInteger(number) && number > 0) {
+	if (numbered && number !== null) {
 		const sign = page[0] === 'merge_requests' ? '!' : '#';
 		const commit = page[2] === 'commits' && page[3] ? page[3] : null;
 

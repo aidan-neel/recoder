@@ -20,6 +20,8 @@ const CLOSERS = new Map([
 	['}', '{']
 ]);
 
+const BRACKETS = new Set([...CLOSERS.keys(), ...CLOSERS.values()]);
+
 /**
  * Every `http:` and `https:` link in the text, in order. A link runs to the
  * next space, quote or angle bracket. Punctuation that belongs to the sentence
@@ -62,22 +64,23 @@ function runEnd(text: string, from: number): number {
 	return end;
 }
 
-/** The end once sentence punctuation and unopened closing brackets are dropped from the tail. */
+/**
+ * The end once sentence punctuation and unopened closing brackets are dropped
+ * from the tail. The brackets are counted once and the count follows the
+ * cut, so a long run of closers costs one pass, not one pass each.
+ */
 function trimTrailing(text: string, start: number, end: number): number {
+	const brackets = countBrackets(text, start, end);
 	let cut = end;
 
 	while (cut > start) {
 		const last = text[cut - 1];
-
-		if (TRAILING.has(last)) {
-			cut -= 1;
-
-			continue;
-		}
-
 		const opener = CLOSERS.get(last);
+		const unopened = opener !== undefined && countOf(brackets, opener) < countOf(brackets, last);
 
-		if (opener === undefined || balanced(text.slice(start, cut), opener, last)) break;
+		if (!TRAILING.has(last) && !unopened) break;
+
+		if (unopened) brackets.set(last, countOf(brackets, last) - 1);
 
 		cut -= 1;
 	}
@@ -85,7 +88,19 @@ function trimTrailing(text: string, start: number, end: number): number {
 	return cut;
 }
 
-/** True when the link holds at least as many openers as closers, so its last closer is its own. */
-function balanced(link: string, opener: string, closer: string): boolean {
-	return link.split(opener).length >= link.split(closer).length;
+/** How many of each bracket, opener or closer, a stretch of the text holds. */
+function countBrackets(text: string, start: number, end: number): Map<string, number> {
+	const counts = new Map<string, number>();
+
+	for (let index = start; index < end; index += 1) {
+		const character = text[index];
+
+		if (BRACKETS.has(character)) counts.set(character, countOf(counts, character) + 1);
+	}
+
+	return counts;
+}
+
+function countOf(counts: Map<string, number>, bracket: string): number {
+	return counts.get(bracket) ?? 0;
 }

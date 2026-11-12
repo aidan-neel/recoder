@@ -53,6 +53,29 @@ describe('describeLink', () => {
 		expect(describeLink('http://localhost:3000/docs').label).toBe('localhost:3000/docs');
 	});
 
+	test('reads the other sites of GitHub and GitLab as plain links, not as repositories', () => {
+		expect(shown('https://docs.github.com/en/actions').kind).toBe('link');
+		expect(shown('https://acme.github.io/blog/2026').kind).toBe('link');
+		expect(shown('https://acme.gitlab.io/handbook/onboarding').kind).toBe('link');
+	});
+
+	test("takes a `-` path segment for GitLab's only on GitLab or before one of its pages", () => {
+		expect(shown('https://docs.acme.dev/guide/limits/-').kind).toBe('link');
+
+		expect(shown('https://github.com/acme/api/blob/main/-/index.ts')).toEqual({
+			kind: 'file',
+			forge: 'github',
+			label: 'index.ts',
+			number: null
+		});
+	});
+
+	test('reads a pull request number from digits only', () => {
+		expect(shown('https://github.com/acme/api/pull/0x10').kind).toBe('link');
+		expect(shown('https://github.com/acme/api/pull/1e2').kind).toBe('link');
+		expect(shown('https://github.com/acme/api/pull/12.').kind).toBe('link');
+	});
+
 	test('labels issues, commits, files and repositories', () => {
 		expect(shown('https://github.com/acme/api/issues/9#issuecomment-5').label).toBe('api #9');
 		expect(shown('https://github.com/acme/api/commit/0123456789abcdef0123').label).toBe('api@0123456');

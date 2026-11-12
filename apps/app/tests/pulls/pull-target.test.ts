@@ -51,6 +51,14 @@ describe('readTarget', () => {
 		});
 	});
 
+	test('a link with the full stop of its sentence after it is the target, read as its embed reads it', () => {
+		expect(readTarget('https://github.com/other/thing/pull/3. Check retries', context())).toEqual({
+			target: { kind: 'untracked', repoUrl: 'https://github.com/other/thing', repoName: 'other/thing', number: 3 },
+			brief: 'Check retries',
+			reference: 'https://github.com/other/thing/pull/3'
+		});
+	});
+
 	test('a link to an untracked repository names the repository to track', () => {
 		expect(readTarget('github.com/other/thing/pull/3', context()).target).toEqual({
 			kind: 'untracked',

@@ -116,13 +116,24 @@ export function readTarget(text: string, context: TargetContext): ReadTarget {
 
 	const first = trimmed.split(/\s/, 1)[0];
 	const brief = trimmed.slice(first.length).replace(BRIEF_LEAD, '');
-	const word = first.replace(/[:,;]$/, '');
+	const word = leadingLink(first) ?? first.replace(/[:,;]$/, '');
 	const ref = parsePullRef(word);
 	const lead = { ...readReference(word, ref, context, brief), reference: word };
 
 	if (ref || lead.target.kind !== 'invalid') return lead;
 
 	return readLinked(trimmed, context) ?? lead;
+}
+
+/**
+ * The link a word starts with, cut where its embed is cut, so the target and
+ * the embed are the same link (`…/pull/12.` is the link without the full
+ * stop). Null when the word starts with no link.
+ */
+function leadingLink(word: string): string | null {
+	const [link] = findLinks(word);
+
+	return link?.start === 0 ? word.slice(0, link.end) : null;
 }
 
 /**

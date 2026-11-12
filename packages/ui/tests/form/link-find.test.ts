@@ -21,6 +21,16 @@ describe('findLinks', () => {
 		expect(urlsIn('ends https://acme.dev/x)')).toEqual(['https://acme.dev/x']);
 	});
 
+	test('drops a very long run of unopened closing brackets without scanning the link again for each one', () => {
+		const link = 'https://acme.dev/x';
+
+		expect(urlsIn(`${link}${')'.repeat(200_000)}`)).toEqual([link]);
+	}, 2000);
+
+	test('keeps the closing brackets the link opened when more follow', () => {
+		expect(urlsIn('(see https://acme.dev/a_(b)_[c]))].')).toEqual(['https://acme.dev/a_(b)_[c]']);
+	});
+
 	test('finds links at the very start and the very end of the text', () => {
 		expect(urlsIn('https://acme.dev/a then https://acme.dev/b')).toEqual(['https://acme.dev/a', 'https://acme.dev/b']);
 	});
