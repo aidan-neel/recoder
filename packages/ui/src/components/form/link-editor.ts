@@ -1,9 +1,17 @@
 import {
+	adoptEdit,
+	deferValue,
+	EMPTY_COMPOSITION,
+	endComposition,
+	holdBeforeInput,
+	startComposition,
+	takeBeforeInput,
+	type Composition
+} from './link-composition';
+import {
 	embedAt,
-	markSelected,
 	embedRange,
-	offsetAtPoint,
-	rangeOffsets,
+	markSelected,
 	readDoc,
 	readSelection,
 	renderDoc,
@@ -15,14 +23,16 @@ import {
 	deleteKind,
 	deletionRange,
 	extendOver,
+	isInsideWord,
+	keyAction,
 	pasteText,
 	plainText,
 	rangeOf,
 	snapSelection,
 	stepOver,
-	typeText,
-	type TextSelection
+	typeText
 } from './link-edits';
+import { attachEditorEvents } from './link-events';
 import type { TextRange } from './link-find';
 import { EMPTY_HISTORY, record, redo, undo, type EditKind, type History, type Snapshot } from './link-history';
 import { docFromText, embedLinks, linkAfter, linkBefore, replaceRange, wordAround, type LinkDoc } from './link-model';
@@ -31,6 +41,7 @@ import { docFromText, embedLinks, linkAfter, linkBefore, replaceRange, wordAroun
 export interface EditorHost {
 	look: (url: string) => EmbedLook;
 	maxLength: () => number | undefined;
+	disabled: () => boolean;
 	/** The person changed the text. */
 	onChange: (text: string) => void;
 	/** The caret moved, or an edit landed: the host re-reads `embedBesideCaret` and `editedLast`. */
@@ -49,14 +60,13 @@ export interface EditorHost {
 export class LinkEditor {
 	private doc: LinkDoc;
 	private history: History = EMPTY_HISTORY;
+	private composition: Composition = EMPTY_COMPOSITION;
 	/** The last edit typed at the caret, so the word around it stays text until it ends. */
 	private typing = false;
 	/** A link that just became an embed because a character ended it, and what the text was before that. */
 	private conversion: { caret: number; before: Snapshot } | null = null;
 	/** Where the last edit left the caret, while it is still there: a card beside it stays shut. */
 	private editedAt: number | null = null;
-	private composing = false;
-	private pointing = false;
 
 	constructor(
 		private readonly root: HTMLElement,
@@ -67,11 +77,6 @@ export class LinkEditor {
 		this.draw();
 	}
 
-	/** The text the field holds. */
-	get text(): string {
-		return this.doc.text;
-	}
-
 	/** True while the caret is where the last edit left it, so a card beside it stays shut. */
 	get editedLast(): boolean {
 		return this.editedAt !== null;
@@ -79,52 +84,57 @@ export class LinkEditor {
 
 	/** Takes focus with the caret at the end of the text. */
 	focusAtEnd(): void {
+		if (!this.editable()) return;
+
 		this.root.focus({ preventScroll: true });
 		this.place(this.doc.text.length);
 	}
 
 	/** Listens to the element and the document; returns the function that stops listening. */
 	attach(): () => void {
-		const root = this.root;
-		const page = root.ownerDocument;
-		const stop = new AbortController();
-		const options = { signal: stop.signal };
-
-		root.addEventListener('beforeinput', this.onBeforeInput, options);
-		root.addEventListener('input', this.onInput, options);
-		root.addEventListener('paste', this.onPaste, options);
-		root.addEventListener('copy', this.onCopy, options);
-		root.addEventListener('cut', this.onCut, options);
-		root.addEventListener('drop', this.onDrop, options);
-		root.addEventListener('dragstart', this.onDragStart, options);
-		root.addEventListener('compositionstart', this.onCompositionStart, options);
-		root.addEventListener('compositionend', this.onCompositionEnd, options);
-		root.addEventListener('focus', this.onFocus, options);
-		root.addEventListener('blur', this.onBlur, options);
-		root.addEventListener('pointerdown', this.onPointerDown, options);
-		page.addEventListener('pointerup', this.onPointerUp, options);
-		page.addEventListener('selectionchange', this.onSelectionChange, options);
-
-		return () => stop.abort();
+		return attachEditorEvents(this.root, {
+			editable: () => this.editable(),
+			composing: () => this.composition.active,
+			selectionRange: () => this.selectionRange(),
+			insert: (range, text) => this.insert(range, text, 'type'),
+			paste: (range, raw) => this.paste(range, raw),
+			remove: (inputType, target) => this.remove(inputType, target),
+			undo: () => this.stepHistory(undo),
+			redo: () => this.stepHistory(redo),
+			selectedText: (range) => this.doc.text.slice(range.start, range.end),
+			cutRange: (range) => this.edit(replaceRange(this.doc, range, ''), range.start, 'other'),
+			holdBeforeInput: () => {
+				this.composition = holdBeforeInput(this.composition, this.snapshot());
+			},
+			adoptInput: () => this.onInput(),
+			startComposition: () => this.onCompositionStart(),
+			endComposition: () => this.onCompositionEnd(),
+			focusFromKeyboard: () => {
+				if (this.editable()) this.place(this.doc.text.length);
+			},
+			blur: () => this.onBlur(),
+			selectionChange: () => this.onSelectionChange()
+		});
 	}
 
 	/**
 	 * Takes a value from outside (cleared after send, filled by a suggestion).
 	 * Every link in it is an embed; the caret goes to the end when the field
-	 * has focus. Nothing happens when the value is what the field holds.
+	 * has focus. While composing, the value waits until the composition ends.
 	 */
 	setValue(value: string): void {
 		const text = plainText(value);
+		const deferred = deferValue(this.composition, text);
 
-		if (text === this.doc.text || this.composing) return;
+		if (deferred) {
+			this.composition = deferred;
 
-		this.history = record(this.history, this.snapshot(), { kind: 'other', caret: text.length, at: Date.now() });
-		this.typing = false;
-		this.conversion = null;
-		this.doc = docFromText(text);
-		this.draw();
+			return;
+		}
 
-		if (this.focused()) this.place(text.length);
+		if (text === this.doc.text) return;
+
+		this.applyValue(text);
 	}
 
 	/** Draws the embeds again, after the host's facts about them changed. */
@@ -134,6 +144,8 @@ export class LinkEditor {
 		this.draw();
 
 		if (selection) writeSelection(this.root, selection);
+
+		this.host.onCaret();
 	}
 
 	/**
@@ -142,30 +154,18 @@ export class LinkEditor {
 	 * handler, and only when that one did not prevent the key.
 	 */
 	keyDown(event: KeyboardEvent): void {
-		if (this.composing || event.isComposing) return;
+		if (!this.editable() || this.composition.active || event.isComposing) return;
 
-		const mod = event.ctrlKey || event.metaKey;
-		const key = event.key.toLowerCase();
+		const action = keyAction(event);
 
-		if (mod && !event.altKey && key === 'z') {
+		if (action === 'undo' || action === 'redo') {
 			event.preventDefault();
-
-			if (event.shiftKey) this.redo();
-			else this.undo();
+			this.stepHistory(action === 'undo' ? undo : redo);
 
 			return;
 		}
 
-		if (mod && !event.altKey && key === 'y') {
-			event.preventDefault();
-			this.redo();
-
-			return;
-		}
-
-		if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && !mod && !event.altKey) {
-			this.step(event, event.key === 'ArrowLeft' ? -1 : 1);
-		}
+		if (action !== null) this.step(event, action);
 	}
 
 	/** The embed the caret sits right after (else right before), with its range; null with a selection. */
@@ -182,6 +182,8 @@ export class LinkEditor {
 
 	/** Puts a caret at the edge of an embed nearer to where it was pressed. */
 	placeBeside(embed: HTMLElement, clientX: number): void {
+		if (!this.editable()) return;
+
 		const box = embed.getBoundingClientRect();
 		const range = embedRange(this.root, embed);
 
@@ -197,104 +199,67 @@ export class LinkEditor {
 
 	/** Selects a whole embed, as a double click on a word selects the word. */
 	selectEmbed(embed: HTMLElement): void {
+		if (!this.editable()) return;
+
 		const range = embedRange(this.root, embed);
 
 		if (range) writeSelection(this.root, { anchor: range.start, focus: range.end });
 	}
 
-	private readonly onBeforeInput = (event: InputEvent): void => {
-		if (this.composing || event.isComposing || event.inputType === 'insertCompositionText') return;
+	/** An edit that slipped past `beforeinput` (an unhandled input type or browser fallback): the DOM is read back. */
+	private onInput(): void {
+		if (this.composition.active) return;
 
-		event.preventDefault();
+		if (!this.editable()) {
+			this.draw();
 
-		const type = event.inputType;
-		const data = event.dataTransfer?.getData('text/plain') ?? event.data ?? '';
+			return;
+		}
 
-		if (type === 'historyUndo') this.undo();
-		else if (type === 'historyRedo') this.redo();
-		else if (type === 'insertText') this.insert(this.selectionRange(), data, 'type');
-		else if (type === 'insertLineBreak' || type === 'insertParagraph') this.insert(this.selectionRange(), '\n', 'type');
-		else if (type.startsWith('insertFrom') || type === 'insertReplacementText')
-			this.paste(this.targetRange(event), data);
-		else if (type.startsWith('delete')) this.remove(event);
-	};
+		const { state, before } = takeBeforeInput(this.composition);
 
-	/** An edit that slipped past `beforeinput` (a browser that does not send it): the DOM is read back as the truth. */
-	private readonly onInput = (): void => {
-		if (!this.composing) this.adoptDom();
-	};
+		this.composition = state;
+		this.adoptDom(before);
+	}
 
-	private readonly onPaste = (event: ClipboardEvent): void => {
-		event.preventDefault();
-		this.paste(this.selectionRange(), event.clipboardData?.getData('text/plain') ?? '');
-	};
+	private onCompositionStart(): void {
+		if (!this.editable()) return;
 
-	private readonly onCopy = (event: ClipboardEvent): void => {
-		const range = this.selectionRange();
+		this.composition = startComposition(this.composition, this.snapshot());
+	}
 
-		if (range.start === range.end || !event.clipboardData) return;
+	private onCompositionEnd(): void {
+		const { state, outcome } = endComposition(this.composition);
 
-		event.preventDefault();
-		event.clipboardData.setData('text/plain', this.doc.text.slice(range.start, range.end));
-	};
+		this.composition = state;
 
-	private readonly onCut = (event: ClipboardEvent): void => {
-		const range = this.selectionRange();
+		if (outcome.kind === 'pending') {
+			this.applyValue(outcome.text);
 
-		this.onCopy(event);
+			return;
+		}
 
-		if (range.start !== range.end) this.edit(replaceRange(this.doc, range, ''), range.start, 'other');
-	};
+		if (!this.editable()) {
+			this.draw();
 
-	/** A drop inserts the dragged text, as plain text, where it lands. */
-	private readonly onDrop = (event: DragEvent): void => {
-		event.preventDefault();
+			return;
+		}
 
-		const text = event.dataTransfer?.getData('text/plain') ?? '';
-		const at = offsetAtPoint(this.root, event.clientX, event.clientY);
-
-		if (text && at !== null) this.paste({ start: at, end: at }, text);
-	};
-
-	/** Text is not dragged out of the field: a move would be an edit the model cannot see whole. */
-	private readonly onDragStart = (event: DragEvent): void => event.preventDefault();
-
-	private readonly onCompositionStart = (): void => {
-		this.composing = true;
-	};
-
-	private readonly onCompositionEnd = (): void => {
-		this.composing = false;
-		this.adoptDom();
-	};
-
-	private readonly onFocus = (): void => {
-		if (!this.pointing) this.place(this.doc.text.length);
-	};
+		this.adoptDom(outcome.before);
+	}
 
 	/** Leaving the field ends the word being typed: a link in it becomes an embed. */
-	private readonly onBlur = (): void => {
+	private onBlur(): void {
 		markSelected(this.root, null);
 		this.typing = false;
 		this.conversion = null;
 		this.commit(null);
 		this.host.onCaret();
-	};
+	}
 
-	private readonly onPointerDown = (): void => {
-		this.pointing = true;
-	};
-
-	private readonly onPointerUp = (): void => {
-		this.pointing = false;
-	};
-
-	/**
-	 * Keeps the caret out of embeds and turns a typed link into an embed once
-	 * the caret leaves its word.
-	 */
-	private readonly onSelectionChange = (): void => {
-		if (this.composing) return;
+	/** Keeps the caret out of embeds and turns a typed link into an embed once the caret leaves its word. */
+	private onSelectionChange(): void {
+		if (this.composition.active) return;
 
 		const selection = readSelection(this.root);
 
@@ -306,19 +271,28 @@ export class LinkEditor {
 
 		if (this.conversion && this.conversion.caret !== snapped.focus) this.conversion = null;
 		if (this.editedAt !== snapped.focus || snapped.anchor !== snapped.focus) this.editedAt = null;
-
-		if (this.typing && !this.isInsideWord(snapped)) this.typing = false;
+		if (this.typing && !isInsideWord(this.doc, snapped)) this.typing = false;
 
 		this.commit(snapped.anchor === snapped.focus ? snapped.focus : null);
 		markSelected(this.root, rangeOf(snapped));
 		this.host.onCaret();
-	};
+	}
 
-	/** Whether a selection is a caret past the start of the word it sits in: Home or a click before the word counts as leaving it. */
-	private isInsideWord(selection: TextSelection): boolean {
-		const word = wordAround(this.doc.text, selection.focus);
+	/** Applies an external value to the model and redraws, cleaning the DOM even when `text` matches `this.doc.text`. */
+	private applyValue(text: string): void {
+		if (text !== this.doc.text) {
+			this.history = record(this.history, this.snapshot(), { kind: 'other', caret: text.length, at: Date.now() });
+			this.typing = false;
+			this.conversion = null;
+			this.editedAt = null;
+			this.doc = docFromText(text);
+		}
 
-		return selection.anchor === selection.focus && word.start < selection.focus && selection.focus <= word.end;
+		this.draw();
+
+		if (this.focused() && this.editable()) this.place(text.length);
+
+		this.host.onCaret();
 	}
 
 	/** Types text at a range. A link the typing ends (a space, a line break) becomes an embed in a step of its own. */
@@ -352,9 +326,9 @@ export class LinkEditor {
 	 * embed because a character ended it takes that character back and turns
 	 * the embed back into text, so a typo in it can still be fixed.
 	 */
-	private remove(event: InputEvent): void {
+	private remove(inputType: string, target: TextRange): void {
 		const selection = this.selectionRange();
-		const kind = deleteKind(event.inputType);
+		const kind = deleteKind(inputType);
 		const caret = selection.start === selection.end ? selection.start : null;
 
 		if (kind === 'backward' && this.conversion && caret === this.conversion.caret) {
@@ -366,13 +340,15 @@ export class LinkEditor {
 			return;
 		}
 
-		const range = deletionRange(this.doc, kind, selection, this.targetRange(event));
+		const range = deletionRange(this.doc, kind, selection, target);
 
 		if (range.start !== range.end) this.edit(replaceRange(this.doc, range, ''), range.start, 'delete');
 	}
 
 	/** Records an edit, draws it, puts the caret, and tells the host. */
 	private edit(next: LinkDoc, caret: number, kind: EditKind): void {
+		if (!this.editable()) return;
+
 		const changed = next.text !== this.doc.text;
 
 		this.history = record(this.history, this.snapshot(), { kind, caret, at: Date.now() });
@@ -383,20 +359,16 @@ export class LinkEditor {
 		if (changed) this.host.onChange(next.text);
 	}
 
-	private undo(): void {
-		const step = undo(this.history, this.snapshot());
-
-		if (step) this.travel(step.history, step.snapshot);
-	}
-
-	private redo(): void {
-		const step = redo(this.history, this.snapshot());
+	private stepHistory(pick: typeof undo): void {
+		const step = pick(this.history, this.snapshot());
 
 		if (step) this.travel(step.history, step.snapshot);
 	}
 
 	/** Shows a state from the history; the text it holds goes to the host. */
 	private travel(history: History, snapshot: Snapshot): void {
+		if (!this.editable()) return;
+
 		const changed = snapshot.doc.text !== this.doc.text;
 
 		this.history = history;
@@ -408,18 +380,31 @@ export class LinkEditor {
 	}
 
 	/** Makes the model what the DOM shows: after a composition, or an edit the browser made without asking. */
-	private adoptDom(): void {
+	private adoptDom(beforeSnapshot: Snapshot | null): void {
+		if (!this.editable()) return;
+
 		const read = readDoc(this.root);
 		const selection = readSelection(this.root);
 
 		if (read.text === this.doc.text && read.links.length === this.doc.links.length) return;
 
-		const caret = selection?.focus ?? read.text.length;
+		const rawCaret = selection?.focus ?? read.text.length;
+		const before = beforeSnapshot ?? { doc: this.doc, caret: Math.min(rawCaret, this.doc.text.length) };
+		const adopted = adoptEdit({ before: this.doc, read, caret: rawCaret, maxLength: this.host.maxLength() });
 
-		this.history = record(this.history, this.snapshot(), { kind: 'type', caret, at: Date.now() });
+		if (adopted.doc.text === this.doc.text && adopted.doc.links.length === this.doc.links.length) {
+			this.draw();
+			this.place(adopted.caret);
+			this.host.onCaret();
+
+			return;
+		}
+
+		this.history = record(this.history, before, { kind: 'type', caret: adopted.caret, at: Date.now() });
 		this.typing = true;
-		this.show({ doc: embedLinks(read, wordAround(read.text, caret)), caret });
-		this.host.onChange(read.text);
+		this.conversion = null;
+		this.show(adopted);
+		this.host.onChange(adopted.doc.text);
 	}
 
 	/** Turns links outside the word at `caret` into embeds (all of them when `caret` is null). */
@@ -484,14 +469,11 @@ export class LinkEditor {
 		return selection ? rangeOf(selection) : { start: this.doc.text.length, end: this.doc.text.length };
 	}
 
-	/** The range the browser says an input event would change, as text offsets; the selection when it says none. */
-	private targetRange(event: InputEvent): TextRange {
-		const [target] = event.getTargetRanges();
-
-		return target ? rangeOffsets(this.root, target) : this.selectionRange();
-	}
-
 	private focused(): boolean {
 		return this.root.ownerDocument.activeElement === this.root;
+	}
+
+	private editable(): boolean {
+		return !this.host.disabled() && this.root.isContentEditable;
 	}
 }

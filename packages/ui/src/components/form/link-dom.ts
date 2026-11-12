@@ -252,12 +252,16 @@ function placeText(root: HTMLElement, current: ChildNode | null, text: string): 
 	root.insertBefore(document.createTextNode(text), current);
 }
 
-/** An embed at `current`'s place: the one there when it shows the same link the same way, else a new one. */
+/** An embed at `current`'s place: the one there when it shows the same link, updated if its facts changed, else a new one. */
 function placeEmbed(root: HTMLElement, current: ChildNode | null, url: string, look: (url: string) => EmbedLook): void {
 	const wanted = look(url);
 	const key = lookKey(wanted);
 
-	if (current instanceof HTMLElement && urlOf(current) === url && current.dataset.look === key) return;
+	if (current instanceof HTMLElement && urlOf(current) === url) {
+		if (current.dataset.look !== key) applyFact(current, wanted, key);
+
+		return;
+	}
 
 	const embed = buildEmbed(wanted, key);
 
@@ -275,24 +279,39 @@ function lookKey({ description, fact }: EmbedLook): string {
  * a link with a readable name. Every string goes in through `textContent` or
  * an attribute, never as markup.
  */
-function buildEmbed({ description, fact }: EmbedLook, key: string): HTMLElement {
+function buildEmbed(wanted: EmbedLook, key: string): HTMLElement {
+	const { description } = wanted;
 	const embed = document.createElement('span');
 	const label = document.createElement('span');
 
 	embed.contentEditable = 'false';
 	embed.dataset.ui = 'link-embed';
 	embed.dataset.kind = description.kind;
-	embed.dataset.look = key;
 	embed.setAttribute(URL_ATTRIBUTE, description.url);
 	embed.setAttribute('role', 'link');
-	embed.setAttribute('aria-label', fact?.status ? `${description.name}, ${fact.status}` : description.name);
 	label.dataset.ui = 'link-embed-label';
 	label.textContent = description.label;
 	embed.append(buildMark(description), label);
-
-	if (fact?.tone) embed.append(buildDot(fact.tone));
+	applyFact(embed, wanted, key);
 
 	return embed;
+}
+
+/** Updates the parts of an embed that come from the host's facts, keeping the element in place. */
+function applyFact(embed: HTMLElement, { description, fact }: EmbedLook, key: string): void {
+	const dot = embed.querySelector<HTMLElement>('[data-ui="link-embed-dot"]');
+
+	embed.dataset.look = key;
+	embed.setAttribute('aria-label', fact?.status ? `${description.name}, ${fact.status}` : description.name);
+
+	if (!fact?.tone) {
+		dot?.remove();
+
+		return;
+	}
+
+	if (dot) dot.dataset.tone = fact.tone;
+	else embed.append(buildDot(fact.tone));
 }
 
 /** The forge's mark, or the link glyph for any other site, drawn at the label's size. */
@@ -325,12 +344,17 @@ function buildDot(tone: string): HTMLElement {
 	return dot;
 }
 
-/** The text a non-embed child stands for: a text node's data (a holder's without its own character), nothing for the closing `<br>`. */
+/** Strips caret-holder characters so a holder, even when split by an IME, never reaches the model. */
+function withoutHolders(text: string): string {
+	return text.replaceAll(HOLDER_CHARACTER, '');
+}
+
+/** The text a non-embed child stands for: its text without caret-holder characters, nothing for the closing `<br>`. */
 function lengthText(node: Node): string {
-	if (node instanceof Text) return holders.has(node) ? node.data.replaceAll(HOLDER_CHARACTER, '') : node.data;
+	if (node instanceof Text) return withoutHolders(node.data);
 	if (node instanceof HTMLBRElement) return '';
 
-	return node.textContent ?? '';
+	return withoutHolders(node.textContent ?? '');
 }
 
 /** How many text characters a child of the field stands for. */
@@ -372,15 +396,38 @@ function offsetOf(root: HTMLElement, node: Node, offset: number): number {
 	const child = children[index];
 
 	if (index === -1) return 0;
-	if (child instanceof Text) return before(index) + (holders.has(child) ? 0 : offset);
+	if (child instanceof Text) return before(index) + withoutHolders(child.data.slice(0, offset)).length;
+	if (urlOf(child) !== null || child instanceof HTMLBRElement) return before(index);
 
-	return before(index);
+	const range = root.ownerDocument.createRange();
+
+	range.setStart(child, 0);
+	range.setEnd(node, offset);
+
+	return before(index) + withoutHolders(range.toString()).length;
+}
+
+/** The UTF-16 offset inside a text node's `data` after `wanted` non-holder code units. */
+function domOffsetInText(data: string, wanted: number): number {
+	if (wanted <= 0) return 0;
+
+	let seen = 0;
+
+	for (let index = 0; index < data.length; index += 1) {
+		if (data[index] !== HOLDER_CHARACTER) seen += 1;
+		if (seen === wanted) return index + 1;
+	}
+
+	return data.length;
 }
 
 /** The DOM point for a text offset: inside a text node (or a caret holder) when one holds it, else between the field's children. */
 function pointOf(root: HTMLElement, offset: number): { node: Node; offset: number } {
 	for (const [index, { child, start, end }] of [...childSpans(root)].entries()) {
-		if (child instanceof Text && offset <= end) return { node: child, offset: offset - start };
+		if (child instanceof Text && offset <= end) {
+			return { node: child, offset: domOffsetInText(child.data, offset - start) };
+		}
+
 		if (!(child instanceof Text) && offset <= start) return { node: root, offset: index };
 	}
 

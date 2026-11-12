@@ -25,15 +25,25 @@ interface EditResult {
 	caret: number;
 }
 
-/** Which way a deletion goes: one character or embed back or forward, or a range the browser worked out (a word, a line). */
-type DeleteKind = 'backward' | 'forward' | 'range';
+/** Which way and how far a deletion goes: a character, a word, a line, or a range the browser worked out. */
+type DeleteKind =
+	'backward' | 'forward' | 'word-backward' | 'word-forward' | 'line-backward' | 'line-forward' | 'range';
 
 /** The kind of deletion an input event asks for. */
 export function deleteKind(inputType: string): DeleteKind {
-	if (inputType === 'deleteContentBackward') return 'backward';
+	if (inputType === 'deleteContentBackward' || inputType === 'deleteContent') return 'backward';
 	if (inputType === 'deleteContentForward') return 'forward';
+	if (inputType === 'deleteWordBackward') return 'word-backward';
+	if (inputType === 'deleteWordForward') return 'word-forward';
+	if (inputType === 'deleteSoftLineBackward' || inputType === 'deleteHardLineBackward') return 'line-backward';
+	if (inputType === 'deleteSoftLineForward' || inputType === 'deleteHardLineForward') return 'line-forward';
 
 	return 'range';
+}
+
+/** The plain text an `InputEvent` carries: `dataTransfer` when it holds plain text, else `data`. */
+export function inputData(event: Pick<InputEvent, 'data' | 'dataTransfer'>): string {
+	return event.dataTransfer?.getData('text/plain') || event.data || '';
 }
 
 /** What a paste, a drop or a value from outside becomes: plain text with Windows and old Mac line ends made `\n`. */
@@ -44,6 +54,28 @@ export function plainText(text: string): string {
 /** A selection as a range, start first. */
 export function rangeOf({ anchor, focus }: TextSelection): TextRange {
 	return { start: Math.min(anchor, focus), end: Math.max(anchor, focus) };
+}
+
+/** Whether a selection is a caret past the start of the word it sits in: Home or a click before the word counts as leaving it. */
+export function isInsideWord(doc: LinkDoc, selection: TextSelection): boolean {
+	const word = wordAround(doc.text, selection.focus);
+
+	return selection.anchor === selection.focus && word.start < selection.focus && selection.focus <= word.end;
+}
+
+/** The editor action a key chord asks for: undo, redo, or stepping Left/Right over an embed. */
+export function keyAction(
+	event: Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>
+): 'undo' | 'redo' | -1 | 1 | null {
+	const mod = event.ctrlKey || event.metaKey;
+	const key = event.key.toLowerCase();
+
+	if (mod && !event.altKey && key === 'z') return event.shiftKey ? 'redo' : 'undo';
+	if (mod && !event.altKey && key === 'y') return 'redo';
+	if (!mod && !event.altKey && event.key === 'ArrowLeft') return -1;
+	if (!mod && !event.altKey && event.key === 'ArrowRight') return 1;
+
+	return null;
 }
 
 /**
@@ -79,10 +111,10 @@ export function pasteText(doc: LinkDoc, range: TextRange, raw: string, maxLength
 
 /**
  * What a deletion removes. A selection goes as it is, grown to whole embeds.
- * One step back or forward takes the embed beside the caret whole, else the
- * browser's own range (`target`, which knows grapheme clusters), else one
- * character. A word or line deletion takes the browser's range, grown to
- * whole embeds.
+ * A character or word deletion right beside an embed takes that embed whole;
+ * otherwise a non-empty browser target (`target`, which knows grapheme
+ * clusters, words and lines) is grown to whole embeds, and a collapsed target
+ * falls back to one character or embed in that direction.
  */
 export function deletionRange(doc: LinkDoc, kind: DeleteKind, selection: TextRange, target: TextRange): TextRange {
 	if (selection.start !== selection.end) return snapRange(doc, selection);
@@ -91,12 +123,14 @@ export function deletionRange(doc: LinkDoc, kind: DeleteKind, selection: TextRan
 
 	if (kind === 'range') return snapRange(doc, target);
 
-	const beside = kind === 'backward' ? linkBefore(doc, caret) : linkAfter(doc, caret);
+	const backward = kind === 'backward' || kind === 'word-backward' || kind === 'line-backward';
+	const takesBeside = kind !== 'line-backward' && kind !== 'line-forward';
+	const beside = backward ? linkBefore(doc, caret) : linkAfter(doc, caret);
 
-	if (beside) return beside;
+	if (takesBeside && beside) return beside;
 	if (target.start !== target.end) return snapRange(doc, target);
 
-	return kind === 'backward' ? backwardRange(doc, caret) : forwardRange(doc, caret);
+	return backward ? backwardRange(doc, caret) : forwardRange(doc, caret);
 }
 
 /** A selection with neither end inside an embed: a caret goes to the nearer edge, a range grows to hold it whole. */
