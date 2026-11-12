@@ -8,13 +8,14 @@ import { isolateSettings } from '../../helpers/settings-env';
 
 isolateSettings();
 
+const CHATGPT_SOL = { provider: 'codex', id: 'chatgpt-sol', label: 'GPT-6-Sol', model: 'gpt-6-sol', efforts: ['low'] };
+const CHATGPT_LUNA = { provider: 'codex', id: 'chatgpt-luna', label: 'GPT-6-Luna', model: 'gpt-6-luna' };
+const LOCAL_ENTRY = { id: 'local', label: 'Local', model: 'qwen', baseUrl: 'http://localhost:8000/v1' };
+
 /** An install from before the Codex CLI: a ChatGPT model picked twice, a local model picked once, and saved tokens. */
 function writeChatGptInstall(dataDir: string): void {
 	const settings = {
-		models: [
-			{ provider: 'codex', id: 'chatgpt-sol', label: 'GPT-6-Sol', model: 'gpt-6-sol', efforts: ['low', 'high'] },
-			{ id: 'local', label: 'Local', model: 'qwen', baseUrl: 'http://localhost:8000/v1' }
-		],
+		models: [CHATGPT_SOL, LOCAL_ENTRY],
 		orchestratorModelId: 'chatgpt-sol',
 		specialistModelId: 'chatgpt-sol',
 		sharedModelId: 'local'
@@ -67,4 +68,21 @@ test('a second start after the move changes nothing', async () => {
 
 	expect(readFileSync(join(dataDir, 'review-config.json'), 'utf8')).toBe(afterFirst);
 	expect(getStoredSettings()).toEqual(settingsAfterFirst);
+});
+
+test('a saved verifier pick of a ChatGPT entry moves to the same model through the Codex CLI', async () => {
+	const dataDir = serverDataDir();
+
+	const settings = {
+		models: [CHATGPT_SOL, CHATGPT_LUNA, LOCAL_ENTRY],
+		orchestratorModelId: 'local',
+		verifierModelId: 'chatgpt-luna',
+		verifierEffort: 'high'
+	};
+
+	writeFileSync(join(dataDir, 'review-config.json'), JSON.stringify(settings));
+
+	await startServer(dataDir);
+
+	expect(getStoredSettings()).toMatchObject({ verifierModelId: 'codex:gpt-6-luna', verifierEffort: 'high' });
 });

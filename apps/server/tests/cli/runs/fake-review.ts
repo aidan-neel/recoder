@@ -6,7 +6,7 @@ import { runRecordedReview, type ReviewRunner } from '../../../src/cli/runs/reco
 import { takeOverRun } from '../../../src/cli/runs/review-command';
 import type { RunId } from '../../../src/cli/runs/run-id';
 import { runFiles } from '../../../src/cli/runs/run-files';
-import { exitOnSignal } from '../../../src/cli/signals/exit-on-signal';
+import { exitOnSignalAfter } from '../../../src/cli/signals/exit-on-signal';
 import { whenFileExists } from '../../helpers/when-found';
 import { report } from '../output/fixtures';
 import { destination } from '../output/fixtures';
@@ -62,7 +62,7 @@ export async function runFakeBackgroundReview(flags: string[], mode: FakeReviewM
 		progress: () => {},
 		loadRunner: async () => (isStuck ? reportAtOnce : untilCancelled),
 		destination: isStuck ? STUCK_READER : SILENT,
-		onEndRecorded: exitOnSignal
+		recordEnd: exitOnSignalAfter
 	}).catch(exitCodeOf);
 }
 

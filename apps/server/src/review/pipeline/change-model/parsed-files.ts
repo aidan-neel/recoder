@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { readFact, writeFact } from '../../../util/fact-cache.js';
 import { readObjects } from '../repo-inventory/blobs.js';
 import type { RepoFile, RepoInventory } from '../repo-inventory/repo-inventory.js';
-import { mapLimit, MAX_FILE_BYTES } from './repo.js';
+import { mapLimit } from '../../../util/map-limit.js';
+import { MAX_FILE_BYTES } from './repo.js';
 import { symbolsOf, type ParsedSymbol } from './symbols.js';
 
 const NAMESPACE = 'parsed-symbols';

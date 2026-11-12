@@ -1,5 +1,5 @@
 import { signedOutAgent, signedOutReason } from '../../models/agent-sign-in.js';
-import { configForOrchestrator, configForSubagent, isReviewConfigured } from '../../models/models.js';
+import { isReviewConfigured, stageConfigs } from '../../models/models.js';
 import { CliError, EXIT, notReadyError } from '../exit.js';
 import type { ProgressSink } from '../progress.js';
 import type { ReviewReport } from '../report/report.js';
@@ -89,7 +89,7 @@ function assertReviewConfigured(): void {
  * out, as the server's review does. The CLI's status command is asked; no model call is made.
  */
 async function assertAgentsSignedIn(): Promise<void> {
-	const signedOut = await signedOutAgent([configForOrchestrator(), configForSubagent()]);
+	const signedOut = await signedOutAgent(stageConfigs());
 
 	if (signedOut) throw notReadyError(signedOutReason(signedOut));
 }

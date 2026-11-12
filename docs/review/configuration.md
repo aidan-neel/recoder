@@ -6,7 +6,7 @@ The server reads the environment variables below. All are optional. An unset var
 
 ## Experiment flags, kill switches and tuning knobs
 
-- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are six: `RECODER_OBLIGATIONS`, `RECODER_OBLIGATIONS_NEW_CODE`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`, `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`. No other variable is an opt-in flag.
+- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are seven: `RECODER_OBLIGATIONS`, `RECODER_OBLIGATIONS_NEW_CODE`, `RECODER_OBLIGATIONS_TRANSITIONS`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`, `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`. `RECODER_REVIEW_VARIANT` is the one experiment flag that takes a name instead of `1`. No other variable is an opt-in flag.
 - **Kill switches.** On by default. Setting one turns a stage off: `RECODER_EXEC=off`, `RECODER_OVERLAY=off`, `RECODER_BASELINE_CACHE=off`, `RECODER_PACKAGE_PREP=0`, `RECODER_CANDIDATE_REPAIR=0`. Any other value leaves the stage on.
 - **Tuning knobs.** Every other variable. They size, place or credential work and do not add or remove a stage.
 
@@ -26,9 +26,9 @@ Read by `effectiveReviewEnv`. A saved value wins. A value that is not a positive
 
 **RECODER_REVIEW_MAX_FILE_CHARS**: Default 12000. Caps the characters one file read returns to a model. Passed to `EvidenceStore` in `apps/server/src/review/pipeline/harness/context.ts`.
 
-**RECODER_REVIEW_MAX_FILES**: Default 20. Returned in `limits` by `GET /api/settings/models`. No pipeline code reads it.
+**RECODER_REVIEW_MAX_FILES**: Default 200. Caps how many reviewable files one review covers (`applyDiffLimits` in `apps/server/src/review/pipeline/harness/diff-limits.ts`, called from `createRun` in `context.ts`). Files past the limit are excluded with `exceeds maxFiles limit (N)` and recorded in `ReviewContext.omitted` (`reason: 'file-cap'`) and `CoverageLedger`.
 
-**RECODER_REVIEW_MAX_DIFF_CHARS**: Default 60000. Returned in `limits` by `GET /api/settings/models`. No pipeline code reads it.
+**RECODER_REVIEW_MAX_DIFF_CHARS**: Default 600000. Caps total patch characters across the reviewable files (`applyDiffLimits` in `diff-limits.ts`). Files, hunks or trailing lines past the cap are excluded with `exceeds maxDiffChars limit (N)` and recorded in `ReviewContext.omitted` (`reason: 'diff-cap'`) and `CoverageLedger`.
 
 **RECODER_REVIEW_EXCLUDE**: Comma-separated substrings, matched case-insensitively. A changed path containing one is excluded from the review with the reason `matches RECODER_REVIEW_EXCLUDE`. Read by `extraExcludes` in `apps/server/src/review/pipeline/review-scope.ts`. Default empty.
 
@@ -78,6 +78,8 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 
 **RECODER_OBLIGATIONS_NEW_CODE**: `1` lets a hunk that only adds lines oblige an investigation. Its truthiness tests, bounds and normalizers fire the truthy-default, boundary and normalization triggers with nothing on the base side to compare. Off, only replaced code fires them. Read by `obligationsNewCodeOn` in `apps/server/src/review/pipeline/obligations/config.ts`. It has no effect unless obligations are on.
 
+**RECODER_OBLIGATIONS_TRANSITIONS**: `1` adds the state-transition trigger (issue #99). A changed line that moves an entity between states derives an obligation: a state field (`status`, `state`, `phase`, `lifecycle`, `jobStatus`…) set or compared, a lease or lifecycle flag written on an object (`leaseUntil`, `lockedBy`, `closed`, `isCancelled`…), and an entry put into or taken out of a cache or queue (`cache.delete`, `jobQueue.push`, `invalidate`, `ack`…). A state field set to a literal counts only when the file gives the field two states or more, and a number is never a state. Read by `obligationsTransitionsOn` in `apps/server/src/review/pipeline/obligations/config.ts`. It has no effect unless obligations are on.
+
 **RECODER_TEST_STRENGTH**: `1` turns on test-strength work. Read by `testStrengthOn` in `apps/server/src/review/pipeline/test-strength.ts`. It adds:
 
 - the matrix stage, which runs the changed tests against mutants (`apps/server/src/review/pipeline/harness/quality-stage.ts`);
@@ -92,6 +94,8 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 **RECODER_RESIDUAL_CAP**: Most residual passes one review launches, one per reviewer slice, at most as many as the subagent cap leaves room for. Default 6. A non-negative integer. Read only when the residual pass is on.
 
 **RECODER_CONTRACT_CHECKS**: `1` turns on contract checks. Each valid readability candidate whose smell is `stale-comment`, `misleading-name` or `hidden-side-effect` gets one second-look subagent on the specialist model, which decides whether the comment, name or doc is wrong or the code is. It counts inside the subagent cap. Read by `contractChecksOn` in `apps/server/src/review/pipeline/second-look/config.ts`.
+
+**RECODER_REVIEW_VARIANT**: names an experiment arm of issue #95; unset, the review is the baseline. `independent-pass` adds a second, complete review pass: one more reviewer per slice (`independent-reviewer-N`), with the same scope and lenses, that never sees the first pass's findings. `specialist-tree` asks a coordinator (one orchestrator call) which specialists read which slices, then runs one reviewer per specialist, each applying one lens (`specialist-<lens>`); correctness, security, concurrency, api-contract and rules always read every slice they fit, and each specialist may send at most 3 subagents, inside the subagent cap. An empty value is unset; any other value makes the server refuse to start and a review throw. Read by `reviewVariant` in `apps/server/src/env.ts`. It is recorded in `RunIdentity.flags` like every other `RECODER_*` variable, so reports of different arms never compare as equal.
 
 **RECODER_CONTRACT_CHECK_CAP**: Most contract checks one review launches, one per place. Default 4. A non-negative integer. Read only when contract checks are on.
 

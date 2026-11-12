@@ -38,6 +38,21 @@ export function isSpentPlan(message: string): boolean {
 }
 
 /**
+ * Words that state outright that the plan is spent. Narrower than {@link SPENT_PLAN}, which only tells a spent
+ * plan from a throttle once the status is a 429: these stand on their own.
+ */
+const STATES_PLAN_SPENT =
+	/\busage limit (?:exceeded|reached)\b|\bquota (?:exceeded|exhausted)\b|\binsufficient (?:balance|credits?)\b/i;
+
+/**
+ * The provider's words state that the plan is spent, whatever status they came with: OpenCode Go's
+ * `Go usage limit exceeded` arrives with none.
+ */
+export function statesPlanSpent(message: string): boolean {
+	return STATES_PLAN_SPENT.test(message);
+}
+
+/**
  * A 429 whose words say the provider is throttling requests, not that the plan is spent. A router such as
  * OpenCode retries most rate limits itself but passes some straight through (Z.AI's "Rate limit reached for
  * requests"), so Recoder retries these, with a longer wait.

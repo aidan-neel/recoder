@@ -1,27 +1,29 @@
 # Review Models
 
-A review uses two model picks: the Review model (orchestrator) and a second model for subagents and verifiers. Each pipeline run resolves both picks once, at its start, and locks them for its calls.
+A review uses three stage model picks: the Review model (orchestrator), a second model for subagents and workers (`specialistModelId`), and a verifier model (`verifierModelId`). Unset, `specialistModelId` and `verifierModelId` each follow the Review model. Each pipeline run resolves all three picks once, at its start, and locks them for its calls.
 
 ## Providers
 
-`ModelProvider` in `packages/shared/src/models.ts` has four values:
+`ModelProvider` in `packages/shared/src/models.ts` has five values:
 
 - **openai-compatible**: any endpoint that serves `POST {baseUrl}/chat/completions` (vLLM, OpenRouter, DashScope). This is the default when a config has no provider. A connected vLLM server's models are this provider too, resolved from `vllm:` ids.
 - **codex**: a model reached through the user's Codex CLI, signed in with its own `codex login`. Adapter: `apps/server/src/agents/codex/codex.ts`. Its ids are `codex:<model>`.
 - **opencode**: a model reached through the user's OpenCode CLI. Adapter: `apps/server/src/agents/opencode/opencode.ts`.
 - **claude-code**: a Claude model reached through the user's Claude Code CLI. Adapter: `apps/server/src/agents/claude-code/claude-code.ts`.
+- **devin**: a model reached through the user's Devin CLI. Adapter: `apps/server/src/agents/devin/devin.ts`.
 
 ## Resolving a pick
 
 All in `apps/server/src/models/models.ts`. Saved settings come from `getStoredSettings` in `apps/server/src/review/session/review-settings.ts`.
 
-`resolveConfig(orchestrator)` resolves one pick to a `ModelConfig`:
+`resolveConfig(role)` resolves one stage pick (`orchestrator`, `subagent`, or `verifier`) to a `ModelConfig`:
 
 1. The Review model id is `orchestratorModelId`, else `sharedModelId`, else the first saved entry's id.
 2. The second model id is `specialistModelId`. Unset, the second pick follows the Review model.
-3. An id starting with `vllm:` resolves through `vllmConfig` (see below). An id starting with `opencode:` resolves through `openCodeConfig`. An id starting with `claude-code:` resolves through `claudeCodeConfig`. These ids are not saved entries; the agent CLIs list them.
-4. Any other id resolves to its saved entry. If no saved entry has that id, the first saved entry is used.
-5. With no saved entries, the model comes from the shared environment (`RECODER_REVIEW_BASE_URL`, `RECODER_REVIEW_API_KEY`, `RECODER_REVIEW_MODEL`), with saved top-level `baseUrl` and `apiKey` winning. If that fails, it throws `ModelConfigError`.
+3. The verifier model id is `verifierModelId`. Unset, the verifier pick follows the Review model.
+4. An id starting with `vllm:` resolves through `vllmConfig` (see below). An id starting with `opencode:` resolves through `openCodeConfig`. An id starting with `claude-code:` resolves through `claudeCodeConfig`. An id starting with `devin:` resolves through `devinConfig`. These ids are not saved entries; vLLM sync and the agent CLIs list them.
+5. Any other id resolves to its saved entry. If no saved entry has that id, the first saved entry is used.
+6. With no saved entries, the model comes from the shared environment (`RECODER_REVIEW_BASE_URL`, `RECODER_REVIEW_API_KEY`, `RECODER_REVIEW_MODEL`), with saved top-level `baseUrl` and `apiKey` winning. If that fails, it throws `ModelConfigError`.
 
 ## vLLM servers
 
@@ -29,14 +31,15 @@ All in `apps/server/src/models/models.ts`. Saved settings come from `getStoredSe
 
 - `GET {base}/v1/models` is read by `discoverModels` (a missing `/v1` is added); `max_model_len` is the context window.
 - A sync runs on connect, at boot, every 5 minutes (`VLLM_SYNC_INTERVAL_MS`), when Settings opens (`POST /api/settings/vllm/refresh`, skipped for a server tried in the last 15 s) and on the Refresh button (`force`).
-- A sync merges with `mergeServed`: new models are added; a model no longer served is dropped unless the Review or Subagent pick names it, in which case it stays with `served: false`. A model that is not served makes `vllmTarget` fail, so `configForOrchestrator` throws a `ModelConfigError` and the review stops with that message instead of falling back to another model.
+- A sync merges with `mergeServed`: new models are added; a model no longer served is dropped unless the Review, Subagent or Verifier pick names it, in which case it stays with `served: false`. A model that is not served makes `vllmTarget` fail, so `configForOrchestrator` throws a `ModelConfigError` and the review stops with that message instead of falling back to another model.
 - A failed sync (unreachable, 401, an empty list) keeps the last good list and records `error`. A server disconnected, or given a new key, while its sync was in flight is left as it is.
 - Settings lists the models from `vllmEntries()` ahead of the agents' models. A model that is not served carries `unavailable: true`.
 
 Effort requested:
 
 - Review pick: `orchestratorEffort`.
-- Second pick: `specialistEffort` when set. Otherwise `orchestratorEffort`, but only when the second pick follows the Review model.
+- Second pick: `specialistEffort` when set. Otherwise `orchestratorEffort`, when the second pick follows the Review model.
+- Verifier pick: `verifierEffort` when set. Otherwise `orchestratorEffort`, when the verifier pick follows the Review model.
 
 Effort checked (`supportedEffort`):
 
@@ -50,10 +53,11 @@ Effort checked (`supportedEffort`):
 Other entry points:
 
 - `configForOrchestrator()` returns the Review pick. It is used by reviewers, consolidation, repair and chat.
-- `configForSubagent()` returns the second pick, for subagents and verifiers.
-- `configForAgent(agent)` returns the second pick when `agent` is `subagent`, else the Review pick. Follow-ups use it so a finding is discussed on the model that made it.
+- `configForSubagent()` returns the second pick, for subagents and workers.
+- `configForVerifier()` returns the verifier pick, used by the verification stage (`apps/server/src/review/pipeline/harness/verification.ts`).
+- `configForAgent(agent)` returns the second pick when `agent` is `subagent`, the verifier pick when `agent` is `verifier`, else the Review pick. Follow-ups use it so a finding is discussed on the model that made it.
 - `configForModel(id, effort)` resolves one model by id, whatever the picks are. A saved-entry id that does not exist throws instead of falling back. The benchmark judge uses it (`apps/server/src/eval/benchmark-scoring.ts`).
-- `isReviewConfigured()` is true when both picks resolve.
+- `isReviewConfigured()` is true when all three stage picks resolve.
 
 ## Saved model entries
 
@@ -71,7 +75,7 @@ How `entryConfig` turns an entry into a config:
 - An entry with `source` uses that provider's base URL and the key saved in `connections` for it. With no key saved, it throws `ModelConfigError`.
 - Any other entry uses its own `baseUrl` and `apiKey`, else the shared ones. With no base URL, it throws `ModelConfigError`.
 
-Id formats: `opencode:<provider>/<model>` and `claude-code:<model>`. The prefixes are `OPENCODE_MODEL_PREFIX` and `CLAUDE_CODE_MODEL_PREFIX`.
+Id formats: `opencode:<provider>/<model>`, `claude-code:<model>`, `devin:<model>` and `vllm:<server>/<model>`. The prefixes are `OPENCODE_MODEL_PREFIX`, `CLAUDE_CODE_MODEL_PREFIX`, `DEVIN_MODEL_PREFIX` and `VLLM_MODEL_PREFIX`.
 
 ## Agent CLI adapters
 
@@ -101,7 +105,7 @@ Codex (`apps/server/src/agents/codex/`), checked against codex-cli 0.167.0:
 - The child process does not inherit `RECODER_*`, `OPENAI_*`, `ANTHROPIC_*`, `CODEX_*` other than `CODEX_HOME`, or any token, key, secret or password variable (`codexEnv`).
 - `RECODER_CODEX_BIN` pins the binary, and `RECODER_CODEX_CONCURRENCY` (default 4) caps its processes.
 
-Before a review starts, `assertAgentsSignedIn` checks that every agent CLI the two picks use is signed in (`signedOutAgent` in `apps/server/src/models/agent-sign-in.ts`).
+Before a review starts, `assertAgentsSignedIn` checks that every agent CLI the three stage picks use is signed in (`signedOutAgent` over `stageConfigs()` in `apps/server/src/models/models.ts`).
 
 Settings saved before the Codex CLI adapter held `provider: 'codex'` entries for Recoder's own ChatGPT sign-in. Reading the settings drops those entries and moves every pick that named one to `codex:<model>` (`movedPicks` in `apps/server/src/review/session/chatgpt-migration.ts`); the server's start saves the file again and deletes the old tokens (`chatgpt-auth.json`, `codex/auth.json`) from the data dir.
 
@@ -130,13 +134,13 @@ An agent Recoder runs turn by turn resends its whole transcript on transports th
 
 `withLockedModels` in `apps/server/src/models/models.ts` wraps `runReviewPipeline` in `apps/server/src/commands/pipeline.ts`.
 
-- It resolves both picks synchronously, before the run awaits anything.
+- It resolves all three picks synchronously, before the run awaits anything.
 - `runLocked` in `apps/server/src/models/llm/locked-models.ts` holds them in async context for the run. `lockedModels()` reads them.
 - The configs stay in memory only, because they carry API keys.
 - Each pipeline run locks its own picks. A rerun, replay or continue is a new pipeline run and resolves the picks again. Changing settings mid-run affects only runs started after.
 - If a pick does not resolve at the start, the run goes on unlocked and fails through its own error handling.
 
-Lock miss: inside a pipeline run with no locked picks, `configForOrchestrator()` or `configForSubagent()` resolves from live settings. `recordLockMiss` in `apps/server/src/models/metrics.ts` counts it on the run and logs a warning on the first one. Outside a pipeline run (discussion, fix) live resolution is normal and is not counted.
+Lock miss: inside a pipeline run with no locked picks, `configForOrchestrator()`, `configForSubagent()` or `configForVerifier()` resolves from live settings. `recordLockMiss` in `apps/server/src/models/metrics.ts` counts it on the run and logs a warning on the first one. Outside a pipeline run (discussion, fix) live resolution is normal and is not counted.
 
 ## Metrics
 
@@ -146,15 +150,16 @@ Stored in the SQLite table `review_metrics` (`reviewMetrics` in `apps/server/src
 - `calls`: every tracked call.
 - `runs`: one `PipelineRun` per pipeline run. Rows written before runs were recorded have none.
 
-`PipelineRun` fields: `index`, `startedAt`, `orchestrator` and `subagent` (the locked model ids, null when the run went unlocked), `lockMisses`.
+`PipelineRun` fields: `index`, `startedAt`, `orchestrator`, `subagent` and `verifier` (the locked model ids, null when the run went unlocked), `lockMisses`, `tokenBudget`, and `history`: which repository history the run received (`RunHistory`: `sources`, the brief's history sources without their text; `dismissals`, the fingerprints of dismissed findings; `topics`, the votes per topic). A part the run never read is absent; one it read and found empty is empty.
 
-`trackTokenCall` in `apps/server/src/models/metrics.ts` opens a call record. `runChat` and the OpenCode agent engine (`apps/server/src/review/pipeline/agent-loop/opencode-relay.ts`) call it. A call is saved only when it runs under `withReviewMetrics` for an existing review.
+`trackTokenCall` in `apps/server/src/models/metrics.ts` opens a call record. `runChat` and the OpenCode agent engine (`apps/server/src/review/pipeline/agent-loop/opencode-relay.ts`) call it. A call is saved only when it runs under `withReviewMetrics` for an existing review. Its `complete()` or `fail(err, secrets)` closes it. An OpenCode prompt that fails before its first step starts (a spent plan, a rejected key) is still saved as one failed call.
 
 A call record (`TokenCall` in `packages/shared/src/metrics.ts`, extended by `RunTokenCall`):
 
 - `id` (UUID), `model`, `provider`.
 - `scope`: `pipeline`, `discussion` or `fix`. Chat counts as `discussion`.
 - `status`: `pending`, `completed` or `failed`.
+- `error`: a failed call's provider error, its last lines with the call's key, key and token shapes, authorization headers and home paths removed (`providerErrorText` in `apps/server/src/models/error-text.ts`).
 - `usage`: `inputTokens`, `outputTokens`, `totalTokens`, `cachedInputTokens`, `cacheWriteInputTokens`, `reasoningOutputTokens`.
 - `apiKeySource`: optional. What paid for a Claude Code call, as the CLI reports it.
 - `run`: index of the pipeline run that made the call. Pipeline calls only.
@@ -179,9 +184,9 @@ Routes in `apps/server/src/routes/settings.ts`, mounted at `/api/settings`.
 `GET /api/settings/models` returns `settingsPayload()`:
 
 - `configured`, `baseUrl`, `model`, `apiKeyPreview`.
-- `sharedModelId`, `orchestratorModelId`, `specialistModelId`.
-- `models`: the agent CLIs' models from `agentModels()`.
-- `orchestratorEffort`, `specialistEffort`, `subagentCap`, `tokenBudget`, `reportLowSeverity`. `tokenBudget` is the last budget picked; the cap and efforts may since have been changed by hand. `subagentCap` is one of 0, 3, 8, 12 or `'uncapped'`; a file saved with 2 or 4 (the caps before) loads as the nearest cap at least as large (`migrateSubagentCap`) and is saved again that way. See [pipeline.md](pipeline.md#token-budget).
+- `sharedModelId`, `orchestratorModelId`, `specialistModelId`, `verifierModelId`.
+- `models`: the connected vLLM servers' models and the agent CLIs' models.
+- `orchestratorEffort`, `specialistEffort`, `verifierEffort`, `subagentCap`, `tokenBudget`, `reportLowSeverity`. `tokenBudget` is the last budget picked; the cap and efforts may since have been changed by hand. `subagentCap` is one of 0, 3, 8, 12 or `'uncapped'`; a file saved with 2 or 4 (the caps before) loads as the nearest cap at least as large (`migrateSubagentCap`) and is saved again that way. See [pipeline.md](pipeline.md#token-budget).
 - `configPath`: where settings are saved, with home shortened to `~`.
 - `limits`: `maxFiles`, `maxDiffChars`, `maxFileChars`.
 
@@ -190,7 +195,7 @@ Routes in `apps/server/src/routes/settings.ts`, mounted at `/api/settings`.
 - The body is validated with `reviewSettingsSchema`. Its fields match `ModelSettingsPatch` in `packages/shared/src/models.ts`.
 - `saveReviewSettings` merges it over the saved settings, persists them and returns the new payload.
 - An empty `apiKey`, top-level or in an entry, keeps the saved key. An empty `baseUrl` clears it.
-- Sending `models` replaces the entry list. Then `dropDeletedRoutes` clears any of `sharedModelId`, `orchestratorModelId` and `specialistModelId` that is not an id in the new list. Agent CLI ids are not in that list, so they are cleared too, unless the same body sets the pick again.
+- Sending `models` replaces the stored HTTP entry list. `dropDeletedRoutes` clears any of `sharedModelId`, `orchestratorModelId`, `specialistModelId` and `verifierModelId` whose stored HTTP route was deleted, while keeping routed picks (`opencode:`, `claude-code:`, `devin:`, `vllm:`), which live outside the stored HTTP entry list.
 
 Hosted provider keys live in `connections`, by provider id. They are not in the models payload.
 
@@ -208,5 +213,8 @@ Hosted provider keys live in `connections`, by provider id. They are not in the 
 - Backoff: below the ceiling sits an effective limit. A rate-limit error halves it, never below 4 (or the ceiling, if lower). It is cut at most once per 10-second cooldown.
 - Recovery: after the cooldown, each successful call raises the limit by one until it reaches the ceiling.
 - Rate-limit errors are HTTP 429, 529 or an "overloaded" message (`isRateLimitError` in `apps/server/src/models/llm/errors.ts`). A `UsageLimitError` does not count: it means a usage cap or a spent plan.
-- Lowering the limit never revokes a held slot. New callers wait until the active count is under it. A freed slot goes to the oldest waiter.
-- `acquireLlmSlot()` is called only when a call is ready to run. It waits up to the timeout its caller passes. `runChat` passes the call's own budget, capped by its settle time. A wait that times out throws `CapacityError`.
+- Lowering the limit never revokes a held slot. New callers wait until the active count is under it.
+- Fair turns: each review's calls wait in their own lane (`withLlmLane`, opened by `withReviewMetrics`). A freed slot goes to the next lane in round-robin order and to that lane's oldest waiter, so one large review cannot hold back another. Calls made outside a review share one lane.
+- `acquireLlmSlot()` is called only when a call is ready to run. It waits up to the timeout its caller passes. `runChat` passes the call's own budget, capped by its settle time. A wait that times out throws `CapacityError` (`apps/server/src/models/llm/errors.ts`), a failure kind of its own: the model never saw the call.
+- Queue delay: each pipeline run records how long its calls waited for a slot (`queueDelay` on the run and on `GET /api/reviews/:id/metrics`: requests, total and longest wait in milliseconds).
+- Load sweep: `bun run --filter @recoder/server eval:load` runs fake reviews against a fake model server through this limiter at several concurrency levels. It prints throughput, queue delay, review duration and capacity failures per level, and the range where more concurrency still helps. It uses no model, forge or storage. Flags: `--reviews`, `--requests` (per review, sent at once), `--levels` (comma-separated), `--model-parallel`, `--latency` (ms) and `--queue-timeout` (seconds).

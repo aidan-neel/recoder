@@ -71,8 +71,11 @@ function mergeCluster(group: CandidateFinding[]): Finding {
 	const evidenceIds = [...new Set([lead, ...members].flatMap((member) => member.evidenceIds ?? []))];
 	const quality = findingKind(lead.category) === 'quality';
 
+	const rule = lead.rule ?? members.find((member) => member.rule)?.rule;
+
 	return {
 		...toFinding(lead),
+		...(rule ? { rule } : {}),
 		severity: quality && lead.severity === 'error' ? 'warning' : lead.severity,
 		evidenceIds,
 		relatedLocations: related.length ? related : undefined,

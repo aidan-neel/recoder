@@ -106,6 +106,11 @@ export interface BenchmarkSummary {
 	lows?: LowTotals;
 	/** The five finding classes, their precision bounds' inputs and control-PR noise. */
 	labels: LabelSummary;
+	/**
+	 * Runs whose review did not pass (failed, cancelled or timed out), which no
+	 * total counts; absent from reports older than counting them.
+	 */
+	failedRuns?: number;
 }
 
 function totalsIn(groups: Record<string, Totals>, key: string): Totals {
@@ -198,6 +203,7 @@ export const recall = (totals: Totals) => (totals.planted ? totals.found / total
 export function benchmarkSummary(prs: readonly PrResult[], taskSet: string | undefined): BenchmarkReport['summary'] {
 	return {
 		taskSet,
+		failedRuns: prs.flatMap((pr) => pr.runs).filter((run) => run.outcome !== 'passed').length,
 		...summarize(
 			prs.map((pr) => ({
 				codebase: pr.codebase,

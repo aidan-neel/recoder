@@ -16,7 +16,7 @@ mock.module('./apps/server/src/commands/pipeline.ts',()=>({runReviewPipeline:asy
 mock.module('./apps/server/src/review/chat/chat-replies.ts',()=>({cancelReviewChats:()=>{},stopReviewChat:()=>{},recordChatMessage:()=>{},waitReviewChat:async()=>{}}));
 mock.module('./apps/server/src/review/chat/review-chat.ts',()=>({startReviewChat:async()=>{}}));
 mock.module('./apps/server/src/review/chat/draft-session.ts',()=>({prepareDraftSession:async()=>{}}));
-mock.module('./apps/server/src/review/session/events.ts',()=>({emitReviewEvent:()=>{},flushReviewEvents:async()=>{},settleReviewTasks:async()=>{}}));
+mock.module('./apps/server/src/review/session/events.ts',()=>({emitReviewEvent:()=>{},commitGatedReviewEvent:async()=>false,flushReviewEvents:async()=>{},settleReviewTasks:async()=>{}}));
 mock.module('./apps/server/src/review/session/review-control.ts',()=>({getReviewControl:()=>undefined}));
 mock.module('./apps/server/src/forge/publish/pull-comment.ts',()=>({publishPullComment:async()=>{published++;review.pullComment.state='posted';}}));
 const {executeReviewActor}=await import('./apps/server/src/review/runtime/actor.ts');

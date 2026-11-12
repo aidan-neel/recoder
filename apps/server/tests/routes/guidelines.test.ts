@@ -14,11 +14,11 @@ test('proposing guidelines on a local repo says it is read-only instead of askin
 		body: JSON.stringify({ content: 'Be kind in reviews.' })
 	});
 
-	const body = (await response.json()) as { error: string };
+	const answer = JSON.stringify(await response.json());
 
 	await db.repos.delete(repo.id);
 
 	expect(response.status).toBe(401);
-	expect(body.error).toContain('read-only');
-	expect(body.error).not.toContain('GitHub');
+	expect(answer).toContain('read-only');
+	expect(answer).not.toContain('GitHub');
 });

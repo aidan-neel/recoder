@@ -3,12 +3,13 @@ import { testStrengthOn } from '../test-strength.js';
 import { clip, type AddedLines } from './changed-lines.js';
 import type { TestFileVersions } from './test-files.js';
 import { testBlocks, type Assertion, type TestBlock } from './test-source.js';
-import type { DetectorResult } from './types.js';
+import type { DetectorId, DetectorResult, SuspicionShape } from './types.js';
 
 /** An assertion in a new test that looks like it proves less than the test claims. */
 interface Suspicion {
 	title: string;
 	body: string;
+	shape: SuspicionShape;
 }
 
 /** Subclasses of a broad error class that the change adds, by the broad class they extend. */
@@ -66,6 +67,7 @@ function outputPresence(test: TestBlock, assertion: Assertion): Suspicion | null
 	if (!found || found.bound !== '0' || !OUTPUT_SUBJECT.test(subject) || !REPORT_TITLE.test(test.name)) return null;
 
 	return {
+		shape: 'output',
 		title: 'checks only that something was printed',
 		body: `The test asserts \`${clip(assertion.text, 60)}\`, which passes for any output at all, not the message the title promises.`
 	};
@@ -77,6 +79,7 @@ function keepsOneOfMany(test: TestBlock): Suspicion | null {
 		return null;
 
 	return {
+		shape: 'selection',
 		title: 'checks how many items remain, not which one',
 		body: 'The title promises a choice among items, but no assertion looks at which item is left, so keeping the wrong item passes.'
 	};
@@ -91,6 +94,7 @@ function lowerBound(assertion: Assertion): Suspicion | null {
 	const { subject, op, bound } = found;
 
 	return {
+		shape: 'lowerBound',
 		title: `checks \`${clip(subject, 40)}\` only from below`,
 		body: `The test asserts \`${clip(subject, 60)} ${op} ${bound}\`, so any larger count also passes. If the behavior the test names needs an exact count, a wrong one above the bound goes unnoticed.`
 	};
@@ -101,6 +105,7 @@ function someForEvery(test: TestBlock, assertion: Assertion): Suspicion | null {
 	if (!EVERY_TITLE.test(test.name) || !assertion.text.includes('.some(')) return null;
 
 	return {
+		shape: 'someForEvery',
 		title: 'checks only some items',
 		body: "The test's title is about every item, but `.some` passes when a single item matches."
 	};
@@ -118,6 +123,7 @@ function presenceOfThrown(test: TestBlock, assertion: Assertion, thrown: Set<str
 	if (test.assertions.some((other) => other !== assertion && mentions.test(other.args[0] ?? ''))) return null;
 
 	return {
+		shape: 'presence',
 		title: 'never checks which error is thrown',
 		body: `\`${subject}\` is the error \`t.throws\` already required, so \`${clip(assertion.text, 60)}\` cannot fail. Nothing checks its type or message, so any failure passes the test.`
 	};
@@ -143,6 +149,7 @@ function broadForSubclass(test: TestBlock, assertion: Assertion, subclasses: Add
 	if (!broad || !specific.length) return null;
 
 	return {
+		shape: 'broadError',
 		title: `accepts any \`${broad}\``,
 		body: `This change adds \`${specific[0]}\`, a subclass of \`${broad}\`, but the test accepts any \`${broad}\`. It still passes if the code throws a different \`${broad}\` that carries the same fields.`
 	};
@@ -163,8 +170,13 @@ export function addedSubclasses(added: AddedLines): AddedSubclasses {
 	return found;
 }
 
-/** The first suspicious assertion the test adds, as a result on its line. */
-export function suspicionIn(file: TestFileVersions, test: TestBlock, subclasses: AddedSubclasses): DetectorResult[] {
+/** The first suspicious assertion the test adds, as a result on its line, credited to `detector`. */
+export function suspicionIn(
+	file: TestFileVersions,
+	test: TestBlock,
+	subclasses: AddedSubclasses,
+	detector: DetectorId
+): DetectorResult[] {
 	const thrown = new Set([...test.body.matchAll(THROWN_BINDING)].map((match) => match[1]!));
 
 	for (const assertion of test.assertions) {
@@ -182,7 +194,7 @@ export function suspicionIn(file: TestFileVersions, test: TestBlock, subclasses:
 
 		return [
 			{
-				detector: 'weak-new-tests',
+				detector,
 				category: 'tests',
 				title: `\`${clip(test.name, 60)}\` ${found.title}`,
 				body: found.body,
@@ -190,6 +202,7 @@ export function suspicionIn(file: TestFileVersions, test: TestBlock, subclasses:
 				line: assertion.startLine,
 				endLine: assertion.endLine,
 				evidence: `PR head: ${clip(assertion.text, 200)}`,
+				shape: found.shape,
 				suspected: true
 			}
 		];
@@ -207,6 +220,6 @@ export function weakInNewTests(file: TestFileVersions, subclasses: AddedSubclass
 	const base = testBlocks(file.base);
 
 	return [...testBlocks(file.head)].flatMap(([name, test]) =>
-		base.has(name) ? [] : suspicionIn(file, test, subclasses)
+		base.has(name) ? [] : suspicionIn(file, test, subclasses, 'weak-new-tests')
 	);
 }

@@ -25,6 +25,12 @@ describe('parseRepoSlug', () => {
 	test('rejects garbage', () => {
 		expect(() => parseRepoSlug('not a url')).toThrow(GhError);
 	});
+
+	test('a URL it cannot parse is named without the credentials in it', () => {
+		expect(() => parseRepoSlug('https://octo:ghp_secret@github.com/owner')).toThrow(
+			'cannot parse repo slug from https://github.com/owner'
+		);
+	});
 });
 
 describe('fetchPullRequest', () => {

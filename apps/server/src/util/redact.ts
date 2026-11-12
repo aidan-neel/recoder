@@ -12,14 +12,33 @@ const URL_CREDENTIALS = /\b([a-z][a-z0-9+.-]*:\/\/)[^/\s]*@/gi;
  */
 const QUOTED_URL_CREDENTIALS = /\b([a-z][a-z0-9+.-]*(?::|%3A)(?:\/|%2F){2})[^/\s]*(@|%40)/gi;
 
-/** An HTTP authorization header as git prints it with tracing on, its colon literal or encoded, to the end of its line. */
-const AUTHORIZATION_HEADER = /\b((?:proxy-)?authorization)(?:\s|%20)*(?::|%3A).*$/gim;
+/**
+ * An HTTP header that carries a credential (`Authorization`, `Proxy-Authorization`, `X-Api-Key`, `Api-Key`) as git
+ * or a CLI prints it, its colon literal or encoded, to the end of its line.
+ */
+const AUTHORIZATION_HEADER = /\b((?:proxy-)?authorization|(?:x-)?api-key)(?:\s|%20)*(?::|%3A).*$/gim;
 
-/** A query or form parameter that carries a secret (`private_token=`, `access_token%3D`, `password=`). */
-const SECRET_PARAMETER = /\b([a-z_-]*(?:token|password|secret)[a-z_-]*)(?:=|%3D)[^&\s'"#]+/gi;
+/**
+ * An authorization field quoted as JSON (`"Authorization":"Basic …"`): the
+ * quote before the colon keeps the header pattern from matching, so the
+ * quoted value is taken to its closing quote.
+ */
+const QUOTED_AUTHORIZATION = /\b((?:proxy-)?authorization)"\s*:\s*"[^"\n]*"/gi;
+
+/** A query or form parameter that carries a secret (`private_token=`, `access_token%3D`, `password=`, `api_key=`). */
+const SECRET_PARAMETER = /\b([a-z_-]*(?:token|password|secret|api[_-]?key)[a-z_-]*)(?:=|%3D)[^&\s'"#]+/gi;
+
+/**
+ * A secret quoted as a JSON field with a text value (`"apiKey":"…"`, `"password":"…"`, `"access_token":"…"`), taken
+ * to its closing quote. A number, such as a token count, is not a text value and stays.
+ */
+const QUOTED_SECRET_FIELD = /"([a-z_-]*(?:token|password|secret|api[_-]?key)[a-z_-]*)"\s*:\s*"[^"\n]*"/gi;
 
 /** The shapes GitHub and GitLab give their tokens, wherever one appears. */
 const TOKEN_SHAPES = /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|glpat-[A-Za-z0-9_-]{20,})/g;
+
+/** API keys as providers shape them (`sk-…`, `sk-ant-…`, `sk-or-v1-…`) and bearer tokens quoted inside a body. */
+const KEY_SHAPES = /\b(?:sk-[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._~+/=-]{8,})/g;
 
 /** Characters that mean something in a pattern, escaped to match themselves. */
 const PATTERN_SYNTAX = /[\\^$.*+?()[\]{}|/-]/g;
@@ -45,18 +64,19 @@ export function withoutCredentials(url: string): string {
  * the cut would split is never left half shown.
  */
 export function redactedTail(text: string, secrets: string[]): string {
-	const lines = redactCredentials(text, secrets).trim().split('\n');
+	const lines = redacted(text, secrets).trim().split('\n');
 
 	return lines.slice(-TAIL_LINES).join('\n').slice(-TAIL_CHARS);
 }
 
 /**
- * Text from git or a forge with every credential it may quote replaced: the
- * `secrets` the run was given, in any percent-encoding, user info in URLs,
- * authorization headers, secret parameters and anything shaped like a forge
- * token. The known secrets go first, before a pattern can split one.
+ * Text from git, a forge or a CLI with every credential it may quote
+ * replaced: the `secrets` the run was given, in any percent-encoding, user
+ * info in URLs, credential headers, secret parameters and JSON fields, and
+ * anything shaped like a forge token or a provider key. The known secrets go
+ * first, before a pattern can split one.
  */
-function redactCredentials(text: string, secrets: string[]): string {
+export function redacted(text: string, secrets: string[]): string {
 	const withoutKnown = secrets
 		.filter(Boolean)
 		.reduce((redacted, secret) => redacted.replace(quotedSecretPattern(secret), REDACTED), text);
@@ -64,8 +84,11 @@ function redactCredentials(text: string, secrets: string[]): string {
 	return withoutKnown
 		.replace(QUOTED_URL_CREDENTIALS, `$1${REDACTED}$2`)
 		.replace(AUTHORIZATION_HEADER, `$1: ${REDACTED}`)
+		.replace(QUOTED_AUTHORIZATION, `$1":"${REDACTED}"`)
 		.replace(SECRET_PARAMETER, `$1=${REDACTED}`)
-		.replace(TOKEN_SHAPES, REDACTED);
+		.replace(QUOTED_SECRET_FIELD, `"$1":"${REDACTED}"`)
+		.replace(TOKEN_SHAPES, REDACTED)
+		.replace(KEY_SHAPES, REDACTED);
 }
 
 /**

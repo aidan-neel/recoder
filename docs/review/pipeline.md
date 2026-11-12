@@ -17,7 +17,7 @@ This page traces one review from trigger to published findings and feedback. It 
 | 9   | Validation and repair      | `validateCandidate`, `repairCandidate`              | `apps/server/src/review/pipeline/consolidate.ts`           | `CandidateFinding`, `CandidateRepair`         |
 | 10  | Verification               | `startVerification`, `finishVerification`           | `apps/server/src/review/pipeline/harness/verification.ts`  | `FindingVerification`, `BaseComparisonResult` |
 | 11  | Consolidation, publication | `consolidate`, `completeReview`                     | `apps/server/src/review/pipeline/harness/consolidation.ts` | `Finding`, `ReviewFunnel`                     |
-| 12  | Feedback                   | `recordDismissal`, `recordVote`, `withTopics`       | `apps/server/src/review/guidelines/learned/dismissals.ts`  | `Dismissal`, `Vote`, `FindingTopic`           |
+| 12  | Feedback and history       | `learnFromDecision`, `withTopics`, `carryHistory`   | `apps/server/src/review/guidelines/learned/decision-learning.ts` | `FindingDecision`, `LearnedRuleProposal`, `FindingHistory` |
 
 The entry file is the first function's file. Each stage section names the files of the others.
 
@@ -61,24 +61,26 @@ The subagent cap is the most agents a review adds after its reviewers, second lo
 
 What the budget leaves alone, on purpose:
 
-- **Verification.** `maxVerifications`, `maxVerifierTurns`, `maxMutationVerifierTurns`, the verifier reserves and the consolidation reserve are the same at every budget. Every valid candidate is still re-proven, and the model-call ceiling still grows by a verifier's turns when one is queued (`VerifyQueue.makeRoom`), so a low ceiling never takes a verifier's share. Verifiers do run at the budget's second-model effort.
+- **Verification.** `maxVerifications`, `maxVerifierTurns`, `maxMutationVerifierTurns`, the verifier reserves and the consolidation reserve are the same at every budget. Every valid candidate is still re-proven, and the model-call ceiling still grows by a verifier's turns when one is queued (`VerifyQueue.makeRoom`), so a low ceiling never takes a verifier's share. Verifiers run on `configForVerifier()`, which follows the Review model and effort unless `verifierModelId` or `verifierEffort` is set.
 - **Deadlines.** `analysisDeadlineMs`, `msPerAssignment` and the per-agent clocks are time limits that stop a review. They are the same at every budget, though the deadline grows with the reviewers and subagents a budget runs. They do not save tokens, and a shorter one would end reviews early rather than make them cheaper.
 - **Workers.** `maxDelegationsPerAgent` and `maxWorkerTurns` only matter with a separate second model, and move work to that cheaper model rather than change how much is spent. The delegation count is also written into a prompt constant (`DELEGATE_OFFER`).
 - **`maxTranscriptChars`.** About 60k tokens, above what a call reaches today, so it never fires. Lowering it would stub tool output a reviewer still needs.
 - **`reportLowSeverity`.** It marks a low-severity candidate `belowBar`, which is still verified (queued after publishable ones), so it changes what is shown, not what is spent.
-- **`maxFiles` and `maxDiffChars`.** Settings → Review harness saves them and `reviewLimits` returns them, but no stage reads them: `maxFileChars` is the only one that reaches the harness (`EvidenceStore` in `createRun`). They are not part of a budget.
+- **`maxFiles` and `maxDiffChars`.** Enforced by `applyDiffLimits` in `createRun` (`apps/server/src/review/pipeline/harness/diff-limits.ts` and `context.ts`) before units and budgets are sized. Anything over either limit is left out with its reason recorded in `ReviewContext.omitted` (`file-cap` or `diff-cap`) and `CoverageLedger`. They are independent of the token budget.
 
 `recordTokenBudget` in `apps/server/src/models/metrics.ts` writes the budget onto the pipeline run segment (`PipelineRun.tokenBudget`) when the harness starts. `ReviewMetrics.tokenBudget` is the latest run's, and Token usage in the app shows it. A Custom setup is recorded under the budget it started from. A benchmark's quality was measured on the old shape (one reviewer per lens and unit) and has to be measured again for these budgets. Benchmark identities carry `tokenBudget` in `limits.settings`, so reports run on different budgets do not compare as equal.
 
-## Repo guidelines: `RECODER.md`
+## Repo guidelines and the rule ledger
 
 A repository tells Recoder what to look for in a `RECODER.md` at its root. It is the repo layer of the owner review guidelines; the global layer is edited in Settings.
 
 - `loadRepoGuidelines` in `apps/server/src/review/pipeline/harness/understand.ts` reads it at the PR's base commit (`target`), so a pull request that edits the file is not reviewed by its own edit.
 - The paths are `GUIDELINES_PATHS` in `packages/shared/src/guidelines.ts`. The first that exists is the layer: `RECODER.md`, else the older `.recoder/REVIEW.md`. The other is ignored.
 - `composeGuidelines` in `apps/server/src/review/guidelines/guidelines.ts` puts it in the trusted guidelines block. It ranks below Recoder's safety rules, above `AGENTS.md`, `CLAUDE.md` and PR text (which stay untrusted), and wins over the global layer where they conflict.
-- It is not in `INSTRUCTION_PATHS`, so its text reaches the prompts once. The rule ledger (`apps/server/src/review/guidelines/ledger/sources.ts`) reads it after the instruction files.
+- It is not in `INSTRUCTION_PATHS`, so its text reaches the prompts once.
 - Settings → Guidelines edits it through a pull or merge request (`apps/server/src/routes/guidelines.ts`). A repository on `.recoder/REVIEW.md` keeps that path; a new file is `RECODER.md`.
+
+`ruleLedgerStage` builds the `RuleLedger` (`buildRuleLedger` in `apps/server/src/review/guidelines/ledger/ledger.ts`, cached by source hash and `LEDGER_VERSION` in `sources.ts`). Every guideline source is framed as untrusted repository text, quoted and never followed as instructions (`prompt.ts`). `validateRules` (`validate.ts`) anchors each `RepoRule` to its source file (`source.path`, `source.line`, `source.endLine`, `source.revision`), keeps the exact source wording in `rule.text` alongside an optional one-sentence `restatement`, keeps stated `exceptions`, and classifies `level` as `mandatory` or `advisory` (`RuleLevel` in `packages/shared/src/findings.ts`). Rules that are `advisory` or carry `exceptions` omit mechanical `check` detectors so a verifier evaluates exceptions first. When sources disagree on the same concern, `resolveRulePrecedence` (`precedence.ts`) resolves overrides deterministically (`overriddenBy`, `excludedScopes`): `RECODER.md` (else `.recoder/REVIEW.md`) > global Settings guidelines > nested `AGENTS.md` / `CLAUDE.md` (deeper folder wins inside its subtree, `AGENTS.md` over `CLAUDE.md` in the same folder) > root instruction files (`INSTRUCTION_PATHS`, then `EXTRA_ROOT_PATHS`). Ledger tests live under `apps/server/tests/review/guidelines/ledger/`.
 
 ## Where candidates are lost
 
@@ -108,7 +110,7 @@ Evals add one more place. `StoppedAt` in `apps/server/src/eval/benchmark-stages.
 - `supersedeWebhookReviews` cancels in-flight webhook reviews of the same pull request with "Superseded by a newer push." It is in `apps/server/src/review/session/supersede.ts`.
 - `queueReview`, `startReviewSession` and `runReviewPipeline` are in `apps/server/src/commands/pipeline.ts`. `queueReview` refuses when `isReviewConfigured` is false.
 - Inputs: a repository, a pull request number, optional developer instructions.
-- Outputs: `ReviewStatus` moves draft, queued, running, then passed or failed. It is defined in `packages/shared/src/review.ts`. The harness returns `ReviewOutcome`, `complete` or `failed`, defined in `packages/shared/src/progress.ts`. `complete` maps to passed.
+- Outputs: `ReviewStatus` moves draft, queued, running, then passed or failed. It is defined in `packages/shared/src/review.ts`. The harness returns `ReviewOutcome`, `complete` or `failed`, defined in `packages/shared/src/progress.ts`. `complete` maps to passed. `finalizeReview` in `apps/server/src/commands/finalize-review.ts` saves a `complete` run as failed when every reviewer stopped with an error or never started and none raised a candidate, with the summary "No reviewer could run: <the first reviewer's reason>": a provider that rejects every call must not pass with what detectors found alone.
 - A review that runs out of time after units were cut still ends `complete`. Findings verified by then are shown, and the summary says the time ran out (`finishOutOfTime` in `apps/server/src/review/pipeline/harness/summary.ts`).
 - Drops: none.
 - Tests:
@@ -162,6 +164,8 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
 - `distillIntent` turns the gathered sources into goals, constraints, non-goals, observed changes and open questions, plus a brief per unit.
 - `ChangeIntent` and `GatheredContext` are defined in `apps/server/src/review/pipeline/intent/types.ts`.
 - Each unit brief has a status of included, partial or omitted. An omitted brief records a `BriefOmission`: size, time, budget or model.
+- The unit briefs run under a signal of the stage's own (`briefUnits` in `apps/server/src/review/pipeline/intent/distill.ts`). A unit call that throws (a blocked model, a cancelled review) aborts it: the calls in flight stop, no queued unit starts, and the error is thrown only after every started call has settled, so no brief call writes after the stage ends.
+- The history sources the brief was given (`pr-history`, `past-review`, `related-review`, `history:unavailable` included) are recorded without their text on the pipeline run, `PipelineRun.history.sources` (`recordHistorySources` in `apps/server/src/review/pipeline/harness/history-record.ts`). The dismissals and topic votes the run read are recorded there at its start (`recordLearnedHistory`).
 - The stage never throws. A failure leaves `run.intent` null and the review goes on.
 - Drops: none.
 - Tests:
@@ -178,6 +182,7 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
 - A slice can be larger than the first evidence round (24,000 characters). The reviewer's prompt names the hunks that round did not reach (`unreadHunks` in `pool.ts`), and the reviewer pages them with `readDiff` before it lists them as examined. It has more turns than a lens had for that reason. A hunk the reviewer neither examined nor reported a gap for, and that the first round did not show, is marked partially covered.
 - `partitionUnits` still cuts brief units of at most `unitBudgetChars` (24,000), which the intent stage summarizes one call each (`distillIntent`). `briefBlock` adds the brief of a reviewer's files to its prompt, with the open questions for every reviewer except one of a documentation-only slice. `UnitBrief` is defined in `apps/server/src/review/pipeline/intent/unit-brief.ts`.
 - Coverage has one role, `reviewer` (`COVERAGE_ROLE`). `retryFailedUnits` runs each failed reviewer once more, as `retry-reviewer-1` or the halves `retry-reviewer-1-a` and `-b`.
+- `variantStage` in `apps/server/src/review/pipeline/variants/stage.ts` reshapes the reviewers after the context stages, only when `RECODER_REVIEW_VARIANT` is set (issue #95). Unset, it returns at once and the reviewers are `partitionReviewers`' as above. `independent-pass` queues `independentPassUnits` (`variants/independent-pass.ts`), a copy of every slice as `independent-reviewer-N`, in the same pool: no reviewer's prompt holds another's findings, so the second pass never sees the first's, and consolidation merges what both report. `specialist-tree` asks `askCoordinator` (`variants/coordinator.ts`, one orchestrator call, token stage `other`) and turns its answer into units with `planSpecialists` (`variants/specialist-plan.ts`): one `specialist-<lens>` reviewer per specialist over the slices it was given, with the coordinator's question in its reason. Correctness, security, concurrency, api-contract and rules always read every slice they fit; a slice no specialist reads goes to the first that fits it; a failed coordinator call runs every specialist over every slice. Every decision (dispatched, kept, omitted, with the reason) and every task left unassigned goes to the orchestrator's message `message_specialist_plan` and the log. `planRequestedSubagents` (`variants/children.ts`) keeps each specialist's first 3 subagent requests. The stage grows the model-call budget and deadline by the reviewers it adds over the baseline, and a resume keeps the saved units.
 - With a lens selection, `partitionReviewers` keeps only the slices a selected lens fits and numbers the reviewers again; `skippedSlices` names the others, and `cutUnits` marks their hunks excluded in coverage with the reason (`CoverageLedger.exclude`). A review left with no reviewer makes no intent call.
 - Drops: none.
 - Tests:
@@ -187,6 +192,9 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
   - `apps/server/tests/review/pipeline/lenses/selection.test.ts`
   - `apps/server/tests/review/pipeline/harness-lenses.test.ts`
   - `apps/server/tests/review/pipeline/harness-retries.test.ts`
+  - `apps/server/tests/review/pipeline/variants/stage.test.ts`: flag-off parity with `partitionReviewers`, the independent pass's isolation and merge, the tree's units and recorded plan.
+  - `apps/server/tests/review/pipeline/variants/specialist-plan.test.ts`
+  - `apps/server/tests/review/pipeline/variants/children.test.ts`
 
 ## 6. Reviewers and subagents
 
@@ -218,6 +226,8 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 - `deriveObligationsStage` derives obligations from the diff without a model call. It is in `apps/server/src/review/pipeline/obligations/stage.ts`.
 - `deriveObligations` reads TypeScript, JavaScript and Svelte files only. `selectUnderCap` keeps at most `RECODER_OBLIGATION_CAP` (default 8), round-robin across triggers.
 - The triggers are the `ObligationTrigger` values in `packages/shared/src/obligations.ts`: truthy-default, boundary, removed-guard, normalization, resource-release, count-validation, error-contract, weaker-assertion. Each has a fixed question in `QUESTIONS`. Truthy-default, boundary and normalization fire on replaced code only, and also on brand-new code when `RECODER_OBLIGATIONS_NEW_CODE` is on.
+- The ninth trigger, state-transition, fires only when `RECODER_OBLIGATIONS_TRANSITIONS` is on. `collectTransitionMarks` in `apps/server/src/review/pipeline/obligations/transition-marks.ts` marks state fields set or compared, lease and lifecycle flags written, and cache and queue moves; `transitionHits` in `transitions.ts` gives one obligation per entity a hunk moves, on the new side for an added or changed move and on the old side for a removed one. The first hint names the states the file gives the field. Its specialist is concurrency, and test files derive none.
+- A state-transition investigator partitions transitions, not inputs: each `inputPartition` entry is an initial state, an operation sequence (success, failure midway, retry, restart, cancellation, supersession; insertion, replacement, expiry, bypass and invalidation for a cache) and the expected final state. A missing contract is answered unresolved. `withTransitionEvidence` in `investigate.ts` turns a disproved answer unresolved when it names no transition or cites only tests and ran nothing, so a passing test never closes a transition it does not run.
 - `runUnitsWithObligations`, in the same stage file, runs investigations first in the same pool as units. Each gets `RECODER_OBLIGATION_TURNS` turns (default 8, clamped to 3 through 12).
 - Each investigation ends in an `ObligationResult`: confirmed, disproved, not-applicable or unresolved. An unlaunched one is unresolved with "Not launched: budget or time reserved for consolidation".
 - A confirmed answer becomes a candidate through `addCandidates` with role obligation. It then goes through stages 9 and 10 like any reviewer candidate.
@@ -228,6 +238,8 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
   - `apps/server/tests/review/pipeline/obligations/lenses.test.ts`
   - `apps/server/tests/review/pipeline/obligations/derive.test.ts`
   - `apps/server/tests/review/pipeline/obligations/triggers.test.ts`
+  - `apps/server/tests/review/pipeline/obligations/transitions.test.ts`
+  - `apps/server/tests/review/pipeline/obligations/transition-closure.test.ts`
 
 ## 8. Detectors
 
@@ -235,9 +247,12 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 - `runDetectors` runs dead-code, complexity, rule-check, weakened-tests, weak-new-tests and duplication.
 - `diagnosticStage` runs `runDiagnostics` on the baseline lint and type check results, then `runTypeHints`.
 - It runs `runMatrix` (mutation testing) only when `testStrengthOn` is true. That reads `RECODER_TEST_STRENGTH`, which must be exactly `1`. `MatrixReport` is in `apps/server/src/review/pipeline/mutation/stage.ts`.
+- `runMatrix` removes leftover `.recoder-mutant.*` scratch files and `*.recoder-old.*` copies first, then `testMatrix` in `apps/server/src/review/pipeline/mutation/matrix.ts` tries two proofs per test file: for an edited test, a mutant of the added source the old file fails and the edited one passes; for a detector suspicion, an aimed mutant (`aim.ts`, picked by the suspicion's typed `shape`) that survives while a tree-sitter probe (`probeOf` in `mutants.ts`) placed before the mutated token's enclosing statement shows the test reaches the line.
+- Mutant and old-test payloads never travel on the command line. `mutantCommand` in `test-run.ts` returns a `CommandPlan`: `files` are placed through the workspace's scratch channel and removed after the run, and `command` only `cat`s the source chunks onto the tracked path. A path outside `PLAIN_PATH` or a payload past the chunk cap is skipped (`unsafe-path`, `too-large`), never run.
+- Every run goes through `runInvestigation` classified by the plan's `testCommand` (the bare test run, not the file-write wrapper), so the package's execution profile says what it reached; matrix runs pass `tally: false` and stay out of the Test outcomes tally. Only an asserted pass or fail is evidence: a timeout, a killed process, a missing exit code, a failed payload write (exit 97), `setup-failed` and `unsupported-execution` count as skips, never as kills or survivors. `closed` is checked before every run and inside the mutant and probe loops, and `diagnosticStage` publishes no matrix results after the review closes.
 - Output: `DetectorResult` and `DetectorId`, defined in `apps/server/src/review/pipeline/detectors/types.ts`.
-- `addDetections` turns each result into a candidate with `candidateFromDetector`. A detector candidate is verified by construction, with method `rule` for rule-check and `detector` otherwise.
-- A `suspected` result is not verified by construction. It goes to a verifier and can be refuted.
+- `addDetections` turns each result into a candidate with `candidateFromDetector`. A detector candidate is verified by construction, with method `rule` for rule-check and `detector` otherwise. When `ruleId` matches the rule ledger, `candidateFromDetector` attaches `Finding.rule`, and verified `rule-check` candidates record `ruleCheck` (`applicability.outcome: 'applies'`, `violation.outcome: 'violated'`).
+- A `suspected` result is not verified by construction. It goes to a verifier and can be refuted. `ruleCheckResults` marks matches of `advisory` rules or rules with `exceptions` as `suspected` and skips files covered by `excludedScopes`.
 - With a lens selection, a result whose category no selected lens reports is filtered out before the caps, so it never takes a slot from one that is wanted; the mutation matrix is skipped unless a selected lens reports `tests`, and the rule ledger is not built (no model call) unless one reports `repo-rule`.
 - Drops: a detector candidate can drop only at `location`.
 - Tests:
@@ -245,12 +260,15 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
   - `apps/server/tests/review/pipeline/harness/quality-stage.test.ts`
   - `apps/server/tests/review/pipeline/test-strength.test.ts`
   - `apps/server/tests/review/pipeline/mutation/matrix.test.ts`
+  - `apps/server/tests/review/pipeline/mutation/test-run.test.ts`
+  - `apps/server/tests/review/pipeline/mutation/mutants.test.ts`
+  - `apps/server/tests/review/pipeline/mutation/aim.test.ts`
   - `apps/server/tests/review/pipeline/harness/verification.test.ts`
   - The files under `apps/server/tests/review/pipeline/detectors/`.
 
 ## 9. Candidates, validation and repair
 
-- `validateCandidate` turns a reviewer finding into a `CandidateFinding`, defined in `apps/server/src/review/pipeline/consolidate.ts`. It sets `valid`, `dropStage` and `dropReason`.
+- `validateCandidate` turns a reviewer finding into a `CandidateFinding`, defined in `apps/server/src/review/pipeline/consolidate.ts`. It sets `valid`, `dropStage` and `dropReason`, and populates `Finding.rule` (`toFindingRule`) whenever `ruleId` names a rule in `run.ledger`.
 - A valid low-severity candidate gets `belowBar` unless `reportLowSeverity` is on. `effectiveReportLowSeverity` decides it, default true (low severity is shown). It is in `apps/server/src/review/session/review-settings.ts`. The harness itself reads `input.reportLowSeverity ?? false`, but its only caller, `commands/pipeline.ts`, always passes the setting; the `false` there is for tests that leave it out.
 - Repair is on unless `RECODER_CANDIDATE_REPAIR=0`. `candidateRepairOn` and `repairCandidate` are in `apps/server/src/review/pipeline/harness/repair.ts`. At most `RECODER_REPAIR_CAP` (default 8) repairs run per review.
 - A candidate whose category no selected lens reports (`AdaptiveReviewInput.lenses`) is never repaired, since the choice of lenses is not a mistake to correct, and a repair that picks a category picks among the selected lenses'.
@@ -274,13 +292,18 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 - A bug that `sameIssue` (`apps/server/src/review/pipeline/consolidate-merge.ts`) says consolidation would merge with a bug already in the queue gets no verifier of its own. It waits for that verifier. When it proves the bug, the waiting one takes the same verification (`shareVerdict`) and its runs lead the evidence. When it does not, the waiting one joins the queue for its own verifier. Only bugs share. Weak-test findings never do, and a below-bar bug shares only with another below-bar bug.
 - Bugs are verified only where the repository's code runs. `whyCodeCannotRun` decides it once per review, after the baseline checks finish: with no workspace, with no baseline check to run, or with no baseline check that exited 0, no bug verifier runs. Each bug then gets `outcome: 'not-run'` (status `unverified`) and is published, marked unverified, not hidden (`isPublishable` in `apps/server/src/review/pipeline/consolidate.ts`). Quality findings are still verified by reading. A bug verifier always has a shell; there is no read-only bug verifier.
 - A convention finding whose examples are missing stops with "The examples it cites are not in the repository." (`examplesOnDisk`).
-- Quality findings settle through `settleQualityVerdict`. Bugs settle through `settleVerdict` in `apps/server/src/review/pipeline/verify/settle.ts`.
-- The verifier answers confirmed, refuted or unverified. A refutation counts only with the verifier's own passing run. For a mutation finding (`isMutationFinding`) it needs a failing run. Otherwise it is inconclusive.
+- Before calling a model on a `repo-rule` candidate, `precheckRuleCandidate` (`apps/server/src/review/pipeline/quality-verify.ts`) runs `evaluateRuleApplicability` (`apps/server/src/review/guidelines/ledger/applicability.ts`) against the ledger, precedence overrides, nested folder boundary, `appliesTo` glob and modified diff lines, refuting out-of-scope rules deterministically (`refuteByRuleScope`).
+- Quality findings settle through `settleQualityVerdict` (`quality-verify.ts`). For `repo-rule` candidates, `settleRuleVerdict` records two separate decisions on `FindingVerification.ruleCheck` (`RuleCheckDecisions`: `applicability` and `violation`, with `evidenceIds`), requires retrieval evidence (`qualityVerifierPushBack`) rather than reviewer assertion alone, and checks stated exceptions before confirming. Bugs settle through `settleVerdict` in `apps/server/src/review/pipeline/verify/settle.ts`.
+- The verifier answers confirmed, refuted or unverified. A bug refutation counts only with the verifier's own passing run. For a mutation finding (`isMutationFinding`) it needs a failing run. Otherwise it is inconclusive.
 - `coveredByIntent` also refutes when the verifier names a non-goal id the intent holds, or a stacked pull request number. That sets `covered`.
 - A confirmed verdict with a run is reproduced; one with cited reads is traced. `withOutcome` sets `VerificationOutcome`: reproduced, traced, inconclusive, refuted or not-run.
 - `FindingVerification.method` is run, trace, detector, rule or convention. These types are in `packages/shared/src/findings.ts`.
 
-Base comparison. `recordBaseline` reruns the proving command on the merge-base tree. It is in `apps/server/src/review/pipeline/harness/verify-baseline.ts`. It never changes the verdict. `compareToBase` classifies the result as one `BaseComparisonResult`:
+Base comparison. `recordBaseline` reruns the proving command on the merge-base tree. It is in `apps/server/src/review/pipeline/harness/verify-baseline.ts`. It never changes the verdict.
+
+The merge-base tree (`BaseTree` in `apps/server/src/sandbox/base-tree.ts`) is built once per review in the review's cache folder. It links the head checkout's installed dependencies read-only, and only when no dependency manifest changed; otherwise the base run is unavailable. Before each base run, `ExecWorkspace.runOnBase` runs in the tree, offline and in the same sandbox, every generation command that succeeded on the head during package prep (`recordGeneration`) and that the tree has not run yet. Each runs once per tree, within the base run's timeout (`REVIEW_POLICY.baseRunTimeoutMs`), and tracked files are put back after each. A generation command that fails on the base is not retried; the base run then classifies on what it reached. So a base run is compared as a prepared run, and no longer stops in setup only because the head's generated files are missing there.
+
+`compareToBase` classifies the result as one `BaseComparisonResult`:
 
 | Class          | Meaning                                                               |
 | -------------- | --------------------------------------------------------------------- |
@@ -296,6 +319,7 @@ A `pre-existing` result adds `SAME_ON_BASE` text to the reason. It also stops a 
 - `finishVerification` drains the queue, checks suggested patches (`checkPatches`), then calls `hideUnproven`. Valid, not held back, unverified candidates go to `run.hidden`, except not-run bugs, which are published. The funnel counts them as `notRun`, so raised = dropped + unproven + verified + notRun.
 - Tests:
   - `apps/server/tests/review/pipeline/verify.test.ts`
+  - `apps/server/tests/review/pipeline/quality-verify.test.ts`
   - `apps/server/tests/review/pipeline/harness-verification.test.ts`
   - `apps/server/tests/review/pipeline/harness/verify-baseline.test.ts`
   - `apps/server/tests/review/pipeline/verify/baseline.test.ts`
@@ -305,15 +329,16 @@ A `pre-existing` result adds `SAME_ON_BASE` text to the reason. It also stops a 
 ## 11. Consolidation and publication
 
 - `consolidate` returns `Consolidated`. It is in `apps/server/src/review/pipeline/harness/consolidation.ts`. It makes no model call.
-- `confirmedFindings` calls `consolidateFindings` in `apps/server/src/review/pipeline/consolidate-merge.ts`. Only valid, verified candidates enter.
-- `consolidateFindings` groups candidates at the same place (a merge key, or the file and title of a model-raised bug), and merges each group into one `Finding`. It drops a group whose members are all held back. `Finding` is defined in `packages/shared/src/findings.ts`. Quality findings are capped at medium severity.
-- A below-bar candidate is published only through `publishHeldBack`, with `PublishedBy` reproduced or rule. `PUBLISHED_BY` is in `apps/server/src/review/pipeline/published-by.ts`.
-- Reproduced means a verifier run that did not end the same way on base. Rule means a verified violation of a ledger rule for that file.
-- `isHeldBack`, `isReportable` and `toFinding` are in the consolidate module. `toFinding` strips pipeline-only fields.
+- `confirmedFindings` calls `consolidateFindings` in `apps/server/src/review/pipeline/consolidate-merge.ts` and attaches any missing `Finding.rule` from `run.ledger`. Only valid, verified candidates enter.
+- `consolidateFindings` groups candidates at the same place (a merge key, or the file and title of a model-raised bug), and merges each group into one `Finding` (preserving `Finding.rule`). It drops a group whose members are all held back. `Finding` is defined in `packages/shared/src/findings.ts`. Quality findings are capped at medium severity.
+- A below-bar candidate is published only through `publishHeldBack`, with `PublishedBy` reproduced or rule. `PUBLISHED_BY`, `isHeldBack`, `isReportable` and `publishHeldBack` are in `apps/server/src/review/pipeline/published-by.ts` (re-exported by `consolidate.ts`).
+- Reproduced means a verifier run that did not end the same way on base. Rule means a verified violation of a `mandatory` ledger rule for that file and changed lines (`ruleCheck` confirms both `applies` and `violated`); low-severity `advisory` rule findings stay held back.
+- `toFinding` is in `consolidate.ts`. It strips pipeline-only fields and copies settled `ruleCheck` onto `finding.verification`.
 - `completeReview` builds the result and the funnel with `reviewFunnel`. Both are in `apps/server/src/review/pipeline/harness/summary.ts`. `stoppedReview` handles errors and cancellation.
 - `ReviewFunnel` is defined in `packages/shared/src/review.ts`. Held-back candidates count under the severity drop. Unconfirmed is hidden plus refuted.
 - Tests:
   - `apps/server/tests/review/pipeline/consolidate-merge.test.ts`
+  - `apps/server/tests/review/pipeline/published-by.test.ts`
   - `apps/server/tests/review/pipeline/harness-reporting-bar.test.ts`
   - `apps/server/tests/review/pipeline/harness/summary.test.ts`
   - `apps/server/tests/eval/benchmark-stages.test.ts`
@@ -321,21 +346,62 @@ A `pre-existing` result adds `SAME_ON_BASE` text to the reason. It also stops a 
 
 ## 12. Feedback
 
-- `POST /api/reviews/:id/dismissals` records a dismissal with `recordDismissal`. The route is in `apps/server/src/routes/reviews/dismissals.ts`.
-- The fingerprint is `dismissalKey`, in `apps/server/src/review/guidelines/learned/finding-key.ts`.
-- Deleting `/api/reviews/:id/dismissals/:findingId` removes it with `removeDismissal`.
-- The store is `apps/server/src/review/guidelines/learned/dismissals.ts`. It keeps at most `MAX_DISMISSALS_PER_REPO` per repository in the server data directory. The `Dismissal` type is defined there too.
+### Decisions
+
+- A person's decision on a finding is a `FindingDecision` (`packages/shared/src/findings.ts`), saved on the finding inside the review record, so every device and the review list (`reviewListItem` keeps each finding's `kind` and `decision`) agree.
+- `PUT /api/reviews/:id/findings/:findingId/decision` takes `{ "state": "accepted", "note"?: string }` or `{ "state": "dismissed", "reason": DismissalReason, "note"?: string }` (`FindingDecisionInput`) and answers the saved `FindingDecision`. `DELETE` on the same path reopens the finding and answers `{ "reopened": true }`. The routes are in `apps/server/src/routes/reviews/decisions.ts`; the decision is written with the review collection's transactional `update`.
+- What a decision teaches later reviews is `learnFromDecision` in `apps/server/src/review/guidelines/learned/decision-learning.ts`. It first forgets what an earlier decision on the same finding taught (`forgetDecision`), so changing a decision never counts twice; reopening calls `forgetDecision` alone.
+  - Accepted: a `useful` vote on the finding's topic.
+  - Dismissed: by `DismissalReason` (`DISMISSAL_REASONS`):
+
+| Reason             | Stops the same finding (`recordDismissal`) | Counts toward its topic (`dismissed` vote) | Evaluation label |
+| ------------------ | ------------------------------------------ | ------------------------------------------ | ---------------- |
+| `wrong`            | yes                                        | yes                                        | `false`          |
+| `not-worth-fixing` | yes                                        | yes                                        | none             |
+| `already-handled`  | yes                                        | no                                         | none             |
+| `style-preference` | yes                                        | yes                                        | none             |
+| `duplicate`        | no                                         | no                                         | none             |
+
+  - Suppression stays narrow: a remembered dismissal matches only in its repository, at its place and for its behaviour (`matchesDismissal`: the same `dismissalPlace` and a claim `sameClaim` takes for the same defect). Only reasons that judge the kind of finding count toward its topic; `already-handled` and `duplicate` judge one finding only. A `duplicate` stops nothing, because the finding it duplicates carries the decision.
+  - apps/web's Dismiss button asks no reason and sends `not-worth-fixing`, which keeps what a dismissal always taught without calling the finding false.
+- The dismissal key is `dismissalKey`, in `apps/server/src/review/guidelines/learned/finding-key.ts`. The store is `apps/server/src/review/guidelines/learned/dismissals.ts`, at most `MAX_DISMISSALS_PER_REPO` per repository; each `Dismissal` keeps its `reason` and `note`. A dismissal saved before reasons existed held free text in `reason`; it reads as the `note`.
 - On the next review, `createRun` loads them with `listDismissals`. `validateCandidate` drops a match as `dismissed`, and reviewer prompts list them through `dismissalsBlock`.
-- Votes count decisions toward a finding's topic (`FindingTopic` in `packages/shared/src/findings.ts`): the ledger rule it cites, keyed by a hash of the rule's text (`ruleTopicId`), else its smell, else its category. The store is `apps/server/src/review/guidelines/learned/votes.ts`, one vote per finding fingerprint, at most `MAX_VOTES_PER_REPO` per repository. Both stores live in `learned-table.ts`: a local file in the server data directory, or a shared setting (`dismissals`, `finding-votes`) under PostgreSQL, so every replica learns from the same decisions.
-  - A dismissal records a `dismissed` vote; restoring it removes that vote.
-  - `PUT /api/reviews/:id/useful/:findingId` records a `useful` vote when a person accepts or sends a finding; `DELETE` removes only a `useful` vote. The routes are in `apps/server/src/routes/reviews/feedback.ts`.
-  - `createRun` loads `topicTallies`. `ruleLedgerStage` orders the ledger with `rankRules`: rules people act on first, rules they keep dismissing last. `ledgerBlock` notes a rule's `standing` in the prompts of reviewers that apply the rules lens. Rule ids stay the same.
-  - `confirmedFindings` sets each finding's topic with `withTopics`. A topic with at least 3 dismissals and at least 4 dismissals per useful vote (`isQuietTopic`) marks its findings `quieted`, unless a run proved the finding. Quieted findings are verified and stored like the rest. The summary, the review list (`reviewListItem`, `reviewTally`) and past-review context leave them out, and the app lists them apart.
-  - `DELETE /api/reviews/:id/quieted/:topicId` turns a topic back on: it forgets the topic's dismissed votes and clears `quieted` on the review's findings of that topic.
+
+### Votes and learned rules
+
+- Votes count decisions toward a finding's topic (`FindingTopic` in `packages/shared/src/findings.ts`): the ledger rule it cites, keyed by a hash of the rule's text (`ruleTopicId`), else its smell, else its category. The store is `apps/server/src/review/guidelines/learned/votes.ts`, one vote per finding fingerprint, at most `MAX_VOTES_PER_REPO` per repository. The learned stores live in `learned-table.ts`: a local file in the server data directory, or a shared setting (`dismissals`, `finding-votes`, `learned-rules`) under PostgreSQL, so every replica learns from the same decisions. Both are read through the table's schema.
+  - `PUT /api/reviews/:id/useful/:findingId` records a `useful` vote when a person sends a finding on; `DELETE` removes only a `useful` vote. The routes are in `apps/server/src/routes/reviews/feedback.ts`.
+  - `createRun` loads `topicTallies`. `ruleLedgerStage` orders the ledger with `rankRules`: rules people act on first, rules they keep dismissing (`isDismissedOften`) last. `ledgerBlock` notes a rule's `standing` in the prompts of reviewers that apply the rules lens. Rule ids stay the same.
+- A topic with at least 3 dismissals and at least 4 dismissals per useful vote (`isDismissedOften`) is only proposed for quieting: the dismissal that crosses the bar calls `proposeQuieting` (`apps/server/src/review/guidelines/learned/proposals.ts`), which stores a `LearnedRuleProposal` (`packages/shared/src/guidelines.ts`) in state `proposed`. A rule applies only once a person approves it.
+  - `GET /api/repos/:repoId/learned-rules` lists the repository's proposals in every state. `PUT /api/repos/:repoId/learned-rules/:topicId` with `{ "state": "approved" | "rejected" }` decides one and answers it. The routes are in `apps/server/src/routes/learned-rules.ts`. A decided proposal is never proposed again by later dismissals; a person can still change it.
+  - `topicTallies` marks approved topics `quietApproved`. `confirmedFindings` sets each finding's topic with `withTopics`, which marks it `quieted` only when its topic is approved, unless a run proved the finding. Quieted findings are verified and stored like the rest. The summary, the review list (`reviewListItem`, `reviewTally`) and past-review context leave them out, and the app lists them apart.
+  - `DELETE /api/reviews/:id/quieted/:topicId` turns a topic back on: it forgets the topic's dismissed votes and its proposal, and clears `quieted` on the review's findings of that topic.
+
+### History across pushes
+
+- `finalizeReview` (`apps/server/src/commands/finalize-review.ts`) passes a passed review's findings through `withFindingHistory` (`apps/server/src/review/history/history.ts`). It sets them against the newest earlier passed review of the same pull request (`earlierReviews`); the first review of a pull request keeps no history.
+- A defect's identity is `defectIdentity` in `apps/server/src/review/history/identity.ts`: its file, its enclosing symbol and its claim terms (`claimTerms`: trigger, consequence, violated contract, rule or smell, title, body). Line and category are left out, so a moved line or a re-filed category keeps the defect, and two different claims in one symbol stay apart (`sameDefect`). `Finding.fingerprint` is unchanged and still keys votes, saved reviews and evaluations.
+- What the commits since did to a finding's code is `codeChange` in `apps/server/src/review/history/code-change.ts`, read from the two pull request diffs: `untouched` when the hunk around it reads the same (perhaps moved), `touched` otherwise, `gone` when the pull request no longer changes its file.
+- `carryHistory` (`apps/server/src/review/history/carry.ts`) sets `FindingHistory`:
+  - raised again: it keeps the earlier finding's id; `rechecked` when its code was touched (and open again), else `carried` with the earlier decision;
+  - not raised, untouched: the earlier finding is `carried` as it was, moved with its code;
+  - not raised, touched: it goes to `Review.resolved` (`ResolvedFinding`) only on new evidence, a verifier refuting the same defect in this review or the pull request no longer changing its file; otherwise it is `carried` where it was;
+  - every other finding is `new` at this head.
+- Because a carried finding keeps its id, `findingForgeStanding` (`apps/server/src/review/history/forge-standing.ts`) answers the forge publisher: the comment already posted for the finding by this or an earlier review of the pull request, and its `ResolvedFinding` when this review closed it. An unrelated commit does not post it again.
+
+### Evaluation labels
+
+- `findingLabel` in `apps/server/src/eval/benchmark-labels.ts` labels a finding `false` when no human adjudication exists and the finding's saved decision is a `wrong` dismissal. No other reason is a false-positive label.
+
 - Tests:
-  - `apps/server/tests/routes/reviews/dismissals.test.ts`
+  - `apps/server/tests/routes/reviews/decisions.test.ts`
   - `apps/server/tests/routes/reviews/feedback.test.ts`
+  - `apps/server/tests/routes/learned-rules.test.ts`
   - `apps/server/tests/review/guidelines/learned/votes.test.ts`
   - `apps/server/tests/review/guidelines/learned/topics.test.ts`
   - `apps/server/tests/review/guidelines/learned/dismissals.test.ts`
+  - `apps/server/tests/review/history/identity.test.ts`
+  - `apps/server/tests/review/history/carry.test.ts`
+  - `apps/server/tests/review/history/history.test.ts`
   - `apps/server/tests/review/pipeline/harness-dismissals.test.ts`
+  - `apps/server/tests/eval/benchmark-labels.test.ts`

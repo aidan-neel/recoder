@@ -14,6 +14,14 @@ export type DetectorId =
 	| 'mutation';
 
 /**
+ * The shape a weak-test suspicion takes, which picks the mutation aimed at
+ * it: a broad error class, a bound or exact check, a count, a presence check,
+ * printed output, a choice among items, or anything else.
+ */
+export type SuspicionShape =
+	'broadError' | 'lowerBound' | 'someForEvery' | 'presence' | 'output' | 'selection' | 'generic';
+
+/**
  * A tool's diagnostic as a record. The head has it by construction, since the
  * tool ran on the head; the base lacks it when the line is one the change adds.
  */
@@ -46,6 +54,8 @@ export interface DetectorResult {
 	diagnostic?: Diagnostic;
 	/** What the detector saw: the diagnostic line, the duplicate's location, the metric against the repo's p95. */
 	evidence: string;
+	/** On a weak-test suspicion: which mutation shape proves it. Absent means `generic`. */
+	shape?: SuspicionShape;
 	relatedLocations?: { file: string; line: number; endLine?: number }[];
 	patch?: FindingPatch;
 	/** A heuristic rather than a proof, so a verifier settles it like a reviewer's finding. */

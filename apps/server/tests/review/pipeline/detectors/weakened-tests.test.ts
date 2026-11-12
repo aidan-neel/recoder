@@ -1,13 +1,8 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { weakenedInFile } from '../../../../src/review/pipeline/detectors/weakened-tests';
+import { envFlag } from '../../../helpers/env-flag';
 
-beforeAll(() => {
-	process.env.RECODER_TEST_STRENGTH = '1';
-});
-
-afterAll(() => {
-	delete process.env.RECODER_TEST_STRENGTH;
-});
+envFlag('RECODER_TEST_STRENGTH', '1');
 
 /** Head lines the base lacks count as added; every head line counts as shown in the diff. */
 function detect(base: string[], head: string[]) {
@@ -34,7 +29,9 @@ describe('weakenedInFile', () => {
 			["test('keeps the most severe', () => {", '	expect(names).toHaveLength(1);', '});']
 		);
 
-		expect(results.map(({ suspected, line }) => ({ suspected, line }))).toEqual([{ suspected: true, line: 2 }]);
+		expect(results.map(({ detector, shape, suspected, line }) => ({ detector, shape, suspected, line }))).toEqual([
+			{ detector: 'weakened-tests', shape: 'selection', suspected: true, line: 2 }
+		]);
 	});
 
 	test('flags an exact count turned into a lower bound on the same count', () => {

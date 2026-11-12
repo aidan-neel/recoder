@@ -1,13 +1,13 @@
 import { z } from 'zod';
-import { configForOrchestrator } from '../../../models/models.js';
+import { configForOrchestrator, type ModelConfig } from '../../../models/models.js';
 import { REVIEW_POLICY } from '../../session/review-policy.js';
-import { mapLimit } from '../change-model/repo.js';
+import { throwIfAborted } from '../agent-loop/budget.js';
 import type { ReviewRun } from '../harness/context.js';
-import { partitionUnits } from '../units.js';
+import { partitionUnits, type ReviewUnit } from '../units.js';
 import { askBrief } from './ask.js';
 import { isFiller, numberClaims } from './brief.js';
 import type { BriefUnit, ChangeIntent, GatheredContext, IntentClaim, IntentSource } from './types.js';
-import { briefUnit } from './unit-brief.js';
+import { briefUnit, type UnitBrief } from './unit-brief.js';
 
 /**
  * Raised whenever a brief prompt or reply schema changes, here or in
@@ -157,17 +157,14 @@ export async function distillIntent(
 	if (!distill && !units.length) return null;
 
 	const cfg = configForOrchestrator();
-
-	const briefs = await mapLimit(units, REVIEW_POLICY.maxConcurrentAssignments, (unit) =>
-		briefUnit(run, cfg, unit, INTENT_VERSION)
-	);
-
+	const briefs = await briefUnits(run, cfg, units);
 	const records = briefs.map((brief) => brief.record);
 
 	const context = distill
 		? await askBrief(run, cfg, {
 				label: 'context',
 				version: INTENT_VERSION,
+				signal: run.controller.signal,
 				system: SYSTEM,
 				user: userPrompt(sources, stack, records),
 				schema: contextSchema,
@@ -194,4 +191,46 @@ export async function distillIntent(
 		units: records,
 		complete: records.every((record) => record.status === 'included') && (!context || Boolean(reply))
 	};
+}
+
+/**
+ * Briefs every unit, as many at once as reviewers run, under one signal of
+ * the stage's own. A call that throws (a blocked model, a cancelled review)
+ * aborts that signal, so the calls in flight stop and no queued unit starts;
+ * the error is thrown only once every call started has settled, so no brief
+ * call writes after the stage has ended.
+ */
+async function briefUnits(run: ReviewRun, cfg: ModelConfig, units: ReviewUnit[]): Promise<UnitBrief[]> {
+	const stage = new AbortController();
+	const stop = () => stage.abort(run.controller.signal.reason);
+	const failures: unknown[] = [];
+	const briefs = new Array<UnitBrief>(units.length);
+	let next = 0;
+
+	const worker = async () => {
+		while (next < units.length && !stage.signal.aborted) {
+			const index = next++;
+
+			try {
+				briefs[index] = await briefUnit(run, cfg, units[index], { version: INTENT_VERSION, signal: stage.signal });
+			} catch (err) {
+				failures.push(err);
+				stage.abort(err);
+			}
+		}
+	};
+
+	run.controller.signal.addEventListener('abort', stop, { once: true });
+	if (run.controller.signal.aborted) stop();
+
+	try {
+		await Promise.all(Array.from({ length: Math.min(REVIEW_POLICY.maxConcurrentAssignments, units.length) }, worker));
+	} finally {
+		run.controller.signal.removeEventListener('abort', stop);
+	}
+
+	if (failures.length) throw failures[0];
+	throwIfAborted(stage.signal);
+
+	return briefs;
 }

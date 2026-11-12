@@ -52,3 +52,12 @@ test('the error of a review that stopped is shown under its outcome', () => {
 	expect(rendered).toContain('Review failed');
 	expect(rendered).toContain('the model stopped answering');
 });
+
+test('the settings header prints the verifier model only when it differs from the reviewer model', () => {
+	const base = report().settings;
+	const same = text({ settings: { ...base, reviewerModel: 'lead', verifierModel: 'lead' } });
+	const different = text({ settings: { ...base, reviewerModel: 'lead', verifierModel: 'judge' } });
+
+	expect(same).not.toContain('verifier ');
+	expect(different).toContain('verifier judge');
+});

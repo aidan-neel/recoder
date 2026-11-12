@@ -159,17 +159,11 @@ export class DevinAgent extends CliAgent {
 
 	/**
 	 * Deletes the session the CLI saved for a call, which holds the review's prompt, and resolves once `devin rm`
-	 * has exited. Its exit code is not read: a session the CLI never saved has nothing to delete.
+	 * has exited or run out of time, so a stalled `rm` never holds a review. Its exit code is not read: a session
+	 * the CLI never saved has nothing to delete.
 	 */
 	private async forget(path: string, session: string): Promise<void> {
-		const proc = Bun.spawn([path, 'rm', session, '--force'], {
-			env: devinEnv(this.env),
-			stdin: 'ignore',
-			stdout: 'ignore',
-			stderr: 'ignore'
-		});
-
-		await proc.exited;
+		await this.output(path, ['rm', session, '--force'], STATUS_TIMEOUT_MS);
 	}
 
 	/** Run a short CLI command. See {@link cliOutput}. */

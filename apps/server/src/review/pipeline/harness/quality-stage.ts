@@ -6,7 +6,7 @@ import { testStrengthOn } from '../test-strength.js';
 import { matrixDetail, runMatrix } from '../mutation/stage.js';
 import type { DetectorResult } from '../detectors/types.js';
 import { publishBudget, type ReviewRun } from './context.js';
-import { addDetections } from './verification.js';
+import { addDetections } from './detections.js';
 import { STILL_RUNNING } from '../../session/task-state.js';
 
 const MATRIX_TASK = { id: 'matrix', label: 'Testing the tests' } as const;
@@ -122,7 +122,7 @@ export async function diagnosticStage(run: ReviewRun, closed: () => boolean, det
 	});
 
 	try {
-		const matrix = await runMatrix(run);
+		const matrix = await runMatrix(run, closed);
 
 		if (!closed() && !run.controller.signal.aborted) {
 			run.detections.push(...matrix.results);

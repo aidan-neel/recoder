@@ -8,6 +8,8 @@ interface SelectionLabel {
 	id: string;
 	codebase: string;
 	defects: LabeledDefect[];
+	/** A holdout label never becomes a candidate: development sets must not learn from it. */
+	holdout?: boolean;
 }
 
 /** A report the selection learns from, under its file path. */
@@ -44,7 +46,7 @@ export interface Pick {
 const BOUNDARY = /off-by-one|boundary|exactly|fencepost|inclusive|exclusive/i;
 
 const RULE =
-	'Rank PRs by defects published in some judged run and not another plus defects a candidate found that no shown finding reported, ties by id; take the best PR for each codebase, then for a tests-category label, a title naming a boundary (off-by-one, boundary, exactly, fencepost, inclusive, exclusive) and a control (ranked by spread in published findings), then fill by rank.';
+	'Labels marked holdout are never candidates. Rank the rest by defects published in some judged run and not another plus defects a candidate found that no shown finding reported, ties by id; take the best PR for each codebase, then for a tests-category label, a title naming a boundary (off-by-one, boundary, exactly, fencepost, inclusive, exclusive) and a control (ranked by spread in published findings), then fill by rank.';
 
 function judgedRuns(id: string, reports: readonly SourceReport[]): ScoredRun[] {
 	return reports.flatMap(({ report }) => report.prs.find((pr) => pr.id === id)?.runs.filter((run) => run.score) ?? []);
@@ -116,11 +118,15 @@ export function selectSet(
 ): { set: TaskSet; picks: Pick[] } {
 	checkSources(dataset, reports);
 
-	const order = ranked(labels.map((label) => candidate(label, reports)));
+	const development = labels.filter((label) => !label.holdout);
+
+	if (!development.length) throw new Error('No labeled PRs outside the holdout set to select from.');
+
+	const order = ranked(development.map((label) => candidate(label, reports)));
 	const picked: Candidate[] = [];
 
 	const needs: ((item: Candidate) => boolean)[] = [
-		...[...new Set(labels.map((label) => label.codebase))]
+		...[...new Set(development.map((label) => label.codebase))]
 			.sort()
 			.map((codebase) => (item: Candidate) => !item.control && item.codebase === codebase),
 		(item) => item.weakTests > 0,

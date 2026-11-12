@@ -18,7 +18,7 @@ import { settlePullComment, trackPullComment, stopPullCommentTracking } from '..
 import { gatherChangeContext, prsForCommit } from '../forge/pr-context';
 import type { GatheredContext } from '../review/pipeline/intent/types';
 import { runAdaptiveReview } from '../review/pipeline/harness';
-import { configForOrchestrator, configForSubagent, isReviewConfigured, withLockedModels } from '../models/models';
+import { configForOrchestrator, isReviewConfigured, stageConfigs, withLockedModels } from '../models/models';
 import { ModelBlockedError } from '../review/pipeline/agent-loop';
 import { signedOutAgent, signedOutReason } from '../models/agent-sign-in';
 import { reviewInstructions } from '../review/chat/review-chat';
@@ -257,9 +257,9 @@ function cancelReason(signal: AbortSignal): string {
 	return signal.reason instanceof Error ? signal.reason.message : REVIEW_CANCELLED;
 }
 
-/** Planning and the correctness pass always run, so an agent CLI that is signed out fails now, not after a long checkout. */
+/** Every stage always runs, so an agent CLI that is signed out fails now, not after a long checkout. */
 async function assertAgentsSignedIn(): Promise<void> {
-	const signedOut = await signedOutAgent([configForOrchestrator(), configForSubagent()]);
+	const signedOut = await signedOutAgent(stageConfigs());
 
 	if (signedOut) throw new ModelBlockedError({ reason: signedOutReason(signedOut) });
 }

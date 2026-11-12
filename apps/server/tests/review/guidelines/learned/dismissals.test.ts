@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from 'bun:test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -24,9 +24,12 @@ const dismissal = (fingerprint: string, repoId = 'repo-1'): Dismissal => ({
 });
 
 test('a dismissal is still there when the store is read again, and restoring it removes it', () => {
-	recordDismissal({ ...dismissal('aaaa'), reason: 'intended' });
+	recordDismissal({ ...dismissal('aaaa'), reason: 'not-worth-fixing', note: 'intended' });
 
-	expect(listDismissals('repo-1').map((held) => [held.fingerprint, held.reason])).toEqual([['aaaa', 'intended']]);
+	expect(listDismissals('repo-1').map((held) => [held.fingerprint, held.reason, held.note])).toEqual([
+		['aaaa', 'not-worth-fixing', 'intended']
+	]);
+
 	expect(listDismissals('repo-2')).toEqual([]);
 
 	expect(removeDismissal('repo-1', (held) => held === 'aaaa')).toBe(true);
@@ -47,4 +50,14 @@ test('dismissing the same finding twice keeps one record, and a repository keeps
 	expect(held).toHaveLength(MAX_DISMISSALS_PER_REPO);
 	expect(held[0].fingerprint).toBe(`f${MAX_DISMISSALS_PER_REPO + 4}`);
 	expect(held.some((entry) => entry.fingerprint === 'same')).toBe(false);
+});
+
+test('a dismissal saved with free text as its reason reads it as the note, with no reason', () => {
+	writeFileSync(
+		join(process.env.RECODER_DATA_DIR ?? '', 'dismissed-findings.json'),
+		JSON.stringify({ 'repo-1': [{ ...dismissal('old'), reason: 'we never do this' }] })
+	);
+
+	expect(listDismissals('repo-1')).toMatchObject([{ fingerprint: 'old', note: 'we never do this' }]);
+	expect(listDismissals('repo-1')[0]?.reason).toBeUndefined();
 });

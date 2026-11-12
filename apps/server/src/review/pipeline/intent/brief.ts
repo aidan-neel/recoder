@@ -3,7 +3,7 @@ import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { symbolAt, unitContext } from '../change-model/lookup.js';
 import type { ChangeModel } from '../change-model/types.js';
 import type { ReviewInventory } from '../inventory.js';
-import { patchChars, patchLineChars, type ReviewUnit, type UnitScope } from '../units.js';
+import { linesWithin, patchChars, patchLineChars, type ReviewUnit, type UnitScope } from '../units.js';
 import type { BriefOmission, ChangeIntent, CodeClaim } from './types.js';
 
 const MAX_DECLARATION_CHARS = 8_000;
@@ -25,16 +25,6 @@ const lineNo = (line: DiffLine, deleted: boolean) => (deleted ? line.oldNo : lin
 const numbered = (line: DiffLine, deleted: boolean) => `${SIGN[line.type]}${lineNo(line, deleted) ?? ''}| ${line.text}`;
 
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
-
-/** The first lines of a hunk that fit in `chars`. */
-function linesWithin(lines: DiffLine[], chars: number): DiffLine[] {
-	let left = chars;
-	let count = 0;
-
-	while (count < lines.length && patchLineChars(lines[count]) <= left) left -= patchLineChars(lines[count++]);
-
-	return lines.slice(0, count);
-}
 
 /** A file whose diff did not fit its share of one call, with how many of its lines were shown. */
 export interface ClippedFile {

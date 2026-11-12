@@ -40,6 +40,18 @@ test('a human label applies to every run that has the finding, and the judge kee
 	expect(labeled.classes).toEqual(['planted', 'additional', 'unresolved', 'duplicate']);
 });
 
+test('a finding a person dismissed as wrong is labeled false, and one dismissed for any other reason is not', () => {
+	const dismissed = (reason: 'wrong' | 'not-worth-fixing'): EvalFinding => ({
+		...finding(`fp-${reason}`),
+		decision: { state: 'dismissed', reason, decidedAt: '2026-11-12T00:00:00.000Z' }
+	});
+
+	const findings = [dismissed('wrong'), dismissed('not-worth-fixing')];
+	const labeled = labelRun('ky-1', { findings, score: { ...score({}), unlabeled: [0, 1] } }, {});
+
+	expect(labeled.classes).toEqual(['false', 'unresolved']);
+});
+
 test('labeling a finding once changes the summary of a run scored before the label existed', () => {
 	const findings = [finding('fp-b')];
 	const run = { findings, score: { ...score({}), unlabeled: [0] } };

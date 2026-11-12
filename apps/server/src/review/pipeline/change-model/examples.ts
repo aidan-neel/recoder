@@ -1,7 +1,8 @@
 import { repoPaths, type RepoInventory } from '../repo-inventory/repo-inventory.js';
 import { languageFor } from './languages.js';
 import { parseRepoFiles } from './parsed-files.js';
-import { byCodePoint, mapLimit } from './repo.js';
+import { mapLimit } from '../../../util/map-limit.js';
+import { byCodePoint } from './repo.js';
 import type { ParsedSymbol } from './symbols.js';
 import { isTestPath } from './test-files.js';
 import type { SymbolRange } from './types.js';

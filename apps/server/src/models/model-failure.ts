@@ -1,6 +1,6 @@
 import type { ModelFailure, UsageLimit } from '@recoder/shared';
 import { LlmError } from './llm.js';
-import { UsageLimitError } from './llm/errors.js';
+import { statesPlanSpent, UsageLimitError } from './llm/errors.js';
 import { hostedProvider } from './model-providers.js';
 import type { ModelConfig } from './models.js';
 import { agentById } from '../agents/registry.js';
@@ -21,16 +21,17 @@ export function isAuthFailure(err: unknown): boolean {
 }
 
 /**
- * The plan behind the model ran out: an agent CLI says so with a {@link UsageLimitError}, and a 402 or a 429 that
- * outlasted every retry means a hosted plan or credit balance is spent. Your own server has no plan: its 429 is an overload, reported as a plain failure. Short rate limits are
+ * The plan behind the model ran out: an agent CLI says so with a {@link UsageLimitError}, and a 402, a 429 that
+ * outlasted every retry, or an error whose words say the plan is spent means a hosted plan or credit balance is
+ * spent. Your own server has no plan: its 429 is an overload, reported as a plain failure. Short rate limits are
  * retried in `llm.ts` before this is reached.
  */
 export function isUsageLimit(err: unknown, config: ModelRef): boolean {
 	if (!(err instanceof LlmError)) return false;
 	if (err instanceof UsageLimitError) return true;
-	if (agentById(config?.provider)) return false;
+	if (agentById(config?.provider) || !hostedProvider(config?.source)) return false;
 
-	return !!hostedProvider(config?.source) && (err.status === 402 || err.status === 429);
+	return err.status === 402 || err.status === 429 || statesPlanSpent(err.message);
 }
 
 function usageLimitFor(config: ModelRef): UsageLimit {

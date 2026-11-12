@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { redactedTail } from '../../../src/cli/target/redact';
+import { redacted, redactedTail } from '../../src/util/redact';
 
 /** A made-up token holding characters a URL encodes. */
 const SECRET = 'fake-T0ken/with:odd+chars';
@@ -50,3 +50,24 @@ test('user info and an authorization value are removed when their separators are
 function encodeEveryByte(text: string): string {
 	return [...new TextEncoder().encode(text)].map((byte) => `%${byte.toString(16).padStart(2, '0')}`).join('');
 }
+
+test('a provider key is removed from a header, a parameter and a JSON field that name it', () => {
+	const key = 'zz-made-up-key-0123456789';
+
+	const text = [`x-api-key: ${key}`, `GET /v1/models?api_key=${key}&page=2`, `{"apiKey":"${key}","model":"m"}`].join(
+		'\n'
+	);
+
+	const shown = redacted(text, []);
+
+	expect(shown).not.toContain(key);
+	expect(shown).toContain('page=2');
+	expect(shown).toContain('"model":"m"');
+});
+
+test('a password quoted as a JSON field is removed, and a token count beside it stays', () => {
+	const shown = redacted('{"password":"hunter2-made-up","totalTokens":1234}', []);
+
+	expect(shown).not.toContain('hunter2-made-up');
+	expect(shown).toContain('"totalTokens":1234');
+});

@@ -11,7 +11,7 @@ const CHATGPT_PROVIDER = 'codex';
 export const SAVED_ENTRY_PROVIDERS = ['openai-compatible', CHATGPT_PROVIDER] as const;
 
 /** Every settings field that names a picked model. A field that names a ChatGPT entry is moved to the CLI's id. */
-const MODEL_PICK_KEYS = ['sharedModelId', 'orchestratorModelId', 'specialistModelId'] as const;
+const MODEL_PICK_KEYS = ['sharedModelId', 'orchestratorModelId', 'specialistModelId', 'verifierModelId'] as const;
 
 type ModelPicks = Partial<Record<(typeof MODEL_PICK_KEYS)[number], string | null>>;
 

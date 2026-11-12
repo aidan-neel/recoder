@@ -4,7 +4,7 @@ import { runSandboxed, sandboxLayout, type RunResult, type SandboxLayout } from 
 import { sanitizeRepoPath } from '../evidence/evidence.js';
 import type { ExecutionOutcome } from '../evidence/types.js';
 import { BaseTree } from './base-tree.js';
-import { installKey } from './install-inputs.js';
+import { installKey, packageManifests } from './install-inputs.js';
 import {
 	JS_LOCKFILES,
 	removeLayers,
@@ -63,18 +63,10 @@ export interface InvestigatorRun {
 	/** Runs the same command again, the same way. */
 	rerun: () => Promise<RunResult>;
 	signal?: AbortSignal;
-}
-
-/** The `package.json` files worth reading, skipping vendored and build dirs: at most 30, at most four levels deep. */
-export function packageManifests(paths: Iterable<string>): string[] {
-	return [...paths]
-		.filter(
-			(path) =>
-				/(^|\/)package\.json$/.test(path) &&
-				!/(^|\/)(node_modules|vendor|dist|build|fixtures?)\//.test(path) &&
-				path.split('/').length <= 4
-		)
-		.slice(0, 30);
+	/** The command the outcome is classified as when `command` wraps the real run, as the matrix's file writes do; defaults to `command`. */
+	classifyAs?: string;
+	/** False keeps the outcome out of the review's Test outcomes tally; the mutation matrix reports its own row. */
+	tally?: boolean;
 }
 
 export class ExecWorkspace {
@@ -91,8 +83,8 @@ export class ExecWorkspace {
 	private releaseShared: () => void = () => {};
 	/** Set by the harness once packages are prepared: says what an investigator's run reached. */
 	settleRun: ((run: InvestigatorRun) => Promise<SettledRun>) | null = null;
-	/** What the harness ran in the checkout before the checks; a stored check result is reused only after the same. */
-	preparedWith = '';
+	/** The generation commands that prepared the head before the checks, in order; the merge-base tree runs the same. */
+	private generation: readonly string[] = [];
 
 	constructor(
 		readonly checkout: string,
@@ -102,6 +94,16 @@ export class ExecWorkspace {
 		private readonly share?: { scope: string; baseSha: string }
 	) {
 		this.layout = layout ?? sandboxLayout(checkout);
+	}
+
+	/** What the harness ran in the checkout before the checks; a stored check result is reused only after the same. */
+	get preparedWith(): string {
+		return this.generation.length ? `package prep: ${this.generation.join('; ')}` : '';
+	}
+
+	/** Records the generation commands that prepared the head, for the check cache key and the merge-base tree. */
+	recordGeneration(commands: readonly string[]): void {
+		this.generation = [...commands];
 	}
 
 	/** Which of the common interpreters a sandboxed command can run. */
@@ -199,20 +201,39 @@ export class ExecWorkspace {
 		return this.exclusive(work, { signal, instead: () => notRun(ABORTED, false) });
 	}
 
-	/** Run an investigator's command the way `run` does; once packages are prepared, the result says what it reached. */
-	async runInvestigation(command: string, timeoutMs: number, signal?: AbortSignal, owner = ''): Promise<SettledRun> {
+	/**
+	 * Run an investigator's command the way `run` does; once packages are
+	 * prepared, the result says what it reached. `settle.classifyAs` names the
+	 * command the outcome is classified as when `command` only wraps it, and
+	 * `settle.tally: false` keeps the outcome out of the Test outcomes tally.
+	 */
+	async runInvestigation(
+		command: string,
+		timeoutMs: number,
+		signal?: AbortSignal,
+		owner = '',
+		settle?: { classifyAs?: string; tally?: boolean }
+	): Promise<SettledRun> {
 		const result = await this.run(command, timeoutMs, signal, owner);
 
 		if (!this.settleRun) return result;
 
-		return this.settleRun({ command, result, owner, rerun: () => this.run(command, timeoutMs, signal, owner), signal });
+		return this.settleRun({
+			command,
+			result,
+			owner,
+			rerun: () => this.run(command, timeoutMs, signal, owner),
+			signal,
+			...settle
+		});
 	}
 
 	/**
 	 * Run a command, offline, on a copy of the merge-base commit with `owner`'s
 	 * scratch files in place, the way `run` does on the head. The copy is built
-	 * once and put back after every command. `unavailable` says why it could not
-	 * be used: changed dependencies, no time left, or a copy that would not build.
+	 * once, prepared with the head's generation commands, and put back after
+	 * every command. `unavailable` says why it could not be used: changed
+	 * dependencies, no time left, or a copy that would not build.
 	 */
 	async runOnBase(
 		command: string,
@@ -227,10 +248,7 @@ export class ExecWorkspace {
 			if (this.timeout(timeoutMs) <= 0) return { unavailable: 'the review is out of time' };
 
 			const tree = (this.baseTree ??= new BaseTree(this.layout, this.headSha, mergeBaseSha));
-
-			const unavailable = await tree.prepare(
-				AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(timeoutMs)])
-			);
+			const unavailable = await this.prepareBase(tree, timeoutMs, signal);
 
 			if (unavailable) return { unavailable };
 
@@ -363,6 +381,25 @@ export class ExecWorkspace {
 		await removeLayers(this.layout).catch(() => undefined);
 	}
 
+	/**
+	 * Builds the merge-base tree, then runs there, as prep commands, the head's
+	 * generation commands it has not run yet, each within `timeoutMs`. Null when
+	 * the tree is ready; otherwise why it can't be used, including a tree a
+	 * generation command replaced.
+	 */
+	private async prepareBase(tree: BaseTree, timeoutMs: number, signal?: AbortSignal): Promise<string | null> {
+		const built = await tree.prepare(AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(timeoutMs)]));
+
+		if (built) return built;
+
+		const generate = (command: string) =>
+			runSandboxed(tree.sandbox, command, { timeoutMs: () => this.timeout(timeoutMs), tier: 'prep', signal });
+
+		await tree.generate(this.generation, generate, signal);
+
+		return tree.prepare();
+	}
+
 	/** Writes each scratch file under `layout`; returns the first path that could not be written. */
 	private async place(
 		files: Map<string, string>,
@@ -446,7 +483,7 @@ export class ExecWorkspace {
 const ABORTED = 'Not run: the review was aborted.';
 
 /** A run that never started, shaped like one that did. */
-function notRun(output: string, timedOut: boolean): RunResult {
+export function notRun(output: string, timedOut: boolean): RunResult {
 	return { exitCode: null, output, truncated: false, timedOut, elapsedMs: 0 };
 }
 

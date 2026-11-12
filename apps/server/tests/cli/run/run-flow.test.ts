@@ -237,9 +237,12 @@ test('the timeout also covers OpenCode listing its models, and the error says so
 	expect(failure).toMatchObject({ exitCode: EXIT.cancelled, message: expect.stringContaining('timeout') });
 });
 
-/** Reviews on a Codex model, the CLI's sign-in as `signedIn` says, with a resolver that counts its calls. */
-async function reviewWithCodexModel(signedIn: boolean): Promise<{ failure: unknown; resolved: number }> {
-	setReviewOverrides({ orchestratorModelId: 'codex:gpt-6-sol' });
+/** Reviews with the given model overrides, the Codex CLI's sign-in as `signedIn` says, and a resolver that counts its calls. */
+async function reviewWithCodexModel(
+	signedIn: boolean,
+	overrides: Parameters<typeof setReviewOverrides>[0] = { orchestratorModelId: 'codex:gpt-6-sol' }
+): Promise<{ failure: unknown; resolved: number }> {
+	setReviewOverrides(overrides);
 
 	const status = { ...(await codex.detect()), installed: true, signedIn };
 	const sign = spyOn(codex, 'quickStatus').mockResolvedValue(status);
@@ -265,6 +268,21 @@ test('an agent CLI that says it is signed out stops the run as not ready before 
 
 	expect(failure).toMatchObject({ exitCode: EXIT.notReady });
 	expect(describeError(failure)).toContain('Codex is not signed in. Sign in with `codex login`');
+	expect(resolved).toBe(0);
+});
+
+test('a Codex verifier pick alone, signed out, stops the run before the target is prepared', async () => {
+	const { failure, resolved } = await reviewWithCodexModel(false, {
+		baseUrl: 'http://model.test/v1',
+		apiKey: 'test',
+		models: [{ id: 'http', label: 'HTTP', model: 'http-x' }],
+		orchestratorModelId: 'http',
+		specialistModelId: 'http',
+		verifierModelId: 'codex:gpt-6-sol'
+	});
+
+	expect(failure).toMatchObject({ exitCode: EXIT.notReady });
+	expect(describeError(failure)).toContain('Codex is not signed in');
 	expect(resolved).toBe(0);
 });
 

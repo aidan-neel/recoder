@@ -198,7 +198,7 @@ const COMMAND_HELP: Record<Exclude<HelpTopic, 'main'>, CommandHelp> = {
 	models: {
 		usage: 'recoder models [--provider <name>] [--search <text>]',
 		about:
-			'Lists the models --reviewer and --worker accept on this machine, grouped by provider, with the saved picks marked. OpenCode and Devin list their models by running, so each may take up to 10 seconds.',
+			'Lists the models --reviewer, --worker and --verifier accept on this machine, grouped by provider, with the saved picks marked. OpenCode and Devin list their models by running, so each may take up to 10 seconds.',
 		sections: flagSections(MODELS_FLAGS),
 		notes: [
 			'With -p it prints one line of JSON: { reviewer, worker, models: [{ id, name, provider, efforts, defaultEffort }], problems }. reviewer and worker are the saved picks, or null. An agent that cannot list its models adds a line to problems, and the other models are still listed.',

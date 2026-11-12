@@ -11,6 +11,7 @@ import {
 	registeredAgents
 } from '../../src/agents/registry';
 import { clearAllCaches } from '../../src/util/ttl-cache';
+import { join } from 'node:path';
 
 const entry: ModelEntry = { id: 'devin:swe', label: 'SWE', model: 'swe', baseUrl: null, apiKeyPreview: null };
 
@@ -209,4 +210,13 @@ test('the agent list Settings shows has every agent CLI of the shared table', as
 	const listed = (await agentStatuses()).map((status) => status.id);
 
 	expect(listed).toEqual(AGENT_CLIS.map((cli) => cli.id));
+});
+
+test('the registry loads when an adapter is the first module of the server to load', () => {
+	const source = join(import.meta.dir, '../../src');
+	const adapterFirst = `await import(${JSON.stringify(join(source, 'agents/opencode/opencode'))}); await import(${JSON.stringify(join(source, 'agents/registry'))});`;
+	const loaded = Bun.spawnSync([process.execPath, '-e', adapterFirst], { env: process.env, stderr: 'pipe' });
+
+	expect(loaded.stderr.toString()).toBe('');
+	expect(loaded.exitCode).toBe(0);
 });

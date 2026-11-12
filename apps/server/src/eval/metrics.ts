@@ -17,6 +17,7 @@ export type EvalFinding = Pick<
 	| 'title'
 	| 'verification'
 	| 'memberIds'
+	| 'decision'
 >;
 
 /** How consistent a set of runs is under one identity key. */

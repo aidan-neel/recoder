@@ -5,6 +5,7 @@ import {
 	DEFAULT_TOKEN_BUDGET,
 	REASONING_EFFORTS,
 	SUBAGENT_CAPS,
+	isRoutedModelId,
 	migrateSubagentCap,
 	TOKEN_BUDGETS,
 	type ModelEntryPatch,
@@ -44,8 +45,10 @@ export const reviewSettingsSchema = z.object({
 	sharedModelId: z.string().max(100).nullable().optional(),
 	orchestratorModelId: z.string().max(100).nullable().optional(),
 	specialistModelId: z.string().max(100).nullable().optional(),
+	verifierModelId: z.string().max(100).nullable().optional(),
 	orchestratorEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	specialistEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
+	verifierEffort: z.enum(REASONING_EFFORTS).nullable().optional(),
 	subagentCap: z.literal(SUBAGENT_CAPS).optional(),
 	tokenBudget: z.enum(TOKEN_BUDGETS).optional(),
 	reportLowSeverity: z.boolean().optional(),
@@ -330,13 +333,15 @@ function mergeModelEntry(
 	return next;
 }
 
-/** Drop routing pointers to model entries that no longer exist. */
+/** Drop routing pointers to stored model entries that no longer exist, keeping agent and vLLM routed ids. */
 function dropDeletedRoutes(settings: StoredSettings, models: StoredModelEntry[]): void {
 	const ids = new Set(models.map((e) => e.id));
+	const keep = (id: string | null | undefined) => !id || ids.has(id) || isRoutedModelId(id);
 
-	if (settings.sharedModelId && !ids.has(settings.sharedModelId)) delete settings.sharedModelId;
-	if (settings.orchestratorModelId && !ids.has(settings.orchestratorModelId)) delete settings.orchestratorModelId;
-	if (settings.specialistModelId && !ids.has(settings.specialistModelId)) delete settings.specialistModelId;
+	if (!keep(settings.sharedModelId)) delete settings.sharedModelId;
+	if (!keep(settings.orchestratorModelId)) delete settings.orchestratorModelId;
+	if (!keep(settings.specialistModelId)) delete settings.specialistModelId;
+	if (!keep(settings.verifierModelId)) delete settings.verifierModelId;
 }
 
 /** Merge a validated patch over the stored settings and persist. */
@@ -359,8 +364,10 @@ export function saveReviewSettings(patch: ReviewSettingsInput): StoredSettings {
 
 	if (patch.orchestratorModelId !== undefined) clean.orchestratorModelId = patch.orchestratorModelId || null;
 	if (patch.specialistModelId !== undefined) clean.specialistModelId = patch.specialistModelId || null;
+	if (patch.verifierModelId !== undefined) clean.verifierModelId = patch.verifierModelId || null;
 	if (patch.orchestratorEffort !== undefined) clean.orchestratorEffort = patch.orchestratorEffort;
 	if (patch.specialistEffort !== undefined) clean.specialistEffort = patch.specialistEffort;
+	if (patch.verifierEffort !== undefined) clean.verifierEffort = patch.verifierEffort;
 	if (patch.subagentCap !== undefined) clean.subagentCap = patch.subagentCap;
 	if (patch.tokenBudget !== undefined) clean.tokenBudget = patch.tokenBudget;
 	if (patch.reportLowSeverity !== undefined) clean.reportLowSeverity = patch.reportLowSeverity;
@@ -404,8 +411,8 @@ export function effectiveReviewEnv(): {
 		baseUrl: pick(overrides.baseUrl, process.env.RECODER_REVIEW_BASE_URL).replace(/\/$/, ''),
 		apiKey: pick(overrides.apiKey, process.env.RECODER_REVIEW_API_KEY),
 		model: shared?.model ?? pick(undefined, process.env.RECODER_REVIEW_MODEL),
-		maxFiles: pickNumber(overrides.maxFiles, process.env.RECODER_REVIEW_MAX_FILES, 20),
-		maxDiffChars: pickNumber(overrides.maxDiffChars, process.env.RECODER_REVIEW_MAX_DIFF_CHARS, 60000),
+		maxFiles: pickNumber(overrides.maxFiles, process.env.RECODER_REVIEW_MAX_FILES, 200),
+		maxDiffChars: pickNumber(overrides.maxDiffChars, process.env.RECODER_REVIEW_MAX_DIFF_CHARS, 600000),
 		maxFileChars: pickNumber(overrides.maxFileChars, process.env.RECODER_REVIEW_MAX_FILE_CHARS, 12000)
 	};
 }

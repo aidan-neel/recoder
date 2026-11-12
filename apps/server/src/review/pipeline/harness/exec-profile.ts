@@ -1,5 +1,6 @@
 import { posix } from 'node:path';
-import { packageManifests, type CommitTree } from '../../../sandbox/exec-workspace.js';
+import type { CommitTree } from '../../../sandbox/exec-workspace.js';
+import { packageManifests } from '../../../sandbox/install-inputs.js';
 import { EXEC, singleFileCommands, testChain } from '../mutation/test-run.js';
 import { CODE_FILE, owningDir, PLAIN_DIR } from './baseline-checks.js';
 

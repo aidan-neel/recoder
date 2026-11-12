@@ -72,6 +72,9 @@ app:
 Provision `recoder-database` in the release namespace through your secret manager.
 The selected key must hold the PostgreSQL connection URL, including the database, credentials, and required TLS configuration.
 Use `server.database` for this reference rather than placing the URL in values or `server.env`.
+`server.env.RECODER_JOB_CONCURRENCY` sets how many reviews each API pod runs at once, from 1 through 32 (default 2).
+Every pod of the release shares it, so the chart rejects `0`; an API-only replica (`0`) belongs in a separate deployment
+next to pods that run reviews. See the [HA operating guide](../../docs/ha-operating.md).
 The chart's explicit database variable takes precedence over a key with the same name in `server.existingSecret`.
 Existing pods keep their environment. Restart the API deployment after rotating its database Secret.
 

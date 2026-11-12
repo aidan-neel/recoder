@@ -3,7 +3,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { vllmModelId } from '@recoder/shared';
-import { ModelConfigError, configForOrchestrator } from '../../../src/models/models';
+import { ModelConfigError, configForOrchestrator, configForVerifier } from '../../../src/models/models';
 import { vllmEntries } from '../../../src/models/vllm/vllm-models';
 import {
 	getVllmServer,
@@ -118,6 +118,12 @@ describe('keeping the list in step', () => {
 		expect(vllmEntries().find((entry) => entry.model === LLAMA)).toMatchObject({ unavailable: true });
 		expect(() => configForOrchestrator()).toThrow(ModelConfigError);
 		expect(() => configForOrchestrator()).toThrow(/no longer served/);
+
+		setReviewOverrides({ orchestratorModelId: vllmModelId(id, QWEN), verifierModelId: vllmModelId(id, LLAMA) });
+		await syncVllmServer(id);
+
+		expect(getVllmServer(id)?.models.find((model) => model.id === LLAMA)).toMatchObject({ served: false });
+		expect(() => configForVerifier()).toThrow(ModelConfigError);
 	});
 
 	test('a failed sync keeps the last good list and says why; the next good one clears it', async () => {

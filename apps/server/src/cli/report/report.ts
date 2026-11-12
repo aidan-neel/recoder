@@ -61,6 +61,8 @@ export interface ReportSettings {
 	subagents: SubagentCap | number;
 	reviewerModel: string | null;
 	workerModel: string | null;
+	/** Set when the verifier runs on a model different from `reviewerModel`; null or absent when it follows `reviewerModel`. */
+	verifierModel?: string | null;
 	reviewerEffort: ReasoningEffort | null;
 	workerEffort: ReasoningEffort | null;
 	/** Null when every lens that applies ran. */

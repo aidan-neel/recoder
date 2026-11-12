@@ -6,6 +6,7 @@ import {
 	clip,
 	exitsEarly,
 	field,
+	firstLineIn,
 	inForHeader,
 	insideTryFinally,
 	isLiteral,
@@ -41,7 +42,8 @@ export interface Mark {
 		| 'exit'
 		| 'assert'
 		| 'skip'
-		| 'name';
+		| 'name'
+		| 'transition';
 	line: number;
 	key: string;
 	value: string;
@@ -50,6 +52,8 @@ export interface Mark {
 	/** The whole source line, clipped. */
 	code: string;
 	detail: string;
+	/** What the rest of the file says about the operation, such as the other states a field takes. */
+	note?: string;
 }
 
 /** Names whose truthiness is the point: flags and predicates, and sizes checked against zero. */
@@ -162,7 +166,7 @@ export function collectMarks(root: Node, lines: Set<number>, test: boolean): Mar
 	while (stack.length) {
 		const node = stack.pop()!;
 
-		if (!touches(node, sorted)) continue;
+		if (firstLineIn(node, sorted) === null) continue;
 		if (lines.has(lineOf(node))) markNode(node, test, marks);
 
 		for (let i = node.namedChildCount - 1; i >= 0; i--) {
@@ -175,24 +179,7 @@ export function collectMarks(root: Node, lines: Set<number>, test: boolean): Mar
 	return marks.map((entry) => ({ ...entry, code: clip(source[entry.line - 1] ?? '') })).sort((a, b) => a.line - b.line);
 }
 
-/** Whether any of the sorted lines falls inside the node. */
-function touches(node: Node, sorted: number[]): boolean {
-	const start = node.startPosition.row + 1;
-	const end = node.endPosition.row + 1;
-	let low = 0;
-	let high = sorted.length;
-
-	while (low < high) {
-		const mid = (low + high) >> 1;
-
-		if (sorted[mid] < start) low = mid + 1;
-		else high = mid;
-	}
-
-	return low < sorted.length && sorted[low] <= end;
-}
-
-function mark(node: Node, kind: Mark['kind'], detail: string, extra: Partial<Mark> = {}): Mark {
+export function mark(node: Node, kind: Mark['kind'], detail: string, extra: Partial<Mark> = {}): Mark {
 	return { kind, line: lineOf(node), key: '', value: '', rank: 0, code: '', detail, ...extra };
 }
 

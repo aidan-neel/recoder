@@ -15,6 +15,7 @@
 	import * as Typography from '@sivir-ui/svelte/components/typography';
 	import {
 		latestReviews,
+		repoLabels,
 		type ProviderAuth,
 		type PullPreview,
 		type PullRequest,
@@ -27,7 +28,7 @@
 	import ProviderMark from '$lib/components/settings/provider-mark.svelte';
 	import SetupChecklist from '$lib/components/home/setup-checklist.svelte';
 	import Skeleton from '$lib/components/ui/skeleton.svelte';
-	import { prKey, type BriefPick } from '$lib/home/home';
+	import { chipLabels, prKey, type BriefPick } from '$lib/home/home';
 	import { matchesPr, parsePrNumber, repoForPaste } from '$lib/home/pr-filter';
 	import { hoverHighlight } from '$lib/shell/hover-highlight';
 	import { modelSettingsUi } from '$lib/settings/model-settings.svelte';
@@ -97,6 +98,14 @@
 
 	const needsModel = $derived(!openPrs.apiDown && !!modelSettingsUi.config && !modelSettingsUi.config.configured);
 	const latest = $derived(latestReviews(recentSessions.reviews));
+
+	/** Each tracked repository's distinct name: two with the same name are told apart by owner, host or folder. */
+	const labels = $derived(repoLabels(openPrs.repos));
+	const chips = $derived(chipLabels(openPrs.repos, labels));
+
+	function labelOf(repo: Repo): string {
+		return labels.get(repo.id) ?? repo.name;
+	}
 
 	/** Every open PR with its repo and latest review; the brief and the actions read this. */
 	const items = $derived.by<BriefPick[]>(() =>
@@ -168,7 +177,7 @@
 	function openReview(review: Review, repo: Repo): void {
 		const status = review.status === 'running' || review.status === 'queued' ? 'reviewing' : 'ready';
 
-		sessionState.ensureSession(review.id, repo.name, `#${review.prNumber}`, status);
+		sessionState.ensureSession(review.id, labelOf(repo), `#${review.prNumber}`, status);
 		void goto(`/session/${review.id}`);
 	}
 
@@ -292,9 +301,9 @@
 							</Tabs.Trigger>
 							{#each openPrs.repos as repo (repo.id)}
 								{@const n = openPrs.prsByRepo[repo.id]?.length}
-								<Tabs.Trigger value={repo.id} {...{ 'data-empty': n === 0 || undefined, title: repo.name }}>
+								<Tabs.Trigger value={repo.id} {...{ 'data-empty': n === 0 || undefined, title: labelOf(repo) }}>
 									<ProviderMark provider={repo.provider} size={14} />
-									{repo.name.split('/').pop()}
+									{chips.get(repo.id)}
 									{#if n !== undefined}<span class="chip-count">{n}</span>{/if}
 								</Tabs.Trigger>
 							{/each}
@@ -341,10 +350,10 @@
 					</section>
 				{:else}
 					{#each listedGroups as group (group.repo.id)}
-						<section class="flex min-w-0 flex-col" aria-label="Pull requests in {group.repo.name}">
+						<section class="flex min-w-0 flex-col" aria-label="Pull requests in {labelOf(group.repo)}">
 							<Typography.H2 class="group-head">
 								<ProviderMark provider={group.repo.provider} size={14} />
-								<span class="truncate font-mono">{group.repo.name}</span>
+								<span class="truncate font-mono">{labelOf(group.repo)}</span>
 								{#if !group.loading}<span class="font-mono text-fg-ghost">{group.prs.length}</span>{/if}
 							</Typography.H2>
 							{#if group.loading}
@@ -383,7 +392,7 @@
 					{#each emptyRepos as group (group.repo.id)}
 						<p class="flex items-center gap-2 px-1 text-[12.5px] text-fg-ghost">
 							<ProviderMark provider={group.repo.provider} size={14} />
-							<span class="font-mono">{group.repo.name}</span>
+							<span class="font-mono">{labelOf(group.repo)}</span>
 							<span>· no open pull requests</span>
 						</p>
 					{/each}

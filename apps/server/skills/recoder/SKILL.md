@@ -69,7 +69,7 @@ Start with the default: `--budget low` runs one reviewer, up to 3 subagents and 
 
 - Raise it to `--budget medium` (2 or 3 reviewers, up to 8 subagents) for a large or risky change. `--budget high` runs 4 reviewers and up to 12 subagents and takes the longest.
 - Narrow it when the change is big and you care about one thing: `--lens correctness,security` runs only those lenses, `--skip-lens readability` drops one. `--include "src/api/**"` and `--exclude "**/*.test.ts"` limit the paths.
-- Leave the models alone unless the user names one. When they do, `recoder models -p` prints the ids this machine accepts; pass one as `--reviewer <id>` (the reviewers) or `--worker <id>` (the subagents and verifiers). Both apply to this run only.
+- Leave the models alone unless the user names one. When they do, `recoder models -p` prints the ids this machine accepts; pass one as `--reviewer <id>` (the reviewers), `--worker <id>` (the subagents) or `--verifier <id>` (the verifiers, which follow the reviewers' model otherwise). Each applies to this run only.
 - `--subagents 0` turns subagents off. The review is faster and cheaper, and misses the questions subagents would have followed up.
 - `--no-exec` runs no code. It is the safest and cheapest option, and every bug comes back `unverified`.
 

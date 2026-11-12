@@ -7,7 +7,7 @@ import { writeStderrLine } from '../output/streams.js';
 import type { ReviewOptions } from '../review/options.js';
 import { selfCommand } from '../self-command.js';
 import { abortOnSignal } from '../signals/abort-on-signal.js';
-import { exitOnSignal } from '../signals/exit-on-signal.js';
+import { exitOnSignalAfter } from '../signals/exit-on-signal.js';
 import { STOP_SIGNALS, outliveHangUp } from '../signals/shutdown-signals.js';
 import { withSpinner } from '../terminal/spinner.js';
 import type { Terminal } from '../terminal/terminal.js';
@@ -47,10 +47,11 @@ export async function runReviewCommand(request: ReviewRequest, terminal: Termina
 			progress: shown.sink,
 			loadRunner: loadReviewRunner,
 			destination: processDestination(terminal),
-			onEndRecorded: () => {
-				shown.close();
-				exitOnSignal();
-			}
+			recordEnd: (write) =>
+				exitOnSignalAfter(async () => {
+					await write();
+					shown.close();
+				})
 		});
 
 		if (terminal.audience === 'person' && launch.kind === 'foreground') noteRun(journal.runId, terminal);

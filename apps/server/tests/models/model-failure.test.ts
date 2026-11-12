@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { claudeCodeError } from '../../src/agents/claude-code/claude-code-reply';
 import { failureError } from '../../src/agents/custom/custom-protocol';
 import { LlmError, isTransientLlmError } from '../../src/models/llm';
-import { modelFailure } from '../../src/models/model-failure';
+import { isUsageLimit, modelFailure } from '../../src/models/model-failure';
 import { providerError } from '../../src/agents/opencode/opencode-error';
 
 test('a raw endpoint error body never becomes the reason', () => {
@@ -75,6 +75,16 @@ test('an OpenCode 429 about a spent quota is out of usage for that provider', ()
 	);
 
 	expect(failure.usageLimit).toMatchObject({ provider: 'openai', usageUrl: null });
+});
+
+test("OpenCode Go's quota error, which carries no status, stops the review as out of usage", () => {
+	const words = 'AI_APICallError: Go usage limit exceeded';
+	const overOpenCode = { provider: 'opencode', source: 'opencode-go' } as const;
+
+	expect(isUsageLimit(providerError(0, words), overOpenCode)).toBe(true);
+	expect(isUsageLimit(new LlmError(0, words), { provider: 'openai-compatible', source: 'opencode-go' })).toBe(true);
+	expect(isUsageLimit(new LlmError(0, words), { provider: 'openai-compatible' })).toBe(false);
+	expect(isUsageLimit(providerError(0, 'socket hang up'), overOpenCode)).toBe(false);
 });
 
 test('an OpenCode 429 that only throttles requests is not reported as out of usage', () => {

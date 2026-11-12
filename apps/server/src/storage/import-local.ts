@@ -14,6 +14,7 @@ import { readWatchState } from '../forge/watch/cursor';
 import { listVllmServers } from '../models/vllm/vllm-store';
 import { readGlobalGuidelines } from '../review/guidelines/guidelines';
 import { listDismissals } from '../review/guidelines/learned/dismissals';
+import { listProposals } from '../review/guidelines/learned/proposals';
 import { topicTallies } from '../review/guidelines/learned/votes';
 import { getStoredSettings, parseSavedReviewSettings } from '../review/session/review-settings';
 import { enqueueActor, enqueueCommand } from '../review/runtime/inbox';
@@ -58,7 +59,8 @@ const settings: { name: SharedSettingName; file: string }[] = [
 	{ name: 'auto-review', file: 'auto-review.json' },
 	{ name: 'watch-state', file: 'auto-review-state.json' },
 	{ name: 'dismissals', file: 'dismissed-findings.json' },
-	{ name: 'finding-votes', file: 'finding-votes.json' }
+	{ name: 'finding-votes', file: 'finding-votes.json' },
+	{ name: 'learned-rules', file: 'learned-rules.json' }
 ];
 
 async function sourceFile(directory: string, name: string, limit: number): Promise<string | undefined> {
@@ -185,6 +187,7 @@ function validateSharedSettings(): void {
 	readWatchState();
 	listDismissals('');
 	topicTallies('');
+	listProposals('');
 }
 
 async function importRecords(transaction: TransactionSQL, database: Database): Promise<number> {
