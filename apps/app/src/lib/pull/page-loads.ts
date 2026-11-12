@@ -20,7 +20,7 @@ interface PageEvents {
 }
 
 /** True while any check still runs. */
-export function hasPendingCheck(checks: PrCheck[]): boolean {
+function hasPendingCheck(checks: PrCheck[]): boolean {
 	return checks.some((check) => check.state === 'pending' || check.state === 'running');
 }
 
