@@ -80,13 +80,34 @@ test('a model call whose stream stays alive for minutes completes, sent once', a
 	expect(prompts).toHaveLength(1);
 });
 
-test('a call still running at the agent’s final-turn time is cut there, and the agent answers in its final turn', async () => {
-	const prompts = liveModel((call) => (call === 1 ? null : 0));
-	const timeLimit = { finalTurnAfterMs: 30_000, maxWallMs: 80_000 };
+/** Final turn from 30 s, stopped at 80 s: a turn before the final one may run to 55 s, half of what is left. */
+const TIME_LIMIT = { finalTurnAfterMs: 30_000, maxWallMs: 80_000 };
 
-	const result = await settleOnClock(runJsonAgent(doneAgentOptions(CONFIG, { timeLimit })), 1_000, 10 * 60_000);
+test('a call still running at the agent’s final-turn time may finish in half of the time that is left', async () => {
+	const prompts = liveModel(() => 45_000);
+
+	const result = await settleOnClock(runJsonAgent(doneAgentOptions(CONFIG, { timeLimit: TIME_LIMIT })), 1_000, 600_000);
+
+	expect(result).toEqual({ value: { done: true } });
+	expect(prompts).toHaveLength(1);
+});
+
+test('a call that outlasts that half is cut, and the agent answers in its final turn', async () => {
+	const prompts = liveModel((call) => (call === 1 ? null : 0));
+
+	const result = await settleOnClock(runJsonAgent(doneAgentOptions(CONFIG, { timeLimit: TIME_LIMIT })), 1_000, 600_000);
 
 	expect(result).toEqual({ value: { done: true } });
 	expect(prompts).toHaveLength(2);
 	expect(prompts[1]).toStartWith('This is your final turn.');
+});
+
+test('an agent whose final call is still running at its deadline ends as out of time, with no further call', async () => {
+	const prompts = liveModel(() => null);
+
+	const result = await settleOnClock(runJsonAgent(doneAgentOptions(CONFIG, { timeLimit: TIME_LIMIT })), 1_000, 600_000);
+
+	expect(result.value).toBeNull();
+	expect(result.error).toStartWith('Ran out of time');
+	expect(prompts).toHaveLength(2);
 });

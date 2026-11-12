@@ -10,7 +10,7 @@ import { reviewNow, reviewPausePoint } from '../session/review-control.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './agent-loop/budget.js';
 import { compactTranscript } from './agent-loop/compaction.js';
 import { DELEGATE_SHAPE, commandsRun, executeTurn } from './agent-loop/delegation.js';
-import { agentDeadlines, deadlineError, newAgentId, toolTurns, type AgentLimits } from './agent-loop/limits.js';
+import { agentDeadlines, callSettleAt, deadlineError, newAgentId, toolTurns } from './agent-loop/limits.js';
 import { runNativeAgent } from './agent-loop/native-engine.js';
 import { agentById } from '../../agents/registry.js';
 import type { JsonAgentOptions } from './agent-loop/options.js';
@@ -42,16 +42,8 @@ function cutOffNote(overthought: boolean, dropped: boolean, truncated: boolean):
 	return undefined;
 }
 
-/** The note on a reply cut off at the agent's final-turn time, while the final turn runs. */
+/** The note on a reply cut off to leave the agent time for its final turn. */
 const OUT_OF_TIME_NOTE = 'Out of time. Asking for an answer now.';
-
-/**
- * When a turn's call must settle on the review clock. The final turn may run to the agent's deadline; every other
- * turn ends by its final-turn time, so an agent with work always has its final turn left to answer in.
- */
-function callSettleAt(limits: AgentLimits, lastTurn: boolean): number {
-	return lastTurn ? limits.deadlineAt : Math.min(limits.deadlineAt, limits.finalTurnAt);
-}
 
 /**
  * Decides what follows a failed model call: a repair prompt to retry with,
@@ -219,7 +211,8 @@ async function runTurns<T>(
 		if (stubbed) opts.onLog?.(`${opts.label} compacted ${stubbed} earlier tool results`);
 
 		const started = Date.now();
-		const result = await streamTurn(opts, messages, conversation, turn, lastTurn, callSettleAt(limits, lastTurn));
+		const settleAt = callSettleAt(limits, lastTurn);
+		const result = await streamTurn(opts, messages, conversation, turn, lastTurn, settleAt);
 
 		if (result.kind === 'paused') {
 			opts.budget.used = Math.max(0, opts.budget.used - 1);
@@ -227,9 +220,14 @@ async function runTurns<T>(
 			continue;
 		}
 
-		/** The next round finds the agent past its final-turn time, so it asks for the answer, or past its deadline. */
+		if (result.kind === 'out-of-time' && settleAt >= deadlineAt) {
+			result.settle();
+
+			return { value: null, error: deadlineError(opts, limits) };
+		}
+
 		if (result.kind === 'out-of-time') {
-			result.settle(lastTurn ? undefined : OUT_OF_TIME_NOTE);
+			result.settle(OUT_OF_TIME_NOTE);
 			call--;
 			continue;
 		}
