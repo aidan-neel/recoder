@@ -164,6 +164,10 @@ export interface FindingDecision {
 	decidedAt: string;
 }
 
+/** The body of `PUT /api/reviews/:id/findings/:findingId/decision`: an acceptance, or a dismissal with its reason. */
+export type FindingDecisionInput =
+	{ state: 'accepted'; note?: string } | { state: 'dismissed'; reason: DismissalReason; note?: string };
+
 /** The repository rule a finding cites, quoted word for word with where it is written. */
 export interface FindingRule {
 	/** The rule's id in the ledger (`R12`). */
@@ -177,9 +181,13 @@ export interface FindingHistory {
 	/** The head commit of the first review that reported it. */
 	firstSeenSha: string;
 	/**
-	 * `new`: this review reported it first. `carried`: reported before, and the
-	 * commits since did not touch it. `rechecked`: reported before, the commits
-	 * since touched it, and a verifier confirmed it still holds.
+	 * `new`: this review reported it first. `carried`: reported before and
+	 * kept as it was, because the commits since did not touch its code, or
+	 * touched it without new evidence either way. `rechecked`: reported
+	 * before, the commits since touched its code, and this review raised it
+	 * again. A carried or rechecked finding keeps the id it had before, so
+	 * decisions and pull request comments follow it; only a carried one keeps
+	 * its decision.
 	 */
 	state: 'new' | 'carried' | 'rechecked';
 }

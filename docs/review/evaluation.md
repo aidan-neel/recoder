@@ -79,7 +79,7 @@ No match throws and lists the tracked repos.
 
 The adjudications file has two kinds of entries:
 
-- Finding labels, keyed by `findingKey` (`<pr>:<fingerprint>`, or `<pr>:<file>:<line>:<category>` without a fingerprint). Value: `label` (`additional`, `false` or `unresolved`), `file`, `line`, `title`, `note`.
+- Finding labels, keyed by `findingKey` (`<pr>:<fingerprint>`, or `<pr>:<file>:<line>:<category>` without a fingerprint). Value: `label` (`additional`, `false` or `unresolved`), `file`, `line`, `title`, `note`. A finding with no label here that a person dismissed in Recoder as `wrong` counts as `false`; no other dismissal reason labels a finding.
 - Match corrections, keyed `match:<pr>:<defect id>:<16-hex claim hash>` (`matchKey`). Value: `reports`, `reason`. They override the judge's call on that claim and defect.
 
 The judge decides `planted` and `duplicate`. A finding with no label is `unresolved`.

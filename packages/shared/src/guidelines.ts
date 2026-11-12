@@ -1,3 +1,4 @@
+import type { FindingTopic } from './findings';
 import type { Provider } from './repo';
 
 /**
@@ -77,4 +78,31 @@ export interface GuidelinesDraftRequest {
 		/** The global guidelines, when drafting a repo layer. */
 		global?: boolean;
 	};
+}
+
+/** Where a learned rule stands: waiting for a person, or decided by one. */
+export type LearnedRuleState = 'proposed' | 'approved' | 'rejected';
+
+/**
+ * A rule Recoder learned from a repository's people: they kept dismissing one
+ * topic's findings, so Recoder proposes quieting that topic there. It applies
+ * to later reviews only while `state` is `approved`. Listed by
+ * `GET /api/repos/:repoId/learned-rules`, decided by
+ * `PUT /api/repos/:repoId/learned-rules/:topicId`.
+ */
+export interface LearnedRuleProposal {
+	repoId: string;
+	/** The topic the rule quiets; one proposal per topic in a repository. */
+	topic: Pick<FindingTopic, 'id' | 'label'>;
+	state: LearnedRuleState;
+	/** The topic's dismissed and useful votes when it was last proposed. */
+	votes: { dismissed: number; useful: number };
+	proposedAt: string;
+	/** When a person approved or rejected it. */
+	decidedAt?: string;
+}
+
+/** The body of `PUT /api/repos/:repoId/learned-rules/:topicId`. */
+export interface LearnedRuleDecision {
+	state: 'approved' | 'rejected';
 }

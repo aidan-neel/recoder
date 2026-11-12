@@ -8,6 +8,12 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Finding.** A problem a developer sees. Type `Finding` in `packages/shared/src/findings.ts`. `severity` is `FindingSeverity` (`info`, `warning`, `error`). `kind` is `FindingKind` (`bug`, `quality`), derived from `category` by `findingKind`.
 
+**Finding decision.** A person's acceptance or dismissal of a finding, with a `DismissalReason` (`wrong`, `not-worth-fixing`, `already-handled`, `style-preference`, `duplicate`) when dismissed. Type `FindingDecision` in `packages/shared/src/findings.ts`; what each reason teaches is in `apps/server/src/review/guidelines/learned/decision-learning.ts`.
+
+**Finding history.** How a finding relates to the review before it on the same pull request: `new`, `carried` or `rechecked`, with the head it was first seen at. Type `FindingHistory` in `packages/shared/src/findings.ts`, set by `carryHistory` in `apps/server/src/review/history/carry.ts`. Findings shown fixed go to `Review.resolved` (`ResolvedFinding`).
+
+**Learned rule.** A proposal to quiet a topic people keep dismissing in a repository. It applies only once a person approves it. Type `LearnedRuleProposal` in `packages/shared/src/guidelines.ts`, stored by `apps/server/src/review/guidelines/learned/proposals.ts`.
+
 **Candidate.** A claim a reviewer, subagent or detector reported, before validation and verification. Type `CandidateFinding` (a `Finding` plus `candidateId`, `valid`, `dropReason`, `dropStage`, `belowBar`, `publishedBy`, `refuted`, `repair`) in `apps/server/src/review/pipeline/consolidate.ts`. Candidates that survive and merge become findings (`toFinding`).
 
 **Unit.** A slice of the change cut from the inventory without a model call. Type `ReviewUnit` in `apps/server/src/review/pipeline/units.ts`. Ids are `reviewer-1` (a reviewer's slice, retried as `retry-reviewer-1`), `unit-1` (a brief unit), `subagent-1`, and the second looks `residual-1` and `contract-1`.

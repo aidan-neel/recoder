@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Finding } from '@recoder/shared';
 import { learnedTable } from './learned-table.js';
+import { approvedTopics } from './proposals.js';
 
 /** What a person did with a finding: accepted or sent it (`useful`), or dismissed it. */
 export type VoteChoice = 'useful' | 'dismissed';
@@ -19,6 +20,8 @@ export interface Vote {
 export interface TopicTally {
 	useful: number;
 	dismissed: number;
+	/** A person approved the proposal to quiet the topic (`LearnedRuleProposal`), so its findings are quieted. */
+	quietApproved?: true;
 }
 
 /** The newest votes kept for each repository. */
@@ -86,7 +89,7 @@ export function forgetDismissedVotes(repoId: string, topic: string): number {
 	return held.length - kept.length;
 }
 
-/** Each topic's votes in the repository, by topic id. */
+/** Each topic's votes in the repository, by topic id, with the topics a person approved quieting marked. */
 export function topicTallies(repoId: string): ReadonlyMap<string, TopicTally> {
 	const tallies = new Map<string, TopicTally>();
 
@@ -94,6 +97,10 @@ export function topicTallies(repoId: string): ReadonlyMap<string, TopicTally> {
 		const tally = tallies.get(vote.topic) ?? { useful: 0, dismissed: 0 };
 
 		tallies.set(vote.topic, { ...tally, [vote.choice]: tally[vote.choice] + 1 });
+	}
+
+	for (const topic of approvedTopics(repoId)) {
+		tallies.set(topic, { ...(tallies.get(topic) ?? { useful: 0, dismissed: 0 }), quietApproved: true });
 	}
 
 	return tallies;
