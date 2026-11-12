@@ -39,7 +39,7 @@ async function captureFirstCall(options: OpenRunOptions = {}, text = 'Review it.
 }
 
 function modelEventTrace(events: readonly AgentEvent[]): AgentEvent[] {
-	return events.filter((item) => item.type !== 'activity' && item.type !== 'tool-call' && item.type !== 'tool-result');
+	return events.filter((item) => item.type !== 'tool-call' && item.type !== 'tool-result');
 }
 
 describe('AntigravityAgent.openRun', () => {

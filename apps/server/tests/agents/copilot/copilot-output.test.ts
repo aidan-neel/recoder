@@ -63,7 +63,7 @@ describe('parseEvent', () => {
 			{ type: 'model.call_start', data: { turnId: '0', model: 'gpt-5.6-sol' } },
 			{ type: 'step-start' }
 		],
-		['session.start', { type: 'session.start', data: { sessionId: 's1' } }, { type: 'activity' }],
+		['session.start', { type: 'session.start', data: { sessionId: 's1' } }, { type: 'other' }],
 		['a bare string', 'not json at all', { type: 'invalid' }],
 		['a line with no type', { data: {} }, { type: 'invalid' }]
 	] as const)('%s parses as %j', (_name, line, expected) => {

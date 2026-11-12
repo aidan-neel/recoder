@@ -56,7 +56,7 @@ interface OpenStep {
  * spends one call of the review's budget), `content_block_delta` streams reasoning and text, `message_stop`
  * reports the step's usage, and the terminal `result` line — read by {@link ReplyReader}, which also owns the
  * answer and every failure mapping — carries the prompt's answer and totals. Lines that are not JSON, `system`
- * lines other than `init`, and `assistant`/`user`/`tool` records are activity at most — the docs warn the stream
+ * lines other than `init`, and `assistant`/`user`/`tool` records are passed over — the docs warn the stream
  * is not exhaustive, so nothing else fails the run. `sessionStarted` records whether `init` was seen so the next
  * prompt resumes the session.
  */
@@ -87,13 +87,7 @@ export class RunReader {
 
 		if (event.success) return this.streamEvent(event.data.event);
 
-		if (initSchema.safeParse(value).success) {
-			this.sessionStarted = true;
-
-			return;
-		}
-
-		this.emit({ type: 'activity' });
+		if (initSchema.safeParse(value).success) this.sessionStarted = true;
 	};
 
 	private streamEvent(event: StreamEvent): void {

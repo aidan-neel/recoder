@@ -143,11 +143,9 @@ describe('CopilotAgent.openRun', () => {
 
 		await run.close();
 
-		const steps = events.filter((event) => event.type !== 'activity');
-
 		expect(reply.text).toBe('the reply');
 
-		expect(steps).toEqual([
+		expect(events).toEqual([
 			{ type: 'step-start' },
 			{ type: 'reasoning', delta: 'Hmm.', partId: 'r1' },
 			{ type: 'text', delta: 'the ', partId: 'm1' },

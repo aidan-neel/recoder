@@ -64,13 +64,7 @@ export class RunReader {
 			return;
 		}
 
-		if (classified.kind === 'step') {
-			this.handleStep(classified.step);
-
-			return;
-		}
-
-		this.onEvent({ type: 'activity' });
+		if (classified.kind === 'step') this.handleStep(classified.step);
 	};
 
 	/** Settles a run's opening turn, falling back to `result.usage` when no step emitted `DONE` usage. */
@@ -94,11 +88,7 @@ export class RunReader {
 	}
 
 	private handleStep(body: StepUpdate): void {
-		if (body.step_type !== 'agent_response') {
-			this.onEvent({ type: 'activity' });
-
-			return;
-		}
+		if (body.step_type !== 'agent_response') return;
 
 		const stepId = `step_${body.step_index}`;
 		const partId = `part_${body.step_index}`;

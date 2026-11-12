@@ -39,7 +39,8 @@ export interface CliExit {
 /**
  * Runs a CLI in its own process group and streams its stdout. When `signal` aborts, the group is killed and the
  * call rejects at once, without waiting on pipes that may never close; output past `maxOutputBytes` kills it too.
- * Whatever the CLI started is killed with it once the call ends either way.
+ * The call ends when the CLI's process does, however it ends: what it started is killed then, so nothing it left
+ * holding stdout or stderr keeps the call open.
  */
 export async function streamCli(invocation: CliInvocation): Promise<CliExit> {
 	const proc = Bun.spawn([...invocation.argv], {
@@ -57,7 +58,7 @@ export async function streamCli(invocation: CliInvocation): Promise<CliExit> {
 
 	try {
 		const [, stderr, code] = await Promise.race([
-			Promise.all([readStdout(proc, invocation), stderrTail(proc.stderr), proc.exited]),
+			Promise.all([readStdout(proc, invocation), stderrTail(proc.stderr), groupExit(proc)]),
 			stopped
 		]);
 
@@ -67,6 +68,18 @@ export async function streamCli(invocation: CliInvocation): Promise<CliExit> {
 		invocation.running.delete(proc);
 		killGroup(proc);
 	}
+}
+
+/**
+ * The CLI's exit code, once the rest of its process group is killed: a child it started inherits its stdout and
+ * stderr, and would hold them open after the CLI itself has died.
+ */
+async function groupExit(proc: Bun.Subprocess): Promise<number> {
+	const code = await proc.exited;
+
+	killGroup(proc);
+
+	return code;
 }
 
 /** Hands stdout to `onOutput` piece by piece, killing the process once it passes the output cap. */

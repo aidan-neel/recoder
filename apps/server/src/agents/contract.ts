@@ -87,9 +87,7 @@ export type AgentEvent =
 	/** A step ended, having used this much. */
 	| { type: 'usage'; usage: TokenUsage; step?: string }
 	/** Something went wrong that the run survives, such as a line the parser could not read. */
-	| { type: 'error'; message: string }
-	/** Any other sign of life from the CLI: proof the run is still moving. */
-	| { type: 'activity' };
+	| { type: 'error'; message: string };
 
 export interface AgentRunOptions {
 	model: string;

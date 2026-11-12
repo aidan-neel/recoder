@@ -117,7 +117,6 @@ export class CursorRun extends ProcessRun {
 			handlers: {
 				text: (delta, partId) => this.options.onEvent({ type: 'text', delta, partId }),
 				reasoning: (delta, partId) => this.options.onEvent({ type: 'reasoning', delta, partId }),
-				activity: () => this.options.onEvent({ type: 'activity' }),
 				problem: (message) => this.options.onEvent({ type: 'error', message })
 			}
 		});

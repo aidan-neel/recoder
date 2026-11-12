@@ -62,7 +62,7 @@ const callData = z.object({ outcome: z.string().optional() });
 
 /**
  * The event one line carries: a streamed piece, an authoritative message, reasoning, a model call starting or
- * ending, a failure, life, or garbage.
+ * ending, a failure, another event the reader does not act on, or garbage.
  */
 export type ParsedLine =
 	| { type: 'delta'; messageId: string; content: string }
@@ -72,10 +72,10 @@ export type ParsedLine =
 	| { type: 'step-start' }
 	| { type: 'step-end'; succeeded: boolean }
 	| { type: 'failure'; message: string; statusCode: number | null; errorType: string | null }
-	| { type: 'activity' }
+	| { type: 'other' }
 	| { type: 'invalid' };
 
-/** Reads one stdout line as a Copilot JSONL event; every type the reader does not act on is `activity`. */
+/** Reads one stdout line as a Copilot JSONL event; every type the reader does not act on is `other`. */
 export function parseEvent(line: string): ParsedLine {
 	let value: unknown;
 
@@ -98,7 +98,7 @@ export function parseEvent(line: string): ParsedLine {
 
 		const content = type === 'assistant.message' ? (parsed.data.content ?? '') : parsed.data.deltaContent;
 
-		if (content === undefined) return { type: 'activity' };
+		if (content === undefined) return { type: 'other' };
 
 		return { type: type === 'assistant.message' ? 'message' : 'delta', messageId: parsed.data.messageId, content };
 	}
@@ -106,12 +106,12 @@ export function parseEvent(line: string): ParsedLine {
 	if (type === 'assistant.reasoning_delta' || type === 'assistant.reasoning') {
 		const parsed = reasoningData.safeParse(data);
 
-		if (!parsed.success) return { type: 'activity' };
+		if (!parsed.success) return { type: 'other' };
 
 		const streamed = type === 'assistant.reasoning_delta';
 		const content = streamed ? streamedReasoning(parsed.data) : wholeReasoning(parsed.data);
 
-		if (content === undefined) return { type: 'activity' };
+		if (content === undefined) return { type: 'other' };
 
 		const partId = parsed.data.reasoningId ?? parsed.data.messageId ?? parsed.data.turnId ?? 'reasoning';
 
@@ -139,7 +139,7 @@ export function parseEvent(line: string): ParsedLine {
 			: { type: 'invalid' };
 	}
 
-	return { type: 'activity' };
+	return { type: 'other' };
 }
 
 /** The text a streamed `assistant.reasoning_delta` carries, under whichever of its fields the CLI used. */
@@ -169,8 +169,7 @@ type StepState = 'none' | 'running' | 'succeeded' | 'failed';
  * Reads the JSONL output of one prompt: text and reasoning deltas stream as events, each `assistant.message`
  * and `assistant.reasoning` is authoritative for its part so a reply is complete even when the CLI did not
  * stream it, and a `session.error` names the failure. Each `model.call_start` starts a step; see
- * {@link EventReader.startStep} for where a step ends. Every other event type is `activity`, keeping the stall
- * watchdog quiet.
+ * {@link EventReader.startStep} for where a step ends. Every other event type is passed over.
  */
 export class EventReader {
 	/** Each message the reply is made of, in the order it arrived, and how much of it has been sent. */
@@ -201,11 +200,7 @@ export class EventReader {
 			return;
 		}
 
-		if (event.type === 'activity') {
-			this.onEvent({ type: 'activity' });
-
-			return;
-		}
+		if (event.type === 'other') return;
 
 		if (event.type === 'step-start') {
 			this.startStep();
@@ -215,8 +210,6 @@ export class EventReader {
 
 		if (event.type === 'step-end') {
 			if (this.step === 'running') this.step = event.succeeded ? 'succeeded' : 'failed';
-
-			this.onEvent({ type: 'activity' });
 
 			return;
 		}

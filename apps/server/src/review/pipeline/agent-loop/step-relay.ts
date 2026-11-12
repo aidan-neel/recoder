@@ -55,7 +55,6 @@ export class StepRelay<T> {
 	 * before the next one calls anything, so tool limits count from this.
 	 */
 	finished = 0;
-	lastActivityAt = Date.now();
 
 	private readonly base: string;
 
@@ -79,10 +78,8 @@ export class StepRelay<T> {
 		this.provider = opts.config.provider ?? 'openai-compatible';
 	}
 
-	/** Every event is a sign of life; the ones that carry a step, usage, reasoning or text are acted on. */
+	/** Acts on the events that carry a step, usage, reasoning, text or an error; tool events are the gate's. */
 	readonly onEvent = (event: AgentEvent): void => {
-		this.lastActivityAt = Date.now();
-
 		if (event.type === 'step-start') this.stepStarted(event.step);
 		else if (event.type === 'usage') this.stepFinished(event.usage, event.step);
 		else if (event.type === 'reasoning') this.reasoned(event.delta);

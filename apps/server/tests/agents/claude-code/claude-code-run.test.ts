@@ -91,7 +91,7 @@ describe('ClaudeCodeAgent.openRun', () => {
 
 		await run.close();
 
-		const steps = events.filter((event) => event.type !== 'activity' && !event.type.startsWith('tool'));
+		const steps = events.filter((event) => !event.type.startsWith('tool'));
 
 		expect(reply.error).toBeUndefined();
 		expect(JSON.parse(reply.text)).toEqual({ done: true, results: [{ isError: false, text: 'read read_diff' }] });

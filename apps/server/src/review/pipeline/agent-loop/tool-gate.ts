@@ -33,9 +33,6 @@ export class ToolGate<T> {
 	/** A read that already failed was asked again: asking more won't go differently. */
 	stuck = false;
 
-	/** Calls being executed now, so a long sandbox run is not mistaken for a stalled model. */
-	inFlight = 0;
-
 	private stepCalls = 0;
 	private stepRuns = 0;
 	private stepChars = 0;
@@ -108,24 +105,19 @@ export class ToolGate<T> {
 		}
 
 		opts.onProgress?.('retrieval', 0, `Reading repository evidence for ${opts.label}`);
-		this.inFlight++;
 
-		try {
-			const result = await this.execute(action);
+		const result = await this.execute(action);
 
-			this.runs += result.runs ?? 0;
-			this.stepChars += result.content.length;
-			if (!result.ok && read) this.failedReads.add(key);
+		this.runs += result.runs ?? 0;
+		this.stepChars += result.content.length;
+		if (!result.ok && read) this.failedReads.add(key);
 
-			if (result.ok && result.path)
-				opts.onLog?.(`Reading ${result.path}${result.startLine ? `:${result.startLine}` : ''}`);
+		if (result.ok && result.path)
+			opts.onLog?.(`Reading ${result.path}${result.startLine ? `:${result.startLine}` : ''}`);
 
-			const closing = this.turns.nextIsFinal() ? LAST_TOOLS_NOTE : '';
+		const closing = this.turns.nextIsFinal() ? LAST_TOOLS_NOTE : '';
 
-			return { text: formatToolResults([result]) + (await this.discussionNote()) + closing, isError: false };
-		} finally {
-			this.inFlight--;
-		}
+		return { text: formatToolResults([result]) + (await this.discussionNote()) + closing, isError: false };
 	}
 
 	/** A delegation goes to the agent's worker; every other action is one evidence call within the step's budget. */

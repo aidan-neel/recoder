@@ -177,4 +177,14 @@ describe('OpenCode 2 agent', () => {
 		expect(reply.text).toBe(' world');
 		expect(events).toEqual(['start', 'finish 17']);
 	});
+
+	test('a prompt ends with an error as soon as the server stops mid-turn, long before its own time runs out', async () => {
+		const session = await open(await start());
+		const started = Date.now();
+
+		const reply = await session.prompt('crash', { tools: true, timeoutMs: 60_000 });
+
+		expect(reply.error).toBeInstanceOf(Error);
+		expect(Date.now() - started).toBeLessThan(3_000);
+	});
 });
