@@ -26,6 +26,18 @@ export function repoName(repo: string): string {
 	return repo.split('/').pop() ?? repo;
 }
 
+/** How a pull request goes by in a short row: `api #214`. */
+export function pullRef(repo: string, number: number): string {
+	return `${repoName(repo)} #${number}`;
+}
+
+/** "acme/api", "acme/api and acme/web", "a, b and c". */
+export function joinNames(names: string[]): string {
+	if (names.length < 2) return names.join('');
+
+	return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 /** A pull request's title, or `Pull request #214` when it has none. */
 export function pullTitle(title: string | null | undefined, number: number): string {
 	return title || `Pull request #${number}`;

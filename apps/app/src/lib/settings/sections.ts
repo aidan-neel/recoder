@@ -1,4 +1,4 @@
-/** The sections of Settings, in nav order. Each has its own address: `?settings=<id>` over the page on screen. */
+/** The sections of Settings, in nav order. Each is a page: `/settings/<id>`. */
 export const SETTINGS_SECTIONS = [
 	{ id: 'agent', label: 'Agent' },
 	{ id: 'connections', label: 'Connections' },

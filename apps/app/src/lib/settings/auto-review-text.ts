@@ -1,10 +1,15 @@
-import type { AutoReviewEvent, AutoReviewInterval } from '@recoder/shared';
+import { AUTO_REVIEW_INTERVALS, type AutoReviewEvent, type AutoReviewInterval } from '@recoder/shared';
 
 import { plural, span } from '../shell/format';
 
 /** A poll interval as the select shows it; every interval is whole minutes. */
 export function intervalLabel(seconds: AutoReviewInterval): string {
 	return plural(seconds / 60, 'minute');
+}
+
+/** The interval a select's string value names, or null for anything else. */
+export function intervalFrom(value: string): AutoReviewInterval | null {
+	return AUTO_REVIEW_INTERVALS.find((seconds) => String(seconds) === value) ?? null;
 }
 
 /** "Last checked 2 minutes ago · next in 30 seconds", or what stands in for either half. */
