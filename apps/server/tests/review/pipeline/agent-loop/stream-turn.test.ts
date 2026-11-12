@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { runJsonAgent } from '../../../../src/review/pipeline/agent-loop';
 import { doneAgentOptions } from '../../../helpers/done-agent';
 import { settleOnClock, useFakeClock } from '../../../helpers/fake-clock';
+import { messagesOf, stubFetch } from '../harness-fixtures';
 
 useFakeClock();
 
@@ -26,13 +27,11 @@ const BEAT_MS = 10_000;
 function liveModel(answerAfterMs: (call: number) => number | null): string[] {
 	const prompts: string[] = [];
 
-	globalThis.fetch = (async (_url, init) => {
-		const body = JSON.parse(String(init?.body));
-
-		prompts.push(body.messages.at(-1).content);
+	stubFetch((init) => {
+		prompts.push(messagesOf(init).at(-1)?.content ?? '');
 
 		return liveStream(answerAfterMs(prompts.length), init?.signal ?? undefined);
-	}) as typeof fetch;
+	});
 
 	return prompts;
 }

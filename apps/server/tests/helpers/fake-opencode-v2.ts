@@ -4,8 +4,8 @@ import { useFakeOpenCode } from './fake-opencode';
  * A fake `opencode` 2.x. Like the real one it answers only under `/api` (the old root routes give the
  * app's HTML page on GET and 405 on POST), wraps replies in `{ data }`, queues a prompt and ends the turn with an
  * `idle` message that `wait` and the message list report. The reply depends on the prompt: `denied`
- * (a provider's 403), `auth`, `slow` (runs until interrupted), `no-wait` (the wait route answers 503) and `crash`
- * (the server exits mid-turn). Like the real one it keeps its sessions on disk, under `HOME`, so a server started
+ * (a provider's 403), `auth`, `slow` (runs until interrupted), `no-wait` (the wait route answers 503), `crash`
+ * (the server exits mid-turn) and `deaf` (the server closes its port mid-turn and exits only seconds later). Like the real one it keeps its sessions on disk, under `HOME`, so a server started
  * after a crash still lists the unfinished turn. Every turn announces its step twice, as a retried provider call
  * does. `/test/calls` lists every request.
  */
@@ -49,6 +49,7 @@ async function run(id, session, text) {
 	emit('session.step.started', { sessionID: id, assistantMessageID: assistant });
 	emit('session.step.started', { sessionID: id, assistantMessageID: assistant });
 	if (text === 'crash') return setTimeout(() => process.exit(1), 50);
+	if (text === 'deaf') return setTimeout(() => { server.stop(true); setTimeout(() => process.exit(1), 8000); }, 50);
 	if (text === 'slow') {
 		await new Promise((resolve) => (session.interrupt = resolve));
 		emit('session.execution.interrupted', { sessionID: id });

@@ -184,6 +184,20 @@ describe('OpenCode 2 agent', () => {
 
 		const reply = await session.prompt('crash', { tools: true, timeoutMs: 60_000 });
 
+		await session.close();
+
+		expect(reply.error).toBeInstanceOf(Error);
+		expect(Date.now() - started).toBeLessThan(3_000);
+	});
+
+	test('a prompt ends with an error as soon as the server closes its port mid-turn, while its process still runs', async () => {
+		const session = await open(await start());
+		const started = Date.now();
+
+		const reply = await session.prompt('deaf', { tools: true, timeoutMs: 60_000 });
+
+		await session.close();
+
 		expect(reply.error).toBeInstanceOf(Error);
 		expect(Date.now() - started).toBeLessThan(3_000);
 	});

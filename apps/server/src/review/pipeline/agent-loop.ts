@@ -227,7 +227,7 @@ async function runTurns<T>(
 		}
 
 		if (result.kind === 'out-of-time') {
-			result.settle(OUT_OF_TIME_NOTE);
+			result.settle(opts.budget.canSpend(1, spendOpts) ? OUT_OF_TIME_NOTE : undefined);
 			call--;
 			continue;
 		}
