@@ -8,11 +8,12 @@ import { fakeBin, loggedCalls } from './fake-bin';
  * A fake `grok` for agent runs, as a Bun script. It appends `{args, cwd, prompt, system, projectConfig,
  * homeConfig, authLink, grok}` for each call to `FAKE_GROK_LOG` (one JSON line per call) and the full environment
  * to `<log>.env`. `grok --version` and `grok models` answer like the real CLI (`FAKE_GROK_SIGNED_IN=0` makes
- * `models` fail as signed out). A run prints `streaming-messages-json`: `answer` (default) streams two model
- * messages — thinking, then the text — after calling `read_diff` on the MCP server of the run's
- * `.grok/config.toml` when there is one; `auth` and `limit` end in an error `result`; `garbage` prints lines that
- * are not JSON; `spawn` starts a `sleep` grandchild, writes `<own pid> <grandchild pid>` to `<log>.pids` and
- * waits; `crash`, `empty` and `flood` cover the remaining exits.
+ * `models` fail as signed out, `error` as an unreachable account). A run prints `streaming-messages-json`:
+ * `answer` (default) streams two model messages — thinking, then the text — after calling `read_diff` on the
+ * MCP server of the run's `.grok/config.toml` when there is one; `auth`, `limit` and `throttle` end in an error
+ * `result`; `stderr-auth` and `stderr-token` fail on stderr and exit 1 with no `result` line; `garbage` prints
+ * lines that are not JSON; `spawn` starts a `sleep` grandchild, writes `<own pid> <grandchild pid>` to
+ * `<log>.pids` and waits; `crash`, `empty` and `flood` cover the remaining exits.
  */
 const SCRIPT = `#!/usr/bin/env bun
 import { appendFileSync, existsSync, readlinkSync, writeFileSync } from 'node:fs';
@@ -27,6 +28,11 @@ if (args[0] === '--version') {
 if (args[0] === 'models') {
 	if (process.env.FAKE_GROK_SIGNED_IN === '0') {
 		console.error('Error: Not logged in. Run \`grok login\` to sign in.');
+		process.exit(1);
+	}
+
+	if (process.env.FAKE_GROK_SIGNED_IN === 'error') {
+		console.error('Error: connection refused');
 		process.exit(1);
 	}
 
@@ -134,11 +140,24 @@ if (mode === 'flood') {
 	process.exit(0);
 }
 
-if (mode === 'auth' || mode === 'limit') {
-	const text =
-		mode === 'auth'
-			? 'Not logged in. Run grok login to sign in.'
-			: 'You have reached your usage limit. Resets at 3pm UTC.';
+if (mode === 'stderr-auth') {
+	console.error('Error: Not logged in. Run \`grok login\` to sign in.');
+	process.exit(1);
+}
+
+if (mode === 'stderr-token') {
+	console.error(
+		'Error: request failed for https://api.x.ai/v1/models?token=fake-grok-token-12345 with Authorization: Bearer fake-grok-token-12345'
+	);
+	process.exit(1);
+}
+
+if (mode === 'auth' || mode === 'limit' || mode === 'throttle') {
+	const text = {
+		auth: 'Not logged in. Run grok login to sign in.',
+		limit: 'You have reached your usage limit. Resets at 3pm UTC.',
+		throttle: 'Rate limit exceeded, retry in 20s.'
+	}[mode];
 
 	say({ type: 'assistant', error: 'api_error', message: { content: [{ type: 'text', text }] } });
 	say({

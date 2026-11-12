@@ -23,7 +23,7 @@ export const usageSchema = z.object({
 type GrokUsage = z.infer<typeof usageSchema>;
 
 /** The terminal `result` line of a run, the only complete answer the stream guarantees. */
-export const resultSchema = z.object({
+const resultSchema = z.object({
 	type: z.literal('result'),
 	subtype: z.string(),
 	is_error: z.boolean(),
@@ -94,11 +94,18 @@ export function tokenUsage(usage: GrokUsage): TokenUsage {
 	};
 }
 
-/** Signed-out and rate-limit wordings seen in CLI errors and the result line's `result`/`errors` text. */
-const SIGNED_OUT =
+/** Signed-out wordings seen in CLI errors, `grok models` output and the result line's `result`/`errors` text. */
+export const SIGNED_OUT =
 	/not logged in|log ?in required|please (?:log|sign) ?in|unauthori[sz]ed|authentication|invalid api key/i;
 
-const LIMIT = /usage limit|rate.?limit|quota|too many requests|insufficient|credit|billing/i;
+/** A request throttle that lifts within minutes: retried with back-off, never reported as out of usage. */
+const THROTTLE = /rate.?limit|too many requests|throttl/i;
+
+/** The plan's usage cap or quota, which lasts hours. */
+const USAGE_CAP = /usage limit|quota/i;
+
+/** Spent credit or billing: the account cannot pay for more calls. */
+const SPENT_CREDIT = /insufficient credit|out of credits|billing/i;
 
 /** Longest stretch of a CLI error line quoted in a message. */
 const QUOTED_CHARS = 120;
@@ -111,22 +118,49 @@ function errorLine(text: string): string {
 }
 
 /**
- * A Grok failure as an `LlmError`: signed-out and usage-limit wordings keep their HTTP meaning so the UI can
- * offer sign-in or a retry-later, a max-turns or max-token stop says which limit cut the run, and anything else
- * quotes its last line without echoing credentials.
+ * A Grok failure as an `LlmError`: signed-out keeps its 401 and sign-in hint, a throttle a retryable 429, a
+ * usage cap a `UsageLimitError` 429 and spent credit a `UsageLimitError` 402, a max-turns or max-token stop
+ * says which limit cut the run, and anything else quotes its last line without echoing credentials.
  */
 export function grokError(text: string, stopReason?: string): LlmError {
 	const quoted = errorLine(text);
 
 	if (SIGNED_OUT.test(text)) return new LlmError(401, `Grok Build is signed out: ${quoted}. Sign in with: grok login`);
-	if (LIMIT.test(text)) return new UsageLimitError(429, `Grok Build hit its usage limit: ${quoted}`);
+	if (THROTTLE.test(text)) return new LlmError(429, `Grok Build is rate limited: ${quoted}`);
+	if (USAGE_CAP.test(text)) return new UsageLimitError(429, `Grok Build hit its usage limit: ${quoted}`);
+	if (SPENT_CREDIT.test(text)) return new UsageLimitError(402, `Grok Build is out of credit: ${quoted}`);
 	if (stopReason === 'max_tokens') return new LlmError(0, 'Grok Build reply was cut at its output limit.');
 
 	return new LlmError(0, `Grok Build failed: ${quoted}`);
 }
 
-/** What a `complete()` call streams and finishes with; `prompt()` runs use {@link RunReader} instead. */
-export interface ReplyHandlers {
+/**
+ * The error of a run that printed no `result` line. A non-zero exit failed before it could answer, so its whole
+ * stderr goes through {@link grokError}: sign-in and limit wordings keep their meaning, and only `quotedLine`'s
+ * redacted tail is ever quoted. A clean exit printed a stream this reader could not use, so the error quotes the
+ * last line it saw the same way.
+ */
+function noResultError(exit: CliExit, lastLine: string): LlmError {
+	if (exit.code === 0) {
+		return new LlmError(
+			0,
+			`Grok Build output could not be parsed${lastLine ? `: the last line was ${quotedLine(lastLine, QUOTED_CHARS)}` : ': it printed nothing'}.`
+		);
+	}
+
+	return grokError(exit.stderr.trim() || `exit ${exit.code}`);
+}
+
+/** The error of a `result` line that reports failure: its text or errors through {@link grokError}, with its stop reason. */
+function failedResult(result: GrokResult): LlmError {
+	return grokError(
+		result.result ?? result.errors?.join('\n') ?? `Grok Build stopped (${result.subtype}).`,
+		result.stop_reason
+	);
+}
+
+/** Where a `complete()` call streams and finishes with; `prompt()` runs use {@link RunReader} instead. */
+interface ReplyHandlers {
 	onText?: (delta: string) => void;
 	onThinking?: (delta: string) => void;
 	onApiKeySource?: (source: string) => void;
@@ -187,21 +221,8 @@ export class ReplyReader {
 	finish(onUsage: ((usage: TokenUsage) => void) | undefined, exit: CliExit): string {
 		const result = this.result;
 
-		if (!result) {
-			if (exit.code !== 0) throw new LlmError(0, `Grok Build failed: ${errorLine(exit.stderr) || `exit ${exit.code}`}`);
-
-			throw new LlmError(
-				0,
-				`Grok Build output could not be parsed${this.lastLine ? `: the last line was ${quotedLine(this.lastLine, QUOTED_CHARS)}` : ': it printed nothing'}.`
-			);
-		}
-
-		if (result.is_error || result.subtype !== 'success') {
-			throw grokError(
-				result.result ?? result.errors?.join('\n') ?? `Grok Build stopped (${result.subtype}).`,
-				result.stop_reason
-			);
-		}
+		if (!result) throw noResultError(exit, this.lastLine);
+		if (result.is_error || result.subtype !== 'success') throw failedResult(result);
 
 		if (result.usage) onUsage?.(tokenUsage(result.usage));
 

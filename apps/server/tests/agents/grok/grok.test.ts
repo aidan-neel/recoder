@@ -20,6 +20,15 @@ function call(overrides: Partial<ChatOptions> = {}): ChatOptions {
 	};
 }
 
+/** The `LlmError` a `complete()` call on the fake's `mode` rejects with. */
+async function completeError(mode: string): Promise<LlmError> {
+	const error = await new GrokAgent(await fakeGrok({ FAKE_GROK_MODE: mode })).complete(call()).catch((e: unknown) => e);
+
+	if (!(error instanceof LlmError)) throw new Error(`expected an LlmError, got ${String(error)}`);
+
+	return error;
+}
+
 test('the models are the runnable rows of `grok models`, under the grok: prefix', async () => {
 	const models = await new GrokAgent(await fakeGrok()).models();
 
@@ -139,21 +148,40 @@ describe('GrokAgent.complete', () => {
 		expect(error).toBeInstanceOf(UsageLimitError);
 	});
 
-	test('malformed output fails without echoing what it printed', async () => {
-		const error = await new GrokAgent(await fakeGrok({ FAKE_GROK_MODE: 'garbage' }))
-			.complete(call())
-			.catch((e: unknown) => e);
+	test('a throttle fails as a retryable 429 that is not a usage limit', async () => {
+		const error = await completeError('throttle');
 
-		expect(error).toBeInstanceOf(LlmError);
-		expect((error as LlmError).message).toMatch(/could not be parsed/);
-		expect((error as LlmError).message).not.toContain('fake-grok-token-12345');
+		expect(error).not.toBeInstanceOf(UsageLimitError);
+		expect(error).toMatchObject({ status: 429 });
+	});
+
+	test('a run that fails before its result line maps signed-out stderr to a 401', async () => {
+		const error = await completeError('stderr-auth');
+
+		expect(error).toMatchObject({ status: 401, message: expect.stringMatching(/grok login/) });
+	});
+
+	test('a run that fails before its result line never quotes a credential from stderr', async () => {
+		const error = await completeError('stderr-token');
+
+		expect(error.message).toContain('[redacted]');
+		expect(error.message).not.toContain('fake-grok-token-12345');
+	});
+
+	test('malformed output fails without echoing what it printed', async () => {
+		const error = await completeError('garbage');
+
+		expect(error.message).toMatch(/could not be parsed/);
+		expect(error.message).not.toContain('fake-grok-token-12345');
 	});
 });
 
 test('detect reports the version and whether the CLI is signed in', async () => {
 	const signedOut = await new GrokAgent(await fakeGrok({ FAKE_GROK_SIGNED_IN: '0' })).detect();
 	const signedIn = await new GrokAgent(await fakeGrok({ FAKE_GROK_SIGNED_IN: '1' })).detect();
+	const unknown = await new GrokAgent(await fakeGrok({ FAKE_GROK_SIGNED_IN: 'error' })).detect();
 
 	expect(signedOut).toMatchObject({ installed: true, version: '1.0.77', signedIn: false });
 	expect(signedIn.signedIn).toBe(true);
+	expect(unknown.signedIn).toBe(null);
 });

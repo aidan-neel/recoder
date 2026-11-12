@@ -35,7 +35,7 @@ export const PRINT_ARGS = [
 ];
 
 /** What a run needs of the adapter: the binary, the server's environment, and the sets its `stop` empties. */
-export interface GrokHost {
+interface GrokHost {
 	path: string;
 	env: Env;
 	running: Set<Bun.Subprocess>;
@@ -100,14 +100,13 @@ export class GrokRun extends ProcessRun {
 	 */
 	async prompt(text: string, options: AgentPromptOptions): Promise<AgentReply> {
 		const asked = options.schema ? `${text}\n\n${JSON_MODE_INSTRUCTION}` : text;
-
-		await writeFile(this.place.prompt, asked, { mode: 0o600 });
-
 		const deadline = this.begin(options.timeoutMs);
 		const reader = new RunReader(this.options.onEvent);
 		const lines = new LineSplitter(reader.line);
 
 		try {
+			await writeFile(this.place.prompt, asked, { mode: 0o600 });
+
 			const exit = await this.exec(deadline.signal, lines.push);
 
 			lines.end();

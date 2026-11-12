@@ -203,6 +203,16 @@ describe('GrokAgent.openRun', () => {
 		}
 	});
 
+	test('a prompt that fails before its result line maps signed-out stderr to a 401', async () => {
+		const { run } = await openRun('stderr-auth');
+
+		const reply = await run.prompt('Review it.', PROMPT);
+
+		await run.close();
+
+		expect(reply.error).toMatchObject({ status: 401, message: expect.stringMatching(/grok login/) });
+	});
+
 	test('malformed output reports the bad line without echoing what it printed', async () => {
 		const { run, events } = await openRun('garbage');
 

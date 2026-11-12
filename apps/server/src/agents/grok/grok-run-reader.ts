@@ -1,9 +1,10 @@
 import { z } from 'zod';
+import type { TokenUsage } from '@recoder/shared';
 import { LlmError } from '../../models/llm/errors';
 import type { CliExit } from '../cli-stream';
 import type { AgentEvent, AgentReply } from '../contract';
 import { quotedLine } from '../quoted-line';
-import { contentBlockDeltaSchema, grokError, parseLine, resultSchema, tokenUsage, usageSchema } from './grok-reply';
+import { ReplyReader, contentBlockDeltaSchema, parseLine, tokenUsage, usageSchema } from './grok-reply';
 
 /**
  * A `stream_event` line: `message_start` opens a model step with its id, `content_block_delta` streams its text
@@ -53,25 +54,25 @@ interface OpenStep {
 /**
  * Turns a Grok run's `streaming-messages-json` lines into the run's events: a `message_start` begins a step (which
  * spends one call of the review's budget), `content_block_delta` streams reasoning and text, `message_stop`
- * reports the step's usage, and the terminal `result` line carries the prompt's answer and totals. Lines that are
- * not JSON, `system` lines other than `init`, and `assistant`/`user`/`tool` records are activity at most — the
- * docs warn the stream is not exhaustive, so nothing else fails the run. `sessionStarted` records whether `init`
- * was seen so the next prompt resumes the session.
+ * reports the step's usage, and the terminal `result` line — read by {@link ReplyReader}, which also owns the
+ * answer and every failure mapping — carries the prompt's answer and totals. Lines that are not JSON, `system`
+ * lines other than `init`, and `assistant`/`user`/`tool` records are activity at most — the docs warn the stream
+ * is not exhaustive, so nothing else fails the run. `sessionStarted` records whether `init` was seen so the next
+ * prompt resumes the session.
  */
 export class RunReader {
 	/** Whether an `init` line proved the session exists and can be resumed. */
 	sessionStarted = false;
 
+	private readonly reply = new ReplyReader({});
 	private step: OpenStep | null = null;
-	private result: z.infer<typeof resultSchema> | null = null;
-	private lastLine = '';
 
 	constructor(private readonly emit: (event: AgentEvent) => void) {}
 
 	readonly line = (line: string): void => {
-		if (line.trim()) this.lastLine = line;
-
 		const value = parseLine(line);
+
+		this.reply.line(line);
 
 		if (value === null) {
 			this.emit({
@@ -86,18 +87,8 @@ export class RunReader {
 
 		if (event.success) return this.streamEvent(event.data.event);
 
-		const init = initSchema.safeParse(value);
-
-		if (init.success) {
+		if (initSchema.safeParse(value).success) {
 			this.sessionStarted = true;
-
-			return;
-		}
-
-		const result = resultSchema.safeParse(value);
-
-		if (result.success) {
-			this.result = result.data;
 
 			return;
 		}
@@ -150,47 +141,24 @@ export class RunReader {
 	}
 
 	/**
-	 * The prompt's answer once the process has exited, or the `LlmError` it failed with. A run without a `result`
-	 * line failed before it could answer: its stderr line when it exited non-zero, otherwise unparseable output.
+	 * The prompt's answer once the process has exited, or the `LlmError` it failed with, both decided by
+	 * {@link ReplyReader.finish}: a run without a `result` line failed before it could answer.
 	 */
 	finish(exit: CliExit): AgentReply {
 		this.finishStep();
 
-		const result = this.result;
+		let text: string;
+		let tokens: TokenUsage | undefined;
 
-		if (!result) {
-			if (exit.code !== 0) {
-				return {
-					text: '',
-					error: new LlmError(
-						0,
-						`Grok Build failed: ${exit.stderr.trim().split('\n').at(-1)?.trim() || `exit ${exit.code}`}`
-					)
-				};
-			}
-
+		try {
+			text = this.reply.finish((usage) => (tokens = usage), exit);
+		} catch (error) {
 			return {
 				text: '',
-				error: new LlmError(
-					0,
-					`Grok Build output could not be parsed${this.lastLine ? `: the last line was ${quotedLine(this.lastLine, QUOTED_CHARS)}` : ': it printed nothing'}.`
-				)
+				error: error instanceof LlmError ? error : new LlmError(0, 'Grok Build run failed.')
 			};
 		}
 
-		if (result.is_error || result.subtype !== 'success') {
-			return {
-				text: '',
-				error: grokError(
-					result.result ?? result.errors?.join('\n') ?? `Grok Build stopped (${result.subtype}).`,
-					result.stop_reason
-				)
-			};
-		}
-
-		return {
-			text: result.result ?? '',
-			tokens: result.usage ? tokenUsage(result.usage) : undefined
-		};
+		return { text, tokens };
 	}
 }

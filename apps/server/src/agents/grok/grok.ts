@@ -13,7 +13,7 @@ import { quotedLine } from '../quoted-line';
 import type { AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
 import { parseGrokModels } from './grok-models';
 import { grokEnv, prepareHome, realAuthPath } from './grok-process';
-import { ReplyReader } from './grok-reply';
+import { ReplyReader, SIGNED_OUT } from './grok-reply';
 import { GROK_EMPTY_DIR, GrokRun, PRINT_ARGS } from './grok-run';
 
 const INSTALL = 'curl -fsSL https://x.ai/cli/install.sh | bash';
@@ -62,12 +62,7 @@ export class GrokAgent extends CliAgent {
 
 		if (listed.length) return listed;
 
-		const why = stderr.trim().split('\n').at(-1)?.trim();
-
-		throw new LlmError(
-			0,
-			`Grok Build listed no models${code === 0 ? '.' : ` (exit ${code}${why ? `: ${quotedLine(why, QUOTED_CHARS)}` : ''}).`}`
-		);
+		throw new LlmError(0, `Grok Build listed no models${noModelsReason(code, stderr)}`);
 	}
 
 	/** `grok models` names no effort levels per model, so a Grok model has none to set. */
@@ -97,11 +92,11 @@ export class GrokAgent extends CliAgent {
 		const promptFile = join(scratch, 'prompt.md');
 		const authPath = realAuthPath(this.env);
 
-		prepareHome(home, authPath);
-		await mkdir(cwd, { recursive: true });
 		this.scratch.add(scratch);
 
 		try {
+			prepareHome(home, authPath);
+			await mkdir(cwd, { recursive: true });
 			await writeFile(promptFile, promptText(opts.messages.filter((m) => m.role !== 'system')), { mode: 0o600 });
 
 			const args = [
@@ -192,19 +187,18 @@ export class GrokAgent extends CliAgent {
 
 	/**
 	 * The sign-in state from `grok models`, which needs the account: its first line says "You are logged in with
-	 * …". A clean exit without that line is unknown (another auth path may word it differently); a failed call is
-	 * signed out.
+	 * …". A clean exit without that line is unknown (another auth path may word it differently); a check that
+	 * could not run — a timeout or a spawn failure — is unknown too, and only a CLI that exits and whose output
+	 * says it is signed out is `false`.
 	 */
 	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn'>> {
-		const { code, stdout } = await this.cliOutput(path, ['models'], STATUS_TIMEOUT_MS).catch(() => ({
-			code: -1,
-			stdout: '',
-			stderr: ''
-		}));
+		const ran = await this.cliOutput(path, ['models'], STATUS_TIMEOUT_MS).catch(() => null);
 
-		if (/logged in with/i.test(stdout)) return { signedIn: true };
+		if (ran === null) return { signedIn: null };
+		if (/logged in with/i.test(ran.stdout)) return { signedIn: true };
+		if (ran.code !== 0 && SIGNED_OUT.test(`${ran.stderr}\n${ran.stdout}`)) return { signedIn: false };
 
-		return { signedIn: code === 0 ? null : false };
+		return { signedIn: null };
 	}
 
 	/** The shared home the status checks run under, prepared on first use and removed by `stop` with the rest. */
@@ -245,6 +239,20 @@ export class GrokAgent extends CliAgent {
 
 		return { code: exit.code, stdout, stderr: exit.stderr };
 	}
+}
+
+/**
+ * Why `grok models` listed nothing: a clean exit that printed no models, or a failed call's last stderr line,
+ * quoted through `quotedLine` so a credential in it never reaches the message.
+ */
+function noModelsReason(code: number, stderr: string): string {
+	if (code === 0) return '.';
+
+	const why = stderr.trim().split('\n').at(-1)?.trim();
+
+	if (!why) return ` (exit ${code}).`;
+
+	return ` (exit ${code}: ${quotedLine(why, QUOTED_CHARS)}).`;
 }
 
 export const grok = new GrokAgent();
