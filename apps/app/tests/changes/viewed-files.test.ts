@@ -43,11 +43,11 @@ describe('viewed files', () => {
 		const blocked = memoryStorage();
 
 		blocked.getItem = () => {
-			throw new Error('SecurityError');
+			throw new DOMException('The operation is insecure.', 'SecurityError');
 		};
 
 		blocked.setItem = () => {
-			throw new Error('SecurityError');
+			throw new DOMException('The operation is insecure.', 'SecurityError');
 		};
 
 		globalThis.localStorage = blocked;

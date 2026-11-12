@@ -5,6 +5,19 @@ import type { DecisionInput } from '../api/reviews';
 import type { SessionContext, Vote } from '../pull/session-state';
 import { withKey, withoutKey } from '../shell/key-set';
 
+/** Saves one decision on the review with id `reviewId`; reopening saves none. */
+type SaveDecision = (reviewId: string) => Promise<FindingDecision | undefined>;
+
+/** One finding's decision writes in flight. */
+interface DecisionWrites {
+	/** The newest write's turn; an older write that settles leaves the screen to it. */
+	newest: number;
+	/** The decision the server holds as far as this page knows: what a failed newest write puts back. */
+	saved: FindingDecision | undefined;
+	/** Settles once every write so far has; the next write starts then. */
+	queue: Promise<unknown>;
+}
+
 /** What a person does with the findings of the followed review. Each write shows at once and rolls back when it fails. */
 export function createBugActions(context: SessionContext) {
 	const { client, state } = context;
@@ -47,38 +60,101 @@ export function createBugActions(context: SessionContext) {
 		);
 	}
 
+	/** How many writes each finding has in flight; it shows as pending until the last one settles. */
+	const pendingWrites = new Map<string, number>();
+
+	/** Each finding's decision writes in flight, by finding id. */
+	const decisionWrites = new Map<string, DecisionWrites>();
+
+	function startPending(id: string): void {
+		pendingWrites.set(id, (pendingWrites.get(id) ?? 0) + 1);
+		state.setState((current) => ({ pendingBugs: withKey(current.pendingBugs, id) }));
+	}
+
+	function endPending(id: string): void {
+		const left = (pendingWrites.get(id) ?? 1) - 1;
+
+		if (left > 0) {
+			pendingWrites.set(id, left);
+
+			return;
+		}
+
+		pendingWrites.delete(id);
+		state.setState((current) => ({ pendingBugs: withoutKey(current.pendingBugs, id) }));
+	}
+
 	/** Runs a write on one finding while it shows as pending. */
 	async function whilePending<T>(id: string, write: () => Promise<T>): Promise<T> {
-		state.setState((current) => ({ pendingBugs: withKey(current.pendingBugs, id) }));
+		startPending(id);
 
 		try {
 			return await write();
 		} finally {
-			state.setState((current) => ({ pendingBugs: withoutKey(current.pendingBugs, id) }));
+			endPending(id);
 		}
 	}
 
-	/** Shows the decision at once, saves it, and puts the old one back when the save fails. */
-	async function decide(id: string, input: DecisionInput): Promise<void> {
+	/**
+	 * Shows `shown` at once and saves it after the finding's earlier decision
+	 * writes, so the server takes them in the order they were made. Only the
+	 * newest write changes the screen when it settles: it shows what the server
+	 * saved, or on failure the decision the server last confirmed.
+	 */
+	async function writeDecision(id: string, shown: FindingDecision | undefined, save: SaveDecision): Promise<void> {
 		const reviewId = currentReview().id;
-		const before = findingOf(id).decision;
+		const writes = decisionWrites.get(id) ?? { newest: 0, saved: findingOf(id).decision, queue: Promise.resolve() };
+		const earlier = writes.queue;
+		const turn = writes.newest + 1;
 
-		setDecision(id, { ...input, decidedAt: new Date().toISOString() });
+		const write = whilePending(id, async () => {
+			await earlier;
+
+			return plainly(() => save(reviewId));
+		});
+
+		decisionWrites.set(id, { ...writes, newest: turn, queue: Promise.allSettled([write]) });
+		setDecision(id, shown);
 
 		try {
-			const saved = await whilePending(id, () => plainly(() => client.decide(reviewId, id, input)));
-
-			setDecision(id, saved);
-		} catch (error) {
-			setDecision(id, before);
-
-			throw error;
+			recordSaved(id, await write);
+		} finally {
+			showIfNewest(id, turn);
 		}
 	}
 
-	/** Takes a review the server answered with, when it is still the one on screen. */
-	function acceptReview(review: Review): void {
-		if (state.getState().review?.id === review.id) state.setState({ review });
+	function recordSaved(id: string, saved: FindingDecision | undefined): void {
+		const writes = decisionWrites.get(id);
+
+		if (writes) decisionWrites.set(id, { ...writes, saved });
+	}
+
+	/** When `turn` is the finding's newest write, it shows the decision the server holds and ends the queue. */
+	function showIfNewest(id: string, turn: number): void {
+		const writes = decisionWrites.get(id);
+
+		if (writes?.newest !== turn) return;
+
+		decisionWrites.delete(id);
+		setDecision(id, writes.saved);
+	}
+
+	/** Shows the decision at once and saves it; a failure puts back the decision the server last confirmed. */
+	function decide(id: string, input: DecisionInput): Promise<void> {
+		return writeDecision(id, { ...input, decidedAt: new Date().toISOString() }, (reviewId) =>
+			client.decide(reviewId, id, input)
+		);
+	}
+
+	/** Takes the comments a post made into the review on screen, keeping every change made since the post began. */
+	function acceptComments(posted: Review): void {
+		const { review } = state.getState();
+
+		if (review?.id !== posted.id) return;
+
+		state.setState({
+			review: { ...review, findingComments: { ...review.findingComments, ...posted.findingComments } }
+		});
 	}
 
 	return {
@@ -87,20 +163,12 @@ export function createBugActions(context: SessionContext) {
 		dismiss: (id: string, reason: DismissalReason, note?: string) =>
 			decide(id, { state: 'dismissed', reason, ...(note && { note }) }),
 
-		async reopen(id: string): Promise<void> {
-			const reviewId = currentReview().id;
-			const before = findingOf(id).decision;
+		reopen: (id: string) =>
+			writeDecision(id, undefined, async (reviewId) => {
+				await client.reopen(reviewId, id);
 
-			setDecision(id, undefined);
-
-			try {
-				await whilePending(id, () => plainly(() => client.reopen(reviewId, id)));
-			} catch (error) {
-				setDecision(id, before);
-
-				throw error;
-			}
-		},
+				return undefined;
+			}),
 
 		/** Turns the finding's quieted topic back on, so every finding of it counts again. */
 		async unquiet(id: string): Promise<void> {
@@ -153,7 +221,7 @@ export function createBugActions(context: SessionContext) {
 		async post(id: string): Promise<void> {
 			const reviewId = currentReview().id;
 
-			acceptReview(await whilePending(id, () => plainly(() => client.postFinding(reviewId, id))));
+			acceptComments(await whilePending(id, () => plainly(() => client.postFinding(reviewId, id))));
 		},
 
 		async postAll(): Promise<void> {
@@ -162,7 +230,7 @@ export function createBugActions(context: SessionContext) {
 			state.setState({ postingAll: true });
 
 			try {
-				acceptReview(await plainly(() => client.postFindings(reviewId)));
+				acceptComments(await plainly(() => client.postFindings(reviewId)));
 			} finally {
 				state.setState({ postingAll: false });
 			}
