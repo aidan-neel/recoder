@@ -1,130 +1,85 @@
 'use client';
 
 import { Keycap, Modal, ModalBody, ModalContent, ModalTitle } from '@recoder/ui';
-import { usePathname } from 'next/navigation';
 
-import { paletteScope } from '@/lib/shell/routes';
-import { useShell } from '@/lib/shell/shell-store';
+import { useChrome } from '@/lib/shell/chrome';
 
-/** One way to press a shortcut: a key, or a chord of keys held together (`['Shift', ' ']`). */
-type Press = string | string[];
-
-/** One row: the presses, any of which does it, and what it does. */
-type Row = [presses: Press[], label: string];
+/** One row: the keys, any of which does it, and what it does. */
+type Row = [keys: string[], label: string];
 
 interface Group {
-	/** The page the keys work on; `anywhere` always shows last. */
-	page: 'queue' | 'review' | 'anywhere';
 	title: string;
 	rows: Row[];
 }
 
 const GROUPS: Group[] = [
 	{
-		page: 'queue',
-		title: 'Queue',
-		rows: [
-			[['j', 'k', 'ArrowDown', 'ArrowUp'], 'Next and previous pull request'],
-			[['Enter'], 'Open the selected pull request'],
-			[['r'], 'Review the selected pull request']
-		]
-	},
-	{
-		page: 'queue',
-		title: 'Review bar',
-		rows: [
-			[['/'], 'Open the review bar'],
-			[['ArrowDown', 'ArrowUp'], 'Next and previous suggestion'],
-			[['Enter'], 'Start or open the highlighted pull request'],
-			[['mod+Enter', ['Shift', 'Enter']], 'Its other action, like also commenting on the PR'],
-			[['Tab'], 'Complete the reference'],
-			[['Escape'], 'Leave the bar']
-		]
-	},
-	{
-		page: 'review',
-		title: 'Review',
-		rows: [
-			[['j', 'k', 'ArrowDown', 'ArrowUp'], 'Next and previous item'],
-			[['Enter'], 'Start with the riskiest'],
-			[['a'], 'Accept: it ships as is'],
-			[['s'], 'Send back to the agent'],
-			[['x'], 'Not an issue: never raise it again'],
-			[['u'], 'Undo the last decision'],
-			[['h'], 'Hand off what you sent back'],
-			[['f'], 'Open the file'],
-			[['q'], 'Open or close ask'],
-			[['Escape'], 'Close ask from its field'],
-			[['o', 'Escape'], 'Back to the overview'],
-			[[' ', 'PageDown'], 'Scroll the reading pane down'],
-			[[['Shift', ' '], 'PageUp'], 'Scroll the reading pane up'],
-			[['Home', 'End'], 'Top or end of the reading pane']
-		]
-	},
-	{
-		page: 'anywhere',
 		title: 'Anywhere',
 		rows: [
 			[['mod+k'], 'Search'],
+			[['c'], 'New review'],
+			[['['], 'Show or hide the sidebar'],
 			[['mod+,'], 'Settings'],
 			[['?'], 'These shortcuts']
+		]
+	},
+	{
+		title: 'Pull request list',
+		rows: [
+			[['j', 'k'], 'Next and previous pull request'],
+			[['Enter'], 'Open it'],
+			[['r'], 'Review it'],
+			[['/'], 'Open a pull request by link']
+		]
+	},
+	{
+		title: 'Pull request',
+		rows: [
+			[['1', '2', '3', '4'], 'Switch tab'],
+			[['j', 'k'], 'Next and previous file or bug'],
+			[['v'], 'Mark the file as viewed'],
+			[['r'], 'Review, or review again'],
+			[['t'], 'Find a file']
+		]
+	},
+	{
+		title: 'Bug',
+		rows: [
+			[['Enter'], 'Open or close it'],
+			[['p'], 'Post it to the pull request'],
+			[['y'], 'Copy its fix prompt'],
+			[['x'], 'Dismiss it']
 		]
 	}
 ];
 
-/** The groups for the page on screen: its own keys, then the ones that work anywhere. */
-function groupsFor(page: string): Group[] {
-	return GROUPS.filter((group) => group.page === page || group.page === 'anywhere');
-}
-
-/** One press: a key's cap, or a chord's caps side by side. */
-function PressCaps({ press }: { press: Press }) {
-	const keys = typeof press === 'string' ? [press] : press;
-
-	return (
-		<span className="flex gap-0.5">
-			{keys.map((key) => (
-				<Keycap key={key} k={key} aria-hidden={false} />
-			))}
-		</span>
-	);
-}
-
-/** Opening on the panel itself keeps a focus ring off the close button; Tab still reaches it. */
-function focusPanel(event: Event): void {
-	event.preventDefault();
-
-	if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus();
-}
-
-/** The keyboard shortcuts for the page on screen, then the ones that work anywhere. Opens from `?` and the palette. */
+/** Every keyboard shortcut, grouped by where it works. */
 export function ShortcutsModal() {
-	const open = useShell((state) => state.shortcutsOpen);
-	const setOpen = useShell((state) => state.setShortcutsOpen);
-	const page = paletteScope(usePathname());
+	const open = useChrome((state) => state.shortcutsOpen);
+	const setOpen = useChrome((state) => state.setShortcutsOpen);
 
 	return (
 		<Modal open={open} onOpenChange={setOpen}>
-			<ModalContent size="md" onOpenAutoFocus={focusPanel}>
+			<ModalContent size="lg">
 				<ModalTitle>Keyboard shortcuts</ModalTitle>
-				<ModalBody data-ui="shortcuts">
-					{groupsFor(page).map((group) => (
-						<section key={group.title} aria-label={group.title}>
-							<h3 data-ui="shortcuts-title">{group.title}</h3>
-							<ul>
-								{group.rows.map(([presses, label]) => (
-									<li key={label} data-ui="shortcuts-row">
-										<span>{label}</span>
-										<span className="flex gap-1.5">
-											{presses.map((press) => (
-												<PressCaps key={String(press)} press={press} />
+				<ModalBody>
+					<div className="shortcuts">
+						{GROUPS.map((group) => (
+							<section key={group.title} aria-label={group.title}>
+								<h3 className="section-label">{group.title}</h3>
+								{group.rows.map(([keys, label]) => (
+									<div key={label} className="shortcut-row">
+										{label}
+										<span className="shortcut-keys">
+											{keys.map((key) => (
+												<Keycap key={key} k={key} aria-hidden={false} />
 											))}
 										</span>
-									</li>
+									</div>
 								))}
-							</ul>
-						</section>
-					))}
+							</section>
+						))}
+					</div>
 				</ModalBody>
 			</ModalContent>
 		</Modal>

@@ -1,180 +1,103 @@
 'use client';
 
-import {
-	Button,
-	Field,
-	Input,
-	Modal,
-	ModalBody,
-	ModalClose,
-	ModalContent,
-	ModalFooter,
-	ModalTitle,
-	type ButtonStatus
-} from '@recoder/ui';
-import { useEffect, useEffectEvent, useId, useState, type FormEvent } from 'react';
+import { Button, Field, Input, Modal, ModalBody, ModalClose, ModalContent, ModalFooter, ModalTitle } from '@recoder/ui';
+import { useId, type FormEvent } from 'react';
 
 import type { Forge } from '@/lib/api/connections';
-import { ApiError, failureText } from '@/lib/api/http';
-import { useConnections } from '@/lib/connections/connections-store';
-import { FORGES, type ForgeInfo } from '@/lib/connections/forges';
+import type { TokenDialog } from '@/lib/connections/use-token-dialog';
+import { useTokenModal, type TokenModalView } from '@/lib/connections/use-token-modal';
 
-/** How long "Done" shows on the button before the dialog closes. */
-const SUCCESS_MS = 700;
+/** The GitLab URL field, for a self-managed GitLab. It starts from the saved host. */
+function HostField({ view }: { view: TokenModalView }) {
+	return (
+		<Field
+			label="GitLab URL"
+			hint="Leave blank for gitlab.com."
+			error={view.error?.field === 'host' ? view.error.text : undefined}
+		>
+			<Input
+				value={view.host}
+				placeholder="gitlab.com"
+				autoComplete="off"
+				spellCheck={false}
+				readOnly={view.pending}
+				onChange={(event) => view.setHost(event.target.value)}
+			/>
+		</Field>
+	);
+}
 
-/** Where the server keeps a token (`apps/server/src/forge/tokens.ts`). */
-const STORED = 'Saved to tokens.json in the server’s data folder.';
+/** The token field. It always starts empty: a saved token is never sent back to the page. */
+function TokenField({ view }: { view: TokenModalView }) {
+	return (
+		<Field
+			label="Personal access token"
+			hint={view.tokenHint}
+			error={view.error?.field === 'token' ? view.error.text : undefined}
+		>
+			<Input
+				type="password"
+				value={view.token}
+				placeholder={view.info.placeholder}
+				autoComplete="off"
+				spellCheck={false}
+				readOnly={view.pending}
+				onChange={(event) => view.setToken(event.target.value)}
+			/>
+		</Field>
+	);
+}
 
-interface TokenModalProps {
+interface TokenPanelProps {
 	forge: Forge;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
 }
 
-/** Which field a rejection belongs to, and what it says. */
-interface Rejection {
-	field: 'token' | 'host';
-	text: string;
-}
-
-function rejection(error: unknown): Rejection {
-	const field = error instanceof ApiError && error.kind === 'host' ? 'host' : 'token';
-
-	return { field, text: failureText(error, 'The forge rejected that token.') };
-}
-
-interface TokenFormProps {
-	forge: ForgeInfo;
-	status: ButtonStatus;
-	onStatus: (status: ButtonStatus) => void;
-}
-
 /**
- * The form. The server checks the token with the forge before it keeps it;
- * a rejection lands under the field it is about. While the check runs the
- * fields are read-only and Cancel waits.
+ * One opening of the dialog. It has no X: while the server checks the token
+ * the dialog stays open, and an X that did nothing would look broken. Cancel
+ * closes it.
  */
-function TokenForm({ forge, status, onStatus }: TokenFormProps) {
+function TokenPanel({ forge, open, onOpenChange }: TokenPanelProps) {
+	const view = useTokenModal(forge, onOpenChange);
 	const formId = useId();
-	const savedHost = useConnections((state) => state.auth?.gitlab.host ?? '');
-	const [token, setToken] = useState('');
-	const [host, setHost] = useState(savedHost);
-	const [error, setError] = useState<Rejection | null>(null);
-	const pending = status === 'pending';
-	const gitlab = forge.id === 'gitlab';
 
-	async function submit(event: FormEvent): Promise<void> {
+	function submit(event: FormEvent): void {
 		event.preventDefault();
-
-		if (!token.trim() || status !== 'idle') return;
-
-		onStatus('pending');
-		setError(null);
-
-		try {
-			await useConnections.getState().saveToken(forge.id, token.trim(), gitlab ? host.trim() : undefined);
-			onStatus('success');
-		} catch (failure) {
-			onStatus('idle');
-			setError(rejection(failure));
-		}
+		view.submit();
 	}
 
 	return (
-		<>
-			<ModalTitle>Connect {forge.label}</ModalTitle>
-			<ModalBody>
-				<form id={formId} className="token-form" onSubmit={(event) => void submit(event)}>
-					{gitlab ? (
-						<Field
-							label="GitLab URL"
-							hint="Leave blank for gitlab.com."
-							error={error?.field === 'host' ? error.text : undefined}
-						>
-							<Input
-								value={host}
-								placeholder="gitlab.com"
-								autoComplete="off"
-								spellCheck={false}
-								readOnly={pending}
-								onChange={(event) => {
-									setHost(event.target.value);
-									setError(null);
-								}}
-							/>
-						</Field>
-					) : null}
-					<Field
-						label="Personal access token"
-						className="token-field"
-						hint={`${forge.scope} ${STORED}`}
-						error={error?.field === 'token' ? error.text : undefined}
-					>
-						<Input
-							type="password"
-							value={token}
-							placeholder={forge.placeholder}
-							autoComplete="off"
-							spellCheck={false}
-							readOnly={pending}
-							onChange={(event) => {
-								setToken(event.target.value);
-								setError(null);
-							}}
-						/>
-					</Field>
-				</form>
-			</ModalBody>
-			<ModalFooter>
-				<ModalClose>
-					<Button variant="ghost" disabled={pending}>
-						Cancel
+		<Modal open={open} onOpenChange={view.changeOpen}>
+			<ModalContent size="sm" showClose={false}>
+				<ModalTitle>Connect {view.info.label}</ModalTitle>
+				<ModalBody>
+					<form id={formId} className="token-form" noValidate onSubmit={submit}>
+						{view.info.id === 'gitlab' ? <HostField view={view} /> : null}
+						<TokenField view={view} />
+					</form>
+				</ModalBody>
+				<ModalFooter>
+					<ModalClose>
+						<Button variant="ghost" disabled={view.pending}>
+							Cancel
+						</Button>
+					</ModalClose>
+					<Button type="submit" form={formId} variant="primary" status={view.status} disabled={!view.canSubmit}>
+						Connect
 					</Button>
-				</ModalClose>
-				<Button
-					type="submit"
-					form={formId}
-					variant="primary"
-					status={status}
-					disabled={!token.trim() && status === 'idle'}
-				>
-					Connect
-				</Button>
-			</ModalFooter>
-		</>
+				</ModalFooter>
+			</ModalContent>
+		</Modal>
 	);
 }
 
 /**
- * Connect GitHub or GitLab with a personal access token. It stays open while
- * the check runs (Escape, a click outside and Cancel wait for the answer), so
- * it has no X that would look live but do nothing; Cancel closes it. It
- * closes a beat after the check face. Mount one per opening, so no timer from
- * an earlier opening can close it.
+ * Connects GitHub or GitLab with a personal access token. Pass it the object
+ * `useTokenDialog()` returns; each opening mounts a fresh dialog, so no check
+ * or timer from an earlier opening reaches the next.
  */
-export function TokenModal({ forge, open, onOpenChange }: TokenModalProps) {
-	const info = FORGES.find((item) => item.id === forge) ?? FORGES[0];
-	const [status, setStatus] = useState<ButtonStatus>('idle');
-	const close = useEffectEvent(() => onOpenChange(false));
-
-	useEffect(() => {
-		if (status !== 'success') return;
-
-		const timer = setTimeout(close, SUCCESS_MS);
-
-		return () => clearTimeout(timer);
-	}, [status]);
-
-	return (
-		<Modal
-			open={open}
-			onOpenChange={(next) => {
-				if (next || status !== 'pending') onOpenChange(next);
-			}}
-		>
-			<ModalContent size="sm" showClose={false}>
-				<TokenForm forge={info} status={status} onStatus={setStatus} />
-			</ModalContent>
-		</Modal>
-	);
+export function TokenModal({ dialog }: { dialog: TokenDialog }) {
+	return <TokenPanel key={dialog.opening} forge={dialog.forge} open={dialog.open} onOpenChange={dialog.setOpen} />;
 }

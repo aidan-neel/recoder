@@ -1,0 +1,188 @@
+/* ───────── Summary: what changed, the order to read it in, the conversation ───────── */
+.summary-analysis [data-ui='markdown'] {
+	color: var(--text-primary);
+	font-size: 15px;
+	line-height: 24px;
+}
+.summary-block {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 18px;
+}
+.summary-block:first-child {
+	margin-top: 0;
+}
+.summary-block-head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	min-height: 20px;
+}
+.summary-description {
+	padding: 14px 16px;
+	border-radius: 10px;
+	background: var(--bg-raised);
+	box-shadow: 0 0 0 1px var(--line-card);
+}
+.summary-description [data-ui='markdown'] {
+	color: var(--text-secondary);
+}
+
+/* The parts of the guide as a short ordered list. */
+.guide-list {
+	overflow: hidden;
+	margin: 0;
+	padding: 0;
+	border-radius: 10px;
+	background: var(--bg-raised);
+	box-shadow: 0 0 0 1px var(--line-card);
+	list-style: none;
+}
+.guide-list li + li {
+	border-top: 1px solid var(--line-card);
+}
+.guide-list-row {
+	display: flex;
+	min-height: 44px;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 16px;
+	font-size: var(--font-size-body);
+}
+.guide-list-title {
+	min-width: 0;
+	flex: 1;
+	color: var(--text-primary);
+}
+
+/* ───────── Conversation: who said what, oldest first ───────── */
+.thread {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.entry {
+	display: grid;
+	grid-template-columns: 24px minmax(0, 1fr);
+	gap: 2px 12px;
+}
+.entry-head {
+	display: flex;
+	min-height: 24px;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 0 8px;
+}
+.entry-author {
+	color: var(--text-primary);
+	font-size: var(--font-size-label);
+	font-weight: 500;
+}
+.entry-body {
+	grid-column: 2;
+	color: var(--text-secondary);
+}
+.entry-body [data-ui='markdown'] {
+	font-size: var(--font-size-body);
+	line-height: 22px;
+}
+.entry-plain {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+.entry-failed {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	color: var(--danger);
+	font-size: var(--font-size-label);
+}
+.avatar[data-recoder] {
+	background: var(--primary);
+	color: var(--on-primary);
+}
+
+/* The composer: a field over one row of tools, ringed as one control. */
+.composer {
+	border-radius: 12px;
+	background: var(--bg-raised);
+	box-shadow: 0 0 0 1px var(--line-control);
+	transition: box-shadow var(--dur-hover) ease-out;
+}
+.composer:focus-within {
+	box-shadow: 0 0 0 1px var(--line-focus);
+}
+.composer [data-ui='textarea'] {
+	display: block;
+	width: 100%;
+	padding: 14px 16px 6px;
+	border: 0;
+	background: none;
+	box-shadow: none;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	line-height: 22px;
+	outline: none;
+	resize: none;
+}
+.composer [data-ui='textarea']::placeholder {
+	color: var(--text-faint);
+}
+.composer-foot {
+	display: flex;
+	min-height: 44px;
+	align-items: center;
+	gap: 6px;
+	padding: 0 8px 8px 10px;
+}
+.composer-end {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-left: auto;
+}
+.composer-send {
+	border-radius: 999px;
+}
+.ask-suggestions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 10px;
+}
+
+/* ───────── Commits ───────── */
+.commit-list {
+	display: flex;
+	flex-direction: column;
+	margin: 0 -12px;
+	padding: 0;
+	list-style: none;
+}
+.commit-row {
+	position: relative;
+	display: grid;
+	min-height: 52px;
+	align-items: center;
+	grid-template-columns: 24px minmax(0, 1fr) auto auto;
+	gap: 0 12px;
+	padding: 6px 12px;
+	--row-button-radius: 10px;
+}
+.commit-row-text {
+	display: flex;
+	min-width: 0;
+	flex-direction: column;
+}
+.commit-title {
+	overflow: hidden;
+	color: var(--text-primary);
+	font-size: var(--font-size-body);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.commit-sha {
+	position: relative;
+	z-index: 1;
+}

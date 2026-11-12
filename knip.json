@@ -40,7 +40,8 @@
 				"tests/**/*.ts"
 			],
 			"ignoreDependencies": [
-				"tailwindcss"
+				"tailwindcss",
+				"@fontsource/geist-sans"
 			]
 		},
 		"apps/site": {

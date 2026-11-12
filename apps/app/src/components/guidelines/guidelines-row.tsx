@@ -1,21 +1,21 @@
 'use client';
 
-import { Collapsible, CollapsibleContent, SPRING, swapMotion, useMotionVariants } from '@recoder/ui';
-import { AnimatePresence, motion } from 'motion/react';
+import { Collapsible, CollapsibleContent } from '@recoder/ui';
 import { useEffect, useRef, type ReactNode, type RefObject } from 'react';
 
 import { SettingsRow } from '@/components/settings/settings-group';
 
 interface GuidelinesRowProps {
 	name: string;
-	/** The one-line preview under the name. A new line crossfades in; a skeleton giving way does not, since the loading row is its own instance. */
-	summary: ReactNode;
-	/** Paints the summary in the danger tone, for a file that could not be read. */
-	failed?: boolean;
-	/** Status pills before the action ("Active · main", "Pending in #12"). */
+	/** The one line under the name: the layer's first rule, or where it stands. */
+	summary?: ReactNode;
+	/** In the summary's place: why the file could not be read. */
+	failure?: string;
+	/** Pills before the button: the branch the file is on, the pull request that waits. */
 	status?: ReactNode;
-	/** The Write or Edit button. It steps aside while the editor is open. */
-	action?: ReactNode;
+	/** The row's button: Edit, Write or Try again. It steps aside while the editor is open. */
+	action: ReactNode;
+	/** The editor under the row is open. */
 	open: boolean;
 	/** The editor that unfolds under the row. */
 	children?: ReactNode;
@@ -23,10 +23,10 @@ interface GuidelinesRowProps {
 
 /**
  * Puts focus back on the row's button once its editor folds away, unless
- * focus already moved somewhere real (another row's editor). Focus left on
- * the page, in the folded editor or in the closing confirm counts as lost.
+ * focus already sits somewhere real (another row's editor). Focus on the
+ * page, in the folded editor or in the closing confirm counts as lost.
  */
-function useReturnFocus(row: RefObject<HTMLDivElement | null>, open: boolean) {
+function useReturnFocus(action: RefObject<HTMLDivElement | null>, open: boolean): void {
 	const wasOpen = useRef(open);
 
 	useEffect(() => {
@@ -41,52 +41,30 @@ function useReturnFocus(row: RefObject<HTMLDivElement | null>, open: boolean) {
 
 			if (active && active !== document.body && !active.closest('[inert], [role="alertdialog"]')) return;
 
-			row.current?.querySelector<HTMLElement>('[data-slot="row-action"] button, [data-slot="row-action"] a')?.focus();
+			action.current?.querySelector<HTMLElement>('button, a')?.focus({ preventScroll: true });
 		});
 
 		return () => cancelAnimationFrame(frame);
-	}, [row, open]);
+	}, [action, open]);
 }
 
 /**
  * One layer of guidelines: its name and first rule, its status and its
- * button, with the editor folding open underneath (height 240ms). Only one
- * row's editor is open at a time.
+ * button, with the editor unfolding underneath. Only one row's editor is open
+ * at a time.
  */
-export function GuidelinesRow({ name, summary, failed, status, action, open, children }: GuidelinesRowProps) {
-	const swap = useMotionVariants(swapMotion);
-	const row = useRef<HTMLDivElement>(null);
+export function GuidelinesRow({ name, summary, failure, status, action, open, children }: GuidelinesRowProps) {
+	const actionSlot = useRef<HTMLDivElement>(null);
 
-	useReturnFocus(row, open);
+	useReturnFocus(actionSlot, open);
 
 	return (
-		<div
-			ref={row}
-			data-ui="guidelines-row"
-			data-open={open || undefined}
-			data-failed={failed || undefined}
-			className="guidelines-item"
-		>
-			<SettingsRow name={name} description={summary}>
-				{status ? (
-					<motion.div layout="position" transition={SPRING} className="flex shrink-0">
-						{status}
-					</motion.div>
-				) : null}
-				<AnimatePresence initial={false} mode="popLayout">
-					{open || !action ? null : (
-						<motion.div
-							key="action"
-							data-slot="row-action"
-							variants={swap}
-							initial="initial"
-							animate="animate"
-							exit="exit"
-						>
-							{action}
-						</motion.div>
-					)}
-				</AnimatePresence>
+		<div className="guidelines-item">
+			<SettingsRow name={name} detail={summary} error={failure}>
+				{status}
+				<div ref={actionSlot} className="guidelines-action" inert={open}>
+					<div className="guidelines-action-clip">{action}</div>
+				</div>
 			</SettingsRow>
 			<Collapsible open={open}>
 				<CollapsibleContent>{children}</CollapsibleContent>

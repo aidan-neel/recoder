@@ -1,10 +1,5 @@
 /* The demo plays apps/app's own review surface, so it takes the app's styles for the parts it shows. */
-@import '../../../app/src/styles/common.css';
-@import '../../../app/src/styles/shell.css';
-@import '../../../app/src/styles/queue.css';
-@import '../../../app/src/styles/review.css';
-@import '../../../app/src/styles/review-overview.css';
-@import '../../../app/src/styles/decision.css';
+@import '../../../app/src/styles/app.css';
 
 /* ───────── Hero tokens ───────── */
 /* The home page's entrance plays once per visit, so it runs longer than the app's everyday motion. */
@@ -112,67 +107,79 @@
 }
 .demo-window {
 	position: relative;
-	display: flex;
 	width: 1200px;
 	height: 760px;
-	flex-direction: column;
 	overflow: hidden;
 	border: 1px solid var(--line-card);
 	border-radius: 18px;
-	background: var(--bg-chrome);
 	transform-origin: top left;
 	user-select: none;
 }
+/*
+ * The app in its own skin. The skin's tokens come with the class; the text
+ * settings the app puts on its page are said again here, because the site's
+ * page has its own.
+ */
+.demo-app {
+	position: relative;
+	height: 100%;
+	background: var(--bg-canvas);
+	color: var(--text-primary);
+	font-family: var(--font-ui);
+	font-size: var(--font-size-body);
+	font-feature-settings: 'ss01', 'cv11';
+	line-height: 20px;
+}
+/* The app fills its browser window; here it fills this one, on one row as tall as the window, so a long page scrolls inside it. */
+.demo-app .app-frame {
+	grid-template-rows: minmax(0, 1fr);
+}
+.demo-app .app-frame,
+.demo-app .sidebar,
+.demo-app .page {
+	height: 100%;
+}
+/* At tablet size the page takes the whole window; the sidebar would leave it too narrow to read. */
 @container (max-width: 900px) {
 	.demo-window {
-		width: max(720px, 100cqw);
+		width: max(760px, 100cqw);
 		height: 680px;
 	}
-	/* At tablet size the reading pane takes the whole card; the rail would leave it too narrow to read. */
-	.demo-window [data-ui='review-rail'] {
+	.demo-app .app-frame {
+		grid-template-columns: minmax(0, 1fr);
+	}
+	.demo-app .sidebar {
 		display: none;
 	}
 }
 /*
- * At phone size the window drops what a 420px app cannot fit: the search
- * field, the review header's meta and the decision bar's stepper; long
- * titles truncate sooner.
+ * At phone size the window drops what a narrow page cannot fit: a tab's own
+ * tools, the search field, a row's line counts, and the merge bar's line
+ * about conflicts, so titles and the merge button keep their room.
  */
 @container (max-width: 600px) {
 	.demo-window {
-		width: max(420px, 100cqw);
-		height: 600px;
+		width: max(560px, 100cqw);
+		height: 620px;
 	}
-	.demo-window [data-slot='search-trigger'],
-	.demo-window .review-meta,
-	.demo-window [data-ui='decide-bar'] > :last-child {
+	.demo-app .pull-tools,
+	.demo-app .pulls-find,
+	.demo-app .pull-row .diff-stat,
+	.demo-app .merge-bar > span.merge-bar-fact {
 		display: none;
 	}
-	.demo-window [data-ui='tab-title'] {
-		max-width: 110px;
+	.demo-app .pull-row {
+		grid-template-columns: 16px minmax(0, 1fr) auto 30px;
 	}
-	.demo-window .review-title {
-		min-width: 0;
-	}
-}
-/* The handoff floats over the whole window, as a modal floats over the app. */
-.demo-layer {
-	position: absolute;
-	z-index: 10;
-	inset: 0;
-	pointer-events: none;
 }
 /*
  * The loop fades the window out to its empty frame and back: a blank frame on
- * top of everything fades in and out, so the window fades as one picture and
- * nothing behind the handoff shows through it.
+ * top of the app fades in and out, so the window fades as one picture.
  */
 .demo-cover {
 	position: absolute;
 	z-index: 20;
 	inset: 0;
-	display: flex;
-	flex-direction: column;
 	pointer-events: none;
 	transition: opacity var(--dur-disclose) ease-out;
 }

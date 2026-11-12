@@ -1,0 +1,208 @@
+/* ───────── Pull request page: the header, the tabs, one tab's body, the merge bar ───────── */
+.pull-title-number {
+	flex-shrink: 0;
+	color: var(--text-faint);
+	font-weight: 400;
+	letter-spacing: 0;
+}
+.pull-facts {
+	display: flex;
+	min-height: 24px;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 8px;
+	margin-top: 6px;
+	color: var(--text-muted);
+	font-size: var(--font-size-label);
+}
+.pull-facts strong {
+	color: var(--text-primary);
+	font-weight: 500;
+}
+
+.pull-tools {
+	display: flex;
+	min-width: 0;
+	align-items: center;
+	gap: 10px;
+}
+.pull-tools .meta {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.pull-body {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+}
+
+/* While the page loads: bars where the title, the facts and the tabs will stand. */
+.pull-head-skeleton {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	padding: 24px 24px 20px;
+	border-bottom: 1px solid var(--line-subtle);
+}
+
+/* ───────── Review banner: where the newest review stands, and the one next step ───────── */
+.run-banner {
+	display: flex;
+	min-height: 48px;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 10px 8px 16px;
+	border-radius: 10px;
+	background: var(--bg-raised);
+	box-shadow: inset 0 0 0 1px var(--line-card);
+	font-size: var(--font-size-label);
+}
+.run-banner-text {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	align-items: center;
+	gap: 12px;
+	color: var(--text-primary);
+	font-weight: 500;
+}
+.run-banner-text .meta {
+	overflow: hidden;
+	font-weight: 400;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.run-banner-actions {
+	display: flex;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 6px;
+}
+
+/* ───────── Merge bar: checks, mergeability, the merge button ───────── */
+.merge-bar {
+	display: flex;
+	height: 52px;
+	flex-shrink: 0;
+	align-items: center;
+	gap: 4px;
+	padding: 0 16px 0 14px;
+	border-top: 1px solid var(--line-subtle);
+	background: var(--bg-canvas);
+	font-size: var(--font-size-label);
+}
+.merge-bar-fact {
+	display: inline-flex;
+	height: 28px;
+	align-items: center;
+	gap: 8px;
+	padding: 0 10px;
+	color: var(--text-secondary);
+	white-space: nowrap;
+}
+.merge-bar-fact + .merge-bar-fact,
+.merge-bar [data-ui='button'] + .merge-bar-fact {
+	margin-left: 6px;
+	padding-left: 16px;
+	border-left: 1px solid var(--line-control);
+}
+.merge-bar-fact svg {
+	width: 14px;
+	height: 14px;
+	flex-shrink: 0;
+}
+.merge-bar-fact[data-tone='ok'] svg {
+	color: var(--success);
+}
+.merge-bar-fact[data-tone='bad'] svg {
+	color: var(--danger);
+}
+.merge-bar-fact[data-tone='wait'] svg {
+	color: var(--sev-medium);
+}
+.merge-bar-end {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-left: auto;
+}
+.merge-error {
+	max-width: 420px;
+	overflow: hidden;
+	color: var(--danger);
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* The merge button and its method menu read as one control. */
+.merge-split {
+	display: inline-flex;
+	border-radius: 8px;
+}
+.merge-split > [data-ui='button']:first-child,
+.merge-split > span:first-child > [data-ui='button'] {
+	border-top-right-radius: 0;
+	border-bottom-right-radius: 0;
+}
+.merge-split > [data-ui='button']:last-child {
+	width: 28px;
+	min-width: 28px;
+	margin-left: 1px;
+	border-top-left-radius: 0;
+	border-bottom-left-radius: 0;
+}
+
+/* A merge method in the menu: what it does, then what it leaves on the base branch. */
+.merge-method {
+	height: auto;
+	min-height: 30px;
+	align-items: flex-start;
+	padding-top: 6px;
+	padding-bottom: 6px;
+}
+.merge-method-detail {
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+	line-height: 16px;
+}
+
+/* The checks popover: one row a check, failed first. */
+.checks {
+	display: flex;
+	width: 340px;
+	max-height: 360px;
+	flex-direction: column;
+}
+.checks-head {
+	padding: 10px 12px 6px;
+}
+.checks-list {
+	display: flex;
+	flex-direction: column;
+	overflow-y: auto;
+	padding: 0 4px 4px;
+	scrollbar-width: thin;
+}
+.check-row {
+	height: 32px;
+	align-items: center;
+	gap: 10px;
+	padding: 0 8px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-label);
+}
+.check-row-name {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.check-row > svg:last-child {
+	width: 12px;
+	height: 12px;
+	flex-shrink: 0;
+	color: var(--text-ghost);
+}

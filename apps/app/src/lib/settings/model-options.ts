@@ -40,14 +40,26 @@ export interface ModelCatalog {
 	count: number;
 }
 
-/** The two model picks: `orchestrator` runs the reviewers; `specialist` runs subagents and verifiers. */
-export type ModelRole = 'orchestrator' | 'specialist';
+/** The model picks: `orchestrator` runs the reviewers, `specialist` the subagents, `verifier` the checks of each finding. */
+export type ModelRole = 'orchestrator' | 'specialist' | 'verifier';
+
+/** The picks in the order Settings lists them. */
+export const MODEL_ROLES: readonly ModelRole[] = ['orchestrator', 'specialist', 'verifier'];
 
 /**
  * Each pick's one name, for its row, its dialog and its labels. Orchestrator,
  * the agent in chat, runs on the Review model.
  */
-export const ROLE_NAME: Record<ModelRole, string> = { orchestrator: 'Review model', specialist: 'Subagent model' };
+export const ROLE_NAME: Record<ModelRole, string> = {
+	orchestrator: 'Review model',
+	specialist: 'Subagent model',
+	verifier: 'Verifier model'
+};
+
+/** True for a pick that runs on the Review model while it is unset: every pick but the Review model itself. */
+export function followsWhenUnset(role: ModelRole): boolean {
+	return role !== 'orchestrator';
+}
 
 /** The entry's name; one still named by its raw id reads as a name. */
 function displayName(entry: ModelEntry): string {
@@ -110,7 +122,7 @@ export function modelCatalog(entries: ModelEntry[]): ModelCatalog {
 	return catalog;
 }
 
-/** What a role is set to now. `follows`: the subagent pick is unset and runs on the Review model. */
+/** What a role is set to now. `follows`: the pick is unset and runs on the Review model. */
 export interface RolePick {
 	/** The saved model id; null when nothing is picked. */
 	id: string | null;
@@ -120,19 +132,28 @@ export interface RolePick {
 	follows: boolean;
 }
 
-/** The saved pick for a role. An unset Review pick falls back to the older shared pick. */
+/** A role's saved model id and effort, before the catalog is looked up. */
+interface SavedPick {
+	id: string | null;
+	effort: ReasoningEffort | null | undefined;
+}
+
+/** Where each role's pick is saved. An unset Review pick falls back to the older shared pick. */
+const SAVED_PICK: Record<ModelRole, (settings: ModelSettings) => SavedPick> = {
+	orchestrator: (settings) => ({
+		id: settings.orchestratorModelId ?? settings.sharedModelId ?? null,
+		effort: settings.orchestratorEffort
+	}),
+	specialist: (settings) => ({ id: settings.specialistModelId ?? null, effort: settings.specialistEffort }),
+	verifier: (settings) => ({ id: settings.verifierModelId ?? null, effort: settings.verifierEffort })
+};
+
+/** The saved pick for a role. */
 export function rolePick(settings: ModelSettings, role: ModelRole): RolePick {
-	const { byId } = modelCatalog(settings.models);
+	const { id, effort } = SAVED_PICK[role](settings);
+	const option = id ? modelCatalog(settings.models).byId.get(id) : undefined;
 
-	const id =
-		role === 'orchestrator'
-			? (settings.orchestratorModelId ?? settings.sharedModelId ?? null)
-			: (settings.specialistModelId ?? null);
-
-	const option = id ? byId.get(id) : undefined;
-	const saved = role === 'orchestrator' ? settings.orchestratorEffort : settings.specialistEffort;
-
-	return { id, option, effort: resolveEffort(option, saved), follows: role === 'specialist' && !id };
+	return { id, option, effort: resolveEffort(option, effort), follows: followsWhenUnset(role) && !id };
 }
 
 /**
@@ -150,9 +171,4 @@ export function missingNote(pick: RolePick): string | null {
 /** True when every word of the query appears somewhere in the model's name, group or id, in any order. */
 export function matchesQuery(option: ModelOption, terms: readonly string[]): boolean {
 	return terms.every((term) => option.haystack.includes(term));
-}
-
-/** A search box's text as lowercase words. */
-export function queryTerms(query: string): string[] {
-	return query.toLowerCase().split(/\s+/).filter(Boolean);
 }

@@ -35,3 +35,14 @@ export function signedInForges(auth: Record<Forge, ProviderAuth> | null): Forge[
 
 	return FORGES.map((forge) => forge.id).filter((id) => auth[id].authenticated);
 }
+
+/** The line under a forge's name: who it is signed in as, or why it is not. */
+export function forgeLine(auth: ProviderAuth): string {
+	if (auth.authenticated) {
+		const who = auth.user ? `Signed in as ${auth.user}` : 'Signed in';
+
+		return auth.host ? `${who} on ${auth.host}` : who;
+	}
+
+	return auth.available ? 'Not connected' : 'CLI not installed. Connect with a token instead.';
+}

@@ -1,0 +1,218 @@
+/*
+ * The app's palette. The kit's tokens keep their names and get neutral values:
+ * near-black surfaces, hairlines of white, one cream primary and one azure
+ * accent. Scoped to `.app-skin` (on <html> here, on the demo's wrapper in
+ * apps/site), so the site around a demo keeps the kit's own values.
+ */
+@import '@fontsource/geist-sans/latin-400.css';
+@import '@fontsource/geist-sans/latin-500.css';
+@import '@fontsource/geist-sans/latin-600.css';
+
+.app-skin {
+	color-scheme: dark;
+	--wash-rgb: 255 255 255;
+	--ink-rgb: 237 237 237;
+	--shade-rgb: 0 0 0;
+
+	/* Surfaces */
+	--bg-chrome: #161616;
+	--bg-canvas: #111111;
+	--bg-panel: #141414;
+	--bg-raised: #1a1a1a;
+	--bg-raised-2: #171717;
+	--bg-menu: #1c1c1c;
+	--bg-hover: #222222;
+	--bg-selected: #282828;
+	--bg-bubble: #1e1e1e;
+	--bg-field: #161616;
+	--bg-search: #161616;
+
+	/* Lines */
+	--line-divider: #1c1c1c;
+	--line-subtle: #1f1f1f;
+	--line-subtle-2: #212121;
+	--line-canvas: #222222;
+	--line-card: #252525;
+	--line-tab: #272727;
+	--line-control: #2b2b2b;
+	--line-menu: #2f2f2f;
+	--line-strong: #353535;
+	--line-hover: #3d3d3d;
+	--line-focus: #474747;
+
+	/* Text */
+	--text-primary: #ededed;
+	--text-ai: #e4e4e4;
+	--text-secondary: #cfcfcf;
+	--text-tertiary: #bdbdbd;
+	--text-muted: #a1a1a1;
+	--text-subtle: #8a8a8a;
+	--text-faint: #6e6e6e;
+	--text-ghost: #555555;
+	--text-brief-body: #8f8f8f;
+
+	--primary: #f2f0eb;
+	--primary-hover: #ffffff;
+	--on-primary: #111111;
+
+	/* The one accent: links, the selected line, the hunk header. */
+	--accent: #5b9dff;
+	--accent-text: #8dbbff;
+	--accent-tint: rgba(91, 157, 255, 0.12);
+
+	/* Status: text on a tint of its own hue. */
+	--sev-high: #ff9da1;
+	--sev-high-icon: #ff6369;
+	--sev-high-tint: rgba(255, 99, 105, 0.14);
+	--sev-medium: #f8c46b;
+	--sev-medium-tint: rgba(245, 165, 36, 0.14);
+	--sev-low: #8dbbff;
+	--sev-low-tint: rgba(91, 157, 255, 0.14);
+	--sev-info: #b4b4b4;
+	--sev-info-tint: rgb(var(--wash-rgb) / 0.07);
+	--success: #62e0a6;
+	--success-tint: rgba(61, 214, 140, 0.13);
+	--danger: #ff8a8f;
+	--danger-tint: rgba(255, 99, 105, 0.13);
+	--sent: #c8a6f2;
+	--sent-tint: rgba(200, 166, 242, 0.13);
+
+	/* Diff and code */
+	--diff-add: rgba(61, 214, 140, 0.09);
+	--diff-del: rgba(255, 99, 105, 0.09);
+	--diff-add-gutter: rgba(61, 214, 140, 0.15);
+	--diff-del-gutter: rgba(255, 99, 105, 0.15);
+	--diff-focus: rgba(245, 165, 36, 0.08);
+	--selection: rgba(91, 157, 255, 0.24);
+	--selection-bar: var(--accent);
+	--syn-keyword: #8fb4f0;
+	--syn-function: #cdb4f2;
+	--syn-type: #86d0c1;
+	--syn-plain: #d0d0d0;
+	--syn-string: #d9c59a;
+	--syn-comment: var(--text-subtle);
+
+	/* Elevation: only menus and dialogs float. */
+	--shadow-menu: 0 0 0 1px var(--line-menu), 0 16px 40px rgba(0, 0, 0, 0.5);
+	--shadow-modal: 0 0 0 1px var(--line-control), 0 8px 32px rgba(0, 0, 0, 0.4);
+	--shadow-composer: 0 0 0 1px var(--line-control);
+	--scrim: rgba(0, 0, 0, 0.55);
+
+	/* The kit's derived tokens, said again so they follow this palette inside a wrapper. */
+	--bg-rail: var(--bg-panel);
+	--bg-code: var(--bg-raised-2);
+	--ok: var(--success);
+	--ok-tint: var(--success-tint);
+	--sev-high-solid: var(--sev-high-icon);
+	--sev-medium-solid: var(--sev-medium);
+	--sev-low-solid: var(--sev-low);
+	--focus-color: rgb(var(--ink-rgb) / 0.42);
+	--focus-ring: 0 0 0 2px var(--focus-color);
+
+	/* Type: Geist for the interface, Geist Mono for code and numbers. No serif voice here. */
+	--font-ui: 'Geist Sans', 'Inter', system-ui, sans-serif;
+	--font-ai: var(--font-ui);
+	--font-size-title: 14px;
+	--font-size-body: 14px;
+	--font-size-label: 13px;
+	--font-size-button: 13px;
+	--font-size-badge: 12px;
+	--font-size-meta: 12px;
+
+	/* Layout */
+	--sidebar-width: 248px;
+	--bar-height: 44px;
+}
+
+/* Light: paper white, hairlines of black. */
+:root.app-skin:not(.dark),
+:root:not(.dark) .app-skin {
+	color-scheme: light;
+	--wash-rgb: 0 0 0;
+	--ink-rgb: 23 23 23;
+	--shade-rgb: 0 0 0;
+
+	--bg-chrome: #f6f6f6;
+	--bg-canvas: #ffffff;
+	--bg-panel: #fafafa;
+	--bg-raised: #ffffff;
+	--bg-raised-2: #fafafa;
+	--bg-menu: #ffffff;
+	--bg-hover: #f0f0f0;
+	--bg-selected: #e8e8e8;
+	--bg-bubble: #f2f2f2;
+	--bg-field: #ffffff;
+	--bg-search: #f6f6f6;
+
+	--line-divider: #efefef;
+	--line-subtle: #ededed;
+	--line-subtle-2: #ebebeb;
+	--line-canvas: #e9e9e9;
+	--line-card: #e6e6e6;
+	--line-tab: #e2e2e2;
+	--line-control: #dedede;
+	--line-menu: #dadada;
+	--line-strong: #cfcfcf;
+	--line-hover: #bdbdbd;
+	--line-focus: #a3a3a3;
+
+	--text-primary: #171717;
+	--text-ai: #1f1f1f;
+	--text-secondary: #333333;
+	--text-tertiary: #454545;
+	--text-muted: #5c5c5c;
+	--text-subtle: #6b6b6b;
+	--text-faint: #858585;
+	--text-ghost: #a8a8a8;
+	--text-brief-body: #6b6b6b;
+
+	--primary: #171717;
+	--primary-hover: #000000;
+	--on-primary: #ffffff;
+
+	--accent: #2563eb;
+	--accent-text: #1d4ed8;
+	--accent-tint: rgba(37, 99, 235, 0.08);
+
+	--sev-high: #b3261e;
+	--sev-high-icon: #d6352c;
+	--sev-high-tint: rgba(214, 53, 44, 0.09);
+	--sev-medium: #805300;
+	--sev-medium-tint: rgba(214, 140, 0, 0.14);
+	--sev-low: #1d4ed8;
+	--sev-low-tint: rgba(37, 99, 235, 0.09);
+	--sev-info: #5c5c5c;
+	--sev-info-tint: rgb(var(--wash-rgb) / 0.06);
+	--success: #136a2d;
+	--success-tint: rgba(26, 127, 55, 0.11);
+	--danger: #ac2723;
+	--danger-tint: rgba(196, 48, 43, 0.09);
+	--sent: #6b3fb0;
+	--sent-tint: rgba(107, 63, 176, 0.1);
+
+	--diff-add: rgba(26, 127, 55, 0.09);
+	--diff-del: rgba(214, 53, 44, 0.08);
+	--diff-add-gutter: rgba(26, 127, 55, 0.15);
+	--diff-del-gutter: rgba(214, 53, 44, 0.14);
+	--diff-focus: rgba(214, 140, 0, 0.08);
+	--selection: rgba(37, 99, 235, 0.16);
+	--syn-keyword: #1d4ed8;
+	--syn-function: #7a3fb0;
+	--syn-type: #0f766e;
+	--syn-plain: #2a2a2a;
+	--syn-string: #8a5a00;
+
+	--shadow-menu: 0 0 0 1px rgb(0 0 0 / 0.08), 0 8px 24px -4px rgb(0 0 0 / 0.12), 0 2px 6px rgb(0 0 0 / 0.04);
+	--shadow-modal: 0 0 0 1px rgb(0 0 0 / 0.08), 0 24px 64px -12px rgb(0 0 0 / 0.2);
+	--scrim: rgba(0, 0, 0, 0.3);
+	--focus-color: rgb(var(--ink-rgb) / 0.5);
+}
+
+@theme inline {
+	--color-accent: var(--accent);
+	--color-accent-text: var(--accent-text);
+	--color-accent-tint: var(--accent-tint);
+	--color-field: var(--bg-field);
+	--color-on-primary: var(--on-primary);
+	--color-primary: var(--primary);
+}

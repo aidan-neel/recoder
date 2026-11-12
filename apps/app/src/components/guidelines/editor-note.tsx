@@ -1,100 +1,58 @@
 'use client';
 
-import type { RepoGuidelines } from '@recoder/shared';
-import { swapMotion, useMotionVariants } from '@recoder/ui';
-import { AnimatePresence, motion } from 'motion/react';
+import { SwapText } from '@recoder/ui';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
+import type { EditorNote as Note } from '@/lib/guidelines/editor-note';
+import { settingsHref } from '@/lib/shell/routes';
+
 interface EditorNoteProps {
-	/** Why the last save or draft failed. */
-	error: string | null;
-	/** Characters in the editor (or in the draft while it streams), trimmed. */
+	/** What the line says, or null when there is nothing to say. */
+	note: Note | null;
+	/** Characters in the editor, or in the draft while it streams. */
 	length: number;
 	/** The character limit. */
 	max: number;
-	repo: RepoGuidelines | null;
 }
 
-interface Note {
-	key: string;
-	tone: 'danger' | 'muted';
-	body: ReactNode;
+/** A count as people read it: `8,000`. */
+function count(value: number): string {
+	return value.toLocaleString('en-US');
 }
 
-/** What a repository save does, or why it can't run yet. */
-function repoNote(repo: RepoGuidelines): Note {
-	if (!repo.canPropose) {
-		return {
-			key: 'blocked',
-			tone: 'muted',
-			body: (
-				<>
-					Connect a token with write access in{' '}
-					<Link href="/settings/connections" className="guidelines-link">
-						Connections
-					</Link>{' '}
-					to open a pull request.
-				</>
-			)
-		};
-	}
+/** A note's words. A blocked save has none of its own: it points at the page that unblocks it. */
+function noteWords(note: Note): ReactNode {
+	if (note.kind !== 'blocked') return note.text;
 
-	if (repo.pending) {
-		return {
-			key: 'pending',
-			tone: 'muted',
-			body: `Updates #${repo.pending.number}. Reviews follow ${repo.path} once it merges.`
-		};
-	}
-
-	return { key: 'propose', tone: 'muted', body: `Reviews follow ${repo.path} once the pull request merges.` };
-}
-
-/** The one note the editor shows, most pressing first: a failure, the limit, then what saving does. */
-function noteFor({ error, length, max, repo }: EditorNoteProps): Note | null {
-	if (error) return { key: `error:${error}`, tone: 'danger', body: error };
-
-	if (length > max) {
-		return {
-			key: 'over',
-			tone: 'danger',
-			body: `Guidelines are limited to ${max.toLocaleString('en-US')} characters.`
-		};
-	}
-
-	return repo ? repoNote(repo) : null;
+	return (
+		<>
+			Connect a token with write access in{' '}
+			<Link href={settingsHref('connections')} className="text-link">
+				Connections
+			</Link>{' '}
+			to open a pull request.
+		</>
+	);
 }
 
 /**
  * The line between the text and the bar: a note on the left (a failure, the
- * limit, or what saving does), the character count on the right. A new note
- * crossfades in place of the old, and a failure is announced.
+ * limit, or what saving does) and the character count on the right. A new
+ * note takes the old one's place, and a failure is announced.
  */
-export function EditorNote(props: EditorNoteProps) {
-	const swap = useMotionVariants(swapMotion);
-	const note = noteFor(props);
-
+export function EditorNote({ note, length, max }: EditorNoteProps) {
 	return (
-		<div data-ui="guidelines-meta" className="guidelines-meta">
-			<AnimatePresence initial={false} mode="wait">
+		<div className="guidelines-meta">
+			<SwapText id={note?.key ?? 'none'} mode="wait" className="guidelines-note">
 				{note ? (
-					<motion.p
-						key={note.key}
-						role={note.tone === 'danger' ? 'alert' : undefined}
-						data-tone={note.tone}
-						className="guidelines-note"
-						variants={swap}
-						initial="initial"
-						animate="animate"
-						exit="exit"
-					>
-						{note.body}
-					</motion.p>
+					<span data-tone={note.tone} role={note.tone === 'danger' ? 'alert' : undefined}>
+						{noteWords(note)}
+					</span>
 				) : null}
-			</AnimatePresence>
-			<span className="guidelines-count" data-over={props.length > props.max || undefined}>
-				{props.length.toLocaleString('en-US')} / {props.max.toLocaleString('en-US')}
+			</SwapText>
+			<span className="guidelines-count" data-over={length > max || undefined}>
+				{count(length)} / {count(max)}
 			</span>
 		</div>
 	);

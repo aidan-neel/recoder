@@ -10,22 +10,20 @@ import {
 	CommandList,
 	type CommandHint
 } from '@recoder/ui';
-import { GitPullRequestArrow } from 'lucide-react';
-import { usePathname } from 'next/navigation';
-import { useState, type KeyboardEvent } from 'react';
+import { BookOpen, Clock, CornerDownLeft, GitPullRequest, Keyboard, Plus, Settings, SunMoon } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState, type ComponentType } from 'react';
 
-import type { QueueEntry } from '@/lib/queue/queue';
-import { useQueue } from '@/lib/queue/queue-store';
-import { useReview } from '@/lib/review/review-store';
-import { pullRef } from '@/lib/shell/format';
-import { paletteScore } from '@/lib/shell/palette-filter';
-import { activeTab, paletteScope } from '@/lib/shell/routes';
-import { useShell, type PaletteItem, type ReviewTab } from '@/lib/shell/shell-store';
+import { useApi } from '@/lib/api/client';
+import type { PullRow, PullTarget } from '@/lib/pulls/types';
+import { useOpenPull } from '@/lib/pulls/use-open-pull';
+import { useRowEntries } from '@/lib/pulls/use-rows';
+import { useChrome } from '@/lib/shell/chrome';
+import { errorToast } from '@/lib/shell/notify';
+import { AUTOMATIONS_HREF, GUIDELINES_HREF, newReviewHref, pullsHref, settingsHref } from '@/lib/shell/routes';
+import { useTheme } from '@/lib/shell/theme';
 
-import { actionItems, tabItems } from './palette-items';
-import { usePullReview } from './use-pull-review';
-import { useRecentReviews } from './use-recent-reviews';
-import { useTabActions } from './use-tab-actions';
+import { PullMark } from '@/components/common/pull-mark';
 
 const HINTS: CommandHint[] = [
 	{ keys: ['ArrowUp', 'ArrowDown'], label: 'navigate' },
@@ -33,170 +31,120 @@ const HINTS: CommandHint[] = [
 	{ keys: ['Escape'], label: 'close' }
 ];
 
-/** Pull request mode adds the way back to the main list. */
-const PULL_HINTS: CommandHint[] = [...HINTS.slice(0, 2), { keys: ['Backspace'], label: 'back' }, HINTS[2]];
+/** The most pull requests the palette lists before the person types. */
+const RESTING_PULLS = 6;
 
-const PLACEHOLDER = {
-	review: 'Search this review and actions',
-	queue: 'Search pull requests and actions',
-	pull: 'Paste a pull request link, or type its number'
-} as const;
+interface Action {
+	id: string;
+	label: string;
+	icon: ComponentType<{ className?: string }>;
+	shortcut?: string;
+	run: () => void;
+}
 
-interface Row {
-	item: PaletteItem;
-	/** What cmdk searches and keys the row by. */
-	value: string;
+/** What the pasted-link row says for a target the palette can open. */
+function targetLabel(target: PullTarget): string | null {
+	if (target.kind === 'pull') return `Open ${target.repoName} #${target.number}`;
+	if (target.kind === 'untracked') return `Track ${target.repoName} and open #${target.number}`;
+
+	return null;
+}
+
+/** One open pull request: its title, then where it is. */
+function PullItem({ row, onOpen }: { row: PullRow; onOpen: (href: string) => void }) {
+	return (
+		<CommandItem
+			value={row.key}
+			keywords={[row.title, row.repoName, String(row.number), row.author]}
+			leading={<PullMark state={row.status.kind === 'draft' ? 'draft' : 'open'} />}
+			detail={`${row.repoName} #${row.number}`}
+			onSelect={() => onOpen(row.href)}
+		>
+			{row.title}
+		</CommandItem>
+	);
 }
 
 /**
- * Pairs each item with its search text. cmdk keys rows by that text, so a
- * repeat (two findings with one title and place) gets invisible padding.
- */
-function rows(items: PaletteItem[]): Row[] {
-	const seen = new Set<string>();
-
-	return items.map((item) => {
-		let value = `${item.label} ${item.detail ?? ''}`.trim();
-
-		while (seen.has(value)) value += '​';
-
-		seen.add(value);
-
-		return { item, value };
-	});
-}
-
-/** Rows grouped under their headings, in the order each heading first appears. */
-function grouped(list: Row[]): [string, Row[]][] {
-	const groups = new Map<string, Row[]>();
-
-	for (const row of list) groups.set(row.item.group, [...(groups.get(row.item.group) ?? []), row]);
-
-	return [...groups];
-}
-
-/** The open tabs the page does not already list: on the queue, a tab's pull request is a row of its own. */
-function unlisted(tabRows: PaletteItem[], pageItems: PaletteItem[]): PaletteItem[] {
-	const listed = new Set(pageItems.map((item) => item.detail));
-
-	return tabRows.filter((item) => !listed.has(item.detail));
-}
-
-/** Reviews the palette already reaches without the Reviews group: open tabs, the one on screen, and the queue's rows. */
-function shownReviews(tabs: ReviewTab[], active: string | null, listed: QueueEntry[] | null): Set<string> {
-	const rows = (listed ?? []).flatMap((entry) => (entry.review ? [entry.review.id] : []));
-
-	return new Set([...tabs.map((tab) => tab.id), ...(active ? [active] : []), ...rows]);
-}
-
-/**
- * The ⌘K palette: what the page publishes first (pull requests, decisions,
- * files), then the open review tabs, then app-wide actions, then the
- * reviews the server keeps that no row above reaches. A pasted pull request link offers to review it;
- * "Review a pull request…" switches the palette to take a link or a number.
- * Choosing a row closes the palette, then runs it, unless the row keeps it
- * open to show its progress. Switching mode clears the search.
+ * Search from anywhere: a pasted pull request link opens (tracking its
+ * repository first when it must), the open pull requests are one word away,
+ * and so are the places and the theme.
  */
 export function CommandPalette() {
-	const open = useShell((state) => state.paletteOpen);
-	const pageItems = useShell((state) => state.pageItems);
-	const tabs = useShell((state) => state.tabs);
-	const setOpen = useShell((state) => state.setPaletteOpen);
-	const pathname = usePathname();
-	const active = activeTab(pathname);
-	const review = tabs.find((tab) => tab.id === active);
-	const { open: openTab, close } = useTabActions();
-	const [search, setSearch] = useState('');
-	const [wasOpen, setWasOpen] = useState(open);
+	const router = useRouter();
+	const { base } = useApi();
+	const open = useChrome((state) => state.paletteOpen);
+	const setOpen = useChrome((state) => state.setPaletteOpen);
+	const setShortcutsOpen = useChrome((state) => state.setShortcutsOpen);
+	const toggleTheme = useTheme((state) => state.toggle);
+	const entries = useRowEntries();
+	const opener = useOpenPull();
+	const [query, setQuery] = useState('');
+	const target = opener.resolve(query);
+	const pasted = targetLabel(target);
+	const pulls = query ? entries : entries.slice(0, RESTING_PULLS);
 
-	const go = (id: string) => {
+	/** Leaves the palette for a page. */
+	function go(href: string): void {
 		setOpen(false);
-		openTab(id);
-	};
-
-	const pageScope = paletteScope(pathname);
-	const sample = useReview((state) => state.sample);
-	const listed = useQueue((state) => (pageScope === 'queue' ? state.entries : null));
-	const pull = usePullReview(open, go);
-	const recent = useRecentReviews(open, shownReviews(tabs, active, listed), openTab);
-	const scope = pull.active ? 'pull' : pageScope;
-
-	const [wasPull, setWasPull] = useState(pull.active);
-
-	if (wasOpen !== open || wasPull !== pull.active) {
-		setWasOpen(open);
-		setWasPull(pull.active);
-		setSearch('');
+		router.push(href);
 	}
 
-	const items = pull.active
-		? pull.items(search)
-		: [
-				...pull.items(search),
-				...pageItems,
-				...unlisted(tabItems(tabs, active, openTab), pageItems),
-				...actionItems(openTab, review ? () => close([review.id]) : null, pageScope === 'review' && !sample),
-				pull.action,
-				...recent
-			];
+	/** Opens the pull request the text names; a refusal stays on screen as a toast. */
+	function openPasted(): void {
+		setOpen(false);
 
-	const where = {
-		review: review ? `in ${pullRef(review.repo, review.pr)}` : 'this review',
-		queue: 'the queue',
-		pull: null
-	}[scope];
-
-	function choose(item: PaletteItem): void {
-		if (!item.keepOpen) setOpen(false);
-
-		item.run();
+		opener.open(query).then(
+			(href) => router.push(href),
+			(error: unknown) => errorToast(error instanceof Error ? error.message : 'That pull request did not open.')
+		);
 	}
 
-	/** Backspace in an empty field leaves pull request mode for the main list. */
-	function onKeyDown(event: KeyboardEvent): void {
-		if (pull.active && event.key === 'Backspace' && search === '') pull.leave();
-	}
+	const actions: Action[] = [
+		{ id: 'new', label: 'New review', icon: Plus, shortcut: 'c', run: () => go(newReviewHref(base)) },
+		{ id: 'pulls', label: 'Pull requests', icon: GitPullRequest, run: () => go(pullsHref(base)) },
+		{ id: 'automations', label: 'Automations', icon: Clock, run: () => go(AUTOMATIONS_HREF) },
+		{ id: 'guidelines', label: 'Guidelines', icon: BookOpen, run: () => go(GUIDELINES_HREF) },
+		{ id: 'settings', label: 'Settings', icon: Settings, shortcut: 'mod+,', run: () => go(settingsHref()) },
+		{ id: 'theme', label: 'Switch theme', icon: SunMoon, run: toggleTheme },
+		{ id: 'shortcuts', label: 'Keyboard shortcuts', icon: Keyboard, shortcut: '?', run: () => setShortcutsOpen(true) }
+	];
 
 	return (
 		<CommandDialog
 			open={open}
-			onOpenChange={setOpen}
+			onOpenChange={(next) => {
+				setOpen(next);
+				if (!next) setQuery('');
+			}}
 			label="Search Recoder"
-			shouldFilter={!pull.active}
-			filter={paletteScore}
 		>
-			<CommandInput
-				placeholder={PLACEHOLDER[scope]}
-				value={search}
-				onValueChange={setSearch}
-				leading={
-					pull.active ? <GitPullRequestArrow aria-hidden className="size-4 shrink-0 text-fg-muted" /> : undefined
-				}
-				trailing={where ? <span aria-live="polite">{where}</span> : undefined}
-				onKeyDown={onKeyDown}
-			/>
+			<CommandInput placeholder="Search pull requests, or paste a link" value={query} onValueChange={setQuery} />
 			<CommandList>
-				{grouped(rows(items)).map(([heading, list]) => (
-					<CommandGroup key={heading} heading={heading}>
-						{list.map(({ item, value }) => (
-							<CommandItem
-								key={item.id}
-								value={value}
-								keywords={item.keywords?.split(/\s+/)}
-								icon={item.icon}
-								iconTone={item.tone}
-								detail={item.detail}
-								shortcut={item.shortcut}
-								onSelect={() => choose(item)}
-							>
-								{item.label}
-							</CommandItem>
+				<CommandEmpty>Nothing matches. Paste a pull request link to open it.</CommandEmpty>
+				{pasted ? (
+					<CommandGroup>
+						<CommandItem value={query} icon={CornerDownLeft} onSelect={openPasted}>
+							{pasted}
+						</CommandItem>
+					</CommandGroup>
+				) : null}
+				{pulls.length > 0 ? (
+					<CommandGroup heading="Pull requests">
+						{pulls.map(({ row }) => (
+							<PullItem key={row.key} row={row} onOpen={go} />
 						))}
 					</CommandGroup>
-				))}
-				<CommandEmpty>{pull.active ? pull.empty(search) : undefined}</CommandEmpty>
+				) : null}
+				<CommandGroup heading="Go to">
+					{actions.map(({ id, label, icon, shortcut, run }) => (
+						<CommandItem key={id} value={`go ${label}`} icon={icon} shortcut={shortcut} onSelect={run}>
+							{label}
+						</CommandItem>
+					))}
+				</CommandGroup>
 			</CommandList>
-			<CommandFooter hints={pull.active ? PULL_HINTS : HINTS} />
+			<CommandFooter hints={HINTS} />
 		</CommandDialog>
 	);
 }

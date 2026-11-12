@@ -1,4 +1,4 @@
-import type { AutoReviewEvent, AutoReviewInterval } from '@recoder/shared';
+import { AUTO_REVIEW_INTERVALS, type AutoReviewEvent, type AutoReviewInterval } from '@recoder/shared';
 
 import { plural, span } from '../shell/format';
 
@@ -7,16 +7,24 @@ export function intervalLabel(seconds: AutoReviewInterval): string {
 	return plural(seconds / 60, 'minute');
 }
 
+/** The interval a select's string value names, or null for anything else. */
+export function intervalFrom(value: string): AutoReviewInterval | null {
+	return AUTO_REVIEW_INTERVALS.find((seconds) => String(seconds) === value) ?? null;
+}
+
+/** The "last checked" half of the watcher row: never, just now, or how long ago. */
+function sinceText(last: number, now: number): string {
+	if (Number.isNaN(last)) return 'Not checked yet';
+	if (now - last < 10_000) return 'Checked just now';
+
+	return `Last checked ${span(now - last)} ago`;
+}
+
 /** "Last checked 2 minutes ago · next in 30 seconds", or what stands in for either half. */
 export function checkText(lastCheckAt: string | null, nextCheckAt: string | null, now: number): string {
 	const last = lastCheckAt ? Date.parse(lastCheckAt) : Number.NaN;
 	const next = nextCheckAt ? Date.parse(nextCheckAt) : Number.NaN;
-
-	const since = Number.isNaN(last)
-		? 'Not checked yet'
-		: now - last < 10_000
-			? 'Checked just now'
-			: `Last checked ${span(now - last)} ago`;
+	const since = sinceText(last, now);
 
 	if (Number.isNaN(next)) return since;
 

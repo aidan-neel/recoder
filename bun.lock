@@ -25,6 +25,7 @@
       "name": "@recoder/app",
       "version": "0.1.0",
       "dependencies": {
+        "@fontsource/geist-sans": "5.3.0",
         "@recoder/shared": "workspace:*",
         "@recoder/ui": "workspace:*",
         "lucide-react": "1.59.0",

@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { ModelEntry } from '@recoder/shared';
 
-import { modelCatalog, queryTerms } from '../../src/lib/settings/model-options';
+import { modelCatalog } from '../../src/lib/settings/model-options';
 import { FOLLOW_ID, layoutRows, mountedRows, stepChoice } from '../../src/lib/settings/model-rows';
+import { queryTerms } from '../../src/lib/shell/search';
 
 function entry(id: string, source: string): ModelEntry {
 	return { id, label: id, model: id, source, agent: 'OpenCode', baseUrl: null, apiKeyPreview: null };

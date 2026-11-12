@@ -3,6 +3,7 @@ import { create } from 'zustand';
 
 import { autoReviewApi } from '../api/auto-review';
 import { failureText, isOffline } from '../api/http';
+import { ignoredPathError } from './ignored-paths';
 
 /** `offline`: the review server did not answer. `error`: it answered the first load with an error. */
 type AutoReviewLoad = 'idle' | 'loading' | 'ready' | 'offline' | 'error';
@@ -23,16 +24,26 @@ interface AutoReviewStore {
 	 * repositories both land.
 	 */
 	watchRepo: (repoId: string, watched: boolean) => Promise<void>;
+	/**
+	 * Adds a glob to the ignored paths. The list it saves is built when the
+	 * save runs, from the newest answer, so two quick adds both land. A blank
+	 * glob does nothing; one that cannot join the list rejects with the reason.
+	 */
+	addIgnoredPath: (glob: string) => Promise<void>;
+	/** Removes one saved glob; a glob not in the list does nothing. */
+	removeIgnoredPath: (glob: string) => Promise<void>;
 	/** Runs one round of checks now. Rejects when it could not run. */
 	check: () => Promise<void>;
 }
 
-/** Settings → Auto-review. Reads and writes run one at a time, so answers land in the order they were asked. */
+/** Automations. Reads and writes run one at a time, so answers land in the order they were asked. */
 export const useAutoReview = create<AutoReviewStore>((set, get) => {
 	let queue: Promise<unknown> = Promise.resolve();
 
-	function queued(work: () => Promise<AutoReviewPayload>): Promise<void> {
-		const next = queue.then(work).then((payload) => set({ payload, status: 'ready', error: null }));
+	function queued(work: () => Promise<AutoReviewPayload | null>): Promise<void> {
+		const next = queue.then(work).then((payload) => {
+			if (payload) set({ payload, status: 'ready', error: null });
+		});
 
 		queue = next.catch(() => undefined);
 
@@ -55,7 +66,7 @@ export const useAutoReview = create<AutoReviewStore>((set, get) => {
 				set(
 					isOffline(error)
 						? { status: 'offline', error: null }
-						: { status: 'error', error: failureText(error, 'Auto-review settings didn’t load.') }
+						: { status: 'error', error: failureText(error, 'Automations didn’t load.') }
 				);
 			}
 		},
@@ -70,6 +81,29 @@ export const useAutoReview = create<AutoReviewStore>((set, get) => {
 				else excluded.add(repoId);
 
 				return autoReviewApi.save({ excludedRepoIds: [...excluded] });
+			}),
+
+		addIgnoredPath: (glob) =>
+			queued(async () => {
+				const text = glob.trim();
+
+				if (!text) return null;
+
+				const paths = get().payload?.settings.ignoredPaths ?? [];
+				const refused = ignoredPathError(text, paths);
+
+				if (refused) throw new Error(refused);
+
+				return autoReviewApi.save({ ignoredPaths: [...paths, text] });
+			}),
+
+		removeIgnoredPath: (glob) =>
+			queued(() => {
+				const paths = get().payload?.settings.ignoredPaths ?? [];
+
+				if (!paths.includes(glob)) return Promise.resolve(null);
+
+				return autoReviewApi.save({ ignoredPaths: paths.filter((path) => path !== glob) });
 			}),
 
 		check: () => queued(autoReviewApi.check)

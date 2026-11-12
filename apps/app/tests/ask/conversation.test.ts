@@ -16,6 +16,7 @@ describe('conversationRows', () => {
 		const sent: Outgoing = {
 			key: 'out-1',
 			text: 'Which reviewer is slowest?',
+			reviewId: 'r1',
 			state: 'sent',
 			after: 1,
 			serverId: 'srv-1'
@@ -40,7 +41,7 @@ describe('conversationRows', () => {
 	});
 
 	test('a copy that arrives before the send returns shows once, and an earlier same message is not taken for it', () => {
-		const pending: Outgoing = { key: 'out-2', text: 'Again?', state: 'pending', after: 2 };
+		const pending: Outgoing = { key: 'out-2', text: 'Again?', reviewId: 'r1', state: 'pending', after: 2 };
 
 		const rows = conversationRows(
 			[message('u1', 'user', 'Again?'), message('a1', 'assistant', 'Yes.'), message('u2', 'user', 'Again?')],
@@ -85,7 +86,7 @@ describe('failed replies', () => {
 				message('u1', 'user', 'Why?'),
 				{ ...message('a1', 'assistant', ''), status: 'error', failure: { reason: 'Timed out.' } }
 			],
-			[{ key: 'out-1', text: 'Why?', state: 'pending', after: 2 }]
+			[{ key: 'out-1', text: 'Why?', reviewId: 'r1', state: 'pending', after: 2 }]
 		);
 
 		expect(retryFor(rows, 1)).toBeNull();
