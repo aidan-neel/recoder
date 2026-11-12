@@ -1,12 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import { PULL_MERGE_METHODS, type MergePullInput } from '@recoder/shared';
-import { detectProvider } from '../../forge/providers';
+import { PULL_MERGE_METHODS, type PullStatus } from '@recoder/shared';
 import { forgetPull, freshPullEntry, mergeMethods, pullEntry, pullForge } from '../../forge/pulls/cached';
-import type { PullEntry } from '../../forge/pulls/status';
+import { PullHeadMoved } from '../../forge/pulls/status';
 import { parseBody } from '../parse-body';
 import { trustedOrigin } from '../trusted-origin';
-import { requirePull, withForge } from './shared';
+import { pullRoute } from './shared';
 
 /** GitHub's limit on a comment body, the lower of the two forges'. */
 const COMMENT_MAX_CHARS = 65_536;
@@ -20,74 +19,69 @@ const mergeSchema = z.object({
 
 const app = new Hono();
 
-/** Comment on the pull request's conversation. */
-app.post('/:id/pulls/:pr/comments', trustedOrigin, async (c) => {
-	const target = await requirePull(c);
+/** Comment on the pull request's conversation, when its forge keeps one (the page's `comments` capability). */
+app.post(
+	'/:id/pulls/:pr/comments',
+	trustedOrigin,
+	pullRoute(async (c, { repo, n }) => {
+		const forge = pullForge(repo);
 
-	if (target instanceof Response) return target;
+		if (!forge.comments) return c.json({ error: 'This repository has no conversation to comment on.' }, 400);
 
-	const { repo, n } = target;
-	const forge = pullForge(repo);
+		const input = await parseBody(c, commentSchema);
 
-	if (!forge.comments) return c.json({ error: 'Local repositories have no conversation to comment on.' }, 400);
+		if (input instanceof Response) return input;
 
-	const input = await parseBody(c, commentSchema);
-
-	if (input instanceof Response) return input;
-
-	return withForge(c, async () => {
 		const { pull } = await pullEntry(repo, n);
 		const comment = await forge.comment(pull, input.body);
 
 		forgetPull(repo, n);
 
 		return c.json(comment, 201);
-	});
-});
+	})
+);
 
 /**
- * Merge the pull request with one of the repository's methods, only at the
- * head the person saw, and only while it is open and ready. The forge's
- * branch rules still decide; a refusal answers `merged: false` with its reason.
+ * Merge the pull request with one of the repository's methods (the page's
+ * `mergeMethods` capability), only at the head the person saw, and only while
+ * it is open and ready. The forge's branch rules still decide; a refusal
+ * answers `merged: false` with its reason. A head that moved, before the
+ * check or between it and the merge, answers 409.
  */
-app.post('/:id/pulls/:pr/merge', trustedOrigin, async (c) => {
-	const target = await requirePull(c);
+app.post(
+	'/:id/pulls/:pr/merge',
+	trustedOrigin,
+	pullRoute(async (c, { repo, n }) => {
+		const input = await parseBody(c, mergeSchema);
 
-	if (target instanceof Response) return target;
+		if (input instanceof Response) return input;
 
-	const { repo, n } = target;
+		const methods = await mergeMethods(repo);
 
-	if ((repo.provider ?? detectProvider(repo.url)) === 'local') {
-		return c.json({ error: 'Local repositories can’t be merged from Recoder.' }, 400);
-	}
+		if (methods.length === 0) return c.json({ error: 'Recoder can’t merge pull requests in this repository.' }, 400);
 
-	const input = await parseBody(c, mergeSchema);
-
-	if (input instanceof Response) return input;
-
-	return withForge(c, async () => {
-		if (!(await mergeMethods(repo)).includes(input.method)) {
+		if (!methods.includes(input.method)) {
 			return c.json({ error: `This repository doesn’t allow ${input.method} merges.` }, 400);
 		}
 
-		const blocker = mergeBlocker(await freshPullEntry(repo, n), input);
+		const { pull, status } = await freshPullEntry(repo, n);
+		const blocker = mergeBlocker(status);
 
 		if (blocker) return c.json({ error: blocker }, 409);
+		if (pull.headSha !== input.headSha) throw new PullHeadMoved();
 
 		const result = await pullForge(repo).merge(n, input);
 
 		forgetPull(repo, n);
 
 		return c.json(result);
-	});
-});
+	})
+);
 
-/** Why the pull request can't be merged as asked, or null when it can be tried. */
-function mergeBlocker({ pull, status }: PullEntry, input: MergePullInput): string | null {
+/** Why the pull request's state stops a merge, or null when it can be tried. */
+function mergeBlocker(status: PullStatus): string | null {
 	if (status.state !== 'open') return `The pull request is ${status.state}, so it can’t be merged.`;
 	if (status.draft) return 'The pull request is a draft. Mark it ready for review before merging.';
-	if (pull.headSha !== input.headSha)
-		return 'The pull request has new commits since you loaded it. Reload and try again.';
 
 	return null;
 }

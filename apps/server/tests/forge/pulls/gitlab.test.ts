@@ -1,5 +1,65 @@
-import { describe, expect, test } from 'bun:test';
-import { gitlabMergeability, gitlabMergeMethods } from '../../../src/forge/pulls/gitlab';
+import { afterEach, describe, expect, test } from 'bun:test';
+import { PULL_LIST_REPO_MAX, type Repo } from '@recoder/shared';
+import { gitlabMergeability, gitlabMergeMethods, gitlabPullForge } from '../../../src/forge/pulls/gitlab';
+import { clearToken, setToken } from '../../../src/forge/tokens';
+import { restoreFetch, stubForge } from '../../helpers/forge-fetch';
+
+afterEach(() => {
+	restoreFetch();
+	clearToken('gitlab');
+});
+
+const REPO: Repo = {
+	id: 'gitlab-paging',
+	name: 'a/b',
+	url: 'https://gitlab.com/a/b',
+	provider: 'gitlab',
+	defaultBranch: 'main',
+	createdAt: '',
+	updatedAt: ''
+};
+
+/** GitLab with `count` open merge requests, newest first, paged the way its API pages them. */
+function openMergeRequests(count: number) {
+	const all = Array.from({ length: count }, (_, index) => ({
+		iid: count - index,
+		title: `MR ${count - index}`,
+		sha: 'c'.repeat(40),
+		state: 'opened',
+		created_at: '2026-11-01T00:00:00Z'
+	}));
+
+	return stubForge(({ url }) => {
+		const query = new URL(url).searchParams;
+
+		if (!url.includes('/merge_requests?')) return [200, []];
+
+		const perPage = Number(query.get('per_page'));
+		const page = Number(query.get('page') ?? '1');
+
+		return [200, all.slice((page - 1) * perPage, page * perPage)];
+	});
+}
+
+test('the list reads past GitLab’s first page and says when the repository had more than it keeps', async () => {
+	setToken('gitlab', 'test-token');
+	openMergeRequests(150);
+
+	const list = await gitlabPullForge(REPO).list();
+
+	expect(list.truncated).toBe(true);
+	expect(list.entries).toHaveLength(PULL_LIST_REPO_MAX);
+	expect(list.entries[0].pull.number).toBe(150);
+});
+
+test('a repository with fewer open merge requests than a page is read whole', async () => {
+	setToken('gitlab', 'test-token');
+	openMergeRequests(51);
+
+	const list = await gitlabPullForge(REPO).list();
+
+	expect(list).toMatchObject({ truncated: false, entries: { length: 51 } });
+});
 
 describe('gitlabMergeability', () => {
 	test('a conflict reads as conflicts in either status field', () => {

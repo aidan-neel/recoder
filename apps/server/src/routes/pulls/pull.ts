@@ -1,30 +1,19 @@
-import { Hono, type Context } from 'hono';
+import { Hono } from 'hono';
 import type { PullPage } from '@recoder/shared';
 import { fetchChecks } from '../../forge/checks';
 import { mergeMethods, pullDiff, pullEntry, pullForge } from '../../forge/pulls/cached';
 import { newestReviews } from '../../forge/pulls/list';
 import { detectProvider } from '../../forge/providers';
 import { db } from '../../store';
-import { requirePull, withForge, type PullTarget } from './shared';
+import { pullRoute } from './shared';
 import writes from './write';
 
 const app = new Hono();
 
-/** Answers `read` for the pull request the path names, with forge failures as statuses. */
-function readPull(read: (c: Context, target: PullTarget) => Promise<Response>) {
-	return async (c: Context) => {
-		const target = await requirePull(c);
-
-		if (target instanceof Response) return target;
-
-		return withForge(c, () => read(c, target));
-	};
-}
-
 /** What the pull request page shows before its tabs load. Answers for a merged or closed pull request too. */
 app.get(
 	'/:id/pulls/:pr/page',
-	readPull(async (c, { repo, n }) => {
+	pullRoute(async (c, { repo, n }) => {
 		const forge = pullForge(repo);
 
 		const [entry, methods, reviews] = await Promise.all([pullEntry(repo, n), mergeMethods(repo), db.reviews.list()]);
@@ -48,7 +37,7 @@ app.get(
  */
 app.get(
 	'/:id/pulls/:pr/diff',
-	readPull(async (c, { repo, n }) => {
+	pullRoute(async (c, { repo, n }) => {
 		const { pull } = await pullEntry(repo, n);
 
 		c.header('Cache-Control', 'private, no-cache');
@@ -69,7 +58,7 @@ app.get(
 
 app.get(
 	'/:id/pulls/:pr/commits',
-	readPull(async (c, { repo, n }) => {
+	pullRoute(async (c, { repo, n }) => {
 		const { pull } = await pullEntry(repo, n);
 
 		return c.json(await pullForge(repo).commits(pull));
@@ -79,7 +68,7 @@ app.get(
 /** The head commit's CI checks; a local repository has none. */
 app.get(
 	'/:id/pulls/:pr/checks',
-	readPull(async (c, { repo, n }) => {
+	pullRoute(async (c, { repo, n }) => {
 		const { pull } = await pullEntry(repo, n);
 
 		return c.json(await fetchChecks(repo, pull.headSha));
@@ -88,7 +77,7 @@ app.get(
 
 app.get(
 	'/:id/pulls/:pr/comments',
-	readPull(async (c, { repo, n }) => {
+	pullRoute(async (c, { repo, n }) => {
 		const forge = pullForge(repo);
 		const { pull } = await pullEntry(repo, n);
 

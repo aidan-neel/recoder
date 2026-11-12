@@ -1,4 +1,5 @@
 import type { PrPerson, PullRequest, RemoteRepo } from '@recoder/shared';
+import { isJsonObject } from './cli.js';
 import { GhError } from './gh.js';
 import { withTimeout } from './github-rest.js';
 import { parseSlug } from './providers.js';
@@ -216,7 +217,7 @@ export async function apiMergeRequest(
 	repoUrl: string,
 	iid: number,
 	env: Record<string, string>
-): Promise<{ pr: PullRequest; diff: string }> {
+): Promise<{ pr: PullRequest; diff: string; row: Record<string, unknown> }> {
 	const [row, entries] = await Promise.all([
 		gitlabGet(`${gitlabProject(repoUrl)}/merge_requests/${iid}`, env) as Promise<Record<string, unknown>>,
 		mergeDiffs(repoUrl, iid, env)
@@ -226,7 +227,7 @@ export async function apiMergeRequest(
 
 	if (!pr.changedFiles) pr.changedFiles = entries.length;
 
-	return { pr, diff: toUnifiedDiff(entries) };
+	return { pr, diff: toUnifiedDiff(entries), row };
 }
 
 export async function apiMergeHeadRef(repoUrl: string, iid: number, env: Record<string, string>): Promise<string> {
@@ -238,16 +239,44 @@ export async function apiMergeHeadRef(repoUrl: string, iid: number, env: Record<
 	return row.source_branch;
 }
 
+/** The largest page GitLab sends. */
+const GITLAB_PAGE_MAX = 100;
+
+/**
+ * The first `limit` objects of a paged GitLab list, a page at a time until
+ * `limit` or a short page. `readPage` gets the page size and the page number.
+ */
+export async function firstRows(
+	limit: number,
+	readPage: (perPage: number, page: number) => Promise<unknown>
+): Promise<Record<string, unknown>[]> {
+	const perPage = Math.min(limit, GITLAB_PAGE_MAX);
+	const rows: Record<string, unknown>[] = [];
+
+	for (let page = 1; rows.length < limit; page++) {
+		const batch = await readPage(perPage, page);
+
+		if (!Array.isArray(batch)) throw new GhError('unknown', `GitLab sent page ${page} of a list as non-array JSON`);
+
+		rows.push(...batch.filter(isJsonObject));
+		if (batch.length < perPage) break;
+	}
+
+	return rows.slice(0, limit);
+}
+
 /** Open MRs, newest first, each with its list row; +/− come from each MR's diffs (zeroed if that fetch fails). */
 export async function apiMergeRows(
 	repoUrl: string,
 	env: Record<string, string>,
 	limit = 20
 ): Promise<{ pr: PullRequest; row: Record<string, unknown> }[]> {
-	const rows = (await gitlabGet(
-		`${gitlabProject(repoUrl)}/merge_requests?state=opened&order_by=created_at&sort=desc&per_page=${limit}`,
-		env
-	)) as Record<string, unknown>[];
+	const rows = await firstRows(limit, (perPage, page) =>
+		gitlabGet(
+			`${gitlabProject(repoUrl)}/merge_requests?state=opened&order_by=created_at&sort=desc&per_page=${perPage}&page=${page}`,
+			env
+		)
+	);
 
 	const merges = rows.map((row) => ({ pr: toPull(row), row })).filter(({ pr }) => pr.number > 0);
 

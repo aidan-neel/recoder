@@ -5,10 +5,10 @@ import { fetchPull } from '../pull-preview.js';
 import { githubPullForge } from './github.js';
 import { gitlabPullForge } from './gitlab.js';
 import { localPullForge } from './local.js';
-import type { PullEntry, PullForge } from './status.js';
+import { PullHeadMoved, type OpenPulls, type PullEntry, type PullForge } from './status.js';
 
 /** Open pull requests per repository, so the list and the sidebar count share one forge call. */
-const listCache = new TtlCache<PullEntry[]>(10_000);
+const listCache = new TtlCache<OpenPulls>(10_000);
 
 /** One pull request, briefly, so the page and its diff tab loading together ask the forge once. */
 const viewCache = new TtlCache<PullEntry>(5_000);
@@ -18,6 +18,9 @@ const methodsCache = new TtlCache<PullMergeMethod[]>(5 * 60_000);
 
 /** Parsed diffs by pull request and head commit. A diff at one head never changes, so they last an hour. */
 const diffCache = new TtlCache<PullDiff>(60 * 60_000, 50);
+
+/** Times a diff is fetched before a pull request that keeps moving is answered as moved. */
+const DIFF_ATTEMPTS = 3;
 
 /** The pull request forge for a repository's provider. */
 export function pullForge(repo: Repo): PullForge {
@@ -29,12 +32,12 @@ export function pullForge(repo: Repo): PullForge {
 }
 
 /** Open pull requests, from the last ten seconds' answer when there is one. */
-export function openPulls(repo: Repo): Promise<PullEntry[]> {
+export function openPulls(repo: Repo): Promise<OpenPulls> {
 	return listCache.get(repo.id, () => pullForge(repo).list());
 }
 
 /** Open pull requests straight from the forge; the answer refreshes the cache. */
-export function freshOpenPulls(repo: Repo): Promise<PullEntry[]> {
+export function freshOpenPulls(repo: Repo): Promise<OpenPulls> {
 	listCache.delete(repo.id);
 
 	return openPulls(repo);
@@ -58,21 +61,42 @@ export function mergeMethods(repo: Repo): Promise<PullMergeMethod[]> {
 
 /**
  * The pull request's whole diff at `headSha`, shared with how a draft review
- * loads its diff (`fetchPull`). When the pull request moved on while the diff
- * loaded, the newer diff is answered but not kept under the older head.
+ * loads its diff (`fetchPull`). `headSha` must have been read from the forge
+ * before this call. When the pull request moved on, the newer diff is
+ * answered but not kept under the older head.
  */
 export async function pullDiff(repo: Repo, n: number, headSha: string): Promise<PullDiff> {
 	const key = `${viewKey(repo, n)}${headSha}`;
-
-	const diff = await diffCache.get(key, async () => {
-		const fetched = await fetchPull(repo, n);
-
-		return { headSha: fetched.pr.headSha, files: parseUnifiedDiff(fetched.diff) };
-	});
+	const diff = await diffCache.get(key, () => diffAtSteadyHead(repo, n, headSha));
 
 	if (diff.headSha !== headSha) diffCache.delete(key);
 
 	return diff;
+}
+
+/**
+ * The diff labelled with the head it was taken at. No forge pins the diff it
+ * sends to a commit, so a push while it loads would put newer files under the
+ * older head. The head is read before and after the fetch, and the diff is
+ * kept only when both reads and the fetch name the same commit; otherwise it
+ * is fetched again from the newer head, a few times, before
+ * {@link PullHeadMoved}.
+ */
+async function diffAtSteadyHead(repo: Repo, n: number, headBefore: string): Promise<PullDiff> {
+	let expected = headBefore;
+
+	for (let attempt = 1; attempt <= DIFF_ATTEMPTS; attempt++) {
+		const fetched = await fetchPull(repo, n);
+		const { pull } = await freshPullEntry(repo, n);
+
+		if (fetched.pr.headSha === expected && pull.headSha === expected) {
+			return { headSha: expected, files: parseUnifiedDiff(fetched.diff) };
+		}
+
+		expected = pull.headSha;
+	}
+
+	throw new PullHeadMoved();
 }
 
 /** Drop what a comment or a merge made stale, so the next read asks the forge. */

@@ -10,13 +10,20 @@ import { str } from '../context/sources.js';
 import { extractJson, gh, listPullRows, parseRepoSlug, viewPullRow, type PullRow } from '../gh.js';
 import { tokenEnv } from '../tokens.js';
 import { githubCommits, githubConversation, githubPostComment } from './github-conversation.js';
-import { mergeRefusal, record, records, refusedMerge, tallyChecks, type PullEntry, type PullForge } from './status.js';
+import {
+	capOpenPulls,
+	mergeRefusal,
+	OPEN_PULLS_ASKED,
+	record,
+	records,
+	refusedMerge,
+	tallyChecks,
+	type PullEntry,
+	type PullForge
+} from './status.js';
 
 /** The `gh pr list` / `gh pr view` fields `PullStatus` is read from. */
 const STATUS_FIELDS = ['state', 'isDraft', 'updatedAt', 'mergeable', 'mergeStateStatus', 'statusCheckRollup'];
-
-/** Open pull requests the list asks `gh` for per repository. */
-const LIST_LIMIT = 50;
 
 /** Pull requests on GitHub: metadata, status and merges through `gh`, the conversation through the REST API. */
 export function githubPullForge(repoUrl: string): PullForge {
@@ -28,9 +35,9 @@ export function githubPullForge(repoUrl: string): PullForge {
 		checks: true,
 
 		async list() {
-			const rows = await listPullRows(repoUrl, { env, limit: LIST_LIMIT, fields: STATUS_FIELDS });
+			const rows = await listPullRows(repoUrl, { env, limit: OPEN_PULLS_ASKED, fields: STATUS_FIELDS });
 
-			return rows.map(githubEntry);
+			return capOpenPulls(rows.map(githubEntry));
 		},
 
 		async view(n) {

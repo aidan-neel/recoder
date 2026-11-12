@@ -14,10 +14,16 @@ import { gitlabProject, useGitlabApi } from '../gitlab-api.js';
 import { fetchMergeRequest, glabApi, glabWrite, listMergeRows } from '../glab.js';
 import { tokenEnv } from '../tokens.js';
 import { gitlabCommits, gitlabConversation, gitlabPostComment } from './gitlab-conversation.js';
-import { mergeRefusal, record, refusedMerge, tallyChecks, type PullEntry, type PullForge } from './status.js';
-
-/** Open merge requests the list asks GitLab for per repository. */
-const LIST_LIMIT = 50;
+import {
+	capOpenPulls,
+	mergeRefusal,
+	OPEN_PULLS_ASKED,
+	record,
+	refusedMerge,
+	tallyChecks,
+	type PullEntry,
+	type PullForge
+} from './status.js';
 
 /** Merge requests on GitLab, through the REST API with a token or `glab api` with its own login. */
 export function gitlabPullForge(repo: Repo): PullForge {
@@ -29,17 +35,14 @@ export function gitlabPullForge(repo: Repo): PullForge {
 		checks: true,
 
 		async list() {
-			const rows = await listMergeRows(repo.url, { env, limit: LIST_LIMIT });
+			const rows = await listMergeRows(repo.url, { env, limit: OPEN_PULLS_ASKED });
 
-			return rows.map(({ pr, row }) => gitlabEntry(pr, row));
+			return capOpenPulls(rows.map(({ pr, row }) => gitlabEntry(pr, row)));
 		},
 
+		/** One merge request read, with its diff, which is where GitLab's +/− counts come from. */
 		async view(n) {
-			const [row, { pr }] = await Promise.all([
-				glabApi(`${project}/merge_requests/${n}`, env).then(record),
-				fetchMergeRequest(repo.url, n, { env })
-			]);
-
+			const { pr, row } = await fetchMergeRequest(repo.url, n, { env });
 			const entry = gitlabEntry(pr, row);
 			const checks = tallyChecks((await fetchChecks(repo, pr.headSha)).map((check) => check.state));
 

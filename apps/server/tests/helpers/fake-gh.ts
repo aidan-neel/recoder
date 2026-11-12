@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fakeBin } from './fake-bin';
 
-/** What the fake `gh` does for one call: print `out` as JSON, or fail with `err` on stderr. */
-export type GhReply = { out: unknown } | { err: string };
+/** What the fake `gh` does for one call: print `out` as JSON, print `text` as it is, or fail with `err` on stderr. */
+export type GhReply = { out: unknown } | { text: string } | { err: string };
 
 /** A fake `gh` on PATH and the argument lines it was called with. */
 export interface FakeGh {
@@ -27,7 +27,7 @@ export async function fakeGh(replies: Record<string, GhReply[]>): Promise<FakeGh
 			const file = join(dir, `${key}.${index + 1}`);
 
 			if ('err' in reply) await writeFile(`${file}.err`, reply.err);
-			else await writeFile(`${file}.out`, JSON.stringify(reply.out));
+			else await writeFile(`${file}.out`, 'text' in reply ? reply.text : JSON.stringify(reply.out));
 		}
 
 		await writeFile(join(dir, `${key}.max`), String(list.length));

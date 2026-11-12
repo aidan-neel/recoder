@@ -6,8 +6,9 @@ import {
 	type Repo,
 	type ReviewListItem
 } from '@recoder/shared';
-import { GhError, type GhErrorKind } from '../cli.js';
-import type { PullEntry } from './status.js';
+import { GhError } from '../cli.js';
+import { forgeFailureMessage, logForgeFailure } from './failure.js';
+import type { OpenPulls } from './status.js';
 
 /** Repositories whose forge is asked at the same time. */
 const REPO_CONCURRENCY = 4;
@@ -15,45 +16,42 @@ const REPO_CONCURRENCY = 4;
 /** How long one repository's forge may take before it is reported as failed and the rest are answered. */
 const REPO_TIMEOUT_MS = 25_000;
 
-/** What failed, in words safe for the page: no forge output, path or token. */
-const FAILURE_MESSAGES: Record<GhErrorKind, string> = {
-	auth: 'The forge refused the credentials. Check Settings → Connections.',
-	'rate-limit': 'The forge’s rate limit was reached. Try again later.',
-	unavailable: 'The forge could not be reached.',
-	'not-found': 'The repository was not found on its forge.',
-	unknown: 'The forge could not list the pull requests.'
-};
-
 /**
  * The open pull requests of `repos`, newest activity first, each joined with
  * its newest review. Repositories load a few at a time; one whose forge fails
- * or is too slow is named in `failures` and the rest still load.
+ * or is too slow is named in `failures` and the rest still load, and one with
+ * more open pull requests than a list keeps is named in `truncatedRepoIds`.
  */
 export async function listOpenPulls(
 	repos: Repo[],
 	reviews: ReviewListItem[],
-	loadPulls: (repo: Repo) => Promise<PullEntry[]>
+	loadPulls: (repo: Repo) => Promise<OpenPulls>
 ): Promise<PullList> {
 	const reviewOf = newestReviews(reviews);
 	const items: PullListItem[] = [];
 	const failures: PullList['failures'] = [];
+	const truncatedRepoIds: string[] = [];
 
 	await forEachBounded(repos, REPO_CONCURRENCY, async (repo) => {
 		try {
-			const entries = await withDeadline(loadPulls(repo), REPO_TIMEOUT_MS);
+			const { entries, truncated } = await withDeadline(loadPulls(repo), REPO_TIMEOUT_MS);
 
 			for (const entry of entries) {
 				items.push({ repoId: repo.id, ...entry, review: reviewOf(repo.id, entry.pull.number) });
 			}
+
+			if (truncated) truncatedRepoIds.push(repo.id);
 		} catch (err) {
-			console.warn('[recoder] listing pull requests failed for repo', repo.id, errorText(err));
-			failures.push({ repoId: repo.id, error: failureMessage(err) });
+			logForgeFailure(`listing pull requests for repo ${repo.id}`, err);
+			failures.push({ repoId: repo.id, error: forgeFailureMessage(err) });
 		}
 	});
 
 	items.sort((a, b) => Date.parse(b.status.updatedAt) - Date.parse(a.status.updatedAt));
 
-	return { items, failures, fetchedAt: new Date().toISOString() };
+	const list: PullList = { items, failures, fetchedAt: new Date().toISOString() };
+
+	return truncatedRepoIds.length > 0 ? { ...list, truncatedRepoIds } : list;
 }
 
 /** Looks up each pull request's newest review; a real review outranks a newer empty draft. */
@@ -65,16 +63,6 @@ export function newestReviews(reviews: ReviewListItem[]): (repoId: string, n: nu
 
 		return review ? reviewListItem(review) : null;
 	};
-}
-
-function failureMessage(err: unknown): string {
-	if (err instanceof GhError) return FAILURE_MESSAGES[err.kind];
-
-	return 'The repository could not be read.';
-}
-
-function errorText(err: unknown): string {
-	return err instanceof Error ? err.message : String(err);
 }
 
 /** Runs `work` on every item with at most `limit` running at once. */

@@ -6,8 +6,10 @@ import {
 	GhError,
 	GITHUB_RATE_LIMIT,
 	githubRateLimit,
+	isJsonObject,
 	runForgeCli
 } from './cli.js';
+import { withoutCredentials } from '../cli/target/redact.js';
 
 export { extractJson, GhError } from './cli.js';
 
@@ -18,7 +20,7 @@ export function parseRepoSlug(url: string): string {
 
 	if (m) return m[1];
 	if (/^[^/\s]+\/[^/\s]+$/.test(clean)) return clean;
-	throw new GhError('unknown', `cannot parse repo slug from ${url}`);
+	throw new GhError('unknown', `cannot parse repo slug from ${withoutCredentials(url)}`);
 }
 
 /**
@@ -172,13 +174,9 @@ export async function viewPullRow(
 		await gh(['pr', 'view', String(prNumber), '--repo', parseRepoSlug(repoUrl), '--json', fields], opts.env)
 	);
 
-	if (typeof row !== 'object' || row === null || Array.isArray(row)) {
-		throw new GhError('unknown', 'gh pr view returned non-object JSON');
-	}
+	if (!isJsonObject(row)) throw new GhError('unknown', 'gh pr view returned non-object JSON');
 
-	const view = row as Record<string, unknown>;
-
-	return { pr: parsePullRow(view, prNumber), row: view };
+	return { pr: parsePullRow(row, prNumber), row };
 }
 
 /** Open PRs for a repo, newest first. Throws GhError. */
@@ -189,7 +187,10 @@ export async function listPullRequests(
 	return (await listPullRows(repoUrl, opts ?? {})).map((row) => row.pr);
 }
 
-/** Open PRs for a repo, newest first, in one `gh pr list` call with `fields` beyond the usual metadata. Throws GhError. */
+/**
+ * Open PRs for a repo, newest first, in one `gh pr list` call with `fields`
+ * beyond the usual metadata; `gh` reads as many pages as `limit` needs. Throws GhError.
+ */
 export async function listPullRows(
 	repoUrl: string,
 	opts: { env?: Record<string, string>; limit?: number; fields?: string[] }
@@ -216,13 +217,7 @@ export async function listPullRows(
 
 	if (!Array.isArray(rows)) throw new GhError('unknown', 'gh pr list returned non-array JSON');
 
-	return rows.flatMap((row) => {
-		if (typeof row !== 'object' || row === null) return [];
-
-		const item = row as Record<string, unknown>;
-
-		return [{ pr: parsePullRow(item, 0), row: item }];
-	});
+	return rows.filter(isJsonObject).map((row) => ({ pr: parsePullRow(row, 0), row }));
 }
 
 /** Normalize one `gh pr view`/`pr list` JSON row to a PullRequest. */

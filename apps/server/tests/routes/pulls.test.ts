@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import type { PullDiff, PullList, PullPage } from '@recoder/shared';
 import { app } from '../../src/app';
 import { db } from '../../src/store';
-import { fakeGh } from '../helpers/fake-gh';
+import { fakeGh, type GhReply } from '../helpers/fake-gh';
 import { localForgeFixture } from '../helpers/local-forge';
 
 const realPath = process.env.PATH;
@@ -23,7 +23,7 @@ async function githubRepo(): Promise<string> {
 		body: JSON.stringify({ name: 'acme/app', url: 'https://github.com/acme/app' })
 	});
 
-	const { id } = (await added.json()) as { id: string };
+	const { id } = await answer<{ id: string }>(added);
 
 	tracked.push(id);
 
@@ -40,6 +40,15 @@ async function localRepo() {
 	return fixture;
 }
 
+/**
+ * A route's JSON answer as the shared type the route declares it answers.
+ * `json()` is untyped, and a test that reads the wrong shape fails on its own
+ * assertions, so no cast is needed.
+ */
+function answer<T>(res: Response): Promise<T> {
+	return res.json();
+}
+
 function post(path: string, body: unknown): Response | Promise<Response> {
 	return app.request(path, {
 		method: 'POST',
@@ -50,9 +59,16 @@ function post(path: string, body: unknown): Response | Promise<Response> {
 
 const HEAD = 'b'.repeat(40);
 
-/** `gh pr view` for open, ready PR 7 at {@link HEAD}, in a repository that allows merge commits and squashes. */
-function openPullGh() {
+/** A token the way GitHub shapes one, which a response must never quote. */
+const TOKEN = 'ghp_abcdefghijklmnopqrstuvwxyz0123';
+
+/**
+ * `gh pr view` for open, ready PR 7 at {@link HEAD}, in a repository that
+ * allows merge commits and squashes, plus the `more` replies a test needs.
+ */
+function openPullGh(more: Record<string, GhReply[]> = {}) {
 	return fakeGh({
+		...more,
 		'pr-view': [
 			{
 				out: {
@@ -74,7 +90,7 @@ test('a local pull request page offers no comments, checks or merge methods', as
 	const { repo } = await localRepo();
 
 	const res = await app.request(`/api/repos/${repo.id}/pulls/7/page`);
-	const page = (await res.json()) as PullPage;
+	const page = await answer<PullPage>(res);
 
 	expect(res.status).toBe(200);
 	expect(page.provider).toBe('local');
@@ -86,7 +102,7 @@ test('a local pull request page offers no comments, checks or merge methods', as
 test('a merged pull request still has a page', async () => {
 	const { repo } = await localRepo();
 
-	const page = (await (await app.request(`/api/repos/${repo.id}/pulls/3/page`)).json()) as PullPage;
+	const page = await answer<PullPage>(await app.request(`/api/repos/${repo.id}/pulls/3/page`));
 
 	expect(page.status.state).toBe('merged');
 });
@@ -96,7 +112,7 @@ test('the diff answers its head commit as the ETag, and 304 when the client alre
 	const path = `/api/repos/${repo.id}/pulls/7/diff`;
 
 	const first = await app.request(path);
-	const diff = (await first.json()) as PullDiff;
+	const diff = await answer<PullDiff>(first);
 
 	expect(first.headers.get('etag')).toBe(`"${pull7Head}"`);
 	expect(diff.headSha).toBe(pull7Head);
@@ -111,7 +127,7 @@ test('the diff answers its head commit as the ETag, and 304 when the client alre
 test('commits list oldest first', async () => {
 	const { repo, pull7Commit, pull7Head } = await localRepo();
 
-	const commits = (await (await app.request(`/api/repos/${repo.id}/pulls/7/commits`)).json()) as { sha: string }[];
+	const commits = await answer<{ sha: string }[]>(await app.request(`/api/repos/${repo.id}/pulls/7/commits`));
 
 	expect(commits.map((commit) => commit.sha)).toEqual([pull7Commit, pull7Head]);
 });
@@ -179,9 +195,61 @@ test('the list loads the repositories that answer and names the one that failed'
 
 	process.env.PATH = gh.path;
 
-	const list = (await (await app.request('/api/pulls')).json()) as PullList;
+	const list = await answer<PullList>(await app.request('/api/pulls'));
 	const mine = list.items.filter((item) => item.repoId === repo.id);
 
 	expect(mine.map((item) => item.pull.number)).toEqual([7]);
 	expect(list.failures.filter((failure) => failure.repoId === id)).toHaveLength(1);
+});
+
+test('a push between the merge check and the merge is refused with 409', async () => {
+	const id = await githubRepo();
+
+	const gh = await openPullGh({
+		'pr-merge': [{ err: 'GraphQL: Head branch was modified. Review and try the merge again.' }]
+	});
+
+	process.env.PATH = gh.path;
+
+	const res = await post(`/api/repos/${id}/pulls/7/merge`, { method: 'squash', headSha: HEAD });
+
+	expect(res.status).toBe(409);
+	expect(await answer<{ error: string }>(res)).toEqual({ error: expect.stringContaining('new commits') });
+});
+
+test('a forge failure answers its kind in fixed words, never the forge output', async () => {
+	const id = await githubRepo();
+
+	const gh = await fakeGh({
+		'pr-view': [{ err: `fatal: unable to access 'https://octo:${TOKEN}@github.com/acme/app'` }]
+	});
+
+	process.env.PATH = gh.path;
+
+	const res = await app.request(`/api/repos/${id}/pulls/7/page`);
+
+	expect(res.status).toBe(502);
+	expect(await res.text()).not.toContain(TOKEN);
+});
+
+test('a tracked URL with credentials in it that names no repository answers without them', async () => {
+	const now = new Date().toISOString();
+	const id = crypto.randomUUID();
+
+	await db.repos.set({
+		id,
+		name: 'owner',
+		url: `https://octo:${TOKEN}@github.com/owner`,
+		provider: 'github',
+		defaultBranch: 'main',
+		createdAt: now,
+		updatedAt: now
+	});
+
+	tracked.push(id);
+
+	const res = await app.request(`/api/repos/${id}/pulls/7/page`);
+
+	expect(res.status).toBe(502);
+	expect(await res.text()).not.toContain(TOKEN);
 });

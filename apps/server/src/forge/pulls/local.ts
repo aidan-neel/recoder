@@ -17,7 +17,9 @@ export function localPullForge(repoUrl: string): PullForge {
 		checks: false,
 
 		async list() {
-			return (await listLocalPulls(repoUrl)).map((pull) => ({ pull, status: localStatus(pull, 'open') }));
+			const entries = (await listLocalPulls(repoUrl)).map((pull) => ({ pull, status: localStatus(pull, 'open') }));
+
+			return { entries, truncated: false };
 		},
 
 		async view(n) {

@@ -6,6 +6,7 @@ import {
 	apiMergeRows,
 	apiProjects,
 	apiUser,
+	firstRows,
 	gitlabGet,
 	gitlabPeople,
 	gitlabRequest,
@@ -91,6 +92,8 @@ export interface FetchedMerge {
 	pr: PullRequest;
 	/** Raw unified diff (`glab mr diff --raw`). */
 	diff: string;
+	/** The merge request as GitLab sent it, for the fields `PullRequest` leaves out. */
+	row: Record<string, unknown>;
 }
 
 /** Is the glab binary usable at all? */
@@ -193,7 +196,8 @@ export async function fetchMergeRequest(
 			createdAt: typeof view.created_at === 'string' ? view.created_at : '',
 			body: typeof view.description === 'string' ? view.description : ''
 		},
-		diff
+		diff,
+		row: view
 	};
 }
 
@@ -224,17 +228,16 @@ export async function listMergeRows(
 
 	const slug = parseSlug(repoUrl);
 
-	const rows = extractJson(
-		await glab(['mr', 'list', '-R', slug, '-F', 'json', '--per-page', String(opts?.limit ?? 20)], opts?.env)
+	const rows = await firstRows(opts?.limit ?? 20, async (perPage, page) =>
+		extractJson(
+			await glab(
+				['mr', 'list', '-R', slug, '-F', 'json', '--per-page', String(perPage), '--page', String(page)],
+				opts?.env
+			)
+		)
 	);
 
-	if (!Array.isArray(rows)) throw new GhError('unknown', 'glab mr list returned non-array JSON');
-
-	const merges = rows.flatMap((row) => {
-		if (typeof row !== 'object' || row === null) return [];
-
-		const item = row as Record<string, unknown>;
-
+	const merges = rows.flatMap((item) => {
 		const author = mergeAuthor(item);
 
 		const pr: PullRequest = {
