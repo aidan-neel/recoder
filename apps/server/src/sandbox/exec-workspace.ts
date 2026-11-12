@@ -4,7 +4,7 @@ import { runSandboxed, sandboxLayout, type RunResult, type SandboxLayout } from 
 import { sanitizeRepoPath } from '../evidence/evidence.js';
 import type { ExecutionOutcome } from '../evidence/types.js';
 import { BaseTree } from './base-tree.js';
-import { installKey } from './install-inputs.js';
+import { installKey, packageManifests } from './install-inputs.js';
 import {
 	JS_LOCKFILES,
 	removeLayers,
@@ -67,18 +67,6 @@ export interface InvestigatorRun {
 	classifyAs?: string;
 	/** False keeps the outcome out of the review's Test outcomes tally; the mutation matrix reports its own row. */
 	tally?: boolean;
-}
-
-/** The `package.json` files worth reading, skipping vendored and build dirs: at most 30, at most four levels deep. */
-export function packageManifests(paths: Iterable<string>): string[] {
-	return [...paths]
-		.filter(
-			(path) =>
-				/(^|\/)package\.json$/.test(path) &&
-				!/(^|\/)(node_modules|vendor|dist|build|fixtures?)\//.test(path) &&
-				path.split('/').length <= 4
-		)
-		.slice(0, 30);
 }
 
 export class ExecWorkspace {
