@@ -3,6 +3,7 @@ import {
 	TOKEN_STAGES,
 	aggregateTokenCalls,
 	emptyTokenUsage,
+	type QueueDelay,
 	type ReviewMetrics,
 	type TokenCall,
 	type TokenScope,
@@ -13,6 +14,8 @@ import {
 import { db, reviewMetrics } from '../store';
 import { metricWrites } from '../storage/persistence-queue';
 import { lockedModels } from './llm/locked-models';
+import { withLlmLane } from './llm/limiter';
+import { currentLease } from '../review/runtime/ownership';
 
 /**
  * One run of the pipeline under a review. A replay, reverify, continue or rerun runs it again on the same
@@ -28,6 +31,10 @@ export interface PipelineRun {
 	lockMisses: number;
 	/** The token budget the run's limits came from; unset on runs older than budgets and on runs that stopped before the harness. */
 	tokenBudget?: TokenBudget;
+	/** How long the run's model requests waited for slots; unset until its first request. */
+	queueDelay?: QueueDelay;
+	/** The review worker that ran it, its lease owner id; unset without shared storage. */
+	worker?: string;
 }
 
 /** A stored call: `run` is the index of the pipeline run that made it, `lockMiss` marks one made without locked models. */
@@ -57,6 +64,7 @@ async function flushReviewMetrics(reviewId: string): Promise<void> {
 /** Opens a run segment on the review's metrics with the models locked for it, and returns its index. */
 function openRun(metrics: StoredMetrics): number {
 	const picks = lockedModels();
+	const worker = currentLease()?.ownerId;
 	const runs = metrics.runs ?? [];
 	const index = runs.length;
 
@@ -65,7 +73,8 @@ function openRun(metrics: StoredMetrics): number {
 		startedAt: new Date().toISOString(),
 		orchestrator: picks?.orchestrator.model ?? null,
 		subagent: picks?.subagent.model ?? null,
-		lockMisses: 0
+		lockMisses: 0,
+		...(worker && { worker })
 	};
 
 	metrics.runs = [...runs, run];
@@ -73,7 +82,10 @@ function openRun(metrics: StoredMetrics): number {
 	return index;
 }
 
-/** Counts calls under `run` toward `reviewId`; a pipeline run also opens its own run segment. */
+/**
+ * Counts calls under `run` toward `reviewId`; a pipeline run also opens its own run segment. The calls wait for
+ * model slots in the review's own lane, so the limiter takes turns between reviews.
+ */
 export async function withReviewMetrics<T>(reviewId: string, scope: TokenScope, run: () => T): Promise<Awaited<T>> {
 	const owner: MetricsOwner = { reviewId, scope };
 
@@ -95,7 +107,7 @@ export async function withReviewMetrics<T>(reviewId: string, scope: TokenScope, 
 	}
 
 	try {
-		return await context.run(owner, run);
+		return await context.run(owner, () => withLlmLane({ id: reviewId, recordWait: recordQueueDelay }, run));
 	} finally {
 		await flushReviewMetrics(reviewId);
 	}
@@ -138,6 +150,19 @@ function updateCurrentRun(mutate: (run: PipelineRun, owner: MetricsOwner) => voi
 
 			return metrics;
 		});
+	});
+}
+
+/** Adds one model request's wait for a slot to the current pipeline run. */
+function recordQueueDelay(waitedMs: number): void {
+	updateCurrentRun((run) => {
+		const delay = run.queueDelay ?? { requests: 0, totalMs: 0, maxMs: 0 };
+
+		run.queueDelay = {
+			requests: delay.requests + 1,
+			totalMs: delay.totalMs + waitedMs,
+			maxMs: Math.max(delay.maxMs, waitedMs)
+		};
 	});
 }
 
@@ -281,6 +306,8 @@ export async function getReviewMetrics(reviewId: string): Promise<ReviewMetrics 
 		startedAt: stored.startedAt,
 		pipelineTracked: stored.pipelineTracked,
 		tokenBudget: stored.runs?.at(-1)?.tokenBudget,
+		queueDelay: stored.runs?.at(-1)?.queueDelay,
+		worker: stored.runs?.at(-1)?.worker,
 		total: aggregateTokenCalls(stored.calls),
 		models: [...models.values()].map((calls) => ({
 			model: calls[0]!.model,

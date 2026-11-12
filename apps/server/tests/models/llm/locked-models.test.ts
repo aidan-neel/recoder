@@ -91,7 +91,13 @@ test('a pipeline that runs without locked models records each miss and warns onc
 		const { runs, calls } = await storedRuns(reviewId);
 
 		expect(runs?.map(({ startedAt: _, ...run }) => run)).toEqual([
-			{ index: 0, orchestrator: null, subagent: null, lockMisses: 2 }
+			{
+				index: 0,
+				orchestrator: null,
+				subagent: null,
+				lockMisses: 2,
+				queueDelay: { requests: 1, totalMs: 0, maxMs: 0 }
+			}
 		]);
 
 		expect(calls.map((call) => [call.model, call.run, call.lockMiss])).toEqual([[FIRST[0], 0, true]]);

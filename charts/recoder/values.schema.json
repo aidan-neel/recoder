@@ -49,6 +49,13 @@
 							]
 						}
 					},
+					"properties": {
+						"RECODER_JOB_CONCURRENCY": {
+							"description": "Reviews each API pod runs at once. Every pod shares this value, so 0 would leave no pod to run reviews.",
+							"type": "string",
+							"pattern": "^([1-9]|[12][0-9]|3[0-2])$"
+						}
+					},
 					"additionalProperties": { "type": "string" }
 				},
 				"resources": { "$ref": "#/definitions/resources" },
