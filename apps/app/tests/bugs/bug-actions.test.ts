@@ -102,6 +102,42 @@ describe('posting a finding', () => {
 	});
 });
 
+describe('posting the review', () => {
+	test('a post the forge refused shows the failure the server recorded', async () => {
+		const recorded: Review = {
+			...structuredClone(SAMPLE_REVIEW),
+			findingsReview: { state: 'failed', error: 'GitHub refused the review.', updatedAt: '2026-10-13T10:00:00.000Z' }
+		};
+
+		const client: ApiClient = {
+			...createSampleApi(),
+			postFindings: () => Promise.reject(new ApiError('GitHub refused the review.', 502)),
+			review: async () => recorded
+		};
+
+		const { actions, state } = actionsOn(client);
+
+		await expect(actions.postAll()).rejects.toThrow('GitHub refused the review.');
+
+		expect(state.getState()).toMatchObject({
+			postingAll: false,
+			review: { findingsReview: { state: 'failed', error: 'GitHub refused the review.' } }
+		});
+	});
+
+	test('a failed post whose record cannot be read still reports the post failure', async () => {
+		const client: ApiClient = {
+			...createSampleApi(),
+			postFindings: () => Promise.reject(new ApiError('GitHub refused the review.', 502)),
+			review: () => Promise.reject(new ApiError('The server is busy.', 503))
+		};
+
+		const { actions } = actionsOn(client);
+
+		await expect(actions.postAll()).rejects.toThrow('GitHub refused the review.');
+	});
+});
+
 /** A client whose first decision is refused with a 409 and whose later ones save at once. */
 function decideConflictsOnce() {
 	let calls = 0;

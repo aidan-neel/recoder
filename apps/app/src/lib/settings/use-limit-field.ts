@@ -2,10 +2,7 @@
 
 import { useSettings } from './settings-store';
 import { parseLimit, type LimitKey } from './limits';
-import { useNumberField } from './use-number-field';
-import type { LimitFieldView } from './use-number-field';
-
-export type { LimitFieldView };
+import { useNumberField, type LimitFieldView } from './use-number-field';
 
 /**
  * One review limit as a number field. It saves when it loses focus or on

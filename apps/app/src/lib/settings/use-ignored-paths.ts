@@ -8,6 +8,9 @@ import { IGNORED_PATHS_MAX } from './ignored-paths';
 import { useAutoReview } from './auto-review-store';
 import { useSaveState, type SaveState } from './use-save-state';
 
+/** The list before the settings load: one array, so the store's selector answers the same value each time. */
+const NO_PATHS: string[] = [];
+
 /** Everything the ignored-paths list shows and does. */
 export interface IgnoredPathsView {
 	/** The saved globs, in saved order. */
@@ -37,7 +40,7 @@ export interface IgnoredPathsView {
  * own refusal shows the same way.
  */
 export function useIgnoredPaths(): IgnoredPathsView {
-	const paths = useAutoReview((state) => state.payload?.settings.ignoredPaths ?? []);
+	const paths = useAutoReview((state) => state.payload?.settings.ignoredPaths ?? NO_PATHS);
 	const [draft, setDraft] = useState('');
 	const [error, setError] = useState<string | null>(null);
 	const { state, track, clearFailure } = useSaveState();

@@ -131,6 +131,27 @@ function createSampleFindings(world: SampleWorld) {
 		return { id: `comment-${findingId}`, url: `${review.prUrl ?? ''}#comment-${findingId}`, inline: true };
 	}
 
+	/** The review once its open findings went up as one forge review; a review already posted stays as it is, as on the server. */
+	function withFindingsPosted(review: Review): Review {
+		if (review.findingsReview?.state === 'posted') return review;
+
+		return {
+			...review,
+			findingComments: {
+				...review.findingComments,
+				...Object.fromEntries(
+					review.findings.filter(isOpenFinding).map((finding) => [finding.id, commentOf(review, finding.id)])
+				)
+			},
+			findingsReview: {
+				state: 'posted',
+				id: 'sample-findings-review',
+				url: `${review.prUrl ?? ''}#findings-review`,
+				updatedAt: new Date().toISOString()
+			}
+		};
+	}
+
 	async function postFinding(reviewId: string, findingId: string): Promise<Review> {
 		return world.updateReview(reviewId, (review) => ({
 			...review,
@@ -162,23 +183,7 @@ function createSampleFindings(world: SampleWorld) {
 			}));
 		},
 
-		async postFindings(reviewId: string): Promise<Review> {
-			return world.updateReview(reviewId, (review) => ({
-				...review,
-				findingComments: {
-					...review.findingComments,
-					...Object.fromEntries(
-						review.findings.filter(isOpenFinding).map((finding) => [finding.id, commentOf(review, finding.id)])
-					)
-				},
-				findingsReview: {
-					state: 'posted',
-					id: 'sample-findings-review',
-					url: `${review.prUrl ?? ''}#findings-review`,
-					updatedAt: new Date().toISOString()
-				}
-			}));
-		}
+		postFindings: async (reviewId: string): Promise<Review> => world.updateReview(reviewId, withFindingsPosted)
 	};
 }
 

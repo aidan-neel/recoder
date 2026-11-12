@@ -44,6 +44,7 @@ function PostedReview({ url }: { url: string | null }) {
  * reason on hover.
  */
 function PostReview({ view }: { view: BugsView }) {
+	const posting = useAction();
 	const posted = view.findingsReview;
 
 	if (posted?.state === 'posted') return <PostedReview url={posted.url} />;
@@ -54,8 +55,8 @@ function PostReview({ view }: { view: BugsView }) {
 	const button = (
 		<Button
 			variant="outline"
-			status={view.postingAll || posted?.state === 'posting' ? 'pending' : 'idle'}
-			onClick={() => view.postAll().catch(report('The review was not posted.'))}
+			status={view.postingAll || posted?.state === 'posting' ? 'pending' : posting.status}
+			onClick={() => posting.run(() => view.postAll().catch(report('The review was not posted.')))}
 		>
 			{failed ? 'Post again' : 'Post review'}
 		</Button>

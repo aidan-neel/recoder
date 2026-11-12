@@ -191,6 +191,17 @@ export function createBugActions(context: SessionContext) {
 		});
 	}
 
+	/**
+	 * After a post failed, shows what the server recorded of it: the failed
+	 * state and the forge's reason. A read that fails too changes nothing, so
+	 * the post's own failure stays the one the person is told.
+	 */
+	async function showPostRecord(reviewId: string): Promise<void> {
+		const [recorded] = await Promise.allSettled([client.review(reviewId)]);
+
+		if (recorded.status === 'fulfilled') acceptPosted(recorded.value);
+	}
+
 	return {
 		accept: (id: string) => decide(id, { state: 'accepted' }),
 
@@ -265,6 +276,10 @@ export function createBugActions(context: SessionContext) {
 
 			try {
 				acceptPosted(await plainly(() => client.postFindings(reviewId)));
+			} catch (failure) {
+				await showPostRecord(reviewId);
+
+				throw failure;
 			} finally {
 				state.setState({ postingAll: false });
 			}
