@@ -40,6 +40,13 @@ const TOKEN_SHAPES = /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20
 /** API keys as providers shape them (`sk-…`, `sk-ant-…`, `sk-or-v1-…`) and bearer tokens quoted inside a body. */
 const KEY_SHAPES = /\b(?:sk-[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._~+/=-]{8,})/g;
 
+/**
+ * The path token of a tool slot Recoder leases to an agent CLI (`http://127.0.0.1:<port>/mcp/<token>`, see
+ * `agents/tools/mcp-host.ts`), its separators literal or percent-encoded. A CLI that cannot reach the slot may print
+ * the URL, and the token opens the slot until the run closes.
+ */
+const TOOL_SLOT_TOKEN = /(127\.0\.0\.1(?::|%3A)\d+(?:\/|%2F)mcp(?:\/|%2F))[A-Za-z0-9_-]+/gi;
+
 /** Characters that mean something in a pattern, escaped to match themselves. */
 const PATTERN_SYNTAX = /[\\^$.*+?()[\]{}|/-]/g;
 
@@ -72,9 +79,9 @@ export function redactedTail(text: string, secrets: string[]): string {
 /**
  * Text from git, a forge or a CLI with every credential it may quote
  * replaced: the `secrets` the run was given, in any percent-encoding, user
- * info in URLs, credential headers, secret parameters and JSON fields, and
- * anything shaped like a forge token or a provider key. The known secrets go
- * first, before a pattern can split one.
+ * info in URLs, credential headers, secret parameters and JSON fields, the
+ * path token of a leased tool slot, and anything shaped like a forge token or
+ * a provider key. The known secrets go first, before a pattern can split one.
  */
 export function redacted(text: string, secrets: string[]): string {
 	const withoutKnown = secrets
@@ -87,6 +94,7 @@ export function redacted(text: string, secrets: string[]): string {
 		.replace(QUOTED_AUTHORIZATION, `$1":"${REDACTED}"`)
 		.replace(SECRET_PARAMETER, `$1=${REDACTED}`)
 		.replace(QUOTED_SECRET_FIELD, `"$1":"${REDACTED}"`)
+		.replace(TOOL_SLOT_TOKEN, `$1${REDACTED}`)
 		.replace(TOKEN_SHAPES, REDACTED)
 		.replace(KEY_SHAPES, REDACTED);
 }

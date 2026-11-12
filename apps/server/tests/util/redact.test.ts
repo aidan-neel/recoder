@@ -71,3 +71,13 @@ test('a password quoted as a JSON field is removed, and a token count beside it 
 	expect(shown).not.toContain('hunter2-made-up');
 	expect(shown).toContain('"totalTokens":1234');
 });
+
+test('the path token of a leased tool slot is removed from a URL a CLI quotes', () => {
+	const shown = redacted(
+		'Error: MCP server recoder1 failed: connect ECONNREFUSED http://127.0.0.1:41873/mcp/Zm9vYmFyLXRva2VuLTEyMzQ1Njc4',
+		[]
+	);
+
+	expect(shown).toContain('http://127.0.0.1:41873/mcp/[redacted]');
+	expect(shown).not.toContain('Zm9vYmFy');
+});
