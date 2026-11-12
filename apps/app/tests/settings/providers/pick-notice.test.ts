@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { AgentStatus } from '@recoder/shared';
 
-import { CHECK_FAILED } from '../../src/lib/settings/providers/use-check-again';
-import { OFFLINE_TEXT } from '../../src/lib/api/http';
-import { pickNotice } from '../../src/lib/settings/providers/pick-notice';
+import { CHECK_FAILED } from '../../../src/lib/settings/providers/use-check-again';
+import { OFFLINE_TEXT } from '../../../src/lib/api/http';
+import { pickNotice } from '../../../src/lib/settings/providers/pick-notice';
 
 const manager: AgentStatus = {
 	id: 'opencode',

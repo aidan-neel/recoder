@@ -22,7 +22,15 @@ function settled(status: LoadStatus): boolean {
 }
 
 /** What the Connections section shows once its loads settle. */
-export type ConnectionsView = 'loading' | 'down' | 'ready';
+type ConnectionsView = 'loading' | 'down' | 'ready';
+
+/** The section's view: `down` only while the repository list has never answered and the server is offline. */
+function sectionView(repos: Repo[] | null, reposStatus: LoadStatus, authStatus: LoadStatus): ConnectionsView {
+	if (!repos && reposStatus === 'offline') return 'down';
+	if (!settled(authStatus) || !settled(reposStatus)) return 'loading';
+
+	return 'ready';
+}
 
 /** Everything the Connections section shows and does. */
 export interface ConnectionsSection {
@@ -70,8 +78,7 @@ export function useConnectionsSection(): ConnectionsSection {
 		void reload();
 	}, []);
 
-	const view: ConnectionsView =
-		!repos && reposStatus === 'offline' ? 'down' : !settled(authStatus) || !settled(reposStatus) ? 'loading' : 'ready';
+	const view = sectionView(repos, reposStatus, authStatus);
 
 	return {
 		view,

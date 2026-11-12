@@ -60,7 +60,11 @@ function localRepo(text: string): RepoInputResult {
 /** The text as a URL: SSH addresses become https, and a bare host gets a scheme. */
 function asUrl(text: string): URL | null {
 	const scp = SCP.exec(text);
-	const href = scp ? `https://${scp[1]}/${scp[2]}` : /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `https://${text}`;
+	let href: string;
+
+	if (scp) href = `https://${scp[1]}/${scp[2]}`;
+	else if (/^[a-z][a-z0-9+.-]*:\/\//i.test(text)) href = text;
+	else href = `https://${text}`;
 
 	try {
 		return new URL(href);

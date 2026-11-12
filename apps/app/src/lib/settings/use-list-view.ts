@@ -12,7 +12,7 @@ const OVERSCAN = 240;
  * read from the element itself. A scroll, a resize, or a `scroll` event
  * dispatched after a programmatic scroll re-renders the rows in the same frame.
  */
-export function useListView(list: HTMLElement | null, pad: number): { top: number; height: number } {
+function useListView(list: HTMLElement | null, pad: number): { top: number; height: number } {
 	const subscribe = useCallback(
 		(notify: () => void) => {
 			if (!list) return () => {};

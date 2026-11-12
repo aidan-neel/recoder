@@ -18,11 +18,11 @@ export interface RepoStepView {
  * or to add a repository by URL.
  */
 export function useRepoStep(done: boolean): RepoStepView {
-	const names = useConnections((state) => (state.repos ?? []).map((repo) => repo.name).join('\n'));
+	const repos = useConnections((state) => state.repos);
 	const signedIn = useConnections((state) => signedInForges(state.auth).length > 0);
 
 	return {
 		signedIn,
-		description: repoDescription({ done, names: names ? names.split('\n') : [], signedIn })
+		description: repoDescription({ done, names: (repos ?? []).map((repo) => repo.name), signedIn })
 	};
 }

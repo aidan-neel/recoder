@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 import { plural } from '../shell/format';
 
-/** Models listed before the rest fold behind "Show all". */
+/** Models listed before the rest fold behind the "more models" disclosure. */
 const SHOWN = 5;
 
 /** Everything a server's model list shows and does. */
@@ -30,11 +30,15 @@ export function useVllmModels(models: VllmModel[]): VllmModels {
 	const head = models.slice(0, SHOWN);
 	const rest = models.slice(SHOWN);
 
+	let moreLabel: string | null = null;
+
+	if (rest.length > 0) moreLabel = open ? 'Show fewer' : plural(rest.length, 'more model');
+
 	return {
 		head,
 		rest,
 		open,
 		setOpen,
-		moreLabel: rest.length ? (open ? 'Show fewer' : plural(rest.length, 'more model')) : null
+		moreLabel
 	};
 }

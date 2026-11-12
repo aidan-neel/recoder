@@ -1,21 +1,19 @@
 'use client';
 
 import type { ButtonStatus } from '@recoder/ui';
-import { useEffect, useEffectEvent, useState } from 'react';
+import { useState } from 'react';
 
 import { ApiError, failureText } from '../api/http';
+import { useCloseOnSuccess } from '../settings/use-close-on-success';
 import { useConnections } from './connections-store';
 import { FORGES, type ForgeInfo } from './forges';
 import type { Forge } from '../api/connections';
-
-/** How long "Done" shows on the button before the dialog closes. */
-const SUCCESS_MS = 700;
 
 /** Where the server keeps a token (`apps/server/src/forge/tokens.ts`). */
 const STORED = 'Saved to tokens.json in the server’s data folder.';
 
 /** Which field a rejection belongs to, and what it says. */
-export interface TokenRejection {
+interface TokenRejection {
 	field: 'token' | 'host';
 	text: string;
 }
@@ -66,15 +64,8 @@ export function useTokenModal(forge: Forge, onOpenChange: (open: boolean) => voi
 	const [error, setError] = useState<TokenRejection | null>(null);
 	const [status, setStatus] = useState<ButtonStatus>('idle');
 	const pending = status === 'pending';
-	const close = useEffectEvent(() => onOpenChange(false));
 
-	useEffect(() => {
-		if (status !== 'success') return;
-
-		const timer = setTimeout(close, SUCCESS_MS);
-
-		return () => clearTimeout(timer);
-	}, [status]);
+	useCloseOnSuccess(status, () => onOpenChange(false));
 
 	async function submit(): Promise<void> {
 		if (!token.trim() || status !== 'idle') return;

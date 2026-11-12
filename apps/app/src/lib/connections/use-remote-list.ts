@@ -69,7 +69,7 @@ function failedList(list: Remote | undefined): boolean {
 }
 
 /**
- * Tracks a remote repository from its row's Add button. A refusal raises an
+ * Tracks a remote repository from its row's Track button. A refusal raises an
  * error toast; the row's own status walks pending → success or error.
  */
 export function useTrackRepo(): { status: ButtonStatus; track: (repo: RemoteRepo) => Promise<void> } {
@@ -78,7 +78,7 @@ export function useTrackRepo(): { status: ButtonStatus; track: (repo: RemoteRepo
 	async function track(repo: RemoteRepo): Promise<void> {
 		const result = await add({ name: repo.name, url: repo.url, provider: repo.provider });
 
-		if ('error' in result) errorToast(`Couldn’t add ${repo.name}`, result.error);
+		if ('error' in result) errorToast(`Couldn’t track ${repo.name}`, result.error);
 	}
 
 	return { status, track };

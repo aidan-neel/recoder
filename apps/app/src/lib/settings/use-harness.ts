@@ -19,7 +19,7 @@ import { useInstantSave, type SaveState } from './use-save-state';
 const FAILED = 'Settings weren’t saved';
 
 /** What each cap allows; shown under the name for the current pick. */
-export const SUBAGENT_TEXT: Record<SubagentCap, string> = {
+const SUBAGENT_TEXT: Record<SubagentCap, string> = {
 	0: 'Reviewers work alone, using the fewest tokens',
 	3: 'Up to 3 deep dives per review',
 	8: 'Up to 8 deep dives per review',
@@ -27,14 +27,22 @@ export const SUBAGENT_TEXT: Record<SubagentCap, string> = {
 	uncapped: 'One per open question. Far more tokens and time'
 };
 
+/** The segmented control's label for a cap: Uncapped, Off at 0, else "Up to N". */
+function capLabel(cap: SubagentCap): string {
+	if (cap === 'uncapped') return 'Uncapped';
+	if (cap === 0) return 'Off';
+
+	return `Up to ${cap}`;
+}
+
 /** The subagent cap picks for the segmented control. */
 export const SUBAGENT_OPTIONS = SUBAGENT_CAPS.map((cap) => ({
 	value: String(cap),
-	label: cap === 'uncapped' ? 'Uncapped' : cap ? `Up to ${cap}` : 'Off'
+	label: capLabel(cap)
 }));
 
 /** The token-budget row: what it shows and its control's view. */
-export interface HarnessBudget {
+interface HarnessBudget {
 	/** The budget on screen, or Custom once the subagent cap or an effort was changed by hand. */
 	shown: TokenBudget | 'custom';
 	/** The saved budget, whose review limits still apply under Custom. */
@@ -45,7 +53,7 @@ export interface HarnessBudget {
 	change: (value: string) => void;
 }
 
-/** The Review harness section once the settings have loaded. */
+/** The Review limits section once the settings have loaded. */
 export interface HarnessReady {
 	ready: true;
 	budget: HarnessBudget;
@@ -65,16 +73,16 @@ export interface HarnessReady {
 	configPath: string | null;
 }
 
-/** Settings → Review harness before its settings load: the section shows nothing yet. */
-export interface HarnessPending {
+/** Settings → Review limits before its settings load: the section shows nothing yet. */
+interface HarnessPending {
 	ready: false;
 }
 
-/** Everything the Review harness section shows and does. */
+/** Everything the Review limits section shows and does. */
 export type HarnessView = HarnessPending | HarnessReady;
 
 /**
- * Settings → Review harness: the token budget, how many subagents a review
+ * Settings → Review limits: the token budget, how many subagents a review
  * may run, low-severity findings, the review limits, and where they are
  * saved. Each control saves the moment it changes.
  */
@@ -93,12 +101,12 @@ export function useHarness(): HarnessView {
 	if (!settings) return { ready: false };
 
 	const picked = budget.draft?.value;
+	const capDraft = cap.draft?.value;
 
-	const capValue = picked
-		? TOKEN_BUDGET_PLANS[picked].subagentCap
-		: cap.draft
-			? cap.draft.value
-			: (settings.subagentCap ?? DEFAULT_SUBAGENT_CAP);
+	let capValue = settings.subagentCap ?? DEFAULT_SUBAGENT_CAP;
+
+	if (capDraft !== undefined) capValue = capDraft;
+	if (picked) capValue = TOKEN_BUDGET_PLANS[picked].subagentCap;
 
 	const shown = picked ?? shownBudget(settings, capValue);
 

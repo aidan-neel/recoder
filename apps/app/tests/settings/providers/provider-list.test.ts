@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { AgentAuthMethod, AgentProvider } from '@recoder/shared';
 
-import { focusTarget } from '../../src/lib/settings/providers/use-provider-list';
+import { focusTarget } from '../../../src/lib/settings/providers/use-provider-list';
 
 function provider(id: string, patch: Partial<AgentProvider> = {}): AgentProvider {
 	return {

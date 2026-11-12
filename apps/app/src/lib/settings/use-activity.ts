@@ -25,7 +25,7 @@ export interface RecentActivity {
 }
 
 /**
- * Settings → Auto-review → Recent: the latest reviews the watcher started,
+ * Automations → Recent: the latest reviews the watcher started,
  * each a link to its review. `repos` names the repositories the events name.
  */
 export function useRecentActivity(repos: Repo[]): RecentActivity {
@@ -48,7 +48,7 @@ export function useRecentActivity(repos: Repo[]): RecentActivity {
 }
 
 /** One forge's webhook address, as its row shows it. */
-export interface WebhookRow {
+interface WebhookRow {
 	forge: 'GitLab' | 'GitHub';
 	/** The full address a webhook posts to. */
 	url: string;
@@ -60,7 +60,7 @@ export interface WebhookActivity {
 }
 
 /**
- * Settings → Auto-review → Webhooks: where a forge can report events instead
+ * Automations → Webhooks: where a forge can report events instead
  * of waiting for the next check. Null until the payload lands.
  */
 export function useWebhookActivity(): WebhookActivity {

@@ -21,13 +21,13 @@ export interface RepoRowError {
 }
 
 /** What a repository row shows while its file loads. */
-export interface RepoRowLoading {
+interface RepoRowLoading {
 	kind: 'loading';
 	name: string;
 }
 
 /** What a repository row shows once its file is read. */
-export interface RepoRowReady {
+interface RepoRowReady {
 	kind: 'ready';
 	name: string;
 	/** The row's one-line preview. */

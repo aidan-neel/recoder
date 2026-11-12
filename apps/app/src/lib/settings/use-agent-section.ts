@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { agentReady, useSettings } from './settings-store';
 import { useProviderHost, type ProviderHost } from './providers/use-provider-host';
 
-/** Everything the Agent section's top half needs: the provider manager, whether its list shows, and the modal host. */
+/** Everything the Models section's top half needs: the provider manager, whether its list shows, and the modal host. */
 export interface AgentSectionView {
 	/** The agent that connects model providers itself (OpenCode), or null. */
 	manager: AgentStatus | null;
@@ -19,7 +19,7 @@ export interface AgentSectionView {
 }
 
 /**
- * Settings → Agent, top half: the agent CLIs, the model providers connected
+ * Settings → Models, top half: the agent CLIs, the model providers connected
  * in OpenCode, and the vLLM servers. Providers show once the agent that
  * connects them is ready; a later check that fails keeps the last list it
  * loaded.
