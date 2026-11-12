@@ -117,8 +117,6 @@ export interface ReviewReasoningEntry {
 	endedAt?: string;
 	text: string;
 	status?: 'streaming' | 'done' | 'error';
-	/** The provider only returns a summary of its reasoning (ChatGPT), so the text is dropped and only the timing is kept. */
-	summary?: boolean;
 	/** The speed of the model call this thought came from. */
 	outputRate?: OutputRate;
 }
@@ -182,22 +180,25 @@ export interface ReviewCodeContext {
 	diffContext?: string;
 }
 
-/** What the developer can do about a failed request: sign in to ChatGPT, or set up a model. */
+/**
+ * What the developer can do about a failed request: sign in, or set up a model. The server no longer sends
+ * `sign-in` (an agent CLI's signed-out message names its own sign-in command); `apps/app` still reads it.
+ */
 export type FailureAction = 'sign-in' | 'settings';
 
 /** Why a model call failed, in words for the developer. */
 export interface ModelFailure {
 	reason: string;
-	/** ChatGPT is signed out or its sign-in expired; signing in fixes it. */
+	/** Signing in fixes it. No server path sets it any more; `apps/app` still reads it. */
 	signIn?: boolean;
 	/** The model's plan ran out of usage; another model or waiting fixes it. */
 	usageLimit?: UsageLimit;
 }
 
 export interface UsageLimit {
-	/** `codex` for ChatGPT, else the hosted provider id (`opencode-go`…); `custom` for your own endpoint. */
+	/** The agent CLI's id (`claude-code`…), else the hosted provider id (`opencode-go`…); `custom` for your own endpoint. */
 	provider: string;
-	/** "ChatGPT", "OpenCode Go"… */
+	/** "Claude Code", "OpenCode Go"… */
 	name: string;
 	/** Unix seconds when usage resets, when the provider says. */
 	resetsAt?: number | null;

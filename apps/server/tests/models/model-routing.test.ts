@@ -15,14 +15,16 @@ const models = [
 		id: 'sol',
 		label: 'Sol',
 		model: 'sol',
-		provider: 'codex' as const,
+		provider: 'openai-compatible' as const,
+		baseUrl: 'http://localhost:8000/v1',
 		efforts: ['low', 'medium', 'high'] as ('low' | 'medium' | 'high')[]
 	},
 	{
 		id: 'mini',
 		label: 'Mini',
 		model: 'mini',
-		provider: 'codex' as const,
+		provider: 'openai-compatible' as const,
+		baseUrl: 'http://localhost:8000/v1',
 		efforts: ['minimal', 'low', 'medium', 'high'] as ('minimal' | 'low' | 'medium' | 'high')[]
 	}
 ];

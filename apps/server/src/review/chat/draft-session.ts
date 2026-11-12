@@ -39,7 +39,7 @@ export async function prepareDraftSession(reviewId: string, opener: boolean): Pr
 
 /**
  * Stream the orchestrator's first pass. A failed opener never blocks the session: it falls back to a
- * plain prompt, and keeps the failure only when signing in to ChatGPT or a usage limit explains it.
+ * plain prompt, and keeps the failure only when a usage limit explains it.
  */
 async function startDraftOpener(
 	reviewId: string,
@@ -148,7 +148,7 @@ async function startDraftOpener(
 
 			const failure = controller.signal.aborted ? null : modelFailure(error, config, '');
 
-			if (failure?.signIn || failure?.usageLimit) reply.failure = failure;
+			if (failure?.usageLimit) reply.failure = failure;
 			await flush(partial && !controller.signal.aborted ? 'error' : 'done');
 		} finally {
 			pending.delete(key);

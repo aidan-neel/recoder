@@ -56,12 +56,9 @@ export async function streamTurn<T>(
 	let overthought = false;
 	let outputRate: OutputRate | undefined;
 
-	/** ChatGPT sends a summary, not its reasoning: keep the timing, drop the text. */
 	const flushReasoning = (status: ReviewReasoningEntry['status'] = 'streaming') => {
-		if (!opts.onReasoning || !reasoningText) return;
-		if (opts.config.provider === 'codex')
-			opts.onReasoning({ id: reasoningId, text: '', status, summary: true, outputRate });
-		else opts.onReasoning({ id: reasoningId, text: reasoningText, status, outputRate });
+		if (opts.onReasoning && reasoningText)
+			opts.onReasoning({ id: reasoningId, text: reasoningText, status, outputRate });
 	};
 
 	const flushResponse = (status: 'streaming' | 'done' | 'error', cutOff?: string) => {

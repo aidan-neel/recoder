@@ -58,7 +58,7 @@ export async function withRetries<T>(
 			if (
 				opts.signal?.aborted ||
 				tries >= max ||
-				!isTransientLlmError(err, opts.provider) ||
+				!isTransientLlmError(err) ||
 				!canRetry() ||
 				Date.now() + wait >= deadline - 5_000
 			)

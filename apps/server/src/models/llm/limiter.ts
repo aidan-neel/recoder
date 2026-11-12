@@ -46,7 +46,7 @@ function stateOf(endpoint: string): EndpointState {
 /**
  * The key a call's limiter state lives under: its base URL without trailing
  * slashes and with a lowercase host, or the provider name for transports that
- * have no base URL (codex, opencode).
+ * have no base URL (the agent CLIs).
  */
 export function llmEndpoint(target: { baseUrl?: string; provider?: string }): string {
 	const trimmed = (target.baseUrl ?? '').trim().replace(/\/+$/, '');

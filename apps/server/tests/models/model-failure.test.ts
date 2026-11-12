@@ -5,22 +5,6 @@ import { LlmError, isTransientLlmError } from '../../src/models/llm';
 import { modelFailure } from '../../src/models/model-failure';
 import { providerError } from '../../src/agents/opencode/opencode-error';
 
-test('a signed-out ChatGPT call asks the developer to sign in', () => {
-	expect(
-		modelFailure(new LlmError(401, 'Your ChatGPT sign-in expired. Sign in again.'), { provider: 'codex' }, 'fallback')
-	).toEqual({ reason: 'Your ChatGPT sign-in expired. Sign in again.', signIn: true });
-});
-
-test('a ChatGPT permission error is not treated as signed out', () => {
-	expect(
-		modelFailure(
-			new LlmError(403, 'ChatGPT denied access. Check model access and workspace permissions.'),
-			{ provider: 'codex' },
-			'fallback'
-		).signIn
-	).toBeUndefined();
-});
-
 test('a raw endpoint error body never becomes the reason', () => {
 	const auth = modelFailure(
 		new LlmError(401, 'LLM 401: {"error":{"message":"Incorrect API key sk-live-123"}}'),
@@ -35,16 +19,6 @@ test('a raw endpoint error body never becomes the reason', () => {
 		modelFailure(new LlmError(500, 'LLM 500: <html>upstream</html>'), { provider: 'openai-compatible' }, 'fallback')
 			.reason
 	).toBe('fallback');
-});
-
-test('a ChatGPT 429 is an out-of-usage failure, not a retry', () => {
-	const failure = modelFailure(
-		new LlmError(429, 'ChatGPT usage limit reached. Wait for it to reset, or pick another model in Settings → Agent.'),
-		{ provider: 'codex' },
-		'fallback'
-	);
-
-	expect(failure.usageLimit).toEqual({ provider: 'codex', name: 'ChatGPT', usageUrl: null });
 });
 
 test('a hosted plan that ran out names the provider and where to check usage', () => {
@@ -113,7 +87,7 @@ test('an OpenCode 429 that only throttles requests is not reported as out of usa
 	expect(failure.usageLimit).toBeUndefined();
 });
 
-test('a signed-out Claude Code call names the login command, not a key or a ChatGPT sign-in', () => {
+test('a signed-out Claude Code call names the login command, not a key', () => {
 	const error = claudeCodeError(
 		'Failed to authenticate: OAuth session expired and could not be refreshed',
 		'authentication_failed',
@@ -135,7 +109,7 @@ test('a Claude Code usage limit stops as out of usage with its reset time, and i
 	expect(failure.usageLimit).toEqual({ provider: 'claude-code', name: 'Claude Code', usageUrl: null });
 	expect(failure.reason).toContain('Claude Code is out of usage');
 	expect(failure.reason).toContain('resets 3pm (UTC)');
-	expect(isTransientLlmError(error, 'claude-code')).toBe(false);
+	expect(isTransientLlmError(error)).toBe(false);
 });
 
 test('a custom command’s spent plan stops as out of usage under its name, and is never retried', () => {
@@ -144,7 +118,7 @@ test('a custom command’s spent plan stops as out of usage under its name, and 
 
 	expect(failure.usageLimit).toEqual({ provider: 'custom-command', name: 'Custom command', usageUrl: null });
 	expect(failure.reason).toContain('plan spent until 3pm');
-	expect(isTransientLlmError(error, 'custom-command')).toBe(false);
+	expect(isTransientLlmError(error)).toBe(false);
 });
 
 test('a signed-out custom command keeps its own message instead of asking for an API key', () => {

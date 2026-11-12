@@ -78,7 +78,7 @@ export function setUpModels(): void {
 				efforts: ['low', 'high'],
 				defaultEffort: 'high'
 			},
-			{ id: 'gpt', provider: 'codex', label: 'GPT', model: 'gpt-x' },
+			{ id: 'gpt', label: 'GPT', model: 'gpt-x', baseUrl: 'http://gpt.example/v1' },
 			{ id: SHADOWED_ID, label: 'Shadowed', model: 'shadowed' }
 		],
 		orchestratorModelId: 'saved-a',

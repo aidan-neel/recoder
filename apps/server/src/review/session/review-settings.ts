@@ -14,6 +14,7 @@ import {
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
 import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
+import { isChatGptEntry, moveChatGptModels, SAVED_ENTRY_PROVIDERS } from './chatgpt-migration.js';
 
 const runtimeSchema = z.object({
 	temperature: z.number().min(0).max(2).nullable().optional(),
@@ -22,7 +23,7 @@ const runtimeSchema = z.object({
 });
 
 const modelEntrySchema = z.object({
-	provider: z.enum(['openai-compatible', 'codex']).optional(),
+	provider: z.literal('openai-compatible').optional(),
 	/** Hosted provider id; the entry uses that provider's endpoint and connected key. */
 	source: z.string().max(40).optional(),
 	id: z.string().max(100).optional(),
@@ -55,11 +56,15 @@ export const reviewSettingsSchema = z.object({
 
 export type ReviewSettingsInput = z.infer<typeof reviewSettingsSchema>;
 
+/** A saved entry, which may be one from before the Codex CLI that used Recoder's own ChatGPT sign-in. */
+const savedEntrySchema = modelEntrySchema.extend({ provider: z.enum(SAVED_ENTRY_PROVIDERS).optional() });
+
 /**
- * Saved files from before models were just Review and a second model carried per-role picks,
- * and files from before subagents carried a specialist dispatch level.
+ * Saved files from before models were just Review and a second model carried per-role picks, files from before
+ * subagents carried a specialist dispatch level, and files from before the Codex CLI carried ChatGPT entries.
  */
 const storedFileSchema = reviewSettingsSchema.extend({
+	models: z.array(savedEntrySchema).max(50).optional(),
 	subagentCap: z.union([z.literal(SUBAGENT_CAPS), z.number().int().nonnegative()]).optional(),
 	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional(),
 	roles: z.record(z.string().max(40), z.string().max(200)).optional(),
@@ -86,6 +91,7 @@ function hasRetiredCap(data: StoredFile): boolean {
 function hasLegacyFields(data: StoredFile): boolean {
 	return (
 		hasRetiredCap(data) ||
+		!!data.models?.some(isChatGptEntry) ||
 		[data.roles, data.roleEfforts, data.applyToSpecialists, data.specialistDispatch].some(
 			(field) => field !== undefined
 		)
@@ -95,9 +101,10 @@ function hasLegacyFields(data: StoredFile): boolean {
 /**
  * Old per-role picks become one second-model pick: correctness (always ran) speaks for them all.
  * An old dispatch level becomes the subagent cap it stands for, and a cap that no longer exists the nearest one.
+ * A ChatGPT entry leaves the list, and each pick of one names the same model through the Codex CLI.
  */
 function migrateLegacy(data: StoredFile): ReviewSettingsInput {
-	const { roles, roleEfforts, applyToSpecialists, specialistDispatch, subagentCap, ...rest } = data;
+	const { roles, roleEfforts, applyToSpecialists, specialistDispatch, subagentCap, models, ...rest } = data;
 	const next: ReviewSettingsInput = { ...rest };
 
 	if (subagentCap !== undefined) next.subagentCap = migrateSubagentCap(subagentCap);
@@ -112,7 +119,7 @@ function migrateLegacy(data: StoredFile): ReviewSettingsInput {
 			next.specialistEffort = roleEfforts.correctness;
 	}
 
-	return next;
+	return { ...next, ...moveChatGptModels(next, models) };
 }
 
 /** A saved model entry: the settings patch's entry, always with an id. */
@@ -130,12 +137,19 @@ interface StoredSettings extends Omit<ModelSettingsPatch, 'models'> {
 let localOverrides: StoredSettings = {};
 
 const sharedStoredSchema = reviewSettingsSchema.extend({
-	models: z.array(modelEntrySchema.extend({ id: z.string().min(1).max(100) })).optional(),
+	models: z.array(savedEntrySchema.extend({ id: z.string().min(1).max(100) })).optional(),
 	connections: z.record(z.string().max(40), z.object({ apiKey: z.string().min(1).max(500) })).optional()
 });
 
+/** The shared settings, read in the current shape: a ChatGPT entry saved before the Codex CLI moves as in a file. */
+function sharedOverrides(): StoredSettings {
+	const { models, ...rest } = sharedStoredSchema.parse(readSharedSetting('review-settings') ?? {});
+
+	return { ...rest, ...moveChatGptModels(rest, models) };
+}
+
 function currentOverrides(): StoredSettings {
-	return sharedSettingsActive() ? sharedStoredSchema.parse(readSharedSetting('review-settings') ?? {}) : localOverrides;
+	return sharedSettingsActive() ? sharedOverrides() : localOverrides;
 }
 
 function replaceOverrides(settings: StoredSettings): void {
@@ -292,11 +306,11 @@ function mergeModelEntry(
 
 	const source = entry.source ?? kept?.source;
 
-	if (source && next.provider !== 'codex') next.source = source;
+	if (source) next.source = source;
 
 	const baseUrl = entry.baseUrl?.replace(/\/$/, '');
 
-	if (baseUrl && next.provider !== 'codex' && !next.source) next.baseUrl = baseUrl;
+	if (baseUrl && !next.source) next.baseUrl = baseUrl;
 	if (entry.efforts?.length) next.efforts = entry.efforts;
 	if (entry.defaultEffort) next.defaultEffort = entry.defaultEffort;
 
@@ -308,7 +322,7 @@ function mergeModelEntry(
 
 	if (runtime && Object.keys(runtime).length) next.runtime = runtime;
 
-	if (next.provider !== 'codex' && !next.source) {
+	if (!next.source) {
 		if (entry.apiKey) next.apiKey = entry.apiKey;
 		else if (kept?.apiKey) next.apiKey = kept.apiKey;
 	}

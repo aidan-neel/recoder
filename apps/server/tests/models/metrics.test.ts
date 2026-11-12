@@ -256,9 +256,9 @@ test('Codex chat and streaming followups each count once and separate the same m
 
 	codex.complete = async (options, onToken) => {
 		onToken?.('o');
-		options.onUsage?.(normalizeTokenUsage({ inputTokens: 50, outputTokens: 10 }, 'codex'));
+		options.onUsage?.(normalizeTokenUsage({ prompt_tokens: 50, completion_tokens: 10 }));
 		onToken?.('k');
-		options.onUsage?.(normalizeTokenUsage({ inputTokens: 100, outputTokens: 30 }, 'codex'));
+		options.onUsage?.(normalizeTokenUsage({ prompt_tokens: 100, completion_tokens: 30 }));
 
 		return 'ok';
 	};
@@ -380,7 +380,7 @@ test('interrupted calls keep reported usage durably and cannot recreate deleted 
 	const a = await review();
 	const call = await withReviewMetrics(a.id, 'pipeline', () => trackTokenCall('model-a', 'codex'));
 
-	call.usage(normalizeTokenUsage({ inputTokens: 100, outputTokens: 10 }, 'codex'));
+	call.usage(normalizeTokenUsage({ prompt_tokens: 100, completion_tokens: 10 }));
 	await closeStore();
 	expect((await getReviewMetrics(a.id))?.total).toMatchObject({ pendingCalls: 1, usage: { totalTokens: 110 } });
 	await db.reviews.delete(a.id);

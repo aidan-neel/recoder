@@ -233,7 +233,7 @@ export async function startReviewChat(
 					assignmentId,
 					model: config.model,
 					role: assignment?.role ?? 'orchestrator',
-					...(config.provider === 'codex' ? { text: '', summary: true } : { text: reasoning }),
+					text: reasoning,
 					status,
 					outputRate: reply.outputRate
 				});

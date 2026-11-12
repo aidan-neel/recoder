@@ -26,12 +26,9 @@ import { isReviewConfigured } from '../models/models';
 import { z } from 'zod';
 import { discoverModels } from '../models/model-discovery';
 import { db } from '../store';
-import codexRoutes from './codex';
 import { parseBody } from './parse-body';
 
 const app = new Hono();
-
-app.route('/codex', codexRoutes);
 
 /**
  * How long a write waits on an agent's fresh model listing (after the lists

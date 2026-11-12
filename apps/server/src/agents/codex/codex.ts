@@ -1,232 +1,180 @@
-import { z } from 'zod';
-import { REASONING_EFFORTS, type CodexConnection, type CodexModel, type ReasoningEffort } from '@recoder/shared';
-import { ChatGptAuth } from './chatgpt-auth';
-import { chatGptRequest, readChatGptResponse } from './chatgpt-responses';
-import { LlmError, type ChatOptions } from '../../models/llm';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import type { AgentStatus, ModelEntry, ReasoningEffort } from '@recoder/shared';
+import { LlmError } from '../../models/llm/errors';
+import type { ChatOptions } from '../../models/llm/types';
+import { CliAgent, callDeadline, cliOutput, emptyDirectory, findCli, stopOnShutdown } from '../cli-process';
+import { promptText, systemText } from '../cli-prompt';
+import { CLI_OUTPUT_CAP_BYTES, LineSplitter, streamCli } from '../cli-stream';
+import type { AgentEvent, AgentModelSettings, AgentRun, AgentRunOptions } from '../contract';
+import { codexEffort, parseCodexModels } from './codex-models';
+import { CODEX_LOGIN, CodexReader } from './codex-output';
+import { callArgs, codexEnv } from './codex-process';
+import { CodexRun } from './codex-run';
 
-const windowSchema = z.object({
-	used_percent: z.number().finite(),
-	limit_window_seconds: z.number().finite().optional(),
-	reset_at: z.number().finite().optional()
-});
+const INSTALL = 'npm install -g @openai/codex';
 
-const rateSchema = z.object({ primary_window: windowSchema.nullish(), secondary_window: windowSchema.nullish() });
+const STATUS_TIMEOUT_MS = 10_000;
 
-const usageSchema = z.object({
-	plan_type: z.string().optional(),
-	rate_limit: rateSchema.nullish(),
-	additional_rate_limits: z.array(z.object({ limit_name: z.string(), rate_limit: rateSchema.nullish() })).nullish()
-});
+const MODELS_TIMEOUT_MS = 20_000;
 
-/** Reasoning levels arrive as `{ effort, description }` objects; older catalogs used plain strings. */
-const levelSchema = z.union([z.string(), z.object({ effort: z.string() }).passthrough()]);
+const FORGET_TIMEOUT_MS = 10_000;
 
-const catalogSchema = z.object({
-	models: z.array(
-		z
-			.object({
-				slug: z.string().min(1),
-				display_name: z.string().optional(),
-				visibility: z.string().optional(),
-				default_reasoning_level: z.string().nullish(),
-				supported_reasoning_levels: z.array(levelSchema).nullish(),
-				supported_reasoning_efforts: z.array(z.string()).nullish(),
-				reasoning_efforts: z.array(z.string()).nullish(),
-				efforts: z.array(z.string()).nullish()
-			})
-			.passthrough()
-	)
-});
+/**
+ * Codex, run as one `codex exec` process per model call.
+ *
+ * The CLI signs in itself and keeps its sign-in under `CODEX_HOME`. Recoder never reads it; it runs the CLI
+ * without the server's keys in its environment, without the user's config, rules, hooks, plugins or own tools, and
+ * reads the JSONL events the CLI prints.
+ */
+export class CodexAgent extends CliAgent {
+	readonly id = 'codex';
+	readonly name = 'Codex';
+	readonly install = INSTALL;
+	readonly login = CODEX_LOGIN;
+	/** Each call runs one CLI process, so four run at once unless `RECODER_CODEX_CONCURRENCY` says otherwise. */
+	readonly processCeiling = { env: 'RECODER_CODEX_CONCURRENCY', fallback: 4 };
+	readonly signInFix = `Sign in with \`${CODEX_LOGIN}\`, or pick another model in Recoder settings.`;
 
-const isEffort = (value: unknown): value is ReasoningEffort =>
-	(REASONING_EFFORTS as readonly unknown[]).includes(value);
+	/** The models the last listing found, for the effort levels {@link modelSettings} answers with. */
+	private listed = new Map<string, ModelEntry>();
 
-/** Direct ChatGPT OAuth provider. `codex` remains the persisted provider ID. */
-export class ChatGptProvider {
-	private active = 0;
-	constructor(private readonly auth = new ChatGptAuth()) {}
+	/**
+	 * The account's models, from the catalog `codex debug models` prints; throws when the CLI is missing or lists
+	 * none. When `signal` aborts, the CLI process is killed and the call rejects.
+	 */
+	async models(signal?: AbortSignal): Promise<ModelEntry[]> {
+		const path = this.requirePath();
+		const { stdout } = await this.output(path, ['debug', 'models'], MODELS_TIMEOUT_MS, signal);
+		const models = parseCodexModels(stdout);
 
-	async status(): Promise<CodexConnection> {
-		try {
-			const status = await this.auth.status();
+		if (!models.length) throw new LlmError(0, 'Codex listed no models.');
 
-			if (!status.authenticated) return status;
+		this.listed = new Map(models.map((entry) => [entry.model, entry]));
 
-			try {
-				const response = await this.auth.authorizedFetch('/wham/usage');
-
-				await this.checkResponse(response, 'usage limits');
-
-				const parsed = usageSchema.safeParse(await response.json());
-
-				if (!parsed.success) throw new LlmError(502, 'ChatGPT returned invalid usage limits.');
-
-				const usage = parsed.data;
-
-				const snapshots = [
-					{ limit_name: 'Codex', rate_limit: usage.rate_limit },
-					...(usage.additional_rate_limits ?? [])
-				];
-
-				const limits = snapshots.flatMap((snapshot) =>
-					(['primary_window', 'secondary_window'] as const).flatMap((key) => {
-						const window = snapshot.rate_limit?.[key];
-
-						if (!window) return [];
-
-						const minutes =
-							window.limit_window_seconds && window.limit_window_seconds > 0
-								? Math.ceil(window.limit_window_seconds / 60)
-								: null;
-
-						return [
-							{
-								name: `${snapshot.limit_name} · ${minutes ? `${minutes} min` : key === 'primary_window' ? 'Primary' : 'Secondary'}`,
-								usedPercent: window.used_percent,
-								resetsAt: window.reset_at ?? null
-							}
-						];
-					})
-				);
-
-				const current = await this.auth.status();
-
-				return current.authenticated ? { ...current, planType: usage.plan_type ?? current.planType, limits } : current;
-			} catch (error) {
-				const current = await this.auth.status();
-
-				return {
-					...current,
-					error: error instanceof LlmError ? error.message : 'Could not load ChatGPT usage limits. Try refreshing.'
-				};
-			}
-		} catch (error) {
-			return {
-				available: true,
-				authenticated: false,
-				error: error instanceof LlmError ? error.message : 'Could not load the ChatGPT connection. Try again.'
-			};
-		}
+		return models;
 	}
 
-	/** Saved credentials only: no network, so a review can check before its checkout. */
-	async signedIn(): Promise<boolean> {
-		try {
-			return (await this.auth.status()).authenticated;
-		} catch {
-			return false;
-		}
+	/** The picked effort when the model offers it, else the model's default. */
+	modelSettings(model: string, requested: ReasoningEffort | undefined): AgentModelSettings {
+		return { reasoningEffort: codexEffort(this.listed.get(model), requested) };
 	}
 
-	async connect(): Promise<CodexConnection> {
-		if (this.active) throw new LlmError(409, 'Wait for active ChatGPT requests to finish before signing in.');
+	/** A run in which Codex is the agent, with Recoder's tools over MCP. See {@link CodexRun}. */
+	async openRun(options: AgentRunOptions): Promise<AgentRun> {
+		const path = this.requirePath();
 
-		return this.auth.connect();
+		const host = {
+			path,
+			env: this.env,
+			running: this.running,
+			scratch: this.scratch,
+			forget: (session: string) => this.forget(path, session)
+		};
+
+		return CodexRun.open(host, options);
 	}
 
-	async disconnect(): Promise<void> {
-		if (this.active) throw new LlmError(409, 'Wait for active ChatGPT requests to finish before disconnecting.');
-		this.auth.disconnect();
-	}
-
-	/** The account's model catalog. `client_version` names the catalog wire contract, not a local CLI requirement. */
-	async models(): Promise<CodexModel[]> {
-		const response = await this.auth.authorizedFetch('/codex/models?client_version=0.153.4');
-
-		await this.checkResponse(response, 'models');
-
-		const raw = await response.json().catch(() => {
-			throw new LlmError(502, 'ChatGPT returned an invalid model catalog. Try again.');
-		});
-
-		const parsed = catalogSchema.safeParse(raw);
-
-		if (!parsed.success) throw new LlmError(502, 'ChatGPT returned an invalid model catalog. Try again.');
-
-		return parsed.data.models
-			.filter((model) => !model.visibility || model.visibility === 'list')
-			.map((model) => {
-				const raw = (
-					model.supported_reasoning_levels ??
-					model.supported_reasoning_efforts ??
-					model.reasoning_efforts ??
-					model.efforts ??
-					[]
-				).map((item) => (typeof item === 'string' ? item : item.effort));
-
-				const efforts = REASONING_EFFORTS.filter((effort) => raw.includes(effort));
-
-				const defaultEffort =
-					isEffort(model.default_reasoning_level) && efforts.includes(model.default_reasoning_level)
-						? model.default_reasoning_level
-						: undefined;
-
-				return {
-					id: model.slug,
-					label: model.display_name || model.slug,
-					...(efforts.length ? { efforts: [...efforts] } : {}),
-					...(defaultEffort ? { defaultEffort } : {})
-				};
-			});
-	}
-
-	private async checkResponse(response: Response, operation: string): Promise<void> {
-		if (response.ok) return;
-		await response.body?.cancel();
-		if (response.status === 429)
-			throw new LlmError(
-				429,
-				'ChatGPT usage limit reached. Wait for it to reset, or pick another model in Settings → Agent.'
-			);
-		if (response.status === 403)
-			throw new LlmError(403, 'ChatGPT denied access. Check model access and workspace permissions.');
-		throw new LlmError(
-			response.status,
-			`Could not load ChatGPT ${operation} (HTTP ${response.status}). ${response.status === 400 ? 'Check the selected model and reasoning effort.' : 'Try again.'}`
-		);
-	}
-
+	/**
+	 * One model call with no tools, saving no session (`--ephemeral`). The system prompt goes in a file and the turns
+	 * on stdin, since a review's diff can pass the kernel's per-argument limit. Each finished message streams to
+	 * `onToken`, each reasoning summary to `onReasoning`, and the turn's usage to `onUsage`.
+	 */
 	async complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string> {
-		this.active++;
+		const path = this.requirePath();
+		const deadline = callDeadline(opts);
+		const scratch = await mkdtemp(join(tmpdir(), 'recoder-codex-'));
+		const systemFile = join(scratch, 'system.md');
 
-		const signal = AbortSignal.any([
-			AbortSignal.timeout(opts.timeoutMs ?? 90_000),
-			...(opts.signal ? [opts.signal] : [])
-		]);
+		this.scratch.add(scratch);
 
 		try {
-			signal.throwIfAborted();
+			await writeFile(systemFile, systemText(opts), { mode: 0o600 });
 
-			const response = await this.auth.authorizedFetch('/codex/responses', {
-				method: 'POST',
-				signal,
-				headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
-				body: JSON.stringify(chatGptRequest(opts))
+			const effort = opts.thinking === false ? 'low' : opts.reasoningEffort;
+			const flags = callArgs({ model: opts.model, reasoningEffort: effort, systemFile, lease: null });
+			const reader = new CodexReader(callEvents(opts, onToken), 'codex');
+			const lines = new LineSplitter(reader.line);
+
+			const exit = await streamCli({
+				argv: [path, 'exec', '--ephemeral', ...flags, '-'],
+				cwd: await emptyDirectory('codex-empty'),
+				env: codexEnv(this.env),
+				stdin: promptText(opts.messages.filter((m) => m.role !== 'system')),
+				signal: deadline.signal,
+				maxOutputBytes: CLI_OUTPUT_CAP_BYTES,
+				onOutput: lines.push,
+				running: this.running,
+				name: this.name
 			});
 
-			await this.checkResponse(response, 'response');
+			lines.end();
 
-			return await readChatGptResponse(response, opts, signal, onToken);
+			const { text, error, tokens } = reader.finish(exit);
+
+			if (tokens) opts.onUsage?.(tokens);
+			if (error) throw error;
+
+			return text;
 		} catch (error) {
-			if (signal.aborted)
-				throw new LlmError(
-					0,
-					opts.signal?.aborted
-						? 'ChatGPT request cancelled.'
-						: 'ChatGPT request timed out. Try a smaller review scope or lower effort.'
-				);
-			if (error instanceof LlmError) throw error;
-			throw new LlmError(0, 'ChatGPT response failed. Check the connection and retry.');
+			throw deadline.failure(error, 'Codex request failed.');
 		} finally {
-			this.active--;
+			this.scratch.delete(scratch);
+			await rm(scratch, { recursive: true, force: true });
 		}
 	}
 
-	stop(): void {
-		this.auth.stop();
+	protected find(): string | null {
+		return findCli({ pin: 'RECODER_CODEX_BIN', command: 'codex', installed: ['.local', 'bin', 'codex'] }, this.env);
+	}
+
+	protected childEnv(): Record<string, string> {
+		return codexEnv(this.env);
+	}
+
+	/** `codex login status` exits 0 when signed in. */
+	protected async signIn(path: string): Promise<Pick<AgentStatus, 'signedIn'>> {
+		return { signedIn: (await this.output(path, ['login', 'status'], STATUS_TIMEOUT_MS)).code === 0 };
+	}
+
+	private requirePath(): string {
+		const path = this.find();
+
+		if (!path) throw new LlmError(0, `Codex is not installed. Install it with: ${INSTALL}`);
+
+		return path;
+	}
+
+	/**
+	 * Deletes the session the CLI saved for a run, which holds the review's prompts, and resolves once `codex delete`
+	 * has exited. Its exit code is not read: a session the CLI never saved has nothing to delete.
+	 */
+	private async forget(path: string, session: string): Promise<void> {
+		await this.output(path, ['delete', '--force', session], FORGET_TIMEOUT_MS);
+	}
+
+	/** Run a short CLI command in an empty directory, so it never sees the user's files. See {@link cliOutput}. */
+	private async output(
+		path: string,
+		args: string[],
+		timeoutMs: number,
+		signal?: AbortSignal
+	): Promise<{ code: number; stdout: string }> {
+		const cwd = await emptyDirectory('codex-empty');
+
+		return cliOutput([path, ...args], { env: codexEnv(this.env), cwd, timeoutMs, signal });
 	}
 }
 
-export const codex = new ChatGptProvider();
+/** The events of a single call, passed on to its callbacks: text to `onToken`, reasoning summaries to `onReasoning`. */
+function callEvents(opts: ChatOptions, onToken: ((text: string) => void) | undefined): (event: AgentEvent) => void {
+	return (event) => {
+		if (event.type === 'text') onToken?.(event.delta);
+		if (event.type === 'reasoning') opts.onReasoning?.(event.delta);
+	};
+}
 
-process.once('exit', () => codex.stop());
+export const codex = new CodexAgent();
+
+stopOnShutdown('codex', () => codex.stop());

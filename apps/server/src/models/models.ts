@@ -4,9 +4,8 @@
  * API-key models use OpenAI-compatible chat completions, so one client covers
  * vLLM (`http://host:8000/v1`), OpenRouter
  * (`https://openrouter.ai/api/v1`), and DashScope
- * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). Subscription
- * entries explicitly select the direct ChatGPT OAuth adapter instead; they never
- * inherit an API endpoint or key from the shared environment.
+ * (`https://dashscope-intl.aliyuncs.com/compatible-mode/v1`). A model an agent
+ * CLI runs has an id `<agent id>:<model>` and goes through that agent's adapter.
  *
  * With no models saved, the shared environment names one:
  *
@@ -215,16 +214,6 @@ function entryConfig(entry: StoredModelEntry | undefined, requested: ReasoningEf
 
 	if (entry) {
 		const reasoningEffort = supportedEffort(requested ?? undefined, entry.efforts, entry.defaultEffort);
-
-		if (entry.provider === 'codex') {
-			return {
-				provider: 'codex',
-				model: entry.model,
-				baseUrl: '',
-				apiKey: '',
-				reasoningEffort: reasoningEffort ?? entry.defaultEffort ?? 'medium'
-			};
-		}
 
 		const runtime = resolveRuntime(entry.model, entry.runtime);
 		const hosted = hostedProvider(entry.source);

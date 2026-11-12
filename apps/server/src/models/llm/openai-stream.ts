@@ -59,7 +59,7 @@ function idleWatchdog(controller: AbortController, idleMs: number) {
 function applyChunk(chunk: ChatChunk, state: StreamState, opts: ChatOptions, onToken: (text: string) => void): void {
 	const choice = chunk.choices?.[0];
 
-	if (chunk.usage) opts.onUsage?.(normalizeTokenUsage(chunk.usage, 'openai-compatible'));
+	if (chunk.usage) opts.onUsage?.(normalizeTokenUsage(chunk.usage));
 	if (chunk.error) state.error = chunk.error.message || 'Model stream failed';
 
 	if (choice?.finish_reason === 'length') {
