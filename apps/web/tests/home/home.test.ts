@@ -49,14 +49,18 @@ function makeHighReview(id: string, repoId: string, prNumber: number): Review {
 	};
 }
 
-test('two repositories with the same pull request number resolve each brief reference to its own repository', () => {
+function collidingApiItems(): BriefPick[] {
 	const acme = makeRepo('r-acme', 'api', 'https://github.com/acme/api');
 	const beta = makeRepo('r-beta', 'api', 'https://github.com/beta/api');
 
-	const items: BriefPick[] = [
+	return [
 		{ repo: acme, pr: makePr(42, 30, 'Acme change') },
 		{ repo: beta, pr: makePr(42, 400, 'Beta change'), review: makeHighReview('rev-beta', 'r-beta', 42) }
 	];
+}
+
+test('two repositories with the same pull request number resolve each brief reference to its own repository', () => {
+	const items = collidingApiItems();
 
 	const singleSegments = briefSegments(
 		'**Evening.** beta/api #42 has **one high finding**.',
@@ -117,7 +121,7 @@ test('the local fallback brief emits repository-scoped references and labels whe
 	const labels = repoLabels([acme, beta]);
 	const fallback = fallbackBrief(items, 'Aidan', 'morning', labels);
 	const actions = briefActions(items, fallback.refs);
-	const prSegments = briefSegments(fallback.text, fallback.refs, items).filter((seg) => seg.kind === 'pr');
+	const prSegments = briefSegments(fallback.text, fallback.refs, items, labels).filter((seg) => seg.kind === 'pr');
 
 	expect(fallback.text).toContain('acme/api #42');
 	expect(fallback.text).toContain('beta/api #42');
@@ -136,4 +140,21 @@ test('filtering pull requests matches the repository owner derived from the repo
 	);
 
 	expect(matchesPr(pr, acme, { query: 'beta', isUrl: false, pastedNumber: null, pastedRepo: undefined })).toBe(false);
+});
+
+test('emphasized pull request references resolve inside strong text without shifting later pull request links', () => {
+	const items = collidingApiItems();
+
+	const segments = briefSegments(
+		'**beta/api #42** is urgent; acme/api #42 can wait.',
+		[
+			{ repoId: 'r-beta', number: 42 },
+			{ repoId: 'r-acme', number: 42 }
+		],
+		items
+	);
+
+	const prSegments = segments.filter((seg) => seg.kind === 'pr');
+
+	expect(prSegments.map((seg) => (seg.kind === 'pr' ? seg.item?.repo.id : null))).toEqual(['r-beta', 'r-acme']);
 });

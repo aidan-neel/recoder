@@ -1,25 +1,23 @@
 <script lang="ts">
-	import { repoLabels, shortAge, type Repo, type Review } from '@recoder/shared';
+	import { shortAge, type Repo, type Review } from '@recoder/shared';
 	import { Badge } from '@sivir-ui/svelte/components/badge';
 	import * as HoverCard from '@sivir-ui/svelte/components/hover-card';
 	import ProviderMark from '$lib/components/settings/provider-mark.svelte';
 	import { prStatus, type BriefPick } from '$lib/home/home';
-	import { openPrs } from '$lib/home/open-prs.svelte';
 	import { hostedUrl } from '$lib/shell/links';
 
 	interface Props {
 		item: BriefPick;
 		/** The link text, as the brief wrote it. */
 		text: string;
+		labels: ReadonlyMap<string, string>;
 		onOpen: (review: Review, repo: Repo) => void;
 	}
 
-	let { item, text, onOpen }: Props = $props();
+	let { item, text, labels, onOpen }: Props = $props();
 
 	const status = $derived(prStatus(item.review));
-	const repoLabel = $derived(
-		repoLabels(openPrs.repos.length > 0 ? openPrs.repos : [item.repo]).get(item.repo.id) ?? item.repo.name
-	);
+	const repoLabel = $derived(labels.get(item.repo.id) ?? item.repo.name);
 
 	/** Where an unreviewed PR opens: its host, or nowhere for a local repo. */
 	const hosted = $derived(hostedUrl(item.pr.url));

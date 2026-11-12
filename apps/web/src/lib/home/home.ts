@@ -1,4 +1,5 @@
 import {
+	endsWithRepoLabel,
 	repoLabels,
 	type HomeBriefPr,
 	type HomeBriefRef,
@@ -203,15 +204,19 @@ export type BriefSegment =
 	| { kind: 'text' | 'strong'; text: string }
 	| { kind: 'pr'; text: string; number: number; ref?: HomeBriefRef; item?: BriefPick };
 
-function resolveSegmentRef(
-	num: number,
-	tokenTotal: number,
-	list: ReadonlyArray<HomeBriefRef>,
-	cursor: number,
-	preceding: string,
-	items: ReadonlyArray<BriefPick>,
-	labels: ReadonlyMap<string, string>
-): { ref: HomeBriefRef | undefined; nextCursor: number } {
+interface SegmentRefContext {
+	num: number;
+	tokenTotal: number;
+	list: ReadonlyArray<HomeBriefRef>;
+	cursor: number;
+	preceding: string;
+	items: ReadonlyArray<BriefPick>;
+	labels: ReadonlyMap<string, string>;
+}
+
+function resolveSegmentRef(ctx: SegmentRefContext): { ref: HomeBriefRef | undefined; nextCursor: number } {
+	const { num, tokenTotal, list, cursor, preceding, items, labels } = ctx;
+
 	if (list.length === 0) return { ref: undefined, nextCursor: cursor };
 
 	if (tokenTotal <= list.length) {
@@ -231,11 +236,52 @@ function resolveSegmentRef(
 
 	const label = labels.get(candidate.repoId);
 
-	if (label && preceding.trimEnd().toLowerCase().endsWith(label.toLowerCase())) {
+	if (label && endsWithRepoLabel(preceding, label)) {
 		return { ref: candidate, nextCursor: cursor + 1 };
 	}
 
 	return { ref: undefined, nextCursor: cursor };
+}
+
+type RawBriefToken =
+	{ kind: 'text' | 'strong'; text: string } | { kind: 'pr'; text: string; number: number; emphasized: boolean };
+
+function tokenizeBrief(text: string): RawBriefToken[] {
+	const tokens: RawBriefToken[] = [];
+
+	for (const part of text.split(/(\*\*[^*]+\*\*|#\d+\b)/g)) {
+		if (!part) continue;
+
+		if (part.startsWith('**') && part.endsWith('**')) {
+			for (const sub of part.slice(2, -2).split(/(#\d+\b)/g)) {
+				if (!sub) continue;
+
+				if (/^#\d+$/.test(sub)) {
+					tokens.push({ kind: 'pr', text: sub, number: Number(sub.slice(1)), emphasized: true });
+				} else {
+					tokens.push({ kind: 'strong', text: sub });
+				}
+			}
+		} else if (/^#\d+$/.test(part)) {
+			tokens.push({ kind: 'pr', text: part, number: Number(part.slice(1)), emphasized: false });
+		} else {
+			tokens.push({ kind: 'text', text: part });
+		}
+	}
+
+	return tokens;
+}
+
+function appendSegment(segments: BriefSegment[], next: BriefSegment): void {
+	const last = segments[segments.length - 1];
+
+	if (last && (last.kind === 'text' || last.kind === 'strong') && last.kind === next.kind) {
+		last.text += next.text;
+
+		return;
+	}
+
+	segments.push(next);
 }
 
 /**
@@ -245,16 +291,15 @@ function resolveSegmentRef(
 export function briefSegments(
 	text: string,
 	refs: ReadonlyArray<HomeBriefRef> = [],
-	items: ReadonlyArray<BriefPick> = []
+	items: ReadonlyArray<BriefPick> = [],
+	labels: ReadonlyMap<string, string> = repoLabels(items.map((item) => item.repo))
 ): BriefSegment[] {
-	const rawParts = text.split(/(\*\*[^*]+\*\*|#\d+\b)/g);
+	const tokens = tokenizeBrief(text);
 	const tokenCounts = new Map<number, number>();
 
-	for (const part of rawParts) {
-		if (/^#\d+$/.test(part)) {
-			const num = Number(part.slice(1));
-
-			tokenCounts.set(num, (tokenCounts.get(num) ?? 0) + 1);
+	for (const token of tokens) {
+		if (token.kind === 'pr') {
+			tokenCounts.set(token.number, (tokenCounts.get(token.number) ?? 0) + 1);
 		}
 	}
 
@@ -268,50 +313,46 @@ export function briefSegments(
 	}
 
 	const byKey = new Map(items.map((item) => [prKey(item.repo.id, item.pr.number), item] as const));
-	const labels = repoLabels(items.map((item) => item.repo));
 	const cursors = new Map<number, number>();
 	const segments: BriefSegment[] = [];
 	let plainSoFar = '';
 
-	for (const part of rawParts) {
-		if (!part) continue;
+	for (const token of tokens) {
+		if (token.kind !== 'pr') {
+			appendSegment(segments, token);
+			plainSoFar += token.text;
+			continue;
+		}
 
-		if (part.startsWith('**') && part.endsWith('**')) {
-			const inner = part.slice(2, -2);
+		const cursor = cursors.get(token.number) ?? 0;
 
-			segments.push({ kind: 'strong', text: inner });
-			plainSoFar += inner;
-		} else if (/^#\d+$/.test(part)) {
-			const number = Number(part.slice(1));
-			const cursor = cursors.get(number) ?? 0;
+		const { ref, nextCursor } = resolveSegmentRef({
+			num: token.number,
+			tokenTotal: tokenCounts.get(token.number) ?? 0,
+			list: refsByNumber.get(token.number) ?? [],
+			cursor,
+			preceding: plainSoFar,
+			items,
+			labels
+		});
 
-			const { ref, nextCursor } = resolveSegmentRef(
-				number,
-				tokenCounts.get(number) ?? 0,
-				refsByNumber.get(number) ?? [],
-				cursor,
-				plainSoFar,
-				items,
-				labels
-			);
+		cursors.set(token.number, nextCursor);
 
-			cursors.set(number, nextCursor);
+		const item = ref ? byKey.get(prKey(ref.repoId, ref.number)) : undefined;
 
-			const item = ref ? byKey.get(prKey(ref.repoId, ref.number)) : undefined;
-
-			segments.push({
+		if (token.emphasized && !ref && !item) {
+			appendSegment(segments, { kind: 'strong', text: token.text });
+		} else {
+			appendSegment(segments, {
 				kind: 'pr',
-				text: part,
-				number,
+				text: token.text,
+				number: token.number,
 				...(ref ? { ref } : {}),
 				...(item ? { item } : {})
 			});
-
-			plainSoFar += part;
-		} else {
-			segments.push({ kind: 'text', text: part });
-			plainSoFar += part;
 		}
+
+		plainSoFar += token.text;
 	}
 
 	return segments;

@@ -40,7 +40,7 @@
 
 	const name = $derived(firstName(shellState.account?.user));
 	const part = $derived(dayPart());
-	const labels = $derived(repoLabels(openPrs.repos.length > 0 ? openPrs.repos : items.map((item) => item.repo)));
+	const labels = $derived(repoLabels([...openPrs.repos, ...items.map((item) => item.repo)]));
 	const briefPrs = $derived(toBriefPrs(items, labels));
 	const currentSnapshot = $derived(briefSnapshotKey(briefPrs));
 	const briefReady = $derived(openPrs.count !== null && !recentSessions.loading);
@@ -139,7 +139,7 @@
 	 * The brief split into text, emphasis and PR refs. The markup renders them on tight lines, since
 	 * whitespace between those tags shows as stray spaces.
 	 */
-	const segments = $derived(briefText ? briefSegments(briefText, activeRefs, items) : []);
+	const segments = $derived(briefText ? briefSegments(briefText, activeRefs, items, labels) : []);
 
 	const today = new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
 
@@ -172,7 +172,7 @@
 					<Typography.Text class="home-brief ai-voice">
 						{#each segments as segment, i (i)}{#if segment.kind === 'strong'}<span class="text-fg">{segment.text}</span
 								>{:else if segment.kind === 'pr' && segment.item}{@const item = segment.item}<span
-									class="brief-ref-wrap"><BriefPrRef {item} text={segment.text} {onOpen} /></span
+									class="brief-ref-wrap"><BriefPrRef {item} text={segment.text} {labels} {onOpen} /></span
 								>{:else}{segment.text}{/if}{/each}
 					</Typography.Text>
 				</div>
