@@ -1,7 +1,7 @@
 'use client';
 
 import type { AgentStatus } from '@recoder/shared';
-import { Button, CodeBlock, StatusGlyph, type GlyphKind } from '@recoder/ui';
+import { Button, StatusGlyph, type GlyphKind } from '@recoder/ui';
 import { RotateCw } from 'lucide-react';
 import type { ReactNode } from 'react';
 
@@ -9,6 +9,7 @@ import { cliDetail, cliFix, cliGlyph, cliState } from '@/lib/settings/providers/
 import { CHECK_FAILED, useCheckAgain } from '@/lib/settings/providers/use-check-again';
 import { useSettings } from '@/lib/settings/settings-store';
 
+import { Command } from './providers/provider-notice';
 import { SettingsGroup, SettingsRow } from './settings-group';
 
 interface GlyphNameProps {
@@ -65,7 +66,7 @@ function CliItem({ agent }: { agent: AgentStatus }) {
 			{fix ? (
 				<div className="cli-fix">
 					<p className="cli-fix-hint">{fix.hint}</p>
-					<CodeBlock code={fix.command} lang="bash" copy />
+					<Command command={fix.command} />
 				</div>
 			) : null}
 		</div>

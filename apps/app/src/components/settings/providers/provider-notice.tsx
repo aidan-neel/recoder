@@ -28,9 +28,12 @@ export function CheckAgain({ label }: { label: string }) {
 	);
 }
 
-/** A shell command to run by hand, in the kit's code block with its copy button. */
+/**
+ * What to run or set by hand, in the kit's code block with its copy button. It shows as plain text and wraps, since
+ * an agent's hint can be a sentence ("pi, then type /login") and must never be cut.
+ */
 export function Command({ command }: { command: string }) {
-	return <CodeBlock code={command} lang="bash" copy className="provider-command" />;
+	return <CodeBlock code={command} copy wrap className="provider-command" />;
 }
 
 /**
