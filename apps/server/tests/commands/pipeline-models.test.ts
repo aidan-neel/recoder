@@ -59,7 +59,8 @@ function modelsByRun(calls: RunTokenCall[]): Record<string, string[]> {
 }
 
 /** A run segment as the tests compare it, without its start time. */
-function segment(index: number, models: string[]): Omit<PipelineRun, 'startedAt'> {
+/** A run's identity without its measured timings, which vary from run to run. */
+function segment(index: number, models: string[]): Omit<PipelineRun, 'startedAt' | 'queueDelay'> {
 	return { index, orchestrator: models[0]!, subagent: models[1]!, lockMisses: 0, tokenBudget: 'medium' };
 }
 
@@ -82,7 +83,7 @@ test('a review keeps the models it started on for every call when the pick chang
 	expect(calls).toHaveLength(requests.length);
 	expect([...new Set(requests.map((request) => request.model))].sort()).toEqual(FIRST);
 	expect(modelsByRun(calls)).toEqual({ 'run 0': FIRST });
-	expect(runs?.map(({ startedAt: _, ...run }) => run)).toEqual([segment(0, FIRST)]);
+	expect(runs?.map(({ startedAt: _, queueDelay: __, ...run }) => run)).toEqual([segment(0, FIRST)]);
 	expect(calls.filter((call) => call.lockMiss)).toEqual([]);
 }, 60000);
 
@@ -110,5 +111,5 @@ test('a replay under a new pick runs as its own run on the new models, apart fro
 	expect((await db.reviews.get(reviewId))?.status).toBe('passed');
 	expect(replayModels.every((model) => SECOND.includes(model))).toBe(true);
 	expect(modelsByRun(calls)).toEqual({ 'run 0': FIRST, 'run 1': replayModels });
-	expect(runs?.map(({ startedAt: _, ...run }) => run)).toEqual([segment(0, FIRST), segment(1, SECOND)]);
+	expect(runs?.map(({ startedAt: _, queueDelay: __, ...run }) => run)).toEqual([segment(0, FIRST), segment(1, SECOND)]);
 }, 60000);
