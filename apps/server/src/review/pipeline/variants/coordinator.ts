@@ -10,15 +10,18 @@ import { KEPT_SPECIALISTS, type CoordinatorAnswer } from './specialist-plan.js';
 const text = (max: number) => z.string().trim().max(max);
 
 /**
- * The coordinator's reply. Both lists are required, so a reply that is not a plan (`{"findings":[]}`) takes the
- * no-plan fallback instead of reading as one that omits every optional specialist. Unknown specialists and slices
- * are ignored by the plan, not rejected here.
+ * The coordinator's reply. `dispatches` is required, so a reply that is not a plan (`{"findings":[]}`) takes the
+ * no-plan fallback instead of reading as one that omits every optional specialist. A plan that leaves `omitted`
+ * out omits nobody. Unknown specialists and slices are ignored by the plan, not rejected here.
  */
 const coordinationSchema = z.object({
 	dispatches: z
 		.array(z.object({ specialist: text(40), slices: z.array(text(80)).max(50), question: text(600).default('') }))
 		.max(40),
-	omitted: z.array(z.object({ specialist: text(40), reason: text(600) })).max(16)
+	omitted: z
+		.array(z.object({ specialist: text(40), reason: text(600) }))
+		.max(16)
+		.default([])
 });
 
 const SYSTEM = `Role: coordinator of a specialist review tree. Each specialist reviewer applies one lens to the slices of a code change you give it. Decide which specialists read which slices, and the one question each should settle first.

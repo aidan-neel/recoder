@@ -342,6 +342,36 @@ test('a new commit resolves the thread of a fixed finding and does not repost a 
 	expect(saved.findingComments?.['kept-2']).toMatchObject({ id: '1001', inline: true });
 });
 
+test('a carried finding whose fingerprint changed keeps its comment, and its thread resolves once it is fixed', async () => {
+	const github = fakeGithub();
+	const kept = finding('kept', { line: 3 });
+
+	const moved = {
+		...kept,
+		fingerprint: 'fp-kept-moved',
+		history: { firstSeenSha: 'abcdef1234', state: 'carried' as const }
+	};
+
+	await publishFindingsReview((await review({ findings: [kept], createdAt: '2026-01-01T00:00:00.000Z' })).id);
+
+	const carried = await publishFindingsReview(
+		(await review({ headSha: 'fedcba9876', findings: [moved], createdAt: '2026-01-02T00:00:00.000Z' })).id
+	);
+
+	await publishFindingsReview(
+		(
+			await review({
+				headSha: '0123456789',
+				findings: [],
+				resolved: [{ finding: moved, reason: 'bun test now passes', resolvedAtSha: '0123456789' }]
+			})
+		).id
+	);
+
+	expect(carried.findingComments?.kept).toMatchObject({ id: '1000', inline: true });
+	expect(github.state.resolvedThreads).toEqual(['thread-1000']);
+});
+
 test('two concurrent requests for the same pull request submit one review', async () => {
 	const github = fakeGithub();
 	const { id } = await review({ findings: [finding('a')] });

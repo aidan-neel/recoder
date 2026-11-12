@@ -3,11 +3,10 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Review } from '@recoder/shared';
-import { findingForgeStanding } from '../../../src/review/history/forge-standing';
 import { withFindingHistory } from '../../../src/review/history/history';
 import { closeStore, db, reviewDiffs } from '../../../src/store';
 import { testReview } from '../../helpers/review';
-import { FIRST_PUSH, REVERTED_PUSH, STALE_CLAIM, UNRELATED_PUSH, cacheFinding } from './fixtures';
+import { FIRST_PUSH, STALE_CLAIM, UNRELATED_PUSH, cacheFinding } from './fixtures';
 
 /** Each test opens the store in its own temp data directory, so a restart reads only what it wrote. */
 beforeEach(async () => {
@@ -54,21 +53,4 @@ test('history and the dismissal reason carried to a new push are still there aft
 	expect((await db.reviews.get(next.id))?.findings).toMatchObject([
 		{ id: 'old-stale', decision: { reason: 'wrong' }, history: { firstSeenSha: 'sha-1', state: 'carried' } }
 	]);
-});
-
-test('a carried finding reads as already posted, and a resolved one as posted and resolved', async () => {
-	await firstReview();
-
-	const carriedReview = await savedReview('sha-2', '2026-11-02T00:00:00.000Z', UNRELATED_PUSH, { status: 'running' });
-	const carried = { ...carriedReview, ...(await withFindingHistory(carriedReview.id, [], [])) };
-
-	expect(await findingForgeStanding(carried, 'old-stale')).toEqual({ posted: COMMENT, resolved: null });
-
-	const revertedReview = await savedReview('sha-3', '2026-11-03T00:00:00.000Z', REVERTED_PUSH, { status: 'running' });
-	const reverted = { ...revertedReview, ...(await withFindingHistory(revertedReview.id, [], [])) };
-
-	expect(await findingForgeStanding(reverted, 'old-stale')).toMatchObject({
-		posted: COMMENT,
-		resolved: { resolvedAtSha: 'sha-3' }
-	});
 });

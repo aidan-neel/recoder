@@ -100,7 +100,7 @@ async function prepare(review: Review): Promise<Submission> {
 	const resolved = review.resolved ?? [];
 	const sources = [...(await earlierReviews(review)), review];
 	const markers = [...review.findings, ...resolved.map((item) => item.finding)].map(findingMarker);
-	const recorded = recordedComments(sources);
+	const recorded = recordedComments(sources, review);
 	const posted = new Map([...recorded, ...inlineComments(await reviews.inlineByMarker(markers))]);
 
 	const plan = planFindingsReview({
@@ -168,8 +168,14 @@ async function earlierReviews(review: Review): Promise<Review[]> {
 	return (await otherPullReviews(review)).filter((other) => other.createdAt <= review.createdAt);
 }
 
-/** Comments a review of the pull request recorded for a finding, by the finding's marker. */
-function recordedComments(sources: readonly Review[]): Map<string, ReviewFindingComment> {
+/**
+ * Comments a review of the pull request recorded for a finding, by the
+ * finding's marker. A finding carried across pushes keeps its id while its
+ * fingerprint follows its line and category, so a comment an earlier review
+ * recorded under that id also counts for the finding as `review` holds it,
+ * open or resolved.
+ */
+function recordedComments(sources: readonly Review[], review: Review): Map<string, ReviewFindingComment> {
 	const recorded = new Map<string, ReviewFindingComment>();
 
 	for (const source of sources) {
@@ -180,7 +186,24 @@ function recordedComments(sources: readonly Review[]): Map<string, ReviewFinding
 		}
 	}
 
+	for (const finding of [...review.findings, ...(review.resolved ?? []).map((entry) => entry.finding)]) {
+		const comment = commentUnderId(sources, finding.id);
+
+		if (comment && !recorded.has(findingMarker(finding))) recorded.set(findingMarker(finding), comment);
+	}
+
 	return recorded;
+}
+
+/** The comment one of `sources` recorded under the finding id `id`. */
+function commentUnderId(sources: readonly Review[], id: string): ReviewFindingComment | undefined {
+	for (const source of sources) {
+		const comment = source.findingComments?.[id];
+
+		if (comment) return comment;
+	}
+
+	return undefined;
 }
 
 /** Inline comments found on the forge, by marker, as finding comment records. */

@@ -197,17 +197,34 @@ describe('the specialist tree', () => {
 		expect(await reviewersOfTree()).toContain('specialist-performance');
 	});
 
-	test("the coordinator's decisions and the tasks it left unassigned are recorded in the conversation", async () => {
+	/** The specialist plan a review of the two-unit diff writes into the conversation. */
+	async function specialistPlanMessage(): Promise<string> {
 		const messages: Omit<ReviewChatMessage, 'at' | 'from'>[] = [];
-
-		stubTree({ dispatches: [], omitted: [{ specialist: 'performance', reason: 'no loops' }] }, []);
 
 		await runAdaptiveReview(
 			{ diff: TWO_UNIT_DIFF, sandboxPath: null },
 			{ onMessage: (message) => messages.push(message) }
 		);
 
-		const plan = messages.find((message) => message.id === 'message_specialist_plan')?.text ?? '';
+		return messages.find((message) => message.id === 'message_specialist_plan')?.text ?? '';
+	}
+
+	test('a plan that leaves out its omitted list is still taken as a plan', async () => {
+		stubTree(
+			{ dispatches: [{ specialist: 'performance', slices: ['reviewer-1'], question: 'Is the loop bounded?' }] },
+			[]
+		);
+
+		const plan = await specialistPlanMessage();
+
+		expect(plan).toContain('Dispatched by the coordinator.');
+		expect(plan).not.toContain('gave no plan');
+	});
+
+	test("the coordinator's decisions and the tasks it left unassigned are recorded in the conversation", async () => {
+		stubTree({ dispatches: [], omitted: [{ specialist: 'performance', reason: 'no loops' }] }, []);
+
+		const plan = await specialistPlanMessage();
 
 		expect(plan).toContain('performance: omitted. The coordinator omitted it: no loops.');
 		expect(plan).toContain('performance does not read reviewer-1');

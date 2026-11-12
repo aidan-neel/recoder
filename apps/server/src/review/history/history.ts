@@ -8,7 +8,7 @@ import { diffFiles } from './code-change.js';
  * The passed reviews of the same pull request created before `review`,
  * newest first: the history its findings are set against.
  */
-export async function earlierReviews(review: Review): Promise<Review[]> {
+async function earlierReviews(review: Review): Promise<Review[]> {
 	const reviews = await db.reviews.list();
 
 	return reviews
