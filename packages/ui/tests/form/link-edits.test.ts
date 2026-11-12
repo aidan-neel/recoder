@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
+	deleteKind,
 	deletionRange,
 	extendOver,
+	inputData,
 	pasteText,
 	snapSelection,
 	stepOver,
@@ -64,6 +66,43 @@ describe('link field edits', () => {
 		expect(deletionRange(doc, 'forward', { start: 2, end: 2 }, { start: 2, end: 3 })).toEqual({ start: 2, end });
 	});
 
+	test('takes only the adjacent embed as a word on backward and forward word deletion', () => {
+		const afterWord = docFromText(`see ${PR}`);
+		const end = afterWord.text.length;
+		const beforeWord = docFromText(`${PR} next`);
+
+		expect(
+			deletionRange(afterWord, deleteKind('deleteWordBackward'), { start: end, end }, { start: end, end })
+		).toEqual({ start: 4, end });
+
+		expect(deletionRange(afterWord, deleteKind('deleteWordBackward'), { start: end, end }, { start: 0, end })).toEqual({
+			start: 4,
+			end
+		});
+
+		expect(
+			deletionRange(
+				beforeWord,
+				deleteKind('deleteWordForward'),
+				{ start: 0, end: 0 },
+				{ start: 0, end: beforeWord.text.length }
+			)
+		).toEqual({ start: 0, end: PR.length });
+	});
+
+	test('falls back to one unit in the deletion direction when a word or line target is collapsed', () => {
+		const doc = docFromText('abc');
+
+		expect(deletionRange(doc, deleteKind('deleteWordBackward'), { start: 3, end: 3 }, { start: 3, end: 3 })).toEqual({
+			start: 2,
+			end: 3
+		});
+
+		expect(deletionRange(doc, deleteKind('deleteSoftLineForward'), { start: 0, end: 0 }, { start: 0, end: 0 })).toEqual(
+			{ start: 0, end: 1 }
+		);
+	});
+
 	test('grows a word deletion that reaches into an embed to take it whole', () => {
 		const doc = docFromText(`a ${PR} b`);
 
@@ -73,6 +112,19 @@ describe('link field edits', () => {
 			start: 2,
 			end: 2 + PR.length
 		});
+	});
+
+	test('reads InputEvent.data when dataTransfer carries no plain text', () => {
+		/** Minimal `DataTransfer` stub returning a fixed `text/plain` payload. */
+		const emptyTransfer = { getData: () => '' } as unknown as DataTransfer;
+
+		/** Minimal `DataTransfer` stub returning pasted plain text. */
+		const filledTransfer = {
+			getData: (format: string) => (format === 'text/plain' ? 'from-transfer' : '')
+		} as unknown as DataTransfer;
+
+		expect(inputData({ data: 'é', dataTransfer: emptyTransfer })).toBe('é');
+		expect(inputData({ data: 'ignored', dataTransfer: filledTransfer })).toBe('from-transfer');
 	});
 
 	test('moves a caret inside an embed to its nearer edge, and keeps a backward selection backward', () => {

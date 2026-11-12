@@ -110,6 +110,8 @@ export function LinkField({
 	className,
 	style,
 	id,
+	'aria-label': ariaLabel,
+	'aria-labelledby': labelledBy,
 	'aria-describedby': describedBy,
 	onKeyDown,
 	onMouseDown,
@@ -124,11 +126,11 @@ export function LinkField({
 	const [editor, setEditor] = useState<LinkEditor | null>(null);
 	const [card, setCard] = useState<CardTarget | null>(null);
 	const hover = useRef(0);
-	const latest = useRef({ value, onValueChange, linkFacts, maxLength });
+	const latest = useRef({ value, onValueChange, linkFacts, maxLength, disabled });
 	const looks = useRef(new Map<string, LinkDescription>());
 
 	useLayoutEffect(() => {
-		latest.current = { value, onValueChange, linkFacts, maxLength };
+		latest.current = { value, onValueChange, linkFacts, maxLength, disabled };
 	});
 
 	const look = useCallback((url: string): EmbedLook => {
@@ -147,6 +149,7 @@ export function LinkField({
 		const host: EditorHost = {
 			look,
 			maxLength: () => latest.current.maxLength,
+			disabled: () => latest.current.disabled,
 			onChange: (text) => latest.current.onValueChange(text),
 			onCaret: () => setCard((open) => caretCard(current, open, look))
 		};
@@ -171,8 +174,8 @@ export function LinkField({
 	}, [node, disabled]);
 
 	useLayoutEffect(() => {
-		if (editor && autoFocus) editor.focusAtEnd();
-	}, [editor, autoFocus]);
+		if (editor && autoFocus && !disabled) editor.focusAtEnd();
+	}, [editor, autoFocus, disabled]);
 
 	useLayoutEffect(() => {
 		editor?.setValue(value);
@@ -187,7 +190,15 @@ export function LinkField({
 	/** Opens or closes the pointer's card after a short rest, so a pointer passing over an embed shows nothing. */
 	const schedule = useCallback((next: CardTarget | null, delay: number) => {
 		window.clearTimeout(hover.current);
-		hover.current = window.setTimeout(() => setCard((open) => (open?.via === 'caret' && !next ? open : next)), delay);
+
+		hover.current = window.setTimeout(() => {
+			setCard((open) => {
+				if (next && !next.element.isConnected) return open;
+				if (!next && open?.via === 'caret') return open;
+
+				return next;
+			});
+		}, delay);
 	}, []);
 
 	function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
@@ -214,6 +225,7 @@ export function LinkField({
 		event.preventDefault();
 
 		if (event.ctrlKey || event.metaKey) openLink(urlOf(embed) ?? '');
+		else if (disabled) return;
 		else if (event.detail === 2) editor.selectEmbed(embed);
 		else editor.placeBeside(embed, event.clientX);
 	}
@@ -234,6 +246,7 @@ export function LinkField({
 		if (embedOf(event.target instanceof Node ? event.target : null)) schedule(null, HOVER_CLOSE_MS);
 	}
 
+	/** CSS custom properties for row sizing lack keys on `CSSProperties`. */
 	const rows = {
 		'--textarea-min-rows': minRows,
 		'--textarea-max-rows': autosize && maxRows ? maxRows : undefined
@@ -246,6 +259,8 @@ export function LinkField({
 				id={field.id}
 				role="textbox"
 				aria-multiline="true"
+				aria-label={ariaLabel}
+				aria-labelledby={labelledBy ?? (ariaLabel ? undefined : field.labelId)}
 				aria-placeholder={placeholder}
 				aria-describedby={field.describedBy}
 				aria-invalid={field.invalid || undefined}
@@ -274,9 +289,29 @@ export function LinkField({
 	);
 }
 
+/** Whether two looks carry the same facts for the same URL, so an unchanged card keeps its reference. */
+function sameLook(first: EmbedLook, second: EmbedLook): boolean {
+	return (
+		first.description.url === second.description.url &&
+		first.fact?.title === second.fact?.title &&
+		first.fact?.status === second.fact?.status &&
+		first.fact?.tone === second.fact?.tone
+	);
+}
+
+/** Keeps a pointer-opened card up to date while its embed stays in the document; closes it once removed. */
+function pointerCard(open: CardTarget, look: (url: string) => EmbedLook): CardTarget | null {
+	if (!open.element.isConnected) return null;
+
+	const nextLook = look(open.look.description.url);
+
+	return sameLook(open.look, nextLook) ? open : { ...open, look: nextLook };
+}
+
 /**
- * The card the caret asks for: the embed beside it, unless the person is
- * typing; a card the pointer opened stays until the pointer leaves.
+ * The card to show after the caret moves, an edit lands, `setValue` runs or
+ * `linkFacts` refreshes: the embed beside the caret (unless just edited), else
+ * a still-connected pointer card with fresh facts, else none.
  */
 function caretCard(
 	editor: LinkEditor | null,
@@ -285,10 +320,11 @@ function caretCard(
 ): CardTarget | null {
 	const beside = editor && !editor.editedLast ? editor.embedBesideCaret() : null;
 
-	if (!beside) return open?.via === 'pointer' ? open : null;
-	if (open?.element === beside.element) return open;
+	if (!beside) return open?.via === 'pointer' ? pointerCard(open, look) : null;
 
-	const url = urlOf(beside.element) ?? '';
+	const nextLook = look(urlOf(beside.element) ?? '');
 
-	return { element: beside.element, look: look(url), via: 'caret' };
+	if (open?.element === beside.element && open.via === 'caret' && sameLook(open.look, nextLook)) return open;
+
+	return { element: beside.element, look: nextLook, via: 'caret' };
 }

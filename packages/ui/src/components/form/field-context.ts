@@ -2,9 +2,10 @@
 
 import { createContext, use } from 'react';
 
-/** What a `Field` tells the control inside it: the id its label points at, its message id, and whether it failed. */
+/** What a `Field` tells the control inside it: the id its label points at, the label's id, its message id, and whether it failed. */
 interface FieldControl {
 	id?: string;
+	labelId?: string;
 	describedBy?: string;
 	invalid: boolean;
 }
@@ -24,6 +25,7 @@ export function useFieldControl({ id, describedBy, invalid }: ControlProps): Fie
 
 	return {
 		id: id ?? field?.id,
+		labelId: field?.labelId,
 		describedBy: described || undefined,
 		invalid: Boolean(invalid ?? field?.invalid)
 	};
