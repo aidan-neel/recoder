@@ -178,6 +178,7 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
 - A slice can be larger than the first evidence round (24,000 characters). The reviewer's prompt names the hunks that round did not reach (`unreadHunks` in `pool.ts`), and the reviewer pages them with `readDiff` before it lists them as examined. It has more turns than a lens had for that reason. A hunk the reviewer neither examined nor reported a gap for, and that the first round did not show, is marked partially covered.
 - `partitionUnits` still cuts brief units of at most `unitBudgetChars` (24,000), which the intent stage summarizes one call each (`distillIntent`). `briefBlock` adds the brief of a reviewer's files to its prompt, with the open questions for every reviewer except one of a documentation-only slice. `UnitBrief` is defined in `apps/server/src/review/pipeline/intent/unit-brief.ts`.
 - Coverage has one role, `reviewer` (`COVERAGE_ROLE`). `retryFailedUnits` runs each failed reviewer once more, as `retry-reviewer-1` or the halves `retry-reviewer-1-a` and `-b`.
+- `variantStage` in `apps/server/src/review/pipeline/variants/stage.ts` reshapes the reviewers after the context stages, only when `RECODER_REVIEW_VARIANT` is set (issue #95). Unset, it returns at once and the reviewers are `partitionReviewers`' as above. `independent-pass` queues `independentPassUnits` (`variants/independent-pass.ts`), a copy of every slice as `independent-reviewer-N`, in the same pool: no reviewer's prompt holds another's findings, so the second pass never sees the first's, and consolidation merges what both report. `specialist-tree` asks `askCoordinator` (`variants/coordinator.ts`, one orchestrator call, token stage `other`) and turns its answer into units with `planSpecialists` (`variants/specialist-plan.ts`): one `specialist-<lens>` reviewer per specialist over the slices it was given, with the coordinator's question in its reason. Correctness, security, concurrency, api-contract and rules always read every slice they fit; a slice no specialist reads goes to the first that fits it; a failed coordinator call runs every specialist over every slice. Every decision (dispatched, kept, omitted, with the reason) and every task left unassigned goes to the orchestrator's message `message_specialist_plan` and the log. `planRequestedSubagents` (`variants/children.ts`) keeps each specialist's first 3 subagent requests. The stage grows the model-call budget and deadline by the reviewers it adds over the baseline, and a resume keeps the saved units.
 - With a lens selection, `partitionReviewers` keeps only the slices a selected lens fits and numbers the reviewers again; `skippedSlices` names the others, and `cutUnits` marks their hunks excluded in coverage with the reason (`CoverageLedger.exclude`). A review left with no reviewer makes no intent call.
 - Drops: none.
 - Tests:
@@ -187,6 +188,9 @@ The second `prepareSandbox` installs packages and runs baseline checks. It is in
   - `apps/server/tests/review/pipeline/lenses/selection.test.ts`
   - `apps/server/tests/review/pipeline/harness-lenses.test.ts`
   - `apps/server/tests/review/pipeline/harness-retries.test.ts`
+  - `apps/server/tests/review/pipeline/variants/stage.test.ts`: flag-off parity with `partitionReviewers`, the independent pass's isolation and merge, the tree's units and recorded plan.
+  - `apps/server/tests/review/pipeline/variants/specialist-plan.test.ts`
+  - `apps/server/tests/review/pipeline/variants/children.test.ts`
 
 ## 6. Reviewers and subagents
 

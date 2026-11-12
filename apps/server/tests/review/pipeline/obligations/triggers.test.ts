@@ -1,6 +1,7 @@
 import type { ObligationTrigger } from '@recoder/shared';
 import { describe, expect, test } from 'bun:test';
-import { file, hits, restoreEnvAfterEach, triggers } from './fixtures';
+import { restoreEnvAfterEach } from '../../../helpers/env';
+import { file, hits, triggers } from './fixtures';
 
 restoreEnvAfterEach(['RECODER_OBLIGATIONS_NEW_CODE']);
 

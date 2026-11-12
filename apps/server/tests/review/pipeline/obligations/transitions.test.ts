@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
-import { deriveFrom, file, hits, restoreEnvAfterEach, triggers } from './fixtures';
+import { restoreEnvAfterEach } from '../../../helpers/env';
+import { deriveFrom, file, hits, triggers } from './fixtures';
 
 restoreEnvAfterEach(['RECODER_OBLIGATIONS_TRANSITIONS']);
 

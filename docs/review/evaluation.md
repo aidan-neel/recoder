@@ -263,6 +263,34 @@ cd apps/server && bun src/eval/reviewer-audit.ts <report.json> <recoder.db> [--s
 - It prints each run's segments (one per pipeline run), calls by model, lock misses and verdict, then a summary.
 - Exit codes: 0 when no run is `MIXED`, 1 when any run is `MIXED`, 2 on a usage error. `MISSING` runs do not fail it.
 
+## Comparing Review Variants
+
+Issue #95 compares four arms on the same frozen dataset, models and judge. Each arm is a server setting, so run one server per arm (or restart between arms) and one benchmark per arm and repeat:
+
+| Arm | Server environment |
+| --- | --- |
+| 1. Baseline (eight-lens review) | none of the flags below |
+| 2. Mandatory investigations (#66) | `RECODER_OBLIGATIONS=1` |
+| 3. Specialist tree | `RECODER_REVIEW_VARIANT=specialist-tree` |
+| 4. Independent second pass | `RECODER_REVIEW_VARIANT=independent-pass` |
+
+Keep `RECODER_TEST_STRENGTH` off in every arm, and test a second model in its own arm, never mixed with an architecture arm.
+
+```sh
+RECODER_REVIEW_VARIANT=specialist-tree bun run --filter @recoder/server start
+bun run --filter @recoder/server eval:benchmark -- --dataset <dir> --runs 1 --repeat 1 --timeout 45
+bun run --filter @recoder/server eval:benchmark -- --dataset <dir> --runs 1 --repeat 2 --timeout 45
+bun run --filter @recoder/server eval:benchmark -- --dataset <dir> --runs 1 --repeat 3 --timeout 45
+bun run --filter @recoder/server eval:merge -- <arm merged.json> <repeat 1 report> <repeat 2 report> <repeat 3 report>
+bun run --filter @recoder/server eval:compare -- <baseline merged.json> <arm merged.json> --allow-diff flags
+```
+
+- Run at least three repeats per arm. `--timeout` is recorded as `execution.timeoutMs`; count the runs that timed out from each report.
+- The arm is recorded in `identity.flags` (`RECODER_REVIEW_VARIANT` or `RECODER_OBLIGATIONS`), so a comparison across arms refuses unless `--allow-diff flags` declares that difference. Check that `flags` is the only declared difference.
+- For the tree, read each review's `message_specialist_plan` message: it lists every dispatch decision with its reason and every task left unassigned. A defect lost by an omission is a labeled defect the baseline found in a slice the coordinator kept from that specialist.
+- Report candidate recall, published recall, unique defects per agent (`CandidateFinding.agent`), duplicate findings, audited precision, median and 95th-percentile time, and tokens. Cost is descriptive only.
+- Keep the current design unless the repeated results beat the run-to-run variation without unacceptable false findings, and confirm on a repository that did not guide the design.
+
 ## Rules for a Valid Comparison
 
 Enforced by `checkCompatibility`, run by `apps/server/src/eval/compare.ts` and `apps/server/src/eval/merge.ts`:

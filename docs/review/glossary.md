@@ -95,3 +95,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 **Identity.** Everything that decides a result, hashed so two reports can be told apart. Type `RunIdentity` in `apps/server/src/eval/identity.ts`.
 
 **Defect stage.** How far one planted defect got in one run: `found`, `verified`, `published`. Type `DefectStage` in `apps/server/src/eval/benchmark-stages.ts`.
+
+**Independent pass.** The `independent-pass` arm of `RECODER_REVIEW_VARIANT`: a second reviewer per slice (`independent-reviewer-N`) that never sees the first pass's findings. Built by `independentPassUnits` in `apps/server/src/review/pipeline/variants/independent-pass.ts`.
+
+**Specialist tree.** The `specialist-tree` arm of `RECODER_REVIEW_VARIANT`: a coordinator assigns slices to one-lens specialists (`specialist-<lens>`), each with at most 3 subagents. Planned by `planSpecialists` in `apps/server/src/review/pipeline/variants/specialist-plan.ts`; its record is `SpecialistPlan`.

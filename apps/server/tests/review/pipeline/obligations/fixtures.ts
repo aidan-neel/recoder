@@ -1,5 +1,5 @@
 import type { Obligation, ObligationTrigger } from '@recoder/shared';
-import { afterEach, beforeEach } from 'bun:test';
+import { beforeEach } from 'bun:test';
 import { mkdtempSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -9,6 +9,7 @@ import type { AdaptiveReviewInput } from '../../../../src/review/pipeline/harnes
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import { deriveObligations } from '../../../../src/review/pipeline/obligations/derive';
 import { loadRepoInventory } from '../../../../src/review/pipeline/repo-inventory/repo-inventory';
+import { restoreEnvAfterEach } from '../../../helpers/env';
 import { git } from '../../../helpers/git';
 import {
 	NOTHING,
@@ -136,18 +137,6 @@ export function stubInvestigations(
 
 		return modelReply({ message: 'ok', ...NOTHING });
 	}) as unknown as typeof fetch;
-}
-
-/** Puts each of `keys` back as it was before the calling file's tests, after each one. */
-export function restoreEnvAfterEach(keys: string[]): void {
-	const original = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
-
-	afterEach(() => {
-		for (const key of keys) {
-			if (original[key] === undefined) delete process.env[key];
-			else process.env[key] = original[key];
-		}
-	});
 }
 
 /**

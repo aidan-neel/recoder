@@ -6,7 +6,7 @@ The server reads the environment variables below. All are optional. An unset var
 
 ## Experiment flags, kill switches and tuning knobs
 
-- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are seven: `RECODER_OBLIGATIONS`, `RECODER_OBLIGATIONS_NEW_CODE`, `RECODER_OBLIGATIONS_TRANSITIONS`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`, `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`. No other variable is an opt-in flag.
+- **Experiment flags.** Off unless set to `1`. With the flag unset, the review must behave exactly as before the feature existed (flag-off parity, see [README.md](README.md)). There are seven: `RECODER_OBLIGATIONS`, `RECODER_OBLIGATIONS_NEW_CODE`, `RECODER_OBLIGATIONS_TRANSITIONS`, `RECODER_TEST_STRENGTH`, `RECODER_CALLER_SELECTION`, `RECODER_RESIDUAL`, `RECODER_CONTRACT_CHECKS`. `RECODER_REVIEW_VARIANT` is the one experiment flag that takes a name instead of `1`. No other variable is an opt-in flag.
 - **Kill switches.** On by default. Setting one turns a stage off: `RECODER_EXEC=off`, `RECODER_OVERLAY=off`, `RECODER_BASELINE_CACHE=off`, `RECODER_PACKAGE_PREP=0`, `RECODER_CANDIDATE_REPAIR=0`. Any other value leaves the stage on.
 - **Tuning knobs.** Every other variable. They size, place or credential work and do not add or remove a stage.
 
@@ -94,6 +94,8 @@ Read by `resolveLimits` in `apps/server/src/sandbox/host-load.ts`. Each must be 
 **RECODER_RESIDUAL_CAP**: Most residual passes one review launches, one per reviewer slice, at most as many as the subagent cap leaves room for. Default 6. A non-negative integer. Read only when the residual pass is on.
 
 **RECODER_CONTRACT_CHECKS**: `1` turns on contract checks. Each valid readability candidate whose smell is `stale-comment`, `misleading-name` or `hidden-side-effect` gets one second-look subagent on the specialist model, which decides whether the comment, name or doc is wrong or the code is. It counts inside the subagent cap. Read by `contractChecksOn` in `apps/server/src/review/pipeline/second-look/config.ts`.
+
+**RECODER_REVIEW_VARIANT**: names an experiment arm of issue #95; unset, the review is the baseline. `independent-pass` adds a second, complete review pass: one more reviewer per slice (`independent-reviewer-N`), with the same scope and lenses, that never sees the first pass's findings. `specialist-tree` asks a coordinator (one orchestrator call) which specialists read which slices, then runs one reviewer per specialist, each applying one lens (`specialist-<lens>`); correctness, security, concurrency, api-contract and rules always read every slice they fit, and each specialist may send at most 3 subagents, inside the subagent cap. An empty value is unset; any other value makes the server refuse to start and a review throw. Read by `reviewVariant` in `apps/server/src/env.ts`. It is recorded in `RunIdentity.flags` like every other `RECODER_*` variable, so reports of different arms never compare as equal.
 
 **RECODER_CONTRACT_CHECK_CAP**: Most contract checks one review launches, one per place. Default 4. A non-negative integer. Read only when contract checks are on.
 
