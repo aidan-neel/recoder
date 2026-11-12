@@ -94,7 +94,10 @@ describe('Antigravity conversation cleanup', () => {
 		const first = await openRun('answer');
 		const second = await openRun('answer', { home: first.home });
 
-		await Promise.all([first.run.prompt('First.', PROMPT), second.run.prompt('Second.', PROMPT)]);
+		const replies = await Promise.all([first.run.prompt('First.', PROMPT), second.run.prompt('Second.', PROMPT)]);
+
+		expect(replies.map((reply) => reply.error)).toEqual([undefined, undefined]);
+
 		await first.run.close();
 
 		const [firstCall] = await fakeAntigravityCalls(first.log);
