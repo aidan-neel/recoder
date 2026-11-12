@@ -116,8 +116,6 @@ function sessionRouter(handlers: SessionHandlers): (event: unknown, session: str
 
 		if ((properties.sessionID ?? properties.part?.sessionID) !== session) return;
 
-		handlers.onActivity?.();
-
 		if (type === 'message.part.updated' && properties.part?.id && properties.part.type) {
 			partTypes.set(properties.part.id, properties.part.type);
 			stepBoundary(properties.part);

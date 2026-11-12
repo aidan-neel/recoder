@@ -103,7 +103,7 @@ describe('PiRun', () => {
 
 		expect(reply).toEqual({ text: '{"done":true,"results":[]}', error: undefined });
 
-		expect(events.filter((event) => event.type !== 'activity')).toEqual([
+		expect(events).toEqual([
 			{ type: 'step-start', step: 'e2' },
 			{ type: 'reasoning', delta: 'Hmm.', partId: 'e2_0' },
 			{ type: 'text', delta: '{"done":true,"results":[]}', partId: 'e2_1' },

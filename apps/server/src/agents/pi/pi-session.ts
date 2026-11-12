@@ -65,7 +65,7 @@ export class SessionTail {
 	follow(): void {
 		this.turn = { reply: null, usages: [] };
 		this.readFailure = null;
-		this.timer = setInterval(() => this.poll(), POLL_MS);
+		this.timer = setInterval(() => void this.read(), POLL_MS);
 	}
 
 	/**
@@ -85,16 +85,6 @@ export class SessionTail {
 		if (failure) throw new Error("Recoder could not read Pi's session file.", { cause: failure });
 
 		return this.turn;
-	}
-
-	/**
-	 * One tick while Pi runs: a sign of life, then a read. Pi saves an entry only when a message ends and, in text
-	 * mode, prints only the final answer, so a long model call is otherwise silent and the engine would stop it as
-	 * stalled. A Pi that hangs is still stopped, by the prompt's deadline.
-	 */
-	private poll(): void {
-		this.onEvent({ type: 'activity' });
-		void this.read();
 	}
 
 	/** Queues a read after the ones before it; a failed read is held for {@link finish}. */
@@ -145,7 +135,7 @@ export class SessionTail {
 		if (id && this.seen.has(id)) return;
 		if (id) this.seen.add(id);
 
-		if (entry.data.type !== 'message' || message?.role !== 'assistant') return this.onEvent({ type: 'activity' });
+		if (entry.data.type !== 'message' || message?.role !== 'assistant') return;
 
 		const assistant = assistantSchema.safeParse(message);
 

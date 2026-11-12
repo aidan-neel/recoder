@@ -133,8 +133,6 @@ export interface CursorHandlers {
 	result?: () => void;
 	/** A line that is not JSON, or a protocol error the run survives. */
 	problem?: (message: string) => void;
-	/** Any other parsed line: proof of life. */
-	activity?: () => void;
 	/** What pays for the call, from the init event's `apiKeySource`. */
 	apiKeySource?: (source: string) => void;
 }
@@ -323,16 +321,12 @@ export class CursorReader {
 		const error = protocolErrorSchema.safeParse(value);
 
 		if (error.success && (error.data.type === 'error' || error.data.subtype === 'error'))
-			return this.protocolError(error.data);
-
-		this.handlers.activity?.();
+			this.protocolError(error.data);
 	}
 
 	private init(event: z.infer<typeof initSchema>): void {
 		this.sessionId = event.session_id ?? this.sessionId;
 		if (event.apiKeySource) this.handlers.apiKeySource?.(event.apiKeySource);
-
-		this.handlers.activity?.();
 	}
 
 	private finish(result: CursorResult): void {
@@ -354,8 +348,6 @@ export class CursorReader {
 			if (text) this.lastMessage = text;
 			this.messageIndex++;
 		}
-
-		this.handlers.activity?.();
 	}
 
 	private thinking(event: z.infer<typeof thinkingSchema>): void {
@@ -363,8 +355,6 @@ export class CursorReader {
 
 		if (delta && (event.subtype === undefined || event.subtype === 'delta'))
 			this.handlers.reasoning?.(delta, `cursor_${this.messageIndex}`);
-
-		this.handlers.activity?.();
 	}
 
 	private stepFinished(tokens: StepTokens | undefined): void {
@@ -375,8 +365,6 @@ export class CursorReader {
 			this.stepTokens.cacheRead += tokens.cache?.read ?? 0;
 			this.stepTokens.cacheWrite += tokens.cache?.write ?? 0;
 		}
-
-		this.handlers.activity?.();
 	}
 
 	private protocolError(event: z.infer<typeof protocolErrorSchema>): void {

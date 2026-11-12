@@ -127,12 +127,11 @@ describe('CursorAgent.openRun', () => {
 	test('the answer streams as text and reasoning within one step, which ends with the prompt’s usage', async () => {
 		const opened = await openRun();
 		const { reply } = await exchange(opened);
-		const seen = opened.events.filter((event) => event.type !== 'activity');
 
 		expect(reply.error).toBeUndefined();
 		expect(reply.text).toBe('the reply');
 
-		expect(seen).toEqual([
+		expect(opened.events).toEqual([
 			{ type: 'step-start' },
 			{ type: 'reasoning', delta: 'Hmm.', partId: 'cursor_1' },
 			{ type: 'text', delta: 'the r', partId: 'cursor_1' },

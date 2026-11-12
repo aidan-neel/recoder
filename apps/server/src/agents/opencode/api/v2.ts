@@ -142,8 +142,6 @@ function sessionRouter(handlers: SessionHandlers): (event: unknown, session: str
 		const message = data.assistantMessageID ?? '';
 		const part = `${message}:${data.ordinal ?? 0}`;
 
-		handlers.onActivity?.();
-
 		if (type === 'session.text.delta' && data.delta) handlers.onText?.(data.delta, part);
 		else if (type === 'session.reasoning.delta' && data.delta) handlers.onReasoning?.(data.delta, part);
 		else if (type === 'session.step.started' && !steps.has(`start:${message}`)) {

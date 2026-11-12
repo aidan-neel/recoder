@@ -196,8 +196,6 @@ export class CodexReader {
 				this.lastError = event.message;
 				this.onEvent({ type: 'error', message: quotedLine(event.message, QUOTED_CHARS) });
 				break;
-			default:
-				this.onEvent({ type: 'activity' });
 		}
 	}
 
@@ -222,11 +220,8 @@ export class CodexReader {
 
 		if (item.type === 'reasoning' && item.text) return this.onEvent({ type: 'reasoning', delta: item.text, partId });
 
-		if (item.type === 'error' && item.message) {
-			return this.onEvent({ type: 'error', message: quotedLine(item.message, QUOTED_CHARS) });
-		}
-
-		this.onEvent({ type: 'activity' });
+		if (item.type === 'error' && item.message)
+			this.onEvent({ type: 'error', message: quotedLine(item.message, QUOTED_CHARS) });
 	}
 }
 

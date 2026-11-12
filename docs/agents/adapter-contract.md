@@ -120,8 +120,7 @@ type AgentEvent =
 	| { type: 'tool-call'; name: string } // sent by the MCP host, not the adapter
 	| { type: 'tool-result'; name: string; isError: boolean } // sent by the MCP host
 	| { type: 'usage'; usage: TokenUsage; step?: string } // a model call ended, with its usage
-	| { type: 'error'; message: string } // something the run survives; logged
-	| { type: 'activity' }; // any other output: keeps the stall watchdog quiet
+	| { type: 'error'; message: string }; // something the run survives; logged
 ```
 
 Each `step-start` spends one model call of the review's budget, and each `usage` records that call's tokens, so

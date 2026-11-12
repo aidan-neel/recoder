@@ -72,8 +72,6 @@ export class RunReader {
 		if (streamed.success) return this.streamEvent(streamed.data.event);
 
 		if (initSchema.safeParse(value).success) this.sessionStarted = true;
-
-		this.onEvent({ type: 'activity' });
 	};
 
 	/** The prompt's answer, or the error that ended it, with what the whole prompt used. */
