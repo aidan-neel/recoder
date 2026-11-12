@@ -2,7 +2,7 @@ import { FORGE_PATHS, LINK_GLYPH_PATHS } from '../display/forge-paths';
 import type { TextRange } from './link-find';
 import type { LinkDescription, LinkFact } from './link-describe';
 import type { TextSelection } from './link-edits';
-import { segmentsOf, type LinkDoc, type Segment } from './link-model';
+import { CARET_HOLDER, segmentsOf, type LinkDoc, type Segment } from './link-model';
 
 /** How the field draws one link: what its URL says, and what the host knows about it. */
 export interface EmbedLook {
@@ -14,9 +14,6 @@ const SVG = 'http://www.w3.org/2000/svg';
 
 /** The attribute an embed carries its URL in. */
 const URL_ATTRIBUTE = 'data-url';
-
-/** A zero-width space: the one character of a caret holder, never part of the text. */
-const HOLDER_CHARACTER = '\u200B';
 
 /**
  * Caret holders: text nodes the field adds before an embed that starts the
@@ -228,12 +225,12 @@ function placePart(root: HTMLElement, index: number, part: Part, look: (url: str
 /** A caret holder at `current`'s place: the one there, reset, or a new one. */
 function placeHolder(root: HTMLElement, current: ChildNode | null): void {
 	if (current instanceof Text && holders.has(current)) {
-		if (current.data !== HOLDER_CHARACTER) current.data = HOLDER_CHARACTER;
+		if (current.data !== CARET_HOLDER) current.data = CARET_HOLDER;
 
 		return;
 	}
 
-	const holder = document.createTextNode(HOLDER_CHARACTER);
+	const holder = document.createTextNode(CARET_HOLDER);
 
 	holders.add(holder);
 	root.insertBefore(holder, current);
@@ -344,17 +341,21 @@ function buildDot(tone: string): HTMLElement {
 	return dot;
 }
 
-/** Strips caret-holder characters so a holder, even when split by an IME, never reaches the model. */
-function withoutHolders(text: string): string {
-	return text.replaceAll(HOLDER_CHARACTER, '');
+/**
+ * The text a text node stands for, or a leading part of its `data` does. A caret holder's own character is no
+ * text, also after an IME typed into the holder. Any other text node is the person's text as it is: a zero-width
+ * space pasted or typed there is theirs.
+ */
+function textOf(node: Text, data = node.data): string {
+	return holders.has(node) ? data.replaceAll(CARET_HOLDER, '') : data;
 }
 
-/** The text a non-embed child stands for: its text without caret-holder characters, nothing for the closing `<br>`. */
+/** The text a non-embed child stands for: nothing for the closing `<br>`. */
 function lengthText(node: Node): string {
-	if (node instanceof Text) return withoutHolders(node.data);
+	if (node instanceof Text) return textOf(node);
 	if (node instanceof HTMLBRElement) return '';
 
-	return withoutHolders(node.textContent ?? '');
+	return node.textContent ?? '';
 }
 
 /** How many text characters a child of the field stands for. */
@@ -396,7 +397,7 @@ function offsetOf(root: HTMLElement, node: Node, offset: number): number {
 	const child = children[index];
 
 	if (index === -1) return 0;
-	if (child instanceof Text) return before(index) + withoutHolders(child.data.slice(0, offset)).length;
+	if (child instanceof Text) return before(index) + textOf(child, child.data.slice(0, offset)).length;
 	if (urlOf(child) !== null || child instanceof HTMLBRElement) return before(index);
 
 	const range = root.ownerDocument.createRange();
@@ -404,28 +405,29 @@ function offsetOf(root: HTMLElement, node: Node, offset: number): number {
 	range.setStart(child, 0);
 	range.setEnd(node, offset);
 
-	return before(index) + withoutHolders(range.toString()).length;
+	return before(index) + range.toString().length;
 }
 
-/** The UTF-16 offset inside a text node's `data` after `wanted` non-holder code units. */
-function domOffsetInText(data: string, wanted: number): number {
+/** The offset inside a text node's `data` after `wanted` characters of the text it stands for. */
+function domOffsetInText(node: Text, wanted: number): number {
+	if (!holders.has(node)) return Math.min(Math.max(wanted, 0), node.data.length);
 	if (wanted <= 0) return 0;
 
 	let seen = 0;
 
-	for (let index = 0; index < data.length; index += 1) {
-		if (data[index] !== HOLDER_CHARACTER) seen += 1;
+	for (let index = 0; index < node.data.length; index += 1) {
+		if (node.data[index] !== CARET_HOLDER) seen += 1;
 		if (seen === wanted) return index + 1;
 	}
 
-	return data.length;
+	return node.data.length;
 }
 
 /** The DOM point for a text offset: inside a text node (or a caret holder) when one holds it, else between the field's children. */
 function pointOf(root: HTMLElement, offset: number): { node: Node; offset: number } {
 	for (const [index, { child, start, end }] of [...childSpans(root)].entries()) {
 		if (child instanceof Text && offset <= end) {
-			return { node: child, offset: domOffsetInText(child.data, offset - start) };
+			return { node: child, offset: domOffsetInText(child, offset - start) };
 		}
 
 		if (!(child instanceof Text) && offset <= start) return { node: root, offset: index };

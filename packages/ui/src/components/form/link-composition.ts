@@ -1,6 +1,16 @@
 import { plainText } from './link-edits';
+import type { TextRange } from './link-find';
 import type { Snapshot } from './link-history';
-import { embedLinks, fitInsert, linkAfter, linkBefore, replaceRange, wordAround, type LinkDoc } from './link-model';
+import {
+	CARET_HOLDER,
+	embedLinks,
+	fitInsert,
+	linkAfter,
+	linkBefore,
+	replaceRange,
+	wordAround,
+	type LinkDoc
+} from './link-model';
 
 /**
  * What the editor remembers while the browser owns an edit (an IME composition,
@@ -76,7 +86,7 @@ export function adoptEdit({ before, read, caret, maxLength }: AdoptInput): { doc
 	const { beforeEnd, readEnd } = commonSuffix(before, read, prefix);
 	const beforeRange = { start: prefix, end: beforeEnd };
 	const rawInserted = read.text.slice(prefix, readEnd);
-	const inserted = fitInsert(before, beforeRange, plainText(rawInserted), maxLength);
+	const inserted = fitInsert(before, beforeRange, addedText(before, beforeRange, rawInserted), maxLength);
 	const replaced = replaceRange(before, beforeRange, inserted);
 
 	const nextCaret = adoptedCaret(caret, {
@@ -91,6 +101,22 @@ export function adoptEdit({ before, read, caret, maxLength }: AdoptInput): { doc
 		doc: embedLinks(replaced, wordAround(replaced.text, nextCaret)),
 		caret: nextCaret
 	};
+}
+
+/**
+ * What the browser added over `range`, as text. Beside an embed the browser may move a caret holder's character
+ * out of its node while it writes (an IME that splits the node), so there a zero-width space in the added text is
+ * the view's. Anywhere else the view keeps no holder, and one is the person's.
+ */
+function addedText(before: LinkDoc, range: TextRange, raw: string): string {
+	const text = plainText(raw);
+
+	return touchesEmbed(before, range) ? text.replaceAll(CARET_HOLDER, '') : text;
+}
+
+/** True when the range holds or borders an embed: the only places the view keeps a caret holder. */
+function touchesEmbed(doc: LinkDoc, range: TextRange): boolean {
+	return doc.links.some((link) => link.start <= range.end && range.start <= link.end);
 }
 
 /** How far from the start `before` and `read` match, treating each embed as one indivisible unit. */

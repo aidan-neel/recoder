@@ -66,4 +66,35 @@ describe('link field composition', () => {
 		expect(emoji.doc.text).toBe('ab');
 		expect(emoji.caret).toBe(2);
 	});
+
+	test('drops a caret holder the browser moved into the added text, and keeps the caret after that text', () => {
+		const before = docFromText(ISSUE);
+		const composed = `${ISSUE}\u200Bté`;
+		const read = { text: composed, links: [{ start: 0, end: ISSUE.length }] };
+
+		const adopted = adoptEdit({ before, read, caret: composed.length, maxLength: undefined });
+
+		expect(adopted.doc.text).toBe(`${ISSUE}té`);
+		expect(adopted.caret).toBe(ISSUE.length + 2);
+	});
+
+	test('keeps a zero-width space the browser added where no embed is near', () => {
+		const before = { text: 'ab', links: [] };
+		const read = { text: 'ab\u200B', links: [] };
+
+		const adopted = adoptEdit({ before, read, caret: 3, maxLength: undefined });
+
+		expect(adopted.doc.text).toBe('ab\u200B');
+		expect(adopted.caret).toBe(3);
+	});
+
+	test('keeps a zero-width space that was in the text before the browser wrote', () => {
+		const before = { text: 'a\u200Bb', links: [] };
+		const read = { text: 'a\u200BbX', links: [] };
+
+		const adopted = adoptEdit({ before, read, caret: 4, maxLength: undefined });
+
+		expect(adopted.doc.text).toBe('a\u200BbX');
+		expect(adopted.caret).toBe(4);
+	});
 });

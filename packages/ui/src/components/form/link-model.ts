@@ -10,6 +10,12 @@ export interface LinkDoc {
 	readonly links: readonly TextRange[];
 }
 
+/**
+ * A zero-width space: the one character of a caret holder, a text node the view puts beside an embed that has no
+ * text next to it. It is the view's own and never part of the content.
+ */
+export const CARET_HOLDER = '\u200B';
+
 /** One run of a link field's content: text, or an embedded link. */
 export type Segment = { kind: 'text'; text: string } | { kind: 'link'; url: string };
 
