@@ -1,7 +1,7 @@
 'use client';
 
-import { Button, Tooltip } from '@recoder/ui';
-import { ArrowUpRight } from 'lucide-react';
+import { Button, Pill, Tooltip } from '@recoder/ui';
+import { ArrowUpRight, Clock, GitCommitHorizontal, Timer } from 'lucide-react';
 
 import type { BugsView } from '@/lib/bugs/types';
 import type { RunView } from '@/lib/run/types';
@@ -65,10 +65,29 @@ function PostReview({ view }: { view: BugsView }) {
 	return failed && posted.error ? <Tooltip content={posted.error}>{button}</Tooltip> : button;
 }
 
+/** The facts of the review being shown, as badges: the commit it read, when it ran, its model and how long it took. */
+function ReviewFacts({ view }: { view: BugsView }) {
+	return (
+		<span className="review-facts" aria-label="This review">
+			{view.headSha ? (
+				<Pill face="code" icon={<GitCommitHorizontal aria-hidden />} title={view.headSha}>
+					{view.headSha.slice(0, 7)}
+				</Pill>
+			) : null}
+			{view.reviewedAt ? (
+				<Pill icon={<Clock aria-hidden />}>
+					<Age at={view.reviewedAt} form="long" />
+				</Pill>
+			) : null}
+			{view.modelLabel ? <Pill>{view.modelLabel}</Pill> : null}
+			{view.duration ? <Pill icon={<Timer aria-hidden />}>{view.duration}</Pill> : null}
+		</span>
+	);
+}
+
 /**
- * The Bugs tab's tools in the tab row: the facts of the review being shown
- * (when, at which commit, with which model, how long it took), posting it on
- * the pull request, and reviewing again.
+ * The Bugs tab's tools in the tab row: the facts of the review being shown,
+ * posting it on the pull request, and reviewing again.
  */
 export function BugsTools({ view, run }: BugsToolsProps) {
 	const reviewing = useAction();
@@ -78,17 +97,7 @@ export function BugsTools({ view, run }: BugsToolsProps) {
 
 	return (
 		<>
-			<span className="meta">
-				Reviewed <Age at={view.reviewedAt} form="long" />
-				{view.headSha ? (
-					<>
-						{' at '}
-						<span className="mono">{view.headSha.slice(0, 7)}</span>
-					</>
-				) : null}
-				{view.modelLabel ? <span className="meta-sep">{view.modelLabel}</span> : null}
-				{view.duration ? <span className="meta-sep">{view.duration}</span> : null}
-			</span>
+			<ReviewFacts view={view} />
 			<PostReview view={view} />
 			{!busy ? (
 				<Button

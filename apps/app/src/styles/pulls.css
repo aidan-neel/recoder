@@ -120,15 +120,6 @@
 	}
 }
 
-/* The dot a status pill leads with. */
-.pill-dot {
-	width: 6px;
-	height: 6px;
-	flex-shrink: 0;
-	border-radius: 999px;
-	background: currentColor;
-}
-
 /* The field in the bar: it filters the list as you type and opens a pasted link on Enter. */
 .pulls-find {
 	width: 320px;

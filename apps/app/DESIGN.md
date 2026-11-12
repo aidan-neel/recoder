@@ -11,9 +11,9 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
 
 - **A sidebar shell**, not a top bar with session tabs. The rule "do not
   reintroduce the left sidebar" is for apps/web only.
-- **One sans face.** The UI face is Geist Sans (`--font-ui`), and the AI voice
-  uses it too (`--font-ai`). There is no serif and no Cal Sans. Code and
-  metadata are Geist Mono.
+- **One sans face.** The UI face is Inter (`--font-ui`), and the AI voice
+  uses it too (`--font-ai`). There is no serif and no Cal Sans. Code, paths,
+  hashes and aligned numbers are Geist Mono.
 - **Neutral surfaces.** Near-black panels with white hairlines in dark,
   white and light grey in light. One cream primary button and one azure
   accent (links, the selected line, hunk headers).
@@ -72,19 +72,26 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   so in a strip above the rows.
 - **New review**: one field that takes a pull request link or a search, and a
   few open pull requests to pick from.
-- **Pull request page**: the header (title, branches, author, change size,
-  checks), a banner for the newest review (running, failed, stopped, or done)
-  with the one next step, then four tabs:
+- **Pull request page**: the header (the title over a row of badges: state,
+  author, base and head branch, change size, last activity), a banner for the
+  newest review (running, failed, stopped, or done) with the one next step,
+  then four tabs:
   - **Changes**: the file tree beside the diff. Bugs sit under the line they
     name. A file can be marked viewed. The guide gives the order to read the
     files in.
-  - **Summary**: what the change does, and the conversation with the
-    reviewer.
-  - **Bugs**: one card a bug, the worst first, each with its evidence class,
-    the proof (a command and its output, a trace, or a rule quoted word for
-    word with its source) and its actions: post it on the pull request, copy
-    a fix prompt for the coding agent, accept it, or dismiss it with a reason.
-    While a review runs, a run card shows its steps.
+  - **Summary**: what the change does (clamped), the order to read the
+    files in, the description (clamped), and the conversation with the
+    reviewer. No boxes: labels, space and hairlines group it.
+  - **Bugs**: one row a bug, the worst first, split by hairlines. Shut, a row
+    is the title over its badges: severity (or Suggestion), category, evidence
+    class, file and line, and whether an earlier review reported it. Open, it
+    adds the explanation (clamped), the proof (a command and its output in a
+    terminal box, a trace, or a rule quoted word for word with its source as
+    badges), the suggested fix behind a disclosure line, and its actions:
+    post it on the pull request, copy a fix prompt for the coding agent,
+    accept it, or dismiss it with a reason. The tab row carries the review's
+    own facts as badges (commit, when, model, duration). While a review runs,
+    a run card shows its steps.
   - **Commits**.
     The merge bar at the bottom shows checks and mergeability and holds the
     merge button. It merges at the head commit the page shows, and never with
@@ -93,6 +100,40 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   titled cards (`SettingsGroup`), one setting a row (`SettingsRow`): the name
   and one line about it on the left, the control on the right. A row saves on
   change and shows where the save stands beside the control.
+
+## Type
+
+- **Inter** at 400 and 500 carries the interface. 600 is for page titles,
+  markdown headings and key numbers only.
+- **Sizes**: body 13.5px on a 20px line, labels and buttons 13px, meta 12px,
+  badges 11.5px medium, the page title 20px.
+- **Tracking**: 0 at 16px and below, -1% from 18 to 24px, -3% near 36px.
+- **Numbers** that line up use tabular figures (`.tabular`). The shipped
+  Inter files carry `tnum` and `calt` and no character variants, so no
+  `cv`/`ss` features are set.
+
+## Facts and long text
+
+The pull request screens show facts, not sentences about facts.
+
+- **Badges for facts.** A fact a reader scans for (state, author, branch,
+  size, severity, category, evidence, file, rule, review time) is a kit
+  `Pill`: 20px tall, 11.5px medium, 6px radius, wrapping in rows with a 6px
+  gap. Paths, branches, commits and commands use `face="code"`. A pill whose
+  text may not fit ends in an ellipsis and shows the whole on hover.
+- **Colour only for meaning.** Severity (high, medium, low, with a dot), pass
+  or fail, and a reproduced bug are tinted. Category, traced, rule, file and
+  time stay neutral; an icon tells them apart.
+- **Not every word is a badge.** Titles, the model's prose and the person's
+  comments stay text.
+- **Long prose is clamped.** Model-written text (what changed, the
+  description, a bug's explanation) shows its first lines through the kit's
+  `ClampedText`; the last line fades and Show more opens the rest over
+  `--dur-disclose`. Text one line past the cut shows whole. The words are
+  never rewritten or cut for good. A suggested fix sits shut behind a
+  disclosure line that names its file and how many checks it passed.
+- **One box level.** A box holds only code or terminal output. Everything
+  else groups by space, a section label and hairlines.
 
 ## Motion
 

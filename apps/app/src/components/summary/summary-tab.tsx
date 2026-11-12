@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Markdown, Pill, SegmentedControl, SkeletonText } from '@recoder/ui';
+import { Button, ClampedText, Markdown, Pill, SegmentedControl, SkeletonText } from '@recoder/ui';
 import { useState } from 'react';
 
 import { useAskView } from '@/lib/ask/use-ask';
@@ -41,7 +41,7 @@ function GuideList({ parts }: { parts: GuidePart[] }) {
 					<span className="guide-number">{index + 1}</span>
 					<span className="guide-list-title">{part.title}</span>
 					{part.bugs > 0 ? <Pill tone="high">{plural(part.bugs, 'bug')}</Pill> : null}
-					<span className="meta">{plural(part.paths.length, 'file')}</span>
+					<Pill>{plural(part.paths.length, 'file')}</Pill>
 				</li>
 			))}
 		</ol>
@@ -49,9 +49,10 @@ function GuideList({ parts }: { parts: GuidePart[] }) {
 }
 
 /**
- * The Summary tab: what the change does in the review's words, the author's
- * own description, the order to read the files in, then the conversation.
- * One composer writes either to Recoder or to the pull request.
+ * The Summary tab: what the change does in the review's words, the order to
+ * read the files in, the author's own description, then the conversation.
+ * Long prose shows its first lines and opens on Show more. One composer
+ * writes either to Recoder or to the pull request.
  */
 export function SummaryTab({ repoId, number, onOpenGuide }: SummaryTabProps) {
 	const summary = useSummaryView();
@@ -79,7 +80,9 @@ export function SummaryTab({ repoId, number, onOpenGuide }: SummaryTabProps) {
 					<section className="summary-block summary-analysis" aria-label="What changed">
 						<h2 className="section-label">What changed</h2>
 						{summary.analysis ? (
-							<Markdown streaming={summary.writing}>{summary.analysis}</Markdown>
+							<ClampedText lines={3}>
+								<Markdown streaming={summary.writing}>{summary.analysis}</Markdown>
+							</ClampedText>
 						) : (
 							<SkeletonText count={3} />
 						)}
@@ -99,9 +102,9 @@ export function SummaryTab({ repoId, number, onOpenGuide }: SummaryTabProps) {
 				{summary.description ? (
 					<section className="summary-block" aria-label="Description">
 						<h2 className="section-label">Description</h2>
-						<div className="summary-description">
+						<ClampedText lines={2} className="summary-description">
 							<Markdown>{summary.description}</Markdown>
-						</div>
+						</ClampedText>
 					</section>
 				) : null}
 				<section className="summary-block" aria-label="Conversation">

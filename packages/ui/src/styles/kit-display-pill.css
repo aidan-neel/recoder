@@ -1,0 +1,71 @@
+/*
+ * kit: badges. The pill, text on a tint of its own hue; neutral unless the
+ * tone carries a meaning. Layered like the rest of the kit, so a class passed
+ * to a pill still wins.
+ */
+@layer components {
+	/* ───────── Pill: text on a tint; a tone change crossfades ───────── */
+	[data-ui='pill'] {
+		--pill-fg: var(--sev-info);
+		--pill-bg: var(--sev-info-tint);
+
+		display: inline-flex;
+		max-width: 100%;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 4px;
+		padding: 1px 6px;
+		border-radius: 5px;
+		background-color: var(--pill-bg);
+		color: var(--pill-fg);
+		font-size: var(--font-size-badge);
+		font-weight: 500;
+		line-height: 16px;
+		white-space: nowrap;
+		transition:
+			color var(--dur-toggle) ease-out,
+			background-color var(--dur-toggle) ease-out;
+	}
+	[data-ui='pill-text'] {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	[data-ui='pill'][data-face='code'] {
+		font-family: var(--font-code);
+		font-weight: 400;
+	}
+	[data-ui='pill'] svg:not([class*='size-']) {
+		width: 12px;
+		height: 12px;
+		flex-shrink: 0;
+	}
+	[data-ui='pill'][data-tone='high'] {
+		--pill-fg: var(--sev-high);
+		--pill-bg: var(--sev-high-tint);
+	}
+	[data-ui='pill'][data-tone='medium'] {
+		--pill-fg: var(--sev-medium);
+		--pill-bg: var(--sev-medium-tint);
+	}
+	[data-ui='pill'][data-tone='low'] {
+		--pill-fg: var(--sev-low);
+		--pill-bg: var(--sev-low-tint);
+	}
+	[data-ui='pill'][data-tone='ok'] {
+		--pill-fg: var(--ok);
+		--pill-bg: var(--ok-tint);
+	}
+	[data-ui='pill'][data-tone='sent'] {
+		--pill-fg: var(--sent);
+		--pill-bg: var(--sent-tint);
+	}
+	[data-ui='pill'][data-tone='danger'] {
+		--pill-fg: var(--danger);
+		--pill-bg: var(--danger-tint);
+	}
+	[data-ui='pill'][data-tone='question'] {
+		--pill-fg: var(--text-muted);
+		--pill-bg: var(--bg-selected);
+	}
+}

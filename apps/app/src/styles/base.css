@@ -4,7 +4,6 @@
 	background: var(--bg-canvas);
 	font-size: var(--font-size-body);
 	line-height: 20px;
-	font-feature-settings: 'ss01', 'cv11';
 	text-rendering: optimizeLegibility;
 }
 
@@ -80,7 +79,7 @@
 	gap: 10px;
 	font-size: 20px;
 	font-weight: 600;
-	letter-spacing: -0.02em;
+	letter-spacing: -0.01em;
 	line-height: 28px;
 }
 .page-title-text {
@@ -203,7 +202,6 @@
 }
 .mono {
 	font-family: var(--font-code);
-	font-feature-settings: normal;
 }
 
 /* Lines added and removed: mono, the sign carries the meaning with the hue. */
@@ -221,23 +219,6 @@
 }
 .diff-stat [data-sign='del'] {
 	color: var(--danger);
-}
-
-/* A branch or commit name set in mono on a quiet chip. */
-.ref-chip {
-	display: inline-flex;
-	max-width: 280px;
-	align-items: center;
-	overflow: hidden;
-	padding: 1px 6px;
-	border-radius: 5px;
-	background: var(--bg-bubble);
-	color: var(--text-secondary);
-	font-family: var(--font-code);
-	font-size: 12px;
-	line-height: 18px;
-	text-overflow: ellipsis;
-	white-space: nowrap;
 }
 
 /* The pull request mark, tinted by state. */
@@ -350,11 +331,34 @@
 	font-weight: 500;
 }
 
-/* The kit's controls, tuned to this skin. */
+/* The kit's controls, tuned to this skin. Every badge is 20px tall, whatever its face. */
 .app-skin [data-ui='pill'] {
+	height: 20px;
 	gap: 5px;
-	padding: 2px 7px;
+	padding: 0 7px;
 	border-radius: 6px;
+}
+.app-skin [data-ui='pill'][data-face='code'] {
+	font-size: 11px;
+}
+.app-skin [data-ui='pill'] .diff-stat {
+	gap: 6px;
+	font-size: inherit;
+}
+/* The dot a status or severity badge leads with. */
+.pill-dot {
+	width: 6px;
+	height: 6px;
+	flex-shrink: 0;
+	border-radius: 999px;
+	background: currentColor;
+}
+/* A person in a badge: their initial or picture at the badge's icon size. */
+.pill-avatar {
+	width: 14px;
+	height: 14px;
+	margin-left: -2px;
+	font-size: 8px;
 }
 .app-skin [data-ui='hover-list-highlight'] {
 	border-radius: 8px;

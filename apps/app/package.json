@@ -12,7 +12,6 @@
 		"lint": "eslint . && prettier --check . --ignore-path ../../.prettierignore"
 	},
 	"dependencies": {
-		"@fontsource/geist-sans": "5.3.0",
 		"@recoder/shared": "workspace:*",
 		"@recoder/ui": "workspace:*",
 		"lucide-react": "1.59.0",

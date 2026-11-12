@@ -1,23 +1,25 @@
 import type { PullPage, PullState } from '@recoder/shared';
 import { Pill, type PillTone } from '@recoder/ui';
+import { Clock, GitBranch } from 'lucide-react';
 
-import { author, plural } from '@/lib/shell/format';
+import { author } from '@/lib/shell/format';
 
+import { Age } from '@/components/common/age';
+import { Avatar } from '@/components/common/avatar';
+import { DiffStat } from '@/components/common/diff-stat';
 import { PullMark, type PullMarkState } from '@/components/common/pull-mark';
 
 interface StateFace {
 	mark: PullMarkState;
 	tone: PillTone;
 	label: string;
-	/** What the author did, or wants: the verb between their name and the branches. */
-	verb: string;
 }
 
 const FACES: Record<PullState | 'draft', StateFace> = {
-	open: { mark: 'open', tone: 'ok', label: 'Open', verb: 'wants to merge' },
-	draft: { mark: 'draft', tone: 'neutral', label: 'Draft', verb: 'is working on' },
-	merged: { mark: 'merged', tone: 'sent', label: 'Merged', verb: 'merged' },
-	closed: { mark: 'closed', tone: 'danger', label: 'Closed', verb: 'wanted to merge' }
+	open: { mark: 'open', tone: 'ok', label: 'Open' },
+	draft: { mark: 'draft', tone: 'neutral', label: 'Draft' },
+	merged: { mark: 'merged', tone: 'sent', label: 'Merged' },
+	closed: { mark: 'closed', tone: 'danger', label: 'Closed' }
 };
 
 /** The face for the page's state; an open draft reads as a draft. */
@@ -25,15 +27,15 @@ function faceOf(page: PullPage): StateFace {
 	return FACES[page.status.state === 'open' && page.status.draft ? 'draft' : page.status.state];
 }
 
-/** `14 commits`, or `changes` when the forge gives no count. */
-function commitsText(commits: number | null): string {
-	return commits === null ? 'changes' : plural(commits, 'commit');
-}
-
-/** The pull request's title, its state, and who wants to merge what into where. */
+/**
+ * The pull request's title over its facts as badges: its state, who wrote
+ * it, the branch it merges into from the branch it came from, the size of the
+ * change and when it last moved. Only the state is coloured.
+ */
 export function PullHeader({ page }: { page: PullPage }) {
 	const face = faceOf(page);
 	const by = author(page.pull.author);
+	const { base, headRef } = page.pull;
 
 	return (
 		<header className="page-head">
@@ -45,16 +47,18 @@ export function PullHeader({ page }: { page: PullPage }) {
 				<Pill tone={face.tone} icon={<PullMark state={face.mark} />}>
 					{face.label}
 				</Pill>
-				<span>
-					<strong>{by.name}</strong> {face.verb} {commitsText(page.status.commits)} into
-				</span>
-				<span className="ref-chip" title={page.pull.base}>
-					{page.pull.base}
-				</span>
-				<span>from</span>
-				<span className="ref-chip" title={page.pull.headRef}>
-					{page.pull.headRef}
-				</span>
+				<Pill icon={<Avatar name={by.name} className="pill-avatar" />}>{by.name}</Pill>
+				<Pill face="code" icon={<GitBranch aria-hidden />} title={`${headRef} into ${base}`}>
+					{base} ← {headRef}
+				</Pill>
+				{page.pull.additions + page.pull.deletions > 0 ? (
+					<Pill face="code">
+						<DiffStat additions={page.pull.additions} deletions={page.pull.deletions} />
+					</Pill>
+				) : null}
+				<Pill icon={<Clock aria-hidden />}>
+					<Age at={page.status.updatedAt} form="long" />
+				</Pill>
 			</div>
 		</header>
 	);
