@@ -130,7 +130,10 @@
 	font-feature-settings: 'ss01', 'cv11';
 	line-height: 20px;
 }
-/* The app fills its browser window; here it fills this one. */
+/* The app fills its browser window; here it fills this one, on one row as tall as the window, so a long page scrolls inside it. */
+.demo-app .app-frame {
+	grid-template-rows: minmax(0, 1fr);
+}
 .demo-app .app-frame,
 .demo-app .sidebar,
 .demo-app .page {
@@ -149,15 +152,24 @@
 		display: none;
 	}
 }
-/* At phone size the window drops what a narrow page cannot fit: a tab's own tools and the search field. */
+/*
+ * At phone size the window drops what a narrow page cannot fit: a tab's own
+ * tools, the search field, a row's line counts, and the merge bar's line
+ * about conflicts, so titles and the merge button keep their room.
+ */
 @container (max-width: 600px) {
 	.demo-window {
 		width: max(560px, 100cqw);
 		height: 620px;
 	}
 	.demo-app .pull-tools,
-	.demo-app .pulls-find {
+	.demo-app .pulls-find,
+	.demo-app .pull-row .diff-stat,
+	.demo-app .merge-bar > span.merge-bar-fact {
 		display: none;
+	}
+	.demo-app .pull-row {
+		grid-template-columns: 16px minmax(0, 1fr) auto 30px;
 	}
 }
 /*
