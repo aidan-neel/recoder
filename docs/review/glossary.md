@@ -58,7 +58,7 @@ Terms as the code uses them, each with the file that defines it. For how they fi
 
 **Proof.** The evidence behind a `verified` status. Type `VerificationEvidence`: the `command`, `exitCode`, `expected`, an `observed` excerpt taken by the harness, and the `evidenceId` of the recorded run. The store is `apps/server/src/evidence/store.ts`.
 
-**Baseline.** The same proving command run on the merge-base tree, to tell a regression from a failure that predates the change. Type `VerificationBaseline` in `packages/shared/src/findings.ts`. Code in `apps/server/src/review/pipeline/harness/verify-baseline.ts`.
+**Baseline.** The same proving command run on the merge-base tree, prepared with the head's generation commands, to tell a regression from a failure that predates the change. Type `VerificationBaseline` in `packages/shared/src/findings.ts`. Code in `apps/server/src/review/pipeline/harness/verify-baseline.ts`.
 
 **Baseline check.** A repo-wide command run on the PR head and cached across reviews by commit and install inputs. Code in `apps/server/src/review/pipeline/harness/baseline-checks.ts`. Cache in `apps/server/src/review/pipeline/harness/baseline-cache.ts`.
 

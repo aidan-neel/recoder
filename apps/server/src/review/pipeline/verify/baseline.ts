@@ -39,8 +39,10 @@ export const UNKNOWN_IDENTITY: RunIdentity = { runtime: 'unknown', dependencies:
 
 /**
  * A run on the merge-base tree, shaped like the recorded runs so the same
- * checks read it, with what it reached: the base tree is never prepared, so a
- * run there can stop in setup where the head's got through.
+ * checks read it, with what it reached: the base tree reruns the head's
+ * generation commands from its own commit, which may not make what they made
+ * on the head, so a run there can still stop in setup where the head's got
+ * through.
  */
 export function baseRecord(command: string, exitCode: number | null, output: string): EvidenceRecord {
 	const end = output.endsWith('\n') || !output ? '' : '\n';

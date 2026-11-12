@@ -1,6 +1,7 @@
 import { lstat, mkdir, realpath, rm, symlink } from 'node:fs/promises';
 import { basename, dirname, join, sep } from 'node:path';
 import { git } from '../evidence/git.js';
+import type { RunResult } from './exec-sandbox.js';
 import { MANIFESTS, packageDirs } from './install-inputs.js';
 import type { SandboxLayout } from './sandbox-layout.js';
 
@@ -30,11 +31,15 @@ const INSTALLED = ['node_modules', '.venv'];
  * that was swapped for a link to somewhere else.
  * Installed dependencies are linked from the head checkout, which the
  * sandbox then sees read-only, and only when no manifest or lockfile changed.
+ * The generation commands the head was prepared with run here too, so a base
+ * run compares with a prepared head run on the same footing.
  */
 export class BaseTree {
 	readonly root: string;
 	private readonly index: string;
 	private ready: Promise<string | null> | null = null;
+	/** The generation commands already run in this tree, so each runs once. */
+	private readonly generated = new Set<string>();
 
 	constructor(
 		private readonly layout: SandboxLayout,
@@ -55,6 +60,30 @@ export class BaseTree {
 		this.ready ??= this.build(signal).catch((err) => `could not build the base tree: ${errorText(err)}`);
 
 		return this.ready;
+	}
+
+	/**
+	 * Runs, in order, each of `commands` this tree has not run yet, and puts
+	 * back the tracked files after each, as the head does after its own. A
+	 * command counts as run whatever its exit, so a generation that fails here
+	 * is not paid for again on every base run; one cut short by `signal` does
+	 * not, so the next base run tries it again. Nothing more runs once a
+	 * command has replaced the tree.
+	 */
+	async generate(
+		commands: readonly string[],
+		run: (command: string) => Promise<RunResult>,
+		signal?: AbortSignal
+	): Promise<void> {
+		for (const command of commands) {
+			if (signal?.aborted || !(await this.intact())) return;
+			if (this.generated.has(command)) continue;
+
+			await run(command);
+			await this.restore();
+
+			if (!signal?.aborted) this.generated.add(command);
+		}
 	}
 
 	/** Puts back every file a command changed, so the next one starts from the commit. */

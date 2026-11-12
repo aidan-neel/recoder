@@ -280,7 +280,11 @@ Off by default. `obligationsOn` reads `RECODER_OBLIGATIONS`, which must be exact
 - A confirmed verdict with a run is reproduced; one with cited reads is traced. `withOutcome` sets `VerificationOutcome`: reproduced, traced, inconclusive, refuted or not-run.
 - `FindingVerification.method` is run, trace, detector, rule or convention. These types are in `packages/shared/src/findings.ts`.
 
-Base comparison. `recordBaseline` reruns the proving command on the merge-base tree. It is in `apps/server/src/review/pipeline/harness/verify-baseline.ts`. It never changes the verdict. `compareToBase` classifies the result as one `BaseComparisonResult`:
+Base comparison. `recordBaseline` reruns the proving command on the merge-base tree. It is in `apps/server/src/review/pipeline/harness/verify-baseline.ts`. It never changes the verdict.
+
+The merge-base tree (`BaseTree` in `apps/server/src/sandbox/base-tree.ts`) is built once per review in the review's cache folder. It links the head checkout's installed dependencies read-only, and only when no dependency manifest changed; otherwise the base run is unavailable. Before each base run, `ExecWorkspace.runOnBase` runs in the tree, offline and in the same sandbox, every generation command that succeeded on the head during package prep (`recordGeneration`) and that the tree has not run yet. Each runs once per tree, within the base run's timeout (`REVIEW_POLICY.baseRunTimeoutMs`), and tracked files are put back after each. A generation command that fails on the base is not retried; the base run then classifies on what it reached. So a base run is compared as a prepared run, and no longer stops in setup only because the head's generated files are missing there.
+
+`compareToBase` classifies the result as one `BaseComparisonResult`:
 
 | Class          | Meaning                                                               |
 | -------------- | --------------------------------------------------------------------- |
