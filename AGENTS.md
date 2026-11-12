@@ -2,6 +2,10 @@
 
 ## Commands
 
+- Helm: `helm lint --strict charts/recoder -f charts/recoder/tests/values.yaml` and
+  `bun test charts/recoder/tests/render.test.ts`. See `charts/recoder/README.md`
+  for image builds and installation. `.github/workflows/helm.yml` runs these checks.
+
 - Web (SvelteKit): `bun run --filter @recoder/web check` · `test` · `build`
 - Review surface (Next.js, the new app): `bun run --filter @recoder/app check` ·
   `test` · `build`. `bun run dev` starts the server and this app (port 5180,

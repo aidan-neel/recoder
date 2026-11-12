@@ -1,0 +1,33 @@
+name: Helm
+
+on:
+  push:
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm.yml'
+  pull_request:
+    paths:
+      - 'charts/**'
+      - '.github/workflows/helm.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: helm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        helm: [v3.22.1, v4.2.4]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: azure/setup-helm@v4
+        with:
+          version: ${{ matrix.helm }}
+      - run: helm lint --strict charts/recoder -f charts/recoder/tests/values.yaml
+      - run: bun test charts/recoder/tests/render.test.ts

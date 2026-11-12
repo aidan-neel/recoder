@@ -24,6 +24,8 @@ The app opens at http://localhost:3000 and the server listens on port 3001. The 
 
 Configuration lives in [`.env.example`](.env.example).
 
+For Kubernetes, use the [Helm chart](charts/recoder/README.md). It deploys one API server with persistent data and the review app.
+
 For multiple API replicas, configure shared PostgreSQL storage. See [HA operation and migration](docs/ha-operating.md).
 
 Recoder can review pull requests on its own when someone comments `@recoder` on them: see [docs/auto-review.md](docs/auto-review.md).

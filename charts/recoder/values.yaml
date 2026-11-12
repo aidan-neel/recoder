@@ -1,0 +1,44 @@
+imagePullSecrets: []
+
+server:
+  replicaCount: 1
+  database:
+    existingSecret: ''
+    secretKey: RECODER_DATABASE_URL
+  image:
+    repository: ''
+    tag: ''
+    pullPolicy: IfNotPresent
+  frontendUrl: http://localhost:3000
+  existingSecret: ''
+  env:
+    RECODER_EXEC: 'off'
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: '2'
+      memory: 2Gi
+  workSizeLimit: 10Gi
+  tmpSizeLimit: 1Gi
+  dataSizeLimit: 1Gi
+  persistence:
+    existingClaim: ''
+    storageClass: null
+    size: 10Gi
+
+app:
+  replicaCount: 1
+  image:
+    repository: ''
+    tag: ''
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: '1'
+      memory: 1Gi
+  tmpSizeLimit: 256Mi
