@@ -2,6 +2,7 @@ import type { PrPerson, PullRequest, RemoteRepo } from '@recoder/shared';
 import { isJsonObject } from './cli.js';
 import { GhError } from './gh.js';
 import { withTimeout } from './github-rest.js';
+import { mapLimit } from '../util/map-limit.js';
 import { parseSlug } from './providers.js';
 
 /**
@@ -243,6 +244,13 @@ export async function apiMergeHeadRef(repoUrl: string, iid: number, env: Record<
 const GITLAB_PAGE_MAX = 100;
 
 /**
+ * How many merge requests have their line counts read at once. The list
+ * endpoint carries none, so each open merge request costs one more request,
+ * and a list of a hundred must not send a hundred at the same moment.
+ */
+export const MERGE_STATS_PARALLEL = 8;
+
+/**
  * The first `limit` objects of a paged GitLab list, a page at a time until
  * `limit` or a short page. `readPage` gets the page size and the page number.
  */
@@ -280,16 +288,14 @@ export async function apiMergeRows(
 
 	const merges = rows.map((row) => ({ pr: toPull(row), row })).filter(({ pr }) => pr.number > 0);
 
-	await Promise.all(
-		merges.map(async ({ pr }) => {
-			try {
-				const entries = await mergeDiffs(repoUrl, pr.number, env);
+	await mapLimit(merges, MERGE_STATS_PARALLEL, async ({ pr }) => {
+		try {
+			const entries = await mergeDiffs(repoUrl, pr.number, env);
 
-				Object.assign(pr, diffStats(entries));
-				pr.changedFiles = entries.length;
-			} catch {}
-		})
-	);
+			Object.assign(pr, diffStats(entries));
+			pr.changedFiles = entries.length;
+		} catch {}
+	});
 
 	return merges;
 }

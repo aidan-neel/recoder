@@ -10,8 +10,10 @@ import {
 	gitlabGet,
 	gitlabPeople,
 	gitlabRequest,
+	MERGE_STATS_PARALLEL,
 	useGitlabApi
 } from './gitlab-api.js';
+import { mapLimit } from '../util/map-limit.js';
 import { parseSlug } from './providers.js';
 
 /** A failed `glab` run's logs as an auth, not-found or unknown GhError. */
@@ -258,18 +260,16 @@ export async function listMergeRows(
 		return pr.number > 0 ? [{ pr, row: item }] : [];
 	});
 
-	await Promise.all(
-		merges.map(async ({ pr }) => {
-			try {
-				const view = await viewMerge(slug, pr.number, opts?.env);
+	await mapLimit(merges, MERGE_STATS_PARALLEL, async ({ pr }) => {
+		try {
+			const view = await viewMerge(slug, pr.number, opts?.env);
 
-				pr.additions = Number(view.additions ?? 0);
-				pr.deletions = Number(view.deletions ?? 0);
-				pr.changedFiles = Number(view.changes_count ?? 0);
-				if (typeof view.sha === 'string') pr.headSha = view.sha;
-			} catch {}
-		})
-	);
+			pr.additions = Number(view.additions ?? 0);
+			pr.deletions = Number(view.deletions ?? 0);
+			pr.changedFiles = Number(view.changes_count ?? 0);
+			if (typeof view.sha === 'string') pr.headSha = view.sha;
+		} catch {}
+	});
 
 	return merges;
 }
