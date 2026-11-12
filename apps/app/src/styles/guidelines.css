@@ -76,7 +76,6 @@ a.guidelines-pill:focus-visible {
 /* The field and the stream view share one box and one type, so swapping them moves nothing. */
 .guidelines-field {
 	font-family: var(--font-code);
-	font-feature-settings: normal;
 	font-size: 12.5px;
 	line-height: 20px;
 	tab-size: 2;

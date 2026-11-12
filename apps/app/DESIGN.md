@@ -11,9 +11,9 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
 
 - **A sidebar shell**, not a top bar with session tabs. The rule "do not
   reintroduce the left sidebar" is for apps/web only.
-- **One sans face.** The UI face is Geist Sans (`--font-ui`), and the AI voice
-  uses it too (`--font-ai`). There is no serif and no Cal Sans. Code and
-  metadata are Geist Mono.
+- **One sans face.** The UI face is Inter (`--font-ui`), and the AI voice
+  uses it too (`--font-ai`). There is no serif and no Cal Sans. Code, paths,
+  hashes and aligned numbers are Geist Mono.
 - **Neutral surfaces.** Near-black panels with white hairlines in dark,
   white and light grey in light. One cream primary button and one azure
   accent (links, the selected line, hunk headers).
@@ -93,6 +93,17 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   titled cards (`SettingsGroup`), one setting a row (`SettingsRow`): the name
   and one line about it on the left, the control on the right. A row saves on
   change and shows where the save stands beside the control.
+
+## Type
+
+- **Inter** at 400 and 500 carries the interface. 600 is for page titles,
+  markdown headings and key numbers only.
+- **Sizes**: body 13.5px on a 20px line, labels and buttons 13px, meta 12px,
+  badges 11.5px medium, the page title 20px.
+- **Tracking**: 0 at 16px and below, -1% from 18 to 24px, -3% near 36px.
+- **Numbers** that line up use tabular figures (`.tabular`). The shipped
+  Inter files carry `tnum` and `calt` and no character variants, so no
+  `cv`/`ss` features are set.
 
 ## Motion
 

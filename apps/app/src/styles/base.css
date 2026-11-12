@@ -4,7 +4,6 @@
 	background: var(--bg-canvas);
 	font-size: var(--font-size-body);
 	line-height: 20px;
-	font-feature-settings: 'ss01', 'cv11';
 	text-rendering: optimizeLegibility;
 }
 
@@ -80,7 +79,7 @@
 	gap: 10px;
 	font-size: 20px;
 	font-weight: 600;
-	letter-spacing: -0.02em;
+	letter-spacing: -0.01em;
 	line-height: 28px;
 }
 .page-title-text {
@@ -203,7 +202,6 @@
 }
 .mono {
 	font-family: var(--font-code);
-	font-feature-settings: normal;
 }
 
 /* Lines added and removed: mono, the sign carries the meaning with the hue. */

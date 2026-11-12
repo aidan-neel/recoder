@@ -234,7 +234,6 @@
 [data-ui='markdown'] :where(h1, h2, h3, h4, h5, h6) {
 	margin: 1.1em 0 0.45em;
 	font-weight: 600;
-	letter-spacing: -0.005em;
 	line-height: 1.3;
 	text-wrap: balance;
 }

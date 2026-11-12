@@ -111,7 +111,7 @@
 	--dur-caret: 1s;
 
 	/* Type */
-	--font-ui: 'Inter', 'Geist Sans', system-ui, sans-serif;
+	--font-ui: 'Inter', system-ui, sans-serif;
 	--font-code: 'Geist Mono', ui-monospace, monospace;
 	--font-ai: 'Lora', Georgia, serif;
 }

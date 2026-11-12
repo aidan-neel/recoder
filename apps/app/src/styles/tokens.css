@@ -4,10 +4,6 @@
  * accent. Scoped to `.app-skin` (on <html> here, on the demo's wrapper in
  * apps/site), so the site around a demo keeps the kit's own values.
  */
-@import '@fontsource/geist-sans/latin-400.css';
-@import '@fontsource/geist-sans/latin-500.css';
-@import '@fontsource/geist-sans/latin-600.css';
-
 .app-skin {
 	color-scheme: dark;
 	--wash-rgb: 255 255 255;
@@ -109,14 +105,14 @@
 	--focus-color: rgb(var(--ink-rgb) / 0.42);
 	--focus-ring: 0 0 0 2px var(--focus-color);
 
-	/* Type: Geist for the interface, Geist Mono for code and numbers. No serif voice here. */
-	--font-ui: 'Geist Sans', 'Inter', system-ui, sans-serif;
+	/* Type: Inter for the interface, Geist Mono for code. No serif voice here. */
+	--font-ui: 'Inter', system-ui, sans-serif;
 	--font-ai: var(--font-ui);
 	--font-size-title: 14px;
-	--font-size-body: 14px;
+	--font-size-body: 13.5px;
 	--font-size-label: 13px;
 	--font-size-button: 13px;
-	--font-size-badge: 12px;
+	--font-size-badge: 11.5px;
 	--font-size-meta: 12px;
 
 	/* Layout */
