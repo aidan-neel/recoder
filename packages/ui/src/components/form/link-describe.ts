@@ -13,7 +13,7 @@ export interface LinkDescription {
 	label: string;
 	/** What a screen reader says: `acme/api pull request 214`. */
 	name: string;
-	/** `host/owner/name` of a forge link, lowercased, without `www.`; null for any other link. */
+	/** `host/owner/name` of a forge link, lowercased, without `www.`, with the port when the link names one; null for any other link. */
 	address: string | null;
 	/** The pull, merge request or issue number, also on a commit seen inside a pull request; null otherwise. */
 	number: number | null;
@@ -66,9 +66,13 @@ function parseUrl(url: string): URL | null {
 	}
 }
 
-/** The host as people write it: lowercased, without `www.`. */
+/**
+ * The host as people write it: lowercased, without `www.`, with the port when
+ * the link names one. A forge on its own port is tracked under that port, so
+ * a link's address must carry it to match.
+ */
 function hostOf(url: URL): string {
-	return url.hostname.toLowerCase().replace(/^www\./, '');
+	return url.host.toLowerCase().replace(/^www\./, '');
 }
 
 /** True for github.com and hosts named like a GitHub Enterprise server. */

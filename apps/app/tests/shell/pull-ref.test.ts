@@ -32,6 +32,14 @@ describe('parsePullRef', () => {
 		});
 	});
 
+	test('reads a link to a forge on its own port with that port, as the tracked repository is keyed', () => {
+		const link = 'https://gitlab.acme.dev:8443/team/svc/-/merge_requests/44';
+		const tracked = repo('r4', 'team/svc', 'https://gitlab.acme.dev:8443/team/svc.git');
+
+		expect(parsePullRef(link)?.address).toBe('gitlab.acme.dev:8443/team/svc');
+		expect(reposFor(parsePullRef(link) ?? { number: 0, address: null, name: null }, [API, tracked])).toEqual([tracked]);
+	});
+
 	test('reads a bare number, #N and a repository before #', () => {
 		expect(parsePullRef('12')).toEqual({ number: 12, address: null, name: null });
 		expect(parsePullRef(' #12 ')).toEqual({ number: 12, address: null, name: null });

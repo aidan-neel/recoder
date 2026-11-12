@@ -72,9 +72,11 @@ It departs from the root `DESIGN.md` (apps/web) in four places:
   so in a strip above the rows.
 - **New review**: one field that takes a pull request link, a number or a
   branch, then what the review should look at, and a few open pull requests
-  to pick from. One line under the field, always in the layout, holds what
-  stops Enter (the target's error) or what Enter will do first (connect an
-  untracked repository); it is empty otherwise.
+  to pick from. A sentence that links one pull request anywhere in it works
+  too ("Check the retries in <link>"): the link is the target and the
+  sentence is what the review looks at. One line under the field, always in
+  the layout, holds what stops Enter (the target's error) or what Enter will
+  do first (connect an untracked repository); it is empty otherwise.
 - **Pull request page**: the header (the title over a row of badges: state,
   author, base and head branch, change size, last activity), a banner for the
   newest review (running, failed, stopped, or done) with the one next step,

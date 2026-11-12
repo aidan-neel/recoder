@@ -7,11 +7,7 @@ import { useStore } from 'zustand';
 
 import { useListStore } from '../api/client';
 import { repoKey } from '../connections/repo-input';
-
-/** The key a tracked pull request and a link to it share: `host/owner/name#number`. */
-function pullKey(address: string, number: number): string {
-	return `${address}#${number}`;
-}
+import { pullKey } from '../shell/pull-ref';
 
 /** What the list says about an open pull request: its title, and whether it is a draft. */
 function factOf(item: PullListItem): LinkFact {

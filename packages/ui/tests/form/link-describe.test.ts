@@ -45,6 +45,14 @@ describe('describeLink', () => {
 		});
 	});
 
+	test('keeps the port a self-hosted forge is served on, so the address matches the repository there', () => {
+		const link = describeLink('https://gitlab.acme.dev:8443/team/svc/-/merge_requests/44');
+
+		expect(link.address).toBe('gitlab.acme.dev:8443/team/svc');
+		expect(link.label).toBe('svc !44');
+		expect(describeLink('http://localhost:3000/docs').label).toBe('localhost:3000/docs');
+	});
+
 	test('labels issues, commits, files and repositories', () => {
 		expect(shown('https://github.com/acme/api/issues/9#issuecomment-5').label).toBe('api #9');
 		expect(shown('https://github.com/acme/api/commit/0123456789abcdef0123').label).toBe('api@0123456');

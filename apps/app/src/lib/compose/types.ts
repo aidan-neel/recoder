@@ -7,7 +7,8 @@ export interface ComposeView {
 	/**
 	 * What the person typed: a pull request URL, `#158` or `158`, or a branch
 	 * name, then optionally what the review should look at
-	 * (`#158 look at the lease handling`).
+	 * (`#158 look at the lease handling`), or a sentence that links the pull
+	 * request (`Check the retries in <link>`).
 	 */
 	text: string;
 	setText: (text: string) => void;

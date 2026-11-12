@@ -56,6 +56,11 @@ export function parsePullRef(text: string): PullRef | null {
 	return { number, address: null, name: short?.[1]?.toLowerCase() ?? null };
 }
 
+/** The key a tracked pull request and a link to it share: `host/owner/name#number`. */
+export function pullKey(address: string, number: number): string {
+	return `${address}#${number}`;
+}
+
 /** True when `path` is the repository's whole name or address, or its last segments. */
 function names(repo: Pick<Repo, 'url' | 'name'>, path: string): boolean {
 	const key = repoKey(repo.url);

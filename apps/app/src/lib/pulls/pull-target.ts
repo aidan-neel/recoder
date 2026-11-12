@@ -1,8 +1,9 @@
 import type { PullListItem, Repo } from '@recoder/shared';
+import { findLinks } from '@recoder/ui/form';
 
 import { parseRepoInput, repoKey } from '../connections/repo-input';
 import { repoName } from '../shell/format';
-import { parsePullRef, reposFor, type PullRef } from '../shell/pull-ref';
+import { parsePullRef, pullKey, reposFor, type PullRef } from '../shell/pull-ref';
 import { pullHref } from '../shell/routes';
 import type { PullTarget } from './types';
 
@@ -26,6 +27,9 @@ export interface ReadTarget {
 
 /** Punctuation between the reference and what the person asks: `#12: look at…`, `fix/lease — only…`. */
 const BRIEF_LEAD = /^[\s:,;—–-]+/;
+
+/** Why a sentence that links two pull requests has no target. */
+const SEVERAL_LINKED = 'More than one pull request is linked. Put the one to review first.';
 
 type Read = Omit<ReadTarget, 'reference'>;
 
@@ -101,7 +105,9 @@ function fromBranch(branch: string, context: TargetContext, brief: string): Read
 
 /**
  * Reads pasted or typed text: a pull request link, `#158`, `158`, `api#158`
- * or a branch name, then optionally what the review should look at.
+ * or a branch name, then optionally what the review should look at. Text
+ * that starts with none of those can name its pull request by a link further
+ * in ("Review <link> first"); see `readLinked`.
  */
 export function readTarget(text: string, context: TargetContext): ReadTarget {
 	const trimmed = text.trim();
@@ -112,8 +118,51 @@ export function readTarget(text: string, context: TargetContext): ReadTarget {
 	const brief = trimmed.slice(first.length).replace(BRIEF_LEAD, '');
 	const word = first.replace(/[:,;]$/, '');
 	const ref = parsePullRef(word);
+	const lead = { ...readReference(word, ref, context, brief), reference: word };
 
-	return { ...readReference(word, ref, context, brief), reference: word };
+	if (ref || lead.target.kind !== 'invalid') return lead;
+
+	return readLinked(trimmed, context) ?? lead;
+}
+
+/**
+ * A sentence whose first word names no pull request: the one pull request it
+ * links is the target, and the whole sentence is what the review should look
+ * at. Null when it links none. Two different ones cannot both be the target.
+ */
+function readLinked(sentence: string, context: TargetContext): ReadTarget | null {
+	const linked = linkedPulls(sentence);
+
+	if (linked.length === 0) return null;
+	if (linked.length > 1) return { ...invalid(SEVERAL_LINKED), reference: null };
+
+	const [{ url, ref }] = linked;
+
+	return { ...fromLink(url, ref, context, sentence), reference: url };
+}
+
+/** A pull request link in a sentence, and the pull request it names. */
+interface LinkedPull {
+	url: string;
+	ref: PullRef;
+}
+
+/** The pull requests a sentence links, each once however many of its pages are linked, as the field's embeds find them. */
+function linkedPulls(sentence: string): LinkedPull[] {
+	const linked = new Map<string, LinkedPull>();
+
+	for (const { start, end } of findLinks(sentence)) {
+		const url = sentence.slice(start, end);
+		const ref = parsePullRef(url);
+
+		if (!ref || ref.address === null) continue;
+
+		const key = pullKey(ref.address, ref.number);
+
+		if (!linked.has(key)) linked.set(key, { url, ref });
+	}
+
+	return [...linked.values()];
 }
 
 /** What one reference names: a link, a short form, or a branch. */

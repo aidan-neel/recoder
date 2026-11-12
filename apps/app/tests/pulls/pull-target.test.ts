@@ -85,6 +85,45 @@ describe('readTarget', () => {
 		expect(readTarget('fix/other', context({ repoId: 'r1' })).target.kind).toBe('invalid');
 	});
 
+	test('a sentence that links one pull request reviews it, and the whole sentence is the brief', () => {
+		const sentence =
+			'Review https://github.com/acme/web/pull/12 first, then (https://github.com/acme/web/pull/12/files).';
+
+		expect(readTarget(sentence, context())).toEqual({
+			target: { kind: 'pull', repoId: 'r2', repoName: 'web', number: 12, href: '/sample/pulls/r2/12' },
+			brief: sentence,
+			reference: 'https://github.com/acme/web/pull/12'
+		});
+	});
+
+	test('a sentence that links two pull requests names no target, and says to put one first', () => {
+		const sentence = 'Compare https://github.com/acme/web/pull/12 with https://github.com/acme/api/pull/158';
+
+		expect(readTarget(sentence, context())).toEqual({
+			target: { kind: 'invalid', reason: 'More than one pull request is linked. Put the one to review first.' },
+			brief: null,
+			reference: null
+		});
+	});
+
+	test('a number or a branch at the start wins over a link later in the text', () => {
+		const later = 'like https://github.com/acme/web/pull/12';
+
+		expect(readTarget(`158 ${later}`, context({ repoId: 'r1' }))).toMatchObject({
+			target: { kind: 'pull', repoId: 'r1', number: 158 },
+			brief: later
+		});
+
+		expect(readTarget(`fix/lease ${later}`, context({ repoId: 'r1' }))).toMatchObject({
+			target: { kind: 'pull', repoId: 'r1', number: 158 },
+			brief: later
+		});
+	});
+
+	test('a link that is no pull request stays no target, wherever it is', () => {
+		expect(readTarget('See https://github.com/acme/api/issues/9', context()).target.kind).toBe('invalid');
+	});
+
 	test('empty text points at nothing yet', () => {
 		expect(readTarget('   ', context())).toEqual({ target: { kind: 'empty' }, brief: null, reference: null });
 	});
