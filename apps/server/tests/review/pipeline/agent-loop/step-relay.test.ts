@@ -4,7 +4,7 @@ import { LlmError } from '../../../../src/models/llm';
 import { getReviewMetrics, withReviewMetrics } from '../../../../src/models/metrics';
 import { ModelBudget } from '../../../../src/review/pipeline/agent-loop/budget';
 import type { JsonAgentOptions } from '../../../../src/review/pipeline/agent-loop/options';
-import { StepRelay } from '../../../../src/review/pipeline/agent-loop/opencode-relay';
+import { StepRelay } from '../../../../src/review/pipeline/agent-loop/step-relay';
 import { db, reviewMetrics } from '../../../../src/store';
 import { testReview } from '../../../helpers/review';
 import { useTempStore } from '../../../helpers/temp-store';
@@ -49,10 +49,10 @@ test('a step that ends after the next one has started still gets its own usage',
 	const { reviewId, run } = await relay();
 
 	await run(async (target) => {
-		target.handlers.onStepStart?.('msg_1');
-		target.handlers.onStepStart?.('msg_2');
-		target.handlers.onStepFinish?.(usage(100, 10), 'msg_1');
-		target.handlers.onStepFinish?.(usage(200, 20), 'msg_2');
+		target.onEvent({ type: 'step-start', step: 'msg_1' });
+		target.onEvent({ type: 'step-start', step: 'msg_2' });
+		target.onEvent({ type: 'usage', usage: usage(100, 10), step: 'msg_1' });
+		target.onEvent({ type: 'usage', usage: usage(200, 20), step: 'msg_2' });
 		await target.finishPrompt(undefined);
 	});
 
@@ -63,8 +63,8 @@ test('usage that arrives just after the prompt answered is recorded on the step 
 	const { reviewId, run } = await relay();
 
 	await run(async (target) => {
-		target.handlers.onStepStart?.('msg_1');
-		setTimeout(() => target.handlers.onStepFinish?.(usage(100, 10), 'msg_1'), 50);
+		target.onEvent({ type: 'step-start', step: 'msg_1' });
+		setTimeout(() => target.onEvent({ type: 'usage', usage: usage(100, 10), step: 'msg_1' }), 50);
 		await target.finishPrompt(undefined);
 	});
 
@@ -93,7 +93,7 @@ test('a single step without a usage event takes the prompt’s tokens, but sever
 	const one = await relay();
 
 	await one.run(async (target) => {
-		target.handlers.onStepStart?.('msg_1');
+		target.onEvent({ type: 'step-start', step: 'msg_1' });
 		await target.finishPrompt(usage(120, 15));
 	});
 
@@ -102,9 +102,9 @@ test('a single step without a usage event takes the prompt’s tokens, but sever
 	const two = await relay();
 
 	await two.run(async (target) => {
-		target.handlers.onStepStart?.('msg_1');
-		target.handlers.onStepStart?.('msg_2');
-		target.handlers.onStepFinish?.(usage(100, 10), 'msg_1');
+		target.onEvent({ type: 'step-start', step: 'msg_1' });
+		target.onEvent({ type: 'step-start', step: 'msg_2' });
+		target.onEvent({ type: 'usage', usage: usage(100, 10), step: 'msg_1' });
 		await target.finishPrompt(usage(300, 30));
 	});
 

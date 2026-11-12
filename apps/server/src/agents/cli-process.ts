@@ -2,11 +2,12 @@ import { existsSync, rmSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import type { AgentStatus } from '@recoder/shared';
+import type { AgentStatus, ModelEntry, ModelFailure, ReasoningEffort } from '@recoder/shared';
 import { LlmError, cancelledError, timedOutError } from '../models/llm/errors';
 import { DEFAULT_TIMEOUT_MS, type ChatOptions } from '../models/llm/types';
 import { serverDataDir } from '../util/data-dir';
-import type { AgentAdapter } from './registry';
+import { cliFailure } from './cli-failure';
+import type { AgentAdapter, AgentModelSettings, AgentRun, AgentRunOptions, ProcessCeiling } from './contract';
 
 type Env = Record<string, string | undefined>;
 
@@ -148,7 +149,7 @@ export interface CallDeadline {
 	failure(error: unknown, fallback: string): LlmError;
 }
 
-export function callDeadline(opts: ChatOptions): CallDeadline {
+export function callDeadline(opts: Pick<ChatOptions, 'timeoutMs' | 'signal'>): CallDeadline {
 	const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 	const timeout = AbortSignal.timeout(timeoutMs);
 
@@ -199,9 +200,18 @@ export abstract class CliAgent implements AgentAdapter {
 	protected scratch = new Set<string>();
 	protected apiKeySource: string | null = null;
 
+	abstract readonly processCeiling: ProcessCeiling | null;
+	abstract readonly signInFix: string;
+
 	constructor(protected readonly env: Env = process.env) {}
 
-	abstract models(): ReturnType<AgentAdapter['models']>;
+	abstract models(signal?: AbortSignal): ReturnType<AgentAdapter['models']>;
+
+	abstract modelSettings(model: string, requested: ReasoningEffort | undefined): AgentModelSettings;
+
+	abstract complete(opts: ChatOptions, onToken?: (text: string) => void): Promise<string>;
+
+	abstract openRun(options: AgentRunOptions): Promise<AgentRun>;
 
 	protected abstract find(): string | null;
 
@@ -230,6 +240,24 @@ export abstract class CliAgent implements AgentAdapter {
 		if (!base.error) Object.assign(base, await this.signIn(path));
 
 		return (this.status = base);
+	}
+
+	/** The version and sign-in check, which starts nothing that outlives it. */
+	quickStatus(): Promise<AgentStatus> {
+		return this.detect();
+	}
+
+	installed(): boolean {
+		return this.find() !== null;
+	}
+
+	/** A CLI that lists its models by running; one with a fixed list overrides this. */
+	fixedModels(): ModelEntry[] | null {
+		return null;
+	}
+
+	describeFailure(err: LlmError, fallback: string): ModelFailure {
+		return cliFailure(this, err, fallback);
 	}
 
 	/** Kill every running call's process group and delete its scratch dir; synchronous, for exit. */

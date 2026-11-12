@@ -1,3 +1,5 @@
+import { agentCliOfModel } from './agent-clis';
+
 /** How model ids and sizes read in the UI. Shared by apps/web and apps/app. */
 
 /** Lowercase name parts that have a fixed spelling. */
@@ -23,9 +25,6 @@ const SIZE = /^\d+(\.\d+)?[bkm]$/i;
 /** `k2`, `v3.1`, `a3b`, `r1`: a letter-led version, upper-cased. */
 const LETTER_VERSION = /^[a-z]\d+(\.\d+)?[a-z]?$/i;
 
-/** Recoder's agent prefixes on model ids (`opencode:openrouter/…`, `claude-code:…`, `devin:…`). */
-const AGENT_PREFIX = /^(opencode|claude-code|devin):/;
-
 /** One part of a name, spelled the way people write it. */
 function spell(part: string): string {
 	const lower = part.toLowerCase();
@@ -44,7 +43,7 @@ function spell(part: string): string {
  * row read as one version.
  */
 export function prettyModelName(id: string): string {
-	const tail = (id.replace(AGENT_PREFIX, '').split('/').pop() ?? id).replace(/:.*$/, '');
+	const tail = (withoutAgentPrefix(id).split('/').pop() ?? id).replace(/:.*$/, '');
 	const parts = tail.split(/[-_\s]+/).filter((part) => part && !DROPPED.test(part));
 	const merged: string[] = [];
 
@@ -71,4 +70,11 @@ export function formatContextWindow(tokens: number): string {
 	if (thousands < 1000) return `${thousands}K`;
 
 	return `${Math.round(tokens / 100_000) / 10}M`;
+}
+
+/** `id` without the prefix of the agent CLI that runs it (`opencode:openrouter/…` → `openrouter/…`). */
+function withoutAgentPrefix(id: string): string {
+	const cli = agentCliOfModel(id);
+
+	return cli ? id.slice(cli.id.length + 1) : id;
 }

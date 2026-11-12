@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { EvidenceStore } from '../../../../src/evidence/evidence';
 import { getReviewMetrics, withReviewMetrics } from '../../../../src/models/metrics';
 import { ModelBudget } from '../../../../src/review/pipeline/agent-loop/budget';
-import { runOpenCodeAgent } from '../../../../src/review/pipeline/agent-loop/opencode-engine';
+import { runNativeAgent } from '../../../../src/review/pipeline/agent-loop/native-engine';
 import type { JsonAgentOptions } from '../../../../src/review/pipeline/agent-loop/options';
 import { buildInventory } from '../../../../src/review/pipeline/inventory';
 import { closeStore, db, reviewMetrics } from '../../../../src/store';
@@ -79,7 +79,7 @@ test('a tool call from OpenCode reads the review evidence and each model step sp
 	const budget = new ModelBudget();
 	const tools: string[] = [];
 
-	const result = await runOpenCodeAgent(
+	const result = await runNativeAgent(
 		agentOptions({
 			user: script([[readDiff]]),
 			budget,
@@ -99,7 +99,7 @@ test('a tool call from OpenCode reads the review evidence and each model step sp
 test('a read-only agent is not offered run, and a call to it is refused', async () => {
 	const target = await startAgent();
 	const run = { tool: 'run', args: { command: 'id' } };
-	const offered = await runOpenCodeAgent(agentOptions({ user: script([[run]]) }), target);
+	const offered = await runNativeAgent(agentOptions({ user: script([[run]]) }), target);
 
 	expect(offered.value?.results).toEqual([{ off: true }]);
 });
@@ -108,7 +108,7 @@ test('tools are refused on the last turn even when a step is reported after its 
 	const start = await startAgent();
 
 	for (const lateStart of [false, true]) {
-		const result = await runOpenCodeAgent(
+		const result = await runNativeAgent(
 			agentOptions({ user: script([[readDiff], [readDiff], [readDiff]], { lateStart }), maxTurns: 3 }),
 			start
 		);
@@ -123,7 +123,7 @@ test('with two answer turns, tools are refused on the last two of its turns', as
 	const user = script([[readDiff], [readDiff], [readDiff]]);
 
 	const refused = async (answerTurns?: number) =>
-		(await runOpenCodeAgent(agentOptions({ user, maxTurns: 4, answerTurns }), start)).value?.results?.map(
+		(await runNativeAgent(agentOptions({ user, maxTurns: 4, answerTurns }), start)).value?.results?.map(
 			(item) => item.isError
 		);
 
@@ -133,7 +133,7 @@ test('with two answer turns, tools are refused on the last two of its turns', as
 
 test('an agent with no model calls left is not started', async () => {
 	const budget = new ModelBudget(3, 3);
-	const result = await runOpenCodeAgent(agentOptions({ user: script([[readDiff]]), budget }), await startAgent());
+	const result = await runNativeAgent(agentOptions({ user: script([[readDiff]]), budget }), await startAgent());
 
 	expect(result).toEqual({ value: null, error: 'model-call budget exhausted' });
 	expect(budget.used).toBe(0);
@@ -142,7 +142,7 @@ test('an agent with no model calls left is not started', async () => {
 test('an agent that keeps taking steps past its turns is stopped and asked to answer without tools', async () => {
 	const budget = new ModelBudget();
 
-	const result = await runOpenCodeAgent(
+	const result = await runNativeAgent(
 		agentOptions({
 			user: script([[readDiff], [readDiff], [readDiff], [readDiff], [readDiff], [readDiff]]),
 			maxTurns: 2,
@@ -160,7 +160,7 @@ test('aborting the review stops the run and deletes its OpenCode session', async
 	const target = await startAgent();
 	const controller = new AbortController();
 
-	const run = runOpenCodeAgent(
+	const run = runNativeAgent(
 		agentOptions({ user: script([[readDiff]], { hang: true }), signal: controller.signal }),
 		target
 	);
@@ -179,7 +179,7 @@ test('an OpenCode 1.x server that names the session on the part alone still has 
 
 	try {
 		const result = await withReviewMetrics(review.id, 'pipeline', async () =>
-			runOpenCodeAgent(agentOptions({ user: script([[readDiff]], { sdkEvents: true }) }), await startAgent())
+			runNativeAgent(agentOptions({ user: script([[readDiff]], { sdkEvents: true }) }), await startAgent())
 		);
 
 		expect(result.value?.done).toBe(true);

@@ -1,7 +1,8 @@
 import type { ModelEntry, ReasoningEffort } from '@recoder/shared';
+import type { ChatOptions } from '../../models/llm/types';
 
 /** Prefix of a Claude Code model's id in the Model select, so routing knows the CLI runs it. */
-export const CLAUDE_CODE_MODEL_PREFIX = 'claude-code:';
+const CLAUDE_CODE_MODEL_PREFIX = 'claude-code:';
 
 /** The levels `claude --effort` takes. Recoder's `minimal` has no CLI level, so it is not offered. */
 const CLI_EFFORTS: ReasoningEffort[] = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -52,4 +53,20 @@ export function claudeCodeModels(): ModelEntry[] {
 		contextWindow: contextWindow ?? CONTEXT_WINDOW,
 		...claudeCodeEfforts(model)
 	}));
+}
+
+/**
+ * The effort flags for a model that takes levels. `thinking: false` turns thinking off; the CLI has no
+ * temperature, top-p, seed or output cap, so those are not sent.
+ */
+export function effortArgs({
+	model,
+	reasoningEffort,
+	thinking
+}: Pick<ChatOptions, 'model' | 'reasoningEffort' | 'thinking'>): string[] {
+	if (thinking === false) return ['--thinking', 'disabled'];
+
+	const offered = claudeCodeEfforts(model).efforts;
+
+	return reasoningEffort && offered?.includes(reasoningEffort) ? ['--effort', reasoningEffort] : [];
 }

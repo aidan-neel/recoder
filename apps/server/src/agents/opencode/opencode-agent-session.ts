@@ -1,45 +1,19 @@
 import { z } from 'zod';
-import type { ReasoningEffort, TokenUsage } from '@recoder/shared';
 import { LlmError, cancelledError } from '../../models/llm/errors';
 import { JSON_MODE_INSTRUCTION } from '../../models/llm/request-fields';
 import { emptyDirectory } from '../cli-process';
+import type { AgentPromptOptions, AgentReply, AgentRun, AgentRunOptions } from '../contract';
+import type { ToolLease } from '../tools/mcp-host';
 import { OPENCODE_EMPTY_DIR, isEmptyObject, variantFor, type OpenCodeChatHost } from './opencode-chat';
 import type { OpenCodeApi } from './api/types';
-import { OpenCodeError } from './opencode-error';
-import { followSession, type SessionHandlers } from './opencode-events';
-import { toolHost, type ToolLease, type ToolRunner } from './opencode-mcp';
+import { OpenCodeError, providerError } from './opencode-error';
+import { eventHandlers, followSession } from './opencode-events';
+import { leaseOpenCodeTools } from './opencode-mcp';
 import { abortSession, createSession, deleteSession, type SessionScope } from './opencode-session';
 
 /** What an agent session needs of the OpenCode agent: the server, a model's efforts, and which models refuse a schema. */
 export interface OpenCodeAgentHost extends OpenCodeChatHost {
 	noStructuredOutput: Set<string>;
-}
-
-export interface AgentSessionOptions {
-	model: string;
-	reasoningEffort?: ReasoningEffort;
-	system: string;
-	/** Recoder tools the agent may call; none makes it a single answer. */
-	tools: string[];
-	runTool: ToolRunner;
-	handlers: SessionHandlers;
-	signal: AbortSignal;
-}
-
-/** How one prompt ended: the final answer as an object or as text, or the error that stopped the run. */
-export interface AgentReply {
-	structured?: unknown;
-	text: string;
-	error?: LlmError;
-	/** What the server counted for the prompt, for a model call whose step events never arrived. */
-	tokens?: TokenUsage;
-}
-
-interface PromptOptions {
-	/** Off on the final turn, so the model can only answer. */
-	tools: boolean;
-	schema?: Record<string, unknown>;
-	timeoutMs: number;
 }
 
 const PLAIN_RESULT = `Send your final result now. ${JSON_MODE_INSTRUCTION}`;
@@ -52,7 +26,7 @@ export function refusesStructuredOutput(err: LlmError): boolean {
 function asLlmError(error: unknown, aborted: boolean): LlmError {
 	if (aborted) return cancelledError();
 	if (error instanceof LlmError) return error;
-	if (error instanceof OpenCodeError) return new LlmError(error.status, error.message);
+	if (error instanceof OpenCodeError) return providerError(error.status, error.message);
 	if (error instanceof z.ZodError) return new LlmError(0, 'OpenCode sent a reply Recoder could not read.');
 
 	return new LlmError(0, error instanceof Error ? error.message : 'OpenCode request failed.');
@@ -64,35 +38,42 @@ function asLlmError(error: unknown, aborted: boolean): LlmError {
  * to the final answer; a later prompt continues the same session, so the
  * provider's prompt cache carries over.
  */
-export class AgentSession {
+export class OpenCodeAgentRun implements AgentRun {
 	private readonly events = new AbortController();
 
 	private constructor(
 		private readonly host: OpenCodeAgentHost,
 		private readonly scope: SessionScope,
-		private readonly options: AgentSessionOptions,
+		private readonly options: AgentRunOptions,
 		private readonly api: OpenCodeApi,
 		private readonly lease: ToolLease | null,
 		private readonly id: string,
 		private readonly variant: string | undefined
 	) {}
 
-	static async open(host: OpenCodeAgentHost, options: AgentSessionOptions): Promise<AgentSession> {
+	static async open(host: OpenCodeAgentHost, options: AgentRunOptions): Promise<OpenCodeAgentRun> {
 		const scope = { server: host.server, directory: await emptyDirectory(OPENCODE_EMPTY_DIR) };
 		const api = await host.server.api();
 		const variant = await variantFor(host, options);
-		const lease = options.tools.length ? await toolHost.lease(scope, options.runTool, options.signal) : null;
+		const lease = options.tools.length ? await leaseOpenCodeTools(scope, options) : null;
 
-		let session: AgentSession | null = null;
+		let session: OpenCodeAgentRun | null = null;
 
 		try {
 			const id = await createSession(
 				{ ...scope, model: options.model, system: options.system, variant, signal: options.signal },
-				lease ? [`${lease.prefix}_*`] : []
+				lease ? [`${lease.name}_*`] : []
 			);
 
-			session = new AgentSession(host, scope, options, api, lease, id, variant);
-			await followSession(host.server, scope.directory, () => id, options.handlers, session.events.signal);
+			session = new OpenCodeAgentRun(host, scope, options, api, lease, id, variant);
+
+			await followSession(
+				host.server,
+				scope.directory,
+				() => id,
+				eventHandlers(options.onEvent),
+				session.events.signal
+			);
 
 			return session;
 		} catch (error) {
@@ -104,10 +85,10 @@ export class AgentSession {
 	}
 
 	private toolNames(tools: boolean): string[] {
-		return tools && this.lease ? this.options.tools.map((name) => `${this.lease!.prefix}_${name}`) : [];
+		return tools && this.lease ? this.options.tools.map((name) => `${this.lease!.name}_${name}`) : [];
 	}
 
-	private async send(text: string, prompt: PromptOptions, structured: boolean): Promise<AgentReply> {
+	private async send(text: string, prompt: AgentPromptOptions, structured: boolean): Promise<AgentReply> {
 		try {
 			const reply = await this.api.prompt({
 				session: this.id,
@@ -142,7 +123,7 @@ export class AgentSession {
 	 * through the structured-output tool is asked once more for plain JSON, and
 	 * later sessions of that model skip the tool.
 	 */
-	async prompt(text: string, prompt: PromptOptions): Promise<AgentReply> {
+	async prompt(text: string, prompt: AgentPromptOptions): Promise<AgentReply> {
 		const { model } = this.options;
 		const structured = Boolean(prompt.schema) && this.api.structuredOutput && !this.host.noStructuredOutput.has(model);
 		const plain = prompt.schema && !structured ? `${text}\n\n${JSON_MODE_INSTRUCTION}` : text;

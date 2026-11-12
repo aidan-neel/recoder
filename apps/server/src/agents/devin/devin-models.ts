@@ -1,7 +1,7 @@
 import type { ModelEntry } from '@recoder/shared';
 
 /** Prefix of a Devin model's id in the Model select, so routing knows the CLI runs it. */
-export const DEVIN_MODEL_PREFIX = 'devin:';
+const DEVIN_MODEL_PREFIX = 'devin:';
 
 /** What `devin models list` leaves out for a model, and the window most of them have. */
 const DEFAULT_CONTEXT_WINDOW = 200_000;

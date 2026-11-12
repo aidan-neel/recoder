@@ -1,24 +1,34 @@
 import { agentReady, within, type AgentStatus, type ModelEntry } from '@recoder/shared';
 import { TtlCache } from '../util/ttl-cache';
 import { claudeCode } from './claude-code/claude-code';
+import type { AgentAdapter } from './contract';
+import { customCommand } from './custom/custom-command';
 import { devin } from './devin/devin';
 import { opencode } from './opencode/opencode';
 
 /**
- * What every agent CLI gives Recoder: whether it's installed and usable, and
- * the models it can run. Adding a CLI is one adapter plus an entry in
- * {@link AGENTS}; the routes and Settings read only this.
+ * Every agent CLI Recoder runs. Adding a CLI is one adapter (see `contract.ts` and
+ * `docs/agents/adapter-contract.md`) plus its line here; the routes, Settings, the model routing and the review
+ * pipeline read only this list.
  */
-export interface AgentAdapter {
-	readonly id: string;
-	readonly name: string;
-	/** Installed, version, sign-in state. Cached until `refresh`. */
-	detect(refresh?: boolean): Promise<AgentStatus>;
-	/** Models it can run now; throws when the agent is missing or down. */
-	models(): Promise<ModelEntry[]>;
+const AGENTS: readonly AgentAdapter[] = [opencode, claudeCode, devin, customCommand];
+
+/** Every agent CLI Recoder runs, in the order Settings lists them. */
+export function registeredAgents(): readonly AgentAdapter[] {
+	return AGENTS;
 }
 
-const AGENTS: AgentAdapter[] = [opencode, claudeCode, devin];
+/** The agent whose id is `id` (a model provider), or null for a provider that is not an agent CLI. */
+export function agentById(id: string | undefined): AgentAdapter | null {
+	return AGENTS.find((agent) => agent.id === id) ?? null;
+}
+
+/** The agent that runs model `id` (`<agent id>:<model>`) and the model without that prefix, or null. */
+export function agentForModel(id: string): { agent: AgentAdapter; model: string } | null {
+	const agent = AGENTS.find((item) => id.startsWith(`${item.id}:`));
+
+	return agent ? { agent, model: id.slice(agent.id.length + 1) } : null;
+}
 
 /** What the status of an agent that looks ready says when its models could not be listed. */
 const UNLISTED = 'Couldn’t list its models.';

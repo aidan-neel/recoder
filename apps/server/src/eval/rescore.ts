@@ -3,8 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { REASONING_EFFORTS, type ReasoningEffort } from '@recoder/shared';
-import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode-catalog';
+import { REASONING_EFFORTS, agentCli, type ReasoningEffort } from '@recoder/shared';
 import { JUDGE_VERSION } from './benchmark-judge';
 import { adjudicationPath, labelRun, readAdjudications, type Adjudications } from './benchmark-labels';
 import {
@@ -60,9 +59,9 @@ interface Source {
 	report: BenchmarkReport;
 }
 
-/** The judge id that names the input's judge again; only an OpenCode judge is named by its model alone. */
+/** The judge id that names the input's judge again; only an agent CLI's judge is named by its model alone. */
 export function judgeChoice(judge: JudgeModel): string {
-	if (judge.provider === 'opencode') return `${OPENCODE_MODEL_PREFIX}${judge.model}`;
+	if (agentCli(judge.provider)) return `${judge.provider}:${judge.model}`;
 
 	throw new Error(
 		`The input was judged by ${judge.model} (${judge.provider}), which only a settings model id names: pass --judge <model id>.`

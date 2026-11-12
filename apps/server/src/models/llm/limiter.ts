@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { agentById } from '../../agents/registry';
 import { CapacityError, cancelledError } from './errors';
 
 /**
@@ -13,16 +14,6 @@ export interface LlmLane {
 }
 
 const DEFAULT_CEILING = 64;
-
-/**
- * Endpoints whose every call starts a local process get a small ceiling of their own, read from an env var:
- * Claude Code (default 8) and Devin (default 4) run one CLI per call, so `RECODER_CLAUDE_CODE_CONCURRENCY` and
- * `RECODER_DEVIN_CONCURRENCY` cap them, never above the shared ceiling.
- */
-const PROCESS_CEILINGS: Record<string, { env: string; fallback: number }> = {
-	'claude-code': { env: 'RECODER_CLAUDE_CODE_CONCURRENCY', fallback: 8 },
-	devin: { env: 'RECODER_DEVIN_CONCURRENCY', fallback: 4 }
-};
 
 const BACKOFF_FLOOR = 4;
 
@@ -48,8 +39,9 @@ interface EndpointState {
  * Concurrency cap kept per model endpoint, shared by review assignments and
  * interactive discussions, so no endpoint is overwhelmed and one provider's
  * trouble never slows another. RECODER_LLM_CONCURRENCY sets each endpoint's
- * ceiling (default 64, so a score of reviews can run at once); Claude Code's
- * endpoint is capped lower, see {@link PROCESS_CEILINGS}. Below the ceiling
+ * ceiling (default 64, so a score of reviews can run at once); an agent CLI
+ * that starts a process per call is capped lower by its own `processCeiling`
+ * (an agent's endpoint is its id, since it has no base URL). Below the ceiling
  * sits an effective limit that backs off when that endpoint pushes back: a rate
  * limit halves it down to a floor of 4, at most once per cooldown so a burst of
  * rejected calls counts as one signal, and after the cooldown every success on
@@ -108,7 +100,7 @@ function envCount(name: string, fallback: number): number {
 
 function llmCeiling(endpoint: string): number {
 	const shared = envCount('RECODER_LLM_CONCURRENCY', DEFAULT_CEILING);
-	const own = PROCESS_CEILINGS[endpoint];
+	const own = agentById(endpoint)?.processCeiling;
 
 	return own ? Math.min(shared, envCount(own.env, own.fallback)) : shared;
 }

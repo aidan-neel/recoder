@@ -1,5 +1,4 @@
-import type { AgentReply, AgentSession } from '../../../agents/opencode/opencode-agent-session.js';
-import { opencode, type OpenCodeAgent } from '../../../agents/opencode/opencode.js';
+import type { AgentAdapter, AgentReply, AgentRun } from '../../../agents/contract.js';
 import { nativeToolNames } from '../../../evidence/native-tools.js';
 import { extractJsonValue } from '../../../models/json-extract.js';
 import { isRateLimitError, isTransientLlmError } from '../../../models/llm/errors.js';
@@ -17,13 +16,13 @@ import { REVIEW_POLICY } from '../../session/review-policy.js';
 import { CHAT_STYLE, NATIVE_REPLY_RULES, forNativeTools } from '../prompts.js';
 import { ModelBlockedError, ReviewAbortedError, throwIfAborted } from './budget.js';
 import { agentDeadlines, deadlineError, newAgentId, toolTurns, type AgentLimits } from './limits.js';
-import { StepRelay } from './opencode-relay.js';
-import { FINAL_TURN_NOTE, ToolGate } from './opencode-tool-gate.js';
+import { StepRelay } from './step-relay.js';
+import { FINAL_TURN_NOTE, ToolGate } from './tool-gate.js';
 import type { JsonAgentOptions } from './options.js';
 
 type AgentResult<T> = { value: T | null; error?: string };
 
-/** Why Recoder stopped a run that OpenCode was still driving. */
+/** Why Recoder stopped a run that the CLI was still driving. */
 type Interrupt = 'paused' | 'deadline' | 'budget' | 'final' | 'runaway' | 'overthought' | 'stalled';
 
 const BUDGET_EXHAUSTED = 'model-call budget exhausted';
@@ -48,18 +47,18 @@ const RESUME_BACKOFF_MS = 5_000;
 const SESSION_CLOSED = new Error('the OpenCode session closed before the model step finished');
 
 /**
- * One agent run with OpenCode as the agent. OpenCode drives the model step
+ * One agent run with an agent CLI as the agent. The CLI drives the model step
  * after step and calls Recoder's tools itself; Recoder keeps what it must
  * own: the tools (through {@link ToolGate}), the turn and call budget, the
  * deadline, pausing, and checking the final result.
  */
-class OpenCodeRun<T> {
+class NativeRun<T> {
 	private readonly limits: AgentLimits;
 	private readonly relay: StepRelay<T>;
 	private readonly gate: ToolGate<T>;
 	private readonly spendOpts: { consumeReserve?: boolean };
 	private readonly endpoint: string;
-	private session: AgentSession | null = null;
+	private session: AgentRun | null = null;
 	private interrupt: Interrupt | null = null;
 	private toolsOn: boolean;
 	private repaired = 0;
@@ -71,7 +70,7 @@ class OpenCodeRun<T> {
 
 	constructor(
 		private readonly opts: JsonAgentOptions<T>,
-		private readonly agent: OpenCodeAgent,
+		private readonly agent: AgentAdapter,
 		limits: AgentLimits,
 		initialDiscussion: string
 	) {
@@ -105,7 +104,7 @@ class OpenCodeRun<T> {
 		);
 	}
 
-	/** Stops the run OpenCode is driving; the prompt then settles and the loop acts on the first reason given. */
+	/** Stops the run the CLI is driving; the prompt then settles and the loop acts on the first reason given. */
 	private stop(why: Interrupt): void {
 		this.interrupt ??= why;
 		void this.session?.abort();
@@ -143,21 +142,21 @@ class OpenCodeRun<T> {
 		if (this.gate.inFlight === 0 && quietMs > REVIEW_POLICY.perCallDeadlineMs) this.stop('stalled');
 	}
 
-	private async open(): Promise<AgentSession> {
+	private async open(): Promise<AgentRun> {
 		const { opts } = this;
 
-		return this.agent.openAgent({
+		return this.agent.openRun({
 			model: opts.config.model,
 			reasoningEffort: opts.config.reasoningEffort,
 			system: forNativeTools(opts.system) + NATIVE_REPLY_RULES + CHAT_STYLE,
 			tools: this.toolsOn ? nativeToolNames({ exec: Boolean(opts.exec), delegate: Boolean(opts.delegate) }) : [],
 			runTool: this.gate.run,
-			handlers: this.relay.handlers,
+			onEvent: this.relay.onEvent,
 			signal: opts.signal
 		});
 	}
 
-	/** One prompt to the session, watched for the deadline, a stall and a pause while OpenCode runs it. */
+	/** One prompt to the session, watched for the deadline, a stall and a pause while the CLI runs it. */
 	private async ask(text: string): Promise<{ reply: AgentReply; why: Interrupt | null; final: boolean }> {
 		const final = this.finalTurn();
 		const pauseSignal = currentReviewControl()?.pauseSignal;
@@ -232,9 +231,9 @@ class OpenCodeRun<T> {
 		if (isAuthFailure(err) || isUsageLimit(err, opts.config))
 			throw new ModelBlockedError(modelFailure(err, opts.config, 'The model rejected the request.'));
 
-		if (isRateLimitError(err, 'opencode')) recordLlmRateLimit(this.endpoint);
+		if (isRateLimitError(err, opts.config.provider)) recordLlmRateLimit(this.endpoint);
 
-		if (isTransientLlmError(err, 'opencode') && this.canRepair()) {
+		if (isTransientLlmError(err, opts.config.provider) && this.canRepair()) {
 			opts.onLog?.(`${opts.label} hit a provider error; resuming: ${err.message}`);
 			await sleep(RESUME_BACKOFF_MS * this.repaired, opts.signal).catch(() => {});
 			throwIfAborted(opts.signal);
@@ -347,13 +346,10 @@ class OpenCodeRun<T> {
 }
 
 /**
- * Run an agent with OpenCode as the agent itself, holding one model slot for
- * the whole run: its steps are sequential, so a run is one call at a time.
+ * Run an agent with an agent CLI as the agent itself, holding one model slot
+ * for the whole run: its steps are sequential, so a run is one call at a time.
  */
-export async function runOpenCodeAgent<T>(
-	opts: JsonAgentOptions<T>,
-	agent: OpenCodeAgent = opencode
-): Promise<AgentResult<T>> {
+export async function runNativeAgent<T>(opts: JsonAgentOptions<T>, agent: AgentAdapter): Promise<AgentResult<T>> {
 	const limits = agentDeadlines(opts);
 	const endpoint = llmEndpoint(opts.config);
 
@@ -367,7 +363,7 @@ export async function runOpenCodeAgent<T>(
 		return { value: null, error: err instanceof Error ? err.message : 'no model slot' };
 	}
 
-	const run = new OpenCodeRun(opts, agent, limits, (await opts.getDiscussion?.()) ?? '');
+	const run = new NativeRun(opts, agent, limits, (await opts.getDiscussion?.()) ?? '');
 
 	try {
 		return await run.toAnswer();

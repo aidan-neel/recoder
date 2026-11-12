@@ -1,4 +1,4 @@
-import { LlmError, cancelledError, isOpenCodeThrottle, isTransientLlmError, timedOutError } from './errors';
+import { LlmError, cancelledError, isProviderThrottle, isTransientLlmError, timedOutError } from './errors';
 import type { ChatOptions } from './types';
 
 function llmRetries(): number {
@@ -27,11 +27,11 @@ export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
 
 /**
  * How long to wait before retry `tries + 1`: 1s, 2s, 4s… capped at 15s, or
- * 5s, 10s, 20s… capped at 60s when OpenCode passed on a provider's throttle,
+ * 5s, 10s, 20s… capped at 60s when a router passed on a provider's throttle,
  * which only lifts once the provider's window moves on.
  */
 function retryWait(err: unknown, tries: number): number {
-	if (err instanceof LlmError && isOpenCodeThrottle(err)) return Math.min(60_000, 5_000 * 2 ** tries);
+	if (err instanceof LlmError && isProviderThrottle(err)) return Math.min(60_000, 5_000 * 2 ** tries);
 
 	return Math.min(15_000, 1_000 * 2 ** tries);
 }

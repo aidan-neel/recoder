@@ -16,15 +16,19 @@
  */
 
 import { z } from 'zod';
-import { VLLM_MODEL_PREFIX, type ModelProvider, type ModelRuntimeProfile, type ReasoningEffort } from '@recoder/shared';
+import {
+	VLLM_MODEL_PREFIX,
+	supportedEffort,
+	type ModelProvider,
+	type ModelRuntimeProfile,
+	type ReasoningEffort
+} from '@recoder/shared';
 import { lockedModels, runLocked, type LockedModels } from './llm/locked-models.js';
 import { recordLockMiss } from './metrics.js';
 import { hostedProvider } from './model-providers.js';
 import { resolveRuntime } from './runtime-profiles.js';
 import { vllmTarget } from './vllm/vllm-models.js';
-import { CLAUDE_CODE_MODEL_PREFIX, claudeCodeEfforts } from '../agents/claude-code/claude-code-models.js';
-import { DEVIN_MODEL_PREFIX } from '../agents/devin/devin-models.js';
-import { OPENCODE_MODEL_PREFIX } from '../agents/opencode/opencode.js';
+import { agentForModel } from '../agents/registry.js';
 import { effectiveReviewEnv, getStoredSettings, type StoredModelEntry } from '../review/session/review-settings.js';
 
 const configSchema = z.object({
@@ -176,9 +180,10 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
 		: (stored.specialistEffort ?? (followsReview ? stored.orchestratorEffort : undefined));
 
 	if (entryId?.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(entryId, requested);
-	if (entryId?.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(entryId, requested ?? undefined);
-	if (entryId?.startsWith(CLAUDE_CODE_MODEL_PREFIX)) return claudeCodeConfig(entryId, requested);
-	if (entryId?.startsWith(DEVIN_MODEL_PREFIX)) return devinConfig(entryId);
+
+	const agentModel = entryId ? agentConfig(entryId, requested ?? undefined) : null;
+
+	if (agentModel) return agentModel;
 
 	return entryConfig(entries.find((e) => e.id === entryId) ?? entries[0], requested);
 }
@@ -191,9 +196,10 @@ function resolveConfig(orchestrator: boolean): ModelConfig {
  */
 export function configForModel(id: string, effort: ReasoningEffort | undefined): ModelConfig {
 	if (id.startsWith(VLLM_MODEL_PREFIX)) return vllmConfig(id, effort);
-	if (id.startsWith(OPENCODE_MODEL_PREFIX)) return openCodeConfig(id, effort);
-	if (id.startsWith(CLAUDE_CODE_MODEL_PREFIX)) return claudeCodeConfig(id, effort);
-	if (id.startsWith(DEVIN_MODEL_PREFIX)) return devinConfig(id);
+
+	const agentModel = agentConfig(id, effort);
+
+	if (agentModel) return agentModel;
 
 	const entry = getStoredSettings().models?.find((e) => e.id === id);
 
@@ -273,51 +279,18 @@ function vllmConfig(entryId: string, requested: ReasoningEffort | null | undefin
 }
 
 /**
- * An OpenCode model is listed live from the CLI rather than stored, so the
- * config comes from its id (`opencode:<provider>/<model>`). The transport
- * checks the effort against the model's variants.
+ * A model an agent CLI runs (`claude-code:opus`, `opencode:openai/gpt-5`) is listed live or by the adapter
+ * rather than stored, so the config comes from its id. It needs no endpoint or key; the adapter says which effort
+ * the model takes and which hosted provider it routes to. Null when no agent owns the id.
  */
-function openCodeConfig(entryId: string, reasoningEffort: ReasoningEffort | undefined): ModelConfig {
-	const model = entryId.slice(OPENCODE_MODEL_PREFIX.length);
+function agentConfig(id: string, requested: ReasoningEffort | undefined): ModelConfig | null {
+	const owner = agentForModel(id);
 
-	return { provider: 'opencode', source: model.split('/')[0], baseUrl: '', apiKey: '', model, reasoningEffort };
-}
+	if (!owner) return null;
 
-/**
- * A Claude Code model is a static entry of the CLI adapter, so the config
- * comes from its id (`claude-code:<model>`). Like ChatGPT it needs no
- * endpoint or key, and an unset effort takes the model's default.
- */
-function claudeCodeConfig(entryId: string, requested: ReasoningEffort | null | undefined): ModelConfig {
-	const model = entryId.slice(CLAUDE_CODE_MODEL_PREFIX.length);
-	const { efforts, defaultEffort } = claudeCodeEfforts(model);
-	const reasoningEffort = efforts ? supportedEffort(requested ?? defaultEffort, efforts, defaultEffort) : undefined;
+	const { agent, model } = owner;
 
-	return { provider: 'claude-code', baseUrl: '', apiKey: '', model, reasoningEffort };
-}
-
-/**
- * A Devin model is listed live from the CLI, so the config comes from its id (`devin:<model>`). Devin names the
- * effort in the model id (`swe-2-high`), so there is no effort to pass.
- */
-function devinConfig(entryId: string): ModelConfig {
-	return { provider: 'devin', baseUrl: '', apiKey: '', model: entryId.slice(DEVIN_MODEL_PREFIX.length) };
-}
-
-/**
- * A saved effort the model no longer offers (e.g. after switching models) falls
- * back to the model default: medium when offered, else the first listed level.
- */
-function supportedEffort(
-	requested: ReasoningEffort | null | undefined,
-	offered: ReasoningEffort[] | undefined,
-	fallback: ReasoningEffort | undefined
-): ReasoningEffort | undefined {
-	if (!requested) return undefined;
-	if (!offered?.length || offered.includes(requested)) return requested;
-	if (fallback && offered.includes(fallback)) return fallback;
-
-	return offered.includes('medium') ? 'medium' : offered[0];
+	return { provider: agent.id, baseUrl: '', apiKey: '', model, ...agent.modelSettings(model, requested) };
 }
 
 /** Caps so one PR can't blow the context window. */

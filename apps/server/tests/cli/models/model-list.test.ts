@@ -1,4 +1,5 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
+import { customCommand } from '../../../src/agents/custom/custom-command';
 import { EXIT } from '../../../src/cli/exit';
 import { listModels, type ModelsQuery } from '../../../src/cli/models/model-list';
 import { MODEL_LOOKUP_LIMIT_MS, namedModelChoices, type ModelLookup } from '../../../src/cli/run/model-choices';
@@ -151,4 +152,18 @@ test('a machine with nothing set up still lists the Claude Code models', async (
 
 	expect(list).toMatchObject({ reviewer: null, worker: null });
 	expect(new Set(list.models.map((model) => model.provider))).toEqual(new Set(['Claude Code']));
+});
+
+test('a model of a configured custom command is accepted by --reviewer once the command lists it', async () => {
+	process.env.RECODER_CUSTOM_AGENT = JSON.stringify({ argv: [process.execPath] });
+
+	const deep = { id: 'custom-command:deep', label: 'Deep', model: 'deep', baseUrl: null, apiKeyPreview: null };
+	const listing = spyOn(customCommand, 'models').mockResolvedValue([{ ...deep, efforts: ['low', 'high'] }]);
+
+	try {
+		expect(await namedModelChoices(deep.id, LOOKUP)).toEqual({ efforts: ['low', 'high'], defaultEffort: null });
+	} finally {
+		listing.mockRestore();
+		delete process.env.RECODER_CUSTOM_AGENT;
+	}
 });
