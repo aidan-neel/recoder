@@ -6,6 +6,7 @@ import {
 	MAX_GUIDELINES_PROMPT_CHARS,
 	type GuidelinesOverview,
 	type GuidelinesProposal,
+	type Provider,
 	type RepoGuidelines
 } from '@recoder/shared';
 import { GhError } from '../forge/gh';
@@ -129,6 +130,17 @@ app.get('/repos/:id', async (c) => {
 	});
 });
 
+/** Why Recoder cannot open a pull request with the file: a local repository takes none, a hosted one needs a token. */
+function proposeRefusal(provider: Provider): string {
+	if (provider === 'local') {
+		return 'Local repositories are read-only; edit the guidelines file in the repository instead.';
+	}
+
+	const forge = provider === 'gitlab' ? 'GitLab' : 'GitHub';
+
+	return `Connect a ${forge} token with write access in Settings → Connections to open a pull request.`;
+}
+
 /** Open a pull/merge request with the file, or push to the pending one. The file keeps its path; a new one is `RECODER.md`. */
 app.post('/repos/:id/propose', async (c) => {
 	const repo = await db.repos.get(c.req.param('id'));
@@ -144,18 +156,8 @@ app.post('/repos/:id/propose', async (c) => {
 	if (content.length > MAX_GUIDELINES_CHARS) return tooLong(c);
 
 	const host = repoFileHost(repo);
-	const provider = repo.provider ?? detectProvider(repo.url);
 
-	if (!host.canWrite())
-		return c.json(
-			{
-				error:
-					provider === 'local'
-						? 'Local repositories are read-only; edit the guidelines file in the repository instead.'
-						: `Connect a ${provider === 'gitlab' ? 'GitLab' : 'GitHub'} token with write access in Settings → Connections to open a pull request.`
-			},
-			401
-		);
+	if (!host.canWrite()) return c.json({ error: proposeRefusal(repo.provider ?? detectProvider(repo.url)) }, 401);
 
 	return withHost(c, async () => {
 		const pending = await host.findPending(BRANCH_PREFIX);
