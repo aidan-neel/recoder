@@ -8,6 +8,7 @@ import { isReviewing } from '../pulls/pull-rows';
 import { useSession, useSessionData } from '../pull/pull-session';
 import { runPhase } from './run-phase';
 import { runStages } from './run-stages';
+import { waitingReason } from './run-waiting';
 import type { RunPhase, RunView } from './types';
 
 /** What the review does right now: the command it runs, else its latest step. */
@@ -15,11 +16,6 @@ function activityOf(progress: ReviewProgress | null): string | null {
 	const running = progress?.toolCalls?.findLast((tool) => tool.status === 'running');
 
 	return running?.command ?? progress?.activity.at(-1)?.message ?? null;
-}
-
-/** Why a queued review has not started, as a waiting task says. */
-function waitingReason(progress: ReviewProgress | null): string | null {
-	return Object.values(progress?.tasks ?? {}).find((task) => task.queueReason)?.queueReason ?? null;
 }
 
 function failureAction(failure: ModelFailure | undefined): FailureAction | null {
