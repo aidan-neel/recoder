@@ -48,7 +48,7 @@ The target flags are mutually exclusive. With none, Recoder reviews the commits 
 - no flag: the branch against the default branch. Use it for committed work. Add `--base <ref>` if the default branch is wrong.
 - `--uncommitted`: everything not committed, untracked files included. Use it when you have not committed yet.
 - `--staged`: only what is staged. Use it before a commit.
-- `--pull <number or url>`: a pull or merge request on GitHub or GitLab. Needs the forge CLI (`gh` or `glab`) signed in.
+- `--pull <number or url>`: a pull or merge request on GitHub or GitLab. Needs the forge CLI (`gh` or `glab`) signed in. Add `--since <commit>` to review only the commits pushed after that one, such as the head you reviewed last. After a rebase or force-push that commit is gone from the pull request, so `--since` is a usage error: review the whole pull request.
 - `--diff <file or ->`: a unified diff, from a file or standard input. Use it when there is no repository. No code runs, so bugs are `unverified`. `--detach` needs a file, not `-`.
 
 Recoder reviews a throwaway copy. It never changes your working tree, index or branches.

@@ -38,6 +38,7 @@ Target:
 | `--staged`               |                       | Review what is staged.                                                                         |
 | `--uncommitted`          |                       | Review all uncommitted changes, untracked files included.                                      |
 | `--pull <number or url>` |                       | Review a pull or merge request on the repository forge.                                        |
+| `--since <commit>`       |                       | With `--pull`: review only the commits after this one. It must be in the pull request's history. |
 | `--diff <file or ->`     |                       | Review a unified diff from a file, or from standard input when the value is `-`. No code runs. |
 
 Scope:

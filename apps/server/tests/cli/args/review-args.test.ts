@@ -83,7 +83,8 @@ const TARGETS: [string[], ReviewTarget][] = [
 	[['--base', 'main', '--head', 'topic'], { kind: 'range', base: 'main', head: 'topic' }],
 	[['--staged'], { kind: 'staged' }],
 	[['--uncommitted'], { kind: 'uncommitted' }],
-	[['--pull', '12'], { kind: 'pull', pull: '12' }],
+	[['--pull', '12'], { kind: 'pull', pull: '12', since: null }],
+	[['--pull', '12', '--since', 'abc1234'], { kind: 'pull', pull: '12', since: 'abc1234' }],
 	[['--diff', '-'], { kind: 'diff', source: '-' }]
 ];
 
@@ -96,6 +97,7 @@ const CONFLICTS: [string[], string][] = [
 	[['--pull', '1', '--diff', 'x.patch'], '--pull and --diff'],
 	[['--staged', '--base', 'main'], '--base'],
 	[['--pull', '1', '--head', 'topic'], '--pull'],
+	[['--since', 'abc1234'], '--since needs --pull'],
 	[['--body', 'a', '--body-file', 'b'], '--body and --body-file'],
 	[['--instructions', 'a', '--instructions-file', 'b'], '--instructions and --instructions-file'],
 	[['--lens', 'security', '--skip-lens', 'rules'], '--lens and --skip-lens'],

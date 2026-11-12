@@ -7,6 +7,7 @@ import { tokenEnv } from '../../forge/tokens.js';
 import { prepareSandbox, sandboxLocation, sandboxRevision } from '../../sandbox/sandbox.js';
 import { CliError, describeError, notReadyError, usageError } from '../exit.js';
 import { checkedOutTarget, removedOnFailure } from './checked-out.js';
+import { startingAt } from './pull-since.js';
 import { assertNotCancelled, gitOutput } from './git.js';
 import { redactedTail, withoutCredentials } from '../../util/redact.js';
 import type { ResolvedTarget, TargetRequest } from './resolve-target.js';
@@ -60,9 +61,10 @@ interface PullCheckout {
  * A pull or merge request checked out the way the server checks one out:
  * metadata from the forge, the head fetched into a fresh checkout, and the
  * base branch fetched to find the merge base. A number means a pull request on
- * the forge the repository's `origin` remote points at.
+ * the forge the repository's `origin` remote points at. A `since` commit starts
+ * the diff there in place of the merge base.
  */
-export async function resolvePull(request: TargetRequest, pull: string): Promise<ResolvedTarget> {
+export async function resolvePull(request: TargetRequest, pull: string, since: string | null): Promise<ResolvedTarget> {
 	const address = await pullAddress(request, pull);
 	const repo = forgeRepo(address.repoUrl);
 	const pr = await pullMetadata(repo, address.number);
@@ -93,9 +95,11 @@ export async function resolvePull(request: TargetRequest, pull: string): Promise
 			})
 		);
 
-		const revision = await checkoutStep(checkout, `fetching its base branch ${pr.base}`, () =>
+		const branchRevision = await checkoutStep(checkout, `fetching its base branch ${pr.base}`, () =>
 			sandboxRevision(path, pr.base, remote)
 		);
+
+		const revision = since === null ? branchRevision : await startingAt(branchRevision, since, request.signal);
 
 		return checkedOutTarget({
 			request,

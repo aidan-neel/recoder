@@ -22,7 +22,7 @@ test('a pull number is found through the origin remote and carries the forge tit
 
 	git(dir, ['remote', 'add', 'origin', forge.repo.url]);
 
-	const resolved = await resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7' }));
+	const resolved = await resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', since: null }));
 
 	expect(resolved.title).toBe('Change a');
 	expect(resolved.body).toBe('Makes two loud. Closes #5.');
@@ -41,17 +41,53 @@ test('a pull URL needs no repository and no origin remote', async () => {
 	const forge = await localForge();
 	const elsewhere = await fixtureFolder('recoder-no-repo-');
 
-	const resolved = await resolveTarget(targetRequest(elsewhere, { kind: 'pull', pull: `${forge.repo.url}#pull/7` }));
+	const resolved = await resolveTarget(
+		targetRequest(elsewhere, { kind: 'pull', pull: `${forge.repo.url}#pull/7`, since: null })
+	);
 
 	expect(resolved.revision?.headSha).toBe(forge.pull7Head);
 
 	await resolved.dispose();
 });
 
+test('--since starts the diff at that commit, so only the commits after it are reviewed', async () => {
+	const forge = await localForge();
+	const elsewhere = await fixtureFolder('recoder-since-');
+	const pull = `${forge.repo.url}#pull/7`;
+
+	const resolved = await resolveTarget(targetRequest(elsewhere, { kind: 'pull', pull, since: forge.pull7Commit }));
+
+	expect(resolved.revision?.mergeBaseSha).toBe(forge.pull7Commit);
+	expect(resolved.report.mergeBaseSha).toBe(forge.pull7Commit);
+	expect(resolved.diff).toContain('old.ts');
+	expect(resolved.diff).not.toContain('+TWO');
+
+	await resolved.dispose();
+});
+
+const OUTSIDE_THE_PULL: [string, (forge: Awaited<ReturnType<typeof localForge>>) => string, string][] = [
+	['an unknown commit', () => 'deadbeef', 'not in the history'],
+	['a commit below where the pull left its base', (forge) => forge.root, 'older than'],
+	["the pull's own head", (forge) => forge.pull7Head, 'Nothing to review'],
+	['a ref name', () => 'main', 'commit SHA']
+];
+
+test.each(OUTSIDE_THE_PULL)('--since at %s is a usage error', async (_, pick, message) => {
+	const forge = await localForge();
+	const elsewhere = await fixtureFolder('recoder-since-');
+	const since = pick(forge);
+
+	const error = await rejection(
+		resolveTarget(targetRequest(elsewhere, { kind: 'pull', pull: `${forge.repo.url}#pull/7`, since }))
+	);
+
+	expect(error).toMatchObject({ exitCode: EXIT.usage, message: expect.stringContaining(message) });
+});
+
 test('a pull number in a repository without an origin remote asks for the URL', async () => {
 	const dir = await userRepository();
 
-	const resolving = resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7' }));
+	const resolving = resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', since: null }));
 
 	await expect(resolving).rejects.toMatchObject({ exitCode: EXIT.notReady, message: expect.stringContaining('URL') });
 });
@@ -67,7 +103,7 @@ test('a rejected pull address is never quoted back, wherever it hides a secret',
 	};
 
 	for (const [pull, secrets] of Object.entries(hostile)) {
-		const error = await rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull })));
+		const error = await rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull, since: null })));
 
 		expect(error).toMatchObject({ exitCode: EXIT.usage });
 		expect(error.message).toContain('pull request URL');
@@ -80,7 +116,7 @@ test('an origin remote that is not on a forge is shown without its query string'
 
 	git(dir, ['remote', 'add', 'origin', 'https://github.com/o/r/extra?private_token=SECRET']);
 
-	const error = await rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7' })));
+	const error = await rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', since: null })));
 
 	expect(error).toMatchObject({ exitCode: EXIT.notReady });
 	expect(error.message).toContain('https://github.com/o/r/extra ');
@@ -143,7 +179,7 @@ async function pullWithFailingClone(dir: string): Promise<Error> {
 		`#!/bin/sh\nif [ "$1" = clone ]; then\n${lines}\nexit 128\nfi\nexec '${realGit}' "$@"\n`
 	);
 
-	return withPath(path, () => rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7' }))));
+	return withPath(path, () => rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', since: null }))));
 }
 
 /** What a fake `gh` prints when it fails, standing in for forge output that can quote the remote URL. */
@@ -153,7 +189,10 @@ const GH_ERROR_TEXT = 'could not resolve FORGE-OWN-TEXT';
 async function pullWithFailingGh(dir: string): Promise<{ error: Error; ghArgs: string }> {
 	const argsFile = join(await fixtureFolder('recoder-gh-args-'), 'args');
 	const path = await pathWithFake('gh', `#!/bin/sh\necho "$*" > '${argsFile}'\necho '${GH_ERROR_TEXT}' >&2\nexit 1\n`);
-	const error = await withPath(path, () => rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7' }))));
+
+	const error = await withPath(path, () =>
+		rejection(resolveTarget(targetRequest(dir, { kind: 'pull', pull: '7', since: null })))
+	);
 
 	return { error, ghArgs: await readFile(argsFile, 'utf8') };
 }

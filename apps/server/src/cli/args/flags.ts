@@ -105,6 +105,13 @@ export const REVIEW_FLAGS = {
 		value: 'number or url',
 		description: 'Review a pull or merge request on the repository forge.'
 	},
+	since: {
+		type: 'string',
+		group: 'target',
+		value: 'commit',
+		description:
+			'With --pull: review only the commits after this one, such as the head of an earlier review. It must be in the history of the pull request.'
+	},
 	diff: {
 		type: 'string',
 		group: 'target',
