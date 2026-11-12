@@ -11,6 +11,7 @@ import {
 import { pullFeed, watchable, type PullFeed } from './feed';
 import { readAutoReviewSettings } from './settings';
 import { reviewHistory, startAutoReview } from './start';
+import { postgres } from '../../storage/backend';
 import { withWatchState } from './state-queue';
 
 /** The first round waits a little after boot or a settings change, so a burst of saves runs one round. */
@@ -127,6 +128,20 @@ async function checkAll(): Promise<void> {
 
 	runtime.errors = errors;
 	runtime.lastCheckAt = new Date().toISOString();
+
+	if (postgres) {
+		await withWatchState(async () => {
+			const state = readWatchState();
+
+			state.status = {
+				lastCheckAt: runtime.lastCheckAt,
+				nextCheckAt: new Date(Date.now() + settings.intervalSeconds * 1000).toISOString(),
+				errors
+			};
+
+			writeWatchState(state);
+		});
+	}
 }
 
 /** One round at a time: a round asked for while one runs waits for that one. */
@@ -160,6 +175,8 @@ function schedule(delayMs: number): void {
 
 /** Start polling, or pick up changed settings: the next round runs shortly, then every interval. */
 export function restartWatcher(): void {
+	if (postgres) return;
+
 	schedule(FIRST_ROUND_MS);
 }
 
@@ -171,12 +188,14 @@ export async function checkNow(): Promise<void> {
 export async function autoReviewStatus(
 	settings: AutoReviewSettings = readAutoReviewSettings()
 ): Promise<AutoReviewStatus> {
+	const state = readWatchState();
+
 	return {
-		running: runtime.timer !== null || runtime.round !== null,
+		running: postgres ? settings.enabled : runtime.timer !== null || runtime.round !== null,
 		watching: (await watchedRepos(settings)).length,
-		lastCheckAt: runtime.lastCheckAt,
-		nextCheckAt: runtime.nextCheckAt,
-		errors: runtime.errors,
-		recent: readWatchState().recent
+		lastCheckAt: postgres ? (state.status?.lastCheckAt ?? null) : runtime.lastCheckAt,
+		nextCheckAt: postgres ? (state.status?.nextCheckAt ?? null) : runtime.nextCheckAt,
+		errors: postgres ? (state.status?.errors ?? []) : runtime.errors,
+		recent: state.recent
 	};
 }

@@ -44,6 +44,13 @@ transactional `update` for read/modify/write decisions. Streaming callbacks queu
 persistence; drain the queue before reporting completion. See
 [the HA design](docs/ha-design.md).
 
+Multiple API replicas require PostgreSQL and fenced review ownership. Keep settings
+inside a request/job snapshot, enqueue shared controls durably, and commit terminal
+results with their progress and event state. See [HA operation](docs/ha-operating.md).
+Run the explicit HA integration suite against an isolated PostgreSQL instance with
+`TEST_DATABASE_URL` and `RECODER_POSTGRES_TEST_URL` set. Default unit tests clear
+`RECODER_DATABASE_URL` and never access a configured shared database.
+
 ESLint (`eslint.config.js`) and Prettier (`.prettierrc.json`) enforce most of
 this. Treat a lint error as a bug, not a suggestion.
 

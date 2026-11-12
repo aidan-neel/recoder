@@ -5,6 +5,10 @@ import { GhError } from '../cli';
 import { PublishConflictError, reviewForge, type PostedComment, type PullCommentForge } from './forge';
 import { savePullComment } from './record';
 import { pullCommentMarker, renderPullComment } from './render';
+import { postgres } from '../../storage/backend';
+import { currentLease } from '../../review/runtime/ownership';
+import type { PublicationSession } from '../../storage/postgres-publication';
+import { missingComment, publicationLock, publicationOperation, rejectedCreate } from './shared-publication';
 
 /**
  * Recoder's one summary comment on a pull request: posted when someone asks
@@ -20,6 +24,7 @@ interface Tracker {
 	unsubscribe: () => void;
 	timer: ReturnType<typeof setTimeout> | null;
 	lastEditAt: number;
+	owner: string;
 }
 
 const trackers = new Map<string, Tracker>();
@@ -31,7 +36,8 @@ const queues = new Map<string, Promise<unknown>>();
 const lastBodies = new Map<string, string>();
 
 function serial<T>(reviewId: string, work: () => Promise<T>): Promise<T> {
-	const run = (queues.get(reviewId) ?? Promise.resolve()).then(work, work);
+	const execute = () => publicationOperation(work);
+	const run = (queues.get(reviewId) ?? Promise.resolve()).then(execute, execute);
 
 	const settled = run.then(
 		() => undefined,
@@ -75,9 +81,32 @@ async function inherited(review: Review): Promise<PostedComment | null> {
  * else the one carrying the marker (after a restart lost the record), else
  * post one. A comment someone deleted is posted again.
  */
-async function upsert(forge: PullCommentForge, review: Review, body: string): Promise<PostedComment> {
+async function upsert(
+	forge: PullCommentForge,
+	review: Review,
+	body: string,
+	session?: PublicationSession
+): Promise<PostedComment> {
 	const own = review.pullComment?.id && review.pullComment.url ? review.pullComment : null;
 	const known = own ? { id: own.id!, url: own.url! } : await inherited(review);
+
+	if (session) {
+		const posted = await session.publish({
+			marker: pullCommentMarker(review.prNumber),
+			...(known ? { known: { ...known, inline: false } } : {}),
+			find: async () => {
+				const found = await forge.find(pullCommentMarker(review.prNumber));
+
+				return found ? { ...found, inline: false } : null;
+			},
+			edit: async (comment) => ({ ...(await forge.edit(comment.id, body)), inline: false }),
+			create: async () => ({ ...(await forge.create(body, review.autoTrigger?.discussionId)), inline: false }),
+			isMissing: missingComment,
+			isRejected: rejectedCreate
+		});
+
+		return { id: posted.id, url: posted.url };
+	}
 
 	if (known) {
 		try {
@@ -99,7 +128,7 @@ function failureText(err: unknown): string {
 }
 
 /** Render the review as it stands and write it to the pull request. Throws the forge's error after saving it. */
-async function write(reviewId: string): Promise<Review> {
+async function writeLocked(reviewId: string, session?: PublicationSession): Promise<Review> {
 	const review = await db.reviews.get(reviewId);
 
 	if (!review) throw new Error('review not found');
@@ -125,7 +154,7 @@ async function write(reviewId: string): Promise<Review> {
 		if (review.pullComment?.id && review.pullComment.state !== 'failed' && lastBodies.get(reviewId) === body)
 			return review;
 
-		const posted = await upsert(forge, review, body);
+		const posted = await upsert(forge, review, body, session);
 
 		if (running) lastBodies.set(reviewId, body);
 
@@ -137,6 +166,18 @@ async function write(reviewId: string): Promise<Review> {
 		await savePullComment(reviewId, { state: 'failed', error: failureText(err) });
 		throw err;
 	}
+}
+
+async function write(reviewId: string): Promise<Review> {
+	if (!postgres) return writeLocked(reviewId);
+
+	const review = await db.reviews.get(reviewId);
+
+	if (!review) throw new Error('review not found');
+
+	const { key } = await reviewForge(review);
+
+	return publicationLock(key, (session) => writeLocked(reviewId, session));
 }
 
 /** Write in the background; the failure is already saved on the review for the page to show. */
@@ -163,9 +204,13 @@ function scheduleEdit(reviewId: string): void {
 
 /** Follow a running review's events with throttled edits. */
 function track(reviewId: string): void {
-	if (trackers.has(reviewId)) return;
+	const lease = currentLease();
+	const owner = lease ? JSON.stringify([lease.ownerId, lease.epoch]) : '';
 
-	const tracker: Tracker = { unsubscribe: () => undefined, timer: null, lastEditAt: Date.now() };
+	if (trackers.get(reviewId)?.owner === owner) return;
+	untrack(reviewId);
+
+	const tracker: Tracker = { unsubscribe: () => undefined, timer: null, lastEditAt: Date.now(), owner };
 
 	trackers.set(reviewId, tracker);
 	tracker.unsubscribe = subscribeReview(reviewId, () => scheduleEdit(reviewId), false);
@@ -181,13 +226,17 @@ function untrack(reviewId: string): void {
 	lastBodies.delete(reviewId);
 }
 
+export function stopPullCommentTracking(reviewId: string): void {
+	untrack(reviewId);
+}
+
 /** Mark the review as wanting a comment, and follow it if it is running. */
 async function claim(reviewId: string): Promise<Review | undefined> {
 	const review = await db.reviews.get(reviewId);
 
 	if (!review) return undefined;
 	if (!review.pullComment) await savePullComment(reviewId, { state: 'posting' });
-	if (inFlight(review)) track(reviewId);
+	if (inFlight(review) && (!postgres || currentLease())) track(reviewId);
 
 	return review;
 }
@@ -201,7 +250,7 @@ async function claim(reviewId: string): Promise<Review | undefined> {
 export async function requestPullComment(reviewId: string): Promise<void> {
 	const review = await claim(reviewId);
 
-	if (review && review.status !== 'draft') writeLater(reviewId);
+	if (review && review.status !== 'draft' && !postgres) writeLater(reviewId);
 }
 /**
  * Write the summary comment now and answer the review with its comment state.
@@ -227,5 +276,11 @@ export async function trackPullComment(reviewId: string): Promise<void> {
 /** The pipeline's run ended, however it ended: stop following it and write the final comment. */
 export async function settlePullComment(reviewId: string): Promise<void> {
 	untrack(reviewId);
-	if ((await db.reviews.get(reviewId))?.pullComment) writeLater(reviewId);
+	if (!(await db.reviews.get(reviewId))?.pullComment) return;
+
+	if (postgres) {
+		await serial(reviewId, () => write(reviewId)).catch((error) =>
+			console.warn(`[pull-comment] ${reviewId}: ${failureText(error)}`)
+		);
+	} else writeLater(reviewId);
 }

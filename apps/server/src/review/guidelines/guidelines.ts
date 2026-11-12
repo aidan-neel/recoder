@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { z } from 'zod';
 import {
 	MAX_GUIDELINES_CHARS,
 	type GlobalGuidelines,
@@ -9,6 +10,7 @@ import {
 } from '@recoder/shared';
 import { serverDataDir } from '../../util/data-dir.js';
 import { DEFAULT_GLOBAL_GUIDELINES } from './default-guidelines.js';
+import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../config/shared-settings.js';
 
 export const GUIDELINES_TEMPLATE = `## Focus
 -
@@ -29,6 +31,12 @@ function globalFile(): string {
 
 /** Never saved means the defaults; a saved empty file means the owner cleared them. */
 export function readGlobalGuidelines(): GlobalGuidelines {
+	if (sharedSettingsActive()) {
+		return z
+			.object({ content: z.string(), updatedAt: z.string().nullable() })
+			.parse(readSharedSetting('global-guidelines') ?? { content: DEFAULT_GLOBAL_GUIDELINES, updatedAt: null });
+	}
+
 	const file = globalFile();
 
 	try {
@@ -58,6 +66,14 @@ export function writeGlobalGuidelines(content: string): GlobalGuidelines {
 	if (text.length > MAX_GUIDELINES_CHARS)
 		throw new Error(`Guidelines are limited to ${MAX_GUIDELINES_CHARS} characters`);
 
+	if (sharedSettingsActive()) {
+		const value = { content: text, updatedAt: new Date().toISOString() };
+
+		writeSharedSetting('global-guidelines', value);
+
+		return value;
+	}
+
 	const file = globalFile();
 	const temporary = `${file}.${crypto.randomUUID()}.tmp`;
 
@@ -75,6 +91,12 @@ export function writeGlobalGuidelines(content: string): GlobalGuidelines {
 
 /** Delete the saved global layer, so it reads as never saved and the defaults apply. */
 export function clearGlobalGuidelines(): GlobalGuidelines {
+	if (sharedSettingsActive()) {
+		writeSharedSetting('global-guidelines', null);
+
+		return readGlobalGuidelines();
+	}
+
 	try {
 		unlinkSync(globalFile());
 	} catch (err) {

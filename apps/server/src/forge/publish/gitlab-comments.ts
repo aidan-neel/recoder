@@ -2,6 +2,8 @@ import { GhError } from '../cli';
 import { useGitlabApi } from '../gitlab-api';
 import { glabApi, glabWrite } from '../glab';
 import type { InlineTarget, PostedComment, PullCommentForge } from './forge';
+import { InlinePreparationError, PublishConflictError } from './forge';
+import { z } from 'zod';
 
 /** GitLab's limit on a note body, in characters. */
 const GITLAB_LIMIT = 1_000_000;
@@ -82,10 +84,41 @@ export function gitlabComments(
 				const match = rows.find((row) => typeof row.body === 'string' && row.body.includes(marker));
 
 				if (match) return linked(match);
-				if (rows.length < 100) break;
+				if (rows.length < 100) return null;
 			}
 
-			return null;
+			throw new PublishConflictError(
+				'The merge request has too many notes to establish whether Recoder already posted. Check its notes before retrying.'
+			);
+		},
+
+		async findInline(marker) {
+			const discussionsSchema = z.array(
+				z.object({
+					notes: z.array(
+						z.object({
+							id: z.number(),
+							body: z.string().nullable().optional(),
+							type: z.string().nullable().optional()
+						})
+					)
+				})
+			);
+
+			for (let page = 1; page <= MAX_PAGES; page++) {
+				const discussions = discussionsSchema.parse(await glabApi(`${mr}/discussions?per_page=100&page=${page}`, env));
+
+				const match = discussions
+					.flatMap((discussion) => discussion.notes)
+					.find((note) => note.type === 'DiffNote' && note.body?.includes(marker));
+
+				if (match) return linked(match);
+				if (discussions.length < 100) return null;
+			}
+
+			throw new PublishConflictError(
+				'The merge request has too many discussions to establish whether Recoder already posted. Check its discussions before retrying.'
+			);
 		},
 
 		async create(body, discussionId) {
@@ -99,9 +132,16 @@ export function gitlabComments(
 		},
 
 		async createInline(body, target) {
-			const refs = (await loadMerge()).diff_refs;
+			let refs: DiffRefs;
 
-			if (!refs) throw new GhError('unknown', 'GitLab has not computed this merge request’s diff yet.');
+			try {
+				const loaded = (await loadMerge()).diff_refs;
+
+				if (!loaded) throw new GhError('unknown', 'GitLab has not computed this merge request’s diff yet.');
+				refs = loaded;
+			} catch (error) {
+				throw new InlinePreparationError(error);
+			}
 
 			const discussion = (await write('POST', `${mr}/discussions`, {
 				body,

@@ -7,7 +7,11 @@ import { initVllmServers } from './models/vllm/vllm-store';
 import { startVllmSync } from './models/vllm/vllm-sync';
 import { initTokenStore } from './forge/tokens';
 import { restartWatcher } from './forge/watch/watcher';
-import { exitOnShutdownSignals, recoverStaleReviews } from './store';
+import { closeStore, exitOnShutdownSignals, recoverStaleReviews } from './store';
+import { coordinator, initializeStorage, postgres } from './storage/backend';
+import { startReviewWorkers } from './review/runtime/worker';
+import { executeReviewActor } from './review/runtime/actor';
+import { startSharedMaintenance } from './review/runtime/maintenance';
 
 /** Start the agent now so Settings never waits on a cold start, and warm its provider catalog. */
 function warmAgent(): void {
@@ -36,14 +40,32 @@ function isLongLived(path: string): boolean {
 	return LONG_LIVED.some((pattern) => pattern.test(path));
 }
 
-exitOnShutdownSignals();
-initTokenStore();
-initReviewSettings();
-initVllmServers();
-await recoverStaleReviews();
-warmAgent();
-startVllmSync();
-restartWatcher();
+await initializeStorage();
+
+let stopWorkers: (() => Promise<void>) | undefined;
+const stopMaintenance = postgres ? startSharedMaintenance(postgres) : undefined;
+
+if (coordinator) {
+	stopWorkers = startReviewWorkers(
+		coordinator,
+		{
+			ownerId: env.RECODER_INSTANCE_ID ?? crypto.randomUUID(),
+			concurrency: env.RECODER_JOB_CONCURRENCY,
+			leaseMs: env.RECODER_JOB_LEASE_MS,
+			pollMs: env.RECODER_JOB_POLL_MS
+		},
+		executeReviewActor
+	);
+} else {
+	exitOnShutdownSignals();
+	initTokenStore();
+	initReviewSettings();
+	initVllmServers();
+	await recoverStaleReviews();
+	warmAgent();
+	startVllmSync();
+	restartWatcher();
+}
 
 const server = Bun.serve({
 	fetch(request, server) {
@@ -57,3 +79,28 @@ const server = Bun.serve({
 
 console.log(`recoder server listening on http://${server.hostname}:${server.port}`);
 console.log(`recoder data dir: ${serverDataDir()}`);
+
+if (postgres) {
+	let stopping = false;
+
+	for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+		process.on(signal, async () => {
+			if (stopping) return;
+
+			stopping = true;
+			await server.stop(true);
+			await stopMaintenance?.();
+			await stopWorkers?.();
+
+			try {
+				await closeStore();
+			} catch {
+				console.error(
+					'[server] some queued writes could not flush before shutdown; another server can recover the review'
+				);
+			}
+
+			process.exit(signal === 'SIGINT' ? 130 : 143);
+		});
+	}
+}

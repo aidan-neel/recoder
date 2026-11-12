@@ -1,6 +1,8 @@
 import { readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { z } from 'zod';
 import { serverDataDir } from '../../../util/data-dir.js';
+import { readSharedSetting, sharedSettingsActive, writeSharedSetting } from '../../../config/shared-settings.js';
 
 /** A finding a person dismissed, remembered so a later review of the same repository does not report it again. */
 export interface Dismissal {
@@ -23,12 +25,29 @@ export const MAX_DISMISSALS_PER_REPO = 200;
 
 type Table = Record<string, Dismissal[]>;
 
+const tableSchema = z.record(
+	z.string(),
+	z.array(
+		z.object({
+			repoId: z.string(),
+			fingerprint: z.string(),
+			file: z.string(),
+			category: z.string(),
+			title: z.string(),
+			reason: z.string().optional(),
+			dismissedAt: z.string()
+		})
+	)
+);
+
 function tableFile(): string {
 	return join(serverDataDir(), 'dismissed-findings.json');
 }
 
 /** The saved table; a missing or unreadable file reads as empty, since losing it only means findings may repeat. */
 function readTable(): Table {
+	if (sharedSettingsActive()) return tableSchema.parse(readSharedSetting('dismissals') ?? {});
+
 	try {
 		const parsed: unknown = JSON.parse(readFileSync(tableFile(), 'utf8'));
 
@@ -40,6 +59,12 @@ function readTable(): Table {
 
 /** Writes through a temp file, so a crash never leaves half a table. */
 function writeTable(table: Table): void {
+	if (sharedSettingsActive()) {
+		writeSharedSetting('dismissals', table);
+
+		return;
+	}
+
 	const file = tableFile();
 	const temp = `${file}.${process.pid}.tmp`;
 

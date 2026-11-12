@@ -1,5 +1,6 @@
 import { settleAssignments, type CommandRun, type Repo, type Review, type ReviewProgress } from '@recoder/shared';
-import { sqlite as getDb, sqliteCollection as createCollection, closeSqlite } from './storage/sqlite';
+import { sqlite as getDb } from './storage/sqlite';
+import { collection as createCollection, closeStorage, postgres, sharedDiffs } from './storage/backend';
 import { progressWrites, metricWrites } from './storage/persistence-queue';
 import type { ReviewCheckpoint } from './review/session/review-checkpoint';
 import type { PipelineRun, RunTokenCall } from './models/metrics';
@@ -15,7 +16,7 @@ export async function closeStore(): Promise<void> {
 	await flushPersistence();
 	progressCache.clear();
 	progressDirty.clear();
-	await closeSqlite();
+	await closeStorage();
 }
 export const db = {
 	repos: createCollection<Repo>('repos'),
@@ -102,6 +103,8 @@ export const reviewProgress = {
 	},
 	set: async (item: ReviewProgress): Promise<ReviewProgress> => {
 		await progressWrites.drain(item.id);
+		if (postgres) return progressTable.set(item);
+
 		await remember(item);
 		progressDirty.add(item.id);
 		progressTimer ??= setTimeout(flushOnTimer, PROGRESS_FLUSH_MS);
@@ -141,6 +144,8 @@ export const reviewProgress = {
 
 /** Cache a snapshot as the most recently used (the map's last entry), writing out and dropping the oldest past the cap. */
 async function remember(item: ReviewProgress): Promise<void> {
+	if (postgres) return;
+
 	progressCache.delete(item.id);
 	progressCache.set(item.id, item);
 
@@ -244,10 +249,16 @@ const REPLAY_BYTES = 512 * 1024 * 1024;
  * `keepId`, the one just kept. A dropped review can no longer be replayed.
  */
 export async function evictReplays(maxBytes: number, keepId?: string): Promise<void> {
-	const rows = getDb().query('SELECT id, length(value) AS bytes FROM review_replays ORDER BY rowid').all() as {
-		id: string;
-		bytes: number;
-	}[];
+	const rows = postgres
+		? await postgres<{ id: string; bytes: number }[]>`
+			SELECT id, octet_length(value::text) AS bytes FROM recoder_records
+			WHERE collection = 'review_replays' ORDER BY position
+		`
+		: getDb()
+				.query<{ id: string; bytes: number }, []>(
+					'SELECT id, length(value) AS bytes FROM review_replays ORDER BY rowid'
+				)
+				.all();
 
 	let total = rows.reduce((sum, row) => sum + row.bytes, 0);
 
@@ -275,6 +286,8 @@ export const reviewSandboxes = new Map<string, string>();
 /** Raw unified diffs by review id. Populated by the pipeline's fetch step. */
 export const reviewDiffs = {
 	get: async (reviewId: string): Promise<string | undefined> => {
+		if (sharedDiffs) return (await sharedDiffs.get(reviewId))?.diff;
+
 		const row = getDb().query('SELECT diff FROM review_diffs WHERE review_id = ?').get(reviewId) as {
 			diff: string;
 		} | null;
@@ -283,6 +296,12 @@ export const reviewDiffs = {
 	},
 	has: async (reviewId: string): Promise<boolean> => (await reviewDiffs.get(reviewId)) !== undefined,
 	set: async (reviewId: string, diff: string): Promise<void> => {
+		if (sharedDiffs) {
+			await sharedDiffs.set({ id: reviewId, diff });
+
+			return;
+		}
+
 		getDb()
 			.query(
 				'INSERT INTO review_diffs (review_id, diff) VALUES (?, ?) ON CONFLICT(review_id) DO UPDATE SET diff = excluded.diff'
@@ -290,6 +309,12 @@ export const reviewDiffs = {
 			.run(reviewId, diff);
 	},
 	delete: async (reviewId: string): Promise<void> => {
+		if (sharedDiffs) {
+			await sharedDiffs.delete(reviewId);
+
+			return;
+		}
+
 		getDb().query('DELETE FROM review_diffs WHERE review_id = ?').run(reviewId);
 	}
 };
