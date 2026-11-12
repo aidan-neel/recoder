@@ -34,6 +34,11 @@ interface PullScreenProps {
 	number: number;
 }
 
+interface PullOnTabProps extends PullScreenProps {
+	/** The open tab. */
+	tab: PullTab;
+}
+
 /** Bars where the title, the facts and the tabs will stand while the page loads. */
 function HeadSkeleton() {
 	return (
@@ -70,11 +75,10 @@ function PullMergeBar() {
 }
 
 /** The page inside its session: the bar, the header, the tabs, the open tab and the merge bar. */
-function PullFrame({ repoId, number }: PullScreenProps) {
+function PullFrame({ repoId, number, tab }: PullOnTabProps) {
 	const router = useRouter();
 	const { base } = useApi();
 	const view = usePullPageView();
-	const tab = usePullTab();
 	const [mode, setMode] = useState<ChangesMode>('files');
 	const page = view.page;
 	const forge = page && page.provider !== 'local' && page.pull.url ? forgeLabel(page.provider) : null;
@@ -138,11 +142,19 @@ function PullFrame({ repoId, number }: PullScreenProps) {
 	);
 }
 
-/** A pull request's page. Everything under it reads one session for this pull request; another pull request gets a fresh one. */
-export function PullScreen({ repoId, number }: PullScreenProps) {
+/**
+ * A pull request's page on `tab`. Everything under it reads one session for
+ * this pull request; another pull request gets a fresh one.
+ */
+export function PullOnTab({ repoId, number, tab }: PullOnTabProps) {
 	return (
 		<PullSessionProvider key={`${repoId}#${number}`} repoId={repoId} number={number}>
-			<PullFrame repoId={repoId} number={number} />
+			<PullFrame repoId={repoId} number={number} tab={tab} />
 		</PullSessionProvider>
 	);
+}
+
+/** A pull request's page on the tab its address names. */
+export function PullScreen({ repoId, number }: PullScreenProps) {
+	return <PullOnTab repoId={repoId} number={number} tab={usePullTab()} />;
 }

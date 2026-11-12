@@ -18,9 +18,9 @@ function sameFit(a: Fit | null, b: Fit): boolean {
 }
 
 /**
- * The review surface, in its own chunk: it renders in the browser only, so
- * the page's first load never waits on it. Until it arrives the window shows
- * its empty frame, which is also what the server paints.
+ * The app, in its own chunk: it renders in the browser only, so the page's
+ * first load never waits on it. Until it arrives the window shows its empty
+ * frame, which is also what the server paints.
  */
 const DemoSurface = dynamic(() => import('./demo-surface').then((module) => module.DemoSurface), {
 	ssr: false,
@@ -32,6 +32,7 @@ const DemoSurface = dynamic(() => import('./demo-surface').then((module) => modu
  * and scaled down to fit the stage; a stage under 900px lays it out at
  * tablet size and one under 600px at phone size (container queries), each
  * at least as wide as the stage, so it shrinks less and never leaves a gap.
+ * The two smaller sizes hide the app's sidebar.
  * The window is inert: it shows the product, it does not take input.
  */
 export function HeroDemo() {
