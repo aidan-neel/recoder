@@ -34,7 +34,8 @@ export interface ProgressMessage {
 	};
 }
 
-const SNAPSHOT_KEYS = [
+/** Progress fields an event replaces whole when its data carries them, on the server and in the browser alike. */
+export const PROGRESS_SNAPSHOT_KEYS = [
 	'paused',
 	'planVersion',
 	'assignments',
@@ -69,7 +70,7 @@ export function applyProgressMessage(current: ReviewProgress, event: ProgressMes
 	}
 
 	if (data) {
-		for (const key of SNAPSHOT_KEYS) {
+		for (const key of PROGRESS_SNAPSHOT_KEYS) {
 			if (key in data) (next as unknown as Record<string, unknown>)[key] = data[key];
 		}
 	}

@@ -1,5 +1,6 @@
 import {
 	emptyReviewProgress,
+	PROGRESS_SNAPSHOT_KEYS,
 	type CoverageGap,
 	type CoverageSummary,
 	type ReviewAssignment,
@@ -56,23 +57,6 @@ function writeQueue(reviewId: string) {
 export async function flushReviewEvents(reviewId: string): Promise<void> {
 	await progressWrites.drain(reviewId);
 }
-
-const SNAPSHOT_KEYS = [
-	'paused',
-	'planVersion',
-	'assignments',
-	'budget',
-	'candidateCount',
-	'coverage',
-	'coverageGaps',
-	'outcome',
-	'failure',
-	'recommendedChecks',
-	'stage',
-	'orchestratorModel',
-	'guidelines',
-	'workerWait'
-] as const;
 
 /** Hand an event to one listener. A listener's failure must never break the pipeline or a replay. */
 function deliver(fn: Listener, event: ReviewEvent): void {
@@ -259,7 +243,7 @@ function applySnapshotPatch(snapshot: ReviewProgress, data?: Record<string, unkn
 		snapshot.reasoning = settled.reasoning;
 	}
 
-	for (const key of SNAPSHOT_KEYS) {
+	for (const key of PROGRESS_SNAPSHOT_KEYS) {
 		if (key in data) (snapshot as unknown as Record<string, unknown>)[key] = data[key];
 	}
 }

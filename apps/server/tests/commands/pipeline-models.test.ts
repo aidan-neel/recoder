@@ -58,7 +58,6 @@ function modelsByRun(calls: RunTokenCall[]): Record<string, string[]> {
 	return byRun;
 }
 
-/** A run segment as the tests compare it, without its start time. */
 /** A run's identity without its measured timings, which vary from run to run. */
 function segment(index: number, models: string[]): Omit<PipelineRun, 'startedAt' | 'queueDelay'> {
 	return { index, orchestrator: models[0]!, subagent: models[1]!, lockMisses: 0, tokenBudget: 'medium' };
