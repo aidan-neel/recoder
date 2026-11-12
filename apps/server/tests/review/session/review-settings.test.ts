@@ -96,3 +96,68 @@ test('an old dispatch level loads as its subagent cap, is saved that way and sur
 		expect(effectiveSubagentCap()).toBe(cap);
 	}
 });
+
+test('saving the models list keeps OpenCode, Claude Code, Devin and vLLM picks while dropping a deleted HTTP model', () => {
+	const kept = { id: 'local', label: 'Local', model: 'qwen', baseUrl: 'http://localhost:8000/v1' };
+	const removed = { id: 'gone', label: 'Gone', model: 'gone', baseUrl: 'http://localhost:8001/v1' };
+
+	saveReviewSettings({
+		models: [kept, removed],
+		sharedModelId: 'opencode:openrouter/deepseek/deepseek-r1',
+		orchestratorModelId: 'claude-code:claude-sonnet-4-5',
+		specialistModelId: 'devin:claude-opus-4-1',
+		verifierModelId: 'vllm:srv1/Qwen/Qwen2.5-Coder-32B'
+	});
+
+	saveReviewSettings({ models: [kept] });
+
+	expect(getStoredSettings()).toMatchObject({
+		sharedModelId: 'opencode:openrouter/deepseek/deepseek-r1',
+		orchestratorModelId: 'claude-code:claude-sonnet-4-5',
+		specialistModelId: 'devin:claude-opus-4-1',
+		verifierModelId: 'vllm:srv1/Qwen/Qwen2.5-Coder-32B'
+	});
+
+	saveReviewSettings({
+		sharedModelId: 'gone',
+		orchestratorModelId: 'gone',
+		specialistModelId: 'gone',
+		verifierModelId: 'gone'
+	});
+
+	saveReviewSettings({ models: [kept] });
+
+	expect(getStoredSettings().sharedModelId).toBeUndefined();
+	expect(getStoredSettings().orchestratorModelId).toBeUndefined();
+	expect(getStoredSettings().specialistModelId).toBeUndefined();
+	expect(getStoredSettings().verifierModelId).toBeUndefined();
+});
+
+test('verifierModelId and verifierEffort survive a restart and can be cleared back to the Review model', () => {
+	saveReviewSettings({
+		models: [
+			{ id: 'lead', label: 'Lead', model: 'lead', baseUrl: 'http://localhost:8000/v1' },
+			{ id: 'judge', label: 'Judge', model: 'judge', baseUrl: 'http://localhost:8000/v1' }
+		],
+		orchestratorModelId: 'lead',
+		verifierModelId: 'judge',
+		verifierEffort: 'high'
+	});
+
+	setReviewOverrides({});
+	initReviewSettings();
+
+	expect(getStoredSettings()).toMatchObject({
+		orchestratorModelId: 'lead',
+		verifierModelId: 'judge',
+		verifierEffort: 'high'
+	});
+
+	saveReviewSettings({ verifierModelId: null, verifierEffort: null });
+	setReviewOverrides({});
+	initReviewSettings();
+
+	expect(getStoredSettings().verifierModelId).toBeNull();
+	expect(getStoredSettings().verifierEffort).toBeNull();
+	expect(configForOrchestrator().model).toBe('lead');
+});

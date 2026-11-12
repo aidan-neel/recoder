@@ -29,6 +29,8 @@ export interface PipelineRun {
 	/** The locked models, null when the run's picks did not resolve and it ran unlocked. */
 	orchestrator: string | null;
 	subagent: string | null;
+	/** The locked verifier model; absent on rows stored before the verifier had its own pick. */
+	verifier?: string | null;
 	/** Models resolved from the live settings instead of the run's locked picks. */
 	lockMisses: number;
 	/** The token budget the run's limits came from; unset on runs older than budgets and on runs that stopped before the harness. */
@@ -104,6 +106,7 @@ function openRun(metrics: StoredMetrics): number {
 		startedAt: new Date().toISOString(),
 		orchestrator: picks?.orchestrator.model ?? null,
 		subagent: picks?.subagent.model ?? null,
+		verifier: picks?.verifier.model ?? null,
 		lockMisses: 0,
 		...(worker && { worker })
 	};

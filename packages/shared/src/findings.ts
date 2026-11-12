@@ -1,3 +1,5 @@
+import type { ReasoningEffort } from './models';
+
 /**
  * Every severity a finding can have, lowest first. `info` is a reviewer's "low";
  * informational notes are never reported.
@@ -282,6 +284,10 @@ export interface FindingVerification {
 	outcome?: VerificationOutcome;
 	/** The run behind a `run` verification; older saved reviews omit it. */
 	evidence?: VerificationEvidence;
+	/** Model that ran the verifier; absent when no verifier model ran. */
+	model?: string;
+	/** Reasoning effort of the verifier model, when one was set. */
+	effort?: ReasoningEffort;
 }
 
 export interface Finding {

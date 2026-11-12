@@ -1,4 +1,5 @@
 import { agentCliOfModel } from './agent-clis';
+import { VLLM_MODEL_PREFIX } from './vllm';
 
 /** How model ids and sizes read in the UI. Shared by apps/web and apps/app. */
 
@@ -43,7 +44,7 @@ function spell(part: string): string {
  * row read as one version.
  */
 export function prettyModelName(id: string): string {
-	const tail = (withoutAgentPrefix(id).split('/').pop() ?? id).replace(/:.*$/, '');
+	const tail = (withoutRoutePrefix(id).split('/').pop() ?? id).replace(/:.*$/, '');
 	const parts = tail.split(/[-_\s]+/).filter((part) => part && !DROPPED.test(part));
 	const merged: string[] = [];
 
@@ -72,8 +73,13 @@ export function formatContextWindow(tokens: number): string {
 	return `${Math.round(tokens / 100_000) / 10}M`;
 }
 
-/** `id` without the prefix of the agent CLI that runs it (`opencode:openrouter/…` → `openrouter/…`). */
-function withoutAgentPrefix(id: string): string {
+/**
+ * `id` without Recoder's routing prefix: the agent CLI that runs it (`opencode:openrouter/…` →
+ * `openrouter/…`) or the vLLM server that serves it (`vllm:srv1/Qwen/…` → `srv1/Qwen/…`).
+ */
+function withoutRoutePrefix(id: string): string {
+	if (id.startsWith(VLLM_MODEL_PREFIX)) return id.slice(VLLM_MODEL_PREFIX.length);
+
 	const cli = agentCliOfModel(id);
 
 	return cli ? id.slice(cli.id.length + 1) : id;

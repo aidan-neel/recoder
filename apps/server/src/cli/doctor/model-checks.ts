@@ -1,7 +1,13 @@
 import type { AgentStatus, ModelProvider } from '@recoder/shared';
 import { codex } from '../../agents/codex/codex.js';
 import { agentById } from '../../agents/registry.js';
-import { configForOrchestrator, configForSubagent, isReviewConfigured, type ModelConfig } from '../../models/models.js';
+import {
+	configForOrchestrator,
+	configForSubagent,
+	configForVerifier,
+	isReviewConfigured,
+	type ModelConfig
+} from '../../models/models.js';
 import { MODEL_LOOKUP_LIMIT_MS, listLiveModels, listingProblem, type ModelLookup } from '../run/model-choices.js';
 import { openRunSignal } from '../run/run-signal.js';
 import { CHATGPT_SIGN_IN } from '../run/chatgpt-signin.js';
@@ -12,16 +18,16 @@ const NOT_CONFIGURED_FIX =
 	'Configure a model in Recoder settings, or set RECODER_REVIEW_BASE_URL, RECODER_REVIEW_API_KEY and RECODER_REVIEW_MODEL.';
 
 /**
- * Whether a review model resolves, and which models the review and its subagents would use. A model run by an agent
- * CLI that lists its models by running must also be one the agent lists: that is how a missing sign-in shows, since
- * OpenCode, for one, lists only the providers it is signed in to. Listing runs no model, and is bounded by the same
- * limit a review gives it. An agent with a fixed list (Claude Code) has no such check: its CLI also takes aliases
- * and newer ids that list lacks.
+ * Whether a review model resolves, and which models the review, subagents and verifiers would use. A model run by
+ * an agent CLI that lists its models by running must also be one the agent lists: that is how a missing sign-in
+ * shows, since OpenCode, for one, lists only the providers it is signed in to. Listing runs no model, and is bounded
+ * by the same limit a review gives it. An agent with a fixed list (Claude Code) has no such check: its CLI also takes
+ * aliases and newer ids that list lacks.
  */
 export async function checkReviewModel(): Promise<DoctorCheck> {
 	if (!isReviewConfigured()) return failedCheck('review-model', 'No review model is configured.', NOT_CONFIGURED_FIX);
 
-	const configs = [configForOrchestrator(), configForSubagent()];
+	const configs = [configForOrchestrator(), configForSubagent(), configForVerifier()];
 
 	const lookup: ModelLookup = {
 		stop: openRunSignal(new AbortController().signal, null),
@@ -32,7 +38,9 @@ export async function checkReviewModel(): Promise<DoctorCheck> {
 
 	if (unlisted) return unlisted;
 
-	return passedCheck('review-model', `Review model ${configs[0].model}; worker model ${configs[1].model}.`);
+	const verifier = configs[2].model === configs[0].model ? '' : `; verifier model ${configs[2].model}`;
+
+	return passedCheck('review-model', `Review model ${configs[0].model}; worker model ${configs[1].model}${verifier}.`);
 }
 
 /** A failed check when the model's agent does not list it; null when it does, and for a model no agent lists. */
@@ -67,7 +75,12 @@ async function unlistedModel(config: ModelConfig, lookup: ModelLookup): Promise<
 export async function checkAgentSignIns(): Promise<DoctorCheck[]> {
 	if (!isReviewConfigured()) return [];
 
-	const providers = new Set([configForOrchestrator().provider, configForSubagent().provider]);
+	const providers = new Set([
+		configForOrchestrator().provider,
+		configForSubagent().provider,
+		configForVerifier().provider
+	]);
+
 	const checks = [...providers].map((provider) => agentCheck(provider));
 
 	return (await Promise.all(checks)).filter((check): check is DoctorCheck => check !== null);

@@ -1,7 +1,13 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, join } from 'node:path';
-import { agentCliOfModel, type ModelEntry, type ModelSettings, type ReasoningEffort } from '@recoder/shared';
+import {
+	agentCliOfModel,
+	parseVllmModelId,
+	type ModelEntry,
+	type ModelSettings,
+	type ReasoningEffort
+} from '@recoder/shared';
 import { localGit } from '../forge/local/git';
 import { localRepoPath, readLocalForge, type LocalForge } from '../forge/local/schema';
 import { JUDGE_VERSION } from './benchmark-judge';
@@ -150,10 +156,24 @@ async function taskIdentities(tasks: readonly TaskLabel[], forge: ForgeReader): 
 	return identities.sort((a, b) => a.taskId.localeCompare(b.taskId, undefined, { numeric: true }));
 }
 
+/** Model and provider for a routed id (an agent CLI's prefix, or `vllm:`) absent from `settings.models`. */
+function unlistedRoutedModel(id: string | null | undefined): { model: string; provider: string } | null {
+	if (!id) return null;
+
+	const cli = agentCliOfModel(id);
+
+	if (cli) return { model: id.slice(cli.id.length + 1), provider: cli.id };
+
+	const vllm = parseVllmModelId(id);
+
+	return vllm ? { model: vllm.model, provider: 'openai-compatible' } : null;
+}
+
 /**
- * One stage's model by its pick. An agent CLI's pick names its model and
- * provider even while the agent cannot list it; any other pick the settings do
- * not list leaves its provider and context size `unknown`.
+ * One stage's model by its pick. A routed pick (an agent CLI's prefix, or
+ * `vllm:`) names its model and provider even when `settings.models`
+ * does not list it; any other unlisted pick leaves its provider and context
+ * size `unknown`.
  */
 function stageModel(
 	settings: ModelSettings,
@@ -161,28 +181,28 @@ function stageModel(
 	effort: ReasoningEffort | null | undefined
 ): StageModel {
 	const entry: ModelEntry | undefined = settings.models.find((candidate) => candidate.id === id);
-	const cli = !entry && id ? agentCliOfModel(id) : null;
-	const agentModel = cli && id ? id.slice(cli.id.length + 1) : null;
+	const routed = entry ? null : unlistedRoutedModel(id);
 
 	return {
-		model: entry?.model ?? agentModel ?? (id || settings.model || UNKNOWN),
-		provider: entry ? (entry.provider ?? 'openai-compatible') : (cli?.id ?? UNKNOWN),
+		model: entry?.model ?? routed?.model ?? (id || settings.model || UNKNOWN),
+		provider: entry ? (entry.provider ?? 'openai-compatible') : (routed?.provider ?? UNKNOWN),
 		effort: effort ?? 'default',
 		sampling: entry?.runtime ?? 'default',
 		contextSize: entry ? (entry.contextWindow ?? 'default') : UNKNOWN
 	};
 }
 
-/** The two review stages' models as the server resolves them: an unset second model follows the review model and its effort. */
+/** Each review stage's model as the server resolves it: an unset specialist or verifier follows the review model and its effort. */
 function stageModels(settings: ModelSettings): RunIdentity['models'] {
 	const review = settings.orchestratorModelId ?? settings.sharedModelId;
-	const second = settings.specialistModelId;
+
+	const follower = (id: string | null | undefined, effort: ReasoningEffort | null | undefined): StageModel =>
+		id ? stageModel(settings, id, effort) : stageModel(settings, review, effort ?? settings.orchestratorEffort);
 
 	return {
 		orchestrator: stageModel(settings, review, settings.orchestratorEffort),
-		specialist: second
-			? stageModel(settings, second, settings.specialistEffort)
-			: stageModel(settings, review, settings.specialistEffort ?? settings.orchestratorEffort)
+		specialist: follower(settings.specialistModelId, settings.specialistEffort),
+		verifier: follower(settings.verifierModelId, settings.verifierEffort)
 	};
 }
 

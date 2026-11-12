@@ -123,6 +123,9 @@ function describeSettings(settings: ReportSettings, { glyphs }: Surface): string
 		`${settings.budget} budget`,
 		settings.reviewerModel ? `reviewer ${settings.reviewerModel}` : null,
 		settings.workerModel && settings.workerModel !== settings.reviewerModel ? `worker ${settings.workerModel}` : null,
+		settings.verifierModel && settings.verifierModel !== settings.reviewerModel
+			? `verifier ${settings.verifierModel}`
+			: null,
 		settings.exec ? 'code ran in the sandbox' : `no code ran${settings.execReason ? ` (${settings.execReason})` : ''}`
 	];
 

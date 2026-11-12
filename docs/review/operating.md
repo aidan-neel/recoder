@@ -82,7 +82,7 @@ curl -s localhost:3201/api/settings/models
 - The answer is the payload built by `settingsPayload` (`apps/server/src/routes/settings.ts`): `configured`, `models[]` (each with an `id`), the chosen model ids and the efforts.
 - Connect a provider first with `PUT /api/agent/providers/:id/key` (`apps/server/src/routes/agent.ts`) or `POST /api/settings/providers/:id/connect`, or sign in to an agent CLI the adapters use. Keys are never read back in full.
 - Choose the model with `PATCH /api/settings/models` (`PUT` works too). The body is `reviewSettingsSchema` (`apps/server/src/review/session/review-settings.ts`).
-- Set `sharedModelId` for one model on every stage. Set `orchestratorModelId` and `specialistModelId` to split them. Set `orchestratorEffort` and `specialistEffort` from `REASONING_EFFORTS` (`packages/shared/src/models.ts`).
+- Set `sharedModelId` for one model on every stage. Set `orchestratorModelId`, `specialistModelId` and `verifierModelId` to split them. Set `orchestratorEffort`, `specialistEffort` and `verifierEffort` from `REASONING_EFFORTS` (`packages/shared/src/models.ts`).
 
 ```sh
 curl -s -X PATCH localhost:3201/api/settings/models -H 'content-type: application/json' \

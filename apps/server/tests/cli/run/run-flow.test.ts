@@ -237,9 +237,14 @@ test('the timeout also covers OpenCode listing its models, and the error says so
 	expect(failure).toMatchObject({ exitCode: EXIT.cancelled, message: expect.stringContaining('timeout') });
 });
 
-/** Reviews with a ChatGPT model saved, the sign-in as `signedIn` says, and a resolver that counts its calls. */
-async function reviewWithChatGptModel(signedIn: boolean): Promise<{ failure: unknown; resolved: number }> {
-	setReviewOverrides({ models: [{ id: 'gpt', provider: 'codex', label: 'GPT', model: 'gpt-x' }] });
+const CHATGPT_ENTRY = { id: 'gpt', provider: 'codex' as const, label: 'GPT', model: 'gpt-x' };
+
+/** Reviews with the given model overrides, the sign-in as `signedIn` says, and a resolver that counts its calls. */
+async function reviewWithChatGptModel(
+	signedIn: boolean,
+	overrides: Parameters<typeof setReviewOverrides>[0] = { models: [CHATGPT_ENTRY] }
+): Promise<{ failure: unknown; resolved: number }> {
+	setReviewOverrides(overrides);
 
 	const sign = spyOn(codex, 'signedIn').mockResolvedValue(signedIn);
 	let resolved = 0;
@@ -261,6 +266,21 @@ async function reviewWithChatGptModel(signedIn: boolean): Promise<{ failure: unk
 
 test('a ChatGPT model with no sign-in stops the run as not ready before the target is prepared', async () => {
 	const { failure, resolved } = await reviewWithChatGptModel(false);
+
+	expect(failure).toMatchObject({ exitCode: EXIT.notReady });
+	expect(describeError(failure)).toContain('Sign in to ChatGPT');
+	expect(resolved).toBe(0);
+});
+
+test('a ChatGPT verifier pick alone with no sign-in stops the run before the target is prepared', async () => {
+	const { failure, resolved } = await reviewWithChatGptModel(false, {
+		baseUrl: 'http://model.test/v1',
+		apiKey: 'test',
+		models: [{ id: 'http', label: 'HTTP', model: 'http-x' }, CHATGPT_ENTRY],
+		orchestratorModelId: 'http',
+		specialistModelId: 'http',
+		verifierModelId: 'gpt'
+	});
 
 	expect(failure).toMatchObject({ exitCode: EXIT.notReady });
 	expect(describeError(failure)).toContain('Sign in to ChatGPT');
