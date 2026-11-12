@@ -9,6 +9,7 @@ import {
 	type Review
 } from '@recoder/shared';
 
+import { sampleTime } from './sample-clock';
 import { SAMPLE_CHECKS, SAMPLE_PULL, SAMPLE_REVIEW } from './sample-review';
 
 /** One open pull request of the sample, with what its forge says about it. */
@@ -27,7 +28,7 @@ export interface SampleSeed {
 	comments: Record<string, PullComment[]>;
 }
 
-const AT = '2026-10-13T09:00:00.000Z';
+const AT = sampleTime('2026-10-13T09:00:00.000Z');
 
 const REPOS: Repo[] = [
 	{
@@ -139,21 +140,21 @@ const PULLS = {
 		number: 216,
 		title: 'Stream usage exports to S3',
 		author: 'maya',
-		updatedAt: '2026-10-13T10:40:00.000Z'
+		updatedAt: sampleTime('2026-10-13T10:40:00.000Z')
 	}),
 	webhooks: samplePull({
 		repoId: 'sample-api',
 		number: 211,
 		title: 'Retry webhook deliveries with backoff',
 		author: 'devin-ai[bot]',
-		updatedAt: '2026-10-13T08:30:00.000Z'
+		updatedAt: sampleTime('2026-10-13T08:30:00.000Z')
 	}),
 	settings: samplePull({
 		repoId: 'sample-web',
 		number: 88,
 		title: 'Move settings to the new form kit',
 		author: 'jonas',
-		updatedAt: '2026-10-13T07:55:00.000Z',
+		updatedAt: sampleTime('2026-10-13T07:55:00.000Z'),
 		status: { mergeability: 'conflicts' }
 	}),
 	charts: samplePull({
@@ -161,7 +162,7 @@ const PULLS = {
 		number: 91,
 		title: 'Upgrade the chart library',
 		author: 'renovate[bot]',
-		updatedAt: '2026-10-13T07:20:00.000Z',
+		updatedAt: sampleTime('2026-10-13T07:20:00.000Z'),
 		checks: FAILING
 	}),
 	darkMode: samplePull({
@@ -169,7 +170,7 @@ const PULLS = {
 		number: 93,
 		title: 'Dark mode tokens',
 		author: 'ana',
-		updatedAt: '2026-10-13T06:45:00.000Z',
+		updatedAt: sampleTime('2026-10-13T06:45:00.000Z'),
 		status: { draft: true }
 	}),
 	audit: samplePull({
@@ -177,28 +178,28 @@ const PULLS = {
 		number: 219,
 		title: 'Add an audit log for admin actions',
 		author: 'claude[bot]',
-		updatedAt: '2026-10-13T06:10:00.000Z'
+		updatedAt: sampleTime('2026-10-13T06:10:00.000Z')
 	}),
 	datePicker: samplePull({
 		repoId: 'sample-web',
 		number: 85,
 		title: 'Fix the date picker in Safari',
 		author: 'ana',
-		updatedAt: '2026-10-12T17:30:00.000Z'
+		updatedAt: sampleTime('2026-10-12T17:30:00.000Z')
 	}),
 	pagination: samplePull({
 		repoId: 'sample-api',
 		number: 205,
 		title: 'Document the pagination headers',
 		author: 'maya',
-		updatedAt: '2026-10-12T15:00:00.000Z'
+		updatedAt: sampleTime('2026-10-12T15:00:00.000Z')
 	}),
 	billing: samplePull({
 		repoId: 'sample-web',
 		number: 80,
 		title: 'Lazy-load the billing page',
 		author: 'jonas',
-		updatedAt: '2026-10-12T11:00:00.000Z',
+		updatedAt: sampleTime('2026-10-12T11:00:00.000Z'),
 		status: { mergeability: 'blocked' }
 	})
 };
@@ -221,7 +222,7 @@ const CONVERSATION: PullComment[] = [
 		kind: 'comment',
 		author: { login: 'maya', name: 'Maya', avatarUrl: null },
 		body: 'Should anonymous traffic be limited per address instead? Sign-up runs before a tenant exists.',
-		createdAt: '2026-10-13T09:20:00.000Z',
+		createdAt: sampleTime('2026-10-13T09:20:00.000Z'),
 		url: null,
 		byRecoder: false
 	},
@@ -230,7 +231,7 @@ const CONVERSATION: PullComment[] = [
 		kind: 'review',
 		author: { login: 'claude[bot]', name: null, avatarUrl: null },
 		body: 'Good catch. I will key header-less requests by client address.',
-		createdAt: '2026-10-13T09:31:00.000Z',
+		createdAt: sampleTime('2026-10-13T09:31:00.000Z'),
 		url: null,
 		verdict: 'commented',
 		byRecoder: false

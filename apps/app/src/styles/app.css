@@ -1,2 +1,10 @@
-/* The app's styles: its tokens first, then one file per feature. */
+/* The app's own styles: the skin's tokens, then one file per feature. Components reference tokens, never raw hex. */
 @import './tokens.css';
+@import './base.css';
+@import './shell.css';
+@import './pulls.css';
+@import './pull.css';
+@import './changes.css';
+@import './bugs.css';
+@import './summary.css';
+@import './compose.css';

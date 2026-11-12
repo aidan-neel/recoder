@@ -1,0 +1,70 @@
+/* ───────── New review: one question, one field, a few pull requests to pick from ───────── */
+.compose {
+	display: flex;
+	min-height: 0;
+	flex: 1;
+	flex-direction: column;
+	align-items: center;
+	overflow-y: auto;
+	padding: 18vh 24px 48px;
+}
+.compose-column {
+	display: flex;
+	width: 100%;
+	max-width: 680px;
+	flex-direction: column;
+}
+.compose-title {
+	margin-bottom: 20px;
+	font-size: 24px;
+	font-weight: 600;
+	letter-spacing: -0.025em;
+	line-height: 32px;
+	text-align: center;
+}
+.compose .composer [data-ui='textarea'] {
+	padding-top: 16px;
+	font-size: 15px;
+}
+.compose-hint {
+	display: flex;
+	min-height: 28px;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px 0;
+	color: var(--text-faint);
+	font-size: var(--font-size-meta);
+}
+.compose-hint[data-tone='danger'] {
+	color: var(--danger);
+}
+.compose-hint[data-tone='ready'] {
+	color: var(--text-secondary);
+}
+.compose-suggestions {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-top: 22px;
+}
+.compose-suggestions .section-label {
+	padding: 0 12px 4px;
+}
+.suggestion-row {
+	height: 38px;
+	align-items: center;
+	gap: 12px;
+	padding: 0 12px;
+	color: var(--text-secondary);
+	font-size: var(--font-size-body);
+}
+.suggestion-row:hover {
+	color: var(--text-primary);
+}
+.suggestion-title {
+	min-width: 0;
+	flex: 1;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}

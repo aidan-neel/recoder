@@ -8,7 +8,9 @@ import type {
 	Review
 } from '@recoder/shared';
 
-const AT = '2026-10-13T09:12:00.000Z';
+import { sampleTime } from './sample-clock';
+
+const AT = sampleTime('2026-10-13T09:12:00.000Z');
 
 const FINDINGS: Finding[] = [
 	{
@@ -246,8 +248,8 @@ export const SAMPLE_REVIEW: Review = {
 	source: 'github',
 	prTitle: 'Add per-tenant rate limiting to the public API',
 	prUrl: 'https://github.com/acme/api/pull/214',
-	startedAt: '2026-10-13T09:08:10.000Z',
-	createdAt: '2026-10-13T09:08:00.000Z',
+	startedAt: sampleTime('2026-10-13T09:08:10.000Z'),
+	createdAt: sampleTime('2026-10-13T09:08:00.000Z'),
 	updatedAt: AT
 };
 
@@ -262,7 +264,7 @@ export const SAMPLE_PULL: PullRequest = {
 	additions: 172,
 	deletions: 1,
 	changedFiles: 9,
-	createdAt: '2026-10-13T08:51:00.000Z',
+	createdAt: sampleTime('2026-10-13T08:51:00.000Z'),
 	body: 'Adds a token bucket per tenant in front of `/api/*`: 100 requests a minute, a `429` with `Retry-After` when a tenant runs out, and per-minute usage counts in Redis for billing.\n\nHealth checks stay unlimited.'
 };
 
