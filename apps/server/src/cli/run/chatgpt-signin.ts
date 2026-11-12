@@ -1,5 +1,5 @@
 import { codex } from '../../agents/codex/codex.js';
-import { configForOrchestrator, configForSubagent } from '../../models/models.js';
+import { configForOrchestrator, configForSubagent, configForVerifier } from '../../models/models.js';
 import { notReadyError } from '../exit.js';
 
 /** The one step that signs in; the sign-in is part of Recoder's settings, not of a command. */
@@ -10,7 +10,9 @@ export const CHATGPT_SIGN_IN = 'Sign in to ChatGPT in Recoder\u2019s settings (S
  * none, as the server's review does. The saved credentials are read; no request is made.
  */
 export async function assertChatGptSignedIn(): Promise<void> {
-	const usesChatGpt = [configForOrchestrator(), configForSubagent()].some((config) => config.provider === 'codex');
+	const usesChatGpt = [configForOrchestrator(), configForSubagent(), configForVerifier()].some(
+		(config) => config.provider === 'codex'
+	);
 
 	if (usesChatGpt && !(await codex.signedIn())) throw notReadyError(`ChatGPT is not signed in. ${CHATGPT_SIGN_IN}`);
 }

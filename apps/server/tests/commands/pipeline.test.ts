@@ -1,5 +1,6 @@
-import { afterEach, beforeAll, expect, test } from 'bun:test';
+import { afterEach, beforeAll, expect, spyOn, test } from 'bun:test';
 import { REVIEW_CANCELLED, type ReviewTask } from '@recoder/shared';
+import { codex } from '../../src/agents/codex/codex';
 import { createReviewSession, startReviewSession } from '../../src/commands/pipeline';
 import { clearReviewEvents, subscribeReview, type ReviewEvent } from '../../src/review/session/events';
 import { getReviewControl } from '../../src/review/session/review-control';
@@ -102,3 +103,48 @@ test('a review cancelled while its reviewers run leaves every task failed as can
 		await db.repos.delete(repoId);
 	}
 }, 30_000);
+
+test('a review with only its verifier on ChatGPT fails at start when ChatGPT is signed out, before fetching', async () => {
+	const { repo } = await localForgeFixture();
+
+	await db.repos.set(repo);
+
+	setReviewOverrides({
+		baseUrl: 'http://lifecycle-model.test/v1',
+		apiKey: 'test',
+		models: [
+			{ id: 'lead', label: 'Lead', model: 'lead' },
+			{ id: 'gpt', provider: 'codex', label: 'GPT', model: 'gpt-x' }
+		],
+		orchestratorModelId: 'lead',
+		specialistModelId: 'lead',
+		verifierModelId: 'gpt'
+	});
+
+	const fetchSpy = spyOn(globalThis, 'fetch').mockResolvedValue(
+		Response.json({ choices: [{ message: { content: '{}' } }] })
+	);
+
+	const sign = spyOn(codex, 'signedIn').mockResolvedValue(false);
+	const reviewId = (await createReviewSession({ repoId: repo.id, prNumber: 7 })).id;
+	const ended = nextEvent(reviewId, (event) => event.type === 'error' && !event.step);
+
+	try {
+		await startReviewSession(reviewId);
+		await ended;
+
+		expect(await db.reviews.get(reviewId)).toMatchObject({
+			status: 'failed',
+			summary: 'Sign in to ChatGPT to run this review.'
+		});
+
+		expect(fetchSpy).not.toHaveBeenCalled();
+		expect(await tasksOf(reviewId)).toEqual([]);
+	} finally {
+		fetchSpy.mockRestore();
+		sign.mockRestore();
+		await db.reviews.delete(reviewId);
+		clearReviewEvents(reviewId);
+		await db.repos.delete(repo.id);
+	}
+});
