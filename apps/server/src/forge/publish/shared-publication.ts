@@ -6,7 +6,7 @@ import {
 	type PublicationSession
 } from '../../storage/postgres-publication';
 import { GhError } from '../cli';
-import { InlinePreparationError, PublishConflictError } from './forge';
+import { InlinePreparationError, PublishConflictError, rejectedPosition } from './forge';
 
 const publications = postgres ? new PostgresPublications(postgres, assertOwnership) : undefined;
 
@@ -25,16 +25,6 @@ export function publicationOperation<T>(work: () => Promise<T>): Promise<T> {
 
 export function missingComment(error: unknown): boolean {
 	return error instanceof GhError && error.kind === 'not-found';
-}
-
-export function rejectedPosition(error: unknown): boolean {
-	return (
-		error instanceof GhError &&
-		error.kind === 'unknown' &&
-		(/^GitHub API (400|422):/.test(error.message) ||
-			/^[^\n]+ returned (400|422):/.test(error.message) ||
-			/^GitLab has not computed this merge request/.test(error.message))
-	);
 }
 
 export function rejectedCreate(error: unknown): boolean {

@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import {
 	assignmentCounts,
+	EVIDENCE_LABELS,
+	evidenceClass,
 	FINDING_SEVERITIES,
 	REVIEW_CANCELLED,
 	reviewStage,
@@ -10,6 +12,8 @@ import {
 	type ReviewProgress
 } from '@recoder/shared';
 import { RECODER_MARKER } from '../watch/mention';
+import { renderEvidence } from './evidence';
+import { quiet } from './markdown';
 
 /**
  * Markdown for Recoder's comments on a pull request. Pure: everything comes
@@ -17,7 +21,7 @@ import { RECODER_MARKER } from '../watch/mention';
  */
 
 /** Where a finding's location links: the pull request's diff on its forge. */
-interface DiffLinkTarget {
+export interface DiffLinkTarget {
 	provider: 'github' | 'gitlab';
 	prUrl: string | null;
 }
@@ -59,16 +63,8 @@ export function findingMarker(finding: Finding): string {
 }
 
 /** The short commit, or null before the review has resolved the head. */
-function shortSha(sha: string): string | null {
+export function shortSha(sha: string): string | null {
 	return sha && sha !== 'unknown' ? sha.slice(0, 7) : null;
-}
-
-/**
- * Model prose with every `@name` broken by a zero-width space, so a review
- * never pings anyone or summons a bot (Recoder included) by quoting a handle.
- */
-function quiet(text: string): string {
-	return text.replace(/(^|[^\w`])@(?=[\w-])/g, '$1@​');
 }
 
 /** `src/a.ts:12-14`, or the file alone without a line. */
@@ -112,7 +108,7 @@ function findingTitle(finding: Finding): string {
 }
 
 /** The message and suggestion under a finding's heading. */
-function findingDetail(finding: Finding): string[] {
+export function findingDetail(finding: Finding): string[] {
 	const body = splitCategoryTag(finding.message).body.trim();
 	const parts = body && body !== finding.title ? [quiet(body)] : [];
 
@@ -121,12 +117,20 @@ function findingDetail(finding: Finding): string[] {
 	return parts;
 }
 
+/** A finding's bold title and the link to its place in the diff. */
+export function findingHeadline(target: DiffLinkTarget, finding: Finding): string {
+	return `**${findingTitle(finding)}** · ${linkedLocation(target, finding)}`;
+}
+
+/** A finding in the summary comment: its headline with its evidence class in the shared words, then its detail. */
 function findingBlock(target: DiffLinkTarget, finding: Finding): string {
-	return [`**${findingTitle(finding)}** · ${linkedLocation(target, finding)}`, ...findingDetail(finding)].join('\n\n');
+	const evidence = EVIDENCE_LABELS[evidenceClass(finding)];
+
+	return [`${findingHeadline(target, finding)} · ${evidence}`, ...findingDetail(finding)].join('\n\n');
 }
 
 /** "2 errors · 1 warning", for the line above the findings. */
-function tally(findings: Finding[]): string {
+export function tally(findings: readonly Finding[]): string {
 	const words: Record<FindingSeverity, [string, string]> = {
 		error: ['error', 'errors'],
 		warning: ['warning', 'warnings'],
@@ -251,6 +255,8 @@ export interface FindingCommentView extends DiffLinkTarget {
 	headSha: string;
 	inline: boolean;
 	limit: number;
+	/** A forge suggestion block that applies the finding's patch, when the comment sits on the lines it replaces. */
+	suggestion?: string;
 }
 
 export function renderFindingComment(view: FindingCommentView): string {
@@ -263,6 +269,8 @@ export function renderFindingComment(view: FindingCommentView): string {
 		RECODER_MARKER,
 		view.inline ? heading : `${heading} · ${linkedLocation(view, finding)}`,
 		...findingDetail(finding),
+		renderEvidence(finding),
+		...(view.suggestion ? [view.suggestion] : []),
 		`<sub>From Recoder’s review${sha ? ` of \`${sha}\`` : ''}</sub>`
 	].join('\n\n');
 

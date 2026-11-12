@@ -1,3 +1,5 @@
+import type { FindingSeverity } from './findings';
+
 /**
  * Auto-review: Recoder watches tracked repositories and starts reviews on its
  * own, when someone mentions it in a pull/merge request comment, when a pull
@@ -14,6 +16,12 @@ export const DEFAULT_MENTION_HANDLE = '@recoder';
 export const AUTO_REVIEW_INTERVALS = [60, 120, 300, 600, 1800] as const;
 
 export type AutoReviewInterval = (typeof AUTO_REVIEW_INTERVALS)[number];
+
+/** The most inline comments one findings review may hold; the settings cap `maxInlineComments` here. */
+export const MAX_INLINE_COMMENTS = 100;
+
+/** The lowest severity that fails Recoder's check on the pull request's head commit, or `off` for no check. */
+export type CheckThreshold = FindingSeverity | 'off';
 
 export interface AutoReviewSettings {
 	/** The watcher runs at all. Off, nothing below happens. */
@@ -34,6 +42,12 @@ export interface AutoReviewSettings {
 	postResults: boolean;
 	/** Tracked repositories the watcher leaves alone. New repositories are watched. */
 	excludedRepoIds: string[];
+	/** Globs of repository paths (`docs/**`, `**\/*.md`) whose findings are never posted and never fail the check. */
+	ignoredPaths: string[];
+	/** The most findings posted as inline comments in one review, worst first; the rest are listed in its summary. */
+	maxInlineComments: number;
+	/** Verified findings at or above this severity fail the commit check Recoder sets; `off` sets none. */
+	checkThreshold: CheckThreshold;
 }
 
 export const DEFAULT_AUTO_REVIEW_SETTINGS: AutoReviewSettings = {
@@ -45,7 +59,10 @@ export const DEFAULT_AUTO_REVIEW_SETTINGS: AutoReviewSettings = {
 	onPushed: false,
 	skipDrafts: true,
 	postResults: true,
-	excludedRepoIds: []
+	excludedRepoIds: [],
+	ignoredPaths: [],
+	maxInlineComments: 25,
+	checkThreshold: 'error'
 };
 
 /** One review the watcher started. */

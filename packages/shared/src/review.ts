@@ -114,6 +114,8 @@ export interface Review {
 	pullComment?: ReviewPullComment;
 	/** Findings posted to the pull request, by finding id, so posting again edits them. */
 	findingComments?: Record<string, ReviewFindingComment>;
+	/** The forge review of verified findings (summary plus inline comments) Recoder submitted once the review finished. */
+	findingsReview?: ReviewPullComment;
 	/** When analysis began; draft sessions may exist before a review is requested. */
 	startedAt?: string;
 	createdAt: string;
