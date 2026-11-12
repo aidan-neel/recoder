@@ -98,53 +98,86 @@ export function tokenUsage(usage: GrokUsage): TokenUsage {
 export const SIGNED_OUT =
 	/not logged in|log ?in required|please (?:log|sign) ?in|unauthori[sz]ed|authentication|invalid api key/i;
 
-/** A request throttle that lifts within minutes: retried with back-off, never reported as out of usage. */
+/**
+ * A request throttle that lifts within minutes: retried with back-off, never reported as out of usage. It is tested
+ * after {@link USAGE_CAP} and {@link SPENT_CREDIT}, since a spent plan is often worded as a rate limit too ("Rate
+ * limit exceeded: monthly quota exhausted") and retrying it starts a new process each time for nothing.
+ */
 const THROTTLE = /rate.?limit|too many requests|throttl/i;
 
 /** The plan's usage cap or quota, which lasts hours. */
 const USAGE_CAP = /usage limit|quota/i;
 
-/** Spent credit or billing: the account cannot pay for more calls. */
-const SPENT_CREDIT = /insufficient credit|out of credits|billing/i;
+/**
+ * Spent credit or billing: the account cannot pay for more calls. xAI's own wording is that the team "has either
+ * used all available credits or reached its monthly spending limit".
+ */
+const SPENT_CREDIT = /insufficient credit|out of credits|available credits|spending limit|billing/i;
 
 /** Longest stretch of a CLI error line quoted in a message. */
 const QUOTED_CHARS = 120;
 
-/** The quoted tail of a failed run's text, cut to the message shape the review shows. */
-function errorLine(text: string): string {
-	const line = text.trim().split('\n').at(-1) ?? '';
-
+/** One line of a failed run's text, redacted and cut to the message shape the review shows. */
+function quoted(line: string): string {
 	return quotedLine(line, QUOTED_CHARS);
 }
 
+/** One wording family of a failed run: the pattern that spots it, and the error it becomes for the line it matched. */
+interface FailureWording {
+	pattern: RegExp;
+	toError: (line: string) => LlmError;
+}
+
+/** The wording families, most lasting cause first: the first one a line matches names the failure. */
+const FAILURE_WORDINGS: FailureWording[] = [
+	{
+		pattern: SIGNED_OUT,
+		toError: (line) => new LlmError(401, `Grok Build is signed out: ${quoted(line)}. Sign in with: grok login`)
+	},
+	{
+		pattern: SPENT_CREDIT,
+		toError: (line) => new UsageLimitError(402, `Grok Build is out of credit: ${quoted(line)}`)
+	},
+	{
+		pattern: USAGE_CAP,
+		toError: (line) => new UsageLimitError(429, `Grok Build hit its usage limit: ${quoted(line)}`)
+	},
+	{
+		pattern: THROTTLE,
+		toError: (line) => new LlmError(429, `Grok Build is rate limited: ${quoted(line)}`)
+	}
+];
+
 /**
- * A Grok failure as an `LlmError`: signed-out keeps its 401 and sign-in hint, a throttle a retryable 429, a
- * usage cap a `UsageLimitError` 429 and spent credit a `UsageLimitError` 402, a max-turns or max-token stop
- * says which limit cut the run, and anything else quotes its last line without echoing credentials.
+ * A Grok failure as an `LlmError`: signed-out keeps its 401 and sign-in hint, spent credit is a `UsageLimitError`
+ * 402 and a usage cap a `UsageLimitError` 429 even when the text also calls it a rate limit, a plain throttle is a
+ * retryable 429, a max-turns or max-token stop says which limit cut the run, and anything else quotes its last
+ * line. The message always quotes the line that named the failure, never a later one, and never a credential.
  */
 export function grokError(text: string, stopReason?: string): LlmError {
-	const quoted = errorLine(text);
+	const lines = text.trim().split('\n');
 
-	if (SIGNED_OUT.test(text)) return new LlmError(401, `Grok Build is signed out: ${quoted}. Sign in with: grok login`);
-	if (THROTTLE.test(text)) return new LlmError(429, `Grok Build is rate limited: ${quoted}`);
-	if (USAGE_CAP.test(text)) return new UsageLimitError(429, `Grok Build hit its usage limit: ${quoted}`);
-	if (SPENT_CREDIT.test(text)) return new UsageLimitError(402, `Grok Build is out of credit: ${quoted}`);
+	for (const wording of FAILURE_WORDINGS) {
+		const line = lines.find((candidate) => wording.pattern.test(candidate));
+
+		if (line !== undefined) return wording.toError(line);
+	}
+
 	if (stopReason === 'max_tokens') return new LlmError(0, 'Grok Build reply was cut at its output limit.');
 
-	return new LlmError(0, `Grok Build failed: ${quoted}`);
+	return new LlmError(0, `Grok Build failed: ${quoted(lines.at(-1) ?? '')}`);
 }
 
 /**
  * The error of a run that printed no `result` line. A non-zero exit failed before it could answer, so its whole
- * stderr goes through {@link grokError}: sign-in and limit wordings keep their meaning, and only `quotedLine`'s
- * redacted tail is ever quoted. A clean exit printed a stream this reader could not use, so the error quotes the
- * last line it saw the same way.
+ * stderr goes through {@link grokError}: sign-in and limit wordings keep their meaning on any line. A clean exit
+ * printed a stream this reader could not use, so the error quotes the last line it saw the same way.
  */
 function noResultError(exit: CliExit, lastLine: string): LlmError {
 	if (exit.code === 0) {
 		return new LlmError(
 			0,
-			`Grok Build output could not be parsed${lastLine ? `: the last line was ${quotedLine(lastLine, QUOTED_CHARS)}` : ': it printed nothing'}.`
+			`Grok Build output could not be parsed${lastLine ? `: the last line was ${quoted(lastLine)}` : ': it printed nothing'}.`
 		);
 	}
 

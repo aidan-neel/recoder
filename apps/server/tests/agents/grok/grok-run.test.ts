@@ -203,6 +203,17 @@ describe('GrokAgent.openRun', () => {
 		}
 	});
 
+	test('a prompt that fails before its result line never quotes a credential from stderr', async () => {
+		const { run } = await openRun('stderr-token');
+
+		const reply = await run.prompt('Review it.', PROMPT);
+
+		await run.close();
+
+		expect(reply.error?.message).toContain('[redacted]');
+		expect(reply.error?.message).not.toContain('fake-grok-token-12345');
+	});
+
 	test('a prompt that fails before its result line maps signed-out stderr to a 401', async () => {
 		const { run } = await openRun('stderr-auth');
 

@@ -9,6 +9,9 @@ describe('grokError', () => {
 			['Error: too many requests, slow down', 429, false],
 			['You have reached your usage limit. Resets at 3pm UTC.', 429, true],
 			['Monthly quota exhausted.', 429, true],
+			['Rate limit exceeded: monthly quota exhausted', 429, true],
+			['Rate limit reached, insufficient credit', 402, true],
+			['Your team has either used all available credits or reached its monthly spending limit.', 402, true],
 			['Error: insufficient credit on this account', 402, true],
 			['Error: out of credits', 402, true],
 			['Error: billing is past due', 402, true],
@@ -22,5 +25,13 @@ describe('grokError', () => {
 			expect(error.status).toBe(status);
 			expect(error instanceof UsageLimitError).toBe(usageLimit);
 		}
+	});
+
+	test('the message quotes the line that named the failure, not a later one', () => {
+		const error = grokError('Error: Not logged in.\n    at Session.open (session.js:41)');
+
+		expect(error.status).toBe(401);
+		expect(error.message).toContain('Not logged in');
+		expect(error.message).not.toContain('session.js');
 	});
 });
